@@ -12,7 +12,7 @@
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -227,7 +227,7 @@ fn extract_phone_numbers(body: &str) -> Vec<DetectedPivot> {
                     digit_count += 1;
                 }
             } else {
-                if digit_count >= 10 && digit_count <= 15 {
+                if (10..=15).contains(&digit_count) {
                     // 周辺テキスト (前後の行)
                     let context = format!(
                         "{} {} {}",
@@ -245,7 +245,7 @@ fn extract_phone_numbers(body: &str) -> Vec<DetectedPivot> {
             }
         }
         // 行末
-        if digit_count >= 10 && digit_count <= 15 {
+        if (10..=15).contains(&digit_count) {
             let context = lines.get(i.saturating_sub(1)).copied().unwrap_or("").to_string()
                 + " "
                 + line;
@@ -350,7 +350,7 @@ fn extract_crypto_addresses(body: &str) -> Vec<DetectedPivot> {
 // ── ヘルパー関数 ─────────────────────────────────────────────────────────
 
 fn trim_url(s: &str) -> &str {
-    s.trim_end_matches(|c: char| matches!(c, '.' | ',' | ')' | ']' | '!' | '?' | ';'))
+    s.trim_end_matches(['.', ',', ')', ']', '!', '?', ';'])
 }
 
 fn extract_tenant_from_teams(url: &str) -> Option<String> {
@@ -409,6 +409,7 @@ pub enum PivotError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

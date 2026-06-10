@@ -217,7 +217,8 @@ mod property_tests {
         fn red_always_multifactor(action in arb_action(), untrusted in any::<bool>()) {
             if action.risk_tier() == RiskTier::Red {
                 let d = TieredRiskController::decide(&action, untrusted);
-                prop_assert!(matches!(d, AccessDecision::RequireMultiFactor { .. }));
+                let is_mfa = matches!(d, AccessDecision::RequireMultiFactor { .. });
+                prop_assert!(is_mfa);
             }
         }
 

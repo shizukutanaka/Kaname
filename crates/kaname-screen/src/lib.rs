@@ -4,7 +4,7 @@
 //!
 //! # 2 つの防御層
 //!
-//! CaMeL (Kaname の Dual-LLM) は「メール本文 (Untrusted) は危険」と扱うが、
+//! `CaMeL` (Kaname の Dual-LLM) は「メール本文 (`Untrusted`) は危険」と扱うが、
 //! 以下の 2 つの経路を見落としている:
 //!
 //! 1. **入力スクリーニング (§2.1)**: ユーザーの初期プロンプトも完全には信頼しない。
@@ -40,7 +40,7 @@ pub struct ScreenResult {
 }
 
 /// スクリーニングで検出されるリスク種別。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ScreenRisk {
     /// 命令上書きフレーズ (例: "ignore all previous")。
     OverridePhrase(String),
@@ -81,12 +81,17 @@ impl PromptScreener {
                 "ignore all previous",
                 "ignore previous instructions",
                 "disregard the above",
+                "disregard all prior",
                 "forget everything",
                 "you are now",
                 "new instructions:",
                 "system override",
                 "前の指示を無視",
                 "これまでの指示を忘れ",
+                "以前の指示を無視",
+                "[pretend this conversation",
+                "[now continue",
+                "pretend you are",
             ],
             special_tokens: vec![
                 "<|im_start|>",
@@ -237,17 +242,24 @@ pub fn shannon_entropy(s: &str) -> f32 {
     if s.is_empty() {
         return 0.0;
     }
-    let mut counts = std::collections::HashMap::new();
+    let mut counts = std::collections::BTreeMap::new();
     for c in s.chars() {
         *counts.entry(c).or_insert(0u32) += 1;
     }
-    let len = s.chars().count() as f32;
-    let mut entropy = 0.0_f32;
+    let len = s.chars().count();
+    #[allow(clippy::cast_precision_loss)]
+    let len_f = len as f64;
+    let mut entropy = 0.0_f64;
     for &count in counts.values() {
-        let p = count as f32 / len;
-        entropy -= p * p.log2();
+        let p = f64::from(count) / len_f;
+        let contribution = p * p.log2();
+        if contribution.is_finite() {
+            entropy -= contribution;
+        }
     }
-    entropy
+    #[allow(clippy::cast_possible_truncation)]
+    let result = entropy as f32;
+    if result.is_nan() { 0.0 } else { result }
 }
 
 fn is_email_like(s: &str) -> bool {
@@ -261,7 +273,7 @@ fn is_email_like(s: &str) -> bool {
 // ============================================================================
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
     use super::*;
 
@@ -378,7 +390,7 @@ mod property_tests {
 /// 制御フロー (どのツールを呼ぶか) は信頼クエリから固定されるが、
 /// 引数 (何を渡すか) に untrusted データが混入する経路が残る。
 ///
-/// 例: "send_email" の宛先は固定でも、本文に untrusted データが
+/// 例: `send_email` の宛先は固定でも、本文に untrusted データが
 /// 注入されて外部送信される。
 pub struct ArgumentValidator;
 

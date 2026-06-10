@@ -558,14 +558,32 @@ pub struct PushNotification {
 // エラー
 // ============================================================================
 
+/// JMAP クライアントで発生するエラー。
 #[derive(Debug, Error)]
 pub enum JmapError {
-    #[error("HTTP エラー: {0}")]        Http(String),
-    #[error("JMAP エラー: {type}")]     JmapProblem { r#type: String, description: String },
-    #[error("デシリアライズ: {0}")]      Deserialize(String),
-    #[error("プッシュ非対応")]           PushNotSupported,
-    #[error("見つからない: {0}")]        NotFound(String),
-    #[error("機能なし: {0}")]           MissingCapability(String),
+    /// HTTP レイヤーのエラー。
+    #[error("HTTP エラー: {0}")]
+    Http(String),
+    /// サーバーが返した JMAP problem (RFC 8620 §3.6)。
+    #[error("JMAP エラー: {}", r#type)]
+    JmapProblem {
+        /// problem type URI。
+        r#type: String,
+        /// 人間可読な説明。
+        description: String,
+    },
+    /// レスポンスのデシリアライズ失敗。
+    #[error("デシリアライズ: {0}")]
+    Deserialize(String),
+    /// サーバーが EventSource プッシュに非対応。
+    #[error("プッシュ非対応")]
+    PushNotSupported,
+    /// 対象オブジェクトが見つからない。
+    #[error("見つからない: {0}")]
+    NotFound(String),
+    /// 必要な JMAP capability がセッションにない。
+    #[error("機能なし: {0}")]
+    MissingCapability(String),
 }
 
 // ============================================================================

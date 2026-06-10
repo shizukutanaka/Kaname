@@ -97,8 +97,8 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     let m = a.len();
     let n = b.len();
     let mut dp = vec![vec![0usize; n + 1]; m + 1];
-    for i in 0..=m { dp[i][0] = i; }
-    for j in 0..=n { dp[0][j] = j; }
+    for (i, row) in dp.iter_mut().enumerate() { row[0] = i; }
+    for (j, cell) in dp[0].iter_mut().enumerate() { *cell = j; }
     for i in 1..=m {
         for j in 1..=n {
             dp[i][j] = if a[i-1] == b[j-1] {
@@ -264,6 +264,11 @@ criterion_group!(
     bench_ai_phishing_detection,
     bench_triage,
     bench_dlp_scan,
+    bench_aitm_detector,
+    bench_sender_style_distance,
+    bench_campaign_radar_lookup,
+    bench_html_smuggling_scan,
+    bench_calendar_guard_scan,
 );
 
 criterion_main!(benches);
@@ -271,8 +276,6 @@ criterion_main!(benches);
 // ============================================================================
 // v0.3 新機能ベンチマーク
 // ============================================================================
-
-use criterion::black_box;
 
 fn bench_aitm_detector(c: &mut Criterion) {
     let urls = vec![

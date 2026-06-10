@@ -15,9 +15,10 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 
+proptest  = { workspace = true }
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-proptest  = { workspace = true }
 
 [[bench]]
 name    = "core_bench"

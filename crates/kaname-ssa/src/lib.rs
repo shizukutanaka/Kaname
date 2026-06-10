@@ -41,6 +41,9 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::doc_markdown)]
 
 use serde::{Deserialize, Serialize};
 
@@ -368,6 +371,7 @@ fn estimate_formality(text: &str) -> f32 {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
     use super::*;
 
@@ -375,7 +379,6 @@ mod tests {
         let mut p = SenderStyleProfile::new("cfo@company.co.jp");
         // 典型的な CFO のメールパターン
         for i in 0..sample_count {
-            let hour = 10u8; // 朝 10 時に送信
             p.update(&EmailStyleFeatures {
                 paragraphs: 2,
                 sentences_per_paragraph: 2.0,
@@ -521,6 +524,7 @@ mod tests {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod property_tests {
     use super::*;
     use proptest::prelude::*;
@@ -563,7 +567,7 @@ mod property_tests {
 
             let dist = profile.style_distance(&features);
             prop_assert!(
-                dist >= 0.0 && dist <= 1.0,
+                (0.0..=1.0).contains(&dist),
                 "style_distance 範囲外: {dist}"
             );
         }

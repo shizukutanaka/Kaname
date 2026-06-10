@@ -77,8 +77,8 @@ pub async fn mail_get_summary() -> Result<MailSummary, String> {
     Ok(MailSummary { unread: 3, bec_alerts: 1, total: 42 })
 }
 
-#[instrument(skip(mailbox))]
-pub async fn mail_list(mailbox: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
+#[instrument(skip(_mailbox))]
+pub async fn mail_list(_mailbox: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
     let limit = limit.unwrap_or(50) as usize;
     Ok(mock_emails(limit))
 }
@@ -120,7 +120,7 @@ pub async fn ai_summarize_email(email_id: String) -> Result<SafeSummary, String>
     })
 }
 
-pub async fn ai_smart_reply(email_id: String) -> Result<Vec<SmartReplyCandidate>, String> {
+pub async fn ai_smart_reply(_email_id: String) -> Result<Vec<SmartReplyCandidate>, String> {
     Ok(vec![
         SmartReplyCandidate { text: "ありがとうございます。確認いたします。".into(), tone: "formal".into(), rationale: "丁寧な確認".into() },
         SmartReplyCandidate { text: "承知いたしました。来週中にご回答します。".into(), tone: "formal".into(), rationale: "期限付き返答".into() },
@@ -180,51 +180,58 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn health_returns_ok() {
+    async fn health_returns_ok() -> Result<(), String> {
         let r = health_check().await.map_err(|e| e.to_string())?;
         assert!(r.ok);
         assert!(!r.version.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn summary_has_counts() {
+    async fn summary_has_counts() -> Result<(), String> {
         let r = mail_get_summary().await.map_err(|e| e.to_string())?;
         assert!(r.unread <= r.total);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn mail_list_respects_limit() {
+    async fn mail_list_respects_limit() -> Result<(), String> {
         let r = mail_list("inbox".into(), Some(2)).await.map_err(|e| e.to_string())?;
         assert_eq!(r.len(), 2);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn phishing_score_in_range() {
+    async fn phishing_score_in_range() -> Result<(), String> {
         let r = ai_detect_phishing("e1".into()).await.map_err(|e| e.to_string())?;
         assert!((0.0f32..=1.0).contains(&r.score));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn summary_is_single_email_only() {
+    async fn summary_is_single_email_only() -> Result<(), String> {
         // Superhuman CVE 対策の核心的検証:
         // safe_summary は single_email_only=true を保証しなければならない
         let r = ai_summarize_email("e1".into()).await.map_err(|e| e.to_string())?;
         assert!(r.single_email_only, "受信箱全体を読んではいけない");
         assert!(r.local_inference,   "データをクラウドに送ってはいけない");
+        Ok(())
     }
 
     #[tokio::test]
-    async fn smart_reply_returns_three() {
+    async fn smart_reply_returns_three() -> Result<(), String> {
         let r = ai_smart_reply("e1".into()).await.map_err(|e| e.to_string())?;
         assert_eq!(r.len(), 3);
         assert!(r.iter().all(|c| !c.text.is_empty()));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn bec_dangerous_in_mock() {
+    async fn bec_dangerous_in_mock() -> Result<(), String> {
         let emails = mail_list("inbox".into(), Some(10)).await.map_err(|e| e.to_string())?;
         assert!(emails.iter().any(|e| e.bec_verdict == "DANGEROUS"),
             "BEC危険メールがモックに存在しなければならない");
+        Ok(())
     }
 
     #[tokio::test]
@@ -425,17 +432,18 @@ mod v02_tests {
     use super::*;
 
     #[tokio::test]
-    async fn oobv_start_creates_ceremony() {
+    async fn oobv_start_creates_ceremony() -> Result<(), String> {
         let state = V02AppState::new();
         let resp = oobv_start(state.clone(), OobvStartRequest {
             email_id: "e1".into(), sender: "a@b.com".into(),
         }).await.map_err(|e| e.to_string())?;
         assert_eq!(resp.phrase.len(), 6);
         assert!((1..=6).contains(&resp.challenge_number));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn oobv_verify_correct_word() {
+    async fn oobv_verify_correct_word() -> Result<(), String> {
         let state = V02AppState::new();
         let start = oobv_start(state.clone(), OobvStartRequest {
             email_id: "e1".into(), sender: "a@b.com".into(),
@@ -445,32 +453,36 @@ mod v02_tests {
             ceremony_id: start.ceremony_id, user_word: correct,
         }).await.map_err(|e| e.to_string())?;
         assert_eq!(resp.state, CeremonyState::Verified);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn oobv_recommend_strong() {
+    async fn oobv_recommend_strong() -> Result<(), String> {
         let resp = oobv_recommend(OobvRecommendRequest {
             email_body: "至急振込先変更".into(),
         }).await.map_err(|e| e.to_string())?;
         assert_eq!(resp.level, RecommendationLevel::Strong);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn pivot_analyze_detects_phone() {
+    async fn pivot_analyze_detects_phone() -> Result<(), String> {
         let state = V02AppState::new();
         let resp = pivot_analyze(state, PivotAnalyzeRequest {
             email_body: "至急 080-1234-5678 に電話".into(),
         }).await.map_err(|e| e.to_string())?;
         assert!(!resp.pivots.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn deepfake_high_severity() {
+    async fn deepfake_high_severity() -> Result<(), String> {
         let resp = deepfake_evaluate(DeepfakeEvaluateRequest {
             attachments: vec![("voice.mp3".into(), "audio/mpeg".into())],
             email_body:  "至急振込先について".into(),
         }).await.map_err(|e| e.to_string())?;
         assert_eq!(resp.severity, kaname_render::deepfake_advisory::AdvisorySeverity::High);
+        Ok(())
     }
 }
 
@@ -669,10 +681,12 @@ mod rule_of_two_command_tests {
 // ============================================================================
 
 use kaname_observability::trajectory::{TrajectoryMonitor, TrajectoryStep, TrajectoryAlert};
-use std::sync::Mutex;
+use std::sync::{Mutex as StdMutex, OnceLock};
 
-/// グローバルな軌跡モニター (セッション単位)。
-static TRAJECTORY: Mutex<Option<TrajectoryMonitor>> = Mutex::new(None);
+fn trajectory() -> &'static StdMutex<Option<TrajectoryMonitor>> {
+    static TRAJECTORY: OnceLock<StdMutex<Option<TrajectoryMonitor>>> = OnceLock::new();
+    TRAJECTORY.get_or_init(|| StdMutex::new(None))
+}
 
 /// エージェント操作を軌跡に記録し、検出されたアラートを返す。
 ///
@@ -685,7 +699,7 @@ pub async fn record_agent_step(
     external_comm: bool,
     timestamp_ms: u64,
 ) -> Result<Vec<String>, String> {
-    let mut guard = TRAJECTORY.lock().map_err(|e| e.to_string())?;
+    let mut guard = trajectory().lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
     let monitor = guard.get_or_insert_with(TrajectoryMonitor::new);
     let alerts = monitor.record(TrajectoryStep {
         action,
@@ -704,7 +718,7 @@ pub async fn record_agent_step(
 /// 軌跡をリセットする (新セッション開始時)。
 #[cfg_attr(feature = "tauri-app", tauri::command)]
 pub async fn reset_trajectory() -> Result<(), String> {
-    let mut guard = TRAJECTORY.lock().map_err(|e| e.to_string())?;
+    let mut guard = trajectory().lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
     if let Some(monitor) = guard.as_mut() {
         monitor.reset();
     }

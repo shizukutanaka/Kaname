@@ -296,6 +296,7 @@ pub fn plural_category(locale: &str, n: u64) -> PluralCategory {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

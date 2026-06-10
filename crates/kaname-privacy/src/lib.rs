@@ -119,7 +119,7 @@ impl TrackingDetector {
             if let Some(src) = extract_attr(tag, "src") {
                 // http/https の外部 URL (cid: は除外)
                 if src.starts_with("http://") || src.starts_with("https://") {
-                    let domain = extract_domain_from_url(&src)
+                    let domain = extract_domain_from_url(src)
                         .unwrap_or_default();
 
                     let width  = extract_attr(tag, "width")
@@ -135,7 +135,7 @@ impl TrackingDetector {
                         TrackerType::OpenTracking
                     } else if self.known_trackers.contains(&domain) {
                         TrackerType::MarketingPlatform { name: domain.clone() }
-                    } else if is_tracking_url_pattern(&src) {
+                    } else if is_tracking_url_pattern(src) {
                         TrackerType::OpenTracking
                     } else {
                         TrackerType::Unknown
@@ -143,12 +143,12 @@ impl TrackingDetector {
 
                     let is_tracker = is_pixel
                         || self.known_trackers.contains(&domain)
-                        || is_tracking_url_pattern(&src);
+                        || is_tracking_url_pattern(src);
 
                     if is_tracker {
                         blocked_domains.push(domain.clone());
                         pixels_found.push(TrackingPixel {
-                            url: src,
+                            url: src.to_string(),
                             domain,
                             pixel_size: width.zip(height),
                             tracker_type,
@@ -404,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn 1x1ピクセルを検出する() {
+    fn detects_1x1_tracking_pixel() {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://unknown-tracker.example.com/pixel.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);

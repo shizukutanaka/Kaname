@@ -25,7 +25,7 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
-use std::sync::{Arc, Mutex};
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -122,9 +122,9 @@ pub fn render_tray_svg(state: &TrayState, dark_mode: bool) -> String {
 
     // BEC アラートドット
     let alert_dot = if mode == TrayDisplayMode::Alert {
-        r#"<circle cx="16" cy="2" r="3" fill="#E5484D"/>"#.into()
+        r##"<circle cx="16" cy="2" r="3" fill="#E5484D"/>"##.into()
     } else if !state.server_connected {
-        r#"<circle cx="16" cy="2" r="3" fill="#888888"/>"#.into()
+        r##"<circle cx="16" cy="2" r="3" fill="#888888"/>"##.into()
     } else {
         String::new()
     };
@@ -485,6 +485,7 @@ impl StartupMetrics {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

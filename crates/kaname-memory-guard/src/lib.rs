@@ -8,7 +8,7 @@
 //! Kaname が将来「過去メール文脈」を RAG/メモリで提供する場合、
 //! MINJA (Memory Injection Attack) のような攻撃に晒される:
 //! - クエリのみで悪意あるレコードをメモリに注入 (95% 成功率)
-//! - トリガー不要の永続的 behavioral drift (MemoryGraft)
+//! - トリガー不要の永続的 behavioral drift (`MemoryGraft`)
 //! - セッションを跨いで持続、手動削除まで残存
 //!
 //! # 防御 (arxiv 2601.05504 の 2 手法)
@@ -119,7 +119,8 @@ impl TrustScorer {
                 pattern_hits += 1;
             }
         }
-        score -= 0.15 * pattern_hits as f32;
+        #[allow(clippy::cast_precision_loss)]
+        { score -= 0.15 * pattern_hits as f32; }
 
         // シグナル3: 長さの異常性 (指示的な長文は減点)
         if content_hint.len() > 500 {
@@ -177,6 +178,7 @@ impl MemorySanitizer {
     /// エントリの影響を減衰させる。
     #[must_use]
     pub fn effective_trust(&self, entry: &MemoryEntry, now: u64) -> f32 {
+        #[allow(clippy::cast_precision_loss)]
         let age = now.saturating_sub(entry.created_at) as f32;
         // 指数減衰: trust * 0.5^(age / half_life)
         let decay = 0.5_f32.powf(age / self.half_life_secs);

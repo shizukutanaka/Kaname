@@ -13,4 +13,4 @@ tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
 
 [dev-dependencies]
-# テスト用依存をここに追加
+proptest = { workspace = true }

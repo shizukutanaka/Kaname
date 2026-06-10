@@ -40,7 +40,7 @@ fn x25519_parameters_match_rfc7748() {
 /// eprint 2026/192 V4: libcrux が欠いていた contributory behavior 検証。
 #[test]
 fn shared_secret_all_zero_is_rejected() {
-    let zero = SharedSecret([0u8; 32]);
+    let zero = SharedSecret::from_bytes([0u8; 32]);
     // all-zero は弱い共有秘密として扱われるべき
     assert!(zero.as_bytes().iter().all(|&b| b == 0));
 }
@@ -51,7 +51,7 @@ fn derive_key_is_deterministic() {
     let mut bytes = [0u8; 32];
     bytes[0] = 0x42;
     bytes[31] = 0x99;
-    let ss = SharedSecret(bytes);
+    let ss = SharedSecret::from_bytes(bytes);
 
     let k1 = ss.derive_key(b"kaname-test-context");
     let k2 = ss.derive_key(b"kaname-test-context");
@@ -63,7 +63,7 @@ fn derive_key_is_deterministic() {
 fn derive_key_context_separation() {
     let mut bytes = [0u8; 32];
     bytes[0] = 0x42;
-    let ss = SharedSecret(bytes);
+    let ss = SharedSecret::from_bytes(bytes);
 
     let k1 = ss.derive_key(b"context-a");
     let k2 = ss.derive_key(b"context-b");

@@ -25,7 +25,7 @@
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 //! # kaname-bec
 //!
@@ -504,7 +504,7 @@ fn contains_unusual_topic(subject: &str, typical: &str) -> bool {
     // the typical_topic_summary.
     let s = subject.to_lowercase();
     let t = typical.to_lowercase();
-    s.len() > 0 && t.len() > 0 && !s.split_whitespace().any(|w| t.contains(w))
+    !s.is_empty() && !t.is_empty() && !s.split_whitespace().any(|w| t.contains(w))
 }
 
 // ============================================================================
@@ -527,6 +527,7 @@ pub enum BecError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

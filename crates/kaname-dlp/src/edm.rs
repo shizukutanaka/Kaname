@@ -182,7 +182,7 @@ mod tests {
     fn detects_chunk_split_attack() {
         let fp = sample_fingerprints();
         // 攻撃者がデータを分割しても各トークンが検出される
-        let chunk1 = "tanaka@customer.example.com";
+        let _chunk1 = "tanaka@customer.example.com";
         let chunk2 = "yamada@customer.example.com 090-1234-5678";
         // chunk2 だけで 2 トークン一致
         assert!(fp.is_match(chunk2));

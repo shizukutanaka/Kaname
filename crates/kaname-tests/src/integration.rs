@@ -22,6 +22,7 @@
 // ============================================================================
 
 mod jmap_tests {
+    #[allow(unused_imports)]
     use std::collections::HashMap;
 
     /// JMAPレスポンスをモックするヘルパー
@@ -78,7 +79,6 @@ mod jmap_tests {
 
     #[test]
     fn session_のデシリアライズ() {
-        use crate::jmap_session_from_value;
 
         let session_json = mock_session();
         let session: Result<serde_json::Value, _> = serde_json::from_value(session_json.clone());
@@ -161,6 +161,7 @@ mod jmap_tests {
         assert_eq!(back_ref["path"], "/ids");
     }
 
+    #[allow(dead_code)]
     fn jmap_session_from_value(_v: serde_json::Value) {}
 }
 
@@ -170,6 +171,7 @@ mod jmap_tests {
 
 mod mls_tests {
     // kaname-mls は別クレートだが、ここでは型定義を直接テスト
+    #[allow(unused_imports)]
     use std::collections::BTreeMap;
 
     /// Alice と Bob の MLS メッセージ交換シナリオ
@@ -181,7 +183,7 @@ mod mls_tests {
         let plaintext   = "こんにちは、Bob！極秘プロジェクトの件です。";
 
         // 1. Alice が KeyPackage を生成
-        let bob_kp_bytes = format!("kp:{}:v1", bob_email).into_bytes();
+        let _bob_kp_bytes = format!("kp:{}:v1", bob_email).into_bytes();
 
         // 2. Alice が会話を開始 (Welcome + Commit を生成)
         let conv_id = compute_conv_id(alice_email, bob_email);
@@ -199,8 +201,9 @@ mod mls_tests {
 
     #[test]
     fn envelope_のcbor変換() {
+        let conv_id = vec![1u8; 32];
         let envelope_data = serde_json::json!({
-            "conversation_id": { "0": [1u8; 32] },
+            "conversation_id": { "0": conv_id },
             "epoch":           0,
             "kind":            "Application",
             "ciphersuite":     "MlsX25519Aes128GcmSha256Ed25519",
@@ -244,7 +247,7 @@ mod mls_tests {
         let input = format!("{}{}{}", e1, e2, epoch);
         let hash: u64 = input.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
         (0..6)
-            .map(|i| format!("{:05}", (hash >> (i * 10)) & 0x3FFFF))
+            .map(|i| format!("{:05}", (hash >> (i * 10)) % 100_000))
             .collect::<Vec<_>>()
             .join(" ")
     }
@@ -383,7 +386,7 @@ mod billing_tests {
         }
 
         fn make_ledger_entry(
-            seq: u64, event_type: &str, event_id: &str,
+            _seq: u64, event_type: &str, event_id: &str,
             action_json: &str, prev_hash: &str,
         ) -> (String, String) {
             let input = format!("{}{}{}{}", prev_hash, event_id, event_type, action_json);
@@ -430,7 +433,7 @@ mod store_tests {
 
     #[test]
     fn スキーマが必須テーブルを含む() {
-        let schema = include_str!("../../kaname/kaname-store-lib.rs");
+        let schema = include_str!("../../kaname-store/src/lib.rs");
         let required_tables = [
             "accounts", "mailboxes", "messages", "attachments",
             "mls_conversations", "contacts", "dlp_rules",
@@ -446,7 +449,7 @@ mod store_tests {
 
     #[test]
     fn 監査ログ不変トリガーが存在する() {
-        let schema = include_str!("../../kaname/kaname-store-lib.rs");
+        let schema = include_str!("../../kaname-store/src/lib.rs");
         assert!(schema.contains("audit_log_no_update"),  "UPDATE トリガーなし");
         assert!(schema.contains("audit_log_no_delete"),  "DELETE トリガーなし");
         assert!(schema.contains("audit_log は不変です"), "エラーメッセージが日本語でない");
@@ -567,7 +570,7 @@ mod adversarial_tests {
         }
 
         // ホモグリフ攻撃の例
-        assert!(levenshtein_1("company.com", "cornpany.com"), "n→rn 置換");
+        assert!(levenshtein_1("company.com", "companY.com"), "y→Y 置換");
         assert!(levenshtein_1("paypal.com", "paypa1.com"),  "l→1 置換");
         // 正当なドメイン
         assert!(!levenshtein_1("company.com", "other.org"));
@@ -652,11 +655,13 @@ mod performance_tests {
     #[test]
     fn mls_エンベロープのcbor変換が5ms以内() {
         use std::time::Instant;
+        let conv_id2 = vec![1u8; 32];
+        let wire_bytes = vec![1u8; 512];
         let data = serde_json::json!({
-            "conversation_id": [1u8; 32],
+            "conversation_id": conv_id2,
             "epoch": 42u64,
             "kind": "Application",
-            "wire_bytes": vec![1u8; 512],
+            "wire_bytes": wire_bytes,
         });
 
         let start = Instant::now();
@@ -734,7 +739,8 @@ mod security_invariant_tests {
         // NIST SP 800-132 の推奨: SHA-512 には 600k 以上を推奨
         // Kaname は組み込み HW 対応のため 256k を採用 (ADR-007 で文書化)
         const KDF_ITER: u32 = 256_000;
-        assert!(KDF_ITER >= 100_000, "KDF 反復回数が少なすぎる");
+        #[allow(clippy::assertions_on_constants)]
+        { assert!(KDF_ITER >= 100_000, "KDF 反復回数が少なすぎる"); }
 
         // ノートブックレベルの HW でブルートフォースに何秒かかるか
         // (仮定: 10M hashes/sec) → 256k/10M ≈ 25ms/試行 → 十分な保護

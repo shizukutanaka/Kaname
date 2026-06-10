@@ -156,17 +156,17 @@ impl AitmDetector {
 
         // 5. 過剰なリダイレクト構造のシグナル
         //    URL 内に URL が含まれる (redirect=https%3A%2F%2F...)
-        if lower.contains("redirect=") || lower.contains("next=") || lower.contains("url=") {
-            if lower.contains("http") {
-                score += 20;
-                signals.push("URL 内にリダイレクト先 URL が埋め込まれている".to_string());
-            }
+        if (lower.contains("redirect=") || lower.contains("next=") || lower.contains("url="))
+            && lower.contains("http")
+        {
+            score += 20;
+            signals.push("URL 内にリダイレクト先 URL が埋め込まれている".to_string());
         }
 
         // スコアからバーディクト
-        let verdict = if score >= 70 {
+        let verdict = if score >= 50 {
             AitmVerdict::Dangerous
-        } else if score >= 30 {
+        } else if score >= 20 {
             AitmVerdict::Caution
         } else {
             AitmVerdict::Safe
@@ -194,7 +194,7 @@ fn extract_domain_from_url(url: &str) -> String {
         .trim_start_matches("https://")
         .trim_start_matches("http://");
     let end = without_scheme
-        .find(|c: char| c == '/' || c == '?' || c == '#')
+        .find(['/', '?', '#'])
         .unwrap_or(without_scheme.len());
     without_scheme[..end].to_lowercase()
 }

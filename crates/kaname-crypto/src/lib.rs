@@ -140,7 +140,7 @@ impl AlgId {
 #[derive(Clone, Debug)]
 pub struct PrivateKeyHandle<K: KeyKind> {
     /// OS キーリング / Secure Enclave ドライバーが付与する不透明な ID。
-    handle_id: [u8; 32],
+    _handle_id: [u8; 32],
     /// Algorithm family this handle was created for.
     alg: AlgId,
     _kind: PhantomData<K>,
@@ -190,14 +190,14 @@ mod sealed {
 }
 
 /// マーカー: このキーはキーカプセル化に使用する。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KemKey;
 impl KeyKind for KemKey {
     const KIND: &'static str = "kem";
 }
 
 /// マーカー: このキーは署名に使用する。
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SigKey;
 impl KeyKind for SigKey {
     const KIND: &'static str = "sig";
@@ -230,6 +230,12 @@ pub struct Signature {
 pub struct SharedSecret([u8; 32]);
 
 impl SharedSecret {
+    /// テスト・KAT 用コンストラクタ。
+    #[must_use]
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     /// 生バイトアクセサ。`derive_key` を推奨。
     #[must_use]
     pub fn as_bytes(&self) -> &[u8; 32] {
@@ -441,8 +447,8 @@ fn combine_shared_secrets(c: &SharedSecret, p: &SharedSecret) -> SharedSecret {
     // プレースホルダー combiner. Production: HKDF-SHA3-256(c || p, info="kaname-xwing-v1").
     // The production KDF preserves the "both must break" property under ROM.
     let mut combined = [0u8; 32];
-    for i in 0..32 {
-        combined[i] = c.0[i] ^ p.0[i];
+    for (out, (&a, &b)) in combined.iter_mut().zip(c.0.iter().zip(p.0.iter())) {
+        *out = a ^ b;
     }
     SharedSecret(combined)
 }

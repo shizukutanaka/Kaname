@@ -231,7 +231,7 @@ fn extract_ics_urls(content: &str) -> Vec<String> {
         let trimmed = line.trim();
         for prefix in ["URL:", "URL;", "ATTACH;"] {
             if trimmed.to_uppercase().starts_with(prefix) {
-                let value = trimmed.splitn(2, ':').nth(1).unwrap_or("").trim();
+                let value = trimmed.split_once(':').map_or("", |x| x.1).trim();
                 if value.starts_with("http") {
                     urls.push(value.to_string());
                 }
@@ -239,7 +239,7 @@ fn extract_ics_urls(content: &str) -> Vec<String> {
         }
         // DESCRIPTION や LOCATION 内の URL
         if trimmed.to_uppercase().starts_with("DESCRIPTION:") || trimmed.to_uppercase().starts_with("LOCATION:") {
-            let value = trimmed.splitn(2, ':').nth(1).unwrap_or("");
+            let value = trimmed.split_once(':').map_or("", |x| x.1);
             // 簡易 URL 抽出
             if let Some(start) = value.find("http") {
                 let url_part: String = value[start..].chars().take_while(|c| !c.is_whitespace()).collect();
@@ -274,7 +274,7 @@ fn extract_field(content: &str, field_name: &str) -> Option<String> {
 
 fn extract_host(url: &str) -> Option<String> {
     let without_scheme = url.trim_start_matches("https://").trim_start_matches("http://");
-    let end = without_scheme.find(|c: char| c == '/' || c == '?').unwrap_or(without_scheme.len());
+    let end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
     if end > 0 {
         Some(without_scheme[..end].to_string())
     } else {

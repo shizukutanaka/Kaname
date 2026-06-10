@@ -33,7 +33,7 @@
 //! Drives Phi-4-mini for both quarantined and privileged inference paths.
 
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
@@ -154,7 +154,9 @@ Always respond in the user's preferred language (default: Japanese).
 /// 単一 LLM 推論への入力。
 #[derive(Debug, Clone)]
 pub struct InferenceRequest {
+    /// システムプロンプト (ハードコード定数のみ)。
     pub system_prompt: String,
+    /// ユーザーメッセージ本文。
     pub user_message:  String,
     /// 過去のターン (P-LLM のマルチターン作文セッション用)。
     pub history:       Vec<Turn>,
@@ -163,20 +165,34 @@ pub struct InferenceRequest {
 /// 会話のターン。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Turn {
+    /// 発話者ロール。
     pub role:    Role,
+    /// 発話内容。
     pub content: String,
 }
 
+/// 会話ターンの発話者ロール。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Role { User, Assistant, System }
+pub enum Role {
+    /// ユーザー発話。
+    User,
+    /// アシスタント応答。
+    Assistant,
+    /// システム指示。
+    System,
+}
 
 /// 単一 LLM 推論からの出力。
 #[derive(Debug, Clone)]
 pub struct InferenceResult {
+    /// 生成テキスト。
     pub text:         String,
+    /// 入力トークン数。
     pub tokens_in:    u32,
+    /// 出力トークン数。
     pub tokens_out:   u32,
+    /// 推論レイテンシ (ミリ秒)。
     pub latency_ms:   u64,
 }
 
@@ -200,6 +216,12 @@ pub struct LocalLlmRunner {
 struct ModelStub;
 
 impl LocalLlmRunner {
+    /// このランナーのモデル設定。
+    #[must_use]
+    pub fn config(&self) -> &ModelConfig {
+        &self.config
+    }
+
     /// ディスクからモデルをロード。
     ///
     /// これは低速 (1-5 seconds). Call it once at startup in a background task.
@@ -321,9 +343,13 @@ impl QuarantinedLlmImpl {
 /// Bridge バリデーション前の Q-LLM からの生 JSON 出力。
 #[derive(Debug, Deserialize)]
 pub struct RawAnalysisOutput {
+    /// 280 文字以内の要約。
     pub summary:  String,
+    /// リスク判定 ("SAFE" | "ADVISORY" | "SUSPICIOUS" | "DANGEROUS")。
     pub risk:     String,
+    /// 言語コード ("JA" | "EN" | "ZH" | "KO" | "OTHER")。
     pub language: String,
+    /// 言及されたエンティティ (未検証の生値)。
     #[serde(default)]
     pub mentions: Vec<serde_json::Value>,
 }
@@ -399,12 +425,21 @@ pub fn check_model(config: &ModelConfig) -> ModelStatus {
     }
 }
 
+/// モデルファイルの存在状態。
 #[derive(Debug)]
 pub enum ModelStatus {
-    Ready { size_bytes: u64 },
+    /// モデルはロード可能。
+    Ready {
+        /// ディスク上のファイルサイズ (bytes)。
+        size_bytes: u64,
+    },
+    /// モデル未取得。ダウンロードが必要。
     Missing {
+        /// 期待される配置パス。
         path:         PathBuf,
+        /// 取得元 URL。
         download_url: String,
+        /// 想定ダウンロードサイズ (bytes)。
         size_bytes:   u64,
     },
 }
@@ -413,23 +448,30 @@ pub enum ModelStatus {
 // エラー
 // ============================================================================
 
+/// ローカル LLM 推論で発生するエラー。
 #[derive(Debug, Error)]
 pub enum LlmError {
+    /// 指定パスにモデルファイルが存在しない。
     #[error("model not found at {0}")]
     ModelNotFound(PathBuf),
 
+    /// モデルの Mutex がポイズンされている。
     #[error("model mutex poisoned")]
     ModelLocked,
 
+    /// モデル出力が期待スキーマに合致しない。
     #[error("invalid output from model: {0}")]
     InvalidOutput(&'static str),
 
+    /// JSON パース失敗。
     #[error("json parse error: {0}")]
     ParseError(String),
 
+    /// コンテキストウィンドウ超過。
     #[error("context window exceeded")]
     ContextWindowExceeded,
 
+    /// 推論タイムアウト。
     #[error("inference timeout")]
     Timeout,
 }
@@ -439,6 +481,7 @@ pub enum LlmError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

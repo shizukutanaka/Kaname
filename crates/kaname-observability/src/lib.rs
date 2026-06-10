@@ -25,10 +25,11 @@
 //   KANAME_TELEMETRY=on RUST_LOG=info cargo run
 
 
-pub mod trajectory;
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
+
+pub mod trajectory;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -245,7 +246,9 @@ impl PrivacySanitizer {
 
         // Bearer トークンを除去
         if let Some(idx) = result.find("Bearer ") {
-            let end = result[idx..].find(char::is_whitespace).unwrap_or(result.len() - idx);
+            let token_start = idx + "Bearer ".len();
+            let token_len = result[token_start..].find(char::is_whitespace).unwrap_or(result.len() - token_start);
+            let end = "Bearer ".len() + token_len;
             result.replace_range(idx..idx + end, "Bearer [REDACTED]");
         }
 
@@ -288,7 +291,7 @@ fn mask_email_addresses(s: &str) -> String {
                     result.push_str(&local);
                 }
                 // @ 以降はそのまま
-                while let Some(c2) = chars.next() {
+                for c2 in chars.by_ref() {
                     result.push(c2);
                     if !c2.is_ascii_alphanumeric() && c2 != '@' && c2 != '.' && c2 != '-' {
                         break;

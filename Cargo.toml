@@ -45,7 +45,7 @@ exclude = ["fuzz"]
 [workspace.package]
 version      = "0.3.21"
 edition      = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 authors      = ["Kaname Team <security@kaname.app>"]
 license      = "AGPL-3.0-or-later"
 repository   = "https://github.com/kaname-app/kaname"
@@ -77,6 +77,9 @@ tauri-build  = { version = "2.0" }
 proptest     = "1.4"
 criterion    = { version = "0.5", features = ["html_reports"] }
 tempfile     = "3.10"
+dirs         = "6.0"
+uuid         = { version = "1.11", features = ["v4"] }
+chrono       = { version = "0.4", default-features = false, features = ["clock"] }
 tokio-test   = "0.4"
 mockito      = "1.4"
 

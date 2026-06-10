@@ -173,7 +173,8 @@ mod property_tests {
                 && caps.contains(&Capability::ExternalCommunication);
             let verdict = RuleOfTwo::check(&caps);
             if has_all {
-                prop_assert!(matches!(verdict, RuleOfTwoVerdict::Violation { .. }));
+                let is_violation = matches!(verdict, RuleOfTwoVerdict::Violation { .. });
+                prop_assert!(is_violation);
             } else {
                 prop_assert_eq!(verdict, RuleOfTwoVerdict::Safe);
             }

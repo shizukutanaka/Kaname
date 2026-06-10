@@ -126,7 +126,8 @@ impl CampaignGroup {
         self.email_ids.push(email_id.into());
         self.last_updated_unix = now_unix();
         // メール数が増えるほど脅威スコアが上がる (最大 1.0)
-        self.threat_score = (0.3 + 0.1 * self.email_ids.len() as f32).min(1.0);
+        #[allow(clippy::cast_precision_loss)]
+        { self.threat_score = (0.3 + 0.1 * self.email_ids.len() as f32).min(1.0); }
     }
 
     /// グループが警告に値するか (3 通以上の場合)
@@ -250,7 +251,8 @@ impl CampaignRadar {
                 });
             }
             return None;
-        } else {
+        }
+        {
             // 新規グループを作成 (次回マッチングの準備)
             for key in infra_keys {
                 self.groups
@@ -343,6 +345,7 @@ fn now_unix() -> u64 {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(unused_must_use, clippy::needless_pass_by_value, clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -352,7 +355,7 @@ mod tests {
             from_domain: from.to_string(),
             return_path_domain: None,
             dkim_domain: None,
-            link_domains: links.iter().map(|s| s.to_string()).collect(),
+            link_domains: links.iter().map(ToString::to_string).collect(),
             received_at: now_unix(),
         }
     }
@@ -406,7 +409,7 @@ mod tests {
         let score_2 = m2.group.threat_score;
         let m3 = r.analyze(&email("e3", "z.com", vec!["phish-3.com"])).unwrap();
         let score_3 = m3.group.threat_score;
-        assert!(score_3 > score_2, "メール数増加でスコアが上がるはず: {} > {}", score_3, score_2);
+        assert!(score_3 > score_2, "メール数増加でスコアが上がるはず: {score_3} > {score_2}");
     }
 
     #[test]
@@ -491,7 +494,7 @@ mod tests {
         let mut r = radar_with_infra();
         r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
         r.analyze(&email("e2", "y.com", vec!["example.com"]));
-        assert!(r.groups().len() >= 1);
+        assert!(!r.groups().is_empty());
     }
 
     #[test]
@@ -511,6 +514,7 @@ mod tests {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(unused_must_use, clippy::unwrap_used, clippy::expect_used)]
 mod property_tests {
     use super::*;
     use proptest::prelude::*;
@@ -549,7 +553,7 @@ mod property_tests {
         fn threat_score_always_valid(n in 1usize..20) {
             let mut radar = CampaignRadar::new();
             for i in 0..n {
-                radar.register_domain(&format!("phish-{i}.com"), "shared-infra");
+                radar.register_domain(format!("phish-{i}.com"), "shared-infra");
             }
             let email = arb_email("test", "0");
             radar.analyze(&email);
@@ -609,6 +613,7 @@ impl DnsResolver for StaticDnsResolver {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(unused_must_use, clippy::unwrap_used, clippy::expect_used)]
 mod dns_tests {
     use super::*;
 

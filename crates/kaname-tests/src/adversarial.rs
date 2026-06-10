@@ -1,6 +1,7 @@
 // tests/adversarial/mod.rs
 //
 // Adversarial test corpus — EXECUTABLE VERSION.
+#![allow(dead_code, unused_must_use, non_snake_case, clippy::must_use_unit, clippy::single_match_else, clippy::assertions_on_constants, clippy::single_match)]
 //
 // This is the "spec meets code" layer. Each payload from docs/adversarial-
 // corpus.md has a test here. CI runs these nightly; a regression blocks merge.
@@ -30,7 +31,7 @@ mod adv_harness {
 
     /// 処理を開始する。
     pub fn run(text: &str) -> Outcome {
-        let content = Content::<Untrusted>::from_network(text);
+        let content = Content::<Untrusted>::from_network(text, "test-preflight");
         let preflight = preflight_untrusted(&content);
 
         let ai_refused = matches!(preflight, PreflightResult::Block(_));

@@ -48,8 +48,11 @@ pub struct AiPhishingAnalysis {
 /// AI生成を示す個別の特徴量。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiFeature {
+    /// 特徴量の識別名。
     pub name:        String,
+    /// 特徴量スコア (0.0-1.0)。
     pub value:       f32,
+    /// 人間可読な説明。
     pub description: String,
 }
 
@@ -106,7 +109,7 @@ impl AiPhishingDetector {
         } else { 1.0 };
 
         // TTR が低い (< 0.4) または高すぎる (> 0.85) はどちらも疑わしい
-        let ttr_score = if ttr < 0.35 || ttr > 0.88 { 0.6 } else { 0.1 };
+        let ttr_score = if !(0.35..=0.88).contains(&ttr) { 0.6 } else { 0.1 };
         features.push(AiFeature {
             name: "語彙多様性 (TTR)".into(),
             value: ttr,
@@ -254,9 +257,15 @@ pub enum AiAccessDecision {
     /// アクセス許可。AI 処理を続行。
     Allow,
     /// 警告付き許可。ユーザーへの確認が必要。
-    AllowWithWarning { reason: String },
+    AllowWithWarning {
+        /// 警告理由。
+        reason: String,
+    },
     /// ブロック。AI 処理を禁止。
-    Block { reason: String },
+    Block {
+        /// ブロック理由。
+        reason: String,
+    },
 }
 
 /// AI アクセス監査エントリ。
@@ -345,8 +354,8 @@ impl AiAccessController {
 
         let timestamp = now_unix();
         let hash_input = format!(
-            "{}{}{}{}{}{}", prev_hash, email_id, operation, llm_type,
-            timestamp, format!("{:?}", decision)
+            "{}{}{}{}{}{:?}", prev_hash, email_id, operation, llm_type,
+            timestamp, decision
         );
         let hash = simple_hash(&hash_input);
 
@@ -391,9 +400,9 @@ impl AiAccessController {
                 return false;
             }
             let expected = simple_hash(&format!(
-                "{}{}{}{}{}{}", entry.prev_hash, entry.email_id,
+                "{}{}{}{}{}{:?}", entry.prev_hash, entry.email_id,
                 entry.operation, entry.llm_type,
-                entry.timestamp, format!("{:?}", entry.decision)
+                entry.timestamp, entry.decision
             ));
             if expected != entry.hash { return false; }
             prev_hash = entry.hash.clone();
@@ -421,7 +430,9 @@ impl Default for AiAccessController {
 /// コンタクトの関係強度と通信パターン。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContactIntelligence {
+    /// メールアドレス。
     pub email_addr:       String,
+    /// 表示名 (ヘッダー由来)。
     pub display_name:     Option<String>,
     /// 関係強度 (0.0=見知らぬ人, 1.0=最も頻繁に連絡する相手)
     pub relationship_strength: f32,
@@ -615,13 +626,17 @@ impl Default for ContactIntelligenceEngine {
 
 /// インタラクションの方向。
 #[derive(Debug, Clone, Copy)]
-pub enum InteractionDirection { Sent, Received }
+pub enum InteractionDirection {
+    /// 自分が送信した。
+    Sent,
+    /// 相手から受信した。
+    Received,
+}
 
 fn categorize_contact(
-    email: &str, domain: &str, received: u32, sent: u32
+    email: &str, _domain: &str, received: u32, sent: u32
 ) -> ContactCategory {
     let email_lower = email.to_lowercase();
-    let domain_lower = domain.to_lowercase();
 
     if email_lower.contains("noreply") || email_lower.contains("no-reply")
        || email_lower.contains("newsletter") || received > 10 && sent == 0 {
@@ -694,7 +709,7 @@ impl ActionExtractor {
     ///   - 他のメールへのアクセスなし
     ///   - 抽出結果は構造化データ (自由形式テキストを P-LLM に渡さない)
     #[must_use]
-    pub fn extract(body: &str, subject: Option<&str>) -> Vec<ActionItem> {
+    pub fn extract(body: &str, _subject: Option<&str>) -> Vec<ActionItem> {
         let mut items = Vec::new();
         let lower = body.to_lowercase();
 

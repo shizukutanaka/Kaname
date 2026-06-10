@@ -30,7 +30,6 @@
 //   DlpEngine::from_db() loads them at startup and on Settings change.
 
 
-pub mod edm;
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -39,6 +38,9 @@ pub mod edm;
 //! # kaname-dlp
 //!
 //! Boolean-grammar DLP rule engine. Pure, synchronous, zero-allocation hot path.
+
+/// EDM (Exact Data Match) — 顧客データの完全一致検出。
+pub mod edm;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -50,11 +52,17 @@ use std::collections::HashMap;
 /// DLP ルール: 条件ツリー + アクション + メタデータ。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
+    /// ルールの一意 ID。
     pub id:        String,
+    /// 表示名。
     pub name:      String,
+    /// 有効フラグ。
     pub enabled:   bool,
+    /// 適用方向 (送信/受信/両方)。
     pub direction: Direction,
+    /// 発火条件ツリー。
     pub condition: Condition,
+    /// 一致時のアクション。
     pub action:    Action,
     /// 数値が小さいほど先に評価。同値の場合は id で決定。
     pub priority:  u32,
@@ -64,7 +72,12 @@ pub struct Rule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Direction {
-    Outbound, Inbound, Both,
+    /// 送信メールに適用。
+    Outbound,
+    /// 受信メールに適用。
+    Inbound,
+    /// 双方向に適用。
+    Both,
 }
 
 /// ルールが一致した時に取るアクション。
@@ -84,11 +97,20 @@ pub enum Action {
 #[serde(tag = "op", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Condition {
     /// 全ての子が一致しなければならない。
-    And { children: Vec<Condition> },
+    And {
+        /// 子条件。
+        children: Vec<Condition>,
+    },
     /// 少なくとも 1 つの子が一致しなければならない。
-    Or  { children: Vec<Condition> },
+    Or {
+        /// 子条件。
+        children: Vec<Condition>,
+    },
     /// 子が一致してはならない。
-    Not { child: Box<Condition> },
+    Not {
+        /// 否定対象の子条件。
+        child: Box<Condition>,
+    },
     /// リーフ: 分類器を実行。
     Matches(Predicate),
 }
@@ -103,7 +125,7 @@ impl Condition {
         Self::Or { children }
     }
     /// Negate a condition.
-    pub fn not(c: Condition) -> Self {
+    pub fn negate(c: Condition) -> Self {
         Self::Not { child: Box::new(c) }
     }
     /// Leaf from a predicate.
@@ -117,23 +139,52 @@ impl Condition {
 #[serde(tag = "kind", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Predicate {
     /// Built-in classifier (e.g. JP_MY_NUMBER, CREDIT_CARD).
-    Classifier { classifier: ClassifierId },
+    Classifier {
+        /// 分類器 ID。
+        classifier: ClassifierId,
+    },
     /// Regular expression match against body text.
-    Regex { pattern: String },
+    Regex {
+        /// 正規表現パターン。
+        pattern: String,
+    },
     /// Keyword match (case-insensitive) against body text.
-    Keyword { words: Vec<String>, min_count: u32 },
+    Keyword {
+        /// 検索キーワード群。
+        words: Vec<String>,
+        /// 発火に必要な最小一致数。
+        min_count: u32,
+    },
     /// Recipient domain is in the given list.
-    RecipientDomain { domains: Vec<String> },
+    RecipientDomain {
+        /// 対象ドメイン群。
+        domains: Vec<String>,
+    },
     /// Sender address matches.
-    SenderAddress { addresses: Vec<String> },
+    SenderAddress {
+        /// 対象アドレス群。
+        addresses: Vec<String>,
+    },
     /// Message size exceeds threshold.
-    SizeBytes { min: u64 },
+    SizeBytes {
+        /// 閾値 (bytes)。
+        min: u64,
+    },
     /// Attachment MIME type matches.
-    AttachmentMime { types: Vec<String> },
+    AttachmentMime {
+        /// 対象 MIME タイプ群。
+        types: Vec<String>,
+    },
     /// Custom: matches a named pattern from the pattern library.
-    PatternLibrary { pattern_id: String },
+    PatternLibrary {
+        /// パターンライブラリ内の ID。
+        pattern_id: String,
+    },
     /// EDM: 機密データセットとの完全一致 (ハッシュフィンガープリント)。
-    ExactDataMatch { fingerprint_set_id: String },
+    ExactDataMatch {
+        /// フィンガープリントセット ID。
+        fingerprint_set_id: String,
+    },
 }
 
 /// 組み込み分類器の識別子。
@@ -341,6 +392,7 @@ impl DlpEngine {
 #[derive(Debug)]
 pub struct DlpResult {
     /// 全体的な判定 (全トリガーされたルールの最大値)。
+    /// 最終判定 (最も厳しいアクション)。
     pub verdict:  Action,
     /// All matching rules and their individual verdicts.
     pub findings: Vec<Finding>,
@@ -357,8 +409,11 @@ impl DlpResult {
 /// 1 つのトリガーされたルール。
 #[derive(Debug)]
 pub struct Finding {
+    /// 発火したルールの ID。
     pub rule_id:   String,
+    /// 発火したルールの表示名。
     pub rule_name: String,
+    /// そのルールのアクション。
     pub action:    Action,
     /// Short excerpt showing where the match occurred (for UI display).
     pub excerpt:   String,
@@ -521,7 +576,7 @@ fn default_rules() -> Vec<Rule> {
             action:    Action::Block,
             condition: Condition::all(vec![
                 Condition::matches(Predicate::Classifier { classifier: ClassifierId::JpMyNumber }),
-                Condition::not(Condition::matches(Predicate::RecipientDomain {
+                Condition::negate(Condition::matches(Predicate::RecipientDomain {
                     domains: vec![], // empty = no allow-list; all external blocked
                 })),
             ]),

@@ -216,7 +216,7 @@ impl MockServer {
         serde_json::json!({
             "list": result,
             "not_found": [],
-            "state": *self.state.lock(),
+            "state": *self.state.lock().unwrap_or_else(|e| e.into_inner()),
         })
     }
 
@@ -252,7 +252,7 @@ impl MockServer {
                 { "id": "trash",   "name": "ゴミ箱",     "role": "trash", "total_emails": 0, "unread_emails": 0 },
                 { "id": "archive", "name": "アーカイブ", "role": "archive", "total_emails": 0, "unread_emails": 0 },
             ],
-            "state": *self.state.lock(),
+            "state": *self.state.lock().unwrap_or_else(|e| e.into_inner()),
         })
     }
 
@@ -278,6 +278,7 @@ impl Default for MockServer {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

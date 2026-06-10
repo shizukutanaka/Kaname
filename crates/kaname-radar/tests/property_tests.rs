@@ -25,7 +25,7 @@ proptest! {
     fn threat_score_in_range(n in 1usize..=20) {
         let mut r = CampaignRadar::new();
         r.register_domain("evil.com", "infra-x");
-        for i in 0..n { r.analyze(&meta(&format!("e{i}"), "evil.com")); }
+        for i in 0..n { let _ = r.analyze(&meta(&format!("e{i}"), "evil.com")); }
         for g in r.groups() {
             prop_assert!((0.0..=1.0).contains(&g.threat_score));
         }
@@ -36,7 +36,7 @@ proptest! {
     fn alertable_iff_three_or_more(n in 0usize..=10) {
         let mut r = CampaignRadar::new();
         r.register_domain("evil.com", "infra-y");
-        for i in 0..n { r.analyze(&meta(&format!("e{i}"), "evil.com")); }
+        for i in 0..n { let _ = r.analyze(&meta(&format!("e{i}"), "evil.com")); }
         for g in r.groups() {
             prop_assert_eq!(g.is_alertable(), g.email_ids.len() >= 3);
         }
@@ -47,7 +47,7 @@ proptest! {
     fn no_duplicate_ids(n in 1usize..=5) {
         let mut r = CampaignRadar::new();
         r.register_domain("evil.com", "infra-z");
-        for _ in 0..n { r.analyze(&meta("same-id", "evil.com")); }
+        for _ in 0..n { let _ = r.analyze(&meta("same-id", "evil.com")); }
         for g in r.groups() {
             let unique: std::collections::HashSet<_> = g.email_ids.iter().collect();
             prop_assert_eq!(g.email_ids.len(), unique.len());

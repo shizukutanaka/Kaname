@@ -12,6 +12,8 @@ tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
 reqwest    = { workspace = true }
+uuid       = { workspace = true }
+chrono     = { workspace = true }
 
 [dev-dependencies]
 mockito = "1.4"

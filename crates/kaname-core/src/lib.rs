@@ -2,6 +2,7 @@
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
+#![allow(missing_docs)]
 
 pub mod app_state;
 pub mod ux_features;

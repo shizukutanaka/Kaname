@@ -571,6 +571,7 @@ fn now_unix() -> u64 {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -584,7 +585,7 @@ mod tests {
     }
 
     #[test]
-    fn 2回目以降は判定済み() {
+    fn second_time_is_already_decided() {
         let mut screener = SenderScreener::new();
         screener.observe("alice@example.com", None, "2026-04-24");
         screener.decide("alice@example.com", ScreenerDecision::AllowInbox).unwrap();

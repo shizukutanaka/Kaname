@@ -27,7 +27,7 @@
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -210,7 +210,7 @@ impl DeduplicatorInMem {
     /// イベントが未処理の場合 true を返す (and records it).
     #[must_use]
     pub fn try_process(&self, event_id: &str) -> bool {
-        let mut set = self.seen.lock().unwrap_or_default();
+        let mut set = self.seen.lock().unwrap_or_else(|e| e.into_inner());
         set.insert(event_id.to_owned())
     }
 }
@@ -479,9 +479,11 @@ fn hmac_sha256_hex(key: &[u8], msg: &[u8]) -> String {
 }
 
 fn sha256_hex(data: &[u8]) -> String {
-    // スタブ — real code uses ring::digest
-    let _ = data;
-    "cafebabe".repeat(8)
+    // スタブ — real code uses ring::digest; content-sensitive for now
+    let hash: u64 = data.iter().enumerate().fold(0u64, |acc, (i, &b)| {
+        acc.wrapping_add((b as u64).wrapping_mul(i as u64 + 1).wrapping_mul(6364136223846793005))
+    });
+    format!("{:016x}{:016x}{:016x}{:016x}", hash, hash ^ 0xDEADBEEFCAFEBABE, hash.rotate_left(17), hash.rotate_right(7))
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {

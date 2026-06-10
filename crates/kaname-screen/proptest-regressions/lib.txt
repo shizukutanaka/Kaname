@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 07a945220c3b05ee5d5d016cfcc222bcbfe6e565ed51f53363e8333f66798534 # shrinks to s = "𰬆\u{dc653}h\u{c2c7c}=\u{889a4}Ú\u{af0a1}1\u{e420a}G\u{c46e3}@\u{390ba}$\\.m`j\u{7}T\u{6}$Ѩ<🕴\u{7f}\u{c969c}=P\"$\0m\u{62332}{.\u{feff}n\\\u{3}"
+cc bae2004c30513c9c85ab5ad15e54d48cf5463ac9397925aec8624e812a185347 # shrinks to s = "C\u{feff}?x\u{c716e}\u{7}🕴\u{7ee8c}Ⱥ눹\u{ac2ca}U\u{6}{&=F\u{202e}K\u{feff}\u{90928}\u{e1b18}%🕴\u{52dc5}iP\u{1b}<\u{f2cf4}\u{14785}*\u{a3f89}"
+cc d6c55476d6251b633b9fd8c8cac5c32fe98b35e62d171fd44f4a61ea7060ef75 # shrinks to s = "Ѩ\u{1b}<[\0\u{b}\u{100bc0}\u{33af4}𧪭%/\0x\u{b}*\u{b}\u{3}P`< n:<\u{7be60}%🕴Sz$\u{61ecc}+u&\u{b}\u{8}^\u{1}/D\u{a8d7e}\u{ffa18}\r{"
+cc 7122cdb0ad02bf6c4c47e6a04231ca1fbed72ccd3e6a1071cb8a51c53d1e9657 # shrinks to s = "E|\t;j\u{e0de3}\u{bf324}\\🕴🕴\u{b}Ⱥ\r-𩽝L\t{\u{bbbb4}DüѨ\u{1b}?\u{766e9}:u\u{f963d}\r{\u{93608}�G\u{8f5c3}T_\u{70763}"

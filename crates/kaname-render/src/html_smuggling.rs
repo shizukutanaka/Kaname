@@ -84,11 +84,9 @@ impl HtmlSmugglingDetector {
             signals.push(SmugglingSignal::BlobUri);
         }
 
-        // 2. Base64 デコード + 即時実行
+        // 2. Base64 デコード (+ 即時実行や blob 結合も含む)
         if lower.contains("atob(") {
-            if lower.contains("eval(") || lower.contains("function(") || lower.contains("exec") {
-                signals.push(SmugglingSignal::Base64Eval);
-            }
+            signals.push(SmugglingSignal::Base64Eval);
         }
 
         // 3. 自動ダウンロードトリガー

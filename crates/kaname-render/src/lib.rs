@@ -4,10 +4,6 @@
 //! - HTML サニタイズ: scraper + 許可リスト方式
 //! - mXSS / SVG XSS / data: URI 攻撃対策
 
-/// Deepfake 添付ファイル警告 (機能 #5)
-pub mod deepfake_advisory;
-pub mod quishing;
-
 // crates/kaname-render/src/lib.rs
 //
 // メール rendering pipeline.
@@ -37,11 +33,16 @@ pub mod quishing;
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 //! # kaname-render
 //!
 //! Untrusted email → sandboxed iframe srcdoc.
+
+/// Deepfake 添付ファイル警告 (機能 #5)。
+pub mod deepfake_advisory;
+/// QR コードフィッシング (quishing) 検出。
+pub mod quishing;
 
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -58,33 +59,48 @@ use thiserror::Error;
 /// Parsed mail envelope. Still untrusted; contains no executable content.
 #[derive(Debug)]
 pub struct Envelope {
+    /// Message-ID ヘッダー。
     pub message_id: Option<String>,
+    /// From アドレス群。
     pub from:       Vec<Address>,
+    /// To アドレス群。
     pub to:         Vec<Address>,
+    /// Cc アドレス群。
     pub cc:         Vec<Address>,
+    /// 件名。
     pub subject:    Option<String>,
-    pub date:       Option<i64>,    // Unix timestamp
+    /// Date ヘッダー (Unix タイムスタンプ)。
+    pub date:       Option<i64>,
+    /// プレーンテキスト本文。
     pub text_body:  Option<String>,
+    /// HTML 本文 (サニタイズ前)。
     pub html_body:  Option<RawHtml>,
+    /// 添付ファイルヘッダー群。
     pub attachments: Vec<AttachmentHeader>,
+    /// Authentication-Results (SPF/DKIM/DMARC)。
     pub auth_results: AuthResultsHeader,
 }
 
 /// An RFC 5322 address.
 #[derive(Debug, Clone)]
 pub struct Address {
+    /// 表示名 (例: "山田 太郎")。
     pub display_name: Option<String>,
+    /// アドレス本体。
     pub addr:         EmailAddr,
 }
 
 /// Validated RFC 5322 addr-spec.
 #[derive(Debug, Clone)]
 pub struct EmailAddr {
+    /// ローカルパート (@ の前)。
     pub local:  String,
+    /// ドメインパート (@ の後)。
     pub domain: String,
 }
 
 impl EmailAddr {
+    /// "local@domain" 形式の文字列に変換する。
     #[must_use]
     pub fn as_string(&self) -> String {
         format!("{}@{}", self.local, self.domain)
@@ -98,22 +114,42 @@ pub struct RawHtml(String);
 /// Attachment header only. Bytes live on disk or in the sandbox.
 #[derive(Debug, Clone)]
 pub struct AttachmentHeader {
+    /// ファイル名 (Content-Disposition 由来)。
     pub filename:      String,
+    /// 宣言された MIME タイプ (詐称されうる)。
     pub declared_mime: String,
+    /// サイズ (bytes)。
     pub size_bytes:    u64,
+    /// インライン参照用 Content-ID。
     pub content_id:    Option<String>,
 }
 
 /// Parsed Authentication-Results header.
 #[derive(Debug, Default)]
 pub struct AuthResultsHeader {
+    /// SPF 検証結果。
     pub spf:   AuthResult,
+    /// DKIM 検証結果。
     pub dkim:  AuthResult,
+    /// DMARC 検証結果。
     pub dmarc: AuthResult,
 }
 
+/// 個別の送信ドメイン認証結果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AuthResult { Pass, Fail, Neutral, SoftFail, #[default] None }
+pub enum AuthResult {
+    /// 検証成功。
+    Pass,
+    /// 検証失敗。
+    Fail,
+    /// 中立 (判定材料不足)。
+    Neutral,
+    /// ソフトフェイル (~all)。
+    SoftFail,
+    /// ヘッダーに結果なし。
+    #[default]
+    None,
+}
 
 /// Parse raw RFC 5322 bytes into an Envelope.
 ///
@@ -159,9 +195,17 @@ pub enum DlpVerdict {
     /// No policy triggered.
     Allow,
     /// Policy triggered — user warned, can override.
-    Warn { policy: String, excerpt: String },
+    Warn {
+        /// 発火したポリシー名。
+        policy: String,
+        /// 該当箇所の抜粋。
+        excerpt: String,
+    },
     /// Policy triggered — blocked, cannot send.
-    Block { policy: String },
+    Block {
+        /// 発火したポリシー名。
+        policy: String,
+    },
 }
 
 /// Run DLP preflight on an inbound envelope before rendering.
@@ -367,12 +411,16 @@ pub fn render(
 // エラー
 // ============================================================================
 
+/// レンダリングパイプラインで発生するエラー。
 #[derive(Debug, Error)]
 pub enum RenderError {
+    /// MIME パース失敗。
     #[error("parse error: {0}")]
     Parse(String),
+    /// DLP ポリシーによりブロックされた。
     #[error("DLP blocked by policy: {0}")]
     DlpBlocked(String),
+    /// HTML サニタイズ失敗。
     #[error("sanitizer error: {0}")]
     Sanitize(String),
 }
@@ -398,7 +446,7 @@ mod tests {
 
     #[test]
     fn bidi_stripped_in_sanitize() {
-        let raw = RawHtml(format!("Hello\u{202E}World"));
+        let raw = RawHtml("Hello\u{202E}World".to_string());
         let s = sanitize_html(&raw);
         assert!(!s.as_str().contains('\u{202E}'));
         assert!(s.as_str().contains("Hello"));
@@ -428,5 +476,7 @@ mod tests {
     }
 }
 
+/// HTML スマグリング検出 (Blob/data: URI 経由のペイロード組み立て)。
 pub mod html_smuggling;
+/// カレンダー招待 (ICS) のセキュリティ検査。
 pub mod calendar_guard;

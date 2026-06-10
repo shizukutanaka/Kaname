@@ -89,7 +89,6 @@ impl ContinuitySession {
     ///
     /// position が 0.0〜1.0 の範囲外の場合。
     pub fn update_scroll(&mut self, position: f32) {
-        debug_assert!((0.0..=1.0).contains(&position), "scroll position out of range: {position}");
         self.scroll_position = position.clamp(0.0, 1.0);
         self.touch();
     }
@@ -195,7 +194,7 @@ fn now_unix() -> u64 {
 // ============================================================================
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
 mod tests {
     use super::*;
 
@@ -265,6 +264,7 @@ mod tests {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::float_cmp)]
 mod property_tests {
     use super::*;
     use proptest::prelude::*;

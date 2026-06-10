@@ -20,7 +20,7 @@
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
@@ -31,13 +31,19 @@ use thiserror::Error;
 // SQLCipher パラメータ (ADR-007 で固定)
 // ============================================================================
 
+/// SQLCipher 暗号化パラメータ (ADR-007 で固定。変更は承認フロー必須)。
 pub struct SqlCipherParams;
 
 impl SqlCipherParams {
+    /// SQLCipher ページサイズ (bytes)。
     pub const PAGE_SIZE: u32    = 4096;
+    /// PBKDF2 反復回数。
     pub const KDF_ITER:  u32    = 256_000;
+    /// HMAC アルゴリズム。
     pub const HMAC_ALG:  &'static str = "HMAC_SHA512";
+    /// KDF アルゴリズム。
     pub const KDF_ALG:   &'static str = "PBKDF2_HMAC_SHA512";
+    /// プレーンテキストヘッダーサイズ (bytes)。
     pub const PLAINTEXT_HEADER_SIZE: u32 = 32;
 
     /// DB オープン直後に実行するプラグマシーケンス。
@@ -67,6 +73,7 @@ impl SqlCipherParams {
 // スキーマ (全テーブル定義)
 // ============================================================================
 
+/// スキーマ V0: 初期テーブル定義。
 pub const SCHEMA_V0: &str = r#"
 CREATE TABLE IF NOT EXISTS accounts (
     id           TEXT PRIMARY KEY NOT NULL,
@@ -305,7 +312,7 @@ impl Store {
 
         // tmp を本番ファイルに置き換え
         std::fs::rename(&tmp_path, &self.path)
-            .map_err(|e| StoreError::Io(e))?;
+            .map_err(StoreError::Io)?;
 
         tracing::info!("DB 再キー設定完了");
         Ok(())
@@ -464,23 +471,30 @@ fn sha256_hex(data: &[u8]) -> String {
 // エラー
 // ============================================================================
 
+/// ストレージ層で発生するエラー。
 #[derive(Debug, Error)]
 pub enum StoreError {
+    /// 暗号化キーが 64 文字の hex 文字列でない。
     #[error("無効なキー: 64 文字の hex が必要")]
     InvalidKey,
 
+    /// SQLite / SQLCipher の操作エラー。
     #[error("DB エラー: {0}")]
     Db(String),
 
+    /// スキーママイグレーション失敗。
     #[error("マイグレーション失敗 (V{0}): {1}")]
     Migration(u32, String),
 
+    /// PRAGMA integrity_check が FAIL を返した。
     #[error("インテグリティチェック失敗")]
     IntegrityCheckFailed,
 
+    /// 監査ログの FNV-1a ハッシュチェーンが破損している。
     #[error("監査ログのハッシュチェーン破損 (seq={0})")]
     AuditChainBroken(i64),
 
+    /// ファイル I/O エラー。
     #[error("IO エラー: {0}")]
     Io(#[from] std::io::Error),
 }

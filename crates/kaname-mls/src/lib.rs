@@ -22,7 +22,7 @@
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -41,10 +41,12 @@ mod mls_types {
 
     /// MLS Welcome メッセージ (RFC 9420 §11)。
     #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[allow(dead_code)]
     pub struct Welcome { pub bytes: Vec<u8> }
 
     /// MLS Application/Commit メッセージ (RFC 9420 §12)。
     #[derive(Clone, Debug, Serialize, Deserialize)]
+    #[allow(dead_code)]
     pub struct MlsMessage { pub bytes: Vec<u8> }
 
     /// KeyPackage: グループ追加に使われる 1 回限りの鍵素材。
@@ -76,7 +78,7 @@ pub struct Identity {
 }
 
 /// RFC 5322 メールアドレス。構築時に検証済み。
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EmailAddress(String);
 
 impl EmailAddress {
@@ -103,6 +105,7 @@ impl std::fmt::Display for EmailAddress {
 // ============================================================================
 
 /// MLS グループとして表現された会話。
+#[derive(Debug)]
 pub struct Conversation {
     pub id:      ConversationId,
     pub kind:    ConversationKind,
@@ -114,7 +117,7 @@ pub struct Conversation {
 }
 
 /// 会話識別子 (名前変更・移動に対して安定)。
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ConversationId(pub [u8; 32]);
 
 impl ConversationId {
@@ -523,13 +526,29 @@ impl MlsMailClient {
             }
 
             EnvelopeKind::Commit => {
-                // openmls 本番実装:
-                //
-                // let mut group = MlsGroup::load(&state.bytes, &crypto)?;
-                // let processed = group.process_message(&crypto, &commit_msg)?;
-                // group.merge_staged_commit(&crypto)?;
+                // モック実装: Welcome を含む Commit は新規参加として扱う
+                let is_new_member = !self.conversations.contains_key(&envelope.conversation_id);
+                if is_new_member && envelope.welcome.is_some() {
+                    let safety_number = compute_safety_number(
+                        self.identity.email.as_str(),
+                        "remote@kaname.app",
+                        envelope.epoch,
+                    );
+                    let conversation = Conversation {
+                        id:            envelope.conversation_id.clone(),
+                        kind:          ConversationKind::OneToOne,
+                        members:       vec![self.identity.email.clone()],
+                        state:         GroupState { bytes: envelope.wire_bytes.clone() },
+                        epoch:         envelope.epoch,
+                        safety_number: Some(safety_number),
+                    };
+                    self.conversations.insert(
+                        envelope.conversation_id.clone(),
+                        GroupState { bytes: envelope.wire_bytes.clone() },
+                    );
+                    return Ok(IncomingResult::WelcomeJoined(conversation));
+                }
 
-                // モック実装: メンバーシップ変更として扱う
                 if let Some(state) = self.conversations.get_mut(&envelope.conversation_id) {
                     state.bytes.extend_from_slice(&envelope.wire_bytes);
                 }
@@ -623,7 +642,7 @@ fn compute_safety_number(our_email: &str, their_email: &str, epoch: u64) -> Stri
     });
     // 5桁×6グループの表示形式 (Signal 方式)
     (0..6)
-        .map(|i| format!("{:05}", (hash >> (i * 10)) & 0x3FFFF))
+        .map(|i| format!("{:05}", (hash >> (i * 10)) % 100_000))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -667,6 +686,7 @@ pub enum MlsMailError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -725,7 +745,7 @@ mod tests {
 
         // Bob が Welcome を処理
         let bob_result = bob.process_incoming(&welcome_env).unwrap();
-        let mut bob_conv = match bob_result {
+        let bob_conv = match bob_result {
             IncomingResult::WelcomeJoined(c) => c,
             _ => panic!("WelcomeJoined を期待"),
         };
@@ -746,11 +766,10 @@ mod tests {
         };
         let result = bob.process_incoming(&env_for_bob).unwrap();
         if let IncomingResult::Application(decrypted) = result {
-            // モック XOR: bob_conv.id[0] を使って復元
+            // モック XOR: 復号した後に再度 XOR すれば元の暗号文に戻る
             let key = bob_conv.id.0[0];
-            let re_decrypted: Vec<u8> = decrypted.iter().map(|b| b ^ key).collect();
-            let re_re: Vec<u8> = re_decrypted.iter().map(|b| b ^ key).collect();
-            assert_eq!(re_re, env_for_bob.wire_bytes);
+            let re_encrypted: Vec<u8> = decrypted.iter().map(|b| b ^ key).collect();
+            assert_eq!(re_encrypted, env_for_bob.wire_bytes);
         } else {
             panic!("Application を期待");
         }

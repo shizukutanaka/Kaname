@@ -21,11 +21,11 @@
 //   - Close DB connection
 
 #![deny(unsafe_code)]
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use thiserror::Error;
 
 // ============================================================================
@@ -95,25 +95,13 @@ pub struct AccountConfig {
 // Sync state (shared between JMAP sync task and UI)
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SyncState {
     pub mailbox_state: Option<String>,
     pub email_state:   Option<String>,
     pub is_syncing:    bool,
     pub last_sync_at:  Option<std::time::SystemTime>,
     pub last_error:    Option<String>,
-}
-
-impl Default for SyncState {
-    fn default() -> Self {
-        Self {
-            mailbox_state: None,
-            email_state:   None,
-            is_syncing:    false,
-            last_sync_at:  None,
-            last_error:    None,
-        }
-    }
 }
 
 // ============================================================================

@@ -2,7 +2,7 @@
 //!
 //! 2026 年の Deepfake 音声/動画詐欺を「儀式」で防ぐ。
 //! BIP39 ベース 6 ワードフレーズ + チャレンジ番号方式。
-//! ZeroizeOnDrop でメモリから自動消去。5 分の期限。
+//! `ZeroizeOnDrop` でメモリから自動消去。5 分の期限。
 
 // crates/kaname-oobv/src/lib.rs
 //
@@ -32,7 +32,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
@@ -57,12 +57,13 @@ const SAFE_WORDS: &[&str] = &[
 
 /// 検証フレーズの 1 単語。
 ///
-/// ZeroizeOnDrop により、Drop 時にメモリから自動消去。
+/// `ZeroizeOnDrop` により、Drop 時にメモリから自動消去。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ZeroizeOnDrop)]
 pub struct VerificationWord(String);
 
 impl VerificationWord {
     /// 暗号学的に安全な乱数で 1 ワードを生成する。
+    #[must_use]
     pub fn random() -> Self {
         use rand::Rng;
         let idx = rand::thread_rng().gen_range(0..SAFE_WORDS.len());
@@ -359,7 +360,11 @@ fn generate_ceremony_id() -> String {
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    bytes.iter().fold(String::new(), |mut acc, b| {
+        use std::fmt::Write as _;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    })
 }
 
 // ============================================================================
@@ -446,7 +451,7 @@ mod tests {
         let json = serde_json::to_string(&record).unwrap();
         for word in c.display_phrase() {
             assert!(!json.contains(word),
-                "Audit record leaked phrase word: {}", word);
+                "Audit record leaked phrase word: {word}");
         }
     }
 
@@ -541,7 +546,9 @@ mod property_tests {
             let correct = c.phrase[c.challenge_index as usize].as_str().to_string();
             let result = c.verify(&correct);
             prop_assert!(result.is_ok());
-            prop_assert_eq!(result.unwrap(), CeremonyState::Verified);
+            if let Ok(state) = result {
+                prop_assert_eq!(state, CeremonyState::Verified);
+            }
         }
     }
 }

@@ -104,7 +104,7 @@ pub enum Provenance {
     },
     /// ユーザーの直接入力。
     UserInput {
-        /// 入力元 (例: "compose_subject", "search_query")。
+        /// 入力元 (例: `compose_subject`, `search_query`)。
         source: String,
     },
     /// ユーザーがアップロードした添付ファイル由来のデータ。
@@ -122,7 +122,7 @@ pub enum Provenance {
     },
     /// システム生成データ (テンプレート、定型文)。
     System {
-        /// 生成者 (例: "smart_reply_template")。
+        /// 生成者 (例: `smart_reply_template`)。
         generator: String,
     },
     /// Q-LLM が解析したデータ (Bridge 経由で昇格済み)。
@@ -235,7 +235,7 @@ impl Content<Trusted> {
 /// **重要**: このスキーマには自由テキストフィールドが存在しない。
 /// すべてのフィールドが事前定義された型・列挙・範囲を持つ。
 ///
-/// プロンプト注入で攻撃文字列を AnalysisReport に埋め込もうとしても、
+/// プロンプト注入で攻撃文字列を `AnalysisReport` に埋め込もうとしても、
 /// Bridge の検証で型・範囲チェックに引っかかって拒否される。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnalysisReport {
@@ -416,7 +416,7 @@ impl Default for BridgePolicy {
                 "ignore all previous",
                 "system prompt",
                 "you are now",
-                "DAN mode",
+                "dan mode",
                 "send all emails",
                 "send to attacker",
                 "execute code",
@@ -543,7 +543,7 @@ impl Default for Bridge {
 ///
 /// - **入力**: `Content<Untrusted>` のみ受け付ける (型レベル)
 /// - **出力**: `AnalysisReport` 構造体のみ (自由テキスト不可)
-/// - **ツール**: なし (この trait に execute_tool メソッドが存在しない)
+/// - **ツール**: なし (この trait に `execute_tool` メソッドが存在しない)
 /// - **ネットワーク**: なし (実装側で seccomp 強制)
 /// - **他メール**: なし (API に存在しない)
 ///
@@ -690,6 +690,7 @@ fn now_unix() -> u64 {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

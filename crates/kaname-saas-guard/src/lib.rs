@@ -23,6 +23,9 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -33,7 +36,7 @@ use thiserror::Error;
 // ============================================================================
 
 /// 認識する SaaS プラットフォーム。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SaasPlatform {
     /// Google Drive / Docs / Sheets
     GoogleDrive,
@@ -54,13 +57,13 @@ pub enum SaasPlatform {
     /// Smartsheet
     Smartsheet,
     /// その他既知の SaaS
-    Other(&'static str),
+    Other(String),
 }
 
 impl SaasPlatform {
     /// プラットフォームのドメインリスト。
     #[must_use]
-    pub fn domains(self) -> Vec<&'static str> {
+    pub fn domains(&self) -> Vec<&'static str> {
         match self {
             Self::GoogleDrive  => vec!["drive.google.com", "docs.google.com", "sheets.google.com"],
             Self::OneDrive     => vec!["1drv.ms", "onedrive.live.com"],
@@ -71,24 +74,24 @@ impl SaasPlatform {
             Self::Box          => vec!["box.com", "boxcloud.com"],
             Self::Notion       => vec!["notion.so", "notion.site"],
             Self::Smartsheet   => vec!["smartsheet.com"],
-            Self::Other(d)     => vec![d],
+            Self::Other(_)     => vec![],
         }
     }
 
     /// 表示名。
     #[must_use]
-    pub fn display_name(self) -> &'static str {
+    pub fn display_name(&self) -> String {
         match self {
-            Self::GoogleDrive => "Google Drive",
-            Self::OneDrive    => "Microsoft OneDrive",
-            Self::SharePoint  => "Microsoft SharePoint",
-            Self::DocuSign    => "DocuSign",
-            Self::AdobeSign   => "Adobe Sign",
-            Self::Dropbox     => "Dropbox",
-            Self::Box         => "Box",
-            Self::Notion      => "Notion",
-            Self::Smartsheet  => "Smartsheet",
-            Self::Other(d)    => d,
+            Self::GoogleDrive => "Google Drive".into(),
+            Self::OneDrive    => "Microsoft OneDrive".into(),
+            Self::SharePoint  => "Microsoft SharePoint".into(),
+            Self::DocuSign    => "DocuSign".into(),
+            Self::AdobeSign   => "Adobe Sign".into(),
+            Self::Dropbox     => "Dropbox".into(),
+            Self::Box         => "Box".into(),
+            Self::Notion      => "Notion".into(),
+            Self::Smartsheet  => "Smartsheet".into(),
+            Self::Other(d)    => d.clone(),
         }
     }
 }
@@ -125,6 +128,18 @@ pub struct DetectedSaasLink {
     pub reasons: Vec<String>,
     /// 送信者
     pub sender: String,
+}
+
+impl Default for DetectedSaasLink {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            platform: SaasPlatform::Other(String::new()),
+            risk: SaasLinkRisk::Safe,
+            reasons: Vec::new(),
+            sender: String::new(),
+        }
+    }
 }
 
 // ============================================================================
@@ -208,10 +223,10 @@ impl SaasLinkInspector {
     #[must_use]
     pub fn identify_platform(&self, url: &str) -> Option<SaasPlatform> {
         let lower = url.to_lowercase();
-        for &platform in &self.platforms {
+        for platform in &self.platforms {
             for domain in platform.domains() {
                 if lower.contains(domain) {
-                    return Some(platform);
+                    return Some(platform.clone());
                 }
             }
         }
@@ -240,14 +255,14 @@ impl SaasLinkInspector {
 
         // 2. 偽 SaaS パターン (例: docusign.evil.com)
         //    既知 SaaS ドメインが「サブドメイン」として悪用されている
-        if risk != SaasLinkRisk::Block && self.is_fake_saas_subdomain(url, platform) {
+        if risk != SaasLinkRisk::Block && self.is_fake_saas_subdomain(url, &platform) {
             risk = SaasLinkRisk::Suspicious;
             reasons.push(format!("{} を装った偽ドメインの可能性", platform.display_name()));
         }
 
         // 3. 送信者履歴ベース評価
         if risk == SaasLinkRisk::Safe {
-            risk = if history.is_familiar(sender, platform) {
+            risk = if history.is_familiar(sender, platform.clone()) {
                 reasons.push(format!("{} さんとの{}での通常やり取り", sender, platform.display_name()));
                 SaasLinkRisk::Safe
             } else {
@@ -277,7 +292,8 @@ impl SaasLinkInspector {
     /// 偽 SaaS サブドメイン検出。
     ///
     /// 例: `docusign.evil.com` は DocuSign を装っているが、ドメインは evil.com
-    fn is_fake_saas_subdomain(&self, url: &str, platform: SaasPlatform) -> bool {
+    #[allow(clippy::unused_self)]
+    fn is_fake_saas_subdomain(&self, url: &str, platform: &SaasPlatform) -> bool {
         for legit_domain in platform.domains() {
             if url.contains(legit_domain) {
                 // URL から実際のドメイン部分を抽出
@@ -303,11 +319,12 @@ impl Default for SaasLinkInspector {
 // ユーティリティ
 // ============================================================================
 
+#[allow(clippy::unnecessary_wraps)]
 fn extract_actual_domain(url: &str) -> Option<String> {
     let without_scheme = url
         .trim_start_matches("https://")
         .trim_start_matches("http://");
-    let domain_end = without_scheme.find(|c: char| c == '/' || c == '?').unwrap_or(without_scheme.len());
+    let domain_end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
     Some(without_scheme[..domain_end].to_lowercase())
 }
 
@@ -328,6 +345,7 @@ pub enum SaasGuardError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -465,6 +483,7 @@ mod tests {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod property_tests {
     use super::*;
     use proptest::prelude::*;
