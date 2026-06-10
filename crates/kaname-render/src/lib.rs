@@ -44,13 +44,10 @@ pub mod deepfake_advisory;
 /// QR コードフィッシング (quishing) 検出。
 pub mod quishing;
 
-use std::marker::PhantomData;
 use thiserror::Error;
 
-// ── External crate stubs (real build would import mail-parser, ammonia, etc.)
-// 本番では:
-//   mail-parser  = "0.11"
-//   ammonia      = "3"   (DOMPurify equivalent in Rust — CSP-aware HTML sanitizer)
+use mail_parser::{MessageParser, MimeHeaders};
+use std::marker::PhantomData;
 
 // ============================================================================
 // Raw MIME parsing (KTR-07 §2 — strict mode)
@@ -161,8 +158,7 @@ pub enum AuthResult {
 ///   S05 – 合計デコードサイズ > 100 MB → 拒否
 ///   S06 – 不明な Content-Transfer-Encoding 値 → 8bit として扱い、ログ
 pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
-    // 本番: call mail_parser::MessageParser::default().parse(raw)
-    // フィールドをマップする。ここでは API の形をモデリング。
+    // S05: サイズ上限チェック (DoS 対策)
     if raw.is_empty() {
         return Err(RenderError::Parse("empty message".into()));
     }
@@ -170,19 +166,116 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         return Err(RenderError::Parse("S05: message exceeds 100 MB".into()));
     }
 
-    // プレースホルダー — the real impl calls mail-parser
-    Ok(Envelope {
-        message_id:   None,
-        from:         vec![],
-        to:           vec![],
-        cc:           vec![],
-        subject:      None,
-        date:         None,
-        text_body:    None,
-        html_body:    None,
-        attachments:  vec![],
-        auth_results: AuthResultsHeader::default(),
+    let msg = MessageParser::default()
+        .parse(raw)
+        .ok_or_else(|| RenderError::Parse("MIME parse failed".into()))?;
+
+    // From アドレス群
+    let from = msg.from()
+        .map(|al| al.iter().filter_map(addr_to_address).collect())
+        .unwrap_or_default();
+
+    // To アドレス群
+    let to = msg.to()
+        .map(|al| al.iter().filter_map(addr_to_address).collect())
+        .unwrap_or_default();
+
+    // Cc アドレス群
+    let cc = msg.cc()
+        .map(|al| al.iter().filter_map(addr_to_address).collect())
+        .unwrap_or_default();
+
+    // 件名
+    let subject = msg.subject().map(|s| s.to_string());
+
+    // Date → Unix タイムスタンプ
+    let date = msg.date().map(|d| d.to_timestamp());
+
+    // Message-ID
+    let message_id = msg.message_id().map(|s| s.to_string());
+
+    // テキスト本文
+    let text_body = msg.body_text(0).map(|s| s.into_owned());
+
+    // HTML 本文 (サニタイズ前)
+    let html_body = msg.body_html(0).map(|s| RawHtml(s.into_owned()));
+
+    // 添付ファイルヘッダー
+    let mut attachments = Vec::new();
+    for part in msg.attachments() {
+        let filename = part.attachment_name()
+            .unwrap_or("unnamed")
+            .to_string();
+        let declared_mime = part.content_type()
+            .map(|ct| {
+                let main = ct.ctype();
+                match ct.subtype() {
+                    Some(sub) => format!("{main}/{sub}"),
+                    None => main.to_string(),
+                }
+            })
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        let size_bytes = part.contents().len() as u64;
+        let content_id = part.content_id().map(|s| s.to_string());
+        attachments.push(AttachmentHeader { filename, declared_mime, size_bytes, content_id });
+    }
+
+    // Authentication-Results ヘッダーをパース
+    let auth_results = parse_auth_results(&msg);
+
+    Ok(Envelope { message_id, from, to, cc, subject, date, text_body, html_body, attachments, auth_results })
+}
+
+fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
+    let email = addr.address.as_deref()?;
+    let at = email.find('@')?;
+    Some(Address {
+        display_name: addr.name.as_deref().map(|s| s.to_string()),
+        addr: EmailAddr {
+            local:  email[..at].to_string(),
+            domain: email[at + 1..].to_string(),
+        },
     })
+}
+
+fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
+    // Authentication-Results ヘッダーを文字列として取得し簡易パース
+    let header_text = msg.headers()
+        .iter()
+        .find(|h| h.name.as_str().eq_ignore_ascii_case("authentication-results"))
+        .and_then(|h| {
+            if let mail_parser::HeaderValue::Text(t) = &h.value {
+                Some(t.as_ref().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default();
+
+    let spf   = extract_auth_result(&header_text, "spf");
+    let dkim  = extract_auth_result(&header_text, "dkim");
+    let dmarc = extract_auth_result(&header_text, "dmarc");
+
+    AuthResultsHeader { spf, dkim, dmarc }
+}
+
+fn extract_auth_result(header: &str, mechanism: &str) -> AuthResult {
+    let lower = header.to_lowercase();
+    // 例: "spf=pass", "dkim=fail", "dmarc=none"
+    let search = format!("{mechanism}=");
+    if let Some(pos) = lower.find(&search) {
+        let rest = &lower[pos + search.len()..];
+        let value: &str = rest.split_whitespace().next().unwrap_or("").trim_end_matches(';');
+        match value {
+            "pass"     => AuthResult::Pass,
+            "fail"     => AuthResult::Fail,
+            "neutral"  => AuthResult::Neutral,
+            "softfail" => AuthResult::SoftFail,
+            _          => AuthResult::None,
+        }
+    } else {
+        AuthResult::None
+    }
 }
 
 // ============================================================================
@@ -430,6 +523,7 @@ pub enum RenderError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -442,6 +536,78 @@ mod tests {
     fn oversized_message_is_rejected() {
         let big = vec![b'A'; 101 * 1024 * 1024];
         assert!(parse(&big).is_err());
+    }
+
+    #[test]
+    fn parse_extracts_basic_headers() {
+        let raw = b"From: Alice <alice@example.com>\r\n\
+                    To: Bob <bob@example.com>\r\n\
+                    Subject: Test email\r\n\
+                    Date: Mon, 01 Jan 2026 10:00:00 +0000\r\n\
+                    Message-ID: <abc123@example.com>\r\n\
+                    \r\n\
+                    Hello, Bob!";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.from.len(), 1);
+        assert_eq!(env.from[0].addr.local, "alice");
+        assert_eq!(env.from[0].addr.domain, "example.com");
+        assert_eq!(env.subject.as_deref(), Some("Test email"));
+        assert_eq!(env.text_body.as_deref(), Some("Hello, Bob!"));
+        assert_eq!(env.message_id.as_deref(), Some("abc123@example.com"));
+    }
+
+    #[test]
+    fn parse_extracts_html_body() {
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    MIME-Version: 1.0\r\n\
+                    Content-Type: text/html; charset=utf-8\r\n\
+                    \r\n\
+                    <p>Hello</p>";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.html_body.is_some(), "HTML body should be extracted");
+        let html = env.html_body.unwrap();
+        assert!(html.0.contains("<p>Hello</p>"));
+    }
+
+    #[test]
+    fn parse_auth_results_spf_pass() {
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    Authentication-Results: mx.example.com; \
+                      spf=pass smtp.mailfrom=example.com; \
+                      dkim=fail header.d=example.com; \
+                      dmarc=pass header.from=example.com\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.auth_results.spf, AuthResult::Pass);
+        assert_eq!(env.auth_results.dkim, AuthResult::Fail);
+        assert_eq!(env.auth_results.dmarc, AuthResult::Pass);
+    }
+
+    #[test]
+    fn parse_multipart_extracts_attachment() {
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    MIME-Version: 1.0\r\n\
+                    Content-Type: multipart/mixed; boundary=\"boundary42\"\r\n\
+                    \r\n\
+                    --boundary42\r\n\
+                    Content-Type: text/plain\r\n\
+                    \r\n\
+                    See attached.\r\n\
+                    --boundary42\r\n\
+                    Content-Type: application/pdf\r\n\
+                    Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\
+                    \r\n\
+                    %PDF-1.4 fake\r\n\
+                    --boundary42--\r\n";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.text_body.as_deref(), Some("See attached."));
+        assert_eq!(env.attachments.len(), 1);
+        assert_eq!(env.attachments[0].filename, "invoice.pdf");
+        assert_eq!(env.attachments[0].declared_mime, "application/pdf");
     }
 
     #[test]

@@ -42,6 +42,7 @@
 /// EDM (Exact Data Match) — 顧客データの完全一致検出。
 pub mod edm;
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -262,13 +263,49 @@ impl<'a> EvalCtx<'a> {
 pub struct DlpEngine {
     rules:    Vec<Rule>,
     patterns: PatternLibrary,
+    /// ルール構築時にコンパイル済みの正規表現キャッシュ (パターン文字列 → Regex)。
+    regex_cache: HashMap<String, Regex>,
 }
 
 impl DlpEngine {
     /// Construct with an explicit rule set.
     pub fn new(mut rules: Vec<Rule>, patterns: PatternLibrary) -> Self {
         rules.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
-        Self { rules, patterns }
+        let regex_cache = Self::compile_regexes(&rules);
+        Self { rules, patterns, regex_cache }
+    }
+
+    /// 全ルールの Regex パターンをコンパイルしてキャッシュする。
+    fn compile_regexes(rules: &[Rule]) -> HashMap<String, Regex> {
+        let mut cache = HashMap::new();
+        for rule in rules {
+            Self::collect_patterns_from_condition(&rule.condition, &mut cache);
+        }
+        cache
+    }
+
+    fn collect_patterns_from_condition(cond: &Condition, cache: &mut HashMap<String, Regex>) {
+        match cond {
+            Condition::And { children } | Condition::Or { children } => {
+                for child in children {
+                    Self::collect_patterns_from_condition(child, cache);
+                }
+            }
+            Condition::Not { child } => {
+                Self::collect_patterns_from_condition(child, cache);
+            }
+            Condition::Matches(Predicate::Regex { pattern }) => {
+                if !cache.contains_key(pattern) {
+                    match Regex::new(pattern) {
+                        Ok(re) => { cache.insert(pattern.clone(), re); }
+                        Err(e) => {
+                            tracing::warn!("DLP: invalid regex pattern {:?}: {}", pattern, e);
+                        }
+                    }
+                }
+            }
+            Condition::Matches(_) => {}
+        }
     }
 
     /// Construct with the built-in defaults (suitable for day-one Starter tier).
@@ -329,9 +366,14 @@ impl DlpEngine {
             Predicate::Classifier { classifier } =>
                 self.run_classifier(*classifier, text),
 
-            Predicate::Regex { pattern } =>
-                // 本番: compile once at engine-build time, cache in Rule
-                regex_matches(pattern, text),
+            Predicate::Regex { pattern } => {
+                if let Some(re) = self.regex_cache.get(pattern) {
+                    re.is_match(text)
+                } else {
+                    // パターンがコンパイル失敗 → 安全側に倒してマッチなし扱い
+                    false
+                }
+            }
 
             Predicate::Keyword { words, min_count } => {
                 let t = text.to_lowercase();
@@ -439,7 +481,7 @@ impl PatternLibrary {
     #[must_use]
     pub fn matches(&self, name: &str, text: &str) -> bool {
         self.patterns.get(name)
-            .map(|regexes| regexes.iter().any(|r| regex_matches(r, text)))
+            .map(|regexes| regexes.iter().any(|r| re_is_match(r.as_str(), text)))
             .unwrap_or(false)
     }
 }
@@ -460,19 +502,19 @@ fn detect_jp_my_number(text: &str) -> bool {
         }
     }
     // フォーマット済みもチェック: XXXX-XXXX-XXXX
-    text.contains('-') && regex_matches(r"\d{4}-\d{4}-\d{4}", text)
+    text.contains('-') && re_is_match(r"\d{4}-\d{4}-\d{4}", text)
 }
 
 fn detect_jp_corporate_number(text: &str) -> bool {
     // 法人番号: 13-digit, starts with 1-9
-    regex_matches(r"\b[1-9]\d{12}\b", text)
+    re_is_match(r"\b[1-9]\d{12}\b", text)
 }
 
 fn detect_credit_card(text: &str) -> bool {
     // 検索: 16-digit groups with or without spaces/hyphens
     // 次に Luhn で検証
     let re = r"(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})";
-    if !regex_matches(re, text) {
+    if !re_is_match(re, text) {
         return false;
     }
     // 数字文字列を抽出 of length 16 and Luhn-check
@@ -506,20 +548,20 @@ fn extract_digit_runs(text: &str, len: usize) -> Vec<String> {
 
 fn detect_iban(text: &str) -> bool {
     // IBAN: 2 letter country code + 2 check digits + up to 30 alphanumeric
-    regex_matches(r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}\b", text)
+    re_is_match(r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}\b", text)
 }
 
 fn detect_swift_bic(text: &str) -> bool {
     // SWIFT BIC: 8 or 11 characters (BANKJPJT or BANKJPJTXXX)
-    regex_matches(r"\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b", text)
+    re_is_match(r"\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b", text)
 }
 
 fn detect_us_ssn(text: &str) -> bool {
-    regex_matches(r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b", text)
+    re_is_match(r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b", text)
 }
 
 fn detect_ip_address(text: &str) -> bool {
-    regex_matches(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text)
+    re_is_match(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text)
 }
 
 fn detect_confidential_marker(text: &str) -> bool {
@@ -540,7 +582,7 @@ fn detect_attorney_privilege(text: &str) -> bool {
 
 fn detect_deal_codename(text: &str) -> bool {
     // ヒューリスティック: all-caps codenames preceded by "Project" or "Operation"
-    regex_matches(r"(?i)(?:project|operation|プロジェクト)\s+[A-Z][A-Z0-9]{2,}", text)
+    re_is_match(r"(?i)(?:project|operation|プロジェクト)\s+[A-Z][A-Z0-9]{2,}", text)
 }
 
 fn detect_source_code(text: &str) -> bool {
@@ -641,37 +683,81 @@ fn default_rules() -> Vec<Rule> {
 }
 
 // ============================================================================
-// Utility helpers (stubs for regex — production uses the `regex` crate)
+// マッチング ユーティリティ
 // ============================================================================
 
-fn regex_matches(pattern: &str, text: &str) -> bool {
-    // 本番: regex::Regex compiled at engine-build time.
-    // For test compilation, we do simple substring / length heuristics.
-    // This function is ALWAYS replaced in production; it's a placeholder.
-    match pattern {
-        r"\b[1-9]\d{12}\b" => {
-            text.chars().filter(|c| c.is_ascii_digit()).count() >= 13
+/// 固定パターン向けの一回コンパイル正規表現マッチ。
+/// 分類器のように定数パターンを使う箇所で呼ぶ (ルール評価は regex_cache を使う)。
+fn re_is_match(pattern: &str, text: &str) -> bool {
+    // コンパイル結果をスレッドローカルキャッシュに保持し再コンパイルを回避する。
+    thread_local! {
+        static CACHE: std::cell::RefCell<HashMap<String, Regex>> =
+            std::cell::RefCell::new(HashMap::new());
+    }
+    CACHE.with(|c| {
+        let mut map = c.borrow_mut();
+        if let Some(re) = map.get(pattern) {
+            return re.is_match(text);
         }
-        r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b" => {
-            text.contains('.')
-                && text.chars().filter(|c| c.is_ascii_digit() || *c == '.').count() > 6
+        match Regex::new(pattern) {
+            Ok(re) => {
+                let result = re.is_match(text);
+                map.insert(pattern.to_string(), re);
+                result
+            }
+            Err(e) => {
+                tracing::warn!("DLP classifier: invalid regex {:?}: {}", pattern, e);
+                false
+            }
         }
-        _ => {
-            // 汎用: パターンが含まれるか確認 without regex syntax appears in text
-            let stripped: String = pattern.chars()
-                .filter(|c| c.is_alphanumeric() || c.is_whitespace())
-                .collect();
-            !stripped.is_empty() && text.to_lowercase().contains(&stripped.to_lowercase())
-        }
+    })
+}
+
+fn excerpt_match(text: &str, cond: &Condition) -> String {
+    // キーワードや正規表現が一致した位置の前後 40 文字を抽出して監査証跡を充実させる。
+    let match_pos = find_first_match_pos(text, cond);
+    let (start, end) = if let Some(pos) = match_pos {
+        let s = pos.saturating_sub(30);
+        let e = (pos + 50).min(text.len());
+        (s, e)
+    } else {
+        (0, text.len().min(80))
+    };
+    // Ensure we're on valid UTF-8 boundaries (manual floor_char_boundary for MSRV 1.85)
+    let s = utf8_floor(text, start);
+    let e = utf8_floor(text, end);
+    if text.len() <= 80 {
+        text.to_owned()
+    } else if s == 0 {
+        format!("{}…", &text[..e])
+    } else {
+        format!("…{}…", &text[s..e])
     }
 }
 
-fn excerpt_match(text: &str, _cond: &Condition) -> String {
-    // 最初の 80 文字を返す of text as excerpt (production: find actual match position)
-    if text.len() <= 80 {
-        text.to_owned()
-    } else {
-        format!("{}…", &text[..80])
+fn utf8_floor(s: &str, mut i: usize) -> usize {
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+
+fn find_first_match_pos(text: &str, cond: &Condition) -> Option<usize> {
+    match cond {
+        Condition::And { children } | Condition::Or { children } => {
+            children.iter().find_map(|c| find_first_match_pos(text, c))
+        }
+        Condition::Not { child } => find_first_match_pos(text, child),
+        Condition::Matches(pred) => match pred {
+            Predicate::Keyword { words, .. } => {
+                let lower = text.to_lowercase();
+                words.iter().find_map(|w| lower.find(w.to_lowercase().as_str()))
+            }
+            Predicate::Regex { pattern } => {
+                Regex::new(pattern).ok().and_then(|re| re.find(text).map(|m| m.start()))
+            }
+            _ => None,
+        },
     }
 }
 
@@ -866,5 +952,81 @@ mod tests {
     fn action_ordering_is_block_gt_warn_gt_allow() {
         assert!(Action::Block > Action::Warn);
         assert!(Action::Warn  > Action::Allow);
+    }
+
+    #[test]
+    fn regex_predicate_matches_real_pattern() {
+        // 実際の正規表現でマイナンバーフォーマットを検出
+        let rule = RuleBuilder::new("r1", "JP Corporate")
+            .outbound()
+            .warn()
+            .priority(1)
+            .when(Condition::matches(Predicate::Regex {
+                pattern: r"\b[1-9]\d{12}\b".to_string(),
+            }))
+            .build();
+        let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
+        let to = vec!["ext@partner.co.jp".to_string()];
+
+        // 13桁の法人番号を含むテキスト
+        let result = engine.evaluate(&ctx("請求書 1234567890123", "", &to), Direction::Outbound);
+        assert!(!result.is_clean(), "法人番号を含むテキストは Warn になるべき");
+    }
+
+    #[test]
+    fn regex_predicate_no_false_positive() {
+        let rule = RuleBuilder::new("r1", "Credit Card")
+            .outbound()
+            .block()
+            .priority(1)
+            .when(Condition::matches(Predicate::Regex {
+                pattern: r"\b4[0-9]{15}\b".to_string(),
+            }))
+            .build();
+        let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
+        let to = vec!["ext@partner.co.jp".to_string()];
+
+        // クレジットカード番号なし
+        let result = engine.evaluate(&ctx("通常のメール本文です", "", &to), Direction::Outbound);
+        assert!(result.is_clean(), "通常テキストには false positive なし");
+    }
+
+    #[test]
+    fn regex_compiled_at_engine_build_time() {
+        // コンパイルエラーのパターン → エンジン構築後に警告ログ出力のみ、panicしない
+        let bad_rule = Rule {
+            id: "bad".into(), name: "bad regex".into(), enabled: true,
+            direction: Direction::Both, priority: 1, action: Action::Block,
+            condition: Condition::matches(Predicate::Regex {
+                pattern: r"[invalid regex(".to_string(),
+            }),
+        };
+        // Should not panic
+        let engine = DlpEngine::new(vec![bad_rule], PatternLibrary::default());
+        let to = vec!["x@x.com".into()];
+        // Invalid regex → no match (fails safe)
+        let result = engine.evaluate(&ctx("anything", "", &to), Direction::Both);
+        assert!(result.is_clean(), "不正な正規表現は安全側に倒してマッチなし");
+    }
+
+    #[test]
+    fn excerpt_includes_match_context() {
+        let rule = RuleBuilder::new("r1", "SSN")
+            .outbound()
+            .warn()
+            .priority(1)
+            .when(Condition::matches(Predicate::Keyword {
+                words: vec!["secret".to_string()],
+                min_count: 1,
+            }))
+            .build();
+        let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
+        let long_text = format!("{}secret information here{}", "x".repeat(50), "y".repeat(50));
+        let to = vec!["x@x.com".into()];
+        let result = engine.evaluate(&ctx(&long_text, "", &to), Direction::Outbound);
+        assert!(!result.is_clean());
+        // 抜粋は一致箇所の前後を含むべき (先頭50文字だけではない)
+        let excerpt = &result.findings[0].excerpt;
+        assert!(excerpt.contains("secret"), "抜粋は一致箇所を含むべき");
     }
 }

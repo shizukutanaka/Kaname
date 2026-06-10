@@ -499,12 +499,133 @@ fn levenshtein1(a: &str, b: &str) -> bool {
     true
 }
 
+/// 件名が送信者の典型的なトピックと意味的に異なるかを判定する。
+///
+/// TF-IDF コサイン類似度で比較:
+///   - subject と typical の単語 bag-of-words ベクトルを構築
+///   - 2 ベクトル間のコサイン類似度を計算
+///   - 類似度が THRESHOLD 未満 → 異常なトピックと判断
+///
+/// 英語・日本語の混在テキストに対応 (Unicode 単語境界)。
 fn contains_unusual_topic(subject: &str, typical: &str) -> bool {
-    // スタブ: a production implementation uses embedding distance against
-    // the typical_topic_summary.
-    let s = subject.to_lowercase();
-    let t = typical.to_lowercase();
-    !s.is_empty() && !t.is_empty() && !s.split_whitespace().any(|w| t.contains(w))
+    if subject.is_empty() || typical.is_empty() {
+        return false;
+    }
+
+    let subj_vec  = term_frequency_vector(subject);
+    let typic_vec = term_frequency_vector(typical);
+
+    // 両方のベクトルが空なら判定不能
+    if subj_vec.is_empty() || typic_vec.is_empty() {
+        return false;
+    }
+
+    let similarity = cosine_similarity(&subj_vec, &typic_vec);
+
+    // 類似度 0.15 未満を「異常なトピック」とみなす。
+    // 0.0 = 完全に異なる語彙、1.0 = 同一語彙。
+    similarity < 0.15
+}
+
+/// テキストを正規化し、各単語の出現頻度マップを返す。
+fn term_frequency_vector(text: &str) -> std::collections::HashMap<String, f64> {
+    let mut freq: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+
+    // Unicode 単語境界で分割: 英単語・日本語文字ともに個別トークンとして扱う
+    let tokens = tokenize(text);
+    let total = tokens.len() as f64;
+    if total == 0.0 {
+        return freq;
+    }
+
+    for token in tokens {
+        *freq.entry(token).or_insert(0.0) += 1.0;
+    }
+    // TF 正規化 (文書長で割る)
+    for v in freq.values_mut() {
+        *v /= total;
+    }
+    freq
+}
+
+/// テキストを単語トークンのリストに変換する。
+/// - ASCII: スペース・句読点区切り、小文字化
+/// - CJK: 1 文字ずつ個別トークン (形態素解析なし)
+/// - ストップワードを除去 (英語・日本語)
+fn tokenize(text: &str) -> Vec<String> {
+    const STOP_EN: &[&str] = &[
+        "the", "a", "an", "is", "are", "was", "were", "be", "been",
+        "and", "or", "of", "to", "in", "for", "on", "at", "by",
+        "this", "that", "it", "its", "with", "from", "have", "has",
+        "will", "please", "your", "our", "we", "you", "i",
+    ];
+    const STOP_JA: &[&str] = &[
+        "の", "に", "は", "を", "が", "で", "と", "も", "へ", "から",
+        "まで", "より", "か", "な", "ね", "よ", "わ", "て", "し", "た",
+        "ます", "です", "ございます", "いただき", "お", "ご",
+    ];
+
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+
+    for c in text.chars() {
+        if c.is_alphabetic() && c.is_ascii() {
+            current.push(c.to_ascii_lowercase());
+        } else if is_cjk(c) {
+            // CJK 文字は現在のASCII語を確定してから個別トークン
+            if !current.is_empty() {
+                push_token(&current, &mut tokens, STOP_EN, STOP_JA);
+                current.clear();
+            }
+            tokens.push(c.to_string());
+        } else {
+            // 区切り文字
+            if !current.is_empty() {
+                push_token(&current, &mut tokens, STOP_EN, STOP_JA);
+                current.clear();
+            }
+        }
+    }
+    if !current.is_empty() {
+        push_token(&current, &mut tokens, STOP_EN, STOP_JA);
+    }
+    tokens
+}
+
+fn push_token(tok: &str, out: &mut Vec<String>, stop_en: &[&str], stop_ja: &[&str]) {
+    if tok.len() < 2 {
+        return;
+    }
+    if stop_en.contains(&tok) || stop_ja.contains(&tok) {
+        return;
+    }
+    out.push(tok.to_string());
+}
+
+fn is_cjk(c: char) -> bool {
+    matches!(c,
+        '\u{3000}'..='\u{9FFF}'   // CJK Unified Ideographs + Hiragana/Katakana
+        | '\u{F900}'..='\u{FAFF}' // CJK Compatibility Ideographs
+        | '\u{20000}'..='\u{2A6DF}' // Extension B
+    )
+}
+
+/// コサイン類似度 = (A·B) / (|A| * |B|)
+fn cosine_similarity(
+    a: &std::collections::HashMap<String, f64>,
+    b: &std::collections::HashMap<String, f64>,
+) -> f64 {
+    let dot: f64 = a.iter()
+        .filter_map(|(k, va)| b.get(k).map(|vb| va * vb))
+        .sum();
+
+    let norm_a: f64 = a.values().map(|v| v * v).sum::<f64>().sqrt();
+    let norm_b: f64 = b.values().map(|v| v * v).sum::<f64>().sqrt();
+
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+    dot / (norm_a * norm_b)
 }
 
 // ============================================================================
@@ -616,6 +737,55 @@ mod tests {
         assert_eq!(extract_domain("alice@example.com"), Some("example.com"));
         assert_eq!(extract_domain("Alice <alice@example.com>"), Some("example.com"));
         assert_eq!(extract_domain("no at sign"), None);
+    }
+
+    #[test]
+    fn topic_anomaly_detects_unrelated_subject() {
+        // CFO のトピックサマリー (財務関連)
+        let typical = "quarterly budget invoice payment wire transfer financial report";
+        // 突然の配送通知 — 財務と無関係
+        let unusual = "package delivery tracking shipment notification";
+        assert!(contains_unusual_topic(unusual, typical), "配送通知は財務トピックと無関係なはず");
+    }
+
+    #[test]
+    fn topic_anomaly_passes_related_subject() {
+        let typical = "quarterly budget invoice payment wire transfer financial report";
+        // 財務関連の件名 — 関連あり
+        let related = "Q3 budget invoice review payment approval";
+        assert!(!contains_unusual_topic(related, typical), "財務関連の件名は異常でないはず");
+    }
+
+    #[test]
+    fn topic_anomaly_handles_japanese() {
+        let typical = "予算 会議 決算 報告 財務 経理 請求書";
+        let unusual = "配送 追跡 荷物 宅配 受け取り";
+        assert!(contains_unusual_topic(unusual, typical), "日本語でも配送通知は財務と無関係なはず");
+    }
+
+    #[test]
+    fn topic_anomaly_identical_text_not_unusual() {
+        let text = "budget review quarterly payment";
+        assert!(!contains_unusual_topic(text, text), "同一テキストは異常でない");
+    }
+
+    #[test]
+    fn cosine_similarity_orthogonal_vectors() {
+        let mut a = std::collections::HashMap::new();
+        let mut b = std::collections::HashMap::new();
+        a.insert("apple".to_string(), 1.0);
+        b.insert("banana".to_string(), 1.0);
+        let sim = cosine_similarity(&a, &b);
+        assert_eq!(sim, 0.0, "直交ベクトルの類似度は 0");
+    }
+
+    #[test]
+    fn cosine_similarity_identical_vectors() {
+        let mut a = std::collections::HashMap::new();
+        a.insert("apple".to_string(), 0.5);
+        a.insert("budget".to_string(), 0.5);
+        let sim = cosine_similarity(&a, &a.clone());
+        assert!((sim - 1.0).abs() < 1e-10, "同一ベクトルの類似度は 1.0");
     }
 }
 
