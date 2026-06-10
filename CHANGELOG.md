@@ -8,6 +8,34 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **kaname-ai preflight モジュール**: Dual-LLM パイプライン入口での事前検査
+  - `preflight_untrusted()` — Bidi 制御文字 (U+202E 等) / ゼロ幅文字 / 既知インジェクションパターンを検出
+  - `PreflightResult` (Clean / Advisory / Block) と `Finding` 列挙型
+- **kaname-dlp 本物の正規表現エンジン** (スタブ撤廃)
+  - `regex` クレート導入。エンジン構築時に全パターンをコンパイルしキャッシュ (メール毎の再コンパイル無し)
+  - 不正パターンはフェイルセーフ (マッチ無し + 警告ログ)
+  - `excerpt_match` が実際の一致位置の前後 ±30 文字を抽出 (監査証跡の精度向上)
+- **kaname-dlp render_bridge モジュール**: kaname-render パイプラインへの DLP 統合
+  - `EnvelopeScanner` が `kaname_render::DlpScanner` trait を実装
+  - `render_with_dlp()` 経由で受信メールの DLP Block がレンダリング前に発動
+- **kaname-render 実 MIME パース** (スタブ撤廃)
+  - `mail-parser` (Stalwart Labs) による RFC 5322/2045-2049 準拠パース
+  - From/To/Cc/Subject/Date/Message-ID/本文/添付ヘッダーを抽出
+  - Authentication-Results ヘッダーから SPF/DKIM/DMARC 結果をパース
+  - `DlpScanner` trait による DLP 注入ポイント (依存グラフ単方向性を維持)
+- **kaname-bec 意味的トピック異常検出** (スタブ撤廃)
+  - TF-IDF bag-of-words + コサイン類似度による送信者の典型トピックとの距離計算
+  - 英語 (単語境界) と日本語 (CJK 文字単位) の混在テキストに対応、ストップワード除去
+  - 類似度 < 0.15 で「異常なトピック」と判定 (例: CFO が突然配送通知を送る)
+
+### Fixed
+- ワークスペース全体の clippy 警告ゼロ化 (`-D warnings` クリーン)
+- MLS セーフティナンバー計算式 (`% 100_000` で常に 5 桁)
+- Bearer トークンのログ秘匿バグ (トークン本体ではなく "Bearer " 内の空白を検出していた)
+- BEC ブランドなりすまし閾値 (70→50) と "dan mode" 攻撃マーカーの小文字比較
+- Shannon エントロピーの非決定性 (HashMap→BTreeMap + f64 演算)
+
 ## [0.3.21] - 2026-06-02 — GitHub 公開準備リリース
 
 ### Added

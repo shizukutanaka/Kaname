@@ -42,6 +42,9 @@
 /// EDM (Exact Data Match) — 顧客データの完全一致検出。
 pub mod edm;
 
+/// kaname-render パイプラインへの DLP 統合アダプター。
+pub mod render_bridge;
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

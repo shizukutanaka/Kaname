@@ -10,8 +10,9 @@ serde_json = { workspace = true }
 thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-kaname-error = { path = "../kaname-error" }
-regex        = { workspace = true }
+kaname-error  = { path = "../kaname-error" }
+kaname-render = { path = "../kaname-render" }
+regex         = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

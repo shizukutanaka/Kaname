@@ -301,11 +301,21 @@ pub enum DlpVerdict {
     },
 }
 
+/// DLP スキャナーの抽象。kaname-dlp が `DlpEngine` 用に実装する。
+///
+/// render は dlp より下層のクレートなので、具体的なエンジンを参照できない。
+/// この trait を経由して依存性を注入する (依存グラフの単方向性を維持)。
+pub trait DlpScanner {
+    /// Envelope を検査して判定を返す。
+    fn scan(&self, envelope: &Envelope) -> DlpVerdict;
+}
+
 /// Run DLP preflight on an inbound envelope before rendering.
 /// For outbound, the same function is called before send.
+///
+/// スキャナー未設定時のデフォルト動作 (Allow)。実際の DLP 統合には
+/// `render_with_dlp` と kaname-dlp の `EnvelopeScanner` を使うこと。
 pub fn preflight_dlp(envelope: &Envelope) -> DlpVerdict {
-    // 本番: call kaname-dlp rule engine with envelope.text_body
-    // and attachment headers. Here we return Allow as a safe default.
     let _ = envelope;
     DlpVerdict::Allow
 }
@@ -479,8 +489,22 @@ img {{ max-width: 100%; height: auto; }}
 pub fn render(
     raw: &[u8],
 ) -> Result<(IframeSrcdoc, Envelope, DlpVerdict), RenderError> {
+    render_with_dlp(raw, None)
+}
+
+/// DLP スキャナーを注入してレンダリングする。
+///
+/// `scanner` が `Some` の場合、parse 直後に DLP 評価が走り、
+/// `Block` ならレンダリングを中断して `RenderError::DlpBlocked` を返す。
+pub fn render_with_dlp(
+    raw: &[u8],
+    scanner: Option<&dyn DlpScanner>,
+) -> Result<(IframeSrcdoc, Envelope, DlpVerdict), RenderError> {
     let envelope  = parse(raw)?;
-    let dlp       = preflight_dlp(&envelope);
+    let dlp = match scanner {
+        Some(s) => s.scan(&envelope),
+        None    => preflight_dlp(&envelope),
+    };
 
     if let DlpVerdict::Block { ref policy } = dlp {
         return Err(RenderError::DlpBlocked(policy.clone()));

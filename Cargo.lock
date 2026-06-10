@@ -2081,6 +2081,7 @@ name = "kaname-dlp"
 version = "0.3.21"
 dependencies = [
  "kaname-error",
+ "kaname-render",
  "proptest",
  "regex",
  "serde",
