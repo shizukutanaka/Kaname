@@ -1,0 +1,23 @@
+[package]
+name             = "kaname-tauri"
+version.workspace     = true
+edition.workspace     = true
+rust-version.workspace = true
+
+[[bin]]
+name = "kaname"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+kaname-ui = { path = "../crates/kaname-ui" }
+serde     = { workspace = true }
+serde_json = { workspace = true }
+tracing   = { workspace = true }
+tauri     = { workspace = true }
+tauri-plugin-shell = "2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

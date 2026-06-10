@@ -1,0 +1,7 @@
+From: alice@example.com
+To: bob@example.com
+Subject: Hello
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Hello, world.

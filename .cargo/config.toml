@@ -1,0 +1,26 @@
+[build]
+rustflags = ["-D", "warnings"]
+
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[profile.release]
+lto            = "thin"
+codegen-units  = 1
+strip          = "symbols"
+panic          = "abort"
+
+[profile.bench]
+opt-level = 3
+
+[alias]
+t   = "nextest run --workspace"
+c   = "clippy --workspace --all-targets -- -D warnings"
+fmt = "fmt --all"
+doc = "doc --workspace --no-deps --open"
+
+[net]
+retry = 3
+
+[env]
+RUSTDOCFLAGS = "-D warnings"

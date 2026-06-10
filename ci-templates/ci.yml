@@ -1,0 +1,327 @@
+# .github/workflows/ci.yml
+# Kaname — 完全 CI/CD パイプライン
+#
+# ジョブ:
+#   check   — 型チェック (cargo check) — 最速フィードバック
+#   test    — 全テスト (cargo nextest) — 並列実行
+#   clippy  — Lint (警告ゼロ強制)
+#   fmt     — フォーマットチェック
+#   audit   — セキュリティ脆弱性スキャン (cargo audit)
+#   deny    — ライセンス・禁止 crate チェック (cargo deny)
+#   bench   — パフォーマンスベンチマーク (main ブランチのみ)
+#   build   — リリースビルド (macOS/Windows/Linux)
+#   release — GitHub Release + バイナリ配布 (タグ push のみ)
+
+name: CI
+
+on:
+  push:
+    branches: ["main", "develop"]
+    tags:     ["v*"]
+  pull_request:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0           # CI では無効化 (キャッシュと競合)
+  RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
+
+jobs:
+  # ────────────────────────────────────────────────────────────────
+  # 1. 型チェック (最速フィードバック ~30s)
+  # ────────────────────────────────────────────────────────────────
+  check:
+    name: "Check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.7
+      - name: cargo check
+        run: cargo check --workspace --all-targets
+
+  # ────────────────────────────────────────────────────────────────
+  # 2. テスト (cargo-nextest で 3x 高速化)
+  # ────────────────────────────────────────────────────────────────
+  test:
+    name: "Test (nextest)"
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.7
+      - uses: taiki-e/install-action@cargo-nextest
+
+      - name: Run tests
+        run: |
+          cargo nextest run \
+            --workspace \
+            --all-features \
+            --no-fail-fast \
+            --test-threads=auto \
+            --failure-output=immediate \
+            --status-level=fail
+
+      # テストレポートをアーティファクトとして保存
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-results
+          path: target/nextest/
+
+  # ────────────────────────────────────────────────────────────────
+  # 3. Clippy (警告ゼロ強制)
+  # ────────────────────────────────────────────────────────────────
+  clippy:
+    name: "Clippy"
+    runs-on: ubuntu-latest
+    needs: [check]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.7
+      - name: cargo clippy
+        run: |
+          cargo clippy \
+            --workspace \
+            --all-targets \
+            --all-features \
+            -- \
+            -D warnings \
+            -D clippy::unwrap_used \
+            -D clippy::expect_used \
+            -D clippy::panic \
+            -W clippy::pedantic \
+            -A clippy::module_name_repetitions \
+            -A clippy::missing_errors_doc
+
+  # ────────────────────────────────────────────────────────────────
+  # 4. フォーマットチェック
+  # ────────────────────────────────────────────────────────────────
+  fmt:
+    name: "Format"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+  # ────────────────────────────────────────────────────────────────
+  # 5. セキュリティ脆弱性スキャン
+  # ────────────────────────────────────────────────────────────────
+  audit:
+    name: "Security Audit"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-audit
+      - name: cargo audit
+        run: |
+          cargo audit \
+            --deny warnings \
+            --deny unsound \
+            --ignore RUSTSEC-2020-0071  # time 間接依存 (許容済み, ADR-022参照)
+
+  # ────────────────────────────────────────────────────────────────
+  # 6. ライセンス・禁止 crate チェック
+  # ────────────────────────────────────────────────────────────────
+  deny:
+    name: "Cargo Deny"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check all
+          arguments: --config deny.toml
+
+  # ────────────────────────────────────────────────────────────────
+  # 7. パフォーマンスベンチマーク (main のみ)
+  # ────────────────────────────────────────────────────────────────
+  bench:
+    name: "Benchmark"
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mozilla-actions/sccache-action@v0.0.7
+      - name: cargo bench
+        run: cargo bench --workspace --bench '*' -- --output-format bencher | tee bench_output.txt
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            bench_output.txt
+            target/criterion/
+
+  # ────────────────────────────────────────────────────────────────
+  # 8. クロスプラットフォームビルド
+  # ────────────────────────────────────────────────────────────────
+  build:
+    name: "Build (${{ matrix.os }})"
+    runs-on: ${{ matrix.runner }}
+    needs: [test, clippy, audit, deny]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macOS-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
+            artifact: kaname-macos-arm64
+          - os: macOS-x64
+            runner: macos-13
+            target: x86_64-apple-darwin
+            artifact: kaname-macos-x64
+          - os: Windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: kaname-windows-x64
+          - os: Linux
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: kaname-linux-x64
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: mozilla-actions/sccache-action@v0.0.7
+
+      # Node.js (フロントエンドビルド用)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS: コードサイニング
+          APPLE_CERTIFICATE:            ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD:   ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:       ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                     ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:               ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID }}
+          # Windows: Authenticode
+          TAURI_SIGNING_PRIVATE_KEY:    ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          args: "--target ${{ matrix.target }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/
+            !**/*.dSYM
+
+  # ────────────────────────────────────────────────────────────────
+  # 9. GitHub Release (タグ push のみ)
+  # ────────────────────────────────────────────────────────────────
+  release:
+    name: "Release"
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      # CHANGELOG から今回のセクションを抽出
+      - name: Extract changelog
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md)
+          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$NOTES"    >> "$GITHUB_OUTPUT"
+          echo "EOF"       >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Kaname ${{ github.ref_name }}"
+          body: ${{ steps.changelog.outputs.notes }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/kaname-macos-arm64/**/*.dmg
+            dist/kaname-macos-x64/**/*.dmg
+            dist/kaname-windows-x64/**/*.msi
+            dist/kaname-linux-x64/**/*.deb
+            dist/kaname-linux-x64/**/*.AppImage
+          generate_release_notes: false
+
+  # ────────────────────────────────────────────────────────────────
+  # 10. ステータスまとめ (PR チェックゲート)
+  # ────────────────────────────────────────────────────────────────
+  ci-status:
+    name: "CI Status"
+    runs-on: ubuntu-latest
+    needs: [check, test, clippy, fmt, audit, deny]
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "❌ CI FAILED"
+            exit 1
+          fi
+          echo "✅ CI PASSED"
+
+  # 暗号 KAT (Known Answer Test) — arxiv eprint 2026/192 対策
+  crypto-kat:
+    name: "Crypto KAT (FIPS 203/204)"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run crypto KAT
+        run: cargo test -p kaname-crypto --test kat
+      - name: Verify X25519 contributory behavior check
+        run: cargo test -p kaname-crypto validate_x25519
+      - name: Audit verification boundary doc exists
+        run: test -f docs/verification-boundary.md
+
+  # 静的整合性チェック (モジュール・依存・バージョンの不整合検出)
+  static-check:
+    name: "Static Integrity Check"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run static integrity check
+        run: bash scripts/static-check.sh

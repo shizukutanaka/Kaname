@@ -1,0 +1,119 @@
+# deny.toml — cargo deny 設定
+# CI で `cargo deny check all` を実行して全チェックを通過することが必須
+
+# ─────────────────────────────────────────────────────────────────────────────
+# グラフチェック: 重複依存の検出
+# ─────────────────────────────────────────────────────────────────────────────
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-apple-darwin" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "x86_64-pc-windows-msvc" },
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ライセンスチェック
+# AGPL-3.0 と互換するライセンスのみ許可
+# ─────────────────────────────────────────────────────────────────────────────
+[licenses]
+version          = 2
+allow            = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "CC0-1.0",
+    "Unlicense",
+    "MPL-2.0",      # ソース開示義務あり — レビュー済み
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "AGPL-3.0",
+]
+deny             = [
+    "GPL-2.0",      # AGPL より制限的
+    "BUSL-1.1",     # 商用利用制限あり
+    "SSPL-1.0",     # サービス条項が AGPL と非互換
+    "Commons-Clause",
+]
+copyleft         = "allow"
+allow-osi-fsf-free = "neither"
+default          = "deny"
+
+# ライセンス例外 (個別に承認済み)
+[[licenses.exceptions]]
+allow   = ["OpenSSL"]
+name    = "openssl-sys"
+version = "*"
+
+[[licenses.exceptions]]
+allow   = ["Unicode-DFS-2016"]
+name    = "unicode-ident"
+version = "*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 禁止クレート: セキュリティリスク・廃止・代替あり
+# ─────────────────────────────────────────────────────────────────────────────
+[bans]
+multiple-versions = "warn"    # 重複バージョンは警告
+wildcards         = "deny"    # ワイルドカードバージョン禁止
+highlight         = "all"
+
+# 明示的に禁止するクレート
+deny = [
+    # 既知の脆弱性がある暗号実装
+    { name = "rust-crypto", reason = "廃止済み。ring または RustCrypto に移行" },
+    # 非同期ランタイム混在を防ぐ
+    { name = "async-std", reason = "tokio との混在禁止。tokio 統一" },
+    # 安全でない JSON パーサー
+    { name = "json", reason = "serde_json を使用" },
+    # ロギング競合
+    { name = "env_logger", reason = "tracing-subscriber を使用" },
+    # Windows API 直接呼び出し禁止 (Tauri が管理)
+    { name = "winapi", version = "< 0.3", reason = "古いバージョン。windows-sys を使用" },
+]
+
+# 許可する重複バージョン (推移的依存による不可避なケース)
+allow-duplicate-versions = [
+    # syn は複数バージョンが共存することがある (proc-macro)
+    "syn",
+    # rand はいくつかの crate が異なるメジャーバージョンを依存
+    "rand",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 脆弱性チェック (RustSec Advisory DB)
+# ─────────────────────────────────────────────────────────────────────────────
+[advisories]
+version          = 2
+db-path          = "~/.cargo/advisory-db"
+db-urls          = ["https://github.com/rustsec/advisory-db"]
+vulnerability    = "deny"      # 脆弱性がある場合はビルド失敗
+unmaintained     = "warn"      # メンテナンス停止は警告
+unsound          = "deny"      # 健全性問題がある場合はビルド失敗
+yanked           = "deny"      # yank されたバージョン禁止
+notice           = "warn"
+
+# 承認済みの例外 (理由と期限を必ず記録)
+ignore = [
+    # RUSTSEC-2020-0071: time crate の Windows ロケール問題
+    # 影響: Windows 環境でのローカル時刻取得の競合状態
+    # 状況: chrono の間接依存。Kaname は UTC のみ使用するため実害なし
+    # 期限: chrono 0.5 リリース後に再評価 (2026-Q3)
+    "RUSTSEC-2020-0071",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ソースチェック: crates.io 以外のソース管理
+# ─────────────────────────────────────────────────────────────────────────────
+[sources]
+unknown-registry = "deny"    # 未知のレジストリ禁止
+unknown-git      = "deny"    # 未知の git ソース禁止
+allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
+allow-git        = [
+    # openmls は crates.io への公開準備中
+    "https://github.com/openmls/openmls",
+]

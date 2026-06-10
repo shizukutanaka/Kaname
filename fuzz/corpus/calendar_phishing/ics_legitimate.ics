@@ -1,0 +1,9 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:週次ミーティング
+DESCRIPTION:通常の定例会議
+ORGANIZER:manager@company.co.jp
+URL:https://teams.microsoft.com/l/meetup-join/abc123
+END:VEVENT
+END:VCALENDAR

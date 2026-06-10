@@ -1,0 +1,79 @@
+{
+  "app": {
+    "name": "Kaname",
+    "tagline": "AIが助けても裏切らない、唯一の法人向けセキュアメールクライアント"
+  },
+  "inbox": {
+    "title": "受信トレイ",
+    "empty": "受信トレイは空です"
+  },
+  "compose": {
+    "subject": "件名",
+    "send": "送信",
+    "draft": "下書き保存"
+  },
+  "oobv": {
+    "title": "別経路検証 (OOBV)",
+    "subtitle": "Deepfake 詐欺対策",
+    "instruction_intro": "送信者に電話して以下の番号のワードを読み上げてもらってください:",
+    "challenge_label": "{number} 番目のワード",
+    "phrase_label": "検証フレーズ",
+    "input_placeholder": "送信者から聞いたワードを入力",
+    "verify_button": "検証する",
+    "cancel_button": "キャンセル",
+    "recommend": {
+      "none": "",
+      "optional": "別経路で確認すると安全です",
+      "strong": "⚠️ 別経路での確認を強く推奨します (金融指示 + 緊急性検出)"
+    },
+    "result": {
+      "verified": "✓ 検証成功 — 送信者本人と確認できました",
+      "mismatch": "✗ 検証失敗 — ワードが一致しません。詐欺の可能性があります",
+      "expired": "⏱ 期限切れ (5 分超過)。再度開始してください",
+      "pending": "検証待ち"
+    },
+    "audit": {
+      "logged": "監査ログに記録されました"
+    }
+  },
+  "pivot": {
+    "title": "横展開検出",
+    "subtitle": "メール → 他チャネルへの誘導を検出",
+    "detected_label": "検出されたチャネル",
+    "trust_score": "信頼スコア: {score}/10",
+    "high_risk_warning": "⚠️ {count} 個の高リスクチャネル",
+    "channel": {
+      "phone": "電話",
+      "teams": "Microsoft Teams",
+      "slack": "Slack",
+      "zoom": "Zoom",
+      "google_meet": "Google Meet",
+      "saas_document": "SaaS ドキュメント",
+      "crypto_wallet": "暗号通貨ウォレット"
+    },
+    "actions": {
+      "trust": "信頼する (履歴に追加)",
+      "block": "ブロック",
+      "verify_with_oobv": "OOBV で検証"
+    }
+  },
+  "deepfake": {
+    "title": "Deepfake 警告",
+    "subtitle": "音声/動画添付の検査",
+    "advisory": {
+      "info": "🎙️ 音声/動画が含まれています。2026 年現在、AI 音声クローンは 3-10 秒で複製可能です。",
+      "medium": "⚠️ 音声/動画 + 金融キーワードまたは緊急性を検出。重要な指示が含まれている可能性があります。",
+      "high": "🚨 高リスク: 音声/動画 + 金融指示 + 緊急性。再生前に別経路で確認してください。"
+    },
+    "action": {
+      "show_advisory": "詳細を見る",
+      "play_sandbox": "サンドボックスで再生",
+      "oobv_first": "OOBV で先に確認"
+    }
+  },
+  "security": {
+    "bec_detected": "BEC 攻撃の可能性があります",
+    "ai_phishing": "AI 生成フィッシングの可能性",
+    "dlp_blocked": "セキュリティポリシーにより AI 処理できません"
+  }
+}

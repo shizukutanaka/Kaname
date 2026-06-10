@@ -1,0 +1,233 @@
+# docs/threat-model.md — Kaname Threat Model
+
+Version 1.0 · 2026-04-18 · Owner: QSM (Quality & Security Manager)
+
+**Review cadence**: Quarterly, plus whenever a new attack class is published or an ADR affecting security lands.
+
+This is our contract with ourselves about what we defend against, what we accept as residual risk, and how we know each control is holding.
+
+---
+
+## 1. Scope and assumptions
+
+### 1.1 Assets we protect, ranked
+1. Message body and attachment content (current and historical)
+2. Cryptographic private keys (E2E, signing, transport)
+3. User credentials and auth tokens
+4. Contact graph and correspondence metadata
+5. Configuration and policy data
+6. Aggregate availability of the service to the organization
+
+### 1.2 Users we care about
+- Primary: employees of organizations that purchased Kaname (Business / Pro / Enterprise).
+- Secondary: admin users with privileged configuration access.
+- Tertiary: external senders whose mail is received (their content is an input we treat as untrusted; we do not owe them confidentiality of our defensive decisions).
+
+### 1.3 Threat actor capability bands
+
+| Band | Examples | Resources | We defend |
+|---|---|---|---|
+| Opportunist | phishing kit buyer, drive-by | low | Yes — full defense |
+| Organized criminal | BEC rings, ransomware gangs | medium | Yes — full defense |
+| APT / nation-state | intelligence services | high; 0-days; supply chain access | Yes — best effort; some threats only mitigated, not eliminated |
+| Insider | disgruntled employee, compromised admin | privileged access to one endpoint | Partial — see §6 |
+| Physical attacker with device | evil-maid, border seizure | device physical access | Full at-rest protection (SE/TPM); limited if device unlocked |
+
+We **out-of-scope**: threats from the operating system kernel being malicious (we trust the OS), threats requiring physical disassembly of Secure Enclave, quantum attacks from hypothetical future hardware against ML-KEM **combined with** X25519 (hybrid means both would need to break).
+
+---
+
+## 2. STRIDE — classical threat axes
+
+### 2.1 Spoofing
+
+| Threat | Example | Control |
+|---|---|---|
+| Display-name spoofing | Sender shows "CEO" but address is attacker@evil.com | UI always shows full address; display-name-only rendering forbidden |
+| Homoglyph domain | mitsui-g1obal.co.jp (l→1) | Punycode expansion + Levenshtein distance from user's contacts |
+| BEC (business email compromise) | Fake vendor requesting wire transfer | Multi-signal local LLM scoring; hard-block on score ≥ threshold |
+| DKIM/SPF/DMARC fail | Any of the three fails | UI red banner; AI pipeline refuses to summarize |
+| MLS identity spoofing | Attacker forges a Kaname identity | Identity keys in Secure Enclave; out-of-band verification UI for first-contact |
+
+### 2.2 Tampering
+
+| Threat | Example | Control |
+|---|---|---|
+| MITM on transport | Downgraded TLS, stripped STARTTLS | MTA-STS + DANE/TLSA enforcement; no cleartext fallback |
+| In-transit body modification | Malicious relay mutates content | DKIM verification + (for Kaname-to-Kaname) MLS AEAD |
+| At-rest DB tampering | Attacker with disk access modifies SQLite | SQLCipher with key in SE; tamper-evident hash chain over critical records |
+| Supply-chain code injection | Compromised dependency ships malware | SBOM, cargo-vet, reproducible builds, code signing, update channel with Ed25519+ML-DSA dual signatures |
+
+### 2.3 Repudiation
+
+| Threat | Example | Control |
+|---|---|---|
+| Sender denies sending | Business dispute | For Kaname-to-Kaname: MLS authenticated sender; for classic mail: DKIM signature captured and archived |
+| Admin action denied | Admin denies having changed policy | All admin actions signed with admin passkey; hash-chain audit log |
+| Message tampering post-receipt | User claims they received something different | Immutable message archive with hash on receipt (per-message Merkle leaf, daily root published) |
+
+### 2.4 Information disclosure
+
+| Threat | Example | Control |
+|---|---|---|
+| Tracking pixel | Sender sees when you opened | KMPP relay pre-fetches all remote content; IP hidden; open-time randomized |
+| Metadata leak in headers | `X-Mailer`, internal hostnames, message-ID format | Kaname strips/normalizes headers on send |
+| Search index leakage | Cloud indexing reveals content | Index is local-only; no cloud search telemetry |
+| HNDL (Harvest Now, Decrypt Later) | Attacker records TLS now, decrypts in 15 years | Hybrid PQC (ML-KEM-768 + X25519) from day 1 |
+| Memory-scraping malware on device | Endpoint is already compromised | Defense in depth only; document that keys in SE aren't readable by user-mode malware |
+| Misdelivery | User sends to wrong recipient | Large-blast-radius detection: warn before sending to >N external addresses; send-undo window; DLP pattern scan |
+| Forensics by device seizure | Corporate IT or adversary acquires device | Full-disk encryption relied upon; we add app-level encrypted-at-rest; remote wipe via MDM integration |
+
+### 2.5 Denial of service
+
+| Threat | Example | Control |
+|---|---|---|
+| Attachment ZIP bomb | Recursive archive explodes on decompress | Extraction runs in Firecracker VM with strict size and depth caps; VM is destroyed on overrun |
+| Regex DoS in filter rules | User Sieve script triggers worst-case regex | Sieve executor uses RE2-class engine (no backtracking); per-rule CPU budget |
+| MIME parse bomb | Pathological MIME tree | Parser has depth cap (8) and field count cap (256); fuzz-tested |
+| Mailbox flood | Attacker sends 1M messages | Rate limiting on inbound SMTP; mailbox quota; priority queue |
+| Font/image parser exploit causing crash | Crafted ttf/png | Rendering in WASM or Firecracker VM; host process unaffected by crashes |
+
+### 2.6 Elevation of privilege
+
+| Threat | Example | Control |
+|---|---|---|
+| HTML/CSS renderer escape | CVE in WebView | Content renders in isolated process with seccomp profile; does not have access to user data |
+| Attachment viewer RCE | 0-day in PDF/Office viewer | Viewer runs in Firecracker VM, no host access, no network; output is a rendered image |
+| Sandbox escape to host | Firecracker CVE | Accept as residual risk; patching cadence + defense in depth (SE-held keys still safe) |
+| Local privilege escalation to steal SE key | Malicious user-mode app | SE access requires biometric + app entitlement; OS provides the actual barrier |
+| Admin-token theft | Session token stolen, admin actions taken | Admin actions require passkey re-auth (not cached); short-lived token; IP anomaly detection |
+
+---
+
+## 3. AI-specific threats
+
+These do not fit STRIDE neatly. They are the reason Kaname exists.
+
+### 3.1 Indirect prompt injection
+**Threat**: Attacker embeds instructions in an email body. A naïve AI assistant processing the email interprets the instructions as legitimate.
+**Example cases**: EchoLeak (2024, Microsoft 365 Copilot), Gemini agentic exfiltration (2025), Apple Intelligence hijack (RSAC 2026).
+**Control**: Dual-LLM architecture (ADR-001). Privileged LLM never sees untrusted content; Quarantined LLM has no tools.
+**Residual risk**: Social-engineering the human — attacker convinces user to manually copy-paste instructions into the trusted pane. Mitigation: training + UI hints that the trusted pane is where YOU type.
+
+### 3.2 Direct prompt injection
+**Threat**: User of our app types a jailbreak into the assistant.
+**Scope**: Not our problem. User directing their own AI to do things within policy is fine.
+**Control**: N/A — trusted by construction.
+
+### 3.3 Fake conversation injection
+**Threat**: Untrusted content contains `User:` / `Assistant:` markers to trick the model into reading a fake prior turn.
+**Control**: Preflight scans for role-marker patterns. Quarantined LLM's system prompt explicitly declares that content between `<untrusted>` tags is not a conversation.
+**Residual risk**: Novel chat-template tokens (for models we haven't seen) — monitor.
+
+### 3.4 Multi-step agentic exfiltration
+**Threat**: Multi-message sequence where AI's reasoning across steps causes data leakage (e.g., "summarize and cite the URL `<encode-data-here>`").
+**Control**: All AI-emitted URLs are rewritten to go through Kaname relay (user-visible domain); any markdown image in AI output is blocked and rendered as `[image hidden]`. Cross-email AI operations require explicit user scope selection.
+**Residual risk**: Undiscovered chain patterns. Mitigation: adversarial corpus §D is updated weekly.
+
+### 3.5 AI recommendation poisoning
+**Threat**: Attacker plants persistent instructions in the model's memory (where persistent memory exists) that later influence recommendations.
+**Example**: Microsoft Security research, Feb 2026 — instructions embedded in web pages behind "Summarize with AI" plant memory.
+**Control**: Kaname does not maintain cross-session LLM memory. Each query is stateless. If we ever add memory, the content will be in `Content<Trusted>` only (user-typed).
+**Residual risk**: If a local LLM model itself is poisoned pre-deployment (supply chain), this would bypass us. Mitigation: model hash pinning and reproducible model builds.
+
+### 3.6 Training data poisoning
+**Threat**: Attacker influences training data of upstream models.
+**Scope**: Out of our direct control (we don't train models).
+**Control**: Models are versioned and pinned by hash; reported model misbehavior triggers rollback to previous known-good.
+
+### 3.7 AI-generated phishing at scale
+**Threat**: Attackers use LLMs to craft perfectly localized, contextually appropriate phishing, defeating static heuristics.
+**Control**: Our BEC detector also uses an LLM — it assesses context, tone shift from past sender, and semantic anomalies (urgent + payment + unusual route). Asymmetric: our defender LLM is local and sees user's historical context; attacker's LLM is blind.
+**Residual risk**: Very well-targeted spear phishing. Mitigation: BEC detector is one signal among many; verified-sender UI is the strongest signal for most attacks.
+
+### 3.8 Deepfake audio/video attachments
+**Threat**: Attachment is a deepfake impersonating the CEO.
+**Control**: Out of scope for text defense, but we display prominent "sender verified" badge. If the attachment requests wire transfer action, the mail text itself will have BEC markers; alarm fires there.
+**Residual risk**: A video attachment with no text context. Documented: users should verify high-value instructions out-of-band. We will add provenance metadata (C2PA) detection in v2.
+
+---
+
+## 4. Supply chain
+
+| Threat | Control |
+|---|---|
+| Compromised Cargo dependency | `cargo-vet` (with allow-list); crates from stdlib/rustcrypto/tokio orgs preferred; audit new deps in PR review |
+| Compromised Tauri plugin | We ship zero third-party plugins (ADR-006) |
+| Compromised Firecracker kernel/rootfs image | We build images reproducibly from source; hash pinned in release manifest |
+| Compromised LLM model file | Model hash pinned; alternate model fallback; downloaded over HTTPS from our CDN with Ed25519 + ML-DSA manifest signature |
+| Compromised update channel | Updates are signed with hardware-rooted key (SE/TPM-gated); clients verify both Ed25519 and ML-DSA signatures on manifest |
+| Compromised developer workstation | Signing is gated by hardware token presence + two-person approval for release branches |
+
+---
+
+## 5. Cryptographic agility
+
+We assume current algorithms will eventually weaken:
+
+- All crypto operations carry an algorithm identifier
+- The algorithm set is configured, not hardcoded
+- We can add HQC (FIPS 2027) as backup KEM without code changes
+- If ML-DSA is found weak, we can switch to SLH-DSA (hash-based, conservative) via configuration
+- If X25519 is ever broken, the hybrid falls back to pure PQC; users notified
+- Migration paths for existing encrypted archives (re-wrap keys) documented in `docs/crypto-migration.md`
+
+---
+
+## 6. Insider threat (partial coverage)
+
+We do not claim to fully defend against determined insider attack with admin privileges:
+- An admin with console access can grant themselves mailbox access
+- The compensating control is the **hash-chained audit log**: such an access is recorded, cannot be modified retroactively, and triggers notifications to other admins (quorum-style)
+- Data exfiltration to external channels is detected by DLP (pattern scan on outbound)
+- Admin actions require passkey re-auth → no stolen-session compromise
+
+A rogue insider with biometric access to their own machine can read their own mail. This is accepted.
+
+---
+
+## 7. Risk register (top 10)
+
+Ranked by `likelihood × impact`:
+
+1. **Novel indirect prompt injection technique** — likelihood high, impact medium (limited by architecture)
+2. **Kernel 0-day bypassing Firecracker isolation** — likelihood low, impact high
+3. **Targeted spear phishing exploiting trust UX** — likelihood high, impact medium
+4. **Mis-configured customer deployment exposing admin console** — likelihood medium, impact high
+5. **Cryptographic library CVE in ring/openmls** — likelihood low, impact high
+6. **Supply chain compromise of a Cargo dep** — likelihood low, impact high
+7. **User lost Secure Enclave device, no recovery path** — likelihood medium, impact medium (data loss, not disclosure)
+8. **LLM model file compromised in distribution** — likelihood low, impact medium
+9. **Apple/Microsoft OS CVE affecting webview** — likelihood medium, impact medium
+10. **Legal subpoena / CLOUD Act against Kaname servers** — likelihood medium, impact high **for content** is low (server holds encrypted blobs only for Kaname-to-Kaname), medium for metadata (we minimize but don't eliminate)
+
+---
+
+## 8. Controls coverage matrix
+
+| Control | Addresses threats |
+|---|---|
+| Dual-LLM architecture (ADR-001) | 3.1, 3.3, 3.4 |
+| Firecracker microVM for attachments (ADR-005) | 2.6, 3.8, F-class payloads |
+| WASM/seccomp HTML sandbox | 2.6, C-class payloads |
+| Hybrid PQC (ADR-004) | 2.4 HNDL, §5 |
+| MLS E2E (ADR-003) | 2.1, 2.2, 2.4 |
+| Passkey + Secure Enclave | 2.1, 2.4, §6 admin |
+| KMPP relay | 2.4 tracking, metadata |
+| Hash-chained audit log | 2.3, §6 insider |
+| BIMI/DMARC/ARC verification | 2.1 spoofing |
+| Local-only AI (ADR-001) | 2.4 content exfil, 3.1 |
+| Reproducible builds + SBOM | §4 supply chain |
+| Adversarial test corpus | 3.1-3.5 regression |
+
+---
+
+## 9. Changelog
+
+- **v1.0 (2026-04-18)**: Initial threat model aligned with ADRs 001-006.
+
+Future versions will be deltas; we don't rewrite from scratch.
+
+## 検証境界
+
+暗号実装の検証境界 (何が機械検証済みで何が信頼ベースか) は [verification-boundary.md](verification-boundary.md) に明示。arxiv eprint 2026/192「Verification Theatre」の教訓を反映している。

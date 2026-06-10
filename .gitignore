@@ -1,0 +1,45 @@
+# Rust
+/target/
+# NOTE: Cargo.lock はアプリケーションなのでコミットする (ライブラリは除外)
+# See: https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# IDE
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 環境変数 (絶対にコミットしない)
+.env
+.env.local
+.env.*.local
+*.pem
+*.p12
+
+# テスト出力
+target/nextest/
+target/criterion/
+bench_output.txt
+test-results/
+playwright-report/
+
+# fuzz (corpus のシードは公開する。生成物のみ除外)
+fuzz/target/
+fuzz/artifacts/
+# fuzz/corpus/ は意図的にコミットする (回帰防止のシード)
+
+# SBOM 一時ファイル
+*-sbom.cdx.json
+LICENSE-THIRD-PARTY.md

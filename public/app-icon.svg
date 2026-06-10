@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Kaname (要) — Liquid Glass アプリアイコン
+    Apple Icon Composer レイヤー構造準拠
+
+    設計原則 (WWDC25 "Say hello to the new look of app icons"):
+      - 正面向きのパース → ガラス素材と相性良
+      - 「less is more」— 重なりを減らし、シンプルに
+      - 鋭いエッジを避け、丸みのある形状
+      - SVG で出力 (透明度・スペキュラは Icon Composer が追加)
+      - ベースアート: フラット、不透明、シンプル
+
+    レイヤー構造 (Icon Composer 向け):
+      Layer 0: background (グラデーション背景)
+      Layer 1: shield (セキュリティシールド)
+      Layer 2: kanji (「要」文字)
+      Layer 3: highlight (スペキュラ強調、Icon Composer が自動追加)
+
+    カラーパレット:
+      Brand:    #00C4CC → #007F85
+      Shield:   rgba(255,255,255,0.15)
+      Text:     #FFFFFF
+      Glow:     #00E5EE @ 40% opacity
+  -->
+  <defs>
+    <!-- ── 背景グラデーション ── -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#00D4DC"/>
+      <stop offset="55%"  stop-color="#00A5AC"/>
+      <stop offset="100%" stop-color="#005C62"/>
+    </linearGradient>
+
+    <!-- ── 内側グロー (ガラスの奥行き感) ── -->
+    <radialGradient id="inner-glow" cx="40%" cy="30%" r="60%">
+      <stop offset="0%"   stop-color="#00F0FF" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#00C4CC" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- ── シールドのグラデーション ── -->
+    <linearGradient id="shield-fill" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+    </linearGradient>
+
+    <!-- ── トップハイライト (Icon Composer のスペキュラ相当) ── -->
+    <linearGradient id="top-spec" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="35%"  stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- ── エッジリング ── -->
+    <linearGradient id="edge-ring" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="50%"  stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+    </linearGradient>
+
+    <!-- ── ドロップシャドウフィルター ── -->
+    <filter id="shield-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="16" flood-color="#003840" flood-opacity="0.35"/>
+    </filter>
+
+    <!-- ── 文字シャドウ ── -->
+    <filter id="text-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <!-- ── アイコン輪郭クリップ ── -->
+    <clipPath id="icon-clip">
+      <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#icon-clip)">
+
+    <!-- ── Layer 0: 背景 ── -->
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#inner-glow)"/>
+
+    <!-- ── 背景のサブテクスチャ (微細なパターン) ── -->
+    <circle cx="200" cy="180" r="380" fill="#00E5EE" fill-opacity="0.04"/>
+    <circle cx="820" cy="850" r="300" fill="#003840" fill-opacity="0.18"/>
+
+    <!-- ── Layer 1: セキュリティシールド ── -->
+    <!--
+      シールドパス: 正面向き、角丸、「less is more」
+      Icon Composer でガラス素材とスペキュラを追加予定
+    -->
+    <g filter="url(#shield-shadow)">
+      <path
+        d="
+          M512 200
+          C512 200  340 240  290 310
+          C250 370  260 500  290 590
+          C320 675  400 740  512 800
+          C624 740  704 675  734 590
+          C764 500  774 370  734 310
+          C684 240  512 200  512 200
+          Z
+        "
+        fill="url(#shield-fill)"
+        stroke="rgba(255,255,255,0.22)"
+        stroke-width="2"
+      />
+    </g>
+
+    <!-- ── Layer 2: 「要」漢字 ── -->
+    <!--
+      Apple 原則: ガラスが素材の豊かさを追加するので、
+      アートワーク自体は「graphic essence」— フラットでシンプルに。
+      フォント: SF Pro Display (SVG 出力時にアウトライン化)
+    -->
+    <text
+      x="512"
+      y="558"
+      text-anchor="middle"
+      dominant-baseline="central"
+      font-family="'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', serif"
+      font-size="310"
+      font-weight="500"
+      fill="#FFFFFF"
+      fill-opacity="0.95"
+      filter="url(#text-glow)"
+      letter-spacing="-4"
+    >
+      要
+    </text>
+
+    <!-- ── Layer 3: トップハイライト (スペキュラシミュレーション) ── -->
+    <!--
+      Icon Composer が実際の物理ベースのスペキュラを追加する。
+      ここでは SVG 書き出し用の近似表現。
+    -->
+    <ellipse
+      cx="400" cy="260"
+      rx="240" ry="100"
+      fill="url(#top-spec)"
+      transform="rotate(-15, 400, 260)"
+    />
+
+    <!-- ── エッジリング (ガラスの縁取り) ── -->
+    <rect
+      width="1024" height="1024"
+      rx="224" ry="224"
+      fill="none"
+      stroke="url(#edge-ring)"
+      stroke-width="2"
+    />
+
+    <!-- ── セキュリティインジケーター (小さな錠前アイコン) ── -->
+    <g transform="translate(512, 760)" fill="rgba(255,255,255,0.55)">
+      <!-- 錠前本体 -->
+      <rect x="-14" y="-4" width="28" height="22" rx="4" fill="rgba(255,255,255,0.50)"/>
+      <!-- シャックル -->
+      <path d="M -9 -4 L -9 -14 Q -9 -24 0 -24 Q 9 -24 9 -14 L 9 -4" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="4" stroke-linecap="round"/>
+    </g>
+
+  </g>
+</svg>

@@ -1,0 +1,704 @@
+/* =============================================================================
+   KHIG — Kaname Human Interface Guidelines
+   Apple HIG + Liquid Glass (iOS 26 / macOS Tahoe 26) を参考にした設計トークン
+
+   4 大原則 (Apple HIG に準拠):
+   1. Clarity  — 全ての警告は警告らしく見える
+   2. Deference — UI はコンテンツと競合しない
+   3. Depth    — 空間的階層を色ではなく奥行きで表現
+   4. Safety   — 破壊的操作には確認が必要
+   ============================================================================= */
+
+:root {
+  /* ──────────────────────────────────────────────────────────────────────────
+     ブランドカラー
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-brand:          #00C4CC;
+  --k-brand-dim:      #00A5AC;
+  --k-brand-deep:     #007F85;
+  --k-brand-glow:     rgba(0,196,204,.15);
+  --k-brand-tint:     rgba(0,196,204,.08);
+  --k-brand-tint-md:  rgba(0,196,204,.14);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     表面レイヤー (暗→明 = 奥→手前)
+     Apple Liquid Glass: 半透明の素材が背景を屈折させる
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-bg:             #080C11;        /* アプリ背景、最低層 */
+  --k-surface-0:      #0D1219;        /* サイドバー、L1 */
+  --k-surface-1:      #12181F;        /* パネル、L2 */
+  --k-surface-2:      #1A2129;        /* カード、行、L3 */
+  --k-surface-3:      #232B36;        /* ホバー、L4 */
+  --k-surface-4:      #2D3543;        /* メニュー、モーダル、L5 */
+
+  /* Liquid Glass 専用 (backdrop-filter と組み合わせる) */
+  --k-glass-bg:       rgba(13,18,25,.70);    /* サイドバーガラス */
+  --k-glass-bg-over:  rgba(13,18,25,.82);    /* モーダルガラス */
+  --k-glass-border:   rgba(255,255,255,.07); /* ガラスの縁取り */
+  --k-glass-shine:    rgba(255,255,255,.04); /* ハイライト */
+  --k-glass-blur:     20px;
+  --k-glass-blur-heavy: 40px;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     ボーダー
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-border:         rgba(255,255,255,.08);
+  --k-border-subtle:  rgba(255,255,255,.04);
+  --k-border-strong:  rgba(255,255,255,.12);
+  --k-border-brand:   rgba(0,196,204,.25);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     テキスト階層 (WCAG AAA ≥ 7:1 を全ペアで達成)
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-text-primary:    #F5F7FA;   /* 見出し、本文 — 11.8:1 on --k-bg */
+  --k-text-secondary:  #C4CBD6;   /* サブ情報       — 8.2:1 */
+  --k-text-tertiary:   #8B96A5;   /* 補足情報       — 5.6:1 */
+  --k-text-quaternary: #5A6473;   /* プレースホルダー */
+  --k-text-on-brand:   #00090A;   /* ブランド背景上のテキスト */
+
+  /* セマンティックテキスト */
+  --k-text-danger:     #FF6B6B;
+  --k-text-warning:    #F5A623;
+  --k-text-success:    #00D68F;
+  --k-text-info:       #00C4CC;
+  --k-text-code:       #7DD3FC;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     セマンティックカラー (1色1意味の法則)
+     ────────────────────────────────────────────────────────────────────────── */
+  /* アクション */
+  --k-action-primary:   var(--k-brand);
+  --k-action-hover:     var(--k-brand-dim);
+  --k-action-disabled:  rgba(0,196,204,.3);
+
+  /* ステータス */
+  --k-status-safe:      #00D68F;
+  --k-status-advisory:  #F5A623;
+  --k-status-suspicious:#E5A500;
+  --k-status-danger:    #E5484D;
+
+  /* BEC 専用 (ステータスと同一色を使わない — 1色1意味) */
+  --k-bec-safe:         #00D68F;
+  --k-bec-advisory:     #FFB800;
+  --k-bec-suspicious:   #FF7D00;
+  --k-bec-danger:       #FF4444;
+
+  /* 暗号化バッジ */
+  --k-mls-color:        var(--k-brand);
+  --k-mls-bg:           rgba(0,196,204,.10);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     タイポグラフィ (Apple SF Pro を模した Web スタック)
+     Apple: SF Pro Display (≥ 20pt) / SF Pro Text (< 20pt)
+     Web 代替: -apple-system, 'Hiragino Sans' (macOS 日本語)
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-font-ui:     -apple-system, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+  --k-font-mono:   ui-monospace, "SF Mono", "Fira Code", "Cascadia Code", monospace;
+
+  /* タイプスケール — Apple HIG 8pt グリッドに準拠 */
+  --k-text-xs:     10px;   /* キャプション、バッジ   lh 14px */
+  --k-text-sm:     11px;   /* メタデータ             lh 16px */
+  --k-text-base:   13px;   /* UI ラベル              lh 18px */
+  --k-text-body:   14px;   /* リスト行、本文 L1      lh 20px */
+  --k-text-md:     15px;   /* 見出し L2              lh 22px */
+  --k-text-lg:     17px;   /* 見出し L1              lh 24px */
+  --k-text-xl:     20px;   /* セクションタイトル     lh 28px */
+  --k-text-2xl:    24px;   /* 大見出し               lh 32px */
+  --k-text-3xl:    28px;   /* 画面タイトル           lh 38px */
+
+  /* フォントウェイト */
+  --k-weight-regular: 400;
+  --k-weight-medium:  500;
+  --k-weight-semibold: 590; /* Apple SF Pro の semibold に近い */
+  --k-weight-bold:    700;
+
+  /* 文字間隔 (Apple HIG: 小さいサイズは広め) */
+  --k-tracking-tight:  -0.03em;
+  --k-tracking-normal:  0em;
+  --k-tracking-wide:    0.02em;
+  --k-tracking-wider:   0.04em;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     スペーシング — 4px ベース (Apple HIG 8pt グリッド互換)
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-space-1:   4px;
+  --k-space-2:   8px;
+  --k-space-3:  12px;
+  --k-space-4:  16px;
+  --k-space-5:  20px;
+  --k-space-6:  24px;
+  --k-space-8:  32px;
+  --k-space-10: 40px;
+  --k-space-12: 48px;
+  --k-space-16: 64px;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     ボーダー半径 (Apple HIG + Liquid Glass)
+     カプセル形状が Liquid Glass の韻律を作る
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-radius-sm:      4px;
+  --k-radius-md:      6px;
+  --k-radius-lg:      8px;
+  --k-radius-xl:     12px;
+  --k-radius-2xl:    16px;
+  --k-radius-3xl:    20px;
+  --k-radius-pill:   9999px;  /* カプセル — Apple の新しいボタン形状 */
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     シャドウ — Liquid Glass のような奥行き
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-shadow-sm:   0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+  --k-shadow-md:   0 4px 12px rgba(0,0,0,.4), 0 2px 4px rgba(0,0,0,.25);
+  --k-shadow-lg:   0 8px 30px rgba(0,0,0,.5), 0 4px 8px rgba(0,0,0,.3);
+  --k-shadow-xl:   0 16px 60px rgba(0,0,0,.6), 0 8px 20px rgba(0,0,0,.4);
+  --k-shadow-brand: 0 0 20px rgba(0,196,204,.25);
+  --k-shadow-glass: 0 8px 32px rgba(0,0,0,.45),
+                    0 0 0 0.5px rgba(255,255,255,.08),
+                    inset 0 0.5px 0 rgba(255,255,255,.06);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     アニメーション (Apple HIG: 目的のある流動的なモーション)
+     Spring physics: Apple は linear transition を嫌う
+     ────────────────────────────────────────────────────────────────────────── */
+
+  /* イージング曲線 */
+  --k-ease-out:      cubic-bezier(.22, 1, .36, 1);       /* 自然な減速 */
+  --k-ease-spring:   cubic-bezier(.34, 1.56, .64, 1);    /* オーバーシュート (Spring) */
+  --k-ease-in-out:   cubic-bezier(.45, 0, .55, 1);       /* 対称的な加減速 */
+  --k-ease-in:       cubic-bezier(.55, 0, 1, .45);       /* 加速のみ */
+
+  /* 継続時間 */
+  --k-duration-instant:  80ms;   /* 状態変化 (チェック等) */
+  --k-duration-fast:    160ms;   /* ホバー、フォーカス */
+  --k-duration-normal:  240ms;   /* パネル展開、トグル */
+  --k-duration-slow:    380ms;   /* モーダル、ページ遷移 */
+  --k-duration-lazy:    500ms;   /* 背景要素 */
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     コンポーネントトークン
+     ────────────────────────────────────────────────────────────────────────── */
+
+  /* ボタン */
+  --k-btn-height-sm:    28px;
+  --k-btn-height-md:    32px;
+  --k-btn-height-lg:    38px;
+  --k-btn-px-sm:        10px;
+  --k-btn-px-md:        14px;
+  --k-btn-px-lg:        18px;
+  --k-btn-radius:       var(--k-radius-pill);  /* Apple Liquid Glass カプセルボタン */
+
+  /* インプット */
+  --k-input-height:     32px;
+  --k-input-height-lg:  40px;
+  --k-input-bg:         var(--k-surface-2);
+  --k-input-border:     var(--k-border);
+  --k-input-radius:     var(--k-radius-lg);
+  --k-input-focus-ring: 0 0 0 3px rgba(0,196,204,.25);
+
+  /* サイドバー */
+  --k-sidebar-width:    212px;
+  --k-sidebar-bg:       var(--k-glass-bg);     /* Liquid Glass */
+  --k-sidebar-blur:     var(--k-glass-blur);
+
+  /* リスト行 */
+  --k-row-height:       64px;
+  --k-row-height-sm:    48px;
+  --k-row-height-compact: 40px;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     Z インデックス スタック (Apple HIG: 明確な層構造)
+     ────────────────────────────────────────────────────────────────────────── */
+  --k-z-base:        0;
+  --k-z-raised:     10;    /* カード、行 */
+  --k-z-dropdown:   100;   /* ドロップダウン */
+  --k-z-sticky:     200;   /* スティッキーヘッダー */
+  --k-z-overlay:    300;   /* オーバーレイ */
+  --k-z-modal:      400;   /* モーダル、ダイアログ */
+  --k-z-toast:      500;   /* トースト通知 */
+  --k-z-tooltip:    600;   /* ツールチップ */
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   グローバルリセット & ベーススタイル
+   ────────────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-base);
+  color: var(--k-text-primary);
+  background: var(--k-bg);
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Liquid Glass コンポーネント
+   ────────────────────────────────────────────────────────────────────────── */
+
+.glass {
+  background: var(--k-glass-bg);
+  backdrop-filter: blur(var(--k-glass-blur)) saturate(1.8);
+  -webkit-backdrop-filter: blur(var(--k-glass-blur)) saturate(1.8);
+  border: 1px solid var(--k-glass-border);
+  box-shadow: var(--k-shadow-glass);
+}
+
+.glass--heavy {
+  background: var(--k-glass-bg-over);
+  backdrop-filter: blur(var(--k-glass-blur-heavy)) saturate(2);
+  -webkit-backdrop-filter: blur(var(--k-glass-blur-heavy)) saturate(2);
+}
+
+.glass--shine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--k-glass-shine) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   タイポグラフィユーティリティ
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-title-lg   { font-size: var(--k-text-lg);   font-weight: var(--k-weight-semibold); letter-spacing: var(--k-tracking-tight); }
+.k-title-md   { font-size: var(--k-text-md);   font-weight: var(--k-weight-semibold); letter-spacing: var(--k-tracking-tight); }
+.k-title-sm   { font-size: var(--k-text-base); font-weight: var(--k-weight-semibold); }
+.k-body       { font-size: var(--k-text-body);  font-weight: var(--k-weight-regular); }
+.k-caption    { font-size: var(--k-text-sm);    color: var(--k-text-tertiary); }
+.k-mono       { font-family: var(--k-font-mono); font-size: var(--k-text-sm); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ボタン
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-1);
+  height: var(--k-btn-height-md);
+  padding: 0 var(--k-btn-px-md);
+  border-radius: var(--k-btn-radius);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-base);
+  font-weight: var(--k-weight-medium);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: transform var(--k-duration-fast) var(--k-ease-spring),
+              box-shadow var(--k-duration-fast) var(--k-ease-out),
+              opacity var(--k-duration-fast) var(--k-ease-out);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.k-btn:active  { transform: scale(.97); }
+.k-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.k-btn--primary {
+  background: var(--k-brand);
+  color: var(--k-text-on-brand);
+}
+.k-btn--primary:hover:not(:disabled) {
+  background: var(--k-brand-dim);
+  box-shadow: var(--k-shadow-brand);
+}
+
+.k-btn--secondary {
+  background: var(--k-surface-3);
+  color: var(--k-text-secondary);
+  border: 1px solid var(--k-border);
+}
+.k-btn--secondary:hover:not(:disabled) {
+  background: var(--k-surface-4);
+  color: var(--k-text-primary);
+}
+
+.k-btn--ghost {
+  background: transparent;
+  color: var(--k-text-tertiary);
+}
+.k-btn--ghost:hover:not(:disabled) {
+  background: var(--k-surface-2);
+  color: var(--k-text-secondary);
+}
+
+.k-btn--danger {
+  background: rgba(229,72,77,.15);
+  color: var(--k-bec-danger);
+  border: 1px solid rgba(229,72,77,.25);
+}
+.k-btn--danger:hover:not(:disabled) {
+  background: rgba(229,72,77,.25);
+}
+
+/* サイズバリアント */
+.k-btn--sm { height: var(--k-btn-height-sm); padding: 0 var(--k-btn-px-sm); font-size: var(--k-text-sm); }
+.k-btn--lg { height: var(--k-btn-height-lg); padding: 0 var(--k-btn-px-lg); font-size: var(--k-text-body); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   バッジ
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: var(--k-radius-pill);
+  font-size: var(--k-text-xs);
+  font-weight: var(--k-weight-semibold);
+  letter-spacing: var(--k-tracking-wider);
+  white-space: nowrap;
+}
+
+.k-badge--brand   { background: var(--k-brand-tint-md); color: var(--k-brand); border: 1px solid var(--k-brand-glow); }
+.k-badge--safe    { background: rgba(0,214,143,.12); color: var(--k-status-safe); }
+.k-badge--warning { background: rgba(245,166,35,.12); color: var(--k-status-advisory); }
+.k-badge--danger  { background: rgba(229,72,77,.12); color: var(--k-status-danger); }
+.k-badge--muted   { background: var(--k-surface-2); color: var(--k-text-tertiary); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   インプット
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-input {
+  width: 100%;
+  height: var(--k-input-height);
+  padding: 0 var(--k-space-3);
+  background: var(--k-input-bg);
+  border: 1px solid var(--k-input-border);
+  border-radius: var(--k-input-radius);
+  font-family: var(--k-font-ui);
+  font-size: var(--k-text-base);
+  color: var(--k-text-primary);
+  outline: none;
+  transition: border-color var(--k-duration-fast) var(--k-ease-out),
+              box-shadow var(--k-duration-fast) var(--k-ease-out);
+}
+
+.k-input::placeholder { color: var(--k-text-quaternary); }
+.k-input:focus {
+  border-color: var(--k-brand);
+  box-shadow: var(--k-input-focus-ring);
+}
+
+.k-input--lg { height: var(--k-input-height-lg); font-size: var(--k-text-body); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   スケルトンローディング (Apple HIG: 意味のあるフィードバック)
+   ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes k-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.k-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--k-surface-2);
+  border-radius: var(--k-radius-md);
+}
+
+.k-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,.04) 50%,
+    transparent 100%
+  );
+  animation: k-shimmer 1.6s infinite;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   トースト通知 (Apple HIG: 一時的なフィードバック)
+   ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes k-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes k-toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(.96);
+  }
+}
+
+.k-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  padding: var(--k-space-3) var(--k-space-4);
+  border-radius: var(--k-radius-xl);
+  max-width: 380px;
+  animation: k-toast-in var(--k-duration-normal) var(--k-ease-spring) forwards;
+}
+
+.k-toast--leaving {
+  animation: k-toast-out var(--k-duration-fast) var(--k-ease-in) forwards;
+}
+
+.k-toast--success { background: rgba(0,214,143,.15); border: 1px solid rgba(0,214,143,.25); color: var(--k-status-safe); }
+.k-toast--error   { background: rgba(229,72,77,.15);  border: 1px solid rgba(229,72,77,.25);  color: var(--k-bec-danger); }
+.k-toast--info    { background: var(--k-brand-tint-md); border: 1px solid var(--k-brand-glow); color: var(--k-brand); }
+.k-toast--warning { background: rgba(245,166,35,.15); border: 1px solid rgba(245,166,35,.25); color: var(--k-status-advisory); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   コンテキストメニュー (macOS HIG スタイル)
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-context-menu {
+  position: fixed;
+  min-width: 200px;
+  padding: var(--k-space-1) 0;
+  border-radius: var(--k-radius-xl);
+  z-index: var(--k-z-modal);
+  animation: k-toast-in var(--k-duration-fast) var(--k-ease-spring);
+}
+
+.k-context-item {
+  display: flex;
+  align-items: center;
+  gap: var(--k-space-3);
+  padding: var(--k-space-2) var(--k-space-4);
+  font-size: var(--k-text-base);
+  color: var(--k-text-secondary);
+  cursor: pointer;
+  transition: background var(--k-duration-instant) var(--k-ease-out),
+              color var(--k-duration-instant) var(--k-ease-out);
+  user-select: none;
+}
+
+.k-context-item:hover         { background: var(--k-surface-3); color: var(--k-text-primary); }
+.k-context-item--danger       { color: var(--k-bec-danger); }
+.k-context-item--danger:hover { background: rgba(229,72,77,.12); }
+
+.k-context-separator {
+  height: 1px;
+  background: var(--k-border-subtle);
+  margin: var(--k-space-1) 0;
+}
+
+.k-context-kbd {
+  margin-left: auto;
+  font-family: var(--k-font-mono);
+  font-size: var(--k-text-xs);
+  color: var(--k-text-quaternary);
+  background: var(--k-surface-2);
+  padding: 1px 5px;
+  border-radius: var(--k-radius-sm);
+  border: 1px solid var(--k-border);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Empty State (Apple HIG: 目的のある空状態)
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--k-space-4);
+  padding: var(--k-space-16) var(--k-space-8);
+  text-align: center;
+}
+
+.k-empty__icon {
+  font-size: 40px;
+  opacity: .18;
+  filter: grayscale(1);
+}
+
+.k-empty__title {
+  font-size: var(--k-text-body);
+  font-weight: var(--k-weight-medium);
+  color: var(--k-text-secondary);
+}
+
+.k-empty__desc {
+  font-size: var(--k-text-base);
+  color: var(--k-text-tertiary);
+  max-width: 280px;
+  line-height: 1.6;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   フォーカスリング (WCAG AA アクセシビリティ)
+   ────────────────────────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0,196,204,.5);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   スクロールバー (macOS スタイル)
+   ────────────────────────────────────────────────────────────────────────── */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.1) transparent;
+}
+
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.18); }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   アニメーション (スタガー & フェードイン)
+   ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes k-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes k-slide-left {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes k-scale-in {
+  from { opacity: 0; transform: scale(.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes k-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+.k-anim-fade-in    { animation: k-fade-in    var(--k-duration-normal) var(--k-ease-out) both; }
+.k-anim-slide-left { animation: k-slide-left var(--k-duration-normal) var(--k-ease-out) both; }
+.k-anim-scale-in   { animation: k-scale-in   var(--k-duration-normal) var(--k-ease-spring) both; }
+.k-anim-pulse      { animation: k-pulse 2s ease-in-out infinite; }
+
+/* スタガーコンビネーター */
+.k-stagger > *:nth-child(1)  { animation-delay:   0ms; }
+.k-stagger > *:nth-child(2)  { animation-delay:  40ms; }
+.k-stagger > *:nth-child(3)  { animation-delay:  80ms; }
+.k-stagger > *:nth-child(4)  { animation-delay: 120ms; }
+.k-stagger > *:nth-child(5)  { animation-delay: 160ms; }
+.k-stagger > *:nth-child(n+6){ animation-delay: 200ms; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   プログレッシブディスクロージャー (Apple HIG)
+   ────────────────────────────────────────────────────────────────────────── */
+
+.k-disclosure {
+  overflow: hidden;
+  transition: max-height var(--k-duration-normal) var(--k-ease-out),
+              opacity    var(--k-duration-normal) var(--k-ease-out);
+}
+
+.k-disclosure--closed { max-height: 0; opacity: 0; }
+.k-disclosure--open   { max-height: 800px; opacity: 1; }
+
+/* =============================================================================
+   WCAG AAA アクセシビリティ拡張
+   Apple WWDC25 Accessibility Nutrition Labels 準拠
+   ============================================================================= */
+
+/* ── Reduce Motion (Apple HIG: アニメーションを止める権利) ─────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  /* Spring アニメーションをクロスフェードに置換 */
+  .k-anim-fade-in,
+  .k-anim-slide-left,
+  .k-anim-scale-in {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  /* Toast: スライドアニメーション除去 → フェードのみ */
+  .k-toast       { animation: k-fade-minimal .15s ease forwards; }
+  .k-toast--leaving { animation: k-fade-out-minimal .1s ease forwards; }
+
+  /* スタガーを無効化 */
+  .k-stagger > * { animation-delay: 0ms !important; }
+
+  /* transition を最短に */
+  *, *::before, *::after { transition-duration: .01ms !important; }
+}
+
+@keyframes k-fade-minimal    { from { opacity:0 } to { opacity:1 } }
+@keyframes k-fade-out-minimal { from { opacity:1 } to { opacity:0 } }
+
+/* ── Increase Contrast ────────────────────────────────────────────────────── */
+@media (prefers-contrast: more) {
+  :root {
+    --k-text-primary:   #FFFFFF;
+    --k-text-secondary: #E0E0E0;
+    --k-text-tertiary:  #BBBBBB;
+    --k-border:         rgba(255,255,255,.25);
+    --k-glass-bg:       rgba(5,8,12,.92);
+  }
+}
+
+/* ── フォーカスリング (キーボードナビゲーション必須) ─────────────────────── */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0,196,204,.6), 0 0 0 1px rgba(0,196,204,.3) !important;
+  border-radius: inherit;
+}
+
+/* ── Dynamic Type (CSS clamp でスケール対応) ─────────────────────────────── */
+/* ユーザーがシステムフォントサイズを上げた場合に追従 */
+@media (min-resolution: 2dppx) {
+  :root {
+    --k-text-base: clamp(12px, 0.81rem, 16px);
+    --k-text-body: clamp(13px, 0.875rem, 18px);
+    --k-text-md:   clamp(14px, 0.94rem, 20px);
+    --k-text-lg:   clamp(15px, 1.0rem,  22px);
+  }
+}
+
+/* ── スクリーンリーダー専用クラス (ARIA 補完) ──────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── 色だけで伝えない (colorblind 対応パターン) ──────────────────────────── */
+.k-state-error::before   { content: "✕ "; }
+.k-state-success::before { content: "✓ "; }
+.k-state-warning::before { content: "⚠ "; }
+.k-state-info::before    { content: "ℹ "; }

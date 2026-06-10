@@ -1,0 +1,35 @@
+[package]
+name             = "kaname-ui"
+version.workspace     = true
+edition.workspace     = true
+rust-version.workspace = true
+
+[lib]
+name = "kaname_ui"
+
+[dependencies]
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+thiserror          = { workspace = true }
+tokio              = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+kaname-oobv = { path = "../kaname-oobv" }
+kaname-pivot = { path = "../kaname-pivot" }
+kaname-render = { path = "../kaname-render" }
+kaname-screen = { path = "../kaname-screen" }
+kaname-memory-guard = { path = "../kaname-memory-guard" }
+kaname-ai = { path = "../kaname-ai" }
+kaname-observability = { path = "../kaname-observability" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[features]
+# tauri-app: src-tauri からビルドする際に tauri::command マクロを有効化
+tauri-app = ["dep:tauri"]
+default = []
+
+[dependencies.tauri]
+version = "2"
+optional = true

@@ -1,0 +1,1 @@
+https://login.microsoftonline.com/tenant/oauth2/v2.0/authorize?client_id=app

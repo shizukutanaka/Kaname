@@ -1,0 +1,94 @@
+# .pre-commit-config.yaml
+# pre-commit フック設定
+#
+# インストール:
+#   pip install pre-commit
+#   pre-commit install
+#
+# 手動実行:
+#   pre-commit run --all-files
+#
+# 各コミット前に自動実行:
+#   - cargo fmt (Rust フォーマット)
+#   - cargo clippy (Rust Lint)
+#   - secret 漏洩検出 (gitleaks)
+#   - 末尾空白・改行コード統一
+#   - 大きなファイルのブロック
+
+repos:
+  # ──────────────────────────────────────────
+  # 汎用
+  # ──────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: "(.md|.txt)$"
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: detect-private-key
+
+  # ──────────────────────────────────────────
+  # Rust
+  # ──────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        language: system
+        entry: cargo fmt --all --
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        language: system
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        types: [rust]
+        pass_filenames: false
+
+  # ──────────────────────────────────────────
+  # Secrets 検出 (gitleaks)
+  # ──────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.2
+    hooks:
+      - id: gitleaks
+
+  # ──────────────────────────────────────────
+  # TypeScript / JSON
+  # ──────────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        language: system
+        entry: npx prettier --write
+        types_or: [ts, tsx, json, css]
+        pass_filenames: true
+
+      - id: eslint
+        name: eslint
+        language: system
+        entry: npx eslint --fix
+        types_or: [ts, tsx]
+        pass_filenames: true
+
+# ──────────────────────────────────────────
+# グローバル除外
+# ──────────────────────────────────────────
+exclude: |
+  (?x)^(
+    target/.*|
+    node_modules/.*|
+    fuzz/target/.*|
+    dist/.*|
+    \.cargo/.*
+  )$

@@ -1,0 +1,47 @@
+{
+  "name": "kaname",
+  "version": "0.3.21",
+  "description": "AIが助けても裏切らない法人向けセキュアメールクライアント",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:a11y": "playwright test e2e/a11y.spec.ts",
+    "test:visual": "playwright test --grep visual",
+    "test": "vitest run && playwright test",
+    "fuzz:mime": "cd fuzz && cargo +nightly fuzz run mime_parser -- -max_total_time=120",
+    "fuzz:html": "cd fuzz && cargo +nightly fuzz run html_sanitizer -- -max_total_time=120",
+    "fuzz:prompt": "cd fuzz && cargo +nightly fuzz run prompt_injection -- -max_total_time=120",
+    "snapshots:init": "bash scripts/init-snapshots.sh",
+    "stats": "bash scripts/stats.sh",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:ui": "vitest --coverage --ui",
+    "static-check": "bash scripts/static-check.sh"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "solid-js": "^1.8.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.4",
+    "vite-plugin-solid": "^2.10.2",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.14.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0"
+  }
+}

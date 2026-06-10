@@ -1,0 +1,35 @@
+[package]
+name             = "kaname-fuzz"
+version          = "0.0.0"
+edition          = "2021"
+rust-version     = "1.82"
+publish          = false
+
+[package.metadata]
+cargo-fuzz       = true
+
+[dependencies]
+libfuzzer-sys    = "0.4"
+kaname-render    = { path = "../crates/kaname-render" }
+kaname-ai        = { path = "../crates/kaname-ai" }
+
+[[bin]]
+name              = "mime_parser"
+path              = "fuzz_targets/mime_parser.rs"
+test              = false
+doc               = false
+bench             = false
+
+[[bin]]
+name              = "html_sanitizer"
+path              = "fuzz_targets/html_sanitizer.rs"
+test              = false
+doc               = false
+bench             = false
+
+[[bin]]
+name              = "prompt_injection"
+path              = "fuzz_targets/prompt_injection.rs"
+test              = false
+doc               = false
+bench             = false

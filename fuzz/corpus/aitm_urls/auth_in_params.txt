@@ -1,0 +1,1 @@
+https://legitimate-looking.com/auth?access_token=eyJhb&code=abc123&state=csrf_bypass

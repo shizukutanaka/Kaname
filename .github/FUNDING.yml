@@ -1,0 +1,14 @@
+# Funding Sources for Kaname
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+# 個人による開発を支援する
+github: ["kaname-app"]
+
+# Open Source 持続可能性のための代替経路
+# (組織化されたら以下を有効化)
+# patreon: kaname-app
+# open_collective: kaname
+# ko_fi: kaname
+
+# 商用ライセンスは https://kaname.app/enterprise 参照
+custom: ["https://kaname.app/enterprise", "https://kaname.app/sponsor"]

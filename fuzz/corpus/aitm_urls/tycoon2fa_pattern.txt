@@ -1,0 +1,1 @@
+https://microsoft.com.tycoon-auth.net/relay?id_token=eyJhbGciOiJSUzI1NiJ9&state=xyz&code=abc

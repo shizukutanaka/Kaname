@@ -1,0 +1,90 @@
+# Dependabot 設定
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Rust (Cargo)
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "kaname-app/security-lead"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # セキュリティ修正は即時 PR、それ以外は週次
+    allow:
+      - dependency-type: "all"
+    # Major バージョン更新は手動レビュー必須
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # 関連 crate をまとめる
+      tokio-stack:
+        patterns: ["tokio*"]
+      serde-stack:
+        patterns: ["serde*"]
+      tracing-stack:
+        patterns: ["tracing*"]
+      crypto-stack:
+        patterns: ["ed25519-dalek", "x25519-dalek", "aes-gcm", "sha2", "hmac"]
+
+  # Node.js (npm)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "kaname-app/platform-lead"
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      solid-stack:
+        patterns: ["solid-*"]
+      tauri-stack:
+        patterns: ["@tauri-apps/*"]
+      vitest-stack:
+        patterns: ["vitest", "@vitest/*"]
+      playwright-stack:
+        patterns: ["@playwright/*", "@axe-core/*"]
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "03:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "kaname-app/platform-lead"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+    # Action のメジャー更新は手動レビュー
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

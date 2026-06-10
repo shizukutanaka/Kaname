@@ -1,0 +1,14 @@
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="BOUNDARY_A"
+
+--BOUNDARY_A
+Content-Type: multipart/alternative; boundary="BOUNDARY_B"
+
+--BOUNDARY_B
+Content-Type: text/plain
+Hello plain
+--BOUNDARY_B
+Content-Type: text/html
+<p>Hello HTML</p>
+--BOUNDARY_B--
+--BOUNDARY_A--

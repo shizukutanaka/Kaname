@@ -1,0 +1,95 @@
+# Cargo.toml — Kaname workspace root
+# 設計: resolver="2", 全バージョン一元管理, release 最適化済み
+# 19 クレート + src-tauri = 20 メンバー
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/kaname-core",
+    "crates/kaname-error",
+    "crates/kaname-i18n",
+    "crates/kaname-observability",
+    "crates/kaname-privacy",
+
+    "crates/kaname-crypto",
+    "crates/kaname-mls",
+    "crates/kaname-store",
+
+    "crates/kaname-jmap",
+    "crates/kaname-render",
+    "crates/kaname-sandbox",
+
+    "crates/kaname-ai",
+    "crates/kaname-bec",
+    "crates/kaname-dlp",
+
+    "crates/kaname-billing",
+    "crates/kaname-tray",
+    "crates/kaname-mockserver",
+    "crates/kaname-oobv",
+    "crates/kaname-saas-guard",
+    "crates/kaname-ssa",
+    "crates/kaname-radar",
+    "crates/kaname-screen",
+    "crates/kaname-memory-guard",
+    "crates/kaname-pivot",
+    "crates/kaname-continuity",
+
+    "crates/kaname-ui",
+    "crates/kaname-tests",
+
+    "src-tauri",
+]
+exclude = ["fuzz"]
+
+[workspace.package]
+version      = "0.3.21"
+edition      = "2021"
+rust-version = "1.82"
+authors      = ["Kaname Team <security@kaname.app>"]
+license      = "AGPL-3.0-or-later"
+repository   = "https://github.com/kaname-app/kaname"
+description  = "AIが助けても裏切らない法人向けセキュアメールクライアント"
+
+[workspace.dependencies]
+tokio        = { version = "1.41", features = ["full"] }
+serde        = { version = "1.0", features = ["derive"] }
+serde_json   = "1.0"
+thiserror    = "1.0"
+anyhow       = "1.0"
+tracing      = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest      = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+axum         = { version = "0.7", features = ["json"] }
+tower        = "0.4"
+tower-http   = { version = "0.5", features = ["cors", "trace"] }
+rand         = "0.8"
+sha2         = "0.10"
+hmac         = "0.12"
+aes-gcm      = "0.10"
+ed25519-dalek = "2.1"
+x25519-dalek = "2.0"
+zeroize      = { version = "1.7", features = ["derive"] }
+rusqlite     = { version = "0.31", features = ["bundled"] }
+scraper      = "0.19"
+tauri        = { version = "2.1", features = ["tray-icon"] }
+tauri-build  = { version = "2.0" }
+proptest     = "1.4"
+criterion    = { version = "0.5", features = ["html_reports"] }
+tempfile     = "3.10"
+tokio-test   = "0.4"
+mockito      = "1.4"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
+panic         = "abort"
+
+[profile.dev]
+opt-level = 1
+debug     = true
+
+[profile.bench]
+opt-level = 3

@@ -1,0 +1,109 @@
+# docker-compose.yml
+#
+# Kaname 開発環境の自動セットアップ
+#
+# 使用法:
+#   docker compose up         全サービスを起動
+#   docker compose up mock    JMAP モックサーバーだけ起動
+#   docker compose down       全停止
+#
+# 提供されるサービス:
+#   - mock:        JMAP モックサーバー (ポート 8080)
+#   - vite:        フロントエンド開発サーバー (ポート 1420)
+#   - registry:    ローカル npm レジストリプロキシ (オプション)
+#
+# 注意:
+#   Tauri (デスクトップアプリ) は Docker 化できないため、
+#   ホスト OS で `npm run tauri:dev` を実行する必要がある。
+#   このファイルは「メールサーバー側」のシミュレーションを Docker 化する。
+
+version: "3.9"
+
+services:
+  # ────────────────────────────────────────────────────────────
+  # JMAP モックサーバー
+  # ────────────────────────────────────────────────────────────
+  mock:
+    image: rust:1.82-bookworm
+    container_name: kaname-mock
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/workspace/target
+    ports:
+      - "8080:8080"
+    environment:
+      KANAME_MOCK_HOST: "0.0.0.0"
+      KANAME_MOCK_PORT: "8080"
+      RUST_LOG: "kaname_mockserver=info,tower_http=info"
+    command: >
+      bash -c "
+        cargo build -p kaname-mockserver --release --bin jmap-mock &&
+        ./target/release/jmap-mock
+      "
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ────────────────────────────────────────────────────────────
+  # Vite フロントエンド (オプション)
+  # ────────────────────────────────────────────────────────────
+  # 注: 通常は host で `npm run dev` を使う方が高速
+  vite:
+    image: node:22-bookworm
+    container_name: kaname-vite
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+      - node-modules:/workspace/node_modules
+    ports:
+      - "1420:1420"
+    environment:
+      VITE_API_URL: "http://mock:8080"
+    command: >
+      bash -c "
+        npm ci &&
+        npm run dev -- --host 0.0.0.0
+      "
+    depends_on:
+      mock:
+        condition: service_healthy
+    profiles:
+      - web   # docker compose --profile web up でのみ起動
+
+  # ────────────────────────────────────────────────────────────
+  # CI シミュレーター (オプション)
+  # ────────────────────────────────────────────────────────────
+  ci:
+    image: rust:1.82-bookworm
+    container_name: kaname-ci
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+      - cargo-cache:/usr/local/cargo/registry
+    command: >
+      bash -c "
+        apt-get update && apt-get install -y --no-install-recommends \
+          libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+          librsvg2-dev libssl-dev pkg-config build-essential &&
+        cargo fmt --check &&
+        cargo clippy --workspace --all-targets -- -D warnings &&
+        cargo test --workspace
+      "
+    profiles:
+      - ci    # docker compose --profile ci up で実行
+
+# ────────────────────────────────────────────────────────────
+# 永続ボリューム (キャッシュ高速化用)
+# ────────────────────────────────────────────────────────────
+volumes:
+  cargo-cache:
+    name: kaname-cargo-cache
+  target-cache:
+    name: kaname-target-cache
+  node-modules:
+    name: kaname-node-modules

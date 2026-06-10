@@ -1,0 +1,53 @@
+# Kaname .gitattributes
+
+# デフォルト: 自動改行正規化
+* text=auto eol=lf
+
+# Rust
+*.rs    text diff=rust
+Cargo.toml  text
+Cargo.lock  text -diff
+
+# Web
+*.ts    text
+*.tsx   text
+*.js    text
+*.jsx   text
+*.json  text
+*.css   text
+*.html  text
+
+# ドキュメント
+*.md    text diff=markdown
+*.txt   text
+
+# シェル (常に LF)
+*.sh    text eol=lf
+
+# Windows バッチ (常に CRLF)
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# バイナリ (diff しない)
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+
+# GitHub Linguist: 言語統計から除外
+docs/**         linguist-documentation
+*.md            linguist-documentation
+examples/**     linguist-documentation
+tests/**        linguist-vendored=false
+crates/kaname-mockserver/**  linguist-vendored
+
+# 生成物を統計から除外
+*.lock          linguist-generated
+fuzz/corpus/**  linguist-generated

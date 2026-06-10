@@ -1,0 +1,62 @@
+name: 🐛 バグ報告
+description: 動作しない、誤動作する、クラッシュするなど
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        セキュリティ脆弱性は [SECURITY.md](../SECURITY.md) を参照してください。
+        ここには報告しないでください。
+
+  - type: input
+    id: version
+    attributes:
+      label: Kaname バージョン
+      placeholder: "v0.1.0"
+    validations: { required: true }
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS 14 (Sonoma)
+        - macOS 15 (Sequoia)
+        - Windows 11
+        - Ubuntu 22.04
+        - Ubuntu 24.04
+        - その他
+    validations: { required: true }
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 何が起きたか
+      description: 具体的な動作を記述してください
+    validations: { required: true }
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した動作
+    validations: { required: true }
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations: { required: true }
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ
+      description: |
+        macOS: ~/Library/Logs/Kaname/
+        Windows: %APPDATA%\Kaname\logs\
+        Linux: ~/.local/share/kaname/logs/
+      render: shell

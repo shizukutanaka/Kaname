@@ -1,0 +1,79 @@
+{
+  "app": {
+    "name": "Kaname",
+    "tagline": "The only enterprise secure email client where AI helps without betraying you"
+  },
+  "inbox": {
+    "title": "Inbox",
+    "empty": "Your inbox is empty"
+  },
+  "compose": {
+    "subject": "Subject",
+    "send": "Send",
+    "draft": "Save Draft"
+  },
+  "oobv": {
+    "title": "Out-of-Band Verification",
+    "subtitle": "Deepfake fraud protection",
+    "instruction_intro": "Call the sender and ask them to read the word at the position below:",
+    "challenge_label": "Word #{number}",
+    "phrase_label": "Verification Phrase",
+    "input_placeholder": "Enter the word you heard from the sender",
+    "verify_button": "Verify",
+    "cancel_button": "Cancel",
+    "recommend": {
+      "none": "",
+      "optional": "Consider verifying via another channel",
+      "strong": "⚠️ Strongly recommend out-of-band verification (financial + urgency detected)"
+    },
+    "result": {
+      "verified": "✓ Verified — sender confirmed",
+      "mismatch": "✗ Failed — words don't match. Possible fraud.",
+      "expired": "⏱ Expired (5 minutes). Please start again.",
+      "pending": "Waiting for verification"
+    },
+    "audit": {
+      "logged": "Recorded in audit log"
+    }
+  },
+  "pivot": {
+    "title": "Cross-Channel Pivot Detection",
+    "subtitle": "Detecting redirects from email to other channels",
+    "detected_label": "Detected channels",
+    "trust_score": "Trust score: {score}/10",
+    "high_risk_warning": "⚠️ {count} high-risk channels",
+    "channel": {
+      "phone": "Phone",
+      "teams": "Microsoft Teams",
+      "slack": "Slack",
+      "zoom": "Zoom",
+      "google_meet": "Google Meet",
+      "saas_document": "SaaS Document",
+      "crypto_wallet": "Cryptocurrency Wallet"
+    },
+    "actions": {
+      "trust": "Trust (add to history)",
+      "block": "Block",
+      "verify_with_oobv": "Verify with OOBV"
+    }
+  },
+  "deepfake": {
+    "title": "Deepfake Advisory",
+    "subtitle": "Audio/video attachment inspection",
+    "advisory": {
+      "info": "🎙️ Audio/video attached. As of 2026, AI voice clones can be made from 3-10 seconds of audio.",
+      "medium": "⚠️ Media + financial keywords or urgency detected. May contain critical instructions.",
+      "high": "🚨 High risk: media + financial instruction + urgency. Verify out-of-band before playing."
+    },
+    "action": {
+      "show_advisory": "View details",
+      "play_sandbox": "Play in sandbox",
+      "oobv_first": "Verify with OOBV first"
+    }
+  },
+  "security": {
+    "bec_detected": "Possible BEC (Business Email Compromise) attack",
+    "ai_phishing": "Possible AI-generated phishing",
+    "dlp_blocked": "AI processing blocked by security policy"
+  }
+}

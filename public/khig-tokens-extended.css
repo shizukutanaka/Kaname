@@ -1,0 +1,356 @@
+/* =============================================================================
+   KHIG — Kaname Human Interface Guidelines
+   Design tokens for immediate use in Tauri frontend and marketing site
+   
+   Principles (in order of priority when in conflict):
+   1. Clarity — every warning looks like a warning
+   2. Deference — UI never competes with content
+   3. Depth — spatial hierarchy through elevation, not color
+   4. Honesty — if something is sandboxed, you see the sandbox
+   5. Safety-first — destructive actions need confirmation
+   ============================================================================= */
+
+:root {
+  /* --------------------------------------------------------------------------
+     Color — Dark theme (default)
+     Accessibility: all text/bg pairs meet WCAG AAA (contrast >= 7:1)
+     Single-meaning rule: one color ≠ two meanings. Warning red ≠ selected highlight.
+     -------------------------------------------------------------------------- */
+  
+  /* Brand */
+  --color-brand:          #00C4CC;
+  --color-brand-dim:      #00A5AC;
+  --color-brand-glow:     #00C4CC26;  /* 15% alpha, hover glows */
+  --color-brand-tint:     #00C4CC14;  /* 8%, backgrounds */
+  
+  /* Surfaces (elevation ladder — darker → lighter means higher) */
+  --color-bg:             #0A0E14;  /* app background, lowest */
+  --color-surface:        #12181F;  /* sidebar, panels */
+  --color-surface-raised: #1A2129;  /* rows, cards */
+  --color-surface-elev:   #232B36;  /* hover, menus */
+  --color-surface-over:   #2D3543;  /* modals, popovers */
+  
+  /* Borders */
+  --color-border:         #2A3441;
+  --color-border-subtle:  #1F2833;
+  --color-border-strong:  #3B4657;
+  
+  /* Text */
+  --color-text:           #F5F7FA;
+  --color-text-muted:     #8B96A5;
+  --color-text-dim:       #5A6473;
+  --color-text-disabled:  #3B4252;
+  
+  /* Semantic — each has one meaning, never reused */
+  --color-success:        #00B368;  /* secure state, verified sender */
+  --color-warning:        #F5A623;  /* attention needed, not danger */
+  --color-danger:         #E5484D;  /* phishing, malware, spoofing — nothing else */
+  --color-info:           #4C9AFF;  /* neutral informational */
+  
+  /* Semantic tints (for backgrounds of banners) */
+  --color-success-tint:   #00B36814;
+  --color-warning-tint:   #F5A62314;
+  --color-danger-tint:    #E5484D14;
+  --color-info-tint:      #4C9AFF14;
+  
+  /* --------------------------------------------------------------------------
+     Typography
+     -------------------------------------------------------------------------- */
+  
+  /* Display — used for logo, keynote moments, big numbers */
+  --font-display: "Instrument Serif", "Noto Serif JP", Georgia, serif;
+  
+  /* Body — UI default. System stack prioritizing macOS San Francisco, 
+     Windows Segoe UI Variable, then Noto Sans for Latin and CJK fallback. */
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI Variable",
+               "Hiragino Sans", "Noto Sans JP", "Noto Sans",
+               "Yu Gothic UI", sans-serif;
+  
+  /* Mono — technical indicators (crypto state, timestamps, IDs) */
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace,
+               SFMono-Regular, "SF Mono", Consolas, monospace;
+  
+  /* Font sizes (type scale, ratio ~1.2) */
+  --text-2xs:  10px;    /* crypto badges, timestamps, mono tokens */
+  --text-xs:   11px;    /* metadata, captions */
+  --text-sm:   12px;    /* actions, labels */
+  --text-base: 13px;    /* body UI text */
+  --text-md:   14px;    /* email body */
+  --text-lg:   16px;    /* section headers */
+  --text-xl:   20px;    /* page titles */
+  --text-2xl:  24px;    /* hero numbers */
+  
+  /* Line heights */
+  --leading-tight:  1.2;
+  --leading-snug:   1.4;
+  --leading-normal: 1.6;
+  
+  /* Weights */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+  
+  /* Letter spacing */
+  --tracking-tight:  -0.01em;
+  --tracking-wide:   0.05em;   /* uppercase labels */
+  
+  /* --------------------------------------------------------------------------
+     Spacing (8px base, 4/8/16/24/32/48 only — never random values)
+     -------------------------------------------------------------------------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  
+  /* --------------------------------------------------------------------------
+     Radii
+     -------------------------------------------------------------------------- */
+  --radius-sm:   4px;   /* buttons, tags */
+  --radius-md:   8px;   /* cards, inputs */
+  --radius-lg:   12px;  /* modals, dialogs */
+  --radius-full: 9999px;
+  
+  /* --------------------------------------------------------------------------
+     Shadows (one ladder, never ad-hoc values)
+     -------------------------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px -4px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 24px 64px -8px rgba(0, 0, 0, 0.7);
+  --shadow-glow-brand: 0 0 24px var(--color-brand-glow);
+  
+  /* --------------------------------------------------------------------------
+     Motion — spring-based, short, purposeful
+     Everything <300ms; longer feels broken on modern hardware
+     -------------------------------------------------------------------------- */
+  
+  /* Easings */
+  --ease-out:     cubic-bezier(0.2, 0.8, 0.2, 1);    /* most UI transitions */
+  --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1); /* bouncy, for reveals */
+  --ease-gentle:  cubic-bezier(0.4, 0, 0.2, 1);       /* calm, for modals */
+  --ease-danger:  cubic-bezier(0.5, 0, 0.75, 0);      /* sharp, for warnings */
+  
+  /* Durations */
+  --duration-instant: 80ms;
+  --duration-fast:    150ms;
+  --duration-normal:  250ms;
+  --duration-slow:    400ms;
+  
+  /* --------------------------------------------------------------------------
+     Z-index ladder
+     -------------------------------------------------------------------------- */
+  --z-base:       0;
+  --z-raised:     10;
+  --z-sticky:     20;
+  --z-overlay:    30;
+  --z-modal:      40;
+  --z-tooltip:    50;
+  --z-toast:      60;
+  
+  /* --------------------------------------------------------------------------
+     Layout constants
+     -------------------------------------------------------------------------- */
+  --sidebar-width:   240px;
+  --maillist-width:  384px;  /* 96 * 4 */
+  --ai-panel-width:  380px;
+  --statusbar-height: 24px;
+}
+
+/* =============================================================================
+   Component classes — use these, don't reinvent
+   ============================================================================= */
+
+/* ---- Card ---- */
+.k-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.k-card-raised {
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- Buttons ---- */
+.k-button {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  transition: all var(--duration-fast) var(--ease-out);
+  cursor: pointer;
+}
+
+.k-button:hover {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.k-button:active {
+  transform: scale(0.98);
+}
+
+.k-button-primary {
+  background: var(--color-brand);
+  color: var(--color-bg);
+  border-color: var(--color-brand);
+}
+
+.k-button-primary:hover {
+  background: var(--color-brand-dim);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-glow-brand);
+}
+
+.k-button-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* ---- Crypto badge (mono, always shows current crypto state) ---- */
+.k-crypto-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-tint);
+  color: var(--color-brand);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ---- Warning banner (the "this email is spoofed" bar) ---- */
+.k-warning-banner {
+  background: linear-gradient(90deg, var(--color-danger-tint), transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  animation: warning-pulse var(--duration-slow) var(--ease-danger);
+}
+
+@keyframes warning-pulse {
+  from {
+    background: var(--color-danger);
+  }
+  to {
+    background: linear-gradient(90deg, var(--color-danger-tint), transparent);
+  }
+}
+
+/* ---- Sandbox indicator (the "rendered in sandbox" chip) ---- */
+.k-sandbox-chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-text-dim);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.k-sandbox-chip::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-success);
+  animation: pulse 2s var(--ease-gentle) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ---- Reveal (used when panels slide in) ---- */
+.k-reveal {
+  animation: reveal var(--duration-normal) var(--ease-spring);
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---- Focus ring (accessibility — always visible with keyboard) ---- */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* =============================================================================
+   Typography utilities
+   ============================================================================= */
+.k-text-display {
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+.k-text-mono {
+  font-family: var(--font-mono);
+}
+
+.k-text-label {
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-dim);
+}
+
+.k-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* =============================================================================
+   Light theme override (opt-in; dark is default for professional tool)
+   ============================================================================= */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    --color-bg:             #FFFFFF;
+    --color-surface:        #F5F7FA;
+    --color-surface-raised: #EBEFF5;
+    --color-surface-elev:   #DFE4EC;
+    --color-surface-over:   #FFFFFF;
+    --color-border:         #D3D9E2;
+    --color-border-subtle:  #E5E9F0;
+    --color-text:           #0A0E14;
+    --color-text-muted:     #4C5667;
+    --color-text-dim:       #8892A3;
+  }
+}
+
+/* =============================================================================
+   Reduced motion (accessibility)
+   ============================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

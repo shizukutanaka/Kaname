@@ -1,0 +1,18 @@
+[package]
+name             = "kaname-jmap"
+version.workspace     = true
+edition.workspace     = true
+rust-version.workspace = true
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tokio      = { workspace = true }
+tracing    = { workspace = true }
+kaname-error = { path = "../kaname-error" }
+reqwest    = { workspace = true }
+
+[dev-dependencies]
+mockito = "1.4"
+tokio-test = "0.4"

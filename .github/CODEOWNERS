@@ -1,0 +1,63 @@
+# .github/CODEOWNERS
+#
+# Apple "DRI (Directly Responsible Individual)" モデル
+# 各クレート・領域に対して「責任を負う 1 人」を指定する。
+
+# プロダクト全体
+* @kaname-app/lead
+
+# セキュリティ (2 名でクロスレビュー必須)
+/crates/kaname-ai/                @kaname-app/security-lead @kaname-app/lead
+/crates/kaname-mls/               @kaname-app/crypto-lead @kaname-app/security-lead
+/crates/kaname-crypto/            @kaname-app/crypto-lead @kaname-app/security-lead
+/crates/kaname-bec/                @kaname-app/security-lead
+/crates/kaname-dlp/                @kaname-app/security-lead
+/crates/kaname-sandbox/            @kaname-app/security-lead
+
+/SECURITY.md                       @kaname-app/security-lead @kaname-app/lead
+/docs/threat-model.md              @kaname-app/security-lead @kaname-app/crypto-lead
+/docs/runbook/                     @kaname-app/security-lead
+/fuzz/                             @kaname-app/security-lead
+
+# UI / UX
+/src/                              @kaname-app/design-lead
+/src/ui/                           @kaname-app/design-lead
+/public/                           @kaname-app/design-lead
+/e2e/                              @kaname-app/design-lead
+/e2e/a11y.spec.ts                  @kaname-app/design-lead @kaname-app/a11y-lead
+
+# Tauri / OS 統合
+/src-tauri/                        @kaname-app/platform-lead
+/crates/kaname-ui/                 @kaname-app/platform-lead
+/crates/kaname-tray/               @kaname-app/platform-lead
+
+# データ層
+/crates/kaname-store/              @kaname-app/data-lead
+/crates/kaname-jmap/               @kaname-app/data-lead
+/crates/kaname-render/             @kaname-app/data-lead @kaname-app/security-lead
+/crates/kaname-mockserver/         @kaname-app/data-lead
+
+# 共通基盤
+/crates/kaname-core/               @kaname-app/lead
+/crates/kaname-error/              @kaname-app/lead
+/crates/kaname-i18n/               @kaname-app/i18n-lead
+/crates/kaname-observability/      @kaname-app/platform-lead
+/crates/kaname-privacy/            @kaname-app/security-lead
+
+# 課金
+/crates/kaname-billing/            @kaname-app/lead @kaname-app/legal-lead
+
+# ビルド・CI / リリース
+/.github/workflows/                @kaname-app/platform-lead
+/.github/workflows/release.yml     @kaname-app/platform-lead @kaname-app/lead
+/.github/workflows/sbom.yml        @kaname-app/security-lead
+/.github/workflows/fuzzing.yml     @kaname-app/security-lead
+/Cargo.toml                        @kaname-app/lead
+/deny.toml                         @kaname-app/security-lead
+/about.toml                        @kaname-app/legal-lead
+
+# 文書
+/README.md                         @kaname-app/lead @kaname-app/design-lead
+/CHANGELOG.md                      @kaname-app/lead
+/LICENSE                           @kaname-app/legal-lead @kaname-app/lead
+/docs/                             @kaname-app/lead
