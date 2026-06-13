@@ -2,7 +2,7 @@
 //!
 //! - AES-256 で全データを暗号化
 //! - OS Keychain でデータベースキー保管
-//! - 監査ログのハッシュチェーン (FNV-1a) で改ざん検出
+//! - 監査ログのハッシュチェーン (SHA-256) で改ざん検出
 
 // crates/kaname-store/src/lib.rs
 //
@@ -23,6 +23,7 @@
 #![allow(missing_docs)]
 
 use rusqlite::{Connection, params};
+use sha2::{Sha256, Digest};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -222,6 +223,28 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 INSERT OR IGNORE INTO schema_migrations (version) VALUES (0);
 "#;
+
+// ============================================================================
+// SenderProfile — BEC 判定用の送信者データ
+// ============================================================================
+
+/// BEC 評価に必要な送信者プロフィール。
+///
+/// `contacts` テーブルの一行を表す。`kaname-bec::SenderHistory` を
+/// 組み立てるためのデータソース。
+#[derive(Debug, Clone)]
+pub struct SenderProfile {
+    /// これまでに受信したメッセージ数。
+    pub message_count: u32,
+    /// 典型トピックのサマリ (BEC のトピック異常検出に使用)。
+    pub topic_summary: Option<String>,
+    /// ユーザーが「検証済み」とマークしたか。
+    pub user_verified: bool,
+    /// 初回受信時刻 (RFC 3339)。
+    pub first_seen_at: Option<String>,
+    /// 最終受信時刻 (RFC 3339)。
+    pub last_seen_at: Option<String>,
+}
 
 // ============================================================================
 // ストアハンドル
@@ -428,6 +451,106 @@ impl Store {
         Ok(())
     }
 
+    // -----------------------------------------------------------------------
+    // SenderProfile — BEC 判定用の送信者プロフィール
+    // -----------------------------------------------------------------------
+
+    /// 送信者プロフィールを取得する。
+    ///
+    /// `contacts` テーブルから BEC 評価に必要なフィールドを返す。
+    /// 存在しない場合は `Ok(None)`。
+    pub async fn get_sender_profile(
+        &self,
+        account_id: &str,
+        email: &str,
+    ) -> Result<Option<SenderProfile>, StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        let result = conn.query_row(
+            "SELECT message_count, topic_summary, \
+                    (CASE trust_level WHEN 'verified' THEN 1 ELSE 0 END) AS user_verified, \
+                    first_seen_at, last_seen_at \
+             FROM contacts \
+             WHERE account_id = ?1 AND email = ?2;",
+            params![account_id, email],
+            |row| {
+                Ok(SenderProfile {
+                    message_count: row.get::<_, u32>(0)?,
+                    topic_summary: row.get::<_, Option<String>>(1)?,
+                    user_verified: row.get::<_, bool>(2)?,
+                    first_seen_at: row.get::<_, Option<String>>(3)?,
+                    last_seen_at:  row.get::<_, Option<String>>(4)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(p)                                    => Ok(Some(p)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e)                                    => Err(StoreError::Db(e.to_string())),
+        }
+    }
+
+    /// 受信メールを記録して送信者プロフィールを更新する。
+    ///
+    /// - 初回受信: 新規レコードを INSERT
+    /// - 以降: `message_count++`、`last_seen_at` 更新
+    /// - `new_topic_summary` を渡した場合は `topic_summary` を上書き
+    ///
+    /// 「受信箱全体を読む」ことなく `topic_summary` を呼び出し元が
+    /// 管理できる (北極星 I1 を維持)。
+    pub async fn record_received(
+        &self,
+        account_id:        &str,
+        email:             &str,
+        display_name:      Option<&str>,
+        new_topic_summary: Option<&str>,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        let id = sha256_hex(format!("{account_id}:{email}").as_bytes());
+
+        conn.execute(
+            "INSERT INTO contacts \
+                (id, account_id, email, display_name, message_count, topic_summary, \
+                 first_seen_at, last_seen_at) \
+             VALUES (?1, ?2, ?3, ?4, 1, ?5, \
+                     strftime('%Y-%m-%dT%H:%M:%SZ','now'), \
+                     strftime('%Y-%m-%dT%H:%M:%SZ','now')) \
+             ON CONFLICT (account_id, email) DO UPDATE SET \
+                message_count = message_count + 1, \
+                last_seen_at  = strftime('%Y-%m-%dT%H:%M:%SZ','now'), \
+                topic_summary = COALESCE(?5, topic_summary), \
+                display_name  = COALESCE(?4, display_name);",
+            params![id, account_id, email, display_name, new_topic_summary],
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// 送信者を「検証済み」としてマークする。
+    ///
+    /// BEC リスクスコアを `-0.20` 押し下げる `user_verified` フラグを設定。
+    pub async fn mark_sender_verified(
+        &self,
+        account_id: &str,
+        email:      &str,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        let rows = conn.execute(
+            "UPDATE contacts SET trust_level = 'verified' \
+             WHERE account_id = ?1 AND email = ?2;",
+            params![account_id, email],
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+
+        if rows == 0 {
+            return Err(StoreError::Db(format!("送信者が見つかりません: {email}")));
+        }
+
+        Ok(())
+    }
+
     /// JMAP 同期状態を更新する。
     pub async fn update_jmap_state(
         &self,
@@ -458,13 +581,8 @@ impl Store {
 // ============================================================================
 
 fn sha256_hex(data: &[u8]) -> String {
-    // 本番: ring::digest::digest(&ring::digest::SHA256, data) を使用
-    // スタブ: XOR ベースの非暗号学的ハッシュ (開発・テスト用)
-    let mut out = [0u8; 32];
-    for (i, b) in data.iter().enumerate() {
-        out[i % 32] ^= b;
-    }
-    out.iter().map(|b| format!("{:02x}", b)).collect()
+    let hash = Sha256::digest(data);
+    hash.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 // ============================================================================
@@ -490,7 +608,7 @@ pub enum StoreError {
     #[error("インテグリティチェック失敗")]
     IntegrityCheckFailed,
 
-    /// 監査ログの FNV-1a ハッシュチェーンが破損している。
+    /// 監査ログの SHA-256 ハッシュチェーンが破損している。
     #[error("監査ログのハッシュチェーン破損 (seq={0})")]
     AuditChainBroken(i64),
 
@@ -504,6 +622,7 @@ pub enum StoreError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use std::path::Path;
@@ -557,5 +676,113 @@ mod tests {
     fn sha256_hex_が決定論的() {
         assert_eq!(sha256_hex(b"hello"), sha256_hex(b"hello"));
         assert_ne!(sha256_hex(b"hello"), sha256_hex(b"world"));
+    }
+
+    #[test]
+    fn sha256_hex_既知値() {
+        let expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+        assert_eq!(sha256_hex(b"abc"), expected);
+    }
+
+    // -----------------------------------------------------------------------
+    // SenderProfile テスト
+    // -----------------------------------------------------------------------
+
+    /// テスト用アカウントを contacts FK 制約のために作成する。
+    async fn seed_account(store: &Store, account_id: &str) {
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO accounts (id, email, identity_fp) \
+             VALUES (?1, ?1 || '@test.invalid', 'fp');",
+            params![account_id],
+        ).unwrap();
+    }
+
+    #[tokio::test]
+    async fn sender_profile_初回受信で作成される() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.record_received("acct1", "alice@corp.com", Some("Alice"), None).await.unwrap();
+
+        let p = store.get_sender_profile("acct1", "alice@corp.com").await.unwrap();
+        let p = p.expect("レコードが存在するはず");
+        assert_eq!(p.message_count, 1);
+        assert!(!p.user_verified);
+        assert!(p.topic_summary.is_none());
+    }
+
+    #[tokio::test]
+    async fn sender_profile_受信回数が累積される() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        for _ in 0..5 {
+            store.record_received("acct1", "bob@corp.com", None, None).await.unwrap();
+        }
+
+        let p = store.get_sender_profile("acct1", "bob@corp.com").await.unwrap().unwrap();
+        assert_eq!(p.message_count, 5);
+    }
+
+    #[tokio::test]
+    async fn sender_profile_topic_summaryを更新できる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.record_received("acct1", "cfo@corp.com", None, None).await.unwrap();
+        store.record_received("acct1", "cfo@corp.com", None, Some("財務 予算 請求書")).await.unwrap();
+
+        let p = store.get_sender_profile("acct1", "cfo@corp.com").await.unwrap().unwrap();
+        assert_eq!(p.topic_summary.as_deref(), Some("財務 予算 請求書"));
+        assert_eq!(p.message_count, 2);
+    }
+
+    #[tokio::test]
+    async fn sender_profile_verified_markで信頼済みになる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.record_received("acct1", "dave@corp.com", None, None).await.unwrap();
+        store.mark_sender_verified("acct1", "dave@corp.com").await.unwrap();
+
+        let p = store.get_sender_profile("acct1", "dave@corp.com").await.unwrap().unwrap();
+        assert!(p.user_verified);
+    }
+
+    #[tokio::test]
+    async fn sender_profile_存在しない場合none() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+
+        let p = store.get_sender_profile("acct1", "nobody@corp.com").await.unwrap();
+        assert!(p.is_none());
+    }
+
+    #[tokio::test]
+    async fn sender_profile_アカウント分離() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+        seed_account(&store, "acct2").await;
+
+        store.record_received("acct1", "shared@corp.com", None, None).await.unwrap();
+        store.record_received("acct2", "shared@corp.com", None, None).await.unwrap();
+        store.record_received("acct2", "shared@corp.com", None, None).await.unwrap();
+
+        let p1 = store.get_sender_profile("acct1", "shared@corp.com").await.unwrap().unwrap();
+        let p2 = store.get_sender_profile("acct2", "shared@corp.com").await.unwrap().unwrap();
+        assert_eq!(p1.message_count, 1);
+        assert_eq!(p2.message_count, 2);
     }
 }
