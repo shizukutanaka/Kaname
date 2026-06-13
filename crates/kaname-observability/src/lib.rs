@@ -244,13 +244,11 @@ impl PrivacySanitizer {
         // メールアドレスを匿名化 (例: alice@example.com → ali***@example.com)
         result = mask_email_addresses(&result);
 
-        // Bearer トークンを除去
-        if let Some(idx) = result.find("Bearer ") {
-            let token_start = idx + "Bearer ".len();
-            let token_len = result[token_start..].find(char::is_whitespace).unwrap_or(result.len() - token_start);
-            let end = "Bearer ".len() + token_len;
-            result.replace_range(idx..idx + end, "Bearer [REDACTED]");
-        }
+        // Bearer トークンを全件除去 (複数ヘッダーがある場合も対応)
+        result = redact_all_bearer_tokens(&result);
+
+        // 日本の電話番号をマスク
+        result = mask_jp_phone_numbers(&result);
 
         result
     }
@@ -325,6 +323,71 @@ where F: Fn(&str) -> bool {
         if digit_count >= 13 {
             result.push_str("[REDACTED-CC]");
             i = j;
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+    result
+}
+
+/// Bearer トークンを全て `Bearer [REDACTED]` に置換する。
+/// `find()` は最初の一件しか返さないため、ループで全件処理する。
+fn redact_all_bearer_tokens(s: &str) -> String {
+    const PREFIX: &str = "Bearer ";
+    let mut result = String::with_capacity(s.len());
+    let mut remaining = s;
+    while let Some(idx) = remaining.find(PREFIX) {
+        result.push_str(&remaining[..idx]);
+        result.push_str("Bearer [REDACTED]");
+        let after = &remaining[idx + PREFIX.len()..];
+        let token_len = after.find(char::is_whitespace).unwrap_or(after.len());
+        remaining = &after[token_len..];
+    }
+    result.push_str(remaining);
+    result
+}
+
+/// 日本の電話番号をマスクする。
+///
+/// 対応フォーマット:
+/// - 携帯: 090-1234-5678 / 080-... / 070-... / 050-...
+/// - 固定: 03-1234-5678 / 06-... / 011-...
+///   - 数字のみ形式 (09012345678) も対象。
+fn mask_jp_phone_numbers(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        // 先頭が数字なら電話番号候補
+        if chars[i].is_ascii_digit() {
+            let start = i;
+            let mut digits = 0u32;
+            let mut j = i;
+            // 数字・ハイフン・括弧を消費して桁数を数える
+            while j < chars.len()
+                && (chars[j].is_ascii_digit()
+                    || matches!(chars[j], '-' | '(' | ')' | ' ')
+                    && digits < 12)
+            {
+                if chars[j].is_ascii_digit() {
+                    digits += 1;
+                }
+                j += 1;
+                // 桁数が多くなりすぎたら打ち切り
+                if digits > 11 {
+                    break;
+                }
+            }
+            // 10〜11桁 = 日本の電話番号
+            if (10..=11).contains(&digits) {
+                result.push_str("[TEL-REDACTED]");
+                i = j;
+            } else {
+                // 電話番号でなければそのまま
+                result.push(chars[start]);
+                i = start + 1;
+            }
         } else {
             result.push(chars[i]);
             i += 1;
@@ -436,6 +499,48 @@ mod tests {
         let elapsed = timer.elapsed_us();
         assert!(elapsed >= 2_000, "計測時間が短すぎる: {elapsed}μs");
         assert!(elapsed < 100_000, "計測時間が異常に長い: {elapsed}μs");
+    }
+
+    #[test]
+    fn privacy_bearer_token_multiple_redaction() {
+        // find() は最初の一件しか返さないため、ループが必須
+        let input = "proxy: Bearer first_token_abc backend: Bearer second_token_xyz end";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(!output.contains("first_token_abc"), "1件目のトークンが漏洩");
+        assert!(!output.contains("second_token_xyz"), "2件目のトークンが漏洩");
+        assert_eq!(output.matches("Bearer [REDACTED]").count(), 2);
+    }
+
+    #[test]
+    fn privacy_jp_mobile_phone_masked() {
+        let input = "連絡先: 090-1234-5678 まで";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(!output.contains("090-1234-5678"), "携帯番号が漏洩: {output}");
+        assert!(output.contains("[TEL-REDACTED]"));
+    }
+
+    #[test]
+    fn privacy_jp_landline_masked() {
+        let input = "事務所: 03-1234-5678 (東京)";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(!output.contains("03-1234-5678"), "固定電話番号が漏洩: {output}");
+        assert!(output.contains("[TEL-REDACTED]"));
+    }
+
+    #[test]
+    fn privacy_jp_phone_digits_only_masked() {
+        let input = "tel:09012345678";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(!output.contains("09012345678"), "数字のみ電話番号が漏洩: {output}");
+        assert!(output.contains("[TEL-REDACTED]"));
+    }
+
+    #[test]
+    fn privacy_short_number_not_masked() {
+        // 郵便番号 (7桁) は電話番号ではない
+        let input = "〒100-0001";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(output.contains("100"), "郵便番号まで消してしまった: {output}");
     }
 
     #[test]
