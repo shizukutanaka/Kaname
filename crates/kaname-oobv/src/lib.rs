@@ -108,6 +108,10 @@ impl VerificationWord {
 /// 攻撃者が両方の経路を Deepfake 音声で制御している場合でも、
 /// **N 番目という間接質問** により、6 ワード全部を聞き出すことが困難
 /// (1 ワードしか聞き出せず、N が動的に変わるため再現できない)。
+/// ワードリストが 50 語のため、3 回試行でロック (ブルートフォース対策)。
+pub const MAX_VERIFY_ATTEMPTS: u8 = 3;
+
+/// Out-of-Band 検証セレモニー。送信者の身元を電話で確認するための手順。
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationCeremony {
     /// 検証 ID (Audit Log で参照)
@@ -124,6 +128,8 @@ pub struct VerificationCeremony {
     pub expires_at_unix: u64,
     /// 状態
     pub state: CeremonyState,
+    /// 試行回数 (最大 `MAX_VERIFY_ATTEMPTS` を超えると `Locked` 状態へ)
+    attempt_count: u8,
 }
 
 /// セレモニーの状態。
@@ -137,6 +143,8 @@ pub enum CeremonyState {
     Mismatch,
     /// タイムアウト
     Expired,
+    /// ブルートフォース防止: `MAX_VERIFY_ATTEMPTS` 回失敗でロック
+    Locked,
 }
 
 impl VerificationCeremony {
@@ -174,6 +182,7 @@ impl VerificationCeremony {
             target_sender: target_sender.into(),
             expires_at_unix,
             state: CeremonyState::Pending,
+            attempt_count: 0,
         }
     }
 
@@ -181,6 +190,12 @@ impl VerificationCeremony {
     #[must_use]
     pub fn display_phrase(&self) -> Vec<&str> {
         self.phrase.iter().map(VerificationWord::as_str).collect()
+    }
+
+    /// 現在の試行回数 (テスト・監査用)。
+    #[must_use]
+    pub fn attempt_count(&self) -> u8 {
+        self.attempt_count
     }
 
     /// チャレンジ番号を取得する (1-indexed for human display)。
@@ -211,13 +226,31 @@ impl VerificationCeremony {
             return Err(CeremonyError::AlreadyCompleted(self.state));
         }
 
+        // ブルートフォース防止: 試行回数上限チェック
+        if self.attempt_count >= MAX_VERIFY_ATTEMPTS {
+            self.state = CeremonyState::Locked;
+            return Err(CeremonyError::TooManyAttempts);
+        }
+        self.attempt_count += 1;
+
         // チャレンジ番号の単語と比較
         let expected = &self.phrase[self.challenge_index as usize];
 
         if expected.matches(user_response) {
             self.state = CeremonyState::Verified;
+        } else if self.attempt_count >= MAX_VERIFY_ATTEMPTS {
+            // 最終失敗: ロック (これ以上試行不可)
+            self.state = CeremonyState::Locked;
         } else {
+            // まだ試行回数が残っている — Pending を維持して再試行を許可
+            // (Mismatch は UI 表示用にのみ返す)
             self.state = CeremonyState::Mismatch;
+        }
+
+        // Mismatch の場合は次の verify() 呼び出しのために Pending に戻す
+        if self.state == CeremonyState::Mismatch {
+            self.state = CeremonyState::Pending;
+            return Ok(CeremonyState::Mismatch);
         }
 
         Ok(self.state)
@@ -346,6 +379,10 @@ pub enum CeremonyError {
     /// 既に検証完了。
     #[error("セレモニーは既に完了しています: {0:?}")]
     AlreadyCompleted(CeremonyState),
+
+    /// ブルートフォース防止: 試行回数超過。
+    #[error("試行回数が上限 ({} 回) に達しました。セレモニーはロックされました。", MAX_VERIFY_ATTEMPTS)]
+    TooManyAttempts,
 }
 
 // ============================================================================
@@ -429,7 +466,49 @@ mod tests {
         let mut c = VerificationCeremony::new("e1", "alice@example.com");
         let result = c.verify("definitely-not-the-right-word").unwrap();
         assert_eq!(result, CeremonyState::Mismatch);
-        assert_eq!(c.state, CeremonyState::Mismatch);
+        // 試行回数が残っている間は内部状態は Pending に戻る (再試行を許可)
+        assert_eq!(c.state, CeremonyState::Pending);
+    }
+
+    #[test]
+    fn brute_force_locks_after_max_attempts() {
+        let mut c = VerificationCeremony::new("e1", "alice@example.com");
+        // MAX_VERIFY_ATTEMPTS 回 わざと間違える
+        for _ in 0..MAX_VERIFY_ATTEMPTS {
+            let _ = c.verify("definitely_wrong_word_12345");
+        }
+        assert_eq!(
+            c.state,
+            CeremonyState::Locked,
+            "3 回失敗後は Locked 状態でなければならない"
+        );
+    }
+
+    #[test]
+    fn locked_ceremony_rejects_correct_answer() {
+        let mut c = VerificationCeremony::new("e1", "alice@example.com");
+        let correct = c.phrase[c.challenge_index as usize].as_str().to_string();
+
+        // 先に MAX_VERIFY_ATTEMPTS 回失敗してロック
+        for _ in 0..MAX_VERIFY_ATTEMPTS {
+            let _ = c.verify("wrong");
+        }
+
+        // ロック後は正解でも受け付けない
+        let result = c.verify(&correct);
+        assert!(
+            matches!(result, Err(CeremonyError::TooManyAttempts | CeremonyError::AlreadyCompleted(_))),
+            "ロック後に verify() が成功してしまった: {result:?}"
+        );
+    }
+
+    #[test]
+    fn attempt_count_advances_on_each_wrong_guess() {
+        let mut c = VerificationCeremony::new("e1", "alice@example.com");
+        let _ = c.verify("wrong1");
+        assert_eq!(c.attempt_count(), 1);
+        let _ = c.verify("wrong2");
+        assert_eq!(c.attempt_count(), 2);
     }
 
     #[test]
