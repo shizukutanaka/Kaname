@@ -403,18 +403,62 @@ impl JmapClient {
         })
     }
 
-    /// EventSource プッシュを購読する (スタブ — shutdown まで待機)。
+    /// EventSource プッシュを購読する (SSE / RFC 6202)。
+    ///
+    /// `reqwest` のバイトストリームで SSE を受信し、`data:` 行を JSON として
+    /// パースして `PushNotification` を `tx` に送信する。
+    /// `shutdown` を受信したら接続を閉じて返る。
     pub async fn subscribe_push(
         &self,
-        _tx: mpsc::Sender<PushNotification>,
+        tx: mpsc::Sender<PushNotification>,
         mut shutdown: tokio::sync::broadcast::Receiver<()>,
     ) -> Result<(), JmapError> {
+        use futures_util::StreamExt;
+
         let url = self.session.event_source_url.as_deref()
             .ok_or(JmapError::PushNotSupported)?;
         tracing::info!(url = %url, "EventSource プッシュ購読開始");
-        // 本番: eventsource_client::ClientBuilder で SSE ストリームを受信
-        let _ = shutdown.recv().await;
-        Ok(())
+
+        let resp = self.http
+            .get(url)
+            .header("Accept", "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .send()
+            .await
+            .map_err(|e| JmapError::Http(e.to_string()))?;
+
+        let mut stream = resp.bytes_stream();
+        let mut buf = String::new();
+
+        loop {
+            tokio::select! {
+                _ = shutdown.recv() => {
+                    tracing::info!("EventSource 購読を正常終了");
+                    return Ok(());
+                }
+                chunk = stream.next() => {
+                    let Some(chunk) = chunk else {
+                        tracing::info!("EventSource ストリームが終了");
+                        return Ok(());
+                    };
+                    let bytes = chunk.map_err(|e| JmapError::Http(e.to_string()))?;
+                    buf.push_str(&String::from_utf8_lossy(&bytes));
+
+                    // SSE イベントは空行 (\n\n) で区切られる
+                    while let Some(event_end) = find_sse_event_end(&buf) {
+                        let event_str = buf[..event_end].to_string();
+                        buf = buf[event_end + 2..].to_string(); // skip \n\n
+
+                        if let Some(notif) = parse_sse_event(&event_str) {
+                            if tx.send(notif).await.is_err() {
+                                // 受信側がドロップ — 終了
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[must_use]
@@ -610,11 +654,37 @@ fn str_arr(v: &serde_json::Value) -> Vec<String> {
         .iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
 }
 
+/// SSE イベントの終端 (`\n\n`) のオフセットを返す。
+fn find_sse_event_end(buf: &str) -> Option<usize> {
+    buf.find("\n\n")
+}
+
+/// SSE テキストブロックを `PushNotification` にパースする。
+///
+/// JMAP push notification (RFC 8620 §7.3) の `data:` フィールドを解析する。
+fn parse_sse_event(event: &str) -> Option<PushNotification> {
+    let data_line = event.lines().find(|l| l.starts_with("data:"))?;
+    let json_str = data_line.trim_start_matches("data:").trim();
+    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
+
+    // RFC 8620 §7.3: {"@type":"StateChange","changed":{accountId:{type:newState}}}
+    if v["@type"].as_str() != Some("StateChange") {
+        return None;
+    }
+    let changed = v["changed"].as_object()?;
+    let account_id = changed.keys().next()?.clone();
+    let type_obj = changed[&account_id].as_object()?;
+    let changed_types: Vec<String> = type_obj.keys().cloned().collect();
+
+    Some(PushNotification { changed_types, account_id })
+}
+
 // ============================================================================
 // テスト
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -656,5 +726,49 @@ mod tests {
         let v = serde_json::json!(["a", "b"]);
         assert_eq!(str_arr(&v), vec!["a", "b"]);
         assert!(str_arr(&serde_json::Value::Null).is_empty());
+    }
+
+    // ── SSE パーサーテスト ────────────────────────────────────────────────────
+
+    #[test]
+    fn sse_find_event_end_returns_offset() {
+        let buf = "data: hello\n\ndata: world\n\n";
+        assert_eq!(find_sse_event_end(buf), Some(11));
+    }
+
+    #[test]
+    fn sse_find_event_end_returns_none_for_incomplete() {
+        let buf = "data: incomplete";
+        assert!(find_sse_event_end(buf).is_none());
+    }
+
+    #[test]
+    fn sse_parse_jmap_state_change() {
+        // RFC 8620 §7.3 形式
+        let event = r#"data: {"@type":"StateChange","changed":{"acc001":{"Email":"s1","Mailbox":"s2"}}}"#;
+        let notif = parse_sse_event(event).expect("パースに失敗");
+        assert_eq!(notif.account_id, "acc001");
+        assert!(notif.changed_types.contains(&"Email".to_string()));
+        assert!(notif.changed_types.contains(&"Mailbox".to_string()));
+    }
+
+    #[test]
+    fn sse_parse_ignores_non_state_change_events() {
+        let event = r#"data: {"@type":"Something","changed":{}}"#;
+        assert!(parse_sse_event(event).is_none());
+    }
+
+    #[test]
+    fn sse_parse_ignores_non_data_lines() {
+        // SSE の comment 行と event: 行は無視される
+        let event = ": heartbeat\nevent: ping\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a\":{\"Email\":\"s\"}}}";
+        let notif = parse_sse_event(event).expect("パースに失敗");
+        assert_eq!(notif.account_id, "a");
+    }
+
+    #[test]
+    fn sse_parse_returns_none_for_invalid_json() {
+        let event = "data: not-valid-json";
+        assert!(parse_sse_event(event).is_none());
     }
 }
