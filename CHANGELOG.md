@@ -28,6 +28,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - TF-IDF bag-of-words + コサイン類似度による送信者の典型トピックとの距離計算
   - 英語 (単語境界) と日本語 (CJK 文字単位) の混在テキストに対応、ストップワード除去
   - 類似度 < 0.15 で「異常なトピック」と判定 (例: CFO が突然配送通知を送る)
+- **kaname-screen RateLimiter** (OWASP ASI-10 リソース枯渇 / DoS 対策)
+  - トークンバケット方式。バースト許容量と定常レートを分離設定
+  - 時刻を外部注入する決定的設計 (テスト容易) + クロック巻き戻り耐性
+  - `docs/owasp-agentic-mapping.md` の ASI-10 を 🔶 部分 → ✅ に更新
+- **kaname-screen 入力スクリーニング拡充**
+  - ドイツ語 override フレーズ・context poisoning マーカーを `PromptScreener` に追加
+- **敵対的テストコーパス 17 → 35 件** (kaname-tests)
+  - カテゴリ H (OutputAuditor 出力検査) / I (CRLF・空白パディング・HTML コメント注入) 新設
 
 ### Fixed
 - ワークスペース全体の clippy 警告ゼロ化 (`-D warnings` クリーン)

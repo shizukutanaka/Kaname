@@ -28,7 +28,7 @@ Kaname の AI 機能 (Dual-LLM、ツール実行) はこの脅威モデルの対
 | ASI-07 | データ流出 (exfiltration) | Rule of Two + DLP + EDM | ✅ |
 | ASI-08 | サプライチェーン (プラグイン/MCP) | サンドボックス分離 + 審査済みのみ | ✅ |
 | ASI-09 | 監視・追跡可能性の欠如 | kaname-observability (OpenTelemetry + 監査ハッシュチェーン + Trajectory Monitor) | ✅ |
-| ASI-10 | リソース枯渇 (DoS) | レート制限 + Q-LLM サブプロセス分離 | 🔶 部分 |
+| ASI-10 | リソース枯渇 (DoS) | kaname-screen `RateLimiter` (トークンバケット) + Q-LLM サブプロセス分離 | ✅ |
 
 ---
 
@@ -55,16 +55,22 @@ Rule of Two が核心: [untrusted入力, 機密アクセス, 外部通信] の 3
 同時に持たせない。EDM (Exact Data Matching) が機密データセットの
 完全一致を hash fingerprinting で検出 (chunk 分割攻撃にも対抗)。
 
-### ASI-10: リソース枯渇 (部分対応)
+### ASI-10: リソース枯渇
 
-Q-LLM はサブプロセス分離されており、リソース上限を設定可能。
-完全な対策 (SHIELD のような auto-healing) は将来課題。
+入力ゲートに `kaname-screen::RateLimiter` (トークンバケット) を配置し、
+大量の untrusted メールによる Q-LLM サブプロセス枯渇を抑制する。
+バースト許容量 (`capacity`) と定常レート (`refill_per_sec`) を分離して
+設定でき、時刻巻き戻り (悪意あるクロック操作) でもトークンを増やさない。
+
+Q-LLM はサブプロセス分離されており、リソース上限も設定可能。
+auto-healing (SHIELD 風) はさらなる将来拡張の余地。
 
 ---
 
 ## 残課題
 
-- **ASI-10 完全対応**: SHIELD (auto-healing) 風のリソース枯渇防御
+- **ASI-10 auto-healing**: `RateLimiter` で基本対応済み。SHIELD 風の
+  自己回復はさらなる拡張余地
 - **継続的検証**: OWASP の更新に追従 (Top 10 は定期改訂)
 - **AgentDojo 互換テスト**: ASI-01/05 の自動検証スイート
 

@@ -460,3 +460,135 @@ mod argument_tests {
         assert!(!ArgumentValidator::detect_smuggled_target("send to bob@corp.com", &allowed));
     }
 }
+
+// ============================================================================
+// レート制限 (OWASP ASI-10: リソース枯渇 / DoS 対策)
+// ============================================================================
+
+/// トークンバケット方式のレート制限器。
+///
+/// OWASP Agentic Top 10 (2026) ASI-10「リソース枯渇」への防御。
+/// 大量の untrusted メールで Q-LLM サブプロセスを枯渇させる `DoS` を、
+/// 入力ゲート (preflight の手前) で抑制する。
+///
+/// # 設計
+///
+/// - `capacity`: バケットの最大トークン数 (バースト許容量)
+/// - `refill_per_sec`: 毎秒補充されるトークン数 (定常レート)
+/// - 1 リクエスト = 1 トークン消費
+///
+/// 時刻は外部から注入する (`try_acquire_at`) ため、テストで決定的に
+/// 検証できる。本番では単調増加時刻 (秒) を渡すこと。
+#[derive(Debug, Clone)]
+pub struct RateLimiter {
+    capacity: f64,
+    refill_per_sec: f64,
+    tokens: f64,
+    last_refill_secs: f64,
+}
+
+impl RateLimiter {
+    /// 新規レート制限器を構築する。
+    ///
+    /// 初期状態はバケット満杯 (バースト即時許可)。
+    #[must_use]
+    pub fn new(capacity: u32, refill_per_sec: f64) -> Self {
+        let capacity = f64::from(capacity);
+        Self {
+            capacity,
+            refill_per_sec,
+            tokens: capacity,
+            last_refill_secs: 0.0,
+        }
+    }
+
+    /// 指定時刻 (単調増加秒) で 1 トークンの取得を試みる。
+    ///
+    /// 取得できれば `true`、レート超過なら `false`。
+    pub fn try_acquire_at(&mut self, now_secs: f64) -> bool {
+        self.refill(now_secs);
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 現在のトークン残量 (検査・メトリクス用)。
+    #[must_use]
+    pub fn available(&self) -> f64 {
+        self.tokens
+    }
+
+    fn refill(&mut self, now_secs: f64) {
+        // 時刻が巻き戻った場合 (クロック調整等) は補充せず last のみ更新
+        if now_secs <= self.last_refill_secs {
+            self.last_refill_secs = now_secs;
+            return;
+        }
+        let elapsed = now_secs - self.last_refill_secs;
+        let added = elapsed * self.refill_per_sec;
+        self.tokens = (self.tokens + added).min(self.capacity);
+        self.last_refill_secs = now_secs;
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+mod rate_limit_tests {
+    use super::*;
+
+    #[test]
+    fn burst_up_to_capacity_allowed() {
+        let mut rl = RateLimiter::new(3, 1.0);
+        assert!(rl.try_acquire_at(0.0));
+        assert!(rl.try_acquire_at(0.0));
+        assert!(rl.try_acquire_at(0.0));
+        // 4 つ目は時刻が進まないのでブロック
+        assert!(!rl.try_acquire_at(0.0));
+    }
+
+    #[test]
+    fn refill_restores_tokens_over_time() {
+        let mut rl = RateLimiter::new(2, 1.0);
+        assert!(rl.try_acquire_at(0.0));
+        assert!(rl.try_acquire_at(0.0));
+        assert!(!rl.try_acquire_at(0.0));
+        // 1 秒後に 1 トークン補充
+        assert!(rl.try_acquire_at(1.0));
+        assert!(!rl.try_acquire_at(1.0));
+    }
+
+    #[test]
+    fn refill_caps_at_capacity() {
+        let mut rl = RateLimiter::new(2, 5.0);
+        assert!(rl.try_acquire_at(0.0));
+        assert!(rl.try_acquire_at(0.0));
+        // 100 秒経過しても上限は capacity (2) まで
+        assert!(rl.try_acquire_at(100.0));
+        assert!(rl.try_acquire_at(100.0));
+        assert!(!rl.try_acquire_at(100.0));
+    }
+
+    #[test]
+    fn clock_rewind_does_not_add_tokens() {
+        let mut rl = RateLimiter::new(2, 1.0);
+        assert!(rl.try_acquire_at(10.0));
+        assert!(rl.try_acquire_at(10.0));
+        // 時刻巻き戻りでは補充しない (悪意あるクロック操作対策)
+        assert!(!rl.try_acquire_at(5.0));
+    }
+
+    #[test]
+    fn fractional_refill_accumulates() {
+        let mut rl = RateLimiter::new(10, 2.0);
+        for _ in 0..10 {
+            assert!(rl.try_acquire_at(0.0));
+        }
+        assert!(!rl.try_acquire_at(0.0));
+        // 0.5 秒で 1 トークン (2/sec)
+        assert!(rl.try_acquire_at(0.5));
+        assert!(!rl.try_acquire_at(0.5));
+    }
+}
