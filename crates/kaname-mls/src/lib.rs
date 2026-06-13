@@ -25,6 +25,7 @@
 #![allow(missing_docs)]
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -633,16 +634,29 @@ fn is_kaname_domain(email: &str) -> bool {
 
 /// 安全番号を計算する (ADR-017)。
 ///
-/// 本番: SHA-256(our_pk_bytes || their_pk_bytes || epoch)
+/// SHA-256(our_email ‖ '\0' ‖ their_email ‖ '\0' ‖ epoch_be) を元に
+/// Signal 方式 (5 桁 × 6 グループ = 30 桁) で表示する。
+///
+/// ゼロ区切り文字を入れることで email 境界をあいまいにする攻撃を防ぐ。
+/// epoch を含めることで古い安全番号の再利用攻撃を防ぐ。
 fn compute_safety_number(our_email: &str, their_email: &str, epoch: u64) -> String {
-    // 簡易ハッシュ (本番は ring::digest を使用)
-    let input = format!("{}{}{}", our_email, their_email, epoch);
-    let hash: u64 = input.bytes().fold(0u64, |acc, b| {
-        acc.wrapping_mul(31).wrapping_add(b as u64)
-    });
-    // 5桁×6グループの表示形式 (Signal 方式)
+    let mut hasher = Sha256::new();
+    hasher.update(our_email.as_bytes());
+    hasher.update(b"\x00");
+    hasher.update(their_email.as_bytes());
+    hasher.update(b"\x00");
+    hasher.update(epoch.to_be_bytes());
+    let digest = hasher.finalize();
+
+    // SHA-256 の先頭 30 バイトから 5 桁×6 グループを生成
+    // 各グループ: 5 バイトを u40 として読み込み % 100_000
     (0..6)
-        .map(|i| format!("{:05}", (hash >> (i * 10)) % 100_000))
+        .map(|i| {
+            let off = i * 5;
+            let chunk = &digest[off..off + 5];
+            let n = chunk.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
+            format!("{:05}", n % 100_000)
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -832,6 +846,37 @@ mod tests {
             assert_eq!(part.len(), 5, "各グループは5桁");
             assert!(part.chars().all(|c| c.is_ascii_digit()));
         }
+    }
+
+    #[test]
+    fn 安全番号はsha256ベース_決定論的() {
+        let sn1 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 1);
+        let sn2 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 1);
+        assert_eq!(sn1, sn2, "同じ入力は同じ安全番号を生成する");
+    }
+
+    #[test]
+    fn 安全番号_メール順序で変化する() {
+        // SHA-256 はゼロ区切りで境界を確定するので順序が影響する
+        let ab = compute_safety_number("alice@kaname.app", "bob@kaname.app", 0);
+        let ba = compute_safety_number("bob@kaname.app", "alice@kaname.app", 0);
+        assert_ne!(ab, ba, "メール順序が違えば安全番号も変わる");
+    }
+
+    #[test]
+    fn 安全番号_epochで変化する() {
+        let e0 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 0);
+        let e1 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 1);
+        assert_ne!(e0, e1, "epoch が変われば安全番号も変わる (replay 攻撃防止)");
+    }
+
+    #[test]
+    fn 安全番号_衝突耐性_polynomial_hashなら失敗するケース() {
+        // polynomial hash (×31) は "ab"と"ba"で同じ値になりやすい
+        // SHA-256 なら必ず異なる
+        let a = compute_safety_number("a@x.com", "b@y.com", 0);
+        let b = compute_safety_number("b@x.com", "a@y.com", 0);
+        assert_ne!(a, b, "異なる入力は異なる安全番号を生成する");
     }
 
     #[test]
