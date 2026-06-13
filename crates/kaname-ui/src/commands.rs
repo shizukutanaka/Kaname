@@ -337,6 +337,7 @@ pub async fn oobv_verify(
         CeremonyState::Mismatch => "oobv.result.mismatch",
         CeremonyState::Expired  => "oobv.result.expired",
         CeremonyState::Pending  => "oobv.result.pending",
+        CeremonyState::Locked   => "oobv.result.locked",
     };
     Ok(OobvVerifyResponse {
         state: result,
@@ -423,6 +424,7 @@ impl From<CeremonyError> for V02CommandError {
         match e {
             CeremonyError::Expired              => Self::InvalidState("expired".into()),
             CeremonyError::AlreadyCompleted(_)  => Self::InvalidState("already_completed".into()),
+            CeremonyError::TooManyAttempts      => Self::InvalidState("locked".into()),
         }
     }
 }
