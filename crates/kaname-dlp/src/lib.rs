@@ -494,18 +494,41 @@ impl PatternLibrary {
 // ============================================================================
 
 fn detect_jp_my_number(text: &str) -> bool {
-    // マイナンバー: 12-digit personal number (with or without hyphens)
-    // 簡単なヒューリスティック: look for 12-digit group with optional separators
-    // 本番: validate with check-digit algorithm
-    let cleaned: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
-    // 検索: 12-digit runs in digit-only version
-    for start in 0..cleaned.len().saturating_sub(11) {
-        if cleaned[start..start + 12].chars().all(|c| c.is_ascii_digit()) {
-            return true;
+    // マイナンバー: 12 桁の個人番号 (ハイフンあり/なし両対応)
+    // 総務省仕様のチェックディジット検証 (第 12 桁):
+    //   p = Σ(i=1..11) d_i × w_i  where w = [2,3,4,5,6,7,2,3,4,5,6] (右から)
+    //   check = (p % 11 < 2) ? 0 : 11 - (p % 11)
+    let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+
+    // テキスト中の連続 12 桁をすべて試す
+    let bytes = digits.as_bytes();
+    for start in 0..bytes.len().saturating_sub(11) {
+        let chunk = &bytes[start..start + 12];
+        if chunk.iter().all(|b| b.is_ascii_digit()) {
+            let d: Vec<u32> = chunk.iter().map(|b| (b - b'0') as u32).collect();
+            if my_number_check_digit_valid(&d) {
+                return true;
+            }
         }
     }
-    // フォーマット済みもチェック: XXXX-XXXX-XXXX
-    text.contains('-') && re_is_match(r"\d{4}-\d{4}-\d{4}", text)
+    false
+}
+
+/// 総務省のチェックディジットアルゴリズムで 12 桁マイナンバーを検証する。
+fn my_number_check_digit_valid(d: &[u32]) -> bool {
+    if d.len() != 12 {
+        return false;
+    }
+    // 第 1〜11 桁に対する乗数 (右→左: p1=d[10], p2=d[9], ..., p11=d[0])
+    let weights = [2u32, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6];
+    let p: u32 = d[..11]
+        .iter()
+        .rev()
+        .zip(weights.iter())
+        .map(|(di, wi)| di * wi)
+        .sum();
+    let check = if p % 11 < 2 { 0 } else { 11 - (p % 11) };
+    d[11] == check
 }
 
 fn detect_jp_corporate_number(text: &str) -> bool {
@@ -876,12 +899,28 @@ mod tests {
 
     #[test]
     fn my_number_blocks_outbound() {
-        // 12-digit number that passes basic detection
+        // 総務省チェックディジット検証を通過する有効なマイナンバー形式
+        // 123456789018: d[0..11]=[1,2,3,4,5,6,7,8,9,0,1], p=212, 212%11=3 → check=8 → 末尾=8
         let to = vec!["attacker@gmail.com".into()];
-        let body = "マイナンバーは 123456789012 です";
+        let body = "マイナンバーは 123456789018 です";
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
-        assert_eq!(result.verdict, Action::Block, "should block my number");
+        assert_eq!(result.verdict, Action::Block, "should block valid my number");
         assert!(result.findings.iter().any(|f| f.rule_id == "default-001"));
+    }
+
+    #[test]
+    fn my_number_check_digit_rejects_invalid() {
+        // 123456789012 はチェックディジット不一致 → 検出しない (false positive 削減)
+        assert!(!my_number_check_digit_valid(&[1,2,3,4,5,6,7,8,9,0,1,2]));
+        // 123456789018 は正しい
+        assert!(my_number_check_digit_valid(&[1,2,3,4,5,6,7,8,9,0,1,8]));
+    }
+
+    #[test]
+    fn my_number_check_digit_edge_cases() {
+        // 桁数が 12 でない場合は false
+        assert!(!my_number_check_digit_valid(&[1,2,3]));
+        assert!(!my_number_check_digit_valid(&[1,2,3,4,5,6,7,8,9,0,1,8,9]));
     }
 
     #[test]

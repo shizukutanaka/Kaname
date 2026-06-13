@@ -29,7 +29,9 @@
 //! FIPS 203 (ML-KEM) と FIPS 204 (ML-DSA) 準拠のハイブリッド量子後暗号。
 //! クラシカルフォールバックと監査レールを含む。
 
+use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use thiserror::Error;
 use std::marker::PhantomData;
 
@@ -443,14 +445,27 @@ fn validate_x25519_output(ss: &SharedSecret) -> Result<(), CryptoError> {
     Ok(())
 }
 
-fn combine_shared_secrets(c: &SharedSecret, p: &SharedSecret) -> SharedSecret {
-    // プレースホルダー combiner. Production: HKDF-SHA3-256(c || p, info="kaname-xwing-v1").
-    // The production KDF preserves the "both must break" property under ROM.
-    let mut combined = [0u8; 32];
-    for (out, (&a, &b)) in combined.iter_mut().zip(c.0.iter().zip(p.0.iter())) {
-        *out = a ^ b;
+pub(crate) fn combine_shared_secrets(c: &SharedSecret, p: &SharedSecret) -> SharedSecret {
+    // HKDF-SHA-256 で 2 つの KEM 共有秘密を結合する。
+    // IKM = c || p (64 バイト)、info = b"kaname-xwing-v1"
+    //
+    // これにより "both must break" 特性が ROM 下で成立:
+    // 攻撃者は ML-KEM と X25519 の両方を破らなければ出力を区別できない。
+    // XOR 結合とは異なり、一方が zero でも安全性が保たれる。
+    let mut ikm = [0u8; 64];
+    ikm[..32].copy_from_slice(&c.0);
+    ikm[32..].copy_from_slice(&p.0);
+
+    let hkdf = Hkdf::<Sha256>::new(None, &ikm);
+    let mut okm = [0u8; 32];
+    // HKDF の出力長は 32 バイト固定で有効範囲内 (SHA-256 では最大 255*32 バイト)
+    // → InvalidLength は起こりえないが、型エラーを避けるため unwrap_or_else で安全処理
+    if hkdf.expand(b"kaname-xwing-v1", &mut okm).is_err() {
+        // 到達不能: 32 バイトは SHA-256 の有効出力長の範囲内
+        return SharedSecret([0u8; 32]);
     }
-    SharedSecret(combined)
+
+    SharedSecret(okm)
 }
 
 // ============================================================================
@@ -564,5 +579,40 @@ mod tests {
         let fp2 = pk.fingerprint();
         assert_eq!(fp1, fp2);
         assert!(fp1.contains(' ')); // formatted with spaces
+    }
+
+    #[test]
+    fn combine_secrets_is_not_xor() {
+        // XOR の場合 a ^ a = 0 になるが、HKDF はそうならない
+        let a = SharedSecret([0xABu8; 32]);
+        let result = combine_shared_secrets(&a, &a);
+        assert_ne!(result.0, [0u8; 32], "HKDF with equal inputs must not produce zero");
+    }
+
+    #[test]
+    fn combine_secrets_deterministic() {
+        let c = SharedSecret([0x11u8; 32]);
+        let p = SharedSecret([0x22u8; 32]);
+        let r1 = combine_shared_secrets(&c, &p);
+        let r2 = combine_shared_secrets(&c, &p);
+        assert_eq!(r1.0, r2.0, "HKDF is deterministic");
+    }
+
+    #[test]
+    fn combine_secrets_order_matters() {
+        // HKDF(c||p) ≠ HKDF(p||c) — 順序の混乱を検出する
+        let c = SharedSecret([0x11u8; 32]);
+        let p = SharedSecret([0x22u8; 32]);
+        let r1 = combine_shared_secrets(&c, &p);
+        let r2 = combine_shared_secrets(&p, &c);
+        assert_ne!(r1.0, r2.0, "input order must affect HKDF output");
+    }
+
+    #[test]
+    fn combine_secrets_produces_32_bytes() {
+        let c = SharedSecret([0x01u8; 32]);
+        let p = SharedSecret([0x02u8; 32]);
+        let r = combine_shared_secrets(&c, &p);
+        assert_eq!(r.0.len(), 32);
     }
 }

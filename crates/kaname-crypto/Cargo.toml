@@ -11,6 +11,9 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
+sha2         = { workspace = true }
+hkdf         = { workspace = true }
+zeroize      = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
