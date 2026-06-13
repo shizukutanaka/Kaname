@@ -23,6 +23,9 @@
 #![deny(unsafe_code)]
 #![allow(missing_docs)]
 
+use kaname_store::Store;
+use rand::RngCore;
+use sha2::{Sha256, Digest};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -118,7 +121,8 @@ pub struct AppState {
     pub primary_account: Option<String>, // email of the primary account
 
     // ── Store (SQLCipher) ──────────────────────────────────────────────────
-    // pub store:          kaname_store::Store,   (real type)
+    /// `None` only in unit tests that don't touch the DB.
+    pub store:          Option<Store>,
     pub db_path:        PathBuf,
     pub db_key_hex:     String,
 
@@ -189,9 +193,10 @@ impl AppState {
         let db_path    = Self::default_db_path();
 
         // ── 3. Store open + migrate ────────────────────────────────────────
-        // 本番:
-        //   let store = kaname_store::Store::open(&db_path, &db_key_hex).await?;
-        //   store.migrate().await?;
+        let store = Store::open(&db_path, &db_key_hex).await
+            .map_err(|e| BootstrapError::Database(e.to_string()))?;
+        store.migrate().await
+            .map_err(|e| BootstrapError::Migration(e.to_string()))?;
         tracing::info!(db_path = %db_path.display(), "store opened");
 
         // ── 4. Load accounts from settings ────────────────────────────────
@@ -233,6 +238,7 @@ impl AppState {
             hw,
             accounts,
             primary_account: None,
+            store: Some(store),
             db_path,
             db_key_hex,
             dlp_rule_count,
@@ -250,23 +256,71 @@ impl AppState {
     // ── DB key management ──────────────────────────────────────────────────
 
     fn get_or_create_db_key(hw: &HardwareCaps) -> Result<String, BootstrapError> {
-        // 本番戦略:
+        // 将来: OS キーチェーン統合
         //   macOS: SecItemCopyMatching(kSecClassGenericPassword) → kSecValueData
         //   Windows: NCryptOpenKey → TPM / Credential Guard で保護された CNG AES-256
         //   Linux: tpm2_tools または libsecret / gnome-keyring
-        //   フォールバック: パスワード + ソルトから PBKDF2 で導出
 
         if hw.secure_enclave || hw.tpm_available || hw.tpm2_available {
-            // ハードウェアバック: 32 バイト鍵ハンドルを返す (Secure Enclave は
-            // exports raw key bytes; we use a wrapped key or a raw key stored
-            // in the OS keychain, protected by SE/TPM at rest).
-            tracing::debug!("using hardware-backed key derivation");
+            tracing::debug!("hardware security module detected (keychain integration pending)");
         } else {
-            tracing::warn!("using software keychain (no hardware security module)");
+            tracing::warn!("no hardware security module — using software keyfile");
         }
 
-        // 開発スタブ: ゼロを返す (real impl is above)
-        Ok("0".repeat(64))
+        // ソフトウェアフォールバック: アプリデータディレクトリの keyfile に永続化。
+        // 各ユーザーが独自のランダム鍵を保持する (全員共通のゼロ鍵は使わない)。
+        let key_path = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Kaname")
+            .join("db.key");
+
+        if key_path.exists() {
+            // 既存の鍵を読み込む
+            let raw = std::fs::read_to_string(&key_path)
+                .map_err(|e| BootstrapError::DbKeyIo(e.to_string()))?;
+            let key = raw.trim().to_string();
+            if key.len() == 64 && key.chars().all(|c| c.is_ascii_hexdigit()) {
+                tracing::debug!(path = %key_path.display(), "db key loaded from keyfile");
+                return Ok(key);
+            }
+            // 壊れた keyfile は再生成
+            tracing::warn!(path = %key_path.display(), "db keyfile corrupt, regenerating");
+        }
+
+        // 新規鍵を生成して保存
+        let mut raw_key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut raw_key);
+        // SHA-256 で 32 バイト → 64 hex 文字へ正規化
+        let key_hex = Sha256::digest(raw_key)
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
+
+        if let Some(parent) = key_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| BootstrapError::DbKeyIo(e.to_string()))?;
+        }
+        // パーミッション 0600 — 所有者のみ読み書き可
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&key_path)
+                .and_then(|mut f| { use std::io::Write; f.write_all(key_hex.as_bytes()) })
+                .map_err(|e| BootstrapError::DbKeyIo(e.to_string()))?;
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&key_path, key_hex.as_bytes())
+                .map_err(|e| BootstrapError::DbKeyIo(e.to_string()))?;
+        }
+
+        tracing::info!(path = %key_path.display(), "new db key generated and saved");
+        Ok(key_hex)
     }
 
     fn default_db_path() -> PathBuf {
@@ -382,6 +436,9 @@ pub enum BootstrapError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("DB keyfile I/O error: {0}")]
+    DbKeyIo(String),
 }
 
 // ============================================================================
@@ -404,6 +461,7 @@ mod tests {
             hw:                  HardwareCaps::detect(),
             accounts:            vec![],
             primary_account:     None,
+            store:               None,
             db_path:             PathBuf::from("/tmp/test.kmdb"),
             db_key_hex:          "0".repeat(64),
             dlp_rule_count:      5,
@@ -431,6 +489,7 @@ mod tests {
             hw:                  HardwareCaps::detect(),
             accounts:            vec![],
             primary_account:     None,
+            store:               None,
             db_path:             PathBuf::from("/tmp/test.kmdb"),
             db_key_hex:          "0".repeat(64),
             dlp_rule_count:      5,

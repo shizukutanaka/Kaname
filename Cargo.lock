@@ -2055,8 +2055,11 @@ version = "0.3.21"
 dependencies = [
  "dirs",
  "kaname-error",
+ "kaname-store",
+ "rand 0.8.6",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",

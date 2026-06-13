@@ -12,6 +12,9 @@ tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
 dirs       = { workspace = true }
+rand         = { workspace = true }
+sha2         = { workspace = true }
+kaname-store = { path = "../kaname-store" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
