@@ -580,6 +580,24 @@ pub trait DnsResolver: Send + Sync {
     fn resolve(&self, domain: &str) -> Vec<String>;
 }
 
+/// 本番用 DNS リゾルバー。
+///
+/// `std::net::ToSocketAddrs` を使用してシステム DNS を同期解決する。
+/// バックグラウンドスレッドから呼び出すこと (ブロッキング)。
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SystemDnsResolver;
+
+impl DnsResolver for SystemDnsResolver {
+    fn resolve(&self, domain: &str) -> Vec<String> {
+        use std::net::ToSocketAddrs;
+        // port 0 を付加して SocketAddr リストに解決し、IP 部分だけ抽出する
+        match (domain, 0u16).to_socket_addrs() {
+            Ok(addrs) => addrs.map(|a| a.ip().to_string()).collect(),
+            Err(_) => vec![],
+        }
+    }
+}
+
 /// テスト用の静的 DNS リゾルバー。
 #[derive(Default)]
 pub struct StaticDnsResolver {
@@ -616,6 +634,25 @@ impl DnsResolver for StaticDnsResolver {
 #[allow(unused_must_use, clippy::unwrap_used, clippy::expect_used)]
 mod dns_tests {
     use super::*;
+
+    #[test]
+    fn system_resolver_resolves_localhost() {
+        let r = SystemDnsResolver;
+        let ips = r.resolve("localhost");
+        // localhost は必ず 127.0.0.1 か ::1 に解決される
+        assert!(!ips.is_empty(), "localhost が解決できなかった");
+        assert!(
+            ips.iter().any(|ip| ip == "127.0.0.1" || ip == "::1"),
+            "localhost の IP が想定外: {ips:?}"
+        );
+    }
+
+    #[test]
+    fn system_resolver_returns_empty_for_invalid() {
+        let r = SystemDnsResolver;
+        let ips = r.resolve("this.domain.does.not.exist.invalid");
+        assert!(ips.is_empty(), "存在しないドメインが解決された: {ips:?}");
+    }
 
     #[test]
     fn static_resolver_returns_registered_ips() {
