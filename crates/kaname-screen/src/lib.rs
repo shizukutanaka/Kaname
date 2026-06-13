@@ -92,6 +92,13 @@ impl PromptScreener {
                 "[pretend this conversation",
                 "[now continue",
                 "pretend you are",
+                // German
+                "ignoriere alle vorherigen",
+                "ignoriere alle",
+                // Context poisoning markers
+                "[previous summary:",
+                "[prior context:",
+                "[conversation history:",
             ],
             special_tokens: vec![
                 "<|im_start|>",
