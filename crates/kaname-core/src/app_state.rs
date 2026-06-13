@@ -399,12 +399,20 @@ impl AppState {
     pub fn system_status(&self) -> SystemStatus {
         let ai_ready = self.model_status == ModelReadiness::Ready
                     || self.model_status == ModelReadiness::Mock;
+        // DB ヘルス: Store が配線されているか確認
+        let store_ok = self.store.is_some();
+        // JMAP 同期状態: 最後のエラーがなければ OK
+        let sync_state = self.sync.try_read();
+        let jmap_ok = sync_state
+            .map(|s| s.last_error.is_none())
+            .unwrap_or(false);
+        let sandbox_ok = self.sandbox_ready || !self.hw.hypervisor;
         SystemStatus {
-            store_ok:     true, // 本番: ping DB
-            jmap_ok:      true, // 本番: check sync state
-            sandbox_ok:   self.sandbox_ready || !self.hw.hypervisor,
-            ai_ok:        ai_ready,
-            all_ok:       ai_ready,
+            store_ok,
+            jmap_ok,
+            sandbox_ok,
+            ai_ok: ai_ready,
+            all_ok: store_ok && ai_ready && sandbox_ok,
         }
     }
 }

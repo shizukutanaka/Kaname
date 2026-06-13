@@ -12,6 +12,8 @@ tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
 mail-parser  = { workspace = true }
+ammonia      = { workspace = true }
+regex        = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

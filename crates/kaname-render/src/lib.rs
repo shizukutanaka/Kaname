@@ -44,9 +44,11 @@ pub mod deepfake_advisory;
 /// QR コードフィッシング (quishing) 検出。
 pub mod quishing;
 
+use ammonia::Builder;
 use thiserror::Error;
 
 use mail_parser::{MessageParser, MimeHeaders};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 // ============================================================================
@@ -354,23 +356,85 @@ impl SanitizedBody {
 ///   BiDi オーバーライド文字: 除去
 ///   ゼロ幅文字: 除去
 pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
-    // 本番: ammonia::Builder::default()
-    //     .tags(ALLOWED_TAGS)
-    //     .clean_content_tags(STRIP_TAGS)
-    //     .allowed_attributes(ATTR_MAP)
-    //     .url_schemes(URL_SCHEMES)
-    //     .clean(&raw.0)
-    //     .to_string()
-    // 次に BiDi とゼロ幅文字をストリップ。
+    // KTR-07 §4 / ADR-010 準拠の HTML サニタイザー。
+    // ammonia (html5ever ベース) で許可リスト方式のタグ・属性フィルタリング。
+    use std::collections::HashSet;
 
-    let mut out = raw.0.clone();
+    // 許可タグ (明示リスト以外はすべて除去)
+    let allowed_tags: HashSet<&str> = [
+        "p", "br", "b", "i", "u", "s", "em", "strong",
+        "a", "ul", "ol", "li", "blockquote", "pre", "code",
+        "span", "div", "table", "thead", "tbody", "tr", "td", "th",
+        "h1", "h2", "h3", "h4", "h5", "h6", "img",
+    ].iter().copied().collect();
 
-    // BiDi override strip — same logic as kaname-ai preflight
-    out = out.chars().filter(|c| !is_bidi_override(*c)).collect();
-    // Zero-width strip
-    out = out.chars().filter(|c| !is_zero_width(*c)).collect();
+    // タグごとの許可属性 (ammonia はデフォルト全除去)
+    let mut tag_attr_map: HashMap<&str, HashSet<&str>> = HashMap::new();
+    tag_attr_map.insert("a",         ["href", "title"].iter().copied().collect());
+    tag_attr_map.insert("img",       ["src", "alt", "width", "height"].iter().copied().collect());
+    tag_attr_map.insert("td",        ["colspan", "rowspan"].iter().copied().collect());
+    tag_attr_map.insert("th",        ["colspan", "rowspan", "scope"].iter().copied().collect());
+    tag_attr_map.insert("ol",        ["type", "start"].iter().copied().collect());
+    tag_attr_map.insert("ul",        ["type"].iter().copied().collect());
+    tag_attr_map.insert("span",      ["lang"].iter().copied().collect());
+    tag_attr_map.insert("div",       ["lang"].iter().copied().collect());
+    tag_attr_map.insert("blockquote",["cite"].iter().copied().collect());
+    tag_attr_map.insert("pre",       ["class"].iter().copied().collect());
+    tag_attr_map.insert("code",      ["class"].iter().copied().collect());
+
+    // script, style, iframe など有害タグのコンテンツごと除去
+    let strip_content_tags: HashSet<&str> = [
+        "script", "style", "iframe", "object", "embed",
+        "form", "input", "button", "svg", "math",
+        "link", "meta", "base", "noscript", "template",
+    ].iter().copied().collect();
+
+    // URL スキーム許可 (javascript: / data: などを除外)
+    // ammonia 4.x はグローバルな url_schemes で全 URL 属性を制御する
+    let allowed_url_schemes: HashSet<&str> =
+        ["http", "https", "mailto", "cid"].iter().copied().collect();
+
+    let mut builder = Builder::default();
+    builder
+        .tags(allowed_tags)
+        .tag_attributes(tag_attr_map)
+        .clean_content_tags(strip_content_tags)
+        .url_schemes(allowed_url_schemes)
+        .link_rel(Some("noopener noreferrer"));
+
+    let cleaned = builder.clean(&raw.0).to_string();
+
+    // img src の追加検証: cid: 以外のスキームを持つ src 属性を除去する。
+    // ammonia のグローバル url_schemes は href にも影響するため、
+    // img src だけを cid: に限定するポストフィルタを適用する。
+    let cleaned = strip_non_cid_img_src(&cleaned);
+
+    // BiDi override とゼロ幅文字をストリップ (ammonia 通過後に追加フィルタ)
+    let out: String = cleaned
+        .chars()
+        .filter(|c| !is_bidi_override(*c) && !is_zero_width(*c))
+        .collect();
 
     SanitizedBody { inner: out, _sealed: PhantomData }
+}
+
+/// `<img src="...">` の src が `cid:` で始まらない場合は src 属性を除去する。
+/// ammonia の url_schemes はグローバルなので img に限定した制限はポストフィルタで実施。
+fn strip_non_cid_img_src(html: &str) -> String {
+    // regex crate は lookahead 未サポートなので 2 ステップで処理:
+    // 1. すべての img src="..." をキャプチャ
+    // 2. cid: で始まらないものを除去
+    let Ok(re_src) = regex::Regex::new(r#"\bsrc\s*=\s*"([^"]*)""#) else {
+        return html.to_string();
+    };
+    re_src.replace_all(html, |caps: &regex::Captures<'_>| {
+        let src_val = caps.get(1).map_or("", |m| m.as_str());
+        if src_val.starts_with("cid:") {
+            caps[0].to_string() // cid: は保持
+        } else {
+            String::new() // それ以外は除去
+        }
+    }).to_string()
 }
 
 fn is_bidi_override(c: char) -> bool {
@@ -663,6 +727,66 @@ mod tests {
         let doc = to_srcdoc(&body, Some("<script>alert(1)</script>"));
         assert!(!doc.content.contains("<script>"));
         assert!(doc.content.contains("&lt;script&gt;"));
+    }
+
+    // -----------------------------------------------------------------------
+    // sanitize_html — ammonia 実装のテスト
+    // -----------------------------------------------------------------------
+
+    fn raw(s: &str) -> RawHtml {
+        RawHtml(s.to_string())
+    }
+
+    #[test]
+    fn xss_script_tag_removed() {
+        let out = sanitize_html(&raw("<script>alert(1)</script>Hello"));
+        assert!(!out.as_str().contains("<script>"), "script tag must be stripped");
+        assert!(!out.as_str().contains("alert(1)"), "script content must be stripped too");
+        assert!(out.as_str().contains("Hello"));
+    }
+
+    #[test]
+    fn allowed_tags_survive() {
+        let out = sanitize_html(&raw("<p>Hello <b>world</b></p>"));
+        assert!(out.as_str().contains("<p>"));
+        assert!(out.as_str().contains("<b>"));
+    }
+
+    #[test]
+    fn on_event_attributes_stripped() {
+        let out = sanitize_html(&raw("<a href=\"https://ok.com\" onclick=\"evil()\">click</a>"));
+        assert!(!out.as_str().contains("onclick"), "onclick must be removed");
+        assert!(out.as_str().contains("https://ok.com"), "href must survive");
+    }
+
+    #[test]
+    fn external_img_src_blocked() {
+        // src=https:// は許可スキームに含まれないので ammonia が除去する
+        let out = sanitize_html(&raw("<img src=\"https://tracker.evil.com/px.gif\" alt=\"x\">"));
+        assert!(!out.as_str().contains("https://tracker.evil.com"), "remote img src must be removed");
+        // cid: は許可
+        let out2 = sanitize_html(&raw("<img src=\"cid:part1@msg.id\" alt=\"x\">"));
+        assert!(out2.as_str().contains("cid:part1@msg.id"), "cid: src must survive");
+    }
+
+    #[test]
+    fn iframe_stripped() {
+        let out = sanitize_html(&raw("<iframe src=\"https://evil.com\"></iframe>"));
+        assert!(!out.as_str().contains("iframe"), "iframe must be removed");
+    }
+
+    #[test]
+    fn bidi_override_stripped_after_ammonia() {
+        // BiDi 文字は ammonia がタグを除去した後にも残るので追加フィルタが必要
+        let out = sanitize_html(&raw("normal\u{202E}hidden"));
+        assert!(!out.as_str().contains('\u{202E}'), "RLO must be stripped");
+        assert!(out.as_str().contains("normal"));
+    }
+
+    #[test]
+    fn javascript_href_blocked() {
+        let out = sanitize_html(&raw("<a href=\"javascript:alert(1)\">click</a>"));
+        assert!(!out.as_str().contains("javascript:"), "javascript: href must be blocked");
     }
 }
 
