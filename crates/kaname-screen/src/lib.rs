@@ -238,6 +238,18 @@ impl OutputAuditor {
             }
         }
 
+        // 3. URL クエリパラメータへのデータ埋め込み検出 (URL exfiltration)
+        // 攻撃例: "Click: https://attacker.com/track?data=SECRET_INFO"
+        // data= / content= / msg= / q= 等の疑わしいクエリ付き外部 URL を検出
+        for word in output.split_whitespace() {
+            let wl = word.to_lowercase();
+            if (wl.starts_with("http://") || wl.starts_with("https://"))
+                && is_suspicious_exfil_url(&wl)
+            {
+                findings.push(AuditFinding::ExfiltrationTarget(word.to_string()));
+            }
+        }
+
         let safe = findings.is_empty();
         AuditResult { findings, safe_to_display: safe }
     }
@@ -283,6 +295,24 @@ fn is_email_like(s: &str) -> bool {
     let trimmed = s.trim_matches(|c: char| !c.is_alphanumeric());
     let parts: Vec<&str> = trimmed.split('@').collect();
     parts.len() == 2 && !parts[0].is_empty() && parts[1].contains('.')
+}
+
+/// URL クエリパラメータにデータが埋め込まれているかを検出する。
+///
+/// 攻撃者が AI 出力に `https://evil.com/x?data=<機密情報>` を生成させ
+/// ユーザーにクリックさせる手法を防ぐ。
+fn is_suspicious_exfil_url(url_lower: &str) -> bool {
+    // 疑わしいクエリパラメータ名 (データ運搬に使われがちな名前)
+    const SUSPICIOUS_PARAMS: &[&str] = &[
+        "?data=", "&data=",
+        "?content=", "&content=",
+        "?msg=", "&msg=",
+        "?text=", "&text=",
+        "?body=", "&body=",
+        "?payload=", "&payload=",
+        "?info=", "&info=",
+    ];
+    SUSPICIOUS_PARAMS.iter().any(|p| url_lower.contains(p))
 }
 
 // ============================================================================
@@ -357,6 +387,33 @@ mod tests {
         assert!(is_email_like("user@example.com"));
         assert!(!is_email_like("not-an-email"));
         assert!(!is_email_like("@.com"));
+    }
+
+    #[test]
+    fn audit_detects_url_exfiltration() {
+        let auditor = OutputAuditor::new();
+        // 攻撃者がクエリパラメータにデータを埋め込む手法
+        let output = "こちらをクリックしてください: https://attacker.com/track?data=SENSITIVE_INFO";
+        let result = auditor.audit(output);
+        assert!(!result.safe_to_display, "URL exfil should be flagged");
+        assert!(result.findings.iter().any(|f| matches!(f, AuditFinding::ExfiltrationTarget(_))));
+    }
+
+    #[test]
+    fn audit_allows_clean_urls() {
+        let auditor = OutputAuditor::new();
+        // クエリなし URL は問題なし
+        let output = "詳細はこちら: https://help.example.com/docs/setup";
+        let result = auditor.audit(output);
+        assert!(result.safe_to_display, "clean URL should pass");
+    }
+
+    #[test]
+    fn audit_detects_data_param_variant() {
+        let auditor = OutputAuditor::new();
+        let output = "結果: https://evil.com/x?content=ConfidentialData&foo=bar";
+        let result = auditor.audit(output);
+        assert!(!result.safe_to_display);
     }
 }
 
