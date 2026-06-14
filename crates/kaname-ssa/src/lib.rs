@@ -135,7 +135,9 @@ impl SenderStyleProfile {
             }
         }
 
-        self.sample_count += 1;
+        // saturating_add でオーバーフロー防止。
+        // u32::MAX に達したらそれ以上増加せず、alpha が 0 に近い安定状態を維持する。
+        self.sample_count = self.sample_count.saturating_add(1);
         self.last_updated_unix = now_unix();
     }
 
@@ -516,6 +518,38 @@ mod tests {
         assert_eq!(p.sample_count, restored.sample_count);
         // コンテンツが入ってないことを確認 (数値のみ)
         assert!(!json.contains("メール本文"), "本文テキストが漏洩している");
+    }
+
+    #[test]
+    fn sample_count_does_not_overflow() {
+        let mut p = SenderStyleProfile::new("alice@example.com");
+        p.sample_count = u32::MAX;
+        // saturating_add: u32::MAX + 1 = u32::MAX (not 0)
+        p.update(&EmailStyleFeatures {
+            paragraphs: 1, sentences_per_paragraph: 1.0, chars_per_sentence: 30.0,
+            punctuation_density: 1.0, formality_score: 0.5,
+            email_length: 100, signature_lines: 0, send_hour: 10,
+        });
+        assert_eq!(p.sample_count, u32::MAX, "saturating_add が機能していない");
+        // オーバーフロー後も is_reliable() は true のまま
+        assert!(p.is_reliable(), "オーバーフロー後に is_reliable() が false になった");
+    }
+
+    #[test]
+    fn alpha_near_zero_at_saturation() {
+        // sample_count = u32::MAX のとき alpha ≈ 2.3e-10 → lerp はほぼ old 値を返す
+        let mut p = SenderStyleProfile::new("alice@example.com");
+        p.sample_count = u32::MAX - 1;
+        p.avg_paragraphs = 3.0;
+        p.update(&EmailStyleFeatures {
+            paragraphs: 100, // 極端な値を入れても avg は変わらないはず
+            sentences_per_paragraph: 1.0, chars_per_sentence: 30.0,
+            punctuation_density: 1.0, formality_score: 0.5,
+            email_length: 100, signature_lines: 0, send_hour: 10,
+        });
+        // avg_paragraphs は 3.0 からほとんど動かないはず (alpha ≈ 2.3e-10)
+        assert!((p.avg_paragraphs - 3.0).abs() < 0.01,
+            "alpha が大きすぎる: avg_paragraphs = {}", p.avg_paragraphs);
     }
 }
 
