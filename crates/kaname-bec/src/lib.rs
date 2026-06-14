@@ -57,6 +57,9 @@ pub struct AssessmentRequest<'a> {
     pub our_domain: &'a str,
     /// User's known contact list (for homoglyph comparison).
     pub known_contacts: &'a [String],
+    /// メール本文から抽出した URL 一覧 (AiTM 検出に使用)。
+    /// `kaname-render` の HTML パーサーが `<a href>` から抽出する。
+    pub extracted_urls: &'a [String],
 }
 
 /// パースされた SPF/DKIM/DMARC の判定。
@@ -231,7 +234,10 @@ impl BecDetector {
         // --- 4. Content signals (simple heuristics, cheap)
         self.check_content_heuristics(&req, &mut signals);
 
-        // --- 5. LLM signal (the expensive one; done last)
+        // --- 5. AiTM URL signals
+        self.check_aitm(&req, &mut signals);
+
+        // --- 6. LLM signal (the expensive one; done last)
         self.check_llm(&req, &mut signals)?;
 
         // Sort by contribution descending for UI.
@@ -239,10 +245,12 @@ impl BecDetector {
             b.contribution.partial_cmp(&a.contribution).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // 結合: clamp the sum. A better approach is logistic regression
-        // on calibrated features; this is a conservative v1.
+        // 結合: 線形加算ではなくロジスティック変換を使用する。
+        // 線形加算は独立シグナルの重複カウントによって過大評価を生む。
+        // logistic(k*(raw - bias)) を使い、raw=0 → score≈0、
+        // raw=1 → score≈0.95 になるよう調整している (k=5, bias=0.7)。
         let raw: f32 = signals.iter().map(|s| s.contribution).sum();
-        let score = raw.clamp(0.0, 1.0);
+        let score = logistic((raw - 0.7) * 5.0).clamp(0.0, 1.0);
 
         let verdict = if score >= self.thresholds.dangerous {
             Verdict::Dangerous
@@ -410,6 +418,30 @@ impl BecDetector {
         }
     }
 
+    fn check_aitm(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        use crate::aitm::{AitmDetector, AitmVerdict};
+        let detector = AitmDetector::new();
+        for url in req.extracted_urls {
+            let risk = detector.analyze(url);
+            let contribution = match risk.verdict {
+                // AiTM Dangerous は高リスク — 単独でも Suspicious 相当のスコアに寄与させる
+                AitmVerdict::Dangerous => 0.70,
+                AitmVerdict::Caution => 0.20,
+                AitmVerdict::Safe => continue,
+            };
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution,
+                label: "AiTM プロキシの疑い".to_string(),
+                rationale: format!("URL: {} — {}", url, risk.signals.join(", ")),
+            });
+            // 最初の危険な URL で十分 (重複カウント防止)
+            if risk.verdict == AitmVerdict::Dangerous {
+                break;
+            }
+        }
+    }
+
     fn check_llm(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) -> Result<(), BecError> {
         // LLM はコンテンツのみを見る。 It does not see the signals we've
         // already gathered, to keep the dimensions independent.
@@ -436,6 +468,13 @@ impl BecDetector {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/// ロジスティック関数 σ(x) = 1 / (1 + e^{-x})。
+/// BEC スコアの線形和を確率的スコア [0,1] へ写す。
+#[inline]
+fn logistic(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
+}
 
 fn extract_domain(header: &str) -> Option<&str> {
     // ドメインを抽出: "Name <user@domain.com>" or "user@domain.com".
@@ -695,6 +734,7 @@ mod tests {
             }),
             our_domain: "ally-corp.com",
             known_contacts: &contacts,
+            extracted_urls: &[],
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Safe);
@@ -716,12 +756,41 @@ mod tests {
             sender_history: None,
             our_domain: "mitsui-global.co.jp",
             known_contacts: &contacts,
+            extracted_urls: &[],
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Dangerous, "score={}, signals={:?}", a.score, a.signals);
         assert!(a.signals.iter().any(|s| s.family == SignalFamily::Domain));
         assert!(a.signals.iter().any(|s| s.family == SignalFamily::Authentication));
         assert!(a.signals.iter().any(|s| s.family == SignalFamily::Content));
+    }
+
+    #[test]
+    fn aitm_url_in_assessment_escalates_score() {
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "ok".into() }));
+        let contacts: Vec<String> = vec![];
+        // URL contains known AiTM PhaaS pattern "tycoon" → AitmVerdict::Dangerous
+        let aitm_url = "https://tycoon-login.evil.com/relay?id_token=abc&state=xyz".to_string();
+        let req = AssessmentRequest {
+            from_header: "Bob <bob@example.com>",
+            return_path: Some("bob@example.com"),
+            subject: "Please login",
+            body_text: "Click the link to verify your account.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &[aitm_url],
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.verdict != Verdict::Safe,
+            "AiTM URL should escalate verdict, got {:?} score={}", a.verdict, a.score
+        );
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("AiTM")),
+            "AiTM signal should appear in {:?}", a.signals
+        );
     }
 
     #[test]

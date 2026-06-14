@@ -146,6 +146,17 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Control**: Out of scope for text defense, but we display prominent "sender verified" badge. If the attachment requests wire transfer action, the mail text itself will have BEC markers; alarm fires there.
 **Residual risk**: A video attachment with no text context. Documented: users should verify high-value instructions out-of-band. We will add provenance metadata (C2PA) detection in v2.
 
+### 3.9 Adversary-in-the-Middle (AiTM) phishing
+**Threat**: Attacker stands up a reverse-proxy (Evilginx, Modlishka) between victim and legitimate SaaS login page. Captures live session cookie after real MFA completion; bypasses MFA entirely. Once session is hijacked, attacker injects payment-redirect emails or changes MX to intercept future mail.
+**Control**: `kaname-bec` `AitmDetector` checks for:
+- Redirect chains traversing known AiTM infrastructure (blocklist in `AITM_INFRASTRUCTURE`)
+- Mismatched final landing domain vs. claimed SaaS platform domain (Levenshtein + homoglyph)
+- Phishing kit fingerprints in URL path (`/security`, `/verify`, `/oauth2/v2.0/authorize` with suspicious query params)
+- Urgency + credential request pattern in email body
+**Detection point**: Inbound link analysis before user clicks; URL extracted from `<a href>` and evaluated in `kaname-render` pipeline.
+**Residual risk**: Zero-day AiTM proxies not yet in blocklist; novel phishing kit paths. Mitigation: BEC LLM signal covers semantic urgency even without URL blocklist match; OOBV ceremony enforced for high-value wire transfers regardless.
+**Implementation**: `crates/kaname-bec/src/aitm.rs`; assessment integrated into `BecDetector::assess()` via `check_aitm()` signal family.
+
 ---
 
 ## 4. Supply chain
@@ -225,6 +236,7 @@ Ranked by `likelihood × impact`:
 ## 9. Changelog
 
 - **v1.0 (2026-04-18)**: Initial threat model aligned with ADRs 001-006.
+- **v1.1 (2026-06-14)**: §3.9 AiTM 追加; BEC スコアリングをロジスティック変換に移行; `Content::from_attachment()` の UserUpload provenance 修正; Bridge の PhaaS マーカー拡充 (10件追加); topics フィールドのマーカースキャン追加.
 
 Future versions will be deltas; we don't rewrite from scratch.
 
