@@ -641,9 +641,15 @@ fn is_kaname_domain(email: &str) -> bool {
 /// epoch を含めることで古い安全番号の再利用攻撃を防ぐ。
 fn compute_safety_number(our_email: &str, their_email: &str, epoch: u64) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(our_email.as_bytes());
+    // 長さプレフィックス付きドメイン分離: len(field) || field || \x00
+    // これにより "a\x00b" + "" と "a" + "b" が区別できる (長さ混同攻撃を防ぐ)
+    let our_bytes = our_email.as_bytes();
+    hasher.update((our_bytes.len() as u16).to_be_bytes());
+    hasher.update(our_bytes);
     hasher.update(b"\x00");
-    hasher.update(their_email.as_bytes());
+    let their_bytes = their_email.as_bytes();
+    hasher.update((their_bytes.len() as u16).to_be_bytes());
+    hasher.update(their_bytes);
     hasher.update(b"\x00");
     hasher.update(epoch.to_be_bytes());
     let digest = hasher.finalize();
@@ -877,6 +883,22 @@ mod tests {
         let a = compute_safety_number("a@x.com", "b@y.com", 0);
         let b = compute_safety_number("b@x.com", "a@y.com", 0);
         assert_ne!(a, b, "異なる入力は異なる安全番号を生成する");
+    }
+
+    #[test]
+    fn 安全番号_長さ混同攻撃を防ぐ() {
+        // 長さプレフィックスなしの実装では "alice\x00" + "bob" == "alice" + "\x00bob"
+        // 長さプレフィックスありなら必ず異なる
+        let with_null = compute_safety_number("alice\x00", "bob@y.com", 0);
+        let without  = compute_safety_number("alice", "\x00bob@y.com", 0);
+        assert_ne!(with_null, without, "長さ混同攻撃を防ぐ: フィールド境界が明確であること");
+    }
+
+    #[test]
+    fn 安全番号_空文字入力でも崩壊しない() {
+        let sn = compute_safety_number("", "", 0);
+        let parts: Vec<&str> = sn.split(' ').collect();
+        assert_eq!(parts.len(), 6, "空入力でも6グループを生成する");
     }
 
     #[test]
