@@ -2107,6 +2107,7 @@ version = "0.3.21"
 dependencies = [
  "kaname-error",
  "proptest",
+ "rand 0.8.6",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2158,6 +2159,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
