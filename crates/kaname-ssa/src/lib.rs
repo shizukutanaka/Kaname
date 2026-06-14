@@ -345,20 +345,24 @@ fn estimate_signature_lines(text: &str) -> u32 {
 }
 
 fn estimate_formality(text: &str) -> f32 {
-    // 丁寧語・敬語の出現で判定
+    // 丁寧語・敬語の出現頻度で判定 (単純な存在フラグではなく出現回数を使う)
+    // これにより AI が "please" を 1 回だけ挿入しても高フォーマリティと誤判定されない
     let polite_japanese = ["ます", "です", "いただ", "ございます", "申し", "存じ"];
     let casual_japanese = ["だよ", "じゃん", "ね〜", "かな", "だな"];
     let polite_english = ["please", "kindly", "would you", "sincerely", "regards"];
     let casual_english = ["hey", "thanks", "cheers", "gonna", "wanna"];
 
     let lower = text.to_lowercase();
-    let mut polite_count = 0u32;
-    let mut casual_count = 0u32;
 
-    for kw in &polite_japanese { if text.contains(kw) { polite_count += 1; } }
-    for kw in &casual_japanese { if text.contains(kw) { casual_count += 1; } }
-    for kw in &polite_english  { if lower.contains(kw) { polite_count += 1; } }
-    for kw in &casual_english  { if lower.contains(kw) { casual_count += 1; } }
+    // 出現回数を数える (binary ではなく frequency)
+    let polite_count: u32 = polite_japanese.iter()
+        .map(|kw| count_occurrences(text, kw))
+        .chain(polite_english.iter().map(|kw| count_occurrences(&lower, kw)))
+        .sum();
+    let casual_count: u32 = casual_japanese.iter()
+        .map(|kw| count_occurrences(text, kw))
+        .chain(casual_english.iter().map(|kw| count_occurrences(&lower, kw)))
+        .sum();
 
     let total = (polite_count + casual_count) as f32;
     if total == 0.0 {
@@ -366,6 +370,17 @@ fn estimate_formality(text: &str) -> f32 {
     } else {
         polite_count as f32 / total
     }
+}
+
+/// テキスト内のパターン出現回数を数える。
+fn count_occurrences(text: &str, pattern: &str) -> u32 {
+    let mut count = 0u32;
+    let mut start = 0;
+    while let Some(pos) = text[start..].find(pattern) {
+        count += 1;
+        start += pos + pattern.len();
+    }
+    count
 }
 
 // ============================================================================
@@ -507,6 +522,18 @@ mod tests {
         let features = EmailStyleFeatures::extract(body, 14);
         assert_eq!(features.send_hour, 14);
         assert!(features.paragraphs >= 1);
+    }
+
+    #[test]
+    fn formality_uses_frequency_not_presence() {
+        // 従来の実装 (存在フラグ) なら 1 回の "please" で formality=1.0 になる
+        // 新実装 (出現頻度) では頻度が低ければ casual に引っ張られる
+        let heavy_casual = "gonna get this done. wanna check cheers hey thanks done.";
+        let with_one_please = format!("please {heavy_casual}");
+        let features = EmailStyleFeatures::extract(&with_one_please, 10);
+        // "please" 1 回 vs casual 5 回 → formality は 0.5 以下のはず
+        assert!(features.formality_score < 0.5,
+            "1 回 please に対して casual が多いとき formality は低いはず: {}", features.formality_score);
     }
 
     #[test]
