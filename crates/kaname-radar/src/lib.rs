@@ -64,6 +64,40 @@ pub struct EmailMetadata {
     pub link_domains: Vec<String>,
     /// 受信時刻 (UNIX 秒)
     pub received_at: u64,
+    /// 件名の長さカテゴリ (コンテンツ非依存のメタデータ)。
+    /// PCR が未知インフラでも構造パターンを検出するために使用。
+    pub subject_length_bucket: SubjectLengthBucket,
+    /// SPF/DKIM/DMARC のうち少なくとも 1 つが失敗しているか
+    pub auth_partial_fail: bool,
+}
+
+/// 件名の長さを大まかなカテゴリに分類する (プライバシー保護のため実際の件名は保存しない)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SubjectLengthBucket {
+    /// 0–10 文字 (空メールや極短)
+    VeryShort,
+    /// 11–30 文字
+    Short,
+    /// 31–60 文字
+    Medium,
+    /// 61–100 文字
+    Long,
+    /// 100 文字超
+    VeryLong,
+}
+
+impl SubjectLengthBucket {
+    /// 件名文字列からバケットを分類する (件名本体は保存しない)。
+    #[must_use]
+    pub fn from_subject(subject: &str) -> Self {
+        match subject.chars().count() {
+            0..=10 => Self::VeryShort,
+            11..=30 => Self::Short,
+            31..=60 => Self::Medium,
+            61..=100 => Self::Long,
+            _ => Self::VeryLong,
+        }
+    }
 }
 
 impl EmailMetadata {
@@ -221,7 +255,29 @@ impl CampaignRadar {
             .collect();
 
         if infra_keys.is_empty() {
-            // 未知のインフラ → 新規グループ候補として保存
+            // 未知のインフラでも構造パターンが一致する場合はクラスタリング。
+            // 件名長バケット + 認証失敗パターンをキーとして使用。
+            // コンテンツ (件名本体・本文) は一切保存しない — 北極星維持。
+            if metadata.auth_partial_fail {
+                let pattern_key = format!(
+                    "pattern:auth_fail:subject_{}",
+                    pattern_key_for_bucket(metadata.subject_length_bucket)
+                );
+                let was_alertable = self.groups.get(&pattern_key).map_or(false, |g| g.is_alertable());
+                let group = self.groups
+                    .entry(pattern_key.clone())
+                    .or_insert_with(|| CampaignGroup::new(pattern_key.clone(), &metadata.email_id));
+                group.add_email(&metadata.email_id);
+                let now_alertable = group.is_alertable();
+                if now_alertable {
+                    return Some(CampaignMatch {
+                        new_email_id: metadata.email_id.clone(),
+                        group: group.clone(),
+                        newly_alertable: !was_alertable && now_alertable,
+                    });
+                }
+                return None;
+            }
             let key = format!("unknown:{}", metadata.from_domain);
             self.groups
                 .entry(key.clone())
@@ -321,6 +377,20 @@ impl Default for CampaignRadar {
 // ============================================================================
 
 /// セカンドレベルドメインを抽出する (例: mail.evil.com → evil.com)。
+/// 件名長バケットをキー文字列に変換する (内部関数)。
+fn pattern_key_for_bucket(bucket: SubjectLengthBucket) -> &'static str {
+    match bucket {
+        SubjectLengthBucket::VeryShort => "veryshort",
+        SubjectLengthBucket::Short => "short",
+        SubjectLengthBucket::Medium => "medium",
+        SubjectLengthBucket::Long => "long",
+        SubjectLengthBucket::VeryLong => "verylong",
+    }
+}
+
+/// ドメインから 2 次レベルドメイン (SLD) を抽出する。
+///
+/// 例: `"mail.google.com"` → `"google.com"`
 #[must_use]
 pub fn extract_sld(domain: &str) -> &str {
     let parts: Vec<&str> = domain.split('.').collect();
@@ -357,6 +427,8 @@ mod tests {
             dkim_domain: None,
             link_domains: links.iter().map(ToString::to_string).collect(),
             received_at: now_unix(),
+            subject_length_bucket: SubjectLengthBucket::Medium,
+            auth_partial_fail: false,
         }
     }
 
@@ -465,6 +537,8 @@ mod tests {
             dkim_domain: Some("evil.com".into()),
             link_domains: vec!["evil.com".into(), "other.com".into()],
             received_at: 0,
+            subject_length_bucket: SubjectLengthBucket::Medium,
+            auth_partial_fail: false,
         };
         let domains = meta.all_domains();
         let unique: HashSet<&&str> = domains.iter().collect();
@@ -527,6 +601,8 @@ mod property_tests {
             dkim_domain: None,
             link_domains: vec![format!("evil-{infra}.com")],
             received_at: 0,
+            subject_length_bucket: SubjectLengthBucket::Medium,
+            auth_partial_fail: false,
         }
     }
 
@@ -675,5 +751,46 @@ mod dns_tests {
         assert_eq!(extract_sld("example.com"), "example.com");
         assert_eq!(extract_sld("sub.example.com"), "example.com");
         assert_eq!(extract_sld("a.b.example.com"), "example.com");
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // 件名バケット
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn subject_bucket_classification() {
+        assert_eq!(SubjectLengthBucket::from_subject(""), SubjectLengthBucket::VeryShort);
+        assert_eq!(SubjectLengthBucket::from_subject("hello"), SubjectLengthBucket::VeryShort);
+        assert_eq!(SubjectLengthBucket::from_subject("【至急】送金のお願い合計金額"), SubjectLengthBucket::Short);
+        assert_eq!(SubjectLengthBucket::from_subject(&"x".repeat(50)), SubjectLengthBucket::Medium);
+        assert_eq!(SubjectLengthBucket::from_subject(&"x".repeat(80)), SubjectLengthBucket::Long);
+        assert_eq!(SubjectLengthBucket::from_subject(&"x".repeat(150)), SubjectLengthBucket::VeryLong);
+    }
+
+    #[test]
+    fn unknown_infra_auth_fail_clusters() {
+        let mut radar = CampaignRadar::new();
+        // 未知インフラ + 認証失敗 の同一件名長パターン
+        // 最初の2通でキャンペーングループが alertable になる
+        // (1通目は new() で1件 + add_email で2件、2通目で3件)
+        let mut any_alertable = false;
+        for i in 0..4u8 {
+            let meta = EmailMetadata {
+                email_id: format!("unknown-{i}"),
+                from_domain: format!("random-{i}.example"),
+                return_path_domain: None,
+                dkim_domain: None,
+                link_domains: vec![],
+                received_at: now_unix(),
+                subject_length_bucket: SubjectLengthBucket::Short,
+                auth_partial_fail: true,
+            };
+            if let Some(r) = radar.analyze(&meta) {
+                if r.newly_alertable {
+                    any_alertable = true;
+                }
+            }
+        }
+        assert!(any_alertable, "未知インフラでも認証失敗パターンでキャンペーン検出されるべき");
     }
 }

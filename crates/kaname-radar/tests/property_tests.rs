@@ -1,7 +1,7 @@
 //! kaname-radar プロパティテスト
 
 use proptest::prelude::*;
-use kaname_radar::{CampaignRadar, EmailMetadata, extract_sld};
+use kaname_radar::{CampaignRadar, EmailMetadata, SubjectLengthBucket, extract_sld};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn now_unix() -> u64 {
@@ -16,6 +16,8 @@ fn meta(id: &str, domain: &str) -> EmailMetadata {
         dkim_domain: None,
         link_domains: vec![],
         received_at: now_unix(),
+        subject_length_bucket: SubjectLengthBucket::Medium,
+        auth_partial_fail: false,
     }
 }
 
