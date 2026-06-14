@@ -446,8 +446,10 @@ fn is_bidi_override(c: char) -> bool {
 
 fn is_zero_width(c: char) -> bool {
     matches!(c,
-        '\u{200B}' | '\u{200C}' | '\u{200D}'
-        | '\u{FEFF}' | '\u{2060}'
+        '\u{00AD}'               // Soft Hyphen (不可視、テキスト分割悪用)
+        | '\u{200B}'..='\u{200F}' // ZW Space, ZWNJ, ZWJ, LRM, RLM
+        | '\u{2060}'..='\u{2064}' // Word Joiner, 数学用不可視演算子
+        | '\u{FEFF}'             // BOM / ZWNBSP
     )
 }
 
@@ -781,6 +783,32 @@ mod tests {
         let out = sanitize_html(&raw("normal\u{202E}hidden"));
         assert!(!out.as_str().contains('\u{202E}'), "RLO must be stripped");
         assert!(out.as_str().contains("normal"));
+    }
+
+    #[test]
+    fn lrm_rlm_stripped() {
+        // U+200E (LRM) と U+200F (RLM) は以前フィルタから漏れていた
+        let out = sanitize_html(&raw("safe\u{200E}lrm\u{200F}rlm"));
+        assert!(!out.as_str().contains('\u{200E}'), "LRM must be stripped");
+        assert!(!out.as_str().contains('\u{200F}'), "RLM must be stripped");
+        assert!(out.as_str().contains("safe"));
+    }
+
+    #[test]
+    fn soft_hyphen_stripped() {
+        // U+00AD (Soft Hyphen) はフィッシャーがテキストを分割して見えにくくするために使用
+        let out = sanitize_html(&raw("pay\u{00AD}pal.com"));
+        assert!(!out.as_str().contains('\u{00AD}'), "Soft Hyphen must be stripped");
+    }
+
+    #[test]
+    fn math_invisible_operators_stripped() {
+        // U+2061..U+2064 (数学用不可視演算子)
+        let invisible: String = ('\u{2061}'..='\u{2064}').collect();
+        let out = sanitize_html(&raw(&format!("text{invisible}more")));
+        for c in '\u{2061}'..='\u{2064}' {
+            assert!(!out.as_str().contains(c), "Math invisible op U+{:04X} must be stripped", c as u32);
+        }
     }
 
     #[test]
