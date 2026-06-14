@@ -472,18 +472,81 @@ impl Default for DunningPolicy {
 // プレースホルダー crypto (production uses ring + blake3)
 // ============================================================================
 
+/// Stripe Webhook の HMAC-SHA256 署名を計算する (RFC 2104)。
+///
+/// Stripe のアルゴリズム: HMAC-SHA256(key=webhook_secret, msg="ts.body")
+/// 出力は lowercase hex (64 文字)。
 fn hmac_sha256_hex(key: &[u8], msg: &[u8]) -> String {
-    // スタブ — real code uses ring::hmac
-    let _ = (key, msg);
-    "deadbeef".repeat(8)
+    use sha2::Sha256;
+    use hmac::{Hmac, Mac};
+    type HmacSha256 = Hmac<Sha256>;
+
+    // HMAC::new_from_slice は key が空でも失敗しない (RFC 2104 では空キーは許容)
+    // 失敗するのは実装上あり得ないが、型安全のため map_err でフォールバック
+    let mut mac = HmacSha256::new_from_slice(key)
+        .unwrap_or_else(|_| HmacSha256::new_from_slice(b"\x00").unwrap_or_else(|_| panic!("1-byte key は必ず valid")));
+    mac.update(msg);
+    let result = mac.finalize().into_bytes();
+    result.iter().fold(String::with_capacity(64), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+        s
+    })
 }
 
 fn sha256_hex(data: &[u8]) -> String {
-    // スタブ — real code uses ring::digest; content-sensitive for now
-    let hash: u64 = data.iter().enumerate().fold(0u64, |acc, (i, &b)| {
-        acc.wrapping_add((b as u64).wrapping_mul(i as u64 + 1).wrapping_mul(6364136223846793005))
-    });
-    format!("{:016x}{:016x}{:016x}{:016x}", hash, hash ^ 0xDEADBEEFCAFEBABE, hash.rotate_left(17), hash.rotate_right(7))
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(data);
+    digest.iter().fold(String::with_capacity(64), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+        s
+    })
+}
+
+fn chrono_now_iso() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    // RFC 3339 形式で現在時刻を返す (chrono を使わずに stdlib のみで実装)
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // 簡易 UTC 変換 (精度: 秒)
+    let (year, month, day, hour, min, sec) = unix_to_utc_parts(secs);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z")
+}
+
+/// UNIX 秒を (year, month, day, hour, min, sec) UTC に変換する。
+fn unix_to_utc_parts(mut secs: u64) -> (u32, u32, u32, u32, u32, u32) {
+    let sec  = (secs % 60) as u32; secs /= 60;
+    let min  = (secs % 60) as u32; secs /= 60;
+    let hour = (secs % 24) as u32; secs /= 24;
+
+    // グレゴリオ暦計算 (うるう年対応)
+    let mut year = 1970u32;
+    loop {
+        let days_in_year = if is_leap(year) { 366 } else { 365 };
+        if secs < days_in_year { break; }
+        secs -= days_in_year;
+        year += 1;
+    }
+    let month_days: &[u64] = if is_leap(year) {
+        &[31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        &[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut month = 1u32;
+    for &md in month_days {
+        if secs < md { break; }
+        secs -= md;
+        month += 1;
+    }
+    let day = secs as u32 + 1;
+    (year, month, day, hour, min, sec)
+}
+
+fn is_leap(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -491,11 +554,6 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         return false;
     }
     a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
-fn chrono_now_iso() -> String {
-    // スタブ — real code uses chrono::Utc::now().to_rfc3339()
-    "2026-04-24T00:00:00Z".to_owned()
 }
 
 // ============================================================================
@@ -531,6 +589,7 @@ pub enum BillingError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -601,5 +660,91 @@ mod tests {
         assert!(!constant_time_eq(b"abc", b"ab"));
         assert!(constant_time_eq(b"abc", b"abc"));
         assert!(!constant_time_eq(b"abc", b"abd"));
+    }
+
+    // ── HMAC-SHA256 / sha256_hex セキュリティテスト ──────────────────────────
+
+    #[test]
+    fn hmac_sha256_hex_known_value() {
+        // RFC 4231 Test Case 1: key=0x0b*20, data="Hi There"
+        // Expected: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7
+        let key  = [0x0bu8; 20];
+        let data = b"Hi There";
+        let result = hmac_sha256_hex(&key, data);
+        assert_eq!(result, "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
+            "HMAC-SHA256 の計算が RFC 4231 Test Case 1 と一致しない");
+    }
+
+    #[test]
+    fn hmac_sha256_hex_is_64_chars() {
+        let result = hmac_sha256_hex(b"key", b"message");
+        assert_eq!(result.len(), 64, "HMAC-SHA256 は hex 64文字でなければならない");
+        assert!(result.chars().all(|c| c.is_ascii_hexdigit()), "hex 文字のみ");
+    }
+
+    #[test]
+    fn hmac_sha256_hex_deadbeef_stub_is_gone() {
+        // スタブが "deadbeef" ループを返していないことを確認
+        let result = hmac_sha256_hex(b"secret", b"payload");
+        assert!(!result.contains("deadbeef"), "スタブが残っている");
+    }
+
+    #[test]
+    fn sha256_hex_known_value() {
+        // 環境内 sha2 クレートの既知出力 (kaname-store と一致)
+        let result = sha256_hex(b"abc");
+        assert_eq!(result, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    #[test]
+    fn sha256_hex_is_64_chars() {
+        let result = sha256_hex(b"test data");
+        assert_eq!(result.len(), 64);
+        assert!(result.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn chrono_now_iso_looks_like_rfc3339() {
+        let ts = chrono_now_iso();
+        // 例: "2026-06-14T03:00:00Z"
+        assert_eq!(ts.len(), 20, "RFC 3339 は YYYY-MM-DDTHH:MM:SSZ = 20文字");
+        assert!(ts.ends_with('Z'), "UTC は Z で終わる");
+        assert!(ts.contains('T'), "日付と時刻は T で区切る");
+        // 年は 2020 以降であるはず
+        let year: u32 = ts[..4].parse().unwrap();
+        assert!(year >= 2020, "年が不正: {year}");
+    }
+
+    #[test]
+    fn chrono_now_iso_not_hardcoded() {
+        let ts = chrono_now_iso();
+        assert_ne!(ts, "2026-04-24T00:00:00Z", "固定値スタブが残っている");
+    }
+
+    #[test]
+    fn stripe_webhook_real_signature_passes() {
+        use sha2::Sha256;
+        use hmac::{Hmac, Mac};
+        type HmacSha256 = Hmac<Sha256>;
+
+        let secret  = "whsec_real_secret";
+        let ts      = "1700000000";
+        let body    = br#"{"type":"invoice.paid"}"#;
+        let payload = format!("{}.{}", ts, String::from_utf8_lossy(body));
+
+        // 正しい署名を計算
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(payload.as_bytes());
+        let sig = mac.finalize().into_bytes()
+            .iter().fold(String::new(), |mut s, b| {
+                use std::fmt::Write as _;
+                let _ = write!(s, "{b:02x}");
+                s
+            });
+
+        let header = format!("t={ts},v1={sig}");
+        let now = 1_700_000_000u64; // 同じ timestamp なので age=0
+        let result = verify_signature(&header, body, secret, now);
+        assert!(result.is_ok(), "正しい署名が拒否された: {result:?}");
     }
 }
