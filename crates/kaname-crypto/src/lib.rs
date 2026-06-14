@@ -347,7 +347,7 @@ impl HybridX25519MlKem {
         // arxiv eprint 2026/192 V4 対策: X25519 出力の contributory behavior を検証
         validate_x25519_output(&c_ss)?;
 
-        let combined = combine_shared_secrets(&c_ss, &p_ss);
+        let combined = combine_kem_secrets(&ClassicalSs(c_ss), &PqcSs(p_ss));
 
         let mut bytes = Vec::with_capacity(4 + c_ct.bytes.len() + p_ct.bytes.len());
         bytes.extend_from_slice(&(c_ct.bytes.len() as u16).to_be_bytes());
@@ -387,7 +387,7 @@ impl HybridX25519MlKem {
         // arxiv eprint 2026/192 V4 対策: X25519 出力の contributory behavior を検証
         validate_x25519_output(&c_ss)?;
 
-        Ok(combine_shared_secrets(&c_ss, &p_ss))
+        Ok(combine_kem_secrets(&ClassicalSs(c_ss), &PqcSs(p_ss)))
     }
 }
 
@@ -445,6 +445,37 @@ fn validate_x25519_output(ss: &SharedSecret) -> Result<(), CryptoError> {
     Ok(())
 }
 
+/// X25519 (古典) の共有秘密をマークする型ラッパー。
+/// `combine_kem_secrets` の引数順序を型で強制するため使用。
+pub(crate) struct ClassicalSs(pub SharedSecret);
+
+/// ML-KEM-768 (PQC) の共有秘密をマークする型ラッパー。
+pub(crate) struct PqcSs(pub SharedSecret);
+
+/// X25519 + ML-KEM-768 の共有秘密を HKDF-SHA-256 で結合する。
+///
+/// 型パラメータにより IKM 順序 (classical || pqc) が不変に保証される。
+/// 引数の順序ミスはコンパイルエラーになる。
+pub(crate) fn combine_kem_secrets(classical: &ClassicalSs, pqc: &PqcSs) -> SharedSecret {
+    // IKM = classical || pqc (64 バイト)、info = b"kaname-xwing-v1"
+    //
+    // "both must break" 特性 (ROM 下):
+    // 攻撃者は ML-KEM と X25519 の両方を破らなければ出力を区別できない。
+    let mut ikm = [0u8; 64];
+    ikm[..32].copy_from_slice(&classical.0.0);
+    ikm[32..].copy_from_slice(&pqc.0.0);
+
+    let hkdf = Hkdf::<Sha256>::new(None, &ikm);
+    let mut okm = [0u8; 32];
+    // HKDF の出力長 32 バイトは SHA-256 の有効範囲内 → InvalidLength は到達不能
+    if hkdf.expand(b"kaname-xwing-v1", &mut okm).is_err() {
+        return SharedSecret([0u8; 32]);
+    }
+
+    SharedSecret(okm)
+}
+
+#[allow(dead_code)]
 pub(crate) fn combine_shared_secrets(c: &SharedSecret, p: &SharedSecret) -> SharedSecret {
     // HKDF-SHA-256 で 2 つの KEM 共有秘密を結合する。
     // IKM = c || p (64 バイト)、info = b"kaname-xwing-v1"
@@ -614,5 +645,32 @@ mod tests {
         let p = SharedSecret([0x02u8; 32]);
         let r = combine_shared_secrets(&c, &p);
         assert_eq!(r.0.len(), 32);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // 型安全 KEM combiner (combine_kem_secrets)
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn combine_kem_secrets_matches_legacy_order() {
+        // ClassicalSs=c, PqcSs=p は旧 combine_shared_secrets(&c, &p) と同じ順序
+        let c = SharedSecret([0x11u8; 32]);
+        let p = SharedSecret([0x22u8; 32]);
+        let legacy = combine_shared_secrets(&c, &p);
+        let typed = combine_kem_secrets(&ClassicalSs(c), &PqcSs(p));
+        assert_eq!(legacy.0, typed.0, "typed API must match legacy order");
+    }
+
+    #[test]
+    fn combine_kem_secrets_different_from_reversed() {
+        let c = SharedSecret([0x11u8; 32]);
+        let p = SharedSecret([0x22u8; 32]);
+        let c2 = SharedSecret([0x11u8; 32]);
+        let p2 = SharedSecret([0x22u8; 32]);
+        // 正しい順序 (classical || pqc)
+        let correct = combine_kem_secrets(&ClassicalSs(c), &PqcSs(p));
+        // 逆順 (pqc || classical) — 型安全 API では表現不能だが値レベルで確認
+        let reversed = combine_shared_secrets(&p2, &c2);
+        assert_ne!(correct.0, reversed.0, "order must matter");
     }
 }
