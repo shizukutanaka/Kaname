@@ -383,13 +383,51 @@ fn extract_zoom_meeting_id(url: &str) -> Option<String> {
     None
 }
 
+/// 否定フレーズ。直後に付くと緊急扱いしない。
+const NEGATION_SUFFIXES: &[&str] = &[
+    "ではありません", "ではない", "じゃない", "ではなく", "でない",
+    "ではないので", "ではなかった",
+];
+
+/// 英語の否定: "not urgent", "no urgency" などを検出するために
+/// urgency marker の前後に "not" / "no " が付く形を検出するペア。
+const EN_NEGATION_PREFIXES: &[&str] = &["not ", "no ", "non-", "isn't", "aren't"];
+
 fn has_urgency(text: &str) -> bool {
     let urgency_markers = [
         "至急", "緊急", "今すぐ", "本日中", "急いで", "すぐに",
         "urgent", "asap", "immediately", "right now", "as soon as",
     ];
     let text_lower = text.to_lowercase();
-    urgency_markers.iter().any(|m| text_lower.contains(m))
+    // 文字単位でトークン化して境界問題を回避
+    let chars: Vec<char> = text_lower.chars().collect();
+    let char_str: String = chars.iter().collect();
+
+    urgency_markers.iter().any(|marker| {
+        let mut rest = char_str.as_str();
+        while let Some(pos) = rest.find(marker) {
+            let after = &rest[pos + marker.len()..];
+
+            // 日本語否定: マーカーの直後
+            let ja_negated = NEGATION_SUFFIXES.iter().any(|neg| after.starts_with(neg));
+
+            // 英語否定: マーカーの直前 8 文字以内
+            let before_start = rest[..pos].char_indices()
+                .rev()
+                .nth(7)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            let before = &rest[before_start..pos];
+            let en_negated = EN_NEGATION_PREFIXES.iter().any(|neg| before.contains(neg));
+
+            if !ja_negated && !en_negated {
+                return true;
+            }
+            // 次の出現を探す
+            rest = &rest[pos + marker.len()..];
+        }
+        false
+    })
 }
 
 // ============================================================================
@@ -591,6 +629,30 @@ mod tests {
         let body = "明日の会議の議題について確認させてください。よろしくお願いします。";
         let detector = PivotDetector::new();
         assert!(detector.analyze(body).is_empty());
+    }
+
+    #[test]
+    fn negated_urgency_does_not_flag_as_high_risk() {
+        // "緊急ではありません" — NOT urgent (否定) は高リスクにならない
+        let body = "本件は緊急ではありませんので、お時間のある時にご確認ください。080-1234-5678";
+        let detector = PivotDetector::new();
+        let pivots = detector.analyze(body);
+        let phone_high_risk = pivots.iter().any(|p| {
+            matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk()
+        });
+        assert!(!phone_high_risk, "否定された緊急表現は高リスク扱いにしてはならない");
+    }
+
+    #[test]
+    fn genuine_urgency_is_still_high_risk() {
+        // 否定なし "至急" は高リスクのまま
+        let body = "至急ご確認ください。080-1234-5678";
+        let detector = PivotDetector::new();
+        let pivots = detector.analyze(body);
+        let phone_high_risk = pivots.iter().any(|p| {
+            matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk()
+        });
+        assert!(phone_high_risk, "否定なし 至急 + 電話番号は高リスクでなければならない");
     }
 
     #[test]

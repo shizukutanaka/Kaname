@@ -592,10 +592,59 @@ fn detect_ip_address(text: &str) -> bool {
 
 fn detect_confidential_marker(text: &str) -> bool {
     let t = text.to_lowercase();
-    ["confidential", "机密", "機密", "秘密", "取扱注意",
-     "restricted", "internal only", "社外秘", "極秘",
-     "do not distribute", "not for distribution",
-    ].iter().any(|m| t.contains(m))
+    // 通常一致
+    let found = ["confidential", "机密", "機密", "秘密", "取扱注意",
+                 "restricted", "internal only", "社外秘", "極秘",
+                 "do not distribute", "not for distribution",
+                ].iter().any(|m| t.contains(m));
+    if found {
+        return true;
+    }
+    // スペース区切り難読化 "C O N F I D E N T I A L" 対策:
+    // 連続する単一英字をスペースで区切ったパターンを除去して再検索
+    let collapsed = collapse_spaced_ascii(&t);
+    ["confidential", "restricted", "internal only", "do not distribute",
+     "not for distribution",
+    ].iter().any(|m| collapsed.contains(m))
+}
+
+/// "c o n f i d e n t i a l" → "confidential" に正規化する。
+///
+/// 1 文字ずつスペース区切りで書かれた ASCII 難読化を解除する。
+fn collapse_spaced_ascii(text: &str) -> String {
+    // 「単一英字 + スペース」が 3 回以上連続するパターンを折りたたむ
+    let chars: Vec<char> = text.chars().collect();
+    let mut result = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        // 現在位置が "x " パターンの先頭かチェック (x=ASCII lowercase, 次がスペース)
+        if chars[i].is_ascii_lowercase()
+            && i + 1 < chars.len() && chars[i + 1] == ' '
+            && i + 2 < chars.len() && chars[i + 2].is_ascii_lowercase()
+            && i + 3 < chars.len() && (chars[i + 3] == ' ' || chars[i + 3].is_ascii_lowercase())
+        {
+            // スペース区切りの単一文字シーケンスを収集
+            let mut word = String::new();
+            while i < chars.len() && chars[i].is_ascii_lowercase() {
+                word.push(chars[i]);
+                i += 1;
+                // 次がスペースかつその次が単一英字ならスペースを飛ばす
+                if i < chars.len() && chars[i] == ' '
+                    && i + 1 < chars.len() && chars[i + 1].is_ascii_lowercase()
+                    && (i + 2 >= chars.len() || chars[i + 2] == ' ' || !chars[i + 2].is_ascii_alphabetic())
+                {
+                    i += 1; // スペースを飛ばす
+                } else {
+                    break;
+                }
+            }
+            result.push_str(&word);
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+    result
 }
 
 fn detect_attorney_privilege(text: &str) -> bool {
@@ -1049,6 +1098,16 @@ mod tests {
         // Invalid regex → no match (fails safe)
         let result = engine.evaluate(&ctx("anything", "", &to), Direction::Both);
         assert!(result.is_clean(), "不正な正規表現は安全側に倒してマッチなし");
+    }
+
+    #[test]
+    fn spaced_confidential_marker_detected() {
+        // "C O N F I D E N T I A L" 難読化対策
+        let to = vec!["vendor@external.com".into()];
+        let body = "C O N F I D E N T I A L: Q3 revenue data";
+        let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
+        assert!(result.findings.iter().any(|f| f.action == Action::Warn),
+            "スペース区切り難読化 CONFIDENTIAL を検出すべき");
     }
 
     #[test]
