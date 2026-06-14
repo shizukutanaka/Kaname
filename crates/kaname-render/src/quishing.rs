@@ -196,13 +196,52 @@ impl Default for QuishingDefense {
 // ユーティリティ
 // ============================================================================
 
+/// URL からホスト名 (ドメイン) を抽出する。
+///
+/// セキュリティ考慮:
+/// - `https://legit.com@attacker.com/` → userinfo を除去して `attacker.com`
+/// - `http://`, `https://` 以外のスキームは None (data:, ftp:, javascript: 等)
+/// - `//evil.com` (プロトコル相対) は None
+/// - port (:443) を除去してホスト名のみ返す
 fn extract_domain(url: &str) -> Option<String> {
-    // 簡易実装: http(s):// を削除して、最初の / または ? まで
-    let without_scheme = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    let domain_end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
-    Some(without_scheme[..domain_end].to_lowercase())
+    // スキームのみ http/https を許可
+    let after_scheme = if let Some(rest) = url.strip_prefix("https://") {
+        rest
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        rest
+    } else {
+        return None; // ftp/data/javascript/protocol-relative 等は除外
+    };
+
+    // パスを除去: 最初の `/` または `?` または `#` まで
+    let authority_end = after_scheme.find(['/', '?', '#']).unwrap_or(after_scheme.len());
+    let authority = &after_scheme[..authority_end];
+
+    // userinfo を除去: `user:pass@host` → `host`
+    // 攻撃例: `https://legit.com@attacker.com/` → authority = `legit.com@attacker.com`
+    let host_with_port = if let Some(at_pos) = authority.rfind('@') {
+        &authority[at_pos + 1..]
+    } else {
+        authority
+    };
+
+    // port を除去: `evil.com:8080` → `evil.com`
+    // IPv6 は [::1]:443 形式なので '[' で判別
+    let host = if host_with_port.starts_with('[') {
+        // IPv6: [::1] or [::1]:443
+        if let Some(close) = host_with_port.find(']') {
+            &host_with_port[1..close] // brackets stripped
+        } else {
+            host_with_port
+        }
+    } else {
+        host_with_port.split(':').next().unwrap_or(host_with_port)
+    };
+
+    if host.is_empty() {
+        return None;
+    }
+    Some(host.to_lowercase())
 }
 
 fn has_digit_substitution(domain: &str) -> bool {
@@ -334,6 +373,57 @@ mod tests {
         assert_eq!(extract_domain("http://example.com"),       Some("example.com".to_string()));
         assert_eq!(extract_domain("https://example.com?q=1"),  Some("example.com".to_string()));
         assert_eq!(extract_domain("https://EXAMPLE.com/"),     Some("example.com".to_string()));
+    }
+
+    // ── URL パース セキュリティテスト ───────────────────────────────────────────
+
+    #[test]
+    fn extract_domain_strips_userinfo_confusion_attack() {
+        // 攻撃: https://legit-bank.com@attacker.com/
+        // 実際のホストは attacker.com — Levenshtein は attacker.com に対して実行すべき
+        assert_eq!(
+            extract_domain("https://legit-bank.com@attacker.com/"),
+            Some("attacker.com".to_string()),
+            "userinfo 部分を除去できていない"
+        );
+    }
+
+    #[test]
+    fn extract_domain_rejects_non_http_schemes() {
+        assert_eq!(extract_domain("data:text/html,<script>alert(1)</script>"), None, "data: を許可した");
+        assert_eq!(extract_domain("ftp://evil.com/file"), None, "ftp: を許可した");
+        assert_eq!(extract_domain("javascript:void(0)"), None, "javascript: を許可した");
+        assert_eq!(extract_domain("//evil.com/path"), None, "プロトコル相対を許可した");
+    }
+
+    #[test]
+    fn extract_domain_strips_port() {
+        assert_eq!(extract_domain("https://evil.com:8443/login"), Some("evil.com".to_string()));
+        assert_eq!(extract_domain("http://evil.com:80/"), Some("evil.com".to_string()));
+    }
+
+    #[test]
+    fn extract_domain_handles_ipv6() {
+        // IPv6 ブラケット記法
+        assert_eq!(extract_domain("http://[::1]/path"), Some("::1".to_string()));
+        assert_eq!(extract_domain("http://[::1]:8080/path"), Some("::1".to_string()));
+    }
+
+    #[test]
+    fn extract_domain_returns_none_for_empty_host() {
+        assert_eq!(extract_domain("https:///path"), None);
+        assert_eq!(extract_domain(""), None);
+    }
+
+    #[test]
+    fn quishing_url_confusion_via_userinfo_flagged() {
+        // QR コード内の URL が userinfo 混乱攻撃を含む場合も Suspicious になるはず
+        let d = QuishingDefense::new();
+        // amaz0n は Suspicious なドメイン — userinfo に合法ドメイン名を混ぜても無効
+        let r = d.evaluate_decoded("qr-1", "https://legitimate.com@amaz0n.tk/login");
+        // 実際のホスト amaz0n.tk は Suspicious (digit substitution + free TLD)
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
+            "userinfo 混乱攻撃で Suspicious が検出されなかった");
     }
 
     #[test]
