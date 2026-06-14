@@ -175,11 +175,13 @@ impl Default for HandoffManager {
 // ============================================================================
 
 fn generate_session_id() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    now_unix().hash(&mut h);
-    format!("sess_{:016x}", h.finish())
+    // rand::thread_rng() は CSPRNG (OS エントロピー源)。
+    // DefaultHasher + now_unix() では同秒内に重複する可能性がある。
+    use rand::RngCore;
+    let mut bytes = [0u8; 8];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let n = u64::from_be_bytes(bytes);
+    format!("sess_{n:016x}")
 }
 
 fn now_unix() -> u64 {
