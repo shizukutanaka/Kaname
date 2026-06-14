@@ -11,20 +11,32 @@
 //! // kaname_render::render_with_dlp(raw, Some(&scanner))
 //! ```
 
-use crate::{Action, Direction, DlpEngine, EvalCtx};
+use crate::{Action, Direction, DlpEngine, EvalCtx, edm::EdmFingerprints};
 use kaname_render::{DlpScanner, DlpVerdict, Envelope};
 use std::collections::HashMap;
 
 /// `DlpEngine` を `kaname_render::DlpScanner` として使うためのラッパー。
+///
+/// `edm_sets` を保持することで `Predicate::ExactDataMatch` が機能する。
+/// 空のまま渡すと EDM ルールは常にミスになる (無効化と同じ)。
 pub struct EnvelopeScanner {
-    engine: DlpEngine,
+    engine:   DlpEngine,
+    /// 登録済み EDM フィンガープリントセット (set_id → fingerprints)
+    edm_sets: HashMap<String, EdmFingerprints>,
 }
 
 impl EnvelopeScanner {
-    /// エンジンをラップする。
+    /// エンジンをラップする。EDM フィンガープリントなし。
     #[must_use]
     pub fn new(engine: DlpEngine) -> Self {
-        Self { engine }
+        Self { engine, edm_sets: HashMap::new() }
+    }
+
+    /// EDM フィンガープリントを追加する。
+    ///
+    /// `fingerprint_set_id` は `Predicate::ExactDataMatch` のセット ID と一致させること。
+    pub fn add_edm_set(&mut self, id: impl Into<String>, fp: EdmFingerprints) {
+        self.edm_sets.insert(id.into(), fp);
     }
 
     /// 内部エンジンへの参照。
@@ -50,8 +62,6 @@ impl DlpScanner for EnvelopeScanner {
             .collect();
         let size_bytes = body.len() as u64
             + envelope.attachments.iter().map(|a| a.size_bytes).sum::<u64>();
-        let edm_sets = HashMap::new();
-
         let ctx = EvalCtx {
             body,
             subject,
@@ -59,7 +69,7 @@ impl DlpScanner for EnvelopeScanner {
             to: &to,
             from: &from,
             attachment_mimes: &attachment_mimes,
-            edm_sets: &edm_sets,
+            edm_sets: &self.edm_sets,
         };
 
         let result = self.engine.evaluate(&ctx, Direction::Inbound);
@@ -136,6 +146,58 @@ mod tests {
         let raw = b"From: alice@example.com\r\nTo: bob@example.com\r\nSubject: x\r\n\r\n\xe7\xa4\xbe\xe5\xa4\x96\xe7\xa7\x98 data";
         let result = kaname_render::render_with_dlp(raw, Some(&scanner));
         assert!(result.is_err(), "Block 判定でレンダリングが中断されるべき");
+    }
+
+    #[test]
+    fn edm_detection_fires_through_envelope_scanner() {
+        use crate::{Condition, Predicate, RuleBuilder};
+
+        // EDM フィンガープリントを登録
+        let mut fp = EdmFingerprints::new("test-salt", 1);
+        fp.register_dataset(&["secret@corp.example.com"]);
+
+        // EDM ルール作成
+        let edm_rule = RuleBuilder::new("edm-leak", "EDM customer email leak")
+            .inbound()
+            .block()
+            .priority(1)
+            .when(Condition::matches(Predicate::ExactDataMatch {
+                fingerprint_set_id: "customers".to_string(),
+            }))
+            .build();
+
+        let engine = DlpEngine::new(vec![edm_rule], PatternLibrary::default());
+        let mut scanner = EnvelopeScanner::new(engine);
+        scanner.add_edm_set("customers", fp);
+
+        // フィンガープリントに登録されたアドレスが本文に含まれる → Block
+        let env = parse_mail("FW", "Contact: secret@corp.example.com");
+        match scanner.scan(&env) {
+            DlpVerdict::Block { policy } => assert_eq!(policy, "EDM customer email leak"),
+            other => panic!("EDM 検出が機能しなかった: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn edm_empty_sets_allows_everything() {
+        use crate::{Condition, Predicate, RuleBuilder};
+
+        let edm_rule = RuleBuilder::new("edm-rule", "EDM rule")
+            .inbound()
+            .block()
+            .priority(1)
+            .when(Condition::matches(Predicate::ExactDataMatch {
+                fingerprint_set_id: "customers".to_string(),
+            }))
+            .build();
+
+        let engine = DlpEngine::new(vec![edm_rule], PatternLibrary::default());
+        // edm_sets を追加しない → EDM ルールは発火しない
+        let scanner = EnvelopeScanner::new(engine);
+        let env = parse_mail("FW", "Contact: secret@corp.example.com");
+        // フィンガープリント未登録なので Allow
+        assert_eq!(scanner.scan(&env), DlpVerdict::Allow,
+            "edm_sets 未登録なのに Block になった");
     }
 
     #[test]

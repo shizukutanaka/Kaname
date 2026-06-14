@@ -120,16 +120,21 @@ fn tokenize(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// salt 付きハッシュ (FxHash ベースの決定論的ハッシュ)。
+/// salt 付き SHA-256 ハッシュ。
 ///
-/// 注: 本番では SHA3-256 を使用。ここでは zero-dep のため
-/// 決定論的な 64bit ハッシュを使う。
+/// `DefaultHasher` は Rust バージョン間で不安定なため使用禁止。
+/// EDM フィンガープリントは永続化されるため、バージョン間の一貫性が必須。
+/// SHA-256 は衝突耐性があり、2^128 の誕生日境界を持つ。
 fn hash_token(token: &str, salt: &str) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    salt.hash(&mut hasher);
-    token.hash(&mut hasher);
-    hasher.finish()
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    // ドメイン分離: salt と token を NULL バイトで区切る
+    hasher.update(salt.as_bytes());
+    hasher.update(b"\x00");
+    hasher.update(token.as_bytes());
+    let digest = hasher.finalize();
+    // SHA-256 の先頭 8 バイトを u64 として使用 (比較用インデックス)
+    u64::from_be_bytes(digest[..8].try_into().unwrap_or([0u8; 8]))
 }
 
 // ============================================================================
