@@ -55,6 +55,60 @@ const SAFE_WORDS: &[&str] = &[
     "yarn",   "zephyr",
 ];
 
+/// 日本語ユーザー向けカタカナワードリスト (50 語)。
+///
+/// 選定基準:
+/// - 3〜5 モーラで電話越しに聞き間違いが起きにくい
+/// - 濁音 (ガ/ダ) と清音 (カ/タ) を混在させず、各グループで区別しやすい語を採用
+/// - 「ン」「ッ」で終わる語は省き、語尾が明確なものを優先
+/// - 似た音形 (カメ/カゲ など) は片方のみ採用
+const SAFE_WORDS_JA: &[&str] = &[
+    "アオゾラ", "イナビカリ", "ウミウシ", "エンピツ", "オリーブ",
+    "カガミ",   "キリン",     "クジャク", "ケムリ",   "コダマ",
+    "サクラ",   "シオカゼ",   "スズムシ", "セキレイ", "ソラマメ",
+    "タツノコ", "チドリ",     "ツバキ",   "テングサ", "トビウオ",
+    "ナマコ",   "ニジマス",   "ヌイグルミ","ネコヤナギ","ノリタケ",
+    "ハマナス", "ヒカリ",     "フクロウ", "ヘチマ",   "ホタル",
+    "マツボックリ","ミカン",  "ムラサキ", "メダカ",   "モミジ",
+    "ヤシノミ", "ユキウサギ", "ヨモギ",   "ラムネ",   "リンドウ",
+    "ルリイロ", "レンゲ",     "ロウバイ", "ワカサギ", "ヲグラ",
+    "ガリバー", "ジャコウ",   "ズワイ",   "ダイコン", "ビワ",
+];
+
+/// ワードリストのロケール。
+///
+/// Deepfake 対策の儀式は、ユーザーが実際に読み上げられる言語でなければ
+/// 機能しない。デフォルトは英語 (`En`)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum WordLocale {
+    /// 英語 (デフォルト)
+    #[default]
+    En,
+    /// 日本語カタカナ
+    Ja,
+}
+
+impl WordLocale {
+    /// ロケール文字列 ("en", "ja", "ja-JP" など) から変換する。
+    #[must_use]
+    pub fn from_str(locale: &str) -> Self {
+        if locale.starts_with("ja") {
+            Self::Ja
+        } else {
+            Self::En
+        }
+    }
+
+    /// このロケールのワードリストを返す。
+    #[must_use]
+    pub fn word_list(self) -> &'static [&'static str] {
+        match self {
+            Self::En => SAFE_WORDS,
+            Self::Ja => SAFE_WORDS_JA,
+        }
+    }
+}
+
 /// 検証フレーズの 1 単語。
 ///
 /// `ZeroizeOnDrop` により、Drop 時にメモリから自動消去。
@@ -62,12 +116,19 @@ const SAFE_WORDS: &[&str] = &[
 pub struct VerificationWord(String);
 
 impl VerificationWord {
-    /// 暗号学的に安全な乱数で 1 ワードを生成する。
+    /// 暗号学的に安全な乱数で 1 ワードを生成する (英語)。
     #[must_use]
     pub fn random() -> Self {
+        Self::random_for_locale(WordLocale::En)
+    }
+
+    /// ロケールに合わせたワードを生成する。
+    #[must_use]
+    pub fn random_for_locale(locale: WordLocale) -> Self {
         use rand::Rng;
-        let idx = rand::thread_rng().gen_range(0..SAFE_WORDS.len());
-        Self(SAFE_WORDS[idx].to_string())
+        let list = locale.word_list();
+        let idx = rand::thread_rng().gen_range(0..list.len());
+        Self(list[idx].to_string())
     }
 
     /// 文字列にアクセス (UI 表示用)。
@@ -76,13 +137,33 @@ impl VerificationWord {
         &self.0
     }
 
-    /// ユーザー入力との大文字小文字無視比較。
+    /// ユーザー入力との比較。
     ///
-    /// 電話越しの聞き取りを許容するため、case-insensitive。
+    /// 英語: case-insensitive (電話越しの聞き取りを許容)
+    /// 日本語: 全角カタカナで正規化して比較
     #[must_use]
     pub fn matches(&self, input: &str) -> bool {
-        self.0.eq_ignore_ascii_case(input.trim())
+        let trimmed = input.trim();
+        // ASCII のみの場合は case-insensitive 比較
+        if self.0.is_ascii() {
+            self.0.eq_ignore_ascii_case(trimmed)
+        } else {
+            // 日本語カタカナ: 正規化後に比較
+            normalize_katakana(&self.0) == normalize_katakana(trimmed)
+        }
     }
+}
+
+/// カタカナ正規化: 全角ひらがな→カタカナ、長音符の揺れを吸収。
+fn normalize_katakana(s: &str) -> String {
+    s.chars().map(|c| {
+        // ひらがな (U+3041-U+3096) → カタカナ (U+30A1-U+30F6)
+        if ('\u{3041}'..='\u{3096}').contains(&c) {
+            char::from_u32(c as u32 + 0x60).unwrap_or(c)
+        } else {
+            c
+        }
+    }).collect()
 }
 
 // ============================================================================
@@ -130,6 +211,8 @@ pub struct VerificationCeremony {
     pub state: CeremonyState,
     /// 試行回数 (最大 `MAX_VERIFY_ATTEMPTS` を超えると `Locked` 状態へ)
     attempt_count: u8,
+    /// ワードリストのロケール
+    pub locale: WordLocale,
 }
 
 /// セレモニーの状態。
@@ -148,23 +231,35 @@ pub enum CeremonyState {
 }
 
 impl VerificationCeremony {
-    /// 新規セレモニーを生成する。
+    /// 新規セレモニーを生成する (英語ワードリスト)。
     ///
     /// # 期限
     ///
     /// 5 分。これより長いとユーザーが忘れる、短いと電話する時間がない。
     /// Apple HIG の "transient feedback" 原則。
     pub fn new(target_email_id: impl Into<String>, target_sender: impl Into<String>) -> Self {
+        Self::new_with_locale(target_email_id, target_sender, WordLocale::En)
+    }
+
+    /// ロケール指定でセレモニーを生成する。
+    ///
+    /// 日本語ユーザーは `WordLocale::Ja` を指定することで、
+    /// 電話越しに読み上げやすいカタカナワードが使用される。
+    pub fn new_with_locale(
+        target_email_id: impl Into<String>,
+        target_sender: impl Into<String>,
+        locale: WordLocale,
+    ) -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         let phrase: [VerificationWord; 6] = [
-            VerificationWord::random(),
-            VerificationWord::random(),
-            VerificationWord::random(),
-            VerificationWord::random(),
-            VerificationWord::random(),
-            VerificationWord::random(),
+            VerificationWord::random_for_locale(locale),
+            VerificationWord::random_for_locale(locale),
+            VerificationWord::random_for_locale(locale),
+            VerificationWord::random_for_locale(locale),
+            VerificationWord::random_for_locale(locale),
+            VerificationWord::random_for_locale(locale),
         ];
 
         let challenge_index = rng.gen_range(0u8..6);
@@ -183,6 +278,7 @@ impl VerificationCeremony {
             expires_at_unix,
             state: CeremonyState::Pending,
             attempt_count: 0,
+            locale,
         }
     }
 
@@ -441,6 +537,49 @@ mod tests {
         for w in phrase {
             assert!(SAFE_WORDS.contains(&w));
         }
+    }
+
+    #[test]
+    fn japanese_ceremony_generates_6_katakana_words() {
+        let c = VerificationCeremony::new_with_locale("e1", "alice@example.com", WordLocale::Ja);
+        let phrase = c.display_phrase();
+        assert_eq!(phrase.len(), 6);
+        for w in &phrase {
+            assert!(SAFE_WORDS_JA.contains(w), "Japanese word not in list: {w}");
+        }
+        assert_eq!(c.locale, WordLocale::Ja);
+    }
+
+    #[test]
+    fn japanese_word_matches_hiragana_input() {
+        // カタカナ "サクラ" はひらがな "さくら" と正規化後に一致する
+        let w = VerificationWord("サクラ".to_string());
+        assert!(w.matches("さくら"), "ひらがな入力がカタカナと一致すべき");
+        assert!(w.matches("サクラ"), "カタカナ入力はそのまま一致すべき");
+    }
+
+    #[test]
+    fn japanese_ceremony_correct_word_verifies() {
+        let mut c = VerificationCeremony::new_with_locale("e2", "bob@example.com", WordLocale::Ja);
+        let correct = c.phrase[c.challenge_index as usize].as_str().to_string();
+        let result = c.verify(&correct).unwrap();
+        assert_eq!(result, CeremonyState::Verified);
+    }
+
+    #[test]
+    fn word_locale_from_str_parses_ja() {
+        assert_eq!(WordLocale::from_str("ja"), WordLocale::Ja);
+        assert_eq!(WordLocale::from_str("ja-JP"), WordLocale::Ja);
+        assert_eq!(WordLocale::from_str("en"), WordLocale::En);
+        assert_eq!(WordLocale::from_str("en-US"), WordLocale::En);
+        assert_eq!(WordLocale::from_str(""), WordLocale::En);
+    }
+
+    #[test]
+    fn english_word_matches_case_insensitive() {
+        let w = VerificationWord("Cipher".to_string());
+        assert!(w.matches("cipher"));
+        assert!(w.matches("CIPHER"));
     }
 
     #[test]

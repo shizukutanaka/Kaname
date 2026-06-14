@@ -50,6 +50,16 @@ pub enum CalendarRisk {
         /// 問題のリンク
         link: String,
     },
+    /// ATTACH プロパティに base64 エンコードされたバイナリが埋め込まれている
+    ///
+    /// HTML スマグリングの ICS 版: .ics に PE/スクリプトを base64 で埋め込み
+    /// カレンダーアプリが展開して実行させる手法。
+    EmbeddedBinaryAttachment {
+        /// 検出されたバイナリの種別 (PE, Script 等)
+        kind: String,
+        /// ATTACH プロパティ行の先頭部分
+        snippet: String,
+    },
 }
 
 /// カレンダー招待スキャン結果。
@@ -131,6 +141,11 @@ impl CalendarGuard {
                     }
                 }
             }
+        }
+
+        // 5. ATTACH;ENCODING=BASE64 バイナリ埋め込み検出
+        for risk in detect_binary_attachments(ics_content) {
+            risks.push(risk);
         }
 
         let risk_level = Self::calculate_level(&risks);
@@ -224,6 +239,62 @@ impl Default for CalendarGuard {
 // ============================================================================
 // ICS パーサーユーティリティ
 // ============================================================================
+
+/// ATTACH プロパティに base64 バイナリが埋め込まれているかを検出する。
+///
+/// 攻撃パターン:
+/// ```text
+/// ATTACH;ENCODING=BASE64;VALUE=BINARY:TVqQAAMAAAA... (MZ = PE ヘッダー)
+/// ATTACH;ENCODING=BASE64;VALUE=BINARY:77u/PCFET...  (BOM + HTML)
+/// ATTACH;ENCODING=BASE64;VALUE=BINARY:UEsDBBQA...   (PK = ZIP)
+/// ```
+fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
+    let mut risks = Vec::new();
+
+    // base64 デコード後のバイナリシグネチャ (先頭バイト)
+    // base64 の先頭文字でマジックバイトを推定 (完全デコードなしで高速判定)
+    const SUSPICIOUS_B64_PREFIXES: &[(&str, &str)] = &[
+        ("TVoA", "Windows PE (MZ ヘッダー)"),  // MZ\x00\x00
+        ("TVqQ", "Windows PE (MZ ヘッダー)"),  // MZ\x90\x00 (最一般的な PE)
+        ("TVpA", "Windows PE (MZ ヘッダー)"),  // MZ@\x00
+        ("UEsDB", "ZIP アーカイブ (PK ヘッダー)"),
+        ("7z/A", "7-Zip アーカイブ"),
+        ("AAAA", "汎用バイナリ (高エントロピー)"),
+        ("77u/PCFET", "BOM 付き HTML ドキュメント"),
+        ("77u/PHNj", "BOM 付き script タグ"),
+        ("IyEvYmlu", "シェバング行 (#!/bin)"),
+        ("cG93ZXJz", "PowerShell (powers...)"),
+        ("JAB", "PowerShell ($...)"),
+    ];
+
+    for line in content.lines() {
+        let upper = line.to_uppercase();
+        // ATTACH プロパティで ENCODING=BASE64 かつ VALUE=BINARY のもの
+        if upper.contains("ATTACH") && upper.contains("ENCODING=BASE64") && upper.contains("VALUE=BINARY") {
+            // コロン以降が base64 データ
+            let b64_data = line.split_once(':').map(|x| x.1.trim()).unwrap_or("").trim();
+            if b64_data.is_empty() {
+                continue;
+            }
+            // マジックバイトチェック
+            let mut detected_kind = None;
+            for (prefix, kind) in SUSPICIOUS_B64_PREFIXES {
+                if b64_data.starts_with(prefix) {
+                    detected_kind = Some(*kind);
+                    break;
+                }
+            }
+            // 未知バイナリでも ENCODING=BASE64;VALUE=BINARY は要注意
+            let kind = detected_kind.unwrap_or("不明なバイナリデータ").to_string();
+            let snippet = if b64_data.len() > 40 { &b64_data[..40] } else { b64_data };
+            risks.push(CalendarRisk::EmbeddedBinaryAttachment {
+                kind,
+                snippet: snippet.to_string(),
+            });
+        }
+    }
+    risks
+}
 
 fn extract_ics_urls(content: &str) -> Vec<String> {
     let mut urls = Vec::new();
@@ -396,5 +467,75 @@ END:VCALENDAR"#;
         let g = guard();
         let scan = g.analyze("BEGIN:VCALENDAR\nEND:VCALENDAR");
         assert_eq!(scan.risk_level, CalendarRiskLevel::Safe);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // ATTACH base64 バイナリ検出
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn detects_pe_binary_in_attach() {
+        let g = guard();
+        // TVqQ... は Windows PE (MZ\x90\x00) ヘッダーの base64
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Meeting\n\
+                   ATTACH;ENCODING=BASE64;VALUE=BINARY:TVqQAAMAAAAEAAAA//8AALgAAAAAAAAA\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
+            "PE バイナリが検出されるべき: {:?}", scan.risks
+        );
+        assert_ne!(scan.risk_level, CalendarRiskLevel::Safe);
+    }
+
+    #[test]
+    fn detects_zip_in_attach() {
+        let g = guard();
+        // UEsDB... は ZIP (PK ヘッダー) の base64
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   ATTACH;ENCODING=BASE64;VALUE=BINARY:UEsDBBQAAAAIAA==\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { kind, .. } if kind.contains("ZIP"))),
+            "ZIP が検出されるべき"
+        );
+    }
+
+    #[test]
+    fn url_attach_not_flagged_as_binary() {
+        let g = guard();
+        // URL 形式の ATTACH は base64 バイナリではない
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   ATTACH;FMTTYPE=application/pdf:https://example.com/doc.pdf\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
+            "URL 形式の ATTACH はバイナリとして検出しない"
+        );
+    }
+
+    #[test]
+    fn unknown_binary_attach_still_flagged() {
+        let g = guard();
+        // 未知シグネチャでも ENCODING=BASE64;VALUE=BINARY は Caution 扱い
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   ATTACH;ENCODING=BASE64;VALUE=BINARY:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
+            "未知バイナリも検出されるべき"
+        );
     }
 }
