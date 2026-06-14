@@ -233,6 +233,26 @@ impl SaasLinkInspector {
         None
     }
 
+    /// URL が短縮サービスを経由しているかを確認する。
+    ///
+    /// 短縮 URL はサンドボックス内で展開してから再評価すべき。
+    /// この関数は展開前の一次フィルターとして使用する。
+    #[must_use]
+    pub fn check_shortened(&self, url: &str) -> Option<DetectedSaasLink> {
+        if !is_shortened_url(url) {
+            return None;
+        }
+        Some(DetectedSaasLink {
+            url: url.to_string(),
+            platform: SaasPlatform::Other("shortened-url".to_string()),
+            risk: SaasLinkRisk::Warn,
+            reasons: vec![
+                "短縮 URL を検出 — 展開前の評価不可能。サンドボックスで展開後に再評価が必要".to_string(),
+            ],
+            sender: String::new(),
+        })
+    }
+
     /// SaaS リンクを評価する。
     #[must_use]
     pub fn evaluate(
@@ -241,6 +261,10 @@ impl SaasLinkInspector {
         sender: &str,
         history: &SaasHistory,
     ) -> Option<DetectedSaasLink> {
+        // 短縮 URL は SaaS 判定より先にチェック
+        if let Some(short_finding) = self.check_shortened(url) {
+            return Some(short_finding);
+        }
         let platform = self.identify_platform(url)?;
         let mut reasons = Vec::new();
         let mut risk = SaasLinkRisk::Safe;
@@ -313,6 +337,30 @@ impl Default for SaasLinkInspector {
     fn default() -> Self {
         Self::new()
     }
+}
+
+// ============================================================================
+// 短縮 URL 検出
+// ============================================================================
+
+/// 既知の短縮 URL サービスのドメイン一覧。
+const URL_SHORTENER_DOMAINS: &[&str] = &[
+    "bit.ly", "t.co", "tinyurl.com", "goo.gl", "ow.ly",
+    "buff.ly", "dlvr.it", "ift.tt", "short.link", "rebrand.ly",
+    "cutt.ly", "tiny.cc", "is.gd", "rb.gy", "clck.ru",
+    "qr.ae", "po.st", "shorturl.at",
+];
+
+/// 短縮 URL かどうかを判定する。
+///
+/// 短縮 URL は展開前の評価が不可能なため、`kaname-render` の
+/// サンドボックスで展開してから再評価する必要がある。
+#[must_use]
+pub fn is_shortened_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    URL_SHORTENER_DOMAINS
+        .iter()
+        .any(|d| lower.contains(&format!("://{d}/")) || lower.contains(&format!("://{d}")))
 }
 
 // ============================================================================
@@ -475,6 +523,36 @@ mod tests {
             &hist,
         ).unwrap_or_default();
         assert!(!detected.reasons.is_empty());
+    }
+
+    #[test]
+    fn shortened_url_detected_as_warn() {
+        assert!(is_shortened_url("https://bit.ly/3xAbCdE"));
+        assert!(is_shortened_url("https://t.co/XyZ123"));
+        assert!(is_shortened_url("https://tinyurl.com/yy4qr3m9"));
+        assert!(!is_shortened_url("https://docusign.net/sign"));
+        assert!(!is_shortened_url("https://example.com/path"));
+    }
+
+    #[test]
+    fn evaluate_returns_warn_for_shortened_url() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate("https://bit.ly/3xAbCdE", "attacker@evil.com", &hist);
+        let found = result.expect("should return a finding");
+        assert_eq!(found.risk, SaasLinkRisk::Warn, "短縮URL はWarn");
+        assert!(found.reasons[0].contains("短縮"));
+    }
+
+    #[test]
+    fn evaluate_non_shortened_saas_link_not_overridden() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        // 通常のドキュサインリンクは短縮URL検出でブロックされない
+        let result = inspector.evaluate("https://docusign.net/sign", "alice@corp.com", &hist);
+        let found = result.expect("should detect DocuSign");
+        // 短縮URLではないのでWarnではなく適切なリスク評価
+        assert_ne!(found.reasons[0], "短縮 URL を検出");
     }
 }
 
