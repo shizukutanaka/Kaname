@@ -157,7 +157,12 @@ impl CampaignGroup {
     }
 
     fn add_email(&mut self, email_id: impl Into<String>) {
-        self.email_ids.push(email_id.into());
+        let id = email_id.into();
+        // 重複追加を防ぐ (同一 email_id が複数回 push されると threat_score が水増しされる)
+        if self.email_ids.contains(&id) {
+            return;
+        }
+        self.email_ids.push(id);
         self.last_updated_unix = now_unix();
         // メール数が増えるほど脅威スコアが上がる (最大 1.0)
         #[allow(clippy::cast_precision_loss)]
@@ -569,6 +574,16 @@ mod tests {
         r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
         r.analyze(&email("e2", "y.com", vec!["example.com"]));
         assert!(!r.groups().is_empty());
+    }
+
+    #[test]
+    fn duplicate_email_id_does_not_inflate_threat_score() {
+        // 同じ email_id を 2 回渡しても threat_score は 1 通分しか計上されない
+        let mut g = CampaignGroup::new("pcr_test".to_string(), "e1");
+        let score_after_first = g.threat_score;
+        g.add_email("e1"); // 重複
+        assert_eq!(g.email_ids.len(), 1, "重複 email_id はカウントされない");
+        assert_eq!(g.threat_score, score_after_first, "重複追加でスコアが変わらない");
     }
 
     #[test]
