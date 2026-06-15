@@ -147,23 +147,42 @@ impl Default for DetectedSaasLink {
 // ============================================================================
 
 /// 送信者ごとの SaaS 利用履歴。
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SaasHistory {
     /// (送信者, プラットフォーム) → やり取り回数
     interactions: std::collections::HashMap<(String, SaasPlatform), u32>,
+    /// エントリ数上限 (OOM DoS 防止)
+    max_senders: usize,
+}
+
+impl Default for SaasHistory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SaasHistory {
     /// 新規履歴を作成。
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self { interactions: std::collections::HashMap::new(), max_senders: 100_000 }
     }
 
     /// やり取りを記録。
+    ///
+    /// `max_senders` に達した場合は新規送信者を無視する (既存送信者のカウント更新は許可)。
     pub fn record(&mut self, sender: impl Into<String>, platform: SaasPlatform) {
-        let key = (sender.into(), platform);
-        *self.interactions.entry(key).or_insert(0) += 1;
+        let sender = sender.into();
+        let key = (sender, platform);
+        // 既存エントリの更新は常に許可
+        if self.interactions.contains_key(&key) {
+            *self.interactions.entry(key).or_insert(0) += 1;
+            return;
+        }
+        // 新規エントリは容量内のみ受け入れる
+        if self.interactions.len() < self.max_senders {
+            self.interactions.insert(key, 1);
+        }
     }
 
     /// 送信者と特定プラットフォームのやり取り回数を取得。
@@ -254,6 +273,8 @@ impl SaasLinkInspector {
     }
 
     /// SaaS リンクを評価する。
+    ///
+    /// URL 長を 8192 文字に制限する (異常に長い URL による過剰な文字列検索 DoS 防止)。
     #[must_use]
     pub fn evaluate(
         &self,
@@ -261,6 +282,16 @@ impl SaasLinkInspector {
         sender: &str,
         history: &SaasHistory,
     ) -> Option<DetectedSaasLink> {
+        const MAX_URL_LEN: usize = 8192;
+        if url.len() > MAX_URL_LEN {
+            return Some(DetectedSaasLink {
+                url: url.chars().take(64).collect::<String>() + "…",
+                platform: SaasPlatform::Other("unknown".to_string()),
+                risk: SaasLinkRisk::Suspicious,
+                reasons: vec![format!("URL が異常に長い: {} 文字 (上限 {MAX_URL_LEN})", url.len())],
+                sender: sender.to_string(),
+            });
+        }
         // 短縮 URL は SaaS 判定より先にチェック
         if let Some(short_finding) = self.check_shortened(url) {
             return Some(short_finding);
@@ -373,7 +404,11 @@ fn extract_actual_domain(url: &str) -> Option<String> {
         .trim_start_matches("https://")
         .trim_start_matches("http://");
     let domain_end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
-    Some(without_scheme[..domain_end].to_lowercase())
+    let host_port = &without_scheme[..domain_end];
+    // ポート番号を除去: "docusign.com:8443" → "docusign.com"
+    // ポート付き正規ドメインを偽ドメインと誤判定する偽陽性を防ぐ
+    let domain = host_port.split(':').next().unwrap_or(host_port);
+    Some(domain.to_lowercase())
 }
 
 // ============================================================================
@@ -553,6 +588,63 @@ mod tests {
         let found = result.expect("should detect DocuSign");
         // 短縮URLではないのでWarnではなく適切なリスク評価
         assert_ne!(found.reasons[0], "短縮 URL を検出");
+    }
+
+    // ── ポート偽陽性テスト ────────────────────────────────────────────────
+
+    #[test]
+    fn ポート付き正規ドメインを偽ドメイン扱いにしない() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        // docusign.com:8443 は正規 DocuSign のポート変更版
+        // → 偽ドメインと誤判定 (Suspicious) しないこと
+        let result = inspector.evaluate("https://docusign.com:8443/sign", "sender@corp.com", &hist);
+        if let Some(found) = result {
+            assert_ne!(found.risk, SaasLinkRisk::Suspicious,
+                "正規ドメインのポート付き URL を偽ドメインと誤判定してはならない");
+        }
+    }
+
+    // ── URL 長さ制限テスト ────────────────────────────────────────────────
+
+    #[test]
+    fn 異常に長いurlをsuspiciousとして返す() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let long_url = format!("https://evil.com/{}", "a".repeat(10_000));
+        let result = inspector.evaluate(&long_url, "attacker@evil.com", &hist);
+        let found = result.expect("長すぎる URL は Suspicious を返すべき");
+        assert_eq!(found.risk, SaasLinkRisk::Suspicious,
+            "8192 文字超の URL は Suspicious でなければならない");
+        assert!(found.reasons[0].contains("異常に長い"),
+            "理由に長さの説明が含まれるべき: {:?}", found.reasons);
+    }
+
+    // ── SaasHistory 容量制限テスト ────────────────────────────────────────
+
+    #[test]
+    fn history_容量制限で新規送信者を拒否する() {
+        let mut hist = SaasHistory::new();
+        hist.max_senders = 3;
+        hist.record("a@a.com", SaasPlatform::GoogleDrive);
+        hist.record("b@b.com", SaasPlatform::GoogleDrive);
+        hist.record("c@c.com", SaasPlatform::GoogleDrive);
+        // 容量上限到達 → 新規送信者は無視
+        hist.record("d@d.com", SaasPlatform::GoogleDrive);
+        assert_eq!(hist.count("d@d.com", SaasPlatform::GoogleDrive), 0,
+            "上限到達後の新規送信者はカウントされてはならない");
+    }
+
+    #[test]
+    fn history_容量上限でも既存送信者カウントは更新する() {
+        let mut hist = SaasHistory::new();
+        hist.max_senders = 1;
+        hist.record("alice@corp.com", SaasPlatform::DocuSign);
+        // 容量上限 (1) 到達後でも alice のカウント更新は許可
+        hist.record("alice@corp.com", SaasPlatform::DocuSign);
+        hist.record("alice@corp.com", SaasPlatform::DocuSign);
+        assert_eq!(hist.count("alice@corp.com", SaasPlatform::DocuSign), 3,
+            "既存送信者のカウントは上限後も更新されるべき");
     }
 }
 
