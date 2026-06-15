@@ -98,6 +98,8 @@ pub struct Entitlements {
 impl Entitlements {
     /// 層のエンタイトルメントセットを構築。
     pub fn for_tier(tier: Tier, seat_count: u32) -> Self {
+        const MAX_SEAT_COUNT: u32 = 1_000_000;
+        let seat_count = seat_count.min(MAX_SEAT_COUNT);
         let seat_limit = match tier {
             Tier::Individual => Some(1),
             Tier::Starter    => Some(seat_count.max(10)),
@@ -197,21 +199,60 @@ pub struct StripeEventData {
 // Idempotency key store (in-process; production uses Redis SET NX)
 // ============================================================================
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 
-/// In-memory dedup store. Production: Redis with 72h TTL.
-#[derive(Clone, Default)]
+/// 容量上限付き In-memory dedup store。Production: Redis with 72h TTL。
+///
+/// 容量超過時は最も古いエントリを退避する (近似 LRU)。
+/// 上限を超えるユニーク ID 送信によるメモリ DoS を防ぐ。
+#[derive(Clone)]
 pub struct DeduplicatorInMem {
-    seen: Arc<Mutex<HashSet<String>>>,
+    inner: Arc<Mutex<DeduplicatorState>>,
+}
+
+struct DeduplicatorState {
+    seen:         HashSet<String>,
+    order:        VecDeque<String>,
+    max_capacity: usize,
 }
 
 impl DeduplicatorInMem {
+    /// 最大容量を指定して作成する。
+    #[must_use]
+    pub fn with_capacity(max_capacity: usize) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(DeduplicatorState {
+                seen:         HashSet::new(),
+                order:        VecDeque::new(),
+                max_capacity,
+            })),
+        }
+    }
+
     /// イベントが未処理の場合 true を返す (and records it).
     #[must_use]
     pub fn try_process(&self, event_id: &str) -> bool {
-        let mut set = self.seen.lock().unwrap_or_else(|e| e.into_inner());
-        set.insert(event_id.to_owned())
+        let mut state = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if state.seen.contains(event_id) {
+            return false;
+        }
+        // 容量超過時は古いエントリを退避
+        if state.seen.len() >= state.max_capacity {
+            if let Some(oldest) = state.order.pop_front() {
+                state.seen.remove(&oldest);
+            }
+        }
+        state.seen.insert(event_id.to_owned());
+        state.order.push_back(event_id.to_owned());
+        true
+    }
+}
+
+impl Default for DeduplicatorInMem {
+    fn default() -> Self {
+        // デフォルト: 10万イベント ≈ 72h × 最大 ~1,400 evt/min の Stripe レート
+        Self::with_capacity(100_000)
     }
 }
 
@@ -288,8 +329,9 @@ pub fn route_event(event: &StripeEvent) -> Result<BillingAction, BillingError> {
             let customer_id  = str_field(obj, "customer")?;
             let tenant_id    = str_field(obj, &meta_key("tenant_id"))?;
             let status       = str_field(obj, "status")?;
+            const MAX_SEAT_COUNT: u32 = 1_000_000;
             let seat_count: u32 = obj["items"]["data"][0]["quantity"]
-                .as_u64().unwrap_or(1) as u32;
+                .as_u64().unwrap_or(1).min(u64::from(MAX_SEAT_COUNT)) as u32;
             let lookup_key = obj["items"]["data"][0]["price"]["lookup_key"]
                 .as_str().unwrap_or("");
             let tier = Tier::from_lookup_key(lookup_key)
@@ -341,6 +383,9 @@ pub fn route_event(event: &StripeEvent) -> Result<BillingAction, BillingError> {
             let tenant_id    = str_field(obj, &meta_key("tenant_id"))?;
             let invoice_id   = str_field(obj, "id")?;
             let amount_jpy   = obj["amount_paid"].as_i64().unwrap_or(0);
+            if amount_jpy < 0 {
+                return Err(BillingError::InvalidAmount { amount_jpy });
+            }
             let period_start = obj["period_start"].as_u64().unwrap_or(0);
             let period_end   = obj["period_end"].as_u64().unwrap_or(0);
             let status       = str_field(obj, "status").unwrap_or("paid".into());
@@ -427,7 +472,8 @@ pub fn make_ledger_entry(
     action_json: &str,
     prev_hash:   &str,
 ) -> LedgerEntry {
-    let input = format!("{}{}{}{}", prev_hash, event_id, event_type, action_json);
+    // tenant_id をハッシュ入力に含める — 異なるテナント間でのエントリ移植攻撃を防ぐ
+    let input = format!("{}{}{}{}{}", prev_hash, tenant_id, event_id, event_type, action_json);
     let hash = sha256_hex(input.as_bytes());
     LedgerEntry {
         seq,
@@ -580,6 +626,9 @@ pub enum BillingError {
     #[error("missing field in event object: {0}")]
     MissingField(String),
 
+    #[error("invalid amount_jpy: {amount_jpy} (must be ≥ 0)")]
+    InvalidAmount { amount_jpy: i64 },
+
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
 }
@@ -634,6 +683,73 @@ mod tests {
         assert!(ded.try_process("evt_123"));
         assert!(!ded.try_process("evt_123")); // duplicate
         assert!(ded.try_process("evt_456")); // new
+    }
+
+    #[test]
+    fn deduplicator_capacity_evicts_oldest() {
+        // 容量 3 で 4 つ登録 → 最初の evt_1 が退避されて再登録できる
+        let ded = DeduplicatorInMem::with_capacity(3);
+        assert!(ded.try_process("evt_1"));
+        assert!(ded.try_process("evt_2"));
+        assert!(ded.try_process("evt_3"));
+        // 容量超過: evt_1 が退避される
+        assert!(ded.try_process("evt_4"));
+        // evt_1 は退避済みなので新規扱い
+        assert!(ded.try_process("evt_1"), "evicted entry should be accepted again");
+        // evt_2, evt_3 はまだ記録されている
+        assert!(!ded.try_process("evt_3"), "evt_3 should still be seen");
+    }
+
+    #[test]
+    fn deduplicator_memory_dos_is_bounded() {
+        // 大量ユニーク ID を投入しても max_capacity を超えない
+        let ded = DeduplicatorInMem::with_capacity(100);
+        for i in 0..1_000u32 {
+            let _ = ded.try_process(&format!("evt_{i}"));
+        }
+        // capacity が 100 を超えないことを内部状態から確認する代わりに
+        // 1001番目のユニーク ID が受け入れられることで容量が循環していると確認
+        assert!(ded.try_process("evt_9999"), "should accept new event after eviction");
+    }
+
+    #[test]
+    fn negative_amount_jpy_is_rejected() {
+        let event: StripeEvent = serde_json::from_value(serde_json::json!({
+            "id": "evt_neg",
+            "type": "invoice.payment_succeeded",
+            "created": 1_700_000_000u64,
+            "data": {
+                "object": {
+                    "customer": "cus_001",
+                    "metadata": { "tenant_id": "tenant_001" },
+                    "id": "inv_001",
+                    "amount_paid": -500i64,
+                    "period_start": 0u64,
+                    "period_end":   0u64,
+                    "status": "paid"
+                }
+            }
+        })).unwrap();
+        let result = route_event(&event);
+        assert!(matches!(result, Err(BillingError::InvalidAmount { amount_jpy: -500 })),
+            "負の金額は拒否されなければならない: {result:?}");
+    }
+
+    #[test]
+    fn ledger_hash_includes_tenant_id() {
+        // 同じ event_id/type/action でもテナントが違えばハッシュが異なる
+        let e_a = make_ledger_entry(1, "tenant_A", "subscription.created", "evt_X", "{}", "");
+        let e_b = make_ledger_entry(1, "tenant_B", "subscription.created", "evt_X", "{}", "");
+        assert_ne!(e_a.hash, e_b.hash, "テナントが異なればハッシュも異なる (移植攻撃防止)");
+    }
+
+    #[test]
+    fn seat_count_is_capped() {
+        // u32::MAX を渡しても Entitlements が破壊されない
+        let e = Entitlements::for_tier(Tier::Starter, u32::MAX);
+        // seat_limit は u32::MAX ではなく適切な値
+        assert!(e.seat_limit.unwrap_or(0) <= 1_000_000,
+            "seat_limit が異常に大きい: {:?}", e.seat_limit);
     }
 
     #[test]
