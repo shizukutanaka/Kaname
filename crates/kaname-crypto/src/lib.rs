@@ -378,6 +378,11 @@ impl HybridX25519MlKem {
         }
         let pqc_bytes = ct.bytes[pqc_start..pqc_start + pqc_len].to_vec();
 
+        // 末尾にゴミバイトがある場合は拒否 (暗号文可鍛性攻撃: 異なる CT で同じ SS)
+        if pqc_start + pqc_len != ct.bytes.len() {
+            return Err(CryptoError::InvalidFormat("hybrid ciphertext: trailing bytes"));
+        }
+
         let cls_ct = Ciphertext { alg: AlgId::X25519, bytes: cls_bytes };
         let pqc_ct = Ciphertext { alg: AlgId::MlKem768, bytes: pqc_bytes };
 
@@ -475,7 +480,7 @@ pub(crate) fn combine_kem_secrets(classical: &ClassicalSs, pqc: &PqcSs) -> Share
     SharedSecret(okm)
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn combine_shared_secrets(c: &SharedSecret, p: &SharedSecret) -> SharedSecret {
     // HKDF-SHA-256 で 2 つの KEM 共有秘密を結合する。
     // IKM = c || p (64 バイト)、info = b"kaname-xwing-v1"
@@ -531,11 +536,8 @@ pub enum CryptoError {
 }
 
 fn blake3_hash(bytes: &[u8]) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    for (i, b) in bytes.iter().enumerate() {
-        out[i % 32] ^= *b;
-    }
-    out
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes).into()
 }
 
 // ============================================================================
@@ -544,6 +546,31 @@ fn blake3_hash(bytes: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    // テスト用の最小限 KEM 実装。generate/encapsulate/decapsulate はランダムバイトを返す。
+    struct MockKem {
+        alg: AlgId,
+        ct_len: usize,
+    }
+    impl Kem for MockKem {
+        fn algorithm(&self) -> AlgId { self.alg }
+        fn generate(&self) -> Result<(PrivateKeyHandle<KemKey>, PublicKey<KemKey>), CryptoError> {
+            Ok((
+                PrivateKeyHandle { _handle_id: [0x01u8; 32], alg: self.alg, _kind: PhantomData },
+                PublicKey { bytes: vec![0x02u8; 32], alg: self.alg, _kind: PhantomData },
+            ))
+        }
+        fn encapsulate(&self, _pk: &PublicKey<KemKey>) -> Result<(SharedSecret, Ciphertext), CryptoError> {
+            Ok((
+                SharedSecret([0xAAu8; 32]),
+                Ciphertext { alg: self.alg, bytes: vec![0xBBu8; self.ct_len] },
+            ))
+        }
+        fn decapsulate(&self, _sk: &PrivateKeyHandle<KemKey>, _ct: &Ciphertext) -> Result<SharedSecret, CryptoError> {
+            Ok(SharedSecret([0xAAu8; 32]))
+        }
+    }
 
     #[test]
     fn validate_x25519_rejects_all_zero() {
@@ -565,8 +592,6 @@ mod tests {
         let ss = SharedSecret([0xFF; 32]);
         assert!(validate_x25519_output(&ss).is_ok());
     }
-
-    use super::*;
 
     #[test]
     fn alg_codes_are_stable() {
@@ -608,8 +633,49 @@ mod tests {
         };
         let fp1 = pk.fingerprint();
         let fp2 = pk.fingerprint();
-        assert_eq!(fp1, fp2);
-        assert!(fp1.contains(' ')); // formatted with spaces
+        assert_eq!(fp1, fp2, "フィンガープリントは決定的でなければならない");
+        assert!(fp1.contains(' '), "スペース区切りフォーマット");
+        // SHA-256 ベースなので XOR スタブ ("00 00...") にならない
+        assert!(!fp1.starts_with("00 00"), "XOR スタブが残っている");
+        assert_eq!(fp1.len(), 19, "8 bytes hex = XXXX XXXX XXXX XXXX = 19文字");
+    }
+
+    #[test]
+    fn fingerprint_changes_with_different_keys() {
+        let pk1 = HybridPublicKey {
+            classical: PublicKey { bytes: vec![1u8; 32], alg: AlgId::X25519, _kind: PhantomData },
+            pqc: PublicKey { bytes: vec![2u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+        };
+        let pk2 = HybridPublicKey {
+            classical: PublicKey { bytes: vec![3u8; 32], alg: AlgId::X25519, _kind: PhantomData },
+            pqc: PublicKey { bytes: vec![2u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+        };
+        assert_ne!(pk1.fingerprint(), pk2.fingerprint(),
+            "異なる鍵は異なるフィンガープリントを持つ");
+    }
+
+    #[test]
+    fn decapsulate_rejects_trailing_bytes() {
+        // 正常な暗号文を作り末尾に余分なバイトを追加 → 可鍛性攻撃を拒否
+        let kem = HybridX25519MlKem {
+            classical: Box::new(MockKem { alg: AlgId::X25519, ct_len: 32 }),
+            pqc:       Box::new(MockKem { alg: AlgId::MlKem768, ct_len: 1088 }),
+        };
+        // 正常な CT を手動で構築
+        let cls_len: u16 = 32;
+        let pqc_len: u16 = 1088;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&cls_len.to_be_bytes());
+        bytes.extend_from_slice(&vec![0xABu8; 32]);
+        bytes.extend_from_slice(&pqc_len.to_be_bytes());
+        bytes.extend_from_slice(&vec![0xCDu8; 1088]);
+        bytes.push(0xFF); // 末尾ゴミバイト
+
+        let ct = Ciphertext { alg: AlgId::HybridX25519MlKem768, bytes };
+        let keypair = kem.generate().unwrap();
+        let result = kem.decapsulate(&keypair, &ct);
+        assert!(matches!(result, Err(CryptoError::InvalidFormat(_))),
+            "末尾バイトがある暗号文は拒否されなければならない: {result:?}");
     }
 
     #[test]
