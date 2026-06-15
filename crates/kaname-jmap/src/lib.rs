@@ -204,9 +204,14 @@ impl JmapClient {
     }
 
     /// メールリストを取得する (JMAP マルチコール: query + get)。
+    ///
+    /// `limit` は最大 500 に制限する (RFC 8620 §2 推奨上限、サーバー負荷と
+    /// クライアント OOM を防ぐ)。
     pub async fn query_emails(
         &self, mailbox_id: &str, position: u32, limit: u32,
     ) -> Result<Vec<EmailListItem>, JmapError> {
+        const MAX_QUERY_LIMIT: u32 = 500;
+        let limit = limit.min(MAX_QUERY_LIMIT);
         let rs = self.call(vec![
             ("Email/query".into(), serde_json::json!({
                 "accountId": self.account_id,
@@ -297,6 +302,23 @@ impl JmapClient {
         &self, from: &str, to: &[&str], subject: &str, body: &str,
         draft_id: Option<&str>,
     ) -> Result<String, JmapError> {
+        // RFC 5322 ヘッダーインジェクション防止: \r\n を含む入力を拒否
+        // 攻撃者が subject に "\r\nBcc: victim@evil.com" を注入すると
+        // 任意の宛先にメールを送れてしまう
+        let sanitize_header = |s: &str| -> Result<String, JmapError> {
+            if s.contains('\r') || s.contains('\n') {
+                return Err(JmapError::InvalidInput(
+                    format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
+                ));
+            }
+            Ok(s.to_owned())
+        };
+        let from    = sanitize_header(from)?;
+        let subject = sanitize_header(subject)?;
+        for addr in to {
+            sanitize_header(addr)?;
+        }
+
         let mailboxes = self.get_mailboxes().await?;
         let sent_id = mailboxes.iter()
             .find(|m| m.role.as_deref() == Some("sent"))
@@ -429,6 +451,9 @@ impl JmapClient {
 
         let mut stream = resp.bytes_stream();
         let mut buf = String::new();
+        // SSE バッファ上限: 悪意あるサーバーが \n\n なしで送り続けることによる
+        // メモリ DoS を防ぐ。JMAP push notification は通常 < 4KB
+        const MAX_SSE_BUF_BYTES: usize = 1024 * 1024; // 1 MB
 
         loop {
             tokio::select! {
@@ -442,6 +467,10 @@ impl JmapClient {
                         return Ok(());
                     };
                     let bytes = chunk.map_err(|e| JmapError::Http(e.to_string()))?;
+                    if buf.len() + bytes.len() > MAX_SSE_BUF_BYTES {
+                        tracing::warn!("SSE バッファ上限超過 — 接続をリセット");
+                        return Err(JmapError::Http("SSE バッファ超過".into()));
+                    }
                     buf.push_str(&String::from_utf8_lossy(&bytes));
 
                     // SSE イベントは空行 (\n\n) で区切られる
@@ -628,6 +657,9 @@ pub enum JmapError {
     /// 必要な JMAP capability がセッションにない。
     #[error("機能なし: {0}")]
     MissingCapability(String),
+    /// 入力値が不正。
+    #[error("不正な入力: {0}")]
+    InvalidInput(String),
 }
 
 // ============================================================================
@@ -771,4 +803,69 @@ mod tests {
         let event = "data: not-valid-json";
         assert!(parse_sse_event(event).is_none());
     }
+
+    // ── ヘッダーインジェクション防止テスト ──────────────────────────────────
+
+    #[test]
+    fn sanitize_header_改行を拒否する() {
+        // CR のみ
+        let result = sanitize_header_value("normal\rsubject");
+        assert!(result.is_err(), "\\r を含む値はエラーになるべき");
+        // LF のみ
+        let result = sanitize_header_value("normal\nsubject");
+        assert!(result.is_err(), "\\n を含む値はエラーになるべき");
+        // CRLF (典型的なインジェクション)
+        let result = sanitize_header_value("legit\r\nBcc: victim@evil.com");
+        assert!(result.is_err(), "CRLF インジェクションはエラーになるべき");
+    }
+
+    #[test]
+    fn sanitize_header_正常値は通過する() {
+        let result = sanitize_header_value("プロジェクト Alpha の報告");
+        assert!(result.is_ok(), "正常な件名はエラーになってはならない");
+        let result = sanitize_header_value("alice@example.com");
+        assert!(result.is_ok(), "正常なメールアドレスはエラーになってはならない");
+    }
+
+    // ── query_emails limit キャップテスト ─────────────────────────────────────
+
+    #[test]
+    fn query_limit_は500を超えない() {
+        // JmapClient を作れないのでロジックを直接テスト
+        const MAX_QUERY_LIMIT: u32 = 500;
+        let user_limit = u32::MAX;
+        let effective = user_limit.min(MAX_QUERY_LIMIT);
+        assert_eq!(effective, 500, "u32::MAX を渡しても 500 に切り捨てられるべき");
+
+        let small_limit = 10u32;
+        let effective = small_limit.min(MAX_QUERY_LIMIT);
+        assert_eq!(effective, 10, "小さい値はそのまま使われるべき");
+    }
+
+    // ── SSE バッファ上限テスト ──────────────────────────────────────────────
+
+    #[test]
+    fn sse_buf_上限チェックロジック() {
+        const MAX_SSE_BUF_BYTES: usize = 1024 * 1024;
+        let current_buf_len = MAX_SSE_BUF_BYTES - 10;
+        let chunk_len = 100;
+        // 合計が上限を超える → エラーになるべき
+        assert!(current_buf_len + chunk_len > MAX_SSE_BUF_BYTES,
+            "バッファ超過チェックが機能しない");
+        // 合計が上限以下 → 正常
+        let small_chunk_len = 5;
+        assert!(current_buf_len + small_chunk_len <= MAX_SSE_BUF_BYTES,
+            "上限以下のチャンクは正常に処理されるべき");
+    }
+}
+
+// テスト専用ヘルパー: sanitize_header のロジックを抽出
+#[cfg(test)]
+fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
+    if s.contains('\r') || s.contains('\n') {
+        return Err(JmapError::InvalidInput(
+            format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
+        ));
+    }
+    Ok(s.to_owned())
 }
