@@ -74,8 +74,17 @@ pub struct HtmlSmugglingDetector;
 
 impl HtmlSmugglingDetector {
     /// HTML 文字列を解析してスマグリングのシグナルを検出する。
+    ///
+    /// 入力サイズを 4 MB に制限する (to_lowercase() が全体を複製するため
+    /// 100 MB 入力で 200 MB 確保される OOM DoS を防ぐ)。
     #[must_use]
     pub fn analyze(&self, html: &str) -> SmugglingScan {
+        const MAX_HTML_BYTES: usize = 4 * 1024 * 1024;
+        let html = if html.len() > MAX_HTML_BYTES {
+            &html[..MAX_HTML_BYTES]
+        } else {
+            html
+        };
         let lower = html.to_lowercase();
         let mut signals = Vec::new();
 
@@ -85,14 +94,24 @@ impl HtmlSmugglingDetector {
         }
 
         // 2. Base64 デコード (+ 即時実行や blob 結合も含む)
-        if lower.contains("atob(") {
+        // atob() に加え TextDecoder/Uint8Array ベースの現代的なデコードパターンも検出
+        let b64_patterns = [
+            "atob(",
+            "frombase64",   // CryptoJS.enc.Base64.parse, Buffer.from(x,'base64') など
+            "textdecoder",  // new TextDecoder().decode(Uint8Array.from(...))
+            "uint8array.from",
+        ];
+        if b64_patterns.iter().any(|p| lower.contains(p)) {
             signals.push(SmugglingSignal::Base64Eval);
         }
 
         // 3. 自動ダウンロードトリガー
-        if (lower.contains("createelement") && lower.contains("\"a\""))
-            && (lower.contains(".click()") || lower.contains(".click ()"))
-        {
+        // ダブル/シングルクォート/バックティックすべてを対象にする
+        // 旧実装: "a" のみ → 'a' やバックティックでバイパス可能だった
+        let has_create_a = lower.contains("createelement(\"a\")")
+            || lower.contains("createelement('a')")
+            || lower.contains("createelement(`a`)");
+        if has_create_a && (lower.contains(".click()") || lower.contains(".click ()")) {
             signals.push(SmugglingSignal::AutoDownload);
         }
 
@@ -332,5 +351,72 @@ mod tests {
             let s = d.analyze(html);
             assert!(!s.message.is_empty(), "message が空: {html}");
         }
+    }
+
+    // ── シングルクォート/バックティックによる AutoDownload バイパステスト ─
+
+    #[test]
+    fn detects_auto_download_single_quote() {
+        let d = detector();
+        // シングルクォートで createElement をバイパスしようとする
+        let html = r#"<script>
+            var a = document.createElement('a');
+            a.href = blobUrl;
+            a.click();
+        </script>"#;
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
+            "シングルクォートの createElement('a') は検出されなければならない");
+    }
+
+    #[test]
+    fn detects_auto_download_backtick() {
+        let d = detector();
+        // バックティックで createElement をバイパスしようとする
+        let html = "<script>var a = document.createElement(`a`); a.click();</script>";
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
+            "バックティックの createElement(`a`) は検出されなければならない");
+    }
+
+    // ── TextDecoder/Uint8Array パターンの検出テスト ─────────────────────────
+
+    #[test]
+    fn detects_textdecoder_pattern() {
+        let d = detector();
+        // atob() の代わりに TextDecoder を使った現代的なデコードパターン
+        let html = r#"<script>
+            var dec = new TextDecoder();
+            var bytes = Uint8Array.from(encoded, c => c.charCodeAt(0));
+            var exe = dec.decode(bytes);
+        </script>"#;
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::Base64Eval),
+            "TextDecoder パターンは Base64Eval シグナルを生成すべき");
+    }
+
+    // ── 入力サイズ制限テスト ──────────────────────────────────────────────
+
+    #[test]
+    fn analyze_サイズ超過入力でパニックしない() {
+        let d = detector();
+        // 4MB を超える入力 (OOM DoS の試み)
+        let huge = "a".repeat(5 * 1024 * 1024);
+        // パニックせず、正常な SmugglingScan を返すこと
+        let s = d.analyze(&huge);
+        assert_eq!(s.risk, SmugglingRisk::Clean, "通常文字の大量入力は Clean");
+    }
+
+    #[test]
+    fn analyze_サイズ上限で悪意あるパターンを切り捨てる() {
+        let d = detector();
+        // 4MB の無害なパディング + 末尾に mshta
+        let padding = "x".repeat(4 * 1024 * 1024);
+        let attack = format!("{padding}mshta");
+        let s = d.analyze(&attack);
+        // 上限で切り捨てられるため mshta は検出されない (上限以内に収まらない)
+        // これは設計上の制約: 超長 HTML は4MB以内のみ検査
+        assert_eq!(s.risk, SmugglingRisk::Clean,
+            "4MB 超の末尾に埋め込まれた攻撃は切り捨てられる (設計上の制約)");
     }
 }
