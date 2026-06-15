@@ -55,8 +55,6 @@ pub struct AitmDetector {
     phaas_patterns: Vec<&'static str>,
     /// リバースプロキシ特有のパス
     proxy_paths: Vec<&'static str>,
-    /// セッション捕捉に使われる URL パラメーター名
-    session_params: Vec<&'static str>,
 }
 
 impl AitmDetector {
@@ -96,15 +94,6 @@ impl AitmDetector {
                 "/mfa-relay",
                 "/forward",
             ],
-            session_params: vec![
-                "id_token",
-                "access_token",
-                "session_token",
-                "auth_token",
-                "code",
-                "state",
-                "nonce",
-            ],
         }
     }
 
@@ -116,20 +105,41 @@ impl AitmDetector {
         let lower = url.to_lowercase();
 
         // 1. セッション捕捉パラメーター
-        for param in &self.session_params {
-            // ?id_token= または &id_token= の形式
+        // 高リスクパラメーター (トークン類) は単独でも危険
+        let high_risk_params = ["id_token", "access_token", "session_token", "auth_token"];
+        // 低リスクパラメーター (code/state/nonce は正当な OAuth でも使われる)
+        // → 正規ドメインからのみなら Safe、そうでなければ加点
+        let low_risk_params = ["code", "state", "nonce"];
+
+        let domain = extract_domain_from_url(&lower);
+        let is_legitimate_domain = self.legitimate_auth_domains.iter()
+            .any(|legit| self.is_legitimate_subdomain(&domain, legit));
+
+        for param in &high_risk_params {
             let patterns = [format!("?{param}="), format!("&{param}=")];
             for pat in &patterns {
                 if lower.contains(pat) {
                     score += 25;
-                    signals.push(format!("URL に認証パラメーター含む: {param}"));
+                    signals.push(format!("URL に高リスク認証パラメーター含む: {param}"));
                     break;
+                }
+            }
+        }
+        // code/state/nonce は非正規ドメインの場合のみ加点
+        if !is_legitimate_domain {
+            for param in &low_risk_params {
+                let patterns = [format!("?{param}="), format!("&{param}=")];
+                for pat in &patterns {
+                    if lower.contains(pat) {
+                        score += 15;
+                        signals.push(format!("非正規ドメインで OAuth パラメーター検出: {param}"));
+                        break;
+                    }
                 }
             }
         }
 
         // 2. 正規ブランドを装った偽ドメイン
-        let domain = extract_domain_from_url(&lower);
         for legit in &self.legitimate_auth_domains {
             if domain.contains(legit) && !self.is_legitimate_subdomain(&domain, legit) {
                 score += 50;
@@ -295,5 +305,38 @@ mod tests {
         for s in &r.signals {
             assert!(!s.is_empty());
         }
+    }
+
+    #[test]
+    fn github_oauth_callback_is_safe() {
+        // 正規 GitHub OAuth コールバック: ?code= は正規ドメインなら Safe
+        let d = AitmDetector::new();
+        let r = d.analyze("https://github.com/login/oauth/authorize?code=abc123&state=xyz");
+        assert_eq!(r.verdict, AitmVerdict::Safe,
+            "正規 GitHub OAuth コールバックは Safe であるべき: score={} signals={:?}",
+            r.score, r.signals);
+    }
+
+    #[test]
+    fn unknown_domain_with_code_param_is_caution() {
+        // 非正規ドメインで ?code= → Caution 以上
+        let d = AitmDetector::new();
+        let r = d.analyze("https://suspicious-relay.net/callback?code=abc123&state=xyz");
+        assert!(
+            r.verdict == AitmVerdict::Caution || r.verdict == AitmVerdict::Dangerous,
+            "非正規ドメインの code/state は Caution 以上であるべき: score={}", r.score
+        );
+    }
+
+    #[test]
+    fn legitimate_microsoft_with_state_is_safe() {
+        // microsoftonline.com/authorize?state= は正規 OAuth → Safe
+        let d = AitmDetector::new();
+        let r = d.analyze(
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=x&state=abc&nonce=def"
+        );
+        assert_eq!(r.verdict, AitmVerdict::Safe,
+            "正規 Microsoft OAuth フローは Safe であるべき: score={} signals={:?}",
+            r.score, r.signals);
     }
 }
