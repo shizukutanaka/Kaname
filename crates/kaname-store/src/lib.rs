@@ -350,27 +350,41 @@ impl Store {
     ) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
-        // 前のエントリのハッシュを取得
-        let prev_hash: String = conn.query_row(
-            "SELECT COALESCE(hash, '') FROM audit_log ORDER BY seq DESC LIMIT 1;",
-            [],
-            |row| row.get(0),
-        ).unwrap_or_default();
-
         let payload_json = serde_json::to_string(payload)
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
-        // ハッシュ計算: SHA-256(prev_hash || event_type || payload_json)
-        let hash_input = format!("{}{}{}", prev_hash, event_type, payload_json);
-        let hash = sha256_hex(hash_input.as_bytes());
+        // prev_hash 取得と INSERT を EXCLUSIVE トランザクションで原子化する。
+        // これにより並行 audit() 呼び出しがハッシュチェーンを破損しない。
+        conn.execute_batch("BEGIN EXCLUSIVE;")
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
-        conn.execute(
-            "INSERT INTO audit_log (account_id, event_type, payload_json, prev_hash, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5);",
-            params![account_id, event_type, payload_json, prev_hash, hash],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        let result = (|| -> Result<(), StoreError> {
+            let prev_hash: String = conn.query_row(
+                "SELECT COALESCE(hash, '') FROM audit_log ORDER BY seq DESC LIMIT 1;",
+                [],
+                |row| row.get(0),
+            ).unwrap_or_default();
 
-        Ok(())
+            // ハッシュ計算: SHA-256(prev_hash || event_type || payload_json)
+            let hash_input = format!("{}{}{}", prev_hash, event_type, payload_json);
+            let hash = sha256_hex(hash_input.as_bytes());
+
+            conn.execute(
+                "INSERT INTO audit_log (account_id, event_type, payload_json, prev_hash, hash)
+                 VALUES (?1, ?2, ?3, ?4, ?5);",
+                params![account_id, event_type, payload_json, prev_hash, hash],
+            ).map_err(|e| StoreError::Db(e.to_string()))?;
+
+            Ok(())
+        })();
+
+        if result.is_ok() {
+            conn.execute_batch("COMMIT;").map_err(|e| StoreError::Db(e.to_string()))?;
+        } else {
+            let _ = conn.execute_batch("ROLLBACK;");
+        }
+
+        result
     }
 
     /// 監査ログのハッシュチェーンを検証する。
@@ -506,6 +520,16 @@ impl Store {
         display_name:      Option<&str>,
         new_topic_summary: Option<&str>,
     ) -> Result<(), StoreError> {
+        // 入力バリデーション: NULL バイト・過剰長を拒否
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(email, "email", 320)?; // RFC 5321 最大 320 文字
+        if let Some(dn) = display_name {
+            validate_text_field(dn, "display_name", 256)?;
+        }
+        if let Some(ts) = new_topic_summary {
+            validate_text_field(ts, "topic_summary", 2000)?;
+        }
+
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         let id = sha256_hex(format!("{account_id}:{email}").as_bytes());
@@ -585,6 +609,28 @@ fn sha256_hex(data: &[u8]) -> String {
     hash.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+/// テキストフィールドの基本バリデーション。
+///
+/// NULL バイト (U+0000) や過剰長を拒否する。
+/// SQLite の TEXT 型は任意のバイト列を受け入れるが、
+/// NULL バイトは SQLite 関数で切り詰められる場合があり、
+/// downstream rendering でも問題を引き起こす可能性がある。
+fn validate_text_field(value: &str, field: &'static str, max_chars: usize) -> Result<(), StoreError> {
+    if value.contains('\0') {
+        return Err(StoreError::InvalidInput {
+            field,
+            reason: "NULL バイトを含んではなりません".to_string(),
+        });
+    }
+    if value.chars().count() > max_chars {
+        return Err(StoreError::InvalidInput {
+            field,
+            reason: format!("{} 文字以下でなければなりません (実際: {})", max_chars, value.chars().count()),
+        });
+    }
+    Ok(())
+}
+
 // ============================================================================
 // エラー
 // ============================================================================
@@ -615,6 +661,15 @@ pub enum StoreError {
     /// ファイル I/O エラー。
     #[error("IO エラー: {0}")]
     Io(#[from] std::io::Error),
+
+    /// 入力バリデーション失敗 (NULL バイト / 過剰長)。
+    #[error("入力不正: {field} — {reason}")]
+    InvalidInput {
+        /// フィールド名。
+        field: &'static str,
+        /// 拒否理由。
+        reason: String,
+    },
 }
 
 // ============================================================================
@@ -784,5 +839,54 @@ mod tests {
         let p2 = store.get_sender_profile("acct2", "shared@corp.com").await.unwrap().unwrap();
         assert_eq!(p1.message_count, 1);
         assert_eq!(p2.message_count, 2);
+    }
+
+    #[tokio::test]
+    async fn record_received_rejects_null_byte_in_email() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+
+        let result = store.record_received("acct1", "evil\x00@corp.com", None, None).await;
+        assert!(
+            matches!(result, Err(StoreError::InvalidInput { field: "email", .. })),
+            "NULL バイトを含むメールアドレスは拒否されるべき: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn record_received_rejects_oversized_topic_summary() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        let huge = "A".repeat(2001);
+        let result = store.record_received("acct1", "test@corp.com", None, Some(&huge)).await;
+        assert!(
+            matches!(result, Err(StoreError::InvalidInput { field: "topic_summary", .. })),
+            "2000 文字超の topic_summary は拒否されるべき: {result:?}"
+        );
+    }
+
+    #[test]
+    fn validate_text_field_rejects_null_byte() {
+        assert!(matches!(
+            validate_text_field("hello\x00world", "test", 100),
+            Err(StoreError::InvalidInput { field: "test", .. })
+        ));
+    }
+
+    #[test]
+    fn validate_text_field_rejects_oversized() {
+        assert!(matches!(
+            validate_text_field(&"あ".repeat(101), "test", 100),
+            Err(StoreError::InvalidInput { field: "test", .. })
+        ));
+    }
+
+    #[test]
+    fn validate_text_field_accepts_valid() {
+        assert!(validate_text_field("normal text 普通", "test", 100).is_ok());
     }
 }
