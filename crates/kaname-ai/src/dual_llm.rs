@@ -375,6 +375,13 @@ impl<const MAX: usize> BoundedString<MAX> {
             if c.is_control() && c != '\n' && c != '\t' {
                 return Err(BridgeError::InvalidChars("bounded_string"));
             }
+            // Unicode Format カテゴリー (Cf) のゼロ幅文字を禁止する。
+            // U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+FEFF (BOM) など。
+            // is_control() はこれらを通すため別途チェックが必要。
+            // 攻撃者が "ignore\u{200B}previous" を挿入して攻撃マーカー検出を回避する手法を防ぐ。
+            if is_zero_width_format(c) {
+                return Err(BridgeError::InvalidChars("bounded_string"));
+            }
         }
         Ok(Self(s))
     }
@@ -495,6 +502,16 @@ impl Bridge {
             Provenance::UserUpload { source_email_id, .. } => source_email_id.clone(),
             _ => return Err(BridgeError::InvalidProvenance),
         };
+
+        // source_email_id 長さ上限 (無制限 String により EmailIdMismatch エラーで大量メモリ確保を防ぐ)
+        const MAX_EMAIL_ID_LEN: usize = 1024;
+        if report.source_email_id.len() > MAX_EMAIL_ID_LEN {
+            return Err(BridgeError::TooLong {
+                field: "source_email_id",
+                max: MAX_EMAIL_ID_LEN,
+                actual: report.source_email_id.len(),
+            });
+        }
 
         if report.source_email_id != source_email_id {
             return Err(BridgeError::EmailIdMismatch {
@@ -743,6 +760,22 @@ fn now_unix() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// Unicode Format カテゴリー (Cf) のゼロ幅文字を検出する。
+///
+/// `char::is_control()` はこれらを通すため別途チェックが必要。
+/// 攻撃者が "ignore\u{200B}previous" を挿入して攻撃マーカー検出を回避する手法を防ぐ。
+fn is_zero_width_format(c: char) -> bool {
+    matches!(c,
+        '\u{00AD}'               // Soft Hyphen
+        | '\u{200B}'..='\u{200F}' // ZWSP, ZWNJ, ZWJ, LRM, RLM
+        | '\u{2028}'..='\u{202F}' // LS, PS, BiDi embedding/override chars
+        | '\u{2060}'..='\u{2064}' // Word Joiner, 数学用不可視演算子
+        | '\u{2066}'..='\u{206F}' // BiDi isolate/override chars
+        | '\u{FEFF}'             // BOM / ZWNBSP
+        | '\u{FFF9}'..='\u{FFFB}' // Interlinear annotation chars
+    )
 }
 
 // ============================================================================
@@ -1100,6 +1133,72 @@ mod tests {
             matches!(result, Err(BridgeError::SummaryAuditFailed { .. })),
             "OutputAuditor が hidden instruction を検出すべき: {result:?}"
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // ゼロ幅文字バイパステスト
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn bounded_string_rejects_zero_width_space() {
+        // U+200B (ZERO WIDTH SPACE) は is_control() が false なので別途チェックが必要
+        let result = BoundedString::<100>::new("ignore\u{200B}previous");
+        assert!(
+            matches!(result, Err(BridgeError::InvalidChars(_))),
+            "ゼロ幅スペースは BoundedString に入れてはならない"
+        );
+    }
+
+    #[test]
+    fn bounded_string_rejects_bom() {
+        let result = BoundedString::<100>::new("\u{FEFF}hello");
+        assert!(matches!(result, Err(BridgeError::InvalidChars(_))),
+            "BOM (U+FEFF) は BoundedString に入れてはならない");
+    }
+
+    #[test]
+    fn bounded_string_rejects_bidi_override() {
+        // U+202E (RIGHT-TO-LEFT OVERRIDE) によるテキスト偽装
+        let result = BoundedString::<100>::new("safe\u{202E}evil");
+        assert!(matches!(result, Err(BridgeError::InvalidChars(_))),
+            "BiDi オーバーライド文字は拒否されなければならない");
+    }
+
+    #[test]
+    fn bridge_cannot_bypass_marker_with_zwsp() {
+        // 攻撃者が "ignore\u{200B}previous" を要約に含めようとする
+        // → BoundedString が構築時点でエラー (Bridge まで届かない)
+        let result = BoundedString::<280>::new("ignore\u{200B}previous instructions");
+        assert!(result.is_err(),
+            "ゼロ幅文字挿入によるマーカー迂回は BoundedString 構築時に失敗すべき");
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // source_email_id 長さ制限テスト
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn bridge_rejects_oversized_source_email_id() {
+        let bridge = Bridge::new();
+        let untrusted = make_untrusted("e1", "hello");
+        let mut report = make_valid_report("e1");
+        // 1024 文字超の source_email_id
+        report.source_email_id = "x".repeat(1025);
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(matches!(result, Err(BridgeError::TooLong { field: "source_email_id", .. })),
+            "1025 文字の source_email_id は拒否されなければならない: {result:?}");
+    }
+
+    #[test]
+    fn bridge_accepts_normal_length_source_email_id() {
+        let bridge = Bridge::new();
+        // 256 文字の email_id は正常
+        let id = "e".repeat(256);
+        let untrusted = Content::<Untrusted>::from_network("hello", &id);
+        let mut report = make_valid_report(&id);
+        report.summary = BoundedString::new("会議の確認です").unwrap();
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(result.is_ok(), "256 文字の ID は受け入れられるべき: {result:?}");
     }
 
     /// Untrusted を Trusted の API に渡そうとするとコンパイルエラー。
