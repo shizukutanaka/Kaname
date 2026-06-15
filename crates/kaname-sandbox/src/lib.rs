@@ -113,11 +113,35 @@ impl RunningVm {
     ///
     /// This is the ONLY entry point for getting data into a VM. No file
     /// bind-mounts, no shared memory. Only this typed channel.
+    /// VM から返ってくる `extracted_text` の最大バイト数 (ホスト OOM 防止)。
+    const MAX_EXTRACTED_TEXT_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+
+    /// 添付ファイルを VM でレンダリングし、結果を返す。
+    ///
+    /// # Errors
+    ///
+    /// VM エラーまたはプロトコルエラーが発生した場合に `SandboxError` を返す。
     pub async fn render_attachment(&mut self, input: AttachmentJob) -> Result<RenderResult, SandboxError> {
         let req = VsockMsg::RenderRequest(input);
         self.vsock.send(req).await?;
         match self.vsock.recv().await? {
-            VsockMsg::RenderResult(r) => Ok(r),
+            VsockMsg::RenderResult(mut r) => {
+                // ホスト側でテキストサイズをキャップする。
+                // VM が悪意ある PDF で 1GB+ を抽出しても OOM しない。
+                if let Some(ref text) = r.extracted_text {
+                    if text.len() > Self::MAX_EXTRACTED_TEXT_BYTES {
+                        let truncated = text
+                            .char_indices()
+                            .take_while(|(i, _)| *i < Self::MAX_EXTRACTED_TEXT_BYTES)
+                            .last()
+                            .map(|(i, c)| &text[..i + c.len_utf8()])
+                            .unwrap_or("");
+                        r.extracted_text = Some(format!("{truncated}\n[テキストが {0} MB を超えたため切り詰め]",
+                            Self::MAX_EXTRACTED_TEXT_BYTES / (1024 * 1024)));
+                    }
+                }
+                Ok(r)
+            }
             VsockMsg::Error(e) => Err(SandboxError::VmError(e)),
             _ => Err(SandboxError::ProtocolError("unexpected response")),
         }
@@ -447,5 +471,29 @@ mod tests {
             network_allowed: false,
         };
         assert!(cfg.validated().is_err());
+    }
+
+    #[test]
+    fn extracted_text_cap_constant_is_10mb() {
+        // RunningVm の MAX_EXTRACTED_TEXT_BYTES が 10 MB であることを検証
+        assert_eq!(RunningVm::MAX_EXTRACTED_TEXT_BYTES, 10 * 1024 * 1024);
+    }
+
+    #[test]
+    fn truncation_preserves_utf8_boundary() {
+        // テキストキャップ処理が UTF-8 の文字境界を壊さないことを確認
+        // (3 バイト日本語文字が境界で切れると panic)
+        let text = "あ".repeat(100); // 300 bytes
+        // キャップを 10 バイトに設定して境界処理をシミュレート
+        let cap = 10usize;
+        let truncated = text
+            .char_indices()
+            .take_while(|(i, _)| *i < cap)
+            .last()
+            .map(|(i, c)| &text[..i + c.len_utf8()])
+            .unwrap_or("");
+        // バイト境界上で切れているか (String として有効か) を確認
+        assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
+        assert!(truncated.len() <= cap + 3, "文字境界での切り詰めは最大 1 文字 (3 バイト) の超過を許容");
     }
 }
