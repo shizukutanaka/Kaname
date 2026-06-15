@@ -84,9 +84,42 @@ pub struct EmailAddress(String);
 
 impl EmailAddress {
     /// `parse` を実行する。
+    ///
+    /// 検証ルール (RFC 5321 の実用サブセット):
+    /// - 長さ 3〜254 文字
+    /// - `@` が正確に 1 つ
+    /// - ローカルパート非空かつ空白のみでない
+    /// - ドメインパートに `.` を含む、かつ `..` を含まない
+    /// - `@` の直前/直後は空白でない
     pub fn parse(s: impl Into<String>) -> Result<Self, MlsMailError> {
         let s = s.into();
-        if !s.contains('@') || s.len() > 254 {
+        if s.len() < 3 || s.len() > 254 {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
+        // @が正確に1つ
+        let at_count = s.chars().filter(|&c| c == '@').count();
+        if at_count != 1 {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
+        let (local, domain) = s.split_once('@').ok_or(MlsMailError::InvalidEmailAddress)?;
+        // ローカルパート: 空でない、空白のみでない
+        if local.is_empty() || local.trim().is_empty() {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
+        // @ の直前が空白でない (ローカルパートの末尾)
+        if local.ends_with(char::is_whitespace) {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
+        // ドメインパート: 空でない、ドットを含む、連続ドット禁止
+        if domain.is_empty() || !domain.contains('.') || domain.contains("..") {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
+        // @ の直後が空白でない (ドメインパートの先頭)
+        if domain.starts_with(char::is_whitespace) {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
+        // ドメイン先頭/末尾がドットでない
+        if domain.starts_with('.') || domain.ends_with('.') {
             return Err(MlsMailError::InvalidEmailAddress);
         }
         Ok(Self(s))
@@ -122,12 +155,14 @@ pub struct Conversation {
 pub struct ConversationId(pub [u8; 32]);
 
 impl ConversationId {
-    /// `new_random` を実行する。
+    /// CSPRNG で 256 ビットのランダム ID を生成する。
+    ///
+    /// 旧実装はタイムスタンプ XOR だったため予測可能だった
+    /// (攻撃者が作成時刻を推測すれば ID を列挙できた)。
     pub fn new_random() -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+        use rand::RngCore;
         let mut bytes = [0u8; 32];
-        for (i, b) in t.to_le_bytes().iter().enumerate() { bytes[i % 32] ^= b; }
+        rand::thread_rng().fill_bytes(&mut bytes);
         Self(bytes)
     }
     #[must_use]
@@ -188,7 +223,16 @@ impl Envelope {
     }
 
     /// MIME パートからパースする。
+    ///
+    /// 入力サイズを 4 MB に制限する (wire_bytes の MLS メッセージは
+    /// 通常 1〜16 KB。無制限入力は OOM サービス妨害の危険がある)。
     pub fn from_cbor(bytes: &[u8]) -> Result<Self, MlsMailError> {
+        const MAX_ENVELOPE_BYTES: usize = 4 * 1024 * 1024;
+        if bytes.len() > MAX_ENVELOPE_BYTES {
+            return Err(MlsMailError::Malformed(format!(
+                "envelope too large: {} bytes (max {})", bytes.len(), MAX_ENVELOPE_BYTES
+            )));
+        }
         serde_json::from_slice(bytes)
             .map_err(|e| MlsMailError::Malformed(e.to_string()))
     }
@@ -925,5 +969,78 @@ mod tests {
         let bob_email  = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut conv, _) = client.start_one_to_one(bob_email, bob_kp).unwrap();
         assert!(client.encrypt_message(&mut conv, b"").is_err());
+    }
+
+    // ── EmailAddress バリデーション強化テスト ─────────────────────────────
+
+    #[test]
+    fn email_複数アットマークを拒否() {
+        assert!(EmailAddress::parse("a@b@c.com").is_err(), "@ が 2 つは無効");
+        assert!(EmailAddress::parse("@@@").is_err(), "@ のみは無効");
+    }
+
+    #[test]
+    fn email_空ローカルパートを拒否() {
+        assert!(EmailAddress::parse("@example.com").is_err(), "空ローカルパート");
+        assert!(EmailAddress::parse(" @example.com").is_err(), "空白のみのローカルパート");
+    }
+
+    #[test]
+    fn email_ドメインにドット必須() {
+        assert!(EmailAddress::parse("user@localhost").is_err(), "ドット無しドメイン");
+        assert!(EmailAddress::parse("user@.com").is_err(), "先頭ドット");
+        assert!(EmailAddress::parse("user@com.").is_err(), "末尾ドット");
+        assert!(EmailAddress::parse("user@a..b.com").is_err(), "連続ドット");
+    }
+
+    #[test]
+    fn email_正常なアドレスは受け入れ() {
+        assert!(EmailAddress::parse("alice@kaname.app").is_ok());
+        assert!(EmailAddress::parse("user+tag@sub.domain.co.jp").is_ok());
+        assert!(EmailAddress::parse("a@b.c").is_ok());
+    }
+
+    // ── ConversationId CSPRNG テスト ──────────────────────────────────────
+
+    #[test]
+    fn conversation_id_はcsprng_タイムスタンプ依存しない() {
+        // 100 件生成して全て異なることを確認 (タイムスタンプXORなら同一ミリ秒で衝突)
+        let ids: std::collections::HashSet<[u8; 32]> = (0..100)
+            .map(|_| ConversationId::new_random().0)
+            .collect();
+        assert_eq!(ids.len(), 100, "ConversationId に重複が発生した");
+    }
+
+    #[test]
+    fn conversation_id_はゼロではない() {
+        let id = ConversationId::new_random();
+        assert_ne!(id.0, [0u8; 32], "全ゼロの ConversationId は CSPRNG 障害を示す");
+    }
+
+    // ── Envelope サイズ制限テスト ─────────────────────────────────────────
+
+    #[test]
+    fn envelope_from_cbor_サイズ超過を拒否() {
+        // 4 MB + 1 バイトのダミーデータ
+        let huge = vec![0u8; 4 * 1024 * 1024 + 1];
+        let result = Envelope::from_cbor(&huge);
+        assert!(result.is_err(), "4MB超のエンベロープは拒否されなければならない");
+        let err_str = result.unwrap_err().to_string();
+        assert!(err_str.contains("too large") || err_str.contains("malformed"),
+            "エラーメッセージが不適切: {err_str}");
+    }
+
+    #[test]
+    fn envelope_from_cbor_正常サイズは通す() {
+        let env = Envelope {
+            conversation_id: ConversationId([0u8; 32]),
+            epoch:           1,
+            kind:            EnvelopeKind::Application,
+            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes:      vec![0xAB; 1024],
+            welcome:         None,
+        };
+        let bytes = env.to_cbor().unwrap();
+        assert!(Envelope::from_cbor(&bytes).is_ok(), "正常サイズのエンベロープは受け入れる");
     }
 }
