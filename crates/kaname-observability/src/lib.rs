@@ -235,11 +235,8 @@ impl PrivacySanitizer {
     pub fn sanitize(input: &str) -> String {
         let mut result = input.to_string();
 
-        // クレジットカード番号 (16桁数字)
-        result = remove_pattern(&result, |s| {
-            s.chars().filter(|c| c.is_ascii_digit()).count() >= 13
-                && s.chars().any(|c| c.is_ascii_digit())
-        });
+        // クレジットカード番号 (13〜16 桁数字、スペース/ハイフン区切り可)
+        result = redact_credit_card_numbers(&result);
 
         // メールアドレスを匿名化 (例: alice@example.com → ali***@example.com)
         result = mask_email_addresses(&result);
@@ -305,9 +302,12 @@ fn mask_email_addresses(s: &str) -> String {
     result
 }
 
-fn remove_pattern<F>(s: &str, _matcher: F) -> String
-where F: Fn(&str) -> bool {
-    // 簡易実装: クレジットカード番号パターンを除去
+/// クレジットカード番号パターン (13〜16 桁、スペース/ハイフン区切り可) を除去する。
+///
+/// 旧来の `remove_pattern(_matcher)` は `_matcher` 引数が実際には使用されず、
+/// 固定の 13 桁ロジックで動作していた (デッドコード)。
+/// 本関数は責務を明確にし引数を取り除いた。
+fn redact_credit_card_numbers(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let chars: Vec<char> = s.chars().collect();
     let mut i = 0;

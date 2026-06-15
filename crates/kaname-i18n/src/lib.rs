@@ -101,6 +101,35 @@ impl I18n {
             .unwrap_or(key);
 
         // プレースホルダー置換
+        // 注: プレースホルダーの値は HTML エスケープして XSS を防ぐ。
+        // 翻訳テンプレート自体のタグは UI 側で信頼済みと見なすが、
+        // ユーザー由来の動的値 (sender name など) をそのまま展開すると
+        // HTML コンテキストで XSS になる。
+        let mut result = template.to_string();
+        for (k, v) in args {
+            result = result.replace(&format!("{{{k}}}"), &html_escape(v));
+        }
+        result
+    }
+
+    /// HTML エスケープ不要のプレースホルダーを使う (URL やコードなど既にエスケープ済みの値)。
+    ///
+    /// # Safety
+    ///
+    /// 呼び出し元は `args` の値が信頼できる内容であることを保証しなければならない。
+    /// ユーザー入力やメール由来のデータには使用禁止。
+    #[must_use]
+    pub fn t_raw(&self, key: &str, args: &[(&str, &str)]) -> String {
+        let current  = self.current.read().unwrap_or_else(|e| e.into_inner()).clone();
+        let catalogs = self.catalogs.read().unwrap_or_else(|e| e.into_inner());
+
+        let template = catalogs
+            .get(&current)
+            .and_then(|c| c.messages.get(key))
+            .or_else(|| catalogs.get(&self.fallback).and_then(|c| c.messages.get(key)))
+            .map(String::as_str)
+            .unwrap_or(key);
+
         let mut result = template.to_string();
         for (k, v) in args {
             result = result.replace(&format!("{{{k}}}"), v);
@@ -295,6 +324,25 @@ pub fn plural_category(locale: &str, n: u64) -> PluralCategory {
 // テスト
 // ============================================================================
 
+/// HTML 特殊文字をエスケープする (XSS 防止)。
+///
+/// `t()` の動的プレースホルダー値に自動適用される。
+/// テンプレート文字列自体にはエスケープを適用しない (翻訳者が意図的に HTML を含める場合がある)。
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&'  => out.push_str("&amp;"),
+            '<'  => out.push_str("&lt;"),
+            '>'  => out.push_str("&gt;"),
+            '"'  => out.push_str("&quot;"),
+            '\'' => out.push_str("&#x27;"),
+            _    => out.push(c),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -378,6 +426,39 @@ mod tests {
         let locales = i18n.available_locales();
         assert!(locales.iter().any(|l| l.locale == "ja"));
         assert!(locales.iter().any(|l| l.locale == "en"));
+    }
+
+    #[test]
+    fn placeholder_xss_is_escaped() {
+        // 攻撃者がプレースホルダーに HTML を注入しても t() はエスケープする
+        let i18n = I18n::new();
+        i18n.set_locale("en").unwrap();
+        let malicious = "<script>alert('xss')</script>";
+        let msg = i18n.t("app.welcome", &[("name", malicious)]);
+        assert!(!msg.contains("<script>"),
+            "XSS ペイロードがエスケープされていない: {msg}");
+        assert!(msg.contains("&lt;script&gt;"),
+            "HTML エスケープされた形が含まれるべき: {msg}");
+    }
+
+    #[test]
+    fn t_raw_does_not_escape() {
+        // t_raw は信頼済み値には HTML エスケープしない (URL など)
+        let i18n = I18n::new();
+        i18n.set_locale("en").unwrap();
+        let trusted_html = "<b>bold</b>";
+        let msg = i18n.t_raw("app.welcome", &[("name", trusted_html)]);
+        assert!(msg.contains("<b>bold</b>"),
+            "t_raw はエスケープしないはず: {msg}");
+    }
+
+    #[test]
+    fn html_escape_encodes_all_special_chars() {
+        assert_eq!(html_escape("a&b"), "a&amp;b");
+        assert_eq!(html_escape("<tag>"), "&lt;tag&gt;");
+        assert_eq!(html_escape("\"q\""), "&quot;q&quot;");
+        assert_eq!(html_escape("'s"), "&#x27;s");
+        assert_eq!(html_escape("normal"), "normal");
     }
 
     #[test]
