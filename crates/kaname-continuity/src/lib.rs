@@ -175,13 +175,17 @@ impl Default for HandoffManager {
 // ============================================================================
 
 fn generate_session_id() -> String {
-    // rand::thread_rng() は CSPRNG (OS エントロピー源)。
-    // DefaultHasher + now_unix() では同秒内に重複する可能性がある。
+    // 16 バイト (128 ビット) CSPRNG — 誕生日パラドックス安全性:
+    // 8 バイトでは 2^32 ≈ 43 億セッションで衝突確率 50% だったが、
+    // 16 バイトなら 2^64 ≈ 1.8 × 10^19 セッションで 50% になり実用上安全。
     use rand::RngCore;
-    let mut bytes = [0u8; 8];
+    let mut bytes = [0u8; 16];
     rand::thread_rng().fill_bytes(&mut bytes);
-    let n = u64::from_be_bytes(bytes);
-    format!("sess_{n:016x}")
+    format!(
+        "sess_{:016x}{:016x}",
+        u64::from_be_bytes(bytes[..8].try_into().unwrap_or([0u8; 8])),
+        u64::from_be_bytes(bytes[8..].try_into().unwrap_or([0u8; 8])),
+    )
 }
 
 fn now_unix() -> u64 {
@@ -258,6 +262,30 @@ mod tests {
         // 新しいセッション ID が生成される
         // (同じタイミングで作ると衝突する可能性があるため、異なることのみ確認)
         assert!(!id1.is_empty() && !id2.is_empty());
+    }
+
+    #[test]
+    fn session_id_is_128_bit() {
+        // ID 形式: "sess_" (5) + 32 文字の hex = 合計 37 文字
+        // 8 バイト時代は "sess_" + 16 文字 = 21 文字だった
+        let s = ContinuitySession::new();
+        assert_eq!(s.session_id.len(), 37,
+            "セッション ID は 128 ビット (37 文字) でなければならない: '{}'", s.session_id);
+        assert!(s.session_id.starts_with("sess_"),
+            "セッション ID は sess_ で始まる: '{}'", s.session_id);
+        // hex 部分の検証
+        let hex_part = &s.session_id[5..];
+        assert!(hex_part.chars().all(|c| c.is_ascii_hexdigit()),
+            "hex 部分に無効な文字: '{hex_part}'");
+    }
+
+    #[test]
+    fn session_ids_are_unique_under_high_volume() {
+        // 10000 回生成して重複なし (64 ビット時代は理論上衝突リスクあり)
+        let ids: std::collections::HashSet<String> = (0..10_000)
+            .map(|_| ContinuitySession::new().session_id)
+            .collect();
+        assert_eq!(ids.len(), 10_000, "セッション ID に重複が発生した");
     }
 }
 
