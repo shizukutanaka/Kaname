@@ -102,7 +102,15 @@ impl TrackingDetector {
     }
 
     /// HTML ボディからトラッキングピクセルを検出する。
+    ///
+    /// 入力サイズを 10 MB に制限する (悪意ある巨大 HTML による OOM 防止)。
     pub fn analyze_html(&self, html: &str) -> TrackingAnalysis {
+        const MAX_HTML_BYTES: usize = 10 * 1024 * 1024;
+        let html = if html.len() > MAX_HTML_BYTES {
+            &html[..MAX_HTML_BYTES]
+        } else {
+            html
+        };
         let mut blocked_domains = Vec::new();
         let mut pixels_found    = Vec::new();
 
@@ -178,16 +186,32 @@ impl TrackingDetector {
 }
 
 fn extract_attr<'a>(tag: &'a str, attr: &str) -> Option<&'a str> {
-    let pattern = format!("{}=\"", attr);
-    let start = tag.find(&pattern)? + pattern.len();
-    let end = tag[start..].find('"')?;
-    Some(&tag[start..start + end])
+    // ダブルクォート: attr="value"
+    let dq_pattern = format!("{}=\"", attr);
+    if let Some(start) = tag.find(&dq_pattern) {
+        let val_start = start + dq_pattern.len();
+        if let Some(end) = tag[val_start..].find('"') {
+            return Some(&tag[val_start..val_start + end]);
+        }
+    }
+    // シングルクォート: attr='value' (単一クォート回避によるトラッカー検出バイパス対策)
+    let sq_pattern = format!("{}='", attr);
+    if let Some(start) = tag.find(&sq_pattern) {
+        let val_start = start + sq_pattern.len();
+        if let Some(end) = tag[val_start..].find('\'') {
+            return Some(&tag[val_start..val_start + end]);
+        }
+    }
+    None
 }
 
 fn extract_domain_from_url(url: &str) -> Option<String> {
     let without_scheme = url.strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
-    let domain = without_scheme.split('/').next()?;
+    let host_port = without_scheme.split('/').next()?;
+    // ポート番号を除去: "tracker.com:8080" → "tracker.com"
+    // ポートを保持したまま known_trackers に照合すると既知ドメインがバイパスされる
+    let domain = host_port.split(':').next()?;
     Some(domain.to_lowercase())
 }
 
@@ -221,6 +245,8 @@ pub struct ZeroKnowledgeSearch {
     /// ローカルインデックス (email_id → keywords)
     /// 本番: SQLite FTS5 バーチャルテーブルを使用
     index: Vec<IndexEntry>,
+    /// インデックスエントリ数の上限 (OOM DoS 防止)
+    max_entries: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -257,9 +283,13 @@ pub enum MatchedField {
 
 impl ZeroKnowledgeSearch {
     /// 新規インスタンスを作成する。
-    pub fn new() -> Self { Self { index: Vec::new() } }
+    pub fn new() -> Self {
+        Self { index: Vec::new(), max_entries: 1_000_000 }
+    }
 
     /// メールをローカルインデックスに追加する。
+    ///
+    /// インデックスが `max_entries` に達した場合は最古エントリを退避する。
     pub fn index_email(
         &mut self,
         email_id:    &str,
@@ -274,6 +304,11 @@ impl ZeroKnowledgeSearch {
             entry.subject     = subject.to_owned();
             entry.body_preview = body_text.chars().take(200).collect();
             return;
+        }
+
+        // 容量超過時は最古エントリを退避 (FIFO)
+        if self.index.len() >= self.max_entries {
+            self.index.remove(0);
         }
 
         self.index.push(IndexEntry {
@@ -501,5 +536,63 @@ mod tests {
         assert_eq!(results.len(), 2);
         // 件名マッチ (e1) が本文マッチ (e2) より先に来るべき
         assert_eq!(results[0].email_id, "e1", "件名マッチが先に来るべき");
+    }
+
+    // ── シングルクォート属性によるトラッカー回避テスト ───────────────────
+
+    #[test]
+    fn single_quote_src_でもトラッカーを検出する() {
+        let detector = TrackingDetector::new();
+        // シングルクォートで囲まれた src 属性
+        let html = r#"<img src='https://mailchimp.com/track/open.gif' width='1' height='1'>"#;
+        let result = detector.analyze_html(html);
+        assert!(result.was_tracked,
+            "シングルクォートの src 属性はトラッカー検出をバイパスしてはならない");
+    }
+
+    #[test]
+    fn ポート番号付きドメインをブロックする() {
+        let detector = TrackingDetector::new();
+        // ポート番号付き: "mailchimp.com:443" は "mailchimp.com" と同じドメイン
+        let html = r#"<img src="https://mailchimp.com:443/track/open.gif" width="1" height="1">"#;
+        let result = detector.analyze_html(html);
+        assert!(result.was_tracked,
+            "ポート番号付きドメインはトラッカー検出をバイパスしてはならない");
+        assert!(result.blocked_domains.contains(&"mailchimp.com".to_string()),
+            "blocked_domains はポートなしドメインを含むべき");
+    }
+
+    #[test]
+    fn 非標準ポートでトラッカーをバイパスできない() {
+        let detector = TrackingDetector::new();
+        // 攻撃者が :8080 を付けて既知リストをバイパスしようとする
+        let html = r#"<img src="https://mailchimp.com:8080/track/open.gif" width="1" height="1">"#;
+        let result = detector.analyze_html(html);
+        assert!(result.was_tracked,
+            "非標準ポートによるトラッカー検出バイパスを防止する");
+    }
+
+    // ── インデックス容量制限テスト ─────────────────────────────────────────
+
+    #[test]
+    fn インデックスは上限を超えない() {
+        let mut search = ZeroKnowledgeSearch::new();
+        // max_entries を小さくしてテスト
+        search.max_entries = 5;
+        for i in 0..10u32 {
+            search.index_email(&format!("e{i}"), "件名", "本文", None, "a@b.com", "");
+        }
+        assert_eq!(search.size(), 5, "上限 5 を超えてはならない");
+    }
+
+    #[test]
+    fn html_サイズ上限で切り捨てる() {
+        let detector = TrackingDetector::new();
+        // 正常な 1x1 ピクセルを 10MB の HTML の後半に埋め込む
+        // → 切り捨てられて検出されない (実害なし — 切り捨てた分は処理対象外)
+        let normal = "x".repeat(10 * 1024 * 1024 + 100);
+        // パニックしないことを確認
+        let result = detector.analyze_html(&normal);
+        assert_eq!(result.tracker_count, 0, "切り捨て後はトラッカーなし");
     }
 }
