@@ -125,8 +125,8 @@ impl SenderStyleProfile {
         self.avg_signature_lines =
             lerp(self.avg_signature_lines, features.signature_lines as f32, alpha);
 
-        // 送信時刻分布を更新
-        let hour = features.send_hour as usize;
+        // 送信時刻分布を更新 (% 24 で範囲外の send_hour を正規化)
+        let hour = (features.send_hour as usize) % 24;
         for (i, slot) in self.send_hour_distribution.iter_mut().enumerate() {
             if i == hour {
                 *slot = lerp(*slot, 1.0, alpha);
@@ -155,7 +155,9 @@ impl SenderStyleProfile {
         let mut weight_sum = 0.0_f32;
 
         // 送信時刻 (重み: 0.25) — AiTM/なりすましで深夜送信が多い
-        let hour = features.send_hour as usize;
+        // send_hour は u8 (0-255) かつ EmailStyleFeatures のフィールドは pub のため、
+        // 24 以上の値で配列インデックスがパニックしうる。% 24 で必ず範囲内に収める。
+        let hour = (features.send_hour as usize) % 24;
         let hour_prob = self.send_hour_distribution[hour];
         let hour_dist = 1.0 - hour_prob.clamp(0.0, 1.0);
         weighted_dist += 0.25 * hour_dist;
@@ -277,7 +279,7 @@ impl EmailStyleFeatures {
             formality_score: formality,
             email_length: chars,
             signature_lines,
-            send_hour,
+            send_hour: send_hour % 24, // 範囲外の時刻を正規化 (配列パニック防止)
         }
     }
 }
@@ -420,6 +422,39 @@ mod tests {
     fn profile_becomes_reliable_at_10_samples() {
         let p = make_profile(10);
         assert!(p.is_reliable());
+    }
+
+    #[test]
+    fn out_of_range_send_hour_does_not_panic() {
+        // 細工メール: Date ヘッダが範囲外の時刻 (99) にパースされた、または
+        // pub フィールド経由で send_hour=99 を直接構築されたケース。
+        // 配列インデックス [99] でパニックしてはならない (untrusted 入力での DoS 防止)。
+        let profile = make_profile(30);
+        let crafted = EmailStyleFeatures {
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 99, // 範囲外
+        };
+        // パニックせず有限のスコアを返すこと
+        let dist = profile.style_distance(&crafted);
+        assert!(dist.is_finite() && (0.0..=1.0).contains(&dist), "dist={dist}");
+
+        // update も範囲外 send_hour でパニックしないこと
+        let mut p2 = SenderStyleProfile::new("x@y.com");
+        p2.update(&crafted); // send_hour=99
+    }
+
+    #[test]
+    fn extract_normalizes_out_of_range_hour() {
+        // 範囲外の send_hour は extract で 0-23 に正規化される (99 % 24 = 3)
+        let f = EmailStyleFeatures::extract("こんにちは。", 99);
+        assert!(f.send_hour < 24, "send_hour が正規化されていない: {}", f.send_hour);
+        assert_eq!(f.send_hour, 99 % 24);
     }
 
     #[test]
