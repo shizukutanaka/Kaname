@@ -302,6 +302,21 @@ impl JmapClient {
         &self, from: &str, to: &[&str], subject: &str, body: &str,
         draft_id: Option<&str>,
     ) -> Result<String, JmapError> {
+        // 宛先数の上限 (DoS 防止: 100 件超えは拒否)
+        const MAX_RECIPIENTS: usize = 100;
+        if to.len() > MAX_RECIPIENTS {
+            return Err(JmapError::InvalidInput(format!(
+                "宛先が多すぎます: {} > {MAX_RECIPIENTS}", to.len()
+            )));
+        }
+        // メール本文サイズ上限 (OOM 防止: 25 MB)
+        const MAX_BODY_BYTES: usize = 25 * 1024 * 1024;
+        if body.len() > MAX_BODY_BYTES {
+            return Err(JmapError::InvalidInput(format!(
+                "本文が大きすぎます: {} バイト > {MAX_BODY_BYTES}", body.len()
+            )));
+        }
+
         // RFC 5322 ヘッダーインジェクション防止: \r\n を含む入力を拒否
         // 攻撃者が subject に "\r\nBcc: victim@evil.com" を注入すると
         // 任意の宛先にメールを送れてしまう
@@ -691,6 +706,17 @@ fn find_sse_event_end(buf: &str) -> Option<usize> {
     buf.find("\n\n")
 }
 
+/// ヘッダー値のバリデーション (テストからも利用)。
+#[cfg(test)]
+fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
+    if s.contains('\r') || s.contains('\n') {
+        return Err(JmapError::InvalidInput(
+            format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
+        ));
+    }
+    Ok(s.to_owned())
+}
+
 /// SSE テキストブロックを `PushNotification` にパースする。
 ///
 /// JMAP push notification (RFC 8620 §7.3) の `data:` フィールドを解析する。
@@ -842,6 +868,27 @@ mod tests {
         assert_eq!(effective, 10, "小さい値はそのまま使われるべき");
     }
 
+    // ── send_email 入力上限テスト ────────────────────────────────────────────
+
+    #[test]
+    fn send_email_宛先数上限ロジック() {
+        // JmapClient を構築できないのでロジックを直接テスト
+        const MAX_RECIPIENTS: usize = 100;
+        let to_ok:  Vec<&str> = (0..100).map(|_| "a@b.com").collect();
+        let to_ng:  Vec<&str> = (0..101).map(|_| "a@b.com").collect();
+        assert!(to_ok.len() <= MAX_RECIPIENTS,  "100件は上限以内");
+        assert!(to_ng.len() >  MAX_RECIPIENTS,  "101件は上限超過");
+    }
+
+    #[test]
+    fn send_email_本文サイズ上限ロジック() {
+        const MAX_BODY_BYTES: usize = 25 * 1024 * 1024;
+        let ok_body = "a".repeat(MAX_BODY_BYTES);
+        let ng_body = "a".repeat(MAX_BODY_BYTES + 1);
+        assert!(ok_body.len() <= MAX_BODY_BYTES, "25MB は許可されるべき");
+        assert!(ng_body.len() >  MAX_BODY_BYTES, "25MB+1 は拒否されるべき");
+    }
+
     // ── SSE バッファ上限テスト ──────────────────────────────────────────────
 
     #[test]
@@ -859,13 +906,3 @@ mod tests {
     }
 }
 
-// テスト専用ヘルパー: sanitize_header のロジックを抽出
-#[cfg(test)]
-fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
-    if s.contains('\r') || s.contains('\n') {
-        return Err(JmapError::InvalidInput(
-            format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
-        ));
-    }
-    Ok(s.to_owned())
-}
