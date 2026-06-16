@@ -145,10 +145,21 @@ impl KanameError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Severity { Low, Medium, High, Critical }
 
-/// Tauri コマンドは Result<T, String> を返すため、変換を提供。
+/// Tauri コマンドは `Result<T, String>` を返すため、変換を提供。
+///
+/// # セキュリティ
+///
+/// `user_message()` のみを返す。`serde_json::to_string(&e)` では
+/// `Internal("SQL details...")` のような内部詳細がフロントエンドに
+/// 漏洩する可能性があるため使用しない。
+/// デバッグ詳細が必要な場合は `tracing::error!("{e:?}")` を使うこと。
 impl From<KanameError> for String {
     fn from(e: KanameError) -> Self {
-        serde_json::to_string(&e).unwrap_or_else(|_| e.to_string())
+        // エラーコードと安全なユーザーメッセージのみを JSON に変換する
+        serde_json::json!({
+            "code":    e.code(),
+            "message": e.user_message(),
+        }).to_string()
     }
 }
 
@@ -211,10 +222,35 @@ mod tests {
     }
 
     #[test]
-    fn string_conversion_is_valid_json_or_fallback() {
+    fn string_conversion_omits_internal_detail() {
+        // Internal エラーの詳細がフロントエンドに漏洩しないこと
+        let e = KanameError::Internal("SQL constraint violation on table emails".into());
+        let s: String = e.into();
+        assert!(!s.contains("SQL"), "内部実装の詳細が String 変換に含まれてはならない: {s}");
+        assert!(!s.contains("constraint"), "内部詳細が漏洩: {s}");
+        assert!(s.contains("INTERNAL"), "エラーコードは含まれるべき: {s}");
+        // user_message() の安全な文言が含まれること
+        assert!(s.contains("内部エラー") || s.contains("message"), "安全なメッセージが含まれるべき: {s}");
+    }
+
+    #[test]
+    fn string_conversion_database_detail_not_leaked() {
+        let e = KanameError::Database("UNIQUE constraint failed: contacts.email".into());
+        let s: String = e.into();
+        assert!(!s.contains("UNIQUE"), "DB スキーマ詳細が漏洩してはならない: {s}");
+        assert!(!s.contains("contacts.email"), "テーブル名が漏洩してはならない: {s}");
+        assert!(s.contains("DATABASE"), "エラーコードは含まれるべき: {s}");
+    }
+
+    #[test]
+    fn string_conversion_is_valid_json() {
         let e = KanameError::Internal("crash".into());
         let s: String = e.into();
         assert!(!s.is_empty());
+        // JSON としてパース可能なこと
+        let v: serde_json::Value = serde_json::from_str(&s).expect("有効な JSON であるべき");
+        assert!(v.get("code").is_some(), "code フィールドが必要: {s}");
+        assert!(v.get("message").is_some(), "message フィールドが必要: {s}");
     }
 
     #[test]
