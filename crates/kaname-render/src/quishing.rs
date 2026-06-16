@@ -160,12 +160,20 @@ impl QuishingDefense {
             }
         }
 
-        // 4. Typosquatting 検出 (Levenshtein 距離)
+        // 4. ブランド・サブドメイン偽装検出
+        //    例: `amazon.com.attacker.io` — 信頼ドメインが登録可能ドメインではなく
+        //    サブドメインのプレフィックスとして現れる。実ホストは attacker.io。
+        //    (正規のサブドメインは `.amazon.com` で *終わる* ため is_trusted で既に Trusted 判定済み)
+        if self.has_trusted_brand_as_subdomain(&domain) {
+            return UrlReputation::Suspicious;
+        }
+
+        // 5. Typosquatting 検出 (Levenshtein 距離)
         if self.is_typosquat(&domain) {
             return UrlReputation::Suspicious;
         }
 
-        // 5. 数字混在の疑わしいパターン (例: amaz0n.com)
+        // 6. 数字混在の疑わしいパターン (例: amaz0n.com)
         if has_digit_substitution(&domain) {
             return UrlReputation::Suspicious;
         }
@@ -175,6 +183,18 @@ impl QuishingDefense {
 
     fn is_trusted(&self, domain: &str) -> bool {
         self.trusted_domains.iter().any(|t| domain == *t || domain.ends_with(&format!(".{t}")))
+    }
+
+    /// 信頼ドメインがサブドメインのプレフィックスとして悪用されているか判定する。
+    ///
+    /// `amazon.com.attacker.io` のように `{信頼ドメイン}.` で始まるホストは、
+    /// 実際の登録可能ドメインが別物 (attacker.io) であるため偽装の可能性が高い。
+    /// 正規のサブドメイン (`aws.amazon.com`) は `.amazon.com` で終わるため
+    /// この関数ではなく `is_trusted` 側で Trusted 判定される。
+    fn has_trusted_brand_as_subdomain(&self, domain: &str) -> bool {
+        self.trusted_domains
+            .iter()
+            .any(|t| domain.starts_with(&format!("{t}.")))
     }
 
     fn is_typosquat(&self, domain: &str) -> bool {
@@ -263,6 +283,14 @@ fn has_digit_substitution(domain: &str) -> bool {
 }
 
 fn levenshtein(a: &str, b: &str) -> usize {
+    // 入力長ガード: QR コードは最大 ~2953 バイトをエンコードできるため、
+    // デコードされた巨大ホスト名で O(m*n) の DP テーブルが無駄に確保されるのを防ぐ。
+    // typosquat 判定は短いドメイン (信頼ドメインは最長 ~15 文字) が対象なので、
+    // 一方が極端に長い場合は編集距離も大きく typosquat ではあり得ない → 早期 return。
+    const MAX_DOMAIN_LEN: usize = 64;
+    if a.len() > MAX_DOMAIN_LEN || b.len() > MAX_DOMAIN_LEN {
+        return a.len().abs_diff(b.len()).max(1);
+    }
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let m = a.len();
@@ -431,5 +459,73 @@ mod tests {
         assert_eq!(levenshtein("amazon", "amzon"), 1);
         assert_eq!(levenshtein("amazon", "amazon"), 0);
         assert_eq!(levenshtein("amazon", "amaozn"), 2);
+    }
+
+    // ── ブランド・サブドメイン偽装検出 ──────────────────────────────────────
+
+    #[test]
+    fn detects_trusted_brand_as_subdomain_prefix() {
+        let d = QuishingDefense::new();
+        // 実ホストは attacker.io だが amazon.com をプレフィックスに偽装
+        assert_eq!(
+            d.evaluate_url("https://amazon.com.attacker.io/login"),
+            UrlReputation::Suspicious,
+            "amazon.com.* のサブドメイン偽装が Neutral になっている"
+        );
+        // google.com も同様
+        assert_eq!(
+            d.evaluate_url("https://google.com.phish.example/verify"),
+            UrlReputation::Suspicious
+        );
+        // 多段サブドメイン
+        assert_eq!(
+            d.evaluate_url("https://apple.com.secure-login.co/auth"),
+            UrlReputation::Suspicious
+        );
+    }
+
+    #[test]
+    fn legit_subdomain_of_trusted_stays_trusted() {
+        let d = QuishingDefense::new();
+        // 正規のサブドメインは `.amazon.com` で終わる → Trusted のまま
+        assert_eq!(
+            d.evaluate_url("https://aws.amazon.com/console"),
+            UrlReputation::Trusted,
+            "正規サブドメインが誤って Suspicious になった"
+        );
+        assert_eq!(
+            d.evaluate_url("https://mail.google.com/inbox"),
+            UrlReputation::Trusted
+        );
+    }
+
+    #[test]
+    fn brand_subdomain_in_qr_is_flagged() {
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("qr-2", "https://microsoft.com.login-verify.tk/");
+        // free TLD でもブランド偽装でも Suspicious になる
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious);
+    }
+
+    // ── Levenshtein 入力長ガード ────────────────────────────────────────────
+
+    #[test]
+    fn levenshtein_caps_oversized_input() {
+        // 64 文字超の入力では DP テーブルを確保せず長さ差を返す
+        let huge = "a".repeat(3000);
+        let dist = levenshtein(&huge, "amazon");
+        assert!(dist > 3, "巨大入力は typosquat 距離 (1-3) に入ってはならない");
+    }
+
+    #[test]
+    fn oversized_qr_host_does_not_panic_and_is_not_typosquat() {
+        let d = QuishingDefense::new();
+        // 巨大なホスト名を持つ URL (QR は最大 ~2953 バイト)
+        let host = "x".repeat(2900);
+        let url = format!("https://{host}.com/");
+        // パニックせず、typosquat にも誤判定しないこと
+        let rep = d.evaluate_url(&url);
+        assert_eq!(rep, UrlReputation::Neutral,
+            "巨大ホストは typosquat ではなく Neutral であるべき: {rep:?}");
     }
 }
