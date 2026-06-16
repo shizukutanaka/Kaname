@@ -182,8 +182,14 @@ impl PivotHistory {
     }
 
     /// 電話番号を履歴に追加する。
+    ///
+    /// 検出側の `DetectedPivot::PhoneNumber.number` は `normalize_phone` で
+    /// 正規化済み (数字と `+` のみ) のため、履歴も同じ正規形で保存する。
+    /// そうしないと "+1 (800) 555-1234" のような書式付き番号が検出値
+    /// "+18005551234" と一致せず、既知の正規チャネルを未知の高リスク pivot と
+    /// 誤判定し、誤検知・アラート疲れを招く。
     pub fn add_phone(&mut self, number: impl Into<String>) {
-        self.seen_phones.push(number.into());
+        self.seen_phones.push(normalize_phone(&number.into()));
     }
 
     /// URL を履歴に追加する。
@@ -616,6 +622,37 @@ mod tests {
 
         let score = detector.trust_score(&pivots, &history);
         assert!(score > 0.5, "既知の Teams リンクはスコアが高いはず: {}", score);
+    }
+
+    #[test]
+    fn known_formatted_phone_matches_normalized_detection() {
+        // 履歴に書式付きで登録された番号が、検出側の正規化済み番号と一致すること
+        let mut history = PivotHistory::new();
+        history.add_phone("+1 (800) 555-1234");
+
+        // 検出側が生成する正規形 (digits + '+')
+        let detected = DetectedPivot::PhoneNumber {
+            number: normalize_phone("+1 (800) 555-1234"),
+            context: String::new(),
+        };
+        assert!(history.has_seen(&detected),
+            "書式付きで登録された既知番号が正規化検出値と一致しない");
+    }
+
+    #[test]
+    fn known_phone_raises_trust_despite_formatting() {
+        let detector = PivotDetector::new();
+        let mut history = PivotHistory::new();
+        history.add_phone("080-1234-5678"); // ハイフン付きで登録
+
+        // 検出側は正規化済み ("08012345678")
+        let pivots = vec![DetectedPivot::PhoneNumber {
+            number: normalize_phone("080-1234-5678"),
+            context: String::new(),
+        }];
+        let score = detector.trust_score(&pivots, &history);
+        assert!(score > 0.5,
+            "書式違いでも既知番号は信頼スコアを上げるべき (誤検知防止): {score}");
     }
 
     #[test]
