@@ -116,12 +116,26 @@ impl RunningVm {
     /// VM から返ってくる `extracted_text` の最大バイト数 (ホスト OOM 防止)。
     const MAX_EXTRACTED_TEXT_BYTES: usize = 10 * 1024 * 1024; // 10 MB
 
+    /// VM へ送り込む添付ファイルの最大バイト数 (ホスト OOM 防止)。
+    /// VM メモリ上限 (最大 2048 MB) を考慮しても、巨大添付を VM に渡す前に
+    /// ホスト側で vsock シリアライズ用のバッファを確保する段階で OOM しうるため、
+    /// 入力側でも上限を設ける。
+    const MAX_ATTACHMENT_BYTES: usize = 100 * 1024 * 1024; // 100 MB
+
     /// 添付ファイルを VM でレンダリングし、結果を返す。
     ///
     /// # Errors
     ///
     /// VM エラーまたはプロトコルエラーが発生した場合に `SandboxError` を返す。
+    /// 添付が `MAX_ATTACHMENT_BYTES` を超える場合 `AttachmentTooLarge` を返す。
     pub async fn render_attachment(&mut self, input: AttachmentJob) -> Result<RenderResult, SandboxError> {
+        // 入力サイズをホスト側でキャップ — VM へ送る前に巨大添付を拒否し OOM を防ぐ
+        if input.bytes.len() > Self::MAX_ATTACHMENT_BYTES {
+            return Err(SandboxError::AttachmentTooLarge {
+                size: input.bytes.len(),
+                max: Self::MAX_ATTACHMENT_BYTES,
+            });
+        }
         let req = VsockMsg::RenderRequest(input);
         self.vsock.send(req).await?;
         match self.vsock.recv().await? {
@@ -134,8 +148,7 @@ impl RunningVm {
                             .char_indices()
                             .take_while(|(i, _)| *i < Self::MAX_EXTRACTED_TEXT_BYTES)
                             .last()
-                            .map(|(i, c)| &text[..i + c.len_utf8()])
-                            .unwrap_or("");
+                            .map_or("", |(i, c)| &text[..i + c.len_utf8()]);
                         r.extracted_text = Some(format!("{truncated}\n[テキストが {0} MB を超えたため切り詰め]",
                             Self::MAX_EXTRACTED_TEXT_BYTES / (1024 * 1024)));
                     }
@@ -417,6 +430,15 @@ pub enum SandboxError {
     #[error("pool closed")]
     PoolClosed,
 
+    /// 添付ファイルがホスト側の上限を超過。
+    #[error("attachment too large: {size} bytes > {max} bytes")]
+    AttachmentTooLarge {
+        /// 実際のサイズ (bytes)。
+        size: usize,
+        /// 許容上限 (bytes)。
+        max: usize,
+    },
+
     /// I/O error.
     #[error("i/o: {0}")]
     Io(#[from] std::io::Error),
@@ -490,10 +512,63 @@ mod tests {
             .char_indices()
             .take_while(|(i, _)| *i < cap)
             .last()
-            .map(|(i, c)| &text[..i + c.len_utf8()])
-            .unwrap_or("");
+            .map_or("", |(i, c)| &text[..i + c.len_utf8()]);
         // バイト境界上で切れているか (String として有効か) を確認
         assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
         assert!(truncated.len() <= cap + 3, "文字境界での切り詰めは最大 1 文字 (3 バイト) の超過を許容");
+    }
+
+    #[test]
+    fn attachment_cap_constant_is_100mb() {
+        assert_eq!(RunningVm::MAX_ATTACHMENT_BYTES, 100 * 1024 * 1024);
+    }
+
+    #[tokio::test]
+    async fn oversized_attachment_is_rejected_before_vm() {
+        // 上限超過の添付は VM へ送る前にホスト側で拒否される (OOM 防止)
+        let (tx, _rx) = mpsc::channel(1);
+        let mut vm = RunningVm {
+            id: VmId(1),
+            spawned_at: Instant::now(),
+            _ctrl: (),
+            vsock: VsockChannel { _private: () },
+            teardown_tx: tx,
+        };
+        let job = AttachmentJob {
+            filename: "huge.bin".into(),
+            declared_mime: None,
+            bytes: vec![0u8; RunningVm::MAX_ATTACHMENT_BYTES + 1],
+            hints: RenderHints::default(),
+        };
+        let result = vm.render_attachment(job).await;
+        assert!(
+            matches!(result, Err(SandboxError::AttachmentTooLarge { .. })),
+            "上限超過の添付が拒否されていない: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn normal_sized_attachment_is_accepted() {
+        // 上限以内の添付は受理される (スタブ VsockChannel が Ready を返すため
+        // ProtocolError になるが、AttachmentTooLarge にはならないことを確認)
+        let (tx, _rx) = mpsc::channel(1);
+        let mut vm = RunningVm {
+            id: VmId(2),
+            spawned_at: Instant::now(),
+            _ctrl: (),
+            vsock: VsockChannel { _private: () },
+            teardown_tx: tx,
+        };
+        let job = AttachmentJob {
+            filename: "small.txt".into(),
+            declared_mime: Some("text/plain".into()),
+            bytes: vec![0u8; 1024],
+            hints: RenderHints::default(),
+        };
+        let result = vm.render_attachment(job).await;
+        assert!(
+            !matches!(result, Err(SandboxError::AttachmentTooLarge { .. })),
+            "通常サイズの添付が誤って拒否された"
+        );
     }
 }
