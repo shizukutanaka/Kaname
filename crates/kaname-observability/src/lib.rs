@@ -233,7 +233,11 @@ impl PrivacySanitizer {
     /// 文字列から PII を除去または匿名化する。
     #[must_use]
     pub fn sanitize(input: &str) -> String {
-        let mut result = input.to_string();
+        // 全角 ASCII (U+FF01–FF5E) → ASCII、全角スペース → space に正規化してから
+        // 各サニタイズルールを適用する。これにより alice＠example.com のような
+        // 全角文字を使った PII 漏洩バイパスを防ぐ。
+        let normalized = normalize_fullwidth(input);
+        let mut result = normalized;
 
         // クレジットカード番号 (13〜16 桁数字、スペース/ハイフン区切り可)
         result = redact_credit_card_numbers(&result);
@@ -260,6 +264,22 @@ impl PrivacySanitizer {
         }
         format!("eml_{:016x}", h)
     }
+}
+
+/// 全角 ASCII (U+FF01–FF5E) → 半角 ASCII、全角スペース (U+3000) → 空白 に変換する。
+///
+/// `alice＠example.com` のような全角文字を使った PII バイパスを防ぐために
+/// `PrivacySanitizer::sanitize` の前処理として使用する。
+fn normalize_fullwidth(s: &str) -> String {
+    s.chars().map(|c| {
+        if ('\u{FF01}'..='\u{FF5E}').contains(&c) {
+            char::from_u32(c as u32 - 0xFEE0).unwrap_or(c)
+        } else if c == '\u{3000}' {
+            ' '
+        } else {
+            c
+        }
+    }).collect()
 }
 
 fn mask_email_addresses(s: &str) -> String {
@@ -646,6 +666,44 @@ mod tests {
         let raw = "normal system event count=42";
         let sanitized = PrivacySanitizer::sanitize(raw);
         assert_eq!(raw, sanitized, "clean field must pass unchanged");
+    }
+
+    // ── 全角バイパステスト ──────────────────────────────────────────────
+
+    #[test]
+    fn privacy_fullwidth_at_sign_email_masked() {
+        // U+FF20 (＠) を使った全角メールアドレスがマスクされること
+        let input = "ユーザー alice＠example.com がログイン";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(
+            !output.contains("alice@example.com") && !output.contains("alice＠example.com"),
+            "全角@のメールアドレスがマスクされていない: {output}"
+        );
+    }
+
+    #[test]
+    fn privacy_fullwidth_digits_credit_card_redacted() {
+        // U+FF10–FF19 の全角数字クレジットカードがマスクされること
+        let input = "card: ４１１１１１１１１１１１１１１１ ok";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(
+            !output.contains("４１１１"),
+            "全角数字クレジットカードが漏洩: {output}"
+        );
+        assert!(output.contains("REDACTED"), "REDACTEDが挿入されていない: {output}");
+    }
+
+    #[test]
+    fn normalize_fullwidth_converts_ascii_range() {
+        // U+FF20 (＠) → U+0040 (@)
+        assert_eq!(normalize_fullwidth("ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ"),
+                   "alice@example.com");
+    }
+
+    #[test]
+    fn normalize_fullwidth_passes_normal_text() {
+        let s = "hello world 123";
+        assert_eq!(normalize_fullwidth(s), s);
     }
 
     #[test]
