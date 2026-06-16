@@ -347,15 +347,21 @@ impl SaasLinkInspector {
     /// 偽 SaaS サブドメイン検出。
     ///
     /// 例: `docusign.evil.com` は DocuSign を装っているが、ドメインは evil.com
+    ///
+    /// # ドット境界チェック
+    ///
+    /// `ends_with("docusign.com")` だけでは `notdocusign.com` も通過してしまう。
+    /// 正規ドメインの前にドットが来ることを確認する。
     #[allow(clippy::unused_self)]
     fn is_fake_saas_subdomain(&self, url: &str, platform: &SaasPlatform) -> bool {
         for legit_domain in platform.domains() {
             if url.contains(legit_domain) {
-                // URL から実際のドメイン部分を抽出
                 if let Some(domain) = extract_actual_domain(url) {
-                    // 抽出ドメインが正規ドメインそのもの or サブドメインで終わる
-                    if !domain.ends_with(legit_domain) {
-                        return true;  // 偽装の可能性
+                    // 正規ドメインそのもの、またはドット区切りのサブドメインのみ許可
+                    let is_legitimate = domain == legit_domain
+                        || domain.ends_with(&format!(".{legit_domain}"));
+                    if !is_legitimate {
+                        return true; // 偽装の可能性
                     }
                 }
             }
@@ -633,6 +639,70 @@ mod tests {
         hist.record("d@d.com", SaasPlatform::GoogleDrive);
         assert_eq!(hist.count("d@d.com", SaasPlatform::GoogleDrive), 0,
             "上限到達後の新規送信者はカウントされてはならない");
+    }
+
+    // ── ドット境界バイパステスト ──────────────────────────────────────────
+
+    #[test]
+    fn prefix_spoof_notdocusign_com_is_suspicious() {
+        // "notdocusign.com" は ends_with("docusign.com") == true だが偽ドメイン
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://notdocusign.com/sign/document",
+            "attacker@evil.com",
+            &hist,
+        );
+        if let Some(found) = result {
+            assert_eq!(found.risk, SaasLinkRisk::Suspicious,
+                "notdocusign.com は Suspicious でなければならない: {:?}", found.risk);
+        }
+    }
+
+    #[test]
+    fn prefix_spoof_notdropbox_com_is_suspicious() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://notdropbox.com/sh/abc123",
+            "attacker@evil.com",
+            &hist,
+        );
+        if let Some(found) = result {
+            assert_eq!(found.risk, SaasLinkRisk::Suspicious,
+                "notdropbox.com は Suspicious でなければならない: {:?}", found.risk);
+        }
+    }
+
+    #[test]
+    fn legitimate_subdomain_not_flagged_as_suspicious() {
+        // www.docusign.com は正規サブドメイン → Suspicious にしてはならない
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://www.docusign.com/sign",
+            "sender@corp.com",
+            &hist,
+        );
+        if let Some(found) = result {
+            assert_ne!(found.risk, SaasLinkRisk::Suspicious,
+                "www.docusign.com は正規サブドメインなので Suspicious にしてはならない");
+        }
+    }
+
+    #[test]
+    fn exact_legit_domain_not_flagged() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://dropbox.com/sh/abc123",
+            "sender@corp.com",
+            &hist,
+        );
+        if let Some(found) = result {
+            assert_ne!(found.risk, SaasLinkRisk::Suspicious,
+                "dropbox.com そのものを偽ドメイン扱いしてはならない");
+        }
     }
 
     #[test]
