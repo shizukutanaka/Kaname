@@ -230,7 +230,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
-    let at = email.find('@')?;
+    // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
+    // Use rfind to always split on the last '@', ensuring the domain is correct.
+    let at = email.rfind('@')?;
     Some(Address {
         display_name: addr.name.as_deref().map(|s| s.to_string()),
         addr: EmailAddr {
@@ -815,6 +817,43 @@ mod tests {
     fn javascript_href_blocked() {
         let out = sanitize_html(&raw("<a href=\"javascript:alert(1)\">click</a>"));
         assert!(!out.as_str().contains("javascript:"), "javascript: href must be blocked");
+    }
+
+    // ── quoted local part の @ バイパステスト ────────────────────────────
+
+    #[test]
+    fn addr_quoted_local_part_at_splits_on_last_at() {
+        // "ceo@trusted.com"@attacker.com の場合、ドメインは attacker.com でなければならない
+        let addr = mail_parser::Addr {
+            name:    None,
+            address: Some(std::borrow::Cow::Borrowed("\"ceo@trusted.com\"@attacker.com")),
+        };
+        let result = addr_to_address(&addr);
+        let result = result.expect("アドレス変換が成功するべき");
+        assert_eq!(result.addr.domain, "attacker.com",
+            "quoted local part を持つアドレスのドメインは最後の @ より後であるべき");
+        assert_eq!(result.addr.local, "\"ceo@trusted.com\"",
+            "quoted local part は @ の前の部分全体であるべき");
+    }
+
+    #[test]
+    fn addr_normal_email_splits_correctly() {
+        let addr = mail_parser::Addr {
+            name:    Some(std::borrow::Cow::Borrowed("Alice")),
+            address: Some(std::borrow::Cow::Borrowed("alice@example.com")),
+        };
+        let result = addr_to_address(&addr).expect("通常アドレスは変換できるべき");
+        assert_eq!(result.addr.local, "alice");
+        assert_eq!(result.addr.domain, "example.com");
+    }
+
+    #[test]
+    fn addr_no_at_sign_returns_none() {
+        let addr = mail_parser::Addr {
+            name:    None,
+            address: Some(std::borrow::Cow::Borrowed("invalid-no-at")),
+        };
+        assert!(addr_to_address(&addr).is_none(), "@ なしアドレスは None を返すべき");
     }
 }
 
