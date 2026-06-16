@@ -251,9 +251,11 @@ impl<'a> EvalCtx<'a> {
 
     /// 受信者ドメイン。
     fn recipient_domains(&self) -> Vec<String> {
+        // RFC 5321: ドメインは最後の `@` の後。`split('@').nth(1)` は
+        // `victim@corp.com@gmail.com` のような細工で 2 番目のフィールド (corp.com) を
+        // 取ってしまい、gmail.com 向けブロックルールを回避されるため rsplit_once を使う。
         self.to.iter()
-            .filter_map(|addr| addr.split('@').nth(1))
-            .map(|d| d.to_lowercase())
+            .filter_map(|addr| addr.rsplit_once('@').map(|(_, domain)| domain.to_lowercase()))
             .collect()
     }
 }
@@ -493,12 +495,37 @@ impl PatternLibrary {
 // Built-in classifiers
 // ============================================================================
 
+/// 全角数字 (U+FF10..=U+FF19) を ASCII 数字に正規化する。
+///
+/// is_ascii_digit() ベースの分類器 (マイナンバー・クレジットカード) は全角数字を
+/// 検出できないため、内部犯が `１２３４５６７８９０１８` のように全角で書くだけで
+/// DLP を回避できてしまう。検出前にこの関数で正規化する。
+fn normalize_fullwidth_digits(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.chars().any(|c| ('\u{FF10}'..='\u{FF19}').contains(&c)) {
+        std::borrow::Cow::Owned(
+            text.chars()
+                .map(|c| {
+                    if ('\u{FF10}'..='\u{FF19}').contains(&c) {
+                        // U+FF10 ('０') → '0' (オフセット 0xFF10)
+                        char::from(b'0' + (c as u32 - 0xFF10) as u8)
+                    } else {
+                        c
+                    }
+                })
+                .collect(),
+        )
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    }
+}
+
 fn detect_jp_my_number(text: &str) -> bool {
     // マイナンバー: 12 桁の個人番号 (ハイフンあり/なし両対応)
     // 総務省仕様のチェックディジット検証 (第 12 桁):
     //   p = Σ(i=1..11) d_i × w_i  where w = [2,3,4,5,6,7,2,3,4,5,6] (右から)
     //   check = (p % 11 < 2) ? 0 : 11 - (p % 11)
-    let digits: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+    let normalized = normalize_fullwidth_digits(text);
+    let digits: String = normalized.chars().filter(|c| c.is_ascii_digit()).collect();
 
     // テキスト中の連続 12 桁をすべて試す
     let bytes = digits.as_bytes();
@@ -537,6 +564,9 @@ fn detect_jp_corporate_number(text: &str) -> bool {
 }
 
 fn detect_credit_card(text: &str) -> bool {
+    // 全角数字を正規化してから検出 (全角での DLP 回避を防ぐ)
+    let normalized = normalize_fullwidth_digits(text);
+    let text = normalized.as_ref();
     // 検索: 16-digit groups with or without spaces/hyphens
     // 次に Luhn で検証
     let re = r"(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})";
@@ -1108,6 +1138,73 @@ mod tests {
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
         assert!(result.findings.iter().any(|f| f.action == Action::Warn),
             "スペース区切り難読化 CONFIDENTIAL を検出すべき");
+    }
+
+    // ── 全角数字による DLP 回避テスト ──────────────────────────────────────
+
+    #[test]
+    fn my_number_fullwidth_digits_still_detected() {
+        // 内部犯が全角数字でマイナンバーを書いて DLP 回避を試みる
+        // １２３４５６７８９０１８ = 123456789018 (有効なチェックディジット)
+        assert!(detect_jp_my_number("マイナンバーは １２３４５６７８９０１８ です"),
+            "全角数字のマイナンバーが検出されない (DLP 回避)");
+    }
+
+    #[test]
+    fn my_number_fullwidth_blocks_outbound() {
+        let to = vec!["attacker@gmail.com".into()];
+        let body = "番号: １２３４５６７８９０１８";
+        let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
+        assert_eq!(result.verdict, Action::Block,
+            "全角マイナンバーの外部送信はブロックされるべき");
+    }
+
+    #[test]
+    fn normalize_fullwidth_digits_roundtrip() {
+        assert_eq!(normalize_fullwidth_digits("０１２３４５６７８９").as_ref(), "0123456789");
+        // 全角を含まない場合は借用のまま (アロケーションなし)
+        assert!(matches!(normalize_fullwidth_digits("hello"), std::borrow::Cow::Borrowed(_)));
+        // 混在
+        assert_eq!(normalize_fullwidth_digits("ab１２cd").as_ref(), "ab12cd");
+    }
+
+    #[test]
+    fn credit_card_fullwidth_digits_detected() {
+        // Visa テスト番号 4532015112830366 を全角で
+        let fullwidth = "４５３２０１５１１２８３０３６６";
+        assert!(detect_credit_card(fullwidth),
+            "全角クレジットカード番号が検出されない (DLP 回避)");
+    }
+
+    // ── 受信者ドメイン抽出のバイパステスト ─────────────────────────────────
+
+    #[test]
+    fn recipient_domain_uses_last_at_segment() {
+        // 細工アドレス victim@corp.com@gmail.com の実ドメインは gmail.com (最後の @)
+        // 旧実装 split('@').nth(1) は corp.com を取り gmail ブロックを回避していた
+        let to = vec!["victim@corp.com@gmail.com".to_string()];
+        let c = ctx("body", "me@corp.com", &to);
+        let domains = c.recipient_domains();
+        assert_eq!(domains, vec!["gmail.com".to_string()],
+            "最後の @ の後のドメインを抽出すべき: {domains:?}");
+    }
+
+    #[test]
+    fn source_code_to_disguised_gmail_still_blocked() {
+        // 細工された gmail アドレスでソースコード DLP を回避しようとする
+        let to = vec!["exfil@internal.corp@gmail.com".to_string()];
+        let body = "fn main() { use std::io; import os; class Foo { def bar(self) {} } pub mod test { function(x) {} const char* p = NULL; SELECT * FROM users WHERE id = 1; }";
+        let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
+        assert!(result.findings.iter().any(|f| f.action == Action::Block),
+            "細工 gmail アドレスでもソースコードはブロックされるべき");
+    }
+
+    #[test]
+    fn recipient_domain_no_at_sign_is_skipped() {
+        // @ を含まない不正アドレスはドメインなし扱い (パニックしない)
+        let to = vec!["not-an-email".to_string()];
+        let c = ctx("body", "me@corp.com", &to);
+        assert!(c.recipient_domains().is_empty());
     }
 
     #[test]
