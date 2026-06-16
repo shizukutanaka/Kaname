@@ -162,9 +162,21 @@ impl I18n {
     }
 
     /// 外部ロケールファイルをロードする。
-    pub fn load_catalog(&self, catalog: Catalog) {
+    ///
+    /// # バリデーション
+    ///
+    /// - ロケール識別子: BCP 47 準拠の ASCII のみ、最大 35 文字
+    /// - メッセージ数: 10,000 件以下
+    pub fn load_catalog(&self, catalog: Catalog) -> Result<(), I18nError> {
+        validate_locale_id(&catalog.locale)?;
+        if catalog.messages.len() > 10_000 {
+            return Err(I18nError::LoadFailed(format!(
+                "メッセージ数が上限を超えています: {} > 10000", catalog.messages.len()
+            )));
+        }
         let locale = catalog.locale.clone();
         self.catalogs.write().unwrap_or_else(|e| e.into_inner()).insert(locale, catalog);
+        Ok(())
     }
 
     // ── 組み込みロケール ──────────────────────────────────────────────────
@@ -324,6 +336,28 @@ pub fn plural_category(locale: &str, n: u64) -> PluralCategory {
 // テスト
 // ============================================================================
 
+/// BCP 47 ロケール識別子のバリデーション。
+///
+/// - ASCII 英数字とハイフンのみ許可 (例: "ja", "en", "zh-Hans", "pt-BR")
+/// - 最大 35 文字 (BCP 47 の実用的な上限)
+/// - 空文字列・NULL バイト・パス区切り文字を拒否
+fn validate_locale_id(locale: &str) -> Result<(), I18nError> {
+    if locale.is_empty() {
+        return Err(I18nError::LoadFailed("ロケール識別子が空です".into()));
+    }
+    if locale.len() > 35 {
+        return Err(I18nError::LoadFailed(format!(
+            "ロケール識別子が長すぎます: {} 文字 (上限 35)", locale.len()
+        )));
+    }
+    if !locale.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(I18nError::LoadFailed(format!(
+            "ロケール識別子に不正な文字が含まれています: {locale:?}"
+        )));
+    }
+    Ok(())
+}
+
 /// HTML 特殊文字をエスケープする (XSS 防止)。
 ///
 /// `t()` の動的プレースホルダー値に自動適用される。
@@ -473,8 +507,57 @@ mod tests {
             rtl: false,
             format_locale: "fr-FR".into(),
         };
-        i18n.load_catalog(cat);
+        i18n.load_catalog(cat).unwrap();
         i18n.set_locale("fr").unwrap();
         assert_eq!(i18n.t_simple("app.name"), "Kaname");
+    }
+
+    // ── ロケール識別子バリデーションテスト ────────────────────────────────
+
+    #[test]
+    fn load_catalog_rejects_empty_locale() {
+        let i18n = I18n::new();
+        let cat = Catalog { locale: "".into(), ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "空ロケールは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_rejects_null_byte_locale() {
+        let i18n = I18n::new();
+        let cat = Catalog { locale: "ja\x00en".into(), ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "NULL バイト含むロケールは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_rejects_path_traversal_locale() {
+        let i18n = I18n::new();
+        let cat = Catalog { locale: "../../etc/passwd".into(), ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "パストラバーサル文字を含むロケールは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_rejects_too_long_locale() {
+        let i18n = I18n::new();
+        let cat = Catalog { locale: "a".repeat(36), ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "36文字超のロケールは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_rejects_too_many_messages() {
+        let i18n = I18n::new();
+        let messages: HashMap<String, String> = (0..10_001)
+            .map(|i| (format!("key.{i}"), format!("value {i}")))
+            .collect();
+        let cat = Catalog { locale: "de".into(), messages, ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "10001件のメッセージは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_accepts_valid_bcp47() {
+        let i18n = I18n::new();
+        for locale in &["de", "zh-Hans", "pt-BR", "sr-Latn-RS"] {
+            let cat = Catalog { locale: (*locale).into(), ..Default::default() };
+            assert!(i18n.load_catalog(cat).is_ok(), "有効な BCP 47 ロケール {locale:?} は受け入れるべき");
+        }
     }
 }
