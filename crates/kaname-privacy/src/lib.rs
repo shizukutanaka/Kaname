@@ -106,8 +106,13 @@ impl TrackingDetector {
     /// 入力サイズを 10 MB に制限する (悪意ある巨大 HTML による OOM 防止)。
     pub fn analyze_html(&self, html: &str) -> TrackingAnalysis {
         const MAX_HTML_BYTES: usize = 10 * 1024 * 1024;
+        // MAX_HTML_BYTES がマルチバイト UTF-8 文字の中間にある場合に
+        // &str スライスがパニックする。is_char_boundary() で安全な境界を探す。
         let html = if html.len() > MAX_HTML_BYTES {
-            &html[..MAX_HTML_BYTES]
+            let safe = (0..=MAX_HTML_BYTES).rev()
+                .find(|&i| html.is_char_boundary(i))
+                .unwrap_or(0);
+            &html[..safe]
         } else {
             html
         };
@@ -594,5 +599,40 @@ mod tests {
         // パニックしないことを確認
         let result = detector.analyze_html(&normal);
         assert_eq!(result.tracker_count, 0, "切り捨て後はトラッカーなし");
+    }
+
+    // ── UTF-8 境界安全カットテスト ─────────────────────────────────────
+
+    #[test]
+    fn html_multibyte_boundary_does_not_panic() {
+        // 10MB ちょうどの境界が日本語マルチバイト文字の中間になるケース
+        // &html[..10*1024*1024] が is_char_boundary でない場合にパニックしたバグの回帰テスト
+        const MAX: usize = 10 * 1024 * 1024;
+        let detector = TrackingDetector::new();
+
+        // ASCII (1 バイト) で MAX-2 バイト埋め、末尾に 3 バイト文字「日」を追加
+        // → MAX バイト目がマルチバイト文字の途中になる
+        let mut html = "a".repeat(MAX - 2);
+        html.push('日'); // 3 バイト: 0xE6 0x97 0xA5
+        // html.len() = MAX - 2 + 3 = MAX + 1 > MAX → 切り捨て発動
+        assert!(html.len() > MAX);
+
+        // パニックしないことを確認 (パニックするとテストがクラッシュする)
+        let result = detector.analyze_html(&html);
+        assert_eq!(result.tracker_count, 0, "切り捨て後はトラッカーなし");
+    }
+
+    #[test]
+    fn html_exactly_at_limit_with_multibyte() {
+        // 境界が4バイト文字 (絵文字) の途中になるケース
+        const MAX: usize = 10 * 1024 * 1024;
+        let detector = TrackingDetector::new();
+
+        let mut html = "b".repeat(MAX - 1);
+        html.push('🔐'); // 4 バイト: 0xF0 0x9F 0x94 0x90
+        assert!(html.len() > MAX);
+
+        let result = detector.analyze_html(&html);
+        let _ = result; // パニックしないことが目的
     }
 }
