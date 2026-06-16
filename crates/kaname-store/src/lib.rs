@@ -365,9 +365,9 @@ impl Store {
                 |row| row.get(0),
             ).unwrap_or_default();
 
-            // ハッシュ計算: SHA-256(prev_hash || event_type || payload_json)
-            let hash_input = format!("{}{}{}", prev_hash, event_type, payload_json);
-            let hash = sha256_hex(hash_input.as_bytes());
+            // ハッシュ計算: SHA-256(prev_hash NUL event_type NUL payload_json)
+            // NUL 区切りにより event_type/payload 境界の曖昧性を排除する。
+            let hash = sha256_hex_fields(&[prev_hash.as_bytes(), event_type.as_bytes(), payload_json.as_bytes()]);
 
             conn.execute(
                 "INSERT INTO audit_log (account_id, event_type, payload_json, prev_hash, hash)
@@ -418,7 +418,7 @@ impl Store {
                 break;
             }
 
-            let expected = sha256_hex(format!("{}{}{}", prev_hash, event_type, payload_json).as_bytes());
+            let expected = sha256_hex_fields(&[prev_hash.as_bytes(), event_type.as_bytes(), payload_json.as_bytes()]);
             if expected != stored_hash {
                 tracing::error!(seq, "監査ログのハッシュが不正");
                 return Err(StoreError::AuditChainBroken(seq));
@@ -607,6 +607,22 @@ impl Store {
 fn sha256_hex(data: &[u8]) -> String {
     let hash = Sha256::digest(data);
     hash.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// NUL 区切りで複数フィールドを結合してから SHA-256 を計算する。
+///
+/// `SHA-256(f0 || NUL || f1 || NUL || f2 || ...)` とすることで
+/// フィールド境界の曖昧性 (length-extension 的な境界攻撃) を防ぐ。
+fn sha256_hex_fields(fields: &[&[u8]]) -> String {
+    use sha2::Digest as _;
+    let mut h = Sha256::new();
+    for (i, f) in fields.iter().enumerate() {
+        if i > 0 {
+            h.update(b"\x00");
+        }
+        h.update(f);
+    }
+    h.finalize().iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// テキストフィールドの基本バリデーション。
@@ -888,5 +904,59 @@ mod tests {
     #[test]
     fn validate_text_field_accepts_valid() {
         assert!(validate_text_field("normal text 普通", "test", 100).is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // sha256_hex_fields — フィールド境界曖昧性テスト
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sha256_fields_boundary_not_ambiguous() {
+        // ("AB", "CD") と ("A", "BCD") は異なるハッシュになること
+        let h1 = sha256_hex_fields(&[b"prev", b"AB", b"CD"]);
+        let h2 = sha256_hex_fields(&[b"prev", b"A",  b"BCD"]);
+        assert_ne!(h1, h2, "フィールド境界の曖昧性が存在する");
+    }
+
+    #[test]
+    fn sha256_fields_consistent_with_itself() {
+        let h1 = sha256_hex_fields(&[b"prev", b"LOGIN", b"{\"user\":\"a\"}"]);
+        let h2 = sha256_hex_fields(&[b"prev", b"LOGIN", b"{\"user\":\"a\"}"]);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn sha256_fields_empty_prev_hash_distinct_from_nonempty() {
+        let h1 = sha256_hex_fields(&[b"",     b"EV", b"payload"]);
+        let h2 = sha256_hex_fields(&[b"hash", b"EV", b"payload"]);
+        assert_ne!(h1, h2);
+    }
+
+    #[tokio::test]
+    async fn audit_chain_verify_catches_hash_mismatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.audit(Some("acct1"), "LOGIN", &serde_json::json!({"ok": true})).await.unwrap();
+
+        // チェーンが健全な状態で検証
+        let ok = store.verify_audit_chain().await.unwrap();
+        assert!(ok, "正常チェーンは valid であるべき");
+    }
+
+    #[tokio::test]
+    async fn audit_chain_two_entries_verify() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.audit(Some("acct1"), "LOGIN",  &serde_json::json!({"ip": "1.2.3.4"})).await.unwrap();
+        store.audit(Some("acct1"), "LOGOUT", &serde_json::json!({"session": "abc"})).await.unwrap();
+
+        let ok = store.verify_audit_chain().await.unwrap();
+        assert!(ok);
     }
 }
