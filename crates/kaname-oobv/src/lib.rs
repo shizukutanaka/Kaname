@@ -90,7 +90,11 @@ pub enum WordLocale {
 
 impl WordLocale {
     /// ロケール文字列 ("en", "ja", "ja-JP" など) から変換する。
+    ///
+    /// 失敗しない (未知のロケールは `En` にフォールバック) ため `FromStr` ではなく
+    /// 独立メソッドとして提供する。
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(locale: &str) -> Self {
         if locale.starts_with("ja") {
             Self::Ja
@@ -307,7 +311,14 @@ impl VerificationCeremony {
     /// - 既に検証完了 → `CeremonyError::AlreadyCompleted`
     /// - 期限切れ → `CeremonyError::Expired`
     pub fn verify(&mut self, user_response: &str) -> Result<CeremonyState, CeremonyError> {
-        // 期限チェック
+        // 終端状態は不変。期限チェックより先に判定し、成功 (Verified) や
+        // ロック済み (Locked) を後続の期限切れで上書きしない。
+        // (上書きすると audit_record() が成功した検証を Expired と誤記録し、監査証跡が汚染される)
+        if self.state != CeremonyState::Pending {
+            return Err(CeremonyError::AlreadyCompleted(self.state));
+        }
+
+        // 期限チェック (Pending のときのみ Expired へ遷移)
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -316,10 +327,6 @@ impl VerificationCeremony {
         if now > self.expires_at_unix {
             self.state = CeremonyState::Expired;
             return Err(CeremonyError::Expired);
-        }
-
-        if self.state != CeremonyState::Pending {
-            return Err(CeremonyError::AlreadyCompleted(self.state));
         }
 
         // ブルートフォース防止: 試行回数上限チェック
@@ -598,6 +605,37 @@ mod tests {
         let result = c.verify(&correct_word).unwrap();
         assert_eq!(result, CeremonyState::Verified);
         assert_eq!(c.state, CeremonyState::Verified);
+    }
+
+    #[test]
+    fn verified_ceremony_not_overwritten_by_later_expiry() {
+        // 検証成功後に期限切れになっても Verified が Expired に上書きされてはならない
+        // (上書きすると audit_record が成功を Expired と誤記録し監査証跡が汚染される)
+        let mut c = VerificationCeremony::new("e1", "alice@example.com");
+        let correct = c.phrase[c.challenge_index as usize].as_str().to_string();
+        assert_eq!(c.verify(&correct).unwrap(), CeremonyState::Verified);
+
+        // 期限を過去に強制し、再度 verify を呼ぶ
+        c.expires_at_unix = 0;
+        let result = c.verify(&correct);
+        assert!(matches!(result, Err(CeremonyError::AlreadyCompleted(CeremonyState::Verified))),
+            "期限切れ後の再 verify で Verified が上書きされた: {result:?}");
+        assert_eq!(c.state, CeremonyState::Verified, "終端状態 Verified は不変であるべき");
+        // 監査記録も Verified のままであること
+        assert_eq!(c.audit_record().state, CeremonyState::Verified);
+    }
+
+    #[test]
+    fn locked_ceremony_not_overwritten_by_later_expiry() {
+        let mut c = VerificationCeremony::new("e1", "alice@example.com");
+        for _ in 0..MAX_VERIFY_ATTEMPTS {
+            let _ = c.verify("wrong");
+        }
+        assert_eq!(c.state, CeremonyState::Locked);
+        // 期限切れ後も Locked のまま
+        c.expires_at_unix = 0;
+        let _ = c.verify("wrong");
+        assert_eq!(c.state, CeremonyState::Locked, "終端状態 Locked は期限切れで上書きされない");
     }
 
     #[test]
