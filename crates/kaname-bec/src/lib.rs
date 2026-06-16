@@ -331,6 +331,20 @@ impl BecDetector {
             });
         }
 
+        // 混在スクリプト (raw UTF-8 ホモグリフ)。
+        // levenshtein1 は距離 1 のホモグリフしか捉えず、xn-- は punycode 時のみ働く。
+        // 複数文字置換 (pаypаl.com 等) や raw Unicode 混在はここで捕捉する。
+        if is_mixed_script_domain(domain) {
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.35,
+                label: "混在スクリプトドメイン".to_string(),
+                rationale: format!(
+                    "'{domain}' は ASCII と非 ASCII 文字が混在 (homoglyph 攻撃の疑い)"
+                ),
+            });
+        }
+
         // Return-Path 不一致。
         if let Some(rp) = req.return_path {
             let rp_domain = extract_domain(rp).unwrap_or("");
@@ -504,6 +518,23 @@ fn homoglyph_match<'a>(
         }
     }
     None
+}
+
+/// ドメインラベルに ASCII 英字と非 ASCII 英字が混在しているかを判定する。
+///
+/// Unicode セキュリティ (UTS #39) のホモグリフ攻撃検出。
+/// `levenshtein1` は編集距離ちょうど 1 のホモグリフ (例: `pаypal.com` キリル文字 1 個) しか
+/// 捕捉できず、`pаypаl.com` (キリル文字 2 個 = 距離 2) や raw UTF-8 の混在を取りこぼす。
+/// さらに `xn--` チェックは punycode エンコード時しか働かない。
+///
+/// 正規の企業ドメインは全 ASCII、正規の IDN (例: 日本語ドメイン) は全非 ASCII。
+/// 1 ラベル内で両者が混ざるのはホモグリフ攻撃の署名なので、これを検出する。
+fn is_mixed_script_domain(domain: &str) -> bool {
+    domain.split('.').any(|label| {
+        let has_ascii_alpha = label.chars().any(|c| c.is_ascii_alphabetic());
+        let has_non_ascii_alpha = label.chars().any(|c| !c.is_ascii() && c.is_alphabetic());
+        has_ascii_alpha && has_non_ascii_alpha
+    })
 }
 
 /// a と b のレーベンシュタイン距離がちょうど 1 の場合 true。
@@ -806,6 +837,53 @@ mod tests {
         assert_eq!(extract_domain("alice@example.com"), Some("example.com"));
         assert_eq!(extract_domain("Alice <alice@example.com>"), Some("example.com"));
         assert_eq!(extract_domain("no at sign"), None);
+    }
+
+    // ── 混在スクリプト・ホモグリフ検出 ──────────────────────────────────────
+
+    #[test]
+    fn mixed_script_domain_detected() {
+        // pаypаl.com — キリル文字 а (U+0430) が 2 箇所。levenshtein1 では距離 2 で取りこぼす
+        let cyrillic_a = '\u{0430}';
+        let domain = format!("p{cyrillic_a}yp{cyrillic_a}l.com");
+        assert!(is_mixed_script_domain(&domain),
+            "複数キリル文字の混在ドメインを検出できていない");
+    }
+
+    #[test]
+    fn pure_ascii_domain_not_mixed_script() {
+        assert!(!is_mixed_script_domain("paypal.com"));
+        assert!(!is_mixed_script_domain("mitsui-global.co.jp"));
+    }
+
+    #[test]
+    fn pure_japanese_idn_not_flagged_as_mixed() {
+        // 正規の日本語ドメイン (全非 ASCII ラベル) は誤検出しない
+        assert!(!is_mixed_script_domain("日本語.jp"),
+            "純日本語ドメインを誤ってホモグリフ扱いしている");
+    }
+
+    #[test]
+    fn multi_homoglyph_domain_escalates_verdict() {
+        // levenshtein1 を回避する複数文字ホモグリフでも Domain シグナルが立つこと
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "ok".into() }));
+        let contacts: Vec<String> = vec![];
+        let cyrillic_a = '\u{0430}';
+        let from = format!("Finance <finance@p{cyrillic_a}yp{cyrillic_a}l.com>");
+        let req = AssessmentRequest {
+            from_header: &from,
+            return_path: None,
+            subject: "invoice",
+            body_text: "please review",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "paypal.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(a.signals.iter().any(|s| s.label.contains("混在スクリプト")),
+            "混在スクリプトシグナルが出ていない: {:?}", a.signals);
     }
 
     #[test]
