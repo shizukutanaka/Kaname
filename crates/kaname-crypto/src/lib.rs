@@ -244,12 +244,16 @@ impl SharedSecret {
         &self.0
     }
 
-    /// HKDF でアプリ固有のサブキーを導出。
+    /// HKDF-SHA-256 でアプリ固有のサブキーを導出。
+    ///
+    /// `info` はコンテキスト識別子 (例: b"kaname-encrypt-v1") として使う。
+    /// XOR ではなく本物の HKDF を使うことで、info が既知でも秘密が漏洩しない。
+    #[must_use]
     pub fn derive_key(&self, info: &[u8]) -> [u8; 32] {
+        let hkdf = Hkdf::<Sha256>::new(None, &self.0);
         let mut out = [0u8; 32];
-        for (i, b) in info.iter().enumerate().take(32) {
-            out[i] = self.0[i % 32] ^ b;
-        }
+        // 出力長 32 バイトは SHA-256 ブロックサイズ内 → InvalidLength は到達不能
+        let _ = hkdf.expand(info, &mut out);
         out
     }
 }
@@ -738,5 +742,49 @@ mod tests {
         // 逆順 (pqc || classical) — 型安全 API では表現不能だが値レベルで確認
         let reversed = combine_shared_secrets(&p2, &c2);
         assert_ne!(correct.0, reversed.0, "order must matter");
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // derive_key: XOR スタブではなく本物の HKDF を使っていることを確認
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn derive_key_is_not_xor() {
+        // XOR なら ss ^ info[..32] になるが HKDF の出力はそうならない
+        let ss = SharedSecret([0xAAu8; 32]);
+        let info = [0xAAu8; 32]; // ss と同じ値 → XOR なら全ゼロ
+        let out = ss.derive_key(&info);
+        assert_ne!(out, [0u8; 32], "XOR スタブが残っている: all-zero output");
+    }
+
+    #[test]
+    fn derive_key_different_info_gives_different_output() {
+        let ss = SharedSecret([0x77u8; 32]);
+        let out1 = ss.derive_key(b"kaname-encrypt-v1");
+        let out2 = ss.derive_key(b"kaname-auth-v1");
+        assert_ne!(out1, out2, "異なる info は異なるサブキーを生成しなければならない");
+    }
+
+    #[test]
+    fn derive_key_is_deterministic() {
+        let ss = SharedSecret([0x55u8; 32]);
+        let a = ss.derive_key(b"context");
+        let b = ss.derive_key(b"context");
+        assert_eq!(a, b, "derive_key は決定的でなければならない");
+    }
+
+    #[test]
+    fn derive_key_output_not_trivially_invertible() {
+        // info が既知でも ss が復元できないことを確認
+        // (完全な証明はできないが XOR スタブなら out ^ info == ss になる)
+        let ss = SharedSecret([0x12u8; 32]);
+        let info = b"known-context";
+        let out = ss.derive_key(info);
+        // XOR なら: out[i] ^ info[i % 32] == ss[i]
+        let mut xor_candidate = [0u8; 32];
+        for (i, b) in out.iter().enumerate() {
+            xor_candidate[i] = b ^ info[i % info.len()];
+        }
+        assert_ne!(xor_candidate, ss.0, "XOR スタブの出力は info で逆算できる");
     }
 }
