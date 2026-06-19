@@ -495,6 +495,8 @@ impl Bridge {
         report: AnalysisReport,
         untrusted_source: &Content<Untrusted>,
     ) -> Result<Content<Trusted>, BridgeError> {
+        const MAX_EMAIL_ID_LEN: usize = 1024;
+
         // 1. 起源整合性チェック — 攻撃者が別メールの ID を返してきていないか
         let source_email_id = match untrusted_source.provenance() {
             Provenance::Network { email_id, .. }
@@ -504,13 +506,19 @@ impl Bridge {
         };
 
         // source_email_id 長さ上限 (無制限 String により EmailIdMismatch エラーで大量メモリ確保を防ぐ)
-        const MAX_EMAIL_ID_LEN: usize = 1024;
         if report.source_email_id.len() > MAX_EMAIL_ID_LEN {
             return Err(BridgeError::TooLong {
                 field: "source_email_id",
                 max: MAX_EMAIL_ID_LEN,
                 actual: report.source_email_id.len(),
             });
+        }
+
+        // source_email_id の制御文字チェック。
+        // 攻撃者が "legit_id\x00injected" を送り込み、比較を混乱させることを防ぐ。
+        // JMAP の email_id は通常 ASCII 印字可能文字のみで構成される。
+        if report.source_email_id.bytes().any(|b| b < 0x20 || b == 0x7F) {
+            return Err(BridgeError::InvalidChars("source_email_id"));
         }
 
         if report.source_email_id != source_email_id {
@@ -559,8 +567,7 @@ impl Bridge {
         let audit_result = auditor.audit(report.summary.as_str());
         if !audit_result.safe_to_display {
             let finding = audit_result.findings.into_iter().next()
-                .map(|f| format!("{f:?}"))
-                .unwrap_or_else(|| "unknown".to_string());
+                .map_or_else(|| "unknown".to_string(), |f| format!("{f:?}"));
             return Err(BridgeError::SummaryAuditFailed { reason: finding });
         }
 
@@ -720,7 +727,7 @@ pub enum BridgeError {
     #[error("'{0}' が空です")]
     EmptyField(&'static str),
 
-    /// OutputAuditor による要約検査失敗 (hidden instruction / exfil 検出)。
+    /// `OutputAuditor` による要約検査失敗 (hidden instruction / exfil 検出)。
     #[error("要約の出力検査に失敗しました: {reason}")]
     SummaryAuditFailed {
         /// 検出された問題の種別。
@@ -1199,6 +1206,49 @@ mod tests {
         report.summary = BoundedString::new("会議の確認です").unwrap();
         let result = bridge.validate_and_promote(report, &untrusted);
         assert!(result.is_ok(), "256 文字の ID は受け入れられるべき: {result:?}");
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // source_email_id 制御文字インジェクションテスト
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn bridge_rejects_null_byte_in_source_email_id() {
+        // 攻撃: "legit\x00spoof" を送ることで ID 比較を混乱させる
+        let bridge = Bridge::new();
+        let untrusted = make_untrusted("legit", "hello");
+        let mut report = make_valid_report("legit");
+        report.source_email_id = "legit\x00spoof".to_string();
+        // NUL バイトが含まれるので EmailIdMismatch より先に InvalidChars が返るはず
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(
+            matches!(result, Err(BridgeError::InvalidChars("source_email_id"))),
+            "NUL バイトを含む source_email_id は拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn bridge_rejects_control_char_in_source_email_id() {
+        let bridge = Bridge::new();
+        let untrusted = make_untrusted("e1", "hello");
+        let mut report = make_valid_report("e1");
+        report.source_email_id = "e1\x1b[31m".to_string(); // ESC シーケンス
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(
+            matches!(result, Err(BridgeError::InvalidChars("source_email_id"))),
+            "制御文字を含む source_email_id は拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn bridge_accepts_normal_source_email_id() {
+        // 印字可能 ASCII の ID は受け入れる
+        let bridge = Bridge::new();
+        let id = "email-id-abc123/xyz";
+        let untrusted = Content::<Untrusted>::from_network("hello", id);
+        let report = make_valid_report(id);
+        let result = bridge.validate_and_promote(report, &untrusted);
+        assert!(result.is_ok(), "通常の email ID は受け入れるべき: {result:?}");
     }
 
     /// Untrusted を Trusted の API に渡そうとするとコンパイルエラー。
