@@ -396,7 +396,20 @@ impl BecDetector {
     }
 
     fn check_content_heuristics(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
-        let b = req.body_text.to_lowercase();
+        // DoS 防止: 本文解析は先頭 20,000 文字のみ。
+        // 典型的な BEC メールはこの範囲内にシグナルを含む。
+        const MAX_BODY_CHARS: usize = 20_000;
+        let body_slice: &str = if req.body_text.chars().count() > MAX_BODY_CHARS {
+            // 文字境界で安全に切り捨て
+            let end = req.body_text
+                .char_indices()
+                .nth(MAX_BODY_CHARS)
+                .map_or(req.body_text.len(), |(i, _)| i);
+            &req.body_text[..end]
+        } else {
+            req.body_text
+        };
+        let b = body_slice.to_lowercase();
 
         // 緊急性 + 金銭の組み合わせ (典型的な BEC)。
         let urgency_markers = ["urgent", "asap", "至急", "本日中", "今すぐ", "immediately"];
@@ -434,8 +447,10 @@ impl BecDetector {
 
     fn check_aitm(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
         use crate::aitm::{AitmDetector, AitmVerdict};
+        // DoS 防止: URL は最初の 200 件のみ評価する。
+        const MAX_URLS: usize = 200;
         let detector = AitmDetector::new();
-        for url in req.extracted_urls {
+        for url in req.extracted_urls.iter().take(MAX_URLS) {
             let risk = detector.analyze(url);
             let contribution = match risk.verdict {
                 // AiTM Dangerous は高リスク — 単独でも Suspicious 相当のスコアに寄与させる
@@ -933,6 +948,53 @@ mod tests {
         a.insert("budget".to_string(), 0.5);
         let sim = cosine_similarity(&a, &a.clone());
         assert!((sim - 1.0).abs() < 1e-10, "同一ベクトルの類似度は 1.0");
+    }
+
+    // ── DoS 防止テスト ────────────────────────────────────────────────────
+
+    #[test]
+    fn assess_large_body_does_not_panic() {
+        // 200,000 文字の本文を渡しても assess() がパニックしない (先頭 20,000 文字で打ち切り)
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.1, expl: "ok".into() }));
+        let huge_body = "至急 振込 ".repeat(30_000); // 6文字×30000 = 180,000文字超
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Sender <sender@example.com>",
+            return_path: None,
+            subject: "test",
+            body_text: &huge_body,
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+        };
+        // パニックせず正常な結果を返すこと
+        let result = det.assess(req);
+        assert!(result.is_ok(), "巨大本文でpanicしてはならない: {result:?}");
+    }
+
+    #[test]
+    fn assess_many_urls_does_not_hang() {
+        // 10,000 件の URL を渡しても MAX_URLS=200 件でカットする
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.1, expl: "ok".into() }));
+        let contacts: Vec<String> = vec![];
+        let urls: Vec<String> = (0..10_000)
+            .map(|i| format!("https://safe-url.example.com/path/{i}"))
+            .collect();
+        let req = AssessmentRequest {
+            from_header: "Sender <sender@example.com>",
+            return_path: None,
+            subject: "test",
+            body_text: "hello",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &urls,
+        };
+        let result = det.assess(req);
+        assert!(result.is_ok(), "大量URLでpanicしてはならない: {result:?}");
     }
 }
 
