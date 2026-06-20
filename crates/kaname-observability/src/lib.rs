@@ -233,6 +233,20 @@ impl PrivacySanitizer {
     /// 文字列から PII を除去または匿名化する。
     #[must_use]
     pub fn sanitize(input: &str) -> String {
+        // 入力サイズを制限する (複数パス処理による OOM/CPU DoS 防止)
+        // ログメッセージが大きすぎる場合は先頭のみサニタイズして truncation を示す
+        const MAX_SANITIZE_BYTES: usize = 64 * 1024; // 64 KB
+        let truncated;
+        let input = if input.len() > MAX_SANITIZE_BYTES {
+            let end = (0..=MAX_SANITIZE_BYTES)
+                .rev()
+                .find(|&i| input.is_char_boundary(i))
+                .unwrap_or(0);
+            truncated = format!("{}…[{} バイト超過のため切り詰め]", &input[..end], input.len());
+            truncated.as_str()
+        } else {
+            input
+        };
         // 全角 ASCII (U+FF01–FF5E) → ASCII、全角スペース → space に正規化してから
         // 各サニタイズルールを適用する。これにより alice＠example.com のような
         // 全角文字を使った PII 漏洩バイパスを防ぐ。
@@ -712,5 +726,23 @@ mod tests {
         // (型が合わないとコンパイルエラーになる)
         let _layer: Box<dyn std::any::Any> = Box::new(PrivacyLayer);
         // Layer<S> の具体的な確認は統合テストで行う
+    }
+
+    #[test]
+    fn sanitize_huge_input_does_not_oom() {
+        // 攻撃: 100MB ログ文字列を sanitize() に渡すと 4 パス × 100MB = CPU/OOM DoS
+        let huge = "a@b.com ".repeat(2_000_000); // ~14MB
+        let result = PrivacySanitizer::sanitize(&huge);
+        // 64KB 以内に切り詰められていること
+        assert!(result.len() <= 64 * 1024 + 200, // truncation メッセージ分の余裕
+            "sanitize の出力が上限を超えた: {} bytes", result.len());
+        // truncation マーカーが含まれること
+        assert!(result.contains("切り詰め"), "大入力は切り詰めメッセージを含むべき");
+    }
+
+    #[test]
+    fn sanitize_normal_input_works() {
+        let result = PrivacySanitizer::sanitize("alice@example.com の Bearer abc123 です");
+        assert!(!result.contains("abc123"), "Bearer トークンは除去されるべき");
     }
 }
