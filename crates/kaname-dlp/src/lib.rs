@@ -340,6 +340,8 @@ impl DlpEngine {
     pub fn evaluate(&self, ctx: &EvalCtx<'_>, direction: Direction) -> DlpResult {
         let mut findings = Vec::new();
         let text = ctx.full_text();
+        // to_lowercase() のアロケーションをルールループ外で一度だけ実行 (P2)
+        let text_lower = text.to_lowercase();
 
         for rule in &self.rules {
             if !rule.enabled {
@@ -351,7 +353,7 @@ impl DlpEngine {
             {
                 continue;
             }
-            if self.eval_condition(&rule.condition, ctx, &text) {
+            if self.eval_condition(&rule.condition, ctx, &text, &text_lower) {
                 findings.push(Finding {
                     rule_id:   rule.id.clone(),
                     rule_name: rule.name.clone(),
@@ -370,11 +372,11 @@ impl DlpEngine {
         DlpResult { verdict, findings }
     }
 
-    fn eval_condition(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str) -> bool {
-        self.eval_condition_depth(cond, ctx, text, 0)
+    fn eval_condition(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str, text_lower: &str) -> bool {
+        self.eval_condition_depth(cond, ctx, text, text_lower, 0)
     }
 
-    fn eval_condition_depth(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str, depth: u32) -> bool {
+    fn eval_condition_depth(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str, text_lower: &str, depth: u32) -> bool {
         const MAX_DEPTH: u32 = 64;
         if depth > MAX_DEPTH {
             tracing::warn!("DLP: condition tree depth exceeded {MAX_DEPTH}, treating as no-match");
@@ -385,18 +387,18 @@ impl DlpEngine {
             // 意味的に「条件なし = マッチしない」として扱う。
             Condition::And { children } => {
                 if children.is_empty() { return false; }
-                children.iter().all(|c| self.eval_condition_depth(c, ctx, text, depth + 1))
+                children.iter().all(|c| self.eval_condition_depth(c, ctx, text, text_lower, depth + 1))
             }
             Condition::Or { children } =>
-                children.iter().any(|c| self.eval_condition_depth(c, ctx, text, depth + 1)),
+                children.iter().any(|c| self.eval_condition_depth(c, ctx, text, text_lower, depth + 1)),
             Condition::Not { child } =>
-                !self.eval_condition_depth(child, ctx, text, depth + 1),
+                !self.eval_condition_depth(child, ctx, text, text_lower, depth + 1),
             Condition::Matches(pred) =>
-                self.eval_predicate(pred, ctx, text),
+                self.eval_predicate(pred, ctx, text, text_lower),
         }
     }
 
-    fn eval_predicate(&self, pred: &Predicate, ctx: &EvalCtx<'_>, text: &str) -> bool {
+    fn eval_predicate(&self, pred: &Predicate, ctx: &EvalCtx<'_>, text: &str, text_lower: &str) -> bool {
         match pred {
             Predicate::Classifier { classifier } =>
                 self.run_classifier(*classifier, text),
@@ -412,10 +414,10 @@ impl DlpEngine {
 
             Predicate::Keyword { words, min_count } => {
                 const MAX_KEYWORD_COUNT: usize = 500;
-                let t = text.to_lowercase();
+                // text_lower は evaluate() で一度だけ計算済み (P2: 再アロケーション防止)
                 let count = words.iter()
                     .take(MAX_KEYWORD_COUNT)
-                    .filter(|w| t.contains(w.to_lowercase().as_str()))
+                    .filter(|w| text_lower.contains(w.to_lowercase().as_str()))
                     .count() as u32;
                 count >= *min_count
             }
@@ -1071,7 +1073,8 @@ mod tests {
         let engine = DlpEngine::new(vec![], PatternLibrary::default());
         // Only confidential, not my number → AND should be false
         let text = ctx_only_conf.full_text();
-        assert!(!engine.eval_condition(&cond, &ctx_only_conf, &text));
+        let text_lower = text.to_lowercase();
+        assert!(!engine.eval_condition(&cond, &ctx_only_conf, &text, &text_lower));
     }
 
     #[test]
