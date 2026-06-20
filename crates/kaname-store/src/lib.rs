@@ -48,7 +48,17 @@ impl SqlCipherParams {
     pub const PLAINTEXT_HEADER_SIZE: u32 = 32;
 
     /// DB オープン直後に実行するプラグマシーケンス。
+    ///
+    /// `key_hex` は 64 桁の ASCII 16 進数でなければならない。
+    /// 不正な値は `rusqlite::Error` を返す (PRAGMA インジェクション防止)。
     pub fn apply(conn: &Connection, key_hex: &str) -> Result<(), rusqlite::Error> {
+        // `open()` の呼び出し元がバリデーション済みのはずだが、
+        // この関数は pub なので直接呼ばれる場合も防御する。
+        if key_hex.len() != 64 || !key_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "key_hex は 64 桁の ASCII 16 進数でなければなりません".into()
+            ));
+        }
         conn.execute_batch(&format!(
             "PRAGMA key = \"x'{key_hex}'\";\
              PRAGMA cipher_page_size = {PAGE_SIZE};\
@@ -325,12 +335,13 @@ impl Store {
 
         // tmpファイルにエクスポートしてから上書き
         let tmp_path = self.path.with_extension("kmdb.tmp");
+        // ATTACH DATABASE はパラメータバインドが使えないため、
+        // パス文字列中の ' を '' にエスケープして SQL インジェクションを防ぐ
+        let tmp_path_str = tmp_path.display().to_string().replace('\'', "''");
         conn.execute_batch(&format!(
-            "ATTACH DATABASE '{}' AS tmp KEY \"x'{}'\";\
+            "ATTACH DATABASE '{tmp_path_str}' AS tmp KEY \"x'{new_key_hex}'\";\
              SELECT sqlcipher_export('tmp');\
              DETACH DATABASE tmp;",
-            tmp_path.display(),
-            new_key_hex,
         )).map_err(|e| StoreError::Db(e.to_string()))?;
 
         // tmp を本番ファイルに置き換え
@@ -958,5 +969,25 @@ mod tests {
 
         let ok = store.verify_audit_chain().await.unwrap();
         assert!(ok);
+    }
+
+    // ── セキュリティ回帰テスト ──────────────────────────────────────────────
+
+    #[test]
+    fn sqlcipher_apply_rejects_invalid_key() {
+        // 攻撃: SqlCipherParams::apply() を直接呼び出して PRAGMA インジェクション
+        use rusqlite::Connection;
+        let conn = Connection::open_in_memory().unwrap();
+        // 非 hex 文字列 (インジェクション試み)
+        let result = SqlCipherParams::apply(&conn, "'; SELECT 1; --                                             ");
+        assert!(result.is_err(), "不正な key_hex は拒否されるべき");
+        // 短すぎる
+        let result2 = SqlCipherParams::apply(&conn, "deadbeef");
+        assert!(result2.is_err(), "短い key_hex は拒否されるべき");
+        // 正しい形式の key
+        let valid_key = "a".repeat(64);
+        // ※ インメモリ DB に SQLCipher の PRAGMA を適用すると失敗する場合があるが
+        //   ここでは「バリデーション通過後に PRAGMA を試みる」ことを確認する
+        let _ = SqlCipherParams::apply(&conn, &valid_key); // ok or cipher error, not injection
     }
 }
