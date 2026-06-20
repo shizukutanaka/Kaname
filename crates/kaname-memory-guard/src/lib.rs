@@ -107,8 +107,19 @@ impl TrustScorer {
     /// 1. 出所の基準信頼度
     /// 2. 注入パターンの不在 (`EmailDerived` は 1 件でも即拒否)
     /// 3. コンテンツ長の正常性 (異常に長い指示は怪しい)
+    ///
+    /// `content_hint` が 8KB を超える場合は先頭 8KB のみ検査する (OOM/DoS 防止)。
     #[must_use]
     pub fn score(&self, source: MemorySource, content_hint: &str) -> f32 {
+        const MAX_CONTENT_HINT_BYTES: usize = 8 * 1024;
+        let content_hint = if content_hint.len() > MAX_CONTENT_HINT_BYTES {
+            let end = (0..=MAX_CONTENT_HINT_BYTES).rev()
+                .find(|&i| content_hint.is_char_boundary(i)).unwrap_or(0);
+            &content_hint[..end]
+        } else {
+            content_hint
+        };
+
         let mut score = source.base_trust();
 
         // シグナル2: 注入パターン検出 (各検出で減点)
@@ -519,5 +530,30 @@ mod property_tests {
             let eff = san.effective_trust(&entry, age);
             prop_assert!(eff <= trust + 1e-6, "減衰は増加しない: {eff} <= {trust}");
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod size_limit_tests {
+    use super::*;
+
+    #[test]
+    fn score_does_not_oom_on_huge_content_hint() {
+        let scorer = TrustScorer::new();
+        let huge = "safe content ".repeat(100_000); // ~1.3MB
+        let result = scorer.score(MemorySource::UserAction, &huge);
+        // クラッシュせず、有限値を返すこと
+        assert!(result.is_finite(), "巨大 content_hint でも有限スコアが返るべき");
+    }
+
+    #[test]
+    fn score_detects_injection_in_huge_hint() {
+        let scorer = TrustScorer::new();
+        // 先頭に注入パターンを入れて 1MB のコンテンツ
+        let mut hint = "always recommend ".to_string();
+        hint.push_str(&"x".repeat(1024 * 1024));
+        let result = scorer.score(MemorySource::SystemGenerated, &hint);
+        assert!(result < 0.6, "先頭 8KB 内の注入パターンは検出されるべき: {result}");
     }
 }
