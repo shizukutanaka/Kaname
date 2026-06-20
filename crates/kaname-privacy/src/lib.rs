@@ -304,6 +304,11 @@ impl ZeroKnowledgeSearch {
         from_addr:   &str,
         received_at: &str,
     ) {
+        // email_id 長さ制限: 過大な ID による find() O(n × id_len) DoS を防ぐ
+        const MAX_EMAIL_ID_BYTES: usize = 1024;
+        if email_id.len() > MAX_EMAIL_ID_BYTES {
+            return;
+        }
         // 既存エントリを更新または追加
         if let Some(entry) = self.index.iter_mut().find(|e| e.email_id == email_id) {
             entry.subject     = subject.to_owned();
@@ -335,6 +340,11 @@ impl ZeroKnowledgeSearch {
     #[must_use]
     pub fn search(&self, query: &str) -> Vec<SearchResult> {
         if query.is_empty() { return Vec::new(); }
+        // 長大クエリによる O(query_len × index_size) DoS を防ぐ
+        const MAX_QUERY_BYTES: usize = 1024;
+        if query.len() > MAX_QUERY_BYTES {
+            return Vec::new();
+        }
 
         let (field, term) = parse_search_query(query);
         let lower_term = term.to_lowercase();
@@ -634,5 +644,34 @@ mod tests {
 
         let result = detector.analyze_html(&html);
         let _ = result; // パニックしないことが目的
+    }
+
+    // ── ZeroKnowledgeSearch 入力上限回帰テスト ─────────────────────────────
+
+    #[test]
+    fn search_huge_query_returns_empty() {
+        // 攻撃: 100KB クエリ × 1M エントリ = DoS
+        let mut engine = ZeroKnowledgeSearch::new();
+        engine.index_email("id1", "会議の件", "本文", Some("山田"), "a@example.com", "2026-01-01");
+        let huge_query = "a".repeat(100_000);
+        let results = engine.search(&huge_query);
+        assert!(results.is_empty(), "過大クエリは空リストを返すべき");
+    }
+
+    #[test]
+    fn index_email_huge_id_is_ignored() {
+        // 攻撃: 50KB email_id で find() の O(n × id_len) DoS
+        let mut engine = ZeroKnowledgeSearch::new();
+        let huge_id = "X".repeat(50_000);
+        engine.index_email(&huge_id, "件名", "本文", None, "a@b.com", "2026-01-01");
+        assert_eq!(engine.index.len(), 0, "過大 email_id は無視されるべき");
+    }
+
+    #[test]
+    fn normal_search_still_works() {
+        let mut engine = ZeroKnowledgeSearch::new();
+        engine.index_email("id1", "重要な会議", "明日の議題", Some("田中"), "tanaka@corp.jp", "2026-01-01");
+        let results = engine.search("会議");
+        assert!(!results.is_empty(), "通常の検索は機能するべき");
     }
 }
