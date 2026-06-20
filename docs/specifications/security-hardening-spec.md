@@ -1,0 +1,245 @@
+# セキュリティ強化仕様書
+
+**バージョン**: 1.0  
+**作成日**: 2026-06-20  
+**対象ブランチ**: `claude/sleepy-keller-1wyggy`  
+**コミット数**: 25 件 (本セッション)  
+**テスト数**: 865 件 (全 PASS)
+
+---
+
+## 1. 概要
+
+本仕様書は、Kaname の全 20+ クレートに対して実施した **Socratic セキュリティ強化ループ** の成果を記録する。
+
+手法: 各クレートについて「攻撃者が何をするか?」と問いかけ、脆弱性を発見し、修正し、回帰テストを追加し、コミット・プッシュする。全ループで CLAUDE.md の絶対不変条件 (I1〜I6) を維持した。
+
+---
+
+## 2. 発見・修正した脆弱性
+
+### 2.1 カテゴリ別一覧
+
+| # | カテゴリ | 影響クレート | 修正内容 |
+|---|---|---|---|
+| 1 | **OOM/DoS via 無制限入力** | observability, privacy, jmap, saas-guard, sandbox, bec, mls, screen, memory-guard, dlp, ai, continuity, i18n, render | `MAX_*_BYTES` 上限 + UTF-8 境界切り詰め |
+| 2 | **未来タイムスタンプバイパス** | billing, continuity, oobv | `saturating_sub` → `ts > now` の明示チェック |
+| 3 | **SQL インジェクション** | store | PRAGMA 値バリデーション + パス SQL エスケープ |
+| 4 | **ドメイン混同 via `contains()`** | pivot, screen | `extract_hostname()` + `host_is()` ドット境界照合 |
+| 5 | **NaN/Infinity による比較バイパス** | bec, ssa, store, memory-guard | `is_finite()` ガード + 0.0 フォールバック |
+| 6 | **シングルクォート img src バイパス** | render | 正規表現を追加しシングルクォートも検出 |
+| 7 | **スタックオーバーフロー via 深い再帰** | dlp | `MAX_DEPTH=64` ガード |
+| 8 | **空 AND 条件の vacuous truth** | dlp | 空 AND → マッチなし (false) に変更 |
+| 9 | **公開鍵長不一致 OOM** | crypto | `validate_length()` で `alg.public_key_len()` を照合 |
+| 10 | **カタログ値サイズ無制限** | i18n | キー 256B・値 4KB 上限を追加 |
+| 11 | **KeyPackage キャッシュ無制限** | mls | 64KB/件・100件/email 上限 |
+| 12 | **エポック検証欠落** | mls | Commit/Application のエポック前進確認 |
+| 13 | **制御文字インジェクション** | ai (Bridge) | `source_email_id` の `< 0x20 || 0x7F` チェック |
+| 14 | **Webhook ボディ OOM** | billing | 512KB 上限 + 1024B ヘッダー上限 |
+| 15 | **email_id 無制限 OOM** | continuity | 512B 上限 |
+| 16 | **DLP テキスト 100MB 評価** | dlp | 1MB 切り詰め + キーワード 500 件上限 |
+| 17 | **LLM IPC バッファ OOM** | ai | `Content<Untrusted>` を 4MB に制限 |
+
+### 2.2 クレート別コミット
+
+| クレート | コミット | 主な修正 |
+|---|---|---|
+| kaname-observability | 088b450 | `sanitize()` 64KB 上限 |
+| kaname-privacy | 8aa1cdf | ZK 検索クエリ・ID サイズ上限 |
+| kaname-store | 708c19f | PRAGMA 注入・パス SQL 注入防止 |
+| kaname-jmap | 6a466a0 | ID リスト・件名サイズ上限 |
+| kaname-saas-guard | a53aefd | sender 長さ上限 |
+| kaname-render | 1173f54 | シングルクォート img src 修正 |
+| kaname-bec | c6c187a | Levenshtein OOM・NaN バイパス・トークナイズ OOM |
+| kaname-sandbox | 95d0413 | RenderHints clamp + filename 上限 |
+| kaname-ssa | 75e8d5a | NaN スタイル特徴量バイパス |
+| kaname-pivot | 431aee2 | ドメイン混同修正 |
+| kaname-oobv | e982643 | 時刻アンダーフロー安全化 |
+| kaname-mls | 281ffc9 | 25MB 上限 + KP キャッシュ上限 |
+| kaname-crypto | fa92ede | PublicKey 長さ検証 |
+| kaname-billing | 7625715 | 未来タイムスタンプバイパス + ボディ OOM |
+| kaname-continuity | 6a753cb | email_id 上限 + 未来時刻バイパス |
+| kaname-i18n | 15ad938 | カタログ値サイズ上限 |
+| kaname-screen | 9452aaa | screen/audit 入力サイズ上限 |
+| kaname-memory-guard | d187f34 | content_hint 8KB 上限 |
+| kaname-dlp | 2da21b0 | full_text 1MB 上限 + キーワード 500 件上限 |
+| kaname-ai | 92c042b | `Content<Untrusted>` 4MB 上限 |
+
+---
+
+## 3. 長所 (Strengths)
+
+### 3.1 設計レベル
+
+- **Phantom Type による型安全 AI 境界**: `Content<Untrusted>` → `QuarantinedLlm` のみ。コンパイル時に Untrusted の P-LLM への流入を防止 (I1-I4)
+- **AnalysisReport の構造化スキーマ**: 自由テキストフィールドなし。プロンプト注入の結果が Q-LLM 出力に残存できない (I2)
+- **Bridge の多段検証**: email_id 整合性・score 範囲・攻撃マーカー・OutputAuditor の 5 ステップ
+- **ハイブリッド PQC 暗号**: X25519 + ML-KEM-768 の X-Wing 構成。どちらか一方が安全なら全体が安全
+- **SQLCipher + ハッシュチェーン台帳**: at-rest 暗号化 + 改ざん検知
+- **`#[deny(unsafe_code, unwrap_used, expect_used)]`**: 全クレートで強制。本番コードに unwrap 禁止 (I6)
+
+### 3.2 実装レベル
+
+- **定数時間比較 (`constant_time_eq`)**: HMAC 比較のタイミング攻撃防止
+- **X25519 all-zero 検出 (`validate_x25519_output`)**: arxiv 2026/192 V4 対策
+- **`saturating_sub` による時刻計算**: オーバーフロー安全 (ただし未来タイムスタンプは別途チェック必要)
+- **`DeduplicatorInMem` の容量上限**: Stripe webhook の重複 ID による OOM 防止
+- **MAX_DEPTH=64 の条件ツリー制限**: DLP 評価の再帰スタックオーバーフロー防止
+- **全角 Unicode・ゼロ幅文字の正規化**: 攻撃マーカー検出の回避防止
+
+### 3.3 テスト品質
+
+- **865 件の自動テスト** (全 PASS)
+- **プロパティテスト (proptest)**: `kaname-bec`, `kaname-ssa`, `kaname-continuity`, `kaname-memory-guard`, `kaname-screen`, `kaname-dlp`
+- **境界値テスト**: 25MB+1B のペイロード・NaN/Infinity スコア・未来タイムスタンプ・深いネスト
+
+---
+
+## 4. 短所・残存リスク (Weaknesses)
+
+### 4.1 アーキテクチャレベル
+
+| # | 課題 | 影響 | 優先度 |
+|---|---|---|---|
+| W1 | `QuarantinedLlm::analyze()` がトレイト定義のみでモック実装 | 本番 LLM 統合時の入力サイズ上限が Q-LLM バックエンド依存 | 🔴 HIGH |
+| W2 | MLS の `openmls` クレートがスタブ実装 | 実際の RFC 9420 暗号文脈でのエポック検証が未テスト | 🔴 HIGH |
+| W3 | `kaname-store` の SQLite ファイルパス生成に `PathBuf::display()` を使用 | Windows の非 UTF-8 パス (稀) で `\u{FFFD}` 置換が発生する可能性 | 🟡 MEDIUM |
+| W4 | `kaname-billing` の `DeduplicatorInMem` は in-process | プロセス再起動で dedup 状態消失 → 72h Stripe リプレイウィンドウ中に重複処理の可能性 | 🟡 MEDIUM |
+| W5 | `kaname-screen` の `PromptScreener` は静的パターンリスト | 新しいプロンプト注入技法 (多言語混合・Unicode 絵文字埋め込み等) への対応遅延 | 🟡 MEDIUM |
+| W6 | `kaname-dlp` の正規表現は `regex` クレートで線形時間保証 | ただし Keyword リーフの `text.to_lowercase()` は全テキスト毎回アロケーション | 🟢 LOW |
+| W7 | `kaname-crypto` の `PublicKey::validate_length()` はオプショナル | デシリアライズ後の明示的呼び出しを忘れると未検証鍵がバックエンドに到達 | 🟡 MEDIUM |
+| W8 | `kaname-oobv` の `now_unix_secs()` が `unwrap_or(u64::MAX)` | `u64::MAX` で期限切れ扱いは安全だが、時計が壊れた場合の診断性が低い | 🟢 LOW |
+
+### 4.2 テストカバレッジ
+
+| クレート | 残存ギャップ |
+|---|---|
+| kaname-mls | `openmls` 本番バックエンドとの結合テストなし |
+| kaname-sandbox | vsock 経由の実際の VM 通信テストなし |
+| kaname-tray | システムトレイ UI のテスト困難 |
+| kaname-ui | SolidJS フロントエンドの E2E テストなし |
+
+---
+
+## 5. 改善点と実装計画
+
+### 5.1 即時実装 (本セッション)
+
+以下を本仕様書コミット後に実装する:
+
+#### P1: `PublicKey` デシリアライズ後自動検証 (W7 対策)
+
+`PublicKey<K>` に `#[serde(try_from)]` を使い、デシリアライズ時に長さ検証を自動実行する。
+
+```rust
+// 現状: デシリアライズ後に validate_length() を手動呼び出しが必要
+// 改善: Deserialize 時に自動検証
+impl<'de, K: KeyKind> Deserialize<'de> for PublicKey<K> {
+    // try_from で長さ検証を強制
+}
+```
+
+#### P2: `Keyword` 述語の `to_lowercase()` キャッシュ (W6 対策)
+
+`DlpEngine::evaluate()` で `text.to_lowercase()` を一度だけ計算して再利用。
+
+#### P3: `PromptScreener` へのマルチバイト混合パターン追加 (W5 対策)
+
+絵文字区切り (`i😀g😀n😀o😀r😀e`) や Base64 エンコードされた命令の検出ルールを追加。
+
+#### P4: `validate_length()` の `Serde` 統合 (W7 対策)
+
+デシリアライズ時に長さ不一致を自動でエラーにする実装を `kaname-crypto` に追加。
+
+---
+
+## 6. 修正パターン集 (コーディング標準への追記)
+
+### 6.1 サイズ制限パターン (UTF-8 安全)
+
+```rust
+// ✅ 標準パターン: UTF-8 境界での切り詰め
+fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes { return s; }
+    let end = (0..=max_bytes).rev()
+        .find(|&i| s.is_char_boundary(i)).unwrap_or(0);
+    &s[..end]
+}
+```
+
+### 6.2 タイムスタンプ比較パターン (未来値防止)
+
+```rust
+// ❌ saturating_sub は未来タイムスタンプをバイパスさせる
+let age = now.saturating_sub(ts); // ts > now → age = 0 (通過)
+
+// ✅ 未来値を明示的に拒否
+if ts > now.saturating_add(TOLERANCE) {
+    return Err(Error::FutureTimestamp);
+}
+let age = now - ts; // ts <= now が保証済み
+```
+
+### 6.3 ドメイン照合パターン (混同防止)
+
+```rust
+// ❌ contains() はサブドメイン偽装を通す
+url.contains("teams.microsoft.com") // evilteams.microsoft.com も通過
+
+// ✅ hostname 抽出 + ドット境界照合
+fn host_is(hostname: &str, domain: &str) -> bool {
+    hostname == domain || hostname.ends_with(&format!(".{domain}"))
+}
+let hostname = extract_hostname(url);
+host_is(hostname, "teams.microsoft.com")
+```
+
+### 6.4 NaN/Infinity 防御パターン
+
+```rust
+// ❌ NaN 比較は常に false → 閾値を素通り
+if score >= threshold { warn!() } // score=NaN → 警告なし
+
+// ✅ is_finite() で事前ガード
+let score = if raw.is_finite() { raw } else { 0.0 };
+if score >= threshold { warn!() }
+```
+
+---
+
+## 7. STRIDE マッピング (追記)
+
+本セッションで発見した脆弱性を STRIDE に対応させる:
+
+| 脆弱性 | STRIDE | 修正 |
+|---|---|---|
+| 未来タイムスタンプによる Webhook バイパス | **S** poofing | 明示的未来値チェック |
+| `contains()` ドメイン混同 | **S** poofing | `host_is()` 照合 |
+| NaN スコアによる BEC/SSA バイパス | **T** ampering | `is_finite()` ガード |
+| PRAGMA SQL 注入 | **T** ampering | 入力バリデーション |
+| OOM/DoS via 無制限入力 (17 箇所) | **D** enial of Service | サイズ上限 |
+| img src シングルクォートバイパス | **E** levation of Privilege | 正規表現追加 |
+| 空 AND 条件の vacuous truth | **E** levation of Privilege | false に変更 |
+| LLM IPC への 100MB 転送 | **D** enial of Service | 4MB 上限 |
+
+---
+
+## 8. 次のアクション (バックログ)
+
+### Sprint N+1 (優先度順)
+
+1. **`openmls` 実統合**: スタブを実際の `openmls 0.6` クレートに置き換え、RFC 9420 準拠テスト追加 (W2)
+2. **Redis dedup**: `DeduplicatorInMem` を Redis SET NX + 72h TTL に置き換え (W4)
+3. **`PublicKey` Serde 自動検証**: `#[serde(try_from = "RawPublicKey")]` パターンへ移行 (W7)
+4. **E2E テスト**: Playwright で SolidJS UI の主要フロー (受信→BEC 警告→AI 要約) をテスト
+5. **MLS 結合テスト**: Docker Compose で 2 ノード MLS 通信テスト
+
+### 将来検討
+
+- **WebAssembly サンドボックス**: Q-LLM を Wasm で実行し seccomp を不要にする
+- **形式検証**: `kani` でメモリ安全性の形式証明 (特に kaname-crypto の KEM 実装)
+- **ファジング**: `cargo-fuzz` で kaname-billing/kaname-jmap/kaname-dlp のエントリポイントをファジング
+
+---
+
+*本仕様書は `docs/threat-model.md` の補完文書として機能する。新たな攻撃クラスが発見された場合は両文書を同時更新すること。*
