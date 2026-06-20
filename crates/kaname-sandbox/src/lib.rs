@@ -122,13 +122,22 @@ impl RunningVm {
     /// 入力側でも上限を設ける。
     const MAX_ATTACHMENT_BYTES: usize = 100 * 1024 * 1024; // 100 MB
 
+    /// VM へ送り込む filename の最大バイト数。
+    const MAX_FILENAME_BYTES: usize = 1024;
+
+    /// VM に渡す最大ページ数 (レンダラーの OOM 防止)。
+    const MAX_PAGES: u32 = 500;
+
+    /// VM に渡す最大画像次元 (レンダラーの OOM 防止)。
+    const MAX_DIMENSION_PX: u32 = 8192;
+
     /// 添付ファイルを VM でレンダリングし、結果を返す。
     ///
     /// # Errors
     ///
     /// VM エラーまたはプロトコルエラーが発生した場合に `SandboxError` を返す。
     /// 添付が `MAX_ATTACHMENT_BYTES` を超える場合 `AttachmentTooLarge` を返す。
-    pub async fn render_attachment(&mut self, input: AttachmentJob) -> Result<RenderResult, SandboxError> {
+    pub async fn render_attachment(&mut self, mut input: AttachmentJob) -> Result<RenderResult, SandboxError> {
         // 入力サイズをホスト側でキャップ — VM へ送る前に巨大添付を拒否し OOM を防ぐ
         if input.bytes.len() > Self::MAX_ATTACHMENT_BYTES {
             return Err(SandboxError::AttachmentTooLarge {
@@ -136,6 +145,13 @@ impl RunningVm {
                 max: Self::MAX_ATTACHMENT_BYTES,
             });
         }
+        // filename 長さ制限 (過大な vsock バッファ防止)
+        if input.filename.len() > Self::MAX_FILENAME_BYTES {
+            return Err(SandboxError::InvalidInput("filename exceeds 1024 bytes"));
+        }
+        // RenderHints を安全な上限にクランプ (VM の OOM 防止)
+        input.hints.max_pages = input.hints.max_pages.min(Self::MAX_PAGES);
+        input.hints.max_dimension_px = input.hints.max_dimension_px.min(Self::MAX_DIMENSION_PX);
         let req = VsockMsg::RenderRequest(input);
         self.vsock.send(req).await?;
         match self.vsock.recv().await? {
@@ -430,6 +446,10 @@ pub enum SandboxError {
     #[error("pool closed")]
     PoolClosed,
 
+    /// 入力が不正 (filename 長すぎ等)。
+    #[error("invalid input: {0}")]
+    InvalidInput(&'static str),
+
     /// 添付ファイルがホスト側の上限を超過。
     #[error("attachment too large: {size} bytes > {max} bytes")]
     AttachmentTooLarge {
@@ -544,6 +564,70 @@ mod tests {
         assert!(
             matches!(result, Err(SandboxError::AttachmentTooLarge { .. })),
             "上限超過の添付が拒否されていない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn hint_constants_are_sane() {
+        assert_eq!(RunningVm::MAX_PAGES, 500);
+        assert_eq!(RunningVm::MAX_DIMENSION_PX, 8192);
+        assert_eq!(RunningVm::MAX_FILENAME_BYTES, 1024);
+    }
+
+    #[tokio::test]
+    async fn oversized_filename_is_rejected() {
+        let (tx, _rx) = mpsc::channel(1);
+        let mut vm = RunningVm {
+            id: VmId(10),
+            spawned_at: Instant::now(),
+            _ctrl: (),
+            vsock: VsockChannel { _private: () },
+            teardown_tx: tx,
+        };
+        let job = AttachmentJob {
+            filename: "A".repeat(2000), // 2000 bytes > 1024 limit
+            declared_mime: None,
+            bytes: vec![0u8; 1024],
+            hints: RenderHints::default(),
+        };
+        let result = vm.render_attachment(job).await;
+        assert!(
+            matches!(result, Err(SandboxError::InvalidInput(_))),
+            "過大な filename が拒否されていない: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn excessive_render_hints_are_clamped() {
+        // max_pages=u32::MAX は MAX_PAGES にクランプされること
+        // (VsockChannel スタブが Ready を返すため ProtocolError になるが、
+        //  VM へ u32::MAX が渡らないことを確認)
+        let (tx, _rx) = mpsc::channel(1);
+        let mut vm = RunningVm {
+            id: VmId(11),
+            spawned_at: Instant::now(),
+            _ctrl: (),
+            vsock: VsockChannel { _private: () },
+            teardown_tx: tx,
+        };
+        let job = AttachmentJob {
+            filename: "doc.pdf".into(),
+            declared_mime: None,
+            bytes: vec![0u8; 1024],
+            hints: RenderHints {
+                max_pages: u32::MAX,
+                max_dimension_px: u32::MAX,
+            },
+        };
+        // クランプ後に VM へ送られるため AttachmentTooLarge にも InvalidInput にもならない
+        let result = vm.render_attachment(job).await;
+        assert!(
+            !matches!(result, Err(SandboxError::AttachmentTooLarge { .. })),
+            "ヒントクランプが攻撃拒否と誤検知している"
+        );
+        assert!(
+            !matches!(result, Err(SandboxError::InvalidInput(_))),
+            "ヒントクランプが攻撃拒否と誤検知している"
         );
     }
 
