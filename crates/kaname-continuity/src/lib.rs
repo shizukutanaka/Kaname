@@ -69,8 +69,15 @@ impl ContinuitySession {
     }
 
     /// メールを開いてセッションを更新する。
+    ///
+    /// `email_id` が 512 バイトを超える場合はセッションを変更しない (OOM 防止)。
     pub fn open_email(&mut self, email_id: impl Into<String>) {
-        self.active_email_id = Some(email_id.into());
+        const MAX_EMAIL_ID_BYTES: usize = 512;
+        let id: String = email_id.into();
+        if id.len() > MAX_EMAIL_ID_BYTES {
+            return;
+        }
+        self.active_email_id = Some(id);
         self.current_view = SessionView::EmailDetail;
         self.scroll_position = 0.0;
         self.touch();
@@ -96,9 +103,14 @@ impl ContinuitySession {
     /// セッションが有効かどうかを返す (30 分以内に更新されていれば有効)。
     #[must_use]
     pub fn is_active(&self) -> bool {
+        const SESSION_TTL_SECS: u64 = 1800; // 30 分
         let now = now_unix();
-        let age = now.saturating_sub(self.updated_at);
-        age < 1800 // 30 分
+        // updated_at が未来値の場合 (不正なデシリアライズ等): セッションを期限切れ扱い
+        if self.updated_at > now {
+            return false;
+        }
+        let age = now - self.updated_at;
+        age < SESSION_TTL_SECS
     }
 
     /// セッションの経過秒数を返す。
@@ -277,6 +289,32 @@ mod tests {
         let hex_part = &s.session_id[5..];
         assert!(hex_part.chars().all(|c| c.is_ascii_hexdigit()),
             "hex 部分に無効な文字: '{hex_part}'");
+    }
+
+    #[test]
+    fn open_email_rejects_oversized_id() {
+        let mut s = ContinuitySession::new();
+        let huge_id = "x".repeat(1024);
+        s.open_email(huge_id);
+        // セッションは変更されていないはず
+        assert_eq!(s.current_view, SessionView::Inbox, "巨大 email_id でビューが変わってはならない");
+        assert!(s.active_email_id.is_none(), "巨大 email_id はセットされてはならない");
+    }
+
+    #[test]
+    fn open_email_accepts_normal_id() {
+        let mut s = ContinuitySession::new();
+        s.open_email("msg-00001");
+        assert_eq!(s.current_view, SessionView::EmailDetail);
+        assert_eq!(s.active_email_id.as_deref(), Some("msg-00001"));
+    }
+
+    #[test]
+    fn is_active_rejects_future_updated_at() {
+        let mut s = ContinuitySession::new();
+        // 未来のタイムスタンプを直接書き込む (不正なデシリアライズ相当)
+        s.updated_at = u64::MAX;
+        assert!(!s.is_active(), "未来のタイムスタンプは is_active=false でなければならない");
     }
 
     #[test]
