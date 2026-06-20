@@ -177,6 +177,17 @@ impl<K: KeyKind> PublicKey<K> {
     pub fn algorithm(&self) -> AlgId {
         self.alg
     }
+
+    /// バイト長がアルゴリズム仕様と一致することを検証する。
+    ///
+    /// デシリアライズ後に必ず呼び出すこと。
+    pub fn validate_length(&self) -> Result<(), CryptoError> {
+        let expected = self.alg.public_key_len();
+        if self.bytes.len() != expected {
+            return Err(CryptoError::InvalidFormat("public key length mismatch"));
+        }
+        Ok(())
+    }
 }
 
 /// キー種別のマーカートレイト。封印済み。
@@ -345,6 +356,8 @@ impl HybridX25519MlKem {
 
     /// ハイブリッド公開鍵にカプセル化。
     pub fn encapsulate(&self, pk: &HybridPublicKey) -> Result<(SharedSecret, Ciphertext), CryptoError> {
+        pk.classical.validate_length()?;
+        pk.pqc.validate_length()?;
         let (c_ss, c_ct) = self.classical.encapsulate(&pk.classical)?;
         let (p_ss, p_ct) = self.pqc.encapsulate(&pk.pqc)?;
 
@@ -419,8 +432,14 @@ pub struct HybridPublicKey {
 
 impl HybridPublicKey {
     /// UI 表示用 8 バイトフィンガープリント ("ab12 cd34 ef56 7890").
+    ///
+    /// 鍵長が仕様外の場合は "invalid-key" を返す (OOM DoS 防止)。
     #[must_use]
     pub fn fingerprint(&self) -> String {
+        // 長さ検証: 不正な鍵で Vec::with_capacity(huge) → OOM を防ぐ
+        if self.classical.validate_length().is_err() || self.pqc.validate_length().is_err() {
+            return "invalid-key".to_string();
+        }
         let mut buf = Vec::with_capacity(self.classical.bytes.len() + self.pqc.bytes.len());
         buf.extend_from_slice(&self.classical.bytes);
         buf.extend_from_slice(&self.pqc.bytes);
@@ -632,8 +651,8 @@ mod tests {
     #[test]
     fn hybrid_public_key_fingerprint_is_stable() {
         let pk = HybridPublicKey {
-            classical: PublicKey { bytes: vec![1, 2, 3], alg: AlgId::X25519, _kind: PhantomData },
-            pqc: PublicKey { bytes: vec![4, 5, 6], alg: AlgId::MlKem768, _kind: PhantomData },
+            classical: PublicKey { bytes: vec![1u8; 32], alg: AlgId::X25519, _kind: PhantomData },
+            pqc: PublicKey { bytes: vec![4u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
         };
         let fp1 = pk.fingerprint();
         let fp2 = pk.fingerprint();
@@ -771,6 +790,56 @@ mod tests {
         let a = ss.derive_key(b"context");
         let b = ss.derive_key(b"context");
         assert_eq!(a, b, "derive_key は決定的でなければならない");
+    }
+
+    #[test]
+    fn public_key_validate_length_rejects_wrong_size() {
+        // X25519 は 32 バイト固定
+        let pk: PublicKey<KemKey> = PublicKey {
+            bytes: vec![0u8; 100], // 不正な長さ
+            alg: AlgId::X25519,
+            _kind: PhantomData,
+        };
+        assert!(
+            matches!(pk.validate_length(), Err(CryptoError::InvalidFormat(_))),
+            "不正な長さの公開鍵は拒否されなければならない"
+        );
+    }
+
+    #[test]
+    fn public_key_validate_length_accepts_correct_size() {
+        let pk: PublicKey<KemKey> = PublicKey {
+            bytes: vec![0u8; 32], // X25519 の正しい長さ
+            alg: AlgId::X25519,
+            _kind: PhantomData,
+        };
+        assert!(pk.validate_length().is_ok(), "正しい長さの公開鍵は受理されなければならない");
+    }
+
+    #[test]
+    fn fingerprint_returns_invalid_key_for_oversized_classical() {
+        let pk = HybridPublicKey {
+            classical: PublicKey { bytes: vec![0u8; 10_000], alg: AlgId::X25519, _kind: PhantomData },
+            pqc: PublicKey { bytes: vec![0u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+        };
+        assert_eq!(pk.fingerprint(), "invalid-key", "不正な鍵長はフィンガープリント OOM を起こしてはならない");
+    }
+
+    #[test]
+    fn encapsulate_rejects_oversized_public_key() {
+        let kem = HybridX25519MlKem {
+            classical: Box::new(MockKem { alg: AlgId::X25519, ct_len: 32 }),
+            pqc:       Box::new(MockKem { alg: AlgId::MlKem768, ct_len: 1088 }),
+        };
+        let bad_pk = HybridPublicKey {
+            classical: PublicKey { bytes: vec![0u8; 1_000_000], alg: AlgId::X25519, _kind: PhantomData },
+            pqc: PublicKey { bytes: vec![0u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+        };
+        let result = kem.encapsulate(&bad_pk);
+        assert!(
+            matches!(result, Err(CryptoError::InvalidFormat(_))),
+            "不正な公開鍵長でカプセル化は拒否されなければならない: {result:?}"
+        );
     }
 
     #[test]
