@@ -120,6 +120,13 @@ impl PivotDetector {
     /// メール本文を解析して全 pivot を抽出する。
     #[must_use]
     pub fn analyze(&self, body: &str) -> Vec<DetectedPivot> {
+        const MAX_BODY_LEN: usize = 1_000_000; // 1 MB
+        let body = if body.len() > MAX_BODY_LEN {
+            tracing::warn!("PivotDetector: body が {}B を超えたため先頭 {}B のみ解析", MAX_BODY_LEN, MAX_BODY_LEN);
+            &body[..MAX_BODY_LEN]
+        } else {
+            body
+        };
         let mut pivots = Vec::new();
 
         // 1. 電話番号
@@ -275,22 +282,23 @@ fn extract_meeting_links(body: &str) -> Vec<DetectedPivot> {
     let mut results = Vec::new();
     for word in body.split_whitespace() {
         let url = trim_url(word);
-        if url.contains("teams.microsoft.com") || url.contains("teams.live.com") {
+        let host = extract_hostname(url);
+        if host_is(host, "teams.microsoft.com") || host_is(host, "teams.live.com") {
             results.push(DetectedPivot::TeamsLink {
                 url: url.to_string(),
                 tenant: extract_tenant_from_teams(url),
             });
-        } else if url.contains("slack.com") || url.contains(".slack.com") {
+        } else if host_is(host, "slack.com") {
             results.push(DetectedPivot::SlackInvite {
                 url: url.to_string(),
                 workspace: extract_slack_workspace(url),
             });
-        } else if url.contains("zoom.us") || url.contains("zoom.com") {
+        } else if host_is(host, "zoom.us") || host_is(host, "zoom.com") {
             results.push(DetectedPivot::ZoomMeeting {
                 meeting_id: extract_zoom_meeting_id(url).unwrap_or_else(|| "unknown".to_string()),
                 has_password: url.contains("pwd=") || url.contains("&p="),
             });
-        } else if url.contains("meet.google.com") {
+        } else if host_is(host, "meet.google.com") {
             results.push(DetectedPivot::GoogleMeet {
                 url: url.to_string(),
             });
@@ -303,14 +311,15 @@ fn extract_saas_links(body: &str) -> Vec<DetectedPivot> {
     let mut results = Vec::new();
     for word in body.split_whitespace() {
         let url = trim_url(word);
+        let host = extract_hostname(url);
         let platform = match () {
-            _ if url.contains("docusign.net") || url.contains("docusign.com") => Some("DocuSign"),
-            _ if url.contains("drive.google.com") => Some("Google Drive"),
-            _ if url.contains("docs.google.com") => Some("Google Docs"),
-            _ if url.contains("onedrive.live.com") || url.contains("1drv.ms") => Some("OneDrive"),
-            _ if url.contains("sharepoint.com") => Some("SharePoint"),
-            _ if url.contains("dropbox.com") => Some("Dropbox"),
-            _ if url.contains("box.com") => Some("Box"),
+            _ if host_is(host, "docusign.net") || host_is(host, "docusign.com") => Some("DocuSign"),
+            _ if host_is(host, "drive.google.com") => Some("Google Drive"),
+            _ if host_is(host, "docs.google.com") => Some("Google Docs"),
+            _ if host_is(host, "onedrive.live.com") || host_is(host, "1drv.ms") => Some("OneDrive"),
+            _ if host_is(host, "sharepoint.com") => Some("SharePoint"),
+            _ if host_is(host, "dropbox.com") => Some("Dropbox"),
+            _ if host_is(host, "box.com") => Some("Box"),
             _ => None,
         };
         if let Some(p) = platform {
@@ -357,6 +366,31 @@ fn extract_crypto_addresses(body: &str) -> Vec<DetectedPivot> {
 
 fn trim_url(s: &str) -> &str {
     s.trim_end_matches(['.', ',', ')', ']', '!', '?', ';'])
+}
+
+/// URL からホスト名を抽出する。
+///
+/// `"https://foo.example.com/path?q=1"` → `"foo.example.com"`
+/// スキームなし (`"foo.example.com/path"`) にも対応。
+fn extract_hostname(url: &str) -> &str {
+    let after_scheme = url
+        .find("://")
+        .map(|i| &url[i + 3..])
+        .unwrap_or(url);
+    // ホスト部分: 最初の '/', '?', '#', ':' まで
+    let end = after_scheme
+        .find(['/', '?', '#', ':'])
+        .unwrap_or(after_scheme.len());
+    &after_scheme[..end]
+}
+
+/// ホスト名が指定ドメイン (または そのサブドメイン) か判定する。
+///
+/// `host_is("foo.example.com", "example.com")` → true
+/// `host_is("notexample.com", "example.com")` → false
+/// `host_is("example.com.evil.com", "example.com")` → false
+fn host_is(hostname: &str, domain: &str) -> bool {
+    hostname == domain || hostname.ends_with(&format!(".{domain}"))
 }
 
 fn extract_tenant_from_teams(url: &str) -> Option<String> {
@@ -690,6 +724,71 @@ mod tests {
             matches!(p, DetectedPivot::PhoneNumber { .. }) && p.is_high_risk()
         });
         assert!(phone_high_risk, "否定なし 至急 + 電話番号は高リスクでなければならない");
+    }
+
+    // ── ドメイン混同バイパス回帰テスト ──────────────────────────────────────
+
+    #[test]
+    fn fake_teams_domain_is_not_detected_as_teams() {
+        // 攻撃: "teams.microsoft.com.attacker.com" は Teams ではない
+        let body = "会議: https://teams.microsoft.com.attacker.com/l/meetup-join/19...";
+        let detector = PivotDetector::new();
+        let pivots = detector.analyze(body);
+        assert!(
+            !pivots.iter().any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
+            "偽ドメインを Teams リンクと誤検知してはならない"
+        );
+    }
+
+    #[test]
+    fn path_containing_teams_domain_is_not_detected_as_teams() {
+        // 攻撃: パスに "teams.microsoft.com" を含む別ドメインの URL
+        let body = "リダイレクト: https://evil.example.com/redirect?to=teams.microsoft.com";
+        let detector = PivotDetector::new();
+        let pivots = detector.analyze(body);
+        assert!(
+            !pivots.iter().any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
+            "パス部分に Teams ドメインを含む URL を Teams リンクと誤検知してはならない"
+        );
+    }
+
+    #[test]
+    fn legitimate_teams_subdomain_is_detected() {
+        // 正規: subdomain.teams.microsoft.com は検出すべき
+        let body = "会議: https://subdomain.teams.microsoft.com/l/meetup-join/19...";
+        let detector = PivotDetector::new();
+        let pivots = detector.analyze(body);
+        assert!(
+            pivots.iter().any(|p| matches!(p, DetectedPivot::TeamsLink { .. })),
+            "正規サブドメインは Teams リンクとして検出されるべき"
+        );
+    }
+
+    #[test]
+    fn fake_slack_domain_not_detected() {
+        // 攻撃: "slack.com.evil.com" は Slack ではない
+        let body = "DM: https://slack.com.evil.com/archives/C123";
+        let detector = PivotDetector::new();
+        let pivots = detector.analyze(body);
+        assert!(
+            !pivots.iter().any(|p| matches!(p, DetectedPivot::SlackInvite { .. })),
+            "偽ドメインを Slack 招待と誤検知してはならない"
+        );
+    }
+
+    #[test]
+    fn host_is_helper_dot_boundary() {
+        assert!(host_is("example.com", "example.com"));
+        assert!(host_is("foo.example.com", "example.com"));
+        assert!(!host_is("notexample.com", "example.com"));
+        assert!(!host_is("example.com.evil.com", "example.com"));
+    }
+
+    #[test]
+    fn oversized_body_is_truncated_and_does_not_panic() {
+        let huge = "A".repeat(2_000_000);
+        let detector = PivotDetector::new();
+        let _pivots = detector.analyze(&huge); // パニックしないこと
     }
 
     #[test]
