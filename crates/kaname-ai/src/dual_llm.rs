@@ -135,15 +135,32 @@ pub enum Provenance {
     },
 }
 
+/// Q-LLM に送れるコンテンツの最大バイト数。
+///
+/// LLM の context window は有限であり、これを超えるとタイムアウト/OOM になる。
+/// 4MB = 約 100 万トークン相当 (GPT-4: 最大 128K token ≈ 512KB UTF-8)。
+/// 実際の LLM context window に合わせて調整する。
+pub const MAX_UNTRUSTED_CONTENT_BYTES: usize = 4 * 1024 * 1024; // 4 MB
+
 impl Content<Untrusted> {
     /// ネットワーク経由のデータを Untrusted として構築する。
     ///
     /// この関数は `kaname-jmap` クレートからのみ呼ぶ前提。
     /// メール本文はすべてこのコンストラクタを通る。
+    ///
+    /// 4MB を超える本文は先頭 4MB に切り詰める (LLM IPC バッファ OOM 防止)。
     #[must_use]
     pub fn from_network(text: impl Into<String>, email_id: impl Into<String>) -> Self {
+        let text: String = text.into();
+        let text = if text.len() > MAX_UNTRUSTED_CONTENT_BYTES {
+            let end = (0..=MAX_UNTRUSTED_CONTENT_BYTES).rev()
+                .find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+            text[..end].to_string()
+        } else {
+            text
+        };
         Self {
-            inner: text.into(),
+            inner: text,
             provenance: Provenance::Network {
                 email_id: email_id.into(),
                 received_at: now_unix(),
@@ -157,6 +174,8 @@ impl Content<Untrusted> {
     /// arxiv 2505.22852 §2.3: 添付ファイルはネットワーク経由だが
     /// `UserUpload` provenanceを付与する。不可逆操作前に
     /// explicit grant-exception を要求するため。
+    ///
+    /// 4MB を超える添付内容は切り詰める (LLM IPC バッファ OOM 防止)。
     #[must_use]
     pub fn from_attachment(
         text: impl Into<String>,
@@ -165,8 +184,16 @@ impl Content<Untrusted> {
         mime_type: impl Into<String>,
     ) -> Self {
         let email_id_str = email_id.into();
+        let text: String = text.into();
+        let text = if text.len() > MAX_UNTRUSTED_CONTENT_BYTES {
+            let end = (0..=MAX_UNTRUSTED_CONTENT_BYTES).rev()
+                .find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+            text[..end].to_string()
+        } else {
+            text
+        };
         Self {
-            inner: text.into(),
+            inner: text,
             provenance: Provenance::UserUpload {
                 filename: filename.into(),
                 mime_type: mime_type.into(),
@@ -1263,5 +1290,39 @@ mod tests {
     fn doc_tests_compile_fail() {
         // この test 自体は何もしない。doc test の存在を確認するだけ。
         // cargo test でこの test が通れば doc test も実行されている。
+    }
+
+    #[test]
+    fn from_network_truncates_huge_content() {
+        let huge = "x".repeat(MAX_UNTRUSTED_CONTENT_BYTES + 100_000);
+        let content = Content::<Untrusted>::from_network(huge, "email-001");
+        assert!(
+            content.inner.len() <= MAX_UNTRUSTED_CONTENT_BYTES,
+            "4MB 超の本文は切り詰められなければならない: {} バイト",
+            content.inner.len()
+        );
+        assert!(
+            content.inner.is_empty() || content.inner.is_char_boundary(content.inner.len()),
+            "切り詰め後の文字列は有効な UTF-8 境界で終わるべき"
+        );
+    }
+
+    #[test]
+    fn from_attachment_truncates_huge_content() {
+        let huge = "a".repeat(MAX_UNTRUSTED_CONTENT_BYTES + 1);
+        let content = Content::<Untrusted>::from_attachment(
+            huge, "email-002", "large.txt", "text/plain",
+        );
+        assert!(
+            content.inner.len() <= MAX_UNTRUSTED_CONTENT_BYTES,
+            "4MB 超の添付内容は切り詰められなければならない"
+        );
+    }
+
+    #[test]
+    fn from_network_accepts_normal_content() {
+        let text = "Hello, this is a normal email body.";
+        let content = Content::<Untrusted>::from_network(text, "email-003");
+        assert_eq!(content.inner, text, "通常サイズのコンテンツは変更なく格納される");
     }
 }
