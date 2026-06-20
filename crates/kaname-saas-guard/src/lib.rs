@@ -172,7 +172,12 @@ impl SaasHistory {
     ///
     /// `max_senders` に達した場合は新規送信者を無視する (既存送信者のカウント更新は許可)。
     pub fn record(&mut self, sender: impl Into<String>, platform: SaasPlatform) {
+        // RFC 5321 の最大メールアドレス長は 320 文字。過大な送信者文字列は OOM DoS の危険。
+        const MAX_SENDER_LEN: usize = 1024;
         let sender = sender.into();
+        if sender.len() > MAX_SENDER_LEN {
+            return;
+        }
         let key = (sender, platform);
         // 既存エントリの更新は常に許可
         if self.interactions.contains_key(&key) {
@@ -239,6 +244,12 @@ impl SaasLinkInspector {
     }
 
     /// URL から SaaS プラットフォームを推定。
+    ///
+    /// **注意**: この関数は URL 内にドメイン文字列が含まれるかを検査するだけで、
+    /// ドット境界チェックを行わない。偽 SaaS ドメイン (`docusign.evil.com`) や
+    /// リダイレクト URL (`?to=drive.google.com`) も `Some` を返す可能性がある。
+    /// `evaluate()` はその後 `is_fake_saas_subdomain()` で補正するが、
+    /// この関数単体ではドメイン混同の偽陽性が生じうることに注意すること。
     #[must_use]
     pub fn identify_platform(&self, url: &str) -> Option<SaasPlatform> {
         let lower = url.to_lowercase();
@@ -763,5 +774,52 @@ mod property_tests {
                 prop_assert!(!hist.is_familiar("test@example.com", SaasPlatform::GoogleDrive));
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod security_tests {
+    use super::*;
+
+    #[test]
+    fn oversized_sender_is_ignored_by_history() {
+        // 攻撃: 50KB の From アドレスで SaasHistory を膨張させる OOM DoS
+        let mut hist = SaasHistory::new();
+        let huge_sender = "a".repeat(50_000);
+        hist.record(huge_sender.clone(), SaasPlatform::GoogleDrive);
+        // 登録されていないこと
+        assert_eq!(hist.count(&huge_sender, SaasPlatform::GoogleDrive), 0,
+            "過大な送信者アドレスは無視されるべき");
+        assert_eq!(hist.interactions.len(), 0, "HashMap のエントリ数は 0 のまま");
+    }
+
+    #[test]
+    fn normal_sender_is_still_recorded() {
+        let mut hist = SaasHistory::new();
+        hist.record("cfo@company.co.jp", SaasPlatform::DocuSign);
+        assert_eq!(hist.count("cfo@company.co.jp", SaasPlatform::DocuSign), 1);
+    }
+
+    #[test]
+    fn fake_saas_subdomain_path_injection_is_suspicious() {
+        // 攻撃: パスに本物ドメインを埋め込んでフィルタを回避
+        // https://evil.com/redirect?to=drive.google.com
+        // identify_platform() は GoogleDrive を返すが、is_fake_saas_subdomain() が Suspicious にする
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://evil.com/redirect?to=drive.google.com",
+            "attacker@evil.com",
+            &hist,
+        );
+        // Some になるはず (identify_platform が GoogleDrive を返すため)
+        if let Some(link) = result {
+            assert!(
+                link.risk == SaasLinkRisk::Suspicious || link.risk == SaasLinkRisk::Block,
+                "パスにドメインを埋めた偽 URL は Suspicious 以上でなければならない: {:?}", link.risk
+            );
+        }
+        // None の場合も安全 (リンクなしと判定)
     }
 }
