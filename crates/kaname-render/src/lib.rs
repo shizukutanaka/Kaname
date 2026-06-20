@@ -420,23 +420,30 @@ pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
     SanitizedBody { inner: out, _sealed: PhantomData }
 }
 
-/// `<img src="...">` の src が `cid:` で始まらない場合は src 属性を除去する。
+/// `<img src="...">` または `<img src='...'>` の src が `cid:` で始まらない場合は除去する。
 /// ammonia の url_schemes はグローバルなので img に限定した制限はポストフィルタで実施。
 fn strip_non_cid_img_src(html: &str) -> String {
-    // regex crate は lookahead 未サポートなので 2 ステップで処理:
-    // 1. すべての img src="..." をキャプチャ
-    // 2. cid: で始まらないものを除去
-    let Ok(re_src) = regex::Regex::new(r#"\bsrc\s*=\s*"([^"]*)""#) else {
+    // ダブルクォート版: src="..."
+    let Ok(re_double) = regex::Regex::new(r#"\bsrc\s*=\s*"([^"]*)""#) else {
         return html.to_string();
     };
-    re_src.replace_all(html, |caps: &regex::Captures<'_>| {
+    // シングルクォート版: src='...'
+    // 攻撃: シングルクォートを使うと旧 regex がマッチせず cid: 以外の src が残る
+    let Ok(re_single) = regex::Regex::new(r#"\bsrc\s*=\s*'([^']*)'"#) else {
+        return html.to_string();
+    };
+
+    let strip = |caps: &regex::Captures<'_>| {
         let src_val = caps.get(1).map_or("", |m| m.as_str());
         if src_val.starts_with("cid:") {
-            caps[0].to_string() // cid: は保持
+            caps[0].to_string()
         } else {
-            String::new() // それ以外は除去
+            String::new()
         }
-    }).to_string()
+    };
+
+    let after_double = re_double.replace_all(html, strip).to_string();
+    re_single.replace_all(&after_double, strip).to_string()
 }
 
 fn is_bidi_override(c: char) -> bool {
@@ -845,6 +852,24 @@ mod tests {
         let result = addr_to_address(&addr).expect("通常アドレスは変換できるべき");
         assert_eq!(result.addr.local, "alice");
         assert_eq!(result.addr.domain, "example.com");
+    }
+
+    #[test]
+    fn single_quoted_img_src_is_stripped() {
+        // 攻撃: src='...' (シングルクォート) でトラッキングピクセルを埋め込む
+        // 旧 regex はダブルクォートのみ対応だったため、シングルクォートが通過していた
+        let out = sanitize_html(&raw("<img src='https://tracker.evil.com/px.gif' alt='x'>"));
+        assert!(
+            !out.as_str().contains("tracker.evil.com"),
+            "シングルクォートの remote img src は除去されるべき: {}",
+            out.as_str()
+        );
+    }
+
+    #[test]
+    fn single_quoted_cid_src_is_preserved() {
+        let out = sanitize_html(&raw("<img src='cid:part1@msg.id' alt='x'>"));
+        assert!(out.as_str().contains("cid:part1@msg.id"), "cid: のシングルクォートは保持されるべき");
     }
 
     #[test]
