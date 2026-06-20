@@ -290,7 +290,16 @@ impl KeyPackageCache {
 
     /// キーパッケージをキャッシュに追加する。
     pub fn add(&mut self, email: EmailAddress, kp: KeyPackage) {
-        self.cache.entry(email).or_default().push(kp);
+        const MAX_KP_BYTES: usize = 64 * 1024;
+        const MAX_KP_PER_EMAIL: usize = 100;
+        if kp.bytes.len() > MAX_KP_BYTES {
+            return;
+        }
+        let pkgs = self.cache.entry(email).or_default();
+        if pkgs.len() >= MAX_KP_PER_EMAIL {
+            return;
+        }
+        pkgs.push(kp);
     }
 
     /// 1 回限りのキーパッケージを消費する。
@@ -502,6 +511,15 @@ impl MlsMailClient {
     ) -> Result<Envelope, MlsMailError> {
         if plaintext.is_empty() {
             return Err(MlsMailError::EmptyPlaintext);
+        }
+        // MLS は大きなメッセージに対してチャンク分割を推奨するが、
+        // ここでは単純に 25 MB 上限を強制する (SMTP の一般的な添付上限と同等)。
+        const MAX_PLAINTEXT_BYTES: usize = 25 * 1024 * 1024;
+        if plaintext.len() > MAX_PLAINTEXT_BYTES {
+            return Err(MlsMailError::PayloadTooLarge {
+                size: plaintext.len(),
+                max:  MAX_PLAINTEXT_BYTES,
+            });
         }
 
         // openmls 本番実装:
@@ -786,6 +804,10 @@ pub enum MlsMailError {
     /// 未知の会話への Application メッセージは処理できない。
     #[error("未知の会話へのメッセージを拒否: {0}")]
     UnknownConversation(String),
+
+    /// ペイロードが上限を超えている。
+    #[error("ペイロードが大きすぎる: {size} バイト (上限 {max} バイト)")]
+    PayloadTooLarge { size: usize, max: usize },
 }
 
 // ============================================================================
@@ -1177,5 +1199,64 @@ mod tests {
         // このテストは epoch=0 < 0 ではないので通過するが、将来の強化のためのドキュメント
         assert!(result.is_ok() || matches!(result, Err(MlsMailError::EpochRejected { .. })),
             "Application のリプレイ処理: {result:?}");
+    }
+
+    #[test]
+    fn encrypt_messageが25mb上限を強制する() {
+        let mut alice = make_client("alice@kaname.app");
+        let bob_kp = dummy_kp();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (mut conv, _) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
+
+        let huge = vec![0u8; 26 * 1024 * 1024]; // 26 MB
+        let result = alice.encrypt_message(&mut conv, &huge);
+        assert!(
+            matches!(result, Err(MlsMailError::PayloadTooLarge { .. })),
+            "26MB メッセージは拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn encrypt_messageが空メッセージを拒否する() {
+        let mut alice = make_client("alice@kaname.app");
+        let bob_kp = dummy_kp();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (mut conv, _) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
+
+        let result = alice.encrypt_message(&mut conv, &[]);
+        assert!(
+            matches!(result, Err(MlsMailError::EmptyPlaintext)),
+            "空メッセージは拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn key_package_cache_64kb上限を強制する() {
+        let mut cache = KeyPackageCache::new();
+        let email = EmailAddress::parse("carol@kaname.app").unwrap();
+
+        // 64KB を超える KP は無視される
+        let huge_kp = KeyPackage { bytes: vec![0u8; 65 * 1024] };
+        cache.add(email.clone(), huge_kp);
+        assert!(!cache.has(&email), "64KB超 KP はキャッシュされてはならない");
+
+        // 正常サイズは追加される
+        let ok_kp = KeyPackage { bytes: vec![0u8; 1024] };
+        cache.add(email.clone(), ok_kp);
+        assert!(cache.has(&email), "正常サイズ KP はキャッシュされなければならない");
+    }
+
+    #[test]
+    fn key_package_cache_100件上限を強制する() {
+        let mut cache = KeyPackageCache::new();
+        let email = EmailAddress::parse("dave@kaname.app").unwrap();
+
+        for i in 0..110u8 {
+            cache.add(email.clone(), KeyPackage { bytes: vec![i; 32] });
+        }
+        // 100件を超えた分は追加されない
+        let mut count = 0usize;
+        while cache.consume(&email).is_some() { count += 1; }
+        assert_eq!(count, 100, "KP は最大 100件まで: 実際 {count}");
     }
 }
