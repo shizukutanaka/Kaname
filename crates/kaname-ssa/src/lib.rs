@@ -108,6 +108,13 @@ impl SenderStyleProfile {
 
     /// メール特徴量でプロファイルを更新する (指数移動平均)。
     pub fn update(&mut self, features: &EmailStyleFeatures) {
+        // NaN/Infinity の f32 フィールドを持つ features を拒否する。
+        // lerp に NaN/Inf が入るとプロファイル全体が NaN に汚染され、
+        // style_distance が NaN を返して warning_level が None になるバイパスが生じる。
+        if !features.is_finite() {
+            tracing::warn!("SSA: NaN/Infinity を含む EmailStyleFeatures を無視しました");
+            return;
+        }
         let n = self.sample_count as f32;
         let alpha = 1.0 / (n + 1.0); // 新規サンプルの重み
 
@@ -149,6 +156,9 @@ impl SenderStyleProfile {
     pub fn style_distance(&self, features: &EmailStyleFeatures) -> f32 {
         if !self.is_reliable() {
             return 0.0; // 信頼性不足のプロファイルは使わない
+        }
+        if !features.is_finite() {
+            return 1.0; // NaN/Inf 特徴量は最大距離 (最悪ケース) として扱う
         }
 
         let mut weighted_dist = 0.0_f32;
@@ -243,9 +253,30 @@ pub struct EmailStyleFeatures {
 }
 
 impl EmailStyleFeatures {
+    /// 全 f32 フィールドが有限値 (NaN でも Infinity でもない) か確認する。
+    #[must_use]
+    pub fn is_finite(&self) -> bool {
+        self.sentences_per_paragraph.is_finite()
+            && self.chars_per_sentence.is_finite()
+            && self.punctuation_density.is_finite()
+            && self.formality_score.is_finite()
+    }
+
     /// テキストと送信時刻から特徴量を抽出する。
     #[must_use]
     pub fn extract(body: &str, send_hour: u8) -> Self {
+        const MAX_BODY_BYTES: usize = 500_000; // 500 KB
+        let body = if body.len() > MAX_BODY_BYTES {
+            // UTF-8 マルチバイト境界を壊さないよう char 境界で切り捨てる
+            let end = body.char_indices()
+                .map(|(i, _)| i)
+                .take_while(|&i| i < MAX_BODY_BYTES)
+                .last()
+                .unwrap_or(0);
+            &body[..end]
+        } else {
+            body
+        };
         let paragraphs = count_paragraphs(body);
         let sentences = count_sentences(body);
         let chars = body.chars().count() as u32;
@@ -613,6 +644,55 @@ mod tests {
         assert!((p.avg_paragraphs - 3.0).abs() < 0.01,
             "alpha が大きすぎる: avg_paragraphs = {}", p.avg_paragraphs);
     }
+
+    // ── NaN / Infinity 攻撃回帰テスト ───────────────────────────────────────
+
+    fn nan_features() -> EmailStyleFeatures {
+        EmailStyleFeatures {
+            paragraphs: 2,
+            sentences_per_paragraph: f32::NAN,
+            chars_per_sentence: f32::INFINITY,
+            punctuation_density: f32::NAN,
+            formality_score: f32::NAN,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
+        }
+    }
+
+    #[test]
+    fn nan_features_do_not_corrupt_profile() {
+        let mut profile = make_profile(30);
+        let original_formality = profile.formality_score;
+        profile.update(&nan_features());
+        assert!(profile.formality_score.is_finite(), "NaN update 後も有限値でなければならない");
+        assert!(
+            (profile.formality_score - original_formality).abs() < 1e-3,
+            "NaN update はプロファイルを変更してはならない"
+        );
+    }
+
+    #[test]
+    fn nan_features_style_distance_returns_max() {
+        let profile = make_profile(30);
+        let dist = profile.style_distance(&nan_features());
+        assert!((dist - 1.0).abs() < 1e-6, "NaN 特徴量の距離は 1.0 でなければならない: {dist}");
+    }
+
+    #[test]
+    fn nan_features_warning_level_is_high() {
+        let profile = make_profile(30);
+        let dist = profile.style_distance(&nan_features());
+        let warn = profile.warning_level(dist);
+        assert_eq!(warn, StyleWarning::High, "NaN 特徴量は High 警告でなければならない");
+    }
+
+    #[test]
+    fn large_body_extract_does_not_oom() {
+        let huge = "は".repeat(200_000);
+        let features = EmailStyleFeatures::extract(&huge, 10);
+        assert!(features.is_finite(), "大入力でも有限の特徴量が返るべき");
+    }
 }
 
 // ============================================================================
@@ -722,4 +802,5 @@ mod property_tests {
             }
         }
     }
+
 }
