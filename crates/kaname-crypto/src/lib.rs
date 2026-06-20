@@ -156,7 +156,10 @@ impl<K: KeyKind> PrivateKeyHandle<K> {
 }
 
 /// 公開鍵。シリアライズ可能、共有可能、MLS クレデンシャルに署名される。
-#[derive(Clone, Debug, Serialize, Deserialize)]
+///
+/// `Deserialize` 実装はデシリアライズ直後に `validate_length()` を呼び出し、
+/// 不正な長さの公開鍵をワイヤーから取り込む前に拒否する (P1)。
+#[derive(Clone, Debug, Serialize)]
 pub struct PublicKey<K: KeyKind> {
     /// 公開鍵の生バイト (アルゴリズムによって長さが異なる)。
     bytes: Vec<u8>,
@@ -164,6 +167,24 @@ pub struct PublicKey<K: KeyKind> {
     alg: AlgId,
     #[serde(skip)]
     _kind: PhantomData<K>,
+}
+
+impl<'de, K: KeyKind> serde::Deserialize<'de> for PublicKey<K> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Raw {
+            bytes: Vec<u8>,
+            alg: AlgId,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let pk = PublicKey::<K> {
+            bytes: raw.bytes,
+            alg: raw.alg,
+            _kind: PhantomData,
+        };
+        pk.validate_length().map_err(|e| serde::de::Error::custom(format!("{e:?}")))?;
+        Ok(pk)
+    }
 }
 
 impl<K: KeyKind> PublicKey<K> {
@@ -855,5 +876,38 @@ mod tests {
             xor_candidate[i] = b ^ info[i % info.len()];
         }
         assert_ne!(xor_candidate, ss.0, "XOR スタブの出力は info で逆算できる");
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // P1: PublicKey の Serde カスタム Deserialize — 不正長さを自動拒否
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn deserialize_public_key_rejects_wrong_length() {
+        // X25519 公開鍵は 32 バイトのはずが 16 バイトのペイロードを注入する
+        let json = r#"{"bytes":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],"alg":"X25519"}"#;
+        let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(json);
+        assert!(result.is_err(),
+            "不正な長さの公開鍵をデシリアライズした際にエラーが返されなかった");
+    }
+
+    #[test]
+    fn deserialize_public_key_accepts_correct_length() {
+        // X25519 公開鍵: 32 バイト
+        let bytes: Vec<u8> = (0u8..32).collect();
+        let json = format!(r#"{{"bytes":{bytes:?},"alg":"X25519"}}"#);
+        let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(&json);
+        assert!(result.is_ok(),
+            "正しい長さの公開鍵をデシリアライズできなかった: {result:?}");
+    }
+
+    #[test]
+    fn deserialize_ml_kem_public_key_rejects_wrong_length() {
+        // ML-KEM-768 公開鍵は 1184 バイトのはずが 100 バイトのペイロードを注入する
+        let bytes = vec![0u8; 100];
+        let json = format!(r#"{{"bytes":{bytes:?},"alg":"MlKem768"}}"#);
+        let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(&json);
+        assert!(result.is_err(),
+            "ML-KEM-768 不正長さ公開鍵がデシリアライズを通過した");
     }
 }
