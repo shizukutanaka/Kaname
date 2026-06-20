@@ -207,15 +207,29 @@ impl MemorySanitizer {
     /// retrieval 時にエントリを採用すべきか判定する。
     #[must_use]
     pub fn should_retrieve(&self, entry: &MemoryEntry, now: u64) -> bool {
-        self.effective_trust(entry, now) >= self.accept_threshold
+        let eff = self.effective_trust(entry, now);
+        // NaN や INFINITY を持つ不正なエントリは拒否する。
+        // INFINITY: 全エントリを通過させる偽装に悪用される可能性。
+        // NaN: 比較演算で常に false → 全エントリを拒否する意図しない動作。
+        eff.is_finite() && eff >= self.accept_threshold
     }
 
     /// エントリ集合を浄化して、信頼できるもののみを返す。
+    ///
+    /// 返却数を 1000 件に制限する (大量エントリによるメモリ枯渇を防ぐ)。
     #[must_use]
     pub fn sanitize<'a>(&self, entries: &'a [MemoryEntry], now: u64) -> Vec<&'a MemoryEntry> {
+        const MAX_ENTRIES: usize = 1_000;
         entries
             .iter()
-            .filter(|e| self.should_retrieve(e, now))
+            .filter(|e| {
+                // 不正な trust_score (NaN / Inf) を持つエントリを除外
+                e.trust_score.is_finite()
+                    // ID が異常に長いエントリを除外 (DoS 対策)
+                    && e.id.len() <= 1024
+                    && self.should_retrieve(e, now)
+            })
+            .take(MAX_ENTRIES)
             .collect()
     }
 }
@@ -387,6 +401,65 @@ mod tests {
         // 否定後続があれば減点なし → スコアが基準と同じ
         assert_eq!(negated_score, base_score,
             "否定された注入パターンは減点すべきでない: negated={negated_score} vs base={base_score}");
+    }
+
+    #[test]
+    fn infinity_trust_score_rejected_in_retrieval() {
+        // f32::INFINITY を trust_score に持つエントリが全通過しないことを確認
+        let san = MemorySanitizer::new().with_threshold(0.5);
+        let entry = MemoryEntry {
+            id: "inf".into(),
+            trust_score: f32::INFINITY,
+            created_at: 0,
+            last_accessed: 0,
+            source: MemorySource::EmailDerived,
+        };
+        assert!(!san.should_retrieve(&entry, 0),
+            "INFINITY trust_score のエントリは拒否されなければならない");
+    }
+
+    #[test]
+    fn nan_trust_score_rejected_in_retrieval() {
+        // f32::NAN を trust_score に持つエントリが全拒否しないことを確認
+        // (NaN >= 0.5 は false のまま、ただし is_finite() チェックで明示的に拒否)
+        let san = MemorySanitizer::new().with_threshold(0.01);
+        let entry = MemoryEntry {
+            id: "nan".into(),
+            trust_score: f32::NAN,
+            created_at: 0,
+            last_accessed: 0,
+            source: MemorySource::UserAction,
+        };
+        assert!(!san.should_retrieve(&entry, 0),
+            "NaN trust_score のエントリは拒否されなければならない");
+    }
+
+    #[test]
+    fn oversized_id_excluded_from_sanitize() {
+        let san = MemorySanitizer::new();
+        let entries = vec![
+            MemoryEntry { id: "a".repeat(1025), trust_score: 0.9, created_at: 0, last_accessed: 0, source: MemorySource::UserAction },
+            MemoryEntry { id: "good".into(),     trust_score: 0.9, created_at: 0, last_accessed: 0, source: MemorySource::UserAction },
+        ];
+        let clean = san.sanitize(&entries, 0);
+        assert_eq!(clean.len(), 1, "1025 文字の ID は除外されるべき");
+        assert_eq!(clean[0].id, "good");
+    }
+
+    #[test]
+    fn sanitize_limits_max_entries() {
+        let san = MemorySanitizer::new().with_threshold(0.0); // 全て通過させる
+        let entries: Vec<MemoryEntry> = (0..1200)
+            .map(|i| MemoryEntry {
+                id: format!("e{i}"),
+                trust_score: 0.9,
+                created_at: 0,
+                last_accessed: 0,
+                source: MemorySource::UserAction,
+            })
+            .collect();
+        let clean = san.sanitize(&entries, 0);
+        assert_eq!(clean.len(), 1000, "sanitize は最大 1000 件に制限されるべき");
     }
 
     #[test]
