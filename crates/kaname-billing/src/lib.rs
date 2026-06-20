@@ -139,6 +139,13 @@ impl Entitlements {
 /// Stripe webhook 署名の許容タイムウィンドウ (seconds).
 const STRIPE_TIMESTAMP_TOLERANCE_SECS: u64 = 300; // 5 minutes
 
+/// Stripe Webhook の最大ボディサイズ (ブラウザ制限 + 余裕を考慮)。
+/// Stripe の実際のペイロードは通常 2〜10KB。
+const MAX_WEBHOOK_BODY_BYTES: usize = 512 * 1024; // 512 KB
+
+/// Stripe-Signature ヘッダーの最大長。
+const MAX_SIGNATURE_HEADER_BYTES: usize = 1024; // 十分な長さ
+
 /// Verify the `Stripe-Signature` header.
 ///
 /// フォーマット: `t=<unix_ts>,v1=<hmac_hex>`
@@ -149,6 +156,14 @@ pub fn verify_signature(
     webhook_secret: &str,
     now_unix: u64,
 ) -> Result<(), BillingError> {
+    // DoS 防止: 入力サイズ上限
+    if stripe_signature.len() > MAX_SIGNATURE_HEADER_BYTES {
+        return Err(BillingError::InvalidTimestamp); // 不正なヘッダー
+    }
+    if raw_body.len() > MAX_WEBHOOK_BODY_BYTES {
+        return Err(BillingError::BodyTooLarge { size: raw_body.len() });
+    }
+
     let parts: std::collections::HashMap<&str, &str> = stripe_signature
         .split(',')
         .filter_map(|s| s.split_once('='))
@@ -159,7 +174,12 @@ pub fn verify_signature(
 
     let ts: u64 = ts_str.parse().map_err(|_| BillingError::InvalidTimestamp)?;
 
-    // Replay protection: reject if timestamp is outside tolerance window
+    // Replay protection: reject if timestamp is outside tolerance window.
+    // saturating_sub: ts > now_unix → age = 0 (バイパス可能) なので、
+    // 未来タイムスタンプを明示的に拒否する。
+    if ts > now_unix.saturating_add(STRIPE_TIMESTAMP_TOLERANCE_SECS) {
+        return Err(BillingError::SignatureExpired { age_secs: 0 });
+    }
     let age = now_unix.saturating_sub(ts);
     if age > STRIPE_TIMESTAMP_TOLERANCE_SECS {
         return Err(BillingError::SignatureExpired { age_secs: age });
@@ -631,6 +651,9 @@ pub enum BillingError {
 
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("webhook body too large: {size} bytes (max {max})", max = MAX_WEBHOOK_BODY_BYTES)]
+    BodyTooLarge { size: usize },
 }
 
 // ============================================================================
@@ -862,5 +885,71 @@ mod tests {
         let now = 1_700_000_000u64; // 同じ timestamp なので age=0
         let result = verify_signature(&header, body, secret, now);
         assert!(result.is_ok(), "正しい署名が拒否された: {result:?}");
+    }
+
+    #[test]
+    fn verify_signature_rejects_future_timestamp() {
+        let secret = b"whsec_test";
+        let body   = b"{}";
+        let now    = 1_700_000_000u64;
+        // 未来のタイムスタンプ (西暦 2286年相当)
+        let future_ts = 9_999_999_999u64;
+        let signed = format!("{future_ts}.{}", String::from_utf8_lossy(body));
+        use sha2::Sha256;
+        use hmac::{Hmac, Mac};
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = HmacSha256::new_from_slice(secret).unwrap();
+        mac.update(signed.as_bytes());
+        let sig = mac.finalize().into_bytes()
+            .iter().fold(String::new(), |mut s, b| {
+                use std::fmt::Write as _;
+                let _ = write!(s, "{b:02x}");
+                s
+            });
+        let header = format!("t={future_ts},v1={sig}");
+        let result = verify_signature(&header, body, std::str::from_utf8(secret).unwrap(), now);
+        assert!(
+            matches!(result, Err(BillingError::SignatureExpired { .. })),
+            "未来タイムスタンプは拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_signature_rejects_oversized_body() {
+        let secret = b"whsec_test";
+        let now    = 1_700_000_000u64;
+        let huge_body = vec![b'x'; 600 * 1024]; // 600 KB
+        let header = format!("t={now},v1=aabbcc");
+        let result = verify_signature(&header, &huge_body, std::str::from_utf8(secret).unwrap(), now);
+        assert!(
+            matches!(result, Err(BillingError::BodyTooLarge { .. })),
+            "巨大なボディは拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn verify_signature_rejects_expired_timestamp() {
+        let secret = b"whsec_test";
+        let body   = b"{}";
+        let now    = 1_700_000_000u64;
+        let old_ts = now - 600; // 10分前 (tolerance は 5分)
+        let signed = format!("{old_ts}.{}", String::from_utf8_lossy(body));
+        use sha2::Sha256;
+        use hmac::{Hmac, Mac};
+        type HmacSha256 = Hmac<Sha256>;
+        let mut mac = HmacSha256::new_from_slice(secret).unwrap();
+        mac.update(signed.as_bytes());
+        let sig = mac.finalize().into_bytes()
+            .iter().fold(String::new(), |mut s, b| {
+                use std::fmt::Write as _;
+                let _ = write!(s, "{b:02x}");
+                s
+            });
+        let header = format!("t={old_ts},v1={sig}");
+        let result = verify_signature(&header, body, std::str::from_utf8(secret).unwrap(), now);
+        assert!(
+            matches!(result, Err(BillingError::SignatureExpired { .. })),
+            "期限切れタイムスタンプは拒否されなければならない: {result:?}"
+        );
     }
 }
