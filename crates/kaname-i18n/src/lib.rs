@@ -167,12 +167,29 @@ impl I18n {
     ///
     /// - ロケール識別子: BCP 47 準拠の ASCII のみ、最大 35 文字
     /// - メッセージ数: 10,000 件以下
+    /// - キー長: 256 バイト以下
+    /// - 値長: 4,096 バイト以下
     pub fn load_catalog(&self, catalog: Catalog) -> Result<(), I18nError> {
+        const MAX_KEY_BYTES: usize = 256;
+        const MAX_VALUE_BYTES: usize = 4096;
+
         validate_locale_id(&catalog.locale)?;
         if catalog.messages.len() > 10_000 {
             return Err(I18nError::LoadFailed(format!(
                 "メッセージ数が上限を超えています: {} > 10000", catalog.messages.len()
             )));
+        }
+        for (k, v) in &catalog.messages {
+            if k.len() > MAX_KEY_BYTES {
+                return Err(I18nError::LoadFailed(format!(
+                    "翻訳キーが長すぎます: {} バイト (上限 {MAX_KEY_BYTES})", k.len()
+                )));
+            }
+            if v.len() > MAX_VALUE_BYTES {
+                return Err(I18nError::LoadFailed(format!(
+                    "翻訳値が長すぎます: {} バイト (上限 {MAX_VALUE_BYTES})", v.len()
+                )));
+            }
         }
         let locale = catalog.locale.clone();
         self.catalogs.write().unwrap_or_else(|e| e.into_inner()).insert(locale, catalog);
@@ -550,6 +567,24 @@ mod tests {
             .collect();
         let cat = Catalog { locale: "de".into(), messages, ..Default::default() };
         assert!(i18n.load_catalog(cat).is_err(), "10001件のメッセージは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_rejects_oversized_key() {
+        let i18n = I18n::new();
+        let mut messages = HashMap::new();
+        messages.insert("a".repeat(257), "value".into());
+        let cat = Catalog { locale: "de".into(), messages, ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "257バイトのキーは拒否されるべき");
+    }
+
+    #[test]
+    fn load_catalog_rejects_oversized_value() {
+        let i18n = I18n::new();
+        let mut messages = HashMap::new();
+        messages.insert("key".into(), "x".repeat(4097));
+        let cat = Catalog { locale: "de".into(), messages, ..Default::default() };
+        assert!(i18n.load_catalog(cat).is_err(), "4097バイトの値は拒否されるべき");
     }
 
     #[test]
