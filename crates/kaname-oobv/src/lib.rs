@@ -268,10 +268,7 @@ impl VerificationCeremony {
 
         let challenge_index = rng.gen_range(0u8..6);
 
-        let expires_at_unix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs() + 300) // 5 分
-            .unwrap_or(0);
+        let expires_at_unix = now_unix_secs().saturating_add(300); // 5 分
 
         Self {
             id: generate_ceremony_id(),
@@ -319,10 +316,9 @@ impl VerificationCeremony {
         }
 
         // 期限チェック (Pending のときのみ Expired へ遷移)
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+        // unwrap_or(0): now=0 になると 0 > expires_at_unix が常に false で期限切れを見落とす。
+        // unwrap_or(u64::MAX): 安全側 — クロック異常時は常に期限切れとして扱う。
+        let now = now_unix_secs();
 
         if now > self.expires_at_unix {
             self.state = CeremonyState::Expired;
@@ -370,10 +366,7 @@ impl VerificationCeremony {
             target_email_id: self.target_email_id.clone(),
             target_sender: self.target_sender.clone(),
             state: self.state,
-            timestamp_unix: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
+            timestamp_unix: now_unix_secs(),
         }
     }
 }
@@ -491,6 +484,21 @@ pub enum CeremonyError {
 // ============================================================================
 // ユーティリティ
 // ============================================================================
+
+/// 現在の Unix 時刻 (秒) を返す。
+///
+/// `SystemTime` が `UNIX_EPOCH` 以前を返す異常が起きた場合、
+/// `u64::MAX` を返すことで期限切れチェック (`now > expires_at_unix`) が
+/// 常に true になり、安全側 (拒否) に倒れる。
+///
+/// セレモニー作成時に呼ぶと `saturating_add(300)` で 5 分後が
+/// `u64::MAX + 300 = u64::MAX` になるため、常に期限切れになる (安全)。
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(u64::MAX)
+}
 
 fn generate_ceremony_id() -> String {
     use rand::Rng;

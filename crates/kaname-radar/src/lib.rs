@@ -243,6 +243,15 @@ impl CampaignRadar {
     /// - `None`: 新規の孤立したメール (グループなし)
     #[must_use]
     pub fn analyze(&mut self, metadata: &EmailMetadata) -> Option<CampaignMatch> {
+        const MAX_EMAIL_ID_LEN: usize = 1024;
+        const MAX_SEEN_EMAILS: usize = 50_000;
+
+        // email_id が異常に長い場合はスキップ (DoS 防止)
+        if metadata.email_id.len() > MAX_EMAIL_ID_LEN {
+            tracing::warn!("CampaignRadar: email_id が長すぎます ({} bytes), スキップ", metadata.email_id.len());
+            return None;
+        }
+
         // 重複処理防止
         if self.seen_emails.contains_key(&metadata.email_id) {
             return None;
@@ -250,6 +259,19 @@ impl CampaignRadar {
 
         // 期限切れグループ・dedup エントリを削除
         self.evict_expired();
+
+        // seen_emails が上限に達している場合、最古エントリを削除してから挿入する。
+        // retention 期間内に大量ユニーク email_id を送りつける DoS を防ぐ。
+        if self.seen_emails.len() >= MAX_SEEN_EMAILS {
+            // 最古エントリを 1 件削除 (FIFO)
+            if let Some(oldest_key) = self.seen_emails
+                .iter()
+                .min_by_key(|(_, &ts)| ts)
+                .map(|(k, _)| k.clone())
+            {
+                self.seen_emails.remove(&oldest_key);
+            }
+        }
 
         // 解析済みとして記録 (退避基準のタイムスタンプ付き)
         self.seen_emails.insert(metadata.email_id.clone(), now_unix());
@@ -857,5 +879,47 @@ mod dns_tests {
             }
         }
         assert!(any_alertable, "未知インフラでも認証失敗パターンでキャンペーン検出されるべき");
+    }
+
+    #[test]
+    fn oversized_email_id_is_skipped() {
+        // 攻撃: 1MB の email_id を送りつけて HashMap のキーとして蓄積する DoS
+        let mut radar = CampaignRadar::new();
+        let huge_id = "x".repeat(1025);
+        let meta = EmailMetadata {
+            email_id: huge_id,
+            from_domain: "evil.example".into(),
+            return_path_domain: None,
+            dkim_domain: None,
+            link_domains: vec![],
+            received_at: now_unix(),
+            subject_length_bucket: SubjectLengthBucket::Short,
+            auth_partial_fail: false,
+        };
+        let result = radar.analyze(&meta);
+        assert!(result.is_none(), "過大な email_id はスキップされるべき");
+        assert_eq!(radar.seen_email_count(), 0, "seen_emails に登録されてはならない");
+    }
+
+    #[test]
+    fn seen_emails_capped_at_max() {
+        // 攻撃: retention 期間内に大量のユニーク email_id を送り込む OOM テスト
+        // 50_001 件目を超えても seen_emails が 50_000 件を超えないことを確認
+        let mut radar = CampaignRadar::new();
+        for i in 0..50_010u64 {
+            let meta = EmailMetadata {
+                email_id: format!("flood-{i}"),
+                from_domain: format!("d{i}.example"),
+                return_path_domain: None,
+                dkim_domain: None,
+                link_domains: vec![],
+                received_at: now_unix(),
+                subject_length_bucket: SubjectLengthBucket::Short,
+                auth_partial_fail: false,
+            };
+            radar.analyze(&meta);
+        }
+        assert!(radar.seen_email_count() <= 50_000,
+            "seen_emails が上限を超えた: {}", radar.seen_email_count());
     }
 }
