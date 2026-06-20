@@ -290,14 +290,20 @@ impl DlpEngine {
     }
 
     fn collect_patterns_from_condition(cond: &Condition, cache: &mut HashMap<String, Regex>) {
+        Self::collect_patterns_depth(cond, cache, 0);
+    }
+
+    fn collect_patterns_depth(cond: &Condition, cache: &mut HashMap<String, Regex>, depth: u32) {
+        const MAX_DEPTH: u32 = 64;
+        if depth > MAX_DEPTH { return; }
         match cond {
             Condition::And { children } | Condition::Or { children } => {
                 for child in children {
-                    Self::collect_patterns_from_condition(child, cache);
+                    Self::collect_patterns_depth(child, cache, depth + 1);
                 }
             }
             Condition::Not { child } => {
-                Self::collect_patterns_from_condition(child, cache);
+                Self::collect_patterns_depth(child, cache, depth + 1);
             }
             Condition::Matches(Predicate::Regex { pattern }) => {
                 if !cache.contains_key(pattern) {
@@ -354,13 +360,26 @@ impl DlpEngine {
     }
 
     fn eval_condition(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str) -> bool {
+        self.eval_condition_depth(cond, ctx, text, 0)
+    }
+
+    fn eval_condition_depth(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str, depth: u32) -> bool {
+        const MAX_DEPTH: u32 = 64;
+        if depth > MAX_DEPTH {
+            tracing::warn!("DLP: condition tree depth exceeded {MAX_DEPTH}, treating as no-match");
+            return false;
+        }
         match cond {
-            Condition::And { children } =>
-                children.iter().all(|c| self.eval_condition(c, ctx, text)),
+            // 空の And は vacuous truth → 全メールをブロックしてしまう。
+            // 意味的に「条件なし = マッチしない」として扱う。
+            Condition::And { children } => {
+                if children.is_empty() { return false; }
+                children.iter().all(|c| self.eval_condition_depth(c, ctx, text, depth + 1))
+            }
             Condition::Or { children } =>
-                children.iter().any(|c| self.eval_condition(c, ctx, text)),
+                children.iter().any(|c| self.eval_condition_depth(c, ctx, text, depth + 1)),
             Condition::Not { child } =>
-                !self.eval_condition(child, ctx, text),
+                !self.eval_condition_depth(child, ctx, text, depth + 1),
             Condition::Matches(pred) =>
                 self.eval_predicate(pred, ctx, text),
         }
@@ -1205,6 +1224,54 @@ mod tests {
         let to = vec!["not-an-email".to_string()];
         let c = ctx("body", "me@corp.com", &to);
         assert!(c.recipient_domains().is_empty());
+    }
+
+    #[test]
+    fn condition_empty_and_does_not_match_vacuously() {
+        // And { children: [] } は Rust の iter().all() で vacuous truth になり
+        // 全メールをブロックしてしまう問題の回帰テスト。
+        let rule = Rule {
+            id: "empty-and".into(),
+            name: "空条件ツリー".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 1,
+            action: Action::Block,
+            condition: Condition::And { children: vec![] },
+        };
+        let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
+        let to = vec!["x@x.com".into()];
+        let result = engine.evaluate(&ctx("通常メール本文", "", &to), Direction::Outbound);
+        assert!(result.is_clean(), "空の AND 条件はマッチしてはならない: {:?}", result.findings);
+    }
+
+    #[test]
+    fn condition_deeply_nested_does_not_stack_overflow() {
+        // 攻撃者がカスタムルールで深いネストを作った場合のスタック保護テスト。
+        // 主な保証: パニック・スタックオーバーフローなしに完了すること。
+        // 深さ制限 (64) で再帰を打ち切るため、Not の連鎖が false に打ち切られる。
+        // Not の偶奇により最終値は変わりうるが、スタックは安全。
+        let mut cond = Condition::matches(Predicate::Classifier {
+            classifier: ClassifierId::ConfidentialMarker,
+        });
+        // 70 段 (> 64 の深さ制限): drop スタックはこの深さでは問題ない範囲
+        for _ in 0..70 {
+            cond = Condition::negate(cond);
+        }
+        let rule = Rule {
+            id: "deep".into(),
+            name: "深いネスト".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 1,
+            action: Action::Block,
+            condition: cond,
+        };
+        let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
+        let to = vec!["x@x.com".into()];
+        // スタックオーバーフローしないこと (is_clean() の値は問わない)
+        let _result = engine.evaluate(&ctx("CONFIDENTIAL", "", &to), Direction::Outbound);
+        // このテストがパニックなしで到達すれば合格
     }
 
     #[test]
