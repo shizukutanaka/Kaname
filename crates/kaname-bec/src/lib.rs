@@ -554,6 +554,11 @@ fn is_mixed_script_domain(domain: &str) -> bool {
 
 /// a と b のレーベンシュタイン距離がちょうど 1 の場合 true。
 fn levenshtein1(a: &str, b: &str) -> bool {
+    // RFC 5321 の最大ドメイン長は 255 文字。過大な入力で Vec 確保 OOM を防ぐ。
+    const MAX_DOMAIN_CHARS: usize = 255;
+    if a.chars().count() > MAX_DOMAIN_CHARS || b.chars().count() > MAX_DOMAIN_CHARS {
+        return false;
+    }
     let al: Vec<char> = a.chars().collect();
     let bl: Vec<char> = b.chars().collect();
     let diff = (al.len() as isize - bl.len() as isize).abs();
@@ -596,6 +601,11 @@ fn contains_unusual_topic(subject: &str, typical: &str) -> bool {
     if subject.is_empty() || typical.is_empty() {
         return false;
     }
+
+    // 過大入力 (例: 攻撃者が巨大 typical テキストを渡す) によるトークナイズ OOM を防ぐ
+    const MAX_INPUT_BYTES: usize = 100_000;
+    let subject = truncate_to_char_boundary(subject, MAX_INPUT_BYTES);
+    let typical  = truncate_to_char_boundary(typical,  MAX_INPUT_BYTES);
 
     let subj_vec  = term_frequency_vector(subject);
     let typic_vec = term_frequency_vector(typical);
@@ -677,6 +687,19 @@ fn tokenize(text: &str) -> Vec<String> {
     tokens
 }
 
+/// UTF-8 マルチバイト境界を壊さずに先頭 `max_bytes` バイト以内に切り捨てる。
+fn truncate_to_char_boundary(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let end = s.char_indices()
+        .map(|(i, _)| i)
+        .take_while(|&i| i < max_bytes)
+        .last()
+        .unwrap_or(0);
+    &s[..end]
+}
+
 fn push_token(tok: &str, out: &mut Vec<String>, stop_en: &[&str], stop_ja: &[&str]) {
     if tok.len() < 2 {
         return;
@@ -710,7 +733,9 @@ fn cosine_similarity(
     if norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
     }
-    dot / (norm_a * norm_b)
+    let result = dot / (norm_a * norm_b);
+    // NaN/Inf は (入力値が異常な場合に) 類似なし (0.0) として扱う
+    if result.is_finite() { result } else { 0.0 }
 }
 
 // ============================================================================
@@ -995,6 +1020,41 @@ mod tests {
         };
         let result = det.assess(req);
         assert!(result.is_ok(), "大量URLでpanicしてはならない: {result:?}");
+    }
+
+    #[test]
+    fn levenshtein1_oversized_domain_returns_false() {
+        // 攻撃: 256 文字超のドメインで Vec<char> OOM → false を返すべき
+        let long = "a".repeat(256);
+        assert!(!levenshtein1(&long, "microsoft.com"),
+            "過大なドメイン文字列は false でなければならない");
+    }
+
+    #[test]
+    fn levenshtein1_typical_domains_still_work() {
+        // 1 文字違い (typosquatting): "micosoft.com" (r 抜き) は距離 1
+        assert!(levenshtein1("micosoft.com", "microsoft.com"), "1文字削除は true でなければならない");
+        // 2 文字以上違いは距離 > 1
+        assert!(!levenshtein1("microsoft.com", "google.com"), "2文字以上違いは false でなければならない");
+    }
+
+    #[test]
+    fn cosine_similarity_nan_input_returns_finite() {
+        // f64::NAN が入ってきても有限値を返すこと
+        let mut a = std::collections::HashMap::new();
+        let mut b = std::collections::HashMap::new();
+        a.insert("key".to_string(), f64::NAN);
+        b.insert("key".to_string(), 1.0);
+        let result = cosine_similarity(&a, &b);
+        assert!(result.is_finite(), "NaN 入力でも有限値を返すべき: {result}");
+    }
+
+    #[test]
+    fn contains_unusual_topic_huge_input_does_not_panic() {
+        let huge = "重要 ".repeat(100_000);
+        let result = contains_unusual_topic(&huge, "請求書の送付");
+        // パニックせず bool を返すこと
+        let _ = result;
     }
 }
 
