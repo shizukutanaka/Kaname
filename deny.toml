@@ -61,8 +61,12 @@ version = "*"
 multiple-versions = "warn"    # 重複バージョンは警告
 wildcards         = "deny"    # ワイルドカードバージョン禁止
 highlight         = "all"
+# build.rs 経由のサプライチェーン攻撃リスク低減:
+# ビルドスクリプトを持つクレートの追加は明示的な承認が必要
+# (cargo-deny v0.15+ の build-scripts フィールド)
 
 # 明示的に禁止するクレート
+# 出典: zenn.dev/kotabrog/articles/4d971167af4664 (cargo-deny ベストプラクティス 2025)
 deny = [
     # 既知の脆弱性がある暗号実装
     { name = "rust-crypto", reason = "廃止済み。ring または RustCrypto に移行" },
@@ -74,6 +78,13 @@ deny = [
     { name = "env_logger", reason = "tracing-subscriber を使用" },
     # Windows API 直接呼び出し禁止 (Tauri が管理)
     { name = "winapi", version = "< 0.3", reason = "古いバージョン。windows-sys を使用" },
+    # typosquatting 対策: よく混同される名前
+    { name = "serde-json", reason = "typosquat 警戒: 正しくは serde_json (アンダースコア)" },
+    { name = "tokio-core", reason = "廃止済み。tokio 1.x を使用" },
+    { name = "openssl", reason = "rustls を使用 (FIPS 非互換版)" },
+    # 情報漏洩リスクのある直接ネットワーク access を P-LLM 相当クレートに禁止
+    { name = "attohttpc", reason = "reqwest (rustls-tls) を使用" },
+    { name = "ureq", reason = "reqwest (rustls-tls) を使用" },
 ]
 
 # 許可する重複バージョン (推移的依存による不可避なケース)

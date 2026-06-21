@@ -485,22 +485,58 @@ impl PiiFieldVisitor {
     }
 }
 
+/// フィールド名が高リスク PII を含む可能性があるか判定する。
+///
+/// フィールド名によるブロッキング (P1/A5):
+/// 値の内容検査より前に名前でブロックすることで、
+/// sanitizer が見逃した PII の多重防衛層を提供する。
+/// 出典: https://zenn.dev/taiki45/books/pragmatic-rust-application-development/viewer/tracing
+fn is_sensitive_field_name(name: &str) -> bool {
+    // 完全一致のみ (サブ文字列マッチは誤検知が多い)
+    const SENSITIVE_EXACT: &[&str] = &[
+        "email", "e_mail", "mail",
+        "subject", "body", "content", "message",
+        "password", "passwd", "secret", "token", "api_key",
+        "bearer", "authorization", "auth",
+        "phone", "address", "name", "full_name", "display_name",
+        "credit_card", "card_number", "cvv",
+        "my_number", "マイナンバー", "個人番号",
+    ];
+    let lower = name.to_lowercase();
+    SENSITIVE_EXACT.iter().any(|&s| lower == s)
+}
+
 impl tracing::field::Visit for PiiFieldVisitor {
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        let sanitized = PrivacySanitizer::sanitize(value);
-        if sanitized != value {
+        let field_name = field.name();
+        // フィールド名による事前ブロック (多重防衛)
+        let sanitized = if is_sensitive_field_name(field_name) {
             self.found_pii = true;
-        }
-        self.sanitized_fields.push((field.name().to_string(), sanitized));
+            "[REDACTED:sensitive-field]".to_string()
+        } else {
+            let s = PrivacySanitizer::sanitize(value);
+            if s != value {
+                self.found_pii = true;
+            }
+            s
+        };
+        self.sanitized_fields.push((field_name.to_string(), sanitized));
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        let field_name = field.name();
         let raw = format!("{value:?}");
-        let sanitized = PrivacySanitizer::sanitize(&raw);
-        if sanitized != raw {
+        let sanitized = if is_sensitive_field_name(field_name) {
             self.found_pii = true;
-        }
-        self.sanitized_fields.push((field.name().to_string(), sanitized));
+            "[REDACTED:sensitive-field]".to_string()
+        } else {
+            let s = PrivacySanitizer::sanitize(&raw);
+            if s != raw {
+                self.found_pii = true;
+            }
+            s
+        };
+        self.sanitized_fields.push((field_name.to_string(), sanitized));
     }
 }
 
@@ -726,6 +762,34 @@ mod tests {
         // (型が合わないとコンパイルエラーになる)
         let _layer: Box<dyn std::any::Any> = Box::new(PrivacyLayer);
         // Layer<S> の具体的な確認は統合テストで行う
+    }
+
+    // P1/A5: フィールド名によるブロッキング
+    #[test]
+    fn sensitive_field_names_detected() {
+        assert!(is_sensitive_field_name("email"));
+        assert!(is_sensitive_field_name("subject"));
+        assert!(is_sensitive_field_name("body"));
+        assert!(is_sensitive_field_name("password"));
+        assert!(is_sensitive_field_name("api_key"));
+        assert!(is_sensitive_field_name("authorization"));
+        assert!(is_sensitive_field_name("my_number"));
+        assert!(is_sensitive_field_name("マイナンバー"));
+    }
+
+    #[test]
+    fn non_sensitive_field_names_pass() {
+        assert!(!is_sensitive_field_name("request_id"));
+        assert!(!is_sensitive_field_name("latency_us"));
+        assert!(!is_sensitive_field_name("verdict"));
+        assert!(!is_sensitive_field_name("crate_name"));
+    }
+
+    #[test]
+    fn sensitive_field_name_is_case_insensitive() {
+        assert!(is_sensitive_field_name("EMAIL"));
+        assert!(is_sensitive_field_name("Password"));
+        assert!(is_sensitive_field_name("BEARER"));
     }
 
     #[test]

