@@ -143,8 +143,22 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             if segments[0] & 0xffc0 == 0xfe80 {
                 return true;
             }
+            // 未指定アドレス: :: (0.0.0.0 に相当)
+            if v6.is_unspecified() {
+                return true;
+            }
             // IPv4-mapped: ::ffff:10.x.x.x 等 (IPv4 プライベートを IPv6 経由で迂回)
             if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_private_ip(&IpAddr::V4(v4));
+            }
+            // NAT64: 64:ff9b::/96 (RFC 6052) — IPv4 プライベートへのトンネル
+            if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2] == 0 && segments[3] == 0 && segments[4] == 0 {
+                let v4 = std::net::Ipv4Addr::new(
+                    (segments[6] >> 8) as u8,
+                    segments[6] as u8,
+                    (segments[7] >> 8) as u8,
+                    segments[7] as u8,
+                );
                 return is_private_ip(&IpAddr::V4(v4));
             }
             false
@@ -266,5 +280,33 @@ mod tests {
         // ::ffff:10.0.0.1 は IPv4-mapped で 10.x.x.x → ブロック
         let ip = IpAddr::V6("::ffff:10.0.0.1".parse().unwrap());
         assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn ipv6_unspecified_blocked() {
+        // :: は未指定アドレス → ブロック
+        let ip = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn nat64_private_blocked() {
+        // 64:ff9b::10.0.0.1 (NAT64) → 10.0.0.1 → ブロック
+        let ip: IpAddr = "64:ff9b::a00:1".parse().unwrap();
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn nat64_loopback_blocked() {
+        // 64:ff9b::127.0.0.1 (NAT64) → ループバック → ブロック
+        let ip: IpAddr = "64:ff9b::7f00:1".parse().unwrap();
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn nat64_public_allowed() {
+        // 64:ff9b::8.8.8.8 (NAT64 → 8.8.8.8) は公開 → 許可
+        let ip: IpAddr = "64:ff9b::808:808".parse().unwrap();
+        assert!(!is_private_ip(&ip));
     }
 }
