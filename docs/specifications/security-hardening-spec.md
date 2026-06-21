@@ -1,10 +1,10 @@
 # セキュリティ強化仕様書
 
-**バージョン**: 1.0  
+**バージョン**: 1.5  
 **作成日**: 2026-06-20  
+**更新日**: 2026-06-21 (Round 5)  
 **対象ブランチ**: `claude/sleepy-keller-1wyggy`  
-**コミット数**: 25 件 (本セッション)  
-**テスト数**: 865 件 (全 PASS)
+**テスト数**: 958 件 (全 PASS)
 
 ---
 
@@ -400,4 +400,37 @@ if score >= threshold { warn!() }
 
 ワークスペース合計テスト数: 909 → 918 (+9)。
 
+## 13. Qiita/Zenn 第 5 ラウンド調査 (v1.5 — 2026-06-21)
+
+### 13.1 調査ソース
+
+| # | パターン | 出典 |
+|---|---|---|
+| 1 | JWT alg:none / RS256→HS256 混同 | Qiita nozomi2025, Zenn tkydev |
+| 2 | SSRF: DNS リバインディング突破 | Qiita kawabe0201, Zenn k41531 |
+| 3 | ZIP Slip — canonicalize 未使用 | Zenn nodamushi |
+| 4 | `zeroize` / `secrecy::SecretString` | Zenn nodamushi |
+| 5 | Safe Rust でのスタックオーバーフロー | Qiita osanshouo |
+| 6 | `checked_*` / `saturating_*` 演算 | Zenn sorairolake |
+| 7 | ファイルマジックバイト — 拡張子偽装 | Qiita/Zenn 複合 |
+
+### 13.2 実装内容
+
+| ID | クレート | 変更 |
+|----|---|---|
+| Z5-1 | kaname-render | `zip_guard.rs` 追加: 字句正規化 + prefix チェックで ZIP Slip 防止 |
+| Z5-2 | kaname-render | `magic_bytes.rs` 追加: PE/ELF/PDF/ZIP 等 14 種 magic bytes 検出、MIME 不一致フラグ |
+| Z5-3 | kaname-jmap | `ssrf_guard.rs` 追加: DNS 解決後 IP (v4/v6/mapped) がプライベートなら接続前ブロック |
+| Z5-4 | kaname-jmap | `connect()` 冒頭で `check_url_for_ssrf()` を呼び出し、`JmapError::Ssrf` を追加 |
+| Z5-5 | kaname-crypto | `SharedSecret` に `#[derive(ZeroizeOnDrop)]` を適用 — 手動 Drop を除去しコンパイラ最適化を防止 |
+| Z5-6 | kaname-sandbox | `mime_depth.rs` 追加: MIME ネスト深度を非再帰でカウント、`MAX_MIME_DEPTH=50` を超えるとエラー |
+
+### 13.3 関連テスト
+
+- `kaname-render::zip_guard`: 8 テスト (正常パス、`..` 拒否、絶対パス拒否、NUL バイト等)
+- `kaname-render::magic_bytes`: 9 テスト (各 magic bytes 検出、危険な不一致フラグ)
+- `kaname-jmap::ssrf_guard`: 15 テスト (IPv4/IPv6 プライベート、ループバック、mapped v4)
+- `kaname-sandbox::mime_depth`: 6 テスト (フラット、単一 multipart、ネスト、過剰ネスト拒否)
+
+ワークスペース合計テスト数: 918 → 958 (+40)。
 

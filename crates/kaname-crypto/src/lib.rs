@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use thiserror::Error;
 use std::marker::PhantomData;
+use zeroize::ZeroizeOnDrop;
 
 // ============================================================================
 // アルゴリズム識別子
@@ -260,7 +261,9 @@ pub struct Signature {
 }
 
 /// KEM から導出した共有シークレット。HKDF 後 32 バイト。
-/// Drop 時にゼロ化。ログにも書かず、シリアライズもしない。
+/// Drop 時にゼロ化 (`ZeroizeOnDrop` derive — コンパイラ最適化で除去されない)。
+/// ログにも書かず、シリアライズもしない。
+#[derive(ZeroizeOnDrop)]
 pub struct SharedSecret([u8; 32]);
 
 impl SharedSecret {
@@ -287,14 +290,6 @@ impl SharedSecret {
         // 出力長 32 バイトは SHA-256 ブロックサイズ内 → InvalidLength は到達不能
         let _ = hkdf.expand(info, &mut out);
         out
-    }
-}
-
-impl Drop for SharedSecret {
-    fn drop(&mut self) {
-        for b in self.0.iter_mut() {
-            *b = 0;
-        }
     }
 }
 

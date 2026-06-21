@@ -18,6 +18,9 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
+pub mod ssrf_guard;
+pub use ssrf_guard::SsrfError;
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -108,6 +111,10 @@ pub struct JmapClient {
 impl JmapClient {
     /// /.well-known/jmap を検出して接続する。
     pub async fn connect(base_url: &str, config: ClientConfig) -> Result<Self, JmapError> {
+        // SSRF: DNS 解決後 IP がプライベートアドレスでないか確認
+        ssrf_guard::check_url_for_ssrf(base_url).await
+            .map_err(|e| JmapError::Ssrf(e.to_string()))?;
+
         let http = reqwest::Client::builder()
             .use_rustls_tls()
             .connect_timeout(config.connect_timeout)
@@ -701,6 +708,9 @@ pub enum JmapError {
     /// 入力値が不正。
     #[error("不正な入力: {0}")]
     InvalidInput(String),
+    /// SSRF 攻撃を検出してブロック。
+    #[error("SSRF ブロック: {0}")]
+    Ssrf(String),
 }
 
 // ============================================================================

@@ -31,6 +31,10 @@
 #![deny(clippy::expect_used)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc, clippy::doc_markdown, clippy::must_use_candidate, clippy::items_after_statements, clippy::unused_async, clippy::used_underscore_binding)]
+/// MIME ネスト深度チェック (スタックオーバーフロー防止)。
+pub mod mime_depth;
+pub use mime_depth::{check_mime_depth, MimeDepthError, MAX_MIME_DEPTH};
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
