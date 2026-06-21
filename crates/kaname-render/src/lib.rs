@@ -882,6 +882,9 @@ mod tests {
     }
 }
 
+/// ヘッダー値の CRLF インジェクション対策ユーティリティ。
+pub mod header_sanitize;
+
 /// HTML スマグリング検出 (Blob/data: URI 経由のペイロード組み立て)。
 pub mod html_smuggling;
 /// カレンダー招待 (ICS) のセキュリティ検査。

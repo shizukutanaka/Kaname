@@ -825,9 +825,20 @@ fn default_rules() -> Vec<Rule> {
 // マッチング ユーティリティ
 // ============================================================================
 
+/// regex マッチングを適用する入力の最大バイト数。
+/// `regex` クレートは線形時間保証があるが DFA テーブルメモリを制限するため上限を設ける。
+const MAX_REGEX_INPUT_BYTES: usize = 512 * 1024; // 512 KB
+
 /// 固定パターン向けの一回コンパイル正規表現マッチ。
 /// 分類器のように定数パターンを使う箇所で呼ぶ (ルール評価は regex_cache を使う)。
 fn re_is_match(pattern: &str, text: &str) -> bool {
+    // 入力が大きすぎる場合は先頭 512 KB のみ検査 (DFA メモリ上限)
+    let text = if text.len() > MAX_REGEX_INPUT_BYTES {
+        let cut = (0..=MAX_REGEX_INPUT_BYTES).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+        &text[..cut]
+    } else {
+        text
+    };
     // コンパイル結果をスレッドローカルキャッシュに保持し再コンパイルを回避する。
     thread_local! {
         static CACHE: std::cell::RefCell<HashMap<String, Regex>> =

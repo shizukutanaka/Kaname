@@ -85,6 +85,10 @@ deny = [
     # 情報漏洩リスクのある直接ネットワーク access を P-LLM 相当クレートに禁止
     { name = "attohttpc", reason = "reqwest (rustls-tls) を使用" },
     { name = "ureq", reason = "reqwest (rustls-tls) を使用" },
+    # ReDoS リスク: fancy-regex は指数的バックトラッキングを持つ
+    { name = "fancy-regex", reason = "ReDoS 脆弱性あり。regex (NFA/DFA) を使用" },
+    # 廃止済み JWT クレート
+    { name = "jsonwebtoken", reason = "内部 JWT はなし。外部認証は reqwest + oauth2 で実装" },
 ]
 
 # 許可する重複バージョン (推移的依存による不可避なケース)

@@ -60,6 +60,8 @@ pub struct AssessmentRequest<'a> {
     /// メール本文から抽出した URL 一覧 (AiTM 検出に使用)。
     /// `kaname-render` の HTML パーサーが `<a href>` から抽出する。
     pub extracted_urls: &'a [String],
+    /// Reply-To ヘッダー (省略可)。スプーフィング検出に使用。
+    pub reply_to: Option<&'a str>,
 }
 
 /// パースされた SPF/DKIM/DMARC の判定。
@@ -236,6 +238,9 @@ impl BecDetector {
 
         // --- 5. AiTM URL signals
         self.check_aitm(&req, &mut signals);
+
+        // --- 5b. Reply-To スプーフィング + 表示名詐称
+        self.check_reply_to_spoof(&req, &mut signals);
 
         // --- 6. LLM signal (the expensive one; done last)
         self.check_llm(&req, &mut signals)?;
@@ -468,6 +473,36 @@ impl BecDetector {
             if risk.verdict == AitmVerdict::Dangerous {
                 break;
             }
+        }
+    }
+
+    fn check_reply_to_spoof(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        use crate::reply_to_spoof::analyze_spoof;
+        let known_names: Vec<&str> = req.known_contacts.iter().map(String::as_str).collect();
+        let analysis = analyze_spoof(req.from_header, req.reply_to, &known_names);
+        if analysis.reply_to_domain_mismatch {
+            let domain = analysis.reply_to_domain.as_deref().unwrap_or("不明");
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution: analysis.risk_score.min(0.6),
+                label: format!("Reply-To ドメイン不一致 ({})", domain),
+                rationale: format!(
+                    "From のドメインと Reply-To のドメインが異なります (Reply-To: {domain})。\
+                    返信が横取りされる可能性があります。"
+                ),
+            });
+        }
+        if analysis.display_name_impersonation {
+            let name = analysis.suspicious_display_name.as_deref().unwrap_or("不明");
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.30,
+                label: format!("表示名詐称の疑い ({})", name),
+                rationale: format!(
+                    "表示名 \"{name}\" は既知の連絡先と一致しますが、\
+                    メールアドレスのドメインが異なります。"
+                ),
+            });
         }
     }
 
@@ -806,6 +841,7 @@ mod tests {
             our_domain: "ally-corp.com",
             known_contacts: &contacts,
             extracted_urls: &[],
+            reply_to: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Safe);
@@ -828,6 +864,7 @@ mod tests {
             our_domain: "mitsui-global.co.jp",
             known_contacts: &contacts,
             extracted_urls: &[],
+            reply_to: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Dangerous, "score={}, signals={:?}", a.score, a.signals);
@@ -852,6 +889,7 @@ mod tests {
             our_domain: "example.com",
             known_contacts: &contacts,
             extracted_urls: &[aitm_url],
+            reply_to: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -920,6 +958,7 @@ mod tests {
             our_domain: "paypal.com",
             known_contacts: &contacts,
             extracted_urls: &[],
+            reply_to: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(a.signals.iter().any(|s| s.label.contains("混在スクリプト")),
@@ -993,6 +1032,7 @@ mod tests {
             our_domain: "example.com",
             known_contacts: &contacts,
             extracted_urls: &[],
+            reply_to: None,
         };
         // パニックせず正常な結果を返すこと
         let result = det.assess(req);
@@ -1017,6 +1057,7 @@ mod tests {
             our_domain: "example.com",
             known_contacts: &contacts,
             extracted_urls: &urls,
+            reply_to: None,
         };
         let result = det.assess(req);
         assert!(result.is_ok(), "大量URLでpanicしてはならない: {result:?}");
@@ -1061,3 +1102,5 @@ mod tests {
 pub mod aitm;
 pub mod account_diff;
 pub mod dkim_check;
+/// Reply-To スプーフィング + 表示名詐称の検出。
+pub mod reply_to_spoof;
