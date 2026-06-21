@@ -145,17 +145,50 @@ impl VerificationWord {
     ///
     /// 英語: case-insensitive (電話越しの聞き取りを許容)
     /// 日本語: 全角カタカナで正規化して比較
+    ///
+    /// **定数時間比較**: タイミング攻撃で期待ワードのビット情報が漏洩しないよう
+    /// XOR ベースの定数時間比較を使用する。長さが異なる場合は早期リターンするが、
+    /// ワードリスト (50語) の長さは限定的なので許容範囲。
     #[must_use]
     pub fn matches(&self, input: &str) -> bool {
         let trimmed = input.trim();
-        // ASCII のみの場合は case-insensitive 比較
         if self.0.is_ascii() {
-            self.0.eq_ignore_ascii_case(trimmed)
+            ct_eq_ascii_case_insensitive(self.0.as_bytes(), trimmed.as_bytes())
         } else {
-            // 日本語カタカナ: 正規化後に比較
-            normalize_katakana(&self.0) == normalize_katakana(trimmed)
+            // 日本語カタカナ: 正規化後に定数時間比較
+            let expected = normalize_katakana(&self.0);
+            let actual = normalize_katakana(trimmed);
+            ct_eq_bytes(expected.as_bytes(), actual.as_bytes())
         }
     }
+}
+
+/// ASCII 大文字小文字を無視した定数時間バイト比較。
+///
+/// タイミングサイドチャネルでワードのビット情報が漏洩しないよう XOR を使用。
+/// 長さが一致しない場合は `false` を返す (長さ比較は非定数時間だが、
+/// 50 語リストの長さは公開情報のため許容する)。
+fn ct_eq_ascii_case_insensitive(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x.to_ascii_lowercase() ^ y.to_ascii_lowercase();
+    }
+    diff == 0
+}
+
+/// 定数時間バイト比較 (大文字小文字区別あり)。
+fn ct_eq_bytes(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 /// カタカナ正規化: 全角ひらがな→カタカナ、長音符の揺れを吸収。
@@ -763,6 +796,60 @@ mod tests {
         assert!(json.contains("Pending"));
         // フレーズは serialize される (検証中はメモリ内で保持が必要)
         // しかし audit_record は phrase を含まない
+    }
+}
+
+// ============================================================================
+// 定数時間比較テスト
+// ============================================================================
+
+#[cfg(test)]
+mod ct_compare_tests {
+    use super::*;
+
+    #[test]
+    fn ct_eq_ascii_same_is_true() {
+        assert!(ct_eq_ascii_case_insensitive(b"anvil", b"anvil"));
+    }
+
+    #[test]
+    fn ct_eq_ascii_case_insensitive_works() {
+        assert!(ct_eq_ascii_case_insensitive(b"ANVIL", b"anvil"));
+        assert!(ct_eq_ascii_case_insensitive(b"Anvil", b"ANVIL"));
+    }
+
+    #[test]
+    fn ct_eq_ascii_different_is_false() {
+        assert!(!ct_eq_ascii_case_insensitive(b"anvil", b"zebra"));
+    }
+
+    #[test]
+    fn ct_eq_ascii_different_length_is_false() {
+        assert!(!ct_eq_ascii_case_insensitive(b"anvil", b"anvils"));
+    }
+
+    #[test]
+    fn ct_eq_bytes_same_is_true() {
+        assert!(ct_eq_bytes(b"hello", b"hello"));
+    }
+
+    #[test]
+    fn ct_eq_bytes_different_is_false() {
+        assert!(!ct_eq_bytes(b"hello", b"world"));
+    }
+
+    #[test]
+    fn verification_word_matches_case_insensitive() {
+        let w = VerificationWord(String::from("anvil"));
+        assert!(w.matches("ANVIL"));
+        assert!(w.matches("Anvil"));
+        assert!(w.matches("  anvil  "));
+    }
+
+    #[test]
+    fn verification_word_no_match_different_word() {
+        let w = VerificationWord(String::from("anvil"));
+        assert!(!w.matches("zebra"));
     }
 }
 

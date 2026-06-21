@@ -82,6 +82,56 @@ pub fn detect_mime_from_magic(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x1F\x8B") {
         return Some("application/gzip");
     }
+    // SVG (XMLベース — <svg で始まる or <?xml の後に svg)
+    {
+        let head = &bytes[..bytes.len().min(256)];
+        let head_str = std::str::from_utf8(head).unwrap_or("");
+        let lower = head_str.to_ascii_lowercase();
+        if lower.contains("<svg") || (lower.contains("<?xml") && lower.contains("svg")) {
+            return Some("image/svg+xml");
+        }
+    }
+    None
+}
+
+/// SVG ファイルか判定する (XSS リスクのため添付として拒否すべき)。
+///
+/// SVG は `<script>` や `onload` 等 JS 実行ベクターを含めるため、
+/// メール添付として受信した場合は sandbox VM 外では展開を禁止する。
+#[must_use]
+pub fn is_svg(bytes: &[u8]) -> bool {
+    detect_mime_from_magic(bytes) == Some("image/svg+xml")
+}
+
+/// Polyglot ファイルを検出する。
+///
+/// Polyglot ファイルは複数のフォーマットとして同時に有効な binary。
+/// 例: JPEG+ZIP (先頭が \xFF\xD8 で有効 JPEG、末尾に ZIP central directory)
+///
+/// magic bytes 単体チェックを回避するため、両端のシグネチャを確認する。
+#[must_use]
+pub fn detect_polyglot(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+    let head_mime = detect_mime_from_magic(bytes)?;
+
+    // ZIP の中央ディレクトリは末尾付近にある (最後の 64 KB をチェック)
+    let tail_offset = bytes.len().saturating_sub(65536);
+    let tail = &bytes[tail_offset..];
+
+    // JPEG + ZIP polyglot (JPEG EOI \xFF\xD9 の後に ZIP データ)
+    if head_mime == "image/jpeg" && tail.windows(4).any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06") {
+        return Some(("image/jpeg", "application/zip"));
+    }
+
+    // PNG + ZIP polyglot (PNG IEND チャンクの後に ZIP データ)
+    if head_mime == "image/png" && tail.windows(4).any(|w| w == b"PK\x05\x06") {
+        return Some(("image/png", "application/zip"));
+    }
+
+    // PDF + ZIP polyglot (PDF %%EOF の後に ZIP)
+    if head_mime == "application/pdf" && tail.windows(4).any(|w| w == b"PK\x05\x06") {
+        return Some(("application/pdf", "application/zip"));
+    }
+
     None
 }
 
@@ -202,6 +252,42 @@ mod tests {
         let bytes = b"#!/bin/bash\nrm -rf /";
         let mismatch = check_mime_mismatch("text/plain", bytes);
         assert!(mismatch.is_some(), "シェルスクリプトを text/plain と偽装は危険");
+    }
+
+    #[test]
+    fn svg_detected_by_tag() {
+        let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"50\"/></svg>";
+        assert_eq!(detect_mime_from_magic(svg), Some("image/svg+xml"));
+        assert!(is_svg(svg));
+    }
+
+    #[test]
+    fn svg_with_xml_declaration_detected() {
+        let svg = b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>";
+        assert!(is_svg(svg));
+    }
+
+    #[test]
+    fn jpeg_is_not_svg() {
+        let jpeg = b"\xFF\xD8\xFF\xE0";
+        assert!(!is_svg(jpeg));
+    }
+
+    #[test]
+    fn jpeg_zip_polyglot_detected() {
+        let mut bytes = b"\xFF\xD8\xFF\xE0".to_vec(); // JPEG header
+        bytes.extend(vec![0u8; 100]);
+        bytes.extend_from_slice(b"PK\x05\x06"); // ZIP end-of-central-directory
+        bytes.extend(vec![0u8; 18]);
+        let result = detect_polyglot(&bytes);
+        assert!(result.is_some(), "JPEG+ZIP polyglot should be detected");
+        assert_eq!(result.unwrap().0, "image/jpeg");
+    }
+
+    #[test]
+    fn clean_jpeg_is_not_polyglot() {
+        let jpeg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF\x00";
+        assert!(detect_polyglot(jpeg).is_none());
     }
 
     #[test]
