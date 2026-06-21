@@ -1060,3 +1060,4 @@ mod tests {
 
 pub mod aitm;
 pub mod account_diff;
+pub mod dkim_check;

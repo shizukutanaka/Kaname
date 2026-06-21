@@ -325,3 +325,41 @@ if score >= threshold { warn!() }
 
 ワークスペース合計テスト数: 865 → 897 (+32)。
 
+---
+
+## 11. Qiita/Zenn 第 3 ラウンド調査 (v1.3 — 2026-06-21 終盤)
+
+メール配信プロトコルレベルの未調査領域に集中。
+
+### 11.1 発見された新攻撃クラス
+
+| ID | 攻撃名 | 出典 | 概要 |
+|---|---|---|---|
+| **S1** | SMTP Smuggling | [JVNVU#94855660](https://jvn.jp/vu/JVNVU94855660/) / [SIOS Security 2023-12-25](https://security.sios.jp/vulnerability/misc-security-vulnerability-20231225/) | 終端 `<CRLF>.<CRLF>` 解釈差で DATA 早期終端 → SPF/DKIM/DMARC バイパス。Exim/Postfix 影響 |
+| **D1** | DKIM `l=` タグ濫用 | [innovatopia 2025](https://innovatopia.jp/cyber-security/cyber-security-news/52148/) / [Zenn suyasuya](https://zenn.dev/suyasuya/articles/07c87cf8153eef) | 本文長制限タグで署名後本文追記が可能。中継経路で「振込先変更しました」を追記しても DKIM 通過 |
+| **D2** | DKIM Replay Attack | innovatopia | 正規署名済みメールを大量配布 (Google OAuth 悪用パターン) |
+
+### 11.2 適用した改善
+
+| # | 対象 | 改善 | 優先度 |
+|---|---|---|---|
+| **S1-fix** | `kaname-jmap::send_email` | `contains_smtp_terminator()` で本文中の `\r\n.\r\n` / `\n.\n` / 先頭 `.\r?\n` を拒否 (送信前検査) | **P0** |
+| **D1-fix** | `kaname-bec::dkim_check` (新規モジュール) | `analyze_dkim_header()` で `l=` タグ存在を検出し `is_risky()` で警告 | **P1** |
+| **D2-fix** | `kaname-bec::dkim_check::DkimReplayTracker` | `(domain, signature_prefix)` 集合で同一署名の複数回受信をカウント | **P1** |
+
+### 11.3 残課題 (Sprint N+4)
+
+- **HTML スマグリング**: `kaname-render` で SVG 内 `<script>` / `<foreignObject>` / 外部 `<image href>` を ammonia ホワイトリストから除去
+- **iCalendar インジェクション (CVE-2023-35636 系)**: `kaname-render::calendar_guard` で ATTENDEE CN 検証、URL/UNC 正規化、SEQUENCE 単調性、DTSTART 過去日警告
+- **wasmtime CVE-2025-53901**: `kaname-sandbox` の wasmtime を 34.0.2+ pin、pooling allocator 無効化、WASI Preview2 capability 最小化
+- **トラッキングピクセル**: 画像プロキシ化 + 既知トラッキングドメインリスト
+- **DKIM Replay の Redis 永続化**: 現状インメモリ → 本番では Redis SET NX + TTL に拡張
+
+### 11.4 関連テスト
+
+- `kaname-jmap`: SMTP smuggling 5 テスト追加 (CRLF.CRLF / LF.LF / 先頭ドット / 通常文通過 / 行中ドット安全)
+- `kaname-bec`: `dkim_check` 7 テスト追加 (`l=` 検出、署名前綴抽出、リプレイカウンタ、不完全署名処理)
+
+ワークスペース合計テスト数: 897 → 909 (+12)。
+
+

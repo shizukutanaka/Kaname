@@ -332,6 +332,17 @@ impl JmapClient {
             )));
         }
 
+        // SMTP Smuggling 対策 (JVNVU#94855660, 2024)
+        // 終端シーケンス `<CRLF>.<CRLF>` または `<LF>.<LF>` を本文に含むと
+        // 下流 MTA で DATA 早期終端 → SPF/DKIM/DMARC バイパスが成立する
+        // (Postfix/Exim/Sendmail 影響、Outlook Express 仕様差を悪用)
+        if contains_smtp_terminator(body) {
+            return Err(JmapError::InvalidInput(
+                "本文に SMTP DATA 終端シーケンス (CRLF.CRLF / LF.LF) が含まれています"
+                    .to_string(),
+            ));
+        }
+
         // RFC 5322 ヘッダーインジェクション防止: \r\n を含む入力を拒否
         // 攻撃者が subject に "\r\nBcc: victim@evil.com" を注入すると
         // 任意の宛先にメールを送れてしまう
@@ -732,6 +743,29 @@ fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
     Ok(s.to_owned())
 }
 
+/// SMTP DATA 終端シーケンスを本文に含むか判定する (SMTP Smuggling 対策)。
+///
+/// `<CRLF>.<CRLF>` (`\r\n.\r\n`) は RFC 5321 §4.1.1.4 で DATA 終端と規定される。
+/// 一部 MTA は `<LF>.<LF>` も終端として解釈するため双方を検査する。
+/// メッセージ先頭の `.<CRLF>` (本来 dot-stuffing で `..` にエスケープすべき) も拒否。
+///
+/// 出典: JVNVU#94855660 (2024-01)、SIOS Security Advisory 2023-12-25。
+fn contains_smtp_terminator(body: &str) -> bool {
+    // 標準: CRLF.CRLF
+    if body.contains("\r\n.\r\n") {
+        return true;
+    }
+    // 仕様逸脱 MTA: LF.LF (Exim/Postfix の旧設定で発火)
+    if body.contains("\n.\n") {
+        return true;
+    }
+    // 本文先頭が ".\r\n" または ".\n" の場合も DATA 終端と解釈される
+    if body.starts_with(".\r\n") || body.starts_with(".\n") {
+        return true;
+    }
+    false
+}
+
 /// SSE テキストブロックを `PushNotification` にパースする。
 ///
 /// JMAP push notification (RFC 8620 §7.3) の `data:` フィールドを解析する。
@@ -940,6 +974,42 @@ mod tests {
             bad_subject.contains('\r') || bad_subject.contains('\n'),
             "改行文字を含む件名はヘッダーインジェクションの危険がある"
         );
+    }
+
+    // SMTP Smuggling 対策テスト (JVNVU#94855660)
+    #[test]
+    fn smtp_terminator_crlf_dot_crlf_detected() {
+        let body = "通常テキスト\r\n.\r\n攻撃者が追加した本文";
+        assert!(contains_smtp_terminator(body),
+            "CRLF.CRLF パターンは検出されるべき");
+    }
+
+    #[test]
+    fn smtp_terminator_lf_dot_lf_detected() {
+        let body = "通常テキスト\n.\n攻撃者が追加した本文";
+        assert!(contains_smtp_terminator(body),
+            "LF.LF パターンは Exim/Postfix で DATA 終端と解釈されうる");
+    }
+
+    #[test]
+    fn smtp_terminator_leading_dot_detected() {
+        let body = ".\r\n後続テキスト";
+        assert!(contains_smtp_terminator(body),
+            "本文先頭の .CRLF は dot-stuffing 不在の早期終端として拒否");
+    }
+
+    #[test]
+    fn smtp_terminator_normal_text_passes() {
+        assert!(!contains_smtp_terminator("お世話になっております。"));
+        assert!(!contains_smtp_terminator("URL: https://example.com/path"));
+        // 単独のドットを含む通常文は OK (改行で囲まれていない)
+        assert!(!contains_smtp_terminator("3.14 は円周率です"));
+    }
+
+    #[test]
+    fn smtp_terminator_dot_in_middle_of_line_safe() {
+        // ドットが行末ではない場合は安全
+        assert!(!contains_smtp_terminator("前文\r\n. これは終端ではない\r\n後文"));
     }
 }
 
