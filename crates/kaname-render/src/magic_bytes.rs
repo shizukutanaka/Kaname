@@ -94,6 +94,51 @@ pub fn detect_mime_from_magic(bytes: &[u8]) -> Option<&'static str> {
     None
 }
 
+/// Windows の危険な添付ファイル拡張子か判定する。
+///
+/// `.lnk` (Shell Link) や `.url` (Internet Shortcut) は任意コマンド実行に使われる。
+/// マクロ有効の Office 形式 (`.docm`, `.xlsm`, `.pptm`) も高リスク。
+#[must_use]
+pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
+    let lower = filename.to_ascii_lowercase();
+    let ext = lower.rsplit('.').next().unwrap_or("");
+    matches!(
+        ext,
+        "lnk"   // Windows Shell Link — 任意コマンド実行
+        | "url"   // Internet Shortcut — UNC/SMB 漏洩
+        | "scf"   // Shell Command File — NTLM hash 漏洩
+        | "scr"   // Screen Saver — 実行可能
+        | "pif"   // Program Information File — 実行可能
+        | "application" // ClickOnce application
+        | "gadget"
+        | "msp"   // Windows Installer Patch
+        | "msi"   // Windows Installer
+        | "cmd"   // Command Script
+        | "bat"   // Batch Script
+        | "ps1"   // PowerShell
+        | "vbs"   // VBScript
+        | "js"    // JScript
+        | "jse"   // JScript Encoded
+        | "vbe"   // VBScript Encoded
+        | "wsf"   // Windows Script File
+        | "wsh"   // Windows Script Host
+        | "hta"   // HTML Application
+        | "docm"  // Office マクロ有効 Word
+        | "xlsm"  // Office マクロ有効 Excel
+        | "pptm"  // Office マクロ有効 PowerPoint
+        | "xls"   // 古い Excel (VBA 埋め込み可能)
+        | "doc"   // 古い Word (VBA 埋め込み可能)
+    )
+}
+
+/// Windows LNK (Shell Link) ファイルか magic bytes で判定する。
+///
+/// LNK ファイルのヘッダー: `4C 00 00 00 01 14 02 00` (CLSID_ShellLink)
+#[must_use]
+pub fn is_lnk_file(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"\x4C\x00\x00\x00\x01\x14\x02\x00")
+}
+
 /// SVG ファイルか判定する (XSS リスクのため添付として拒否すべき)。
 ///
 /// SVG は `<script>` や `onload` 等 JS 実行ベクターを含めるため、
@@ -282,6 +327,50 @@ mod tests {
         let result = detect_polyglot(&bytes);
         assert!(result.is_some(), "JPEG+ZIP polyglot should be detected");
         assert_eq!(result.unwrap().0, "image/jpeg");
+    }
+
+    #[test]
+    fn lnk_file_detected_by_extension() {
+        assert!(is_dangerous_windows_attachment("invoice.lnk"));
+        assert!(is_dangerous_windows_attachment("INVOICE.LNK"));
+    }
+
+    #[test]
+    fn url_file_is_dangerous() {
+        assert!(is_dangerous_windows_attachment("report.url"));
+    }
+
+    #[test]
+    fn office_macro_extensions_dangerous() {
+        assert!(is_dangerous_windows_attachment("doc.docm"));
+        assert!(is_dangerous_windows_attachment("sheet.xlsm"));
+        assert!(is_dangerous_windows_attachment("slide.pptm"));
+    }
+
+    #[test]
+    fn script_extensions_dangerous() {
+        assert!(is_dangerous_windows_attachment("evil.ps1"));
+        assert!(is_dangerous_windows_attachment("evil.vbs"));
+        assert!(is_dangerous_windows_attachment("evil.bat"));
+    }
+
+    #[test]
+    fn safe_extensions_not_dangerous() {
+        assert!(!is_dangerous_windows_attachment("report.pdf"));
+        assert!(!is_dangerous_windows_attachment("photo.jpg"));
+        assert!(!is_dangerous_windows_attachment("data.csv"));
+    }
+
+    #[test]
+    fn lnk_magic_bytes_detected() {
+        let lnk = b"\x4C\x00\x00\x00\x01\x14\x02\x00\x00\x00\x00\x00";
+        assert!(is_lnk_file(lnk));
+    }
+
+    #[test]
+    fn non_lnk_magic_bytes_not_detected() {
+        assert!(!is_lnk_file(b"MZ\x90\x00"));
+        assert!(!is_lnk_file(b"%PDF"));
     }
 
     #[test]

@@ -574,6 +574,135 @@ pub enum CryptoError {
     VerificationFailed,
 }
 
+// ============================================================================
+// AES-GCM nonce 安全性 — 単調増加カウンター (R7-02 対策)
+// ============================================================================
+
+/// AES-GCM 用 nonce カウンター。
+///
+/// AES-GCM では同一キーで nonce を再利用すると keystream が同一になり、
+/// 認証付き暗号が完全に破られる (Qiita QUANON 記事参照)。
+/// このカウンターはスレッドセーフな単調増加で nonce 再利用を型レベルで防ぐ。
+///
+/// # 設計
+///
+/// - カウンターは `u64` で 2^64 回まで安全に使用可能
+/// - 枯渇時 (u64::MAX) はパニックではなく `Err` を返す
+/// - スレッドセーフ: `AtomicU64` を使用
+///
+/// # 使用上の注意
+///
+/// 1 つのキーに対して 1 つの `NonceCounter` を使用すること。
+/// キーを変えたら `NonceCounter` も新規作成すること。
+pub struct NonceCounter {
+    counter: std::sync::atomic::AtomicU64,
+}
+
+impl NonceCounter {
+    /// 新しいカウンターを 0 から開始する。
+    #[must_use]
+    pub fn new() -> Self {
+        Self { counter: std::sync::atomic::AtomicU64::new(0) }
+    }
+
+    /// カウンターを指定値から開始する (永続化後の再開に使用)。
+    #[must_use]
+    pub fn from_value(start: u64) -> Self {
+        Self { counter: std::sync::atomic::AtomicU64::new(start) }
+    }
+
+    /// 次の nonce を取得してカウンターをインクリメントする。
+    ///
+    /// # Errors
+    ///
+    /// カウンターが `u64::MAX` に達した場合 (キーを再生成すること)。
+    pub fn next_nonce(&self) -> Result<[u8; 12], CryptoError> {
+        let val = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if val == u64::MAX {
+            return Err(CryptoError::Backend("nonce counter exhausted; rotate key".to_string()));
+        }
+        // 12 バイト nonce: 上位 4 バイトを 0、下位 8 バイトをカウンター値 (big-endian)
+        let mut nonce = [0u8; 12];
+        nonce[4..12].copy_from_slice(&val.to_be_bytes());
+        Ok(nonce)
+    }
+
+    /// 現在のカウンター値を返す (永続化に使用)。
+    #[must_use]
+    pub fn current_value(&self) -> u64 {
+        self.counter.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Default for NonceCounter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Debug for NonceCounter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NonceCounter")
+            .field("current", &self.current_value())
+            .finish()
+    }
+}
+
+// ============================================================================
+// Argon2id パラメータバリデーション (R7-05 対策)
+// ============================================================================
+
+/// Argon2id パラメータ。RFC 9106 の最小推奨値を強制する。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Argon2Params {
+    /// メモリコスト (KiB)。RFC 9106 最小: 64 MiB = 65536 KiB。
+    pub memory_kib: u32,
+    /// 時間コスト (反復回数)。RFC 9106 最小: 3。
+    pub time_cost: u32,
+    /// 並列度。RFC 9106 推奨: 2。
+    pub parallelism: u32,
+}
+
+impl Argon2Params {
+    /// RFC 9106 §4 推奨値 (高セキュリティ設定)。
+    pub const RFC9106_HIGH: Self = Self {
+        memory_kib: 131_072, // 128 MiB
+        time_cost: 3,
+        parallelism: 2,
+    };
+
+    /// RFC 9106 §4 最小値 (低スペック環境向け)。
+    pub const RFC9106_MIN: Self = Self {
+        memory_kib: 65_536, // 64 MiB
+        time_cost: 3,
+        parallelism: 1,
+    };
+
+    /// パラメータが RFC 9106 最小要件を満たすか検証する。
+    ///
+    /// # Errors
+    ///
+    /// 最小要件を満たさない場合 `CryptoError::InvalidFormat`。
+    pub fn validate(&self) -> Result<(), CryptoError> {
+        if self.memory_kib < 65_536 {
+            return Err(CryptoError::InvalidFormat(
+                "Argon2id: memory_kib < 65536 (64 MiB). RFC 9106 最小要件を満たさない"
+            ));
+        }
+        if self.time_cost < 3 {
+            return Err(CryptoError::InvalidFormat(
+                "Argon2id: time_cost < 3. RFC 9106 最小要件を満たさない"
+            ));
+        }
+        if self.parallelism == 0 {
+            return Err(CryptoError::InvalidFormat(
+                "Argon2id: parallelism = 0 は無効"
+            ));
+        }
+        Ok(())
+    }
+}
+
 fn blake3_hash(bytes: &[u8]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     Sha256::digest(bytes).into()
@@ -905,5 +1034,104 @@ mod tests {
         let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(&json);
         assert!(result.is_err(),
             "ML-KEM-768 不正長さ公開鍵がデシリアライズを通過した");
+    }
+
+    // ── NonceCounter テスト ────────────────────────────────────────────────
+
+    #[test]
+    fn nonce_counter_starts_at_zero() {
+        let nc = NonceCounter::new();
+        assert_eq!(nc.current_value(), 0);
+    }
+
+    #[test]
+    fn nonce_counter_produces_unique_values() {
+        let nc = NonceCounter::new();
+        let n1 = nc.next_nonce().unwrap();
+        let n2 = nc.next_nonce().unwrap();
+        let n3 = nc.next_nonce().unwrap();
+        assert_ne!(n1, n2, "連続する nonce は一致してはならない");
+        assert_ne!(n2, n3, "連続する nonce は一致してはならない");
+    }
+
+    #[test]
+    fn nonce_counter_is_monotonically_increasing() {
+        let nc = NonceCounter::new();
+        let n1 = nc.next_nonce().unwrap();
+        let n2 = nc.next_nonce().unwrap();
+        // big-endian 8バイトを比較
+        assert!(n2[4..] > n1[4..], "nonce カウンターは単調増加でなければならない");
+    }
+
+    #[test]
+    fn nonce_counter_12_bytes() {
+        let nc = NonceCounter::new();
+        let n = nc.next_nonce().unwrap();
+        assert_eq!(n.len(), 12, "AES-GCM nonce は 12 バイトでなければならない");
+    }
+
+    #[test]
+    fn nonce_counter_from_value_resumes_correctly() {
+        let nc = NonceCounter::from_value(100);
+        assert_eq!(nc.current_value(), 100);
+        let n = nc.next_nonce().unwrap();
+        // 値 100 の nonce: 末尾 8 バイトが 100 の big-endian
+        let expected = 100u64.to_be_bytes();
+        assert_eq!(&n[4..], &expected);
+    }
+
+    #[test]
+    fn nonce_counter_thread_safe() {
+        use std::sync::Arc;
+        let nc = Arc::new(NonceCounter::new());
+        let nc2 = nc.clone();
+        let handle = std::thread::spawn(move || {
+            nc2.next_nonce().unwrap()
+        });
+        let n1 = nc.next_nonce().unwrap();
+        let n2 = handle.join().unwrap();
+        assert_ne!(n1, n2, "スレッド間で nonce が重複してはならない");
+    }
+
+    // ── Argon2Params テスト ───────────────────────────────────────────────
+
+    #[test]
+    fn argon2_rfc9106_high_is_valid() {
+        assert!(Argon2Params::RFC9106_HIGH.validate().is_ok());
+    }
+
+    #[test]
+    fn argon2_rfc9106_min_is_valid() {
+        assert!(Argon2Params::RFC9106_MIN.validate().is_ok());
+    }
+
+    #[test]
+    fn argon2_insufficient_memory_is_rejected() {
+        let params = Argon2Params {
+            memory_kib: 4096, // 4 MiB — bcrypt より弱い
+            time_cost: 3,
+            parallelism: 1,
+        };
+        assert!(params.validate().is_err(), "memory < 64 MiB は拒否されるべき");
+    }
+
+    #[test]
+    fn argon2_insufficient_time_is_rejected() {
+        let params = Argon2Params {
+            memory_kib: 65_536,
+            time_cost: 1, // 反復1回 — 不十分
+            parallelism: 1,
+        };
+        assert!(params.validate().is_err(), "time_cost < 3 は拒否されるべき");
+    }
+
+    #[test]
+    fn argon2_zero_parallelism_is_rejected() {
+        let params = Argon2Params {
+            memory_kib: 65_536,
+            time_cost: 3,
+            parallelism: 0,
+        };
+        assert!(params.validate().is_err(), "parallelism = 0 は拒否されるべき");
     }
 }
