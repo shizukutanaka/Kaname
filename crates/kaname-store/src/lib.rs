@@ -22,6 +22,8 @@
 #![deny(clippy::expect_used)]
 #![allow(missing_docs)]
 
+pub mod login_limiter;
+
 use rusqlite::{Connection, params};
 use sha2::{Sha256, Digest};
 use std::path::{Path, PathBuf};
