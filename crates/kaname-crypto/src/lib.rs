@@ -589,6 +589,7 @@ fn blake3_hash(bytes: &[u8]) -> [u8; 32] {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::useless_vec)]
 mod tests {
     use super::*;
 

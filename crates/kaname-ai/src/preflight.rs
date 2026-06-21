@@ -57,6 +57,11 @@ fn screen_risk_to_finding(r: &ScreenRisk) -> Finding {
         ScreenRisk::SuspiciousUrl(s) => Finding::SuspiciousUrl(s.clone()),
         ScreenRisk::HighEntropy(f) => Finding::HighEntropy(*f),
         ScreenRisk::SpecialToken(s) => Finding::SpecialToken(s.clone()),
+        // 新規追加パターン (P3 絵文字区切り / Base64 / Unicode タグ) は
+        // すべて高リスクの注入として KnownInjectionPattern にマップ
+        ScreenRisk::EmojiSeparatedInjection(s)
+        | ScreenRisk::Base64EncodedInstruction(s)
+        | ScreenRisk::UnicodeTagInjection(s) => Finding::KnownInjectionPattern(s.clone()),
     }
 }
 

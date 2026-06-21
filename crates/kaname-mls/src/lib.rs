@@ -334,6 +334,12 @@ pub struct MlsMailClient {
     epochs: BTreeMap<ConversationId, u64>,
     /// キーパッケージキャッシュ。
     kp_cache: KeyPackageCache,
+    /// 既処理 Welcome の (`conversation_id`, epoch) 集合 — リプレイ防止 (P1)。
+    ///
+    /// openmls 自体は Welcome の重複を検知しないため、上位層で
+    /// `(group_id, epoch)` の重複を追跡する必要がある。
+    /// 出典: openmls docs.rs §11 安全要件。
+    seen_welcomes: std::collections::HashSet<(ConversationId, u64)>,
 }
 
 impl MlsMailClient {
@@ -344,6 +350,7 @@ impl MlsMailClient {
             conversations: BTreeMap::new(),
             epochs: BTreeMap::new(),
             kp_cache: KeyPackageCache::new(),
+            seen_welcomes: std::collections::HashSet::new(),
         }
     }
 
@@ -561,6 +568,17 @@ impl MlsMailClient {
                 // let welcome = Welcome::try_from_bytes(&envelope.wire_bytes)?;
                 // let mut group = MlsGroup::new_from_welcome(&crypto, &welcome)?;
                 // let conv_id = ConversationId(group.group_id().as_slice().try_into()?);
+
+                // Welcome リプレイ防止 (P1): 同一 (conv_id, epoch) は一度のみ
+                // openmls は重複検知しないため上位層で追跡する必要がある
+                let key = (envelope.conversation_id.clone(), envelope.epoch);
+                if self.seen_welcomes.contains(&key) {
+                    return Err(MlsMailError::WelcomeReplay {
+                        conv_id_hex: envelope.conversation_id.as_hex(),
+                        epoch: envelope.epoch,
+                    });
+                }
+                self.seen_welcomes.insert(key);
 
                 // モック実装
                 let safety_number = compute_safety_number(
@@ -808,6 +826,11 @@ pub enum MlsMailError {
     /// ペイロードが上限を超えている。
     #[error("ペイロードが大きすぎる: {size} バイト (上限 {max} バイト)")]
     PayloadTooLarge { size: usize, max: usize },
+
+    /// Welcome メッセージのリプレイを検出。
+    /// 同一 `(conversation_id, epoch)` の Welcome を 2 回以上処理した。
+    #[error("Welcome リプレイを検出: conv_id={conv_id_hex} epoch={epoch}")]
+    WelcomeReplay { conv_id_hex: String, epoch: u64 },
 }
 
 // ============================================================================
@@ -1258,5 +1281,36 @@ mod tests {
         let mut count = 0usize;
         while cache.consume(&email).is_some() { count += 1; }
         assert_eq!(count, 100, "KP は最大 100件まで: 実際 {count}");
+    }
+
+    // P1: Welcome リプレイ防止テスト (openmls 上位層責務)
+    #[test]
+    fn welcome_リプレイは2回目以降拒否される() {
+        let mut alice = make_client("alice@kaname.app");
+        let mut bob   = make_client("bob@kaname.app");
+
+        let bob_kp    = dummy_kp();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (_alice_conv, welcome_env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
+
+        // 通常の Welcome 処理用に Envelope を作成 (kind=Welcome に変換)
+        let welcome_only = Envelope {
+            conversation_id: welcome_env.conversation_id.clone(),
+            kind:            EnvelopeKind::Welcome,
+            epoch:           welcome_env.epoch,
+            ciphersuite:     welcome_env.ciphersuite,
+            wire_bytes:      welcome_env.wire_bytes.clone(),
+            welcome:         welcome_env.welcome.clone(),
+        };
+
+        // 1 回目は成功
+        let first = bob.process_incoming(&welcome_only);
+        assert!(matches!(first, Ok(IncomingResult::WelcomeJoined(_))),
+            "初回 Welcome は処理されるべき: {first:?}");
+
+        // 2 回目は WelcomeReplay で拒否
+        let second = bob.process_incoming(&welcome_only);
+        assert!(matches!(second, Err(MlsMailError::WelcomeReplay { .. })),
+            "リプレイされた Welcome は拒否されるべき: {second:?}");
     }
 }

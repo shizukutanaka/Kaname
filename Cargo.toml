@@ -88,6 +88,17 @@ regex        = { version = "1.11", features = ["unicode"] }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 mail-parser  = { version = "0.9", features = ["full_encoding"] }
 
+# ────────────────────────────────────────────────────────────────
+# Workspace-wide lints (P0/Concurrency: await_holding_lock)
+# 出典: turso.tech (Tokio single-mutex deadlock), 2025-2026 Rust 並行性報告
+# ────────────────────────────────────────────────────────────────
+[workspace.lints.clippy]
+# .await を跨いで std::sync::Mutex / RwLock を保持するとデッドロック
+# 確実な実行時バグの静的検出
+await_holding_lock        = "deny"
+# DashMap などの参照を await 跨ぎで保持するパターンも検出
+await_holding_refcell_ref = "deny"
+
 [profile.release]
 opt-level     = 3
 lto           = "thin"

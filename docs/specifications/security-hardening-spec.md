@@ -289,3 +289,39 @@ if score >= threshold { warn!() }
 - `cyrillic_homoglyph_override_blocked` / `greek_homoglyph_override_blocked`
 - `homoglyph_to_ascii_maps_known_lookalikes`
 
+---
+
+## 10. Qiita/Zenn 追加調査 (v1.2 — 2026-06-21 後半)
+
+第 2 ラウンドの調査で発見した BEC・MLS・並行性領域の改善を実装。
+
+### 10.1 発見された新攻撃クラス
+
+| ID | 攻撃名 | 出典 | 概要 |
+|---|---|---|---|
+| **B1** | スレッドハイジャック (口座差替) | [PSI 解説](https://www.psi.co.jp/topics/2026/nl_20260105_1.html) / [ジュピターテクノロジー](https://blog.jtc-i.co.jp/2026/01/mail-security.html) | 数週間の会話観察後、振込タイミングで本文の口座番号のみ差し替え。DMARC/SPF/DKIM 全通過 |
+| **M1** | MLS Welcome リプレイ | [openmls docs](https://docs.rs/openmls/latest/openmls/) | openmls 自体は Welcome の `(group_id, epoch)` 重複を検知しない |
+| **C1** | tokio async-await mutex デッドロック | [turso.tech](https://turso.tech/blog/how-to-deadlock-tokio-application-in-rust-with-just-a-single-mutex) | 単一 std::sync::Mutex でも `.await` 跨ぎ保持で確実にデッドロック |
+
+### 10.2 適用した改善
+
+| # | 対象 | 改善 | 優先度 |
+|---|---|---|---|
+| **C1-fix** | `Cargo.toml` (workspace.lints.clippy) | `await_holding_lock` / `await_holding_refcell_ref` を `deny` で workspace 全体に適用 | **P0** |
+| **B1-fix** | `kaname-bec::account_diff` (新規モジュール) | スレッドハイジャック検出: 過去スレッドと現在メールから 7-8 桁数字 (口座番号) を抽出し集合差分。「変更」「振込先」キーワード重み付け | **P0** |
+| **M1-fix** | `kaname-mls::MlsMailClient` | `seen_welcomes: HashSet<(ConversationId, u64)>` で `(conv_id, epoch)` 重複を追跡。リプレイ時は `MlsMailError::WelcomeReplay` で拒否 | **P1** |
+
+### 10.3 残課題 (Sprint N+3)
+
+- **B1 拡張**: 過去スレッドソースを JMAP から取得し `assess()` パイプラインに組み込み
+- **OAuth トークン窃取兆候検知**: 送信元 IP / User-Agent 急変を MLS audit log と突合
+- **PII 5 段階階層検出**: regex → keyword → 形態素 → NER → LLM (Qualiteg 推奨)
+- **Double HMAC Verification**: `kaname-crypto` 内の HMAC 比較を `subtle::ConstantTimeEq` + Double HMAC パターンに統一
+
+### 10.4 関連テスト
+
+- `kaname-bec`: `account_diff` モジュール 11 テスト追加 (差替検出、全角数字、英日キーワード、低リスクケース)
+- `kaname-mls`: `welcome_リプレイは2回目以降拒否される` 1 テスト追加
+
+ワークスペース合計テスト数: 865 → 897 (+32)。
+
