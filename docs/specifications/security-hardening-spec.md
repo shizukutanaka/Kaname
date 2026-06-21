@@ -243,3 +243,49 @@ if score >= threshold { warn!() }
 ---
 
 *本仕様書は `docs/threat-model.md` の補完文書として機能する。新たな攻撃クラスが発見された場合は両文書を同時更新すること。*
+
+---
+
+## 9. Qiita/Zenn 調査由来の追加強化 (v1.1 — 2026-06-21)
+
+国内技術記事 (Qiita / Zenn) で 2025-2026 に報告された新攻撃パターンに基づく追加強化。
+
+### 9.1 発見された新攻撃クラス
+
+| ID | 攻撃名 | 出典 | 概要 |
+|---|---|---|---|
+| **A1** | Unicode タグ文字注入 | [Qiita: 絵文字や空白に攻撃命令を隠せる](https://qiita.com/sharu389no/items/a94aedbed2cb24edd9b7) | `U+E0000..=U+E007F` の不可視文字に命令を埋め込む (成功率 ~90%) |
+| **A2** | ANSI エスケープ隠蔽 | [Qiita: jqwik 事件](https://qiita.com/quotidia/items/8657462d9549c989d075) | OSS 文字列に `\x1b[` を仕込み端末非表示・AI 入力に残す |
+| **A3** | ホモグリフ・多言語 | [Zenn: homoglyph プロンプト検証](https://zenn.dev/fmuuly/articles/e8c481bf265007) | Cyrillic/Greek の Latin 類似字で OOV 誘発し検閲突破 |
+| **A4** | プロンプトワーム | [Zenn: prompt-worm-quarantine](https://zenn.dev/76hata/articles/prompt-worm-attack-agent-quarantine-design) | エージェント間メッセージに次エージェント向け命令を埋め込み感染拡大 |
+| **A5** | 出力インジェクション | [Zenn: Tool Use・MCP 時代の対策](https://zenn.dev/0h_n0/articles/78e4204a2a50c3) | LLM 応答中の Markdown/HTML/画像 URL クエリでデータ流出 |
+| **A6** | Quishing (QR Phishing) | [Zenn: Cybozu PSIRT 2025年12月](https://zenn.dev/cybozu_psirt/articles/81a5479a194fb2) | モバイル経由 BEC の主流化 |
+
+### 9.2 適用した改善
+
+| # | 対象 | 改善 | 優先度 | コミット |
+|---|---|---|---|---|
+| **A1-fix** | `kaname-screen::PromptScreener` | Unicode タグ領域を `extract_unicode_tag_payload()` で復号し `ScreenRisk::UnicodeTagInjection` で Blocked。`is_zero_width_or_format()` にも `U+E0000..=U+E007F` を追加 | P0 | (本コミット) |
+| **A1-audit** | `kaname-screen::OutputAuditor` | 出力中のタグ文字も `AuditFinding::UnicodeTagInjection` で検出 | P0 | (本コミット) |
+| **A2-fix** | `kaname-screen::OutputAuditor` | `detect_ansi_escape()` で ESC (0x1B) を検出し `AuditFinding::AnsiEscapeSequence` で警告。`\r` 単独は `CarriageReturnOverwrite` で検出 (CRLF は通過) | P0 | (本コミット) |
+| **A3-fix** | `kaname-screen::normalize_for_matching` | `homoglyph_to_ascii()` で Cyrillic/Greek の Latin 類似字 39 種を ASCII に折りたたみ。外部依存ゼロ | P1 | (本コミット) |
+
+### 9.3 残課題 (Sprint N+2 候補)
+
+- **A4 対策**: `kaname-ai::tiered_risk` に `Provenance::Agent` を追加し、エージェント間メッセージにも `PromptScreener` を強制適用
+- **A5 拡張**: `OutputAuditor` に Markdown 画像 (`![alt](url)`) クエリパラメータ exfil の検出を追加
+- **A6 対策**: `kaname-render::quishing` を `kaname-saas-guard` の URL 安全性チェックに連結し、QR デコード URL を SaaS チェッカに通す
+- **タイミング攻撃対策**: `kaname-crypto` 内の HMAC/署名比較を `subtle::ConstantTimeEq` で統一 (要 `subtle` クレート追加)
+
+### 9.4 関連テスト
+
+`kaname-screen` テスト数: 44 → 56 (+12)
+- `unicode_tag_injection_blocked_in_screen`
+- `extract_unicode_tag_decodes_payload` / `extract_unicode_tag_returns_none_for_normal_text`
+- `ansi_escape_detected_in_audit` / `osc_hyperlink_spoof_detected`
+- `carriage_return_overwrite_detected` / `crlf_alone_passes_audit`
+- `unicode_tag_in_audit_output_detected`
+- `normalize_strips_unicode_tag_chars`
+- `cyrillic_homoglyph_override_blocked` / `greek_homoglyph_override_blocked`
+- `homoglyph_to_ascii_maps_known_lookalikes`
+
