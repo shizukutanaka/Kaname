@@ -61,7 +61,8 @@ fn screen_risk_to_finding(r: &ScreenRisk) -> Finding {
         // すべて高リスクの注入として KnownInjectionPattern にマップ
         ScreenRisk::EmojiSeparatedInjection(s)
         | ScreenRisk::Base64EncodedInstruction(s)
-        | ScreenRisk::UnicodeTagInjection(s) => Finding::KnownInjectionPattern(s.clone()),
+        | ScreenRisk::UnicodeTagInjection(s)
+        | ScreenRisk::HtmlEntityInjection(s) => Finding::KnownInjectionPattern(s.clone()),
     }
 }
 
