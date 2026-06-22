@@ -102,6 +102,8 @@ impl AitmDetector {
     pub fn analyze(&self, url: &str) -> AitmRisk {
         let mut score = 0u32;
         let mut signals = Vec::new();
+        // NULL バイト・制御文字を除去してからドメイン比較 (evil.com%00.microsoft.com バイパス防止)
+        let url = &sanitize_url_for_domain_check(url);
         let lower = url.to_lowercase();
 
         // 1. セッション捕捉パラメーター
@@ -189,8 +191,14 @@ impl AitmDetector {
     fn is_legitimate_subdomain(&self, domain: &str, legit: &str) -> bool {
         // mail.microsoft.com → microsoft.com のサブドメイン = OK
         // microsoftlogin.com → microsoft を含むが別ドメイン = NG
+        // NULL バイト混入 (evil.com%00.microsoft.com) は事前に除去済みであること前提
         domain == legit || domain.ends_with(&format!(".{legit}"))
     }
+}
+
+/// URL から NULL バイト・制御文字を除去し、ドメイン混同攻撃を防ぐ。
+fn sanitize_url_for_domain_check(url: &str) -> String {
+    url.chars().filter(|c| *c != '\0' && !c.is_control()).collect()
 }
 
 impl Default for AitmDetector {
@@ -338,5 +346,23 @@ mod tests {
         assert_eq!(r.verdict, AitmVerdict::Safe,
             "正規 Microsoft OAuth フローは Safe であるべき: score={} signals={:?}",
             r.score, r.signals);
+    }
+
+    #[test]
+    fn null_byte_domain_bypass_blocked() {
+        // evil.com%00.microsoft.com — NULL バイトで偽ドメインを正規ドメインに見せかける
+        let d = AitmDetector::new();
+        let r = d.analyze("https://evil.com\x00.microsoft.com/login?id_token=stolen");
+        assert!(r.verdict != AitmVerdict::Safe,
+            "NULL バイト混入ドメインは Safe であってはならない: {:?}", r.signals);
+    }
+
+    #[test]
+    fn control_char_domain_bypass_blocked() {
+        // 制御文字を含む URL は Caution 以上でなければならない
+        let d = AitmDetector::new();
+        let r = d.analyze("https://evil.com\r\n.microsoft.com/login?id_token=test");
+        assert!(r.verdict != AitmVerdict::Safe,
+            "制御文字を含むドメインは Safe であってはならない");
     }
 }

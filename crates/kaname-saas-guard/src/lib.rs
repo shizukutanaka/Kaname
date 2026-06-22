@@ -255,10 +255,13 @@ impl SaasLinkInspector {
     /// この関数単体ではドメイン混同の偽陽性が生じうることに注意すること。
     #[must_use]
     pub fn identify_platform(&self, url: &str) -> Option<SaasPlatform> {
-        let lower = url.to_lowercase();
+        // ドット境界チェックで偽装ドメインを排除
+        // `?to=drive.google.com` や `notdocusign.com` が Some を返さないよう
+        // extract_actual_domain() でホスト部分のみと比較する
+        let actual = extract_actual_domain(url)?;
         for platform in &self.platforms {
             for domain in platform.domains() {
-                if lower.contains(domain) {
+                if actual == domain || actual.ends_with(&format!(".{domain}")) {
                     return Some(platform.clone());
                 }
             }
@@ -474,6 +477,24 @@ mod tests {
     fn does_not_identify_unknown_domain() {
         let i = SaasLinkInspector::new();
         assert_eq!(i.identify_platform("https://example.com/document"), None);
+    }
+
+    #[test]
+    fn identify_platform_rejects_redirect_with_saas_domain_in_query() {
+        // 旧実装: ?to=drive.google.com が含まれると Some(GoogleDrive) を返していた
+        let i = SaasLinkInspector::new();
+        let result = i.identify_platform("https://evil.com/redirect?to=drive.google.com");
+        assert_eq!(result, None,
+            "クエリパラメーター内の SaaS ドメインで偽陽性を起こしてはならない");
+    }
+
+    #[test]
+    fn identify_platform_rejects_subdomain_spoof() {
+        // drive.google.com.evil.com は Google として認識してはならない
+        let i = SaasLinkInspector::new();
+        let result = i.identify_platform("https://drive.google.com.evil.com/file");
+        assert_eq!(result, None,
+            "サブドメイン偽装ドメインは None を返すべき");
     }
 
     #[test]

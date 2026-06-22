@@ -137,6 +137,21 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             if *v4 == std::net::Ipv4Addr::BROADCAST {
                 return true;
             }
+            // マルチキャスト: 224.0.0.0/4
+            if octets[0] >= 224 && octets[0] <= 239 {
+                return true;
+            }
+            // 予約済み: 240.0.0.0/4 (RFC 1112)
+            if octets[0] >= 240 {
+                return true;
+            }
+            // ドキュメント用 TEST-NET: 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24
+            if (octets[0] == 192 && octets[1] == 0 && octets[2] == 2)
+                || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+                || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+            {
+                return true;
+            }
             false
         }
         IpAddr::V6(v6) => {
@@ -160,6 +175,10 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             // IPv4-mapped: ::ffff:10.x.x.x 等 (IPv4 プライベートを IPv6 経由で迂回)
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_private_ip(&IpAddr::V4(v4));
+            }
+            // IPv6 マルチキャスト: ff00::/8
+            if segments[0] & 0xff00 == 0xff00 {
+                return true;
             }
             // NAT64: 64:ff9b::/96 (RFC 6052) — IPv4 プライベートへのトンネル
             if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2] == 0 && segments[3] == 0 && segments[4] == 0 {
@@ -426,5 +445,41 @@ mod tests {
     #[test]
     fn hex_uppercase_obfuscated() {
         assert!(is_obfuscated_ip("0X7F000001"));
+    }
+
+    #[test]
+    fn multicast_ipv4_blocked() {
+        // 224.0.0.0/4 — マルチキャスト
+        let ip: IpAddr = "224.0.0.1".parse().unwrap();
+        assert!(is_private_ip(&ip));
+        let ip: IpAddr = "239.255.255.255".parse().unwrap();
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn reserved_ipv4_blocked() {
+        // 240.0.0.0/4 — 予約済み (RFC 1112)
+        let ip: IpAddr = "240.0.0.1".parse().unwrap();
+        assert!(is_private_ip(&ip));
+        let ip: IpAddr = "255.255.255.254".parse().unwrap();
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn test_net_ipv4_blocked() {
+        // ドキュメント用 TEST-NET (RFC 5737)
+        let ip: IpAddr = "192.0.2.1".parse().unwrap();
+        assert!(is_private_ip(&ip));
+        let ip: IpAddr = "198.51.100.42".parse().unwrap();
+        assert!(is_private_ip(&ip));
+        let ip: IpAddr = "203.0.113.99".parse().unwrap();
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
+    fn multicast_ipv6_blocked() {
+        // ff02::1 — リンクローカルマルチキャスト
+        let ip: IpAddr = "ff02::1".parse().unwrap();
+        assert!(is_private_ip(&ip));
     }
 }

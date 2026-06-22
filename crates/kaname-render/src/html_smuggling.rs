@@ -111,7 +111,9 @@ impl HtmlSmugglingDetector {
         let has_create_a = lower.contains("createelement(\"a\")")
             || lower.contains("createelement('a')")
             || lower.contains("createelement(`a`)");
-        if has_create_a && (lower.contains(".click()") || lower.contains(".click ()")) {
+        // `.click()` の空白・改行バイパス対策: 空白を除去した文字列でも検出
+        let lower_no_ws: String = lower.chars().filter(|c| !c.is_whitespace()).collect();
+        if has_create_a && (lower_no_ws.contains(".click()")) {
             signals.push(SmugglingSignal::AutoDownload);
         }
 
@@ -418,5 +420,25 @@ mod tests {
         // これは設計上の制約: 超長 HTML は4MB以内のみ検査
         assert_eq!(s.risk, SmugglingRisk::Clean,
             "4MB 超の末尾に埋め込まれた攻撃は切り捨てられる (設計上の制約)");
+    }
+
+    // ── .click() 空白バイパステスト ──────────────────────────────────────────
+
+    #[test]
+    fn detects_auto_download_click_with_newline() {
+        let d = detector();
+        let html = "<script>var a = document.createElement(\"a\"); a\n.click\n();</script>";
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
+            "改行入り .click() は検出されなければならない");
+    }
+
+    #[test]
+    fn detects_auto_download_click_with_tab() {
+        let d = detector();
+        let html = "<script>var a = document.createElement(\"a\"); a.click\t();</script>";
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
+            "タブ入り .click() は検出されなければならない");
     }
 }
