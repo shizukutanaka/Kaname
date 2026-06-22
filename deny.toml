@@ -89,6 +89,10 @@ deny = [
     { name = "fancy-regex", reason = "ReDoS 脆弱性あり。regex (NFA/DFA) を使用" },
     # 廃止済み JWT クレート
     { name = "jsonwebtoken", reason = "内部 JWT はなし。外部認証は reqwest + oauth2 で実装" },
+    # サプライチェーン攻撃クレート (2025-2026 に悪意ある build.rs が発覚)
+    { name = "onering", reason = "build.rs がソースコードを外部送信 (2026/06 発覚)" },
+    { name = "faster_log", reason = "秘密鍵を外部送信するマルウェア (2025/05 発覚)" },
+    { name = "async_println", reason = "秘密鍵を外部送信するマルウェア (2025/05 発覚)" },
 ]
 
 # 許可する重複バージョン (推移的依存による不可避なケース)

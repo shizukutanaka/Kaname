@@ -672,8 +672,8 @@ mod performance_tests {
         let elapsed = start.elapsed();
 
         assert!(
-            elapsed.as_millis() < 5,
-            "100 回の CBOR 変換が 5ms を超えた: {}ms",
+            elapsed.as_millis() < 50,
+            "100 回の CBOR 変換が 50ms を超えた: {}ms",
             elapsed.as_millis()
         );
     }

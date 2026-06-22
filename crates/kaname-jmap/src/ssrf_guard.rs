@@ -6,6 +6,9 @@
 use std::net::IpAddr;
 use thiserror::Error;
 
+/// リダイレクト最大ホップ数。
+pub const MAX_REDIRECT_HOPS: usize = 3;
+
 /// SSRF ガードエラー。
 #[derive(Debug, Error)]
 pub enum SsrfError {
@@ -58,6 +61,13 @@ pub async fn check_url_for_ssrf(url: &str) -> Result<(), SsrfError> {
     }
 
     let host = extract_host(url).ok_or_else(|| SsrfError::InvalidUrl(url.to_string()))?;
+
+    // 難読化 IP 表記を拒否 (16進/8進/10進 integer 表記)
+    // 例: 0x7f000001, 2130706433, 0177.0.0.1
+    // Rust の標準パーサーは通常形式のみ受け付けるが、明示的に拒否しておく。
+    if is_obfuscated_ip(host) {
+        return Err(SsrfError::InvalidUrl(format!("難読化 IP 表記: {host}")));
+    }
 
     // 数値 IP が直接指定された場合
     if let Ok(ip) = host.parse::<IpAddr>() {
@@ -164,6 +174,79 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             false
         }
     }
+}
+
+/// SSRF-safe な reqwest リダイレクトポリシーを返す。
+///
+/// 各リダイレクト先の IP アドレスを検証し、プライベートアドレスへの誘導を防ぐ。
+/// ホップ数は [`MAX_REDIRECT_HOPS`] に制限。
+///
+/// # 使い方
+///
+/// ```no_run
+/// let client = reqwest::Client::builder()
+///     .redirect(kaname_jmap::ssrf_guard::safe_redirect_policy())
+///     .build()
+///     .unwrap();
+/// ```
+#[must_use]
+pub fn safe_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        // ホップ数制限
+        if attempt.previous().len() >= MAX_REDIRECT_HOPS {
+            return attempt.stop();
+        }
+
+        let url = attempt.url();
+
+        // HTTPS のみ許可
+        if url.scheme() != "https" {
+            return attempt.stop();
+        }
+
+        // IP リテラルの場合は即時検証
+        if let Some(host) = url.host_str() {
+            // 難読化 IP を拒否
+            if is_obfuscated_ip(host) {
+                return attempt.stop();
+            }
+
+            if let Ok(ip) = host.parse::<IpAddr>() {
+                if is_private_ip(&ip) {
+                    return attempt.stop();
+                }
+            }
+        } else {
+            // ホスト名がない URL は不正
+            return attempt.stop();
+        }
+
+        // DNS 解決後の検証は非同期のため行えないが、
+        // 最終的な接続はコネクター層の SSRF ガードが担保する。
+        attempt.follow()
+    })
+}
+
+/// 難読化 IP 表記かどうかを検出する。
+///
+/// 以下の形式を検出:
+/// - 16進整数: `0x7f000001`
+/// - 10進整数: `2130706433` (127.0.0.1 の 32bit 表現)
+/// - 8進オクテット: `0177.0.0.1`
+fn is_obfuscated_ip(host: &str) -> bool {
+    // 16進表記: 0x で始まる
+    if host.to_ascii_lowercase().starts_with("0x") {
+        return true;
+    }
+    // オクテット表記で先頭が 0 (8進): "0177.0.0.1"
+    if host.starts_with('0') && host.contains('.') {
+        return true;
+    }
+    // 純粋な 10 進整数 (ドットなし、数字のみ) — IPv4 の 32bit 表現
+    if host.bytes().all(|b| b.is_ascii_digit()) && !host.is_empty() {
+        return true;
+    }
+    false
 }
 
 /// URL からホスト名を抽出する (スキーム・ポート・パスを除去)。
@@ -308,5 +391,40 @@ mod tests {
         // 64:ff9b::8.8.8.8 (NAT64 → 8.8.8.8) は公開 → 許可
         let ip: IpAddr = "64:ff9b::808:808".parse().unwrap();
         assert!(!is_private_ip(&ip));
+    }
+
+    #[test]
+    fn obfuscated_hex_ip_rejected() {
+        assert!(is_obfuscated_ip("0x7f000001"));
+    }
+
+    #[test]
+    fn obfuscated_decimal_integer_ip_rejected() {
+        // 2130706433 = 0x7F000001 = 127.0.0.1
+        assert!(is_obfuscated_ip("2130706433"));
+    }
+
+    #[test]
+    fn obfuscated_octal_ip_rejected() {
+        // 0177.0.0.1 = 127.0.0.1 in octal first octet
+        assert!(is_obfuscated_ip("0177.0.0.1"));
+    }
+
+    #[test]
+    fn normal_ip_not_obfuscated() {
+        assert!(!is_obfuscated_ip("127.0.0.1"));
+        assert!(!is_obfuscated_ip("192.168.1.1"));
+        assert!(!is_obfuscated_ip("8.8.8.8"));
+    }
+
+    #[test]
+    fn hostname_not_obfuscated() {
+        assert!(!is_obfuscated_ip("example.com"));
+        assert!(!is_obfuscated_ip("localhost"));
+    }
+
+    #[test]
+    fn hex_uppercase_obfuscated() {
+        assert!(is_obfuscated_ip("0X7F000001"));
     }
 }
