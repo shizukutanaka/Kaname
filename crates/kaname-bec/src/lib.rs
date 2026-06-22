@@ -31,6 +31,8 @@
 //!
 //! Multi-signal BEC detector. Local-only. Explainable.
 
+pub mod idn_homograph;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -326,27 +328,16 @@ impl BecDetector {
             });
         }
 
-        // Punycode / IDN.
-        if domain.contains("xn--") {
+        // Punycode / IDN — 詳細分析 (idn_homograph モジュール使用)。
+        let idn_risks = idn_homograph::analyze_domain(domain);
+        if !idn_risks.is_empty() {
+            let score = idn_homograph::idn_risk_score(&idn_risks);
+            let descriptions: Vec<String> = idn_risks.iter().map(|r| r.to_string()).collect();
             signals.push(Signal {
                 family: SignalFamily::Domain,
-                contribution: 0.15,
-                label: "IDN ドメイン".to_string(),
-                rationale: "Punycode エンコードされた国際化ドメイン。homoglyph の可能性".to_string(),
-            });
-        }
-
-        // 混在スクリプト (raw UTF-8 ホモグリフ)。
-        // levenshtein1 は距離 1 のホモグリフしか捉えず、xn-- は punycode 時のみ働く。
-        // 複数文字置換 (pаypаl.com 等) や raw Unicode 混在はここで捕捉する。
-        if is_mixed_script_domain(domain) {
-            signals.push(Signal {
-                family: SignalFamily::Domain,
-                contribution: 0.35,
-                label: "混在スクリプトドメイン".to_string(),
-                rationale: format!(
-                    "'{domain}' は ASCII と非 ASCII 文字が混在 (homoglyph 攻撃の疑い)"
-                ),
+                contribution: score.max(0.15),
+                label: "IDN ホモグラフリスク".to_string(),
+                rationale: descriptions.join("; "),
             });
         }
 
@@ -568,23 +559,6 @@ fn homoglyph_match<'a>(
         }
     }
     None
-}
-
-/// ドメインラベルに ASCII 英字と非 ASCII 英字が混在しているかを判定する。
-///
-/// Unicode セキュリティ (UTS #39) のホモグリフ攻撃検出。
-/// `levenshtein1` は編集距離ちょうど 1 のホモグリフ (例: `pаypal.com` キリル文字 1 個) しか
-/// 捕捉できず、`pаypаl.com` (キリル文字 2 個 = 距離 2) や raw UTF-8 の混在を取りこぼす。
-/// さらに `xn--` チェックは punycode エンコード時しか働かない。
-///
-/// 正規の企業ドメインは全 ASCII、正規の IDN (例: 日本語ドメイン) は全非 ASCII。
-/// 1 ラベル内で両者が混ざるのはホモグリフ攻撃の署名なので、これを検出する。
-fn is_mixed_script_domain(domain: &str) -> bool {
-    domain.split('.').any(|label| {
-        let has_ascii_alpha = label.chars().any(|c| c.is_ascii_alphabetic());
-        let has_non_ascii_alpha = label.chars().any(|c| !c.is_ascii() && c.is_alphabetic());
-        has_ascii_alpha && has_non_ascii_alpha
-    })
 }
 
 /// a と b のレーベンシュタイン距離がちょうど 1 の場合 true。
@@ -924,21 +898,30 @@ mod tests {
         // pаypаl.com — キリル文字 а (U+0430) が 2 箇所。levenshtein1 では距離 2 で取りこぼす
         let cyrillic_a = '\u{0430}';
         let domain = format!("p{cyrillic_a}yp{cyrillic_a}l.com");
-        assert!(is_mixed_script_domain(&domain),
-            "複数キリル文字の混在ドメインを検出できていない");
+        let risks = idn_homograph::analyze_domain(&domain);
+        assert!(
+            risks.iter().any(|r| matches!(r, idn_homograph::IdnRisk::MixedScript { .. }
+                | idn_homograph::IdnRisk::HomoglyphCharacters { .. })),
+            "複数キリル文字の混在ドメインを検出できていない"
+        );
     }
 
     #[test]
     fn pure_ascii_domain_not_mixed_script() {
-        assert!(!is_mixed_script_domain("paypal.com"));
-        assert!(!is_mixed_script_domain("mitsui-global.co.jp"));
+        let risks = idn_homograph::analyze_domain("paypal.com");
+        assert!(!risks.iter().any(|r| matches!(r, idn_homograph::IdnRisk::MixedScript { .. })));
+        let risks2 = idn_homograph::analyze_domain("mitsui-global.co.jp");
+        assert!(!risks2.iter().any(|r| matches!(r, idn_homograph::IdnRisk::MixedScript { .. })));
     }
 
     #[test]
     fn pure_japanese_idn_not_flagged_as_mixed() {
-        // 正規の日本語ドメイン (全非 ASCII ラベル) は誤検出しない
-        assert!(!is_mixed_script_domain("日本語.jp"),
-            "純日本語ドメインを誤ってホモグリフ扱いしている");
+        // 正規の日本語ドメイン (全非 ASCII ラベル) は idn_homograph で MixedScript にならない
+        let risks = idn_homograph::analyze_domain("日本語.jp");
+        assert!(
+            !risks.iter().any(|r| matches!(r, idn_homograph::IdnRisk::MixedScript { .. })),
+            "純日本語ドメインを誤ってホモグリフ扱いしている"
+        );
     }
 
     #[test]
@@ -961,8 +944,8 @@ mod tests {
             reply_to: None,
         };
         let a = det.assess(req).expect("assessment failed");
-        assert!(a.signals.iter().any(|s| s.label.contains("混在スクリプト")),
-            "混在スクリプトシグナルが出ていない: {:?}", a.signals);
+        assert!(a.signals.iter().any(|s| s.label.contains("IDN") || s.label.contains("混在")),
+            "IDN ホモグラフシグナルが出ていない: {:?}", a.signals);
     }
 
     #[test]

@@ -895,3 +895,4 @@ pub mod zip_guard;
 pub mod magic_bytes;
 /// 添付ファイルメタデータ漏洩検出 (Round7 P1)。
 pub mod metadata_check;
+pub mod css_sanitizer;
