@@ -260,6 +260,13 @@ impl<'a> EvalCtx<'a> {
         format!("{} {}", self.subject, body)
     }
 
+    /// URL パーセントデコード済みの全テキスト。
+    ///
+    /// `%40` → `@` 等の変換を行い、URL エンコードで DLP を回避するパターンを検出できる。
+    fn decoded_text(&self) -> String {
+        percent_decode(&self.full_text())
+    }
+
     /// 受信者ドメイン。
     fn recipient_domains(&self) -> Vec<String> {
         // RFC 5321: ドメインは最後の `@` の後。`split('@').nth(1)` は
@@ -340,8 +347,11 @@ impl DlpEngine {
     pub fn evaluate(&self, ctx: &EvalCtx<'_>, direction: Direction) -> DlpResult {
         let mut findings = Vec::new();
         let text = ctx.full_text();
+        // パーセントデコード済みテキストも評価 (URL エンコード DLP バイパス防止)
+        let decoded = ctx.decoded_text();
         // to_lowercase() のアロケーションをルールループ外で一度だけ実行 (P2)
         let text_lower = text.to_lowercase();
+        let decoded_lower = decoded.to_lowercase();
 
         for rule in &self.rules {
             if !rule.enabled {
@@ -353,7 +363,10 @@ impl DlpEngine {
             {
                 continue;
             }
-            if self.eval_condition(&rule.condition, ctx, &text, &text_lower) {
+            // 通常テキスト または パーセントデコード済みテキストのいずれかにマッチで検出
+            let matched = self.eval_condition(&rule.condition, ctx, &text, &text_lower)
+                || (decoded != text && self.eval_condition(&rule.condition, ctx, &decoded, &decoded_lower));
+            if matched {
                 findings.push(Finding {
                     rule_id:   rule.id.clone(),
                     rule_name: rule.name.clone(),
@@ -828,6 +841,52 @@ fn default_rules() -> Vec<Rule> {
 /// regex マッチングを適用する入力の最大バイト数。
 /// `regex` クレートは線形時間保証があるが DFA テーブルメモリを制限するため上限を設ける。
 const MAX_REGEX_INPUT_BYTES: usize = 512 * 1024; // 512 KB
+
+/// URL パーセントエンコードをデコードする (DLP バイパス防止)。
+///
+/// `%40` → `@`、`%2F` → `/` 等の変換を行い、エンコードされた PII を
+/// 正規表現が正しく検出できるようにする。
+/// 不正なエンコードシーケンスはそのまま残す。
+#[must_use]
+pub fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut result = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (
+                hex_digit(bytes[i + 1]),
+                hex_digit(bytes[i + 2]),
+            ) {
+                let byte = (h << 4) | l;
+                // ASCII 可読文字のみデコード (制御文字はスキップ)
+                if byte >= 0x20 {
+                    result.push(byte as char);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        // UTF-8 文字をそのままコピー
+        if let Some(ch) = s[i..].chars().next() {
+            result.push(ch);
+            i += ch.len_utf8();
+        } else {
+            i += 1;
+        }
+    }
+    result
+}
+
+/// 16進数字を数値に変換する。
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
 
 /// 固定パターン向けの一回コンパイル正規表現マッチ。
 /// 分類器のように定数パターンを使う箇所で呼ぶ (ルール評価は regex_cache を使う)。
@@ -1365,5 +1424,72 @@ mod tests {
         // 先頭 1MB 以内にマイナンバーがあるので検出されるはず
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
         let _ = result; // 検出有無はデフォルトルール次第; クラッシュしないことを確認
+    }
+
+    // percent_decode テスト
+    #[test]
+    fn percent_decode_at_sign() {
+        assert_eq!(percent_decode("user%40example.com"), "user@example.com");
+    }
+
+    #[test]
+    fn percent_decode_slash() {
+        assert_eq!(percent_decode("path%2Fto%2Ffile"), "path/to/file");
+    }
+
+    #[test]
+    fn percent_decode_uppercase_hex() {
+        assert_eq!(percent_decode("%41%42%43"), "ABC");
+    }
+
+    #[test]
+    fn percent_decode_lowercase_hex() {
+        assert_eq!(percent_decode("%61%62%63"), "abc");
+    }
+
+    #[test]
+    fn percent_decode_no_encoding_unchanged() {
+        assert_eq!(percent_decode("plain text"), "plain text");
+    }
+
+    #[test]
+    fn percent_decode_invalid_sequence_kept() {
+        // 不正なシーケンスはそのまま
+        assert!(percent_decode("%ZZ is invalid").contains('%'));
+    }
+
+    #[test]
+    fn percent_decode_truncated_sequence_kept() {
+        // 末尾で切れている場合もクラッシュしない
+        let result = percent_decode("abc%2");
+        assert!(result.starts_with("abc"));
+    }
+
+    #[test]
+    fn percent_encoded_pii_detected_by_dlp() {
+        use crate::{EvalCtx, Direction, DlpEngine};
+        use std::collections::HashMap;
+
+        let edm_sets = HashMap::new();
+        let engine = DlpEngine::default_engine();
+
+        // マイナンバーを %XX エンコードで難読化
+        // "123456789018" を一部エンコード: "123456789018" → 通常は検出済みだが
+        // ここでは keyword "confidential" をエンコードした場合をテスト
+        let eval_ctx = EvalCtx {
+            body:    "sending %63onfidential document to external",
+            subject: "test",
+            size_bytes: 50,
+            to:      &["external@gmail.com".to_string()],
+            from:    "alice@corp.com",
+            attachment_mimes: &[],
+            edm_sets: &edm_sets,
+        };
+        let result = engine.evaluate(&eval_ctx, Direction::Outbound);
+        // decoded_text で "confidential" が復元され検出されるはず
+        assert!(
+            !result.findings.is_empty(),
+            "パーセントエンコードされた機密キーワードは検出されるべき: {:?}", result.findings
+        );
     }
 }
