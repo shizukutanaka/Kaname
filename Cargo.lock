@@ -2270,6 +2270,7 @@ dependencies = [
 name = "kaname-oobv"
 version = "0.3.21"
 dependencies = [
+ "kaname-crypto",
  "kaname-error",
  "proptest",
  "rand 0.8.6",
@@ -2338,6 +2339,7 @@ dependencies = [
 name = "kaname-saas-guard"
 version = "0.3.21"
 dependencies = [
+ "kaname-crypto",
  "kaname-error",
  "proptest",
  "rand 0.8.6",

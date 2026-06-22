@@ -33,15 +33,25 @@ pub struct CssSanitizeResult {
 /// CSS テキストから外部リソース参照を除去する。
 ///
 /// `style` 属性値または `<style>` ブロック内のテキストに適用する。
+///
+/// # 処理順序
+///
+/// 1. CSS ブロックコメント (`/* ... */`) を除去
+/// 2. `@import` を含む行を除去 (コメント後の mid-line `@import` も対象)
+/// 3. `expression()` / `-moz-binding` / `behavior:` を含む行を除去
+/// 4. `url(http://...)` を `url(about:blank)` に置換
 #[must_use]
 pub fn sanitize_css(css: &str) -> CssSanitizeResult {
     let mut removed_count = 0;
+
+    // CSS ブロックコメントを除去 (/* ... */ の単純な除去)
+    let css = strip_css_comments(css);
+
     let result: Vec<&str> = css.lines()
         .filter(|line| {
-            let trimmed = line.trim_start();
-            let lower = trimmed.to_ascii_lowercase();
-            // @import ルールを完全に除去
-            if lower.starts_with("@import") {
+            let lower = line.to_ascii_lowercase();
+            // @import ルールを完全に除去 (mid-line も含む)
+            if lower.contains("@import") {
                 removed_count += 1;
                 return false;
             }
@@ -51,7 +61,7 @@ pub fn sanitize_css(css: &str) -> CssSanitizeResult {
                 return false;
             }
             // -moz-binding / behavior: プロパティを除去
-            if lower.contains("-moz-binding") || lower.starts_with("behavior") {
+            if lower.contains("-moz-binding") || lower.trim_start().starts_with("behavior") {
                 removed_count += 1;
                 return false;
             }
@@ -65,6 +75,37 @@ pub fn sanitize_css(css: &str) -> CssSanitizeResult {
     removed_count += url_removed;
 
     CssSanitizeResult { sanitized, removed_count }
+}
+
+/// CSS ブロックコメント (`/* ... */`) を除去する。
+///
+/// 複数行コメントにも対応。ネストしたコメントは CSS 仕様では許可されない。
+fn strip_css_comments(css: &str) -> String {
+    let mut result = String::with_capacity(css.len());
+    let mut in_comment = false;
+    let chars: Vec<char> = css.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if !in_comment && i + 1 < chars.len() && chars[i] == '/' && chars[i + 1] == '*' {
+            in_comment = true;
+            i += 2;
+        } else if in_comment && i + 1 < chars.len() && chars[i] == '*' && chars[i + 1] == '/' {
+            in_comment = false;
+            i += 2;
+            // コメントを空白に置換 (行構造を保持)
+            result.push(' ');
+        } else if !in_comment {
+            result.push(chars[i]);
+            i += 1;
+        } else {
+            // コメント内の改行は保持 (行番号を維持)
+            if chars[i] == '\n' {
+                result.push('\n');
+            }
+            i += 1;
+        }
+    }
+    result
 }
 
 /// HTML の `style` 属性からも外部参照を除去する (インライン CSS 用)。
@@ -227,5 +268,40 @@ mod tests {
         let css = "div { background: URL(HTTPS://evil.com/img.png); }";
         let result = sanitize_css(css);
         assert!(!result.sanitized.contains("evil.com"));
+    }
+
+    #[test]
+    fn midline_import_after_comment_removed() {
+        // コメントの後に @import が来る場合 (コメント除去後に検出される)
+        let css = "/* harmless */ @import url('https://evil.com');\nbody { color: red; }";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("@import"), "コメント後の @import は除去されるべき");
+        assert!(result.sanitized.contains("color: red"), "無害なルールは保持");
+    }
+
+    #[test]
+    fn import_inside_comment_not_flagged() {
+        // コメント内の @import はコメント自体が除去されるので問題なし
+        let css = "/* @import url('https://evil.com'); */\nbody { color: blue; }";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("evil.com"), "コメント内の URL は除去されるべき");
+        assert!(result.sanitized.contains("color: blue"));
+    }
+
+    #[test]
+    fn multiline_comment_stripped() {
+        let css = "body {\n  /* remove\n  this */\n  color: red;\n}";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("remove"), "コメントは除去されるべき");
+        assert!(result.sanitized.contains("color: red"));
+    }
+
+    #[test]
+    fn font_face_external_url_rewritten() {
+        // @font-face も外部 URL を書き換え (直接 src: url() を検出)
+        let css = "@font-face { font-family: 'Evil'; src: url(https://evil.com/font.woff); }";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("evil.com"), "@font-face の外部 URL も書き換え");
+        assert!(result.sanitized.contains("about:blank"));
     }
 }

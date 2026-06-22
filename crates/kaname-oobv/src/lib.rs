@@ -153,42 +153,14 @@ impl VerificationWord {
     pub fn matches(&self, input: &str) -> bool {
         let trimmed = input.trim();
         if self.0.is_ascii() {
-            ct_eq_ascii_case_insensitive(self.0.as_bytes(), trimmed.as_bytes())
+            kaname_crypto::ct_eq_ascii_ci(&self.0, trimmed)
         } else {
             // 日本語カタカナ: 正規化後に定数時間比較
             let expected = normalize_katakana(&self.0);
             let actual = normalize_katakana(trimmed);
-            ct_eq_bytes(expected.as_bytes(), actual.as_bytes())
+            kaname_crypto::ct_eq(expected.as_bytes(), actual.as_bytes())
         }
     }
-}
-
-/// ASCII 大文字小文字を無視した定数時間バイト比較。
-///
-/// タイミングサイドチャネルでワードのビット情報が漏洩しないよう XOR を使用。
-/// 長さが一致しない場合は `false` を返す (長さ比較は非定数時間だが、
-/// 50 語リストの長さは公開情報のため許容する)。
-fn ct_eq_ascii_case_insensitive(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x.to_ascii_lowercase() ^ y.to_ascii_lowercase();
-    }
-    diff == 0
-}
-
-/// 定数時間バイト比較 (大文字小文字区別あり)。
-fn ct_eq_bytes(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
 }
 
 /// カタカナ正規化: 全角ひらがな→カタカナ、長音符の揺れを吸収。
@@ -806,36 +778,37 @@ mod tests {
 #[cfg(test)]
 mod ct_compare_tests {
     use super::*;
+    use kaname_crypto::{ct_eq, ct_eq_ascii_ci};
 
     #[test]
     fn ct_eq_ascii_same_is_true() {
-        assert!(ct_eq_ascii_case_insensitive(b"anvil", b"anvil"));
+        assert!(ct_eq_ascii_ci("anvil", "anvil"));
     }
 
     #[test]
     fn ct_eq_ascii_case_insensitive_works() {
-        assert!(ct_eq_ascii_case_insensitive(b"ANVIL", b"anvil"));
-        assert!(ct_eq_ascii_case_insensitive(b"Anvil", b"ANVIL"));
+        assert!(ct_eq_ascii_ci("ANVIL", "anvil"));
+        assert!(ct_eq_ascii_ci("Anvil", "ANVIL"));
     }
 
     #[test]
     fn ct_eq_ascii_different_is_false() {
-        assert!(!ct_eq_ascii_case_insensitive(b"anvil", b"zebra"));
+        assert!(!ct_eq_ascii_ci("anvil", "zebra"));
     }
 
     #[test]
     fn ct_eq_ascii_different_length_is_false() {
-        assert!(!ct_eq_ascii_case_insensitive(b"anvil", b"anvils"));
+        assert!(!ct_eq_ascii_ci("anvil", "anvils"));
     }
 
     #[test]
     fn ct_eq_bytes_same_is_true() {
-        assert!(ct_eq_bytes(b"hello", b"hello"));
+        assert!(ct_eq(b"hello", b"hello"));
     }
 
     #[test]
     fn ct_eq_bytes_different_is_false() {
-        assert!(!ct_eq_bytes(b"hello", b"world"));
+        assert!(!ct_eq(b"hello", b"world"));
     }
 
     #[test]

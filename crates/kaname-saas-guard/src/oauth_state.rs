@@ -111,7 +111,7 @@ impl OAuthStateStore {
 
         // 定数時間比較
         let expected_hex = hex_encode(&entry.token);
-        if !ct_eq_str(&expected_hex, state) {
+        if !kaname_crypto::ct_eq(expected_hex.as_bytes(), state.as_bytes()) {
             return Err(OAuthStateError::InvalidOrExpired);
         }
 
@@ -125,19 +125,6 @@ impl Default for OAuthStateStore {
     }
 }
 
-/// 定数時間文字列比較 (タイミングサイドチャネル防止)。
-fn ct_eq_str(a: &str, b: &str) -> bool {
-    let a = a.as_bytes();
-    let b = b.as_bytes();
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff: u8 = 0;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
 
 /// バイト配列を小文字 hex 文字列に変換。
 fn hex_encode(bytes: &[u8]) -> String {
@@ -236,17 +223,17 @@ mod tests {
 
     #[test]
     fn ct_eq_str_same() {
-        assert!(ct_eq_str("hello", "hello"));
+        assert!(kaname_crypto::ct_eq(b"hello", b"hello"));
     }
 
     #[test]
     fn ct_eq_str_different() {
-        assert!(!ct_eq_str("hello", "world"));
+        assert!(!kaname_crypto::ct_eq(b"hello", b"world"));
     }
 
     #[test]
     fn ct_eq_str_length_mismatch() {
-        assert!(!ct_eq_str("abc", "abcd"));
+        assert!(!kaname_crypto::ct_eq(b"abc", b"abcd"));
     }
 
     #[allow(clippy::unwrap_used)]

@@ -847,8 +847,24 @@ const MAX_REGEX_INPUT_BYTES: usize = 512 * 1024; // 512 KB
 /// `%40` → `@`、`%2F` → `/` 等の変換を行い、エンコードされた PII を
 /// 正規表現が正しく検出できるようにする。
 /// 不正なエンコードシーケンスはそのまま残す。
+///
+/// 二重エンコード (`%2540` → `%40` → `@`) も処理するため、
+/// 出力が変化しなくなるまで最大 3 回繰り返す。
 #[must_use]
 pub fn percent_decode(s: &str) -> String {
+    let mut current = percent_decode_once(s);
+    for _ in 0..2 {
+        let next = percent_decode_once(&current);
+        if next == current {
+            break;
+        }
+        current = next;
+    }
+    current
+}
+
+/// URL パーセントデコードを 1 回実行する。
+fn percent_decode_once(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut result = String::with_capacity(s.len());
     let mut i = 0;
@@ -1491,5 +1507,23 @@ mod tests {
             !result.findings.is_empty(),
             "パーセントエンコードされた機密キーワードは検出されるべき: {:?}", result.findings
         );
+    }
+
+    #[test]
+    fn double_encoded_at_sign_decoded() {
+        // %2540 → %40 → @ (二重エンコード)
+        assert_eq!(percent_decode("%2540"), "@");
+    }
+
+    #[test]
+    fn triple_encoding_limited_to_3_iterations() {
+        // %252540 → %2540 → %40 → @ (3重エンコード、3回で収束)
+        assert_eq!(percent_decode("%252540"), "@");
+    }
+
+    #[test]
+    fn single_encoding_still_works() {
+        // 既存の1重エンコードは変わらず動作する
+        assert_eq!(percent_decode("user%40example.com"), "user@example.com");
     }
 }

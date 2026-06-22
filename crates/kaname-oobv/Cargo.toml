@@ -10,7 +10,8 @@ serde_json = { workspace = true }
 thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-kaname-error = { path = "../kaname-error" }
+kaname-error  = { path = "../kaname-error" }
+kaname-crypto = { path = "../kaname-crypto" }
 rand       = { workspace = true }
 zeroize    = { workspace = true }
 
