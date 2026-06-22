@@ -709,6 +709,48 @@ fn blake3_hash(bytes: &[u8]) -> [u8; 32] {
 }
 
 // ============================================================================
+// 定数時間比較 (タイミングサイドチャネル防止)
+// ============================================================================
+
+/// 2 つのバイト列を定数時間で比較する。
+///
+/// DKIM/SPF HMAC 値の検証など、タイミング攻撃が問題になる場面で使用する。
+/// 長さが異なる場合は即座に `false` を返すが、これは長さ自体は秘密でないため許容。
+///
+/// # 実装
+///
+/// XOR アキュムレーターパターン: 全バイトをXORし続け、最後に0かどうかを確認。
+/// 短絡評価がないため全バイトを必ず処理する。
+#[must_use]
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// 文字列を定数時間で比較する (ASCII 大文字小文字を区別しない)。
+///
+/// DKIM `h=` タグのアルゴリズム名比較など大文字小文字を無視する場合に使用。
+#[must_use]
+pub fn ct_eq_ascii_ci(a: &str, b: &str) -> bool {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x.to_ascii_lowercase() ^ y.to_ascii_lowercase();
+    }
+    diff == 0
+}
+
+// ============================================================================
 // テスト
 // ============================================================================
 
@@ -1133,5 +1175,48 @@ mod tests {
             parallelism: 0,
         };
         assert!(params.validate().is_err(), "parallelism = 0 は拒否されるべき");
+    }
+
+    // ct_eq テスト
+    #[test]
+    fn ct_eq_equal_bytes() {
+        assert!(ct_eq(b"hello", b"hello"));
+    }
+
+    #[test]
+    fn ct_eq_different_bytes() {
+        assert!(!ct_eq(b"hello", b"world"));
+    }
+
+    #[test]
+    fn ct_eq_length_mismatch() {
+        assert!(!ct_eq(b"hello", b"helloworld"));
+    }
+
+    #[test]
+    fn ct_eq_empty() {
+        assert!(ct_eq(b"", b""));
+    }
+
+    #[test]
+    fn ct_eq_single_bit_difference() {
+        // 1 ビットだけ異なる場合も正しく検出する
+        assert!(!ct_eq(&[0b1010_1010], &[0b1010_1011]));
+    }
+
+    #[test]
+    fn ct_eq_ascii_ci_same_case() {
+        assert!(ct_eq_ascii_ci("RS256", "RS256"));
+    }
+
+    #[test]
+    fn ct_eq_ascii_ci_different_case() {
+        assert!(ct_eq_ascii_ci("rs256", "RS256"));
+        assert!(ct_eq_ascii_ci("RS256", "rs256"));
+    }
+
+    #[test]
+    fn ct_eq_ascii_ci_different_value() {
+        assert!(!ct_eq_ascii_ci("HS256", "RS256"));
     }
 }
