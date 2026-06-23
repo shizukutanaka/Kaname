@@ -337,8 +337,9 @@ fn extract_crypto_addresses(body: &str) -> Vec<DetectedPivot> {
     for word in body.split_whitespace() {
         let w = word.trim_matches(|c: char| !c.is_alphanumeric());
 
-        // Ethereum: 0x で始まる 40 桁の hex
-        if w.starts_with("0x") && w.len() == 42 && w[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        // Ethereum: 0x/0X で始まる 40 桁の hex (大文字プレフィックスもバイパス防止)
+        let w_lower = w.to_lowercase();
+        if w_lower.starts_with("0x") && w.len() == 42 && w[2..].chars().all(|c| c.is_ascii_hexdigit()) {
             results.push(DetectedPivot::CryptoWallet {
                 currency: "ETH".to_string(),
                 address: w.to_string(),
@@ -809,5 +810,22 @@ mod tests {
             .channel_name(),
             "Microsoft Teams"
         );
+    }
+
+    #[test]
+    fn ethereum_uppercase_prefix_detected() {
+        // 0X (大文字) バイパス対策テスト
+        let body = "ETH 送金先: 0X742d35Cc6634C0532925a3b844Bc9e7595f0bEb1";
+        let pivots = extract_crypto_addresses(body);
+        assert!(!pivots.is_empty(), "0X プレフィックスの Ethereum アドレスも検出すべき");
+        assert!(pivots.iter().any(|p| matches!(p, DetectedPivot::CryptoWallet { currency, .. } if currency == "ETH")));
+    }
+
+    #[test]
+    fn ethereum_lowercase_prefix_still_detected() {
+        // 元々の 0x も引き続き検出できること
+        let body = "送金: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1";
+        let pivots = extract_crypto_addresses(body);
+        assert!(!pivots.is_empty(), "0x プレフィックスの Ethereum アドレスは検出されるべき");
     }
 }

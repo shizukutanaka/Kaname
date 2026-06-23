@@ -364,6 +364,15 @@ impl BecDetector {
                     label: "初回受信".to_string(),
                     rationale: "この差出人からは初めての受信".to_string(),
                 });
+                // 初回送信者でも高リスクトピック (暗号資産・緊急送金) は低閾値で検出
+                if contains_high_risk_topic(req.subject) {
+                    signals.push(Signal {
+                        family: SignalFamily::History,
+                        contribution: 0.12,
+                        label: "初回受信 + 高リスクトピック".to_string(),
+                        rationale: "初めての送信者が金融・緊急要求に関する件名を使用".to_string(),
+                    });
+                }
             }
             Some(h) => {
                 if h.prior_message_count >= 5
@@ -548,6 +557,12 @@ fn homoglyph_match<'a>(
     if levenshtein1(domain, our_domain) {
         return Some(our_domain);
     }
+    // 上位ブランドウォッチリストに対しては距離 2 まで検出 (複数文字タイポスクワット)。
+    for &watched in TYPOSQUAT_WATCHLIST {
+        if domain != watched && levenshtein2(domain, watched) {
+            return Some(watched);
+        }
+    }
     for contact in known_contacts {
         if let Some(contact_domain) = extract_domain(contact) {
             if levenshtein1(domain, contact_domain) && domain != contact_domain {
@@ -596,6 +611,68 @@ fn levenshtein1(a: &str, b: &str) -> bool {
         }
     }
     true
+}
+
+/// 初回送信者でも検出すべき高リスクトピックかを判定する。
+///
+/// 暗号資産要求・緊急送金・パスワードリセットなど BEC の典型的な初回接触パターン。
+fn contains_high_risk_topic(subject: &str) -> bool {
+    const HIGH_RISK_KEYWORDS: &[&str] = &[
+        // 金融・送金
+        "wire transfer", "bank transfer", "urgent payment", "immediate payment",
+        "invoice", "urgent invoice", "overdue payment",
+        // 暗号資産
+        "bitcoin", "ethereum", "crypto", "wallet", "btc", "eth",
+        // 認証情報
+        "password reset", "account suspended", "verify your account",
+        "confirm your identity", "login attempt",
+        // 緊急性
+        "act now", "immediate action", "respond immediately",
+        // 日本語
+        "至急", "緊急", "送金", "振込", "パスワード", "口座", "仮想通貨",
+        "ビットコイン", "アカウント停止", "確認が必要",
+    ];
+    let lower = subject.to_ascii_lowercase();
+    HIGH_RISK_KEYWORDS.iter().any(|kw| lower.contains(kw))
+}
+
+/// 上位ブランドに対してはレーベンシュタイン距離 2 まで検出 (複数文字タイポスクワット対策)。
+///
+/// 例: `miccrosoft.com` (distance=2 from `microsoft.com`) を捕捉する。
+const TYPOSQUAT_WATCHLIST: &[&str] = &[
+    "microsoft.com", "google.com", "amazon.com", "apple.com",
+    "paypal.com", "linkedin.com", "dropbox.com", "docusign.com",
+    "salesforce.com", "zoom.us", "office365.com", "outlook.com",
+    "gmail.com", "yahoo.com", "facebook.com",
+];
+
+/// a と b のレーベンシュタイン距離が 2 以内のとき true。
+fn levenshtein2(a: &str, b: &str) -> bool {
+    const MAX_DOMAIN_CHARS: usize = 255;
+    if a.chars().count() > MAX_DOMAIN_CHARS || b.chars().count() > MAX_DOMAIN_CHARS {
+        return false;
+    }
+    let al: Vec<char> = a.chars().collect();
+    let bl: Vec<char> = b.chars().collect();
+    let m = al.len();
+    let n = bl.len();
+    if (m as isize - n as isize).abs() > 2 {
+        return false;
+    }
+    // 標準 DP (m × n)。ドメイン名は短いので問題なし。
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..=m { dp[i][0] = i; }
+    for (j, row) in dp[0].iter_mut().enumerate() { *row = j; }
+    for i in 1..=m {
+        for j in 1..=n {
+            let cost = if al[i - 1] == bl[j - 1] { 0 } else { 1 };
+            dp[i][j] = (dp[i - 1][j] + 1)
+                .min(dp[i][j - 1] + 1)
+                .min(dp[i - 1][j - 1] + cost);
+        }
+    }
+    dp[m][n] <= 2
 }
 
 /// 件名が送信者の典型的なトピックと意味的に異なるかを判定する。
@@ -1079,6 +1156,33 @@ mod tests {
         let result = contains_unusual_topic(&huge, "請求書の送付");
         // パニックせず bool を返すこと
         let _ = result;
+    }
+
+    #[test]
+    fn levenshtein2_detects_two_char_typosquat() {
+        // "miccrosoft.com" — distance 2 から microsoft.com
+        assert!(levenshtein2("miccrosoft.com", "microsoft.com"), "distance-2 タイポスクワットを検出すべき");
+        assert!(levenshtein2("paypa1.com", "paypal.com"), "distance-1 も検出すべき");
+        assert!(!levenshtein2("completelydifferent.com", "microsoft.com"), "無関係ドメインは false");
+        // 同一文字列は distance=0 なので levenshtein2 は true だが
+        // homoglyph_match では domain != watched のガードで除外される
+    }
+
+    #[test]
+    fn typosquat_watchlist_triggers_for_distance2() {
+        // homoglyph_match が distance-2 で watchlist ブランドを捕捉すること
+        let result = homoglyph_match("miccrosoft.com", "mycompany.com", &[]);
+        assert!(result.is_some(), "distance-2 microsoft タイポスクワットはシグナルを返すべき");
+    }
+
+    #[test]
+    fn high_risk_topic_detected_for_new_sender() {
+        assert!(contains_high_risk_topic("至急: ビットコインの送金を確認してください"),
+            "暗号資産 + 至急は高リスクトピック");
+        assert!(contains_high_risk_topic("Urgent wire transfer required"),
+            "英語の緊急送金も高リスクトピック");
+        assert!(!contains_high_risk_topic("週次ミーティングの日程確認"),
+            "一般的な会議の件名は高リスクではない");
     }
 }
 
