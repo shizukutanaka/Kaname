@@ -147,6 +147,9 @@ impl LoginLimiter {
 
     /// ログイン試行を許可するか判断する (アカウント + IP の両方をチェック)。
     ///
+    /// `source_ip` を指定した場合は IP ブロックも同時に確認する。
+    /// 分散 IP を使った緩やかなブルートフォース攻撃に対し、どちらかがブロック中なら拒否する。
+    ///
     /// # Errors
     ///
     /// 内部ロックが破損している場合に `Err` を返す。
@@ -159,6 +162,23 @@ impl LoginLimiter {
             }
         }
         Ok(LimitDecision::Allow)
+    }
+
+    /// ログイン試行を許可するか判断する (アカウント + IP の両方を同時チェック)。
+    ///
+    /// `check(account_id)` と `check_ip(source_ip)` を1回の呼び出しで実行する。
+    /// いずれかがブロック中であれば `Deny` を返す。
+    ///
+    /// # Errors
+    ///
+    /// 内部ロックが破損している場合に `Err` を返す。
+    pub fn check_with_ip(&self, account_id: &str, source_ip: &str) -> Result<LimitDecision, LimiterError> {
+        // アカウントロックを優先確認 (残り時間を正確に返すため)
+        if let LimitDecision::Deny { retry_after } = self.check(account_id)? {
+            return Ok(LimitDecision::Deny { retry_after });
+        }
+        // IP ブロックも確認
+        self.check_ip(source_ip)
     }
 
     /// IP アドレスが現在ブロックされているかを確認する (パスワードスプレー対策)。
@@ -219,7 +239,11 @@ impl LoginLimiter {
         Ok(())
     }
 
-    /// 期限切れエントリをクリーンアップする (定期メンテナンス用)。
+    /// 期限切れ・クリーンエントリをクリーンアップする (定期メンテナンス用)。
+    ///
+    /// 以下のエントリを削除する:
+    /// - 失敗カウントが 0 かつロック中でないアカウントエントリ (成功後リセット済み)
+    /// - ブロック期限が切れた IP エントリ
     ///
     /// # Errors
     ///
@@ -227,8 +251,17 @@ impl LoginLimiter {
     pub fn cleanup_expired(&self) -> Result<usize, LimiterError> {
         let mut map = self.inner.write().unwrap_or_else(std::sync::PoisonError::into_inner);
         let before = map.len();
+        // consecutive_failures == 0 かつ is_locked() でないエントリは不要 (リセット済み)
         map.retain(|_, v| v.consecutive_failures > 0 || v.is_locked());
-        Ok(before - map.len())
+        let removed_accounts = before - map.len();
+
+        let mut ip_map = self.ip_inner.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let ip_before = ip_map.len();
+        // ブロック期限切れの IP エントリを削除
+        ip_map.retain(|_, v| v.is_blocked() || v.total_failures > 0);
+        let removed_ips = ip_before - ip_map.len();
+
+        Ok(removed_accounts + removed_ips)
     }
 }
 
@@ -442,5 +475,48 @@ mod tests {
             limiter.record_failure("user@example.com").unwrap();
         }
         assert_eq!(limiter.check_ip("1.2.3.4").unwrap(), LimitDecision::Allow);
+    }
+
+    #[allow(clippy::unwrap_used)]
+    #[test]
+    fn check_with_ip_blocks_on_account_lock() {
+        let limiter = LoginLimiter::new();
+        for _ in 0..5 {
+            limiter.record_failure("locked@example.com").unwrap();
+        }
+        // アカウントがロックされていれば check_with_ip も Deny
+        assert!(matches!(
+            limiter.check_with_ip("locked@example.com", "1.2.3.4").unwrap(),
+            LimitDecision::Deny { .. }
+        ), "アカウントロック中は check_with_ip も Deny を返すべき");
+    }
+
+    #[allow(clippy::unwrap_used)]
+    #[test]
+    fn check_with_ip_blocks_on_ip_block() {
+        let limiter = LoginLimiter::new();
+        // 別アカウントに 20 回失敗して IP をブロック
+        for i in 0..20 {
+            limiter.record_failure_with_ip(&format!("u{}@example.com", i), "5.6.7.8").unwrap();
+        }
+        // 別アカウントへの試行でも IP ブロックで止まる
+        assert!(matches!(
+            limiter.check_with_ip("new_victim@example.com", "5.6.7.8").unwrap(),
+            LimitDecision::Deny { .. }
+        ), "IP ブロック中は check_with_ip も Deny を返すべき");
+    }
+
+    #[allow(clippy::unwrap_used)]
+    #[test]
+    fn cleanup_removes_ip_entries_with_no_active_block() {
+        let limiter = LoginLimiter::new();
+        // IP に 5 回失敗記録 (ブロック未到達)
+        for i in 0..5 {
+            limiter.record_failure_with_ip(&format!("u{}@example.com", i), "9.9.9.9").unwrap();
+        }
+        // cleanup は成功 (エラーなし)
+        let removed = limiter.cleanup_expired().unwrap();
+        // IP エントリは failures > 0 なので保持される
+        assert_eq!(removed, 0, "アクティブな IP エントリは削除されない");
     }
 }

@@ -115,8 +115,10 @@ pub fn analyze_thread_hijack(ctx: &ThreadContext<'_>) -> ThreadHijackResult {
     // 1. In-Reply-To 参照チェック
     if let Some(ref_id) = ctx.in_reply_to {
         let ref_id_clean = ref_id.trim();
+        // RFC 5322: Message-ID はケースセンシティブだが実装上は大文字小文字を無視して比較
+        // (攻撃者が <ABC@example.com> vs 既知 <abc@example.com> でバイパスする手法を防ぐ)
         if !ref_id_clean.is_empty()
-            && !ctx.known_thread_message_ids.iter().any(|id| id == ref_id_clean)
+            && !ctx.known_thread_message_ids.iter().any(|id| id.eq_ignore_ascii_case(ref_id_clean))
         {
             signals.push(ThreadHijackSignal::UnknownMessageIdReferenced {
                 message_id: ref_id_clean.to_string(),
@@ -492,5 +494,50 @@ mod tests {
         assert_eq!(strip_reply_prefix("Re: hello"), "hello");
         assert_eq!(strip_reply_prefix("re: hello"), "hello");
         assert_eq!(strip_reply_prefix("hello"), "hello");
+    }
+
+    #[test]
+    fn message_id_case_insensitive_match() {
+        // 大文字 MessageID は既知エントリと大文字小文字を無視して照合されるべき
+        let known_ids = vec!["<abc123@example.com>".to_string()];
+        let domains = vec!["example.com".to_string()];
+        let ctx = make_ctx(
+            Some("<ABC123@example.com>"), // 大文字バリアント
+            &known_ids,
+            &domains,
+            "example.com",
+            None,
+            "Re: ミーティング",
+            None,
+            "よろしくお願いします。",
+        );
+        let r = analyze_thread_hijack(&ctx);
+        // 大文字小文字のみ異なる既知 MessageID は「未知」として扱わない
+        assert!(
+            !r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
+            "大文字小文字のみ異なる MessageID は既知として扱われるべき: {:?}", r.signals
+        );
+    }
+
+    #[test]
+    fn truly_unknown_message_id_still_flagged() {
+        // 完全に異なる MessageID は従来通りフラグを立てる
+        let known_ids = vec!["<real@example.com>".to_string()];
+        let domains = vec!["example.com".to_string()];
+        let ctx = make_ctx(
+            Some("<forged@attacker.com>"),
+            &known_ids,
+            &domains,
+            "example.com",
+            None,
+            "Re: プロジェクト",
+            None,
+            "よろしく。",
+        );
+        let r = analyze_thread_hijack(&ctx);
+        assert!(
+            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
+            "完全に異なる MessageID は依然としてフラグを立てるべき"
+        );
     }
 }

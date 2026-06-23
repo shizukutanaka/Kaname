@@ -307,8 +307,10 @@ impl CampaignRadar {
                         newly_alertable: !was_alertable && now_alertable,
                     });
                 }
-                return None;
+                // auth_partial_fail の場合は unknown: バケットにも追記して将来の相関に使う
+                // (新規攻撃キャンペーンでも両方のグルーピングを維持する)
             }
+            // 未知ドメインでも unknown: バケットに記録 (将来のインフラ特定に備える)
             let key = format!("unknown:{}", metadata.from_domain);
             self.groups
                 .entry(key.clone())

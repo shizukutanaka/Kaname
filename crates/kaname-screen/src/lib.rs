@@ -220,8 +220,14 @@ impl PromptScreener {
         }
 
         // 6. Unicode タグ文字検出 (P0/A1): タグ領域に文字があれば即拒否
-        // 復号文字列がオーバーライドフレーズを含むかも追加検証
+        // 復号文字列がオーバーライドフレーズを含むか追加検証し、内容に関わらずブロック
         if let Some(decoded) = extract_unicode_tag_payload(input) {
+            // タグ文字の存在自体が攻撃の証拠 — デコード内容によらず UnicodeTagInjection とする
+            // ただし、デコード後にオーバーライドフレーズが見つかれば OverridePhrase も追加
+            let decoded_lower = decoded.to_ascii_lowercase();
+            if self.override_phrases.iter().any(|p| decoded_lower.contains(&p.to_ascii_lowercase())) {
+                risks.push(ScreenRisk::OverridePhrase(decoded.clone()));
+            }
             risks.push(ScreenRisk::UnicodeTagInjection(decoded));
         }
 
