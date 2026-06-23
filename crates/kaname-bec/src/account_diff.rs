@@ -82,7 +82,56 @@ pub fn extract_accounts(body: &str) -> HashSet<String> {
         i = end.max(i + 1);
     }
 
+    // 4桁 + セパレータ + 3桁 パターン (銀行コード + 支店コード/口座番号)
+    // 例: "1234-567" / "1234 567" / "1234　567" (全角スペース)
+    extract_accounts_4_3(&normalized, &mut accounts);
+
     accounts
+}
+
+/// `NNNN-NNN` / `NNNN NNN` 形式の口座番号を抽出する (4桁+セパレータ+3桁)。
+fn extract_accounts_4_3(s: &str, out: &mut HashSet<String>) {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i + 8 <= len {
+        // 4桁の開始を探す
+        if !bytes[i].is_ascii_digit() || (i > 0 && bytes[i - 1].is_ascii_digit()) {
+            i += 1;
+            continue;
+        }
+        // 4桁の連続確認
+        if bytes[i..].iter().take(4).all(|b| b.is_ascii_digit())
+            && !bytes.get(i + 4).copied().unwrap_or(0).is_ascii_digit()
+        {
+            // セパレータ: '-' / ' ' / '　' (0xE3 0x80 0x80)
+            let sep_end = if bytes.get(i + 4).copied() == Some(b'-')
+                || bytes.get(i + 4).copied() == Some(b' ')
+            {
+                i + 5
+            } else if bytes.get(i + 4..i + 7) == Some("\u{3000}".as_bytes()) {
+                i + 7 // 全角スペース (3バイト)
+            } else {
+                i += 1;
+                continue;
+            };
+            // セパレータ後に3桁が続く
+            if sep_end + 3 <= len
+                && bytes[sep_end..sep_end + 3].iter().all(|b| b.is_ascii_digit())
+                && !bytes.get(sep_end + 3).copied().unwrap_or(0).is_ascii_digit()
+            {
+                let combined = format!(
+                    "{}{}",
+                    std::str::from_utf8(&bytes[i..i + 4]).unwrap_or(""),
+                    std::str::from_utf8(&bytes[sep_end..sep_end + 3]).unwrap_or("")
+                );
+                if !combined.is_empty() {
+                    out.insert(combined);
+                }
+            }
+        }
+        i += 1;
+    }
 }
 
 /// メール本文に「口座変更」「振込先変更」等の典型キーワードが含まれるか。
@@ -260,6 +309,40 @@ mod tests {
         let acc = extract_accounts(body);
         assert!(acc.is_empty(),
             "範囲外の数字列は口座扱いしない: {acc:?}");
+    }
+
+    #[test]
+    fn extract_4_3_hyphen_pattern() {
+        let body = "振込先: 1234-567 にお振込ください";
+        let acc = extract_accounts(body);
+        assert!(acc.contains("1234567"),
+            "ハイフン区切り 4+3 パターンが抽出されない: {acc:?}");
+    }
+
+    #[test]
+    fn extract_4_3_space_pattern() {
+        let body = "支店コード 1234 567 口座";
+        let acc = extract_accounts(body);
+        assert!(acc.contains("1234567"),
+            "スペース区切り 4+3 パターンが抽出されない: {acc:?}");
+    }
+
+    #[test]
+    fn extract_4_3_fullwidth_space() {
+        let body = "口座番号: 1234\u{3000}567";
+        let acc = extract_accounts(body);
+        assert!(acc.contains("1234567"),
+            "全角スペース区切り 4+3 パターンが抽出されない: {acc:?}");
+    }
+
+    #[test]
+    fn thread_hijack_with_4_3_pattern_detected() {
+        let past = vec!["振込先 1234-567 にお振込ください"];
+        let current = "重要: 振込先変更 5678-901 にお振込ください";
+        let r = detect_account_diff(&past, current);
+        assert!(r.is_high_risk(), "4+3 パターン口座差替は高リスク: {r:?}");
+        assert!(r.new_accounts.contains(&"5678901".to_string()));
+        assert!(r.removed_accounts.contains(&"1234567".to_string()));
     }
 
     #[test]

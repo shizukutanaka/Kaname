@@ -185,16 +185,18 @@ impl QuishingDefense {
         self.trusted_domains.iter().any(|t| domain == *t || domain.ends_with(&format!(".{t}")))
     }
 
-    /// 信頼ドメインがサブドメインのプレフィックスとして悪用されているか判定する。
+    /// 信頼ドメインがサブドメインのプレフィックスまたは中間ラベルとして悪用されているか判定する。
     ///
-    /// `amazon.com.attacker.io` のように `{信頼ドメイン}.` で始まるホストは、
-    /// 実際の登録可能ドメインが別物 (attacker.io) であるため偽装の可能性が高い。
-    /// 正規のサブドメイン (`aws.amazon.com`) は `.amazon.com` で終わるため
-    /// この関数ではなく `is_trusted` 側で Trusted 判定される。
+    /// 検出パターン:
+    /// - プレフィックス: `amazon.com.attacker.io` — `{trusted}.` で始まる
+    /// - インフィックス: `sub.amazon.com.evil.io` — `.{trusted}.` を含む
+    ///
+    /// 正規のサブドメイン (`aws.amazon.com`) は `.amazon.com` で*終わる*ため
+    /// `is_trusted` 側で Trusted 判定済みであり、この関数には届かない。
     fn has_trusted_brand_as_subdomain(&self, domain: &str) -> bool {
-        self.trusted_domains
-            .iter()
-            .any(|t| domain.starts_with(&format!("{t}.")))
+        self.trusted_domains.iter().any(|t| {
+            domain.starts_with(&format!("{t}.")) || domain.contains(&format!(".{t}."))
+        })
     }
 
     fn is_typosquat(&self, domain: &str) -> bool {
@@ -505,6 +507,35 @@ mod tests {
         let r = d.evaluate_decoded("qr-2", "https://microsoft.com.login-verify.tk/");
         // free TLD でもブランド偽装でも Suspicious になる
         assert_eq!(r.url_reputation, UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn detects_trusted_brand_as_infix_subdomain() {
+        let d = QuishingDefense::new();
+        // インフィックスパターン: `sub.amazon.com.evil.io` — starts_with では検出できない
+        assert_eq!(
+            d.evaluate_url("https://sub.amazon.com.evil.io/login"),
+            UrlReputation::Suspicious,
+            "sub.amazon.com.evil.io のインフィックスブランド偽装が検出されなかった"
+        );
+        assert_eq!(
+            d.evaluate_url("https://account.google.com.phisher.net/auth"),
+            UrlReputation::Suspicious,
+            "account.google.com.phisher.net のインフィックス偽装が検出されなかった"
+        );
+        assert_eq!(
+            d.evaluate_url("https://secure.microsoft.com.login.ru/verify"),
+            UrlReputation::Suspicious,
+            "secure.microsoft.com.login.ru のインフィックス偽装が検出されなかった"
+        );
+    }
+
+    #[test]
+    fn deep_infix_brand_in_qr_is_flagged() {
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("qr-3", "https://one.two.apple.com.badactor.cn/download");
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
+            "QR 内の深い階層インフィックス偽装が検出されなかった");
     }
 
     // ── Levenshtein 入力長ガード ────────────────────────────────────────────
