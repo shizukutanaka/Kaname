@@ -259,6 +259,10 @@ impl BecDetector {
             b.contribution.partial_cmp(&a.contribution).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        // クロスシグナル相関エスカレーション
+        // 個々のシグナルは閾値以下でも、危険な組み合わせが揃うと追加スコア
+        apply_cross_signal_escalation(&mut signals);
+
         // 結合: 線形加算ではなくロジスティック変換を使用する。
         // 線形加算は独立シグナルの重複カウントによって過大評価を生む。
         // logistic(k*(raw - bias)) を使い、raw=0 → score≈0、
@@ -308,6 +312,31 @@ impl BecDetector {
             });
         }
 
+        // 認証ヘッダ「欠如」検出: None が 3 つ揃うと Fail よりむしろ危険
+        // (正規の大手送信者は必ず SPF/DKIM/DMARC を設定している)
+        let none_count = [&req.auth.spf, &req.auth.dkim, &req.auth.dmarc]
+            .iter()
+            .filter(|v| matches!(***v, AuthVerdict::None))
+            .count();
+        if none_count == 3 {
+            signals.push(Signal {
+                family: SignalFamily::Authentication,
+                contribution: 0.30,
+                label: "認証ヘッダが全て欠如".to_string(),
+                rationale: "SPF/DKIM/DMARC ヘッダが全て存在しません。\
+                    正規送信者では通常あり得ない構成です。ドメイン詐称の可能性があります。"
+                    .to_string(),
+            });
+        } else if none_count == 2 && fail_count == 0 {
+            signals.push(Signal {
+                family: SignalFamily::Authentication,
+                contribution: 0.15,
+                label: "認証ヘッダ欠如 (2/3)".to_string(),
+                rationale: "認証ヘッダの大部分が存在しません。送信元の正当性を確認してください。"
+                    .to_string(),
+            });
+        }
+
         if let AuthVerdict::Reject = req.auth.dmarc {
             signals.push(Signal {
                 family: SignalFamily::Authentication,
@@ -315,6 +344,35 @@ impl BecDetector {
                 label: "DMARC 拒否ポリシー".to_string(),
                 rationale: "送信ドメインが DMARC reject を指定".to_string(),
             });
+        }
+
+        // ARC チェーン評価: 転送メールで SPF/DKIM が壊れた場合のフォールバック
+        // ARC Fail = 転送チェーン内で改ざんが行われた可能性
+        if let Some(arc) = &req.auth.arc {
+            match arc {
+                AuthVerdict::Fail | AuthVerdict::Reject => {
+                    signals.push(Signal {
+                        family: SignalFamily::Authentication,
+                        contribution: 0.35,
+                        label: "ARC チェーン検証失敗".to_string(),
+                        rationale: "転送チェーンの ARC 署名が無効です。\
+                            転送経路でメールが改ざんされた可能性があります。"
+                            .to_string(),
+                    });
+                }
+                // ARC Pass + SPF/DKIM Fail → 転送による正当な崩れ (スコアを緩和)
+                AuthVerdict::Pass if fail_count >= 1 => {
+                    signals.push(Signal {
+                        family: SignalFamily::Authentication,
+                        contribution: -0.10,
+                        label: "ARC 検証成功 (転送メール)".to_string(),
+                        rationale: "転送によって SPF/DKIM が無効になりましたが、\
+                            ARC チェーンが転送前の正当性を保証しています。"
+                            .to_string(),
+                    });
+                }
+                _ => {}
+            }
         }
     }
 
@@ -667,6 +725,59 @@ fn levenshtein1(a: &str, b: &str) -> bool {
         }
     }
     true
+}
+
+/// クロスシグナル相関エスカレーション。
+///
+/// 各シグナルが個別には閾値を下回っていても、特定の組み合わせが揃うと
+/// 実際のリスクは単純加算より高い。複合パターンを追加シグナルで表現する。
+///
+/// # 危険な組み合わせ
+///
+/// | 組み合わせ | 追加スコア | 理由 |
+/// |---|---|---|
+/// | Auth + Domain + Content | +0.20 | BEC の典型的な三点セット |
+/// | Auth + History(新規) + Content | +0.15 | 初回接触 + 認証問題 + 高リスク内容 |
+/// | Domain + Thread(hijack) | +0.15 | ドメイン偽装 + スレッド乗っ取りの二重攻撃 |
+fn apply_cross_signal_escalation(signals: &mut Vec<Signal>) {
+    // 先に全てのフラグを収集してからシグナルを追加 (借用の競合を避ける)
+    let has_auth    = signals.iter().any(|s| s.family == SignalFamily::Authentication);
+    let has_domain  = signals.iter().any(|s| s.family == SignalFamily::Domain);
+    let has_content = signals.iter().any(|s| s.family == SignalFamily::Content);
+    let has_first_contact  = signals.iter().any(|s| s.label.contains("初回受信"));
+    let has_high_risk_label = signals.iter().any(|s| s.label.contains("高リスク"));
+    let has_thread_label   = signals.iter().any(|s| s.label.contains("スレッド"));
+
+    // クラスター 1: Auth 問題 + Domain 偽装 + Content 高リスク
+    if has_auth && has_domain && has_content {
+        signals.push(Signal {
+            family: SignalFamily::Authentication,
+            contribution: 0.20,
+            label: "複合シグナル: 認証+ドメイン+コンテンツ".to_string(),
+            rationale: "認証問題・ドメイン偽装・高リスクコンテンツが同時に検出されました。\
+                BEC の典型的な三点攻撃パターンです。".to_string(),
+        });
+    }
+
+    // クラスター 2: 初回送信者 + 認証欠如 + 高リスクトピック
+    if has_first_contact && has_auth && has_high_risk_label {
+        signals.push(Signal {
+            family: SignalFamily::History,
+            contribution: 0.15,
+            label: "複合シグナル: 初回+認証問題+高リスク件名".to_string(),
+            rationale: "初回接触の送信者が認証問題を抱えながら高リスクトピックで接触しています。".to_string(),
+        });
+    }
+
+    // クラスター 3: ドメイン偽装 + スレッド乗っ取り
+    if has_domain && has_thread_label {
+        signals.push(Signal {
+            family: SignalFamily::Domain,
+            contribution: 0.15,
+            label: "複合シグナル: ドメイン偽装+スレッド乗っ取り".to_string(),
+            rationale: "ドメイン偽装とスレッド乗っ取りの両方が検出されました。二重攻撃の可能性があります。".to_string(),
+        });
+    }
 }
 
 /// 初回送信者でも検出すべき高リスクトピックかを判定する。
@@ -1245,6 +1356,124 @@ mod tests {
             "英語の緊急送金も高リスクトピック");
         assert!(!contains_high_risk_topic("週次ミーティングの日程確認"),
             "一般的な会議の件名は高リスクではない");
+    }
+
+    #[test]
+    fn all_auth_none_generates_signal() {
+        // 全認証ヘッダが None → 正規送信者ではあり得ない → シグナル
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "ok".into() }));
+        let req = AssessmentRequest {
+            from_header: "sender@example.com",
+            return_path: None,
+            subject: "テストメール",
+            body_text: "普通の本文です。",
+            auth: AuthResults {
+                spf: AuthVerdict::None,
+                dkim: AuthVerdict::None,
+                dmarc: AuthVerdict::None,
+                arc: None,
+            },
+            sender_history: None,
+            our_domain: "mycompany.com",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("全て欠如")),
+            "認証ヘッダ全欠如シグナルが生成されるべき: {:?}", a.signals
+        );
+        assert!(a.score > 0.0, "スコアが 0 より大きいべき");
+    }
+
+    #[test]
+    fn arc_fail_adds_signal() {
+        // ARC チェーン失敗 → 転送経路での改ざん疑い
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "ok".into() }));
+        let req = AssessmentRequest {
+            from_header: "forwarded@example.com",
+            return_path: None,
+            subject: "転送メール",
+            body_text: "転送されました。",
+            auth: AuthResults {
+                spf: AuthVerdict::Fail,
+                dkim: AuthVerdict::Fail,
+                dmarc: AuthVerdict::None,
+                arc: Some(AuthVerdict::Fail),
+            },
+            sender_history: None,
+            our_domain: "mycompany.com",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("ARC")),
+            "ARC 失敗シグナルが生成されるべき: {:?}", a.signals
+        );
+    }
+
+    #[test]
+    fn arc_pass_with_spf_fail_reduces_score() {
+        // ARC Pass + SPF Fail → 転送による正当な崩れ → スコアを緩和
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "ok".into() }));
+        let req = AssessmentRequest {
+            from_header: "forwarded@example.com",
+            return_path: None,
+            subject: "メーリングリスト経由",
+            body_text: "ML 経由で転送されました。",
+            auth: AuthResults {
+                spf: AuthVerdict::Fail,
+                dkim: AuthVerdict::Pass,
+                dmarc: AuthVerdict::Pass,
+                arc: Some(AuthVerdict::Pass),
+            },
+            sender_history: None,
+            our_domain: "mycompany.com",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.contribution < 0.0),
+            "ARC Pass は緩和シグナル (負の寄与) を生成すべき: {:?}", a.signals
+        );
+    }
+
+    #[test]
+    fn cross_signal_escalation_triggers_for_triple_cluster() {
+        // Auth + Domain + Content の三点セットで複合シグナルが発生
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "ok".into() }));
+        let contacts = vec![];
+        let req = AssessmentRequest {
+            from_header: "cfo@mitsui-g1obal.co.jp", // Domain: タイポスクワット
+            return_path: None,
+            subject: "【至急】振込お願い",           // Content: 緊急送金
+            body_text: "今すぐ送金をお願いします。",
+            auth: AuthResults {
+                spf: AuthVerdict::Fail,               // Authentication: 失敗
+                dkim: AuthVerdict::Fail,
+                dmarc: AuthVerdict::None,
+                arc: None,
+            },
+            sender_history: None,
+            our_domain: "mitsui-global.co.jp",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("複合シグナル")),
+            "三点セット複合シグナルが生成されるべき: {:?}", a.signals
+        );
     }
 }
 
