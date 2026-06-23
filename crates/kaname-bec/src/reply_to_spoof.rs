@@ -34,11 +34,12 @@ impl SpoofAnalysis {
 ///
 /// - `from_header`: RFC 5322 の From ヘッダー全体 (例: `"CEO 山田" <ceo@company.com>`)
 /// - `reply_to_header`: Reply-To ヘッダー (省略可)
-/// - `known_contact_names`: 既知の連絡先表示名一覧 (小文字正規化済み推奨)
+/// - `known_contacts`: 既知の連絡先 `(表示名, 期待ドメイン)` ペア一覧。
+///   表示名が一致し**かつ**送信元ドメインが期待ドメインと異なる場合のみ詐称と判定する。
 pub fn analyze_spoof(
     from_header: &str,
     reply_to_header: Option<&str>,
-    known_contact_names: &[&str],
+    known_contacts: &[(&str, &str)],
 ) -> SpoofAnalysis {
     let from_domain = extract_domain_from_header(from_header);
     let display_name = extract_display_name(from_header);
@@ -55,26 +56,19 @@ pub fn analyze_spoof(
     };
 
     // 2. 表示名詐称チェック
+    // 表示名が既知連絡先と一致し、かつ送信元ドメインが期待ドメインと異なる場合のみ詐称。
+    // 正規ドメインから送られた場合 (from_domain == expected_domain) は詐称ではない。
     let display_name_impersonation = if let (Some(ref name), Some(ref fd)) = (&display_name, &from_domain) {
         let name_lower = name.to_lowercase();
         let name_lower = name_lower.trim();
-        // 既知の連絡先名と一致するかチェック
-        let matches_known = known_contact_names.iter().any(|known| {
-            let known_lower = known.to_lowercase();
-            // 完全一致 or 既知名が表示名を包含
-            name_lower == known_lower.trim()
+        known_contacts.iter().any(|(known_name, expected_domain)| {
+            let known_lower = known_name.to_lowercase();
+            let name_matches = name_lower == known_lower.trim()
                 || name_lower.contains(known_lower.trim())
-                || known_lower.trim().contains(name_lower)
-        });
-        if matches_known {
-            // 表示名に一致する連絡先が、送信元ドメインと一致しないか
-            // 簡易チェック: 表示名にドメイン名キーワードが含まれる場合は
-            // そのドメインから送られているべき
-            let _ = fd;
-            true
-        } else {
-            false
-        }
+                || known_lower.trim().contains(name_lower);
+            // 名前が一致し、かつ送信元ドメインが期待ドメインと異なれば詐称
+            name_matches && fd != &expected_domain.to_lowercase().trim().to_string()
+        })
     } else {
         false
     };
@@ -165,14 +159,15 @@ mod tests {
 
     #[test]
     fn clean_email_no_risk() {
+        // 正規ドメインから送られた CEO 山田 は詐称ではない
         let result = analyze_spoof(
             "\"CEO 山田\" <ceo@company.com>",
             None,
-            &["CEO 山田"],
+            &[("CEO 山田", "company.com")],
         );
         assert!(!result.reply_to_domain_mismatch);
-        // 表示名一致だが Reply-To なし → display_name_impersonation は true だが score < 0.6
-        assert!(!result.is_high_risk() || result.reply_to_domain_mismatch);
+        assert!(!result.display_name_impersonation, "正規ドメインからの送信は詐称ではない");
+        assert_eq!(result.risk_score, 0.0);
     }
 
     #[test]
@@ -212,13 +207,25 @@ mod tests {
 
     #[test]
     fn display_name_impersonation_detected() {
+        // 既知の CEO 山田 が evil.com から送信 → 詐称
         let result = analyze_spoof(
             "\"CEO 山田\" <attacker@evil.com>",
             None,
-            &["CEO 山田", "CFO 鈴木"],
+            &[("CEO 山田", "company.com"), ("CFO 鈴木", "company.com")],
         );
         assert!(result.display_name_impersonation);
         assert!(result.risk_score > 0.0);
+    }
+
+    #[test]
+    fn display_name_impersonation_false_positive_fixed() {
+        // 正規ドメインからなら詐称ではない (修正前はここが false positive だった)
+        let result = analyze_spoof(
+            "\"CEO 山田\" <ceo@company.com>",
+            None,
+            &[("CEO 山田", "company.com")],
+        );
+        assert!(!result.display_name_impersonation, "正規ドメインは詐称ではない");
     }
 
     #[test]
@@ -226,7 +233,7 @@ mod tests {
         let result = analyze_spoof(
             "\"Unknown Person\" <unknown@evil.com>",
             None,
-            &["CEO 山田"],
+            &[("CEO 山田", "company.com")],
         );
         assert!(!result.display_name_impersonation);
     }
@@ -262,7 +269,7 @@ mod tests {
         let result = analyze_spoof(
             "\"CEO 山田\" <attacker@evil.com>",
             Some("attacker@gmail.com"),
-            &["CEO 山田"],
+            &[("CEO 山田", "company.com")],
         );
         assert!(result.reply_to_domain_mismatch);
         assert!(result.display_name_impersonation);

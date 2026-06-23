@@ -543,8 +543,21 @@ impl BecDetector {
 
     fn check_reply_to_spoof(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
         use crate::reply_to_spoof::analyze_spoof;
-        let known_names: Vec<&str> = req.known_contacts.iter().map(String::as_str).collect();
-        let analysis = analyze_spoof(req.from_header, req.reply_to, &known_names);
+        // known_contacts の各エントリから (表示名, ドメイン) ペアを抽出する。
+        // 書式: `"名前" <email@domain.com>` または `email@domain.com`
+        let contact_pairs: Vec<(String, String)> = req.known_contacts.iter().filter_map(|c| {
+            let name = extract_display_name_from_addr(c).unwrap_or_default();
+            let domain = extract_domain(c).unwrap_or("").to_string();
+            if domain.is_empty() {
+                None
+            } else {
+                Some((name, domain))
+            }
+        }).collect();
+        let contact_refs: Vec<(&str, &str)> = contact_pairs.iter()
+            .map(|(n, d)| (n.as_str(), d.as_str()))
+            .collect();
+        let analysis = analyze_spoof(req.from_header, req.reply_to, &contact_refs);
         if analysis.reply_to_domain_mismatch {
             let domain = analysis.reply_to_domain.as_deref().unwrap_or("不明");
             signals.push(Signal {
@@ -652,6 +665,13 @@ impl BecDetector {
 #[inline]
 fn logistic(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
+}
+
+/// `"表示名" <user@domain.com>` または `user@domain.com` から表示名を抽出する。
+fn extract_display_name_from_addr(addr: &str) -> Option<String> {
+    let lt_pos = addr.find('<')?;
+    let name_part = addr[..lt_pos].trim().trim_matches('"').trim_matches('\'').trim();
+    if name_part.is_empty() { None } else { Some(name_part.to_string()) }
 }
 
 fn extract_domain(header: &str) -> Option<&str> {

@@ -387,7 +387,7 @@ fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
             }
             // 未知バイナリでも ENCODING=BASE64;VALUE=BINARY は要注意
             let kind = detected_kind.unwrap_or("不明なバイナリデータ").to_string();
-            let snippet = if b64_data.len() > 40 { &b64_data[..40] } else { b64_data };
+            let snippet = b64_data.get(..40).unwrap_or(b64_data);
             risks.push(CalendarRisk::EmbeddedBinaryAttachment {
                 kind,
                 snippet: snippet.to_string(),
