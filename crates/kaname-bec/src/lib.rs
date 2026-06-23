@@ -32,6 +32,7 @@
 //! Multi-signal BEC detector. Local-only. Explainable.
 
 pub mod idn_homograph;
+pub mod thread_hijack;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -64,6 +65,9 @@ pub struct AssessmentRequest<'a> {
     pub extracted_urls: &'a [String],
     /// Reply-To ヘッダー (省略可)。スプーフィング検出に使用。
     pub reply_to: Option<&'a str>,
+    /// スレッド乗っ取り検出用コンテキスト (省略可)。
+    /// 返信メールの場合のみ設定する。
+    pub thread_context: Option<thread_hijack::ThreadContext<'a>>,
 }
 
 /// パースされた SPF/DKIM/DMARC の判定。
@@ -243,6 +247,9 @@ impl BecDetector {
 
         // --- 5b. Reply-To スプーフィング + 表示名詐称
         self.check_reply_to_spoof(&req, &mut signals);
+
+        // --- 5c. スレッド乗っ取り検出
+        self.check_thread_hijack(&req, &mut signals);
 
         // --- 6. LLM signal (the expensive one; done last)
         self.check_llm(&req, &mut signals)?;
@@ -502,6 +509,55 @@ impl BecDetector {
                     "表示名 \"{name}\" は既知の連絡先と一致しますが、\
                     メールアドレスのドメインが異なります。"
                 ),
+            });
+        }
+    }
+
+    fn check_thread_hijack(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        use crate::thread_hijack::{analyze_thread_hijack, ThreadHijackSignal};
+        let Some(ctx) = req.thread_context.as_ref() else { return };
+        let result = analyze_thread_hijack(ctx);
+        if result.risk_score <= 0.0 {
+            return;
+        }
+        for sig in &result.signals {
+            let (label, rationale, contribution) = match sig {
+                ThreadHijackSignal::UnknownMessageIdReferenced { message_id } => (
+                    "スレッド外参照 (MessageID 不明)".to_string(),
+                    format!("In-Reply-To {message_id} は既知スレッドに存在しません。スレッド乗っ取りの可能性があります。"),
+                    0.30_f32,
+                ),
+                ThreadHijackSignal::ReplySubjectWithoutInReplyTo => (
+                    "Re: 件名だが In-Reply-To なし".to_string(),
+                    "返信を装った偽メールの可能性があります。".to_string(),
+                    0.25,
+                ),
+                ThreadHijackSignal::SenderDomainChanged { from, to } => (
+                    format!("スレッド内でドメイン変化: {} → {}", from, to),
+                    "返信スレッドの途中でメールアドレスのドメインが変わりました。なりすましの可能性があります。".to_string(),
+                    0.35,
+                ),
+                ThreadHijackSignal::LanguageShift { from, to } => (
+                    format!("言語が急変: {:?} → {:?}", from, to),
+                    "スレッドの言語が突然変わりました。スレッド乗っ取りの典型パターンです。".to_string(),
+                    0.20,
+                ),
+                ThreadHijackSignal::HighRiskTopicInjected { keyword } => (
+                    format!("返信スレッドに高リスクトピック注入: {keyword}"),
+                    "通常の返信スレッドに金融・暗号資産関連のキーワードが現れました。".to_string(),
+                    0.25,
+                ),
+                ThreadHijackSignal::SubjectManipulated { similarity } => (
+                    format!("件名が操作されている可能性 (類似度 {:.0}%)", similarity * 100.0),
+                    "Re: 件名が前のメールと大きく異なります。件名を偽装されている可能性があります。".to_string(),
+                    0.15,
+                ),
+            };
+            signals.push(Signal {
+                family: SignalFamily::History,
+                contribution,
+                label,
+                rationale,
             });
         }
     }
@@ -893,6 +949,7 @@ mod tests {
             known_contacts: &contacts,
             extracted_urls: &[],
             reply_to: None,
+            thread_context: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Safe);
@@ -916,6 +973,7 @@ mod tests {
             known_contacts: &contacts,
             extracted_urls: &[],
             reply_to: None,
+            thread_context: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Dangerous, "score={}, signals={:?}", a.score, a.signals);
@@ -941,6 +999,7 @@ mod tests {
             known_contacts: &contacts,
             extracted_urls: &[aitm_url],
             reply_to: None,
+            thread_context: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -1019,6 +1078,7 @@ mod tests {
             known_contacts: &contacts,
             extracted_urls: &[],
             reply_to: None,
+            thread_context: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(a.signals.iter().any(|s| s.label.contains("IDN") || s.label.contains("混在")),
@@ -1093,6 +1153,7 @@ mod tests {
             known_contacts: &contacts,
             extracted_urls: &[],
             reply_to: None,
+            thread_context: None,
         };
         // パニックせず正常な結果を返すこと
         let result = det.assess(req);
@@ -1118,6 +1179,7 @@ mod tests {
             known_contacts: &contacts,
             extracted_urls: &urls,
             reply_to: None,
+            thread_context: None,
         };
         let result = det.assess(req);
         assert!(result.is_ok(), "大量URLでpanicしてはならない: {result:?}");
