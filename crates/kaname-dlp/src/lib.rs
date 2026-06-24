@@ -850,10 +850,18 @@ const MAX_REGEX_INPUT_BYTES: usize = 512 * 1024; // 512 KB
 ///
 /// 二重エンコード (`%2540` → `%40` → `@`) も処理するため、
 /// 出力が変化しなくなるまで最大 3 回繰り返す。
+///
+/// **DoS 対策**: 展開後のサイズが入力の 4 倍を超えた時点で打ち切る。
+/// トリプルエンコードされた巨大入力でも最大 4x のメモリ増幅に抑える。
 #[must_use]
 pub fn percent_decode(s: &str) -> String {
+    // 展開サイズ上限: 入力の 4 倍 または 4 MB のうち小さい方
+    let max_decoded = (s.len() * 4).min(4 * 1024 * 1024);
     let mut current = percent_decode_once(s);
     for _ in 0..2 {
+        if current.len() > max_decoded {
+            break;
+        }
         let next = percent_decode_once(&current);
         if next == current {
             break;

@@ -116,7 +116,7 @@ impl WordLocale {
 /// 検証フレーズの 1 単語。
 ///
 /// `ZeroizeOnDrop` により、Drop 時にメモリから自動消去。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, ZeroizeOnDrop, Default)]
 pub struct VerificationWord(String);
 
 impl VerificationWord {
@@ -167,8 +167,14 @@ impl VerificationWord {
 fn normalize_katakana(s: &str) -> String {
     s.chars().map(|c| {
         // ひらがな (U+3041-U+3096) → カタカナ (U+30A1-U+30F6)
+        // オフセット 0x60 は安全: U+3096 + 0x60 = U+30F6 (有効なカタカナ範囲内)
         if ('\u{3041}'..='\u{3096}').contains(&c) {
-            char::from_u32(c as u32 + 0x60).unwrap_or(c)
+            let katakana_cp = c as u32 + 0x60;
+            debug_assert!(
+                ('\u{30A1}'..='\u{30F6}').contains(&char::from_u32(katakana_cp).unwrap_or('\0')),
+                "ひらがな→カタカナ変換が有効範囲外: U+{katakana_cp:04X}"
+            );
+            char::from_u32(katakana_cp).unwrap_or(c)
         } else {
             c
         }
@@ -202,11 +208,17 @@ fn normalize_katakana(s: &str) -> String {
 pub const MAX_VERIFY_ATTEMPTS: u8 = 3;
 
 /// Out-of-Band 検証セレモニー。送信者の身元を電話で確認するための手順。
+///
+/// **セキュリティ注意**: `phrase` フィールドは `#[serde(skip)]` により
+/// シリアライズされない。セレモニーオブジェクトをログ・データベース・
+/// ネットワーク経由で送信しても 6 ワードフレーズが漏洩しない。
+/// フレーズはメモリ内にのみ存在し、Drop 時に `ZeroizeOnDrop` で消去される。
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationCeremony {
     /// 検証 ID (Audit Log で参照)
     pub id: String,
-    /// 6 ワードフレーズ
+    /// 6 ワードフレーズ (シリアライズ不可 — ログ・DB に漏洩させない)
+    #[serde(skip)]
     phrase: [VerificationWord; 6],
     /// チャレンジ番号 (1-6 のうちのどれか)
     challenge_index: u8,
@@ -508,7 +520,8 @@ fn now_unix_secs() -> u64 {
 fn generate_ceremony_id() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    let bytes: [u8; 8] = rng.gen();
+    // 128-bit (16 bytes) で誕生日衝突確率を無視できるレベルに抑える (64-bit は ~4B 儀式で 50% 衝突)
+    let bytes: [u8; 16] = rng.gen();
     format!("oobv_{}", hex_encode(&bytes))
 }
 
@@ -766,8 +779,23 @@ mod tests {
         let c = VerificationCeremony::new("e1", "alice@example.com");
         let json = serde_json::to_string(&c).expect("should serialize");
         assert!(json.contains("Pending"));
-        // フレーズは serialize される (検証中はメモリ内で保持が必要)
-        // しかし audit_record は phrase を含まない
+    }
+
+    #[test]
+    fn ceremony_phrase_not_in_serialized_output() {
+        // SECURITY: phrase は #[serde(skip)] によりシリアライズされない
+        // ログ・DB 経由での 6 ワードフレーズ漏洩を防ぐ
+        let c = VerificationCeremony::new("e1", "alice@example.com");
+        // 正しい単語を取得してシリアライズ後に含まれないことを確認
+        let phrase_word = c.phrase[0].as_str().to_string();
+        let json = serde_json::to_string(&c).expect("should serialize");
+        assert!(
+            !json.contains(&phrase_word),
+            "フレーズが JSON に漏洩している: word={phrase_word:?}, json={json}"
+        );
+        // JSON に "phrase" キーも含まれないこと
+        assert!(!json.contains("\"phrase\""),
+            "phrase フィールドが JSON に存在する: {json}");
     }
 }
 

@@ -182,8 +182,64 @@ impl CalendarGuard {
         CalendarScan { risks, risk_level }
     }
 
+    /// Google Forms/Drawings 等の信頼ドメインを中継点 (ランディングページ) として
+    /// 使ったリダイレクトチェーン攻撃を検出する。
+    ///
+    /// 攻撃パターン (2024〜2026 に急増):
+    /// - ICS invite → Google Forms (forms.gle) → フィッシングサイト
+    /// - ICS invite → Google Drawings (docs.google.com/drawings) → フィッシングサイト
+    ///
+    /// これらは URL ブロックリストをすり抜ける (ドメインが google.com のため)。
+    /// パラメータ部 (`?url=`, `?dest=`, `?to=` 等) に外部ドメインが含まれるかで判定。
+    ///
+    /// 出典: Check Point Google Calendar abuse 2025, MailData 解説 2025
+    fn is_trusted_domain_redirect_hop(url: &str) -> Option<String> {
+        const RELAY_HOSTS: &[&str] = &[
+            "forms.gle",
+            "docs.google.com/forms",
+            "docs.google.com/drawings",
+            "docs.google.com/presentation",
+            "drive.google.com",
+            "forms.office.com",
+            "sway.office.com",
+            "1drv.ms",
+        ];
+        let lower = url.to_lowercase();
+        for host in RELAY_HOSTS {
+            if lower.contains(host) {
+                // クエリパラメータに外部 URL が埋め込まれているか確認
+                if let Some(q_pos) = lower.find('?') {
+                    let query = &lower[q_pos..];
+                    // ?url=, ?dest=, ?to=, ?link=, ?redirect= 等の外部リダイレクト
+                    let redirect_keys = ["url=http", "dest=http", "to=http", "link=http",
+                                         "redirect=http", "r=http", "next=http", "continue=http"];
+                    for key in redirect_keys {
+                        if query.contains(key) {
+                            return Some(format!(
+                                "信頼ドメイン ({host}) を中継点としたリダイレクトチェーン攻撃の疑い"
+                            ));
+                        }
+                    }
+                }
+                // パスに /d/ や /view などがあるがクエリなし → Google Drawings 直リンク
+                // Google Drawings 自体をフィッシングページとして使う手口
+                if host.contains("drawings") {
+                    return Some(format!(
+                        "Google Drawings を偽装ランディングページとして使用している可能性 ({host})"
+                    ));
+                }
+            }
+        }
+        None
+    }
+
     /// URL が疑わしい場合に理由を返す。
     fn evaluate_url(&self, url: &str) -> Option<String> {
+        // 信頼ドメイン中継点チェック (Google Forms/Drawings リダイレクト攻撃)
+        if let Some(reason) = Self::is_trusted_domain_redirect_hop(url) {
+            return Some(reason);
+        }
+
         let lower = url.to_lowercase();
 
         // 無料 TLD
@@ -696,6 +752,75 @@ END:VCALENDAR"#;
         let content = "BEGIN:VCALENDAR\nSEQUENCE:0\nEND:VCALENDAR";
         let risk = check_sequence_monotonicity(content, 0);
         assert!(risk.is_none(), "初回受信は正常");
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // 信頼ドメイン中継点リダイレクト検出 (Google Forms/Drawings 攻撃)
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn detects_google_forms_redirect_hop() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Please Verify\n\
+                   URL:https://docs.google.com/forms/d/abc123?url=https://phishing.com/steal\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
+            "Google Forms リダイレクトが検出されなかった: {:?}", scan.risks
+        );
+    }
+
+    #[test]
+    fn detects_google_drawings_as_phishing_landing() {
+        // Google Drawings を直接フィッシングページとして使う手口
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Meeting Invite\n\
+                   URL:https://docs.google.com/drawings/d/fakeid123/view\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
+            "Google Drawings ランディングページが検出されなかった: {:?}", scan.risks
+        );
+    }
+
+    #[test]
+    fn detects_forms_gle_redirect() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   URL:https://forms.gle/shortcode?dest=http://evil.io/login\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl { .. })),
+            "forms.gle リダイレクトが検出されなかった"
+        );
+    }
+
+    #[test]
+    fn legit_google_forms_without_redirect_not_flagged() {
+        // リダイレクトパラメータなしの正規 Google Forms は検出しない
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   URL:https://docs.google.com/forms/d/survey123/viewform\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousUrl {
+                reason, .. } if reason.contains("中継点"))),
+            "正規の Google Forms が誤検出された: {:?}", scan.risks
+        );
     }
 
     #[test]

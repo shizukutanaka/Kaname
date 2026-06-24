@@ -513,6 +513,34 @@ impl BecDetector {
                 rationale: "通常の連絡経路を回避する表現".to_string(),
             });
         }
+
+        // チャネル移行要求 (Qiita/Zenn 2025-2026 新手口):
+        // CEO になりすまして LINE/Teams/WhatsApp へ移行させることで
+        // メールフィルタの監視から外れた経路で詐欺を完結させる。
+        // 例: 「LINEグループを作ってほしい」「Teamsのチャットで話しましょう」
+        let channel_migration_phrases = [
+            // LINE 誘導
+            "lineグループ", "lineで連絡", "lineに移動", "lineをください",
+            "line group", "contact me on line", "add me on line",
+            // Teams 誘導
+            "teamsのチャット", "teamsで話", "teamsに移動",
+            "contact on teams", "message me on teams", "switch to teams",
+            // WhatsApp 誘導
+            "whatsappで", "whatsapp me", "message on whatsapp",
+            // 汎用チャネル移行
+            "このメールを使わず", "別の方法で連絡",
+            "don't use email", "use personal message",
+            "smsで送って", "テキストで送って",
+        ];
+        if channel_migration_phrases.iter().any(|m| b.contains(m)) {
+            signals.push(Signal {
+                family: SignalFamily::Content,
+                contribution: 0.35,
+                label: "チャット/SNS への誘導".to_string(),
+                rationale: "メール経路を離れてチャットアプリに移行させようとする表現。\
+                    フィルタ監視外での詐欺完結を狙う新手口 (2025)。".to_string(),
+            });
+        }
     }
 
     fn check_aitm(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
