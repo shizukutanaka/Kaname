@@ -72,6 +72,28 @@ pub enum DetectedPivot {
         /// アドレス
         address: String,
     },
+    /// WhatsApp 招待/連絡先リンク
+    ///
+    /// 2025-2026 BEC で急増: CEO になりすまし WhatsApp グループに誘導後、
+    /// フィルタ監視外で不正振込指示を行う手口。
+    WhatsAppLink {
+        /// 検出された URL または電話番号リンク
+        url: String,
+    },
+    /// Telegram ボット/チャンネル/グループ招待
+    ///
+    /// フィッシングキット配布や送金指示に Telegram ボットが使われる事例が増加。
+    TelegramLink {
+        /// t.me または telegram.me の URL
+        url: String,
+        /// ボット招待か (@xxx_bot 形式)
+        is_bot: bool,
+    },
+    /// Signal 連絡先/グループ招待
+    SignalLink {
+        /// signal.me または signal.group URL
+        url: String,
+    },
 }
 
 impl DetectedPivot {
@@ -83,6 +105,8 @@ impl DetectedPivot {
             Self::CryptoWallet { .. } => true,
             // 電話 + 緊急性は高リスク (Deepfake 音声攻撃の入口)
             Self::PhoneNumber { context, .. } => has_urgency(context),
+            // WhatsApp/Telegram/Signal は CEO 詐欺の典型的な誘導先 (2025-2026 急増)
+            Self::WhatsAppLink { .. } | Self::TelegramLink { .. } | Self::SignalLink { .. } => true,
             _ => false,
         }
     }
@@ -98,6 +122,9 @@ impl DetectedPivot {
             Self::GoogleMeet { .. }    => "Google Meet",
             Self::SaasDocument { .. }  => "SaaS ドキュメント",
             Self::CryptoWallet { .. }  => "暗号通貨ウォレット",
+            Self::WhatsAppLink { .. }  => "WhatsApp",
+            Self::TelegramLink { .. }  => "Telegram",
+            Self::SignalLink { .. }    => "Signal",
         }
     }
 }
@@ -212,7 +239,10 @@ impl PivotHistory {
             DetectedPivot::TeamsLink { url, .. }
             | DetectedPivot::SlackInvite { url, .. }
             | DetectedPivot::GoogleMeet { url }
-            | DetectedPivot::SaasDocument { url, .. } => {
+            | DetectedPivot::SaasDocument { url, .. }
+            | DetectedPivot::WhatsAppLink { url }
+            | DetectedPivot::TelegramLink { url, .. }
+            | DetectedPivot::SignalLink { url } => {
                 self.seen_urls.iter().any(|u| u == url)
             }
             _ => false,
@@ -300,6 +330,30 @@ fn extract_meeting_links(body: &str) -> Vec<DetectedPivot> {
             });
         } else if host_is(host, "meet.google.com") {
             results.push(DetectedPivot::GoogleMeet {
+                url: url.to_string(),
+            });
+        // WhatsApp: wa.me (短縮), api.whatsapp.com, chat.whatsapp.com
+        } else if host_is(host, "wa.me")
+            || host_is(host, "api.whatsapp.com")
+            || host_is(host, "chat.whatsapp.com")
+            || host_is(host, "whatsapp.com")
+        {
+            results.push(DetectedPivot::WhatsAppLink {
+                url: url.to_string(),
+            });
+        // Telegram: t.me (短縮), telegram.me, telegram.org
+        } else if host_is(host, "t.me")
+            || host_is(host, "telegram.me")
+            || host_is(host, "telegram.org")
+        {
+            let is_bot = url.contains("_bot") || url.contains("bot?");
+            results.push(DetectedPivot::TelegramLink {
+                url: url.to_string(),
+                is_bot,
+            });
+        // Signal: signal.me, signal.group
+        } else if host_is(host, "signal.me") || host_is(host, "signal.group") {
+            results.push(DetectedPivot::SignalLink {
                 url: url.to_string(),
             });
         }
@@ -827,5 +881,75 @@ mod tests {
         let body = "送金: 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1";
         let pivots = extract_crypto_addresses(body);
         assert!(!pivots.is_empty(), "0x プレフィックスの Ethereum アドレスは検出されるべき");
+    }
+
+    // ── WhatsApp / Telegram / Signal 検出 ─────────────────────────────────
+
+    #[test]
+    fn detects_whatsapp_wa_me_link() {
+        let body = "Please contact me on WhatsApp: https://wa.me/819012345678";
+        let d = PivotDetector::new();
+        let pivots = d.analyze(body);
+        assert!(
+            pivots.iter().any(|p| matches!(p, DetectedPivot::WhatsAppLink { .. })),
+            "wa.me リンクが検出されなかった: {pivots:?}"
+        );
+    }
+
+    #[test]
+    fn whatsapp_link_is_high_risk() {
+        let pivot = DetectedPivot::WhatsAppLink { url: "https://wa.me/819012345678".to_string() };
+        assert!(pivot.is_high_risk(), "WhatsApp は高リスクチャネル");
+        assert_eq!(pivot.channel_name(), "WhatsApp");
+    }
+
+    #[test]
+    fn detects_telegram_t_me_link() {
+        let body = "Join our Telegram: https://t.me/ceoinstructions";
+        let d = PivotDetector::new();
+        let pivots = d.analyze(body);
+        assert!(
+            pivots.iter().any(|p| matches!(p, DetectedPivot::TelegramLink { .. })),
+            "t.me リンクが検出されなかった: {pivots:?}"
+        );
+    }
+
+    #[test]
+    fn detects_telegram_bot_link() {
+        let body = "Message the bot: https://t.me/payment_bot?start=ref123";
+        let d = PivotDetector::new();
+        let pivots = d.analyze(body);
+        assert!(
+            pivots.iter().any(|p| matches!(p, DetectedPivot::TelegramLink { is_bot: true, .. })),
+            "Telegram ボットリンクが検出されなかった"
+        );
+    }
+
+    #[test]
+    fn detects_signal_link() {
+        let body = "Let's talk privately: https://signal.me/#p/+819012345678";
+        let d = PivotDetector::new();
+        let pivots = d.analyze(body);
+        assert!(
+            pivots.iter().any(|p| matches!(p, DetectedPivot::SignalLink { .. })),
+            "signal.me リンクが検出されなかった: {pivots:?}"
+        );
+    }
+
+    #[test]
+    fn signal_link_is_high_risk() {
+        let pivot = DetectedPivot::SignalLink { url: "https://signal.me/#p/+819012345678".to_string() };
+        assert!(pivot.is_high_risk());
+        assert_eq!(pivot.channel_name(), "Signal");
+    }
+
+    #[test]
+    fn telegram_link_is_high_risk() {
+        let pivot = DetectedPivot::TelegramLink {
+            url: "https://t.me/attacker".to_string(),
+            is_bot: false,
+        };
+        assert!(pivot.is_high_risk());
+        assert_eq!(pivot.channel_name(), "Telegram");
     }
 }

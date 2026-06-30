@@ -514,6 +514,24 @@ impl BecDetector {
             });
         }
 
+        // Cialdini 説得原理スコアリング (MDPI 2025 研究に基づく)
+        // AI 生成フィッシングは文法的に正確なため、説得心理パターンで検出する。
+        // 「権威」「希少性」「一貫性」「社会的証明」が高密度で出現 → BEC の典型。
+        let cialdini_score = calculate_cialdini_score(&b);
+        if cialdini_score >= 2 {
+            let contribution = (0.10 * cialdini_score as f32).min(0.40);
+            signals.push(Signal {
+                family: SignalFamily::Content,
+                contribution,
+                label: format!("説得原理パターン ({}種)", cialdini_score),
+                rationale: format!(
+                    "Cialdini 説得原理が {}種類検出された。\
+                    AI 生成フィッシングに特徴的な心理操作パターン (MDPI 2025)。",
+                    cialdini_score
+                ),
+            });
+        }
+
         // チャネル移行要求 (Qiita/Zenn 2025-2026 新手口):
         // CEO になりすまして LINE/Teams/WhatsApp へ移行させることで
         // メールフィルタの監視から外れた経路で詐欺を完結させる。
@@ -691,6 +709,91 @@ impl BecDetector {
 /// ロジスティック関数 σ(x) = 1 / (1 + e^{-x})。
 /// BEC スコアの線形和を確率的スコア [0,1] へ写す。
 #[inline]
+/// Cialdini 説得原理スコアを計算する。
+///
+/// 検出する原理 (各1点):
+/// 1. 権威 (Authority): 役職・上位者による命令口調
+/// 2. 希少性/緊急性 (Scarcity): 期限・今すぐ・残りわずか
+/// 3. 一貫性 (Commitment): 「約束したとおり」「既に合意した」
+/// 4. 社会的証明 (Social Proof): 「皆やっている」「会社方針」
+/// 5. 好意 (Liking): 個人的な関係を装う
+/// 6. 返報性 (Reciprocity): 過去の恩を使って要求する
+///
+/// スコア = 検出した原理の種類数 (0〜6)
+fn calculate_cialdini_score(body_lower: &str) -> u32 {
+    let mut score = 0u32;
+
+    // 1. 権威 (Authority) — 上位者・役職を使って命令
+    let authority_patterns = [
+        "as ceo", "as the ceo", "ceo here", "this is ceo",
+        "代表取締役", "社長より", "役員からの指示", "上層部からの",
+        "on behalf of", "executive directive", "management directive",
+        "i am the ceo", "per cfo", "per ceo",
+    ];
+    if authority_patterns.iter().any(|p| body_lower.contains(p)) {
+        score += 1;
+    }
+
+    // 2. 希少性/緊急性 (Scarcity/Urgency) — 時間的プレッシャー
+    let scarcity_patterns = [
+        "before end of day", "eod today", "by close of business",
+        "within the hour", "right now", "no later than",
+        "本日中", "今日中", "今すぐ", "締め切り", "期限",
+        "time sensitive", "time-sensitive", "act now",
+        "deadline", "expires today", "last chance",
+    ];
+    if scarcity_patterns.iter().any(|p| body_lower.contains(p)) {
+        score += 1;
+    }
+
+    // 3. 一貫性 (Commitment) — 過去の合意に訴える
+    let commitment_patterns = [
+        "as we discussed", "as agreed", "as previously discussed",
+        "as i mentioned", "you promised", "per our conversation",
+        "以前お話した", "ご承知のとおり", "既にご了承", "先日ご確認",
+        "as per our last meeting", "following our call",
+    ];
+    if commitment_patterns.iter().any(|p| body_lower.contains(p)) {
+        score += 1;
+    }
+
+    // 4. 社会的証明 (Social Proof) — 組織全体・皆がやっている
+    let social_proof_patterns = [
+        "company policy", "company procedure", "corporate policy",
+        "all staff", "everyone else has", "rest of the team",
+        "社内ルール", "会社の方針", "全員が", "他の部署も",
+        "standard procedure", "normal process", "routine transfer",
+    ];
+    if social_proof_patterns.iter().any(|p| body_lower.contains(p)) {
+        score += 1;
+    }
+
+    // 5. 好意 (Liking) — 個人的な関係を装う
+    let liking_patterns = [
+        "between us", "just between you and me", "keep this confidential",
+        "don't tell anyone", "this is private", "personal matter",
+        "内密に", "ここだけの話", "誰にも言わないで", "秘密で",
+        "trust you with this", "i trust you",
+    ];
+    if liking_patterns.iter().any(|p| body_lower.contains(p)) {
+        score += 1;
+    }
+
+    // 6. 返報性 (Reciprocity) — 過去の恩・信頼に訴える
+    let reciprocity_patterns = [
+        "i've always trusted you", "i rely on you",
+        "you've always come through", "count on you",
+        "いつも頼りにしている", "あなたを信頼しているから",
+        "you've never let me down", "i know i can count on you",
+        "only you can handle this",
+    ];
+    if reciprocity_patterns.iter().any(|p| body_lower.contains(p)) {
+        score += 1;
+    }
+
+    score
+}
+
 fn logistic(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
 }

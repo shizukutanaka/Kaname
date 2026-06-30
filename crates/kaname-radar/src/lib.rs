@@ -141,11 +141,16 @@ pub struct CampaignGroup {
     pub threat_score: f32,
 }
 
+/// 1 キャンペーングループが保持するメール ID の上限。
+/// 超えた分は破棄 (脅威スコアは継続して更新)。
+const MAX_EMAILS_PER_GROUP: usize = 10_000;
+
 impl CampaignGroup {
     fn new(infra: impl Into<String>, first_email_id: impl Into<String>) -> Self {
         let now = now_unix();
         let infra = infra.into();
-        let id = format!("pcr_{}", &infra[..infra.len().min(8)]);
+        // UUID v4 で衝突のない一意 ID を生成 (旧実装の先頭 8 文字では衝突リスクあり)
+        let id = format!("pcr_{}", uuid::Uuid::new_v4().simple());
         Self {
             id,
             shared_infrastructure: infra,
@@ -162,7 +167,10 @@ impl CampaignGroup {
         if self.email_ids.contains(&id) {
             return;
         }
-        self.email_ids.push(id);
+        // メモリ DoS 防止: 上限を超えた場合は追跡を継続しつつ ID は保存しない
+        if self.email_ids.len() < MAX_EMAILS_PER_GROUP {
+            self.email_ids.push(id);
+        }
         self.last_updated_unix = now_unix();
         // メール数が増えるほど脅威スコアが上がる (最大 1.0)
         #[allow(clippy::cast_precision_loss)]
