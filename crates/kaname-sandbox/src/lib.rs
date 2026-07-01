@@ -40,7 +40,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use tokio::sync::{Mutex, Semaphore, mpsc};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc};
 
 // ============================================================================
 // Configuration
@@ -67,9 +67,19 @@ pub struct FirecrackerConfig {
 }
 
 impl FirecrackerConfig {
-    /// 設定をバリデート。セキュリティ不変条件が破られるとパニック。
+    /// 設定をバリデート。セキュリティ不変条件が破られると `Err` を返す。
+    ///
+    /// 修正前は `assert!` を使用しておりパニックしていた。他の全ての不変条件が
+    /// `Err(SandboxError::InvalidConfig)` を返す設計と矛盾する上、
+    /// `#![deny(clippy::unwrap_used)]` が示す「本番コードでパニックさせない」
+    /// 方針にも反していた。デシリアライズされた設定が不正な場合に
+    /// プロセス全体をクラッシュさせず、呼び出し元にエラーとして返す。
     pub fn validated(self) -> Result<Self, SandboxError> {
-        assert!(!self.network_allowed, "FirecrackerConfig.network_allowed must be false — no exceptions");
+        if self.network_allowed {
+            return Err(SandboxError::InvalidConfig(
+                "network_allowed must be false — no exceptions",
+            ));
+        }
         if self.pool_size == 0 || self.pool_size > 8 {
             return Err(SandboxError::InvalidConfig("pool_size must be 1..=8"));
         }
@@ -100,6 +110,15 @@ pub struct RunningVm {
     vsock: VsockChannel,
     /// Hook fired on drop to notify the pool supervisor.
     teardown_tx: mpsc::Sender<VmId>,
+    /// 同時実行数を制限するセマフォパーミット。
+    ///
+    /// 修正前は `acquire()` 内で `_permit.forget()` により恒久的にリークして
+    /// おり、「VM Drop が別経路でセマフォを解放する」というコメントに反して
+    /// 実際に解放するコードがどこにも存在しなかった。その結果
+    /// `pool_size * 2` 回 `acquire()` すると以降永久にブロックする
+    /// 自己 DoS バグになっていた。パーミットを VM の所有物として保持し、
+    /// `RunningVm` の Drop で自動的に解放されるようにする。
+    _permit: Option<OwnedSemaphorePermit>,
 }
 
 impl RunningVm {
@@ -134,6 +153,11 @@ impl RunningVm {
 
     /// VM に渡す最大画像次元 (レンダラーの OOM 防止)。
     const MAX_DIMENSION_PX: u32 = 8192;
+
+    /// VM から返ってくる `preview_pages` の合計最大バイト数 (ホスト OOM 防止)。
+    /// `extracted_text` と同様、悪意ある添付が巨大なプレビュー画像を大量に
+    /// 返してもホスト側でメモリを使い尽くさないようにする。
+    const MAX_PREVIEW_TOTAL_BYTES: usize = 200 * 1024 * 1024; // 200 MB
 
     /// 添付ファイルを VM でレンダリングし、結果を返す。
     ///
@@ -173,6 +197,27 @@ impl RunningVm {
                             Self::MAX_EXTRACTED_TEXT_BYTES / (1024 * 1024)));
                     }
                 }
+                // ホスト側で preview_pages の合計サイズもキャップする。
+                // 修正前は無制限であり、悪意ある添付が (将来の実装で) 大量/巨大な
+                // プレビューページを返すとホストが OOM しうる不均衡があった
+                // (extracted_text は既に保護されていた)。
+                let mut total: usize = 0;
+                let mut cutoff = r.preview_pages.len();
+                for (i, page) in r.preview_pages.iter().enumerate() {
+                    total += page.len();
+                    if total > Self::MAX_PREVIEW_TOTAL_BYTES {
+                        cutoff = i;
+                        break;
+                    }
+                }
+                if cutoff < r.preview_pages.len() {
+                    tracing::warn!(
+                        pages_kept = cutoff,
+                        pages_total = r.preview_pages.len(),
+                        "preview_pages の合計サイズが上限を超えたため切り詰めました"
+                    );
+                    r.preview_pages.truncate(cutoff);
+                }
                 Ok(r)
             }
             VsockMsg::Error(e) => Err(SandboxError::VmError(e)),
@@ -183,9 +228,19 @@ impl RunningVm {
 
 impl Drop for RunningVm {
     fn drop(&mut self) {
-        // ベストエフォートで通知。 If the channel is closed (supervisor exited),
-        // that's fine — the VM will be reaped by its own timeout.
-        let _ = self.teardown_tx.try_send(self.id);
+        // ベストエフォートで通知。チャネルが閉じている場合 (supervisor 終了時) は
+        // 問題ない — VM は自身のタイムアウトで回収される。
+        // ただしチャネルが「満杯」(bounded 32) で失敗した場合は本当に
+        // プール補充が行われず、リークしたままになりうる。修正前はこの
+        // ケースが完全に無視されており気付く手段がなかったため、
+        // せめて監視・アラートで検知できるよう警告ログを残す。
+        if let Err(e) = self.teardown_tx.try_send(self.id) {
+            tracing::warn!(
+                vm_id = ?self.id,
+                error = %e,
+                "VM ティアダウン通知の送信に失敗しました (プール補充が行われない可能性)"
+            );
+        }
     }
 }
 
@@ -373,13 +428,17 @@ impl SandboxPool {
     /// 高速パス: ウォーム VM をポップ (体感 50ms)。
     /// 低速パス: オンデマンドでスポーン (900ms)。
     pub async fn acquire(&self) -> Result<RunningVm, SandboxError> {
-        let _permit = self.concurrency.acquire().await.map_err(|_| SandboxError::PoolClosed)?;
-        _permit.forget(); // VM Drop releases semaphore via a different route
+        // パーミットは RunningVm が所有し、Drop 時に自動解放される
+        // (以前は forget() で恒久リークしており、acquire() を
+        // pool_size * 2 回呼ぶと以降ずっとブロックする自己 DoS だった)。
+        let permit = self.concurrency.clone().acquire_owned().await
+            .map_err(|_| SandboxError::PoolClosed)?;
 
         let mut warm = self.warm.lock().await;
-        if let Some(vm) = warm.pop() {
+        if let Some(mut vm) = warm.pop() {
             // 経過時間チェック — don't hand out VMs that have been idle too long.
             if vm.age() < Duration::from_secs(self.config.max_lifetime_secs / 2) {
+                vm._permit = Some(permit);
                 return Ok(vm);
             }
             // 古すぎる。破棄 (ティアダウントリガー)、コールドスポーンにフォールスルー。
@@ -389,7 +448,9 @@ impl SandboxPool {
 
         // コールドスポーン。
         tracing::info!("sandbox pool miss; cold-spawning vm");
-        spawn_vm(&self.config, self.teardown_tx.clone()).await
+        let mut vm = spawn_vm(&self.config, self.teardown_tx.clone()).await?;
+        vm._permit = Some(permit);
+        Ok(vm)
     }
 }
 
@@ -416,6 +477,7 @@ async fn spawn_vm(
         _ctrl: (),
         vsock: VsockChannel { _private: () },
         teardown_tx,
+        _permit: None,
     })
 }
 
@@ -477,9 +539,10 @@ mod tests {
     use super::*;
 
     #[test]
-    #[should_panic(expected = "network_allowed must be false")]
-    fn network_enabled_config_panics() {
-        let _ = FirecrackerConfig {
+    fn network_enabled_config_rejected() {
+        // 修正前: assert! でパニックしていた。デシリアライズされた不正な設定が
+        // プロセス全体をクラッシュさせず、Err として扱えることを確認する。
+        let result = FirecrackerConfig {
             pool_size: 1,
             max_lifetime_secs: 60,
             memory_mb: 256,
@@ -489,6 +552,38 @@ mod tests {
             network_allowed: true,
         }
         .validated();
+        assert!(
+            matches!(result, Err(SandboxError::InvalidConfig(_))),
+            "network_allowed=true は Err(InvalidConfig) を返すべき: {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn acquire_does_not_leak_semaphore_permits() {
+        // 回帰テスト: 修正前は acquire() 内で _permit.forget() により
+        // パーミットを恒久的にリークしており、pool_size * 2 回
+        // acquire しては drop するだけで、以降 acquire() が永久にブロック
+        // する自己 DoS バグだった。VM を確保してすぐ破棄するサイクルを
+        // セマフォ容量の何倍も繰り返し、ハングしないことをタイムアウト付きで確認する。
+        let config = FirecrackerConfig {
+            pool_size: 1,
+            max_lifetime_secs: 60,
+            memory_mb: 256,
+            vcpus: 1,
+            kernel_path: PathBuf::from("/dev/null"),
+            rootfs_path: PathBuf::from("/dev/null"),
+            network_allowed: false,
+        };
+        let pool = SandboxPool::new(config).await.expect("プール構築に失敗");
+
+        // セマフォ容量は pool_size * 2 = 2。10 回転すれば旧バグでは確実にハングする。
+        for i in 0..10 {
+            let vm = tokio::time::timeout(Duration::from_secs(5), pool.acquire())
+                .await
+                .unwrap_or_else(|_| panic!("acquire() が {i} 回目でハングしました (セマフォパーミットリークの疑い)"))
+                .expect("acquire がエラーを返した");
+            drop(vm);
+        }
     }
 
     #[test]
@@ -557,6 +652,7 @@ mod tests {
             _ctrl: (),
             vsock: VsockChannel { _private: () },
             teardown_tx: tx,
+            _permit: None,
         };
         let job = AttachmentJob {
             filename: "huge.bin".into(),
@@ -587,6 +683,7 @@ mod tests {
             _ctrl: (),
             vsock: VsockChannel { _private: () },
             teardown_tx: tx,
+            _permit: None,
         };
         let job = AttachmentJob {
             filename: "A".repeat(2000), // 2000 bytes > 1024 limit
@@ -613,6 +710,7 @@ mod tests {
             _ctrl: (),
             vsock: VsockChannel { _private: () },
             teardown_tx: tx,
+            _permit: None,
         };
         let job = AttachmentJob {
             filename: "doc.pdf".into(),
@@ -646,6 +744,7 @@ mod tests {
             _ctrl: (),
             vsock: VsockChannel { _private: () },
             teardown_tx: tx,
+            _permit: None,
         };
         let job = AttachmentJob {
             filename: "small.txt".into(),
