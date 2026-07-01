@@ -739,15 +739,82 @@ fn iban_checksum_valid(candidate: &str) -> bool {
 
 fn detect_swift_bic(text: &str) -> bool {
     // SWIFT BIC: 8 or 11 characters (BANKJPJT or BANKJPJTXXX)
-    re_is_match(r"\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b", text)
+    // 修正前は単純な文字クラスのみで判定しており、"ATTACHED" のような
+    // 8文字の英大文字の英単語も誤って BIC と判定していた。
+    // 位置5-6 (国コード部分) が実在する ISO 3166-1 alpha-2 国コードかを
+    // 追加検証し、誤検知を大幅に減らす。
+    let Ok(re) = Regex::new(r"\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b") else { return false };
+    let result = re.find_iter(text).any(|m| swift_bic_country_code_valid(m.as_str()));
+    result
 }
 
+/// BIC 候補文字列の位置5-6 (0-indexed 4..6) が実在する国コードかを確認する。
+fn swift_bic_country_code_valid(candidate: &str) -> bool {
+    if candidate.len() < 6 {
+        return false;
+    }
+    let country = &candidate[4..6];
+    ISO_3166_ALPHA2.contains(&country)
+}
+
+/// ISO 3166-1 alpha-2 国コード一覧 (BIC の国コード検証に使用する主要国)。
+/// 完全な 249 カ国リストではなく、金融取引で頻出する国を中心に収録。
+const ISO_3166_ALPHA2: &[&str] = &[
+    "JP", "US", "GB", "DE", "FR", "IT", "ES", "NL", "BE", "CH",
+    "AT", "SE", "NO", "DK", "FI", "IE", "PT", "GR", "PL", "CZ",
+    "HU", "RO", "BG", "HR", "SK", "SI", "LT", "LV", "EE", "LU",
+    "CA", "AU", "NZ", "CN", "KR", "HK", "SG", "TW", "TH", "MY",
+    "ID", "PH", "VN", "IN", "PK", "BD", "AE", "SA", "IL", "TR",
+    "ZA", "EG", "NG", "KE", "BR", "MX", "AR", "CL", "CO", "PE",
+    "RU", "UA", "CY", "MT", "IS", "LI",
+];
+
 fn detect_us_ssn(text: &str) -> bool {
-    re_is_match(r"\b(?!000|666|9\d{2})\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b", text)
+    // 全角数字を正規化してから検出 (全角での DLP 回避を防ぐ)
+    //
+    // **重大な既存バグ修正**: 従来のパターンは `(?!000|666|9\d{2})` のような
+    // ネガティブルックアヘッドを使用していたが、本クレートが依存する
+    // `regex` クレート (標準版) はルックアラウンドを一切サポートしていない。
+    // そのため `Regex::new()` が常にコンパイルエラーとなり、`re_is_match`
+    // 内で警告ログを出して黙って `false` を返していた。つまり SSN 検出は
+    // 機能追加以来ずっと動作しておらず、DLP が SSN を一度も検出できていなかった。
+    // ルックアラウンドなしのパターンでマッチさせ、除外条件はコードで検証する。
+    let normalized = normalize_fullwidth_digits(text);
+    let Ok(re) = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b") else { return false };
+    let result = re.find_iter(&normalized).any(|m| is_plausible_ssn(m.as_str()));
+    result
+}
+
+/// SSA の割り当てルールに基づき、明らかに無効な SSN パターンを除外する。
+///
+/// - エリア番号 (先頭3桁) は "000", "666", "900"-"999" は割り当てられない
+/// - グループ番号 (中間2桁) は "00" は割り当てられない
+/// - シリアル番号 (末尾4桁) は "0000" は割り当てられない
+fn is_plausible_ssn(candidate: &str) -> bool {
+    let digits: Vec<u8> = candidate.bytes().filter(u8::is_ascii_digit).collect();
+    if digits.len() != 9 {
+        return false;
+    }
+    let area = std::str::from_utf8(&digits[0..3]).unwrap_or("");
+    let group = std::str::from_utf8(&digits[3..5]).unwrap_or("");
+    let serial = std::str::from_utf8(&digits[5..9]).unwrap_or("");
+
+    if area == "000" || area == "666" || area.starts_with('9') {
+        return false;
+    }
+    if group == "00" {
+        return false;
+    }
+    if serial == "0000" {
+        return false;
+    }
+    true
 }
 
 fn detect_ip_address(text: &str) -> bool {
-    re_is_match(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text)
+    // 全角数字を正規化してから検出 (全角での DLP 回避を防ぐ)
+    let normalized = normalize_fullwidth_digits(text);
+    re_is_match(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", &normalized)
 }
 
 fn detect_confidential_marker(text: &str) -> bool {
@@ -1668,6 +1735,60 @@ mod tests {
     fn detect_jp_corporate_number_with_valid_checksum() {
         let text = "法人番号: 7123456789012 です";
         assert!(detect_jp_corporate_number(text), "有効な法人番号は検出されるべき");
+    }
+
+    // ── SWIFT BIC 国コード検証 ────────────────────────────────────────────
+
+    #[test]
+    fn valid_swift_bic_with_real_country_code_detected() {
+        // BANKJPJT: 位置5-6 = "JP" (実在国コード)
+        assert!(detect_swift_bic("送金先 BIC: BANKJPJT です"));
+    }
+
+    #[test]
+    fn valid_swift_bic_11_char_detected() {
+        assert!(detect_swift_bic("BIC: BANKJPJTXXX"));
+    }
+
+    #[test]
+    fn random_uppercase_word_not_flagged_as_bic() {
+        // 修正前: 8 文字の英大文字の単語なら何でも BIC と誤検知していた。
+        // "SOFTWARE" の位置5-6 (0-indexed 4..6) = "WA" は実在国コードではないため
+        // 検出されないはず (前は単なる文字クラス一致で誤検知していた)。
+        assert!(!detect_swift_bic("please install the SOFTWARE update"));
+    }
+
+    #[test]
+    fn invalid_country_code_bic_not_flagged() {
+        // 位置5-6 = "ZZ" は実在しない国コード
+        assert!(!detect_swift_bic("code: BANKZZJT"));
+    }
+
+    // ── SSN / IP アドレス 全角数字バイパス対策 ──────────────────────────
+
+    #[test]
+    fn ssn_detected_with_fullwidth_digits() {
+        // 全角数字 + 半角ハイフンでの SSN 記述 (DLP バイパス試行)。
+        // ハイフン自体は normalize_fullwidth_digits の対象外のため半角で記述する。
+        let text = "SSN: ３３３-４４-５５５５ です";
+        assert!(detect_us_ssn(text), "全角数字の SSN も検出されるべき");
+    }
+
+    #[test]
+    fn ip_address_detected_with_fullwidth_digits() {
+        // ピリオドは半角のまま、数字のみ全角にする
+        let text = "サーバー IP: １９２.１６８.１.１ です";
+        assert!(detect_ip_address(text), "全角数字の IP アドレスも検出されるべき");
+    }
+
+    #[test]
+    fn normal_ascii_ssn_still_detected() {
+        assert!(detect_us_ssn("SSN: 333-44-5555"));
+    }
+
+    #[test]
+    fn normal_ascii_ip_still_detected() {
+        assert!(detect_ip_address("IP: 192.168.1.1"));
     }
 
     #[test]
