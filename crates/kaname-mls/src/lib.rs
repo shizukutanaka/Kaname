@@ -122,6 +122,11 @@ impl EmailAddress {
         if domain.starts_with('.') || domain.ends_with('.') {
             return Err(MlsMailError::InvalidEmailAddress);
         }
+        // ドメイン内部に空白を含まない (例: "user@ex ample.com")。
+        // 従来は先頭/末尾の空白のみチェックしており、内部空白が素通りしていた。
+        if domain.contains(char::is_whitespace) {
+            return Err(MlsMailError::InvalidEmailAddress);
+        }
         Ok(Self(s))
     }
     #[must_use]
@@ -859,6 +864,15 @@ mod tests {
         assert!(EmailAddress::parse("alice@example.com").is_ok());
         assert!(EmailAddress::parse("invalid-no-at").is_err());
         assert!(EmailAddress::parse("a".repeat(255)).is_err());
+    }
+
+    #[test]
+    fn email_address_rejects_internal_whitespace_in_domain() {
+        // 修正前は先頭/末尾の空白しかチェックしておらず、
+        // "user@ex ample.com" のような内部空白付きドメインが通過していた。
+        assert!(EmailAddress::parse("user@ex ample.com").is_err(),
+            "ドメイン内部の空白は拒否されるべき");
+        assert!(EmailAddress::parse("user@example.com").is_ok());
     }
 
     #[test]

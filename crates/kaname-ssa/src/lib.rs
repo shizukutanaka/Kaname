@@ -226,6 +226,163 @@ impl SenderStyleProfile {
 }
 
 // ============================================================================
+// 組織ベースライン (Cold-Start 対策)
+// ============================================================================
+
+/// 組織全体の文体ベースライン。
+///
+/// **Cold-Start 問題**: 初回接触の送信者 (`sample_count < 10`) は
+/// `SenderStyleProfile::is_reliable()` が false を返し、SSA が完全に
+/// 無効化される。BEC 攻撃者は初回接触メールに集中する傾向があるため、
+/// これは検出の主要な穴になる。
+///
+/// 組織内の全既知送信者プロファイルを集約した「組織の平均的な文体」を
+/// フォールバックとして使うことで、初回接触メールでも粗い異常検知が可能になる。
+/// 個々の送信者ほど精度は高くないが、"全く何もしない" よりはるかに良い。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OrgStyleBaseline {
+    /// 集約に使った送信者プロファイル数
+    pub profile_count: u32,
+    /// 組織全体の平均フォーマリティ
+    pub avg_formality_score: f32,
+    /// 組織全体の平均文長
+    pub avg_chars_per_sentence: f32,
+    /// 組織全体の平均メール長
+    pub avg_email_length: f32,
+    /// 組織全体の平均読点密度
+    pub avg_punctuation_density: f32,
+    /// 組織全体の送信時刻分布 (業務時間帯に集中するはず)
+    pub send_hour_distribution: [f32; 24],
+}
+
+impl OrgStyleBaseline {
+    /// 信頼できる送信者プロファイル群から組織ベースラインを構築する。
+    ///
+    /// `is_reliable()` (sample_count >= 10) なプロファイルのみを対象とする。
+    /// 空リストの場合は全フィールド 0 のベースラインを返す (呼び出し側で
+    /// `profile_count == 0` をチェックして未使用にすること)。
+    #[must_use]
+    pub fn from_profiles(profiles: &[SenderStyleProfile]) -> Self {
+        let reliable: Vec<&SenderStyleProfile> = profiles.iter().filter(|p| p.is_reliable()).collect();
+        let n = reliable.len() as f32;
+        if reliable.is_empty() {
+            return Self {
+                profile_count: 0,
+                avg_formality_score: 0.5,
+                avg_chars_per_sentence: 0.0,
+                avg_email_length: 0.0,
+                avg_punctuation_density: 0.0,
+                send_hour_distribution: [0.0; 24],
+            };
+        }
+
+        let mut send_hour_distribution = [0.0f32; 24];
+        for p in &reliable {
+            for (i, v) in p.send_hour_distribution.iter().enumerate() {
+                send_hour_distribution[i] += v / n;
+            }
+        }
+
+        Self {
+            profile_count: reliable.len() as u32,
+            avg_formality_score: reliable.iter().map(|p| p.formality_score).sum::<f32>() / n,
+            avg_chars_per_sentence: reliable.iter().map(|p| p.avg_chars_per_sentence).sum::<f32>() / n,
+            avg_email_length: reliable.iter().map(|p| p.avg_email_length).sum::<f32>() / n,
+            avg_punctuation_density: reliable.iter().map(|p| p.punctuation_density).sum::<f32>() / n,
+            send_hour_distribution,
+        }
+    }
+
+    /// ベースラインが実用に足るデータを持つか (最低 3 送信者)。
+    #[must_use]
+    pub fn is_usable(&self) -> bool {
+        self.profile_count >= 3
+    }
+
+    /// 新着メールの特徴量と組織ベースラインとのスタイル距離を計算する。
+    ///
+    /// 個別送信者プロファイルより粒度は粗いが、初回接触メールでも
+    /// "組織の通常パターンから外れているか" を検出できる。
+    /// 重みは `SenderStyleProfile::style_distance` より緩め (誤検知抑制のため)。
+    #[must_use]
+    pub fn style_distance(&self, features: &EmailStyleFeatures) -> f32 {
+        if !self.is_usable() || !features.is_finite() {
+            return 0.0;
+        }
+
+        let mut weighted_dist = 0.0_f32;
+        let mut weight_sum = 0.0_f32;
+
+        // 送信時刻 (重み: 0.30) — 深夜/早朝送信は組織ベースラインでも強いシグナル
+        let hour = (features.send_hour as usize) % 24;
+        let hour_prob = self.send_hour_distribution[hour];
+        let hour_dist = 1.0 - hour_prob.clamp(0.0, 1.0);
+        weighted_dist += 0.30 * hour_dist;
+        weight_sum += 0.30;
+
+        // フォーマリティ (重み: 0.25)
+        let form_dist = (self.avg_formality_score - features.formality_score).abs().min(1.0);
+        weighted_dist += 0.25 * form_dist;
+        weight_sum += 0.25;
+
+        // 文長 (重み: 0.20)
+        let sent_dist = if self.avg_chars_per_sentence > 0.0 {
+            ((features.chars_per_sentence / self.avg_chars_per_sentence - 1.0).abs()).min(1.0)
+        } else {
+            0.0
+        };
+        weighted_dist += 0.20 * sent_dist;
+        weight_sum += 0.20;
+
+        // 読点密度 (重み: 0.25)
+        let punct_dist = (self.avg_punctuation_density - features.punctuation_density).abs().min(1.0);
+        weighted_dist += 0.25 * punct_dist;
+        weight_sum += 0.25;
+
+        if weight_sum > 0.0 { weighted_dist / weight_sum } else { 0.0 }
+    }
+
+    /// 組織ベースラインからの警告レベルを判定する。
+    ///
+    /// 個別プロファイルより粗いため、閾値は個別版よりやや高めに設定。
+    /// Cold-Start メールの誤検知率を抑えつつ、明らかな逸脱は捕捉する。
+    #[must_use]
+    pub fn warning_level(&self, distance: f32) -> StyleWarning {
+        if !self.is_usable() {
+            return StyleWarning::InsufficientData;
+        }
+        match distance {
+            d if d >= 0.80 => StyleWarning::High,
+            d if d >= 0.65 => StyleWarning::Medium,
+            d if d >= 0.45 => StyleWarning::Low,
+            _              => StyleWarning::None,
+        }
+    }
+}
+
+/// 送信者プロファイルと組織ベースラインを組み合わせて評価する。
+///
+/// - 送信者プロファイルが信頼できる (`sample_count >= 10`) 場合はそちらを優先。
+/// - 信頼できない場合 (Cold-Start) は組織ベースラインにフォールバック。
+/// - どちらも使えない場合は `StyleWarning::InsufficientData`。
+#[must_use]
+pub fn assess_with_fallback(
+    sender_profile: &SenderStyleProfile,
+    org_baseline: &OrgStyleBaseline,
+    features: &EmailStyleFeatures,
+) -> StyleWarning {
+    if sender_profile.is_reliable() {
+        let dist = sender_profile.style_distance(features);
+        sender_profile.warning_level(dist)
+    } else if org_baseline.is_usable() {
+        let dist = org_baseline.style_distance(features);
+        org_baseline.warning_level(dist)
+    } else {
+        StyleWarning::InsufficientData
+    }
+}
+
+// ============================================================================
 // メールスタイル特徴量
 // ============================================================================
 
@@ -692,6 +849,126 @@ mod tests {
         let huge = "は".repeat(200_000);
         let features = EmailStyleFeatures::extract(&huge, 10);
         assert!(features.is_finite(), "大入力でも有限の特徴量が返るべき");
+    }
+
+    // ── 組織ベースライン Cold-Start 対策テスト ──────────────────────────────
+
+    #[test]
+    fn empty_org_baseline_is_not_usable() {
+        let baseline = OrgStyleBaseline::from_profiles(&[]);
+        assert!(!baseline.is_usable());
+        assert_eq!(baseline.profile_count, 0);
+    }
+
+    #[test]
+    fn org_baseline_needs_at_least_3_reliable_profiles() {
+        let profiles = vec![make_profile(15)]; // 1件のみ
+        let baseline = OrgStyleBaseline::from_profiles(&profiles);
+        assert!(!baseline.is_usable(), "3件未満は usable ではない");
+    }
+
+    #[test]
+    fn org_baseline_usable_with_3_reliable_profiles() {
+        let profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
+        let baseline = OrgStyleBaseline::from_profiles(&profiles);
+        assert!(baseline.is_usable());
+        assert_eq!(baseline.profile_count, 3);
+    }
+
+    #[test]
+    fn org_baseline_ignores_unreliable_profiles() {
+        // 10 通未満のプロファイルは集約対象外
+        let profiles = vec![make_profile(5), make_profile(3), make_profile(15)];
+        let baseline = OrgStyleBaseline::from_profiles(&profiles);
+        assert_eq!(baseline.profile_count, 1, "信頼できるプロファイルのみ集約すべき");
+    }
+
+    #[test]
+    fn cold_start_email_uses_org_baseline_fallback() {
+        // 初回接触送信者 (sample_count=0) — SSA が従来は完全無効化されていたケース
+        let new_sender = SenderStyleProfile::new("newcomer@company.co.jp");
+        let org_profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
+        let baseline = OrgStyleBaseline::from_profiles(&org_profiles);
+
+        // 組織の通常パターンと同じ特徴量 → 低距離
+        let normal = EmailStyleFeatures {
+            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
+            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
+            signature_lines: 3, send_hour: 10,
+        };
+        let warning = assess_with_fallback(&new_sender, &baseline, &normal);
+        assert_ne!(warning, StyleWarning::InsufficientData,
+            "組織ベースラインが使える場合は InsufficientData にならない");
+    }
+
+    #[test]
+    fn cold_start_email_with_anomalous_style_flagged_via_baseline() {
+        // 初回接触 + 組織の通常パターンから大きく逸脱 (深夜送信・過丁寧・長文)
+        let new_sender = SenderStyleProfile::new("attacker@evil.co.jp");
+        let org_profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
+        let baseline = OrgStyleBaseline::from_profiles(&org_profiles);
+
+        let anomalous = EmailStyleFeatures {
+            paragraphs: 5, sentences_per_paragraph: 4.0, chars_per_sentence: 80.0,
+            punctuation_density: 8.0, formality_score: 0.99, email_length: 900,
+            signature_lines: 1, send_hour: 3, // 深夜3時
+        };
+        let warning = assess_with_fallback(&new_sender, &baseline, &anomalous);
+        assert!(
+            matches!(warning, StyleWarning::Medium | StyleWarning::High),
+            "組織パターンから大きく逸脱した Cold-Start メールは警告されるべき: {warning:?}"
+        );
+    }
+
+    #[test]
+    fn reliable_sender_profile_takes_precedence_over_org_baseline() {
+        // 送信者プロファイルが信頼できる場合は個別プロファイルを優先
+        let sender = make_profile(30);
+        let org_profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
+        let baseline = OrgStyleBaseline::from_profiles(&org_profiles);
+
+        let same_style = EmailStyleFeatures {
+            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
+            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
+            signature_lines: 3, send_hour: 10,
+        };
+        let warning = assess_with_fallback(&sender, &baseline, &same_style);
+        assert_eq!(warning, StyleWarning::None, "既知の送信者は個別プロファイルで低リスク判定されるべき");
+    }
+
+    #[test]
+    fn no_baseline_and_cold_start_returns_insufficient_data() {
+        // 組織ベースラインも未確立 (新規組織) → InsufficientData
+        let new_sender = SenderStyleProfile::new("first@newco.com");
+        let empty_baseline = OrgStyleBaseline::from_profiles(&[]);
+        let features = EmailStyleFeatures {
+            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
+            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
+            signature_lines: 3, send_hour: 10,
+        };
+        let warning = assess_with_fallback(&new_sender, &empty_baseline, &features);
+        assert_eq!(warning, StyleWarning::InsufficientData);
+    }
+
+    #[test]
+    fn org_baseline_distance_always_in_range() {
+        let profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
+        let baseline = OrgStyleBaseline::from_profiles(&profiles);
+        let features = EmailStyleFeatures {
+            paragraphs: 1, sentences_per_paragraph: 1.0, chars_per_sentence: 500.0,
+            punctuation_density: 50.0, formality_score: 0.0, email_length: 10,
+            signature_lines: 0, send_hour: 4,
+        };
+        let dist = baseline.style_distance(&features);
+        assert!((0.0..=1.0).contains(&dist), "dist={dist}");
+    }
+
+    #[test]
+    fn org_baseline_nan_features_return_zero_distance() {
+        let profiles = vec![make_profile(15), make_profile(20), make_profile(30)];
+        let baseline = OrgStyleBaseline::from_profiles(&profiles);
+        let dist = baseline.style_distance(&nan_features());
+        assert_eq!(dist, 0.0, "NaN 特徴量は組織ベースラインでは無視 (0.0) されるべき");
     }
 }
 

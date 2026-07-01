@@ -318,10 +318,28 @@ impl SaasLinkInspector {
         let mut risk = SaasLinkRisk::Safe;
 
         // 1. 既知の悪意あるドメインへのリダイレクト示唆?
-        for mal in &self.malicious_domains {
-            if url.contains(mal) {
-                risk = SaasLinkRisk::Block;
-                reasons.push(format!("既知の悪意あるドメインを含む: {mal}"));
+        //    修正前は `url.contains(mal)` の単純部分一致で判定しており、
+        //    "notevil.com" が blocklist の "evil.com" に誤って一致していた。
+        //    ホストはドメイン境界を尊重した比較に変更する一方、
+        //    `?redirect=https://evil.com/...` のようなクエリパラメータ経由の
+        //    リダイレクト埋め込みは正当な検出対象のため、そちらは別途
+        //    クエリ文字列内のホストも同様の境界チェックで検査する。
+        if let Some(actual_domain) = extract_actual_domain(url) {
+            for mal in &self.malicious_domains {
+                if domain_matches_or_is_subdomain_of(&actual_domain, mal) {
+                    risk = SaasLinkRisk::Block;
+                    reasons.push(format!("既知の悪意あるドメインを含む: {mal}"));
+                }
+            }
+        }
+        if risk != SaasLinkRisk::Block {
+            if let Some(query_domain) = extract_redirect_param_domain(url) {
+                for mal in &self.malicious_domains {
+                    if domain_matches_or_is_subdomain_of(&query_domain, mal) {
+                        risk = SaasLinkRisk::Block;
+                        reasons.push(format!("リダイレクトパラメータに既知の悪意あるドメイン: {mal}"));
+                    }
+                }
             }
         }
 
@@ -427,11 +445,45 @@ fn extract_actual_domain(url: &str) -> Option<String> {
         .trim_start_matches("https://")
         .trim_start_matches("http://");
     let domain_end = without_scheme.find(['/', '?']).unwrap_or(without_scheme.len());
-    let host_port = &without_scheme[..domain_end];
+    let authority = &without_scheme[..domain_end];
+    // userinfo を除去: "drive.google.com@evil.com" → "evil.com"
+    // 修正前は userinfo を考慮しておらず、`https://drive.google.com@evil.com/`
+    // のようなブラウザなりすまし URL で実ホストではなく userinfo 側が
+    // ドメインとして扱われ、フィッシングが素通りする可能性があった。
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
     // ポート番号を除去: "docusign.com:8443" → "docusign.com"
     // ポート付き正規ドメインを偽ドメインと誤判定する偽陽性を防ぐ
     let domain = host_port.split(':').next().unwrap_or(host_port);
     Some(domain.to_lowercase())
+}
+
+/// `domain` が `suffix` と完全一致するか、`suffix` のサブドメインであるかを判定する。
+/// 単純な `contains` と異なり `notevil.com` が `evil.com` にマッチすることを防ぐ。
+fn domain_matches_or_is_subdomain_of(domain: &str, suffix: &str) -> bool {
+    domain == suffix || domain.ends_with(&format!(".{suffix}"))
+}
+
+/// URL のクエリパラメータ (`?redirect=`, `?url=`, `?to=`, `?dest=` 等) に
+/// 埋め込まれたリダイレクト先 URL のドメインを抽出する。
+///
+/// SaaS ドメイン (google.com 等) を偽装しつつ、クエリパラメータで
+/// 実際の悪意あるサイトへ誘導する攻撃パターンを検出するために使う。
+const REDIRECT_PARAM_KEYS: &[&str] =
+    &["redirect=", "url=", "to=", "dest=", "link=", "next=", "continue=", "r="];
+
+fn extract_redirect_param_domain(url: &str) -> Option<String> {
+    let q_pos = url.find('?')?;
+    let query = &url[q_pos + 1..];
+    for pair in query.split('&') {
+        for key in REDIRECT_PARAM_KEYS {
+            if let Some(value) = pair.strip_prefix(*key) {
+                if value.starts_with("http://") || value.starts_with("https://") {
+                    return extract_actual_domain(value);
+                }
+            }
+        }
+    }
+    None
 }
 
 // ============================================================================
@@ -845,5 +897,62 @@ mod security_tests {
             );
         }
         // None の場合も安全 (リンクなしと判定)
+    }
+
+    #[test]
+    fn malicious_domain_substring_false_positive_fixed() {
+        // 修正前: url.contains("evil.com") は "notevil.com" にも一致していた。
+        // "notevil.com" 自体は SaaS プラットフォームではないため identify_platform
+        // が None を返し evaluate() 全体も None になる (安全側)。
+        let mut inspector = SaasLinkInspector::new();
+        inspector.add_malicious("evil.com");
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://drive.google.com/?redirect=https://notevil.com/x",
+            "sender@company.com",
+            &hist,
+        );
+        if let Some(link) = result {
+            assert_ne!(link.risk, SaasLinkRisk::Block,
+                "notevil.com は evil.com とドメイン境界で一致しないため Block になってはならない");
+        }
+    }
+
+    #[test]
+    fn malicious_domain_exact_match_in_redirect_param_still_blocked() {
+        let mut inspector = SaasLinkInspector::new();
+        inspector.add_malicious("evil.com");
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://drive.google.com/?redirect=https://evil.com/steal",
+            "sender@company.com",
+            &hist,
+        );
+        assert_eq!(result.map(|l| l.risk), Some(SaasLinkRisk::Block),
+            "完全一致ドメインは引き続き Block されるべき");
+    }
+
+    #[test]
+    fn malicious_subdomain_in_redirect_param_still_blocked() {
+        let mut inspector = SaasLinkInspector::new();
+        inspector.add_malicious("evil.com");
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://drive.google.com/?redirect=https://sub.evil.com/steal",
+            "sender@company.com",
+            &hist,
+        );
+        assert_eq!(result.map(|l| l.risk), Some(SaasLinkRisk::Block),
+            "evil.com のサブドメインは引き続き Block されるべき");
+    }
+
+    #[test]
+    fn extract_actual_domain_strips_userinfo() {
+        // https://drive.google.com@evil.com/ の実ホストは evil.com
+        assert_eq!(
+            extract_actual_domain("https://drive.google.com@evil.com/steal"),
+            Some("evil.com".to_string()),
+            "userinfo 部分を除去して実ホストを返すべき"
+        );
     }
 }

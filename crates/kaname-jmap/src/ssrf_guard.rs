@@ -176,6 +176,13 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_private_ip(&IpAddr::V4(v4));
             }
+            // IPv4-compatible (レガシー形式): ::127.0.0.1, ::169.254.169.254 等
+            // `to_ipv4_mapped()` は `::ffff:0:0/96` のみを認識し、
+            // 古い `::/96` 形式 (先頭 96 ビットが全ゼロ) の IPv4-compatible アドレスは
+            // 見逃していた。`to_ipv4()` は両方の形式を含むため、これで両方を検証する。
+            if let Some(v4) = v6.to_ipv4() {
+                return is_private_ip(&IpAddr::V4(v4));
+            }
             // IPv6 マルチキャスト: ff00::/8
             if segments[0] & 0xff00 == 0xff00 {
                 return true;
@@ -224,25 +231,46 @@ pub fn safe_redirect_policy() -> reqwest::redirect::Policy {
         }
 
         // IP リテラルの場合は即時検証
-        if let Some(host) = url.host_str() {
-            // 難読化 IP を拒否
-            if is_obfuscated_ip(host) {
-                return attempt.stop();
-            }
-
-            if let Ok(ip) = host.parse::<IpAddr>() {
-                if is_private_ip(&ip) {
-                    return attempt.stop();
-                }
-            }
-        } else {
+        let Some(host) = url.host_str() else {
             // ホスト名がない URL は不正
+            return attempt.stop();
+        };
+
+        // 難読化 IP を拒否
+        if is_obfuscated_ip(host) {
             return attempt.stop();
         }
 
-        // DNS 解決後の検証は非同期のため行えないが、
-        // 最終的な接続はコネクター層の SSRF ガードが担保する。
-        attempt.follow()
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            if is_private_ip(&ip) {
+                return attempt.stop();
+            }
+            return attempt.follow();
+        }
+
+        // ホスト名リダイレクト: DNS リバインディング対策として、この場での
+        // 同期 DNS 解決で全 IP を検証する。`reqwest::redirect::Policy::custom`
+        // のクロージャは同期関数のため非同期 lookup は使えないが、
+        // `std::net::ToSocketAddrs` はブロッキング解決を提供するため
+        // ここで直接検証できる (最大 3 ホップなので許容範囲の遅延)。
+        //
+        // 修正前は "コネクター層が最終検証する" とコメントされていたが、
+        // その検証は実装されておらず、ホスト名リダイレクトが SSRF ガードを
+        // 素通りしていた (DNS リバインディングでプライベート IP へ誘導可能)。
+        use std::net::ToSocketAddrs;
+        let port = url.port_or_known_default().unwrap_or(443);
+        match (host, port).to_socket_addrs() {
+            Ok(addrs) => {
+                for addr in addrs {
+                    if is_private_ip(&addr.ip()) {
+                        return attempt.stop();
+                    }
+                }
+                attempt.follow()
+            }
+            // DNS 解決失敗時は安全側に倒してリダイレクトを停止する
+            Err(_) => attempt.stop(),
+        }
     })
 }
 
@@ -258,8 +286,17 @@ fn is_obfuscated_ip(host: &str) -> bool {
         return true;
     }
     // オクテット表記で先頭が 0 (8進): "0177.0.0.1"
+    // 修正: 従来は `starts_with('0') && contains('.')` のみで判定しており、
+    // "0.mycdn.com" のような正規ホスト名 (数字始まりのサブドメイン) を
+    // 誤って IP 難読化とみなし InvalidUrl でブロックしていた (over-blocking)。
+    // 全セグメントが数字のみで構成される場合のみ IP らしいと判定する。
     if host.starts_with('0') && host.contains('.') {
-        return true;
+        let segments: Vec<&str> = host.split('.').collect();
+        if (2..=4).contains(&segments.len())
+            && segments.iter().all(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return true;
+        }
     }
     // 純粋な 10 進整数 (ドットなし、数字のみ) — IPv4 の 32bit 表現
     if host.bytes().all(|b| b.is_ascii_digit()) && !host.is_empty() {
@@ -385,6 +422,29 @@ mod tests {
     }
 
     #[test]
+    fn ipv6_compatible_legacy_loopback_blocked() {
+        // ::127.0.0.1 は IPv4-compatible (レガシー形式、`::/96` プレフィックス)。
+        // 修正前は to_ipv4_mapped() のみを使っており `::ffff:0:0/96` しか
+        // 認識しないため、この形式は素通りしていた。
+        let ip = IpAddr::V6("::127.0.0.1".parse().unwrap());
+        assert!(is_private_ip(&ip), "::127.0.0.1 (IPv4-compatible) はブロックされるべき");
+    }
+
+    #[test]
+    fn ipv6_compatible_legacy_link_local_blocked() {
+        // ::169.254.169.254 — クラウドメタデータエンドポイントの IPv4-compatible 表現
+        let ip = IpAddr::V6("::169.254.169.254".parse().unwrap());
+        assert!(is_private_ip(&ip), "::169.254.169.254 (IMDS) はブロックされるべき");
+    }
+
+    #[test]
+    fn aws_imds_ecs_ip_blocked() {
+        // 169.254.170.2 — ECS タスクメタデータエンドポイント
+        let ip: IpAddr = "169.254.170.2".parse().unwrap();
+        assert!(is_private_ip(&ip));
+    }
+
+    #[test]
     fn ipv6_unspecified_blocked() {
         // :: は未指定アドレス → ブロック
         let ip = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
@@ -440,6 +500,23 @@ mod tests {
     fn hostname_not_obfuscated() {
         assert!(!is_obfuscated_ip("example.com"));
         assert!(!is_obfuscated_ip("localhost"));
+    }
+
+    #[test]
+    fn hostname_starting_with_zero_not_obfuscated() {
+        // 修正前は "0" で始まりドットを含むだけで誤って IP 難読化とみなし
+        // InvalidUrl でブロックしていた (over-blocking バグ)。
+        // 数字始まりの正規サブドメインは許可されるべき。
+        assert!(!is_obfuscated_ip("0.mycdn.com"), "0.mycdn.com は正規ホスト名");
+        assert!(!is_obfuscated_ip("007.example.org"), "007.example.org は正規ホスト名");
+        assert!(!is_obfuscated_ip("0-tier.cdn.net"), "0-tier.cdn.net は正規ホスト名");
+    }
+
+    #[test]
+    fn all_numeric_dotted_octal_still_obfuscated() {
+        // 全セグメントが数字のみ → IP らしいので引き続きブロック
+        assert!(is_obfuscated_ip("0177.0.0.1"));
+        assert!(is_obfuscated_ip("0.0.0.1"));
     }
 
     #[test]

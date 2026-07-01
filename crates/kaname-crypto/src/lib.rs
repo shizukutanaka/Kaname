@@ -459,7 +459,7 @@ impl HybridPublicKey {
         let mut buf = Vec::with_capacity(self.classical.bytes.len() + self.pqc.bytes.len());
         buf.extend_from_slice(&self.classical.bytes);
         buf.extend_from_slice(&self.pqc.bytes);
-        let h = blake3_hash(&buf);
+        let h = sha256_hash(&buf);
         format!(
             "{:02x}{:02x} {:02x}{:02x} {:02x}{:02x} {:02x}{:02x}",
             h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]
@@ -703,7 +703,8 @@ impl Argon2Params {
     }
 }
 
-fn blake3_hash(bytes: &[u8]) -> [u8; 32] {
+/// SHA-256 ハッシュ (関数名が示す通り BLAKE3 ではなく SHA-256 を使用)。
+fn sha256_hash(bytes: &[u8]) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     Sha256::digest(bytes).into()
 }
