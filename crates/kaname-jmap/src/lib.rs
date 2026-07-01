@@ -416,11 +416,15 @@ impl JmapClient {
         ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
 
         if let Some(id) = draft_id {
-            let _ = self.call(vec![
+            if let Err(e) = self.call(vec![
                 ("Email/set".into(), serde_json::json!({
                     "accountId": self.account_id, "destroy": [id],
                 }), "del".into()),
-            ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await;
+            ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await {
+                // 送信は既に成功しているため致命的ではないが、下書きが残留する
+                // ことをログに残さないと利用者もサポートも気付けない。
+                tracing::warn!(error = %e, "送信後の下書き削除に失敗しました (下書きが残留している可能性があります)");
+            }
         }
 
         Ok(email_id)

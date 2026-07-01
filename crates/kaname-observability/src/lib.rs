@@ -107,7 +107,14 @@ impl Metrics {
             "ADVISORY"   => self.bec_advisory.fetch_add(1, Ordering::Relaxed),
             "SUSPICIOUS" => self.bec_suspicious.fetch_add(1, Ordering::Relaxed),
             "DANGEROUS"  => self.bec_dangerous.fetch_add(1, Ordering::Relaxed),
-            _ => 0,
+            // 未知の verdict は静かに捨てず警告ログを残す。
+            // 修正前は _ => 0 で黙って破棄しており、呼び出し側の verdict 文字列が
+            // タイポやリネームで不一致になってもメトリクスが欠落するだけで
+            // 誰にも気付かれない状態だった (セキュリティ関連メトリクスの欠損)。
+            _ => {
+                tracing::warn!(verdict, "未知の BEC verdict を record_bec に渡されました");
+                0
+            }
         };
     }
 
@@ -579,6 +586,19 @@ mod tests {
         m.record_bec("SAFE");
         assert_eq!(m.bec_dangerous.load(Ordering::Relaxed), 2);
         assert_eq!(m.bec_safe.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn unknown_bec_verdict_does_not_panic_or_corrupt_other_counters() {
+        // 修正前は _ => 0 で黙って破棄していた。タイポ/リネームされた
+        // verdict 文字列が来てもパニックせず、既存カウンタを汚染しないことを確認する。
+        let m = Metrics::new();
+        m.record_bec("DANGEROUS");
+        m.record_bec("UNKNOWN_VERDICT_TYPO");
+        assert_eq!(m.bec_dangerous.load(Ordering::Relaxed), 1);
+        assert_eq!(m.bec_safe.load(Ordering::Relaxed), 0);
+        assert_eq!(m.bec_advisory.load(Ordering::Relaxed), 0);
+        assert_eq!(m.bec_suspicious.load(Ordering::Relaxed), 0);
     }
 
     #[test]
