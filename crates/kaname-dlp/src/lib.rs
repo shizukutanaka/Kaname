@@ -244,6 +244,14 @@ pub struct EvalCtx<'a> {
     pub attachment_mimes: &'a [String],
     /// EDM フィンガープリントセット (ID → フィンガープリント)。
     pub edm_sets: &'a std::collections::HashMap<String, crate::edm::EdmFingerprints>,
+    /// 過去にやり取りした実績のある宛先ドメイン一覧。
+    ///
+    /// `misdirected_recipient` による宛先ミス検出に使用。空スライスの場合は
+    /// 宛先ミス検出をスキップする (履歴データが利用できない呼び出し元向け)。
+    pub known_recipient_domains: &'a [String],
+    /// 自組織のドメイン (`misdirected_recipient` の自己送信除外用)。
+    /// 空文字列の場合は宛先ミス検出をスキップする。
+    pub our_domain: &'a str,
 }
 
 impl<'a> EvalCtx<'a> {
@@ -380,10 +388,32 @@ impl DlpEngine {
         }
 
         // 全体判定 = 全発見の最大重大度 across all findings
-        let verdict = findings.iter()
+        let mut verdict = findings.iter()
             .map(|f| f.action)
             .max()
             .unwrap_or(Action::Allow);
+
+        // 機密コンテンツ検出 (findings が Warn 以上) と宛先ミス検出を組み合わせる。
+        // 「機密情報」+「個人メールアドレス宛/タイポドメイン宛」は内部脅威
+        // (情報持ち出し) や誤送信の典型的な複合シグナルであり、
+        // どちらか単独よりも深刻に扱うべきだが、従来は misdirected_recipient
+        // モジュールが register されているだけで評価パイプラインと未接続だった。
+        if direction == Direction::Outbound && verdict >= Action::Warn && !ctx.our_domain.is_empty() {
+            let suspicious = crate::misdirected_recipient::detect_misdirected_recipients(
+                ctx.to, ctx.our_domain, ctx.known_recipient_domains,
+            );
+            if !suspicious.is_empty() {
+                verdict = Action::Block;
+                for s in &suspicious {
+                    findings.push(Finding {
+                        rule_id: "misdirected-recipient".to_string(),
+                        rule_name: "宛先ミスの疑い + 機密コンテンツ".to_string(),
+                        action: Action::Block,
+                        excerpt: format!("{}: {:?}", s.address, s.reason),
+                    });
+                }
+            }
+        }
 
         DlpResult { verdict, findings }
     }
@@ -1214,6 +1244,8 @@ mod tests {
             body, subject: "", size_bytes: 100,
             to, from, attachment_mimes: &[],
             edm_sets,
+            known_recipient_domains: &[],
+            our_domain: "",
         }
     }
 
@@ -1231,6 +1263,8 @@ mod tests {
             body, subject: "", size_bytes: 100,
             to: &to, from: "me@corp.com", attachment_mimes: &[],
             edm_sets: &sets,
+        known_recipient_domains: &[],
+        our_domain: "",
         };
         let engine = DlpEngine::new(
             vec![Rule {
@@ -1422,6 +1456,76 @@ mod tests {
             "スペース区切り難読化 CONFIDENTIAL を検出すべき");
     }
 
+    // ── 機密コンテンツ + 宛先ミス の複合検出 (内部脅威/誤送信対策) ──────────
+
+    fn ctx_with_recipient_history<'a>(
+        body: &'a str, from: &'a str, to: &'a [String],
+        known_recipient_domains: &'a [String], our_domain: &'a str,
+    ) -> EvalCtx<'a> {
+        use std::sync::OnceLock;
+        static EMPTY_EDM: OnceLock<std::collections::HashMap<String, crate::edm::EdmFingerprints>> = OnceLock::new();
+        let edm_sets = EMPTY_EDM.get_or_init(std::collections::HashMap::new);
+        EvalCtx {
+            body, subject: "", size_bytes: 100,
+            to, from, attachment_mimes: &[],
+            edm_sets, known_recipient_domains, our_domain,
+        }
+    }
+
+    #[test]
+    fn confidential_content_to_typo_domain_escalates_to_block() {
+        // 「機密情報」+「タイポドメイン宛」の複合 — 内部脅威/誤送信の典型シグナル
+        let to = vec!["alice@crop.com".to_string()]; // corp.com のタイポ
+        let known = vec!["corp.com".to_string()];
+        let body = "CONFIDENTIAL: Q3 財務データを送付します";
+        let result = engine().evaluate(
+            &ctx_with_recipient_history(body, "me@us.com", &to, &known, "us.com"),
+            Direction::Outbound,
+        );
+        assert_eq!(result.verdict, Action::Block,
+            "機密コンテンツ + タイポドメイン宛は Block にエスカレートされるべき: {result:?}");
+        assert!(result.findings.iter().any(|f| f.rule_id == "misdirected-recipient"));
+    }
+
+    #[test]
+    fn confidential_content_to_known_domain_not_escalated() {
+        // 機密コンテンツだが既知の実績あるドメイン宛 — エスカレートしない
+        let to = vec!["alice@corp.com".to_string()];
+        let known = vec!["corp.com".to_string()];
+        let body = "CONFIDENTIAL: Q3 財務データを送付します";
+        let result = engine().evaluate(
+            &ctx_with_recipient_history(body, "me@us.com", &to, &known, "us.com"),
+            Direction::Outbound,
+        );
+        assert_ne!(result.verdict, Action::Block,
+            "既知の実績あるドメイン宛は宛先ミスとしてエスカレートされるべきではない: {result:?}");
+    }
+
+    #[test]
+    fn non_sensitive_content_to_typo_domain_not_escalated_by_dlp() {
+        // 機密コンテンツでなければ DLP レベルではエスカレートしない
+        // (宛先ミス自体の検出は misdirected_recipient モジュール単体の責務)
+        let to = vec!["alice@crop.com".to_string()];
+        let known = vec!["corp.com".to_string()];
+        let body = "こんにちは、来週の予定について確認させてください。";
+        let result = engine().evaluate(
+            &ctx_with_recipient_history(body, "me@us.com", &to, &known, "us.com"),
+            Direction::Outbound,
+        );
+        assert_eq!(result.verdict, Action::Allow);
+    }
+
+    #[test]
+    fn our_domain_empty_skips_misdirect_check() {
+        // our_domain が空 (呼び出し元が履歴データを持たない) 場合は
+        // 宛先ミス検出をスキップし、通常の DLP 判定のみ適用する
+        let to = vec!["alice@crop.com".to_string()];
+        let body = "CONFIDENTIAL: Q3 財務データを送付します";
+        let result = engine().evaluate(&ctx(body, "me@us.com", &to), Direction::Outbound);
+        assert_ne!(result.verdict, Action::Block,
+            "our_domain が空の場合は宛先ミス検出でエスカレートされるべきではない");
+    }
+
     // ── 全角数字による DLP 回避テスト ──────────────────────────────────────
 
     #[test]
@@ -1573,6 +1677,8 @@ mod tests {
             from:             "sender@example.com",
             attachment_mimes: &[],
             edm_sets:         &edm_sets,
+        known_recipient_domains: &[],
+        our_domain: "",
         };
         // クラッシュしないこと
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
@@ -1597,6 +1703,8 @@ mod tests {
             from:             "sender@example.com",
             attachment_mimes: &[],
             edm_sets:         &edm_sets,
+        known_recipient_domains: &[],
+        our_domain: "",
         };
         // 先頭 1MB 以内にマイナンバーがあるので検出されるはず
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
@@ -1661,6 +1769,8 @@ mod tests {
             from:    "alice@corp.com",
             attachment_mimes: &[],
             edm_sets: &edm_sets,
+        known_recipient_domains: &[],
+        our_domain: "",
         };
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
         // decoded_text で "confidential" が復元され検出されるはず

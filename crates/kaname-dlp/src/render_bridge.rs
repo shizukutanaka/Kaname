@@ -70,6 +70,9 @@ impl DlpScanner for EnvelopeScanner {
             from: &from,
             attachment_mimes: &attachment_mimes,
             edm_sets: &self.edm_sets,
+            // 受信メールの評価のため宛先ミス検出 (送信専用機能) は対象外。
+            known_recipient_domains: &[],
+            our_domain: "",
         };
 
         let result = self.engine.evaluate(&ctx, Direction::Inbound);
