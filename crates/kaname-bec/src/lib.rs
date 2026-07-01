@@ -109,6 +109,13 @@ pub struct SenderHistory {
     pub typical_topic_summary: Option<String>,
     /// Has the user previously marked this sender as verified?
     pub user_verified: bool,
+    /// ユーザーがこの送信者を過去に「悪意あり」と報告したか。
+    ///
+    /// `user_verified` の対称形。従来は「信頼済み」への正のフィードバック
+    /// ループしか存在せず、「この送信者は危険」という負のフィードバックを
+    /// 反映する経路がなかった。同一の攻撃者が別のメールで再度接触してきた
+    /// 場合に、ユーザーの過去の報告を活かせなかった検出漏れを埋める。
+    pub user_reported_malicious: bool,
 }
 
 // ============================================================================
@@ -459,6 +466,19 @@ impl BecDetector {
                         contribution: -0.20,
                         label: "検証済み差出人".to_string(),
                         rationale: "ユーザーが以前この差出人を信頼済みと記録".to_string(),
+                    });
+                }
+
+                // user_verified の対称形: ユーザーが過去にこの送信者を
+                // 「悪意あり」と報告している場合は強く警告する。
+                // 同一攻撃者からの再接触 (別メール・別スレッド) を
+                // ユーザーの過去の判断から即座に検出できるようにする。
+                if h.user_reported_malicious {
+                    signals.push(Signal {
+                        family: SignalFamily::History,
+                        contribution: 0.60,
+                        label: "報告済み悪意ある差出人".to_string(),
+                        rationale: "ユーザーが以前この差出人を悪意ありと報告済み".to_string(),
                     });
                 }
             }
@@ -1206,6 +1226,7 @@ mod tests {
                 days_since_last: Some(3),
                 typical_topic_summary: Some("coffee meetings scheduling".into()),
                 user_verified: true,
+                user_reported_malicious: false,
             }),
             our_domain: "ally-corp.com",
             known_contacts: &contacts,
@@ -1215,6 +1236,40 @@ mod tests {
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Safe);
+    }
+
+    #[test]
+    fn user_reported_malicious_sender_boosts_risk() {
+        // 過去にユーザーが「悪意あり」と報告した送信者からの再接触は
+        // 内容が一見無害でも警戒シグナルが上乗せされるべき (user_verified の対称形)。
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "looks normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Alice <alice@known-bad-actor.com>",
+            return_path: Some("alice@known-bad-actor.com"),
+            subject: "Following up",
+            body_text: "Just checking in on our previous conversation.",
+            auth: baseline_auth_all_pass(),
+            sender_history: Some(&SenderHistory {
+                prior_message_count: 3,
+                days_since_last: Some(10),
+                typical_topic_summary: None,
+                user_verified: false,
+                user_reported_malicious: true,
+            }),
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+        };
+        let a = det.assess(req).expect("BEC assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("報告済み悪意ある差出人")),
+            "user_reported_malicious のシグナルが含まれるべき: {:?}", a.signals
+        );
+        assert_ne!(a.verdict, Verdict::Safe,
+            "報告済み悪意ある差出人からのメールは Safe 判定になるべきではない");
     }
 
     #[test]
