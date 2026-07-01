@@ -87,16 +87,68 @@ pub fn preflight_untrusted(content: &Content<Untrusted>) -> PreflightResult {
         findings.push(Finding::ZeroWidthSeparator);
     }
 
-    // 判定: Bidi/BOM は Block、それ以外は kaname-screen の verdict に従う
+    // 判定: Bidi/BOM・ゼロ幅文字は Block、それ以外は kaname-screen の verdict に従う
+    //
+    // 修正前は has_bidi のみをブロック条件に含めており、コメントは
+    // "Bidi/BOM は Block" となっていたにも関わらず ZeroWidthSeparator
+    // (BOM/ZWSP/ZWNJ/ZWJ/WordJoiner) は判定条件から漏れていた。
+    // ゼロ幅文字はトークン分割による LLM プロンプトインジェクション回避の
+    // 既知手口であり、他の注入シグナルがない場合でも単独で Advisory に
+    // 降格されてしまうと Dual-LLM 境界 (I1) の防御が弱まる。
     let has_bidi = findings.iter().any(|f| matches!(f, Finding::BidiOverride));
+    let has_zero_width = findings.iter().any(|f| matches!(f, Finding::ZeroWidthSeparator));
     let has_injection = findings.iter().any(|f| matches!(
         f, Finding::KnownInjectionPattern(_) | Finding::SpecialToken(_)
     ));
     if findings.is_empty() {
         PreflightResult::Clean
-    } else if has_bidi || has_injection || matches!(result.verdict, ScreenVerdict::Blocked) {
+    } else if has_bidi || has_zero_width || has_injection || matches!(result.verdict, ScreenVerdict::Blocked) {
         PreflightResult::Block(findings)
     } else {
         PreflightResult::Advisory(findings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn untrusted(text: &str) -> Content<Untrusted> {
+        Content::<Untrusted>::from_network(text, "test-email-id")
+    }
+
+    #[test]
+    fn clean_text_returns_clean() {
+        let content = untrusted("こんにちは、明日の会議についてご連絡します。");
+        let result = preflight_untrusted(&content);
+        assert!(matches!(result, PreflightResult::Clean));
+    }
+
+    #[test]
+    fn bidi_override_is_blocked() {
+        let content = untrusted("Hello \u{202E}dlrow olleH");
+        let result = preflight_untrusted(&content);
+        assert!(matches!(result, PreflightResult::Block(_)),
+            "Bidi override はブロックされるべき");
+    }
+
+    #[test]
+    fn zero_width_separator_alone_is_blocked() {
+        // 修正前: ZeroWidthSeparator 単独では Advisory に降格されていた
+        // (コメントは "Bidi/BOM は Block" と書かれていたが実際は has_bidi しか
+        // チェックしておらず、ZeroWidthSeparator が判定から漏れていた)。
+        // 他の注入シグナルがなく、ゼロ幅文字 (BOM) のみを含むテキストで検証する。
+        let content = untrusted("Hello\u{FEFF}World this is a normal looking sentence");
+        let result = preflight_untrusted(&content);
+        assert!(matches!(result, PreflightResult::Block(_)),
+            "ゼロ幅文字単独でもブロックされるべき: {result:?}");
+    }
+
+    #[test]
+    fn zero_width_joiner_alone_is_blocked() {
+        let content = untrusted("Please\u{200D}review this document today");
+        let result = preflight_untrusted(&content);
+        assert!(matches!(result, PreflightResult::Block(_)),
+            "ZWJ 単独でもブロックされるべき: {result:?}");
     }
 }

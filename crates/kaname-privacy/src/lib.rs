@@ -144,9 +144,11 @@ impl TrackingDetector {
                     let is_pixel = matches!((width, height), (Some(1), Some(1)))
                         || matches!((width, height), (Some(0), Some(0)));
 
+                    let matches_known_tracker = self.is_known_tracker_domain(&domain);
+
                     let tracker_type = if is_pixel {
                         TrackerType::OpenTracking
-                    } else if self.known_trackers.contains(&domain) {
+                    } else if matches_known_tracker {
                         TrackerType::MarketingPlatform { name: domain.clone() }
                     } else if is_tracking_url_pattern(src) {
                         TrackerType::OpenTracking
@@ -155,7 +157,7 @@ impl TrackingDetector {
                     };
 
                     let is_tracker = is_pixel
-                        || self.known_trackers.contains(&domain)
+                        || matches_known_tracker
                         || is_tracking_url_pattern(src);
 
                     if is_tracker {
@@ -188,24 +190,51 @@ impl TrackingDetector {
     pub fn add_tracker(&mut self, domain: &str) {
         self.known_trackers.insert(domain.to_lowercase());
     }
+
+    /// ドメインが既知トラッカーと完全一致するか、そのサブドメインであるかを判定する。
+    ///
+    /// 修正前は `HashSet::contains` による完全一致のみで判定しており、
+    /// `cdn.mailchimp.com` のような正規のトラッカーサブドメインが
+    /// `mailchimp.com` の登録と一致せず検出をすり抜けていた。
+    fn is_known_tracker_domain(&self, domain: &str) -> bool {
+        self.known_trackers.iter().any(|known| {
+            domain == known || domain.ends_with(&format!(".{known}"))
+        })
+    }
 }
 
 fn extract_attr<'a>(tag: &'a str, attr: &str) -> Option<&'a str> {
     // ダブルクォート: attr="value"
-    let dq_pattern = format!("{}=\"", attr);
-    if let Some(start) = tag.find(&dq_pattern) {
-        let val_start = start + dq_pattern.len();
-        if let Some(end) = tag[val_start..].find('"') {
-            return Some(&tag[val_start..val_start + end]);
-        }
+    if let Some(val) = find_attr_value(tag, attr, '"') {
+        return Some(val);
     }
     // シングルクォート: attr='value' (単一クォート回避によるトラッカー検出バイパス対策)
-    let sq_pattern = format!("{}='", attr);
-    if let Some(start) = tag.find(&sq_pattern) {
-        let val_start = start + sq_pattern.len();
-        if let Some(end) = tag[val_start..].find('\'') {
-            return Some(&tag[val_start..val_start + end]);
+    find_attr_value(tag, attr, '\'')
+}
+
+/// 属性名の境界 (直前が空白または `<` タグ開始) を尊重して属性値を検索する。
+///
+/// 修正前は `tag.find("src=\"")` の単純部分文字列検索を使っており、
+/// `<img data-src="tracker.com/x.gif" src="real.png">` のような
+/// タグで `data-src="..."` の `src="` 部分に誤ってマッチし、
+/// トラッカー URL ではなく無関係な値を `src` として誤抽出していた。
+fn find_attr_value<'a>(tag: &'a str, attr: &str, quote: char) -> Option<&'a str> {
+    let pattern = format!("{attr}={quote}");
+    let bytes = tag.as_bytes();
+    let mut search_from = 0;
+    while let Some(rel) = tag[search_from..].find(&pattern) {
+        let start = search_from + rel;
+        // 属性名の直前が「タグの先頭」または空白文字であることを確認する
+        // (境界チェックがないと "data-src" の "src" 部分文字列にマッチする)
+        let boundary_ok = start == 0 || bytes[start - 1].is_ascii_whitespace();
+        if boundary_ok {
+            let val_start = start + pattern.len();
+            if let Some(end) = tag[val_start..].find(quote) {
+                return Some(&tag[val_start..val_start + end]);
+            }
+            return None;
         }
+        search_from = start + 1;
     }
     None
 }
@@ -673,5 +702,73 @@ mod tests {
         engine.index_email("id1", "重要な会議", "明日の議題", Some("田中"), "tanaka@corp.jp", "2026-01-01");
         let results = engine.search("会議");
         assert!(!results.is_empty(), "通常の検索は機能するべき");
+    }
+
+    // ── extract_attr 境界チェック回帰テスト ──────────────────────────────
+
+    #[test]
+    fn extract_attr_does_not_match_data_src_prefix() {
+        // 修正前: tag.find("src=\"") が "data-src=\"" の部分文字列にマッチし、
+        // data-src の値を誤って src の値として抽出していた。
+        let tag = r#"<img data-src="https://tracker.example.com/pixel.gif" src="https://legit.com/logo.png">"#;
+        let src = extract_attr(tag, "src");
+        assert_eq!(src, Some("https://legit.com/logo.png"),
+            "data-src ではなく実際の src 属性値を抽出すべき");
+    }
+
+    #[test]
+    fn extract_attr_finds_data_src_when_requested() {
+        let tag = r#"<img data-src="https://tracker.example.com/pixel.gif" alt="x">"#;
+        let data_src = extract_attr(tag, "data-src");
+        assert_eq!(data_src, Some("https://tracker.example.com/pixel.gif"));
+    }
+
+    #[test]
+    fn tracking_pixel_with_data_src_prefix_correctly_uses_real_src() {
+        // data-src (遅延読み込み用の疑似トラッカー属性) が先にあっても
+        // 実際にスキャンされる src は正しい値であるべき
+        let detector = TrackingDetector::new();
+        let html = r#"<img data-src="https://tracker.example.com/pixel.gif" src="https://our-company.co.jp/logo.png" width="200" height="100">"#;
+        let result = detector.analyze_html(html);
+        // src (200x100, 非トラッカードメイン) がスキャン対象になるため未検出のはず
+        assert_eq!(result.tracker_count, 0,
+            "data-src の影響を受けず実際の src (無害な画像) が正しく評価されるべき");
+    }
+
+    #[test]
+    fn extract_attr_single_quote_boundary_respected() {
+        let tag = "<img data-src='https://tracker.example.com/x.gif' src='https://legit.com/logo.png'>";
+        let src = extract_attr(tag, "src");
+        assert_eq!(src, Some("https://legit.com/logo.png"));
+    }
+
+    // ── トラッカードメインのサブドメイン検出回帰テスト ─────────────────────
+
+    #[test]
+    fn tracker_subdomain_is_detected() {
+        // 修正前: cdn.mailchimp.com は "mailchimp.com" と完全一致せず検出漏れだった
+        let detector = TrackingDetector::new();
+        let html = r#"<img src="https://cdn.mailchimp.com/open/abc123" width="300" height="200">"#;
+        let result = detector.analyze_html(html);
+        assert!(result.was_tracked,
+            "既知トラッカーのサブドメインは検出されるべき: {result:?}");
+    }
+
+    #[test]
+    fn unrelated_domain_with_similar_suffix_not_flagged() {
+        // "notmailchimp.com" は "mailchimp.com" のサブドメインではない
+        let detector = TrackingDetector::new();
+        let html = r#"<img src="https://notmailchimp.com/logo.png" width="300" height="200">"#;
+        let result = detector.analyze_html(html);
+        assert!(!result.was_tracked,
+            "無関係なドメインは誤検知されるべきではない: {result:?}");
+    }
+
+    #[test]
+    fn exact_tracker_domain_still_detected() {
+        let detector = TrackingDetector::new();
+        let html = r#"<img src="https://mailchimp.com/open/abc123" width="300" height="200">"#;
+        let result = detector.analyze_html(html);
+        assert!(result.was_tracked, "完全一致トラッカーは引き続き検出されるべき");
     }
 }

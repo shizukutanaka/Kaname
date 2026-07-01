@@ -606,8 +606,48 @@ fn my_number_check_digit_valid(d: &[u32]) -> bool {
 }
 
 fn detect_jp_corporate_number(text: &str) -> bool {
-    // 法人番号: 13-digit, starts with 1-9
-    re_is_match(r"\b[1-9]\d{12}\b", text)
+    // 法人番号: 13桁、先頭は1-9。
+    // 国税庁のチェックディジットアルゴリズム (mod 9) で検証し、
+    // ランダムな13桁数字列への誤検知を減らす。
+    let normalized = normalize_fullwidth_digits(text);
+    let digits: String = normalized.chars().filter(|c| c.is_ascii_digit()).collect();
+    let bytes = digits.as_bytes();
+    for start in 0..bytes.len().saturating_sub(12) {
+        let chunk = &bytes[start..start + 13];
+        if chunk[0] == b'0' {
+            continue; // 先頭は1-9
+        }
+        if chunk.iter().all(|b| b.is_ascii_digit()) {
+            let d: Vec<u32> = chunk.iter().map(|b| u32::from(b - b'0')).collect();
+            if corporate_number_check_digit_valid(&d) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 国税庁の法人番号チェックディジットアルゴリズム (mod 9) で検証する。
+///
+/// 手順 (国税庁仕様):
+///   基礎番号 (12桁, d[1..13]) の各桁に交互に重み 1, 2 を右から掛けて合計し、
+///   9 で割った余りを 9 から引いた値がチェックディジット (d[0])。
+fn corporate_number_check_digit_valid(d: &[u32]) -> bool {
+    if d.len() != 13 {
+        return false;
+    }
+    // 基礎番号は d[1..13] (12桁)。右から重み 1,2,1,2... を掛ける。
+    let sum: u32 = d[1..]
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(i, &digit)| {
+            let weight = if i % 2 == 0 { 1 } else { 2 };
+            digit * weight
+        })
+        .sum();
+    let check = 9 - (sum % 9);
+    d[0] == check
 }
 
 fn detect_credit_card(text: &str) -> bool {
@@ -651,7 +691,50 @@ fn extract_digit_runs(text: &str, len: usize) -> Vec<String> {
 
 fn detect_iban(text: &str) -> bool {
     // IBAN: 2 letter country code + 2 check digits + up to 30 alphanumeric
-    re_is_match(r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}\b", text)
+    // 正規表現だけでは "US00ABCD1234" のような非 IBAN 文字列にも一致してしまうため、
+    // ISO 7064 MOD 97-10 のチェックディジット検証を追加して誤検知を減らす。
+    let Ok(re) = Regex::new(r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}\b") else { return false };
+    let result = re.find_iter(text).any(|m| iban_checksum_valid(m.as_str()));
+    result
+}
+
+/// ISO 7064 MOD 97-10 アルゴリズムで IBAN のチェックディジットを検証する。
+///
+/// 手順:
+/// 1. 先頭 4 文字 (国コード 2 + チェックディジット 2) を末尾に移動
+/// 2. 各文字を数字に変換 (A=10, B=11, ..., Z=35)
+/// 3. 変換後の数値全体を 97 で割った余りが 1 なら有効
+fn iban_checksum_valid(candidate: &str) -> bool {
+    if candidate.len() < 15 || candidate.len() > 34 {
+        return false;
+    }
+    let bytes = candidate.as_bytes();
+    if !bytes[0].is_ascii_uppercase() || !bytes[1].is_ascii_uppercase() {
+        return false;
+    }
+    // 先頭 4 文字を末尾に移動: "GB82WEST..." → "WEST...GB82"
+    let rearranged = format!("{}{}", &candidate[4..], &candidate[..4]);
+
+    let mut remainder: u64 = 0;
+    for c in rearranged.chars() {
+        let value = if c.is_ascii_digit() {
+            u64::from(c as u32 - '0' as u32)
+        } else if c.is_ascii_uppercase() {
+            u64::from(c as u32 - 'A' as u32) + 10
+        } else {
+            return false; // IBAN に許可されない文字
+        };
+        // 2桁の値 (10-35) は "12" のように2桁として計算に組み込む
+        let digits = if value >= 10 {
+            vec![value / 10, value % 10]
+        } else {
+            vec![value]
+        };
+        for d in digits {
+            remainder = (remainder * 10 + d) % 97;
+        }
+    }
+    remainder == 1
 }
 
 fn detect_swift_bic(text: &str) -> bool {
@@ -1533,5 +1616,66 @@ mod tests {
     fn single_encoding_still_works() {
         // 既存の1重エンコードは変わらず動作する
         assert_eq!(percent_decode("user%40example.com"), "user@example.com");
+    }
+
+    // ── IBAN チェックディジット検証 ──────────────────────────────────────
+
+    #[test]
+    fn valid_iban_checksum_passes() {
+        // GB82 WEST 1234 5698 7654 32 — 広く知られる有効な IBAN サンプル
+        assert!(iban_checksum_valid("GB82WEST12345698765432"));
+    }
+
+    #[test]
+    fn invalid_iban_checksum_rejected() {
+        // 最終桁を変更してチェックディジットを崩す
+        assert!(!iban_checksum_valid("GB82WEST12345698765433"));
+    }
+
+    #[test]
+    fn random_non_iban_string_rejected_by_checksum() {
+        // 従来の正規表現のみでは一致するが、チェックディジットで弾かれるべき
+        assert!(!iban_checksum_valid("US00ABCD1234"));
+    }
+
+    #[test]
+    fn detect_iban_with_valid_checksum_in_text() {
+        let text = "お振込先 IBAN: GB82WEST12345698765432 までお願いします";
+        assert!(detect_iban(text), "有効な IBAN は検出されるべき");
+    }
+
+    #[test]
+    fn detect_iban_random_uppercase_string_not_flagged() {
+        // ランダムな大文字英数字列 (チェックディジット不一致) は検出されない
+        let text = "製品コード: US00ABCDEFGH について";
+        assert!(!detect_iban(text), "無効なチェックディジットの文字列は検出されるべきではない");
+    }
+
+    // ── 法人番号チェックディジット検証 ────────────────────────────────────
+
+    #[test]
+    fn valid_corporate_number_checksum_passes() {
+        // 基礎番号 123456789012 に対する正しいチェックディジットは 7
+        assert!(corporate_number_check_digit_valid(&[7, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2]));
+    }
+
+    #[test]
+    fn invalid_corporate_number_checksum_rejected() {
+        assert!(!corporate_number_check_digit_valid(&[1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2]));
+    }
+
+    #[test]
+    fn detect_jp_corporate_number_with_valid_checksum() {
+        let text = "法人番号: 7123456789012 です";
+        assert!(detect_jp_corporate_number(text), "有効な法人番号は検出されるべき");
+    }
+
+    #[test]
+    fn detect_jp_corporate_number_random_digits_not_flagged() {
+        // チェックディジット不一致のランダムな13桁は検出されない
+        // (1111111111112 は基礎番号 111111111111 2 のチェックディジットが 8 であるべきなので不一致)
+        let text = "注文番号: 1111111111112 です";
+        assert!(!detect_jp_corporate_number(text),
+            "チェックディジット不一致の13桁は検出されるべきではない");
     }
 }
