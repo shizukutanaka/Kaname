@@ -542,6 +542,18 @@ impl MlsMailClient {
         // let wire_bytes = ciphertext.to_bytes()?;
 
         // モック実装 — XOR 暗号 (テスト用のみ; 本番では絶対に使わない)
+        //
+        // **重大な注意**: この関数は openmls 統合が完了するまでの間、
+        // 単一バイト XOR による暗号化もどきを行っている。鍵空間は256通りしかなく、
+        // かつ鍵は公開情報である ConversationId の先頭バイトそのものであるため、
+        // 実際の秘匿性はゼロに等しい。誤って本番ビルドに混入すると気付かれずに
+        // メール本文が平文同然で送信される。呼び出しごとに tracing::error! で
+        // 極めて目立つログを出し、監視・アラートで即座に検知できるようにする。
+        tracing::error!(
+            target: "kaname_mls::INSECURE_MOCK_CRYPTO",
+            "kaname-mls はまだ openmls 統合前のモック XOR 暗号を使用しています。 \
+             本番運用では絶対に使用しないでください (I4/暗号境界違反の恐れ)。"
+        );
         let key = conversation.id.0[0];
         let wire_bytes: Vec<u8> = plaintext.iter().map(|b| b ^ key).collect();
 
@@ -688,7 +700,12 @@ impl MlsMailClient {
                     }
                 }
 
-                // モック実装 — XOR 復号
+                // モック実装 — XOR 復号 (encrypt_message と対をなす)
+                tracing::error!(
+                    target: "kaname_mls::INSECURE_MOCK_CRYPTO",
+                    "kaname-mls はまだ openmls 統合前のモック XOR 復号を使用しています。 \
+                     本番運用では絶対に使用しないでください (I4/暗号境界違反の恐れ)。"
+                );
                 let key = envelope.conversation_id.0[0];
                 let plaintext: Vec<u8> = envelope.wire_bytes.iter().map(|b| b ^ key).collect();
 

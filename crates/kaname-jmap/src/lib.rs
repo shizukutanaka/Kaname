@@ -462,6 +462,17 @@ impl JmapClient {
         let parse = |id: &str| -> ChangesResult {
             let a = &rs.iter().find(|r| r.call_id == id).map(|r| &r.args).cloned()
                 .unwrap_or(serde_json::Value::Null);
+            // 想定される JSON 形状 (newState 文字列フィールド) が欠落している場合、
+            // サーバーが不正な応答を返したか、レスポンスに call_id が見つからなかった
+            // ことを意味する。修正前は空文字列/空配列へ黙ってフォールバックしており、
+            // "変更なし" と "サーバー応答が壊れていた" が区別できず、
+            // メールボックスの同期状態が誰にも気付かれずに乖離するリスクがあった。
+            if a["newState"].as_str().is_none() {
+                tracing::warn!(
+                    call_id = id,
+                    "JMAP changes 応答に newState が見つかりません (不正な応答またはサーバーエラーの可能性)"
+                );
+            }
             ChangesResult {
                 new_state:       a["newState"].as_str().unwrap_or("").into(),
                 has_more_changes: a["hasMoreChanges"].as_bool().unwrap_or(false),
