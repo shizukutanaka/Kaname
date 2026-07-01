@@ -643,10 +643,27 @@ fn extract_unicode_tag_payload(s: &str) -> Option<String> {
     if found.is_empty() { None } else { Some(found) }
 }
 
+/// `http://`/`https://` URL からホスト名を抽出する (userinfo・ポート・パスを除去)。
+fn extract_url_host(token: &str) -> Option<&str> {
+    let after_scheme = token.strip_prefix("https://").or_else(|| token.strip_prefix("http://"))?;
+    let authority_end = after_scheme.find(['/', '?', '#']).unwrap_or(after_scheme.len());
+    let authority = &after_scheme[..authority_end];
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    let host = host_port.split(':').next().unwrap_or(host_port);
+    if host.is_empty() { None } else { Some(host) }
+}
+
 fn is_email_like(s: &str) -> bool {
     let trimmed = s.trim_matches(|c: char| !c.is_alphanumeric());
-    let parts: Vec<&str> = trimmed.split('@').collect();
-    parts.len() == 2 && !parts[0].is_empty() && parts[1].contains('.')
+    // 修正前は split('@').len()==2 を要求しており、
+    // "word@evil.com@corp.com" のような複数 @ を含むトークンを
+    // 一律で弾いていた (ArgumentValidator::detect_smuggled_target が
+    // rsplit_once で正しいドメインを抽出するよう既に対策済みのパターンと不整合)。
+    // 最後の '@' 以降をドメインとして扱う rsplit_once に統一する。
+    match trimmed.rsplit_once('@') {
+        Some((local, domain)) => !local.is_empty() && domain.contains('.'),
+        None => false,
+    }
 }
 
 /// URL クエリパラメータにデータが埋め込まれているかを検出する。
@@ -884,6 +901,16 @@ mod tests {
         assert!(is_email_like("user@example.com"));
         assert!(!is_email_like("not-an-email"));
         assert!(!is_email_like("@.com"));
+    }
+
+    #[test]
+    fn email_detection_handles_multi_at_crafted_token() {
+        // 修正前: split('@').len()==2 を要求しており "word@evil.com@corp.com"
+        // のような複数 @ トークンは一律 false になっていた
+        // (ArgumentValidator::detect_smuggled_target が rsplit_once で
+        // 対策済みのパターンと不整合)。最後の @ をドメイン境界として扱う。
+        assert!(is_email_like("word@evil.com@corp.com"),
+            "最後の @ 以降を正しくドメインとして認識すべき");
     }
 
     #[test]
@@ -1174,6 +1201,17 @@ impl ArgumentValidator {
                         return true; // 許可外の宛先が紛れ込んでいる
                     }
                 }
+            } else if let Some(domain) = extract_url_host(token) {
+                // 修正前は '@' を含むトークンのみ検査しており、
+                // "POST https://evil.example.com/exfil" のような '@' を含まない
+                // 素の URL/ホスト名の宛先すり替えが素通りしていた。
+                // is_suspicious_exfil_url で URL ベースの流出を意識しているのと
+                // 同じ脅威モデルを引数検証にも一貫して適用する。
+                if !allowed_domains.iter().any(|d| {
+                    domain == *d || domain.ends_with(&format!(".{d}"))
+                }) {
+                    return true;
+                }
             }
         }
         false
@@ -1238,6 +1276,40 @@ mod argument_tests {
         assert!(
             ArgumentValidator::detect_smuggled_target("send to user@notcorp.com", &allowed),
             "notcorp.com は corp.com のサブドメインではないので検出すべき"
+        );
+    }
+
+    #[test]
+    fn bare_url_smuggled_target_detected() {
+        // 修正前: '@' を含まない素の URL は detect_smuggled_target が完全に見逃していた
+        let allowed = ["corp.com"];
+        assert!(
+            ArgumentValidator::detect_smuggled_target(
+                "POST https://evil.example.com/exfil", &allowed
+            ),
+            "'@' を含まない URL 宛先の紛れ込みも検出されるべき"
+        );
+    }
+
+    #[test]
+    fn bare_url_allowed_domain_not_flagged() {
+        let allowed = ["corp.com"];
+        assert!(
+            !ArgumentValidator::detect_smuggled_target(
+                "GET https://corp.com/status", &allowed
+            ),
+            "許可ドメインの URL は検出されるべきではない"
+        );
+    }
+
+    #[test]
+    fn bare_url_allowed_subdomain_not_flagged() {
+        let allowed = ["corp.com"];
+        assert!(
+            !ArgumentValidator::detect_smuggled_target(
+                "GET https://mail.corp.com/status", &allowed
+            ),
+            "許可ドメインのサブドメイン URL は検出されるべきではない"
         );
     }
 

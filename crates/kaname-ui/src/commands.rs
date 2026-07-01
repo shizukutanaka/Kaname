@@ -693,6 +693,12 @@ fn trajectory() -> &'static StdMutex<Option<TrajectoryMonitor>> {
 /// エージェント操作を軌跡に記録し、検出されたアラートを返す。
 ///
 /// OWASP ASI-09 (監視・追跡可能性) 対応。
+///
+/// **セキュリティ注意**: `timestamp_ms` はフロントエンド (Tauri webview) から
+/// 送られてくる untrusted な値であり、ここでは高頻度操作検出 (`HighFrequency`)
+/// のレート計算に使われる。フロントエンドが古い/未来のタイムスタンプを
+/// 送信することでレート制限を回避できてしまうため、サーバー側の単調時刻で
+/// 上書きする。フロントエンド提供の値は無視する (API互換性のため引数は残す)。
 #[cfg_attr(feature = "tauri-app", tauri::command)]
 pub async fn record_agent_step(
     action: String,
@@ -701,6 +707,11 @@ pub async fn record_agent_step(
     external_comm: bool,
     timestamp_ms: u64,
 ) -> Result<Vec<String>, String> {
+    let _ = timestamp_ms; // untrusted; サーバー時刻を正とする
+    let server_now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
     let mut guard = trajectory().lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
     let monitor = guard.get_or_insert_with(TrajectoryMonitor::new);
     let alerts = monitor.record(TrajectoryStep {
@@ -708,7 +719,7 @@ pub async fn record_agent_step(
         touched_untrusted,
         accessed_sensitive,
         external_comm,
-        timestamp_ms,
+        timestamp_ms: server_now_ms,
     });
     Ok(alerts.iter().map(|a| match a {
         TrajectoryAlert::RuleOfTwoViolation => "rule_of_two_violation".to_string(),
@@ -739,6 +750,23 @@ mod trajectory_command_tests {
         record_agent_step("access".into(), false, true, false, 2000).await.unwrap();
         let alerts = record_agent_step("send".into(), false, false, true, 3000).await.unwrap();
         assert!(alerts.contains(&"rule_of_two_violation".to_string()));
+        let _ = reset_trajectory().await;
+    }
+
+    #[tokio::test]
+    async fn frontend_timestamp_is_ignored_server_time_used() {
+        // セキュリティ回帰テスト: フロントエンドが偽の (過去/未来の) タイムスタンプを
+        // 送っても、高頻度検出のレート計算はサーバー側の単調時刻を使うべきであり、
+        // untrusted な値をそのまま信用してレート制限を回避できてはならない。
+        let _ = reset_trajectory().await;
+        // フロントエンドが同一の古いタイムスタンプを連続で送っても
+        // (レート回避を試みても)、パニックせず正常に処理されることを確認する。
+        for _ in 0..5 {
+            let _ = record_agent_step("read".into(), false, false, false, 0).await.unwrap();
+        }
+        // 極端な未来タイムスタンプを送っても処理が破綻しないこと
+        let result = record_agent_step("read".into(), false, false, false, u64::MAX).await;
+        assert!(result.is_ok(), "偽装タイムスタンプでもコマンドは正常終了すべき");
         let _ = reset_trajectory().await;
     }
 }

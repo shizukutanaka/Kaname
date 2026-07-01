@@ -228,10 +228,15 @@ impl MemorySanitizer {
     /// エントリ集合を浄化して、信頼できるもののみを返す。
     ///
     /// 返却数を 1000 件に制限する (大量エントリによるメモリ枯渇を防ぐ)。
+    /// 上限超過時は `effective_trust` の高いエントリを優先して残す。
+    /// 修正前は入力順のまま `.take(MAX_ENTRIES)` していたため、
+    /// 候補が 1000 件を超える環境では入力順序のみで採否が決まり、
+    /// 信頼度の低い古いエントリが新しく信頼度の高いエントリを
+    /// 押し出してしまうことがあった。
     #[must_use]
     pub fn sanitize<'a>(&self, entries: &'a [MemoryEntry], now: u64) -> Vec<&'a MemoryEntry> {
         const MAX_ENTRIES: usize = 1_000;
-        entries
+        let mut filtered: Vec<(&'a MemoryEntry, f32)> = entries
             .iter()
             .filter(|e| {
                 // 不正な trust_score (NaN / Inf) を持つエントリを除外
@@ -240,8 +245,10 @@ impl MemorySanitizer {
                     && e.id.len() <= 1024
                     && self.should_retrieve(e, now)
             })
-            .take(MAX_ENTRIES)
-            .collect()
+            .map(|e| (e, self.effective_trust(e, now)))
+            .collect();
+        filtered.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        filtered.into_iter().take(MAX_ENTRIES).map(|(e, _)| e).collect()
     }
 }
 
@@ -471,6 +478,35 @@ mod tests {
             .collect();
         let clean = san.sanitize(&entries, 0);
         assert_eq!(clean.len(), 1000, "sanitize は最大 1000 件に制限されるべき");
+    }
+
+    #[test]
+    fn sanitize_keeps_highest_trust_entries_when_over_limit() {
+        // 修正前: 上限超過時は入力順で採否が決まり、信頼度の高いエントリが
+        // 低信頼度の古いエントリに押し出されることがあった。
+        // 1500件のうち先頭1000件を低信頼度、後半500件を高信頼度にして検証する。
+        let san = MemorySanitizer::new().with_threshold(0.0);
+        let mut entries: Vec<MemoryEntry> = (0..1000)
+            .map(|i| MemoryEntry {
+                id: format!("low{i}"),
+                trust_score: 0.1,
+                created_at: 0,
+                last_accessed: 0,
+                source: MemorySource::UserAction,
+            })
+            .collect();
+        entries.extend((0..500).map(|i| MemoryEntry {
+            id: format!("high{i}"),
+            trust_score: 0.9,
+            created_at: 0,
+            last_accessed: 0,
+            source: MemorySource::UserAction,
+        }));
+        let clean = san.sanitize(&entries, 0);
+        assert_eq!(clean.len(), 1000);
+        let high_trust_count = clean.iter().filter(|e| e.id.starts_with("high")).count();
+        assert_eq!(high_trust_count, 500,
+            "高信頼度エントリは全て残り、低信頼度エントリで押し出されてはならない: {high_trust_count}");
     }
 
     #[test]
