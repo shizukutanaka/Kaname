@@ -383,6 +383,63 @@ pub fn assess_with_fallback(
 }
 
 // ============================================================================
+// 自己送信メールのなりすまし検出 (アカウント乗っ取り対策)
+// ============================================================================
+
+/// 「自分自身のアカウントが乗っ取られていないか」を送信メールで検査する。
+///
+/// # 背景
+///
+/// 従来の SSA は受信メールの送信者を検証する用途のみを想定していた
+/// (他者が自分になりすましていないか)。しかし BEC の実被害では、
+/// AiTM (Adversary-in-the-Middle) によるセッションクッキー窃取等で
+/// **自分自身のアカウントが乗っ取られ**、正規の認証情報を持つ攻撃者が
+/// 取引先や経理部門へ送金指示メールを送るケースが多い。
+/// この場合 SPF/DKIM/DMARC は全て正規に通過するため、受信側の対策
+/// (kaname-bec) だけでは検出できない。
+///
+/// 対策として、送信メール (Sent) にも同じ文体プロファイル手法を適用し、
+/// 「自分の普段の文体から逸脱」かつ「金融/緊急性の高い要求を含む」の
+/// 複合条件が揃った場合に警告を強める。
+///
+/// # 引数
+///
+/// - `own_profile`: 自分自身の過去の送信メールから構築した文体プロファイル。
+/// - `features`: 今回送信しようとしているメールの特徴量。
+/// - `contains_financial_request`: 件名/本文に金融・緊急送金系のキーワードが
+///   含まれるか (呼び出し側で判定し渡す。本文そのものはこの関数に渡さない)。
+#[must_use]
+pub fn assess_self_send_anomaly(
+    own_profile: &SenderStyleProfile,
+    features: &EmailStyleFeatures,
+    contains_financial_request: bool,
+) -> StyleWarning {
+    if !own_profile.is_reliable() {
+        return StyleWarning::InsufficientData;
+    }
+    let dist = own_profile.style_distance(features);
+    let base = own_profile.warning_level(dist);
+    if contains_financial_request {
+        // 文体逸脱 + 金融要求の複合は、片方だけの場合より深刻な
+        // アカウント乗っ取りシグナルのため、警告レベルを一段階引き上げる。
+        escalate_warning(base)
+    } else {
+        base
+    }
+}
+
+/// `StyleWarning` を一段階深刻な方向へ引き上げる。
+/// `InsufficientData` は判断材料不足を意味するため対象外 (そのまま維持)。
+fn escalate_warning(w: StyleWarning) -> StyleWarning {
+    match w {
+        StyleWarning::None => StyleWarning::Low,
+        StyleWarning::Low => StyleWarning::Medium,
+        StyleWarning::Medium | StyleWarning::High => StyleWarning::High,
+        StyleWarning::InsufficientData => StyleWarning::InsufficientData,
+    }
+}
+
+// ============================================================================
 // メールスタイル特徴量
 // ============================================================================
 
@@ -948,6 +1005,75 @@ mod tests {
         };
         let warning = assess_with_fallback(&new_sender, &empty_baseline, &features);
         assert_eq!(warning, StyleWarning::InsufficientData);
+    }
+
+    // ── 自己送信メールのなりすまし検出 (アカウント乗っ取り) テスト ───────────
+
+    #[test]
+    fn self_send_matching_own_style_is_none() {
+        let own = make_profile(30);
+        let normal = EmailStyleFeatures {
+            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
+            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
+            signature_lines: 3, send_hour: 10,
+        };
+        let warning = assess_self_send_anomaly(&own, &normal, false);
+        assert_eq!(warning, StyleWarning::None,
+            "普段の文体と一致する自己送信は警告なしであるべき");
+    }
+
+    #[test]
+    fn self_send_style_deviation_without_financial_request_is_moderate() {
+        // 文体逸脱のみ (金融要求なし) — 通常の warning_level のまま
+        let own = make_profile(30);
+        let deviated = EmailStyleFeatures {
+            paragraphs: 5, sentences_per_paragraph: 4.0, chars_per_sentence: 80.0,
+            punctuation_density: 5.0, formality_score: 0.98, email_length: 800,
+            signature_lines: 1, send_hour: 23,
+        };
+        let warning = assess_self_send_anomaly(&own, &deviated, false);
+        assert!(matches!(warning, StyleWarning::Medium | StyleWarning::High),
+            "文体逸脱のみでも通常の警告は出るべき: {warning:?}");
+    }
+
+    #[test]
+    fn self_send_style_deviation_with_financial_request_is_escalated() {
+        // アカウント乗っ取りの典型パターン: 文体逸脱 + 金融/緊急要求の複合
+        // → escalate_warning により通常より一段階深刻な警告になるべき
+        let own = make_profile(30);
+        // わずかな逸脱 (通常なら Low 程度) だが金融要求と組み合わさる
+        let slight_deviation = EmailStyleFeatures {
+            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
+            punctuation_density: 2.5, formality_score: 0.55, email_length: 200,
+            signature_lines: 3, send_hour: 10,
+        };
+        let without_financial = assess_self_send_anomaly(&own, &slight_deviation, false);
+        let with_financial = assess_self_send_anomaly(&own, &slight_deviation, true);
+        assert_ne!(with_financial, without_financial,
+            "金融要求が絡む場合は文体逸脱のみのケースよりエスカレートすべき: \
+             without={without_financial:?} with={with_financial:?}");
+    }
+
+    #[test]
+    fn self_send_cold_start_returns_insufficient_data() {
+        // 自己プロファイルが未確立 (新規アカウント) の場合は判断材料不足
+        let own = SenderStyleProfile::new("me@company.com");
+        let features = EmailStyleFeatures {
+            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
+            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
+            signature_lines: 3, send_hour: 10,
+        };
+        let warning = assess_self_send_anomaly(&own, &features, true);
+        assert_eq!(warning, StyleWarning::InsufficientData);
+    }
+
+    #[test]
+    fn escalate_warning_caps_at_high() {
+        assert_eq!(escalate_warning(StyleWarning::None), StyleWarning::Low);
+        assert_eq!(escalate_warning(StyleWarning::Low), StyleWarning::Medium);
+        assert_eq!(escalate_warning(StyleWarning::Medium), StyleWarning::High);
+        assert_eq!(escalate_warning(StyleWarning::High), StyleWarning::High);
+        assert_eq!(escalate_warning(StyleWarning::InsufficientData), StyleWarning::InsufficientData);
     }
 
     #[test]
