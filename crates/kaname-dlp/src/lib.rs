@@ -45,6 +45,9 @@ pub mod edm;
 /// kaname-render パイプラインへの DLP 統合アダプター。
 pub mod render_bridge;
 
+/// 宛先ミス検出 (誤送信防止) — Misdirected Recipient Detection。
+pub mod misdirected_recipient;
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
