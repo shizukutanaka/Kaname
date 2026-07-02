@@ -195,6 +195,46 @@ impl PivotDetector {
 
         score.clamp(0.0, 1.0)
     }
+
+    /// `trust_score` に BEC 検出結果のリスクスコアを組み合わせた複合信頼スコア。
+    ///
+    /// # 背景
+    ///
+    /// `kaname-bec` はテキストベースのチャネル移行フレーズ
+    /// (「LINEグループを作って」等) を検出し、`kaname-pivot` は
+    /// URL ベースの実際のチャネルリンク (`wa.me`, `t.me` 等) を検出するが、
+    /// 依存グラフ上 `kaname-pivot` が下流にあるにも関わらず両者は
+    /// 連携しておらず、それぞれ独立に判定されていた。
+    ///
+    /// 「BEC スコアが高いメールに実際のチャットアプリ誘導リンクが
+    /// 含まれる」という複合は、片方だけの判定より遥かに強い
+    /// シグナルであるため、BEC リスクスコアが高いほど pivot の
+    /// 信頼スコアをより強く減点する。
+    ///
+    /// `kaname-pivot` は `kaname-bec` の具体的な型に依存させない設計とし
+    /// (クレート結合を避ける)、呼び出し側が `Assessment.score` (0.0-1.0)
+    /// を渡す。
+    ///
+    /// # 引数
+    ///
+    /// - `bec_risk_score`: `kaname-bec::Assessment.score` 相当の値 (0.0=安全, 1.0=確実に BEC)。
+    #[must_use]
+    pub fn trust_score_with_bec_context(
+        &self,
+        pivots: &[DetectedPivot],
+        known_history: &PivotHistory,
+        bec_risk_score: f32,
+    ) -> f32 {
+        let base = self.trust_score(pivots, known_history);
+        if pivots.is_empty() {
+            return base;
+        }
+        let bec_risk_score = bec_risk_score.clamp(0.0, 1.0);
+        // BEC リスクが高いメールにチャネル誘導が含まれる場合、追加でペナルティを課す。
+        // BEC が Safe (低スコア) なら影響を与えない。
+        let penalty = bec_risk_score * 0.4;
+        (base - penalty).clamp(0.0, 1.0)
+    }
 }
 
 // ============================================================================
@@ -711,6 +751,58 @@ mod tests {
 
         let score = detector.trust_score(&pivots, &history);
         assert!(score > 0.5, "既知の Teams リンクはスコアが高いはず: {}", score);
+    }
+
+    #[test]
+    fn bec_context_penalizes_pivot_when_bec_risk_high() {
+        // BEC リスクが高いメールにチャネル誘導があれば、通常より強く減点される
+        let detector = PivotDetector::new();
+        let history = PivotHistory::new();
+        let pivots = vec![DetectedPivot::WhatsAppLink {
+            url: "https://wa.me/819012345678".to_string(),
+        }];
+
+        let base = detector.trust_score(&pivots, &history);
+        let with_bec = detector.trust_score_with_bec_context(&pivots, &history, 0.9);
+        assert!(with_bec < base,
+            "BEC リスクが高い場合はベーススコアより低くなるべき: base={base} with_bec={with_bec}");
+    }
+
+    #[test]
+    fn bec_context_no_effect_when_bec_safe() {
+        // BEC が Safe (低スコア) ならベーススコアと同じ
+        let detector = PivotDetector::new();
+        let history = PivotHistory::new();
+        let pivots = vec![DetectedPivot::TeamsLink {
+            url: "https://teams.microsoft.com/l/meetup-join/xyz".to_string(),
+            tenant: None,
+        }];
+
+        let base = detector.trust_score(&pivots, &history);
+        let with_bec = detector.trust_score_with_bec_context(&pivots, &history, 0.0);
+        assert!((base - with_bec).abs() < f32::EPSILON,
+            "BEC が Safe ならベーススコアと変わらないべき: base={base} with_bec={with_bec}");
+    }
+
+    #[test]
+    fn bec_context_no_pivots_returns_base() {
+        // pivot がなければ BEC スコアに関わらず 1.0 (安全)
+        let detector = PivotDetector::new();
+        let history = PivotHistory::new();
+        let score = detector.trust_score_with_bec_context(&[], &history, 0.9);
+        assert!((score - 1.0).abs() < f32::EPSILON, "pivot がなければ 1.0: {score}");
+    }
+
+    #[test]
+    fn bec_context_clamps_out_of_range_bec_score() {
+        // 範囲外の bec_risk_score でもパニックせず 0.0..=1.0 に収まる
+        let detector = PivotDetector::new();
+        let history = PivotHistory::new();
+        let pivots = vec![DetectedPivot::SignalLink {
+            url: "https://signal.me/#p/+819012345678".to_string(),
+        }];
+        let score = detector.trust_score_with_bec_context(&pivots, &history, 99.0);
+        assert!((0.0..=1.0).contains(&score), "スコアは範囲内に収まるべき: {score}");
     }
 
     #[test]
