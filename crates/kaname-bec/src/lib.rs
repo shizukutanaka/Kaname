@@ -68,6 +68,17 @@ pub struct AssessmentRequest<'a> {
     /// スレッド乗っ取り検出用コンテキスト (省略可)。
     /// 返信メールの場合のみ設定する。
     pub thread_context: Option<thread_hijack::ThreadContext<'a>>,
+    /// 同一スレッド内の過去メール本文一覧 (時系列順、古い→新しい)。
+    ///
+    /// `account_diff` による口座番号差替検出 (スレッドハイジャック型 BEC 対策) に
+    /// 使用する。空スライスの場合はスレッドの最初のメールとみなし検出をスキップする。
+    pub past_thread_bodies: &'a [String],
+    /// 生の `DKIM-Signature` ヘッダー値 (省略可)。
+    ///
+    /// `dkim_check` による `l=` タグ濫用検出・リプレイ検出に使用する。
+    /// `None` の場合は DKIM 詳細チェックをスキップする
+    /// (SPF/DKIM/DMARC の合否自体は `auth` フィールドで別途評価される)。
+    pub dkim_signature_header: Option<&'a str>,
 }
 
 /// パースされた SPF/DKIM/DMARC の判定。
@@ -203,6 +214,12 @@ pub struct BecDetector {
     thresholds: Thresholds,
     // handle to Quarantined LLM — injected for testability
     llm: Box<dyn LocalLlm>,
+    /// DKIM 署名リプレイ追跡用のステート。
+    ///
+    /// `assess()` は `&self` (複数スレッドから共有される想定) のため、
+    /// `DkimReplayTracker::observe` の `&mut self` 要求を満たすには
+    /// 内部可変性が必要。`Mutex` で保護する。
+    dkim_replay_tracker: std::sync::Mutex<dkim_check::DkimReplayTracker>,
 }
 
 /// Trait for the local LLM used for semantic scoring.
@@ -224,12 +241,20 @@ pub struct LlmScore {
 impl BecDetector {
     /// Construct with default thresholds.
     pub fn new(llm: Box<dyn LocalLlm>) -> Self {
-        Self { thresholds: Thresholds::default(), llm }
+        Self {
+            thresholds: Thresholds::default(),
+            llm,
+            dkim_replay_tracker: std::sync::Mutex::new(dkim_check::DkimReplayTracker::new()),
+        }
     }
 
     /// Construct with custom thresholds.
     pub fn with_thresholds(llm: Box<dyn LocalLlm>, thresholds: Thresholds) -> Self {
-        Self { thresholds, llm }
+        Self {
+            thresholds,
+            llm,
+            dkim_replay_tracker: std::sync::Mutex::new(dkim_check::DkimReplayTracker::new()),
+        }
     }
 
     /// Assess a message. Runs all signal families and combines.
@@ -257,6 +282,12 @@ impl BecDetector {
 
         // --- 5c. スレッド乗っ取り検出
         self.check_thread_hijack(&req, &mut signals);
+
+        // --- 5d. 口座番号差替検出 (スレッドハイジャック型 BEC)
+        self.check_account_diff(&req, &mut signals);
+
+        // --- 5e. DKIM l= タグ濫用 + リプレイ検出
+        self.check_dkim(&req, &mut signals);
 
         // --- 6. LLM signal (the expensive one; done last)
         self.check_llm(&req, &mut signals)?;
@@ -696,6 +727,76 @@ impl BecDetector {
                 label,
                 rationale,
             });
+        }
+    }
+
+    /// 口座番号差替検出 (スレッドハイジャック型 BEC 対策)。
+    ///
+    /// 修正前は `account_diff` モジュールが `pub mod` 宣言されているだけで
+    /// `assess()` から一度も呼ばれておらず、モジュール doc が「本文レベルの
+    /// 差分検出が唯一の砦」と謳う口座番号差替型スレッド乗っ取り防御が
+    /// 実際の Verdict に一切寄与しなかった (未結線バグ)。
+    fn check_account_diff(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        if req.past_thread_bodies.is_empty() {
+            return; // スレッドの最初のメール — 比較対象なし
+        }
+        let past: Vec<&str> = req.past_thread_bodies.iter().map(String::as_str).collect();
+        let result = account_diff::detect_account_diff(&past, req.body_text);
+        if result.risk_score <= 0.0 {
+            return;
+        }
+        signals.push(Signal {
+            family: SignalFamily::Content,
+            // account_diff::risk_score は既に 0.0..=1.0 で口座差替・除去・変更
+            // キーワードの複合を織り込んでいる。他シグナルとの相対比較のため
+            // 0.6 倍でスケールする (is_high_risk() 相当の 0.7 のとき contribution=0.42)。
+            contribution: (result.risk_score * 0.6).min(0.6),
+            label: "口座番号の差し替わり疑い".to_string(),
+            rationale: format!(
+                "過去スレッドと本文で口座番号が変化しています (新規: {:?}, 除去: {:?})。\
+                 スレッド乗っ取りによる振込先差替の可能性があります。",
+                result.new_accounts, result.removed_accounts
+            ),
+        });
+    }
+
+    /// DKIM `l=` タグ濫用検出 + リプレイ検出。
+    ///
+    /// 修正前は `dkim_check` モジュールが `pub mod` 宣言されているだけで
+    /// `assess()` から一度も呼ばれておらず、DKIM 署名の悪用検出が
+    /// 実際の Verdict に一切寄与しなかった (未結線バグ)。
+    fn check_dkim(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        let Some(header) = req.dkim_signature_header else { return };
+        let analysis = dkim_check::analyze_dkim_header(header);
+
+        if analysis.is_risky() {
+            signals.push(Signal {
+                family: SignalFamily::Authentication,
+                contribution: 0.35,
+                label: "DKIM l= タグによる本文追記の疑い".to_string(),
+                rationale: format!(
+                    "DKIM 署名に l={} タグが存在し、本文の署名対象範囲外に \
+                     悪意ある内容が追記されている可能性があります (RFC 6376 §3.5)。",
+                    analysis.length_value.map_or_else(|| "?".to_string(), |v| v.to_string())
+                ),
+            });
+        }
+
+        // ロックが取得できない (中毒化) 場合はリプレイ検出をスキップし、
+        // 他のシグナルには影響を与えない (フェイルセーフ)。
+        if let Ok(mut tracker) = self.dkim_replay_tracker.lock() {
+            let count = tracker.observe(&analysis);
+            if count >= 2 {
+                signals.push(Signal {
+                    family: SignalFamily::Authentication,
+                    contribution: 0.30,
+                    label: "DKIM 署名のリプレイ兆候".to_string(),
+                    rationale: format!(
+                        "同一の DKIM 署名を {count} 回観測しました。\
+                         正規署名済みメールの複数回配布 (リプレイ攻撃) の可能性があります。"
+                    ),
+                });
+            }
         }
     }
 
@@ -1233,6 +1334,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Safe);
@@ -1262,6 +1365,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert!(
@@ -1270,6 +1375,160 @@ mod tests {
         );
         assert_ne!(a.verdict, Verdict::Safe,
             "報告済み悪意ある差出人からのメールは Safe 判定になるべきではない");
+    }
+
+    // ── C-01: account_diff 結線の回帰テスト ─────────────────────────────
+
+    #[test]
+    fn account_diff_signal_fires_when_wired() {
+        // 修正前: account_diff は pub mod 宣言のみで assess() から呼ばれず、
+        // 口座番号差替型スレッド乗っ取りが検出されても Verdict に無反映だった。
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "looks normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let past = vec![
+            "請求書送付いたします。口座 1111111 までお振込お願いします。".to_string(),
+        ];
+        let req = AssessmentRequest {
+            from_header: "経理部 <accounting@ally-corp.com>",
+            return_path: Some("accounting@ally-corp.com"),
+            subject: "Re: 請求書のご確認",
+            body_text: "重要: 振込先変更のお知らせ。新口座 9999999 にお振込ください。",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &past,
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("BEC assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("口座番号の差し替わり疑い")),
+            "account_diff が結線されていれば口座差替シグナルが出るべき: {:?}", a.signals
+        );
+    }
+
+    #[test]
+    fn account_diff_skipped_for_first_message_in_thread() {
+        // past_thread_bodies が空 (スレッドの最初のメール) の場合は比較対象がなく
+        // account_diff シグナルは発火しない
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "looks normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "経理部 <accounting@ally-corp.com>",
+            return_path: Some("accounting@ally-corp.com"),
+            subject: "請求書のご確認",
+            body_text: "口座 9999999 にお振込ください。",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("BEC assessment failed");
+        assert!(
+            !a.signals.iter().any(|s| s.label.contains("口座番号の差し替わり疑い")),
+            "スレッド初回メールでは account_diff シグナルは発火しないべき: {:?}", a.signals
+        );
+    }
+
+    // ── C-02: dkim_check 結線の回帰テスト ────────────────────────────────
+
+    #[test]
+    fn dkim_length_tag_signal_fires_when_wired() {
+        // 修正前: dkim_check は pub mod 宣言のみで assess() から呼ばれず、
+        // DKIM l= タグ濫用 (本文追記攻撃) が検出されても Verdict に無反映だった。
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "looks normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Alice <alice@ally-corp.com>",
+            return_path: Some("alice@ally-corp.com"),
+            subject: "Hello",
+            body_text: "Just a normal message.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: Some("v=1; a=rsa-sha256; d=ally-corp.com; s=sel; l=200; b=AAAA"),
+        };
+        let a = det.assess(req).expect("BEC assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("DKIM l= タグ")),
+            "dkim_check が結線されていれば l= タグシグナルが出るべき: {:?}", a.signals
+        );
+    }
+
+    #[test]
+    fn dkim_replay_detected_across_multiple_assess_calls() {
+        // DkimReplayTracker はステートフルなため、同一 BecDetector インスタンスへの
+        // 複数回の assess() 呼び出しをまたいでリプレイを検出できることを確認する
+        // (Mutex による内部可変性が正しく機能していることの検証)。
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "looks normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let make_req = || AssessmentRequest {
+            from_header: "Alice <alice@ally-corp.com>",
+            return_path: Some("alice@ally-corp.com"),
+            subject: "Hello",
+            body_text: "Just a normal message.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: Some("d=ally-corp.com; b=SameSignatureRepeated123"),
+        };
+
+        let a1 = det.assess(make_req()).expect("assess 1 failed");
+        assert!(
+            !a1.signals.iter().any(|s| s.label.contains("リプレイ")),
+            "初回観測ではリプレイシグナルは出ないべき: {:?}", a1.signals
+        );
+
+        let a2 = det.assess(make_req()).expect("assess 2 failed");
+        assert!(
+            a2.signals.iter().any(|s| s.label.contains("リプレイ")),
+            "2回目の同一署名観測でリプレイシグナルが出るべき: {:?}", a2.signals
+        );
+    }
+
+    #[test]
+    fn dkim_check_skipped_when_header_absent() {
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "looks normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Alice <alice@ally-corp.com>",
+            return_path: Some("alice@ally-corp.com"),
+            subject: "Hello",
+            body_text: "Just a normal message.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("BEC assessment failed");
+        assert!(
+            !a.signals.iter().any(|s| s.family == SignalFamily::Authentication
+                && (s.label.contains("DKIM l=") || s.label.contains("リプレイ"))),
+            "DKIM ヘッダー未指定時は DKIM 詳細チェックをスキップすべき: {:?}", a.signals
+        );
     }
 
     #[test]
@@ -1291,6 +1550,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("BEC assessment failed");
         assert_eq!(a.verdict, Verdict::Dangerous, "score={}, signals={:?}", a.score, a.signals);
@@ -1317,6 +1578,8 @@ mod tests {
             extracted_urls: &[aitm_url],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -1396,6 +1659,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(a.signals.iter().any(|s| s.label.contains("IDN") || s.label.contains("混在")),
@@ -1471,6 +1736,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         // パニックせず正常な結果を返すこと
         let result = det.assess(req);
@@ -1497,6 +1764,8 @@ mod tests {
             extracted_urls: &urls,
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let result = det.assess(req);
         assert!(result.is_ok(), "大量URLでpanicしてはならない: {result:?}");
@@ -1585,6 +1854,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -1615,6 +1886,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -1644,6 +1917,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
@@ -1674,6 +1949,8 @@ mod tests {
             extracted_urls: &[],
             reply_to: None,
             thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
         };
         let a = det.assess(req).expect("assessment failed");
         assert!(
