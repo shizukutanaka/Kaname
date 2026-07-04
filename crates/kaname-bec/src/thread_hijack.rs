@@ -23,7 +23,7 @@
 //! # 使用方法
 //!
 //! ```rust
-//! use kaname_bec::thread_hijack::{ThreadContext, analyze_thread_hijack};
+//! use kaname_bec::thread_hijack::{ThreadContext, ThreadLanguage, analyze_thread_hijack};
 //!
 //! let ctx = ThreadContext {
 //!     in_reply_to: Some("<abc@example.com>"),
