@@ -139,6 +139,15 @@ pub struct CampaignGroup {
     pub last_updated_unix: u64,
     /// 脅威スコア (0.0 = 低リスク, 1.0 = 高リスク)
     pub threat_score: f32,
+    /// このグループ内でユーザーが「悪意あり」と報告したメール件数。
+    ///
+    /// ユーザーの手動報告は極めて強いシグナル (人間による確定判断) のため、
+    /// 1 件でも報告があればグループ全体の脅威スコアを大きく引き上げる。
+    /// これにより「1 ユーザーが 1 通を報告 → 同一インフラを共有する
+    /// キャンペーン全体を警戒」という組織横展開が可能になる。
+    /// `#[serde(default)]` で既存の永続化データとの後方互換を保つ。
+    #[serde(default)]
+    pub user_reported_count: u32,
 }
 
 /// 1 キャンペーングループが保持するメール ID の上限。
@@ -158,6 +167,7 @@ impl CampaignGroup {
             first_detected_unix: now,
             last_updated_unix: now,
             threat_score: 0.3, // 初期は低め
+            user_reported_count: 0,
         }
     }
 
@@ -172,15 +182,31 @@ impl CampaignGroup {
             self.email_ids.push(id);
         }
         self.last_updated_unix = now_unix();
-        // メール数が増えるほど脅威スコアが上がる (最大 1.0)
-        #[allow(clippy::cast_precision_loss)]
-        { self.threat_score = (0.3 + 0.1 * self.email_ids.len() as f32).min(1.0); }
+        self.recompute_threat_score();
     }
 
-    /// グループが警告に値するか (3 通以上の場合)
+    /// 脅威スコアを再計算する。
+    ///
+    /// - メール数が増えるほど上昇 (0.3 + 0.1 × 件数、最大 1.0)
+    /// - ユーザーの手動報告が 1 件でもあれば +0.6 のブースト
+    ///   (人間による確定判断は強いシグナルのため)
+    fn recompute_threat_score(&mut self) {
+        #[allow(clippy::cast_precision_loss)]
+        let base = (0.3 + 0.1 * self.email_ids.len() as f32).min(1.0);
+        let reported_boost = if self.user_reported_count > 0 { 0.6 } else { 0.0 };
+        self.threat_score = (base + reported_boost).min(1.0);
+    }
+
+    /// グループが警告に値するか (3 通以上、またはユーザー報告があれば即座に)
     #[must_use]
     pub fn is_alertable(&self) -> bool {
-        self.email_ids.len() >= 3
+        self.email_ids.len() >= 3 || self.user_reported_count > 0
+    }
+
+    /// ユーザーがこのグループのメールを悪意ありと報告済みか。
+    #[must_use]
+    pub fn is_user_reported(&self) -> bool {
+        self.user_reported_count > 0
     }
 }
 
@@ -197,6 +223,24 @@ pub struct CampaignMatch {
     pub group: CampaignGroup,
     /// このグループが初めて警告レベルに達したか
     pub newly_alertable: bool,
+}
+
+/// ユーザー報告 ([`CampaignRadar::report_email_malicious`]) の波及効果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReportImpact {
+    /// 脅威スコアを引き上げたグループ数。
+    pub groups_escalated: usize,
+    /// 同一キャンペーン内で新たに警戒対象となった兄弟メール数
+    /// (報告メール自身を除く)。
+    pub sibling_emails_flagged: usize,
+}
+
+impl ReportImpact {
+    /// 報告が既知のキャンペーンに波及したか (どのグループにも属さなければ false)。
+    #[must_use]
+    pub fn had_effect(&self) -> bool {
+        self.groups_escalated > 0
+    }
 }
 
 // ============================================================================
@@ -366,10 +410,56 @@ impl CampaignRadar {
         self.groups.values().collect()
     }
 
-    /// 警告レベルのグループのみを返す (3 通以上)。
+    /// 警告レベルのグループのみを返す (3 通以上、またはユーザー報告あり)。
     #[must_use]
     pub fn alertable_groups(&self) -> Vec<&CampaignGroup> {
         self.groups.values().filter(|g| g.is_alertable()).collect()
+    }
+
+    /// ユーザーが特定メールを「悪意あり」と報告したことを記録し、
+    /// 同一インフラを共有するキャンペーングループ全体の脅威スコアを引き上げる。
+    ///
+    /// # 背景 (組織横展開 / C-03)
+    ///
+    /// 従来、ユーザーの「悪意あり報告」は `kaname-bec` の `SenderHistory`
+    /// (送信者アドレス単位) にしか反映されず、同一攻撃者が**別ドメイン・
+    /// 別送信者アドレス**でポリモーフィックに送ってくる同一キャンペーンの
+    /// 別メールには効かなかった。PCR は既に「共有インフラ」でメールを
+    /// クラスタリングしているため、報告されたメールが属するグループ全体を
+    /// 即座に高脅威としてマークすることで、1 ユーザーの 1 報告が
+    /// キャンペーン全体 (他の受信者・将来の受信メールを含む) の警戒に
+    /// つながる。
+    ///
+    /// # 戻り値
+    ///
+    /// 報告の波及効果 ([`ReportImpact`])。報告メールが未知 (どのグループにも
+    /// 属さない) 場合は `groups_escalated = 0`。
+    pub fn report_email_malicious(&mut self, email_id: &str) -> ReportImpact {
+        let mut groups_escalated = 0usize;
+        let mut sibling_emails_flagged = 0usize;
+        let now = now_unix();
+        for group in self.groups.values_mut() {
+            if group.email_ids.iter().any(|id| id == email_id) {
+                group.user_reported_count = group.user_reported_count.saturating_add(1);
+                group.recompute_threat_score();
+                group.last_updated_unix = now;
+                groups_escalated += 1;
+                // 報告メール自身を除いた同一キャンペーンの「兄弟」メール数
+                sibling_emails_flagged += group.email_ids.len().saturating_sub(1);
+            }
+        }
+        ReportImpact { groups_escalated, sibling_emails_flagged }
+    }
+
+    /// 指定メールがユーザー報告済みのキャンペーンに属するか判定する。
+    ///
+    /// `kaname-bec` 等の下流が、新規受信メールを評価する際に
+    /// 「このメールは既に報告されたキャンペーンの一部か」を照会するために使う。
+    #[must_use]
+    pub fn is_email_in_reported_campaign(&self, email_id: &str) -> bool {
+        self.groups.values().any(|g| {
+            g.is_user_reported() && g.email_ids.iter().any(|id| id == email_id)
+        })
     }
 
     /// グループ数を返す。
@@ -534,6 +624,65 @@ mod tests {
         let m3 = r.analyze(&email("e3", "z.com", vec!["phish-3.com"])).unwrap();
         let score_3 = m3.group.threat_score;
         assert!(score_3 > score_2, "メール数増加でスコアが上がるはず: {score_3} > {score_2}");
+    }
+
+    // ── C-03: ユーザー悪意報告のキャンペーン横展開 ───────────────────────
+
+    #[test]
+    fn user_report_escalates_entire_campaign() {
+        let mut r = radar_with_infra();
+        // 同一インフラで 3 通のポリモーフィックメール (別ドメイン・別送信者)
+        r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
+        r.analyze(&email("e2", "y.com", vec!["phish-2.com"]));
+        r.analyze(&email("e3", "z.com", vec!["phish-3.com"]));
+
+        // ユーザーが 1 通だけを「悪意あり」と報告
+        let impact = r.report_email_malicious("e2");
+        assert!(impact.had_effect(), "既知キャンペーンへの報告は波及するはず");
+        assert_eq!(impact.groups_escalated, 1);
+        // e2 を除く e1, e3 が兄弟として警戒対象に
+        assert_eq!(impact.sibling_emails_flagged, 2);
+
+        // グループ全体の脅威スコアが引き上げられている
+        let g = r.alertable_groups();
+        assert!(g.iter().any(|grp| grp.is_user_reported() && grp.threat_score >= 0.9),
+            "報告後はグループ脅威スコアが 0.9 以上に上がるはず: {:?}",
+            g.iter().map(|grp| grp.threat_score).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn user_report_makes_sibling_emails_queryable() {
+        let mut r = radar_with_infra();
+        r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
+        r.analyze(&email("e2", "y.com", vec!["phish-2.com"]));
+        r.report_email_malicious("e1");
+
+        // 報告メール自身も、同一キャンペーンの兄弟メールも「報告済みキャンペーン」として照会可能
+        assert!(r.is_email_in_reported_campaign("e1"), "報告メール自身は報告済みキャンペーン");
+        assert!(r.is_email_in_reported_campaign("e2"), "兄弟メールも報告済みキャンペーンに属する");
+        assert!(!r.is_email_in_reported_campaign("unknown"), "無関係メールは該当しない");
+    }
+
+    #[test]
+    fn user_report_of_unknown_email_has_no_effect() {
+        let mut r = radar_with_infra();
+        r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
+        let impact = r.report_email_malicious("never-seen");
+        assert!(!impact.had_effect(), "未知メールの報告は波及しないはず");
+        assert_eq!(impact.groups_escalated, 0);
+    }
+
+    #[test]
+    fn single_report_makes_group_alertable_immediately() {
+        // 通常はアラートに 3 通必要だが、ユーザー報告があれば 1 通でも即警戒
+        let mut r = radar_with_infra();
+        r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
+        r.analyze(&email("e2", "y.com", vec!["phish-2.com"])); // 2 通 (通常は未アラート)
+        assert!(r.alertable_groups().is_empty(), "報告前・2通ではアラート対象なし");
+
+        r.report_email_malicious("e1");
+        assert!(!r.alertable_groups().is_empty(),
+            "ユーザー報告後は 2 通でもアラート対象になるはず");
     }
 
     #[test]
