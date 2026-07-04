@@ -256,25 +256,42 @@ impl LlmSubprocess {
                 .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
         }
 
-        // タイムアウト付きでレスポンスを待つ
-        let result = std::thread::scope(|s| {
-            let stdout = self.stdout.clone();
-            let handle = s.spawn(move || -> Result<String, SubprocessError> {
+        // タイムアウト付きでレスポンスを待つ。
+        //
+        // 修正前は `std::thread::sleep(self.timeout)` の後に `handle.join()` を
+        // 呼んでおり、2 つの重大な欠陥があった:
+        //   1. レスポンスが即座に返っても必ずタイムアウト全時間ブロックしていた
+        //      (1ms で返る応答でも例えば 30 秒待つ = Speed 柱に反する)
+        //   2. `read_line` がハングした場合、sleep 後の join が永久ブロックし、
+        //      「タイムアウト」が実際には何も中断しなかった
+        // detached スレッド + `mpsc::recv_timeout` に置き換えることで、
+        //   - 応答が来次第すぐ返る (無駄な待機を排除)
+        //   - タイムアウト経過時は確実に Err(Timeout) を返す (真のタイムアウト)
+        // を実現する。読み取りスレッドは Arc で stdout を共有するため、
+        // タイムアウト時に放棄されてもコンパイル安全 (scoped 不要)。
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Result<String, SubprocessError>>(1);
+        let stdout = self.stdout.clone();
+        std::thread::spawn(move || {
+            let outcome = (|| -> Result<String, SubprocessError> {
                 let mut stdout = stdout.lock()
                     .map_err(|_| SubprocessError::Protocol("stdout ロック失敗".into()))?;
                 let mut line = String::new();
                 stdout.read_line(&mut line)
                     .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
                 Ok(line)
-            });
-
-            // タイムアウト処理
-            std::thread::sleep(self.timeout);
-            handle.join()
-                .map_err(|_| SubprocessError::Timeout)?
+            })();
+            // 受信側が既にタイムアウトで rx を drop している場合、send は Err に
+            // なるが無視してよい (結果は不要)。
+            let _ = tx.send(outcome);
         });
 
-        let line = result?;
+        let line = match rx.recv_timeout(self.timeout) {
+            Ok(result) => result?,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return Err(SubprocessError::Timeout),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(SubprocessError::Protocol("読み取りスレッドが異常終了".into()));
+            }
+        };
 
         // モックモード: プロセスが終了している場合はデフォルトレスポンスを返す
         if line.trim().is_empty() {
@@ -553,6 +570,81 @@ mod tests {
         let id = uuid_v4();
         assert_eq!(id.len(), 32);
         assert!(id.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    // ── B-05: infer() のタイムアウト挙動テスト ──────────────────────────
+    //
+    // 修正前は infer() を実行するテストが 1 件も存在せず、
+    // 「毎回タイムアウト全時間ブロック」「ハング時に永久ブロック」という
+    // 2 つの重大なバグが検出されていなかった。
+
+    /// stdout を開いたまま何も出力しないプロセス (`sleep`) を起動する。
+    /// read_line がハングする状況を再現し、タイムアウトが機能するか検証する。
+    fn spawn_hanging(timeout: Duration) -> Option<LlmSubprocess> {
+        let mut child = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .ok()?;
+        let stdin = child.stdin.take()?;
+        let stdout = child.stdout.take()?;
+        Some(LlmSubprocess {
+            child: Some(child),
+            stdin: Arc::new(Mutex::new(stdin)),
+            stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
+            timeout,
+            mode: SubprocessMode::Quarantined,
+        })
+    }
+
+    fn sample_req() -> LlmRequest {
+        LlmRequest {
+            request_id:    "timeout-test".into(),
+            system_prompt: "test".into(),
+            messages:      vec![],
+            max_tokens:    100,
+            temperature:   0.0,
+        }
+    }
+
+    #[test]
+    fn infer_returns_timeout_error_and_does_not_hang() {
+        // sleep プロセスは stdout に何も書かないため read_line がハングする。
+        // 修正前: sleep(timeout) 後に join() が永久ブロックしてこのテストは終わらない。
+        // 修正後: recv_timeout が発火し、タイムアウト直後に Err(Timeout) を返す。
+        let Some(proc) = spawn_hanging(Duration::from_millis(200)) else {
+            eprintln!("sleep コマンドが利用不可; テストをスキップ");
+            return;
+        };
+        let start = std::time::Instant::now();
+        let result = proc.infer(&sample_req());
+        let elapsed = start.elapsed();
+
+        assert!(matches!(result, Err(SubprocessError::Timeout)),
+            "ハングするプロセスは Err(Timeout) を返すべき: {result:?}");
+        // タイムアウト (200ms) 直後に返り、sleep の 30 秒を待たないこと
+        assert!(elapsed < Duration::from_secs(5),
+            "タイムアウトは即座に発火すべき (実測 {elapsed:?}) — 永久ブロックバグの回帰防止");
+    }
+
+    #[test]
+    fn infer_fast_response_returns_well_before_timeout() {
+        // `true` は即終了し stdout が EOF になるため read_line は空行を即返す。
+        // 修正前: 応答が即返っても sleep(timeout) 全時間ブロックしていた。
+        // 修正後: 応答受信次第すぐ返る (大きなタイムアウトを設定しても待たない)。
+        let Ok(proc) = LlmSubprocess::spawn_mock(
+            SubprocessMode::Quarantined,
+            Duration::from_secs(30), // 大きなタイムアウト
+        ) else {
+            eprintln!("mock 起動不可; テストをスキップ");
+            return;
+        };
+        let start = std::time::Instant::now();
+        let _ = proc.infer(&sample_req()); // 結果 (Ok/Err) は環境依存だが即座に返ること
+        let elapsed = start.elapsed();
+        assert!(elapsed < Duration::from_secs(5),
+            "即座に返る応答で 30 秒タイムアウトを待ってはならない (実測 {elapsed:?})");
     }
 }
 
