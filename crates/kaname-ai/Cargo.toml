@@ -11,6 +11,9 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 dirs       = { workspace = true }
+sha2       = { workspace = true }
+hmac       = { workspace = true }
+rand       = { workspace = true }
 kaname-error  = { path = "../kaname-error" }
 kaname-screen = { path = "../kaname-screen" }
 

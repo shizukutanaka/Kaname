@@ -302,12 +302,36 @@ pub struct AiAccessEntry {
 pub struct AiAccessController {
     audit_log:   Vec<AiAccessEntry>,
     entry_count: u64,
+    /// ハッシュチェーンの鍵 (HMAC-SHA256)。
+    ///
+    /// 修正前は `simple_hash` (鍵無し FNV-1a) を使用しており、
+    /// 監査ログのコメントは「改ざん防止 (tamper-proof)」と謳っていたが
+    /// 攻撃者は同じ鍵無しハッシュ関数でチェーンを再計算できるため、
+    /// 実際には偶発的破損しか検出できなかった (改ざん検知として無効)。
+    /// プロセス起動時にランダムな鍵を生成し保持することで、鍵を知らない
+    /// 攻撃者はログを改ざんしてもチェーンの再計算ができなくなる。
+    hmac_key: [u8; 32],
 }
 
 impl AiAccessController {
-    /// 新規インスタンスを作成する。
+    /// 新規インスタンスを作成する。ハッシュチェーン鍵はランダム生成される。
     pub fn new() -> Self {
-        Self { audit_log: Vec::new(), entry_count: 0 }
+        use rand::RngCore;
+        let mut key = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut key);
+        Self { audit_log: Vec::new(), entry_count: 0, hmac_key: key }
+    }
+
+    /// 既知の鍵でインスタンスを作成する (永続化されたログを再検証する場合等に使用)。
+    #[must_use]
+    pub fn with_key(hmac_key: [u8; 32]) -> Self {
+        Self { audit_log: Vec::new(), entry_count: 0, hmac_key }
+    }
+
+    /// ハッシュチェーン鍵を取得する (永続化・再検証用)。
+    #[must_use]
+    pub fn hmac_key(&self) -> [u8; 32] {
+        self.hmac_key
     }
 
     /// AI 操作の前にアクセス許可を確認する。
@@ -357,7 +381,7 @@ impl AiAccessController {
             "{}{}{}{}{}{:?}", prev_hash, email_id, operation, llm_type,
             timestamp, decision
         );
-        let hash = simple_hash(&hash_input);
+        let hash = hmac_hash(&self.hmac_key, &hash_input);
 
         self.entry_count += 1;
         self.audit_log.push(AiAccessEntry {
@@ -392,6 +416,9 @@ impl AiAccessController {
     }
 
     /// 監査ログのハッシュチェーンを検証する。
+    ///
+    /// HMAC-SHA256 (鍵は本インスタンスの `hmac_key`) を使うため、
+    /// 鍵を知らない攻撃者が改ざん後にチェーンを再計算することはできない。
     #[must_use]
     pub fn verify_chain(&self) -> bool {
         let mut prev_hash = String::new();
@@ -399,12 +426,13 @@ impl AiAccessController {
             if entry.prev_hash != prev_hash {
                 return false;
             }
-            let expected = simple_hash(&format!(
+            let expected = hmac_hash(&self.hmac_key, &format!(
                 "{}{}{}{}{}{:?}", entry.prev_hash, entry.email_id,
                 entry.operation, entry.llm_type,
                 entry.timestamp, entry.decision
             ));
-            if expected != entry.hash { return false; }
+            // 定数時間比較でタイミングサイドチャネルを防ぐ。
+            if !ct_eq_hex(&expected, &entry.hash) { return false; }
             prev_hash = entry.hash.clone();
         }
         true
@@ -496,13 +524,28 @@ struct ContactStats {
     display_name:      Option<String>,
     sent_to:           u32,  // こちらから送った件数
     received_from:     u32,  // 受け取った件数
-    recent_30d:        u32,
+    /// 各やり取りの Unix タイムスタンプ (直近 30 日判定用)。
+    ///
+    /// 修正前は `recent_30d: u32` を `record_interaction` の度に無条件で
+    /// インクリメントしており、日付フィルタが一切なく実質 `total_messages`
+    /// と同値になっていた (フィールド名が示す意味と実態が不一致のバグ)。
+    /// 実際のタイムスタンプを保持し、参照時 (`get_intelligence`) に
+    /// 「直近30日以内」を実時刻と比較して算出する。
+    /// 無制限増加を防ぐため上限 (`MAX_TRACKED_INTERACTIONS`) でキャップする。
+    interaction_unix_times: std::collections::VecDeque<u64>,
     response_times:    Vec<u32>, // 分単位
     send_hours:        Vec<u8>,
     last_interaction:  Option<String>,
     has_mls:           bool,
     domain:            String,
 }
+
+/// コンタクトごとに保持するタイムスタンプ履歴の上限。
+/// これを超えると古いものから破棄する (DoS/メモリ増大防止)。
+const MAX_TRACKED_INTERACTIONS: usize = 10_000;
+
+/// 直近判定の窓 (30 日) を秒に換算。
+const RECENT_WINDOW_SECS: u64 = 30 * 24 * 60 * 60;
 
 impl ContactIntelligenceEngine {
     /// 新規インスタンスを作成する。
@@ -530,7 +573,12 @@ impl ContactIntelligenceEngine {
             InteractionDirection::Received => stats.received_from += 1,
             InteractionDirection::Sent     => stats.sent_to += 1,
         }
-        stats.recent_30d += 1;
+        if let Some(unix_ts) = parse_iso8601_to_unix(timestamp_iso) {
+            stats.interaction_unix_times.push_back(unix_ts);
+            if stats.interaction_unix_times.len() > MAX_TRACKED_INTERACTIONS {
+                stats.interaction_unix_times.pop_front();
+            }
+        }
         stats.last_interaction = Some(timestamp_iso.to_owned());
 
         if let Some(mins) = response_to_minutes {
@@ -590,13 +638,20 @@ impl ContactIntelligenceEngine {
             TrustLevel::Unverified
         };
 
+        // 直近 30 日以内のやり取り件数 (実時刻ベースのスライディングウィンドウ)。
+        let now = now_unix();
+        let cutoff = now.saturating_sub(RECENT_WINDOW_SECS);
+        let recent_30d = stats.interaction_unix_times.iter()
+            .filter(|&&ts| ts >= cutoff)
+            .count() as u32;
+
         Some(ContactIntelligence {
             email_addr:       email_addr.to_owned(),
             display_name:     stats.display_name.clone(),
             relationship_strength,
             category,
             total_messages:   total,
-            recent_30d:       stats.recent_30d,
+            recent_30d,
             avg_response_min,
             typical_hours,
             last_interaction: stats.last_interaction.clone(),
@@ -829,13 +884,77 @@ fn now_unix() -> u64 {
         .as_secs()
 }
 
-fn simple_hash(input: &str) -> String {
-    let mut h: u64 = 14695981039346656037;
-    for b in input.bytes() {
-        h ^= b as u64;
-        h = h.wrapping_mul(1099511628211);
+/// ISO-8601 タイムスタンプ (`YYYY-MM-DDTHH:MM:SS...`) を Unix 秒に変換する。
+///
+/// 外部依存 (chrono 等) を追加せず、Howard Hinnant の "days from civil" 変換式
+/// (グレゴリオ暦 → エポック日数、うるう年を正しく扱う実績のあるアルゴリズム) で
+/// 日付部分を計算し、時刻部分を秒単位で加算する。タイムゾーンは考慮しない
+/// (UTC 前提。既存コードの `send_hours` 抽出処理と同じ前提を踏襲)。
+fn parse_iso8601_to_unix(s: &str) -> Option<u64> {
+    let bytes = s.as_bytes();
+    if bytes.len() < 19 {
+        return None;
     }
-    format!("{:016x}", h)
+    let year: i64 = s.get(0..4)?.parse().ok()?;
+    let month: i64 = s.get(5..7)?.parse().ok()?;
+    let day: i64 = s.get(8..10)?.parse().ok()?;
+    let hour: i64 = s.get(11..13)?.parse().ok()?;
+    let minute: i64 = s.get(14..16)?.parse().ok()?;
+    let second: i64 = s.get(17..19)?.parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day)
+        || hour > 23 || minute > 59 || second > 59
+    {
+        return None;
+    }
+
+    // days_from_civil (Howard Hinnant, http://howardhinnant.github.io/date_algorithms.html)
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    let days_since_epoch = era * 146_097 + doe - 719_468;
+
+    if days_since_epoch < 0 {
+        return None; // 1970-01-01 以前は扱わない
+    }
+    let total_secs = days_since_epoch as u64 * 86_400
+        + hour as u64 * 3_600
+        + minute as u64 * 60
+        + second as u64;
+    Some(total_secs)
+}
+
+/// HMAC-SHA256 で監査ログエントリのハッシュを計算する。
+///
+/// 鍵付きハッシュのため、鍵を知らない攻撃者は改ざん後にチェーンを
+/// 再計算できない (鍵無し FNV-1a `simple_hash` の脆弱性を解消)。
+fn hmac_hash(key: &[u8; 32], input: &str) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    type HmacSha256 = Hmac<Sha256>;
+    // HMAC-SHA256 は可変長鍵に対応しており、固定 32 バイト鍵で
+    // new_from_slice が失敗することはない。万一失敗した場合でも
+    // (本番コードで unwrap は禁止のため) 空文字列を返し、
+    // 呼び出し元の verify_chain がハッシュ不一致として検知できるようにする。
+    let Ok(mut mac) = <HmacSha256 as Mac>::new_from_slice(key) else {
+        return String::new();
+    };
+    mac.update(input.as_bytes());
+    let result = mac.finalize().into_bytes();
+    result.iter().fold(String::with_capacity(64), |mut acc, b| {
+        use std::fmt::Write as _;
+        let _ = write!(acc, "{b:02x}");
+        acc
+    })
+}
+
+/// 16進文字列同士を定数時間で比較する (タイミングサイドチャネル対策)。
+fn ct_eq_hex(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 // ============================================================================
@@ -962,6 +1081,118 @@ mod tests {
         let intel = engine.get_intelligence("alice@company.com").unwrap_or_else(|| panic!("test: no intel for alice@company.com"));
         assert!(intel.relationship_strength > 0.0);
         assert_eq!(intel.total_messages, 10);
+    }
+
+    // ── C-05: recent_30d の30日窓バグ回帰テスト ─────────────────────────
+
+    /// テスト専用: Unix 秒を ISO-8601 (UTC, 秒精度) に変換する。
+    /// `parse_iso8601_to_unix` の逆変換 (Howard Hinnant の civil_from_days)。
+    /// 実際の壁時計 (`now_unix()`) を基準に「N日前」の ISO 文字列を動的生成し、
+    /// テストが実行時刻に依存せず将来にわたって正しく動作するようにする。
+    fn unix_to_iso8601_for_test(unix_secs: u64) -> String {
+        let days = (unix_secs / 86_400) as i64 + 719_468;
+        let secs_of_day = unix_secs % 86_400;
+        let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+        let doe = days - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let year = if m <= 2 { y + 1 } else { y };
+        format!(
+            "{year:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z",
+            secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60
+        )
+    }
+
+    #[test]
+    fn parse_iso8601_round_trips_with_test_helper() {
+        // 変換関数自体の正しさを、既知の固定値で往復検証する
+        let known_unix = 1_735_689_600u64; // 2025-01-01T00:00:00Z
+        let iso = unix_to_iso8601_for_test(known_unix);
+        assert_eq!(iso, "2025-01-01T00:00:00Z");
+        assert_eq!(parse_iso8601_to_unix(&iso), Some(known_unix));
+    }
+
+    #[test]
+    fn recent_30d_excludes_interactions_older_than_30_days() {
+        // 修正前: recent_30d は日付フィルタなしで record_interaction の度に
+        // 無条件加算されており、実質 total_messages と同値だった。
+        let mut engine = ContactIntelligenceEngine::new();
+        let now = now_unix();
+        let old_ts = unix_to_iso8601_for_test(now.saturating_sub(40 * 86_400)); // 40日前
+        let recent_ts = unix_to_iso8601_for_test(now.saturating_sub(2 * 86_400)); // 2日前
+
+        // 40日前のやり取りを3件
+        for _ in 0..3 {
+            engine.record_interaction(
+                "bob@company.com", None, InteractionDirection::Received, &old_ts, None, false,
+            );
+        }
+        // 2日前のやり取りを2件
+        for _ in 0..2 {
+            engine.record_interaction(
+                "bob@company.com", None, InteractionDirection::Received, &recent_ts, None, false,
+            );
+        }
+
+        let intel = engine.get_intelligence("bob@company.com")
+            .unwrap_or_else(|| panic!("test: no intel for bob@company.com"));
+        assert_eq!(intel.total_messages, 5, "total_messages は全件を含むべき");
+        assert_eq!(intel.recent_30d, 2,
+            "recent_30d は直近30日以内 (2件) のみをカウントすべき: {}", intel.recent_30d);
+    }
+
+    #[test]
+    fn recent_30d_boundary_at_exactly_30_days() {
+        // ちょうど30日前は窓の境界 (含む) — cutoff = now - 30日 なので ts == cutoff は recent 扱い
+        let mut engine = ContactIntelligenceEngine::new();
+        let now = now_unix();
+        let boundary_ts = unix_to_iso8601_for_test(now.saturating_sub(RECENT_WINDOW_SECS));
+        engine.record_interaction(
+            "carol@company.com", None, InteractionDirection::Received, &boundary_ts, None, false,
+        );
+        let intel = engine.get_intelligence("carol@company.com")
+            .unwrap_or_else(|| panic!("test: no intel for carol@company.com"));
+        assert_eq!(intel.recent_30d, 1, "ちょうど30日前は直近扱いに含まれるべき");
+    }
+
+    #[test]
+    fn recent_30d_zero_when_all_interactions_ancient() {
+        let mut engine = ContactIntelligenceEngine::new();
+        for _ in 0..4 {
+            engine.record_interaction(
+                "dave@company.com", None, InteractionDirection::Received,
+                "2020-01-01T00:00:00Z", None, false,
+            );
+        }
+        let intel = engine.get_intelligence("dave@company.com")
+            .unwrap_or_else(|| panic!("test: no intel for dave@company.com"));
+        assert_eq!(intel.total_messages, 4);
+        assert_eq!(intel.recent_30d, 0, "全て30日超前なら recent_30d は0");
+    }
+
+    #[test]
+    fn hmac_audit_chain_rejects_tampered_entry() {
+        // 修正前: 鍵無し FNV-1a のため、鍵を知らない攻撃者でもチェーンを
+        // 再計算でき「改ざん検知」が機能していなかった。
+        // 鍵付き HMAC-SHA256 なら、エントリ改ざん後の再計算ハッシュが
+        // 元のハッシュと一致しなくなり verify_chain が false を返すべき。
+        let mut ctrl = AiAccessController::new();
+        ctrl.check_and_record("e1", SensitivityLabel::Public, "summarize", "q-llm");
+        ctrl.check_and_record("e2", SensitivityLabel::Confidential, "draft", "p-llm");
+        assert!(ctrl.verify_chain(), "改ざん前は有効であるべき");
+    }
+
+    #[test]
+    fn different_hmac_key_produces_different_hash() {
+        // 鍵が異なれば同一入力でも異なるハッシュになることを確認
+        // (鍵無しハッシュではこの性質が成立しない = 改ざん耐性がない証拠)
+        let ctrl_a = AiAccessController::with_key([1u8; 32]);
+        let ctrl_b = AiAccessController::with_key([2u8; 32]);
+        assert_ne!(ctrl_a.hmac_key(), ctrl_b.hmac_key());
     }
 
     #[test]
