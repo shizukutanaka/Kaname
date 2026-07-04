@@ -2065,11 +2065,14 @@ name = "kaname-ai"
 version = "0.3.21"
 dependencies = [
  "dirs",
+ "hmac",
  "kaname-error",
  "kaname-screen",
  "proptest",
+ "rand 0.8.6",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
