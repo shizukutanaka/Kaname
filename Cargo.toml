@@ -1,6 +1,6 @@
 # Cargo.toml — Kaname workspace root
 # 設計: resolver="2", 全バージョン一元管理, release 最適化済み
-# 19 クレート + src-tauri = 20 メンバー
+# 27 クレート + src-tauri = 28 メンバー (CLAUDE.md のクレート数と整合)
 
 [workspace]
 resolver = "2"
@@ -45,6 +45,9 @@ exclude = ["fuzz"]
 [workspace.package]
 version      = "0.3.21"
 edition      = "2021"
+# rust-version は「この crate が要求する最低 Rust バージョン」(MSRV)。
+# 開発・CI で実際に使うツールチェインは rust-toolchain.toml の 1.94.1 (より新しい)。
+# 両者は役割が異なるため意図的に異なる値であり、矛盾ではない。
 rust-version = "1.85"
 authors      = ["Kaname Team <security@kaname.app>"]
 license      = "AGPL-3.0-or-later"
@@ -74,7 +77,7 @@ x25519-dalek = "2.0"
 zeroize      = { version = "1.7", features = ["derive"] }
 rusqlite     = { version = "0.31", features = ["bundled"] }
 scraper      = "0.19"
-tauri        = { version = "2.1", features = ["tray-icon"] }
+tauri        = { version = "2.1", features = ["tray-icon", "macos-private-api"] }
 tauri-build  = { version = "2.0" }
 proptest     = "1.4"
 criterion    = { version = "0.5", features = ["html_reports"] }
