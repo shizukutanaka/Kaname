@@ -228,7 +228,7 @@ test("コールドスタートから操作可能まで < 800ms (Apple HIG 準拠
 
 test("AI 要約レスポンスに single_email_only=true が含まれる", async ({ page }) => {
   // フェッチを傍受
-  const responses: any[] = [];
+  const responses: Record<string, unknown>[] = [];
   await page.route("**/ai_summarize_email**", async (route) => {
     const response = await route.fetch();
     const json = await response.json();
