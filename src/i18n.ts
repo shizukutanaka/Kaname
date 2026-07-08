@@ -17,8 +17,6 @@ import enTranslations from "./locales/en.json";
 
 type Language = "ja" | "en" | "zh-CN" | "ko";
 
-type Translations = typeof jaTranslations;
-
 const TRANSLATIONS: Record<string, unknown> = {
   ja: jaTranslations,
   en: enTranslations,
@@ -53,6 +51,21 @@ export function detectLanguage(): Language {
 const [currentLanguage, setCurrentLanguage] = createSignal<Language>(detectLanguage());
 
 export { currentLanguage };
+
+/**
+ * i18n システムを初期化する。
+ *
+ * 現在は言語検出・翻訳データの読み込みがモジュールロード時に同期完了する
+ * 設計のため、呼び出し自体は no-op に近い。将来的にリモート翻訳データの
+ * 取得等で非同期処理が必要になった場合に備え、呼び出し元 (main.tsx の
+ * 起動シーケンス) が `await initI18n()` できる形にしておく。
+ */
+export async function initI18n(): Promise<void> {
+  // <html lang="..."> をブート時点の検出言語で確実に同期しておく
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = currentLanguage();
+  }
+}
 
 /** 言語を変更し、選択を永続化する */
 export function setLanguage(lang: Language) {
@@ -163,7 +176,7 @@ export function validateTranslations(): { lang: string; missing: string[] }[] {
   for (const [lang, translations] of Object.entries(TRANSLATIONS)) {
     if (lang === "ja") continue;
     const langKeys = collectKeys(translations);
-    const missing = baseKeys.filter(k => !langKeys.has(k));
+    const missing = [...baseKeys].filter(k => !langKeys.has(k));
     if (missing.length > 0) {
       result.push({ lang, missing });
     }

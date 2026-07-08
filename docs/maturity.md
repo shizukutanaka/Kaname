@@ -68,3 +68,37 @@
 
 これらの修正前は **`cargo check --workspace` が完走せず、CI・リリースビルドの
 どちらも実行不可能**な状態だった。
+
+## 2026-07 追加調査: フロントエンド (SolidJS/TS) も同様にビルド不能だった
+
+バックエンドと並行して `npm run build` (`tsc && vite build`) を検証したところ、
+**フロントエンドも本番ビルドが失敗する状態**だった。主な原因と修正:
+
+- `src/main.tsx` が実在しない `./ui/KanameAppleV5` をインポートしていた
+  (未実装のデモビュー「V5デモ」への参照)。当該ビュー・ナビ項目を削除。
+- `src/i18n.ts` に `main.tsx` が呼び出す `initI18n` が定義されておらず
+  型エラー。薄い非同期ラッパーとして追加。同ファイルの `Set.filter()` 呼び出し
+  ( `Set` に `filter` メソッドは存在しない) も配列変換して修正。
+- **`src/ui/` 配下の全 `.tsx` コンポーネントに未使用の `.jsx` 重複ファイルが
+  併存していた** (`KanameApp.jsx`, `KanameDesign.jsx` 等 8 ファイル + `main.jsx`)。
+  `index.html` の実エントリポイントは `main.tsx` のみで `.jsx` 群はどこからも
+  参照されないデッドコードと確認の上、全削除。
+- `src/ui/KanameDesign.tsx` の `view` 状態に `"paper_trail"` 用のフィルタ
+  ロジックは実装済みだったが、対応するナビゲーション項目 (`navItems`) が
+  存在せず**永久に到達不可能な機能**になっていた (HEY 風 Paper Trail 機能が
+  UI から到達できなかった)。ナビ項目・型定義・ラベルマップを追加して結線。
+- `package.json` に `jsdom`(vitest の jsdom 環境で必須)、
+  `@playwright/test`/`@axe-core/playwright` (e2e/a11y テストで使用) が
+  devDependency として宣言されておらず、`npm install` 後もテスト実行が
+  失敗する状態だった。追加。
+- ESLint 設定ファイル (`.eslintrc.json`) が存在せず `npm run lint` が
+  一度も実行できない状態だった。新規作成し、実際に検出された
+  `no-empty`(空 catch ブロック) と `@typescript-eslint/ban-ts-comment`
+  (`@ts-ignore` の使用) の 2 件を修正。特に後者は `src/ui/Onboarding.tsx` の
+  `Ready` コンポーネントが誤って `async` 関数として定義され
+  `Promise<Element>` を返していた実バグを隠していた
+  (JSX コンポーネントは同期的に要素を返す契約に違反)。`onMount` 内で
+  非同期処理を行う設計に修正。
+
+検証: `npx tsc --noEmit` (exit 0) / `npx eslint src ... --max-warnings 0` (exit 0) /
+`npm run build` 成功 / `npx vitest run` 21 テスト全パス。

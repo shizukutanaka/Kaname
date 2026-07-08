@@ -34,11 +34,11 @@ export const Compose = (props: ComposeProps) => {
     clearTimeout(dlpTimer);
     dlpTimer = setTimeout(async () => {
       if (b.length < 20) { setDlpWarn(null); return; }
-      try {
-        // 本番: DLP チェック API を呼び出す
-        // const result = await invoke<{verdict: string, rule?: string}>("dlp_check_outbound", { body: b, to: to() });
-        // if (result.verdict !== "ALLOW") setDlpWarn(result.rule || "ポリシー違反");
-      } catch {}
+      // 注: 送信前 DLP チェックはまだ invoke 経由でバックエンドに
+      // 接続されていない (docs/maturity.md 参照)。実装時に以下を有効化する:
+      //   const result = await invoke<{verdict: string, rule?: string}>(
+      //     "dlp_check_outbound", { body: b, to: to() });
+      //   if (result.verdict !== "ALLOW") setDlpWarn(result.rule || "ポリシー違反");
     }, 600);
   });
 

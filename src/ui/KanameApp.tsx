@@ -13,14 +13,14 @@
 //               ツールなし・ネットワークなし・他メールへのアクセスなし
 //               型システムが Content<Untrusted> の漏れをコンパイル時に阻止
 
-import { createSignal, createEffect, For, Show, Switch, Match, onMount, onCleanup } from "solid-js";
+import { createSignal, For, Show, Switch, Match, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 // ============================================================================
 // 型定義
 // ============================================================================
 
-interface Email {
+export interface Email {
   id:          string;
   from_name:   string | null;
   from_addr:   string;
@@ -569,7 +569,7 @@ const SnoozePanel = (props: {
 // ============================================================================
 
 /** メールを自動仕分けする */
-function triageEmail(email: Email): "important" | "other" | "paper_trail" | "feed" {
+export function triageEmail(email: Email): "important" | "other" | "paper_trail" | "feed" {
   const subject = (email.subject || "").toLowerCase();
   const from    = email.from_addr.toLowerCase();
 
@@ -606,7 +606,9 @@ function triageEmail(email: Email): "important" | "other" | "paper_trail" | "fee
 // Send Later (スケジュール送信)
 // ============================================================================
 
-const SendLaterPicker = (props: {
+// 現時点でこの UI から呼び出す箇所がないため export しておく
+// (将来のメール作成画面への統合待ち。削除するとロジックが失われるため保持)。
+export const SendLaterPicker = (props: {
   onSchedule: (date: Date) => void;
   onClose: () => void;
 }) => {
@@ -964,7 +966,7 @@ export const KanameApp = () => {
             }}>
               <div style={{ padding: "12px 16px", "border-bottom": "1px solid #1F2833" }}>
                 <div style={{ "font-size": "14px", "font-weight": "600" }}>
-                  {{ inbox: "受信トレイ", feed: "フィード", paper_trail: "Paper Trail", reply_later: "Reply Later", screener: "スクリーナー" }[activeView()] || ""}
+                  {{ inbox: "受信トレイ", feed: "フィード", paper_trail: "Paper Trail", reply_later: "Reply Later", screener: "スクリーナー", snoozed: "スヌーズ" }[activeView()] || ""}
                 </div>
               </div>
               <div style={{ flex: "1", "overflow-y": "auto" }}>

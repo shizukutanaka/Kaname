@@ -14,7 +14,7 @@
 //   6. ユーザーが安心して返信案を生成
 //   7. Cmd+Z で全アクションを取り消せる
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
 // ── 共通セットアップ ─────────────────────────────────────────────────────
 test.beforeEach(async ({ page }) => {

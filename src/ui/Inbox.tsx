@@ -136,7 +136,7 @@ const SenderAvatar = (props: { name: string | null; addr: string; bec: string | 
 // 日時フォーマット
 // ============================================================================
 
-const formatDate = (iso: string | null): string => {
+export const formatDate = (iso: string | null): string => {
   if (!iso) return "";
   const d = new Date(iso);
   const now = new Date();
