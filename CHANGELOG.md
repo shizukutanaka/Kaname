@@ -12,6 +12,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **kaname-render Quishing 構造亜種検出** (2026年研究反映, docs/research-2026-07.md)
   - `blob:`/`data:`/`javascript:` スキームの QR ペイロードを `Suspicious` に格上げ (従来は Neutral で素通り)
   - `assess_multi_qr()` / `MultiQrRisk` — 分割QR (Structured Append) 攻撃の兆候検出
+  - `detect_ascii_qr()` — ブロック文字によるASCIIアートQR (画像デコード不要のテキスト解析) の検出
 - **kaname-render CalPhishing 検出** (`CalendarRisk::AutoRegistrationAbuse`)
   - `METHOD:REQUEST`/`PUBLISH` の自動登録永続化 (元メール削除後もカレンダーに残る) と他のフィッシング兆候の併存を検出
   - 警告文で「カレンダー側のエントリ削除が必要」であることを明示

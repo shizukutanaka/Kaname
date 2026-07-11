@@ -16,6 +16,9 @@
 //! - デコードされた URL を `BadDomainDetector` で評価
 //! - 怪しい URL (typosquatting、free TLD、最近登録) を警告
 //! - UI に「QR コード発見」バナーを表示
+//! - 危険スキーム (`blob:`/`data:`/`javascript:`) の QR ペイロードを格上げ検出
+//! - 分割 QR (Structured Append) の兆候をメール内 QR 個数から検出 (`assess_multi_qr`)
+//! - 画像デコードを経由しない ASCII アート QR の兆候をテキスト解析で検出 (`detect_ascii_qr`)
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -154,6 +157,46 @@ impl QuishingDefense {
             url_reputation: reputation,
             position: None,
         }
+    }
+
+    /// 本文プレーンテキスト中に ASCII アート QR コードらしき塊がないか判定する。
+    ///
+    /// 2025-26 年に観測された亜種: QR を画像ではなくブロック文字
+    /// (`█`, `▀`, `▄` 等) や `#`/`@` の羅列で描画し、画像スキャン型の
+    /// 検出 (`scan_image`) を回避する。画像デコードは不要で、
+    /// メール本文の構造 (連続する等幅っぽい正方形ブロック) から検知できる。
+    #[must_use]
+    pub fn detect_ascii_qr(&self, body: &str) -> bool {
+        const QR_BLOCK_CHARS: &[char] = &['█', '▀', '▄', '▌', '▐', '░', '▒', '▓'];
+        const MIN_QR_LINES: usize = 8; // 実用的な QR は最低 21x21 モジュールだが、
+                                       // ASCII 縮小表現でも最低限の行数を要求する
+        const MIN_DENSITY: f64 = 0.5; // ブロック文字が行の半分以上を占める
+
+        let mut consecutive_block_lines = 0usize;
+
+        for line in body.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                consecutive_block_lines = 0;
+                continue;
+            }
+            let total = trimmed.chars().count();
+            if total == 0 {
+                continue;
+            }
+            let block_count = trimmed.chars().filter(|c| QR_BLOCK_CHARS.contains(c)).count();
+            let density = block_count as f64 / total as f64;
+
+            if density >= MIN_DENSITY && total >= 8 {
+                consecutive_block_lines += 1;
+                if consecutive_block_lines >= MIN_QR_LINES {
+                    return true;
+                }
+            } else {
+                consecutive_block_lines = 0;
+            }
+        }
+        false
     }
 
     /// 同一メール内の複数 QR コードを構造的リスクとして評価する。
@@ -636,6 +679,44 @@ mod tests {
         let d = QuishingDefense::new();
         let r = d.evaluate_decoded("q5", "WIFI:T:WPA;S:MyNet;P:pass123;;");
         assert_eq!(r.url_reputation, UrlReputation::Neutral);
+    }
+
+    // ── ASCII アート QR 検出 ─────────────────────────────────────────────────
+
+    #[test]
+    fn detects_ascii_qr_block() {
+        let d = QuishingDefense::new();
+        let line = "█▀▄▀█▄▀█▀▄▀█▄▀█▀▄▀█▄▀█";
+        let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
+        assert!(d.detect_ascii_qr(&body), "ブロック文字の羅列が ASCII QR として検出されなかった");
+    }
+
+    #[test]
+    fn normal_text_is_not_ascii_qr() {
+        let d = QuishingDefense::new();
+        let body = "こんにちは、\n来週の会議についてですが、\n資料を添付します。\nよろしくお願いします。";
+        assert!(!d.detect_ascii_qr(body), "通常の文章を ASCII QR と誤検出した");
+    }
+
+    #[test]
+    fn short_block_run_not_flagged() {
+        let d = QuishingDefense::new();
+        // MIN_QR_LINES (8) 未満の連続では検出しない
+        let line = "████████████████";
+        let body: String = std::iter::repeat(line).take(3).collect::<Vec<_>>().join("\n");
+        assert!(!d.detect_ascii_qr(&body), "短すぎるブロック行の連続を誤検出した");
+    }
+
+    #[test]
+    fn blank_line_resets_consecutive_count() {
+        let d = QuishingDefense::new();
+        let block_line = "█▀▄▀█▄▀█▀▄▀█▄▀█▀▄▀█▄▀█";
+        // 5行 + 空行 + 5行 (空行で連続カウントがリセットされ 8 行連続に届かない)
+        let mut lines: Vec<&str> = std::iter::repeat(block_line).take(5).collect();
+        lines.push("");
+        lines.extend(std::iter::repeat(block_line).take(5));
+        let body = lines.join("\n");
+        assert!(!d.detect_ascii_qr(&body), "空行を挟んだ分断ブロックを誤検出した");
     }
 
     // ── 分割 QR (Structured Append) 検出 ────────────────────────────────────
