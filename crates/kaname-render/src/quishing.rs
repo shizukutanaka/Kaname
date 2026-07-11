@@ -52,6 +52,20 @@ pub enum UrlReputation {
     Malicious,
 }
 
+/// 同一メール内の複数 QR コードの構造的リスク評価。
+///
+/// 分割 QR (Structured Append) 攻撃対策。個々の QR ペイロードとは独立に、
+/// 「1 通のメールに QR が何個あるか」だけで判定する。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum MultiQrRisk {
+    /// QR は 0-1 個 (通常)
+    Normal,
+    /// QR が 2 個 (正規メールでも稀にあるが注意)
+    Elevated,
+    /// QR が 3 個以上 (分割 QR 攻撃の疑い)
+    SplitQrSuspected,
+}
+
 /// 画像内の検出位置。
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct BoundingBox {
@@ -124,6 +138,11 @@ impl QuishingDefense {
         let is_url = decoded.starts_with("http://") || decoded.starts_with("https://");
         let reputation = if is_url {
             self.evaluate_url(decoded)
+        } else if has_dangerous_scheme(decoded) {
+            // blob:/data:/javascript: は http(s) ではないが、QR 経由で開かせると
+            // ブラウザ内でペイロードが実行され得る (2025-26 年の quishing 亜種)。
+            // Neutral で素通りさせず Suspicious に格上げする。
+            UrlReputation::Suspicious
         } else {
             UrlReputation::Neutral
         };
@@ -134,6 +153,21 @@ impl QuishingDefense {
             is_url,
             url_reputation: reputation,
             position: None,
+        }
+    }
+
+    /// 同一メール内の複数 QR コードを構造的リスクとして評価する。
+    ///
+    /// 2025-26 年に観測された「分割 QR (Structured Append)」攻撃では、
+    /// 悪意ある URL を複数の QR に分割し、単一画像スキャンを回避する。
+    /// 個々の QR の中身が Neutral でも、1 通に複数の QR がある事実そのものが
+    /// 攻撃の兆候になる。
+    #[must_use]
+    pub fn assess_multi_qr(&self, qr_count: usize) -> MultiQrRisk {
+        match qr_count {
+            0 | 1 => MultiQrRisk::Normal,
+            2 => MultiQrRisk::Elevated,
+            _ => MultiQrRisk::SplitQrSuspected,
         }
     }
 
@@ -264,6 +298,18 @@ fn extract_domain(url: &str) -> Option<String> {
         return None;
     }
     Some(host.to_lowercase())
+}
+
+/// QR ペイロードが http(s) 以外の危険スキームで始まるか判定する。
+///
+/// `blob:` はローカル Blob URI 経由でフィッシングページを表示する亜種
+/// (メールフィルタは URL を外部照会できない)、`data:` はページ全体を
+/// ペイロードに内包する亜種、`javascript:` はスキャナアプリ内 WebView での
+/// スクリプト実行を狙う。大文字小文字のバリエーションも吸収する。
+fn has_dangerous_scheme(payload: &str) -> bool {
+    const DANGEROUS: [&str; 3] = ["blob:", "data:", "javascript:"];
+    let lower = payload.trim_start().to_lowercase();
+    DANGEROUS.iter().any(|s| lower.starts_with(s))
 }
 
 fn has_digit_substitution(domain: &str) -> bool {
@@ -536,6 +582,82 @@ mod tests {
         let r = d.evaluate_decoded("qr-3", "https://one.two.apple.com.badactor.cn/download");
         assert_eq!(r.url_reputation, UrlReputation::Suspicious,
             "QR 内の深い階層インフィックス偽装が検出されなかった");
+    }
+
+    // ── 危険スキーム検出 (blob:/data:/javascript:) ──────────────────────────
+
+    #[test]
+    fn blob_uri_qr_is_suspicious() {
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("qr-blob", "blob:https://evil.example/uuid-1234");
+        assert!(!r.is_url, "blob: は http(s) URL として扱わない");
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
+            "blob: URI が Neutral で素通りしている");
+    }
+
+    #[test]
+    fn data_uri_qr_is_suspicious() {
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("qr-data", "data:text/html;base64,PHNjcmlwdD4=");
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
+            "data: URI が Neutral で素通りしている");
+    }
+
+    #[test]
+    fn javascript_uri_qr_is_suspicious() {
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("qr-js", "javascript:fetch('https://evil.example')");
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn dangerous_scheme_case_variation_detected() {
+        let d = QuishingDefense::new();
+        // 大文字小文字のバリエーションでの回避を防ぐ
+        assert_eq!(d.evaluate_decoded("q1", "BLOB:https://x.example/z").url_reputation,
+            UrlReputation::Suspicious);
+        assert_eq!(d.evaluate_decoded("q2", "Data:text/html,hello").url_reputation,
+            UrlReputation::Suspicious);
+        assert_eq!(d.evaluate_decoded("q3", "JavaScript:void(0)").url_reputation,
+            UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn dangerous_scheme_leading_whitespace_detected() {
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("q4", "  data:text/html,x");
+        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
+            "先頭空白で危険スキーム検出を回避できてしまう");
+    }
+
+    #[test]
+    fn wifi_payload_stays_neutral() {
+        // 正規の非 URL ペイロード (WiFi 設定等) は引き続き Neutral
+        let d = QuishingDefense::new();
+        let r = d.evaluate_decoded("q5", "WIFI:T:WPA;S:MyNet;P:pass123;;");
+        assert_eq!(r.url_reputation, UrlReputation::Neutral);
+    }
+
+    // ── 分割 QR (Structured Append) 検出 ────────────────────────────────────
+
+    #[test]
+    fn single_qr_is_normal() {
+        let d = QuishingDefense::new();
+        assert_eq!(d.assess_multi_qr(0), MultiQrRisk::Normal);
+        assert_eq!(d.assess_multi_qr(1), MultiQrRisk::Normal);
+    }
+
+    #[test]
+    fn two_qr_is_elevated() {
+        let d = QuishingDefense::new();
+        assert_eq!(d.assess_multi_qr(2), MultiQrRisk::Elevated);
+    }
+
+    #[test]
+    fn three_or_more_qr_suspected_split_attack() {
+        let d = QuishingDefense::new();
+        assert_eq!(d.assess_multi_qr(3), MultiQrRisk::SplitQrSuspected);
+        assert_eq!(d.assess_multi_qr(10), MultiQrRisk::SplitQrSuspected);
     }
 
     // ── Levenshtein 入力長ガード ────────────────────────────────────────────

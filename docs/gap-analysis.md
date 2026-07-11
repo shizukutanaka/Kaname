@@ -99,7 +99,7 @@
 
 | # | 機能 | 場所 | 現状 (何が足りないか) | 実装すべき内容 |
 |---|---|---|---|---|
-| D1 | MLS グループ暗号化 | `kaname-mls` | 単一バイト XOR (鍵=公開 ConversationId 先頭バイト、鍵空間256のみ)。暗号として機能していない | `openmls` クレートを統合し RFC 9420 準拠の実装に置き換える |
+| D1 | MLS グループ暗号化 | `kaname-mls` | 単一バイト XOR (鍵=公開 ConversationId 先頭バイト、鍵空間256のみ)。暗号として機能していない | `openmls` クレート (0.7.2, 2026-02) を統合し RFC 9420 準拠の実装に置き換える。**統合時は draft-ietf-mls-pq-ciphersuites の ML-KEM/ハイブリッド ciphersuite を最初から選定すること** (2026-07 調査で標準化進行を確認、docs/research-2026-07.md §1.5) |
 | D2 | ローカル LLM 推論 (Q-LLM/P-LLM) | `kaname-ai::llm_bridge` | 固定文字列 (`{"risk":"SAFE",...}` 等) を返すだけ。`tokens_in`/`tokens_out` も常に0で実際には推論していない | `llama.cpp` か `candle` で Phi-4-mini 等の実推論を実装。トークン計測も実値化 |
 | D3 | Q-LLM/P-LLM のプロセス分離 | `kaname-ai::subprocess` | seccompプロファイルの「パス文字列」を生成するだけ。実際に分離を強制する外部バイナリ `kaname-llm-runner` が存在するか自体が未確認 | `kaname-llm-runner` バイナリを実装し、seccomp-bpf (Linux) / sandbox-exec (macOS) / Job Object (Windows) を実際に適用する |
 | D4 | Firecracker microVM サンドボックス | `kaname-sandbox` | `spawn_vm`/`VsockChannel` が no-op。セマフォ管理・プールの衛生管理コードは実装済みだが VM 自体は起動しない | Firecracker バイナリとの実連携、vsock通信の実装 |
@@ -107,6 +107,7 @@
 | D6 | 課金基盤の永続化 | `kaname-billing` | エンタイトルメント/冪等性キーが全てインメモリで、プロセス再起動で消える。Stripe webhookのペイロードを検証なしに信頼し、ライブAPIで再確認していない | `kaname-store` (永続化層) との連携、Redis等での分散重複排除、監査用の台帳ハッシュチェーン検証を追加 |
 | D7 | CI が実行されていない | `.github/workflows/` | このディレクトリが空。ワークフロー定義は `ci-templates/*.yml` (ci/e2e/fuzzing/perf/release/sbom の6つ) に退避されたまま。旧ギャップ分析表の「CI/CD 6ワークフロー ✅」は誤りで、**push/PRのたびに自動テストが一切走っていない**。**2026-07-10 に実際に `git mv ci-templates/*.yml .github/workflows/` を試みたところ、GitHub から `refusing to allow a GitHub App to create or update workflow ".github/workflows/ci.yml" without "workflows" permission` で push が拒否されることを確認済み** | コード変更・エージェント操作では解決不可能と確定。リポジトリ管理者(人間)が GitHub App の権限設定に `workflows` スコープを追加するか、管理者自身の認証情報で `git mv ci-templates/*.yml .github/workflows/` を実行する必要がある |
 | D8 | E2Eテストの実行検証が未完了 | `e2e/*.spec.ts`, `playwright.config.ts` | Playwrightでのテスト一覧パースは成功 (66件) したが、実際にブラウザで実行して green を確認できていない。このセッションはネットワーク越しの `crates.io` 取得が組織ポリシーで 403 拒否されており、`cargo run -p kaname-mockserver` のビルドを伴う `npx playwright test` の実行が検証未了 | ネットワーク制限のないセッションで `npx playwright test` を実行し、実際にパスすることを確認する |
+| D9 | SSA の敵対的LLM生成サンプル校正 | `kaname-ssa` | 文体認証の閾値 (0.60/0.75) がハードコードで、LLM生成なりすましサンプルによる訓練・校正がない。arxiv 2603.29454 は「敵対的LLM生成サンプルを訓練に含めた検証器はLLMなりすましを回避されない (含めなければ精度が落ちる)」と示した | ローカルLLM推論 (D2) 実装後に、自組織の送信者プロファイルに対する敵対的なりすましサンプルを生成し、閾値を校正するパイプラインを追加する。D2 が前提のため単独では着手不可 |
 
 ## 過剰 (不要・重複・到達不能だった — 2026-07セッションで発見し既に削除/修正済み)
 

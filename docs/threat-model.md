@@ -157,6 +157,16 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Residual risk**: Zero-day AiTM proxies not yet in blocklist; novel phishing kit paths. Mitigation: BEC LLM signal covers semantic urgency even without URL blocklist match; OOBV ceremony enforced for high-value wire transfers regardless.
 **Implementation**: `crates/kaname-bec/src/aitm.rs`; assessment integrated into `BecDetector::assess()` via `check_aitm()` signal family.
 
+### 3.10 QR 構造亜種による画像スキャン回避 (2026-07 追加)
+**Threat**: 分割QR (Structured Append) で悪意ある URL を複数の QR に分割する、`blob:`/`data:`/`javascript:` スキームをペイロードに使う、等の構造的亜種により「QR をデコードして URL を照会する」型の防御を回避する。2026-03 には 28 通のキャンペーンが全てのセキュリティツールを素通りした事例が報告された (ReversingLabs/Acronis)。
+**Control**: `kaname-render::quishing` — (a) 非 http(s) の危険スキーム (`blob:`/`data:`/`javascript:`) を `Suspicious` に格上げ、(b) `assess_multi_qr()` が同一メール内の QR 個数から分割 QR 兆候を判定 (`MultiQrRisk::SplitQrSuspected` = 3個以上)。
+**Residual risk**: ASCII アート QR (画像ではなくテキストで QR を描く) はレンダリング前のテキスト解析では QR として認識できない。OCR 統合 (将来) が必要。
+
+### 3.11 CalPhishing — カレンダー自動登録の永続化悪用 (2026-07 追加)
+**Threat**: `METHOD:REQUEST` の .ics は多くのクライアントで受信時に自動 tentative 登録され、**元メールをスパム判定・削除してもカレンダーエントリが残る**。攻撃者はこの永続化に緊急性偽装や不審 URL を組み合わせ、削除したはずの攻撃がカレンダーから再度ユーザーに提示される (SC Media "CalPhishing" 2026, KnowBe4)。
+**Control**: `kaname-render::calendar_guard` — `CalendarRisk::AutoRegistrationAbuse`。METHOD:REQUEST/PUBLISH と他のフィッシング兆候の併存で検出し、警告文で「カレンダー側のエントリ削除が必要」であることを明示 (メール削除だけでは不十分という attacker asymmetry をユーザーに伝える)。
+**Residual risk**: 正規招待も METHOD:REQUEST を使うため、他の兆候ゼロの標的型攻撃 (綺麗な招待文+後日差し替え) は検出できない。SEQUENCE 単調性チェック (§既存) が差し替え時の第二防衛線。
+
 ---
 
 ## 4. Supply chain
@@ -237,6 +247,7 @@ Ranked by `likelihood × impact`:
 
 - **v1.0 (2026-04-18)**: Initial threat model aligned with ADRs 001-006.
 - **v1.1 (2026-06-14)**: §3.9 AiTM 追加; BEC スコアリングをロジスティック変換に移行; `Content::from_attachment()` の UserUpload provenance 修正; Bridge の PhaaS マーカー拡充 (10件追加); topics フィールドのマーカースキャン追加.
+- **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム)、§3.11 CalPhishing 自動登録永続化を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
 
 Future versions will be deltas; we don't rewrite from scratch.
 

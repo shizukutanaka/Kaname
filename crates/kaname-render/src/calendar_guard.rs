@@ -79,6 +79,19 @@ pub enum CalendarRisk {
         /// 既知の最後の SEQUENCE 値
         expected_min: u32,
     },
+    /// 自動登録型フィッシング (CalPhishing persistence、2026 年に活発化)。
+    ///
+    /// `METHOD:REQUEST` の招待は Outlook 等が受信時に自動でカレンダーへ
+    /// tentative 登録するため、**元のメールを削除/スパム判定してもカレンダー
+    /// エントリだけが残り続ける**。この永続化特性と他のフィッシング兆候
+    /// (緊急性偽装・不審 URL・フリーメール主催者) の組合せで検出する。
+    /// 出典: SC Media "CalPhishing" 2026, KnowBe4/Cofense カレンダーフィッシング解説
+    AutoRegistrationAbuse {
+        /// 検出された METHOD 値 (REQUEST 等)
+        method: String,
+        /// 併存したフィッシング兆候の説明
+        reason: String,
+    },
 }
 
 /// カレンダー招待スキャン結果。
@@ -176,6 +189,14 @@ impl CalendarGuard {
         // 7. SEQUENCE 単調性チェック (known_sequence=0 は初回受信を意味する)
         if let Some(seq_risk) = check_sequence_monotonicity(ics_content, 0) {
             risks.push(seq_risk);
+        }
+
+        // 8. 自動登録型フィッシング (CalPhishing persistence) 検出。
+        //    METHOD:REQUEST は受信時にカレンダーへ自動 tentative 登録され、
+        //    元メール削除後もエントリが残る。他のフィッシング兆候と併存する
+        //    場合は「メール削除では消えない攻撃」として明示的に警告する。
+        if let Some(auto_reg) = detect_auto_registration_abuse(ics_content, &risks) {
+            risks.push(auto_reg);
         }
 
         let risk_level = Self::calculate_level(&risks);
@@ -311,8 +332,9 @@ impl CalendarGuard {
         let has_suspicious_meeting = risks.iter().any(|r| matches!(r, CalendarRisk::SuspiciousMeetingLink { .. }));
         let has_unc = risks.iter().any(|r| matches!(r, CalendarRisk::UncPathInAttendeeCn { .. }));
         let has_binary = risks.iter().any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. }));
+        let has_auto_reg = risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. }));
 
-        if has_suspicious_url || has_suspicious_meeting || has_unc || has_binary {
+        if has_suspicious_url || has_suspicious_meeting || has_unc || has_binary || has_auto_reg {
             CalendarRiskLevel::Danger
         } else {
             CalendarRiskLevel::Caution
@@ -451,6 +473,43 @@ fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
         }
     }
     risks
+}
+
+/// 自動登録型フィッシング (CalPhishing persistence) を検出する。
+///
+/// `METHOD:REQUEST` (または `PUBLISH`) の .ics は多くのカレンダークライアントで
+/// 受信時に自動 tentative 登録され、元メールを削除してもエントリが残る。
+/// 自動登録自体は正規招待でも使われるため、**既に検出済みの他のフィッシング
+/// 兆候と併存する場合のみ** リスクとして報告する (誤検出防止)。
+fn detect_auto_registration_abuse(content: &str, existing_risks: &[CalendarRisk]) -> Option<CalendarRisk> {
+    let method = extract_field(content, "METHOD")?;
+    let method_upper = method.to_uppercase();
+    if method_upper != "REQUEST" && method_upper != "PUBLISH" {
+        return None;
+    }
+
+    // 併存するフィッシング兆候 (自動登録リスク自身は除く) を要約
+    let companion: Vec<&str> = existing_risks.iter().filter_map(|r| match r {
+        CalendarRisk::SuspiciousUrl { .. } => Some("不審URL"),
+        CalendarRisk::SuspiciousOrganizer { .. } => Some("不審な主催者"),
+        CalendarRisk::UrgencyManipulation { .. } => Some("緊急性偽装"),
+        CalendarRisk::SuspiciousMeetingLink { .. } => Some("不審会議リンク"),
+        CalendarRisk::EmbeddedBinaryAttachment { .. } => Some("バイナリ埋め込み"),
+        CalendarRisk::UncPathInAttendeeCn { .. } => Some("UNCパス"),
+        _ => None,
+    }).collect();
+
+    if companion.is_empty() {
+        return None; // 正規招待の METHOD:REQUEST は問題なし
+    }
+
+    Some(CalendarRisk::AutoRegistrationAbuse {
+        method: method_upper,
+        reason: format!(
+            "自動登録される招待にフィッシング兆候が併存 ({})。元メールを削除してもカレンダーに残るため、カレンダー側のエントリ削除が必要",
+            companion.join(", ")
+        ),
+    })
 }
 
 fn extract_ics_urls(content: &str) -> Vec<String> {
@@ -821,6 +880,110 @@ END:VCALENDAR"#;
                 reason, .. } if reason.contains("中継点"))),
             "正規の Google Forms が誤検出された: {:?}", scan.risks
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // 自動登録型フィッシング (CalPhishing persistence) 検出
+    // ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn calphishing_method_request_with_urgency_detected() {
+        let g = guard();
+        // 実際の CalPhishing 攻撃を模した .ics: METHOD:REQUEST + 緊急性偽装 + 不審URL
+        let ics = "BEGIN:VCALENDAR\n\
+                   METHOD:REQUEST\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Account Suspended - Verify Now\n\
+                   DESCRIPTION:Immediate action required: http://verify-account.tk/login\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            "CalPhishing 自動登録リスクが検出されるべき: {:?}", scan.risks
+        );
+        assert_eq!(scan.risk_level, CalendarRiskLevel::Danger);
+    }
+
+    #[test]
+    fn calphishing_reason_mentions_persistence() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   METHOD:REQUEST\n\
+                   SUMMARY:verify now\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        let auto_reg = scan.risks.iter().find_map(|r| match r {
+            CalendarRisk::AutoRegistrationAbuse { reason, .. } => Some(reason.clone()),
+            _ => None,
+        });
+        match auto_reg {
+            Some(reason) => assert!(reason.contains("元メールを削除しても"),
+                "永続化 (メール削除で消えない) の警告文が含まれるべき: {reason}"),
+            None => panic!("AutoRegistrationAbuse が検出されるべき: {:?}", scan.risks),
+        }
+    }
+
+    #[test]
+    fn legit_method_request_without_other_signals_not_flagged() {
+        let g = guard();
+        // 正規の会議招待も METHOD:REQUEST を使う — 他の兆候がなければ検出しない
+        let ics = "BEGIN:VCALENDAR\n\
+                   METHOD:REQUEST\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:週次チームミーティング\n\
+                   ORGANIZER:mailto:alice@company.co.jp\n\
+                   URL:https://teams.microsoft.com/l/meetup-join/abc123\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            "正規の METHOD:REQUEST 招待が誤検出された: {:?}", scan.risks
+        );
+    }
+
+    #[test]
+    fn phishing_without_method_not_flagged_as_auto_registration() {
+        let g = guard();
+        // METHOD 行がない .ics は自動登録リスクとしては報告しない
+        // (SuspiciousUrl 等では引き続き検出される)
+        let ics = "BEGIN:VCALENDAR\n\
+                   SUMMARY:verify now\n\
+                   URL:http://phish.tk/steal\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan.risks.iter().any(|r| matches!(r, CalendarRisk::AutoRegistrationAbuse { .. })),
+            "METHOD なしで AutoRegistrationAbuse が検出された"
+        );
+        assert_eq!(scan.risk_level, CalendarRiskLevel::Danger, "不審URL自体は Danger のまま");
+    }
+
+    #[test]
+    fn calphishing_method_publish_also_detected() {
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\n\
+                   METHOD:PUBLISH\n\
+                   ORGANIZER:mailto:ceo@gmail.com\n\
+                   SUMMARY:至急確認\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(
+                r, CalendarRisk::AutoRegistrationAbuse { method, .. } if method == "PUBLISH")),
+            "METHOD:PUBLISH の自動登録型も検出されるべき: {:?}", scan.risks
+        );
+    }
+
+    #[test]
+    fn auto_registration_alone_escalates_to_danger() {
+        // 緊急性偽装 (単独では Caution) + 自動登録 → Danger に格上げ
+        let risks = vec![
+            CalendarRisk::UrgencyManipulation { keyword: "verify now".into() },
+            CalendarRisk::AutoRegistrationAbuse { method: "REQUEST".into(), reason: "test".into() },
+        ];
+        assert_eq!(CalendarGuard::calculate_level(&risks), CalendarRiskLevel::Danger);
     }
 
     #[test]

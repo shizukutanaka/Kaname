@@ -23,7 +23,7 @@
 | 入力スクリーニング (プロンプト注入検出) | `kaname-screen` | |
 | SSRF 対策 (DNS再検証込みリダイレクトガード) | `kaname-jmap::ssrf_guard` | |
 | 監査ログ (HMAC-SHA256 鍵付きハッシュチェーン) | `kaname-ai::threat_intel` | |
-| PQC ハイブリッド鍵カプセル化 (X25519 + ML-KEM) | `kaname-crypto` | |
+| PQC ハイブリッド鍵カプセル化 (X25519 + ML-KEM) | `kaname-crypto` | **注意**: コード内の "X-Wing" 表記は独自 HKDF 合成 (`combine_kem_secrets`, info=`kaname-xwing-v1`) であり、IETF 標準の X-Wing (draft-connolly-cfrg-xwing-kem) とはワイヤ非互換。外部監査時に名称で混同しないこと。また X25519/ML-KEM の実体は `Kem` トレイト経由のバックエンド注入で、テストは MockKem のみ (実アルゴリズムバックエンドの結合は未検証) |
 
 ---
 
