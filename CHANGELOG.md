@@ -21,6 +21,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - .ics の DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener` で検査 (ワークスペース内依存を新規追加、循環なし)
   - 命令上書きフレーズ・特殊トークン・Base64/Unicodeタグ/HTMLエンティティ注入を検出し Danger 判定
   - 誤検出防止のため `Blocked` (確定的マーカー一致) のみ採用 (エントロピー単独の `Suspicious` は不使用)
+- **kaname-saas-guard SaaSリンクのプロンプト注入検査** (`SaasLinkInspector::evaluate`)
+  - SaaSリンクのクエリパラメータ (`?note=`等) を `kaname-screen::PromptScreener` で検査し `SaasLinkRisk::Block` に格上げ
+  - 偽SaaSドメイン検出 (`notdocusign.com`等) との併存を確認 (Suspicious→Block)
 - **kaname-ai preflight モジュール**: Dual-LLM パイプライン入口での事前検査
   - `preflight_untrusted()` — Bidi 制御文字 (U+202E 等) / ゼロ幅文字 / 既知インジェクションパターンを検出
   - `PreflightResult` (Clean / Advisory / Block) と `Finding` 列挙型

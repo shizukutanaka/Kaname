@@ -172,6 +172,11 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Control**: `kaname-render::calendar_guard` — DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener::screen()` にかけ、`Blocked` 判定 (確定的マーカー一致) を `CalendarRisk::PromptInjectionAttempt` として Danger 報告。エントロピー単独の `Suspicious` は文字種の多い正規日本語文の誤検出を招くため不採用。
 **Residual risk**: `Suspicious` を捨てるトレードオフにより、未知パターンの難読化注入 (高エントロピーのみが兆候) は検出しない。Dual-LLM 側の出力監査 (`kaname-ai` の Bridge/AuditResult) が第二防衛線。
 
+### 3.13 SaaSリンク経由のプロンプト注入 (2026-07 追加)
+**Threat**: 正当な SaaS ドメイン (Google Drive/DocuSign 等) や偽装ドメインへのリンクのクエリパラメータ (`?note=`, `?comment=` 等) に命令上書きフレーズや LLM 特殊トークンを仕込み、SaaS連携を装いつつプロンプト注入を狙う複合攻撃。従来の `SaasLinkInspector::evaluate()` はドメイン一致・キーワード一致のみでクエリの文面内容を検査していなかった。
+**Control**: `kaname-saas-guard::SaasLinkInspector::evaluate()` — URL全体を `kaname-screen::PromptScreener::screen()` にかけ、`Blocked` 判定で `SaasLinkRisk::Block` に格上げ。偽SaaSドメイン検出 (§既存の `is_fake_saas_subdomain`) との併存も確認済み (Suspicious→Block)。
+**Residual risk**: §3.12 と同じトレードオフ (`Suspicious`/`HighEntropy` 単独は不採用)。
+
 ---
 
 ## 4. Supply chain
@@ -252,7 +257,7 @@ Ranked by `likelihood × impact`:
 
 - **v1.0 (2026-04-18)**: Initial threat model aligned with ADRs 001-006.
 - **v1.1 (2026-06-14)**: §3.9 AiTM 追加; BEC スコアリングをロジスティック変換に移行; `Content::from_attachment()` の UserUpload provenance 修正; Bridge の PhaaS マーカー拡充 (10件追加); topics フィールドのマーカースキャン追加.
-- **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム/ASCIIアートQR)、§3.11 CalPhishing 自動登録永続化、§3.12 カレンダー招待経由のプロンプト注入 (kaname-screen 統合) を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
+- **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム/ASCIIアートQR)、§3.11 CalPhishing 自動登録永続化、§3.12 カレンダー招待経由のプロンプト注入、§3.13 SaaSリンク経由のプロンプト注入 (kaname-screen 統合) を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
 
 Future versions will be deltas; we don't rewrite from scratch.
 

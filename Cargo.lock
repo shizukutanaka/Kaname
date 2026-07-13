@@ -2346,6 +2346,7 @@ version = "0.3.21"
 dependencies = [
  "kaname-crypto",
  "kaname-error",
+ "kaname-screen",
  "proptest",
  "rand 0.8.6",
  "serde",

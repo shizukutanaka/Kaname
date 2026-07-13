@@ -45,7 +45,7 @@ kaname-error
               └── kaname-mls, kaname-render (→ kaname-screen)
                     └── kaname-bec, kaname-dlp, kaname-ai
                           └── kaname-jmap, kaname-sandbox
-                                └── kaname-oobv, kaname-pivot, kaname-radar, kaname-ssa, kaname-saas-guard
+                                └── kaname-oobv, kaname-pivot, kaname-radar, kaname-ssa, kaname-saas-guard (→ kaname-screen)
                                       └── kaname-ui → src-tauri
 ```
 
