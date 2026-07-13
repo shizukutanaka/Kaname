@@ -40,9 +40,9 @@ CLAUDE.md → Cargo.toml → docs/threat-model.md → 対象クレートの lib.
 
 ```
 kaname-error
-  └── kaname-i18n, kaname-observability, kaname-privacy
+  └── kaname-i18n, kaname-observability, kaname-privacy, kaname-screen
         └── kaname-crypto, kaname-store
-              └── kaname-mls, kaname-render
+              └── kaname-mls, kaname-render (→ kaname-screen)
                     └── kaname-bec, kaname-dlp, kaname-ai
                           └── kaname-jmap, kaname-sandbox
                                 └── kaname-oobv, kaname-pivot, kaname-radar, kaname-ssa, kaname-saas-guard

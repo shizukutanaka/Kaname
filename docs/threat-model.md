@@ -167,6 +167,11 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Control**: `kaname-render::calendar_guard` — `CalendarRisk::AutoRegistrationAbuse`。METHOD:REQUEST/PUBLISH と他のフィッシング兆候の併存で検出し、警告文で「カレンダー側のエントリ削除が必要」であることを明示 (メール削除だけでは不十分という attacker asymmetry をユーザーに伝える)。
 **Residual risk**: 正規招待も METHOD:REQUEST を使うため、他の兆候ゼロの標的型攻撃 (綺麗な招待文+後日差し替え) は検出できない。SEQUENCE 単調性チェック (§既存) が差し替え時の第二防衛線。
 
+### 3.12 カレンダー招待経由のプロンプト注入 (2026-07 追加)
+**Threat**: .ics の DESCRIPTION/SUMMARY に命令上書きフレーズ・LLM特殊トークン・不可視 Unicode タグ等を埋め込む。現状の Kaname では .ics 本文が AI 要約に渡る経路は無いが、(a) UI にそのまま表示され得る、(b) 将来カレンダー統合が Dual-LLM 要約対象になった場合に `kaname-screen` を経由しない入力経路が成立する、という2点で入口検査に値する (§3.1 間接注入のカレンダー版)。
+**Control**: `kaname-render::calendar_guard` — DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener::screen()` にかけ、`Blocked` 判定 (確定的マーカー一致) を `CalendarRisk::PromptInjectionAttempt` として Danger 報告。エントロピー単独の `Suspicious` は文字種の多い正規日本語文の誤検出を招くため不採用。
+**Residual risk**: `Suspicious` を捨てるトレードオフにより、未知パターンの難読化注入 (高エントロピーのみが兆候) は検出しない。Dual-LLM 側の出力監査 (`kaname-ai` の Bridge/AuditResult) が第二防衛線。
+
 ---
 
 ## 4. Supply chain
@@ -247,7 +252,7 @@ Ranked by `likelihood × impact`:
 
 - **v1.0 (2026-04-18)**: Initial threat model aligned with ADRs 001-006.
 - **v1.1 (2026-06-14)**: §3.9 AiTM 追加; BEC スコアリングをロジスティック変換に移行; `Content::from_attachment()` の UserUpload provenance 修正; Bridge の PhaaS マーカー拡充 (10件追加); topics フィールドのマーカースキャン追加.
-- **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム)、§3.11 CalPhishing 自動登録永続化を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
+- **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム/ASCIIアートQR)、§3.11 CalPhishing 自動登録永続化、§3.12 カレンダー招待経由のプロンプト注入 (kaname-screen 統合) を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
 
 Future versions will be deltas; we don't rewrite from scratch.
 

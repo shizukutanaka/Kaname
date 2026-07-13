@@ -17,6 +17,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `METHOD:REQUEST`/`PUBLISH` の自動登録永続化 (元メール削除後もカレンダーに残る) と他のフィッシング兆候の併存を検出
   - 警告文で「カレンダー側のエントリ削除が必要」であることを明示
 - **docs/research-2026-07.md**: 2026-07 の最新研究調査とKanameへの反映マップ (長所・短所・改善点の総括含む)
+- **kaname-render カレンダー招待のプロンプト注入検査** (`CalendarRisk::PromptInjectionAttempt`)
+  - .ics の DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener` で検査 (ワークスペース内依存を新規追加、循環なし)
+  - 命令上書きフレーズ・特殊トークン・Base64/Unicodeタグ/HTMLエンティティ注入を検出し Danger 判定
+  - 誤検出防止のため `Blocked` (確定的マーカー一致) のみ採用 (エントロピー単独の `Suspicious` は不使用)
 - **kaname-ai preflight モジュール**: Dual-LLM パイプライン入口での事前検査
   - `preflight_untrusted()` — Bidi 制御文字 (U+202E 等) / ゼロ幅文字 / 既知インジェクションパターンを検出
   - `PreflightResult` (Clean / Advisory / Block) と `Finding` 列挙型
