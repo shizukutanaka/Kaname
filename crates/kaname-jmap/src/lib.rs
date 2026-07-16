@@ -121,6 +121,11 @@ impl JmapClient {
             .timeout(config.request_timeout)
             .user_agent(&config.user_agent)
             .https_only(true)
+            // 初回 base_url の検証 (check_url_for_ssrf) だけでは、その後の
+            // リダイレクト先が未検証のまま追従され DNS リバインディングによる
+            // SSRF の入口が開いてしまう。per-hop で HTTPS 限定・プライベート IP 拒否・
+            // DNS 再解決検証を行う safe_redirect_policy を全リクエストに適用する。
+            .redirect(ssrf_guard::safe_redirect_policy())
             .build()
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
