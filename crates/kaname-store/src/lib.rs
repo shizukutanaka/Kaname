@@ -61,7 +61,11 @@ impl SqlCipherParams {
                 "key_hex は 64 桁の ASCII 16 進数でなければなりません".into()
             ));
         }
-        conn.execute_batch(&format!(
+        // 生鍵を含む PRAGMA 文字列は Zeroizing でラップし、実行後に
+        // ヒープ上の平文鍵を確実にゼロ化する (kaname-crypto の ZeroizeOnDrop と
+        // 同じ鍵ライフサイクル保証をストア層にも一貫させる。コアダンプ/スワップ
+        // 経由の鍵材料残留を防ぐ)。
+        let pragma_sql = zeroize::Zeroizing::new(format!(
             "PRAGMA key = \"x'{key_hex}'\";\
              PRAGMA cipher_page_size = {PAGE_SIZE};\
              PRAGMA kdf_iter = {KDF_ITER};\
@@ -78,7 +82,8 @@ impl SqlCipherParams {
             HMAC_ALG  = Self::HMAC_ALG,
             KDF_ALG   = Self::KDF_ALG,
             HEADER    = Self::PLAINTEXT_HEADER_SIZE,
-        ))
+        ));
+        conn.execute_batch(&pragma_sql)
     }
 }
 
@@ -340,11 +345,14 @@ impl Store {
         // ATTACH DATABASE はパラメータバインドが使えないため、
         // パス文字列中の ' を '' にエスケープして SQL インジェクションを防ぐ
         let tmp_path_str = tmp_path.display().to_string().replace('\'', "''");
-        conn.execute_batch(&format!(
+        // 新しい生鍵を含む ATTACH 文も Zeroizing でラップし実行後にゼロ化する
+        // (apply() と同じ理由: ヒープ上の平文鍵残留を防ぐ)。
+        let attach_sql = zeroize::Zeroizing::new(format!(
             "ATTACH DATABASE '{tmp_path_str}' AS tmp KEY \"x'{new_key_hex}'\";\
              SELECT sqlcipher_export('tmp');\
              DETACH DATABASE tmp;",
-        )).map_err(|e| StoreError::Db(e.to_string()))?;
+        ));
+        conn.execute_batch(&attach_sql).map_err(|e| StoreError::Db(e.to_string()))?;
 
         // tmp を本番ファイルに置き換え
         std::fs::rename(&tmp_path, &self.path)
