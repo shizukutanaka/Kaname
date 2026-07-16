@@ -445,12 +445,17 @@ impl OobvRecommender {
     /// - 片方だけなら推奨 (`Severity::High`)
     #[must_use]
     pub fn recommend(&self, body: &str) -> RecommendationLevel {
-        let body_lower = body.to_lowercase();
+        // 全角ラテン文字 (ＵＲＧＥＮＴ) やゼロ幅文字挿入 (urg\u{200B}ent) による
+        // キーワード回避を防ぐため、単純な to_lowercase ではなく
+        // kaname-memory-guard の共通正規化を通す。
+        // (キーワードはいずれも半角小文字 ASCII または日本語で登録されており、
+        //  正規化後の本文と直接照合できる。)
+        let body_norm = kaname_memory_guard::normalize_for_matching(body);
         let financial_count = self.financial_keywords.iter()
-            .filter(|kw| body_lower.contains(*kw))
+            .filter(|kw| body_norm.contains(*kw))
             .count();
         let urgency_count = self.urgency_keywords.iter()
-            .filter(|kw| body_lower.contains(*kw))
+            .filter(|kw| body_norm.contains(*kw))
             .count();
 
         match (financial_count, urgency_count) {
@@ -763,6 +768,25 @@ mod tests {
         let r = OobvRecommender::new();
         let body = "今月の請求書をお送りします。ご確認ください。";
         assert_eq!(r.recommend(body), RecommendationLevel::Optional);
+    }
+
+    #[test]
+    fn recommender_detects_fullwidth_english_bypass() {
+        // 全角ラテン文字による回避 (ＵＲＧＥＮＴ / ＷＩＲＥ ＴＲＡＮＳＦＥＲ) も
+        // 正規化により検出されるべき。
+        let r = OobvRecommender::new();
+        let body = "Please process this ＷＩＲＥ ＴＲＡＮＳＦＥＲ ＵＲＧＥＮＴ";
+        assert_eq!(r.recommend(body), RecommendationLevel::Strong,
+            "全角ラテン文字によるキーワード回避が検出されなかった");
+    }
+
+    #[test]
+    fn recommender_detects_zero_width_bypass() {
+        // ゼロ幅スペース挿入による回避も正規化により検出されるべき。
+        let r = OobvRecommender::new();
+        let body = "wire\u{200B} transfer needed urg\u{200B}ent";
+        assert_eq!(r.recommend(body), RecommendationLevel::Strong,
+            "ゼロ幅文字によるキーワード回避が検出されなかった");
     }
 
     #[test]
