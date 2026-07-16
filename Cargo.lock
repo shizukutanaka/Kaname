@@ -2083,6 +2083,8 @@ name = "kaname-bec"
 version = "0.3.21"
 dependencies = [
  "kaname-error",
+ "kaname-pivot",
+ "kaname-screen",
  "proptest",
  "serde",
  "serde_json",
