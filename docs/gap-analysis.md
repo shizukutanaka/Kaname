@@ -108,6 +108,11 @@
 | D7 | CI が実行されていない | `.github/workflows/` | このディレクトリが空。ワークフロー定義は `ci-templates/*.yml` (ci/e2e/fuzzing/perf/release/sbom の6つ) に退避されたまま。旧ギャップ分析表の「CI/CD 6ワークフロー ✅」は誤りで、**push/PRのたびに自動テストが一切走っていない**。**2026-07-10 に実際に `git mv ci-templates/*.yml .github/workflows/` を試みたところ、GitHub から `refusing to allow a GitHub App to create or update workflow ".github/workflows/ci.yml" without "workflows" permission` で push が拒否されることを確認済み** | コード変更・エージェント操作では解決不可能と確定。リポジトリ管理者(人間)が GitHub App の権限設定に `workflows` スコープを追加するか、管理者自身の認証情報で `git mv ci-templates/*.yml .github/workflows/` を実行する必要がある |
 | D8 | E2Eテストの実行検証が未完了 | `e2e/*.spec.ts`, `playwright.config.ts` | Playwrightでのテスト一覧パースは成功 (66件) したが、実際にブラウザで実行して green を確認できていない。このセッションはネットワーク越しの `crates.io` 取得が組織ポリシーで 403 拒否されており、`cargo run -p kaname-mockserver` のビルドを伴う `npx playwright test` の実行が検証未了 | ネットワーク制限のないセッションで `npx playwright test` を実行し、実際にパスすることを確認する |
 | D9 | SSA の敵対的LLM生成サンプル校正 | `kaname-ssa` | 文体認証の閾値 (0.60/0.75) がハードコードで、LLM生成なりすましサンプルによる訓練・校正がない。arxiv 2603.29454 は「敵対的LLM生成サンプルを訓練に含めた検証器はLLMなりすましを回避されない (含めなければ精度が落ちる)」と示した | ローカルLLM推論 (D2) 実装後に、自組織の送信者プロファイルに対する敵対的なりすましサンプルを生成し、閾値を校正するパイプラインを追加する。D2 が前提のため単独では着手不可 |
+| D10 | UIコマンド層が完全なモックバックエンド | `kaname-ui/src/commands.rs` | `mail_get_summary`/`mail_list`/`mail_get_body` は固定値・`mock_emails()` を返すのみ。`ai_detect_phishing()` は常に `score:0.12` を返し `BecDetector::assess()` を一度も呼ばない。**BEC検出という中核機能が本番アプリで一通も実行されていない**。`kaname-bec::AssessmentRequest` の必須フィールド (認証結果/送信者履歴/URL/DKIM等) が現行の `EmailRow` に存在せず、単純な配線では埋められない | JMAP実クライアント → kaname-store永続化 → Authentication-Results解析 → BecDetector という**バックエンド統合そのもの**の実装が必要。実データモデル (EmailRowの拡張) 設計込み。ネットワーク解放後に着手 |
+| D11 | `AiAccessController` が未配線 + `SensitivityLabel` 供給元が存在しない | `kaname-ai::threat_intel`, `kaname-dlp` | DLPラベルでAI処理をブロックする `AiAccessController` (HMAC監査チェーン付き) は完全実装済みだが、`dual_llm`/`preflight`/UI のどこからも呼ばれない。さらに入力の `SensitivityLabel` (Public〜LegalPrivilege) を生成するコードが皆無 — `DlpResult` は `Action` (Allow/Warn/Block) しか出力しない。ドキュメント上は「DLP分類→AI処理ブロック」設計だが配線が欠落 | `DlpResult`/`ClassifierId` から `SensitivityLabel` を導出する変換アダプターを追加し、`QuarantinedLlm::analyze()` 前段で `check_and_record()` を呼ぶ |
+| D12 | `kaname-ssa` (送信者文体認証) が孤島クレート | `kaname-ssa` | `assess_self_send_anomaly` (AiTMアカウント乗っ取り検出) 等は実装・テスト済みだが、ワークスペース全体のどこからも呼ばれない。`kaname-ui`/`kaname-bec` の依存にも含まれない | 送信フローへの統合。`contains_financial_request` 判定は `kaname-oobv::OobvRecommender` の既存ロジックと重複するため共有化も検討。警告UX (いつ・どう出すか) の設計が必要 |
+| D13 | `kaname-saas-guard` がどこからも依存されない孤立クレート | `kaname-saas-guard` | フェーズ3でプロンプト注入検査を追加したが、クレート自体がワークスペース中どのクレートからも `path` 依存されておらず、メール受信パイプラインで一度も実行されない | メール受信フロー (D10のバックエンド統合) にSaaSリンク検査を組み込む統合ポイント設計が必要 |
+| D14 | `kaname-mls` の Commit 処理でメンバーシップ変更が常に空配列 | `kaname-mls` | `process_incoming` の Commit 分岐が `MembershipChange { added: vec![], removed: vec![] }` をハードコードで返し、誰が追加/削除されたか呼び出し側に伝わらない | `Envelope` に membership diff を運ぶフィールド追加が必要なデータモデル変更。D1 (openmls統合) と合わせて対応するのが自然 |
 
 ## 2026-07-13 に実施した依存不要の改善 (D1〜D9とは別枠、実施済み)
 
@@ -119,16 +124,23 @@
 | 1 | quishing.rs: blob:/data:/javascript:スキーム検出、分割QR (`assess_multi_qr`)、ASCIIアートQR (`detect_ascii_qr`) | `kaname-render` | `d3c9bb5`, `959e70d` |
 | 2 | calendar_guard.rs: CalPhishing自動登録永続化検出 (`AutoRegistrationAbuse`)、`kaname-screen`統合によるプロンプト注入検査 (`PromptInjectionAttempt`) | `kaname-render` | `d3c9bb5`, `8eb2fa8` |
 | 3 | SaaSリンクのクエリパラメータに対する`kaname-screen`統合プロンプト注入検査 | `kaname-saas-guard` | `8976a3b` |
+| 4 | Ultracode 3エージェント並列監査で発見した純ロジックバグ3件: 数字始まりメールのPII漏洩 (`kaname-observability`)、unknown:バケット集計バグ (`kaname-radar`)、開始者側エポック初期化漏れ (`kaname-mls`) | 各クレート | `55aac4a` |
+| 4 | SQLCipher鍵を含むPRAGMA/ATTACH文のゼロ化 (`Zeroizing<String>`) | `kaname-store` | `8804430` |
+| 5 | 全角/ゼロ幅文字によるキーワード回避を防ぐ正規化 (`kaname-memory-guard::normalize_for_matching` を pub 化して横展開) | `kaname-oobv` | `48cfb32` |
+| 5 | SSRFセーフリダイレクトポリシーをHTTPクライアントに適用 (DNSリバインディング対策) | `kaname-jmap` | `e71e795` |
+| 5 | pivot(チャネル誘導)とscreen(注入検出)をBEC検出器に統合 | `kaname-bec` | `48586c9` |
 
 **検討したが見送った統合**: `kaname-dlp` への `kaname-screen` 統合。
 DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker由来の
 命令注入という脅威モデルに合致しないため、無理な統合はスコープミスマッチ
 と判断し実施しなかった。
 
-**このカテゴリの改善は出尽くした**: 残る改善候補 (D1-D9) は全て
-ネットワーク解放待ち (D1-D6, D8)・管理者操作待ち (D7)・D2依存 (D9)
-のいずれかであり、現行のネットワーク制限下でこれ以上の依存不要な
-改善は見つからなかった (2026-07-13時点)。
+**このカテゴリで残る改善は、大規模配線または設計判断が必要な D10-D14 のみ**:
+2026-07-13 の Ultracode 徹底監査 (3エージェント並列、全27クレート) により、
+上表のフェーズ4・5の8項目を追加実施した。これで「1-2箇所の局所修正 or
+確立パターンの横展開」で済む依存不要改善は出尽くした。残る D10-D14 は
+バックエンド統合・データモデル変更・UX設計を伴うため、ネットワーク解放後に
+実データモデル設計込みで着手する (上記 D10-D14 の表を参照)。
 
 ## 過剰 (不要・重複・到達不能だった — 2026-07セッションで発見し既に削除/修正済み)
 

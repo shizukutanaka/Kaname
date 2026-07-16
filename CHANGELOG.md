@@ -24,6 +24,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **kaname-saas-guard SaaSリンクのプロンプト注入検査** (`SaasLinkInspector::evaluate`)
   - SaaSリンクのクエリパラメータ (`?note=`等) を `kaname-screen::PromptScreener` で検査し `SaasLinkRisk::Block` に格上げ
   - 偽SaaSドメイン検出 (`notdocusign.com`等) との併存を確認 (Suspicious→Block)
+- **kaname-bec クロスクレート連携** (Ultracode監査で発見、docs/gap-analysis.md 参照)
+  - `check_content_heuristics` に `kaname-pivot::PivotDetector` を統合 — 暗号通貨アドレス/WhatsApp/Telegram/Signal等の構造化チャネル誘導検出 (従来はハードコードフレーズ一致のみ)
+  - `check_llm` に `kaname-screen::PromptScreener` を統合 — Quarantined LLM に渡す前にプロンプト注入をスクリーニングし、Blocked時はLLMをスキップして注入シグナルを加点
+
+### Fixed
+- **kaname-observability PIIサニタイザの検出漏れ** (北極星 I5 に直結)
+  - `mask_email_addresses` が数字始まりのローカル部 (`12345@vendor.com` 等) を無加工でログに残していた問題を修正 (`is_ascii_alphabetic`→`is_ascii_alphanumeric`)
+- **kaname-radar 集計バグ**: `unknown:` バケットが `or_insert_with` の返り値を捨てており、同一未解決ドメインからの2通目以降が集計されず継続キャンペーン検出が機能していなかった問題を修正
+- **kaname-mls 開始者側エポック初期化漏れ**: 会話開始者が自分の会話に届くリプレイ Commit を検出できなかった問題を修正 (`start_one_to_one` で `epochs` を初期化し受信側と対称化)
+- **kaname-store SQLCipher鍵のゼロ化漏れ**: PRAGMA/ATTACH 文に埋め込む生鍵文字列を `Zeroizing<String>` でラップし、実行後にヒープ上の平文鍵を確実にゼロ化
+- **kaname-oobv Unicode/全角バイパス**: `recommend` のキーワード照合を `kaname-memory-guard::normalize_for_matching` 経由に変更し、全角ラテン文字 (`ＵＲＧＥＮＴ`)・ゼロ幅文字挿入によるOOBV推奨回避を防止
+- **kaname-jmap SSRFリダイレクト未検証**: `JmapClient::connect` の HTTP クライアントに `safe_redirect_policy()` (per-hop DNS再検証) を適用し、DNSリバインディングによるSSRFの入口を閉塞
 - **kaname-ai preflight モジュール**: Dual-LLM パイプライン入口での事前検査
   - `preflight_untrusted()` — Bidi 制御文字 (U+202E 等) / ゼロ幅文字 / 既知インジェクションパターンを検出
   - `PreflightResult` (Clean / Advisory / Block) と `Finding` 列挙型
