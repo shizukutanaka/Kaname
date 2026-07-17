@@ -362,11 +362,16 @@ impl CampaignRadar {
                 // auth_partial_fail の場合は unknown: バケットにも追記して将来の相関に使う
                 // (新規攻撃キャンペーンでも両方のグルーピングを維持する)
             }
-            // 未知ドメインでも unknown: バケットに記録 (将来のインフラ特定に備える)
+            // 未知ドメインでも unknown: バケットに記録 (将来のインフラ特定に備える)。
+            // 以前は or_insert_with の返り値を捨てており、同一未解決ドメインからの
+            // 2通目以降が email_ids/threat_score/last_updated に一切反映されず、
+            // 継続キャンペーンの蓄積が機能していなかった (pattern_key 分岐と同じ
+            // 「挿入または取得 → add_email」の形に揃える)。
             let key = format!("unknown:{}", metadata.from_domain);
-            self.groups
+            let group = self.groups
                 .entry(key.clone())
                 .or_insert_with(|| CampaignGroup::new(key, &metadata.email_id));
+            group.add_email(&metadata.email_id);
             return None;
         }
 
@@ -1038,6 +1043,36 @@ mod dns_tests {
             }
         }
         assert!(any_alertable, "未知インフラでも認証失敗パターンでキャンペーン検出されるべき");
+    }
+
+    #[test]
+    fn unknown_bucket_accumulates_repeat_emails_from_same_domain() {
+        // 回帰テスト: 同一の未解決ドメインから届く別 ID のメールが
+        // unknown: バケットに蓄積されること。
+        // 以前は or_insert_with の返り値を捨てていたため 2 通目以降が
+        // email_ids に反映されず、常に 1 件のままだった。
+        let mut radar = CampaignRadar::new();
+        // 認証失敗なし (pattern_key 経路に入らず unknown: 経路のみを通す)
+        for i in 0..3u8 {
+            let meta = EmailMetadata {
+                email_id: format!("mail-{i}"),
+                from_domain: "unresolved-attacker.example".to_string(),
+                return_path_domain: None,
+                dkim_domain: None,
+                link_domains: vec![],
+                received_at: now_unix(),
+                subject_length_bucket: SubjectLengthBucket::Short,
+                auth_partial_fail: false,
+            };
+            radar.analyze(&meta);
+        }
+        let unknown_group = radar.groups().into_iter()
+            .find(|g| g.shared_infrastructure == "unknown:unresolved-attacker.example");
+        match unknown_group {
+            Some(g) => assert_eq!(g.email_ids.len(), 3,
+                "同一未解決ドメインからの3通が unknown: バケットに蓄積されるべき: {:?}", g.email_ids),
+            None => panic!("unknown: バケットのグループが作られていない"),
+        }
     }
 
     #[test]

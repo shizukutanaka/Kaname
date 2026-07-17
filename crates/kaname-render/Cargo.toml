@@ -11,6 +11,7 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
+kaname-screen = { path = "../kaname-screen" }
 mail-parser  = { workspace = true }
 ammonia      = { workspace = true }
 regex        = { workspace = true }

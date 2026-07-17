@@ -14,7 +14,7 @@
 //   6. ユーザーが安心して返信案を生成
 //   7. Cmd+Z で全アクションを取り消せる
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
 // ── 共通セットアップ ─────────────────────────────────────────────────────
 test.beforeEach(async ({ page }) => {
@@ -228,7 +228,7 @@ test("コールドスタートから操作可能まで < 800ms (Apple HIG 準拠
 
 test("AI 要約レスポンスに single_email_only=true が含まれる", async ({ page }) => {
   // フェッチを傍受
-  const responses: any[] = [];
+  const responses: Record<string, unknown>[] = [];
   await page.route("**/ai_summarize_email**", async (route) => {
     const response = await route.fetch();
     const json = await response.json();

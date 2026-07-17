@@ -9,9 +9,11 @@
 // 5. PDF エクスポート — Apple 共有シートのメール→PDF 機能相当
 
 import {
-  createSignal, createEffect, For, Show, onMount, onCleanup, batch
+  createSignal, For, Show, onMount, onCleanup
 } from "solid-js";
-import { invoke } from "@tauri-apps/api/core";
+// 注: Smart Reply / PDF エクスポートは現状フロントエンドもモック実装で
+// 実際の invoke("ai_smart_reply"/"export_email_pdf") 呼び出しはまだ無い
+// (docs/maturity.md 参照)。実装時に import { invoke } from "@tauri-apps/api/core" を戻すこと。
 
 // ============================================================================
 // 型定義
@@ -26,7 +28,7 @@ interface Attachment {
   scan_ok:   boolean;
 }
 
-interface UndoAction {
+export interface UndoAction {
   id:          number;
   type:        "archive" | "trash" | "snooze" | "star" | "mark_read" | "move";
   email_id:    string;

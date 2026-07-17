@@ -12,7 +12,7 @@
 //   4. 戻れる、スキップできる、後で変更できる
 //   5. 終わった瞬間にユーザーは **すでに価値を得ている**
 
-import { Component, createSignal, Show } from "solid-js";
+import { Component, createSignal, Show, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 // ── 型定義 ───────────────────────────────────────────────────────────────
@@ -228,17 +228,22 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
   // **完了の瞬間**: ユーザーはすでに価値を得ている
   // 「Set up」ではなく「すでに守られている」状態
 
-  const Ready = async () => {
-    // 設定を保存
-    try {
-      await invoke("settings_save_onboarding", {
+  const Ready = () => {
+    // 設定を保存 (副作用として非同期実行。JSX を返す前に await すると
+    // コンポーネントの戻り値が Promise<Element> になり、SolidJS の
+    // 同期コンポーネント契約に違反する — 従来は @ts-ignore で
+    // この型エラーを隠していたが、根本原因はこの async 構造だった)。
+    onMount(() => {
+      invoke("settings_save_onboarding", {
         notifications: state().notificationsAllowed,
         continuity:    state().continuityEnabled,
         telemetry:     state().telemetryOptIn,
+      }).catch(() => {
+        // オンボーディング設定保存の失敗は致命的ではないため無視して続行するが、
+        // 完全に沈黙させず開発時に気付けるようログだけ残す。
+        console.warn("[Onboarding] settings_save_onboarding failed");
       });
-    } catch {
-      /* ignore — オンボーディング失敗でも続行 */
-    }
+    });
 
     return (
       <div class="k-onboard-step k-onboard-ready">
@@ -281,7 +286,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
       <Show when={state().step === "principles"}>  <Principles /> </Show>
       <Show when={state().step === "permissions"}> <Permissions /> </Show>
       <Show when={state().step === "first_email"}> <FirstEmail /> </Show>
-      <Show when={state().step === "ready"}>       {/* @ts-ignore */}
+      <Show when={state().step === "ready"}>
         <Ready />
       </Show>
     </div>

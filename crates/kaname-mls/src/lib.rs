@@ -448,6 +448,12 @@ impl MlsMailClient {
         };
 
         self.conversations.insert(conv_id.clone(), group_state);
+        // 会話の開始者側でもエポックを初期化する。これがないと、開始者が
+        // 自分の会話に後から届く Commit/Application を処理する際に
+        // self.epochs.get() が None となり、リプレイ/エポック逆行チェック
+        // (process_incoming) がスキップされてしまう。Welcome/Commit の
+        // 受信側 (self.epochs.insert(...)) と対称にする。
+        self.epochs.insert(conv_id.clone(), 0);
 
         let envelope = Envelope {
             conversation_id: conv_id,
@@ -1191,6 +1197,35 @@ mod tests {
         assert!(
             matches!(result, Err(MlsMailError::EpochRejected { .. })),
             "同一 epoch の Commit はリプレイとして拒否されなければならない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn 開始者側でも同一epochのcommitはリプレイとして拒否される() {
+        // 回帰テスト: 会話を開始した側 (alice) は以前 self.epochs に
+        // 登録されず、自分の会話に届くリプレイ Commit を検出できなかった。
+        // start_one_to_one で epoch=0 を初期化することで、Welcome 受信側と
+        // 同様にリプレイ拒否が機能することを確認する。
+        let mut alice = make_client("alice@kaname.app");
+        let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
+
+        // alice が会話を開始 (自分側で epoch=0 を記録するはず)
+        let (conversation, _welcome) =
+            alice.start_one_to_one(alice_email, dummy_kp()).unwrap();
+
+        // 攻撃者が alice に対して同一 epoch=0 の Commit を再送する
+        let replay_commit = Envelope {
+            conversation_id: conversation.id.clone(),
+            epoch:           0, // start_one_to_one で既に確立済みの epoch
+            kind:            EnvelopeKind::Commit,
+            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes:      vec![0xFF; 16],
+            welcome:         None,
+        };
+        let result = alice.process_incoming(&replay_commit);
+        assert!(
+            matches!(result, Err(MlsMailError::EpochRejected { .. })),
+            "開始者側でも同一 epoch の Commit はリプレイとして拒否されるべき: {result:?}"
         );
     }
 

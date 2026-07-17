@@ -10,27 +10,29 @@
 //            → KanameDesign (Liquid Glass UI)
 //            → SecurityDashboard (BEC/DLP/AI監査)
 //            → KanameAppleFeatures (Quick Look/Undo/Smart Reply)
-//            → KanameAppleV5 (Swipe/Focus/Natural Search/Safety Number)
+//
+// 注: 以前は「KanameAppleV5 (Swipe/Focus/Natural Search/Safety Number)」への
+// 参照があったが、対応するコンポーネントファイルが存在せず
+// (src/ui/KanameAppleV5.* は未実装)、npm run build がここで失敗していた。
+// 実装されるまでこのビューへの参照は削除する。
 
 import { render } from "solid-js/web";
-import { createSignal, createEffect, onMount, Show } from "solid-js";
+import { onMount, createSignal, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { initI18n, t } from "./i18n";
+import { initI18n } from "./i18n";
 
 // ── コンポーネントインポート ──
 import { KanameDesign }        from "./ui/KanameDesign";
 import { SecurityDashboard }   from "./ui/SecurityDashboard";
 import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
-import { KanameAppleV5 }       from "./ui/KanameAppleV5";
 
 // ── 型定義 ──
 
 type View =
   | "inbox"
   | "security"
-  | "features_demo"
-  | "v5_demo";
+  | "features_demo";
 
 interface AppState {
   initialized:    boolean;
@@ -49,7 +51,7 @@ window.addEventListener("unhandledrejection", (e) => {
   invoke("log_error", { message: String(e.reason) }).catch(() => {});
 });
 
-window.onerror = (msg, src, line, col, err) => {
+window.onerror = (msg, src, line, _col, err) => {
   console.error("[Kaname] Global error:", msg, err);
   invoke("log_error", { message: `${msg} @ ${src}:${line}` }).catch(() => {});
   return false;
@@ -201,7 +203,7 @@ const App = () => {
       gap: "4px",
       "z-index": "9999",
     }}>
-      {(["inbox", "security", "features_demo", "v5_demo"] as View[]).map(v => (
+      {(["inbox", "security", "features_demo"] as View[]).map(v => (
         <button
           onClick={() => setState(s => ({ ...s, activeView: v }))}
           style={{
@@ -220,7 +222,7 @@ const App = () => {
             cursor: "pointer",
           }}
         >
-          {{ inbox:"受信トレイ", security:"セキュリティ", features_demo:"機能デモ", v5_demo:"V5デモ" }[v]}
+          {{ inbox:"受信トレイ", security:"セキュリティ", features_demo:"機能デモ" }[v]}
         </button>
       ))}
     </div>
@@ -244,9 +246,6 @@ const App = () => {
           </Show>
           <Show when={state().activeView === "features_demo"}>
             <KanameAppleFeatures />
-          </Show>
-          <Show when={state().activeView === "v5_demo"}>
-            <KanameAppleV5 />
           </Show>
           <NavBar />
         </div>

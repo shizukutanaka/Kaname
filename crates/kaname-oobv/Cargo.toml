@@ -12,6 +12,7 @@ tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error  = { path = "../kaname-error" }
 kaname-crypto = { path = "../kaname-crypto" }
+kaname-memory-guard = { path = "../kaname-memory-guard" }
 rand       = { workspace = true }
 zeroize    = { workspace = true }
 

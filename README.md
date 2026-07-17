@@ -6,6 +6,28 @@
 [![Security Audit](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kaname-app/kaname/releases)
+[![Status](https://img.shields.io/badge/status-pre--release%20(v0.3.22)-orange.svg)](docs/maturity.md)
+
+---
+
+## ⚠️ 実装ステータス (公開前に必読)
+
+**本リポジトリは開発中のプレリリース (v0.3.22) であり、そのまま本番運用できる完成品ではありません。**
+機能ごとの成熟度は [`docs/maturity.md`](docs/maturity.md) と [`docs/gap-analysis.md`](docs/gap-analysis.md) に
+実コード根拠付きで正直に記載しています。要点:
+
+- **実装済み・実テストで検証済み (本番出荷可)**: BEC 多信号検出 (`kaname-bec`)、DLP 分類器 (`kaname-dlp`)、
+  Quishing / カレンダー招待 / HTML スマグリング検出 (`kaname-render`)、SaaS リンク安全性 (`kaname-saas-guard`)、
+  Out-of-Band Verification (`kaname-oobv`)、入力スクリーニング (`kaname-screen`)、SSRF 対策 (`kaname-jmap`)、
+  Dual-LLM の**型境界** (`kaname-ai::dual_llm`)。
+- **モック / スタブ段階 (本番運用不可)**: MLS グループ暗号化 (`kaname-mls` — 現状は XOR モック)、
+  ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
+  自動アップデート、課金基盤の永続化 (`kaname-billing`)。これらは外部クレート統合が必要。
+- **未配線**: UI コマンド層 (`kaname-ui`) はまだモックバックエンドで、BEC 検出等はデスクトップアプリの
+  実行経路に接続されていません (詳細は gap-analysis.md D10)。
+
+下記の比較表・機能説明のうち、暗号・ローカル AI 推論に関する項目は上記「モック段階」に該当します。
+設計の到達目標として記載されており、現時点で稼働している保証ではありません。
 
 ---
 

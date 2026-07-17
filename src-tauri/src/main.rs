@@ -96,12 +96,19 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         &MenuItem::with_id(app, "quit",     "Kaname を終了",   true, Some("CmdOrCtrl+Q"))?,
     ])?;
 
-    let _tray = TrayIconBuilder::new()
+    let mut tray_builder = TrayIconBuilder::new()
         .menu(&menu)
-        .menu_on_left_click(false)
-        .icon(app.default_window_icon().cloned().unwrap())
+        .show_menu_on_left_click(false)
         .icon_as_template(true) // macOS テンプレート画像
-        .tooltip("Kaname")
+        .tooltip("Kaname");
+    // デフォルトアイコンが取得できない場合でもトレイ自体は生成を継続する
+    // (修正前は .unwrap() で取得失敗時にアプリ全体がクラッシュしていた)。
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray_builder = tray_builder.icon(icon);
+    } else {
+        tracing::warn!("デフォルトウィンドウアイコンが取得できませんでした (トレイアイコンは既定値を使用)");
+    }
+    let _tray = tray_builder
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 if let Some(w) = app.get_webview_window("main") {

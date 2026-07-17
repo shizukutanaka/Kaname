@@ -8,7 +8,44 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-07-17 — 最新研究反映・クロスクレート統合・監査バグ修正リリース
+
+このリリースは (1) ワークスペース全体のビルド不能状態の解消、(2) 2026-07 の
+最新研究 (quishing 亜種・CalPhishing・プロンプト注入) の反映、(3) Ultracode
+徹底監査 (3エージェント並列・全27クレート) で発見したクロスクレート連携の
+欠落とロジックバグの修正、(4) 実装状況の正直化 (docs/maturity.md,
+docs/gap-analysis.md, README) をまとめたもの。**中核 (MLS暗号・LLM推論・
+Firecracker・課金永続化・UIバックエンド配線) はモック段階であり本番運用は
+不可** — 詳細は docs/maturity.md を参照。
+
 ### Added
+- **kaname-render Quishing 構造亜種検出** (2026年研究反映, docs/research-2026-07.md)
+  - `blob:`/`data:`/`javascript:` スキームの QR ペイロードを `Suspicious` に格上げ (従来は Neutral で素通り)
+  - `assess_multi_qr()` / `MultiQrRisk` — 分割QR (Structured Append) 攻撃の兆候検出
+  - `detect_ascii_qr()` — ブロック文字によるASCIIアートQR (画像デコード不要のテキスト解析) の検出
+- **kaname-render CalPhishing 検出** (`CalendarRisk::AutoRegistrationAbuse`)
+  - `METHOD:REQUEST`/`PUBLISH` の自動登録永続化 (元メール削除後もカレンダーに残る) と他のフィッシング兆候の併存を検出
+  - 警告文で「カレンダー側のエントリ削除が必要」であることを明示
+- **docs/research-2026-07.md**: 2026-07 の最新研究調査とKanameへの反映マップ (長所・短所・改善点の総括含む)
+- **kaname-render カレンダー招待のプロンプト注入検査** (`CalendarRisk::PromptInjectionAttempt`)
+  - .ics の DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener` で検査 (ワークスペース内依存を新規追加、循環なし)
+  - 命令上書きフレーズ・特殊トークン・Base64/Unicodeタグ/HTMLエンティティ注入を検出し Danger 判定
+  - 誤検出防止のため `Blocked` (確定的マーカー一致) のみ採用 (エントロピー単独の `Suspicious` は不使用)
+- **kaname-saas-guard SaaSリンクのプロンプト注入検査** (`SaasLinkInspector::evaluate`)
+  - SaaSリンクのクエリパラメータ (`?note=`等) を `kaname-screen::PromptScreener` で検査し `SaasLinkRisk::Block` に格上げ
+  - 偽SaaSドメイン検出 (`notdocusign.com`等) との併存を確認 (Suspicious→Block)
+- **kaname-bec クロスクレート連携** (Ultracode監査で発見、docs/gap-analysis.md 参照)
+  - `check_content_heuristics` に `kaname-pivot::PivotDetector` を統合 — 暗号通貨アドレス/WhatsApp/Telegram/Signal等の構造化チャネル誘導検出 (従来はハードコードフレーズ一致のみ)
+  - `check_llm` に `kaname-screen::PromptScreener` を統合 — Quarantined LLM に渡す前にプロンプト注入をスクリーニングし、Blocked時はLLMをスキップして注入シグナルを加点
+
+### Fixed
+- **kaname-observability PIIサニタイザの検出漏れ** (北極星 I5 に直結)
+  - `mask_email_addresses` が数字始まりのローカル部 (`12345@vendor.com` 等) を無加工でログに残していた問題を修正 (`is_ascii_alphabetic`→`is_ascii_alphanumeric`)
+- **kaname-radar 集計バグ**: `unknown:` バケットが `or_insert_with` の返り値を捨てており、同一未解決ドメインからの2通目以降が集計されず継続キャンペーン検出が機能していなかった問題を修正
+- **kaname-mls 開始者側エポック初期化漏れ**: 会話開始者が自分の会話に届くリプレイ Commit を検出できなかった問題を修正 (`start_one_to_one` で `epochs` を初期化し受信側と対称化)
+- **kaname-store SQLCipher鍵のゼロ化漏れ**: PRAGMA/ATTACH 文に埋め込む生鍵文字列を `Zeroizing<String>` でラップし、実行後にヒープ上の平文鍵を確実にゼロ化
+- **kaname-oobv Unicode/全角バイパス**: `recommend` のキーワード照合を `kaname-memory-guard::normalize_for_matching` 経由に変更し、全角ラテン文字 (`ＵＲＧＥＮＴ`)・ゼロ幅文字挿入によるOOBV推奨回避を防止
+- **kaname-jmap SSRFリダイレクト未検証**: `JmapClient::connect` の HTTP クライアントに `safe_redirect_policy()` (per-hop DNS再検証) を適用し、DNSリバインディングによるSSRFの入口を閉塞
 - **kaname-ai preflight モジュール**: Dual-LLM パイプライン入口での事前検査
   - `preflight_untrusted()` — Bidi 制御文字 (U+202E 等) / ゼロ幅文字 / 既知インジェクションパターンを検出
   - `PreflightResult` (Clean / Advisory / Block) と `Finding` 列挙型

@@ -16,8 +16,10 @@
 //   - アニメーション: spring physics (cubic-bezier(.34, 1.56, .64, 1))
 //   - 奥行き: 透明度レイヤー、色ではなく空間で階層を表現
 
-import { createSignal, createEffect, For, Show, onMount, onCleanup } from "solid-js";
-import { invoke } from "@tauri-apps/api/core";
+import { createSignal, For, Show, onMount, onCleanup } from "solid-js";
+// 注: このコンポーネントはまだ Tauri invoke 経由でバックエンドと接続されておらず
+// (mockデータで動作)、実装時に import { invoke } from "@tauri-apps/api/core" を戻すこと。
+// (docs/maturity.md 参照)
 
 // ============================================================================
 // 型定義
@@ -475,7 +477,7 @@ export const KanameDesign = () => {
   const [loading, setLoading]       = createSignal(true);
   const [emails, setEmails]         = createSignal<Email[]>([]);
   const [selected, setSelected]     = createSignal<string | null>(null);
-  const [view, setView]             = createSignal<"inbox" | "screener" | "reply_later" | "feed">("inbox");
+  const [view, setView]             = createSignal<"inbox" | "screener" | "reply_later" | "feed" | "paper_trail">("inbox");
   const [contextMenu, setContextMenu] = createSignal<ContextMenu | null>(null);
   const { toasts, show: showToast } = createToastSystem();
 
@@ -538,6 +540,7 @@ export const KanameDesign = () => {
     { id:"inbox",       label:"受信トレイ",  icon:"✉",  count: emails().filter(e => !e.is_read && e.triage === "important").length },
     { id:"screener",    label:"スクリーナー", icon:"🛡", count: 2 },
     { id:"reply_later", label:"Reply Later", icon:"📌", count: 0 },
+    { id:"paper_trail", label:"Paper Trail", icon:"🧾", count: 0 },
     { id:"feed",        label:"フィード",    icon:"📰", count: 0 },
   ];
 
@@ -709,7 +712,7 @@ export const KanameDesign = () => {
           <For each={navItems}>
             {(item) => (
               <button
-                onClick={() => setView(item.id as "inbox" | "screener" | "reply_later" | "feed")}
+                onClick={() => setView(item.id as "inbox" | "screener" | "reply_later" | "feed" | "paper_trail")}
                 style={{
                   width: "100%",
                   display: "flex",
@@ -794,7 +797,7 @@ export const KanameDesign = () => {
             "letter-spacing": "-0.02em",
             flex: "1",
           }}>
-            {{ inbox:"受信トレイ", screener:"スクリーナー", reply_later:"Reply Later", feed:"フィード" }[view()]}
+            {{ inbox:"受信トレイ", screener:"スクリーナー", reply_later:"Reply Later", paper_trail:"Paper Trail", feed:"フィード" }[view()]}
           </div>
           <button
             style={{
@@ -840,7 +843,7 @@ export const KanameDesign = () => {
             <EmptyState
               icon="📭"
               title="メールなし"
-              desc={{ inbox:"受信トレイは空です。新着メールが届くとここに表示されます。", feed:"フィード登録なし。", screener:"スクリーニング待ちなし。", reply_later:"Reply Later リストは空です。" }[view()]}
+              desc={{ inbox:"受信トレイは空です。新着メールが届くとここに表示されます。", feed:"フィード登録なし。", screener:"スクリーニング待ちなし。", reply_later:"Reply Later リストは空です。", paper_trail:"Paper Trail は空です。" }[view()]}
             />
           </Show>
 

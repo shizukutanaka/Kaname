@@ -11,6 +11,8 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
+kaname-screen = { path = "../kaname-screen" }
+kaname-pivot  = { path = "../kaname-pivot" }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -157,6 +157,26 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Residual risk**: Zero-day AiTM proxies not yet in blocklist; novel phishing kit paths. Mitigation: BEC LLM signal covers semantic urgency even without URL blocklist match; OOBV ceremony enforced for high-value wire transfers regardless.
 **Implementation**: `crates/kaname-bec/src/aitm.rs`; assessment integrated into `BecDetector::assess()` via `check_aitm()` signal family.
 
+### 3.10 QR 構造亜種による画像スキャン回避 (2026-07 追加)
+**Threat**: 分割QR (Structured Append) で悪意ある URL を複数の QR に分割する、`blob:`/`data:`/`javascript:` スキームをペイロードに使う、等の構造的亜種により「QR をデコードして URL を照会する」型の防御を回避する。2026-03 には 28 通のキャンペーンが全てのセキュリティツールを素通りした事例が報告された (ReversingLabs/Acronis)。
+**Control**: `kaname-render::quishing` — (a) 非 http(s) の危険スキーム (`blob:`/`data:`/`javascript:`) を `Suspicious` に格上げ、(b) `assess_multi_qr()` が同一メール内の QR 個数から分割 QR 兆候を判定 (`MultiQrRisk::SplitQrSuspected` = 3個以上)、(c) `detect_ascii_qr()` がブロック文字 (`█▀▄` 等) の高密度な連続行をテキスト解析のみで検出 (画像デコード不要)。
+**Residual risk**: `detect_ascii_qr` は密度・行数ヒューリスティックであり、`#`/`@` 等の非ブロック文字だけで描かれた QR や、意図的に密度を下げた亜種は未検出。実際の QR デコード (画像添付分) は `rqrr` 統合待ち (D1 系ではなく別途の依存追加が必要、ネットワーク制限で本セッションは対応不可)。
+
+### 3.11 CalPhishing — カレンダー自動登録の永続化悪用 (2026-07 追加)
+**Threat**: `METHOD:REQUEST` の .ics は多くのクライアントで受信時に自動 tentative 登録され、**元メールをスパム判定・削除してもカレンダーエントリが残る**。攻撃者はこの永続化に緊急性偽装や不審 URL を組み合わせ、削除したはずの攻撃がカレンダーから再度ユーザーに提示される (SC Media "CalPhishing" 2026, KnowBe4)。
+**Control**: `kaname-render::calendar_guard` — `CalendarRisk::AutoRegistrationAbuse`。METHOD:REQUEST/PUBLISH と他のフィッシング兆候の併存で検出し、警告文で「カレンダー側のエントリ削除が必要」であることを明示 (メール削除だけでは不十分という attacker asymmetry をユーザーに伝える)。
+**Residual risk**: 正規招待も METHOD:REQUEST を使うため、他の兆候ゼロの標的型攻撃 (綺麗な招待文+後日差し替え) は検出できない。SEQUENCE 単調性チェック (§既存) が差し替え時の第二防衛線。
+
+### 3.12 カレンダー招待経由のプロンプト注入 (2026-07 追加)
+**Threat**: .ics の DESCRIPTION/SUMMARY に命令上書きフレーズ・LLM特殊トークン・不可視 Unicode タグ等を埋め込む。現状の Kaname では .ics 本文が AI 要約に渡る経路は無いが、(a) UI にそのまま表示され得る、(b) 将来カレンダー統合が Dual-LLM 要約対象になった場合に `kaname-screen` を経由しない入力経路が成立する、という2点で入口検査に値する (§3.1 間接注入のカレンダー版)。
+**Control**: `kaname-render::calendar_guard` — DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener::screen()` にかけ、`Blocked` 判定 (確定的マーカー一致) を `CalendarRisk::PromptInjectionAttempt` として Danger 報告。エントロピー単独の `Suspicious` は文字種の多い正規日本語文の誤検出を招くため不採用。
+**Residual risk**: `Suspicious` を捨てるトレードオフにより、未知パターンの難読化注入 (高エントロピーのみが兆候) は検出しない。Dual-LLM 側の出力監査 (`kaname-ai` の Bridge/AuditResult) が第二防衛線。
+
+### 3.13 SaaSリンク経由のプロンプト注入 (2026-07 追加)
+**Threat**: 正当な SaaS ドメイン (Google Drive/DocuSign 等) や偽装ドメインへのリンクのクエリパラメータ (`?note=`, `?comment=` 等) に命令上書きフレーズや LLM 特殊トークンを仕込み、SaaS連携を装いつつプロンプト注入を狙う複合攻撃。従来の `SaasLinkInspector::evaluate()` はドメイン一致・キーワード一致のみでクエリの文面内容を検査していなかった。
+**Control**: `kaname-saas-guard::SaasLinkInspector::evaluate()` — URL全体を `kaname-screen::PromptScreener::screen()` にかけ、`Blocked` 判定で `SaasLinkRisk::Block` に格上げ。偽SaaSドメイン検出 (§既存の `is_fake_saas_subdomain`) との併存も確認済み (Suspicious→Block)。
+**Residual risk**: §3.12 と同じトレードオフ (`Suspicious`/`HighEntropy` 単独は不採用)。
+
 ---
 
 ## 4. Supply chain
@@ -237,6 +257,8 @@ Ranked by `likelihood × impact`:
 
 - **v1.0 (2026-04-18)**: Initial threat model aligned with ADRs 001-006.
 - **v1.1 (2026-06-14)**: §3.9 AiTM 追加; BEC スコアリングをロジスティック変換に移行; `Content::from_attachment()` の UserUpload provenance 修正; Bridge の PhaaS マーカー拡充 (10件追加); topics フィールドのマーカースキャン追加.
+- **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム/ASCIIアートQR)、§3.11 CalPhishing 自動登録永続化、§3.12 カレンダー招待経由のプロンプト注入、§3.13 SaaSリンク経由のプロンプト注入 (kaname-screen 統合) を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
+- **v1.3 (2026-07-13)**: Ultracode 徹底監査 (3エージェント並列、全27クレート) で発見したセキュリティ修正を反映: (a) kaname-store の SQLCipher 生鍵を `Zeroizing` でゼロ化 (§5 暗号アジリティ / コアダンプ経由の鍵漏洩対策)、(b) kaname-jmap のリダイレクトに `safe_redirect_policy` を適用し DNS リバインディング型 SSRF を閉塞 (§2 STRIDE-Spoofing/EoP)、(c) kaname-oobv の OOBV 推奨キーワード照合を全角/ゼロ幅正規化経由に変更しバイパスを防止 (§3.9 AiTM の電話確認回避対策)、(d) kaname-observability の PII サニタイザが数字始まりメールアドレスを見逃していた検出漏れを修正 (I5 ログ PII 混入防止)。あわせて BEC 検出器への kaname-pivot/kaname-screen 統合、kaname-radar のキャンペーン集計バグ、kaname-mls 開始者側のリプレイ検出漏れを修正。詳細は docs/gap-analysis.md フェーズ4・5。
 
 Future versions will be deltas; we don't rewrite from scratch.
 

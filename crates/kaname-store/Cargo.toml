@@ -13,6 +13,7 @@ tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
 rusqlite   = { workspace = true }
 sha2       = { workspace = true }
+zeroize    = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

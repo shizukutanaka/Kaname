@@ -279,6 +279,7 @@ fn subject_similarity(a: &str, b: &str) -> f32 {
 mod tests {
     use super::*;
 
+    #[allow(clippy::too_many_arguments)]
     fn make_ctx<'a>(
         in_reply_to: Option<&'a str>,
         known_ids: &'a [String],

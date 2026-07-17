@@ -308,7 +308,11 @@ fn mask_email_addresses(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
-        if c.is_ascii_alphabetic() {
+        // 数字始まりのローカル部 (例: "12345@vendor.com"、社員番号型アドレス) も
+        // マスク対象にするため alphanumeric で走査を開始する。
+        // 以前は is_ascii_alphabetic のみで、数字始まりのメールアドレスが
+        // 無加工でログへ素通りしていた。
+        if c.is_ascii_alphanumeric() {
             // メールっぽいパターンを検出
             let mut local = String::new();
             local.push(c);
@@ -617,6 +621,18 @@ mod tests {
         let output = PrivacySanitizer::sanitize(input);
         assert!(!output.contains("alice@"), "メール先頭がマスクされていない: {output}");
         assert!(output.contains("@company.co.jp") || output.contains("***"));
+    }
+
+    #[test]
+    fn privacy_digit_leading_email_is_masked() {
+        // 回帰テスト: 以前はローカル部が数字始まりのメールアドレスが
+        // 走査対象にすら入らず、無加工でログに残っていた。
+        let input = "invoice 12345@vendor.com paid";
+        let output = PrivacySanitizer::sanitize(input);
+        assert!(!output.contains("12345@"),
+            "数字始まりのローカル部がマスクされていない: {output}");
+        assert!(output.contains("123***"),
+            "先頭3文字+*** の形式でマスクされるべき: {output}");
     }
 
     #[test]

@@ -21,7 +21,9 @@
         "fullscreen": false,
         "decorations": true,
         "transparent": false,
-        "vibrancy": "under-window",
+        "windowEffects": {
+          "effects": ["underWindowBackground"]
+        },
         "hiddenTitle": true,
         "titleBarStyle": "overlay"
       }
@@ -78,22 +80,12 @@
       "timestampUrl": "http://timestamp.digicert.com"
     },
     "linux": {
-      "depends": [],
-      "desktopTemplate": null,
       "appimage": {
         "bundleMediaFramework": false
       },
       "deb": {
         "depends": []
       }
-    },
-    "updater": {
-      "active": true,
-      "dialog": true,
-      "pubkey": "",
-      "endpoints": [
-        "https://releases.kaname.app/update/{{target}}/{{arch}}/{{current_version}}"
-      ]
     }
   }
 }

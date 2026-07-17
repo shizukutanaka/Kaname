@@ -2083,6 +2083,8 @@ name = "kaname-bec"
 version = "0.3.21"
 dependencies = [
  "kaname-error",
+ "kaname-pivot",
+ "kaname-screen",
  "proptest",
  "serde",
  "serde_json",
@@ -2275,6 +2277,7 @@ version = "0.3.21"
 dependencies = [
  "kaname-crypto",
  "kaname-error",
+ "kaname-memory-guard",
  "proptest",
  "rand 0.8.6",
  "serde",
@@ -2329,6 +2332,7 @@ version = "0.3.21"
 dependencies = [
  "ammonia",
  "kaname-error",
+ "kaname-screen",
  "mail-parser",
  "proptest",
  "regex",
@@ -2345,6 +2349,7 @@ version = "0.3.21"
 dependencies = [
  "kaname-crypto",
  "kaname-error",
+ "kaname-screen",
  "proptest",
  "rand 0.8.6",
  "serde",
@@ -2404,6 +2409,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]

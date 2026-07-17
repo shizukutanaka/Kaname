@@ -267,7 +267,12 @@ impl Default for MemorySanitizer {
 /// `to_lowercase().contains()` は全角 Unicode やゼロ幅文字による回避に弱い。
 /// 全角 ASCII を ASCII に折り返し、全角空白を半角に、ゼロ幅/フォーマット文字を
 /// 除去したうえで小文字化する。
-fn normalize_for_matching(s: &str) -> String {
+///
+/// キーワード照合の前処理として他クレート (`kaname-oobv` 等) からも再利用できる
+/// よう公開している。全角ラテン文字やゼロ幅文字挿入によるキーワード回避
+/// (例: `ＵＲＧＥＮＴ`、`urg\u{200B}ent`) を防ぐ共通の入口正規化。
+#[must_use]
+pub fn normalize_for_matching(s: &str) -> String {
     s.chars()
         .filter_map(|c| {
             if is_zero_width_or_format(c) {
