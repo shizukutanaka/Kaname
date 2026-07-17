@@ -8,6 +8,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-07-17 — 最新研究反映・クロスクレート統合・監査バグ修正リリース
+
+このリリースは (1) ワークスペース全体のビルド不能状態の解消、(2) 2026-07 の
+最新研究 (quishing 亜種・CalPhishing・プロンプト注入) の反映、(3) Ultracode
+徹底監査 (3エージェント並列・全27クレート) で発見したクロスクレート連携の
+欠落とロジックバグの修正、(4) 実装状況の正直化 (docs/maturity.md,
+docs/gap-analysis.md, README) をまとめたもの。**中核 (MLS暗号・LLM推論・
+Firecracker・課金永続化・UIバックエンド配線) はモック段階であり本番運用は
+不可** — 詳細は docs/maturity.md を参照。
+
 ### Added
 - **kaname-render Quishing 構造亜種検出** (2026年研究反映, docs/research-2026-07.md)
   - `blob:`/`data:`/`javascript:` スキームの QR ペイロードを `Suspicious` に格上げ (従来は Neutral で素通り)

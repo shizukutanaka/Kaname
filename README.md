@@ -6,13 +6,13 @@
 [![Security Audit](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kaname-app/kaname/releases)
-[![Status](https://img.shields.io/badge/status-pre--release%20(v0.3.21)-orange.svg)](docs/maturity.md)
+[![Status](https://img.shields.io/badge/status-pre--release%20(v0.3.22)-orange.svg)](docs/maturity.md)
 
 ---
 
 ## ⚠️ 実装ステータス (公開前に必読)
 
-**本リポジトリは開発中のプレリリース (v0.3.21) であり、そのまま本番運用できる完成品ではありません。**
+**本リポジトリは開発中のプレリリース (v0.3.22) であり、そのまま本番運用できる完成品ではありません。**
 機能ごとの成熟度は [`docs/maturity.md`](docs/maturity.md) と [`docs/gap-analysis.md`](docs/gap-analysis.md) に
 実コード根拠付きで正直に記載しています。要点:
 
