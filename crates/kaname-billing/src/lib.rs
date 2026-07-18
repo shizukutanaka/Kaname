@@ -483,7 +483,13 @@ pub struct LedgerEntry {
 
 /// 新しい台帳エントリを計算。
 ///
-/// hash = SHA-256(prev_hash || event_id || event_type || action_json)
+/// hash = SHA-256(prev_hash ␞ tenant_id ␞ event_id ␞ event_type ␞ action_json)
+/// (␞ = U+001E RECORD SEPARATOR)
+///
+/// フィールド間に区切り文字を挟むことで、境界をずらした別エントリが同一ハッシュに
+/// なる曖昧さを排除する。区切り文字なしでは例えば
+/// `(tenant_id="A", event_id="BC")` と `(tenant_id="AB", event_id="C")` が
+/// 同じ連結文字列 `AB C...` を生み、異なる論理エントリが同一ハッシュを持ち得た。
 pub fn make_ledger_entry(
     seq:         u64,
     tenant_id:   &str,
@@ -492,8 +498,13 @@ pub fn make_ledger_entry(
     action_json: &str,
     prev_hash:   &str,
 ) -> LedgerEntry {
-    // tenant_id をハッシュ入力に含める — 異なるテナント間でのエントリ移植攻撃を防ぐ
-    let input = format!("{}{}{}{}{}", prev_hash, tenant_id, event_id, event_type, action_json);
+    // tenant_id をハッシュ入力に含める — 異なるテナント間でのエントリ移植攻撃を防ぐ。
+    // フィールド間に RS (U+001E) を挟み、境界ずらしによるハッシュ衝突を防ぐ。
+    // RS は tenant_id / event_id / event_type / Stripe イベント種別に通常出現しない
+    // 制御文字であり、フィールド区切りとして安全。
+    let input = format!(
+        "{prev_hash}\u{1e}{tenant_id}\u{1e}{event_id}\u{1e}{event_type}\u{1e}{action_json}"
+    );
     let hash = sha256_hex(input.as_bytes());
     LedgerEntry {
         seq,
@@ -784,6 +795,26 @@ mod tests {
             1000 + STRIPE_TIMESTAMP_TOLERANCE_SECS + 1,
         );
         assert!(matches!(result, Err(BillingError::SignatureExpired { .. })));
+    }
+
+    #[test]
+    fn ledger_hash_no_boundary_collision() {
+        // 境界ずらし攻撃: (tenant="A", event_id="BC") と (tenant="AB", event_id="C") は
+        // 論理的に異なるエントリなのでハッシュも異なるべき。
+        // 区切り文字なしの旧実装では両者の連結が同一になり衝突していた。
+        let e1 = make_ledger_entry(1, "A",  "subscription.created", "BC", "{}", "");
+        let e2 = make_ledger_entry(1, "AB", "subscription.created", "C",  "{}", "");
+        assert_ne!(e1.hash, e2.hash,
+            "フィールド境界をずらした異なるエントリが同一ハッシュになってはならない");
+
+        // event_type と action_json の境界でも同様
+        let e3 = make_ledger_entry(1, "t", "a", "e", "b{}", "");
+        let e4 = make_ledger_entry(1, "t", "a", "e", "b{}", "");
+        assert_eq!(e3.hash, e4.hash, "同一入力は同一ハッシュ (決定性)");
+        let e5 = make_ledger_entry(1, "t", "ab", "e", "{}", "");
+        let e6 = make_ledger_entry(1, "t", "a",  "e", "b{}", "");
+        assert_ne!(e5.hash, e6.hash,
+            "event_type/action_json 境界ずらしも衝突しないこと");
     }
 
     #[test]
