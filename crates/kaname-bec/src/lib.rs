@@ -1,10 +1,22 @@
 //! kaname-bec — BEC (Business Email Compromise) 多信号検出器。
 //!
-//! # 検出する信号
-//! - Levenshtein 距離によるドメインタイポスクワット
-//! - 緊急性マーカー (至急、urgent 等)
-//! - 振込先変更パターン
-//! - QR フィッシング、VEC、多ペルソナ、メール爆撃
+//! # 実際に検出する信号 (assess() が組み合わせる signal family)
+//! - 認証 (SPF/DKIM/DMARC/ARC の合否)
+//! - ドメイン (Levenshtein タイポスクワット / ホモグリフ / 新規性)
+//! - 送信者履歴 (新規連絡先 / 急なトピック変化)
+//! - 内容ヒューリスティクス (緊急性マーカー・振込先変更・Cialdini 説得原理・
+//!   チャネル誘導フレーズ + `kaname-pivot` による構造化チャネル誘導検出)
+//! - AiTM プロキシ (リバースプロキシ / PhaaS フィンガープリント)
+//! - Reply-To スプーフィング + 表示名詐称
+//! - スレッド乗っ取り
+//! - 口座番号差替 (スレッドハイジャック型)
+//! - DKIM `l=` タグ濫用 + リプレイ
+//! - Quarantined LLM 意味解析 (+ 前段の `kaname-screen` プロンプト注入スクリーニング)
+//!
+//! # このクレートが扱わない検出 (別クレートに委譲)
+//! - QR フィッシング (quishing) → `kaname-render::quishing`
+//! - カレンダー招待 / SaaS リンク → `kaname-render`, `kaname-saas-guard`
+//! - ポリモーフィックキャンペーン (PCR) → `kaname-radar`
 //!
 //! # 出力
 //! Verdict (Safe / Advisory / Suspicious / Dangerous) + 0..=1 のスコア
