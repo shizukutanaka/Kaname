@@ -25,9 +25,11 @@
 //   On Block, rendering aborts and the UI shows a DLP banner.
 //   On Warn, rendering continues but the banner appears.
 //
-// Extensibility:
-//   Custom rules live in kaname-store.dlp_rules as JSON.
-//   DlpEngine::from_db() loads them at startup and on Settings change.
+// Extensibility (planned, not yet wired):
+//   The kaname-store.dlp_rules table is defined for storing custom rules as JSON,
+//   but loading them into DlpEngine at startup / on Settings change is NOT yet
+//   implemented (no from_db() exists; app_state wiring is commented-out pseudocode).
+//   Currently the engine uses only its built-in default classifiers.
 
 
 #![deny(unsafe_code)]
