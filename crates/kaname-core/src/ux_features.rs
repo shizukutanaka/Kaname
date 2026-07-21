@@ -66,7 +66,12 @@ impl SenderScreener {
         from_name: Option<&str>,
         received_at: &str,
     ) -> ScreenerDecision {
-        if let Some(entry) = self.entries.get_mut(from_addr) {
+        // キーは小文字化して正規化する。正規化しないと、Blocked にした送信者が
+        // 大小を変える (Attacker@evil.com → attacker@evil.com) だけで新規 Pending
+        // エントリになりスクリーニングを回避できてしまう。表示用 from_addr は
+        // 元の大小を保持する。
+        let key = from_addr.to_lowercase();
+        if let Some(entry) = self.entries.get_mut(&key) {
             entry.email_count += 1;
             return entry.decision.clone();
         }
@@ -80,7 +85,7 @@ impl SenderScreener {
             email_count: 1,
             is_new:      true,
         };
-        self.entries.insert(from_addr.to_owned(), entry);
+        self.entries.insert(key, entry);
         ScreenerDecision::Pending
     }
 
@@ -90,7 +95,8 @@ impl SenderScreener {
         from_addr: &str,
         decision: ScreenerDecision,
     ) -> Result<(), ScreenerError> {
-        let entry = self.entries.get_mut(from_addr)
+        let key = from_addr.to_lowercase();
+        let entry = self.entries.get_mut(&key)
             .ok_or_else(|| ScreenerError::NotFound(from_addr.to_owned()))?;
         entry.decision = decision;
         entry.is_new   = false;
@@ -107,7 +113,8 @@ impl SenderScreener {
 
     /// 送信者の判定を返す。
     pub fn get(&self, from_addr: &str) -> ScreenerDecision {
-        self.entries.get(from_addr)
+        // observe/decide と同じく小文字化キーで引く (大小差によるすり抜け防止)。
+        self.entries.get(&from_addr.to_lowercase())
             .map(|e| e.decision.clone())
             .unwrap_or(ScreenerDecision::Pending)
     }
@@ -164,13 +171,16 @@ impl TriageEngine {
         subject:     &str,
         bec_verdict: Option<&str>,
     ) -> TriageBucket {
-        // 送信者ルール優先
-        if let Some(&bucket) = self.sender_rules.get(from_addr) {
-            return bucket;
-        }
-
         let subject_lower = subject.to_lowercase();
         let from_lower    = from_addr.to_lowercase();
+
+        // 送信者ルール優先。add_sender_rule はキーを小文字化して格納するため
+        // ルックアップも小文字化した from_lower を使う (以前は生の from_addr で
+        // 引いており、大文字を含む From ではユーザー設定のルールがサイレントに
+        // 無視されていた)。
+        if let Some(&bucket) = self.sender_rules.get(&from_lower) {
+            return bucket;
+        }
 
         // Paper Trail: 取引・確認メール
         let paper_trail_markers = [
@@ -630,6 +640,34 @@ mod tests {
         let result = engine.triage("boss@company.com", "週刊 newsletter", None);
         // 送信者ルールが Feed より優先
         assert_eq!(result, TriageBucket::Important);
+    }
+
+    #[test]
+    fn 送信者ルールは大文字混在fromでも適用される() {
+        // 回帰: add_sender_rule は小文字化して格納するが、triage が生キーで
+        // 引いていたため大文字を含む From でルールが無視されていた。
+        let mut engine = TriageEngine::new();
+        engine.add_sender_rule("boss@company.com", TriageBucket::Important);
+        // Feed マーカーを含む件名でも、大小混在の From に対しルールが優先されるべき
+        let result = engine.triage("Boss@Company.com", "週刊 newsletter", None);
+        assert_eq!(result, TriageBucket::Important,
+            "大文字混在 From でも送信者ルールが適用されるべき");
+    }
+
+    #[test]
+    fn ブロック済み送信者は大小変更で回避できない() {
+        // 回帰: SenderScreener がキーを正規化していなかったため、Blocked にした
+        // 送信者が大小を変えるだけで新規 Pending 扱いになりブロックを回避できた。
+        let mut screener = SenderScreener::new();
+        screener.observe("spam@evil.com", None, "2026-04-24");
+        screener.decide("spam@evil.com", ScreenerDecision::Blocked).unwrap();
+        // 大小を変えた同一送信者も Blocked と判定されるべき
+        assert!(screener.is_blocked("Spam@Evil.com"),
+            "大小を変えたブロック済み送信者がすり抜けている");
+        // observe でも新規 Pending にならず既存の Blocked を返すべき
+        let d = screener.observe("SPAM@EVIL.COM", None, "2026-04-25");
+        assert_eq!(d, ScreenerDecision::Blocked,
+            "大文字化した同一送信者が新規 Pending になっている");
     }
 
     // スヌーズ
