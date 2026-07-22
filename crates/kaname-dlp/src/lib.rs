@@ -689,17 +689,25 @@ fn detect_credit_card(text: &str) -> bool {
     // 全角数字を正規化してから検出 (全角での DLP 回避を防ぐ)
     let normalized = normalize_fullwidth_digits(text);
     let text = normalized.as_ref();
-    // 区切り (スペース/ハイフン) あり・なし両対応で 16 桁 PAN 候補をマッチする。
-    let Ok(re) = Regex::new(
-        r"(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})"
-    ) else { return false };
-    // 各マッチから数字のみ抽出して Luhn 検証する。
-    // 以前は extract_digit_runs で「連続16桁ラン」しか拾わず、区切り付きの
-    // 4111-1111-1111-1111 / 4111 1111 1111 1111 が Luhn 検証に到達せず
-    // 検出漏れしていた (人間が普通に書く区切り付き PAN が素通り)。
+    // 区切り (スペース/ハイフン) あり・なし両対応で主要ブランドの PAN 候補をマッチする。
+    // Visa / Mastercard (16桁) に加え、以前は対象外だった JCB(35, 16桁) /
+    // Discover(6011・65, 16桁) / American Express(34・37, 15桁 4-6-5) も検出する
+    // (法人メールで Amex/JCB のカード番号が DLP をすり抜けて外部送信される穴を塞ぐ)。
+    let Ok(re) = Regex::new(concat!(
+        r"(?:",
+        r"4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",            // Visa 16
+        r"|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",      // Mastercard 16
+        r"|35[0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",          // JCB 16
+        r"|6(?:011|5[0-9]{2})[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",  // Discover 16
+        r"|3[47][0-9]{2}[-\s]?[0-9]{6}[-\s]?[0-9]{5}",                     // Amex 15 (4-6-5)
+        r")",
+    )) else { return false };
+    // 各マッチから数字のみ抽出して桁数 (Amex=15 / その他=16) と Luhn を検証する。
+    // 以前は「連続16桁ラン」しか拾わず区切り付き PAN が素通りし、かつ 16桁固定
+    // 判定のため 15桁の Amex は原理的に検出できなかった。
     re.find_iter(text).any(|m| {
         let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
-        digits.len() == 16 && luhn_check(&digits)
+        (digits.len() == 15 || digits.len() == 16) && luhn_check(&digits)
     })
 }
 
@@ -1578,6 +1586,23 @@ mod tests {
         // Luhn 不正な番号は (区切りの有無に関わらず) 検出されない
         assert!(!detect_credit_card("4111-1111-1111-1112"),
             "Luhn 不正な番号を誤検出している");
+    }
+
+    #[test]
+    fn credit_card_amex_jcb_discover_detected() {
+        // Visa/Mastercard 以外の主要ブランドも検出されるべき (DLP カバレッジの穴)。
+        // いずれも各ブランドの標準テスト番号 (Luhn 有効)。
+        assert!(detect_credit_card("Amex: 378282246310005"),
+            "American Express (15桁) が検出されない");
+        assert!(detect_credit_card("Amex 3782 822463 10005"),
+            "区切り付き Amex が検出されない");
+        assert!(detect_credit_card("JCB 3530111333300000"),
+            "JCB が検出されない");
+        assert!(detect_credit_card("Discover 6011111111111117"),
+            "Discover が検出されない");
+        // Luhn 不正な 15桁 Amex 風番号は検出されない
+        assert!(!detect_credit_card("378282246310004"),
+            "Luhn 不正な Amex 風番号を誤検出している");
     }
 
     #[test]
