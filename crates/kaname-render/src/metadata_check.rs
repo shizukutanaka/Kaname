@@ -80,22 +80,61 @@ fn detect_pdf_metadata(bytes: &[u8]) -> Vec<MetadataRisk> {
 }
 
 /// PDF フィールド値を抽出する (簡易パーサー)。
+///
+/// PDF の文字列リテラルは 2 形式ある:
+/// - literal string: `(Alice)`
+/// - hex string:     `<416c696365>` (= "Alice")
+/// 両方に対応する (以前は `(...)` のみ対応し、hex string を握り潰していたため
+/// 作成者名等が hex エンコードされた PDF でメタデータ検出が漏れていた)。
 fn find_pdf_field(text: &str, field: &str) -> Option<String> {
     let pos = text.find(field)?;
     let rest = &text[pos + field.len()..];
-    // フィールド後の値: "(...)" または "<...>" 形式
     let rest = rest.trim_start();
-    if rest.starts_with('(') {
-        let end = rest.find(')')?;
-        let value = &rest[1..end];
+    if let Some(body) = rest.strip_prefix('(') {
+        // literal string: "(...)"
+        let end = body.find(')')?;
+        let value = &body[..end];
         if value.is_empty() {
             return None;
         }
-        let excerpt = truncate_utf8(value, 64);
-        Some(excerpt)
+        Some(truncate_utf8(value, 64))
+    } else if let Some(body) = rest.strip_prefix('<') {
+        // hex string: "<...>" — hex ペアを ASCII にデコードする
+        let end = body.find('>')?;
+        let hex: String = body[..end].chars().filter(|c| !c.is_ascii_whitespace()).collect();
+        if hex.is_empty() {
+            return None;
+        }
+        let decoded = decode_pdf_hex_string(&hex)?;
+        if decoded.is_empty() {
+            return None;
+        }
+        Some(truncate_utf8(&decoded, 64))
     } else {
         None
     }
+}
+
+/// PDF hex string (`<...>` 内) を ASCII 文字列にデコードする。
+///
+/// PDF 仕様: 奇数桁の場合は末尾に `0` を補う。非 hex 文字が含まれる場合は
+/// 不正としてデコードを中止する (None)。制御文字は `.` に置換して excerpt を安全に保つ。
+fn decode_pdf_hex_string(hex: &str) -> Option<String> {
+    let mut bytes = Vec::with_capacity(hex.len() / 2 + 1);
+    let chars: Vec<char> = hex.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let hi = chars[i].to_digit(16)?;
+        // 奇数桁は末尾 0 補完 (PDF 仕様)
+        let lo = if i + 1 < chars.len() { chars[i + 1].to_digit(16)? } else { 0 };
+        bytes.push((hi * 16 + lo) as u8);
+        i += 2;
+    }
+    // 印字可能な文字のみ残し、制御文字は '.' に (メタデータ excerpt の安全化)
+    let s: String = bytes.iter()
+        .map(|&b| if (0x20..0x7f).contains(&b) { b as char } else { '.' })
+        .collect();
+    Some(s)
 }
 
 /// JPEG/TIFF EXIF メタデータ検出。
@@ -191,6 +230,28 @@ mod tests {
         let pdf = b"%PDF-1.4\nThis PDF has no metadata.\n%%EOF";
         let risks = detect_pdf_metadata(pdf);
         assert!(risks.is_empty());
+    }
+
+    #[test]
+    fn pdf_author_in_hex_string_detected() {
+        // 回帰: hex string 形式 <416c696365> (= "Alice") の作成者名は以前
+        // find_pdf_field が握り潰しており検出漏れしていた。
+        let pdf = b"%PDF-1.4\n/Author <416c696365>\n";
+        let risks = detect_pdf_metadata(pdf);
+        assert!(
+            risks.iter().any(|r| matches!(r, MetadataRisk::PdfAuthorInfo { .. })),
+            "hex string の作成者名が検出されるべき: {risks:?}"
+        );
+    }
+
+    #[test]
+    fn pdf_hex_string_decodes_to_ascii() {
+        // <48656c6c6f> = "Hello"
+        assert_eq!(decode_pdf_hex_string("48656c6c6f").as_deref(), Some("Hello"));
+        // 奇数桁は末尾 0 補完: <41> = "A", <4> → 0x40 = "@"
+        assert_eq!(decode_pdf_hex_string("41").as_deref(), Some("A"));
+        // 非 hex 文字は None
+        assert_eq!(decode_pdf_hex_string("zz"), None);
     }
 
     #[test]
