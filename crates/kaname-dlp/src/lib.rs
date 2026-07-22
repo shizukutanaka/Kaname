@@ -689,14 +689,18 @@ fn detect_credit_card(text: &str) -> bool {
     // 全角数字を正規化してから検出 (全角での DLP 回避を防ぐ)
     let normalized = normalize_fullwidth_digits(text);
     let text = normalized.as_ref();
-    // 検索: 16-digit groups with or without spaces/hyphens
-    // 次に Luhn で検証
-    let re = r"(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})";
-    if !re_is_match(re, text) {
-        return false;
-    }
-    // 数字文字列を抽出 of length 16 and Luhn-check
-    extract_digit_runs(text, 16).into_iter().any(|n| luhn_check(&n))
+    // 区切り (スペース/ハイフン) あり・なし両対応で 16 桁 PAN 候補をマッチする。
+    let Ok(re) = Regex::new(
+        r"(?:4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4})"
+    ) else { return false };
+    // 各マッチから数字のみ抽出して Luhn 検証する。
+    // 以前は extract_digit_runs で「連続16桁ラン」しか拾わず、区切り付きの
+    // 4111-1111-1111-1111 / 4111 1111 1111 1111 が Luhn 検証に到達せず
+    // 検出漏れしていた (人間が普通に書く区切り付き PAN が素通り)。
+    re.find_iter(text).any(|m| {
+        let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
+        digits.len() == 16 && luhn_check(&digits)
+    })
 }
 
 fn luhn_check(digits: &str) -> bool {
@@ -714,23 +718,19 @@ fn luhn_check(digits: &str) -> bool {
     sum % 10 == 0
 }
 
-fn extract_digit_runs(text: &str, len: usize) -> Vec<String> {
-    let digits: String = text.chars()
-        .map(|c| if c.is_ascii_digit() { c } else { ' ' })
-        .collect();
-    digits.split_whitespace()
-        .filter(|s| s.len() == len)
-        .map(|s| s.to_owned())
-        .collect()
-}
-
 fn detect_iban(text: &str) -> bool {
-    // IBAN: 2 letter country code + 2 check digits + up to 30 alphanumeric
-    // 正規表現だけでは "US00ABCD1234" のような非 IBAN 文字列にも一致してしまうため、
-    // ISO 7064 MOD 97-10 のチェックディジット検証を追加して誤検知を減らす。
-    let Ok(re) = Regex::new(r"\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}\b") else { return false };
-    let result = re.find_iter(text).any(|m| iban_checksum_valid(m.as_str()));
-    result
+    // IBAN: 2 letter country code + 2 check digits + up to 30 alphanumeric。
+    // 人間可読形式では4文字ごとにスペース区切りで印字するのが標準
+    // (例: GB82 WEST 1234 5698 7654 32)。区切り (スペース/ハイフン) を跨いで
+    // マッチできるようにし、検証前に区切りを除去する。以前は連続文字列にしか
+    // マッチせず、銀行取引でごく一般的な区切り付き IBAN が素通りしていた。
+    // 正規表現だけでは "US00ABCD1234" 等の非 IBAN にも一致し得るため、
+    // ISO 7064 MOD 97-10 のチェックディジット検証で誤検知を抑える。
+    let Ok(re) = Regex::new(r"\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b") else { return false };
+    re.find_iter(text).any(|m| {
+        let compact: String = m.as_str().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+        iban_checksum_valid(&compact)
+    })
 }
 
 /// ISO 7064 MOD 97-10 アルゴリズムで IBAN のチェックディジットを検証する。
@@ -1562,6 +1562,35 @@ mod tests {
         let fullwidth = "４５３２０１５１１２８３０３６６";
         assert!(detect_credit_card(fullwidth),
             "全角クレジットカード番号が検出されない (DLP 回避)");
+    }
+
+    #[test]
+    fn credit_card_with_separators_detected() {
+        // 回帰: 区切り付き PAN は正規表現に一致するのに、旧 extract_digit_runs が
+        // 「連続16桁ラン」しか拾わず Luhn 検証に到達せず検出漏れしていた。
+        // 4111 1111 1111 1111 は Luhn 有効な Visa テスト番号。
+        assert!(detect_credit_card("カード番号は 4111-1111-1111-1111 です"),
+            "ハイフン区切りの PAN が検出されない");
+        assert!(detect_credit_card("card 4111 1111 1111 1111"),
+            "スペース区切りの PAN が検出されない");
+        // 連続表記も引き続き検出される
+        assert!(detect_credit_card("4111111111111111"));
+        // Luhn 不正な番号は (区切りの有無に関わらず) 検出されない
+        assert!(!detect_credit_card("4111-1111-1111-1112"),
+            "Luhn 不正な番号を誤検出している");
+    }
+
+    #[test]
+    fn iban_with_spaces_detected() {
+        // 回帰: 4文字ごとスペース区切りの標準印字形式は、旧正規表現が
+        // スペースを跨げず検出漏れしていた。
+        assert!(detect_iban("送金先 IBAN: GB82 WEST 1234 5698 7654 32 まで"),
+            "スペース区切りの IBAN が検出されない");
+        // 連続表記も引き続き検出される
+        assert!(detect_iban("IBAN GB82WEST12345698765432"));
+        // チェックディジット不正 (区切り付き) は検出されない
+        assert!(!detect_iban("GB82 WEST 1234 5698 7654 33"),
+            "チェックディジット不正な IBAN を誤検出している");
     }
 
     // ── 受信者ドメイン抽出のバイパステスト ─────────────────────────────────
