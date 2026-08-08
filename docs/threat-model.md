@@ -167,6 +167,11 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Control**: `kaname-render::calendar_guard` — `CalendarRisk::AutoRegistrationAbuse`。METHOD:REQUEST/PUBLISH と他のフィッシング兆候の併存で検出し、警告文で「カレンダー側のエントリ削除が必要」であることを明示 (メール削除だけでは不十分という attacker asymmetry をユーザーに伝える)。
 **Residual risk**: 正規招待も METHOD:REQUEST を使うため、他の兆候ゼロの標的型攻撃 (綺麗な招待文+後日差し替え) は検出できない。SEQUENCE 単調性チェック (§既存) が差し替え時の第二防衛線。
 
+### 3.15 DKIM リプレイ攻撃 / DMARC OR trap (2026-07 追加)
+**Threat**: 攻撃者が正規組織 (Google/PayPal/Apple 等) から届いた DKIM 署名済みメールを入手し、そのまま別の宛先へ再送する。署名は有効なままなので DKIM は pass する。**DMARC は SPF と DKIM の OR 判定 (AND ではない) ため、SPF が転送で落ちても DKIM 側の alignment だけで DMARC も pass** してしまう。結果、受信側には「認証を完全に通過した正規メール」に見える。2025 年に Google をスプーフィングする実被害が発生。
+**Control**: `kaname-bec::check_dkim` — DKIM 署名ドメイン (`d=`) と表示上の From ドメインの整合を検証する。正規メールでは `d=` は From ドメイン (またはその親ドメイン) と揃うため、不一致は第三者署名かリプレイの強い指標になる。DKIM が pass しているケースほど「認証通過に見える」ため重み付けを高くする (0.40 / 未pass時 0.20)。既存の `DkimReplayTracker` (同一署名の複数回観測) と併せて多層で検出する。
+**Residual risk**: 正当な第三者送信サービス (メール配信基盤等) は `d=` が異なることがあり、単独では誤検知になり得るため、他シグナルとの複合で評価する設計としている。また転送メーリングリストは SPF fail + DKIM pass の形を取るが、`d=` が整合していれば本シグナルは発火しない。
+
 ### 3.14 SVG 添付によるスクリプト実行・フィッシング (2026-07 追加)
 **Threat**: SVG は「画像」でありながら XML であり、`<script>`・イベントハンドラ・`<foreignObject>` を含められる。ブラウザで開くと JavaScript が実行されるため、無害な画像に見せかけてフィッシングページをローカル展開したりトークンを窃取できる。悪意ある SVG 添付は 2024 年比で **50 倍**に増加 (2025 年)、2026 年 2 月の単一キャンペーンで **120 万通が 53,000 組織**へ配信された。観測された回避手法: (a) `type="application/ecmascript"` という非推奨 MIME 型でのスクリプト宣言 (ブラウザは `text/javascript` と同一に扱うが多くのスキャナが未検査)、(b) EML→SVG→base64 iframe の多層エンコード、(c) `<script>` を使わないイベントハンドラ実行。
 **Control**: `kaname-render::svg_guard` — `scan_svg()` が `<script>` (type 属性も監査証跡として記録)・イベントハンドラ・`javascript:`/`vbscript:` スキーム・`<foreignObject>`・base64/`atob()` を検出し、実行リスクがあれば `safe_as_attachment = false`。また `magic_bytes::is_svg` が先頭 256 バイトしか走査せず長いコメントで `<svg` を押し下げると回避できたため、8 KB まで走査する `looks_like_svg()` を追加。

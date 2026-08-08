@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **kaname-bec DKIM リプレイ攻撃の検出** (署名ドメイン `d=` と From ドメインの整合検証)
+  - 攻撃: 正規組織 (Google/PayPal/Apple 等) の DKIM 署名済みメールを入手して再送する。署名は有効なままなので DKIM は pass し、**DMARC は SPF と DKIM の OR 判定 (AND ではない) のため DMARC も pass** する → 受信側には「認証を完全に通過した正規メール」に見える
+  - 従来の `check_auth` ではこの組み合わせ (SPF fail + DKIM pass + DMARC pass) が「1つ失敗 = 0.15」の軽微扱いで、ARC pass があると更に減点されていた
+  - `dkim_check` は既に `d=` を解析していたが**整合検証に使っていなかった**ため、これを追加。DKIM が pass しているケースほど危険 (認証通過に見える) として重み付け
+  - 親ドメイン署名 (`d=example.com` / From が `mail.example.com`) は正当として誤検出しない
+  - 出典: 2025年の Google スプーフィング事例、"DMARC OR trap" (DMARC が OR ロジックである構造的弱点)
 - **kaname-render SVG 添付攻撃の検出** (`svg_guard` モジュール新設)
   - 背景: 悪意ある SVG 添付は2024年比で**50倍**に増加 (2025年)。2026年2月の単一キャンペーンでは **120万通が53,000組織**へ配信された。SANS ISC が 2026-06 に MIME 型回避手法を警告
   - 検出: `<script>` 要素 (**非推奨 MIME 型 `application/ecmascript` による回避**も型を記録して検出)、イベントハンドラ (`onload=` 等、`<script>` なしの実行)、`javascript:`/`vbscript:` スキーム、`<foreignObject>` による HTML 埋め込み、base64/`atob()` の多層エンコード、外部リソース参照

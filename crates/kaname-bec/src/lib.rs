@@ -820,6 +820,47 @@ impl BecDetector {
             });
         }
 
+        // DKIM 署名ドメイン (d=) と表示上の From ドメインの整合検証。
+        //
+        // # DKIM リプレイ攻撃 (2025 年に Google/PayPal/Apple が実被害)
+        //
+        // 攻撃者は正規組織から届いた DKIM 署名済みメールを入手し、そのまま
+        // 別の宛先へ再送する。署名は有効なままなので DKIM は pass し、
+        // **DMARC は SPF と DKIM の OR 判定 (AND ではない) のため DMARC も pass** する。
+        // 結果、受信側には「認証を完全に通過した正規メール」に見える。
+        //
+        // 識別子となるのは「署名ドメインが表示上の送信元ドメインと一致しない」点。
+        // 正規のメールでは d= は From ドメイン (またはその親ドメイン) と揃う。
+        // 一致しない場合、第三者署名かリプレイの可能性が高い。
+        //
+        // 出典: 2025 年の Google スプーフィング事例、DMARC の OR ロジック問題
+        // ("DMARC OR trap")。
+        if let (Some(d_domain), Some(from_domain)) =
+            (analysis.domain.as_deref(), extract_domain(req.from_header))
+        {
+            let d_lower = d_domain.trim().to_ascii_lowercase();
+            let from_lower = from_domain.trim().to_ascii_lowercase();
+            // 完全一致、または d= が From の親ドメイン (サブドメイン署名) なら整合。
+            let aligned = d_lower == from_lower
+                || from_lower.ends_with(&format!(".{d_lower}"))
+                || d_lower.ends_with(&format!(".{from_lower}"));
+            if !aligned {
+                // DKIM 自体が pass している場合ほど危険 (認証通過に見えるため)。
+                let contribution = if matches!(req.auth.dkim, AuthVerdict::Pass) { 0.40 } else { 0.20 };
+                signals.push(Signal {
+                    family: SignalFamily::Authentication,
+                    contribution,
+                    label: "DKIM 署名ドメインが送信元と不一致".to_string(),
+                    rationale: format!(
+                        "DKIM 署名ドメイン (d={d_lower}) が From ドメイン ({from_lower}) と\
+                         一致しません。DMARC は SPF と DKIM の OR 判定のため、\
+                         正規署名済みメールを再送する DKIM リプレイ攻撃でも\
+                         認証を通過して見えることがあります。"
+                    ),
+                });
+            }
+        }
+
         // ロックが取得できない (中毒化) 場合はリプレイ検出をスキップし、
         // 他のシグナルには影響を与えない (フェイルセーフ)。
         if let Ok(mut tracker) = self.dkim_replay_tracker.lock() {
@@ -1865,6 +1906,93 @@ mod tests {
         let result = contains_unusual_topic(&huge, "請求書の送付");
         // パニックせず bool を返すこと
         let _ = result;
+    }
+
+    #[test]
+    fn dkim_replay_signing_domain_mismatch_detected() {
+        // DKIM リプレイ攻撃: 正規組織 (google.com) の署名済みメールを再送。
+        // DKIM は pass、DMARC も OR 判定で pass するが、d= が From と一致しない。
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Security <no-reply@attacker-relay.example>",
+            return_path: None,
+            subject: "Account notice",
+            body_text: "Please review.",
+            auth: AuthResults {
+                spf: AuthVerdict::Fail,   // 転送のため SPF は落ちる
+                dkim: AuthVerdict::Pass,  // 正規署名なので DKIM は通る
+                dmarc: AuthVerdict::Pass, // OR 判定のため DMARC も通ってしまう
+                arc: None,
+            },
+            sender_history: None,
+            our_domain: "corp.example",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: Some("v=1; a=rsa-sha256; d=google.com; s=sel; b=AAAA1111"),
+        };
+        let a = det.assess(req).expect("assess failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("DKIM 署名ドメインが送信元と不一致")),
+            "DKIM リプレイの署名ドメイン不一致が検出されていない: {:?}", a.signals
+        );
+    }
+
+    #[test]
+    fn dkim_aligned_signing_domain_not_flagged() {
+        // 正規メール: d= と From ドメインが一致 → 検出してはならない
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Alice <alice@ally-corp.com>",
+            return_path: Some("alice@ally-corp.com"),
+            subject: "Hello",
+            body_text: "Just a normal message.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: Some("v=1; a=rsa-sha256; d=ally-corp.com; s=sel; b=BBBB2222"),
+        };
+        let a = det.assess(req).expect("assess failed");
+        assert!(
+            !a.signals.iter().any(|s| s.label.contains("DKIM 署名ドメインが送信元と不一致")),
+            "整合した署名ドメインを誤検出した: {:?}", a.signals
+        );
+    }
+
+    #[test]
+    fn dkim_subdomain_signing_is_aligned() {
+        // 親ドメイン署名 (d=example.com で From が mail.example.com) は正当
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "normal".into() }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "Notices <no-reply@mail.ally-corp.com>",
+            return_path: None,
+            subject: "Hello",
+            body_text: "Normal.",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "ally-corp.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: Some("v=1; a=rsa-sha256; d=ally-corp.com; s=sel; b=CCCC3333"),
+        };
+        let a = det.assess(req).expect("assess failed");
+        assert!(
+            !a.signals.iter().any(|s| s.label.contains("DKIM 署名ドメインが送信元と不一致")),
+            "サブドメイン署名を誤検出した: {:?}", a.signals
+        );
     }
 
     #[test]
