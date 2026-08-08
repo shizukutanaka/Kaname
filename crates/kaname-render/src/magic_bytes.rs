@@ -168,12 +168,19 @@ pub fn detect_polyglot(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     }
 
     // PNG + ZIP polyglot (PNG IEND チャンクの後に ZIP データ)
-    if head_mime == "image/png" && tail.windows(4).any(|w| w == b"PK\x05\x06") {
+    // JPEG 分岐と同じく、EOCD (PK\x05\x06) だけでなくローカルファイルヘッダ
+    // (PK\x03\x04) も照合する。EOCD が 64KB 窓の外にある巨大 polyglot や
+    // EOCD を細工した検体でも、埋め込みエントリの存在で検出できるようにする。
+    if head_mime == "image/png"
+        && tail.windows(4).any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
+    {
         return Some(("image/png", "application/zip"));
     }
 
     // PDF + ZIP polyglot (PDF %%EOF の後に ZIP)
-    if head_mime == "application/pdf" && tail.windows(4).any(|w| w == b"PK\x05\x06") {
+    if head_mime == "application/pdf"
+        && tail.windows(4).any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
+    {
         return Some(("application/pdf", "application/zip"));
     }
 
@@ -327,6 +334,30 @@ mod tests {
         let result = detect_polyglot(&bytes);
         assert!(result.is_some(), "JPEG+ZIP polyglot should be detected");
         assert_eq!(result.unwrap().0, "image/jpeg");
+    }
+
+    #[test]
+    fn png_zip_polyglot_with_local_header_detected() {
+        // 回帰: PNG/PDF 分岐は EOCD (PK\x05\x06) のみ照合しており、
+        // ローカルファイルヘッダ (PK\x03\x04) しか窓内に無い検体を見逃していた。
+        let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec(); // PNG signature
+        bytes.extend(vec![0u8; 100]);
+        bytes.extend_from_slice(b"PK\x03\x04"); // ZIP local file header
+        bytes.extend(vec![0u8; 20]);
+        let result = detect_polyglot(&bytes);
+        assert_eq!(result, Some(("image/png", "application/zip")),
+            "PNG+ZIP (ローカルヘッダ) polyglot が検出されるべき");
+    }
+
+    #[test]
+    fn pdf_zip_polyglot_with_local_header_detected() {
+        let mut bytes = b"%PDF-1.7\n".to_vec();
+        bytes.extend(vec![0u8; 100]);
+        bytes.extend_from_slice(b"PK\x03\x04");
+        bytes.extend(vec![0u8; 20]);
+        let result = detect_polyglot(&bytes);
+        assert_eq!(result, Some(("application/pdf", "application/zip")),
+            "PDF+ZIP (ローカルヘッダ) polyglot が検出されるべき");
     }
 
     #[test]
