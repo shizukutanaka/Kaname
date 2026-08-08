@@ -167,6 +167,11 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Control**: `kaname-render::calendar_guard` — `CalendarRisk::AutoRegistrationAbuse`。METHOD:REQUEST/PUBLISH と他のフィッシング兆候の併存で検出し、警告文で「カレンダー側のエントリ削除が必要」であることを明示 (メール削除だけでは不十分という attacker asymmetry をユーザーに伝える)。
 **Residual risk**: 正規招待も METHOD:REQUEST を使うため、他の兆候ゼロの標的型攻撃 (綺麗な招待文+後日差し替え) は検出できない。SEQUENCE 単調性チェック (§既存) が差し替え時の第二防衛線。
 
+### 3.14 SVG 添付によるスクリプト実行・フィッシング (2026-07 追加)
+**Threat**: SVG は「画像」でありながら XML であり、`<script>`・イベントハンドラ・`<foreignObject>` を含められる。ブラウザで開くと JavaScript が実行されるため、無害な画像に見せかけてフィッシングページをローカル展開したりトークンを窃取できる。悪意ある SVG 添付は 2024 年比で **50 倍**に増加 (2025 年)、2026 年 2 月の単一キャンペーンで **120 万通が 53,000 組織**へ配信された。観測された回避手法: (a) `type="application/ecmascript"` という非推奨 MIME 型でのスクリプト宣言 (ブラウザは `text/javascript` と同一に扱うが多くのスキャナが未検査)、(b) EML→SVG→base64 iframe の多層エンコード、(c) `<script>` を使わないイベントハンドラ実行。
+**Control**: `kaname-render::svg_guard` — `scan_svg()` が `<script>` (type 属性も監査証跡として記録)・イベントハンドラ・`javascript:`/`vbscript:` スキーム・`<foreignObject>`・base64/`atob()` を検出し、実行リスクがあれば `safe_as_attachment = false`。また `magic_bytes::is_svg` が先頭 256 バイトしか走査せず長いコメントで `<svg` を押し下げると回避できたため、8 KB まで走査する `looks_like_svg()` を追加。
+**Residual risk**: 文字列走査ベースであり完全な XML パーサーではないため、極端な難読化 (XML 実体参照による `<script>` の分割等) は検出漏れし得る。SVG 添付は本来メールで受け取る必然性が乏しいため、UI 側で既定拒否とする運用が望ましい。**また現状 `svg_guard` は添付処理パイプラインに未配線** (D10 参照) であり、実際のメール添付に適用されていない。
+
 ### 3.12 カレンダー招待経由のプロンプト注入 (2026-07 追加)
 **Threat**: .ics の DESCRIPTION/SUMMARY に命令上書きフレーズ・LLM特殊トークン・不可視 Unicode タグ等を埋め込む。現状の Kaname では .ics 本文が AI 要約に渡る経路は無いが、(a) UI にそのまま表示され得る、(b) 将来カレンダー統合が Dual-LLM 要約対象になった場合に `kaname-screen` を経由しない入力経路が成立する、という2点で入口検査に値する (§3.1 間接注入のカレンダー版)。
 **Control**: `kaname-render::calendar_guard` — DESCRIPTION/SUMMARY を `kaname-screen::PromptScreener::screen()` にかけ、`Blocked` 判定 (確定的マーカー一致) を `CalendarRisk::PromptInjectionAttempt` として Danger 報告。エントロピー単独の `Suspicious` は文字種の多い正規日本語文の誤検出を招くため不採用。
