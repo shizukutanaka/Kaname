@@ -542,7 +542,13 @@ impl BecDetector {
         } else {
             req.body_text
         };
-        let b = body_slice.to_lowercase();
+        // キーワード照合の前に正規化する。単なる `to_lowercase()` では、
+        // RFC 2047 encoded-word 経由で撒かれた soft hyphen (U+00AD) や
+        // ゼロ幅文字、全角ラテンによってキーワード検出を完全に回避できる。
+        // 例: 「至\u{00AD}急」は人間には「至急」と見えるが contains("至急") は false。
+        // 2026 年の実キャンペーンで観測された手法 (件名の encoded-word に
+        // soft hyphen を散布) への対策。
+        let b = kaname_memory_guard::normalize_for_matching(body_slice);
 
         // 緊急性 + 金銭の組み合わせ (典型的な BEC)。
         let urgency_markers = ["urgent", "asap", "至急", "本日中", "今すぐ", "immediately"];
@@ -1122,7 +1128,11 @@ fn contains_high_risk_topic(subject: &str) -> bool {
         "至急", "緊急", "送金", "振込", "パスワード", "口座", "仮想通貨",
         "ビットコイン", "アカウント停止", "確認が必要",
     ];
-    let lower = subject.to_ascii_lowercase();
+    // 件名は RFC 2047 encoded-word でデコードされた結果に soft hyphen (U+00AD) や
+    // ゼロ幅文字が散布されることがある (2026 年の実キャンペーンで観測)。
+    // `to_ascii_lowercase()` はこれらも全角ラテンも処理しないため、
+    // 「至\u{00AD}急」のような表記でキーワード検出を完全に回避できていた。
+    let lower = kaname_memory_guard::normalize_for_matching(subject);
     HIGH_RISK_KEYWORDS.iter().any(|kw| lower.contains(kw))
 }
 
@@ -1855,6 +1865,41 @@ mod tests {
         let result = contains_unusual_topic(&huge, "請求書の送付");
         // パニックせず bool を返すこと
         let _ = result;
+    }
+
+    #[test]
+    fn soft_hyphen_does_not_bypass_subject_keywords() {
+        // 回帰: RFC 2047 encoded-word 経由で soft hyphen (U+00AD) を散布し
+        // キーワード検出を回避する 2026 年の実攻撃手法。
+        // 「至\u{00AD}急」は人間には「至急」と見える。
+        assert!(
+            contains_high_risk_topic("至\u{00AD}急のご連絡"),
+            "soft hyphen 挿入で件名キーワード検出が回避された"
+        );
+        assert!(
+            contains_high_risk_topic("wire\u{200B} transfer request"),
+            "ゼロ幅スペース挿入で件名キーワード検出が回避された"
+        );
+        assert!(
+            contains_high_risk_topic("\u{FF35}\u{FF32}\u{FF27}\u{FF25}\u{FF2E}\u{FF34} payment"),
+            "全角ラテンで件名キーワード検出が回避された"
+        );
+        // 通常の件名は引き続き検出されない (誤検出防止)
+        assert!(!contains_high_risk_topic("来週の定例会議の議題について"));
+    }
+
+    #[test]
+    fn soft_hyphen_does_not_bypass_body_urgency_signal() {
+        // 本文側も同様に正規化されること
+        let det = BecDetector::new(Box::new(MockLlm { prob: 0.05, expl: "normal".into() }));
+        let contacts: Vec<String> = vec![];
+        // 「至急」「振込」を soft hyphen / ゼロ幅で分断した本文
+        let body = "至\u{00AD}急、下記口座へ振\u{200B}込をお願いします。";
+        let a = det.assess(plain_req(body, &contacts)).expect("assess failed");
+        assert!(
+            a.signals.iter().any(|s| s.family == SignalFamily::Content),
+            "難読化された緊急性/金銭シグナルが検出されていない: {:?}", a.signals
+        );
     }
 
     #[test]

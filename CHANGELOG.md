@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **kaname-bec のキーワード検出が難読化で完全に回避できた問題を修正 (中核機能・最重要)**
+  - 中核の BEC 検出器が件名・本文の照合に `to_lowercase()`/`to_ascii_lowercase()` のみを使っており、**ゼロ幅文字・soft hyphen (U+00AD)・全角ラテンの正規化が一切なかった**
+  - 攻撃: 「至\u{00AD}急」は人間には「至急」と見えるが `contains("至急")` は false → 緊急性・金銭・チャネル誘導・Cialdini の全キーワード検出をすり抜けられた
+  - 2026年の実キャンペーンで観測された手法 (RFC 2047 encoded-word でデコードされた件名に soft hyphen を散布) がそのまま通用する状態だった
+  - `kaname-memory-guard::normalize_for_matching` を適用して解消 (kaname-oobv で確立した対策の横展開)
+
 ### Added
 - **kaname-bec 表示名ホモグラフ検出** (`idn_homograph::analyze_display_name` / `fold_homoglyphs`)
   - 攻撃: `From: "СЕО 山田" <attacker@evil.com>` (キリル文字 С/Е/О) は人間には `CEO 山田` と区別できないが、従来の `to_lowercase()` 比較では一致せず**なりすまし検出を完全に回避**できた
