@@ -13,6 +13,7 @@ tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
 kaname-screen = { path = "../kaname-screen" }
 kaname-pivot  = { path = "../kaname-pivot" }
+kaname-memory-guard = { path = "../kaname-memory-guard" }
 
 [dev-dependencies]
 proptest = { workspace = true }

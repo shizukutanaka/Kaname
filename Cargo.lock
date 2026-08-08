@@ -2083,6 +2083,7 @@ name = "kaname-bec"
 version = "0.3.22"
 dependencies = [
  "kaname-error",
+ "kaname-memory-guard",
  "kaname-pivot",
  "kaname-screen",
  "proptest",
