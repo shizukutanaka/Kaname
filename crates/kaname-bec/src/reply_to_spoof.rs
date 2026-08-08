@@ -59,10 +59,15 @@ pub fn analyze_spoof(
     // 表示名が既知連絡先と一致し、かつ送信元ドメインが期待ドメインと異なる場合のみ詐称。
     // 正規ドメインから送られた場合 (from_domain == expected_domain) は詐称ではない。
     let display_name_impersonation = if let (Some(ref name), Some(ref fd)) = (&display_name, &from_domain) {
-        let name_lower = name.to_lowercase();
-        let name_lower = name_lower.trim();
+        // ホモグリフを畳み込んでから比較する。`to_lowercase()` だけでは
+        // `"СЕО 山田"` (Cyrillic С/Е/О) が `"CEO 山田"` と一致せず、
+        // 視覚的に同一の表示名によるなりすましを素通りさせていた。
+        // 2025-2026 の観測ではホモグリフ悪用の主戦場が URL から
+        // From ヘッダーの表示名へ移っている (crate::idn_homograph 参照)。
+        let folded = crate::idn_homograph::fold_homoglyphs(name);
+        let name_lower = folded.trim();
         known_contacts.iter().any(|(known_name, expected_domain)| {
-            let known_lower = known_name.to_lowercase();
+            let known_lower = crate::idn_homograph::fold_homoglyphs(known_name);
             let name_matches = name_lower == known_lower.trim()
                 || name_lower.contains(known_lower.trim())
                 || known_lower.trim().contains(name_lower);
@@ -215,6 +220,50 @@ mod tests {
         );
         assert!(result.display_name_impersonation);
         assert!(result.risk_score > 0.0);
+    }
+
+    #[test]
+    fn cyrillic_homoglyph_display_name_impersonation_detected() {
+        // 回帰: 表示名にキリル文字ホモグリフを使うと to_lowercase() 比較を
+        // 完全に回避できていた。"СЕО" は Cyrillic С(U+0421)/Е(U+0415)/О(U+041E) で
+        // 人間には ASCII "CEO" と区別できないが、従来は一致せず素通りしていた。
+        let result = analyze_spoof(
+            "\"\u{0421}\u{0415}\u{041E} 山田\" <attacker@evil.com>",
+            None,
+            &[("CEO 山田", "company.com")],
+        );
+        assert!(
+            result.display_name_impersonation,
+            "キリル文字ホモグリフによる表示名なりすましが検出されていない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn fullwidth_display_name_impersonation_detected() {
+        // 全角ラテンによる回避も畳み込みで検出されるべき
+        let result = analyze_spoof(
+            "\"\u{FF23}\u{FF25}\u{FF2F} 山田\" <attacker@evil.com>",
+            None,
+            &[("CEO 山田", "company.com")],
+        );
+        assert!(
+            result.display_name_impersonation,
+            "全角ラテンによる表示名なりすましが検出されていない: {result:?}"
+        );
+    }
+
+    #[test]
+    fn homoglyph_fold_does_not_create_false_positive() {
+        // 畳み込みによって無関係な表示名が誤って一致してはならない
+        let result = analyze_spoof(
+            "\"経理部 佐藤\" <keiri@partner.co.jp>",
+            None,
+            &[("CEO 山田", "company.com")],
+        );
+        assert!(
+            !result.display_name_impersonation,
+            "無関係な表示名を誤検出した: {result:?}"
+        );
     }
 
     #[test]

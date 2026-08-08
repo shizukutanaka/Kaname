@@ -131,6 +131,109 @@ fn is_homoglyph(c: char) -> bool {
     )
 }
 
+/// 表示名 (From ヘッダーの display name) のホモグラフリスクを解析する。
+///
+/// # なぜドメインとは別に必要か
+///
+/// 2025-2026 の観測では、ホモグリフ悪用の主戦場は URL/ドメインから
+/// **From ヘッダーの表示名**へ移っている。表示名はレジストラの制約を受けず
+/// 任意の Unicode を置けるため、`"Suррогt Меѕѕаցе сеոtеr"` のように
+/// Cyrillic/Armenian を混ぜるだけで、人間には正規に見えつつ
+/// キーワードベースの検出を回避できる。
+///
+/// 本関数はドメイン用の `analyze_domain` と同じホモグリフ判定・スクリプト
+/// 混在判定を表示名に適用する (punycode 判定は表示名では無意味なため行わない)。
+///
+/// 出典: Unit 42 (2025) のホモグラフ×リダイレクト併用事例、
+/// arxiv 2604.04926「Comprehensive List of User Deception Techniques in Emails」。
+#[must_use]
+pub fn analyze_display_name(display_name: &str) -> Vec<IdnRisk> {
+    let mut risks = Vec::new();
+
+    let homoglyphs: Vec<char> = display_name.chars().filter(|c| is_homoglyph(*c)).collect();
+    if !homoglyphs.is_empty() {
+        risks.push(IdnRisk::HomoglyphCharacters { chars: homoglyphs });
+    }
+
+    let scripts = detect_mixed_scripts(display_name);
+    if scripts.len() > 1 {
+        risks.push(IdnRisk::MixedScript { scripts });
+    }
+
+    risks
+}
+
+/// ホモグリフを ASCII の見た目上の対応文字に畳み込む (比較用の正規化)。
+///
+/// 表示名を既知連絡先と突き合わせる際、`to_lowercase()` だけでは
+/// `"СЕО 山田"` (Cyrillic С/Е/О) が `"CEO 山田"` と一致せず、なりすまし検出を
+/// 素通りしてしまう。本関数で見た目上の ASCII に寄せてから比較することで、
+/// 視覚的に同一の表示名を同一として扱える。
+///
+/// 全角ラテン (U+FF01..U+FF5E) は対応する ASCII へ、Cyrillic/Greek/Armenian の
+/// 代表的な Latin 類似文字は対応する ASCII 小文字へ畳み込み、最後に小文字化する。
+#[must_use]
+pub fn fold_homoglyphs(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            // 全角ラテン → ASCII
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+            // Cyrillic → Latin lookalike
+            '\u{0430}' => 'a',
+            '\u{0435}' => 'e',
+            '\u{0456}' => 'i',
+            '\u{043E}' => 'o',
+            '\u{0440}' => 'p',
+            '\u{0441}' => 'c',
+            '\u{0445}' => 'x',
+            '\u{0443}' => 'y',
+            '\u{0455}' => 's',
+            '\u{0454}' => 'e',
+            '\u{0458}' => 'j',
+            '\u{0433}' => 'r',
+            // Cyrillic 大文字 (表示名は大文字で始まることが多い)
+            '\u{0410}' => 'a',
+            '\u{0415}' => 'e',
+            '\u{041E}' => 'o',
+            '\u{0420}' => 'p',
+            '\u{0421}' => 'c',
+            '\u{0425}' => 'x',
+            '\u{0423}' => 'y',
+            '\u{0406}' => 'i',
+            '\u{0412}' => 'b',
+            '\u{041C}' => 'm',
+            '\u{041D}' => 'h',
+            '\u{041A}' => 'k',
+            '\u{0422}' => 't',
+            // Greek → Latin lookalike
+            '\u{03BF}' => 'o',
+            '\u{03C1}' => 'p',
+            '\u{03BD}' => 'v',
+            '\u{03C9}' => 'w',
+            '\u{03B1}' => 'a',
+            '\u{039F}' => 'o',
+            '\u{0391}' => 'a',
+            '\u{0392}' => 'b',
+            '\u{0395}' => 'e',
+            '\u{0397}' => 'h',
+            '\u{039A}' => 'k',
+            '\u{039C}' => 'm',
+            '\u{039D}' => 'n',
+            '\u{03A1}' => 'p',
+            '\u{03A4}' => 't',
+            '\u{03A7}' => 'x',
+            // Armenian → Latin lookalike
+            '\u{0585}' => 'q',
+            '\u{0578}' => 'o',
+            // Latin Extended lookalikes
+            '\u{01A1}' => 'o',
+            '\u{0261}' => 'g',
+            other => other,
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 /// ドメインに含まれる Unicode スクリプトを検出する。
 fn detect_mixed_scripts(domain: &str) -> Vec<&'static str> {
     let mut found = Vec::new();
@@ -254,5 +357,50 @@ mod tests {
             .filter(|r| matches!(r, IdnRisk::PunycodeLabel { .. }))
             .count();
         assert_eq!(punycode_count, 2, "2 つの xn-- ラベルが検出されるべき");
+    }
+
+    // ── 表示名のホモグラフ検出 (ホモグリフの主戦場は非URL文脈へ移行) ────────
+
+    #[test]
+    fn display_name_with_cyrillic_homoglyphs_flagged() {
+        // "Suppοrt" 風に Cyrillic/Greek を混ぜた表示名
+        let risks = analyze_display_name("Su\u{0440}\u{0440}ort Center");
+        assert!(
+            risks.iter().any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
+            "表示名のホモグリフが検出されていない: {risks:?}"
+        );
+        assert!(
+            risks.iter().any(|r| matches!(r, IdnRisk::MixedScript { .. })),
+            "Latin と Cyrillic の混在が検出されていない: {risks:?}"
+        );
+    }
+
+    #[test]
+    fn clean_display_name_has_no_risk() {
+        // 通常の ASCII 表示名はリスクなし
+        assert!(analyze_display_name("Support Center").is_empty());
+    }
+
+    #[test]
+    fn japanese_display_name_is_not_flagged_as_mixed_script() {
+        // 日本語の表示名は Cyrillic/Greek/Armenian を含まないため
+        // MixedScript としては報告されない (誤検出防止)
+        let risks = analyze_display_name("経理部 佐藤");
+        assert!(
+            !risks.iter().any(|r| matches!(r, IdnRisk::MixedScript { .. })),
+            "日本語表示名を誤検出した: {risks:?}"
+        );
+    }
+
+    #[test]
+    fn fold_homoglyphs_maps_lookalikes_to_ascii() {
+        // Cyrillic СЕО → ceo
+        assert_eq!(fold_homoglyphs("\u{0421}\u{0415}\u{041E}"), "ceo");
+        // 全角 ＣＥＯ → ceo
+        assert_eq!(fold_homoglyphs("\u{FF23}\u{FF25}\u{FF2F}"), "ceo");
+        // ASCII はそのまま小文字化
+        assert_eq!(fold_homoglyphs("CEO"), "ceo");
+        // 日本語は変化しない
+        assert_eq!(fold_homoglyphs("山田"), "山田");
     }
 }
