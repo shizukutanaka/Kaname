@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **kaname-render SVG 添付攻撃の検出** (`svg_guard` モジュール新設)
+  - 背景: 悪意ある SVG 添付は2024年比で**50倍**に増加 (2025年)。2026年2月の単一キャンペーンでは **120万通が53,000組織**へ配信された。SANS ISC が 2026-06 に MIME 型回避手法を警告
+  - 検出: `<script>` 要素 (**非推奨 MIME 型 `application/ecmascript` による回避**も型を記録して検出)、イベントハンドラ (`onload=` 等、`<script>` なしの実行)、`javascript:`/`vbscript:` スキーム、`<foreignObject>` による HTML 埋め込み、base64/`atob()` の多層エンコード、外部リソース参照
+  - `magic_bytes::is_svg` は**先頭256バイトしか見ず**、長いコメントで `<svg` を押し下げると検出を回避できたため、8KB まで走査する `looks_like_svg()` を追加
+  - 出典: SANS ISC (2026-06, Xavier Mertens)、OPSWAT、Microsoft 脅威情報 (2026-02)
+
 ### Fixed
 - **kaname-bec のキーワード検出が難読化で完全に回避できた問題を修正 (中核機能・最重要)**
   - 中核の BEC 検出器が件名・本文の照合に `to_lowercase()`/`to_ascii_lowercase()` のみを使っており、**ゼロ幅文字・soft hyphen (U+00AD)・全角ラテンの正規化が一切なかった**

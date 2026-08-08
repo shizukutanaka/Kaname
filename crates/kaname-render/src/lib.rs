@@ -896,3 +896,5 @@ pub mod magic_bytes;
 /// 添付ファイルメタデータ漏洩検出 (Round7 P1)。
 pub mod metadata_check;
 pub mod css_sanitizer;
+/// SVG 添付攻撃の検出 (2025-2026 に急増した主要ベクタ)。
+pub mod svg_guard;
