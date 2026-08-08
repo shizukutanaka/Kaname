@@ -8,6 +8,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **arxiv 研究ベースの防御コマンド10件を到達可能化** (これまで `invoke_handler` 未登録で死蔵)
+  - 入力スクリーニング (2505.22852 §2.1) / 出力監査 (§2.2) / Tiered-Risk (§3) / メモリ信頼スコア (2601.05504) / Rule of Two (2601.17548) / ツール引数検証 (2601.11893) / トラジェクトリ記録・リセット / OOBV 推奨 / Deepfake 判定
+  - `commands.rs` の `#[cfg_attr(feature = "tauri-app", ...)]` は src-tauri が該当フィーチャーを指定しておらず無効だったため、既存12コマンドと同じラッパー方式で登録
+
+### Fixed
+- **UI が呼ぶが未定義だった5コマンドを追加** (`mail_send`/`mail_get_mailboxes`/`mail_query_emails`/`bec_get_score`/`settings_save_onboarding`)
+  - 「コマンドが存在しない」という不可解な失敗を、明示的な「未配線」エラーに変更 (偽データは返さない)
+  - Inbox が起動時に無言で永久に空になっていた問題が、原因表示に変わった
+
+### Changed
+- **実装ステータスの正直化 (First Principles 監査の反映)**: `docs/maturity.md`・README・`docs/gap-analysis.md` D10 に、**現状のビルドではメールを送受信できない**事実を検証根拠付きで明記。`kaname-ui` が `kaname-jmap`/`kaname-store` に依存しておらず到達経路が無いこと、`messages` テーブルへの INSERT/SELECT がゼロ件であること等。D15 (コマンド死蔵) を追加
+
 ## [0.3.22] - 2026-07-17 — 最新研究反映・クロスクレート統合・監査バグ修正リリース
 
 このリリースは (1) ワークスペース全体のビルド不能状態の解消、(2) 2026-07 の

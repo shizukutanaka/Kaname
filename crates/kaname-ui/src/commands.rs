@@ -253,7 +253,10 @@ use kaname_oobv::{
     RecommendationLevel, AuditRecord, CeremonyError,
 };
 use kaname_pivot::{PivotDetector, DetectedPivot, PivotHistory};
-use kaname_render::deepfake_advisory::{DeepfakeAdvisory, AdvisoryReport};
+use kaname_render::deepfake_advisory::DeepfakeAdvisory;
+// src-tauri 側のコマンドラッパーが戻り値型として名前を書けるよう再エクスポートする
+// (src-tauri は kaname-render に直接依存していないため)。
+pub use kaname_render::deepfake_advisory::AdvisoryReport;
 
 /// 新機能用の共有状態。
 pub struct V02AppState {
