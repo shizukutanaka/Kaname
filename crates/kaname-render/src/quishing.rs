@@ -94,6 +94,8 @@ pub struct QuishingDefense {
     known_malicious: HashSet<String>,
     /// 自由 TLD (悪用が多い)
     free_tlds: HashSet<&'static str>,
+    /// URL 短縮・リダイレクトサービス (動的 QR の実現手段)。
+    url_shorteners: HashSet<&'static str>,
 }
 
 impl QuishingDefense {
@@ -110,10 +112,31 @@ impl QuishingDefense {
             ".click", ".download", ".loan",     // 悪用多発 TLD
         ].into_iter().collect();
 
+        // URL 短縮・リダイレクトサービス。
+        //
+        // # 動的 QR (dynamic QR) 攻撃
+        //
+        // 攻撃者は QR の中身に短縮 URL / QR 生成サービスのリダイレクタを埋め、
+        // **配信直後は無害なページを指しておく**。メールがセキュリティ検査を
+        // 通過した後で、同じ URL のリダイレクト先をフィッシングサイトへ差し替える。
+        // 検査時点の宛先が無害でも意味がないため、スキャン時に最終宛先を
+        // 検証できない参照そのものを疑わしいものとして扱う。
+        //
+        // 出典: 2026 年の quishing 動向 (上半期に約 146% 増)、
+        // FBI 警告 (2026-01, Kimsuky/APT43 が MFA 耐性のある侵入経路として使用)。
+        let url_shorteners: HashSet<&'static str> = [
+            "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd",
+            "buff.ly", "rebrand.ly", "cutt.ly", "shorturl.at", "rb.gy",
+            "s.id", "tiny.cc", "lnkd.in", "t.ly", "shrtco.de",
+            // QR 生成/リダイレクトサービス (動的 QR の中核)
+            "qrco.de", "qr.codes", "scanova.io", "qrfy.com", "flowcode.com",
+        ].into_iter().collect();
+
         Self {
             trusted_domains,
             known_malicious: HashSet::new(),
             free_tlds,
+            url_shorteners,
         }
     }
 
@@ -167,7 +190,26 @@ impl QuishingDefense {
     /// メール本文の構造 (連続する等幅っぽい正方形ブロック) から検知できる。
     #[must_use]
     pub fn detect_ascii_qr(&self, body: &str) -> bool {
-        const QR_BLOCK_CHARS: &[char] = &['█', '▀', '▄', '▌', '▐', '░', '▒', '▓'];
+        // QR をテキストで描画する際に使われる文字。
+        //
+        // Barracuda の観測では、攻撃者は QR を画像ではなく **ASCII/Unicode 文字**で
+        // 構成し、画像添付だけを走査するフィルタを回避する。罫線ブロックだけでなく
+        // 幾何学記号・全角記号・点字ブロックも同じ用途で使われるため対象に含める。
+        const QR_BLOCK_CHARS: &[char] = &[
+            // 罫線ブロック
+            '█', '▀', '▄', '▌', '▐', '░', '▒', '▓',
+            // 幾何学記号 (黒/白の塗り分けで QR を表現)
+            '■', '□', '▪', '▫', '◼', '◻', '●', '○', '◾', '◽',
+            // 絵文字ブロック (メール本文でよく使われる)
+            '⬛', '⬜', '🟥', '🟦',
+            // 全角記号
+            '　',
+        ];
+        // 点字ブロック (U+2800..U+28FF) は 2x4 ドットを 1 文字で表現できるため
+        // テキスト QR レンダラで最も多用される。範囲判定で一括して扱う。
+        fn is_braille_block(c: char) -> bool {
+            ('\u{2800}'..='\u{28FF}').contains(&c)
+        }
         const MIN_QR_LINES: usize = 8; // 実用的な QR は最低 21x21 モジュールだが、
                                        // ASCII 縮小表現でも最低限の行数を要求する
         const MIN_DENSITY: f64 = 0.5; // ブロック文字が行の半分以上を占める
@@ -184,7 +226,10 @@ impl QuishingDefense {
             if total == 0 {
                 continue;
             }
-            let block_count = trimmed.chars().filter(|c| QR_BLOCK_CHARS.contains(c)).count();
+            let block_count = trimmed
+                .chars()
+                .filter(|c| QR_BLOCK_CHARS.contains(c) || is_braille_block(*c))
+                .count();
             let density = block_count as f64 / total as f64;
 
             if density >= MIN_DENSITY && total >= 8 {
@@ -230,7 +275,14 @@ impl QuishingDefense {
             return UrlReputation::Trusted;
         }
 
-        // 3. 自由 TLD (悪用多発)
+        // 3. 短縮 URL / リダイレクタ (動的 QR の実現手段)
+        //    スキャン時点の宛先が無害でも、後から差し替えられるため検証不能。
+        //    QR という「人間が中身を読めない」文脈では特にリスクが高い。
+        if self.is_url_shortener(&domain) {
+            return UrlReputation::Suspicious;
+        }
+
+        // 4. 自由 TLD (悪用多発)
         for tld in &self.free_tlds {
             if domain.ends_with(tld) {
                 return UrlReputation::Suspicious;
@@ -260,6 +312,15 @@ impl QuishingDefense {
 
     fn is_trusted(&self, domain: &str) -> bool {
         self.trusted_domains.iter().any(|t| domain == *t || domain.ends_with(&format!(".{t}")))
+    }
+
+    /// URL 短縮・リダイレクトサービスのドメインか判定する。
+    ///
+    /// サブドメイン形式のカスタム短縮 (`go.bit.ly` 等) も対象に含める。
+    fn is_url_shortener(&self, domain: &str) -> bool {
+        self.url_shorteners
+            .iter()
+            .any(|s| domain == *s || domain.ends_with(&format!(".{s}")))
     }
 
     /// 信頼ドメインがサブドメインのプレフィックスまたは中間ラベルとして悪用されているか判定する。
@@ -689,6 +750,54 @@ mod tests {
         let line = "█▀▄▀█▄▀█▀▄▀█▄▀█▀▄▀█▄▀█";
         let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
         assert!(d.detect_ascii_qr(&body), "ブロック文字の羅列が ASCII QR として検出されなかった");
+    }
+
+    #[test]
+    fn url_shortener_is_suspicious() {
+        // 動的 QR: 短縮 URL はスキャン後に宛先を差し替え可能なため疑わしい
+        let d = QuishingDefense::new();
+        assert_eq!(d.evaluate_url("https://bit.ly/3xYz"), UrlReputation::Suspicious);
+        assert_eq!(d.evaluate_url("https://tinyurl.com/abcd"), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn qr_redirect_service_is_suspicious() {
+        // QR 生成/リダイレクトサービス (動的 QR の中核)
+        let d = QuishingDefense::new();
+        assert_eq!(d.evaluate_url("https://qrco.de/xyz"), UrlReputation::Suspicious);
+        assert_eq!(d.evaluate_url("https://flowcode.com/p/abc"), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn shortener_subdomain_is_suspicious() {
+        // カスタム短縮のサブドメイン形式も対象
+        let d = QuishingDefense::new();
+        assert_eq!(d.evaluate_url("https://go.bit.ly/promo"), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn trusted_domain_not_flagged_as_shortener() {
+        // 回帰: 信頼ドメインが短縮判定に巻き込まれないこと
+        let d = QuishingDefense::new();
+        assert_eq!(d.evaluate_url("https://github.com/anthropics"), UrlReputation::Trusted);
+    }
+
+    #[test]
+    fn detects_braille_qr() {
+        // Barracuda が観測した点字ブロックによるテキスト QR
+        let d = QuishingDefense::new();
+        let line = "\u{2801}\u{28FF}\u{2847}\u{28B6}\u{2809}\u{28FE}\u{2840}\u{28DB}\u{2807}\u{28F0}";
+        let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
+        assert!(d.detect_ascii_qr(&body), "点字ブロックのテキスト QR が検出されなかった");
+    }
+
+    #[test]
+    fn detects_geometric_qr() {
+        // 幾何学記号による QR
+        let d = QuishingDefense::new();
+        let line = "■□■■□■□■□■■□■□■■□■□■";
+        let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
+        assert!(d.detect_ascii_qr(&body), "幾何学記号のテキスト QR が検出されなかった");
     }
 
     #[test]

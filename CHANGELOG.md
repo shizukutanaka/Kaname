@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **kaname-render 動的QR・テキストQR亜種の検出強化** (`quishing`)
+  - **動的 QR**: 短縮 URL / QR リダイレクトサービス (bit.ly, tinyurl, qrco.de, flowcode.com 等) を `Suspicious` 判定。配信時は無害なページを指しておき、検査通過後にフィッシング先へ差し替える手法のため、スキャン時点の宛先検証では防げない — 検証不能な参照そのものを疑う設計。サブドメイン形式 (`go.bit.ly`) も対象
+  - **テキスト QR の文字集合拡張**: 罫線ブロック8種のみ → 幾何学記号 (■□●○等)・絵文字ブロック (⬛⬜🟥🟦)・全角空白・**点字ブロック U+2800..U+28FF** (2x4ドットを1文字で表現でき、テキストQRレンダラで最多用) を追加。画像添付だけを走査するフィルタを回避する Barracuda 観測の手法に対応
+  - 背景: quishing は 2026 年上半期に約 **146%増**、2025年8-11月に成功事例が 4.6万→25万へ**5倍増**。FBI が 2026-01 に北朝鮮 Kimsuky/APT43 の利用を「MFA 耐性のある侵入経路」として警告
+  - テスト6件追加 (短縮/リダイレクタ/サブドメイン判定、信頼ドメイン回帰、点字QR、幾何学記号QR)
 - **kaname-bec DKIM リプレイ攻撃の検出** (署名ドメイン `d=` と From ドメインの整合検証)
   - 攻撃: 正規組織 (Google/PayPal/Apple 等) の DKIM 署名済みメールを入手して再送する。署名は有効なままなので DKIM は pass し、**DMARC は SPF と DKIM の OR 判定 (AND ではない) のため DMARC も pass** する → 受信側には「認証を完全に通過した正規メール」に見える
   - 従来の `check_auth` ではこの組み合わせ (SPF fail + DKIM pass + DMARC pass) が「1つ失敗 = 0.15」の軽微扱いで、ARC pass があると更に減点されていた
