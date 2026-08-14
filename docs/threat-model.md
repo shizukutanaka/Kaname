@@ -159,8 +159,8 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 
 ### 3.10 QR 構造亜種による画像スキャン回避 (2026-07 追加)
 **Threat**: 分割QR (Structured Append) で悪意ある URL を複数の QR に分割する、`blob:`/`data:`/`javascript:` スキームをペイロードに使う、等の構造的亜種により「QR をデコードして URL を照会する」型の防御を回避する。2026-03 には 28 通のキャンペーンが全てのセキュリティツールを素通りした事例が報告された (ReversingLabs/Acronis)。
-**Control**: `kaname-render::quishing` — (a) 非 http(s) の危険スキーム (`blob:`/`data:`/`javascript:`) を `Suspicious` に格上げ、(b) `assess_multi_qr()` が同一メール内の QR 個数から分割 QR 兆候を判定 (`MultiQrRisk::SplitQrSuspected` = 3個以上)、(c) `detect_ascii_qr()` がブロック文字 (`█▀▄` 等) の高密度な連続行をテキスト解析のみで検出 (画像デコード不要)。
-**Residual risk**: `detect_ascii_qr` は密度・行数ヒューリスティックであり、`#`/`@` 等の非ブロック文字だけで描かれた QR や、意図的に密度を下げた亜種は未検出。実際の QR デコード (画像添付分) は `rqrr` 統合待ち (D1 系ではなく別途の依存追加が必要、ネットワーク制限で本セッションは対応不可)。
+**Control**: `kaname-render::quishing` — (a) 非 http(s) の危険スキーム (`blob:`/`data:`/`javascript:`) を `Suspicious` に格上げ、(b) `assess_multi_qr()` が同一メール内の QR 個数から分割 QR 兆候を判定 (`MultiQrRisk::SplitQrSuspected` = 3個以上)、(c) `detect_ascii_qr()` がブロック文字の高密度な連続行をテキスト解析のみで検出 (画像デコード不要)。2026-07 更新: (d) **動的 QR 対策** — 短縮 URL / QR リダイレクトサービス (bit.ly, qrco.de, flowcode.com 等) を `Suspicious` 判定。配信時は無害ページを指し検査通過後に差し替える手法のため、スキャン時点の宛先検証では防げず、検証不能な参照そのものを疑う (2026 上半期に quishing 約 146% 増、FBI が 2026-01 に Kimsuky/APT43 の利用を警告)。(e) **テキスト QR 文字集合の拡張** — 幾何学記号・絵文字ブロック・**点字ブロック U+2800..U+28FF** (2x4 ドット/文字でテキスト QR レンダラの主流) を追加 (Barracuda 観測)。
+**Residual risk**: `detect_ascii_qr` は密度・行数ヒューリスティックであり、`#`/`@` 等の非ブロック文字だけで描かれた QR や、意図的に密度を下げた亜種は未検出。短縮 URL 判定は静的リストであり、自前ドメインのリダイレクタは検出不能 (リダイレクト追跡には実ネットワークアクセスが必要で、P-LLM 不可侵条件 I4 との整合を要検討)。実際の QR デコード (画像添付分) は `rqrr` 統合待ち。
 
 ### 3.11 CalPhishing — カレンダー自動登録の永続化悪用 (2026-07 追加)
 **Threat**: `METHOD:REQUEST` の .ics は多くのクライアントで受信時に自動 tentative 登録され、**元メールをスパム判定・削除してもカレンダーエントリが残る**。攻撃者はこの永続化に緊急性偽装や不審 URL を組み合わせ、削除したはずの攻撃がカレンダーから再度ユーザーに提示される (SC Media "CalPhishing" 2026, KnowBe4)。
