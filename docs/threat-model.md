@@ -167,6 +167,12 @@ These do not fit STRIDE neatly. They are the reason Kaname exists.
 **Control**: `kaname-render::calendar_guard` — `CalendarRisk::AutoRegistrationAbuse`。METHOD:REQUEST/PUBLISH と他のフィッシング兆候の併存で検出し、警告文で「カレンダー側のエントリ削除が必要」であることを明示 (メール削除だけでは不十分という attacker asymmetry をユーザーに伝える)。
 **Residual risk**: 正規招待も METHOD:REQUEST を使うため、他の兆候ゼロの標的型攻撃 (綺麗な招待文+後日差し替え) は検出できない。SEQUENCE 単調性チェック (§既存) が差し替え時の第二防衛線。
 
+### 3.16 Dual-LLM 型境界の実効性 — 宣言と実装の分離 (2026-07 監査で追加)
+**Threat**: Kaname の中核的な防御は「`Content<Untrusted>` は Q-LLM にのみ渡り、`Bridge` を通らない昇格は型エラー」という**コンパイル時の型強制**である。2026 年の研究 (CaMeL / FIDES / Progent、arxiv 2606.26479 の適応的評価) は、防御が「振る舞いではなくアーキテクチャによる保証」へ収束したと整理しており、Kaname の主張はさらに強い型レベルの保証にあたる。この保証が実際には成立していない場合、**製品の中核的な安全性の前提そのものが崩れる**。
+**実態 (2026-07 監査)**: 型境界の**定義** (`dual_llm.rs`) は堅牢だが、**実装** (`llm_bridge.rs`) がそれを通っていない。(1) ワークスペース全体で `impl QuarantinedLlm for` / `impl PrivilegedLlm for` が **0 件**で、実推論経路は生 `&str` を受ける API (`llm_bridge.rs:352/417`)。(2) `Content<Untrusted>::as_text()` (`dual_llm.rs:208`) が `pub` で、I1 は型ではなく規約。(3) `Content<L>` の `Deserialize` derive + `#[serde(skip)] _level` (`dual_llm.rs:85,91`) により `Content<Trusted>` を JSON で偽造可能。(4) `subprocess.rs:101,219` は P-LLM に `(allow network-outbound)` を与えており CLAUDE.md I4 と矛盾、かつ参照先 `resources/seccomp/` が存在しない。
+**Control (現状)**: I3 の中核のみ実効性がある — `Content` のフィールドは全て private、`Content<Trusted>` の公開コンストラクタは `from_user_input`/`from_system` の2つのみ、Bridge 専用昇格路 `from_validated` は `pub(crate)`、`#![deny(unsafe_code)]` により `transmute` 不可、`compile_fail` doc テストも実在する。Bridge の検証ロジック (email_id 一致・score 範囲・topics 数・攻撃マーカー・OutputAuditor) も実質的。
+**Residual risk**: **現時点で悪用可能な経路は存在しない** — メールパイプラインが未配線 (D10) で `llm_bridge` の推論もスタブのため、攻撃者が到達できない。問題は「配線時に確実に穴になる構造」であり、特に**型安全な trait を誰も実装していないため、配線時の最短経路が型を迂回する側にある**点。残作業と修正手順は `docs/gap-analysis.md` D17 を参照。**この項目が解消されるまで、README/仕様の「コンパイル時型安全」は設計上の意図であって実装済みの保証ではない。**
+
 ### 3.15 DKIM リプレイ攻撃 / DMARC OR trap (2026-07 追加)
 **Threat**: 攻撃者が正規組織 (Google/PayPal/Apple 等) から届いた DKIM 署名済みメールを入手し、そのまま別の宛先へ再送する。署名は有効なままなので DKIM は pass する。**DMARC は SPF と DKIM の OR 判定 (AND ではない) ため、SPF が転送で落ちても DKIM 側の alignment だけで DMARC も pass** してしまう。結果、受信側には「認証を完全に通過した正規メール」に見える。2025 年に Google をスプーフィングする実被害が発生。
 **Control**: `kaname-bec::check_dkim` — DKIM 署名ドメイン (`d=`) と表示上の From ドメインの整合を検証する。正規メールでは `d=` は From ドメイン (またはその親ドメイン) と揃うため、不一致は第三者署名かリプレイの強い指標になる。DKIM が pass しているケースほど「認証通過に見える」ため重み付けを高くする (0.40 / 未pass時 0.20)。既存の `DkimReplayTracker` (同一署名の複数回観測) と併せて多層で検出する。

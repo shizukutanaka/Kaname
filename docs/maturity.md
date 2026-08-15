@@ -48,7 +48,7 @@
 | ホモグリフ/タイポスクワット/IDN Punycode検出 | `kaname-bec` | |
 | Quishing・カレンダー招待(.ics)・HTMLスマグリング検出 | `kaname-render` | |
 | SaaSリンク安全性・OAuth state検証 | `kaname-saas-guard` | |
-| Dual-LLM 型境界 (`Content<Untrusted>`/`Bridge`/preflight) | `kaname-ai::dual_llm` | 型レベルでプロンプト注入経路を遮断。**LLM 推論本体は下記モック段階** |
+| Dual-LLM 型境界の**定義** (`Content<Untrusted>`/`Bridge`) | `kaname-ai::dual_llm` | フィールド private・`Content<Trusted>` の公開コンストラクタは2つのみ・Bridge 昇格路は `pub(crate)`・`unsafe` ゼロ・`compile_fail` テスト有り。**ただし (a) trait を実装するコードが 0 件で実推論経路 `llm_bridge` は生 `&str` API、(b) `as_text()` が `pub` で規約依存、(c) serde derive により `Content<Trusted>` を JSON 偽造可能。したがって「型で強制」は現状**未達**。詳細は gap-analysis D17 |
 | プライバシー保護 (PCR メタデータのみ/SSA数値ベクトルのみ/トラッキング遮断) | `kaname-radar`, `kaname-ssa`, `kaname-privacy` | 本文非解析設計 |
 | Out-of-Band Verification (電話確認セレモニー) | `kaname-oobv` | |
 | 入力スクリーニング (プロンプト注入検出) | `kaname-screen` | |
