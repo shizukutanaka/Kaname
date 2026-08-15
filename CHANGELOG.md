@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **kaname-render SVG のマルチモーダル・プロンプト注入検出** (`svg_guard`)
+  - 攻撃 (Polyglot SVG Attack): SVG は「画像」でありながら XML のため、`<desc>`・**XML コメント (描画されない)**・**CDATA セクション**に命令を潜ませられる。人間の目には正規の画像でも、それを処理する AI は指示として読んでしまう
+  - 従来の `svg_guard` は `<script>`・イベントハンドラ等の**ブラウザでのスクリプト実行**のみを見ており、この経路は未検出だった
+  - `SvgRisk::PromptInjectionAttempt` を追加。**同一クレートの `calendar_guard` の先例をそのまま踏襲**し `kaname_screen::PromptScreener` に委譲 (原文のまま渡す / `Blocked` のみ採用 / `HighEntropy` は除外して誤検出防止)
+  - `SvgRisk::XmlExternalEntity` を追加 — `<!DOCTYPE`/`<!ENTITY` による XXE 形式ペイロード・billion laughs 型 DoS の入口を検出
+  - 出典: [arxiv 2603.03637](https://arxiv.org/abs/2603.03637) / CSA research note (2026-03)「Image-based Prompt Injection」— 画像埋め込み命令が**テキスト層のサニタイズを迂回**し、ステルス条件下で最大 **64% の攻撃成功率**。XML/SVG では CDATA 悪用と XXE 形式ペイロードが名指しされている
+  - テスト6件追加 (desc/XMLコメント/CDATA の注入検出、XXE 検出、**通常の日本語 SVG の非誤検出**、抽出器の網羅性)
 - **kaname-render 動的QR・テキストQR亜種の検出強化** (`quishing`)
   - **動的 QR**: 短縮 URL / QR リダイレクトサービス (bit.ly, tinyurl, qrco.de, flowcode.com 等) を `Suspicious` 判定。配信時は無害なページを指しておき、検査通過後にフィッシング先へ差し替える手法のため、スキャン時点の宛先検証では防げない — 検証不能な参照そのものを疑う設計。サブドメイン形式 (`go.bit.ly`) も対象
   - **テキスト QR の文字集合拡張**: 罫線ブロック8種のみ → 幾何学記号 (■□●○等)・絵文字ブロック (⬛⬜🟥🟦)・全角空白・**点字ブロック U+2800..U+28FF** (2x4ドットを1文字で表現でき、テキストQRレンダラで最多用) を追加。画像添付だけを走査するフィルタを回避する Barracuda 観測の手法に対応
