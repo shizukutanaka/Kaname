@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Dual-LLM 型不変条件の実効性監査と正直化 (最重要)**
+  - 2026年の out-of-band 防御研究 (CaMeL/FIDES/Progent、arxiv 2606.26479) が「振る舞いではなくアーキテクチャによる保証」へ収束したのを受け、Kaname が公言する**より強い「コンパイル時の型強制」が実際に成立しているか**を実コードで検証した
+  - **結果: 型境界の「定義」は堅牢だが「実装」がそれを通っていない**。ワークスペース全体で `impl QuarantinedLlm for`/`impl PrivilegedLlm for` が **0 件**で、実推論経路 `llm_bridge` は生 `&str` API。`as_text()` は `pub` で I1 は規約。`Content<L>` の `Deserialize` derive により `Content<Trusted>` を JSON 偽造可能。`subprocess.rs` は P-LLM に `(allow network-outbound)` を与えており CLAUDE.md I4 と矛盾 (参照先 `resources/seccomp/` も不在)
+  - **良いニュース**: I3 の中核 (フィールド private / 公開コンストラクタ2つのみ / `from_validated` が `pub(crate)` / `unsafe` ゼロ / `compile_fail` テスト有り) は本物
+  - **悪用可能な経路は現時点で存在しない** (D10 でパイプライン未配線・推論もスタブ)。問題は「配線時に確実に穴になる構造」で、特に**型安全な trait を誰も実装していないため配線時の最短経路が型を迂回する側にある**
+  - README の「コンパイル時型安全」節・`docs/maturity.md`・`docs/threat-model.md` §3.16 を実態に合わせて修正。誤導していた doc コメント (`as_text` の「Q-LLM 内部のみ」、`Content` の「型変換は禁止される」) も是正
+  - 修正手順を `docs/gap-analysis.md` **D17** に file:line 付きで記録。**中核型の derive 変更はワークスペース全体の再コンパイルを要するため、`cargo check` が実行できない現状では意図的に実施していない**
+
 ### Added
 - **kaname-render SVG のマルチモーダル・プロンプト注入検出** (`svg_guard`)
   - 攻撃 (Polyglot SVG Attack): SVG は「画像」でありながら XML のため、`<desc>`・**XML コメント (描画されない)**・**CDATA セクション**に命令を潜ませられる。人間の目には正規の画像でも、それを処理する AI は指示として読んでしまう

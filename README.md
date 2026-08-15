@@ -55,7 +55,7 @@
 
 ## 3 つの柱
 
-### 🛡 Security — コンパイル時型安全
+### 🛡 Security — Dual-LLM の型境界 (設計は完成・実装は未接続)
 
 ```
 Untrusted メール本文
@@ -71,7 +71,26 @@ Bridge::validate_and_promote()  ← 型変換で境界を越える
 Content<Trusted>  ← P-LLM が受け取る
 ```
 
-`Content<Untrusted>` を `PrivilegedLlm` に渡すコードはコンパイルエラー。**ランタイムではなくコンパイル時に防ぐ。**
+上図は `kaname-ai::dual_llm` が定義する**設計上の境界**であり、`PrivilegedLlm` trait は
+`&Content<Trusted>` しか受け取らないため、`Content<Untrusted>` をそのまま渡すコードは
+確かにコンパイルエラーになる。
+
+**ただし現状の実装はこの型境界を通っていない (2026-07 監査で判明)。** 正直に書くと:
+
+- ワークスペース全体で **`impl QuarantinedLlm for` / `impl PrivilegedLlm for` は 0 件**。
+  実際の推論経路 `kaname-ai::llm_bridge` は `Content` 型を使わず生の `&str` を受け取る
+  API になっており、上記の型境界を迂回できる。
+- `Content<Untrusted>::as_text()` は `pub` であり、doc は「Q-LLM 内部のみ」と書いているが
+  **可視性では強制されていない**（規約であって型ではない）。
+- `Content<L>` は `Serialize`/`Deserialize` を derive しており、`_level` が `#[serde(skip)]`
+  のため **JSON 経由で `Content<Trusted>` を Bridge を経ずに構築できる**。
+- 一方で **I3 の中核は本物**: `Content` のフィールドは全て private、`Content<Trusted>` の
+  公開コンストラクタは `from_user_input`/`from_system` のみ、Bridge 専用の昇格路は
+  `pub(crate)`、`unsafe`/`transmute` はゼロで `compile_fail` テストも存在する。
+
+現時点でメールパイプライン自体が未配線 (下記) のため**悪用可能な経路は存在しない**が、
+配線時に上記を塞がないと型境界は実効性を持たない。残作業は
+[`docs/gap-analysis.md`](docs/gap-analysis.md) の D17 を参照。
 
 ### ⚡ Speed — HEY + Superhuman の統合
 
