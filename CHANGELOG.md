@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **docs/research-2026-07-part2.md**: セッション横断の研究反映マップと構造的発見の統合
+  - 2026年研究動向 (CaMeL/FIDES のアーキテクチャ保証収束、LLMail-Inject/ARGUS、画像ベース注入、DKIMリプレイ、動的QR、deepfake増強BEC 40%) の総括
+  - 研究 → 実装 (PR #25〜#33) の対応表
+  - 構造的発見 (D10 配線欠如 / D16 添付AI経路未配線 / D17 型境界の宣言と実装の分離) の統合
+  - **ネットワーク解放を前提とした優先ロードマップ** (P0 検証 → P1 型実効化 → P2 配線)
+
 ### Changed
 - **Dual-LLM 型不変条件の実効性監査と正直化 (最重要)**
   - 2026年の out-of-band 防御研究 (CaMeL/FIDES/Progent、arxiv 2606.26479) が「振る舞いではなくアーキテクチャによる保証」へ収束したのを受け、Kaname が公言する**より強い「コンパイル時の型強制」が実際に成立しているか**を実コードで検証した
