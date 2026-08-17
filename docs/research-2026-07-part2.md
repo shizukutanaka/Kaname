@@ -152,10 +152,35 @@ README は「コンパイル時型安全」を掲げるが、**`impl Quarantined
 `fold_homoglyphs` のマッピング網羅性。**これらは `cargo check` / `cargo nextest`
 でしか確認できない**。
 
-> 注: 独立エージェントによる敵対的レビューを試みたが、週次利用上限により
-> 6 エージェント全てが起動できず実施できなかった。上表は主エージェントによる
-> 自己検証であり、[適応的評価 2606.26479](https://arxiv.org/html/2606.26479v1) が
-> 指摘する通り**自己評価は安全性を過大評価しがち**である点に留意すること。
+### 独立エージェントによる敵対的レビュー (2026-07 実施)
+
+[適応的評価 2606.26479](https://arxiv.org/html/2606.26479v1) が指摘する通り
+**自己評価は安全性を過大評価しがち**であるため、主エージェントとは独立した
+エージェントに「コンパイラの代わりにビルドエラーを探す」タスクを与えた。
+**結論: コンパイルエラー・テスト失敗と確信できるものは検出されなかった。**
+
+独立検証で個別に確認された項目 (いずれも「問題なし」):
+
+| 懸念点 | 検証結果 |
+|---|---|
+| `svg_guard::extract_ai_visible_text` の `lower` バイト位置を `content` に適用する安全性 | `to_ascii_lowercase` は非 ASCII バイトを変更せずバイト長も保存。加えて `is_char_boundary` で二重チェックしており panic 不可 |
+| 同関数のループが無限ループにならないか | close 発見時も未発見時も `search_from` が厳密増加し必ず前進 |
+| `extract_script_type` の `?` と `Option` 整合 | 全て `Option` 上で戻り値と整合。`q @ ('"' \| '\'')` バインディングも合法 |
+| `kaname_screen` の API 実在と `Debug` derive | `PromptScreener::new`/`screen`/`ScreenVerdict::Blocked`/`ScreenRisk::HighEntropy(f32)` 全て実在、`Debug` あり |
+| `ordinary_japanese_text_not_flagged_as_injection` の成立 | 日本語文は最悪でも `HighEntropy` のみ → verdict は `Suspicious` で `Blocked` にならず注入判定されない |
+| `fold_homoglyphs` の `.flat_map(char::to_lowercase)` | インヘレント `fn(char) -> ToLowercase` を関数パスで渡すのは型推論が通る |
+| `fold_homoglyphs` テスト期待値のコードポイント一致 | U+0421→c / U+0415→e / U+041E→o、全角は `-0xFEE0` で FF23/FF25/FF2F→CEO→"ceo" いずれも一致 |
+| `reply_to_spoof` の `&&str` → `&str` と借用寿命 | 関数引数は coercion site のため deref coercion が適用。`folded` はクロージャより長生き |
+| `magic_bytes` の `Cow<str>::to_ascii_lowercase` | `Cow` は `Deref<Target=str>` のため呼べる。先行マジックバイトは `<svg`/`<?xml`/`<!--` 始まりに一致しない |
+| `quishing` のネスト `fn is_braille_block` と絵文字 char | `self` 非参照の自由関数として合法。`'🟥'`/`'🟦'`/`'　'` は全て単一スカラ値 |
+| `QuishingDefense` の初期化漏れ | 構築箇所は `new()` のみ、`Default` は委譲 → 漏れなし |
+
+**それでもなお `cargo check` の代替にはならない**。静的読解は借用チェッカや
+トレイト解決の完全な代替ではなく、正規表現の実コンパイルやテストの実行結果も
+確認できていない。ネットワーク解放後の検証は依然として P0 のままである。
+
+指摘された唯一の改善余地は性能のみ (`extract_ai_visible_text` が 4 タグそれぞれで
+`to_ascii_lowercase()` を再計算)。動作・ビルドには影響しない。
 
 ## 5. 正直な総括
 

@@ -248,11 +248,15 @@ pub fn scan_svg(content: &str) -> SvgScan {
 fn extract_ai_visible_text(content: &str) -> Vec<String> {
     let mut out = Vec::new();
 
+    // タグ検索用に一度だけ小文字化する (タグ名の大小を無視するため)。
+    // `to_ascii_lowercase` は非 ASCII バイトを変更せずバイト長も保存するため、
+    // `lower` 上のバイト位置をそのまま `content` のスライスに使える。
+    let lower = content.to_ascii_lowercase();
+
     // 要素の内容を抽出 (開始タグの `>` から対応する終了タグまで)。
     for tag in ["title", "desc", "text", "tspan"] {
         let open = format!("<{tag}");
         let close = format!("</{tag}");
-        let lower = content.to_ascii_lowercase();
         let mut search_from = 0usize;
         while let Some(rel) = lower[search_from..].find(&open) {
             let tag_start = search_from + rel;
