@@ -44,6 +44,29 @@
 - **deepfake 増強 BEC** — deepfake が BEC の **40%** に関与 (2023 年は 5% 未満)。
   メール + 「CEO を騙る音声メモ」で確認を偽装する複合攻撃。
 
+### 1.4 標準規格の刷新 — DKIM2 / DMARCbis (2026)、および関連ソフトウェア
+
+Kaname の認証系実装に**直接影響する標準の更新**が 2026 年に起きた。
+
+- **DMARCbis** — 2026-05 に **RFC 9989 / 9990 / 9991** として公開。静的な
+  Public Suffix List を**ライブ DNS tree walk** に置き換え、機能しなかったタグを廃止。
+- **DKIM2** — 10 年以上ぶりの認証プロトコル再設計。**メッセージを宛先にバインドし
+  送信時刻を記録**することで**リプレイ攻撃をプロトコルレベルで解決**。さらに転送時に
+  署名が壊れない chain of custody を導入し、署名対象ヘッダを標準化する。
+- **`mail-auth`** ([Stalwart Labs](https://github.com/stalwartlabs/mail-auth)) —
+  DKIM (RSA/Ed25519) / ARC 連鎖検証 / SPF / DMARC を実装する Rust ライブラリ。
+  **Kaname が既に採用している `mail-parser` と同一ベンダ** (ADR-009) であり、
+  2026-07 時点で **DKIM2 と DMARCbis を実装済み**。
+
+**Kaname への含意 (重要)**:
+1. **§3.15 で実装した DKIM リプレイ検出 (`d=` と From の整合) は DKIM1 時代の
+   暫定ヒューリスティックであり、DKIM2 対応が入れば本来不要になる。**
+   DKIM2 は同じ問題をプロトコルで解決するため、転送起因の「SPF fail + DKIM pass +
+   DMARC pass」という曖昧な状態自体が消える。
+2. Kaname は現在**送信ドメイン認証を独立検証しておらず**、受信サーバが付けた
+   `Authentication-Results` ヘッダの文字列パースに全面依存している (D18 / §3.15b)。
+   `mail-auth` はこのギャップを埋める最有力候補であり、同時に DKIM2/DMARCbis 対応も得られる。
+
 ---
 
 ## 2. このセッションの実装マップ (研究 → PR)
@@ -100,6 +123,7 @@ README は「コンパイル時型安全」を掲げるが、**`impl Quarantined
 | **P1** | D17(c): `llm_bridge` を `dual_llm` の trait を実装する形に変更し `&str` 入口を塞ぐ | 配線時の最短経路を型安全側へ倒す。**最も重要** | P0 |
 | **P1** | D17(a,b,d): `Content` の serde derive 除去 / `as_text` を `pub(crate)` / `TopicTag` の Deserialize 迂回封じ | 中核型のため要ワークスペース再コンパイル | P0 |
 | **P2** | D10 + D16 の配線 (jmap 受信 → store 永続化 → 表示 → 送信、添付テキストの preflight 強制) | 検出器に初めて実メールが流れる | P1 |
+| **P2** | D18: [`mail-auth`](https://github.com/stalwartlabs/mail-auth) (Stalwart Labs) 採用による**送信ドメイン認証の独立検証**。当面は authserv-id 検証と `extract_auth_result` のスコープ限定パース | 認証系シグナル全体が受信サーバのヘッダへの盲目的信頼の上に乗っている。**mail-parser と同一ベンダ** (ADR-009) で **DKIM2/DMARCbis 実装済み** | 新規依存 → ネットワーク解放 |
 | **P3** | I4 の矛盾解消 (所有者判断: コードを I4 に合わせるか I4 改訂か)、`resources/seccomp/` 実体作成 | CLAUDE.md I4 は「変更禁止」 | 所有者判断 |
 | P4 | 画素 typographic 注入 (OCR)、自前ドメインの動的 QR 追跡 (要ネットワーク) | 今回の実装で原理的に届かない残余リスク | 設計判断 |
 
