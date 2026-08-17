@@ -83,10 +83,23 @@ pub fn detect_mime_from_magic(bytes: &[u8]) -> Option<&'static str> {
         return Some("application/gzip");
     }
     // SVG (XMLベース — <svg で始まる or <?xml の後に svg)
+    //
+    // 走査窓は 8 KB。従来の 256 バイトでは、長い XML 宣言・DOCTYPE・コメントで
+    // `<svg` を押し下げるだけで検出を回避でき、その結果
+    // `check_mime_mismatch` が「SVG を image/png と偽装した添付」を見逃していた。
+    // (`svg_guard::looks_like_svg` と同じ窓幅に揃えている。)
+    //
+    // デコードは `from_utf8_lossy` を使う。`from_utf8` では窓の末尾で
+    // マルチバイト文字が切れた瞬間に**文字列全体が空**になり、SVG 判定が
+    // 丸ごと失われるため (窓を広げるほどこの確率は上がる)。
+    //
+    // なお本判定は関数末尾にあり、PNG/JPEG/PDF/ZIP/PE/ELF 等は先行する
+    // マジックバイト判定で既に return 済みのため、ここへ到達するのは
+    // 既知のバイナリ形式に該当しないファイルのみ。
     {
-        let head = &bytes[..bytes.len().min(256)];
-        let head_str = std::str::from_utf8(head).unwrap_or("");
-        let lower = head_str.to_ascii_lowercase();
+        const SVG_SCAN_BYTES: usize = 8 * 1024;
+        let head = &bytes[..bytes.len().min(SVG_SCAN_BYTES)];
+        let lower = String::from_utf8_lossy(head).to_ascii_lowercase();
         if lower.contains("<svg") || (lower.contains("<?xml") && lower.contains("svg")) {
             return Some("image/svg+xml");
         }
@@ -317,6 +330,42 @@ mod tests {
     fn svg_with_xml_declaration_detected() {
         let svg = b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>";
         assert!(is_svg(svg));
+    }
+
+    #[test]
+    fn padded_svg_still_detected() {
+        // 回帰: 従来の 256 バイト窓では、長いコメントで <svg> を押し下げるだけで
+        // 検出を回避でき、SVG を image/png と偽装した添付が素通りしていた。
+        let padding = format!("<!-- {} -->", "A".repeat(2000));
+        let svg = format!("{padding}<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+        assert_eq!(
+            detect_mime_from_magic(svg.as_bytes()),
+            Some("image/svg+xml"),
+            "パディングで押し下げられた <svg> が検出されない"
+        );
+        assert!(is_svg(svg.as_bytes()));
+    }
+
+    #[test]
+    fn svg_after_long_doctype_detected() {
+        // DOCTYPE で押し下げる亜種
+        let doctype = format!("<?xml version=\"1.0\"?>\n<!DOCTYPE svg [{}]>\n", " ".repeat(1500));
+        let svg = format!("{doctype}<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
+        assert_eq!(detect_mime_from_magic(svg.as_bytes()), Some("image/svg+xml"));
+    }
+
+    #[test]
+    fn invalid_utf8_tail_does_not_break_svg_detection() {
+        // from_utf8 だと窓末尾でマルチバイト文字が切れた瞬間に全体が空になり
+        // 判定が失われていた。from_utf8_lossy なら部分一致できる。
+        let mut bytes = b"<svg xmlns=\"http://www.w3.org/2000/svg\">".to_vec();
+        bytes.extend_from_slice(&[0xE3, 0x81]); // 不完全な UTF-8 シーケンス
+        bytes.extend_from_slice(b"</svg>");
+        assert_eq!(
+            detect_mime_from_magic(&bytes),
+            Some("image/svg+xml"),
+            "不正な UTF-8 を含む SVG が検出されない"
+        );
     }
 
     #[test]
