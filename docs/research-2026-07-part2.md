@@ -105,6 +105,34 @@ README は「コンパイル時型安全」を掲げるが、**`impl Quarantined
 
 ---
 
+## 4.5 静的検証の実施状況 (2026-07、コンパイラ不在下)
+
+`cargo check` が実行できないため、**コンパイルエラーになりやすい箇所を静的に
+自己検証**した。以下は「実際にファイルを読んで確認した」項目であり、
+**`cargo check` の代替にはならない** (特定の高リスク点のみの確認)。
+
+| 検証項目 | 結果 |
+|---|---|
+| `src-tauri/src/main.rs` の `use kaname_ui::commands;` | ✅ 存在 |
+| main.rs が参照する型 (`ScreenResponse` / `OobvRecommendRequest` / `OobvRecommendResponse` / `V02CommandError` / `DeepfakeEvaluateRequest` / `AdvisoryReport`) が `pub` で到達可能 | ✅ 全て `pub` (`AdvisoryReport` は `pub use` 済み) |
+| `kaname_memory_guard::normalize_for_matching` のシグネチャ (`&str -> String`) と `kaname-bec` 側の利用 (`b.contains()`, `&b`) の整合 | ✅ 一致 |
+| `SignalFamily::Content` バリアントの実在 | ✅ 実在 |
+| BEC テストヘルパー (`MockLlm` / `baseline_auth_all_pass` / `plain_req`) の実在 | ✅ 全て実在 |
+| 新規 DKIM テストの `AssessmentRequest` フィールド網羅 (13 フィールド) | ✅ 過不足なし |
+| `AuditFinding` への新バリアント追加による網羅 `match` の破壊 | ✅ 網羅 match は存在せず (全て `matches!`) |
+| `QuishingDefense` の構造体リテラル漏れ (新フィールド `url_shorteners`) | ✅ 構築箇所は `new()` のみ、`Default` は `Self::new()` 委譲 |
+| `pub mod svg_guard;` の登録 | ✅ 登録済み |
+
+**未検証のまま残るもの**: 借用チェッカ、ライフタイム、正規表現の実コンパイル、
+テスト assert の実際の成否、`extract_ai_visible_text` の UTF-8 境界安全性、
+`fold_homoglyphs` のマッピング網羅性。**これらは `cargo check` / `cargo nextest`
+でしか確認できない**。
+
+> 注: 独立エージェントによる敵対的レビューを試みたが、週次利用上限により
+> 6 エージェント全てが起動できず実施できなかった。上表は主エージェントによる
+> 自己検証であり、[適応的評価 2606.26479](https://arxiv.org/html/2606.26479v1) が
+> 指摘する通り**自己評価は安全性を過大評価しがち**である点に留意すること。
+
 ## 5. 正直な総括
 
 - **長所 (研究に照らして裏付けられた)**: 検出ロジック (BEC/DLP/quishing/SVG/
