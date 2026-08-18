@@ -45,6 +45,8 @@ interface BodyDto {
   sandbox: string;
   csp: string;
   is_mls: boolean;
+  /** 本文に対するレンダリング系セキュリティ検出の結果 (人間可読)。 */
+  render_risks: string[];
 }
 
 interface BecScoreDto {
@@ -340,6 +342,28 @@ const EmailDetailPanel = (props: {
         </Show>
 
         <Show when={!loading() && body()}>
+          {/* レンダリング系の検出結果 (HTMLスマグリング / テキストQR / CSS外部参照)。
+              kaname-render の検出器を実際に実行した結果をここに表示する。 */}
+          <Show when={(body()!.render_risks ?? []).length > 0}>
+            <div style={{
+              margin: "0 0 12px 0",
+              padding: "10px 12px",
+              "border-radius": "8px",
+              background: "#FFF4E5",
+              border: "1px solid #F0B37E",
+              color: "#7A4A00",
+              "font-size": "13px",
+              "line-height": "1.6",
+            }}>
+              <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>
+                本文の解析で注意点が見つかりました
+              </div>
+              <For each={body()!.render_risks}>
+                {(risk) => <div>・{risk}</div>}
+              </For>
+            </div>
+          </Show>
+
           {/* サンドボックス化された iframe */}
           <iframe
             srcdoc={body()!.srcdoc}
