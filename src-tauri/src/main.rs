@@ -177,6 +177,15 @@ async fn deepfake_evaluate(
 // 実際の配線 (JMAP 受信・送信・永続化) は docs/gap-analysis.md D10 を参照。
 // ============================================================================
 
+/// ローカルの `.eml` ファイルを読み込み、実際のメールをパイプライン全体に通す。
+///
+/// 本製品で**初めて実メールが検出器に流れる**経路。JMAP 受信 (D10) の配線を
+/// 待たずに、解析・認証評価・BEC 判定・サニタイズを実データで動かせる。
+#[tauri::command]
+async fn mail_import_eml(path: String) -> Result<commands::ImportedEmail, String> {
+    commands::mail_import_eml(path).await
+}
+
 /// バックエンド未配線を示す共通エラー文言。
 fn not_wired(feature: &str) -> String {
     format!(
@@ -326,6 +335,8 @@ fn main() {
             reset_trajectory,
             oobv_recommend,
             deepfake_evaluate,
+            // 実メールの入口 (ローカル .eml インポート)
+            mail_import_eml,
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
             mail_send,
             mail_get_mailboxes,
