@@ -73,14 +73,91 @@ pub async fn health_check() -> Result<HealthResponse, String> {
 }
 
 #[instrument]
+/// 受信箱のサマリを返す。
+///
+/// 従来は `{ unread: 3, bec_alerts: 1, total: 42 }` の固定値だった。
+/// 現在は一覧と**同じ検出器**で集計するため、表示される警告件数が
+/// 実際の判定結果と一致する。
 pub async fn mail_get_summary() -> Result<MailSummary, String> {
-    Ok(MailSummary { unread: 3, bec_alerts: 1, total: 42 })
+    let rows = mock_emails(16);
+    let total = rows.len() as u32;
+    let unread = rows.iter().filter(|r| !r.is_read).count() as u32;
+    // Suspicious 以上を警告として数える (Advisory は注意喚起であり警告ではない)。
+    let bec_alerts = rows
+        .iter()
+        .filter(|r| matches!(assess_row_verdict(r).as_str(), "SUSPICIOUS" | "DANGEROUS"))
+        .count() as u32;
+    Ok(MailSummary { unread, bec_alerts, total })
 }
 
 #[instrument(skip(_mailbox))]
 pub async fn mail_list(_mailbox: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
     let limit = limit.unwrap_or(50) as usize;
-    Ok(mock_emails(limit))
+    let mut rows = mock_emails(limit);
+
+    // 一覧の BEC 判定を**実際の検出結果**で上書きする。
+    // 従来 `bec_verdict` はモックデータに手書きされた固定文字列であり、
+    // 一覧に表示される危険度は検出器の出力ではなかった。
+    for row in &mut rows {
+        row.bec_verdict = assess_row_verdict(row);
+    }
+    Ok(rows)
+}
+
+/// 1 通の `EmailRow` に対し BEC 検出を実行し、判定文字列を返す。
+///
+/// LLM 意味解析は未配線のため `BecDetector::deterministic_only()` を用い、
+/// 認証 / ドメイン / 送信者履歴 / 内容 / AiTM / Reply-To / スレッド乗っ取り /
+/// 口座差替 / DKIM の 9 シグナルファミリーで判定する。
+///
+/// 検出に失敗した場合は握り潰さず `"UNKNOWN"` を返す。**安全側に倒して
+/// `"SAFE"` を返してはならない** — 判定できなかったことを安全と偽ることになる。
+fn assess_row_verdict(row: &EmailRow) -> String {
+    let from_header = match &row.from_name {
+        Some(name) => format!("{name} <{}>", row.from_addr),
+        None => row.from_addr.clone(),
+    };
+    let subject = row.subject.clone().unwrap_or_default();
+    let body = row.preview.clone().unwrap_or_default();
+
+    // 認証結果の供給元が未配線のため None を渡す (Pass を偽ると
+    // 認証シグナルが不当に安全側へ倒れる)。
+    let auth = kaname_bec::AuthResults {
+        spf:   kaname_bec::AuthVerdict::None,
+        dkim:  kaname_bec::AuthVerdict::None,
+        dmarc: kaname_bec::AuthVerdict::None,
+        arc:   None,
+    };
+    let contacts: Vec<String> = Vec::new();
+    let req = kaname_bec::AssessmentRequest {
+        from_header:  &from_header,
+        return_path:  None,
+        subject:      &subject,
+        body_text:    &body,
+        auth,
+        sender_history: None,
+        our_domain:   "example.com",
+        known_contacts: &contacts,
+        extracted_urls: &[],
+        reply_to:     None,
+        thread_context: None,
+        past_thread_bodies: &[],
+        dkim_signature_header: None,
+    };
+
+    match kaname_bec::BecDetector::deterministic_only().assess(req) {
+        Ok(a) => match a.verdict {
+            kaname_bec::Verdict::Safe       => "SAFE",
+            kaname_bec::Verdict::Advisory   => "ADVISORY",
+            kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
+            kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+        }
+        .to_string(),
+        Err(e) => {
+            tracing::warn!(error=%e, email_id=%row.id, "BEC 判定に失敗");
+            "UNKNOWN".to_string()
+        }
+    }
 }
 
 /// サニタイズ済み本文 (iframe 描画用)。
