@@ -1,0 +1,19 @@
+From: Accounts <billing@partner.example.com>
+To: you@example.com
+Subject: Payment details for invoice 8842
+Date: Mon, 26 Apr 2026 12:30:00 +0900
+Message-ID: <dlp-004@partner.example.com>
+Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=partner.example.com; dkim=pass header.d=partner.example.com; dmarc=pass header.from=partner.example.com
+Content-Type: text/plain; charset=utf-8
+
+Hello,
+
+Please find the payment details below for invoice 8842.
+
+Card on file: 4111 1111 1111 1111
+IBAN: GB82 WEST 1234 5698 7654 32
+
+Let us know if anything looks incorrect.
+
+Regards,
+Accounts team

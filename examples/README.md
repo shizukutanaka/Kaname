@@ -32,6 +32,7 @@
 | `01-safe-meeting.eml` | SAFE | SPF/DKIM/DMARC がすべて pass。緊急性も金銭要求もない通常の業務メール |
 | `02-bec-wire-transfer.eml` | SUSPICIOUS 〜 DANGEROUS | 認証の全失敗、`arnazon-billing.com` (`amazon` のタイポスクワット)、緊急性 + 送金要求の共起、Reply-To がフリーメールで送信元ドメインと不一致 |
 | `03-quishing-textqr.eml` | SUSPICIOUS 以上 + 本文リスク | 認証失敗に加え、**本文に文字で描かれた QR コード** (画像スキャンを回避する quishing) を検出 |
+| `04-sensitive-data.eml` | SAFE + **DLP 検出あり** | 認証はすべて pass の正規メールだが、本文に**区切り付きのクレジットカード番号と IBAN** が含まれる。転送・返信時の漏洩リスクとして DLP が検出する (区切り付き表記は検出漏れしやすい典型例) |
 
 ### フォルダ一括解析でのみ見えるもの
 

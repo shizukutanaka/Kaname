@@ -31,6 +31,8 @@ interface ImportedEmail {
   bec_signals: string[];
   attachments: string[];
   body: BodyDto;
+  /** 本文中に検出された機微情報 (DLP)。転送・返信時の漏洩リスク。 */
+  dlp_findings: string[];
 }
 
 /** 判定に応じた配色。危険なものほど強い色にする。 */
@@ -312,6 +314,21 @@ export function EmlImport() {
                   <dd style={{ margin: "0" }}>{r().attachments.join(", ")}</dd>
                 </Show>
               </dl>
+
+              {/* 機微情報の検出 (DLP) */}
+              <Show when={(r().dlp_findings ?? []).length > 0}>
+                <div style={{
+                  padding: "10px 12px", "border-radius": "8px",
+                  background: "#EAF1FB", border: "1px solid #9DBDEA",
+                  color: "#123B75", "font-size": "13px",
+                  "line-height": "1.6", "margin-bottom": "12px",
+                }}>
+                  <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>
+                    本文に機微情報が含まれています（転送・返信時は注意）
+                  </div>
+                  <For each={r().dlp_findings}>{(d) => <div>・{d}</div>}</For>
+                </div>
+              </Show>
 
               {/* 本文のリスク検出 */}
               <Show when={(r().body.render_risks ?? []).length > 0}>
