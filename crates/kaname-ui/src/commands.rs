@@ -83,8 +83,53 @@ pub async fn mail_list(_mailbox: String, limit: Option<u32>) -> Result<Vec<Email
     Ok(mock_emails(limit))
 }
 
-pub async fn mail_get_body(email_id: String) -> Result<String, String> {
-    Ok(format!("<p>メール {} の本文</p>", email_id))
+/// サニタイズ済み本文 (iframe 描画用)。
+///
+/// フロントエンド (`src/ui/Inbox.tsx` の `BodyDto`) が期待する形。
+/// 従来このコマンドは生の `String` を返しており、フロントの型と**契約が
+/// 一致していなかった** (`.srcdoc` / `.sandbox` へのアクセスが実行時に失敗する)。
+#[derive(Debug, Serialize)]
+pub struct BodyDto {
+    /// `<iframe srcdoc="...">` にそのまま渡せる文字列。
+    pub srcdoc: String,
+    /// iframe の `sandbox` 属性値。
+    pub sandbox: String,
+    /// 併せて適用する CSP。
+    pub csp: String,
+    /// MLS で暗号化されたメールか。
+    pub is_mls: bool,
+}
+
+/// メール本文を取得し、**サニタイズして** iframe 描画用の形で返す。
+///
+/// 従来は `format!("<p>メール {} の本文</p>")` の固定文字列を返しており、
+/// `kaname-render` のサニタイズ経路 (mXSS / CSS exfiltration / トラッキング
+/// ピクセル / 危険スキームの除去) は出荷バイナリ内に存在しながら
+/// **一度も実行されていなかった**。
+///
+/// **既知の制約 (docs/gap-analysis.md D10)**: 本文の取得元は現状
+/// `mock_emails()` の preview である。実メールが流れるようになれば、
+/// 同じサニタイズ経路がそのまま実本文を処理する。
+pub async fn mail_get_body(email_id: String) -> Result<BodyDto, String> {
+    info!(email_id=%email_id, "mail_get_body");
+
+    let Some(email) = mock_emails(16).into_iter().find(|e| e.id == email_id) else {
+        return Err(format!("メールが見つかりません: {email_id}"));
+    };
+
+    // 本文をサニタイズ経路に載せる。RawHtml は「サニタイズ前の untrusted 入力」
+    // を表す型であり、SanitizedBody はサニタイザ経由でしか得られない。
+    let raw_body = email.preview.clone().unwrap_or_default();
+    let raw = kaname_render::RawHtml::new(raw_body.clone());
+    let sanitized = kaname_render::sanitize_html(&raw);
+    let srcdoc = kaname_render::to_srcdoc(&sanitized, Some(&raw_body));
+
+    Ok(BodyDto {
+        srcdoc:  srcdoc.content,
+        sandbox: srcdoc.sandbox.to_string(),
+        csp:     srcdoc.csp.to_string(),
+        is_mls:  email.is_mls,
+    })
 }
 
 pub async fn mail_mark_read(ids: Vec<String>) -> Result<(), String> {

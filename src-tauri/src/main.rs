@@ -35,7 +35,7 @@ async fn mail_list(mailbox: String, limit: Option<u32>) -> Result<Vec<commands::
 }
 
 #[tauri::command]
-async fn mail_get_body(email_id: String) -> Result<String, String> {
+async fn mail_get_body(email_id: String) -> Result<commands::BodyDto, String> {
     commands::mail_get_body(email_id).await
 }
 
