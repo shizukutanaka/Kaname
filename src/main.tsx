@@ -26,13 +26,16 @@ import { initI18n } from "./i18n";
 import { KanameDesign }        from "./ui/KanameDesign";
 import { SecurityDashboard }   from "./ui/SecurityDashboard";
 import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
+import { EmlImport }           from "./ui/EmlImport";
 
 // ── 型定義 ──
 
 type View =
   | "inbox"
   | "security"
-  | "features_demo";
+  | "features_demo"
+  // ローカル .eml を実際のパイプラインに通す画面 (実メールの唯一の入口)
+  | "eml_import";
 
 interface AppState {
   initialized:    boolean;
@@ -203,7 +206,7 @@ const App = () => {
       gap: "4px",
       "z-index": "9999",
     }}>
-      {(["inbox", "security", "features_demo"] as View[]).map(v => (
+      {(["inbox", "security", "eml_import", "features_demo"] as View[]).map(v => (
         <button
           onClick={() => setState(s => ({ ...s, activeView: v }))}
           style={{
@@ -222,7 +225,7 @@ const App = () => {
             cursor: "pointer",
           }}
         >
-          {{ inbox:"受信トレイ", security:"セキュリティ", features_demo:"機能デモ" }[v]}
+          {{ inbox:"受信トレイ", security:"セキュリティ", eml_import:"ファイル解析", features_demo:"機能デモ" }[v]}
         </button>
       ))}
     </div>
@@ -243,6 +246,9 @@ const App = () => {
           </Show>
           <Show when={state().activeView === "security"}>
             <SecurityDashboard selectedEmailId={state().selectedEmailId} />
+          </Show>
+          <Show when={state().activeView === "eml_import"}>
+            <EmlImport />
           </Show>
           <Show when={state().activeView === "features_demo"}>
             <KanameAppleFeatures />
