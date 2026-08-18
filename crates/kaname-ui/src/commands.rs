@@ -75,90 +75,35 @@ pub async fn health_check() -> Result<HealthResponse, String> {
 #[instrument]
 /// 受信箱のサマリを返す。
 ///
-/// 従来は `{ unread: 3, bec_alerts: 1, total: 42 }` の固定値だった。
-/// 現在は一覧と**同じ検出器**で集計するため、表示される警告件数が
-/// 実際の判定結果と一致する。
+/// # サーバ未接続のため常にゼロ
+///
+/// 従来は固定値 `{unread:3, bec_alerts:1, total:42}`、その後モックデータからの
+/// 集計を返していたが、**いずれも実在しないメールの件数**だった。
+/// JMAP 受信が未配線 (D10) である以上、受信箱に表示できる本物のメールは
+/// 存在しない。偽の件数を出すより 0 を返す方が正確である。
+///
+/// 実際のメール解析は「ファイル解析」タブ (`mail_import_eml` /
+/// `mail_scan_folder`) を使う。
 pub async fn mail_get_summary() -> Result<MailSummary, String> {
-    let rows = mock_emails(16);
-    let total = rows.len() as u32;
-    let unread = rows.iter().filter(|r| !r.is_read).count() as u32;
-    // Suspicious 以上を警告として数える (Advisory は注意喚起であり警告ではない)。
-    let bec_alerts = rows
-        .iter()
-        .filter(|r| matches!(assess_row_verdict(r).as_str(), "SUSPICIOUS" | "DANGEROUS"))
-        .count() as u32;
-    Ok(MailSummary { unread, bec_alerts, total })
+    Ok(MailSummary { unread: 0, bec_alerts: 0, total: 0 })
 }
 
 #[instrument(skip(_mailbox))]
+/// 受信箱のメール一覧を返す。
+///
+/// # サーバ未接続のため常に空
+///
+/// 従来はモックデータ (`mock_emails()`) を返しており、**実在しないメールを
+/// 受信箱に表示していた**。JMAP 受信が未配線 (D10) である以上、
+/// 表示できる本物のメールは存在しない。
+///
+/// 偽のメールを並べるより空を返す方が正確であり、利用者を欺かない。
+/// 実際のメール解析は「ファイル解析」タブを使う。
 pub async fn mail_list(_mailbox: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
-    let limit = limit.unwrap_or(50) as usize;
-    let mut rows = mock_emails(limit);
-
-    // 一覧の BEC 判定を**実際の検出結果**で上書きする。
-    // 従来 `bec_verdict` はモックデータに手書きされた固定文字列であり、
-    // 一覧に表示される危険度は検出器の出力ではなかった。
-    for row in &mut rows {
-        row.bec_verdict = assess_row_verdict(row);
-    }
-    Ok(rows)
+    let _ = limit;
+    Ok(Vec::new())
 }
 
-/// 1 通の `EmailRow` に対し BEC 検出を実行し、判定文字列を返す。
-///
-/// LLM 意味解析は未配線のため `BecDetector::deterministic_only()` を用い、
-/// 認証 / ドメイン / 送信者履歴 / 内容 / AiTM / Reply-To / スレッド乗っ取り /
-/// 口座差替 / DKIM の 9 シグナルファミリーで判定する。
-///
-/// 検出に失敗した場合は握り潰さず `"UNKNOWN"` を返す。**安全側に倒して
-/// `"SAFE"` を返してはならない** — 判定できなかったことを安全と偽ることになる。
-fn assess_row_verdict(row: &EmailRow) -> String {
-    let from_header = match &row.from_name {
-        Some(name) => format!("{name} <{}>", row.from_addr),
-        None => row.from_addr.clone(),
-    };
-    let subject = row.subject.clone().unwrap_or_default();
-    let body = row.preview.clone().unwrap_or_default();
-
-    // 認証結果の供給元が未配線のため None を渡す (Pass を偽ると
-    // 認証シグナルが不当に安全側へ倒れる)。
-    let auth = kaname_bec::AuthResults {
-        spf:   kaname_bec::AuthVerdict::None,
-        dkim:  kaname_bec::AuthVerdict::None,
-        dmarc: kaname_bec::AuthVerdict::None,
-        arc:   None,
-    };
-    let contacts: Vec<String> = Vec::new();
-    let req = kaname_bec::AssessmentRequest {
-        from_header:  &from_header,
-        return_path:  None,
-        subject:      &subject,
-        body_text:    &body,
-        auth,
-        sender_history: None,
-        our_domain:   "example.com",
-        known_contacts: &contacts,
-        extracted_urls: &[],
-        reply_to:     None,
-        thread_context: None,
-        past_thread_bodies: &[],
-        dkim_signature_header: None,
-    };
-
-    match kaname_bec::BecDetector::deterministic_only().assess(req) {
-        Ok(a) => match a.verdict {
-            kaname_bec::Verdict::Safe       => "SAFE",
-            kaname_bec::Verdict::Advisory   => "ADVISORY",
-            kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
-            kaname_bec::Verdict::Dangerous  => "DANGEROUS",
-        }
-        .to_string(),
-        Err(e) => {
-            tracing::warn!(error=%e, email_id=%row.id, "BEC 判定に失敗");
-            "UNKNOWN".to_string()
-        }
-    }
-}
 
 /// サニタイズ済み本文 (iframe 描画用)。
 ///
@@ -183,37 +128,22 @@ pub struct BodyDto {
     pub render_risks: Vec<String>,
 }
 
-/// メール本文を取得し、**サニタイズして** iframe 描画用の形で返す。
+/// 受信箱のメール本文を取得する。
 ///
-/// 従来は `format!("<p>メール {} の本文</p>")` の固定文字列を返しており、
-/// `kaname-render` のサニタイズ経路 (mXSS / CSS exfiltration / トラッキング
-/// ピクセル / 危険スキームの除去) は出荷バイナリ内に存在しながら
-/// **一度も実行されていなかった**。
+/// # サーバ未接続のため未実装
 ///
-/// **既知の制約 (docs/gap-analysis.md D10)**: 本文の取得元は現状
-/// `mock_emails()` の preview である。実メールが流れるようになれば、
-/// 同じサニタイズ経路がそのまま実本文を処理する。
+/// JMAP 受信が未配線 (D10) のため、受信箱には本物のメールが存在しない。
+/// 従来はモックデータの preview をサニタイズして返していたが、
+/// **実在しないメールの本文を表示するのは偽装**である。
+///
+/// サニタイズ経路自体は健在で、「ファイル解析」タブ (`mail_import_eml`) が
+/// 実際の `.eml` に対して同じ `sanitize_html` → `to_srcdoc` を実行する。
 pub async fn mail_get_body(email_id: String) -> Result<BodyDto, String> {
-    info!(email_id=%email_id, "mail_get_body");
-
-    let Some(email) = mock_emails(16).into_iter().find(|e| e.id == email_id) else {
-        return Err(format!("メールが見つかりません: {email_id}"));
-    };
-
-    // 本文をサニタイズ経路に載せる。RawHtml は「サニタイズ前の untrusted 入力」
-    // を表す型であり、SanitizedBody はサニタイザ経由でしか得られない。
-    let raw_body = email.preview.clone().unwrap_or_default();
-    let raw = kaname_render::RawHtml::new(raw_body.clone());
-    let sanitized = kaname_render::sanitize_html(&raw);
-    let srcdoc = kaname_render::to_srcdoc(&sanitized, Some(&raw_body));
-
-    Ok(BodyDto {
-        srcdoc:  srcdoc.content,
-        sandbox: srcdoc.sandbox.to_string(),
-        csp:     srcdoc.csp.to_string(),
-        is_mls:  email.is_mls,
-        render_risks: analyze_body_risks(&raw_body),
-    })
+    let _ = email_id;
+    Err("未配線: 受信箱はサーバに接続されていません。\
+         実際のメールを解析するには「ファイル解析」タブをご利用ください \
+         (docs/gap-analysis.md D10 参照)"
+        .to_string())
 }
 
 /// ローカルの `.eml` ファイルを解析した結果。
@@ -591,164 +521,35 @@ fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
 /// 到達可能なまま未使用)。ここで実際に実行する。
 ///
 /// サニタイズ自体は `sanitize_html` が別途行う。本関数は「サニタイズでは
-/// 落とせないが利用者に伝えるべき兆候」を報告する役割を持つ。
-fn analyze_body_risks(body: &str) -> Vec<String> {
-    let mut risks = Vec::new();
-
-    // 1. HTML スマグリング (blob:/atob()/mshta 等による添付の密輸)
-    let smuggling = kaname_render::html_smuggling::HtmlSmugglingDetector.analyze(body);
-    if !matches!(smuggling.risk, kaname_render::html_smuggling::SmugglingRisk::Clean) {
-        risks.push(format!("HTMLスマグリングの疑い: {}", smuggling.message));
-    }
-
-    // 2. テキストで描かれた QR コード (画像スキャンを回避する quishing)
-    let quishing = kaname_render::quishing::QuishingDefense::new();
-    if quishing.detect_ascii_qr(body) {
-        risks.push(
-            "本文にテキストで描かれた QR コードがあります。\
-             画像スキャンを回避する quishing の可能性があります。"
-                .to_string(),
-        );
-    }
-
-    // 3. CSS 外部参照 (EchoLeak 型の情報流出)
-    let css = kaname_render::css_sanitizer::sanitize_css(body);
-    if css.removed_count > 0 {
-        risks.push(format!(
-            "CSS の外部リソース参照を {} 件無効化しました (情報流出の防止)。",
-            css.removed_count
-        ));
-    }
-
-    risks
-}
-
-pub async fn mail_mark_read(ids: Vec<String>) -> Result<(), String> {
-    info!("mail_mark_read: {} emails", ids.len());
-    Ok(())
-}
-
-pub async fn mail_trash(email_id: String) -> Result<(), String> {
-    info!("mail_trash: {}", email_id);
-    Ok(())
-}
-
-#[instrument(skip(email_id))]
+/// 受信箱のメールにフィッシング解析を行う。
+///
+/// # サーバ未接続のため未実装
+///
+/// 受信箱に本物のメールが存在しないため解析対象がない。
+/// 実際の BEC 判定は「ファイル解析」タブ (`mail_import_eml` /
+/// `mail_scan_folder`) が `.eml` に対して実行する。
 pub async fn ai_detect_phishing(email_id: String) -> Result<PhishingAnalysis, String> {
-    info!(email_id=%email_id, "ai_detect_phishing");
-
-    // 看板機能である BEC 検出を実際に実行する。
-    //
-    // 従来はここが `score: 0.12` の固定値を返しており、`kaname-bec` は
-    // 出荷バイナリから到達すらできなかった (27 クレート中 10 個しか
-    // 到達可能でなかった)。LLM 意味解析は未配線のため
-    // `BecDetector::deterministic_only()` を使い、認証 / ドメイン / 送信者履歴 /
-    // 内容 / AiTM / Reply-To / スレッド乗っ取り / 口座差替 / DKIM の
-    // 9 シグナルファミリーで判定する。
-    //
-    // **既知の制約 (docs/gap-analysis.md D10)**: メールパイプラインが未配線の
-    // ため、対象メールの取得元は現状 `mock_emails()` である。実メールが
-    // 流れるようになれば同じ経路がそのまま実データを評価する。
-    let Some(email) = mock_emails(16).into_iter().find(|e| e.id == email_id) else {
-        return Err(format!("メールが見つかりません: {email_id}"));
-    };
-
-    let from_header = match &email.from_name {
-        Some(name) => format!("{name} <{}>", email.from_addr),
-        None => email.from_addr.clone(),
-    };
-    let subject = email.subject.clone().unwrap_or_default();
-    let body = email.preview.clone().unwrap_or_default();
-
-    // 認証結果の供給元 (Authentication-Results の解析) も未配線のため、
-    // 判定材料なしを意味する None を渡す。誤って Pass を渡すと
-    // 認証シグナルが不当に安全側へ倒れるため、ここは None が正しい。
-    let auth = kaname_bec::AuthResults {
-        spf:   kaname_bec::AuthVerdict::None,
-        dkim:  kaname_bec::AuthVerdict::None,
-        dmarc: kaname_bec::AuthVerdict::None,
-        arc:   None,
-    };
-
-    let contacts: Vec<String> = Vec::new();
-    let req = kaname_bec::AssessmentRequest {
-        from_header:  &from_header,
-        return_path:  None,
-        subject:      &subject,
-        body_text:    &body,
-        auth,
-        sender_history: None,
-        our_domain:   "example.com",
-        known_contacts: &contacts,
-        extracted_urls: &[],
-        reply_to:     None,
-        thread_context: None,
-        past_thread_bodies: &[],
-        dkim_signature_header: None,
-    };
-
-    let detector = kaname_bec::BecDetector::deterministic_only();
-    let assessment = detector.assess(req).map_err(|e| e.to_string())?;
-
-    // 上位シグナルを説明文に反映する (監査証跡)。
-    let explanation = if assessment.signals.is_empty() {
-        "決定論的シグナルでは危険な兆候を検出しませんでした。".to_string()
-    } else {
-        let top: Vec<String> = assessment.signals.iter()
-            .take(3)
-            .map(|s| s.label.clone())
-            .collect();
-        format!("検出シグナル: {}", top.join(" / "))
-    };
-
-    Ok(PhishingAnalysis {
-        // LLM 意味解析が未配線のため AI 生成判定は行えない。
-        // 「判定していない」ことを false で表現する (誤って断定しない)。
-        likely_ai_generated: false,
-        score: assessment.score,
-        phishing_intent: assessment.score >= 0.5,
-        explanation,
-    })
+    let _ = email_id;
+    Err("未配線: 受信箱はサーバに接続されていません。\
+         実際のメールを解析するには「ファイル解析」タブをご利用ください"
+        .to_string())
 }
 
 #[instrument(skip(email_id))]
-/// メールの要約と危険度を返す。
+/// 受信箱のメールを要約する。
 ///
-/// # 何が本物で何が未実装か (誤認を避けるため明示)
+/// # 二重に未実装
 ///
-/// - `risk`: **本物**。`BecDetector` の決定論的シグナルによる実際の判定。
-/// - `summary`: **未実装**。ローカル LLM 推論 (`kaname-ai::llm_bridge`) が
-///   スタブのため要約は生成できない。従来はどのメールに対しても
-///   「Q2予算会議の案内。来週火曜日。参加確認を求めている。」という固定文字列を
-///   返し、かつ `local_inference: true` と**成立していない保証を主張**していた。
-///   偽の要約を返すより、要約が無いことを明示する方が安全である
-///   (偽要約は利用者に誤った安心を与え、北極星に反する)。
+/// (1) 受信箱がサーバ未接続で対象メールが存在しない (D10)、
+/// (2) ローカル LLM 推論 (`kaname-ai::llm_bridge`) がスタブで要約を生成できない。
+///
+/// 従来は固定要約を返しつつ `local_inference: true` と**成立していない保証を
+/// 主張**していた。偽の要約は利用者に誤った安心を与えるため返さない。
 pub async fn ai_summarize_email(email_id: String) -> Result<SafeSummary, String> {
-    info!(email_id=%email_id, "ai_summarize_email");
-
-    let Some(email) = mock_emails(16).into_iter().find(|e| e.id == email_id) else {
-        return Err(format!("メールが見つかりません: {email_id}"));
-    };
-
-    // 危険度は実際の検出器で判定する。
-    let risk = assess_row_verdict(&email);
-
-    // 要約は生成できないため、その事実と件名の原文のみを返す。
-    // 「要約したふり」をしない。
-    let subject = email.subject.clone().unwrap_or_else(|| "(件名なし)".to_string());
-    let summary = format!(
-        "AI 要約は未実装のため生成していません (ローカル LLM 推論が未配線)。件名: {subject}"
-    );
-
-    Ok(SafeSummary {
-        summary,
-        risk,
-        email_id,
-        // Q-LLM に 1 通しか渡さない設計自体は維持されている。
-        single_email_only: true,
-        // **推論を行っていないので false**。従来 true を返していたのは誤り。
-        local_inference: false,
-    })
+    let _ = email_id;
+    Err("未実装: 要約はローカル LLM 推論が未配線のため利用できません。\
+         メールの危険度判定は「ファイル解析」タブをご利用ください"
+        .to_string())
 }
 
 /// スマートリプライ候補を返す。
@@ -778,40 +579,7 @@ pub async fn log_error(message: String) -> Result<(), String> {
 
 // ── モックデータ ──────────────────────────────────────────────────────────────
 
-fn mock_emails(n: usize) -> Vec<EmailRow> {
-    let base = vec![
-        EmailRow {
-            id: "e1".into(), from_name: Some("田中 花子".into()),
-            from_addr: "hanako@company.co.jp".into(),
-            subject: Some("Q2予算会議のご案内".into()),
-            preview: Some("来週火曜日に会議を設定しました".into()),
-            received_at: Some("2026-04-26T09:00:00Z".into()),
-            is_read: false, is_starred: true,
-            bec_verdict: "SAFE".into(), is_mls: true, triage: "important".into(),
-        },
-        EmailRow {
-            id: "e2".into(), from_name: None,
-            from_addr: "cfo@arnazon-billing.com".into(),
-            subject: Some("【至急】振込先変更のご連絡".into()),
-            preview: Some("新しい口座番号に200万円をご送金ください".into()),
-            received_at: Some("2026-04-26T08:00:00Z".into()),
-            is_read: false, is_starred: false,
-            bec_verdict: "DANGEROUS".into(), is_mls: false, triage: "important".into(),
-        },
-        EmailRow {
-            id: "e3".into(), from_name: Some("Amazon".into()),
-            from_addr: "order@amazon.co.jp".into(),
-            subject: Some("ご注文の確認".into()),
-            preview: Some("ご注文ありがとうございます".into()),
-            received_at: Some("2026-04-25T12:00:00Z".into()),
-            is_read: true, is_starred: false,
-            bec_verdict: "SAFE".into(), is_mls: false, triage: "paper_trail".into(),
-        },
-    ];
-    base.into_iter().cycle().take(n).enumerate().map(|(i, mut e)| {
-        e.id = format!("e{}", i + 1); e
-    }).collect()
-}
+
 
 // ── テスト ────────────────────────────────────────────────────────────────────
 
