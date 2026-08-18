@@ -26,6 +26,8 @@ kaname-ai = { path = "../kaname-ai" }
 kaname-bec = { path = "../kaname-bec" }
 # 複数メールを横断するキャンペーン検出 (PCR)。フォルダ一括解析で使用する。
 kaname-radar = { path = "../kaname-radar" }
+# 受信メール内の機微情報検出 (Direction::Inbound)。解析結果に含める。
+kaname-dlp = { path = "../kaname-dlp" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]

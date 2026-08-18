@@ -237,6 +237,11 @@ pub struct ImportedEmail {
     pub attachments: Vec<String>,
     /// サニタイズ済み本文 (iframe 描画用)。
     pub body: BodyDto,
+    /// 本文中に検出された機微情報 (DLP)。
+    ///
+    /// 受信メールに機微情報が含まれる場合、転送・返信時の漏洩リスクになる。
+    /// `Direction::Inbound` で評価する。
+    pub dlp_findings: Vec<String>,
 }
 
 /// ローカルの `.eml` / `.mbox` ファイルを読み込み、**実際のメール**を
@@ -342,7 +347,47 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
             is_mls:  false,
             render_risks: analyze_body_risks(&body_text),
         },
+        dlp_findings: scan_dlp_inbound(&subject, &body_text),
     })
+}
+
+/// 受信メール本文の機微情報を DLP で検出する。
+///
+/// # なぜ受信側でも検出するか
+///
+/// DLP は本来「送信時の情報漏洩を防ぐ」機能だが、**受信メールに機微情報が
+/// 含まれている事実自体が重要な情報**である。そのまま転送・返信すれば
+/// 漏洩に直結するため、解析時点で利用者に知らせる価値がある。
+/// `Direction::Inbound` はまさにこの用途のために用意されている。
+///
+/// 送信経路 (`mail_send`) は未配線 (D10) のため、現時点で DLP を活かせる
+/// のは受信側の解析のみである。
+fn scan_dlp_inbound(subject: &str, body: &str) -> Vec<String> {
+    let engine = kaname_dlp::DlpEngine::default_engine();
+    let recipients: Vec<String> = Vec::new();
+    let mimes: Vec<String> = Vec::new();
+    let domains: Vec<String> = Vec::new();
+    let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
+        std::collections::HashMap::new();
+
+    let ctx = kaname_dlp::EvalCtx {
+        body,
+        subject,
+        size_bytes: body.len() as u64,
+        to: &recipients,
+        from: "",
+        attachment_mimes: &mimes,
+        edm_sets: &edm,
+        known_recipient_domains: &domains,
+        our_domain: "example.com",
+    };
+
+    let result = engine.evaluate(&ctx, kaname_dlp::Direction::Inbound);
+    result
+        .findings
+        .iter()
+        .map(|f| format!("{} ({:?})", f.rule_name, f.action))
+        .collect()
 }
 
 /// フォルダ一括解析の結果。
