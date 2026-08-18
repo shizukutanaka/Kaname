@@ -100,11 +100,78 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
 #[instrument(skip(email_id))]
 pub async fn ai_detect_phishing(email_id: String) -> Result<PhishingAnalysis, String> {
     info!(email_id=%email_id, "ai_detect_phishing");
+
+    // 看板機能である BEC 検出を実際に実行する。
+    //
+    // 従来はここが `score: 0.12` の固定値を返しており、`kaname-bec` は
+    // 出荷バイナリから到達すらできなかった (27 クレート中 10 個しか
+    // 到達可能でなかった)。LLM 意味解析は未配線のため
+    // `BecDetector::deterministic_only()` を使い、認証 / ドメイン / 送信者履歴 /
+    // 内容 / AiTM / Reply-To / スレッド乗っ取り / 口座差替 / DKIM の
+    // 9 シグナルファミリーで判定する。
+    //
+    // **既知の制約 (docs/gap-analysis.md D10)**: メールパイプラインが未配線の
+    // ため、対象メールの取得元は現状 `mock_emails()` である。実メールが
+    // 流れるようになれば同じ経路がそのまま実データを評価する。
+    let Some(email) = mock_emails(16).into_iter().find(|e| e.id == email_id) else {
+        return Err(format!("メールが見つかりません: {email_id}"));
+    };
+
+    let from_header = match &email.from_name {
+        Some(name) => format!("{name} <{}>", email.from_addr),
+        None => email.from_addr.clone(),
+    };
+    let subject = email.subject.clone().unwrap_or_default();
+    let body = email.preview.clone().unwrap_or_default();
+
+    // 認証結果の供給元 (Authentication-Results の解析) も未配線のため、
+    // 判定材料なしを意味する None を渡す。誤って Pass を渡すと
+    // 認証シグナルが不当に安全側へ倒れるため、ここは None が正しい。
+    let auth = kaname_bec::AuthResults {
+        spf:   kaname_bec::AuthVerdict::None,
+        dkim:  kaname_bec::AuthVerdict::None,
+        dmarc: kaname_bec::AuthVerdict::None,
+        arc:   None,
+    };
+
+    let contacts: Vec<String> = Vec::new();
+    let req = kaname_bec::AssessmentRequest {
+        from_header:  &from_header,
+        return_path:  None,
+        subject:      &subject,
+        body_text:    &body,
+        auth,
+        sender_history: None,
+        our_domain:   "example.com",
+        known_contacts: &contacts,
+        extracted_urls: &[],
+        reply_to:     None,
+        thread_context: None,
+        past_thread_bodies: &[],
+        dkim_signature_header: None,
+    };
+
+    let detector = kaname_bec::BecDetector::deterministic_only();
+    let assessment = detector.assess(req).map_err(|e| e.to_string())?;
+
+    // 上位シグナルを説明文に反映する (監査証跡)。
+    let explanation = if assessment.signals.is_empty() {
+        "決定論的シグナルでは危険な兆候を検出しませんでした。".to_string()
+    } else {
+        let top: Vec<String> = assessment.signals.iter()
+            .take(3)
+            .map(|s| s.label.clone())
+            .collect();
+        format!("検出シグナル: {}", top.join(" / "))
+    };
+
     Ok(PhishingAnalysis {
+        // LLM 意味解析が未配線のため AI 生成判定は行えない。
+        // 「判定していない」ことを false で表現する (誤って断定しない)。
         likely_ai_generated: false,
-        score: 0.12,
-        phishing_intent: false,
-        explanation: "このメールはAI生成の特徴が少ない。".into(),
+        score: assessment.score,
+        phishing_intent: assessment.score >= 0.5,
+        explanation,
     })
 }
 

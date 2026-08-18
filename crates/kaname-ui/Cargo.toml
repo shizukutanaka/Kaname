@@ -20,6 +20,10 @@ kaname-render = { path = "../kaname-render" }
 kaname-screen = { path = "../kaname-screen" }
 kaname-memory-guard = { path = "../kaname-memory-guard" }
 kaname-ai = { path = "../kaname-ai" }
+# 看板機能である BEC 検出を出荷バイナリに組み込む。
+# kaname-bec の外部依存 (serde/serde_json/thiserror/tokio/tracing) は
+# すべて本クレートに既存のため、新規の外部 crate は増えない。
+kaname-bec = { path = "../kaname-bec" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]
