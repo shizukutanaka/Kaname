@@ -8,6 +8,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **「組み立て」フェーズ — 部品を製品に組み付ける (イーロン・マスクのアルゴリズム適用)**
+  - **依存グラフの実測**により、出荷バイナリに到達可能なのは **27クレート中10個のみ**で、`kaname-bec` (看板機能・110+テスト) すら製品に含まれていないことが判明 (gap-analysis **D19**)
+  - **LLM という要件自体を削除**: `BecDetector` は `Box<dyn LocalLlm>` を必須としたが実装はテスト内のみで、これが BEC 出荷を阻んでいた。10シグナルファミリーのうち9つはモデル不要の決定論的ロジックであるため、`NullLlm` と `BecDetector::deterministic_only()` を追加して LLM なしで動作可能にした
+  - **BEC 検出を実際に実行**: `ai_detect_phishing` (固定値 `score: 0.12`)、`mail_list` の `bec_verdict` (モックに手書き)、`mail_get_summary` (固定値) をすべて実際の判定結果に接続
+  - **HTML サニタイズ経路を実際に実行**: `mail_get_body` は固定文字列を返しており `kaname-render` のサニタイズが一度も走っていなかった。`sanitize_html` → `to_srcdoc` の実経路に接続し、フロントとの型契約不一致 (`String` vs `BodyDto`) も解消
+  - **偽の AI 出力を削除**: `ai_summarize_email` は固定要約を返しつつ `local_inference: true` と成立していない保証を主張していたため、risk のみ本物にし要約は未実装と明示 (`local_inference: false`)。`ai_smart_reply` の固定3文は削除し未実装エラーに変更
+  - 到達可能クレート **10 → 11**。新規外部依存はゼロ
+  - **依然としてメールの取得元は `mock_emails()`** (D10)。実メールが流れれば同じ経路がそのまま処理する
+
 ### Added
 - **docs/research-2026-07-part2.md**: セッション横断の研究反映マップと構造的発見の統合
   - 2026年研究動向 (CaMeL/FIDES のアーキテクチャ保証収束、LLMail-Inject/ARGUS、画像ベース注入、DKIMリプレイ、動的QR、deepfake増強BEC 40%) の総括
