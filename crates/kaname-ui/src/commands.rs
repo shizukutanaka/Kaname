@@ -298,23 +298,60 @@ pub async fn ai_detect_phishing(email_id: String) -> Result<PhishingAnalysis, St
 }
 
 #[instrument(skip(email_id))]
+/// メールの要約と危険度を返す。
+///
+/// # 何が本物で何が未実装か (誤認を避けるため明示)
+///
+/// - `risk`: **本物**。`BecDetector` の決定論的シグナルによる実際の判定。
+/// - `summary`: **未実装**。ローカル LLM 推論 (`kaname-ai::llm_bridge`) が
+///   スタブのため要約は生成できない。従来はどのメールに対しても
+///   「Q2予算会議の案内。来週火曜日。参加確認を求めている。」という固定文字列を
+///   返し、かつ `local_inference: true` と**成立していない保証を主張**していた。
+///   偽の要約を返すより、要約が無いことを明示する方が安全である
+///   (偽要約は利用者に誤った安心を与え、北極星に反する)。
 pub async fn ai_summarize_email(email_id: String) -> Result<SafeSummary, String> {
+    info!(email_id=%email_id, "ai_summarize_email");
+
+    let Some(email) = mock_emails(16).into_iter().find(|e| e.id == email_id) else {
+        return Err(format!("メールが見つかりません: {email_id}"));
+    };
+
+    // 危険度は実際の検出器で判定する。
+    let risk = assess_row_verdict(&email);
+
+    // 要約は生成できないため、その事実と件名の原文のみを返す。
+    // 「要約したふり」をしない。
+    let subject = email.subject.clone().unwrap_or_else(|| "(件名なし)".to_string());
+    let summary = format!(
+        "AI 要約は未実装のため生成していません (ローカル LLM 推論が未配線)。件名: {subject}"
+    );
+
     Ok(SafeSummary {
-        summary: "Q2予算会議の案内。来週火曜日。参加確認を求めている。".into(),
-        risk: "SAFE".into(),
-        email_id: email_id.clone(),
-        // 型安全の保証をレスポンスに含める — UI で表示
+        summary,
+        risk,
+        email_id,
+        // Q-LLM に 1 通しか渡さない設計自体は維持されている。
         single_email_only: true,
-        local_inference:   true,
+        // **推論を行っていないので false**。従来 true を返していたのは誤り。
+        local_inference: false,
     })
 }
 
+/// スマートリプライ候補を返す。
+///
+/// # 未実装 (偽の候補を返さない)
+///
+/// 従来はメール内容と無関係な固定 3 文
+/// (「ありがとうございます。確認いたします。」等) を返しており、
+/// あたかも AI が生成したかのように見せていた。実際にはローカル LLM 推論
+/// (`kaname-ai::llm_bridge`) がスタブであり、生成は行われていない。
+///
+/// **偽の候補を返すのは利用者を欺く**ため、明示的に未実装を返す。
+/// 生成できないことを正直に示す方が、それらしい文面を出すより安全である。
 pub async fn ai_smart_reply(_email_id: String) -> Result<Vec<SmartReplyCandidate>, String> {
-    Ok(vec![
-        SmartReplyCandidate { text: "ありがとうございます。確認いたします。".into(), tone: "formal".into(), rationale: "丁寧な確認".into() },
-        SmartReplyCandidate { text: "承知いたしました。来週中にご回答します。".into(), tone: "formal".into(), rationale: "期限付き返答".into() },
-        SmartReplyCandidate { text: "問題ありません。進めていただいて大丈夫です。".into(), tone: "casual".into(), rationale: "簡潔な承認".into() },
-    ])
+    Err("未実装: スマートリプライはローカル LLM 推論が未配線のため利用できません \
+         (docs/maturity.md / docs/gap-analysis.md D10 参照)"
+        .to_string())
 }
 
 pub async fn settings_set(_account_id: String, _key: String, _value: String) -> Result<(), String> { Ok(()) }
