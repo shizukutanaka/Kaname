@@ -216,6 +216,149 @@ pub async fn mail_get_body(email_id: String) -> Result<BodyDto, String> {
     })
 }
 
+/// ローカルの `.eml` ファイルを解析した結果。
+///
+/// **本製品で初めて「実際のメール」がパイプラインを流れる経路**である。
+#[derive(Debug, Serialize)]
+pub struct ImportedEmail {
+    /// 差出人 (表示名 + アドレス)。
+    pub from: String,
+    /// 件名。
+    pub subject: String,
+    /// 送信ドメイン認証の結果 (Authentication-Results ヘッダ由来)。
+    pub auth: String,
+    /// BEC 判定 (SAFE / ADVISORY / SUSPICIOUS / DANGEROUS)。
+    pub bec_verdict: String,
+    /// BEC スコア。
+    pub bec_score: f32,
+    /// 検出されたシグナルのラベル。
+    pub bec_signals: Vec<String>,
+    /// 添付ファイル名の一覧。
+    pub attachments: Vec<String>,
+    /// サニタイズ済み本文 (iframe 描画用)。
+    pub body: BodyDto,
+}
+
+/// ローカルの `.eml` / `.mbox` ファイルを読み込み、**実際のメール**を
+/// パイプライン全体に通す。
+///
+/// # なぜこれが重要か
+///
+/// 従来この製品には実メールの入口が存在せず、すべての検出器は
+/// `mock_emails()` の固定データしか見ていなかった (D10)。JMAP サーバからの
+/// 受信は `kaname-jmap` の配線が必要だが、**「メールはサーバから取得しな
+/// ければならない」という要件自体を疑えば**、ローカルの `.eml` を開くだけで
+/// 実メールを処理できる。ネットワークも認証情報も不要である。
+///
+/// 本コマンドは以下を実データで実行する:
+/// 1. `kaname_render::parse()` による RFC 5322 / MIME 解析
+/// 2. `Authentication-Results` ヘッダからの SPF/DKIM/DMARC 取り込み
+/// 3. `BecDetector` による BEC 判定 (**実際の認証結果を使う**)
+/// 4. `sanitize_html` → `to_srcdoc` によるサニタイズ
+/// 5. レンダリング系検出器 (HTMLスマグリング / テキストQR / CSS外部参照)
+pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
+    info!(path=%path, "mail_import_eml");
+
+    let bytes = std::fs::read(&path).map_err(|e| format!("ファイルを読めません ({path}): {e}"))?;
+    let env = kaname_render::parse(&bytes).map_err(|e| format!("メールの解析に失敗: {e}"))?;
+
+    // 差出人ヘッダを復元する。
+    let from = env
+        .from
+        .first()
+        .map(|a| match &a.display_name {
+            Some(n) => format!("{n} <{}>", a.addr.as_string()),
+            None => a.addr.as_string(),
+        })
+        .unwrap_or_default();
+
+    let subject = env.subject.clone().unwrap_or_default();
+
+    // 本文はプレーンテキストを優先し、無ければ空。
+    // (HTML 本文は RawHtml のまま sanitize に渡すため別扱い)
+    let body_text = env.text_body.clone().unwrap_or_default();
+
+    // **実際の Authentication-Results をそのまま使う**。
+    // モックでは None を渡していたが、ここでは実データが得られる。
+    let auth = kaname_bec::AuthResults {
+        spf:   map_auth(env.auth_results.spf),
+        dkim:  map_auth(env.auth_results.dkim),
+        dmarc: map_auth(env.auth_results.dmarc),
+        arc:   None,
+    };
+    let auth_desc = format!(
+        "SPF={:?} DKIM={:?} DMARC={:?}",
+        env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc
+    );
+
+    let contacts: Vec<String> = Vec::new();
+    let req = kaname_bec::AssessmentRequest {
+        from_header:  &from,
+        return_path:  None,
+        subject:      &subject,
+        body_text:    &body_text,
+        auth,
+        sender_history: None,
+        our_domain:   "example.com",
+        known_contacts: &contacts,
+        extracted_urls: &[],
+        reply_to:     None,
+        thread_context: None,
+        past_thread_bodies: &[],
+        dkim_signature_header: None,
+    };
+
+    let assessment = kaname_bec::BecDetector::deterministic_only()
+        .assess(req)
+        .map_err(|e| format!("BEC 判定に失敗: {e}"))?;
+
+    let bec_verdict = match assessment.verdict {
+        kaname_bec::Verdict::Safe       => "SAFE",
+        kaname_bec::Verdict::Advisory   => "ADVISORY",
+        kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
+        kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+    }
+    .to_string();
+
+    // 本文をサニタイズする。HTML 本文があればそれを、無ければテキストを包む。
+    let sanitized = match &env.html_body {
+        Some(html) => kaname_render::sanitize_html(html),
+        None => kaname_render::sanitize_html(&kaname_render::RawHtml::new(body_text.clone())),
+    };
+    let srcdoc = kaname_render::to_srcdoc(&sanitized, Some(&body_text));
+
+    Ok(ImportedEmail {
+        from,
+        subject,
+        auth: auth_desc,
+        bec_verdict,
+        bec_score: assessment.score,
+        bec_signals: assessment.signals.iter().map(|s| s.label.clone()).collect(),
+        attachments: env.attachments.iter().map(|a| a.filename.clone()).collect(),
+        body: BodyDto {
+            srcdoc:  srcdoc.content,
+            sandbox: srcdoc.sandbox.to_string(),
+            csp:     srcdoc.csp.to_string(),
+            is_mls:  false,
+            render_risks: analyze_body_risks(&body_text),
+        },
+    })
+}
+
+/// `kaname-render` の認証結果を `kaname-bec` の判定型へ写す。
+///
+/// `SoftFail` は「失敗寄りだが確定ではない」ため `Neutral` に写す
+/// (`Fail` に倒すと過検出、`Pass` に倒すと危険側の見逃しになる)。
+fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
+    match r {
+        kaname_render::AuthResult::Pass     => kaname_bec::AuthVerdict::Pass,
+        kaname_render::AuthResult::Fail     => kaname_bec::AuthVerdict::Fail,
+        kaname_render::AuthResult::Neutral  => kaname_bec::AuthVerdict::Neutral,
+        kaname_render::AuthResult::SoftFail => kaname_bec::AuthVerdict::Neutral,
+        kaname_render::AuthResult::None     => kaname_bec::AuthVerdict::None,
+    }
+}
+
 /// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
 ///
 /// `kaname-render` は既に `kaname-ui` の依存に入っており各検出器も実装済み
