@@ -110,6 +110,23 @@ impl EmailAddr {
 #[derive(Debug)]
 pub struct RawHtml(String);
 
+impl RawHtml {
+    /// 未サニタイズの HTML 文字列を包む。
+    ///
+    /// 本型は**サニタイズ前の untrusted 入力**を表すマーカーであり、
+    /// 任意の文字列から構築できること自体が正しい (信頼を主張する型ではない)。
+    /// 表示可能な形にするには必ず `sanitize_html()` を通す必要があり、
+    /// `SanitizedBody` はサニタイザ経由でしか得られない。
+    ///
+    /// `parse()` が MIME から本文を取り出す通常経路に加え、
+    /// 既に HTML 文字列を手元に持っている呼び出し側 (ストア済み本文の再表示等)
+    /// が同じサニタイズ経路に載せられるようにするための入口。
+    #[must_use]
+    pub fn new(html: String) -> Self {
+        Self(html)
+    }
+}
+
 /// Attachment header only. Bytes live on disk or in the sandbox.
 #[derive(Debug, Clone)]
 pub struct AttachmentHeader {
