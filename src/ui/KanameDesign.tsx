@@ -481,33 +481,18 @@ export const KanameDesign = () => {
   const [contextMenu, setContextMenu] = createSignal<ContextMenu | null>(null);
   const { toasts, show: showToast } = createToastSystem();
 
-  // デモデータ
-  onMount(async () => {
-    await new Promise(r => setTimeout(r, 1200)); // Skeleton の確認
-    setEmails([
-      { id:"e1", from_name:"田中 花子", from_addr:"hanako@kaname-partner.co.jp",
-        subject:"Q2予算会議のご案内", preview:"来週火曜日に会議を設定しました。参加可能でしょうか。",
-        received_at: new Date(Date.now()-3600000).toISOString(),
-        is_read:false, is_starred:true, bec_verdict:"SAFE", is_mls:true, triage:"important" },
-      { id:"e2", from_name:null, from_addr:"cfo-urgent@arnazon-billing.com",
-        subject:"【至急】振込先口座変更のご連絡", preview:"新しい銀行口座に今日中に200万円をご送金ください。",
-        received_at: new Date(Date.now()-7200000).toISOString(),
-        is_read:false, is_starred:false, bec_verdict:"DANGEROUS", is_mls:false, triage:"important" },
-      { id:"e3", from_name:"佐藤 次郎", from_addr:"jiro@company.co.jp",
-        subject:"プロジェクト進捗報告", preview:"今週の進捗をご報告します。順調に進んでいます。",
-        received_at: new Date(Date.now()-14400000).toISOString(),
-        is_read:true, is_starred:false, bec_verdict:"SAFE", is_mls:true, triage:"important" },
-      { id:"e4", from_name:"Amazon注文確認", from_addr:"order@amazon.co.jp",
-        subject:"ご注文の確認 #123-456", preview:"ご注文ありがとうございます。",
-        received_at: new Date(Date.now()-86400000).toISOString(),
-        is_read:true, is_starred:false, bec_verdict:"SAFE", is_mls:false, triage:"paper_trail" },
-      { id:"e5", from_name:"TechCrunch Japan", from_addr:"newsletter@techcrunch.com",
-        subject:"週刊AIニュース", preview:"今週の注目ニュースをお届けします。",
-        received_at: new Date(Date.now()-172800000).toISOString(),
-        is_read:true, is_starred:false, bec_verdict:"SAFE", is_mls:false, triage:"feed" },
-    ]);
+  // 受信箱はサーバ未接続のため常に空。
+  //
+  // 従来はここにハードコードされたデモメール 4 通を表示していたが、
+  // **実在しないメールを受信箱に並べるのは偽装**である。
+  // JMAP 受信が未配線 (docs/gap-analysis.md D10) である以上、
+  // 表示できる本物のメールは存在しない。
+  //
+  // 実際のメール解析は「ファイル解析」タブ (EmlImport) が行う。
+  onMount(() => {
+    setEmails([]);
     setLoading(false);
-  });
+});
 
   const viewEmails = () => emails().filter(e => {
     if (view() === "inbox")       return e.triage === "important";
@@ -843,7 +828,7 @@ export const KanameDesign = () => {
             <EmptyState
               icon="📭"
               title="メールなし"
-              desc={{ inbox:"受信トレイは空です。新着メールが届くとここに表示されます。", feed:"フィード登録なし。", screener:"スクリーニング待ちなし。", reply_later:"Reply Later リストは空です。", paper_trail:"Paper Trail は空です。" }[view()]}
+              desc={{ inbox:"受信箱はサーバに接続されていません（JMAP 受信は未実装）。実際のメールを解析するには、上部ナビの「ファイル解析」タブから .eml ファイルを指定してください。", feed:"フィード登録なし。", screener:"スクリーニング待ちなし。", reply_later:"Reply Later リストは空です。", paper_trail:"Paper Trail は空です。" }[view()]}
             />
           </Show>
 
