@@ -250,7 +250,44 @@ pub struct LlmScore {
     pub explanation: String,
 }
 
+/// LLM を使わない実装。意味解析の寄与を常に 0 にする。
+///
+/// # なぜ本番コードに置くか
+///
+/// `BecDetector` の 10 シグナルファミリーのうち LLM 意味解析は 1 つに過ぎず、
+/// 残り 9 つ (認証 / ドメイン / 送信者履歴 / 内容ヒューリスティクス / AiTM /
+/// Reply-To 詐称 / スレッド乗っ取り / 口座差替 / DKIM) は**モデルを一切必要と
+/// しない決定論的ロジック**である。
+///
+/// ローカル LLM 推論が未実装 (`kaname-ai::llm_bridge` はスタブ) であることを
+/// 理由に BEC 検出そのものを出荷できない状態が続いていたため、**LLM 依存を
+/// 外して決定論的シグナルだけで動かせる経路**を用意する。北極星
+/// 「AI が受信箱全体を読まない」にはむしろ適合する。
+///
+/// `probability: 0.0` を返すため `check_llm` の寄与 (`probability * 0.45`) は
+/// 0 になり、判定は決定論的シグナルのみで決まる。
+pub struct NullLlm;
+
+impl LocalLlm for NullLlm {
+    fn score_bec(&self, _subject: &str, _body: &str, _context: Option<&str>) -> LlmScore {
+        LlmScore {
+            probability: 0.0,
+            explanation: "意味解析は無効 (決定論的シグナルのみで判定)".to_string(),
+        }
+    }
+}
+
 impl BecDetector {
+    /// LLM を使わず決定論的シグナルのみで判定する検出器を構築する。
+    ///
+    /// ローカル LLM が未配線の環境でも BEC 検出を有効化するための入口。
+    /// 認証・ドメイン・送信者履歴・内容・AiTM・Reply-To・スレッド乗っ取り・
+    /// 口座差替・DKIM の 9 シグナルファミリーは通常どおり評価される。
+    #[must_use]
+    pub fn deterministic_only() -> Self {
+        Self::new(Box::new(NullLlm))
+    }
+
     /// Construct with default thresholds.
     pub fn new(llm: Box<dyn LocalLlm>) -> Self {
         Self {
