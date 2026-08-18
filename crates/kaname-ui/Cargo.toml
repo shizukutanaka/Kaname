@@ -24,6 +24,8 @@ kaname-ai = { path = "../kaname-ai" }
 # kaname-bec の外部依存 (serde/serde_json/thiserror/tokio/tracing) は
 # すべて本クレートに既存のため、新規の外部 crate は増えない。
 kaname-bec = { path = "../kaname-bec" }
+# 複数メールを横断するキャンペーン検出 (PCR)。フォルダ一括解析で使用する。
+kaname-radar = { path = "../kaname-radar" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]

@@ -186,6 +186,15 @@ async fn mail_import_eml(path: String) -> Result<commands::ImportedEmail, String
     commands::mail_import_eml(path).await
 }
 
+/// フォルダ内の .eml を一括解析し、キャンペーン検出も行う。
+///
+/// `kaname-radar` (PCR) は複数メールを見比べて初めて機能するため、
+/// 一括解析がこの検出器を動かす唯一の現実的な入口となる。
+#[tauri::command]
+async fn mail_scan_folder(path: String) -> Result<commands::FolderScanResult, String> {
+    commands::mail_scan_folder(path).await
+}
+
 /// バックエンド未配線を示す共通エラー文言。
 fn not_wired(feature: &str) -> String {
     format!(
@@ -337,6 +346,7 @@ fn main() {
             deepfake_evaluate,
             // 実メールの入口 (ローカル .eml インポート)
             mail_import_eml,
+            mail_scan_folder,
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
             mail_send,
             mail_get_mailboxes,

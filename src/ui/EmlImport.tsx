@@ -50,11 +50,56 @@ function verdictStyle(v: string): { bg: string; fg: string; border: string } {
   }
 }
 
+interface FolderScanEntry {
+  file: string;
+  from: string;
+  subject: string;
+  verdict: string;
+  score: number;
+}
+
+interface CampaignSummary {
+  shared_infrastructure: string;
+  email_count: number;
+  threat_score: number;
+}
+
+interface FolderScanResult {
+  analyzed: number;
+  failed: [string, string][];
+  verdict_counts: [string, number][];
+  emails: FolderScanEntry[];
+  campaigns: CampaignSummary[];
+}
+
 export function EmlImport() {
   const [path, setPath] = createSignal("");
   const [result, setResult] = createSignal<ImportedEmail | null>(null);
+  const [folder, setFolder] = createSignal<FolderScanResult | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+
+  // フォルダ一括解析。kaname-radar (PCR) は複数メールを見比べて初めて
+  // 機能するため、この経路でのみキャンペーン検出が有効になる。
+  const scanFolder = async () => {
+    const p = path().trim();
+    if (!p) {
+      setError("フォルダのパスを入力してください。");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setFolder(null);
+    try {
+      const r = await invoke<FolderScanResult>("mail_scan_folder", { path: p });
+      setFolder(r);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const analyze = async () => {
     const p = path().trim();
@@ -65,6 +110,7 @@ export function EmlImport() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setFolder(null);
     try {
       const r = await invoke<ImportedEmail>("mail_import_eml", { path: p });
       setResult(r);
@@ -115,7 +161,24 @@ export function EmlImport() {
             cursor: loading() ? "default" : "pointer",
           }}
         >
-          {loading() ? "解析中..." : "解析する"}
+          {loading() ? "解析中..." : "1通を解析"}
+        </button>
+        <button
+          onClick={() => void scanFolder()}
+          disabled={loading()}
+          title="フォルダ内の .eml をまとめて解析し、キャンペーン検出も行います"
+          style={{
+            padding: "10px 18px",
+            "border-radius": "8px",
+            border: "1px solid #1F6FEB",
+            background: "#fff",
+            color: "#1F6FEB",
+            "font-size": "14px",
+            "font-weight": "600",
+            cursor: loading() ? "default" : "pointer",
+          }}
+        >
+          フォルダを一括解析
         </button>
       </div>
 
@@ -127,6 +190,87 @@ export function EmlImport() {
         }}>
           {error()}
         </div>
+      </Show>
+
+      <Show when={folder()}>
+        {(f) => (
+          <div style={{ "margin-bottom": "20px" }}>
+            <div style={{ "font-size": "15px", "font-weight": "600", "margin-bottom": "8px" }}>
+              {f().analyzed} 件を解析しました
+            </div>
+
+            {/* 判定の内訳 */}
+            <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap", "margin-bottom": "12px" }}>
+              <For each={f().verdict_counts}>
+                {([v, n]) => {
+                  const st = verdictStyle(v);
+                  return (
+                    <span style={{
+                      padding: "4px 10px", "border-radius": "999px",
+                      background: st.bg, border: `1px solid ${st.border}`,
+                      color: st.fg, "font-size": "12px", "font-weight": "600",
+                    }}>{v}: {n}</span>
+                  );
+                }}
+              </For>
+            </div>
+
+            {/* キャンペーン検出 (複数メール横断) */}
+            <Show when={f().campaigns.length > 0}>
+              <div style={{
+                padding: "10px 12px", "border-radius": "8px",
+                background: "#FDECEA", border: "1px solid #E5A29B",
+                color: "#8B1A10", "font-size": "13px",
+                "line-height": "1.6", "margin-bottom": "12px",
+              }}>
+                <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>
+                  複数メールにまたがるキャンペーンを検出しました
+                </div>
+                <For each={f().campaigns}>
+                  {(c) => (
+                    <div>
+                      ・共有インフラ: {c.shared_infrastructure}（{c.email_count} 通 / 脅威スコア {c.threat_score.toFixed(2)}）
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+            {/* 危険度順の一覧 */}
+            <div style={{ border: "1px solid #C3CBD4", "border-radius": "8px", overflow: "hidden" }}>
+              <For each={f().emails}>
+                {(e) => {
+                  const st = verdictStyle(e.verdict);
+                  return (
+                    <div style={{
+                      display: "flex", gap: "10px", "align-items": "center",
+                      padding: "8px 12px", "border-bottom": "1px solid #E6EAEE",
+                      "font-size": "13px",
+                    }}>
+                      <span style={{
+                        padding: "2px 8px", "border-radius": "999px",
+                        background: st.bg, color: st.fg, border: `1px solid ${st.border}`,
+                        "font-size": "11px", "font-weight": "700", "white-space": "nowrap",
+                      }}>{e.verdict}</span>
+                      <span style={{ flex: "1", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
+                        {e.subject || "(件名なし)"}
+                      </span>
+                      <span style={{ color: "#5A6473", "white-space": "nowrap" }}>{e.from}</span>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+
+            {/* 失敗したファイルも隠さず表示する */}
+            <Show when={f().failed.length > 0}>
+              <div style={{ "margin-top": "10px", "font-size": "12px", color: "#8B1A10" }}>
+                <div style={{ "font-weight": "600" }}>解析できなかったファイル:</div>
+                <For each={f().failed}>{([file, why]) => <div>・{file}: {why}</div>}</For>
+              </div>
+            </Show>
+          </div>
+        )}
       </Show>
 
       <Show when={result()}>
