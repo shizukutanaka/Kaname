@@ -1,27 +1,54 @@
-# Kaname Examples
+# サンプルメール — Kaname を実データで動かす
 
-Kaname の各機能の動作確認・デモ用サンプル。全サンプルにテストが付属。
+`examples/emails/` には、Kaname の解析パイプラインを**実際に動かして確かめる**ための
+`.eml` サンプルが入っています。サーバ接続もアカウント設定も不要です。
 
-## 実行
+## 使い方
 
-```bash
-cargo run --example oobv_basic
-cargo run --example html_smuggling_check
-cargo run --example dual_llm_safety
-cargo run --example pivot_detect
-```
+1. アプリを起動する
 
-## テスト実行
+   ```bash
+   npm run tauri dev
+   ```
 
-```bash
-cargo test --examples
-```
+2. ナビゲーションの「**ファイル解析**」タブを開く
 
-## ファイル一覧
+3. 1 通だけ解析する場合 — パス欄に `.eml` のフルパスを入力し「**1通を解析**」
 
-| ファイル | 機能 | テスト数 |
+   ```
+   /path/to/kaname/examples/emails/02-bec-wire-transfer.eml
+   ```
+
+4. まとめて解析する場合 — パス欄に**フォルダ**のフルパスを入力し「**フォルダを一括解析**」
+
+   ```
+   /path/to/kaname/examples/emails
+   ```
+
+## 各サンプルが何を試すか
+
+| ファイル | 想定される判定 | 検出されるはずのもの |
 |---|---|---|
-| `oobv_basic.rs` | Out-of-Band Verification | 5 |
-| `html_smuggling_check.rs` | HTML スマグリング検出 | 6 |
-| `dual_llm_safety.rs` | Dual-LLM 型安全 | デモ |
-| `pivot_detect.rs` | Cross-Channel Pivot Detection | デモ |
+| `01-safe-meeting.eml` | SAFE | SPF/DKIM/DMARC がすべて pass。緊急性も金銭要求もない通常の業務メール |
+| `02-bec-wire-transfer.eml` | SUSPICIOUS 〜 DANGEROUS | 認証の全失敗、`arnazon-billing.com` (`amazon` のタイポスクワット)、緊急性 + 送金要求の共起、Reply-To がフリーメールで送信元ドメインと不一致 |
+| `03-quishing-textqr.eml` | SUSPICIOUS 以上 + 本文リスク | 認証失敗に加え、**本文に文字で描かれた QR コード** (画像スキャンを回避する quishing) を検出 |
+
+### フォルダ一括解析でのみ見えるもの
+
+`02` と `03` は**同じ攻撃インフラ (`arnazon-billing.com`) を共有**しています。
+1 通ずつ解析しても分かりませんが、フォルダ一括解析では
+`kaname-radar` (ポリモーフィック・キャンペーン検出) が両者を結び付け、
+「**複数メールにまたがるキャンペーン**」として警告します。
+
+これは「複数のメールを見比べて初めて意味を持つ」検出であり、
+一括解析がこの機能を使う唯一の入口です。
+
+## 実装状況について
+
+これらのサンプルは**実際のメールファイル**であり、モックデータではありません。
+MIME 解析・送信ドメイン認証の評価・BEC 判定・HTML サニタイズ・本文リスク検出は
+すべて本物の実装が動きます。
+
+一方で、**サーバとのメール送受信 (JMAP) は未配線**です。
+詳細は [`docs/maturity.md`](../docs/maturity.md) と
+[`docs/gap-analysis.md`](../docs/gap-analysis.md) を参照してください。
