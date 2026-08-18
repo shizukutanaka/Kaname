@@ -345,6 +345,186 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     })
 }
 
+/// フォルダ一括解析の結果。
+#[derive(Debug, Serialize)]
+pub struct FolderScanResult {
+    /// 解析できたメール件数。
+    pub analyzed: usize,
+    /// 解析に失敗したファイル (パス, 理由)。握り潰さず返す。
+    pub failed: Vec<(String, String)>,
+    /// 判定ごとの件数 (SAFE / ADVISORY / SUSPICIOUS / DANGEROUS)。
+    pub verdict_counts: Vec<(String, usize)>,
+    /// 危険度の高い順に並べたメール一覧。
+    pub emails: Vec<FolderScanEntry>,
+    /// 複数メールを横断して検出されたキャンペーン。
+    pub campaigns: Vec<CampaignSummary>,
+}
+
+/// フォルダ一括解析における 1 通分の結果。
+#[derive(Debug, Serialize)]
+pub struct FolderScanEntry {
+    /// 元ファイル名。
+    pub file: String,
+    /// 差出人。
+    pub from: String,
+    /// 件名。
+    pub subject: String,
+    /// BEC 判定。
+    pub verdict: String,
+    /// BEC スコア。
+    pub score: f32,
+}
+
+/// 検出されたキャンペーンの要約。
+#[derive(Debug, Serialize)]
+pub struct CampaignSummary {
+    /// 共有インフラ (グルーピングの根拠)。
+    pub shared_infrastructure: String,
+    /// 所属メール数。
+    pub email_count: usize,
+    /// 脅威スコア。
+    pub threat_score: f32,
+}
+
+/// フォルダ内の `.eml` を一括解析し、**複数メールを横断したキャンペーン検出**も行う。
+///
+/// # なぜ一括解析が必要か
+///
+/// `kaname-radar` (PCR: ポリモーフィック・キャンペーン検出) は
+/// **複数のメールを見比べて初めて意味を持つ**検出器であり、1 通ずつの解析では
+/// 動かせない。そのため出荷バイナリから到達不能なまま放置されていた。
+/// フォルダ一括解析はこの検出器を実際に動かす唯一の現実的な入口である。
+///
+/// メールボックスのエクスポート (`.eml` の集合) を丸ごと投入して
+/// トリアージする、という実運用にも合致する。
+pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> {
+    info!(path=%path, "mail_scan_folder");
+
+    let dir = std::fs::read_dir(&path)
+        .map_err(|e| format!("フォルダを開けません ({path}): {e}"))?;
+
+    let mut entries: Vec<FolderScanEntry> = Vec::new();
+    let mut failed: Vec<(String, String)> = Vec::new();
+    let mut radar = kaname_radar::CampaignRadar::new();
+    let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+
+    for item in dir {
+        let Ok(item) = item else { continue };
+        let p = item.path();
+        // .eml のみを対象にする (拡張子の大小は問わない)。
+        let is_eml = p.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("eml"));
+        if !is_eml {
+            continue;
+        }
+        let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string();
+
+        let bytes = match std::fs::read(&p) {
+            Ok(b) => b,
+            Err(e) => { failed.push((file_name, format!("読み込み失敗: {e}"))); continue; }
+        };
+        let env = match kaname_render::parse(&bytes) {
+            Ok(e) => e,
+            Err(e) => { failed.push((file_name, format!("解析失敗: {e}"))); continue; }
+        };
+
+        let from = env.from.first()
+            .map(|a| a.addr.as_string())
+            .unwrap_or_default();
+        let from_domain = env.from.first()
+            .map(|a| a.addr.domain.clone())
+            .unwrap_or_default();
+        let subject = env.subject.clone().unwrap_or_default();
+        let body_text = env.text_body.clone().unwrap_or_default();
+
+        let auth = kaname_bec::AuthResults {
+            spf:   map_auth(env.auth_results.spf),
+            dkim:  map_auth(env.auth_results.dkim),
+            dmarc: map_auth(env.auth_results.dmarc),
+            arc:   None,
+        };
+        // 認証のいずれかが失敗していれば radar に伝える。
+        let auth_partial_fail = matches!(
+            (env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc),
+            (kaname_render::AuthResult::Fail, _, _)
+                | (_, kaname_render::AuthResult::Fail, _)
+                | (_, _, kaname_render::AuthResult::Fail)
+        );
+
+        let contacts: Vec<String> = Vec::new();
+        let req = kaname_bec::AssessmentRequest {
+            from_header:  &from,
+            return_path:  None,
+            subject:      &subject,
+            body_text:    &body_text,
+            auth,
+            sender_history: None,
+            our_domain:   "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to:     None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+
+        let (verdict, score) = match kaname_bec::BecDetector::deterministic_only().assess(req) {
+            Ok(a) => {
+                let v = match a.verdict {
+                    kaname_bec::Verdict::Safe       => "SAFE",
+                    kaname_bec::Verdict::Advisory   => "ADVISORY",
+                    kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
+                    kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+                };
+                (v.to_string(), a.score)
+            }
+            // 判定できなかったことを SAFE と偽らない。
+            Err(e) => {
+                failed.push((file_name.clone(), format!("BEC 判定失敗: {e}")));
+                ("UNKNOWN".to_string(), 0.0)
+            }
+        };
+        *counts.entry(verdict.clone()).or_insert(0) += 1;
+
+        // キャンペーン検出へ投入する。
+        let meta = kaname_radar::EmailMetadata {
+            email_id: file_name.clone(),
+            from_domain,
+            return_path_domain: None,
+            dkim_domain: None,
+            link_domains: Vec::new(),
+            received_at: env.date.unwrap_or(0).max(0) as u64,
+            subject_length_bucket: kaname_radar::SubjectLengthBucket::from_subject(&subject),
+            auth_partial_fail,
+        };
+        let _ = radar.analyze(&meta);
+
+        entries.push(FolderScanEntry { file: file_name, from, subject, verdict, score });
+    }
+
+    // 危険度の高い順に並べる (トリアージのため)。
+    entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+
+    let campaigns = radar
+        .alertable_groups()
+        .into_iter()
+        .map(|g| CampaignSummary {
+            shared_infrastructure: g.shared_infrastructure.clone(),
+            email_count: g.email_ids.len(),
+            threat_score: g.threat_score,
+        })
+        .collect();
+
+    Ok(FolderScanResult {
+        analyzed: entries.len(),
+        failed,
+        verdict_counts: counts.into_iter().collect(),
+        emails: entries,
+        campaigns,
+    })
+}
+
 /// `kaname-render` の認証結果を `kaname-bec` の判定型へ写す。
 ///
 /// `SoftFail` は「失敗寄りだが確定ではない」ため `Neutral` に写す
