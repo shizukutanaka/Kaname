@@ -43,7 +43,7 @@ members = [
 exclude = ["fuzz"]
 
 [workspace.package]
-version      = "0.3.22"
+version      = "0.4.0"
 edition      = "2021"
 # rust-version は「この crate が要求する最低 Rust バージョン」(MSRV)。
 # 開発・CI で実際に使うツールチェインは rust-toolchain.toml の 1.94.1 (より新しい)。
