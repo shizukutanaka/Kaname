@@ -226,6 +226,10 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
         env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc
     );
 
+    // 本文からリンクを抽出し、bec の URL シグナルに供給する。
+    // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
+    let urls = extract_urls_from_text(&body_text);
+
     let contacts: Vec<String> = Vec::new();
     let req = kaname_bec::AssessmentRequest {
         from_header:  &from,
@@ -236,7 +240,7 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
         sender_history: None,
         our_domain:   "example.com",
         known_contacts: &contacts,
-        extracted_urls: &[],
+        extracted_urls: &urls,
         reply_to:     None,
         thread_context: None,
         past_thread_bodies: &[],
@@ -275,7 +279,12 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
             sandbox: srcdoc.sandbox.to_string(),
             csp:     srcdoc.csp.to_string(),
             is_mls:  false,
-            render_risks: analyze_body_risks(&body_text),
+            render_risks: {
+                // 本文の構造リスクに加え、リンク先の評判判定も併記する。
+                let mut risks = analyze_body_risks(&body_text);
+                risks.extend(evaluate_link_risks(&urls));
+                risks
+            },
         },
         dlp_findings: scan_dlp_inbound(&subject, &body_text),
     })
@@ -348,6 +357,8 @@ pub struct FolderScanEntry {
     pub verdict: String,
     /// BEC スコア。
     pub score: f32,
+    /// 本文中に検出された機微情報 (DLP) の件数。
+    pub dlp_count: usize,
 }
 
 /// 検出されたキャンペーンの要約。
@@ -427,6 +438,10 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
                 | (_, _, kaname_render::AuthResult::Fail)
         );
 
+        // 本文からリンクを抽出し、bec の URL シグナルとキャンペーン相関に供給する。
+        let urls = extract_urls_from_text(&body_text);
+        let link_domains: Vec<String> = urls.iter().filter_map(|u| url_host(u)).collect();
+
         let contacts: Vec<String> = Vec::new();
         let req = kaname_bec::AssessmentRequest {
             from_header:  &from,
@@ -437,7 +452,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             sender_history: None,
             our_domain:   "example.com",
             known_contacts: &contacts,
-            extracted_urls: &[],
+            extracted_urls: &urls,
             reply_to:     None,
             thread_context: None,
             past_thread_bodies: &[],
@@ -468,14 +483,17 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             from_domain,
             return_path_domain: None,
             dkim_domain: None,
-            link_domains: Vec::new(),
+            link_domains,
             received_at: env.date.unwrap_or(0).max(0) as u64,
             subject_length_bucket: kaname_radar::SubjectLengthBucket::from_subject(&subject),
             auth_partial_fail,
         };
         let _ = radar.analyze(&meta);
 
-        entries.push(FolderScanEntry { file: file_name, from, subject, verdict, score });
+        // 機微情報 (DLP) は件数のみ一覧に載せる (詳細は単体解析で確認する)。
+        let dlp_count = scan_dlp_inbound(&subject, &body_text).len();
+
+        entries.push(FolderScanEntry { file: file_name, from, subject, verdict, score, dlp_count });
     }
 
     // 危険度の高い順に並べる (トリアージのため)。
@@ -504,6 +522,79 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
 ///
 /// `SoftFail` は「失敗寄りだが確定ではない」ため `Neutral` に写す
 /// (`Fail` に倒すと過検出、`Pass` に倒すと危険側の見逃しになる)。
+/// 本文から http/https の URL を抽出する。
+///
+/// # なぜこの関数が必要か
+///
+/// `kaname-bec` は URL 評価シグナル (フリーホスティング/危険 TLD 等) を
+/// 実装済みで、`kaname-render::quishing::evaluate_url` も悪性ドメイン・
+/// 短縮 URL・タイポスクワットを判定できる。しかし**本文から URL を取り出す
+/// 関数がワークスペースに存在しなかった**ため、これらの実装済みシグナルは
+/// 実データで一度も発火していなかった (`extracted_urls: &[]` を渡していた)。
+///
+/// XML/HTML パーサは使わず、他モジュールと同じ文字列走査方針を取る。
+/// 上限 20 件は `kaname-bec` 側の MAX_URLS と整合させている。
+fn extract_urls_from_text(text: &str) -> Vec<String> {
+    const MAX_URLS: usize = 20;
+    let mut out: Vec<String> = Vec::new();
+    for token in text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'') {
+        let lower = token.to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            continue;
+        }
+        // 末尾に付きがちな句読点・括弧を落とす
+        let trimmed = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ')' | ';' | ']' | '!' | '?'));
+        if trimmed.len() < 12 {
+            // "http://a.b" 未満は URL として意味を成さない
+            continue;
+        }
+        if !out.iter().any(|u| u == trimmed) {
+            out.push(trimmed.to_string());
+        }
+        if out.len() >= MAX_URLS {
+            break;
+        }
+    }
+    out
+}
+
+/// URL のホスト部を取り出す (`https://host/path` → `host`)。
+///
+/// キャンペーン相関 (`EmailMetadata.link_domains`) 用の簡易抽出。
+/// userinfo (`user@host`) やポートは落とす。
+fn url_host(url: &str) -> Option<String> {
+    let rest = url.split("://").nth(1)?;
+    let host_port = rest.split(['/', '?', '#']).next()?;
+    // userinfo 混乱攻撃 (https://trusted.com@evil.com/) 対策: 最後の '@' 以降を採る
+    let host = host_port.rsplit('@').next()?;
+    let host = host.split(':').next()?.trim().to_ascii_lowercase();
+    if host.is_empty() { None } else { Some(host) }
+}
+
+/// 本文中のリンクを `quishing::evaluate_url` で判定し、人間可読の警告を返す。
+///
+/// QR 用に実装された評価器 (悪性ドメイン/短縮 URL/自由 TLD/タイポスクワット/
+/// ブランド・サブドメイン偽装) を、本文リンクにもそのまま適用する。
+fn evaluate_link_risks(urls: &[String]) -> Vec<String> {
+    let defense = kaname_render::quishing::QuishingDefense::new();
+    let mut risks = Vec::new();
+    for url in urls {
+        match defense.evaluate_url(url) {
+            kaname_render::quishing::UrlReputation::Malicious => {
+                risks.push(format!("リンク先が既知の悪性ドメインです: {url}"));
+            }
+            kaname_render::quishing::UrlReputation::Suspicious => {
+                risks.push(format!(
+                    "リンク先が疑わしいドメインです (短縮URL/自由TLD/タイポスクワット等): {url}"
+                ));
+            }
+            kaname_render::quishing::UrlReputation::Trusted
+            | kaname_render::quishing::UrlReputation::Neutral => {}
+        }
+    }
+    risks
+}
+
 fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
     match r {
         kaname_render::AuthResult::Pass     => kaname_bec::AuthVerdict::Pass,

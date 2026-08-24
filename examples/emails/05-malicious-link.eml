@@ -1,0 +1,17 @@
+From: Security Team <alert@arnazon-billing.com>
+To: you@example.com
+Subject: Action required: verify your payment method
+Date: Mon, 26 Apr 2026 13:45:00 +0900
+Message-ID: <link-005@arnazon-billing.com>
+Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=none; dmarc=fail header.from=arnazon-billing.com
+Content-Type: text/plain; charset=utf-8
+
+Your payment method could not be verified.
+
+Please confirm your details within 24 hours using the secure link:
+https://bit.ly/3xVerifyNow
+
+If the link above does not work, use our backup portal:
+http://amaz0n-verify.tk/login
+
+Failure to verify will result in account suspension.
