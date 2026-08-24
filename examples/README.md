@@ -33,6 +33,7 @@
 | `02-bec-wire-transfer.eml` | SUSPICIOUS 〜 DANGEROUS | 認証の全失敗、`arnazon-billing.com` (`amazon` のタイポスクワット)、緊急性 + 送金要求の共起、Reply-To がフリーメールで送信元ドメインと不一致 |
 | `03-quishing-textqr.eml` | SUSPICIOUS 以上 + 本文リスク | 認証失敗に加え、**本文に文字で描かれた QR コード** (画像スキャンを回避する quishing) を検出 |
 | `04-sensitive-data.eml` | SAFE + **DLP 検出あり** | 認証はすべて pass の正規メールだが、本文に**区切り付きのクレジットカード番号と IBAN** が含まれる。転送・返信時の漏洩リスクとして DLP が検出する (区切り付き表記は検出漏れしやすい典型例) |
+| `05-malicious-link.eml` | SUSPICIOUS 以上 + **リンク警告** | 認証失敗に加え、本文のリンクが**短縮 URL (`bit.ly`)** と **`amaz0n-verify.tk` (数字置換タイポスクワット + 自由 TLD)**。本文リンクの評判判定と BEC の URL シグナルの両方が発火する |
 
 ### フォルダ一括解析でのみ見えるもの
 

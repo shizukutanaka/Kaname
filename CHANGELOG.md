@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **本文リンクの評価を解析パイプラインに接続**
+  - `kaname-bec` の URL 評価シグナルと `quishing::evaluate_url` (悪性ドメイン/短縮URL/タイポスクワット/自由TLD) は実装済みだったが、**本文から URL を取り出す関数が無いだけで一度も実データで発火していなかった**。`extract_urls_from_text` を新設して接続
+  - 単体解析: 抽出 URL を BEC へ供給し、リンクの評判判定結果を本文リスクに併記
+  - フォルダ一括解析: リンクドメインを `kaname-radar` のキャンペーン相関に供給。各メールの DLP 件数も一覧に表示 (`dlp_count`)
+  - サンプル `05-malicious-link.eml` を追加 (短縮URL + 数字置換タイポスクワット + 自由TLD)
+
 ## [0.4.0] - 2026-07-18 — ローカル・メールセキュリティ解析ツールとして完結
 
 イーロン・マスクのアルゴリズム (要件を疑う → 削除する → 簡素化する → 組み立てる)

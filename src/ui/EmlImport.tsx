@@ -58,6 +58,8 @@ interface FolderScanEntry {
   subject: string;
   verdict: string;
   score: number;
+  /** 本文中に検出された機微情報 (DLP) の件数。 */
+  dlp_count: number;
 }
 
 interface CampaignSummary {
@@ -257,6 +259,14 @@ export function EmlImport() {
                       <span style={{ flex: "1", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
                         {e.subject || "(件名なし)"}
                       </span>
+                      <Show when={e.dlp_count > 0}>
+                        <span style={{
+                          padding: "2px 8px", "border-radius": "999px",
+                          background: "#EAF1FB", color: "#123B75",
+                          border: "1px solid #9DBDEA",
+                          "font-size": "11px", "font-weight": "700", "white-space": "nowrap",
+                        }}>機微 {e.dlp_count} 件</span>
+                      </Show>
                       <span style={{ color: "#5A6473", "white-space": "nowrap" }}>{e.from}</span>
                     </div>
                   );
