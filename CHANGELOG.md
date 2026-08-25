@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **メール本体の永続化と検索** (D10 の残りを解消)
+  - `messages` テーブルはスキーマもインデックスも完備していたが、**INSERT/SELECT がワークスペース全体でゼロ件**だった。`save_message` / `list_messages` / `search_messages` を実装
+  - **冪等性**: `id` を `sha256(account_id + jmap_id)` で決定論的に採番し `ON CONFLICT DO UPDATE`。再取得しても行が重複しない
+  - **`body_encrypted` には書かない** — MLS がモック段階 (D1) の現状で暗号化列に平文を入れると「暗号化済み」と偽ることになる。一覧表示に必要な `body_preview` のみ保存
+  - **検索は LIKE ベース** — FTS5 は SQLCipher ビルドで有効とは限らず、有効性を確認できない環境で依存するのは危険。利用者の検索語の `%` `_` はエスケープする
+  - 受信箱の検索欄は**ハンドラ未バインドの「飾り」だった**ため `mail_search` に接続
+  - 一覧読み込みを未配線の `mail_query_emails` から実装済みの `mail_fetch` に切り替え
+
 ## [0.5.0] - 2026-07-18 — 全検出器を製品に組み付けた「組み立て完了」リリース
 
 v0.4.0 で確立した解析パイプラインに、**実装済みだが眠っていた部品を

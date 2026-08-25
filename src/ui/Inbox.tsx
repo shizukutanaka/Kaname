@@ -402,6 +402,70 @@ export const Inbox = () => {
   const [selectedEmail, setSelectedEmail] = createSignal<string | null>(null);
   const [loading, setLoading]           = createSignal(false);
   const [error, setError]               = createSignal<string | null>(null);
+  // 検索: 保存済みメール (mail_search) を対象にする。
+  // 従来この検索欄はハンドラ未バインドで機能していなかった (D10)。
+  const [searchQuery, setSearchQuery]   = createSignal("");
+  const [searching, setSearching]       = createSignal(false);
+
+  /** サーバからメールを取得して一覧に反映する。 */
+  const loadEmails = async (mbxId: string | null) => {
+    if (!mbxId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // 未配線の mail_query_emails ではなく、実装済みの mail_fetch を使う。
+      // mail_fetch は取得と同時に BEC 判定を行い、保存も行う。
+      const items = await invoke<EmailListItem[]>("mail_fetch", {
+        mailboxId: mbxId,
+        limit:     50,
+      });
+      setEmails(items);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** 保存済みメールを検索し、一覧を結果で置き換える。 */
+  const runSearch = async () => {
+    const q = searchQuery().trim();
+    if (!q) {
+      // 空文字で Enter → 検索を解除して通常の一覧に戻す。
+      setSearching(false);
+      setError(null);
+      void loadEmails(selectedMbx());
+      return;
+    }
+    setSearching(true);
+    setError(null);
+    try {
+      // StoredMessage は EmailListItem と形が異なるため詰め替える。
+      // 保存済みメールには starred/mls の情報が無いので false を入れる
+      // (不明な値を true と偽らない)。
+      const found = await invoke<{
+        id: string; from_addr: string; from_name: string | null;
+        subject: string | null; body_preview: string | null;
+        received_at: string | null; is_read: boolean;
+        bec_score: number | null; bec_verdict: string | null;
+      }[]>("mail_search", { query: q, limit: 50 });
+      setEmails(found.map(m => ({
+        id: m.id,
+        from_name: m.from_name,
+        from_addr: m.from_addr,
+        subject: m.subject,
+        preview: m.body_preview,
+        received_at: m.received_at,
+        is_read: m.is_read,
+        is_starred: false,
+        bec_verdict: m.bec_verdict,
+        is_mls: false,
+      })));
+    } catch (e) {
+      setError(String(e));
+      setEmails([]);
+    }
+  };
 
   // 起動時にメールボックスを読み込む
   createEffect(async () => {
@@ -416,24 +480,11 @@ export const Inbox = () => {
     }
   });
 
-  // メールボックス変更時にメールを読み込む
+  // メールボックス変更時にメールを読み込む (検索中は上書きしない)
   createEffect(async () => {
     const mbxId = selectedMbx();
-    if (!mbxId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const items = await invoke<EmailListItem[]>("mail_query_emails", {
-        mailboxId: mbxId,
-        position:  0,
-        limit:     50,
-      });
-      setEmails(items);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
+    if (!mbxId || searching()) return;
+    await loadEmails(mbxId);
   });
 
   const selectedMbxInfo = () => mailboxes().find(m => m.id === selectedMbx());
@@ -570,10 +621,14 @@ export const Inbox = () => {
           }}>
             {selectedMbxInfo()?.name || "受信トレイ"}
           </div>
-          {/* 検索バー */}
+          {/* 検索バー — 保存済みメールを対象に検索する。
+              従来はハンドラが未バインドで「飾り」だった (D10)。 */}
           <input
             type="text"
             placeholder="検索..."
+            value={searchQuery()}
+            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
             style={{
               width: "100%",
               background: "#12181F",

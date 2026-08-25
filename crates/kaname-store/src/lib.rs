@@ -1001,3 +1001,217 @@ mod tests {
         let _ = SqlCipherParams::apply(&conn, &valid_key); // ok or cipher error, not injection
     }
 }
+
+// ============================================================================
+// メール本体の永続化
+//
+// `messages` テーブルはスキーマもインデックスも完備していたが、
+// **INSERT/SELECT がワークスペース全体でゼロ件**だった (gap-analysis D10)。
+// 保存する 1 メソッドと読み出す 1 メソッドが無いだけで、
+// オフライン閲覧も検索も成立しない状態だった。
+// ============================================================================
+
+/// 保存するメールの内容。
+#[derive(Debug, Clone)]
+pub struct NewMessage {
+    /// JMAP 側の ID (冪等性キーとして使う)。
+    pub jmap_id:     String,
+    /// 送信者アドレス。
+    pub from_addr:   String,
+    /// 送信者表示名。
+    pub from_name:   Option<String>,
+    /// 件名。
+    pub subject:     Option<String>,
+    /// 本文プレビュー (一覧表示用)。
+    pub body_preview: Option<String>,
+    /// 受信時刻 (RFC 3339)。
+    pub received_at: Option<String>,
+    /// 既読か。
+    pub is_read:     bool,
+    /// BEC スコア。
+    pub bec_score:   Option<f32>,
+    /// BEC 判定。
+    pub bec_verdict: Option<String>,
+}
+
+/// 保存済みメール。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StoredMessage {
+    /// 内部 ID。
+    pub id:           String,
+    /// 送信者アドレス。
+    pub from_addr:    String,
+    /// 送信者表示名。
+    pub from_name:    Option<String>,
+    /// 件名。
+    pub subject:      Option<String>,
+    /// 本文プレビュー。
+    pub body_preview: Option<String>,
+    /// 受信時刻 (RFC 3339)。
+    pub received_at:  Option<String>,
+    /// 既読か。
+    pub is_read:      bool,
+    /// BEC スコア。
+    pub bec_score:    Option<f32>,
+    /// BEC 判定。
+    pub bec_verdict:  Option<String>,
+}
+
+/// `LIKE` パターンのメタ文字をエスケープする。
+///
+/// `%` `_` をそのまま渡すと利用者の検索語がワイルドカードとして解釈され、
+/// 意図しない結果を返す。`\` をエスケープ文字として使う。
+fn escape_like(pattern: &str) -> String {
+    pattern
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
+impl Store {
+    /// メールを保存する。
+    ///
+    /// # 冪等性
+    ///
+    /// `id` は `sha256(account_id + jmap_id)` で決定論的に採番し
+    /// `ON CONFLICT DO UPDATE` で上書きする。同じメールを再取得しても
+    /// 行が重複しない (`record_received` と同じ発想)。
+    ///
+    /// # 本文を暗号化列に入れない理由
+    ///
+    /// `body_encrypted` には**書かない**。MLS がモック段階 (D1) の現状で
+    /// 暗号化列に平文を入れると「暗号化済み」と偽ることになる。
+    /// 一覧表示に必要な `body_preview` のみ保存する。
+    pub async fn save_message(
+        &self,
+        account_id: &str,
+        mailbox_id: &str,
+        msg: &NewMessage,
+    ) -> Result<(), StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(mailbox_id, "mailbox_id", 256)?;
+        validate_text_field(&msg.jmap_id, "jmap_id", 256)?;
+        validate_text_field(&msg.from_addr, "from_addr", 320)?;
+        if let Some(v) = &msg.from_name    { validate_text_field(v, "from_name", 256)?; }
+        if let Some(v) = &msg.subject      { validate_text_field(v, "subject", 2_000)?; }
+        if let Some(v) = &msg.body_preview { validate_text_field(v, "body_preview", 10_000)?; }
+
+        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let id = sha256_hex_fields(&[account_id.as_bytes(), msg.jmap_id.as_bytes()]);
+
+        conn.execute(
+            "INSERT INTO messages \
+                (id, account_id, mailbox_id, jmap_id, from_addr, from_name, \
+                 to_addrs, subject, body_preview, received_at, is_read, \
+                 bec_score, bec_verdict) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', ?7, ?8, ?9, ?10, ?11, ?12) \
+             ON CONFLICT (id) DO UPDATE SET \
+                subject      = ?7, \
+                body_preview = ?8, \
+                received_at  = COALESCE(?9, received_at), \
+                is_read      = ?10, \
+                bec_score    = ?11, \
+                bec_verdict  = ?12, \
+                updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
+            params![
+                id, account_id, mailbox_id, msg.jmap_id, msg.from_addr, msg.from_name,
+                msg.subject, msg.body_preview, msg.received_at,
+                i32::from(msg.is_read), msg.bec_score, msg.bec_verdict
+            ],
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// メールボックスの保存済みメールを新しい順に返す。
+    ///
+    /// `idx_messages_mailbox(mailbox_id, received_at DESC)` を利用する。
+    /// **オフラインでも直近のメールを閲覧できる**ようにするための読み出し。
+    pub async fn list_messages(
+        &self,
+        account_id: &str,
+        mailbox_id: &str,
+        limit: u32,
+    ) -> Result<Vec<StoredMessage>, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(mailbox_id, "mailbox_id", 256)?;
+        let limit = limit.clamp(1, 500);
+
+        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, from_addr, from_name, subject, body_preview, \
+                    received_at, is_read, bec_score, bec_verdict \
+             FROM messages \
+             WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
+             ORDER BY received_at DESC LIMIT ?3;",
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let rows = stmt.query_map(params![account_id, mailbox_id, limit], row_to_stored)
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
+        }
+        Ok(out)
+    }
+
+    /// 件名・送信者・本文プレビューを対象に検索する。
+    ///
+    /// # FTS5 を使わない理由
+    ///
+    /// FTS5 は SQLCipher ビルドで有効とは限らず、有効性を確認できない環境で
+    /// 依存するのは危険。まず `LIKE` で確実に動く実装を入れ、
+    /// FTS5 の有効性を検証できる環境が整ってから移行する。
+    ///
+    /// 利用者の検索語に含まれる `%` `_` はエスケープするため、
+    /// ワイルドカードとして解釈されることはない。
+    pub async fn search_messages(
+        &self,
+        account_id: &str,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<StoredMessage>, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(query, "query", 1_000)?;
+        let limit = limit.clamp(1, 500);
+        let pattern = format!("%{}%", escape_like(query));
+
+        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn.prepare(
+            "SELECT id, from_addr, from_name, subject, body_preview, \
+                    received_at, is_read, bec_score, bec_verdict \
+             FROM messages \
+             WHERE account_id = ?1 AND is_deleted = 0 \
+               AND ( subject      LIKE ?2 ESCAPE '\\' \
+                  OR from_addr    LIKE ?2 ESCAPE '\\' \
+                  OR from_name    LIKE ?2 ESCAPE '\\' \
+                  OR body_preview LIKE ?2 ESCAPE '\\' ) \
+             ORDER BY received_at DESC LIMIT ?3;",
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let rows = stmt.query_map(params![account_id, pattern, limit], row_to_stored)
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
+        }
+        Ok(out)
+    }
+}
+
+/// `messages` の 1 行を `StoredMessage` に変換する。
+fn row_to_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> {
+    Ok(StoredMessage {
+        id:           row.get(0)?,
+        from_addr:    row.get(1)?,
+        from_name:    row.get(2)?,
+        subject:      row.get(3)?,
+        body_preview: row.get(4)?,
+        received_at:  row.get(5)?,
+        is_read:      row.get::<_, i32>(6)? != 0,
+        bec_score:    row.get(7)?,
+        bec_verdict:  row.get(8)?,
+    })
+}
