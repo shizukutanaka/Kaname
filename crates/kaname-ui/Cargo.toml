@@ -36,6 +36,8 @@ kaname-store = { path = "../kaname-store" }
 kaname-saas-guard = { path = "../kaname-saas-guard" }
 # 送信者文体認証 (アカウント乗っ取り検出)。
 kaname-ssa = { path = "../kaname-ssa" }
+# トラッキングピクセル検出 (README が謳うプライバシー保護の実体)。
+kaname-privacy = { path = "../kaname-privacy" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]
