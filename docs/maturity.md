@@ -19,7 +19,7 @@ Kaname は現在 **「ローカル・メールセキュリティ解析ツール�
 | 送信ドメイン認証の評価 (SPF/DKIM/DMARC) | ✅ 動作 (ヘッダ由来) | 同上 |
 | BEC 多信号検出 (決定論的 9 シグナル) | ✅ 動作 | 同上 |
 | HTML サニタイズ (mXSS/CSS exfil/トラッキング) | ✅ 動作 | 同上 |
-| 本文リスク検出 (HTMLスマグリング/テキストQR/CSS外部参照/**リンク評判判定**) | ✅ 動作 | 同上 |
+| 本文リスク検出 (HTMLスマグリング/テキストQR/CSS外部参照/リンク評判判定/**SaaSリンク安全性**) | ✅ 動作 | 同上 |
 | 機微情報検出 (DLP, Inbound) | ✅ 動作 | 同上 |
 | **添付ファイル検査** (MIME偽装/polyglot/危険拡張子/SVGスクリプト/メタデータ/**カレンダー招待**) | ✅ 動作 | 同上 |
 | キャンペーン検出 (複数メール横断) | ✅ 動作 | 「フォルダを一括解析」 |
@@ -109,7 +109,7 @@ First Principles 監査 (2026-07) で以下を実コード確認した:
 | DLP 12分類器 + 宛先ミス検出 (誤送信防止) | `kaname-dlp` | ✅ 組込済 (Inbound) / チェックディジット検証 (Luhn/マイナンバー/IBAN/法人番号/BIC) |
 | ホモグリフ/タイポスクワット/IDN Punycode検出 | `kaname-bec` | ✅ 組込済 | |
 | Quishing・カレンダー招待(.ics)・HTMLスマグリング検出 | `kaname-render` | ✅ 組込済 | |
-| SaaSリンク安全性・OAuth state検証 | `kaname-saas-guard` | ⬜ 未組込 | |
+| SaaSリンク安全性・OAuth state検証 | `kaname-saas-guard` | ✅ 組込済 (本文リンクに適用) | |
 | Dual-LLM 型境界の**定義** (`Content<Untrusted>`/`Bridge`) | `kaname-ai::dual_llm` | フィールド private・`Content<Trusted>` の公開コンストラクタは2つのみ・Bridge 昇格路は `pub(crate)`・`unsafe` ゼロ・`compile_fail` テスト有り。**ただし (a) trait を実装するコードが 0 件で実推論経路 `llm_bridge` は生 `&str` API、(b) `as_text()` が `pub` で規約依存、(c) serde derive により `Content<Trusted>` を JSON 偽造可能。したがって「型で強制」は現状**未達**。詳細は gap-analysis D17 |
 | プライバシー保護 (PCR メタデータのみ/SSA数値ベクトルのみ/トラッキング遮断) | `kaname-radar`, `kaname-ssa`, `kaname-privacy` | 本文非解析設計 |
 | Out-of-Band Verification (電話確認セレモニー) | `kaname-oobv` | |

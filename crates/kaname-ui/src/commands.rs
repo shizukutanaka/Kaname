@@ -288,6 +288,7 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
                 // 本文の構造リスクに加え、リンク先の評判判定も併記する。
                 let mut risks = analyze_body_risks(&body_text);
                 risks.extend(evaluate_link_risks(&urls));
+                risks.extend(evaluate_saas_links(&urls, &from));
                 risks
             },
         },
@@ -622,6 +623,41 @@ fn analyze_body_risks(body: &str) -> Vec<String> {
     }
 
     risks
+}
+
+/// 本文リンクの SaaS 安全性を判定する。
+///
+/// `kaname-saas-guard` は偽 SaaS ドメイン (`notdocusign.com` 等)・
+/// SaaS リンク経由のプロンプト注入・OAuth state 検証を実装済みだが、
+/// **commands.rs から呼ばれておらず到達不能だった** (孤島クレート D13)。
+/// 本文リンクは既に抽出しているため、そこへ載せる。
+///
+/// `SaasHistory` は 1 通の解析ごとに新規作成する。履歴を跨いだ学習
+/// (この送信者から普段どの SaaS が来るか) は送信者履歴の永続化と同様に
+/// Store 側の対応が要るため、現時点では単発評価に留める。
+fn evaluate_saas_links(urls: &[String], sender: &str) -> Vec<String> {
+    let inspector = kaname_saas_guard::SaasLinkInspector::new();
+    let history = kaname_saas_guard::SaasHistory::new();
+    let mut out = Vec::new();
+    for url in urls {
+        let Some(link) = inspector.evaluate(url, sender, &history) else { continue };
+        // Safe/Caution は通常の SaaS 通知でも出るため報告しない。
+        // Warn 以上のみ利用者に伝える (警告疲れを避ける)。
+        if matches!(
+            link.risk,
+            kaname_saas_guard::SaasLinkRisk::Warn
+                | kaname_saas_guard::SaasLinkRisk::Suspicious
+                | kaname_saas_guard::SaasLinkRisk::Block
+        ) {
+            out.push(format!(
+                "SaaS リンクのリスク ({:?}): {} — {}",
+                link.risk,
+                link.url,
+                link.reasons.join(" / ")
+            ));
+        }
+    }
+    out
 }
 
 /// 本文中のリンクを `quishing::evaluate_url` で判定し、人間可読の警告を返す。

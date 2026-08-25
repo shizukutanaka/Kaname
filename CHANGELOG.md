@@ -9,6 +9,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **SaaS リンク安全性判定を本文リンクに接続** — `kaname-saas-guard` (1556行、偽 SaaS ドメイン検出・SaaS リンク経由のプロンプト注入・OAuth state 検証) は**どこからも依存されない孤島クレート**だった (D13)。本文リンクは既に抽出済みだったため、そこへ載せて到達可能にした。`Warn` 以上のみ報告し `Safe`/`Caution` は出さない (通常の SaaS 通知でも出るため、警告疲れを避ける)
 - **送信者履歴を永続化し BEC の履歴シグナルを有効化**
   - `kaname-bec` は履歴シグナル (初回連絡 / 久しぶりの連絡 / 普段と違うトピック / 検証済み) を実装済みだが、`sender_history` に常に `None` を渡していたため**一度も発火していなかった**
   - `kaname-store` には `SenderProfile` の CRUD が実装済みで BEC の `SenderHistory` と対応する形だった。**両者を繋ぐコードが無いだけ**だったため配線
