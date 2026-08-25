@@ -163,8 +163,12 @@ pub struct ImportedEmail {
     pub bec_score: f32,
     /// 検出されたシグナルのラベル。
     pub bec_signals: Vec<String>,
-    /// 添付ファイル名の一覧。
-    pub attachments: Vec<String>,
+    /// 添付ファイルの検査結果。
+    ///
+    /// 従来はファイル名の羅列のみで、`kaname-render` の添付検出器
+    /// (MIME 偽装 / polyglot / 危険拡張子 / SVG スクリプト / メタデータ) は
+    /// **一つも呼ばれていなかった**。`scan_attachments` で実際に検査する。
+    pub attachments: Vec<kaname_render::AttachmentScan>,
     /// サニタイズ済み本文 (iframe 描画用)。
     pub body: BodyDto,
     /// 本文中に検出された機微情報 (DLP)。
@@ -273,7 +277,8 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
         bec_verdict,
         bec_score: assessment.score,
         bec_signals: assessment.signals.iter().map(|s| s.label.clone()).collect(),
-        attachments: env.attachments.iter().map(|a| a.filename.clone()).collect(),
+        // 添付を実際に検査する (バイト列は kaname-render 内で完結)。
+        attachments: kaname_render::scan_attachments(&bytes),
         body: BodyDto {
             srcdoc:  srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),
@@ -359,6 +364,8 @@ pub struct FolderScanEntry {
     pub score: f32,
     /// 本文中に検出された機微情報 (DLP) の件数。
     pub dlp_count: usize,
+    /// 危険と判定された添付ファイルの件数。
+    pub attachment_risk_count: usize,
 }
 
 /// 検出されたキャンペーンの要約。
@@ -492,8 +499,15 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
 
         // 機微情報 (DLP) は件数のみ一覧に載せる (詳細は単体解析で確認する)。
         let dlp_count = scan_dlp_inbound(&subject, &body_text).len();
+        // 添付検査 (危険と判定された件数のみ一覧に載せる)。
+        let attachment_risk_count = kaname_render::scan_attachments(&bytes)
+            .iter()
+            .filter(|a| a.is_dangerous)
+            .count();
 
-        entries.push(FolderScanEntry { file: file_name, from, subject, verdict, score, dlp_count });
+        entries.push(FolderScanEntry {
+            file: file_name, from, subject, verdict, score, dlp_count, attachment_risk_count,
+        });
     }
 
     // 危険度の高い順に並べる (トリアージのため)。

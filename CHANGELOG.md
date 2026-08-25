@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **添付ファイル検査を解析パイプラインに接続**
+  - `kaname-render` には添付検査 (MIME 偽装 / polyglot / 危険拡張子 / SVG スクリプト / メタデータ) が揃っていたが、**`parse()` が `AttachmentHeader` にバイト列を保持せず捨てていた**ため、検出器に渡す経路が無く一つも動いていなかった
+  - `kaname_render::scan_attachments()` を新設。バイト列はクレート内で完結させ (`AttachmentHeader` は変更しない)、検査結果のみ返す。1 添付あたり先頭 10 MB まで検査
+  - 単体解析: 添付を危険度付きで表示 (危険/問題なし バッジ + リスク文言)
+  - フォルダ一括解析: 危険な添付の件数を一覧に表示 (`attachment_risk_count`)
+  - **メタデータのみの検出は `is_dangerous = false`** — 作成者情報や GPS はプライバシー通知であって実行リスクではないため
+  - サンプル `06-dangerous-attachment.eml` を追加 (二重拡張子 `.pdf.lnk` + `image/png` を装った PE 実行ファイル)
 - **本文リンクの評価を解析パイプラインに接続**
   - `kaname-bec` の URL 評価シグナルと `quishing::evaluate_url` (悪性ドメイン/短縮URL/タイポスクワット/自由TLD) は実装済みだったが、**本文から URL を取り出す関数が無いだけで一度も実データで発火していなかった**。`extract_urls_from_text` を新設して接続
   - 単体解析: 抽出 URL を BEC へ供給し、リンクの評判判定結果を本文リスクに併記

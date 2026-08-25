@@ -915,3 +915,119 @@ pub mod metadata_check;
 pub mod css_sanitizer;
 /// SVG 添付攻撃の検出 (2025-2026 に急増した主要ベクタ)。
 pub mod svg_guard;
+
+// ============================================================================
+// 添付ファイル検査
+// ============================================================================
+
+/// 添付ファイル 1 件の検査結果。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AttachmentScan {
+    /// ファイル名 (Content-Disposition 由来)。
+    pub filename: String,
+    /// 宣言された MIME タイプ (詐称されうる)。
+    pub declared_mime: String,
+    /// サイズ (bytes)。
+    pub size_bytes: u64,
+    /// 検出されたリスク (人間可読)。
+    pub risks: Vec<String>,
+    /// 実行リスクがあるか。
+    ///
+    /// 危険拡張子 / MIME 偽装 / polyglot / SVG のスクリプト実行のいずれか。
+    /// **メタデータ検出のみの場合は false** — 作成者情報や GPS はプライバシー
+    /// 上の通知であって、開いた瞬間にコードが走るわけではないため。
+    pub is_dangerous: bool,
+}
+
+/// メール全体から添付を取り出し、実装済みの各検出器にかける。
+///
+/// # なぜこの関数が必要か
+///
+/// `kaname-render` には添付検査が揃っている
+/// (`magic_bytes::check_mime_mismatch` / `detect_polyglot` /
+/// `is_dangerous_windows_attachment`、`metadata_check::detect_metadata_risks`、
+/// `svg_guard::scan_svg`)。しかし `parse()` が構築する `AttachmentHeader` は
+/// **バイト列を保持しておらず** (`part.contents().len()` でサイズだけ取って
+/// 中身を捨てている)、これらの検出器に渡す経路が存在しなかった。
+/// 結果として添付検査は一つも動いていなかった。
+///
+/// `AttachmentHeader` にバイト列を足す設計は採らない。全添付をメモリに
+/// 常駐させることになり大きな添付で不利なため、**バイトはこのクレート内で
+/// 完結させ**、検査結果だけを返す。
+///
+/// # DoS 対策
+///
+/// 1 添付あたり検査するのは先頭 10 MB まで。それを超える部分は読まない。
+#[must_use]
+pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
+    /// 1 添付あたりの検査上限。
+    const MAX_SCAN_BYTES: usize = 10 * 1024 * 1024;
+
+    let Some(msg) = MessageParser::default().parse(raw) else {
+        return Vec::new();
+    };
+
+    let mut out = Vec::new();
+    for part in msg.attachments() {
+        let filename = part.attachment_name().unwrap_or("unnamed").to_string();
+        let declared_mime = part
+            .content_type()
+            .map(|ct| {
+                let main = ct.ctype();
+                match ct.subtype() {
+                    Some(sub) => format!("{main}/{sub}"),
+                    None => main.to_string(),
+                }
+            })
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+
+        let full = part.contents();
+        let size_bytes = full.len() as u64;
+        let bytes = &full[..full.len().min(MAX_SCAN_BYTES)];
+
+        let mut risks = Vec::new();
+        let mut is_dangerous = false;
+
+        // 1. Windows で危険な拡張子 (.lnk / .docm / .scr 等)
+        if magic_bytes::is_dangerous_windows_attachment(&filename) {
+            risks.push(format!("危険な拡張子です: {filename}"));
+            is_dangerous = true;
+        }
+
+        // 2. 宣言 MIME と実体の不一致 (実行ファイルを画像等に偽装)
+        if let Some(mismatch) = magic_bytes::check_mime_mismatch(&declared_mime, bytes) {
+            risks.push(format!(
+                "MIME 偽装の疑い: {} と宣言されていますが実体は {} です",
+                mismatch.declared, mismatch.detected
+            ));
+            is_dangerous = true;
+        }
+
+        // 3. Polyglot (画像/PDF としても ZIP としても有効)
+        if let Some((a, b)) = magic_bytes::detect_polyglot(bytes) {
+            risks.push(format!("Polyglot ファイルです ({a} と {b} の両方として有効)"));
+            is_dangerous = true;
+        }
+
+        // 4. SVG のスクリプト実行 / XXE / プロンプト注入
+        if let Ok(text) = std::str::from_utf8(bytes) {
+            if svg_guard::looks_like_svg(text) {
+                let scan = svg_guard::scan_svg(text);
+                if !scan.safe_as_attachment {
+                    for r in &scan.risks {
+                        risks.push(format!("SVG のリスク: {r:?}"));
+                    }
+                    is_dangerous = true;
+                }
+            }
+        }
+
+        // 5. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
+        for r in metadata_check::detect_metadata_risks(&filename, bytes) {
+            risks.push(format!("メタデータが含まれます: {r:?}"));
+        }
+
+        out.push(AttachmentScan { filename, declared_mime, size_bytes, risks, is_dangerous });
+    }
+    out
+}
