@@ -12,45 +12,40 @@
 
 ## ⚠️ 実装ステータス (公開前に必読)
 
-**本リポジトリは v0.4.0 です。「ローカル・メールセキュリティ解析ツール」としては動作しますが、
-サーバとのメール送受信は未実装です。**
+**本リポジトリは v0.4.0 です。メールの解析・受信・送信は実装されていますが、
+永続化・検索・MLS 暗号化・ローカル LLM 推論は未実装です。
+また開発環境の制約により型検査 (`cargo check`) が未実施です。**
 機能ごとの成熟度は [`docs/maturity.md`](docs/maturity.md) と [`docs/gap-analysis.md`](docs/gap-analysis.md) に
 実コード根拠付きで正直に記載しています。要点:
 
 - **実装済み・実テストで検証済み (本番出荷可)**: BEC 多信号検出 (`kaname-bec`)、DLP 分類器 (`kaname-dlp`)、
-  Quishing / カレンダー招待 / HTML スマグリング検出 (`kaname-render`)、SaaS リンク安全性 (`kaname-saas-guard`)、
-  Out-of-Band Verification (`kaname-oobv`)、入力スクリーニング (`kaname-screen`)、SSRF 対策 (`kaname-jmap`)、
+  Quishing / カレンダー招待 / HTML スマグリング検出 (`kaname-render`)、Out-of-Band Verification (`kaname-oobv`)、入力スクリーニング (`kaname-screen`)、SSRF 対策 (`kaname-jmap`)、
   Dual-LLM の**型境界** (`kaname-ai::dual_llm`)。
 - **モック / スタブ段階 (本番運用不可)**: MLS グループ暗号化 (`kaname-mls` — 現状は XOR モック)、
   ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
   自動アップデート、課金基盤の永続化 (`kaname-billing`)。これらは外部クレート統合が必要。
 - **組み立て状況 (2026-07 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
-  **27 クレート中 11 個**です (当初 10 個)。**部品は作られているが製品に組み付けられていない**のが
-  現状の本質で、`kaname-dlp`・`kaname-jmap`・`kaname-store`・`kaname-mls` 等 16 クレートは
-  まだ製品に含まれていません (詳細: gap-analysis D19)。
-  直近で以下を「組み立て」ました:
-  - **BEC 検出を実際に実行** — `ai_detect_phishing` / 一覧の `bec_verdict` / サマリの警告件数は
-    固定値でしたが、`BecDetector` の決定論的 9 シグナルによる**実際の判定**に接続済み
-    (LLM 未配線でも動くよう `deterministic_only()` を追加)
-  - **HTML サニタイズ経路を実際に実行** — `mail_get_body` は固定文字列を返していましたが、
-    `sanitize_html` → `to_srcdoc` の実経路に接続済み (フロントとの型契約不一致も解消)
-  - **偽の AI 出力を削除** — 要約・スマートリプライは固定文字列を返しつつ
-    `local_inference: true` と偽っていたため、未実装であることを正直に返すよう修正
-- **実メールを解析できます (2026-07)**: [`examples/emails/`](examples/) にサンプルの `.eml` を
-  同梱しています (使い方: [`examples/README.md`](examples/README.md))。ナビの「**ファイル解析**」タブから
-  ローカルの `.eml` ファイルを指定すると、**実際のメール**が
-  MIME 解析 → 送信ドメイン認証の評価 → BEC 判定 → サニタイズ →
-  本文リスク検出のパイプライン全体を通ります。サーバ接続もアカウント設定も
-  不要です。「メールはサーバから取得しなければならない」という前提を外すことで、
-  JMAP 配線 (D10) を待たずに実データで動く経路を確保しました。
-- **未送受信 (最重要)**: **現状のビルドでは (サーバとの) メール送受信はできません。** `kaname-ui` (Tauri コマンド層) は
-  `kaname-jmap`/`kaname-store` に依存しておらず、出荷バイナリからサーバにも DB にもコンパイル時点で
-  到達経路がありません。メールの受信・送信・永続化・アカウント設定・検索・添付ダウンロードは
-  いずれも未配線で、UI はデモデータを表示しています。`kaname-jmap` は RFC 8621 準拠の実装が
-  存在しますが呼び出し元がなく、`messages` テーブルへの INSERT/SELECT はワークスペース全体で
-  ゼロ件です。**したがって現時点の本プロジェクトは「メールクライアント」ではなく
-  「メールセキュリティ・ライブラリ集 + デモ UI」です** (詳細: [`docs/maturity.md`](docs/maturity.md)、
-  gap-analysis.md D10)。
+  **27 クレート中 14 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
+  実装済みで眠っていた検出器を順次接続しました。
+- **実メールを解析できます**: 「**ファイル解析**」タブからローカルの `.eml` を指定すると、
+  MIME 解析 → 送信ドメイン認証の評価 → BEC 判定 → サニタイズ → 本文リスク検出
+  (HTMLスマグリング/テキストQR/CSS外部参照/リンク評判) → DLP → 添付検査
+  (MIME偽装/polyglot/危険拡張子/SVG/メタデータ/カレンダー招待) が動きます。
+  フォルダ一括解析では**複数メール横断のキャンペーン検出**も。
+  動作確認用サンプルを [`examples/emails/`](examples/) に7通同梱しています
+  (使い方: [`examples/README.md`](examples/README.md))。
+- **サーバとの送受信も配線済み**: 「**サーバ接続**」タブから JMAP サーバに接続すると、
+  受信したメールが**ファイル解析と同じ検出器**を通ります。送信時は
+  **DLP (Outbound) が機微情報を検出したらブロック**します。
+  認証トークンは**メモリ内にのみ保持しディスクに書きません**
+  (安全に保管できるまで保管しない方針。OS キーチェーン統合は今後)。
+- **まだ無いもの**: メールの永続化 (SQLCipher)、検索、添付ダウンロード、
+  MLS 暗号化、ローカル LLM 推論 (要約・スマートリプライ) は未実装です。
+  詳細は [`docs/maturity.md`](docs/maturity.md) / [`docs/gap-analysis.md`](docs/gap-analysis.md)。
+- **ビルド検証の制約**: 本リポジトリの開発環境は組織のエグレスポリシーにより
+  `static.crates.io` が遮断されており、`cargo check` / `cargo test` を実行できません
+  (gap-analysis D20)。代替として `./scripts/static-check.sh` で構文検証を行っていますが、
+  **型検査は未実施**です。ネットワークのある環境での検証が必要です。
 
 下記の比較表・機能説明のうち、暗号・ローカル AI 推論に関する項目は上記「モック段階」に該当します。
 設計の到達目標として記載されており、現時点で稼働している保証ではありません。
@@ -75,7 +70,7 @@
 
 ## 3 つの柱
 
-### 🛡 Security — Dual-LLM の型境界 (設計は完成・実装は未接続)
+### 🛡 Security — Dual-LLM の型境界 (設計は完成・LLM 実装は未接続)
 
 ```
 Untrusted メール本文
@@ -108,8 +103,9 @@ Content<Trusted>  ← P-LLM が受け取る
   公開コンストラクタは `from_user_input`/`from_system` のみ、Bridge 専用の昇格路は
   `pub(crate)`、`unsafe`/`transmute` はゼロで `compile_fail` テストも存在する。
 
-現時点でメールパイプライン自体が未配線 (下記) のため**悪用可能な経路は存在しない**が、
-配線時に上記を塞がないと型境界は実効性を持たない。残作業は
+現時点でローカル LLM 推論自体がスタブ (`llm_bridge` は固定応答) のため
+**悪用可能な経路は存在しない**が、実推論を入れる際に上記を塞がないと
+型境界は実効性を持たない。残作業は
 [`docs/gap-analysis.md`](docs/gap-analysis.md) の D17 を参照。
 
 ### ⚡ Speed — HEY + Superhuman の統合
