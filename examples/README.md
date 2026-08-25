@@ -34,6 +34,7 @@
 | `03-quishing-textqr.eml` | SUSPICIOUS 以上 + 本文リスク | 認証失敗に加え、**本文に文字で描かれた QR コード** (画像スキャンを回避する quishing) を検出 |
 | `04-sensitive-data.eml` | SAFE + **DLP 検出あり** | 認証はすべて pass の正規メールだが、本文に**区切り付きのクレジットカード番号と IBAN** が含まれる。転送・返信時の漏洩リスクとして DLP が検出する (区切り付き表記は検出漏れしやすい典型例) |
 | `05-malicious-link.eml` | SUSPICIOUS 以上 + **リンク警告** | 認証失敗に加え、本文のリンクが**短縮 URL (`bit.ly`)** と **`amaz0n-verify.tk` (数字置換タイポスクワット + 自由 TLD)**。本文リンクの評判判定と BEC の URL シグナルの両方が発火する |
+| `07-malicious-calendar.eml` | SUSPICIOUS 以上 + **カレンダー警告** | `.ics` 招待が添付。`METHOD:REQUEST` による**自動登録の永続化** (元メールを削除してもカレンダーに残る CalPhishing)、DESCRIPTION 内の**プロンプト注入**、緊急性の煽り、短縮 URL を検出する |
 | `06-dangerous-attachment.eml` | SUSPICIOUS 以上 + **添付「危険」2件** | 添付が2つ: (1) `invoice.pdf.lnk` — **二重拡張子で PDF に見せかけた Windows ショートカット** (任意コマンド実行に悪用される)、(2) `receipt.png` — **`image/png` と宣言されているが実体は `MZ` 始まりの PE 実行ファイル** (MIME 偽装)。添付検査が両方を「危険」と判定する |
 
 ### フォルダ一括解析でのみ見えるもの

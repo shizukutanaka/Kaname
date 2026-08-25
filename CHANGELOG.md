@@ -16,6 +16,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - フォルダ一括解析: 危険な添付の件数を一覧に表示 (`attachment_risk_count`)
   - **メタデータのみの検出は `is_dangerous = false`** — 作成者情報や GPS はプライバシー通知であって実行リスクではないため
   - サンプル `06-dangerous-attachment.eml` を追加 (二重拡張子 `.pdf.lnk` + `image/png` を装った PE 実行ファイル)
+  - **カレンダー招待 (.ics) の検査も接続** — `calendar_guard` は実装済みだが未接続だった。招待は「添付」として届くため `scan_attachments` に載せた。`Danger` のみ実行リスク扱いとし `Caution` は注意喚起に留める。サンプル `07-malicious-calendar.eml` を追加 (CalPhishing 自動登録永続化 + DESCRIPTION へのプロンプト注入)
 - **本文リンクの評価を解析パイプラインに接続**
   - `kaname-bec` の URL 評価シグナルと `quishing::evaluate_url` (悪性ドメイン/短縮URL/タイポスクワット/自由TLD) は実装済みだったが、**本文から URL を取り出す関数が無いだけで一度も実データで発火していなかった**。`extract_urls_from_text` を新設して接続
   - 単体解析: 抽出 URL を BEC へ供給し、リンクの評判判定結果を本文リスクに併記
