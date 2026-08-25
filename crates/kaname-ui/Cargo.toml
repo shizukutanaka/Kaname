@@ -34,6 +34,8 @@ kaname-jmap = { path = "../kaname-jmap" }
 kaname-store = { path = "../kaname-store" }
 # 本文リンクの SaaS 安全性判定 (偽 SaaS ドメイン・OAuth state 検証)。
 kaname-saas-guard = { path = "../kaname-saas-guard" }
+# 送信者文体認証 (アカウント乗っ取り検出)。
+kaname-ssa = { path = "../kaname-ssa" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]
