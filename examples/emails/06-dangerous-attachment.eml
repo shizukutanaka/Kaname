@@ -1,0 +1,29 @@
+From: Billing <invoices@arnazon-billing.com>
+To: you@example.com
+Subject: Invoice 9921 attached
+Date: Mon, 26 Apr 2026 15:10:00 +0900
+Message-ID: <att-006@arnazon-billing.com>
+Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=none; dmarc=fail header.from=arnazon-billing.com
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="b0undary"
+
+--b0undary
+Content-Type: text/plain; charset=utf-8
+
+Please review the attached invoice and the payment receipt image.
+
+--b0undary
+Content-Type: application/octet-stream; name="invoice.pdf.lnk"
+Content-Disposition: attachment; filename="invoice.pdf.lnk"
+Content-Transfer-Encoding: base64
+
+TAAAAAEUAgAgZHVtbXkgc2hlbGwgbGluaw==
+
+--b0undary
+Content-Type: image/png; name="receipt.png"
+Content-Disposition: attachment; filename="receipt.png"
+Content-Transfer-Encoding: base64
+
+TVqQAAMAAABUaGlzIGlzIG5vdCBhIHJlYWwgZXhlY3V0YWJsZQ==
+
+--b0undary--

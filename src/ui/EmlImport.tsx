@@ -29,7 +29,7 @@ interface ImportedEmail {
   bec_verdict: string;
   bec_score: number;
   bec_signals: string[];
-  attachments: string[];
+  attachments: AttachmentScan[];
   body: BodyDto;
   /** 本文中に検出された機微情報 (DLP)。転送・返信時の漏洩リスク。 */
   dlp_findings: string[];
@@ -60,6 +60,16 @@ interface FolderScanEntry {
   score: number;
   /** 本文中に検出された機微情報 (DLP) の件数。 */
   dlp_count: number;
+  /** 危険と判定された添付ファイルの件数。 */
+  attachment_risk_count: number;
+}
+
+interface AttachmentScan {
+  filename: string;
+  declared_mime: string;
+  size_bytes: number;
+  risks: string[];
+  is_dangerous: boolean;
 }
 
 interface CampaignSummary {
@@ -259,6 +269,14 @@ export function EmlImport() {
                       <span style={{ flex: "1", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
                         {e.subject || "(件名なし)"}
                       </span>
+                      <Show when={e.attachment_risk_count > 0}>
+                        <span style={{
+                          padding: "2px 8px", "border-radius": "999px",
+                          background: "#FDECEA", color: "#8B1A10",
+                          border: "1px solid #E5A29B",
+                          "font-size": "11px", "font-weight": "700", "white-space": "nowrap",
+                        }}>添付 {e.attachment_risk_count} 件</span>
+                      </Show>
                       <Show when={e.dlp_count > 0}>
                         <span style={{
                           padding: "2px 8px", "border-radius": "999px",
@@ -321,7 +339,28 @@ export function EmlImport() {
                 <dd style={{ margin: "0" }}>{r().auth}</dd>
                 <Show when={r().attachments.length > 0}>
                   <dt style={{ color: "#5A6473" }}>添付</dt>
-                  <dd style={{ margin: "0" }}>{r().attachments.join(", ")}</dd>
+                  <dd style={{ margin: "0" }}>
+                    <For each={r().attachments}>
+                      {(a) => (
+                        <div style={{ "margin-bottom": "4px" }}>
+                          <span style={{
+                            padding: "1px 7px", "border-radius": "999px",
+                            background: a.is_dangerous ? "#FDECEA" : "#EAF6EC",
+                            color: a.is_dangerous ? "#8B1A10" : "#1E5B2A",
+                            border: `1px solid ${a.is_dangerous ? "#E5A29B" : "#9CC9A6"}`,
+                            "font-size": "11px", "font-weight": "700", "margin-right": "6px",
+                          }}>{a.is_dangerous ? "危険" : "問題なし"}</span>
+                          {a.filename}
+                          <span style={{ color: "#5A6473" }}> ({a.declared_mime})</span>
+                          <For each={a.risks}>
+                            {(risk) => (
+                              <div style={{ color: "#7A4A00", "margin-left": "12px" }}>・{risk}</div>
+                            )}
+                          </For>
+                        </div>
+                      )}
+                    </For>
+                  </dd>
                 </Show>
               </dl>
 
