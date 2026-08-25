@@ -585,6 +585,45 @@ fn url_host(url: &str) -> Option<String> {
     if host.is_empty() { None } else { Some(host) }
 }
 
+/// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
+///
+/// `kaname-render` は既に `kaname-ui` の依存に入っており各検出器も実装済み
+/// だが、**commands.rs から一度も呼ばれていなかった** (9 モジュールが
+/// 到達可能なまま未使用)。ここで実際に実行する。
+///
+/// サニタイズ自体は `sanitize_html` が別途行う。本関数は「サニタイズでは
+/// 落とせないが利用者に伝えるべき兆候」を報告する役割を持つ。
+fn analyze_body_risks(body: &str) -> Vec<String> {
+    let mut risks = Vec::new();
+
+    // 1. HTML スマグリング (blob:/atob()/mshta 等による添付の密輸)
+    let smuggling = kaname_render::html_smuggling::HtmlSmugglingDetector.analyze(body);
+    if !matches!(smuggling.risk, kaname_render::html_smuggling::SmugglingRisk::Clean) {
+        risks.push(format!("HTMLスマグリングの疑い: {}", smuggling.message));
+    }
+
+    // 2. テキストで描かれた QR コード (画像スキャンを回避する quishing)
+    let quishing = kaname_render::quishing::QuishingDefense::new();
+    if quishing.detect_ascii_qr(body) {
+        risks.push(
+            "本文にテキストで描かれた QR コードがあります。\
+             画像スキャンを回避する quishing の可能性があります。"
+                .to_string(),
+        );
+    }
+
+    // 3. CSS 外部参照 (EchoLeak 型の情報流出)
+    let css = kaname_render::css_sanitizer::sanitize_css(body);
+    if css.removed_count > 0 {
+        risks.push(format!(
+            "CSS の外部リソース参照を {} 件無効化しました (情報流出の防止)。",
+            css.removed_count
+        ));
+    }
+
+    risks
+}
+
 /// 本文中のリンクを `quishing::evaluate_url` で判定し、人間可読の警告を返す。
 ///
 /// QR 用に実装された評価器 (悪性ドメイン/短縮 URL/自由 TLD/タイポスクワット/
