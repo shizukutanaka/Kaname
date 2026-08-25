@@ -1022,7 +1022,28 @@ pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
             }
         }
 
-        // 5. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
+        // 5. カレンダー招待 (.ics) の検査
+        //    悪意ある招待は自動登録で永続化し、元メールを削除しても残る
+        //    (CalPhishing)。招待は「添付」として届くためここで検査する。
+        if let Ok(text) = std::str::from_utf8(bytes) {
+            let is_ics = filename.to_ascii_lowercase().ends_with(".ics")
+                || declared_mime.to_ascii_lowercase().contains("text/calendar")
+                || text.contains("BEGIN:VCALENDAR");
+            if is_ics {
+                let scan = calendar_guard::CalendarGuard.analyze(text);
+                if !matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Safe) {
+                    for r in &scan.risks {
+                        risks.push(format!("カレンダー招待のリスク: {r:?}"));
+                    }
+                    // Danger のみ実行リスク扱い。Caution は注意喚起に留める。
+                    if matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Danger) {
+                        is_dangerous = true;
+                    }
+                }
+            }
+        }
+
+        // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
         for r in metadata_check::detect_metadata_risks(&filename, bytes) {
             risks.push(format!("メタデータが含まれます: {r:?}"));
         }
