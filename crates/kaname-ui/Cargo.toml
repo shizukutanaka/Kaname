@@ -32,6 +32,8 @@ kaname-dlp = { path = "../kaname-dlp" }
 kaname-jmap = { path = "../kaname-jmap" }
 # 送信者履歴の永続化 (BEC の履歴シグナルに供給する)。
 kaname-store = { path = "../kaname-store" }
+# 本文リンクの SaaS 安全性判定 (偽 SaaS ドメイン・OAuth state 検証)。
+kaname-saas-guard = { path = "../kaname-saas-guard" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]
