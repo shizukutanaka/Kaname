@@ -1325,3 +1325,226 @@ mod trajectory_command_tests {
         let _ = reset_trajectory().await;
     }
 }
+
+// ============================================================================
+// JMAP サーバとの実接続 (受信・送信)
+//
+// 従来この製品は kaname-jmap に依存すらしておらず、出荷バイナリから
+// サーバへ到達する経路がコンパイル時点で存在しなかった (gap-analysis D10)。
+// kaname-jmap 自体は RFC 8621 準拠の実装が揃っていたため、
+// **配線するコードを書くだけ**で受信・送信が動くようになる。
+// ============================================================================
+
+/// 接続中の JMAP セッション。
+///
+/// # 認証情報を永続化しない理由
+///
+/// Bearer トークンはプロセスのメモリ内にのみ保持し、ディスクへは書かない。
+/// `kaname-store` の SQLCipher 鍵管理は現状 keyfile へのフォールバックを
+/// 含んでおり (docs/maturity.md)、トークンを平文同然で置く危険がある。
+/// **安全に保管できないものは保管しない**方針を採り、起動のたびに
+/// 接続し直す。OS キーチェーン統合が入ったら永続化を検討する。
+static JMAP_SESSION: std::sync::OnceLock<
+    tokio::sync::Mutex<Option<std::sync::Arc<kaname_jmap::JmapClient>>>,
+> = std::sync::OnceLock::new();
+
+fn jmap_slot() -> &'static tokio::sync::Mutex<Option<std::sync::Arc<kaname_jmap::JmapClient>>> {
+    JMAP_SESSION.get_or_init(|| tokio::sync::Mutex::new(None))
+}
+
+/// 接続済みクライアントを取り出す。未接続なら分かりやすいエラーを返す。
+async fn jmap_client() -> Result<std::sync::Arc<kaname_jmap::JmapClient>, String> {
+    jmap_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "未接続: 先に「アカウント接続」でサーバへ接続してください".to_string())
+}
+
+/// 接続結果。
+#[derive(Debug, Serialize)]
+pub struct ConnectResult {
+    /// JMAP のアカウント ID。
+    pub account_id: String,
+    /// メールボックス一覧 (id, 名前, 未読数)。
+    pub mailboxes: Vec<(String, String, u32)>,
+}
+
+/// JMAP サーバへ接続し、メールボックス一覧を取得する。
+///
+/// `base_url` は JMAP セッションリソース (例: `https://mail.example.com`)。
+/// `token` は Bearer トークン。**メモリ内にのみ保持し永続化しない**。
+pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResult, String> {
+    // トークンはログに出さない (PII/認証情報の漏洩防止)。
+    info!(base_url=%base_url, "mail_connect");
+
+    let config = kaname_jmap::ClientConfig {
+        bearer_token:    token,
+        connect_timeout: std::time::Duration::from_secs(10),
+        request_timeout: std::time::Duration::from_secs(30),
+        max_retries:     2,
+        user_agent:      concat!("Kaname/", env!("CARGO_PKG_VERSION")).to_string(),
+    };
+
+    let client = kaname_jmap::JmapClient::connect(&base_url, config)
+        .await
+        .map_err(|e| format!("接続に失敗しました: {e}"))?;
+
+    let mailboxes = client
+        .get_mailboxes()
+        .await
+        .map_err(|e| format!("メールボックスの取得に失敗しました: {e}"))?;
+
+    let result = ConnectResult {
+        account_id: client.account_id().to_string(),
+        mailboxes: mailboxes
+            .iter()
+            .map(|m| (m.id.clone(), m.name.clone(), m.unread_emails))
+            .collect(),
+    };
+
+    *jmap_slot().lock().await = Some(std::sync::Arc::new(client));
+    Ok(result)
+}
+
+/// 接続を破棄する (トークンをメモリから落とす)。
+pub async fn mail_disconnect() -> Result<(), String> {
+    *jmap_slot().lock().await = None;
+    Ok(())
+}
+
+/// サーバからメール一覧を取得し、**各通に BEC 判定を付けて**返す。
+///
+/// 受信した実データが、ファイル解析と同じ検出器を通る。
+pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
+    let client = jmap_client().await?;
+    let items = client
+        .query_emails(&mailbox_id, 0, limit.unwrap_or(50))
+        .await
+        .map_err(|e| format!("メール一覧の取得に失敗しました: {e}"))?;
+
+    let mut rows = Vec::with_capacity(items.len());
+    for it in &items {
+        let from_addr = it
+            .from
+            .as_ref()
+            .and_then(|v| v.first())
+            .map(|a| a.email.clone())
+            .unwrap_or_default();
+        let from_name = it
+            .from
+            .as_ref()
+            .and_then(|v| v.first())
+            .and_then(|a| a.name.clone());
+        let subject = it.subject.clone().unwrap_or_default();
+        let preview = it.preview.clone().unwrap_or_default();
+
+        // 一覧の時点では Authentication-Results ヘッダを取得していないため
+        // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
+        let verdict = assess_listing(&from_name, &from_addr, &subject, &preview);
+
+        rows.push(EmailRow {
+            id:          it.id.clone(),
+            from_name,
+            from_addr,
+            subject:     it.subject.clone(),
+            preview:     it.preview.clone(),
+            received_at: it.received_at.clone(),
+            is_read:     it.is_read(),
+            is_starred:  it.is_starred(),
+            bec_verdict: verdict,
+            is_mls:      it.is_mls_envelope(),
+            triage:      "important".to_string(),
+        });
+    }
+    Ok(rows)
+}
+
+/// 一覧表示用の簡易 BEC 判定。
+///
+/// 一覧では本文全体もヘッダも持たないため、差出人・件名・プレビューのみで
+/// 評価する。**判定できなかった場合に SAFE を返さない** (UNKNOWN を返す) のは
+/// 他の経路と同じ方針で、判定不能を安全と偽らないため。
+fn assess_listing(from_name: &Option<String>, from_addr: &str, subject: &str, preview: &str) -> String {
+    let from_header = match from_name {
+        Some(n) => format!("{n} <{from_addr}>"),
+        None => from_addr.to_string(),
+    };
+    let urls = extract_urls_from_text(preview);
+    let contacts: Vec<String> = Vec::new();
+    let req = kaname_bec::AssessmentRequest {
+        from_header:  &from_header,
+        return_path:  None,
+        subject,
+        body_text:    preview,
+        auth: kaname_bec::AuthResults {
+            spf:   kaname_bec::AuthVerdict::None,
+            dkim:  kaname_bec::AuthVerdict::None,
+            dmarc: kaname_bec::AuthVerdict::None,
+            arc:   None,
+        },
+        sender_history: None,
+        our_domain:   "example.com",
+        known_contacts: &contacts,
+        extracted_urls: &urls,
+        reply_to:     None,
+        thread_context: None,
+        past_thread_bodies: &[],
+        dkim_signature_header: None,
+    };
+    match kaname_bec::BecDetector::deterministic_only().assess(req) {
+        Ok(a) => match a.verdict {
+            kaname_bec::Verdict::Safe       => "SAFE",
+            kaname_bec::Verdict::Advisory   => "ADVISORY",
+            kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
+            kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+        }
+        .to_string(),
+        Err(e) => {
+            tracing::warn!(error=%e, "一覧の BEC 判定に失敗");
+            "UNKNOWN".to_string()
+        }
+    }
+}
+
+/// メールを送信する。
+///
+/// **送信前に DLP (`Direction::Outbound`) を実行し、Block 判定なら送信しない。**
+/// これが DLP 本来の用途であり、受信側検査 (`scan_dlp_inbound`) と対になる。
+pub async fn mail_send_real(
+    from: String, to: Vec<String>, subject: String, body: String,
+) -> Result<String, String> {
+    let client = jmap_client().await?;
+
+    // 送信前 DLP。ここで止めるのが情報漏洩防止の本丸。
+    let engine = kaname_dlp::DlpEngine::default_engine();
+    let mimes: Vec<String> = Vec::new();
+    let domains: Vec<String> = Vec::new();
+    let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
+        std::collections::HashMap::new();
+    let ctx = kaname_dlp::EvalCtx {
+        body: &body,
+        subject: &subject,
+        size_bytes: body.len() as u64,
+        to: &to,
+        from: &from,
+        attachment_mimes: &mimes,
+        edm_sets: &edm,
+        known_recipient_domains: &domains,
+        our_domain: "example.com",
+    };
+    let dlp = engine.evaluate(&ctx, kaname_dlp::Direction::Outbound);
+    if matches!(dlp.verdict, kaname_dlp::Action::Block) {
+        let reasons: Vec<String> = dlp.findings.iter().map(|f| f.rule_name.clone()).collect();
+        return Err(format!(
+            "DLP により送信をブロックしました: {}。機微情報が含まれていないか確認してください",
+            reasons.join(" / ")
+        ));
+    }
+
+    let to_refs: Vec<&str> = to.iter().map(String::as_str).collect();
+    client
+        .send_email(&from, &to_refs, &subject, &body, None)
+        .await
+        .map_err(|e| format!("送信に失敗しました: {e}"))
+}

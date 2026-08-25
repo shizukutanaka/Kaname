@@ -203,10 +203,33 @@ fn not_wired(feature: &str) -> String {
     )
 }
 
+/// メールを送信する (JMAP)。送信前に DLP (Outbound) を実行する。
 #[tauri::command]
-async fn mail_send(req: serde_json::Value) -> Result<(), String> {
-    let _ = req;
-    Err(not_wired("メール送信"))
+async fn mail_send(
+    from: String,
+    to: Vec<String>,
+    subject: String,
+    body: String,
+) -> Result<String, String> {
+    commands::mail_send_real(from, to, subject, body).await
+}
+
+/// JMAP サーバへ接続し、メールボックス一覧を取得する。
+#[tauri::command]
+async fn mail_connect(base_url: String, token: String) -> Result<commands::ConnectResult, String> {
+    commands::mail_connect(base_url, token).await
+}
+
+/// 接続を破棄する (トークンをメモリから落とす)。
+#[tauri::command]
+async fn mail_disconnect() -> Result<(), String> {
+    commands::mail_disconnect().await
+}
+
+/// サーバからメール一覧を取得し、各通に BEC 判定を付けて返す。
+#[tauri::command]
+async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<commands::EmailRow>, String> {
+    commands::mail_fetch(mailbox_id, limit).await
 }
 
 #[tauri::command]
@@ -347,6 +370,10 @@ fn main() {
             // 実メールの入口 (ローカル .eml インポート)
             mail_import_eml,
             mail_scan_folder,
+            // JMAP サーバとの実接続 (受信・送信)
+            mail_connect,
+            mail_disconnect,
+            mail_fetch,
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
             mail_send,
             mail_get_mailboxes,

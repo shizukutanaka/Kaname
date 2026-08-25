@@ -28,6 +28,8 @@ kaname-bec = { path = "../kaname-bec" }
 kaname-radar = { path = "../kaname-radar" }
 # 受信メール内の機微情報検出 (Direction::Inbound)。解析結果に含める。
 kaname-dlp = { path = "../kaname-dlp" }
+# JMAP サーバとの実接続 (受信・送信)。reqwest はこのクレート経由で入る。
+kaname-jmap = { path = "../kaname-jmap" }
 kaname-observability = { path = "../kaname-observability" }
 
 [dev-dependencies]
