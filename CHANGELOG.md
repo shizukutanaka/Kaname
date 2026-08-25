@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **送信者履歴を永続化し BEC の履歴シグナルを有効化**
+  - `kaname-bec` は履歴シグナル (初回連絡 / 久しぶりの連絡 / 普段と違うトピック / 検証済み) を実装済みだが、`sender_history` に常に `None` を渡していたため**一度も発火していなかった**
+  - `kaname-store` には `SenderProfile` の CRUD が実装済みで BEC の `SenderHistory` と対応する形だった。**両者を繋ぐコードが無いだけ**だったため配線
+  - `history_open` / `history_close` / `history_mark_verified` を追加。受信時に `record_received` で履歴を蓄積
+  - **履歴が無い場合は `None` のまま**にし、BEC に履歴シグナルを評価させない (履歴の不在を「初回連絡」と断定しないため)
+  - `user_reported_malicious` は Store 側に列が無いため **`false` 固定** — `true` と偽ると危険側の判定が不当に強まるため、列が追加されるまで保守的に扱う
+  - 日付計算は `chrono` を使わず自前実装 (履歴シグナルは日単位の粗い粒度で足りるため、新規依存を増やさない)
 - **JMAP サーバとの送受信を配線 (D10 の中核を解消)**
   - `kaname-ui` が `kaname-jmap` に依存していなかったため、出荷バイナリからサーバへ到達する経路が**コンパイル時点で存在しなかった**。`kaname-jmap` 自体は RFC 8621 準拠の実装が揃っており、**配線するコードを書くだけ**で動く状態だった
   - `mail_connect` / `mail_disconnect` / `mail_fetch` / `mail_send` を実装・登録

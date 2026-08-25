@@ -1418,6 +1418,7 @@ pub async fn mail_disconnect() -> Result<(), String> {
 /// 受信した実データが、ファイル解析と同じ検出器を通る。
 pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
     let client = jmap_client().await?;
+    let account_id = client.account_id().to_string();
     let items = client
         .query_emails(&mailbox_id, 0, limit.unwrap_or(50))
         .await
@@ -1441,7 +1442,18 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 
         // 一覧の時点では Authentication-Results ヘッダを取得していないため
         // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
-        let verdict = assess_listing(&from_name, &from_addr, &subject, &preview);
+        let verdict = assess_listing(&account_id, &from_name, &from_addr, &subject, &preview).await;
+
+        // 受信を履歴に記録する (次回以降のシグナル精度が上がる)。
+        // Store 未接続なら何もしない。失敗しても解析結果は返す。
+        if let Some(store) = store_slot().lock().await.clone() {
+            if let Err(e) = store
+                .record_received(&account_id, &from_addr, from_name.as_deref(), it.subject.as_deref())
+                .await
+            {
+                tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+            }
+        }
 
         rows.push(EmailRow {
             id:          it.id.clone(),
@@ -1465,13 +1477,19 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 /// 一覧では本文全体もヘッダも持たないため、差出人・件名・プレビューのみで
 /// 評価する。**判定できなかった場合に SAFE を返さない** (UNKNOWN を返す) のは
 /// 他の経路と同じ方針で、判定不能を安全と偽らないため。
-fn assess_listing(from_name: &Option<String>, from_addr: &str, subject: &str, preview: &str) -> String {
+async fn assess_listing(
+    account_id: &str, from_name: &Option<String>, from_addr: &str,
+    subject: &str, preview: &str,
+) -> String {
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
         None => from_addr.to_string(),
     };
     let urls = extract_urls_from_text(preview);
     let contacts: Vec<String> = Vec::new();
+    // 送信者履歴を引く。無ければ None のままで、BEC は履歴シグナルを
+    // 評価しない (履歴が無いことを「初回連絡」と断定しない)。
+    let history = lookup_sender_history(account_id, from_addr).await;
     let req = kaname_bec::AssessmentRequest {
         from_header:  &from_header,
         return_path:  None,
@@ -1483,7 +1501,7 @@ fn assess_listing(from_name: &Option<String>, from_addr: &str, subject: &str, pr
             dmarc: kaname_bec::AuthVerdict::None,
             arc:   None,
         },
-        sender_history: None,
+        sender_history: history.as_ref(),
         our_domain:   "example.com",
         known_contacts: &contacts,
         extracted_urls: &urls,
@@ -1547,4 +1565,130 @@ pub async fn mail_send_real(
         .send_email(&from, &to_refs, &subject, &body, None)
         .await
         .map_err(|e| format!("送信に失敗しました: {e}"))
+}
+
+// ============================================================================
+// 送信者履歴の永続化
+//
+// `kaname-bec` は送信者履歴シグナル (初回連絡 / 久しぶりの連絡 /
+// 普段と違うトピック / ユーザーが検証済みか / 過去に悪意ありと報告したか) を
+// 実装済みだが、`AssessmentRequest.sender_history` に常に `None` を渡して
+// いたため**一度も発火していなかった**。
+//
+// `kaname-store` には SenderProfile の CRUD (`get_sender_profile` /
+// `record_received` / `mark_sender_verified`) が実装済みで、
+// BEC 側の `SenderHistory` と対応する形になっている。
+// 両者を繋ぐコードが無いだけだった。
+// ============================================================================
+
+/// 開いている Store。未接続なら None。
+static STORE: std::sync::OnceLock<tokio::sync::Mutex<Option<std::sync::Arc<kaname_store::Store>>>> =
+    std::sync::OnceLock::new();
+
+fn store_slot() -> &'static tokio::sync::Mutex<Option<std::sync::Arc<kaname_store::Store>>> {
+    STORE.get_or_init(|| tokio::sync::Mutex::new(None))
+}
+
+/// 送信者履歴データベースを開く。
+///
+/// `key_hex` は SQLCipher の 64 桁 16 進鍵。**鍵は呼び出し側が管理する**
+/// (本コマンドは保存しない)。認証トークンと同じく、安全に保管できる仕組みが
+/// 入るまでアプリ側では永続化しない方針。
+pub async fn history_open(path: String, key_hex: String) -> Result<(), String> {
+    let store = kaname_store::Store::open(std::path::Path::new(&path), &key_hex)
+        .await
+        .map_err(|e| format!("履歴データベースを開けません: {e}"))?;
+    store
+        .migrate()
+        .await
+        .map_err(|e| format!("スキーマ移行に失敗しました: {e}"))?;
+    *store_slot().lock().await = Some(std::sync::Arc::new(store));
+    info!(path=%path, "history_open");
+    Ok(())
+}
+
+/// 履歴データベースを閉じる。
+pub async fn history_close() -> Result<(), String> {
+    *store_slot().lock().await = None;
+    Ok(())
+}
+
+/// 送信者を「検証済み」としてマークする。
+///
+/// BEC の `user_verified` シグナルに反映され、以後この送信者は
+/// 初回連絡扱いされなくなる。
+pub async fn history_mark_verified(account_id: String, email: String) -> Result<(), String> {
+    let store = store_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    store
+        .mark_sender_verified(&account_id, &email)
+        .await
+        .map_err(|e| format!("検証済みマークに失敗しました: {e}"))
+}
+
+/// Store から送信者履歴を引き、BEC の `SenderHistory` に変換する。
+///
+/// Store が開かれていない、または該当プロファイルが無い場合は `None` を返す。
+/// **その場合 BEC 側は履歴シグナルを評価しない** (履歴が無いことを
+/// 「初回連絡」と断定しないため、これが正しい挙動)。
+async fn lookup_sender_history(
+    account_id: &str,
+    email: &str,
+) -> Option<kaname_bec::SenderHistory> {
+    let store = store_slot().lock().await.clone()?;
+    let profile = store.get_sender_profile(account_id, email).await.ok()??;
+
+    // 最終受信からの経過日数を求める。パースできない場合は None にして
+    // 「不明」を保つ (0 日と誤って扱うと「直前に連絡があった」ことになり
+    //  久しぶりの連絡シグナルが不当に抑制される)。
+    let days_since_last = profile.last_seen_at.as_deref().and_then(days_since_rfc3339);
+
+    Some(kaname_bec::SenderHistory {
+        prior_message_count: profile.message_count,
+        days_since_last,
+        typical_topic_summary: profile.topic_summary.clone(),
+        user_verified: profile.user_verified,
+        // Store 側に「悪意ありと報告」の列がまだ無いため false 固定。
+        // ここを true と偽ると危険側の判定が不当に強まるため、
+        // 列が追加されるまでは保守的に false を返す。
+        user_reported_malicious: false,
+    })
+}
+
+/// RFC 3339 形式の時刻から現在までの日数を求める。
+///
+/// `chrono` を使わずに済ませるため、`YYYY-MM-DD` 部分のみを使った
+/// 概算とする (履歴シグナルは日単位の粗い粒度で足りる)。
+/// 解析できない場合は `None` を返し「不明」を保つ。
+fn days_since_rfc3339(ts: &str) -> Option<u32> {
+    fn to_days(y: i64, m: i64, d: i64) -> i64 {
+        // Howard Hinnant の days_from_civil アルゴリズム
+        let y = if m <= 2 { y - 1 } else { y };
+        let era = if y >= 0 { y } else { y - 399 } / 400;
+        let yoe = y - era * 400;
+        let mp = (m + 9) % 12;
+        let doy = (153 * mp + 2) / 5 + d - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        era * 146_097 + doe - 719_468
+    }
+
+    let date = ts.get(..10)?;
+    let mut it = date.split('-');
+    let y: i64 = it.next()?.parse().ok()?;
+    let m: i64 = it.next()?.parse().ok()?;
+    let d: i64 = it.next()?.parse().ok()?;
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return None;
+    }
+
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs() as i64;
+    let today = now_secs / 86_400;
+    let then = to_days(y, m, d);
+    u32::try_from((today - then).max(0)).ok()
 }

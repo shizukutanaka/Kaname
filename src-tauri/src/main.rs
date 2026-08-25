@@ -226,6 +226,27 @@ async fn mail_disconnect() -> Result<(), String> {
     commands::mail_disconnect().await
 }
 
+/// 送信者履歴データベース (SQLCipher) を開く。
+///
+/// 履歴があると BEC の履歴シグナル (初回連絡 / 久しぶりの連絡 /
+/// 普段と違うトピック / 検証済み) が有効になる。
+#[tauri::command]
+async fn history_open(path: String, key_hex: String) -> Result<(), String> {
+    commands::history_open(path, key_hex).await
+}
+
+/// 履歴データベースを閉じる。
+#[tauri::command]
+async fn history_close() -> Result<(), String> {
+    commands::history_close().await
+}
+
+/// 送信者を「検証済み」としてマークする。
+#[tauri::command]
+async fn history_mark_verified(account_id: String, email: String) -> Result<(), String> {
+    commands::history_mark_verified(account_id, email).await
+}
+
 /// サーバからメール一覧を取得し、各通に BEC 判定を付けて返す。
 #[tauri::command]
 async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<commands::EmailRow>, String> {
@@ -374,6 +395,10 @@ fn main() {
             mail_connect,
             mail_disconnect,
             mail_fetch,
+            // 送信者履歴 (BEC の履歴シグナルに供給)
+            history_open,
+            history_close,
+            history_mark_verified,
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
             mail_send,
             mail_get_mailboxes,
