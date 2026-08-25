@@ -6,13 +6,13 @@
 [![Security Audit](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kaname-app/kaname/releases)
-[![Status](https://img.shields.io/badge/status-v0.4.0-orange.svg)](docs/maturity.md)
+[![Status](https://img.shields.io/badge/status-v0.5.0-orange.svg)](docs/maturity.md)
 
 ---
 
 ## ⚠️ 実装ステータス (公開前に必読)
 
-**本リポジトリは v0.4.0 です。メールの解析・受信・送信は実装されていますが、
+**本リポジトリは v0.5.0 です。メールの解析・受信・送信は実装されていますが、
 永続化・検索・MLS 暗号化・ローカル LLM 推論は未実装です。
 また開発環境の制約により型検査 (`cargo check`) が未実施です。**
 機能ごとの成熟度は [`docs/maturity.md`](docs/maturity.md) と [`docs/gap-analysis.md`](docs/gap-analysis.md) に
@@ -25,7 +25,7 @@
   ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
   自動アップデート、課金基盤の永続化 (`kaname-billing`)。これらは外部クレート統合が必要。
 - **組み立て状況 (2026-07 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
-  **27 クレート中 14 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
+  **27 クレート中 18 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
   実装済みで眠っていた検出器を順次接続しました。
 - **実メールを解析できます**: 「**ファイル解析**」タブからローカルの `.eml` を指定すると、
   MIME 解析 → 送信ドメイン認証の評価 → BEC 判定 → サニタイズ → 本文リスク検出
