@@ -612,6 +612,23 @@ fn url_host(url: &str) -> Option<String> {
 fn analyze_body_risks(body: &str) -> Vec<String> {
     let mut risks = Vec::new();
 
+    // 0. トラッキングピクセル (README が「デフォルトでブロック」と謳う機能)。
+    //    kaname-privacy は実装済みだが commands.rs から呼ばれていなかった。
+    //    sanitize_html が実際の読み込みを止めるため、ここでは
+    //    「何が仕込まれていたか」を利用者に伝える役割を持つ。
+    let tracking = kaname_privacy::TrackingDetector::new().analyze_html(body);
+    if tracking.was_tracked {
+        let domains = if tracking.blocked_domains.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", tracking.blocked_domains.join(", "))
+        };
+        risks.push(format!(
+            "トラッキングピクセルを {} 件検出し読み込みを防ぎました{domains}。",
+            tracking.tracker_count
+        ));
+    }
+
     // 1. HTML スマグリング (blob:/atob()/mshta 等による添付の密輸)
     let smuggling = kaname_render::html_smuggling::HtmlSmugglingDetector.analyze(body);
     if !matches!(smuggling.risk, kaname_render::html_smuggling::SmugglingRisk::Clean) {
