@@ -234,6 +234,20 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
     let urls = extract_urls_from_text(&body_text);
 
+    // 送信者の文体を評価する (アカウント乗っ取り検出)。
+    // Date ヘッダから送信時刻 (UTC 時) を取り出す。無ければ評価しない。
+    let send_hour = env.date.and_then(|ts| u8::try_from((ts.rem_euclid(86_400)) / 3_600).ok());
+    let from_addr_only = env.from.first().map(|a| a.addr.as_string()).unwrap_or_default();
+    // 金銭要求の有無は BEC の判定材料と揃える (文体逸脱との複合で警告を上げる)。
+    let has_financial = {
+        let n = kaname_memory_guard::normalize_for_matching(&body_text);
+        ["振込", "送金", "支払", "invoice", "wire transfer", "payment"]
+            .iter()
+            .any(|k| n.contains(k))
+    };
+    let style_risks =
+        evaluate_sender_style(&from_addr_only, &body_text, send_hour, has_financial).await;
+
     let contacts: Vec<String> = Vec::new();
     let req = kaname_bec::AssessmentRequest {
         from_header:  &from,
@@ -289,6 +303,7 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
                 let mut risks = analyze_body_risks(&body_text);
                 risks.extend(evaluate_link_risks(&urls));
                 risks.extend(evaluate_saas_links(&urls, &from));
+                risks.extend(style_risks);
                 risks
             },
         },
@@ -1727,4 +1742,77 @@ fn days_since_rfc3339(ts: &str) -> Option<u32> {
     let today = now_secs / 86_400;
     let then = to_days(y, m, d);
     u32::try_from((today - then).max(0)).ok()
+}
+
+// ============================================================================
+// 送信者文体認証 (SSA)
+//
+// `kaname-ssa` (1209 行) は文体プロファイルによるアカウント乗っ取り検出を
+// 実装済みだが、**どこからも依存されない孤島クレート**だった
+// (gap-analysis D12)。`EmailStyleFeatures::extract()` という抽出関数も
+// 揃っており、繋ぐコードが無いだけだった。
+//
+// 文体は「同一送信者の複数通を見比べて初めて意味を持つ」ため、
+// プロファイルを跨いで蓄積する必要がある。送信者履歴 (SQLCipher) と違い
+// 文体プロファイルは数値ベクトルのみで本文を含まないため
+// (kaname-ssa の設計方針)、メモリ内保持で足りる。
+// ============================================================================
+
+/// 送信者ごとの文体プロファイル。
+///
+/// 本文は保持せず数値特徴のみ (段落数・文長・句読点密度・formality 等)。
+/// プロセス終了で失われるが、文体は同一セッション内の複数通を
+/// 見比べるだけでも乗っ取り検出に寄与する。
+static STYLE_PROFILES: std::sync::OnceLock<
+    tokio::sync::Mutex<std::collections::HashMap<String, kaname_ssa::SenderStyleProfile>>,
+> = std::sync::OnceLock::new();
+
+fn style_profiles() -> &'static tokio::sync::Mutex<
+    std::collections::HashMap<String, kaname_ssa::SenderStyleProfile>,
+> {
+    STYLE_PROFILES.get_or_init(|| tokio::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// 本文の文体を評価し、必要なら警告を返す。プロファイルは同時に更新する。
+///
+/// 送信時刻が不明な場合は評価しない。`send_hour` を 0 で代用すると
+/// 「深夜送信」という誤ったシグナルを生むため、推測しない。
+///
+/// 戻り値が空なのは「警告なし」または「学習データ不足」のいずれか。
+/// **不足を「問題なし」と偽らない**ため、UI には警告のみを出す。
+async fn evaluate_sender_style(
+    sender: &str,
+    body: &str,
+    send_hour: Option<u8>,
+    contains_financial_request: bool,
+) -> Vec<String> {
+    let Some(hour) = send_hour else { return Vec::new() };
+    let features = kaname_ssa::EmailStyleFeatures::extract(body, hour);
+    if !features.is_finite() {
+        // NaN/Infinity を含む特徴量はプロファイルを汚染するため取り込まない。
+        return Vec::new();
+    }
+
+    let mut profiles = style_profiles().lock().await;
+    let profile = profiles
+        .entry(sender.to_string())
+        .or_insert_with(|| kaname_ssa::SenderStyleProfile::new(sender));
+
+    // 判定してから取り込む。取り込んでから判定すると、
+    // なりすましメール自身がプロファイルを引き寄せて検出が鈍る。
+    let warning = kaname_ssa::assess_self_send_anomaly(profile, &features, contains_financial_request);
+    profile.update(&features);
+
+    match warning {
+        kaname_ssa::StyleWarning::High => vec![format!(
+            "文体が普段と大きく異なります (送信者: {sender})。\
+             アカウント乗っ取りの可能性があります。"
+        )],
+        kaname_ssa::StyleWarning::Medium => vec![format!(
+            "文体が普段と異なります (送信者: {sender})。"
+        )],
+        // Low は日常的な揺らぎでも出るため報告しない (警告疲れの回避)。
+        // InsufficientData / None は警告を出さない。
+        _ => Vec::new(),
+    }
 }
