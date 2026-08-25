@@ -27,6 +27,7 @@ import { KanameDesign }        from "./ui/KanameDesign";
 import { SecurityDashboard }   from "./ui/SecurityDashboard";
 import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
 import { EmlImport }           from "./ui/EmlImport";
+import { MailConnect }         from "./ui/MailConnect";
 
 // ── 型定義 ──
 
@@ -35,6 +36,8 @@ type View =
   | "security"
   | "features_demo"
   // ローカル .eml を実際のパイプラインに通す画面 (実メールの唯一の入口)
+  // JMAP サーバへ接続して実際にメールを受信する画面
+  | "connect"
   | "eml_import";
 
 interface AppState {
@@ -206,7 +209,7 @@ const App = () => {
       gap: "4px",
       "z-index": "9999",
     }}>
-      {(["inbox", "security", "eml_import", "features_demo"] as View[]).map(v => (
+      {(["inbox", "connect", "security", "eml_import", "features_demo"] as View[]).map(v => (
         <button
           onClick={() => setState(s => ({ ...s, activeView: v }))}
           style={{
@@ -225,7 +228,7 @@ const App = () => {
             cursor: "pointer",
           }}
         >
-          {{ inbox:"受信トレイ", security:"セキュリティ", eml_import:"ファイル解析", features_demo:"機能デモ" }[v]}
+          {{ inbox:"受信トレイ", connect:"サーバ接続", security:"セキュリティ", eml_import:"ファイル解析", features_demo:"機能デモ" }[v]}
         </button>
       ))}
     </div>
@@ -246,6 +249,9 @@ const App = () => {
           </Show>
           <Show when={state().activeView === "security"}>
             <SecurityDashboard selectedEmailId={state().selectedEmailId} />
+          </Show>
+          <Show when={state().activeView === "connect"}>
+            <MailConnect />
           </Show>
           <Show when={state().activeView === "eml_import"}>
             <EmlImport />

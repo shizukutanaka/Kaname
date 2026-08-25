@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **JMAP サーバとの送受信を配線 (D10 の中核を解消)**
+  - `kaname-ui` が `kaname-jmap` に依存していなかったため、出荷バイナリからサーバへ到達する経路が**コンパイル時点で存在しなかった**。`kaname-jmap` 自体は RFC 8621 準拠の実装が揃っており、**配線するコードを書くだけ**で動く状態だった
+  - `mail_connect` / `mail_disconnect` / `mail_fetch` / `mail_send` を実装・登録
+  - **受信した実データが、ファイル解析と同じ BEC 検出器を通る** (一覧の各通に判定を付与)
+  - **送信前に DLP (`Direction::Outbound`) を実行し、`Block` 判定なら送信しない** — これが DLP 本来の用途であり、受信側検査と対になる
+  - **認証情報は永続化しない**: Bearer トークンはメモリ内にのみ保持。`kaname-store` の鍵管理が keyfile フォールバックを含む現状では平文同然で置くことになるため、安全に保管できるまで保管しない方針
+  - UI に「サーバ接続」タブを追加 (`src/ui/MailConnect.tsx`)
+
 ### Fixed
 - **回帰修正: 誤って削除された `analyze_body_risks` を復元** — PR #64 の編集で定義ごと巻き込まれ、呼び出しだけが残ってコンパイルエラーの状態が **5 PR にわたり検出されなかった**。`cargo check` が使えない環境 (D20) の実害
 ### Added

@@ -828,7 +828,7 @@ export const KanameDesign = () => {
             <EmptyState
               icon="📭"
               title="メールなし"
-              desc={{ inbox:"受信箱はサーバに接続されていません（JMAP 受信は未実装）。実際のメールを解析するには、上部ナビの「ファイル解析」タブから .eml ファイルを指定してください。", feed:"フィード登録なし。", screener:"スクリーニング待ちなし。", reply_later:"Reply Later リストは空です。", paper_trail:"Paper Trail は空です。" }[view()]}
+              desc={{ inbox:"このタブはまだサーバと接続していません。「サーバ接続」タブから JMAP サーバに接続すると受信メールを解析できます。ローカルの .eml を解析する場合は「ファイル解析」タブをご利用ください。", feed:"フィード登録なし。", screener:"スクリーニング待ちなし。", reply_later:"Reply Later リストは空です。", paper_trail:"Paper Trail は空です。" }[view()]}
             />
           </Show>
 
