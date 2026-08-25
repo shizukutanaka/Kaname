@@ -226,6 +226,24 @@ async fn mail_disconnect() -> Result<(), String> {
     commands::mail_disconnect().await
 }
 
+/// 保存済みメールを新しい順に返す (オフライン閲覧)。
+#[tauri::command]
+async fn mail_list_stored(
+    mailbox_id: String,
+    limit: Option<u32>,
+) -> Result<Vec<commands::StoredMessage>, String> {
+    commands::mail_list_stored(mailbox_id, limit).await
+}
+
+/// 保存済みメールを検索する (件名・送信者・本文プレビュー)。
+#[tauri::command]
+async fn mail_search(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<commands::StoredMessage>, String> {
+    commands::mail_search(query, limit).await
+}
+
 /// 送信者履歴データベース (SQLCipher) を開く。
 ///
 /// 履歴があると BEC の履歴シグナル (初回連絡 / 久しぶりの連絡 /
@@ -396,6 +414,8 @@ fn main() {
             mail_disconnect,
             mail_fetch,
             // 送信者履歴 (BEC の履歴シグナルに供給)
+            mail_list_stored,
+            mail_search,
             history_open,
             history_close,
             history_mark_verified,

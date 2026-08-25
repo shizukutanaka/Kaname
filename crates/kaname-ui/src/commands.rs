@@ -877,6 +877,9 @@ use kaname_render::deepfake_advisory::DeepfakeAdvisory;
 // src-tauri 側のコマンドラッパーが戻り値型として名前を書けるよう再エクスポートする
 // (src-tauri は kaname-render に直接依存していないため)。
 pub use kaname_render::deepfake_advisory::AdvisoryReport;
+// src-tauri 側のコマンドラッパーが戻り値型として名前を書けるよう再エクスポートする
+// (src-tauri は kaname-store に直接依存していないため)。
+pub use kaname_store::StoredMessage;
 
 /// 新機能用の共有状態。
 pub struct V02AppState {
@@ -1512,14 +1515,30 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
         // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
         let verdict = assess_listing(&account_id, &from_name, &from_addr, &subject, &preview).await;
 
-        // 受信を履歴に記録する (次回以降のシグナル精度が上がる)。
-        // Store 未接続なら何もしない。失敗しても解析結果は返す。
+        // 受信を履歴に記録し、メール本体も保存する。
+        // Store 未接続なら何もしない。失敗しても解析結果は返す
+        // (保存できないことは表示できない理由にならない)。
         if let Some(store) = store_slot().lock().await.clone() {
             if let Err(e) = store
                 .record_received(&account_id, &from_addr, from_name.as_deref(), it.subject.as_deref())
                 .await
             {
                 tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+            }
+
+            let new_msg = kaname_store::NewMessage {
+                jmap_id:      it.id.clone(),
+                from_addr:    from_addr.clone(),
+                from_name:    from_name.clone(),
+                subject:      it.subject.clone(),
+                body_preview: it.preview.clone(),
+                received_at:  it.received_at.clone(),
+                is_read:      it.is_read(),
+                bec_score:    None,
+                bec_verdict:  Some(verdict.clone()),
+            };
+            if let Err(e) = store.save_message(&account_id, &mailbox_id, &new_msg).await {
+                tracing::warn!(error=%e, "メールの保存に失敗");
             }
         }
 
@@ -1831,5 +1850,61 @@ async fn evaluate_sender_style(
         // Low は日常的な揺らぎでも出るため報告しない (警告疲れの回避)。
         // InsufficientData / None は警告を出さない。
         _ => Vec::new(),
+    }
+}
+
+/// 保存済みメールを新しい順に返す (オフライン閲覧)。
+///
+/// `mail_fetch` が保存したメールを、サーバに接続せず読み出す。
+/// 従来 `messages` テーブルへの SELECT は**ワークスペース全体でゼロ件**
+/// だったため、取得したメールを再表示する手段が無かった (D10)。
+pub async fn mail_list_stored(
+    mailbox_id: String,
+    limit: Option<u32>,
+) -> Result<Vec<kaname_store::StoredMessage>, String> {
+    let store = store_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    let account_id = current_account_id().await;
+    store
+        .list_messages(&account_id, &mailbox_id, limit.unwrap_or(50))
+        .await
+        .map_err(|e| format!("保存済みメールの読み出しに失敗しました: {e}"))
+}
+
+/// 保存済みメールを検索する。
+///
+/// 件名・送信者・本文プレビューが対象。受信箱 UI の検索欄は
+/// **ハンドラが未バインドのまま放置されていた** (D10) ため、
+/// 検索機能そのものが存在しなかった。
+pub async fn mail_search(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<kaname_store::StoredMessage>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let store = store_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    let account_id = current_account_id().await;
+    store
+        .search_messages(&account_id, query.trim(), limit.unwrap_or(50))
+        .await
+        .map_err(|e| format!("検索に失敗しました: {e}"))
+}
+
+/// 現在の JMAP アカウント ID を返す。未接続なら空文字。
+///
+/// 保存・検索はサーバ未接続でも行えるべきだが、どのアカウントの
+/// メールかを区別する必要があるため、接続時の ID を使う。
+async fn current_account_id() -> String {
+    match jmap_client().await {
+        Ok(c) => c.account_id().to_string(),
+        Err(_) => String::new(),
     }
 }
