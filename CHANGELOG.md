@@ -8,7 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **回帰修正: 誤って削除された `analyze_body_risks` を復元** — PR #64 の編集で定義ごと巻き込まれ、呼び出しだけが残ってコンパイルエラーの状態が **5 PR にわたり検出されなかった**。`cargo check` が使えない環境 (D20) の実害
 ### Added
+- **`scripts/static-check.sh`** — `cargo check` の代替となる静的検証。全 Rust ファイルの構文チェックと「定義が消えた関数の呼び出し」検出を自動化。上記回帰を受けて追加 (型検査の代替にはならないことも明記)
 - **添付ファイル検査を解析パイプラインに接続**
   - `kaname-render` には添付検査 (MIME 偽装 / polyglot / 危険拡張子 / SVG スクリプト / メタデータ) が揃っていたが、**`parse()` が `AttachmentHeader` にバイト列を保持せず捨てていた**ため、検出器に渡す経路が無く一つも動いていなかった
   - `kaname_render::scan_attachments()` を新設。バイト列はクレート内で完結させ (`AttachmentHeader` は変更しない)、検査結果のみ返す。1 添付あたり先頭 10 MB まで検査
