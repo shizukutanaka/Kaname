@@ -5,22 +5,17 @@
 // **重要**: 以前の実装は全ロジックをテストファイル内にインラインで
 // 再実装しており (実ソースからインポートしていなかった)、実際の
 // UI コンポーネントのコードを一切検証していなかった (false confidence)。
-// 例えば `triageEmail` はテスト内で `(fromAddr, subject, becVerdict)` という
-// 架空のシグネチャで再実装されていたが、実際の src/ui/KanameApp.tsx の
-// `triageEmail` は `(email: Email)` を受け取り、becVerdict を判定に
-// 一切使っていなかった。`parseNaturalQuery`/`BEC_COLORS`/
-// `formatSafetyNumber` に至っては対応する実装が UI コードに存在しない
-// 架空の関数だった。
+// 例えば `triageEmail` はテスト内で架空のシグネチャで再実装されており、
+// `parseNaturalQuery`/`BEC_COLORS`/`formatSafetyNumber` に至っては
+// 対応する実装が UI コードに存在しない架空の関数だった。
 //
 // このファイルは実際にエクスポートされた関数・クラスをインポートして
 // テストする。テスト対象を実コードに追従させるため、UI 側の
 // private だった関数・型に `export` を追加した
-// (src/ui/KanameApp.tsx: Email, triageEmail /
-//  src/ui/KanameAppleFeatures.tsx: UndoAction, UndoRedoStack /
+// (src/ui/KanameAppleFeatures.tsx: UndoAction, UndoRedoStack /
 //  src/ui/Inbox.tsx: formatDate)。
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { triageEmail, type Email } from "../ui/KanameApp";
 import { UndoRedoStack } from "../ui/KanameAppleFeatures";
 import { formatDate } from "../ui/Inbox";
 
@@ -42,43 +37,14 @@ function makeEmail(overrides: Partial<Email> = {}): Email {
   };
 }
 
-// ── 1. triageEmail (実 src/ui/KanameApp.tsx をインポートしてテスト) ──────────
+// ── 1. トリアージ (判定は Rust 側へ集約済み) ────────────────────────────
 
-describe("triageEmail", () => {
-  it("noreply アドレス → paper_trail", () => {
-    const r = triageEmail(makeEmail({ from_addr: "noreply@amazon.co.jp", subject: "ご注文確認" }));
-    expect(r).toBe("paper_trail");
-  });
-
-  it("領収書系の件名 → paper_trail", () => {
-    const r = triageEmail(makeEmail({ from_addr: "info@shop.com", subject: "Receipt #123" }));
-    expect(r).toBe("paper_trail");
-  });
-
-  it("newsletter 系の件名 → feed", () => {
-    const r = triageEmail(makeEmail({ from_addr: "news@tc.com", subject: "Weekly Newsletter" }));
-    expect(r).toBe("feed");
-  });
-
-  it("BEC DANGEROUS → important", () => {
-    const r = triageEmail(makeEmail({ from_addr: "cfo@evil.com", subject: "至急の連絡", bec_verdict: "DANGEROUS" }));
-    expect(r).toBe("important");
-  });
-
-  it("通常メール (BEC SAFE) → important", () => {
-    const r = triageEmail(makeEmail({ subject: "会議の件" }));
-    expect(r).toBe("important");
-  });
-
-  it("bec_verdict が null でも paper_trail/feed 判定は独立して動く", () => {
-    // 実装は bec_verdict を「important 昇格」にのみ使い、paper_trail/feed の
-    // 判定はキーワードのみで完結する。null でもクラッシュしないことを確認。
-    const r = triageEmail(makeEmail({ subject: "ご注文確認", bec_verdict: null }));
-    expect(r).toBe("paper_trail");
-  });
-});
-
-// ── 2. UndoRedoStack (実 src/ui/KanameAppleFeatures.tsx をインポート) ────────
+// 注: triageEmail の TypeScript 実装 (src/ui/KanameApp.tsx) は削除した。
+// 同じ仕分けロジックが kaname-core::ux_features::TriageEngine に実装されており、
+// バックエンドの mail_fetch が返す EmailRow.triage が唯一の判定元になった。
+// テストは crates/kaname-core/src/ux_features.rs の #[cfg(test)] 側にあり、
+// paper_trail / feed / BEC important / 送信者ルール / 大小文字回避まで
+// TypeScript 版より広くカバーしている。二重実装は二重の真実を生むため残さない。
 
 describe("UndoRedoStack", () => {
   let stack: UndoRedoStack;

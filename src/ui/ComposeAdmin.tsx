@@ -18,6 +18,9 @@ interface ComposeProps {
 }
 
 export const Compose = (props: ComposeProps) => {
+  // 差出人: JMAP セッションはアカウントのメールアドレスを公開しないため
+  // (Session.primary_accounts は accountId のみ)、利用者に入力してもらう。
+  const [from,     setFrom]    = createSignal("");
   const [to,       setTo]      = createSignal(props.initialTo || "");
   const [subject,  setSubject] = createSignal(props.initialSubject || "");
   const [body,     setBody]    = createSignal("");
@@ -34,37 +37,38 @@ export const Compose = (props: ComposeProps) => {
     clearTimeout(dlpTimer);
     dlpTimer = setTimeout(async () => {
       if (b.length < 20) { setDlpWarn(null); return; }
-      // 注: 送信前 DLP チェックはまだ invoke 経由でバックエンドに
-      // 接続されていない (docs/maturity.md 参照)。実装時に以下を有効化する:
-      //   const result = await invoke<{verdict: string, rule?: string}>(
-      //     "dlp_check_outbound", { body: b, to: to() });
-      //   if (result.verdict !== "ALLOW") setDlpWarn(result.rule || "ポリシー違反");
+      // 注: 入力中のリアルタイム DLP 警告用コマンドは未実装。ただし
+      // **送信時には mail_send が Direction::Outbound の DLP を実行し、
+      // Block 判定なら送信せずエラーを返す** (commands.rs: mail_send_real)。
+      // 保護は効いており、ここで欠けているのは事前警告の UX のみ。
     }, 600);
   });
 
   // MLS 対応チェック
-  createEffect(async () => {
-    const addr = to().trim();
-    if (!addr.includes("@")) { setMlsReady(null); return; }
-    // 本番: KPD で確認
-    setMlsReady(addr.endsWith("@kaname.app") || addr.endsWith("@kaname.jp"));
+  //
+  // 以前はドメイン名の接尾辞だけを見て「MLS 対応」と表示していたが、
+  // kaname-mls は XOR モック段階 (gap-analysis D1) であり、宛先が何であれ
+  // 実際に MLS 暗号化は行われない。実装されていない保護を UI が
+  // 「対応済み」と示すのは利用者を欺くため、常に null (非対応) を返す。
+  // KPD による実確認は MLS 本実装と同時に入れる。
+  createEffect(() => {
+    to();
+    setMlsReady(null);
   });
 
   const handleSend = async () => {
-    if (!to().trim() || !subject().trim() || !body().trim()) {
-      setError("宛先・件名・本文は必須です");
+    if (!from().trim() || !to().trim() || !subject().trim() || !body().trim()) {
+      setError("差出人・宛先・件名・本文は必須です");
       return;
     }
     setSending(true);
     setError(null);
     try {
       await invoke("mail_send", {
-        req: {
-          to:       [to()],
-          subject:  subject(),
-          body:     body(),
-          draft_id: props.replyToId || null,
-        },
+        from:    from(),
+        to:      [to()],
+        subject: subject(),
+        body:    body(),
       });
       props.onSent();
       props.onClose();
@@ -166,6 +170,13 @@ export const Compose = (props: ComposeProps) => {
 
       {/* フォーム */}
       <div style={{ padding: "12px 16px", display: "flex", "flex-direction": "column", gap: "8px" }}>
+        <input
+          type="email"
+          placeholder="差出人 (自分のメールアドレス)"
+          value={from()}
+          onInput={e => setFrom(e.currentTarget.value)}
+          style={inputStyle}
+        />
         <input
           type="email"
           placeholder="宛先"
