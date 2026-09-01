@@ -39,6 +39,10 @@ kaname-ssa = { path = "../kaname-ssa" }
 # トラッキングピクセル検出 (README が謳うプライバシー保護の実体)。
 kaname-privacy = { path = "../kaname-privacy" }
 kaname-observability = { path = "../kaname-observability" }
+# スマートトリアージ (README「⚡ Speed」の柱)。TriageEngine は実装済みだったが
+# 出荷バイナリから到達不能で、EmailRow.triage は "important" 固定だった。
+# 外部依存は kaname-error/kaname-store のみで、いずれも本クレートに既存。
+kaname-core = { path = "../kaname-core" }
 
 [dev-dependencies]
 tokio-test = "0.4"

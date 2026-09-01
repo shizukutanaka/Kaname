@@ -6,15 +6,14 @@
 // Tauri の invoke コマンドとリアルタイムイベントを接続。
 //
 // アーキテクチャ:
-//   main.tsx → KanameApp (state management)
-//            → KanameDesign (Liquid Glass UI)
+//   main.tsx → Inbox (mail_fetch / mail_search でバックエンドに実接続)
 //            → SecurityDashboard (BEC/DLP/AI監査)
 //            → KanameAppleFeatures (Quick Look/Undo/Smart Reply)
 //
-// 注: 以前は「KanameAppleV5 (Swipe/Focus/Natural Search/Safety Number)」への
-// 参照があったが、対応するコンポーネントファイルが存在せず
-// (src/ui/KanameAppleV5.* は未実装)、npm run build がここで失敗していた。
-// 実装されるまでこのビューへの参照は削除する。
+// 注: 受信トレイは以前 KanameDesign を描画していたが、同コンポーネントは
+// 自身のコメントが認めるとおり invoke を一切呼ばないモック専用だった。
+// 実際に mail_fetch / mail_search / bec_get_score を呼ぶ Inbox はどこからも
+// import されておらず死蔵していたため、両者を入れ替える。
 
 import { render } from "solid-js/web";
 import { onMount, createSignal, Show } from "solid-js";
@@ -23,7 +22,8 @@ import { listen } from "@tauri-apps/api/event";
 import { initI18n } from "./i18n";
 
 // ── コンポーネントインポート ──
-import { KanameDesign }        from "./ui/KanameDesign";
+import { Inbox }               from "./ui/Inbox";
+import { Compose }             from "./ui/ComposeAdmin";
 import { SecurityDashboard }   from "./ui/SecurityDashboard";
 import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
 import { EmlImport }           from "./ui/EmlImport";
@@ -38,6 +38,7 @@ type View =
   // ローカル .eml を実際のパイプラインに通す画面 (実メールの唯一の入口)
   // JMAP サーバへ接続して実際にメールを受信する画面
   | "connect"
+  | "compose"
   | "eml_import";
 
 interface AppState {
@@ -209,7 +210,7 @@ const App = () => {
       gap: "4px",
       "z-index": "9999",
     }}>
-      {(["inbox", "connect", "security", "eml_import", "features_demo"] as View[]).map(v => (
+      {(["inbox", "compose", "connect", "security", "eml_import", "features_demo"] as View[]).map(v => (
         <button
           onClick={() => setState(s => ({ ...s, activeView: v }))}
           style={{
@@ -228,7 +229,7 @@ const App = () => {
             cursor: "pointer",
           }}
         >
-          {{ inbox:"受信トレイ", connect:"サーバ接続", security:"セキュリティ", eml_import:"ファイル解析", features_demo:"機能デモ" }[v]}
+          {{ inbox:"受信トレイ", compose:"作成", connect:"サーバ接続", security:"セキュリティ", eml_import:"ファイル解析", features_demo:"機能デモ" }[v]}
         </button>
       ))}
     </div>
@@ -245,10 +246,16 @@ const App = () => {
       >
         <div style={{ "padding-bottom": "44px" }}>
           <Show when={state().activeView === "inbox"}>
-            <KanameDesign />
+            <Inbox />
           </Show>
           <Show when={state().activeView === "security"}>
             <SecurityDashboard selectedEmailId={state().selectedEmailId} />
+          </Show>
+          <Show when={state().activeView === "compose"}>
+            <Compose
+              onClose={() => setState(s => ({ ...s, activeView: "inbox" }))}
+              onSent={()  => setState(s => ({ ...s, activeView: "inbox" }))}
+            />
           </Show>
           <Show when={state().activeView === "connect"}>
             <MailConnect />

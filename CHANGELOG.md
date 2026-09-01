@@ -8,6 +8,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **出荷 UI がモック専用コンポーネントを描画していた (最重要)**
+  - 受信トレイは `KanameDesign` を描画していたが、同コンポーネントは自身のコメントが認めるとおり **invoke を一切呼ばないモックデータ専用**だった。一方 `mail_fetch` / `mail_search` / `bec_get_score` を実際に呼ぶ `Inbox` は**どこからも import されておらず死蔵**していた。両者を入れ替え、受信トレイが実データを表示するようにした
+  - **メール送信に UI から到達できなかった**: `mail_send` を呼ぶのは未到達の `ComposeAdmin` のみ。「作成」ビューとして配線した
+  - **送信は配線しても実行時に必ず失敗する状態だった**: フロントは `{ req: { to, subject, body, draft_id } }` を送っていたが Tauri コマンドは `(from, to, subject, body)` を取る。引数形を合わせ、差出人入力欄を追加 (JMAP セッションはアカウントのメールアドレスを公開しないため)
+  - **UI が実装されていない暗号化を「対応済み」と表示していた**: 作成画面の MLS インジケータは宛先ドメインの接尾辞だけを見て判定していたが、`kaname-mls` は XOR モック (D1) で実際には暗号化されない。常に非対応を返すよう修正
+  - `EmailRow.triage` が `"important"` 固定だった。実装済みの `kaname_core::ux_features::TriageEngine` を配線 (フロントエンドの TypeScript 重複実装は削除し、判定元を一つにした)
+
+### Removed
+- **死蔵していたモック専用フロントエンド 2,284 行を削除**: `KanameApp.tsx` (1,134 行・ハードコードされたデモメールと `triageEmail` の重複実装)、`KanameDesign.tsx` (1,150 行・モック専用の受信トレイ)。到達可能なフロントエンドモジュールは **7/11 → 8/9**
+
 ### Added
 - **添付ファイルのダウンロード** (D10 の最後の項目を解消 — **D10 完全解消**)
   - `kaname-jmap` に `download_blob` を追加 (`download_url` テンプレート置換 + Bearer 認証、25 MB 上限を Content-Length と実読み取りの二重で確認)

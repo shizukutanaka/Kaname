@@ -1487,6 +1487,23 @@ pub async fn mail_disconnect() -> Result<(), String> {
 /// サーバからメール一覧を取得し、**各通に BEC 判定を付けて**返す。
 ///
 /// 受信した実データが、ファイル解析と同じ検出器を通る。
+/// 件名と送信者からトリアージ先を決める。
+///
+/// 判定本体は `kaname_core::ux_features::TriageEngine` にあり、
+/// 実装済みでありながら出荷バイナリから到達不能だった (フロントエンドに
+/// 同等ロジックが TypeScript で二重実装されていた)。単一の実装に寄せる。
+fn triage_bucket(from_addr: &str, subject: &str, verdict: &str) -> String {
+    use kaname_core::ux_features::{TriageBucket, TriageEngine};
+    let bucket = TriageEngine::new().triage(from_addr, subject, Some(verdict));
+    match bucket {
+        TriageBucket::Important  => "important",
+        TriageBucket::Other      => "other",
+        TriageBucket::Feed       => "feed",
+        TriageBucket::PaperTrail => "paper_trail",
+    }
+    .to_string()
+}
+
 pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
     let client = jmap_client().await?;
     let account_id = client.account_id().to_string();
@@ -1542,6 +1559,10 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             }
         }
 
+        // TriageEngine は送信者ルールを持たない既定インスタンスで十分
+        // (ユーザー定義ルールの永続化は未実装)。判定は決定論的で LLM 不要。
+        let triage = triage_bucket(&from_addr, &subject, &verdict);
+
         rows.push(EmailRow {
             id:          it.id.clone(),
             from_name,
@@ -1553,7 +1574,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             is_starred:  it.is_starred(),
             bec_verdict: verdict,
             is_mls:      it.is_mls_envelope(),
-            triage:      "important".to_string(),
+            triage,
         });
     }
     Ok(rows)
