@@ -226,6 +226,17 @@ async fn mail_disconnect() -> Result<(), String> {
     commands::mail_disconnect().await
 }
 
+/// 添付ファイルをダウンロードし、検査してから隔離保存する。
+///
+/// 危険と判定された添付はディスクに書かず、検査結果のみ返す。
+#[tauri::command]
+async fn mail_download_attachment(
+    email_id: String,
+    blob_id: String,
+) -> Result<commands::AttachmentDownload, String> {
+    commands::mail_download_attachment(email_id, blob_id).await
+}
+
 /// 保存済みメールを新しい順に返す (オフライン閲覧)。
 #[tauri::command]
 async fn mail_list_stored(
@@ -414,6 +425,7 @@ fn main() {
             mail_disconnect,
             mail_fetch,
             // 送信者履歴 (BEC の履歴シグナルに供給)
+            mail_download_attachment,
             mail_list_stored,
             mail_search,
             history_open,

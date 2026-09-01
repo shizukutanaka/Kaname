@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **添付ファイルのダウンロード** (D10 の最後の項目を解消 — **D10 完全解消**)
+  - `kaname-jmap` に `download_blob` を追加 (`download_url` テンプレート置換 + Bearer 認証、25 MB 上限を Content-Length と実読み取りの二重で確認)
+  - `kaname-render` の添付検査を `scan_attachment_bytes(filename, mime, bytes)` として公開関数に抽出し、フォルダ一括スキャンと単一 blob の両方で同一の検査を適用
+  - `mail_download_attachment` コマンド: **ディスクに書く前に必ず検査**し、`is_dangerous` なら**保存せず**リスク一覧のみ返す (kaname-sandbox が no-op の現状、実行は許さず「検査して警告」に徹する)
+  - `sanitize_filename` で添付名のパストラバーサル・制御文字を無害化 (添付名は攻撃者制御の入力)
+- **ソクラテス問答による製品総括** `docs/socratic-review.md` — 「これはメールクライアントか」「セキュリティは本物か」「最大の弱点は何か」「完成とは何か」の自問と、長所・短所・改善点の一覧
+
 - **メール本体の永続化と検索** (D10 の残りを解消)
   - `messages` テーブルはスキーマもインデックスも完備していたが、**INSERT/SELECT がワークスペース全体でゼロ件**だった。`save_message` / `list_messages` / `search_messages` を実装
   - **冪等性**: `id` を `sha256(account_id + jmap_id)` で決定論的に採番し `ON CONFLICT DO UPDATE`。再取得しても行が重複しない

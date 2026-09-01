@@ -436,6 +436,53 @@ impl JmapClient {
     }
 
     /// BLOB をアップロードする。
+    /// blob をダウンロードする (RFC 8620 §6.2)。
+    ///
+    /// `upload_blob` と対称。`session.download_url` の
+    /// `{accountId}`/`{blobId}`/`{type}`/`{name}` を置換して GET する。
+    ///
+    /// 添付ファイルの実体を取得する唯一の経路。DoS 対策として応答は
+    /// 25 MB までに制限する (それを超える添付は取得を拒否)。
+    pub async fn download_blob(
+        &self,
+        blob_id: &str,
+        mime_type: &str,
+        name: &str,
+    ) -> Result<Vec<u8>, JmapError> {
+        const MAX_BLOB_BYTES: usize = 25 * 1024 * 1024;
+
+        let url = self.session.download_url
+            .replace("{accountId}", &self.account_id)
+            .replace("{blobId}", blob_id)
+            .replace("{type}", mime_type)
+            .replace("{name}", name);
+
+        let resp = self.http.get(&url)
+            .bearer_auth(&self.config.bearer_token)
+            .send().await
+            .map_err(|e| JmapError::Http(e.to_string()))?;
+
+        if !resp.status().is_success() {
+            return Err(JmapError::Http(format!("blob 取得失敗: HTTP {}", resp.status())));
+        }
+
+        // Content-Length で事前に上限を弾く (ストリームを読み切る前に拒否)。
+        if let Some(len) = resp.content_length() {
+            if len as usize > MAX_BLOB_BYTES {
+                return Err(JmapError::Http(format!(
+                    "添付が大きすぎます ({len} バイト > {MAX_BLOB_BYTES} バイト上限)"
+                )));
+            }
+        }
+
+        let bytes = resp.bytes().await
+            .map_err(|e| JmapError::Http(e.to_string()))?;
+        if bytes.len() > MAX_BLOB_BYTES {
+            return Err(JmapError::Http("添付が上限を超えました".into()));
+        }
+        Ok(bytes.to_vec())
+    }
+
     async fn upload_blob(&self, data: &[u8]) -> Result<String, JmapError> {
         let url = self.session.upload_url.replace("{accountId}", &self.account_id);
         let resp = self.http.post(&url)
