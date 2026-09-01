@@ -960,9 +960,6 @@ pub struct AttachmentScan {
 /// 1 添付あたり検査するのは先頭 10 MB まで。それを超える部分は読まない。
 #[must_use]
 pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
-    /// 1 添付あたりの検査上限。
-    const MAX_SCAN_BYTES: usize = 10 * 1024 * 1024;
-
     let Some(msg) = MessageParser::default().parse(raw) else {
         return Vec::new();
     };
@@ -981,74 +978,87 @@ pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
             })
             .unwrap_or_else(|| "application/octet-stream".to_string());
 
-        let full = part.contents();
-        let size_bytes = full.len() as u64;
-        let bytes = &full[..full.len().min(MAX_SCAN_BYTES)];
+        out.push(scan_attachment_bytes(&filename, &declared_mime, part.contents()));
+    }
+    out
+}
 
-        let mut risks = Vec::new();
-        let mut is_dangerous = false;
+/// 1 添付分のバイト列を各検出器にかける。
+///
+/// `scan_attachments` (メール全体) と、JMAP でダウンロードした単一 blob の
+/// 両方から使える共通ロジック。検査は先頭 10 MB まで (DoS 対策)。
+#[must_use]
+pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -> AttachmentScan {
+    const MAX_SCAN_BYTES: usize = 10 * 1024 * 1024;
+    let size_bytes = full.len() as u64;
+    let bytes = &full[..full.len().min(MAX_SCAN_BYTES)];
 
-        // 1. Windows で危険な拡張子 (.lnk / .docm / .scr 等)
-        if magic_bytes::is_dangerous_windows_attachment(&filename) {
-            risks.push(format!("危険な拡張子です: {filename}"));
-            is_dangerous = true;
+    let mut risks = Vec::new();
+    let mut is_dangerous = false;
+
+    // 1. Windows で危険な拡張子 (.lnk / .docm / .scr 等)
+    if magic_bytes::is_dangerous_windows_attachment(filename) {
+        risks.push(format!("危険な拡張子です: {filename}"));
+        is_dangerous = true;
+    }
+
+    // 2. 宣言 MIME と実体の不一致 (実行ファイルを画像等に偽装)
+    if let Some(mismatch) = magic_bytes::check_mime_mismatch(declared_mime, bytes) {
+        risks.push(format!(
+            "MIME 偽装の疑い: {} と宣言されていますが実体は {} です",
+            mismatch.declared, mismatch.detected
+        ));
+        is_dangerous = true;
+    }
+
+    // 3. Polyglot (画像/PDF としても ZIP としても有効)
+    if let Some((a, b)) = magic_bytes::detect_polyglot(bytes) {
+        risks.push(format!("Polyglot ファイルです ({a} と {b} の両方として有効)"));
+        is_dangerous = true;
+    }
+
+    // 4. SVG のスクリプト実行 / XXE / プロンプト注入
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        if svg_guard::looks_like_svg(text) {
+            let scan = svg_guard::scan_svg(text);
+            if !scan.safe_as_attachment {
+                for r in &scan.risks {
+                    risks.push(format!("SVG のリスク: {r:?}"));
+                }
+                is_dangerous = true;
+            }
         }
+    }
 
-        // 2. 宣言 MIME と実体の不一致 (実行ファイルを画像等に偽装)
-        if let Some(mismatch) = magic_bytes::check_mime_mismatch(&declared_mime, bytes) {
-            risks.push(format!(
-                "MIME 偽装の疑い: {} と宣言されていますが実体は {} です",
-                mismatch.declared, mismatch.detected
-            ));
-            is_dangerous = true;
-        }
-
-        // 3. Polyglot (画像/PDF としても ZIP としても有効)
-        if let Some((a, b)) = magic_bytes::detect_polyglot(bytes) {
-            risks.push(format!("Polyglot ファイルです ({a} と {b} の両方として有効)"));
-            is_dangerous = true;
-        }
-
-        // 4. SVG のスクリプト実行 / XXE / プロンプト注入
-        if let Ok(text) = std::str::from_utf8(bytes) {
-            if svg_guard::looks_like_svg(text) {
-                let scan = svg_guard::scan_svg(text);
-                if !scan.safe_as_attachment {
-                    for r in &scan.risks {
-                        risks.push(format!("SVG のリスク: {r:?}"));
-                    }
+    // 5. カレンダー招待 (.ics) の検査 (CalPhishing)
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        let is_ics = filename.to_ascii_lowercase().ends_with(".ics")
+            || declared_mime.to_ascii_lowercase().contains("text/calendar")
+            || text.contains("BEGIN:VCALENDAR");
+        if is_ics {
+            let scan = calendar_guard::CalendarGuard.analyze(text);
+            if !matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Safe) {
+                for r in &scan.risks {
+                    risks.push(format!("カレンダー招待のリスク: {r:?}"));
+                }
+                // Danger のみ実行リスク扱い。Caution は注意喚起に留める。
+                if matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Danger) {
                     is_dangerous = true;
                 }
             }
         }
-
-        // 5. カレンダー招待 (.ics) の検査
-        //    悪意ある招待は自動登録で永続化し、元メールを削除しても残る
-        //    (CalPhishing)。招待は「添付」として届くためここで検査する。
-        if let Ok(text) = std::str::from_utf8(bytes) {
-            let is_ics = filename.to_ascii_lowercase().ends_with(".ics")
-                || declared_mime.to_ascii_lowercase().contains("text/calendar")
-                || text.contains("BEGIN:VCALENDAR");
-            if is_ics {
-                let scan = calendar_guard::CalendarGuard.analyze(text);
-                if !matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Safe) {
-                    for r in &scan.risks {
-                        risks.push(format!("カレンダー招待のリスク: {r:?}"));
-                    }
-                    // Danger のみ実行リスク扱い。Caution は注意喚起に留める。
-                    if matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Danger) {
-                        is_dangerous = true;
-                    }
-                }
-            }
-        }
-
-        // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
-        for r in metadata_check::detect_metadata_risks(&filename, bytes) {
-            risks.push(format!("メタデータが含まれます: {r:?}"));
-        }
-
-        out.push(AttachmentScan { filename, declared_mime, size_bytes, risks, is_dangerous });
     }
-    out
+
+    // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
+    for r in metadata_check::detect_metadata_risks(filename, bytes) {
+        risks.push(format!("メタデータが含まれます: {r:?}"));
+    }
+
+    AttachmentScan {
+        filename: filename.to_string(),
+        declared_mime: declared_mime.to_string(),
+        size_bytes,
+        risks,
+        is_dangerous,
+    }
 }

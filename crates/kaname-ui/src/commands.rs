@@ -1908,3 +1908,113 @@ async fn current_account_id() -> String {
         Err(_) => String::new(),
     }
 }
+
+// ============================================================================
+// 添付ファイルのダウンロード + 検査
+//
+// D10 の残る唯一の項目。従来 `download_url` は保持されるだけで参照ゼロ
+// (blob download 未実装) だった。
+//
+// **安全側の設計**: ダウンロードしたバイトは必ず `scan_attachment_bytes` に
+// かけ、危険と判定されたらディスクに書かない。kaname-sandbox が no-op の現状、
+// 実行はさせず「検査して警告」に留める。
+// ============================================================================
+
+/// 添付ダウンロードの結果。
+#[derive(Debug, serde::Serialize)]
+pub struct AttachmentDownload {
+    /// ファイル名。
+    pub filename:     String,
+    /// MIME タイプ。
+    pub mime:         String,
+    /// サイズ (bytes)。
+    pub size_bytes:   u64,
+    /// 検出されたリスク (人間可読)。
+    pub risks:        Vec<String>,
+    /// 実行リスクがあるか。
+    pub is_dangerous: bool,
+    /// 隔離ディレクトリへの保存先。危険な場合は書き込まないため None。
+    pub saved_path:   Option<String>,
+}
+
+/// メールの添付ファイルをダウンロードし、検査してから隔離保存する。
+///
+/// `blob_id` が空の添付 (インライン参照のみ等) は取得できないためエラー。
+pub async fn mail_download_attachment(
+    email_id: String,
+    blob_id: String,
+) -> Result<AttachmentDownload, String> {
+    if blob_id.trim().is_empty() {
+        return Err("この添付には blobId がなく取得できません".to_string());
+    }
+    let client = jmap_client().await?;
+
+    // 対象メールの添付メタデータ (name / type) を得る。
+    let full = client
+        .get_email_body(&email_id)
+        .await
+        .map_err(|e| format!("メールの取得に失敗しました: {e}"))?;
+    let part = full
+        .attachments
+        .unwrap_or_default()
+        .into_iter()
+        .find(|p| p.blob_id.as_deref() == Some(blob_id.as_str()))
+        .ok_or_else(|| "指定された添付が見つかりません".to_string())?;
+
+    let filename = part.name.clone().unwrap_or_else(|| "unnamed".to_string());
+    let mime = part.mime_type.clone().unwrap_or_else(|| "application/octet-stream".to_string());
+
+    // blob を取得する。
+    let bytes = client
+        .download_blob(&blob_id, &mime, &filename)
+        .await
+        .map_err(|e| format!("添付のダウンロードに失敗しました: {e}"))?;
+
+    // **ディスクに書く前に必ず検査する**。
+    let scan = kaname_render::scan_attachment_bytes(&filename, &mime, &bytes);
+
+    let saved_path = if scan.is_dangerous {
+        // 危険な添付は書き出さない。利用者に理由を示すだけ。
+        None
+    } else {
+        // 隔離ディレクトリ (アプリの一時領域) に書く。
+        // ファイル名はサニタイズし、パストラバーサルを防ぐ。
+        let safe_name = sanitize_filename(&filename);
+        let dir = std::env::temp_dir().join("kaname-attachments");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Err(format!("保存先を作成できません: {e}"));
+        }
+        let path = dir.join(&safe_name);
+        std::fs::write(&path, &bytes).map_err(|e| format!("保存に失敗しました: {e}"))?;
+        Some(path.to_string_lossy().into_owned())
+    };
+
+    Ok(AttachmentDownload {
+        filename,
+        mime,
+        size_bytes: scan.size_bytes,
+        risks: scan.risks,
+        is_dangerous: scan.is_dangerous,
+        saved_path,
+    })
+}
+
+/// ファイル名からパス区切り・親参照・制御文字を除去する。
+///
+/// 添付のファイル名は攻撃者が制御するため、そのまま `join` すると
+/// `../../etc/passwd` のようなパストラバーサルを許す。ベース名のみを採り、
+/// 危険な文字を `_` に置換する。
+fn sanitize_filename(name: &str) -> String {
+    // パス区切りの後ろ (ベース名) だけを採る。
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let cleaned: String = base
+        .chars()
+        .map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '\0') { '_' } else { c })
+        .collect();
+    let trimmed = cleaned.trim_matches(['.', ' ']);
+    if trimmed.is_empty() {
+        "attachment".to_string()
+    } else {
+        trimmed.chars().take(200).collect()
+    }
+}
