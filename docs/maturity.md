@@ -77,6 +77,7 @@ First Principles 監査で以下を実コード確認し、**その後すべて�
 | Tauri コマンド層の依存 | ~~`kaname-jmap`/`kaname-store` が無い~~ → **両方追加済み。到達可能 18/27** |
 | メール永続化 | ~~INSERT/SELECT がゼロ件~~ → **`save_message`/`list_messages`/`search_messages` を実装** |
 | メール受信 | ~~呼び出し元が存在しない~~ → **`mail_fetch` が受信し各通に BEC 判定を付与** |
+| メールを開く | ~~`mail_get_body`/`bec_get_score` がスタブ~~ → **`mail_open` が生 blob を取得し `.eml` と同じパイプラインで本文・BEC・添付・DLP を返す** |
 | メール送信 | ~~Tauri コマンド未登録~~ → **`mail_send` を登録。送信前に DLP (Outbound) を実行** |
 | アカウント設定 | ~~UI が存在しない~~ → **「サーバ接続」タブを追加** (トークンは永続化しない方針) |
 | 検索 | ~~ハンドラ未バインド~~ → **`mail_search` に接続** (LIKE ベース。FTS5 は SQLCipher での有効性未確認のため見送り) |

@@ -138,12 +138,55 @@ pub struct BodyDto {
 ///
 /// サニタイズ経路自体は健在で、「ファイル解析」タブ (`mail_import_eml`) が
 /// 実際の `.eml` に対して同じ `sanitize_html` → `to_srcdoc` を実行する。
-pub async fn mail_get_body(email_id: String) -> Result<BodyDto, String> {
-    let _ = email_id;
-    Err("未配線: 受信箱はサーバに接続されていません。\
-         実際のメールを解析するには「ファイル解析」タブをご利用ください \
-         (docs/gap-analysis.md D10 参照)"
-        .to_string())
+/// サーバ上のメールを開き、**ローカル `.eml` と同じパイプライン**で解析する。
+///
+/// JMAP の `Email.blobId` は生 RFC 5322 全体を指す。これを `download_blob` で
+/// 取得して `analyze_raw_email` に渡せば、本文サニタイズ・BEC スコア・
+/// シグナル・添付検査・DLP・リンク評価がすべて得られる。
+/// 「サーバのメールを開く」ために新しい解析コードは不要である。
+pub async fn mail_open(email_id: String) -> Result<ImportedEmail, String> {
+    let client = jmap_client().await?;
+    let full = client
+        .get_email_body(&email_id)
+        .await
+        .map_err(|e| format!("メールの取得に失敗しました: {e}"))?;
+    let blob_id = full
+        .blob_id
+        .ok_or_else(|| "このメールには blobId がなく本文を取得できません".to_string())?;
+    let bytes = client
+        .download_blob(&blob_id, "message/rfc822", "message.eml")
+        .await
+        .map_err(|e| format!("メール本文の取得に失敗しました: {e}"))?;
+    analyze_raw_email(&bytes).await
+}
+
+/// 受信トレイ UI 用のメールボックス行。
+#[derive(Debug, serde::Serialize)]
+pub struct MailboxRow {
+    pub id:            String,
+    pub name:          String,
+    pub role:          Option<String>,
+    pub unread_emails: u32,
+    pub total_emails:  u32,
+}
+
+/// 接続中のサーバからメールボックス一覧を取得する。
+pub async fn mail_get_mailboxes() -> Result<Vec<MailboxRow>, String> {
+    let client = jmap_client().await?;
+    let list = client
+        .get_mailboxes()
+        .await
+        .map_err(|e| format!("メールボックス一覧の取得に失敗しました: {e}"))?;
+    Ok(list
+        .into_iter()
+        .map(|m| MailboxRow {
+            id:            m.id,
+            name:          m.name,
+            role:          m.role,
+            unread_emails: m.unread_emails,
+            total_emails:  m.total_emails,
+        })
+        .collect())
 }
 
 /// ローカルの `.eml` ファイルを解析した結果。
@@ -199,7 +242,15 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     info!(path=%path, "mail_import_eml");
 
     let bytes = std::fs::read(&path).map_err(|e| format!("ファイルを読めません ({path}): {e}"))?;
-    let env = kaname_render::parse(&bytes).map_err(|e| format!("メールの解析に失敗: {e}"))?;
+    analyze_raw_email(&bytes).await
+}
+
+/// 生 RFC 5322 バイト列を解析パイプライン全体に通す。
+///
+/// ローカル `.eml` (`mail_import_eml`) とサーバ上のメール (`mail_open`) の
+/// **唯一の解析経路**。入口が複数あっても検出器は一つに集約する。
+pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
+    let env = kaname_render::parse(bytes).map_err(|e| format!("メールの解析に失敗: {e}"))?;
 
     // 差出人ヘッダを復元する。
     let from = env
@@ -292,7 +343,7 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
         bec_score: assessment.score,
         bec_signals: assessment.signals.iter().map(|s| s.label.clone()).collect(),
         // 添付を実際に検査する (バイト列は kaname-render 内で完結)。
-        attachments: kaname_render::scan_attachments(&bytes),
+        attachments: kaname_render::scan_attachments(bytes),
         body: BodyDto {
             srcdoc:  srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),

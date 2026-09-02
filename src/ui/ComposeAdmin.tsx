@@ -2,7 +2,8 @@
 //
 // 機能:
 //   - DLP 事前チェック (送信前にリアルタイム警告)
-//   - AI 返信草案生成
+//   - (AI 返信草案は LLM 推論がスタブのため提供しない。以前は定型文を
+//      「AI 草案」と表示して挿入しており、AI 出力を偽っていた)
 //   - MLS 暗号化状態表示
 //   - キーボードショートカット (Cmd/Ctrl+Enter で送信)
 
@@ -26,7 +27,6 @@ export const Compose = (props: ComposeProps) => {
   const [body,     setBody]    = createSignal("");
   const [sending,  setSending] = createSignal(false);
   const [dlpWarn,  setDlpWarn] = createSignal<string | null>(null);
-  const [aiLoading, setAiLoading] = createSignal(false);
   const [error,    setError]   = createSignal<string | null>(null);
   const [mlsReady, setMlsReady] = createSignal<boolean | null>(null);
 
@@ -76,18 +76,6 @@ export const Compose = (props: ComposeProps) => {
       setError(String(e));
     } finally {
       setSending(false);
-    }
-  };
-
-  const handleAiDraft = async () => {
-    setAiLoading(true);
-    try {
-      // 本番: P-LLM に返信草案を依頼
-      // const draft = await invoke<string>("ai_draft_reply", { replyToId: props.replyToId, instruction: body() });
-      // setBody(draft);
-      setBody("（AI 草案）ご連絡ありがとうございます。ご要望の件について確認いたします。");
-    } finally {
-      setAiLoading(false);
     }
   };
 
@@ -241,24 +229,6 @@ export const Compose = (props: ComposeProps) => {
           {sending() ? "送信中..." : "送信 (⌘↵)"}
         </button>
 
-        <Show when={props.replyToId}>
-          <button
-            onClick={handleAiDraft}
-            disabled={aiLoading()}
-            style={{
-              background: "#1A2129",
-              color: "#00C4CC",
-              border: "1px solid #00C4CC30",
-              "border-radius": "6px",
-              padding: "8px 16px",
-              "font-size": "12px",
-              cursor: aiLoading() ? "not-allowed" : "pointer",
-              opacity: aiLoading() ? 0.7 : 1,
-            }}
-          >
-            {aiLoading() ? "生成中..." : "✨ AI 草案"}
-          </button>
-        </Show>
 
         <div style={{ flex: "1" }} />
 

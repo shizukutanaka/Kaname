@@ -49,10 +49,17 @@ interface BodyDto {
   render_risks: string[];
 }
 
-interface BecScoreDto {
-  score: number;
-  verdict: string;
-  signals: { family: string; label: string; contribution: number }[];
+/** `mail_open` の戻り値。ローカル .eml 解析 (`mail_import_eml`) と同じ形。 */
+interface OpenedEmail {
+  from: string;
+  subject: string;
+  auth: string;
+  bec_verdict: string;
+  bec_score: number;
+  bec_signals: string[];
+  attachments: { filename: string; risks: string[]; is_dangerous: boolean }[];
+  body: BodyDto;
+  dlp_findings: string[];
 }
 
 // ============================================================================
@@ -270,21 +277,27 @@ const EmailDetailPanel = (props: {
   emailId: string | null;
   onClose: () => void;
 }) => {
-  const [body, setBody] = createSignal<BodyDto | null>(null);
-  const [bec, setBec] = createSignal<BecScoreDto | null>(null);
+  const [opened, setOpened] = createSignal<OpenedEmail | null>(null);
+  const [openError, setOpenError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+  // 以前は mail_get_body と bec_get_score の 2 コマンドを呼んでいたが、
+  // どちらもスタブで、メールを開くたびに必ず失敗していた。
+  // mail_open は生 RFC 5322 をサーバから取得し、ローカル .eml と同じ
+  // パイプラインで本文・BEC・添付・DLP をまとめて返す。
+  const body = () => opened()?.body ?? null;
+  const bec  = () => opened();
 
   createEffect(async () => {
     if (!props.emailId) return;
     setLoading(true);
+    setOpenError(null);
     try {
-      const [bodyData, becData] = await Promise.all([
-        invoke<BodyDto>("mail_get_body", { emailId: props.emailId }),
-        invoke<BecScoreDto>("bec_get_score", { emailId: props.emailId }),
-      ]);
-      setBody(bodyData);
-      setBec(becData);
-      await invoke("mail_mark_read", { ids: [props.emailId] });
+      const data = await invoke<OpenedEmail>("mail_open", { emailId: props.emailId });
+      setOpened(data);
+      await invoke("mail_mark_read", { ids: [props.emailId] }).catch(() => {});
+    } catch (e) {
+      setOpened(null);
+      setOpenError(String(e));
     } finally {
       setLoading(false);
     }
@@ -299,13 +312,13 @@ const EmailDetailPanel = (props: {
       overflow: "hidden",
     }}>
       {/* BEC 警告バナー */}
-      <Show when={bec() && bec()!.verdict !== "SAFE"}>
+      <Show when={bec() && bec()!.bec_verdict !== "SAFE"}>
         <div style={{
           padding: "10px 20px",
-          background: bec()!.verdict === "DANGEROUS" ? "#E5484D12" :
-                      bec()!.verdict === "SUSPICIOUS" ? "#E5A50012" : "#F5A62312",
+          background: bec()!.bec_verdict === "DANGEROUS" ? "#E5484D12" :
+                      bec()!.bec_verdict === "SUSPICIOUS" ? "#E5A50012" : "#F5A62312",
           "border-bottom": `1px solid ${
-            bec()!.verdict === "DANGEROUS" ? "#E5484D40" : "#F5A62340"
+            bec()!.bec_verdict === "DANGEROUS" ? "#E5484D40" : "#F5A62340"
           }`,
           display: "flex",
           "align-items": "center",
@@ -314,16 +327,16 @@ const EmailDetailPanel = (props: {
           <div style={{
             "font-size": "12px",
             "font-weight": "600",
-            color: bec()!.verdict === "DANGEROUS" ? "#E5484D" : "#F5A623",
+            color: bec()!.bec_verdict === "DANGEROUS" ? "#E5484D" : "#F5A623",
           }}>
-            ⚠ {bec()!.verdict === "DANGEROUS"
+            ⚠ {bec()!.bec_verdict === "DANGEROUS"
               ? "このメールは差出人を証明できません — BEC 攻撃の可能性があります"
               : "このメールについて注意が必要な点があります"}
           </div>
           <div style={{ flex: "1" }} />
-          <Show when={bec()!.signals.length > 0}>
+          <Show when={bec()!.bec_signals.length > 0}>
             <span style={{ "font-size": "11px", color: "#8B96A5" }}>
-              検出シグナル: {bec()!.signals.map(s => s.label).join(", ")}
+              検出シグナル: {bec()!.bec_signals.join(", ")}
             </span>
           </Show>
         </div>
@@ -344,6 +357,16 @@ const EmailDetailPanel = (props: {
         <Show when={!loading() && body()}>
           {/* レンダリング系の検出結果 (HTMLスマグリング / テキストQR / CSS外部参照)。
               kaname-render の検出器を実際に実行した結果をここに表示する。 */}
+          <Show when={bec()!.attachments.some(a => a.is_dangerous) || bec()!.dlp_findings.length > 0}>
+            <div style={{ padding: "8px 16px", "font-size": "12px", color: "#E5A500", background: "#E5A50012", "border-bottom": "0.5px solid #E5A50040" }}>
+              <For each={bec()!.attachments.filter(a => a.is_dangerous)}>
+                {a => <div>⚠ 危険な添付: {a.filename} — {a.risks.join(", ")}</div>}
+              </For>
+              <For each={bec()!.dlp_findings}>
+                {f => <div>🔒 機微情報: {f}</div>}
+              </For>
+            </div>
+          </Show>
           <Show when={(body()!.render_risks ?? []).length > 0}>
             <div style={{
               margin: "0 0 12px 0",
@@ -383,7 +406,7 @@ const EmailDetailPanel = (props: {
             display: "flex", "align-items": "center", "justify-content": "center",
             height: "100%", color: "#5A6473",
           }}>
-            メールを読み込めませんでした
+            {openError() ?? "メールを読み込めませんでした"}
           </div>
         </Show>
       </div>
