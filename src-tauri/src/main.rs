@@ -30,11 +30,6 @@ async fn mail_get_summary() -> Result<commands::MailSummary, String> {
 }
 
 #[tauri::command]
-async fn mail_list(mailbox: String, limit: Option<u32>) -> Result<Vec<commands::EmailRow>, String> {
-    commands::mail_list(mailbox, limit).await
-}
-
-#[tauri::command]
 async fn mail_open(email_id: String) -> Result<commands::ImportedEmail, String> {
     commands::mail_open(email_id).await
 }
@@ -381,7 +376,6 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             health_check,
             mail_get_summary,
-            mail_list,
             mail_open,
             mail_mark_read,
             mail_trash,

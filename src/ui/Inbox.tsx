@@ -49,6 +49,38 @@ interface BodyDto {
   render_risks: string[];
 }
 
+/** `mail_search` / `mail_list_stored` が返す保存済みメール。 */
+interface StoredMessage {
+  id: string;
+  from_addr: string;
+  from_name: string | null;
+  subject: string | null;
+  body_preview: string | null;
+  received_at: string | null;
+  is_read: boolean;
+  bec_score: number | null;
+  bec_verdict: string | null;
+}
+
+/**
+ * 保存済みメールを一覧表示用に詰め替える。
+ *
+ * starred / MLS の情報は保存していないため false を入れる
+ * (不明な値を true と偽らない)。
+ */
+const storedToListItem = (m: StoredMessage): EmailListItem => ({
+  id:          m.id,
+  from_name:   m.from_name,
+  from_addr:   m.from_addr,
+  subject:     m.subject,
+  preview:     m.body_preview,
+  received_at: m.received_at,
+  is_read:     m.is_read,
+  is_starred:  false,
+  bec_verdict: m.bec_verdict,
+  is_mls:      false,
+});
+
 /** `mail_open` の戻り値。ローカル .eml 解析 (`mail_import_eml`) と同じ形。 */
 interface OpenedEmail {
   from: string;
@@ -429,6 +461,8 @@ export const Inbox = () => {
   // 従来この検索欄はハンドラ未バインドで機能していなかった (D10)。
   const [searchQuery, setSearchQuery]   = createSignal("");
   const [searching, setSearching]       = createSignal(false);
+  /** サーバから取得できず、保存済みメールを表示していることを示す。 */
+  const [offline, setOffline]           = createSignal(false);
 
   /** サーバからメールを取得して一覧に反映する。 */
   const loadEmails = async (mbxId: string | null) => {
@@ -443,8 +477,22 @@ export const Inbox = () => {
         limit:     50,
       });
       setEmails(items);
+      setOffline(false);
     } catch (e) {
-      setError(String(e));
+      // サーバに繋がらないときは、保存済みのメールを表示する。
+      // 「取得できない」ことは「読めない」ことを意味しない。
+      try {
+        const stored = await invoke<StoredMessage[]>("mail_list_stored", {
+          mailboxId: mbxId,
+          limit:     50,
+        });
+        setEmails(stored.map(storedToListItem));
+        setOffline(true);
+        setError(stored.length === 0 ? String(e) : null);
+      } catch {
+        setError(String(e));
+        setOffline(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -466,24 +514,8 @@ export const Inbox = () => {
       // StoredMessage は EmailListItem と形が異なるため詰め替える。
       // 保存済みメールには starred/mls の情報が無いので false を入れる
       // (不明な値を true と偽らない)。
-      const found = await invoke<{
-        id: string; from_addr: string; from_name: string | null;
-        subject: string | null; body_preview: string | null;
-        received_at: string | null; is_read: boolean;
-        bec_score: number | null; bec_verdict: string | null;
-      }[]>("mail_search", { query: q, limit: 50 });
-      setEmails(found.map(m => ({
-        id: m.id,
-        from_name: m.from_name,
-        from_addr: m.from_addr,
-        subject: m.subject,
-        preview: m.body_preview,
-        received_at: m.received_at,
-        is_read: m.is_read,
-        is_starred: false,
-        bec_verdict: m.bec_verdict,
-        is_mls: false,
-      })));
+      const found = await invoke<StoredMessage[]>("mail_search", { query: q, limit: 50 });
+      setEmails(found.map(storedToListItem));
     } catch (e) {
       setError(String(e));
       setEmails([]);
@@ -665,6 +697,16 @@ export const Inbox = () => {
             }}
           />
         </div>
+
+        {/* オフライン表示中のバナー: 何を見ているかを偽らない */}
+        <Show when={offline()}>
+          <div style={{
+            padding: "6px 16px", "font-size": "11px", color: "#F5A623",
+            background: "#F5A62312", "border-bottom": "0.5px solid #F5A62340",
+          }}>
+            サーバに接続できないため、保存済みのメールを表示しています
+          </div>
+        </Show>
 
         {/* メールリスト本体 */}
         <div style={{ flex: "1", "overflow-y": "auto" }}>

@@ -23,7 +23,7 @@ import { initI18n } from "./i18n";
 
 // ── コンポーネントインポート ──
 import { Inbox }               from "./ui/Inbox";
-import { Compose }             from "./ui/ComposeAdmin";
+import { Compose }             from "./ui/Compose";
 import { SecurityDashboard }   from "./ui/SecurityDashboard";
 import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
 import { EmlImport }           from "./ui/EmlImport";
