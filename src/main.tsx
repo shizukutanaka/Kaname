@@ -28,6 +28,7 @@ import { SecurityDashboard }   from "./ui/SecurityDashboard";
 import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
 import { EmlImport }           from "./ui/EmlImport";
 import { MailConnect }         from "./ui/MailConnect";
+import { Onboarding }          from "./ui/Onboarding";
 
 // ── 型定義 ──
 
@@ -77,6 +78,11 @@ const App = () => {
   });
 
   const [initError, setInitError] = createSignal<string | null>(null);
+  // 初回起動ならオンボーディングを表示する。判定は Store の設定値
+  // (settings_is_onboarded)。Store が開けなかった場合は false になり
+  // 画面を出す側に倒れるが、保存も失敗するため毎回表示される。
+  // これは「保存できないのに保存したふりをする」より正直な挙動である。
+  const [needsOnboarding, setNeedsOnboarding] = createSignal(false);
 
   // ── 起動シーケンス ──
   onMount(async () => {
@@ -84,7 +90,16 @@ const App = () => {
       // 0. i18n 初期化 (ブラウザ言語自動検出)
       await initI18n();
 
-      // 1. バックエンド接続確認
+      // 1. 履歴データベースを既定の場所に開く。
+      //    以前は history_open がどの UI からも呼ばれておらず、永続化・検索・
+      //    送信者履歴がすべて無言で無効だった。失敗は致命的ではないので
+      //    ログに残して続行する (解析・受信はDBなしでも動く)。
+      await invoke<string>("history_open_default").catch(e =>
+        console.warn("[Kaname] 履歴DBを開けません (永続化・検索は無効):", e));
+      const onboarded = await invoke<boolean>("settings_is_onboarded").catch(() => false);
+      setNeedsOnboarding(!onboarded);
+
+      // 2. バックエンド接続確認
       const health = await invoke<{ ok: boolean; version: string }>("health_check")
         .catch(() => ({ ok: false, version: "unknown" }));
 
@@ -244,7 +259,10 @@ const App = () => {
         when={!initError()}
         fallback={<ErrorState message={initError()!} />}
       >
-        <div style={{ "padding-bottom": "44px" }}>
+        <Show when={needsOnboarding()}>
+          <Onboarding onComplete={() => setNeedsOnboarding(false)} />
+        </Show>
+        <div style={{ "padding-bottom": "44px" }} hidden={needsOnboarding()}>
           <Show when={state().activeView === "inbox"}>
             <Inbox />
           </Show>
