@@ -43,6 +43,10 @@ kaname-observability = { path = "../kaname-observability" }
 # 出荷バイナリから到達不能で、EmailRow.triage は "important" 固定だった。
 # 外部依存は kaname-error/kaname-store のみで、いずれも本クレートに既存。
 kaname-core = { path = "../kaname-core" }
+# 履歴 DB の既定パスと SQLCipher 鍵の生成 (いずれも kaname-core 経由で既に
+# バイナリに含まれる workspace 依存。新規外部 crate は増えない)。
+dirs = { workspace = true }
+rand = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"

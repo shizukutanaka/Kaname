@@ -451,6 +451,34 @@ impl Store {
         Ok(valid)
     }
 
+    /// アカウント行が無ければ作る (FK 制約の前提)。
+    ///
+    /// `PRAGMA foreign_keys = ON` のため、`contacts`/`messages`/`settings` は
+    /// 対応する `accounts` 行が無いと INSERT に失敗する。ところが本番コードに
+    /// `accounts` への INSERT は存在せず (テストの `seed_account` のみ)、
+    /// **永続化は一度も成功し得ない状態だった**。書き込み前に必ずこれを通す。
+    /// `identity_fp` は MLS 未実装のため account_id のハッシュで埋める。
+    fn ensure_account_sync(conn: &Connection, account_id: &str) -> Result<(), StoreError> {
+        conn.execute(
+            "INSERT OR IGNORE INTO accounts (id, email, identity_fp) \
+             VALUES (?1, ?1 || '@jmap.local', ?2);",
+            params![account_id, sha256_hex(account_id.as_bytes())],
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
+    /// メールボックス行が無ければ作る (`messages.mailbox_id` の FK 前提)。
+    fn ensure_mailbox_sync(
+        conn: &Connection, account_id: &str, mailbox_id: &str,
+    ) -> Result<(), StoreError> {
+        conn.execute(
+            "INSERT OR IGNORE INTO mailboxes (id, account_id, name, jmap_id) \
+             VALUES (?1, ?2, ?1, ?1);",
+            params![mailbox_id, account_id],
+        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
     /// 設定値を取得する。
     pub async fn get_setting(
         &self, account_id: &str, key: &str,
@@ -475,6 +503,7 @@ impl Store {
         &self, account_id: &str, key: &str, value: &str,
     ) -> Result<(), StoreError> {
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        Self::ensure_account_sync(&conn, account_id)?;
 
         conn.execute(
             "INSERT INTO settings (account_id, key, value, updated_at)
@@ -552,6 +581,7 @@ impl Store {
         }
 
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        Self::ensure_account_sync(&conn, account_id)?;
 
         let id = sha256_hex(format!("{account_id}:{email}").as_bytes());
 
@@ -1097,6 +1127,8 @@ impl Store {
         if let Some(v) = &msg.body_preview { validate_text_field(v, "body_preview", 10_000)?; }
 
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        Self::ensure_account_sync(&conn, account_id)?;
+        Self::ensure_mailbox_sync(&conn, account_id, mailbox_id)?;
         let id = sha256_hex_fields(&[account_id.as_bytes(), msg.jmap_id.as_bytes()]);
 
         conn.execute(

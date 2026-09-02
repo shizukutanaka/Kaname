@@ -195,14 +195,6 @@ async fn mail_scan_folder(path: String) -> Result<commands::FolderScanResult, St
     commands::mail_scan_folder(path).await
 }
 
-/// バックエンド未配線を示す共通エラー文言。
-fn not_wired(feature: &str) -> String {
-    format!(
-        "未配線: {feature} はまだバックエンドに接続されていません \
-         (JMAP 受信・送信・永続化は未実装。docs/maturity.md / docs/gap-analysis.md D10 参照)"
-    )
-}
-
 /// メールを送信する (JMAP)。送信前に DLP (Outbound) を実行する。
 #[tauri::command]
 async fn mail_send(
@@ -293,8 +285,17 @@ async fn settings_save_onboarding(
     continuity: bool,
     telemetry: bool,
 ) -> Result<(), String> {
-    let _ = (notifications, continuity, telemetry);
-    Err(not_wired("オンボーディング設定の保存"))
+    commands::settings_save_onboarding(notifications, continuity, telemetry).await
+}
+
+#[tauri::command]
+async fn settings_is_onboarded() -> bool {
+    commands::settings_is_onboarded().await
+}
+
+#[tauri::command]
+async fn history_open_default() -> Result<String, String> {
+    commands::history_open_default().await
 }
 
 // ============================================================================
@@ -419,6 +420,8 @@ fn main() {
             mail_send,
             mail_get_mailboxes,
             settings_save_onboarding,
+            settings_is_onboarded,
+            history_open_default,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");

@@ -1766,6 +1766,88 @@ pub async fn history_open(path: String, key_hex: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 既定の場所に履歴データベースを開く (アプリ起動時に呼ぶ)。
+///
+/// # なぜ必要か
+/// `history_open` はコマンドとして存在したが、**どの UI からも呼ばれていなかった**。
+/// Store が開かれなければ永続化・検索・送信者履歴はすべて無言で無効になる
+/// (「Store 未接続なら何もしない」設計のため、失敗すら表示されない)。
+///
+/// # 鍵の扱い (正直に)
+/// SQLCipher の鍵は `<data_dir>/kaname/history.key` に 0600 で保存する
+/// (初回起動時に OS の CSPRNG で 32 バイト生成)。OS キーチェーン統合は未実装
+/// のため、**同一ユーザー権限で動くプロセスからは鍵を読める**。
+/// これは「他ユーザー・ディスクの持ち出し」に対する保護であり、
+/// 「同一アカウント上のマルウェア」に対する保護ではない。
+pub async fn history_open_default() -> Result<String, String> {
+    if store_slot().lock().await.is_some() {
+        return Ok("already-open".to_string());
+    }
+    let base = dirs::data_dir()
+        .ok_or_else(|| "データディレクトリを特定できません".to_string())?
+        .join("kaname");
+    std::fs::create_dir_all(&base).map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
+
+    let key_path = base.join("history.key");
+    let key_hex = match std::fs::read_to_string(&key_path) {
+        Ok(k) if k.trim().len() == 64 => k.trim().to_string(),
+        _ => {
+            use rand::RngCore as _;
+            let mut raw = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut raw);
+            let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+            std::fs::write(&key_path, &hex).map_err(|e| format!("鍵ファイルを書けません: {e}"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+            }
+            hex
+        }
+    };
+
+    let db_path = base.join("history.db");
+    let shown = db_path.to_string_lossy().into_owned();
+    history_open(shown.clone(), key_hex).await?;
+    Ok(shown)
+}
+
+/// オンボーディングで選んだ設定を保存する。
+///
+/// 以前は `not_wired` を返すスタブで、そのために Onboarding 画面は
+/// 意図的に未到達にしていた (D22)。`settings` テーブルに保存する。
+/// アカウント接続前でも動くよう account_id は固定の "local" を使う。
+pub async fn settings_save_onboarding(
+    notifications: bool, continuity: bool, telemetry: bool,
+) -> Result<(), String> {
+    let store = store_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    for (k, v) in [
+        ("notifications", notifications),
+        ("continuity",    continuity),
+        ("telemetry",     telemetry),
+        ("onboarding_done", true),
+    ] {
+        store
+            .set_setting("local", k, if v { "true" } else { "false" })
+            .await
+            .map_err(|e| format!("設定の保存に失敗しました: {e}"))?;
+    }
+    Ok(())
+}
+
+/// オンボーディング済みか。Store 未接続なら false (画面を出す側に倒す)。
+pub async fn settings_is_onboarded() -> bool {
+    let Some(store) = store_slot().lock().await.clone() else { return false };
+    matches!(
+        store.get_setting("local", "onboarding_done").await,
+        Ok(Some(v)) if v == "true"
+    )
+}
+
 /// 履歴データベースを閉じる。
 pub async fn history_close() -> Result<(), String> {
     *store_slot().lock().await = None;

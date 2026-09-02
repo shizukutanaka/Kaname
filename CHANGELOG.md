@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **永続化は一度も成功し得ない状態だった (最重要)**
+  - `history_open` はコマンドとして存在したが**どの UI からも呼ばれておらず**、Store は出荷製品で一度も開かれていなかった。「Store 未接続なら何もしない」設計のため、永続化・検索・送信者履歴が**無言で無効**だった。起動時に `history_open_default` で `<data_dir>/kaname/history.db` を開く
+  - さらに `PRAGMA foreign_keys = ON` なのに `accounts`/`mailboxes` への本番 INSERT が存在せず (テストの `seed_account` のみ)、Store を開いても `save_message`/`record_received`/`set_setting` は **FK 違反で必ず失敗**していた。書き込み前に `ensure_account`/`ensure_mailbox` を通す
+  - SQLCipher 鍵は `history.key` (0600) に保存。**OS キーチェーン未統合のため同一ユーザー権限のプロセスからは読める**ことを明記 (他ユーザー・持ち出しへの保護であり、同一アカウント上のマルウェアへの保護ではない)
+- **オンボーディングを配線 (D22 解消)**: `settings_save_onboarding` を `settings` テーブルへ実装し、初回起動時に表示。到達可能フロントエンドモジュール **8/9 → 9/9**、`not_wired` スタブ **0 件**
 - **出荷 Inbox が呼ぶスタブ 3 件を実装** (`mail_open` / `mail_get_mailboxes`)
   - PR #82 で到達可能にした `Inbox` は `mail_get_body` / `bec_get_score` / `mail_get_mailboxes` を呼んでいたが、**3 つともスタブ**でメールを開くたびに必ず失敗していた。到達可能にした画面がスタブを呼ぶなら到達させた意味がない
   - `mail_open(email_id)`: JMAP の `blobId` (生 RFC 5322 全体) を `download_blob` で取得し、ローカル `.eml` と**同じ** `analyze_raw_email` に通す。本文・BEC スコア・シグナル・添付検査・DLP・リンク評価が一度に得られ、**新しい解析コードは 0 行**。`bec_get_score` という別コマンドは不要になり削除
