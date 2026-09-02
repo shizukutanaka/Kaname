@@ -6,13 +6,13 @@
 [![Security Audit](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kaname-app/kaname/releases)
-[![Status](https://img.shields.io/badge/status-v0.5.0-orange.svg)](docs/maturity.md)
+[![Status](https://img.shields.io/badge/status-v0.6.0-orange.svg)](docs/maturity.md)
 
 ---
 
 ## ⚠️ 実装ステータス (公開前に必読)
 
-**本リポジトリは v0.5.0+ です。メールの解析・受信・送信・永続化・検索・添付ダウンロードは
+**本リポジトリは v0.6.0 です。メールの解析・受信・送信・永続化・検索・添付ダウンロードは
 実装され配線済みですが、MLS 暗号化とローカル LLM 推論はモック/スタブのままです。
 また開発環境の制約により型検査 (`cargo check`) が未実施です。**
 製品の長所・短所・改善点と「完成の定義」は [`docs/socratic-review.md`](docs/socratic-review.md) に

@@ -1,6 +1,6 @@
 {
   "name": "kaname",
-  "version": "0.3.21",
+  "version": "0.6.0",
   "description": "AIが助けても裏切らない法人向けセキュアメールクライアント",
   "private": true,
   "scripts": {
