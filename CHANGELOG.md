@@ -8,6 +8,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **発見した欠陥クラスを `scripts/static-check.sh` に自動化** (マスク式の第5段階「自動化」)
+  - 検査3: `src/main.tsx` からの import 到達可能性 (死蔵モジュールの検出)
+  - 検査4: `invoke("name", {args})` と Tauri コマンド定義の**名前・引数の整合** (camelCase → snake_case 変換、shorthand プロパティ対応)
+  - 検査5: 登録済みだが UI から呼ばれないコマンドの列挙 (WARN)
+  - v0.6.0 までに人手で 4 回発見した欠陥は、どれも機械的に検出できたクラスだった。測定を毎回捨てていたことが再発の原因
+
+### Fixed
+- **`AdminDashboard` が死蔵し、存在しない 3 コマンドを呼んでいた**: どこからも描画されないまま `admin_get_dashboard` / `admin_get_audit_log` / `admin_list_incidents` を invoke していた。削除し、`ComposeAdmin.tsx` を実態に合わせ `Compose.tsx` に改名。**ファイルは到達可能だがコンポーネントは死んでいる**という、検査3では見つからない欠陥だった
+- **`mail_list` が空配列を返す偽実装だった**: エラーではなく `Ok(Vec::new())` を返すため「メールなし」と表示される。呼び手はゼロで `mail_fetch` に置き換え済みのため削除
+
+### Changed
+- **オフライン時は保存済みメールを表示**: `mail_fetch` が失敗したら `mail_list_stored` にフォールバックし、「サーバに接続できないため保存済みのメールを表示しています」と明示する。取得できないことは読めないことを意味しない
+
 ## [0.6.0] - 2026-09-02 — 「到達可能な UI がすべて実装を呼ぶ」完成リリース
 
 v0.5.0 が「検出器を組み付けた」リリースなら、v0.6.0 は**出荷 UI が実際に

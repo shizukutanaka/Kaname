@@ -98,12 +98,6 @@ pub async fn mail_get_summary() -> Result<MailSummary, String> {
 /// 表示できる本物のメールは存在しない。
 ///
 /// 偽のメールを並べるより空を返す方が正確であり、利用者を欺かない。
-/// 実際のメール解析は「ファイル解析」タブを使う。
-pub async fn mail_list(_mailbox: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
-    let _ = limit;
-    Ok(Vec::new())
-}
-
 
 /// サニタイズ済み本文 (iframe 描画用)。
 ///
