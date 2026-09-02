@@ -35,8 +35,8 @@ async fn mail_list(mailbox: String, limit: Option<u32>) -> Result<Vec<commands::
 }
 
 #[tauri::command]
-async fn mail_get_body(email_id: String) -> Result<commands::BodyDto, String> {
-    commands::mail_get_body(email_id).await
+async fn mail_open(email_id: String) -> Result<commands::ImportedEmail, String> {
+    commands::mail_open(email_id).await
 }
 
 #[tauri::command]
@@ -283,24 +283,8 @@ async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<comman
 }
 
 #[tauri::command]
-async fn mail_get_mailboxes() -> Result<Vec<serde_json::Value>, String> {
-    Err(not_wired("メールボックス取得"))
-}
-
-#[tauri::command]
-async fn mail_query_emails(
-    mailbox_id: String,
-    position: Option<u32>,
-    limit: Option<u32>,
-) -> Result<Vec<serde_json::Value>, String> {
-    let _ = (mailbox_id, position, limit);
-    Err(not_wired("メール一覧取得"))
-}
-
-#[tauri::command]
-async fn bec_get_score(email_id: String) -> Result<serde_json::Value, String> {
-    let _ = email_id;
-    Err(not_wired("BEC スコア取得"))
+async fn mail_get_mailboxes() -> Result<Vec<commands::MailboxRow>, String> {
+    commands::mail_get_mailboxes().await
 }
 
 #[tauri::command]
@@ -397,7 +381,7 @@ fn main() {
             health_check,
             mail_get_summary,
             mail_list,
-            mail_get_body,
+            mail_open,
             mail_mark_read,
             mail_trash,
             ai_detect_phishing,
@@ -434,8 +418,6 @@ fn main() {
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
             mail_send,
             mail_get_mailboxes,
-            mail_query_emails,
-            bec_get_score,
             settings_save_onboarding,
         ])
         .build(tauri::generate_context!())

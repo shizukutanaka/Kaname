@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **出荷 Inbox が呼ぶスタブ 3 件を実装** (`mail_open` / `mail_get_mailboxes`)
+  - PR #82 で到達可能にした `Inbox` は `mail_get_body` / `bec_get_score` / `mail_get_mailboxes` を呼んでいたが、**3 つともスタブ**でメールを開くたびに必ず失敗していた。到達可能にした画面がスタブを呼ぶなら到達させた意味がない
+  - `mail_open(email_id)`: JMAP の `blobId` (生 RFC 5322 全体) を `download_blob` で取得し、ローカル `.eml` と**同じ** `analyze_raw_email` に通す。本文・BEC スコア・シグナル・添付検査・DLP・リンク評価が一度に得られ、**新しい解析コードは 0 行**。`bec_get_score` という別コマンドは不要になり削除
+  - `mail_get_mailboxes`: `JmapClient::get_mailboxes` を配線
+  - 受信トレイの詳細ビューで危険な添付と機微情報 (DLP) も表示
+  - **作成画面の「✨ AI 草案」を削除**: 定型文を「AI 草案」と表示して挿入しており、LLM がスタブ (D2) である以上 AI 出力を偽っていた
+  - 呼び手ゼロのスタブ `mail_query_emails` / `bec_get_score` を削除。残る `not_wired` は `settings_save_onboarding` のみ (D22)
 - **出荷 UI がモック専用コンポーネントを描画していた (最重要)**
   - 受信トレイは `KanameDesign` を描画していたが、同コンポーネントは自身のコメントが認めるとおり **invoke を一切呼ばないモックデータ専用**だった。一方 `mail_fetch` / `mail_search` / `bec_get_score` を実際に呼ぶ `Inbox` は**どこからも import されておらず死蔵**していた。両者を入れ替え、受信トレイが実データを表示するようにした
   - **メール送信に UI から到達できなかった**: `mail_send` を呼ぶのは未到達の `ComposeAdmin` のみ。「作成」ビューとして配線した
