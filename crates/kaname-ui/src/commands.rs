@@ -933,6 +933,110 @@ mod tests {
     async fn log_error_ok() {
         assert!(log_error("test".into()).await.is_ok());
     }
+
+    // ── analyze_raw_email: mail_import_eml / mail_open 共通の解析経路 ──
+    //
+    // これまで一度もテストされていなかった (docs/gap-analysis.md の
+    // static-check 強化 (D25) で発覚)。実データ (.eml バイト列) を渡して
+    // BEC/OOBV/Deepfake/DLP/添付検査が実際に配線されていることを検証する。
+
+    const SAFE_EML: &[u8] = b"From: alice@example.com\r\n\
+        To: bob@example.com\r\n\
+        Subject: Team lunch tomorrow\r\n\
+        Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+        Content-Type: text/plain; charset=utf-8\r\n\
+        \r\n\
+        Let's grab lunch tomorrow at noon.\r\n";
+
+    const BEC_WIRE_EML: &[u8] = b"From: \"CEO\" <ceo@arnazon-billing.com>\r\n\
+        To: you@example.com\r\n\
+        Subject: URGENT wire transfer needed today\r\n\
+        Date: Mon, 26 Apr 2026 10:15:00 +0900\r\n\
+        Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com\r\n\
+        Reply-To: ceo.private@gmail.com\r\n\
+        Content-Type: text/plain; charset=utf-8\r\n\
+        \r\n\
+        I need you to process an urgent wire transfer immediately.\r\n\
+        Our bank account has changed. Please send the payment today.\r\n\
+        Do not discuss this with anyone. Confirm once complete.\r\n";
+
+    #[tokio::test]
+    async fn analyze_raw_email_safe_message_is_quiet() -> Result<(), String> {
+        let r = analyze_raw_email(SAFE_EML).await?;
+        assert_eq!(r.bec_verdict, "SAFE");
+        assert_eq!(r.oobv_level, "none", "金融/緊急性の無い本文で OOBV を推奨してはいけない");
+        assert!(r.oobv_message.is_empty());
+        assert_eq!(r.deepfake_advisory.severity, kaname_render::deepfake_advisory::AdvisorySeverity::None);
+        assert!(r.attachments.is_empty());
+        assert!(r.dlp_findings.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn analyze_raw_email_bec_wire_transfer_triggers_oobv() -> Result<(), String> {
+        let r = analyze_raw_email(BEC_WIRE_EML).await?;
+        assert_ne!(r.bec_verdict, "SAFE", "SPF/DKIM/DMARC 全滅 + 金融文脈は SAFE であってはならない");
+        assert!(!r.bec_signals.is_empty());
+        assert_eq!(r.oobv_level, "strong", "送金要求 + 緊急性は OOBV を強く推奨すべき");
+        assert!(r.oobv_message.contains("電話"), "推奨理由が人間可読でなければならない");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn analyze_raw_email_deepfake_high_severity_for_financial_media_attachment() -> Result<(), String> {
+        // 音声添付 + 金融/緊急性のある本文 → Deepfake 警告は High になるべき。
+        let raw: &[u8] = b"From: cfo@example.com\r\n\
+            To: you@example.com\r\n\
+            Subject: Urgent voice message about payment\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: multipart/mixed; boundary=\"b1\"\r\n\
+            \r\n\
+            --b1\r\n\
+            Content-Type: text/plain\r\n\
+            \r\n\
+            Please listen to the attached urgent voice message about the wire payment.\r\n\
+            --b1\r\n\
+            Content-Type: audio/mpeg\r\n\
+            Content-Disposition: attachment; filename=\"message.mp3\"\r\n\
+            \r\n\
+            fake-audio-bytes\r\n\
+            --b1--\r\n";
+        let r = analyze_raw_email(raw).await?;
+        assert_eq!(
+            r.deepfake_advisory.severity,
+            kaname_render::deepfake_advisory::AdvisorySeverity::High,
+            "音声添付 + 金融/緊急性の本文は High 警戒であるべき"
+        );
+        assert!(!r.deepfake_advisory.affected_attachments.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn analyze_raw_email_dangerous_attachment_is_flagged() -> Result<(), String> {
+        // 二重拡張子 (.pdf.lnk) は危険拡張子として検出されるべき。
+        let raw: &[u8] = b"From: alice@example.com\r\n\
+            To: bob@example.com\r\n\
+            Subject: Invoice attached\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: multipart/mixed; boundary=\"b1\"\r\n\
+            \r\n\
+            --b1\r\n\
+            Content-Type: text/plain\r\n\
+            \r\n\
+            See attached invoice.\r\n\
+            --b1\r\n\
+            Content-Type: application/octet-stream\r\n\
+            Content-Disposition: attachment; filename=\"invoice.pdf.lnk\"\r\n\
+            \r\n\
+            fake-bytes\r\n\
+            --b1--\r\n";
+        let r = analyze_raw_email(raw).await?;
+        assert!(
+            r.attachments.iter().any(|a| a.is_dangerous),
+            "二重拡張子の添付は危険と判定されるべき"
+        );
+        Ok(())
+    }
 }
 
 // ============================================================================
