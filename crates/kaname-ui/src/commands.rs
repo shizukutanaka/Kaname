@@ -905,13 +905,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mail_list_respects_limit() -> Result<(), String> {
-        let r = mail_list("inbox".into(), Some(2)).await.map_err(|e| e.to_string())?;
-        assert_eq!(r.len(), 2);
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn phishing_score_in_range() -> Result<(), String> {
         let r = ai_detect_phishing("e1".into()).await.map_err(|e| e.to_string())?;
         assert!((0.0f32..=1.0).contains(&r.score));
@@ -933,14 +926,6 @@ mod tests {
         let r = ai_smart_reply("e1".into()).await.map_err(|e| e.to_string())?;
         assert_eq!(r.len(), 3);
         assert!(r.iter().all(|c| !c.text.is_empty()));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn bec_dangerous_in_mock() -> Result<(), String> {
-        let emails = mail_list("inbox".into(), Some(10)).await.map_err(|e| e.to_string())?;
-        assert!(emails.iter().any(|e| e.bec_verdict == "DANGEROUS"),
-            "BEC危険メールがモックに存在しなければならない");
         Ok(())
     }
 

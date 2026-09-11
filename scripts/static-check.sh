@@ -47,23 +47,97 @@ done < <(find crates src-tauri -name '*.rs' -not -path '*/target/*')
 
 echo ""
 echo "== 2. 定義が存在しないローカル関数の呼び出し =="
-# 各ファイル内で `fn name(` が定義され、かつ同ファイル内で呼ばれている前提の
-# ローカルヘルパーについて、定義の消失を検出する。
-while IFS= read -r f; do
-  # `foo(` の形で呼ばれているシンボルのうち、既知のマクロ・メソッド呼び出しを除外
-  while IFS= read -r sym; do
-    [ -z "$sym" ] && continue
-    # 同ファイルに定義があるか
-    if ! grep -qE "(^|\s)fn ${sym}\b" "$f"; then
-      # 他クレート/std 由来なら :: か . の直後にあるはず。ローカル呼び出しのみ拾う
-      if grep -vE '^\s*(//|\*)' "$f" | grep -qE "(^|[^a-zA-Z0-9_:.])${sym}\("; then
-        echo "  NG $f: ${sym}() を呼んでいるが定義が見つからない"
-        fail=1
-      fi
-    fi
-  done < <(grep -vE '^\s*(//|\*)' "$f" \
-           | grep -oP '(?<![a-zA-Z0-9_:.])\b(analyze_body_risks|scan_dlp_inbound|map_auth|extract_urls_from_text|url_host|evaluate_link_risks|assess_row_verdict|mock_emails|not_wired)(?=\()' 2>/dev/null | sort -u)
-done < <(find crates src-tauri -name '*.rs' -not -path '*/target/*')
+# 以前はハードコードされたシンボル一覧 (analyze_body_risks 等) だけを見ていた。
+# そのため mail_list を削除した PR #86 で、同じ関数をまだ呼んでいた
+# テスト 2 件を検出できなかった (シンボルが一覧に無かったため)。
+# 一覧を都度更新する運用は同じ穴を繰り返すので、リポジトリ全体から
+# 「裸で呼ばれているが、どこにも定義されておらず import もされていない」
+# シンボルを機械的に洗い出す方式に一般化する。
+python3 - <<'PY' || fail=1
+import re, glob, sys
+
+files = {f: open(f, encoding='utf-8', errors='replace').read()
+         for f in glob.glob('crates/**/*.rs', recursive=True) + glob.glob('src-tauri/**/*.rs', recursive=True)
+         if '/target/' not in f}
+
+# リポジトリ全体で定義されている fn 名 (可視性・async 問わず)。
+defined = set()
+for src in files.values():
+    defined.update(re.findall(r'(?:^|\s)fn\s+([a-zA-Z_][a-zA-Z0-9_]*)', src))
+
+# Rust の組み込み・prelude 由来で「裸呼び出し」されうるもの。
+# use 文で明示 import されていれば defined 判定に頼らず許可する。
+BUILTIN_ALLOW = {
+    'drop', 'print', 'eprint', 'format', 'panic', 'min', 'max', 'swap',
+    'replace', 'take', 'size_of', 'align_of', 'default',
+}
+
+# Rust の予約語。`if (x)` `for (a, b) in` `match (a, b)` `let (a, b) =`
+# `pub(crate)` のように、キーワード直後に括弧が続く構文が普通にあり、
+# 関数呼び出しではない。
+KEYWORDS = {
+    'if', 'for', 'while', 'loop', 'match', 'let', 'return', 'pub',
+    'else', 'in', 'move', 'unsafe', 'async', 'await', 'box', 'yield',
+    'where', 'as', 'ref', 'mut', 'crate', 'super', 'self', 'Self',
+    'true', 'false', 'impl', 'trait', 'fn', 'type', 'struct', 'enum',
+    'const', 'static', 'dyn', 'do',
+}
+
+# 属性・コメント・文字列/char リテラルは、その中身が関数呼び出しに似た
+# 形になりうる (kaname-screen 等は検出パターンをそのまま文字列で持ち、
+# コメントには「// unlimited (Enterprise)」のような自然文が入る)。
+# 呼び出し判定の前に、文字列 → コメントの順で取り除く
+# (コメント除去を先にすると "http://foo" のようなURL文字列内の `//` を
+# コメント開始と誤認するため、必ず文字列を先に潰す)。
+def strip_noise(src: str) -> str:
+    src = re.sub(r'#!?\[.*?\]', ' ', src, flags=re.S)  # 属性
+    # raw 文字列: r#*"..."#* は開始と同じ個数の # で閉じる必要がある
+    # (Rust の実際の構文どおり、バックリファレンスで揃える)。
+    # 'r' の直前が識別子の一部 (例: "tr", "for") だと誤爆するので
+    # 単語境界を要求する ("tr", "td" の並びを raw 文字列と誤認しない)。
+    src = re.sub(r'(?<![a-zA-Z0-9_])r(#*)"(?:.*?)"\1', '""', src, flags=re.S)
+    # char リテラルを文字列より先に剥がす。`'"'` (ダブルクォート 1 文字の
+    # char リテラル) を先に文字列側の正規表現に処理させると、中の `"` を
+    # 文字列の開始と誤認し、次に見つかる無関係な `"` までを丸ごと呑み込んで
+    # 以降の文字列境界が全部ズレる (実際に発生した)。
+    src = re.sub(r"'(?:[^'\\]|\\.)'", "''", src, flags=re.S)
+    # 通常の文字列。DOTALL 必須: `\<改行>` によるバックスラッシュ行継続
+    # (複数行文字列リテラルで使われる) は `\\.` が改行にマッチできないと
+    # 消費できず、以降の文字列境界がすべてズレる
+    # (MIME フィクスチャの複数行バイト文字列で実際に発生した)。
+    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src, flags=re.S)
+    # ブロックコメント (文字列を潰した後なので安全)。
+    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
+    # 行コメント。以前は「行頭が // のコメント専用行」しか除去しておらず、
+    # 実コードに続く行末コメント (`pub seat_limit: ..., // unlimited (...)`
+    # のような) を取りこぼしていた。文字列を潰した後なので、残る `//` は
+    # すべて本物のコメント開始とみなしてよい。
+    src = re.sub(r'//[^\n]*', '', src)
+    return src
+
+bad = 0
+for f, src in files.items():
+    body = strip_noise(src)
+    # `use` 文に現れる識別子はすべて import 済みとみなす (別クレート由来を許可)。
+    # `use axum::{\n routing::{get, post},\n ... \n};` のように複数行にまたがる
+    # 波括弧 import があるため、DOTALL + 非貪欲で `use` から最初の `;` までを拾う。
+    imported = set(re.findall(r'[a-zA-Z_][a-zA-Z0-9_]*',
+                   ' '.join(re.findall(r'^\s*(?:pub\s+)?use\s+.*?;', body, re.M | re.S))))
+    # `fn NAME` に加えて `let NAME = |...` / `let NAME = move |...` の
+    # クロージャ束縛も局所的な「定義」として扱う (テストの make_req 等)。
+    local_defs = set(re.findall(r'(?:^|\s)fn\s+([a-zA-Z_][a-zA-Z0-9_]*)', src))
+    local_defs |= set(re.findall(r'\blet\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::[^=]*)?=\s*(?:move\s*)?\|', body))
+    # `!` の直前 (マクロ) と `.`/`::` の直後 (メソッド・パス) を除く裸呼び出しのみを拾う。
+    calls = set(re.findall(r'(?<![a-zA-Z0-9_:.])\b([a-z_][a-z0-9_]*)\s*\(', body))
+    for sym in sorted(calls):
+        if sym in local_defs or sym in imported or sym in BUILTIN_ALLOW or sym in KEYWORDS:
+            continue
+        if sym in defined:
+            continue  # 同クレート内の別ファイルで定義されている
+        print(f"  NG {f}: {sym}() を呼んでいるが定義も import も見つからない")
+        bad = 1
+sys.exit(bad)
+PY
 [ "$fail" -eq 0 ] && echo "  OK: 未定義のローカル関数呼び出しなし"
 
 echo ""
