@@ -62,6 +62,12 @@ interface StoredMessage {
   bec_verdict: string | null;
 }
 
+/** "表示名 <addr>" または生アドレスから、実際のメールアドレスだけを取り出す。 */
+const extractEmailAddr = (from: string): string => {
+  const m = from.match(/<([^>]+)>/);
+  return (m ? m[1] : from).trim();
+};
+
 /**
  * 保存済みメールを一覧表示用に詰め替える。
  *
@@ -317,6 +323,8 @@ const EmailDetailPanel = (props: {
   const [attachmentBlobs, setAttachmentBlobs] = createSignal<Record<string, { blobId: string; mime: string }>>({});
   const [downloading, setDownloading] = createSignal<string | null>(null);
   const [downloadMsg, setDownloadMsg] = createSignal<string | null>(null);
+  const [verifying, setVerifying] = createSignal(false);
+  const [verifiedMsg, setVerifiedMsg] = createSignal<string | null>(null);
   // 以前は mail_get_body と bec_get_score の 2 コマンドを呼んでいたが、
   // どちらもスタブで、メールを開くたびに必ず失敗していた。
   // mail_open は生 RFC 5322 をサーバから取得し、ローカル .eml と同じ
@@ -363,6 +371,22 @@ const EmailDetailPanel = (props: {
       setOpenError(String(e));
     } finally {
       setTrashing(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    const email = opened();
+    if (!email || verifying()) return;
+    if (!confirm("電話などの帯域外手段で本人確認が取れましたか?\n確認済みにすると、今後このアドレスからのメールは信頼度が上がります。")) return;
+    setVerifying(true);
+    setVerifiedMsg(null);
+    try {
+      await invoke("history_mark_verified", { email: extractEmailAddr(email.from) });
+      setVerifiedMsg("確認済みにしました。今後のメールからこの信頼を反映します。");
+    } catch (e) {
+      setVerifiedMsg(`失敗しました: ${String(e)}`);
+    } finally {
+      setVerifying(false);
     }
   };
 
@@ -450,6 +474,22 @@ const EmailDetailPanel = (props: {
               検出シグナル: {bec()!.bec_signals.join(", ")}
             </span>
           </Show>
+          <button
+            onClick={handleVerify}
+            disabled={verifying()}
+            style={{
+              background: "transparent", border: "1px solid #8B96A540", color: "#8B96A5",
+              "border-radius": "4px", padding: "3px 10px", "font-size": "11px",
+              cursor: verifying() ? "not-allowed" : "pointer", "white-space": "nowrap",
+            }}
+          >
+            {verifying() ? "処理中..." : "本人確認済みにする"}
+          </button>
+        </div>
+      </Show>
+      <Show when={verifiedMsg()}>
+        <div style={{ padding: "6px 20px", "font-size": "11px", color: "#8B96A5" }}>
+          {verifiedMsg()}
         </div>
       </Show>
 

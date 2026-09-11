@@ -1852,12 +1852,19 @@ pub async fn history_close() -> Result<(), String> {
 ///
 /// BEC の `user_verified` シグナルに反映され、以後この送信者は
 /// 初回連絡扱いされなくなる。
-pub async fn history_mark_verified(account_id: String, email: String) -> Result<(), String> {
+/// 差出人を「確認済み」にマークする。
+///
+/// 他コマンド (`mail_open`/`mail_fetch`) と同様に `account_id` は
+/// `current_account_id()` で内部解決する。以前はフロントエンドに
+/// `account_id` を渡させていたが、どの UI もそれを持っておらず、
+/// 呼び手ゼロのまま放置されていた (docs/gap-analysis.md D24)。
+pub async fn history_mark_verified(email: String) -> Result<(), String> {
     let store = store_slot()
         .lock()
         .await
         .clone()
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    let account_id = current_account_id().await;
     store
         .mark_sender_verified(&account_id, &email)
         .await
