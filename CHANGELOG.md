@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **受信トレイに削除・添付ダウンロードを配線** (D24 (b) を一部解消)
+  - 詳細パネルにツールバーを追加: 「🗑 ゴミ箱へ」(`mail_trash`。確認ダイアログ経由)・「✕ 閉じる」。以前は `onClose` が props として存在するのに呼び出し元の UI 要素が無かった
+  - 添付を**全件**表示し (従来は危険なものだけ)、各添付に「ダウンロード」ボタンを追加。新規 `mail_list_attachment_blobs` でファイル名→blobId を解決してから `mail_download_attachment` を呼ぶ (`mail_open` の添付検査結果はバイト列由来で blobId を持たないため)
+  - 危険と判定された添付は既存仕様どおりディスクに書かれず、理由が表示される
+
+### Added
 - **発見した欠陥クラスを `scripts/static-check.sh` に自動化** (マスク式の第5段階「自動化」)
   - 検査3: `src/main.tsx` からの import 到達可能性 (死蔵モジュールの検出)
   - 検査4: `invoke("name", {args})` と Tauri コマンド定義の**名前・引数の整合** (camelCase → snake_case 変換、shorthand プロパティ対応)

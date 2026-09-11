@@ -2085,6 +2085,40 @@ pub struct AttachmentDownload {
     pub saved_path:   Option<String>,
 }
 
+/// サーバ上のメールが持つ添付の一覧 (ファイル名・blobId・MIME) を返す。
+///
+/// `mail_open` が返す添付検査結果 (`AttachmentScan`) はファイル名しか
+/// 持たない (バイト列から検査するだけで JMAP を知らない)。ダウンロード
+/// ボタンを表示するには `blobId` が要るため、この一覧を別途取得して
+/// ファイル名で突き合わせる。
+#[derive(Debug, serde::Serialize)]
+pub struct AttachmentRef {
+    pub filename: String,
+    pub blob_id:  String,
+    pub mime:     String,
+}
+
+pub async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<AttachmentRef>, String> {
+    let client = jmap_client().await?;
+    let full = client
+        .get_email_body(&email_id)
+        .await
+        .map_err(|e| format!("メールの取得に失敗しました: {e}"))?;
+    Ok(full
+        .attachments
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|p| {
+            let blob_id = p.blob_id?;
+            Some(AttachmentRef {
+                filename: p.name.unwrap_or_else(|| "unnamed".to_string()),
+                blob_id,
+                mime: p.mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
+            })
+        })
+        .collect())
+}
+
 /// メールの添付ファイルをダウンロードし、検査してから隔離保存する。
 ///
 /// `blob_id` が空の添付 (インライン参照のみ等) は取得できないためエラー。

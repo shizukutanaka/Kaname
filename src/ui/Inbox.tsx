@@ -308,10 +308,15 @@ const EmailItem = (props: {
 const EmailDetailPanel = (props: {
   emailId: string | null;
   onClose: () => void;
+  onTrashed: () => void;
 }) => {
   const [opened, setOpened] = createSignal<OpenedEmail | null>(null);
   const [openError, setOpenError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
+  const [trashing, setTrashing] = createSignal(false);
+  const [attachmentBlobs, setAttachmentBlobs] = createSignal<Record<string, { blobId: string; mime: string }>>({});
+  const [downloading, setDownloading] = createSignal<string | null>(null);
+  const [downloadMsg, setDownloadMsg] = createSignal<string | null>(null);
   // 以前は mail_get_body と bec_get_score の 2 コマンドを呼んでいたが、
   // どちらもスタブで、メールを開くたびに必ず失敗していた。
   // mail_open は生 RFC 5322 をサーバから取得し、ローカル .eml と同じ
@@ -327,6 +332,17 @@ const EmailDetailPanel = (props: {
       const data = await invoke<OpenedEmail>("mail_open", { emailId: props.emailId });
       setOpened(data);
       await invoke("mail_mark_read", { ids: [props.emailId] }).catch(() => {});
+      try {
+        const refs = await invoke<{ filename: string; blob_id: string; mime: string }[]>(
+          "mail_list_attachment_blobs", { emailId: props.emailId }
+        );
+        const map: Record<string, { blobId: string; mime: string }> = {};
+        for (const r of refs) map[r.filename] = { blobId: r.blob_id, mime: r.mime };
+        setAttachmentBlobs(map);
+      } catch {
+        // blobId が取れなくてもメール本体の表示は継続する。
+        setAttachmentBlobs({});
+      }
     } catch (e) {
       setOpened(null);
       setOpenError(String(e));
@@ -334,6 +350,42 @@ const EmailDetailPanel = (props: {
       setLoading(false);
     }
   });
+
+  const handleTrash = async () => {
+    if (!props.emailId || trashing()) return;
+    if (!confirm("このメールをゴミ箱に移動しますか?")) return;
+    setTrashing(true);
+    try {
+      await invoke("mail_trash", { emailId: props.emailId });
+      props.onTrashed();
+      props.onClose();
+    } catch (e) {
+      setOpenError(String(e));
+    } finally {
+      setTrashing(false);
+    }
+  };
+
+  const handleDownload = async (filename: string) => {
+    const ref = attachmentBlobs()[filename];
+    if (!ref || !props.emailId) return;
+    setDownloading(filename);
+    setDownloadMsg(null);
+    try {
+      const result = await invoke<{
+        filename: string; is_dangerous: boolean; risks: string[]; saved_path: string | null;
+      }>("mail_download_attachment", { emailId: props.emailId, blobId: ref.blobId });
+      setDownloadMsg(
+        result.is_dangerous
+          ? `⚠ 危険と判定されたため保存しませんでした: ${result.risks.join(", ")}`
+          : `保存しました: ${result.saved_path}`
+      );
+    } catch (e) {
+      setDownloadMsg(`ダウンロードに失敗しました: ${String(e)}`);
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   return (
     <div style={{
@@ -343,6 +395,33 @@ const EmailDetailPanel = (props: {
       background: "#0A0E14",
       overflow: "hidden",
     }}>
+      {/* ツールバー: 閉じる / ゴミ箱へ移動 */}
+      <div style={{
+        display: "flex", "align-items": "center", "justify-content": "flex-end",
+        gap: "8px", padding: "8px 16px", "border-bottom": "0.5px solid #1A2129",
+      }}>
+        <button
+          onClick={handleTrash}
+          disabled={trashing()}
+          style={{
+            background: "transparent", border: "1px solid #E5484D40", color: "#E5484D",
+            "border-radius": "6px", padding: "5px 12px", "font-size": "12px",
+            cursor: trashing() ? "not-allowed" : "pointer", opacity: trashing() ? 0.6 : 1,
+          }}
+        >
+          {trashing() ? "削除中..." : "🗑 ゴミ箱へ"}
+        </button>
+        <button
+          onClick={props.onClose}
+          style={{
+            background: "transparent", border: "1px solid #2A3441", color: "#8B96A5",
+            "border-radius": "6px", padding: "5px 12px", "font-size": "12px", cursor: "pointer",
+          }}
+        >
+          ✕ 閉じる
+        </button>
+      </div>
+
       {/* BEC 警告バナー */}
       <Show when={bec() && bec()!.bec_verdict !== "SAFE"}>
         <div style={{
@@ -397,6 +476,39 @@ const EmailDetailPanel = (props: {
               <For each={bec()!.dlp_findings}>
                 {f => <div>🔒 機微情報: {f}</div>}
               </For>
+            </div>
+          </Show>
+          <Show when={bec()!.attachments.length > 0}>
+            <div style={{ padding: "8px 16px", "font-size": "12px", "border-bottom": "0.5px solid #1A2129" }}>
+              <For each={bec()!.attachments}>
+                {a => (
+                  <div style={{
+                    display: "flex", "align-items": "center", gap: "8px", padding: "4px 0",
+                  }}>
+                    <span style={{ color: a.is_dangerous ? "#E5484D" : "#8B96A5" }}>
+                      📎 {a.filename}
+                    </span>
+                    <Show when={attachmentBlobs()[a.filename]}>
+                      <button
+                        onClick={() => handleDownload(a.filename)}
+                        disabled={downloading() === a.filename}
+                        style={{
+                          background: "transparent", border: "1px solid #2A3441", color: "#00C4CC",
+                          "border-radius": "4px", padding: "2px 8px", "font-size": "11px",
+                          cursor: downloading() === a.filename ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {downloading() === a.filename ? "取得中..." : "ダウンロード"}
+                      </button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+              <Show when={downloadMsg()}>
+                <div style={{ color: "#8B96A5", "font-size": "11px", "margin-top": "4px" }}>
+                  {downloadMsg()}
+                </div>
+              </Show>
             </div>
           </Show>
           <Show when={(body()!.render_risks ?? []).length > 0}>
@@ -773,6 +885,7 @@ export const Inbox = () => {
         <EmailDetailPanel
           emailId={selectedEmail()}
           onClose={() => setSelectedEmail(null)}
+          onTrashed={() => void loadEmails(selectedMbx())}
         />
       </Show>
 
