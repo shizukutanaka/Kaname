@@ -102,6 +102,16 @@ interface OpenedEmail {
   oobv_level: string;
   /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
   oobv_message: string;
+  deepfake_advisory: DeepfakeAdvisory;
+}
+
+/** `AdvisoryReport` (kaname-render::deepfake_advisory) の JSON 表現。 */
+interface DeepfakeAdvisory {
+  severity: "None" | "Info" | "Medium" | "High";
+  affected_attachments: { filename: string; mime: string; kind: string }[];
+  has_financial_context: boolean;
+  has_urgency: boolean;
+  recommended_action: "None" | "ShowAdvisory" | "PlayInSandbox" | "OobvBeforePlay";
 }
 
 // ============================================================================
@@ -537,6 +547,27 @@ const EmailDetailPanel = (props: {
             }}>
               📞 {bec()!.oobv_message}
             </div>
+          </Show>
+          <Show when={bec()!.deepfake_advisory.severity !== "None"}>
+            {(() => {
+              const adv = bec()!.deepfake_advisory;
+              const strong = adv.severity === "High";
+              return (
+                <div style={{
+                  padding: strong ? "8px 16px" : "6px 16px", "font-size": strong ? "12px" : "11px",
+                  "font-weight": strong ? "600" : "400", color: strong ? "#E5484D" : "#F5A623",
+                  background: strong ? "#E5484D12" : "#F5A62312",
+                  "border-bottom": `0.5px solid ${strong ? "#E5484D40" : "#F5A62340"}`,
+                }}>
+                  🎭 音声/動画添付 ({adv.affected_attachments.map(a => a.filename).join(", ")})
+                  {adv.has_financial_context && " があり、送金・認証情報に関する本文です"}
+                  {adv.recommended_action === "OobvBeforePlay" &&
+                    " — 再生前に電話など別経路で本人確認することを強く推奨します"}
+                  {adv.recommended_action === "PlayInSandbox" &&
+                    " — 実行環境の制約により、再生は自己責任で行ってください"}
+                </div>
+              );
+            })()}
           </Show>
           <Show when={bec()!.attachments.length > 0}>
             <div style={{ padding: "8px 16px", "font-size": "12px", "border-bottom": "0.5px solid #1A2129" }}>

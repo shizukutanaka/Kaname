@@ -37,6 +37,16 @@ interface ImportedEmail {
   oobv_level: string;
   /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
   oobv_message: string;
+  deepfake_advisory: DeepfakeAdvisory;
+}
+
+/** `AdvisoryReport` (kaname-render::deepfake_advisory) の JSON 表現。 */
+interface DeepfakeAdvisory {
+  severity: "None" | "Info" | "Medium" | "High";
+  affected_attachments: { filename: string; mime: string; kind: string }[];
+  has_financial_context: boolean;
+  has_urgency: boolean;
+  recommended_action: "None" | "ShowAdvisory" | "PlayInSandbox" | "OobvBeforePlay";
 }
 
 /** 判定に応じた配色。危険なものほど強い色にする。 */
@@ -388,6 +398,31 @@ export function EmlImport() {
                 }}>
                   📞 {r().oobv_message}
                 </div>
+              </Show>
+
+              {/* Deepfake (音声/動画添付) の警告 */}
+              <Show when={r().deepfake_advisory.severity !== "None"}>
+                {(() => {
+                  const adv = r().deepfake_advisory;
+                  const strong = adv.severity === "High";
+                  return (
+                    <div style={{
+                      padding: "10px 12px", "border-radius": "8px",
+                      background: strong ? "#FDECEC" : "#FBF6E9",
+                      border: `1px solid ${strong ? "#E5484D60" : "#E5A50060"}`,
+                      color: strong ? "#8A1F22" : "#6B4E00", "font-size": "13px",
+                      "line-height": "1.6", "margin-bottom": "12px",
+                      "font-weight": strong ? 600 : 400,
+                    }}>
+                      🎭 音声/動画添付 ({adv.affected_attachments.map(a => a.filename).join(", ")})
+                      {adv.has_financial_context && " があり、送金・認証情報に関する本文です"}
+                      {adv.recommended_action === "OobvBeforePlay" &&
+                        " — 再生前に電話など別経路で本人確認することを強く推奨します"}
+                      {adv.recommended_action === "PlayInSandbox" &&
+                        " — 実行環境の制約により、再生は自己責任で行ってください"}
+                    </div>
+                  );
+                })()}
               </Show>
 
               {/* 機微情報の検出 (DLP) */}
