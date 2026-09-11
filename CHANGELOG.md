@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **`mail_list` 削除 (PR #86) の巻き添えで放置されていたコンパイルエラー** (D25)
+  - `crates/kaname-ui/src/commands.rs` のテストモジュールに `mail_list("inbox".into(), ...)` を呼ぶテストが2件残っており、`mail_list` 自体は既に削除済みだった。`cargo check` を実行できない環境 (D20) でこの種のリグレッションを防ぐために作った `static-check.sh` 自身が、これを見逃していた
+  - 原因: 検査2がハードコードされたシンボル一覧しか見ておらず、一覧に無い関数の削除は検出できなかった。一覧を都度更新する運用は同じ穴を繰り返す設計だったため、リポジトリ全体を走査する一般的な方式に置き換えた
+  - 壊れていた2テスト (`mail_list_respects_limit`/`bec_dangerous_in_mock`) はモック実装を前提にしていたため削除
+
+### Added
+- **`static-check.sh` 検査2を一般化** (D25 の根本対応)
+  - ハードコードされたシンボル一覧を廃止し、リポジトリ全体から「裸で呼ばれているが定義も import も見つからないシンボル」を機械的に検出する方式に変更
+  - 一般化の過程で見つけた誤検知の原因をすべて修正: 属性 (`#[cfg(...)]`)・raw文字列の閉じハッシュ数不一致・char リテラル (`'"'`) と文字列リテラルの処理順序・文字列内のバックスラッシュ行継続 (DOTALL 不足)・複数行 `use` インポート・行末コメント (従来は行頭コメント専用行しか除去していなかった)・Rust 予約語 (`if(`/`let(`/`pub(crate)` 等)・クロージャ束縛 (`let f = |...|`)
+  - 修正後、ワークスペース全体で誤検知ゼロを確認。合成的に削除済み関数への参照を注入したテストで正しく検出できることも確認済み
+
 ### Added
 - **Deepfake (音声/動画添付) の警告をメール詳細に配線** (D24 (b) を完全解消)
   - `analyze_raw_email` が添付検査 (`scan_attachments`) の結果を使い回し、`DeepfakeAdvisory::evaluate()` を直接呼ぶ。`ImportedEmail.deepfake_advisory` として埋め込み、独立コマンド `deepfake_evaluate` への往復は発生させない
