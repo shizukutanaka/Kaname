@@ -33,6 +33,10 @@ interface ImportedEmail {
   body: BodyDto;
   /** 本文中に検出された機微情報 (DLP)。転送・返信時の漏洩リスク。 */
   dlp_findings: string[];
+  /** 帯域外検証 (OOBV) の推奨度: "none" | "optional" | "strong"。 */
+  oobv_level: string;
+  /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
+  oobv_message: string;
 }
 
 /** 判定に応じた配色。危険なものほど強い色にする。 */
@@ -363,6 +367,28 @@ export function EmlImport() {
                   </dd>
                 </Show>
               </dl>
+
+              {/* 帯域外検証 (OOBV) の推奨 */}
+              <Show when={r().oobv_level === "strong"}>
+                <div style={{
+                  padding: "10px 12px", "border-radius": "8px",
+                  background: "#FDECEC", border: "1px solid #E5484D60",
+                  color: "#8A1F22", "font-size": "13px",
+                  "line-height": "1.6", "margin-bottom": "12px", "font-weight": "600",
+                }}>
+                  📞 {r().oobv_message}
+                </div>
+              </Show>
+              <Show when={r().oobv_level === "optional"}>
+                <div style={{
+                  padding: "8px 12px", "border-radius": "8px",
+                  background: "#FBF6E9", border: "1px solid #E5A50060",
+                  color: "#6B4E00", "font-size": "12px",
+                  "line-height": "1.6", "margin-bottom": "12px",
+                }}>
+                  📞 {r().oobv_message}
+                </div>
+              </Show>
 
               {/* 機微情報の検出 (DLP) */}
               <Show when={(r().dlp_findings ?? []).length > 0}>

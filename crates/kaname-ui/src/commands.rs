@@ -213,6 +213,20 @@ pub struct ImportedEmail {
     /// 受信メールに機微情報が含まれる場合、転送・返信時の漏洩リスクになる。
     /// `Direction::Inbound` で評価する。
     pub dlp_findings: Vec<String>,
+    /// 帯域外検証 (OOBV) の推奨度。`OobvRecommender` の判定をそのまま返す。
+    ///
+    /// `oobv_recommend` コマンドは登録済みだったが呼び手がゼロだった
+    /// (docs/gap-analysis.md D24)。本文を素のままフロントに渡して
+    /// クライアント側で再計算させるより、既に本文を持っているここで
+    /// 判定してしまう方が往復も本文の露出も増えない。
+    pub oobv_level: String,
+    /// 上記の人間可読メッセージ。
+    ///
+    /// `OobvRecommendResponse.message_i18n_key` は i18n カタログに
+    /// 対応するキーが存在せず (kaname-i18n は出荷バイナリから到達不能、
+    /// docs/gap-analysis.md D19)、キーを返しても表示できない。
+    /// カタログが繋がるまでは日本語の完成文をここで組み立てる。
+    pub oobv_message: String,
 }
 
 /// ローカルの `.eml` / `.mbox` ファイルを読み込み、**実際のメール**を
@@ -314,6 +328,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .assess(req)
         .map_err(|e| format!("BEC 判定に失敗: {e}"))?;
 
+    let oobv_level = kaname_oobv::OobvRecommender::new().recommend(&body_text);
+
     let bec_verdict = match assessment.verdict {
         kaname_bec::Verdict::Safe       => "SAFE",
         kaname_bec::Verdict::Advisory   => "ADVISORY",
@@ -353,6 +369,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             },
         },
         dlp_findings: scan_dlp_inbound(&subject, &body_text),
+        oobv_level: match oobv_level {
+            kaname_oobv::RecommendationLevel::None     => "none",
+            kaname_oobv::RecommendationLevel::Optional => "optional",
+            kaname_oobv::RecommendationLevel::Strong   => "strong",
+        }.to_string(),
+        oobv_message: match oobv_level {
+            kaname_oobv::RecommendationLevel::None =>
+                String::new(),
+            kaname_oobv::RecommendationLevel::Optional =>
+                "念のため、電話や別の連絡手段で送信者に確認することをお勧めします。".to_string(),
+            kaname_oobv::RecommendationLevel::Strong =>
+                "送金・認証情報・重要な意思決定に関わる内容です。返信の前に、電話など                  メール以外の手段で送信者に必ず確認してください。".to_string(),
+        },
     })
 }
 
