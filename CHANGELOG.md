@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`analyze_raw_email` (mail_import_eml/mail_open 共通の解析経路) に初のユニットテストを追加**
+  - これまで一度もテストされていなかった。D25 の static-check 強化の過程で発覚
+  - 安全なメール (BEC/OOBV/Deepfake すべて無反応)、送金 BEC メール (OOBV 強い推奨)、金融文脈を伴う音声添付 (Deepfake High 警戒)、二重拡張子の危険添付、の4ケースを実データ (RFC 5322 バイト列) で検証
+
 ### Fixed
 - **`mail_list` 削除 (PR #86) の巻き添えで放置されていたコンパイルエラー** (D25)
   - `crates/kaname-ui/src/commands.rs` のテストモジュールに `mail_list("inbox".into(), ...)` を呼ぶテストが2件残っており、`mail_list` 自体は既に削除済みだった。`cargo check` を実行できない環境 (D20) でこの種のリグレッションを防ぐために作った `static-check.sh` 自身が、これを見逃していた
