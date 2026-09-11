@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Deepfake (音声/動画添付) の警告をメール詳細に配線** (D24 (b) を完全解消)
+  - `analyze_raw_email` が添付検査 (`scan_attachments`) の結果を使い回し、`DeepfakeAdvisory::evaluate()` を直接呼ぶ。`ImportedEmail.deepfake_advisory` として埋め込み、独立コマンド `deepfake_evaluate` への往復は発生させない
+  - 受信トレイの詳細パネルと「ファイル解析」タブの両方に表示: 高警戒 (金融文脈あり) は目立つ警告として、それ以外の音声/動画添付は控えめな注記として表示。推奨アクション (`OobvBeforePlay`/`PlayInSandbox`) に応じて文言を出し分ける
+  - これで D24 (b)「配線すべき」5 件 (`mail_download_attachment`/`mail_trash`/`history_mark_verified`/`oobv_recommend`/`deepfake_evaluate`) が**全件解消**。独立コマンドとしての `oobv_recommend`/`deepfake_evaluate` は UI から未到達のままだが、判定ロジックは配線済みで、静的検査の WARN は意図した状態として D24 に記録済み
 - **帯域外検証 (OOBV) の推奨をメール詳細に配線** (D24 (b) をさらに一部解消)
   - `analyze_raw_email` (`mail_open`/`mail_import_eml` 共通の解析経路) が本文を解析する時点で `OobvRecommender::recommend()` を直接呼び、判定結果を `ImportedEmail.oobv_level`/`oobv_message` として埋め込んだ。独立コマンド `oobv_recommend` を素の本文を渡して呼ぶより、往復も本文の露出も増えない
   - `oobv_recommend` の `message_i18n_key` は i18n カタログに対応するキーが存在しない (`kaname-i18n` は出荷バイナリから到達不能、D19) ため、カタログが繋がるまでは完成した日本語メッセージを直接組み立てて返す

@@ -227,6 +227,12 @@ pub struct ImportedEmail {
     /// docs/gap-analysis.md D19)、キーを返しても表示できない。
     /// カタログが繋がるまでは日本語の完成文をここで組み立てる。
     pub oobv_message: String,
+    /// Deepfake (音声/動画添付 + 金融文脈) の警告判定。
+    ///
+    /// `deepfake_evaluate` コマンドは登録済みだったが呼び手がゼロだった
+    /// (docs/gap-analysis.md D24)。添付一覧と本文はここで既に手元にある
+    /// ため、OOBV と同じ理由でここで直接評価する。
+    pub deepfake_advisory: AdvisoryReport,
 }
 
 /// ローカルの `.eml` / `.mbox` ファイルを読み込み、**実際のメール**を
@@ -330,6 +336,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     let oobv_level = kaname_oobv::OobvRecommender::new().recommend(&body_text);
 
+    // 添付を一度だけ検査し、危険判定 (attachments フィールド) と
+    // Deepfake 判定の両方に使い回す (filename/declared_mime だけで足りる)。
+    let attachment_scans = kaname_render::scan_attachments(bytes);
+    let deepfake_pairs: Vec<(String, String)> = attachment_scans
+        .iter()
+        .map(|a| (a.filename.clone(), a.declared_mime.clone()))
+        .collect();
+    let deepfake_advisory = DeepfakeAdvisory::new().evaluate(&deepfake_pairs, &body_text);
+
     let bec_verdict = match assessment.verdict {
         kaname_bec::Verdict::Safe       => "SAFE",
         kaname_bec::Verdict::Advisory   => "ADVISORY",
@@ -352,8 +367,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         bec_verdict,
         bec_score: assessment.score,
         bec_signals: assessment.signals.iter().map(|s| s.label.clone()).collect(),
-        // 添付を実際に検査する (バイト列は kaname-render 内で完結)。
-        attachments: kaname_render::scan_attachments(bytes),
+        attachments: attachment_scans,
         body: BodyDto {
             srcdoc:  srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),
@@ -380,8 +394,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             kaname_oobv::RecommendationLevel::Optional =>
                 "念のため、電話や別の連絡手段で送信者に確認することをお勧めします。".to_string(),
             kaname_oobv::RecommendationLevel::Strong =>
-                "送金・認証情報・重要な意思決定に関わる内容です。返信の前に、電話など                  メール以外の手段で送信者に必ず確認してください。".to_string(),
+                "送金・認証情報・重要な意思決定に関わる内容です。返信の前に、\
+                 電話などメール以外の手段で送信者に必ず確認してください。".to_string(),
         },
+        deepfake_advisory,
     })
 }
 
