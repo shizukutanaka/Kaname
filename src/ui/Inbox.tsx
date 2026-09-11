@@ -98,6 +98,10 @@ interface OpenedEmail {
   attachments: { filename: string; risks: string[]; is_dangerous: boolean }[];
   body: BodyDto;
   dlp_findings: string[];
+  /** 帯域外検証 (OOBV) の推奨度: "none" | "optional" | "strong"。 */
+  oobv_level: string;
+  /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
+  oobv_message: string;
 }
 
 // ============================================================================
@@ -516,6 +520,22 @@ const EmailDetailPanel = (props: {
               <For each={bec()!.dlp_findings}>
                 {f => <div>🔒 機微情報: {f}</div>}
               </For>
+            </div>
+          </Show>
+          <Show when={bec()!.oobv_level === "strong"}>
+            <div style={{
+              padding: "8px 16px", "font-size": "12px", "font-weight": "600", color: "#E5484D",
+              background: "#E5484D12", "border-bottom": "0.5px solid #E5484D40",
+            }}>
+              📞 {bec()!.oobv_message}
+            </div>
+          </Show>
+          <Show when={bec()!.oobv_level === "optional"}>
+            <div style={{
+              padding: "6px 16px", "font-size": "11px", color: "#F5A623",
+              background: "#F5A62312", "border-bottom": "0.5px solid #F5A62340",
+            }}>
+              📞 {bec()!.oobv_message}
             </div>
           </Show>
           <Show when={bec()!.attachments.length > 0}>

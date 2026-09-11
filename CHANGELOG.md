@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **帯域外検証 (OOBV) の推奨をメール詳細に配線** (D24 (b) をさらに一部解消)
+  - `analyze_raw_email` (`mail_open`/`mail_import_eml` 共通の解析経路) が本文を解析する時点で `OobvRecommender::recommend()` を直接呼び、判定結果を `ImportedEmail.oobv_level`/`oobv_message` として埋め込んだ。独立コマンド `oobv_recommend` を素の本文を渡して呼ぶより、往復も本文の露出も増えない
+  - `oobv_recommend` の `message_i18n_key` は i18n カタログに対応するキーが存在しない (`kaname-i18n` は出荷バイナリから到達不能、D19) ため、カタログが繋がるまでは完成した日本語メッセージを直接組み立てて返す
+  - 受信トレイの詳細パネルと「ファイル解析」タブの両方に表示: 強い推奨 (送金・認証情報など) は目立つ警告として、任意の推奨は控えめな注記として表示
+  - 独立コマンド `oobv_recommend` 自体は今も UI から未到達 (判定ロジックは配線したが、コマンドという経路は使っていない)。将来の直接呼び出しに備えたテスト済み内部 API として残す
 - **BEC 警告バナーに送信者の本人確認を配線** (D24 (b) をさらに一部解消)
   - `history_mark_verified` は登録済みだが呼び手がゼロだった。フロントエンドは `account_id` を持っていなかったため、他コマンド (`mail_open`/`mail_fetch`) と同様に `current_account_id()` で内部解決するようシグネチャを `(account_id, email)` → `(email)` に簡素化
   - BEC 警告バナー (ADVISORY 以上) に「本人確認済みにする」ボタンを追加。電話などの帯域外手段で確認が取れた送信者をマークでき、以降の BEC 判定で信頼シグナルとして働く (`kaname-bec` の `user_verified`)
