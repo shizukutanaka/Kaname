@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **BEC 警告バナーに送信者の本人確認を配線** (D24 (b) をさらに一部解消)
+  - `history_mark_verified` は登録済みだが呼び手がゼロだった。フロントエンドは `account_id` を持っていなかったため、他コマンド (`mail_open`/`mail_fetch`) と同様に `current_account_id()` で内部解決するようシグネチャを `(account_id, email)` → `(email)` に簡素化
+  - BEC 警告バナー (ADVISORY 以上) に「本人確認済みにする」ボタンを追加。電話などの帯域外手段で確認が取れた送信者をマークでき、以降の BEC 判定で信頼シグナルとして働く (`kaname-bec` の `user_verified`)
+  - 対象の contacts 行は `mail_fetch` の `record_received` が受信のたびに作成するため、メール一覧に出ている送信者であれば必ず存在する
 - **受信トレイに削除・添付ダウンロードを配線** (D24 (b) を一部解消)
   - 詳細パネルにツールバーを追加: 「🗑 ゴミ箱へ」(`mail_trash`。確認ダイアログ経由)・「✕ 閉じる」。以前は `onClose` が props として存在するのに呼び出し元の UI 要素が無かった
   - 添付を**全件**表示し (従来は危険なものだけ)、各添付に「ダウンロード」ボタンを追加。新規 `mail_list_attachment_blobs` でファイル名→blobId を解決してから `mail_download_attachment` を呼ぶ (`mail_open` の添付検査結果はバイト列由来で blobId を持たないため)

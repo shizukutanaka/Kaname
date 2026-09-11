@@ -264,8 +264,8 @@ async fn history_close() -> Result<(), String> {
 
 /// 送信者を「検証済み」としてマークする。
 #[tauri::command]
-async fn history_mark_verified(account_id: String, email: String) -> Result<(), String> {
-    commands::history_mark_verified(account_id, email).await
+async fn history_mark_verified(email: String) -> Result<(), String> {
+    commands::history_mark_verified(email).await
 }
 
 /// サーバからメール一覧を取得し、各通に BEC 判定を付けて返す。
