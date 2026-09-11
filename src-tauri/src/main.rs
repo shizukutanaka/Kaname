@@ -224,6 +224,11 @@ async fn mail_download_attachment(
     commands::mail_download_attachment(email_id, blob_id).await
 }
 
+#[tauri::command]
+async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<commands::AttachmentRef>, String> {
+    commands::mail_list_attachment_blobs(email_id).await
+}
+
 /// 保存済みメールを新しい順に返す (オフライン閲覧)。
 #[tauri::command]
 async fn mail_list_stored(
@@ -405,6 +410,7 @@ fn main() {
             mail_fetch,
             // 送信者履歴 (BEC の履歴シグナルに供給)
             mail_download_attachment,
+            mail_list_attachment_blobs,
             mail_list_stored,
             mail_search,
             history_open,
