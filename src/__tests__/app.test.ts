@@ -19,24 +19,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { UndoRedoStack } from "../ui/KanameAppleFeatures";
 import { formatDate } from "../ui/Inbox";
 
-// ── テスト用ヘルパー ─────────────────────────────────────────────────────────
-
-function makeEmail(overrides: Partial<Email> = {}): Email {
-  return {
-    id: "e1",
-    from_name: null,
-    from_addr: "alice@company.co.jp",
-    subject: "会議の件",
-    preview: null,
-    received_at: null,
-    is_read: false,
-    is_starred: false,
-    bec_verdict: "SAFE",
-    is_mls: false,
-    ...overrides,
-  };
-}
-
 // ── 1. トリアージ (判定は Rust 側へ集約済み) ────────────────────────────
 
 // 注: triageEmail の TypeScript 実装 (src/ui/KanameApp.tsx) は削除した。
@@ -45,6 +27,15 @@ function makeEmail(overrides: Partial<Email> = {}): Email {
 // テストは crates/kaname-core/src/ux_features.rs の #[cfg(test)] 側にあり、
 // paper_trail / feed / BEC important / 送信者ルール / 大小文字回避まで
 // TypeScript 版より広くカバーしている。二重実装は二重の真実を生むため残さない。
+//
+// 併せて、上記の削除で使い道を失っていた makeEmail() ヘルパーも削除した。
+// どこからも呼ばれていない未使用コードでありながら、消えた KanameApp.tsx
+// の Email 型を import せずに参照しており、tsc/vitest が動く環境であれば
+// 型エラーになっていたはずの状態だった (D20 により未実行のため放置されて
+// いた。crates/kaname-ui/src/commands.rs の mail_list 巻き添え放置
+// (docs/gap-analysis.md D25) と同じ欠陥クラスの、フロントエンド版)。
+
+// ── 2. UndoRedoStack (実 src/ui/KanameAppleFeatures.tsx をインポート) ─────
 
 describe("UndoRedoStack", () => {
   let stack: UndoRedoStack;

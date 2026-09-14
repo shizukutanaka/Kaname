@@ -279,6 +279,84 @@ for u in unused:
 PY
 
 echo ""
+echo "== 6. TypeScript: 未 import・未定義の型参照 (src/__tests__ 含む) =="
+# Rust 側の検査2と同じ欠陥クラスがフロントエンドにもあった: app.test.ts の
+# makeEmail() が、削除済み KanameApp.tsx の Email 型を import せず参照して
+# いた。tsc/vitest は D20 により実行できないため、これも tsc が無ければ
+# 一生気付けない。型検査そのものの代替にはならないが、「大文字始まりの
+# 識別子が import も同一ファイル内定義も無いまま型位置で使われている」
+# ケースだけは機械的に検出できる。
+python3 - <<'PY' || fail=1
+import re, glob, sys
+
+files = {f: open(f, encoding='utf-8', errors='replace').read()
+         for f in glob.glob('src/**/*.ts', recursive=True) + glob.glob('src/**/*.tsx', recursive=True)}
+
+# TS 標準ライブラリ・DOM・vitest/solid-js が提供する型で、各ファイルに
+# import が無くても使える名前。
+BUILTIN_TYPES = {
+    'String','Number','Boolean','Object','Array','Promise','Record','Partial',
+    'Required','Readonly','Pick','Omit','Exclude','Extract','ReturnType',
+    'Parameters','InstanceType','Map','Set','WeakMap','WeakSet','Date','Error',
+    'RegExp','JSON','Math','Symbol','Function','Iterable','Iterator',
+    'IterableIterator','Generator','AsyncGenerator','ArrayBuffer','ArrayLike',
+    'Uint8Array','Int8Array','Float32Array','Float64Array','DataView',
+    'HTMLElement','HTMLInputElement','HTMLDivElement','HTMLButtonElement',
+    'HTMLTextAreaElement','HTMLIFrameElement','Element','Event','CustomEvent',
+    'MouseEvent','KeyboardEvent','EventTarget','Node','Window','Document',
+    'NodeJS','ReturnType','ReadonlyArray','NonNullable','PromiseLike',
+    'ThisType','Awaited',
+    # vitest / solid-js の型としてよく使われるもの
+    'Component','JSXElement','Accessor','Setter','Signal',
+}
+
+def strip_ts_noise(src: str) -> str:
+    src = re.sub(r'r#*"(?:.*?)"#*', '""', src, flags=re.S)
+    src = re.sub(r"'(?:[^'\\]|\\.)*'", "''", src, flags=re.S)
+    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src, flags=re.S)
+    src = re.sub(r'`(?:[^`\\]|\\.)*`', '``', src, flags=re.S)
+    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
+    src = re.sub(r'//[^\n]*', '', src)
+    return src
+
+bad = 0
+for f, raw in files.items():
+    src = strip_ts_noise(raw)
+
+    # このファイル内の import で得られる名前すべて (default/named/type import)。
+    imported = set()
+    for use in re.findall(r'^\s*import\s+(?:type\s+)?.*?from\s+["\'][^"\']*["\']\s*;?', src, re.M):
+        imported.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', use))
+
+    # このファイル内で定義されている型・値の名前。
+    local_defs = set()
+    local_defs.update(re.findall(r'\b(?:interface|type|class|enum)\s+([A-Za-z_][A-Za-z0-9_]*)', src))
+    local_defs.update(re.findall(r'\b(?:export\s+)?(?:const|function)\s+([A-Za-z_][A-Za-z0-9_]*)', src))
+    # ジェネリクス宣言 (`function f<T extends X>` 等) もローカルの型名として
+    # 許可する。`Partial<Email>` のような「ジェネリクスの使用側」まで拾って
+    # しまわないよう、宣言側にしか現れない `function`/`class` 直後の
+    # `<...>` に限定する (最初のテスト実装は `<Name>` を無条件に許可して
+    # おり、まさに検出したかった `Partial<Email>` 型の誤参照を素通りさせて
+    # いた。合成的な回帰テストで発覚)。
+    local_defs.update(re.findall(
+        r'\b(?:function|class)\s+[A-Za-z_][A-Za-z0-9_]*\s*<\s*([A-Za-z_][A-Za-z0-9_]*)', src))
+
+    # 型位置での参照: `: TypeName` および `<TypeName` (ジェネリクス引数)。
+    # 変数の値としての大文字始まり参照 (JSX コンポーネント等) と混同しない
+    # よう、コロンの後ろか、Partial</Array< 等ジェネリクスの内側に限定する。
+    refs = set(re.findall(r':\s*([A-Z][A-Za-z0-9_]*)', src))
+    refs |= set(re.findall(r'<\s*([A-Z][A-Za-z0-9_]*)\s*[>,]', src))
+
+    for sym in sorted(refs):
+        if sym in imported or sym in local_defs or sym in BUILTIN_TYPES:
+            continue
+        print(f"  NG {f}: 型 {sym} が import も同一ファイル内定義も無いまま使われている")
+        bad = 1
+sys.exit(bad)
+PY
+[ "$fail" -eq 0 ] && echo "  OK: 未 import の型参照なし"
+
+echo ""
 if [ "$fail" -eq 0 ]; then
   echo "静的検証: 問題なし"
   echo "注意: これは cargo check の代替ではない。型検査・借用検査・"
