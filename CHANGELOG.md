@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **D24 (a) の分類も一部誤りだった: 「LLM 依存で意図的に未配線」10件のうち8件は LLM 生成ではなく決定論的な防衛策だった** (D30・文書訂正のみ、コード変更なし)
+  - D24 (a) は「配線すると偽の AI 出力を表示する」という理由で10件すべてを一括りにしていたが、`audit_ai_output`/`check_action_risk`/`check_memory_trust`/`check_rule_of_two`/`validate_tool_argument`/`record_agent_step`/`reset_trajectory`/`screen_user_input` の8件は `PromptScreener`/`OutputAuditor`/`TieredRisk` 等の決定論的チェッカーを呼ぶだけで、`kaname-ai::llm_bridge` を一切呼んでいない。本当に LLM 生成を要するのは `ai_smart_reply`/`ai_summarize_email` の2件のみ
+  - **配線しない判断自体は維持する**: `kaname-ui/src/commands.rs` に実際の LLM 呼び出し経路が一つも無いため、防衛すべき対象が無い現状でこれら8件を UI に繋いでも意味を持たない。LLM 本実装と同時に、その入出力の境界に組み込むのが正しい順序。D24 の分類理由のみを訂正した
+
+### Fixed
 - **D24 の分類ミスを発見・修正: `settings_get`/`settings_set` は「内部 API として正当」ではなく、引数を無視するだけの未使用スタブだった** (D29)
   - D24 を書いた時点でこの2コマンドの実装を確認せず「他コマンドから使用される内部 API」と分類していたが、実際は `_account_id`/`_key`/`_value` と使わない引数に `_` を付けたまま `Ok(())`/`Ok(None)` を返すだけで、呼び手は一つも無かった
   - オンボーディング専用の `settings_save_onboarding`/`settings_is_onboarded` は既に `kaname_store::Store::set_setting`/`get_setting` を実際に呼んでいたが、汎用版だけが同じパターンを踏襲せずスタブのまま放置されていた
