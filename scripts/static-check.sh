@@ -279,7 +279,91 @@ for u in unused:
 PY
 
 echo ""
-echo "== 6. TypeScript: 未 import・未定義の型参照 (src/__tests__ 含む) =="
+echo "== 6. 本番コードに .unwrap() が無いこと (CLAUDE.md 不変条件 I6) =="
+# I6: 「unwrap() は本番コードに使用禁止」。#[deny(clippy::unwrap_used)] で
+# 強制する設計だが、clippy は D20 により実行できず一度も検証されていない。
+# テストコード (#[cfg(test)] mod / 個々の #[test] 関数) は対象外。
+python3 - <<'PY' || fail=1
+import re, glob, sys
+
+def _blank(text: str) -> str:
+    # 除去した範囲を同じ改行数の空白に置き換える (行番号がズレないように)。
+    return '\n' * text.count('\n')
+
+def strip_cfg_test_mods(src):
+    out, i, n = [], 0, len(src)
+    while i < n:
+        m = re.compile(r'#\[cfg\(test\)\]').search(src, i)
+        if not m:
+            out.append(src[i:]); break
+        out.append(src[i:m.start()])
+        mod_m = re.compile(r'\bmod\s+\w+\s*\{').search(src, m.end())
+        if not mod_m:
+            out.append(src[m.start():m.end()]); i = m.end(); continue
+        depth, j = 0, mod_m.end() - 1
+        while j < n:
+            if src[j] == '{': depth += 1
+            elif src[j] == '}':
+                depth -= 1
+                if depth == 0: j += 1; break
+            j += 1
+        out.append(_blank(src[m.start():j]))
+        i = j
+    return ''.join(out)
+
+def strip_single_test_fns(src):
+    # #[test] / #[tokio::test] が付いた個々の関数本体を、ブレース対応で除去する
+    # (mod tests { } の外に単発で置かれているテスト関数のため)。
+    out, i, n = [], 0, len(src)
+    pat = re.compile(r'#\[(?:tokio::)?test\][^\]]*\]?\s*\n')
+    while i < n:
+        m = pat.search(src, i)
+        if not m:
+            out.append(src[i:]); break
+        out.append(src[i:m.start()])
+        brace = src.find('{', m.end())
+        if brace == -1:
+            out.append(src[m.start():m.end()]); i = m.end(); continue
+        depth, j = 0, brace
+        while j < n:
+            if src[j] == '{': depth += 1
+            elif src[j] == '}':
+                depth -= 1
+                if depth == 0: j += 1; break
+            j += 1
+        out.append(_blank(src[m.start():j]))
+        i = j
+    return ''.join(out)
+
+def strip_comments_and_strings(src):
+    # 行番号を報告するため、複数行にまたがりうる置換 (raw文字列・複数行
+    # 文字列・ブロックコメント) は改行数を保った置換にする。
+    src = re.sub(r'(?<![a-zA-Z0-9_])r(#*)"(?:.*?)"\1',
+                  lambda m: '"' + _blank(m.group(0)) + '"', src, flags=re.S)
+    src = re.sub(r"'(?:[^'\\]|\\.)'", "''", src, flags=re.S)
+    src = re.sub(r'"(?:[^"\\]|\\.)*"',
+                  lambda m: '"' + _blank(m.group(0)) + '"', src, flags=re.S)
+    src = re.sub(r'/\*.*?\*/', lambda m: _blank(m.group(0)), src, flags=re.S)
+    src = re.sub(r'//[^\n]*', '', src)
+    return src
+
+bad = 0
+for f in glob.glob('crates/**/*.rs', recursive=True) + glob.glob('src-tauri/**/*.rs', recursive=True):
+    if '/target/' in f:
+        continue
+    src = open(f, encoding='utf-8', errors='replace').read()
+    prod = strip_comments_and_strings(strip_single_test_fns(strip_cfg_test_mods(src)))
+    if re.search(r'\.unwrap\(\)', prod):
+        for m in re.finditer(r'\.unwrap\(\)', prod):
+            ln = prod[:m.start()].count('\n') + 1
+            print(f"  NG {f}:{ln}: 本番コードで .unwrap() を使用 (I6 違反)")
+        bad = 1
+sys.exit(bad)
+PY
+[ "$fail" -eq 0 ] && echo "  OK: 本番コードに .unwrap() なし"
+
+echo ""
+echo "== 7. TypeScript: 未 import・未定義の型参照 (src/__tests__ 含む) =="
 # Rust 側の検査2と同じ欠陥クラスがフロントエンドにもあった: app.test.ts の
 # makeEmail() が、削除済み KanameApp.tsx の Email 型を import せず参照して
 # いた。tsc/vitest は D20 により実行できないため、これも tsc が無ければ
