@@ -8,6 +8,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **D25 と同じ欠陥クラスのフロントエンド版が見つかった** (D26)
+  - `app.test.ts` の `makeEmail()` ヘルパーが、`KanameApp.tsx` 削除 (PR #82) で消えた `Email` 型を import せずに参照していた。どこからも呼ばれていない未使用コードでもあった。`tsc`/`vitest` が動く環境であれば型エラーで即発覚するはずが、D20 により実行できず3セッション気付かれなかった
+  - `makeEmail()` を削除
+
+### Added
+- **`static-check.sh` に検査6を追加**: TypeScript の「未 import・未定義の型参照」を検出 (D26 の再発防止)
+  - 大文字始まりの識別子が、import 文にも同一ファイル内の型/値定義にも無いまま型位置 (`: Type` / `Generic<Type>`) で使われているケースを機械的に検出する
+  - 最初の実装は `Partial<Email>` のようなジェネリクス**使用**側まで「ローカルなジェネリクス宣言」として誤って許可しており、検出したかったバグそのものを素通りさせていた。合成的な回帰テスト (壊れたコードを一時的に再現し、検出→復元を確認する) で発覚し、`function f<T>`/`class C<T>` の宣言側にのみ限定して修正した
+  - ワークスペース全体で誤検知ゼロを確認
+
 ### Added
 - **`analyze_raw_email` (mail_import_eml/mail_open 共通の解析経路) に初のユニットテストを追加**
   - これまで一度もテストされていなかった。D25 の static-check 強化の過程で発覚
