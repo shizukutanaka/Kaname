@@ -441,6 +441,43 @@ PY
 [ "$fail" -eq 0 ] && echo "  OK: 未 import の型参照なし"
 
 echo ""
+echo "== 8. ビルドマニフェスト3箇所のバージョン番号が一致していること =="
+# v0.7.0/v0.7.1 のリリースカットで README/CHANGELOG/maturity.md は
+# 更新したが、実際のビルド成果物に埋め込まれる Cargo.toml/package.json/
+# tauri.conf.json のバージョンを更新し忘れ、3箇所とも v0.6.0 のまま
+# 放置されていた。README 上は最新版を名乗りながら、ビルドすれば
+# 旧バージョンを名乗るアプリができる状態だった。再発防止として検証する。
+python3 - <<'PY' || fail=1
+import re, sys
+
+def read(path, pattern):
+    try:
+        src = open(path, encoding='utf-8').read()
+    except FileNotFoundError:
+        return None
+    m = re.search(pattern, src, re.M)
+    return m.group(1) if m else None
+
+versions = {
+    'Cargo.toml':                 read('Cargo.toml', r'^version\s*=\s*"([^"]+)"'),
+    'package.json':                read('package.json', r'"version"\s*:\s*"([^"]+)"'),
+    'src-tauri/tauri.conf.json':   read('src-tauri/tauri.conf.json', r'"version"\s*:\s*"([^"]+)"'),
+}
+missing = [f for f, v in versions.items() if v is None]
+for f in missing:
+    print(f"  NG {f}: version フィールドが見つからない")
+present = {f: v for f, v in versions.items() if v is not None}
+distinct = set(present.values())
+if len(distinct) > 1:
+    for f, v in present.items():
+        print(f"  NG {f}: version = {v}")
+    print(f"  NG バージョン番号が一致していない: {sorted(distinct)}")
+    sys.exit(1)
+sys.exit(1 if missing else 0)
+PY
+[ "$fail" -eq 0 ] && echo "  OK: 3ファイルのバージョンが一致"
+
+echo ""
 if [ "$fail" -eq 0 ]; then
   echo "静的検証: 問題なし"
   echo "注意: これは cargo check の代替ではない。型検査・借用検査・"
