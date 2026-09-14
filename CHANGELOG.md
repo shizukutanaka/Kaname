@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **CLAUDE.md I5 (「ログに PII を含めない」) を守るはずの `PrivacyLayer` が完全に無効だった** (D28・最重要)
+  - `PrivacyLayer` は `kaname-observability` に実装・テストされていたが、どの tracing subscriber にも登録されておらず、実行時に一度も動いていなかった。`kaname-ui::run()` (`src-tauri/main.rs` から実際に呼ばれるロガー初期化) は `tracing_subscriber::fmt()...init()` だけで `PrivacyLayer` を組み込んでいなかった
+  - `tracing_subscriber::registry().with(env_filter).with(fmt::layer()).with(PrivacyLayer).init()` に変更し、実際の subscriber に組み込んだ
+  - **さらに `PrivacyLayer` 自身の docstring も実装と食い違っていた**: 「PII 検出時にイベントをドロップする」と書かれていたが、実装は警告ログを追加発行するだけで、PII を含む元のイベントは他の Layer (フォーマッタ) にそのまま伝播し出力されていた。`tracing-subscriber` の `Layer::on_event` には他レイヤーへの伝播を止める権限が無く、真にブロックするには `Filter::event_enabled` ベースの再設計が要る。docstring を実装どおり (検知のみ・非ブロック) に修正した
+  - 手動でのワークスペース走査では I5 違反 (ログへの PII 直接埋め込み) はゼロ件を確認済みだが、それはプログラマの注意力のみに依存する脆い保証であり、設計されていた多重防衛層が無効だったのは重大な見落としだった
+  - `cargo check` は D20 により実行できず、この修正が型検査を通ることは未検証。`Filter` ベースへの再設計 (実際にブロックできるようにする) も未着手 (残作業として記録)
+
 ### Added
 - **`static-check.sh` に検査6を追加**: CLAUDE.md 不変条件 I6 (「`unwrap()` は本番コードに使用禁止」) を検証 (D27)
   - `#[deny(clippy::unwrap_used)]` で強制する設計だが、`clippy` は D20 (組織のエグレスポリシー) により一度も実行されておらず、I6 が守られているか未検証だった
