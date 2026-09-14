@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **ビルドマニフェスト3箇所のバージョン番号が v0.6.0 のまま放置されていた**: `Cargo.toml` (workspace、全クレートに波及)、`package.json`、`src-tauri/tauri.conf.json`。v0.7.0/v0.7.1 のリリースカットで README/CHANGELOG/maturity.md は更新したが、実際のビルド成果物に埋め込まれるバージョン番号を更新し忘れていた。すべて `0.7.1` に揃えた
+
 ### Changed
 - **`docs/threat-model.md` の残存リスク評価3件が D10 (メールパイプライン未配線) 解消前の前提のまま放置されていた** (最重要)
   - **§3.15b (D18, 送信ドメイン認証の独立検証なし)**: 「D10 未配線のため悪用経路は存在しない」から**「D10 解消により現在実際に稼働している」へ格上げ**。`Authentication-Results` ヘッダを暗号検証・authserv-id 検証なしに信頼する設計は、監査時点では理論上の懸念だったが、**接続先 JMAP サーバや経路上の中継を攻撃者が制御・偽装できれば、現在悪用可能**。`docs/gap-analysis.md` D18 も同様に更新
