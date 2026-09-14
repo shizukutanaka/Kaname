@@ -2,10 +2,10 @@
 
 > AIが助けてくれるのに、裏切らない唯一のメールクライアント
 
-[![CI](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
-[![Security Audit](https://github.com/kaname-app/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/kaname-app/kaname/actions/workflows/ci.yml)
+[![CI](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml/badge.svg)](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml/badge.svg?job=audit)](https://github.com/shizukutanaka/kaname/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/kaname-app/kaname/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/shizukutanaka/kaname/releases)
 [![Status](https://img.shields.io/badge/status-v0.7.0-orange.svg)](docs/maturity.md)
 
 ---
@@ -142,7 +142,7 @@ Content<Trusted>  ← P-LLM が受け取る
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/kaname-app/kaname.git
+git clone https://github.com/shizukutanaka/kaname.git
 cd kaname
 
 # 依存関係インストール
