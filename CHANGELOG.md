@@ -8,7 +8,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-14 — CLAUDE.md 不変条件の検証と、自分自身の記録の訂正
+
+v0.7.0 に続き、CLAUDE.md の不変条件 (I5/I6) を初めて検証し、I5 を守る
+はずの防衛層が完全に無効だったことを発見・修正した。加えて、v0.7.0
+までに書いた D24 の分類を検証し直し、2箇所の誤りを訂正した。
+「結論が同じでも理由が間違っていれば次の判断を誤らせる」という
+教訓を得たリリース (詳細は docs/socratic-review.md)。
+
 ### Fixed
+- **README のバッジ・`git clone` 手順が `kaname-app/kaname` (アクセス範囲外のリポジトリ) を指していた** (D31)
+  - CI/Security Audit/Platform バッジと `git clone` コマンドの4箇所を実際のリポジトリ `shizukutanaka/kaname` に訂正した
+  - `Cargo.toml`/`CLAUDE.md` 等、他13ファイルに残る同種の言及は意図的に変更していない (ブランド名か置き場所かの区別がコードから判断できないため)
+- **`examples/README.md` の「JMAP 送受信は未配線」という記述が D10 解消より前の古い記述のまま残っていた**
+  - 受信/送信/添付ダウンロード/削除/本人確認/検索/永続化はすべて配線済み。サンプルは「サーバ接続なしで同じ検出器をすぐ試せる」という位置づけに書き直した
 - **D24 (a) の分類も一部誤りだった: 「LLM 依存で意図的に未配線」10件のうち8件は LLM 生成ではなく決定論的な防衛策だった** (D30・文書訂正のみ、コード変更なし)
   - D24 (a) は「配線すると偽の AI 出力を表示する」という理由で10件すべてを一括りにしていたが、`audit_ai_output`/`check_action_risk`/`check_memory_trust`/`check_rule_of_two`/`validate_tool_argument`/`record_agent_step`/`reset_trajectory`/`screen_user_input` の8件は `PromptScreener`/`OutputAuditor`/`TieredRisk` 等の決定論的チェッカーを呼ぶだけで、`kaname-ai::llm_bridge` を一切呼んでいない。本当に LLM 生成を要するのは `ai_smart_reply`/`ai_summarize_email` の2件のみ
   - **配線しない判断自体は維持する**: `kaname-ui/src/commands.rs` に実際の LLM 呼び出し経路が一つも無いため、防衛すべき対象が無い現状でこれら8件を UI に繋いでも意味を持たない。LLM 本実装と同時に、その入出力の境界に組み込むのが正しい順序。D24 の分類理由のみを訂正した
