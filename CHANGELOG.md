@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **`static-check.sh` に検査8を追加**: `Cargo.toml`/`package.json`/`tauri.conf.json` のバージョン番号が一致していることを検証 (D32)
+  - 前PRで v0.6.0 のまま放置されていた3箇所を修正した直後、「次のセッションのために記憶しておくべき」と書いただけで自動化していなかった。これは D25/D26 の教訓 (欠陥クラスは自動化するまで再発防止にならない) をその場で忘れていたことになる
+  - 合成的に `package.json` を `0.6.0` に戻して検出されることを確認 (実際に起きたバグをそのまま再現)。復元後に誤検知が無いことも確認済み
+
 ### Fixed
 - **ビルドマニフェスト3箇所のバージョン番号が v0.6.0 のまま放置されていた**: `Cargo.toml` (workspace、全クレートに波及)、`package.json`、`src-tauri/tauri.conf.json`。v0.7.0/v0.7.1 のリリースカットで README/CHANGELOG/maturity.md は更新したが、実際のビルド成果物に埋め込まれるバージョン番号を更新し忘れていた。すべて `0.7.1` に揃えた
 
