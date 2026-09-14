@@ -469,19 +469,27 @@ impl Default for TelemetryConfig {
 }
 
 // ============================================================================
-// PrivacyLayer — tracing-subscriber Layer で PII 漏洩をブロック
+// PrivacyLayer — tracing-subscriber Layer で PII 漏洩を検知
 // ============================================================================
 
-/// PII を含む tracing イベントをブロックする `Layer` 実装。
+/// PII を含む tracing イベントを検知する `Layer` 実装。
 ///
 /// `tracing-subscriber` の Layer として登録することで、
 /// 将来の開発者がうっかり PII をログに書いた場合に検出できる。
 ///
-/// # 動作
+/// # 動作 (現状: 検知のみ・ブロックはしない)
 ///
-/// - 文字列フィールドを `PrivacySanitizer::contains_pii()` で検査
-/// - PII を検出した場合: イベントをドロップし、代替の匿名化ログを出力
-/// - 正常なイベントは全て通過させる
+/// - 文字列フィールドを `PrivacySanitizer::sanitize()` / フィールド名の
+///   許可リストで検査する
+/// - PII を検出した場合: `target: "kaname::privacy"` で警告ログを追加発行する
+/// - **元のイベント自体は他の Layer (`fmt::layer()` 等) にもそのまま渡り、
+///   PII を含んだまま出力される。** `Layer::on_event` には他レイヤーへの
+///   伝播を止める権限が無く、それを行うには `Filter::event_enabled` で
+///   イベント構築前に判定する設計へ変更する必要がある (未実装)。
+///   このコメント自体、以前は「イベントをドロップし代替ログを出力する」
+///   と誤って書かれており、`PrivacyLayer` がどの subscriber にも登録
+///   されていなかったことと合わせて**多重に空文だった**
+///   (docs/gap-analysis.md D28)。まずは検知だけでも動かす。
 pub struct PrivacyLayer;
 
 /// PII を含む可能性のあるフィールドを収集するビジター。
