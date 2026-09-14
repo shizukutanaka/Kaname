@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **D24 の分類ミスを発見・修正: `settings_get`/`settings_set` は「内部 API として正当」ではなく、引数を無視するだけの未使用スタブだった** (D29)
+  - D24 を書いた時点でこの2コマンドの実装を確認せず「他コマンドから使用される内部 API」と分類していたが、実際は `_account_id`/`_key`/`_value` と使わない引数に `_` を付けたまま `Ok(())`/`Ok(None)` を返すだけで、呼び手は一つも無かった
+  - オンボーディング専用の `settings_save_onboarding`/`settings_is_onboarded` は既に `kaname_store::Store::set_setting`/`get_setting` を実際に呼んでいたが、汎用版だけが同じパターンを踏襲せずスタブのまま放置されていた
+  - `Store::set_setting`/`get_setting` を呼ぶ実装に置き換えた。呼び出す UI はまだ無いため `static-check.sh` 検査5の WARN は残るが、これは「実装はしたが UI 未着手」という正直な状態であり、隠さず記録する
+
+### Fixed
 - **CLAUDE.md I5 (「ログに PII を含めない」) を守るはずの `PrivacyLayer` が完全に無効だった** (D28・最重要)
   - `PrivacyLayer` は `kaname-observability` に実装・テストされていたが、どの tracing subscriber にも登録されておらず、実行時に一度も動いていなかった。`kaname-ui::run()` (`src-tauri/main.rs` から実際に呼ばれるロガー初期化) は `tracing_subscriber::fmt()...init()` だけで `PrivacyLayer` を組み込んでいなかった
   - `tracing_subscriber::registry().with(env_filter).with(fmt::layer()).with(PrivacyLayer).init()` に変更し、実際の subscriber に組み込んだ
