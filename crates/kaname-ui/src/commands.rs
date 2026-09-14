@@ -871,8 +871,38 @@ pub async fn ai_smart_reply(_email_id: String) -> Result<Vec<SmartReplyCandidate
         .to_string())
 }
 
-pub async fn settings_set(_account_id: String, _key: String, _value: String) -> Result<(), String> { Ok(()) }
-pub async fn settings_get(_account_id: String, _key: String) -> Result<Option<String>, String> { Ok(None) }
+/// 汎用の設定値を保存する。
+///
+/// 以前は引数をすべて無視して `Ok(())` を返すだけのスタブだった。
+/// `settings_save_onboarding` (オンボーディング専用) は既に
+/// `Store::set_setting` を実際に呼んでいたが、この汎用版は同じ
+/// パターンを踏襲していなかった。D24 (c) で「他コマンドから使用される
+/// 内部 API として正当」と誤って分類していたが、呼び手は一つも
+/// 存在せず、しかも中身がスタブのままだった (docs/gap-analysis.md D29)。
+pub async fn settings_set(account_id: String, key: String, value: String) -> Result<(), String> {
+    let store = store_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    store
+        .set_setting(&account_id, &key, &value)
+        .await
+        .map_err(|e| format!("設定の保存に失敗しました: {e}"))
+}
+
+/// 汎用の設定値を取得する。`settings_set` の対称形。
+pub async fn settings_get(account_id: String, key: String) -> Result<Option<String>, String> {
+    let store = store_slot()
+        .lock()
+        .await
+        .clone()
+        .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
+    store
+        .get_setting(&account_id, &key)
+        .await
+        .map_err(|e| format!("設定の取得に失敗しました: {e}"))
+}
 
 pub async fn log_error(message: String) -> Result<(), String> {
     error!(source = "frontend", %message);
