@@ -448,20 +448,38 @@ echo "== 8. ビルドマニフェスト3箇所のバージョン番号が一致�
 # 放置されていた。README 上は最新版を名乗りながら、ビルドすれば
 # 旧バージョンを名乗るアプリができる状態だった。再発防止として検証する。
 python3 - <<'PY' || fail=1
-import re, sys
+import re, json, sys
 
-def read(path, pattern):
+def read_toml_version(path):
+    # Cargo.toml は TOML なので簡易パーサは使わず、[workspace.package] の
+    # version だけを正規表現で拾う。トップレベルの他の "version" 的な
+    # 文字列 (依存バージョン指定等) と混同しないよう、セクション見出しの
+    # 直後から次の [ セクション見出しまでに限定して探す。
     try:
         src = open(path, encoding='utf-8').read()
     except FileNotFoundError:
         return None
-    m = re.search(pattern, src, re.M)
-    return m.group(1) if m else None
+    m = re.search(r'\[workspace\.package\](.*?)(?=\n\[|\Z)', src, re.S)
+    if not m:
+        return None
+    m2 = re.search(r'^\s*version\s*=\s*"([^"]+)"', m.group(1), re.M)
+    return m2.group(1) if m2 else None
+
+def read_json_version(path):
+    # JSON は正規表現ではなくパーサで読む。"version" キーが devDependencies
+    # 等ネストした場所に先に現れても、トップレベルの値だけを正しく拾う。
+    try:
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    v = data.get('version')
+    return v if isinstance(v, str) else None
 
 versions = {
-    'Cargo.toml':                 read('Cargo.toml', r'^version\s*=\s*"([^"]+)"'),
-    'package.json':                read('package.json', r'"version"\s*:\s*"([^"]+)"'),
-    'src-tauri/tauri.conf.json':   read('src-tauri/tauri.conf.json', r'"version"\s*:\s*"([^"]+)"'),
+    'Cargo.toml':                 read_toml_version('Cargo.toml'),
+    'package.json':                read_json_version('package.json'),
+    'src-tauri/tauri.conf.json':   read_json_version('src-tauri/tauri.conf.json'),
 }
 missing = [f for f, v in versions.items() if v is None]
 for f in missing:
