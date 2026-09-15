@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-screen::OutputAuditor::audit` の漏洩先検出チェックが未正規化テキストを走査し全角回避を見逃していた欠陥を修正** (D53)
+  - チェック1/7 は全角 Unicode 折り返し済みの正規化テキストを走査するが、チェック2 (漏洩先メールアドレス) とチェック3 (URL漏洩) は未正規化の原文を走査しており、全角文字で書かれた漏洩先アドレス/URLはモジュール自身が防ぐはずの回避手口をすり抜けていた
+  - チェック2/3 も正規化済みテキストを走査するよう統一。全角回避を検出する回帰テストを追加
+
+### Fixed
 - **`kaname-dlp::edm::hash_token` が SHA-256 を64bitに切り詰めており doc comment の暗号強度主張と食い違うことを記録** (D52・未修正・記録のみ)
   - `hash_token` はフル SHA-256 を計算後 `digest[..8]` (64bit) のみを `u64` として保存するが、doc comment は「2^128 の誕生日境界」と主張していた。実際の衝突耐性は約 2^32
   - EDM (Exact Data Matching) の衝突は無関係なトークンを機微データ一致と誤判定しうる(false positive、可用性方向)。salt によりレインボーテーブル攻撃は引き続き防がれる
