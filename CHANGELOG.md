@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **末尾のバージョン比較リンクが誤ったリポジトリ (`kaname-app/kaname`) を指していた** (D35。D31/D33 と同じ欠陥クラス)
+  - `shizukutanaka/kaname` に訂正した
+  - **git tag が一つも作成されていないことを確認した** (`git tag -l` が空)。v0.1.0〜v0.7.1 のどのリリースにもタグが付いておらず、比較リンクはリポジトリを訂正しても404のままになる。タグ作成はリリース権限を持つ人間の判断領域のため本セッションでは行わない
+
+### Fixed
 - **`SECURITY.md` が実装されていない保護機構3件を「実装済み」と主張していた** (D34・最重要)
   - 「主要保護メカニズム」節が Dual-LLM 型安全(実際は D17: trait 実装0件)・MLS 暗号化(実際は D1: XOR モック)・Firecracker サンドボックス(実際は D4: no-op)を実装済みと誤って主張していた
   - サポート対象バージョン表も v0.3.x を最新と記載したまま(実際は v0.7.1)だった
@@ -1101,9 +1106,17 @@ Firecracker・課金永続化・UIバックエンド配線) はモック段階�
 - 50 ペイロード × 7 カテゴリの敵対テスト
 - todo!() ゼロ達成
 
-[Unreleased]: https://github.com/kaname-app/kaname/compare/v0.1.4...HEAD
-[0.1.4]: https://github.com/kaname-app/kaname/compare/v0.1.3...v0.1.4
-[0.1.3]: https://github.com/kaname-app/kaname/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/kaname-app/kaname/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/kaname-app/kaname/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/kaname-app/kaname/releases/tag/v0.1.0
+<!-- 2026-09 訂正: 以下は誤ったリポジトリ (kaname-app/kaname) を指していた
+     (D31/D33 と同じ欠陥クラス)。実際のリポジトリ shizukutanaka/kaname に
+     訂正した。ただし git tag は一つも作成されていない (v0.1.0〜v0.7.1 の
+     いずれも) ため、これらのリンクは訂正後もリリースタグが作られるまで
+     404 になる。タグ作成はリリース権限を持つ人間の判断領域のため、本
+     セッションでは作成していない。v0.5.0 以降 (このリポジトリで実際に
+     行われたリリース) のリンクは追加していない — 存在しないタグへの
+     リンクをこれ以上増やすと同じ問題を広げるだけのため。 -->
+[Unreleased]: https://github.com/shizukutanaka/kaname/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/shizukutanaka/kaname/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/shizukutanaka/kaname/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/shizukutanaka/kaname/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/shizukutanaka/kaname/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/shizukutanaka/kaname/releases/tag/v0.1.0
