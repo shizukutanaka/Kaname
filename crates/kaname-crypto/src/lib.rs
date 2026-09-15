@@ -1,8 +1,14 @@
-//! kaname-crypto — ハイブリッド暗号 (古典 + ポスト量子)。
+//! kaname-crypto — ハイブリッド暗号 (古典 + ポスト量子) の**トレイト定義**。
 //!
-//! - KEM: ML-KEM-768 (FIPS 203) + X25519
-//! - 署名: ML-DSA-65 (FIPS 204) + Ed25519
-//! - HNDL (Harvest Now Decrypt Later) 対策
+//! - KEM: ML-KEM-768 (FIPS 203) + X25519 (設計目標)
+//! - 署名: ML-DSA-65 (FIPS 204) + Ed25519 (設計目標)
+//! - HNDL (Harvest Now Decrypt Later) 対策 (設計目標)
+//!
+//! **現状 (2026-09, docs/gap-analysis.md D47)**: `trait Kem` を実装する実暗号バックエンドは
+//! まだ存在しない。`Cargo.toml` に `x25519-dalek`/`ml-kem` 等の依存は無く、`impl Kem for` の
+//! 実装は `#[cfg(test)]` 内の `MockKem` のみ。`HybridX25519MlKem` は構造上は実装済みに見えるが、
+//! 実際に呼び出しても本物の暗号は動かない。加えて MLS 群鍵暗号化を行う `kaname-mls` (D1: XOR モック)
+//! は本クレートに依存しておらず、両者は独立に未実装のまま並存している。
 
 // crates/kaname-crypto/src/lib.rs
 //
@@ -26,8 +32,9 @@
 
 //! # kaname-crypto
 //!
-//! FIPS 203 (ML-KEM) と FIPS 204 (ML-DSA) 準拠のハイブリッド量子後暗号。
-//! クラシカルフォールバックと監査レールを含む。
+//! FIPS 203 (ML-KEM) と FIPS 204 (ML-DSA) 準拠のハイブリッド量子後暗号を目指す設計 (トレイト定義)。
+//! クラシカルフォールバックと監査レールの型は用意されているが、
+//! 実暗号バックエンドは未実装 (詳細は本ファイル冒頭の D47 注記を参照)。
 
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};

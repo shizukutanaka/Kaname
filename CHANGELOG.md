@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-crypto` (ハイブリッド PQC クレート) に実暗号バックエンドが存在しないことを記録** (D47・doc comment のみ訂正・ロジック変更なし)
+  - クレート冒頭が「FIPS 203/204 準拠のハイブリッド量子後暗号」と主張するが、`Cargo.toml` に暗号バックエンド依存が一切無く (`x25519-dalek`/`ml-kem` 等ゼロ)、`trait Kem` の実装は `#[cfg(test)]` 内の `MockKem` のみ。`HybridX25519MlKem::new` の実呼び出しもワークスペース全体でゼロ
+  - MLS 群鍵暗号化を行う `kaname-mls` (D1: XOR モック) はそもそも `kaname-crypto` に依存しておらず、D1 と D47 は別々の未実装が独立に並存している
+  - `kaname-crypto` は暗号設計レビュー (CLAUDE.md) 必須のクレートのため実装は見送り、クレート自身の doc comment のみ現状に合わせて訂正した(詳細: `docs/gap-analysis.md` D47)
+
+### Fixed
 - **`Store::save_message` がフォルダ移動・送信者情報の更新を永久に反映しない欠陥を修正** (D46)
   - `ON CONFLICT (id) DO UPDATE` の SET 句に `mailbox_id`/`from_addr`/`from_name` が含まれておらず、JMAP 側でのメール移動 (Inbox→Archive 等) や再同期時の送信者情報訂正が、決定論的 `id` による冪等 UPSERT では一切反映されなかった (オフライン閲覧が旧フォルダ・旧送信者情報のまま固定される)
   - SET 句に3カラムを追加して修正。回帰テストを2件新規追加(D20 により `cargo test` 実行不可のためコンパイル・実行は未検証、目視でのロジック確認のみ)
