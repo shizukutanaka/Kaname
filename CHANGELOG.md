@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **Dependabot の cargo エコシステムが上限に達し新規PRを開けなくなっていることを記録** (D43・コード変更なし)
+  - `open-pull-requests-limit: 10`(cargo)に対し、未マージのcargo依存PRがちょうど10件(#37〜#45, #95)存在し上限と一致。npm由来も3件(#66/#87/#94)未マージ
+  - D20(`cargo build`/`cargo check`がこの環境で実行不可)により安全にマージ判断ができないため、本セッションでは意図的に未着手のまま残した
+
+### Fixed
 - **D41 の追跡監査で `BecBadge` の表示漏れを発見** (D42・軽微)
   - バックエンドの BEC 判定エラー時フォールバックは正しく `"UNKNOWN"` を返していた(`"SAFE"` と偽らない、`assess_listing` は最初から正しく実装済み)
   - フロントエンドの `BecBadge`(Inbox.tsx)がこのケースをラベル/色マップに含めておらず、内部の生文字列 `"UNKNOWN"` がそのまま UI に表示されていた。「判定失敗」のラベルとグレー配色を追加した
