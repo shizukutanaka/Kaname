@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`HtmlSmugglingDetector::analyze` の4MBサイズ上限切り詰めが UTF-8 文字境界を無視しパニックしうる欠陥を修正** (D50)
+  - `&html[..MAX_HTML_BYTES]` が生のバイトオフセットでスライスするため、マルチバイト文字 (日本語等) の途中を切ると `panic!("byte index is not a char boundary")` していた。OOM DoS 対策自身がクラッシュを起こす本末転倒な状態だった
+  - 既存テストは全て1バイト ASCII のみで構成されており、この境界ケースを一度もテストしていなかった
+  - 切り詰め位置から `is_char_boundary` を満たすまで後退させてからスライスするよう修正。日本語1文字が4MB境界をまたぐ回帰テストを追加
+
+### Fixed
 - **`JmapClient::send_email` が送信済みフォルダ未検出時に架空のメールボックス ID にフォールバックしていた欠陥を修正** (D49)
   - `role == "sent"` のメールボックスが見つからない場合、文字列リテラル `"sent"` を実在しないメールボックス ID として使っていた。`Email/import` が失敗しても「インポート ID なし」という無関係なエラーになり根本原因が分かりにくかった
   - 同一ファイル内の `trash()` と同じパターン (`role` 未検出時に `JmapError::NotFound` を明示的に返す) に統一
