@@ -9,6 +9,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`docs/competitive-analysis.md` の「実装した改善」表に、モック/スタブ/未配線の機能が実装済みとして6項目含まれていた** (D40)
+  - 件名MLS暗号化(D1)・Dual-LLM型安全(D17)・Firecracker添付分離(D4)・ローカルAI推論(D2)が実装済みと主張していた
+  - **新発見**: `kaname-privacy::ZeroKnowledgeSearch` は実装されているが `kaname-ui` から一度も呼ばれておらず、実際の検索(`mail_search`)は平文 LIKE 検索だった。D12/D13/D21 と同じ「実装したが組み付けていない」パターン
+  - 該当6項目に実態を注記(⚠️/✅で区別)
+- **`launch-keynote-2026.md`/`vision-keynote.md`/`product-film-script.md` に現状確認への導線を追加**
+  - これらは Amazon/Apple 流「Working Backwards」を自ら明記した到達目標であり、SECURITY.md/testing-strategy.md/brand-guidelines.md とは性質が異なるため本文は書き換えず、`docs/maturity.md`/`docs/gap-analysis.md` へ導く注記のみ追加した
+
+### Fixed
 - **`docs/brand-guidelines.md` の「推奨表現」が未実装機能を主張するマーケティング文言の使用を執筆者に指示していた** (D39・最重要級)
   - 「推奨表現」に `"型システムで保証"`/`"コンパイル時に検証"`(D17: trait 実装0件)と `"RFC 9420 準拠"`(D1: MLS は XOR モック)が含まれていた
   - SECURITY.md(D34)・testing-strategy.md(D36)は「既に書かれた文書が誇張していた」問題だったが、これは**将来書かれるマーケティング文言・UI 文言が誇張することを積極的に推奨する**という、より先行的な害を持っていた

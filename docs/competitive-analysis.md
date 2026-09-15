@@ -3,6 +3,11 @@
 
 作成: 2026-04-25 | 情報源: 2026年市場調査
 
+> **2026-09 訂正**: 「2. Kaname に実装した改善」「3. Kaname の独自優位性」の
+> 表に、実際にはモック/スタブ段階、または出荷バイナリに配線されていない
+> 項目が「実装済み」として含まれていた (`docs/brand-guidelines.md` D39・
+> `SECURITY.md` D34 と同種)。該当項目に実態を注記した。
+
 ---
 
 ## 1. 競合マップと長所・短所
@@ -42,9 +47,9 @@ QR コードフィッシングはフラグメントベース攻撃に進化し�
 | **配送後 URL 再スキャン** | Mimecast と同等機能をローカルで実装 | `PostDeliveryScanner` |
 | **多ペルソナ BEC キャンペーン検出** | 業界初レベル (単一メール内でなく時系列で検出) | `MultiPersonaDetector` |
 | **メール爆撃防御** | MFA 疲労と組み合わせた攻撃を検出 | `EmailBombingDefense` |
-| **件名 MLS 暗号化** | Tuta と同等、Proton Mail に対して優位 | `SubjectEncryption` |
+| **件名 MLS 暗号化** | ⚠️ **未実装** (`docs/gap-analysis.md` D1)。MLS は単一バイト XOR のモックで、暗号化は行われていない | `SubjectEncryption` |
 | **トラッキングピクセル検出・ブロック** | Proton Mail と同等、Gmail より優位 | `TrackingDetector` |
-| **ゼロ知識ローカル検索** | Tuta と同等、Proton Mail は未実装 | `ZeroKnowledgeSearch` |
+| **ゼロ知識ローカル検索** | ⚠️ **実装はあるが出荷バイナリに未配線**。`ZeroKnowledgeSearch` は `kaname-privacy` に実装済みだが `kaname-ui` から一度も呼ばれておらず、実際に使われている検索 (`mail_search` → `kaname_store::search_messages`) は平文に対する LIKE 検索 | `ZeroKnowledgeSearch` (未配線) |
 
 ---
 
@@ -52,12 +57,12 @@ QR コードフィッシングはフラグメントベース攻撃に進化し�
 
 | 優位点 | 理由 |
 |---|---|
-| **Dual-LLM 型安全** | コンパイル時の型制約 — 従来製品は実行時チェックのみ |
-| **MLS RFC 9420 + PQC** | Proton は PGP (前方秘匿なし)、Tuta は独自暗号 |
-| **ローカル AI 推論** | データを外部に送らない — Proofpoint/Abnormal はクラウド必須 |
-| **Firecracker 添付分離** | ハイパーバイザーレベル添付サンドボックス |
-| **VEC + QR + 多ペルソナ統合** | 5 つの新型攻撃を単一エンジンで対応 |
-| **ゼロ知識検索** | 検索クエリがサーバーに届かない |
+| **Dual-LLM 型安全** | ⚠️ **型定義のみで実装が伴っていない** (`docs/gap-analysis.md` D17)。trait 実装0件、実推論経路は型を経由しない生 `&str` API |
+| **MLS RFC 9420 + PQC** | ⚠️ **未実装** (D1)。単一バイト XOR のモック |
+| **ローカル AI 推論** | ⚠️ **未実装** (`docs/gap-analysis.md` D2)。`llm_bridge` は固定文字列を返すのみで実推論は行われていない |
+| **Firecracker 添付分離** | ⚠️ **未実装** (`docs/gap-analysis.md` D4)。`spawn_vm`/`VsockChannel` は no-op |
+| **VEC + QR + 多ペルソナ統合** | ✅ 実装済み・出荷バイナリに配線済み (`kaname-bec`/`kaname-render`) |
+| **ゼロ知識検索** | ⚠️ **未配線** (上表参照)。実際の検索は平文 LIKE 検索 |
 
 ---
 
