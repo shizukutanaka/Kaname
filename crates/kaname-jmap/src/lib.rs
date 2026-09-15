@@ -499,45 +499,101 @@ impl JmapClient {
     }
 
     /// 変更を同期する。
+    ///
+    /// # ページング (RFC 8620 §5.2)
+    ///
+    /// サーバーは `maxChanges` (500) を超える変更がある場合 `hasMoreChanges: true` を
+    /// 返し、続きは直前の応答の `newState` を次回の `sinceState` として要求する必要が
+    /// ある。ここでループせずに呼び出し元へ `hasMoreChanges` を返すだけだと、
+    /// 誰も次ページを取得しないまま `newState` だけを保存してしまい、
+    /// 500件を超える差分の"中間部分"が誰にも気付かれず永久に欠落する
+    /// (サイレントなデータ損失、docs/gap-analysis.md D48)。
+    /// そのため `hasMoreChanges` が `false` になるまで本メソッド内でループし、
+    /// 全ページ分の `created`/`updated`/`destroyed` を結合して返す。
+    ///
+    /// 無限ループ防止のため最大 `MAX_SYNC_PAGES` ページ (=最大 `MAX_SYNC_PAGES * 500`
+    /// 件) で打ち切る。打ち切った場合も `has_more_changes` に `true` を残すため、
+    /// 呼び出し元は返された `new_state` で再度 `sync()` を呼べば続きから再開できる。
     pub async fn sync(
         &self, mailbox_state: &str, email_state: &str,
     ) -> Result<SyncResult, JmapError> {
-        let rs = self.call(vec![
-            ("Mailbox/changes".into(), serde_json::json!({
-                "accountId": self.account_id, "sinceState": mailbox_state, "maxChanges": 500,
-            }), "mc".into()),
-            ("Email/changes".into(), serde_json::json!({
-                "accountId": self.account_id, "sinceState": email_state, "maxChanges": 500,
-            }), "ec".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        const MAX_SYNC_PAGES: u32 = 50;
 
-        let parse = |id: &str| -> ChangesResult {
-            let a = &rs.iter().find(|r| r.call_id == id).map(|r| &r.args).cloned()
-                .unwrap_or(serde_json::Value::Null);
-            // 想定される JSON 形状 (newState 文字列フィールド) が欠落している場合、
-            // サーバーが不正な応答を返したか、レスポンスに call_id が見つからなかった
-            // ことを意味する。修正前は空文字列/空配列へ黙ってフォールバックしており、
-            // "変更なし" と "サーバー応答が壊れていた" が区別できず、
-            // メールボックスの同期状態が誰にも気付かれずに乖離するリスクがあった。
-            if a["newState"].as_str().is_none() {
-                tracing::warn!(
-                    call_id = id,
-                    "JMAP changes 応答に newState が見つかりません (不正な応答またはサーバーエラーの可能性)"
-                );
-            }
-            ChangesResult {
-                new_state:       a["newState"].as_str().unwrap_or("").into(),
-                has_more_changes: a["hasMoreChanges"].as_bool().unwrap_or(false),
-                created:  str_arr(&a["created"]),
-                updated:  str_arr(&a["updated"]),
-                destroyed: str_arr(&a["destroyed"]),
-            }
+        let mut mailbox = ChangesResult {
+            new_state: mailbox_state.to_string(), has_more_changes: true,
+            created: Vec::new(), updated: Vec::new(), destroyed: Vec::new(),
+        };
+        let mut email = ChangesResult {
+            new_state: email_state.to_string(), has_more_changes: true,
+            created: Vec::new(), updated: Vec::new(), destroyed: Vec::new(),
         };
 
-        Ok(SyncResult {
-            mailbox_changes: parse("mc"),
-            email_changes:   parse("ec"),
-        })
+        for _ in 0..MAX_SYNC_PAGES {
+            if !mailbox.has_more_changes && !email.has_more_changes {
+                break;
+            }
+
+            let mut calls = Vec::new();
+            if mailbox.has_more_changes {
+                calls.push(("Mailbox/changes".into(), serde_json::json!({
+                    "accountId": self.account_id, "sinceState": mailbox.new_state, "maxChanges": 500,
+                }), "mc".into()));
+            }
+            if email.has_more_changes {
+                calls.push(("Email/changes".into(), serde_json::json!({
+                    "accountId": self.account_id, "sinceState": email.new_state, "maxChanges": 500,
+                }), "ec".into()));
+            }
+
+            let rs = self.call(calls, &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+
+            let parse_page = |id: &str| -> Option<ChangesResult> {
+                let a = rs.iter().find(|r| r.call_id == id).map(|r| &r.args)?;
+                // 想定される JSON 形状 (newState 文字列フィールド) が欠落している場合、
+                // サーバーが不正な応答を返したか、レスポンスに call_id が見つからなかった
+                // ことを意味する。修正前は空文字列/空配列へ黙ってフォールバックしており、
+                // "変更なし" と "サーバー応答が壊れていた" が区別できず、
+                // メールボックスの同期状態が誰にも気付かれずに乖離するリスクがあった。
+                if a["newState"].as_str().is_none() {
+                    tracing::warn!(
+                        call_id = id,
+                        "JMAP changes 応答に newState が見つかりません (不正な応答またはサーバーエラーの可能性)"
+                    );
+                }
+                Some(ChangesResult {
+                    new_state:       a["newState"].as_str().unwrap_or("").into(),
+                    has_more_changes: a["hasMoreChanges"].as_bool().unwrap_or(false),
+                    created:  str_arr(&a["created"]),
+                    updated:  str_arr(&a["updated"]),
+                    destroyed: str_arr(&a["destroyed"]),
+                })
+            };
+
+            if mailbox.has_more_changes {
+                if let Some(page) = parse_page("mc") {
+                    mailbox.has_more_changes = page.has_more_changes;
+                    mailbox.new_state = page.new_state;
+                    mailbox.created.extend(page.created);
+                    mailbox.updated.extend(page.updated);
+                    mailbox.destroyed.extend(page.destroyed);
+                } else {
+                    mailbox.has_more_changes = false;
+                }
+            }
+            if email.has_more_changes {
+                if let Some(page) = parse_page("ec") {
+                    email.has_more_changes = page.has_more_changes;
+                    email.new_state = page.new_state;
+                    email.created.extend(page.created);
+                    email.updated.extend(page.updated);
+                    email.destroyed.extend(page.destroyed);
+                } else {
+                    email.has_more_changes = false;
+                }
+            }
+        }
+
+        Ok(SyncResult { mailbox_changes: mailbox, email_changes: email })
     }
 
     /// EventSource プッシュを購読する (SSE / RFC 6202)。
