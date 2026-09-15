@@ -1138,6 +1138,9 @@ impl Store {
                  bec_score, bec_verdict) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', ?7, ?8, ?9, ?10, ?11, ?12) \
              ON CONFLICT (id) DO UPDATE SET \
+                mailbox_id   = ?3, \
+                from_addr    = ?5, \
+                from_name    = ?6, \
                 subject      = ?7, \
                 body_preview = ?8, \
                 received_at  = COALESCE(?9, received_at), \
@@ -1246,4 +1249,78 @@ fn row_to_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> {
         bec_score:    row.get(7)?,
         bec_verdict:  row.get(8)?,
     })
+}
+
+#[cfg(test)]
+mod message_persistence_tests {
+    use super::*;
+
+    async fn seed_account(store: &Store, account_id: &str) {
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO accounts (id, email, identity_fp) \
+             VALUES (?1, ?1 || '@test.invalid', 'fp');",
+            params![account_id],
+        ).unwrap();
+    }
+
+    fn msg(jmap_id: &str, subject: &str) -> NewMessage {
+        NewMessage {
+            jmap_id:      jmap_id.to_string(),
+            from_addr:    "alice@corp.com".to_string(),
+            from_name:    Some("Alice".to_string()),
+            subject:      Some(subject.to_string()),
+            body_preview: Some("hello".to_string()),
+            received_at:  Some("2026-09-15T00:00:00Z".to_string()),
+            is_read:      false,
+            bec_score:    None,
+            bec_verdict:  None,
+        }
+    }
+
+    /// 同じ `jmap_id` を別の `mailbox_id` で再保存すると (JMAP 側でのフォルダ移動の
+    /// 再同期を想定)、`ON CONFLICT` の SET 句に `mailbox_id` が含まれていなかったため
+    /// 旧フォルダに永久に取り残される欠陥があった。修正後は移動先に反映される。
+    #[tokio::test]
+    async fn save_message_はメールボックス移動を上書き保存できる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.save_message("acct1", "inbox", &msg("jmap-1", "件名A")).await.unwrap();
+        let inbox_before = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(inbox_before.len(), 1);
+
+        // 同じ jmap_id を別フォルダで再保存 (フォルダ移動の再同期)。
+        store.save_message("acct1", "archive", &msg("jmap-1", "件名A")).await.unwrap();
+
+        let inbox_after = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert!(inbox_after.is_empty(), "移動後は旧フォルダに残ってはいけない");
+
+        let archive_after = store.list_messages("acct1", "archive", 10).await.unwrap();
+        assert_eq!(archive_after.len(), 1, "移動先フォルダに反映されるべき");
+    }
+
+    /// `from_addr`/`from_name` も同じ理由で `ON CONFLICT` の SET 句に無く、
+    /// 送信者情報の変更 (再同期時の訂正等) が反映されない欠陥があった。
+    #[tokio::test]
+    async fn save_message_は送信者情報の変更も上書き保存できる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.save_message("acct1", "inbox", &msg("jmap-1", "件名A")).await.unwrap();
+
+        let mut updated = msg("jmap-1", "件名A");
+        updated.from_addr = "bob@corp.com".to_string();
+        updated.from_name = Some("Bob".to_string());
+        store.save_message("acct1", "inbox", &updated).await.unwrap();
+
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].from_addr, "bob@corp.com");
+        assert_eq!(rows[0].from_name.as_deref(), Some("Bob"));
+    }
 }
