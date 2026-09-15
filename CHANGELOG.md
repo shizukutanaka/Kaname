@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **DLP/BEC の自組織ドメイン (`our_domain`) が全箇所で `"example.com"` にハードコードされていることを記録** (D44・未修正・記録のみ)
+  - `kaname_dlp::EvalCtx.our_domain`(宛先ミス検出の自己送信除外用)と `kaname_bec::AssessmentRequest.our_domain`(なりすましドメインのホモグリフ検出用)が `commands.rs` の全5箇所で文字列リテラル `"example.com"` のまま渡されており、ログイン中アカウントの実ドメインを一切反映していない
+  - 影響: (1) 送信 DLP の宛先ミス検出が自社ドメイン宛メールを常に「未知の外部ドメイン」として誤検知、(2) BEC のなりすましドメイン(ホモグリフ)検出が自社ドメインを騙る攻撃ドメインを実質検出できない(見逃し方向、より深刻)
+  - 根本原因: `commands.rs`/`kaname-jmap::JmapClient` のどこにも「自組織のメールドメイン」を保持する設定・永続化の仕組みが存在しない(`JmapClient` は JMAP 内部 `account_id` のみ保持)
+  - 修正には設定 UI への「組織ドメイン」入力欄の追加を伴うため、このセッションでは実装せず記録のみに留めた(詳細: `docs/gap-analysis.md` D44)
+
+### Fixed
 - **Dependabot の cargo エコシステムが上限に達し新規PRを開けなくなっていることを記録** (D43・コード変更なし)
   - `open-pull-requests-limit: 10`(cargo)に対し、未マージのcargo依存PRがちょうど10件(#37〜#45, #95)存在し上限と一致。npm由来も3件(#66/#87/#94)未マージ
   - D20(`cargo build`/`cargo check`がこの環境で実行不可)により安全にマージ判断ができないため、本セッションでは意図的に未着手のまま残した
