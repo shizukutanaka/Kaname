@@ -11,7 +11,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **`Store::save_message` がフォルダ移動・送信者情報の更新を永久に反映しない欠陥を修正** (D46)
   - `ON CONFLICT (id) DO UPDATE` の SET 句に `mailbox_id`/`from_addr`/`from_name` が含まれておらず、JMAP 側でのメール移動 (Inbox→Archive 等) や再同期時の送信者情報訂正が、決定論的 `id` による冪等 UPSERT では一切反映されなかった (オフライン閲覧が旧フォルダ・旧送信者情報のまま固定される)
-  - SET 句に3カラムを追加して修正。回帰テストを2件新規追加(修正前のコードで実際に失敗することを確認済み)
+  - SET 句に3カラムを追加して修正。回帰テストを2件新規追加(D20 により `cargo test` 実行不可のためコンパイル・実行は未検証、目視でのロジック確認のみ)
   - `to_addrs` 列が INSERT/UPDATE いずれも `''` 固定で宛先自体が永続化されていない別課題は `NewMessage` の構造拡張が必要なため残置(D46 に記録)
 
 ### Fixed
