@@ -124,11 +124,17 @@ const BecBadge = (props: { verdict: string | null }) => {
     ADVISORY:   "#F5A623",
     SUSPICIOUS: "#E5A500",
     DANGEROUS:  "#E5484D",
+    // BEC 判定自体がエラーで失敗した場合 (commands.rs: assess_listing の
+    // Err 分岐)、SAFE と偽らず "UNKNOWN" を返す設計になっている。以前は
+    // このケースをラベルマップに含めておらず、内部の生文字列 "UNKNOWN"
+    // がそのまま UI に漏れていた。
+    UNKNOWN:    "#5A6473",
   };
   const labels: Record<string, string> = {
     ADVISORY:   "要確認",
     SUSPICIOUS: "不審",
     DANGEROUS:  "危険",
+    UNKNOWN:    "判定失敗",
   };
   const color = colors[props.verdict] || "#8B96A5";
   return (
