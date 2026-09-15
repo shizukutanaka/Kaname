@@ -12,6 +12,16 @@
 > 参照も訂正 (D31)。
 > 「完成」の定義と根拠は `docs/socratic-review.md`。未実装 (MLS/LLM/サンドボックス)
 > と未検証 (cargo/vitest, D20) は本文書の該当節に明記し、UI は一切それを偽らない。
+> **2026-09 続報 (D43〜D50)**: `Store::save_message` がフォルダ移動を永久に反映しない
+> 欠陥 (D46)、`JmapClient::sync` が RFC 8620 の `hasMoreChanges` ページングを実装しておらず
+> 500件超の差分をサイレント欠落させる欠陥 (D48)、`send_email` が送信済みフォルダ未検出時に
+> 架空の ID にフォールバックしていた欠陥 (D49)、`HtmlSmugglingDetector` の4MBサイズ上限が
+> UTF-8 文字境界を無視しパニックしうる欠陥 (D50) を発見・修正。DLP/BEC の `our_domain` が
+> 全箇所 `"example.com"` 固定で自組織ドメインが一切永続化されていない欠陥 (D44) と、
+> `kaname-memory-guard` のゼロ幅文字除去が複数単語キーワードの語境界を壊す新たな回避経路 (D45)、
+> `kaname-crypto` (ハイブリッド PQC クレート) に実暗号バックエンドが皆無で `kaname-mls` とは
+> 独立に未実装のままであること (D47) は、セキュリティレビュー必須クレートに触れるため未修正の
+> まま記録のみ。詳細は `docs/gap-analysis.md` D43〜D50。
 
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、
