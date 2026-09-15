@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`normalize_for_matching` のゼロ幅文字除去が複数単語キーワードの語境界を壊す新たな回避経路を記録** (D45・未修正・記録のみ)
+  - `kaname-memory-guard::normalize_for_matching` はゼロ幅文字 (`​` 等) を削除して単語内挿入回避 (`urg​ent`) を防ぐが、`wire​transfer` のようにスペースの代わりにゼロ幅文字を挿入されると `wiretransfer` に結合され、`kaname-oobv` の複数単語キーワード (`"wire transfer"` 等) の部分一致に失敗する
+  - 単語内挿入対策が単語間挿入という逆方向の新しい回避経路を開いている。影響は `kaname-oobv`/`kaname-bec`/`kaname-screen` の3クレート
+  - セキュリティリード承認必須のクレートに触れる修正のため、本セッションでは実装せず記録のみに留めた(詳細: `docs/gap-analysis.md` D45)
+
+### Fixed
 - **DLP/BEC の自組織ドメイン (`our_domain`) が全箇所で `"example.com"` にハードコードされていることを記録** (D44・未修正・記録のみ)
   - `kaname_dlp::EvalCtx.our_domain`(宛先ミス検出の自己送信除外用)と `kaname_bec::AssessmentRequest.our_domain`(なりすましドメインのホモグリフ検出用)が `commands.rs` の全5箇所で文字列リテラル `"example.com"` のまま渡されており、ログイン中アカウントの実ドメインを一切反映していない
   - 影響: (1) 送信 DLP の宛先ミス検出が自社ドメイン宛メールを常に「未知の外部ドメイン」として誤検知、(2) BEC のなりすましドメイン(ホモグリフ)検出が自社ドメインを騙る攻撃ドメインを実質検出できない(見逃し方向、より深刻)
