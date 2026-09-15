@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`SETUP.md` に D7/D31 と同じ欠陥クラスが3箇所あった** (D38)
+  - `git clone` が誤ったリポジトリ(`kaname-app/kaname`)を指していた(D31/D33/D35 と同じ誤り)。`shizukutanaka/kaname` に訂正
+  - ディレクトリツリー図が `.github/workflows/` に `ci.yml`/`sbom.yml`/`release.yml` が存在すると記載していたが、実際は空(D7)
+  - リリース手順が「`git push origin vX.Y.Z` で CI が自動的にビルド・配布」すると説明していたが、CI 自体が存在しないため配布は起きない
+  - いずれも実態(CI 不在、手動配布が必要)に合わせて訂正した。`scripts/release.sh` 自体は実在することを確認済み
+
+### Fixed
 - **`docs/performance-history.md` が「実測は v0.2.0 リリース時に追記」と予告したまま、v0.7.1 に至るまで一度も追記されていなかった** (D37)
   - `cargo bench` は D20 により本環境で実行不可、CI ベンチマーク (`.github/workflows/perf.yml`) も D7 により存在しないため、この空白は今後も埋まらない可能性が高いことを明記した
   - v0.1.0/v0.1.4 の歴史的な実測記録は変更していない
