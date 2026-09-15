@@ -268,7 +268,10 @@ impl Default for TrackingDetector {
 //
 // Tuta の優位性: ゼロ知識検索 (サーバーが何を検索したか知らない)
 // Proton Mail の弱点: フルテキスト検索でサーバー側に問い合わせ
-// Kaname の実装: SQLite FTS5 でローカル検索、サーバーには一切送信しない
+// このクレートの実装: インメモリ Vec (SQLite FTS5 ではない。下記
+// ZeroKnowledgeSearch のフィールドコメント参照)。出荷バイナリには
+// 未配線で、実際に動いている検索は kaname_store::search_messages
+// (SQLCipher 永続化 + LIKE) である (docs/gap-analysis.md D40)。
 // ============================================================================
 
 /// ゼロ知識ローカル検索エンジン。
@@ -276,8 +279,17 @@ impl Default for TrackingDetector {
 /// 全ての検索処理はデバイス上のみで実行される。
 /// サーバーには検索クエリも結果も送信されない。
 pub struct ZeroKnowledgeSearch {
-    /// ローカルインデックス (email_id → keywords)
-    /// 本番: SQLite FTS5 バーチャルテーブルを使用
+    /// ローカルインデックス (email_id → keywords)。
+    ///
+    /// **2026-09 訂正**: このフィールドは `Vec` によるインメモリ実装で、
+    /// アプリ再起動でインデックスが消える。「本番: SQLite FTS5 バーチャル
+    /// テーブルを使用」という以前の記述は、実装と食い違う願望的な記述
+    /// だった。加えてこのクレート自体が `kaname-ui` から一度も呼ばれて
+    /// おらず出荷バイナリに未配線 (`docs/gap-analysis.md` D40)。
+    /// 実際に配線されている検索 (`kaname_store::search_messages`) は
+    /// SQLCipher に永続化された LIKE 検索であり、こちらを FTS5/永続化
+    /// 対応の `ZeroKnowledgeSearch` に置き換えるだけの価値がまだ無い
+    /// (永続化を失う退行になるため)。
     index: Vec<IndexEntry>,
     /// インデックスエントリ数の上限 (OOM DoS 防止)
     max_entries: usize,
