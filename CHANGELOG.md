@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`SECURITY.md` が実装されていない保護機構3件を「実装済み」と主張していた** (D34・最重要)
+  - 「主要保護メカニズム」節が Dual-LLM 型安全(実際は D17: trait 実装0件)・MLS 暗号化(実際は D1: XOR モック)・Firecracker サンドボックス(実際は D4: no-op)を実装済みと誤って主張していた
+  - サポート対象バージョン表も v0.3.x を最新と記載したまま(実際は v0.7.1)だった
+  - **セキュリティ方針文書自体が、この製品の README・threat-model・gap-analysis が総力で正そうとしてきた「誇張」を体現していた**。脆弱性報告者が誤った前提で判断しないよう、実態に合わせて訂正した
+  - 報告経路・SLA・重大度分類・報奨・監査計画等の運用面は変更していない(人間の意思決定領域)
+
+### Fixed
 - **CONTRIBUTING.md の i18n 節が実態と3点ズレていた** (D33)
   - 存在しないディレクトリ (`src/i18n/`。実際は `src/locales/`)、存在しない言語ファイル (`zh-CN.json`/`ko.json`。`Language` 型は宣言しているが JSON 未作成)、存在しない CI 検証 (D7 により CI 自体が無い) を実態に合わせて訂正
   - `git clone` の URL も D31 と同じ誤り (`kaname-app/kaname`) を含んでいたため `shizukutanaka/kaname` に訂正
