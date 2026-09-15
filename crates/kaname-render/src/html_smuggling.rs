@@ -77,11 +77,21 @@ impl HtmlSmugglingDetector {
     ///
     /// 入力サイズを 4 MB に制限する (to_lowercase() が全体を複製するため
     /// 100 MB 入力で 200 MB 確保される OOM DoS を防ぐ)。
+    ///
+    /// `MAX_HTML_BYTES` は生のバイトオフセットであり、日本語等のマルチバイト
+    /// 文字の途中を指す可能性がある。`&html[..MAX_HTML_BYTES]` のように文字境界を
+    /// 無視してスライスすると "byte index is not a char boundary" で **パニックする**
+    /// (docs/gap-analysis.md D50)。DoS 対策自身が日本語 CJK 入力でクラッシュしては
+    /// 本末転倒なため、直近の文字境界まで後退させてから切り詰める。
     #[must_use]
     pub fn analyze(&self, html: &str) -> SmugglingScan {
         const MAX_HTML_BYTES: usize = 4 * 1024 * 1024;
         let html = if html.len() > MAX_HTML_BYTES {
-            &html[..MAX_HTML_BYTES]
+            let mut boundary = MAX_HTML_BYTES;
+            while boundary > 0 && !html.is_char_boundary(boundary) {
+                boundary -= 1;
+            }
+            &html[..boundary]
         } else {
             html
         };
@@ -420,6 +430,20 @@ mod tests {
         // これは設計上の制約: 超長 HTML は4MB以内のみ検査
         assert_eq!(s.risk, SmugglingRisk::Clean,
             "4MB 超の末尾に埋め込まれた攻撃は切り捨てられる (設計上の制約)");
+    }
+
+    #[test]
+    fn analyze_サイズ上限がマルチバイト文字境界をまたいでもパニックしない() {
+        let d = detector();
+        // 4MB ちょうどの境界に日本語 (3バイト UTF-8) を配置し、切り捨て位置が
+        // 文字の途中に落ちるようにする (D50: 修正前は "byte index is not a
+        // char boundary" でパニックしていた)。
+        const MAX_HTML_BYTES: usize = 4 * 1024 * 1024;
+        let mut html = "a".repeat(MAX_HTML_BYTES - 1);
+        html.push('あ'); // 3バイト文字がちょうど境界をまたぐ
+        html.push_str(&"b".repeat(1024));
+        let s = d.analyze(&html);
+        assert_eq!(s.risk, SmugglingRisk::Clean);
     }
 
     // ── .click() 空白バイパステスト ──────────────────────────────────────────
