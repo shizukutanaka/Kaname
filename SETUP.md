@@ -31,7 +31,7 @@ sudo apt install -y \
 ## クイックスタート (3 コマンド)
 
 ```bash
-git clone https://github.com/kaname-app/kaname.git
+git clone https://github.com/shizukutanaka/kaname.git
 cd kaname
 npm install && cargo build --workspace
 ```
@@ -115,7 +115,9 @@ kaname/
 │   └── generate-icons.sh   # アイコン生成
 │
 ├── .github/                # GitHub 統合
-│   ├── workflows/          # CI: ci.yml + sbom.yml + release.yml
+│   ├── workflows/          # 2026-09 時点で空 (D7: workflows 権限の都合で
+│   │                       #   ci-templates/*.yml から移動できていない。
+│   │                       #   docs/gap-analysis.md D7 参照)
 │   ├── ISSUE_TEMPLATE/     # バグ・機能要望
 │   └── pull_request_template.md
 │
@@ -175,7 +177,9 @@ cargo bench --bench core_bench
 ### リリース
 ```bash
 ./scripts/release.sh 0.2.0     # 9 ステップ自動化 + git tag
-git push origin v0.2.0         # CI が自動的にビルド・配布
+git push origin v0.2.0         # 2026-09 時点で CI 自体が存在しないため
+                                # 自動ビルド・配布は行われない (D7)。
+                                # 手動でビルド・配布する必要がある
 ```
 
 ---
