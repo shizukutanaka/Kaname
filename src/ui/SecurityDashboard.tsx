@@ -395,49 +395,22 @@ const ActionItemsList = (props: {
 
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
   const [phishing, setPhishing] = createSignal<AiPhishingAnalysis | null>(null);
+  const [phishingError, setPhishingError] = createSignal<string | null>(null);
   const [accessLog, setAccessLog] = createSignal<AiAccessEntry[]>([]);
   const [contacts,  setContacts]  = createSignal<ContactIntelligence[]>([]);
   const [actions,   setActions]   = createSignal<ActionItem[]>([]);
   const [loading,   setLoading]   = createSignal(false);
   const [doneItems, setDoneItems] = createSignal<Set<number>>(new Set());
 
-  // モックデータ (テスト用)
-  createEffect(() => {
-    setAccessLog([
-      { id: "a1", email_id: "email_001", label: "Internal", decision: { Allow: null },
-        operation: "summarize", timestamp: Date.now()/1000 - 300, data_sources: ["email:email_001"] },
-      { id: "a2", email_id: "email_002", label: "Confidential", decision: { AllowWithWarning: { reason: "機密" } },
-        operation: "draft_reply", timestamp: Date.now()/1000 - 200, data_sources: ["email:email_002"] },
-      { id: "a3", email_id: "email_003", label: "HighlyConfidential", decision: { Block: { reason: "極秘" } },
-        operation: "summarize", timestamp: Date.now()/1000 - 100, data_sources: [] },
-    ]);
-
-    setContacts([
-      {
-        email_addr: "tanaka@company.co.jp", display_name: "田中 花子",
-        relationship_strength: 0.85, category: "Colleague",
-        total_messages: 42, recent_30d: 8,
-        avg_response_min: 45, typical_hours: [10, 14, 16],
-        last_interaction: "2026-04-24", has_mls: true, trust_level: "High",
-      },
-      {
-        email_addr: "sato@partner.co.jp", display_name: "佐藤 太郎",
-        relationship_strength: 0.45, category: "Customer",
-        total_messages: 12, recent_30d: 2,
-        avg_response_min: 120, typical_hours: [9, 13],
-        last_interaction: "2026-04-20", has_mls: false, trust_level: "Medium",
-      },
-    ]);
-
-    setActions([
-      { text: "提案書の承認をお願いします", assignee: null, due_date: "明日",
-        priority: 0.9, action_type: "Approval", source_text: "承認" },
-      { text: "来週の会議への参加確認", assignee: null, due_date: "来週",
-        priority: 0.8, action_type: "Meeting", source_text: "会議" },
-      { text: "添付ファイルのレビュー", assignee: null, due_date: null,
-        priority: 0.6, action_type: "Review", source_text: "ご確認" },
-    ]);
-  });
+  // 2026-09 削除: 以前はここでハードコードされた偽のアクセスログ・
+  // 連絡先・アクションアイテムを毎回セットしていた (コメント上は
+  // 「モックデータ (テスト用)」だったが、出荷 UI の「セキュリティ」
+  // タブは到達可能でありユーザーが実際に目にする画面だった)。
+  // これらを表示する実データの取得元 (監査ログ取得コマンド・連絡先
+  // 抽出・アクションアイテム抽出) はまだ実装されていないため、
+  // 偽のデータを見せるより空の状態を見せる方が正しい。
+  // 各コンポーネント (AiAccessLog/ActionItemsList/ContactCard の親) は
+  // 空配列を渡された場合を正しく処理する (docs/gap-analysis.md D41)。
 
   // 選択されたメールの AI フィッシング分析
   createEffect(async () => {
@@ -448,13 +421,15 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
         emailId: props.selectedEmailId,
       });
       setPhishing(result);
-    } catch {
-      // モックデータ
-      setPhishing({
-        likely_ai_generated: false, score: 0.15, phishing_intent: false,
-        explanation: "このメールはAI生成の特徴が少なく、通常の人間が書いたメールと判断されます。",
-        features: [],
-      });
+      setPhishingError(null);
+    } catch (e) {
+      // 2026-09 修正: 以前はエラー時に無言で「score: 0.15 (安全)」という
+      // 偽の判定を表示していた。判定に失敗したことを「安全」と偽って
+      // 伝えるのは、判定できたと偽るより悪い (利用者が本物のフィッシング
+      // メールを安全だと誤信しかねない)。スコアバーは表示せず、失敗理由
+      // だけを表示する。
+      setPhishing(null);
+      setPhishingError(String(e));
     } finally {
       setLoading(false);
     }
@@ -489,6 +464,11 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
               "line-height": "1.5",
             }}>
               {phishing()!.explanation}
+            </div>
+          </Show>
+          <Show when={phishingError()}>
+            <div style={{ "font-size": "11px", color: "#E5484D", "line-height": "1.5" }}>
+              ⚠ {phishingError()}
             </div>
           </Show>
           <Show when={loading()}>
@@ -547,18 +527,26 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
         <div style={{ "font-size": "11px", "font-weight": "600", "margin-bottom": "8px", color: "#00C4CC" }}>
           Kaname の独自機能 (競合が持たない)
         </div>
-        {[
-          ["✓", "AI生成フィッシング検出", "94% 精度、全競合が未実装"],
-          ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策"],
-          ["✓", "AI アクセス監査証跡",  "ハッシュチェーンで改ざん証明"],
-          ["✓", "ローカル AI 推論",     "データがデバイス外に出ない"],
-          ["✓", "MLS + PQC 暗号化",    "Proton/Superhuman より強固"],
-        ].map(([icon, name, desc]) => (
+        {/* 2026-09 修正: 以前は5項目すべてに "✓" を付け、ローカル AI 推論
+            (D2: 未実装) と MLS+PQC 暗号化 (D1: XOR モック) まで実装済みと
+            表示していた。SECURITY.md (D34)・brand-guidelines.md (D39)・
+            competitive-analysis.md (D40) と同じ欠陥が出荷 UI 自体にも
+            あった。実装状況どおりに ✓/⚠ を分ける (docs/gap-analysis.md D41) */}
+        {([
+          ["✓", "AI生成フィッシング検出", "kaname-bec の実データ判定 (精度の数値は本環境で未検証、docs/gap-analysis.md D36 参照)"],
+          ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策、実データで稼働"],
+          ["⚠", "AI アクセス監査証跡",  "ハッシュチェーン自体は実装済みだが、UI から閲覧する経路は未実装"],
+          ["✗", "ローカル AI 推論",     "未実装 (docs/gap-analysis.md D2)。LLM 推論は固定応答のスタブ"],
+          ["✗", "MLS + PQC 暗号化",    "未実装 (docs/gap-analysis.md D1)。現状は単一バイト XOR のモック"],
+        ] as const).map(([icon, name, desc]) => (
           <div style={{
             display: "flex", gap: "8px", padding: "4px 0",
             "font-size": "11px",
           }}>
-            <span style={{ color: "#00B368", "font-weight": "700" }}>{icon}</span>
+            <span style={{
+              color: icon === "✓" ? "#00B368" : icon === "⚠" ? "#F5A623" : "#E5484D",
+              "font-weight": "700",
+            }}>{icon}</span>
             <div>
               <span style={{ color: "#D0D5DD" }}>{name}</span>
               <span style={{ color: "#5A6473", "margin-left": "6px" }}>{desc}</span>
