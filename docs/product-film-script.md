@@ -4,6 +4,12 @@
 > Keynote 発表中、"Introducing Kaname" の直後に流す。
 > 拡張版 (3-5 分) も末尾に併記。
 
+> **2026-09 注記**: この脚本は Amazon/Apple 流「Working Backwards」手法
+> (製品を作る前に発表の言葉を先に書き、そこから逆算する) に基づく
+> 到達目標であり、現時点の製品の状態を描写したものではない。
+> 現在何が実装済みで何がモック/未実装かは `docs/maturity.md` /
+> `docs/gap-analysis.md` を参照すること。
+
 ---
 
 ## 基本仕様
