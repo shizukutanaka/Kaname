@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`JmapClient::sync` が `hasMoreChanges` (RFC 8620 §5.2) を無視し500件超の差分をサイレント欠落させる欠陥を修正** (D48)
+  - `Mailbox/changes`/`Email/changes` の `hasMoreChanges` を正しくパースしていたが、この値でページングループしておらず、`sync()` を呼ぶコードが将来書かれた場合に500件を超える差分の中間部分が永久に欠落する潜在バグだった(現時点で `sync()` 自体の呼び出し元はまだ無い)
+  - `hasMoreChanges` が両方 `false` になるまで内部でループするよう修正。無限ループ防止のため最大50ページで打ち切り、打ち切り時は `has_more_changes: true` を呼び出し元に残して再開可能にした
+
+### Fixed
 - **`kaname-crypto` (ハイブリッド PQC クレート) に実暗号バックエンドが存在しないことを記録** (D47・doc comment のみ訂正・ロジック変更なし)
   - クレート冒頭が「FIPS 203/204 準拠のハイブリッド量子後暗号」と主張するが、`Cargo.toml` に暗号バックエンド依存が一切無く (`x25519-dalek`/`ml-kem` 等ゼロ)、`trait Kem` の実装は `#[cfg(test)]` 内の `MockKem` のみ。`HybridX25519MlKem::new` の実呼び出しもワークスペース全体でゼロ
   - MLS 群鍵暗号化を行う `kaname-mls` (D1: XOR モック) はそもそも `kaname-crypto` に依存しておらず、D1 と D47 は別々の未実装が独立に並存している
