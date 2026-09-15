@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`JmapClient::send_email` が送信済みフォルダ未検出時に架空のメールボックス ID にフォールバックしていた欠陥を修正** (D49)
+  - `role == "sent"` のメールボックスが見つからない場合、文字列リテラル `"sent"` を実在しないメールボックス ID として使っていた。`Email/import` が失敗しても「インポート ID なし」という無関係なエラーになり根本原因が分かりにくかった
+  - 同一ファイル内の `trash()` と同じパターン (`role` 未検出時に `JmapError::NotFound` を明示的に返す) に統一
+
+### Fixed
 - **`JmapClient::sync` が `hasMoreChanges` (RFC 8620 §5.2) を無視し500件超の差分をサイレント欠落させる欠陥を修正** (D48)
   - `Mailbox/changes`/`Email/changes` の `hasMoreChanges` を正しくパースしていたが、この値でページングループしておらず、`sync()` を呼ぶコードが将来書かれた場合に500件を超える差分の中間部分が永久に欠落する潜在バグだった(現時点で `sync()` 自体の呼び出し元はまだ無い)
   - `hasMoreChanges` が両方 `false` になるまで内部でループするよう修正。無限ループ防止のため最大50ページで打ち切り、打ち切り時は `has_more_changes: true` を呼び出し元に残して再開可能にした

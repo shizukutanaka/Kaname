@@ -373,10 +373,15 @@ impl JmapClient {
         }
 
         let mailboxes = self.get_mailboxes().await?;
+        // `trash()` と同じ理由で `unwrap_or("sent")` のような架空 ID へのフォールバックは
+        // 使わない。role="sent" のメールボックスが無いまま送信済みフォルダの ID として
+        // 文字列 "sent" を渡すと、大抵のサーバーでは実在しないメールボックス ID として
+        // Email/import が失敗する — その場合エラーメッセージが「インポート ID なし」という
+        // 無関係な文言になり、根本原因 (送信済みフォルダ未検出) が分かりにくくなる。
         let sent_id = mailboxes.iter()
             .find(|m| m.role.as_deref() == Some("sent"))
-            .map(|m| m.id.as_str())
-            .unwrap_or("sent");
+            .map(|m| m.id.clone())
+            .ok_or_else(|| JmapError::NotFound("送信済みフォルダなし".into()))?;
 
         let now = chrono::Utc::now().to_rfc2822();
         let msg_id = format!("<{}@kaname.app>", uuid::Uuid::new_v4().simple());
