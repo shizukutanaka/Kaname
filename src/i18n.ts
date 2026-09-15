@@ -1,13 +1,17 @@
-// src/i18n/index.ts
+// src/i18n.ts
 //
 // Kaname 多言語化システム
 //
 // 設計原則:
 //   - すべての翻訳キーは ja.json (基準) に存在しなければならない
-//   - 他言語は ja.json のキーをすべてカバーすること (CI が検証)
+//   - 他言語は ja.json のキーをすべてカバーすること (CI は無い。目視レビューで確認)
 //   - フォールバック: 翻訳がなければ ja → key 名そのもの
 //   - 補間: {name} 形式のプレースホルダー対応
 //   - SolidJS リアクティブシグナル経由
+//
+// 注: Language 型は "zh-CN"/"ko" も宣言しているが、対応する JSON は
+// まだ無い (CONTRIBUTING.md 参照)。該当ブラウザ言語のユーザーは
+// 日本語へ自動フォールバックする。
 
 import { createSignal, createMemo } from "solid-js";
 import jaTranslations from "./locales/ja.json";

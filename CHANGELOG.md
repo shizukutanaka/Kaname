@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **CONTRIBUTING.md の i18n 節が実態と3点ズレていた** (D33)
+  - 存在しないディレクトリ (`src/i18n/`。実際は `src/locales/`)、存在しない言語ファイル (`zh-CN.json`/`ko.json`。`Language` 型は宣言しているが JSON 未作成)、存在しない CI 検証 (D7 により CI 自体が無い) を実態に合わせて訂正
+  - `git clone` の URL も D31 と同じ誤り (`kaname-app/kaname`) を含んでいたため `shizukutanaka/kaname` に訂正
+  - `src/i18n.ts` 冒頭コメントの誤ったファイルパス表記・CI 主張も訂正
+  - 実害としてはブラウザ言語が中国語/韓国語のユーザーが日本語へ自動フォールバックするのみで、クラッシュや空表示にはならないことも確認済み
+
 ### Added
 - **`static-check.sh` に検査8を追加**: `Cargo.toml`/`package.json`/`tauri.conf.json` のバージョン番号が一致していることを検証 (D32)
   - 前PRで v0.6.0 のまま放置されていた3箇所を修正した直後、「次のセッションのために記憶しておくべき」と書いただけで自動化していなかった。これは D25/D26 の教訓 (欠陥クラスは自動化するまで再発防止にならない) をその場で忘れていたことになる
