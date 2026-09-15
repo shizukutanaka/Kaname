@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`docs/brand-guidelines.md` の「推奨表現」が未実装機能を主張するマーケティング文言の使用を執筆者に指示していた** (D39・最重要級)
+  - 「推奨表現」に `"型システムで保証"`/`"コンパイル時に検証"`(D17: trait 実装0件)と `"RFC 9420 準拠"`(D1: MLS は XOR モック)が含まれていた
+  - SECURITY.md(D34)・testing-strategy.md(D36)は「既に書かれた文書が誇張していた」問題だったが、これは**将来書かれるマーケティング文言・UI 文言が誇張することを積極的に推奨する**という、より先行的な害を持っていた
+  - 該当2表現を取り消し線付きで「使用禁止」に変更し、D1/D17 解消後にのみ使用可能と明記した
+
+### Fixed
 - **`SETUP.md` に D7/D31 と同じ欠陥クラスが3箇所あった** (D38)
   - `git clone` が誤ったリポジトリ(`kaname-app/kaname`)を指していた(D31/D33/D35 と同じ誤り)。`shizukutanaka/kaname` に訂正
   - ディレクトリツリー図が `.github/workflows/` に `ci.yml`/`sbom.yml`/`release.yml` が存在すると記載していたが、実際は空(D7)
