@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-dlp::edm::hash_token` が SHA-256 を64bitに切り詰めており doc comment の暗号強度主張と食い違うことを記録** (D52・未修正・記録のみ)
+  - `hash_token` はフル SHA-256 を計算後 `digest[..8]` (64bit) のみを `u64` として保存するが、doc comment は「2^128 の誕生日境界」と主張していた。実際の衝突耐性は約 2^32
+  - EDM (Exact Data Matching) の衝突は無関係なトークンを機微データ一致と誤判定しうる(false positive、可用性方向)。salt によりレインボーテーブル攻撃は引き続き防がれる
+  - `kaname-dlp` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D52)
+
+### Fixed
 - **「機能デモ」タブ (`KanameAppleFeatures.tsx`) 内の特定の誤情報・未表示のデモ表示を訂正** (D51・部分解消)
   - `QuickLook` の「Firecracker サンドボックスで安全にプレビュー」は、ページ全体が「デモ」と明示されているとはいえ、Firecracker が no-op (D4) であることを知らないと動作中の安全機構と誤読しうる特定の誤情報だった。「デモ表示 (Firecracker 隔離は未実装 — D4)」に訂正
   - `SmartReplyBar` の「AI 返信案」、`PdfExportDialog` の「✓ エクスポート完了」も、`invoke()` を呼ばず固定文言/固定完了状態を返すことがラベル自体には現れていなかった。それぞれ「(デモ・固定文言)」「✓ デモ完了 (実ファイルは生成されません)」に訂正
