@@ -50,7 +50,9 @@ interface SmartReply {
  * Quick Look パネル。macOS Finder のスペースバープレビューと同じ体験。
  *
  * Apple HIG: Quick Look は「アプリを開かずに内容を確認できる」
- * Kaname では添付ファイルを Firecracker サンドボックスで表示する。
+ * Kaname では添付ファイルを将来的に Firecracker サンドボックスで表示する設計だが、
+ * `kaname-sandbox::spawn_vm` は no-op (docs/gap-analysis.md D4) であり、
+ * このデモ画面のプレビューは実際には隔離されていない。UI 文言もその旨に訂正済み。
  */
 export const QuickLook = (props: {
   attachment: Attachment | null;
@@ -183,7 +185,7 @@ export const QuickLook = (props: {
             }}>
               🖼<br />
               <span style={{ "font-size": "11px", color: "rgba(255,255,255,.3)", "margin-top": "8px", display: "block" }}>
-                Firecracker サンドボックスで安全にプレビュー
+                デモ表示 (Firecracker 隔離は未実装 — D4)
               </span>
             </div>
           </Show>
@@ -486,7 +488,7 @@ export const SmartReplyBar = (props: {
                 "letter-spacing": "0.06em",
                 "text-transform": "uppercase",
               }}>
-                AI 返信案
+                AI 返信案 (デモ・固定文言 — 実推論は未配線 D2)
               </span>
               <For each={replies()}>
                 {(reply) => (
@@ -843,7 +845,7 @@ export const PdfExportDialog = (props: {
               transition: "all .3s ease",
             }}
           >
-            {done() ? "✓ エクスポート完了" : exporting() ? "生成中..." : "PDF を保存"}
+            {done() ? "✓ デモ完了 (実ファイルは生成されません)" : exporting() ? "生成中..." : "PDF を保存"}
           </button>
           <button
             onClick={props.onClose}

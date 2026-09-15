@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **「機能デモ」タブ (`KanameAppleFeatures.tsx`) 内の特定の誤情報・未表示のデモ表示を訂正** (D51・部分解消)
+  - `QuickLook` の「Firecracker サンドボックスで安全にプレビュー」は、ページ全体が「デモ」と明示されているとはいえ、Firecracker が no-op (D4) であることを知らないと動作中の安全機構と誤読しうる特定の誤情報だった。「デモ表示 (Firecracker 隔離は未実装 — D4)」に訂正
+  - `SmartReplyBar` の「AI 返信案」、`PdfExportDialog` の「✓ エクスポート完了」も、`invoke()` を呼ばず固定文言/固定完了状態を返すことがラベル自体には現れていなかった。それぞれ「(デモ・固定文言)」「✓ デモ完了 (実ファイルは生成されません)」に訂正
+  - 実際の `invoke()` 配線(D24 で `ai_smart_reply` は honest error を返す実装済み)への切り替えはタブ全体がデモ前提のため見送り
+
+### Fixed
 - **`HtmlSmugglingDetector::analyze` の4MBサイズ上限切り詰めが UTF-8 文字境界を無視しパニックしうる欠陥を修正** (D50)
   - `&html[..MAX_HTML_BYTES]` が生のバイトオフセットでスライスするため、マルチバイト文字 (日本語等) の途中を切ると `panic!("byte index is not a char boundary")` していた。OOM DoS 対策自身がクラッシュを起こす本末転倒な状態だった
   - 既存テストは全て1バイト ASCII のみで構成されており、この境界ケースを一度もテストしていなかった
