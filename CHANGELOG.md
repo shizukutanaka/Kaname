@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`ZeroKnowledgeSearch` 自身の doc コメントも「本番: SQLite FTS5 使用」と誤って主張していた** (D40 の追跡調査)
+  - 実際のフィールドはインメモリ `Vec` で、アプリ再起動でインデックスが消える。コメントを実装どおりに訂正した
+  - **配線は見送った**: 実際に配線されている `kaname_store::search_messages` は SQLCipher に永続化された LIKE 検索であり、未配線かつ非永続の `ZeroKnowledgeSearch` に置き換えると永続化を失う退行になる
+
+### Fixed
 - **`docs/competitive-analysis.md` の「実装した改善」表に、モック/スタブ/未配線の機能が実装済みとして6項目含まれていた** (D40)
   - 件名MLS暗号化(D1)・Dual-LLM型安全(D17)・Firecracker添付分離(D4)・ローカルAI推論(D2)が実装済みと主張していた
   - **新発見**: `kaname-privacy::ZeroKnowledgeSearch` は実装されているが `kaname-ui` から一度も呼ばれておらず、実際の検索(`mail_search`)は平文 LIKE 検索だった。D12/D13/D21 と同じ「実装したが組み付けていない」パターン
