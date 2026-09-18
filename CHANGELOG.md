@@ -9,6 +9,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-bec::aitm::AitmDetector` が OAuth Implicit Flow のフラグメントトークン窃取 (`#access_token=...`) を検出できないことを記録** (D56・未修正・記録のみ)
+  - 高リスク認証パラメーター検出がクエリ文字列区切り (`?`/`&`) のみを見ており、フラグメント区切り (`#`) を見ていない。Tycoon2FA/Storm-1747 等の実際の AiTM フィッシングキットが使う OAuth Implicit Flow のトークン窃取パターンを取りこぼす
+  - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D56)
+
+### Fixed
+- **`kaname-screen::PromptScreener::screen` の主防御 (命令上書きフレーズ検出) がゼロ幅文字による単語間境界破壊で回避されていた欠陥を修正** (D55)
+  - `kaname-screen` 独自の `normalize_for_matching` (D45 の `kaname-memory-guard` 版とは別実装) がゼロ幅文字を削除する設計のため、`ignore​all​previous` のように単語区切りにゼロ幅文字を挿入すると結合され、複数単語の override フレーズ照合が成立しなくなっていた。入力スクリーニングという Dual-LLM 境界前の最初の防御層での回避だった
+  - ゼロ幅文字を削除せずスペースに置換する `normalize_for_matching_spaced` を新設し、削除版・スペース化版の両方でフレーズ照合するよう修正。回帰テストを追加
+
+### Fixed
+- **`kaname-dlp::misdirected_recipient` のフリーメール混入検出が宛先リスト最後尾以外では機能しないことを記録** (D54・未修正・記録のみ)
+  - `all_internal_except_last` は「最後の1件を除く全員」が社内ドメインかのみ判定するため、フリーメールが宛先の先頭・中間にある場合は位置ベースの判定条件が成立せずサイレントに見逃す。`To`/`Cc`/`Bcc` の順序保証はどこにも無く、実際に起こりうる誤送信パターン
+  - `kaname-dlp` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D54)
+
+### Fixed
 - **`kaname-screen::OutputAuditor::audit` の漏洩先検出チェックが未正規化テキストを走査し全角回避を見逃していた欠陥を修正** (D53)
   - チェック1/7 は全角 Unicode 折り返し済みの正規化テキストを走査するが、チェック2 (漏洩先メールアドレス) とチェック3 (URL漏洩) は未正規化の原文を走査しており、全角文字で書かれた漏洩先アドレス/URLはモジュール自身が防ぐはずの回避手口をすり抜けていた
   - チェック2/3 も正規化済みテキストを走査するよう統一。全角回避を検出する回帰テストを追加
