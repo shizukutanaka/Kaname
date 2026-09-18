@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-bec::apply_cross_signal_escalation` がリスク緩和シグナル (ARC検証成功) を認証問題と誤認し複合シグナルボーナスを誤って付与することを記録** (D59・未修正・記録のみ)
+  - `has_auth` 判定が `SignalFamily::Authentication` の存在チェックのみで符号 (加点/減点) を見ていないため、正規の転送メール (ARC成功による減点シグナル) が無関係な Domain/Content シグナルと重なると誤って `+0.20`/`+0.15` の複合ボーナスを受ける。正当な転送メール・請求書督促等を誤って BEC 高リスクと誤判定しうる false positive 方向の欠陥
+  - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D59)
+
+### Fixed
 - **`kaname-bec::dkim_check::DkimReplayTracker` がエントリを一切退避せず無制限にメモリが増加することを記録** (D58・未修正・記録のみ)
   - `(domain, signature_prefix)` を `HashMap` に記録するのみで TTL/LRU/上限のいずれも無い。DKIM 署名は1通ごとに一意なため、攻撃でなくても通常のメール受信だけでプロセス生存期間中ずっと増え続ける。長期稼働するデスクトップメールクライアントで実際に影響する実用的なリソース枯渇バグ
   - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D58)
