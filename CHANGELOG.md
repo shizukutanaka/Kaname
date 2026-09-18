@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-dlp` の既定ポリシーが実装済み12分類器中3つしか有効化しておらず、SSN/IBAN/医療データ等が既定設定では無検査のまま送信できることを記録** (D57・未修正・記録のみ)
+  - `default_rules()` が参照するのは `JpMyNumber`/`CreditCardPan`/`SourceCode` の3分類器のみ。`Iban`/`SwiftBic`/`UsSsn`/`IpAddress`/`AttorneyClientPrivilege`/`DealCodename`/`MedicalData`/`JpCorporateNumber` の8分類器は実装・テスト済みだが、カスタムルール読み込み (`from_db()`) も未配線のため有効化する経路が製品内に存在しない
+  - `kaname-dlp` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D57)
+
+### Fixed
 - **`kaname-bec::aitm::AitmDetector` が OAuth Implicit Flow のフラグメントトークン窃取 (`#access_token=...`) を検出できないことを記録** (D56・未修正・記録のみ)
   - 高リスク認証パラメーター検出がクエリ文字列区切り (`?`/`&`) のみを見ており、フラグメント区切り (`#`) を見ていない。Tycoon2FA/Storm-1747 等の実際の AiTM フィッシングキットが使う OAuth Implicit Flow のトークン窃取パターンを取りこぼす
   - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D56)
