@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`kaname-bec::dkim_check::DkimReplayTracker` がエントリを一切退避せず無制限にメモリが増加することを記録** (D58・未修正・記録のみ)
+  - `(domain, signature_prefix)` を `HashMap` に記録するのみで TTL/LRU/上限のいずれも無い。DKIM 署名は1通ごとに一意なため、攻撃でなくても通常のメール受信だけでプロセス生存期間中ずっと増え続ける。長期稼働するデスクトップメールクライアントで実際に影響する実用的なリソース枯渇バグ
+  - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D58)
+
+### Fixed
 - **`kaname-dlp` の既定ポリシーが実装済み12分類器中3つしか有効化しておらず、SSN/IBAN/医療データ等が既定設定では無検査のまま送信できることを記録** (D57・未修正・記録のみ)
   - `default_rules()` が参照するのは `JpMyNumber`/`CreditCardPan`/`SourceCode` の3分類器のみ。`Iban`/`SwiftBic`/`UsSsn`/`IpAddress`/`AttorneyClientPrivilege`/`DealCodename`/`MedicalData`/`JpCorporateNumber` の8分類器は実装・テスト済みだが、カスタムルール読み込み (`from_db()`) も未配線のため有効化する経路が製品内に存在しない
   - `kaname-dlp` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D57)
