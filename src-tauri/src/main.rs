@@ -161,6 +161,39 @@ async fn deepfake_evaluate(
     commands::deepfake_evaluate(req).await
 }
 
+// ── V02AppState を共有する3コマンド (D15 残件) ────────────────────────────────
+//
+// oobv_start / oobv_verify / pivot_analyze は `Arc<V02AppState>` を引数に取る
+// ため、`.manage()` でステートを登録し `tauri::State` として受け取る必要が
+// あった。ここで配線して到達可能にする。
+
+/// OOBV (Out-of-Band Verification) セレモニーを開始する。
+#[tauri::command]
+async fn oobv_start(
+    state: tauri::State<'_, std::sync::Arc<commands::V02AppState>>,
+    req: commands::OobvStartRequest,
+) -> Result<commands::OobvStartResponse, commands::V02CommandError> {
+    commands::oobv_start(state.inner().clone(), req).await
+}
+
+/// OOBV セレモニーを検証する (ユーザーの合い言葉を照合)。
+#[tauri::command]
+async fn oobv_verify(
+    state: tauri::State<'_, std::sync::Arc<commands::V02AppState>>,
+    req: commands::OobvVerifyRequest,
+) -> Result<commands::OobvVerifyResponse, commands::V02CommandError> {
+    commands::oobv_verify(state.inner().clone(), req).await
+}
+
+/// Pivot 攻撃 (電話番号・別チャネルへの誘導) を解析する。
+#[tauri::command]
+async fn pivot_analyze(
+    state: tauri::State<'_, std::sync::Arc<commands::V02AppState>>,
+    req: commands::PivotAnalyzeRequest,
+) -> Result<commands::PivotAnalyzeResponse, commands::V02CommandError> {
+    commands::pivot_analyze(state.inner().clone(), req).await
+}
+
 // ============================================================================
 // 未配線コマンド (フロントエンドが呼ぶが実装が存在しなかったもの)
 //
@@ -372,6 +405,9 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // OOBV セレモニー / Pivot 履歴 / 監査ログの共有状態 (D15 残件)。
+        // `oobv_start`/`oobv_verify`/`pivot_analyze` が tauri::State 経由で受け取る。
+        .manage(commands::V02AppState::new())
         .setup(|app| {
             #[cfg(desktop)]
             setup_tray(app.handle())?;
@@ -401,6 +437,10 @@ fn main() {
             reset_trajectory,
             oobv_recommend,
             deepfake_evaluate,
+            // V02AppState を共有するコマンド (D15 残件、.manage() で配線)
+            oobv_start,
+            oobv_verify,
+            pivot_analyze,
             // 実メールの入口 (ローカル .eml インポート)
             mail_import_eml,
             mail_scan_folder,
