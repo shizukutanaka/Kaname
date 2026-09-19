@@ -22,11 +22,10 @@
 #![deny(clippy::expect_used)]
 #![allow(missing_docs)]
 
-pub mod login_limiter;
 
 use rusqlite::{Connection, params};
 use sha2::{Sha256, Digest};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
@@ -260,7 +259,6 @@ pub struct SenderProfile {
 /// 暗号化ストアへの不透明ハンドル。
 pub struct Store {
     conn: Arc<Mutex<Connection>>,
-    path: PathBuf,
 }
 
 impl Store {
@@ -294,7 +292,6 @@ impl Store {
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
-            path: path.to_owned(),
         })
     }
 
@@ -319,36 +316,6 @@ impl Store {
         // 将来のマイグレーションはここに追加
         // if version < 1 { conn.execute_batch(SCHEMA_V1)?; }
 
-        Ok(())
-    }
-
-    /// DB を新しいキーに再キー設定する (sqlcipher_export パターン)。
-    pub async fn rekey(&self, new_key_hex: &str) -> Result<(), StoreError> {
-        if new_key_hex.len() != 64 || !new_key_hex.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(StoreError::InvalidKey);
-        }
-
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-
-        // tmpファイルにエクスポートしてから上書き
-        let tmp_path = self.path.with_extension("kmdb.tmp");
-        // ATTACH DATABASE はパラメータバインドが使えないため、
-        // パス文字列中の ' を '' にエスケープして SQL インジェクションを防ぐ
-        let tmp_path_str = tmp_path.display().to_string().replace('\'', "''");
-        // 新しい生鍵を含む ATTACH 文も Zeroizing でラップし実行後にゼロ化する
-        // (apply() と同じ理由: ヒープ上の平文鍵残留を防ぐ)。
-        let attach_sql = zeroize::Zeroizing::new(format!(
-            "ATTACH DATABASE '{tmp_path_str}' AS tmp KEY \"x'{new_key_hex}'\";\
-             SELECT sqlcipher_export('tmp');\
-             DETACH DATABASE tmp;",
-        ));
-        conn.execute_batch(&attach_sql).map_err(|e| StoreError::Db(e.to_string()))?;
-
-        // tmp を本番ファイルに置き換え
-        std::fs::rename(&tmp_path, &self.path)
-            .map_err(StoreError::Io)?;
-
-        tracing::info!("DB 再キー設定完了");
         Ok(())
     }
 

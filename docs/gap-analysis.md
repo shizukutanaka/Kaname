@@ -218,6 +218,7 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | E4 | Tauri 2.x スキーマに存在しない設定フィールド | `src-tauri/tauri.conf.json` の `windows[0].vibrancy`、`bundle.linux.depends`/`desktopTemplate`、`bundle.updater` | 削除済み。いずれも現行スキーマに存在せず `cargo check --workspace` を exit 101 で失敗させていた。`bundle.updater` は `active:true` + `pubkey:""` (空の署名鍵) という危険な設定でもあった |
 | E5 | 非推奨API呼び出し | `src-tauri/src/main.rs` の `TrayIconBuilder::menu_on_left_click` | 修正済み。`show_menu_on_left_click` に置換 (`-D warnings` ビルドを阻害していた) |
 | E6 | 起動時パニックの温床 | `src-tauri/src/main.rs` の `.icon(...unwrap())` | 修正済み。アイコン取得失敗時にアプリ全体がクラッシュする設計だった。`if let Some(icon) = ...` に変更し、失敗時は警告ログのみで継続するよう修正 |
+| E7 | 外部参照ゼロのモジュール・API 群 (関数レベルデッドコード掃除) | `kaname-store/login_limiter.rs` (522行)、`kaname-core/app_state.rs` (525行)、`kaname-render/zip_guard.rs` + `header_sanitize.rs` (354行)、`kaname-observability` の `Metrics`/`LatencyTimer`/`TelemetryConfig`/`hash_email` (~330行)、`kaname-core/ux_features.rs` の Screener/Snooze/SendLater/SafeSummary 群 (~550行) | 削除済み (2026-09)。呼び出し元が存在しない基盤は「配線する価値があるなら削除履歴から復元」できるため、棚卸しせず全削除。`verify_audit_chain` のみ意味のある改ざん検出機能として `history_open` に警告配線を残した |
 | E9 | フロントエンド i18n 基盤 | `src/i18n.ts` (222行) + `src/locales/{ja,en}.json` (158行) | 削除済み (2026-09)。`t()`/`useT()`/`setLanguage()`/`detectLanguage()`/`listLanguages()`/`validateTranslations()` の実呼び出しはゼロ — UI コンポーネントは全てハードコード文字列で、`initI18n()` が起動時にカタログを読むだけの空転基盤だった。kaname-i18n クレート削除 (D19) に続きフロント側も除去。将来多言語化する場合は git 履歴から復元 |
 
 ## 到達不能だった機能 (不足でも過剰でもない第三のカテゴリ)
