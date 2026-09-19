@@ -154,7 +154,7 @@ export function EmlImport() {
       <h2 style={{ "font-size": "20px", "font-weight": "600", "margin-bottom": "6px" }}>
         メールファイルを解析
       </h2>
-      <p style={{ color: "#5A6473", "font-size": "13px", "margin-bottom": "16px", "line-height": "1.7" }}>
+      <p style={{ color: "#8B96A5", "font-size": "13px", "margin-bottom": "16px", "line-height": "1.7" }}>
         ローカルの <code>.eml</code> ファイルを Kaname の解析パイプライン
         (MIME 解析 → 送信ドメイン認証の評価 → BEC 判定 → サニタイズ →
         本文のリスク検出) に通します。サーバ接続もアカウント設定も不要です。
@@ -299,7 +299,7 @@ export function EmlImport() {
                           "font-size": "11px", "font-weight": "700", "white-space": "nowrap",
                         }}>機微 {e.dlp_count} 件</span>
                       </Show>
-                      <span style={{ color: "#5A6473", "white-space": "nowrap" }}>{e.from}</span>
+                      <span style={{ color: "#8B96A5", "white-space": "nowrap" }}>{e.from}</span>
                     </div>
                   );
                 }}
@@ -345,14 +345,14 @@ export function EmlImport() {
                 display: "grid", "grid-template-columns": "120px 1fr",
                 gap: "6px 12px", "font-size": "13px", "margin-bottom": "16px",
               }}>
-                <dt style={{ color: "#5A6473" }}>差出人</dt>
+                <dt style={{ color: "#8B96A5" }}>差出人</dt>
                 <dd style={{ margin: "0" }}>{r().from || "(不明)"}</dd>
-                <dt style={{ color: "#5A6473" }}>件名</dt>
+                <dt style={{ color: "#8B96A5" }}>件名</dt>
                 <dd style={{ margin: "0" }}>{r().subject || "(件名なし)"}</dd>
-                <dt style={{ color: "#5A6473" }}>送信ドメイン認証</dt>
+                <dt style={{ color: "#8B96A5" }}>送信ドメイン認証</dt>
                 <dd style={{ margin: "0" }}>{r().auth}</dd>
                 <Show when={r().attachments.length > 0}>
-                  <dt style={{ color: "#5A6473" }}>添付</dt>
+                  <dt style={{ color: "#8B96A5" }}>添付</dt>
                   <dd style={{ margin: "0" }}>
                     <For each={r().attachments}>
                       {(a) => (
@@ -365,7 +365,7 @@ export function EmlImport() {
                             "font-size": "11px", "font-weight": "700", "margin-right": "6px",
                           }}>{a.is_dangerous ? "危険" : "問題なし"}</span>
                           {a.filename}
-                          <span style={{ color: "#5A6473" }}> ({a.declared_mime})</span>
+                          <span style={{ color: "#8B96A5" }}> ({a.declared_mime})</span>
                           <For each={a.risks}>
                             {(risk) => (
                               <div style={{ color: "#7A4A00", "margin-left": "12px" }}>・{risk}</div>
@@ -382,7 +382,7 @@ export function EmlImport() {
               <Show when={r().oobv_level === "strong"}>
                 <div style={{
                   padding: "10px 12px", "border-radius": "8px",
-                  background: "#FDECEC", border: "1px solid #E5484D60",
+                  background: "#FDECEC", border: "1px solid #FF6B7060",
                   color: "#8A1F22", "font-size": "13px",
                   "line-height": "1.6", "margin-bottom": "12px", "font-weight": "600",
                 }}>
@@ -409,7 +409,7 @@ export function EmlImport() {
                     <div style={{
                       padding: "10px 12px", "border-radius": "8px",
                       background: strong ? "#FDECEC" : "#FBF6E9",
-                      border: `1px solid ${strong ? "#E5484D60" : "#E5A50060"}`,
+                      border: `1px solid ${strong ? "#FF6B7060" : "#E5A50060"}`,
                       color: strong ? "#8A1F22" : "#6B4E00", "font-size": "13px",
                       "line-height": "1.6", "margin-bottom": "12px",
                       "font-weight": strong ? 600 : 400,
@@ -456,7 +456,7 @@ export function EmlImport() {
               </Show>
 
               {/* サニタイズ済み本文 */}
-              <div style={{ "font-size": "13px", color: "#5A6473", "margin-bottom": "6px" }}>
+              <div style={{ "font-size": "13px", color: "#8B96A5", "margin-bottom": "6px" }}>
                 サニタイズ済み本文（サンドボックス内で表示）
               </div>
               <iframe
