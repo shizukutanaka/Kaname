@@ -182,11 +182,13 @@ cargo deny check all
 kaname/
 ├── src/                    # SolidJS フロントエンド
 │   ├── main.tsx            # エントリポイント
-│   └── ui/                 # コンポーネント
-│       ├── KanameDesign.tsx        # Liquid Glass メイン UI
-│       ├── SecurityDashboard.tsx   # セキュリティダッシュボード
-│       ├── KanameAppleFeatures.tsx # Quick Look / Undo / Smart Reply
-│       └── KanameAppleV5.tsx       # スワイプ / Focus / 自然言語検索
+│   └── ui/                 # コンポーネント (到達可能な出荷 UI のみ)
+│       ├── Inbox.tsx             # 受信トレイ (一覧/検索/詳細/添付 DL)
+│       ├── Compose.tsx           # 作成 (送信前アドバイザリ付き)
+│       ├── MailConnect.tsx       # JMAP サーバ接続
+│       ├── EmlImport.tsx         # ローカル .eml 解析
+│       ├── SecurityDashboard.tsx # セキュリティダッシュボード
+│       └── Onboarding.tsx        # 初回起動オンボーディング
 ├── src-tauri/              # Tauri エントリポイント
 │   └── src/main.rs
 ├── crates/                 # Rust クレート (単方向依存)

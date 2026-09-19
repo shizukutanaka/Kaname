@@ -30,6 +30,12 @@
 > `extract_auth_result` を機構スコープ限定パースに修正し `authserv_id` を露出 (D18 部分対応、
 > `mail-auth` 導入は未実施)。npm devDeps の脆弱性は `npm audit fix` で10→4件に削減 (D61、
 > 残りは vitest/vite メジャー更新が前提)。
+> **2026-09 続報 (D51 完全解消・D24 残件)**: 「機能デモ」タブ (KanameAppleFeatures.tsx、
+> 偽データで未実装機能を見せる遊技場、1,244 行) をファイルごと削除しナビから除去 —
+> 部分解消ラベルでもデモ画面を出荷する理由が無かった (到達可能 UI 9/9 → 8/8、
+> vitest 15→8件は対象消滅分)。作成画面の送信前アドバイザリに `oobv_recommend` を配線し、
+> `oobv_start`/`oobv_verify`/`pivot_analyze` も `invoke_handler` 登録で到達可能化 (D15 残件。
+> #139 はコンフリクトで未マージのままクローズされていたため #143 として再適用)。
 
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、
