@@ -1050,6 +1050,12 @@ pub struct NewMessage {
     pub from_addr:   String,
     /// 送信者表示名。
     pub from_name:   Option<String>,
+    /// 宛先アドレス (addr-spec のみ。表示名は保存しない)。
+    ///
+    /// `to_addrs` 列はスキーマ作成時から NOT NULL で存在したが、
+    /// 構造体にフィールドが無く常に `''` で書き込まれていたため
+    /// 宛先情報が完全に消失していた (誤配検出・詳細表示の材料)。
+    pub to_addrs:    Vec<String>,
     /// 件名。
     pub subject:     Option<String>,
     /// 本文プレビュー (一覧表示用)。
@@ -1073,6 +1079,8 @@ pub struct StoredMessage {
     pub from_addr:    String,
     /// 送信者表示名。
     pub from_name:    Option<String>,
+    /// 宛先アドレス (addr-spec のみ。空配列は「未取得」を意味する)。
+    pub to_addrs:     Vec<String>,
     /// 件名。
     pub subject:      Option<String>,
     /// 本文プレビュー。
@@ -1125,6 +1133,15 @@ impl Store {
         if let Some(v) = &msg.from_name    { validate_text_field(v, "from_name", 256)?; }
         if let Some(v) = &msg.subject      { validate_text_field(v, "subject", 2_000)?; }
         if let Some(v) = &msg.body_preview { validate_text_field(v, "body_preview", 10_000)?; }
+        if msg.to_addrs.len() > 1_000 {
+            return Err(StoreError::InvalidInput {
+                field:  "to_addrs",
+                reason: "宛先は 1,000 件まで".to_string(),
+            });
+        }
+        for addr in &msg.to_addrs { validate_text_field(addr, "to_addrs", 320)?; }
+        let to_addrs_json = serde_json::to_string(&msg.to_addrs)
+            .map_err(|e| StoreError::Db(format!("to_addrs のシリアライズに失敗: {e}")))?;
 
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         Self::ensure_account_sync(&conn, account_id)?;
@@ -1136,21 +1153,22 @@ impl Store {
                 (id, account_id, mailbox_id, jmap_id, from_addr, from_name, \
                  to_addrs, subject, body_preview, received_at, is_read, \
                  bec_score, bec_verdict) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, '', ?7, ?8, ?9, ?10, ?11, ?12) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) \
              ON CONFLICT (id) DO UPDATE SET \
                 mailbox_id   = ?3, \
                 from_addr    = ?5, \
                 from_name    = ?6, \
-                subject      = ?7, \
-                body_preview = ?8, \
-                received_at  = COALESCE(?9, received_at), \
-                is_read      = ?10, \
-                bec_score    = ?11, \
-                bec_verdict  = ?12, \
+                to_addrs     = ?7, \
+                subject      = ?8, \
+                body_preview = ?9, \
+                received_at  = COALESCE(?10, received_at), \
+                is_read      = ?11, \
+                bec_score    = ?12, \
+                bec_verdict  = ?13, \
                 updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
             params![
                 id, account_id, mailbox_id, msg.jmap_id, msg.from_addr, msg.from_name,
-                msg.subject, msg.body_preview, msg.received_at,
+                to_addrs_json, msg.subject, msg.body_preview, msg.received_at,
                 i32::from(msg.is_read), msg.bec_score, msg.bec_verdict
             ],
         ).map_err(|e| StoreError::Db(e.to_string()))?;
@@ -1175,7 +1193,7 @@ impl Store {
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         let mut stmt = conn.prepare(
             "SELECT id, from_addr, from_name, subject, body_preview, \
-                    received_at, is_read, bec_score, bec_verdict \
+                    received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
              ORDER BY received_at DESC LIMIT ?3;",
@@ -1215,7 +1233,7 @@ impl Store {
         let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         let mut stmt = conn.prepare(
             "SELECT id, from_addr, from_name, subject, body_preview, \
-                    received_at, is_read, bec_score, bec_verdict \
+                    received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND is_deleted = 0 \
                AND ( subject      LIKE ?2 ESCAPE '\\' \
@@ -1248,6 +1266,12 @@ fn row_to_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> {
         is_read:      row.get::<_, i32>(6)? != 0,
         bec_score:    row.get(7)?,
         bec_verdict:  row.get(8)?,
+        // 過去の行は `''` が入っている (列はあったが常に空で書かれていた)。
+        // パース不能は「宛先不明」として空配列に倒す。
+        to_addrs:     row.get::<_, String>(9)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
+            .unwrap_or_default(),
     })
 }
 
@@ -1269,6 +1293,7 @@ mod message_persistence_tests {
             jmap_id:      jmap_id.to_string(),
             from_addr:    "alice@corp.com".to_string(),
             from_name:    Some("Alice".to_string()),
+            to_addrs:     vec!["bob@corp.com".to_string()],
             subject:      Some(subject.to_string()),
             body_preview: Some("hello".to_string()),
             received_at:  Some("2026-09-15T00:00:00Z".to_string()),
@@ -1322,5 +1347,54 @@ mod message_persistence_tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].from_addr, "bob@corp.com");
         assert_eq!(rows[0].from_name.as_deref(), Some("Bob"));
+    }
+
+    /// `to_addrs` 列はスキーマ上 NOT NULL で存在したが `NewMessage` に
+    /// フィールドが無く常に `''` で書かれていたため、保存時に宛先が
+    /// 全て消失していた。往復で読み戻せることと、再保存時に更新される
+    /// ことを固定する。
+    #[tokio::test]
+    async fn save_message_は宛先を往復保存できる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store.save_message("acct1", "inbox", &msg("jmap-1", "件名A")).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].to_addrs, vec!["bob@corp.com".to_string()]);
+
+        // 宛先が変わって再保存された場合も追従する。
+        let mut updated = msg("jmap-1", "件名A");
+        updated.to_addrs = vec!["carol@corp.com".to_string(), "dan@corp.com".to_string()];
+        store.save_message("acct1", "inbox", &updated).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(rows[0].to_addrs.len(), 2);
+        assert_eq!(rows[0].to_addrs[0], "carol@corp.com");
+    }
+
+    /// 修正前に書かれた行の `to_addrs` は `''` — 読み出し時に JSON パース
+    /// できない値は「宛先不明」として空配列に倒し、エラーにしない。
+    #[tokio::test]
+    async fn list_messages_は過去の空宛先行を空配列として読める() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        // 旧実装の書き込み形 (to_addrs = '') を再現する。
+        store.save_message("acct1", "inbox", &msg("jmap-legacy", "旧件名")).await.unwrap();
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE messages SET to_addrs = '' WHERE jmap_id = 'jmap-legacy';",
+                [],
+            ).unwrap();
+        }
+
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].to_addrs.is_empty(), "'' は宛先不明として空配列に倒す");
     }
 }

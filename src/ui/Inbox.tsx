@@ -60,6 +60,8 @@ interface StoredMessage {
   is_read: boolean;
   bec_score: number | null;
   bec_verdict: string | null;
+  /** 宛先アドレス (addr-spec の配列。旧行は空)。 */
+  to_addrs: string[];
 }
 
 /** "表示名 <addr>" または生アドレスから、実際のメールアドレスだけを取り出す。 */
