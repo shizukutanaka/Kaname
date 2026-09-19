@@ -327,3 +327,9 @@ SafeSummary (~550行)。`verify_audit_chain` のみ改ざん検出として価�
 機能群 ~1,100行を追加削除 (E8): `ZeroKnowledgeSearch` 群 (D40 解消)、
 saas-guard の `oauth_state`/`jwt_inspect`、radar の DNS リゾルバー群、
 ssa の `OrgStyleBaseline`/`assess_with_fallback`。
+
+### 依存クレート掃除 (2026-09, E10)
+
+`use` も derive 参照も無い `[dependencies]` 宣言を 15 クレートから
+計 48 件削除 (kaname-privacy は依存ゼロに、kaname-core は serde のみ)。
+大半は E7/E8 のコード削除に伴い不要化したもの。

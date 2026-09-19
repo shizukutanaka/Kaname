@@ -14,13 +14,10 @@ path = "src/main.rs"
 [dependencies]
 serde      = { workspace = true }
 serde_json = { workspace = true }
-thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-kaname-error = { path = "../kaname-error" }
 tracing-subscriber = { workspace = true }
 axum       = { workspace = true }
-tower      = { workspace = true }
 tower-http = { workspace = true }
 
 [dev-dependencies]
