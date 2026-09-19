@@ -22,7 +22,6 @@
     "fuzz:mime": "cd fuzz && cargo +nightly fuzz run mime_parser -- -max_total_time=120",
     "fuzz:html": "cd fuzz && cargo +nightly fuzz run html_sanitizer -- -max_total_time=120",
     "fuzz:prompt": "cd fuzz && cargo +nightly fuzz run prompt_injection -- -max_total_time=120",
-    "snapshots:init": "bash scripts/init-snapshots.sh",
     "stats": "bash scripts/stats.sh",
     "test:coverage": "vitest run --coverage",
     "test:coverage:ui": "vitest --coverage --ui",
