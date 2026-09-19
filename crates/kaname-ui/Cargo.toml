@@ -48,7 +48,6 @@ dirs = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]
-tokio-test = "0.4"
 
 [features]
 # tauri-app: src-tauri からビルドする際に tauri::command マクロを有効化

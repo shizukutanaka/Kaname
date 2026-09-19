@@ -352,4 +352,5 @@ ssa の `OrgStyleBaseline`/`assess_with_fallback`。
 
 `use` も derive 参照も無い `[dependencies]` 宣言を 15 クレートから
 計 48 件削除 (kaname-privacy は依存ゼロに、kaname-core は serde のみ)。
-大半は E7/E8 のコード削除に伴い不要化したもの。
+大半は E7/E8 のコード削除に伴い不要化したもの。workspace ルート
+宣言10件、dev-dep 3件、src-tauri 2件、npm 1件も除去 (計61件)。
