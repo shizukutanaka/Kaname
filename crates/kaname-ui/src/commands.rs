@@ -305,10 +305,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     let from_addr_only = env.from.first().map(|a| a.addr.as_string()).unwrap_or_default();
     // 金銭要求の有無は BEC の判定材料と揃える (文体逸脱との複合で警告を上げる)。
     let has_financial = {
+        // D45: 複数単語キーワード ("wire transfer") はゼロ幅文字を単語間に
+        // 挿入されると削除版正規化では "wiretransfer" に結合されて
+        // すり抜ける。スペース化版でも照合して捕捉する。
         let n = kaname_memory_guard::normalize_for_matching(&body_text);
+        let n_spaced = kaname_memory_guard::normalize_for_matching_spaced(&body_text);
         ["振込", "送金", "支払", "invoice", "wire transfer", "payment"]
             .iter()
-            .any(|k| n.contains(k))
+            .any(|k| n.contains(k) || n_spaced.contains(k))
     };
     let style_risks =
         evaluate_sender_style(&from_addr_only, &body_text, send_hour, has_financial).await;

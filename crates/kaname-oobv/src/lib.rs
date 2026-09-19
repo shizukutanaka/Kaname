@@ -450,12 +450,17 @@ impl OobvRecommender {
         // kaname-memory-guard の共通正規化を通す。
         // (キーワードはいずれも半角小文字 ASCII または日本語で登録されており、
         //  正規化後の本文と直接照合できる。)
+        // D45: `normalize_for_matching` はゼロ幅文字を削除するため、
+        // `wire\u{200B}transfer` のような単語間挿入で複数単語キーワード
+        // ("wire transfer" 等) を回避されてしまう。スペース化版でも照合して
+        // 両方の回避を捕捉する。
         let body_norm = kaname_memory_guard::normalize_for_matching(body);
+        let body_norm_spaced = kaname_memory_guard::normalize_for_matching_spaced(body);
         let financial_count = self.financial_keywords.iter()
-            .filter(|kw| body_norm.contains(*kw))
+            .filter(|kw| body_norm.contains(*kw) || body_norm_spaced.contains(*kw))
             .count();
         let urgency_count = self.urgency_keywords.iter()
-            .filter(|kw| body_norm.contains(*kw))
+            .filter(|kw| body_norm.contains(*kw) || body_norm_spaced.contains(*kw))
             .count();
 
         match (financial_count, urgency_count) {
@@ -787,6 +792,18 @@ mod tests {
         let body = "wire\u{200B} transfer needed urg\u{200B}ent";
         assert_eq!(r.recommend(body), RecommendationLevel::Strong,
             "ゼロ幅文字によるキーワード回避が検出されなかった");
+    }
+
+    #[test]
+    fn recommender_detects_zero_width_as_word_separator() {
+        // D45 回帰: ゼロ幅文字をスペースの**代わり**に使う回避。
+        // "wire\u{200B}transfer" は削除版正規化で "wiretransfer" に結合され、
+        // 複数単語キーワード "wire transfer" をすり抜けていた。
+        // スペース化版との二重照合で捕捉されることを確認する。
+        let r = OobvRecommender::new();
+        let body = "please process the wire\u{200B}transfer by EOD, right\u{200B}now";
+        assert_eq!(r.recommend(body), RecommendationLevel::Strong,
+            "単語間ゼロ幅挿入によるキーワード回避が検出されなかった");
     }
 
     #[test]
