@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **作成画面の送信前アドバイザリに `oobv_recommend` を配線** (D24 残件 — 台帳記載の想定用途どおり)
+  - 本文入力の debounce が「DLP 事前チェック」を意図しながら空のスタブだったため実装に置き換え。送金要求・急迫表現等の別経路確認推奨文脈を送信前に助言表示 (ブロックではなく助言。呼び出し失敗は送信を妨げない)
+
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)
   - `to_addrs: Vec<String>` を両構造体に追加し JSON 配列として保存。`mail_fetch` が JMAP `Email.to[].email` を供給。旧行の `''` は「宛先不明」として空配列に倒す後方互換。回帰テスト2件追加
