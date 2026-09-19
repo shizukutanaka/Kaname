@@ -340,3 +340,10 @@ TelemetryConfig (~330行)、ux_features の Screener/Snooze/SendLater/
 SafeSummary (~550行)。`verify_audit_chain` のみ改ざん検出として価値が
 あるため `history_open` に警告配線を追加して残した。
 「価値が判明したら git 履歴から復元する」方針は D19/D48 と同一。
+
+### 第2走査 — ライブクレート内デッド機能削除 (2026-09)
+
+型名が他ファイルに一度も現れない `pub` 項目を走査し、到達不能な
+機能群 ~1,100行を追加削除 (E8): `ZeroKnowledgeSearch` 群 (D40 解消)、
+saas-guard の `oauth_state`/`jwt_inspect`、radar の DNS リゾルバー群、
+ssa の `OrgStyleBaseline`/`assess_with_fallback`。
