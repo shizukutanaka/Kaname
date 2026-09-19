@@ -24,8 +24,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `;` 区切り各部の `mechanism=result` トークンのみを機構結果として認めるパースに変更 (RFC 8601)。authserv-id の信頼リスト照合自体は組織ドメイン設定 (D44) と `mail-auth` 導入に依存するため未実施
 
 ### Security
-- **フロントエンド devDependencies の既知脆弱性を `npm audit fix` で10件→4件に削減** (D61・部分対応)
-  - `postcss`/`nanoid`/`js-yaml`/`browserslist`/`brace-expansion`/`baseline-browser-mapping` を非破壊的に更新 (lockfile のみ)。残り4件は `vitest`/`vite` メジャー更新が前提のため見送り(詳細: `docs/gap-analysis.md` D61)
+- **フロントエンド devDependencies の既知脆弱性を全件解消 (10件→0件)** (D61 解消)
+  - `postcss`/`nanoid`/`js-yaml`/`browserslist`/`brace-expansion`/`baseline-browser-mapping` を非破壊的に更新 (lockfile のみ)
+  - **残り4件もメジャー更新で解消**: `vite` 5→8 (rolldown 系)、`vitest` 1→5、`jsdom` 最新化、`@types/node` ^24。rolldown で `manualChunks` のオブジェクト形式が廃止されたため `vite.config.ts` を関数形式に書き換え (チャンク分割は維持)。`npm audit` 0件を実測確認
 
 ### Fixed
 - **実装済みの `oobv_start`/`oobv_verify`/`pivot_analyze` 3コマンドを Tauri に配線して到達可能化** (D15 残件)
