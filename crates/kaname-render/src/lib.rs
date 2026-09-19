@@ -149,6 +149,15 @@ pub struct AuthResultsHeader {
     pub dkim:  AuthResult,
     /// DMARC 検証結果。
     pub dmarc: AuthResult,
+    /// ヘッダを記述した MTA の識別子 (authserv-id, RFC 8601 §2.2)。
+    ///
+    /// RFC 8601 §7.1 は、MUA が信頼する authserv-id のリストと照合して
+    /// 結果を受け入れることを要求する。Kaname は受信経路の MTA ドメインを
+    /// まだ設定として持たない (docs/gap-analysis.md D44) ため、現時点では
+    /// **検証ではなく露出のみ**行う — 下流・将来の信頼リスト照合が判別に
+    /// 使えるよう記述元を保持する。ヘッダ値をそのまま信頼する前提は
+    /// 変わらない (docs/threat-model.md §3.15b, gap-analysis D18)。
+    pub authserv_id: Option<String>,
 }
 
 /// 個別の送信ドメイン認証結果。
@@ -273,30 +282,46 @@ fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
         })
         .unwrap_or_default();
 
+    // authserv-id は最初の `;` の前にある先頭トークン (RFC 8601 §2.2)。
+    // `=` を含まない先頭トークンがそれに相当する。
+    let authserv_id = header_text
+        .split(';')
+        .next()
+        .and_then(|head| head.split_whitespace().next())
+        .filter(|tok| !tok.contains('='))
+        .map(|tok| tok.to_string());
+
     let spf   = extract_auth_result(&header_text, "spf");
     let dkim  = extract_auth_result(&header_text, "dkim");
     let dmarc = extract_auth_result(&header_text, "dmarc");
 
-    AuthResultsHeader { spf, dkim, dmarc }
+    AuthResultsHeader { spf, dkim, dmarc, authserv_id }
 }
 
 fn extract_auth_result(header: &str, mechanism: &str) -> AuthResult {
-    let lower = header.to_lowercase();
-    // 例: "spf=pass", "dkim=fail", "dmarc=none"
-    let search = format!("{mechanism}=");
-    if let Some(pos) = lower.find(&search) {
-        let rest = &lower[pos + search.len()..];
-        let value: &str = rest.split_whitespace().next().unwrap_or("").trim_end_matches(';');
-        match value {
-            "pass"     => AuthResult::Pass,
-            "fail"     => AuthResult::Fail,
-            "neutral"  => AuthResult::Neutral,
-            "softfail" => AuthResult::SoftFail,
-            _          => AuthResult::None,
+    // RFC 8601: ヘッダは `;` 区切りのメソッド部の並びで、各部は
+    // `mechanism=result` で始まり、後続にプロパティ (`header.d=` /
+    // `smtp.mailfrom=` 等) が続く。機構結果として認めるのは各部の
+    // `mechanism=result` トークンのみ — プロパティ値に `dkim=pass` のような
+    // 文字列が混入しても機構結果として誤読しない
+    // (gap-analysis D18: 旧実装は `find("dkim=")` の最初の一致を取っており、
+    // 攻撃者が影響しうる echo フィールド内の擬似トークンを機構結果と
+    // 誤認しえた)。
+    for part in header.split(';') {
+        for token in part.split_whitespace() {
+            let Some((key, value)) = token.split_once('=') else { continue };
+            if key.eq_ignore_ascii_case(mechanism) {
+                return match value.to_lowercase().as_str() {
+                    "pass"     => AuthResult::Pass,
+                    "fail"     => AuthResult::Fail,
+                    "neutral"  => AuthResult::Neutral,
+                    "softfail" => AuthResult::SoftFail,
+                    _          => AuthResult::None,
+                };
+            }
         }
-    } else {
-        AuthResult::None
     }
+    AuthResult::None
 }
 
 // ============================================================================
@@ -700,6 +725,44 @@ mod tests {
         assert_eq!(env.auth_results.spf, AuthResult::Pass);
         assert_eq!(env.auth_results.dkim, AuthResult::Fail);
         assert_eq!(env.auth_results.dmarc, AuthResult::Pass);
+        assert_eq!(env.auth_results.authserv_id.as_deref(), Some("mx.example.com"));
+    }
+
+    #[test]
+    fn auth_results_ignores_mechanism_like_text_in_properties() {
+        // D18 回帰: プロパティ値に混入した `dkim=pass` を機構結果と誤読しない。
+        // 旧実装は `find("dkim=")` の最初の一致を採ったため、spf 部の
+        // smtp.mailfrom 値に含まれる擬似トークンを dkim=pass と誤認した。
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    Authentication-Results: mx.example.com; \
+                      spf=fail smtp.mailfrom=dkim=pass@evil.example; \
+                      dkim=temperror header.d=evil.example; \
+                      dmarc=fail header.from=evil.example\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.auth_results.spf, AuthResult::Fail);
+        // `smtp.mailfrom=dkim=pass@evil.example` はプロパティであり、
+        // 実際の dkim 結果は temperror (未知値) → None。
+        assert_eq!(env.auth_results.dkim, AuthResult::None,
+            "プロパティ内の擬似トークンを dkim 結果として拾ってはいけない");
+        assert_eq!(env.auth_results.dmarc, AuthResult::Fail);
+        assert_eq!(env.auth_results.authserv_id.as_deref(), Some("mx.example.com"));
+    }
+
+    #[test]
+    fn auth_results_missing_authserv_id_is_none() {
+        // authserv-id を欠くヘッダ (送信者自身が埋め込んだ偽ヘッダ等) では
+        // 機構結果のみ読み、authserv_id は None。
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    Authentication-Results: dkim=pass header.d=evil.example\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.auth_results.dkim, AuthResult::Pass);
+        assert_eq!(env.auth_results.authserv_id, None);
     }
 
     #[test]
