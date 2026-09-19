@@ -8,12 +8,7 @@ rust-version.workspace = true
 kaname-ai = { path = "../kaname-ai" }
 kaname-screen = { path = "../kaname-screen" }
 kaname-bec = { path = "../kaname-bec" }
-kaname-dlp = { path = "../kaname-dlp" }
-serde      = { workspace = true }
 serde_json = { workspace = true }
-thiserror  = { workspace = true }
-tokio      = { workspace = true }
-tracing    = { workspace = true }
 
 proptest  = { workspace = true }
 

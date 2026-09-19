@@ -27,6 +27,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - 反対に `Store::verify_audit_chain` はテスト専用だったが実用上意味がある改ざん検出機能のため、`history_open` で警告ログを出す配線を追加 (削除せず接続)
 - **ライブクレート内のデッド機能群を第2走査で削除** (E8、計 ~1,100行)。第3走査 (バリアント/フィールドレベル) では構築経路ゼロの `AuditFinding::TaskContradiction` バリアントと `scripts/pre-commit.sh` の死んだ i18n 検証 (存在しない `src/i18n/index.ts` を参照) も除去 — 以降の層 (pub フィールド) には未使用は検出されず
   - `kaname-privacy::ZeroKnowledgeSearch` + `SearchResult`/`MatchedField`/`parse_search_query` (~215行、D40 解消 — 実際の検索は `kaname_store::search_messages` で、doc 自身が「置き換える価値なし」と記述していた未配線機能)、`kaname-saas-guard::oauth_state`/`jwt_inspect` モジュール (513行)、`kaname-radar` の `DnsResolver`/`SystemDnsResolver`/`StaticDnsResolver` (~225行)、`kaname-ssa` の `OrgStyleBaseline`/`assess_with_fallback` (~160行)
+- **宣言のみで参照ゼロの依存クレートを 15 クレートから 48 件削除** (E10)
+  - kaname-privacy は依存ゼロに (serde/serde_json/thiserror/tokio/tracing/kaname-error 全て未使用)、kaname-core は serde のみ残して 9 件除去。kaname-oobv/pivot/radar/render/observability/ssa/saas-guard/store/jmap/error/ui/tests/mockserver の未使用依存も除去。大半は E7/E8 のコード削除に伴い不要化したもの
 
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)
