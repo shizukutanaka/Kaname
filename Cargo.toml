@@ -1,13 +1,12 @@
 # Cargo.toml — Kaname workspace root
 # 設計: resolver="2", 全バージョン一元管理, release 最適化済み
-# 27 クレート + src-tauri = 28 メンバー (CLAUDE.md のクレート数と整合)
+# 23 クレート + src-tauri = 24 メンバー (CLAUDE.md のクレート数と整合)
 
 [workspace]
 resolver = "2"
 members = [
     "crates/kaname-core",
     "crates/kaname-error",
-    "crates/kaname-i18n",
     "crates/kaname-observability",
     "crates/kaname-privacy",
 
@@ -23,8 +22,6 @@ members = [
     "crates/kaname-bec",
     "crates/kaname-dlp",
 
-    "crates/kaname-billing",
-    "crates/kaname-tray",
     "crates/kaname-mockserver",
     "crates/kaname-oobv",
     "crates/kaname-saas-guard",
@@ -33,7 +30,6 @@ members = [
     "crates/kaname-screen",
     "crates/kaname-memory-guard",
     "crates/kaname-pivot",
-    "crates/kaname-continuity",
 
     "crates/kaname-ui",
     "crates/kaname-tests",

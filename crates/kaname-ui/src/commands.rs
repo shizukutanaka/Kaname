@@ -222,10 +222,9 @@ pub struct ImportedEmail {
     pub oobv_level: String,
     /// 上記の人間可読メッセージ。
     ///
-    /// `OobvRecommendResponse.message_i18n_key` は i18n カタログに
-    /// 対応するキーが存在せず (kaname-i18n は出荷バイナリから到達不能、
-    /// docs/gap-analysis.md D19)、キーを返しても表示できない。
-    /// カタログが繋がるまでは日本語の完成文をここで組み立てる。
+    /// `OobvRecommendResponse.message_i18n_key` に対応するカタログは
+    /// 存在しない (kaname-i18n は 2026-09 に削除、
+    /// docs/gap-analysis.md D19)。日本語の完成文をここで組み立てる。
     pub oobv_message: String,
     /// Deepfake (音声/動画添付 + 金融文脈) の警告判定。
     ///

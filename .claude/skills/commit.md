@@ -27,7 +27,7 @@
 ## scope 一覧 (Kaname クレート名)
 kaname-ai, kaname-bec, kaname-mls, kaname-crypto, kaname-dlp,
 kaname-oobv, kaname-pivot, kaname-radar, kaname-ssa, kaname-saas-guard,
-kaname-render, kaname-store, kaname-ui, kaname-tray, kaname-billing
+kaname-render, kaname-store, kaname-ui
 
 ## 例
 ```
