@@ -30,6 +30,15 @@
 > `extract_auth_result` を機構スコープ限定パースに修正し `authserv_id` を露出 (D18 部分対応、
 > `mail-auth` 導入は未実施)。npm devDeps の脆弱性は `npm audit fix` で10→4件に削減 (D61、
 > 残りは vitest/vite メジャー更新が前提)。
+> **2026-09 続報 (D8 解消)**: Playwright E2E が実際に実行可能になった。
+> `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入モック
+> (`e2e/tauri-mock.ts`) で Tauri なしの vite 起動上で UI 層 E2E を実現し、
+> 実 UI に合わせて spec を全面書き換えた結果、実行が**実 a11y 欠陥を検出**:
+> `#5A6473` (2.7–3.2:1) / `#E5484D` (tint 上 4.15:1) / nav 白30% (2.61:1) の
+> WCAG AA 未達、`h1` 不在、ランドマーク不足、×ボタンの aria-label 欠落、
+> `prefers-reduced-motion` 未尊重 — すべて修正済み。全行列で 62 pass / 1 skip。
+> spec が呼ばない mockserver の webServer と架空スワイプ spec/project、
+> 空のスナップショット基準インフラは削除した。
 
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、

@@ -1,250 +1,179 @@
 // e2e/north-star-demo.spec.ts
 //
-// 北極星デモシーン E2E テスト
+// ゴールデンパス E2E テスト — 実装済み UI の主要導線を検証する。
 //
-// このテストは Apple "Demo-driven development" の中核。
-// 1 つのテストでプロダクトの全価値を検証する。
+// シナリオ (実 UI に対応):
+//   1. 起動時にバックエンド初期化コマンドが呼ばれる
+//   2. 受信トレイにメールボックスとメール一覧が出る
+//   3. BEC 危険メールに「危険」バッジが付き、開くと警告バナーが出る
+//   4. 「本人確認済みにする」が履歴DBに記録される
+//   5. 検索欄が保存済みメールを検索する
+//   6. 作成画面から mail_send が正しい引数で呼ばれる
+//   7. サーバ接続画面から mail_connect が呼ばれる
+//   8. サーバ取得失敗時は保存済みメールにフォールバックする
+//   9. 未オンボーディング時はオンボーディングが表示される
 //
-// シナリオ:
-//   1. ユーザーが BEC 攻撃メールを受信
-//   2. UI が DANGEROUS バナーを表示
-//   3. ユーザーが「AI で要約」をクリック
-//   4. 「このメール 1 通のみ分析」のセキュリティ証明が表示される
-//   5. 安全な要約が表示される
-//   6. ユーザーが安心して返信案を生成
-//   7. Cmd+Z で全アクションを取り消せる
+// 注: Tauri ランタイムのない vite 起動のため IPC は `tauri-mock.ts` で
+// モックしている。Rust 側ロジックの検証は cargo nextest が担う。
 
 import { test, expect } from "@playwright/test";
+import { installTauriMock, mockCalls } from "./tauri-mock";
 
-// ── 共通セットアップ ─────────────────────────────────────────────────────
+// ── 共通セットアップ ─────────────────────────────────────────────────
 test.beforeEach(async ({ page }) => {
-  // モックサーバーを起動した状態でフロントエンドを開く
-  await page.goto("http://localhost:1420");
-
-  // オンボーディングをスキップ (E2E では不要)
-  const skipBtn = page.locator('button', { hasText: 'スキップ' });
-  if (await skipBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await skipBtn.click();
-  }
-
-  // メールリストが読み込まれるまで待つ
-  await expect(page.locator('text=受信トレイ').first()).toBeVisible({ timeout: 10_000 });
+  await installTauriMock(page);
+  await page.goto("/");
+  await expect(page.getByText("Q2予算レビューのお願い")).toBeVisible({
+    timeout: 10_000,
+  });
 });
 
-// ── テスト 1: BEC メール検出 ─────────────────────────────────────────────
+// ── テスト 1: 起動時にバックエンド初期化が走る ───────────────────────
 
-test("BEC 攻撃メールが赤色バナーで表示される", async ({ page }) => {
-  // BEC メール (fix-002) を選択
-  const becMail = page.locator('[data-testid="email-row"]', {
-    hasText: /至急/,
-  }).first();
+test("起動時に履歴DB・オンボーディング判定・ヘルスチェックが呼ばれる", async ({
+  page,
+}) => {
+  const calls = async (cmd: string) =>
+    (await mockCalls(page, cmd)).length;
 
-  await expect(becMail).toBeVisible();
-  await becMail.click();
-
-  // DANGEROUS バナーが表示される
-  await expect(page.locator('text=/BEC.*可能性/')).toBeVisible();
-
-  // 「危険」または「DANGEROUS」のラベル
-  await expect(page.locator('text=/危険|DANGEROUS/')).toBeVisible();
-
-  // 視覚的特徴: 赤系の色が使われている
-  const banner = page.locator('[role="alert"]').first();
-  if (await banner.count() > 0) {
-    const color = await banner.evaluate(el => getComputedStyle(el).color);
-    // 赤系の RGB であることを確認 (R > G + B/2 程度)
-    expect(color).toMatch(/rgb\((2[0-9]{2}|255).*[0-9]/);
-  }
+  expect(await calls("history_open_default")).toBe(1);
+  expect(await calls("settings_is_onboarded")).toBe(1);
+  expect(await calls("health_check")).toBe(1);
+  expect(await calls("mail_get_summary")).toBe(1);
 });
 
-// ── テスト 2: AI 要約のセキュリティ証明 ─────────────────────────────────
+// ── テスト 2: 受信トレイに一覧が出る ─────────────────────────────────
 
-test("AI 要約は「このメール 1 通のみ」を明示する", async ({ page }) => {
-  // 通常メールを選択
-  const normalMail = page.locator('[data-testid="email-row"]', {
-    hasText: /Q2予算/,
-  }).first();
-  await normalMail.click();
+test("メールボックスとメール一覧が表示される", async ({ page }) => {
+  // メールボックス (サイドバーの <nav> 内 — ナビバーと同名のためスコープする)
+  const sidebar = page.locator("nav");
+  await expect(sidebar.getByRole("button", { name: /受信トレイ/ })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "送信済み" })).toBeVisible();
 
-  // AI 要約ボタンをクリック
-  const summarizeBtn = page.locator('button', { hasText: /AI.*要約|Summarize/ });
-  await expect(summarizeBtn).toBeVisible();
-  await summarizeBtn.click();
-
-  // セキュリティ証明が表示される
-  await expect(page.locator('text=/このメール.*1.*通|this email only/')).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('text=/受信箱全体.*読みません|does not read.*inbox/')).toBeVisible();
-
-  // 🔒 安全マーカー
-  await expect(page.locator('text=/🔒.*安全|🔒.*Safe/')).toBeVisible();
-
-  // 要約結果が表示される
-  await expect(page.locator('[data-testid="summary-text"]')).toBeVisible({ timeout: 10_000 });
+  // メール行 (送信者・件名が見える)
+  await expect(page.getByText("週次レポート (暗号化)")).toBeVisible();
+  await expect(page.getByText("経理担当 鈴木")).toBeVisible();
 });
 
-// ── テスト 3: Smart Reply で 3 候補が表示される ──────────────────────────
+// ── テスト 3: BEC 危険メールの検出表示 ───────────────────────────────
 
-test("Smart Reply は 3 つの候補を表示し、トーンが分かれている", async ({ page }) => {
-  const mail = page.locator('[data-testid="email-row"]').first();
-  await mail.click();
+test("DANGEROUS メールに「危険」バッジと警告バナーが出る", async ({ page }) => {
+  const subject = page.getByText("【至急】振込先口座変更のご連絡");
+  // 一覧のバッジ
+  await expect(subject.locator("..").getByText("危険")).toBeVisible();
 
-  const smartReplyBtn = page.locator('button', { hasText: /返信案を生成|Suggest replies/ });
-  await smartReplyBtn.click();
-
-  // 3 つの候補が表示される
-  const replies = page.locator('[data-testid="smart-reply-candidate"]');
-  await expect(replies).toHaveCount(3, { timeout: 5000 });
-
-  // 各候補に異なるテキストが含まれる
-  const texts: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    const text = await replies.nth(i).textContent();
-    if (text) texts.push(text);
-  }
-  // 重複なし
-  expect(new Set(texts).size).toBe(3);
+  await subject.click();
+  // 詳細の警告バナーと検出シグナル
+  await expect(
+    page.getByText(/このメールは差出人を証明できません.*BEC 攻撃の可能性/),
+  ).toBeVisible();
+  await expect(page.getByText(/検出シグナル/)).toBeVisible();
+  // 帯域外検証の推奨メッセージ
+  await expect(page.getByText(/別経路での確認を推奨/)).toBeVisible();
 });
 
-// ── テスト 4: Cmd+Z で操作を取り消せる ──────────────────────────────────
+// ── テスト 4: 本人確認済みの記録 ─────────────────────────────────────
 
-test("メールアーカイブを Cmd+Z で取り消せる", async ({ page }) => {
-  // 最初のメールをアーカイブ
-  const mail = page.locator('[data-testid="email-row"]').first();
-  const originalSubject = await mail.locator('[data-testid="email-subject"]').textContent();
+test("「本人確認済みにする」が history_mark_verified を呼ぶ", async ({
+  page,
+}) => {
+  // 実装は confirm() ダイアログで確認する — accept して続行
+  page.on("dialog", (d) => void d.accept());
+  await page.getByText("【至急】振込先口座変更のご連絡").click();
+  await page.getByRole("button", { name: "本人確認済みにする" }).click();
 
-  await mail.click();
-  await page.keyboard.press("e"); // アーカイブショートカット
-
-  // トーストが表示される
-  await expect(page.locator('text=/アーカイブ.*しました|Archived/')).toBeVisible();
-
-  // 取り消し
-  await page.keyboard.press("Meta+z");
-
-  // 元のメールが復元される
-  await expect(page.locator('text=/取り消し|Undone/')).toBeVisible();
-
-  // メールが受信トレイに戻る
-  if (originalSubject) {
-    await expect(page.locator(`text=${originalSubject}`).first()).toBeVisible();
-  }
+  const calls = await mockCalls(page, "history_mark_verified");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toEqual({ email: "suzuki@examp1e.co.jp" });
 });
 
-// ── テスト 5: スワイプジェスチャーでアーカイブ ────────────────────────
+// ── テスト 5: 検索 ───────────────────────────────────────────────────
 
-test("メール行を左にスワイプしてアーカイブできる", async ({ page }) => {
-  const mail = page.locator('[data-testid="email-row"]').first();
-  const box = await mail.boundingBox();
+test("検索欄で mail_search が呼ばれ結果が表示される", async ({ page }) => {
+  await page.getByPlaceholder("検索...").fill("振込");
+  await page.getByPlaceholder("検索...").press("Enter");
 
-  if (!box) throw new Error("メール行が見つからない");
+  const calls = await mockCalls(page, "mail_search");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ query: "振込" });
 
-  // 左にスワイプ (中心から左へ 200px)
-  await page.mouse.move(box.x + box.width - 50, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 50, box.y + box.height / 2, { steps: 20 });
-  await page.mouse.up();
-
-  // アーカイブされた
-  await expect(page.locator('text=/アーカイブ|Archive/')).toBeVisible({ timeout: 2000 });
+  // クエリに一致する行のみ残る
+  await expect(page.getByText("【至急】振込先口座変更のご連絡")).toBeVisible();
+  await expect(page.getByText("週次レポート (暗号化)")).toBeHidden();
 });
 
-// ── テスト 6: 自然言語検索 ─────────────────────────────────────────────
+// ── テスト 6: 作成 → mail_send ───────────────────────────────────────
 
-test("「先週のメール」で日付フィルターが適用される", async ({ page }) => {
-  const search = page.locator('[data-testid="natural-search"]').or(
-    page.locator('input[placeholder*="検索"]').or(
-      page.locator('input[type="search"]')
-    )
+test("作成画面から mail_send が正しい引数で呼ばれる", async ({ page }) => {
+  await page.getByRole("button", { name: "作成" }).click();
+  await expect(page.getByText("新規メール")).toBeVisible();
+
+  await page.getByPlaceholder("差出人 (自分のメールアドレス)").fill("me@example.co.jp");
+  await page.getByPlaceholder("宛先").fill("tanaka@example.co.jp");
+  await page.getByPlaceholder("件名").fill("テスト送信");
+  await page.getByPlaceholder("本文を入力...").fill("本文のテストです。");
+  await page.getByRole("button", { name: /送信/ }).click();
+
+  const calls = await mockCalls(page, "mail_send");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toEqual({
+    from: "me@example.co.jp",
+    to: ["tanaka@example.co.jp"],
+    subject: "テスト送信",
+    body: "本文のテストです。",
+  });
+});
+
+// ── テスト 7: サーバ接続 ────────────────────────────────────────────
+
+test("サーバ接続画面から mail_connect が呼ばれる", async ({ page }) => {
+  await page.getByRole("button", { name: "サーバ接続" }).click();
+  await expect(
+    page.getByRole("heading", { name: "サーバに接続" }),
+  ).toBeVisible();
+
+  await page.getByPlaceholder("https://mail.example.com").fill(
+    "https://mail.example.com",
   );
-  await search.fill("先週のメール");
-  await search.press("Enter");
+  await page.getByPlaceholder("Bearer トークン").fill("test-token-123");
+  await page.getByRole("button", { name: "接続する" }).click();
 
-  // フィルターチップに「先週」が表示される
-  await expect(page.locator('text="先週"').first()).toBeVisible({ timeout: 3000 });
-});
-
-// ── テスト 7: アクセシビリティ — キーボードのみで全操作 ───────────────
-
-test("マウスを使わずに j/k/e/r で全操作できる", async ({ page }) => {
-  // j で次のメールへ
-  await page.keyboard.press("j");
-  await page.waitForTimeout(100);
-
-  // 選択されたメールに ARIA selected が付く
-  const selected = page.locator('[aria-selected="true"]').first();
-  await expect(selected).toBeVisible();
-
-  // k で前のメール
-  await page.keyboard.press("k");
-  await page.waitForTimeout(100);
-
-  // ? でヘルプ
-  await page.keyboard.press("Shift+/");
-  await expect(page.locator('text=/ショートカット|Shortcut/')).toBeVisible({ timeout: 2000 });
-
-  // Escape で閉じる
-  await page.keyboard.press("Escape");
-});
-
-// ── テスト 8: 視覚的回帰 — Liquid Glass UI のスクリーンショット ──────
-
-test("Liquid Glass UI のスクリーンショットが期待値と一致", async ({ page }) => {
-  await page.waitForTimeout(500); // アニメーション完了を待つ
-
-  // 受信トレイのスクリーンショット
-  await expect(page).toHaveScreenshot("liquid-glass-inbox.png", {
-    maxDiffPixels: 100,
-    threshold: 0.2,  // 20% の差まで許容
-  });
-
-  // メール詳細を開いてスクリーンショット
-  await page.locator('[data-testid="email-row"]').first().click();
-  await page.waitForTimeout(300);
-
-  await expect(page).toHaveScreenshot("liquid-glass-detail.png", {
-    maxDiffPixels: 100,
-    threshold: 0.2,
+  const calls = await mockCalls(page, "mail_connect");
+  expect(calls.length).toBeGreaterThanOrEqual(1);
+  expect(calls[0]).toMatchObject({
+    baseUrl: "https://mail.example.com",
+    token: "test-token-123",
   });
 });
 
-// ── テスト 9: パフォーマンス — 起動時間 ────────────────────────────────
+// ── テスト 8: オフライン時フォールバック ────────────────────────────
 
-test("コールドスタートから操作可能まで < 800ms (Apple HIG 準拠)", async ({ page }) => {
-  const start = Date.now();
+test("mail_fetch 失敗時は保存済みメールにフォールバックする", async ({
+  browser,
+}) => {
+  const page = await browser.newPage();
+  await installTauriMock(page, { mailFetchFails: true });
+  await page.goto("/");
 
-  await page.goto("http://localhost:1420");
-
-  // 受信トレイが操作可能になるまで待つ
-  await expect(page.locator('text=受信トレイ').first()).toBeVisible();
-  await expect(page.locator('[data-testid="email-row"]').first()).toBeVisible();
-
-  const duration = Date.now() - start;
-  console.log(`コールドスタート: ${duration}ms`);
-
-  expect(duration).toBeLessThan(800);
+  // mail_list_stored の結果 (s-1) が一覧に出る
+  await expect(page.getByText("Q2予算レビューのお願い")).toBeVisible({
+    timeout: 10_000,
+  });
+  const calls = await mockCalls(page, "mail_list_stored");
+  expect(calls.length).toBeGreaterThanOrEqual(1);
+  await page.close();
 });
 
-// ── テスト 10: セキュリティ証明の不変条件 (型レベル + ランタイム) ─────
+// ── テスト 9: オンボーディングゲート ────────────────────────────────
 
-test("AI 要約レスポンスに single_email_only=true が含まれる", async ({ page }) => {
-  // フェッチを傍受
-  const responses: Record<string, unknown>[] = [];
-  await page.route("**/ai_summarize_email**", async (route) => {
-    const response = await route.fetch();
-    const json = await response.json();
-    responses.push(json);
-    await route.fulfill({ response });
-  });
+test("未オンボーディング時はオンボーディングが表示される", async ({
+  browser,
+}) => {
+  const page = await browser.newPage();
+  await installTauriMock(page, { onboarded: false });
+  await page.goto("/");
 
-  await page.goto("http://localhost:1420");
-  await page.locator('[data-testid="email-row"]').first().click();
-  await page.locator('button', { hasText: /AI.*要約/ }).click();
-
-  await page.waitForResponse(/ai_summarize_email/, { timeout: 10_000 });
-
-  // セキュリティ証明が含まれている
-  expect(responses.length).toBeGreaterThan(0);
-  const summary = responses[0];
-  expect(summary.single_email_only).toBe(true);
-  expect(summary.local_inference).toBe(true);
+  // オンボーディング画面 (受信トレイではない)
+  await expect(page.getByText("Q2予算レビューのお願い")).toBeHidden();
+  await page.close();
 });

@@ -95,7 +95,7 @@ export function MailConnect() {
       <h2 style={{ "font-size": "20px", "font-weight": "600", "margin-bottom": "6px" }}>
         サーバに接続
       </h2>
-      <p style={{ color: "#5A6473", "font-size": "13px", "margin-bottom": "16px", "line-height": "1.7" }}>
+      <p style={{ color: "#8B96A5", "font-size": "13px", "margin-bottom": "16px", "line-height": "1.7" }}>
         JMAP サーバに接続してメールを受信し、各通に BEC 判定を付けて表示します。
         <strong>認証トークンはメモリ内にのみ保持し、ディスクには保存しません</strong>
         （安全に保管できるまで保存しない方針のため、起動のたびに接続が必要です）。
@@ -146,7 +146,7 @@ export function MailConnect() {
               "margin-bottom": "12px", "font-size": "13px",
             }}>
               <span style={{ color: "#1E5B2A", "font-weight": "600" }}>接続中</span>
-              <span style={{ color: "#5A6473" }}>アカウント: {s().account_id}</span>
+              <span style={{ color: "#8B96A5" }}>アカウント: {s().account_id}</span>
               <button
                 onClick={() => void disconnect()}
                 style={{
@@ -195,7 +195,7 @@ export function MailConnect() {
                         <span style={{ flex: "1", overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>
                           {e.subject || "(件名なし)"}
                         </span>
-                        <span style={{ color: "#5A6473", "white-space": "nowrap" }}>
+                        <span style={{ color: "#8B96A5", "white-space": "nowrap" }}>
                           {e.from_name || e.from_addr}
                         </span>
                       </div>

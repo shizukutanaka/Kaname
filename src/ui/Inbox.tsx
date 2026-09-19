@@ -125,12 +125,12 @@ const BecBadge = (props: { verdict: string | null }) => {
   const colors: Record<string, string> = {
     ADVISORY:   "#F5A623",
     SUSPICIOUS: "#E5A500",
-    DANGEROUS:  "#E5484D",
+    DANGEROUS:  "#FF6B70",
     // BEC 判定自体がエラーで失敗した場合 (commands.rs: assess_listing の
     // Err 分岐)、SAFE と偽らず "UNKNOWN" を返す設計になっている。以前は
     // このケースをラベルマップに含めておらず、内部の生文字列 "UNKNOWN"
     // がそのまま UI に漏れていた。
-    UNKNOWN:    "#5A6473",
+    UNKNOWN:    "#8B96A5",
   };
   const labels: Record<string, string> = {
     ADVISORY:   "要確認",
@@ -180,8 +180,8 @@ const MlsBadge = () => (
 
 const SenderAvatar = (props: { name: string | null; addr: string; bec: string | null }) => {
   const initial = (props.name || props.addr)[0]?.toUpperCase() || "?";
-  const bg = props.bec === "DANGEROUS" ? "#E5484D20" : "#1A2129";
-  const color = props.bec === "DANGEROUS" ? "#E5484D" : "#8B96A5";
+  const bg = props.bec === "DANGEROUS" ? "#FF6B7020" : "#1A2129";
+  const color = props.bec === "DANGEROUS" ? "#FF6B70" : "#8B96A5";
   return (
     <div style={{
       width: "36px",
@@ -280,7 +280,7 @@ const EmailItem = (props: {
           <span style={{
             "font-size": "13px",
             "font-weight": email.is_read ? "400" : "600",
-            color: email.bec_verdict === "DANGEROUS" ? "#E5484D" : "#F5F7FA",
+            color: email.bec_verdict === "DANGEROUS" ? "#FF6B70" : "#F5F7FA",
             "white-space": "nowrap",
             overflow: "hidden",
             "text-overflow": "ellipsis",
@@ -294,7 +294,7 @@ const EmailItem = (props: {
           <BecBadge verdict={email.bec_verdict} />
           <span style={{
             "font-size": "11px",
-            color: "#5A6473",
+            color: "#8B96A5",
             "white-space": "nowrap",
           }}>
             {formatDate(email.received_at)}
@@ -317,7 +317,7 @@ const EmailItem = (props: {
         {/* 3行目: プレビュー */}
         <div style={{
           "font-size": "12px",
-          color: "#5A6473",
+          color: "#8B96A5",
           "white-space": "nowrap",
           overflow: "hidden",
           "text-overflow": "ellipsis",
@@ -450,7 +450,7 @@ const EmailDetailPanel = (props: {
           onClick={handleTrash}
           disabled={trashing()}
           style={{
-            background: "transparent", border: "1px solid #E5484D40", color: "#E5484D",
+            background: "transparent", border: "1px solid #FF6B7040", color: "#FF6B70",
             "border-radius": "6px", padding: "5px 12px", "font-size": "12px",
             cursor: trashing() ? "not-allowed" : "pointer", opacity: trashing() ? 0.6 : 1,
           }}
@@ -472,10 +472,10 @@ const EmailDetailPanel = (props: {
       <Show when={bec() && bec()!.bec_verdict !== "SAFE"}>
         <div style={{
           padding: "10px 20px",
-          background: bec()!.bec_verdict === "DANGEROUS" ? "#E5484D12" :
+          background: bec()!.bec_verdict === "DANGEROUS" ? "#FF6B7012" :
                       bec()!.bec_verdict === "SUSPICIOUS" ? "#E5A50012" : "#F5A62312",
           "border-bottom": `1px solid ${
-            bec()!.bec_verdict === "DANGEROUS" ? "#E5484D40" : "#F5A62340"
+            bec()!.bec_verdict === "DANGEROUS" ? "#FF6B7040" : "#F5A62340"
           }`,
           display: "flex",
           "align-items": "center",
@@ -484,7 +484,7 @@ const EmailDetailPanel = (props: {
           <div style={{
             "font-size": "12px",
             "font-weight": "600",
-            color: bec()!.bec_verdict === "DANGEROUS" ? "#E5484D" : "#F5A623",
+            color: bec()!.bec_verdict === "DANGEROUS" ? "#FF6B70" : "#F5A623",
           }}>
             ⚠ {bec()!.bec_verdict === "DANGEROUS"
               ? "このメールは差出人を証明できません — BEC 攻撃の可能性があります"
@@ -521,7 +521,7 @@ const EmailDetailPanel = (props: {
           <div style={{
             position: "absolute", inset: "0",
             display: "flex", "align-items": "center", "justify-content": "center",
-            color: "#5A6473", "font-size": "14px",
+            color: "#8B96A5", "font-size": "14px",
           }}>
             読み込み中...
           </div>
@@ -542,8 +542,8 @@ const EmailDetailPanel = (props: {
           </Show>
           <Show when={bec()!.oobv_level === "strong"}>
             <div style={{
-              padding: "8px 16px", "font-size": "12px", "font-weight": "600", color: "#E5484D",
-              background: "#E5484D12", "border-bottom": "0.5px solid #E5484D40",
+              padding: "8px 16px", "font-size": "12px", "font-weight": "600", color: "#FF6B70",
+              background: "#FF6B7012", "border-bottom": "0.5px solid #FF6B7040",
             }}>
               📞 {bec()!.oobv_message}
             </div>
@@ -563,9 +563,9 @@ const EmailDetailPanel = (props: {
               return (
                 <div style={{
                   padding: strong ? "8px 16px" : "6px 16px", "font-size": strong ? "12px" : "11px",
-                  "font-weight": strong ? "600" : "400", color: strong ? "#E5484D" : "#F5A623",
-                  background: strong ? "#E5484D12" : "#F5A62312",
-                  "border-bottom": `0.5px solid ${strong ? "#E5484D40" : "#F5A62340"}`,
+                  "font-weight": strong ? "600" : "400", color: strong ? "#FF6B70" : "#F5A623",
+                  background: strong ? "#FF6B7012" : "#F5A62312",
+                  "border-bottom": `0.5px solid ${strong ? "#FF6B7040" : "#F5A62340"}`,
                 }}>
                   🎭 音声/動画添付 ({adv.affected_attachments.map(a => a.filename).join(", ")})
                   {adv.has_financial_context && " があり、送金・認証情報に関する本文です"}
@@ -584,7 +584,7 @@ const EmailDetailPanel = (props: {
                   <div style={{
                     display: "flex", "align-items": "center", gap: "8px", padding: "4px 0",
                   }}>
-                    <span style={{ color: a.is_dangerous ? "#E5484D" : "#8B96A5" }}>
+                    <span style={{ color: a.is_dangerous ? "#FF6B70" : "#8B96A5" }}>
                       📎 {a.filename}
                     </span>
                     <Show when={attachmentBlobs()[a.filename]}>
@@ -632,6 +632,7 @@ const EmailDetailPanel = (props: {
 
           {/* サンドボックス化された iframe */}
           <iframe
+            data-iframe-content
             srcdoc={body()!.srcdoc}
             sandbox={body()!.sandbox}
             style={{
@@ -647,7 +648,7 @@ const EmailDetailPanel = (props: {
         <Show when={!loading() && !body() && props.emailId}>
           <div style={{
             display: "flex", "align-items": "center", "justify-content": "center",
-            height: "100%", color: "#5A6473",
+            height: "100%", color: "#8B96A5",
           }}>
             {openError() ?? "メールを読み込めませんでした"}
           </div>
@@ -880,13 +881,13 @@ export const Inbox = () => {
           padding: "14px 16px 12px",
           "border-bottom": "1px solid #1F2833",
         }}>
-          <div style={{
+          <h1 style={{
             "font-size": "15px",
             "font-weight": "600",
             "margin-bottom": "8px",
           }}>
             {selectedMbxInfo()?.name || "受信トレイ"}
-          </div>
+          </h1>
           {/* 検索バー — 保存済みメールを対象に検索する。
               従来はハンドラが未バインドで「飾り」だった (D10)。 */}
           <input
@@ -925,14 +926,14 @@ export const Inbox = () => {
             <Match when={loading()}>
               <div style={{
                 display: "flex", "align-items": "center", "justify-content": "center",
-                height: "200px", color: "#5A6473", "font-size": "13px",
+                height: "200px", color: "#8B96A5", "font-size": "13px",
               }}>
                 読み込み中...
               </div>
             </Match>
             <Match when={error()}>
               <div style={{
-                padding: "20px", color: "#E5484D", "font-size": "13px",
+                padding: "20px", color: "#FF6B70", "font-size": "13px",
                 "text-align": "center",
               }}>
                 エラー: {error()}
@@ -945,7 +946,7 @@ export const Inbox = () => {
                 height: "200px", gap: "8px",
               }}>
                 <div style={{ "font-size": "32px", opacity: "0.3" }}>📭</div>
-                <div style={{ color: "#5A6473", "font-size": "13px" }}>メールなし</div>
+                <div style={{ color: "#8B96A5", "font-size": "13px" }}>メールなし</div>
               </div>
             </Match>
             <Match when={true}>
@@ -973,7 +974,7 @@ export const Inbox = () => {
             "flex-direction": "column",
             "align-items": "center",
             "justify-content": "center",
-            color: "#5A6473",
+            color: "#8B96A5",
             gap: "12px",
           }}>
             <div style={{ "font-size": "48px", opacity: "0.2" }}>✉</div>
@@ -998,7 +999,7 @@ export const Inbox = () => {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #2A3441; border-radius: 2px; }
         button:hover { opacity: 0.9; }
-        input::placeholder { color: #5A6473; }
+        input::placeholder { color: #8B96A5; }
         input:focus { border-color: #00C4CC40 !important; }
       `}</style>
     </div>

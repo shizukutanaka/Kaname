@@ -125,7 +125,7 @@ export const Compose = (props: ComposeProps) => {
         <Show when={mlsReady() !== null}>
           <span style={{
             "font-size": "11px",
-            color: mlsReady() ? "#00C4CC" : "#5A6473",
+            color: mlsReady() ? "#00C4CC" : "#8B96A5",
             padding: "2px 8px",
             border: `1px solid ${mlsReady() ? "#00C4CC30" : "#2A3441"}`,
             "border-radius": "4px",
@@ -135,9 +135,10 @@ export const Compose = (props: ComposeProps) => {
         </Show>
         <button
           onClick={props.onClose}
+          aria-label="閉じる"
           style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "#5A6473", "font-size": "18px", padding: "0 4px",
+            color: "#8B96A5", "font-size": "18px", padding: "0 4px",
             "line-height": "1",
           }}
         >×</button>
@@ -147,10 +148,10 @@ export const Compose = (props: ComposeProps) => {
       <Show when={dlpWarn()}>
         <div style={{
           padding: "8px 16px",
-          background: "#E5484D12",
-          "border-bottom": "1px solid #E5484D30",
+          background: "#FF6B7012",
+          "border-bottom": "1px solid #FF6B7030",
           "font-size": "12px",
-          color: "#E5484D",
+          color: "#FF6B70",
         }}>
           ⚠ DLP ポリシー: {dlpWarn()}
         </div>
@@ -198,7 +199,7 @@ export const Compose = (props: ComposeProps) => {
 
       {/* エラー */}
       <Show when={error()}>
-        <div style={{ padding: "8px 16px", "font-size": "12px", color: "#E5484D" }}>
+        <div style={{ padding: "8px 16px", "font-size": "12px", color: "#FF6B70" }}>
           {error()}
         </div>
       </Show>
@@ -232,7 +233,7 @@ export const Compose = (props: ComposeProps) => {
 
         <div style={{ flex: "1" }} />
 
-        <span style={{ "font-size": "11px", color: "#5A6473" }}>
+        <span style={{ "font-size": "11px", color: "#8B96A5" }}>
           Esc でキャンセル
         </span>
       </div>

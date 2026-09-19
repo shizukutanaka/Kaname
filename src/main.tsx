@@ -224,7 +224,7 @@ const App = () => {
       "justify-content": "center",
       gap: "4px",
       "z-index": "9999",
-    }}>
+    }} role="navigation" aria-label="メイン">
       {(["inbox", "compose", "connect", "security", "eml_import", "features_demo"] as View[]).map(v => (
         <button
           onClick={() => setState(s => ({ ...s, activeView: v }))}
@@ -239,7 +239,7 @@ const App = () => {
             "border-radius": "9999px",
             color: state().activeView === v
               ? "#00C4CC"
-              : "rgba(255,255,255,.3)",
+              : "rgba(255,255,255,.55)",
             "font-size": "11px",
             cursor: "pointer",
           }}
@@ -262,7 +262,7 @@ const App = () => {
         <Show when={needsOnboarding()}>
           <Onboarding onComplete={() => setNeedsOnboarding(false)} />
         </Show>
-        <div style={{ "padding-bottom": "44px" }} hidden={needsOnboarding()}>
+        <div style={{ "padding-bottom": "44px" }} hidden={needsOnboarding()} role="main">
           <Show when={state().activeView === "inbox"}>
             <Inbox />
           </Show>
