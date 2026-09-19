@@ -25,7 +25,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **外部参照ゼロのモジュール・API 群を一括削除** (関数レベルデッドコード掃除、計 ~2,400行)
   - `kaname-store::login_limiter` モジュール (522行・UI/コマンド層からの呼び出し元ゼロ)、`kaname-core::app_state` (525行・外部参照ゼロ)、`kaname-render::zip_guard` + `header_sanitize` (354行)、`kaname-observability` の `Metrics`/`METRICS`/`LatencyTimer`/`TelemetryConfig`/`hash_email` (~330行)、`kaname-core::ux_features` の Screener/Snooze/ReplyLater/SendLater/SafeSummary 群 (~550行・`TriageEngine` のみ利用中のため残置)、`kaname-store` の未使用 `rekey()`/`path` フィールド
   - 反対に `Store::verify_audit_chain` はテスト専用だったが実用上意味がある改ざん検出機能のため、`history_open` で警告ログを出す配線を追加 (削除せず接続)
-- **ライブクレート内のデッド機能群を第2走査で削除** (E8、計 ~1,100行)
+- **ライブクレート内のデッド機能群を第2走査で削除** (E8、計 ~1,100行)。第3走査 (バリアント/フィールドレベル) では構築経路ゼロの `AuditFinding::TaskContradiction` バリアントと `scripts/pre-commit.sh` の死んだ i18n 検証 (存在しない `src/i18n/index.ts` を参照) も除去 — 以降の層 (pub フィールド) には未使用は検出されず
   - `kaname-privacy::ZeroKnowledgeSearch` + `SearchResult`/`MatchedField`/`parse_search_query` (~215行、D40 解消 — 実際の検索は `kaname_store::search_messages` で、doc 自身が「置き換える価値なし」と記述していた未配線機能)、`kaname-saas-guard::oauth_state`/`jwt_inspect` モジュール (513行)、`kaname-radar` の `DnsResolver`/`SystemDnsResolver`/`StaticDnsResolver` (~225行)、`kaname-ssa` の `OrgStyleBaseline`/`assess_with_fallback` (~160行)
 
 ### Fixed
