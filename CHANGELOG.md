@@ -9,6 +9,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`src/ui/SecurityDashboard.tsx` の未使用 setter 3件により `npm run build`/`typecheck` が main で失敗していた出荷ブロッカーを修正** (D60)
+  - `noUnusedLocals` 下で TS6133 ×3。CI 不在 (D7) のため検出が遅れていた
+- **`kaname-memory-guard::normalize_for_matching` のゼロ幅文字削除が複数単語キーワードの語境界を壊す回避経路を修正** (D45・kaname-bec 残件あり)
+  - ゼロ幅/フォーマット文字を単一スペースに置換する `normalize_for_matching_spaced` を新設し、`TrustScorer::score`・`kaname-oobv::OobvRecommender`・`commands.rs::has_financial` の3箇所で削除版とスペース化版の二重照合に変更。`wire​transfer` 型の単語間ゼロ幅挿入を捕捉。`kaname-bec` の2箇所はセキュリティレビュー必須クレートのため未修正(詳細: `docs/gap-analysis.md` D45)
+- **`kaname-render::extract_auth_result` がプロパティ値内の `dkim=pass` 風擬似トークンを機構結果と誤認しうる構造的脆さを修正し、`AuthResultsHeader.authserv_id` を露出** (D18・部分対応)
+  - `;` 区切り各部の `mechanism=result` トークンのみを機構結果として認めるパースに変更 (RFC 8601)。authserv-id の信頼リスト照合自体は組織ドメイン設定 (D44) と `mail-auth` 導入に依存するため未実施
+
+### Security
+- **フロントエンド devDependencies の既知脆弱性を `npm audit fix` で10件→4件に削減** (D61・部分対応)
+  - `postcss`/`nanoid`/`js-yaml`/`browserslist`/`brace-expansion`/`baseline-browser-mapping` を非破壊的に更新 (lockfile のみ)。残り4件は `vitest`/`vite` メジャー更新が前提のため見送り(詳細: `docs/gap-analysis.md` D61)
+
+### Fixed
 - **`kaname-bec::apply_cross_signal_escalation` がリスク緩和シグナル (ARC検証成功) を認証問題と誤認し複合シグナルボーナスを誤って付与することを記録** (D59・未修正・記録のみ)
   - `has_auth` 判定が `SignalFamily::Authentication` の存在チェックのみで符号 (加点/減点) を見ていないため、正規の転送メール (ARC成功による減点シグナル) が無関係な Domain/Content シグナルと重なると誤って `+0.20`/`+0.15` の複合ボーナスを受ける。正当な転送メール・請求書督促等を誤って BEC 高リスクと誤判定しうる false positive 方向の欠陥
   - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D59)

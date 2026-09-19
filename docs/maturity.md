@@ -22,6 +22,14 @@
 > `kaname-crypto` (ハイブリッド PQC クレート) に実暗号バックエンドが皆無で `kaname-mls` とは
 > 独立に未実装のままであること (D47) は、セキュリティレビュー必須クレートに触れるため未修正の
 > まま記録のみ。詳細は `docs/gap-analysis.md` D43〜D50。
+> **2026-09 続報 (D60〜D61 および D45/D18 部分対応)**: `SecurityDashboard.tsx` の
+> 未使用 setter が `npm run build` を main で壊していた出荷ブロッカー (D60) を修正。
+> `kaname-memory-guard` の複数単語キーワード回避経路 (D45) は、ゼロ幅文字を
+> スペース化する `normalize_for_matching_spaced` を新設し memory-guard/oobv/ui の
+> 3箇所で二重照合とした (kaname-bec の2箇所はセキュリティレビュー必須クレートのため残件)。
+> `extract_auth_result` を機構スコープ限定パースに修正し `authserv_id` を露出 (D18 部分対応、
+> `mail-auth` 導入は未実施)。npm devDeps の脆弱性は `npm audit fix` で10→4件に削減 (D61、
+> 残りは vitest/vite メジャー更新が前提)。
 
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、
