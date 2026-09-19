@@ -11,8 +11,7 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
 kaname-error = { path = "../kaname-error" }
-reqwest      = { workspace = true, features = ["stream"] }
-futures-util = { workspace = true }
+reqwest      = { workspace = true }
 uuid       = { workspace = true }
 chrono     = { workspace = true }
 

@@ -12,6 +12,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **出荷バイナリ・ワークスペースから一度も到達不能だった4クレートを削除** (D19・D6)
   - `kaname-billing` (課金 — スコープ外、永続化未実装だった D6 も消滅)、`kaname-continuity` (デバイス間ハンドオフ — 単一デバイスで完結するスコープに不要)、`kaname-i18n` (翻訳カタログ — 正規実装は `src/i18n.ts` + `src/locales/`)、`kaname-tray` (トレイ生成 — `src-tauri` の内蔵トレイと重複)
   - ワークスペース 27→23 クレート (出荷 19、意図的除外 4: mls/sandbox/mockserver/tests)。実装は git 履歴に残り将来復元可能
+- **呼び出し元が存在しない JMAP 差分同期・プッシュ基盤を削除** (D48 完全解消)
+  - `JmapClient::sync` (~100行)、`subscribe_push` (~65行)、`SyncResult`/`ChangesResult`/`PushNotification`、`parse_sse_event`/`find_sse_event_end`、`JmapError::PushNotSupported`、`Session.event_source_url`、`Store::update_jmap_state`、`jmap_state` テーブルと `mailboxes.jmap_state` 列、kaname-jmap の `futures-util` 依存と `reqwest stream` feature を除去 (計 ~350行)
+  - `mail_fetch` の全件 `Email/query`+`Email/get` 経路は正しく機能しており、差分同期が将来必要になれば git 履歴から復元可能。D19/D51 と同じく「呼び出し元の無い基盤は配線ではなく削除」の判断
 
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)

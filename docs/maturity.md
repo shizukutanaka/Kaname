@@ -300,3 +300,12 @@ D24 に記録済み)。
 
 検証: `npx tsc --noEmit` (exit 0) / `npx eslint src ... --max-warnings 0` (exit 0) /
 `npm run build` 成功 / `npx vitest run` 21 テスト全パス。
+
+### D48 完全解消 — 差分同期/プッシュ基盤の削除 (2026-09)
+
+`JmapClient::sync` の未配線問題は「配線」ではなく「削除」で解消した。
+呼び出し元がゼロのインフラ (sync/subscribe_push/SSE パーサー/jmap_state 永続化
+/futures-util 依存) は維持コストだけを生むため、D19 (未到達クレート削除) と
+同じ判断基準で ~350行を除去。全件 `Email/query`+`Email/get` 経路は現機能に
+十分であり、差分同期が必要になった時点で git 履歴から復元すればよい。
+これで kaname-jmap / kaname-store に未使用コードは残っていない。

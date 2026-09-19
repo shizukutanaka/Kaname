@@ -111,7 +111,6 @@ CREATE TABLE IF NOT EXISTS mailboxes (
     total_emails  INTEGER NOT NULL DEFAULT 0,
     unread_emails INTEGER NOT NULL DEFAULT 0,
     jmap_id       TEXT,
-    jmap_state    TEXT,
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
@@ -218,15 +217,6 @@ CREATE TRIGGER IF NOT EXISTS audit_log_no_update
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
     BEFORE DELETE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log は不変です'); END;
-CREATE TABLE IF NOT EXISTS jmap_state (
-    account_id     TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-    session_url    TEXT NOT NULL,
-    mailbox_state  TEXT,
-    email_state    TEXT,
-    thread_state   TEXT,
-    identity_state TEXT,
-    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
 CREATE TABLE IF NOT EXISTS settings (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     key        TEXT NOT NULL,
@@ -626,29 +616,6 @@ impl Store {
         Ok(())
     }
 
-    /// JMAP 同期状態を更新する。
-    pub async fn update_jmap_state(
-        &self,
-        account_id:    &str,
-        session_url:   &str,
-        mailbox_state: Option<&str>,
-        email_state:   Option<&str>,
-    ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-
-        conn.execute(
-            "INSERT INTO jmap_state (account_id, session_url, mailbox_state, email_state, updated_at)
-             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-             ON CONFLICT (account_id) DO UPDATE SET
-               session_url   = ?2,
-               mailbox_state = COALESCE(?3, mailbox_state),
-               email_state   = COALESCE(?4, email_state),
-               updated_at    = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
-            params![account_id, session_url, mailbox_state, email_state],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
-
-        Ok(())
-    }
 }
 
 // ============================================================================
@@ -761,7 +728,7 @@ mod tests {
         for t in &[
             "accounts", "mailboxes", "messages", "attachments",
             "mls_conversations", "contacts", "dlp_rules",
-            "audit_log", "jmap_state", "settings", "schema_migrations",
+            "audit_log", "settings", "schema_migrations",
         ] {
             assert!(
                 SCHEMA_V0.contains(&format!("CREATE TABLE IF NOT EXISTS {}", t)),
