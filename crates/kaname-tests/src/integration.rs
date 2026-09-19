@@ -437,7 +437,7 @@ mod store_tests {
         let required_tables = [
             "accounts", "mailboxes", "messages", "attachments",
             "mls_conversations", "contacts", "dlp_rules",
-            "audit_log", "jmap_state", "settings", "schema_migrations",
+            "audit_log", "settings", "schema_migrations",
         ];
         for table in &required_tables {
             assert!(
