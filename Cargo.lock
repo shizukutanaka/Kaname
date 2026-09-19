@@ -2094,36 +2094,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kaname-billing"
-version = "0.5.0"
-dependencies = [
- "hmac",
- "kaname-error",
- "mockito",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "kaname-continuity"
-version = "0.5.0"
-dependencies = [
- "kaname-error",
- "proptest",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tracing",
-]
-
-[[package]]
 name = "kaname-core"
 version = "0.5.0"
 dependencies = [
@@ -2176,18 +2146,6 @@ dependencies = [
 name = "kaname-error"
 version = "0.5.0"
 dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "kaname-i18n"
-version = "0.5.0"
-dependencies = [
- "kaname-error",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2435,18 +2393,6 @@ dependencies = [
  "kaname-dlp",
  "kaname-screen",
  "proptest",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "kaname-tray"
-version = "0.5.0"
-dependencies = [
- "kaname-error",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

@@ -79,11 +79,13 @@ eprint 2022/1533 (メタデータ秘匿), awslabs/mls-rs
 
 ### 9. 国際化 (i18n)
 
-**現状**: kaname-i18n (BCP47 + CLDR) で対応。変更不要。
+**現状**: フロントエンドの `src/i18n.ts` + `src/locales/*.json` で対応 (ja/en)。変更不要。
+Rust 側の `kaname-i18n` クレートは重複のため 2026-09 に削除。
 
 ### 10. 課金 (Stripe)
 
-**現状**: kaname-billing (HMAC 検証) で対応。変更不要。
+**現状**: 課金はスコープ外 — `kaname-billing` は 2026-09 にクレートごと削除 (D6)。
+将来導入する場合は git 履歴から HMAC 検証実装を参照可能。
 
 ---
 

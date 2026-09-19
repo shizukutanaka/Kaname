@@ -40,10 +40,6 @@ DRI は:
 | `kaname-jmap` | Mail Protocol Lead | JMAP、IMAP、SMTP 仕様 |
 | `kaname-store` | Storage Lead | SQLCipher、AES-256、SQL 設計 |
 | `kaname-ui` | Frontend Lead | Tauri、SolidJS、TypeScript |
-| `kaname-tray` | macOS Integration Lead | Cocoa、AppKit、メニューバー |
-| `kaname-i18n` | Localization Lead | CLDR、BCP 47、多言語 |
-| `kaname-billing` | Business Operations Lead | Stripe、エンタイトルメント |
-| `kaname-continuity` | Apple Platform Lead | Handoff、iCloud、UserActivity |
 | `kaname-observability` | SRE Lead | Prometheus、tracing、SLI/SLO |
 | `kaname-privacy` | Privacy Lead | GDPR、トラッキング検出 |
 | `kaname-mockserver` | DevX Lead | E2E テスト、開発者体験 |

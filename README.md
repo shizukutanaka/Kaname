@@ -25,9 +25,10 @@
   Dual-LLM の**型境界** (`kaname-ai::dual_llm`)。
 - **モック / スタブ段階 (本番運用不可)**: MLS グループ暗号化 (`kaname-mls` — 現状は XOR モック)、
   ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
-  自動アップデート、課金基盤の永続化 (`kaname-billing`)。これらは外部クレート統合が必要。
+  自動アップデート。これらは外部クレート統合が必要。
 - **組み立て状況 (2026-07 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
-  **27 クレート中 18 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
+  **23 クレート中 19 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
+  スコープ外・重複と判定した 4 クレート (billing/continuity/i18n/tray) はワークスペースから削除済みです (2026-09)。
   実装済みで眠っていた検出器を順次接続しました。
 - **実メールを解析できます**: 「**ファイル解析**」タブからローカルの `.eml` を指定すると、
   MIME 解析 → 送信ドメイン認証の評価 → BEC 判定 → サニタイズ → 本文リスク検出
@@ -198,8 +199,6 @@ kaname/
 │   ├── kaname-dlp/         # DLP ルールエンジン
 │   ├── kaname-mls/         # MLS RFC 9420 E2E 暗号化
 │   ├── kaname-sandbox/     # Firecracker microVM
-│   ├── kaname-billing/     # Stripe + エンタイトルメント
-│   ├── kaname-tray/        # macOS メニューバー Extra
 │   ├── kaname-ui/          # Tauri コマンド層
 │   └── kaname-tests/       # 統合テスト + 敵対テスト
 ├── .github/workflows/
@@ -252,9 +251,9 @@ Kaname は arxiv の最新研究を継続的に反映している:
 
 | 項目 | 数値 |
 |---|---|
-| Rust クレート | 27 |
-| Rust LOC | 約 22,000 |
-| Rust ユニットテスト | 452 |
+| Rust クレート | 23 |
+| Rust LOC | 約 19,200 |
+| Rust ユニットテスト | 378 |
 | KAT + AgentDojo + 統合テスト | 16 |
 | Playwright E2E | 19 |
 | vitest | 31 |

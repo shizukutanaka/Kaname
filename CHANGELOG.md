@@ -12,6 +12,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **作成画面の送信前アドバイザリに `oobv_recommend` を配線** (D24 残件 — 台帳記載の想定用途どおり)
   - 本文入力の debounce が「DLP 事前チェック」を意図しながら空のスタブだったため実装に置き換え。送金要求・急迫表現等の別経路確認推奨文脈を送信前に助言表示 (ブロックではなく助言。呼び出し失敗は送信を妨げない)
 
+### Removed
+- **出荷バイナリ・ワークスペースから一度も到達不能だった4クレートを削除** (D19・D6)
+  - `kaname-billing` (課金 — スコープ外、永続化未実装だった D6 も消滅)、`kaname-continuity` (デバイス間ハンドオフ — 単一デバイスで完結するスコープに不要)、`kaname-i18n` (翻訳カタログ — 正規実装は `src/i18n.ts` + `src/locales/`)、`kaname-tray` (トレイ生成 — `src-tauri` の内蔵トレイと重複)
+  - ワークスペース 27→23 クレート (出荷 19、意図的除外 4: mls/sandbox/mockserver/tests)。実装は git 履歴に残り将来復元可能
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)
   - `to_addrs: Vec<String>` を両構造体に追加し JSON 配列として保存。`mail_fetch` が JMAP `Email.to[].email` を供給。旧行の `''` は「宛先不明」として空配列に倒す後方互換。回帰テスト2件追加
@@ -27,6 +31,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `postcss`/`nanoid`/`js-yaml`/`browserslist`/`brace-expansion`/`baseline-browser-mapping` を非破壊的に更新 (lockfile のみ)。残り4件は `vitest`/`vite` メジャー更新が前提のため見送り(詳細: `docs/gap-analysis.md` D61)
 
 ### Fixed
+- **実装済みの `oobv_start`/`oobv_verify`/`pivot_analyze` 3コマンドを Tauri に配線して到達可能化** (D15 残件)
+  - `main.rs` に `.manage(commands::V02AppState::new())` を追加し、3コマンドを `tauri::State<'_, Arc<V02AppState>>` ラッパー経由で `invoke_handler` に登録。これで `commands.rs` の全公開コマンドが登録済みに。呼び出す UI は依然未実装 (static-check の「UI 未呼出」WARN に移行)
 - **`kaname-bec::apply_cross_signal_escalation` がリスク緩和シグナル (ARC検証成功) を認証問題と誤認し複合シグナルボーナスを誤って付与することを記録** (D59・未修正・記録のみ)
   - `has_auth` 判定が `SignalFamily::Authentication` の存在チェックのみで符号 (加点/減点) を見ていないため、正規の転送メール (ARC成功による減点シグナル) が無関係な Domain/Content シグナルと重なると誤って `+0.20`/`+0.15` の複合ボーナスを受ける。正当な転送メール・請求書督促等を誤って BEC 高リスクと誤判定しうる false positive 方向の欠陥
   - `kaname-bec` は CLAUDE.md のセキュリティレビュー必須クレートのため、本セッションでは修正せず記録のみ(詳細: `docs/gap-analysis.md` D59)
