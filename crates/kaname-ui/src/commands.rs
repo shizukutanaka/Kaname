@@ -298,6 +298,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
     let urls = extract_urls_from_text(&body_text);
 
+    // 自組織ドメイン (D44): 設定 `org_domain` → 接続中アカウントから導出。
+    // 未設定・未接続なら空文字で、自己ドメインを前提とする検出は安全にスキップされる。
+    let our = our_domain(&current_account_id().await, None).await;
+
     // 送信者の文体を評価する (アカウント乗っ取り検出)。
     // Date ヘッダから送信時刻 (UTC 時) を取り出す。無ければ評価しない。
     let send_hour = env.date.and_then(|ts| u8::try_from((ts.rem_euclid(86_400)) / 3_600).ok());
@@ -324,7 +328,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         body_text:    &body_text,
         auth,
         sender_history: None,
-        our_domain:   "example.com",
+        our_domain:   &our,
         known_contacts: &contacts,
         extracted_urls: &urls,
         reply_to:     None,
@@ -385,7 +389,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 risks
             },
         },
-        dlp_findings: scan_dlp_inbound(&subject, &body_text),
+        dlp_findings: scan_dlp_inbound(&subject, &body_text, &our),
         oobv_level: match oobv_level {
             kaname_oobv::RecommendationLevel::None     => "none",
             kaname_oobv::RecommendationLevel::Optional => "optional",
@@ -415,7 +419,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 ///
 /// 送信経路 (`mail_send`) は未配線 (D10) のため、現時点で DLP を活かせる
 /// のは受信側の解析のみである。
-fn scan_dlp_inbound(subject: &str, body: &str) -> Vec<String> {
+fn scan_dlp_inbound(subject: &str, body: &str, our_domain: &str) -> Vec<String> {
     let engine = kaname_dlp::DlpEngine::default_engine();
     let recipients: Vec<String> = Vec::new();
     let mimes: Vec<String> = Vec::new();
@@ -432,7 +436,7 @@ fn scan_dlp_inbound(subject: &str, body: &str) -> Vec<String> {
         attachment_mimes: &mimes,
         edm_sets: &edm,
         known_recipient_domains: &domains,
-        our_domain: "example.com",
+        our_domain,
     };
 
     let result = engine.evaluate(&ctx, kaname_dlp::Direction::Inbound);
@@ -509,6 +513,8 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut radar = kaname_radar::CampaignRadar::new();
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    // 自組織ドメイン (D44) は走査全体で1回だけ解決する。
+    let our = our_domain(&current_account_id().await, None).await;
 
     for item in dir {
         let Ok(item) = item else { continue };
@@ -566,7 +572,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             body_text:    &body_text,
             auth,
             sender_history: None,
-            our_domain:   "example.com",
+            our_domain:   &our,
             known_contacts: &contacts,
             extracted_urls: &urls,
             reply_to:     None,
@@ -607,7 +613,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let _ = radar.analyze(&meta);
 
         // 機微情報 (DLP) は件数のみ一覧に載せる (詳細は単体解析で確認する)。
-        let dlp_count = scan_dlp_inbound(&subject, &body_text).len();
+        let dlp_count = scan_dlp_inbound(&subject, &body_text, &our).len();
         // 添付検査 (危険と判定された件数のみ一覧に載せる)。
         let attachment_risk_count = kaname_render::scan_attachments(&bytes)
             .iter()
@@ -1651,6 +1657,8 @@ pub struct ConnectResult {
     pub account_id: String,
     /// メールボックス一覧 (id, 名前, 未読数)。
     pub mailboxes: Vec<(String, String, u32)>,
+    /// セッションから導出した組織ドメイン (D44)。取得できなければ None。
+    pub org_domain: Option<String>,
 }
 
 /// JMAP サーバへ接続し、メールボックス一覧を取得する。
@@ -1684,6 +1692,7 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
             .iter()
             .map(|m| (m.id.clone(), m.name.clone(), m.unread_emails))
             .collect(),
+        org_domain: client.account_domain(),
     };
 
     *jmap_slot().lock().await = Some(std::sync::Arc::new(client));
@@ -1724,6 +1733,8 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
         .await
         .map_err(|e| format!("メール一覧の取得に失敗しました: {e}"))?;
 
+    // 自組織ドメイン (D44) は一覧全体で1回だけ解決する (行ごとの DB 参照を避ける)。
+    let our = our_domain(&account_id, None).await;
     let mut rows = Vec::with_capacity(items.len());
     for it in &items {
         let from_addr = it
@@ -1742,7 +1753,9 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 
         // 一覧の時点では Authentication-Results ヘッダを取得していないため
         // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
-        let verdict = assess_listing(&account_id, &from_name, &from_addr, &subject, &preview).await;
+        let verdict = assess_listing(
+            &account_id, &from_name, &from_addr, &subject, &preview, &our,
+        ).await;
 
         // 受信を履歴に記録し、メール本体も保存する。
         // Store 未接続なら何もしない。失敗しても解析結果は返す
@@ -1803,7 +1816,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 /// 他の経路と同じ方針で、判定不能を安全と偽らないため。
 async fn assess_listing(
     account_id: &str, from_name: &Option<String>, from_addr: &str,
-    subject: &str, preview: &str,
+    subject: &str, preview: &str, our_domain: &str,
 ) -> String {
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
@@ -1826,7 +1839,7 @@ async fn assess_listing(
             arc:   None,
         },
         sender_history: history.as_ref(),
-        our_domain:   "example.com",
+        our_domain,
         known_contacts: &contacts,
         extracted_urls: &urls,
         reply_to:     None,
@@ -1864,6 +1877,8 @@ pub async fn mail_send_real(
     let domains: Vec<String> = Vec::new();
     let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
         std::collections::HashMap::new();
+    // 自組織ドメイン (D44): 送信者自身の `from` アドレスが最直接のヒント。
+    let our = our_domain(client.account_id(), Some(&from)).await;
     let ctx = kaname_dlp::EvalCtx {
         body: &body,
         subject: &subject,
@@ -1873,7 +1888,7 @@ pub async fn mail_send_real(
         attachment_mimes: &mimes,
         edm_sets: &edm,
         known_recipient_domains: &domains,
-        our_domain: "example.com",
+        our_domain: &our,
     };
     let dlp = engine.evaluate(&ctx, kaname_dlp::Direction::Outbound);
     if matches!(dlp.verdict, kaname_dlp::Action::Block) {
@@ -2233,6 +2248,52 @@ async fn current_account_id() -> String {
         Ok(c) => c.account_id().to_string(),
         Err(_) => String::new(),
     }
+}
+
+/// メールアドレスからドメイン部を取り出す (小文字化)。
+/// `"Name <a@b.com>"` のような表示名付きにも耐える。アドレス形でなければ None。
+fn email_domain(addr: &str) -> Option<String> {
+    let (_, domain) = addr.rsplit_once('@')?;
+    let domain: String = domain
+        .split(|c: char| c.is_whitespace() || matches!(c, '>' | ';' | ','))
+        .next()?
+        .to_lowercase();
+    (!domain.is_empty()).then_some(domain)
+}
+
+/// 自組織ドメインを解決する (D44)。
+///
+/// 優先順位:
+/// 1. 設定 `org_domain` (明示設定が最優先。アカウント固有 → "local" 共有の順)
+/// 2. `hint` (呼び出し側が持つ自アドレスのドメイン — 例: `mail_send_real` の from)
+/// 3. 接続中 JMAP アカウントのドメイン (session.username / account name から導出)
+/// 4. 空文字 — 下流の検出器は空を「不明」として安全にスキップする
+///    (`kaname-dlp` は `!our_domain.is_empty()` ガード、`kaname-bec` は
+///    `levenshtein1(domain, "")` が成立しないため自己類似判定が発火しない)。
+///
+/// `"example.com"` のような実在ドメインの固定値は、他者ドメイン宛メールへの
+/// 誤検知と自組織ドメインなりすましの見逃しを同時に招くため返さない。
+async fn our_domain(account_id: &str, hint: Option<&str>) -> String {
+    let store = store_slot().lock().await.clone();
+    if let Some(store) = store {
+        for acct in [account_id, "local"] {
+            if let Ok(Some(v)) = store.get_setting(acct, "org_domain").await {
+                let v = v.trim().to_lowercase();
+                if !v.is_empty() {
+                    return v;
+                }
+            }
+        }
+    }
+    if let Some(d) = hint.and_then(email_domain) {
+        return d;
+    }
+    if let Ok(client) = jmap_client().await {
+        if let Some(d) = client.account_domain() {
+            return d;
+        }
+    }
+    String::new()
 }
 
 // ============================================================================
