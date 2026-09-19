@@ -306,3 +306,10 @@ D24 に記録済み)。
 
 検証: `npx tsc --noEmit` (exit 0) / `npx eslint src ... --max-warnings 0` (exit 0) /
 `npm run build` 成功 / `npx vitest run` 21 テスト全パス。
+
+### フロントエンド i18n 基盤の削除 (2026-09)
+
+`t()`/`useT()`/`setLanguage()` 等の実呼び出しが UI 内にゼロだった
+`src/i18n.ts` + `src/locales/` (~380行) を削除 (E9)。
+起動時にカタログを読むだけの空転基盤であり、UI はハードコード
+日本語のみ。kaname-i18n クレート (D19) に続きフロント側の重複も除去。
