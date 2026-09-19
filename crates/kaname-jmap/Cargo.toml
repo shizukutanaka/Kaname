@@ -10,7 +10,6 @@ serde_json = { workspace = true }
 thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-kaname-error = { path = "../kaname-error" }
 reqwest      = { workspace = true }
 uuid       = { workspace = true }
 chrono     = { workspace = true }
