@@ -305,8 +305,6 @@ pub enum AuditFinding {
     HiddenInstruction(String),
     /// 外部送信先を示唆する URL/メール。
     ExfiltrationTarget(String),
-    /// 意図したタスクと矛盾する内容。
-    TaskContradiction(String),
     /// ANSI エスケープシーケンス (端末隠蔽・上書きに悪用)。
     /// 例: `\x1b[2K` (行消去)、`\x1b]8;;` (OSC ハイパーリンク偽装)。
     AnsiEscapeSequence(String),
