@@ -330,3 +330,14 @@ D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成し
 十分であり、差分同期が必要になった時点で git 履歴から復元すればよい。
 これで kaname-jmap / kaname-store に未使用コードは残っていない。
 (#148 はコンフリクトで未マージクローズ、#149/#151/#152 と共に再適用)
+
+### 関数レベル デッドコード掃除 (2026-09)
+
+非制限クレートの `pub` 項目を外部参照の有無で全走査し、呼び出し元ゼロの
+モジュール・API 群 ~2,400行を削除した (欠陥台帳 E7)。
+主な対象: `login_limiter` (522行)、`app_state` (525行)、`zip_guard` +
+`header_sanitize` (354行)、observability の Metrics/LatencyTimer/
+TelemetryConfig (~330行)、ux_features の Screener/Snooze/SendLater/
+SafeSummary (~550行)。`verify_audit_chain` のみ改ざん検出として価値が
+あるため `history_open` に警告配線を追加して残した。
+「価値が判明したら git 履歴から復元する」方針は D19/D48 と同一。

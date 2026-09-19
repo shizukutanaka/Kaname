@@ -963,14 +963,12 @@ mod tests {
 }
 
 /// ヘッダー値の CRLF インジェクション対策ユーティリティ。
-pub mod header_sanitize;
 
 /// HTML スマグリング検出 (Blob/data: URI 経由のペイロード組み立て)。
 pub mod html_smuggling;
 /// カレンダー招待 (ICS) のセキュリティ検査。
 pub mod calendar_guard;
 /// ZIP Slip 攻撃防止 (Zenn Round5 P0)。
-pub mod zip_guard;
 /// ファイルマジックバイト検証 — 拡張子偽装検出 (Qiita/Zenn Round5 P2)。
 pub mod magic_bytes;
 /// 添付ファイルメタデータ漏洩検出 (Round7 P1)。
