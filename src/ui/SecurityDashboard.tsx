@@ -396,9 +396,9 @@ const ActionItemsList = (props: {
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
   const [phishing, setPhishing] = createSignal<AiPhishingAnalysis | null>(null);
   const [phishingError, setPhishingError] = createSignal<string | null>(null);
-  const [accessLog, setAccessLog] = createSignal<AiAccessEntry[]>([]);
-  const [contacts,  setContacts]  = createSignal<ContactIntelligence[]>([]);
-  const [actions,   setActions]   = createSignal<ActionItem[]>([]);
+  const [accessLog] = createSignal<AiAccessEntry[]>([]);
+  const [contacts]  = createSignal<ContactIntelligence[]>([]);
+  const [actions]   = createSignal<ActionItem[]>([]);
   const [loading,   setLoading]   = createSignal(false);
   const [doneItems, setDoneItems] = createSignal<Set<number>>(new Set());
 
