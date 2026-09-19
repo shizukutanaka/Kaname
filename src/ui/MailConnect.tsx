@@ -18,6 +18,8 @@ interface ConnectResult {
   account_id: string;
   /** [id, 名前, 未読数] */
   mailboxes: [string, string, number][];
+  /** セッションから導出した組織ドメイン (D44)。未取得時は null。 */
+  org_domain: string | null;
 }
 
 interface EmailRow {
@@ -147,6 +149,10 @@ export function MailConnect() {
             }}>
               <span style={{ color: "#1E5B2A", "font-weight": "600" }}>接続中</span>
               <span style={{ color: "#5A6473" }}>アカウント: {s().account_id}</span>
+              {/* D44: 自組織ドメインは検出結果を明示する (誤検出に気付けるよう)。 */}
+              <Show when={s().org_domain}>
+                {(d) => <span style={{ color: "#5A6473" }}>組織ドメイン: {d()}</span>}
+              </Show>
               <button
                 onClick={() => void disconnect()}
                 style={{

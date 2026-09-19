@@ -30,6 +30,11 @@
 > `extract_auth_result` を機構スコープ限定パースに修正し `authserv_id` を露出 (D18 部分対応、
 > `mail-auth` 導入は未実施)。npm devDeps の脆弱性は `npm audit fix` で10→4件に削減 (D61、
 > 残りは vitest/vite メジャー更新が前提)。
+> **2026-09 続報 (D44 解消)**: DLP/BEC の `our_domain` が全箇所 `"example.com"` 固定だった
+> 欠陥を解消。`Session.username` (RFC 8620) から `JmapClient::account_domain()` が
+> 組織ドメインを自動導出し、`commands.rs` の `our_domain()` ヘルパーが
+> 設定 `org_domain` → `from` ヒント → 接続アカウント導出 → 空文字 (安全スキップ) の順で
+> 解決する。設定 UI は追加せず導出結果を接続画面に表示する方針 (操作回数最小の原則)。
 
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、

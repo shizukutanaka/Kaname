@@ -38,6 +38,10 @@ pub struct Session {
     pub capabilities:     HashMap<String, serde_json::Value>,
     pub accounts:         HashMap<String, Account>,
     pub primary_accounts: HashMap<String, String>,
+    /// RFC 8620 §2: 認証に使われたユーザー名 (通常はメールアドレス)。
+    /// 準拠しないサーバが省略してもパースを失敗させないよう Option。
+    #[serde(default)]
+    pub username:         Option<String>,
     pub api_url:          String,
     pub download_url:     String,
     pub upload_url:       String,
@@ -57,6 +61,14 @@ impl Session {
     #[must_use]
     pub fn primary_mail_account(&self) -> Option<&str> {
         self.primary_accounts.get(Self::JMAP_MAIL).map(String::as_str)
+    }
+
+    /// メールアドレス文字列からドメイン部を取り出す (小文字化)。
+    /// アドレス形でなければ None。
+    fn domain_part(addr: &str) -> Option<String> {
+        let (_, domain) = addr.rsplit_once('@')?;
+        let domain = domain.trim().to_lowercase();
+        (!domain.is_empty()).then_some(domain)
     }
 }
 
@@ -669,6 +681,21 @@ impl JmapClient {
     #[must_use]
     pub fn account_id(&self) -> &str  { &self.account_id }
     pub fn session_state(&self) -> &str { &self.session.state }
+
+    /// 接続中アカウントのメールドメインを返す (D44: 自組織ドメインの自動導出)。
+    ///
+    /// セッションの `username` (RFC 8620 §2、多くのサーバでメールアドレス) の
+    /// ドメイン部を優先し、アドレス形でなければアカウント `name` も試す。
+    /// どちらもアドレス形でなければ None — 推測はしない。
+    #[must_use]
+    pub fn account_domain(&self) -> Option<String> {
+        self.session.username.as_deref()
+            .and_then(Session::domain_part)
+            .or_else(|| {
+                self.session.accounts.get(&self.account_id)
+                    .and_then(|a| Session::domain_part(&a.name))
+            })
+    }
 }
 
 // ============================================================================
@@ -1148,6 +1175,48 @@ mod tests {
     fn smtp_terminator_dot_in_middle_of_line_safe() {
         // ドットが行末ではない場合は安全
         assert!(!contains_smtp_terminator("前文\r\n. これは終端ではない\r\n後文"));
+    }
+
+    // ── D44: 自組織ドメイン導出テスト ───────────────────────────────────────
+
+    fn session_json(username: Option<&str>) -> serde_json::Value {
+        let mut v = serde_json::json!({
+            "capabilities": {},
+            "accounts": {},
+            "primaryAccounts": {},
+            "apiUrl": "https://x.test/api",
+            "downloadUrl": "https://x.test/d",
+            "uploadUrl": "https://x.test/u",
+            "state": "s1"
+        });
+        if let Some(u) = username {
+            v["username"] = serde_json::json!(u);
+        }
+        v
+    }
+
+    #[test]
+    fn session_username_がパースされる() {
+        let s: Session = serde_json::from_value(session_json(Some("alice@corp.com")))
+            .expect("username 付きセッションはパースできるべき");
+        assert_eq!(s.username.as_deref(), Some("alice@corp.com"));
+    }
+
+    #[test]
+    fn session_username_省略時はNone() {
+        // RFC 8620 では必須だが、準拠しないサーバが省略しても失敗させない (D44)
+        let s: Session = serde_json::from_value(session_json(None))
+            .expect("username なしセッションもパースできるべき");
+        assert!(s.username.is_none());
+    }
+
+    #[test]
+    fn domain_part_アドレスからドメイン抽出() {
+        assert_eq!(Session::domain_part("alice@Corp.COM"), Some("corp.com".into()));
+        assert_eq!(Session::domain_part("a@b@corp.com"), Some("corp.com".into()));
+        assert_eq!(Session::domain_part("plain-name"), None);
+        assert_eq!(Session::domain_part("alice@"), None);
+        assert_eq!(Session::domain_part(""), None);
     }
 }
 
