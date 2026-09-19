@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)
+  - `to_addrs: Vec<String>` を両構造体に追加し JSON 配列として保存。`mail_fetch` が JMAP `Email.to[].email` を供給。旧行の `''` は「宛先不明」として空配列に倒す後方互換。回帰テスト2件追加
 - **`src/ui/SecurityDashboard.tsx` の未使用 setter 3件により `npm run build`/`typecheck` が main で失敗していた出荷ブロッカーを修正** (D60)
   - `noUnusedLocals` 下で TS6133 ×3。CI 不在 (D7) のため検出が遅れていた
 - **`kaname-memory-guard::normalize_for_matching` のゼロ幅文字削除が複数単語キーワードの語境界を壊す回避経路を修正** (D45・kaname-bec 残件あり)

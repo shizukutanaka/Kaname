@@ -1760,6 +1760,10 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
                 jmap_id:      it.id.clone(),
                 from_addr:    from_addr.clone(),
                 from_name:    from_name.clone(),
+                to_addrs:     it.to
+                    .as_ref()
+                    .map(|addrs| addrs.iter().map(|a| a.email.clone()).collect())
+                    .unwrap_or_default(),
                 subject:      it.subject.clone(),
                 body_preview: it.preview.clone(),
                 received_at:  it.received_at.clone(),
