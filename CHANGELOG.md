@@ -27,6 +27,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `JmapClient::sync` (~100行)、`subscribe_push` (~65行)、`SyncResult`/`ChangesResult`/`PushNotification`、`parse_sse_event`/`find_sse_event_end`、`JmapError::PushNotSupported`、`Session.event_source_url`、`Store::update_jmap_state`、`jmap_state` テーブルと `mailboxes.jmap_state` 列、kaname-jmap の `futures-util` 依存と `reqwest stream` feature を除去 (計 ~350行)
   - `mail_fetch` の全件 `Email/query`+`Email/get` 経路は正しく機能しており、差分同期が将来必要になれば git 履歴から復元可能。D19/D51 と同じく「呼び出し元の無い基盤は配線ではなく削除」の判断
   - (#148 はコンフリクトで未マージクローズされ、スタック上の #149/#151/#152 も main に入っていなかったため再適用)
+- **外部参照ゼロのモジュール・API 群を一括削除** (関数レベルデッドコード掃除、計 ~2,400行)
+  - `kaname-store::login_limiter` モジュール (522行・UI/コマンド層からの呼び出し元ゼロ)、`kaname-core::app_state` (525行・外部参照ゼロ)、`kaname-render::zip_guard` + `header_sanitize` (354行)、`kaname-observability` の `Metrics`/`METRICS`/`LatencyTimer`/`TelemetryConfig`/`hash_email` (~330行)、`kaname-core::ux_features` の Screener/Snooze/ReplyLater/SendLater/SafeSummary 群 (~550行・`TriageEngine` のみ利用中のため残置)、`kaname-store` の未使用 `rekey()`/`path` フィールド
+  - 反対に `Store::verify_audit_chain` はテスト専用だったが実用上意味がある改ざん検出機能のため、`history_open` で警告ログを出す配線を追加 (削除せず接続)
 
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)
