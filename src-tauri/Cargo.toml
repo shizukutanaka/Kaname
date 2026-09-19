@@ -13,8 +13,6 @@ tauri-build = { workspace = true }
 
 [dependencies]
 kaname-ui = { path = "../crates/kaname-ui" }
-serde     = { workspace = true }
-serde_json = { workspace = true }
 tracing   = { workspace = true }
 tauri     = { workspace = true }
 tauri-plugin-shell = "2"

@@ -15,5 +15,3 @@ uuid       = { workspace = true }
 chrono     = { workspace = true }
 
 [dev-dependencies]
-mockito = "1.4"
-tokio-test = "0.4"
