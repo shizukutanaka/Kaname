@@ -78,7 +78,10 @@ OS キーチェーン統合が入るまで、起動のたびに接続し直す�
 ## 出荷バイナリに含まれないクレートとその理由 (2026-07 仕分け)
 
 依存グラフ実測で「到達可能 10/27」だった状態から組み立てを進め、
-現在 **18/27** が出荷バイナリに含まれる。残る 9 個は**意図的に含めていない**:
+現在 **19/23** が出荷バイナリに含まれる (2026-09 に不要判定済みの
+billing/continuity/i18n/tray をワークスペースから削除し 27→23 へ。
+kaname-core は `TriageEngine` 経由で既に到達済みだったため表から除外)。
+残る 4 個は**意図的に含めていない**:
 
 | クレート | 含めない理由 |
 |---|---|
@@ -86,11 +89,15 @@ OS キーチェーン統合が入るまで、起動のたびに接続し直す�
 | `kaname-sandbox` | **no-op** (`spawn_vm` が VM を起動しない)。同上、隔離されていないものを隔離済みと見せない |
 | `kaname-mockserver` | 開発用の JMAP モックサーバ。製品に含めるものではない |
 | `kaname-tests` | 統合テスト・敵対テスト用クレート。同上 |
-| `kaname-billing` | 課金基盤。本製品のスコープ (メールセキュリティ解析) に不要。永続化も未実装 (D6) |
-| `kaname-core` | UX 機能 (スクリーナー/トリアージ/スヌーズ)。受信箱 UI が本格稼働してから接続する |
+
+削除済み (下表の判定に基づき 2026-09 にワークスペースから除去。履歴は git に残る):
+
+| 削除クレート | 削除根拠 |
+|---|---|
+| `kaname-billing` | 課金基盤。本製品のスコープ (メールセキュリティ解析) に不要。永続化も未実装だった (D6) |
 | `kaname-continuity` | デバイス間ハンドオフ。単一デバイスで完結する現スコープでは不要 |
-| `kaname-i18n` | 翻訳カタログ。UI 文言の外部化は本体機能が固まってから |
-| `kaname-tray` | トレイアイコンの描画/メニュー生成。`src-tauri` が独自にトレイを持つため重複 |
+| `kaname-i18n` | 翻訳カタログ。フロントエンドの `src/i18n.ts` + `src/locales/` が正規実装であり重複 |
+| `kaname-tray` | トレイアイコン生成。`src-tauri` が独自にトレイを持つため重複 |
 
 **モック実装を組み込まない判断が最も重要**である。`kaname-mls` や
 `kaname-sandbox` を「到達可能クレート数」のために繋ぐと、
@@ -105,7 +112,7 @@ First Principles 監査で以下を実コード確認し、**その後すべて�
 
 | 検証項目 | 結果 (根拠) |
 |---|---|
-| Tauri コマンド層の依存 | ~~`kaname-jmap`/`kaname-store` が無い~~ → **両方追加済み。到達可能 18/27** |
+| Tauri コマンド層の依存 | ~~`kaname-jmap`/`kaname-store` が無い~~ → **両方追加済み。到達可能 19/23** |
 | メール永続化 | ~~INSERT/SELECT がゼロ件~~ → ~~実装したが Store が開かれず FK でも失敗~~ → **起動時に自動オープン + `ensure_account`/`ensure_mailbox` で実際に保存される** (D23) |
 | メール受信 | ~~呼び出し元が存在しない~~ → **`mail_fetch` が受信し各通に BEC 判定を付与** |
 | メールを開く | ~~`mail_get_body`/`bec_get_score` がスタブ~~ → **`mail_open` が生 blob を取得し `.eml` と同じパイプラインで本文・BEC・添付・DLP を返す** |
@@ -230,7 +237,7 @@ D24 に記録済み)。
 | Q-LLM/P-LLM プロセス分離 | `kaname-ai::subprocess` | seccomp プロファイルのパス文字列を生成するのみ。実際の seccomp 適用は外部バイナリ `kaname-llm-runner` 側に委譲 (存在未確認) | `kaname-llm-runner` バイナリの実装、seccomp-bpf/sandbox-exec/Job Object の実適用 |
 | Firecracker microVM サンドボックス | `kaname-sandbox` | `spawn_vm`/`VsockChannel` が no-op。セマフォ管理・プール衛生は実装済みだが VM 自体は起動しない | Firecracker バイナリ統合、vsock 通信実装 |
 | 自動アップデート | `src-tauri` | `tauri.conf.json` から `updater` 設定を削除済み (2026-07 修正)。`tauri-plugin-updater` 未導入 | プラグイン導入 + 署名鍵生成 + 配信サーバー構築 |
-| 課金基盤の永続化 | `kaname-billing` | エンタイトルメント/冪等性キーが in-memory のみ (プロセス再起動で消失)。Stripe webhook ペイロードを直接信頼 (ライブAPI再取得なし) | `kaname-store` 連携、Redis 分散重複排除、台帳ハッシュチェーン検証 |
+| ~~課金基盤の永続化~~ (2026-09 解消) | ~~`kaname-billing`~~ | ~~エンタイトルメント/冪等性キーが in-memory のみ~~ | **クレートごと削除** — 課金はスコープ外 (D6) |
 
 ---
 

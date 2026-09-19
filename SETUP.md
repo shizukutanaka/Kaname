@@ -82,9 +82,6 @@ kaname/
 │   ├── kaname-render/      # MIME + HTML サニタイズ
 │   ├── kaname-jmap/        # JMAP クライアント
 │   ├── kaname-sandbox/     # Firecracker microVM
-│   ├── kaname-billing/     # Stripe ライセンス
-│   ├── kaname-tray/        # macOS メニューバー
-│   ├── kaname-i18n/        # 国際化
 │   ├── kaname-observability/ # Metrics + Privacy フィルター
 │   ├── kaname-privacy/     # トラッキング検出・匿名化
 │   ├── kaname-mockserver/  # JMAP モックサーバー (E2E 用)

@@ -11,7 +11,7 @@
 
 北極星: 「AIが受信箱全体を読まない。メール1通のみ解析する。」
 
-技術スタック: Rust (27 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
+技術スタック: Rust (23 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
 
 ---
 
@@ -40,7 +40,7 @@ CLAUDE.md → Cargo.toml → docs/threat-model.md → 対象クレートの lib.
 
 ```
 kaname-error
-  └── kaname-i18n, kaname-observability, kaname-privacy, kaname-screen
+  └── kaname-observability, kaname-privacy, kaname-screen
         └── kaname-crypto, kaname-store
               └── kaname-mls, kaname-render (→ kaname-screen)
                     └── kaname-bec, kaname-dlp, kaname-ai
@@ -127,12 +127,15 @@ let guard = lock.read().unwrap_or_else(|e| e.into_inner());
 
 ### 翻訳キーを直接文字列で書く
 
-```rust
+UI 文言の正規は `src/i18n.ts` + `src/locales/*.json` (Rust 側の kaname-i18n は
+重複のため削除済み — 出荷バイナリに UI 文字列は存在しない)。
+
+```typescript
 // ❌
-let msg = "エラーが発生しました";
+const msg = "エラーが発生しました";
 
 // ✅
-let msg = i18n.get("error.generic");
+const msg = t("error.generic");
 ```
 
 ---
