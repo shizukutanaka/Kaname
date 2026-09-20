@@ -657,6 +657,73 @@ PY
 [ "$fail" -eq 0 ] && echo "  OK: 3ファイルのバージョンが一致"
 
 echo ""
+echo '== 9. fuzz ターゲットの use kaname_*:: が実在すること =='
+# fuzz/ は workspace から exclude されており cargo check/test が届かない
+# ため、import 名が対象クレートの lib.rs に pub 宣言として実在するかを
+# 静的に照合する (kaname_render::mime / ::sanitize のような消滅参照は
+# D98 で実際に全ターゲットをコンパイル不能にしていた)。
+python3 - <<'PY' || fail=1
+import re, sys, glob, os
+
+os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) if '__file__' in dir() else '.')
+
+def public_names(lib_rs):
+    """lib.rs のルートで公開されている名前を集める。"""
+    names = set()
+    try:
+        src = open(lib_rs, encoding='utf-8').read()
+    except FileNotFoundError:
+        return names
+    for m in re.finditer(r'pub\s+(?:mod|fn|struct|enum|trait|type|const|static)\s+([A-Za-z_][A-Za-z0-9_]*)', src):
+        names.add(m.group(1))
+    # pub use path::Name / pub use path::{A, B, ...}
+    for m in re.finditer(r'pub\s+use\s+[^;]+;', src):
+        tail = m.group(0)
+        brace = re.search(r'\{([^}]*)\}', tail)
+        if brace:
+            for part in brace.group(1).split(','):
+                part = part.strip()
+                if not part:
+                    continue
+                # `Name` or `path::Name` or `Name as Alias`
+                alias = re.search(r'\bas\s+([A-Za-z_][A-Za-z0-9_]*)$', part)
+                if alias:
+                    names.add(alias.group(1))
+                else:
+                    names.add(part.split('::')[-1].strip())
+        else:
+            single = re.search(r'pub\s+use\s+.*?::([A-Za-z_][A-Za-z0-9_]*)\s*;', tail)
+            if single:
+                names.add(single.group(1))
+    return names
+
+bad = 0
+for target in glob.glob('fuzz/fuzz_targets/*.rs'):
+    src = open(target, encoding='utf-8').read()
+    # use kaname_x::{A, B, C} / use kaname_x::Name / use kaname_x::mod::...
+    for m in re.finditer(r'use\s+(kaname_[a-z_]+)::([^;]+);', src):
+        crate, path = m.group(1), m.group(2)
+        lib = os.path.join('crates', crate.replace('_', '-'), 'src', 'lib.rs')
+        names = public_names(lib)
+        # `use crate::{A, B}` はブレース内の各名前を、`use crate::mod::X`
+        # は先頭セグメント (モジュール) をルートで検査する。
+        if path.lstrip().startswith('{'):
+            inner = re.search(r'\{([^}]*)\}', path)
+            segs = [p.strip().split('::')[0].strip()
+                    for p in inner.group(1).split(',') if p.strip()] if inner else []
+        else:
+            first = re.findall(r'[A-Za-z_][A-Za-z0-9_]*', path)
+            segs = first[:1]
+        for seg in segs:
+            if seg and seg not in names:
+                print(f"  NG {target}: `use {crate}::{seg}` は {lib} に存在しない")
+                bad += 1
+if bad:
+    sys.exit(1)
+print("  OK: fuzz ターゲットの kaname_* import は全て実在")
+PY
+
+echo ""
 if [ "$fail" -eq 0 ]; then
   echo "静的検証: 問題なし"
   echo "注意: これは cargo check の代替ではない。型検査・借用検査・"
