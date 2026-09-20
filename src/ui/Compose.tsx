@@ -11,9 +11,6 @@ import { createSignal, createEffect, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ComposeProps {
-  replyToId?: string;
-  initialTo?: string;
-  initialSubject?: string;
   onClose: () => void;
   onSent: () => void;
 }
@@ -22,8 +19,8 @@ export const Compose = (props: ComposeProps) => {
   // 差出人: JMAP セッションはアカウントのメールアドレスを公開しないため
   // (Session.primary_accounts は accountId のみ)、利用者に入力してもらう。
   const [from,     setFrom]    = createSignal("");
-  const [to,       setTo]      = createSignal(props.initialTo || "");
-  const [subject,  setSubject] = createSignal(props.initialSubject || "");
+  const [to,       setTo]      = createSignal("");
+  const [subject,  setSubject] = createSignal("");
   const [body,     setBody]    = createSignal("");
   const [sending,  setSending] = createSignal(false);
   const [advice,   setAdvice]  = createSignal<string | null>(null);
@@ -150,7 +147,7 @@ export const Compose = (props: ComposeProps) => {
         gap: "12px",
       }}>
         <span style={{ "font-size": "14px", "font-weight": "600", flex: "1" }}>
-          {props.replyToId ? "返信" : "新規メール"}
+          新規メール
         </span>
         <button
           onClick={props.onClose}
