@@ -81,7 +81,7 @@ export const Compose = (props: ComposeProps) => {
     try {
       await invoke("mail_send", {
         from:    from(),
-        to:      [to()],
+        to:      to().split(/[,;]/).map(s => s.trim()).filter(Boolean),
         subject: subject(),
         body:    body(),
       });
@@ -183,7 +183,7 @@ export const Compose = (props: ComposeProps) => {
         />
         <input
           type="email"
-          placeholder="宛先"
+          placeholder="宛先 (カンマ区切りで複数可)"
           value={to()}
           onInput={e => setTo(e.currentTarget.value)}
           style={inputStyle}
