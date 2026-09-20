@@ -375,6 +375,32 @@ impl JmapClient {
             .map(|m| m.id.clone())
             .ok_or_else(|| JmapError::NotFound("ゴミ箱なし".into()))?;
 
+        // RFC 8621 §4.6: Email/set の mailboxIds はパッチ意味論で
+        // `true` は追加のみ。`{trash: true}` だけ書くと受信トレイに
+        // 残ったままになるため、現在の所属を取得して全て null で除去する。
+        let rs = self
+            .call(
+                vec![(
+                    "Email/get".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "ids": [email_id],
+                        "properties": ["id", "mailboxIds"],
+                    }),
+                    "get".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        let current: Vec<EmailListItem> = find_result(&rs, "get", "list")?;
+        let mailbox_patch = trash_mailbox_patch(
+            current
+                .first()
+                .map(|e| &e.mailbox_ids)
+                .unwrap_or(&HashMap::new()),
+            &trash_id,
+        );
+
         self.call(
             vec![(
                 "Email/set".into(),
@@ -382,7 +408,7 @@ impl JmapClient {
                     "accountId": self.account_id,
                     "update": {
                         email_id: {
-                            "mailboxIds": { trash_id: true },
+                            "mailboxIds": mailbox_patch,
                             "keywords/$seen": true,
                         }
                     },
@@ -860,6 +886,20 @@ fn find_result<T: for<'de> Deserialize<'de>>(
     serde_json::from_value(r.args[key].clone()).map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
+/// Email/set `mailboxIds` パッチを構築する: `trash_id` を追加し、
+/// 現在所属する他の全メールボックスを `null` で除去する。
+/// (RFC 8621 §4.6: パッチは `true`=追加・`null`=除去)
+fn trash_mailbox_patch(current: &HashMap<String, bool>, trash_id: &str) -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    m.insert(trash_id.to_string(), true.into());
+    for id in current.keys() {
+        if id != trash_id {
+            m.insert(id.clone(), serde_json::Value::Null);
+        }
+    }
+    serde_json::Value::Object(m)
+}
+
 /// JSON 配列から文字列のみを抽出するヘルパー (テストから利用)。
 #[cfg(test)]
 fn str_arr(v: &serde_json::Value) -> Vec<String> {
@@ -913,6 +953,25 @@ fn contains_smtp_terminator(body: &str) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trash_mailbox_patch_は現所属を全てnullにしてtrashを追加する() {
+        let mut current = HashMap::new();
+        current.insert("mbx-inbox".to_string(), true);
+        current.insert("mbx-archive".to_string(), true);
+        let p = trash_mailbox_patch(&current, "mbx-trash");
+        assert_eq!(p["mbx-trash"], serde_json::json!(true));
+        assert!(p["mbx-inbox"].is_null());
+        assert!(p["mbx-archive"].is_null());
+        // trash 自体が既所属でも二重挿入しない
+        let mut cur2 = HashMap::new();
+        cur2.insert("mbx-trash".to_string(), true);
+        let p2 = trash_mailbox_patch(&cur2, "mbx-trash");
+        assert_eq!(p2.as_object().unwrap().len(), 1);
+        // 未所属が空なら trash 追加のみ
+        let p3 = trash_mailbox_patch(&HashMap::new(), "mbx-trash");
+        assert_eq!(p3.as_object().unwrap().len(), 1);
+    }
 
     #[test]
     fn email_list_item_フラグ判定() {
