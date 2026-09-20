@@ -270,6 +270,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D73 | ~~**static-check.sh 検査6/7 に同型の字句解析欠陥が残置**~~ **(2026-09-20 解消)** | P1 | PR #209 は検査2/4 のみ状態機械化しており、検査6 の `strip_comments_and_strings` (正規表現カスケード) と検査7 の `strip_ts_noise` は未修正だった。実証した実害2種: (a) doc コメント内の孤立 `"` が後続文字列とペア化して**本番 .unwrap() を見逃す** (合成 p1 で検出行なし)、(b) `strip_single_test_fns` のパターン `[^\]]*\]?\s*\n` が `[^\]]*` に改行を許すため `#[test]` から文末までを「属性」として貪欲消費し、**テスト関数除去が一度も機能していなかった** (テスト内 unwrap が本番扱いで誤 NG)。さらに検査6/検査内の mod 検出は生ソースでブレース対応を取っており `"}"`/`'}'` で早期閉じしうる、検査7 は Rust の `r#` パターンを TS に誤持込 + テンプレート `${}` 内の式 (型参照を含みうる) を丸ごと抹消していた。修正: 検査6は属性テキスト保持の単一パス字句解析 (`strip_strings_comments`) + mask 済みテキストでのブレース対応、検査7は単一パス + `${}` 内再帰除去に置き換え、引用符は import 文識別のため残す。合成回帰3件 (孤立"後の本番 unwrap 検出・テスト内 unwrap 非検出・文字列内 unwrap 非検出) を実測確認 |
 | D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
+| D76 | ~~**`tauri-plugin-shell` が登録のみの dead plugin**: src-tauri が `.plugin(tauri_plugin_shell::init())` を登録し `tauri-plugin-shell = "2"` を依存に持つが、フロントエンド側に `@tauri-apps/plugin-shell` パッケージも `shell:` 権限 (capabilities/default.json) も無い — 呼び出し経路が完全に無い状態でビルド資産にだけ存在~~ **(2026-09-20 削除)** | P4 | plugin 登録行と Cargo.toml 依存を除去 (Cargo.lock から関連クレート消失を確認)。動作変更ゼロ、バイナリサイズ・供給網面を削減 |
+
 ### 完了判定の変更
 
 初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。
