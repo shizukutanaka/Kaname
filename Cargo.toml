@@ -6,7 +6,6 @@
 resolver = "2"
 members = [
     "crates/kaname-core",
-    "crates/kaname-error",
     "crates/kaname-observability",
     "crates/kaname-privacy",
 

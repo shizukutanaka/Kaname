@@ -2094,15 +2094,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kaname-error"
-version = "0.7.1"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "kaname-jmap"
 version = "0.7.1"
 dependencies = [

@@ -22,6 +22,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `e2e/tauri-mock.ts`: `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入で、Tauri ランタイムなしの `npm run dev` 上で UI 層 E2E を実現。コマンド呼び出しログ (`__KANAME_MOCK_LOG`) で invoke 引数まで検証可能
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
+### Removed
+- chore(workspace): 「全クレートで共有」の共通エラー型 `kaname-error` が利用クレートゼロのまま残存していたためクレートごと削除 — ADR は未実施の意図文書と判明 (D85)
+- fix(kaname-jmap): 一覧取得で `hasAttachment` プロパティを要求・パースしていたが消費者ゼロ — プロパティとフィールドを削除 (D86)
+
 ### Fixed
 - fix(kaname-jmap): JMAP ベアラトークンを Zeroizing 保持 + Debug 出力で伏字 — 切断後もヒープに残らないように (SQLCipher 鍵と同一の取り扱い)
 

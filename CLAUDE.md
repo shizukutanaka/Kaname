@@ -39,9 +39,8 @@ CLAUDE.md → Cargo.toml → docs/threat-model.md → 対象クレートの lib.
 ## クレート依存グラフ (単方向)
 
 ```
-kaname-error
-  └── kaname-observability, kaname-privacy, kaname-screen
-        └── kaname-crypto, kaname-store
+kaname-observability, kaname-privacy, kaname-screen
+  └── kaname-crypto, kaname-store
               └── kaname-mls, kaname-render (→ kaname-screen)
                     └── kaname-bec, kaname-dlp, kaname-ai
                           └── kaname-jmap, kaname-sandbox
@@ -78,7 +77,6 @@ cargo clippy --workspace --all-targets -- -D warnings
 - [ ] `crates/kaname-xxx/src/lib.rs` に `//!` ドキュメント追加
 - [ ] `crates/kaname-xxx/README.md` に機能説明追加
 - [ ] `Cargo.toml` の workspace members に追加
-- [ ] `crates/kaname-xxx/Cargo.toml` に `kaname-error` 依存追加
 - [ ] ユニットテスト ≥ 10 件
 - [ ] `CHANGELOG.md` の `[Unreleased]` に追記
 - [ ] `docs/threat-model.md` に新しい攻撃面を追記 (必要な場合)
