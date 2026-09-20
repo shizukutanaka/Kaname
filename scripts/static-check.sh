@@ -665,8 +665,9 @@ echo '== 9. fuzz ターゲットの use kaname_*:: が実在すること =='
 python3 - <<'PY' || fail=1
 import re, sys, glob, os
 
-os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) if '__file__' in dir() else '.')
-
+# シェルの冒頭で repo root に cd 済み (chdir は不要 — stdin 実行の
+# __file__ は <stdin> であり abspath からの dirname が repo の親を
+# 指してしまい glob が空ヒットで空転する欠陥があった)。
 def public_names(lib_rs):
     """lib.rs のルートで公開されている名前を集める。"""
     names = set()
@@ -720,7 +721,40 @@ for target in glob.glob('fuzz/fuzz_targets/*.rs'):
                 bad += 1
 if bad:
     sys.exit(1)
-print("  OK: fuzz ターゲットの kaname_* import は全て実在")
+print("  OK: 全ての fuzz ターゲットの kaname_* import が実在する")
+PY
+
+echo ""
+echo "== 10. fuzz コーパス ↔ ターゲット ↔ Cargo.toml bin の対応関係 =="
+# D103: corpus/aitm_urls 等の種は作られたが対応ターゲットが fuzz_targets に
+# 無く (Cargo.toml の [[bin]] にも登録なし)、一度も実行されなかった。
+# 逆方向も検査: ターゲット .rs があっても [[bin]] 未登録なら cargo fuzz の
+# 対象にならない。コーパス無しの bin は許容 (初実行で自動生成される)。
+python3 - <<'PY' || fail=1
+import re, os, sys, glob
+
+toml = open('fuzz/Cargo.toml', encoding='utf-8').read()
+# [[bin]] ブロックの name = "..." を集める。
+bins = set(re.findall(r'\[\[bin\]\]\s*name\s*=\s*"([^"]+)"', toml))
+targets = {os.path.splitext(os.path.basename(p))[0]
+           for p in glob.glob('fuzz/fuzz_targets/*.rs')}
+corpora = {d for d in os.listdir('fuzz/corpus')
+           if os.path.isdir(os.path.join('fuzz/corpus', d))} \
+    if os.path.isdir('fuzz/corpus') else set()
+
+bad = 0
+for name in sorted(corpora - targets):
+    print(f"  NG fuzz/corpus/{name}: 対応する fuzz_targets/{name}.rs が無い (D103 型の孤立コーパス)")
+    bad += 1
+for name in sorted(targets - bins):
+    print(f"  NG fuzz_targets/{name}.rs: fuzz/Cargo.toml の [[bin]] に未登録 — cargo fuzz の対象外")
+    bad += 1
+for name in sorted(bins - targets):
+    print(f"  NG fuzz/Cargo.toml [[bin]] \"{name}\": 対応する fuzz_targets/{name}.rs が無い")
+    bad += 1
+if bad:
+    sys.exit(1)
+print(f"  OK: corpus {len(corpora)} 件 / target {len(targets)} 件 / bin {len(bins)} 件の対応が一致")
 PY
 
 echo ""
