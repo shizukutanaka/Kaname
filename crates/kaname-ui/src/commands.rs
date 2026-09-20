@@ -231,7 +231,14 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     info!(path=%path, "mail_import_eml");
 
     let bytes = std::fs::read(&path).map_err(|e| format!("ファイルを読めません ({path}): {e}"))?;
-    analyze_raw_email(&bytes).await
+    let imported = analyze_raw_email(&bytes).await?;
+    audit_event(
+        None,
+        "MAIL_IMPORT",
+        serde_json::json!({ "path": path, "verdict": imported.bec_verdict }),
+    )
+    .await;
+    Ok(imported)
 }
 
 /// 生 RFC 5322 バイト列を解析パイプライン全体に通す。
@@ -724,6 +731,16 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         })
         .collect();
 
+    audit_event(
+        None,
+        "FOLDER_SCAN",
+        serde_json::json!({
+            "path": path,
+            "analyzed": entries.len(),
+            "failed": failed.len(),
+        }),
+    )
+    .await;
     Ok(FolderScanResult {
         analyzed: entries.len(),
         failed,
