@@ -441,6 +441,105 @@ pub fn parse_analysis_json(text: &str) -> Result<RawAnalysisOutput, LlmError> {
 }
 
 // ============================================================================
+// BEC スコアリングアダプタ (D2 Phase 4)
+// ============================================================================
+
+/// BEC 判定専用の Q-LLM システムプロンプト。出力は JSON のみ。
+///
+/// `kaname-bec` はこの文字列を知らない — 呼び出し側 (Phase 5 の配線) が
+/// `QUARANTINED_SYSTEM_PROMPT` とこの指示を組み合わせて使う。
+pub const BEC_SCORE_INSTRUCTION: &str = concat!(
+    "Analyze the email for Business Email Compromise. ",
+    "Output ONLY JSON: {\"risk\": \"SAFE\"|\"ADVISORY\"|\"SUSPICIOUS\"|\"DANGEROUS\", ",
+    "\"summary\": \"<=280 chars\", \"language\": \"JA\"|\"EN\"|\"ZH\"|\"KO\"|\"OTHER\"}. ",
+    "Consider: urgent payment requests, account changes, executive impersonation, ",
+    "gift-card requests, secrecy pressure, lookalike sender claims."
+);
+
+/// モデルの risk 文字列を BEC 確率にマップする。
+/// 未知の値は `None` (スキーマ違反として 0 寄与にフォールバック)。
+fn risk_to_probability(risk: &str) -> Option<f32> {
+    match risk.trim().to_ascii_uppercase().as_str() {
+        "SAFE" => Some(0.05),
+        "ADVISORY" => Some(0.35),
+        "SUSPICIOUS" => Some(0.65),
+        "DANGEROUS" => Some(0.9),
+        _ => None,
+    }
+}
+
+/// char 境界で `max` 文字まで切り詰める (UTF-8 の途中で切らない)。
+fn truncate_chars(s: &str, max: usize) -> &str {
+    if s.chars().count() > max {
+        let end = s.char_indices().nth(max).map_or(s.len(), |(i, _)| i);
+        &s[..end]
+    } else {
+        s
+    }
+}
+
+/// `kaname-bec::LocalLlm::score_bec` と同じシグネチャで Q-LLM を呼ぶ
+/// アダプタ関数。返り値は `(probability, explanation)`。
+///
+/// 推論失敗・スキーマ違反・未知の risk 値のいずれでも `(0.0, 理由)` を
+/// 返す — 確率 0 の寄与で決定論的シグナルのみの判定にフォールバックする
+/// (`NullLlm` と同じ安全側の失敗)。
+///
+/// 呼び出し側の約束: `config` は `ModelConfig::quarantined()`
+/// (temperature=0、同一入力に決定論的 — `LocalLlm` の契約) を使うこと。
+/// 件名・本文・context は `Content<Untrusted>` 由来を想定し、件名 256 /
+/// 本文 4000 / context 1024 chars に切り詰めてプロンプトサイズを制限する。
+/// `<|end|>` 等の特殊トークンは `build_phi4_prompt` が除去する。
+#[must_use]
+pub fn bec_score(
+    runner: &Mutex<LocalLlmRunner>,
+    subject: &str,
+    body: &str,
+    context: Option<&str>,
+) -> (f32, String) {
+    let mut user_message = format!(
+        "件名: {}\n本文:\n{}",
+        truncate_chars(subject, 256),
+        truncate_chars(body, 4000)
+    );
+    if let Some(ctx) = context {
+        user_message.push_str(&format!("\nコンテキスト: {}", truncate_chars(ctx, 1024)));
+    }
+
+    let req = InferenceRequest {
+        system_prompt: format!("{QUARANTINED_SYSTEM_PROMPT}\n{BEC_SCORE_INSTRUCTION}"),
+        user_message,
+        history: vec![],
+    };
+
+    let runner = runner.lock().unwrap_or_else(|e| e.into_inner());
+    let result = match runner.infer(&req) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "BEC LLM 推論失敗 — 0 寄与にフォールバック");
+            return (
+                0.0,
+                format!("意味解析失敗 ({e}) — 決定論的シグナルのみで判定"),
+            );
+        }
+    };
+
+    match parse_analysis_json(&result.text) {
+        Ok(out) => match risk_to_probability(&out.risk) {
+            Some(p) => (p, truncate_chars(&out.summary, 120).to_string()),
+            None => {
+                tracing::warn!(risk = %out.risk, "BEC LLM の risk 値がスキーマ外");
+                (0.0, "意味解析の出力がスキーマ違反 — 0 寄与".into())
+            }
+        },
+        Err(e) => {
+            tracing::warn!(error = %e, "BEC LLM 出力のパース失敗 — 0 寄与にフォールバック");
+            (0.0, format!("意味解析出力のパース失敗 ({e}) — 0 寄与"))
+        }
+    }
+}
+
+// ============================================================================
 // Model download helper (first-run)
 // ============================================================================
 
