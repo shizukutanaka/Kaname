@@ -306,6 +306,12 @@ async fn mls_send_encrypted(to: String, subject: String, body: String) -> Result
     commands::mls_send_encrypted(to, subject, body).await
 }
 
+/// 安全番号を相手と照合済みとして記録する (D1 Phase 5)。
+#[tauri::command]
+async fn mls_mark_verified(to: String) -> Result<String, String> {
+    commands::mls_mark_verified(to).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -450,6 +456,7 @@ fn main() {
             mls_send_key_package,
             mls_start_conversation,
             mls_send_encrypted,
+            mls_mark_verified,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");

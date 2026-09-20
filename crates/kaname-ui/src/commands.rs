@@ -1502,6 +1502,70 @@ mod tests {
         Ok(())
     }
 
+    /// D1 Phase 5: 安全番号の照合記録が `mls_conversations` の
+    /// verified/safety_changed に反映されること、および照合後に番号が
+    /// 変わった会話が safety_changed で警告されること。
+    #[tokio::test]
+    async fn mls照合記録がverifiedと番号変更警告に反映される() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        // 照合記録の保存先 (history.db) を開く
+        let dir = std::env::temp_dir().join(format!("kaname-d1p5-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        history_open(
+            dir.join("history.db").to_string_lossy().to_string(),
+            "0".repeat(64),
+        )
+        .await?;
+
+        let mut bob = kaname_mls::MlsMailClient::try_new(mls_test_identity("bob@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let alice = kaname_mls::MlsMailClient::try_new(mls_test_identity("alice@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let alice_kp = alice
+            .generate_key_package()
+            .ok_or("alice の KP 生成に失敗")?;
+        let (conv, _welcome) = bob
+            .start_one_to_one(
+                kaname_mls::EmailAddress::parse("alice@kaname.app").map_err(|e| format!("{e}"))?,
+                alice_kp,
+            )
+            .map_err(|e| format!("{e}"))?;
+        let conv_id = conv.id.as_hex();
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(bob);
+
+        // 記録前: 未検証
+        let peers = mls_conversations().await;
+        assert_eq!(peers.len(), 1);
+        assert!(!peers[0].verified);
+        assert!(!peers[0].safety_changed);
+
+        // 照合記録 → verified
+        mls_mark_verified("alice@kaname.app".to_string()).await?;
+        let peers = mls_conversations().await;
+        assert!(peers[0].verified, "照合記録が verified に反映されるべき");
+        assert!(!peers[0].safety_changed);
+
+        // 番号が変わった (鍵変更・再参加・中間者) → safety_changed で警告。
+        // ここでは記録値を直接書き換えて不一致状態を再現する
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        store
+            .mls_mark_verified("local", &conv_id, "deadbeef-different-sn")
+            .await
+            .map_err(|e| e.to_string())?;
+        let peers = mls_conversations().await;
+        assert!(!peers[0].verified);
+        assert!(peers[0].safety_changed, "番号不一致が検出されるべき");
+
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *store_slot().lock().await = None;
+        Ok(())
+    }
+
     #[tokio::test]
     async fn analyze_raw_email_mls未初期化ではイベントのみ返す() -> Result<(), String> {
         // MLS スロットが空の状態で mls パートを含むメールを解析する。
@@ -3016,33 +3080,104 @@ pub struct MlsPeer {
     pub epoch: u64,
     /// 安全番号 — 電話等で相手と照合する値 (Phase 5 セレモニーの実体)。
     pub safety_number: Option<String>,
+    /// 安全番号を相手と照合済みか (Phase 5: store の照合記録と現在値が一致)。
+    pub verified: bool,
+    /// 照合記録があるが現在の安全番号と一致しない = 鍵変更/再参加/中間者の
+    /// 可能性 — UI は警告を出すべき。
+    pub safety_changed: bool,
 }
 
 /// MLS 会話が成立している相手の一覧を返す (未初期化は空列)。
 pub async fn mls_conversations() -> Vec<MlsPeer> {
-    let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
-    let Some(client) = guard.as_ref() else {
-        return Vec::new();
+    let (convs, own) = {
+        let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+        let Some(client) = guard.as_ref() else {
+            return Vec::new();
+        };
+        (
+            client.list_conversations(),
+            client.identity.email.as_str().to_string(),
+        )
     };
-    let own = client.identity.email.as_str().to_string();
-    client
-        .list_conversations()
-        .iter()
-        .flat_map(|c| {
-            let conv_id = c.id.as_hex();
-            let epoch = c.epoch;
-            let sn = c.safety_number.clone();
-            c.members
-                .iter()
-                .filter(|m| m.as_str() != own)
-                .map(move |m| MlsPeer {
-                    email: m.as_str().to_string(),
-                    conversation_id: conv_id.clone(),
-                    epoch,
-                    safety_number: sn.clone(),
-                })
-        })
-        .collect()
+    // 照合記録は history 側 Store (history.db の mls_conversations 行)。
+    // 未接続時は verified=false/safety_changed=false — 検証状態を偽らない。
+    let store = store_slot().lock().await.clone();
+    let mut out = Vec::new();
+    for c in &convs {
+        let conv_id = c.id.as_hex();
+        let recorded = match &store {
+            Some(s) => s.mls_verification_state(&conv_id).await.unwrap_or(None),
+            None => None,
+        };
+        let (verified, safety_changed) = match (&recorded, &c.safety_number) {
+            (Some((recorded_sn, _)), Some(current)) => {
+                (recorded_sn == current, recorded_sn != current)
+            }
+            _ => (false, false),
+        };
+        for m in &c.members {
+            if m.as_str() == own {
+                continue;
+            }
+            out.push(MlsPeer {
+                email: m.as_str().to_string(),
+                conversation_id: conv_id.clone(),
+                epoch: c.epoch,
+                safety_number: c.safety_number.clone(),
+                verified,
+                safety_changed,
+            });
+        }
+    }
+    out
+}
+
+/// 相手と安全番号を対面照合した記録を store に残す (D1 Phase 5)。
+///
+/// 照合操作自体は利用者が別経路 (電話・対面等) で行う — ここで保存する
+/// のは「この時点の番号で照合した」という記録であり、以後番号が変わった
+/// 場合に `mls_conversations` の `safety_changed` で警告される。
+/// Store 未接続では記録先が無いためエラー。
+pub async fn mls_mark_verified(to: String) -> Result<String, String> {
+    let to_addr = kaname_mls::EmailAddress::parse(to.clone())
+        .map_err(|e| format!("宛先アドレスが不正です: {e}"))?;
+    let (conv_id, sn) = {
+        let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+        let client = guard.as_ref().ok_or_else(|| {
+            "MLS が初期化されていません (mls_init を先に呼んでください)".to_string()
+        })?;
+        let conv = client
+            .list_conversations()
+            .into_iter()
+            .find(|c| c.members.iter().any(|m| m.as_str() == to_addr.as_str()))
+            .ok_or_else(|| format!("{} との MLS 会話がありません", to_addr.as_str()))?;
+        let sn = conv
+            .safety_number
+            .clone()
+            .ok_or_else(|| "安全番号がまだ計算されていません".to_string())?;
+        (conv.id.as_hex(), sn)
+    };
+    let store = store_slot().lock().await.clone().ok_or_else(|| {
+        "履歴ストアが開かれていません (先にアカウント接続してください)".to_string()
+    })?;
+    let account = jmap_client()
+        .await
+        .map(|c| c.account_id().to_string())
+        .unwrap_or_else(|_| "local".to_string());
+    store
+        .mls_mark_verified(&account, &conv_id, &sn)
+        .await
+        .map_err(|e| format!("照合記録の保存に失敗しました: {e}"))?;
+    audit_event(
+        Some(account.as_str()),
+        "MLS_SAFETY_VERIFIED",
+        serde_json::json!({ "conversation_id": conv_id }),
+    )
+    .await;
+    Ok(format!(
+        "{} との安全番号を照合済みとして記録しました",
+        to_addr.as_str()
+    ))
 }
 
 /// この端末の KeyPackage を `application/mls-key-package` 添付として

@@ -446,6 +446,10 @@ interface MlsPeer {
   conversation_id: string;
   epoch: number;
   safety_number: string | null;
+  // D1 Phase 5: 安全番号の照合状態
+  verified: boolean;
+  // 照合記録はあるが現在の番号と不一致 = 鍵変更/再参加/中間者の可能性
+  safety_changed: boolean;
 }
 
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
@@ -816,10 +820,72 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
                             padding: "6px 8px", background: "#0A0E14",
                             "border-radius": "4px", border: "1px solid #1F2833",
                           }}>
-                            <div>🔐 {p.email} — epoch {p.epoch}</div>
+                            <div>
+                              🔐 {p.email} — epoch {p.epoch}{" "}
+                              {/* D1 Phase 5: 照合状態バッジ。verified=照合済み、
+                                  safety_changed=照合後に番号が変化 (鍵変更/
+                                  再参加/中間者の可能性)、それ以外=未検証 */}
+                              <Show when={p.safety_changed}>
+                                <span style={{
+                                  background: "#FF6B7020", color: "#FF6B70",
+                                  "font-size": "10px", padding: "1px 6px",
+                                  "border-radius": "3px", "margin-left": "4px",
+                                }}>
+                                  ⚠ 番号が照合時と異なります
+                                </span>
+                              </Show>
+                              <Show when={!p.safety_changed && p.verified}>
+                                <span style={{
+                                  background: "#34D39920", color: "#34D399",
+                                  "font-size": "10px", padding: "1px 6px",
+                                  "border-radius": "3px", "margin-left": "4px",
+                                }}>
+                                  ✓ 照合済み
+                                </span>
+                              </Show>
+                              <Show when={!p.safety_changed && !p.verified}>
+                                <span style={{
+                                  background: "#FFB22420", color: "#FFB224",
+                                  "font-size": "10px", padding: "1px 6px",
+                                  "border-radius": "3px", "margin-left": "4px",
+                                }}>
+                                  未検証
+                                </span>
+                              </Show>
+                            </div>
                             <Show when={p.safety_number}>
                               <div style={{ "font-family": "monospace", color: "#6B7A94", "margin-top": "2px", "word-break": "break-all" }}>
                                 安全番号: {p.safety_number}
+                              </div>
+                              {/* 照合記録 — 押す前に利用者が別経路 (電話・
+                                  対面等) で番号を確かめた前提 */}
+                              <div style={{ "margin-top": "4px", display: "flex", gap: "6px", "align-items": "center" }}>
+                                <button
+                                  disabled={mlsBusy()}
+                                  onClick={async () => {
+                                    setMlsBusy(true);
+                                    setMlsMsg(null);
+                                    try {
+                                      const r = await invoke<string>("mls_mark_verified", { to: p.email });
+                                      setMlsMsg({ ok: true, text: r });
+                                      await refreshMls();
+                                    } catch (e) {
+                                      setMlsMsg({ ok: false, text: String(e) });
+                                    }
+                                    setMlsBusy(false);
+                                  }}
+                                  style={{
+                                    background: "#1A2129", color: "#8B96A5",
+                                    border: "1px solid #2A3441", "border-radius": "4px",
+                                    padding: "2px 8px", "font-size": "10px",
+                                    cursor: mlsBusy() ? "default" : "pointer",
+                                  }}
+                                >
+                                  相手と照合しました (記録)
+                                </button>
+                                <span style={{ "font-size": "9px", color: "#6B7A94" }}>
+                                  電話・対面等の別経路で番号が一致することを確認してから押してください
+                                </span>
                               </div>
                             </Show>
                           </div>
@@ -867,7 +933,7 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
           ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策、実データで稼働"],
           ["✓", "監査証跡",           "append-only + ハッシュチェーン — 上の「監査証跡」セクションで実データを閲覧可能"],
           ["⚠", "ローカル AI 推論",     "実装済み (D2 Phase 1-5) — モデルダウンロード・ロード後に BEC 意味解析が有効化。未ロード時は決定論的シグナルのみ"],
-          ["⚠", "MLS + PQC 暗号化",    "実装済み (D1 Phase 1/2/4) — openmls + X-Wing (ML-KEM-768) ハイブリッド、SQLCipher 永続化、受信エンベロープの自動処理。KeyPackage 配送と安全番号 UI は未実装 (Phase 3/5)"],
+          ["⚠", "MLS + PQC 暗号化",    "実装済み (D1 Phase 1–5) — openmls + X-Wing (ML-KEM-768) ハイブリッド、SQLCipher 永続化、KP の添付往復・暗号送信・受信エンベロープ自動処理・安全番号照合記録まで配線済み"],
         ] as [string, string, string][]).map(([icon, name, desc]) => (
           <div style={{
             display: "flex", gap: "8px", padding: "4px 0",
