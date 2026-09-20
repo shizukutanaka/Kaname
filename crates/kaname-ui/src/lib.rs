@@ -7,9 +7,9 @@
 
 pub mod commands;
 
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 /// アプリのロガーを初期化する。
 ///
@@ -21,8 +21,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// 完全に無効だった)。`tracing_subscriber::registry()` を土台に
 /// `PrivacyLayer` と `fmt::layer()` を両方積む構成に変更する。
 pub fn run() {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("kaname=debug,warn"));
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("kaname=debug,warn"));
     tracing_subscriber::registry()
         .with(env_filter)
         .with(tracing_subscriber::fmt::layer())

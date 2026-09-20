@@ -11,9 +11,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use kaname_ui::commands;
-use tauri::{AppHandle, Manager, Emitter, RunEvent};
-use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent};
 
 // ============================================================================
 // Tauri コマンドラッパー
@@ -150,7 +150,9 @@ async fn mail_download_attachment(
 }
 
 #[tauri::command]
-async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<commands::AttachmentRef>, String> {
+async fn mail_list_attachment_blobs(
+    email_id: String,
+) -> Result<Vec<commands::AttachmentRef>, String> {
     commands::mail_list_attachment_blobs(email_id).await
 }
 
@@ -180,7 +182,10 @@ async fn history_mark_verified(email: String) -> Result<(), String> {
 
 /// サーバからメール一覧を取得し、各通に BEC 判定を付けて返す。
 #[tauri::command]
-async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<commands::EmailRow>, String> {
+async fn mail_fetch(
+    mailbox_id: String,
+    limit: Option<u32>,
+) -> Result<Vec<commands::EmailRow>, String> {
     commands::mail_fetch(mailbox_id, limit).await
 }
 
@@ -214,16 +219,25 @@ async fn history_open_default() -> Result<String, String> {
 
 #[cfg(desktop)]
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = Menu::with_items(app, &[
-        &MenuItem::with_id(app, "open",     "受信トレイを開く", true, None::<&str>)?,
-        &MenuItem::with_id(app, "compose",  "新規作成...",     true, Some("CmdOrCtrl+N"))?,
-        &PredefinedMenuItem::separator(app)?,
-        &MenuItem::with_id(app, "security", "セキュリティポスチャー...", true, None::<&str>)?,
-        &MenuItem::with_id(app, "settings", "設定...",         true, Some("CmdOrCtrl+,"))?,
-        &PredefinedMenuItem::separator(app)?,
-        &MenuItem::with_id(app, "about",    "Kaname について",  true, None::<&str>)?,
-        &MenuItem::with_id(app, "quit",     "Kaname を終了",   true, Some("CmdOrCtrl+Q"))?,
-    ])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &MenuItem::with_id(app, "open", "受信トレイを開く", true, None::<&str>)?,
+            &MenuItem::with_id(app, "compose", "新規作成...", true, Some("CmdOrCtrl+N"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(
+                app,
+                "security",
+                "セキュリティポスチャー...",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app, "settings", "設定...", true, Some("CmdOrCtrl+,"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, "about", "Kaname について", true, None::<&str>)?,
+            &MenuItem::with_id(app, "quit", "Kaname を終了", true, Some("CmdOrCtrl+Q"))?,
+        ],
+    )?;
 
     let mut tray_builder = TrayIconBuilder::new()
         .menu(&menu)
@@ -235,7 +249,9 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     if let Some(icon) = app.default_window_icon().cloned() {
         tray_builder = tray_builder.icon(icon);
     } else {
-        tracing::warn!("デフォルトウィンドウアイコンが取得できませんでした (トレイアイコンは既定値を使用)");
+        tracing::warn!(
+            "デフォルトウィンドウアイコンが取得できませんでした (トレイアイコンは既定値を使用)"
+        );
     }
     let _tray = tray_builder
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -245,18 +261,28 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = w.set_focus();
                 }
             }
-            "compose"  => { let _ = app.emit("menu:compose", ()); }
-            "security" => { let _ = app.emit("menu:security", ()); }
-            "settings" => { let _ = app.emit("menu:settings", ()); }
-            "about"    => { let _ = app.emit("menu:about", ()); }
-            "quit"     => app.exit(0),
+            "compose" => {
+                let _ = app.emit("menu:compose", ());
+            }
+            "security" => {
+                let _ = app.emit("menu:security", ());
+            }
+            "settings" => {
+                let _ = app.emit("menu:settings", ());
+            }
+            "about" => {
+                let _ = app.emit("menu:about", ());
+            }
+            "quit" => app.exit(0),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
-                button_state: MouseButtonState::Up, ..
-            } = event {
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 if let Some(window) = tray.app_handle().get_webview_window("main") {
                     if window.is_visible().unwrap_or(false) {
                         let _ = window.hide();

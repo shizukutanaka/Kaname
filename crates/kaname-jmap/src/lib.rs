@@ -33,17 +33,17 @@ use thiserror::Error;
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
-    pub capabilities:     HashMap<String, serde_json::Value>,
-    pub accounts:         HashMap<String, Account>,
+    pub capabilities: HashMap<String, serde_json::Value>,
+    pub accounts: HashMap<String, Account>,
     pub primary_accounts: HashMap<String, String>,
     /// RFC 8620 §2: 認証に使われたユーザー名 (通常はメールアドレス)。
     /// 準拠しないサーバが省略してもパースを失敗させないよう Option。
     #[serde(default)]
-    pub username:         Option<String>,
-    pub api_url:          String,
-    pub download_url:     String,
-    pub upload_url:       String,
-    pub state:            String,
+    pub username: Option<String>,
+    pub api_url: String,
+    pub download_url: String,
+    pub upload_url: String,
+    pub state: String,
 }
 
 impl Session {
@@ -57,7 +57,9 @@ impl Session {
     }
     #[must_use]
     pub fn primary_mail_account(&self) -> Option<&str> {
-        self.primary_accounts.get(Self::JMAP_MAIL).map(String::as_str)
+        self.primary_accounts
+            .get(Self::JMAP_MAIL)
+            .map(String::as_str)
     }
 
     /// メールアドレス文字列からドメイン部を取り出す (小文字化)。
@@ -73,9 +75,9 @@ impl Session {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
-    pub name:                 String,
-    pub is_personal:          bool,
-    pub is_read_only:         bool,
+    pub name: String,
+    pub is_personal: bool,
+    pub is_read_only: bool,
     pub account_capabilities: HashMap<String, serde_json::Value>,
 }
 
@@ -86,21 +88,21 @@ pub struct Account {
 /// JMAP クライアント設定
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
-    pub bearer_token:   String,
+    pub bearer_token: String,
     pub connect_timeout: Duration,
     pub request_timeout: Duration,
-    pub max_retries:    u32,
-    pub user_agent:     String,
+    pub max_retries: u32,
+    pub user_agent: String,
 }
 
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            bearer_token:    String::new(),
-            connect_timeout:  Duration::from_secs(10),
-            request_timeout:  Duration::from_secs(30),
-            max_retries:      3,
-            user_agent:       format!("Kaname/{}", env!("CARGO_PKG_VERSION")),
+            bearer_token: String::new(),
+            connect_timeout: Duration::from_secs(10),
+            request_timeout: Duration::from_secs(30),
+            max_retries: 3,
+            user_agent: format!("Kaname/{}", env!("CARGO_PKG_VERSION")),
         }
     }
 }
@@ -110,18 +112,19 @@ impl Default for ClientConfig {
 // ============================================================================
 
 pub struct JmapClient {
-    session:    Session,
+    session: Session,
     account_id: String,
-    http:       reqwest::Client,
-    api_url:    String,
-    config:     ClientConfig,
+    http: reqwest::Client,
+    api_url: String,
+    config: ClientConfig,
 }
 
 impl JmapClient {
     /// /.well-known/jmap を検出して接続する。
     pub async fn connect(base_url: &str, config: ClientConfig) -> Result<Self, JmapError> {
         // SSRF: DNS 解決後 IP がプライベートアドレスでないか確認
-        ssrf_guard::check_url_for_ssrf(base_url).await
+        ssrf_guard::check_url_for_ssrf(base_url)
+            .await
             .map_err(|e| JmapError::Ssrf(e.to_string()))?;
 
         let http = reqwest::Client::builder()
@@ -146,24 +149,36 @@ impl JmapClient {
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
         if !resp.status().is_success() {
-            return Err(JmapError::Http(format!("セッション検出失敗: HTTP {}", resp.status())));
+            return Err(JmapError::Http(format!(
+                "セッション検出失敗: HTTP {}",
+                resp.status()
+            )));
         }
 
-        let session: Session = resp.json().await
+        let session: Session = resp
+            .json()
+            .await
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
         if !session.has_capability(Session::JMAP_MAIL) {
             return Err(JmapError::MissingCapability(Session::JMAP_MAIL.to_string()));
         }
 
-        let account_id = session.primary_mail_account()
+        let account_id = session
+            .primary_mail_account()
             .ok_or_else(|| JmapError::MissingCapability("プライマリメールアカウントなし".into()))?
             .to_string();
 
         let api_url = session.api_url.clone();
         tracing::info!(api_url = %api_url, account_id = %account_id, "JMAP 接続完了");
 
-        Ok(Self { session, account_id, http, api_url, config })
+        Ok(Self {
+            session,
+            account_id,
+            http,
+            api_url,
+            config,
+        })
     }
 
     // JMAP API にマルチコールリクエストを送信する内部ヘルパー
@@ -181,7 +196,8 @@ impl JmapClient {
             ]).collect::<Vec<_>>(),
         });
 
-        let resp = self.http
+        let resp = self
+            .http
             .post(&self.api_url)
             .bearer_auth(&self.config.bearer_token)
             .header("Content-Type", "application/json")
@@ -191,12 +207,14 @@ impl JmapClient {
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
         let status = resp.status();
-        let raw: serde_json::Value = resp.json().await
+        let raw: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
         if !status.is_success() {
             return Err(JmapError::JmapProblem {
-                r#type:      raw["type"].as_str().unwrap_or("serverError").into(),
+                r#type: raw["type"].as_str().unwrap_or("serverError").into(),
                 description: raw["detail"].as_str().unwrap_or("").into(),
             });
         }
@@ -206,8 +224,8 @@ impl JmapClient {
             .unwrap_or(&vec![])
             .iter()
             .map(|r| MethodResponse {
-                method:  r[0].as_str().unwrap_or("").into(),
-                args:    r[1].clone(),
+                method: r[0].as_str().unwrap_or("").into(),
+                args: r[1].clone(),
                 call_id: r[2].as_str().unwrap_or("").into(),
             })
             .collect())
@@ -215,11 +233,16 @@ impl JmapClient {
 
     /// 全メールボックスを取得する。
     pub async fn get_mailboxes(&self) -> Result<Vec<Mailbox>, JmapError> {
-        let rs = self.call(vec![
-            ("Mailbox/get".into(),
-             serde_json::json!({ "accountId": self.account_id, "ids": null }),
-             "mb".into())
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Mailbox/get".into(),
+                    serde_json::json!({ "accountId": self.account_id, "ids": null }),
+                    "mb".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
         find_result(&rs, "mb", "list")
     }
@@ -229,55 +252,79 @@ impl JmapClient {
     /// `limit` は最大 500 に制限する (RFC 8620 §2 推奨上限、サーバー負荷と
     /// クライアント OOM を防ぐ)。
     pub async fn query_emails(
-        &self, mailbox_id: &str, position: u32, limit: u32,
+        &self,
+        mailbox_id: &str,
+        position: u32,
+        limit: u32,
     ) -> Result<Vec<EmailListItem>, JmapError> {
         const MAX_QUERY_LIMIT: u32 = 500;
         let limit = limit.min(MAX_QUERY_LIMIT);
-        let rs = self.call(vec![
-            ("Email/query".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "filter":    { "inMailbox": mailbox_id },
-                "sort":      [{ "property": "receivedAt", "isAscending": false }],
-                "position":  position,
-                "limit":     limit,
-                "calculateTotal": false,
-            }), "q".into()),
-            ("Email/get".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "#ids": { "resultOf": "q", "name": "Email/query", "path": "/ids" },
-                "properties": [
-                    "id","mailboxIds","keywords","size",
-                    "receivedAt","sentAt","subject",
-                    "from","to","preview","hasAttachment","threadId",
+        let rs = self
+            .call(
+                vec![
+                    (
+                        "Email/query".into(),
+                        serde_json::json!({
+                            "accountId": self.account_id,
+                            "filter":    { "inMailbox": mailbox_id },
+                            "sort":      [{ "property": "receivedAt", "isAscending": false }],
+                            "position":  position,
+                            "limit":     limit,
+                            "calculateTotal": false,
+                        }),
+                        "q".into(),
+                    ),
+                    (
+                        "Email/get".into(),
+                        serde_json::json!({
+                            "accountId": self.account_id,
+                            "#ids": { "resultOf": "q", "name": "Email/query", "path": "/ids" },
+                            "properties": [
+                                "id","mailboxIds","keywords","size",
+                                "receivedAt","sentAt","subject",
+                                "from","to","preview","hasAttachment","threadId",
+                            ],
+                        }),
+                        "emails".into(),
+                    ),
                 ],
-            }), "emails".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
         find_result(&rs, "emails", "list")
     }
 
     /// 単一メールの完全な本文を取得する。
     pub async fn get_email_body(&self, email_id: &str) -> Result<EmailFull, JmapError> {
-        let rs = self.call(vec![
-            ("Email/get".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "ids": [email_id],
-                "properties": [
-                    "id","blobId","bodyStructure","bodyValues",
-                    "textBody","htmlBody","attachments","headers",
-                ],
-                "bodyProperties": [
-                    "partId","blobId","type","size","name",
-                    "charset","disposition","subParts",
-                ],
-                "fetchTextBodyValues": true,
-                "fetchHTMLBodyValues": true,
-                "maxBodyValueBytes":   524288,
-            }), "body".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Email/get".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "ids": [email_id],
+                        "properties": [
+                            "id","blobId","bodyStructure","bodyValues",
+                            "textBody","htmlBody","attachments","headers",
+                        ],
+                        "bodyProperties": [
+                            "partId","blobId","type","size","name",
+                            "charset","disposition","subParts",
+                        ],
+                        "fetchTextBodyValues": true,
+                        "fetchHTMLBodyValues": true,
+                        "maxBodyValueBytes":   524288,
+                    }),
+                    "body".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
         let list: Vec<EmailFull> = find_result(&rs, "body", "list")?;
-        list.into_iter().next()
+        list.into_iter()
+            .next()
             .ok_or_else(|| JmapError::NotFound(email_id.to_string()))
     }
 
@@ -287,61 +334,87 @@ impl JmapClient {
         const MAX_MARK_READ_IDS: usize = 1000;
         if ids.len() > MAX_MARK_READ_IDS {
             return Err(JmapError::InvalidInput(format!(
-                "一度に既読化できる ID 数の上限を超えました: {} > {MAX_MARK_READ_IDS}", ids.len()
+                "一度に既読化できる ID 数の上限を超えました: {} > {MAX_MARK_READ_IDS}",
+                ids.len()
             )));
         }
-        let patch: serde_json::Value = ids.iter()
-            .map(|id| (id.to_string(), serde_json::json!({ "keywords/$seen": true })))
+        let patch: serde_json::Value = ids
+            .iter()
+            .map(|id| {
+                (
+                    id.to_string(),
+                    serde_json::json!({ "keywords/$seen": true }),
+                )
+            })
             .collect::<serde_json::Map<_, _>>()
             .into();
 
-        self.call(vec![
-            ("Email/set".into(), serde_json::json!({
-                "accountId": self.account_id, "update": patch,
-            }), "read".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        self.call(
+            vec![(
+                "Email/set".into(),
+                serde_json::json!({
+                    "accountId": self.account_id, "update": patch,
+                }),
+                "read".into(),
+            )],
+            &[Session::JMAP_CORE, Session::JMAP_MAIL],
+        )
+        .await?;
         Ok(())
     }
 
     /// メールをゴミ箱に移動する。
     pub async fn trash(&self, email_id: &str) -> Result<(), JmapError> {
         let mailboxes = self.get_mailboxes().await?;
-        let trash_id = mailboxes.iter()
+        let trash_id = mailboxes
+            .iter()
             .find(|m| m.role.as_deref() == Some("trash"))
             .map(|m| m.id.clone())
             .ok_or_else(|| JmapError::NotFound("ゴミ箱なし".into()))?;
 
-        self.call(vec![
-            ("Email/set".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "update": {
-                    email_id: {
-                        "mailboxIds": { trash_id: true },
-                        "keywords/$seen": true,
-                    }
-                },
-            }), "trash".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        self.call(
+            vec![(
+                "Email/set".into(),
+                serde_json::json!({
+                    "accountId": self.account_id,
+                    "update": {
+                        email_id: {
+                            "mailboxIds": { trash_id: true },
+                            "keywords/$seen": true,
+                        }
+                    },
+                }),
+                "trash".into(),
+            )],
+            &[Session::JMAP_CORE, Session::JMAP_MAIL],
+        )
+        .await?;
         Ok(())
     }
 
     /// メールを送信する。
     pub async fn send_email(
-        &self, from: &str, to: &[&str], subject: &str, body: &str,
+        &self,
+        from: &str,
+        to: &[&str],
+        subject: &str,
+        body: &str,
         draft_id: Option<&str>,
     ) -> Result<String, JmapError> {
         // 宛先数の上限 (DoS 防止: 100 件超えは拒否)
         const MAX_RECIPIENTS: usize = 100;
         if to.len() > MAX_RECIPIENTS {
             return Err(JmapError::InvalidInput(format!(
-                "宛先が多すぎます: {} > {MAX_RECIPIENTS}", to.len()
+                "宛先が多すぎます: {} > {MAX_RECIPIENTS}",
+                to.len()
             )));
         }
         // メール本文サイズ上限 (OOM 防止: 25 MB)
         const MAX_BODY_BYTES: usize = 25 * 1024 * 1024;
         if body.len() > MAX_BODY_BYTES {
             return Err(JmapError::InvalidInput(format!(
-                "本文が大きすぎます: {} バイト > {MAX_BODY_BYTES}", body.len()
+                "本文が大きすぎます: {} バイト > {MAX_BODY_BYTES}",
+                body.len()
             )));
         }
 
@@ -349,7 +422,8 @@ impl JmapClient {
         const MAX_SUBJECT_BYTES: usize = 2048;
         if subject.len() > MAX_SUBJECT_BYTES {
             return Err(JmapError::InvalidInput(format!(
-                "件名が長すぎます: {} バイト > {MAX_SUBJECT_BYTES}", subject.len()
+                "件名が長すぎます: {} バイト > {MAX_SUBJECT_BYTES}",
+                subject.len()
             )));
         }
 
@@ -359,8 +433,7 @@ impl JmapClient {
         // (Postfix/Exim/Sendmail 影響、Outlook Express 仕様差を悪用)
         if contains_smtp_terminator(body) {
             return Err(JmapError::InvalidInput(
-                "本文に SMTP DATA 終端シーケンス (CRLF.CRLF / LF.LF) が含まれています"
-                    .to_string(),
+                "本文に SMTP DATA 終端シーケンス (CRLF.CRLF / LF.LF) が含まれています".to_string(),
             ));
         }
 
@@ -369,13 +442,14 @@ impl JmapClient {
         // 任意の宛先にメールを送れてしまう
         let sanitize_header = |s: &str| -> Result<String, JmapError> {
             if s.contains('\r') || s.contains('\n') {
-                return Err(JmapError::InvalidInput(
-                    format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
-                ));
+                return Err(JmapError::InvalidInput(format!(
+                    "ヘッダーに改行文字は使用できません: {:?}",
+                    &s[..s.len().min(40)]
+                )));
             }
             Ok(s.to_owned())
         };
-        let from    = sanitize_header(from)?;
+        let from = sanitize_header(from)?;
         let subject = sanitize_header(subject)?;
         for addr in to {
             sanitize_header(addr)?;
@@ -387,7 +461,8 @@ impl JmapClient {
         // 文字列 "sent" を渡すと、大抵のサーバーでは実在しないメールボックス ID として
         // Email/import が失敗する — その場合エラーメッセージが「インポート ID なし」という
         // 無関係な文言になり、根本原因 (送信済みフォルダ未検出) が分かりにくくなる。
-        let sent_id = mailboxes.iter()
+        let sent_id = mailboxes
+            .iter()
             .find(|m| m.role.as_deref() == Some("sent"))
             .map(|m| m.id.clone())
             .ok_or_else(|| JmapError::NotFound("送信済みフォルダなし".into()))?;
@@ -402,44 +477,70 @@ impl JmapClient {
         // BLOB アップロード → Email/import → EmailSubmission/set
         let blob_id = self.upload_blob(raw.as_bytes()).await?;
 
-        let import_rs = self.call(vec![
-            ("Email/import".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "emails": {
-                    "d1": {
-                        "blobId":    blob_id,
-                        "mailboxIds": { sent_id: true },
-                        "keywords": { "$seen": true },
-                    }
-                },
-            }), "imp".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let import_rs = self
+            .call(
+                vec![(
+                    "Email/import".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "emails": {
+                            "d1": {
+                                "blobId":    blob_id,
+                                "mailboxIds": { sent_id: true },
+                                "keywords": { "$seen": true },
+                            }
+                        },
+                    }),
+                    "imp".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
 
-        let email_id = import_rs.iter().find(|r| r.call_id == "imp")
+        let email_id = import_rs
+            .iter()
+            .find(|r| r.call_id == "imp")
             .and_then(|r| r.args["created"]["d1"]["id"].as_str())
             .ok_or_else(|| JmapError::NotFound("インポート ID なし".into()))?
             .to_string();
 
-        let rcpt: Vec<_> = to.iter().map(|a| serde_json::json!({ "email": a })).collect();
-        self.call(vec![
-            ("EmailSubmission/set".into(), serde_json::json!({
-                "accountId": self.account_id,
-                "create": { "s1": {
-                    "emailId": &email_id,
-                    "envelope": {
-                        "mailFrom": { "email": from },
-                        "rcptTo":   rcpt,
-                    },
-                }},
-            }), "sub".into()),
-        ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
+        let rcpt: Vec<_> = to
+            .iter()
+            .map(|a| serde_json::json!({ "email": a }))
+            .collect();
+        self.call(
+            vec![(
+                "EmailSubmission/set".into(),
+                serde_json::json!({
+                    "accountId": self.account_id,
+                    "create": { "s1": {
+                        "emailId": &email_id,
+                        "envelope": {
+                            "mailFrom": { "email": from },
+                            "rcptTo":   rcpt,
+                        },
+                    }},
+                }),
+                "sub".into(),
+            )],
+            &[Session::JMAP_CORE, Session::JMAP_MAIL],
+        )
+        .await?;
 
         if let Some(id) = draft_id {
-            if let Err(e) = self.call(vec![
-                ("Email/set".into(), serde_json::json!({
-                    "accountId": self.account_id, "destroy": [id],
-                }), "del".into()),
-            ], &[Session::JMAP_CORE, Session::JMAP_MAIL]).await {
+            if let Err(e) = self
+                .call(
+                    vec![(
+                        "Email/set".into(),
+                        serde_json::json!({
+                            "accountId": self.account_id, "destroy": [id],
+                        }),
+                        "del".into(),
+                    )],
+                    &[Session::JMAP_CORE, Session::JMAP_MAIL],
+                )
+                .await
+            {
                 // 送信は既に成功しているため致命的ではないが、下書きが残留する
                 // ことをログに残さないと利用者もサポートも気付けない。
                 tracing::warn!(error = %e, "送信後の下書き削除に失敗しました (下書きが残留している可能性があります)");
@@ -465,19 +566,27 @@ impl JmapClient {
     ) -> Result<Vec<u8>, JmapError> {
         const MAX_BLOB_BYTES: usize = 25 * 1024 * 1024;
 
-        let url = self.session.download_url
+        let url = self
+            .session
+            .download_url
             .replace("{accountId}", &self.account_id)
             .replace("{blobId}", blob_id)
             .replace("{type}", mime_type)
             .replace("{name}", name);
 
-        let resp = self.http.get(&url)
+        let resp = self
+            .http
+            .get(&url)
             .bearer_auth(&self.config.bearer_token)
-            .send().await
+            .send()
+            .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
         if !resp.status().is_success() {
-            return Err(JmapError::Http(format!("blob 取得失敗: HTTP {}", resp.status())));
+            return Err(JmapError::Http(format!(
+                "blob 取得失敗: HTTP {}",
+                resp.status()
+            )));
         }
 
         // Content-Length で事前に上限を弾く (ストリームを読み切る前に拒否)。
@@ -489,7 +598,9 @@ impl JmapClient {
             }
         }
 
-        let bytes = resp.bytes().await
+        let bytes = resp
+            .bytes()
+            .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
         if bytes.len() > MAX_BLOB_BYTES {
             return Err(JmapError::Http("添付が上限を超えました".into()));
@@ -498,23 +609,37 @@ impl JmapClient {
     }
 
     async fn upload_blob(&self, data: &[u8]) -> Result<String, JmapError> {
-        let url = self.session.upload_url.replace("{accountId}", &self.account_id);
-        let resp = self.http.post(&url)
+        let url = self
+            .session
+            .upload_url
+            .replace("{accountId}", &self.account_id);
+        let resp = self
+            .http
+            .post(&url)
             .bearer_auth(&self.config.bearer_token)
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
-            .send().await
+            .send()
+            .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let json: serde_json::Value = resp.json().await
+        let json: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
-        json["blobId"].as_str().map(String::from)
+        json["blobId"]
+            .as_str()
+            .map(String::from)
             .ok_or_else(|| JmapError::Deserialize("blobId なし".into()))
     }
 
     #[must_use]
-    pub fn account_id(&self) -> &str  { &self.account_id }
-    pub fn session_state(&self) -> &str { &self.session.state }
+    pub fn account_id(&self) -> &str {
+        &self.account_id
+    }
+    pub fn session_state(&self) -> &str {
+        &self.session.state
+    }
 
     /// 接続中アカウントのメールドメインを返す (D44: 自組織ドメインの自動導出)。
     ///
@@ -523,10 +648,14 @@ impl JmapClient {
     /// どちらもアドレス形でなければ None — 推測はしない。
     #[must_use]
     pub fn account_domain(&self) -> Option<String> {
-        self.session.username.as_deref()
+        self.session
+            .username
+            .as_deref()
             .and_then(Session::domain_part)
             .or_else(|| {
-                self.session.accounts.get(&self.account_id)
+                self.session
+                    .accounts
+                    .get(&self.account_id)
                     .and_then(|a| Session::domain_part(&a.name))
             })
     }
@@ -539,8 +668,8 @@ impl JmapClient {
 /// JMAP メソッドレスポンス
 #[derive(Debug)]
 pub struct MethodResponse {
-    pub method:  String,
-    pub args:    serde_json::Value,
+    pub method: String,
+    pub args: serde_json::Value,
     pub call_id: String,
 }
 
@@ -548,76 +677,83 @@ pub struct MethodResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Mailbox {
-    pub id:             String,
-    pub name:           String,
-    pub parent_id:      Option<String>,
-    pub role:           Option<String>,
-    pub sort_order:     u32,
-    pub total_emails:   u32,
-    pub unread_emails:  u32,
-    pub total_threads:  u32,
+    pub id: String,
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub role: Option<String>,
+    pub sort_order: u32,
+    pub total_emails: u32,
+    pub unread_emails: u32,
+    pub total_threads: u32,
     pub unread_threads: u32,
     #[serde(default)]
-    pub is_subscribed:  bool,
+    pub is_subscribed: bool,
 }
 
 /// メールリストアイテム
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailListItem {
-    pub id:             String,
+    pub id: String,
     #[serde(default)]
-    pub mailbox_ids:    HashMap<String, bool>,
+    pub mailbox_ids: HashMap<String, bool>,
     #[serde(default)]
-    pub keywords:       HashMap<String, bool>,
-    pub size:           Option<u64>,
-    pub received_at:    Option<String>,
-    pub sent_at:        Option<String>,
-    pub subject:        Option<String>,
-    pub from:           Option<Vec<EmailAddress>>,
-    pub to:             Option<Vec<EmailAddress>>,
-    pub preview:        Option<String>,
+    pub keywords: HashMap<String, bool>,
+    pub size: Option<u64>,
+    pub received_at: Option<String>,
+    pub sent_at: Option<String>,
+    pub subject: Option<String>,
+    pub from: Option<Vec<EmailAddress>>,
+    pub to: Option<Vec<EmailAddress>>,
+    pub preview: Option<String>,
     pub has_attachment: Option<bool>,
-    pub thread_id:      Option<String>,
+    pub thread_id: Option<String>,
 }
 
 impl EmailListItem {
     #[must_use]
-    pub fn is_read(&self)    -> bool { self.keywords.get("$seen").copied().unwrap_or(false) }
-    pub fn is_starred(&self) -> bool { self.keywords.get("$flagged").copied().unwrap_or(false) }
+    pub fn is_read(&self) -> bool {
+        self.keywords.get("$seen").copied().unwrap_or(false)
+    }
+    pub fn is_starred(&self) -> bool {
+        self.keywords.get("$flagged").copied().unwrap_or(false)
+    }
 }
 
 /// メールアドレス
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct EmailAddress { pub name: Option<String>, pub email: String }
+pub struct EmailAddress {
+    pub name: Option<String>,
+    pub email: String,
+}
 
 /// メール完全本文
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailFull {
-    pub id:             String,
-    pub blob_id:        Option<String>,
+    pub id: String,
+    pub blob_id: Option<String>,
     pub body_structure: Option<BodyPart>,
-    pub body_values:    Option<HashMap<String, BodyValue>>,
-    pub text_body:      Option<Vec<BodyPart>>,
-    pub html_body:      Option<Vec<BodyPart>>,
-    pub attachments:    Option<Vec<BodyPart>>,
-    pub headers:        Option<Vec<Header>>,
+    pub body_values: Option<HashMap<String, BodyValue>>,
+    pub text_body: Option<Vec<BodyPart>>,
+    pub html_body: Option<Vec<BodyPart>>,
+    pub attachments: Option<Vec<BodyPart>>,
+    pub headers: Option<Vec<Header>>,
 }
 
 /// MIME ボディパート
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BodyPart {
-    pub part_id:     Option<String>,
-    pub blob_id:     Option<String>,
+    pub part_id: Option<String>,
+    pub blob_id: Option<String>,
     #[serde(rename = "type")]
-    pub mime_type:   Option<String>,
-    pub size:        Option<u64>,
-    pub name:        Option<String>,
-    pub charset:     Option<String>,
+    pub mime_type: Option<String>,
+    pub size: Option<u64>,
+    pub name: Option<String>,
+    pub charset: Option<String>,
     pub disposition: Option<String>,
-    pub sub_parts:   Option<Vec<BodyPart>>,
+    pub sub_parts: Option<Vec<BodyPart>>,
 }
 
 impl BodyPart {
@@ -638,7 +774,10 @@ pub struct BodyValue {
 
 /// ヘッダー
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Header { pub name: String, pub value: String }
+pub struct Header {
+    pub name: String,
+    pub value: String,
+}
 
 // ============================================================================
 // エラー
@@ -680,25 +819,30 @@ pub enum JmapError {
 // ============================================================================
 
 fn find_result<T: for<'de> Deserialize<'de>>(
-    rs: &[MethodResponse], call_id: &str, key: &str,
+    rs: &[MethodResponse],
+    call_id: &str,
+    key: &str,
 ) -> Result<T, JmapError> {
-    let r = rs.iter().find(|r| r.call_id == call_id)
+    let r = rs
+        .iter()
+        .find(|r| r.call_id == call_id)
         .ok_or_else(|| JmapError::NotFound(format!("{} のレスポンスなし", call_id)))?;
     if r.method == "error" {
         return Err(JmapError::JmapProblem {
-            r#type:      r.args["type"].as_str().unwrap_or("").into(),
+            r#type: r.args["type"].as_str().unwrap_or("").into(),
             description: r.args["description"].as_str().unwrap_or("").into(),
         });
     }
-    serde_json::from_value(r.args[key].clone())
-        .map_err(|e| JmapError::Deserialize(e.to_string()))
+    serde_json::from_value(r.args[key].clone()).map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
 /// JSON 配列から文字列のみを抽出するヘルパー (テストから利用)。
 #[cfg(test)]
 fn str_arr(v: &serde_json::Value) -> Vec<String> {
     v.as_array().map_or_else(Vec::new, |a| {
-        a.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
+        a.iter()
+            .filter_map(|x| x.as_str().map(str::to_owned))
+            .collect()
     })
 }
 
@@ -706,9 +850,10 @@ fn str_arr(v: &serde_json::Value) -> Vec<String> {
 #[cfg(test)]
 fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
     if s.contains('\r') || s.contains('\n') {
-        return Err(JmapError::InvalidInput(
-            format!("ヘッダーに改行文字は使用できません: {:?}", &s[..s.len().min(40)])
-        ));
+        return Err(JmapError::InvalidInput(format!(
+            "ヘッダーに改行文字は使用できません: {:?}",
+            &s[..s.len().min(40)]
+        )));
     }
     Ok(s.to_owned())
 }
@@ -750,9 +895,18 @@ mod tests {
         let mut kw = HashMap::new();
         kw.insert("$seen".to_string(), true);
         let e = EmailListItem {
-            id: "e1".into(), mailbox_ids: HashMap::new(), keywords: kw,
-            size: None, received_at: None, sent_at: None, subject: None,
-            from: None, to: None, preview: None, has_attachment: None, thread_id: None,
+            id: "e1".into(),
+            mailbox_ids: HashMap::new(),
+            keywords: kw,
+            size: None,
+            received_at: None,
+            sent_at: None,
+            subject: None,
+            from: None,
+            to: None,
+            preview: None,
+            has_attachment: None,
+            thread_id: None,
         };
         assert!(e.is_read());
         assert!(!e.is_starred());
@@ -761,13 +915,21 @@ mod tests {
     #[test]
     fn mls_エンベロープパートの検出() {
         let part = BodyPart {
-            part_id: None, blob_id: None,
+            part_id: None,
+            blob_id: None,
             mime_type: Some("application/mls-envelope+cbor".into()),
-            size: None, name: None, charset: None, disposition: None, sub_parts: None,
+            size: None,
+            name: None,
+            charset: None,
+            disposition: None,
+            sub_parts: None,
         };
         assert!(part.is_mls_envelope());
 
-        let plain = BodyPart { mime_type: Some("text/plain".into()), ..part.clone() };
+        let plain = BodyPart {
+            mime_type: Some("text/plain".into()),
+            ..part.clone()
+        };
         assert!(!plain.is_mls_envelope());
     }
 
@@ -805,7 +967,10 @@ mod tests {
         let result = sanitize_header_value("プロジェクト Alpha の報告");
         assert!(result.is_ok(), "正常な件名はエラーになってはならない");
         let result = sanitize_header_value("alice@example.com");
-        assert!(result.is_ok(), "正常なメールアドレスはエラーになってはならない");
+        assert!(
+            result.is_ok(),
+            "正常なメールアドレスはエラーになってはならない"
+        );
     }
 
     // ── query_emails limit キャップテスト ─────────────────────────────────────
@@ -816,7 +981,10 @@ mod tests {
         const MAX_QUERY_LIMIT: u32 = 500;
         let user_limit = u32::MAX;
         let effective = user_limit.min(MAX_QUERY_LIMIT);
-        assert_eq!(effective, 500, "u32::MAX を渡しても 500 に切り捨てられるべき");
+        assert_eq!(
+            effective, 500,
+            "u32::MAX を渡しても 500 に切り捨てられるべき"
+        );
 
         let small_limit = 10u32;
         let effective = small_limit.min(MAX_QUERY_LIMIT);
@@ -829,10 +997,10 @@ mod tests {
     fn send_email_宛先数上限ロジック() {
         // JmapClient を構築できないのでロジックを直接テスト
         const MAX_RECIPIENTS: usize = 100;
-        let to_ok:  Vec<&str> = (0..100).map(|_| "a@b.com").collect();
-        let to_ng:  Vec<&str> = (0..101).map(|_| "a@b.com").collect();
-        assert!(to_ok.len() <= MAX_RECIPIENTS,  "100件は上限以内");
-        assert!(to_ng.len() >  MAX_RECIPIENTS,  "101件は上限超過");
+        let to_ok: Vec<&str> = (0..100).map(|_| "a@b.com").collect();
+        let to_ng: Vec<&str> = (0..101).map(|_| "a@b.com").collect();
+        assert!(to_ok.len() <= MAX_RECIPIENTS, "100件は上限以内");
+        assert!(to_ng.len() > MAX_RECIPIENTS, "101件は上限超過");
     }
 
     #[test]
@@ -841,7 +1009,7 @@ mod tests {
         let ok_body = "a".repeat(MAX_BODY_BYTES);
         let ng_body = "a".repeat(MAX_BODY_BYTES + 1);
         assert!(ok_body.len() <= MAX_BODY_BYTES, "25MB は許可されるべき");
-        assert!(ng_body.len() >  MAX_BODY_BYTES, "25MB+1 は拒否されるべき");
+        assert!(ng_body.len() > MAX_BODY_BYTES, "25MB+1 は拒否されるべき");
     }
 
     // ── SSE バッファ上限テスト ──────────────────────────────────────────────
@@ -852,12 +1020,16 @@ mod tests {
         let current_buf_len = MAX_SSE_BUF_BYTES - 10;
         let chunk_len = 100;
         // 合計が上限を超える → エラーになるべき
-        assert!(current_buf_len + chunk_len > MAX_SSE_BUF_BYTES,
-            "バッファ超過チェックが機能しない");
+        assert!(
+            current_buf_len + chunk_len > MAX_SSE_BUF_BYTES,
+            "バッファ超過チェックが機能しない"
+        );
         // 合計が上限以下 → 正常
         let small_chunk_len = 5;
-        assert!(current_buf_len + small_chunk_len <= MAX_SSE_BUF_BYTES,
-            "上限以下のチャンクは正常に処理されるべき");
+        assert!(
+            current_buf_len + small_chunk_len <= MAX_SSE_BUF_BYTES,
+            "上限以下のチャンクは正常に処理されるべき"
+        );
     }
 
     // ── 入力上限回帰テスト ───────────────────────────────────────────────────
@@ -886,22 +1058,28 @@ mod tests {
     #[test]
     fn smtp_terminator_crlf_dot_crlf_detected() {
         let body = "通常テキスト\r\n.\r\n攻撃者が追加した本文";
-        assert!(contains_smtp_terminator(body),
-            "CRLF.CRLF パターンは検出されるべき");
+        assert!(
+            contains_smtp_terminator(body),
+            "CRLF.CRLF パターンは検出されるべき"
+        );
     }
 
     #[test]
     fn smtp_terminator_lf_dot_lf_detected() {
         let body = "通常テキスト\n.\n攻撃者が追加した本文";
-        assert!(contains_smtp_terminator(body),
-            "LF.LF パターンは Exim/Postfix で DATA 終端と解釈されうる");
+        assert!(
+            contains_smtp_terminator(body),
+            "LF.LF パターンは Exim/Postfix で DATA 終端と解釈されうる"
+        );
     }
 
     #[test]
     fn smtp_terminator_leading_dot_detected() {
         let body = ".\r\n後続テキスト";
-        assert!(contains_smtp_terminator(body),
-            "本文先頭の .CRLF は dot-stuffing 不在の早期終端として拒否");
+        assert!(
+            contains_smtp_terminator(body),
+            "本文先頭の .CRLF は dot-stuffing 不在の早期終端として拒否"
+        );
     }
 
     #[test]
@@ -915,7 +1093,9 @@ mod tests {
     #[test]
     fn smtp_terminator_dot_in_middle_of_line_safe() {
         // ドットが行末ではない場合は安全
-        assert!(!contains_smtp_terminator("前文\r\n. これは終端ではない\r\n後文"));
+        assert!(!contains_smtp_terminator(
+            "前文\r\n. これは終端ではない\r\n後文"
+        ));
     }
 
     // ── D44: 自組織ドメイン導出テスト ───────────────────────────────────────
@@ -953,11 +1133,16 @@ mod tests {
 
     #[test]
     fn domain_part_アドレスからドメイン抽出() {
-        assert_eq!(Session::domain_part("alice@Corp.COM"), Some("corp.com".into()));
-        assert_eq!(Session::domain_part("a@b@corp.com"), Some("corp.com".into()));
+        assert_eq!(
+            Session::domain_part("alice@Corp.COM"),
+            Some("corp.com".into())
+        );
+        assert_eq!(
+            Session::domain_part("a@b@corp.com"),
+            Some("corp.com".into())
+        );
         assert_eq!(Session::domain_part("plain-name"), None);
         assert_eq!(Session::domain_part("alice@"), None);
         assert_eq!(Session::domain_part(""), None);
     }
 }
-

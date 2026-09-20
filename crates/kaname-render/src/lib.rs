@@ -61,19 +61,19 @@ pub struct Envelope {
     /// Message-ID ヘッダー。
     pub message_id: Option<String>,
     /// From アドレス群。
-    pub from:       Vec<Address>,
+    pub from: Vec<Address>,
     /// To アドレス群。
-    pub to:         Vec<Address>,
+    pub to: Vec<Address>,
     /// Cc アドレス群。
-    pub cc:         Vec<Address>,
+    pub cc: Vec<Address>,
     /// 件名。
-    pub subject:    Option<String>,
+    pub subject: Option<String>,
     /// Date ヘッダー (Unix タイムスタンプ)。
-    pub date:       Option<i64>,
+    pub date: Option<i64>,
     /// プレーンテキスト本文。
-    pub text_body:  Option<String>,
+    pub text_body: Option<String>,
     /// HTML 本文 (サニタイズ前)。
-    pub html_body:  Option<RawHtml>,
+    pub html_body: Option<RawHtml>,
     /// 添付ファイルヘッダー群。
     pub attachments: Vec<AttachmentHeader>,
     /// Authentication-Results (SPF/DKIM/DMARC)。
@@ -86,14 +86,14 @@ pub struct Address {
     /// 表示名 (例: "山田 太郎")。
     pub display_name: Option<String>,
     /// アドレス本体。
-    pub addr:         EmailAddr,
+    pub addr: EmailAddr,
 }
 
 /// Validated RFC 5322 addr-spec.
 #[derive(Debug, Clone)]
 pub struct EmailAddr {
     /// ローカルパート (@ の前)。
-    pub local:  String,
+    pub local: String,
     /// ドメインパート (@ の後)。
     pub domain: String,
 }
@@ -131,22 +131,22 @@ impl RawHtml {
 #[derive(Debug, Clone)]
 pub struct AttachmentHeader {
     /// ファイル名 (Content-Disposition 由来)。
-    pub filename:      String,
+    pub filename: String,
     /// 宣言された MIME タイプ (詐称されうる)。
     pub declared_mime: String,
     /// サイズ (bytes)。
-    pub size_bytes:    u64,
+    pub size_bytes: u64,
     /// インライン参照用 Content-ID。
-    pub content_id:    Option<String>,
+    pub content_id: Option<String>,
 }
 
 /// Parsed Authentication-Results header.
 #[derive(Debug, Default)]
 pub struct AuthResultsHeader {
     /// SPF 検証結果。
-    pub spf:   AuthResult,
+    pub spf: AuthResult,
     /// DKIM 検証結果。
-    pub dkim:  AuthResult,
+    pub dkim: AuthResult,
     /// DMARC 検証結果。
     pub dmarc: AuthResult,
     /// ヘッダを記述した MTA の識別子 (authserv-id, RFC 8601 §2.2)。
@@ -199,17 +199,20 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         .ok_or_else(|| RenderError::Parse("MIME parse failed".into()))?;
 
     // From アドレス群
-    let from = msg.from()
+    let from = msg
+        .from()
         .map(|al| al.iter().filter_map(addr_to_address).collect())
         .unwrap_or_default();
 
     // To アドレス群
-    let to = msg.to()
+    let to = msg
+        .to()
         .map(|al| al.iter().filter_map(addr_to_address).collect())
         .unwrap_or_default();
 
     // Cc アドレス群
-    let cc = msg.cc()
+    let cc = msg
+        .cc()
         .map(|al| al.iter().filter_map(addr_to_address).collect())
         .unwrap_or_default();
 
@@ -231,10 +234,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // 添付ファイルヘッダー
     let mut attachments = Vec::new();
     for part in msg.attachments() {
-        let filename = part.attachment_name()
-            .unwrap_or("unnamed")
-            .to_string();
-        let declared_mime = part.content_type()
+        let filename = part.attachment_name().unwrap_or("unnamed").to_string();
+        let declared_mime = part
+            .content_type()
             .map(|ct| {
                 let main = ct.ctype();
                 match ct.subtype() {
@@ -245,13 +247,29 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
             .unwrap_or_else(|| "application/octet-stream".to_string());
         let size_bytes = part.contents().len() as u64;
         let content_id = part.content_id().map(|s| s.to_string());
-        attachments.push(AttachmentHeader { filename, declared_mime, size_bytes, content_id });
+        attachments.push(AttachmentHeader {
+            filename,
+            declared_mime,
+            size_bytes,
+            content_id,
+        });
     }
 
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
-    Ok(Envelope { message_id, from, to, cc, subject, date, text_body, html_body, attachments, auth_results })
+    Ok(Envelope {
+        message_id,
+        from,
+        to,
+        cc,
+        subject,
+        date,
+        text_body,
+        html_body,
+        attachments,
+        auth_results,
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -262,7 +280,7 @@ fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     Some(Address {
         display_name: addr.name.as_deref().map(|s| s.to_string()),
         addr: EmailAddr {
-            local:  email[..at].to_string(),
+            local: email[..at].to_string(),
             domain: email[at + 1..].to_string(),
         },
     })
@@ -270,9 +288,14 @@ fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
 
 fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
     // Authentication-Results ヘッダーを文字列として取得し簡易パース
-    let header_text = msg.headers()
+    let header_text = msg
+        .headers()
         .iter()
-        .find(|h| h.name.as_str().eq_ignore_ascii_case("authentication-results"))
+        .find(|h| {
+            h.name
+                .as_str()
+                .eq_ignore_ascii_case("authentication-results")
+        })
         .and_then(|h| {
             if let mail_parser::HeaderValue::Text(t) = &h.value {
                 Some(t.as_ref().to_string())
@@ -291,11 +314,16 @@ fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
         .filter(|tok| !tok.contains('='))
         .map(|tok| tok.to_string());
 
-    let spf   = extract_auth_result(&header_text, "spf");
-    let dkim  = extract_auth_result(&header_text, "dkim");
+    let spf = extract_auth_result(&header_text, "spf");
+    let dkim = extract_auth_result(&header_text, "dkim");
     let dmarc = extract_auth_result(&header_text, "dmarc");
 
-    AuthResultsHeader { spf, dkim, dmarc, authserv_id }
+    AuthResultsHeader {
+        spf,
+        dkim,
+        dmarc,
+        authserv_id,
+    }
 }
 
 fn extract_auth_result(header: &str, mechanism: &str) -> AuthResult {
@@ -309,14 +337,16 @@ fn extract_auth_result(header: &str, mechanism: &str) -> AuthResult {
     // 誤認しえた)。
     for part in header.split(';') {
         for token in part.split_whitespace() {
-            let Some((key, value)) = token.split_once('=') else { continue };
+            let Some((key, value)) = token.split_once('=') else {
+                continue;
+            };
             if key.eq_ignore_ascii_case(mechanism) {
                 return match value.to_lowercase().as_str() {
-                    "pass"     => AuthResult::Pass,
-                    "fail"     => AuthResult::Fail,
-                    "neutral"  => AuthResult::Neutral,
+                    "pass" => AuthResult::Pass,
+                    "fail" => AuthResult::Fail,
+                    "neutral" => AuthResult::Neutral,
                     "softfail" => AuthResult::SoftFail,
-                    _          => AuthResult::None,
+                    _ => AuthResult::None,
                 };
             }
         }
@@ -406,32 +436,69 @@ pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
 
     // 許可タグ (明示リスト以外はすべて除去)
     let allowed_tags: HashSet<&str> = [
-        "p", "br", "b", "i", "u", "s", "em", "strong",
-        "a", "ul", "ol", "li", "blockquote", "pre", "code",
-        "span", "div", "table", "thead", "tbody", "tr", "td", "th",
-        "h1", "h2", "h3", "h4", "h5", "h6", "img",
-    ].iter().copied().collect();
+        "p",
+        "br",
+        "b",
+        "i",
+        "u",
+        "s",
+        "em",
+        "strong",
+        "a",
+        "ul",
+        "ol",
+        "li",
+        "blockquote",
+        "pre",
+        "code",
+        "span",
+        "div",
+        "table",
+        "thead",
+        "tbody",
+        "tr",
+        "td",
+        "th",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "img",
+    ]
+    .iter()
+    .copied()
+    .collect();
 
     // タグごとの許可属性 (ammonia はデフォルト全除去)
     let mut tag_attr_map: HashMap<&str, HashSet<&str>> = HashMap::new();
-    tag_attr_map.insert("a",         ["href", "title"].iter().copied().collect());
-    tag_attr_map.insert("img",       ["src", "alt", "width", "height"].iter().copied().collect());
-    tag_attr_map.insert("td",        ["colspan", "rowspan"].iter().copied().collect());
-    tag_attr_map.insert("th",        ["colspan", "rowspan", "scope"].iter().copied().collect());
-    tag_attr_map.insert("ol",        ["type", "start"].iter().copied().collect());
-    tag_attr_map.insert("ul",        ["type"].iter().copied().collect());
-    tag_attr_map.insert("span",      ["lang"].iter().copied().collect());
-    tag_attr_map.insert("div",       ["lang"].iter().copied().collect());
-    tag_attr_map.insert("blockquote",["cite"].iter().copied().collect());
-    tag_attr_map.insert("pre",       ["class"].iter().copied().collect());
-    tag_attr_map.insert("code",      ["class"].iter().copied().collect());
+    tag_attr_map.insert("a", ["href", "title"].iter().copied().collect());
+    tag_attr_map.insert(
+        "img",
+        ["src", "alt", "width", "height"].iter().copied().collect(),
+    );
+    tag_attr_map.insert("td", ["colspan", "rowspan"].iter().copied().collect());
+    tag_attr_map.insert(
+        "th",
+        ["colspan", "rowspan", "scope"].iter().copied().collect(),
+    );
+    tag_attr_map.insert("ol", ["type", "start"].iter().copied().collect());
+    tag_attr_map.insert("ul", ["type"].iter().copied().collect());
+    tag_attr_map.insert("span", ["lang"].iter().copied().collect());
+    tag_attr_map.insert("div", ["lang"].iter().copied().collect());
+    tag_attr_map.insert("blockquote", ["cite"].iter().copied().collect());
+    tag_attr_map.insert("pre", ["class"].iter().copied().collect());
+    tag_attr_map.insert("code", ["class"].iter().copied().collect());
 
     // script, style, iframe など有害タグのコンテンツごと除去
     let strip_content_tags: HashSet<&str> = [
-        "script", "style", "iframe", "object", "embed",
-        "form", "input", "button", "svg", "math",
+        "script", "style", "iframe", "object", "embed", "form", "input", "button", "svg", "math",
         "link", "meta", "base", "noscript", "template",
-    ].iter().copied().collect();
+    ]
+    .iter()
+    .copied()
+    .collect();
 
     // URL スキーム許可 (javascript: / data: などを除外)
     // ammonia 4.x はグローバルな url_schemes で全 URL 属性を制御する
@@ -459,7 +526,10 @@ pub fn sanitize_html(raw: &RawHtml) -> SanitizedBody {
         .filter(|c| !is_bidi_override(*c) && !is_zero_width(*c))
         .collect();
 
-    SanitizedBody { inner: out, _sealed: PhantomData }
+    SanitizedBody {
+        inner: out,
+        _sealed: PhantomData,
+    }
 }
 
 /// `<img src="...">` または `<img src='...'>` の src が `cid:` で始まらない場合は除去する。
@@ -522,7 +592,7 @@ pub struct IframeSrcdoc {
     /// The full srcdoc string, ready for `<iframe srcdoc="...">`.
     pub content: String,
     /// The CSP header value to inject alongside.
-    pub csp:     &'static str,
+    pub csp: &'static str,
     /// The sandbox attribute value.
     pub sandbox: &'static str,
 }
@@ -590,7 +660,7 @@ img {{ max-width: 100%; height: auto; }}
 
     IframeSrcdoc {
         content: html,
-        csp:     IframeSrcdoc::CSP,
+        csp: IframeSrcdoc::CSP,
         sandbox: IframeSrcdoc::SANDBOX,
     }
 }
@@ -603,9 +673,7 @@ img {{ max-width: 100%; height: auto; }}
 ///
 /// `(srcdoc, envelope, dlp_verdict)` を返す。
 /// 呼び出し元は `srcdoc` を注入する前に `dlp_verdict` を確認すること。
-pub fn render(
-    raw: &[u8],
-) -> Result<(IframeSrcdoc, Envelope, DlpVerdict), RenderError> {
+pub fn render(raw: &[u8]) -> Result<(IframeSrcdoc, Envelope, DlpVerdict), RenderError> {
     render_with_dlp(raw, None)
 }
 
@@ -617,10 +685,10 @@ pub fn render_with_dlp(
     raw: &[u8],
     scanner: Option<&dyn DlpScanner>,
 ) -> Result<(IframeSrcdoc, Envelope, DlpVerdict), RenderError> {
-    let envelope  = parse(raw)?;
+    let envelope = parse(raw)?;
     let dlp = match scanner {
         Some(s) => s.scan(&envelope),
-        None    => preflight_dlp(&envelope),
+        None => preflight_dlp(&envelope),
     };
 
     if let DlpVerdict::Block { ref policy } = dlp {
@@ -633,7 +701,10 @@ pub fn render_with_dlp(
             to_srcdoc(&sanitized, envelope.text_body.as_deref())
         }
         None => {
-            let empty = SanitizedBody { inner: String::new(), _sealed: PhantomData };
+            let empty = SanitizedBody {
+                inner: String::new(),
+                _sealed: PhantomData,
+            };
             to_srcdoc(&empty, envelope.text_body.as_deref())
         }
     };
@@ -725,7 +796,10 @@ mod tests {
         assert_eq!(env.auth_results.spf, AuthResult::Pass);
         assert_eq!(env.auth_results.dkim, AuthResult::Fail);
         assert_eq!(env.auth_results.dmarc, AuthResult::Pass);
-        assert_eq!(env.auth_results.authserv_id.as_deref(), Some("mx.example.com"));
+        assert_eq!(
+            env.auth_results.authserv_id.as_deref(),
+            Some("mx.example.com")
+        );
     }
 
     #[test]
@@ -745,10 +819,16 @@ mod tests {
         assert_eq!(env.auth_results.spf, AuthResult::Fail);
         // `smtp.mailfrom=dkim=pass@evil.example` はプロパティであり、
         // 実際の dkim 結果は temperror (未知値) → None。
-        assert_eq!(env.auth_results.dkim, AuthResult::None,
-            "プロパティ内の擬似トークンを dkim 結果として拾ってはいけない");
+        assert_eq!(
+            env.auth_results.dkim,
+            AuthResult::None,
+            "プロパティ内の擬似トークンを dkim 結果として拾ってはいけない"
+        );
         assert_eq!(env.auth_results.dmarc, AuthResult::Fail);
-        assert_eq!(env.auth_results.authserv_id.as_deref(), Some("mx.example.com"));
+        assert_eq!(
+            env.auth_results.authserv_id.as_deref(),
+            Some("mx.example.com")
+        );
     }
 
     #[test]
@@ -799,7 +879,10 @@ mod tests {
 
     #[test]
     fn srcdoc_contains_csp_meta() {
-        let body = SanitizedBody { inner: "<p>test</p>".into(), _sealed: PhantomData };
+        let body = SanitizedBody {
+            inner: "<p>test</p>".into(),
+            _sealed: PhantomData,
+        };
         let doc = to_srcdoc(&body, None);
         assert!(doc.content.contains("Content-Security-Policy"));
         assert!(doc.content.contains("script-src") || doc.content.contains("default-src"));
@@ -814,7 +897,10 @@ mod tests {
 
     #[test]
     fn plain_text_fallback_escapes_html() {
-        let body = SanitizedBody { inner: String::new(), _sealed: PhantomData };
+        let body = SanitizedBody {
+            inner: String::new(),
+            _sealed: PhantomData,
+        };
         let doc = to_srcdoc(&body, Some("<script>alert(1)</script>"));
         assert!(!doc.content.contains("<script>"));
         assert!(doc.content.contains("&lt;script&gt;"));
@@ -831,8 +917,14 @@ mod tests {
     #[test]
     fn xss_script_tag_removed() {
         let out = sanitize_html(&raw("<script>alert(1)</script>Hello"));
-        assert!(!out.as_str().contains("<script>"), "script tag must be stripped");
-        assert!(!out.as_str().contains("alert(1)"), "script content must be stripped too");
+        assert!(
+            !out.as_str().contains("<script>"),
+            "script tag must be stripped"
+        );
+        assert!(
+            !out.as_str().contains("alert(1)"),
+            "script content must be stripped too"
+        );
         assert!(out.as_str().contains("Hello"));
     }
 
@@ -845,7 +937,9 @@ mod tests {
 
     #[test]
     fn on_event_attributes_stripped() {
-        let out = sanitize_html(&raw("<a href=\"https://ok.com\" onclick=\"evil()\">click</a>"));
+        let out = sanitize_html(&raw(
+            "<a href=\"https://ok.com\" onclick=\"evil()\">click</a>",
+        ));
         assert!(!out.as_str().contains("onclick"), "onclick must be removed");
         assert!(out.as_str().contains("https://ok.com"), "href must survive");
     }
@@ -853,11 +947,19 @@ mod tests {
     #[test]
     fn external_img_src_blocked() {
         // src=https:// は許可スキームに含まれないので ammonia が除去する
-        let out = sanitize_html(&raw("<img src=\"https://tracker.evil.com/px.gif\" alt=\"x\">"));
-        assert!(!out.as_str().contains("https://tracker.evil.com"), "remote img src must be removed");
+        let out = sanitize_html(&raw(
+            "<img src=\"https://tracker.evil.com/px.gif\" alt=\"x\">",
+        ));
+        assert!(
+            !out.as_str().contains("https://tracker.evil.com"),
+            "remote img src must be removed"
+        );
         // cid: は許可
         let out2 = sanitize_html(&raw("<img src=\"cid:part1@msg.id\" alt=\"x\">"));
-        assert!(out2.as_str().contains("cid:part1@msg.id"), "cid: src must survive");
+        assert!(
+            out2.as_str().contains("cid:part1@msg.id"),
+            "cid: src must survive"
+        );
     }
 
     #[test]
@@ -887,7 +989,10 @@ mod tests {
     fn soft_hyphen_stripped() {
         // U+00AD (Soft Hyphen) はフィッシャーがテキストを分割して見えにくくするために使用
         let out = sanitize_html(&raw("pay\u{00AD}pal.com"));
-        assert!(!out.as_str().contains('\u{00AD}'), "Soft Hyphen must be stripped");
+        assert!(
+            !out.as_str().contains('\u{00AD}'),
+            "Soft Hyphen must be stripped"
+        );
     }
 
     #[test]
@@ -896,14 +1001,21 @@ mod tests {
         let invisible: String = ('\u{2061}'..='\u{2064}').collect();
         let out = sanitize_html(&raw(&format!("text{invisible}more")));
         for c in '\u{2061}'..='\u{2064}' {
-            assert!(!out.as_str().contains(c), "Math invisible op U+{:04X} must be stripped", c as u32);
+            assert!(
+                !out.as_str().contains(c),
+                "Math invisible op U+{:04X} must be stripped",
+                c as u32
+            );
         }
     }
 
     #[test]
     fn javascript_href_blocked() {
         let out = sanitize_html(&raw("<a href=\"javascript:alert(1)\">click</a>"));
-        assert!(!out.as_str().contains("javascript:"), "javascript: href must be blocked");
+        assert!(
+            !out.as_str().contains("javascript:"),
+            "javascript: href must be blocked"
+        );
     }
 
     // ── quoted local part の @ バイパステスト ────────────────────────────
@@ -912,21 +1024,27 @@ mod tests {
     fn addr_quoted_local_part_at_splits_on_last_at() {
         // "ceo@trusted.com"@attacker.com の場合、ドメインは attacker.com でなければならない
         let addr = mail_parser::Addr {
-            name:    None,
-            address: Some(std::borrow::Cow::Borrowed("\"ceo@trusted.com\"@attacker.com")),
+            name: None,
+            address: Some(std::borrow::Cow::Borrowed(
+                "\"ceo@trusted.com\"@attacker.com",
+            )),
         };
         let result = addr_to_address(&addr);
         let result = result.expect("アドレス変換が成功するべき");
-        assert_eq!(result.addr.domain, "attacker.com",
-            "quoted local part を持つアドレスのドメインは最後の @ より後であるべき");
-        assert_eq!(result.addr.local, "\"ceo@trusted.com\"",
-            "quoted local part は @ の前の部分全体であるべき");
+        assert_eq!(
+            result.addr.domain, "attacker.com",
+            "quoted local part を持つアドレスのドメインは最後の @ より後であるべき"
+        );
+        assert_eq!(
+            result.addr.local, "\"ceo@trusted.com\"",
+            "quoted local part は @ の前の部分全体であるべき"
+        );
     }
 
     #[test]
     fn addr_normal_email_splits_correctly() {
         let addr = mail_parser::Addr {
-            name:    Some(std::borrow::Cow::Borrowed("Alice")),
+            name: Some(std::borrow::Cow::Borrowed("Alice")),
             address: Some(std::borrow::Cow::Borrowed("alice@example.com")),
         };
         let result = addr_to_address(&addr).expect("通常アドレスは変換できるべき");
@@ -949,29 +1067,35 @@ mod tests {
     #[test]
     fn single_quoted_cid_src_is_preserved() {
         let out = sanitize_html(&raw("<img src='cid:part1@msg.id' alt='x'>"));
-        assert!(out.as_str().contains("cid:part1@msg.id"), "cid: のシングルクォートは保持されるべき");
+        assert!(
+            out.as_str().contains("cid:part1@msg.id"),
+            "cid: のシングルクォートは保持されるべき"
+        );
     }
 
     #[test]
     fn addr_no_at_sign_returns_none() {
         let addr = mail_parser::Addr {
-            name:    None,
+            name: None,
             address: Some(std::borrow::Cow::Borrowed("invalid-no-at")),
         };
-        assert!(addr_to_address(&addr).is_none(), "@ なしアドレスは None を返すべき");
+        assert!(
+            addr_to_address(&addr).is_none(),
+            "@ なしアドレスは None を返すべき"
+        );
     }
 }
 
-/// HTML スマグリング検出 (Blob/data: URI 経由のペイロード組み立て)。
-pub mod html_smuggling;
 /// カレンダー招待 (ICS) のセキュリティ検査。
 pub mod calendar_guard;
+pub mod css_sanitizer;
+/// HTML スマグリング検出 (Blob/data: URI 経由のペイロード組み立て)。
+pub mod html_smuggling;
 /// ZIP Slip 攻撃防止 (Zenn Round5 P0)。
 /// ファイルマジックバイト検証 — 拡張子偽装検出 (Qiita/Zenn Round5 P2)。
 pub mod magic_bytes;
 /// 添付ファイルメタデータ漏洩検出 (Round7 P1)。
 pub mod metadata_check;
-pub mod css_sanitizer;
 /// SVG 添付攻撃の検出 (2025-2026 に急増した主要ベクタ)。
 pub mod svg_guard;
 
@@ -1037,7 +1161,11 @@ pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
             })
             .unwrap_or_else(|| "application/octet-stream".to_string());
 
-        out.push(scan_attachment_bytes(&filename, &declared_mime, part.contents()));
+        out.push(scan_attachment_bytes(
+            &filename,
+            &declared_mime,
+            part.contents(),
+        ));
     }
     out
 }
@@ -1072,7 +1200,9 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
 
     // 3. Polyglot (画像/PDF としても ZIP としても有効)
     if let Some((a, b)) = magic_bytes::detect_polyglot(bytes) {
-        risks.push(format!("Polyglot ファイルです ({a} と {b} の両方として有効)"));
+        risks.push(format!(
+            "Polyglot ファイルです ({a} と {b} の両方として有効)"
+        ));
         is_dangerous = true;
     }
 

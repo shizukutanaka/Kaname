@@ -31,7 +31,6 @@
 //   implemented (no from_db() exists; app_state wiring is commented-out pseudocode).
 //   Currently the engine uses only its built-in default classifiers.
 
-
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -62,19 +61,19 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
     /// ルールの一意 ID。
-    pub id:        String,
+    pub id: String,
     /// 表示名。
-    pub name:      String,
+    pub name: String,
     /// 有効フラグ。
-    pub enabled:   bool,
+    pub enabled: bool,
     /// 適用方向 (送信/受信/両方)。
     pub direction: Direction,
     /// 発火条件ツリー。
     pub condition: Condition,
     /// 一致時のアクション。
-    pub action:    Action,
+    pub action: Action,
     /// 数値が小さいほど先に評価。同値の場合は id で決定。
-    pub priority:  u32,
+    pub priority: u32,
 }
 
 /// このルールが適用される方向。
@@ -233,15 +232,15 @@ pub enum ClassifierId {
 /// 単一評価のための DLP エンジンへの入力。
 pub struct EvalCtx<'a> {
     /// Plaintext body (after HTML stripping).
-    pub body:       &'a str,
+    pub body: &'a str,
     /// Subject line.
-    pub subject:    &'a str,
+    pub subject: &'a str,
     /// Message size in bytes.
     pub size_bytes: u64,
     /// Recipient email addresses.
-    pub to:         &'a [String],
+    pub to: &'a [String],
     /// Sender email address.
-    pub from:       &'a str,
+    pub from: &'a str,
     /// Declared attachment MIME types.
     pub attachment_mimes: &'a [String],
     /// EDM フィンガープリントセット (ID → フィンガープリント)。
@@ -264,8 +263,10 @@ impl<'a> EvalCtx<'a> {
     fn full_text(&self) -> String {
         const MAX_EVAL_BYTES: usize = 1024 * 1024; // 1MB
         let body = if self.body.len() > MAX_EVAL_BYTES {
-            let end = (0..=MAX_EVAL_BYTES).rev()
-                .find(|&i| self.body.is_char_boundary(i)).unwrap_or(0);
+            let end = (0..=MAX_EVAL_BYTES)
+                .rev()
+                .find(|&i| self.body.is_char_boundary(i))
+                .unwrap_or(0);
             &self.body[..end]
         } else {
             self.body
@@ -285,8 +286,12 @@ impl<'a> EvalCtx<'a> {
         // RFC 5321: ドメインは最後の `@` の後。`split('@').nth(1)` は
         // `victim@corp.com@gmail.com` のような細工で 2 番目のフィールド (corp.com) を
         // 取ってしまい、gmail.com 向けブロックルールを回避されるため rsplit_once を使う。
-        self.to.iter()
-            .filter_map(|addr| addr.rsplit_once('@').map(|(_, domain)| domain.to_lowercase()))
+        self.to
+            .iter()
+            .filter_map(|addr| {
+                addr.rsplit_once('@')
+                    .map(|(_, domain)| domain.to_lowercase())
+            })
             .collect()
     }
 }
@@ -297,7 +302,7 @@ impl<'a> EvalCtx<'a> {
 
 /// DLP エンジン。アクティブルールのソート済みリスト + パターンライブラリを保持。
 pub struct DlpEngine {
-    rules:    Vec<Rule>,
+    rules: Vec<Rule>,
     patterns: PatternLibrary,
     /// ルール構築時にコンパイル済みの正規表現キャッシュ (パターン文字列 → Regex)。
     regex_cache: HashMap<String, Regex>,
@@ -308,7 +313,11 @@ impl DlpEngine {
     pub fn new(mut rules: Vec<Rule>, patterns: PatternLibrary) -> Self {
         rules.sort_by(|a, b| a.priority.cmp(&b.priority).then(a.id.cmp(&b.id)));
         let regex_cache = Self::compile_regexes(&rules);
-        Self { rules, patterns, regex_cache }
+        Self {
+            rules,
+            patterns,
+            regex_cache,
+        }
     }
 
     /// 全ルールの Regex パターンをコンパイルしてキャッシュする。
@@ -326,7 +335,9 @@ impl DlpEngine {
 
     fn collect_patterns_depth(cond: &Condition, cache: &mut HashMap<String, Regex>, depth: u32) {
         const MAX_DEPTH: u32 = 64;
-        if depth > MAX_DEPTH { return; }
+        if depth > MAX_DEPTH {
+            return;
+        }
         match cond {
             Condition::And { children } | Condition::Or { children } => {
                 for child in children {
@@ -339,7 +350,9 @@ impl DlpEngine {
             Condition::Matches(Predicate::Regex { pattern }) => {
                 if !cache.contains_key(pattern) {
                     match Regex::new(pattern) {
-                        Ok(re) => { cache.insert(pattern.clone(), re); }
+                        Ok(re) => {
+                            cache.insert(pattern.clone(), re);
+                        }
                         Err(e) => {
                             tracing::warn!("DLP: invalid regex pattern {:?}: {}", pattern, e);
                         }
@@ -378,19 +391,21 @@ impl DlpEngine {
             }
             // 通常テキスト または パーセントデコード済みテキストのいずれかにマッチで検出
             let matched = self.eval_condition(&rule.condition, ctx, &text, &text_lower)
-                || (decoded != text && self.eval_condition(&rule.condition, ctx, &decoded, &decoded_lower));
+                || (decoded != text
+                    && self.eval_condition(&rule.condition, ctx, &decoded, &decoded_lower));
             if matched {
                 findings.push(Finding {
-                    rule_id:   rule.id.clone(),
+                    rule_id: rule.id.clone(),
                     rule_name: rule.name.clone(),
-                    action:    rule.action,
-                    excerpt:   excerpt_match(&text, &rule.condition),
+                    action: rule.action,
+                    excerpt: excerpt_match(&text, &rule.condition),
                 });
             }
         }
 
         // 全体判定 = 全発見の最大重大度 across all findings
-        let mut verdict = findings.iter()
+        let mut verdict = findings
+            .iter()
             .map(|f| f.action)
             .max()
             .unwrap_or(Action::Allow);
@@ -400,9 +415,12 @@ impl DlpEngine {
         // (情報持ち出し) や誤送信の典型的な複合シグナルであり、
         // どちらか単独よりも深刻に扱うべきだが、従来は misdirected_recipient
         // モジュールが register されているだけで評価パイプラインと未接続だった。
-        if direction == Direction::Outbound && verdict >= Action::Warn && !ctx.our_domain.is_empty() {
+        if direction == Direction::Outbound && verdict >= Action::Warn && !ctx.our_domain.is_empty()
+        {
             let suspicious = crate::misdirected_recipient::detect_misdirected_recipients(
-                ctx.to, ctx.our_domain, ctx.known_recipient_domains,
+                ctx.to,
+                ctx.our_domain,
+                ctx.known_recipient_domains,
             );
             if !suspicious.is_empty() {
                 verdict = Action::Block;
@@ -420,11 +438,24 @@ impl DlpEngine {
         DlpResult { verdict, findings }
     }
 
-    fn eval_condition(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str, text_lower: &str) -> bool {
+    fn eval_condition(
+        &self,
+        cond: &Condition,
+        ctx: &EvalCtx<'_>,
+        text: &str,
+        text_lower: &str,
+    ) -> bool {
         self.eval_condition_depth(cond, ctx, text, text_lower, 0)
     }
 
-    fn eval_condition_depth(&self, cond: &Condition, ctx: &EvalCtx<'_>, text: &str, text_lower: &str, depth: u32) -> bool {
+    fn eval_condition_depth(
+        &self,
+        cond: &Condition,
+        ctx: &EvalCtx<'_>,
+        text: &str,
+        text_lower: &str,
+        depth: u32,
+    ) -> bool {
         const MAX_DEPTH: u32 = 64;
         if depth > MAX_DEPTH {
             tracing::warn!("DLP: condition tree depth exceeded {MAX_DEPTH}, treating as no-match");
@@ -434,22 +465,32 @@ impl DlpEngine {
             // 空の And は vacuous truth → 全メールをブロックしてしまう。
             // 意味的に「条件なし = マッチしない」として扱う。
             Condition::And { children } => {
-                if children.is_empty() { return false; }
-                children.iter().all(|c| self.eval_condition_depth(c, ctx, text, text_lower, depth + 1))
+                if children.is_empty() {
+                    return false;
+                }
+                children
+                    .iter()
+                    .all(|c| self.eval_condition_depth(c, ctx, text, text_lower, depth + 1))
             }
-            Condition::Or { children } =>
-                children.iter().any(|c| self.eval_condition_depth(c, ctx, text, text_lower, depth + 1)),
-            Condition::Not { child } =>
-                !self.eval_condition_depth(child, ctx, text, text_lower, depth + 1),
-            Condition::Matches(pred) =>
-                self.eval_predicate(pred, ctx, text, text_lower),
+            Condition::Or { children } => children
+                .iter()
+                .any(|c| self.eval_condition_depth(c, ctx, text, text_lower, depth + 1)),
+            Condition::Not { child } => {
+                !self.eval_condition_depth(child, ctx, text, text_lower, depth + 1)
+            }
+            Condition::Matches(pred) => self.eval_predicate(pred, ctx, text, text_lower),
         }
     }
 
-    fn eval_predicate(&self, pred: &Predicate, ctx: &EvalCtx<'_>, text: &str, text_lower: &str) -> bool {
+    fn eval_predicate(
+        &self,
+        pred: &Predicate,
+        ctx: &EvalCtx<'_>,
+        text: &str,
+        text_lower: &str,
+    ) -> bool {
         match pred {
-            Predicate::Classifier { classifier } =>
-                self.run_classifier(*classifier, text),
+            Predicate::Classifier { classifier } => self.run_classifier(*classifier, text),
 
             Predicate::Regex { pattern } => {
                 if let Some(re) = self.regex_cache.get(pattern) {
@@ -463,7 +504,8 @@ impl DlpEngine {
             Predicate::Keyword { words, min_count } => {
                 const MAX_KEYWORD_COUNT: usize = 500;
                 // text_lower は evaluate() で一度だけ計算済み (P2: 再アロケーション防止)
-                let count = words.iter()
+                let count = words
+                    .iter()
                     .take(MAX_KEYWORD_COUNT)
                     .filter(|w| text_lower.contains(w.to_lowercase().as_str()))
                     .count() as u32;
@@ -472,43 +514,44 @@ impl DlpEngine {
 
             Predicate::RecipientDomain { domains } => {
                 let rx_domains = ctx.recipient_domains();
-                domains.iter().any(|d| rx_domains.contains(&d.to_lowercase()))
+                domains
+                    .iter()
+                    .any(|d| rx_domains.contains(&d.to_lowercase()))
             }
 
-            Predicate::SenderAddress { addresses } =>
-                addresses.iter().any(|a| a.eq_ignore_ascii_case(ctx.from)),
+            Predicate::SenderAddress { addresses } => {
+                addresses.iter().any(|a| a.eq_ignore_ascii_case(ctx.from))
+            }
 
-            Predicate::SizeBytes { min } =>
-                ctx.size_bytes >= *min,
+            Predicate::SizeBytes { min } => ctx.size_bytes >= *min,
 
-            Predicate::AttachmentMime { types } =>
-                ctx.attachment_mimes.iter()
-                    .any(|m| types.contains(m)),
+            Predicate::AttachmentMime { types } => {
+                ctx.attachment_mimes.iter().any(|m| types.contains(m))
+            }
 
-            Predicate::PatternLibrary { pattern_id } =>
-                self.patterns.matches(pattern_id, text),
+            Predicate::PatternLibrary { pattern_id } => self.patterns.matches(pattern_id, text),
 
-            Predicate::ExactDataMatch { fingerprint_set_id } =>
-                ctx.edm_sets
-                    .get(fingerprint_set_id)
-                    .is_some_and(|fp| fp.is_match(text)),
+            Predicate::ExactDataMatch { fingerprint_set_id } => ctx
+                .edm_sets
+                .get(fingerprint_set_id)
+                .is_some_and(|fp| fp.is_match(text)),
         }
     }
 
     fn run_classifier(&self, id: ClassifierId, text: &str) -> bool {
         match id {
-            ClassifierId::JpMyNumber          => detect_jp_my_number(text),
-            ClassifierId::JpCorporateNumber   => detect_jp_corporate_number(text),
-            ClassifierId::CreditCardPan       => detect_credit_card(text),
-            ClassifierId::Iban                => detect_iban(text),
-            ClassifierId::SwiftBic            => detect_swift_bic(text),
-            ClassifierId::UsSsn               => detect_us_ssn(text),
-            ClassifierId::IpAddress           => detect_ip_address(text),
-            ClassifierId::ConfidentialMarker  => detect_confidential_marker(text),
+            ClassifierId::JpMyNumber => detect_jp_my_number(text),
+            ClassifierId::JpCorporateNumber => detect_jp_corporate_number(text),
+            ClassifierId::CreditCardPan => detect_credit_card(text),
+            ClassifierId::Iban => detect_iban(text),
+            ClassifierId::SwiftBic => detect_swift_bic(text),
+            ClassifierId::UsSsn => detect_us_ssn(text),
+            ClassifierId::IpAddress => detect_ip_address(text),
+            ClassifierId::ConfidentialMarker => detect_confidential_marker(text),
             ClassifierId::AttorneyClientPrivilege => detect_attorney_privilege(text),
-            ClassifierId::DealCodename        => detect_deal_codename(text),
-            ClassifierId::SourceCode          => detect_source_code(text),
-            ClassifierId::MedicalData         => detect_medical_data(text),
+            ClassifierId::DealCodename => detect_deal_codename(text),
+            ClassifierId::SourceCode => detect_source_code(text),
+            ClassifierId::MedicalData => detect_medical_data(text),
         }
     }
 }
@@ -522,7 +565,7 @@ impl DlpEngine {
 pub struct DlpResult {
     /// 全体的な判定 (全トリガーされたルールの最大値)。
     /// 最終判定 (最も厳しいアクション)。
-    pub verdict:  Action,
+    pub verdict: Action,
     /// All matching rules and their individual verdicts.
     pub findings: Vec<Finding>,
 }
@@ -539,13 +582,13 @@ impl DlpResult {
 #[derive(Debug)]
 pub struct Finding {
     /// 発火したルールの ID。
-    pub rule_id:   String,
+    pub rule_id: String,
     /// 発火したルールの表示名。
     pub rule_name: String,
     /// そのルールのアクション。
-    pub action:    Action,
+    pub action: Action,
     /// Short excerpt showing where the match occurred (for UI display).
-    pub excerpt:   String,
+    pub excerpt: String,
 }
 
 // ============================================================================
@@ -567,7 +610,8 @@ impl PatternLibrary {
     /// 名前付きパターンがテキストに一致するか確認。
     #[must_use]
     pub fn matches(&self, name: &str, text: &str) -> bool {
-        self.patterns.get(name)
+        self.patterns
+            .get(name)
             .map(|regexes| regexes.iter().any(|r| re_is_match(r.as_str(), text)))
             .unwrap_or(false)
     }
@@ -695,13 +739,15 @@ fn detect_credit_card(text: &str) -> bool {
     // (法人メールで Amex/JCB のカード番号が DLP をすり抜けて外部送信される穴を塞ぐ)。
     let Ok(re) = Regex::new(concat!(
         r"(?:",
-        r"4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",            // Visa 16
-        r"|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",      // Mastercard 16
-        r"|35[0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",          // JCB 16
-        r"|6(?:011|5[0-9]{2})[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}",  // Discover 16
-        r"|3[47][0-9]{2}[-\s]?[0-9]{6}[-\s]?[0-9]{5}",                     // Amex 15 (4-6-5)
+        r"4[0-9]{3}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}", // Visa 16
+        r"|5[1-5][0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}", // Mastercard 16
+        r"|35[0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}", // JCB 16
+        r"|6(?:011|5[0-9]{2})[-\s]?[0-9]{4}[-\s]?[0-9]{4}[-\s]?[0-9]{4}", // Discover 16
+        r"|3[47][0-9]{2}[-\s]?[0-9]{6}[-\s]?[0-9]{5}",          // Amex 15 (4-6-5)
         r")",
-    )) else { return false };
+    )) else {
+        return false;
+    };
     // 各マッチから数字のみ抽出して桁数 (Amex=15 / その他=16) と Luhn を検証する。
     // 以前は「連続16桁ラン」しか拾わず区切り付き PAN が素通りし、かつ 16桁固定
     // 判定のため 15桁の Amex は原理的に検出できなかった。
@@ -716,13 +762,24 @@ fn luhn_check(digits: &str) -> bool {
     if digits.len() < 13 || digits.len() > 19 {
         return false;
     }
-    let sum: u32 = digits.chars().rev().enumerate()
-        .filter_map(|(i, c)| c.to_digit(10).map(|d| {
-            if i % 2 == 1 {
-                let doubled = d * 2;
-                if doubled > 9 { doubled - 9 } else { doubled }
-            } else { d }
-        }))
+    let sum: u32 = digits
+        .chars()
+        .rev()
+        .enumerate()
+        .filter_map(|(i, c)| {
+            c.to_digit(10).map(|d| {
+                if i % 2 == 1 {
+                    let doubled = d * 2;
+                    if doubled > 9 {
+                        doubled - 9
+                    } else {
+                        doubled
+                    }
+                } else {
+                    d
+                }
+            })
+        })
         .sum();
     sum % 10 == 0
 }
@@ -735,9 +792,15 @@ fn detect_iban(text: &str) -> bool {
     // マッチせず、銀行取引でごく一般的な区切り付き IBAN が素通りしていた。
     // 正規表現だけでは "US00ABCD1234" 等の非 IBAN にも一致し得るため、
     // ISO 7064 MOD 97-10 のチェックディジット検証で誤検知を抑える。
-    let Ok(re) = Regex::new(r"\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b") else { return false };
+    let Ok(re) = Regex::new(r"\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b") else {
+        return false;
+    };
     let matched = re.find_iter(text).any(|m| {
-        let compact: String = m.as_str().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+        let compact: String = m
+            .as_str()
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
         iban_checksum_valid(&compact)
     });
     matched
@@ -788,8 +851,12 @@ fn detect_swift_bic(text: &str) -> bool {
     // 8文字の英大文字の英単語も誤って BIC と判定していた。
     // 位置5-6 (国コード部分) が実在する ISO 3166-1 alpha-2 国コードかを
     // 追加検証し、誤検知を大幅に減らす。
-    let Ok(re) = Regex::new(r"\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b") else { return false };
-    let result = re.find_iter(text).any(|m| swift_bic_country_code_valid(m.as_str()));
+    let Ok(re) = Regex::new(r"\b[A-Z]{6}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\b") else {
+        return false;
+    };
+    let result = re
+        .find_iter(text)
+        .any(|m| swift_bic_country_code_valid(m.as_str()));
     result
 }
 
@@ -805,13 +872,11 @@ fn swift_bic_country_code_valid(candidate: &str) -> bool {
 /// ISO 3166-1 alpha-2 国コード一覧 (BIC の国コード検証に使用する主要国)。
 /// 完全な 249 カ国リストではなく、金融取引で頻出する国を中心に収録。
 const ISO_3166_ALPHA2: &[&str] = &[
-    "JP", "US", "GB", "DE", "FR", "IT", "ES", "NL", "BE", "CH",
-    "AT", "SE", "NO", "DK", "FI", "IE", "PT", "GR", "PL", "CZ",
-    "HU", "RO", "BG", "HR", "SK", "SI", "LT", "LV", "EE", "LU",
-    "CA", "AU", "NZ", "CN", "KR", "HK", "SG", "TW", "TH", "MY",
-    "ID", "PH", "VN", "IN", "PK", "BD", "AE", "SA", "IL", "TR",
-    "ZA", "EG", "NG", "KE", "BR", "MX", "AR", "CL", "CO", "PE",
-    "RU", "UA", "CY", "MT", "IS", "LI",
+    "JP", "US", "GB", "DE", "FR", "IT", "ES", "NL", "BE", "CH", "AT", "SE", "NO", "DK", "FI", "IE",
+    "PT", "GR", "PL", "CZ", "HU", "RO", "BG", "HR", "SK", "SI", "LT", "LV", "EE", "LU", "CA", "AU",
+    "NZ", "CN", "KR", "HK", "SG", "TW", "TH", "MY", "ID", "PH", "VN", "IN", "PK", "BD", "AE", "SA",
+    "IL", "TR", "ZA", "EG", "NG", "KE", "BR", "MX", "AR", "CL", "CO", "PE", "RU", "UA", "CY", "MT",
+    "IS", "LI",
 ];
 
 fn detect_us_ssn(text: &str) -> bool {
@@ -825,8 +890,12 @@ fn detect_us_ssn(text: &str) -> bool {
     // 機能追加以来ずっと動作しておらず、DLP が SSN を一度も検出できていなかった。
     // ルックアラウンドなしのパターンでマッチさせ、除外条件はコードで検証する。
     let normalized = normalize_fullwidth_digits(text);
-    let Ok(re) = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b") else { return false };
-    let result = re.find_iter(&normalized).any(|m| is_plausible_ssn(m.as_str()));
+    let Ok(re) = Regex::new(r"\b\d{3}-\d{2}-\d{4}\b") else {
+        return false;
+    };
+    let result = re
+        .find_iter(&normalized)
+        .any(|m| is_plausible_ssn(m.as_str()));
     result
 }
 
@@ -865,19 +934,36 @@ fn detect_ip_address(text: &str) -> bool {
 fn detect_confidential_marker(text: &str) -> bool {
     let t = text.to_lowercase();
     // 通常一致
-    let found = ["confidential", "机密", "機密", "秘密", "取扱注意",
-                 "restricted", "internal only", "社外秘", "極秘",
-                 "do not distribute", "not for distribution",
-                ].iter().any(|m| t.contains(m));
+    let found = [
+        "confidential",
+        "机密",
+        "機密",
+        "秘密",
+        "取扱注意",
+        "restricted",
+        "internal only",
+        "社外秘",
+        "極秘",
+        "do not distribute",
+        "not for distribution",
+    ]
+    .iter()
+    .any(|m| t.contains(m));
     if found {
         return true;
     }
     // スペース区切り難読化 "C O N F I D E N T I A L" 対策:
     // 連続する単一英字をスペースで区切ったパターンを除去して再検索
     let collapsed = collapse_spaced_ascii(&t);
-    ["confidential", "restricted", "internal only", "do not distribute",
-     "not for distribution",
-    ].iter().any(|m| collapsed.contains(m))
+    [
+        "confidential",
+        "restricted",
+        "internal only",
+        "do not distribute",
+        "not for distribution",
+    ]
+    .iter()
+    .any(|m| collapsed.contains(m))
 }
 
 /// "c o n f i d e n t i a l" → "confidential" に正規化する。
@@ -891,9 +977,12 @@ fn collapse_spaced_ascii(text: &str) -> String {
     while i < chars.len() {
         // 現在位置が "x " パターンの先頭かチェック (x=ASCII lowercase, 次がスペース)
         if chars[i].is_ascii_lowercase()
-            && i + 1 < chars.len() && chars[i + 1] == ' '
-            && i + 2 < chars.len() && chars[i + 2].is_ascii_lowercase()
-            && i + 3 < chars.len() && (chars[i + 3] == ' ' || chars[i + 3].is_ascii_lowercase())
+            && i + 1 < chars.len()
+            && chars[i + 1] == ' '
+            && i + 2 < chars.len()
+            && chars[i + 2].is_ascii_lowercase()
+            && i + 3 < chars.len()
+            && (chars[i + 3] == ' ' || chars[i + 3].is_ascii_lowercase())
         {
             // スペース区切りの単一文字シーケンスを収集
             let mut word = String::new();
@@ -901,9 +990,13 @@ fn collapse_spaced_ascii(text: &str) -> String {
                 word.push(chars[i]);
                 i += 1;
                 // 次がスペースかつその次が単一英字ならスペースを飛ばす
-                if i < chars.len() && chars[i] == ' '
-                    && i + 1 < chars.len() && chars[i + 1].is_ascii_lowercase()
-                    && (i + 2 >= chars.len() || chars[i + 2] == ' ' || !chars[i + 2].is_ascii_alphabetic())
+                if i < chars.len()
+                    && chars[i] == ' '
+                    && i + 1 < chars.len()
+                    && chars[i + 1].is_ascii_lowercase()
+                    && (i + 2 >= chars.len()
+                        || chars[i + 2] == ' '
+                        || !chars[i + 2].is_ascii_alphabetic())
                 {
                     i += 1; // スペースを飛ばす
                 } else {
@@ -921,32 +1014,63 @@ fn collapse_spaced_ascii(text: &str) -> String {
 
 fn detect_attorney_privilege(text: &str) -> bool {
     let t = text.to_lowercase();
-    ["attorney-client", "privileged and confidential",
-     "attorney client privilege", "legal advice",
-     "弁護士秘匿特権", "法的助言",
-    ].iter().any(|m| t.contains(m))
+    [
+        "attorney-client",
+        "privileged and confidential",
+        "attorney client privilege",
+        "legal advice",
+        "弁護士秘匿特権",
+        "法的助言",
+    ]
+    .iter()
+    .any(|m| t.contains(m))
 }
 
 fn detect_deal_codename(text: &str) -> bool {
     // ヒューリスティック: all-caps codenames preceded by "Project" or "Operation"
-    re_is_match(r"(?i)(?:project|operation|プロジェクト)\s+[A-Z][A-Z0-9]{2,}", text)
+    re_is_match(
+        r"(?i)(?:project|operation|プロジェクト)\s+[A-Z][A-Z0-9]{2,}",
+        text,
+    )
 }
 
 fn detect_source_code(text: &str) -> bool {
     // ヒューリスティック: multiple lines that look like code
-    let code_markers = ["fn ", "def ", "class ", "import ", "use ", "pub mod",
-                        "#include", "namespace ", "function(", "const char*",
-                        "SELECT ", "FROM ", "WHERE "];
+    let code_markers = [
+        "fn ",
+        "def ",
+        "class ",
+        "import ",
+        "use ",
+        "pub mod",
+        "#include",
+        "namespace ",
+        "function(",
+        "const char*",
+        "SELECT ",
+        "FROM ",
+        "WHERE ",
+    ];
     let count = code_markers.iter().filter(|m| text.contains(*m)).count();
     count >= 3
 }
 
 fn detect_medical_data(text: &str) -> bool {
     let t = text.to_lowercase();
-    ["diagnosis", "prescription", "patient id", "医療記録",
-     "診断名", "処方箋", "患者id", "病名",
-     "icd-10", "icd-11",
-    ].iter().any(|m| t.contains(m))
+    [
+        "diagnosis",
+        "prescription",
+        "patient id",
+        "医療記録",
+        "診断名",
+        "処方箋",
+        "患者id",
+        "病名",
+        "icd-10",
+        "icd-11",
+    ]
+    .iter()
+    .any(|m| t.contains(m))
 }
 
 // ============================================================================
@@ -957,71 +1081,77 @@ fn default_rules() -> Vec<Rule> {
     vec![
         // Rule 1: Block JP My Number in outbound
         Rule {
-            id:        "default-001".into(),
-            name:      "マイナンバー外部送信防止".into(),
-            enabled:   true,
+            id: "default-001".into(),
+            name: "マイナンバー外部送信防止".into(),
+            enabled: true,
             direction: Direction::Outbound,
-            priority:  10,
-            action:    Action::Block,
+            priority: 10,
+            action: Action::Block,
             condition: Condition::all(vec![
-                Condition::matches(Predicate::Classifier { classifier: ClassifierId::JpMyNumber }),
+                Condition::matches(Predicate::Classifier {
+                    classifier: ClassifierId::JpMyNumber,
+                }),
                 Condition::negate(Condition::matches(Predicate::RecipientDomain {
                     domains: vec![], // empty = no allow-list; all external blocked
                 })),
             ]),
         },
-
         // Rule 2: Block credit card numbers in outbound
         Rule {
-            id:        "default-002".into(),
-            name:      "クレジットカード番号外部送信防止".into(),
-            enabled:   true,
+            id: "default-002".into(),
+            name: "クレジットカード番号外部送信防止".into(),
+            enabled: true,
             direction: Direction::Outbound,
-            priority:  10,
-            action:    Action::Block,
+            priority: 10,
+            action: Action::Block,
             condition: Condition::matches(Predicate::Classifier {
                 classifier: ClassifierId::CreditCardPan,
             }),
         },
-
         // Rule 3: Warn on confidential marker to external domains
         Rule {
-            id:        "default-003".into(),
-            name:      "機密マーカー外部送信警告".into(),
-            enabled:   true,
+            id: "default-003".into(),
+            name: "機密マーカー外部送信警告".into(),
+            enabled: true,
             direction: Direction::Outbound,
-            priority:  20,
-            action:    Action::Warn,
+            priority: 20,
+            action: Action::Warn,
             condition: Condition::matches(Predicate::Classifier {
                 classifier: ClassifierId::ConfidentialMarker,
             }),
         },
-
         // Rule 4: Warn on large outbound attachments (>50MB)
         Rule {
-            id:        "default-004".into(),
-            name:      "大容量添付ファイル送信警告".into(),
-            enabled:   true,
+            id: "default-004".into(),
+            name: "大容量添付ファイル送信警告".into(),
+            enabled: true,
             direction: Direction::Outbound,
-            priority:  30,
-            action:    Action::Warn,
-            condition: Condition::matches(Predicate::SizeBytes { min: 50 * 1024 * 1024 }),
+            priority: 30,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::SizeBytes {
+                min: 50 * 1024 * 1024,
+            }),
         },
-
         // Rule 5: Block source code to personal domains (gmail, yahoo, etc.)
         Rule {
-            id:        "default-005".into(),
-            name:      "ソースコードの個人メール送信防止".into(),
-            enabled:   true,
+            id: "default-005".into(),
+            name: "ソースコードの個人メール送信防止".into(),
+            enabled: true,
             direction: Direction::Outbound,
-            priority:  15,
-            action:    Action::Block,
+            priority: 15,
+            action: Action::Block,
             condition: Condition::all(vec![
-                Condition::matches(Predicate::Classifier { classifier: ClassifierId::SourceCode }),
+                Condition::matches(Predicate::Classifier {
+                    classifier: ClassifierId::SourceCode,
+                }),
                 Condition::matches(Predicate::RecipientDomain {
                     domains: vec![
-                        "gmail.com".into(), "yahoo.co.jp".into(), "yahoo.com".into(),
-                        "hotmail.com".into(), "outlook.com".into(), "icloud.com".into(),
+                        "gmail.com".into(),
+                        "yahoo.co.jp".into(),
+                        "yahoo.com".into(),
+                        "hotmail.com".into(),
+                        "outlook.com".into(),
+                        "icloud.com".into(),
                     ],
                 }),
             ]),
@@ -1073,10 +1203,7 @@ fn percent_decode_once(s: &str) -> String {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(h), Some(l)) = (
-                hex_digit(bytes[i + 1]),
-                hex_digit(bytes[i + 2]),
-            ) {
+            if let (Some(h), Some(l)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
                 let byte = (h << 4) | l;
                 // ASCII 可読文字のみデコード (制御文字はスキップ)
                 if byte >= 0x20 {
@@ -1112,7 +1239,10 @@ fn hex_digit(b: u8) -> Option<u8> {
 fn re_is_match(pattern: &str, text: &str) -> bool {
     // 入力が大きすぎる場合は先頭 512 KB のみ検査 (DFA メモリ上限)
     let text = if text.len() > MAX_REGEX_INPUT_BYTES {
-        let cut = (0..=MAX_REGEX_INPUT_BYTES).rev().find(|&i| text.is_char_boundary(i)).unwrap_or(0);
+        let cut = (0..=MAX_REGEX_INPUT_BYTES)
+            .rev()
+            .find(|&i| text.is_char_boundary(i))
+            .unwrap_or(0);
         &text[..cut]
     } else {
         text
@@ -1179,11 +1309,13 @@ fn find_first_match_pos(text: &str, cond: &Condition) -> Option<usize> {
         Condition::Matches(pred) => match pred {
             Predicate::Keyword { words, .. } => {
                 let lower = text.to_lowercase();
-                words.iter().find_map(|w| lower.find(w.to_lowercase().as_str()))
+                words
+                    .iter()
+                    .find_map(|w| lower.find(w.to_lowercase().as_str()))
             }
-            Predicate::Regex { pattern } => {
-                Regex::new(pattern).ok().and_then(|re| re.find(text).map(|m| m.start()))
-            }
+            Predicate::Regex { pattern } => Regex::new(pattern)
+                .ok()
+                .and_then(|re| re.find(text).map(|m| m.start())),
             _ => None,
         },
     }
@@ -1195,11 +1327,11 @@ fn find_first_match_pos(text: &str, cond: &Condition) -> Option<usize> {
 
 /// 流暢なルールビルダー。
 pub struct RuleBuilder {
-    id:        String,
-    name:      String,
+    id: String,
+    name: String,
     direction: Direction,
-    priority:  u32,
-    action:    Action,
+    priority: u32,
+    action: Action,
     condition: Option<Condition>,
 }
 
@@ -1207,30 +1339,53 @@ impl RuleBuilder {
     /// 新規インスタンスを作成する。
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
-            id: id.into(), name: name.into(),
+            id: id.into(),
+            name: name.into(),
             direction: Direction::Both,
-            priority: 100, action: Action::Warn,
+            priority: 100,
+            action: Action::Warn,
             condition: None,
         }
     }
     /// `outbound` を実行する。
-    pub fn outbound(mut self)             -> Self { self.direction = Direction::Outbound; self }
+    pub fn outbound(mut self) -> Self {
+        self.direction = Direction::Outbound;
+        self
+    }
     /// `inbound` を実行する。
-    pub fn inbound(mut self)              -> Self { self.direction = Direction::Inbound;  self }
+    pub fn inbound(mut self) -> Self {
+        self.direction = Direction::Inbound;
+        self
+    }
     /// `block` を実行する。
-    pub fn block(mut self)                -> Self { self.action = Action::Block; self }
+    pub fn block(mut self) -> Self {
+        self.action = Action::Block;
+        self
+    }
     /// `warn` を実行する。
-    pub fn warn(mut self)                 -> Self { self.action = Action::Warn;  self }
+    pub fn warn(mut self) -> Self {
+        self.action = Action::Warn;
+        self
+    }
     /// `priority` を実行する。
-    pub fn priority(mut self, p: u32)     -> Self { self.priority = p; self }
+    pub fn priority(mut self, p: u32) -> Self {
+        self.priority = p;
+        self
+    }
     /// `when` を実行する。
-    pub fn when(mut self, c: Condition)   -> Self { self.condition = Some(c); self }
+    pub fn when(mut self, c: Condition) -> Self {
+        self.condition = Some(c);
+        self
+    }
 
     /// `build` を実行する。
     pub fn build(self) -> Rule {
         Rule {
-            id: self.id, name: self.name, enabled: true,
-            direction: self.direction, priority: self.priority,
+            id: self.id,
+            name: self.name,
+            enabled: true,
+            direction: self.direction,
+            priority: self.priority,
             action: self.action,
             condition: self.condition.unwrap_or(Condition::Or { children: vec![] }),
         }
@@ -1245,16 +1400,23 @@ impl RuleBuilder {
 mod tests {
     use super::*;
 
-    fn engine() -> DlpEngine { DlpEngine::default_engine() }
+    fn engine() -> DlpEngine {
+        DlpEngine::default_engine()
+    }
 
     fn ctx<'a>(body: &'a str, from: &'a str, to: &'a [String]) -> EvalCtx<'a> {
         // テスト用の空 EDM セット (static で寿命を確保)
         use std::sync::OnceLock;
-        static EMPTY_EDM: OnceLock<std::collections::HashMap<String, crate::edm::EdmFingerprints>> = OnceLock::new();
+        static EMPTY_EDM: OnceLock<std::collections::HashMap<String, crate::edm::EdmFingerprints>> =
+            OnceLock::new();
         let edm_sets = EMPTY_EDM.get_or_init(std::collections::HashMap::new);
         EvalCtx {
-            body, subject: "", size_bytes: 100,
-            to, from, attachment_mimes: &[],
+            body,
+            subject: "",
+            size_bytes: 100,
+            to,
+            from,
+            attachment_mimes: &[],
             edm_sets,
             known_recipient_domains: &[],
             our_domain: "",
@@ -1272,11 +1434,15 @@ mod tests {
         let to = vec!["external@other.com".to_string()];
         let body = "送信: secret-customer-001 と confidential-deal-x の情報";
         let ctx = EvalCtx {
-            body, subject: "", size_bytes: 100,
-            to: &to, from: "me@corp.com", attachment_mimes: &[],
+            body,
+            subject: "",
+            size_bytes: 100,
+            to: &to,
+            from: "me@corp.com",
+            attachment_mimes: &[],
             edm_sets: &sets,
-        known_recipient_domains: &[],
-        our_domain: "",
+            known_recipient_domains: &[],
+            our_domain: "",
         };
         let engine = DlpEngine::new(
             vec![Rule {
@@ -1299,7 +1465,10 @@ mod tests {
     #[test]
     fn clean_email_passes() {
         let to = vec!["alice@example.com".into()];
-        let result = engine().evaluate(&ctx("こんにちは。本日の会議の件です。", "me@corp.com", &to), Direction::Outbound);
+        let result = engine().evaluate(
+            &ctx("こんにちは。本日の会議の件です。", "me@corp.com", &to),
+            Direction::Outbound,
+        );
         assert!(result.is_clean(), "findings: {:?}", result.findings);
     }
 
@@ -1310,23 +1479,33 @@ mod tests {
         let to = vec!["attacker@gmail.com".into()];
         let body = "マイナンバーは 123456789018 です";
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
-        assert_eq!(result.verdict, Action::Block, "should block valid my number");
+        assert_eq!(
+            result.verdict,
+            Action::Block,
+            "should block valid my number"
+        );
         assert!(result.findings.iter().any(|f| f.rule_id == "default-001"));
     }
 
     #[test]
     fn my_number_check_digit_rejects_invalid() {
         // 123456789012 はチェックディジット不一致 → 検出しない (false positive 削減)
-        assert!(!my_number_check_digit_valid(&[1,2,3,4,5,6,7,8,9,0,1,2]));
+        assert!(!my_number_check_digit_valid(&[
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2
+        ]));
         // 123456789018 は正しい
-        assert!(my_number_check_digit_valid(&[1,2,3,4,5,6,7,8,9,0,1,8]));
+        assert!(my_number_check_digit_valid(&[
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 8
+        ]));
     }
 
     #[test]
     fn my_number_check_digit_edge_cases() {
         // 桁数が 12 でない場合は false
-        assert!(!my_number_check_digit_valid(&[1,2,3]));
-        assert!(!my_number_check_digit_valid(&[1,2,3,4,5,6,7,8,9,0,1,8,9]));
+        assert!(!my_number_check_digit_valid(&[1, 2, 3]));
+        assert!(!my_number_check_digit_valid(&[
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 8, 9
+        ]));
     }
 
     #[test]
@@ -1334,8 +1513,10 @@ mod tests {
         let to = vec!["vendor@external.com".into()];
         let body = "CONFIDENTIAL: Q3 revenue forecast attached.";
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
-        assert!(result.findings.iter().any(|f| f.action == Action::Warn),
-            "should warn on confidential marker");
+        assert!(
+            result.findings.iter().any(|f| f.action == Action::Warn),
+            "should warn on confidential marker"
+        );
     }
 
     #[test]
@@ -1358,8 +1539,12 @@ mod tests {
     #[test]
     fn condition_and_requires_both() {
         let cond = Condition::all(vec![
-            Condition::matches(Predicate::Classifier { classifier: ClassifierId::ConfidentialMarker }),
-            Condition::matches(Predicate::Classifier { classifier: ClassifierId::JpMyNumber }),
+            Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::ConfidentialMarker,
+            }),
+            Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::JpMyNumber,
+            }),
         ]);
         let to: Vec<String> = vec![];
         let ctx_only_conf = ctx("CONFIDENTIAL: meeting notes", "", &to);
@@ -1376,7 +1561,9 @@ mod tests {
             .outbound()
             .block()
             .priority(5)
-            .when(Condition::matches(Predicate::Classifier { classifier: ClassifierId::CreditCardPan }))
+            .when(Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::CreditCardPan,
+            }))
             .build();
         assert_eq!(rule.action, Action::Block);
         assert_eq!(rule.direction, Direction::Outbound);
@@ -1386,9 +1573,15 @@ mod tests {
     #[test]
     fn inbound_rule_skipped_for_outbound() {
         let inbound_only = Rule {
-            id: "in-only".into(), name: "inbound only".into(), enabled: true,
-            direction: Direction::Inbound, priority: 1, action: Action::Block,
-            condition: Condition::matches(Predicate::Classifier { classifier: ClassifierId::ConfidentialMarker }),
+            id: "in-only".into(),
+            name: "inbound only".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 1,
+            action: Action::Block,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::ConfidentialMarker,
+            }),
         };
         let engine = DlpEngine::new(vec![inbound_only], PatternLibrary::default());
         let to = vec!["x@x.com".into()];
@@ -1400,7 +1593,7 @@ mod tests {
     #[test]
     fn action_ordering_is_block_gt_warn_gt_allow() {
         assert!(Action::Block > Action::Warn);
-        assert!(Action::Warn  > Action::Allow);
+        assert!(Action::Warn > Action::Allow);
     }
 
     #[test]
@@ -1419,7 +1612,10 @@ mod tests {
 
         // 13桁の法人番号を含むテキスト
         let result = engine.evaluate(&ctx("請求書 1234567890123", "", &to), Direction::Outbound);
-        assert!(!result.is_clean(), "法人番号を含むテキストは Warn になるべき");
+        assert!(
+            !result.is_clean(),
+            "法人番号を含むテキストは Warn になるべき"
+        );
     }
 
     #[test]
@@ -1444,8 +1640,12 @@ mod tests {
     fn regex_compiled_at_engine_build_time() {
         // コンパイルエラーのパターン → エンジン構築後に警告ログ出力のみ、panicしない
         let bad_rule = Rule {
-            id: "bad".into(), name: "bad regex".into(), enabled: true,
-            direction: Direction::Both, priority: 1, action: Action::Block,
+            id: "bad".into(),
+            name: "bad regex".into(),
+            enabled: true,
+            direction: Direction::Both,
+            priority: 1,
+            action: Action::Block,
             condition: Condition::matches(Predicate::Regex {
                 pattern: r"[invalid regex(".to_string(),
             }),
@@ -1455,7 +1655,10 @@ mod tests {
         let to = vec!["x@x.com".into()];
         // Invalid regex → no match (fails safe)
         let result = engine.evaluate(&ctx("anything", "", &to), Direction::Both);
-        assert!(result.is_clean(), "不正な正規表現は安全側に倒してマッチなし");
+        assert!(
+            result.is_clean(),
+            "不正な正規表現は安全側に倒してマッチなし"
+        );
     }
 
     #[test]
@@ -1464,23 +1667,35 @@ mod tests {
         let to = vec!["vendor@external.com".into()];
         let body = "C O N F I D E N T I A L: Q3 revenue data";
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
-        assert!(result.findings.iter().any(|f| f.action == Action::Warn),
-            "スペース区切り難読化 CONFIDENTIAL を検出すべき");
+        assert!(
+            result.findings.iter().any(|f| f.action == Action::Warn),
+            "スペース区切り難読化 CONFIDENTIAL を検出すべき"
+        );
     }
 
     // ── 機密コンテンツ + 宛先ミス の複合検出 (内部脅威/誤送信対策) ──────────
 
     fn ctx_with_recipient_history<'a>(
-        body: &'a str, from: &'a str, to: &'a [String],
-        known_recipient_domains: &'a [String], our_domain: &'a str,
+        body: &'a str,
+        from: &'a str,
+        to: &'a [String],
+        known_recipient_domains: &'a [String],
+        our_domain: &'a str,
     ) -> EvalCtx<'a> {
         use std::sync::OnceLock;
-        static EMPTY_EDM: OnceLock<std::collections::HashMap<String, crate::edm::EdmFingerprints>> = OnceLock::new();
+        static EMPTY_EDM: OnceLock<std::collections::HashMap<String, crate::edm::EdmFingerprints>> =
+            OnceLock::new();
         let edm_sets = EMPTY_EDM.get_or_init(std::collections::HashMap::new);
         EvalCtx {
-            body, subject: "", size_bytes: 100,
-            to, from, attachment_mimes: &[],
-            edm_sets, known_recipient_domains, our_domain,
+            body,
+            subject: "",
+            size_bytes: 100,
+            to,
+            from,
+            attachment_mimes: &[],
+            edm_sets,
+            known_recipient_domains,
+            our_domain,
         }
     }
 
@@ -1494,9 +1709,15 @@ mod tests {
             &ctx_with_recipient_history(body, "me@us.com", &to, &known, "us.com"),
             Direction::Outbound,
         );
-        assert_eq!(result.verdict, Action::Block,
-            "機密コンテンツ + タイポドメイン宛は Block にエスカレートされるべき: {result:?}");
-        assert!(result.findings.iter().any(|f| f.rule_id == "misdirected-recipient"));
+        assert_eq!(
+            result.verdict,
+            Action::Block,
+            "機密コンテンツ + タイポドメイン宛は Block にエスカレートされるべき: {result:?}"
+        );
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "misdirected-recipient"));
     }
 
     #[test]
@@ -1509,8 +1730,11 @@ mod tests {
             &ctx_with_recipient_history(body, "me@us.com", &to, &known, "us.com"),
             Direction::Outbound,
         );
-        assert_ne!(result.verdict, Action::Block,
-            "既知の実績あるドメイン宛は宛先ミスとしてエスカレートされるべきではない: {result:?}");
+        assert_ne!(
+            result.verdict,
+            Action::Block,
+            "既知の実績あるドメイン宛は宛先ミスとしてエスカレートされるべきではない: {result:?}"
+        );
     }
 
     #[test]
@@ -1534,8 +1758,11 @@ mod tests {
         let to = vec!["alice@crop.com".to_string()];
         let body = "CONFIDENTIAL: Q3 財務データを送付します";
         let result = engine().evaluate(&ctx(body, "me@us.com", &to), Direction::Outbound);
-        assert_ne!(result.verdict, Action::Block,
-            "our_domain が空の場合は宛先ミス検出でエスカレートされるべきではない");
+        assert_ne!(
+            result.verdict,
+            Action::Block,
+            "our_domain が空の場合は宛先ミス検出でエスカレートされるべきではない"
+        );
     }
 
     // ── 全角数字による DLP 回避テスト ──────────────────────────────────────
@@ -1544,8 +1771,10 @@ mod tests {
     fn my_number_fullwidth_digits_still_detected() {
         // 内部犯が全角数字でマイナンバーを書いて DLP 回避を試みる
         // １２３４５６７８９０１８ = 123456789018 (有効なチェックディジット)
-        assert!(detect_jp_my_number("マイナンバーは １２３４５６７８９０１８ です"),
-            "全角数字のマイナンバーが検出されない (DLP 回避)");
+        assert!(
+            detect_jp_my_number("マイナンバーは １２３４５６７８９０１８ です"),
+            "全角数字のマイナンバーが検出されない (DLP 回避)"
+        );
     }
 
     #[test]
@@ -1553,15 +1782,24 @@ mod tests {
         let to = vec!["attacker@gmail.com".into()];
         let body = "番号: １２３４５６７８９０１８";
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
-        assert_eq!(result.verdict, Action::Block,
-            "全角マイナンバーの外部送信はブロックされるべき");
+        assert_eq!(
+            result.verdict,
+            Action::Block,
+            "全角マイナンバーの外部送信はブロックされるべき"
+        );
     }
 
     #[test]
     fn normalize_fullwidth_digits_roundtrip() {
-        assert_eq!(normalize_fullwidth_digits("０１２３４５６７８９").as_ref(), "0123456789");
+        assert_eq!(
+            normalize_fullwidth_digits("０１２３４５６７８９").as_ref(),
+            "0123456789"
+        );
         // 全角を含まない場合は借用のまま (アロケーションなし)
-        assert!(matches!(normalize_fullwidth_digits("hello"), std::borrow::Cow::Borrowed(_)));
+        assert!(matches!(
+            normalize_fullwidth_digits("hello"),
+            std::borrow::Cow::Borrowed(_)
+        ));
         // 混在
         assert_eq!(normalize_fullwidth_digits("ab１２cd").as_ref(), "ab12cd");
     }
@@ -1570,8 +1808,10 @@ mod tests {
     fn credit_card_fullwidth_digits_detected() {
         // Visa テスト番号 4532015112830366 を全角で
         let fullwidth = "４５３２０１５１１２８３０３６６";
-        assert!(detect_credit_card(fullwidth),
-            "全角クレジットカード番号が検出されない (DLP 回避)");
+        assert!(
+            detect_credit_card(fullwidth),
+            "全角クレジットカード番号が検出されない (DLP 回避)"
+        );
     }
 
     #[test]
@@ -1579,45 +1819,65 @@ mod tests {
         // 回帰: 区切り付き PAN は正規表現に一致するのに、旧 extract_digit_runs が
         // 「連続16桁ラン」しか拾わず Luhn 検証に到達せず検出漏れしていた。
         // 4111 1111 1111 1111 は Luhn 有効な Visa テスト番号。
-        assert!(detect_credit_card("カード番号は 4111-1111-1111-1111 です"),
-            "ハイフン区切りの PAN が検出されない");
-        assert!(detect_credit_card("card 4111 1111 1111 1111"),
-            "スペース区切りの PAN が検出されない");
+        assert!(
+            detect_credit_card("カード番号は 4111-1111-1111-1111 です"),
+            "ハイフン区切りの PAN が検出されない"
+        );
+        assert!(
+            detect_credit_card("card 4111 1111 1111 1111"),
+            "スペース区切りの PAN が検出されない"
+        );
         // 連続表記も引き続き検出される
         assert!(detect_credit_card("4111111111111111"));
         // Luhn 不正な番号は (区切りの有無に関わらず) 検出されない
-        assert!(!detect_credit_card("4111-1111-1111-1112"),
-            "Luhn 不正な番号を誤検出している");
+        assert!(
+            !detect_credit_card("4111-1111-1111-1112"),
+            "Luhn 不正な番号を誤検出している"
+        );
     }
 
     #[test]
     fn credit_card_amex_jcb_discover_detected() {
         // Visa/Mastercard 以外の主要ブランドも検出されるべき (DLP カバレッジの穴)。
         // いずれも各ブランドの標準テスト番号 (Luhn 有効)。
-        assert!(detect_credit_card("Amex: 378282246310005"),
-            "American Express (15桁) が検出されない");
-        assert!(detect_credit_card("Amex 3782 822463 10005"),
-            "区切り付き Amex が検出されない");
-        assert!(detect_credit_card("JCB 3530111333300000"),
-            "JCB が検出されない");
-        assert!(detect_credit_card("Discover 6011111111111117"),
-            "Discover が検出されない");
+        assert!(
+            detect_credit_card("Amex: 378282246310005"),
+            "American Express (15桁) が検出されない"
+        );
+        assert!(
+            detect_credit_card("Amex 3782 822463 10005"),
+            "区切り付き Amex が検出されない"
+        );
+        assert!(
+            detect_credit_card("JCB 3530111333300000"),
+            "JCB が検出されない"
+        );
+        assert!(
+            detect_credit_card("Discover 6011111111111117"),
+            "Discover が検出されない"
+        );
         // Luhn 不正な 15桁 Amex 風番号は検出されない
-        assert!(!detect_credit_card("378282246310004"),
-            "Luhn 不正な Amex 風番号を誤検出している");
+        assert!(
+            !detect_credit_card("378282246310004"),
+            "Luhn 不正な Amex 風番号を誤検出している"
+        );
     }
 
     #[test]
     fn iban_with_spaces_detected() {
         // 回帰: 4文字ごとスペース区切りの標準印字形式は、旧正規表現が
         // スペースを跨げず検出漏れしていた。
-        assert!(detect_iban("送金先 IBAN: GB82 WEST 1234 5698 7654 32 まで"),
-            "スペース区切りの IBAN が検出されない");
+        assert!(
+            detect_iban("送金先 IBAN: GB82 WEST 1234 5698 7654 32 まで"),
+            "スペース区切りの IBAN が検出されない"
+        );
         // 連続表記も引き続き検出される
         assert!(detect_iban("IBAN GB82WEST12345698765432"));
         // チェックディジット不正 (区切り付き) は検出されない
-        assert!(!detect_iban("GB82 WEST 1234 5698 7654 33"),
-            "チェックディジット不正な IBAN を誤検出している");
+        assert!(
+            !detect_iban("GB82 WEST 1234 5698 7654 33"),
+            "チェックディジット不正な IBAN を誤検出している"
+        );
     }
 
     // ── 受信者ドメイン抽出のバイパステスト ─────────────────────────────────
@@ -1629,8 +1889,11 @@ mod tests {
         let to = vec!["victim@corp.com@gmail.com".to_string()];
         let c = ctx("body", "me@corp.com", &to);
         let domains = c.recipient_domains();
-        assert_eq!(domains, vec!["gmail.com".to_string()],
-            "最後の @ の後のドメインを抽出すべき: {domains:?}");
+        assert_eq!(
+            domains,
+            vec!["gmail.com".to_string()],
+            "最後の @ の後のドメインを抽出すべき: {domains:?}"
+        );
     }
 
     #[test]
@@ -1639,8 +1902,10 @@ mod tests {
         let to = vec!["exfil@internal.corp@gmail.com".to_string()];
         let body = "fn main() { use std::io; import os; class Foo { def bar(self) {} } pub mod test { function(x) {} const char* p = NULL; SELECT * FROM users WHERE id = 1; }";
         let result = engine().evaluate(&ctx(body, "me@corp.com", &to), Direction::Outbound);
-        assert!(result.findings.iter().any(|f| f.action == Action::Block),
-            "細工 gmail アドレスでもソースコードはブロックされるべき");
+        assert!(
+            result.findings.iter().any(|f| f.action == Action::Block),
+            "細工 gmail アドレスでもソースコードはブロックされるべき"
+        );
     }
 
     #[test]
@@ -1667,7 +1932,11 @@ mod tests {
         let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
         let to = vec!["x@x.com".into()];
         let result = engine.evaluate(&ctx("通常メール本文", "", &to), Direction::Outbound);
-        assert!(result.is_clean(), "空の AND 条件はマッチしてはならない: {:?}", result.findings);
+        assert!(
+            result.is_clean(),
+            "空の AND 条件はマッチしてはならない: {:?}",
+            result.findings
+        );
     }
 
     #[test]
@@ -1711,7 +1980,11 @@ mod tests {
             }))
             .build();
         let engine = DlpEngine::new(vec![rule], PatternLibrary::default());
-        let long_text = format!("{}secret information here{}", "x".repeat(50), "y".repeat(50));
+        let long_text = format!(
+            "{}secret information here{}",
+            "x".repeat(50),
+            "y".repeat(50)
+        );
         let to = vec!["x@x.com".into()];
         let result = engine.evaluate(&ctx(&long_text, "", &to), Direction::Outbound);
         assert!(!result.is_clean());
@@ -1728,15 +2001,15 @@ mod tests {
         let to = vec!["alice@example.com".to_string()];
         let edm_sets = HashMap::new();
         let eval_ctx = EvalCtx {
-            body:             &huge_body,
-            subject:          "test",
-            size_bytes:       huge_body.len() as u64,
-            to:               &to,
-            from:             "sender@example.com",
+            body: &huge_body,
+            subject: "test",
+            size_bytes: huge_body.len() as u64,
+            to: &to,
+            from: "sender@example.com",
             attachment_mimes: &[],
-            edm_sets:         &edm_sets,
-        known_recipient_domains: &[],
-        our_domain: "",
+            edm_sets: &edm_sets,
+            known_recipient_domains: &[],
+            our_domain: "",
         };
         // クラッシュしないこと
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
@@ -1754,15 +2027,15 @@ mod tests {
         let to = vec!["external@gmail.com".to_string()];
         let edm_sets = HashMap::new();
         let eval_ctx = EvalCtx {
-            body:             &body,
-            subject:          "test",
-            size_bytes:       body.len() as u64,
-            to:               &to,
-            from:             "sender@example.com",
+            body: &body,
+            subject: "test",
+            size_bytes: body.len() as u64,
+            to: &to,
+            from: "sender@example.com",
             attachment_mimes: &[],
-            edm_sets:         &edm_sets,
-        known_recipient_domains: &[],
-        our_domain: "",
+            edm_sets: &edm_sets,
+            known_recipient_domains: &[],
+            our_domain: "",
         };
         // 先頭 1MB 以内にマイナンバーがあるので検出されるはず
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
@@ -1810,7 +2083,7 @@ mod tests {
 
     #[test]
     fn percent_encoded_pii_detected_by_dlp() {
-        use crate::{EvalCtx, Direction, DlpEngine};
+        use crate::{Direction, DlpEngine, EvalCtx};
         use std::collections::HashMap;
 
         let edm_sets = HashMap::new();
@@ -1820,21 +2093,22 @@ mod tests {
         // "123456789018" を一部エンコード: "123456789018" → 通常は検出済みだが
         // ここでは keyword "confidential" をエンコードした場合をテスト
         let eval_ctx = EvalCtx {
-            body:    "sending %63onfidential document to external",
+            body: "sending %63onfidential document to external",
             subject: "test",
             size_bytes: 50,
-            to:      &["external@gmail.com".to_string()],
-            from:    "alice@corp.com",
+            to: &["external@gmail.com".to_string()],
+            from: "alice@corp.com",
             attachment_mimes: &[],
             edm_sets: &edm_sets,
-        known_recipient_domains: &[],
-        our_domain: "",
+            known_recipient_domains: &[],
+            our_domain: "",
         };
         let result = engine.evaluate(&eval_ctx, Direction::Outbound);
         // decoded_text で "confidential" が復元され検出されるはず
         assert!(
             !result.findings.is_empty(),
-            "パーセントエンコードされた機密キーワードは検出されるべき: {:?}", result.findings
+            "パーセントエンコードされた機密キーワードは検出されるべき: {:?}",
+            result.findings
         );
     }
 
@@ -1886,7 +2160,10 @@ mod tests {
     fn detect_iban_random_uppercase_string_not_flagged() {
         // ランダムな大文字英数字列 (チェックディジット不一致) は検出されない
         let text = "製品コード: US00ABCDEFGH について";
-        assert!(!detect_iban(text), "無効なチェックディジットの文字列は検出されるべきではない");
+        assert!(
+            !detect_iban(text),
+            "無効なチェックディジットの文字列は検出されるべきではない"
+        );
     }
 
     // ── 法人番号チェックディジット検証 ────────────────────────────────────
@@ -1894,18 +2171,25 @@ mod tests {
     #[test]
     fn valid_corporate_number_checksum_passes() {
         // 基礎番号 123456789012 に対する正しいチェックディジットは 7
-        assert!(corporate_number_check_digit_valid(&[7, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2]));
+        assert!(corporate_number_check_digit_valid(&[
+            7, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2
+        ]));
     }
 
     #[test]
     fn invalid_corporate_number_checksum_rejected() {
-        assert!(!corporate_number_check_digit_valid(&[1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2]));
+        assert!(!corporate_number_check_digit_valid(&[
+            1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2
+        ]));
     }
 
     #[test]
     fn detect_jp_corporate_number_with_valid_checksum() {
         let text = "法人番号: 7123456789012 です";
-        assert!(detect_jp_corporate_number(text), "有効な法人番号は検出されるべき");
+        assert!(
+            detect_jp_corporate_number(text),
+            "有効な法人番号は検出されるべき"
+        );
     }
 
     // ── SWIFT BIC 国コード検証 ────────────────────────────────────────────
@@ -1949,7 +2233,10 @@ mod tests {
     fn ip_address_detected_with_fullwidth_digits() {
         // ピリオドは半角のまま、数字のみ全角にする
         let text = "サーバー IP: １９２.１６８.１.１ です";
-        assert!(detect_ip_address(text), "全角数字の IP アドレスも検出されるべき");
+        assert!(
+            detect_ip_address(text),
+            "全角数字の IP アドレスも検出されるべき"
+        );
     }
 
     #[test]
@@ -1967,7 +2254,9 @@ mod tests {
         // チェックディジット不一致のランダムな13桁は検出されない
         // (1111111111112 は基礎番号 111111111111 2 のチェックディジットが 8 であるべきなので不一致)
         let text = "注文番号: 1111111111112 です";
-        assert!(!detect_jp_corporate_number(text),
-            "チェックディジット不一致の13桁は検出されるべきではない");
+        assert!(
+            !detect_jp_corporate_number(text),
+            "チェックディジット不一致の13桁は検出されるべきではない"
+        );
     }
 }

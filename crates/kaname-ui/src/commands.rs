@@ -11,38 +11,38 @@ use tracing::{error, info, instrument, warn};
 
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
-    pub ok:      bool,
+    pub ok: bool,
     pub version: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
 pub struct EmailRow {
-    pub id:          String,
-    pub from_name:   Option<String>,
-    pub from_addr:   String,
-    pub subject:     Option<String>,
-    pub preview:     Option<String>,
+    pub id: String,
+    pub from_name: Option<String>,
+    pub from_addr: String,
+    pub subject: Option<String>,
+    pub preview: Option<String>,
     pub received_at: Option<String>,
-    pub is_read:     bool,
-    pub is_starred:  bool,
+    pub is_read: bool,
+    pub is_starred: bool,
     pub bec_verdict: String,
-    pub is_mls:      bool,
-    pub triage:      String,
+    pub is_mls: bool,
+    pub triage: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct MailSummary {
-    pub unread:     u32,
+    pub unread: u32,
     pub bec_alerts: u32,
-    pub total:      u32,
+    pub total: u32,
 }
 
 #[derive(Debug, Serialize)]
 pub struct PhishingAnalysis {
     pub likely_ai_generated: bool,
-    pub score:               f32,
-    pub phishing_intent:     bool,
-    pub explanation:         String,
+    pub score: f32,
+    pub phishing_intent: bool,
+    pub explanation: String,
 }
 
 // ── コマンド実装 ──────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ pub struct PhishingAnalysis {
 pub async fn health_check() -> Result<HealthResponse, String> {
     info!("health_check");
     Ok(HealthResponse {
-        ok:      true,
+        ok: true,
         version: env!("CARGO_PKG_VERSION").into(),
     })
 }
@@ -69,7 +69,11 @@ pub async fn health_check() -> Result<HealthResponse, String> {
 /// 実際のメール解析は「ファイル解析」タブ (`mail_import_eml` /
 /// `mail_scan_folder`) を使う。
 pub async fn mail_get_summary() -> Result<MailSummary, String> {
-    Ok(MailSummary { unread: 0, bec_alerts: 0, total: 0 })
+    Ok(MailSummary {
+        unread: 0,
+        bec_alerts: 0,
+        total: 0,
+    })
 }
 
 /// サニタイズ済み本文 (iframe 描画用)。
@@ -130,11 +134,11 @@ pub async fn mail_open(email_id: String) -> Result<ImportedEmail, String> {
 /// 受信トレイ UI 用のメールボックス行。
 #[derive(Debug, serde::Serialize)]
 pub struct MailboxRow {
-    pub id:            String,
-    pub name:          String,
-    pub role:          Option<String>,
+    pub id: String,
+    pub name: String,
+    pub role: Option<String>,
     pub unread_emails: u32,
-    pub total_emails:  u32,
+    pub total_emails: u32,
 }
 
 /// 接続中のサーバからメールボックス一覧を取得する。
@@ -147,11 +151,11 @@ pub async fn mail_get_mailboxes() -> Result<Vec<MailboxRow>, String> {
     Ok(list
         .into_iter()
         .map(|m| MailboxRow {
-            id:            m.id,
-            name:          m.name,
-            role:          m.role,
+            id: m.id,
+            name: m.name,
+            role: m.role,
             unread_emails: m.unread_emails,
-            total_emails:  m.total_emails,
+            total_emails: m.total_emails,
         })
         .collect())
 }
@@ -256,10 +260,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // **実際の Authentication-Results をそのまま使う**。
     // モックでは None を渡していたが、ここでは実データが得られる。
     let auth = kaname_bec::AuthResults {
-        spf:   map_auth(env.auth_results.spf),
-        dkim:  map_auth(env.auth_results.dkim),
+        spf: map_auth(env.auth_results.spf),
+        dkim: map_auth(env.auth_results.dkim),
         dmarc: map_auth(env.auth_results.dmarc),
-        arc:   None,
+        arc: None,
     };
     let auth_desc = format!(
         "SPF={:?} DKIM={:?} DMARC={:?}",
@@ -276,8 +280,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // 送信者の文体を評価する (アカウント乗っ取り検出)。
     // Date ヘッダから送信時刻 (UTC 時) を取り出す。無ければ評価しない。
-    let send_hour = env.date.and_then(|ts| u8::try_from((ts.rem_euclid(86_400)) / 3_600).ok());
-    let from_addr_only = env.from.first().map(|a| a.addr.as_string()).unwrap_or_default();
+    let send_hour = env
+        .date
+        .and_then(|ts| u8::try_from((ts.rem_euclid(86_400)) / 3_600).ok());
+    let from_addr_only = env
+        .from
+        .first()
+        .map(|a| a.addr.as_string())
+        .unwrap_or_default();
     // 金銭要求の有無は BEC の判定材料と揃える (文体逸脱との複合で警告を上げる)。
     let has_financial = {
         // D45: 複数単語キーワード ("wire transfer") はゼロ幅文字を単語間に
@@ -285,25 +295,32 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         // すり抜ける。スペース化版でも照合して捕捉する。
         let n = kaname_memory_guard::normalize_for_matching(&body_text);
         let n_spaced = kaname_memory_guard::normalize_for_matching_spaced(&body_text);
-        ["振込", "送金", "支払", "invoice", "wire transfer", "payment"]
-            .iter()
-            .any(|k| n.contains(k) || n_spaced.contains(k))
+        [
+            "振込",
+            "送金",
+            "支払",
+            "invoice",
+            "wire transfer",
+            "payment",
+        ]
+        .iter()
+        .any(|k| n.contains(k) || n_spaced.contains(k))
     };
     let style_risks =
         evaluate_sender_style(&from_addr_only, &body_text, send_hour, has_financial).await;
 
     let contacts: Vec<String> = Vec::new();
     let req = kaname_bec::AssessmentRequest {
-        from_header:  &from,
-        return_path:  None,
-        subject:      &subject,
-        body_text:    &body_text,
+        from_header: &from,
+        return_path: None,
+        subject: &subject,
+        body_text: &body_text,
         auth,
         sender_history: None,
-        our_domain:   &our,
+        our_domain: &our,
         known_contacts: &contacts,
         extracted_urls: &urls,
-        reply_to:     None,
+        reply_to: None,
         thread_context: None,
         past_thread_bodies: &[],
         dkim_signature_header: None,
@@ -325,10 +342,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     let deepfake_advisory = DeepfakeAdvisory::new().evaluate(&deepfake_pairs, &body_text);
 
     let bec_verdict = match assessment.verdict {
-        kaname_bec::Verdict::Safe       => "SAFE",
-        kaname_bec::Verdict::Advisory   => "ADVISORY",
+        kaname_bec::Verdict::Safe => "SAFE",
+        kaname_bec::Verdict::Advisory => "ADVISORY",
         kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
-        kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+        kaname_bec::Verdict::Dangerous => "DANGEROUS",
     }
     .to_string();
 
@@ -356,26 +373,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         bec_signals: assessment.signals.iter().map(|s| s.label.clone()).collect(),
         attachments: attachment_scans,
         body: BodyDto {
-            srcdoc:  srcdoc.content,
+            srcdoc: srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),
-            csp:     srcdoc.csp.to_string(),
-            is_mls:  false,
+            csp: srcdoc.csp.to_string(),
+            is_mls: false,
             render_risks,
         },
         dlp_findings,
         oobv_level: match oobv_level {
-            kaname_oobv::RecommendationLevel::None     => "none",
+            kaname_oobv::RecommendationLevel::None => "none",
             kaname_oobv::RecommendationLevel::Optional => "optional",
-            kaname_oobv::RecommendationLevel::Strong   => "strong",
-        }.to_string(),
+            kaname_oobv::RecommendationLevel::Strong => "strong",
+        }
+        .to_string(),
         oobv_message: match oobv_level {
-            kaname_oobv::RecommendationLevel::None =>
-                String::new(),
-            kaname_oobv::RecommendationLevel::Optional =>
-                "念のため、電話や別の連絡手段で送信者に確認することをお勧めします。".to_string(),
-            kaname_oobv::RecommendationLevel::Strong =>
+            kaname_oobv::RecommendationLevel::None => String::new(),
+            kaname_oobv::RecommendationLevel::Optional => {
+                "念のため、電話や別の連絡手段で送信者に確認することをお勧めします。".to_string()
+            }
+            kaname_oobv::RecommendationLevel::Strong => {
                 "送金・認証情報・重要な意思決定に関わる内容です。返信の前に、\
-                 電話などメール以外の手段で送信者に必ず確認してください。".to_string(),
+                 電話などメール以外の手段で送信者に必ず確認してください。"
+                    .to_string()
+            }
         },
         deepfake_advisory,
     })
@@ -479,8 +499,8 @@ pub struct CampaignSummary {
 pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> {
     info!(path=%path, "mail_scan_folder");
 
-    let dir = std::fs::read_dir(&path)
-        .map_err(|e| format!("フォルダを開けません ({path}): {e}"))?;
+    let dir =
+        std::fs::read_dir(&path).map_err(|e| format!("フォルダを開けません ({path}): {e}"))?;
 
     let mut entries: Vec<FolderScanEntry> = Vec::new();
     let mut failed: Vec<(String, String)> = Vec::new();
@@ -493,41 +513,60 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let Ok(item) = item else { continue };
         let p = item.path();
         // .eml のみを対象にする (拡張子の大小は問わない)。
-        let is_eml = p.extension()
+        let is_eml = p
+            .extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("eml"));
         if !is_eml {
             continue;
         }
-        let file_name = p.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string();
+        let file_name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("?")
+            .to_string();
 
         let bytes = match std::fs::read(&p) {
             Ok(b) => b,
-            Err(e) => { failed.push((file_name, format!("読み込み失敗: {e}"))); continue; }
+            Err(e) => {
+                failed.push((file_name, format!("読み込み失敗: {e}")));
+                continue;
+            }
         };
         let env = match kaname_render::parse(&bytes) {
             Ok(e) => e,
-            Err(e) => { failed.push((file_name, format!("解析失敗: {e}"))); continue; }
+            Err(e) => {
+                failed.push((file_name, format!("解析失敗: {e}")));
+                continue;
+            }
         };
 
-        let from = env.from.first()
+        let from = env
+            .from
+            .first()
             .map(|a| a.addr.as_string())
             .unwrap_or_default();
-        let from_domain = env.from.first()
+        let from_domain = env
+            .from
+            .first()
             .map(|a| a.addr.domain.clone())
             .unwrap_or_default();
         let subject = env.subject.clone().unwrap_or_default();
         let body_text = env.text_body.clone().unwrap_or_default();
 
         let auth = kaname_bec::AuthResults {
-            spf:   map_auth(env.auth_results.spf),
-            dkim:  map_auth(env.auth_results.dkim),
+            spf: map_auth(env.auth_results.spf),
+            dkim: map_auth(env.auth_results.dkim),
             dmarc: map_auth(env.auth_results.dmarc),
-            arc:   None,
+            arc: None,
         };
         // 認証のいずれかが失敗していれば radar に伝える。
         let auth_partial_fail = matches!(
-            (env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc),
+            (
+                env.auth_results.spf,
+                env.auth_results.dkim,
+                env.auth_results.dmarc
+            ),
             (kaname_render::AuthResult::Fail, _, _)
                 | (_, kaname_render::AuthResult::Fail, _)
                 | (_, _, kaname_render::AuthResult::Fail)
@@ -539,16 +578,16 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
 
         let contacts: Vec<String> = Vec::new();
         let req = kaname_bec::AssessmentRequest {
-            from_header:  &from,
-            return_path:  None,
-            subject:      &subject,
-            body_text:    &body_text,
+            from_header: &from,
+            return_path: None,
+            subject: &subject,
+            body_text: &body_text,
             auth,
             sender_history: None,
-            our_domain:   &our,
+            our_domain: &our,
             known_contacts: &contacts,
             extracted_urls: &urls,
-            reply_to:     None,
+            reply_to: None,
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
@@ -557,10 +596,10 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let (verdict, score) = match kaname_bec::BecDetector::deterministic_only().assess(req) {
             Ok(a) => {
                 let v = match a.verdict {
-                    kaname_bec::Verdict::Safe       => "SAFE",
-                    kaname_bec::Verdict::Advisory   => "ADVISORY",
+                    kaname_bec::Verdict::Safe => "SAFE",
+                    kaname_bec::Verdict::Advisory => "ADVISORY",
                     kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
-                    kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+                    kaname_bec::Verdict::Dangerous => "DANGEROUS",
                 };
                 (v.to_string(), a.score)
             }
@@ -594,12 +633,22 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             .count();
 
         entries.push(FolderScanEntry {
-            file: file_name, from, subject, verdict, score, dlp_count, attachment_risk_count,
+            file: file_name,
+            from,
+            subject,
+            verdict,
+            score,
+            dlp_count,
+            attachment_risk_count,
         });
     }
 
     // 危険度の高い順に並べる (トリアージのため)。
-    entries.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    entries.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let campaigns = radar
         .alertable_groups()
@@ -639,7 +688,9 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
 fn extract_urls_from_text(text: &str) -> Vec<String> {
     const MAX_URLS: usize = 20;
     let mut out: Vec<String> = Vec::new();
-    for token in text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'') {
+    for token in
+        text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'')
+    {
         let lower = token.to_ascii_lowercase();
         if !(lower.starts_with("http://") || lower.starts_with("https://")) {
             continue;
@@ -670,7 +721,11 @@ fn url_host(url: &str) -> Option<String> {
     // userinfo 混乱攻撃 (https://trusted.com@evil.com/) 対策: 最後の '@' 以降を採る
     let host = host_port.rsplit('@').next()?;
     let host = host.split(':').next()?.trim().to_ascii_lowercase();
-    if host.is_empty() { None } else { Some(host) }
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
 }
 
 /// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
@@ -703,7 +758,10 @@ fn analyze_body_risks(body: &str) -> Vec<String> {
 
     // 1. HTML スマグリング (blob:/atob()/mshta 等による添付の密輸)
     let smuggling = kaname_render::html_smuggling::HtmlSmugglingDetector.analyze(body);
-    if !matches!(smuggling.risk, kaname_render::html_smuggling::SmugglingRisk::Clean) {
+    if !matches!(
+        smuggling.risk,
+        kaname_render::html_smuggling::SmugglingRisk::Clean
+    ) {
         risks.push(format!("HTMLスマグリングの疑い: {}", smuggling.message));
     }
 
@@ -744,7 +802,9 @@ fn evaluate_saas_links(urls: &[String], sender: &str) -> Vec<String> {
     let history = kaname_saas_guard::SaasHistory::new();
     let mut out = Vec::new();
     for url in urls {
-        let Some(link) = inspector.evaluate(url, sender, &history) else { continue };
+        let Some(link) = inspector.evaluate(url, sender, &history) else {
+            continue;
+        };
         // Safe/Caution は通常の SaaS 通知でも出るため報告しない。
         // Warn 以上のみ利用者に伝える (警告疲れを避ける)。
         if matches!(
@@ -790,11 +850,11 @@ fn evaluate_link_risks(urls: &[String]) -> Vec<String> {
 
 fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
     match r {
-        kaname_render::AuthResult::Pass     => kaname_bec::AuthVerdict::Pass,
-        kaname_render::AuthResult::Fail     => kaname_bec::AuthVerdict::Fail,
-        kaname_render::AuthResult::Neutral  => kaname_bec::AuthVerdict::Neutral,
+        kaname_render::AuthResult::Pass => kaname_bec::AuthVerdict::Pass,
+        kaname_render::AuthResult::Fail => kaname_bec::AuthVerdict::Fail,
+        kaname_render::AuthResult::Neutral => kaname_bec::AuthVerdict::Neutral,
         kaname_render::AuthResult::SoftFail => kaname_bec::AuthVerdict::Neutral,
-        kaname_render::AuthResult::None     => kaname_bec::AuthVerdict::None,
+        kaname_render::AuthResult::None => kaname_bec::AuthVerdict::None,
     }
 }
 
@@ -825,8 +885,6 @@ pub async fn log_error(message: String) -> Result<(), String> {
 }
 
 // ── モックデータ ──────────────────────────────────────────────────────────────
-
-
 
 // ── テスト ────────────────────────────────────────────────────────────────────
 
@@ -891,9 +949,15 @@ mod tests {
     async fn analyze_raw_email_safe_message_is_quiet() -> Result<(), String> {
         let r = analyze_raw_email(SAFE_EML).await?;
         assert_eq!(r.bec_verdict, "SAFE");
-        assert_eq!(r.oobv_level, "none", "金融/緊急性の無い本文で OOBV を推奨してはいけない");
+        assert_eq!(
+            r.oobv_level, "none",
+            "金融/緊急性の無い本文で OOBV を推奨してはいけない"
+        );
         assert!(r.oobv_message.is_empty());
-        assert_eq!(r.deepfake_advisory.severity, kaname_render::deepfake_advisory::AdvisorySeverity::None);
+        assert_eq!(
+            r.deepfake_advisory.severity,
+            kaname_render::deepfake_advisory::AdvisorySeverity::None
+        );
         assert!(r.attachments.is_empty());
         assert!(r.dlp_findings.is_empty());
         Ok(())
@@ -902,15 +966,25 @@ mod tests {
     #[tokio::test]
     async fn analyze_raw_email_bec_wire_transfer_triggers_oobv() -> Result<(), String> {
         let r = analyze_raw_email(BEC_WIRE_EML).await?;
-        assert_ne!(r.bec_verdict, "SAFE", "SPF/DKIM/DMARC 全滅 + 金融文脈は SAFE であってはならない");
+        assert_ne!(
+            r.bec_verdict, "SAFE",
+            "SPF/DKIM/DMARC 全滅 + 金融文脈は SAFE であってはならない"
+        );
         assert!(!r.bec_signals.is_empty());
-        assert_eq!(r.oobv_level, "strong", "送金要求 + 緊急性は OOBV を強く推奨すべき");
-        assert!(r.oobv_message.contains("電話"), "推奨理由が人間可読でなければならない");
+        assert_eq!(
+            r.oobv_level, "strong",
+            "送金要求 + 緊急性は OOBV を強く推奨すべき"
+        );
+        assert!(
+            r.oobv_message.contains("電話"),
+            "推奨理由が人間可読でなければならない"
+        );
         Ok(())
     }
 
     #[tokio::test]
-    async fn analyze_raw_email_deepfake_high_severity_for_financial_media_attachment() -> Result<(), String> {
+    async fn analyze_raw_email_deepfake_high_severity_for_financial_media_attachment(
+    ) -> Result<(), String> {
         // 音声添付 + 金融/緊急性のある本文 → Deepfake 警告は High になるべき。
         let raw: &[u8] = b"From: cfo@example.com\r\n\
             To: you@example.com\r\n\
@@ -970,13 +1044,13 @@ mod tests {
 // 新機能 v0.2 - 2026 年最新脅威対応コマンド群
 // ============================================================================
 
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use kaname_oobv::{
-    VerificationCeremony, CeremonyState, OobvRecommender,
-    RecommendationLevel, AuditRecord, CeremonyError,
+    AuditRecord, CeremonyError, CeremonyState, OobvRecommender, RecommendationLevel,
+    VerificationCeremony,
 };
 use kaname_render::deepfake_advisory::DeepfakeAdvisory;
 // src-tauri 側のコマンドラッパーが戻り値型として名前を書けるよう再エクスポートする
@@ -989,7 +1063,7 @@ pub use kaname_store::StoredMessage;
 /// 新機能用の共有状態。
 pub struct V02AppState {
     pub ceremonies: Mutex<HashMap<String, VerificationCeremony>>,
-    pub audit_log:  Mutex<Vec<AuditRecord>>,
+    pub audit_log: Mutex<Vec<AuditRecord>>,
 }
 
 impl V02AppState {
@@ -997,7 +1071,7 @@ impl V02AppState {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             ceremonies: Mutex::new(HashMap::new()),
-            audit_log:  Mutex::new(Vec::new()),
+            audit_log: Mutex::new(Vec::new()),
         })
     }
 }
@@ -1007,15 +1081,15 @@ impl V02AppState {
 #[derive(Debug, Deserialize)]
 pub struct OobvStartRequest {
     pub email_id: String,
-    pub sender:   String,
+    pub sender: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct OobvStartResponse {
-    pub ceremony_id:      String,
-    pub phrase:           Vec<String>,
+    pub ceremony_id: String,
+    pub phrase: Vec<String>,
     pub challenge_number: u8,
-    pub expires_at_unix:  u64,
+    pub expires_at_unix: u64,
 }
 
 /// OOBV を開始する。
@@ -1025,25 +1099,33 @@ pub async fn oobv_start(
 ) -> Result<OobvStartResponse, V02CommandError> {
     let ceremony = VerificationCeremony::new(&req.email_id, &req.sender);
     let response = OobvStartResponse {
-        ceremony_id:      ceremony.id.clone(),
-        phrase:           ceremony.display_phrase().iter().map(|s| s.to_string()).collect(),
+        ceremony_id: ceremony.id.clone(),
+        phrase: ceremony
+            .display_phrase()
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         challenge_number: ceremony.challenge_number(),
-        expires_at_unix:  ceremony.expires_at_unix,
+        expires_at_unix: ceremony.expires_at_unix,
     };
-    state.ceremonies.lock().await.insert(ceremony.id.clone(), ceremony);
+    state
+        .ceremonies
+        .lock()
+        .await
+        .insert(ceremony.id.clone(), ceremony);
     Ok(response)
 }
 
 #[derive(Debug, Deserialize)]
 pub struct OobvVerifyRequest {
     pub ceremony_id: String,
-    pub user_word:   String,
+    pub user_word: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct OobvVerifyResponse {
-    pub state:             CeremonyState,
-    pub message_i18n_key:  String,
+    pub state: CeremonyState,
+    pub message_i18n_key: String,
 }
 
 /// OOBV を検証する。
@@ -1052,10 +1134,13 @@ pub async fn oobv_verify(
     req: OobvVerifyRequest,
 ) -> Result<OobvVerifyResponse, V02CommandError> {
     let mut ceremonies = state.ceremonies.lock().await;
-    let ceremony = ceremonies.get_mut(&req.ceremony_id)
+    let ceremony = ceremonies
+        .get_mut(&req.ceremony_id)
         .ok_or_else(|| V02CommandError::NotFound("セレモニーが見つかりません".into()))?;
 
-    let result = ceremony.verify(&req.user_word).map_err(V02CommandError::from)?;
+    let result = ceremony
+        .verify(&req.user_word)
+        .map_err(V02CommandError::from)?;
     let audit = ceremony.audit_record();
     drop(ceremonies);
 
@@ -1064,9 +1149,9 @@ pub async fn oobv_verify(
     let key = match result {
         CeremonyState::Verified => "oobv.result.verified",
         CeremonyState::Mismatch => "oobv.result.mismatch",
-        CeremonyState::Expired  => "oobv.result.expired",
-        CeremonyState::Pending  => "oobv.result.pending",
-        CeremonyState::Locked   => "oobv.result.locked",
+        CeremonyState::Expired => "oobv.result.expired",
+        CeremonyState::Pending => "oobv.result.pending",
+        CeremonyState::Locked => "oobv.result.locked",
     };
     Ok(OobvVerifyResponse {
         state: result,
@@ -1081,19 +1166,24 @@ pub struct OobvRecommendRequest {
 
 #[derive(Debug, Serialize)]
 pub struct OobvRecommendResponse {
-    pub level:            RecommendationLevel,
+    pub level: RecommendationLevel,
     pub message_i18n_key: String,
 }
 
 /// メール本文から OOBV 必要性を判定。
-pub async fn oobv_recommend(req: OobvRecommendRequest) -> Result<OobvRecommendResponse, V02CommandError> {
+pub async fn oobv_recommend(
+    req: OobvRecommendRequest,
+) -> Result<OobvRecommendResponse, V02CommandError> {
     let level = OobvRecommender::new().recommend(&req.email_body);
     let key = match level {
-        RecommendationLevel::None     => "oobv.recommend.none",
+        RecommendationLevel::None => "oobv.recommend.none",
         RecommendationLevel::Optional => "oobv.recommend.optional",
-        RecommendationLevel::Strong   => "oobv.recommend.strong",
+        RecommendationLevel::Strong => "oobv.recommend.strong",
     };
-    Ok(OobvRecommendResponse { level, message_i18n_key: key.into() })
+    Ok(OobvRecommendResponse {
+        level,
+        message_i18n_key: key.into(),
+    })
 }
 
 // ── エラー ──────────────────────────────────────────────────────────────────
@@ -1109,9 +1199,9 @@ pub enum V02CommandError {
 impl From<CeremonyError> for V02CommandError {
     fn from(e: CeremonyError) -> Self {
         match e {
-            CeremonyError::Expired              => Self::InvalidState("expired".into()),
-            CeremonyError::AlreadyCompleted(_)  => Self::InvalidState("already_completed".into()),
-            CeremonyError::TooManyAttempts      => Self::InvalidState("locked".into()),
+            CeremonyError::Expired => Self::InvalidState("expired".into()),
+            CeremonyError::AlreadyCompleted(_) => Self::InvalidState("already_completed".into()),
+            CeremonyError::TooManyAttempts => Self::InvalidState("locked".into()),
         }
     }
 }
@@ -1123,9 +1213,15 @@ mod v02_tests {
     #[tokio::test]
     async fn oobv_start_creates_ceremony() -> Result<(), String> {
         let state = V02AppState::new();
-        let resp = oobv_start(state.clone(), OobvStartRequest {
-            email_id: "e1".into(), sender: "a@b.com".into(),
-        }).await.map_err(|e| e.to_string())?;
+        let resp = oobv_start(
+            state.clone(),
+            OobvStartRequest {
+                email_id: "e1".into(),
+                sender: "a@b.com".into(),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         assert_eq!(resp.phrase.len(), 6);
         assert!((1..=6).contains(&resp.challenge_number));
         Ok(())
@@ -1134,13 +1230,25 @@ mod v02_tests {
     #[tokio::test]
     async fn oobv_verify_correct_word() -> Result<(), String> {
         let state = V02AppState::new();
-        let start = oobv_start(state.clone(), OobvStartRequest {
-            email_id: "e1".into(), sender: "a@b.com".into(),
-        }).await.map_err(|e| e.to_string())?;
+        let start = oobv_start(
+            state.clone(),
+            OobvStartRequest {
+                email_id: "e1".into(),
+                sender: "a@b.com".into(),
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         let correct = start.phrase[(start.challenge_number - 1) as usize].clone();
-        let resp = oobv_verify(state, OobvVerifyRequest {
-            ceremony_id: start.ceremony_id, user_word: correct,
-        }).await.map_err(|e| e.to_string())?;
+        let resp = oobv_verify(
+            state,
+            OobvVerifyRequest {
+                ceremony_id: start.ceremony_id,
+                user_word: correct,
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         assert_eq!(resp.state, CeremonyState::Verified);
         Ok(())
     }
@@ -1149,7 +1257,9 @@ mod v02_tests {
     async fn oobv_recommend_strong() -> Result<(), String> {
         let resp = oobv_recommend(OobvRecommendRequest {
             email_body: "至急振込先変更".into(),
-        }).await.map_err(|e| e.to_string())?;
+        })
+        .await
+        .map_err(|e| e.to_string())?;
         assert_eq!(resp.level, RecommendationLevel::Strong);
         Ok(())
     }
@@ -1210,11 +1320,11 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     info!(base_url=%base_url, "mail_connect");
 
     let config = kaname_jmap::ClientConfig {
-        bearer_token:    token,
+        bearer_token: token,
         connect_timeout: std::time::Duration::from_secs(10),
         request_timeout: std::time::Duration::from_secs(30),
-        max_retries:     2,
-        user_agent:      concat!("Kaname/", env!("CARGO_PKG_VERSION")).to_string(),
+        max_retries: 2,
+        user_agent: concat!("Kaname/", env!("CARGO_PKG_VERSION")).to_string(),
     };
 
     let client = kaname_jmap::JmapClient::connect(&base_url, config)
@@ -1257,9 +1367,9 @@ fn triage_bucket(from_addr: &str, subject: &str, verdict: &str) -> String {
     use kaname_core::ux_features::{TriageBucket, TriageEngine};
     let bucket = TriageEngine::new().triage(from_addr, subject, Some(verdict));
     match bucket {
-        TriageBucket::Important  => "important",
-        TriageBucket::Other      => "other",
-        TriageBucket::Feed       => "feed",
+        TriageBucket::Important => "important",
+        TriageBucket::Other => "other",
+        TriageBucket::Feed => "feed",
         TriageBucket::PaperTrail => "paper_trail",
     }
     .to_string()
@@ -1294,34 +1404,46 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
         // 一覧の時点では Authentication-Results ヘッダを取得していないため
         // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
         let verdict = assess_listing(
-            &account_id, &from_name, &from_addr, &subject, &preview, &our,
-        ).await;
+            &account_id,
+            &from_name,
+            &from_addr,
+            &subject,
+            &preview,
+            &our,
+        )
+        .await;
 
         // 受信を履歴に記録し、メール本体も保存する。
         // Store 未接続なら何もしない。失敗しても解析結果は返す
         // (保存できないことは表示できない理由にならない)。
         if let Some(store) = store_slot().lock().await.clone() {
             if let Err(e) = store
-                .record_received(&account_id, &from_addr, from_name.as_deref(), it.subject.as_deref())
+                .record_received(
+                    &account_id,
+                    &from_addr,
+                    from_name.as_deref(),
+                    it.subject.as_deref(),
+                )
                 .await
             {
                 tracing::warn!(error=%e, "送信者履歴の記録に失敗");
             }
 
             let new_msg = kaname_store::NewMessage {
-                jmap_id:      it.id.clone(),
-                from_addr:    from_addr.clone(),
-                from_name:    from_name.clone(),
-                to_addrs:     it.to
+                jmap_id: it.id.clone(),
+                from_addr: from_addr.clone(),
+                from_name: from_name.clone(),
+                to_addrs: it
+                    .to
                     .as_ref()
                     .map(|addrs| addrs.iter().map(|a| a.email.clone()).collect())
                     .unwrap_or_default(),
-                subject:      it.subject.clone(),
+                subject: it.subject.clone(),
                 body_preview: it.preview.clone(),
-                received_at:  it.received_at.clone(),
-                is_read:      it.is_read(),
-                bec_score:    None,
-                bec_verdict:  Some(verdict.clone()),
+                received_at: it.received_at.clone(),
+                is_read: it.is_read(),
+                bec_score: None,
+                bec_verdict: Some(verdict.clone()),
             };
             if let Err(e) = store.save_message(&account_id, &mailbox_id, &new_msg).await {
                 tracing::warn!(error=%e, "メールの保存に失敗");
@@ -1332,19 +1454,19 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
         let triage = triage_bucket(&from_addr, &subject, &verdict);
 
         rows.push(EmailRow {
-            id:          it.id.clone(),
+            id: it.id.clone(),
             from_name,
             from_addr,
-            subject:     it.subject.clone(),
-            preview:     it.preview.clone(),
+            subject: it.subject.clone(),
+            preview: it.preview.clone(),
             received_at: it.received_at.clone(),
-            is_read:     it.is_read(),
-            is_starred:  it.is_starred(),
+            is_read: it.is_read(),
+            is_starred: it.is_starred(),
             bec_verdict: verdict,
             // EmailListItem は一覧用途のため body_structure を持たず、
             // MLS かどうかはここでは判別できない (is_mls_envelope は BodyPart
             // のメソッド)。判別不能を真と偽らず false にする。
-            is_mls:      false,
+            is_mls: false,
             triage,
         });
     }
@@ -1357,8 +1479,12 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 /// 評価する。**判定できなかった場合に SAFE を返さない** (UNKNOWN を返す) のは
 /// 他の経路と同じ方針で、判定不能を安全と偽らないため。
 async fn assess_listing(
-    account_id: &str, from_name: &Option<String>, from_addr: &str,
-    subject: &str, preview: &str, our_domain: &str,
+    account_id: &str,
+    from_name: &Option<String>,
+    from_addr: &str,
+    subject: &str,
+    preview: &str,
+    our_domain: &str,
 ) -> String {
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
@@ -1370,31 +1496,31 @@ async fn assess_listing(
     // 評価しない (履歴が無いことを「初回連絡」と断定しない)。
     let history = lookup_sender_history(account_id, from_addr).await;
     let req = kaname_bec::AssessmentRequest {
-        from_header:  &from_header,
-        return_path:  None,
+        from_header: &from_header,
+        return_path: None,
         subject,
-        body_text:    preview,
+        body_text: preview,
         auth: kaname_bec::AuthResults {
-            spf:   kaname_bec::AuthVerdict::None,
-            dkim:  kaname_bec::AuthVerdict::None,
+            spf: kaname_bec::AuthVerdict::None,
+            dkim: kaname_bec::AuthVerdict::None,
             dmarc: kaname_bec::AuthVerdict::None,
-            arc:   None,
+            arc: None,
         },
         sender_history: history.as_ref(),
         our_domain,
         known_contacts: &contacts,
         extracted_urls: &urls,
-        reply_to:     None,
+        reply_to: None,
         thread_context: None,
         past_thread_bodies: &[],
         dkim_signature_header: None,
     };
     match kaname_bec::BecDetector::deterministic_only().assess(req) {
         Ok(a) => match a.verdict {
-            kaname_bec::Verdict::Safe       => "SAFE",
-            kaname_bec::Verdict::Advisory   => "ADVISORY",
+            kaname_bec::Verdict::Safe => "SAFE",
+            kaname_bec::Verdict::Advisory => "ADVISORY",
             kaname_bec::Verdict::Suspicious => "SUSPICIOUS",
-            kaname_bec::Verdict::Dangerous  => "DANGEROUS",
+            kaname_bec::Verdict::Dangerous => "DANGEROUS",
         }
         .to_string(),
         Err(e) => {
@@ -1435,7 +1561,10 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
 /// **送信前に DLP (`Direction::Outbound`) を実行し、Block 判定なら送信しない。**
 /// これが DLP 本来の用途であり、受信側検査 (`scan_dlp_inbound`) と対になる。
 pub async fn mail_send_real(
-    from: String, to: Vec<String>, subject: String, body: String,
+    from: String,
+    to: Vec<String>,
+    subject: String,
+    body: String,
 ) -> Result<String, String> {
     let client = jmap_client().await?;
 
@@ -1541,7 +1670,8 @@ pub async fn history_open_default() -> Result<String, String> {
     let base = dirs::data_dir()
         .ok_or_else(|| "データディレクトリを特定できません".to_string())?
         .join("kaname");
-    std::fs::create_dir_all(&base).map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
+    std::fs::create_dir_all(&base)
+        .map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
 
     let key_path = base.join("history.key");
     let key_hex = match std::fs::read_to_string(&key_path) {
@@ -1573,7 +1703,9 @@ pub async fn history_open_default() -> Result<String, String> {
 /// 意図的に未到達にしていた (D22)。`settings` テーブルに保存する。
 /// アカウント接続前でも動くよう account_id は固定の "local" を使う。
 pub async fn settings_save_onboarding(
-    notifications: bool, continuity: bool, telemetry: bool,
+    notifications: bool,
+    continuity: bool,
+    telemetry: bool,
 ) -> Result<(), String> {
     let store = store_slot()
         .lock()
@@ -1582,8 +1714,8 @@ pub async fn settings_save_onboarding(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     for (k, v) in [
         ("notifications", notifications),
-        ("continuity",    continuity),
-        ("telemetry",     telemetry),
+        ("continuity", continuity),
+        ("telemetry", telemetry),
         ("onboarding_done", true),
     ] {
         store
@@ -1596,7 +1728,9 @@ pub async fn settings_save_onboarding(
 
 /// オンボーディング済みか。Store 未接続なら false (画面を出す側に倒す)。
 pub async fn settings_is_onboarded() -> bool {
-    let Some(store) = store_slot().lock().await.clone() else { return false };
+    let Some(store) = store_slot().lock().await.clone() else {
+        return false;
+    };
     matches!(
         store.get_setting("local", "onboarding_done").await,
         Ok(Some(v)) if v == "true"
@@ -1631,10 +1765,7 @@ pub async fn history_mark_verified(email: String) -> Result<(), String> {
 /// Store が開かれていない、または該当プロファイルが無い場合は `None` を返す。
 /// **その場合 BEC 側は履歴シグナルを評価しない** (履歴が無いことを
 /// 「初回連絡」と断定しないため、これが正しい挙動)。
-async fn lookup_sender_history(
-    account_id: &str,
-    email: &str,
-) -> Option<kaname_bec::SenderHistory> {
+async fn lookup_sender_history(account_id: &str, email: &str) -> Option<kaname_bec::SenderHistory> {
     let store = store_slot().lock().await.clone()?;
     let profile = store.get_sender_profile(account_id, email).await.ok()??;
 
@@ -1713,9 +1844,9 @@ static STYLE_PROFILES: std::sync::OnceLock<
     tokio::sync::Mutex<std::collections::HashMap<String, kaname_ssa::SenderStyleProfile>>,
 > = std::sync::OnceLock::new();
 
-fn style_profiles() -> &'static tokio::sync::Mutex<
-    std::collections::HashMap<String, kaname_ssa::SenderStyleProfile>,
-> {
+fn style_profiles(
+) -> &'static tokio::sync::Mutex<std::collections::HashMap<String, kaname_ssa::SenderStyleProfile>>
+{
     STYLE_PROFILES.get_or_init(|| tokio::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -1732,7 +1863,9 @@ async fn evaluate_sender_style(
     send_hour: Option<u8>,
     contains_financial_request: bool,
 ) -> Vec<String> {
-    let Some(hour) = send_hour else { return Vec::new() };
+    let Some(hour) = send_hour else {
+        return Vec::new();
+    };
     let features = kaname_ssa::EmailStyleFeatures::extract(body, hour);
     if !features.is_finite() {
         // NaN/Infinity を含む特徴量はプロファイルを汚染するため取り込まない。
@@ -1746,7 +1879,8 @@ async fn evaluate_sender_style(
 
     // 判定してから取り込む。取り込んでから判定すると、
     // なりすましメール自身がプロファイルを引き寄せて検出が鈍る。
-    let warning = kaname_ssa::assess_self_send_anomaly(profile, &features, contains_financial_request);
+    let warning =
+        kaname_ssa::assess_self_send_anomaly(profile, &features, contains_financial_request);
     profile.update(&features);
 
     match warning {
@@ -1754,9 +1888,9 @@ async fn evaluate_sender_style(
             "文体が普段と大きく異なります (送信者: {sender})。\
              アカウント乗っ取りの可能性があります。"
         )],
-        kaname_ssa::StyleWarning::Medium => vec![format!(
-            "文体が普段と異なります (送信者: {sender})。"
-        )],
+        kaname_ssa::StyleWarning::Medium => {
+            vec![format!("文体が普段と異なります (送信者: {sender})。")]
+        }
         // Low は日常的な揺らぎでも出るため報告しない (警告疲れの回避)。
         // InsufficientData / None は警告を出さない。
         _ => Vec::new(),
@@ -1880,17 +2014,17 @@ async fn our_domain(account_id: &str, hint: Option<&str>) -> String {
 #[derive(Debug, serde::Serialize)]
 pub struct AttachmentDownload {
     /// ファイル名。
-    pub filename:     String,
+    pub filename: String,
     /// MIME タイプ。
-    pub mime:         String,
+    pub mime: String,
     /// サイズ (bytes)。
-    pub size_bytes:   u64,
+    pub size_bytes: u64,
     /// 検出されたリスク (人間可読)。
-    pub risks:        Vec<String>,
+    pub risks: Vec<String>,
     /// 実行リスクがあるか。
     pub is_dangerous: bool,
     /// 隔離ディレクトリへの保存先。危険な場合は書き込まないため None。
-    pub saved_path:   Option<String>,
+    pub saved_path: Option<String>,
 }
 
 /// サーバ上のメールが持つ添付の一覧 (ファイル名・blobId・MIME) を返す。
@@ -1902,8 +2036,8 @@ pub struct AttachmentDownload {
 #[derive(Debug, serde::Serialize)]
 pub struct AttachmentRef {
     pub filename: String,
-    pub blob_id:  String,
-    pub mime:     String,
+    pub blob_id: String,
+    pub mime: String,
 }
 
 pub async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<AttachmentRef>, String> {
@@ -1921,7 +2055,9 @@ pub async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<Attachme
             Some(AttachmentRef {
                 filename: p.name.unwrap_or_else(|| "unnamed".to_string()),
                 blob_id,
-                mime: p.mime_type.unwrap_or_else(|| "application/octet-stream".to_string()),
+                mime: p
+                    .mime_type
+                    .unwrap_or_else(|| "application/octet-stream".to_string()),
             })
         })
         .collect())
@@ -1952,7 +2088,10 @@ pub async fn mail_download_attachment(
         .ok_or_else(|| "指定された添付が見つかりません".to_string())?;
 
     let filename = part.name.clone().unwrap_or_else(|| "unnamed".to_string());
-    let mime = part.mime_type.clone().unwrap_or_else(|| "application/octet-stream".to_string());
+    let mime = part
+        .mime_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
 
     // blob を取得する。
     let bytes = client
@@ -1999,7 +2138,13 @@ fn sanitize_filename(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
     let cleaned: String = base
         .chars()
-        .map(|c| if c.is_control() || matches!(c, '/' | '\\' | ':' | '\0') { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || matches!(c, '/' | '\\' | ':' | '\0') {
+                '_'
+            } else {
+                c
+            }
+        })
         .collect();
     let trimmed = cleaned.trim_matches(['.', ' ']);
     if trimmed.is_empty() {

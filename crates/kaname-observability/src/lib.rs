@@ -17,7 +17,6 @@
 // 実行例:
 //   KANAME_TELEMETRY=on RUST_LOG=info cargo run
 
-
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
@@ -37,7 +36,11 @@ impl PrivacySanitizer {
                 .rev()
                 .find(|&i| input.is_char_boundary(i))
                 .unwrap_or(0);
-            truncated = format!("{}…[{} バイト超過のため切り詰め]", &input[..end], input.len());
+            truncated = format!(
+                "{}…[{} バイト超過のため切り詰め]",
+                &input[..end],
+                input.len()
+            );
             truncated.as_str()
         } else {
             input
@@ -62,7 +65,6 @@ impl PrivacySanitizer {
 
         result
     }
-
 }
 
 /// 全角 ASCII (U+FF01–FF5E) → 半角 ASCII、全角スペース (U+3000) → 空白 に変換する。
@@ -70,15 +72,17 @@ impl PrivacySanitizer {
 /// `alice＠example.com` のような全角文字を使った PII バイパスを防ぐために
 /// `PrivacySanitizer::sanitize` の前処理として使用する。
 fn normalize_fullwidth(s: &str) -> String {
-    s.chars().map(|c| {
-        if ('\u{FF01}'..='\u{FF5E}').contains(&c) {
-            char::from_u32(c as u32 - 0xFEE0).unwrap_or(c)
-        } else if c == '\u{3000}' {
-            ' '
-        } else {
-            c
-        }
-    }).collect()
+    s.chars()
+        .map(|c| {
+            if ('\u{FF01}'..='\u{FF5E}').contains(&c) {
+                char::from_u32(c as u32 - 0xFEE0).unwrap_or(c)
+            } else if c == '\u{3000}' {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 fn mask_email_addresses(s: &str) -> String {
@@ -98,7 +102,9 @@ fn mask_email_addresses(s: &str) -> String {
                 if nc.is_ascii_alphanumeric() || nc == '.' || nc == '_' || nc == '-' {
                     local.push(nc);
                     chars.next();
-                } else { break; }
+                } else {
+                    break;
+                }
             }
             if chars.peek() == Some(&'@') {
                 // メールアドレスっぽい
@@ -139,9 +145,13 @@ fn redact_credit_card_numbers(s: &str) -> String {
         let mut digit_count = 0;
         let mut j = i;
         while j < chars.len() && (chars[j].is_ascii_digit() || matches!(chars[j], ' ' | '-')) {
-            if chars[j].is_ascii_digit() { digit_count += 1; }
+            if chars[j].is_ascii_digit() {
+                digit_count += 1;
+            }
             j += 1;
-            if digit_count >= 16 { break; }
+            if digit_count >= 16 {
+                break;
+            }
         }
         if digit_count >= 13 {
             result.push_str("[REDACTED-CC]");
@@ -190,8 +200,7 @@ fn mask_jp_phone_numbers(s: &str) -> String {
             // 数字・ハイフン・括弧を消費して桁数を数える
             while j < chars.len()
                 && (chars[j].is_ascii_digit()
-                    || matches!(chars[j], '-' | '(' | ')' | ' ')
-                    && digits < 12)
+                    || matches!(chars[j], '-' | '(' | ')' | ' ') && digits < 12)
             {
                 if chars[j].is_ascii_digit() {
                     digits += 1;
@@ -251,7 +260,10 @@ struct PiiFieldVisitor {
 
 impl PiiFieldVisitor {
     fn new() -> Self {
-        Self { found_pii: false, sanitized_fields: Vec::new() }
+        Self {
+            found_pii: false,
+            sanitized_fields: Vec::new(),
+        }
     }
 }
 
@@ -264,13 +276,32 @@ impl PiiFieldVisitor {
 fn is_sensitive_field_name(name: &str) -> bool {
     // 完全一致のみ (サブ文字列マッチは誤検知が多い)
     const SENSITIVE_EXACT: &[&str] = &[
-        "email", "e_mail", "mail",
-        "subject", "body", "content", "message",
-        "password", "passwd", "secret", "token", "api_key",
-        "bearer", "authorization", "auth",
-        "phone", "address", "name", "full_name", "display_name",
-        "credit_card", "card_number", "cvv",
-        "my_number", "マイナンバー", "個人番号",
+        "email",
+        "e_mail",
+        "mail",
+        "subject",
+        "body",
+        "content",
+        "message",
+        "password",
+        "passwd",
+        "secret",
+        "token",
+        "api_key",
+        "bearer",
+        "authorization",
+        "auth",
+        "phone",
+        "address",
+        "name",
+        "full_name",
+        "display_name",
+        "credit_card",
+        "card_number",
+        "cvv",
+        "my_number",
+        "マイナンバー",
+        "個人番号",
     ];
     let lower = name.to_lowercase();
     SENSITIVE_EXACT.iter().any(|&s| lower == s)
@@ -290,7 +321,8 @@ impl tracing::field::Visit for PiiFieldVisitor {
             }
             s
         };
-        self.sanitized_fields.push((field_name.to_string(), sanitized));
+        self.sanitized_fields
+            .push((field_name.to_string(), sanitized));
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
@@ -306,7 +338,8 @@ impl tracing::field::Visit for PiiFieldVisitor {
             }
             s
         };
-        self.sanitized_fields.push((field_name.to_string(), sanitized));
+        self.sanitized_fields
+            .push((field_name.to_string(), sanitized));
     }
 }
 
@@ -344,7 +377,10 @@ mod tests {
     fn privacy_email_address_masking() {
         let input = "Connection from alice@company.co.jp succeeded";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(!output.contains("alice@"), "メール先頭がマスクされていない: {output}");
+        assert!(
+            !output.contains("alice@"),
+            "メール先頭がマスクされていない: {output}"
+        );
         assert!(output.contains("@company.co.jp") || output.contains("***"));
     }
 
@@ -354,17 +390,24 @@ mod tests {
         // 走査対象にすら入らず、無加工でログに残っていた。
         let input = "invoice 12345@vendor.com paid";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(!output.contains("12345@"),
-            "数字始まりのローカル部がマスクされていない: {output}");
-        assert!(output.contains("123***"),
-            "先頭3文字+*** の形式でマスクされるべき: {output}");
+        assert!(
+            !output.contains("12345@"),
+            "数字始まりのローカル部がマスクされていない: {output}"
+        );
+        assert!(
+            output.contains("123***"),
+            "先頭3文字+*** の形式でマスクされるべき: {output}"
+        );
     }
 
     #[test]
     fn privacy_credit_card_redaction() {
         let input = "Payment with 4111111111111111 succeeded";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(!output.contains("4111111111111111"), "クレジットカード番号がマスクされていない");
+        assert!(
+            !output.contains("4111111111111111"),
+            "クレジットカード番号がマスクされていない"
+        );
         assert!(output.contains("REDACTED"));
     }
 
@@ -382,7 +425,10 @@ mod tests {
         let input = "proxy: Bearer first_token_abc backend: Bearer second_token_xyz end";
         let output = PrivacySanitizer::sanitize(input);
         assert!(!output.contains("first_token_abc"), "1件目のトークンが漏洩");
-        assert!(!output.contains("second_token_xyz"), "2件目のトークンが漏洩");
+        assert!(
+            !output.contains("second_token_xyz"),
+            "2件目のトークンが漏洩"
+        );
         assert_eq!(output.matches("Bearer [REDACTED]").count(), 2);
     }
 
@@ -390,7 +436,10 @@ mod tests {
     fn privacy_jp_mobile_phone_masked() {
         let input = "連絡先: 090-1234-5678 まで";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(!output.contains("090-1234-5678"), "携帯番号が漏洩: {output}");
+        assert!(
+            !output.contains("090-1234-5678"),
+            "携帯番号が漏洩: {output}"
+        );
         assert!(output.contains("[TEL-REDACTED]"));
     }
 
@@ -398,7 +447,10 @@ mod tests {
     fn privacy_jp_landline_masked() {
         let input = "事務所: 03-1234-5678 (東京)";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(!output.contains("03-1234-5678"), "固定電話番号が漏洩: {output}");
+        assert!(
+            !output.contains("03-1234-5678"),
+            "固定電話番号が漏洩: {output}"
+        );
         assert!(output.contains("[TEL-REDACTED]"));
     }
 
@@ -406,7 +458,10 @@ mod tests {
     fn privacy_jp_phone_digits_only_masked() {
         let input = "tel:09012345678";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(!output.contains("09012345678"), "数字のみ電話番号が漏洩: {output}");
+        assert!(
+            !output.contains("09012345678"),
+            "数字のみ電話番号が漏洩: {output}"
+        );
         assert!(output.contains("[TEL-REDACTED]"));
     }
 
@@ -415,7 +470,10 @@ mod tests {
         // 郵便番号 (7桁) は電話番号ではない
         let input = "〒100-0001";
         let output = PrivacySanitizer::sanitize(input);
-        assert!(output.contains("100"), "郵便番号まで消してしまった: {output}");
+        assert!(
+            output.contains("100"),
+            "郵便番号まで消してしまった: {output}"
+        );
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -428,7 +486,10 @@ mod tests {
         let raw = "user@example.com login event";
         let sanitized = PrivacySanitizer::sanitize(raw);
         assert_ne!(raw, sanitized, "email should be masked by sanitizer");
-        assert!(!sanitized.contains("user@example.com"), "raw email must not appear: {sanitized}");
+        assert!(
+            !sanitized.contains("user@example.com"),
+            "raw email must not appear: {sanitized}"
+        );
     }
 
     #[test]
@@ -460,14 +521,19 @@ mod tests {
             !output.contains("４１１１"),
             "全角数字クレジットカードが漏洩: {output}"
         );
-        assert!(output.contains("REDACTED"), "REDACTEDが挿入されていない: {output}");
+        assert!(
+            output.contains("REDACTED"),
+            "REDACTEDが挿入されていない: {output}"
+        );
     }
 
     #[test]
     fn normalize_fullwidth_converts_ascii_range() {
         // U+FF20 (＠) → U+0040 (@)
-        assert_eq!(normalize_fullwidth("ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ"),
-                   "alice@example.com");
+        assert_eq!(
+            normalize_fullwidth("ａｌｉｃｅ＠ｅｘａｍｐｌｅ．ｃｏｍ"),
+            "alice@example.com"
+        );
     }
 
     #[test]
@@ -518,15 +584,24 @@ mod tests {
         let huge = "a@b.com ".repeat(2_000_000); // ~14MB
         let result = PrivacySanitizer::sanitize(&huge);
         // 64KB 以内に切り詰められていること
-        assert!(result.len() <= 64 * 1024 + 200, // truncation メッセージ分の余裕
-            "sanitize の出力が上限を超えた: {} bytes", result.len());
+        assert!(
+            result.len() <= 64 * 1024 + 200, // truncation メッセージ分の余裕
+            "sanitize の出力が上限を超えた: {} bytes",
+            result.len()
+        );
         // truncation マーカーが含まれること
-        assert!(result.contains("切り詰め"), "大入力は切り詰めメッセージを含むべき");
+        assert!(
+            result.contains("切り詰め"),
+            "大入力は切り詰めメッセージを含むべき"
+        );
     }
 
     #[test]
     fn sanitize_normal_input_works() {
         let result = PrivacySanitizer::sanitize("alice@example.com の Bearer abc123 です");
-        assert!(!result.contains("abc123"), "Bearer トークンは除去されるべき");
+        assert!(
+            !result.contains("abc123"),
+            "Bearer トークンは除去されるべき"
+        );
     }
 }

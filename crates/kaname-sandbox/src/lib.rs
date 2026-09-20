@@ -30,7 +30,15 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc, clippy::doc_markdown, clippy::must_use_candidate, clippy::items_after_statements, clippy::unused_async, clippy::used_underscore_binding)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::doc_markdown,
+    clippy::must_use_candidate,
+    clippy::items_after_statements,
+    clippy::unused_async,
+    clippy::used_underscore_binding
+)]
 /// MIME ネスト深度チェック (スタックオーバーフロー防止)。
 pub mod mime_depth;
 pub use mime_depth::{check_mime_depth, MimeDepthError, MAX_MIME_DEPTH};
@@ -40,7 +48,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore, mpsc};
+use tokio::sync::{mpsc, Mutex, OwnedSemaphorePermit, Semaphore};
 
 // ============================================================================
 // Configuration
@@ -87,7 +95,9 @@ impl FirecrackerConfig {
             return Err(SandboxError::InvalidConfig("memory_mb must be 128..=2048"));
         }
         if self.max_lifetime_secs < 10 || self.max_lifetime_secs > 1800 {
-            return Err(SandboxError::InvalidConfig("max_lifetime_secs must be 10..=1800"));
+            return Err(SandboxError::InvalidConfig(
+                "max_lifetime_secs must be 10..=1800",
+            ));
         }
         Ok(self)
     }
@@ -165,7 +175,10 @@ impl RunningVm {
     ///
     /// VM エラーまたはプロトコルエラーが発生した場合に `SandboxError` を返す。
     /// 添付が `MAX_ATTACHMENT_BYTES` を超える場合 `AttachmentTooLarge` を返す。
-    pub async fn render_attachment(&mut self, mut input: AttachmentJob) -> Result<RenderResult, SandboxError> {
+    pub async fn render_attachment(
+        &mut self,
+        mut input: AttachmentJob,
+    ) -> Result<RenderResult, SandboxError> {
         // 入力サイズをホスト側でキャップ — VM へ送る前に巨大添付を拒否し OOM を防ぐ
         if input.bytes.len() > Self::MAX_ATTACHMENT_BYTES {
             return Err(SandboxError::AttachmentTooLarge {
@@ -193,8 +206,10 @@ impl RunningVm {
                             .take_while(|(i, _)| *i < Self::MAX_EXTRACTED_TEXT_BYTES)
                             .last()
                             .map_or("", |(i, c)| &text[..i + c.len_utf8()]);
-                        r.extracted_text = Some(format!("{truncated}\n[テキストが {0} MB を超えたため切り詰め]",
-                            Self::MAX_EXTRACTED_TEXT_BYTES / (1024 * 1024)));
+                        r.extracted_text = Some(format!(
+                            "{truncated}\n[テキストが {0} MB を超えたため切り詰め]",
+                            Self::MAX_EXTRACTED_TEXT_BYTES / (1024 * 1024)
+                        ));
                     }
                 }
                 // ホスト側で preview_pages の合計サイズもキャップする。
@@ -292,7 +307,10 @@ pub struct RenderHints {
 
 impl Default for RenderHints {
     fn default() -> Self {
-        Self { max_pages: 50, max_dimension_px: 2048 }
+        Self {
+            max_pages: 50,
+            max_dimension_px: 2048,
+        }
     }
 }
 
@@ -417,7 +435,12 @@ impl SandboxPool {
             warm.lock().await.push(vm);
         }
 
-        Ok(Self { config, warm, concurrency, teardown_tx })
+        Ok(Self {
+            config,
+            warm,
+            concurrency,
+            teardown_tx,
+        })
     }
 
     /// How many warm VMs are currently available.
@@ -433,7 +456,11 @@ impl SandboxPool {
         // パーミットは RunningVm が所有し、Drop 時に自動解放される
         // (以前は forget() で恒久リークしており、acquire() を
         // pool_size * 2 回呼ぶと以降ずっとブロックする自己 DoS だった)。
-        let permit = self.concurrency.clone().acquire_owned().await
+        let permit = self
+            .concurrency
+            .clone()
+            .acquire_owned()
+            .await
             .map_err(|_| SandboxError::PoolClosed)?;
 
         let mut warm = self.warm.lock().await;
@@ -583,7 +610,9 @@ mod tests {
         for i in 0..10 {
             let vm = tokio::time::timeout(Duration::from_secs(5), pool.acquire())
                 .await
-                .unwrap_or_else(|_| panic!("acquire() が {i} 回目でハングしました (セマフォパーミットリークの疑い)"))
+                .unwrap_or_else(|_| {
+                    panic!("acquire() が {i} 回目でハングしました (セマフォパーミットリークの疑い)")
+                })
                 .expect("acquire がエラーを返した");
             drop(vm);
         }
@@ -628,7 +657,7 @@ mod tests {
         // テキストキャップ処理が UTF-8 の文字境界を壊さないことを確認
         // (3 バイト日本語文字が境界で切れると panic)
         let text = "あ".repeat(100); // 300 bytes
-        // キャップを 10 バイトに設定して境界処理をシミュレート
+                                     // キャップを 10 バイトに設定して境界処理をシミュレート
         let cap = 10usize;
         let truncated = text
             .char_indices()
@@ -637,7 +666,10 @@ mod tests {
             .map_or("", |(i, c)| &text[..i + c.len_utf8()]);
         // バイト境界上で切れているか (String として有効か) を確認
         assert!(std::str::from_utf8(truncated.as_bytes()).is_ok());
-        assert!(truncated.len() <= cap + 3, "文字境界での切り詰めは最大 1 文字 (3 バイト) の超過を許容");
+        assert!(
+            truncated.len() <= cap + 3,
+            "文字境界での切り詰めは最大 1 文字 (3 バイト) の超過を許容"
+        );
     }
 
     #[test]

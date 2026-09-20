@@ -43,9 +43,18 @@ pub enum MisdirectReason {
 
 /// フリーメールドメイン一覧 (社内スレッドへの混入検出用)。
 const FREE_MAIL_DOMAINS: &[&str] = &[
-    "gmail.com", "yahoo.com", "yahoo.co.jp", "hotmail.com", "outlook.com",
-    "live.com", "icloud.com", "protonmail.com", "yandex.com", "aol.com",
-    "qq.com", "163.com",
+    "gmail.com",
+    "yahoo.com",
+    "yahoo.co.jp",
+    "hotmail.com",
+    "outlook.com",
+    "live.com",
+    "icloud.com",
+    "protonmail.com",
+    "yandex.com",
+    "aol.com",
+    "qq.com",
+    "163.com",
 ];
 
 /// 宛先リストを評価し、宛先ミスの疑いがある宛先を検出する。
@@ -86,7 +95,9 @@ pub fn detect_misdirected_recipients(
     let mut suspicious = Vec::new();
 
     for recipient in recipients {
-        let Some(domain) = extract_domain(recipient) else { continue };
+        let Some(domain) = extract_domain(recipient) else {
+            continue;
+        };
         if domain == our_domain_lower {
             continue; // 自己送信は対象外
         }
@@ -95,10 +106,15 @@ pub fn detect_misdirected_recipients(
         }
 
         // 1. 既知ドメインとのタイポスクワット類似度チェック (距離 1-2)
-        if let Some(similar) = known_lower.iter().find(|k| levenshtein_le_2(&domain, k) && &domain != *k) {
+        if let Some(similar) = known_lower
+            .iter()
+            .find(|k| levenshtein_le_2(&domain, k) && &domain != *k)
+        {
             suspicious.push(SuspiciousRecipient {
                 address: recipient.clone(),
-                reason: MisdirectReason::LookalikeDomain { similar_to: similar.clone() },
+                reason: MisdirectReason::LookalikeDomain {
+                    similar_to: similar.clone(),
+                },
             });
             continue;
         }
@@ -172,7 +188,10 @@ mod tests {
         let known = vec!["corp.com".to_string()];
         let result = detect_misdirected_recipients(&recipients, "us.com", &known);
         assert_eq!(result.len(), 1, "タイポドメインが検出されるべき");
-        assert!(matches!(result[0].reason, MisdirectReason::LookalikeDomain { .. }));
+        assert!(matches!(
+            result[0].reason,
+            MisdirectReason::LookalikeDomain { .. }
+        ));
     }
 
     #[test]
@@ -180,7 +199,10 @@ mod tests {
         let recipients = vec!["alice@corp.com".to_string()];
         let known = vec!["corp.com".to_string()];
         let result = detect_misdirected_recipients(&recipients, "us.com", &known);
-        assert!(result.is_empty(), "既知の実績あるドメインは検出されるべきではない");
+        assert!(
+            result.is_empty(),
+            "既知の実績あるドメインは検出されるべきではない"
+        );
     }
 
     #[test]
@@ -197,7 +219,10 @@ mod tests {
         let recipients = vec!["contact@newvendor.io".to_string()];
         let known = vec!["corp.com".to_string()];
         let result = detect_misdirected_recipients(&recipients, "us.com", &known);
-        assert!(result.is_empty(), "無関係な新規ドメインは誤検知されるべきではない");
+        assert!(
+            result.is_empty(),
+            "無関係な新規ドメインは誤検知されるべきではない"
+        );
     }
 
     #[test]
@@ -247,7 +272,10 @@ mod tests {
     #[test]
     fn levenshtein_le_2_rejects_oversized_input() {
         let huge = "a".repeat(1000);
-        assert!(!levenshtein_le_2(&huge, "corp.com"), "巨大入力はDoS対策で早期拒否されるべき");
+        assert!(
+            !levenshtein_le_2(&huge, "corp.com"),
+            "巨大入力はDoS対策で早期拒否されるべき"
+        );
     }
 
     #[test]

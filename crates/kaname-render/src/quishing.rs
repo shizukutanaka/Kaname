@@ -103,14 +103,30 @@ impl QuishingDefense {
     #[must_use]
     pub fn new() -> Self {
         let trusted_domains: HashSet<&'static str> = [
-            "amazon.com", "amazon.co.jp", "google.com", "microsoft.com",
-            "apple.com", "github.com", "stripe.com", "anthropic.com",
-        ].into_iter().collect();
+            "amazon.com",
+            "amazon.co.jp",
+            "google.com",
+            "microsoft.com",
+            "apple.com",
+            "github.com",
+            "stripe.com",
+            "anthropic.com",
+        ]
+        .into_iter()
+        .collect();
 
         let free_tlds: HashSet<&'static str> = [
-            ".tk", ".ml", ".ga", ".cf", ".gq",  // 無料ドメイン
-            ".click", ".download", ".loan",     // 悪用多発 TLD
-        ].into_iter().collect();
+            ".tk",
+            ".ml",
+            ".ga",
+            ".cf",
+            ".gq", // 無料ドメイン
+            ".click",
+            ".download",
+            ".loan", // 悪用多発 TLD
+        ]
+        .into_iter()
+        .collect();
 
         // URL 短縮・リダイレクトサービス。
         //
@@ -125,12 +141,31 @@ impl QuishingDefense {
         // 出典: 2026 年の quishing 動向 (上半期に約 146% 増)、
         // FBI 警告 (2026-01, Kimsuky/APT43 が MFA 耐性のある侵入経路として使用)。
         let url_shorteners: HashSet<&'static str> = [
-            "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd",
-            "buff.ly", "rebrand.ly", "cutt.ly", "shorturl.at", "rb.gy",
-            "s.id", "tiny.cc", "lnkd.in", "t.ly", "shrtco.de",
+            "bit.ly",
+            "tinyurl.com",
+            "t.co",
+            "goo.gl",
+            "ow.ly",
+            "is.gd",
+            "buff.ly",
+            "rebrand.ly",
+            "cutt.ly",
+            "shorturl.at",
+            "rb.gy",
+            "s.id",
+            "tiny.cc",
+            "lnkd.in",
+            "t.ly",
+            "shrtco.de",
             // QR 生成/リダイレクトサービス (動的 QR の中核)
-            "qrco.de", "qr.codes", "scanova.io", "qrfy.com", "flowcode.com",
-        ].into_iter().collect();
+            "qrco.de",
+            "qr.codes",
+            "scanova.io",
+            "qrfy.com",
+            "flowcode.com",
+        ]
+        .into_iter()
+        .collect();
 
         Self {
             trusted_domains,
@@ -150,9 +185,11 @@ impl QuishingDefense {
     /// # Errors
     ///
     /// 画像デコード失敗時にエラーを返す。
-    pub fn scan_image(&self, _image_id: &str, _image_bytes: &[u8])
-        -> Result<Option<DetectedQrCode>, QuishingError>
-    {
+    pub fn scan_image(
+        &self,
+        _image_id: &str,
+        _image_bytes: &[u8],
+    ) -> Result<Option<DetectedQrCode>, QuishingError> {
         // 実装では `rqrr::PreparedImage` でデコード
         // ここではスケルトンのため、テスト可能な形でロジックを示す
         Ok(None)
@@ -201,8 +238,7 @@ impl QuishingDefense {
             // 幾何学記号 (黒/白の塗り分けで QR を表現)
             '■', '□', '▪', '▫', '◼', '◻', '●', '○', '◾', '◽',
             // 絵文字ブロック (メール本文でよく使われる)
-            '⬛', '⬜', '🟥', '🟦',
-            // 全角記号
+            '⬛', '⬜', '🟥', '🟦', // 全角記号
             '　',
         ];
         // 点字ブロック (U+2800..U+28FF) は 2x4 ドットを 1 文字で表現できるため
@@ -311,7 +347,9 @@ impl QuishingDefense {
     }
 
     fn is_trusted(&self, domain: &str) -> bool {
-        self.trusted_domains.iter().any(|t| domain == *t || domain.ends_with(&format!(".{t}")))
+        self.trusted_domains
+            .iter()
+            .any(|t| domain == *t || domain.ends_with(&format!(".{t}")))
     }
 
     /// URL 短縮・リダイレクトサービスのドメインか判定する。
@@ -332,9 +370,9 @@ impl QuishingDefense {
     /// 正規のサブドメイン (`aws.amazon.com`) は `.amazon.com` で*終わる*ため
     /// `is_trusted` 側で Trusted 判定済みであり、この関数には届かない。
     fn has_trusted_brand_as_subdomain(&self, domain: &str) -> bool {
-        self.trusted_domains.iter().any(|t| {
-            domain.starts_with(&format!("{t}.")) || domain.contains(&format!(".{t}."))
-        })
+        self.trusted_domains
+            .iter()
+            .any(|t| domain.starts_with(&format!("{t}.")) || domain.contains(&format!(".{t}.")))
     }
 
     fn is_typosquat(&self, domain: &str) -> bool {
@@ -373,7 +411,9 @@ fn extract_domain(url: &str) -> Option<String> {
     };
 
     // パスを除去: 最初の `/` または `?` または `#` まで
-    let authority_end = after_scheme.find(['/', '?', '#']).unwrap_or(after_scheme.len());
+    let authority_end = after_scheme
+        .find(['/', '?', '#'])
+        .unwrap_or(after_scheme.len());
     let authority = &after_scheme[..authority_end];
 
     // userinfo を除去: `user:pass@host` → `host`
@@ -418,12 +458,12 @@ fn has_dangerous_scheme(payload: &str) -> bool {
 fn has_digit_substitution(domain: &str) -> bool {
     // amaz0n, g00gle のような数字混入
     let known_patterns = [
-        ("amaz0n",  "amazon"),
-        ("amaz", "amazon"),  // partial だが追加検出
-        ("g00gle",  "google"),
+        ("amaz0n", "amazon"),
+        ("amaz", "amazon"), // partial だが追加検出
+        ("g00gle", "google"),
         ("micr0soft", "microsoft"),
-        ("paypa1",  "paypal"),
-        ("0ffice",  "office"),
+        ("paypa1", "paypal"),
+        ("0ffice", "office"),
     ];
     for (bad, _good) in &known_patterns {
         if domain.contains(bad) && !domain.contains(&bad.replace('0', "o").replace('1', "l")) {
@@ -446,17 +486,25 @@ fn levenshtein(a: &str, b: &str) -> usize {
     let b: Vec<char> = b.chars().collect();
     let m = a.len();
     let n = b.len();
-    if m == 0 { return n; }
-    if n == 0 { return m; }
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
     let mut dp = vec![vec![0usize; n + 1]; m + 1];
-    for (i, row) in dp.iter_mut().enumerate() { row[0] = i; }
-    for (j, cell) in dp[0].iter_mut().enumerate() { *cell = j; }
+    for (i, row) in dp.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in dp[0].iter_mut().enumerate() {
+        *cell = j;
+    }
     for i in 1..=m {
         for j in 1..=n {
-            dp[i][j] = if a[i-1] == b[j-1] {
-                dp[i-1][j-1]
+            dp[i][j] = if a[i - 1] == b[j - 1] {
+                dp[i - 1][j - 1]
             } else {
-                1 + dp[i-1][j].min(dp[i][j-1]).min(dp[i-1][j-1])
+                1 + dp[i - 1][j].min(dp[i][j - 1]).min(dp[i - 1][j - 1])
             };
         }
     }
@@ -491,44 +539,74 @@ mod tests {
     #[test]
     fn detects_trusted_domain() {
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://amazon.co.jp/order"), UrlReputation::Trusted);
-        assert_eq!(d.evaluate_url("https://www.google.com/search"), UrlReputation::Trusted);
+        assert_eq!(
+            d.evaluate_url("https://amazon.co.jp/order"),
+            UrlReputation::Trusted
+        );
+        assert_eq!(
+            d.evaluate_url("https://www.google.com/search"),
+            UrlReputation::Trusted
+        );
     }
 
     #[test]
     fn detects_free_tld_as_suspicious() {
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://amazon-secure.tk/login"), UrlReputation::Suspicious);
-        assert_eq!(d.evaluate_url("https://login.ml/auth"),         UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://amazon-secure.tk/login"),
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_url("https://login.ml/auth"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn detects_digit_substitution() {
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://amaz0n.com/login"), UrlReputation::Suspicious);
-        assert_eq!(d.evaluate_url("https://paypa1.com/auth"), UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://amaz0n.com/login"),
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_url("https://paypa1.com/auth"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn detects_typosquatting() {
         let d = QuishingDefense::new();
         // 1 文字違い (amzon = amazon - a)
-        assert_eq!(d.evaluate_url("https://amzon.com/login"), UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://amzon.com/login"),
+            UrlReputation::Suspicious
+        );
         // 文字入れ替え
-        assert_eq!(d.evaluate_url("https://amaozn.com/login"), UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://amaozn.com/login"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn known_malicious_takes_precedence() {
         let mut d = QuishingDefense::new();
         d.add_malicious_domain("evil-corp.com");
-        assert_eq!(d.evaluate_url("https://evil-corp.com/exploit"), UrlReputation::Malicious);
+        assert_eq!(
+            d.evaluate_url("https://evil-corp.com/exploit"),
+            UrlReputation::Malicious
+        );
     }
 
     #[test]
     fn neutral_unknown_domain() {
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://random-startup-2026.io/"), UrlReputation::Neutral);
+        assert_eq!(
+            d.evaluate_url("https://random-startup-2026.io/"),
+            UrlReputation::Neutral
+        );
     }
 
     #[test]
@@ -549,10 +627,22 @@ mod tests {
 
     #[test]
     fn extract_domain_works() {
-        assert_eq!(extract_domain("https://example.com/path"), Some("example.com".to_string()));
-        assert_eq!(extract_domain("http://example.com"),       Some("example.com".to_string()));
-        assert_eq!(extract_domain("https://example.com?q=1"),  Some("example.com".to_string()));
-        assert_eq!(extract_domain("https://EXAMPLE.com/"),     Some("example.com".to_string()));
+        assert_eq!(
+            extract_domain("https://example.com/path"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            extract_domain("http://example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            extract_domain("https://example.com?q=1"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            extract_domain("https://EXAMPLE.com/"),
+            Some("example.com".to_string())
+        );
     }
 
     // ── URL パース セキュリティテスト ───────────────────────────────────────────
@@ -570,23 +660,48 @@ mod tests {
 
     #[test]
     fn extract_domain_rejects_non_http_schemes() {
-        assert_eq!(extract_domain("data:text/html,<script>alert(1)</script>"), None, "data: を許可した");
-        assert_eq!(extract_domain("ftp://evil.com/file"), None, "ftp: を許可した");
-        assert_eq!(extract_domain("javascript:void(0)"), None, "javascript: を許可した");
-        assert_eq!(extract_domain("//evil.com/path"), None, "プロトコル相対を許可した");
+        assert_eq!(
+            extract_domain("data:text/html,<script>alert(1)</script>"),
+            None,
+            "data: を許可した"
+        );
+        assert_eq!(
+            extract_domain("ftp://evil.com/file"),
+            None,
+            "ftp: を許可した"
+        );
+        assert_eq!(
+            extract_domain("javascript:void(0)"),
+            None,
+            "javascript: を許可した"
+        );
+        assert_eq!(
+            extract_domain("//evil.com/path"),
+            None,
+            "プロトコル相対を許可した"
+        );
     }
 
     #[test]
     fn extract_domain_strips_port() {
-        assert_eq!(extract_domain("https://evil.com:8443/login"), Some("evil.com".to_string()));
-        assert_eq!(extract_domain("http://evil.com:80/"), Some("evil.com".to_string()));
+        assert_eq!(
+            extract_domain("https://evil.com:8443/login"),
+            Some("evil.com".to_string())
+        );
+        assert_eq!(
+            extract_domain("http://evil.com:80/"),
+            Some("evil.com".to_string())
+        );
     }
 
     #[test]
     fn extract_domain_handles_ipv6() {
         // IPv6 ブラケット記法
         assert_eq!(extract_domain("http://[::1]/path"), Some("::1".to_string()));
-        assert_eq!(extract_domain("http://[::1]:8080/path"), Some("::1".to_string()));
+        assert_eq!(
+            extract_domain("http://[::1]:8080/path"),
+            Some("::1".to_string())
+        );
     }
 
     #[test]
@@ -602,8 +717,11 @@ mod tests {
         // amaz0n は Suspicious なドメイン — userinfo に合法ドメイン名を混ぜても無効
         let r = d.evaluate_decoded("qr-1", "https://legitimate.com@amaz0n.tk/login");
         // 実際のホスト amaz0n.tk は Suspicious (digit substitution + free TLD)
-        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
-            "userinfo 混乱攻撃で Suspicious が検出されなかった");
+        assert_eq!(
+            r.url_reputation,
+            UrlReputation::Suspicious,
+            "userinfo 混乱攻撃で Suspicious が検出されなかった"
+        );
     }
 
     #[test]
@@ -684,8 +802,11 @@ mod tests {
     fn deep_infix_brand_in_qr_is_flagged() {
         let d = QuishingDefense::new();
         let r = d.evaluate_decoded("qr-3", "https://one.two.apple.com.badactor.cn/download");
-        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
-            "QR 内の深い階層インフィックス偽装が検出されなかった");
+        assert_eq!(
+            r.url_reputation,
+            UrlReputation::Suspicious,
+            "QR 内の深い階層インフィックス偽装が検出されなかった"
+        );
     }
 
     // ── 危険スキーム検出 (blob:/data:/javascript:) ──────────────────────────
@@ -695,16 +816,22 @@ mod tests {
         let d = QuishingDefense::new();
         let r = d.evaluate_decoded("qr-blob", "blob:https://evil.example/uuid-1234");
         assert!(!r.is_url, "blob: は http(s) URL として扱わない");
-        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
-            "blob: URI が Neutral で素通りしている");
+        assert_eq!(
+            r.url_reputation,
+            UrlReputation::Suspicious,
+            "blob: URI が Neutral で素通りしている"
+        );
     }
 
     #[test]
     fn data_uri_qr_is_suspicious() {
         let d = QuishingDefense::new();
         let r = d.evaluate_decoded("qr-data", "data:text/html;base64,PHNjcmlwdD4=");
-        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
-            "data: URI が Neutral で素通りしている");
+        assert_eq!(
+            r.url_reputation,
+            UrlReputation::Suspicious,
+            "data: URI が Neutral で素通りしている"
+        );
     }
 
     #[test]
@@ -718,20 +845,32 @@ mod tests {
     fn dangerous_scheme_case_variation_detected() {
         let d = QuishingDefense::new();
         // 大文字小文字のバリエーションでの回避を防ぐ
-        assert_eq!(d.evaluate_decoded("q1", "BLOB:https://x.example/z").url_reputation,
-            UrlReputation::Suspicious);
-        assert_eq!(d.evaluate_decoded("q2", "Data:text/html,hello").url_reputation,
-            UrlReputation::Suspicious);
-        assert_eq!(d.evaluate_decoded("q3", "JavaScript:void(0)").url_reputation,
-            UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_decoded("q1", "BLOB:https://x.example/z")
+                .url_reputation,
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_decoded("q2", "Data:text/html,hello")
+                .url_reputation,
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_decoded("q3", "JavaScript:void(0)")
+                .url_reputation,
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn dangerous_scheme_leading_whitespace_detected() {
         let d = QuishingDefense::new();
         let r = d.evaluate_decoded("q4", "  data:text/html,x");
-        assert_eq!(r.url_reputation, UrlReputation::Suspicious,
-            "先頭空白で危険スキーム検出を回避できてしまう");
+        assert_eq!(
+            r.url_reputation,
+            UrlReputation::Suspicious,
+            "先頭空白で危険スキーム検出を回避できてしまう"
+        );
     }
 
     #[test]
@@ -749,46 +888,71 @@ mod tests {
         let d = QuishingDefense::new();
         let line = "█▀▄▀█▄▀█▀▄▀█▄▀█▀▄▀█▄▀█";
         let body: String = std::iter::repeat_n(line, 10).collect::<Vec<_>>().join("\n");
-        assert!(d.detect_ascii_qr(&body), "ブロック文字の羅列が ASCII QR として検出されなかった");
+        assert!(
+            d.detect_ascii_qr(&body),
+            "ブロック文字の羅列が ASCII QR として検出されなかった"
+        );
     }
 
     #[test]
     fn url_shortener_is_suspicious() {
         // 動的 QR: 短縮 URL はスキャン後に宛先を差し替え可能なため疑わしい
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://bit.ly/3xYz"), UrlReputation::Suspicious);
-        assert_eq!(d.evaluate_url("https://tinyurl.com/abcd"), UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://bit.ly/3xYz"),
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_url("https://tinyurl.com/abcd"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn qr_redirect_service_is_suspicious() {
         // QR 生成/リダイレクトサービス (動的 QR の中核)
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://qrco.de/xyz"), UrlReputation::Suspicious);
-        assert_eq!(d.evaluate_url("https://flowcode.com/p/abc"), UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://qrco.de/xyz"),
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_url("https://flowcode.com/p/abc"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn shortener_subdomain_is_suspicious() {
         // カスタム短縮のサブドメイン形式も対象
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://go.bit.ly/promo"), UrlReputation::Suspicious);
+        assert_eq!(
+            d.evaluate_url("https://go.bit.ly/promo"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]
     fn trusted_domain_not_flagged_as_shortener() {
         // 回帰: 信頼ドメインが短縮判定に巻き込まれないこと
         let d = QuishingDefense::new();
-        assert_eq!(d.evaluate_url("https://github.com/anthropics"), UrlReputation::Trusted);
+        assert_eq!(
+            d.evaluate_url("https://github.com/anthropics"),
+            UrlReputation::Trusted
+        );
     }
 
     #[test]
     fn detects_braille_qr() {
         // Barracuda が観測した点字ブロックによるテキスト QR
         let d = QuishingDefense::new();
-        let line = "\u{2801}\u{28FF}\u{2847}\u{28B6}\u{2809}\u{28FE}\u{2840}\u{28DB}\u{2807}\u{28F0}";
+        let line =
+            "\u{2801}\u{28FF}\u{2847}\u{28B6}\u{2809}\u{28FE}\u{2840}\u{28DB}\u{2807}\u{28F0}";
         let body: String = std::iter::repeat_n(line, 10).collect::<Vec<_>>().join("\n");
-        assert!(d.detect_ascii_qr(&body), "点字ブロックのテキスト QR が検出されなかった");
+        assert!(
+            d.detect_ascii_qr(&body),
+            "点字ブロックのテキスト QR が検出されなかった"
+        );
     }
 
     #[test]
@@ -797,14 +961,21 @@ mod tests {
         let d = QuishingDefense::new();
         let line = "■□■■□■□■□■■□■□■■□■□■";
         let body: String = std::iter::repeat_n(line, 10).collect::<Vec<_>>().join("\n");
-        assert!(d.detect_ascii_qr(&body), "幾何学記号のテキスト QR が検出されなかった");
+        assert!(
+            d.detect_ascii_qr(&body),
+            "幾何学記号のテキスト QR が検出されなかった"
+        );
     }
 
     #[test]
     fn normal_text_is_not_ascii_qr() {
         let d = QuishingDefense::new();
-        let body = "こんにちは、\n来週の会議についてですが、\n資料を添付します。\nよろしくお願いします。";
-        assert!(!d.detect_ascii_qr(body), "通常の文章を ASCII QR と誤検出した");
+        let body =
+            "こんにちは、\n来週の会議についてですが、\n資料を添付します。\nよろしくお願いします。";
+        assert!(
+            !d.detect_ascii_qr(body),
+            "通常の文章を ASCII QR と誤検出した"
+        );
     }
 
     #[test]
@@ -813,7 +984,10 @@ mod tests {
         // MIN_QR_LINES (8) 未満の連続では検出しない
         let line = "████████████████";
         let body: String = std::iter::repeat_n(line, 3).collect::<Vec<_>>().join("\n");
-        assert!(!d.detect_ascii_qr(&body), "短すぎるブロック行の連続を誤検出した");
+        assert!(
+            !d.detect_ascii_qr(&body),
+            "短すぎるブロック行の連続を誤検出した"
+        );
     }
 
     #[test]
@@ -825,7 +999,10 @@ mod tests {
         lines.push("");
         lines.extend(std::iter::repeat_n(block_line, 5));
         let body = lines.join("\n");
-        assert!(!d.detect_ascii_qr(&body), "空行を挟んだ分断ブロックを誤検出した");
+        assert!(
+            !d.detect_ascii_qr(&body),
+            "空行を挟んだ分断ブロックを誤検出した"
+        );
     }
 
     // ── 分割 QR (Structured Append) 検出 ────────────────────────────────────
@@ -857,7 +1034,10 @@ mod tests {
         // 64 文字超の入力では DP テーブルを確保せず長さ差を返す
         let huge = "a".repeat(3000);
         let dist = levenshtein(&huge, "amazon");
-        assert!(dist > 3, "巨大入力は typosquat 距離 (1-3) に入ってはならない");
+        assert!(
+            dist > 3,
+            "巨大入力は typosquat 距離 (1-3) に入ってはならない"
+        );
     }
 
     #[test]
@@ -868,7 +1048,10 @@ mod tests {
         let url = format!("https://{host}.com/");
         // パニックせず、typosquat にも誤判定しないこと
         let rep = d.evaluate_url(&url);
-        assert_eq!(rep, UrlReputation::Neutral,
-            "巨大ホストは typosquat ではなく Neutral であるべき: {rep:?}");
+        assert_eq!(
+            rep,
+            UrlReputation::Neutral,
+            "巨大ホストは typosquat ではなく Neutral であるべき: {rep:?}"
+        );
     }
 }
