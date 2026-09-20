@@ -587,7 +587,10 @@ impl JmapClient {
         check_set_errors(&sub_rs, "sub")?;
 
         if let Some(id) = draft_id {
-            if let Err(e) = self
+            // 送信は既に成功しているため致命的ではないが、下書きが残留する
+            // ことをログに残さないと利用者もサポートも気付けない。
+            // transport だけでなく notDestroyed の拒否も拾う (D79)
+            let del_rs = self
                 .call(
                     vec![(
                         "Email/set".into(),
@@ -599,9 +602,8 @@ impl JmapClient {
                     &[Session::JMAP_CORE, Session::JMAP_MAIL],
                 )
                 .await
-            {
-                // 送信は既に成功しているため致命的ではないが、下書きが残留する
-                // ことをログに残さないと利用者もサポートも気付けない。
+                .and_then(|rs| check_set_errors(&rs, "del"));
+            if let Err(e) = del_rs {
                 tracing::warn!(error = %e, "送信後の下書き削除に失敗しました (下書きが残留している可能性があります)");
             }
         }
