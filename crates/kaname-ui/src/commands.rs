@@ -1872,7 +1872,21 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
     client
         .trash(&email_id)
         .await
-        .map_err(|e| format!("削除に失敗しました: {e}"))
+        .map_err(|e| format!("削除に失敗しました: {e}"))?;
+
+    // JMAP 側でゴミ箱へ移した後、ローカルの保存済み一覧にも削除を反映する。
+    // ここで立てないと `list_messages` が `is_deleted = 0` で拾い続け、
+    // 削除済みメールがオフライン表示に残る。ローカル行が無い (未保存) なら
+    // 何もしない — best-effort。
+    let account_id = current_account_id().await;
+    if !account_id.is_empty() {
+        if let Some(store) = store_slot().lock().await.clone() {
+            if let Err(e) = store.mark_deleted(&account_id, &email_id).await {
+                tracing::warn!(error=%e, "ローカル削除の反映に失敗");
+            }
+        }
+    }
+    Ok(())
 }
 
 /// メールを送信する。

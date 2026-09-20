@@ -1630,6 +1630,31 @@ impl Store {
         Ok(())
     }
 
+    /// メールをローカルで削除済みにする (ソフトデリート)。
+    ///
+    /// JMAP 側でゴミ箱へ移したメールを呼ぶ想定。`list_messages` 等は
+    /// `is_deleted = 0` でフィルタするため、ここで立てないと削除した
+    /// メールがオフライン一覧に残り続ける。`jmap_id` 一致で1行だけ
+    /// 更新する (id を知らない呼び出し側のため)。対象が無ければ false。
+    pub async fn mark_deleted(&self, account_id: &str, jmap_id: &str) -> Result<bool, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(jmap_id, "jmap_id", 256)?;
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let n = conn
+            .execute(
+                "UPDATE messages SET is_deleted = 1, \
+                    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+                 WHERE account_id = ?1 AND jmap_id = ?2 AND is_deleted = 0;",
+                params![account_id, jmap_id],
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(n > 0)
+    }
+
     /// メールボックスの保存済みメールを新しい順に返す。
     ///
     /// `idx_messages_mailbox(mailbox_id, received_at DESC)` を利用する。
@@ -2292,5 +2317,47 @@ mod message_persistence_tests {
         assert_eq!(count, 1);
         assert_eq!(verdict, "scanned");
         assert_eq!(size, 2048);
+    }
+||||||| parent of f31f398 (fix(kaname-store): ゴミ箱移動をローカル一覧にも反映)
+
+    /// `is_deleted` を立てる経路が無く、JMAP でゴミ箱へ移したメールが
+    /// ローカル一覧に残り続ける欠陥があった (オフライン表示の不整合)。
+    /// `mark_deleted` で一覧から外れること・未保存メールでは何もしない
+    /// こと・冪等であることを固定する。
+    #[tokio::test]
+    async fn mark_deleted_は一覧からメールを外す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .list_messages("acct1", "inbox", 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        assert!(store.mark_deleted("acct1", "jmap-1").await.unwrap());
+        assert!(
+            store
+                .list_messages("acct1", "inbox", 10)
+                .await
+                .unwrap()
+                .is_empty(),
+            "削除済みは一覧に残ってはいけない"
+        );
+
+        // 冪等: 既に削除済み / 存在しないメールでは false で何もしない
+        assert!(!store.mark_deleted("acct1", "jmap-1").await.unwrap());
+        assert!(!store.mark_deleted("acct1", "jmap-missing").await.unwrap());
     }
 }
