@@ -381,10 +381,14 @@ impl Store {
                 )
                 .unwrap_or_default();
 
-            // ハッシュ計算: SHA-256(prev_hash NUL event_type NUL payload_json)
-            // NUL 区切りにより event_type/payload 境界の曖昧性を排除する。
+            // ハッシュ計算: SHA-256(prev_hash NUL account_id NUL event_type NUL payload_json)
+            // account_id も素材に含める — 含めないと DB 書き込み権限を持つ
+            // 攻撃者がイベントの帰属アカウントを書き換えても検知できない。
+            // NUL 区切りによりフィールド境界の曖昧性を排除する。
+            // (注: 旧形式のハッシュで書かれた既存行は verify で破損と判定される)
             let hash = sha256_hex_fields(&[
                 prev_hash.as_bytes(),
+                account_id.unwrap_or("").as_bytes(),
                 event_type.as_bytes(),
                 payload_json.as_bytes(),
             ]);
@@ -417,7 +421,7 @@ impl Store {
             .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         let mut stmt = conn.prepare(
-            "SELECT seq, event_type, payload_json, prev_hash, hash FROM audit_log ORDER BY seq;"
+            "SELECT seq, account_id, event_type, payload_json, prev_hash, hash FROM audit_log ORDER BY seq;"
         ).map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut prev_hash = String::new();
@@ -427,16 +431,17 @@ impl Store {
             .query_map([], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
                 ))
             })
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         for row in rows {
-            let (seq, event_type, payload_json, stored_prev, stored_hash) =
+            let (seq, account_id, event_type, payload_json, stored_prev, stored_hash) =
                 row.map_err(|e| StoreError::Db(e.to_string()))?;
 
             if stored_prev != prev_hash {
@@ -447,6 +452,7 @@ impl Store {
 
             let expected = sha256_hex_fields(&[
                 prev_hash.as_bytes(),
+                account_id.as_deref().unwrap_or("").as_bytes(),
                 event_type.as_bytes(),
                 payload_json.as_bytes(),
             ]);
@@ -1273,6 +1279,44 @@ mod tests {
         // チェーンが健全な状態で検証
         let ok = store.verify_audit_chain().await.unwrap();
         assert!(ok, "正常チェーンは valid であるべき");
+    }
+
+    #[tokio::test]
+    async fn audit_chain_は行改ざんを検知する() {
+        // 攻撃者シナリオ: DB 鍵を握られた攻撃者は不変トリガーを落とせる。
+        // その上で行を書き換えても、ハッシュ素材に account_id を含むため
+        // 帰属の書き換え (DLP 違反の転嫁等) が検知される。
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .audit(
+                Some("acct1"),
+                "DLP_BLOCK",
+                &serde_json::json!({"to_count": 1}),
+            )
+            .await
+            .unwrap();
+
+        // 不変トリガーを落として account_id を書き換える
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute_batch(
+                "DROP TRIGGER audit_log_no_update;
+                 UPDATE audit_log SET account_id = 'attacker' WHERE seq = 1;",
+            )
+            .unwrap();
+        }
+
+        let r = store.verify_audit_chain().await;
+        assert!(
+            matches!(r, Err(StoreError::AuditChainBroken(1))),
+            "account_id 改ざんはハッシュ不一致で検知されるべき (got {r:?})"
+        );
     }
 
     #[tokio::test]
