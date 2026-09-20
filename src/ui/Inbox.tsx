@@ -633,6 +633,10 @@ const EmailDetailPanel = (props: {
             data-iframe-content
             srcdoc={body()!.srcdoc}
             sandbox={body()!.sandbox}
+            // バックエンドの CSP を iframe csp 属性としても強制する
+            // (srcdoc 内 <meta> CSP に加え、ブラウザ側でも独立に適用される
+            // 二重防御 — ADR-010)。
+            csp={body()!.csp}
             style={{
               width: "100%",
               height: "100%",
