@@ -312,7 +312,9 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
   応答を call_id で検索 (不在は Err)、`method == "error"` を拾い、
   `notCreated`/`notUpdated`/`notDestroyed` の最初のエントリを
   `JmapError::JmapProblem { type, description: "{id}: {desc}" }` として返す。
-  `mark_read`/`trash`/`send_email` (EmailSubmission/set) の3箇所に適用。
+  `mark_read`/`trash`/`send_email` (EmailSubmission/set) に適用。
+  送信後の下書き削除 (`Email/set` destroy, "del") も transport 失敗のみ warn で
+  `notDestroyed` を見ていなかったため同ヘルパーに接続 (送信成功後のため warn 維持)。
   なお `Email/import` は従来から `created.d1.id` の存在で成功判定していたため
   既に部分的に検出していた (理由は落ちるが失敗は伝わる)。
 - **テスト**: `check_set_errors_は拒否を検出する` — notUpdated/notCreated/notDestroyed/
