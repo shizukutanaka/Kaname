@@ -78,6 +78,10 @@ pub struct Envelope {
     pub attachments: Vec<AttachmentHeader>,
     /// Authentication-Results (SPF/DKIM/DMARC)。
     pub auth_results: AuthResultsHeader,
+    /// Reply-To アドレス群 (BEC の返信横取り検出に使用)。
+    pub reply_to: Vec<Address>,
+    /// Return-Path ヘッダーのアドレス (MAIL FROM; なりすまし検出に使用)。
+    pub return_path: Option<Address>,
 }
 
 /// An RFC 5322 address.
@@ -255,6 +259,17 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         });
     }
 
+    // Reply-To / Return-Path (BEC 判定に供給するため抽出する)
+    let reply_to = msg
+        .reply_to()
+        .map(|al| al.iter().filter_map(addr_to_address).collect())
+        .unwrap_or_default();
+    let return_path = match msg.return_path() {
+        mail_parser::HeaderValue::Address(a) => a.iter().next().and_then(addr_to_address),
+        // Return-Path は空 (`<>`) が正常なので、他の形式は None として扱う
+        _ => None,
+    };
+
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
@@ -269,6 +284,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         html_body,
         attachments,
         auth_results,
+        reply_to,
+        return_path,
     })
 }
 

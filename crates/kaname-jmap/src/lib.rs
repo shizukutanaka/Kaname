@@ -282,7 +282,7 @@ impl JmapClient {
                             "properties": [
                                 "id","mailboxIds","keywords","size",
                                 "receivedAt","sentAt","subject",
-                                "from","to","preview","hasAttachment","threadId",
+                                "from","to","replyTo","preview","hasAttachment","threadId",
                             ],
                         }),
                         "emails".into(),
@@ -705,6 +705,8 @@ pub struct EmailListItem {
     pub subject: Option<String>,
     pub from: Option<Vec<EmailAddress>>,
     pub to: Option<Vec<EmailAddress>>,
+    /// Reply-To アドレス群 (BEC の返信横取り検出に使用)。
+    pub reply_to: Option<Vec<EmailAddress>>,
     pub preview: Option<String>,
     pub has_attachment: Option<bool>,
     pub thread_id: Option<String>,
@@ -904,6 +906,7 @@ mod tests {
             subject: None,
             from: None,
             to: None,
+            reply_to: None,
             preview: None,
             has_attachment: None,
             thread_id: None,
