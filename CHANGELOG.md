@@ -20,6 +20,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `MlsMailClient::try_new` を追加 (CSPRNG 初期化失敗を Result で返す)
   - `generate_key_package` の戻り値を `Option<KeyPackage>` に変更 (生成失敗を表現可能に)
   - 残存: グループ状態はプロセス内メモリのみ (再起動で喪失 — Phase 2 で `mls_conversations` 永続化)、KeyPackage 配送経路と Compose 統合は Phase 3-4
+  - D122 修正: `seen_welcomes` の記録を `into_group` 成功後に移動 — 不正 Welcome によるリプレイ防止スロットの燃尽 DoS を解消
 
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした

@@ -661,6 +661,8 @@ impl MlsMailClient {
             EnvelopeKind::Welcome => {
                 // Welcome リプレイ防止 (P1): 同一 (conv_id, epoch) は一度のみ
                 // openmls は重複検知しないため上位層で追跡する必要がある
+                // 記録は参加成功後に行う — パース失敗の Welcome でスロットが
+                // 燃えて正規の再送を拒否する DoS を防ぐ (D122)
                 let key = (envelope.conversation_id.clone(), envelope.epoch);
                 if self.seen_welcomes.contains(&key) {
                     return Err(MlsMailError::WelcomeReplay {
@@ -668,7 +670,6 @@ impl MlsMailClient {
                         epoch: envelope.epoch,
                     });
                 }
-                self.seen_welcomes.insert(key);
 
                 let msg_in = MlsMessageIn::tls_deserialize_exact(&envelope.wire_bytes)
                     .map_err(|e| MlsMailError::Malformed(format!("Welcome パース失敗: {e}")))?;
@@ -742,6 +743,8 @@ impl MlsMailClient {
                     },
                 );
                 self.epochs.insert(envelope.conversation_id.clone(), epoch);
+                // 参加成功 — ここで初めて Welcome を処理済みとして記録する
+                self.seen_welcomes.insert(key);
 
                 tracing::info!(
                     conv_id = %envelope.conversation_id.as_hex(),
@@ -1629,6 +1632,44 @@ mod tests {
         assert!(
             matches!(second, Err(MlsMailError::WelcomeReplay { .. })),
             "リプレイされた Welcome は拒否されるべき: {second:?}"
+        );
+    }
+
+    #[test]
+    fn welcome_不正なものはスロットを燃やさない() {
+        // D122: seen_welcomes への記録は参加成功後にのみ行う。
+        // パース失敗する不正 Welcome で (conv_id, epoch) を汚染されても、
+        // 同じキーの正規 Welcome が後から処理できることを確認する。
+        let mut alice = make_client("alice@kaname.app");
+        let mut bob = make_client("bob@kaname.app");
+        let bob_kp = bob.generate_key_package().unwrap();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (_alice_conv, welcome_env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
+
+        // 攻撃者が先に同じ (conv_id, epoch) の壊れた Welcome を送りつける
+        let malformed = Envelope {
+            conversation_id: welcome_env.conversation_id.clone(),
+            kind: EnvelopeKind::Welcome,
+            epoch: welcome_env.epoch,
+            ciphersuite: welcome_env.ciphersuite,
+            wire_bytes: vec![0xFF; 4],
+            welcome: None,
+        };
+        assert!(bob.process_incoming(&malformed).is_err());
+
+        // 正規の Welcome (wire_bytes に Welcome メッセージ本体)
+        let legit = Envelope {
+            conversation_id: welcome_env.conversation_id.clone(),
+            kind: EnvelopeKind::Welcome,
+            epoch: welcome_env.epoch,
+            ciphersuite: welcome_env.ciphersuite,
+            wire_bytes: welcome_env.welcome.clone().unwrap(),
+            welcome: None,
+        };
+        let result = bob.process_incoming(&legit);
+        assert!(
+            matches!(result, Ok(IncomingResult::WelcomeJoined(_))),
+            "不正 Welcome の後でも正規 Welcome は参加できるべき: {result:?}"
         );
     }
 }
