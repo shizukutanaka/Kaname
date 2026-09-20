@@ -23,10 +23,39 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Removed
+- **`EmailRow.triage` と `kaname-core` クレートを削除** (D97): TS 側 `triageEmail` を Rust `TriageEngine` に集約した際、UI は仕分け値を読む箇所を持たず、行ごとに計算・シリアライズされるだけの dead 出力だった。E11 が残置根拠とした「TriageEngine のみ利用中」が消えたためクレートごと削除 (git 履歴に残る)
+- **呼び出し経路の無い `tauri-plugin-shell` を src-tauri から削除** (D76)
+- **Compose の未使用 `reply_to` prop を削除** (D78) — 体裁だけの返信機能だった
+- **永久エラー画面の「AI生成フィッシング検出 ✓」パネルと競合比較カードの同名表記を削除/訂正** (D92) — 実在しない検出機能を正常動作と表示する虚偽 UI だった
 - chore(workspace): 「全クレートで共有」の共通エラー型 `kaname-error` が利用クレートゼロのまま残存していたためクレートごと削除 — ADR は未実施の意図文書と判明 (D85)
 - fix(kaname-jmap): 一覧取得で `hasAttachment` プロパティを要求・パースしていたが消費者ゼロ — プロパティとフィールドを削除 (D86)
 
 ### Fixed
+- **クローズ済み未マージ PR に置き去りになっていた修正群を救出** (取りこぼし第2回 — 履歴再構築により D76–D111 系の ~30 件が孤児化していた):
+  - fix(kaname-store): 既読/ゴミ箱操作がローカル DB に反映されず再起動で巻き戻る欠陥を修正 — `mark_messages_read`/`mark_message_deleted` + upsert の `is_deleted=0` ガード (D77)
+  - fix(kaname-store): サーバ側で消えたメールがローカルに永久残存する欠陥を修正 — `reconcile_mailbox` で tombstone 化し、一覧先頭ページの部分取得時のみ走査 (D80)
+  - fix(kaname-jmap): Email/set 系応答の `notCreated`/`notUpdated`/`notDestroyed` を検査 — サーバ拒否が成功として握り潰されていた (D79)
+  - fix(kaname-jmap): `downloadUrl`/`uploadUrl` のテンプレート変数を URL エンコード — アカウント ID/ blob ID にテンプレート構文文字が来ると置換が壊れ任意 URL 解釈になりえた (D82)
+  - fix(kaname-jmap): セッション応答の `downloadUrl`/`uploadUrl`/`uploadUrl` オリジンを検証 — 悪意ある JMAP サーバがベアラトークンを別オリジンへ誘導する経路を閉塞 (D83)
+  - fix(kaname-jmap): `max_retries` が宣言のみで一度も発火しなかった — 冪等メソッド限定のリトライを `connect`/`call`/`download_blob` に実装 (D84)
+  - fix(kaname-jmap): To/From アドレスのヘッダ構文文字 (`<`/`>`/`,`/CRLF) を除去 — 宛先名の改行・カンマ注入を閉塞 (D90)
+  - fix(kaname-jmap): `get_email_body` の未消費本文フェッチを除去 — `bodyValues`/`fetch*BodyValues` (最大 ~1MB/通) を要求しながら blobId 経路しか使っていなかった (D93)
+  - fix(kaname-store,kaname-ui): ログのフルパス出力を葉名に落とす (D96, I5)
+  - fix(kaname-ui): 添付の同名上書きを `write_unique` の別名化で防止 + OOBV セレモニーの無制限蓄積に終端追い出しと上限を実装 (D87/D88)
+  - fix(kaname-ui): 履歴 DB 鍵の生成を tmp+rename アトミック化し、壊鍵時の黙殺再生成 (既存 DB が復号不能になる経路) をエラー化 — 平文 DB 検出時は「旧形式」と誘導文を返す (D89)
+  - fix(kaname-ui): 詳細解析・フォルダ一括解析にも送信者履歴を供給 — `sender_history` が `None` 固定で一覧と詳細の BEC 判定が食い違っていた (D100)
+  - fix(kaname-dlp,kaname-ui): 受信側 DLP に既定ルール3件を追加 (構造的に空だった) + 誤配検出へ既知宛先ドメインを連絡先履歴から供給 (D104) — kaname-dlp 変更のため security-lead 承認要
+  - fix(kaname-jmap,kaname-ui): 一覧経路に Return-Path を配線し From vs Return-Path 不一致検出を実効化 + e2e モック欠落3コマンド補完 (D106/D107)
+  - fix(kaname-ui): `org_domain` 設定を接続時に永続化 — 読み取り分岐 (他ユーザーの組織ドメイン既定値) が実効化 (D109)
+  - fix(kaname-ui): オンボーディング完了画面の虚偽機能表示2件を削除 (D110)
+  - fix(kaname-ui): `record_received` へ件名を `topic_summary` として保存する誤信号経路を閉塞 — 「話題急変」シグナルが構造的に誤発火していた (D111)
+  - fix(kaname-ui): `.eml` 解析をバイト列から直接行う `mail_analyze_bytes` を追加し、開封/インポート経路を統合
+  - feat(kaname-ui): メール一覧にオフセットページネーションを実装 — `mail_fetch(mailbox_id, limit, offset)` + `query_emails_page` (D68b)
+  - perf(kaname-ui): 一括経路の連絡先一覧/アカウント解決を行ごとの DB 参照から一覧1回の hoist に (D108)
+  - fix(kaname-observability): PII 検知のみだった `PrivacyLayer` に実抑制層を追加 (D28 残作業)
+  - fix(ci): static-check 検査9 の空転 (heredoc 実行で `__file__="<stdin>"` → repo 親 dir への誤 chdir) を修正 + corpus↔target↔bin 対応の検査10追加 (D103 再発防止/D105)
+  - fix(kaname-ui): オフライン時に保存済みメールが読めない不具合 + オンボーディングのデモメールを実解析エンジンに接続
+  - docs: CLAUDE.md のクレート依存グラフを設計意図の記述から実測へ修正 (D101)
 - **SSA 文体認証の学習がアプリ再起動で全消去されていた問題を修正 (D112)**: 送信者文体プロファイルを暗号化 DB (`settings`) に永続化 — 従来は警告に必要な 10 サンプルが再起動ごとにリセットされ、実運用では一度も発火し得なかった
 
 - fix(kaname-bec): AiTM スコアが契約上限 0-100 を超過していた (D102) — 高リスク認証パラメータ多重・PhaaS パターン・偽ドメインが重複加点され、出荷済み fuzz コーパスの種入力 (Tycoon2FA 系 URL) で実測 130+ に到達。`score.min(100)` でクランプし doc の閾値記述 (80+ → 実装の 50+) も修正。**kaname-bec 変更のため security-lead 承認要**
