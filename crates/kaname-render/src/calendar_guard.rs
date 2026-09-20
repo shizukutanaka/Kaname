@@ -64,7 +64,7 @@ pub enum CalendarRisk {
     ///
     /// CVE-2023-35636 型攻撃: Outlook が CN を自動解決する際に UNC を参照し
     /// NTLMv2 ハッシュが漏洩する。
-    /// 出典: https://codebook.machinarecord.com/threatreport/31520/
+    /// 出典: <https://codebook.machinarecord.com/threatreport/31520/>
     UncPathInAttendeeCn {
         /// 問題の CN 値
         cn: String,
@@ -450,7 +450,7 @@ impl Default for CalendarGuard {
 /// ```
 /// Outlook 等が CN を UI 表示のために解決しようとすると UNC を参照し、
 /// NTLMv2 ハッシュが攻撃者サーバーに漏洩する。
-/// 出典: https://codebook.machinarecord.com/threatreport/31520/ (2024)
+/// 出典: <https://codebook.machinarecord.com/threatreport/31520/> (2024)
 fn detect_unc_in_attendee(content: &str) -> Vec<CalendarRisk> {
     let mut risks = Vec::new();
     for line in content.lines() {

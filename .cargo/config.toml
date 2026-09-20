@@ -17,8 +17,6 @@ opt-level = 3
 t   = "nextest run --workspace"
 c   = "clippy --workspace --all-targets -- -D warnings"
 
-doc = "doc --workspace --no-deps --open"
-
 [net]
 retry = 3
 

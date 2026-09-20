@@ -1,6 +1,6 @@
 //! kaname-ui — Tauri 層。
 //! commands.rs に 12 個の API ハンドラーが純粋 async fn として実装されている。
-//! src-tauri/main.rs が #[tauri::command] でラップする。
+//! src-tauri/main.rs が `#[tauri::command]` でラップする。
 #![deny(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]

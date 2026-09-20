@@ -2,7 +2,7 @@
 //! フロントエンドの invoke() が呼ぶ全関数を実装。
 //!
 //! Tauri マクロを使わずに純粋な async fn として定義し、
-//! src-tauri で #[tauri::command] を付けて登録する。
+//! src-tauri で `#[tauri::command]` を付けて登録する。
 
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, instrument, warn};
