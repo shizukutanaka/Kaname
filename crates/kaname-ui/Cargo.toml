@@ -46,6 +46,8 @@ kaname-core = { path = "../kaname-core" }
 # バイナリに含まれる workspace 依存。新規外部 crate は増えない)。
 dirs = { workspace = true }
 rand = { workspace = true }
+# JMAP トークンを Zeroizing で包む (kaname-jmap::ClientConfig.bearer_token)
+zeroize = { workspace = true }
 
 [dev-dependencies]
 

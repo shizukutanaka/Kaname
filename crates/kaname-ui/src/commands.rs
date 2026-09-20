@@ -1440,7 +1440,7 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     info!(base_url=%base_url, "mail_connect");
 
     let config = kaname_jmap::ClientConfig {
-        bearer_token: token,
+        bearer_token: zeroize::Zeroizing::new(token),
         connect_timeout: std::time::Duration::from_secs(10),
         request_timeout: std::time::Duration::from_secs(30),
         max_retries: 2,

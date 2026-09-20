@@ -15,5 +15,7 @@ tracing    = { workspace = true }
 reqwest      = { workspace = true }
 uuid       = { workspace = true }
 chrono     = { workspace = true }
+# bearer_token を Zeroizing で保持 (切断後にヒープへ残さない)
+zeroize    = { workspace = true }
 
 [dev-dependencies]
