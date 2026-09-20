@@ -286,7 +286,7 @@ impl Store {
             return Err(StoreError::IntegrityCheckFailed);
         }
 
-        tracing::info!(path = %path.display(), "ストア開通");
+        tracing::info!(path = %redact_path(path), "ストア開通");
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -770,6 +770,15 @@ impl Store {
 // ============================================================================
 // SHA-256 プレースホルダー (本番: ring クレートを使用)
 // ============================================================================
+
+/// ログ用にパスを葉名だけに落とす (I5: フルパスは `/Users/<name>` 等の
+/// OS ユーザー名・ディレクトリ構造をログへ漏らすため)。
+fn redact_path(p: &Path) -> String {
+    p.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("<path>")
+        .to_owned()
+}
 
 fn sha256_hex(data: &[u8]) -> String {
     let hash = Sha256::digest(data);
