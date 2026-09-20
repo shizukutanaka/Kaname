@@ -207,6 +207,89 @@ const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
   );
 };
 
+// ============================================================================
+// 監査証跡 (audit_log — append-only + SHA-256 ハッシュチェーン)
+// ============================================================================
+
+interface AuditEntry {
+  seq:          number;
+  event_type:   string;
+  payload_json: string;
+  created_at:   string;
+}
+
+interface AuditLogView {
+  entries:     AuditEntry[];
+  chain_valid: boolean;
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  STORE_OPEN:          "履歴 DB オープン",
+  MAIL_CONNECT:        "メールサーバ接続",
+  MAIL_DISCONNECT:     "メールサーバ切断",
+  SENDER_VERIFIED:     "送信者を検証済みに変更",
+  ATTACHMENT_DOWNLOAD: "添付ダウンロード",
+  MAIL_SEND:           "外部宛メール送信",
+  DLP_BLOCK:           "DLP が送信をブロック",
+  MAIL_IMPORT:         ".eml 取り込み",
+  FOLDER_SCAN:         "フォルダ一括解析",
+};
+
+const AuditTrail = (props: { view: AuditLogView | null }) => {
+  const formatTime = (iso: string) => iso.replace("T", " ").replace("Z", " UTC");
+  return (
+    <div style={{
+      background: "#0D1219", border: "1px solid #1F2833",
+      "border-radius": "8px", overflow: "hidden",
+    }}>
+      <div style={{
+        padding: "12px 16px 10px", "border-bottom": "1px solid #1F2833",
+        display: "flex", "align-items": "center", gap: "8px",
+      }}>
+        <span style={{ "font-size": "13px", "font-weight": "600" }}>監査証跡</span>
+        <Show when={props.view}>
+          {(v) => (
+            <span style={{
+              "font-size": "10px", "font-weight": "600",
+              color: v().chain_valid ? "#00B368" : "#FF6B70",
+              padding: "1px 6px", background: "#1A2129", "border-radius": "3px",
+            }}>
+              {v().chain_valid ? "ハッシュチェーン正常" : "⚠ チェーン破損 (改ざんの可能性)"}
+            </span>
+          )}
+        </Show>
+      </div>
+      <Show
+        when={(props.view?.entries.length ?? 0) > 0}
+        fallback={
+          <div style={{ padding: "16px", "text-align": "center", color: "#8B96A5", "font-size": "12px" }}>
+            監査イベントの記録なし
+          </div>
+        }
+      >
+        <div style={{ "max-height": "240px", "overflow-y": "auto", "font-family": "monospace" }}>
+          <For each={props.view?.entries}>
+            {(e) => (
+              <div style={{
+                padding: "7px 16px", "border-bottom": "1px solid #12181F",
+                display: "flex", "justify-content": "space-between",
+                "font-size": "11px", "align-items": "baseline", gap: "8px",
+              }}>
+                <span style={{ color: "#D0D5DD" }}>
+                  {EVENT_LABEL[e.event_type] ?? e.event_type}
+                </span>
+                <span style={{ color: "#8B96A5", "font-size": "10px", "flex-shrink": "0" }}>
+                  {formatTime(e.created_at)}
+                </span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
 const getLabelColor = (label: string) => ({
   "Public": "#8B96A5",
   "Internal": "#8B96A5",
@@ -397,6 +480,16 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
   const [phishing, setPhishing] = createSignal<AiPhishingAnalysis | null>(null);
   const [phishingError, setPhishingError] = createSignal<string | null>(null);
   const [accessLog] = createSignal<AiAccessEntry[]>([]);
+  const [auditLog, setAuditLog] = createSignal<AuditLogView | null>(null);
+
+  // 監査証跡 (audit_log テーブル) は実在データ — 起動時に読み出す。
+  createEffect(async () => {
+    try {
+      setAuditLog(await invoke<AuditLogView>("security_audit_log", { limit: 100 }));
+    } catch {
+      // 読み出し失敗時はセクションを空のままにする (偽の記録を見せない)
+    }
+  });
   const [contacts]  = createSignal<ContactIntelligence[]>([]);
   const [actions]   = createSignal<ActionItem[]>([]);
   const [loading,   setLoading]   = createSignal(false);
@@ -479,6 +572,7 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
 
       {/* AI アクセス監査ログ */}
       <AiAccessLog entries={accessLog()} />
+      <AuditTrail view={auditLog()} />
 
       {/* アクションアイテム */}
       <div style={{
@@ -535,10 +629,10 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
         {([
           ["✓", "AI生成フィッシング検出", "kaname-bec の実データ判定 (精度の数値は本環境で未検証、docs/gap-analysis.md D36 参照)"],
           ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策、実データで稼働"],
-          ["⚠", "AI アクセス監査証跡",  "ハッシュチェーン自体は実装済みだが、UI から閲覧する経路は未実装"],
+          ["✓", "監査証跡",           "append-only + ハッシュチェーン — 上の「監査証跡」セクションで実データを閲覧可能"],
           ["✗", "ローカル AI 推論",     "未実装 (docs/gap-analysis.md D2)。LLM 推論は固定応答のスタブ"],
           ["✗", "MLS + PQC 暗号化",    "未実装 (docs/gap-analysis.md D1)。現状は単一バイト XOR のモック"],
-        ] as const).map(([icon, name, desc]) => (
+        ] as [string, string, string][]).map(([icon, name, desc]) => (
           <div style={{
             display: "flex", gap: "8px", padding: "4px 0",
             "font-size": "11px",

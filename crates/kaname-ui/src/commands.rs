@@ -1919,6 +1919,42 @@ pub async fn history_open_default() -> Result<String, String> {
     Ok(shown)
 }
 
+/// 監査ログ閲覧の応答。
+#[derive(Debug, Serialize)]
+pub struct AuditLogView {
+    /// 監査エントリ (新しい順)。
+    pub entries: Vec<kaname_store::AuditEntry>,
+    /// ハッシュチェーンの検証結果 (true = 改ざんなし)。
+    pub chain_valid: bool,
+}
+
+/// 監査証跡 (`audit_log` テーブル) を閲覧用に返す。
+///
+/// audit_log は append-only トリガー + ハッシュチェーンで書き込み側は
+/// 保護されていたが、**読み出し経路が存在せず書き込み専用のままだった**。
+/// このコマンドが SecurityDashboard の「監査証跡」セクションを駆動する。
+/// Store 未オープンなら空 (DB が無ければ記録も無いため実態として正しい)。
+#[instrument]
+pub async fn security_audit_log(limit: Option<i64>) -> Result<AuditLogView, String> {
+    let Some(store) = store_slot().lock().await.clone() else {
+        return Ok(AuditLogView {
+            entries: Vec::new(),
+            chain_valid: true,
+        });
+    };
+    let limit = limit.unwrap_or(100).clamp(1, 500);
+    let entries = store
+        .audit_entries(limit)
+        .await
+        .map_err(|e| format!("監査ログの読み出しに失敗しました: {e}"))?;
+    // チェーン破損 (行ハッシュ不正) は Err、prev_hash 不連続は Ok(false)。
+    let chain_valid = store.verify_audit_chain().await.unwrap_or(false);
+    Ok(AuditLogView {
+        entries,
+        chain_valid,
+    })
+}
+
 /// オンボーディングで選んだ設定を保存する。
 ///
 /// 以前は `not_wired` を返すスタブで、そのために Onboarding 画面は

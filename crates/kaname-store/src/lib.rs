@@ -459,6 +459,38 @@ impl Store {
         Ok(valid)
     }
 
+    /// 監査ログを新しい順に最大 `limit` 件返す (閲覧用)。
+    ///
+    /// 書き込み専用だった audit_log を UI から閲覧するための読み出し経路。
+    /// ペイロードは生 JSON のまま返し、表示整形は呼び出し側に委ねる。
+    pub async fn audit_entries(&self, limit: i64) -> Result<Vec<AuditEntry>, StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT seq, event_type, payload_json, created_at
+                 FROM audit_log ORDER BY seq DESC LIMIT ?1;",
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([limit], |row| {
+                Ok(AuditEntry {
+                    seq: row.get(0)?,
+                    event_type: row.get(1)?,
+                    payload_json: row.get(2)?,
+                    created_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StoreError::Db(e.to_string()))
+    }
+
     /// アカウント行が無ければ作る (FK 制約の前提)。
     ///
     /// `PRAGMA foreign_keys = ON` のため、`contacts`/`messages`/`settings` は
@@ -1228,6 +1260,33 @@ mod tests {
         assert!(ok);
     }
 
+    #[tokio::test]
+    async fn audit_entries_は新しい順に返し_limitを尊重する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        for i in 0..3 {
+            store
+                .audit(None, &format!("EV{i}"), &serde_json::json!({"i": i}))
+                .await
+                .unwrap();
+        }
+
+        let all = store.audit_entries(10).await.unwrap();
+        assert_eq!(all.len(), 3);
+        // 新しい順 (seq DESC)
+        assert_eq!(all[0].event_type, "EV2");
+        assert_eq!(all[2].event_type, "EV0");
+        assert!(all[0].created_at.contains('T'));
+
+        let last2 = store.audit_entries(2).await.unwrap();
+        assert_eq!(last2.len(), 2);
+        assert_eq!(last2[0].event_type, "EV2");
+    }
+
     // ── セキュリティ回帰テスト ──────────────────────────────────────────────
 
     #[test]
@@ -1354,6 +1413,19 @@ pub struct MessageStats {
     pub unread: u32,
     /// BEC 警戒判定 (SUSPICIOUS + DANGEROUS) 件数。
     pub bec_alerts: u32,
+}
+
+/// 監査ログの1行 (閲覧用読み出し)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AuditEntry {
+    /// 連番 (AUTOINCREMENT)。
+    pub seq: i64,
+    /// イベント種別 (STORE_OPEN / MAIL_SEND / DLP_BLOCK 等)。
+    pub event_type: String,
+    /// イベント詳細の JSON (件名・本文・宛先は含まない最小構成)。
+    pub payload_json: String,
+    /// 記録時刻 (RFC 3339 / UTC)。
+    pub created_at: String,
 }
 
 /// `LIKE` パターンのメタ文字をエスケープする。

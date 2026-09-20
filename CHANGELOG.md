@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
+
 - **`mail_get_summary` を履歴 DB の実集計に接続** — 起動時に呼ばれるのに常に `{unread:0, bec_alerts:0, total:0}` を返すスタブだった。`Store::message_stats` (COUNT + `is_read`/`bec_verdict` 集計) を追加し、Store オープン+アカウント特定時は実数を返す。未接続なら 0 (ローカルにメールが無い実態として正しい)
 ### Added
 - **作成画面の送信前アドバイザリに `oobv_recommend` を配線** (D24 残件 — 台帳記載の想定用途どおり)
