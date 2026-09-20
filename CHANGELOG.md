@@ -19,6 +19,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **ゴミ箱移動がサーバー側で実際に移動していなかった欠陥**: `Email/set` の `mailboxIds` パッチは `{trash: true}` だけだと追加のみで受信トレイから除去されない (RFC 8621 §4.6) → 現在の所属を `Email/get` で取得し全て `null` で除去するパッチに修正
+
 - **オンボーディングが完全に無スタイルで描画されていた欠陥**: `k-*` クラス37個が CSS 未定義のまま残存 (アーカイブ移行時にスタイル定義が欠落) → ダークテーマのスタイルブロックをコンポーネント内に定義。トグル・進捗ドット・危険カード等すべて正しく描画されるようになった
 
 - **bec-scoring-spec.md が実装と乖離**: 閾値 (0.5/0.7 → 実装 0.6/0.85)・「7 信号」→ ~14 経路・最終スコア式 (線形クリップ → ロジスティック変換) を実装に合わせて訂正
