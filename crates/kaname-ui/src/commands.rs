@@ -364,6 +364,11 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     ref_ids.dedup();
     let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
         build_thread_data(&account_id, None, &ref_ids).await;
+    // 送信者履歴 (初回連絡・検証済み・悪意報告等) を引く。
+    // 一覧評価 (assess_listing) と同じシグナル集合で判定しないと、
+    // 一覧では「検証済み差出人」で減点されていたメールが詳細を
+    // 開いた途端に DANGEROUS へ跳ねる (逆も同様) という食い違いが起きる。
+    let sender_history = lookup_sender_history(&account_id, &from_addr_only).await;
     let current_domain = from_addr_only
         .rsplit('@')
         .next()
@@ -391,7 +396,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         subject: &subject,
         body_text: &body_text,
         auth,
-        sender_history: None,
+        sender_history: sender_history.as_ref(),
         our_domain: &our,
         known_contacts: &contacts,
         extracted_urls: &urls,
@@ -671,6 +676,9 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         ref_ids.dedup();
         let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
             build_thread_data(&account_id, None, &ref_ids).await;
+        // 送信者履歴 — analyze_raw_email / assess_listing と同じシグナル集合で
+        // 判定しないと、フォルダ走査だけ判定が食い違う (D100)。
+        let sender_history = lookup_sender_history(&account_id, &from).await;
         let current_domain = from_domain.to_lowercase();
         let body_snippet: String = body_text.chars().take(500).collect();
         let in_reply_to_first = env.in_reply_to.first();
@@ -694,7 +702,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             subject: &subject,
             body_text: &body_text,
             auth,
-            sender_history: None,
+            sender_history: sender_history.as_ref(),
             our_domain: &our,
             known_contacts: &contacts,
             extracted_urls: &urls,
@@ -1207,6 +1215,74 @@ mod tests {
         assert_eq!(
             p.sample_count, 4,
             "永続化済みの 3 サンプル + 今回の 1 サンプル = 4 であるべき (0 からの再学習ではない)"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn analyze_raw_email_uses_verified_sender_history() -> Result<(), String> {
+        // D100 回帰: 一覧評価 (assess_listing) にのみ送信者履歴が供給され、
+        // 詳細解析 (analyze_raw_email) は sender_history=None 固定だった。
+        // 「本人確認済み」の -0.20 寄与が詳細表示に効かず、同一メールで
+        // 一覧と詳細の判定が食い違った。検証済み送信者のメールで
+        // 「検証済み差出人」シグナルが出ることで配線を証明する。
+        //
+        // 注意: STORE はプロセス共有の OnceLock のため、このテスト以降に
+        // 走る他テストも「空の Store が開いている」状態になる。ただし
+        // 履歴の無い送信者には None が返り挙動は不変のため影響は無い。
+        if store_slot().lock().await.is_none() {
+            let db = std::env::temp_dir().join(format!("kaname-d100-{}.db", std::process::id()));
+            history_open(db.to_string_lossy().into_owned(), "0".repeat(64)).await?;
+        }
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("テスト用 Store を開けませんでした")?;
+
+        // 未接続時の current_account_id() は空文字。両送信者とも同じ
+        // アカウントで種付けする。
+        let account = "";
+        let verified = "d100-verified@example.test";
+        let control = "d100-control@example.test";
+        store
+            .record_received(account, verified, Some("Verified Sender"), None)
+            .await
+            .map_err(|e| e.to_string())?;
+        store
+            .mark_sender_verified(account, verified)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mk = |from: &str| -> Vec<u8> {
+            format!(
+                "From: {from}\r\n\
+                 To: you@example.test\r\n\
+                 Subject: wire transfer request\r\n\
+                 Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+                 Content-Type: text/plain; charset=utf-8\r\n\
+                 \r\n\
+                 Please process the wire transfer today.\r\n"
+            )
+            .into_bytes()
+        };
+
+        let v = analyze_raw_email(&mk(verified)).await?;
+        let c = analyze_raw_email(&mk(control)).await?;
+        assert!(
+            v.bec_signals.iter().any(|s| s.contains("検証済み")),
+            "詳細解析に送信者履歴が供給されていない (D100 回帰): {:?}",
+            v.bec_signals
+        );
+        assert!(
+            !c.bec_signals.iter().any(|s| s.contains("検証済み")),
+            "履歴の無い対照送信者に検証済みシグナルが出てはいけない"
+        );
+        assert!(
+            v.bec_score < c.bec_score,
+            "検証済み送信者のスコアが対照より下がるべき ({} vs {})",
+            v.bec_score,
+            c.bec_score
         );
         Ok(())
     }
