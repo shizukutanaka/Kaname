@@ -14,6 +14,7 @@
 
 import { createSignal, createEffect, For, Show, Switch, Match } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { OobvCeremony } from "./OobvCeremony";
 
 // ============================================================================
 // 型定義
@@ -540,20 +541,14 @@ const EmailDetailPanel = (props: {
               </For>
             </div>
           </Show>
-          <Show when={bec()!.oobv_level === "strong"}>
-            <div style={{
-              padding: "8px 16px", "font-size": "12px", "font-weight": "600", color: "#E5484D",
-              background: "#E5484D12", "border-bottom": "0.5px solid #E5484D40",
-            }}>
-              📞 {bec()!.oobv_message}
-            </div>
-          </Show>
-          <Show when={bec()!.oobv_level === "optional"}>
-            <div style={{
-              padding: "6px 16px", "font-size": "11px", color: "#F5A623",
-              background: "#F5A62312", "border-bottom": "0.5px solid #F5A62340",
-            }}>
-              📞 {bec()!.oobv_message}
+          <Show when={bec()!.oobv_level !== "none"}>
+            <div style={{ padding: "8px 16px" }}>
+              <OobvCeremony
+                level={bec()!.oobv_level}
+                message={bec()!.oobv_message}
+                emailId={props.emailId ?? ""}
+                sender={bec()!.from}
+              />
             </div>
           </Show>
           <Show when={bec()!.deepfake_advisory.severity !== "None"}>
