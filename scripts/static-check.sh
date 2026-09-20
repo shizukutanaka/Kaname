@@ -86,9 +86,8 @@ KEYWORDS = {
 # 属性・コメント・文字列/char リテラルは、その中身が関数呼び出しに似た
 # 形になりうる (kaname-screen 等は検出パターンをそのまま文字列で持ち、
 # コメントには「// unlimited (Enterprise)」のような自然文が入る)。
-# 呼び出し判定の前に、文字列 → コメントの順で取り除く
-# (コメント除去を先にすると "http://foo" のようなURL文字列内の `//` を
-# コメント開始と誤認するため、必ず文字列を先に潰す)。
+# 呼び出し判定の前に取り除く。文字列内の `//` (URL) とコメント内の `"`
+# が相互に干渉するため、正規表現の連鎖ではなく単一パスで処理する。
 def strip_noise(src: str) -> str:
     src = re.sub(r'#!?\[.*?\]', ' ', src, flags=re.S)  # 属性
     # raw 文字列: r#*"..."#* は開始と同じ個数の # で閉じる必要がある
@@ -96,24 +95,58 @@ def strip_noise(src: str) -> str:
     # 'r' の直前が識別子の一部 (例: "tr", "for") だと誤爆するので
     # 単語境界を要求する ("tr", "td" の並びを raw 文字列と誤認しない)。
     src = re.sub(r'(?<![a-zA-Z0-9_])r(#*)"(?:.*?)"\1', '""', src, flags=re.S)
-    # char リテラルを文字列より先に剥がす。`'"'` (ダブルクォート 1 文字の
-    # char リテラル) を先に文字列側の正規表現に処理させると、中の `"` を
-    # 文字列の開始と誤認し、次に見つかる無関係な `"` までを丸ごと呑み込んで
-    # 以降の文字列境界が全部ズレる (実際に発生した)。
-    src = re.sub(r"'(?:[^'\\]|\\.)'", "''", src, flags=re.S)
-    # 通常の文字列。DOTALL 必須: `\<改行>` によるバックスラッシュ行継続
-    # (複数行文字列リテラルで使われる) は `\\.` が改行にマッチできないと
-    # 消費できず、以降の文字列境界がすべてズレる
-    # (MIME フィクスチャの複数行バイト文字列で実際に発生した)。
-    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src, flags=re.S)
-    # ブロックコメント (文字列を潰した後なので安全)。
-    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
-    # 行コメント。以前は「行頭が // のコメント専用行」しか除去しておらず、
-    # 実コードに続く行末コメント (`pub seat_limit: ..., // unlimited (...)`
-    # のような) を取りこぼしていた。文字列を潰した後なので、残る `//` は
-    # すべて本物のコメント開始とみなしてよい。
-    src = re.sub(r'//[^\n]*', '', src)
-    return src
+    # 文字列・文字リテラル・コメントを状態機械の単一パスで除去する。
+    # 以前は「文字列 → char → コメント」の正規表現連鎖だったが、
+    # コメント内の孤立 `"` (例: /// 表示名の `"` は〜) が文字列の
+    # 開閉パリティを崩し、以降の文字列がコードとして誤検出される
+    # バグがあった (kaname-store の SQL 内 strftime()/accounts() が
+    # 「未定義関数呼び出し」と報告された)。パリティに依存しない
+    # 一文字ずつの走査なら同類の誤爆は発生しない。
+    out = []
+    i, n = 0, len(src)
+    NORMAL, IN_STR, IN_LINE, IN_BLOCK = 0, 1, 2, 3
+    state = NORMAL
+    block_depth = 0
+    while i < n:
+        c = src[i]
+        if state == NORMAL:
+            if c == '/' and i + 1 < n and src[i + 1] == '/':
+                state = IN_LINE; i += 2; continue
+            if c == '/' and i + 1 < n and src[i + 1] == '*':
+                state = IN_BLOCK; block_depth = 1; i += 2; continue
+            if c == '"':
+                out.append('"'); state = IN_STR; i += 1; continue
+            if c == "'":
+                # char リテラルは 'x'/'\\n'/'\"' など1要素のみ。
+                # ライフタイム 'a / 'static は閉じ ' が無いので残す。
+                m = re.match(r"'(?:[^'\\]|\\.)'", src[i:])
+                if m:
+                    out.append("''"); i += m.end(); continue
+                out.append(c); i += 1; continue
+            out.append(c); i += 1; continue
+        if state == IN_STR:
+            if c == '\\':
+                i += 2; continue          # \" \\ \<改行> 等のエスケープ/継続
+            if c == '"':
+                out.append('"'); state = NORMAL; i += 1; continue
+            if c == '\n':
+                out.append('\n')          # 行番号をずらさないため改行は残す
+            i += 1; continue
+        if state == IN_LINE:
+            if c == '\n':
+                out.append('\n'); state = NORMAL
+            i += 1; continue
+        # IN_BLOCK: Rust のブロックコメントはネストする
+        if src.startswith('/*', i):
+            block_depth += 1; i += 2; continue
+        if src.startswith('*/', i):
+            block_depth -= 1; i += 2
+            if block_depth == 0: state = NORMAL
+            continue
+        if c == '\n':
+            out.append('\n')
+        i += 1
+    return ''.join(out)
 
 bad = 0
 for f, src in files.items():
@@ -196,10 +229,13 @@ sigs = {}
 for m in re.finditer(r'(?:async\s+)?fn\s+([a-z_][a-z0-9_]*)\s*\(([^)]*)\)', main_rs):
     # 引数名のみ抽出。「name: Type」の name のみ (パス内の `::` 区切りは
     # `(?!:)` で除外)。`tauri::State`/`AppHandle` などフレームワーク注入の
-    # 引数は invoke 呼び出し側が送らないため型に `tauri::` を含むものは除外。
+    # 引数は invoke 呼び出し側が送らないため除外する。`use tauri::AppHandle`
+    # で裸名にもなるため、型パスに `tauri::` を含まなくても注入型名自体も除外。
+    INJECTED = {'AppHandle', 'State', 'Window', 'WebviewWindow', 'Manager', 'Emitter'}
     params = set()
     for pm in re.finditer(r'([a-z_][a-z0-9_]*)\s*:(?!:)\s*([^,)]+)', m.group(2)):
-        if 'tauri::' not in pm.group(2):
+        ty = pm.group(2)
+        if 'tauri::' not in ty and not any(t in ty for t in INJECTED):
             params.add(pm.group(1))
     sigs[m.group(1)] = params
 
