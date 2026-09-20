@@ -370,17 +370,21 @@ impl JmapClient {
             .collect::<serde_json::Map<_, _>>()
             .into();
 
-        self.call(
-            vec![(
-                "Email/set".into(),
-                serde_json::json!({
-                    "accountId": self.account_id, "update": patch,
-                }),
-                "read".into(),
-            )],
-            &[Session::JMAP_CORE, Session::JMAP_MAIL],
-        )
-        .await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Email/set".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id, "update": patch,
+                    }),
+                    "read".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        // notUpdated を検査しないとサーバーが $seen を拒否しても
+        // 「既読にした」と誤って返す (D79)
+        check_set_errors(&rs, "read")?;
         Ok(())
     }
 
@@ -419,23 +423,26 @@ impl JmapClient {
             &trash_id,
         );
 
-        self.call(
-            vec![(
-                "Email/set".into(),
-                serde_json::json!({
-                    "accountId": self.account_id,
-                    "update": {
-                        email_id: {
-                            "mailboxIds": mailbox_patch,
-                            "keywords/$seen": true,
-                        }
-                    },
-                }),
-                "trash".into(),
-            )],
-            &[Session::JMAP_CORE, Session::JMAP_MAIL],
-        )
-        .await?;
+        let rs = self
+            .call(
+                vec![(
+                    "Email/set".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "update": {
+                            email_id: {
+                                "mailboxIds": mailbox_patch,
+                                "keywords/$seen": true,
+                            }
+                        },
+                    }),
+                    "trash".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        // 同上: notUpdated の拒否を「移動成功」と誤認しない
+        check_set_errors(&rs, "trash")?;
         Ok(())
     }
 
@@ -555,24 +562,29 @@ impl JmapClient {
             .iter()
             .map(|a| serde_json::json!({ "email": a }))
             .collect();
-        self.call(
-            vec![(
-                "EmailSubmission/set".into(),
-                serde_json::json!({
-                    "accountId": self.account_id,
-                    "create": { "s1": {
-                        "emailId": &email_id,
-                        "envelope": {
-                            "mailFrom": { "email": from },
-                            "rcptTo":   rcpt,
-                        },
-                    }},
-                }),
-                "sub".into(),
-            )],
-            &[Session::JMAP_CORE, Session::JMAP_MAIL],
-        )
-        .await?;
+        let sub_rs = self
+            .call(
+                vec![(
+                    "EmailSubmission/set".into(),
+                    serde_json::json!({
+                        "accountId": self.account_id,
+                        "create": { "s1": {
+                            "emailId": &email_id,
+                            "envelope": {
+                                "mailFrom": { "email": from },
+                                "rcptTo":   rcpt,
+                            },
+                        }},
+                    }),
+                    "sub".into(),
+                )],
+                &[Session::JMAP_CORE, Session::JMAP_MAIL],
+            )
+            .await?;
+        // EmailSubmission/set が notCreated で拒否されても transport は
+        // 成功を返す — 検査しないと「送信したが実は送信されていない」
+        // になる (D79)
+        check_set_errors(&sub_rs, "sub")?;
 
         if let Some(id) = draft_id {
             if let Err(e) = self
@@ -904,6 +916,39 @@ fn find_result<T: for<'de> Deserialize<'de>>(
     serde_json::from_value(r.args[key].clone()).map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
+/// `Email/set`/`Email/import`/`EmailSubmission/set` 等の set 系メソッドの
+/// `notCreated`/`notUpdated`/`notDestroyed` を検査する。
+///
+/// RFC 8620 §5.3: set 系メソッドは transport が成功してもアイテム単位の
+/// 失敗を `notXxx` マップで返す。これを検査しないと、サーバーが更新を
+/// 拒否していても呼び出し側は「操作成功」と誤認する (D79)。
+/// 複数失敗時は最初の一件を報告する (呼び出し側に返るのは失敗の有無
+/// と内容で十分であり、全件列挙は情報量に対して重い)。
+fn check_set_errors(rs: &[MethodResponse], call_id: &str) -> Result<(), JmapError> {
+    let r = rs
+        .iter()
+        .find(|r| r.call_id == call_id)
+        .ok_or_else(|| JmapError::NotFound(format!("{call_id} のレスポンスなし")))?;
+    if r.method == "error" {
+        return Err(JmapError::JmapProblem {
+            r#type: r.args["type"].as_str().unwrap_or("").into(),
+            description: r.args["description"].as_str().unwrap_or("").into(),
+        });
+    }
+    for key in ["notCreated", "notUpdated", "notDestroyed"] {
+        if let Some((id, err)) = r.args[key].as_object().and_then(|m| m.iter().next()) {
+            return Err(JmapError::JmapProblem {
+                r#type: err["type"].as_str().unwrap_or("setError").into(),
+                description: format!(
+                    "{id}: {}",
+                    err["description"].as_str().unwrap_or("理由不明")
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Email/set `mailboxIds` パッチを構築する: `trash_id` を追加し、
 /// 現在所属する他の全メールボックスを `null` で除去する。
 /// (RFC 8621 §4.6: パッチは `true`=追加・`null`=除去)
@@ -971,6 +1016,66 @@ fn contains_smtp_terminator(body: &str) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    fn resp(call_id: &str, args: serde_json::Value) -> MethodResponse {
+        MethodResponse {
+            method: "Email/set".to_string(),
+            args,
+            call_id: call_id.to_string(),
+        }
+    }
+
+    /// D79: set 系応答の `notUpdated`/`notCreated`/`notDestroyed` を
+    /// 検査しないと、サーバーが更新を拒否しても「操作成功」と
+    /// 誤認する。3 分岐すべてが Err を返すことを固定する。
+    #[test]
+    fn check_set_errors_は拒否を検出する() {
+        let ok = vec![resp(
+            "read",
+            serde_json::json!({ "accountId": "a1", "updated": { "e1": null } }),
+        )];
+        assert!(check_set_errors(&ok, "read").is_ok());
+
+        let bad_update = vec![resp(
+            "read",
+            serde_json::json!({
+                "notUpdated": { "e1": { "type": "forbidden", "description": "read-only" } }
+            }),
+        )];
+        let JmapError::JmapProblem { description, .. } =
+            check_set_errors(&bad_update, "read").unwrap_err()
+        else {
+            panic!("JmapProblem を返すべき");
+        };
+        assert!(description.contains("e1"), "ID を含めるべき: {description}");
+
+        let bad_create = vec![resp(
+            "sub",
+            serde_json::json!({
+                "notCreated": { "s1": { "type": "invalidProperties", "description": "bad envelope" } }
+            }),
+        )];
+        assert!(check_set_errors(&bad_create, "sub").is_err());
+
+        let bad_destroy = vec![resp(
+            "del",
+            serde_json::json!({
+                "notDestroyed": { "d1": { "type": "notFound", "description": "gone" } }
+            }),
+        )];
+        assert!(check_set_errors(&bad_destroy, "del").is_err());
+
+        // メソッドレベルの error 応答も拾う
+        let err_resp = vec![MethodResponse {
+            method: "error".to_string(),
+            args: serde_json::json!({ "type": "serverFail", "description": "x" }),
+            call_id: "read".to_string(),
+        }];
+        assert!(check_set_errors(&err_resp, "read").is_err());
+
+        // 対象 call_id の応答自体が無い場合も失敗 (黙って成功扱いしない)
+        assert!(check_set_errors(&[], "read").is_err());
+    }
 
     #[test]
     fn trash_mailbox_patch_は現所属を全てnullにしてtrashを追加する() {

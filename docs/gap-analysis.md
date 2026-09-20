@@ -297,3 +297,27 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 - 判断に迷う場合 (例: D6のRedis要否、D1のopenmlsバージョン選定など)
   アーキテクチャ判断が要る項目は Opus に、決まった手順の実装 (プラグイン導入・
   ファイル移動・依存追加等) は Sonnet に割り振るのが効率的。
+
+### D79 — JMAP set 系応答の `notCreated`/`notUpdated`/`notDestroyed` が一切検査されていなかった (修正済み・第9ラウンド)
+
+- **症状**: `Session::mark_read` (`Email/set`, call_id "read")・`Session::trash` ("trash")・
+  `Session::send_email` (`EmailSubmission/set`, "sub") は `self.call()` の transport 成功を
+  もって `Ok` を返し、応答内の `notUpdated`/`notCreated` マップを一度も読んでいなかった。
+  RFC 8620 §5.3 により、set 系メソッドはメソッド呼出し自体は成功しつつ
+  アイテム単位で拒否を返す設計 (例: 権限不足の `forbidden`、検証失敗の `invalidProperties`)。
+  このため**サーバーが既読化/ゴミ箱移動/送信を拒否しても、クライアントは「成功した」と
+  表示していた**。特に `EmailSubmission/set` は `notCreated["s1"]` で拒否されても
+  `Ok(email_id)` が返り「送信済み」の誤認になる — D77 の JMAP 側の姉妹欠陥。
+- **修正**: `check_set_errors(rs, call_id)` ヘルパーを追加 —
+  応答を call_id で検索 (不在は Err)、`method == "error"` を拾い、
+  `notCreated`/`notUpdated`/`notDestroyed` の最初のエントリを
+  `JmapError::JmapProblem { type, description: "{id}: {desc}" }` として返す。
+  `mark_read`/`trash`/`send_email` (EmailSubmission/set) の3箇所に適用。
+  なお `Email/import` は従来から `created.d1.id` の存在で成功判定していたため
+  既に部分的に検出していた (理由は落ちるが失敗は伝わる)。
+- **テスト**: `check_set_errors_は拒否を検出する` — notUpdated/notCreated/notDestroyed/
+  method=error/応答不在の5ケースが全て Err を返すことを固定 (合成 MethodResponse、HTTP 不要)。
+- **教訓**: 「transport が成功した ≠ 操作が成功した」。RFC 8620 の set 系は
+  二層の結果 (呼出し結果 + アイテム結果) を返す設計であり、一方しか読まなければ
+  必ず誤認する。同型の検査漏れが他の set 呼出しに無いか、新規に set 系メソッドを
+  呼ぶ際はこのヘルパーを必ず通すこと。
