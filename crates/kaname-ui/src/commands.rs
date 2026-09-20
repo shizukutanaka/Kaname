@@ -3127,10 +3127,16 @@ async fn current_account_id() -> String {
 /// 留める — audit_log は messages/contacts と同じ暗号化 DB 内だが、
 /// 不要な本文・トークン・パスは絶対に書かない。
 async fn audit_event(account_id: Option<&str>, event_type: &str, payload: serde_json::Value) {
-    if let Some(store) = store_slot().lock().await.clone() {
-        if let Err(e) = store.audit(account_id, event_type, &payload).await {
-            warn!(error=%e, "監査ログの書き込みに失敗");
+    match store_slot().lock().await.clone() {
+        Some(store) => {
+            if let Err(e) = store.audit(account_id, event_type, &payload).await {
+                warn!(error=%e, "監査ログの書き込みに失敗");
+            }
         }
+        // Store が開いていなくても監査イベントを握り潰さない。
+        // DLP_BLOCK のような最重要証跡が無言で失われるのを防ぐ
+        // (D23 の教訓: サイレント失敗は欠陥を隠す)。
+        None => warn!(event_type, "Store 未接続のため監査イベントを破棄"),
     }
 }
 

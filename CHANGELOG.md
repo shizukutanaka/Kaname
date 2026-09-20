@@ -47,6 +47,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - fix(e2e): Tauri モックの `default:` が未登録コマンドをサイレント成功させていた偽陽性経路を閉塞 — 実 Tauri と同じくエラー化し、消滅済み `ai_detect_phishing` のモック残留を削除 (D117)
 - docs(performance): performance-history.md のベンチコード不在5項目 (AI summary/MLS/SQLCipher/JMAP/sanitize — うち2項目は未実装サブシステム) を「実測」から訂正 — 再現不能な数値に警告注記 (D118)
 - fix(scripts): release.sh の「CI が自動リリース」主張を手動配布指示に訂正 (D7 で CI 不在) + `--bench '*'` を `--bench core_bench` に修正 (glob 非対応でベンチが走らなかった) (D119)
+- fix(kaname-ui): Store 未接続時に監査イベントを無言破棄していたのを warn 化 — DLP_BLOCK 等の証跡喪失を防止 (D120)
 - docs: maturity.md の出荷クレート数を cargo metadata 実測で訂正 (19/23 → 17/22、非出荷5件に kaname-ai を追記) / gap-analysis の D20/D37 に「現在の環境では cargo が実行可能」の追記
   - fix(kaname-ui): 詳細解析・フォルダ一括解析にも送信者履歴を供給 — `sender_history` が `None` 固定で一覧と詳細の BEC 判定が食い違っていた (D100)
   - fix(kaname-dlp,kaname-ui): 受信側 DLP に既定ルール3件を追加 (構造的に空だった) + 誤配検出へ既知宛先ドメインを連絡先履歴から供給 (D104) — kaname-dlp 変更のため security-lead 承認要
