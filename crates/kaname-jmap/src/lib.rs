@@ -159,12 +159,30 @@ impl JmapClient {
             .build()
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let resp = http
-            .get(format!("{base_url}/.well-known/jmap"))
-            .bearer_auth(config.bearer_token.as_str())
-            .send()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
+        // セッション発見 GET は冪等 — 一過性の接続失敗は max_retries 回まで再試行
+        let mut last_err: Option<JmapError> = None;
+        let mut resp_opt = None;
+        for attempt in 0..=config.max_retries {
+            if attempt > 0 {
+                tokio::time::sleep(Duration::from_millis(50 * (1 << (attempt - 1)))).await;
+            }
+            match http
+                .get(format!("{base_url}/.well-known/jmap"))
+                .bearer_auth(config.bearer_token.as_str())
+                .send()
+                .await
+            {
+                Ok(r) => {
+                    resp_opt = Some(r);
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(JmapError::Http(e.to_string()));
+                }
+            }
+        }
+        let resp = resp_opt
+            .ok_or_else(|| last_err.unwrap_or_else(|| JmapError::Http("接続失敗".into())))?;
 
         if !resp.status().is_success() {
             return Err(JmapError::Http(format!(
@@ -221,15 +239,19 @@ impl JmapClient {
             ]).collect::<Vec<_>>(),
         });
 
+        // リトライは全呼出しが冪等 (読み取り専用メソッドのみ) のとき限る。
+        // Email/set や EmailSubmission/set を再送すると二重送信/二重作成に
+        // なり得るため (D84)。
+        let idempotent = calls.iter().all(|(m, _, _)| is_idempotent_method(m));
         let resp = self
-            .http
-            .post(&self.api_url)
-            .bearer_auth(self.config.bearer_token.as_str())
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
+            .send_with_retry(idempotent, || {
+                self.http
+                    .post(&self.api_url)
+                    .bearer_auth(self.config.bearer_token.as_str())
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+            })
+            .await?;
 
         let status = resp.status();
         let raw: serde_json::Value = resp
@@ -653,12 +675,12 @@ impl JmapClient {
             .replace("{name}", &encode_template_value(name));
 
         let resp = self
-            .http
-            .get(&url)
-            .bearer_auth(self.config.bearer_token.as_str())
-            .send()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
+            .send_with_retry(true, || {
+                self.http
+                    .get(&url)
+                    .bearer_auth(self.config.bearer_token.as_str())
+            })
+            .await?;
 
         if !resp.status().is_success() {
             return Err(JmapError::Http(format!(
@@ -1000,6 +1022,66 @@ fn session_url_origin_ok(base_host: &str, name: &str, raw: &str) -> Result<(), J
     Ok(())
 }
 
+/// `ClientConfig.max_retries` を使った冪等リクエストのリトライ。
+///
+/// `idempotent` が true のときのみ `max_retries` 回まで再試行する
+/// (一過性エラー: timeout / connect / HTTP 5xx / 429)。
+/// 非冪等呼出し (Email/set 等) では絶対に再送しない —
+/// リトライは「もう一度送っても安全」と分かっている時だけの機能 (D84)。
+fn is_idempotent_method(method: &str) -> bool {
+    matches!(
+        method,
+        "Email/get"
+            | "Email/query"
+            | "Email/parse"
+            | "Mailbox/get"
+            | "Mailbox/query"
+            | "Thread/get"
+            | "Identity/get"
+            | "EmailSubmission/get"
+            | "Blob/get"
+            | "PushSubscription/get"
+    )
+}
+
+impl JmapClient {
+    /// `build` で作ったリクエストを送信する。`idempotent` なら
+    /// 一過性エラーに限り `config.max_retries` 回まで指数バックオフで再試行。
+    async fn send_with_retry<F>(
+        &self,
+        idempotent: bool,
+        build: F,
+    ) -> Result<reqwest::Response, JmapError>
+    where
+        F: Fn() -> reqwest::RequestBuilder,
+    {
+        let tries = if idempotent {
+            self.config.max_retries.max(1) + 1 // 初回 + リトライ回数
+        } else {
+            1
+        };
+        let mut delay = Duration::from_millis(100);
+        for attempt in 1..=tries {
+            let result = build().send().await;
+            let retryable = match &result {
+                Ok(r) => r.status().is_server_error() || r.status().as_u16() == 429,
+                Err(e) => e.is_timeout() || e.is_connect(),
+            };
+            match result {
+                r if !retryable || attempt == tries => {
+                    return r.map_err(|e| JmapError::Http(e.to_string()));
+                }
+                _ => {
+                    tracing::warn!(attempt, "JMAP リクエストが一過性エラー — リトライします");
+                    tokio::time::sleep(delay).await;
+                    delay *= 2;
+                }
+            }
+        }
+        unreachable!()
+    }
+}
+
 fn find_result<T: for<'de> Deserialize<'de>>(
     rs: &[MethodResponse],
     call_id: &str,
@@ -1334,6 +1416,33 @@ mod tests {
         // ホストなし/不正 URL も拒否
         assert!(session_url_origin_ok("mail.example.com", "apiUrl", "not a url").is_err());
         assert!(session_url_origin_ok("mail.example.com", "apiUrl", "https:///x").is_err());
+    }
+
+    /// D84: リトライは冪等メソッドに限る。set 系 (書き込み) を再送すると
+    /// 二重送信/二重作成になるため絶対に対象外であることを固定。
+    #[test]
+    fn is_idempotent_method_は書き込みメソッドを除外する() {
+        // 読み取り専用は true
+        for m in [
+            "Email/get",
+            "Email/query",
+            "Mailbox/get",
+            "Thread/get",
+            "Blob/get",
+        ] {
+            assert!(is_idempotent_method(m), "{m} は冪等");
+        }
+        // 書き込み系は全て false — リトライすると二重実行になり得る
+        for m in [
+            "Email/set",
+            "Email/import",
+            "EmailSubmission/set",
+            "Mailbox/set",
+            "Identity/set",
+            "PushSubscription/set",
+        ] {
+            assert!(!is_idempotent_method(m), "{m} は非冪等 — リトライ禁止");
+        }
     }
 
     #[test]
