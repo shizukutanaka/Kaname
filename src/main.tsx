@@ -119,6 +119,14 @@ const App = () => {
         }));
       });
 
+      // トレイメニューの emit をビュー遷移に接続
+      // (受信側が無ければクリックしても何も起きないデッドコントロールになる)
+      await listen("menu:compose", () => {
+        setState(s => ({ ...s, activeView: "compose" }));
+      });
+      await listen("menu:security", () => {
+        setState(s => ({ ...s, activeView: "security" }));
+      });
       await listen<{ email_id: string; verdict: string }>("bec:alert", (event) => {
         console.warn("[BEC]", event.payload.verdict, event.payload.email_id);
         setState(s => ({ ...s, becAlertCount: s.becAlertCount + 1 }));
