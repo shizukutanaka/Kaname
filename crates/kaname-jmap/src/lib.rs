@@ -2,7 +2,6 @@
 //!
 //! - HTTPS over TLS 1.3 のみ
 //! - Email/get、Email/query、Email/set、Mailbox/get
-//! - Push/EventSource でリアルタイム同期
 
 // crates/kaname-core/src/jmap.rs
 //
@@ -25,7 +24,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::mpsc;
 
 // ============================================================================
 // セッション (RFC 8620 §2)
@@ -45,7 +43,6 @@ pub struct Session {
     pub api_url:          String,
     pub download_url:     String,
     pub upload_url:       String,
-    pub event_source_url: Option<String>,
     pub state:            String,
 }
 
@@ -515,169 +512,6 @@ impl JmapClient {
             .ok_or_else(|| JmapError::Deserialize("blobId なし".into()))
     }
 
-    /// 変更を同期する。
-    ///
-    /// # ページング (RFC 8620 §5.2)
-    ///
-    /// サーバーは `maxChanges` (500) を超える変更がある場合 `hasMoreChanges: true` を
-    /// 返し、続きは直前の応答の `newState` を次回の `sinceState` として要求する必要が
-    /// ある。ここでループせずに呼び出し元へ `hasMoreChanges` を返すだけだと、
-    /// 誰も次ページを取得しないまま `newState` だけを保存してしまい、
-    /// 500件を超える差分の"中間部分"が誰にも気付かれず永久に欠落する
-    /// (サイレントなデータ損失、docs/gap-analysis.md D48)。
-    /// そのため `hasMoreChanges` が `false` になるまで本メソッド内でループし、
-    /// 全ページ分の `created`/`updated`/`destroyed` を結合して返す。
-    ///
-    /// 無限ループ防止のため最大 `MAX_SYNC_PAGES` ページ (=最大 `MAX_SYNC_PAGES * 500`
-    /// 件) で打ち切る。打ち切った場合も `has_more_changes` に `true` を残すため、
-    /// 呼び出し元は返された `new_state` で再度 `sync()` を呼べば続きから再開できる。
-    pub async fn sync(
-        &self, mailbox_state: &str, email_state: &str,
-    ) -> Result<SyncResult, JmapError> {
-        const MAX_SYNC_PAGES: u32 = 50;
-
-        let mut mailbox = ChangesResult {
-            new_state: mailbox_state.to_string(), has_more_changes: true,
-            created: Vec::new(), updated: Vec::new(), destroyed: Vec::new(),
-        };
-        let mut email = ChangesResult {
-            new_state: email_state.to_string(), has_more_changes: true,
-            created: Vec::new(), updated: Vec::new(), destroyed: Vec::new(),
-        };
-
-        for _ in 0..MAX_SYNC_PAGES {
-            if !mailbox.has_more_changes && !email.has_more_changes {
-                break;
-            }
-
-            let mut calls = Vec::new();
-            if mailbox.has_more_changes {
-                calls.push(("Mailbox/changes".into(), serde_json::json!({
-                    "accountId": self.account_id, "sinceState": mailbox.new_state, "maxChanges": 500,
-                }), "mc".into()));
-            }
-            if email.has_more_changes {
-                calls.push(("Email/changes".into(), serde_json::json!({
-                    "accountId": self.account_id, "sinceState": email.new_state, "maxChanges": 500,
-                }), "ec".into()));
-            }
-
-            let rs = self.call(calls, &[Session::JMAP_CORE, Session::JMAP_MAIL]).await?;
-
-            let parse_page = |id: &str| -> Option<ChangesResult> {
-                let a = rs.iter().find(|r| r.call_id == id).map(|r| &r.args)?;
-                // 想定される JSON 形状 (newState 文字列フィールド) が欠落している場合、
-                // サーバーが不正な応答を返したか、レスポンスに call_id が見つからなかった
-                // ことを意味する。修正前は空文字列/空配列へ黙ってフォールバックしており、
-                // "変更なし" と "サーバー応答が壊れていた" が区別できず、
-                // メールボックスの同期状態が誰にも気付かれずに乖離するリスクがあった。
-                if a["newState"].as_str().is_none() {
-                    tracing::warn!(
-                        call_id = id,
-                        "JMAP changes 応答に newState が見つかりません (不正な応答またはサーバーエラーの可能性)"
-                    );
-                }
-                Some(ChangesResult {
-                    new_state:       a["newState"].as_str().unwrap_or("").into(),
-                    has_more_changes: a["hasMoreChanges"].as_bool().unwrap_or(false),
-                    created:  str_arr(&a["created"]),
-                    updated:  str_arr(&a["updated"]),
-                    destroyed: str_arr(&a["destroyed"]),
-                })
-            };
-
-            if mailbox.has_more_changes {
-                if let Some(page) = parse_page("mc") {
-                    mailbox.has_more_changes = page.has_more_changes;
-                    mailbox.new_state = page.new_state;
-                    mailbox.created.extend(page.created);
-                    mailbox.updated.extend(page.updated);
-                    mailbox.destroyed.extend(page.destroyed);
-                } else {
-                    mailbox.has_more_changes = false;
-                }
-            }
-            if email.has_more_changes {
-                if let Some(page) = parse_page("ec") {
-                    email.has_more_changes = page.has_more_changes;
-                    email.new_state = page.new_state;
-                    email.created.extend(page.created);
-                    email.updated.extend(page.updated);
-                    email.destroyed.extend(page.destroyed);
-                } else {
-                    email.has_more_changes = false;
-                }
-            }
-        }
-
-        Ok(SyncResult { mailbox_changes: mailbox, email_changes: email })
-    }
-
-    /// EventSource プッシュを購読する (SSE / RFC 6202)。
-    ///
-    /// `reqwest` のバイトストリームで SSE を受信し、`data:` 行を JSON として
-    /// パースして `PushNotification` を `tx` に送信する。
-    /// `shutdown` を受信したら接続を閉じて返る。
-    pub async fn subscribe_push(
-        &self,
-        tx: mpsc::Sender<PushNotification>,
-        mut shutdown: tokio::sync::broadcast::Receiver<()>,
-    ) -> Result<(), JmapError> {
-        use futures_util::StreamExt;
-
-        let url = self.session.event_source_url.as_deref()
-            .ok_or(JmapError::PushNotSupported)?;
-        tracing::info!(url = %url, "EventSource プッシュ購読開始");
-
-        let resp = self.http
-            .get(url)
-            .header("Accept", "text/event-stream")
-            .header("Cache-Control", "no-cache")
-            .send()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
-
-        let mut stream = resp.bytes_stream();
-        let mut buf = String::new();
-        // SSE バッファ上限: 悪意あるサーバーが \n\n なしで送り続けることによる
-        // メモリ DoS を防ぐ。JMAP push notification は通常 < 4KB
-        const MAX_SSE_BUF_BYTES: usize = 1024 * 1024; // 1 MB
-
-        loop {
-            tokio::select! {
-                _ = shutdown.recv() => {
-                    tracing::info!("EventSource 購読を正常終了");
-                    return Ok(());
-                }
-                chunk = stream.next() => {
-                    let Some(chunk) = chunk else {
-                        tracing::info!("EventSource ストリームが終了");
-                        return Ok(());
-                    };
-                    let bytes = chunk.map_err(|e| JmapError::Http(e.to_string()))?;
-                    if buf.len() + bytes.len() > MAX_SSE_BUF_BYTES {
-                        tracing::warn!("SSE バッファ上限超過 — 接続をリセット");
-                        return Err(JmapError::Http("SSE バッファ超過".into()));
-                    }
-                    buf.push_str(&String::from_utf8_lossy(&bytes));
-
-                    // SSE イベントは空行 (\n\n) で区切られる
-                    while let Some(event_end) = find_sse_event_end(&buf) {
-                        let event_str = buf[..event_end].to_string();
-                        buf = buf[event_end + 2..].to_string(); // skip \n\n
-
-                        if let Some(notif) = parse_sse_event(&event_str) {
-                            if tx.send(notif).await.is_err() {
-                                // 受信側がドロップ — 終了
-                                return Ok(());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     #[must_use]
     pub fn account_id(&self) -> &str  { &self.account_id }
     pub fn session_state(&self) -> &str { &self.session.state }
@@ -806,30 +640,6 @@ pub struct BodyValue {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Header { pub name: String, pub value: String }
 
-/// 同期結果
-#[derive(Debug)]
-pub struct SyncResult {
-    pub mailbox_changes: ChangesResult,
-    pub email_changes:   ChangesResult,
-}
-
-/// 変更結果
-#[derive(Debug)]
-pub struct ChangesResult {
-    pub new_state:        String,
-    pub has_more_changes: bool,
-    pub created:          Vec<String>,
-    pub updated:          Vec<String>,
-    pub destroyed:        Vec<String>,
-}
-
-/// プッシュ通知
-#[derive(Debug)]
-pub struct PushNotification {
-    pub changed_types: Vec<String>,
-    pub account_id:    String,
-}
-
 // ============================================================================
 // エラー
 // ============================================================================
@@ -851,9 +661,6 @@ pub enum JmapError {
     /// レスポンスのデシリアライズ失敗。
     #[error("デシリアライズ: {0}")]
     Deserialize(String),
-    /// サーバーが EventSource プッシュに非対応。
-    #[error("プッシュ非対応")]
-    PushNotSupported,
     /// 対象オブジェクトが見つからない。
     #[error("見つからない: {0}")]
     NotFound(String),
@@ -887,14 +694,12 @@ fn find_result<T: for<'de> Deserialize<'de>>(
         .map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
+/// JSON 配列から文字列のみを抽出するヘルパー (テストから利用)。
+#[cfg(test)]
 fn str_arr(v: &serde_json::Value) -> Vec<String> {
-    v.as_array().unwrap_or(&vec![])
-        .iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
-}
-
-/// SSE イベントの終端 (`\n\n`) のオフセットを返す。
-fn find_sse_event_end(buf: &str) -> Option<usize> {
-    buf.find("\n\n")
+    v.as_array().map_or_else(Vec::new, |a| {
+        a.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
+    })
 }
 
 /// ヘッダー値のバリデーション (テストからも利用)。
@@ -929,26 +734,6 @@ fn contains_smtp_terminator(body: &str) -> bool {
         return true;
     }
     false
-}
-
-/// SSE テキストブロックを `PushNotification` にパースする。
-///
-/// JMAP push notification (RFC 8620 §7.3) の `data:` フィールドを解析する。
-fn parse_sse_event(event: &str) -> Option<PushNotification> {
-    let data_line = event.lines().find(|l| l.starts_with("data:"))?;
-    let json_str = data_line.trim_start_matches("data:").trim();
-    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
-
-    // RFC 8620 §7.3: {"@type":"StateChange","changed":{accountId:{type:newState}}}
-    if v["@type"].as_str() != Some("StateChange") {
-        return None;
-    }
-    let changed = v["changed"].as_object()?;
-    let account_id = changed.keys().next()?.clone();
-    let type_obj = changed[&account_id].as_object()?;
-    let changed_types: Vec<String> = type_obj.keys().cloned().collect();
-
-    Some(PushNotification { changed_types, account_id })
 }
 
 // ============================================================================
@@ -998,50 +783,6 @@ mod tests {
         let v = serde_json::json!(["a", "b"]);
         assert_eq!(str_arr(&v), vec!["a", "b"]);
         assert!(str_arr(&serde_json::Value::Null).is_empty());
-    }
-
-    // ── SSE パーサーテスト ────────────────────────────────────────────────────
-
-    #[test]
-    fn sse_find_event_end_returns_offset() {
-        let buf = "data: hello\n\ndata: world\n\n";
-        assert_eq!(find_sse_event_end(buf), Some(11));
-    }
-
-    #[test]
-    fn sse_find_event_end_returns_none_for_incomplete() {
-        let buf = "data: incomplete";
-        assert!(find_sse_event_end(buf).is_none());
-    }
-
-    #[test]
-    fn sse_parse_jmap_state_change() {
-        // RFC 8620 §7.3 形式
-        let event = r#"data: {"@type":"StateChange","changed":{"acc001":{"Email":"s1","Mailbox":"s2"}}}"#;
-        let notif = parse_sse_event(event).expect("パースに失敗");
-        assert_eq!(notif.account_id, "acc001");
-        assert!(notif.changed_types.contains(&"Email".to_string()));
-        assert!(notif.changed_types.contains(&"Mailbox".to_string()));
-    }
-
-    #[test]
-    fn sse_parse_ignores_non_state_change_events() {
-        let event = r#"data: {"@type":"Something","changed":{}}"#;
-        assert!(parse_sse_event(event).is_none());
-    }
-
-    #[test]
-    fn sse_parse_ignores_non_data_lines() {
-        // SSE の comment 行と event: 行は無視される
-        let event = ": heartbeat\nevent: ping\ndata: {\"@type\":\"StateChange\",\"changed\":{\"a\":{\"Email\":\"s\"}}}";
-        let notif = parse_sse_event(event).expect("パースに失敗");
-        assert_eq!(notif.account_id, "a");
-    }
-
-    #[test]
-    fn sse_parse_returns_none_for_invalid_json() {
-        let event = "data: not-valid-json";
-        assert!(parse_sse_event(event).is_none());
     }
 
     // ── ヘッダーインジェクション防止テスト ──────────────────────────────────

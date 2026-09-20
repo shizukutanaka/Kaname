@@ -60,7 +60,9 @@ pub fn analyze_dkim_header(header_value: &str) -> DkimHeaderAnalysis {
 
     for raw_part in header_value.split(';') {
         let part = raw_part.trim();
-        let Some((k, v)) = part.split_once('=') else { continue };
+        let Some((k, v)) = part.split_once('=') else {
+            continue;
+        };
         let k = k.trim();
         let v = v.trim();
         match k {
@@ -72,10 +74,7 @@ pub fn analyze_dkim_header(header_value: &str) -> DkimHeaderAnalysis {
             "s" => selector = Some(v.to_string()),
             "b" => {
                 // 署名値は途中で改行・空白を含む可能性 → 連結して先頭 32 文字
-                let cleaned: String = v.chars()
-                    .filter(|c| !c.is_whitespace())
-                    .take(32)
-                    .collect();
+                let cleaned: String = v.chars().filter(|c| !c.is_whitespace()).take(32).collect();
                 if !cleaned.is_empty() {
                     signature_prefix = Some(cleaned);
                 }
@@ -153,8 +152,7 @@ mod tests {
     fn detects_length_tag() {
         let h = "v=1; a=rsa-sha256; d=evil.com; s=s; l=2048; b=AAAA";
         let a = analyze_dkim_header(h);
-        assert!(a.has_length_tag,
-            "l= タグが検出されていない");
+        assert!(a.has_length_tag, "l= タグが検出されていない");
         assert_eq!(a.length_value, Some(2048));
         assert!(a.is_risky(), "l= 付きはリスクと判定すべき");
     }
@@ -164,8 +162,11 @@ mod tests {
         // 実際の DKIM 署名は折り返しで空白を含む
         let h = "d=ex.com; b=AbCd Ef\n  Gh12 34;";
         let a = analyze_dkim_header(h);
-        assert_eq!(a.signature_prefix.as_deref(), Some("AbCdEfGh1234"),
-            "署名から空白・改行を除去すべき");
+        assert_eq!(
+            a.signature_prefix.as_deref(),
+            Some("AbCdEfGh1234"),
+            "署名から空白・改行を除去すべき"
+        );
     }
 
     #[test]
@@ -195,8 +196,7 @@ mod tests {
         let a = analyze_dkim_header("v=1; a=rsa");
         // domain も signature_prefix もない → トラッキング不可
         assert_eq!(t.observe(&a), 1);
-        assert!(t.is_empty(),
-            "domain/b 不完全な署名は記録しない");
+        assert!(t.is_empty(), "domain/b 不完全な署名は記録しない");
     }
 
     #[test]

@@ -75,7 +75,10 @@ impl RuleOfTwo {
     /// 外部通信を最優先で分離 (最も被害が大きいため)。
     #[must_use]
     pub fn suggest_mitigation(capabilities: &[Capability]) -> Option<Capability> {
-        if matches!(Self::check(capabilities), RuleOfTwoVerdict::Violation { .. }) {
+        if matches!(
+            Self::check(capabilities),
+            RuleOfTwoVerdict::Violation { .. }
+        ) {
             // 外部通信を断つのが最も効果的 (流出経路を塞ぐ)
             Some(Capability::ExternalCommunication)
         } else {
@@ -105,7 +108,10 @@ mod tests {
             Capability::AccessSensitiveData,
             Capability::ExternalCommunication,
         ];
-        assert!(matches!(RuleOfTwo::check(&caps), RuleOfTwoVerdict::Violation { .. }));
+        assert!(matches!(
+            RuleOfTwo::check(&caps),
+            RuleOfTwoVerdict::Violation { .. }
+        ));
     }
 
     #[test]

@@ -96,13 +96,22 @@ pub fn preflight_untrusted(content: &Content<Untrusted>) -> PreflightResult {
     // 既知手口であり、他の注入シグナルがない場合でも単独で Advisory に
     // 降格されてしまうと Dual-LLM 境界 (I1) の防御が弱まる。
     let has_bidi = findings.iter().any(|f| matches!(f, Finding::BidiOverride));
-    let has_zero_width = findings.iter().any(|f| matches!(f, Finding::ZeroWidthSeparator));
-    let has_injection = findings.iter().any(|f| matches!(
-        f, Finding::KnownInjectionPattern(_) | Finding::SpecialToken(_)
-    ));
+    let has_zero_width = findings
+        .iter()
+        .any(|f| matches!(f, Finding::ZeroWidthSeparator));
+    let has_injection = findings.iter().any(|f| {
+        matches!(
+            f,
+            Finding::KnownInjectionPattern(_) | Finding::SpecialToken(_)
+        )
+    });
     if findings.is_empty() {
         PreflightResult::Clean
-    } else if has_bidi || has_zero_width || has_injection || matches!(result.verdict, ScreenVerdict::Blocked) {
+    } else if has_bidi
+        || has_zero_width
+        || has_injection
+        || matches!(result.verdict, ScreenVerdict::Blocked)
+    {
         PreflightResult::Block(findings)
     } else {
         PreflightResult::Advisory(findings)
@@ -128,8 +137,10 @@ mod tests {
     fn bidi_override_is_blocked() {
         let content = untrusted("Hello \u{202E}dlrow olleH");
         let result = preflight_untrusted(&content);
-        assert!(matches!(result, PreflightResult::Block(_)),
-            "Bidi override はブロックされるべき");
+        assert!(
+            matches!(result, PreflightResult::Block(_)),
+            "Bidi override はブロックされるべき"
+        );
     }
 
     #[test]
@@ -140,15 +151,19 @@ mod tests {
         // 他の注入シグナルがなく、ゼロ幅文字 (BOM) のみを含むテキストで検証する。
         let content = untrusted("Hello\u{FEFF}World this is a normal looking sentence");
         let result = preflight_untrusted(&content);
-        assert!(matches!(result, PreflightResult::Block(_)),
-            "ゼロ幅文字単独でもブロックされるべき: {result:?}");
+        assert!(
+            matches!(result, PreflightResult::Block(_)),
+            "ゼロ幅文字単独でもブロックされるべき: {result:?}"
+        );
     }
 
     #[test]
     fn zero_width_joiner_alone_is_blocked() {
         let content = untrusted("Please\u{200D}review this document today");
         let result = preflight_untrusted(&content);
-        assert!(matches!(result, PreflightResult::Block(_)),
-            "ZWJ 単独でもブロックされるべき: {result:?}");
+        assert!(
+            matches!(result, PreflightResult::Block(_)),
+            "ZWJ 単独でもブロックされるべき: {result:?}"
+        );
     }
 }

@@ -25,12 +25,12 @@
 
 #![deny(unsafe_code)]
 
+use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // ============================================================================
@@ -41,15 +41,15 @@ use thiserror::Error;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmRequest {
     /// リクエストを一意に識別する ID (レスポンスと突き合わせる)。
-    pub request_id:    String,
+    pub request_id: String,
     /// システムプロンプト。ハードコードされた定数のみ許可。
     pub system_prompt: String,
     /// 会話履歴。
-    pub messages:      Vec<LlmMessage>,
+    pub messages: Vec<LlmMessage>,
     /// 生成する最大トークン数。
-    pub max_tokens:    u32,
+    pub max_tokens: u32,
     /// サンプリング温度 (セキュリティ判定パスは 0.0)。
-    pub temperature:   f32,
+    pub temperature: f32,
 }
 
 /// LLM サブプロセスからのレスポンス
@@ -58,22 +58,22 @@ pub struct LlmResponse {
     /// 対応するリクエストの ID。
     pub request_id: String,
     /// 生成されたテキスト。
-    pub text:       String,
+    pub text: String,
     /// 入力トークン数。
-    pub tokens_in:  u32,
+    pub tokens_in: u32,
     /// 出力トークン数。
     pub tokens_out: u32,
     /// 推論レイテンシ (ミリ秒)。
     pub latency_ms: u64,
     /// 推論側で発生したエラー (正常時は None)。
-    pub error:      Option<String>,
+    pub error: Option<String>,
 }
 
 /// 会話メッセージ
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmMessage {
     /// 発話者ロール ("user" | "assistant")。
-    pub role:    String,
+    pub role: String,
     /// メッセージ本文。
     pub content: String,
 }
@@ -85,10 +85,10 @@ pub struct LlmMessage {
 /// LLM サブプロセスへのハンドル。
 /// Drop 時にプロセスを終了させる。
 pub struct LlmSubprocess {
-    child:    Option<Child>,
-    stdin:    Arc<Mutex<ChildStdin>>,
-    stdout:   Arc<Mutex<BufReader<ChildStdout>>>,
-    timeout:  Duration,
+    child: Option<Child>,
+    stdin: Arc<Mutex<ChildStdin>>,
+    stdout: Arc<Mutex<BufReader<ChildStdout>>>,
+    timeout: Duration,
     /// このプロセスのセキュリティモード。
     pub mode: SubprocessMode,
 }
@@ -107,7 +107,7 @@ impl SubprocessMode {
     pub fn seccomp_profile_path(&self) -> PathBuf {
         let name = match self {
             Self::Quarantined => "quarantined.json",
-            Self::Privileged  => "privileged.json",
+            Self::Privileged => "privileged.json",
         };
         // 本番: アプリバンドルの resources ディレクトリから解決
         PathBuf::from(format!("resources/seccomp/{}", name))
@@ -123,9 +123,9 @@ impl LlmSubprocess {
     ///
     /// モデルが存在しない場合はモックモードで起動する。
     pub fn spawn(
-        mode:       SubprocessMode,
+        mode: SubprocessMode,
         model_path: &PathBuf,
-        timeout:    Duration,
+        timeout: Duration,
     ) -> Result<Self, SubprocessError> {
         if !model_path.exists() {
             tracing::warn!(
@@ -145,16 +145,20 @@ impl LlmSubprocess {
             .spawn()
             .map_err(|e| SubprocessError::SpawnFailed(e.to_string()))?;
 
-        let stdin  = child.stdin.take()
+        let stdin = child
+            .stdin
+            .take()
             .ok_or_else(|| SubprocessError::SpawnFailed("stdin 取得失敗".into()))?;
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| SubprocessError::SpawnFailed("stdout 取得失敗".into()))?;
 
         tracing::info!(mode = ?mode, "LLM サブプロセス起動完了");
 
         Ok(Self {
-            child:  Some(child),
-            stdin:  Arc::new(Mutex::new(stdin)),
+            child: Some(child),
+            stdin: Arc::new(Mutex::new(stdin)),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
             mode,
@@ -162,10 +166,7 @@ impl LlmSubprocess {
     }
 
     /// モックサブプロセス (モデルなし / テスト用)。
-    pub fn spawn_mock(
-        mode:    SubprocessMode,
-        timeout: Duration,
-    ) -> Result<Self, SubprocessError> {
+    pub fn spawn_mock(mode: SubprocessMode, timeout: Duration) -> Result<Self, SubprocessError> {
         // モックプロセス: 自身に対して echo するだけ
         // 本番ではダミーバイナリを使用するが、テスト環境では親プロセスがモックする
         tracing::debug!(mode = ?mode, "モック LLM サブプロセス起動");
@@ -178,14 +179,18 @@ impl LlmSubprocess {
             .spawn()
             .map_err(|e| SubprocessError::SpawnFailed(e.to_string()))?;
 
-        let stdin  = child.stdin.take()
+        let stdin = child
+            .stdin
+            .take()
             .ok_or_else(|| SubprocessError::SpawnFailed("stdin 取得失敗".into()))?;
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| SubprocessError::SpawnFailed("stdout 取得失敗".into()))?;
 
         Ok(Self {
-            child:  Some(child),
-            stdin:  Arc::new(Mutex::new(stdin)),
+            child: Some(child),
+            stdin: Arc::new(Mutex::new(stdin)),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
             mode,
@@ -194,7 +199,7 @@ impl LlmSubprocess {
 
     /// OS に応じたコマンドを構築する。
     fn build_command(
-        mode:       SubprocessMode,
+        mode: SubprocessMode,
         model_path: &PathBuf,
     ) -> Result<Command, SubprocessError> {
         #[cfg(target_os = "linux")]
@@ -246,11 +251,13 @@ impl LlmSubprocess {
     /// 推論リクエストを送信してレスポンスを受け取る。
     pub fn infer(&self, req: &LlmRequest) -> Result<LlmResponse, SubprocessError> {
         // JSON-Lines プロトコル: リクエストを 1 行で送信
-        let req_json = serde_json::to_string(req)
-            .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
+        let req_json =
+            serde_json::to_string(req).map_err(|e| SubprocessError::Protocol(e.to_string()))?;
 
         {
-            let mut stdin = self.stdin.lock()
+            let mut stdin = self
+                .stdin
+                .lock()
                 .map_err(|_| SubprocessError::Protocol("stdin ロック失敗".into()))?;
             writeln!(stdin, "{}", req_json)
                 .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
@@ -273,10 +280,12 @@ impl LlmSubprocess {
         let stdout = self.stdout.clone();
         std::thread::spawn(move || {
             let outcome = (|| -> Result<String, SubprocessError> {
-                let mut stdout = stdout.lock()
+                let mut stdout = stdout
+                    .lock()
                     .map_err(|_| SubprocessError::Protocol("stdout ロック失敗".into()))?;
                 let mut line = String::new();
-                stdout.read_line(&mut line)
+                stdout
+                    .read_line(&mut line)
                     .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
                 Ok(line)
             })();
@@ -287,9 +296,13 @@ impl LlmSubprocess {
 
         let line = match rx.recv_timeout(self.timeout) {
             Ok(result) => result?,
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => return Err(SubprocessError::Timeout),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                return Err(SubprocessError::Timeout)
+            }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(SubprocessError::Protocol("読み取りスレッドが異常終了".into()));
+                return Err(SubprocessError::Protocol(
+                    "読み取りスレッドが異常終了".into(),
+                ));
             }
         };
 
@@ -298,8 +311,7 @@ impl LlmSubprocess {
             return Ok(self.mock_response(req));
         }
 
-        serde_json::from_str(line.trim())
-            .map_err(|e| SubprocessError::Protocol(e.to_string()))
+        serde_json::from_str(line.trim()).map_err(|e| SubprocessError::Protocol(e.to_string()))
     }
 
     /// モックレスポンス (開発・テスト用)。
@@ -316,10 +328,10 @@ impl LlmSubprocess {
         LlmResponse {
             request_id: req.request_id.clone(),
             text,
-            tokens_in:  0,
+            tokens_in: 0,
             tokens_out: 0,
             latency_ms: 0,
-            error:      None,
+            error: None,
         }
     }
 }
@@ -375,15 +387,18 @@ impl PrivilegedLlmImpl {
     ) -> Result<String, SubprocessError> {
         let content = match context_summary {
             Some(ctx) => format!("{}\n\n[コンテキスト: {}]", instruction, ctx),
-            None      => instruction.to_string(),
+            None => instruction.to_string(),
         };
 
         let req = LlmRequest {
-            request_id:    uuid_v4(),
+            request_id: uuid_v4(),
             system_prompt: crate::llm_bridge::PRIVILEGED_SYSTEM_PROMPT.to_string(),
-            messages:      vec![LlmMessage { role: "user".into(), content }],
-            max_tokens:    512,
-            temperature:   0.3,
+            messages: vec![LlmMessage {
+                role: "user".into(),
+                content,
+            }],
+            max_tokens: 512,
+            temperature: 0.3,
         };
 
         let resp = self.subprocess.infer(&req)?;
@@ -413,17 +428,17 @@ impl QuarantinedLlmImpl {
     /// 信頼できないメール本文を解析する。
     pub fn analyze(&self, untrusted_text: &str) -> Result<String, SubprocessError> {
         let req = LlmRequest {
-            request_id:    uuid_v4(),
+            request_id: uuid_v4(),
             system_prompt: crate::llm_bridge::QUARANTINED_SYSTEM_PROMPT.to_string(),
-            messages:      vec![LlmMessage {
-                role:    "user".into(),
+            messages: vec![LlmMessage {
+                role: "user".into(),
                 content: format!(
                     "<untrusted_content>\n{}\n</untrusted_content>",
                     untrusted_text
                 ),
             }],
-            max_tokens:    256,
-            temperature:   0.0, // 決定論的
+            max_tokens: 256,
+            temperature: 0.0, // 決定論的
         };
 
         let resp = self.subprocess.infer(&req)?;
@@ -443,7 +458,7 @@ impl QuarantinedLlmImpl {
 /// モデルが存在しない場合はモックモードで起動する。
 pub fn spawn_both(
     model_path: &PathBuf,
-    timeout:    Duration,
+    timeout: Duration,
 ) -> Result<(PrivilegedLlmImpl, QuarantinedLlmImpl), SubprocessError> {
     let p_proc = LlmSubprocess::spawn(SubprocessMode::Privileged, model_path, timeout)?;
     let q_proc = LlmSubprocess::spawn(SubprocessMode::Quarantined, model_path, timeout)?;
@@ -506,26 +521,22 @@ mod tests {
 
     #[test]
     fn モックモードで起動する() {
-        let mock = LlmSubprocess::spawn_mock(
-            SubprocessMode::Quarantined,
-            Duration::from_secs(5),
-        ).unwrap();
+        let mock =
+            LlmSubprocess::spawn_mock(SubprocessMode::Quarantined, Duration::from_secs(5)).unwrap();
         assert_eq!(mock.mode, SubprocessMode::Quarantined);
     }
 
     #[test]
     fn モックレスポンスはjsonを返す() {
-        let mock = LlmSubprocess::spawn_mock(
-            SubprocessMode::Quarantined,
-            Duration::from_secs(5),
-        ).unwrap();
+        let mock =
+            LlmSubprocess::spawn_mock(SubprocessMode::Quarantined, Duration::from_secs(5)).unwrap();
 
         let req = LlmRequest {
-            request_id:    "test-001".into(),
+            request_id: "test-001".into(),
             system_prompt: "test".into(),
-            messages:      vec![],
-            max_tokens:    100,
-            temperature:   0.0,
+            messages: vec![],
+            max_tokens: 100,
+            temperature: 0.0,
         };
 
         let resp = mock.mock_response(&req);
@@ -537,10 +548,9 @@ mod tests {
 
     #[test]
     fn privileged_モードはprivilegedプロセスを要求する() {
-        let mock = Arc::new(LlmSubprocess::spawn_mock(
-            SubprocessMode::Privileged,
-            Duration::from_secs(5),
-        ).unwrap());
+        let mock = Arc::new(
+            LlmSubprocess::spawn_mock(SubprocessMode::Privileged, Duration::from_secs(5)).unwrap(),
+        );
 
         let p = PrivilegedLlmImpl::new(mock);
         assert_eq!(p.subprocess.mode, SubprocessMode::Privileged);
@@ -549,10 +559,9 @@ mod tests {
     #[test]
     #[should_panic]
     fn privileged_impl_にquarantinedを渡すとpanicする() {
-        let mock = Arc::new(LlmSubprocess::spawn_mock(
-            SubprocessMode::Quarantined,
-            Duration::from_secs(5),
-        ).unwrap());
+        let mock = Arc::new(
+            LlmSubprocess::spawn_mock(SubprocessMode::Quarantined, Duration::from_secs(5)).unwrap(),
+        );
         let _ = PrivilegedLlmImpl::new(mock); // パニックすべき
     }
 
@@ -600,11 +609,11 @@ mod tests {
 
     fn sample_req() -> LlmRequest {
         LlmRequest {
-            request_id:    "timeout-test".into(),
+            request_id: "timeout-test".into(),
             system_prompt: "test".into(),
-            messages:      vec![],
-            max_tokens:    100,
-            temperature:   0.0,
+            messages: vec![],
+            max_tokens: 100,
+            temperature: 0.0,
         }
     }
 
@@ -621,11 +630,15 @@ mod tests {
         let result = proc.infer(&sample_req());
         let elapsed = start.elapsed();
 
-        assert!(matches!(result, Err(SubprocessError::Timeout)),
-            "ハングするプロセスは Err(Timeout) を返すべき: {result:?}");
+        assert!(
+            matches!(result, Err(SubprocessError::Timeout)),
+            "ハングするプロセスは Err(Timeout) を返すべき: {result:?}"
+        );
         // タイムアウト (200ms) 直後に返り、sleep の 30 秒を待たないこと
-        assert!(elapsed < Duration::from_secs(5),
-            "タイムアウトは即座に発火すべき (実測 {elapsed:?}) — 永久ブロックバグの回帰防止");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "タイムアウトは即座に発火すべき (実測 {elapsed:?}) — 永久ブロックバグの回帰防止"
+        );
     }
 
     #[test]
@@ -643,8 +656,9 @@ mod tests {
         let start = std::time::Instant::now();
         let _ = proc.infer(&sample_req()); // 結果 (Ok/Err) は環境依存だが即座に返ること
         let elapsed = start.elapsed();
-        assert!(elapsed < Duration::from_secs(5),
-            "即座に返る応答で 30 秒タイムアウトを待ってはならない (実測 {elapsed:?})");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "即座に返る応答で 30 秒タイムアウトを待ってはならない (実測 {elapsed:?})"
+        );
     }
 }
-

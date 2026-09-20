@@ -117,8 +117,14 @@ fn extract_accounts_4_3(s: &str, out: &mut HashSet<String>) {
             };
             // セパレータ後に3桁が続く
             if sep_end + 3 <= len
-                && bytes[sep_end..sep_end + 3].iter().all(|b| b.is_ascii_digit())
-                && !bytes.get(sep_end + 3).copied().unwrap_or(0).is_ascii_digit()
+                && bytes[sep_end..sep_end + 3]
+                    .iter()
+                    .all(|b| b.is_ascii_digit())
+                && !bytes
+                    .get(sep_end + 3)
+                    .copied()
+                    .unwrap_or(0)
+                    .is_ascii_digit()
             {
                 let combined = format!(
                     "{}{}",
@@ -139,12 +145,22 @@ fn extract_accounts_4_3(s: &str, out: &mut HashSet<String>) {
 pub fn has_account_change_keyword(body: &str) -> bool {
     const KEYWORDS: &[&str] = &[
         // 日本語
-        "口座変更", "振込先変更", "振込先が変更", "口座が変わりました",
-        "新しい口座", "新口座", "振込先を変更", "口座番号変更",
-        "支払先変更", "送金先変更",
+        "口座変更",
+        "振込先変更",
+        "振込先が変更",
+        "口座が変わりました",
+        "新しい口座",
+        "新口座",
+        "振込先を変更",
+        "口座番号変更",
+        "支払先変更",
+        "送金先変更",
         // 英語
-        "account change", "new account", "updated account",
-        "wire transfer details have changed", "banking details updated",
+        "account change",
+        "new account",
+        "updated account",
+        "wire transfer details have changed",
+        "banking details updated",
         "remittance information has been updated",
     ];
     let lower = body.to_lowercase();
@@ -166,14 +182,8 @@ pub fn detect_account_diff(past_bodies: &[&str], current_body: &str) -> AccountD
     }
     let current_accounts = extract_accounts(current_body);
 
-    let new_accounts: Vec<String> = current_accounts
-        .difference(&historical)
-        .cloned()
-        .collect();
-    let removed_accounts: Vec<String> = historical
-        .difference(&current_accounts)
-        .cloned()
-        .collect();
+    let new_accounts: Vec<String> = current_accounts.difference(&historical).cloned().collect();
+    let removed_accounts: Vec<String> = historical.difference(&current_accounts).cloned().collect();
 
     let has_change_keyword = has_account_change_keyword(current_body);
 
@@ -238,8 +248,10 @@ mod tests {
     fn extract_handles_fullwidth_digits() {
         let body = "口座番号: １２３４５６７ です";
         let acc = extract_accounts(body);
-        assert!(acc.contains("1234567"),
-            "全角数字が正規化されていない: {acc:?}");
+        assert!(
+            acc.contains("1234567"),
+            "全角数字が正規化されていない: {acc:?}"
+        );
     }
 
     #[test]
@@ -251,8 +263,12 @@ mod tests {
 
     #[test]
     fn keyword_detected_english() {
-        assert!(has_account_change_keyword("Please note: account change required"));
-        assert!(has_account_change_keyword("Wire transfer details have changed"));
+        assert!(has_account_change_keyword(
+            "Please note: account change required"
+        ));
+        assert!(has_account_change_keyword(
+            "Wire transfer details have changed"
+        ));
     }
 
     #[test]
@@ -265,8 +281,10 @@ mod tests {
         // 攻撃者が口座を 9999999 に差し替え、キーワード「変更」を含む
         let current = "重要: 振込先変更のお知らせ。新口座 9999999 にお振込ください。";
         let r = detect_account_diff(&past, current);
-        assert!(r.is_high_risk(),
-            "口座差替 + 変更キーワード = 高リスクでなければならない: {r:?}");
+        assert!(
+            r.is_high_risk(),
+            "口座差替 + 変更キーワード = 高リスクでなければならない: {r:?}"
+        );
         assert!(r.new_accounts.contains(&"9999999".to_string()));
         assert!(r.removed_accounts.contains(&"1111111".to_string()));
         assert!(r.has_change_keyword);
@@ -277,8 +295,7 @@ mod tests {
         let past = vec!["口座 1234567 までお振込ください"];
         let current = "1234567 への振込確認しました";
         let r = detect_account_diff(&past, current);
-        assert!(!r.is_high_risk(),
-            "同一口座継続は低リスク: {r:?}");
+        assert!(!r.is_high_risk(), "同一口座継続は低リスク: {r:?}");
         assert_eq!(r.risk_score, 0.0);
     }
 
@@ -286,8 +303,10 @@ mod tests {
     fn first_email_in_thread_no_history() {
         // 過去スレッドなし → ベースライン確立フェーズ、リスクなし
         let r = detect_account_diff(&[], "口座 1234567 までお振込ください");
-        assert_eq!(r.risk_score, 0.0,
-            "履歴ゼロのスレッドではリスクスコアは 0: {r:?}");
+        assert_eq!(
+            r.risk_score, 0.0,
+            "履歴ゼロのスレッドではリスクスコアは 0: {r:?}"
+        );
     }
 
     #[test]
@@ -298,8 +317,10 @@ mod tests {
         let r = detect_account_diff(&past, current);
         // new_accounts は空、change keyword はある
         assert!(r.has_change_keyword);
-        assert!(!r.is_high_risk(),
-            "差分なしならキーワードのみで高リスクにはしない: {r:?}");
+        assert!(
+            !r.is_high_risk(),
+            "差分なしならキーワードのみで高リスクにはしない: {r:?}"
+        );
     }
 
     #[test]
@@ -307,32 +328,37 @@ mod tests {
         // 10 桁の文字列は 7-8 桁レンジ外なので口座として抽出しない
         let body = "ID: 1234567890123 は社内番号です";
         let acc = extract_accounts(body);
-        assert!(acc.is_empty(),
-            "範囲外の数字列は口座扱いしない: {acc:?}");
+        assert!(acc.is_empty(), "範囲外の数字列は口座扱いしない: {acc:?}");
     }
 
     #[test]
     fn extract_4_3_hyphen_pattern() {
         let body = "振込先: 1234-567 にお振込ください";
         let acc = extract_accounts(body);
-        assert!(acc.contains("1234567"),
-            "ハイフン区切り 4+3 パターンが抽出されない: {acc:?}");
+        assert!(
+            acc.contains("1234567"),
+            "ハイフン区切り 4+3 パターンが抽出されない: {acc:?}"
+        );
     }
 
     #[test]
     fn extract_4_3_space_pattern() {
         let body = "支店コード 1234 567 口座";
         let acc = extract_accounts(body);
-        assert!(acc.contains("1234567"),
-            "スペース区切り 4+3 パターンが抽出されない: {acc:?}");
+        assert!(
+            acc.contains("1234567"),
+            "スペース区切り 4+3 パターンが抽出されない: {acc:?}"
+        );
     }
 
     #[test]
     fn extract_4_3_fullwidth_space() {
         let body = "口座番号: 1234\u{3000}567";
         let acc = extract_accounts(body);
-        assert!(acc.contains("1234567"),
-            "全角スペース区切り 4+3 パターンが抽出されない: {acc:?}");
+        assert!(
+            acc.contains("1234567"),
+            "全角スペース区切り 4+3 パターンが抽出されない: {acc:?}"
+        );
     }
 
     #[test]
