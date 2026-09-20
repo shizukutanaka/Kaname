@@ -279,6 +279,7 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 
 | D102 | ~~**AiTM スコアが契約上限を超過**: `AitmRisk.score` は doc 上 0-100 のはずが無上限加算で、出荷済みコーパス種 (tycoon-auth.net URL) で実測 130+ — verdict 閾値には影響しないが契約虚偽~~ **(2026-09-20 解消)** | P4 | `score.min(100)` クランプ + doc 閾値訂正 (80+ → 50+) |
 | D103 | ~~**fuzz コーパス3件が孤立**: `aitm_urls`/`calendar_phishing`/`ssa_bypass` に種ファイルが存在するが対応ターゲット未定義で一度も実行不能~~ **(2026-09-20 解消)** | P4 | 3ターゲットを不変条件付きで実装し全コーパス消化可能に。実走で aitm が D102 を即座に検出 — 孤立コーパスの存在が本来の検証価値を果たしていなかった証左 |
+| D108 | ~~**一括経路が連絡先一覧を件数分だけ再問合せ**: `mail_fetch` の `assess_listing` が行ごとに `lookup_contacts` (contacts 全件 SELECT)、`mail_scan_folder` がファイルごとに `lookup_contacts`+`current_account_id` を呼び、N 件で N 回の同一クエリが走っていた — 直前の `our_domain` には「行ごとの DB 参照を避ける」と明記して hoist 済みだったのに同原則が contacts に適用されていなかった~~ **(2026-09-20 解消)** | P4 | contacts/account_id をループ外に hoist (mail_fetch は `ListingInput.known_contacts` で供給、scan_folder は冒頭で1回解決)。判定結果は不変、I/O のみ削減 |
 
 ### 完了判定の変更
 

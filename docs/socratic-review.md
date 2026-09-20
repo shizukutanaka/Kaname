@@ -535,3 +535,29 @@ A: はい。`EmailStyleFeatures::extract` は 500KB 切り捨て・
 `fuzz_targets/<name>` の対応関係は1対1でなければ無意味であり、
 今回のようにコーパスが先に書かれターゲットが忘れられる退行は
 起きうる。
+
+
+## ラウンド 31 — 「避ける」と書いた原則は本当に守られているか
+
+**問**: `mail_fetch` の `our_domain` には「一覧全体で1回だけ解決する
+(行ごとの DB 参照を避ける)」と明記されている。この原則は同じループ内の
+他のデータにも適用されているか?
+
+**答**: 守られていなかった。`assess_listing` 内の `lookup_contacts`
+(contacts テーブル全件 SELECT) は行ごとに走り、`mail_scan_folder` では
+`lookup_contacts` と `current_account_id` がファイルごとに呼ばれていた。
+50 件の一覧取得で 50 回の同一 SELECT、500 ファイルの走査で 500 回の
+同一クエリ + アカウント解決が走る。
+
+**なぜ見落とされたか**: hoist の原則は `our_domain` 追加時に明文化されたが、
+`lookup_contacts` は後から別経路で追加され、原則の適用範囲が
+「書かれた行の隣」に留まっていた。原則は書くだけでは伝播しない —
+新たな参照が増えるたびに再適用が要る。
+
+**対応 (D108)**: contacts/account_id を両ループの外に hoist。
+`assess_listing` は `ListingInput.known_contacts` で受け取る形に変更し、
+取得責任を呼び出し側に移した (単発呼出の `analyze_raw_email` は従来通り
+内部で取得)。判定の意味論は一切不変、I/O のみ削減。
+
+**検証**: cargo check/test/clippy/fmt 全グリーン。50 件取得時の contacts
+クエリは 50 → 1 回に削減。

@@ -573,8 +573,12 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut radar = kaname_radar::CampaignRadar::new();
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    // 自組織ドメイン (D44) は走査全体で1回だけ解決する。
-    let our = our_domain(&current_account_id().await, None).await;
+    // アカウント・自組織ドメイン (D44)・連絡先一覧は走査全体で1回だけ
+    // 解決する (D108: 以前はファイルごとに contacts/account_id を引き直し、
+    // N 件の走査で N 回の同一 SELECT/アカウント解決が走っていた)。
+    let account_id = current_account_id().await;
+    let our = our_domain(&account_id, None).await;
+    let contacts = lookup_contacts(&account_id).await;
 
     for item in dir {
         let Ok(item) = item else { continue };
@@ -649,12 +653,10 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let urls = extract_urls_from_text(&body_text);
         let link_domains: Vec<String> = urls.iter().filter_map(|u| url_host(u)).collect();
 
-        let contacts = lookup_contacts(&current_account_id().await).await;
         let reply_to = env.reply_to.first().map(|a| a.addr.as_string());
         let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
         // スレッド乗っ取り検出: In-Reply-To/References が指す既知メッセージを
         // Store から逆引きし、スレッド履歴を組み立てる。
-        let account_id = current_account_id().await;
         let mut ref_ids = env.in_reply_to.clone();
         ref_ids.extend(env.references.iter().cloned());
         ref_ids.dedup();
@@ -1547,8 +1549,12 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
         .await
         .map_err(|e| format!("メール一覧の取得に失敗しました: {e}"))?;
 
-    // 自組織ドメイン (D44) は一覧全体で1回だけ解決する (行ごとの DB 参照を避ける)。
+    // 自組織ドメイン (D44) と連絡先一覧は一覧全体で1回だけ解決する
+    // (行ごとの DB 参照を避ける — D108: contacts の取得が
+    //  assess_listing 内で行ごとに走り、50 件で 50 回の同一 SELECT
+    //  になっていた)。
     let our = our_domain(&account_id, None).await;
+    let contacts = lookup_contacts(&account_id).await;
     let mut rows = Vec::with_capacity(items.len());
     for it in &items {
         let from_addr = it
@@ -1585,6 +1591,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             references: it.references.as_deref().unwrap_or(&[]),
             dkim_signature: it.dkim_signature.as_deref(),
             auth_results: it.auth_results.as_deref(),
+            known_contacts: &contacts,
         })
         .await;
 
@@ -1667,6 +1674,9 @@ struct ListingInput<'a> {
     dkim_signature: Option<&'a str>,
     /// Authentication-Results ヘッダーの生値 (未取得時は None)。
     auth_results: Option<&'a str>,
+    /// 呼び出し側が一覧全体で1回だけ解決した連絡先一覧
+    /// (kaname-bec の `known_contacts` 書式: `"Name <addr>"` または `addr`)。
+    known_contacts: &'a [String],
 }
 
 /// 一覧表示用の簡易 BEC 判定。
@@ -1688,13 +1698,13 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         references,
         dkim_signature,
         auth_results,
+        known_contacts,
     } = input;
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
         None => from_addr.to_string(),
     };
     let urls = extract_urls_from_text(preview);
-    let contacts = lookup_contacts(account_id).await;
     // 送信者履歴を引く。無ければ None のままで、BEC は履歴シグナルを
     // 評価しない (履歴が無いことを「初回連絡」と断定しない)。
     let history = lookup_sender_history(account_id, from_addr).await;
@@ -1746,7 +1756,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         },
         sender_history: history.as_ref(),
         our_domain,
-        known_contacts: &contacts,
+        known_contacts,
         extracted_urls: &urls,
         reply_to,
         thread_context: thread_ctx,
