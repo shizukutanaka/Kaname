@@ -299,17 +299,12 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
         <div class="k-ready-features">
           <div>🛡 BEC 検出は<strong>すでに動いています</strong></div>
-          <div>🤖 Phi-4-mini AI モデルは<strong>すでに準備されています</strong></div>
           <div>🔒 ローカル DB は<strong>すでに暗号化されています</strong></div>
         </div>
 
         <button class="k-btn-primary" onClick={props.onComplete} autofocus>
           受信トレイを開く
         </button>
-
-        <p class="k-tip">
-          💡 ⌘K でいつでもコマンドパレットを開けます
-        </p>
       </div>
     );
   };
@@ -425,7 +420,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
           color: #00C4CC; font-size: 32px; display: flex;
           align-items: center; justify-content: center; margin-bottom: 8px;
         }
-        .k-tip { font-size: 12px; color: #8B96A5; margin-top: 24px; }
+
         .k-step-controls {
           display: flex; justify-content: space-between; align-items: center;
           width: 100%; margin-top: 8px;
