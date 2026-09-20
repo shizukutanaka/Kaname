@@ -264,6 +264,23 @@ async fn ai_model_download(expected_sha256: String) -> Result<&'static str, Stri
     commands::ai_model_download(expected_sha256).await
 }
 
+// ── MLS E2E 暗号化 (D1 Phase 4) ─────────────────────────────────────────
+
+#[tauri::command]
+async fn mls_init(email: String) -> Result<commands::MlsStatus, String> {
+    commands::mls_init(email).await
+}
+
+#[tauri::command]
+async fn mls_status() -> commands::MlsStatus {
+    commands::mls_status().await
+}
+
+#[tauri::command]
+async fn mls_key_package() -> Result<String, String> {
+    commands::mls_key_package().await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -399,6 +416,10 @@ fn main() {
             ai_model_status,
             ai_llm_start,
             ai_model_download,
+            // MLS E2E 暗号化 (D1 Phase 4)
+            mls_init,
+            mls_status,
+            mls_key_package,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");
