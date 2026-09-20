@@ -281,6 +281,31 @@ async fn mls_key_package() -> Result<String, String> {
     commands::mls_key_package().await
 }
 
+/// 会話成立済みの相手一覧 (Compose の「MLS で暗号化」表示用)。
+#[tauri::command]
+async fn mls_conversations() -> Vec<commands::MlsPeer> {
+    commands::mls_conversations().await
+}
+
+/// 自分の KeyPackage を相手に添付送信する (D1 Phase 3)。
+#[tauri::command]
+async fn mls_send_key_package(to: String) -> Result<String, String> {
+    commands::mls_send_key_package(to).await
+}
+
+/// 受信済み KP を消費して会話を開始し Welcome を送信する。
+#[tauri::command]
+async fn mls_start_conversation(to: String) -> Result<String, String> {
+    commands::mls_start_conversation(to).await
+}
+
+/// 会話成立済みの相手へ暗号化メッセージを送信する。
+/// 実件名・本文はエンベロープ内にのみ封入される。
+#[tauri::command]
+async fn mls_send_encrypted(to: String, subject: String, body: String) -> Result<String, String> {
+    commands::mls_send_encrypted(to, subject, body).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -420,6 +445,11 @@ fn main() {
             mls_init,
             mls_status,
             mls_key_package,
+            // MLS 配送経路 (D1 Phase 3)
+            mls_conversations,
+            mls_send_key_package,
+            mls_start_conversation,
+            mls_send_encrypted,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");

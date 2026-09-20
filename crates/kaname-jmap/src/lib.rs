@@ -47,6 +47,19 @@ pub struct Session {
     pub state: String,
 }
 
+/// 送信メールの添付パート。`send_email` が RFC822 multipart/mixed に
+/// 直列化して 1 本の BLOB としてアップロードする (Email/import 経路)。
+#[derive(Debug, Clone)]
+pub struct OutgoingAttachment {
+    /// ファイル名 — CR/LF・引用符・制御文字は拒否される。
+    /// 非 ASCII は RFC 5987 `filename*=UTF-8''…` で送出する。
+    pub filename: String,
+    /// Content-Type (例: `application/mls-envelope+cbor`)
+    pub mime_type: String,
+    /// 添付バイト列 (base64 で送出)
+    pub data: Vec<u8>,
+}
+
 impl Session {
     pub const JMAP_CORE: &'static str = "urn:ietf:params:jmap:core";
     pub const JMAP_MAIL: &'static str = "urn:ietf:params:jmap:mail";
@@ -504,6 +517,7 @@ impl JmapClient {
         to: &[&str],
         subject: &str,
         body: &str,
+        attachments: &[OutgoingAttachment],
     ) -> Result<String, JmapError> {
         // 宛先数の上限 (DoS 防止: 100 件超えは拒否)
         const MAX_RECIPIENTS: usize = 100;
@@ -539,6 +553,54 @@ impl JmapClient {
             return Err(JmapError::InvalidInput(
                 "本文に SMTP DATA 終端シーケンス (CRLF.CRLF / LF.LF) が含まれています".to_string(),
             ));
+        }
+
+        // 添付の検証 — MIME ヘッダへ展開される値は直列化前に潰す。
+        // filename は Content-Disposition / name パラメータに入るため
+        // `"`/`\`・制御文字・CR/LF を拒否 (ヘッダインジェクション防止)。
+        const MAX_ATTACHMENTS: usize = 32;
+        const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
+        const MAX_TOTAL_BYTES: usize = 25 * 1024 * 1024; // 本文+添付の合計
+        if attachments.len() > MAX_ATTACHMENTS {
+            return Err(JmapError::InvalidInput(format!(
+                "添付が多すぎます: {} > {MAX_ATTACHMENTS}",
+                attachments.len()
+            )));
+        }
+        let mut total_bytes = body.len();
+        for a in attachments {
+            if a.data.len() > MAX_ATTACHMENT_BYTES {
+                return Err(JmapError::InvalidInput(format!(
+                    "添付が大きすぎます: {} バイト > {MAX_ATTACHMENT_BYTES}",
+                    a.data.len()
+                )));
+            }
+            total_bytes = total_bytes.saturating_add(a.data.len());
+            if total_bytes > MAX_TOTAL_BYTES {
+                return Err(JmapError::InvalidInput(format!(
+                    "本文+添付の合計が大きすぎます: {total_bytes} バイト > {MAX_TOTAL_BYTES}"
+                )));
+            }
+            if a.filename.is_empty()
+                || a.filename
+                    .chars()
+                    .any(|c| c == '"' || c == '\\' || c.is_control())
+            {
+                return Err(JmapError::InvalidInput(format!(
+                    "添付名が不正です: {:?}",
+                    &a.filename[..a.filename.len().min(40)]
+                )));
+            }
+            if a.mime_type.is_empty()
+                || a.mime_type
+                    .chars()
+                    .any(|c| c.is_control() || c == '"' || c == ';')
+            {
+                return Err(JmapError::InvalidInput(format!(
+                    "添付の MIME 型が不正です: {:?}",
+                    &a.mime_type[..a.mime_type.len().min(40)]
+                )));
+            }
         }
 
         // RFC 5322 ヘッダーインジェクション防止: \r\n を含む入力を拒否
@@ -579,7 +641,15 @@ impl JmapClient {
 
         let now = chrono::Utc::now().to_rfc2822();
         let msg_id = format!("<{}@kaname.app>", uuid::Uuid::new_v4().simple());
-        let raw = build_raw_message(&from, &to.join(", "), &subject, body, &msg_id, &now);
+        let raw = build_raw_message(
+            &from,
+            &to.join(", "),
+            &subject,
+            body,
+            &msg_id,
+            &now,
+            attachments,
+        );
 
         // BLOB アップロード → Email/import → EmailSubmission/set
         let blob_id = self.upload_blob(raw.as_bytes()).await?;
@@ -1117,11 +1187,56 @@ fn build_raw_message(
     body: &str,
     msg_id: &str,
     date: &str,
+    attachments: &[OutgoingAttachment],
 ) -> String {
     let subject = encode_header_utf8(subject);
     let body_b64 = wrap76(&base64_encode(body.as_bytes()));
-    format!(
-        "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {to_header}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{body_b64}"
+    if attachments.is_empty() {
+        return format!(
+            "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {to_header}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{body_b64}"
+        );
+    }
+
+    // multipart/mixed: 第1パートが text/plain 本文、以降が添付。
+    // 境界文字列はメッセージごとにランダム生成 (本文/添付との衝突を
+    // 統計的に排除 — 32 hex 桁)。
+    let boundary = format!("kaname-{}", uuid::Uuid::new_v4().simple());
+    let mut raw = format!(
+        "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {to_header}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"{boundary}\"\r\n\r\nThis is a multi-part message in MIME format.\r\n\r\n--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{body_b64}\r\n"
+    );
+    for att in attachments {
+        let (name_param, fname_param) = filename_params(&att.filename);
+        raw.push_str(&format!(
+            "--{boundary}\r\nContent-Type: {mime}; {name_param}\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; {fname_param}\r\n\r\n{data}\r\n",
+            mime = att.mime_type,
+            data = wrap76(&base64_encode(&att.data)),
+        ));
+    }
+    raw.push_str(&format!("--{boundary}--\r\n"));
+    raw
+}
+
+/// RFC 2183/5987 の添付名パラメータ (`name=`, `filename=`) のペア。
+///
+/// ASCII の安全な名前は `name="…"`/`filename="…"` の quoted-string、
+/// 非 ASCII を含む場合は `name*=UTF-8''<pct-encoded>` の extended
+/// パラメータ (パラメータ名も `*` 付きに変わる)。
+/// pct エンコードは既存の `encode_template_value` と同じ unreserved
+/// ポリシーで、`'`・空白等も全て %XX に落ちる。
+fn filename_params(filename: &str) -> (String, String) {
+    let is_plain_safe = filename
+        .bytes()
+        .all(|b| b.is_ascii() && !matches!(b, b'"' | b'\\' | b'(' | b')' | b';'));
+    if is_plain_safe {
+        return (
+            format!("name=\"{filename}\""),
+            format!("filename=\"{filename}\""),
+        );
+    }
+    let enc = encode_template_value(filename);
+    (
+        format!("name*=UTF-8''{enc}"),
+        format!("filename*=UTF-8''{enc}"),
     )
 }
 
@@ -1874,6 +1989,7 @@ mod tests {
             "本文です。\r\n2 行目",
             "<m@x>",
             "Mon, 01 Jan 2024 00:00:00 +0000",
+            &[],
         );
         // ヘッダーは全て ASCII (件名は encoded-word)
         let (head, body) = raw.split_once("\r\n\r\n").expect("ヘッダ/本文区切り");
@@ -1892,6 +2008,55 @@ mod tests {
         assert_eq!(
             base64_encode("本文です。\r\n2 行目".as_bytes()),
             body.replace("\r\n", "")
+        );
+    }
+
+    #[test]
+    fn build_raw_message_は添付をmultipart_mixedで直列化する() {
+        let att = OutgoingAttachment {
+            filename: "kaname-mls-key-package.bin".into(),
+            mime_type: "application/mls-key-package".into(),
+            data: b"\x01\x02\x03keypackage".to_vec(),
+        };
+        let raw = build_raw_message(
+            "alice@kaname.app",
+            "bob@kaname.app",
+            "MLS",
+            "KeyPackage を添付します",
+            "<m@x>",
+            "Mon, 01 Jan 2024 00:00:00 +0000",
+            &[att],
+        );
+        let (head, rest) = raw.split_once("\r\n\r\n").expect("ヘッダ区切り");
+        assert!(head.contains("Content-Type: multipart/mixed; boundary=\"kaname-"));
+        let boundary = head
+            .split("boundary=\"")
+            .nth(1)
+            .and_then(|s| s.split('"').next())
+            .expect("boundary 抽出");
+        // 構造: --B 本文 / --B 添付 / --B-- 終端
+        assert!(rest.contains(&format!("--{boundary}\r\nContent-Type: text/plain")));
+        assert!(rest.contains(&format!(
+            "--{boundary}\r\nContent-Type: application/mls-key-package; name=\"kaname-mls-key-package.bin\""
+        )));
+        assert!(rest
+            .contains("Content-Disposition: attachment; filename=\"kaname-mls-key-package.bin\""));
+        assert!(rest.trim_end().ends_with(&format!("--{boundary}--")));
+        // 添付データは base64 で埋め込まれている
+        assert!(rest.contains(&wrap76(&base64_encode(b"\x01\x02\x03keypackage"))));
+    }
+
+    #[test]
+    fn filename_params_は非asciiをrfc5987の拡張パラメータにする() {
+        let (n, f) = filename_params("report.pdf");
+        assert_eq!(n, "name=\"report.pdf\"");
+        assert_eq!(f, "filename=\"report.pdf\"");
+        let (n2, f2) = filename_params("請求書.pdf");
+        assert!(n2.starts_with("name*=UTF-8''"), "{n2}");
+        assert!(f2.starts_with("filename*=UTF-8''"), "{f2}");
+        assert!(
+            !f2.contains("請求書"),
+            "非 ASCII は percent-encode される: {f2}"
         );
     }
 
