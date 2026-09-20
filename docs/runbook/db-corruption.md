@@ -16,14 +16,17 @@
 
 2. **DB ファイル特定**
    ```
-   macOS:   ~/Library/Application Support/Kaname/kaname.db
-   Linux:   ~/.local/share/kaname/kaname.db
-   Windows: %APPDATA%\Kaname\kaname.db
+   macOS:   ~/Library/Application Support/kaname/history.db
+   Linux:   ~/.local/share/kaname/history.db
+   Windows: %APPDATA%\kaname\history.db
+   
+   ※ ファイル名は `history.db` (`kaname.db` ではない)。同じディレクトリの
+   `history.key` (64桁 hex, 0600) が SQLCipher 鍵。
    ```
 
 3. **バックアップ作成** (必須、これ以上の操作前)
    ```bash
-   cp kaname.db kaname.db.bak.$(date +%Y%m%d-%H%M%S)
+   cp history.db history.db.bak.$(date +%Y%m%d-%H%M%S)
    ```
 
 ## 復旧手順
@@ -31,21 +34,24 @@
 ### 軽度な破損 (整合性チェック失敗)
 
 ```bash
-sqlcipher kaname.db
+# DB は SQLCipher 暗号化のため平文では開けない。key は history.key の hex。
+sqlcipher history.db
+> PRAGMA key = "x'$(cat history.key | tr -d '\n')'";
+> PRAGMA integrity_check;
 > .recover
-> .save kaname.db.recovered
+> .save history.db.recovered
 > .quit
 ```
 
 ### 重度な破損 (ヘッダー破損)
 
 1. JMAP サーバーから完全再同期
-2. ローカル下書きは `kaname.db.bak` から手動抽出 (要 SQL クエリ)
+2. ローカル下書きは `history.db.bak` から手動抽出 (要 SQL クエリ)
 3. ユーザーには「メールは安全、ローカルキャッシュを再構築中」と通知
 
 ## データ消失防止
 
-- 自動バックアップ: 毎日深夜、最新 7 日分を保持
+- 自動バックアップは未実装 — `history.db` の定期的な手動バックアップを推奨
 - 監査ログのハッシュチェーンで改ざん検出 (`AuditLog::verify_chain`)
 - WAL モードで電源断耐性
 

@@ -459,6 +459,38 @@ impl Store {
         Ok(valid)
     }
 
+    /// 監査ログを新しい順に最大 `limit` 件返す (閲覧用)。
+    ///
+    /// 書き込み専用だった audit_log を UI から閲覧するための読み出し経路。
+    /// ペイロードは生 JSON のまま返し、表示整形は呼び出し側に委ねる。
+    pub async fn audit_entries(&self, limit: i64) -> Result<Vec<AuditEntry>, StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT seq, event_type, payload_json, created_at
+                 FROM audit_log ORDER BY seq DESC LIMIT ?1;",
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([limit], |row| {
+                Ok(AuditEntry {
+                    seq: row.get(0)?,
+                    event_type: row.get(1)?,
+                    payload_json: row.get(2)?,
+                    created_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| StoreError::Db(e.to_string()))
+    }
+
     /// アカウント行が無ければ作る (FK 制約の前提)。
     ///
     /// `PRAGMA foreign_keys = ON` のため、`contacts`/`messages`/`settings` は
@@ -1228,6 +1260,33 @@ mod tests {
         assert!(ok);
     }
 
+    #[tokio::test]
+    async fn audit_entries_は新しい順に返し_limitを尊重する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        for i in 0..3 {
+            store
+                .audit(None, &format!("EV{i}"), &serde_json::json!({"i": i}))
+                .await
+                .unwrap();
+        }
+
+        let all = store.audit_entries(10).await.unwrap();
+        assert_eq!(all.len(), 3);
+        // 新しい順 (seq DESC)
+        assert_eq!(all[0].event_type, "EV2");
+        assert_eq!(all[2].event_type, "EV0");
+        assert!(all[0].created_at.contains('T'));
+
+        let last2 = store.audit_entries(2).await.unwrap();
+        assert_eq!(last2.len(), 2);
+        assert_eq!(last2[0].event_type, "EV2");
+    }
+
     // ── セキュリティ回帰テスト ──────────────────────────────────────────────
 
     #[test]
@@ -1294,6 +1353,26 @@ pub struct NewMessage {
     pub bec_verdict: Option<String>,
 }
 
+/// `record_attachment_scan` への入力 — 添付1件の検査記録。
+///
+/// `detected_mime`・`content_id`・`scan_signature` は現状の検査器が
+/// 返さない値のため持たない (空列を埋めるためだけの偽データは作らない)。
+#[derive(Debug)]
+pub struct AttachmentScanRecord<'a> {
+    /// JMAP 側のメール ID (`messages.jmap_id` と対応)。
+    pub jmap_id: &'a str,
+    /// ファイル名 (Content-Disposition 由来)。
+    pub filename: &'a str,
+    /// 宣言された MIME タイプ (詐称されうる)。
+    pub declared_mime: &'a str,
+    /// サイズ (bytes)。
+    pub size_bytes: u64,
+    /// 検査判定 (`"scanned"` / `"dangerous"` 等)。
+    pub scan_verdict: &'a str,
+    /// 隔離保存先パス。拒否されて書き出さなかった場合は None。
+    pub blob_path: Option<&'a str>,
+}
+
 /// 保存済みメール。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct StoredMessage {
@@ -1334,6 +1413,19 @@ pub struct MessageStats {
     pub unread: u32,
     /// BEC 警戒判定 (SUSPICIOUS + DANGEROUS) 件数。
     pub bec_alerts: u32,
+}
+
+/// 監査ログの1行 (閲覧用読み出し)。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AuditEntry {
+    /// 連番 (AUTOINCREMENT)。
+    pub seq: i64,
+    /// イベント種別 (STORE_OPEN / MAIL_SEND / DLP_BLOCK 等)。
+    pub event_type: String,
+    /// イベント詳細の JSON (件名・本文・宛先は含まない最小構成)。
+    pub payload_json: String,
+    /// 記録時刻 (RFC 3339 / UTC)。
+    pub created_at: String,
 }
 
 /// `LIKE` パターンのメタ文字をエスケープする。
@@ -1593,6 +1685,80 @@ impl Store {
             out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
         }
         Ok(out)
+    }
+
+    /// 添付ファイルの検査結果を `attachments` テーブルに記録する。
+    ///
+    /// `mail_download_attachment` が検査・隔離保存した添付の証跡。
+    /// `attachments` テーブルは `scan_verdict`/`blob_path` 列を持つ
+    /// 設計だったが INSERT する経路が存在せず死んだスキーマだった。
+    ///
+    /// `jmap_id` で `messages` 行を引き、メールが未保存 (一覧未取得) の
+    /// 場合は記録せず `false` を返す — 記録はメール行に紐付いて初めて
+    /// 意味を持つため、孤立行は作らない。
+    ///
+    /// # 冪等性
+    ///
+    /// `id` は `sha256(message_row_id + filename)` で決定論的に採番し、
+    /// 同一添付の再ダウンロードは上書きとなる (最新の検査結果が残る)。
+    pub async fn record_attachment_scan(
+        &self,
+        account_id: &str,
+        rec: &AttachmentScanRecord<'_>,
+    ) -> Result<bool, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(rec.jmap_id, "jmap_id", 256)?;
+        validate_text_field(rec.filename, "filename", 1_024)?;
+        validate_text_field(rec.declared_mime, "declared_mime", 256)?;
+        validate_text_field(rec.scan_verdict, "scan_verdict", 64)?;
+        if let Some(p) = rec.blob_path {
+            validate_text_field(p, "blob_path", 4_096)?;
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        Self::ensure_account_sync(&conn, account_id)?;
+
+        // messages.id は sha256(account_id + jmap_id) で採番されている。
+        let message_row_id = sha256_hex_fields(&[account_id.as_bytes(), rec.jmap_id.as_bytes()]);
+        let exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages WHERE id = ?1;",
+                params![message_row_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        if exists == 0 {
+            return Ok(false);
+        }
+
+        let id = sha256_hex_fields(&[message_row_id.as_bytes(), rec.filename.as_bytes()]);
+        let size_i64 = i64::try_from(rec.size_bytes).unwrap_or(i64::MAX);
+        conn.execute(
+            "INSERT INTO attachments \
+                (id, message_id, filename, declared_mime, size_bytes, \
+                 scan_verdict, blob_path) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) \
+             ON CONFLICT (id) DO UPDATE SET \
+                declared_mime = ?4, \
+                size_bytes    = ?5, \
+                scan_verdict  = ?6, \
+                blob_path     = ?7;",
+            params![
+                id,
+                message_row_id,
+                rec.filename,
+                rec.declared_mime,
+                size_i64,
+                rec.scan_verdict,
+                rec.blob_path
+            ],
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        Ok(true)
     }
 
     /// 件名・送信者・本文プレビューを対象に検索する。
@@ -1958,5 +2124,84 @@ mod message_persistence_tests {
         assert_eq!(s1.total, 2);
         assert_eq!(s1.unread, 1);
         assert_eq!(s1.bec_alerts, 1);
+    }
+
+    /// `record_attachment_scan` は保存済みメールの jmap_id から attachments 行を
+    /// 作り、未保存のメールに対しては孤立行を作らず `false` を返す。
+    /// 同一添付の再記録は冪等に上書きされる。
+    #[tokio::test]
+    async fn record_attachment_scan_は保存済みメールに紐付けて記録する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        // 未保存メール → false で孤立行を作らない。
+        let recorded = store
+            .record_attachment_scan(
+                "acct1",
+                &AttachmentScanRecord {
+                    jmap_id: "jmap-404",
+                    filename: "invoice.pdf",
+                    declared_mime: "application/pdf",
+                    size_bytes: 1024,
+                    scan_verdict: "scanned",
+                    blob_path: Some("/tmp/invoice.pdf"),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!recorded);
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名1"))
+            .await
+            .unwrap();
+        let recorded = store
+            .record_attachment_scan(
+                "acct1",
+                &AttachmentScanRecord {
+                    jmap_id: "jmap-1",
+                    filename: "invoice.pdf",
+                    declared_mime: "application/pdf",
+                    size_bytes: 1024,
+                    scan_verdict: "dangerous",
+                    blob_path: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(recorded);
+
+        // 再記録は冪等 (同じ id に上書き、行は増えない)。
+        store
+            .record_attachment_scan(
+                "acct1",
+                &AttachmentScanRecord {
+                    jmap_id: "jmap-1",
+                    filename: "invoice.pdf",
+                    declared_mime: "application/pdf",
+                    size_bytes: 2048,
+                    scan_verdict: "scanned",
+                    blob_path: Some("/tmp/invoice.pdf"),
+                },
+            )
+            .await
+            .unwrap();
+
+        let conn = store.conn.lock().unwrap();
+        let (count, verdict, size): (i64, String, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), MAX(scan_verdict), MAX(size_bytes) \
+                 FROM attachments;",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(verdict, "scanned");
+        assert_eq!(size, 2048);
     }
 }
