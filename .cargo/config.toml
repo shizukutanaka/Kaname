@@ -1,17 +1,11 @@
 [build]
 rustflags = ["-D", "warnings"]
 
-[profile.dev]
-split-debuginfo = "unpacked"
-
-[profile.release]
-lto            = "thin"
-codegen-units  = 1
-strip          = "symbols"
-panic          = "abort"
-
-[profile.bench]
-opt-level = 3
+# プロファイル設定は Cargo.toml を唯一のソースとする。
+# config.toml の [profile.*] は Cargo.toml の設定をキー単位でオーバーライド
+# するため、ここに置くと値が二箇所に分散し、Cargo.toml を編集しても
+# 反映されないドリフト源になっていた (split-debuginfo のみここに存在し、
+# release/bench は Cargo.toml と完全重複していた)。全設定を Cargo.toml に集約済み。
 
 [alias]
 t   = "nextest run --workspace"

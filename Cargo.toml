@@ -96,8 +96,9 @@ strip         = "symbols"
 panic         = "abort"
 
 [profile.dev]
-opt-level = 1
-debug     = true
+opt-level       = 1
+debug           = true
+split-debuginfo = "unpacked"
 
 [profile.bench]
 opt-level = 3
