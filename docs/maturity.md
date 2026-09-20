@@ -109,7 +109,7 @@ kaname-core は `TriageEngine` 経由で既に到達済みだったため表か�
 |---|---|
 | `kaname-billing` | 課金基盤。本製品のスコープ (メールセキュリティ解析) に不要。永続化も未実装だった (D6) |
 | `kaname-continuity` | デバイス間ハンドオフ。単一デバイスで完結する現スコープでは不要 |
-| `kaname-i18n` | 翻訳カタログ。フロントエンドの `src/i18n.ts` + `src/locales/` が正規実装であり重複 |
+| `kaname-i18n` | 翻訳カタログ。フロント側 `src/i18n.ts` + `src/locales/` も呼び出し実績ゼロで削除済み (E9) — UI は日本語ハードコードのみ |
 | `kaname-tray` | トレイアイコン生成。`src-tauri` が独自にトレイを持つため重複 |
 
 **モック実装を組み込まない判断が最も重要**である。`kaname-mls` や
@@ -159,8 +159,8 @@ D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成し
 `oobv_recommend`・`deepfake_evaluate` (判定ロジックを `mail_open`/
 `mail_import_eml` 共通の `analyze_raw_email` に埋め込み、素の本文・
 添付一覧を UI に渡さず済む形で結果だけ `ImportedEmail` に含めた。
-独立コマンドとしての経路は今も未到達だが、これは意図的な設計判断であり
-D24 に記録済み)。
+独立コマンドは後に E11 で呼び出し元ゼロのため削除 — 判定自体は
+解析経路に組み込まれている)。
 
 ### 2026-09 の副産物: 検証ツール自体の欠陥を2件発見・修正
 
@@ -192,8 +192,8 @@ D24 に記録済み)。
 | `mail_list` の `bec_verdict` | モックに手書きした固定文字列 | **実際の判定結果で上書き** |
 | `mail_get_summary` | `{unread:3, bec_alerts:1, total:42}` 固定 | **同じ検出器で実集計** |
 | `mail_get_body` | `format!("<p>メール {} の本文</p>")` | **`sanitize_html` → `to_srcdoc` の実経路** (型契約不一致も解消) |
-| `ai_summarize_email` | 固定要約 + `local_inference: true` と偽装 | **risk は本物、要約は未実装と明示、`local_inference: false`** |
-| `ai_smart_reply` | 内容と無関係な固定3文 | **未実装を明示的にエラーで返す (偽物を削除)** |
+| ~~`ai_summarize_email`~~ | 固定要約 + `local_inference: true` と偽装 | **コマンドごと削除** (E11 — 「未実装」Err を返すだけの IPC 面は攻撃面のため除去) |
+| ~~`ai_smart_reply`~~ | 内容と無関係な固定3文 | **コマンドごと削除** (E11 — 同上) |
 
 到達可能クレートは 10 → **13** に増加 (`kaname-bec` / `kaname-radar` / `kaname-dlp`)。
 さらにローカル `.eml` インポートにより**実メールがパイプラインを流れる**ようになり、
