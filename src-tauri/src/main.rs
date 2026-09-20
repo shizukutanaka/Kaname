@@ -179,8 +179,9 @@ async fn mail_list_attachment_blobs(
 async fn mail_list_stored(
     mailbox_id: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<commands::StoredMessage>, String> {
-    commands::mail_list_stored(mailbox_id, limit).await
+    commands::mail_list_stored(mailbox_id, limit, offset).await
 }
 
 /// 保存済みメールを検索する (件名・送信者・本文プレビュー)。
@@ -188,8 +189,9 @@ async fn mail_list_stored(
 async fn mail_search(
     query: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<commands::StoredMessage>, String> {
-    commands::mail_search(query, limit).await
+    commands::mail_search(query, limit, offset).await
 }
 
 /// 送信者を「検証済み」としてマークする。
@@ -204,8 +206,9 @@ async fn mail_fetch(
     app: AppHandle,
     mailbox_id: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<commands::EmailRow>, String> {
-    let rows = commands::mail_fetch(mailbox_id, limit).await?;
+    let rows = commands::mail_fetch(mailbox_id, limit, offset).await?;
     emit_summary_updated(&app).await;
     Ok(rows)
 }

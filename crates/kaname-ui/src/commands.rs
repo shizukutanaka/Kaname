@@ -1509,11 +1509,15 @@ fn triage_bucket(from_addr: &str, subject: &str, verdict: &str) -> String {
     .to_string()
 }
 
-pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
+pub async fn mail_fetch(
+    mailbox_id: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<EmailRow>, String> {
     let client = jmap_client().await?;
     let account_id = client.account_id().to_string();
     let items = client
-        .query_emails(&mailbox_id, 0, limit.unwrap_or(50))
+        .query_emails(&mailbox_id, offset.unwrap_or(0), limit.unwrap_or(50))
         .await
         .map_err(|e| format!("メール一覧の取得に失敗しました: {e}"))?;
 
@@ -2278,6 +2282,7 @@ async fn evaluate_sender_style(
 pub async fn mail_list_stored(
     mailbox_id: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<kaname_store::StoredMessage>, String> {
     let store = store_slot()
         .lock()
@@ -2286,7 +2291,12 @@ pub async fn mail_list_stored(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     let account_id = current_account_id().await;
     store
-        .list_messages(&account_id, &mailbox_id, limit.unwrap_or(50))
+        .list_messages(
+            &account_id,
+            &mailbox_id,
+            limit.unwrap_or(50),
+            offset.unwrap_or(0),
+        )
         .await
         .map_err(|e| format!("保存済みメールの読み出しに失敗しました: {e}"))
 }
@@ -2299,6 +2309,7 @@ pub async fn mail_list_stored(
 pub async fn mail_search(
     query: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<kaname_store::StoredMessage>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
@@ -2310,7 +2321,12 @@ pub async fn mail_search(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     let account_id = current_account_id().await;
     store
-        .search_messages(&account_id, query.trim(), limit.unwrap_or(50))
+        .search_messages(
+            &account_id,
+            query.trim(),
+            limit.unwrap_or(50),
+            offset.unwrap_or(0),
+        )
         .await
         .map_err(|e| format!("検索に失敗しました: {e}"))
 }

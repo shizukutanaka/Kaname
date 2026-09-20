@@ -1550,6 +1550,7 @@ impl Store {
         account_id: &str,
         mailbox_id: &str,
         limit: u32,
+        offset: u32,
     ) -> Result<Vec<StoredMessage>, StoreError> {
         validate_text_field(account_id, "account_id", 256)?;
         validate_text_field(mailbox_id, "mailbox_id", 256)?;
@@ -1565,12 +1566,15 @@ impl Store {
                     received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
-             ORDER BY received_at DESC LIMIT ?3;",
+             ORDER BY received_at DESC LIMIT ?3 OFFSET ?4;",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![account_id, mailbox_id, limit], row_to_stored)
+            .query_map(
+                params![account_id, mailbox_id, limit, offset],
+                row_to_stored,
+            )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1776,6 +1780,7 @@ impl Store {
         account_id: &str,
         query: &str,
         limit: u32,
+        offset: u32,
     ) -> Result<Vec<StoredMessage>, StoreError> {
         validate_text_field(account_id, "account_id", 256)?;
         validate_text_field(query, "query", 1_000)?;
@@ -1796,12 +1801,12 @@ impl Store {
                   OR from_addr    LIKE ?2 ESCAPE '\\' \
                   OR from_name    LIKE ?2 ESCAPE '\\' \
                   OR body_preview LIKE ?2 ESCAPE '\\' ) \
-             ORDER BY received_at DESC LIMIT ?3;",
+             ORDER BY received_at DESC LIMIT ?3 OFFSET ?4;",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![account_id, pattern, limit], row_to_stored)
+            .query_map(params![account_id, pattern, limit, offset], row_to_stored)
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1886,7 +1891,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
             .await
             .unwrap();
-        let inbox_before = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let inbox_before = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(inbox_before.len(), 1);
 
         // 同じ jmap_id を別フォルダで再保存 (フォルダ移動の再同期)。
@@ -1895,13 +1900,16 @@ mod message_persistence_tests {
             .await
             .unwrap();
 
-        let inbox_after = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let inbox_after = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert!(
             inbox_after.is_empty(),
             "移動後は旧フォルダに残ってはいけない"
         );
 
-        let archive_after = store.list_messages("acct1", "archive", 10).await.unwrap();
+        let archive_after = store
+            .list_messages("acct1", "archive", 10, 0)
+            .await
+            .unwrap();
         assert_eq!(archive_after.len(), 1, "移動先フォルダに反映されるべき");
     }
 
@@ -1929,7 +1937,7 @@ mod message_persistence_tests {
             .await
             .unwrap();
 
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].from_addr, "bob@corp.com");
         assert_eq!(rows[0].from_name.as_deref(), Some("Bob"));
@@ -1952,7 +1960,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
             .await
             .unwrap();
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].to_addrs, vec!["bob@corp.com".to_string()]);
 
@@ -1963,7 +1971,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &updated)
             .await
             .unwrap();
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows[0].to_addrs.len(), 2);
         assert_eq!(rows[0].to_addrs[0], "carol@corp.com");
     }
@@ -1993,7 +2001,7 @@ mod message_persistence_tests {
             .unwrap();
         }
 
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert!(
             rows[0].to_addrs.is_empty(),

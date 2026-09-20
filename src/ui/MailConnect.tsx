@@ -83,7 +83,7 @@ export function MailConnect() {
   const fetchMailbox = async (mailboxId: string) => {
     setBusy(true); setError(null);
     try {
-      const rows = await invoke<EmailRow[]>("mail_fetch", { mailboxId, limit: 50 });
+      const rows = await invoke<EmailRow[]>("mail_fetch", { mailboxId, limit: 50, offset: 0 });
       setEmails(rows);
     } catch (e) {
       setError(String(e));
