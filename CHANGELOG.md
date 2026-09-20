@@ -43,6 +43,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - fix(kaname-store,kaname-ui): ログのフルパス出力を葉名に落とす (D96, I5)
   - fix(kaname-ui): 添付の同名上書きを `write_unique` の別名化で防止 + OOBV セレモニーの無制限蓄積に終端追い出しと上限を実装 (D87/D88)
   - fix(kaname-ui): 履歴 DB 鍵の生成を tmp+rename アトミック化し、壊鍵時の黙殺再生成 (既存 DB が復号不能になる経路) をエラー化 — 平文 DB 検出時は「旧形式」と誘導文を返す (D89)
+- fix(kaname-render,kaname-ui): `is_mls` が構造的に永遠に false だった欠陥を修正 — `kaname_render::is_mls_message()` を新設し全 MIME パートの `application/mls-envelope+cbor` を検査、EML インポート経路の `BodyDto.is_mls` に配線 (JMAP 一覧は body_structure 非所持のため判別不能=false を維持) (D116)
   - fix(kaname-ui): 詳細解析・フォルダ一括解析にも送信者履歴を供給 — `sender_history` が `None` 固定で一覧と詳細の BEC 判定が食い違っていた (D100)
   - fix(kaname-dlp,kaname-ui): 受信側 DLP に既定ルール3件を追加 (構造的に空だった) + 誤配検出へ既知宛先ドメインを連絡先履歴から供給 (D104) — kaname-dlp 変更のため security-lead 承認要
   - fix(kaname-jmap,kaname-ui): 一覧経路に Return-Path を配線し From vs Return-Path 不一致検出を実効化 + e2e モック欠落3コマンド補完 (D106/D107)

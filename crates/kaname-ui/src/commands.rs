@@ -105,22 +105,15 @@ pub struct BodyDto {
     pub render_risks: Vec<String>,
 }
 
-/// 受信箱のメール本文を取得する。
-///
-/// # サーバ未接続のため未実装
-///
-/// JMAP 受信が未配線 (D10) のため、受信箱には本物のメールが存在しない。
-/// 従来はモックデータの preview をサニタイズして返していたが、
-/// **実在しないメールの本文を表示するのは偽装**である。
-///
-/// サニタイズ経路自体は健在で、「ファイル解析」タブ (`mail_import_eml`) が
-/// 実際の `.eml` に対して同じ `sanitize_html` → `to_srcdoc` を実行する。
 /// サーバ上のメールを開き、**ローカル `.eml` と同じパイプライン**で解析する。
 ///
 /// JMAP の `Email.blobId` は生 RFC 5322 全体を指す。これを `download_blob` で
 /// 取得して `analyze_raw_email` に渡せば、本文サニタイズ・BEC スコア・
 /// シグナル・添付検査・DLP・リンク評価がすべて得られる。
 /// 「サーバのメールを開く」ために新しい解析コードは不要である。
+///
+/// (旧実装は「サーバ未接続のため未実装」でモック preview を返す設計だったが
+/// D10 解消で実装に置き換えられた。)
 pub async fn mail_open(email_id: String) -> Result<ImportedEmail, String> {
     let client = jmap_client().await?;
     let full = client
@@ -456,7 +449,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             srcdoc: srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),
             csp: srcdoc.csp.to_string(),
-            is_mls: false,
+            is_mls: kaname_render::is_mls_message(bytes),
             render_risks,
         },
         dlp_findings,
