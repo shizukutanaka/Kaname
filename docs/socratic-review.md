@@ -535,3 +535,33 @@ A: はい。`EmailStyleFeatures::extract` は 500KB 切り捨て・
 `fuzz_targets/<name>` の対応関係は1対1でなければ無意味であり、
 今回のようにコーパスが先に書かれターゲットが忘れられる退行は
 起きうる。
+
+## ラウンド 30: 一覧経路で Return-Path は見えていたか?
+
+**Q**: BEC の「Return-Path 不一致」シグナル (From ヘッダと envelope
+sender のドメイン不一致 — CEO 詐欺の古典的指紋) は受信トレイで発火するか?
+
+**A**: しない。kaname-bec の `AssessmentRequest.return_path` は実装済みで
+EML インポート・フォルダ走査経路では配線済みだったが、最も交通量の多い
+**一覧経路**では `assess_listing` が `return_path: None` を固定で渡し、
+かつ JMAP `query_emails` の Email/get プロパティに
+`header:Return-Path:asText` が含まれていなかった (D106)。
+フィールドを要求側に追加するだけでは不発 — **供給側 (JMAP プロパティ
+要求) まで遡って初めて発火可能になる**。D100 (sender_history) と同型の
+「構造体にフィールド追加済み、配線先を grep しなければ気づけない」
+退行パターンであり、今回は serde rename の回帰テストで固定した。
+
+**Q**: e2e モックは全コマンドを覆っているか?
+
+**A**: 3件漏れていた (D107)。`mail_list_attachment_blobs` /
+`mail_download_attachment` / `security_audit_log` が switch に無く
+`default: null` に落ちる — 呼び出しはログに記録されても応答が無いため、
+添付 UI と監査証跡画面は E2E で実質検査不可能だった。モックは
+「UI が呼ぶコマンド」と「登録コマンド」の対称表として保守するべきで、
+UI 側にだけ存在する呼び出しは漏れに気づかない。MockOverrides に3件を
+追加し、spec からの差し替えも可能にした。
+
+**教訓**: 「検査が実装されている」≠「検査に届く入力がある」。
+シグナル→評価器→配線層→取得層の鎖は、末端の取得 (JMAP プロパティ、
+ヘッダ抽出、DB 照会) が欠けると全段が無意味になる。要求側フィールドの
+`None` 固定を見つけたら取得側まで遡ること。

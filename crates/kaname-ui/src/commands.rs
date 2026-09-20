@@ -1585,6 +1585,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             references: it.references.as_deref().unwrap_or(&[]),
             dkim_signature: it.dkim_signature.as_deref(),
             auth_results: it.auth_results.as_deref(),
+            return_path: it.return_path.as_deref(),
         })
         .await;
 
@@ -1667,6 +1668,9 @@ struct ListingInput<'a> {
     dkim_signature: Option<&'a str>,
     /// Authentication-Results ヘッダーの生値 (未取得時は None)。
     auth_results: Option<&'a str>,
+    /// Return-Path ヘッダーの生値 (未取得時は None)。
+    /// From vs Return-Path 不一致検出に使用 (D106 で JMAP 経路に配線)。
+    return_path: Option<&'a str>,
 }
 
 /// 一覧表示用の簡易 BEC 判定。
@@ -1688,6 +1692,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         references,
         dkim_signature,
         auth_results,
+        return_path,
     } = input;
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
@@ -1735,7 +1740,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         .unwrap_or_default();
     let req = kaname_bec::AssessmentRequest {
         from_header: &from_header,
-        return_path: None,
+        return_path,
         subject,
         body_text: preview,
         auth: kaname_bec::AuthResults {

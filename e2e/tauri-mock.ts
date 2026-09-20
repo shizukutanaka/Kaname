@@ -140,6 +140,12 @@ export interface MockOverrides {
   oobvLevel?: string;
   /** `mail_dlp_precheck` の戻り値。 */
   dlpWarnings?: string[];
+  /** `mail_list_attachment_blobs` の戻り値 (既定は添付なし)。 */
+  attachmentRefs?: { filename: string; blob_id: string; mime: string; size: number }[];
+  /** `mail_download_attachment` の戻り値 (既定は良性ファイル保存成功)。 */
+  attachmentDownload?: { filename: string; is_dangerous: boolean; risks: string[]; saved_path: string | null };
+  /** `security_audit_log` の戻り値 (既定は空の正常チェーン)。 */
+  auditLog?: { entries: { id: number; action: string; detail_json: string; created_at: string }[]; chain_valid: boolean };
 }
 
 /**
@@ -253,6 +259,17 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             return { level: ov.oobvLevel ?? "None", message_i18n_key: "" };
           case "mail_dlp_precheck":
             return { warnings: ov.dlpWarnings ?? [] };
+          // 添付経路 (D107): 未登録だと default:null に落ちて
+          // 添付UIの E2E が実質不可能だった。履歴/検査の画面も同様。
+          case "mail_list_attachment_blobs":
+            return ov.attachmentRefs ?? [];
+          case "mail_download_attachment":
+            return ov.attachmentDownload ?? {
+              filename: "mock.pdf", is_dangerous: false, risks: [],
+              saved_path: "/mock/downloads/mock.pdf",
+            };
+          case "security_audit_log":
+            return ov.auditLog ?? { entries: [], chain_valid: true };
           case "ai_detect_phishing":      return { verdict: "SAFE", score: 0 };
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":

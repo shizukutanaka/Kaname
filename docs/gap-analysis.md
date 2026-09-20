@@ -279,6 +279,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 
 | D102 | ~~**AiTM スコアが契約上限を超過**: `AitmRisk.score` は doc 上 0-100 のはずが無上限加算で、出荷済みコーパス種 (tycoon-auth.net URL) で実測 130+ — verdict 閾値には影響しないが契約虚偽~~ **(2026-09-20 解消)** | P4 | `score.min(100)` クランプ + doc 閾値訂正 (80+ → 50+) |
 | D103 | ~~**fuzz コーパス3件が孤立**: `aitm_urls`/`calendar_phishing`/`ssa_bypass` に種ファイルが存在するが対応ターゲット未定義で一度も実行不能~~ **(2026-09-20 解消)** | P4 | 3ターゲットを不変条件付きで実装し全コーパス消化可能に。実走で aitm が D102 を即座に検出 — 孤立コーパスの存在が本来の検証価値を果たしていなかった証左 |
+| D106 | ~~**一覧経路で Return-Path 不一致シグナルが構造的に不発**: kaname-bec の `return_path` 不一致検査 (From vs Return-Path ドメイン、BEC の古典的シグナル) は `assess_listing` が `return_path: None` 固定かつ JMAP `query_emails` が `header:Return-Path:asText` を要求プロパティに含まなかったため、受信トレイ一覧の判定では一度も発火し得なかった (D100 と同型「要求フィールドはあるが供給元が未配線」)~~ **(2026-09-20 解消)** | P3 | Email/get プロパティに `header:Return-Path:asText` を追加 + `EmailListItem.return_path` フィールド追加 (serde rename 固定テスト付き) + `assess_listing` 配線 |
+| D107 | ~~**e2e モックが3コマンド未収録**: `mail_list_attachment_blobs`/`mail_download_attachment`/`security_audit_log` がモックになく `default: null` に落ち、添付 UI・監査証跡画面の E2E が実質不可能だった (呼び出しは記録されるが応答が無い)~~ **(2026-09-20 解消)** | P4 | 3コマンドを MockOverrides 経由で実装 (既定: 添付なし / 良性 DL 成功 / 空の正常チェーン) |
 
 ### 完了判定の変更
 
