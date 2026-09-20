@@ -9,8 +9,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- **`mail_get_summary` を履歴 DB の実集計に接続** — 起動時に呼ばれるのに常に `{unread:0, bec_alerts:0, total:0}` を返すスタブだった。`Store::message_stats` (COUNT + `is_read`/`bec_verdict` 集計) を追加し、Store オープン+アカウント特定時は実数を返す。未接続なら 0 (ローカルにメールが無い実態として正しい)
-### Added
 - **作成画面の送信前アドバイザリに `oobv_recommend` を配線** (D24 残件 — 台帳記載の想定用途どおり)
   - 本文入力の debounce が「DLP 事前チェック」を意図しながら空のスタブだったため実装に置き換え。送金要求・急迫表現等の別経路確認推奨文脈を送信前に助言表示 (ブロックではなく助言。呼び出し失敗は送信を妨げない)
 - **OOBV 電話確認セレモニーの UI 配線**: 📞 バナー (メール開封ビュー / .eml 解析結果) に「電話で確認を開始」ボタンを追加。`oobv_start` で6単語の合い言葉+挑戦番号を発行し、電話で相手が読み上げた単語を `oobv_verify` で照合 → Verified/Mismatch/Expired/Locked を表示。共有コンポーネント `src/ui/OobvCeremony.tsx`。登録済みコマンドの UI 未呼出は `oobv_recommend` のみとなる (#145 で配線済み)
@@ -26,12 +24,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dual-LLM 型不変条件の serde 迂回穴を閉塞** (D17 部分解消): `Content<L>` から `Serialize`/`Deserialize` derive を除去 — `serde_json::from_str::<Content<Trusted>>` で Bridge を迂回し任意テキストを Trusted 偽造できた経路と、生本文の JSON 漏洩経路を閉塞。`Content<Untrusted>::as_text()` を `pub(crate)` 化、`TopicTag` を `serde(try_from)` 化し検証迂回を封じた。kaname-ai 変更のため security-lead 承認が必要。併せて `llm_bridge` の `QuarantinedLlmImpl`/`PrivilegedLlmImpl` (subprocess 側と同名の重複で、呼び出し元・テストすら存在しない in-process 経路のデッドコード ~90行) を削除 — D3 のプロセス隔離設計に反する迂回経路を消去
 - **`.eml` インポート/フォルダ一括解析の無制限ファイル読み込み**: `fs::read` がサイズ確認なしで巨大ファイルを丸ごとメモリに読み込んでいた。50MB 上限 (`MAX_EML_BYTES`) を設け、超過時は正直なエラー/失敗リスト入りに
 
+- **Dual-LLM 型不変条件の serde 迂回穴を閉塞** (D17 部分解消): `Content<L>` から `Serialize`/`Deserialize` derive を除去 — `serde_json::from_str::<Content<Trusted>>` で Bridge を迂回し任意テキストを Trusted 偽造できた経路と、生本文の JSON 漏洩経路を閉塞。`Content<Untrusted>::as_text()` を `pub(crate)` 化、`TopicTag` を `serde(try_from)` 化し検証迂回を封じた。kaname-ai 変更のため security-lead 承認が必要。併せて `llm_bridge` の `QuarantinedLlmImpl`/`PrivilegedLlmImpl` (subprocess 側と同名の重複で、呼び出し元・テストすら存在しない in-process 経路のデッドコード ~90行) を削除 — D3 のプロセス隔離設計に反する迂回経路を消去
+- **送信フォームが複数宛先を扱えなかった**: `to` を単一文字列のまま1要素配列で送信していたため「a@x, b@y」と入力すると1つの不正な宛先として送信されていた。カンマ/セミコロンで分割して実配列化 + プレースホルダに複数可を明記
+
+- **開封済みメールが一覧で未読のまま残る UI 不整合**: `EmailDetailPanel` が `mail_mark_read` を呼んでも一覧側の `is_read` が更新されず、再取得まで太字・未読ドットが残っていた。`onRead` コールバックで mark_read 成功時に一覧の該当行をローカル既読に反映 (メールボックスの未読バッジも同時に減算)
+
+- **サイドバーの「全サブシステム正常」が常時緑の虚偽表示だった**: BEC 警戒・オフライン状態に関係なく緑を表示していた。`mail_get_summary` の実集計と `offline` シグナルに接続し、警戒時は赤で「警戒メール N 件」、オフライン時はその旨を正直に表示。併せて表示先の無かった `serverOnline`/`unreadCount` の dead state を整理
+
 - **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
   - `kaname-render`: `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加し mail-parser から抽出
   - `kaname-jmap`: `Email/get` の properties に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を追加
   - `kaname-store`: `NewMessage`/`messages` テーブルに `message_id`/`thread_id` を永続化し、`list_thread_messages`/`list_messages_by_message_ids` を新規追加
   - `kaname-ui`: 全3評価経路 (analyze_raw_email / mail_scan_folder / assess_listing) で `thread_context`・`past_thread_bodies`・`dkim_signature_header` を実データに接続 — 従来は全て `None`/`&[]` 固定
-  - 一覧経路でも `header:Authentication-Results:asText` を取得し SPF/DKIM/DMARC を実値評価 (kaname-render に `parse_auth_results_str` を公開) — 従来は一覧では全て `None` で認証系シグナルが不在だった
 - **BEC 評価への連絡先・Reply-To・Return-Path 実データ配線** (検出ギャップ — 実装済み検出器が本番経路で一度も発火していなかった)
   - `kaname-render`: `Envelope` に `reply_to`/`return_path` を追加し mail-parser から抽出
   - `kaname-jmap`: `Email/get` の properties に `replyTo` を追加、`EmailListItem.reply_to` に格納
@@ -63,7 +67,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **「機能デモ」タブを削除** (D51 完全解消): `KanameAppleFeatures.tsx` (1,244 行) は偽の添付・固定返信案・架空のエクスポート完了を見せるデモ遊技場であり、正直なラベル付けでも出荷する理由が無かった。`QuickLook`/`SmartReplyBar`/`PdfExportDialog`/`UndoToast`/`AccessibleEmailRow`/`UndoRedoStack` (実利用者ゼロ) も消滅。UI 到達可能性 9/9 → 8/8、関連 vitest 7 件も対象消滅のため削除
 - **フロントエンド i18n 基盤を削除** (E9、~380行): `src/i18n.ts` + `src/locales/{ja,en}.json`。`t()`/`useT()`/`setLanguage()` 等の実呼び出しが UI 内にゼロで、起動時に翻訳カタログを読むだけの空転基盤だった。UI はハードコード日本語文字列のみ。kaname-i18n クレート削除 (D19) に続きフロント側の重複実装も除去
 - **呼び出し元ゼロの IPC コマンド16件を削除** (E11): 「未実装」Err を返すだけの `ai_summarize_email`/`ai_smart_reply`、汎用 KV `settings_get`/`settings_set`、エージェント監視 UI の無い arxiv 系8コマンド (`screen_user_input`/`audit_ai_output`/`check_action_risk`/`check_memory_trust`/`check_rule_of_two`/`validate_tool_argument`/`record_agent_step`/`reset_trajectory` + `kaname-observability::trajectory` 262行)、解析経路に内製済みの `pivot_analyze`/`deepfake_evaluate`、`history_close`/`history_open` の IPC 登録。kaname-ui から kaname-ai/kaname-screen/kaname-pivot への依存辺も除去 (クレート自体は存続)。`oobv_*` は看板機能のため残置し UI 配線で完成させる
-||||||| parent of 8e72bb9 (chore(jmap,store): 呼び出し元ゼロの差分同期・プッシュ基盤を削除 (D48 完全解消))
 - **呼び出し元が存在しない JMAP 差分同期・プッシュ基盤を削除** (D48 完全解消)
   - `JmapClient::sync` (~100行)、`subscribe_push` (~65行)、`SyncResult`/`ChangesResult`/`PushNotification`、`parse_sse_event`/`find_sse_event_end`、`JmapError::PushNotSupported`、`Session.event_source_url`、`Store::update_jmap_state`、`jmap_state` テーブルと `mailboxes.jmap_state` 列、kaname-jmap の `futures-util` 依存と `reqwest stream` feature を除去 (計 ~350行)
   - `mail_fetch` の全件 `Email/query`+`Email/get` 経路は正しく機能しており、差分同期が将来必要になれば git 履歴から復元可能。D19/D51 と同じく「呼び出し元の無い基盤は配線ではなく削除」の判断

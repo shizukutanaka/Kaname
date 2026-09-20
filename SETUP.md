@@ -47,7 +47,7 @@ npm run tauri:dev
 
 ```
 kaname/
-├── Cargo.toml              # Rust workspace (24 クレート — 出荷 19 + kaname-tauri + 開発用4)
+├── Cargo.toml              # Rust workspace (23 クレート — 出荷 18 + kaname-tauri + 開発用4)
 ├── package.json            # Node 依存
 ├── index.html              # Vite エントリ
 ├── vite.config.ts          # Vite 設定 (ポート 1420 固定)

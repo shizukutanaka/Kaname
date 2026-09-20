@@ -42,9 +42,7 @@ interface AppState {
   initialized:    boolean;
   selectedEmailId: string | null;
   activeView:     View;
-  unreadCount:    number;
   becAlertCount:  number;
-  serverOnline:   boolean;
 }
 
 // ── グローバルエラーハウンダリ ──
@@ -68,9 +66,7 @@ const App = () => {
     initialized:     false,
     selectedEmailId: null,
     activeView:      "inbox",
-    unreadCount:     0,
     becAlertCount:   0,
-    serverOnline:    false,
   });
 
   const [initError, setInitError] = createSignal<string | null>(null);
@@ -92,11 +88,11 @@ const App = () => {
       const onboarded = await invoke<boolean>("settings_is_onboarded").catch(() => false);
       setNeedsOnboarding(!onboarded);
 
-      // 2. バックエンド接続確認
-      const health = await invoke<{ ok: boolean; version: string }>("health_check")
-        .catch(() => ({ ok: false, version: "unknown" }));
+      // 2. バックエンド疎通プローブ (結果は表示しない — 実状態は
+      //    サイドバーのポスチャー表示に委ねる。IPC 健全性の起動時確認)
+      await invoke<{ ok: boolean; version: string }>("health_check").catch(() => {});
 
-      // 2. 初期状態ロード
+      // 3. 初期状態ロード (BEC 警戒件数 — サイドバーの警戒バッジに表示)
       const summary = await invoke<{
         unread: number;
         bec_alerts: number;
@@ -105,18 +101,12 @@ const App = () => {
       setState(s => ({
         ...s,
         initialized:   true,
-        serverOnline:  health.ok,
-        unreadCount:   summary.unread,
         becAlertCount: summary.bec_alerts,
       }));
 
       // 3. リアルタイムイベント購読
       await listen<{ unread: number; bec: number }>("mail:summary_updated", (event) => {
-        setState(s => ({
-          ...s,
-          unreadCount:   event.payload.unread,
-          becAlertCount: event.payload.bec,
-        }));
+        setState(s => ({ ...s, becAlertCount: event.payload.bec }));
       });
 
       // トレイメニューの emit をビュー遷移に接続
@@ -265,7 +255,7 @@ const App = () => {
         </Show>
         <div style={{ "padding-bottom": "44px" }} hidden={needsOnboarding()} role="main">
           <Show when={state().activeView === "inbox"}>
-            <Inbox />
+            <Inbox becAlerts={state().becAlertCount} />
           </Show>
           <Show when={state().activeView === "security"}>
             <SecurityDashboard selectedEmailId={state().selectedEmailId} />

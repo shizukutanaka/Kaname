@@ -338,6 +338,7 @@ const EmailDetailPanel = (props: {
   emailId: string | null;
   onClose: () => void;
   onTrashed: () => void;
+  onRead: (id: string) => void;
 }) => {
   const [opened, setOpened] = createSignal<OpenedEmail | null>(null);
   const [openError, setOpenError] = createSignal<string | null>(null);
@@ -362,7 +363,9 @@ const EmailDetailPanel = (props: {
     try {
       const data = await invoke<OpenedEmail>("mail_open", { emailId: props.emailId });
       setOpened(data);
-      await invoke("mail_mark_read", { ids: [props.emailId] }).catch(() => {});
+      await invoke("mail_mark_read", { ids: [props.emailId] })
+        .then(() => props.onRead(props.emailId as string))
+        .catch(() => {});
       try {
         const refs = await invoke<{ filename: string; blob_id: string; mime: string }[]>(
           "mail_list_attachment_blobs", { emailId: props.emailId }
@@ -657,7 +660,7 @@ const EmailDetailPanel = (props: {
 // メインInboxコンポーネント
 // ============================================================================
 
-export const Inbox = () => {
+export const Inbox = (props: { becAlerts?: number }) => {
   const [mailboxes, setMailboxes]       = createSignal<Mailbox[]>([]);
   const [selectedMbx, setSelectedMbx]  = createSignal<string | null>(null);
   const [emails, setEmails]             = createSignal<EmailListItem[]>([]);
@@ -842,24 +845,34 @@ export const Inbox = () => {
           </For>
         </nav>
 
-        {/* セキュリティポスチャー */}
-        <div style={{
-          padding: "12px 16px",
-          "border-top": "1px solid #1F2833",
-          display: "flex",
-          "align-items": "center",
-          gap: "6px",
-          "font-size": "11px",
-          color: "#00B368",
-        }}>
-          <div style={{
-            width: "6px", height: "6px",
-            "border-radius": "50%",
-            background: "#00B368",
-            animation: "pulse 2s infinite",
-          }} />
-          全サブシステム正常
-        </div>
+        {/* セキュリティポスチャー — 実状態を表示する。
+            BEC 警戒がある・オフラインのときに緑を偽らない。 */}
+        {(() => {
+          const bec = props.becAlerts ?? 0;
+          const [text, color] =
+            offline()        ? ["オフライン — 保存済みを表示", "#8B96A5"] :
+            bec > 0          ? [`警戒メール ${bec} 件`, "#FF6B70"] :
+                               ["全サブシステム正常", "#00B368"];
+          return (
+            <div style={{
+              padding: "12px 16px",
+              "border-top": "1px solid #1F2833",
+              display: "flex",
+              "align-items": "center",
+              gap: "6px",
+              "font-size": "11px",
+              color,
+            }}>
+              <div style={{
+                width: "6px", height: "6px",
+                "border-radius": "50%",
+                background: color,
+                animation: "pulse 2s infinite",
+              }} />
+              {text}
+            </div>
+          );
+        })()}
       </aside>
 
       {/* ── メールリスト ── */}
@@ -981,6 +994,14 @@ export const Inbox = () => {
           emailId={selectedEmail()}
           onClose={() => setSelectedEmail(null)}
           onTrashed={() => void loadEmails(selectedMbx())}
+          onRead={(id) => {
+            setEmails(list => list.map(e => (e.id === id ? { ...e, is_read: true } : e)));
+            setMailboxes(list =>
+              list.map(m => (m.id === selectedMbx() && m.unread_emails > 0
+                ? { ...m, unread_emails: m.unread_emails - 1 }
+                : m))
+            );
+          }}
         />
       </Show>
 

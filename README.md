@@ -26,8 +26,8 @@
 - **モック / スタブ段階 (本番運用不可)**: MLS グループ暗号化 (`kaname-mls` — 現状は XOR モック)、
   ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
   自動アップデート。これらは外部クレート統合が必要。
-- **組み立て状況 (2026-07 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
-  **24 クレート中 19 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
+- **組み立て状況 (2026-09 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
+  **23 クレート中 18 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
   スコープ外・重複と判定した 4 クレート (billing/continuity/i18n/tray) はワークスペースから削除済みです (2026-09)。
   実装済みで眠っていた検出器を順次接続しました。
 - **実メールを解析できます**: 「**ファイル解析**」タブからローカルの `.eml` を指定すると、
@@ -53,10 +53,9 @@
 - **まだ無いもの**: MLS 暗号化 (XOR モック)、ローカル LLM 推論 (要約・スマートリプライ、固定応答)、
   Firecracker サンドボックス (no-op)、OS キーチェーン統合は未実装です。
   詳細は [`docs/maturity.md`](docs/maturity.md) / [`docs/gap-analysis.md`](docs/gap-analysis.md)。
-- **ビルド検証の制約**: 本リポジトリの開発環境は組織のエグレスポリシーにより
-  `static.crates.io` が遮断されており、`cargo check` / `cargo test` を実行できません
-  (gap-analysis D20)。代替として `./scripts/static-check.sh` で構文検証を行っていますが、
-  **型検査は未実施**です。ネットワークのある環境での検証が必要です。
+- **検証状況 (2026-09-20 更新)**: `cargo check` / `cargo nextest run --workspace` (1,182 全パス) /
+  `cargo clippy -D warnings` / `cargo fmt --check` / `cargo audit` / `cargo deny` はすべて
+  実走・グリーンを確認済み。以前記載していた「crates.io 遮断で cargo 実行不可」は解消済み。
 
 比較表の記号: **✅ = 実データで稼働中**、**⚠ = 一部稼働 (制約付き)**、
 **🔶 = 設計のみ・実装はモック/スタブ**。🔶 は到達目標であって現時点の能力ではありません。
@@ -203,8 +202,7 @@ kaname/
 │   ├── kaname-sandbox/     # Firecracker microVM
 │   ├── kaname-ui/          # Tauri コマンド層
 │   └── kaname-tests/       # 統合テスト + 敵対テスト
-├── .github/workflows/
-│   └── ci.yml              # CI/CD (check/test/clippy/audit/build/release)
+├── ci-templates/           # CI テンプレート (有効化は ci-templates/README.md 参照)
 ├── deny.toml               # ライセンス + 脆弱性管理
 ├── CHANGELOG.md
 └── CLAUDE.md               # AI ペアプログラミング向け設定
@@ -253,14 +251,13 @@ Kaname は arxiv の最新研究を継続的に反映している:
 
 | 項目 | 数値 |
 |---|---|
-| Rust クレート | 24 |
-| Rust LOC | 約 19,200 |
-| Rust ユニットテスト | 378 |
-| KAT + AgentDojo + 統合テスト | 16 |
-| Playwright E2E | 19 |
-| vitest | 31 |
-| ファジングターゲット | 3 (corpus 23 シード) |
-| プロパティテスト | 20 |
+| Rust クレート | 23 |
+| Rust LOC | 約 41,200 |
+| Rust テスト (nextest) | 1,182 (うち kaname-tests 統合/敵対 104) |
+| Playwright E2E | 19 spec (62 pass / 1 skip・3 ブラウザ行列) |
+| vitest | 6 |
+| ファジングターゲット | 3 (corpus 34 シード) |
+| プロパティテスト | 19 |
 | unsafe ブロック | 0 |
 | 本番 unwrap() | 0 |
 | docs/ 文書数 | 24 (索引付き) |
