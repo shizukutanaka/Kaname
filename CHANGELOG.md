@@ -19,6 +19,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **cargo deny が deserialize 不能だった問題を修復** — deny.toml を cargo-deny 0.18+ スキーマへ移行 (廃止キー削除、`allow-wildcard-paths`、ライセンス許可追加: Zlib/Unicode-3.0/CDLA-Permissive-2.0/AGPL-3.0-or-later)。glib unsound (RUSTSEC-2024-0429) は理由・期限付きで ignore。`cargo deny check all` が全セクション ok
+- **全24クレートに `license.workspace = true` + `publish = false` 付与** — ライセンスメタデータ欠落の解消
 - **E2E 実行が検出した実 a11y 欠陥を修正** (D8 関連)
   - ミュートテキスト `#5A6473` が背景に対しコントラスト 2.7–3.2:1 で WCAG AA (4.5:1) 未達 → `#8B96A5` へ全置換
   - 危険色 `#E5484D` が自身の tint 背景上で 4.15:1 → `#FF6B70` へ全置換
