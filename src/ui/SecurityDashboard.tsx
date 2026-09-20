@@ -572,11 +572,12 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
                     ? "モデル配置済み — ロードすると BEC 意味解析が有効になります"
                     : `モデル未取得 (約 ${(Number(m().expected_size_bytes ?? 0) / 1e9).toFixed(1)}GB) — 未取得の間は BEC は決定論的シグナルのみで判定します`}
               </div>
-              {/* D121: 現在はインプロセス推論 — Q-LLM サブプロセス分離は
-                  未配線のため、現状を隠さず表示する */}
+              {/* D121 解消: 推論は kaname-llm-runner ワーカープロセスで
+                  実行 (sandbox-exec / seccomp 経由)。不信本文はホスト
+                  プロセスの llama.cpp に入らない */}
               <Show when={m().state === "loaded"}>
                 <div style={{ "font-size": "10px", color: "#6B7A94", "margin-bottom": "8px", "font-family": "monospace" }}>
-                  推論はインプロセスで実行されます (サブプロセス分離は未配線 — D121)
+                  推論は隔離ワーカープロセスで実行されます (不信本文はホストプロセスに入りません)
                 </div>
               </Show>
               <div style={{ display: "flex", gap: "8px" }}>
