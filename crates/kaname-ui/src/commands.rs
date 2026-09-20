@@ -1159,8 +1159,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use kaname_oobv::{
-    AuditRecord, CeremonyError, CeremonyState, OobvRecommender, RecommendationLevel,
-    VerificationCeremony,
+    CeremonyError, CeremonyState, OobvRecommender, RecommendationLevel, VerificationCeremony,
 };
 use kaname_render::deepfake_advisory::DeepfakeAdvisory;
 // src-tauri 側のコマンドラッパーが戻り値型として名前を書けるよう再エクスポートする
@@ -1173,7 +1172,6 @@ pub use kaname_store::StoredMessage;
 /// 新機能用の共有状態。
 pub struct V02AppState {
     pub ceremonies: Mutex<HashMap<String, VerificationCeremony>>,
-    pub audit_log: Mutex<Vec<AuditRecord>>,
 }
 
 impl V02AppState {
@@ -1181,7 +1179,6 @@ impl V02AppState {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             ceremonies: Mutex::new(HashMap::new()),
-            audit_log: Mutex::new(Vec::new()),
         })
     }
 }
@@ -1254,7 +1251,20 @@ pub async fn oobv_verify(
     let audit = ceremony.audit_record();
     drop(ceremonies);
 
-    state.audit_log.lock().await.push(audit);
+    // 帯域外検証の結果は改ざん検知付きの永続監査ログに残す
+    // (以前は読み出し経路の無いインメモリ Vec のみで、プロセス終了で
+    // 証跡が消えていた)。フレーズ自体はシークレットなので記録しない。
+    let account_id = current_account_id().await;
+    audit_event(
+        Some(&account_id),
+        "OOBV_VERIFY",
+        serde_json::json!({
+            "email_id": audit.target_email_id,
+            "sender": audit.target_sender,
+            "state": audit.state,
+        }),
+    )
+    .await;
 
     let key = match result {
         CeremonyState::Verified => "oobv.result.verified",

@@ -233,6 +233,7 @@ const EVENT_LABEL: Record<string, string> = {
   DLP_BLOCK:           "DLP が送信をブロック",
   MAIL_IMPORT:         ".eml 取り込み",
   FOLDER_SCAN:         "フォルダ一括解析",
+  OOBV_VERIFY:         "帯域外検証の結果",
 };
 
 const AuditTrail = (props: { view: AuditLogView | null }) => {
