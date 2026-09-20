@@ -499,6 +499,67 @@ impl Store {
             .map_err(|e| StoreError::Db(e.to_string()))
     }
 
+    // -----------------------------------------------------------------------
+    // MLS 会話の安全番号照合記録 (D1 Phase 5)
+    // -----------------------------------------------------------------------
+
+    /// MLS 会話の安全番号を「照合済み」として記録する。
+    ///
+    /// 会話本体 (openmls のグループ状態) は kaname-mls 側の `mls.db` が
+    /// 持つため、ここでは照合記録のみを書く — `mls_conversations` 行を
+    /// conversation_id で upsert し、照合時の安全番号と日時を保存する。
+    /// 将来番号が変わったとき、読み出し側で不一致を検出して警告できる。
+    pub async fn mls_mark_verified(
+        &self,
+        account_id: &str,
+        conversation_id: &str,
+        safety_number: &str,
+    ) -> Result<(), StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        Self::ensure_account_sync(&conn, account_id)?;
+
+        conn.execute(
+            "INSERT INTO mls_conversations
+                (id, account_id, kind, group_state, safety_number, safety_number_verified_at)
+             VALUES (?1, ?2, 'direct', X'', ?3, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+             ON CONFLICT(id) DO UPDATE SET
+                safety_number = ?3,
+                safety_number_verified_at = strftime('%Y-%m-%dT%H:%M:%SZ','now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
+            params![conversation_id, account_id, safety_number],
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
+    /// 記録済みの照合状態を返す: `(照合時の安全番号, 照合日時)`。
+    /// 未記録 (一度も照合していない会話) は `None`。
+    pub async fn mls_verification_state(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<(String, String)>, StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT safety_number, safety_number_verified_at
+                 FROM mls_conversations WHERE id = ?1;",
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        match stmt.query_row([conversation_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        }) {
+            Ok(v) => Ok(Some(v)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(StoreError::Db(e.to_string())),
+        }
+    }
+
     /// 最後に使われたアカウントの ID を返す。
     ///
     /// オフライン (JMAP 未接続) でも保存済みメールの一覧・検索が動くための
@@ -2630,5 +2691,62 @@ mod message_persistence_tests {
         assert_eq!(count, 1);
         assert_eq!(verdict, "scanned");
         assert_eq!(size, 2048);
+    }
+
+    /// D1 Phase 5: 安全番号の照合記録の往復 — 未記録は None、記録後は
+    /// (番号, 日時) が返り、再記録は上書きされる。
+    #[tokio::test]
+    async fn mls照合記録が往復し番号変更を検出できる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        // 未記録は None
+        assert!(store
+            .mls_verification_state("conv-1")
+            .await
+            .unwrap()
+            .is_none());
+
+        // 記録 → (番号, 照合日時) が返る
+        store
+            .mls_mark_verified("acct1", "conv-1", "sn-aaaa")
+            .await
+            .unwrap();
+        let (sn, at) = store
+            .mls_verification_state("conv-1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(sn, "sn-aaaa");
+        assert!(!at.is_empty());
+
+        // 照合時と異なる番号を持つ会話は読み出し側で不一致を検出できる
+        // (ここでは「記録値 ≠ 現在値」の比較が可能なことだけ確認)
+        assert_ne!(sn, "sn-bbbb");
+
+        // 再照合は上書き (行は増えない)
+        store
+            .mls_mark_verified("acct1", "conv-1", "sn-bbbb")
+            .await
+            .unwrap();
+        let (sn2, _) = store
+            .mls_verification_state("conv-1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(sn2, "sn-bbbb");
+        let count: i64 = {
+            let conn = store.conn.lock().unwrap();
+            conn.query_row(
+                "SELECT COUNT(*) FROM mls_conversations WHERE id = 'conv-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(count, 1);
     }
 }

@@ -16,6 +16,8 @@ interface MlsPeer {
   conversation_id: string;
   epoch: number;
   safety_number: string | null;
+  verified: boolean;
+  safety_changed: boolean;
 }
 
 interface ComposeProps {
@@ -308,6 +310,17 @@ export const Compose = (props: ComposeProps) => {
           <span style={{ color: "#6B7A94" }}>
             件名・本文はサーバにも表示されません (相手の Kaname のみ復号)
           </span>
+          {/* Phase 5: 照合状態を送信直前に表示 — 番号変更は警告、未検証は注意 */}
+          <Show when={mlsPeer()?.safety_changed}>
+            <span style={{ color: "#FF6B70" }}>
+              ⚠ 安全番号が照合時から変わっています — 鍵変更または中間者の可能性。別経路で再確認してください
+            </span>
+          </Show>
+          <Show when={!mlsPeer()?.safety_changed && !mlsPeer()?.verified}>
+            <span style={{ color: "#FFB224" }}>
+              この相手とは安全番号が未照合です (セキュリティ画面で照合できます)
+            </span>
+          </Show>
         </div>
       </Show>
 

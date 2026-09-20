@@ -52,6 +52,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 受信側往復テスト: KP 添付取込 → 消費で会話開始 → 双方向暗号復号を kaname-ui テストで実証 (不正 KP がキャッシュされないことも検証)
 - 残存: Phase 5 (安全番号の対面セレモニー UI — 番号表示は済、照合フローが未実装)、kaname-store `mls_conversations` テーブルとのアカウント紐付け
 
+### Security — D1 Phase 5: 安全番号セレモニー (照合記録)
+
+- **照合状態の永続化**: kaname-store の `mls_conversations` テーブル (設計済みシーム — `safety_number`/`safety_number_verified_at` 列は存在したが書込経路ゼロだった) に `mls_mark_verified`/`mls_verification_state` を実装 — 「この時点の番号で相手と照合した」記録を会話 ID で upsert
+- **IPC `mls_mark_verified` 追加** (登録38 = 呼出38 = モック38): 現在の安全番号を記録 + `MLS_SAFETY_VERIFIED` 監査イベント (件名・宛先は書かず会話 ID のみ)
+- **番号変更の検出**: `mls_conversations` が各相手に `verified`/`safety_changed` を返す — 照合記録と現在値の不一致 (鍵変更・再参加・中間者攻撃の可能性) を `safety_changed` で区別。Store 未接続時は両方 false — 検証状態を偽らない
+- **UI**: SecurityDashboard の会話カードに 3 状態バッジ (⚠ 番号変更 / ✓ 照合済み / 未検証) +「相手と照合しました (記録)」ボタン (別経路確認を前提とする注記付き)。Compose の MLS 選択肢にも照合前に警告を表示
+- これで D1 の 5 フェーズすべてが実装済み: 実 openmls (X-Wing) → SQLCipher 永続化 → KP 添付往復 + 暗号送信 → 受信自動処理 → 信頼確立のセレモニー記録
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
