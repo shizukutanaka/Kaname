@@ -42,14 +42,6 @@ pub struct MailSummary {
     pub total: u32,
 }
 
-#[derive(Debug, Serialize)]
-pub struct PhishingAnalysis {
-    pub likely_ai_generated: bool,
-    pub score: f32,
-    pub phishing_intent: bool,
-    pub explanation: String,
-}
-
 // ── コマンド実装 ──────────────────────────────────────────────────────────────
 
 #[instrument]
@@ -968,27 +960,6 @@ fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
     }
 }
 
-/// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
-///
-/// `kaname-render` は既に `kaname-ui` の依存に入っており各検出器も実装済み
-/// だが、**commands.rs から一度も呼ばれていなかった** (9 モジュールが
-/// 到達可能なまま未使用)。ここで実際に実行する。
-///
-/// サニタイズ自体は `sanitize_html` が別途行う。本関数は「サニタイズでは
-/// 受信箱のメールにフィッシング解析を行う。
-///
-/// # サーバ未接続のため未実装
-///
-/// 受信箱に本物のメールが存在しないため解析対象がない。
-/// 実際の BEC 判定は「ファイル解析」タブ (`mail_import_eml` /
-/// `mail_scan_folder`) が `.eml` に対して実行する。
-pub async fn ai_detect_phishing(email_id: String) -> Result<PhishingAnalysis, String> {
-    let _ = email_id;
-    Err("未配線: 受信箱はサーバに接続されていません。\
-         実際のメールを解析するには「ファイル解析」タブをご利用ください"
-        .to_string())
-}
-
 pub async fn log_error(message: String) -> Result<(), String> {
     error!(source = "frontend", %message);
     Ok(())
@@ -1015,13 +986,6 @@ mod tests {
         let r = mail_get_summary().await.map_err(|e| e.to_string())?;
         assert!(r.unread <= r.total);
         Ok(())
-    }
-
-    #[tokio::test]
-    async fn phishing_未接続時はエラーを返す() {
-        // 偽データ経路削除後の正直な契約: 未配線の ai_detect_phishing は
-        // パニックせず Err を返す (I5/I6: 未接続を silent にしない)。
-        assert!(ai_detect_phishing("e1".into()).await.is_err());
     }
 
     #[tokio::test]

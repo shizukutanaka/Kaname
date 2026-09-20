@@ -15,14 +15,6 @@ import { invoke } from "@tauri-apps/api/core";
 // 型定義
 // ============================================================================
 
-interface AiPhishingAnalysis {
-  likely_ai_generated: boolean;
-  score:               number;
-  phishing_intent:     boolean;
-  explanation:         string;
-  features:            { name: string; value: number; description: string }[];
-}
-
 interface AiAccessEntry {
   id:           string;
   email_id:     string;
@@ -59,46 +51,6 @@ interface ActionItem {
 // ============================================================================
 // AI フィッシングスコアバー
 // ============================================================================
-
-const PhishingScoreBar = (props: { score: number; likely: boolean }) => {
-  const color = props.likely
-    ? "#FF6B70"
-    : props.score > 0.4 ? "#F5A623" : "#00B368";
-
-  return (
-    <div style={{ "margin-top": "8px" }}>
-      <div style={{
-        display: "flex", "justify-content": "space-between",
-        "font-size": "11px", color: "#8B96A5", "margin-bottom": "4px",
-      }}>
-        <span>AI生成フィッシングスコア</span>
-        <span style={{ color, "font-weight": "600" }}>
-          {(props.score * 100).toFixed(0)}%
-        </span>
-      </div>
-      <div style={{
-        height: "6px", background: "#1A2129",
-        "border-radius": "3px", overflow: "hidden",
-      }}>
-        <div style={{
-          height: "100%",
-          width: `${props.score * 100}%`,
-          background: color,
-          "border-radius": "3px",
-          transition: "width 0.5s ease",
-        }} />
-      </div>
-      <Show when={props.likely}>
-        <div style={{
-          "margin-top": "4px", "font-size": "10px",
-          color: "#FF6B70", "font-weight": "600",
-        }}>
-          ⚠ AI生成フィッシングの疑いが高い
-        </div>
-      </Show>
-    </div>
-  );
-};
 
 // ============================================================================
 // AI アクセス監査ログ
@@ -478,8 +430,6 @@ const ActionItemsList = (props: {
 // ============================================================================
 
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
-  const [phishing, setPhishing] = createSignal<AiPhishingAnalysis | null>(null);
-  const [phishingError, setPhishingError] = createSignal<string | null>(null);
   const [accessLog] = createSignal<AiAccessEntry[]>([]);
   const [auditLog, setAuditLog] = createSignal<AuditLogView | null>(null);
 
@@ -493,7 +443,6 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
   });
   const [contacts]  = createSignal<ContactIntelligence[]>([]);
   const [actions]   = createSignal<ActionItem[]>([]);
-  const [loading,   setLoading]   = createSignal(false);
   const [doneItems, setDoneItems] = createSignal<Set<number>>(new Set());
 
   // 2026-09 削除: 以前はここでハードコードされた偽のアクセスログ・
@@ -506,29 +455,6 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
   // 各コンポーネント (AiAccessLog/ActionItemsList/ContactCard の親) は
   // 空配列を渡された場合を正しく処理する (docs/gap-analysis.md D41)。
 
-  // 選択されたメールの AI フィッシング分析
-  createEffect(async () => {
-    if (!props.selectedEmailId) return;
-    setLoading(true);
-    try {
-      const result = await invoke<AiPhishingAnalysis>("ai_detect_phishing", {
-        emailId: props.selectedEmailId,
-      });
-      setPhishing(result);
-      setPhishingError(null);
-    } catch (e) {
-      // 2026-09 修正: 以前はエラー時に無言で「score: 0.15 (安全)」という
-      // 偽の判定を表示していた。判定に失敗したことを「安全」と偽って
-      // 伝えるのは、判定できたと偽るより悪い (利用者が本物のフィッシング
-      // メールを安全だと誤信しかねない)。スコアバーは表示せず、失敗理由
-      // だけを表示する。
-      setPhishing(null);
-      setPhishingError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  });
-
   return (
     <div style={{
       display: "flex", "flex-direction": "column", gap: "16px",
@@ -536,41 +462,6 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
       background: "#0A0E14", color: "#F5F7FA",
       "font-family": "-apple-system, 'Hiragino Sans', sans-serif",
     }}>
-      {/* AI フィッシング分析 */}
-      <Show when={props.selectedEmailId}>
-        <div style={{
-          background: "#0D1219", border: "1px solid #1F2833",
-          "border-radius": "8px", padding: "14px",
-        }}>
-          <div style={{
-            "font-size": "13px", "font-weight": "600", "margin-bottom": "10px",
-            display: "flex", "align-items": "center", gap: "8px",
-          }}>
-            🔍 AI生成フィッシング検出
-            <span style={{ "font-size": "10px", color: "#8B96A5" }}>
-              (全競合が未実装)
-            </span>
-          </div>
-          <Show when={phishing()}>
-            <PhishingScoreBar score={phishing()!.score} likely={phishing()!.likely_ai_generated} />
-            <div style={{
-              "font-size": "11px", color: "#8B96A5", "margin-top": "8px",
-              "line-height": "1.5",
-            }}>
-              {phishing()!.explanation}
-            </div>
-          </Show>
-          <Show when={phishingError()}>
-            <div style={{ "font-size": "11px", color: "#FF6B70", "line-height": "1.5" }}>
-              ⚠ {phishingError()}
-            </div>
-          </Show>
-          <Show when={loading()}>
-            <div style={{ "font-size": "12px", color: "#8B96A5" }}>分析中...</div>
-          </Show>
-        </div>
-      </Show>
-
       {/* AI アクセス監査ログ */}
       <AiAccessLog entries={accessLog()} />
       <AuditTrail view={auditLog()} />

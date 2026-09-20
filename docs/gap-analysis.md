@@ -271,6 +271,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
 | D75 | ~~**「暗号化ローカルストア」が一度も暗号化されていなかった**: workspace の rusqlite が `features = ["bundled"]` (素の SQLite3) で、`SqlCipherParams::apply` の `PRAGMA key`/`cipher_*` は全て no-op。DB ファイルは平文で保存されていた~~ **(2026-09-20 解消)** | P0 | 実測証明: `PRAGMA cipher_version` が存在せず、DB 本文に `CREATE TABLE`/既知文字列が平文残存。`bundled` → `bundled-sqlcipher` に変更後、`cipher_version = 4.5.3 community` + 本文にマーカー非出現を実測確認。**既存の平文 history.db は移行措置なしのため旧環境では開けなくなる** (プレリリース・ローカル実データ前提のため許容判断、要レビュー)。恒久回帰テスト `dbファイルは暗号化され既知文字列が平文で残らない` を追加 — feature を戻すと検知される。コメントの「0.32/sqlcipher」記述も実態 (0.31/bundled-sqlcipher) に訂正 |
+| D92 | ~~**「AI生成フィッシング検出」パネルが永久エラーの死んだ UI**: `SecurityDashboard` は選択メールごとに `ai_detect_phishing` を invoke するが、コマンドは常に `Err("未配線: 受信箱はサーバに接続されていません")` を返すスタブ — エラーメッセージの口実自体が D10 で JMAP 接続済みの現在は虚偽。`likely_ai_generated` の判定には LLM が必要だが P-LLM は未配線 (D2) のため実装不能、かつ実 BEC 判定はメール詳細パネルに既に存在し重複~~ **(2026-09-20 解消)** | P3 | マスク「まず消す」: UI セクション・`PhishingScoreBar` コンポーネント・`AiPhishingAnalysis` インタフェース・`ai_detect_phishing` コマンド・`PhishingAnalysis` 構造体・Tauri ハンドラ登録を全て削除。「全競合が未実装」という注記は嘘ではないが、このプロダクトでも未実装だった — 未実装を装飾で誤魔化さない。実装時は git 履歴から復元可能 |
+
 
 ### 完了判定の変更
 
@@ -291,6 +293,14 @@ DB は平文だった (D75)。丁寧なパラメータ定義・鍵検証・Zeroi
 全て実装済みだったが、依存 feature 一つの違いで中核の約束が成立して
 いなかった。「実装が丁寧」は「機能している」の証拠にならない ——
 出力物 (ファイルの実バイト) を見るまで確かにならない。
+
+**2026-09-20 (追記・永久エラーの UI)**: 「AI生成フィッシング検出」
+パネルは選択メールのたびに必ずエラーになるスタブを呼んでいた
+(D92)。エラーの口実「受信箱はサーバに接続されていません」は
+D10 で接続済みとなった今は虚偽でもあった — **エラーメッセージ
+の中の主張もまた、時とともに腐る**。LLM なしに `likely_ai_generated`
+は判定不能なので、実装ではなく削除で解消 (実 BEC 判定は詳細
+パネルに残存)。
 
 ## Opus/Sonnet への申し送り事項
 

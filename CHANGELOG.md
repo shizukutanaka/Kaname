@@ -22,6 +22,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `e2e/tauri-mock.ts`: `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入で、Tauri ランタイムなしの `npm run dev` 上で UI 層 E2E を実現。コマンド呼び出しログ (`__KANAME_MOCK_LOG`) で invoke 引数まで検証可能
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
+### Removed
+- fix(kaname-ui): 「AI生成フィッシング検出」パネルと `ai_detect_phishing` コマンドを削除 (D92) — メール選択のたびに必ずエラーになるスタブで、エラー文の口実「受信箱はサーバに接続されていません」も D10 以降は虚偽だった。LLM 判定不能なため実装不能 (D2 前提) → 装飾を消去。実 BEC 判定は詳細パネルに残存
+
 ### Fixed
 - fix(kaname-store): 「暗号化ローカルストア」が実際には平文だった問題を修正 (D75) — workspace の rusqlite が `bundled` (素の SQLite3) で `PRAGMA key`/`cipher_*` が全て silent no-op だったため DB は平文保存されていた。`bundled-sqlcipher` へ切替し `cipher_version=4.5.3` の動作を実測確認。既知文字列非出現を固定する恒久回帰テストを追加。平文期間の既存 history.db は新ビルドで開けない (移行措置なし — プレリリースのため許容判断)
 - fix(kaname-jmap): JMAP ベアラトークンを Zeroizing 保持 + Debug 出力で伏字 — 切断後もヒープに残らないように (SQLCipher 鍵と同一の取り扱い)

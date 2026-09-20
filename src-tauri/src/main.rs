@@ -63,11 +63,6 @@ async fn mail_trash(app: AppHandle, email_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn ai_detect_phishing(email_id: String) -> Result<commands::PhishingAnalysis, String> {
-    commands::ai_detect_phishing(email_id).await
-}
-
-#[tauri::command]
 async fn log_error(message: String) -> Result<(), String> {
     commands::log_error(message).await
 }
@@ -353,7 +348,6 @@ fn main() {
             mail_open,
             mail_mark_read,
             mail_trash,
-            ai_detect_phishing,
             log_error,
             oobv_recommend,
             // V02AppState を共有するコマンド (D15 残件、.manage() で配線)
