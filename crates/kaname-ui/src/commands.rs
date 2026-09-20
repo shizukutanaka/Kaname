@@ -2501,6 +2501,8 @@ pub struct AttachmentRef {
     pub filename: String,
     pub blob_id: String,
     pub mime: String,
+    /// JMAP bodyStructure の size。同名添付の区別に使う (D91)。
+    pub size: u64,
 }
 
 pub async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<AttachmentRef>, String> {
@@ -2521,6 +2523,7 @@ pub async fn mail_list_attachment_blobs(email_id: String) -> Result<Vec<Attachme
                 mime: p
                     .mime_type
                     .unwrap_or_else(|| "application/octet-stream".to_string()),
+                size: p.size.unwrap_or(0),
             })
         })
         .collect())

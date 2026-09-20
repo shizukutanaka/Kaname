@@ -25,6 +25,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - fix(kaname-store): 「暗号化ローカルストア」が実際には平文だった問題を修正 (D75) — workspace の rusqlite が `bundled` (素の SQLite3) で `PRAGMA key`/`cipher_*` が全て silent no-op だったため DB は平文保存されていた。`bundled-sqlcipher` へ切替し `cipher_version=4.5.3` の動作を実測確認。既知文字列非出現を固定する恒久回帰テストを追加。平文期間の既存 history.db は新ビルドで開けない (移行措置なし — プレリリースのため許容判断)
 - fix(kaname-jmap): JMAP ベアラトークンを Zeroizing 保持 + Debug 出力で伏字 — 切断後もヒープに残らないように (SQLCipher 鍵と同一の取り扱い)
+- fix(kaname-ui): 同名添付があるとダウンロードが常に最後の blob を取得していた — `AttachmentRef` に `size` を追加し、突き合わせを `filename::mime::size` の三つ組に変更 (D91)
 
 - fix(kaname-ui): OOBV 検証結果を改ざん検知付きの永続監査ログに記録 — 以前は読み出し経路の無いインメモリ Vec のみでプロセス終了時に証跡が消失していた
 - ビルドプロファイル設定の二重管理を解消 — `.cargo/config.toml` の `[profile.*]` は Cargo.toml をキー単位でオーバーライドするため値が分散していた (release/bench は完全重複、dev の `split-debuginfo` は config.toml にのみ存在)。全設定を Cargo.toml に集約
