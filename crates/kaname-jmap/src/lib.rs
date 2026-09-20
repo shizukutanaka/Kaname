@@ -283,6 +283,8 @@ impl JmapClient {
                                 "id","mailboxIds","keywords","size",
                                 "receivedAt","sentAt","subject",
                                 "from","to","replyTo","preview","hasAttachment","threadId",
+                                "messageId","inReplyTo","references",
+                                "header:DKIM-Signature:asText",
                             ],
                         }),
                         "emails".into(),
@@ -710,6 +712,19 @@ pub struct EmailListItem {
     pub preview: Option<String>,
     pub has_attachment: Option<bool>,
     pub thread_id: Option<String>,
+    /// RFC 5322 Message-ID (スレッド乗っ取り検出・スレッド保存用)。
+    #[serde(default)]
+    pub message_id: Option<Vec<String>>,
+    /// In-Reply-To 参照 Message-ID 群。
+    #[serde(default)]
+    pub in_reply_to: Option<Vec<String>>,
+    /// References 参照 Message-ID 群。
+    #[serde(default)]
+    pub references: Option<Vec<String>>,
+    /// DKIM-Signature ヘッダーの生値 (`header:DKIM-Signature:asText`)。
+    /// `l=` タグ乱用・リプレイ検出に使用。
+    #[serde(rename = "header:DKIM-Signature:asText", default)]
+    pub dkim_signature: Option<String>,
 }
 
 impl EmailListItem {
@@ -910,6 +925,10 @@ mod tests {
             preview: None,
             has_attachment: None,
             thread_id: None,
+            message_id: None,
+            in_reply_to: None,
+            references: None,
+            dkim_signature: None,
         };
         assert!(e.is_read());
         assert!(!e.is_starred());

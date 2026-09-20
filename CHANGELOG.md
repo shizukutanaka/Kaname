@@ -19,6 +19,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
+  - `kaname-render`: `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加し mail-parser から抽出
+  - `kaname-jmap`: `Email/get` の properties に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を追加
+  - `kaname-store`: `NewMessage`/`messages` テーブルに `message_id`/`thread_id` を永続化し、`list_thread_messages`/`list_messages_by_message_ids` を新規追加
+  - `kaname-ui`: 全3評価経路 (analyze_raw_email / mail_scan_folder / assess_listing) で `thread_context`・`past_thread_bodies`・`dkim_signature_header` を実データに接続 — 従来は全て `None`/`&[]` 固定
 - **BEC 評価への連絡先・Reply-To・Return-Path 実データ配線** (検出ギャップ — 実装済み検出器が本番経路で一度も発火していなかった)
   - `kaname-render`: `Envelope` に `reply_to`/`return_path` を追加し mail-parser から抽出
   - `kaname-jmap`: `Email/get` の properties に `replyTo` を追加、`EmailListItem.reply_to` に格納
