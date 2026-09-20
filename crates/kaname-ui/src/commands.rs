@@ -1434,7 +1434,6 @@ mod v02_tests {
         Ok(())
     }
 
-<<<<<<< HEAD
     /// D87: 同名添付の連続保存で先のファイルが上書きされないことを固定。
     #[test]
     fn write_unique_は同名を別名で保存し既存を上書きしない() -> Result<(), String> {
@@ -1504,8 +1503,6 @@ mod v02_tests {
         Ok(())
     }
 
-||||||| parent of d5ed10c (fix(kaname-ui): 履歴 DB 鍵の非アトミック書き込みと壊鍵時の黙殺再生成を修正 (D89))
-=======
     /// D89: 鍵ファイルの生成・再読・破損ガードを固定。
     #[test]
     fn resolve_or_create_key_は生成と破損ガードを正しく行う() -> Result<(), String> {
@@ -1520,6 +1517,8 @@ mod v02_tests {
         let k2 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
         assert_eq!(k1, k2, "再呼出しで別鍵を生成してはいけない");
         #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
             let mode = std::fs::metadata(dir.join("history.key"))
                 .map_err(|e| e.to_string())?
                 .permissions()
@@ -1567,7 +1566,6 @@ mod v02_tests {
         Ok(())
     }
 
->>>>>>> d5ed10c (fix(kaname-ui): 履歴 DB 鍵の非アトミック書き込みと壊鍵時の黙殺再生成を修正 (D89))
     #[tokio::test]
     async fn dlp_precheck_は機密マーカーの_warn_所見を返す() -> Result<(), String> {
         let resp = mail_dlp_precheck(DlpPrecheckRequest {
@@ -1583,6 +1581,7 @@ mod v02_tests {
             resp.warnings
         );
         Ok(())
+    }
 
     #[tokio::test]
     async fn dlp_precheck_は平文メールで警告を返さない() -> Result<(), String> {
