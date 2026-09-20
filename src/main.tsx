@@ -8,7 +8,6 @@
 // アーキテクチャ:
 //   main.tsx → Inbox (mail_fetch / mail_search でバックエンドに実接続)
 //            → SecurityDashboard (BEC/DLP/AI監査)
-//            → KanameAppleFeatures (Quick Look/Undo/Smart Reply)
 //
 // 注: 受信トレイは以前 KanameDesign を描画していたが、同コンポーネントは
 // 自身のコメントが認めるとおり invoke を一切呼ばないモック専用だった。
@@ -25,7 +24,6 @@ import { initI18n } from "./i18n";
 import { Inbox }               from "./ui/Inbox";
 import { Compose }             from "./ui/Compose";
 import { SecurityDashboard }   from "./ui/SecurityDashboard";
-import { KanameAppleFeatures } from "./ui/KanameAppleFeatures";
 import { EmlImport }           from "./ui/EmlImport";
 import { MailConnect }         from "./ui/MailConnect";
 import { Onboarding }          from "./ui/Onboarding";
@@ -35,7 +33,6 @@ import { Onboarding }          from "./ui/Onboarding";
 type View =
   | "inbox"
   | "security"
-  | "features_demo"
   // ローカル .eml を実際のパイプラインに通す画面 (実メールの唯一の入口)
   // JMAP サーバへ接続して実際にメールを受信する画面
   | "connect"
@@ -225,7 +222,7 @@ const App = () => {
       gap: "4px",
       "z-index": "9999",
     }}>
-      {(["inbox", "compose", "connect", "security", "eml_import", "features_demo"] as View[]).map(v => (
+      {(["inbox", "compose", "connect", "security", "eml_import"] as View[]).map(v => (
         <button
           onClick={() => setState(s => ({ ...s, activeView: v }))}
           style={{
@@ -244,7 +241,7 @@ const App = () => {
             cursor: "pointer",
           }}
         >
-          {{ inbox:"受信トレイ", compose:"作成", connect:"サーバ接続", security:"セキュリティ", eml_import:"ファイル解析", features_demo:"機能デモ" }[v]}
+          {{ inbox:"受信トレイ", compose:"作成", connect:"サーバ接続", security:"セキュリティ", eml_import:"ファイル解析" }[v]}
         </button>
       ))}
     </div>
@@ -280,9 +277,6 @@ const App = () => {
           </Show>
           <Show when={state().activeView === "eml_import"}>
             <EmlImport />
-          </Show>
-          <Show when={state().activeView === "features_demo"}>
-            <KanameAppleFeatures />
           </Show>
           <NavBar />
         </div>

@@ -12,11 +12,9 @@
 // このファイルは実際にエクスポートされた関数・クラスをインポートして
 // テストする。テスト対象を実コードに追従させるため、UI 側の
 // private だった関数・型に `export` を追加した
-// (src/ui/KanameAppleFeatures.tsx: UndoAction, UndoRedoStack /
-//  src/ui/Inbox.tsx: formatDate)。
+// (src/ui/Inbox.tsx: formatDate)。
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { UndoRedoStack } from "../ui/KanameAppleFeatures";
+import { describe, it, expect } from "vitest";
 import { formatDate } from "../ui/Inbox";
 
 // ── 1. トリアージ (判定は Rust 側へ集約済み) ────────────────────────────
@@ -35,64 +33,7 @@ import { formatDate } from "../ui/Inbox";
 // いた。crates/kaname-ui/src/commands.rs の mail_list 巻き添え放置
 // (docs/gap-analysis.md D25) と同じ欠陥クラスの、フロントエンド版)。
 
-// ── 2. UndoRedoStack (実 src/ui/KanameAppleFeatures.tsx をインポート) ─────
-
-describe("UndoRedoStack", () => {
-  let stack: UndoRedoStack;
-
-  beforeEach(() => { stack = new UndoRedoStack(); });
-
-  it("初期状態で canUndo=false, canRedo=false", () => {
-    expect(stack.canUndo()).toBe(false);
-    expect(stack.canRedo()).toBe(false);
-  });
-
-  it("push後 canUndo=true", () => {
-    stack.push("archive", "e1", "アーカイブ", () => {});
-    expect(stack.canUndo()).toBe(true);
-  });
-
-  it("undo() でアクションが返り reverse_fn が呼ばれる", () => {
-    const fn = vi.fn();
-    stack.push("archive", "e1", "アーカイブ", fn);
-    const a = stack.undo();
-    expect(a?.description).toBe("アーカイブ");
-    expect(fn).toHaveBeenCalledOnce();
-  });
-
-  it("undo後 canRedo=true, redo()で復元", () => {
-    stack.push("star", "e1", "スター", () => {});
-    stack.undo();
-    expect(stack.canRedo()).toBe(true);
-    const r = stack.redo();
-    expect(r?.description).toBe("スター");
-    expect(stack.canRedo()).toBe(false);
-  });
-
-  it("push後 redoStack がクリアされる", () => {
-    stack.push("archive", "e1", "A", () => {});
-    stack.undo();
-    stack.push("trash", "e2", "B", () => {});
-    expect(stack.canRedo()).toBe(false);
-  });
-
-  it("undoDescription が直前のアクション説明を返す", () => {
-    stack.push("archive", "e1", "アーカイブ", () => {});
-    stack.push("trash", "e2", "削除", () => {});
-    expect(stack.undoDescription()).toBe("削除");
-  });
-
-  it("MAX=50 を超えると古いものが削除される", () => {
-    for (let i = 0; i < 55; i++) {
-      stack.push("archive", `e${i}`, `action${i}`, () => {});
-    }
-    let count = 0;
-    while (stack.canUndo()) { stack.undo(); count++; }
-    expect(count).toBe(50);
-  });
-});
-
-// ── 3. formatDate (実 src/ui/Inbox.tsx をインポート) ─────────────────────────
+// ── 2. formatDate (実 src/ui/Inbox.tsx をインポート) ─────────────────────────
 
 describe("formatDate", () => {
   it("null → 空文字列", () => {
@@ -126,7 +67,7 @@ describe("formatDate", () => {
   });
 });
 
-// ── 4. セキュリティ不変条件 (契約テスト) ─────────────────────────────────────
+// ── 3. セキュリティ不変条件 (契約テスト) ─────────────────────────────────────
 // Kaname の核心: AI は単一メールのみアクセス可能。
 // これは実際の Rust 側 (kaname-ai::SafeSummaryEngine 等) の出力契約を
 // フロントエンドが正しく前提としているかのドキュメント的テスト。
