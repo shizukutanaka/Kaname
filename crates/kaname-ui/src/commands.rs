@@ -254,7 +254,14 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
         }
     }
     let bytes = std::fs::read(&path).map_err(|e| format!("ファイルを読めません ({path}): {e}"))?;
-    analyze_raw_email(&bytes).await
+    let imported = analyze_raw_email(&bytes).await?;
+    audit_event(
+        None,
+        "MAIL_IMPORT",
+        serde_json::json!({ "path": path, "verdict": imported.bec_verdict }),
+    )
+    .await;
+    Ok(imported)
 }
 
 /// 生 RFC 5322 バイト列を解析パイプライン全体に通す。
@@ -753,6 +760,16 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         })
         .collect();
 
+    audit_event(
+        None,
+        "FOLDER_SCAN",
+        serde_json::json!({
+            "path": path,
+            "analyzed": entries.len(),
+            "failed": failed.len(),
+        }),
+    )
+    .await;
     Ok(FolderScanResult {
         analyzed: entries.len(),
         failed,
@@ -1439,12 +1456,26 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     };
 
     *jmap_slot().lock().await = Some(std::sync::Arc::new(client));
+    audit_event(
+        Some(&result.account_id),
+        "MAIL_CONNECT",
+        serde_json::json!({"mailboxes": result.mailboxes.len()}),
+    )
+    .await;
     Ok(result)
 }
 
 /// 接続を破棄する (トークンをメモリから落とす)。
 pub async fn mail_disconnect() -> Result<(), String> {
-    *jmap_slot().lock().await = None;
+    let client = jmap_slot().lock().await.take();
+    if let Some(c) = client {
+        audit_event(
+            Some(c.account_id()),
+            "MAIL_DISCONNECT",
+            serde_json::json!({}),
+        )
+        .await;
+    }
     Ok(())
 }
 
@@ -1757,17 +1788,35 @@ pub async fn mail_send_real(
     let dlp = engine.evaluate(&ctx, kaname_dlp::Direction::Outbound);
     if matches!(dlp.verdict, kaname_dlp::Action::Block) {
         let reasons: Vec<String> = dlp.findings.iter().map(|f| f.rule_name.clone()).collect();
+        let reason_str = reasons.join(" / ");
+        // 外部宛送信の阻止は最重要の証跡 — どのルールで止めたかを残す
+        // (件名・本文・宛先は書かない)。
+        audit_event(
+            Some(client.account_id()),
+            "DLP_BLOCK",
+            serde_json::json!({ "to_count": to.len(), "rules": reasons }),
+        )
+        .await;
         return Err(format!(
-            "DLP により送信をブロックしました: {}。機微情報が含まれていないか確認してください",
-            reasons.join(" / ")
+            "DLP により送信をブロックしました: {reason_str}。機微情報が含まれていないか確認してください"
         ));
     }
 
     let to_refs: Vec<&str> = to.iter().map(String::as_str).collect();
-    client
+    let result = client
         .send_email(&from, &to_refs, &subject, &body, None)
         .await
-        .map_err(|e| format!("送信に失敗しました: {e}"))
+        .map_err(|e| format!("送信に失敗しました: {e}"))?;
+
+    // 実際に送信が行われた出口イベント (件名・本文・宛先アドレスは書かない)。
+    audit_event(
+        Some(client.account_id()),
+        "MAIL_SEND",
+        serde_json::json!({ "to_count": to.len() }),
+    )
+    .await;
+
+    Ok(result)
 }
 
 // ============================================================================
@@ -1811,6 +1860,12 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
     // 監査ログの改ざん検知: チェーン破損は致命的ではないため警告のみ。
     if let Ok(false) = store.verify_audit_chain().await {
         warn!("監査ログのハッシュチェーンが破損 — 改ざんの可能性があります");
+    }
+    if let Err(e) = store
+        .audit(None, "STORE_OPEN", &serde_json::json!({}))
+        .await
+    {
+        warn!(error=%e, "監査ログの書き込みに失敗");
     }
     *store_slot().lock().await = Some(std::sync::Arc::new(store));
     info!(path=%path, "history_open");
@@ -1862,6 +1917,42 @@ pub async fn history_open_default() -> Result<String, String> {
     let shown = db_path.to_string_lossy().into_owned();
     history_open(shown.clone(), key_hex).await?;
     Ok(shown)
+}
+
+/// 監査ログ閲覧の応答。
+#[derive(Debug, Serialize)]
+pub struct AuditLogView {
+    /// 監査エントリ (新しい順)。
+    pub entries: Vec<kaname_store::AuditEntry>,
+    /// ハッシュチェーンの検証結果 (true = 改ざんなし)。
+    pub chain_valid: bool,
+}
+
+/// 監査証跡 (`audit_log` テーブル) を閲覧用に返す。
+///
+/// audit_log は append-only トリガー + ハッシュチェーンで書き込み側は
+/// 保護されていたが、**読み出し経路が存在せず書き込み専用のままだった**。
+/// このコマンドが SecurityDashboard の「監査証跡」セクションを駆動する。
+/// Store 未オープンなら空 (DB が無ければ記録も無いため実態として正しい)。
+#[instrument]
+pub async fn security_audit_log(limit: Option<i64>) -> Result<AuditLogView, String> {
+    let Some(store) = store_slot().lock().await.clone() else {
+        return Ok(AuditLogView {
+            entries: Vec::new(),
+            chain_valid: true,
+        });
+    };
+    let limit = limit.unwrap_or(100).clamp(1, 500);
+    let entries = store
+        .audit_entries(limit)
+        .await
+        .map_err(|e| format!("監査ログの読み出しに失敗しました: {e}"))?;
+    // チェーン破損 (行ハッシュ不正) は Err、prev_hash 不連続は Ok(false)。
+    let chain_valid = store.verify_audit_chain().await.unwrap_or(false);
+    Ok(AuditLogView {
+        entries,
+        chain_valid,
+    })
 }
 
 /// オンボーディングで選んだ設定を保存する。
@@ -1924,7 +2015,16 @@ pub async fn history_mark_verified(email: String) -> Result<(), String> {
     store
         .mark_sender_verified(&account_id, &email)
         .await
-        .map_err(|e| format!("検証済みマークに失敗しました: {e}"))
+        .map_err(|e| format!("検証済みマークに失敗しました: {e}"))?;
+    // 送信者の「確認済み」化は以後の BEC 判定 (user_verified シグナル) を
+    // 変えるため、改ざん検知付きの監査ログに残す。
+    audit_event(
+        Some(&account_id),
+        "SENDER_VERIFIED",
+        serde_json::json!({"sender": email}),
+    )
+    .await;
+    Ok(())
 }
 
 /// Store から連絡先一覧を引き、BEC の `known_contacts` に渡す。
@@ -2216,6 +2316,20 @@ async fn current_account_id() -> String {
     }
 }
 
+/// 監査ログ (audit_log, ハッシュチェーン付き) への書き込み — best-effort。
+///
+/// Store が開かれていなければ記録しない。監査の失敗で本来の操作
+/// (メール送受信・添付保存等) を失敗させない。ペイロードは最小限に
+/// 留める — audit_log は messages/contacts と同じ暗号化 DB 内だが、
+/// 不要な本文・トークン・パスは絶対に書かない。
+async fn audit_event(account_id: Option<&str>, event_type: &str, payload: serde_json::Value) {
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Err(e) = store.audit(account_id, event_type, &payload).await {
+            warn!(error=%e, "監査ログの書き込みに失敗");
+        }
+    }
+}
+
 /// メールアドレスからドメイン部を取り出す (小文字化)。
 /// `"Name <a@b.com>"` のような表示名付きにも耐える。アドレス形でなければ None。
 fn email_domain(addr: &str) -> Option<String> {
@@ -2380,6 +2494,46 @@ pub async fn mail_download_attachment(
         std::fs::write(&path, &bytes).map_err(|e| format!("保存に失敗しました: {e}"))?;
         Some(path.to_string_lossy().into_owned())
     };
+
+    // 検査結果を attachments テーブルに記録する (フォレンジック証跡)。
+    // メールが未保存なら何も書かない。記録の失敗でダウンロード自体を
+    // 失敗させない。
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Err(e) = store
+            .record_attachment_scan(
+                client.account_id(),
+                &kaname_store::AttachmentScanRecord {
+                    jmap_id: &email_id,
+                    filename: &filename,
+                    declared_mime: &mime,
+                    size_bytes: scan.size_bytes,
+                    scan_verdict: if scan.is_dangerous {
+                        "dangerous"
+                    } else {
+                        "scanned"
+                    },
+                    blob_path: saved_path.as_deref(),
+                },
+            )
+            .await
+        {
+            warn!(error = %e, "添付検査結果の記録に失敗");
+        }
+    }
+
+    // 添付のディスク書き出し/拒否はセキュリティ上重要な出口イベント。
+    // 危険判定で拒否した場合こそ証跡が必要なため、拒否時も記録する。
+    audit_event(
+        Some(client.account_id()),
+        "ATTACHMENT_DOWNLOAD",
+        serde_json::json!({
+            "email_id": email_id,
+            "filename": filename,
+            "is_dangerous": scan.is_dangerous,
+            "saved": saved_path.is_some(),
+        }),
+    )
+    .await;
 
     Ok(AttachmentDownload {
         filename,
