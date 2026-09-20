@@ -660,7 +660,7 @@ const EmailDetailPanel = (props: {
 // メインInboxコンポーネント
 // ============================================================================
 
-export const Inbox = () => {
+export const Inbox = (props: { becAlerts?: number }) => {
   const [mailboxes, setMailboxes]       = createSignal<Mailbox[]>([]);
   const [selectedMbx, setSelectedMbx]  = createSignal<string | null>(null);
   const [emails, setEmails]             = createSignal<EmailListItem[]>([]);
@@ -845,24 +845,34 @@ export const Inbox = () => {
           </For>
         </nav>
 
-        {/* セキュリティポスチャー */}
-        <div style={{
-          padding: "12px 16px",
-          "border-top": "1px solid #1F2833",
-          display: "flex",
-          "align-items": "center",
-          gap: "6px",
-          "font-size": "11px",
-          color: "#00B368",
-        }}>
-          <div style={{
-            width: "6px", height: "6px",
-            "border-radius": "50%",
-            background: "#00B368",
-            animation: "pulse 2s infinite",
-          }} />
-          全サブシステム正常
-        </div>
+        {/* セキュリティポスチャー — 実状態を表示する。
+            BEC 警戒がある・オフラインのときに緑を偽らない。 */}
+        {(() => {
+          const bec = props.becAlerts ?? 0;
+          const [text, color] =
+            offline()        ? ["オフライン — 保存済みを表示", "#8B96A5"] :
+            bec > 0          ? [`警戒メール ${bec} 件`, "#FF6B70"] :
+                               ["全サブシステム正常", "#00B368"];
+          return (
+            <div style={{
+              padding: "12px 16px",
+              "border-top": "1px solid #1F2833",
+              display: "flex",
+              "align-items": "center",
+              gap: "6px",
+              "font-size": "11px",
+              color,
+            }}>
+              <div style={{
+                width: "6px", height: "6px",
+                "border-radius": "50%",
+                background: color,
+                animation: "pulse 2s infinite",
+              }} />
+              {text}
+            </div>
+          );
+        })()}
       </aside>
 
       {/* ── メールリスト ── */}

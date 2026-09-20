@@ -27,6 +27,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **開封済みメールが一覧で未読のまま残る UI 不整合**: `EmailDetailPanel` が `mail_mark_read` を呼んでも一覧側の `is_read` が更新されず、再取得まで太字・未読ドットが残っていた。`onRead` コールバックで mark_read 成功時に一覧の該当行をローカル既読に反映 (メールボックスの未読バッジも同時に減算)
 
+- **サイドバーの「全サブシステム正常」が常時緑の虚偽表示だった**: BEC 警戒・オフライン状態に関係なく緑を表示していた。`mail_get_summary` の実集計と `offline` シグナルに接続し、警戒時は赤で「警戒メール N 件」、オフライン時はその旨を正直に表示。併せて表示先の無かった `serverOnline`/`unreadCount` の dead state を整理
+
 - **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
   - `kaname-render`: `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加し mail-parser から抽出
   - `kaname-jmap`: `Email/get` の properties に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を追加
