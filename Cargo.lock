@@ -2827,6 +2827,7 @@ version = "0.7.1"
 dependencies = [
  "criterion",
  "kaname-ai",
+ "kaname-mls",
  "kaname-screen",
  "proptest",
  "serde_json",

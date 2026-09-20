@@ -8,6 +8,7 @@ publish             = false
 
 [dependencies]
 kaname-ai = { path = "../kaname-ai" }
+kaname-mls = { path = "../kaname-mls" }
 kaname-screen = { path = "../kaname-screen" }
 serde_json = { workspace = true }
 

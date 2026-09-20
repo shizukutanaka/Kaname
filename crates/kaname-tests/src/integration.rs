@@ -171,66 +171,117 @@ mod jmap_tests {
 // ============================================================================
 
 mod mls_tests {
-    // kaname-mls は別クレートだが、ここでは型定義を直接テスト
-    #[allow(unused_imports)]
-    use std::collections::BTreeMap;
+    //! 実 openmls を通した kaname-mls の統合テスト (D1 Phase 1)。
+    //! 以前はテスト内で XOR を自前実装する恒真テストだった — ライブラリを
+    //! 一切呼ばずモック時代の動作を複写していたため、実クライアント経路に書き換え。
 
-    /// Alice と Bob の MLS メッセージ交換シナリオ
+    use kaname_mls::{
+        Ciphersuite, EmailAddress, EnvelopeKind, Identity, IncomingResult, MlsMailClient,
+    };
+
+    fn client(email: &str, suite: Ciphersuite) -> MlsMailClient {
+        MlsMailClient::new(Identity {
+            email: EmailAddress::parse(email).expect("test assertion failed"),
+            display_name: Some("テスト".into()),
+            default_ciphersuite: suite,
+        })
+    }
+
+    /// Alice と Bob の実 MLS メッセージ交換シナリオ (E2E 暗号化の往復検証)。
     #[test]
     fn alice_bob_メッセージ交換シナリオ() {
-        // アクター
         let alice_email = "alice@kaname.app";
         let bob_email = "bob@kaname.app";
-        let plaintext = "こんにちは、Bob！極秘プロジェクトの件です。";
+        let plaintext = "こんにちは、Bob！極秘プロジェクトの件です。".as_bytes();
 
-        // 1. Alice が KeyPackage を生成
-        let _bob_kp_bytes = format!("kp:{}:v1", bob_email).into_bytes();
+        let mut alice = client(alice_email, Ciphersuite::MlsX25519Aes128GcmSha256Ed25519);
+        let mut bob = client(bob_email, Ciphersuite::MlsX25519Aes128GcmSha256Ed25519);
 
-        // 2. Alice が会話を開始 (Welcome + Commit を生成)
-        let conv_id = compute_conv_id(alice_email, bob_email);
-        assert_eq!(conv_id.len(), 64, "会話 ID は 32 バイト hex");
+        // 1. Bob が KeyPackage を生成 (秘密鍵は bob の provider に保持)
+        let bob_kp = bob
+            .generate_key_package()
+            .expect("KeyPackage 生成に成功すべき");
 
-        // 3. メッセージを暗号化
-        let key = conv_id.as_bytes()[0];
-        let encrypted: Vec<u8> = plaintext.as_bytes().iter().map(|b| b ^ key).collect();
-        assert_ne!(
-            encrypted,
-            plaintext.as_bytes(),
-            "暗号化後はプレーンテキストと異なること"
-        );
+        // 2. Alice が会話を開始 (実 Commit + Welcome を生成)
+        let (mut alice_conv, welcome_env) = alice
+            .start_one_to_one(EmailAddress::parse(bob_email).unwrap(), bob_kp)
+            .expect("会話開始に成功すべき");
+        assert_eq!(welcome_env.kind, EnvelopeKind::Commit);
+        assert!(welcome_env.welcome.is_some());
+        assert_eq!(welcome_env.epoch, 1, "作成(0) + add コミットで epoch=1");
 
-        // 4. Bob が復号
-        let decrypted: Vec<u8> = encrypted.iter().map(|b| b ^ key).collect();
+        // 3. Bob が Welcome で参加
+        let bob_conv = match bob
+            .process_incoming(&welcome_env)
+            .expect("Welcome 処理に成功すべき")
+        {
+            IncomingResult::WelcomeJoined(c) => c,
+            other => panic!("WelcomeJoined を期待: {other:?}"),
+        };
         assert_eq!(
-            decrypted,
-            plaintext.as_bytes(),
-            "復号後はプレーンテキストと一致すること"
+            bob_conv.id, alice_conv.id,
+            "両側で同一の会話 ID (GroupId 整合)"
         );
+
+        // 4. Alice が暗号化 — wire_bytes が平文と一致しない (実 AEAD 暗号文)
+        let env = alice
+            .encrypt_message(&mut alice_conv, plaintext)
+            .expect("暗号化に成功すべき");
+        assert_ne!(env.wire_bytes, plaintext, "暗号文は平文と異なるべき");
+        assert!(!env.wire_bytes.is_empty());
+
+        // 5. Bob が復号 — 元の平文が復元される (本物の MLS 共有鍵)
+        let decrypted = bob.process_incoming(&env).expect("復号に成功すべき");
+        match decrypted {
+            IncomingResult::Application(bytes) => {
+                assert_eq!(bytes, plaintext, "実 MLS 復号で元の平文に戻る")
+            }
+            other => panic!("Application を期待: {other:?}"),
+        }
     }
 
+    /// PQ ハイブリッド (X-Wing: ML-KEM-768+X25519) ciphersuite でも往復検証。
     #[test]
-    fn envelope_のcbor変換() {
-        let conv_id = vec![1u8; 32];
-        let envelope_data = serde_json::json!({
-            "conversation_id": { "0": conv_id },
-            "epoch":           0,
-            "kind":            "Application",
-            "ciphersuite":     "MlsX25519Aes128GcmSha256Ed25519",
-            "wire_bytes":      [1, 2, 3, 4, 5],
-            "welcome":         null,
-        });
-
-        let serialized = serde_json::to_vec(&envelope_data).expect("test assertion failed");
-        assert!(!serialized.is_empty());
-
-        let deserialized: serde_json::Value =
-            serde_json::from_slice(&serialized).expect("test assertion failed");
-        assert_eq!(deserialized["epoch"], 0);
+    fn pqc_ciphersuite_でも往復できる() {
+        let mut alice = client("alice@kaname.app", Ciphersuite::KanameHybridPqc);
+        let mut bob = client("bob@kaname.app", Ciphersuite::KanameHybridPqc);
+        let bob_kp = bob.generate_key_package().unwrap();
+        let (mut conv, welcome) = alice
+            .start_one_to_one(EmailAddress::parse("bob@kaname.app").unwrap(), bob_kp)
+            .unwrap();
+        let _ = bob.process_incoming(&welcome).unwrap();
+        let env = alice.encrypt_message(&mut conv, b"pqc test").unwrap();
+        match bob.process_incoming(&env).unwrap() {
+            IncomingResult::Application(b) => assert_eq!(b, b"pqc test"),
+            other => panic!("Application を期待: {other:?}"),
+        }
     }
 
+    /// 両側で同一の安全番号が導出される (epoch_authenticator 由来の本物の認証子)。
     #[test]
-    fn 安全番号は6グループ5桁形式() {
-        let sn = compute_safety_number("alice@kaname.app", "bob@kaname.app", 0);
+    fn 安全番号は両側で一致する() {
+        let mut alice = client(
+            "alice@kaname.app",
+            Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+        );
+        let mut bob = client(
+            "bob@kaname.app",
+            Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+        );
+        let bob_kp = bob.generate_key_package().unwrap();
+        let (alice_conv, welcome) = alice
+            .start_one_to_one(EmailAddress::parse("bob@kaname.app").unwrap(), bob_kp)
+            .unwrap();
+        let bob_conv = match bob.process_incoming(&welcome).unwrap() {
+            IncomingResult::WelcomeJoined(c) => c,
+            other => panic!("WelcomeJoined を期待: {other:?}"),
+        };
+        assert_eq!(
+            alice_conv.safety_number, bob_conv.safety_number,
+            "epoch_authenticator 由来の安全番号は全メンバーで一致する"
+        );
+        // 形式確認: 5桁 × 6グループ
+        let sn = alice_conv.safety_number.unwrap();
         let parts: Vec<&str> = sn.split(' ').collect();
         assert_eq!(parts.len(), 6);
         for part in parts {
@@ -240,30 +291,20 @@ mod mls_tests {
     }
 
     #[test]
-    fn mls_ciphersuite_の識別子() {
-        let default_suite = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
-        let pqc_suite = "Kaname_Hybrid_PQC";
-        assert!(default_suite.contains("X25519"));
-        assert!(pqc_suite.contains("PQC"));
-    }
-
-    fn compute_conv_id(email1: &str, email2: &str) -> String {
-        let input = format!("{}{}", email1, email2);
-        let hash: u64 = input
-            .bytes()
-            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-        format!("{:064x}", hash)
-    }
-
-    fn compute_safety_number(e1: &str, e2: &str, epoch: u64) -> String {
-        let input = format!("{}{}{}", e1, e2, epoch);
-        let hash: u64 = input
-            .bytes()
-            .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-        (0..6)
-            .map(|i| format!("{:05}", (hash >> (i * 10)) % 100_000))
-            .collect::<Vec<_>>()
-            .join(" ")
+    fn envelope_のcbor変換() {
+        use kaname_mls::{ConversationId, Envelope};
+        let envelope = Envelope {
+            conversation_id: ConversationId([1u8; 32]),
+            epoch: 42,
+            kind: EnvelopeKind::Application,
+            ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes: vec![1, 2, 3, 4, 5],
+            welcome: None,
+        };
+        let bytes = envelope.to_cbor().expect("test assertion failed");
+        let restored = Envelope::from_cbor(&bytes).expect("test assertion failed");
+        assert_eq!(restored.epoch, 42);
+        assert_eq!(restored.wire_bytes, vec![1, 2, 3, 4, 5]);
     }
 }
 

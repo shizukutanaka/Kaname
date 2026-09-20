@@ -100,7 +100,7 @@ impl Ciphersuite {
     }
 }
 
-use mls_types::*;
+pub use mls_types::*;
 
 // ============================================================================
 // アイデンティティ
@@ -1000,15 +1000,20 @@ fn is_kaname_domain(email: &str) -> bool {
 /// epoch を含めることで古い安全番号の再利用攻撃を防ぐ。
 fn compute_safety_number(our_email: &str, their_email: &str, authenticator: &[u8]) -> String {
     let mut hasher = Sha256::new();
+    // 両側で同一の番号を導出するため、2アドレスはバイト順で正準化する。
+    // (our/their の呼出順に依存させない — Signal 方式の Safety Number と同じ要件)
+    let (first, second) = if our_email.as_bytes() <= their_email.as_bytes() {
+        (our_email.as_bytes(), their_email.as_bytes())
+    } else {
+        (their_email.as_bytes(), our_email.as_bytes())
+    };
     // 長さプレフィックス付きドメイン分離: len(field) || field || \x00
     // これにより "a\x00b" + "" と "a" + "b" が区別できる (長さ混同攻撃を防ぐ)
-    let our_bytes = our_email.as_bytes();
-    hasher.update((our_bytes.len() as u16).to_be_bytes());
-    hasher.update(our_bytes);
+    hasher.update((first.len() as u16).to_be_bytes());
+    hasher.update(first);
     hasher.update(b"\x00");
-    let their_bytes = their_email.as_bytes();
-    hasher.update((their_bytes.len() as u16).to_be_bytes());
-    hasher.update(their_bytes);
+    hasher.update((second.len() as u16).to_be_bytes());
+    hasher.update(second);
     hasher.update(b"\x00");
     hasher.update(authenticator);
     let digest = hasher.finalize();
@@ -1245,11 +1250,12 @@ mod tests {
     }
 
     #[test]
-    fn 安全番号_メール順序で変化する() {
+    fn 安全番号_メール順序に依存しない() {
         // SHA-256 はゼロ区切りで境界を確定するので順序が影響する
+        // 正準順により両側で同一の番号が導出される (実 MLS 安全番号の要件)
         let ab = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[0u8; 32]);
         let ba = compute_safety_number("bob@kaname.app", "alice@kaname.app", &[0u8; 32]);
-        assert_ne!(ab, ba, "メール順序が違えば安全番号も変わる");
+        assert_eq!(ab, ba, "安全番号は両側で一致するべき (正準順序)");
     }
 
     #[test]
