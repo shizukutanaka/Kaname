@@ -21,6 +21,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(kaname-ui): SQLCipher 鍵ファイルを生成時点から 0600 で作成 — `fs::write` + 後付け chmod の競合窓 (書き込み〜chmod 間に鍵が umask 許可で読める) と chmod 失敗の無言握り潰しを解消
 - ビルドプロファイル設定の二重管理を解消 — `.cargo/config.toml` の `[profile.*]` は Cargo.toml をキー単位でオーバーライドするため値が分散していた (release/bench は完全重複、dev の `split-debuginfo` は config.toml にのみ存在)。全設定を Cargo.toml に集約
 - static-check.sh の誤検出を修正 — コメント内の孤立 `"` が文字列パリティを崩し SQL 内の `strftime()`/`accounts()` を「未定義関数呼び出し」と誤報していた問題を、文字列/コメント/char を単一パスで処理する状態機械に置き換えて解消。Tauri 注入引数 (`AppHandle` 等) の裸名も除外対象に追加
 - docker-compose の Rust イメージを `rust:1.82-bookworm` → `rust:bookworm` に修正 — workspace の MSRV (1.85) を下回っており `docker compose up` でビルドが失敗していた
