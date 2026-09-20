@@ -19,6 +19,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **送信フォームが複数宛先を扱えなかった**: `to` を単一文字列のまま1要素配列で送信していたため「a@x, b@y」と入力すると1つの不正な宛先として送信されていた。カンマ/セミコロンで分割して実配列化 + プレースホルダに複数可を明記
+
 - **開封済みメールが一覧で未読のまま残る UI 不整合**: `EmailDetailPanel` が `mail_mark_read` を呼んでも一覧側の `is_read` が更新されず、再取得まで太字・未読ドットが残っていた。`onRead` コールバックで mark_read 成功時に一覧の該当行をローカル既読に反映
 
 - **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
