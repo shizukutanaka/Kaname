@@ -1383,6 +1383,36 @@ mod v02_tests {
         assert_eq!(resp.level, RecommendationLevel::Strong);
         Ok(())
     }
+
+    #[tokio::test]
+    async fn dlp_precheck_は機密マーカーの_warn_所見を返す() -> Result<(), String> {
+        let resp = mail_dlp_precheck(DlpPrecheckRequest {
+            from: "alice@corp.example".into(),
+            to: vec!["bob@example.com".into()],
+            subject: "資料送付".into(),
+            body: "【社外秘】この資料は部外秘です。".into(),
+        })
+        .await?;
+        assert!(
+            resp.warnings.iter().any(|w| w.contains("機密")),
+            "機密マーカーで警告が出るべき: {:?}",
+            resp.warnings
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn dlp_precheck_は平文メールで警告を返さない() -> Result<(), String> {
+        let resp = mail_dlp_precheck(DlpPrecheckRequest {
+            from: "alice@corp.example".into(),
+            to: vec!["bob@corp.example".into()],
+            subject: "ランチ".into(),
+            body: "12時に食堂で会いましょう。".into(),
+        })
+        .await?;
+        assert!(resp.warnings.is_empty(), "{:?}", resp.warnings);
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -1768,6 +1798,69 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
 ///
 /// **送信前に DLP (`Direction::Outbound`) を実行し、Block 判定なら送信しない。**
 /// これが DLP 本来の用途であり、受信側検査 (`scan_dlp_inbound`) と対になる。
+/// 送信方向の DLP 評価 (`mail_send_real` と `mail_dlp_precheck` で共有)。
+/// 添付なし (Compose に添付 UI が無い)・既知宛先ドメイン履歴なし。
+async fn outbound_dlp_eval(
+    account_id: &str,
+    from: &str,
+    to: &[String],
+    subject: &str,
+    body: &str,
+) -> kaname_dlp::DlpResult {
+    let engine = kaname_dlp::DlpEngine::default_engine();
+    let mimes: Vec<String> = Vec::new();
+    let domains: Vec<String> = Vec::new();
+    let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
+        std::collections::HashMap::new();
+    let our = our_domain(account_id, Some(from)).await;
+    let ctx = kaname_dlp::EvalCtx {
+        body,
+        subject,
+        size_bytes: body.len() as u64,
+        to,
+        from,
+        attachment_mimes: &mimes,
+        edm_sets: &edm,
+        known_recipient_domains: &domains,
+        our_domain: &our,
+    };
+    engine.evaluate(&ctx, kaname_dlp::Direction::Outbound)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DlpPrecheckRequest {
+    pub from: String,
+    pub to: Vec<String>,
+    pub subject: String,
+    pub body: String,
+}
+
+/// 送信前 DLP の警告レベル所見。
+#[derive(Debug, Serialize)]
+pub struct DlpPrecheckResponse {
+    /// Allow 以外の所見のルール名 (日本語)。Block 相当の所見も含む —
+    /// Block は `mail_send` が改めてハードブロックする (二重防御)。
+    pub warnings: Vec<String>,
+}
+
+/// 送信前に DLP の Warn 所見を返す (アドバイザリ)。
+///
+/// `mail_send` は Block のみ止めて Warn を捨てていたため、機密マーカーや
+/// 大容量メールの警告がユーザーに届かなかった。Compose が送信前に呼び、
+/// 警告があれば確認ステップを挟む。オフラインでも評価可能
+/// (自組織ドメインは settings / from アドレスから推定)。
+pub async fn mail_dlp_precheck(req: DlpPrecheckRequest) -> Result<DlpPrecheckResponse, String> {
+    let account_id = current_account_id().await;
+    let dlp = outbound_dlp_eval(&account_id, &req.from, &req.to, &req.subject, &req.body).await;
+    let warnings = dlp
+        .findings
+        .iter()
+        .filter(|f| !matches!(f.action, kaname_dlp::Action::Allow))
+        .map(|f| f.rule_name.clone())
+        .collect();
+    Ok(DlpPrecheckResponse { warnings })
+}
+
 pub async fn mail_send_real(
     from: String,
     to: Vec<String>,
@@ -1777,25 +1870,8 @@ pub async fn mail_send_real(
     let client = jmap_client().await?;
 
     // 送信前 DLP。ここで止めるのが情報漏洩防止の本丸。
-    let engine = kaname_dlp::DlpEngine::default_engine();
-    let mimes: Vec<String> = Vec::new();
-    let domains: Vec<String> = Vec::new();
-    let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
-        std::collections::HashMap::new();
     // 自組織ドメイン (D44): 送信者自身の `from` アドレスが最直接のヒント。
-    let our = our_domain(client.account_id(), Some(&from)).await;
-    let ctx = kaname_dlp::EvalCtx {
-        body: &body,
-        subject: &subject,
-        size_bytes: body.len() as u64,
-        to: &to,
-        from: &from,
-        attachment_mimes: &mimes,
-        edm_sets: &edm,
-        known_recipient_domains: &domains,
-        our_domain: &our,
-    };
-    let dlp = engine.evaluate(&ctx, kaname_dlp::Direction::Outbound);
+    let dlp = outbound_dlp_eval(client.account_id(), &from, &to, &subject, &body).await;
     if matches!(dlp.verdict, kaname_dlp::Action::Block) {
         let reasons: Vec<String> = dlp.findings.iter().map(|f| f.rule_name.clone()).collect();
         let reason_str = reasons.join(" / ");

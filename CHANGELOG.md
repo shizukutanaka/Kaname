@@ -11,6 +11,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
+- **送信前 DLP 警告の表示**: `mail_dlp_precheck` コマンドを追加し Compose が送信クリック時に Warn 所見 (機密マーカー・大容量等) を確認 UI で表示 — 従来 `mail_send` は Block のみ止めて Warn をサイレント破棄しており警告が利用者に届かなかった
+
 - **作成画面の送信前アドバイザリに `oobv_recommend` を配線** (D24 残件 — 台帳記載の想定用途どおり)
   - 本文入力の debounce が「DLP 事前チェック」を意図しながら空のスタブだったため実装に置き換え。送金要求・急迫表現等の別経路確認推奨文脈を送信前に助言表示 (ブロックではなく助言。呼び出し失敗は送信を妨げない)
 - **OOBV 電話確認セレモニーの UI 配線**: 📞 バナー (メール開封ビュー / .eml 解析結果) に「電話で確認を開始」ボタンを追加。`oobv_start` で6単語の合い言葉+挑戦番号を発行し、電話で相手が読み上げた単語を `oobv_verify` で照合 → Verified/Mismatch/Expired/Locked を表示。共有コンポーネント `src/ui/OobvCeremony.tsx`。登録済みコマンドの UI 未呼出は `oobv_recommend` のみとなる (#145 で配線済み)

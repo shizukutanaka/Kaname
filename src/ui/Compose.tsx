@@ -7,7 +7,7 @@
 //   - MLS 暗号化状態表示
 //   - キーボードショートカット (Cmd/Ctrl+Enter で送信)
 
-import { createSignal, createEffect, Show } from "solid-js";
+import { createSignal, createEffect, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ComposeProps {
@@ -29,6 +29,9 @@ export const Compose = (props: ComposeProps) => {
   const [advice,   setAdvice]  = createSignal<string | null>(null);
   const [error,    setError]   = createSignal<string | null>(null);
   const [mlsReady, setMlsReady] = createSignal<boolean | null>(null);
+  // 送信前 DLP の Warn 所見 (mail_send は Block のみ止めるため、
+  // 警告は送信ボタン経由の事前チェックで表示する)。
+  const [dlpWarnings,  setDlpWarnings]  = createSignal<string[]>([]);
 
   // 送信前アドバイザリ (debounced): 本文が「受信側で別経路確認を推奨」
   // される文脈 (送金要求・急迫表現等) に一致するかを `oobv_recommend`
@@ -71,17 +74,39 @@ export const Compose = (props: ComposeProps) => {
     setMlsReady(null);
   });
 
-  const handleSend = async () => {
+  // 入力が変わったら DLP 確認をやり直す (確認済みのまま本文を変えて
+  // 警告を回避できないようにする)
+  createEffect(() => {
+    from(); to(); subject(); body();
+    setDlpWarnings([]);
+  });
+
+  const handleSend = async (skipPrecheck = false) => {
     if (!from().trim() || !to().trim() || !subject().trim() || !body().trim()) {
       setError("差出人・宛先・件名・本文は必須です");
       return;
     }
+    const toList = to().split(/[,;]/).map(s => s.trim()).filter(Boolean);
     setSending(true);
     setError(null);
+    if (!skipPrecheck) {
+      try {
+        const res = await invoke<{ warnings: string[] }>("mail_dlp_precheck", {
+          req: { from: from(), to: toList, subject: subject(), body: body() },
+        });
+        if (res.warnings.length > 0) {
+          setDlpWarnings(res.warnings);
+          setSending(false);
+          return;
+        }
+      } catch {
+        // 事前チェックの失敗で送信を妨げない (Block は mail_send が実行)
+      }
+    }
     try {
       await invoke("mail_send", {
         from:    from(),
-        to:      to().split(/[,;]/).map(s => s.trim()).filter(Boolean),
+        to:      toList,
         subject: subject(),
         body:    body(),
       });
@@ -172,6 +197,42 @@ export const Compose = (props: ComposeProps) => {
         </div>
       </Show>
 
+      {/* DLP 警告確認 (送信前チェックの所見) */}
+      <Show when={dlpWarnings().length > 0}>
+        <div style={{
+          padding: "10px 16px",
+          background: "#FF6B7012",
+          "border-bottom": "1px solid #FF6B7030",
+          "font-size": "12px",
+          color: "#FF6B70",
+        }}>
+          <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>
+            ⚠ DLP 警告 — 機微情報が含まれている可能性があります
+          </div>
+          <ul style={{ margin: "0 0 8px", "padding-left": "18px" }}>
+            <For each={dlpWarnings()}>{w => <li>{w}</li>}</For>
+          </ul>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={() => { setDlpWarnings([]); handleSend(true); }}
+              style={{
+                background: "#FF6B70", color: "#0A0E14", border: "none",
+                "border-radius": "4px", padding: "4px 12px",
+                "font-size": "11px", "font-weight": "600", cursor: "pointer",
+              }}
+            >それでも送信</button>
+            <button
+              onClick={() => setDlpWarnings([])}
+              style={{
+                background: "none", color: "#8B96A5",
+                border: "1px solid #2A3441", "border-radius": "4px",
+                padding: "4px 12px", "font-size": "11px", cursor: "pointer",
+              }}
+            >内容を修正する</button>
+          </div>
+        </div>
+      </Show>
+
       {/* フォーム */}
       <div style={{ padding: "12px 16px", display: "flex", "flex-direction": "column", gap: "8px" }}>
         <input
@@ -228,7 +289,7 @@ export const Compose = (props: ComposeProps) => {
         "align-items": "center",
       }}>
         <button
-          onClick={handleSend}
+          onClick={() => handleSend()}
           disabled={sending()}
           style={{
             background: "#00C4CC",
