@@ -49,7 +49,7 @@ QR コードフィッシングはフラグメントベース攻撃に進化し�
 | **メール爆撃防御** | MFA 疲労と組み合わせた攻撃を検出 | `EmailBombingDefense` |
 | **件名 MLS 暗号化** | ⚠️ **未実装** (`docs/gap-analysis.md` D1)。MLS は単一バイト XOR のモックで、暗号化は行われていない | `SubjectEncryption` |
 | **トラッキングピクセル検出・ブロック** | Proton Mail と同等、Gmail より優位 | `TrackingDetector` |
-| **ゼロ知識ローカル検索** | ⚠️ **実装はあるが出荷バイナリに未配線**。`ZeroKnowledgeSearch` は `kaname-privacy` に実装済みだが `kaname-ui` から一度も呼ばれておらず、実際に使われている検索 (`mail_search` → `kaname_store::search_messages`) は平文に対する LIKE 検索 | `ZeroKnowledgeSearch` (未配線) |
+| **ゼロ知識ローカル検索** | ❌ **削除済み (2026-09, E8)**。`ZeroKnowledgeSearch` は `kaname-privacy` に存在したが `kaname-ui` から一度も呼ばれておらず、実際に使われている検索 (`mail_search` → `kaname_store::search_messages`) は平文に対する LIKE 検索。未配線の代替実装は維持コストのみを生むため削除 — 将来必要になれば git 履歴から復元 | なし (削除済み) |
 
 ---
 
