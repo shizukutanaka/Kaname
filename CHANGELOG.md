@@ -23,7 +23,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **トレイメニューのデッドコントロール**: 「新規作成...」「セキュリティポスチャー...」は emit 先のリスナーがフロントエンドに存在せずクリックしても無反応だった → `menu:compose`/`menu:security` をビュー遷移に接続。「設定...」「Kaname について」は対応ビュー自体が存在しないためメニューから削除 (実装時に git 履歴から復元)
 
-||||||| bb15439
 - **Dual-LLM 型不変条件の serde 迂回穴を閉塞** (D17 部分解消): `Content<L>` から `Serialize`/`Deserialize` derive を除去 — `serde_json::from_str::<Content<Trusted>>` で Bridge を迂回し任意テキストを Trusted 偽造できた経路と、生本文の JSON 漏洩経路を閉塞。`Content<Untrusted>::as_text()` を `pub(crate)` 化、`TopicTag` を `serde(try_from)` 化し検証迂回を封じた。kaname-ai 変更のため security-lead 承認が必要。併せて `llm_bridge` の `QuarantinedLlmImpl`/`PrivilegedLlmImpl` (subprocess 側と同名の重複で、呼び出し元・テストすら存在しない in-process 経路のデッドコード ~90行) を削除 — D3 のプロセス隔離設計に反する迂回経路を消去
 - **`.eml` インポート/フォルダ一括解析の無制限ファイル読み込み**: `fs::read` がサイズ確認なしで巨大ファイルを丸ごとメモリに読み込んでいた。50MB 上限 (`MAX_EML_BYTES`) を設け、超過時は正直なエラー/失敗リスト入りに
 
