@@ -497,9 +497,15 @@ impl JmapClient {
             Ok(s.to_owned())
         };
         let from = sanitize_header(from)?;
+        validate_addr(&from)?;
         let subject = sanitize_header(subject)?;
         for addr in to {
             sanitize_header(addr)?;
+            // `\r\n` を拒否しても `,` や `<`/`>` は残る — `To: a@b, <x@y>` の
+            // ようにヘッダ値内でアドレスリスト化/表示名注入できてしまうため
+            // (D90)、envelope (rcptTo) とヘッダの宛先を一致させるには
+            // アドレス自体も単一 addr-spec に限定する必要がある。
+            validate_addr(addr)?;
         }
 
         let mailboxes = self.get_mailboxes().await?;
@@ -940,6 +946,40 @@ fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
     Ok(s.to_owned())
 }
 
+/// アドレスが「単一の addr-spec」かを検査する (D90)。
+///
+/// `\r\n` を拒否するだけでは `,`・`<`/`>`・`"` が残り、`To: a@b, <x@y>` の
+/// ようにヘッダ値内でアドレスを増殖させたり表示名を注入できてしまう。
+/// envelope (`rcptTo`) とヘッダの宛先を一致させるため、RFC 5322 の
+/// specials と空白・制御文字を含む入力を拒否する。
+/// EAI の UTF-8 ローカル部は許す (非 ASCII で specials を含まなければよい)。
+fn validate_addr(addr: &str) -> Result<(), JmapError> {
+    let reject = |reason: &str| {
+        Err(JmapError::InvalidInput(format!(
+            "メールアドレスの形式が不正です ({reason}): {:?}",
+            &addr[..addr.len().min(40)]
+        )))
+    };
+    if addr.is_empty() {
+        return reject("空");
+    }
+    if addr.chars().any(|c| {
+        c.is_control()
+            || c.is_whitespace()
+            || matches!(
+                c,
+                ',' | ';' | '<' | '>' | '(' | ')' | '[' | ']' | '"' | '\'' | '\\' | ':'
+            )
+    }) {
+        return reject("特殊文字を含む");
+    }
+    // '@' は1つだけ — 複数は quoted-string/domain-literal 偽装を許す
+    if addr.matches('@').count() != 1 {
+        return reject("'@' がちょうど1個でない");
+    }
+    Ok(())
+}
+
 /// SMTP DATA 終端シーケンスを本文に含むか判定する (SMTP Smuggling 対策)。
 ///
 /// `<CRLF>.<CRLF>` (`\r\n.\r\n`) は RFC 5321 §4.1.1.4 で DATA 終端と規定される。
@@ -1078,6 +1118,38 @@ mod tests {
             result.is_ok(),
             "正常なメールアドレスはエラーになってはならない"
         );
+    }
+
+    // ── validate_addr (D90): To ヘッダ内のアドレス増殖/表示名注入防止 ────────
+
+    #[test]
+    fn validate_addr_は通常アドレスを通す() {
+        for ok in [
+            "alice@example.com",
+            "a.b+tag@sub.example.co.jp",
+            "ユーザー@example.com", // EAI
+        ] {
+            assert!(validate_addr(ok).is_ok(), "{ok} は通るべき");
+        }
+    }
+
+    #[test]
+    fn validate_addr_はアドレス増殖と特殊文字を拒否する() {
+        for bad in [
+            "",                     // 空
+            "no-at-sign",           // @ なし
+            "a@@b.com",             // @ 2個
+            "a@b.com, c@d.com",     // アドレスリスト化
+            "a@b.com>, <x@y.com",   // <> 注入
+            "\"Quoted\" <a@b.com>", // display-name 形式
+            "a@b.com (コメント)",   // comment 構文
+            "Group:a@b.com;",       // group 構文
+            "a@[127.0.0.1]",        // domain literal
+            "a\\b@c.com",           // バックスラッシュ
+            "a b@c.com",            // 空白
+        ] {
+            assert!(validate_addr(bad).is_err(), "{bad} は拒否されるべき");
+        }
     }
 
     // ── query_emails limit キャップテスト ─────────────────────────────────────
