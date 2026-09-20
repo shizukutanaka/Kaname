@@ -632,13 +632,18 @@ impl JmapClient {
     ) -> Result<Vec<u8>, JmapError> {
         const MAX_BLOB_BYTES: usize = 25 * 1024 * 1024;
 
+        // RFC 8620 §6.2 のダウンロード URL テンプレート。変数の値は
+        // URL エンコードして埋め込む — 送信者制御の添付ファイル名や
+        // MIME 型に `?`/`#`/`..`/`%2F` 等が含まれると、パスを
+        // 改変して意図しないエンドポイントに Authorization 付きで
+        // リクエストを送り得るため (D82)。
         let url = self
             .session
             .download_url
-            .replace("{accountId}", &self.account_id)
-            .replace("{blobId}", blob_id)
-            .replace("{type}", mime_type)
-            .replace("{name}", name);
+            .replace("{accountId}", &encode_template_value(&self.account_id))
+            .replace("{blobId}", &encode_template_value(blob_id))
+            .replace("{type}", &encode_template_value(mime_type))
+            .replace("{name}", &encode_template_value(name));
 
         let resp = self
             .http
@@ -678,7 +683,7 @@ impl JmapClient {
         let url = self
             .session
             .upload_url
-            .replace("{accountId}", &self.account_id);
+            .replace("{accountId}", &encode_template_value(&self.account_id));
         let resp = self
             .http
             .post(&url)
@@ -914,6 +919,31 @@ pub enum JmapError {
 // ============================================================================
 // ユーティリティ
 // ============================================================================
+
+/// URI テンプレート変数の値をパーセントエンコードする (RFC 3986)。
+///
+/// RFC 8620 の downloadUrl/uploadUrl は URI テンプレートであり、
+/// 変数は URL エンコードして埋め込む決まり。unreserved 文字
+/// (A-Z a-z 0-9 `-` `_` `.` `~`) 以外は全て %XX に変換する。
+/// これにより添付ファイル名に `/`/`?`/`#`/`..` が含まれても
+/// URL のパス構造を改変できない (D82)。
+fn encode_template_value(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for &b in value.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(char::from(b));
+            }
+            _ => {
+                out.push('%');
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                out.push(char::from(HEX[(b >> 4) as usize]));
+                out.push(char::from(HEX[(b & 0xF) as usize]));
+            }
+        }
+    }
+    out
+}
 
 fn find_result<T: for<'de> Deserialize<'de>>(
     rs: &[MethodResponse],
@@ -1185,6 +1215,27 @@ mod tests {
 
         // 対象 call_id の応答自体が無い場合も失敗 (黙って成功扱いしない)
         assert!(check_set_errors(&[], "read").is_err());
+    }
+
+    /// D82: URL テンプレート変数はパーセントエンコード必須。
+    /// 送信者制御のファイル名が URL パス構造を改変できないことを固定。
+    #[test]
+    fn encode_template_value_はパス改変文字をエンコードする() {
+        // 通常値はそのまま
+        assert_eq!(encode_template_value("report.pdf"), "report.pdf");
+        assert_eq!(encode_template_value("id-123_abc~x"), "id-123_abc~x");
+        // パス区切り・クエリ・フラグメント・パーセント自身を全てエンコード
+        assert_eq!(
+            encode_template_value("../admin?name=x#f"),
+            "..%2Fadmin%3Fname%3Dx%23f"
+        );
+        assert_eq!(encode_template_value("100%"), "100%25");
+        // MIME 型の / もエンコードされる (RFC 8620: 変数は URL エンコード)
+        assert_eq!(encode_template_value("message/rfc822"), "message%2Frfc822");
+        // 非 ASCII (UTF-8 バイト列) も安全にエンコード
+        assert_eq!(encode_template_value("表.pdf"), "%E8%A1%A8.pdf");
+        // 空文字は空
+        assert_eq!(encode_template_value(""), "");
     }
 
     #[test]
