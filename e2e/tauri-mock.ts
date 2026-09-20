@@ -158,6 +158,14 @@ export interface MockOverrides {
   mlsStatus?: { initialized: boolean; email: string | null; conversations: number };
   /** `mls_key_package` の戻り値 (既定は固定 hex)。 */
   mlsKeyPackage?: string;
+  /** `mls_conversations` の戻り値 (既定は空列)。 */
+  mlsConversations?: Array<{ email: string; conversation_id: string; epoch: number; safety_number: string | null }>;
+  /** `mls_send_key_package` の戻り値。 */
+  mlsSendKeyPackage?: string;
+  /** `mls_start_conversation` の戻り値。 */
+  mlsStartConversation?: string;
+  /** `mls_send_encrypted` の戻り値。 */
+  mlsSendEncrypted?: string;
 }
 
 /**
@@ -308,6 +316,15 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             return { initialized: true, email: "user@kaname.app", conversations: 0 };
           case "mls_key_package":
             return ov.mlsKeyPackage ?? "deadbeef".repeat(16);
+          // MLS 配送経路 (D1 Phase 3): 既定は会話なし、送信系は成功応答
+          case "mls_conversations":
+            return ov.mlsConversations ?? [];
+          case "mls_send_key_package":
+            return ov.mlsSendKeyPackage ?? "KeyPackage を送信しました";
+          case "mls_start_conversation":
+            return ov.mlsStartConversation ?? "MLS 会話を開始しました";
+          case "mls_send_encrypted":
+            return ov.mlsSendEncrypted ?? "mls-msg-id";
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":
           case "mail_trash":

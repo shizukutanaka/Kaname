@@ -440,6 +440,14 @@ interface MlsStatus {
   conversations: number;
 }
 
+// D1 Phase 3: 会話成立済みの相手 (kaname-ui::commands::MlsPeer)
+interface MlsPeer {
+  email: string;
+  conversation_id: string;
+  epoch: number;
+  safety_number: string | null;
+}
+
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
   const [accessLog] = createSignal<AiAccessEntry[]>([]);
   const [auditLog, setAuditLog] = createSignal<AuditLogView | null>(null);
@@ -465,9 +473,14 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
   const [mlsEmail, setMlsEmail] = createSignal("");
   const [mlsKp, setMlsKp] = createSignal("");
   const [mlsBusy, setMlsBusy] = createSignal(false);
+  // D1 Phase 3: KP 配送経路の UI — 相手先入力・会話一覧・操作結果
+  const [mlsPeer, setMlsPeer] = createSignal("");
+  const [mlsPeers, setMlsPeers] = createSignal<MlsPeer[]>([]);
+  const [mlsMsg, setMlsMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
   const refreshMls = async () => {
     try {
       setMls(await invoke<MlsStatus>("mls_status"));
+      setMlsPeers(await invoke<MlsPeer[]>("mls_conversations"));
     } catch {
       setMls(null);
     }
@@ -718,9 +731,102 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
                     {mlsKp()}
                   </div>
                 </Show>
-                <div style={{ "font-size": "10px", color: "#6B7A94", "margin-top": "6px" }}>
-                  KeyPackage を相手の Kaname に渡すと会話に招待できます。
-                  配送経路は未実装のため (D1 Phase 3)、当面は手で共有する運用です
+                {/* D1 Phase 3: KeyPackage の配送と会話開始
+                    — KP は添付で自動往復 (相手の Kaname が受信時に検証・取込)。
+                    KP 配送経路での差し替えは防げないため、会話成立後は
+                    安全番号を別経路で照合するのが信頼確立の手順。 */}
+                <div style={{ "margin-top": "10px", "border-top": "1px solid #1F2833", "padding-top": "8px" }}>
+                  <div style={{ "font-size": "10px", color: "#6B7A94", "margin-bottom": "6px" }}>
+                    相手のメールアドレスを指定して KeyPackage を送信・または受信済み KP で会話を開始します。
+                    開始後は新規作成画面で「MLS で暗号化」が使えます
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", "align-items": "center", "flex-wrap": "wrap" }}>
+                    <input
+                      type="email"
+                      placeholder="相手のメールアドレス"
+                      value={mlsPeer()}
+                      onInput={e => setMlsPeer(e.currentTarget.value)}
+                      style={{
+                        flex: "1", "min-width": "200px", background: "#0A0E14", color: "#D7DEE7",
+                        border: "1px solid #2A3441", "border-radius": "4px",
+                        padding: "6px 8px", "font-size": "11px",
+                      }}
+                    />
+                    <button
+                      disabled={mlsBusy() || !mlsPeer().includes("@")}
+                      onClick={async () => {
+                        setMlsBusy(true);
+                        setMlsMsg(null);
+                        try {
+                          const r = await invoke<string>("mls_send_key_package", { to: mlsPeer().trim() });
+                          setMlsMsg({ ok: true, text: r });
+                        } catch (e) {
+                          setMlsMsg({ ok: false, text: String(e) });
+                        }
+                        setMlsBusy(false);
+                      }}
+                      style={{
+                        background: "#00C4CC20", color: "#00C4CC", border: "none",
+                        "border-radius": "4px", padding: "4px 10px",
+                        "font-size": "11px",
+                        cursor: mlsBusy() || !mlsPeer().includes("@") ? "default" : "pointer",
+                      }}
+                    >
+                      KeyPackage を送信
+                    </button>
+                    <button
+                      disabled={mlsBusy() || !mlsPeer().includes("@")}
+                      onClick={async () => {
+                        setMlsBusy(true);
+                        setMlsMsg(null);
+                        try {
+                          const r = await invoke<string>("mls_start_conversation", { to: mlsPeer().trim() });
+                          setMlsMsg({ ok: true, text: r });
+                          await refreshMls();
+                        } catch (e) {
+                          setMlsMsg({ ok: false, text: String(e) });
+                        }
+                        setMlsBusy(false);
+                      }}
+                      style={{
+                        background: "#00C4CC20", color: "#00C4CC", border: "none",
+                        "border-radius": "4px", padding: "4px 10px",
+                        "font-size": "11px",
+                        cursor: mlsBusy() || !mlsPeer().includes("@") ? "default" : "pointer",
+                      }}
+                    >
+                      受信した KP で会話を開始
+                    </button>
+                  </div>
+                  <Show when={mlsMsg()}>
+                    <div style={{
+                      "font-size": "10px", "margin-top": "6px",
+                      color: mlsMsg()!.ok ? "#34D399" : "#FF6B70",
+                    }}>
+                      {mlsMsg()!.text}
+                    </div>
+                  </Show>
+                  {/* 成立済み会話: 安全番号の照合は別経路 (電話等) で実施 */}
+                  <Show when={mlsPeers().length > 0}>
+                    <div style={{ "margin-top": "8px" }}>
+                      <For each={mlsPeers()}>
+                        {(p) => (
+                          <div style={{
+                            "font-size": "10px", color: "#8B96A5", "margin-top": "4px",
+                            padding: "6px 8px", background: "#0A0E14",
+                            "border-radius": "4px", border: "1px solid #1F2833",
+                          }}>
+                            <div>🔐 {p.email} — epoch {p.epoch}</div>
+                            <Show when={p.safety_number}>
+                              <div style={{ "font-family": "monospace", color: "#6B7A94", "margin-top": "2px", "word-break": "break-all" }}>
+                                安全番号: {p.safety_number}
+                              </div>
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
               </Show>
             </div>

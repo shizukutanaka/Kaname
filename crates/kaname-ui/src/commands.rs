@@ -451,7 +451,12 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // `is_mls` バッジはエンベロープの有無で決める — メッセージ本体が
     // エンベロープ内にあるため外側パースでは内容が見えない。
     let mls_envelopes = kaname_render::extract_mls_envelopes(bytes);
-    let (mls_events, mls_plaintexts) = process_mls_envelopes(&mls_envelopes);
+    let (mut mls_events, mls_plaintexts) = process_mls_envelopes(&mls_envelopes);
+
+    // MLS KeyPackage 添付の受信 (D1 Phase 3) — 検証して kp_cache に投入。
+    // 送信者は外側の From アドレス (エンベロープ内ではなく配送層の属性)。
+    let mls_key_packages = kaname_render::extract_mls_key_packages(bytes);
+    process_mls_key_packages(&mls_key_packages, &from_addr_only, &mut mls_events);
 
     Ok(ImportedEmail {
         from,
@@ -1318,6 +1323,185 @@ mod tests {
         Ok(())
     }
 
+    /// D1 Phase 3: `application/mls-key-package` 添付を受信経路で検証し
+    /// `kp_cache` に取り込むこと、および取り込んだ KP で実際に会話を
+    /// 開始して双方向の暗号化が成立すること (JMAP 送信を除く全経路)。
+    #[tokio::test]
+    async fn analyze_raw_email_はkeypackage添付を検証してkpキャッシュに入れる() -> Result<(), String>
+    {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let mut alice = kaname_mls::MlsMailClient::try_new(mls_test_identity("alice@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let bob = kaname_mls::MlsMailClient::try_new(mls_test_identity("bob@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+
+        // alice の KP を `application/mls-key-package` パートに載せた
+        // メールを受信経路 (analyze_raw_email) に流す
+        let alice_kp = alice
+            .generate_key_package()
+            .ok_or("alice の KeyPackage 生成に失敗")?;
+        let raw = format!(
+            "From: alice@kaname.app\r\n\
+             To: bob@kaname.app\r\n\
+             Subject: kp\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: multipart/mixed; boundary=\"K\"\r\n\
+             \r\n\
+             --K\r\n\
+             Content-Type: text/plain\r\n\
+             \r\n\
+             KeyPackage を添付します\r\n\
+             --K\r\n\
+             Content-Type: application/mls-key-package\r\n\
+             Content-Transfer-Encoding: quoted-printable\r\n\
+             \r\n\
+             {}\r\n\
+             --K--\r\n",
+            qp_encode(&alice_kp.bytes)
+        );
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(bob);
+        let r = analyze_raw_email(raw.as_bytes()).await?;
+        assert!(
+            r.mls_events.iter().any(|e| e.contains("KeyPackage を受信")),
+            "KP 取込イベントが必要: {:?}",
+            r.mls_events
+        );
+
+        // KP がキャッシュされている → bob が alice との会話を開始できる
+        // (mls_start_conversation の送信前までのライブラリ経路を直接確認)
+        {
+            let mut guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+            let client = guard.as_mut().ok_or("mls スロットが空")?;
+            let addr =
+                kaname_mls::EmailAddress::parse("alice@kaname.app").map_err(|e| format!("{e}"))?;
+            assert!(client.kp_cache().has(&addr), "KP がキャッシュされるべき");
+            let kp = client.kp_cache().consume(&addr).ok_or("KP の消費に失敗")?;
+            let (mut conv_bob, welcome) = client
+                .start_one_to_one(addr, kp)
+                .map_err(|e| format!("{e}"))?;
+            // consume は 1 回限り — 二度目は取れない
+            assert!(
+                client
+                    .kp_cache()
+                    .consume(
+                        &kaname_mls::EmailAddress::parse("alice@kaname.app")
+                            .map_err(|e| format!("{e}"))?
+                    )
+                    .is_none(),
+                "消費済み KP が再び取れてはいけない"
+            );
+
+            // alice (KP を生成した本体) が Welcome を処理し、
+            // bob へ返信を暗号化できるか
+            let msg = alice
+                .process_incoming(&welcome)
+                .map_err(|e| format!("{e}"))?;
+            assert!(
+                matches!(msg, kaname_mls::IncomingResult::WelcomeJoined(_)),
+                "WelcomeJoined が返るべき: {msg:?}"
+            );
+            let mut conv_alice = alice
+                .list_conversations()
+                .into_iter()
+                .next()
+                .ok_or("alice に会話が作成されていない")?;
+            let sealed = alice
+                .encrypt_message(&mut conv_alice, "ok".as_bytes())
+                .map_err(|e| format!("{e}"))?;
+            let dec = client
+                .process_incoming(&sealed)
+                .map_err(|e| format!("{e}"))?;
+            assert!(
+                matches!(&dec, kaname_mls::IncomingResult::Application(b) if b == b"ok"),
+                "alice→bob の復号が一致するべき: {dec:?}"
+            );
+            // bob → alice 方向も
+            let sealed2 = client
+                .encrypt_message(&mut conv_bob, "ack".as_bytes())
+                .map_err(|e| format!("{e}"))?;
+            let dec2 = alice
+                .process_incoming(&sealed2)
+                .map_err(|e| format!("{e}"))?;
+            assert!(
+                matches!(&dec2, kaname_mls::IncomingResult::Application(b) if b == b"ack"),
+                "bob→alice の復号が一致するべき: {dec2:?}"
+            );
+        }
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(())
+    }
+
+    /// D1 Phase 3: 不正な KP 添付はイベントとして記録され、キャッシュされない。
+    #[tokio::test]
+    async fn analyze_raw_email_は不正なkeypackageをキャッシュしない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let bob = kaname_mls::MlsMailClient::try_new(mls_test_identity("bob@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let raw = "From: mallory@kaname.app\r\n\
+            To: bob@kaname.app\r\n\
+            Subject: kp\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"K\"\r\n\
+            \r\n\
+            --K\r\n\
+            Content-Type: application/mls-key-package\r\n\
+            \r\n\
+            not-a-real-keypackage\r\n\
+            --K--\r\n";
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(bob);
+        let r = analyze_raw_email(raw.as_bytes()).await?;
+        assert!(
+            r.mls_events.iter().any(|e| e.contains("検証に失敗")),
+            "検証失敗イベントが必要: {:?}",
+            r.mls_events
+        );
+        let mut guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+        let client = guard.as_mut().ok_or("mls スロットが空")?;
+        assert!(
+            !client.kp_cache().has(
+                &kaname_mls::EmailAddress::parse("mallory@kaname.app")
+                    .map_err(|e| format!("{e}"))?
+            ),
+            "不正 KP がキャッシュされてはいけない"
+        );
+        *guard = None;
+        Ok(())
+    }
+
+    /// D1 Phase 3: `mls_conversations` は会話成立済みの相手のみ返す。
+    #[tokio::test]
+    async fn mls_conversations_は会話成立済みの相手を返す() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        assert!(
+            mls_conversations().await.is_empty(),
+            "未初期化では空列であるべき"
+        );
+        let mut bob = kaname_mls::MlsMailClient::try_new(mls_test_identity("bob@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let alice = kaname_mls::MlsMailClient::try_new(mls_test_identity("alice@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let alice_kp = alice
+            .generate_key_package()
+            .ok_or("alice の KP 生成に失敗")?;
+        let _ = bob
+            .start_one_to_one(
+                kaname_mls::EmailAddress::parse("alice@kaname.app").map_err(|e| format!("{e}"))?,
+                alice_kp,
+            )
+            .map_err(|e| format!("{e}"))?;
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(bob);
+        let peers = mls_conversations().await;
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0].email, "alice@kaname.app");
+        // Welcome コミットで epoch は 1 に進む
+        assert_eq!(peers[0].epoch, 1);
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(())
+    }
+
     #[tokio::test]
     async fn analyze_raw_email_mls未初期化ではイベントのみ返す() -> Result<(), String> {
         // MLS スロットが空の状態で mls パートを含むメールを解析する。
@@ -2036,6 +2220,7 @@ mod v02_tests {
             &["x@corp-partnr.com".to_string()],
             "件名",
             "【社外秘】この資料を転送します",
+            &[],
         )
         .await;
         assert!(
@@ -2054,6 +2239,7 @@ mod v02_tests {
             &["x@corp-partner.com".to_string()],
             "件名",
             "【社外秘】この資料を転送します",
+            &[],
         )
         .await;
         assert!(
@@ -2543,9 +2729,10 @@ async fn outbound_dlp_eval(
     to: &[String],
     subject: &str,
     body: &str,
+    attachment_mimes: &[String],
 ) -> kaname_dlp::DlpResult {
     let engine = kaname_dlp::DlpEngine::default_engine();
-    let mimes: Vec<String> = Vec::new();
+    let mimes: Vec<String> = attachment_mimes.to_vec();
     // D104: 誤配検出 (タイポドメイン照合) は「既知の宛先ドメイン」に対する
     // 類似度で判定するが、ここに常に空リストが渡されていたため
     // LookalikeDomain 検査が構造的に不発だった。連絡先履歴から供給する。
@@ -2565,6 +2752,64 @@ async fn outbound_dlp_eval(
         our_domain: &our,
     };
     engine.evaluate(&ctx, kaname_dlp::Direction::Outbound)
+}
+
+/// 送信共通経路: 送信前 DLP (Outbound) → JMAP `send_email` → 送信監査。
+///
+/// `dlp_target` は DLP に渡す実内容 — MLS 暗号化メールは外側が
+/// プレースホルダのため、暗号化前の平文で評価する (E2E でも送信側
+/// DLP は実効化される)。`audit_name` は送信イベント名
+/// (MAIL_SEND / MLS_KEYPACKAGE_SEND / MLS_WELCOME_SEND / MLS_MESSAGE_SEND)。
+async fn send_mail_core(
+    from: &str,
+    to: &[String],
+    send_subject: &str,
+    send_body: &str,
+    attachments: &[kaname_jmap::OutgoingAttachment],
+    // DLP 評価対象の (件名, 本文)。None のとき外側の件名・本文を評価する。
+    // MLS 送信では実内容がエンベロープ内にのみあるため、ここに実件名・
+    // 実本文を渡して暗号化前の内容で DLP を効かせる。
+    dlp_target: Option<(&str, &str)>,
+    audit_name: &str,
+) -> Result<String, String> {
+    let client = jmap_client().await?;
+
+    // 送信前 DLP。ここで止めるのが情報漏洩防止の本丸。
+    // 自組織ドメイン (D44): 送信者自身の `from` アドレスが最直接のヒント。
+    let mimes: Vec<String> = attachments.iter().map(|a| a.mime_type.clone()).collect();
+    let (dlp_subject, dlp_body) = dlp_target.unwrap_or((send_subject, send_body));
+    let dlp = outbound_dlp_eval(client.account_id(), from, to, dlp_subject, dlp_body, &mimes).await;
+    if matches!(dlp.verdict, kaname_dlp::Action::Block) {
+        let reasons: Vec<String> = dlp.findings.iter().map(|f| f.rule_name.clone()).collect();
+        let reason_str = reasons.join(" / ");
+        // 外部宛送信の阻止は最重要の証跡 — どのルールで止めたかを残す
+        // (件名・本文・宛先は書かない)。
+        audit_event(
+            Some(client.account_id()),
+            "DLP_BLOCK",
+            serde_json::json!({ "to_count": to.len(), "rules": reasons }),
+        )
+        .await;
+        return Err(format!(
+            "DLP により送信をブロックしました: {reason_str}。機微情報が含まれていないか確認してください"
+        ));
+    }
+
+    let to_refs: Vec<&str> = to.iter().map(String::as_str).collect();
+    let result = client
+        .send_email(from, &to_refs, send_subject, send_body, attachments)
+        .await
+        .map_err(|e| format!("送信に失敗しました: {e}"))?;
+
+    // 実際に送信が行われた出口イベント (件名・本文・宛先アドレスは書かない)。
+    audit_event(
+        Some(client.account_id()),
+        audit_name,
+        serde_json::json!({ "to_count": to.len(), "attachments": attachments.len() }),
+    )
+    .await;
+
+    Ok(result)
 }
 
 #[derive(Debug, Deserialize)]
@@ -2591,7 +2836,16 @@ pub struct DlpPrecheckResponse {
 /// (自組織ドメインは settings / from アドレスから推定)。
 pub async fn mail_dlp_precheck(req: DlpPrecheckRequest) -> Result<DlpPrecheckResponse, String> {
     let account_id = current_account_id().await;
-    let dlp = outbound_dlp_eval(&account_id, &req.from, &req.to, &req.subject, &req.body).await;
+    // 事前チェック時点では添付は存在しない (Compose に添付 UI が無い)。
+    let dlp = outbound_dlp_eval(
+        &account_id,
+        &req.from,
+        &req.to,
+        &req.subject,
+        &req.body,
+        &[],
+    )
+    .await;
     let warnings = dlp
         .findings
         .iter()
@@ -2607,42 +2861,7 @@ pub async fn mail_send_real(
     subject: String,
     body: String,
 ) -> Result<String, String> {
-    let client = jmap_client().await?;
-
-    // 送信前 DLP。ここで止めるのが情報漏洩防止の本丸。
-    // 自組織ドメイン (D44): 送信者自身の `from` アドレスが最直接のヒント。
-    let dlp = outbound_dlp_eval(client.account_id(), &from, &to, &subject, &body).await;
-    if matches!(dlp.verdict, kaname_dlp::Action::Block) {
-        let reasons: Vec<String> = dlp.findings.iter().map(|f| f.rule_name.clone()).collect();
-        let reason_str = reasons.join(" / ");
-        // 外部宛送信の阻止は最重要の証跡 — どのルールで止めたかを残す
-        // (件名・本文・宛先は書かない)。
-        audit_event(
-            Some(client.account_id()),
-            "DLP_BLOCK",
-            serde_json::json!({ "to_count": to.len(), "rules": reasons }),
-        )
-        .await;
-        return Err(format!(
-            "DLP により送信をブロックしました: {reason_str}。機微情報が含まれていないか確認してください"
-        ));
-    }
-
-    let to_refs: Vec<&str> = to.iter().map(String::as_str).collect();
-    let result = client
-        .send_email(&from, &to_refs, &subject, &body)
-        .await
-        .map_err(|e| format!("送信に失敗しました: {e}"))?;
-
-    // 実際に送信が行われた出口イベント (件名・本文・宛先アドレスは書かない)。
-    audit_event(
-        Some(client.account_id()),
-        "MAIL_SEND",
-        serde_json::json!({ "to_count": to.len() }),
-    )
-    .await;
-
-    Ok(result)
+    send_mail_core(&from, &to, &subject, &body, &[], None, "MAIL_SEND").await
 }
 
 // ============================================================================
@@ -2773,8 +2992,8 @@ pub async fn mls_status() -> MlsStatus {
 /// この端末の MLS KeyPackage を 16 進文字列で返す。
 ///
 /// 相手の Kaname がこれを取り込むと自分を会話に招待できるようになる
-/// (KeyPackage は公開情報 — 配布してよい)。配送経路は未実装のため
-/// (D1 Phase 3)、当面は手でコピーして渡す運用。
+/// (KeyPackage は公開情報 — 配布してよい)。手渡し向けの表示用で、
+/// メール添付での送付は `mls_send_key_package` を使う (D1 Phase 3)。
 pub async fn mls_key_package() -> Result<String, String> {
     let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
     let client = guard
@@ -2784,6 +3003,200 @@ pub async fn mls_key_package() -> Result<String, String> {
         .generate_key_package()
         .ok_or_else(|| "KeyPackage の生成に失敗しました".to_string())?;
     Ok(kp.bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// MLS 会話が成立している相手の情報 (Compose の暗号化表示用)。
+#[derive(Debug, Serialize)]
+pub struct MlsPeer {
+    /// 相手のメールアドレス。
+    pub email: String,
+    /// 会話 ID (hex)。
+    pub conversation_id: String,
+    /// 現在の epoch。
+    pub epoch: u64,
+    /// 安全番号 — 電話等で相手と照合する値 (Phase 5 セレモニーの実体)。
+    pub safety_number: Option<String>,
+}
+
+/// MLS 会話が成立している相手の一覧を返す (未初期化は空列)。
+pub async fn mls_conversations() -> Vec<MlsPeer> {
+    let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+    let Some(client) = guard.as_ref() else {
+        return Vec::new();
+    };
+    let own = client.identity.email.as_str().to_string();
+    client
+        .list_conversations()
+        .iter()
+        .flat_map(|c| {
+            let conv_id = c.id.as_hex();
+            let epoch = c.epoch;
+            let sn = c.safety_number.clone();
+            c.members
+                .iter()
+                .filter(|m| m.as_str() != own)
+                .map(move |m| MlsPeer {
+                    email: m.as_str().to_string(),
+                    conversation_id: conv_id.clone(),
+                    epoch,
+                    safety_number: sn.clone(),
+                })
+        })
+        .collect()
+}
+
+/// この端末の KeyPackage を `application/mls-key-package` 添付として
+/// 相手に送信する (D1 Phase 3 — KP 配送経路、添付ベース)。
+///
+/// KP は公開情報 (署名公開鍵を含む) で秘匿は不要だが、配送経路での
+/// 差し替えは防げない — 会話成立後に安全番号を照合するのが本来の
+/// 信頼確立 (Phase 5)。送信前 DLP と監査は通常メールと同じ経路を通る。
+pub async fn mls_send_key_package(to: String) -> Result<String, String> {
+    let to_addr = kaname_mls::EmailAddress::parse(to.clone())
+        .map_err(|e| format!("宛先アドレスが不正です: {e}"))?;
+    let (from, kp_bytes) = {
+        let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+        let client = guard.as_ref().ok_or_else(|| {
+            "MLS が初期化されていません (mls_init を先に呼んでください)".to_string()
+        })?;
+        let kp = client
+            .generate_key_package()
+            .ok_or_else(|| "KeyPackage の生成に失敗しました".to_string())?;
+        (client.identity.email.as_str().to_string(), kp.bytes)
+    };
+    let cover = format!(
+        "Kaname E2E 暗号化のための KeyPackage を添付しています (送信者: {from})。\
+         受信側の Kaname が自動で取り込みます。"
+    );
+    let att = kaname_jmap::OutgoingAttachment {
+        filename: "kaname-mls-key-package.bin".to_string(),
+        mime_type: kaname_render::MLS_KEY_PACKAGE_MIME.to_string(),
+        data: kp_bytes,
+    };
+    send_mail_core(
+        &from,
+        std::slice::from_ref(&to),
+        "Kaname MLS KeyPackage",
+        &cover,
+        &[att],
+        None,
+        "MLS_KEYPACKAGE_SEND",
+    )
+    .await?;
+    Ok(format!(
+        "KeyPackage を {} に送信しました。相手が取り込んだ後、こちらで「会話を開始」を実行してください",
+        to_addr.as_str()
+    ))
+}
+
+/// 受信済みの相手 KeyPackage を消費して 1:1 会話を開始し、Welcome を
+/// `application/mls-envelope+cbor` 添付で送信する (D1 Phase 3)。
+///
+/// KP は 1 回限りの消費 (`kp_cache.consume`) — 同じ KP で二度開始は
+/// できない。相手が Welcome を処理すれば以後双方向の暗号化が有効。
+pub async fn mls_start_conversation(to: String) -> Result<String, String> {
+    let to_addr = kaname_mls::EmailAddress::parse(to.clone())
+        .map_err(|e| format!("宛先アドレスが不正です: {e}"))?;
+    // JMAP 未接続で KP を消費すると会話だけが残り Welcome が届かない
+    // 中途半端な状態になるため、接続を先に確認する。
+    jmap_client().await?;
+    let (from, conv_id, cbor) = {
+        let mut guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+        let client = guard.as_mut().ok_or_else(|| {
+            "MLS が初期化されていません (mls_init を先に呼んでください)".to_string()
+        })?;
+        let kp = client.kp_cache().consume(&to_addr).ok_or_else(|| {
+            format!(
+                "{} の KeyPackage を持っていません — 先に相手の KeyPackage 添付を受信してください",
+                to_addr.as_str()
+            )
+        })?;
+        let (conv, envelope) = client
+            .start_one_to_one(to_addr.clone(), kp)
+            .map_err(|e| format!("会話の開始に失敗しました: {e}"))?;
+        let cbor = envelope
+            .to_cbor()
+            .map_err(|e| format!("エンベロープの符号化に失敗しました: {e}"))?;
+        (
+            client.identity.email.as_str().to_string(),
+            conv.id.as_hex(),
+            cbor,
+        )
+    };
+    let cover = "Kaname MLS E2E 暗号化会話への招待です。受信側の Kaname が自動で参加処理します。";
+    let att = kaname_jmap::OutgoingAttachment {
+        filename: "kaname-mls-invite.cbor".to_string(),
+        mime_type: kaname_mls::Envelope::MIME_TYPE.to_string(),
+        data: cbor,
+    };
+    send_mail_core(
+        &from,
+        std::slice::from_ref(&to),
+        "Kaname MLS 会話の招待",
+        cover,
+        &[att],
+        None,
+        "MLS_WELCOME_SEND",
+    )
+    .await?;
+    Ok(format!("MLS 会話を開始しました (会話 ID: {conv_id})"))
+}
+
+/// 会話が成立している相手へ MLS 暗号化メッセージを送信する。
+///
+/// 件名・本文は `subject\x00body` のペイロードとしてエンベロープ内に
+/// 封入される — 外側メールの件名・本文はプレースホルダのみで、実内容
+/// はサーバ・配送経路には一切出ない。DLP は暗号化前の実件名/本文に
+/// 対して評価されるため、E2E でも情報漏洩防止は実効化したまま。
+pub async fn mls_send_encrypted(
+    to: String,
+    subject: String,
+    body: String,
+) -> Result<String, String> {
+    let to_addr = kaname_mls::EmailAddress::parse(to.clone())
+        .map_err(|e| format!("宛先アドレスが不正です: {e}"))?;
+    let (from, cbor) = {
+        let mut guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+        let client = guard.as_mut().ok_or_else(|| {
+            "MLS が初期化されていません (mls_init を先に呼んでください)".to_string()
+        })?;
+        let mut conv = client
+            .list_conversations()
+            .into_iter()
+            .find(|c| c.members.iter().any(|m| m.as_str() == to_addr.as_str()))
+            .ok_or_else(|| {
+                format!(
+                    "{} との MLS 会話がありません — 先に KeyPackage を交換して会話を開始してください",
+                    to_addr.as_str()
+                )
+            })?;
+        // ペイロード規約: `subject\x00body` (受信側で最初の \x00 で分割)。
+        // 件名も秘匿対象のためエンベロープ内に入れる。
+        let payload = format!("{subject}\u{0}{body}");
+        let envelope = client
+            .encrypt_message(&mut conv, payload.as_bytes())
+            .map_err(|e| format!("暗号化に失敗しました: {e}"))?;
+        let cbor = envelope
+            .to_cbor()
+            .map_err(|e| format!("エンベロープの符号化に失敗しました: {e}"))?;
+        (client.identity.email.as_str().to_string(), cbor)
+    };
+    let outer_body = "このメールは Kaname MLS で E2E 暗号化されています。受信側の Kaname クライアントで開封してください。";
+    let att = kaname_jmap::OutgoingAttachment {
+        filename: "kaname-mls-message.cbor".to_string(),
+        mime_type: kaname_mls::Envelope::MIME_TYPE.to_string(),
+        data: cbor,
+    };
+    send_mail_core(
+        &from,
+        std::slice::from_ref(&to),
+        "(暗号化メッセージ)",
+        outer_body,
+        &[att],
+        Some((&subject, &body)),
+        "MLS_MESSAGE_SEND",
+    )
+    .await
 }
 
 /// `analyze_raw_email` 内で呼ぶ MLS エンベロープ処理。
@@ -2840,6 +3253,51 @@ fn process_mls_envelopes(envelopes: &[Vec<u8>]) -> (Vec<String>, Vec<String>) {
         }
     }
     (events, plaintexts)
+}
+
+/// `analyze_raw_email` 内で呼ぶ KeyPackage 添付の処理 (D1 Phase 3 受信側)。
+///
+/// `mls_send_key_package` で送られた `application/mls-key-package` パートを
+/// 検証して `kp_cache` に投入する — 以後 `mls_start_conversation` が使える。
+/// From ヘッダのアドレスを KP の所有者として記録する。不正な KP は
+/// 検証で弾き、イベントとして記録する (エラーにはしない — メール表示を
+/// 壊さない)。KP の「本当に相手のものか」の確認は安全番号セレモニー
+/// (Phase 5) で行う。
+fn process_mls_key_packages(parts: &[Vec<u8>], from_addr: &str, events: &mut Vec<String>) {
+    if parts.is_empty() {
+        return;
+    }
+    let mut guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+    let Some(client) = guard.as_mut() else {
+        events.push(
+            "MLS KeyPackage を検出しましたが、MLS が初期化されていません (設定から有効化してください)"
+                .to_string(),
+        );
+        return;
+    };
+    let Ok(sender) = kaname_mls::EmailAddress::parse(from_addr) else {
+        events.push(format!(
+            "KeyPackage 添付を受信しましたが、送信者アドレスを解析できません ({from_addr:?})"
+        ));
+        return;
+    };
+    for bytes in parts {
+        let kp = kaname_mls::KeyPackage {
+            bytes: bytes.clone(),
+        };
+        match client.validate_key_package(&kp) {
+            Ok(()) => {
+                client.kp_cache().add(sender.clone(), kp);
+                events.push(format!(
+                    "{} の KeyPackage を受信しました — 「会話を開始」で E2E 暗号化を有効にできます (信頼の確認は安全番号で)",
+                    sender.as_str()
+                ));
+            }
+            Err(e) => {
+                events.push(format!("KeyPackage 添付の検証に失敗しました: {e}"));
+            }
+        }
+    }
 }
 
 /// `LocalLlm` の `score_bec` に渡す関数本体。

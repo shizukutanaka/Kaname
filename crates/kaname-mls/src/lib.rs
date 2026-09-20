@@ -806,6 +806,17 @@ impl MlsMailClient {
         out
     }
 
+    /// 受信した KeyPackage バイト列の形式・署名検証 (キャッシュ投入前)。
+    ///
+    /// `start_one_to_one`/`add_member` が最終的に再検証するが、
+    /// 添付経路 (Phase 3) で受け取った KP を未検証でキャッシュに
+    /// 入れると壊れた KP が残り続けるため、投入前に形式だけ弾く。
+    /// 信頼判断 (正しい相手の KP か) は Safety Number セレモニーの
+    /// 責務 — ここでは MLS 構造と署名の正当性のみを見る。
+    pub fn validate_key_package(&self, kp: &KeyPackage) -> Result<(), MlsMailError> {
+        self.parse_key_package(kp).map(|_| ())
+    }
+
     /// KeyPackage blob を実 openmls KeyPackage にデシリアライズ+検証する。
     fn parse_key_package(&self, blob: &KeyPackage) -> Result<OpenmlsKeyPackage, MlsMailError> {
         let kp_in = KeyPackageIn::tls_deserialize_exact(&blob.bytes)

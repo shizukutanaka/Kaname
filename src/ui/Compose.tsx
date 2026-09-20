@@ -7,8 +7,16 @@
 //   - MLS 暗号化状態表示
 //   - キーボードショートカット (Cmd/Ctrl+Enter で送信)
 
-import { createSignal, createEffect, For, Show } from "solid-js";
+import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+
+// D1 Phase 3: MLS 会話が成立している相手 (kaname-ui::commands::MlsPeer)
+interface MlsPeer {
+  email: string;
+  conversation_id: string;
+  epoch: number;
+  safety_number: string | null;
+}
 
 interface ComposeProps {
   onClose: () => void;
@@ -28,6 +36,23 @@ export const Compose = (props: ComposeProps) => {
   // 送信前 DLP の Warn 所見 (mail_send は Block のみ止めるため、
   // 警告は送信ボタン経由の事前チェックで表示する)。
   const [dlpWarnings,  setDlpWarnings]  = createSignal<string[]>([]);
+
+  // D1 Phase 3/4: MLS 会話が成立している相手一覧。
+  // 単一宛先が会話を持つときだけ「MLS で暗号化」選択肢を出す。
+  const [mlsPeers, setMlsPeers] = createSignal<MlsPeer[]>([]);
+  const [useMls,  setUseMls]  = createSignal(false);
+  createEffect(async () => {
+    try {
+      setMlsPeers(await invoke<MlsPeer[]>("mls_conversations"));
+    } catch {
+      setMlsPeers([]);
+    }
+  });
+  const mlsPeer = createMemo<MlsPeer | null>(() => {
+    const list = to().split(/[,;]/).map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (list.length !== 1) return null;
+    return mlsPeers().find(p => p.email.toLowerCase() === list[0]) ?? null;
+  });
 
   // 送信前アドバイザリ (debounced): 本文が「受信側で別経路確認を推奨」
   // される文脈 (送金要求・急迫表現等) に一致するかを `oobv_recommend`
@@ -58,8 +83,8 @@ export const Compose = (props: ComposeProps) => {
     }, 600);
   });
 
-  // E2E 暗号化バッジは表示しない — MLS は未実装 (D1) で、実際の暗号化は
-  // 行われないため「対応済み」と示すのは利用者を欺く。実装時に復元する。
+  // MLS で暗号化するかの選択 (D1 Phase 3)。選択肢は宛先が単一かつ
+  // その相手と会話が成立しているときのみ出す (mlsPeer メモ)。
 
   // 入力が変わったら DLP 確認をやり直す (確認済みのまま本文を変えて
   // 警告を回避できないようにする)
@@ -91,12 +116,22 @@ export const Compose = (props: ComposeProps) => {
       }
     }
     try {
-      await invoke("mail_send", {
-        from:    from(),
-        to:      toList,
-        subject: subject(),
-        body:    body(),
-      });
+      if (useMls() && mlsPeer()) {
+        // MLS E2E: 実件名・本文はエンベロープ内にのみ封入され、
+        // 外側メールにはプレースホルダのみ出る。DLP は実本文で済ませた。
+        await invoke("mls_send_encrypted", {
+          to:      mlsPeer()!.email,
+          subject: subject(),
+          body:    body(),
+        });
+      } else {
+        await invoke("mail_send", {
+          from:    from(),
+          to:      toList,
+          subject: subject(),
+          body:    body(),
+        });
+      }
       props.onSent();
       props.onClose();
     } catch (e) {
@@ -253,6 +288,26 @@ export const Compose = (props: ComposeProps) => {
       <Show when={error()}>
         <div style={{ padding: "8px 16px", "font-size": "12px", color: "#FF6B70" }}>
           {error()}
+        </div>
+      </Show>
+
+      {/* MLS 暗号化の選択 — 宛先が会話成立済みの単一相手のときのみ表示 */}
+      <Show when={mlsPeer()}>
+        <div style={{
+          padding: "6px 16px", "font-size": "11px",
+          display: "flex", "align-items": "center", gap: "8px",
+        }}>
+          <label style={{ display: "flex", "align-items": "center", gap: "6px", cursor: "pointer", color: "#00C4CC" }}>
+            <input
+              type="checkbox"
+              checked={useMls()}
+              onChange={e => setUseMls(e.currentTarget.checked)}
+            />
+            🔐 MLS で暗号化して送信
+          </label>
+          <span style={{ color: "#6B7A94" }}>
+            件名・本文はサーバにも表示されません (相手の Kaname のみ復号)
+          </span>
         </div>
       </Show>
 

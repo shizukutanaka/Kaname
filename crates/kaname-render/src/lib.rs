@@ -827,6 +827,17 @@ mod tests {
     }
 
     #[test]
+    fn extract_mls_key_packages_はkpパートを取り出す() {
+        // base64("kp-bytes")
+        let raw = b"From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nhi\r\n--B\r\nContent-Type: application/mls-key-package\r\nContent-Transfer-Encoding: base64\r\n\r\na3AtYnl0ZXM=\r\n--B--\r\n";
+        let found = extract_mls_key_packages(raw);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0], b"kp-bytes");
+        // エンベロープ抽出には混ざらない
+        assert!(extract_mls_envelopes(raw).is_empty());
+    }
+
+    #[test]
     fn oversized_message_is_rejected() {
         let big = vec![b'A'; 101 * 1024 * 1024];
         assert!(parse(&big).is_err());
@@ -1299,31 +1310,58 @@ pub struct AttachmentScan {
 /// transfer-encoding は復号済みの `contents()` を返す。
 #[must_use]
 pub fn extract_mls_envelopes(raw: &[u8]) -> Vec<Vec<u8>> {
+    extract_parts_by_media_type(raw, "application", "mls-envelope+cbor")
+}
+
+/// MLS KeyPackage 添付の Content-Type (D1 Phase 3)。
+/// 自分の KeyPackage を相手に手渡しする際の MIME タイプ —
+/// エンベロープ (`application/mls-envelope+cbor`) は CBOR だが、
+/// KeyPackage は TLS シリアライズ済みのためサフィックスを付けない。
+pub const MLS_KEY_PACKAGE_MIME: &str = "application/mls-key-package";
+
+/// `application/mls-key-package` パートの内容を取り出す。
+///
+/// 相手の KeyPackage が添付で届いた際 (Phase 3 配送経路)、
+/// `kp_cache` 投入のために抽出する。転送符号化はデコード済み。
+#[must_use]
+pub fn extract_mls_key_packages(raw: &[u8]) -> Vec<Vec<u8>> {
+    extract_parts_by_media_type(raw, "application", "mls-key-package")
+}
+
+/// 指定 Content-Type のパート内容を multipart を再帰走査して取り出す
+/// (入れ子 `message/rfc822` を含む)。`Content-Disposition` を問わず
+/// 全パートを検査するため、インライン挿入にも対応する。
+fn extract_parts_by_media_type(raw: &[u8], ctype: &str, subtype: &str) -> Vec<Vec<u8>> {
     let Some(msg) = MessageParser::default().parse(raw) else {
         return Vec::new();
     };
-    fn collect(part: &mail_parser::MessagePart<'_>, out: &mut Vec<Vec<u8>>) {
-        let is_mls = part
+    fn collect(
+        part: &mail_parser::MessagePart<'_>,
+        ctype: &str,
+        subtype: &str,
+        out: &mut Vec<Vec<u8>>,
+    ) {
+        let matched = part
             .content_type()
             .map(|ct| {
-                ct.ctype().eq_ignore_ascii_case("application")
+                ct.ctype().eq_ignore_ascii_case(ctype)
                     && ct
                         .subtype()
-                        .is_some_and(|s| s.eq_ignore_ascii_case("mls-envelope+cbor"))
+                        .is_some_and(|s| s.eq_ignore_ascii_case(subtype))
             })
             .unwrap_or(false);
-        if is_mls {
+        if matched {
             out.push(part.contents().to_vec());
         }
         if let mail_parser::PartType::Message(sub) = &part.body {
             for p in &sub.parts {
-                collect(p, out);
+                collect(p, ctype, subtype, out);
             }
         }
     }
     let mut out = Vec::new();
     for part in &msg.parts {
-        collect(part, &mut out);
+        collect(part, ctype, subtype, &mut out);
     }
     out
 }

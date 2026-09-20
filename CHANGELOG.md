@@ -42,6 +42,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - kaname-ui テストで Welcome 参加 → 暗号往復の実ラウンドトリップを解析経路経由で実証
 - 残存: 送信側 (Compose への `encrypt_message` 統合と KeyPackage 配送 = Phase 3、`mail_send_real` の添付非対応がブロッカー)、Safety Number セレモニー UI (Phase 5)
 
+### Security — D1 Phase 3: KeyPackage 配送経路 + 送信側暗号化
+
+- **JMAP 添付送信を実装** (kaname-jmap): `OutgoingAttachment` + `send_email(..., attachments)` が `multipart/mixed` RFC822 を構築 — `Email/import` は生 MIME blob をそのままアップロードするため blobId 配管は不要。ファイル名の RFC 5987 拡張パラメータ (`filename*=UTF-8''...`)、添付数 32・個別 10MB・合計 25MB 上限を実装
+- **KeyPackage 往復がメール添付で完結** (`application/mls-key-package` パート): `mls_send_key_package` で送信 → 受信側は `analyze_raw_email` が `extract_mls_key_packages` で検出し `validate_key_package` (TLS デシリアライズ + openmls 署名検証) 通過分のみ `kp_cache` に自動取込。KP は公開情報のため秘匿不要、経路上の差し替え対策は安全番号照合 (Phase 5) が担う
+- **IPC 4 件追加** (登録37 = 呼出37 = モック37): `mls_conversations` (会話成立済み相手の一覧 + 安全番号)、`mls_send_key_package`、`mls_start_conversation` (KP を1回限り消費 → `start_one_to_one` → Welcome エンベロープ添付送信。JMAP 未接続では KP を消費する前に失敗するよう接続確認を先行)、`mls_send_encrypted` (実件名・本文は `subject\x00body` ペイロードとしてエンベロープ内のみに封入 — 外側はプレースホルダのみでサーバ・経路に一切出ない)
+- **送信共通経路 `send_mail_core` を抽出**: 送信前 DLP は実内容で評価 (`dlp_target`) — E2E 暗号化経路でも情報漏洩防止が実効化したまま (暗号文の外側で DLP を通すと本文が空に見えて素通りする欠陥を構造的に回避)
+- **UI**: SecurityDashboard に KP 送信/会話開始フォーム + 会話一覧 (安全番号表示 — Phase 5 セレモニーの実体)。Compose は宛先が会話成立済みの単一相手のときのみ「🔐 MLS で暗号化して送信」チェックボックスを表示
+- 受信側往復テスト: KP 添付取込 → 消費で会話開始 → 双方向暗号復号を kaname-ui テストで実証 (不正 KP がキャッシュされないことも検証)
+- 残存: Phase 5 (安全番号の対面セレモニー UI — 番号表示は済、照合フローが未実装)、kaname-store `mls_conversations` テーブルとのアカウント紐付け
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
