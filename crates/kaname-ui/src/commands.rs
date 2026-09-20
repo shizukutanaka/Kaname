@@ -5,7 +5,7 @@
 //! src-tauri で #[tauri::command] を付けて登録する。
 
 use serde::{Deserialize, Serialize};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 // ── レスポンス型 ─────────────────────────────────────────────────────────────
 
@@ -1328,8 +1328,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             }
         }
 
-        // TriageEngine は送信者ルールを持たない既定インスタンスで十分
-        // (ユーザー定義ルールの永続化は未実装)。判定は決定論的で LLM 不要。
+        // 判定は決定論的で LLM 不要。
         let triage = triage_bucket(&from_addr, &subject, &verdict);
 
         rows.push(EmailRow {
@@ -1513,6 +1512,10 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
         .migrate()
         .await
         .map_err(|e| format!("スキーマ移行に失敗しました: {e}"))?;
+    // 監査ログの改ざん検知: チェーン破損は致命的ではないため警告のみ。
+    if let Ok(false) = store.verify_audit_chain().await {
+        warn!("監査ログのハッシュチェーンが破損 — 改ざんの可能性があります");
+    }
     *store_slot().lock().await = Some(std::sync::Arc::new(store));
     info!(path=%path, "history_open");
     Ok(())

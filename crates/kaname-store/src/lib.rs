@@ -22,11 +22,10 @@
 #![deny(clippy::expect_used)]
 #![allow(missing_docs)]
 
-pub mod login_limiter;
 
 use rusqlite::{Connection, params};
 use sha2::{Sha256, Digest};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
@@ -111,7 +110,6 @@ CREATE TABLE IF NOT EXISTS mailboxes (
     total_emails  INTEGER NOT NULL DEFAULT 0,
     unread_emails INTEGER NOT NULL DEFAULT 0,
     jmap_id       TEXT,
-    jmap_state    TEXT,
     created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
     updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
@@ -218,15 +216,6 @@ CREATE TRIGGER IF NOT EXISTS audit_log_no_update
 CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
     BEFORE DELETE ON audit_log
     BEGIN SELECT RAISE(ABORT, 'audit_log は不変です'); END;
-CREATE TABLE IF NOT EXISTS jmap_state (
-    account_id     TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-    session_url    TEXT NOT NULL,
-    mailbox_state  TEXT,
-    email_state    TEXT,
-    thread_state   TEXT,
-    identity_state TEXT,
-    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
 CREATE TABLE IF NOT EXISTS settings (
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     key        TEXT NOT NULL,
@@ -270,7 +259,6 @@ pub struct SenderProfile {
 /// 暗号化ストアへの不透明ハンドル。
 pub struct Store {
     conn: Arc<Mutex<Connection>>,
-    path: PathBuf,
 }
 
 impl Store {
@@ -304,7 +292,6 @@ impl Store {
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
-            path: path.to_owned(),
         })
     }
 
@@ -329,36 +316,6 @@ impl Store {
         // 将来のマイグレーションはここに追加
         // if version < 1 { conn.execute_batch(SCHEMA_V1)?; }
 
-        Ok(())
-    }
-
-    /// DB を新しいキーに再キー設定する (sqlcipher_export パターン)。
-    pub async fn rekey(&self, new_key_hex: &str) -> Result<(), StoreError> {
-        if new_key_hex.len() != 64 || !new_key_hex.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(StoreError::InvalidKey);
-        }
-
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-
-        // tmpファイルにエクスポートしてから上書き
-        let tmp_path = self.path.with_extension("kmdb.tmp");
-        // ATTACH DATABASE はパラメータバインドが使えないため、
-        // パス文字列中の ' を '' にエスケープして SQL インジェクションを防ぐ
-        let tmp_path_str = tmp_path.display().to_string().replace('\'', "''");
-        // 新しい生鍵を含む ATTACH 文も Zeroizing でラップし実行後にゼロ化する
-        // (apply() と同じ理由: ヒープ上の平文鍵残留を防ぐ)。
-        let attach_sql = zeroize::Zeroizing::new(format!(
-            "ATTACH DATABASE '{tmp_path_str}' AS tmp KEY \"x'{new_key_hex}'\";\
-             SELECT sqlcipher_export('tmp');\
-             DETACH DATABASE tmp;",
-        ));
-        conn.execute_batch(&attach_sql).map_err(|e| StoreError::Db(e.to_string()))?;
-
-        // tmp を本番ファイルに置き換え
-        std::fs::rename(&tmp_path, &self.path)
-            .map_err(StoreError::Io)?;
-
-        tracing::info!("DB 再キー設定完了");
         Ok(())
     }
 
@@ -626,29 +583,6 @@ impl Store {
         Ok(())
     }
 
-    /// JMAP 同期状態を更新する。
-    pub async fn update_jmap_state(
-        &self,
-        account_id:    &str,
-        session_url:   &str,
-        mailbox_state: Option<&str>,
-        email_state:   Option<&str>,
-    ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-
-        conn.execute(
-            "INSERT INTO jmap_state (account_id, session_url, mailbox_state, email_state, updated_at)
-             VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-             ON CONFLICT (account_id) DO UPDATE SET
-               session_url   = ?2,
-               mailbox_state = COALESCE(?3, mailbox_state),
-               email_state   = COALESCE(?4, email_state),
-               updated_at    = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
-            params![account_id, session_url, mailbox_state, email_state],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
-
-        Ok(())
-    }
 }
 
 // ============================================================================
@@ -761,7 +695,7 @@ mod tests {
         for t in &[
             "accounts", "mailboxes", "messages", "attachments",
             "mls_conversations", "contacts", "dlp_rules",
-            "audit_log", "jmap_state", "settings", "schema_migrations",
+            "audit_log", "settings", "schema_migrations",
         ] {
             assert!(
                 SCHEMA_V0.contains(&format!("CREATE TABLE IF NOT EXISTS {}", t)),

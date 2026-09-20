@@ -22,6 +22,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **「機能デモ」タブを削除** (D51 完全解消): `KanameAppleFeatures.tsx` (1,244 行) は偽の添付・固定返信案・架空のエクスポート完了を見せるデモ遊技場であり、正直なラベル付けでも出荷する理由が無かった。`QuickLook`/`SmartReplyBar`/`PdfExportDialog`/`UndoToast`/`AccessibleEmailRow`/`UndoRedoStack` (実利用者ゼロ) も消滅。UI 到達可能性 9/9 → 8/8、関連 vitest 7 件も対象消滅のため削除
 - **フロントエンド i18n 基盤を削除** (E9、~380行): `src/i18n.ts` + `src/locales/{ja,en}.json`。`t()`/`useT()`/`setLanguage()` 等の実呼び出しが UI 内にゼロで、起動時に翻訳カタログを読むだけの空転基盤だった。UI はハードコード日本語文字列のみ。kaname-i18n クレート削除 (D19) に続きフロント側の重複実装も除去
 - **呼び出し元ゼロの IPC コマンド16件を削除** (E11): 「未実装」Err を返すだけの `ai_summarize_email`/`ai_smart_reply`、汎用 KV `settings_get`/`settings_set`、エージェント監視 UI の無い arxiv 系8コマンド (`screen_user_input`/`audit_ai_output`/`check_action_risk`/`check_memory_trust`/`check_rule_of_two`/`validate_tool_argument`/`record_agent_step`/`reset_trajectory` + `kaname-observability::trajectory` 262行)、解析経路に内製済みの `pivot_analyze`/`deepfake_evaluate`、`history_close`/`history_open` の IPC 登録。kaname-ui から kaname-ai/kaname-screen/kaname-pivot への依存辺も除去 (クレート自体は存続)。`oobv_*` は看板機能のため残置し UI 配線で完成させる
+||||||| parent of 8e72bb9 (chore(jmap,store): 呼び出し元ゼロの差分同期・プッシュ基盤を削除 (D48 完全解消))
+- **呼び出し元が存在しない JMAP 差分同期・プッシュ基盤を削除** (D48 完全解消)
+  - `JmapClient::sync` (~100行)、`subscribe_push` (~65行)、`SyncResult`/`ChangesResult`/`PushNotification`、`parse_sse_event`/`find_sse_event_end`、`JmapError::PushNotSupported`、`Session.event_source_url`、`Store::update_jmap_state`、`jmap_state` テーブルと `mailboxes.jmap_state` 列、kaname-jmap の `futures-util` 依存と `reqwest stream` feature を除去 (計 ~350行)
+  - `mail_fetch` の全件 `Email/query`+`Email/get` 経路は正しく機能しており、差分同期が将来必要になれば git 履歴から復元可能。D19/D51 と同じく「呼び出し元の無い基盤は配線ではなく削除」の判断
+  - (#148 はコンフリクトで未マージクローズされ、スタック上の #149/#151/#152 も main に入っていなかったため再適用)
+- **外部参照ゼロのモジュール・API 群を一括削除** (関数レベルデッドコード掃除、計 ~2,400行)
+  - `kaname-store::login_limiter` モジュール (522行・UI/コマンド層からの呼び出し元ゼロ)、`kaname-core::app_state` (525行・外部参照ゼロ)、`kaname-render::zip_guard` + `header_sanitize` (354行)、`kaname-observability` の `Metrics`/`METRICS`/`LatencyTimer`/`TelemetryConfig`/`hash_email` (~330行)、`kaname-core::ux_features` の Screener/Snooze/ReplyLater/SendLater/SafeSummary 群 (~550行・`TriageEngine` のみ利用中のため残置)、`kaname-store` の未使用 `rekey()`/`path` フィールド
+  - 反対に `Store::verify_audit_chain` はテスト専用だったが実用上意味がある改ざん検出機能のため、`history_open` で警告ログを出す配線を追加 (削除せず接続)
+- **ライブクレート内のデッド機能群を第2走査で削除** (E8、計 ~1,100行)。第3走査 (バリアント/フィールドレベル) では構築経路ゼロの `AuditFinding::TaskContradiction` バリアントと `scripts/pre-commit.sh` の死んだ i18n 検証 (存在しない `src/i18n/index.ts` を参照) も除去 — 以降の層 (pub フィールド) には未使用は検出されず
+  - `kaname-privacy::ZeroKnowledgeSearch` + `SearchResult`/`MatchedField`/`parse_search_query` (~215行、D40 解消 — 実際の検索は `kaname_store::search_messages` で、doc 自身が「置き換える価値なし」と記述していた未配線機能)、`kaname-saas-guard::oauth_state`/`jwt_inspect` モジュール (513行)、`kaname-radar` の `DnsResolver`/`SystemDnsResolver`/`StaticDnsResolver` (~225行)、`kaname-ssa` の `OrgStyleBaseline`/`assess_with_fallback` (~160行)
+- **宣言のみで参照ゼロの依存を計 61 件削除** (E10)
+  - 15 クレートの `[dependencies]` 48 件: kaname-privacy は依存ゼロに (serde/serde_json/thiserror/tokio/tracing/kaname-error 全て未使用)、kaname-core は serde のみ残して 9 件除去。kaname-oobv/pivot/radar/render/observability/ssa/saas-guard/store/jmap/error/ui/tests/mockserver の未使用依存も除去。大半は E7/E8 のコード削除に伴い不要化したもの
+  - workspace ルート `Cargo.toml` の未使用宣言 10 件 (anyhow/tower/aes-gcm/ed25519-dalek/x25519-dalek/scraper/criterion/tokio-test/mockito/futures-util)、kaname-jmap/ui の未使用 dev-dep `mockito`/`tokio-test`、src-tauri の `serde`/`serde_json`、npm の `@tauri-apps/plugin-shell` (フロント未参照) も除去
 
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)

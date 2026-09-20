@@ -320,3 +320,38 @@ D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成し
 `src/i18n.ts` + `src/locales/` (~380行) を削除 (E9)。
 起動時にカタログを読むだけの空転基盤であり、UI はハードコード
 日本語のみ。kaname-i18n クレート (D19) に続きフロント側の重複も除去。
+
+### D48 完全解消 — 差分同期/プッシュ基盤の削除 (2026-09)
+
+`JmapClient::sync` の未配線問題は「配線」ではなく「削除」で解消した。
+呼び出し元がゼロのインフラ (sync/subscribe_push/SSE パーサー/jmap_state 永続化
+/futures-util 依存) は維持コストだけを生むため、D19 (未到達クレート削除) と
+同じ判断基準で ~350行を除去。全件 `Email/query`+`Email/get` 経路は現機能に
+十分であり、差分同期が必要になった時点で git 履歴から復元すればよい。
+これで kaname-jmap / kaname-store に未使用コードは残っていない。
+(#148 はコンフリクトで未マージクローズ、#149/#151/#152 と共に再適用)
+
+### 関数レベル デッドコード掃除 (2026-09)
+
+非制限クレートの `pub` 項目を外部参照の有無で全走査し、呼び出し元ゼロの
+モジュール・API 群 ~2,400行を削除した (欠陥台帳 E7)。
+主な対象: `login_limiter` (522行)、`app_state` (525行)、`zip_guard` +
+`header_sanitize` (354行)、observability の Metrics/LatencyTimer/
+TelemetryConfig (~330行)、ux_features の Screener/Snooze/SendLater/
+SafeSummary (~550行)。`verify_audit_chain` のみ改ざん検出として価値が
+あるため `history_open` に警告配線を追加して残した。
+「価値が判明したら git 履歴から復元する」方針は D19/D48 と同一。
+
+### 第2走査 — ライブクレート内デッド機能削除 (2026-09)
+
+型名が他ファイルに一度も現れない `pub` 項目を走査し、到達不能な
+機能群 ~1,100行を追加削除 (E8): `ZeroKnowledgeSearch` 群 (D40 解消)、
+saas-guard の `oauth_state`/`jwt_inspect`、radar の DNS リゾルバー群、
+ssa の `OrgStyleBaseline`/`assess_with_fallback`。
+
+### 依存クレート掃除 (2026-09, E10)
+
+`use` も derive 参照も無い `[dependencies]` 宣言を 15 クレートから
+計 48 件削除 (kaname-privacy は依存ゼロに、kaname-core は serde のみ)。
+大半は E7/E8 のコード削除に伴い不要化したもの。workspace ルート
+宣言10件、dev-dep 3件、src-tauri 2件、npm 1件も除去 (計61件)。
