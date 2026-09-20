@@ -91,6 +91,11 @@ pub struct LlmSubprocess {
     timeout: Duration,
     /// このプロセスのセキュリティモード。
     pub mode: SubprocessMode,
+    /// モックモード (モデル未配置/テスト用) なら true。
+    /// EOF (空行) をモック応答として扱うか判定に使う — 実プロセスの
+    /// EOF は異常終了を意味するためエラーにすべきで、モックの
+    /// `true` コマンド (即 EOF) と区別するために必要。
+    is_mock: bool,
 }
 
 /// サブプロセスのセキュリティモード。
@@ -162,6 +167,7 @@ impl LlmSubprocess {
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
             mode,
+            is_mock: false,
         })
     }
 
@@ -194,7 +200,26 @@ impl LlmSubprocess {
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
             mode,
+            is_mock: true,
         })
+    }
+
+    /// `kaname-llm-runner` バイナリのパスを解決する。
+    ///
+    /// 優先順位: (1) 自身の実行ファイルと同じディレクトリ (cargo の
+    /// target/{debug,release}/ と配布バンドルで隣接配置される)、
+    /// (2) PATH。見つからない場合は PATH 探索に任せて `Command::new` が
+    /// spawn 時にエラーを返す。
+    fn runner_program(name: &str) -> PathBuf {
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let sibling = dir.join(name);
+                if sibling.exists() {
+                    return sibling;
+                }
+            }
+        }
+        PathBuf::from(name)
     }
 
     /// OS に応じたコマンドを構築する。
@@ -206,7 +231,7 @@ impl LlmSubprocess {
         {
             // Linux: seccomp-bpf 経由でシステムコールをフィルタリング
             // kaname-llm-runner バイナリが自身に seccomp を適用してから推論を実行
-            let mut cmd = Command::new("kaname-llm-runner");
+            let mut cmd = Command::new(Self::runner_program("kaname-llm-runner"));
             cmd.arg("--mode").arg(format!("{:?}", mode).to_lowercase());
             cmd.arg("--model").arg(model_path);
             cmd.arg("--seccomp").arg(mode.seccomp_profile_path());
@@ -226,7 +251,7 @@ impl LlmSubprocess {
             };
             let mut cmd = Command::new("sandbox-exec");
             cmd.arg("-p").arg(profile);
-            cmd.arg("kaname-llm-runner");
+            cmd.arg(Self::runner_program("kaname-llm-runner"));
             cmd.arg("--mode").arg(format!("{:?}", mode).to_lowercase());
             cmd.arg("--model").arg(model_path);
             return Ok(cmd);
@@ -236,7 +261,7 @@ impl LlmSubprocess {
         {
             // Windows: Job Object によるリソース制限
             // ネットワーク制限は Windows Filtering Platform 経由
-            let mut cmd = Command::new("kaname-llm-runner.exe");
+            let mut cmd = Command::new(Self::runner_program("kaname-llm-runner.exe"));
             cmd.arg("--mode").arg(format!("{:?}", mode).to_lowercase());
             cmd.arg("--model").arg(model_path);
             return Ok(cmd);
@@ -306,9 +331,17 @@ impl LlmSubprocess {
             }
         };
 
-        // モックモード: プロセスが終了している場合はデフォルトレスポンスを返す
+        // 空行 (stdout EOF) = ワーカープロセスが死亡/終了した。
+        // モックモード (モデル未配置時に spawn_mock が起動した `true`) のみ
+        // 既定応答を返す。実プロセスの EOF をモック応答に化けさせると
+        // 「ワーカーが死んだのに SAFE 判定が返る」偽装になるため区別する。
         if line.trim().is_empty() {
-            return Ok(self.mock_response(req));
+            if self.is_mock {
+                return Ok(self.mock_response(req));
+            }
+            return Err(SubprocessError::Protocol(
+                "LLM サブプロセスが応答せず終了した (モデルロード失敗等)".into(),
+            ));
         }
 
         serde_json::from_str(line.trim()).map_err(|e| SubprocessError::Protocol(e.to_string()))
@@ -604,6 +637,7 @@ mod tests {
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
             mode: SubprocessMode::Quarantined,
+            is_mock: false,
         })
     }
 

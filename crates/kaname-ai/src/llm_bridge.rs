@@ -15,8 +15,10 @@
 //   - GGUF format via llama.cpp
 //
 // llama.cpp integration:
-//   Production: `llama-cpp-2` crate (safe Rust wrapper around llama.cpp FFI)
-//   Dev stub: MockLlm that returns deterministic outputs for testing
+//   `llama-cpp-2` crate (safe Rust wrapper around llama.cpp FFI) — 実装済み。
+//   モデルファイル未配置の環境では `load()` が `ModelNotFound` を返し、
+//   呼び出し側は `NullLlm` フォールバックで動作する (BEC 判定は
+//   決定論的シグナルのみ — llm_bridge の availability に非依存)。
 //
 // Subprocess isolation (replacing todo!() in kaname-ai):
 //   The QuarantinedLlm subprocess runs with seccomp profile `quarantined.json`:
@@ -32,7 +34,14 @@
 //!
 //! Drives Phi-4-mini for both quarantined and privileged inference paths.
 
+use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::llama_backend::LlamaBackend;
+use llama_cpp_2::llama_batch::LlamaBatch;
+use llama_cpp_2::model::params::LlamaModelParams;
+use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::sampling::LlamaSampler;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -206,14 +215,15 @@ pub struct InferenceResult {
 /// 一度に 1 つの推論のみ実行 per instance (the model is not re-entrant).
 /// The Q-LLM and P-LLM each hold their OWN `LocalLlmRunner` instance with
 /// separate configs — they cannot share model state.
+///
+/// コンテキスト (`LlamaContext`) は推論ごとに生成・破棄する。
+/// KV キャッシュを推論間で持ち越さないことで、あるメールの解析状態が
+/// 別のメールの判定に漏れないことを保証する (Dual-LLM の分離要件)。
 pub struct LocalLlmRunner {
     config: ModelConfig,
-    /// 本番では: llama_cpp_2::model::LlamaModel held here.
-    _model: ModelStub,
+    backend: LlamaBackend,
+    model: LlamaModel,
 }
-
-/// プレースホルダー for llama_cpp_2::model::LlamaModel.
-struct ModelStub;
 
 impl LocalLlmRunner {
     /// このランナーのモデル設定。
@@ -226,58 +236,125 @@ impl LocalLlmRunner {
     ///
     /// これは低速 (1-5 seconds). Call it once at startup in a background task.
     /// ウォームモデルは AppState に保持 for the app lifetime.
+    /// モデルロードはブロッキングのため `spawn_blocking` で実行する。
     pub async fn load(config: ModelConfig) -> Result<Arc<Mutex<Self>>, LlmError> {
         if !config.model_path.exists() {
             return Err(LlmError::ModelNotFound(config.model_path.clone()));
         }
 
-        // 本番:
-        //   let backend = llama_cpp_2::llama_backend::LlamaBackend::init()?;
-        //   let model = llama_cpp_2::model::LlamaModel::load_from_file(
-        //     &backend, &config.model_path,
-        //     &llama_cpp_2::model::params::LlamaModelParams::default()
-        //       .with_n_gpu_layers(config.n_gpu_layers),
-        //   )?;
-        tracing::info!(
-            model = %config.model_path.display(),
-            "model loaded (stub)"
-        );
+        let cfg = config.clone();
+        let runner = tokio::task::spawn_blocking(move || -> Result<Self, LlmError> {
+            let backend =
+                LlamaBackend::init().map_err(|e| LlmError::BackendInit(format!("{e}")))?;
+            let params = LlamaModelParams::default().with_n_gpu_layers(cfg.n_gpu_layers);
+            let model = LlamaModel::load_from_file(&backend, &cfg.model_path, &params)
+                .map_err(|e| LlmError::ModelLoad(format!("{e}")))?;
+            Ok(Self {
+                config: cfg,
+                backend,
+                model,
+            })
+        })
+        .await
+        .map_err(|e| LlmError::BackendInit(format!("load task failed: {e}")))??;
 
-        Ok(Arc::new(Mutex::new(Self {
-            config,
-            _model: ModelStub,
-        })))
+        tracing::info!(
+            model = %runner.config.model_path.display(),
+            "model loaded"
+        );
+        Ok(Arc::new(Mutex::new(runner)))
     }
 
-    /// Run inference. Blocks the current thread for `latency_ms`.
+    /// Run inference. Blocks the calling thread for `latency_ms`.
     ///
-    /// In production, this calls llama_cpp_2 to:
+    /// llama_cpp_2 で以下を実行する:
     ///   1. Tokenize [system_prompt + history + user_message]
     ///   2. Run forward pass
     ///   3. Decode tokens to UTF-8 string
-    ///   4. Return InferenceResult
+    ///   4. Return InferenceResult (tokens_in/tokens_out は実測値)
+    ///
+    /// `temperature == 0.0` なら greedy サンプリング (決定論的、
+    /// セキュリティ判定パス用)。`> 0.0` なら温度サンプリング。
     pub fn infer(&self, req: &InferenceRequest) -> Result<InferenceResult, LlmError> {
         let start = std::time::Instant::now();
 
-        // 本番: build the prompt in Phi-4 chat template format:
-        //   <|system|>\n{system}\n<|end|>\n
-        //   <|user|>\n{user}\n<|end|>\n
-        //   <|assistant|>\n
-        let _prompt = build_phi4_prompt(req);
+        let prompt = build_phi4_prompt(req);
 
-        // スタブ: return a minimal valid JSON for Q-LLM or a draft for P-LLM
-        let text = if req.system_prompt.contains("untrusted_content") {
-            // Q-LLM の応答
-            r#"{"summary":"メールの内容を解析しました。","risk":"SAFE","language":"JA","mentions":[]}"#.into()
+        // 1. Tokenize
+        let tokens = self
+            .model
+            .str_to_token(&prompt, AddBos::Always)
+            .map_err(|e| LlmError::Inference(format!("トークン化に失敗: {e}")))?;
+        let tokens_in = tokens.len() as u32;
+        if tokens.len() + self.config.max_tokens as usize > self.config.ctx_size as usize {
+            return Err(LlmError::ContextWindowExceeded);
+        }
+
+        // 2. 推論ごとに新しいコンテキスト (KV キャッシュの持ち越しを防ぐ)
+        let n_ctx = NonZeroU32::new(self.config.ctx_size)
+            .ok_or(LlmError::Inference("ctx_size は 0 不可".into()))?;
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(Some(n_ctx))
+            .with_n_threads(self.config.n_threads as i32)
+            .with_n_threads_batch(self.config.n_threads as i32);
+        let mut ctx = self
+            .model
+            .new_context(&self.backend, ctx_params)
+            .map_err(|e| LlmError::Inference(format!("コンテキスト生成に失敗: {e}")))?;
+
+        // 3. プロンプトをバッチ投入し forward pass
+        let mut batch = LlamaBatch::new(self.config.ctx_size as usize, 1);
+        let last = tokens.len() - 1;
+        for (i, token) in tokens.iter().enumerate() {
+            batch
+                .add(*token, i as i32, &[0], i == last)
+                .map_err(|e| LlmError::Inference(format!("バッチ追加に失敗: {e}")))?;
+        }
+        ctx.decode(&mut batch)
+            .map_err(|e| LlmError::Inference(format!("プロンプト評価に失敗: {e}")))?;
+
+        // 4. サンプラー (temperature=0 → greedy、それ以外 → 温度付き)
+        let mut sampler = if self.config.temperature <= 0.0 {
+            LlamaSampler::greedy()
         } else {
-            // P-LLM の応答
-            "了解しました。返信の下書きを作成します。".into()
+            LlamaSampler::chain_simple([
+                LlamaSampler::temp(self.config.temperature),
+                LlamaSampler::dist(rand::random::<u32>()),
+            ])
         };
 
+        // 5. 生成ループ
+        let mut output = String::new();
+        let mut n_cur = tokens.len();
+        let max = tokens.len() + self.config.max_tokens as usize;
+        let mut tokens_out = 0u32;
+        while n_cur < max {
+            // -1 = 最終トークンの logits (プロンプト末尾/生成トークンいずれも
+            // logits=true は最後の1つのみなので常に正しい位置を指す)
+            let token = sampler.sample(&ctx, -1);
+            sampler.accept(token);
+            if self.model.is_eog_token(token) {
+                break;
+            }
+            let piece = self
+                .model
+                .token_to_piece(token, &mut encoding_rs::UTF_8.new_decoder(), true, None)
+                .map_err(|e| LlmError::Inference(format!("デトークン化に失敗: {e}")))?;
+            output.push_str(&piece);
+            tokens_out += 1;
+            batch.clear();
+            batch
+                .add(token, n_cur as i32, &[0], true)
+                .map_err(|e| LlmError::Inference(format!("バッチ追加に失敗: {e}")))?;
+            n_cur += 1;
+            ctx.decode(&mut batch)
+                .map_err(|e| LlmError::Inference(format!("生成に失敗: {e}")))?;
+        }
+
         Ok(InferenceResult {
-            text,
-            tokens_in: 0,
-            tokens_out: 0,
+            text: output,
+            tokens_in,
+            tokens_out,
             latency_ms: start.elapsed().as_millis() as u64,
         })
     }
@@ -364,6 +441,105 @@ pub fn parse_analysis_json(text: &str) -> Result<RawAnalysisOutput, LlmError> {
 }
 
 // ============================================================================
+// BEC スコアリングアダプタ (D2 Phase 4)
+// ============================================================================
+
+/// BEC 判定専用の Q-LLM システムプロンプト。出力は JSON のみ。
+///
+/// `kaname-bec` はこの文字列を知らない — 呼び出し側 (Phase 5 の配線) が
+/// `QUARANTINED_SYSTEM_PROMPT` とこの指示を組み合わせて使う。
+pub const BEC_SCORE_INSTRUCTION: &str = concat!(
+    "Analyze the email for Business Email Compromise. ",
+    "Output ONLY JSON: {\"risk\": \"SAFE\"|\"ADVISORY\"|\"SUSPICIOUS\"|\"DANGEROUS\", ",
+    "\"summary\": \"<=280 chars\", \"language\": \"JA\"|\"EN\"|\"ZH\"|\"KO\"|\"OTHER\"}. ",
+    "Consider: urgent payment requests, account changes, executive impersonation, ",
+    "gift-card requests, secrecy pressure, lookalike sender claims."
+);
+
+/// モデルの risk 文字列を BEC 確率にマップする。
+/// 未知の値は `None` (スキーマ違反として 0 寄与にフォールバック)。
+fn risk_to_probability(risk: &str) -> Option<f32> {
+    match risk.trim().to_ascii_uppercase().as_str() {
+        "SAFE" => Some(0.05),
+        "ADVISORY" => Some(0.35),
+        "SUSPICIOUS" => Some(0.65),
+        "DANGEROUS" => Some(0.9),
+        _ => None,
+    }
+}
+
+/// char 境界で `max` 文字まで切り詰める (UTF-8 の途中で切らない)。
+fn truncate_chars(s: &str, max: usize) -> &str {
+    if s.chars().count() > max {
+        let end = s.char_indices().nth(max).map_or(s.len(), |(i, _)| i);
+        &s[..end]
+    } else {
+        s
+    }
+}
+
+/// `kaname-bec::LocalLlm::score_bec` と同じシグネチャで Q-LLM を呼ぶ
+/// アダプタ関数。返り値は `(probability, explanation)`。
+///
+/// 推論失敗・スキーマ違反・未知の risk 値のいずれでも `(0.0, 理由)` を
+/// 返す — 確率 0 の寄与で決定論的シグナルのみの判定にフォールバックする
+/// (`NullLlm` と同じ安全側の失敗)。
+///
+/// 呼び出し側の約束: `config` は `ModelConfig::quarantined()`
+/// (temperature=0、同一入力に決定論的 — `LocalLlm` の契約) を使うこと。
+/// 件名・本文・context は `Content<Untrusted>` 由来を想定し、件名 256 /
+/// 本文 4000 / context 1024 chars に切り詰めてプロンプトサイズを制限する。
+/// `<|end|>` 等の特殊トークンは `build_phi4_prompt` が除去する。
+#[must_use]
+pub fn bec_score(
+    runner: &Mutex<LocalLlmRunner>,
+    subject: &str,
+    body: &str,
+    context: Option<&str>,
+) -> (f32, String) {
+    let mut user_message = format!(
+        "件名: {}\n本文:\n{}",
+        truncate_chars(subject, 256),
+        truncate_chars(body, 4000)
+    );
+    if let Some(ctx) = context {
+        user_message.push_str(&format!("\nコンテキスト: {}", truncate_chars(ctx, 1024)));
+    }
+
+    let req = InferenceRequest {
+        system_prompt: format!("{QUARANTINED_SYSTEM_PROMPT}\n{BEC_SCORE_INSTRUCTION}"),
+        user_message,
+        history: vec![],
+    };
+
+    let runner = runner.lock().unwrap_or_else(|e| e.into_inner());
+    let result = match runner.infer(&req) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "BEC LLM 推論失敗 — 0 寄与にフォールバック");
+            return (
+                0.0,
+                format!("意味解析失敗 ({e}) — 決定論的シグナルのみで判定"),
+            );
+        }
+    };
+
+    match parse_analysis_json(&result.text) {
+        Ok(out) => match risk_to_probability(&out.risk) {
+            Some(p) => (p, truncate_chars(&out.summary, 120).to_string()),
+            None => {
+                tracing::warn!(risk = %out.risk, "BEC LLM の risk 値がスキーマ外");
+                (0.0, "意味解析の出力がスキーマ違反 — 0 寄与".into())
+            }
+        },
+        Err(e) => {
+            tracing::warn!(error = %e, "BEC LLM 出力のパース失敗 — 0 寄与にフォールバック");
+            (0.0, format!("意味解析出力のパース失敗 ({e}) — 0 寄与"))
+        }
+    }
+}
+
+// ============================================================================
 // Model download helper (first-run)
 // ============================================================================
 
@@ -381,6 +557,99 @@ pub fn check_model(config: &ModelConfig) -> ModelStatus {
             size_bytes:   2_400_000_000, // ~2.4 GB
         }
     }
+}
+
+/// モデルファイルを HTTPS でストリーミングダウンロードし、SHA-256 を
+/// 検証して配置する (D2 Phase 2)。
+///
+/// - `<model_path>.part` に逐次書き込み → 検証 → `rename` の順で
+///   アトミックに配置 (途中失敗で部分ファイルが残っても本物と誤認しない)
+/// - `expected_sha256` は 64 桁 hex の期待ダイジェスト。**モデルファイルの
+///   公式ハッシュはリリースノート/社内 IT が配布する値を渡すこと** (コードに
+///   ピン留めしない理由: HF 側がモデルを更新すると破損した固定値を残して
+///   しまい、かつ開発環境ではゲート済みリポにアクセスできず実測できない)。
+///   不一致時は部分ファイルを削除して `ChecksumMismatch` を返す
+///   (改ざん/破損モデルをロードさせない)
+/// - 失敗時の呼び出し側の約束: モデル不在として扱い NullLlm
+///   フォールバックを維持する (BEC 判定は LLM なしで動作)
+pub async fn download_model(
+    config: &ModelConfig,
+    expected_sha256: &str,
+    mut progress: impl FnMut(u64, u64) + Send,
+) -> Result<(), LlmError> {
+    use futures_util::StreamExt;
+    use sha2::Digest;
+    use tokio::io::AsyncWriteExt;
+
+    let expected = expected_sha256.trim().to_lowercase();
+    if expected.len() != 64 || !expected.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(LlmError::InvalidChecksumFormat);
+    }
+    let url = match check_model(config) {
+        ModelStatus::Ready { .. } => return Ok(()),
+        ModelStatus::Missing { download_url, .. } => download_url,
+    };
+    if let Some(parent) = config.model_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| LlmError::Download(format!("モデル保存先の作成に失敗: {e}")))?;
+    }
+    let tmp_path = config.model_path.with_extension("gguf.part");
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| LlmError::Download(format!("HTTP クライアント初期化失敗: {e}")))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| LlmError::Download(format!("ダウンロード開始に失敗: {e}")))?;
+    let total = resp.content_length().unwrap_or(0);
+
+    let mut file = tokio::fs::File::create(&tmp_path)
+        .await
+        .map_err(|e| LlmError::Download(format!("部分ファイル作成に失敗: {e}")))?;
+    let mut hasher = sha2::Sha256::new();
+    let mut downloaded = 0u64;
+    let mut stream = resp.bytes_stream();
+    let result: Result<(), LlmError> = async {
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| LlmError::Download(format!("受信失敗: {e}")))?;
+            hasher.update(&chunk);
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| LlmError::Download(format!("書き込み失敗: {e}")))?;
+            downloaded += chunk.len() as u64;
+            progress(downloaded, total);
+        }
+        file.flush()
+            .await
+            .map_err(|e| LlmError::Download(format!("フラッシュ失敗: {e}")))?;
+        Ok(())
+    }
+    .await;
+    drop(file);
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(e);
+    }
+
+    let actual: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    if actual != expected {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(LlmError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        });
+    }
+    std::fs::rename(&tmp_path, &config.model_path)
+        .map_err(|e| LlmError::Download(format!("配置に失敗: {e}")))?;
+    Ok(())
 }
 
 /// モデルファイルの存在状態。
@@ -432,6 +701,35 @@ pub enum LlmError {
     /// 推論タイムアウト。
     #[error("inference timeout")]
     Timeout,
+
+    /// llama.cpp バックエンドの初期化失敗。
+    #[error("llama backend init failed: {0}")]
+    BackendInit(String),
+
+    /// モデルファイルの読み込み失敗 (破損・非GGUF等)。
+    #[error("model load failed: {0}")]
+    ModelLoad(String),
+
+    /// 推論実行中のエラー (トークン化/デコード/生成)。
+    #[error("inference failed: {0}")]
+    Inference(String),
+
+    /// チェックサムの形式が不正 (64桁 hex ではない)。
+    #[error("expected_sha256 must be a 64-char hex string")]
+    InvalidChecksumFormat,
+
+    /// モデルのダウンロード/配置に失敗。
+    #[error("model download failed: {0}")]
+    Download(String),
+
+    /// ダウンロードしたモデルの SHA-256 が期待値と不一致 (改ざん/破損)。
+    #[error("model checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch {
+        /// 期待していた 64 桁 hex ダイジェスト。
+        expected: String,
+        /// 実際に計算された 64 桁 hex ダイジェスト。
+        actual: String,
+    },
 }
 
 // ============================================================================
@@ -591,5 +889,68 @@ mod tests {
         let prompt = build_phi4_prompt(&req);
         // システムプロンプト由来の <|end|> は保持されるべき
         assert!(prompt.starts_with("<|system|>"));
+    }
+
+    /// 実モデルがある環境のみで走る統合テスト。
+    /// `KANAME_TEST_MODEL` に GGUF パスを指定した時のみ実行
+    /// (CI/開発環境に2.4GBモデルは存在しないためデフォルトではスキップ)。
+    #[test]
+    fn real_inference_produces_finite_tokens() {
+        let Ok(model_path) = std::env::var("KANAME_TEST_MODEL") else {
+            eprintln!("KANAME_TEST_MODEL 未設定のためスキップ");
+            return;
+        };
+        let config = ModelConfig {
+            model_path: PathBuf::from(model_path),
+            ctx_size: 4096,
+            n_threads: 2,
+            n_gpu_layers: 0,
+            temperature: 0.0,
+            max_tokens: 32,
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let runner = rt
+            .block_on(LocalLlmRunner::load(config))
+            .expect("モデルロード");
+        let req = InferenceRequest {
+            system_prompt: QUARANTINED_SYSTEM_PROMPT.into(),
+            user_message: "会議の件で明日15時に電話します。".into(),
+            history: vec![],
+        };
+        let result = runner.lock().unwrap().infer(&req).expect("推論");
+        assert!(result.tokens_in > 0, "tokens_in が実測されているべき");
+        assert!(result.tokens_out > 0, "tokens_out が実測されているべき");
+        assert!(!result.text.is_empty());
+    }
+
+    #[tokio::test]
+    async fn download_model_is_noop_when_model_ready() {
+        let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("m.gguf");
+        std::fs::write(&path, b"already here").unwrap();
+        let cfg = ModelConfig {
+            model_path: path.clone(),
+            ..ModelConfig::quarantined()
+        };
+        let ok = download_model(&cfg, &"a".repeat(64), |_, _| {}).await;
+        assert!(ok.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn download_model_rejects_bad_checksum_format() {
+        let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
+        let cfg = ModelConfig {
+            model_path: dir.join("m.gguf"),
+            ..ModelConfig::quarantined()
+        };
+        let err = download_model(&cfg, "not-hex", |_, _| {})
+            .await
+            .unwrap_err();
+        assert!(matches!(err, LlmError::InvalidChecksumFormat));
     }
 }

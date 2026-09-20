@@ -425,9 +425,71 @@ const ActionItemsList = (props: {
 // メインダッシュボード
 // ============================================================================
 
+// D2 Phase 5: ローカル AI モデルの状態 (kaname-ai::llm_bridge::check_model)
+interface AiModelStatus {
+  state: "loaded" | "ready" | "missing";
+  size_bytes: number | null;
+  download_url: string | null;
+  expected_size_bytes: number | null;
+}
+
+// D1 Phase 4: MLS E2E の状態 (kaname-ui::commands::MlsStatus)
+interface MlsStatus {
+  initialized: boolean;
+  email: string | null;
+  conversations: number;
+}
+
+// D1 Phase 3: 会話成立済みの相手 (kaname-ui::commands::MlsPeer)
+interface MlsPeer {
+  email: string;
+  conversation_id: string;
+  epoch: number;
+  safety_number: string | null;
+  // D1 Phase 5: 安全番号の照合状態
+  verified: boolean;
+  // 照合記録はあるが現在の番号と不一致 = 鍵変更/再参加/中間者の可能性
+  safety_changed: boolean;
+}
+
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
   const [accessLog] = createSignal<AiAccessEntry[]>([]);
   const [auditLog, setAuditLog] = createSignal<AuditLogView | null>(null);
+
+  // D2 Phase 5: モデルの実状態 (missing / ready / loaded) を表示し、
+  // ダウンロード・ロードを実行する。未ロード時は BEC が決定論的
+  // シグナルのみで動くことを明示する (偽の「AI 稼働中」を見せない)。
+  const [aiModel, setAiModel] = createSignal<AiModelStatus | null>(null);
+  const [aiBusy, setAiBusy] = createSignal(false);
+  const [aiHash, setAiHash] = createSignal("");
+  const refreshAiModel = async () => {
+    try {
+      setAiModel(await invoke<AiModelStatus>("ai_model_status"));
+    } catch {
+      setAiModel(null);
+    }
+  };
+  createEffect(refreshAiModel);
+
+  // D1 Phase 4: MLS E2E の実状態。未初期化でもエラーではなく
+  // initialized=false が返るため、偽の「E2E 稼働中」は表示しない。
+  const [mls, setMls] = createSignal<MlsStatus | null>(null);
+  const [mlsEmail, setMlsEmail] = createSignal("");
+  const [mlsKp, setMlsKp] = createSignal("");
+  const [mlsBusy, setMlsBusy] = createSignal(false);
+  // D1 Phase 3: KP 配送経路の UI — 相手先入力・会話一覧・操作結果
+  const [mlsPeer, setMlsPeer] = createSignal("");
+  const [mlsPeers, setMlsPeers] = createSignal<MlsPeer[]>([]);
+  const [mlsMsg, setMlsMsg] = createSignal<{ ok: boolean; text: string } | null>(null);
+  const refreshMls = async () => {
+    try {
+      setMls(await invoke<MlsStatus>("mls_status"));
+      setMlsPeers(await invoke<MlsPeer[]>("mls_conversations"));
+    } catch {
+      setMls(null);
+    }
+  };
+  createEffect(refreshMls);
 
   // 監査証跡 (audit_log テーブル) は実在データ — 起動時に読み出す。
   createEffect(async () => {
@@ -486,6 +548,358 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
         />
       </div>
 
+      {/* D2 Phase 5: ローカル AI モデル管理 (Phi-4-mini) */}
+      <div style={{
+        background: "#0D1219", border: "1px solid #1F2833",
+        "border-radius": "8px", padding: "14px",
+      }}>
+        <div style={{
+          "font-size": "13px", "font-weight": "600", "margin-bottom": "8px",
+        }}>
+          🤖 ローカル AI モデル
+        </div>
+        <Show when={aiModel()} fallback={
+          <div style={{ "font-size": "11px", color: "#8B96A5" }}>
+            モデル状態を取得できませんでした
+          </div>
+        }>
+          {(m) => (
+            <div>
+              <div style={{ "font-size": "11px", color: "#8B96A5", "margin-bottom": "8px" }}>
+                {m().state === "loaded"
+                  ? "Phi-4-mini ロード済み — BEC 意味解析が有効です"
+                  : m().state === "ready"
+                    ? "モデル配置済み — ロードすると BEC 意味解析が有効になります"
+                    : `モデル未取得 (約 ${(Number(m().expected_size_bytes ?? 0) / 1e9).toFixed(1)}GB) — 未取得の間は BEC は決定論的シグナルのみで判定します`}
+              </div>
+              {/* D121: 現在はインプロセス推論 — Q-LLM サブプロセス分離は
+                  未配線のため、現状を隠さず表示する */}
+              <Show when={m().state === "loaded"}>
+                <div style={{ "font-size": "10px", color: "#6B7A94", "margin-bottom": "8px", "font-family": "monospace" }}>
+                  推論はインプロセスで実行されます (サブプロセス分離は未配線 — D121)
+                </div>
+              </Show>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Show when={m().state === "missing"}>
+                  {/* HF リポジトリはゲート済みのため、配布元が発行する
+                      公式 SHA-256 を管理者が入力する運用 */}
+                  <input
+                    placeholder="モデルの公式 SHA-256 (64桁)"
+                    value={aiHash()}
+                    onInput={(e) => setAiHash(e.currentTarget.value)}
+                    style={{
+                      background: "#1A2129", border: "1px solid #2A3441",
+                      color: "#F5F7FA", "border-radius": "4px",
+                      padding: "4px 8px", "font-size": "11px",
+                      "font-family": "monospace", width: "340px",
+                    }}
+                  />
+                  <button
+                    disabled={aiBusy() || aiHash().trim().length !== 64}
+                    onClick={async () => {
+                      setAiBusy(true);
+                      try {
+                        await invoke("ai_model_download", { expectedSha256: aiHash().trim() });
+                        await invoke("ai_llm_start");
+                      } catch { /* 失敗は状態表示に反映される */ }
+                      await refreshAiModel();
+                      setAiBusy(false);
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px",
+                      cursor: aiBusy() || aiHash().trim().length !== 64 ? "default" : "pointer",
+                    }}
+                  >
+                    {aiBusy() ? "ダウンロード中…" : "モデルをダウンロード"}
+                  </button>
+                </Show>
+                <Show when={m().state === "ready"}>
+                  <button
+                    disabled={aiBusy()}
+                    onClick={async () => {
+                      setAiBusy(true);
+                      try { await invoke("ai_llm_start"); } catch { /* 同上 */ }
+                      await refreshAiModel();
+                      setAiBusy(false);
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px", cursor: aiBusy() ? "default" : "pointer",
+                    }}
+                  >
+                    {aiBusy() ? "ロード中…" : "モデルをロード"}
+                  </button>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
+      </div>
+
+      {/* D1 Phase 4: MLS E2E 暗号化 */}
+      <div style={{
+        background: "#0D1219", border: "1px solid #1F2833",
+        "border-radius": "8px", padding: "14px",
+      }}>
+        <div style={{
+          "font-size": "13px", "font-weight": "600", "margin-bottom": "8px",
+        }}>
+          🔐 MLS E2E 暗号化
+        </div>
+        <Show when={mls()} fallback={
+          <div style={{ "font-size": "11px", color: "#8B96A5" }}>
+            MLS の状態を取得できませんでした
+          </div>
+        }>
+          {(s) => (
+            <div>
+              <div style={{ "font-size": "11px", color: "#8B96A5", "margin-bottom": "8px" }}>
+                {s().initialized
+                  ? `${s().email ?? ""} として有効 — 会話 ${s().conversations} 件。受信メール内の MLS エンベロープは開封時に自動で処理されます (X-Wing / ML-KEM-768 ハイブリッド)`
+                  : "未初期化 — 自分のメールアドレスを入力して有効化してください (状態は mls.db に暗号化保存されます)"}
+              </div>
+              <Show when={!s().initialized}>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    placeholder="あなたのメールアドレス"
+                    value={mlsEmail()}
+                    onInput={(e) => setMlsEmail(e.currentTarget.value)}
+                    style={{
+                      background: "#1A2129", border: "1px solid #2A3441",
+                      color: "#F5F7FA", "border-radius": "4px",
+                      padding: "4px 8px", "font-size": "11px",
+                      "font-family": "monospace", width: "260px",
+                    }}
+                  />
+                  <button
+                    disabled={mlsBusy() || !mlsEmail().includes("@")}
+                    onClick={async () => {
+                      setMlsBusy(true);
+                      try {
+                        setMls(await invoke<MlsStatus>("mls_init", { email: mlsEmail().trim() }));
+                      } catch { /* 失敗は状態表示に反映される */ }
+                      await refreshMls();
+                      setMlsBusy(false);
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px",
+                      cursor: mlsBusy() || !mlsEmail().includes("@") ? "default" : "pointer",
+                    }}
+                  >
+                    {mlsBusy() ? "初期化中…" : "有効化"}
+                  </button>
+                </div>
+              </Show>
+              <Show when={s().initialized}>
+                <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                  <button
+                    disabled={mlsBusy()}
+                    onClick={async () => {
+                      try {
+                        setMlsKp(await invoke<string>("mls_key_package"));
+                      } catch {
+                        setMlsKp("");
+                      }
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px", cursor: mlsBusy() ? "default" : "pointer",
+                    }}
+                  >
+                    この端末の KeyPackage を表示
+                  </button>
+                  <Show when={mlsKp() !== ""}>
+                    <button
+                      onClick={() => { void navigator.clipboard.writeText(mlsKp()); }}
+                      style={{
+                        background: "#1A2129", color: "#8B96A5",
+                        border: "1px solid #2A3441", "border-radius": "4px",
+                        padding: "4px 10px", "font-size": "11px", cursor: "pointer",
+                      }}
+                    >
+                      コピー
+                    </button>
+                  </Show>
+                </div>
+                <Show when={mlsKp() !== ""}>
+                  <div style={{
+                    "font-size": "10px", color: "#6B7A94", "margin-top": "6px",
+                    "font-family": "monospace", "word-break": "break-all",
+                  }}>
+                    {mlsKp()}
+                  </div>
+                </Show>
+                {/* D1 Phase 3: KeyPackage の配送と会話開始
+                    — KP は添付で自動往復 (相手の Kaname が受信時に検証・取込)。
+                    KP 配送経路での差し替えは防げないため、会話成立後は
+                    安全番号を別経路で照合するのが信頼確立の手順。 */}
+                <div style={{ "margin-top": "10px", "border-top": "1px solid #1F2833", "padding-top": "8px" }}>
+                  <div style={{ "font-size": "10px", color: "#6B7A94", "margin-bottom": "6px" }}>
+                    相手のメールアドレスを指定して KeyPackage を送信・または受信済み KP で会話を開始します。
+                    開始後は新規作成画面で「MLS で暗号化」が使えます
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", "align-items": "center", "flex-wrap": "wrap" }}>
+                    <input
+                      type="email"
+                      placeholder="相手のメールアドレス"
+                      value={mlsPeer()}
+                      onInput={e => setMlsPeer(e.currentTarget.value)}
+                      style={{
+                        flex: "1", "min-width": "200px", background: "#0A0E14", color: "#D7DEE7",
+                        border: "1px solid #2A3441", "border-radius": "4px",
+                        padding: "6px 8px", "font-size": "11px",
+                      }}
+                    />
+                    <button
+                      disabled={mlsBusy() || !mlsPeer().includes("@")}
+                      onClick={async () => {
+                        setMlsBusy(true);
+                        setMlsMsg(null);
+                        try {
+                          const r = await invoke<string>("mls_send_key_package", { to: mlsPeer().trim() });
+                          setMlsMsg({ ok: true, text: r });
+                        } catch (e) {
+                          setMlsMsg({ ok: false, text: String(e) });
+                        }
+                        setMlsBusy(false);
+                      }}
+                      style={{
+                        background: "#00C4CC20", color: "#00C4CC", border: "none",
+                        "border-radius": "4px", padding: "4px 10px",
+                        "font-size": "11px",
+                        cursor: mlsBusy() || !mlsPeer().includes("@") ? "default" : "pointer",
+                      }}
+                    >
+                      KeyPackage を送信
+                    </button>
+                    <button
+                      disabled={mlsBusy() || !mlsPeer().includes("@")}
+                      onClick={async () => {
+                        setMlsBusy(true);
+                        setMlsMsg(null);
+                        try {
+                          const r = await invoke<string>("mls_start_conversation", { to: mlsPeer().trim() });
+                          setMlsMsg({ ok: true, text: r });
+                          await refreshMls();
+                        } catch (e) {
+                          setMlsMsg({ ok: false, text: String(e) });
+                        }
+                        setMlsBusy(false);
+                      }}
+                      style={{
+                        background: "#00C4CC20", color: "#00C4CC", border: "none",
+                        "border-radius": "4px", padding: "4px 10px",
+                        "font-size": "11px",
+                        cursor: mlsBusy() || !mlsPeer().includes("@") ? "default" : "pointer",
+                      }}
+                    >
+                      受信した KP で会話を開始
+                    </button>
+                  </div>
+                  <Show when={mlsMsg()}>
+                    <div style={{
+                      "font-size": "10px", "margin-top": "6px",
+                      color: mlsMsg()!.ok ? "#34D399" : "#FF6B70",
+                    }}>
+                      {mlsMsg()!.text}
+                    </div>
+                  </Show>
+                  {/* 成立済み会話: 安全番号の照合は別経路 (電話等) で実施 */}
+                  <Show when={mlsPeers().length > 0}>
+                    <div style={{ "margin-top": "8px" }}>
+                      <For each={mlsPeers()}>
+                        {(p) => (
+                          <div style={{
+                            "font-size": "10px", color: "#8B96A5", "margin-top": "4px",
+                            padding: "6px 8px", background: "#0A0E14",
+                            "border-radius": "4px", border: "1px solid #1F2833",
+                          }}>
+                            <div>
+                              🔐 {p.email} — epoch {p.epoch}{" "}
+                              {/* D1 Phase 5: 照合状態バッジ。verified=照合済み、
+                                  safety_changed=照合後に番号が変化 (鍵変更/
+                                  再参加/中間者の可能性)、それ以外=未検証 */}
+                              <Show when={p.safety_changed}>
+                                <span style={{
+                                  background: "#FF6B7020", color: "#FF6B70",
+                                  "font-size": "10px", padding: "1px 6px",
+                                  "border-radius": "3px", "margin-left": "4px",
+                                }}>
+                                  ⚠ 番号が照合時と異なります
+                                </span>
+                              </Show>
+                              <Show when={!p.safety_changed && p.verified}>
+                                <span style={{
+                                  background: "#34D39920", color: "#34D399",
+                                  "font-size": "10px", padding: "1px 6px",
+                                  "border-radius": "3px", "margin-left": "4px",
+                                }}>
+                                  ✓ 照合済み
+                                </span>
+                              </Show>
+                              <Show when={!p.safety_changed && !p.verified}>
+                                <span style={{
+                                  background: "#FFB22420", color: "#FFB224",
+                                  "font-size": "10px", padding: "1px 6px",
+                                  "border-radius": "3px", "margin-left": "4px",
+                                }}>
+                                  未検証
+                                </span>
+                              </Show>
+                            </div>
+                            <Show when={p.safety_number}>
+                              <div style={{ "font-family": "monospace", color: "#6B7A94", "margin-top": "2px", "word-break": "break-all" }}>
+                                安全番号: {p.safety_number}
+                              </div>
+                              {/* 照合記録 — 押す前に利用者が別経路 (電話・
+                                  対面等) で番号を確かめた前提 */}
+                              <div style={{ "margin-top": "4px", display: "flex", gap: "6px", "align-items": "center" }}>
+                                <button
+                                  disabled={mlsBusy()}
+                                  onClick={async () => {
+                                    setMlsBusy(true);
+                                    setMlsMsg(null);
+                                    try {
+                                      const r = await invoke<string>("mls_mark_verified", { to: p.email });
+                                      setMlsMsg({ ok: true, text: r });
+                                      await refreshMls();
+                                    } catch (e) {
+                                      setMlsMsg({ ok: false, text: String(e) });
+                                    }
+                                    setMlsBusy(false);
+                                  }}
+                                  style={{
+                                    background: "#1A2129", color: "#8B96A5",
+                                    border: "1px solid #2A3441", "border-radius": "4px",
+                                    padding: "2px 8px", "font-size": "10px",
+                                    cursor: mlsBusy() ? "default" : "pointer",
+                                  }}
+                                >
+                                  相手と照合しました (記録)
+                                </button>
+                                <span style={{ "font-size": "9px", color: "#6B7A94" }}>
+                                  電話・対面等の別経路で番号が一致することを確認してから押してください
+                                </span>
+                              </div>
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+          )}
+        </Show>
+      </div>
+
       {/* コンタクトインテリジェンス */}
       <div>
         <div style={{
@@ -518,8 +932,8 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
           ["✓", "BEC/なりすまし検出",       "kaname-bec の実データ判定 (精度の数値は本環境で未検証、docs/gap-analysis.md D36 参照)。「AI生成か」の判定は LLM 未配線のため非対応 (D2/D92)"],
           ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策、実データで稼働"],
           ["✓", "監査証跡",           "append-only + ハッシュチェーン — 上の「監査証跡」セクションで実データを閲覧可能"],
-          ["✗", "ローカル AI 推論",     "未実装 (docs/gap-analysis.md D2)。LLM 推論は固定応答のスタブ"],
-          ["✗", "MLS + PQC 暗号化",    "未実装 (docs/gap-analysis.md D1)。現状は単一バイト XOR のモック"],
+          ["⚠", "ローカル AI 推論",     "実装済み (D2 Phase 1-5) — モデルダウンロード・ロード後に BEC 意味解析が有効化。未ロード時は決定論的シグナルのみ"],
+          ["⚠", "MLS + PQC 暗号化",    "実装済み (D1 Phase 1–5) — openmls + X-Wing (ML-KEM-768) ハイブリッド、SQLCipher 永続化、KP の添付往復・暗号送信・受信エンベロープ自動処理・安全番号照合記録まで配線済み"],
         ] as [string, string, string][]).map(([icon, name, desc]) => (
           <div style={{
             display: "flex", gap: "8px", padding: "4px 0",

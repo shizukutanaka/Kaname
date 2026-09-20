@@ -281,6 +281,20 @@ impl LocalLlm for NullLlm {
     }
 }
 
+/// クロージャ/関数を `LocalLlm` として直接配線できるようにするブランケット実装。
+///
+/// `kaname-bec` は `kaname-ai` に依存しないため、実モデルへの接続は
+/// 呼び出し側 (kaname-ui) が `kaname_ai::llm_bridge::bec_score` を包む
+/// クロージャとして渡す形を取る — クレート間の依存辺を増やさない。
+impl<F> LocalLlm for F
+where
+    F: Fn(&str, &str, Option<&str>) -> LlmScore + Send + Sync,
+{
+    fn score_bec(&self, subject: &str, body: &str, context: Option<&str>) -> LlmScore {
+        self(subject, body, context)
+    }
+}
+
 impl BecDetector {
     /// LLM を使わず決定論的シグナルのみで判定する検出器を構築する。
     ///

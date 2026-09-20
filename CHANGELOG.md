@@ -8,6 +8,58 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1 Phase 1: 実 MLS 暗号化 (openmls)
+
+- **`kaname-mls` の XOR モック暗号を実 openmls 0.9 に全面置換** (D1 Phase 1)
+  - `encrypt_message` は `MlsGroup::create_message` による本物の MLS Application 暗号文を生成 (従来は `plaintext ^ conv_id[0]` の単一バイト XOR — 鍵空間256・鍵自体が公開情報だった)
+  - `process_incoming` は `MlsMessageIn` → `StagedWelcome::new_from_welcome` / `process_message` + `merge_staged_commit` で実プロトコル処理
+  - `generate_key_package` は署名付きの実 `KeyPackageIn` (TLS シリアライズ) を生成 — 受け取り側は `validate()` で署名検証
+  - グループ ID = `ConversationId` を `new_with_group_id` で整合させ、両側が同一の会話 ID を導出
+  - 安全番号は `group.epoch_authenticator()` (全メンバーが同一値を持つ MLS の認証子) から導出 — メールアドレス+epoch の疑似ハッシュから本物の暗号素材へ
+  - `Ciphersuite::KanameHybridPqc` は `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (draft-ietf-mls-pq-ciphersuites の ML-KEM-768+X25519 ハイブリッド) にマッピング — 設計書の「PQ ciphersuite を最初から選定」要件を充足
+  - `MlsMailClient::try_new` を追加 (CSPRNG 初期化失敗を Result で返す)
+  - `generate_key_package` の戻り値を `Option<KeyPackage>` に変更 (生成失敗を表現可能に)
+  - D122 修正: `seen_welcomes` の記録を `into_group` 成功後に移動 — 不正 Welcome によるリプレイ防止スロットの燃尽 DoS を解消
+  - kaname-tests の `mls_tests` を恒真テスト (内部自前 XOR) から実 `MlsMailClient` 経路に全面書き換え — 安全番号の両側不一致を正準化で解消
+
+### Security — D1 Phase 2: MLS 状態の SQLCipher 永続化
+
+- **`MlsMailClient::try_new_persistent(identity, db_path, key_hex)` を追加** (D1 Phase 2)
+  - `openmls_sqlite_storage` の `SqliteStorageProvider` を内蔵した独自 `KanameProvider` (libcrux 暗号 + rusqlite/SQLCipher ストレージ) に差し替え — `LibcruxProvider` は MemoryStorage 固定で永続化不能だった
+  - openmls グループ状態・署名鍵ペア (秘密鍵は openmls storage 内、公開鍵をメタに保存して `SignatureKeyPair::read` で復元)・会話メタ・`seen_welcomes` リプレイ帳簿を SQLCipher ファイルに永続化 — **再起動跨ぎの Welcome リプレイ防止が実効化**
+  - メタ書き込みは best-effort (暗号操作成功後の失敗は warn のみ — 操作の成功自体は維持)
+  - `list_conversations()` を追加 — 再起動後の UI 復元用
+  - 永続化テスト 3 本: 再起動後の暗号往復継続 / 再起動跨ぎ Welcome リプレイ拒否 / 発行済み KP の秘密鍵永続化 (38 テスト全パス)
+  - 残存: `try_new_persistent` の呼出元は未配線 (Phase 4 で kaname-ui に kaname-mls 依存辺を追加して接続 — DB パス/鍵は kaname-store の history.key 方式に倣う)。KeyPackage 配送経路は Phase 3、`kp_cache` は意図的に揮発のまま
+
+### Security — D1 Phase 4: 受信経路への MLS 配線
+
+- **`kaname_render::extract_mls_envelopes` を新設**: multipart を再帰走査 (入れ子 `message/rfc822` を含む) し、`application/mls-envelope+cbor` パートの復号済みボディを取り出す。`Content-Disposition` を問わず全パートを検査 (インライン挿入にも対応)
+- **kaname-ui が kaname-mls に接続**: `analyze_raw_email` (mail_open / mail_import_eml / mail_analyze_bytes の唯一の解析経路) がエンベロープを自動で `process_incoming` に通し、`mls_events` (Welcome 参加・メンバー変更・復号イベント) と `mls_plaintexts` (復号された本文) を `ImportedEmail` に追加。`is_mls` バッジも実エンベロープ検出で立つように
+- **IPC 3 件追加** (登録33 = 呼出33 = モック33): `mls_init(email)` — `<data_dir>/kaname/mls.db` (SQLCipher、`mls.key` は history.key と同じ 0600 ファイル運用。`resolve_or_create_key` をファイル名引数に汎用化) で `try_new_persistent` を起動、`mls_status` — 初期化状態と会話数、`mls_key_package` — この端末の KeyPackage を hex で返す (相手に手渡しする運用 — 配送経路は Phase 3 未実装)
+- SecurityDashboard に「MLS E2E 暗号化」カードを追加 (初期化フォーム・状態・KP 表示/コピー)。既定 ciphersuite は `KanameHybridPqc` (X-Wing = ML-KEM-768 + X25519 ハイブリッド)
+- 未初期化時はエラーにせず「初期化が必要」のイベントを返す — E2E はオプトインであり未設定ユーザーのメール表示を壊さない
+- kaname-ui テストで Welcome 参加 → 暗号往復の実ラウンドトリップを解析経路経由で実証
+- 残存: 送信側 (Compose への `encrypt_message` 統合と KeyPackage 配送 = Phase 3、`mail_send_real` の添付非対応がブロッカー)、Safety Number セレモニー UI (Phase 5)
+
+### Security — D1 Phase 3: KeyPackage 配送経路 + 送信側暗号化
+
+- **JMAP 添付送信を実装** (kaname-jmap): `OutgoingAttachment` + `send_email(..., attachments)` が `multipart/mixed` RFC822 を構築 — `Email/import` は生 MIME blob をそのままアップロードするため blobId 配管は不要。ファイル名の RFC 5987 拡張パラメータ (`filename*=UTF-8''...`)、添付数 32・個別 10MB・合計 25MB 上限を実装
+- **KeyPackage 往復がメール添付で完結** (`application/mls-key-package` パート): `mls_send_key_package` で送信 → 受信側は `analyze_raw_email` が `extract_mls_key_packages` で検出し `validate_key_package` (TLS デシリアライズ + openmls 署名検証) 通過分のみ `kp_cache` に自動取込。KP は公開情報のため秘匿不要、経路上の差し替え対策は安全番号照合 (Phase 5) が担う
+- **IPC 4 件追加** (登録37 = 呼出37 = モック37): `mls_conversations` (会話成立済み相手の一覧 + 安全番号)、`mls_send_key_package`、`mls_start_conversation` (KP を1回限り消費 → `start_one_to_one` → Welcome エンベロープ添付送信。JMAP 未接続では KP を消費する前に失敗するよう接続確認を先行)、`mls_send_encrypted` (実件名・本文は `subject\x00body` ペイロードとしてエンベロープ内のみに封入 — 外側はプレースホルダのみでサーバ・経路に一切出ない)
+- **送信共通経路 `send_mail_core` を抽出**: 送信前 DLP は実内容で評価 (`dlp_target`) — E2E 暗号化経路でも情報漏洩防止が実効化したまま (暗号文の外側で DLP を通すと本文が空に見えて素通りする欠陥を構造的に回避)
+- **UI**: SecurityDashboard に KP 送信/会話開始フォーム + 会話一覧 (安全番号表示 — Phase 5 セレモニーの実体)。Compose は宛先が会話成立済みの単一相手のときのみ「🔐 MLS で暗号化して送信」チェックボックスを表示
+- 受信側往復テスト: KP 添付取込 → 消費で会話開始 → 双方向暗号復号を kaname-ui テストで実証 (不正 KP がキャッシュされないことも検証)
+- 残存: Phase 5 (安全番号の対面セレモニー UI — 番号表示は済、照合フローが未実装)、kaname-store `mls_conversations` テーブルとのアカウント紐付け
+
+### Security — D1 Phase 5: 安全番号セレモニー (照合記録)
+
+- **照合状態の永続化**: kaname-store の `mls_conversations` テーブル (設計済みシーム — `safety_number`/`safety_number_verified_at` 列は存在したが書込経路ゼロだった) に `mls_mark_verified`/`mls_verification_state` を実装 — 「この時点の番号で相手と照合した」記録を会話 ID で upsert
+- **IPC `mls_mark_verified` 追加** (登録38 = 呼出38 = モック38): 現在の安全番号を記録 + `MLS_SAFETY_VERIFIED` 監査イベント (件名・宛先は書かず会話 ID のみ)
+- **番号変更の検出**: `mls_conversations` が各相手に `verified`/`safety_changed` を返す — 照合記録と現在値の不一致 (鍵変更・再参加・中間者攻撃の可能性) を `safety_changed` で区別。Store 未接続時は両方 false — 検証状態を偽らない
+- **UI**: SecurityDashboard の会話カードに 3 状態バッジ (⚠ 番号変更 / ✓ 照合済み / 未検証) +「相手と照合しました (記録)」ボタン (別経路確認を前提とする注記付き)。Compose の MLS 選択肢にも照合前に警告を表示
+- これで D1 の 5 フェーズすべてが実装済み: 実 openmls (X-Wing) → SQLCipher 永続化 → KP 添付往復 + 暗号送信 → 受信自動処理 → 信頼確立のセレモニー記録
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 

@@ -146,6 +146,28 @@ export interface MockOverrides {
   attachmentDownload?: { filename: string; is_dangerous: boolean; risks: string[]; saved_path: string | null };
   /** `security_audit_log` の戻り値 (既定は空の正常チェーン)。 */
   auditLog?: { entries: { id: number; action: string; detail_json: string; created_at: string }[]; chain_valid: boolean };
+  /** `ai_model_status` の戻り値 (既定はモデル未取得)。 */
+  aiModelStatus?: { state: string; size_bytes: number | null; download_url: string | null; expected_size_bytes: number | null };
+  /** `ai_llm_start` の戻り値 (既定は "loaded")。 */
+  aiLlmStart?: string;
+  /** `ai_model_download` の戻り値 (既定は "downloaded")。 */
+  aiModelDownload?: string;
+  /** `mls_init` 済みかどうか — `mls_status` の既定応答を切り替える。 */
+  mlsInitialized?: boolean;
+  /** `mls_status` の戻り値 (既定は mlsInitialized に追随)。 */
+  mlsStatus?: { initialized: boolean; email: string | null; conversations: number };
+  /** `mls_key_package` の戻り値 (既定は固定 hex)。 */
+  mlsKeyPackage?: string;
+  /** `mls_conversations` の戻り値 (既定は空列)。 */
+  mlsConversations?: Array<{ email: string; conversation_id: string; epoch: number; safety_number: string | null; verified?: boolean; safety_changed?: boolean }>;
+  /** `mls_send_key_package` の戻り値。 */
+  mlsSendKeyPackage?: string;
+  /** `mls_start_conversation` の戻り値。 */
+  mlsStartConversation?: string;
+  /** `mls_send_encrypted` の戻り値。 */
+  mlsSendEncrypted?: string;
+  /** `mls_mark_verified` の戻り値。 */
+  mlsMarkVerified?: string;
 }
 
 /**
@@ -273,6 +295,40 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             };
           case "security_audit_log":
             return ov.auditLog ?? { entries: [], chain_valid: true };
+          // ローカル LLM (D2 Phase 5): 既定はモデル未取得・未ロード
+          case "ai_model_status":
+            return ov.aiModelStatus ?? {
+              state: "missing",
+              size_bytes: null,
+              download_url: "https://huggingface.co/mock/model.gguf",
+              expected_size_bytes: 2400000000,
+            };
+          case "ai_llm_start":
+            return ov.aiLlmStart ?? "loaded";
+          case "ai_model_download":
+            return ov.aiModelDownload ?? "downloaded";
+          // MLS E2E (D1 Phase 4): 既定は未初期化。init 後は status が
+          // initialized を返すよう ov.mlsInitialized で切替可能
+          case "mls_status":
+            return ov.mlsStatus ?? (ov.mlsInitialized
+              ? { initialized: true, email: "user@kaname.app", conversations: 0 }
+              : { initialized: false, email: null, conversations: 0 });
+          case "mls_init":
+            ov.mlsInitialized = true;
+            return { initialized: true, email: "user@kaname.app", conversations: 0 };
+          case "mls_key_package":
+            return ov.mlsKeyPackage ?? "deadbeef".repeat(16);
+          // MLS 配送経路 (D1 Phase 3): 既定は会話なし、送信系は成功応答
+          case "mls_conversations":
+            return ov.mlsConversations ?? [];
+          case "mls_send_key_package":
+            return ov.mlsSendKeyPackage ?? "KeyPackage を送信しました";
+          case "mls_start_conversation":
+            return ov.mlsStartConversation ?? "MLS 会話を開始しました";
+          case "mls_send_encrypted":
+            return ov.mlsSendEncrypted ?? "mls-msg-id";
+          case "mls_mark_verified":
+            return ov.mlsMarkVerified ?? "安全番号を照合済みとして記録しました";
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":
           case "mail_trash":

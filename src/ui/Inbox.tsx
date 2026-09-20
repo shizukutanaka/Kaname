@@ -112,6 +112,10 @@ interface OpenedEmail {
   /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
   oobv_message: string;
   deepfake_advisory: DeepfakeAdvisory;
+  /** MLS エンベロープの処理イベント (D1 Phase 4)。旧モックでは欠落可。 */
+  mls_events?: string[];
+  /** MLS で復号された本文 (平文)。 */
+  mls_plaintexts?: string[];
 }
 
 /** `AdvisoryReport` (kaname-render::deepfake_advisory) の JSON 表現。 */
@@ -618,6 +622,48 @@ const EmailDetailPanel = (props: {
               </Show>
             </div>
           </Show>
+          {/* MLS E2E: 処理イベント + 復号本文 (D1 Phase 4)。
+              エンベロープを処理した結果をここに表示する。 */}
+          <Show when={(bec()!.mls_events ?? []).length > 0}>
+            <div style={{
+              margin: "0",
+              padding: "8px 16px",
+              "font-size": "12px",
+              color: "#00B368",
+              background: "#00B36812",
+              "border-bottom": "0.5px solid #00B36840",
+            }}>
+              <For each={bec()!.mls_events}>
+                {(e) => <div>🔐 {e}</div>}
+              </For>
+            </div>
+          </Show>
+          <Show when={(bec()!.mls_plaintexts ?? []).length > 0}>
+            <div style={{
+              margin: "12px 16px",
+              padding: "10px 12px",
+              "border-radius": "8px",
+              background: "#00B36812",
+              border: "1px solid #00B36840",
+            }}>
+              <div style={{
+                "font-weight": "600", "font-size": "12px", color: "#00B368",
+                "margin-bottom": "4px",
+              }}>
+                復号された本文 (E2E — サーバでは読めない内容)
+              </div>
+              <For each={bec()!.mls_plaintexts}>
+                {(t) => (
+                  <pre style={{
+                    "font-size": "13px", color: "#D0D5DD",
+                    "white-space": "pre-wrap", "font-family": "inherit",
+                    margin: "0", "line-height": "1.6",
+                  }}>{t}</pre>
+                )}
+              </For>
+            </div>
+          </Show>
+
           <Show when={(body()!.render_risks ?? []).length > 0}>
             <div style={{
               margin: "0 0 12px 0",

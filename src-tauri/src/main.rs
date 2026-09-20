@@ -247,6 +247,71 @@ async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<commands::ImportedEmail, S
     commands::mail_analyze_bytes(bytes).await
 }
 
+// ── ローカル LLM (D2 Phase 5) ──────────────────────────────────────────────
+
+#[tauri::command]
+async fn ai_model_status() -> Result<commands::AiModelStatus, String> {
+    commands::ai_model_status().await
+}
+
+#[tauri::command]
+async fn ai_llm_start() -> Result<&'static str, String> {
+    commands::ai_llm_start().await
+}
+
+#[tauri::command]
+async fn ai_model_download(expected_sha256: String) -> Result<&'static str, String> {
+    commands::ai_model_download(expected_sha256).await
+}
+
+// ── MLS E2E 暗号化 (D1 Phase 4) ─────────────────────────────────────────
+
+#[tauri::command]
+async fn mls_init(email: String) -> Result<commands::MlsStatus, String> {
+    commands::mls_init(email).await
+}
+
+#[tauri::command]
+async fn mls_status() -> commands::MlsStatus {
+    commands::mls_status().await
+}
+
+#[tauri::command]
+async fn mls_key_package() -> Result<String, String> {
+    commands::mls_key_package().await
+}
+
+/// 会話成立済みの相手一覧 (Compose の「MLS で暗号化」表示用)。
+#[tauri::command]
+async fn mls_conversations() -> Vec<commands::MlsPeer> {
+    commands::mls_conversations().await
+}
+
+/// 自分の KeyPackage を相手に添付送信する (D1 Phase 3)。
+#[tauri::command]
+async fn mls_send_key_package(to: String) -> Result<String, String> {
+    commands::mls_send_key_package(to).await
+}
+
+/// 受信済み KP を消費して会話を開始し Welcome を送信する。
+#[tauri::command]
+async fn mls_start_conversation(to: String) -> Result<String, String> {
+    commands::mls_start_conversation(to).await
+}
+
+/// 会話成立済みの相手へ暗号化メッセージを送信する。
+/// 実件名・本文はエンベロープ内にのみ封入される。
+#[tauri::command]
+async fn mls_send_encrypted(to: String, subject: String, body: String) -> Result<String, String> {
+    commands::mls_send_encrypted(to, subject, body).await
+}
+
+/// 安全番号を相手と照合済みとして記録する (D1 Phase 5)。
+#[tauri::command]
+async fn mls_mark_verified(to: String) -> Result<String, String> {
+    commands::mls_mark_verified(to).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -378,6 +443,20 @@ fn main() {
             history_open_default,
             security_audit_log,
             mail_analyze_bytes,
+            // ローカル LLM (D2 Phase 5)
+            ai_model_status,
+            ai_llm_start,
+            ai_model_download,
+            // MLS E2E 暗号化 (D1 Phase 4)
+            mls_init,
+            mls_status,
+            mls_key_package,
+            // MLS 配送経路 (D1 Phase 3)
+            mls_conversations,
+            mls_send_key_package,
+            mls_start_conversation,
+            mls_send_encrypted,
+            mls_mark_verified,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");
