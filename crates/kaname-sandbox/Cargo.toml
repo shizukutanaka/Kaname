@@ -14,3 +14,6 @@ tracing    = { workspace = true }
 
 [dev-dependencies]
 # テスト用依存をここに追加
+
+[lints]
+workspace = true

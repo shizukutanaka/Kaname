@@ -19,3 +19,6 @@ kaname-screen = { path = "../kaname-screen" }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[lints]
+workspace = true

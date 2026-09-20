@@ -15,3 +15,6 @@ hkdf         = { workspace = true }
 zeroize      = { workspace = true }
 
 [dev-dependencies]
+
+[lints]
+workspace = true

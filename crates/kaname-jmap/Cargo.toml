@@ -17,3 +17,6 @@ uuid       = { workspace = true }
 chrono     = { workspace = true }
 
 [dev-dependencies]
+
+[lints]
+workspace = true

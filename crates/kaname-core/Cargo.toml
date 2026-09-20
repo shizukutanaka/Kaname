@@ -10,3 +10,6 @@ publish             = false
 serde      = { workspace = true }
 
 [dev-dependencies]
+
+[lints]
+workspace = true
