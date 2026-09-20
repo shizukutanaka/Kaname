@@ -23,6 +23,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **SSA 文体認証の学習がアプリ再起動で全消去されていた問題を修正 (D112)**: 送信者文体プロファイルを暗号化 DB (`settings`) に永続化 — 従来は警告に必要な 10 サンプルが再起動ごとにリセットされ、実運用では一度も発火し得なかった
+
 - fix(kaname-bec): AiTM スコアが契約上限 0-100 を超過していた (D102) — 高リスク認証パラメータ多重・PhaaS パターン・偽ドメインが重複加点され、出荷済み fuzz コーパスの種入力 (Tycoon2FA 系 URL) で実測 130+ に到達。`score.min(100)` でクランプし doc の閾値記述 (80+ → 実装の 50+) も修正。**kaname-bec 変更のため security-lead 承認要**
 - feat(fuzz): 孤立していた fuzz コーパス3件に対応ターゲットを実装 (D103) — `aitm_urls`/`calendar_phishing`/`ssa_bypass` の種ファイル群はターゲット未定義で一度も実行されていなかった。`AitmDetector::analyze` (score≤100・verdict 整合性)、`CalendarGuard::analyze` (リスク⇄レベル整合性)、`EmailStyleFeatures::extract`+`assess_self_send_anomaly` (send_hour 正規化・有限性契約) を不変条件付きで追加。実走: aitm 859k / calendar 257k / ssa 1.13M exec クラッシュゼロ
 - fix(fuzz): 3ターゲット中2本がコンパイル不能だった問題を修正 (D98) — `kaname_render::mime`/`::sanitize` の消滅参照を現行 API (`parse`/`sanitize_html(&RawHtml)`) に修正し libFuzzer 実走で検証 (609k/25k/1.2M exec 全クラッシュなし)。併せてハーネス側の `onerror=` 部分一致誤検知を属性スキャナに置換。static-check.sh に fuzz import 実在照合 (検査9) を追加

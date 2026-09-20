@@ -1148,6 +1148,62 @@ mod tests {
         );
         Ok(())
     }
+
+    /// D112: 文体プロファイルは settings テーブルへ永続化され、
+    /// プロセス内キャッシュ消去 (再起動相当) 後も復元される。
+    #[tokio::test]
+    async fn 文体プロファイルが再起動相当のキャッシュ消去後も復元される() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d112-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        history_open(
+            dir.join("history.db").to_string_lossy().into_owned(),
+            "00".repeat(32),
+        )
+        .await?;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+
+        let sender = "persist-test@example.com";
+        let key = format!("style_profile:{sender}");
+        // 未接続時は account_id が "" になる (evaluate_sender_style と同じ経路)。
+        let account_id = current_account_id().await;
+
+        // 3 サンプル蓄積済みのプロファイルを仕込む。
+        let seeded = kaname_ssa::SenderStyleProfile {
+            sample_count: 3,
+            ..kaname_ssa::SenderStyleProfile::new(sender)
+        };
+        store
+            .set_setting(
+                &account_id,
+                &key,
+                &serde_json::to_string(&seeded).map_err(|e| e.to_string())?,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // プロセス内キャッシュを消す (= アプリ再起動相当)。
+        style_profiles().lock().await.remove(sender);
+
+        // 1 通評価すると、永続化済みの 3 サンプルから再開されるべき。
+        let _ = evaluate_sender_style(sender, "こんにちは。お元気ですか。", Some(10), false).await;
+
+        let json = store
+            .get_setting(&account_id, &key)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("プロファイルが永続化されていない")?;
+        let p: kaname_ssa::SenderStyleProfile =
+            serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        assert_eq!(
+            p.sample_count, 4,
+            "永続化済みの 3 サンプル + 今回の 1 サンプル = 4 であるべき (0 からの再学習ではない)"
+        );
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -2312,6 +2368,10 @@ async fn evaluate_sender_style(
     send_hour: Option<u8>,
     contains_financial_request: bool,
 ) -> Vec<String> {
+    // 送信者不明のメールに文体プロファイルを帰属させられない。
+    if sender.is_empty() {
+        return Vec::new();
+    }
     let Some(hour) = send_hour else {
         return Vec::new();
     };
@@ -2321,16 +2381,51 @@ async fn evaluate_sender_style(
         return Vec::new();
     }
 
+    // D112: プロファイルをプロセス内 HashMap のみに保持していたため、
+    // 警告に必要な 10 サンプルが再起動ごとに全消去され、実運用では
+    // InsufficientData のまま永久に発火しない機能だった。
+    // settings テーブル (暗号化 DB 内) に JSON で永続化し、
+    // インメモリはキャッシュとして使う。
+    let account_id = current_account_id().await;
+    let store = store_slot().lock().await.clone();
+    let style_key = format!("style_profile:{sender}");
+
     let mut profiles = style_profiles().lock().await;
-    let profile = profiles
-        .entry(sender.to_string())
-        .or_insert_with(|| kaname_ssa::SenderStyleProfile::new(sender));
+    if let std::collections::hash_map::Entry::Vacant(e) = profiles.entry(sender.to_string()) {
+        let loaded = match &store {
+            Some(s) => s
+                .get_setting(&account_id, &style_key)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|json| serde_json::from_str::<kaname_ssa::SenderStyleProfile>(&json).ok())
+                .filter(|p| p.sender == sender),
+            None => None,
+        };
+        e.insert(loaded.unwrap_or_else(|| kaname_ssa::SenderStyleProfile::new(sender)));
+    }
+    let Some(profile) = profiles.get_mut(sender) else {
+        // 到達不能: 直前の Vacant 分岐で必ず挿入済み。
+        return Vec::new();
+    };
 
     // 判定してから取り込む。取り込んでから判定すると、
     // なりすましメール自身がプロファイルを引き寄せて検出が鈍る。
     let warning =
         kaname_ssa::assess_self_send_anomaly(profile, &features, contains_financial_request);
     profile.update(&features);
+
+    // 永続化の失敗で警告自体を失わせない (best-effort)。
+    if let Some(s) = &store {
+        match serde_json::to_string(profile) {
+            Ok(json) => {
+                if let Err(e) = s.set_setting(&account_id, &style_key, &json).await {
+                    tracing::warn!(error = %e, "文体プロファイルの保存に失敗");
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "文体プロファイルのシリアライズに失敗"),
+        }
+    }
 
     match warning {
         kaname_ssa::StyleWarning::High => vec![format!(
