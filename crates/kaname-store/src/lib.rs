@@ -1236,6 +1236,10 @@ mod tests {
 pub struct NewMessage {
     /// JMAP 側の ID (冪等性キーとして使う)。
     pub jmap_id: String,
+    /// RFC 5322 Message-ID (スレッド乗っ取り検出用)。無ければ None。
+    pub message_id: Option<String>,
+    /// JMAP threadId (スレッド横断検出用)。無ければ None。
+    pub thread_id: Option<String>,
     /// 送信者アドレス。
     pub from_addr: String,
     /// 送信者表示名。
@@ -1283,6 +1287,9 @@ pub struct StoredMessage {
     pub bec_score: Option<f32>,
     /// BEC 判定。
     pub bec_verdict: Option<String>,
+    /// RFC 5322 Message-ID (スレッド乗っ取り検出用)。未保存の過去行は None。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
 }
 
 /// `LIKE` パターンのメタ文字をエスケープする。
@@ -1319,6 +1326,12 @@ impl Store {
         validate_text_field(account_id, "account_id", 256)?;
         validate_text_field(mailbox_id, "mailbox_id", 256)?;
         validate_text_field(&msg.jmap_id, "jmap_id", 256)?;
+        if let Some(v) = &msg.message_id {
+            validate_text_field(v, "message_id", 998)?;
+        }
+        if let Some(v) = &msg.thread_id {
+            validate_text_field(v, "thread_id", 256)?;
+        }
         validate_text_field(&msg.from_addr, "from_addr", 320)?;
         if let Some(v) = &msg.from_name {
             validate_text_field(v, "from_name", 256)?;
@@ -1351,27 +1364,31 @@ impl Store {
 
         conn.execute(
             "INSERT INTO messages \
-                (id, account_id, mailbox_id, jmap_id, from_addr, from_name, \
-                 to_addrs, subject, body_preview, received_at, is_read, \
-                 bec_score, bec_verdict) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) \
+                (id, account_id, mailbox_id, jmap_id, message_id, thread_id, \
+                 from_addr, from_name, to_addrs, subject, body_preview, \
+                 received_at, is_read, bec_score, bec_verdict) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) \
              ON CONFLICT (id) DO UPDATE SET \
                 mailbox_id   = ?3, \
-                from_addr    = ?5, \
-                from_name    = ?6, \
-                to_addrs     = ?7, \
-                subject      = ?8, \
-                body_preview = ?9, \
-                received_at  = COALESCE(?10, received_at), \
-                is_read      = ?11, \
-                bec_score    = ?12, \
-                bec_verdict  = ?13, \
+                message_id   = COALESCE(?5, message_id), \
+                thread_id    = COALESCE(?6, thread_id), \
+                from_addr    = ?7, \
+                from_name    = ?8, \
+                to_addrs     = ?9, \
+                subject      = ?10, \
+                body_preview = ?11, \
+                received_at  = COALESCE(?12, received_at), \
+                is_read      = ?13, \
+                bec_score    = ?14, \
+                bec_verdict  = ?15, \
                 updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
             params![
                 id,
                 account_id,
                 mailbox_id,
                 msg.jmap_id,
+                msg.message_id,
+                msg.thread_id,
                 msg.from_addr,
                 msg.from_name,
                 to_addrs_json,
@@ -1418,6 +1435,113 @@ impl Store {
 
         let rows = stmt
             .query_map(params![account_id, mailbox_id, limit], row_to_stored)
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
+        }
+        Ok(out)
+    }
+
+    /// 指定スレッドの保存済みメールを古い順に返す。
+    ///
+    /// BEC のスレッド乗っ取り検出 (`ThreadContext`) と口座差替検出
+    /// (`past_thread_bodies`) に供給するための読み出し。
+    /// `idx_messages_thread` を利用する。上限 100 件。
+    pub async fn list_thread_messages(
+        &self,
+        account_id: &str,
+        thread_id: &str,
+    ) -> Result<Vec<StoredMessage>, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(thread_id, "thread_id", 256)?;
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, from_addr, from_name, subject, body_preview, \
+                    received_at, is_read, bec_score, bec_verdict, to_addrs, \
+                    message_id \
+             FROM messages \
+             WHERE account_id = ?1 AND thread_id = ?2 AND is_deleted = 0 \
+             ORDER BY received_at ASC LIMIT 100;",
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![account_id, thread_id], |row| {
+                let mut s = row_to_stored(row)?;
+                s.message_id = row.get(10)?;
+                Ok(s)
+            })
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
+        }
+        Ok(out)
+    }
+
+    /// RFC 5322 Message-ID 群に一致する保存済みメッセージを返す。
+    ///
+    /// `.eml` 取り込み経路では JMAP threadId が無いため、In-Reply-To /
+    /// References が指す Message-ID を保存済みメールと突き合わせて
+    /// 既知スレッドを特定する。上限 100 件の IN 句・全てパラメータ束縛。
+    pub async fn list_messages_by_message_ids(
+        &self,
+        account_id: &str,
+        message_ids: &[String],
+    ) -> Result<Vec<StoredMessage>, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        if message_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        const MAX_IDS: usize = 100;
+        if message_ids.len() > MAX_IDS {
+            return Err(StoreError::InvalidInput {
+                field: "message_ids",
+                reason: format!("{MAX_IDS} 件まで"),
+            });
+        }
+        for id in message_ids {
+            validate_text_field(id, "message_ids", 998)?;
+        }
+
+        let marks = std::iter::repeat_n("?", message_ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id, from_addr, from_name, subject, body_preview, \
+                received_at, is_read, bec_score, bec_verdict, to_addrs, \
+                message_id \
+             FROM messages \
+             WHERE account_id = ?1 AND is_deleted = 0 AND message_id IN ({marks}) \
+             ORDER BY received_at ASC LIMIT 100;"
+        );
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        let mut params_vec: Vec<rusqlite::types::Value> = Vec::with_capacity(message_ids.len() + 1);
+        params_vec.push(account_id.to_string().into());
+        for id in message_ids {
+            params_vec.push(id.clone().into());
+        }
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(params_vec), |row| {
+                let mut s = row_to_stored(row)?;
+                s.message_id = row.get(10)?;
+                Ok(s)
+            })
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1497,6 +1621,10 @@ fn row_to_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> {
             .ok()
             .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
             .unwrap_or_default(),
+        // message_id 列は呼び出し元で SELECT に含めた場合のみ Some。
+        // 既定クエリ (list_messages/search) では列がないため None を入れ、
+        // スレッド系クエリが呼び出し側で上書きする。
+        message_id: None,
     })
 }
 
@@ -1518,6 +1646,8 @@ mod message_persistence_tests {
     fn msg(jmap_id: &str, subject: &str) -> NewMessage {
         NewMessage {
             jmap_id: jmap_id.to_string(),
+            message_id: Some(format!("<{jmap_id}@example.test>")),
+            thread_id: Some("thread-1".to_string()),
             from_addr: "alice@corp.com".to_string(),
             from_name: Some("Alice".to_string()),
             to_addrs: vec!["bob@corp.com".to_string()],
@@ -1659,5 +1789,96 @@ mod message_persistence_tests {
             rows[0].to_addrs.is_empty(),
             "'' は宛先不明として空配列に倒す"
         );
+    }
+
+    /// `list_thread_messages` は同一 `thread_id` のメッセージを `received_at`
+    /// 昇順で返し、他スレッド・他アカウント・削除済みは除外する。
+    /// スレッド乗っ取り検出 (kaname-bec) が「既知スレッドの参加者」を
+    /// 引くために使う経路。
+    #[tokio::test]
+    async fn list_thread_messages_は同一スレッドのみを昇順で返す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+        seed_account(&store, "acct2").await;
+
+        let mut m1 = msg("jmap-1", "件名1");
+        m1.received_at = Some("2026-09-10T00:00:00Z".to_string());
+        let mut m2 = msg("jmap-2", "件名2");
+        m2.received_at = Some("2026-09-12T00:00:00Z".to_string());
+        store.save_message("acct1", "inbox", &m2).await.unwrap();
+        store.save_message("acct1", "inbox", &m1).await.unwrap();
+
+        // 別スレッド・別アカウントの混入。
+        let mut other = msg("jmap-3", "件名3");
+        other.thread_id = Some("thread-2".to_string());
+        store.save_message("acct1", "inbox", &other).await.unwrap();
+        store.save_message("acct2", "inbox", &m1).await.unwrap();
+
+        let rows = store
+            .list_thread_messages("acct1", "thread-1")
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].message_id.as_deref(),
+            Some("<jmap-1@example.test>"),
+            "received_at 昇順"
+        );
+        assert_eq!(rows[1].message_id.as_deref(), Some("<jmap-2@example.test>"));
+    }
+
+    /// `list_messages_by_message_ids` は RFC 5322 Message-ID の集合で
+    /// メッセージを引く。In-Reply-To/References が指す親メッセージの
+    /// 検索に使う。未知 ID・他アカウントは結果に含めない。
+    #[tokio::test]
+    async fn list_messages_by_message_ids_は一致idのみ返す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+        seed_account(&store, "acct2").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名1"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "件名2"))
+            .await
+            .unwrap();
+        // 同じ Message-ID を持つ他アカウント行は返さない。
+        store
+            .save_message("acct2", "inbox", &msg("jmap-1", "件名1"))
+            .await
+            .unwrap();
+
+        let ids = vec![
+            "<jmap-1@example.test>".to_string(),
+            "<unknown@example.test>".to_string(),
+        ];
+        let rows = store
+            .list_messages_by_message_ids("acct1", &ids)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].message_id.as_deref(), Some("<jmap-1@example.test>"));
+
+        // 空入力は空を返し、上限超過は検証エラー。
+        let empty = store
+            .list_messages_by_message_ids("acct1", &[])
+            .await
+            .unwrap();
+        assert!(empty.is_empty());
+        let too_many: Vec<String> = (0..101).map(|i| format!("<m{i}@x.test>")).collect();
+        assert!(store
+            .list_messages_by_message_ids("acct1", &too_many)
+            .await
+            .is_err());
     }
 }

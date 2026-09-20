@@ -82,6 +82,13 @@ pub struct Envelope {
     pub reply_to: Vec<Address>,
     /// Return-Path ヘッダーのアドレス (MAIL FROM; なりすまし検出に使用)。
     pub return_path: Option<Address>,
+    /// In-Reply-To が参照する Message-ID 群 (スレッド乗っ取り検出に使用)。
+    pub in_reply_to: Vec<String>,
+    /// References が参照する Message-ID 群 (スレッド乗っ取り検出に使用)。
+    pub references: Vec<String>,
+    /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
+    /// 複数署名がある場合は先頭のみ保持する。
+    pub dkim_signature: Option<String>,
 }
 
 /// An RFC 5322 address.
@@ -270,6 +277,27 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         _ => None,
     };
 
+    // In-Reply-To / References (スレッド乗っ取り判定に供給するため抽出する)
+    let in_reply_to = msg
+        .in_reply_to()
+        .as_text_list()
+        .unwrap_or_default()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let references = msg
+        .references()
+        .as_text_list()
+        .unwrap_or_default()
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    // DKIM-Signature ヘッダーの生値 (複数ある場合は先頭のみ — `l=` 検査用)
+    let dkim_signature = msg
+        .header_values("DKIM-Signature")
+        .find_map(|v| v.as_text().map(|s| s.to_string()));
+
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
@@ -286,6 +314,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         auth_results,
         reply_to,
         return_path,
+        in_reply_to,
+        references,
+        dkim_signature,
     })
 }
 

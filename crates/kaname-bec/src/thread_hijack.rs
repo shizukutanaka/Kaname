@@ -208,7 +208,8 @@ pub fn analyze_thread_hijack(ctx: &ThreadContext<'_>) -> ThreadHijackResult {
 }
 
 /// テキストの主要言語を推定する (簡易ヒューリスティック)。
-fn detect_language(text: &str) -> ThreadLanguage {
+/// 過去スレッドの言語を求める呼び出し側 (`ThreadContext.prior_language`) にも公開する。
+pub fn detect_language(text: &str) -> ThreadLanguage {
     let total_chars: usize = text.chars().count();
     if total_chars == 0 {
         return ThreadLanguage::Other;

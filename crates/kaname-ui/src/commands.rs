@@ -318,6 +318,35 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         None => a.addr.as_string(),
     });
     let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
+    // スレッド乗っ取り検出: In-Reply-To/References が指す既知メッセージを
+    // Store から逆引きし、スレッド履歴を組み立てる。
+    let account_id = current_account_id().await;
+    let mut ref_ids = env.in_reply_to.clone();
+    ref_ids.extend(env.references.iter().cloned());
+    ref_ids.dedup();
+    let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
+        build_thread_data(&account_id, None, &ref_ids).await;
+    let current_domain = from_addr_only
+        .rsplit('@')
+        .next()
+        .map(|d| d.to_lowercase())
+        .unwrap_or_default();
+    let body_snippet: String = body_text.chars().take(500).collect();
+    let in_reply_to_first = env.in_reply_to.first();
+    let thread_ctx = if known_ids.is_empty() && in_reply_to_first.is_none() {
+        None
+    } else {
+        Some(kaname_bec::thread_hijack::ThreadContext {
+            in_reply_to: in_reply_to_first.map(|s| s.as_str()),
+            known_thread_message_ids: &known_ids,
+            thread_sender_domains: &thread_domains,
+            current_sender_domain: &current_domain,
+            prior_subject: prior_subject.as_deref(),
+            current_subject: &subject,
+            prior_language,
+            current_body_snippet: &body_snippet,
+        })
+    };
     let req = kaname_bec::AssessmentRequest {
         from_header: &from,
         return_path: return_path.as_deref(),
@@ -329,9 +358,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         known_contacts: &contacts,
         extracted_urls: &urls,
         reply_to: reply_to.as_deref(),
-        thread_context: None,
-        past_thread_bodies: &[],
-        dkim_signature_header: None,
+        thread_context: thread_ctx,
+        past_thread_bodies: &past_bodies,
+        dkim_signature_header: env.dkim_signature.as_deref(),
     };
 
     let assessment = kaname_bec::BecDetector::deterministic_only()
@@ -587,6 +616,31 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let contacts = lookup_contacts(&current_account_id().await).await;
         let reply_to = env.reply_to.first().map(|a| a.addr.as_string());
         let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
+        // スレッド乗っ取り検出: In-Reply-To/References が指す既知メッセージを
+        // Store から逆引きし、スレッド履歴を組み立てる。
+        let account_id = current_account_id().await;
+        let mut ref_ids = env.in_reply_to.clone();
+        ref_ids.extend(env.references.iter().cloned());
+        ref_ids.dedup();
+        let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
+            build_thread_data(&account_id, None, &ref_ids).await;
+        let current_domain = from_domain.to_lowercase();
+        let body_snippet: String = body_text.chars().take(500).collect();
+        let in_reply_to_first = env.in_reply_to.first();
+        let thread_ctx = if known_ids.is_empty() && in_reply_to_first.is_none() {
+            None
+        } else {
+            Some(kaname_bec::thread_hijack::ThreadContext {
+                in_reply_to: in_reply_to_first.map(|s| s.as_str()),
+                known_thread_message_ids: &known_ids,
+                thread_sender_domains: &thread_domains,
+                current_sender_domain: &current_domain,
+                prior_subject: prior_subject.as_deref(),
+                current_subject: &subject,
+                prior_language,
+                current_body_snippet: &body_snippet,
+            })
+        };
         let req = kaname_bec::AssessmentRequest {
             from_header: &from,
             return_path: return_path.as_deref(),
@@ -598,9 +652,9 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             known_contacts: &contacts,
             extracted_urls: &urls,
             reply_to: reply_to.as_deref(),
-            thread_context: None,
-            past_thread_bodies: &[],
-            dkim_signature_header: None,
+            thread_context: thread_ctx,
+            past_thread_bodies: &past_bodies,
+            dkim_signature_header: env.dkim_signature.as_deref(),
         };
 
         let (verdict, score) = match kaname_bec::BecDetector::deterministic_only().assess(req) {
@@ -1418,15 +1472,20 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 
         // 一覧の時点では Authentication-Results ヘッダを取得していないため
         // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
-        let verdict = assess_listing(
-            &account_id,
-            &from_name,
-            &from_addr,
-            &subject,
-            &preview,
-            &our,
-            reply_to.as_deref(),
-        )
+        // スレッド情報は JMAP の messageId/inReplyTo/references/threadId から供給。
+        let verdict = assess_listing(ListingInput {
+            account_id: &account_id,
+            from_name: &from_name,
+            from_addr: &from_addr,
+            subject: &subject,
+            preview: &preview,
+            our_domain: &our,
+            reply_to: reply_to.as_deref(),
+            thread_id: it.thread_id.as_deref(),
+            in_reply_to: it.in_reply_to.as_deref().unwrap_or(&[]),
+            references: it.references.as_deref().unwrap_or(&[]),
+            dkim_signature: it.dkim_signature.as_deref(),
+        })
         .await;
 
         // 受信を履歴に記録し、メール本体も保存する。
@@ -1447,6 +1506,9 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
 
             let new_msg = kaname_store::NewMessage {
                 jmap_id: it.id.clone(),
+                // Message-ID は RFC 5322 の値 (JMAP messageId) を先頭のみ保持。
+                message_id: it.message_id.as_ref().and_then(|v| v.first()).cloned(),
+                thread_id: it.thread_id.clone(),
                 from_addr: from_addr.clone(),
                 from_name: from_name.clone(),
                 to_addrs: it
@@ -1489,20 +1551,41 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
     Ok(rows)
 }
 
+/// `assess_listing` への入力を束ねる。
+/// JMAP `EmailListItem` のフィールド群 + 評価用の自組織ドメイン。
+struct ListingInput<'a> {
+    account_id: &'a str,
+    from_name: &'a Option<String>,
+    from_addr: &'a str,
+    subject: &'a str,
+    preview: &'a str,
+    our_domain: &'a str,
+    reply_to: Option<&'a str>,
+    thread_id: Option<&'a str>,
+    in_reply_to: &'a [String],
+    references: &'a [String],
+    dkim_signature: Option<&'a str>,
+}
+
 /// 一覧表示用の簡易 BEC 判定。
 ///
 /// 一覧では本文全体もヘッダも持たないため、差出人・件名・プレビューのみで
 /// 評価する。**判定できなかった場合に SAFE を返さない** (UNKNOWN を返す) のは
 /// 他の経路と同じ方針で、判定不能を安全と偽らないため。
-async fn assess_listing(
-    account_id: &str,
-    from_name: &Option<String>,
-    from_addr: &str,
-    subject: &str,
-    preview: &str,
-    our_domain: &str,
-    reply_to: Option<&str>,
-) -> String {
+async fn assess_listing(input: ListingInput<'_>) -> String {
+    let ListingInput {
+        account_id,
+        from_name,
+        from_addr,
+        subject,
+        preview,
+        our_domain,
+        reply_to,
+        thread_id,
+        in_reply_to,
+        references,
+        dkim_signature,
+    } = input;
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
         None => from_addr.to_string(),
@@ -1512,6 +1595,35 @@ async fn assess_listing(
     // 送信者履歴を引く。無ければ None のままで、BEC は履歴シグナルを
     // 評価しない (履歴が無いことを「初回連絡」と断定しない)。
     let history = lookup_sender_history(account_id, from_addr).await;
+
+    // スレッド乗っ取り検出: JMAP threadId で既知スレッドを引き、
+    // In-Reply-To/References の Message-ID 一致と照合する。
+    let mut ref_ids: Vec<String> = in_reply_to.to_vec();
+    ref_ids.extend(references.iter().cloned());
+    ref_ids.dedup();
+    let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
+        build_thread_data(account_id, thread_id, &ref_ids).await;
+    let current_domain = from_addr
+        .rsplit('@')
+        .next()
+        .map(|d| d.to_lowercase())
+        .unwrap_or_default();
+    let body_snippet: String = preview.chars().take(500).collect();
+    let in_reply_to_first = in_reply_to.first();
+    let thread_ctx = if known_ids.is_empty() && in_reply_to_first.is_none() {
+        None
+    } else {
+        Some(kaname_bec::thread_hijack::ThreadContext {
+            in_reply_to: in_reply_to_first.map(|s| s.as_str()),
+            known_thread_message_ids: &known_ids,
+            thread_sender_domains: &thread_domains,
+            current_sender_domain: &current_domain,
+            prior_subject: prior_subject.as_deref(),
+            current_subject: subject,
+            prior_language,
+            current_body_snippet: &body_snippet,
+        })
+    };
     let req = kaname_bec::AssessmentRequest {
         from_header: &from_header,
         return_path: None,
@@ -1528,9 +1640,9 @@ async fn assess_listing(
         known_contacts: &contacts,
         extracted_urls: &urls,
         reply_to,
-        thread_context: None,
-        past_thread_bodies: &[],
-        dkim_signature_header: None,
+        thread_context: thread_ctx,
+        past_thread_bodies: &past_bodies,
+        dkim_signature_header: dkim_signature,
     };
     match kaname_bec::BecDetector::deterministic_only().assess(req) {
         Ok(a) => match a.verdict {
@@ -1789,6 +1901,88 @@ async fn lookup_contacts(account_id: &str) -> Vec<String> {
         tracing::warn!(error=%e, "連絡先一覧の取得に失敗");
         Vec::new()
     })
+}
+
+/// Store からスレッド内メッセージを引く。
+///
+/// `thread_id` (JMAP) があれば直接引き、無ければ `ref_message_ids`
+/// (In-Reply-To / References が指す Message-ID) に一致する過去メールから
+/// 逆引きする。Store 未接続・失敗・0件なら空 (そのシグナルはスキップ)。
+async fn lookup_thread_messages(
+    account_id: &str,
+    thread_id: Option<&str>,
+    ref_message_ids: &[String],
+) -> Vec<kaname_store::StoredMessage> {
+    let Some(store) = store_slot().lock().await.clone() else {
+        return Vec::new();
+    };
+    if let Some(tid) = thread_id {
+        match store.list_thread_messages(account_id, tid).await {
+            Ok(v) if !v.is_empty() => return v,
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!(error=%e, "スレッド履歴の取得に失敗");
+                return Vec::new();
+            }
+        }
+    }
+    if ref_message_ids.is_empty() {
+        return Vec::new();
+    }
+    store
+        .list_messages_by_message_ids(account_id, ref_message_ids)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(error=%e, "Message-ID 検索に失敗");
+            Vec::new()
+        })
+}
+
+/// `ThreadContext`/`past_thread_bodies` に渡す所有データを組み立てる。
+///
+/// BEC の `ThreadContext<'a>` は参照型のため、所有側 (この戻り値) を
+/// 評価ブロックスコープで保持してから借用する。
+/// 返るタプル: (known_message_ids, sender_domains, prior_subject,
+///              prior_language, past_bodies)
+async fn build_thread_data(
+    account_id: &str,
+    thread_id: Option<&str>,
+    ref_message_ids: &[String],
+) -> (
+    Vec<String>,
+    Vec<String>,
+    Option<String>,
+    Option<kaname_bec::thread_hijack::ThreadLanguage>,
+    Vec<String>,
+) {
+    let msgs = lookup_thread_messages(account_id, thread_id, ref_message_ids).await;
+    if msgs.is_empty() {
+        return (Vec::new(), Vec::new(), None, None, Vec::new());
+    }
+    let mut known_ids = Vec::with_capacity(msgs.len());
+    let mut domains = Vec::new();
+    let mut bodies = Vec::new();
+    for m in &msgs {
+        if let Some(id) = &m.message_id {
+            known_ids.push(id.clone());
+        }
+        if let Some(dom) = m.from_addr.rsplit('@').next() {
+            let d = dom.to_lowercase();
+            if !domains.contains(&d) {
+                domains.push(d);
+            }
+        }
+        if let Some(b) = &m.body_preview {
+            bodies.push(b.clone());
+        }
+    }
+    // 直近メッセージの件名と言語を「スレッドの基準」として使う。
+    let prior_subject = msgs.last().and_then(|m| m.subject.clone());
+    let prior_language = msgs
+        .last()
+        .and_then(|m| m.body_preview.as_deref())
+        .map(kaname_bec::thread_hijack::detect_language);
+    (known_ids, domains, prior_subject, prior_language, bodies)
 }
 
 /// Store から送信者履歴を引き、BEC の `SenderHistory` に変換する。
