@@ -344,7 +344,6 @@ fn main() {
     kaname_ui::run();
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         // OOBV セレモニー / 監査ログの共有状態 (D15 残件)。
         // `oobv_start`/`oobv_verify` が tauri::State 経由で受け取る。
         .manage(commands::V02AppState::new())
