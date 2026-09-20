@@ -213,6 +213,11 @@ async fn history_open_default() -> Result<String, String> {
     commands::history_open_default().await
 }
 
+#[tauri::command]
+async fn security_audit_log(limit: Option<i64>) -> Result<commands::AuditLogView, String> {
+    commands::security_audit_log(limit).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -343,6 +348,7 @@ fn main() {
             settings_save_onboarding,
             settings_is_onboarded,
             history_open_default,
+            security_audit_log,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");
