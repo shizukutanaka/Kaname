@@ -451,6 +451,8 @@ export function EmlImport() {
               <iframe
                 srcdoc={r().body.srcdoc}
                 sandbox={r().body.sandbox}
+                // srcdoc 内 <meta> CSP に加え iframe csp 属性でも強制 (二重防御)。
+                csp={r().body.csp}
                 style={{
                   width: "100%", height: "360px",
                   border: "1px solid #C3CBD4", "border-radius": "8px",
