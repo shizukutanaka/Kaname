@@ -133,6 +133,15 @@ async fn mail_scan_folder(path: String) -> Result<commands::FolderScanResult, St
     commands::mail_scan_folder(path).await
 }
 
+/// 送信前の DLP 警告を返す (Compose が送信クリック時に呼ぶ)。
+/// mail_send は Block のみ止めるため、Warn 所見はここで表示する。
+#[tauri::command]
+async fn mail_dlp_precheck(
+    req: commands::DlpPrecheckRequest,
+) -> Result<commands::DlpPrecheckResponse, String> {
+    commands::mail_dlp_precheck(req).await
+}
+
 /// メールを送信する (JMAP)。送信前に DLP (Outbound) を実行する。
 #[tauri::command]
 async fn mail_send(
@@ -364,6 +373,7 @@ fn main() {
             mail_search,
             history_mark_verified,
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
+            mail_dlp_precheck,
             mail_send,
             mail_get_mailboxes,
             settings_save_onboarding,

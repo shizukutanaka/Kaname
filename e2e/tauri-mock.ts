@@ -138,6 +138,8 @@ export interface MockOverrides {
   mailFetchFails?: boolean;
   /** `oobv_recommend` の戻り値。 */
   oobvLevel?: string;
+  /** `mail_dlp_precheck` の戻り値。 */
+  dlpWarnings?: string[];
 }
 
 /**
@@ -249,6 +251,8 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             return { account_id: "acc-1", mailboxes: [["mbx-inbox", "受信トレイ", 2]] };
           case "oobv_recommend":
             return { level: ov.oobvLevel ?? "None", message_i18n_key: "" };
+          case "mail_dlp_precheck":
+            return { warnings: ov.dlpWarnings ?? [] };
           case "ai_detect_phishing":      return { verdict: "SAFE", score: 0 };
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":
