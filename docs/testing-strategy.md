@@ -2,19 +2,16 @@
 
 > "Quality is not an act, it is a habit." — Aristotle (Apple HIG 引用)
 
-Kaname は 384 の Rust テスト、31 vitest、19 Playwright E2E、3 ファジングターゲット、8 proptestを持つ。本ドキュメントは**それぞれの存在意義**と**いつ何を書くべきか**を定義する。
+Kaname は 1,178 の Rust テスト、6 vitest、19 Playwright E2E spec (62 pass / 1 skip・3ブラウザ行列)、3 ファジングターゲット、19 proptest を持つ (2026-09-20 実測)。本ドキュメントは**それぞれの存在意義**と**いつ何を書くべきか**を定義する。
 
-> **2026-09 訂正**: このドキュメントの「CI 実行マトリクス」節と「カバレッジ目標」
-> 表の「現状」列は、あたかも実測済みであるかのように記載されているが、
-> **本リポジトリでは `cargo test`/`cargo nextest`/`npm test` の一つも実行
-> できない** (組織のエグレスポリシーで `static.crates.io`/npm レジストリが
-> 遮断されているため。`docs/gap-analysis.md` D20)。「CI 実行マトリクス」
-> が前提とする CI パイプライン自体も存在しない (`.github/workflows/` が
-> 空。D7)。したがって冒頭のテスト件数・カバレッジ「現状」91%/87%/85% 等の
-> 数値は、この環境で検証されたものではない。テストコード自体は実在し
-> `./scripts/static-check.sh` の構文検証は通っているが、**実行結果 (合格・
-> 失敗・カバレッジ率) は一切確認できていない**。ネットワークのある環境
-> での実行が必要 (SECURITY.md D34 と同種の教訓)。
+> **2026-09-20 実測訂正**: この環境では `cargo nextest run --workspace`
+> (1,178 全パス) と `npm run test:unit` (vitest 6 件) が実際に実行可能
+> (rust-toolchain = stable、crates.io/npm 到達可能)。**残る未検証は
+> カバレッジ率のみ** — 「カバレッジ目標」表の「現状」列 (91%/87%/85% 等)
+> は測定基盤 (llvm-cov / tarpaulin) が導入されていないため依然として
+> 未検証のまま残す。CI パイプラインは `ci-templates/` に用意済みだが
+> `.github/workflows/` への移行は未実施 (`docs/gap-analysis.md` D63 —
+> `workflow` スコープのある認証で `git mv` する人間作業が必要)。
 
 ---
 
@@ -23,27 +20,29 @@ Kaname は 384 の Rust テスト、31 vitest、19 Playwright E2E、3 ファジ�
 ### 1. ユニットテスト (Rust)
 
 **目的**: 関数・モジュール単体の正しさ証明  
-**規模**: 303 件  
-**実行**: `cargo nextest run --workspace` (約 30 秒)
+**規模**: 1,178 件 (2026-09-20 `cargo nextest list --workspace` 実測)  
+**実行**: `cargo nextest run --workspace` (約 2 秒)
 
 **書く基準**:
 - 全ての `pub` 関数に最低 1 テスト
 - 正常系 + 異常系 + 境界値の 3 ケース
 - ファイル内の `#[cfg(test)] mod tests` 内に配置
 
-**特に重要なクレート**:
-- `kaname-ai/src/dual_llm.rs` — 22 テストで型安全コア検証
-- `kaname-oobv` — 14 テストでセレモニーロジック
-- `kaname-pivot` — 17 テストで横展開検出
-- `kaname-bec` — 8 proptestでスコア不変条件
+**特に重要なクレート** (2026-09-20 実測テスト数):
+- `kaname-render` — 214 テスト (HTML サニタイザ/スマグリング/Quishing)
+- `kaname-bec` — 131 テスト (BEC 判定シグナル)
+- `kaname-tests` — 104 テスト (統合・敵対・プロパティ)
+- `kaname-ai` — 102 テスト (Dual-LLM 型安全コア)
+- `kaname-dlp` — 95 テスト (DLP 分類器・EDM)
+- `kaname-screen` — 78 テスト (PromptScreener/OutputAuditor)
 
 ---
 
 ### 2. プロパティテスト (proptest)
 
 **目的**: 「全ての入力に対する不変条件」を数千ケースで検証  
-**規模**: 14 件 (`kaname-bec/tests/property_tests.rs`)  
-**実行**: `cargo test -p kaname-bec --test property_tests`
+**規模**: 19 件 (`kaname-tests/src/property_tests.rs` 14 件 + `kaname-radar/tests/property_tests.rs` 5 件)  
+**実行**: `cargo nextest run -p kaname-tests -p kaname-radar`
 
 **書く基準**:
 - 数学的不変条件 (Levenshtein 三角不等式、対称性)
@@ -90,7 +89,7 @@ Kaname は 384 の Rust テスト、31 vitest、19 Playwright E2E、3 ファジ�
 ### 5. ファジングテスト (cargo-fuzz)
 
 **目的**: 任意バイト列で未知のクラッシュ発見  
-**規模**: 3 ターゲット + 12 シード  
+**規模**: 3 ターゲット + 34 シード (`fuzz/corpus/` 実測)  
 **実行**: `npm run fuzz:prompt` / `:mime` / `:html`
 
 **ターゲット**:
@@ -108,7 +107,7 @@ Kaname は 384 の Rust テスト、31 vitest、19 Playwright E2E、3 ファジ�
 ### 6. E2E テスト (Playwright)
 
 **目的**: ユーザー視点での北極星デモシーン保証  
-**規模**: 19 件 (`e2e/north-star-demo.spec.ts`)  
+**規模**: 9 件 (`e2e/north-star-demo.spec.ts`) × 3 ブラウザ行列 = 62 pass / 1 skip (2026-09-20 実測、Tauri IPC モック注入 `e2e/tauri-mock.ts` により実 UI で実行)  
 **実行**: `npm run test:e2e`
 
 **カバーする UX フロー**:
@@ -126,7 +125,7 @@ Kaname は 384 の Rust テスト、31 vitest、19 Playwright E2E、3 ファジ�
 ### 7. アクセシビリティ自動テスト (axe-core)
 
 **目的**: WCAG AAA 自動検証  
-**規模**: 9 件 (`e2e/a11y.spec.ts`)  
+**規模**: 10 件 (`e2e/a11y.spec.ts`、axe-core 実測)  
 **実行**: `npm run test:a11y`
 
 **検証項目**:
@@ -192,10 +191,10 @@ Kaname は 384 の Rust テスト、31 vitest、19 Playwright E2E、3 ファジ�
 
 | クレート | 目標 | 現状 |
 |---|---|---|
-| `kaname-ai`  | 95% | 91% |
-| `kaname-bec` | 90% | 87% |
-| `kaname-mls` | 90% | 85% |
-| その他       | 80% | 75-85% |
+| `kaname-ai`  | 95% | 未測定 (測定基盤なし) |
+| `kaname-bec` | 90% | 未測定 (測定基盤なし) |
+| `kaname-mls` | 90% | 未測定 (測定基盤なし) |
+| その他       | 80% | 未測定 (測定基盤なし) |
 
 ---
 
