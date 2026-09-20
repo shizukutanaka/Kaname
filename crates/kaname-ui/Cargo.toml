@@ -50,6 +50,7 @@ rand = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 
 
 [lints]
