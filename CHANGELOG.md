@@ -28,6 +28,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - ゼロ幅/フォーマット文字を単一スペースに置換する `normalize_for_matching_spaced` を新設し、`TrustScorer::score`・`kaname-oobv::OobvRecommender`・`commands.rs::has_financial` の3箇所で削除版とスペース化版の二重照合に変更。`wire​transfer` 型の単語間ゼロ幅挿入を捕捉。`kaname-bec` の2箇所はセキュリティレビュー必須クレートのため未修正(詳細: `docs/gap-analysis.md` D45)
 - **`kaname-render::extract_auth_result` がプロパティ値内の `dkim=pass` 風擬似トークンを機構結果と誤認しうる構造的脆さを修正し、`AuthResultsHeader.authserv_id` を露出** (D18・部分対応)
   - `;` 区切り各部の `mechanism=result` トークンのみを機構結果として認めるパースに変更 (RFC 8601)。authserv-id の信頼リスト照合自体は組織ドメイン設定 (D44) と `mail-auth` 導入に依存するため未実施
+- **DLP/BEC の `our_domain` が全5箇所で `"example.com"` 固定だった欠陥を修正 — 自組織ドメインを実ソースから解決する** (D44)
+  - `kaname-jmap` の `Session` に RFC 8620 の `username` フィールドを追加し `JmapClient::account_domain()` でメールドメインを自動導出。`commands.rs` の新ヘルパー `our_domain()` が 設定 `org_domain` → 呼び出し側ヒント (`from` アドレス) → 接続中アカウント導出 → 空文字 (両検出器が安全スキップ) の順で解決。`mail_connect` は `ConnectResult.org_domain` を返し、接続画面が導出した組織ドメインを表示する (設定 UI は不要 — 導出でユーザー操作ゼロ)。一覧表示では `mail_fetch` が1回だけ解決して各行に渡す (N+1 回避)
 
 ### Security
 - **フロントエンド devDependencies の既知脆弱性を `npm audit fix` で10件→4件に削減** (D61・部分対応)

@@ -36,6 +36,12 @@
 > vitest 15→8件は対象消滅分)。作成画面の送信前アドバイザリに `oobv_recommend` を配線し、
 > `oobv_start`/`oobv_verify`/`pivot_analyze` も `invoke_handler` 登録で到達可能化 (D15 残件。
 > #139 はコンフリクトで未マージのままクローズされていたため #143 として再適用)。
+> **2026-09 続報 (D44 解消)**: DLP/BEC の `our_domain` が全箇所 `"example.com"` 固定だった
+> 欠陥を解消。`Session.username` (RFC 8620) から `JmapClient::account_domain()` が
+> 組織ドメインを自動導出し、`commands.rs` の `our_domain()` ヘルパーが
+> 設定 `org_domain` → `from` ヒント → 接続アカウント導出 → 空文字 (安全スキップ) の順で
+> 解決する。設定 UI は追加せず導出結果を接続画面に表示する方針 (操作回数最小の原則)。
+> (#138 はベースブランチ側へマージされ main に入っていなかったため再適用)。
 
 > このドキュメントは `crates/kaname-ai/src/lib.rs` の doc コメントが参照する
 > マチュリティ表を実体化したもの。市販/本番出荷の可否判断材料として、
