@@ -559,8 +559,7 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn count_paragraphs(text: &str) -> u32 {

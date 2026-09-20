@@ -900,7 +900,7 @@ mod property_tests {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod security_tests {
     use super::*;
 

@@ -645,7 +645,7 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
             continue;
         }
         // 末尾に付きがちな句読点・括弧を落とす
-        let trimmed = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ')' | ';' | ']' | '!' | '?'));
+        let trimmed = token.trim_end_matches(['.', ',', ')', ';', ']', '!', '?']);
         if trimmed.len() < 12 {
             // "http://a.b" 未満は URL として意味を成さない
             continue;

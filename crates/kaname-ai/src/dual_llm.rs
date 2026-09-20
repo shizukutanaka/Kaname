@@ -812,8 +812,7 @@ pub enum AiError {
 fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Unicode Format カテゴリー (Cf) のゼロ幅文字を検出する。
