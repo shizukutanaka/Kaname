@@ -1077,11 +1077,17 @@ fn detect_medical_data(text: &str) -> bool {
 // Default rule set (Starter tier)
 // ============================================================================
 //
-// D57: 既定で有効なのはこの5ルールのみ。実装済み12分類器のうち
+// D57: 既定で有効な Outbound ルールは5件。実装済み12分類器のうち
 // JpMyNumber / CreditCardPan / ConfidentialMarker / SourceCode の4つが
 // 既定で使用される。残り8つ (JpCorporateNumber, Iban, SwiftBic, UsSsn,
 // IpAddress, AttorneyClientPrivilege, DealCodename, MedicalData) は
 // カスタムルール読み込み (from_db) 未実装のため現在有効化する経路がない。
+//
+// D104: Inbound ルールが0件だったため、受信メールの DLP 評価
+// (Direction::Inbound) は常に所見ゼロを返していた — UI の
+// 「機微情報の検出 (DLP)」表示が構造的に空だった。届いた本文中の
+// 機微情報を Warn として報告する3ルールを追加する (転送・返信時の
+// 漏洩リスクの可視化が目的で、受信をブロックしない)。
 
 fn default_rules() -> Vec<Rule> {
     vec![
@@ -1161,6 +1167,42 @@ fn default_rules() -> Vec<Rule> {
                     ],
                 }),
             ]),
+        },
+        // Inbound ルール (D104): 届いたメール本文中の機微情報を Warn で報告。
+        // 受信は遮断しないため Action は Warn のみ。分類器は Outbound と
+        // 同じものを再利用する (検出したい実体は方向によらず同じ)。
+        Rule {
+            id: "default-in-001".into(),
+            name: "受信メールにマイナンバー".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::JpMyNumber,
+            }),
+        },
+        Rule {
+            id: "default-in-002".into(),
+            name: "受信メールにクレジットカード番号".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::CreditCardPan,
+            }),
+        },
+        Rule {
+            id: "default-in-003".into(),
+            name: "受信メールに機密マーカー".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::ConfidentialMarker,
+            }),
         },
     ]
 }
@@ -1600,6 +1642,75 @@ mod tests {
     fn action_ordering_is_block_gt_warn_gt_allow() {
         assert!(Action::Block > Action::Warn);
         assert!(Action::Warn > Action::Allow);
+    }
+
+    // D104: Inbound ルールが0件だったため受信メールの DLP 評価は
+    // 構造的に常に空だった (UI の「機微情報の検出」が死んでいた)。
+    #[test]
+    fn inbound_eval_detects_my_number_in_received_body() {
+        let result = engine().evaluate(
+            &ctx("マイナンバーは 123456789018 です", "ext@partner.co.jp", &[]),
+            Direction::Inbound,
+        );
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.rule_id == "default-in-001"),
+            "受信本文のマイナンバーが検出されるべき: {:?}",
+            result.findings
+        );
+        // 受信側は遮断しない — Warn 以上にはしない
+        assert!(matches!(result.verdict, Action::Warn));
+    }
+
+    #[test]
+    fn inbound_eval_detects_credit_card_and_confidential_marker() {
+        let r1 = engine().evaluate(
+            &ctx("カード番号は 4111-1111-1111-1111 です", "ext@x.jp", &[]),
+            Direction::Inbound,
+        );
+        assert!(r1.findings.iter().any(|f| f.rule_id == "default-in-002"));
+        let r2 = engine().evaluate(
+            &ctx("【社外秘】の資料です", "ext@x.jp", &[]),
+            Direction::Inbound,
+        );
+        assert!(r2.findings.iter().any(|f| f.rule_id == "default-in-003"));
+    }
+
+    #[test]
+    fn inbound_eval_is_clean_for_plain_body() {
+        let result = engine().evaluate(
+            &ctx("明日の打ち合わせは10時からです", "ext@x.jp", &[]),
+            Direction::Inbound,
+        );
+        assert!(
+            result.is_clean(),
+            "受信の平文で誤検出しない: {:?}",
+            result.findings
+        );
+    }
+
+    #[test]
+    fn inbound_rules_do_not_leak_into_outbound_eval() {
+        // 受信用ルールは送信側評価に混ざらない (Inbound の Warn が
+        // Outbound の所見として出ないこと)。
+        let result = engine().evaluate(
+            &ctx(
+                "通常のメール本文です",
+                "me@corp.com",
+                &["a@x.com".to_string()],
+            ),
+            Direction::Outbound,
+        );
+        assert!(
+            !result
+                .findings
+                .iter()
+                .any(|f| f.rule_id.starts_with("default-in-")),
+            "{:?}",
+            result.findings
+        );
     }
 
     #[test]

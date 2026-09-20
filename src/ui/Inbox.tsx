@@ -643,6 +643,10 @@ const EmailDetailPanel = (props: {
             data-iframe-content
             srcdoc={body()!.srcdoc}
             sandbox={body()!.sandbox}
+            // バックエンドの CSP を iframe csp 属性としても強制する
+            // (srcdoc 内 <meta> CSP に加え、ブラウザ側でも独立に適用される
+            // 二重防御 — ADR-010)。
+            csp={body()!.csp}
             style={{
               width: "100%",
               height: "100%",
@@ -683,6 +687,18 @@ export const Inbox = (props: { becAlerts?: number }) => {
   const [searching, setSearching]       = createSignal(false);
   /** サーバから取得できず、保存済みメールを表示していることを示す。 */
   const [offline, setOffline]           = createSignal(false);
+  /** 一覧は PAGE 件ずつ取得する。直近のページが満杯なら続きがあるとみなす。 */
+  const PAGE = 50;
+  const [hasMore, setHasMore]           = createSignal(false);
+  const [loadingMore, setLoadingMore]   = createSignal(false);
+
+  /** ページネーション用: 新着ページを既存一覧に重複なく連結する。 */
+  const appendEmails = (next: EmailListItem[]) => {
+    setEmails(prev => {
+      const seen = new Set(prev.map(e => e.id));
+      return [...prev, ...next.filter(e => !seen.has(e.id))];
+    });
+  };
 
   /** サーバからメールを取得して一覧に反映する。 */
   const loadEmails = async (mbxId: string | null) => {
@@ -694,9 +710,11 @@ export const Inbox = (props: { becAlerts?: number }) => {
       // mail_fetch は取得と同時に BEC 判定を行い、保存も行う。
       const items = await invoke<EmailListItem[]>("mail_fetch", {
         mailboxId: mbxId,
-        limit:     50,
+        limit:     PAGE,
+        offset:    0,
       });
       setEmails(items);
+      setHasMore(items.length === PAGE);
       setOffline(false);
     } catch (e) {
       // サーバに繋がらないときは、保存済みのメールを表示する。
@@ -704,9 +722,11 @@ export const Inbox = (props: { becAlerts?: number }) => {
       try {
         const stored = await invoke<StoredMessage[]>("mail_list_stored", {
           mailboxId: mbxId,
-          limit:     50,
+          limit:     PAGE,
+          offset:    0,
         });
         setEmails(stored.map(storedToListItem));
+        setHasMore(stored.length === PAGE);
         setOffline(true);
         setError(stored.length === 0 ? String(e) : null);
       } catch {
@@ -715,6 +735,45 @@ export const Inbox = (props: { becAlerts?: number }) => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** 一覧・検索・オフラインのどの表示状態でも、次ページを末尾に追加する。 */
+  const loadMore = async () => {
+    const mbxId = selectedMbx();
+    if (!mbxId || loading() || loadingMore()) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      if (searching()) {
+        const found = await invoke<StoredMessage[]>("mail_search", {
+          query:  searchQuery().trim(),
+          limit:  PAGE,
+          offset: emails().length,
+        });
+        appendEmails(found.map(storedToListItem));
+        setHasMore(found.length === PAGE);
+      } else if (offline()) {
+        const stored = await invoke<StoredMessage[]>("mail_list_stored", {
+          mailboxId: mbxId,
+          limit:     PAGE,
+          offset:    emails().length,
+        });
+        appendEmails(stored.map(storedToListItem));
+        setHasMore(stored.length === PAGE);
+      } else {
+        const items = await invoke<EmailListItem[]>("mail_fetch", {
+          mailboxId: mbxId,
+          limit:     PAGE,
+          offset:    emails().length,
+        });
+        appendEmails(items);
+        setHasMore(items.length === PAGE);
+      }
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -734,8 +793,9 @@ export const Inbox = (props: { becAlerts?: number }) => {
       // StoredMessage は EmailListItem と形が異なるため詰め替える。
       // 保存済みメールには starred/mls の情報が無いので false を入れる
       // (不明な値を true と偽らない)。
-      const found = await invoke<StoredMessage[]>("mail_search", { query: q, limit: 50 });
+      const found = await invoke<StoredMessage[]>("mail_search", { query: q, limit: PAGE, offset: 0 });
       setEmails(found.map(storedToListItem));
+      setHasMore(found.length === PAGE);
     } catch (e) {
       setError(String(e));
       setEmails([]);
@@ -977,6 +1037,26 @@ export const Inbox = (props: { becAlerts?: number }) => {
                   />
                 )}
               </For>
+              <Show when={hasMore()}>
+                <button
+                  type="button"
+                  disabled={loadingMore()}
+                  onClick={() => void loadMore()}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px",
+                    "border": "none",
+                    "border-top": "1px solid #E3E8EE",
+                    background: "transparent",
+                    color: "#4A6FA5",
+                    "font-size": "13px",
+                    cursor: loadingMore() ? "default" : "pointer",
+                  }}
+                >
+                  {loadingMore() ? "読み込み中…" : "さらに読み込む"}
+                </button>
+              </Show>
             </Match>
           </Switch>
         </div>

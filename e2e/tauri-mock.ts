@@ -46,7 +46,7 @@ const OPENED_SAFE = {
   from: "営業部 田中 <tanaka@example.co.jp>",
   subject: "Q2予算レビューのお願い",
   auth: "spf=pass dkim=pass",
-  bec_verdict: "SAFE", bec_score: 5, bec_signals: [],
+  bec_verdict: "SAFE", bec_score: 0.05, bec_signals: [],
   attachments: [],
   body: {
     srcdoc: "<p>来週の会議でご確認ください。</p>",
@@ -65,7 +65,7 @@ const OPENED_DANGEROUS = {
   from: "経理担当 鈴木 <suzuki@examp1e.co.jp>",
   subject: "【至急】振込先口座変更のご連絡",
   auth: "dkim=fail",
-  bec_verdict: "DANGEROUS", bec_score: 85,
+  bec_verdict: "DANGEROUS", bec_score: 0.85,
   bec_signals: ["similar_domain", "urgency_language"],
   attachments: [
     { filename: "請求書.pdf", risks: [], is_dangerous: false },
@@ -119,13 +119,13 @@ const STORED = [
   {
     id: "s-1", from_addr: "tanaka@example.co.jp", from_name: "営業部 田中",
     subject: "Q2予算レビューのお願い", body_preview: "来週の会議で…",
-    received_at: NOW, is_read: true, bec_score: 5, bec_verdict: "SAFE",
+    received_at: NOW, is_read: true, bec_score: 0.05, bec_verdict: "SAFE",
     to_addrs: ["me@example.co.jp"],
   },
   {
     id: "s-2", from_addr: "suzuki@examp1e.co.jp", from_name: "経理担当 鈴木",
     subject: "【至急】振込先口座変更のご連絡", body_preview: "口座情報が…",
-    received_at: NOW, is_read: false, bec_score: 85, bec_verdict: "DANGEROUS",
+    received_at: NOW, is_read: false, bec_score: 0.85, bec_verdict: "DANGEROUS",
     to_addrs: ["me@example.co.jp"],
   },
 ];
@@ -140,6 +140,12 @@ export interface MockOverrides {
   oobvLevel?: string;
   /** `mail_dlp_precheck` の戻り値。 */
   dlpWarnings?: string[];
+  /** `mail_list_attachment_blobs` の戻り値 (既定は添付なし)。 */
+  attachmentRefs?: { filename: string; blob_id: string; mime: string; size: number }[];
+  /** `mail_download_attachment` の戻り値 (既定は良性ファイル保存成功)。 */
+  attachmentDownload?: { filename: string; is_dangerous: boolean; risks: string[]; saved_path: string | null };
+  /** `security_audit_log` の戻り値 (既定は空の正常チェーン)。 */
+  auditLog?: { entries: { id: number; action: string; detail_json: string; created_at: string }[]; chain_valid: boolean };
 }
 
 /**
@@ -232,6 +238,9 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             return /dlp|danger|bec|phish/i.test(String(args.path ?? ""))
               ? openedDangerousDlp
               : openedSafe;
+          case "mail_analyze_bytes":
+            // オンボーディングのデモ解析経路 — 実シグネチャで応答
+            return openedDangerous;
           case "mail_scan_folder":        return folderScan;
           case "oobv_start":
             return {
@@ -253,6 +262,17 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             return { level: ov.oobvLevel ?? "None", message_i18n_key: "" };
           case "mail_dlp_precheck":
             return { warnings: ov.dlpWarnings ?? [] };
+          // 添付経路 (D107): 未登録だと default:null に落ちて
+          // 添付UIの E2E が実質不可能だった。履歴/検査の画面も同様。
+          case "mail_list_attachment_blobs":
+            return ov.attachmentRefs ?? [];
+          case "mail_download_attachment":
+            return ov.attachmentDownload ?? {
+              filename: "mock.pdf", is_dangerous: false, risks: [],
+              saved_path: "/mock/downloads/mock.pdf",
+            };
+          case "security_audit_log":
+            return ov.auditLog ?? { entries: [], chain_valid: true };
           case "ai_detect_phishing":      return { verdict: "SAFE", score: 0 };
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":

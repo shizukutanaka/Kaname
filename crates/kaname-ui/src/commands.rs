@@ -32,7 +32,6 @@ pub struct EmailRow {
     pub is_starred: bool,
     pub bec_verdict: String,
     pub is_mls: bool,
-    pub triage: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -40,14 +39,6 @@ pub struct MailSummary {
     pub unread: u32,
     pub bec_alerts: u32,
     pub total: u32,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PhishingAnalysis {
-    pub likely_ai_generated: bool,
-    pub score: f32,
-    pub phishing_intent: bool,
-    pub explanation: String,
 }
 
 // ── コマンド実装 ──────────────────────────────────────────────────────────────
@@ -243,7 +234,7 @@ pub struct ImportedEmail {
 /// 4. `sanitize_html` → `to_srcdoc` によるサニタイズ
 /// 5. レンダリング系検出器 (HTMLスマグリング / テキストQR / CSS外部参照)
 pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
-    info!(path=%path, "mail_import_eml");
+    info!(path=%redact_path(&path), "mail_import_eml");
 
     if let Ok(meta) = std::fs::metadata(&path) {
         if meta.len() > MAX_EML_BYTES {
@@ -264,10 +255,24 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     Ok(imported)
 }
 
+/// 生 RFC 5322 バイト列を直接解析する IPC コマンド。
+///
+/// オンボーディングのデモメールなど、ファイルパスを持たない入力を
+/// `analyze_raw_email` に通すための経路。50MB 上限は `mail_import_eml`
+/// と同じ。
+#[instrument(skip(bytes))]
+pub async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<ImportedEmail, String> {
+    if bytes.len() > MAX_EML_BYTES as usize {
+        return Err("メールが大きすぎます (50MB 超)".to_string());
+    }
+    analyze_raw_email(&bytes).await
+}
+
 /// 生 RFC 5322 バイト列を解析パイプライン全体に通す。
 ///
-/// ローカル `.eml` (`mail_import_eml`) とサーバ上のメール (`mail_open`) の
-/// **唯一の解析経路**。入口が複数あっても検出器は一つに集約する。
+/// ローカル `.eml` (`mail_import_eml`)・サーバ上のメール (`mail_open`)・
+/// デモ用バイト列 (`mail_analyze_bytes`) の**唯一の解析経路**。
+/// 入口が複数あっても検出器は一つに集約する。
 pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     let env = kaname_render::parse(bytes).map_err(|e| format!("メールの解析に失敗: {e}"))?;
 
@@ -293,11 +298,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         spf: map_auth(env.auth_results.spf),
         dkim: map_auth(env.auth_results.dkim),
         dmarc: map_auth(env.auth_results.dmarc),
-        arc: None,
+        arc: match env.auth_results.arc {
+            kaname_render::AuthResult::None => None,
+            r => Some(map_auth(r)),
+        },
     };
     let auth_desc = format!(
-        "SPF={:?} DKIM={:?} DMARC={:?}",
-        env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc
+        "SPF={:?} DKIM={:?} DMARC={:?} ARC={:?}",
+        env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc, env.auth_results.arc
     );
 
     // 本文からリンクを抽出し、bec の URL シグナルに供給する。
@@ -356,6 +364,11 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     ref_ids.dedup();
     let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
         build_thread_data(&account_id, None, &ref_ids).await;
+    // 送信者履歴 (初回連絡・検証済み・悪意報告等) を引く。
+    // 一覧評価 (assess_listing) と同じシグナル集合で判定しないと、
+    // 一覧では「検証済み差出人」で減点されていたメールが詳細を
+    // 開いた途端に DANGEROUS へ跳ねる (逆も同様) という食い違いが起きる。
+    let sender_history = lookup_sender_history(&account_id, &from_addr_only).await;
     let current_domain = from_addr_only
         .rsplit('@')
         .next()
@@ -383,7 +396,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         subject: &subject,
         body_text: &body_text,
         auth,
-        sender_history: None,
+        sender_history: sender_history.as_ref(),
         our_domain: &our,
         known_contacts: &contacts,
         extracted_urls: &urls,
@@ -564,7 +577,7 @@ pub struct CampaignSummary {
 /// メールボックスのエクスポート (`.eml` の集合) を丸ごと投入して
 /// トリアージする、という実運用にも合致する。
 pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> {
-    info!(path=%path, "mail_scan_folder");
+    info!(path=%redact_path(&path), "mail_scan_folder");
 
     let dir =
         std::fs::read_dir(&path).map_err(|e| format!("フォルダを開けません ({path}): {e}"))?;
@@ -573,8 +586,12 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut radar = kaname_radar::CampaignRadar::new();
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
-    // 自組織ドメイン (D44) は走査全体で1回だけ解決する。
-    let our = our_domain(&current_account_id().await, None).await;
+    // アカウント・自組織ドメイン (D44)・連絡先一覧は走査全体で1回だけ
+    // 解決する (D108: 以前はファイルごとに contacts/account_id を引き直し、
+    // N 件の走査で N 回の同一 SELECT/アカウント解決が走っていた)。
+    let account_id = current_account_id().await;
+    let our = our_domain(&account_id, None).await;
+    let contacts = lookup_contacts(&account_id).await;
 
     for item in dir {
         let Ok(item) = item else { continue };
@@ -631,7 +648,10 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             spf: map_auth(env.auth_results.spf),
             dkim: map_auth(env.auth_results.dkim),
             dmarc: map_auth(env.auth_results.dmarc),
-            arc: None,
+            arc: match env.auth_results.arc {
+                kaname_render::AuthResult::None => None,
+                r => Some(map_auth(r)),
+            },
         };
         // 認証のいずれかが失敗していれば radar に伝える。
         let auth_partial_fail = matches!(
@@ -649,17 +669,18 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let urls = extract_urls_from_text(&body_text);
         let link_domains: Vec<String> = urls.iter().filter_map(|u| url_host(u)).collect();
 
-        let contacts = lookup_contacts(&current_account_id().await).await;
         let reply_to = env.reply_to.first().map(|a| a.addr.as_string());
         let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
         // スレッド乗っ取り検出: In-Reply-To/References が指す既知メッセージを
         // Store から逆引きし、スレッド履歴を組み立てる。
-        let account_id = current_account_id().await;
         let mut ref_ids = env.in_reply_to.clone();
         ref_ids.extend(env.references.iter().cloned());
         ref_ids.dedup();
         let (known_ids, thread_domains, prior_subject, prior_language, past_bodies) =
             build_thread_data(&account_id, None, &ref_ids).await;
+        // 送信者履歴 — analyze_raw_email / assess_listing と同じシグナル集合で
+        // 判定しないと、フォルダ走査だけ判定が食い違う (D100)。
+        let sender_history = lookup_sender_history(&account_id, &from).await;
         let current_domain = from_domain.to_lowercase();
         let body_snippet: String = body_text.chars().take(500).collect();
         let in_reply_to_first = env.in_reply_to.first();
@@ -683,7 +704,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             subject: &subject,
             body_text: &body_text,
             auth,
-            sender_history: None,
+            sender_history: sender_history.as_ref(),
             our_domain: &our,
             known_contacts: &contacts,
             extracted_urls: &urls,
@@ -958,6 +979,15 @@ fn evaluate_link_risks(urls: &[String]) -> Vec<String> {
     risks
 }
 
+/// ログ用にパスを葉名だけに落とす (I5: フルパスは `/Users/<name>` 等の
+/// OS ユーザー名・ディレクトリ構造をログへ漏らすため) (D96)。
+fn redact_path(p: &str) -> &str {
+    std::path::Path::new(p)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("<path>")
+}
+
 fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
     match r {
         kaname_render::AuthResult::Pass => kaname_bec::AuthVerdict::Pass,
@@ -966,27 +996,6 @@ fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
         kaname_render::AuthResult::SoftFail => kaname_bec::AuthVerdict::Neutral,
         kaname_render::AuthResult::None => kaname_bec::AuthVerdict::None,
     }
-}
-
-/// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
-///
-/// `kaname-render` は既に `kaname-ui` の依存に入っており各検出器も実装済み
-/// だが、**commands.rs から一度も呼ばれていなかった** (9 モジュールが
-/// 到達可能なまま未使用)。ここで実際に実行する。
-///
-/// サニタイズ自体は `sanitize_html` が別途行う。本関数は「サニタイズでは
-/// 受信箱のメールにフィッシング解析を行う。
-///
-/// # サーバ未接続のため未実装
-///
-/// 受信箱に本物のメールが存在しないため解析対象がない。
-/// 実際の BEC 判定は「ファイル解析」タブ (`mail_import_eml` /
-/// `mail_scan_folder`) が `.eml` に対して実行する。
-pub async fn ai_detect_phishing(email_id: String) -> Result<PhishingAnalysis, String> {
-    let _ = email_id;
-    Err("未配線: 受信箱はサーバに接続されていません。\
-         実際のメールを解析するには「ファイル解析」タブをご利用ください"
-        .to_string())
 }
 
 pub async fn log_error(message: String) -> Result<(), String> {
@@ -1018,15 +1027,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn phishing_未接続時はエラーを返す() {
-        // 偽データ経路削除後の正直な契約: 未配線の ai_detect_phishing は
-        // パニックせず Err を返す (I5/I6: 未接続を silent にしない)。
-        assert!(ai_detect_phishing("e1".into()).await.is_err());
-    }
-
-    #[tokio::test]
     async fn log_error_ok() {
         assert!(log_error("test".into()).await.is_ok());
+    }
+
+    #[test]
+    fn redact_path_はフルパスを葉名に落とす() {
+        // D96/I5: `/Users/<name>` のような OS ユーザー名を含む親パスが
+        // ログに出ないことを固定する。
+        assert_eq!(
+            redact_path("/Users/alice/Library/Application Support/Kaname/history.db"),
+            "history.db"
+        );
+        assert_eq!(redact_path("/home/bob/mail/田中さん.eml"), "田中さん.eml");
+        assert_eq!(redact_path("history.db"), "history.db");
+        assert_eq!(redact_path(""), "<path>");
+        assert_eq!(redact_path("/"), "<path>");
     }
 
     // ── analyze_raw_email: mail_import_eml / mail_open 共通の解析経路 ──
@@ -1204,6 +1220,143 @@ mod tests {
         );
         Ok(())
     }
+
+    #[tokio::test]
+    async fn analyze_raw_email_uses_verified_sender_history() -> Result<(), String> {
+        // D100 回帰: 一覧評価 (assess_listing) にのみ送信者履歴が供給され、
+        // 詳細解析 (analyze_raw_email) は sender_history=None 固定だった。
+        // 「本人確認済み」の -0.20 寄与が詳細表示に効かず、同一メールで
+        // 一覧と詳細の判定が食い違った。検証済み送信者のメールで
+        // 「検証済み差出人」シグナルが出ることで配線を証明する。
+        //
+        // 注意: STORE はプロセス共有の OnceLock のため、このテスト以降に
+        // 走る他テストも「空の Store が開いている」状態になる。ただし
+        // 履歴の無い送信者には None が返り挙動は不変のため影響は無い。
+        if store_slot().lock().await.is_none() {
+            let db = std::env::temp_dir().join(format!("kaname-d100-{}.db", std::process::id()));
+            history_open(db.to_string_lossy().into_owned(), "0".repeat(64)).await?;
+        }
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("テスト用 Store を開けませんでした")?;
+
+        // 未接続時の current_account_id() は空文字。両送信者とも同じ
+        // アカウントで種付けする。
+        let account = "";
+        let verified = "d100-verified@example.test";
+        let control = "d100-control@example.test";
+        store
+            .record_received(account, verified, Some("Verified Sender"), None)
+            .await
+            .map_err(|e| e.to_string())?;
+        store
+            .mark_sender_verified(account, verified)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mk = |from: &str| -> Vec<u8> {
+            format!(
+                "From: {from}\r\n\
+                 To: you@example.test\r\n\
+                 Subject: wire transfer request\r\n\
+                 Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+                 Content-Type: text/plain; charset=utf-8\r\n\
+                 \r\n\
+                 Please process the wire transfer today.\r\n"
+            )
+            .into_bytes()
+        };
+
+        let v = analyze_raw_email(&mk(verified)).await?;
+        let c = analyze_raw_email(&mk(control)).await?;
+        assert!(
+            v.bec_signals.iter().any(|s| s.contains("検証済み")),
+            "詳細解析に送信者履歴が供給されていない (D100 回帰): {:?}",
+            v.bec_signals
+        );
+        assert!(
+            !c.bec_signals.iter().any(|s| s.contains("検証済み")),
+            "履歴の無い対照送信者に検証済みシグナルが出てはいけない"
+        );
+        assert!(
+            v.bec_score < c.bec_score,
+            "検証済み送信者のスコアが対照より下がるべき ({} vs {})",
+            v.bec_score,
+            c.bec_score
+        );
+        Ok(())
+    }
+
+    /// D109: `org_domain` 設定は接続時の導出値で初めて実在する。
+    /// 未設定なら小文字化して書き込み、既存値は上書きしないことを固定する。
+    #[tokio::test]
+    async fn persist_org_domain_if_unset_は未設定時のみ書き込む() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d109-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let db = dir.join("history.db");
+        let key = "00".repeat(32);
+        history_open(db.to_string_lossy().into_owned(), key).await?;
+
+        let account = "acct-d109";
+        persist_org_domain_if_unset(account, "  Corp-Example.com  ").await;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        let v = store
+            .get_setting(account, "org_domain")
+            .await
+            .map_err(|e| e.to_string())?;
+        assert_eq!(v.as_deref(), Some("corp-example.com"));
+
+        // 既存値 (将来の手動上書きを含む) は保持する。
+        persist_org_domain_if_unset(account, "other.example").await;
+        let v2 = store
+            .get_setting(account, "org_domain")
+            .await
+            .map_err(|e| e.to_string())?;
+        assert_eq!(v2.as_deref(), Some("corp-example.com"));
+        Ok(())
+    }
+
+    /// D111: `record_received` に `None` を渡した場合、
+    /// `topic_summary` は設定されない (直前件名を「いつもの話題」と
+    /// 偽って話題急変シグナルを誤発火させないため)。
+    #[tokio::test]
+    async fn record_received_に_none_を渡すと話題プロファイルが作られない() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d111-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        history_open(
+            dir.join("history.db").to_string_lossy().into_owned(),
+            "00".repeat(32),
+        )
+        .await?;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        for _ in 0..6 {
+            store
+                .record_received("acct-d111", "alice@example.com", None, None)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        let profile = store
+            .get_sender_profile("acct-d111", "alice@example.com")
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("profile not created")?;
+        assert_eq!(profile.message_count, 6);
+        assert!(
+            profile.topic_summary.is_none(),
+            "topic_summary は None のままであるべき (件名の流用は話題プロファイルではない)"
+        );
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -1271,11 +1424,21 @@ pub async fn oobv_start(
         challenge_number: ceremony.challenge_number(),
         expires_at_unix: ceremony.expires_at_unix,
     };
-    state
-        .ceremonies
-        .lock()
-        .await
-        .insert(ceremony.id.clone(), ceremony);
+    let mut ceremonies = state.ceremonies.lock().await;
+    // セレモニーは一度も削除されず map が無限に育つため、上限で止める (D88)。
+    // Pending 以外 (Verified/Expired/Locked) は verify が AlreadyCompleted を
+    // 返すため二度と使えず、期限切れ Pending も verify できない — 追い出してよい。
+    const MAX_CEREMONIES: usize = 256;
+    if ceremonies.len() >= MAX_CEREMONIES {
+        let now = now_unix_secs();
+        ceremonies.retain(|_, c| c.state == CeremonyState::Pending && c.expires_at_unix > now);
+    }
+    if ceremonies.len() >= MAX_CEREMONIES {
+        return Err(V02CommandError::InvalidState(
+            "進行中の検証が多すぎます。少し待ってから再度お試しください".into(),
+        ));
+    }
+    ceremonies.insert(ceremony.id.clone(), ceremony);
     Ok(response)
 }
 
@@ -1440,6 +1603,138 @@ mod v02_tests {
         Ok(())
     }
 
+    /// D87: 同名添付の連続保存で先のファイルが上書きされないことを固定。
+    #[test]
+    fn write_unique_は同名を別名で保存し既存を上書きしない() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let p1 = write_unique(&dir, "report.pdf", b"first").map_err(|e| e.to_string())?;
+        let p2 = write_unique(&dir, "report.pdf", b"second").map_err(|e| e.to_string())?;
+        assert_ne!(p1, p2, "同名なのに同じパスを返した");
+        assert_eq!(std::fs::read(&p1).map_err(|e| e.to_string())?, b"first");
+        assert_eq!(std::fs::read(&p2).map_err(|e| e.to_string())?, b"second");
+        assert!(p2.to_string_lossy().contains("(1)"));
+        // 拡張子なし・先頭ドットの名でも別名になる
+        let p3 = write_unique(&dir, "noext", b"x").map_err(|e| e.to_string())?;
+        let p4 = write_unique(&dir, "noext", b"y").map_err(|e| e.to_string())?;
+        assert_ne!(p3, p4);
+        Ok(())
+    }
+
+    /// D88: セレモニーが上限を超えるとき、終端のものは追い出され
+    /// 有効な Pending が上限を超える場合のみエラーになることを固定。
+    #[tokio::test]
+    async fn oobv_start_は終端セレモニーを追い出し有効なものが満杯なら拒否する(
+    ) -> Result<(), String> {
+        let state = V02AppState::new();
+        // 256件の終端セレモニーを詰める (Verified は二度と検証できないため
+        // 追い出されてよい)
+        {
+            let mut map = state.ceremonies.lock().await;
+            for i in 0..256 {
+                let mut c = VerificationCeremony::new(format!("e{i}"), "a@b.com");
+                c.state = CeremonyState::Verified;
+                map.insert(c.id.clone(), c);
+            }
+        }
+        // 終端だけが詰まっているので追い出されて成功するはず
+        let resp = oobv_start(
+            state.clone(),
+            OobvStartRequest {
+                email_id: "new".into(),
+                sender: "a@b.com".into(),
+            },
+        )
+        .await;
+        assert!(resp.is_ok(), "終端セレモニーは追い出されるべき: {resp:?}");
+
+        // 今度は有効な Pending 256件で埋める
+        {
+            let mut map = state.ceremonies.lock().await;
+            map.clear();
+            for i in 0..256 {
+                let c = VerificationCeremony::new(format!("e{i}"), "a@b.com");
+                map.insert(c.id.clone(), c);
+            }
+        }
+        let resp = oobv_start(
+            state.clone(),
+            OobvStartRequest {
+                email_id: "overflow".into(),
+                sender: "a@b.com".into(),
+            },
+        )
+        .await;
+        assert!(
+            matches!(resp, Err(V02CommandError::InvalidState(_))),
+            "有効な Pending が上限を超えたら拒否すべき: {resp:?}"
+        );
+        Ok(())
+    }
+
+    /// D89: 鍵ファイルの生成・再読・破損ガードを固定。
+    #[test]
+    fn resolve_or_create_key_は生成と破損ガードを正しく行う() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-keytest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+        // 1. 新規: 64桁hex の鍵が作られ、再呼出しで同じ値を返す
+        let k1 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_eq!(k1.len(), 64);
+        assert!(k1.chars().all(|c| c.is_ascii_hexdigit()));
+        let k2 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_eq!(k1, k2, "再呼出しで別鍵を生成してはいけない");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mode = std::fs::metadata(dir.join("history.key"))
+                .map_err(|e| e.to_string())?
+                .permissions()
+                .mode();
+            assert_eq!(
+                mode & 0o777,
+                0o600,
+                "鍵は作成時から 0600 であるべき: {mode:o}"
+            );
+        }
+
+        // 2. 鍵のみ破損 (DB なし) → 自己修復で再生成
+        std::fs::write(dir.join("history.key"), b"corrupt").map_err(|e| e.to_string())?;
+        let k3 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_ne!(k3.len(), 0);
+        assert_eq!(k3.len(), 64);
+
+        // 3. DB が存在し鍵が壊れている → 再生成せずエラー (新鍵は旧DBを読めない)
+        std::fs::write(
+            dir.join("history.db"),
+            b"\x00encrypted-bytes-not-sqlite-header",
+        )
+        .map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("history.key"), b"corrupt").map_err(|e| e.to_string())?;
+        match resolve_or_create_key(&dir) {
+            Err(e) => assert!(e.contains("鍵"), "破損鍵の旨を伝えるべき: {e}"),
+            Ok(_) => panic!("DB があるのに鍵が壊れていたら再生成してはいけない"),
+        }
+
+        // 4. 平文 SQLite DB + 鍵なし → 「旧形式」と教える
+        std::fs::remove_file(dir.join("history.key")).ok();
+        std::fs::write(dir.join("history.db"), b"SQLite format 3\x00rest")
+            .map_err(|e| e.to_string())?;
+        match resolve_or_create_key(&dir) {
+            Err(e) => assert!(e.contains("平文"), "平文 DB の旨を伝えるべき: {e}"),
+            Ok(_) => panic!("平文 DB を鍵生成で上書きしてはいけない"),
+        }
+
+        // 5. 有効な鍵 + DB あり → そのまま返す
+        std::fs::write(dir.join("history.key"), k3.as_bytes()).map_err(|e| e.to_string())?;
+        let k4 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_eq!(k4, k3);
+
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn dlp_precheck_は機密マーカーの_warn_所見を返す() -> Result<(), String> {
         let resp = mail_dlp_precheck(DlpPrecheckRequest {
@@ -1467,6 +1762,98 @@ mod v02_tests {
         })
         .await?;
         assert!(resp.warnings.is_empty(), "{:?}", resp.warnings);
+        Ok(())
+    }
+
+    // D104: 受信側 DLP (scan_dlp_inbound) は Direction::Inbound で評価するが、
+    // Inbound ルールが0件だったため構造的に常に空を返していた。
+    #[test]
+    fn scan_dlp_inbound_は受信本文中のマイナンバーを検出する() {
+        let findings = scan_dlp_inbound("件名", "マイナンバーは 123456789018 です", "corp.example");
+        assert!(
+            findings.iter().any(|f| f.contains("マイナンバー")),
+            "受信メールの機微情報が検出されるべき: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn scan_dlp_inbound_は平文本文で誤検出しない() {
+        let findings = scan_dlp_inbound("ランチ", "12時に食堂で会いましょう", "corp.example");
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    // D104: outbound_dlp_eval の known_recipient_domains が常に空で
+    // タイポドメイン誤配検出が不発だった。連絡先ドメイン抽出の検査。
+    #[test]
+    fn contact_domain_は表示名付きと裸のアドレスからドメインを抽出する() {
+        assert_eq!(
+            contact_domain("\"田中 太郎\" <tanaka@Corp.Example>"),
+            Some("corp.example".to_string())
+        );
+        assert_eq!(
+            contact_domain("sato@Example.co.jp"),
+            Some("example.co.jp".to_string())
+        );
+        assert_eq!(contact_domain("not-an-email"), None);
+        assert_eq!(contact_domain("a@"), None);
+    }
+
+    // D104: 連絡先履歴が既知ドメインに供給され、タイポドメイン宛の
+    // 機微メール送信が Block にエスカレートされることを端到端で検査。
+    // (crop-partnr.com は連絡先の corp-partner.com と距離2のタイポ)
+    #[tokio::test]
+    async fn outbound_dlp_eval_は既知宛先のタイポドメインを疑う() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d104-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        history_open(
+            dir.join("history.db").to_string_lossy().to_string(),
+            "0".repeat(64),
+        )
+        .await?;
+        let account = "acct-d104";
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        store
+            .record_received(account, "alice@corp-partner.com", None, None)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let res = outbound_dlp_eval(
+            account,
+            "me@us.example",
+            &["x@corp-partnr.com".to_string()],
+            "件名",
+            "【社外秘】この資料を転送します",
+        )
+        .await;
+        assert!(
+            res.findings
+                .iter()
+                .any(|f| f.rule_id == "misdirected-recipient"),
+            "タイポドメイン宛が疑われるべき: {:?}",
+            res.findings
+        );
+        assert!(matches!(res.verdict, kaname_dlp::Action::Block));
+
+        // 対照: 正しい既知ドメイン宛は誤配として疑われない
+        let ok = outbound_dlp_eval(
+            account,
+            "me@us.example",
+            &["x@corp-partner.com".to_string()],
+            "件名",
+            "【社外秘】この資料を転送します",
+        )
+        .await;
+        assert!(
+            !ok.findings
+                .iter()
+                .any(|f| f.rule_id == "misdirected-recipient"),
+            "既知ドメイン宛を誤配扱いしない: {:?}",
+            ok.findings
+        );
         Ok(())
     }
 }
@@ -1552,6 +1939,12 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     };
 
     *jmap_slot().lock().await = Some(std::sync::Arc::new(client));
+    // 導出した自組織ドメインを永続化し `our_domain` の設定経路を実効化する (D109)。
+    // 未接続時のオフライン解析 (mail_import_eml / mail_scan_folder) でも
+    // 自組織偽装系シグナルが効くようになる。
+    if let Some(d) = &result.org_domain {
+        persist_org_domain_if_unset(&result.account_id, d).await;
+    }
     audit_event(
         Some(&result.account_id),
         "MAIL_CONNECT",
@@ -1559,6 +1952,31 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     )
     .await;
     Ok(result)
+}
+
+/// `org_domain` 設定が未設定なら、接続時に導出したドメインを保存する。
+///
+/// `our_domain` の最優先経路は `settings.org_domain` だが書き込み経路が
+/// どこにも存在せず常に空だった (D109)。既に値がある場合は上書きしない
+/// (将来の手動設定・マルチドメイン組織の上書き余地を残す)。
+/// 永続化の失敗で接続自体を失敗させない (best-effort)。
+async fn persist_org_domain_if_unset(account_id: &str, domain: &str) {
+    let domain = domain.trim().to_lowercase();
+    if domain.is_empty() {
+        return;
+    }
+    let Some(store) = store_slot().lock().await.clone() else {
+        return;
+    };
+    match store.get_setting(account_id, "org_domain").await {
+        Ok(Some(v)) if !v.trim().is_empty() => {}
+        Ok(_) => {
+            if let Err(e) = store.set_setting(account_id, "org_domain", &domain).await {
+                tracing::warn!(error=%e, "org_domain の保存に失敗");
+            }
+        }
+        Err(e) => tracing::warn!(error=%e, "org_domain の読み出しに失敗"),
+    }
 }
 
 /// 接続を破棄する (トークンをメモリから落とす)。
@@ -1578,35 +1996,28 @@ pub async fn mail_disconnect() -> Result<(), String> {
 /// サーバからメール一覧を取得し、**各通に BEC 判定を付けて**返す。
 ///
 /// 受信した実データが、ファイル解析と同じ検出器を通る。
-/// 件名と送信者からトリアージ先を決める。
-///
-/// 判定本体は `kaname_core::ux_features::TriageEngine` にあり、
-/// 実装済みでありながら出荷バイナリから到達不能だった (フロントエンドに
-/// 同等ロジックが TypeScript で二重実装されていた)。単一の実装に寄せる。
-fn triage_bucket(from_addr: &str, subject: &str, verdict: &str) -> String {
-    use kaname_core::ux_features::{TriageBucket, TriageEngine};
-    let bucket = TriageEngine::new().triage(from_addr, subject, Some(verdict));
-    match bucket {
-        TriageBucket::Important => "important",
-        TriageBucket::Other => "other",
-        TriageBucket::Feed => "feed",
-        TriageBucket::PaperTrail => "paper_trail",
-    }
-    .to_string()
-}
-
-pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
+pub async fn mail_fetch(
+    mailbox_id: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<EmailRow>, String> {
     let client = jmap_client().await?;
     let account_id = client.account_id().to_string();
-    let items = client
-        .query_emails(&mailbox_id, 0, limit.unwrap_or(50))
+    let requested = limit.unwrap_or(50).min(500);
+    let page = client
+        .query_emails_page(&mailbox_id, offset.unwrap_or(0), requested)
         .await
         .map_err(|e| format!("メール一覧の取得に失敗しました: {e}"))?;
+    let items = &page.items;
 
-    // 自組織ドメイン (D44) は一覧全体で1回だけ解決する (行ごとの DB 参照を避ける)。
+    // 自組織ドメイン (D44) と連絡先一覧は一覧全体で1回だけ解決する
+    // (行ごとの DB 参照を避ける — D108: contacts の取得が
+    //  assess_listing 内で行ごとに走り、50 件で 50 回の同一 SELECT
+    //  になっていた)。
     let our = our_domain(&account_id, None).await;
+    let contacts = lookup_contacts(&account_id).await;
     let mut rows = Vec::with_capacity(items.len());
-    for it in &items {
+    for it in items {
         let from_addr = it
             .from
             .as_ref()
@@ -1641,6 +2052,8 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             references: it.references.as_deref().unwrap_or(&[]),
             dkim_signature: it.dkim_signature.as_deref(),
             auth_results: it.auth_results.as_deref(),
+            return_path: it.return_path.as_deref(),
+            known_contacts: &contacts,
         })
         .await;
 
@@ -1648,13 +2061,14 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
         // Store 未接続なら何もしない。失敗しても解析結果は返す
         // (保存できないことは表示できない理由にならない)。
         if let Some(store) = store_slot().lock().await.clone() {
+            // D111: `topic_summary` に当該メールの件名を渡すと
+            // 「いつもの話題」が直前1通の件名に退化し、
+            // `contains_unusual_topic` が「話題が毎回変わる普通の連絡先」に
+            // 構造的に誤発火する (cosine < 0.15 → +0.15 「話題の急変」)。
+            // 真の話題集計 (LLM 要約) が無い現状では、誤信号を供給するより
+            // None を渡して話題シグナルをスキップするのが正直な挙動。
             if let Err(e) = store
-                .record_received(
-                    &account_id,
-                    &from_addr,
-                    from_name.as_deref(),
-                    it.subject.as_deref(),
-                )
+                .record_received(&account_id, &from_addr, from_name.as_deref(), None)
                 .await
             {
                 tracing::warn!(error=%e, "送信者履歴の記録に失敗");
@@ -1684,9 +2098,6 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             }
         }
 
-        // 判定は決定論的で LLM 不要。
-        let triage = triage_bucket(&from_addr, &subject, &verdict);
-
         rows.push(EmailRow {
             id: it.id.clone(),
             from_name,
@@ -1701,9 +2112,37 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             // MLS かどうかはここでは判別できない (is_mls_envelope は BodyPart
             // のメソッド)。判別不能を真と偽らず false にする。
             is_mls: false,
-            triage,
         });
     }
+
+    // サーバ側で消えたメールのローカル残存を tombstone 化する (D80)。
+    // 「不在 = 削除」の推論はメールボックス全体を見た時のみ成立するため、
+    // 先頭ページの取得件数が実効 limit 未満 (= これ以上ページが無い) のとき
+    // だけ実行する。サーバが要求より小さい limit をエコーした場合は
+    // そちらを上限として使う。
+    let effective_limit = page
+        .applied_limit
+        .map(|l| l.min(requested as u64))
+        .unwrap_or(requested as u64);
+    if page.position == 0 && (page.items.len() as u64) < effective_limit {
+        if let Some(store) = store_slot().lock().await.clone() {
+            let live_ids: Vec<String> = page.items.iter().map(|i| i.id.clone()).collect();
+            match store
+                .reconcile_mailbox(&account_id, &mailbox_id, &live_ids)
+                .await
+            {
+                Ok(n) if n > 0 => {
+                    tracing::info!(
+                        count = n,
+                        "サーバで削除されたメールをローカルで tombstone 化"
+                    );
+                }
+                Err(e) => tracing::warn!(error = %e, "ローカルメールの reconcile に失敗"),
+                _ => {}
+            }
+        }
+    }
+
     Ok(rows)
 }
 
@@ -1723,6 +2162,12 @@ struct ListingInput<'a> {
     dkim_signature: Option<&'a str>,
     /// Authentication-Results ヘッダーの生値 (未取得時は None)。
     auth_results: Option<&'a str>,
+    /// Return-Path ヘッダーの生値 (未取得時は None)。
+    /// From vs Return-Path 不一致検出に使用 (D106 で JMAP 経路に配線)。
+    return_path: Option<&'a str>,
+    /// 呼び出し側が一覧全体で1回だけ解決した連絡先一覧
+    /// (kaname-bec の `known_contacts` 書式: `"Name <addr>"` または `addr`)。
+    known_contacts: &'a [String],
 }
 
 /// 一覧表示用の簡易 BEC 判定。
@@ -1744,13 +2189,14 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         references,
         dkim_signature,
         auth_results,
+        return_path,
+        known_contacts,
     } = input;
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
         None => from_addr.to_string(),
     };
     let urls = extract_urls_from_text(preview);
-    let contacts = lookup_contacts(account_id).await;
     // 送信者履歴を引く。無ければ None のままで、BEC は履歴シグナルを
     // 評価しない (履歴が無いことを「初回連絡」と断定しない)。
     let history = lookup_sender_history(account_id, from_addr).await;
@@ -1791,18 +2237,21 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         .unwrap_or_default();
     let req = kaname_bec::AssessmentRequest {
         from_header: &from_header,
-        return_path: None,
+        return_path,
         subject,
         body_text: preview,
         auth: kaname_bec::AuthResults {
             spf: map_auth(parsed_auth.spf),
             dkim: map_auth(parsed_auth.dkim),
             dmarc: map_auth(parsed_auth.dmarc),
-            arc: None,
+            arc: match parsed_auth.arc {
+                kaname_render::AuthResult::None => None,
+                r => Some(map_auth(r)),
+            },
         },
         sender_history: history.as_ref(),
         our_domain,
-        known_contacts: &contacts,
+        known_contacts,
         extracted_urls: &urls,
         reply_to,
         thread_context: thread_ctx,
@@ -1835,7 +2284,18 @@ pub async fn mail_mark_read(ids: Vec<String>) -> Result<(), String> {
     client
         .mark_read(&refs)
         .await
-        .map_err(|e| format!("既読化に失敗しました: {e}"))
+        .map_err(|e| format!("既読化に失敗しました: {e}"))?;
+
+    // ローカル保存分も同期する。JMAP だけを更新していたため、保存済み一覧
+    // (オフライン表示) とサマリの未読数が永遠に古いままだった (D77)。
+    // Store 未接続・更新失敗でも既読化自体は成立しているため best-effort。
+    if let Some(store) = store_slot().lock().await.clone() {
+        let account_id = current_account_id().await;
+        if let Err(e) = store.mark_messages_read(&account_id, &ids).await {
+            warn!(error = %e, "ローカルの既読同期に失敗");
+        }
+    }
+    Ok(())
 }
 
 /// メールをゴミ箱へ移動する。
@@ -1847,7 +2307,19 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
     client
         .trash(&email_id)
         .await
-        .map_err(|e| format!("削除に失敗しました: {e}"))
+        .map_err(|e| format!("削除に失敗しました: {e}"))?;
+
+    // ローカル保存分も論理削除する。JMAP だけを更新していたため、
+    // ゴミ箱へ移したメールが保存済み一覧・検索・サマリに出続けていた
+    // (D77)。Store 未接続・更新失敗でも JMAP 側の移動は成立している
+    // ため best-effort。
+    if let Some(store) = store_slot().lock().await.clone() {
+        let account_id = current_account_id().await;
+        if let Err(e) = store.mark_message_deleted(&account_id, &email_id).await {
+            warn!(error = %e, "ローカルの削除同期に失敗");
+        }
+    }
+    Ok(())
 }
 
 /// メールを送信する。
@@ -1865,7 +2337,10 @@ async fn outbound_dlp_eval(
 ) -> kaname_dlp::DlpResult {
     let engine = kaname_dlp::DlpEngine::default_engine();
     let mimes: Vec<String> = Vec::new();
-    let domains: Vec<String> = Vec::new();
+    // D104: 誤配検出 (タイポドメイン照合) は「既知の宛先ドメイン」に対する
+    // 類似度で判定するが、ここに常に空リストが渡されていたため
+    // LookalikeDomain 検査が構造的に不発だった。連絡先履歴から供給する。
+    let domains = lookup_known_domains(account_id).await;
     let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
         std::collections::HashMap::new();
     let our = our_domain(account_id, Some(from)).await;
@@ -2010,7 +2485,7 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
         warn!(error=%e, "監査ログの書き込みに失敗");
     }
     *store_slot().lock().await = Some(std::sync::Arc::new(store));
-    info!(path=%path, "history_open");
+    info!(path=%redact_path(&path), "history_open");
     Ok(())
 }
 
@@ -2037,28 +2512,80 @@ pub async fn history_open_default() -> Result<String, String> {
     std::fs::create_dir_all(&base)
         .map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
 
-    let key_path = base.join("history.key");
-    let key_hex = match std::fs::read_to_string(&key_path) {
-        Ok(k) if k.trim().len() == 64 => k.trim().to_string(),
-        _ => {
-            use rand::RngCore as _;
-            let mut raw = [0u8; 32];
-            rand::rngs::OsRng.fill_bytes(&mut raw);
-            let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
-            std::fs::write(&key_path, &hex).map_err(|e| format!("鍵ファイルを書けません: {e}"))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt as _;
-                let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
-            }
-            hex
-        }
-    };
+    let key_hex = resolve_or_create_key(&base)?;
 
     let db_path = base.join("history.db");
     let shown = db_path.to_string_lossy().into_owned();
     history_open(shown.clone(), key_hex).await?;
     Ok(shown)
+}
+
+/// `history.key` を読むか、無ければ新規生成して返す (D89)。
+///
+/// - 書き込みは `history.key.tmp` → rename でアトミック
+///   (クラッシュでの半書き残し = 無効鍵 = DB 全損を防ぐ)
+/// - 作成時点で 0600 (write→chmod の窓を塞ぐ)
+/// - DB が存在するのに鍵が無い/壊れている場合は再生成せずエラー
+///   (新鍵は既存 DB を読めないため、勝手に作ると静かな全損になる)
+/// - 平文 SQLite DB (D75 以前) には別メッセージを返す
+fn resolve_or_create_key(base: &std::path::Path) -> Result<String, String> {
+    let key_path = base.join("history.key");
+    let db_path = base.join("history.db");
+    match std::fs::read_to_string(&key_path) {
+        Ok(k) if k.trim().len() == 64 && k.trim().chars().all(|c| c.is_ascii_hexdigit()) => {
+            Ok(k.trim().to_string())
+        }
+        _ => {
+            if db_path.exists() {
+                // 平文 SQLite はヘッダが "SQLite format 3\0" で始まる。
+                // 鍵が無いのに平文 DB なら「鍵紛失」ではなく「未移行の旧 DB」。
+                let is_plaintext = std::fs::File::open(&db_path)
+                    .and_then(|mut f| {
+                        use std::io::Read as _;
+                        let mut head = [0u8; 16];
+                        f.read_exact(&mut head).map(|_| head)
+                    })
+                    .map(|h| h == *b"SQLite format 3\x00")
+                    .unwrap_or(false);
+                let msg = if is_plaintext {
+                    "履歴データベースは暗号化以前の平文形式です (D75)。\
+                     読み取るには移行が必要ですが未実装のため、\
+                     history.db を退避して新しい DB を作ってください"
+                } else {
+                    "履歴データベースの鍵ファイルが壊れているか存在しません。\
+                     自動で新しい鍵を作ると既存データが読めなくなるため、\
+                     history.key を復旧するか history.db を退避してください"
+                };
+                return Err(msg.to_string());
+            }
+            use rand::RngCore as _;
+            let mut raw = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut raw);
+            let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+            let tmp = base.join("history.key.tmp");
+            // 前回のクラッシュで tmp が残っていると create_new が永久に
+            // 失敗するため、先に消す。
+            let _ = std::fs::remove_file(&tmp);
+            {
+                let mut opts = std::fs::OpenOptions::new();
+                opts.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt as _;
+                    opts.mode(0o600);
+                }
+                let mut f = opts
+                    .open(&tmp)
+                    .map_err(|e| format!("鍵ファイルを作成できません: {e}"))?;
+                use std::io::Write as _;
+                f.write_all(hex.as_bytes())
+                    .map_err(|e| format!("鍵ファイルを書けません: {e}"))?;
+            }
+            std::fs::rename(&tmp, &key_path)
+                .map_err(|e| format!("鍵ファイルを確定できません: {e}"))?;
+            Ok(hex)
+        }
+    }
 }
 
 /// 監査ログ閲覧の応答。
@@ -2102,11 +2629,7 @@ pub async fn security_audit_log(limit: Option<i64>) -> Result<AuditLogView, Stri
 /// 以前は `not_wired` を返すスタブで、そのために Onboarding 画面は
 /// 意図的に未到達にしていた (D22)。`settings` テーブルに保存する。
 /// アカウント接続前でも動くよう account_id は固定の "local" を使う。
-pub async fn settings_save_onboarding(
-    notifications: bool,
-    continuity: bool,
-    telemetry: bool,
-) -> Result<(), String> {
+pub async fn settings_save_onboarding(notifications: bool, telemetry: bool) -> Result<(), String> {
     let store = store_slot()
         .lock()
         .await
@@ -2114,7 +2637,6 @@ pub async fn settings_save_onboarding(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     for (k, v) in [
         ("notifications", notifications),
-        ("continuity", continuity),
         ("telemetry", telemetry),
         ("onboarding_done", true),
     ] {
@@ -2181,6 +2703,32 @@ async fn lookup_contacts(account_id: &str) -> Vec<String> {
         tracing::warn!(error=%e, "連絡先一覧の取得に失敗");
         Vec::new()
     })
+}
+
+/// 連絡先エントリ (`"表示名" <email>` または裸の `email`) からドメインを抽出する。
+fn contact_domain(contact: &str) -> Option<String> {
+    let addr = match contact.rfind('<') {
+        Some(i) => contact[i + 1..].trim_end_matches('>').trim(),
+        None => contact.trim(),
+    };
+    let at = addr.rfind('@')?;
+    let domain = addr[at + 1..].trim();
+    if domain.is_empty() {
+        None
+    } else {
+        Some(domain.to_lowercase())
+    }
+}
+
+/// Store の連絡先履歴から既知宛先ドメインの一覧を返す (DLP の
+/// タイポドメイン誤配検出用)。未接続・失敗・0件なら空で、
+/// その検査がスキップされるだけ。
+async fn lookup_known_domains(account_id: &str) -> Vec<String> {
+    let contacts = lookup_contacts(account_id).await;
+    let mut domains: Vec<String> = contacts.iter().filter_map(|c| contact_domain(c)).collect();
+    domains.sort();
+    domains.dedup();
+    domains
 }
 
 /// Store からスレッド内メッセージを引く。
@@ -2449,6 +2997,7 @@ async fn evaluate_sender_style(
 pub async fn mail_list_stored(
     mailbox_id: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<kaname_store::StoredMessage>, String> {
     let store = store_slot()
         .lock()
@@ -2457,7 +3006,12 @@ pub async fn mail_list_stored(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     let account_id = current_account_id().await;
     store
-        .list_messages(&account_id, &mailbox_id, limit.unwrap_or(50))
+        .list_messages(
+            &account_id,
+            &mailbox_id,
+            limit.unwrap_or(50),
+            offset.unwrap_or(0),
+        )
         .await
         .map_err(|e| format!("保存済みメールの読み出しに失敗しました: {e}"))
 }
@@ -2470,6 +3024,7 @@ pub async fn mail_list_stored(
 pub async fn mail_search(
     query: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<kaname_store::StoredMessage>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
@@ -2481,20 +3036,32 @@ pub async fn mail_search(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     let account_id = current_account_id().await;
     store
-        .search_messages(&account_id, query.trim(), limit.unwrap_or(50))
+        .search_messages(
+            &account_id,
+            query.trim(),
+            limit.unwrap_or(50),
+            offset.unwrap_or(0),
+        )
         .await
         .map_err(|e| format!("検索に失敗しました: {e}"))
 }
 
-/// 現在の JMAP アカウント ID を返す。未接続なら空文字。
+/// 現在の JMAP アカウント ID を返す。
 ///
-/// 保存・検索はサーバ未接続でも行えるべきだが、どのアカウントの
-/// メールかを区別する必要があるため、接続時の ID を使う。
+/// JMAP 未接続でも保存済みメールの一覧・検索が機能するよう、
+/// 接続されていなければ履歴 DB に登録済みのアカウントへフォールバックする
+/// (ローカルファースト: サーバが落ちても過去の受信メールは読めるべき)。
+/// 両方とも無ければ空文字。
 async fn current_account_id() -> String {
-    match jmap_client().await {
-        Ok(c) => c.account_id().to_string(),
-        Err(_) => String::new(),
+    if let Ok(c) = jmap_client().await {
+        return c.account_id().to_string();
     }
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Ok(Some(id)) = store.primary_account_id().await {
+            return id;
+        }
+    }
+    String::new()
 }
 
 /// 監査ログ (audit_log, ハッシュチェーン付き) への書き込み — best-effort。
@@ -2513,6 +3080,14 @@ async fn audit_event(account_id: Option<&str>, event_type: &str, payload: serde_
 
 /// メールアドレスからドメイン部を取り出す (小文字化)。
 /// `"Name <a@b.com>"` のような表示名付きにも耐える。アドレス形でなければ None。
+/// 現在時刻の UNIX 秒 (セレモニー期限の比較用)。
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 fn email_domain(addr: &str) -> Option<String> {
     let (_, domain) = addr.rsplit_once('@')?;
     let domain: String = domain
@@ -2674,8 +3249,8 @@ pub async fn mail_download_attachment(
         if let Err(e) = std::fs::create_dir_all(&dir) {
             return Err(format!("保存先を作成できません: {e}"));
         }
-        let path = dir.join(&safe_name);
-        std::fs::write(&path, &bytes).map_err(|e| format!("保存に失敗しました: {e}"))?;
+        let path = write_unique(&dir, &safe_name, &bytes)
+            .map_err(|e| format!("保存に失敗しました: {e}"))?;
         Some(path.to_string_lossy().into_owned())
     };
 
@@ -2753,4 +3328,41 @@ fn sanitize_filename(name: &str) -> String {
     } else {
         trimmed.chars().take(200).collect()
     }
+}
+
+/// 既存ファイルを上書きせず、同名があれば `name (1).ext` の形で別名にする。
+///
+/// 別メール由来の同名添付で先に保存したファイルを黙って上書きしないため
+/// (D87)。`create_new` のアトミック作成で exists-then-write の競合も避ける。
+fn write_unique(
+    dir: &std::path::Path,
+    name: &str,
+    bytes: &[u8],
+) -> Result<std::path::PathBuf, std::io::Error> {
+    use std::io::ErrorKind;
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+        _ => (name.to_string(), String::new()),
+    };
+    for i in 0..1000u32 {
+        let candidate = if i == 0 {
+            dir.join(name)
+        } else {
+            dir.join(format!("{stem} ({i}){ext}"))
+        };
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut f) => {
+                use std::io::Write as _;
+                f.write_all(bytes)?;
+                return Ok(candidate);
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(ErrorKind::AlreadyExists.into())
 }

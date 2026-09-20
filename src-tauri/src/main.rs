@@ -63,11 +63,6 @@ async fn mail_trash(app: AppHandle, email_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn ai_detect_phishing(email_id: String) -> Result<commands::PhishingAnalysis, String> {
-    commands::ai_detect_phishing(email_id).await
-}
-
-#[tauri::command]
 async fn log_error(message: String) -> Result<(), String> {
     commands::log_error(message).await
 }
@@ -188,8 +183,9 @@ async fn mail_list_attachment_blobs(
 async fn mail_list_stored(
     mailbox_id: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<commands::StoredMessage>, String> {
-    commands::mail_list_stored(mailbox_id, limit).await
+    commands::mail_list_stored(mailbox_id, limit, offset).await
 }
 
 /// 保存済みメールを検索する (件名・送信者・本文プレビュー)。
@@ -197,8 +193,9 @@ async fn mail_list_stored(
 async fn mail_search(
     query: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<commands::StoredMessage>, String> {
-    commands::mail_search(query, limit).await
+    commands::mail_search(query, limit, offset).await
 }
 
 /// 送信者を「検証済み」としてマークする。
@@ -213,8 +210,9 @@ async fn mail_fetch(
     app: AppHandle,
     mailbox_id: String,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> Result<Vec<commands::EmailRow>, String> {
-    let rows = commands::mail_fetch(mailbox_id, limit).await?;
+    let rows = commands::mail_fetch(mailbox_id, limit, offset).await?;
     emit_summary_updated(&app).await;
     Ok(rows)
 }
@@ -225,12 +223,8 @@ async fn mail_get_mailboxes() -> Result<Vec<commands::MailboxRow>, String> {
 }
 
 #[tauri::command]
-async fn settings_save_onboarding(
-    notifications: bool,
-    continuity: bool,
-    telemetry: bool,
-) -> Result<(), String> {
-    commands::settings_save_onboarding(notifications, continuity, telemetry).await
+async fn settings_save_onboarding(notifications: bool, telemetry: bool) -> Result<(), String> {
+    commands::settings_save_onboarding(notifications, telemetry).await
 }
 
 #[tauri::command]
@@ -246,6 +240,11 @@ async fn history_open_default() -> Result<String, String> {
 #[tauri::command]
 async fn security_audit_log(limit: Option<i64>) -> Result<commands::AuditLogView, String> {
     commands::security_audit_log(limit).await
+}
+
+#[tauri::command]
+async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<commands::ImportedEmail, String> {
+    commands::mail_analyze_bytes(bytes).await
 }
 
 // ============================================================================
@@ -337,7 +336,6 @@ fn main() {
     kaname_ui::run();
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         // OOBV セレモニー / 監査ログの共有状態 (D15 残件)。
         // `oobv_start`/`oobv_verify` が tauri::State 経由で受け取る。
         .manage(commands::V02AppState::new())
@@ -353,7 +351,6 @@ fn main() {
             mail_open,
             mail_mark_read,
             mail_trash,
-            ai_detect_phishing,
             log_error,
             oobv_recommend,
             // V02AppState を共有するコマンド (D15 残件、.manage() で配線)
@@ -380,6 +377,7 @@ fn main() {
             settings_is_onboarded,
             history_open_default,
             security_audit_log,
+            mail_analyze_bytes,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");

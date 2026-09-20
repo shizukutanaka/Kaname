@@ -11,9 +11,6 @@ import { createSignal, createEffect, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ComposeProps {
-  replyToId?: string;
-  initialTo?: string;
-  initialSubject?: string;
   onClose: () => void;
   onSent: () => void;
 }
@@ -22,13 +19,12 @@ export const Compose = (props: ComposeProps) => {
   // 差出人: JMAP セッションはアカウントのメールアドレスを公開しないため
   // (Session.primary_accounts は accountId のみ)、利用者に入力してもらう。
   const [from,     setFrom]    = createSignal("");
-  const [to,       setTo]      = createSignal(props.initialTo || "");
-  const [subject,  setSubject] = createSignal(props.initialSubject || "");
+  const [to,       setTo]      = createSignal("");
+  const [subject,  setSubject] = createSignal("");
   const [body,     setBody]    = createSignal("");
   const [sending,  setSending] = createSignal(false);
   const [advice,   setAdvice]  = createSignal<string | null>(null);
   const [error,    setError]   = createSignal<string | null>(null);
-  const [mlsReady, setMlsReady] = createSignal<boolean | null>(null);
   // 送信前 DLP の Warn 所見 (mail_send は Block のみ止めるため、
   // 警告は送信ボタン経由の事前チェックで表示する)。
   const [dlpWarnings,  setDlpWarnings]  = createSignal<string[]>([]);
@@ -62,17 +58,8 @@ export const Compose = (props: ComposeProps) => {
     }, 600);
   });
 
-  // MLS 対応チェック
-  //
-  // 以前はドメイン名の接尾辞だけを見て「MLS 対応」と表示していたが、
-  // kaname-mls は XOR モック段階 (gap-analysis D1) であり、宛先が何であれ
-  // 実際に MLS 暗号化は行われない。実装されていない保護を UI が
-  // 「対応済み」と示すのは利用者を欺くため、常に null (非対応) を返す。
-  // KPD による実確認は MLS 本実装と同時に入れる。
-  createEffect(() => {
-    to();
-    setMlsReady(null);
-  });
+  // E2E 暗号化バッジは表示しない — MLS は未実装 (D1) で、実際の暗号化は
+  // 行われないため「対応済み」と示すのは利用者を欺く。実装時に復元する。
 
   // 入力が変わったら DLP 確認をやり直す (確認済みのまま本文を変えて
   // 警告を回避できないようにする)
@@ -160,19 +147,8 @@ export const Compose = (props: ComposeProps) => {
         gap: "12px",
       }}>
         <span style={{ "font-size": "14px", "font-weight": "600", flex: "1" }}>
-          {props.replyToId ? "返信" : "新規メール"}
+          新規メール
         </span>
-        <Show when={mlsReady() !== null}>
-          <span style={{
-            "font-size": "11px",
-            color: mlsReady() ? "#00C4CC" : "#8B96A5",
-            padding: "2px 8px",
-            border: `1px solid ${mlsReady() ? "#00C4CC30" : "#2A3441"}`,
-            "border-radius": "4px",
-          }}>
-            {mlsReady() ? "🔐 E2E 暗号化" : "📧 SMTP"}
-          </span>
-        </Show>
         <button
           onClick={props.onClose}
           aria-label="閉じる"

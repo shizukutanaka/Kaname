@@ -286,7 +286,7 @@ impl Store {
             return Err(StoreError::IntegrityCheckFailed);
         }
 
-        tracing::info!(path = %path.display(), "ストア開通");
+        tracing::info!(path = %redact_path(path), "ストア開通");
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -381,10 +381,14 @@ impl Store {
                 )
                 .unwrap_or_default();
 
-            // ハッシュ計算: SHA-256(prev_hash NUL event_type NUL payload_json)
-            // NUL 区切りにより event_type/payload 境界の曖昧性を排除する。
+            // ハッシュ計算: SHA-256(prev_hash NUL account_id NUL event_type NUL payload_json)
+            // account_id も素材に含める — 含めないと DB 書き込み権限を持つ
+            // 攻撃者がイベントの帰属アカウントを書き換えても検知できない。
+            // NUL 区切りによりフィールド境界の曖昧性を排除する。
+            // (注: 旧形式のハッシュで書かれた既存行は verify で破損と判定される)
             let hash = sha256_hex_fields(&[
                 prev_hash.as_bytes(),
+                account_id.unwrap_or("").as_bytes(),
                 event_type.as_bytes(),
                 payload_json.as_bytes(),
             ]);
@@ -417,7 +421,7 @@ impl Store {
             .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         let mut stmt = conn.prepare(
-            "SELECT seq, event_type, payload_json, prev_hash, hash FROM audit_log ORDER BY seq;"
+            "SELECT seq, account_id, event_type, payload_json, prev_hash, hash FROM audit_log ORDER BY seq;"
         ).map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut prev_hash = String::new();
@@ -427,16 +431,17 @@ impl Store {
             .query_map([], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
                 ))
             })
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         for row in rows {
-            let (seq, event_type, payload_json, stored_prev, stored_hash) =
+            let (seq, account_id, event_type, payload_json, stored_prev, stored_hash) =
                 row.map_err(|e| StoreError::Db(e.to_string()))?;
 
             if stored_prev != prev_hash {
@@ -447,6 +452,7 @@ impl Store {
 
             let expected = sha256_hex_fields(&[
                 prev_hash.as_bytes(),
+                account_id.as_deref().unwrap_or("").as_bytes(),
                 event_type.as_bytes(),
                 payload_json.as_bytes(),
             ]);
@@ -491,6 +497,29 @@ impl Store {
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| StoreError::Db(e.to_string()))
+    }
+
+    /// 最後に使われたアカウントの ID を返す。
+    ///
+    /// オフライン (JMAP 未接続) でも保存済みメールの一覧・検索が動くための
+    /// フォールバック — 保存時のアカウントを `accounts` テーブルから復元する。
+    /// アカウントが一度も登録されていなければ None。
+    pub async fn primary_account_id(&self) -> Result<Option<String>, StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        conn.query_row(
+            "SELECT id FROM accounts WHERE deleted_at IS NULL \
+             ORDER BY created_at DESC LIMIT 1;",
+            [],
+            |row| row.get(0),
+        )
+        .map(Some)
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(StoreError::Db(other.to_string())),
+        })
     }
 
     /// アカウント行が無ければ作る (FK 制約の前提)。
@@ -742,6 +771,15 @@ impl Store {
 // SHA-256 プレースホルダー (本番: ring クレートを使用)
 // ============================================================================
 
+/// ログ用にパスを葉名だけに落とす (I5: フルパスは `/Users/<name>` 等の
+/// OS ユーザー名・ディレクトリ構造をログへ漏らすため)。
+fn redact_path(p: &Path) -> String {
+    p.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("<path>")
+        .to_owned()
+}
+
 fn sha256_hex(data: &[u8]) -> String {
     let hash = Sha256::digest(data);
     hash.iter().map(|b| format!("{:02x}", b)).collect()
@@ -965,6 +1003,24 @@ mod tests {
                 String::from_utf8_lossy(marker),
             );
         }
+    }
+
+    #[tokio::test]
+    async fn primary_account_id_は登録済みアカウントを返す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        // アカウント未登録なら None
+        assert_eq!(store.primary_account_id().await.unwrap(), None);
+
+        seed_account(&store, "acct1").await;
+        assert_eq!(
+            store.primary_account_id().await.unwrap(),
+            Some("acct1".to_string())
+        );
     }
 
     #[tokio::test]
@@ -1276,6 +1332,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn audit_chain_は行改ざんを検知する() {
+        // 攻撃者シナリオ: DB 鍵を握られた攻撃者は不変トリガーを落とせる。
+        // その上で行を書き換えても、ハッシュ素材に account_id を含むため
+        // 帰属の書き換え (DLP 違反の転嫁等) が検知される。
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .audit(
+                Some("acct1"),
+                "DLP_BLOCK",
+                &serde_json::json!({"to_count": 1}),
+            )
+            .await
+            .unwrap();
+
+        // 不変トリガーを落として account_id を書き換える
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute_batch(
+                "DROP TRIGGER audit_log_no_update;
+                 UPDATE audit_log SET account_id = 'attacker' WHERE seq = 1;",
+            )
+            .unwrap();
+        }
+
+        let r = store.verify_audit_chain().await;
+        assert!(
+            matches!(r, Err(StoreError::AuditChainBroken(1))),
+            "account_id 改ざんはハッシュ不一致で検知されるべき (got {r:?})"
+        );
+    }
+
+    #[tokio::test]
     async fn audit_chain_two_entries_verify() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
@@ -1560,8 +1654,10 @@ impl Store {
                 body_preview = ?11, \
                 received_at  = COALESCE(?12, received_at), \
                 is_read      = ?13, \
+                is_deleted   = 0, \
                 bec_score    = ?14, \
                 bec_verdict  = ?15, \
+                is_deleted   = 0, \
                 updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
             params![
                 id,
@@ -1586,6 +1682,67 @@ impl Store {
         Ok(())
     }
 
+    /// JMAP 側で既読にしたメールをローカルにも反映する。
+    ///
+    /// `mail_mark_read` は JMAP だけを更新していたため、保存済み一覧
+    /// (オフライン表示) と `mail_get_summary` の未読数が古いままに
+    /// なっていた (D77)。更新件数を返す (該当なし = 0 でエラーにしない)。
+    pub async fn mark_messages_read(
+        &self,
+        account_id: &str,
+        jmap_ids: &[String],
+    ) -> Result<usize, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        for id in jmap_ids {
+            validate_text_field(id, "jmap_id", 256)?;
+        }
+        if jmap_ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let sql = format!(
+            "UPDATE messages SET is_read = 1, \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+             WHERE account_id = ?1 AND jmap_id IN ({})",
+            jmap_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+        );
+        let mut params_vec: Vec<rusqlite::types::Value> = Vec::with_capacity(jmap_ids.len() + 1);
+        params_vec.push(account_id.to_string().into());
+        for id in jmap_ids {
+            params_vec.push(id.clone().into());
+        }
+        conn.execute(&sql, rusqlite::params_from_iter(params_vec))
+            .map_err(|e| StoreError::Db(e.to_string()))
+    }
+
+    /// JMAP 側でゴミ箱へ移したメールをローカルで論理削除する。
+    ///
+    /// `mail_trash` は JMAP だけを更新していたため、保存済み一覧・検索・
+    /// サマリに削除済みメールが出続けていた (D77)。`is_deleted = 1` にして
+    /// 全読み出し経路 (`is_deleted = 0` フィルタ) から外す。
+    pub async fn mark_message_deleted(
+        &self,
+        account_id: &str,
+        jmap_id: &str,
+    ) -> Result<usize, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(jmap_id, "jmap_id", 256)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        conn.execute(
+            "UPDATE messages SET is_deleted = 1, \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+             WHERE account_id = ?1 AND jmap_id = ?2",
+            params![account_id, jmap_id],
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))
+    }
+
     /// メールボックスの保存済みメールを新しい順に返す。
     ///
     /// `idx_messages_mailbox(mailbox_id, received_at DESC)` を利用する。
@@ -1595,6 +1752,7 @@ impl Store {
         account_id: &str,
         mailbox_id: &str,
         limit: u32,
+        offset: u32,
     ) -> Result<Vec<StoredMessage>, StoreError> {
         validate_text_field(account_id, "account_id", 256)?;
         validate_text_field(mailbox_id, "mailbox_id", 256)?;
@@ -1610,12 +1768,15 @@ impl Store {
                     received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
-             ORDER BY received_at DESC LIMIT ?3;",
+             ORDER BY received_at DESC LIMIT ?3 OFFSET ?4;",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![account_id, mailbox_id, limit], row_to_stored)
+            .query_map(
+                params![account_id, mailbox_id, limit, offset],
+                row_to_stored,
+            )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1821,6 +1982,7 @@ impl Store {
         account_id: &str,
         query: &str,
         limit: u32,
+        offset: u32,
     ) -> Result<Vec<StoredMessage>, StoreError> {
         validate_text_field(account_id, "account_id", 256)?;
         validate_text_field(query, "query", 1_000)?;
@@ -1841,12 +2003,12 @@ impl Store {
                   OR from_addr    LIKE ?2 ESCAPE '\\' \
                   OR from_name    LIKE ?2 ESCAPE '\\' \
                   OR body_preview LIKE ?2 ESCAPE '\\' ) \
-             ORDER BY received_at DESC LIMIT ?3;",
+             ORDER BY received_at DESC LIMIT ?3 OFFSET ?4;",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![account_id, pattern, limit], row_to_stored)
+            .query_map(params![account_id, pattern, limit, offset], row_to_stored)
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1854,6 +2016,58 @@ impl Store {
             out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
         }
         Ok(out)
+    }
+
+    /// サーバで消えたメールをローカルで tombstone (`is_deleted = 1`) にする。
+    ///
+    /// `live_ids` は該当メールボックスにサーバ上で現存する `jmap_id` の
+    /// **全件**である必要がある。**全件が見えたとき (先頭からの取得件数が
+    /// 実効 limit 未満) のみ呼ぶこと** — 部分ページでは「不在 = サーバ削除」
+    /// の推論が成立しない。返値は tombstone 化した行数。
+    ///
+    /// tombstone は物理削除ではなく `is_deleted = 1` とし、
+    /// 再取得時の upsert (`is_deleted = 0`) で復活できるようにする。
+    pub async fn reconcile_mailbox(
+        &self,
+        account_id: &str,
+        mailbox_id: &str,
+        live_ids: &[String],
+    ) -> Result<usize, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(mailbox_id, "mailbox_id", 256)?;
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        if live_ids.is_empty() {
+            // サーバ上でメールボックスが空 → ローカル行は全て tombstone
+            return conn
+                .execute(
+                    "UPDATE messages SET is_deleted = 1, \
+                        updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+                     WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0;",
+                    params![account_id, mailbox_id],
+                )
+                .map_err(|e| StoreError::Db(e.to_string()));
+        }
+
+        let marks = live_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "UPDATE messages SET is_deleted = 1, \
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+             WHERE account_id = ? AND mailbox_id = ? AND is_deleted = 0 \
+               AND jmap_id NOT IN ({marks});"
+        );
+        let mut params_vec: Vec<rusqlite::types::Value> = Vec::with_capacity(live_ids.len() + 2);
+        params_vec.push(account_id.to_string().into());
+        params_vec.push(mailbox_id.to_string().into());
+        for id in live_ids {
+            params_vec.push(id.clone().into());
+        }
+        conn.execute(&sql, rusqlite::params_from_iter(params_vec))
+            .map_err(|e| StoreError::Db(e.to_string()))
     }
 }
 
@@ -1931,7 +2145,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
             .await
             .unwrap();
-        let inbox_before = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let inbox_before = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(inbox_before.len(), 1);
 
         // 同じ jmap_id を別フォルダで再保存 (フォルダ移動の再同期)。
@@ -1940,13 +2154,16 @@ mod message_persistence_tests {
             .await
             .unwrap();
 
-        let inbox_after = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let inbox_after = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert!(
             inbox_after.is_empty(),
             "移動後は旧フォルダに残ってはいけない"
         );
 
-        let archive_after = store.list_messages("acct1", "archive", 10).await.unwrap();
+        let archive_after = store
+            .list_messages("acct1", "archive", 10, 0)
+            .await
+            .unwrap();
         assert_eq!(archive_after.len(), 1, "移動先フォルダに反映されるべき");
     }
 
@@ -1974,10 +2191,175 @@ mod message_persistence_tests {
             .await
             .unwrap();
 
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].from_addr, "bob@corp.com");
         assert_eq!(rows[0].from_name.as_deref(), Some("Bob"));
+    }
+
+    /// D77: `mail_mark_read` が JMAP しか更新しなかったため、
+    /// 保存済みの `is_read` が永遠に古いままだった。
+    /// `mark_messages_read` が既読をローカルに反映することを固定する。
+    #[tokio::test]
+    async fn mark_messages_read_で未読が既読になる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "件名B"))
+            .await
+            .unwrap();
+
+        let n = store
+            .mark_messages_read("acct1", &["jmap-1".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let r1 = rows
+            .iter()
+            .find(|r| r.subject.as_deref() == Some("件名A"))
+            .unwrap();
+        let r2 = rows
+            .iter()
+            .find(|r| r.subject.as_deref() == Some("件名B"))
+            .unwrap();
+        assert!(r1.is_read, "jmap-1 (件名A) は既読のはず");
+        assert!(!r2.is_read, "jmap-2 (件名B) は未読のままのはず");
+    }
+
+    /// D77: `mail_trash` が JMAP しか更新しなかったため、ゴミ箱に移した
+    /// メールが保存済み一覧・検索・サマリに出続けていた。
+    /// `mark_message_deleted` が `is_deleted` を立て、全読み出し経路
+    /// (`is_deleted = 0` フィルタ) から外れることを固定する。
+    /// あわせて、ゴミ箱から戻されたメールが次回の fetch upsert で
+    /// `is_deleted = 0` に戻ること (復元の反映) も固定する。
+    #[tokio::test]
+    async fn mark_message_deleted_で一覧から外れ再保存で復活する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+
+        let n = store.mark_message_deleted("acct1", "jmap-1").await.unwrap();
+        assert_eq!(n, 1);
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert!(rows.is_empty(), "論理削除後は一覧に出てはいけない");
+
+        // 復元 (JMAP 側でゴミ箱から戻され、次回 fetch で upsert) を模す。
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(rows.len(), 1, "復元されたメールは再び見えるべき");
+    }
+
+    /// D80: `reconcile_mailbox` は「全件が見えた」前提でのみ呼ばれ、
+    /// `live_ids` に無い jmap_id のローカル行を is_deleted=1 にする。
+    /// つまりサーバ側で削除されたメールがローカルに残り続ける欠陥を直す。
+    /// 誤 tombstone でも upsert (`is_deleted = 0`) で復活できることを併せて固定。
+    #[tokio::test]
+    async fn reconcile_mailbox_はサーバで消えたメールをtombstone化し再取得で復活する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "残る件名"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "消える件名"))
+            .await
+            .unwrap();
+        // 他フォルダのメールは対象外であること
+        store
+            .save_message("acct1", "archive", &msg("jmap-3", "別箱"))
+            .await
+            .unwrap();
+
+        // サーバには jmap-1 だけ残っている
+        let n = store
+            .reconcile_mailbox("acct1", "inbox", &["jmap-1".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(n, 1, "消えた 1 件だけ tombstone");
+
+        let inbox = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(inbox.len(), 1);
+        assert_eq!(inbox[0].subject.as_deref(), Some("残る件名"));
+        // 別フォルダは無関係
+        assert_eq!(
+            store
+                .list_messages("acct1", "archive", 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // 誤 tombstone でもサーバが再び返せば upsert で復活する
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "消える件名"))
+            .await
+            .unwrap();
+        let inbox2 = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(inbox2.len(), 2, "再取得で is_deleted=0 に復活すべき");
+    }
+
+    /// サーバ側でメールボックスが空になった場合はローカル行を全て
+    /// tombstone にする (live_ids 空 → NOT IN 句なしの全行更新)。
+    #[tokio::test]
+    async fn reconcile_mailbox_はサーバ空なら全行をtombstone化する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "A"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "B"))
+            .await
+            .unwrap();
+
+        let n = store
+            .reconcile_mailbox("acct1", "inbox", &[])
+            .await
+            .unwrap();
+        assert_eq!(n, 2);
+        assert!(
+            store
+                .list_messages("acct1", "inbox", 10)
+                .await
+                .unwrap()
+                .is_empty(),
+            "空メールボックスなら一覧も空になるべき"
+        );
     }
 
     /// `to_addrs` 列はスキーマ上 NOT NULL で存在したが `NewMessage` に
@@ -1997,7 +2379,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
             .await
             .unwrap();
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].to_addrs, vec!["bob@corp.com".to_string()]);
 
@@ -2008,7 +2390,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &updated)
             .await
             .unwrap();
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows[0].to_addrs.len(), 2);
         assert_eq!(rows[0].to_addrs[0], "carol@corp.com");
     }
@@ -2038,7 +2420,7 @@ mod message_persistence_tests {
             .unwrap();
         }
 
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert!(
             rows[0].to_addrs.is_empty(),
