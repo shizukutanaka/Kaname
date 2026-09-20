@@ -99,7 +99,7 @@
 
 | # | 機能 | 場所 | 現状 (何が足りないか) | 実装すべき内容 |
 |---|---|---|---|---|
-| D1 | MLS グループ暗号化 | `kaname-mls` | 単一バイト XOR (鍵=公開 ConversationId 先頭バイト、鍵空間256のみ)。暗号として機能していない | `openmls` クレート (0.7.2, 2026-02) を統合し RFC 9420 準拠の実装に置き換える。**統合時は draft-ietf-mls-pq-ciphersuites の ML-KEM/ハイブリッド ciphersuite を最初から選定すること** (2026-07 調査で標準化進行を確認、docs/research-2026-07.md §1.5) |
+| D1 | MLS グループ暗号化 | `kaname-mls` | 単一バイト XOR (鍵=公開 ConversationId 先頭バイト、鍵空間256のみ)。暗号として機能していない | `openmls` クレート (0.7.2, 2026-02) を統合し RFC 9420 準拠の実装に置き換える。**統合時は draft-ietf-mls-pq-ciphersuites の ML-KEM/ハイブリッド ciphersuite を最初から選定すること** (2026-07 調査で標準化進行を確認、docs/research-2026-07.md §1.5)。**2026-09-20 追記**: 5フェーズの実装計画を `docs/design-d1-mls.md` に解体済み (openmls統合→永続化→KeyPackage配送→暗号化セレモニー統合→Safety Number) |
 | D2 | ローカル LLM 推論 (Q-LLM/P-LLM) | `kaname-ai::llm_bridge` | 固定文字列 (`{"risk":"SAFE",...}` 等) を返すだけ。`tokens_in`/`tokens_out` も常に0で実際には推論していない | `llama.cpp` か `candle` で Phi-4-mini 等の実推論を実装。トークン計測も実値化。**2026-09-20 追記**: 5フェーズの実装計画を `docs/design-d2-local-llm.md` に解体済み (バックエンド接続→モデル配布→サブプロセス分離→BEC統合→出荷統合) |
 | D3 | Q-LLM/P-LLM のプロセス分離 | `kaname-ai::subprocess` | seccompプロファイルの「パス文字列」を生成するだけ。実際に分離を強制する外部バイナリ `kaname-llm-runner` が存在するか自体が未確認 | `kaname-llm-runner` バイナリを実装し、seccomp-bpf (Linux) / sandbox-exec (macOS) / Job Object (Windows) を実際に適用する |
 | D4 | Firecracker microVM サンドボックス | `kaname-sandbox` | `spawn_vm`/`VsockChannel` が no-op。セマフォ管理・プールの衛生管理コードは実装済みだが VM 自体は起動しない | Firecracker バイナリとの実連携、vsock通信の実装 |
