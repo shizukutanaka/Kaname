@@ -499,6 +499,29 @@ impl Store {
             .map_err(|e| StoreError::Db(e.to_string()))
     }
 
+    /// 最後に使われたアカウントの ID を返す。
+    ///
+    /// オフライン (JMAP 未接続) でも保存済みメールの一覧・検索が動くための
+    /// フォールバック — 保存時のアカウントを `accounts` テーブルから復元する。
+    /// アカウントが一度も登録されていなければ None。
+    pub async fn primary_account_id(&self) -> Result<Option<String>, StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        conn.query_row(
+            "SELECT id FROM accounts WHERE deleted_at IS NULL \
+             ORDER BY created_at DESC LIMIT 1;",
+            [],
+            |row| row.get(0),
+        )
+        .map(Some)
+        .or_else(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(StoreError::Db(other.to_string())),
+        })
+    }
+
     /// アカウント行が無ければ作る (FK 制約の前提)。
     ///
     /// `PRAGMA foreign_keys = ON` のため、`contacts`/`messages`/`settings` は
@@ -971,6 +994,24 @@ mod tests {
                 String::from_utf8_lossy(marker),
             );
         }
+    }
+
+    #[tokio::test]
+    async fn primary_account_id_は登録済みアカウントを返す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        // アカウント未登録なら None
+        assert_eq!(store.primary_account_id().await.unwrap(), None);
+
+        seed_account(&store, "acct1").await;
+        assert_eq!(
+            store.primary_account_id().await.unwrap(),
+            Some("acct1".to_string())
+        );
     }
 
     #[tokio::test]
