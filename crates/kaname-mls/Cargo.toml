@@ -19,6 +19,11 @@ rand         = { workspace = true }
 openmls                  = { version = "0.9", features = ["draft-ietf-mls-pq-ciphersuites"] }
 openmls_libcrux_crypto   = { version = "0.4", features = ["draft-ietf-mls-pq-ciphersuites"] }
 openmls_basic_credential = "0.6"
+# D1 Phase 2: openmls 状態を SQLite (SQLCipher) に永続化。
+# rusqlite は workspace の bundled-sqlcipher 版を共有 (libsqlite3-sys の
+# links 衝突を避けるため workspace 依存を使う)。
+openmls_sqlite_storage = { version = "0.3", features = ["draft-ietf-mls-pq-ciphersuites"] }
+rusqlite               = { workspace = true }
 
 [dev-dependencies]
 

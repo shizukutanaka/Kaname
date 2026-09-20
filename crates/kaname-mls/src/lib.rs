@@ -36,7 +36,10 @@ use openmls::prelude::{
     MlsMessageBodyIn, OpenMlsProvider, ProcessedMessageContent, ProtocolVersion, StagedWelcome,
 };
 use openmls_basic_credential::SignatureKeyPair;
-use openmls_libcrux_crypto::Provider as LibcruxProvider;
+use openmls_libcrux_crypto::CryptoProvider;
+use openmls_sqlite_storage::{Codec, SqliteStorageProvider};
+use rusqlite::Connection;
+use std::path::Path;
 use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
 
 // ============================================================================
@@ -379,11 +382,129 @@ impl Default for KeyPackageCache {
 // MLS メールクライアント — openmls wire 実装
 // ============================================================================
 
+/// openmls_sqlite_storage 用の serde コーデック (JSON)。
+///
+/// storage 内の値は人間可読である必要がないため JSON で十分 — 内容は
+/// いずれにせよ SQLCipher ファイルに暗号化されて書かれる。
+#[derive(Default)]
+struct JsonCodec;
+
+impl Codec for JsonCodec {
+    type Error = serde_json::Error;
+
+    fn to_vec<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, Self::Error> {
+        serde_json::to_vec(value)
+    }
+
+    fn from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T, Self::Error> {
+        serde_json::from_slice(slice)
+    }
+}
+
+/// libcrux 暗号 + SQLCipher (rusqlite) ストレージの OpenMLS プロバイダ。
+///
+/// `openmls_libcrux_crypto::Provider` は storage が MemoryStorage 固定のため
+/// 永続化できない — D1 Phase 2 として独自プロバイダで差し替える。
+/// ストレージ実体は `SqliteStorageProvider` で、refinery マイグレーション済みの
+/// openmls 管理スキーマに openmls 自身が書き込む。
+struct KanameProvider {
+    crypto: CryptoProvider,
+    storage: SqliteStorageProvider<JsonCodec, Connection>,
+}
+
+impl KanameProvider {
+    /// `connection` を openmls 状態用ストレージとして取り込む。
+    ///
+    /// 呼出側で SQLCipher の `PRAGMA key` を適用済みであること。
+    /// openmls のスキーママイグレーションを実行してから返す。
+    fn new(connection: Connection) -> Result<Self, MlsMailError> {
+        let crypto = CryptoProvider::new()
+            .map_err(|e| MlsMailError::Mls(format!("crypto provider 初期化失敗: {e:?}")))?;
+        let mut storage = SqliteStorageProvider::<JsonCodec, Connection>::new(connection);
+        storage.run_migrations().map_err(|e| {
+            MlsMailError::Storage(format!("openmls スキーママイグレーション失敗: {e}"))
+        })?;
+        Ok(Self { crypto, storage })
+    }
+}
+
+impl OpenMlsProvider for KanameProvider {
+    type CryptoProvider = CryptoProvider;
+    type RandProvider = CryptoProvider;
+    type StorageProvider = SqliteStorageProvider<JsonCodec, Connection>;
+
+    fn storage(&self) -> &Self::StorageProvider {
+        &self.storage
+    }
+
+    fn crypto(&self) -> &Self::CryptoProvider {
+        &self.crypto
+    }
+
+    fn rand(&self) -> &Self::RandProvider {
+        &self.crypto
+    }
+}
+
+/// SQLCipher 接続を開く。`path` が None ならインメモリ (揮発モード)。
+///
+/// `key_hex` は 64 桁の 16 進キー (SQLCipher の `PRAGMA key = "x'…'"` 形式)。
+/// 揮発モードでは平文 SQLite のため key は使わない。
+fn open_db(path: Option<&Path>, key_hex: Option<&str>) -> Result<Connection, MlsMailError> {
+    let conn = match path {
+        Some(p) => Connection::open(p)
+            .map_err(|e| MlsMailError::Storage(format!("MLS DB オープン失敗: {e}")))?,
+        None => Connection::open_in_memory()
+            .map_err(|e| MlsMailError::Storage(format!("MLS メモリ DB オープン失敗: {e}")))?,
+    };
+    if let Some(key) = key_hex {
+        // kaname-store と同じ PRAGMA 形式。SQLCipher ではキー適用は
+        // 他のステートメントより先に行う必要がある。
+        conn.execute_batch(&format!("PRAGMA key = \"x'{key}'\";"))
+            .map_err(|e| MlsMailError::Storage(format!("MLS DB キー適用失敗: {e}")))?;
+        // 2 コネクション (openmls + メタ) が同一ファイルを共有するため
+        // WAL + busy_timeout でロック競合を避ける。
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
+            .map_err(|e| MlsMailError::Storage(format!("MLS DB pragma 失敗: {e}")))?;
+    }
+    Ok(conn)
+}
+
+/// メタテーブル群 (openmls 管理スキーマとは別 — kaname 側の帳簿)。
+///
+/// 永続化するのはセキュリティ上必要な最小限:
+/// - `kaname_mls_meta`: 署名鍵の公開鍵 (秘密鍵本体は openmls storage 内)
+/// - `mls_conversations`: 会話の kind/epoch/safety_number/メンバー
+/// - `mls_seen_welcomes`: Welcome リプレイ防止 (再起動跨ぎが必須要件)
+///
+/// `kp_cache` は揮発のまま — 他人の公開 KeyPackage のキャッシュであり、
+/// 失われても再取得可能なため永続化しない (D1 Phase 2 スコープ)。
+const META_SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS kaname_mls_meta (
+    key   TEXT PRIMARY KEY NOT NULL,
+    value BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mls_conversations (
+    conv_id       BLOB PRIMARY KEY NOT NULL,
+    kind          TEXT NOT NULL,
+    epoch         INTEGER NOT NULL,
+    safety_number TEXT,
+    members_json  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mls_seen_welcomes (
+    conv_id BLOB NOT NULL,
+    epoch   INTEGER NOT NULL,
+    PRIMARY KEY (conv_id, epoch)
+);
+";
+
 /// MLS グループ操作を担う主クライアント。
 pub struct MlsMailClient {
     pub identity: Identity,
-    /// openmls プロバイダ (libcrux: 暗号 + 乱数 + メモリストレージ)。
-    provider: LibcruxProvider,
+    /// openmls プロバイダ (libcrux 暗号 + SQLCipher ストレージ)。
+    provider: KanameProvider,
+    /// kaname 側帳簿の DB 接続 (会話メタ・seen_welcomes)。
+    meta: Connection,
     /// 自アイデンティティの署名鍵ペア。
     signer: SignatureKeyPair,
     /// 自アイデンティティの Credential + 署名公開鍵。
@@ -405,23 +526,80 @@ pub struct MlsMailClient {
 }
 
 impl MlsMailClient {
-    /// 新しい MLS クライアントを構築する。
+    /// 新しい MLS クライアントを構築する (揮発モード — 状態はメモリ内のみ)。
     ///
     /// Ed25519 署名鍵ペアと BasicCredential (identity = メールアドレス) を
     /// 生成し、署名鍵をプロバイダのストレージに登録する。
+    /// 再起動で状態は失われる — 永続化するには `try_new_persistent` を使う。
     ///
     /// # Panics / 失敗
-    /// CSPRNG 初期化失敗のみ (実質的に起こり得ない)。`Self` を返すため
+    /// CSPRNG/DB 初期化失敗のみ (実質的に起こり得ない)。`Self` を返すため
     /// 失敗時は MlsMailError を返す版の `try_new` を利用すること。
     pub fn try_new(identity: Identity) -> Result<Self, MlsMailError> {
-        let provider = LibcruxProvider::new()
-            .map_err(|e| MlsMailError::Mls(format!("crypto provider 初期化失敗: {e:?}")))?;
+        Self::open(identity, None, None)
+    }
+
+    /// SQLCipher ファイルに状態を永続化する MLS クライアントを構築する。
+    ///
+    /// `db_path` に openmls グループ状態・署名鍵・会話メタ・
+    /// `seen_welcomes` (Welcome リプレイ防止帳簿) を格納する。
+    /// `key_hex` は 64 桁 16 進の SQLCipher キー (kaname-store の
+    /// `history.key` と同形式 — 呼出側が鍵管理を担う)。
+    ///
+    /// 再起動時は同じ `(db_path, key_hex)` で再度呼べば、会話・署名鍵・
+    /// リプレイ帳簿が復元される。
+    pub fn try_new_persistent(
+        identity: Identity,
+        db_path: &Path,
+        key_hex: &str,
+    ) -> Result<Self, MlsMailError> {
+        Self::open(identity, Some(db_path), Some(key_hex))
+    }
+
+    /// 共通初期化: DB 2 本 (openmls 状態 + kaname メタ) を開き、
+    /// 署名鍵を取得/生成し、永続化済みの状態を復元する。
+    fn open(
+        identity: Identity,
+        db_path: Option<&Path>,
+        key_hex: Option<&str>,
+    ) -> Result<Self, MlsMailError> {
+        let provider = KanameProvider::new(open_db(db_path, key_hex)?)?;
+        let meta = open_db(db_path, key_hex)?;
+        meta.execute_batch(META_SCHEMA)
+            .map_err(|e| MlsMailError::Storage(format!("メタスキーマ初期化失敗: {e}")))?;
+
         let ciphersuite = identity.default_ciphersuite.to_openmls();
-        let signer = SignatureKeyPair::new(ciphersuite.signature_algorithm())
-            .map_err(|e| MlsMailError::Mls(format!("署名鍵生成失敗: {e:?}")))?;
-        signer
-            .store(provider.storage())
-            .map_err(|e| MlsMailError::Mls(format!("署名鍵ストレージ失敗: {e:?}")))?;
+        let scheme = ciphersuite.signature_algorithm();
+
+        // 署名鍵: 永続化モードでは公開鍵をメタに保存しておき、再起動時に
+        // openmls storage から秘密鍵ごと復元する (鍵の再生成で過去の
+        // KeyPackage/グループ署名が全部無効になるのを防ぐ)。
+        let stored_pk: Option<Vec<u8>> = meta
+            .query_row(
+                "SELECT value FROM kaname_mls_meta WHERE key = 'signer_pk'",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
+        let signer = match stored_pk
+            .as_deref()
+            .and_then(|pk| SignatureKeyPair::read(provider.storage(), pk, scheme))
+        {
+            Some(s) => s,
+            None => {
+                let s = SignatureKeyPair::new(scheme)
+                    .map_err(|e| MlsMailError::Mls(format!("署名鍵生成失敗: {e:?}")))?;
+                s.store(provider.storage())
+                    .map_err(|e| MlsMailError::Mls(format!("署名鍵ストレージ失敗: {e:?}")))?;
+                meta.execute(
+                    "INSERT OR REPLACE INTO kaname_mls_meta (key, value) VALUES ('signer_pk', ?1)",
+                    rusqlite::params![s.to_public_vec()],
+                )
+                .map_err(|e| MlsMailError::Storage(format!("署名鍵メタ保存失敗: {e}")))?;
+                s
+            }
+        };
+
         let credential = Credential::from(openmls::credentials::BasicCredential::new(
             identity.email.as_str().as_bytes().to_vec(),
         ));
@@ -429,9 +607,11 @@ impl MlsMailClient {
             credential,
             signature_key: signer.to_public_vec().into(),
         };
-        Ok(Self {
+
+        let mut client = Self {
             identity,
             provider,
+            meta,
             signer,
             credential_with_key,
             groups: BTreeMap::new(),
@@ -439,7 +619,69 @@ impl MlsMailClient {
             epochs: BTreeMap::new(),
             kp_cache: KeyPackageCache::new(),
             seen_welcomes: std::collections::HashSet::new(),
-        })
+        };
+        client.load_state()?;
+        Ok(client)
+    }
+
+    /// 永続化済みの会話・エポック・Welcome 帳簿を復元する。
+    ///
+    /// 会話ごとに `MlsGroup::load` で openmls 状態を復元する —
+    /// openmls 側に残っていない会話 (半クラッシュ等) はスキップして
+    /// 起動を失敗させない。
+    fn load_state(&mut self) -> Result<(), MlsMailError> {
+        let conv_rows: Vec<(Vec<u8>, i64)> = self
+            .meta
+            .prepare("SELECT conv_id, epoch FROM mls_conversations")
+            .and_then(|mut st| {
+                st.query_map([], |r| Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, i64>(1)?)))
+                    .and_then(|m| m.collect::<Result<_, _>>())
+            })
+            .map_err(|e| MlsMailError::Storage(format!("会話メタ読み出し失敗: {e}")))?;
+        for (conv_bytes, epoch) in conv_rows {
+            let Ok(conv_arr) = <[u8; 32]>::try_from(conv_bytes.as_slice()) else {
+                continue;
+            };
+            let conv_id = ConversationId(conv_arr);
+            let group_id = GroupId::from_slice(&conv_id.0);
+            match MlsGroup::load(self.provider.storage(), &group_id) {
+                Ok(Some(group)) => {
+                    self.conversations.insert(
+                        conv_id.clone(),
+                        GroupState {
+                            bytes: conv_id.0.to_vec(),
+                        },
+                    );
+                    self.epochs.insert(conv_id.clone(), epoch as u64);
+                    self.groups.insert(conv_id, group);
+                }
+                Ok(None) => {
+                    tracing::warn!(
+                        conv_id = %conv_id.as_hex(),
+                        "openmls 状態が無い会話をスキップ"
+                    );
+                }
+                Err(e) => {
+                    return Err(MlsMailError::Storage(format!("MLS グループ復元失敗: {e}")));
+                }
+            }
+        }
+
+        let seen_rows: Vec<(Vec<u8>, i64)> = self
+            .meta
+            .prepare("SELECT conv_id, epoch FROM mls_seen_welcomes")
+            .and_then(|mut st| {
+                st.query_map([], |r| Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, i64>(1)?)))
+                    .and_then(|m| m.collect::<Result<_, _>>())
+            })
+            .map_err(|e| MlsMailError::Storage(format!("Welcome 帳簿読み出し失敗: {e}")))?;
+        for (conv_bytes, epoch) in seen_rows {
+            if let Ok(arr) = <[u8; 32]>::try_from(conv_bytes.as_slice()) {
+                self.seen_welcomes
+                    .insert((ConversationId(arr), epoch as u64));
+            }
+        }
+        Ok(())
     }
 
     /// 新しい MLS クライアントを構築する (後方互換 — 失敗時 panic しないよう内部で try_new)。
@@ -451,6 +693,110 @@ impl MlsMailClient {
             Ok(c) => c,
             Err(e) => panic!("MlsMailClient 初期化失敗: {e}"),
         }
+    }
+
+    /// 会話メタを永続化する (best-effort — 暗号操作自体は既に成功済みの
+    /// ため、メタ書き込み失敗で呼出側に失敗を返さず warn のみ。
+    /// 永続化失敗は次回起動時の状態欠落を意味する)。
+    fn persist_conversation(&self, conv: &Conversation) {
+        let kind = match &conv.kind {
+            ConversationKind::OneToOne => "one_to_one".to_string(),
+            ConversationKind::Team { max_members } => format!("team:{max_members}"),
+            ConversationKind::Announce => "announce".to_string(),
+        };
+        let members_json =
+            serde_json::to_string(&conv.members.iter().map(|m| m.as_str()).collect::<Vec<_>>())
+                .unwrap_or_else(|_| "[]".to_string());
+        if let Err(e) = self.meta.execute(
+            "INSERT OR REPLACE INTO mls_conversations
+             (conv_id, kind, epoch, safety_number, members_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                conv.id.0.as_slice(),
+                kind,
+                conv.epoch as i64,
+                conv.safety_number,
+                members_json,
+            ],
+        ) {
+            tracing::warn!(error = %e, "会話メタの永続化に失敗");
+        }
+    }
+
+    /// 会話の現在エポックだけを永続化する。
+    fn persist_epoch(&self, conv_id: &ConversationId, epoch: u64) {
+        if let Err(e) = self.meta.execute(
+            "UPDATE mls_conversations SET epoch = ?2 WHERE conv_id = ?1",
+            rusqlite::params![conv_id.0.as_slice(), epoch as i64],
+        ) {
+            tracing::warn!(error = %e, "エポックの永続化に失敗");
+        }
+    }
+
+    /// 処理済み Welcome をリプレイ帳簿に永続化する。
+    fn persist_seen_welcome(&self, conv_id: &ConversationId, epoch: u64) {
+        if let Err(e) = self.meta.execute(
+            "INSERT OR IGNORE INTO mls_seen_welcomes (conv_id, epoch) VALUES (?1, ?2)",
+            rusqlite::params![conv_id.0.as_slice(), epoch as i64],
+        ) {
+            tracing::warn!(error = %e, "Welcome 帳簿の永続化に失敗");
+        }
+    }
+
+    /// 永続化された会話の一覧 (再起動後の UI 復元用)。
+    ///
+    /// 揮発モードでもメタはインメモリ DB に書かれているため同じ結果を返す。
+    pub fn list_conversations(&self) -> Vec<Conversation> {
+        let mut out = Vec::new();
+        let Ok(mut st) = self.meta.prepare(
+            "SELECT conv_id, kind, epoch, safety_number, members_json FROM mls_conversations",
+        ) else {
+            return out;
+        };
+        let rows = st.query_map([], |r| {
+            Ok((
+                r.get::<_, Vec<u8>>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        });
+        let Ok(rows) = rows else { return out };
+        for row in rows.flatten() {
+            let (conv_bytes, kind, epoch, safety_number, members_json) = row;
+            let Ok(arr) = <[u8; 32]>::try_from(conv_bytes.as_slice()) else {
+                continue;
+            };
+            let members: Vec<EmailAddress> = serde_json::from_str::<Vec<String>>(&members_json)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|s| EmailAddress::parse(s.clone()).ok())
+                .collect();
+            let kind = if kind == "one_to_one" {
+                ConversationKind::OneToOne
+            } else if kind == "announce" {
+                ConversationKind::Announce
+            } else if let Some(n) = kind.strip_prefix("team:") {
+                ConversationKind::Team {
+                    max_members: n.parse().unwrap_or(16),
+                }
+            } else {
+                ConversationKind::OneToOne
+            };
+            let conv_id = ConversationId(arr);
+            out.push(Conversation {
+                id: conv_id.clone(),
+                kind,
+                members,
+                state: GroupState {
+                    bytes: conv_id.0.to_vec(),
+                },
+                epoch: epoch as u64,
+                safety_number,
+            });
+        }
+        out
     }
 
     /// KeyPackage blob を実 openmls KeyPackage にデシリアライズ+検証する。
@@ -523,6 +869,7 @@ impl MlsMailClient {
         self.groups.insert(conv_id.clone(), group);
         self.conversations.insert(conv_id.clone(), group_state);
         self.epochs.insert(conv_id.clone(), epoch);
+        self.persist_conversation(&conversation);
 
         let envelope = Envelope {
             conversation_id: conv_id,
@@ -582,6 +929,7 @@ impl MlsMailClient {
         conversation.members.push(new_member_email.clone());
         conversation.epoch = group.epoch().as_u64();
         conversation.state.bytes = group.group_id().as_slice().to_vec();
+        self.persist_conversation(conversation);
 
         tracing::info!(
             conv_id = %conversation.id.as_hex(),
@@ -745,6 +1093,8 @@ impl MlsMailClient {
                 self.epochs.insert(envelope.conversation_id.clone(), epoch);
                 // 参加成功 — ここで初めて Welcome を処理済みとして記録する
                 self.seen_welcomes.insert(key);
+                self.persist_conversation(&conversation);
+                self.persist_seen_welcome(&envelope.conversation_id, epoch);
 
                 tracing::info!(
                     conv_id = %envelope.conversation_id.as_hex(),
@@ -831,6 +1181,7 @@ impl MlsMailClient {
                         },
                     );
                     self.epochs.insert(envelope.conversation_id.clone(), epoch);
+                    self.persist_conversation(&conversation);
                     return Ok(IncomingResult::WelcomeJoined(conversation));
                 }
 
@@ -845,29 +1196,35 @@ impl MlsMailClient {
                 }
 
                 // 実 Commit を openmls に処理させる
-                let group = self
-                    .groups
-                    .get_mut(&envelope.conversation_id)
-                    .ok_or_else(|| {
-                        MlsMailError::ConversationNotFound(envelope.conversation_id.as_hex())
+                let merged_epoch = {
+                    let group =
+                        self.groups
+                            .get_mut(&envelope.conversation_id)
+                            .ok_or_else(|| {
+                                MlsMailError::ConversationNotFound(
+                                    envelope.conversation_id.as_hex(),
+                                )
+                            })?;
+                    let msg_in = MlsMessageIn::tls_deserialize_exact(&envelope.wire_bytes)
+                        .map_err(|e| MlsMailError::Malformed(format!("Commit パース失敗: {e}")))?;
+                    let protocol_msg = msg_in.try_into_protocol_message().map_err(|e| {
+                        MlsMailError::Malformed(format!("ProtocolMessage 変換失敗: {e:?}"))
                     })?;
-                let msg_in = MlsMessageIn::tls_deserialize_exact(&envelope.wire_bytes)
-                    .map_err(|e| MlsMailError::Malformed(format!("Commit パース失敗: {e}")))?;
-                let protocol_msg = msg_in.try_into_protocol_message().map_err(|e| {
-                    MlsMailError::Malformed(format!("ProtocolMessage 変換失敗: {e:?}"))
-                })?;
-                let processed = group
-                    .process_message(&self.provider, protocol_msg)
-                    .map_err(|e| MlsMailError::Mls(format!("Commit 処理失敗: {e:?}")))?;
-                if let ProcessedMessageContent::StagedCommitMessage(staged) =
-                    processed.into_content()
-                {
-                    group
-                        .merge_staged_commit(&self.provider, *staged)
-                        .map_err(|e| MlsMailError::Mls(format!("Commit マージ失敗: {e:?}")))?;
-                }
+                    let processed = group
+                        .process_message(&self.provider, protocol_msg)
+                        .map_err(|e| MlsMailError::Mls(format!("Commit 処理失敗: {e:?}")))?;
+                    if let ProcessedMessageContent::StagedCommitMessage(staged) =
+                        processed.into_content()
+                    {
+                        group
+                            .merge_staged_commit(&self.provider, *staged)
+                            .map_err(|e| MlsMailError::Mls(format!("Commit マージ失敗: {e:?}")))?;
+                    }
+                    group.epoch().as_u64()
+                };
                 self.epochs
-                    .insert(envelope.conversation_id.clone(), group.epoch().as_u64());
+                    .insert(envelope.conversation_id.clone(), merged_epoch);
+                self.persist_epoch(&envelope.conversation_id, merged_epoch);
 
                 Ok(IncomingResult::MembershipChange {
                     conversation_id: envelope.conversation_id.clone(),
@@ -1060,6 +1417,10 @@ pub enum MlsMailError {
 
     #[error("MLS エラー: {0}")]
     Mls(String),
+
+    /// 永続化ストレージ (SQLCipher) のエラー。
+    #[error("ストレージエラー: {0}")]
+    Storage(String),
 
     #[error("会話が見つからない: {0}")]
     ConversationNotFound(String),
@@ -1677,5 +2038,139 @@ mod tests {
             matches!(result, Ok(IncomingResult::WelcomeJoined(_))),
             "不正 Welcome の後でも正規 Welcome は参加できるべき: {result:?}"
         );
+    }
+
+    // ========================================================================
+    // D1 Phase 2: 永続化テスト
+    // ========================================================================
+
+    fn temp_db(tag: &str) -> std::path::PathBuf {
+        let mut bytes = [0u8; 8];
+        rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut bytes);
+        std::env::temp_dir().join(format!(
+            "kaname-mls-{tag}-{:016x}.db",
+            u64::from_ne_bytes(bytes)
+        ))
+    }
+
+    fn persistent_client(email: &str, path: &Path) -> MlsMailClient {
+        let key = "a".repeat(64); // テスト用固定 SQLCipher キー (32 バイト hex)
+        MlsMailClient::try_new_persistent(
+            Identity {
+                email: EmailAddress::parse(email).unwrap(),
+                display_name: Some("テスト".into()),
+                default_ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            },
+            path,
+            &key,
+        )
+        .unwrap()
+    }
+
+    fn cleanup_db(path: &Path) {
+        for suffix in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{}", path.display(), suffix));
+        }
+    }
+
+    fn welcome_envelope(env: &Envelope) -> Envelope {
+        Envelope {
+            conversation_id: env.conversation_id.clone(),
+            kind: EnvelopeKind::Welcome,
+            epoch: env.epoch,
+            ciphersuite: env.ciphersuite,
+            wire_bytes: env.welcome.clone().unwrap(),
+            welcome: env.welcome.clone(),
+        }
+    }
+
+    #[test]
+    fn 永続化_再起動後も暗号往復が継続できる() {
+        let a_path = temp_db("alice");
+        let b_path = temp_db("bob");
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+
+        // --- 1 回目のセッション: 会話作成 + Welcome 参加 ---
+        {
+            let mut alice = persistent_client("alice@kaname.app", &a_path);
+            let mut bob = persistent_client("bob@kaname.app", &b_path);
+            let kp = bob.generate_key_package().unwrap();
+            let (_conv, env) = alice.start_one_to_one(bob_email.clone(), kp).unwrap();
+            bob.process_incoming(&welcome_envelope(&env)).unwrap();
+        }
+
+        // --- 2 回目のセッション: 両者が状態を復元して往復 ---
+        let mut alice = persistent_client("alice@kaname.app", &a_path);
+        let mut bob = persistent_client("bob@kaname.app", &b_path);
+
+        let mut conv = alice
+            .list_conversations()
+            .into_iter()
+            .next()
+            .expect("alice の会話が復元されるべき");
+        assert_eq!(conv.members.len(), 2);
+        assert_eq!(conv.epoch, 1);
+
+        let env2 = alice.encrypt_message(&mut conv, b"after restart").unwrap();
+        let res = bob.process_incoming(&env2).unwrap();
+        match res {
+            IncomingResult::Application(pt) => assert_eq!(pt, b"after restart"),
+            other => panic!("復号されるべき: {other:?}"),
+        }
+        cleanup_db(&a_path);
+        cleanup_db(&b_path);
+    }
+
+    #[test]
+    fn 永続化_再起動跨ぎでwelcomeリプレイを防ぐ() {
+        let a_path = temp_db("alice2");
+        let b_path = temp_db("bob2");
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+
+        let mut alice = persistent_client("alice@kaname.app", &a_path);
+        let welcome_env = {
+            let mut bob = persistent_client("bob@kaname.app", &b_path);
+            let kp = bob.generate_key_package().unwrap();
+            let (_c, env) = alice.start_one_to_one(bob_email, kp).unwrap();
+            let w = welcome_envelope(&env);
+            bob.process_incoming(&w).unwrap();
+            w
+        };
+        drop(alice);
+
+        // bob を再起動 — seen_welcomes が復元されているはず
+        let mut bob = persistent_client("bob@kaname.app", &b_path);
+        let replay = bob.process_incoming(&welcome_env);
+        assert!(
+            matches!(replay, Err(MlsMailError::WelcomeReplay { .. })),
+            "再起動後もリプレイは拒否されるべき: {replay:?}"
+        );
+        cleanup_db(&a_path);
+        cleanup_db(&b_path);
+    }
+
+    #[test]
+    fn 永続化_署名鍵が再起動後も維持される() {
+        let b_path = temp_db("bob3");
+        // 再起動前に発行した KP の秘密鍵が残っていれば、
+        // 再起動後にその KP 宛ての Welcome で参加できる
+        let (a_path, bob_kp) = {
+            let bob = persistent_client("bob@kaname.app", &b_path);
+            let kp = bob.generate_key_package().unwrap();
+            (temp_db("alice3"), kp)
+        };
+
+        let mut alice = persistent_client("alice@kaname.app", &a_path);
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (_c, env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
+
+        let mut bob2 = persistent_client("bob@kaname.app", &b_path);
+        let res = bob2.process_incoming(&welcome_envelope(&env));
+        assert!(
+            matches!(res, Ok(IncomingResult::WelcomeJoined(_))),
+            "再起動後も発行済み KP で参加できるべき (署名鍵+KP秘密鍵が永続化): {res:?}"
+        );
+        cleanup_db(&a_path);
+        cleanup_db(&b_path);
     }
 }
