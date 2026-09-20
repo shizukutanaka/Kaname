@@ -140,14 +140,16 @@ test("prefers-reduced-motion でアニメーションが停止する", async ({ 
   await context.close();
 });
 
-// ── テスト 8: 言語検出 ──────────────────────────────────────────────
+// ── テスト 8: 言語宣言 ──────────────────────────────────────────────
 
-test("英語ロケールでは html lang が en になる", async ({ browser }) => {
+// i18n 基盤は E9 で削除済み — UI は日本語固定。スクリーンリーダーが正しい
+// 発話規則を使えるよう <html lang="ja"> が常に宣言されていることを保証する。
+test("html lang が ja に固定されている", async ({ browser }) => {
   const context = await browser.newContext({ locale: "en-US" });
   const page = await context.newPage();
   await installTauriMock(page);
   await page.goto("/");
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja");
   await context.close();
 });
 
