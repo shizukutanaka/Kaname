@@ -19,6 +19,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **BEC/DLP セキュリティクレートの台帳残件を修正** (D45残/D52/D54/D56/D58/D59 — 要セキュリティリード承認)
+  - D45 残: kaname-bec のキーワード照合2系統 (本文のルート変更/チャネル移行/緊急・金銭マーカー群 + `contains_high_risk_topic` 件名照合) が語間ゼロ幅挿入で回避可能 → `normalize_for_matching_spaced` 併用の二重照合化。Cialdini 説得原理スコアも両正規化の max を採用
+  - D52: `kaname-dlp::edm` の SHA-256 ハッシュが先頭8バイト (u64) に切り詰められ実効誕生日境界 ~2^32 → フル 256bit ダイジェスト保持に変更 (doc comment の 2^128 主張と実装が一致)。**永続化済みフィンガープリントとの互換性はなく、再登録が必要**
+  - D54: 誤送信検出 `all_internal_except_last` が宛先リスト最後尾のフリーメールしか検出しない → 位置非依存化 (社内宛先 ≥1 + 社外=フリーメールのみのスレッドで全フリーメール宛先を検出、複数混入にも対応)
+  - D56: AiTM 高リスク認証パラメーター検出が URL フラグメント (`#access_token=`) を見ていなかった → `#` パターン追加 (OAuth Implicit Flow のトークン窃取手口対応)
+  - D58: `DkimReplayTracker` が上限なくメモリ増殖 (正常メール受信のみで発生するリソース枯渇) → 10,000 エントリ上限 + FIFO 退避
+  - D59: `apply_cross_signal_escalation` の `has_auth` が符号を見ず ARC 成功 (減点) シグナルでも複合ボーナス誤発火 → 正の寄与のみカウント
 - **cargo deny が deserialize 不能だった問題を修復** — deny.toml を cargo-deny 0.18+ スキーマへ移行 (廃止キー削除、`allow-wildcard-paths`、ライセンス許可追加: Zlib/Unicode-3.0/CDLA-Permissive-2.0/AGPL-3.0-or-later)。glib unsound (RUSTSEC-2024-0429) は理由・期限付きで ignore。`cargo deny check all` が全セクション ok
 - **全24クレートに `license.workspace = true` + `publish = false` 付与** — ライセンスメタデータ欠落の解消
 - **E2E 実行が検出した実 a11y 欠陥を修正** (D8 関連)

@@ -29,8 +29,10 @@ use std::collections::HashSet;
 pub struct EdmFingerprints {
     /// salt (フィンガープリント生成時のソルト)。
     salt: String,
-    /// トークンのハッシュ集合。
-    hashes: HashSet<u64>,
+    /// トークンのハッシュ集合 (SHA-256 フルダイジェスト 256bit)。
+    /// D52: 旧バージョンの u64 切り詰め形式と互換性がないため、
+    /// 永続化済みのフィンガープリントは再登録 (再ハッシュ化) が必要。
+    hashes: HashSet<[u8; 32]>,
     /// 検出に必要な最小一致数 (chunk 分割対策)。
     min_matches: u32,
 }
@@ -125,16 +127,16 @@ fn tokenize(text: &str) -> Vec<String> {
 /// `DefaultHasher` は Rust バージョン間で不安定なため使用禁止。
 /// EDM フィンガープリントは永続化されるため、バージョン間の一貫性が必須。
 /// SHA-256 は衝突耐性があり、2^128 の誕生日境界を持つ。
-fn hash_token(token: &str, salt: &str) -> u64 {
+/// 切り詰めずフルダイジェストを保持する (u64 切り詰めでは実効的な
+/// 誕生日境界が約 2^32 まで低下し、無関係なトークンの誤一致を招く)。
+fn hash_token(token: &str, salt: &str) -> [u8; 32] {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     // ドメイン分離: salt と token を NULL バイトで区切る
     hasher.update(salt.as_bytes());
     hasher.update(b"\x00");
     hasher.update(token.as_bytes());
-    let digest = hasher.finalize();
-    // SHA-256 の先頭 8 バイトを u64 として使用 (比較用インデックス)
-    u64::from_be_bytes(digest[..8].try_into().unwrap_or([0u8; 8]))
+    hasher.finalize().into()
 }
 
 // ============================================================================
@@ -172,6 +174,27 @@ mod tests {
         // 2 トークン以上一致 → 検出
         let text = "送信先: tanaka@customer.example.com, 顧客番号 CUST-00042";
         assert!(fp.is_match(text));
+    }
+
+    #[test]
+    fn hash_is_full_sha256_digest() {
+        // D52: 64bit 切り詰めでないことを担保 (フルダイジェスト = 32 バイト)
+        let h = hash_token("test-token", "salt");
+        assert_eq!(h.len(), 32);
+        // salt が違えば別ハッシュ
+        assert_ne!(
+            hash_token("test-token", "salt"),
+            hash_token("test-token", "salt2")
+        );
+    }
+
+    #[test]
+    fn serialization_round_trip() {
+        let fp = sample_fingerprints();
+        let json = serde_json::to_string(&fp).unwrap();
+        let restored: EdmFingerprints = serde_json::from_str(&json).unwrap();
+        let text = "送信先: tanaka@customer.example.com, 顧客番号 CUST-00042";
+        assert!(restored.is_match(text), "往復後も照合が機能するべき");
     }
 
     #[test]

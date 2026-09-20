@@ -120,7 +120,14 @@ impl AitmDetector {
             .any(|legit| self.is_legitimate_subdomain(&domain, legit));
 
         for param in &high_risk_params {
-            let patterns = [format!("?{param}="), format!("&{param}=")];
+            // OAuth Implicit Flow はトークンを URL フラグメント (#access_token=...) で
+            // 返すため、クエリ区切り (? / &) に加えてフラグメント先頭 (#) も検査する。
+            // Tycoon2FA/Storm-1747 系 AiTM キットのトークン窃取手口 (D56)。
+            let patterns = [
+                format!("?{param}="),
+                format!("&{param}="),
+                format!("#{param}="),
+            ];
             for pat in &patterns {
                 if lower.contains(pat) {
                     score += 25;
@@ -132,7 +139,11 @@ impl AitmDetector {
         // code/state/nonce は非正規ドメインの場合のみ加点
         if !is_legitimate_domain {
             for param in &low_risk_params {
-                let patterns = [format!("?{param}="), format!("&{param}=")];
+                let patterns = [
+                    format!("?{param}="),
+                    format!("&{param}="),
+                    format!("#{param}="),
+                ];
                 for pat in &patterns {
                     if lower.contains(pat) {
                         score += 15;
@@ -246,6 +257,16 @@ mod tests {
         let r = d.analyze("https://evil.com/relay?id_token=eyJhb...&code=abc123");
         assert!(r.score >= 25, "score={}", r.score);
         assert!(r.signals.iter().any(|s| s.contains("id_token")));
+    }
+
+    #[test]
+    fn detects_auth_token_in_fragment() {
+        // D56: OAuth Implicit Flow はトークンをフラグメントで返すため、
+        // AiTM キットは #access_token=... でトークンを窃取する。
+        let d = AitmDetector::new();
+        let r = d.analyze("https://evil-relay.tk/#access_token=stolen&id_token=abc");
+        assert!(r.score >= 25, "score={}", r.score);
+        assert!(r.signals.iter().any(|s| s.contains("access_token")));
     }
 
     #[test]
