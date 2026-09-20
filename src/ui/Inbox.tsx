@@ -98,7 +98,13 @@ interface OpenedEmail {
   bec_verdict: string;
   bec_score: number;
   bec_signals: string[];
-  attachments: { filename: string; risks: string[]; is_dangerous: boolean }[];
+  attachments: {
+    filename: string;
+    declared_mime: string;
+    size_bytes: number;
+    risks: string[];
+    is_dangerous: boolean;
+  }[];
   body: BodyDto;
   dlp_findings: string[];
   /** 帯域外検証 (OOBV) の推奨度: "none" | "optional" | "strong"。 */
@@ -344,6 +350,7 @@ const EmailDetailPanel = (props: {
   const [openError, setOpenError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [trashing, setTrashing] = createSignal(false);
+  // key は `${filename}::${declared_mime}::${size_bytes}` (同名添付の区別)
   const [attachmentBlobs, setAttachmentBlobs] = createSignal<Record<string, { blobId: string; mime: string }>>({});
   const [downloading, setDownloading] = createSignal<string | null>(null);
   const [downloadMsg, setDownloadMsg] = createSignal<string | null>(null);
@@ -367,11 +374,14 @@ const EmailDetailPanel = (props: {
         .then(() => props.onRead(props.emailId as string))
         .catch(() => {});
       try {
-        const refs = await invoke<{ filename: string; blob_id: string; mime: string }[]>(
+        const refs = await invoke<{ filename: string; blob_id: string; mime: string; size: number }[]>(
           "mail_list_attachment_blobs", { emailId: props.emailId }
         );
+        // 同名添付があると filename だけでは区別できない (D91) — (filename, mime, size)
+        // の三つ組で突き合わせる。完全に同一の三つ組は byte-identical 相当なので
+        // どちらを取っても同じ。
         const map: Record<string, { blobId: string; mime: string }> = {};
-        for (const r of refs) map[r.filename] = { blobId: r.blob_id, mime: r.mime };
+        for (const r of refs) map[`${r.filename}::${r.mime}::${r.size}`] = { blobId: r.blob_id, mime: r.mime };
         setAttachmentBlobs(map);
       } catch {
         // blobId が取れなくてもメール本体の表示は継続する。
@@ -416,8 +426,8 @@ const EmailDetailPanel = (props: {
     }
   };
 
-  const handleDownload = async (filename: string) => {
-    const ref = attachmentBlobs()[filename];
+  const handleDownload = async (filename: string, mime: string, size: number) => {
+    const ref = attachmentBlobs()[`${filename}::${mime}::${size}`];
     if (!ref || !props.emailId) return;
     setDownloading(filename);
     setDownloadMsg(null);
@@ -585,9 +595,9 @@ const EmailDetailPanel = (props: {
                     <span style={{ color: a.is_dangerous ? "#FF6B70" : "#8B96A5" }}>
                       📎 {a.filename}
                     </span>
-                    <Show when={attachmentBlobs()[a.filename]}>
+                    <Show when={attachmentBlobs()[`${a.filename}::${a.declared_mime}::${a.size_bytes}`]}>
                       <button
-                        onClick={() => handleDownload(a.filename)}
+                        onClick={() => handleDownload(a.filename, a.declared_mime, a.size_bytes)}
                         disabled={downloading() === a.filename}
                         style={{
                           background: "transparent", border: "1px solid #2A3441", color: "#00C4CC",
