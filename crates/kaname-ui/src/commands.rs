@@ -15,6 +15,11 @@ pub struct HealthResponse {
     pub version: String,
 }
 
+/// `.eml` 取り込みで読み込む1ファイルの最大サイズ。
+/// 巨大ファイルの `fs::read` によるメモリ使い果たしを防ぐ
+/// (一般的なメールは数百KB 程度; 添付込みでも 50MB を超える正規利用は稀)。
+const MAX_EML_BYTES: u64 = 50 * 1024 * 1024;
+
 #[derive(Debug, Serialize, Clone)]
 pub struct EmailRow {
     pub id: String,
@@ -240,6 +245,14 @@ pub struct ImportedEmail {
 pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     info!(path=%path, "mail_import_eml");
 
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > MAX_EML_BYTES {
+            return Err(format!(
+                "ファイルが大きすぎます ({}MB > 50MB): {path}",
+                meta.len() / (1024 * 1024)
+            ));
+        }
+    }
     let bytes = std::fs::read(&path).map_err(|e| format!("ファイルを読めません ({path}): {e}"))?;
     analyze_raw_email(&bytes).await
 }
@@ -573,12 +586,18 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             .unwrap_or("?")
             .to_string();
 
-        let bytes = match std::fs::read(&p) {
-            Ok(b) => b,
-            Err(e) => {
-                failed.push((file_name, format!("読み込み失敗: {e}")));
+        let bytes = match std::fs::metadata(&p) {
+            Ok(m) if m.len() > MAX_EML_BYTES => {
+                failed.push((file_name, "ファイルが大きすぎます (50MB 超)".to_string()));
                 continue;
             }
+            _ => match std::fs::read(&p) {
+                Ok(b) => b,
+                Err(e) => {
+                    failed.push((file_name, format!("読み込み失敗: {e}")));
+                    continue;
+                }
+            },
         };
         let env = match kaname_render::parse(&bytes) {
             Ok(e) => e,
