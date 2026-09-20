@@ -2040,7 +2040,6 @@ version = "0.7.1"
 dependencies = [
  "dirs",
  "hmac",
- "kaname-error",
  "kaname-screen",
  "proptest",
  "rand 0.8.6",
@@ -2048,7 +2047,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 1.0.69",
- "tokio",
  "tracing",
 ]
 
@@ -2056,16 +2054,11 @@ dependencies = [
 name = "kaname-bec"
 version = "0.7.1"
 dependencies = [
- "kaname-error",
  "kaname-memory-guard",
  "kaname-pivot",
  "kaname-screen",
- "proptest",
  "serde",
- "serde_json",
  "thiserror 1.0.69",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -2073,7 +2066,6 @@ name = "kaname-core"
 version = "0.7.1"
 dependencies = [
  "serde",
- "tempfile",
 ]
 
 [[package]]
@@ -2081,14 +2073,10 @@ name = "kaname-crypto"
 version = "0.7.1"
 dependencies = [
  "hkdf",
- "kaname-error",
- "proptest",
  "serde",
  "serde_json",
  "sha2",
  "thiserror 1.0.69",
- "tokio",
- "tracing",
  "zeroize",
 ]
 
@@ -2096,15 +2084,12 @@ dependencies = [
 name = "kaname-dlp"
 version = "0.7.1"
 dependencies = [
- "kaname-error",
  "kaname-render",
  "proptest",
  "regex",
  "serde",
  "serde_json",
  "sha2",
- "thiserror 1.0.69",
- "tokio",
  "tracing",
 ]
 
@@ -2115,7 +2100,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -2136,27 +2120,19 @@ dependencies = [
 name = "kaname-memory-guard"
 version = "0.7.1"
 dependencies = [
- "kaname-error",
  "proptest",
  "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
 name = "kaname-mls"
 version = "0.7.1"
 dependencies = [
- "kaname-error",
- "proptest",
  "rand 0.8.6",
  "serde",
  "serde_json",
  "sha2",
- "tempfile",
  "thiserror 1.0.69",
- "tokio",
  "tracing",
 ]
 
@@ -2177,9 +2153,6 @@ dependencies = [
 name = "kaname-observability"
 version = "0.7.1"
 dependencies = [
- "proptest",
- "serde",
- "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2202,7 +2175,6 @@ dependencies = [
 name = "kaname-pivot"
 version = "0.7.1"
 dependencies = [
- "proptest",
  "serde",
  "thiserror 1.0.69",
  "tracing",
@@ -2229,7 +2201,6 @@ dependencies = [
  "ammonia",
  "kaname-screen",
  "mail-parser",
- "proptest",
  "regex",
  "serde",
  "thiserror 1.0.69",
@@ -2249,9 +2220,7 @@ dependencies = [
 name = "kaname-sandbox"
 version = "0.7.1"
 dependencies = [
- "kaname-error",
  "serde",
- "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
@@ -2261,12 +2230,8 @@ dependencies = [
 name = "kaname-screen"
 version = "0.7.1"
 dependencies = [
- "kaname-error",
  "proptest",
  "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -2311,7 +2276,6 @@ version = "0.7.1"
 dependencies = [
  "criterion",
  "kaname-ai",
- "kaname-bec",
  "kaname-screen",
  "proptest",
  "serde_json",
@@ -2337,7 +2301,6 @@ dependencies = [
  "kaname-store",
  "rand 0.8.6",
  "serde",
- "tauri",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
