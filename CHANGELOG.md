@@ -21,6 +21,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **ゴミ箱へ移したメールがオフライン一覧に残り続ける欠陥**: `is_deleted` 列を立てる経路が存在せず、`mail_trash` 後も `mail_list_stored` が拾い続けていた。`Store::mark_deleted` (jmap_id 一致・冪等) を追加し `mail_trash` で JMAP 側成功後に best-effort 反映
+
+- **Compose の到達不能な MLS バッジを削除**: `mlsReady` が永久に null のため非表示だった E2E/📧SMTP バッジ UI とチェック用 effect を削除 (常時非表示のデッドコード。実装時は git 履歴から復元)
+
+- **iframe に CSP 属性を適用**: `BodyDto.csp` はバックエンドから返されていたがフロントエンドで一度も使われていなかった → `<iframe csp>` として適用し、srcdoc 内 `<meta>` CSP に加えブラウザ側でも独立に CSP を強制 (二重防御、Inbox + EmlImport)
+
+- **オフライン時に保存済みメールが読めない不具合を修正**: `mail_list_stored`/`mail_search`/`mail_get_summary` が JMAP 接続中のアカウント ID に依存し、未接続時は `""` で照合して全て空を返していた → `Store::primary_account_id` を追加し履歴 DB のアカウントにフォールバック (ローカルファーストの実質化)
+
 - **ゴミ箱移動がサーバー側で実際に移動していなかった欠陥**: `Email/set` の `mailboxIds` パッチは `{trash: true}` だけだと追加のみで受信トレイから除去されない (RFC 8621 §4.6) → 現在の所属を `Email/get` で取得し全て `null` で除去するパッチに修正
 
 - **オンボーディングが完全に無スタイルで描画されていた欠陥**: `k-*` クラス37個が CSS 未定義のまま残存 (アーカイブ移行時にスタイル定義が欠落) → ダークテーマのスタイルブロックをコンポーネント内に定義。トグル・進捗ドット・危険カード等すべて正しく描画されるようになった
