@@ -280,6 +280,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D102 | ~~**AiTM スコアが契約上限を超過**: `AitmRisk.score` は doc 上 0-100 のはずが無上限加算で、出荷済みコーパス種 (tycoon-auth.net URL) で実測 130+ — verdict 閾値には影響しないが契約虚偽~~ **(2026-09-20 解消)** | P4 | `score.min(100)` クランプ + doc 閾値訂正 (80+ → 50+) |
 | D112 | **SSA 文体認証が再起動ごとに学習全消去で永久不発だった** | kaname-ui / kaname-ssa / kaname-store | 送信者文体プロファイル (`SenderStyleProfile`, 警告発火に ≥10 サンプル必要) がプロセス内 `HashMap` のみに保持され、**Store への永続化経路が皆無** — アプリ再起動のたびに `sample_count` が 0 に戻り、実運用では永久に `InsufficientData` で一度も警告が出ない機能だった (README 看板機能「アカウント乗っ取り検出」の実効性ゼロ)。settings テーブル (暗号化 DB 内、`style_profile:<sender>` キー) に JSON 永続化し、インメモリ Map はキャッシュ化。併せて送信者空文字のプロファイル帰属を早期 return で遮断。「10 サンプル集まれば動く」は**永続化があって初めて真**になる — 学習系機能に揮発性メモリは設計として成立しない |
 | D103 | ~~**fuzz コーパス3件が孤立**: `aitm_urls`/`calendar_phishing`/`ssa_bypass` に種ファイルが存在するが対応ターゲット未定義で一度も実行不能~~ **(2026-09-20 解消)** | P4 | 3ターゲットを不変条件付きで実装し全コーパス消化可能に。実走で aitm が D102 を即座に検出 — 孤立コーパスの存在が本来の検証価値を果たしていなかった証左 |
+| D104 | ~~**受信側 DLP が構造的に空 + 誤配検出の主入力が常に空**: (a) 既定ルール全5件が `Direction::Outbound` のため `Direction::Inbound` で評価する `scan_dlp_inbound` は常に所見ゼロ — UI の「機微情報の検出 (DLP)」表示が死んでいた。(b) `outbound_dlp_eval` の `known_recipient_domains` が常に空でタイポドメイン誤配検出 (`misdirected_recipient` の主検査) が不発~~ **(2026-09-20 解消)** | P3 | (a) Inbound 既定ルール3件追加 (受信マイナンバー/カード番号/機密マーカー → Warn)。(b) 連絡先履歴から既知宛先ドメインを供給。端到端回帰テストでタイポ宛+機微 → Block エスカレーションを固定。**kaname-dlp 変更のため security-lead 承認要** |
+| D105 | ~~**static-check 検査9 が空転**: heredoc stdin 実行では `__file__ = "<stdin>"` となり `abspath→dirname×2` が repo の親 dir に chdir → glob が0件ヒットで常に OK。D98 で導入した検査が一度も中身を見ていなかった (D73 と同型: 検査器自身の欠陥)~~ **(2026-09-20 解消)** | P3 | chdir 除去 (シェル冒頭の `cd` に一本化) + 合成違反で検知を実測。併せて検査10 (corpus↔target↔bin 対応) を新設し D103 再発を機械防止 |
 
 ### 完了判定の変更
 
