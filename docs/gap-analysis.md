@@ -257,7 +257,7 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 
 | # | 内容 | 優先度 | 備考 |
 |---|---|---|---|
-| D62 | **rustfmt ドリフト**: `cargo fmt --check` で 1,610 箇所の差分 (64ファイル)。コードベース全体が rustfmt 非準拠 | P2 | 機械的 `cargo fmt` で解消可能だが diff が巨大のため別 PR 化を推奨。sweep PR マージ後に実施 |
+| D62 | ~~**rustfmt ドリフト**: `cargo fmt --check` で 1,610 箇所の差分 (64ファイル)。コードベース全体が rustfmt 非準拠~~ **(2026-09-20 解消確認)** | P2 | ~~機械的 `cargo fmt` で解消可能だが diff が巨大のため別 PR 化を推奨。sweep PR マージ後に実施~~ **解消済み**: `cargo +stable fmt --all --check` が差分ゼロで通過 (sweep PR 群に含まれて解消されていた) |
 | D63 | **CI テンプレートが未配置**: `ci-templates/` に ci.yml 等があるが `.github/workflows/` が存在せず CI が実際に動いていない (D7 と同一根因) | P0 (権限必要) | `cp ci-templates/*.yml .github/workflows/` ではなく、テンプレートのブランチ/ジョブ定義をレビューしてから配置する人間作業が必要 |
 | D64 | `cargo-nextest` 未インストール (Makefile/CLAUDE.md は nextest 前提だが環境に無し) | P3 | `cargo test` で代替可能だが CI 想定時は `cargo install cargo-nextest` が必要 |
 | D65 | ~~**BEC 評価への連絡先・Reply-To・Return-Path が未配線**: 全3経路で `known_contacts`=`Vec::new()`、`reply_to`/`return_path`=`None` 固定 — 実装済みの Reply-To 詐称・連絡先詐称検出が本番で一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | kaname-render の `Envelope` に `reply_to`/`return_path` を追加、kaname-jmap の `Email/get` に `replyTo` を要求、kaname-store に `list_contacts` を追加し kaname-ui の全経路で配線。nextest 439 pass 実測 |
@@ -267,12 +267,21 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D67 | ~~**BEC 評価へのスレッド文脈・DKIM 署名が未配線**: 全3経路で `thread_context`=`None`、`past_thread_bodies`=`&[]`、`dkim_signature_header`=`None` 固定 — 実装済みのスレッド乗っ取り・口座差し替え・DKIM `l=` 乱用/リプレイ検出が本番で一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | kaname-render の `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加、kaname-jmap の `Email/get` に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を要求、kaname-store の `messages` に `message_id`/`thread_id` 永続化 + `list_thread_messages`/`list_messages_by_message_ids` 追加、kaname-ui 全経路で配線 (kaname-bec `detect_language` を pub 化 — 要 security-lead 承認)。一覧経路の Authentication-Results (SPF/DKIM/DMARC) も `header:Authentication-Results:asText` で実値化 (kaname-render `parse_auth_results_str` 公開)。nextest 1,183 pass 実測 |
 | D68b | **メール一覧にページネーションが無い**: `mail_fetch`/`mail_list_stored` は `position=0` 固定・先頭 `limit` (≤500) 件のみ — 受信箱に51通目以降のメールを表示する経路がない (UI に「もっと読む」も無い) | P3 | kaname-jmap `query_emails` の `position` パラメータは実在するため、UI にページ送り/無限スクロールを追加し offset を渡せば実現可能。現状は「最新50件のみ表示」制限として明記 |
 | D70 | **オンボーディングの通知/テレメトリトグルが書き込み専用**: `settings_save_onboarding` は `notifications`/`telemetry` を `settings` テーブルへ永続化するが、読み出すコードパスが存在しない (通知送信・テレメトリ送信の機能自体が未実装)。ユーザーは「通知を有効にした」が通知は一切来ない placebo 状態 | P4 | 機能実装時に `get_setting` で読み出して利用する。現状は設定値が inert データである旨をここに明記 (偽装ではなく先行収集だが、ユーザー期待との乖離はある) |
+| D71 | ~~**static-check.sh 検査2/6 の字句解析が doc コメント中の孤立 `"` で parity 反転する欠陥 — 検査2は SQL 内 `accounts()`/`strftime()` を誤検知、検査6は反転区間の本番 `.unwrap()` を隠しうる (検査7の TS 版も同種 + Rust の r# パターン誤持込)**~~ **(2026-09-20 解消)** | P1 | 「文字列→コメント」の順の正規表現除去は、コメント内 `"` (kaname-store 行46/620 の `` `"` `` 1個の行) を文字列開始と誤認して parity を反転させる。逆順も文字列内 `//` で破綻するため、どちらの順序も構造的に成立しない。**`scripts/source_strip.py` を新設し、コメント/文字列/char/属性を先頭から1回読む単一パス字句解析に置き換え** (Rust ブロックコメントのネスト・生文字列の `#` 数・`'a` lifetime vs char・`b"`/br` バイト系・属性内の文字列も処理)。検査2/6/7 が共通利用。検査6 のテスト範囲除去も「mask (属性形状は保持) → `rust_test_spans` でブレース対応」の2段に変更 — 旧実装は生ソースでブレース対応を取っていたため、テスト内の `"}"` を含む文字列で早期に閉じる別の潜伏欠陥も同時解消。合成回帰テストで「孤立 `"` 後の未定義呼び出し/本番 unwrap を検出できる」「文字列内の `.unwrap()` を誤検知しない」を確認済み |
+| D72 | ~~**static-check.sh 検査4 が `app: AppHandle` 等の Tauri 注入引数を「不足引数」として誤検知 — `use tauri::AppHandle` の短縮形を認識していなかった**~~ **(2026-09-20 解消)** | P1 | 除外判定が「型に `tauri::` を含む」だけで、`use tauri::{AppHandle}` 経由の短縮型名を知らなかった。PR #203 で `mail_mark_read`/`mail_trash`/`mail_fetch` に `app: AppHandle` が増えて初めて顕在化し、main で検査が赤くなっていた (CI 不在 D7 で誰も気付かない — 安全網の故障自体が検知されない構造的問題)。`use tauri::...` の import 識別子を収集して注入型として扱うよう修正。合成テストで「実引数の不一致は引き続き検出する」ことを確認済み |
 
 ### 完了判定の変更
 
 初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。
 テスト 1,290 合格 / clippy 0 エラー / 静的検査 8/8 / TS 系全グリーン。
 残る P0 は D63 (CI 未配置 — 人間権限) のみ。
+
+**2026-09-20 (再実走追記)**: 「静的検査 8/8」は実は破綻していた — main 上の
+static-check.sh が全項目誤検知で NG を出しており (D71/D72)、CI 不在のため
+誰にも通知されなかった。安全網が「常に赤」だと全アラートが狼少年化し、
+本物の違反も埋もれる。字句解析を `scripts/source_strip.py` に集約して復旧。
+D62 (rustfmt ドリフト) は sweep PR 群により解消済みであることを実測確認
+(`cargo +stable fmt --all --check` 差分ゼロ)。
 
 ## Opus/Sonnet への申し送り事項
 

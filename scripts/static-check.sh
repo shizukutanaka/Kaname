@@ -55,6 +55,8 @@ echo "== 2. 定義が存在しないローカル関数の呼び出し =="
 # シンボルを機械的に洗い出す方式に一般化する。
 python3 - <<'PY' || fail=1
 import re, glob, sys
+sys.path.insert(0, 'scripts')
+from source_strip import strip_rust
 
 files = {f: open(f, encoding='utf-8', errors='replace').read()
          for f in glob.glob('crates/**/*.rs', recursive=True) + glob.glob('src-tauri/**/*.rs', recursive=True)
@@ -86,38 +88,14 @@ KEYWORDS = {
 # 属性・コメント・文字列/char リテラルは、その中身が関数呼び出しに似た
 # 形になりうる (kaname-screen 等は検出パターンをそのまま文字列で持ち、
 # コメントには「// unlimited (Enterprise)」のような自然文が入る)。
-# 呼び出し判定の前に、文字列 → コメントの順で取り除く
-# (コメント除去を先にすると "http://foo" のようなURL文字列内の `//` を
-# コメント開始と誤認するため、必ず文字列を先に潰す)。
-def strip_noise(src: str) -> str:
-    src = re.sub(r'#!?\[.*?\]', ' ', src, flags=re.S)  # 属性
-    # raw 文字列: r#*"..."#* は開始と同じ個数の # で閉じる必要がある
-    # (Rust の実際の構文どおり、バックリファレンスで揃える)。
-    # 'r' の直前が識別子の一部 (例: "tr", "for") だと誤爆するので
-    # 単語境界を要求する ("tr", "td" の並びを raw 文字列と誤認しない)。
-    src = re.sub(r'(?<![a-zA-Z0-9_])r(#*)"(?:.*?)"\1', '""', src, flags=re.S)
-    # char リテラルを文字列より先に剥がす。`'"'` (ダブルクォート 1 文字の
-    # char リテラル) を先に文字列側の正規表現に処理させると、中の `"` を
-    # 文字列の開始と誤認し、次に見つかる無関係な `"` までを丸ごと呑み込んで
-    # 以降の文字列境界が全部ズレる (実際に発生した)。
-    src = re.sub(r"'(?:[^'\\]|\\.)'", "''", src, flags=re.S)
-    # 通常の文字列。DOTALL 必須: `\<改行>` によるバックスラッシュ行継続
-    # (複数行文字列リテラルで使われる) は `\\.` が改行にマッチできないと
-    # 消費できず、以降の文字列境界がすべてズレる
-    # (MIME フィクスチャの複数行バイト文字列で実際に発生した)。
-    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src, flags=re.S)
-    # ブロックコメント (文字列を潰した後なので安全)。
-    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
-    # 行コメント。以前は「行頭が // のコメント専用行」しか除去しておらず、
-    # 実コードに続く行末コメント (`pub seat_limit: ..., // unlimited (...)`
-    # のような) を取りこぼしていた。文字列を潰した後なので、残る `//` は
-    # すべて本物のコメント開始とみなしてよい。
-    src = re.sub(r'//[^\n]*', '', src)
-    return src
+# 以前は「文字列 → コメント」の順で正規表現除去していたが、doc コメント中の
+# 孤立した `"` が文字列開始と誤認され parity が反転する欠陥があった
+# (kaname-store の SQL スキーマ内 accounts()/strftime() が誤検知された)。
+# 単一パスの字句解析 (source_strip.strip_rust) に置き換え済み。
 
 bad = 0
 for f, src in files.items():
-    body = strip_noise(src)
+    body = strip_rust(src)
     # `use` 文に現れる識別子はすべて import 済みとみなす (別クレート由来を許可)。
     # `use axum::{\n routing::{get, post},\n ... \n};` のように複数行にまたがる
     # 波括弧 import があるため、DOTALL + 非貪欲で `use` から最初の `;` までを拾う。
@@ -189,18 +167,32 @@ while stack:
     seen.add(cur); stack += list(imports(cur))
 
 main_rs = open('src-tauri/src/main.rs').read()
-reg = set(re.findall(r'^\s*([a-z_][a-z0-9_]*),\s*$', 
+reg = set(re.findall(r'^\s*([a-z_][a-z0-9_]*),\s*$',
           main_rs[main_rs.index('generate_handler!['):main_rs.index('generate_handler![')+3000], re.M))
+
+# `use tauri::{AppHandle, ...}` で import された型名を集める。
+# `app: AppHandle`/`state: tauri::State<..>` などフレームワーク注入の引数は
+# invoke 呼び出し側が送らない (Tauri が注入する)。以前は型に `tauri::` を
+# 含むものだけを除外していたため、`use tauri::AppHandle` で短縮された
+# `AppHandle` 型の `app` 引数が「不足引数」と誤検知されていた。
+injected_types = set()
+for um in re.finditer(r'^\s*use\s+tauri::(.*?);', main_rs, re.M | re.S):
+    injected_types.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]*', um.group(1)))
+
 # fn シグネチャからパラメータ名を集める
 sigs = {}
 for m in re.finditer(r'(?:async\s+)?fn\s+([a-z_][a-z0-9_]*)\s*\(([^)]*)\)', main_rs):
     # 引数名のみ抽出。「name: Type」の name のみ (パス内の `::` 区切りは
     # `(?!:)` で除外)。`tauri::State`/`AppHandle` などフレームワーク注入の
-    # 引数は invoke 呼び出し側が送らないため型に `tauri::` を含むものは除外。
+    # 引数は invoke 呼び出し側が送らないため除外する。
     params = set()
     for pm in re.finditer(r'([a-z_][a-z0-9_]*)\s*:(?!:)\s*([^,)]+)', m.group(2)):
-        if 'tauri::' not in pm.group(2):
-            params.add(pm.group(1))
+        typ = pm.group(2)
+        # ジェネリクスを剥がして最後のパス区切りの型名を取る
+        base = re.sub(r'<.*', '', typ).split('::')[-1].strip().lstrip('&').strip()
+        if 'tauri::' in typ or base in injected_types:
+            continue
+        params.add(pm.group(1))
     sigs[m.group(1)] = params
 
 def camel_to_snake(k):
@@ -289,76 +281,27 @@ echo "== 6. 本番コードに .unwrap() が無いこと (CLAUDE.md 不変条件
 # I6: 「unwrap() は本番コードに使用禁止」。#[deny(clippy::unwrap_used)] で
 # 強制する設計だが、clippy は D20 により実行できず一度も検証されていない。
 # テストコード (#[cfg(test)] mod / 個々の #[test] 関数) は対象外。
+#
+# 実装メモ: まず strip_rust(keep_lines, keep_attrs) で文字列・コメントを
+# 潰したマスクを作り (属性は #[cfg(test)]/[test] を見つけるため形状を残す)、
+# その上でテスト範囲をブレース対応で切り落とす。旧実装は生ソースで
+# ブレース対応を取っていたため、テスト内の "{" を含む文字列で早期に
+# 閉じる欠陥があった。また検査2と同じ孤立 `"` parity 反転の影響で、
+# 反転区間の本番 .unwrap() を文字列扱いで隠しうる状態だった。
 python3 - <<'PY' || fail=1
 import re, glob, sys
-
-def _blank(text: str) -> str:
-    # 除去した範囲を同じ改行数の空白に置き換える (行番号がズレないように)。
-    return '\n' * text.count('\n')
-
-def strip_cfg_test_mods(src):
-    out, i, n = [], 0, len(src)
-    while i < n:
-        m = re.compile(r'#\[cfg\(test\)\]').search(src, i)
-        if not m:
-            out.append(src[i:]); break
-        out.append(src[i:m.start()])
-        mod_m = re.compile(r'\bmod\s+\w+\s*\{').search(src, m.end())
-        if not mod_m:
-            out.append(src[m.start():m.end()]); i = m.end(); continue
-        depth, j = 0, mod_m.end() - 1
-        while j < n:
-            if src[j] == '{': depth += 1
-            elif src[j] == '}':
-                depth -= 1
-                if depth == 0: j += 1; break
-            j += 1
-        out.append(_blank(src[m.start():j]))
-        i = j
-    return ''.join(out)
-
-def strip_single_test_fns(src):
-    # #[test] / #[tokio::test] が付いた個々の関数本体を、ブレース対応で除去する
-    # (mod tests { } の外に単発で置かれているテスト関数のため)。
-    out, i, n = [], 0, len(src)
-    pat = re.compile(r'#\[(?:tokio::)?test\][^\]]*\]?\s*\n')
-    while i < n:
-        m = pat.search(src, i)
-        if not m:
-            out.append(src[i:]); break
-        out.append(src[i:m.start()])
-        brace = src.find('{', m.end())
-        if brace == -1:
-            out.append(src[m.start():m.end()]); i = m.end(); continue
-        depth, j = 0, brace
-        while j < n:
-            if src[j] == '{': depth += 1
-            elif src[j] == '}':
-                depth -= 1
-                if depth == 0: j += 1; break
-            j += 1
-        out.append(_blank(src[m.start():j]))
-        i = j
-    return ''.join(out)
-
-def strip_comments_and_strings(src):
-    # 行番号を報告するため、複数行にまたがりうる置換 (raw文字列・複数行
-    # 文字列・ブロックコメント) は改行数を保った置換にする。
-    src = re.sub(r'(?<![a-zA-Z0-9_])r(#*)"(?:.*?)"\1',
-                  lambda m: '"' + _blank(m.group(0)) + '"', src, flags=re.S)
-    src = re.sub(r"'(?:[^'\\]|\\.)'", "''", src, flags=re.S)
-    src = re.sub(r'"(?:[^"\\]|\\.)*"',
-                  lambda m: '"' + _blank(m.group(0)) + '"', src, flags=re.S)
-    src = re.sub(r'/\*.*?\*/', lambda m: _blank(m.group(0)), src, flags=re.S)
-    src = re.sub(r'//[^\n]*', '', src)
-    return src
+sys.path.insert(0, 'scripts')
+from source_strip import strip_rust, rust_test_spans
 
 bad = 0
 for f in glob.glob('crates/**/*.rs', recursive=True) + glob.glob('src-tauri/**/*.rs', recursive=True):
     if '/target/' in f:
         continue
     src = open(f, encoding='utf-8', errors='replace').read()
-    prod = strip_comments_and_strings(strip_single_test_fns(strip_cfg_test_mods(src)))
+    masked = list(strip_rust(src, keep_lines=True, keep_attrs=True))
+    for start, end in rust_test_spans(''.join(masked)):
+        masked[start:end] = re.sub(r'[^\n]', ' ', ''.join(masked[start:end]))
+    prod = ''.join(masked)
     if re.search(r'\.unwrap\(\)', prod):
         for m in re.finditer(r'\.unwrap\(\)', prod):
             ln = prod[:m.start()].count('\n') + 1
@@ -378,6 +321,8 @@ echo "== 7. TypeScript: 未 import・未定義の型参照 (src/__tests__ 含む
 # ケースだけは機械的に検出できる。
 python3 - <<'PY' || fail=1
 import re, glob, sys
+sys.path.insert(0, 'scripts')
+from source_strip import strip_ts
 
 files = {f: open(f, encoding='utf-8', errors='replace').read()
          for f in glob.glob('src/**/*.ts', recursive=True) + glob.glob('src/**/*.tsx', recursive=True)}
@@ -400,18 +345,9 @@ BUILTIN_TYPES = {
     'Component','JSXElement','Accessor','Setter','Signal',
 }
 
-def strip_ts_noise(src: str) -> str:
-    src = re.sub(r'r#*"(?:.*?)"#*', '""', src, flags=re.S)
-    src = re.sub(r"'(?:[^'\\]|\\.)*'", "''", src, flags=re.S)
-    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src, flags=re.S)
-    src = re.sub(r'`(?:[^`\\]|\\.)*`', '``', src, flags=re.S)
-    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
-    src = re.sub(r'//[^\n]*', '', src)
-    return src
-
 bad = 0
 for f, raw in files.items():
-    src = strip_ts_noise(raw)
+    src = strip_ts(raw)
 
     # このファイル内の import で得られる名前すべて (default/named/type import)。
     imported = set()
