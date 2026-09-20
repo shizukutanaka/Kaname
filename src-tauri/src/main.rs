@@ -247,6 +247,11 @@ async fn security_audit_log(limit: Option<i64>) -> Result<commands::AuditLogView
     commands::security_audit_log(limit).await
 }
 
+#[tauri::command]
+async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<commands::ImportedEmail, String> {
+    commands::mail_analyze_bytes(bytes).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -379,6 +384,7 @@ fn main() {
             settings_is_onboarded,
             history_open_default,
             security_audit_log,
+            mail_analyze_bytes,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");
