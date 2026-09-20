@@ -18,7 +18,6 @@ import { render } from "solid-js/web";
 import { onMount, createSignal, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { initI18n } from "./i18n";
 
 // ── コンポーネントインポート ──
 import { Inbox }               from "./ui/Inbox";
@@ -84,9 +83,6 @@ const App = () => {
   // ── 起動シーケンス ──
   onMount(async () => {
     try {
-      // 0. i18n 初期化 (ブラウザ言語自動検出)
-      await initI18n();
-
       // 1. 履歴データベースを既定の場所に開く。
       //    以前は history_open がどの UI からも呼ばれておらず、永続化・検索・
       //    送信者履歴がすべて無言で無効だった。失敗は致命的ではないので
