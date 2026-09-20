@@ -55,7 +55,7 @@ We **out-of-scope**: threats from the operating system kernel being malicious (w
 |---|---|---|
 | MITM on transport | Downgraded TLS, stripped STARTTLS | MTA-STS + DANE/TLSA enforcement; no cleartext fallback |
 | In-transit body modification | Malicious relay mutates content | DKIM verification + (for Kaname-to-Kaname) MLS AEAD |
-| At-rest DB tampering | Attacker with disk access modifies SQLite | SQLCipher with key in SE; tamper-evident hash chain over critical records |
+| At-rest DB tampering | Attacker with disk access modifies SQLite | SQLCipher (bundled-sqlcipher; D75 で実効化。鍵は `<data_dir>/kaname/history.key` の 0600 ファイル — SE/Keychain 統合は未実装); tamper-evident hash chain over critical records |
 | Supply-chain code injection | Compromised dependency ships malware | SBOM, cargo-vet, reproducible builds, code signing, update channel with Ed25519+ML-DSA dual signatures |
 
 ### 2.3 Repudiation
@@ -286,6 +286,8 @@ Ranked by `likelihood × impact`:
 - **v1.1 (2026-06-14)**: §3.9 AiTM 追加; BEC スコアリングをロジスティック変換に移行; `Content::from_attachment()` の UserUpload provenance 修正; Bridge の PhaaS マーカー拡充 (10件追加); topics フィールドのマーカースキャン追加.
 - **v1.2 (2026-07-10)**: §3.10 QR 構造亜種 (分割QR/危険スキーム/ASCIIアートQR)、§3.11 CalPhishing 自動登録永続化、§3.12 カレンダー招待経由のプロンプト注入、§3.13 SaaSリンク経由のプロンプト注入 (kaname-screen 統合) を追加。2026-07 の研究調査 (docs/research-2026-07.md) に基づく.
 - **v1.3 (2026-07-13)**: Ultracode 徹底監査 (3エージェント並列、全27クレート) で発見したセキュリティ修正を反映: (a) kaname-store の SQLCipher 生鍵を `Zeroizing` でゼロ化 (§5 暗号アジリティ / コアダンプ経由の鍵漏洩対策)、(b) kaname-jmap のリダイレクトに `safe_redirect_policy` を適用し DNS リバインディング型 SSRF を閉塞 (§2 STRIDE-Spoofing/EoP)、(c) kaname-oobv の OOBV 推奨キーワード照合を全角/ゼロ幅正規化経由に変更しバイパスを防止 (§3.9 AiTM の電話確認回避対策)、(d) kaname-observability の PII サニタイザが数字始まりメールアドレスを見逃していた検出漏れを修正 (I5 ログ PII 混入防止)。あわせて BEC 検出器への kaname-pivot/kaname-screen 統合、kaname-radar のキャンペーン集計バグ、kaname-mls 開始者側のリプレイ検出漏れを修正。詳細は docs/gap-analysis.md フェーズ4・5。
+
+- **v1.4 (2026-09-20)**: D75 — 「SQLCipher で暗号化」の対策記述が実効していなかったことを反映。rusqlite は `bundled` (素の SQLite3) でビルドされており `PRAGMA key` が no-op、DB は平文だった。`bundled-sqlcipher` への切替で `cipher_version=4.5.3` 動作を実測確認し、回帰テストを固定。「対策」の主張が成立していたのはこの時点から。あわせて鍵の実保管場所を正記述 (0600 ファイル; SE/Keychain は未実装のまま)。
 
 Future versions will be deltas; we don't rewrite from scratch.
 

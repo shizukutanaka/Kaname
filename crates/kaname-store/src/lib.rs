@@ -9,7 +9,9 @@
 // 暗号化ローカルストア。SQLite + SQLCipher (rusqlite)。
 //
 // todo!() をすべて実装済み。
-// 依存: rusqlite = { version = "0.32", features = ["sqlcipher", "bundled-sqlcipher"] }
+// 依存: rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
+//   (かつて `bundled` のみで、PRAGMA key が no-op のまま DB が
+//    平文で保存されていた — D75。「0.32/sqlcipher」記述とも不一致)
 //
 // 設計 (ADR-007):
 //   - SQLCipher パラメータ: PAGE_SIZE=4096, KDF_ITER=256000, HMAC=SHA512
@@ -920,6 +922,49 @@ mod tests {
             params![account_id],
         )
         .unwrap();
+    }
+
+    /// D75: DB ファイルが実際に暗号化されていることを固定する。
+    ///
+    /// rusqlite を `bundled` (素の SQLite3) でビルドしていた期間は
+    /// `PRAGMA key` が no-op で DB が平文のまま保存されていた。
+    /// `cipher_version` の有無と、書き込んだ既知文字列がファイル
+    /// 本文に出現しないことの両方で、SQLCipher が実動していることを
+    /// 再帰検査する (先頭 32B は `cipher_plaintext_header_size` により
+    /// 意図的に平文 — magic 維持のため、そこは判定に使わない)。
+    #[tokio::test]
+    async fn dbファイルは暗号化され既知文字列が平文で残らない() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("enc.db");
+        let store = Store::open(&p, &"A".repeat(64)).await.unwrap();
+        store.migrate().await.unwrap();
+
+        {
+            let conn = store.conn.lock().unwrap();
+            // SQLCipher でないビルドでは cipher_version 自体が存在しない
+            let cipher_version: String = conn
+                .query_row("PRAGMA cipher_version;", [], |r| r.get(0))
+                .unwrap();
+            assert!(
+                !cipher_version.is_empty(),
+                "cipher_version が空 — SQLCipher が有効ではない"
+            );
+            conn.execute_batch("INSERT INTO schema_migrations (version) VALUES (424242);")
+                .unwrap();
+        }
+        drop(store);
+
+        let raw = std::fs::read(&p).unwrap();
+        // plaintext_header_size=32 を除く本文領域に既知の構造文字列が
+        // 出現しないこと (平文 DB なら CREATE TABLE 等が読める)
+        let body = &raw[32.min(raw.len())..];
+        for marker in [b"CREATE TABLE".as_ref(), b"schema_migrations".as_ref()] {
+            assert!(
+                !body.windows(marker.len()).any(|w| w == marker),
+                "DB ファイルに平文マーカーが残存: {:?}",
+                String::from_utf8_lossy(marker),
+            );
+        }
     }
 
     #[tokio::test]

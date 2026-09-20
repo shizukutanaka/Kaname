@@ -270,6 +270,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D73 | ~~**static-check.sh 検査6/7 に同型の字句解析欠陥が残置**~~ **(2026-09-20 解消)** | P1 | PR #209 は検査2/4 のみ状態機械化しており、検査6 の `strip_comments_and_strings` (正規表現カスケード) と検査7 の `strip_ts_noise` は未修正だった。実証した実害2種: (a) doc コメント内の孤立 `"` が後続文字列とペア化して**本番 .unwrap() を見逃す** (合成 p1 で検出行なし)、(b) `strip_single_test_fns` のパターン `[^\]]*\]?\s*\n` が `[^\]]*` に改行を許すため `#[test]` から文末までを「属性」として貪欲消費し、**テスト関数除去が一度も機能していなかった** (テスト内 unwrap が本番扱いで誤 NG)。さらに検査6/検査内の mod 検出は生ソースでブレース対応を取っており `"}"`/`'}'` で早期閉じしうる、検査7 は Rust の `r#` パターンを TS に誤持込 + テンプレート `${}` 内の式 (型参照を含みうる) を丸ごと抹消していた。修正: 検査6は属性テキスト保持の単一パス字句解析 (`strip_strings_comments`) + mask 済みテキストでのブレース対応、検査7は単一パス + `${}` 内再帰除去に置き換え、引用符は import 文識別のため残す。合成回帰3件 (孤立"後の本番 unwrap 検出・テスト内 unwrap 非検出・文字列内 unwrap 非検出) を実測確認 |
 | D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
+| D75 | ~~**「暗号化ローカルストア」が一度も暗号化されていなかった**: workspace の rusqlite が `features = ["bundled"]` (素の SQLite3) で、`SqlCipherParams::apply` の `PRAGMA key`/`cipher_*` は全て no-op。DB ファイルは平文で保存されていた~~ **(2026-09-20 解消)** | P0 | 実測証明: `PRAGMA cipher_version` が存在せず、DB 本文に `CREATE TABLE`/既知文字列が平文残存。`bundled` → `bundled-sqlcipher` に変更後、`cipher_version = 4.5.3 community` + 本文にマーカー非出現を実測確認。**既存の平文 history.db は移行措置なしのため旧環境では開けなくなる** (プレリリース・ローカル実データ前提のため許容判断、要レビュー)。恒久回帰テスト `dbファイルは暗号化され既知文字列が平文で残らない` を追加 — feature を戻すと検知される。コメントの「0.32/sqlcipher」記述も実態 (0.31/bundled-sqlcipher) に訂正 |
+
 ### 完了判定の変更
 
 初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。
@@ -282,6 +284,13 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 なかった**。さらに `[workspace.lints]` は member crate 未継承の死んだ
 設定だった (D74)。「書いてある検査が効いている」は毎回合成テストで
 証明するまで信用しない、がこのドキュメントの方針。D62 は解消確認済み。
+
+**2026-09-20 (追記・中核の約束)**: 「SQLite + SQLCipher 暗号化ストア」は
+`bundled` (素の SQLite3) でビルドされており `PRAGMA key` は no-op、
+DB は平文だった (D75)。丁寧なパラメータ定義・鍵検証・Zeroizing まで
+全て実装済みだったが、依存 feature 一つの違いで中核の約束が成立して
+いなかった。「実装が丁寧」は「機能している」の証拠にならない ——
+出力物 (ファイルの実バイト) を見るまで確かにならない。
 
 ## Opus/Sonnet への申し送り事項
 
