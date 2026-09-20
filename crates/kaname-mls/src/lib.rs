@@ -29,6 +29,16 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
+use openmls::framing::MlsMessageIn;
+use openmls::prelude::{
+    tls_codec, Ciphersuite as OpenmlsCiphersuite, Credential, CredentialWithKey, GroupId,
+    KeyPackage as OpenmlsKeyPackage, KeyPackageIn, MlsGroup, MlsGroupCreateConfig,
+    MlsMessageBodyIn, OpenMlsProvider, ProcessedMessageContent, ProtocolVersion, StagedWelcome,
+};
+use openmls_basic_credential::SignatureKeyPair;
+use openmls_libcrux_crypto::Provider as LibcruxProvider;
+use tls_codec::{Deserialize as TlsDeserialize, Serialize as TlsSerialize};
+
 // ============================================================================
 // openmls ラッパー型 (本番は openmls クレートの実型を使用)
 // ============================================================================
@@ -69,6 +79,24 @@ mod mls_types {
         MlsX25519Aes128GcmSha256Ed25519,
         /// PQC ハイブリッドプロファイル。
         KanameHybridPqc,
+    }
+}
+
+impl Ciphersuite {
+    /// openmls の実 ciphersuite 定数にマッピングする。
+    ///
+    /// `KanameHybridPqc` は X-Wing (ML-KEM-768 + X25519 のハイブリッド KEM)
+    /// を使う `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` に対応する —
+    /// draft-ietf-mls-pq-ciphersuites の耐量子プロファイル。
+    fn to_openmls(self) -> OpenmlsCiphersuite {
+        match self {
+            Self::MlsX25519Aes128GcmSha256Ed25519 => {
+                OpenmlsCiphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519
+            }
+            Self::KanameHybridPqc => {
+                OpenmlsCiphersuite::MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519
+            }
+        }
     }
 }
 
@@ -354,6 +382,14 @@ impl Default for KeyPackageCache {
 /// MLS グループ操作を担う主クライアント。
 pub struct MlsMailClient {
     pub identity: Identity,
+    /// openmls プロバイダ (libcrux: 暗号 + 乱数 + メモリストレージ)。
+    provider: LibcruxProvider,
+    /// 自アイデンティティの署名鍵ペア。
+    signer: SignatureKeyPair,
+    /// 自アイデンティティの Credential + 署名公開鍵。
+    credential_with_key: CredentialWithKey,
+    /// 会話 ID → openmls グループハンドル。
+    groups: BTreeMap<ConversationId, MlsGroup>,
     /// 会話 ID → 会話のマップ (メモリ内; DB にも永続化)。
     conversations: BTreeMap<ConversationId, GroupState>,
     /// 会話 ID → 最後に処理した epoch (リプレイ攻撃防止)。
@@ -370,31 +406,61 @@ pub struct MlsMailClient {
 
 impl MlsMailClient {
     /// 新しい MLS クライアントを構築する。
-    pub fn new(identity: Identity) -> Self {
-        Self {
+    ///
+    /// Ed25519 署名鍵ペアと BasicCredential (identity = メールアドレス) を
+    /// 生成し、署名鍵をプロバイダのストレージに登録する。
+    ///
+    /// # Panics / 失敗
+    /// CSPRNG 初期化失敗のみ (実質的に起こり得ない)。`Self` を返すため
+    /// 失敗時は MlsMailError を返す版の `try_new` を利用すること。
+    pub fn try_new(identity: Identity) -> Result<Self, MlsMailError> {
+        let provider = LibcruxProvider::new()
+            .map_err(|e| MlsMailError::Mls(format!("crypto provider 初期化失敗: {e:?}")))?;
+        let ciphersuite = identity.default_ciphersuite.to_openmls();
+        let signer = SignatureKeyPair::new(ciphersuite.signature_algorithm())
+            .map_err(|e| MlsMailError::Mls(format!("署名鍵生成失敗: {e:?}")))?;
+        signer
+            .store(provider.storage())
+            .map_err(|e| MlsMailError::Mls(format!("署名鍵ストレージ失敗: {e:?}")))?;
+        let credential = Credential::from(openmls::credentials::BasicCredential::new(
+            identity.email.as_str().as_bytes().to_vec(),
+        ));
+        let credential_with_key = CredentialWithKey {
+            credential,
+            signature_key: signer.to_public_vec().into(),
+        };
+        Ok(Self {
             identity,
+            provider,
+            signer,
+            credential_with_key,
+            groups: BTreeMap::new(),
             conversations: BTreeMap::new(),
             epochs: BTreeMap::new(),
             kp_cache: KeyPackageCache::new(),
             seen_welcomes: std::collections::HashSet::new(),
+        })
+    }
+
+    /// 新しい MLS クライアントを構築する (後方互換 — 失敗時 panic しないよう内部で try_new)。
+    ///
+    /// CSPRNG 初期化に失敗する環境でのみ失敗し得る。
+    #[must_use]
+    pub fn new(identity: Identity) -> Self {
+        match Self::try_new(identity) {
+            Ok(c) => c,
+            Err(e) => panic!("MlsMailClient 初期化失敗: {e}"),
         }
     }
 
-    // ── openmls wire 実装 ────────────────────────────────────────────────────
-    //
-    // 注意: openmls API は以下の設計に従う:
-    //   - MlsGroup::new() でグループを作成
-    //   - MlsGroup::add_members() でメンバーを追加し (Commit + Welcome を生成)
-    //   - MlsGroup::create_message() で Application メッセージを暗号化
-    //   - MlsGroup::process_message() で受信メッセージを復号
-    //
-    // 本番では以下の依存が必要:
-    //   openmls = { version = "0.6", features = [] }
-    //   openmls_rust_crypto = { version = "0.6" }
-    //
-    // このファイルでは openmls_stub モジュールをモックとして使用する。
-    // ユニットテストはすべてモックで動作する。
-    // 統合テストは実際の openmls を使用する (tests/integration/)。
+    /// KeyPackage blob を実 openmls KeyPackage にデシリアライズ+検証する。
+    fn parse_key_package(&self, blob: &KeyPackage) -> Result<OpenmlsKeyPackage, MlsMailError> {
+        let kp_in = KeyPackageIn::tls_deserialize_exact(&blob.bytes)
+            .map_err(|e| MlsMailError::Malformed(format!("KeyPackage パース失敗: {e}")))?;
+        kp_in
+            .validate(self.provider.crypto(), ProtocolVersion::Mls10)
+            .map_err(|e| MlsMailError::Mls(format!("KeyPackage 検証失敗: {e:?}")))
+    }
 
     /// 1:1 会話を開始する。
     ///
@@ -407,80 +473,70 @@ impl MlsMailClient {
         recipient_email: EmailAddress,
         recipient_key_package: KeyPackage,
     ) -> Result<(Conversation, Envelope), MlsMailError> {
-        // openmls 本番実装:
-        //
-        // let crypto = OpenMlsRustCrypto::default();
-        // let ciphersuite = CiphersuiteName::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
-        //
-        // // 自分の credentials を作成
-        // let credential = Credential::new(
-        //     self.identity.email.as_str().as_bytes().to_vec(),
-        //     CredentialType::Basic,
-        // )?;
-        // let signer = SignatureKeyPair::new(ciphersuite.signature_algorithm(), &crypto)?;
-        //
-        // // グループを作成
-        // let mut group = MlsGroup::new(
-        //     &crypto,
-        //     &MlsGroupConfig::default(),
-        //     GroupId::random(&crypto),
-        //     &signer,
-        // )?;
-        //
-        // // 相手を追加して Welcome + Commit を生成
-        // let (commit, welcome, _) = group.add_members(&crypto, &signer, &[recipient_key_package])?;
-        // group.merge_pending_commit(&crypto)?;
-        //
-        // // エンベロープを構築
-        // let conv_id = ConversationId(group.group_id().as_slice().try_into().unwrap_or([0u8;32]));
-        // let envelope = Envelope {
-        //     conversation_id: conv_id.clone(),
-        //     epoch: group.epoch().as_u64(),
-        //     kind: EnvelopeKind::Commit,
-        //     ciphersuite: self.identity.default_ciphersuite,
-        //     wire_bytes: commit.to_bytes()?,
-        //     welcome: Some(welcome.to_bytes()?),
-        // };
+        let ciphersuite = self.identity.default_ciphersuite.to_openmls();
+        let key_package = self.parse_key_package(&recipient_key_package)?;
 
-        // モック実装 (テスト通過・コンパイル成功用)
         let conv_id = ConversationId::new_random();
+        let group_config = MlsGroupCreateConfig::builder()
+            .ciphersuite(ciphersuite)
+            .use_ratchet_tree_extension(true)
+            .build();
+
+        let mut group = MlsGroup::new_with_group_id(
+            &self.provider,
+            &self.signer,
+            &group_config,
+            GroupId::from_slice(&conv_id.0),
+            self.credential_with_key.clone(),
+        )
+        .map_err(|e| MlsMailError::Mls(format!("グループ作成失敗: {e:?}")))?;
+
+        let (commit, welcome, _group_info) = group
+            .add_members(&self.provider, &self.signer, &[key_package])
+            .map_err(|e| MlsMailError::Mls(format!("メンバー追加失敗: {e:?}")))?;
+        group
+            .merge_pending_commit(&self.provider)
+            .map_err(|e| MlsMailError::Mls(format!("コミットマージ失敗: {e:?}")))?;
+
+        let epoch = group.epoch().as_u64();
         let group_state = GroupState {
-            bytes: format!(
-                "group:{}+{}",
-                self.identity.email.as_str(),
-                recipient_email.as_str()
-            )
-            .into_bytes(),
+            bytes: group.group_id().as_slice().to_vec(),
         };
 
-        // 安全番号を生成 (本番: SHA-256 of public keys + epoch)
-        let safety_number =
-            compute_safety_number(self.identity.email.as_str(), recipient_email.as_str(), 0);
+        // 安全番号: epoch_authenticator はグループメンバー全員が同一値を
+        // 持つため、両側で同じ番号が導出される (本物の MLS の性質)。
+        let safety_number = compute_safety_number(
+            self.identity.email.as_str(),
+            recipient_email.as_str(),
+            group.epoch_authenticator().as_slice(),
+        );
 
         let conversation = Conversation {
             id: conv_id.clone(),
             kind: ConversationKind::OneToOne,
             members: vec![self.identity.email.clone(), recipient_email],
             state: group_state.clone(),
-            epoch: 0,
+            epoch,
             safety_number: Some(safety_number),
         };
 
+        self.groups.insert(conv_id.clone(), group);
         self.conversations.insert(conv_id.clone(), group_state);
-        // 会話の開始者側でもエポックを初期化する。これがないと、開始者が
-        // 自分の会話に後から届く Commit/Application を処理する際に
-        // self.epochs.get() が None となり、リプレイ/エポック逆行チェック
-        // (process_incoming) がスキップされてしまう。Welcome/Commit の
-        // 受信側 (self.epochs.insert(...)) と対称にする。
-        self.epochs.insert(conv_id.clone(), 0);
+        self.epochs.insert(conv_id.clone(), epoch);
 
         let envelope = Envelope {
             conversation_id: conv_id,
-            epoch: 0,
+            epoch,
             kind: EnvelopeKind::Commit,
             ciphersuite: self.identity.default_ciphersuite,
-            wire_bytes: vec![0x01, 0x00], // モックの MLS Commit
-            welcome: Some(recipient_key_package.bytes),
+            wire_bytes: commit
+                .tls_serialize_detached()
+                .map_err(|e| MlsMailError::Serialization(e.to_string()))?,
+            welcome: Some(
+                welcome
+                    .tls_serialize_detached()
+                    .map_err(|e| MlsMailError::Serialization(e.to_string()))?,
+            ),
         };
 
         tracing::info!(
@@ -510,21 +566,22 @@ impl MlsMailClient {
             ConversationKind::Announce => {}
         }
 
-        // openmls 本番実装:
-        //
-        // let mut group = MlsGroup::load(&conversation.state.bytes, &crypto)?;
-        // let (commit, welcome, _) = group.add_members(&crypto, &signer, &[new_member_key_package])?;
-        // group.merge_pending_commit(&crypto)?;
-        // conversation.state.bytes = group.save()?;
-        // conversation.epoch = group.epoch().as_u64();
+        let key_package = self.parse_key_package(&new_member_key_package)?;
+        let group = self
+            .groups
+            .get_mut(&conversation.id)
+            .ok_or_else(|| MlsMailError::ConversationNotFound(conversation.id.as_hex()))?;
 
-        // モック実装
+        let (commit, welcome, _group_info) = group
+            .add_members(&self.provider, &self.signer, &[key_package])
+            .map_err(|e| MlsMailError::Mls(format!("メンバー追加失敗: {e:?}")))?;
+        group
+            .merge_pending_commit(&self.provider)
+            .map_err(|e| MlsMailError::Mls(format!("コミットマージ失敗: {e:?}")))?;
+
         conversation.members.push(new_member_email.clone());
-        conversation.epoch += 1;
-        conversation
-            .state
-            .bytes
-            .extend_from_slice(&new_member_key_package.bytes);
+        conversation.epoch = group.epoch().as_u64();
+        conversation.state.bytes = group.group_id().as_slice().to_vec();
 
         tracing::info!(
             conv_id = %conversation.id.as_hex(),
@@ -538,8 +595,14 @@ impl MlsMailClient {
             epoch: conversation.epoch,
             kind: EnvelopeKind::Commit,
             ciphersuite: self.identity.default_ciphersuite,
-            wire_bytes: new_member_key_package.bytes.clone(),
-            welcome: Some(new_member_key_package.bytes),
+            wire_bytes: commit
+                .tls_serialize_detached()
+                .map_err(|e| MlsMailError::Serialization(e.to_string()))?,
+            welcome: Some(
+                welcome
+                    .tls_serialize_detached()
+                    .map_err(|e| MlsMailError::Serialization(e.to_string()))?,
+            ),
         })
     }
 
@@ -562,35 +625,23 @@ impl MlsMailClient {
             });
         }
 
-        // openmls 本番実装:
-        //
-        // let mut group = MlsGroup::load(&conversation.state.bytes, &crypto)?;
-        // let ciphertext = group.create_message(&crypto, &signer, plaintext)?;
-        // conversation.state.bytes = group.save()?;
-        // let wire_bytes = ciphertext.to_bytes()?;
+        let group = self
+            .groups
+            .get_mut(&conversation.id)
+            .ok_or_else(|| MlsMailError::ConversationNotFound(conversation.id.as_hex()))?;
 
-        // モック実装 — XOR 暗号 (テスト用のみ; 本番では絶対に使わない)
-        //
-        // **重大な注意**: この関数は openmls 統合が完了するまでの間、
-        // 単一バイト XOR による暗号化もどきを行っている。鍵空間は256通りしかなく、
-        // かつ鍵は公開情報である ConversationId の先頭バイトそのものであるため、
-        // 実際の秘匿性はゼロに等しい。誤って本番ビルドに混入すると気付かれずに
-        // メール本文が平文同然で送信される。呼び出しごとに tracing::error! で
-        // 極めて目立つログを出し、監視・アラートで即座に検知できるようにする。
-        tracing::error!(
-            target: "kaname_mls::INSECURE_MOCK_CRYPTO",
-            "kaname-mls はまだ openmls 統合前のモック XOR 暗号を使用しています。 \
-             本番運用では絶対に使用しないでください (I4/暗号境界違反の恐れ)。"
-        );
-        let key = conversation.id.0[0];
-        let wire_bytes: Vec<u8> = plaintext.iter().map(|b| b ^ key).collect();
+        let msg_out = group
+            .create_message(&self.provider, &self.signer, plaintext)
+            .map_err(|e| MlsMailError::Mls(format!("暗号化失敗: {e:?}")))?;
 
         Ok(Envelope {
             conversation_id: conversation.id.clone(),
-            epoch: conversation.epoch,
+            epoch: group.epoch().as_u64(),
             kind: EnvelopeKind::Application,
             ciphersuite: self.identity.default_ciphersuite,
-            wire_bytes,
+            wire_bytes: msg_out
+                .tls_serialize_detached()
+                .map_err(|e| MlsMailError::Serialization(e.to_string()))?,
             welcome: None,
         })
     }
@@ -608,12 +659,6 @@ impl MlsMailClient {
     ) -> Result<IncomingResult, MlsMailError> {
         match envelope.kind {
             EnvelopeKind::Welcome => {
-                // openmls 本番実装:
-                //
-                // let welcome = Welcome::try_from_bytes(&envelope.wire_bytes)?;
-                // let mut group = MlsGroup::new_from_welcome(&crypto, &welcome)?;
-                // let conv_id = ConversationId(group.group_id().as_slice().try_into()?);
-
                 // Welcome リプレイ防止 (P1): 同一 (conv_id, epoch) は一度のみ
                 // openmls は重複検知しないため上位層で追跡する必要がある
                 let key = (envelope.conversation_id.clone(), envelope.epoch);
@@ -625,32 +670,78 @@ impl MlsMailClient {
                 }
                 self.seen_welcomes.insert(key);
 
-                // モック実装
+                let msg_in = MlsMessageIn::tls_deserialize_exact(&envelope.wire_bytes)
+                    .map_err(|e| MlsMailError::Malformed(format!("Welcome パース失敗: {e}")))?;
+                let welcome = match msg_in.extract() {
+                    MlsMessageBodyIn::Welcome(w) => w,
+                    _ => {
+                        return Err(MlsMailError::Malformed(
+                            "Welcome メッセージではありません".into(),
+                        ))
+                    }
+                };
+
+                let join_config = MlsGroupCreateConfig::builder()
+                    .ciphersuite(envelope.ciphersuite.to_openmls())
+                    .build()
+                    .join_config()
+                    .clone();
+                let staged =
+                    StagedWelcome::new_from_welcome(&self.provider, &join_config, welcome, None)
+                        .map_err(|e| MlsMailError::Mls(format!("Welcome 処理失敗: {e:?}")))?;
+                let group = staged
+                    .into_group(&self.provider)
+                    .map_err(|e| MlsMailError::Mls(format!("グループ参加失敗: {e:?}")))?;
+
+                let epoch = group.epoch().as_u64();
+                let other = group
+                    .members()
+                    .filter_map(|m| {
+                        let c = m.credential.serialized_content();
+                        std::str::from_utf8(c)
+                            .ok()
+                            .filter(|s| *s != self.identity.email.as_str())
+                            .map(String::from)
+                    })
+                    .next()
+                    .unwrap_or_else(|| "unknown".into());
                 let safety_number = compute_safety_number(
                     self.identity.email.as_str(),
-                    "remote@kaname.app",
-                    envelope.epoch,
+                    &other,
+                    group.epoch_authenticator().as_slice(),
                 );
+
+                let mut members: Vec<EmailAddress> = group
+                    .members()
+                    .filter_map(|m| {
+                        std::str::from_utf8(m.credential.serialized_content())
+                            .ok()
+                            .and_then(|s| EmailAddress::parse(s).ok())
+                    })
+                    .collect();
+                if members.is_empty() {
+                    members.push(self.identity.email.clone());
+                }
 
                 let conversation = Conversation {
                     id: envelope.conversation_id.clone(),
                     kind: ConversationKind::OneToOne,
-                    members: vec![self.identity.email.clone()],
+                    members,
                     state: GroupState {
-                        bytes: envelope.wire_bytes.clone(),
+                        bytes: group.group_id().as_slice().to_vec(),
                     },
-                    epoch: envelope.epoch,
+                    epoch,
                     safety_number: Some(safety_number),
                 };
 
+                self.groups.insert(envelope.conversation_id.clone(), group);
                 self.conversations.insert(
                     envelope.conversation_id.clone(),
                     GroupState {
-                        bytes: envelope.wire_bytes.clone(),
+                        bytes: envelope.conversation_id.0.to_vec(),
                     },
                 );
-                self.epochs
-                    .insert(envelope.conversation_id.clone(), envelope.epoch);
+                self.epochs.insert(envelope.conversation_id.clone(), epoch);
 
                 tracing::info!(
                     conv_id = %envelope.conversation_id.as_hex(),
@@ -661,32 +752,82 @@ impl MlsMailClient {
             }
 
             EnvelopeKind::Commit => {
-                // モック実装: Welcome を含む Commit は新規参加として扱う
+                // Welcome を含む Commit は新規参加として扱う (本人宛ての Welcome)
                 let is_new_member = !self.conversations.contains_key(&envelope.conversation_id);
                 if is_new_member && envelope.welcome.is_some() {
+                    let welcome_bytes = envelope
+                        .welcome
+                        .clone()
+                        .ok_or_else(|| MlsMailError::Malformed("welcome フィールドが空".into()))?;
+                    let msg_in = MlsMessageIn::tls_deserialize_exact(&welcome_bytes)
+                        .map_err(|e| MlsMailError::Malformed(format!("Welcome パース失敗: {e}")))?;
+                    let welcome = match msg_in.extract() {
+                        MlsMessageBodyIn::Welcome(w) => w,
+                        _ => {
+                            return Err(MlsMailError::Malformed(
+                                "Welcome メッセージではありません".into(),
+                            ))
+                        }
+                    };
+                    let join_config = MlsGroupCreateConfig::builder()
+                        .ciphersuite(envelope.ciphersuite.to_openmls())
+                        .build()
+                        .join_config()
+                        .clone();
+                    let staged = StagedWelcome::new_from_welcome(
+                        &self.provider,
+                        &join_config,
+                        welcome,
+                        None,
+                    )
+                    .map_err(|e| MlsMailError::Mls(format!("Welcome 処理失敗: {e:?}")))?;
+                    let group = staged
+                        .into_group(&self.provider)
+                        .map_err(|e| MlsMailError::Mls(format!("グループ参加失敗: {e:?}")))?;
+
+                    let epoch = group.epoch().as_u64();
+                    let other = group
+                        .members()
+                        .filter_map(|m| {
+                            let c = m.credential.serialized_content();
+                            std::str::from_utf8(c)
+                                .ok()
+                                .filter(|s| *s != self.identity.email.as_str())
+                                .map(String::from)
+                        })
+                        .next()
+                        .unwrap_or_else(|| "unknown".into());
                     let safety_number = compute_safety_number(
                         self.identity.email.as_str(),
-                        "remote@kaname.app",
-                        envelope.epoch,
+                        &other,
+                        group.epoch_authenticator().as_slice(),
                     );
+                    let members: Vec<EmailAddress> = group
+                        .members()
+                        .filter_map(|m| {
+                            std::str::from_utf8(m.credential.serialized_content())
+                                .ok()
+                                .and_then(|s| EmailAddress::parse(s).ok())
+                        })
+                        .collect();
                     let conversation = Conversation {
                         id: envelope.conversation_id.clone(),
                         kind: ConversationKind::OneToOne,
-                        members: vec![self.identity.email.clone()],
+                        members,
                         state: GroupState {
-                            bytes: envelope.wire_bytes.clone(),
+                            bytes: group.group_id().as_slice().to_vec(),
                         },
-                        epoch: envelope.epoch,
+                        epoch,
                         safety_number: Some(safety_number),
                     };
+                    self.groups.insert(envelope.conversation_id.clone(), group);
                     self.conversations.insert(
                         envelope.conversation_id.clone(),
                         GroupState {
-                            bytes: envelope.wire_bytes.clone(),
+                            bytes: envelope.conversation_id.0.to_vec(),
                         },
                     );
-                    self.epochs
-                        .insert(envelope.conversation_id.clone(), envelope.epoch);
+                    self.epochs.insert(envelope.conversation_id.clone(), epoch);
                     return Ok(IncomingResult::WelcomeJoined(conversation));
                 }
 
@@ -700,11 +841,30 @@ impl MlsMailClient {
                     }
                 }
 
-                if let Some(state) = self.conversations.get_mut(&envelope.conversation_id) {
-                    state.bytes.extend_from_slice(&envelope.wire_bytes);
-                    self.epochs
-                        .insert(envelope.conversation_id.clone(), envelope.epoch);
+                // 実 Commit を openmls に処理させる
+                let group = self
+                    .groups
+                    .get_mut(&envelope.conversation_id)
+                    .ok_or_else(|| {
+                        MlsMailError::ConversationNotFound(envelope.conversation_id.as_hex())
+                    })?;
+                let msg_in = MlsMessageIn::tls_deserialize_exact(&envelope.wire_bytes)
+                    .map_err(|e| MlsMailError::Malformed(format!("Commit パース失敗: {e}")))?;
+                let protocol_msg = msg_in.try_into_protocol_message().map_err(|e| {
+                    MlsMailError::Malformed(format!("ProtocolMessage 変換失敗: {e:?}"))
+                })?;
+                let processed = group
+                    .process_message(&self.provider, protocol_msg)
+                    .map_err(|e| MlsMailError::Mls(format!("Commit 処理失敗: {e:?}")))?;
+                if let ProcessedMessageContent::StagedCommitMessage(staged) =
+                    processed.into_content()
+                {
+                    group
+                        .merge_staged_commit(&self.provider, *staged)
+                        .map_err(|e| MlsMailError::Mls(format!("Commit マージ失敗: {e:?}")))?;
                 }
+                self.epochs
+                    .insert(envelope.conversation_id.clone(), group.epoch().as_u64());
 
                 Ok(IncomingResult::MembershipChange {
                     conversation_id: envelope.conversation_id.clone(),
@@ -739,16 +899,27 @@ impl MlsMailClient {
                     }
                 }
 
-                // モック実装 — XOR 復号 (encrypt_message と対をなす)
-                tracing::error!(
-                    target: "kaname_mls::INSECURE_MOCK_CRYPTO",
-                    "kaname-mls はまだ openmls 統合前のモック XOR 復号を使用しています。 \
-                     本番運用では絶対に使用しないでください (I4/暗号境界違反の恐れ)。"
-                );
-                let key = envelope.conversation_id.0[0];
-                let plaintext: Vec<u8> = envelope.wire_bytes.iter().map(|b| b ^ key).collect();
+                let group = self
+                    .groups
+                    .get_mut(&envelope.conversation_id)
+                    .ok_or_else(|| {
+                        MlsMailError::UnknownConversation(envelope.conversation_id.as_hex())
+                    })?;
+                let msg_in = MlsMessageIn::tls_deserialize_exact(&envelope.wire_bytes)
+                    .map_err(|e| MlsMailError::Malformed(format!("Application パース失敗: {e}")))?;
+                let protocol_msg = msg_in.try_into_protocol_message().map_err(|e| {
+                    MlsMailError::Malformed(format!("ProtocolMessage 変換失敗: {e:?}"))
+                })?;
+                let processed = group
+                    .process_message(&self.provider, protocol_msg)
+                    .map_err(|e| MlsMailError::Mls(format!("復号失敗: {e:?}")))?;
 
-                Ok(IncomingResult::Application(plaintext))
+                match processed.into_content() {
+                    ProcessedMessageContent::ApplicationMessage(app) => {
+                        Ok(IncomingResult::Application(app.into_bytes()))
+                    }
+                    _ => Ok(IncomingResult::Control),
+                }
             }
 
             EnvelopeKind::ExternalJoin => {
@@ -769,21 +940,22 @@ impl MlsMailClient {
     }
 
     /// 新しい KeyPackage を生成する (KPD にアップロード用)。
-    pub fn generate_key_package(&self) -> KeyPackage {
-        // openmls 本番実装:
-        // let kp = KeyPackage::new(&crypto, ciphersuite, &self.credential, &signer)?;
-        // kp.to_bytes()
-
-        // モック実装
-        let mut bytes = self.identity.email.as_str().as_bytes().to_vec();
-        bytes.extend_from_slice(
-            &std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-                .to_le_bytes(),
-        );
-        KeyPackage { bytes }
+    ///
+    /// 実 openmls KeyPackage を生成し、TLS シリアライズした blob を返す。
+    /// 秘密部分 (init/encryption 鍵) はプロバイダのストレージに保持される。
+    /// 生成失敗時は None を返す (呼出側はリトライ可能な一時失敗として扱う)。
+    pub fn generate_key_package(&self) -> Option<KeyPackage> {
+        let bundle = OpenmlsKeyPackage::builder()
+            .build(
+                self.identity.default_ciphersuite.to_openmls(),
+                &self.provider,
+                &self.signer,
+                self.credential_with_key.clone(),
+            )
+            .ok()?;
+        let kp_in = KeyPackageIn::from(bundle.key_package().clone());
+        let bytes = kp_in.tls_serialize_detached().ok()?;
+        Some(KeyPackage { bytes })
     }
 
     /// 受信者ポリシーを決定する (KPD キャッシュを参照)。
@@ -823,7 +995,7 @@ fn is_kaname_domain(email: &str) -> bool {
 ///
 /// ゼロ区切り文字を入れることで email 境界をあいまいにする攻撃を防ぐ。
 /// epoch を含めることで古い安全番号の再利用攻撃を防ぐ。
-fn compute_safety_number(our_email: &str, their_email: &str, epoch: u64) -> String {
+fn compute_safety_number(our_email: &str, their_email: &str, authenticator: &[u8]) -> String {
     let mut hasher = Sha256::new();
     // 長さプレフィックス付きドメイン分離: len(field) || field || \x00
     // これにより "a\x00b" + "" と "a" + "b" が区別できる (長さ混同攻撃を防ぐ)
@@ -835,7 +1007,7 @@ fn compute_safety_number(our_email: &str, their_email: &str, epoch: u64) -> Stri
     hasher.update((their_bytes.len() as u16).to_be_bytes());
     hasher.update(their_bytes);
     hasher.update(b"\x00");
-    hasher.update(epoch.to_be_bytes());
+    hasher.update(authenticator);
     let digest = hasher.finalize();
 
     // SHA-256 の先頭 30 バイトから 5 桁×6 グループを生成
@@ -919,12 +1091,6 @@ mod tests {
         })
     }
 
-    fn dummy_kp() -> KeyPackage {
-        KeyPackage {
-            bytes: b"dummy_key_package_bytes_v1".to_vec(),
-        }
-    }
-
     #[test]
     fn email_address_のパース() {
         assert!(EmailAddress::parse("alice@example.com").is_ok());
@@ -956,7 +1122,8 @@ mod tests {
     #[test]
     fn one_to_one_会話の開始() {
         let mut alice = make_client("alice@kaname.app");
-        let bob_kp = dummy_kp();
+        let bob = make_client("bob@kaname.app");
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
 
         let (conv, envelope) = alice.start_one_to_one(bob_email.clone(), bob_kp).unwrap();
@@ -965,7 +1132,7 @@ mod tests {
         assert!(conv.members.contains(&bob_email));
         assert_eq!(envelope.kind, EnvelopeKind::Commit);
         assert!(envelope.welcome.is_some()); // Bob への Welcome
-        assert_eq!(conv.epoch, 0);
+        assert_eq!(conv.epoch, 1); // グループ作成(0) → メンバー追加コミットで 1
     }
 
     #[test]
@@ -973,7 +1140,7 @@ mod tests {
         let mut alice = make_client("alice@kaname.app");
         let mut bob = make_client("bob@kaname.app");
 
-        let bob_kp = dummy_kp();
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut alice_conv, welcome_env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
@@ -989,21 +1156,14 @@ mod tests {
         let env = alice.encrypt_message(&mut alice_conv, plaintext).unwrap();
         assert_eq!(env.kind, EnvelopeKind::Application);
 
-        // Bob が復号
-        // 注意: モック実装では conv_id の XOR キーが一致する必要がある。
-        // alice_conv と bob_conv の id が異なる場合、XOR キーも異なる。
-        // 本番の openmls では同一グループで共有鍵を使う。
-        // ここでは Bob の会話で復号をテスト。
+        // Bob が復号 — 実 openmls では同一グループ共有鍵で正しく平文が返る
         let env_for_bob = Envelope {
             conversation_id: bob_conv.id.clone(),
             ..env
         };
         let result = bob.process_incoming(&env_for_bob).unwrap();
         if let IncomingResult::Application(decrypted) = result {
-            // モック XOR: 復号した後に再度 XOR すれば元の暗号文に戻る
-            let key = bob_conv.id.0[0];
-            let re_encrypted: Vec<u8> = decrypted.iter().map(|b| b ^ key).collect();
-            assert_eq!(re_encrypted, env_for_bob.wire_bytes);
+            assert_eq!(decrypted, plaintext, "実 MLS 復号で元の平文が復元される");
         } else {
             panic!("Application を期待");
         }
@@ -1012,13 +1172,15 @@ mod tests {
     #[test]
     fn team_への追加() {
         let mut admin = make_client("admin@kaname.app");
-        let alice_kp = dummy_kp();
+        let alice = make_client("alice@kaname.app");
+        let alice_kp = alice.generate_key_package().unwrap();
         let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
 
         let (mut conv, _) = admin.start_one_to_one(alice_email, alice_kp).unwrap();
 
         // 1:1 に追加しようとするとエラー
-        let bob_kp = dummy_kp();
+        let bob = make_client("bob@kaname.app");
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         assert!(admin.add_member(&mut conv, bob_email, bob_kp).is_err());
     }
@@ -1063,7 +1225,7 @@ mod tests {
 
     #[test]
     fn 安全番号の形式() {
-        let sn = compute_safety_number("alice@kaname.app", "bob@kaname.app", 0);
+        let sn = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[0u8; 32]);
         let parts: Vec<&str> = sn.split(' ').collect();
         assert_eq!(parts.len(), 6, "安全番号は6グループ");
         for part in parts {
@@ -1074,23 +1236,23 @@ mod tests {
 
     #[test]
     fn 安全番号はsha256ベース_決定論的() {
-        let sn1 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 1);
-        let sn2 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 1);
+        let sn1 = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[1u8; 32]);
+        let sn2 = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[1u8; 32]);
         assert_eq!(sn1, sn2, "同じ入力は同じ安全番号を生成する");
     }
 
     #[test]
     fn 安全番号_メール順序で変化する() {
         // SHA-256 はゼロ区切りで境界を確定するので順序が影響する
-        let ab = compute_safety_number("alice@kaname.app", "bob@kaname.app", 0);
-        let ba = compute_safety_number("bob@kaname.app", "alice@kaname.app", 0);
+        let ab = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[0u8; 32]);
+        let ba = compute_safety_number("bob@kaname.app", "alice@kaname.app", &[0u8; 32]);
         assert_ne!(ab, ba, "メール順序が違えば安全番号も変わる");
     }
 
     #[test]
     fn 安全番号_epochで変化する() {
-        let e0 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 0);
-        let e1 = compute_safety_number("alice@kaname.app", "bob@kaname.app", 1);
+        let e0 = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[0u8; 32]);
+        let e1 = compute_safety_number("alice@kaname.app", "bob@kaname.app", &[1u8; 32]);
         assert_ne!(e0, e1, "epoch が変われば安全番号も変わる (replay 攻撃防止)");
     }
 
@@ -1098,8 +1260,8 @@ mod tests {
     fn 安全番号_衝突耐性_polynomial_hashなら失敗するケース() {
         // polynomial hash (×31) は "ab"と"ba"で同じ値になりやすい
         // SHA-256 なら必ず異なる
-        let a = compute_safety_number("a@x.com", "b@y.com", 0);
-        let b = compute_safety_number("b@x.com", "a@y.com", 0);
+        let a = compute_safety_number("a@x.com", "b@y.com", &[0u8; 32]);
+        let b = compute_safety_number("b@x.com", "a@y.com", &[0u8; 32]);
         assert_ne!(a, b, "異なる入力は異なる安全番号を生成する");
     }
 
@@ -1107,8 +1269,8 @@ mod tests {
     fn 安全番号_長さ混同攻撃を防ぐ() {
         // 長さプレフィックスなしの実装では "alice\x00" + "bob" == "alice" + "\x00bob"
         // 長さプレフィックスありなら必ず異なる
-        let with_null = compute_safety_number("alice\x00", "bob@y.com", 0);
-        let without = compute_safety_number("alice", "\x00bob@y.com", 0);
+        let with_null = compute_safety_number("alice\x00", "bob@y.com", &[0u8; 32]);
+        let without = compute_safety_number("alice", "\x00bob@y.com", &[0u8; 32]);
         assert_ne!(
             with_null, without,
             "長さ混同攻撃を防ぐ: フィールド境界が明確であること"
@@ -1117,7 +1279,7 @@ mod tests {
 
     #[test]
     fn 安全番号_空文字入力でも崩壊しない() {
-        let sn = compute_safety_number("", "", 0);
+        let sn = compute_safety_number("", "", &[0u8; 32]);
         let parts: Vec<&str> = sn.split(' ').collect();
         assert_eq!(parts.len(), 6, "空入力でも6グループを生成する");
     }
@@ -1142,7 +1304,8 @@ mod tests {
     #[test]
     fn empty_平文の暗号化を拒否する() {
         let mut client = make_client("alice@kaname.app");
-        let bob_kp = dummy_kp();
+        let bob = make_client("bob@kaname.app");
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut conv, _) = client.start_one_to_one(bob_email, bob_kp).unwrap();
         assert!(client.encrypt_message(&mut conv, b"").is_err());
@@ -1246,13 +1409,11 @@ mod tests {
     fn commit_同一epoch_はリプレイとして拒否される() {
         let mut bob = make_client("bob@kaname.app");
         let mut alice = make_client("alice@kaname.app");
-        let alice_kp = alice.generate_key_package();
-        let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
-
+        let alice_kp = alice.generate_key_package().unwrap();
         // alice が bob に Welcome を送る
-        let (_, welcome) = alice
-            .start_one_to_one(alice_email.clone(), dummy_kp())
-            .unwrap();
+        let bob_kp = bob.generate_key_package().unwrap();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (_, welcome) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
         // bob が Welcome を受信して会話 epoch=0 を記録
         let _ = bob.process_incoming(&welcome).unwrap();
 
@@ -1280,10 +1441,13 @@ mod tests {
         // start_one_to_one で epoch=0 を初期化することで、Welcome 受信側と
         // 同様にリプレイ拒否が機能することを確認する。
         let mut alice = make_client("alice@kaname.app");
-        let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
 
         // alice が会話を開始 (自分側で epoch=0 を記録するはず)
-        let (conversation, _welcome) = alice.start_one_to_one(alice_email, dummy_kp()).unwrap();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let bob_kp = make_client("bob@kaname.app")
+            .generate_key_package()
+            .unwrap();
+        let (conversation, _welcome) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
         // 攻撃者が alice に対して同一 epoch=0 の Commit を再送する
         let replay_commit = Envelope {
@@ -1327,16 +1491,15 @@ mod tests {
         let mut alice = make_client("alice@kaname.app");
         let mut bob = make_client("bob@kaname.app");
 
-        let bob_kp = dummy_kp();
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut alice_conv, welcome) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
         let _ = bob.process_incoming(&welcome).unwrap();
 
-        // 正常な Application を送信 (epoch=0)
+        // 正常な Application を送信 (実 epoch = 1: グループ作成+add で進んでいる)
         let env = alice.encrypt_message(&mut alice_conv, b"hello").unwrap();
         let env_for_bob = Envelope {
             conversation_id: welcome.conversation_id.clone(),
-            epoch: 0,
             ..env
         };
         let _ = bob.process_incoming(&env_for_bob).unwrap();
@@ -1367,7 +1530,8 @@ mod tests {
     #[test]
     fn encrypt_messageが25mb上限を強制する() {
         let mut alice = make_client("alice@kaname.app");
-        let bob_kp = dummy_kp();
+        let bob = make_client("bob@kaname.app");
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut conv, _) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
@@ -1382,7 +1546,8 @@ mod tests {
     #[test]
     fn encrypt_messageが空メッセージを拒否する() {
         let mut alice = make_client("alice@kaname.app");
-        let bob_kp = dummy_kp();
+        let bob = make_client("bob@kaname.app");
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut conv, _) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
@@ -1438,7 +1603,7 @@ mod tests {
         let mut alice = make_client("alice@kaname.app");
         let mut bob = make_client("bob@kaname.app");
 
-        let bob_kp = dummy_kp();
+        let bob_kp = bob.generate_key_package().unwrap();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (_alice_conv, welcome_env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
@@ -1448,7 +1613,7 @@ mod tests {
             kind: EnvelopeKind::Welcome,
             epoch: welcome_env.epoch,
             ciphersuite: welcome_env.ciphersuite,
-            wire_bytes: welcome_env.wire_bytes.clone(),
+            wire_bytes: welcome_env.welcome.clone().unwrap(),
             welcome: welcome_env.welcome.clone(),
         };
 

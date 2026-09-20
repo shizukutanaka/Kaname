@@ -8,6 +8,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1 Phase 1: 実 MLS 暗号化 (openmls)
+
+- **`kaname-mls` の XOR モック暗号を実 openmls 0.9 に全面置換** (D1 Phase 1)
+  - `encrypt_message` は `MlsGroup::create_message` による本物の MLS Application 暗号文を生成 (従来は `plaintext ^ conv_id[0]` の単一バイト XOR — 鍵空間256・鍵自体が公開情報だった)
+  - `process_incoming` は `MlsMessageIn` → `StagedWelcome::new_from_welcome` / `process_message` + `merge_staged_commit` で実プロトコル処理
+  - `generate_key_package` は署名付きの実 `KeyPackageIn` (TLS シリアライズ) を生成 — 受け取り側は `validate()` で署名検証
+  - グループ ID = `ConversationId` を `new_with_group_id` で整合させ、両側が同一の会話 ID を導出
+  - 安全番号は `group.epoch_authenticator()` (全メンバーが同一値を持つ MLS の認証子) から導出 — メールアドレス+epoch の疑似ハッシュから本物の暗号素材へ
+  - `Ciphersuite::KanameHybridPqc` は `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (draft-ietf-mls-pq-ciphersuites の ML-KEM-768+X25519 ハイブリッド) にマッピング — 設計書の「PQ ciphersuite を最初から選定」要件を充足
+  - `MlsMailClient::try_new` を追加 (CSPRNG 初期化失敗を Result で返す)
+  - `generate_key_package` の戻り値を `Option<KeyPackage>` に変更 (生成失敗を表現可能に)
+  - 残存: グループ状態はプロセス内メモリのみ (再起動で喪失 — Phase 2 で `mls_conversations` 永続化)、KeyPackage 配送経路と Compose 統合は Phase 3-4
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
