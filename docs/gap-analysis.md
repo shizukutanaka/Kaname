@@ -297,3 +297,31 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 - 判断に迷う場合 (例: D6のRedis要否、D1のopenmlsバージョン選定など)
   アーキテクチャ判断が要る項目は Opus に、決まった手順の実装 (プラグイン導入・
   ファイル移動・依存追加等) は Sonnet に割り振るのが効率的。
+
+### D82 — JMAP downloadUrl/uploadUrl テンプレート変数が URL エンコードなしで埋め込まれていた (修正済み・第12ラウンド)
+
+- **症状**: `download_blob` は RFC 8620 §6.2 の `downloadUrl` テンプレートに
+  `{accountId}`/`{blobId}`/`{type}`/`{name}` を `String::replace` で
+  **生値のまま**埋め込んでいた。`{name}` は添付ファイル名 (`part.name`)、
+  `{type}` は MIME 型 — いずれもメール送信者が制御する値。
+  `report.pdf` なら無害だが、`../../admin`、`x?query=`、`x#frag`、
+  `a%2F..%2F` 等を含む名前は URL のパス/クエリ構造を改変でき、
+  Bearer 認証付きリクエストが意図しない JMAP サーバ上のエンドポイントへ
+  向き得た (クライアント側リクエストフォージェリ。限定的ながら
+  SSRF/パストラバーサルの類)。`upload_url` の `{accountId}` も同型。
+  RFC 8620 はテンプレート変数の URL エンコードを義務付けている。
+- **修正**: `encode_template_value` (RFC 3986 unreserved = `A-Z a-z 0-9 - _ . ~`
+  以外を全て %XX に) を追加し、download_url の4変数と upload_url の
+  accountId に適用。MIME 型の `/` も %2F にエンコードされる — これは
+  RFC 8620 準拠の正しい動作 (サーバ側でデコードされるべき)。
+- **テスト**: `encode_template_value_はパス改変文字をエンコードする` —
+  通常値の非変換・`../`/`?`/`#`/`%`/非 ASCII のエンコードを固定。
+- **残リスク**: `session.download_url`/`upload_url` 自体はサーバ応答由来 —
+  悪意あるサーバは任意 URL を返せる (connect 時の SSRF 検証は
+  base_url のみで、テンプレート URL のホストは未検証)。認証情報を
+  含むリクエストを別ホストに送り得る → セッション応答の
+  download/upload URL が base_url と同一オリジンか検査する余地あり
+  (要判断、記録のみ)。
+- **教訓**: 「テンプレートに文字列を置換する」はインジェクションの
+  原型。URL/SQL/HTML すべて同じ構造 — 値のエンコードは仕様が求める
+  契約であり、省略はセキュリティ欠陥になる。
