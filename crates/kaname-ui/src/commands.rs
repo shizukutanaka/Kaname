@@ -59,16 +59,26 @@ pub async fn health_check() -> Result<HealthResponse, String> {
 #[instrument]
 /// 受信箱のサマリを返す。
 ///
-/// # サーバ未接続のため常にゼロ
-///
-/// 従来は固定値 `{unread:3, bec_alerts:1, total:42}`、その後モックデータからの
-/// 集計を返していたが、**いずれも実在しないメールの件数**だった。
-/// JMAP 受信が未配線 (D10) である以上、受信箱に表示できる本物のメールは
-/// 存在しない。偽の件数を出すより 0 を返す方が正確である。
-///
-/// 実際のメール解析は「ファイル解析」タブ (`mail_import_eml` /
-/// `mail_scan_folder`) を使う。
+/// 履歴 DB (`kaname-store`) に保存済みメールの件数を実集計する。
+/// Store 未オープン・JMAP 未接続 (アカウント不明) なら 0 件 —
+/// その場合ローカルに保存されたメールが存在しないので 0 が実態として正しい。
 pub async fn mail_get_summary() -> Result<MailSummary, String> {
+    // 履歴 DB が開いていてアカウントが特定できる場合は実数を返す。
+    // 未接続 (Store 未オープン or JMAP 未接続) は空 = 0 件が実態として正しい。
+    let account_id = current_account_id().await;
+    if !account_id.is_empty() {
+        if let Some(store) = store_slot().lock().await.clone() {
+            let s = store
+                .message_stats(&account_id)
+                .await
+                .map_err(|e| format!("サマリ集計に失敗しました: {e}"))?;
+            return Ok(MailSummary {
+                unread: s.unread,
+                bec_alerts: s.bec_alerts,
+                total: s.total,
+            });
+        }
+    }
     Ok(MailSummary {
         unread: 0,
         bec_alerts: 0,
