@@ -85,6 +85,36 @@ const OPENED_DANGEROUS = {
   },
 };
 
+/** .eml インポート用: DLP 機微情報を含む危険メール (パスに dlp/danger 等で選択)。 */
+const OPENED_DANGEROUS_DLP = {
+  ...OPENED_DANGEROUS,
+  dlp_findings: ["クレジットカード番号の可能性: 4111-****-****-1111", "マイナンバーの可能性: ****-****-1234"],
+};
+
+/** `mail_scan_folder` の FolderScanResult 形状 (commands.rs と一致)。 */
+const FOLDER_SCAN = {
+  analyzed: 2,
+  failed: [],
+  verdict_counts: [["DANGEROUS", 1], ["SAFE", 1]] as [string, number][],
+  emails: [
+    {
+      file: "invoice.eml", from: "suzuki@examp1e.co.jp",
+      subject: "【至急】振込先口座変更のご連絡",
+      verdict: "DANGEROUS", score: 85, dlp_count: 1, attachment_risk_count: 1,
+    },
+    {
+      file: "budget.eml", from: "tanaka@example.co.jp",
+      subject: "Q2予算レビューのお願い",
+      verdict: "SAFE", score: 5, dlp_count: 0, attachment_risk_count: 0,
+    },
+  ],
+  campaigns: [
+    { shared_infrastructure: "examp1e.co.jp", email_count: 2, threat_score: 0.82 },
+  ],
+};
+
+const OOBV_PHRASE = ["apple", "river", "mountain", "bridge", "silver", "garden"];
+
 const STORED = [
   {
     id: "s-1", from_addr: "tanaka@example.co.jp", from_name: "営業部 田中",
@@ -117,7 +147,7 @@ export interface MockOverrides {
  */
 export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
   await page.addInitScript(
-    ({ ov, emails, mailboxes, openedSafe, openedDangerous, stored }) => {
+    ({ ov, emails, mailboxes, openedSafe, openedDangerous, openedDangerousDlp, folderScan, oobvPhrase, stored }) => {
       // mockIPC (@tauri-apps/api/mocks) と同じ内部構造。
       // @tauri-apps/api のグローバル型はこのコンテキストでは読み込まれない
       // ため、内部 API の形だけをローカルに宣言する。
@@ -195,8 +225,26 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
               (m.subject ?? "").includes(args.query as string));
           case "mail_open":
             return args.emailId === "m-2" ? openedDangerous : openedSafe;
-          case "mail_import_eml":         return openedSafe;
-          case "mail_scan_folder":        return [];
+          case "mail_import_eml":
+            // パス名で切替: "dlp|danger|bec|phish" を含む → 危険+DLP版
+            return /dlp|danger|bec|phish/i.test(String(args.path ?? ""))
+              ? openedDangerousDlp
+              : openedSafe;
+          case "mail_scan_folder":        return folderScan;
+          case "oobv_start":
+            return {
+              ceremony_id: "mock-ceremony-1",
+              phrase: oobvPhrase,
+              challenge_number: 3,
+              expires_at_unix: Math.floor(Date.now() / 1000) + 600,
+            };
+          case "oobv_verify": {
+            const req = (args.req ?? {}) as { user_word?: string };
+            return {
+              state: req.user_word === oobvPhrase[2] ? "Verified" : "Mismatch",
+              message_i18n_key: "",
+            };
+          }
           case "mail_connect":
             return { account_id: "acc-1", mailboxes: [["mbx-inbox", "受信トレイ", 2]] };
           case "oobv_recommend":
@@ -222,6 +270,9 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
       mailboxes: MAILBOXES,
       openedSafe: OPENED_SAFE,
       openedDangerous: OPENED_DANGEROUS,
+      openedDangerousDlp: OPENED_DANGEROUS_DLP,
+      folderScan: FOLDER_SCAN,
+      oobvPhrase: OOBV_PHRASE,
       stored: STORED,
     },
   );
