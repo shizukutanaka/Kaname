@@ -275,6 +275,9 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D95 | ~~**`send_email` の `draft_id` が常に `None` の死んだパラメータ**: 唯一の呼び出し元 (`mail_send_real`) が `None` 固定で、下書き削除の分岐は到達不能 — 下書きを作るコマンド自体が存在しない~~ **(2026-09-20 解消)** | P4 | パラメータと「送信後に下書き削除」分岐を削除。下書き機能の実装時に git 履歴から復元可能 |
 
 
+| D100 | ~~**詳細解析・フォルダ一括解析に送信者履歴が供給されず一覧と詳細で BEC 判定が食い違う**: `analyze_raw_email`/`mail_scan_folder` は `AssessmentRequest.sender_history` に `None` 固定 — 「検証済み差出人」(-0.20)・初回連絡・悪意報告等の履歴シグナルは一覧評価 (assess_listing) にのみ発火。検証済み送信者のメールを開くと一覧より高スコアで表示されていた~~ **(2026-09-20 解消)** | P2 | `lookup_sender_history` を両経路に配線 + 検証済み送信者で「検証済み差出人」シグナルが出る回帰テスト |
+| D101 | ~~**CLAUDE.md のクレート依存グラフが実装と不一致**: 「kaname-error → observability/privacy/screen → crypto/store → …」の層構造は設計意図の記述で、実測ではほぼ全層が乖離 (kaname-error は被依存ゼロの孤立、実際は bec→screen/pivot/memory-guard・oobv→crypto/memory-guard 等、13クレートが葉)~~ **(2026-09-20 修正)** | P5 | Cargo.toml 実測のグラフに書き換え。循環依存は Cargo がコンパイル時に検出する旨を明記 |
+
 ### 完了判定の変更
 
 初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。

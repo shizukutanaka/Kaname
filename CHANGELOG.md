@@ -23,6 +23,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(kaname-ui): 詳細解析とフォルダ一括解析に送信者履歴が供給されず一覧と詳細で BEC 判定が食い違っていた (D100) — `analyze_raw_email`/`mail_scan_folder` の `AssessmentRequest.sender_history` が `None` 固定で、「本人確認済み」の -0.20 寄与・初回連絡・悪意報告シグナルが一覧評価 (assess_listing) にのみ発火していた。`lookup_sender_history` を両経路に配線し、検証済み送信者の詳細解析で「検証済み差出人」シグナルが出る回帰テストを追加
+- docs(CLAUDE.md): 依存グラフを実測に修正 (D101) — 以前の記述は設計意図で、実装とほぼ全層が不一致だった (kaname-error は被依存ゼロの孤立、bec→screen/pivot/memory-guard、oobv→crypto/memory-guard、jmap/store/crypto 等13クレートが葉)
 - fix(kaname-jmap): 送信メッセージを RFC 5322/2047 準拠に (D94) — 非 ASCII 件名を `=?UTF-8?B?` encoded-word にエンコード、本文を base64 + `MIME-Version: 1.0`/`Content-Transfer-Encoding: base64` で送出。生 UTF-8 のままでは SMTPUTF8 非対応経路で件名文字化け・本文破壊の可能性があった。base64 本文は `.` を含まないため SMTP Smuggling 終端シーケンスの構造的起因も消去
 - fix(kaname-jmap): `send_email` の `draft_id` 死んだパラメータを削除 (D95) — 唯一の呼び出し元が `None` 固定で下書き削除分岐は到達不能だった
 - fix(kaname-store): 「暗号化ローカルストア」が実際には平文だった問題を修正 (D75) — workspace の rusqlite が `bundled` (素の SQLite3) で `PRAGMA key`/`cipher_*` が全て silent no-op だったため DB は平文保存されていた。`bundled-sqlcipher` へ切替し `cipher_version=4.5.3` の動作を実測確認。既知文字列非出現を固定する恒久回帰テストを追加。平文期間の既存 history.db は新ビルドで開けない (移行措置なし — プレリリースのため許容判断)
