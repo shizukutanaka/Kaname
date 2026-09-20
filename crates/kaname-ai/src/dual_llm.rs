@@ -83,25 +83,25 @@ pub struct Untrusted(pub(crate) ());
 ///
 /// 直接的な型変換 (`as`, `transmute`) は `#![deny(unsafe_code)]` で禁止される。
 ///
-/// # ⚠ 既知の限界: serde 経由の迂回 (docs/gap-analysis.md D17)
+/// # serde 非対応は意図的 (docs/gap-analysis.md D17)
 ///
-/// 本型は `Serialize`/`Deserialize` を derive しており、`_level` は
-/// `#[serde(skip)]` である。serde は `PhantomData<T>` に型境界を付けないため、
-/// `serde_json::from_str::<Content<Trusted>>(...)` が公開 API として通り、
-/// **`Bridge` を経ずに任意テキストの `Content<Trusted>` を構築できる**。
-/// また `Serialize` により `inner` (生の untrusted 本文) が JSON に出るため、
-/// ログ/IPC/Tauri コマンドの戻り値経由で漏れ得る。
+/// 本型は `Serialize`/`Deserialize` を**持たない**。かつて derive されて
+/// おり `_level` が `#[serde(skip)]` だったため、`serde_json::from_str::<
+/// Content<Trusted>>(...)` が公開 API として通り **Bridge を経ずに任意
+/// テキストの `Content<Trusted>` を構築できた** (I3 違反)。また `Serialize`
+/// により生の untrusted 本文が JSON に漏れ得た。
 ///
-/// 現時点ではメールパイプラインが未配線 (D10) でこれを呼ぶコードが存在せず
-/// 悪用経路は無いが、`Content` を JSON で往復させた瞬間に I3 は破れる。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// プロセス間プロトコル (subprocess) は `LlmMessage { content: String }`
+/// の平文文字列で運ぶ設計のため `Content` の serde は不要だった。
+/// JSON で往復させたい場合は信頼境界の外側 (生 `String`) で行い、
+/// 境界を越える時点で必ずコンストラクタを通すこと。
+#[derive(Debug, Clone)]
 pub struct Content<L> {
     /// データ本体 (常に文字列。バイナリは Base64 でエンコード)。
     inner: String,
     /// データの起源 (デバッグとログ用)。
     provenance: Provenance,
     /// 信頼レベルを型で表現 (実行時オーバーヘッドゼロ)。
-    #[serde(skip)]
     _level: PhantomData<L>,
 }
 
@@ -223,13 +223,11 @@ impl Content<Untrusted> {
     ///
     /// # ⚠ これは規約であり型では強制されていない
     ///
-    /// 設計意図は「Q-LLM 内部からのみ呼ぶ」だが、本メソッドは `pub` であり
-    /// 可視性による制限は無い。したがって呼び出し側の規律に依存しており、
-    /// ここから得た `&str` を P-LLM や UI に渡せば I1 は破れる。
-    /// 型で強制するには `pub(crate)` 化するか Q-LLM 呼び出し境界の内側に
-    /// 閉じる必要がある (docs/gap-analysis.md D17)。
+    /// 呼び出しは Q-LLM 境界の内側 (本クレート) に限定する
+    /// (docs/gap-analysis.md D17)。`pub` だった頃は呼び出し側の規律に
+    /// 依存しており、得た `&str` を P-LLM や UI に渡せば I1 が破れた。
     #[must_use]
-    pub fn as_text(&self) -> &str {
+    pub(crate) fn as_text(&self) -> &str {
         &self.inner
     }
 
@@ -355,7 +353,11 @@ pub enum LanguageCode {
 }
 
 /// トピックタグ (32 文字以内、英数+ハイフンのみ)。
+///
+/// Deserialize は `try_from` 経由で `new()` の検証を必ず通る
+/// (素の derive だと検証を迂回できた — docs/gap-analysis.md D17)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct TopicTag(String);
 
 impl TopicTag {
@@ -388,6 +390,19 @@ impl TopicTag {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl TryFrom<String> for TopicTag {
+    type Error = BridgeError;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        Self::new(s)
+    }
+}
+
+impl From<TopicTag> for String {
+    fn from(t: TopicTag) -> Self {
+        t.0
     }
 }
 
