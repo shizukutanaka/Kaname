@@ -66,7 +66,7 @@ hkdf         = "0.12"
 ammonia      = "4.0"
 hmac         = "0.12"
 zeroize      = { version = "1.7", features = ["derive"] }
-rusqlite     = { version = "0.31", features = ["bundled"] }
+rusqlite     = { version = "0.31", features = ["bundled-sqlcipher"] }
 tauri        = { version = "2.1", features = ["tray-icon", "macos-private-api"] }
 tauri-build  = { version = "2.0" }
 proptest     = "1.4"
