@@ -205,11 +205,12 @@ cargo nextest run --workspace --no-fail-fast 2>&1 | tail -5
 | Tiered-Risk アクセス制御 | kaname-ai `tiered_risk` | arxiv 2505.22852 §3 |
 | メモリ汚染防御 | kaname-memory-guard | arxiv 2601.05504 |
 
-UI コマンド (commands.rs):
-- `screen_user_input` — 入力スクリーニング
-- `audit_ai_output` — 出力監査
-- `check_action_risk` — Tiered-Risk 判定
-- `check_memory_trust` — メモリ信頼スコア
+これらのクレートはライブラリとして残っているが、エージェント監視 UI が
+製品に存在しないため IPC コマンド層 (screen_user_input / audit_ai_output /
+check_action_risk / check_memory_trust / check_rule_of_two /
+validate_tool_argument / record_agent_step / reset_trajectory) は
+呼び出し元ゼロで削除済み (2026-09, gap-analysis E11)。クレートの機能は
+`kaname_memory_guard::normalize_for_matching*` 等として解析経路で利用中。
 
 ## よく使うコマンド (Makefile)
 

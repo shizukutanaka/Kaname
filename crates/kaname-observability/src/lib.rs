@@ -29,8 +29,6 @@
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 
-pub mod trajectory;
-
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use serde::{Deserialize, Serialize};

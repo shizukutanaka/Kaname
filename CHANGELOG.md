@@ -18,6 +18,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - ワークスペース 27→23 クレート (出荷 19、意図的除外 4: mls/sandbox/mockserver/tests)。実装は git 履歴に残り将来復元可能
 - **「機能デモ」タブを削除** (D51 完全解消): `KanameAppleFeatures.tsx` (1,244 行) は偽の添付・固定返信案・架空のエクスポート完了を見せるデモ遊技場であり、正直なラベル付けでも出荷する理由が無かった。`QuickLook`/`SmartReplyBar`/`PdfExportDialog`/`UndoToast`/`AccessibleEmailRow`/`UndoRedoStack` (実利用者ゼロ) も消滅。UI 到達可能性 9/9 → 8/8、関連 vitest 7 件も対象消滅のため削除
 - **フロントエンド i18n 基盤を削除** (E9、~380行): `src/i18n.ts` + `src/locales/{ja,en}.json`。`t()`/`useT()`/`setLanguage()` 等の実呼び出しが UI 内にゼロで、起動時に翻訳カタログを読むだけの空転基盤だった。UI はハードコード日本語文字列のみ。kaname-i18n クレート削除 (D19) に続きフロント側の重複実装も除去
+- **呼び出し元ゼロの IPC コマンド16件を削除** (E11): 「未実装」Err を返すだけの `ai_summarize_email`/`ai_smart_reply`、汎用 KV `settings_get`/`settings_set`、エージェント監視 UI の無い arxiv 系8コマンド (`screen_user_input`/`audit_ai_output`/`check_action_risk`/`check_memory_trust`/`check_rule_of_two`/`validate_tool_argument`/`record_agent_step`/`reset_trajectory` + `kaname-observability::trajectory` 262行)、解析経路に内製済みの `pivot_analyze`/`deepfake_evaluate`、`history_close`/`history_open` の IPC 登録。kaname-ui から kaname-ai/kaname-screen/kaname-pivot への依存辺も除去 (クレート自体は存続)。`oobv_*` は看板機能のため残置し UI 配線で完成させる
 
 ### Fixed
 - **`messages.to_addrs` 列が NOT NULL で存在するのに `NewMessage`/`StoredMessage` にフィールドが無く、宛先が常に `''` として消失していた欠落を修正** (D46 残件)
