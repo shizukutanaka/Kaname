@@ -155,9 +155,8 @@ impl JmapClient {
             )));
         }
 
-        let session: Session = resp
-            .json()
-            .await
+        // セッション文書は通常数 KB — 1MB 上限
+        let session: Session = serde_json::from_value(json_with_limit(resp, 1024 * 1024).await?)
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
         if !session.has_capability(Session::JMAP_MAIL) {
@@ -207,10 +206,9 @@ impl JmapClient {
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
         let status = resp.status();
-        let raw: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        // 応答ボディは 64MB 上限 — 一覧 50 件 × 本文上限 512KB の
+        // 正当応答でも十分な上限。
+        let raw: serde_json::Value = json_with_limit(resp, 64 * 1024 * 1024).await?;
 
         if !status.is_success() {
             return Err(JmapError::JmapProblem {
@@ -652,10 +650,7 @@ impl JmapClient {
             .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let json: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        let json: serde_json::Value = json_with_limit(resp, 1024 * 1024).await?;
         json["blobId"]
             .as_str()
             .map(String::from)
@@ -867,6 +862,36 @@ pub enum JmapError {
 // ============================================================================
 // ユーティリティ
 // ============================================================================
+
+/// `resp.json()` は応答を無制限にバッファするため、悪意ある/異常な
+/// サーバー応答でメモリ枯渇し得た。blob 取得 (`download_blob`) と同じ
+/// 二重防御 (Content-Length 事前チェック + 読み取り中の逐次チェック) で
+/// `max` バイトに制限してから JSON としてパースする。
+async fn json_with_limit(
+    resp: reqwest::Response,
+    max: usize,
+) -> Result<serde_json::Value, JmapError> {
+    if let Some(len) = resp.content_length() {
+        if len as usize > max {
+            return Err(JmapError::Http(format!(
+                "応答が大きすぎます ({len} バイト > {max} バイト上限)"
+            )));
+        }
+    }
+    let mut resp = resp;
+    let mut buf = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .map_err(|e| JmapError::Http(e.to_string()))?
+    {
+        if buf.len() + chunk.len() > max {
+            return Err(JmapError::Http("応答が上限を超えました".into()));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&buf).map_err(|e| JmapError::Deserialize(e.to_string()))
+}
 
 fn find_result<T: for<'de> Deserialize<'de>>(
     rs: &[MethodResponse],
