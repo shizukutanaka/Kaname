@@ -533,6 +533,13 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
                     ? "モデル配置済み — ロードすると BEC 意味解析が有効になります"
                     : `モデル未取得 (約 ${(Number(m().expected_size_bytes ?? 0) / 1e9).toFixed(1)}GB) — 未取得の間は BEC は決定論的シグナルのみで判定します`}
               </div>
+              {/* D121: 現在はインプロセス推論 — Q-LLM サブプロセス分離は
+                  未配線のため、現状を隠さず表示する */}
+              <Show when={m().state === "loaded"}>
+                <div style={{ "font-size": "10px", color: "#6B7A94", "margin-bottom": "8px", "font-family": "monospace" }}>
+                  推論はインプロセスで実行されます (サブプロセス分離は未配線: D121)
+                </div>
+              </Show>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Show when={m().state === "missing"}>
                   {/* HF リポジトリはゲート済みのため、配布元が発行する

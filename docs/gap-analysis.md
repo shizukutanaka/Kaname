@@ -393,3 +393,4 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 |---|---|---|---|
 | D113 | **cargo-machete 検出の未使用依存 44件削除が未適用** | P3 | 孤児コミット 20b8ca2 は移動済み Cargo.toml 群に広く衝突し救出不能。修復は古い差分の移植ではなく `cargo machete` の fresh 実行で再導出すべき (依存宣言は時価) |
 | D114 | **修正 PR の取りこぼしが2回発生したプロセス欠陥** | P1 | 「修正した」は PR がマージされるまで成立しない。クローズ済み未マージ PR を一覧する定期検査 (例: `gh pr list --state closed --json mergedAt` で mergedAt=null) を static-check か運用手順に組み込むべき。人間がマージするワークフローの限界 |
+| D121 | **BEC の LLM スコアリングが不信メール本文をインプロセスで処理し、Q-LLM サブプロセス分離 (I1) が出荷経路に未配線** | P1 | `kaname-ui` の `bec_score` 配線は `LocalLlmRunner` をプロセス内で直接呼ぶため、llama.cpp が敵対的メール本文をサンドボックスなしでパースする。`LlmSubprocess`/`kaname-llm-runner` (D2 Phase 3) は実装済みだが呼出元がなく、`tauri.conf.json` にも externalBin 登録がない。完全な解消には (1) runner バイナリの externalBin/バンドル登録、(2) kaname-ui が QuarantinedLlmImpl 経由で呼ぶ配線変更が必要。暫定の正直化: SecurityDashboard に「インプロセス推論」と明記済み。本番化前に要 security-lead 判断 |
