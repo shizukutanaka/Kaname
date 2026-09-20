@@ -12,7 +12,7 @@
 //
 // 実行: cargo bench --bench core_bench
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,10 +26,34 @@ fn bench_bec_detection(c: &mut Criterion) {
 
     // ── ベンチマーク対象の入力 ──
     let test_cases = vec![
-        ("safe_normal",    "田中 花子",    "hanako@company.co.jp",   "Q2予算会議のご案内",          false),
-        ("bec_urgent",     "CFO",          "cfo@companv-billing.com", "【至急】振込先変更のご連絡",   true),
-        ("phishing_qr",    "Support",      "support@amaz0n.co.jp",    "アカウント確認が必要です",      true),
-        ("newsletter",     "TechCrunch",   "noreply@tc.com",          "週刊ニュースレター",           false),
+        (
+            "safe_normal",
+            "田中 花子",
+            "hanako@company.co.jp",
+            "Q2予算会議のご案内",
+            false,
+        ),
+        (
+            "bec_urgent",
+            "CFO",
+            "cfo@companv-billing.com",
+            "【至急】振込先変更のご連絡",
+            true,
+        ),
+        (
+            "phishing_qr",
+            "Support",
+            "support@amaz0n.co.jp",
+            "アカウント確認が必要です",
+            true,
+        ),
+        (
+            "newsletter",
+            "TechCrunch",
+            "noreply@tc.com",
+            "週刊ニュースレター",
+            false,
+        ),
     ];
 
     for (name, from_name, from_addr, subject, _expected_alert) in &test_cases {
@@ -59,7 +83,8 @@ fn simulate_bec_evaluation(from_name: &str, from_addr: &str, subject: &str) -> f
     // 信号1: ドメイン類似度 (タイポスクワッティング検出)
     let domain = from_addr.split('@').nth(1).unwrap_or("");
     let legitimate_domains = ["amazon.co.jp", "company.co.jp", "rakuten.co.jp"];
-    let min_distance = legitimate_domains.iter()
+    let min_distance = legitimate_domains
+        .iter()
         .map(|&d| levenshtein_distance(domain, d))
         .min()
         .unwrap_or(999);
@@ -69,13 +94,15 @@ fn simulate_bec_evaluation(from_name: &str, from_addr: &str, subject: &str) -> f
 
     // 信号2: 緊急性マーカー
     let urgency_markers = ["至急", "urgent", "immediately", "今すぐ", "本日中"];
-    let urgency_count = urgency_markers.iter()
+    let urgency_count = urgency_markers
+        .iter()
         .filter(|&&m| subject.to_lowercase().contains(m))
         .count();
     score += urgency_count as f32 * 0.15;
 
     // 信号3: 振込先変更パターン
-    if subject.contains("振込") || subject.contains("口座変更") || subject.contains("wire transfer") {
+    if subject.contains("振込") || subject.contains("口座変更") || subject.contains("wire transfer")
+    {
         score += 0.45;
     }
 
@@ -97,14 +124,18 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
     let m = a.len();
     let n = b.len();
     let mut dp = vec![vec![0usize; n + 1]; m + 1];
-    for (i, row) in dp.iter_mut().enumerate() { row[0] = i; }
-    for (j, cell) in dp[0].iter_mut().enumerate() { *cell = j; }
+    for (i, row) in dp.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in dp[0].iter_mut().enumerate() {
+        *cell = j;
+    }
     for i in 1..=m {
         for j in 1..=n {
-            dp[i][j] = if a[i-1] == b[j-1] {
-                dp[i-1][j-1]
+            dp[i][j] = if a[i - 1] == b[j - 1] {
+                dp[i - 1][j - 1]
             } else {
-                1 + dp[i-1][j].min(dp[i][j-1]).min(dp[i-1][j-1])
+                1 + dp[i - 1][j].min(dp[i][j - 1]).min(dp[i - 1][j - 1])
             };
         }
     }
@@ -141,7 +172,8 @@ fn bench_ai_phishing_detection(c: &mut Criterion) {
 }
 
 fn simulate_ai_phishing_detection(text: &str) -> f32 {
-    let sentences: Vec<&str> = text.split(&['.', '!', '？', '。', '！'][..])
+    let sentences: Vec<&str> = text
+        .split(&['.', '!', '？', '。', '！'][..])
         .filter(|s| !s.trim().is_empty())
         .collect();
 
@@ -151,13 +183,24 @@ fn simulate_ai_phishing_detection(text: &str) -> f32 {
     if sentences.len() >= 3 {
         let lengths: Vec<f32> = sentences.iter().map(|s| s.len() as f32).collect();
         let mean = lengths.iter().sum::<f32>() / lengths.len() as f32;
-        let variance = lengths.iter().map(|&l| (l - mean).powi(2)).sum::<f32>() / lengths.len() as f32;
-        let cv = if mean > 0.0 { variance.sqrt() / mean } else { 1.0 };
+        let variance =
+            lengths.iter().map(|&l| (l - mean).powi(2)).sum::<f32>() / lengths.len() as f32;
+        let cv = if mean > 0.0 {
+            variance.sqrt() / mean
+        } else {
+            1.0
+        };
         score += (1.0 - (cv / 0.5).min(1.0)).max(0.0) * 0.25;
     }
 
     // AI常套句
-    let ai_phrases = ["I hope this email", "please don't hesitate", "thank you for your prompt", "kindly find attached", "looking forward to hearing"];
+    let ai_phrases = [
+        "I hope this email",
+        "please don't hesitate",
+        "thank you for your prompt",
+        "kindly find attached",
+        "looking forward to hearing",
+    ];
     let lower = text.to_lowercase();
     let phrase_matches = ai_phrases.iter().filter(|p| lower.contains(*p)).count();
     score += (phrase_matches as f32 * 0.15).min(0.45);
@@ -174,10 +217,14 @@ fn bench_triage(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(3));
 
     let test_cases = vec![
-        ("order_confirm", "noreply@amazon.co.jp", "ご注文の確認 #12345"),
-        ("newsletter",    "digest@techcrunch.com", "週刊ニュースレター"),
-        ("bec_urgent",    "cfo@evil.com",          "至急: 振込依頼"),
-        ("normal",        "alice@company.co.jp",   "来週の打ち合わせについて"),
+        (
+            "order_confirm",
+            "noreply@amazon.co.jp",
+            "ご注文の確認 #12345",
+        ),
+        ("newsletter", "digest@techcrunch.com", "週刊ニュースレター"),
+        ("bec_urgent", "cfo@evil.com", "至急: 振込依頼"),
+        ("normal", "alice@company.co.jp", "来週の打ち合わせについて"),
     ];
 
     for (name, from_addr, subject) in &test_cases {
@@ -196,10 +243,16 @@ fn simulate_triage(from_addr: &str, subject: &str) -> &'static str {
     let subject_lower = subject.to_lowercase();
     let from_lower = from_addr.to_lowercase();
 
-    if from_lower.contains("noreply") || subject_lower.contains("注文") || subject_lower.contains("領収") {
+    if from_lower.contains("noreply")
+        || subject_lower.contains("注文")
+        || subject_lower.contains("領収")
+    {
         return "paper_trail";
     }
-    if subject_lower.contains("newsletter") || subject_lower.contains("ニュースレター") || subject_lower.contains("digest") {
+    if subject_lower.contains("newsletter")
+        || subject_lower.contains("ニュースレター")
+        || subject_lower.contains("digest")
+    {
         return "feed";
     }
     "important"
@@ -293,7 +346,9 @@ fn bench_aitm_detector(c: &mut Criterion) {
                 let lower = url.to_lowercase();
                 let mut score = 0u32;
                 for param in &["id_token=", "session_token=", "&code=", "?code=", "state="] {
-                    if lower.contains(param) { score += 25; }
+                    if lower.contains(param) {
+                        score += 25;
+                    }
                 }
                 for legit in &["microsoft.com", "google.com", "live.com"] {
                     let domain = extract_simple_domain(&lower);
@@ -302,7 +357,9 @@ fn bench_aitm_detector(c: &mut Criterion) {
                     }
                 }
                 for proxy in &["/relay", "/mfa-relay", "tycoon", "microsoft365-"] {
-                    if lower.contains(proxy) { score += 30; }
+                    if lower.contains(proxy) {
+                        score += 30;
+                    }
                 }
                 black_box(score);
             }
@@ -316,10 +373,11 @@ fn bench_sender_style_distance(c: &mut Criterion) {
         b.iter(|| {
             // 7 次元の重み付きユークリッド距離
             let profile = [10.0f32, 2.0, 40.0, 2.5, 0.8, 200.0, 3.0];
-            let email   = [23.0f32, 4.5, 85.0, 5.0, 0.98, 800.0, 1.0]; // 深夜・長文・過丁寧
+            let email = [23.0f32, 4.5, 85.0, 5.0, 0.98, 800.0, 1.0]; // 深夜・長文・過丁寧
             let weights = [0.25, 0.20, 0.20, 0.15, 0.25, 0.10, 0.05];
 
-            let dist: f32 = profile.iter()
+            let dist: f32 = profile
+                .iter()
                 .zip(email.iter())
                 .zip(weights.iter())
                 .map(|((p, e), w)| w * ((e - p).abs() / p.max(1.0)).min(1.0))
@@ -348,7 +406,8 @@ fn bench_campaign_radar_lookup(c: &mut Criterion) {
 }
 
 fn bench_html_smuggling_scan(c: &mut Criterion) {
-    let html_clean = "<p>Hello, please review the document.</p><a href='https://example.com'>click</a>";
+    let html_clean =
+        "<p>Hello, please review the document.</p><a href='https://example.com'>click</a>";
     let html_malicious = r#"<script>
         var blob = new Blob([atob('SGVsbG8=')], {type: 'application/octet-stream'});
         var url = URL.createObjectURL(blob);
@@ -361,10 +420,18 @@ fn bench_html_smuggling_scan(c: &mut Criterion) {
             for html in &[html_clean, html_malicious] {
                 let lower = html.to_lowercase();
                 let mut risk_score = 0u32;
-                if lower.contains("url.createobjecturl") { risk_score += 40; }
-                if lower.contains("atob(") && lower.contains("blob") { risk_score += 35; }
-                if lower.contains("createelement") && lower.contains(".click()") { risk_score += 30; }
-                if lower.contains("<script") { risk_score += 10; }
+                if lower.contains("url.createobjecturl") {
+                    risk_score += 40;
+                }
+                if lower.contains("atob(") && lower.contains("blob") {
+                    risk_score += 35;
+                }
+                if lower.contains("createelement") && lower.contains(".click()") {
+                    risk_score += 30;
+                }
+                if lower.contains("<script") {
+                    risk_score += 10;
+                }
                 black_box(risk_score);
             }
         })
@@ -394,7 +461,9 @@ fn bench_calendar_guard_scan(c: &mut Criterion) {
 }
 
 fn extract_simple_domain(url: &str) -> String {
-    let without_scheme = url.trim_start_matches("https://").trim_start_matches("http://");
+    let without_scheme = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
     let end = without_scheme.find('/').unwrap_or(without_scheme.len());
     without_scheme[..end].to_string()
 }

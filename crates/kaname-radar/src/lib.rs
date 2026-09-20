@@ -193,7 +193,11 @@ impl CampaignGroup {
     fn recompute_threat_score(&mut self) {
         #[allow(clippy::cast_precision_loss)]
         let base = (0.3 + 0.1 * self.email_ids.len() as f32).min(1.0);
-        let reported_boost = if self.user_reported_count > 0 { 0.6 } else { 0.0 };
+        let reported_boost = if self.user_reported_count > 0 {
+            0.6
+        } else {
+            0.0
+        };
         self.threat_score = (base + reported_boost).min(1.0);
     }
 
@@ -300,7 +304,10 @@ impl CampaignRadar {
 
         // email_id が異常に長い場合はスキップ (DoS 防止)
         if metadata.email_id.len() > MAX_EMAIL_ID_LEN {
-            tracing::warn!("CampaignRadar: email_id が長すぎます ({} bytes), スキップ", metadata.email_id.len());
+            tracing::warn!(
+                "CampaignRadar: email_id が長すぎます ({} bytes), スキップ",
+                metadata.email_id.len()
+            );
             return None;
         }
 
@@ -316,7 +323,8 @@ impl CampaignRadar {
         // retention 期間内に大量ユニーク email_id を送りつける DoS を防ぐ。
         if self.seen_emails.len() >= MAX_SEEN_EMAILS {
             // 最古エントリを 1 件削除 (FIFO)
-            if let Some(oldest_key) = self.seen_emails
+            if let Some(oldest_key) = self
+                .seen_emails
                 .iter()
                 .min_by_key(|(_, &ts)| ts)
                 .map(|(k, _)| k.clone())
@@ -326,7 +334,8 @@ impl CampaignRadar {
         }
 
         // 解析済みとして記録 (退避基準のタイムスタンプ付き)
-        self.seen_emails.insert(metadata.email_id.clone(), now_unix());
+        self.seen_emails
+            .insert(metadata.email_id.clone(), now_unix());
 
         // 全ドメインをインフラキーに変換
         let infra_keys: Vec<String> = metadata
@@ -346,8 +355,12 @@ impl CampaignRadar {
                     "pattern:auth_fail:subject_{}",
                     pattern_key_for_bucket(metadata.subject_length_bucket)
                 );
-                let was_alertable = self.groups.get(&pattern_key).is_some_and(CampaignGroup::is_alertable);
-                let group = self.groups
+                let was_alertable = self
+                    .groups
+                    .get(&pattern_key)
+                    .is_some_and(CampaignGroup::is_alertable);
+                let group = self
+                    .groups
                     .entry(pattern_key.clone())
                     .or_insert_with(|| CampaignGroup::new(pattern_key.clone(), &metadata.email_id));
                 group.add_email(&metadata.email_id);
@@ -368,7 +381,8 @@ impl CampaignRadar {
             // 継続キャンペーンの蓄積が機能していなかった (pattern_key 分岐と同じ
             // 「挿入または取得 → add_email」の形に揃える)。
             let key = format!("unknown:{}", metadata.from_domain);
-            let group = self.groups
+            let group = self
+                .groups
                 .entry(key.clone())
                 .or_insert_with(|| CampaignGroup::new(key, &metadata.email_id));
             group.add_email(&metadata.email_id);
@@ -453,7 +467,10 @@ impl CampaignRadar {
                 sibling_emails_flagged += group.email_ids.len().saturating_sub(1);
             }
         }
-        ReportImpact { groups_escalated, sibling_emails_flagged }
+        ReportImpact {
+            groups_escalated,
+            sibling_emails_flagged,
+        }
     }
 
     /// 指定メールがユーザー報告済みのキャンペーンに属するか判定する。
@@ -462,9 +479,9 @@ impl CampaignRadar {
     /// 「このメールは既に報告されたキャンペーンの一部か」を照会するために使う。
     #[must_use]
     pub fn is_email_in_reported_campaign(&self, email_id: &str) -> bool {
-        self.groups.values().any(|g| {
-            g.is_user_reported() && g.email_ids.iter().any(|id| id == email_id)
-        })
+        self.groups
+            .values()
+            .any(|g| g.is_user_reported() && g.email_ids.iter().any(|id| id == email_id))
     }
 
     /// グループ数を返す。
@@ -506,10 +523,8 @@ impl CampaignRadar {
     /// メール爆撃で dedup セットが無限肥大化する (メモリ `DoS`) のを防ぐ。
     fn evict_expired(&mut self) {
         let cutoff = now_unix().saturating_sub(self.retention.as_secs());
-        self.groups
-            .retain(|_, g| g.last_updated_unix >= cutoff);
-        self.seen_emails
-            .retain(|_, ts| *ts >= cutoff);
+        self.groups.retain(|_, g| g.last_updated_unix >= cutoff);
+        self.seen_emails.retain(|_, ts| *ts >= cutoff);
     }
 }
 
@@ -561,7 +576,13 @@ fn now_unix() -> u64 {
 // ============================================================================
 
 #[cfg(test)]
-#[allow(unused_must_use, clippy::needless_pass_by_value, clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+#[allow(
+    unused_must_use,
+    clippy::needless_pass_by_value,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::float_cmp
+)]
 mod tests {
     use super::*;
 
@@ -623,11 +644,18 @@ mod tests {
     fn threat_score_increases_with_count() {
         let mut r = radar_with_infra();
         r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
-        let m2 = r.analyze(&email("e2", "y.com", vec!["phish-2.com"])).unwrap();
+        let m2 = r
+            .analyze(&email("e2", "y.com", vec!["phish-2.com"]))
+            .unwrap();
         let score_2 = m2.group.threat_score;
-        let m3 = r.analyze(&email("e3", "z.com", vec!["phish-3.com"])).unwrap();
+        let m3 = r
+            .analyze(&email("e3", "z.com", vec!["phish-3.com"]))
+            .unwrap();
         let score_3 = m3.group.threat_score;
-        assert!(score_3 > score_2, "メール数増加でスコアが上がるはず: {score_3} > {score_2}");
+        assert!(
+            score_3 > score_2,
+            "メール数増加でスコアが上がるはず: {score_3} > {score_2}"
+        );
     }
 
     // ── C-03: ユーザー悪意報告のキャンペーン横展開 ───────────────────────
@@ -642,16 +670,22 @@ mod tests {
 
         // ユーザーが 1 通だけを「悪意あり」と報告
         let impact = r.report_email_malicious("e2");
-        assert!(impact.had_effect(), "既知キャンペーンへの報告は波及するはず");
+        assert!(
+            impact.had_effect(),
+            "既知キャンペーンへの報告は波及するはず"
+        );
         assert_eq!(impact.groups_escalated, 1);
         // e2 を除く e1, e3 が兄弟として警戒対象に
         assert_eq!(impact.sibling_emails_flagged, 2);
 
         // グループ全体の脅威スコアが引き上げられている
         let g = r.alertable_groups();
-        assert!(g.iter().any(|grp| grp.is_user_reported() && grp.threat_score >= 0.9),
+        assert!(
+            g.iter()
+                .any(|grp| grp.is_user_reported() && grp.threat_score >= 0.9),
             "報告後はグループ脅威スコアが 0.9 以上に上がるはず: {:?}",
-            g.iter().map(|grp| grp.threat_score).collect::<Vec<_>>());
+            g.iter().map(|grp| grp.threat_score).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -662,9 +696,18 @@ mod tests {
         r.report_email_malicious("e1");
 
         // 報告メール自身も、同一キャンペーンの兄弟メールも「報告済みキャンペーン」として照会可能
-        assert!(r.is_email_in_reported_campaign("e1"), "報告メール自身は報告済みキャンペーン");
-        assert!(r.is_email_in_reported_campaign("e2"), "兄弟メールも報告済みキャンペーンに属する");
-        assert!(!r.is_email_in_reported_campaign("unknown"), "無関係メールは該当しない");
+        assert!(
+            r.is_email_in_reported_campaign("e1"),
+            "報告メール自身は報告済みキャンペーン"
+        );
+        assert!(
+            r.is_email_in_reported_campaign("e2"),
+            "兄弟メールも報告済みキャンペーンに属する"
+        );
+        assert!(
+            !r.is_email_in_reported_campaign("unknown"),
+            "無関係メールは該当しない"
+        );
     }
 
     #[test]
@@ -682,11 +725,16 @@ mod tests {
         let mut r = radar_with_infra();
         r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
         r.analyze(&email("e2", "y.com", vec!["phish-2.com"])); // 2 通 (通常は未アラート)
-        assert!(r.alertable_groups().is_empty(), "報告前・2通ではアラート対象なし");
+        assert!(
+            r.alertable_groups().is_empty(),
+            "報告前・2通ではアラート対象なし"
+        );
 
         r.report_email_malicious("e1");
-        assert!(!r.alertable_groups().is_empty(),
-            "ユーザー報告後は 2 通でもアラート対象になるはず");
+        assert!(
+            !r.alertable_groups().is_empty(),
+            "ユーザー報告後は 2 通でもアラート対象になるはず"
+        );
     }
 
     #[test]
@@ -699,7 +747,11 @@ mod tests {
         let groups = r.alertable_groups();
         assert!(!groups.is_empty());
         for g in groups {
-            assert!(g.threat_score <= 1.0, "スコアは 1.0 を超えない: {}", g.threat_score);
+            assert!(
+                g.threat_score <= 1.0,
+                "スコアは 1.0 を超えない: {}",
+                g.threat_score
+            );
         }
     }
 
@@ -718,7 +770,11 @@ mod tests {
         for i in 0..5 {
             r.analyze(&email(&format!("e{i}"), "x.com", vec!["phish-1.com"]));
         }
-        assert_eq!(r.seen_email_count(), 5, "ユニーク 5 件が dedup セットに記録される");
+        assert_eq!(
+            r.seen_email_count(),
+            5,
+            "ユニーク 5 件が dedup セットに記録される"
+        );
     }
 
     #[test]
@@ -730,7 +786,11 @@ mod tests {
         for _ in 0..10 {
             r.analyze(&email("e1", "x.com", vec!["phish-1.com"]));
         }
-        assert_eq!(r.seen_email_count(), before, "重複 ID で dedup セットが肥大化してはならない");
+        assert_eq!(
+            r.seen_email_count(),
+            before,
+            "重複 ID で dedup セットが肥大化してはならない"
+        );
     }
 
     #[test]
@@ -818,7 +878,10 @@ mod tests {
         let score_after_first = g.threat_score;
         g.add_email("e1"); // 重複
         assert_eq!(g.email_ids.len(), 1, "重複 email_id はカウントされない");
-        assert_eq!(g.threat_score, score_after_first, "重複追加でスコアが変わらない");
+        assert_eq!(
+            g.threat_score, score_after_first,
+            "重複追加でスコアが変わらない"
+        );
     }
 
     #[test]

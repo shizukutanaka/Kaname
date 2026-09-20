@@ -22,9 +22,8 @@
 #![deny(clippy::expect_used)]
 #![allow(missing_docs)]
 
-
-use rusqlite::{Connection, params};
-use sha2::{Sha256, Digest};
+use rusqlite::{params, Connection};
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -38,13 +37,13 @@ pub struct SqlCipherParams;
 
 impl SqlCipherParams {
     /// SQLCipher ページサイズ (bytes)。
-    pub const PAGE_SIZE: u32    = 4096;
+    pub const PAGE_SIZE: u32 = 4096;
     /// PBKDF2 反復回数。
-    pub const KDF_ITER:  u32    = 256_000;
+    pub const KDF_ITER: u32 = 256_000;
     /// HMAC アルゴリズム。
-    pub const HMAC_ALG:  &'static str = "HMAC_SHA512";
+    pub const HMAC_ALG: &'static str = "HMAC_SHA512";
     /// KDF アルゴリズム。
-    pub const KDF_ALG:   &'static str = "PBKDF2_HMAC_SHA512";
+    pub const KDF_ALG: &'static str = "PBKDF2_HMAC_SHA512";
     /// プレーンテキストヘッダーサイズ (bytes)。
     pub const PLAINTEXT_HEADER_SIZE: u32 = 32;
 
@@ -57,7 +56,7 @@ impl SqlCipherParams {
         // この関数は pub なので直接呼ばれる場合も防御する。
         if key_hex.len() != 64 || !key_hex.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(rusqlite::Error::InvalidParameterName(
-                "key_hex は 64 桁の ASCII 16 進数でなければなりません".into()
+                "key_hex は 64 桁の ASCII 16 進数でなければなりません".into(),
             ));
         }
         // 生鍵を含む PRAGMA 文字列は Zeroizing でラップし、実行後に
@@ -75,12 +74,12 @@ impl SqlCipherParams {
              PRAGMA journal_mode = WAL;\
              PRAGMA synchronous = FULL;\
              PRAGMA foreign_keys = ON;",
-            key_hex   = key_hex,
+            key_hex = key_hex,
             PAGE_SIZE = Self::PAGE_SIZE,
-            KDF_ITER  = Self::KDF_ITER,
-            HMAC_ALG  = Self::HMAC_ALG,
-            KDF_ALG   = Self::KDF_ALG,
-            HEADER    = Self::PLAINTEXT_HEADER_SIZE,
+            KDF_ITER = Self::KDF_ITER,
+            HMAC_ALG = Self::HMAC_ALG,
+            KDF_ALG = Self::KDF_ALG,
+            HEADER = Self::PLAINTEXT_HEADER_SIZE,
         ));
         conn.execute_batch(&pragma_sql)
     }
@@ -270,19 +269,16 @@ impl Store {
             return Err(StoreError::InvalidKey);
         }
 
-        let conn = Connection::open(path)
-            .map_err(|e| StoreError::Db(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| StoreError::Db(e.to_string()))?;
 
         // SQLCipher パラメータを適用
         SqlCipherParams::apply(&conn, key_hex)
             .map_err(|e| StoreError::Db(format!("SQLCipher 設定失敗: {}", e)))?;
 
         // インテグリティチェック
-        let ok: String = conn.query_row(
-            "PRAGMA integrity_check;",
-            [],
-            |row| row.get(0),
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        let ok: String = conn
+            .query_row("PRAGMA integrity_check;", [], |row| row.get(0))
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
         if ok != "ok" {
             return Err(StoreError::IntegrityCheckFailed);
@@ -297,14 +293,19 @@ impl Store {
 
     /// 保留中の全マイグレーションを実行する。
     pub async fn migrate(&self) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         // 現在のバージョンを確認
-        let version: i64 = conn.query_row(
-            "SELECT COALESCE(MAX(version), -1) FROM schema_migrations;",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(-1);
+        let version: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(version), -1) FROM schema_migrations;",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(-1);
 
         if version < 0 {
             // V0 を適用
@@ -322,14 +323,17 @@ impl Store {
     /// 不変の監査ログにエントリを追加する。
     pub async fn audit(
         &self,
-        account_id:  Option<&str>,
-        event_type:  &str,
-        payload:     &serde_json::Value,
+        account_id: Option<&str>,
+        event_type: &str,
+        payload: &serde_json::Value,
     ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
-        let payload_json = serde_json::to_string(payload)
-            .map_err(|e| StoreError::Db(e.to_string()))?;
+        let payload_json =
+            serde_json::to_string(payload).map_err(|e| StoreError::Db(e.to_string()))?;
 
         // prev_hash 取得と INSERT を EXCLUSIVE トランザクションで原子化する。
         // これにより並行 audit() 呼び出しがハッシュチェーンを破損しない。
@@ -337,27 +341,35 @@ impl Store {
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let result = (|| -> Result<(), StoreError> {
-            let prev_hash: String = conn.query_row(
-                "SELECT COALESCE(hash, '') FROM audit_log ORDER BY seq DESC LIMIT 1;",
-                [],
-                |row| row.get(0),
-            ).unwrap_or_default();
+            let prev_hash: String = conn
+                .query_row(
+                    "SELECT COALESCE(hash, '') FROM audit_log ORDER BY seq DESC LIMIT 1;",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or_default();
 
             // ハッシュ計算: SHA-256(prev_hash NUL event_type NUL payload_json)
             // NUL 区切りにより event_type/payload 境界の曖昧性を排除する。
-            let hash = sha256_hex_fields(&[prev_hash.as_bytes(), event_type.as_bytes(), payload_json.as_bytes()]);
+            let hash = sha256_hex_fields(&[
+                prev_hash.as_bytes(),
+                event_type.as_bytes(),
+                payload_json.as_bytes(),
+            ]);
 
             conn.execute(
                 "INSERT INTO audit_log (account_id, event_type, payload_json, prev_hash, hash)
                  VALUES (?1, ?2, ?3, ?4, ?5);",
                 params![account_id, event_type, payload_json, prev_hash, hash],
-            ).map_err(|e| StoreError::Db(e.to_string()))?;
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
             Ok(())
         })();
 
         if result.is_ok() {
-            conn.execute_batch("COMMIT;").map_err(|e| StoreError::Db(e.to_string()))?;
+            conn.execute_batch("COMMIT;")
+                .map_err(|e| StoreError::Db(e.to_string()))?;
         } else {
             let _ = conn.execute_batch("ROLLBACK;");
         }
@@ -367,7 +379,10 @@ impl Store {
 
     /// 監査ログのハッシュチェーンを検証する。
     pub async fn verify_audit_chain(&self) -> Result<bool, StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         let mut stmt = conn.prepare(
             "SELECT seq, event_type, payload_json, prev_hash, hash FROM audit_log ORDER BY seq;"
@@ -376,15 +391,17 @@ impl Store {
         let mut prev_hash = String::new();
         let mut valid = true;
 
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-            ))
-        }).map_err(|e| StoreError::Db(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
         for row in rows {
             let (seq, event_type, payload_json, stored_prev, stored_hash) =
@@ -396,7 +413,11 @@ impl Store {
                 break;
             }
 
-            let expected = sha256_hex_fields(&[prev_hash.as_bytes(), event_type.as_bytes(), payload_json.as_bytes()]);
+            let expected = sha256_hex_fields(&[
+                prev_hash.as_bytes(),
+                event_type.as_bytes(),
+                payload_json.as_bytes(),
+            ]);
             if expected != stored_hash {
                 tracing::error!(seq, "監査ログのハッシュが不正");
                 return Err(StoreError::AuditChainBroken(seq));
@@ -420,27 +441,36 @@ impl Store {
             "INSERT OR IGNORE INTO accounts (id, email, identity_fp) \
              VALUES (?1, ?1 || '@jmap.local', ?2);",
             params![account_id, sha256_hex(account_id.as_bytes())],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
         Ok(())
     }
 
     /// メールボックス行が無ければ作る (`messages.mailbox_id` の FK 前提)。
     fn ensure_mailbox_sync(
-        conn: &Connection, account_id: &str, mailbox_id: &str,
+        conn: &Connection,
+        account_id: &str,
+        mailbox_id: &str,
     ) -> Result<(), StoreError> {
         conn.execute(
             "INSERT OR IGNORE INTO mailboxes (id, account_id, name, jmap_id) \
              VALUES (?1, ?2, ?1, ?1);",
             params![mailbox_id, account_id],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
         Ok(())
     }
 
     /// 設定値を取得する。
     pub async fn get_setting(
-        &self, account_id: &str, key: &str,
+        &self,
+        account_id: &str,
+        key: &str,
     ) -> Result<Option<String>, StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         let result = conn.query_row(
             "SELECT value FROM settings WHERE account_id = ?1 AND key = ?2;",
@@ -449,17 +479,23 @@ impl Store {
         );
 
         match result {
-            Ok(v)                                    => Ok(Some(v)),
+            Ok(v) => Ok(Some(v)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e)                                    => Err(StoreError::Db(e.to_string())),
+            Err(e) => Err(StoreError::Db(e.to_string())),
         }
     }
 
     /// 設定値を保存する。
     pub async fn set_setting(
-        &self, account_id: &str, key: &str, value: &str,
+        &self,
+        account_id: &str,
+        key: &str,
+        value: &str,
     ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         Self::ensure_account_sync(&conn, account_id)?;
 
         conn.execute(
@@ -485,7 +521,10 @@ impl Store {
         account_id: &str,
         email: &str,
     ) -> Result<Option<SenderProfile>, StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
         let result = conn.query_row(
             "SELECT message_count, topic_summary, \
@@ -500,15 +539,15 @@ impl Store {
                     topic_summary: row.get::<_, Option<String>>(1)?,
                     user_verified: row.get::<_, bool>(2)?,
                     first_seen_at: row.get::<_, Option<String>>(3)?,
-                    last_seen_at:  row.get::<_, Option<String>>(4)?,
+                    last_seen_at: row.get::<_, Option<String>>(4)?,
                 })
             },
         );
 
         match result {
-            Ok(p)                                    => Ok(Some(p)),
+            Ok(p) => Ok(Some(p)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e)                                    => Err(StoreError::Db(e.to_string())),
+            Err(e) => Err(StoreError::Db(e.to_string())),
         }
     }
 
@@ -522,9 +561,9 @@ impl Store {
     /// 管理できる (北極星 I1 を維持)。
     pub async fn record_received(
         &self,
-        account_id:        &str,
-        email:             &str,
-        display_name:      Option<&str>,
+        account_id: &str,
+        email: &str,
+        display_name: Option<&str>,
         new_topic_summary: Option<&str>,
     ) -> Result<(), StoreError> {
         // 入力バリデーション: NULL バイト・過剰長を拒否
@@ -537,7 +576,10 @@ impl Store {
             validate_text_field(ts, "topic_summary", 2000)?;
         }
 
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         Self::ensure_account_sync(&conn, account_id)?;
 
         let id = sha256_hex(format!("{account_id}:{email}").as_bytes());
@@ -555,7 +597,8 @@ impl Store {
                 topic_summary = COALESCE(?5, topic_summary), \
                 display_name  = COALESCE(?4, display_name);",
             params![id, account_id, email, display_name, new_topic_summary],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
 
         Ok(())
     }
@@ -566,15 +609,20 @@ impl Store {
     pub async fn mark_sender_verified(
         &self,
         account_id: &str,
-        email:      &str,
+        email: &str,
     ) -> Result<(), StoreError> {
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
 
-        let rows = conn.execute(
-            "UPDATE contacts SET trust_level = 'verified' \
+        let rows = conn
+            .execute(
+                "UPDATE contacts SET trust_level = 'verified' \
              WHERE account_id = ?1 AND email = ?2;",
-            params![account_id, email],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+                params![account_id, email],
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
         if rows == 0 {
             return Err(StoreError::Db(format!("送信者が見つかりません: {email}")));
@@ -582,7 +630,6 @@ impl Store {
 
         Ok(())
     }
-
 }
 
 // ============================================================================
@@ -616,7 +663,11 @@ fn sha256_hex_fields(fields: &[&[u8]]) -> String {
 /// SQLite の TEXT 型は任意のバイト列を受け入れるが、
 /// NULL バイトは SQLite 関数で切り詰められる場合があり、
 /// downstream rendering でも問題を引き起こす可能性がある。
-fn validate_text_field(value: &str, field: &'static str, max_chars: usize) -> Result<(), StoreError> {
+fn validate_text_field(
+    value: &str,
+    field: &'static str,
+    max_chars: usize,
+) -> Result<(), StoreError> {
     if value.contains('\0') {
         return Err(StoreError::InvalidInput {
             field,
@@ -626,7 +677,11 @@ fn validate_text_field(value: &str, field: &'static str, max_chars: usize) -> Re
     if value.chars().count() > max_chars {
         return Err(StoreError::InvalidInput {
             field,
-            reason: format!("{} 文字以下でなければなりません (実際: {})", max_chars, value.chars().count()),
+            reason: format!(
+                "{} 文字以下でなければなりません (実際: {})",
+                max_chars,
+                value.chars().count()
+            ),
         });
     }
     Ok(())
@@ -686,20 +741,28 @@ mod tests {
     #[test]
     fn sqlcipher_パラメータが固定値を持つ() {
         assert_eq!(SqlCipherParams::PAGE_SIZE, 4096);
-        assert_eq!(SqlCipherParams::KDF_ITER,  256_000);
-        assert_eq!(SqlCipherParams::HMAC_ALG,  "HMAC_SHA512");
+        assert_eq!(SqlCipherParams::KDF_ITER, 256_000);
+        assert_eq!(SqlCipherParams::HMAC_ALG, "HMAC_SHA512");
     }
 
     #[test]
     fn スキーマが全テーブルを含む() {
         for t in &[
-            "accounts", "mailboxes", "messages", "attachments",
-            "mls_conversations", "contacts", "dlp_rules",
-            "audit_log", "settings", "schema_migrations",
+            "accounts",
+            "mailboxes",
+            "messages",
+            "attachments",
+            "mls_conversations",
+            "contacts",
+            "dlp_rules",
+            "audit_log",
+            "settings",
+            "schema_migrations",
         ] {
             assert!(
                 SCHEMA_V0.contains(&format!("CREATE TABLE IF NOT EXISTS {}", t)),
-                "テーブル {} が SCHEMA_V0 に存在しない", t
+                "テーブル {} が SCHEMA_V0 に存在しない",
+                t
             );
         }
     }
@@ -751,19 +814,28 @@ mod tests {
             "INSERT OR IGNORE INTO accounts (id, email, identity_fp) \
              VALUES (?1, ?1 || '@test.invalid', 'fp');",
             params![account_id],
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[tokio::test]
     async fn sender_profile_初回受信で作成される() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.record_received("acct1", "alice@corp.com", Some("Alice"), None).await.unwrap();
+        store
+            .record_received("acct1", "alice@corp.com", Some("Alice"), None)
+            .await
+            .unwrap();
 
-        let p = store.get_sender_profile("acct1", "alice@corp.com").await.unwrap();
+        let p = store
+            .get_sender_profile("acct1", "alice@corp.com")
+            .await
+            .unwrap();
         let p = p.expect("レコードが存在するはず");
         assert_eq!(p.message_count, 1);
         assert!(!p.user_verified);
@@ -773,29 +845,50 @@ mod tests {
     #[tokio::test]
     async fn sender_profile_受信回数が累積される() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
         for _ in 0..5 {
-            store.record_received("acct1", "bob@corp.com", None, None).await.unwrap();
+            store
+                .record_received("acct1", "bob@corp.com", None, None)
+                .await
+                .unwrap();
         }
 
-        let p = store.get_sender_profile("acct1", "bob@corp.com").await.unwrap().unwrap();
+        let p = store
+            .get_sender_profile("acct1", "bob@corp.com")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(p.message_count, 5);
     }
 
     #[tokio::test]
     async fn sender_profile_topic_summaryを更新できる() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.record_received("acct1", "cfo@corp.com", None, None).await.unwrap();
-        store.record_received("acct1", "cfo@corp.com", None, Some("財務 予算 請求書")).await.unwrap();
+        store
+            .record_received("acct1", "cfo@corp.com", None, None)
+            .await
+            .unwrap();
+        store
+            .record_received("acct1", "cfo@corp.com", None, Some("財務 予算 請求書"))
+            .await
+            .unwrap();
 
-        let p = store.get_sender_profile("acct1", "cfo@corp.com").await.unwrap().unwrap();
+        let p = store
+            .get_sender_profile("acct1", "cfo@corp.com")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(p.topic_summary.as_deref(), Some("財務 予算 請求書"));
         assert_eq!(p.message_count, 2);
     }
@@ -803,41 +896,77 @@ mod tests {
     #[tokio::test]
     async fn sender_profile_verified_markで信頼済みになる() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.record_received("acct1", "dave@corp.com", None, None).await.unwrap();
-        store.mark_sender_verified("acct1", "dave@corp.com").await.unwrap();
+        store
+            .record_received("acct1", "dave@corp.com", None, None)
+            .await
+            .unwrap();
+        store
+            .mark_sender_verified("acct1", "dave@corp.com")
+            .await
+            .unwrap();
 
-        let p = store.get_sender_profile("acct1", "dave@corp.com").await.unwrap().unwrap();
+        let p = store
+            .get_sender_profile("acct1", "dave@corp.com")
+            .await
+            .unwrap()
+            .unwrap();
         assert!(p.user_verified);
     }
 
     #[tokio::test]
     async fn sender_profile_存在しない場合none() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
 
-        let p = store.get_sender_profile("acct1", "nobody@corp.com").await.unwrap();
+        let p = store
+            .get_sender_profile("acct1", "nobody@corp.com")
+            .await
+            .unwrap();
         assert!(p.is_none());
     }
 
     #[tokio::test]
     async fn sender_profile_アカウント分離() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
         seed_account(&store, "acct2").await;
 
-        store.record_received("acct1", "shared@corp.com", None, None).await.unwrap();
-        store.record_received("acct2", "shared@corp.com", None, None).await.unwrap();
-        store.record_received("acct2", "shared@corp.com", None, None).await.unwrap();
+        store
+            .record_received("acct1", "shared@corp.com", None, None)
+            .await
+            .unwrap();
+        store
+            .record_received("acct2", "shared@corp.com", None, None)
+            .await
+            .unwrap();
+        store
+            .record_received("acct2", "shared@corp.com", None, None)
+            .await
+            .unwrap();
 
-        let p1 = store.get_sender_profile("acct1", "shared@corp.com").await.unwrap().unwrap();
-        let p2 = store.get_sender_profile("acct2", "shared@corp.com").await.unwrap().unwrap();
+        let p1 = store
+            .get_sender_profile("acct1", "shared@corp.com")
+            .await
+            .unwrap()
+            .unwrap();
+        let p2 = store
+            .get_sender_profile("acct2", "shared@corp.com")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(p1.message_count, 1);
         assert_eq!(p2.message_count, 2);
     }
@@ -845,10 +974,14 @@ mod tests {
     #[tokio::test]
     async fn record_received_rejects_null_byte_in_email() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
 
-        let result = store.record_received("acct1", "evil\x00@corp.com", None, None).await;
+        let result = store
+            .record_received("acct1", "evil\x00@corp.com", None, None)
+            .await;
         assert!(
             matches!(result, Err(StoreError::InvalidInput { field: "email", .. })),
             "NULL バイトを含むメールアドレスは拒否されるべき: {result:?}"
@@ -858,14 +991,24 @@ mod tests {
     #[tokio::test]
     async fn record_received_rejects_oversized_topic_summary() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
         let huge = "A".repeat(2001);
-        let result = store.record_received("acct1", "test@corp.com", None, Some(&huge)).await;
+        let result = store
+            .record_received("acct1", "test@corp.com", None, Some(&huge))
+            .await;
         assert!(
-            matches!(result, Err(StoreError::InvalidInput { field: "topic_summary", .. })),
+            matches!(
+                result,
+                Err(StoreError::InvalidInput {
+                    field: "topic_summary",
+                    ..
+                })
+            ),
             "2000 文字超の topic_summary は拒否されるべき: {result:?}"
         );
     }
@@ -899,7 +1042,7 @@ mod tests {
     fn sha256_fields_boundary_not_ambiguous() {
         // ("AB", "CD") と ("A", "BCD") は異なるハッシュになること
         let h1 = sha256_hex_fields(&[b"prev", b"AB", b"CD"]);
-        let h2 = sha256_hex_fields(&[b"prev", b"A",  b"BCD"]);
+        let h2 = sha256_hex_fields(&[b"prev", b"A", b"BCD"]);
         assert_ne!(h1, h2, "フィールド境界の曖昧性が存在する");
     }
 
@@ -912,7 +1055,7 @@ mod tests {
 
     #[test]
     fn sha256_fields_empty_prev_hash_distinct_from_nonempty() {
-        let h1 = sha256_hex_fields(&[b"",     b"EV", b"payload"]);
+        let h1 = sha256_hex_fields(&[b"", b"EV", b"payload"]);
         let h2 = sha256_hex_fields(&[b"hash", b"EV", b"payload"]);
         assert_ne!(h1, h2);
     }
@@ -920,11 +1063,16 @@ mod tests {
     #[tokio::test]
     async fn audit_chain_verify_catches_hash_mismatch() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.audit(Some("acct1"), "LOGIN", &serde_json::json!({"ok": true})).await.unwrap();
+        store
+            .audit(Some("acct1"), "LOGIN", &serde_json::json!({"ok": true}))
+            .await
+            .unwrap();
 
         // チェーンが健全な状態で検証
         let ok = store.verify_audit_chain().await.unwrap();
@@ -934,12 +1082,28 @@ mod tests {
     #[tokio::test]
     async fn audit_chain_two_entries_verify() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.audit(Some("acct1"), "LOGIN",  &serde_json::json!({"ip": "1.2.3.4"})).await.unwrap();
-        store.audit(Some("acct1"), "LOGOUT", &serde_json::json!({"session": "abc"})).await.unwrap();
+        store
+            .audit(
+                Some("acct1"),
+                "LOGIN",
+                &serde_json::json!({"ip": "1.2.3.4"}),
+            )
+            .await
+            .unwrap();
+        store
+            .audit(
+                Some("acct1"),
+                "LOGOUT",
+                &serde_json::json!({"session": "abc"}),
+            )
+            .await
+            .unwrap();
 
         let ok = store.verify_audit_chain().await.unwrap();
         assert!(ok);
@@ -953,7 +1117,10 @@ mod tests {
         use rusqlite::Connection;
         let conn = Connection::open_in_memory().unwrap();
         // 非 hex 文字列 (インジェクション試み)
-        let result = SqlCipherParams::apply(&conn, "'; SELECT 1; --                                             ");
+        let result = SqlCipherParams::apply(
+            &conn,
+            "'; SELECT 1; --                                             ",
+        );
         assert!(result.is_err(), "不正な key_hex は拒否されるべき");
         // 短すぎる
         let result2 = SqlCipherParams::apply(&conn, "deadbeef");
@@ -979,27 +1146,27 @@ mod tests {
 #[derive(Debug, Clone)]
 pub struct NewMessage {
     /// JMAP 側の ID (冪等性キーとして使う)。
-    pub jmap_id:     String,
+    pub jmap_id: String,
     /// 送信者アドレス。
-    pub from_addr:   String,
+    pub from_addr: String,
     /// 送信者表示名。
-    pub from_name:   Option<String>,
+    pub from_name: Option<String>,
     /// 宛先アドレス (addr-spec のみ。表示名は保存しない)。
     ///
     /// `to_addrs` 列はスキーマ作成時から NOT NULL で存在したが、
     /// 構造体にフィールドが無く常に `''` で書き込まれていたため
     /// 宛先情報が完全に消失していた (誤配検出・詳細表示の材料)。
-    pub to_addrs:    Vec<String>,
+    pub to_addrs: Vec<String>,
     /// 件名。
-    pub subject:     Option<String>,
+    pub subject: Option<String>,
     /// 本文プレビュー (一覧表示用)。
     pub body_preview: Option<String>,
     /// 受信時刻 (RFC 3339)。
     pub received_at: Option<String>,
     /// 既読か。
-    pub is_read:     bool,
+    pub is_read: bool,
     /// BEC スコア。
-    pub bec_score:   Option<f32>,
+    pub bec_score: Option<f32>,
     /// BEC 判定。
     pub bec_verdict: Option<String>,
 }
@@ -1008,25 +1175,25 @@ pub struct NewMessage {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct StoredMessage {
     /// 内部 ID。
-    pub id:           String,
+    pub id: String,
     /// 送信者アドレス。
-    pub from_addr:    String,
+    pub from_addr: String,
     /// 送信者表示名。
-    pub from_name:    Option<String>,
+    pub from_name: Option<String>,
     /// 宛先アドレス (addr-spec のみ。空配列は「未取得」を意味する)。
-    pub to_addrs:     Vec<String>,
+    pub to_addrs: Vec<String>,
     /// 件名。
-    pub subject:      Option<String>,
+    pub subject: Option<String>,
     /// 本文プレビュー。
     pub body_preview: Option<String>,
     /// 受信時刻 (RFC 3339)。
-    pub received_at:  Option<String>,
+    pub received_at: Option<String>,
     /// 既読か。
-    pub is_read:      bool,
+    pub is_read: bool,
     /// BEC スコア。
-    pub bec_score:    Option<f32>,
+    pub bec_score: Option<f32>,
     /// BEC 判定。
-    pub bec_verdict:  Option<String>,
+    pub bec_verdict: Option<String>,
 }
 
 /// `LIKE` パターンのメタ文字をエスケープする。
@@ -1064,20 +1231,31 @@ impl Store {
         validate_text_field(mailbox_id, "mailbox_id", 256)?;
         validate_text_field(&msg.jmap_id, "jmap_id", 256)?;
         validate_text_field(&msg.from_addr, "from_addr", 320)?;
-        if let Some(v) = &msg.from_name    { validate_text_field(v, "from_name", 256)?; }
-        if let Some(v) = &msg.subject      { validate_text_field(v, "subject", 2_000)?; }
-        if let Some(v) = &msg.body_preview { validate_text_field(v, "body_preview", 10_000)?; }
+        if let Some(v) = &msg.from_name {
+            validate_text_field(v, "from_name", 256)?;
+        }
+        if let Some(v) = &msg.subject {
+            validate_text_field(v, "subject", 2_000)?;
+        }
+        if let Some(v) = &msg.body_preview {
+            validate_text_field(v, "body_preview", 10_000)?;
+        }
         if msg.to_addrs.len() > 1_000 {
             return Err(StoreError::InvalidInput {
-                field:  "to_addrs",
+                field: "to_addrs",
                 reason: "宛先は 1,000 件まで".to_string(),
             });
         }
-        for addr in &msg.to_addrs { validate_text_field(addr, "to_addrs", 320)?; }
+        for addr in &msg.to_addrs {
+            validate_text_field(addr, "to_addrs", 320)?;
+        }
         let to_addrs_json = serde_json::to_string(&msg.to_addrs)
             .map_err(|e| StoreError::Db(format!("to_addrs のシリアライズに失敗: {e}")))?;
 
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         Self::ensure_account_sync(&conn, account_id)?;
         Self::ensure_mailbox_sync(&conn, account_id, mailbox_id)?;
         let id = sha256_hex_fields(&[account_id.as_bytes(), msg.jmap_id.as_bytes()]);
@@ -1101,11 +1279,22 @@ impl Store {
                 bec_verdict  = ?13, \
                 updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
             params![
-                id, account_id, mailbox_id, msg.jmap_id, msg.from_addr, msg.from_name,
-                to_addrs_json, msg.subject, msg.body_preview, msg.received_at,
-                i32::from(msg.is_read), msg.bec_score, msg.bec_verdict
+                id,
+                account_id,
+                mailbox_id,
+                msg.jmap_id,
+                msg.from_addr,
+                msg.from_name,
+                to_addrs_json,
+                msg.subject,
+                msg.body_preview,
+                msg.received_at,
+                i32::from(msg.is_read),
+                msg.bec_score,
+                msg.bec_verdict
             ],
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
 
         Ok(())
     }
@@ -1124,16 +1313,22 @@ impl Store {
         validate_text_field(mailbox_id, "mailbox_id", 256)?;
         let limit = limit.clamp(1, 500);
 
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, from_addr, from_name, subject, body_preview, \
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, from_addr, from_name, subject, body_preview, \
                     received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
              ORDER BY received_at DESC LIMIT ?3;",
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
-        let rows = stmt.query_map(params![account_id, mailbox_id, limit], row_to_stored)
+        let rows = stmt
+            .query_map(params![account_id, mailbox_id, limit], row_to_stored)
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1164,9 +1359,13 @@ impl Store {
         let limit = limit.clamp(1, 500);
         let pattern = format!("%{}%", escape_like(query));
 
-        let conn = self.conn.lock().map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-        let mut stmt = conn.prepare(
-            "SELECT id, from_addr, from_name, subject, body_preview, \
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, from_addr, from_name, subject, body_preview, \
                     received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND is_deleted = 0 \
@@ -1175,9 +1374,11 @@ impl Store {
                   OR from_name    LIKE ?2 ESCAPE '\\' \
                   OR body_preview LIKE ?2 ESCAPE '\\' ) \
              ORDER BY received_at DESC LIMIT ?3;",
-        ).map_err(|e| StoreError::Db(e.to_string()))?;
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
 
-        let rows = stmt.query_map(params![account_id, pattern, limit], row_to_stored)
+        let rows = stmt
+            .query_map(params![account_id, pattern, limit], row_to_stored)
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         let mut out = Vec::new();
@@ -1191,18 +1392,19 @@ impl Store {
 /// `messages` の 1 行を `StoredMessage` に変換する。
 fn row_to_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> {
     Ok(StoredMessage {
-        id:           row.get(0)?,
-        from_addr:    row.get(1)?,
-        from_name:    row.get(2)?,
-        subject:      row.get(3)?,
+        id: row.get(0)?,
+        from_addr: row.get(1)?,
+        from_name: row.get(2)?,
+        subject: row.get(3)?,
         body_preview: row.get(4)?,
-        received_at:  row.get(5)?,
-        is_read:      row.get::<_, i32>(6)? != 0,
-        bec_score:    row.get(7)?,
-        bec_verdict:  row.get(8)?,
+        received_at: row.get(5)?,
+        is_read: row.get::<_, i32>(6)? != 0,
+        bec_score: row.get(7)?,
+        bec_verdict: row.get(8)?,
         // 過去の行は `''` が入っている (列はあったが常に空で書かれていた)。
         // パース不能は「宛先不明」として空配列に倒す。
-        to_addrs:     row.get::<_, String>(9)
+        to_addrs: row
+            .get::<_, String>(9)
             .ok()
             .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
             .unwrap_or_default(),
@@ -1220,21 +1422,22 @@ mod message_persistence_tests {
             "INSERT OR IGNORE INTO accounts (id, email, identity_fp) \
              VALUES (?1, ?1 || '@test.invalid', 'fp');",
             params![account_id],
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     fn msg(jmap_id: &str, subject: &str) -> NewMessage {
         NewMessage {
-            jmap_id:      jmap_id.to_string(),
-            from_addr:    "alice@corp.com".to_string(),
-            from_name:    Some("Alice".to_string()),
-            to_addrs:     vec!["bob@corp.com".to_string()],
-            subject:      Some(subject.to_string()),
+            jmap_id: jmap_id.to_string(),
+            from_addr: "alice@corp.com".to_string(),
+            from_name: Some("Alice".to_string()),
+            to_addrs: vec!["bob@corp.com".to_string()],
+            subject: Some(subject.to_string()),
             body_preview: Some("hello".to_string()),
-            received_at:  Some("2026-09-15T00:00:00Z".to_string()),
-            is_read:      false,
-            bec_score:    None,
-            bec_verdict:  None,
+            received_at: Some("2026-09-15T00:00:00Z".to_string()),
+            is_read: false,
+            bec_score: None,
+            bec_verdict: None,
         }
     }
 
@@ -1244,19 +1447,30 @@ mod message_persistence_tests {
     #[tokio::test]
     async fn save_message_はメールボックス移動を上書き保存できる() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.save_message("acct1", "inbox", &msg("jmap-1", "件名A")).await.unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
         let inbox_before = store.list_messages("acct1", "inbox", 10).await.unwrap();
         assert_eq!(inbox_before.len(), 1);
 
         // 同じ jmap_id を別フォルダで再保存 (フォルダ移動の再同期)。
-        store.save_message("acct1", "archive", &msg("jmap-1", "件名A")).await.unwrap();
+        store
+            .save_message("acct1", "archive", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
 
         let inbox_after = store.list_messages("acct1", "inbox", 10).await.unwrap();
-        assert!(inbox_after.is_empty(), "移動後は旧フォルダに残ってはいけない");
+        assert!(
+            inbox_after.is_empty(),
+            "移動後は旧フォルダに残ってはいけない"
+        );
 
         let archive_after = store.list_messages("acct1", "archive", 10).await.unwrap();
         assert_eq!(archive_after.len(), 1, "移動先フォルダに反映されるべき");
@@ -1267,16 +1481,24 @@ mod message_persistence_tests {
     #[tokio::test]
     async fn save_message_は送信者情報の変更も上書き保存できる() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.save_message("acct1", "inbox", &msg("jmap-1", "件名A")).await.unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
 
         let mut updated = msg("jmap-1", "件名A");
         updated.from_addr = "bob@corp.com".to_string();
         updated.from_name = Some("Bob".to_string());
-        store.save_message("acct1", "inbox", &updated).await.unwrap();
+        store
+            .save_message("acct1", "inbox", &updated)
+            .await
+            .unwrap();
 
         let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
         assert_eq!(rows.len(), 1);
@@ -1291,11 +1513,16 @@ mod message_persistence_tests {
     #[tokio::test]
     async fn save_message_は宛先を往復保存できる() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
-        store.save_message("acct1", "inbox", &msg("jmap-1", "件名A")).await.unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
         let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].to_addrs, vec!["bob@corp.com".to_string()]);
@@ -1303,7 +1530,10 @@ mod message_persistence_tests {
         // 宛先が変わって再保存された場合も追従する。
         let mut updated = msg("jmap-1", "件名A");
         updated.to_addrs = vec!["carol@corp.com".to_string(), "dan@corp.com".to_string()];
-        store.save_message("acct1", "inbox", &updated).await.unwrap();
+        store
+            .save_message("acct1", "inbox", &updated)
+            .await
+            .unwrap();
         let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
         assert_eq!(rows[0].to_addrs.len(), 2);
         assert_eq!(rows[0].to_addrs[0], "carol@corp.com");
@@ -1314,22 +1544,31 @@ mod message_persistence_tests {
     #[tokio::test]
     async fn list_messages_は過去の空宛先行を空配列として読める() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64)).await.unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
         store.migrate().await.unwrap();
         seed_account(&store, "acct1").await;
 
         // 旧実装の書き込み形 (to_addrs = '') を再現する。
-        store.save_message("acct1", "inbox", &msg("jmap-legacy", "旧件名")).await.unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-legacy", "旧件名"))
+            .await
+            .unwrap();
         {
             let conn = store.conn.lock().unwrap();
             conn.execute(
                 "UPDATE messages SET to_addrs = '' WHERE jmap_id = 'jmap-legacy';",
                 [],
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].to_addrs.is_empty(), "'' は宛先不明として空配列に倒す");
+        assert!(
+            rows[0].to_addrs.is_empty(),
+            "'' は宛先不明として空配列に倒す"
+        );
     }
 }

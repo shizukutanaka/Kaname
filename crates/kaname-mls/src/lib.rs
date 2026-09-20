@@ -38,21 +38,29 @@ mod mls_types {
 
     /// 不透明な MLS グループ状態 blob。openmls がフォーマットを所有。
     #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-    pub struct GroupState { pub bytes: Vec<u8> }
+    pub struct GroupState {
+        pub bytes: Vec<u8>,
+    }
 
     /// MLS Welcome メッセージ (RFC 9420 §11)。
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[allow(dead_code)]
-    pub struct Welcome { pub bytes: Vec<u8> }
+    pub struct Welcome {
+        pub bytes: Vec<u8>,
+    }
 
     /// MLS Application/Commit メッセージ (RFC 9420 §12)。
     #[derive(Clone, Debug, Serialize, Deserialize)]
     #[allow(dead_code)]
-    pub struct MlsMessage { pub bytes: Vec<u8> }
+    pub struct MlsMessage {
+        pub bytes: Vec<u8>,
+    }
 
     /// KeyPackage: グループ追加に使われる 1 回限りの鍵素材。
     #[derive(Clone, Debug, Serialize, Deserialize)]
-    pub struct KeyPackage { pub bytes: Vec<u8> }
+    pub struct KeyPackage {
+        pub bytes: Vec<u8>,
+    }
 
     /// 暗号スイート識別子。
     #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -73,8 +81,8 @@ use mls_types::*;
 /// Kaname ユーザーの長期 MLS アイデンティティ。
 #[derive(Clone, Debug)]
 pub struct Identity {
-    pub email:               EmailAddress,
-    pub display_name:        Option<String>,
+    pub email: EmailAddress,
+    pub display_name: Option<String>,
     pub default_ciphersuite: Ciphersuite,
 }
 
@@ -130,7 +138,9 @@ impl EmailAddress {
         Ok(Self(s))
     }
     #[must_use]
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl std::fmt::Display for EmailAddress {
@@ -146,11 +156,11 @@ impl std::fmt::Display for EmailAddress {
 /// MLS グループとして表現された会話。
 #[derive(Debug)]
 pub struct Conversation {
-    pub id:      ConversationId,
-    pub kind:    ConversationKind,
+    pub id: ConversationId,
+    pub kind: ConversationKind,
     pub members: Vec<EmailAddress>,
-    state:       GroupState,
-    pub epoch:   u64,
+    state: GroupState,
+    pub epoch: u64,
     /// 安全番号 (ADR-017: 会話ごと、エポック変化でリセット)。
     pub safety_number: Option<String>,
 }
@@ -195,13 +205,13 @@ pub enum ConversationKind {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Envelope {
     pub conversation_id: ConversationId,
-    pub epoch:           u64,
-    pub kind:            EnvelopeKind,
-    pub ciphersuite:     Ciphersuite,
+    pub epoch: u64,
+    pub kind: EnvelopeKind,
+    pub ciphersuite: Ciphersuite,
     /// MLS メッセージのワイヤーバイト。
-    pub wire_bytes:      Vec<u8>,
+    pub wire_bytes: Vec<u8>,
     /// 新メンバー向けの Welcome (オプション)。
-    pub welcome:         Option<Vec<u8>>,
+    pub welcome: Option<Vec<u8>>,
 }
 
 /// エンベロープの種類。
@@ -223,8 +233,7 @@ impl Envelope {
 
     /// CBOR にシリアライズする (MIME パートのバイト列)。
     pub fn to_cbor(&self) -> Result<Vec<u8>, MlsMailError> {
-        serde_json::to_vec(self)
-            .map_err(|e| MlsMailError::Serialization(e.to_string()))
+        serde_json::to_vec(self).map_err(|e| MlsMailError::Serialization(e.to_string()))
     }
 
     /// MIME パートからパースする。
@@ -235,11 +244,12 @@ impl Envelope {
         const MAX_ENVELOPE_BYTES: usize = 4 * 1024 * 1024;
         if bytes.len() > MAX_ENVELOPE_BYTES {
             return Err(MlsMailError::Malformed(format!(
-                "envelope too large: {} bytes (max {})", bytes.len(), MAX_ENVELOPE_BYTES
+                "envelope too large: {} bytes (max {})",
+                bytes.len(),
+                MAX_ENVELOPE_BYTES
             )));
         }
-        serde_json::from_slice(bytes)
-            .map_err(|e| MlsMailError::Malformed(e.to_string()))
+        serde_json::from_slice(bytes).map_err(|e| MlsMailError::Malformed(e.to_string()))
     }
 }
 
@@ -255,8 +265,8 @@ pub enum IncomingResult {
     /// メンバーシップ変更。
     MembershipChange {
         conversation_id: ConversationId,
-        added:           Vec<EmailAddress>,
-        removed:         Vec<EmailAddress>,
+        added: Vec<EmailAddress>,
+        removed: Vec<EmailAddress>,
     },
     /// 新しい会話に参加した (Welcome を処理した)。
     WelcomeJoined(Conversation),
@@ -291,7 +301,11 @@ pub struct KeyPackageCache {
 
 impl KeyPackageCache {
     /// 新規インスタンスを作成する。
-    pub fn new() -> Self { Self { cache: BTreeMap::new() } }
+    pub fn new() -> Self {
+        Self {
+            cache: BTreeMap::new(),
+        }
+    }
 
     /// キーパッケージをキャッシュに追加する。
     pub fn add(&mut self, email: EmailAddress, kp: KeyPackage) {
@@ -311,19 +325,26 @@ impl KeyPackageCache {
     #[must_use]
     pub fn consume(&mut self, email: &EmailAddress) -> Option<KeyPackage> {
         let pkgs = self.cache.get_mut(email)?;
-        if pkgs.is_empty() { return None; }
+        if pkgs.is_empty() {
+            return None;
+        }
         Some(pkgs.remove(0))
     }
 
     /// キーパッケージが存在するかチェックする。
     #[must_use]
     pub fn has(&self, email: &EmailAddress) -> bool {
-        self.cache.get(email).map(|v| !v.is_empty()).unwrap_or(false)
+        self.cache
+            .get(email)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
     }
 }
 
 impl Default for KeyPackageCache {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ============================================================================
@@ -383,7 +404,7 @@ impl MlsMailClient {
     ///   3. エンベロープを構築して返す
     pub fn start_one_to_one(
         &mut self,
-        recipient_email:       EmailAddress,
+        recipient_email: EmailAddress,
         recipient_key_package: KeyPackage,
     ) -> Result<(Conversation, Envelope), MlsMailError> {
         // openmls 本番実装:
@@ -428,22 +449,20 @@ impl MlsMailClient {
                 "group:{}+{}",
                 self.identity.email.as_str(),
                 recipient_email.as_str()
-            ).into_bytes(),
+            )
+            .into_bytes(),
         };
 
         // 安全番号を生成 (本番: SHA-256 of public keys + epoch)
-        let safety_number = compute_safety_number(
-            self.identity.email.as_str(),
-            recipient_email.as_str(),
-            0,
-        );
+        let safety_number =
+            compute_safety_number(self.identity.email.as_str(), recipient_email.as_str(), 0);
 
         let conversation = Conversation {
-            id:            conv_id.clone(),
-            kind:          ConversationKind::OneToOne,
-            members:       vec![self.identity.email.clone(), recipient_email],
-            state:         group_state.clone(),
-            epoch:         0,
+            id: conv_id.clone(),
+            kind: ConversationKind::OneToOne,
+            members: vec![self.identity.email.clone(), recipient_email],
+            state: group_state.clone(),
+            epoch: 0,
             safety_number: Some(safety_number),
         };
 
@@ -457,11 +476,11 @@ impl MlsMailClient {
 
         let envelope = Envelope {
             conversation_id: conv_id,
-            epoch:           0,
-            kind:            EnvelopeKind::Commit,
-            ciphersuite:     self.identity.default_ciphersuite,
-            wire_bytes:      vec![0x01, 0x00],  // モックの MLS Commit
-            welcome:         Some(recipient_key_package.bytes),
+            epoch: 0,
+            kind: EnvelopeKind::Commit,
+            ciphersuite: self.identity.default_ciphersuite,
+            wire_bytes: vec![0x01, 0x00], // モックの MLS Commit
+            welcome: Some(recipient_key_package.bytes),
         };
 
         tracing::info!(
@@ -475,8 +494,8 @@ impl MlsMailClient {
     /// 既存のチーム会話にメンバーを追加する。
     pub fn add_member(
         &mut self,
-        conversation:           &mut Conversation,
-        new_member_email:       EmailAddress,
+        conversation: &mut Conversation,
+        new_member_email: EmailAddress,
         new_member_key_package: KeyPackage,
     ) -> Result<Envelope, MlsMailError> {
         match &conversation.kind {
@@ -502,7 +521,10 @@ impl MlsMailClient {
         // モック実装
         conversation.members.push(new_member_email.clone());
         conversation.epoch += 1;
-        conversation.state.bytes.extend_from_slice(&new_member_key_package.bytes);
+        conversation
+            .state
+            .bytes
+            .extend_from_slice(&new_member_key_package.bytes);
 
         tracing::info!(
             conv_id = %conversation.id.as_hex(),
@@ -513,11 +535,11 @@ impl MlsMailClient {
 
         Ok(Envelope {
             conversation_id: conversation.id.clone(),
-            epoch:           conversation.epoch,
-            kind:            EnvelopeKind::Commit,
-            ciphersuite:     self.identity.default_ciphersuite,
-            wire_bytes:      new_member_key_package.bytes.clone(),
-            welcome:         Some(new_member_key_package.bytes),
+            epoch: conversation.epoch,
+            kind: EnvelopeKind::Commit,
+            ciphersuite: self.identity.default_ciphersuite,
+            wire_bytes: new_member_key_package.bytes.clone(),
+            welcome: Some(new_member_key_package.bytes),
         })
     }
 
@@ -525,7 +547,7 @@ impl MlsMailClient {
     pub fn encrypt_message(
         &mut self,
         conversation: &mut Conversation,
-        plaintext:    &[u8],
+        plaintext: &[u8],
     ) -> Result<Envelope, MlsMailError> {
         if plaintext.is_empty() {
             return Err(MlsMailError::EmptyPlaintext);
@@ -536,7 +558,7 @@ impl MlsMailClient {
         if plaintext.len() > MAX_PLAINTEXT_BYTES {
             return Err(MlsMailError::PayloadTooLarge {
                 size: plaintext.len(),
-                max:  MAX_PLAINTEXT_BYTES,
+                max: MAX_PLAINTEXT_BYTES,
             });
         }
 
@@ -565,11 +587,11 @@ impl MlsMailClient {
 
         Ok(Envelope {
             conversation_id: conversation.id.clone(),
-            epoch:           conversation.epoch,
-            kind:            EnvelopeKind::Application,
-            ciphersuite:     self.identity.default_ciphersuite,
+            epoch: conversation.epoch,
+            kind: EnvelopeKind::Application,
+            ciphersuite: self.identity.default_ciphersuite,
             wire_bytes,
-            welcome:         None,
+            welcome: None,
         })
     }
 
@@ -611,19 +633,24 @@ impl MlsMailClient {
                 );
 
                 let conversation = Conversation {
-                    id:            envelope.conversation_id.clone(),
-                    kind:          ConversationKind::OneToOne,
-                    members:       vec![self.identity.email.clone()],
-                    state:         GroupState { bytes: envelope.wire_bytes.clone() },
-                    epoch:         envelope.epoch,
+                    id: envelope.conversation_id.clone(),
+                    kind: ConversationKind::OneToOne,
+                    members: vec![self.identity.email.clone()],
+                    state: GroupState {
+                        bytes: envelope.wire_bytes.clone(),
+                    },
+                    epoch: envelope.epoch,
                     safety_number: Some(safety_number),
                 };
 
                 self.conversations.insert(
                     envelope.conversation_id.clone(),
-                    GroupState { bytes: envelope.wire_bytes.clone() },
+                    GroupState {
+                        bytes: envelope.wire_bytes.clone(),
+                    },
                 );
-                self.epochs.insert(envelope.conversation_id.clone(), envelope.epoch);
+                self.epochs
+                    .insert(envelope.conversation_id.clone(), envelope.epoch);
 
                 tracing::info!(
                     conv_id = %envelope.conversation_id.as_hex(),
@@ -643,18 +670,23 @@ impl MlsMailClient {
                         envelope.epoch,
                     );
                     let conversation = Conversation {
-                        id:            envelope.conversation_id.clone(),
-                        kind:          ConversationKind::OneToOne,
-                        members:       vec![self.identity.email.clone()],
-                        state:         GroupState { bytes: envelope.wire_bytes.clone() },
-                        epoch:         envelope.epoch,
+                        id: envelope.conversation_id.clone(),
+                        kind: ConversationKind::OneToOne,
+                        members: vec![self.identity.email.clone()],
+                        state: GroupState {
+                            bytes: envelope.wire_bytes.clone(),
+                        },
+                        epoch: envelope.epoch,
                         safety_number: Some(safety_number),
                     };
                     self.conversations.insert(
                         envelope.conversation_id.clone(),
-                        GroupState { bytes: envelope.wire_bytes.clone() },
+                        GroupState {
+                            bytes: envelope.wire_bytes.clone(),
+                        },
                     );
-                    self.epochs.insert(envelope.conversation_id.clone(), envelope.epoch);
+                    self.epochs
+                        .insert(envelope.conversation_id.clone(), envelope.epoch);
                     return Ok(IncomingResult::WelcomeJoined(conversation));
                 }
 
@@ -670,13 +702,14 @@ impl MlsMailClient {
 
                 if let Some(state) = self.conversations.get_mut(&envelope.conversation_id) {
                     state.bytes.extend_from_slice(&envelope.wire_bytes);
-                    self.epochs.insert(envelope.conversation_id.clone(), envelope.epoch);
+                    self.epochs
+                        .insert(envelope.conversation_id.clone(), envelope.epoch);
                 }
 
                 Ok(IncomingResult::MembershipChange {
                     conversation_id: envelope.conversation_id.clone(),
-                    added:           vec![],
-                    removed:         vec![],
+                    added: vec![],
+                    removed: vec![],
                 })
             }
 
@@ -692,7 +725,7 @@ impl MlsMailClient {
                 // 順序エラーまたは偽造メッセージの可能性がある。
                 if !self.conversations.contains_key(&envelope.conversation_id) {
                     return Err(MlsMailError::UnknownConversation(
-                        envelope.conversation_id.as_hex()
+                        envelope.conversation_id.as_hex(),
                     ));
                 }
 
@@ -731,7 +764,9 @@ impl MlsMailClient {
 
     /// KeyPackage キャッシュにアクセスする。
     #[must_use]
-    pub fn kp_cache(&mut self) -> &mut KeyPackageCache { &mut self.kp_cache }
+    pub fn kp_cache(&mut self) -> &mut KeyPackageCache {
+        &mut self.kp_cache
+    }
 
     /// 新しい KeyPackage を生成する (KPD にアップロード用)。
     pub fn generate_key_package(&self) -> KeyPackage {
@@ -754,14 +789,20 @@ impl MlsMailClient {
     /// 受信者ポリシーを決定する (KPD キャッシュを参照)。
     pub fn recipient_policy(&self, email: &EmailAddress) -> RecipientPolicy {
         if let Some(kp) = self.kp_cache.cache.get(email).and_then(|v| v.first()) {
-            return RecipientPolicy::KanameMls { key_package: kp.clone() };
+            return RecipientPolicy::KanameMls {
+                key_package: kp.clone(),
+            };
         }
 
         if is_kaname_domain(email.as_str()) {
-            return RecipientPolicy::KanameNeedsKeyPackage { email: email.clone() };
+            return RecipientPolicy::KanameNeedsKeyPackage {
+                email: email.clone(),
+            };
         }
 
-        RecipientPolicy::ClassicSmtp { email: email.clone() }
+        RecipientPolicy::ClassicSmtp {
+            email: email.clone(),
+        }
     }
 }
 
@@ -872,14 +913,16 @@ mod tests {
 
     fn make_client(email: &str) -> MlsMailClient {
         MlsMailClient::new(Identity {
-            email:               EmailAddress::parse(email).unwrap(),
-            display_name:        Some("テスト".into()),
+            email: EmailAddress::parse(email).unwrap(),
+            display_name: Some("テスト".into()),
             default_ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
         })
     }
 
     fn dummy_kp() -> KeyPackage {
-        KeyPackage { bytes: b"dummy_key_package_bytes_v1".to_vec() }
+        KeyPackage {
+            bytes: b"dummy_key_package_bytes_v1".to_vec(),
+        }
     }
 
     #[test]
@@ -893,8 +936,10 @@ mod tests {
     fn email_address_rejects_internal_whitespace_in_domain() {
         // 修正前は先頭/末尾の空白しかチェックしておらず、
         // "user@ex ample.com" のような内部空白付きドメインが通過していた。
-        assert!(EmailAddress::parse("user@ex ample.com").is_err(),
-            "ドメイン内部の空白は拒否されるべき");
+        assert!(
+            EmailAddress::parse("user@ex ample.com").is_err(),
+            "ドメイン内部の空白は拒否されるべき"
+        );
         assert!(EmailAddress::parse("user@example.com").is_ok());
     }
 
@@ -911,7 +956,7 @@ mod tests {
     #[test]
     fn one_to_one_会話の開始() {
         let mut alice = make_client("alice@kaname.app");
-        let bob_kp    = dummy_kp();
+        let bob_kp = dummy_kp();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
 
         let (conv, envelope) = alice.start_one_to_one(bob_email.clone(), bob_kp).unwrap();
@@ -926,9 +971,9 @@ mod tests {
     #[test]
     fn メッセージの暗号化と復号() {
         let mut alice = make_client("alice@kaname.app");
-        let mut bob   = make_client("bob@kaname.app");
+        let mut bob = make_client("bob@kaname.app");
 
-        let bob_kp    = dummy_kp();
+        let bob_kp = dummy_kp();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut alice_conv, welcome_env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
@@ -967,13 +1012,13 @@ mod tests {
     #[test]
     fn team_への追加() {
         let mut admin = make_client("admin@kaname.app");
-        let alice_kp  = dummy_kp();
+        let alice_kp = dummy_kp();
         let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
 
         let (mut conv, _) = admin.start_one_to_one(alice_email, alice_kp).unwrap();
 
         // 1:1 に追加しようとするとエラー
-        let bob_kp    = dummy_kp();
+        let bob_kp = dummy_kp();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         assert!(admin.add_member(&mut conv, bob_email, bob_kp).is_err());
     }
@@ -982,11 +1027,11 @@ mod tests {
     fn envelopeのcbor変換() {
         let env = Envelope {
             conversation_id: ConversationId([1u8; 32]),
-            epoch:           42,
-            kind:            EnvelopeKind::Application,
-            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
-            wire_bytes:      vec![1, 2, 3],
-            welcome:         None,
+            epoch: 42,
+            kind: EnvelopeKind::Application,
+            ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes: vec![1, 2, 3],
+            welcome: None,
         };
         let bytes = env.to_cbor().unwrap();
         let restored = Envelope::from_cbor(&bytes).unwrap();
@@ -998,8 +1043,12 @@ mod tests {
     fn key_package_cacheが消費動作する() {
         let mut cache = KeyPackageCache::new();
         let email = EmailAddress::parse("alice@kaname.app").unwrap();
-        let kp1 = KeyPackage { bytes: b"kp1".to_vec() };
-        let kp2 = KeyPackage { bytes: b"kp2".to_vec() };
+        let kp1 = KeyPackage {
+            bytes: b"kp1".to_vec(),
+        };
+        let kp2 = KeyPackage {
+            bytes: b"kp2".to_vec(),
+        };
 
         cache.add(email.clone(), kp1.clone());
         cache.add(email.clone(), kp2.clone());
@@ -1059,8 +1108,11 @@ mod tests {
         // 長さプレフィックスなしの実装では "alice\x00" + "bob" == "alice" + "\x00bob"
         // 長さプレフィックスありなら必ず異なる
         let with_null = compute_safety_number("alice\x00", "bob@y.com", 0);
-        let without  = compute_safety_number("alice", "\x00bob@y.com", 0);
-        assert_ne!(with_null, without, "長さ混同攻撃を防ぐ: フィールド境界が明確であること");
+        let without = compute_safety_number("alice", "\x00bob@y.com", 0);
+        assert_ne!(
+            with_null, without,
+            "長さ混同攻撃を防ぐ: フィールド境界が明確であること"
+        );
     }
 
     #[test]
@@ -1090,8 +1142,8 @@ mod tests {
     #[test]
     fn empty_平文の暗号化を拒否する() {
         let mut client = make_client("alice@kaname.app");
-        let bob_kp     = dummy_kp();
-        let bob_email  = EmailAddress::parse("bob@kaname.app").unwrap();
+        let bob_kp = dummy_kp();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut conv, _) = client.start_one_to_one(bob_email, bob_kp).unwrap();
         assert!(client.encrypt_message(&mut conv, b"").is_err());
     }
@@ -1106,13 +1158,22 @@ mod tests {
 
     #[test]
     fn email_空ローカルパートを拒否() {
-        assert!(EmailAddress::parse("@example.com").is_err(), "空ローカルパート");
-        assert!(EmailAddress::parse(" @example.com").is_err(), "空白のみのローカルパート");
+        assert!(
+            EmailAddress::parse("@example.com").is_err(),
+            "空ローカルパート"
+        );
+        assert!(
+            EmailAddress::parse(" @example.com").is_err(),
+            "空白のみのローカルパート"
+        );
     }
 
     #[test]
     fn email_ドメインにドット必須() {
-        assert!(EmailAddress::parse("user@localhost").is_err(), "ドット無しドメイン");
+        assert!(
+            EmailAddress::parse("user@localhost").is_err(),
+            "ドット無しドメイン"
+        );
         assert!(EmailAddress::parse("user@.com").is_err(), "先頭ドット");
         assert!(EmailAddress::parse("user@com.").is_err(), "末尾ドット");
         assert!(EmailAddress::parse("user@a..b.com").is_err(), "連続ドット");
@@ -1130,16 +1191,18 @@ mod tests {
     #[test]
     fn conversation_id_はcsprng_タイムスタンプ依存しない() {
         // 100 件生成して全て異なることを確認 (タイムスタンプXORなら同一ミリ秒で衝突)
-        let ids: std::collections::HashSet<[u8; 32]> = (0..100)
-            .map(|_| ConversationId::new_random().0)
-            .collect();
+        let ids: std::collections::HashSet<[u8; 32]> =
+            (0..100).map(|_| ConversationId::new_random().0).collect();
         assert_eq!(ids.len(), 100, "ConversationId に重複が発生した");
     }
 
     #[test]
     fn conversation_id_はゼロではない() {
         let id = ConversationId::new_random();
-        assert_ne!(id.0, [0u8; 32], "全ゼロの ConversationId は CSPRNG 障害を示す");
+        assert_ne!(
+            id.0, [0u8; 32],
+            "全ゼロの ConversationId は CSPRNG 障害を示す"
+        );
     }
 
     // ── Envelope サイズ制限テスト ─────────────────────────────────────────
@@ -1149,24 +1212,32 @@ mod tests {
         // 4 MB + 1 バイトのダミーデータ
         let huge = vec![0u8; 4 * 1024 * 1024 + 1];
         let result = Envelope::from_cbor(&huge);
-        assert!(result.is_err(), "4MB超のエンベロープは拒否されなければならない");
+        assert!(
+            result.is_err(),
+            "4MB超のエンベロープは拒否されなければならない"
+        );
         let err_str = result.unwrap_err().to_string();
-        assert!(err_str.contains("too large") || err_str.contains("malformed"),
-            "エラーメッセージが不適切: {err_str}");
+        assert!(
+            err_str.contains("too large") || err_str.contains("malformed"),
+            "エラーメッセージが不適切: {err_str}"
+        );
     }
 
     #[test]
     fn envelope_from_cbor_正常サイズは通す() {
         let env = Envelope {
             conversation_id: ConversationId([0u8; 32]),
-            epoch:           1,
-            kind:            EnvelopeKind::Application,
-            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
-            wire_bytes:      vec![0xAB; 1024],
-            welcome:         None,
+            epoch: 1,
+            kind: EnvelopeKind::Application,
+            ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes: vec![0xAB; 1024],
+            welcome: None,
         };
         let bytes = env.to_cbor().unwrap();
-        assert!(Envelope::from_cbor(&bytes).is_ok(), "正常サイズのエンベロープは受け入れる");
+        assert!(
+            Envelope::from_cbor(&bytes).is_ok(),
+            "正常サイズのエンベロープは受け入れる"
+        );
     }
 
     // ── エポック検証テスト (リプレイ攻撃防止) ────────────────────────────
@@ -1179,18 +1250,20 @@ mod tests {
         let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
 
         // alice が bob に Welcome を送る
-        let (_, welcome) = alice.start_one_to_one(alice_email.clone(), dummy_kp()).unwrap();
+        let (_, welcome) = alice
+            .start_one_to_one(alice_email.clone(), dummy_kp())
+            .unwrap();
         // bob が Welcome を受信して会話 epoch=0 を記録
         let _ = bob.process_incoming(&welcome).unwrap();
 
         // 攻撃者が同じ epoch=0 の Commit を再送する (リプレイ)
         let replay_commit = Envelope {
             conversation_id: welcome.conversation_id.clone(),
-            epoch:           0, // 既に処理済みの epoch
-            kind:            EnvelopeKind::Commit,
-            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
-            wire_bytes:      vec![0xFF; 16],
-            welcome:         None,
+            epoch: 0, // 既に処理済みの epoch
+            kind: EnvelopeKind::Commit,
+            ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes: vec![0xFF; 16],
+            welcome: None,
         };
         let _ = alice_kp; // suppress unused warning
         let result = bob.process_incoming(&replay_commit);
@@ -1210,17 +1283,16 @@ mod tests {
         let alice_email = EmailAddress::parse("alice@kaname.app").unwrap();
 
         // alice が会話を開始 (自分側で epoch=0 を記録するはず)
-        let (conversation, _welcome) =
-            alice.start_one_to_one(alice_email, dummy_kp()).unwrap();
+        let (conversation, _welcome) = alice.start_one_to_one(alice_email, dummy_kp()).unwrap();
 
         // 攻撃者が alice に対して同一 epoch=0 の Commit を再送する
         let replay_commit = Envelope {
             conversation_id: conversation.id.clone(),
-            epoch:           0, // start_one_to_one で既に確立済みの epoch
-            kind:            EnvelopeKind::Commit,
-            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
-            wire_bytes:      vec![0xFF; 16],
-            welcome:         None,
+            epoch: 0, // start_one_to_one で既に確立済みの epoch
+            kind: EnvelopeKind::Commit,
+            ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes: vec![0xFF; 16],
+            welcome: None,
         };
         let result = alice.process_incoming(&replay_commit);
         assert!(
@@ -1237,11 +1309,11 @@ mod tests {
         let unknown_conv = ConversationId([0xDE; 32]);
         let app_env = Envelope {
             conversation_id: unknown_conv,
-            epoch:           0,
-            kind:            EnvelopeKind::Application,
-            ciphersuite:     Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
-            wire_bytes:      vec![0x41; 16],
-            welcome:         None,
+            epoch: 0,
+            kind: EnvelopeKind::Application,
+            ciphersuite: Ciphersuite::MlsX25519Aes128GcmSha256Ed25519,
+            wire_bytes: vec![0x41; 16],
+            welcome: None,
         };
         let result = bob.process_incoming(&app_env);
         assert!(
@@ -1253,9 +1325,9 @@ mod tests {
     #[test]
     fn application_古いepoch_はリプレイとして拒否される() {
         let mut alice = make_client("alice@kaname.app");
-        let mut bob   = make_client("bob@kaname.app");
+        let mut bob = make_client("bob@kaname.app");
 
-        let bob_kp    = dummy_kp();
+        let bob_kp = dummy_kp();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (mut alice_conv, welcome) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
         let _ = bob.process_incoming(&welcome).unwrap();
@@ -1286,8 +1358,10 @@ mod tests {
         let result = bob.process_incoming(&replay);
         // epoch が last_epoch と同じなら通過、小さければ拒否
         // このテストは epoch=0 < 0 ではないので通過するが、将来の強化のためのドキュメント
-        assert!(result.is_ok() || matches!(result, Err(MlsMailError::EpochRejected { .. })),
-            "Application のリプレイ処理: {result:?}");
+        assert!(
+            result.is_ok() || matches!(result, Err(MlsMailError::EpochRejected { .. })),
+            "Application のリプレイ処理: {result:?}"
+        );
     }
 
     #[test]
@@ -1325,14 +1399,21 @@ mod tests {
         let email = EmailAddress::parse("carol@kaname.app").unwrap();
 
         // 64KB を超える KP は無視される
-        let huge_kp = KeyPackage { bytes: vec![0u8; 65 * 1024] };
+        let huge_kp = KeyPackage {
+            bytes: vec![0u8; 65 * 1024],
+        };
         cache.add(email.clone(), huge_kp);
         assert!(!cache.has(&email), "64KB超 KP はキャッシュされてはならない");
 
         // 正常サイズは追加される
-        let ok_kp = KeyPackage { bytes: vec![0u8; 1024] };
+        let ok_kp = KeyPackage {
+            bytes: vec![0u8; 1024],
+        };
         cache.add(email.clone(), ok_kp);
-        assert!(cache.has(&email), "正常サイズ KP はキャッシュされなければならない");
+        assert!(
+            cache.has(&email),
+            "正常サイズ KP はキャッシュされなければならない"
+        );
     }
 
     #[test]
@@ -1345,7 +1426,9 @@ mod tests {
         }
         // 100件を超えた分は追加されない
         let mut count = 0usize;
-        while cache.consume(&email).is_some() { count += 1; }
+        while cache.consume(&email).is_some() {
+            count += 1;
+        }
         assert_eq!(count, 100, "KP は最大 100件まで: 実際 {count}");
     }
 
@@ -1353,30 +1436,34 @@ mod tests {
     #[test]
     fn welcome_リプレイは2回目以降拒否される() {
         let mut alice = make_client("alice@kaname.app");
-        let mut bob   = make_client("bob@kaname.app");
+        let mut bob = make_client("bob@kaname.app");
 
-        let bob_kp    = dummy_kp();
+        let bob_kp = dummy_kp();
         let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
         let (_alice_conv, welcome_env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
 
         // 通常の Welcome 処理用に Envelope を作成 (kind=Welcome に変換)
         let welcome_only = Envelope {
             conversation_id: welcome_env.conversation_id.clone(),
-            kind:            EnvelopeKind::Welcome,
-            epoch:           welcome_env.epoch,
-            ciphersuite:     welcome_env.ciphersuite,
-            wire_bytes:      welcome_env.wire_bytes.clone(),
-            welcome:         welcome_env.welcome.clone(),
+            kind: EnvelopeKind::Welcome,
+            epoch: welcome_env.epoch,
+            ciphersuite: welcome_env.ciphersuite,
+            wire_bytes: welcome_env.wire_bytes.clone(),
+            welcome: welcome_env.welcome.clone(),
         };
 
         // 1 回目は成功
         let first = bob.process_incoming(&welcome_only);
-        assert!(matches!(first, Ok(IncomingResult::WelcomeJoined(_))),
-            "初回 Welcome は処理されるべき: {first:?}");
+        assert!(
+            matches!(first, Ok(IncomingResult::WelcomeJoined(_))),
+            "初回 Welcome は処理されるべき: {first:?}"
+        );
 
         // 2 回目は WelcomeReplay で拒否
         let second = bob.process_incoming(&welcome_only);
-        assert!(matches!(second, Err(MlsMailError::WelcomeReplay { .. })),
-            "リプレイされた Welcome は拒否されるべき: {second:?}");
+        assert!(
+            matches!(second, Err(MlsMailError::WelcomeReplay { .. })),
+            "リプレイされた Welcome は拒否されるべき: {second:?}"
+        );
     }
 }

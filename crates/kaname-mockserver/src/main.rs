@@ -9,20 +9,20 @@
 
 #![deny(unsafe_code)]
 
-use std::sync::Arc;
-use std::net::SocketAddr;
 use axum::{
-    Router,
-    routing::{get, post},
     extract::State,
-    response::Json,
     http::StatusCode,
+    response::Json,
+    routing::{get, post},
+    Router,
 };
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing::{info, error};
+use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
-use kaname_mockserver::{MockServer, JmapRequest};
+use kaname_mockserver::{JmapRequest, MockServer};
 
 type SharedServer = Arc<MockServer>;
 
@@ -32,7 +32,7 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("kaname_mockserver=info,tower_http=info"))
+                .unwrap_or_else(|_| EnvFilter::new("kaname_mockserver=info,tower_http=info")),
         )
         .init();
 
@@ -41,22 +41,18 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(8080);
 
-    let host = std::env::var("KANAME_MOCK_HOST")
-        .unwrap_or_else(|_| "127.0.0.1".to_string());
+    let host = std::env::var("KANAME_MOCK_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
 
     let server = Arc::new(MockServer::new());
     let initial_count = server.email_count();
 
-    info!(
-        "Kaname Mock Server v{} starting",
-        env!("CARGO_PKG_VERSION")
-    );
+    info!("Kaname Mock Server v{} starting", env!("CARGO_PKG_VERSION"));
     info!("Loaded {initial_count} fixture emails");
 
     // ルーター
     let app = Router::new()
-        .route("/jmap",         post(handle_jmap))
-        .route("/health",       get(health))
+        .route("/jmap", post(handle_jmap))
+        .route("/health", get(health))
         .route("/.well-known/jmap", get(session))
         .with_state(server)
         .layer(CorsLayer::permissive())

@@ -32,8 +32,8 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
-use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
@@ -46,13 +46,11 @@ use zeroize::ZeroizeOnDrop;
 /// 完全 BIP39 (2048 ワード) は記憶しにくいので、視認性の高い
 /// 短い単語のみを採用。電話越しでも聞き間違いにくい。
 const SAFE_WORDS: &[&str] = &[
-    "anvil",  "ballot", "cipher", "drift",  "ember",  "fable",  "gauze",  "havoc",
-    "ivory",  "joust",  "kite",   "lyric",  "moss",   "needle", "ocean",  "pebble",
-    "quartz", "raven",  "sage",   "tiger",  "umbra",  "velvet", "willow", "xenon",
-    "yacht",  "zebra",  "blade",  "creek",  "delta",  "echo",   "flint",  "glass",
-    "harbor", "iris",   "jade",   "knot",   "lotus",  "marble", "north",  "orbit",
-    "prism",  "quill",  "river",  "stone",  "tomb",   "ulna",   "vine",   "wing",
-    "yarn",   "zephyr",
+    "anvil", "ballot", "cipher", "drift", "ember", "fable", "gauze", "havoc", "ivory", "joust",
+    "kite", "lyric", "moss", "needle", "ocean", "pebble", "quartz", "raven", "sage", "tiger",
+    "umbra", "velvet", "willow", "xenon", "yacht", "zebra", "blade", "creek", "delta", "echo",
+    "flint", "glass", "harbor", "iris", "jade", "knot", "lotus", "marble", "north", "orbit",
+    "prism", "quill", "river", "stone", "tomb", "ulna", "vine", "wing", "yarn", "zephyr",
 ];
 
 /// 日本語ユーザー向けカタカナワードリスト (50 語)。
@@ -63,16 +61,56 @@ const SAFE_WORDS: &[&str] = &[
 /// - 「ン」「ッ」で終わる語は省き、語尾が明確なものを優先
 /// - 似た音形 (カメ/カゲ など) は片方のみ採用
 const SAFE_WORDS_JA: &[&str] = &[
-    "アオゾラ", "イナビカリ", "ウミウシ", "エンピツ", "オリーブ",
-    "カガミ",   "キリン",     "クジャク", "ケムリ",   "コダマ",
-    "サクラ",   "シオカゼ",   "スズムシ", "セキレイ", "ソラマメ",
-    "タツノコ", "チドリ",     "ツバキ",   "テングサ", "トビウオ",
-    "ナマコ",   "ニジマス",   "ヌイグルミ","ネコヤナギ","ノリタケ",
-    "ハマナス", "ヒカリ",     "フクロウ", "ヘチマ",   "ホタル",
-    "マツボックリ","ミカン",  "ムラサキ", "メダカ",   "モミジ",
-    "ヤシノミ", "ユキウサギ", "ヨモギ",   "ラムネ",   "リンドウ",
-    "ルリイロ", "レンゲ",     "ロウバイ", "ワカサギ", "ヲグラ",
-    "ガリバー", "ジャコウ",   "ズワイ",   "ダイコン", "ビワ",
+    "アオゾラ",
+    "イナビカリ",
+    "ウミウシ",
+    "エンピツ",
+    "オリーブ",
+    "カガミ",
+    "キリン",
+    "クジャク",
+    "ケムリ",
+    "コダマ",
+    "サクラ",
+    "シオカゼ",
+    "スズムシ",
+    "セキレイ",
+    "ソラマメ",
+    "タツノコ",
+    "チドリ",
+    "ツバキ",
+    "テングサ",
+    "トビウオ",
+    "ナマコ",
+    "ニジマス",
+    "ヌイグルミ",
+    "ネコヤナギ",
+    "ノリタケ",
+    "ハマナス",
+    "ヒカリ",
+    "フクロウ",
+    "ヘチマ",
+    "ホタル",
+    "マツボックリ",
+    "ミカン",
+    "ムラサキ",
+    "メダカ",
+    "モミジ",
+    "ヤシノミ",
+    "ユキウサギ",
+    "ヨモギ",
+    "ラムネ",
+    "リンドウ",
+    "ルリイロ",
+    "レンゲ",
+    "ロウバイ",
+    "ワカサギ",
+    "ヲグラ",
+    "ガリバー",
+    "ジャコウ",
+    "ズワイ",
+    "ダイコン",
+    "ビワ",
 ];
 
 /// ワードリストのロケール。
@@ -165,20 +203,23 @@ impl VerificationWord {
 
 /// カタカナ正規化: 全角ひらがな→カタカナ、長音符の揺れを吸収。
 fn normalize_katakana(s: &str) -> String {
-    s.chars().map(|c| {
-        // ひらがな (U+3041-U+3096) → カタカナ (U+30A1-U+30F6)
-        // オフセット 0x60 は安全: U+3096 + 0x60 = U+30F6 (有効なカタカナ範囲内)
-        if ('\u{3041}'..='\u{3096}').contains(&c) {
-            let katakana_cp = c as u32 + 0x60;
-            debug_assert!(
-                ('\u{30A1}'..='\u{30F6}').contains(&char::from_u32(katakana_cp).unwrap_or('\0')),
-                "ひらがな→カタカナ変換が有効範囲外: U+{katakana_cp:04X}"
-            );
-            char::from_u32(katakana_cp).unwrap_or(c)
-        } else {
-            c
-        }
-    }).collect()
+    s.chars()
+        .map(|c| {
+            // ひらがな (U+3041-U+3096) → カタカナ (U+30A1-U+30F6)
+            // オフセット 0x60 は安全: U+3096 + 0x60 = U+30F6 (有効なカタカナ範囲内)
+            if ('\u{3041}'..='\u{3096}').contains(&c) {
+                let katakana_cp = c as u32 + 0x60;
+                debug_assert!(
+                    ('\u{30A1}'..='\u{30F6}')
+                        .contains(&char::from_u32(katakana_cp).unwrap_or('\0')),
+                    "ひらがな→カタカナ変換が有効範囲外: U+{katakana_cp:04X}"
+                );
+                char::from_u32(katakana_cp).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -422,16 +463,43 @@ impl OobvRecommender {
         Self {
             financial_keywords: vec![
                 // 日本語
-                "振込", "口座", "送金", "支払", "請求", "決済", "入金", "出金",
-                "資金", "残高", "為替", "口座変更", "支払先",
+                "振込",
+                "口座",
+                "送金",
+                "支払",
+                "請求",
+                "決済",
+                "入金",
+                "出金",
+                "資金",
+                "残高",
+                "為替",
+                "口座変更",
+                "支払先",
                 // 英語
-                "wire transfer", "payment", "invoice", "deposit", "withdrawal",
-                "bank account", "account change", "remittance", "swift code",
+                "wire transfer",
+                "payment",
+                "invoice",
+                "deposit",
+                "withdrawal",
+                "bank account",
+                "account change",
+                "remittance",
+                "swift code",
                 "iban",
             ],
             urgency_keywords: vec![
-                "至急", "緊急", "本日中", "今すぐ", "即時", "急いで",
-                "urgent", "immediately", "asap", "right now", "today",
+                "至急",
+                "緊急",
+                "本日中",
+                "今すぐ",
+                "即時",
+                "急いで",
+                "urgent",
+                "immediately",
+                "asap",
+                "right now",
+                "today",
             ],
         }
     }
@@ -456,10 +524,14 @@ impl OobvRecommender {
         // 両方の回避を捕捉する。
         let body_norm = kaname_memory_guard::normalize_for_matching(body);
         let body_norm_spaced = kaname_memory_guard::normalize_for_matching_spaced(body);
-        let financial_count = self.financial_keywords.iter()
+        let financial_count = self
+            .financial_keywords
+            .iter()
             .filter(|kw| body_norm.contains(*kw) || body_norm_spaced.contains(*kw))
             .count();
-        let urgency_count = self.urgency_keywords.iter()
+        let urgency_count = self
+            .urgency_keywords
+            .iter()
             .filter(|kw| body_norm.contains(*kw) || body_norm_spaced.contains(*kw))
             .count();
 
@@ -504,7 +576,10 @@ pub enum CeremonyError {
     AlreadyCompleted(CeremonyState),
 
     /// ブルートフォース防止: 試行回数超過。
-    #[error("試行回数が上限 ({} 回) に達しました。セレモニーはロックされました。", MAX_VERIFY_ATTEMPTS)]
+    #[error(
+        "試行回数が上限 ({} 回) に達しました。セレモニーはロックされました。",
+        MAX_VERIFY_ATTEMPTS
+    )]
     TooManyAttempts,
 }
 
@@ -555,8 +630,11 @@ mod tests {
     fn word_generation_is_from_safe_list() {
         for _ in 0..100 {
             let w = VerificationWord::random();
-            assert!(SAFE_WORDS.contains(&w.as_str()),
-                "Generated word not in SAFE_WORDS: {}", w.as_str());
+            assert!(
+                SAFE_WORDS.contains(&w.as_str()),
+                "Generated word not in SAFE_WORDS: {}",
+                w.as_str()
+            );
         }
     }
 
@@ -566,8 +644,8 @@ mod tests {
         assert!(w.matches("cipher"));
         assert!(w.matches("CIPHER"));
         assert!(w.matches("CiPhEr"));
-        assert!(w.matches("  cipher  "));  // trim
-        assert!(!w.matches("ciphers"));    // 別単語
+        assert!(w.matches("  cipher  ")); // trim
+        assert!(!w.matches("ciphers")); // 別単語
     }
 
     #[test]
@@ -653,9 +731,18 @@ mod tests {
         // 期限を過去に強制し、再度 verify を呼ぶ
         c.expires_at_unix = 0;
         let result = c.verify(&correct);
-        assert!(matches!(result, Err(CeremonyError::AlreadyCompleted(CeremonyState::Verified))),
-            "期限切れ後の再 verify で Verified が上書きされた: {result:?}");
-        assert_eq!(c.state, CeremonyState::Verified, "終端状態 Verified は不変であるべき");
+        assert!(
+            matches!(
+                result,
+                Err(CeremonyError::AlreadyCompleted(CeremonyState::Verified))
+            ),
+            "期限切れ後の再 verify で Verified が上書きされた: {result:?}"
+        );
+        assert_eq!(
+            c.state,
+            CeremonyState::Verified,
+            "終端状態 Verified は不変であるべき"
+        );
         // 監査記録も Verified のままであること
         assert_eq!(c.audit_record().state, CeremonyState::Verified);
     }
@@ -670,7 +757,11 @@ mod tests {
         // 期限切れ後も Locked のまま
         c.expires_at_unix = 0;
         let _ = c.verify("wrong");
-        assert_eq!(c.state, CeremonyState::Locked, "終端状態 Locked は期限切れで上書きされない");
+        assert_eq!(
+            c.state,
+            CeremonyState::Locked,
+            "終端状態 Locked は期限切れで上書きされない"
+        );
     }
 
     #[test]
@@ -709,7 +800,10 @@ mod tests {
         // ロック後は正解でも受け付けない
         let result = c.verify(&correct);
         assert!(
-            matches!(result, Err(CeremonyError::TooManyAttempts | CeremonyError::AlreadyCompleted(_))),
+            matches!(
+                result,
+                Err(CeremonyError::TooManyAttempts | CeremonyError::AlreadyCompleted(_))
+            ),
             "ロック後に verify() が成功してしまった: {result:?}"
         );
     }
@@ -741,8 +835,10 @@ mod tests {
         // 監査ログを JSON 化して、フレーズが含まれていないことを確認
         let json = serde_json::to_string(&record).unwrap();
         for word in c.display_phrase() {
-            assert!(!json.contains(word),
-                "Audit record leaked phrase word: {word}");
+            assert!(
+                !json.contains(word),
+                "Audit record leaked phrase word: {word}"
+            );
         }
     }
 
@@ -780,8 +876,11 @@ mod tests {
         // 正規化により検出されるべき。
         let r = OobvRecommender::new();
         let body = "Please process this ＷＩＲＥ ＴＲＡＮＳＦＥＲ ＵＲＧＥＮＴ";
-        assert_eq!(r.recommend(body), RecommendationLevel::Strong,
-            "全角ラテン文字によるキーワード回避が検出されなかった");
+        assert_eq!(
+            r.recommend(body),
+            RecommendationLevel::Strong,
+            "全角ラテン文字によるキーワード回避が検出されなかった"
+        );
     }
 
     #[test]
@@ -789,8 +888,11 @@ mod tests {
         // ゼロ幅スペース挿入による回避も正規化により検出されるべき。
         let r = OobvRecommender::new();
         let body = "wire\u{200B} transfer needed urg\u{200B}ent";
-        assert_eq!(r.recommend(body), RecommendationLevel::Strong,
-            "ゼロ幅文字によるキーワード回避が検出されなかった");
+        assert_eq!(
+            r.recommend(body),
+            RecommendationLevel::Strong,
+            "ゼロ幅文字によるキーワード回避が検出されなかった"
+        );
     }
 
     #[test]
@@ -801,8 +903,11 @@ mod tests {
         // スペース化版との二重照合で捕捉されることを確認する。
         let r = OobvRecommender::new();
         let body = "please process the wire\u{200B}transfer by EOD, right\u{200B}now";
-        assert_eq!(r.recommend(body), RecommendationLevel::Strong,
-            "単語間ゼロ幅挿入によるキーワード回避が検出されなかった");
+        assert_eq!(
+            r.recommend(body),
+            RecommendationLevel::Strong,
+            "単語間ゼロ幅挿入によるキーワード回避が検出されなかった"
+        );
     }
 
     #[test]
@@ -834,8 +939,10 @@ mod tests {
             "フレーズが JSON に漏洩している: word={phrase_word:?}, json={json}"
         );
         // JSON に "phrase" キーも含まれないこと
-        assert!(!json.contains("\"phrase\""),
-            "phrase フィールドが JSON に存在する: {json}");
+        assert!(
+            !json.contains("\"phrase\""),
+            "phrase フィールドが JSON に存在する: {json}"
+        );
     }
 }
 

@@ -107,8 +107,8 @@ impl HtmlSmugglingDetector {
         // atob() に加え TextDecoder/Uint8Array ベースの現代的なデコードパターンも検出
         let b64_patterns = [
             "atob(",
-            "frombase64",   // CryptoJS.enc.Base64.parse, Buffer.from(x,'base64') など
-            "textdecoder",  // new TextDecoder().decode(Uint8Array.from(...))
+            "frombase64",  // CryptoJS.enc.Base64.parse, Buffer.from(x,'base64') など
+            "textdecoder", // new TextDecoder().decode(Uint8Array.from(...))
             "uint8array.from",
         ];
         if b64_patterns.iter().any(|p| lower.contains(p)) {
@@ -177,7 +177,11 @@ impl HtmlSmugglingDetector {
         let risk = Self::calculate_risk(&signals);
         let message = Self::build_message(&signals, risk);
 
-        SmugglingScan { signals, risk, message }
+        SmugglingScan {
+            signals,
+            risk,
+            message,
+        }
     }
 
     fn calculate_risk(signals: &[SmugglingSignal]) -> SmugglingRisk {
@@ -239,7 +243,9 @@ impl Default for HtmlSmugglingDetector {
 mod tests {
     use super::*;
 
-    fn detector() -> HtmlSmugglingDetector { HtmlSmugglingDetector }
+    fn detector() -> HtmlSmugglingDetector {
+        HtmlSmugglingDetector
+    }
 
     #[test]
     fn clean_html_no_signals() {
@@ -377,8 +383,10 @@ mod tests {
             a.click();
         </script>"#;
         let s = d.analyze(html);
-        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
-            "シングルクォートの createElement('a') は検出されなければならない");
+        assert!(
+            s.signals.contains(&SmugglingSignal::AutoDownload),
+            "シングルクォートの createElement('a') は検出されなければならない"
+        );
     }
 
     #[test]
@@ -387,8 +395,10 @@ mod tests {
         // バックティックで createElement をバイパスしようとする
         let html = "<script>var a = document.createElement(`a`); a.click();</script>";
         let s = d.analyze(html);
-        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
-            "バックティックの createElement(`a`) は検出されなければならない");
+        assert!(
+            s.signals.contains(&SmugglingSignal::AutoDownload),
+            "バックティックの createElement(`a`) は検出されなければならない"
+        );
     }
 
     // ── TextDecoder/Uint8Array パターンの検出テスト ─────────────────────────
@@ -403,8 +413,10 @@ mod tests {
             var exe = dec.decode(bytes);
         </script>"#;
         let s = d.analyze(html);
-        assert!(s.signals.contains(&SmugglingSignal::Base64Eval),
-            "TextDecoder パターンは Base64Eval シグナルを生成すべき");
+        assert!(
+            s.signals.contains(&SmugglingSignal::Base64Eval),
+            "TextDecoder パターンは Base64Eval シグナルを生成すべき"
+        );
     }
 
     // ── 入力サイズ制限テスト ──────────────────────────────────────────────
@@ -428,8 +440,11 @@ mod tests {
         let s = d.analyze(&attack);
         // 上限で切り捨てられるため mshta は検出されない (上限以内に収まらない)
         // これは設計上の制約: 超長 HTML は4MB以内のみ検査
-        assert_eq!(s.risk, SmugglingRisk::Clean,
-            "4MB 超の末尾に埋め込まれた攻撃は切り捨てられる (設計上の制約)");
+        assert_eq!(
+            s.risk,
+            SmugglingRisk::Clean,
+            "4MB 超の末尾に埋め込まれた攻撃は切り捨てられる (設計上の制約)"
+        );
     }
 
     #[test]
@@ -453,8 +468,10 @@ mod tests {
         let d = detector();
         let html = "<script>var a = document.createElement(\"a\"); a\n.click\n();</script>";
         let s = d.analyze(html);
-        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
-            "改行入り .click() は検出されなければならない");
+        assert!(
+            s.signals.contains(&SmugglingSignal::AutoDownload),
+            "改行入り .click() は検出されなければならない"
+        );
     }
 
     #[test]
@@ -462,7 +479,9 @@ mod tests {
         let d = detector();
         let html = "<script>var a = document.createElement(\"a\"); a.click\t();</script>";
         let s = d.analyze(html);
-        assert!(s.signals.contains(&SmugglingSignal::AutoDownload),
-            "タブ入り .click() は検出されなければならない");
+        assert!(
+            s.signals.contains(&SmugglingSignal::AutoDownload),
+            "タブ入り .click() は検出されなければならない"
+        );
     }
 }

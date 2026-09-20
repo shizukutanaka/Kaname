@@ -13,9 +13,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use kaname_crypto::{
-    AlgId, SharedSecret,
-};
+use kaname_crypto::{AlgId, SharedSecret};
 
 /// ML-KEM-768 のパラメータが FIPS 203 と一致することを検証。
 #[test]
@@ -23,16 +21,36 @@ fn ml_kem_768_parameters_match_fips203() {
     // FIPS 203 ML-KEM-768 (NIST security level 3):
     //   秘密鍵: 2400 bytes, 公開鍵: 1184 bytes, 暗号文: 1088 bytes
     // これらは AlgId のメタデータと一致すべき
-    assert_eq!(AlgId::MlKem768.public_key_len(), 1184, "ML-KEM-768 公開鍵長は 1184");
-    assert_eq!(AlgId::MlKem768.ciphertext_len(), 1088, "ML-KEM-768 暗号文長は 1088");
-    assert_eq!(AlgId::MlKem768.shared_secret_len(), 32, "共有秘密は 32 bytes");
+    assert_eq!(
+        AlgId::MlKem768.public_key_len(),
+        1184,
+        "ML-KEM-768 公開鍵長は 1184"
+    );
+    assert_eq!(
+        AlgId::MlKem768.ciphertext_len(),
+        1088,
+        "ML-KEM-768 暗号文長は 1088"
+    );
+    assert_eq!(
+        AlgId::MlKem768.shared_secret_len(),
+        32,
+        "共有秘密は 32 bytes"
+    );
 }
 
 /// X25519 のパラメータが RFC 7748 と一致することを検証。
 #[test]
 fn x25519_parameters_match_rfc7748() {
-    assert_eq!(AlgId::X25519.public_key_len(), 32, "X25519 公開鍵は 32 bytes");
-    assert_eq!(AlgId::X25519.shared_secret_len(), 32, "X25519 共有秘密は 32 bytes");
+    assert_eq!(
+        AlgId::X25519.public_key_len(),
+        32,
+        "X25519 公開鍵は 32 bytes"
+    );
+    assert_eq!(
+        AlgId::X25519.shared_secret_len(),
+        32,
+        "X25519 共有秘密は 32 bytes"
+    );
 }
 
 /// SharedSecret の all-zero 検出が KAT レベルで正しいことを検証。
@@ -67,7 +85,10 @@ fn derive_key_context_separation() {
 
     let k1 = ss.derive_key(b"context-a");
     let k2 = ss.derive_key(b"context-b");
-    assert_ne!(k1, k2, "異なる context は異なる鍵を導出する (domain separation)");
+    assert_ne!(
+        k1, k2,
+        "異なる context は異なる鍵を導出する (domain separation)"
+    );
 }
 
 /// HybridX25519MlKem768 の暗号文長が両半分の合計 + フレーミングであることを検証。

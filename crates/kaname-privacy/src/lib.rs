@@ -40,21 +40,21 @@ pub struct TrackingDetector {
 #[derive(Debug, Clone)]
 pub struct TrackingAnalysis {
     /// 検出されたトラッカーの数。
-    pub tracker_count:   usize,
+    pub tracker_count: usize,
     /// ブロックされたドメインのリスト。
     pub blocked_domains: Vec<String>,
     /// 検出されたピクセル追跡の詳細。
-    pub pixels_found:    Vec<TrackingPixel>,
+    pub pixels_found: Vec<TrackingPixel>,
     /// トラッキングが試みられた場合 true。
-    pub was_tracked:     bool,
+    pub was_tracked: bool,
 }
 
 /// 検出されたトラッキングピクセル。
 #[derive(Debug, Clone)]
 pub struct TrackingPixel {
-    pub url:          String,
-    pub domain:       String,
-    pub pixel_size:   Option<(u32, u32)>,
+    pub url: String,
+    pub domain: String,
+    pub pixel_size: Option<(u32, u32)>,
     pub tracker_type: TrackerType,
 }
 
@@ -78,27 +78,52 @@ impl TrackingDetector {
         // 既知のトラッキングドメインリスト
         let trackers = [
             // メールマーケティング
-            "mailchimp.com", "list-manage.com", "salesforce.com",
-            "pardot.com", "exacttarget.com", "sendgrid.net",
-            "sendgrid.com", "mailgun.org", "mandrillapp.com",
-            "klaviyo.com", "constantcontact.com", "campaignmonitor.com",
-            "getresponse.com", "aweber.com", "hubspot.com",
-            "marketo.com", "eloqua.com",
+            "mailchimp.com",
+            "list-manage.com",
+            "salesforce.com",
+            "pardot.com",
+            "exacttarget.com",
+            "sendgrid.net",
+            "sendgrid.com",
+            "mailgun.org",
+            "mandrillapp.com",
+            "klaviyo.com",
+            "constantcontact.com",
+            "campaignmonitor.com",
+            "getresponse.com",
+            "aweber.com",
+            "hubspot.com",
+            "marketo.com",
+            "eloqua.com",
             // 分析系
-            "google-analytics.com", "analytics.google.com",
-            "doubleclick.net", "facebook.com", "fb.com",
-            "linkedin.com", "twitter.com",
+            "google-analytics.com",
+            "analytics.google.com",
+            "doubleclick.net",
+            "facebook.com",
+            "fb.com",
+            "linkedin.com",
+            "twitter.com",
             // メール開封追跡 SaaS
-            "mailtrack.io", "streak.com", "yesware.com",
-            "boomeranggmail.com", "mixmax.com", "outreach.io",
-            "salesloft.com", "groove.co", "cirrusinsight.com",
+            "mailtrack.io",
+            "streak.com",
+            "yesware.com",
+            "boomeranggmail.com",
+            "mixmax.com",
+            "outreach.io",
+            "salesloft.com",
+            "groove.co",
+            "cirrusinsight.com",
             // 日本系
-            "blastmail.jp", "cuenote.jp", "wowma.jp",
+            "blastmail.jp",
+            "cuenote.jp",
+            "wowma.jp",
         ];
         for t in &trackers {
             known.insert(t.to_string());
         }
-        Self { known_trackers: known }
+        Self {
+            known_trackers: known,
+        }
     }
 
     /// HTML ボディからトラッキングピクセルを検出する。
@@ -109,7 +134,8 @@ impl TrackingDetector {
         // MAX_HTML_BYTES がマルチバイト UTF-8 文字の中間にある場合に
         // &str スライスがパニックする。is_char_boundary() で安全な境界を探す。
         let html = if html.len() > MAX_HTML_BYTES {
-            let safe = (0..=MAX_HTML_BYTES).rev()
+            let safe = (0..=MAX_HTML_BYTES)
+                .rev()
                 .find(|&i| html.is_char_boundary(i))
                 .unwrap_or(0);
             &html[..safe]
@@ -117,13 +143,14 @@ impl TrackingDetector {
             html
         };
         let mut blocked_domains = Vec::new();
-        let mut pixels_found    = Vec::new();
+        let mut pixels_found = Vec::new();
 
         // img タグを検索
         let mut pos = 0;
         while let Some(img_start) = html[pos..].find("<img") {
             let abs_start = pos + img_start;
-            let tag_end = html[abs_start..].find('>')
+            let tag_end = html[abs_start..]
+                .find('>')
                 .map(|e| abs_start + e + 1)
                 .unwrap_or(html.len());
             let tag = &html[abs_start..tag_end];
@@ -132,13 +159,10 @@ impl TrackingDetector {
             if let Some(src) = extract_attr(tag, "src") {
                 // http/https の外部 URL (cid: は除外)
                 if src.starts_with("http://") || src.starts_with("https://") {
-                    let domain = extract_domain_from_url(src)
-                        .unwrap_or_default();
+                    let domain = extract_domain_from_url(src).unwrap_or_default();
 
-                    let width  = extract_attr(tag, "width")
-                        .and_then(|w| w.parse::<u32>().ok());
-                    let height = extract_attr(tag, "height")
-                        .and_then(|h| h.parse::<u32>().ok());
+                    let width = extract_attr(tag, "width").and_then(|w| w.parse::<u32>().ok());
+                    let height = extract_attr(tag, "height").and_then(|h| h.parse::<u32>().ok());
 
                     // 1x1 ピクセルは確実にトラッカー
                     let is_pixel = matches!((width, height), (Some(1), Some(1)))
@@ -149,16 +173,17 @@ impl TrackingDetector {
                     let tracker_type = if is_pixel {
                         TrackerType::OpenTracking
                     } else if matches_known_tracker {
-                        TrackerType::MarketingPlatform { name: domain.clone() }
+                        TrackerType::MarketingPlatform {
+                            name: domain.clone(),
+                        }
                     } else if is_tracking_url_pattern(src) {
                         TrackerType::OpenTracking
                     } else {
                         TrackerType::Unknown
                     };
 
-                    let is_tracker = is_pixel
-                        || matches_known_tracker
-                        || is_tracking_url_pattern(src);
+                    let is_tracker =
+                        is_pixel || matches_known_tracker || is_tracking_url_pattern(src);
 
                     if is_tracker {
                         blocked_domains.push(domain.clone());
@@ -179,9 +204,9 @@ impl TrackingDetector {
         blocked_domains.dedup();
 
         TrackingAnalysis {
-            tracker_count:   pixels_found.len(),
+            tracker_count: pixels_found.len(),
             blocked_domains,
-            was_tracked:     !pixels_found.is_empty(),
+            was_tracked: !pixels_found.is_empty(),
             pixels_found,
         }
     }
@@ -197,9 +222,9 @@ impl TrackingDetector {
     /// `cdn.mailchimp.com` のような正規のトラッカーサブドメインが
     /// `mailchimp.com` の登録と一致せず検出をすり抜けていた。
     fn is_known_tracker_domain(&self, domain: &str) -> bool {
-        self.known_trackers.iter().any(|known| {
-            domain == known || domain.ends_with(&format!(".{known}"))
-        })
+        self.known_trackers
+            .iter()
+            .any(|known| domain == known || domain.ends_with(&format!(".{known}")))
     }
 }
 
@@ -240,7 +265,8 @@ fn find_attr_value<'a>(tag: &'a str, attr: &str, quote: char) -> Option<&'a str>
 }
 
 fn extract_domain_from_url(url: &str) -> Option<String> {
-    let without_scheme = url.strip_prefix("https://")
+    let without_scheme = url
+        .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
     let host_port = without_scheme.split('/').next()?;
     // ポート番号を除去: "tracker.com:8080" → "tracker.com"
@@ -251,16 +277,29 @@ fn extract_domain_from_url(url: &str) -> Option<String> {
 
 fn is_tracking_url_pattern(url: &str) -> bool {
     let patterns = [
-        "/track/", "/pixel/", "/open/", "/click/", "/beacon/",
-        "track=", "pixel=", "open=", "utm_", "trk=",
-        "/t/", ".gif?", "tracking", "analytics",
+        "/track/",
+        "/pixel/",
+        "/open/",
+        "/click/",
+        "/beacon/",
+        "track=",
+        "pixel=",
+        "open=",
+        "utm_",
+        "trk=",
+        "/t/",
+        ".gif?",
+        "tracking",
+        "analytics",
     ];
     let lower = url.to_lowercase();
     patterns.iter().any(|p| lower.contains(p))
 }
 
 impl Default for TrackingDetector {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ============================================================================
@@ -279,15 +318,21 @@ mod tests {
         let result = detector.analyze_html(html);
         assert!(result.was_tracked);
         assert!(result.tracker_count > 0);
-        assert!(result.blocked_domains.contains(&"mailchimp.com".to_string()));
+        assert!(result
+            .blocked_domains
+            .contains(&"mailchimp.com".to_string()));
     }
 
     #[test]
     fn detects_1x1_tracking_pixel() {
         let detector = TrackingDetector::new();
-        let html = r#"<img src="https://unknown-tracker.example.com/pixel.gif" width="1" height="1">"#;
+        let html =
+            r#"<img src="https://unknown-tracker.example.com/pixel.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked, "1x1 ピクセルはトラッカーとして検出されるべき");
+        assert!(
+            result.was_tracked,
+            "1x1 ピクセルはトラッカーとして検出されるべき"
+        );
     }
 
     #[test]
@@ -310,10 +355,15 @@ mod tests {
         // kaname の CSP では実際には全外部画像をブロックするが、
         // このテストはトラッカー判定ロジックのみを確認
         // 200x100 の画像は 1x1 でなく、既知トラッカーでもない
-        let pixel_only = result.pixels_found.iter()
+        let pixel_only = result
+            .pixels_found
+            .iter()
             .filter(|p| matches!(p.tracker_type, TrackerType::OpenTracking))
             .count();
-        assert_eq!(pixel_only, 0, "通常サイズの画像はピクセルトラッカーではない");
+        assert_eq!(
+            pixel_only, 0,
+            "通常サイズの画像はピクセルトラッカーではない"
+        );
     }
 
     // ゼロ知識検索
@@ -323,8 +373,10 @@ mod tests {
         // シングルクォートで囲まれた src 属性
         let html = r#"<img src='https://mailchimp.com/track/open.gif' width='1' height='1'>"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "シングルクォートの src 属性はトラッカー検出をバイパスしてはならない");
+        assert!(
+            result.was_tracked,
+            "シングルクォートの src 属性はトラッカー検出をバイパスしてはならない"
+        );
     }
 
     #[test]
@@ -333,10 +385,16 @@ mod tests {
         // ポート番号付き: "mailchimp.com:443" は "mailchimp.com" と同じドメイン
         let html = r#"<img src="https://mailchimp.com:443/track/open.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "ポート番号付きドメインはトラッカー検出をバイパスしてはならない");
-        assert!(result.blocked_domains.contains(&"mailchimp.com".to_string()),
-            "blocked_domains はポートなしドメインを含むべき");
+        assert!(
+            result.was_tracked,
+            "ポート番号付きドメインはトラッカー検出をバイパスしてはならない"
+        );
+        assert!(
+            result
+                .blocked_domains
+                .contains(&"mailchimp.com".to_string()),
+            "blocked_domains はポートなしドメインを含むべき"
+        );
     }
 
     #[test]
@@ -345,8 +403,10 @@ mod tests {
         // 攻撃者が :8080 を付けて既知リストをバイパスしようとする
         let html = r#"<img src="https://mailchimp.com:8080/track/open.gif" width="1" height="1">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "非標準ポートによるトラッカー検出バイパスを防止する");
+        assert!(
+            result.was_tracked,
+            "非標準ポートによるトラッカー検出バイパスを防止する"
+        );
     }
 
     // ── インデックス容量制限テスト ─────────────────────────────────────────
@@ -375,7 +435,7 @@ mod tests {
         // → MAX バイト目がマルチバイト文字の途中になる
         let mut html = "a".repeat(MAX - 2);
         html.push('日'); // 3 バイト: 0xE6 0x97 0xA5
-        // html.len() = MAX - 2 + 3 = MAX + 1 > MAX → 切り捨て発動
+                         // html.len() = MAX - 2 + 3 = MAX + 1 > MAX → 切り捨て発動
         assert!(html.len() > MAX);
 
         // パニックしないことを確認 (パニックするとテストがクラッシュする)
@@ -403,8 +463,11 @@ mod tests {
         // data-src の値を誤って src の値として抽出していた。
         let tag = r#"<img data-src="https://tracker.example.com/pixel.gif" src="https://legit.com/logo.png">"#;
         let src = extract_attr(tag, "src");
-        assert_eq!(src, Some("https://legit.com/logo.png"),
-            "data-src ではなく実際の src 属性値を抽出すべき");
+        assert_eq!(
+            src,
+            Some("https://legit.com/logo.png"),
+            "data-src ではなく実際の src 属性値を抽出すべき"
+        );
     }
 
     #[test]
@@ -422,13 +485,16 @@ mod tests {
         let html = r#"<img data-src="https://tracker.example.com/pixel.gif" src="https://our-company.co.jp/logo.png" width="200" height="100">"#;
         let result = detector.analyze_html(html);
         // src (200x100, 非トラッカードメイン) がスキャン対象になるため未検出のはず
-        assert_eq!(result.tracker_count, 0,
-            "data-src の影響を受けず実際の src (無害な画像) が正しく評価されるべき");
+        assert_eq!(
+            result.tracker_count, 0,
+            "data-src の影響を受けず実際の src (無害な画像) が正しく評価されるべき"
+        );
     }
 
     #[test]
     fn extract_attr_single_quote_boundary_respected() {
-        let tag = "<img data-src='https://tracker.example.com/x.gif' src='https://legit.com/logo.png'>";
+        let tag =
+            "<img data-src='https://tracker.example.com/x.gif' src='https://legit.com/logo.png'>";
         let src = extract_attr(tag, "src");
         assert_eq!(src, Some("https://legit.com/logo.png"));
     }
@@ -441,8 +507,10 @@ mod tests {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://cdn.mailchimp.com/open/abc123" width="300" height="200">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked,
-            "既知トラッカーのサブドメインは検出されるべき: {result:?}");
+        assert!(
+            result.was_tracked,
+            "既知トラッカーのサブドメインは検出されるべき: {result:?}"
+        );
     }
 
     #[test]
@@ -451,8 +519,10 @@ mod tests {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://notmailchimp.com/logo.png" width="300" height="200">"#;
         let result = detector.analyze_html(html);
-        assert!(!result.was_tracked,
-            "無関係なドメインは誤検知されるべきではない: {result:?}");
+        assert!(
+            !result.was_tracked,
+            "無関係なドメインは誤検知されるべきではない: {result:?}"
+        );
     }
 
     #[test]
@@ -460,6 +530,9 @@ mod tests {
         let detector = TrackingDetector::new();
         let html = r#"<img src="https://mailchimp.com/open/abc123" width="300" height="200">"#;
         let result = detector.analyze_html(html);
-        assert!(result.was_tracked, "完全一致トラッカーは引き続き検出されるべき");
+        assert!(
+            result.was_tracked,
+            "完全一致トラッカーは引き続き検出されるべき"
+        );
     }
 }

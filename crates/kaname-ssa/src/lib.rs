@@ -119,18 +119,28 @@ impl SenderStyleProfile {
         let alpha = 1.0 / (n + 1.0); // 新規サンプルの重み
 
         self.avg_paragraphs = lerp(self.avg_paragraphs, features.paragraphs as f32, alpha);
-        self.avg_sentences_per_paragraph =
-            lerp(self.avg_sentences_per_paragraph, features.sentences_per_paragraph, alpha);
-        self.avg_chars_per_sentence =
-            lerp(self.avg_chars_per_sentence, features.chars_per_sentence, alpha);
-        self.punctuation_density =
-            lerp(self.punctuation_density, features.punctuation_density, alpha);
-        self.formality_score =
-            lerp(self.formality_score, features.formality_score, alpha);
-        self.avg_email_length =
-            lerp(self.avg_email_length, features.email_length as f32, alpha);
-        self.avg_signature_lines =
-            lerp(self.avg_signature_lines, features.signature_lines as f32, alpha);
+        self.avg_sentences_per_paragraph = lerp(
+            self.avg_sentences_per_paragraph,
+            features.sentences_per_paragraph,
+            alpha,
+        );
+        self.avg_chars_per_sentence = lerp(
+            self.avg_chars_per_sentence,
+            features.chars_per_sentence,
+            alpha,
+        );
+        self.punctuation_density = lerp(
+            self.punctuation_density,
+            features.punctuation_density,
+            alpha,
+        );
+        self.formality_score = lerp(self.formality_score, features.formality_score, alpha);
+        self.avg_email_length = lerp(self.avg_email_length, features.email_length as f32, alpha);
+        self.avg_signature_lines = lerp(
+            self.avg_signature_lines,
+            features.signature_lines as f32,
+            alpha,
+        );
 
         // 送信時刻分布を更新 (% 24 で範囲外の send_hour を正規化)
         let hour = (features.send_hour as usize) % 24;
@@ -199,7 +209,9 @@ impl SenderStyleProfile {
         weight_sum += 0.15;
 
         // 句読点密度 (重み: 0.15)
-        let punct_dist = (self.punctuation_density - features.punctuation_density).abs().min(1.0);
+        let punct_dist = (self.punctuation_density - features.punctuation_density)
+            .abs()
+            .min(1.0);
         weighted_dist += 0.15 * punct_dist;
         weight_sum += 0.15;
 
@@ -220,7 +232,7 @@ impl SenderStyleProfile {
             d if d >= 0.75 => StyleWarning::High,
             d if d >= 0.60 => StyleWarning::Medium,
             d if d >= 0.40 => StyleWarning::Low,
-            _              => StyleWarning::None,
+            _ => StyleWarning::None,
         }
     }
 }
@@ -325,7 +337,8 @@ impl EmailStyleFeatures {
         const MAX_BODY_BYTES: usize = 500_000; // 500 KB
         let body = if body.len() > MAX_BODY_BYTES {
             // UTF-8 マルチバイト境界を壊さないよう char 境界で切り捨てる
-            let end = body.char_indices()
+            let end = body
+                .char_indices()
                 .map(|(i, _)| i)
                 .take_while(|&i| i < MAX_BODY_BYTES)
                 .last()
@@ -407,9 +420,7 @@ fn now_unix() -> u64 {
 
 fn count_paragraphs(text: &str) -> u32 {
     // 空行で区切られた段落
-    text.split("\n\n")
-        .filter(|p| !p.trim().is_empty())
-        .count() as u32
+    text.split("\n\n").filter(|p| !p.trim().is_empty()).count() as u32
 }
 
 fn count_sentences(text: &str) -> u32 {
@@ -444,13 +455,23 @@ fn estimate_formality(text: &str) -> f32 {
     let lower = text.to_lowercase();
 
     // 出現回数を数える (binary ではなく frequency)
-    let polite_count: u32 = polite_japanese.iter()
+    let polite_count: u32 = polite_japanese
+        .iter()
         .map(|kw| count_occurrences(text, kw))
-        .chain(polite_english.iter().map(|kw| count_occurrences(&lower, kw)))
+        .chain(
+            polite_english
+                .iter()
+                .map(|kw| count_occurrences(&lower, kw)),
+        )
         .sum();
-    let casual_count: u32 = casual_japanese.iter()
+    let casual_count: u32 = casual_japanese
+        .iter()
         .map(|kw| count_occurrences(text, kw))
-        .chain(casual_english.iter().map(|kw| count_occurrences(&lower, kw)))
+        .chain(
+            casual_english
+                .iter()
+                .map(|kw| count_occurrences(&lower, kw)),
+        )
         .sum();
 
     let total = (polite_count + casual_count) as f32;
@@ -529,7 +550,10 @@ mod tests {
         };
         // パニックせず有限のスコアを返すこと
         let dist = profile.style_distance(&crafted);
-        assert!(dist.is_finite() && (0.0..=1.0).contains(&dist), "dist={dist}");
+        assert!(
+            dist.is_finite() && (0.0..=1.0).contains(&dist),
+            "dist={dist}"
+        );
 
         // update も範囲外 send_hour でパニックしないこと
         let mut p2 = SenderStyleProfile::new("x@y.com");
@@ -540,7 +564,11 @@ mod tests {
     fn extract_normalizes_out_of_range_hour() {
         // 範囲外の send_hour は extract で 0-23 に正規化される (99 % 24 = 3)
         let f = EmailStyleFeatures::extract("こんにちは。", 99);
-        assert!(f.send_hour < 24, "send_hour が正規化されていない: {}", f.send_hour);
+        assert!(
+            f.send_hour < 24,
+            "send_hour が正規化されていない: {}",
+            f.send_hour
+        );
         assert_eq!(f.send_hour, 99 % 24);
     }
 
@@ -573,7 +601,7 @@ mod tests {
             formality_score: 0.98,    // 過丁寧
             email_length: 800,        // 4x 長い
             signature_lines: 1,
-            send_hour: 23,            // 深夜送信
+            send_hour: 23, // 深夜送信
         };
         let dist = profile.style_distance(&ai_style);
         assert!(dist > 0.50, "dist={dist:.3}");
@@ -583,11 +611,19 @@ mod tests {
     fn midnight_send_increases_distance() {
         let profile = make_profile(20);
         let normal = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
-        let midnight = EmailStyleFeatures { send_hour: 23, ..normal };
+        let midnight = EmailStyleFeatures {
+            send_hour: 23,
+            ..normal
+        };
         assert!(
             profile.style_distance(&midnight) > profile.style_distance(&normal),
             "深夜送信はスタイル距離を高める"
@@ -598,9 +634,14 @@ mod tests {
     fn insufficient_samples_return_zero_distance() {
         let profile = make_profile(5); // 10 未満
         let features = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         // 信頼性不足 → 距離 0.0 (無視)
         assert_eq!(profile.style_distance(&features), 0.0);
@@ -635,7 +676,10 @@ mod tests {
         let body = "お世話になっております。\nご確認をお願いいたします。\n\n田中部長";
         let features = EmailStyleFeatures::extract(body, 10);
         assert!(features.email_length > 0);
-        assert!(features.formality_score > 0.5, "敬語が多い文章のフォーマリティは高い");
+        assert!(
+            features.formality_score > 0.5,
+            "敬語が多い文章のフォーマリティは高い"
+        );
     }
 
     #[test]
@@ -654,8 +698,11 @@ mod tests {
         let with_one_please = format!("please {heavy_casual}");
         let features = EmailStyleFeatures::extract(&with_one_please, 10);
         // "please" 1 回 vs casual 5 回 → formality は 0.5 以下のはず
-        assert!(features.formality_score < 0.5,
-            "1 回 please に対して casual が多いとき formality は低いはず: {}", features.formality_score);
+        assert!(
+            features.formality_score < 0.5,
+            "1 回 please に対して casual が多いとき formality は低いはず: {}",
+            features.formality_score
+        );
     }
 
     #[test]
@@ -675,13 +722,21 @@ mod tests {
         p.sample_count = u32::MAX;
         // saturating_add: u32::MAX + 1 = u32::MAX (not 0)
         p.update(&EmailStyleFeatures {
-            paragraphs: 1, sentences_per_paragraph: 1.0, chars_per_sentence: 30.0,
-            punctuation_density: 1.0, formality_score: 0.5,
-            email_length: 100, signature_lines: 0, send_hour: 10,
+            paragraphs: 1,
+            sentences_per_paragraph: 1.0,
+            chars_per_sentence: 30.0,
+            punctuation_density: 1.0,
+            formality_score: 0.5,
+            email_length: 100,
+            signature_lines: 0,
+            send_hour: 10,
         });
         assert_eq!(p.sample_count, u32::MAX, "saturating_add が機能していない");
         // オーバーフロー後も is_reliable() は true のまま
-        assert!(p.is_reliable(), "オーバーフロー後に is_reliable() が false になった");
+        assert!(
+            p.is_reliable(),
+            "オーバーフロー後に is_reliable() が false になった"
+        );
     }
 
     #[test]
@@ -692,13 +747,20 @@ mod tests {
         p.avg_paragraphs = 3.0;
         p.update(&EmailStyleFeatures {
             paragraphs: 100, // 極端な値を入れても avg は変わらないはず
-            sentences_per_paragraph: 1.0, chars_per_sentence: 30.0,
-            punctuation_density: 1.0, formality_score: 0.5,
-            email_length: 100, signature_lines: 0, send_hour: 10,
+            sentences_per_paragraph: 1.0,
+            chars_per_sentence: 30.0,
+            punctuation_density: 1.0,
+            formality_score: 0.5,
+            email_length: 100,
+            signature_lines: 0,
+            send_hour: 10,
         });
         // avg_paragraphs は 3.0 からほとんど動かないはず (alpha ≈ 2.3e-10)
-        assert!((p.avg_paragraphs - 3.0).abs() < 0.01,
-            "alpha が大きすぎる: avg_paragraphs = {}", p.avg_paragraphs);
+        assert!(
+            (p.avg_paragraphs - 3.0).abs() < 0.01,
+            "alpha が大きすぎる: avg_paragraphs = {}",
+            p.avg_paragraphs
+        );
     }
 
     // ── NaN / Infinity 攻撃回帰テスト ───────────────────────────────────────
@@ -721,7 +783,10 @@ mod tests {
         let mut profile = make_profile(30);
         let original_formality = profile.formality_score;
         profile.update(&nan_features());
-        assert!(profile.formality_score.is_finite(), "NaN update 後も有限値でなければならない");
+        assert!(
+            profile.formality_score.is_finite(),
+            "NaN update 後も有限値でなければならない"
+        );
         assert!(
             (profile.formality_score - original_formality).abs() < 1e-3,
             "NaN update はプロファイルを変更してはならない"
@@ -732,7 +797,10 @@ mod tests {
     fn nan_features_style_distance_returns_max() {
         let profile = make_profile(30);
         let dist = profile.style_distance(&nan_features());
-        assert!((dist - 1.0).abs() < 1e-6, "NaN 特徴量の距離は 1.0 でなければならない: {dist}");
+        assert!(
+            (dist - 1.0).abs() < 1e-6,
+            "NaN 特徴量の距離は 1.0 でなければならない: {dist}"
+        );
     }
 
     #[test]
@@ -740,7 +808,11 @@ mod tests {
         let profile = make_profile(30);
         let dist = profile.style_distance(&nan_features());
         let warn = profile.warning_level(dist);
-        assert_eq!(warn, StyleWarning::High, "NaN 特徴量は High 警告でなければならない");
+        assert_eq!(
+            warn,
+            StyleWarning::High,
+            "NaN 特徴量は High 警告でなければならない"
+        );
     }
 
     #[test]
@@ -756,13 +828,21 @@ mod tests {
     fn self_send_matching_own_style_is_none() {
         let own = make_profile(30);
         let normal = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         let warning = assess_self_send_anomaly(&own, &normal, false);
-        assert_eq!(warning, StyleWarning::None,
-            "普段の文体と一致する自己送信は警告なしであるべき");
+        assert_eq!(
+            warning,
+            StyleWarning::None,
+            "普段の文体と一致する自己送信は警告なしであるべき"
+        );
     }
 
     #[test]
@@ -770,13 +850,20 @@ mod tests {
         // 文体逸脱のみ (金融要求なし) — 通常の warning_level のまま
         let own = make_profile(30);
         let deviated = EmailStyleFeatures {
-            paragraphs: 5, sentences_per_paragraph: 4.0, chars_per_sentence: 80.0,
-            punctuation_density: 5.0, formality_score: 0.98, email_length: 800,
-            signature_lines: 1, send_hour: 23,
+            paragraphs: 5,
+            sentences_per_paragraph: 4.0,
+            chars_per_sentence: 80.0,
+            punctuation_density: 5.0,
+            formality_score: 0.98,
+            email_length: 800,
+            signature_lines: 1,
+            send_hour: 23,
         };
         let warning = assess_self_send_anomaly(&own, &deviated, false);
-        assert!(matches!(warning, StyleWarning::Medium | StyleWarning::High),
-            "文体逸脱のみでも通常の警告は出るべき: {warning:?}");
+        assert!(
+            matches!(warning, StyleWarning::Medium | StyleWarning::High),
+            "文体逸脱のみでも通常の警告は出るべき: {warning:?}"
+        );
     }
 
     #[test]
@@ -786,15 +873,22 @@ mod tests {
         let own = make_profile(30);
         // わずかな逸脱 (通常なら Low 程度) だが金融要求と組み合わさる
         let slight_deviation = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.55, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.55,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         let without_financial = assess_self_send_anomaly(&own, &slight_deviation, false);
         let with_financial = assess_self_send_anomaly(&own, &slight_deviation, true);
-        assert_ne!(with_financial, without_financial,
+        assert_ne!(
+            with_financial, without_financial,
             "金融要求が絡む場合は文体逸脱のみのケースよりエスカレートすべき: \
-             without={without_financial:?} with={with_financial:?}");
+             without={without_financial:?} with={with_financial:?}"
+        );
     }
 
     #[test]
@@ -802,9 +896,14 @@ mod tests {
         // 自己プロファイルが未確立 (新規アカウント) の場合は判断材料不足
         let own = SenderStyleProfile::new("me@company.com");
         let features = EmailStyleFeatures {
-            paragraphs: 2, sentences_per_paragraph: 2.0, chars_per_sentence: 40.0,
-            punctuation_density: 2.5, formality_score: 0.8, email_length: 200,
-            signature_lines: 3, send_hour: 10,
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
         };
         let warning = assess_self_send_anomaly(&own, &features, true);
         assert_eq!(warning, StyleWarning::InsufficientData);
@@ -816,9 +915,11 @@ mod tests {
         assert_eq!(escalate_warning(StyleWarning::Low), StyleWarning::Medium);
         assert_eq!(escalate_warning(StyleWarning::Medium), StyleWarning::High);
         assert_eq!(escalate_warning(StyleWarning::High), StyleWarning::High);
-        assert_eq!(escalate_warning(StyleWarning::InsufficientData), StyleWarning::InsufficientData);
+        assert_eq!(
+            escalate_warning(StyleWarning::InsufficientData),
+            StyleWarning::InsufficientData
+        );
     }
-
 }
 
 // ============================================================================
@@ -928,5 +1029,4 @@ mod property_tests {
             }
         }
     }
-
 }

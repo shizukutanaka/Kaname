@@ -136,15 +136,37 @@ impl DeepfakeAdvisory {
         Self {
             financial_keywords: vec![
                 // 日本語
-                "振込", "口座", "送金", "支払", "請求", "決済",
-                "入金", "出金", "資金", "残高", "為替",
+                "振込",
+                "口座",
+                "送金",
+                "支払",
+                "請求",
+                "決済",
+                "入金",
+                "出金",
+                "資金",
+                "残高",
+                "為替",
                 // 英語
-                "wire transfer", "payment", "invoice", "deposit",
-                "bank account", "remittance", "swift", "iban",
+                "wire transfer",
+                "payment",
+                "invoice",
+                "deposit",
+                "bank account",
+                "remittance",
+                "swift",
+                "iban",
             ],
             urgency_keywords: vec![
-                "至急", "緊急", "本日中", "今すぐ", "急いで",
-                "urgent", "immediately", "asap", "right now",
+                "至急",
+                "緊急",
+                "本日中",
+                "今すぐ",
+                "急いで",
+                "urgent",
+                "immediately",
+                "asap",
+                "right now",
             ],
         }
     }
@@ -156,11 +178,7 @@ impl DeepfakeAdvisory {
     /// - `attachments`: 添付ファイルの (filename, mime_type) のリスト
     /// - `body`: メール本文 (文脈判定用)
     #[must_use]
-    pub fn evaluate(
-        &self,
-        attachments: &[(String, String)],
-        body: &str,
-    ) -> AdvisoryReport {
+    pub fn evaluate(&self, attachments: &[(String, String)], body: &str) -> AdvisoryReport {
         let media_attachments: Vec<MediaAttachment> = attachments
             .iter()
             .map(|(filename, mime)| {

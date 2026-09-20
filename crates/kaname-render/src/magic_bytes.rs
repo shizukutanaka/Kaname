@@ -13,7 +13,11 @@ pub struct MimeMismatch {
 
 impl std::fmt::Display for MimeMismatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MIME 不一致: 宣言={:?}, 検出={:?}", self.declared, self.detected)
+        write!(
+            f,
+            "MIME 不一致: 宣言={:?}, 検出={:?}",
+            self.declared, self.detected
+        )
     }
 }
 
@@ -140,7 +144,7 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "xlsm"  // Office マクロ有効 Excel
         | "pptm"  // Office マクロ有効 PowerPoint
         | "xls"   // 古い Excel (VBA 埋め込み可能)
-        | "doc"   // 古い Word (VBA 埋め込み可能)
+        | "doc" // 古い Word (VBA 埋め込み可能)
     )
 }
 
@@ -176,7 +180,11 @@ pub fn detect_polyglot(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     let tail = &bytes[tail_offset..];
 
     // JPEG + ZIP polyglot (JPEG EOI \xFF\xD9 の後に ZIP データ)
-    if head_mime == "image/jpeg" && tail.windows(4).any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06") {
+    if head_mime == "image/jpeg"
+        && tail
+            .windows(4)
+            .any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
+    {
         return Some(("image/jpeg", "application/zip"));
     }
 
@@ -185,14 +193,18 @@ pub fn detect_polyglot(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     // (PK\x03\x04) も照合する。EOCD が 64KB 窓の外にある巨大 polyglot や
     // EOCD を細工した検体でも、埋め込みエントリの存在で検出できるようにする。
     if head_mime == "image/png"
-        && tail.windows(4).any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
+        && tail
+            .windows(4)
+            .any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
     {
         return Some(("image/png", "application/zip"));
     }
 
     // PDF + ZIP polyglot (PDF %%EOF の後に ZIP)
     if head_mime == "application/pdf"
-        && tail.windows(4).any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
+        && tail
+            .windows(4)
+            .any(|w| w == b"PK\x03\x04" || w == b"PK\x05\x06")
     {
         return Some(("application/pdf", "application/zip"));
     }
@@ -316,7 +328,10 @@ mod tests {
     fn shell_script_disguised_as_text_is_dangerous() {
         let bytes = b"#!/bin/bash\nrm -rf /";
         let mismatch = check_mime_mismatch("text/plain", bytes);
-        assert!(mismatch.is_some(), "シェルスクリプトを text/plain と偽装は危険");
+        assert!(
+            mismatch.is_some(),
+            "シェルスクリプトを text/plain と偽装は危険"
+        );
     }
 
     #[test]
@@ -349,9 +364,15 @@ mod tests {
     #[test]
     fn svg_after_long_doctype_detected() {
         // DOCTYPE で押し下げる亜種
-        let doctype = format!("<?xml version=\"1.0\"?>\n<!DOCTYPE svg [{}]>\n", " ".repeat(1500));
+        let doctype = format!(
+            "<?xml version=\"1.0\"?>\n<!DOCTYPE svg [{}]>\n",
+            " ".repeat(1500)
+        );
         let svg = format!("{doctype}<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>");
-        assert_eq!(detect_mime_from_magic(svg.as_bytes()), Some("image/svg+xml"));
+        assert_eq!(
+            detect_mime_from_magic(svg.as_bytes()),
+            Some("image/svg+xml")
+        );
     }
 
     #[test]
@@ -394,8 +415,11 @@ mod tests {
         bytes.extend_from_slice(b"PK\x03\x04"); // ZIP local file header
         bytes.extend(vec![0u8; 20]);
         let result = detect_polyglot(&bytes);
-        assert_eq!(result, Some(("image/png", "application/zip")),
-            "PNG+ZIP (ローカルヘッダ) polyglot が検出されるべき");
+        assert_eq!(
+            result,
+            Some(("image/png", "application/zip")),
+            "PNG+ZIP (ローカルヘッダ) polyglot が検出されるべき"
+        );
     }
 
     #[test]
@@ -405,8 +429,11 @@ mod tests {
         bytes.extend_from_slice(b"PK\x03\x04");
         bytes.extend(vec![0u8; 20]);
         let result = detect_polyglot(&bytes);
-        assert_eq!(result, Some(("application/pdf", "application/zip")),
-            "PDF+ZIP (ローカルヘッダ) polyglot が検出されるべき");
+        assert_eq!(
+            result,
+            Some(("application/pdf", "application/zip")),
+            "PDF+ZIP (ローカルヘッダ) polyglot が検出されるべき"
+        );
     }
 
     #[test]

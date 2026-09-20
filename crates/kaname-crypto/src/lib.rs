@@ -39,8 +39,8 @@
 use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use thiserror::Error;
 use std::marker::PhantomData;
+use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
 // ============================================================================
@@ -76,8 +76,8 @@ impl AlgId {
         match self {
             AlgId::X25519 => 32,
             AlgId::Ed25519 => 32,
-            AlgId::MlKem768 => 1184,  // FIPS 203
-            AlgId::MlDsa65 => 1952,   // FIPS 204
+            AlgId::MlKem768 => 1184, // FIPS 203
+            AlgId::MlDsa65 => 1952,  // FIPS 204
             AlgId::HybridX25519MlKem768 => 32 + 1184,
             AlgId::HybridEd25519MlDsa65 => 32 + 1952,
         }
@@ -88,18 +88,17 @@ impl AlgId {
     pub fn ciphertext_len(&self) -> usize {
         match self {
             AlgId::X25519 => 32,
-            AlgId::MlKem768 => 1088,  // FIPS 203
+            AlgId::MlKem768 => 1088, // FIPS 203
             AlgId::HybridX25519MlKem768 => 32 + 1088,
-            _ => 0,  // 署名方式は暗号文を持たない
+            _ => 0, // 署名方式は暗号文を持たない
         }
     }
 
     /// 共有秘密長 (bytes)。
     #[must_use]
     pub fn shared_secret_len(&self) -> usize {
-        32  // 全方式で 32 bytes に正規化
+        32 // 全方式で 32 bytes に正規化
     }
-
 
     /// ワイヤーフォーマット識別子。一度割り当てると変更しない。
     pub const fn code(self) -> u16 {
@@ -129,13 +128,19 @@ impl AlgId {
     pub const fn is_pqc(self) -> bool {
         matches!(
             self,
-            AlgId::MlKem768 | AlgId::MlDsa65 | AlgId::HybridX25519MlKem768 | AlgId::HybridEd25519MlDsa65
+            AlgId::MlKem768
+                | AlgId::MlDsa65
+                | AlgId::HybridX25519MlKem768
+                | AlgId::HybridEd25519MlDsa65
         )
     }
 
     /// このアルゴリズムはハイブリッド構成か?
     pub const fn is_hybrid(self) -> bool {
-        matches!(self, AlgId::HybridX25519MlKem768 | AlgId::HybridEd25519MlDsa65)
+        matches!(
+            self,
+            AlgId::HybridX25519MlKem768 | AlgId::HybridEd25519MlDsa65
+        )
     }
 }
 
@@ -190,7 +195,8 @@ impl<'de, K: KeyKind> serde::Deserialize<'de> for PublicKey<K> {
             alg: raw.alg,
             _kind: PhantomData,
         };
-        pk.validate_length().map_err(|e| serde::de::Error::custom(format!("{e:?}")))?;
+        pk.validate_length()
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))?;
         Ok(pk)
     }
 }
@@ -303,7 +309,9 @@ impl SharedSecret {
 impl std::fmt::Debug for SharedSecret {
     /// 鍵マテリアルは絶対に表示しない。
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SharedSecret").field("len", &self.0.len()).finish()
+        f.debug_struct("SharedSecret")
+            .field("len", &self.0.len())
+            .finish()
     }
 }
 
@@ -320,10 +328,17 @@ pub trait Kem {
     fn generate(&self) -> Result<(PrivateKeyHandle<KemKey>, PublicKey<KemKey>), CryptoError>;
 
     /// 指定の公開鍵に新しい共有シークレットをカプセル化。
-    fn encapsulate(&self, pk: &PublicKey<KemKey>) -> Result<(SharedSecret, Ciphertext), CryptoError>;
+    fn encapsulate(
+        &self,
+        pk: &PublicKey<KemKey>,
+    ) -> Result<(SharedSecret, Ciphertext), CryptoError>;
 
     /// 秘密鍵ハンドルで暗号文をデカプセル化。
-    fn decapsulate(&self, sk: &PrivateKeyHandle<KemKey>, ct: &Ciphertext) -> Result<SharedSecret, CryptoError>;
+    fn decapsulate(
+        &self,
+        sk: &PrivateKeyHandle<KemKey>,
+        ct: &Ciphertext,
+    ) -> Result<SharedSecret, CryptoError>;
 }
 
 /// デジタル署名スキーム。
@@ -335,10 +350,16 @@ pub trait Sig {
     fn generate(&self) -> Result<(PrivateKeyHandle<SigKey>, PublicKey<SigKey>), CryptoError>;
 
     /// メッセージに署名。アルゴリズムタグ付き署名を返す。
-    fn sign(&self, sk: &PrivateKeyHandle<SigKey>, message: &[u8]) -> Result<Signature, CryptoError>;
+    fn sign(&self, sk: &PrivateKeyHandle<SigKey>, message: &[u8])
+        -> Result<Signature, CryptoError>;
 
     /// Verify. Ok only if sig valid AND algorithm tag matches pk's algorithm.
-    fn verify(&self, pk: &PublicKey<SigKey>, message: &[u8], sig: &Signature) -> Result<(), CryptoError>;
+    fn verify(
+        &self,
+        pk: &PublicKey<SigKey>,
+        message: &[u8],
+        sig: &Signature,
+    ) -> Result<(), CryptoError>;
 }
 
 // ============================================================================
@@ -358,10 +379,14 @@ impl HybridX25519MlKem {
     /// 具体的なバックエンドで構築。
     pub fn new(classical: Box<dyn Kem>, pqc: Box<dyn Kem>) -> Result<Self, CryptoError> {
         if classical.algorithm() != AlgId::X25519 {
-            return Err(CryptoError::AlgorithmMismatch("classical half must be X25519"));
+            return Err(CryptoError::AlgorithmMismatch(
+                "classical half must be X25519",
+            ));
         }
         if pqc.algorithm() != AlgId::MlKem768 {
-            return Err(CryptoError::AlgorithmMismatch("pqc half must be ML-KEM-768"));
+            return Err(CryptoError::AlgorithmMismatch(
+                "pqc half must be ML-KEM-768",
+            ));
         }
         Ok(Self { classical, pqc })
     }
@@ -373,12 +398,18 @@ impl HybridX25519MlKem {
         Ok(HybridKemKeypair {
             classical_sk: c_sk,
             pqc_sk: p_sk,
-            public: HybridPublicKey { classical: c_pk, pqc: p_pk },
+            public: HybridPublicKey {
+                classical: c_pk,
+                pqc: p_pk,
+            },
         })
     }
 
     /// ハイブリッド公開鍵にカプセル化。
-    pub fn encapsulate(&self, pk: &HybridPublicKey) -> Result<(SharedSecret, Ciphertext), CryptoError> {
+    pub fn encapsulate(
+        &self,
+        pk: &HybridPublicKey,
+    ) -> Result<(SharedSecret, Ciphertext), CryptoError> {
         pk.classical.validate_length()?;
         pk.pqc.validate_length()?;
         let (c_ss, c_ct) = self.classical.encapsulate(&pk.classical)?;
@@ -395,11 +426,21 @@ impl HybridX25519MlKem {
         bytes.extend_from_slice(&(p_ct.bytes.len() as u16).to_be_bytes());
         bytes.extend_from_slice(&p_ct.bytes);
 
-        Ok((combined, Ciphertext { alg: AlgId::HybridX25519MlKem768, bytes }))
+        Ok((
+            combined,
+            Ciphertext {
+                alg: AlgId::HybridX25519MlKem768,
+                bytes,
+            },
+        ))
     }
 
     /// Decapsulate. Algorithm tag MUST match.
-    pub fn decapsulate(&self, sk: &HybridKemKeypair, ct: &Ciphertext) -> Result<SharedSecret, CryptoError> {
+    pub fn decapsulate(
+        &self,
+        sk: &HybridKemKeypair,
+        ct: &Ciphertext,
+    ) -> Result<SharedSecret, CryptoError> {
         if ct.alg != AlgId::HybridX25519MlKem768 {
             return Err(CryptoError::AlgorithmMismatch("ciphertext is not hybrid"));
         }
@@ -408,10 +449,13 @@ impl HybridX25519MlKem {
         }
         let cls_len = u16::from_be_bytes([ct.bytes[0], ct.bytes[1]]) as usize;
         if ct.bytes.len() < 2 + cls_len + 2 {
-            return Err(CryptoError::InvalidFormat("hybrid ciphertext: classical overrun"));
+            return Err(CryptoError::InvalidFormat(
+                "hybrid ciphertext: classical overrun",
+            ));
         }
         let cls_bytes = ct.bytes[2..2 + cls_len].to_vec();
-        let pqc_len = u16::from_be_bytes([ct.bytes[2 + cls_len], ct.bytes[2 + cls_len + 1]]) as usize;
+        let pqc_len =
+            u16::from_be_bytes([ct.bytes[2 + cls_len], ct.bytes[2 + cls_len + 1]]) as usize;
         let pqc_start = 2 + cls_len + 2;
         if ct.bytes.len() < pqc_start + pqc_len {
             return Err(CryptoError::InvalidFormat("hybrid ciphertext: pqc overrun"));
@@ -420,11 +464,19 @@ impl HybridX25519MlKem {
 
         // 末尾にゴミバイトがある場合は拒否 (暗号文可鍛性攻撃: 異なる CT で同じ SS)
         if pqc_start + pqc_len != ct.bytes.len() {
-            return Err(CryptoError::InvalidFormat("hybrid ciphertext: trailing bytes"));
+            return Err(CryptoError::InvalidFormat(
+                "hybrid ciphertext: trailing bytes",
+            ));
         }
 
-        let cls_ct = Ciphertext { alg: AlgId::X25519, bytes: cls_bytes };
-        let pqc_ct = Ciphertext { alg: AlgId::MlKem768, bytes: pqc_bytes };
+        let cls_ct = Ciphertext {
+            alg: AlgId::X25519,
+            bytes: cls_bytes,
+        };
+        let pqc_ct = Ciphertext {
+            alg: AlgId::MlKem768,
+            bytes: pqc_bytes,
+        };
 
         let c_ss = self.classical.decapsulate(&sk.classical_sk, &cls_ct)?;
         let p_ss = self.pqc.decapsulate(&sk.pqc_sk, &pqc_ct)?;
@@ -474,7 +526,6 @@ impl HybridPublicKey {
     }
 }
 
-
 /// X25519 共有秘密の contributory behavior を検証する。
 ///
 /// arxiv eprint 2026/192 (Verification Theatre) V4: libcrux は X25519 DH 出力の
@@ -513,8 +564,8 @@ pub(crate) fn combine_kem_secrets(classical: &ClassicalSs, pqc: &PqcSs) -> Share
     // "both must break" 特性 (ROM 下):
     // 攻撃者は ML-KEM と X25519 の両方を破らなければ出力を区別できない。
     let mut ikm = [0u8; 64];
-    ikm[..32].copy_from_slice(&classical.0.0);
-    ikm[32..].copy_from_slice(&pqc.0.0);
+    ikm[..32].copy_from_slice(&classical.0 .0);
+    ikm[32..].copy_from_slice(&pqc.0 .0);
 
     let hkdf = Hkdf::<Sha256>::new(None, &ikm);
     let mut okm = [0u8; 32];
@@ -609,13 +660,17 @@ impl NonceCounter {
     /// 新しいカウンターを 0 から開始する。
     #[must_use]
     pub fn new() -> Self {
-        Self { counter: std::sync::atomic::AtomicU64::new(0) }
+        Self {
+            counter: std::sync::atomic::AtomicU64::new(0),
+        }
     }
 
     /// カウンターを指定値から開始する (永続化後の再開に使用)。
     #[must_use]
     pub fn from_value(start: u64) -> Self {
-        Self { counter: std::sync::atomic::AtomicU64::new(start) }
+        Self {
+            counter: std::sync::atomic::AtomicU64::new(start),
+        }
     }
 
     /// 次の nonce を取得してカウンターをインクリメントする。
@@ -624,9 +679,13 @@ impl NonceCounter {
     ///
     /// カウンターが `u64::MAX` に達した場合 (キーを再生成すること)。
     pub fn next_nonce(&self) -> Result<[u8; 12], CryptoError> {
-        let val = self.counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let val = self
+            .counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if val == u64::MAX {
-            return Err(CryptoError::Backend("nonce counter exhausted; rotate key".to_string()));
+            return Err(CryptoError::Backend(
+                "nonce counter exhausted; rotate key".to_string(),
+            ));
         }
         // 12 バイト nonce: 上位 4 バイトを 0、下位 8 バイトをカウンター値 (big-endian)
         let mut nonce = [0u8; 12];
@@ -693,17 +752,17 @@ impl Argon2Params {
     pub fn validate(&self) -> Result<(), CryptoError> {
         if self.memory_kib < 65_536 {
             return Err(CryptoError::InvalidFormat(
-                "Argon2id: memory_kib < 65536 (64 MiB). RFC 9106 最小要件を満たさない"
+                "Argon2id: memory_kib < 65536 (64 MiB). RFC 9106 最小要件を満たさない",
             ));
         }
         if self.time_cost < 3 {
             return Err(CryptoError::InvalidFormat(
-                "Argon2id: time_cost < 3. RFC 9106 最小要件を満たさない"
+                "Argon2id: time_cost < 3. RFC 9106 最小要件を満たさない",
             ));
         }
         if self.parallelism == 0 {
             return Err(CryptoError::InvalidFormat(
-                "Argon2id: parallelism = 0 は無効"
+                "Argon2id: parallelism = 0 は無効",
             ));
         }
         Ok(())
@@ -773,20 +832,40 @@ mod tests {
         ct_len: usize,
     }
     impl Kem for MockKem {
-        fn algorithm(&self) -> AlgId { self.alg }
+        fn algorithm(&self) -> AlgId {
+            self.alg
+        }
         fn generate(&self) -> Result<(PrivateKeyHandle<KemKey>, PublicKey<KemKey>), CryptoError> {
             Ok((
-                PrivateKeyHandle { _handle_id: [0x01u8; 32], alg: self.alg, _kind: PhantomData },
-                PublicKey { bytes: vec![0x02u8; 32], alg: self.alg, _kind: PhantomData },
+                PrivateKeyHandle {
+                    _handle_id: [0x01u8; 32],
+                    alg: self.alg,
+                    _kind: PhantomData,
+                },
+                PublicKey {
+                    bytes: vec![0x02u8; 32],
+                    alg: self.alg,
+                    _kind: PhantomData,
+                },
             ))
         }
-        fn encapsulate(&self, _pk: &PublicKey<KemKey>) -> Result<(SharedSecret, Ciphertext), CryptoError> {
+        fn encapsulate(
+            &self,
+            _pk: &PublicKey<KemKey>,
+        ) -> Result<(SharedSecret, Ciphertext), CryptoError> {
             Ok((
                 SharedSecret([0xAAu8; 32]),
-                Ciphertext { alg: self.alg, bytes: vec![0xBBu8; self.ct_len] },
+                Ciphertext {
+                    alg: self.alg,
+                    bytes: vec![0xBBu8; self.ct_len],
+                },
             ))
         }
-        fn decapsulate(&self, _sk: &PrivateKeyHandle<KemKey>, _ct: &Ciphertext) -> Result<SharedSecret, CryptoError> {
+        fn decapsulate(
+            &self,
+            _sk: &PrivateKeyHandle<KemKey>,
+            _ct: &Ciphertext,
+        ) -> Result<SharedSecret, CryptoError> {
             Ok(SharedSecret([0xAAu8; 32]))
         }
     }
@@ -794,7 +873,10 @@ mod tests {
     #[test]
     fn validate_x25519_rejects_all_zero() {
         let zero = SharedSecret([0u8; 32]);
-        assert!(matches!(validate_x25519_output(&zero), Err(CryptoError::WeakSharedSecret)));
+        assert!(matches!(
+            validate_x25519_output(&zero),
+            Err(CryptoError::WeakSharedSecret)
+        ));
     }
 
     #[test]
@@ -847,8 +929,16 @@ mod tests {
     #[test]
     fn hybrid_public_key_fingerprint_is_stable() {
         let pk = HybridPublicKey {
-            classical: PublicKey { bytes: vec![1u8; 32], alg: AlgId::X25519, _kind: PhantomData },
-            pqc: PublicKey { bytes: vec![4u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+            classical: PublicKey {
+                bytes: vec![1u8; 32],
+                alg: AlgId::X25519,
+                _kind: PhantomData,
+            },
+            pqc: PublicKey {
+                bytes: vec![4u8; 1184],
+                alg: AlgId::MlKem768,
+                _kind: PhantomData,
+            },
         };
         let fp1 = pk.fingerprint();
         let fp2 = pk.fingerprint();
@@ -862,23 +952,48 @@ mod tests {
     #[test]
     fn fingerprint_changes_with_different_keys() {
         let pk1 = HybridPublicKey {
-            classical: PublicKey { bytes: vec![1u8; 32], alg: AlgId::X25519, _kind: PhantomData },
-            pqc: PublicKey { bytes: vec![2u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+            classical: PublicKey {
+                bytes: vec![1u8; 32],
+                alg: AlgId::X25519,
+                _kind: PhantomData,
+            },
+            pqc: PublicKey {
+                bytes: vec![2u8; 1184],
+                alg: AlgId::MlKem768,
+                _kind: PhantomData,
+            },
         };
         let pk2 = HybridPublicKey {
-            classical: PublicKey { bytes: vec![3u8; 32], alg: AlgId::X25519, _kind: PhantomData },
-            pqc: PublicKey { bytes: vec![2u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+            classical: PublicKey {
+                bytes: vec![3u8; 32],
+                alg: AlgId::X25519,
+                _kind: PhantomData,
+            },
+            pqc: PublicKey {
+                bytes: vec![2u8; 1184],
+                alg: AlgId::MlKem768,
+                _kind: PhantomData,
+            },
         };
-        assert_ne!(pk1.fingerprint(), pk2.fingerprint(),
-            "異なる鍵は異なるフィンガープリントを持つ");
+        assert_ne!(
+            pk1.fingerprint(),
+            pk2.fingerprint(),
+            "異なる鍵は異なるフィンガープリントを持つ"
+        );
     }
 
     #[test]
     fn decapsulate_rejects_trailing_bytes() {
         // 正常な暗号文を作り末尾に余分なバイトを追加 → 可鍛性攻撃を拒否
         let kem = HybridX25519MlKem {
-            classical: Box::new(MockKem { alg: AlgId::X25519, ct_len: 32 }),
-            pqc:       Box::new(MockKem { alg: AlgId::MlKem768, ct_len: 1088 }),
+            classical: Box::new(MockKem {
+                alg: AlgId::X25519,
+                ct_len: 32,
+            }),
+            pqc: Box::new(MockKem {
+                alg: AlgId::MlKem768,
+                ct_len: 1088,
+            }),
         };
         // 正常な CT を手動で構築
         let cls_len: u16 = 32;
@@ -890,11 +1005,16 @@ mod tests {
         bytes.extend_from_slice(&vec![0xCDu8; 1088]);
         bytes.push(0xFF); // 末尾ゴミバイト
 
-        let ct = Ciphertext { alg: AlgId::HybridX25519MlKem768, bytes };
+        let ct = Ciphertext {
+            alg: AlgId::HybridX25519MlKem768,
+            bytes,
+        };
         let keypair = kem.generate().unwrap();
         let result = kem.decapsulate(&keypair, &ct);
-        assert!(matches!(result, Err(CryptoError::InvalidFormat(_))),
-            "末尾バイトがある暗号文は拒否されなければならない: {result:?}");
+        assert!(
+            matches!(result, Err(CryptoError::InvalidFormat(_))),
+            "末尾バイトがある暗号文は拒否されなければならない: {result:?}"
+        );
     }
 
     #[test]
@@ -902,7 +1022,10 @@ mod tests {
         // XOR の場合 a ^ a = 0 になるが、HKDF はそうならない
         let a = SharedSecret([0xABu8; 32]);
         let result = combine_shared_secrets(&a, &a);
-        assert_ne!(result.0, [0u8; 32], "HKDF with equal inputs must not produce zero");
+        assert_ne!(
+            result.0, [0u8; 32],
+            "HKDF with equal inputs must not produce zero"
+        );
     }
 
     #[test]
@@ -977,7 +1100,10 @@ mod tests {
         let ss = SharedSecret([0x77u8; 32]);
         let out1 = ss.derive_key(b"kaname-encrypt-v1");
         let out2 = ss.derive_key(b"kaname-auth-v1");
-        assert_ne!(out1, out2, "異なる info は異なるサブキーを生成しなければならない");
+        assert_ne!(
+            out1, out2,
+            "異なる info は異なるサブキーを生成しなければならない"
+        );
     }
 
     #[test]
@@ -1009,27 +1135,56 @@ mod tests {
             alg: AlgId::X25519,
             _kind: PhantomData,
         };
-        assert!(pk.validate_length().is_ok(), "正しい長さの公開鍵は受理されなければならない");
+        assert!(
+            pk.validate_length().is_ok(),
+            "正しい長さの公開鍵は受理されなければならない"
+        );
     }
 
     #[test]
     fn fingerprint_returns_invalid_key_for_oversized_classical() {
         let pk = HybridPublicKey {
-            classical: PublicKey { bytes: vec![0u8; 10_000], alg: AlgId::X25519, _kind: PhantomData },
-            pqc: PublicKey { bytes: vec![0u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+            classical: PublicKey {
+                bytes: vec![0u8; 10_000],
+                alg: AlgId::X25519,
+                _kind: PhantomData,
+            },
+            pqc: PublicKey {
+                bytes: vec![0u8; 1184],
+                alg: AlgId::MlKem768,
+                _kind: PhantomData,
+            },
         };
-        assert_eq!(pk.fingerprint(), "invalid-key", "不正な鍵長はフィンガープリント OOM を起こしてはならない");
+        assert_eq!(
+            pk.fingerprint(),
+            "invalid-key",
+            "不正な鍵長はフィンガープリント OOM を起こしてはならない"
+        );
     }
 
     #[test]
     fn encapsulate_rejects_oversized_public_key() {
         let kem = HybridX25519MlKem {
-            classical: Box::new(MockKem { alg: AlgId::X25519, ct_len: 32 }),
-            pqc:       Box::new(MockKem { alg: AlgId::MlKem768, ct_len: 1088 }),
+            classical: Box::new(MockKem {
+                alg: AlgId::X25519,
+                ct_len: 32,
+            }),
+            pqc: Box::new(MockKem {
+                alg: AlgId::MlKem768,
+                ct_len: 1088,
+            }),
         };
         let bad_pk = HybridPublicKey {
-            classical: PublicKey { bytes: vec![0u8; 1_000_000], alg: AlgId::X25519, _kind: PhantomData },
-            pqc: PublicKey { bytes: vec![0u8; 1184], alg: AlgId::MlKem768, _kind: PhantomData },
+            classical: PublicKey {
+                bytes: vec![0u8; 1_000_000],
+                alg: AlgId::X25519,
+                _kind: PhantomData,
+            },
+            pqc: PublicKey {
+                bytes: vec![0u8; 1184],
+                alg: AlgId::MlKem768,
+                _kind: PhantomData,
+            },
         };
         let result = kem.encapsulate(&bad_pk);
         assert!(
@@ -1062,8 +1217,10 @@ mod tests {
         // X25519 公開鍵は 32 バイトのはずが 16 バイトのペイロードを注入する
         let json = r#"{"bytes":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],"alg":"X25519"}"#;
         let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(json);
-        assert!(result.is_err(),
-            "不正な長さの公開鍵をデシリアライズした際にエラーが返されなかった");
+        assert!(
+            result.is_err(),
+            "不正な長さの公開鍵をデシリアライズした際にエラーが返されなかった"
+        );
     }
 
     #[test]
@@ -1072,8 +1229,10 @@ mod tests {
         let bytes: Vec<u8> = (0u8..32).collect();
         let json = format!(r#"{{"bytes":{bytes:?},"alg":"X25519"}}"#);
         let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(&json);
-        assert!(result.is_ok(),
-            "正しい長さの公開鍵をデシリアライズできなかった: {result:?}");
+        assert!(
+            result.is_ok(),
+            "正しい長さの公開鍵をデシリアライズできなかった: {result:?}"
+        );
     }
 
     #[test]
@@ -1082,8 +1241,10 @@ mod tests {
         let bytes = vec![0u8; 100];
         let json = format!(r#"{{"bytes":{bytes:?},"alg":"MlKem768"}}"#);
         let result: Result<PublicKey<KemKey>, _> = serde_json::from_str(&json);
-        assert!(result.is_err(),
-            "ML-KEM-768 不正長さ公開鍵がデシリアライズを通過した");
+        assert!(
+            result.is_err(),
+            "ML-KEM-768 不正長さ公開鍵がデシリアライズを通過した"
+        );
     }
 
     // ── NonceCounter テスト ────────────────────────────────────────────────
@@ -1110,7 +1271,10 @@ mod tests {
         let n1 = nc.next_nonce().unwrap();
         let n2 = nc.next_nonce().unwrap();
         // big-endian 8バイトを比較
-        assert!(n2[4..] > n1[4..], "nonce カウンターは単調増加でなければならない");
+        assert!(
+            n2[4..] > n1[4..],
+            "nonce カウンターは単調増加でなければならない"
+        );
     }
 
     #[test]
@@ -1135,9 +1299,7 @@ mod tests {
         use std::sync::Arc;
         let nc = Arc::new(NonceCounter::new());
         let nc2 = nc.clone();
-        let handle = std::thread::spawn(move || {
-            nc2.next_nonce().unwrap()
-        });
+        let handle = std::thread::spawn(move || nc2.next_nonce().unwrap());
         let n1 = nc.next_nonce().unwrap();
         let n2 = handle.join().unwrap();
         assert_ne!(n1, n2, "スレッド間で nonce が重複してはならない");
@@ -1162,7 +1324,10 @@ mod tests {
             time_cost: 3,
             parallelism: 1,
         };
-        assert!(params.validate().is_err(), "memory < 64 MiB は拒否されるべき");
+        assert!(
+            params.validate().is_err(),
+            "memory < 64 MiB は拒否されるべき"
+        );
     }
 
     #[test]
@@ -1182,7 +1347,10 @@ mod tests {
             time_cost: 3,
             parallelism: 0,
         };
-        assert!(params.validate().is_err(), "parallelism = 0 は拒否されるべき");
+        assert!(
+            params.validate().is_err(),
+            "parallelism = 0 は拒否されるべき"
+        );
     }
 
     // ct_eq テスト
