@@ -264,6 +264,7 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D66 | **runbook が存在しない `kaname-cli` を参照**: `docs/runbook/bec-alert.md` の5箇所が未実装の CLI を前提にしている | P3 | 実在の手段 (sqlcipher → `audit_log`/`messages`/`contacts`) への書き換え、または kaname-cli 実装後の有効化が必要 |
 | D67 | ~~**BEC 評価へのスレッド文脈・DKIM 署名が未配線**: 全3経路で `thread_context`=`None`、`past_thread_bodies`=`&[]`、`dkim_signature_header`=`None` 固定 — 実装済みのスレッド乗っ取り・口座差し替え・DKIM `l=` 乱用/リプレイ検出が本番で一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | kaname-render の `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加、kaname-jmap の `Email/get` に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を要求、kaname-store の `messages` に `message_id`/`thread_id` 永続化 + `list_thread_messages`/`list_messages_by_message_ids` 追加、kaname-ui 全経路で配線 (kaname-bec `detect_language` を pub 化 — 要 security-lead 承認)。一覧経路の Authentication-Results (SPF/DKIM/DMARC) も `header:Authentication-Results:asText` で実値化 (kaname-render `parse_auth_results_str` 公開)。nextest 1,183 pass 実測 |
 | D68b | **メール一覧にページネーションが無い**: `mail_fetch`/`mail_list_stored` は `position=0` 固定・先頭 `limit` (≤500) 件のみ — 受信箱に51通目以降のメールを表示する経路がない (UI に「もっと読む」も無い) | P3 | kaname-jmap `query_emails` の `position` パラメータは実在するため、UI にページ送り/無限スクロールを追加し offset を渡せば実現可能。現状は「最新50件のみ表示」制限として明記 |
+| D70 | **オンボーディングの通知/テレメトリトグルが書き込み専用**: `settings_save_onboarding` は `notifications`/`telemetry` を `settings` テーブルへ永続化するが、読み出すコードパスが存在しない (通知送信・テレメトリ送信の機能自体が未実装)。ユーザーは「通知を有効にした」が通知は一切来ない placebo 状態 | P4 | 機能実装時に `get_setting` で読み出して利用する。現状は設定値が inert データである旨をここに明記 (偽装ではなく先行収集だが、ユーザー期待との乖離はある) |
 
 ### 完了判定の変更
 
