@@ -109,7 +109,7 @@ kaname-core は `TriageEngine` 経由で既に到達済みだったため表か�
 |---|---|
 | `kaname-billing` | 課金基盤。本製品のスコープ (メールセキュリティ解析) に不要。永続化も未実装だった (D6) |
 | `kaname-continuity` | デバイス間ハンドオフ。単一デバイスで完結する現スコープでは不要 |
-| `kaname-i18n` | 翻訳カタログ。フロントエンドの `src/i18n.ts` + `src/locales/` が正規実装であり重複 |
+| `kaname-i18n` | 翻訳カタログ。フロント側 `src/i18n.ts` + `src/locales/` も呼び出し実績ゼロで削除済み (E9) — UI は日本語ハードコードのみ |
 | `kaname-tray` | トレイアイコン生成。`src-tauri` が独自にトレイを持つため重複 |
 
 **モック実装を組み込まない判断が最も重要**である。`kaname-mls` や

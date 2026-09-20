@@ -54,13 +54,15 @@ kaname/
 ├── tauri.conf.json         # → src-tauri/
 │
 ├── src/                    # SolidJS フロントエンド
-│   ├── main.tsx            # エントリポイント (4 ビューのルーター)
+│   ├── main.tsx            # エントリポイント (タブルーター)
 │   ├── ui/                 # UI コンポーネント
-│   │   ├── KanameDesign.tsx       # Liquid Glass メイン UI
-│   │   ├── KanameAppleFeatures.tsx # Quick Look / Undo / Smart Reply
-│   │   ├── KanameApp.tsx          # スワイプ / Focus / 自然言語検索
+│   │   ├── Inbox.tsx              # 受信箱 / メール開封ビュー
+│   │   ├── Compose.tsx            # 作成画面 (送信前アドバイザリ)
+│   │   ├── EmlImport.tsx          # .eml ファイル解析
+│   │   ├── MailConnect.tsx        # サーバ接続設定
+│   │   ├── Onboarding.tsx         # 初回オンボーディング
+│   │   ├── OobvCeremony.tsx       # OOBV 電話確認セレモニー
 │   │   └── SecurityDashboard.tsx  # セキュリティポスチャー
-│   ├── locales/            # i18n カタログ (ja / en)
 │   └── __tests__/          # vitest ユニットテスト
 │
 ├── src-tauri/              # Tauri バックエンド
