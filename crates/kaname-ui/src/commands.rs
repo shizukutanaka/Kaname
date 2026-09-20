@@ -1148,6 +1148,39 @@ mod tests {
         );
         Ok(())
     }
+
+    /// D109: `org_domain` 設定は接続時の導出値で初めて実在する。
+    /// 未設定なら小文字化して書き込み、既存値は上書きしないことを固定する。
+    #[tokio::test]
+    async fn persist_org_domain_if_unset_は未設定時のみ書き込む() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d109-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let db = dir.join("history.db");
+        let key = "00".repeat(32);
+        history_open(db.to_string_lossy().into_owned(), key).await?;
+
+        let account = "acct-d109";
+        persist_org_domain_if_unset(account, "  Corp-Example.com  ").await;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        let v = store
+            .get_setting(account, "org_domain")
+            .await
+            .map_err(|e| e.to_string())?;
+        assert_eq!(v.as_deref(), Some("corp-example.com"));
+
+        // 既存値 (将来の手動上書きを含む) は保持する。
+        persist_org_domain_if_unset(account, "other.example").await;
+        let v2 = store
+            .get_setting(account, "org_domain")
+            .await
+            .map_err(|e| e.to_string())?;
+        assert_eq!(v2.as_deref(), Some("corp-example.com"));
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -1496,6 +1529,12 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     };
 
     *jmap_slot().lock().await = Some(std::sync::Arc::new(client));
+    // 導出した自組織ドメインを永続化し `our_domain` の設定経路を実効化する (D109)。
+    // 未接続時のオフライン解析 (mail_import_eml / mail_scan_folder) でも
+    // 自組織偽装系シグナルが効くようになる。
+    if let Some(d) = &result.org_domain {
+        persist_org_domain_if_unset(&result.account_id, d).await;
+    }
     audit_event(
         Some(&result.account_id),
         "MAIL_CONNECT",
@@ -1503,6 +1542,31 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     )
     .await;
     Ok(result)
+}
+
+/// `org_domain` 設定が未設定なら、接続時に導出したドメインを保存する。
+///
+/// `our_domain` の最優先経路は `settings.org_domain` だが書き込み経路が
+/// どこにも存在せず常に空だった (D109)。既に値がある場合は上書きしない
+/// (将来の手動設定・マルチドメイン組織の上書き余地を残す)。
+/// 永続化の失敗で接続自体を失敗させない (best-effort)。
+async fn persist_org_domain_if_unset(account_id: &str, domain: &str) {
+    let domain = domain.trim().to_lowercase();
+    if domain.is_empty() {
+        return;
+    }
+    let Some(store) = store_slot().lock().await.clone() else {
+        return;
+    };
+    match store.get_setting(account_id, "org_domain").await {
+        Ok(Some(v)) if !v.trim().is_empty() => {}
+        Ok(_) => {
+            if let Err(e) = store.set_setting(account_id, "org_domain", &domain).await {
+                tracing::warn!(error=%e, "org_domain の保存に失敗");
+            }
+        }
+        Err(e) => tracing::warn!(error=%e, "org_domain の読み出しに失敗"),
+    }
 }
 
 /// 接続を破棄する (トークンをメモリから落とす)。
