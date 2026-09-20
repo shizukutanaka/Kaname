@@ -300,7 +300,7 @@ impl JmapClient {
                             "properties": [
                                 "id","mailboxIds","keywords","size",
                                 "receivedAt","sentAt","subject",
-                                "from","to","replyTo","preview","hasAttachment","threadId",
+                                "from","to","replyTo","preview","threadId",
                                 "messageId","inReplyTo","references",
                                 "header:DKIM-Signature:asText",
                                 "header:Authentication-Results:asText",
@@ -743,7 +743,6 @@ pub struct EmailListItem {
     /// Reply-To アドレス群 (BEC の返信横取り検出に使用)。
     pub reply_to: Option<Vec<EmailAddress>>,
     pub preview: Option<String>,
-    pub has_attachment: Option<bool>,
     pub thread_id: Option<String>,
     /// RFC 5322 Message-ID (スレッド乗っ取り検出・スレッド保存用)。
     #[serde(default)]
@@ -1181,7 +1180,6 @@ mod tests {
             to: None,
             reply_to: None,
             preview: None,
-            has_attachment: None,
             thread_id: None,
             message_id: None,
             in_reply_to: None,
