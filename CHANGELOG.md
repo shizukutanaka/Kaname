@@ -51,6 +51,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - fix(ci-templates): ci.yml の `--bench '*'` を `--bench core_bench` に修正 (D119 と同型の glob 無効バグ — ワークフロー復活時にベンチが走らなかった)
 - docs: D2 (ローカル LLM 推論) を5フェーズの実装計画に解体 — `docs/design-d2-local-llm.md` (現行コードの構造に沿った Phase 別タスク・完了条件・リスク)
 - docs: D1 (MLS グループ暗号化) を5フェーズの実装計画に解体 — `docs/design-d1-mls.md` (openmls統合/永続化/KP配送/セレモニー統合/Safety Number)
+- docs: D4 (Firecracker サンドボックス) を4フェーズの実装計画に解体 — `docs/design-d4-firecracker.md` (プロセス制御/vsock/OS分岐/UI統合、実機検証は Linux 必須)
 - docs: maturity.md の出荷クレート数を cargo metadata 実測で訂正 (19/23 → 17/22、非出荷5件に kaname-ai を追記) / gap-analysis の D20/D37 に「現在の環境では cargo が実行可能」の追記
   - fix(kaname-ui): 詳細解析・フォルダ一括解析にも送信者履歴を供給 — `sender_history` が `None` 固定で一覧と詳細の BEC 判定が食い違っていた (D100)
   - fix(kaname-dlp,kaname-ui): 受信側 DLP に既定ルール3件を追加 (構造的に空だった) + 誤配検出へ既知宛先ドメインを連絡先履歴から供給 (D104) — kaname-dlp 変更のため security-lead 承認要
