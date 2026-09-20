@@ -105,6 +105,8 @@ const App = () => {
       }));
 
       // 3. リアルタイムイベント購読
+      // mail_fetch / mail_mark_read / mail_trash 成功時に src-tauri が
+      // 実集計値を発行する (発行側が無いイベントは購読しても二度と来ない)。
       await listen<{ unread: number; bec: number }>("mail:summary_updated", (event) => {
         setState(s => ({ ...s, becAlertCount: event.payload.bec }));
       });
@@ -116,10 +118,6 @@ const App = () => {
       });
       await listen("menu:security", () => {
         setState(s => ({ ...s, activeView: "security" }));
-      });
-      await listen<{ email_id: string; verdict: string }>("bec:alert", (event) => {
-        console.warn("[BEC]", event.payload.verdict, event.payload.email_id);
-        setState(s => ({ ...s, becAlertCount: s.becAlertCount + 1 }));
       });
 
     } catch (err) {

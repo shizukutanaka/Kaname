@@ -29,19 +29,37 @@ async fn mail_get_summary() -> Result<commands::MailSummary, String> {
     commands::mail_get_summary().await
 }
 
+/// メール件数変化後に `mail:summary_updated` を発行する。
+///
+/// フロントエンドはこのイベントでサイドバーの未読/BEC警戒バッジを
+/// 更新する。発行側が無いと購読だけのデッドイベントになるため、
+/// 件数が変わりうるコマンド (fetch/mark_read/trash) の成功時に呼ぶ。
+async fn emit_summary_updated(app: &AppHandle) {
+    if let Ok(s) = commands::mail_get_summary().await {
+        let _ = app.emit(
+            "mail:summary_updated",
+            serde_json::json!({ "unread": s.unread, "bec": s.bec_alerts }),
+        );
+    }
+}
+
 #[tauri::command]
 async fn mail_open(email_id: String) -> Result<commands::ImportedEmail, String> {
     commands::mail_open(email_id).await
 }
 
 #[tauri::command]
-async fn mail_mark_read(ids: Vec<String>) -> Result<(), String> {
-    commands::mail_mark_read(ids).await
+async fn mail_mark_read(app: AppHandle, ids: Vec<String>) -> Result<(), String> {
+    commands::mail_mark_read(ids).await?;
+    emit_summary_updated(&app).await;
+    Ok(())
 }
 
 #[tauri::command]
-async fn mail_trash(email_id: String) -> Result<(), String> {
-    commands::mail_trash(email_id).await
+async fn mail_trash(app: AppHandle, email_id: String) -> Result<(), String> {
+    commands::mail_trash(email_id).await?;
+    emit_summary_updated(&app).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -183,10 +201,13 @@ async fn history_mark_verified(email: String) -> Result<(), String> {
 /// サーバからメール一覧を取得し、各通に BEC 判定を付けて返す。
 #[tauri::command]
 async fn mail_fetch(
+    app: AppHandle,
     mailbox_id: String,
     limit: Option<u32>,
 ) -> Result<Vec<commands::EmailRow>, String> {
-    commands::mail_fetch(mailbox_id, limit).await
+    let rows = commands::mail_fetch(mailbox_id, limit).await?;
+    emit_summary_updated(&app).await;
+    Ok(rows)
 }
 
 #[tauri::command]
