@@ -43,3 +43,9 @@ fuzz/artifacts/
 # SBOM 一時ファイル
 *-sbom.cdx.json
 LICENSE-THIRD-PARTY.md
+
+# cargo-fuzz 生成物 (ローカル実行用、再生成可能)
+fuzz/Cargo.lock
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/target/
