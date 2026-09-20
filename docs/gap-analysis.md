@@ -297,3 +297,28 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 - 判断に迷う場合 (例: D6のRedis要否、D1のopenmlsバージョン選定など)
   アーキテクチャ判断が要る項目は Opus に、決まった手順の実装 (プラグイン導入・
   ファイル移動・依存追加等) は Sonnet に割り振るのが効率的。
+
+### D81 — 検索/保存済み一覧からメールが一切開けなかった (修正済み・第11ラウンド)
+
+- **症状**: `StoredMessage.id` は `sha256(account_id + jmap_id)` の内部主キーだが、
+  `storedToListItem` がこれを一覧アイテムの `id` として使い、クリックで
+  `mail_open(id)` に渡していた。`mail_open` は JMAP `Email/get` にその値を
+  送るため、sha256 の内部 ID はサーバに存在せず必ず `NotFound` —
+  **オフライン一覧・検索結果のメールをどれをクリックしても
+  「メールの取得に失敗しました」としかならなかった**。オンラインでも
+  検索結果は開けない (検索が常にローカル DB 経由のため)。
+  既読化・ゴミ箱・送信者履歴記録も同じ内部 ID を使うため全て沈黙失敗。
+- **修正**: `StoredMessage` に `jmap_id` フィールドを追加し、全4 SELECT
+  (list_messages / by_thread / by_message_ids / search) に `jmap_id` 列を
+  追加 (index 10 に統一、`message_id` は index 11 へ)。`storedToListItem` は
+  `m.jmap_id` を一覧 `id` に使う。`jmap_id` が空の行 (過去行・非 JMAP 経路) は
+  開封時に正直にエラーとなる。
+- **テスト**: `listとsearchはjmap_idを返す` — 一覧・検索双方が jmap_id を
+  返し `id` と別物であることを固定。
+- **残課題**: オフライン時は本文自体が保存されていない (body_encrypted は
+  設計上空 — MLS モックのため平文を入れない判断) ため、jmap_id が正しくても
+  オフラインでの開封はサーバエラーになる。オフライン閲覧には本文保存の
+  設計変更が必要で、現状は「エラーとして正直に報告」のまま。
+- **教訓**: ID が2種類あるとき (内部主キー vs 外部プロトコル ID)、型も
+  フィールド名も「id」一つだと取り違える。境界を越えるデータの ID は
+  必ず `jmap_id`/`internal_id` のように由来を名付けること。

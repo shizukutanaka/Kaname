@@ -1376,8 +1376,14 @@ pub struct AttachmentScanRecord<'a> {
 /// 保存済みメール。
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct StoredMessage {
-    /// 内部 ID。
+    /// 内部 ID (`sha256(account_id + jmap_id)` — DB の主キー)。
+    /// **JMAP コマンド (mail_open 等) の ID としては使えない** —
+    /// サーバ側の ID は `jmap_id` を参照すること (D81)。
     pub id: String,
+    /// JMAP 側のメール ID。サーバ操作に使う正しい ID。
+    /// 過去の行や JMAP 以外の経路で保存された行は空文字になりうる。
+    #[serde(default)]
+    pub jmap_id: String,
     /// 送信者アドレス。
     pub from_addr: String,
     /// 送信者表示名。
@@ -1562,7 +1568,8 @@ impl Store {
         let mut stmt = conn
             .prepare(
                 "SELECT id, from_addr, from_name, subject, body_preview, \
-                    received_at, is_read, bec_score, bec_verdict, to_addrs \
+                    received_at, is_read, bec_score, bec_verdict, to_addrs, \
+                    jmap_id \
              FROM messages \
              WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
              ORDER BY received_at DESC LIMIT ?3;",
@@ -1601,7 +1608,7 @@ impl Store {
             .prepare(
                 "SELECT id, from_addr, from_name, subject, body_preview, \
                     received_at, is_read, bec_score, bec_verdict, to_addrs, \
-                    message_id \
+                    jmap_id, message_id \
              FROM messages \
              WHERE account_id = ?1 AND thread_id = ?2 AND is_deleted = 0 \
              ORDER BY received_at ASC LIMIT 100;",
@@ -1611,7 +1618,7 @@ impl Store {
         let rows = stmt
             .query_map(params![account_id, thread_id], |row| {
                 let mut s = row_to_stored(row)?;
-                s.message_id = row.get(10)?;
+                s.message_id = row.get(11)?;
                 Ok(s)
             })
             .map_err(|e| StoreError::Db(e.to_string()))?;
@@ -1654,7 +1661,7 @@ impl Store {
         let sql = format!(
             "SELECT id, from_addr, from_name, subject, body_preview, \
                 received_at, is_read, bec_score, bec_verdict, to_addrs, \
-                message_id \
+                jmap_id, message_id \
              FROM messages \
              WHERE account_id = ?1 AND is_deleted = 0 AND message_id IN ({marks}) \
              ORDER BY received_at ASC LIMIT 100;"
@@ -1675,7 +1682,7 @@ impl Store {
         let rows = stmt
             .query_map(rusqlite::params_from_iter(params_vec), |row| {
                 let mut s = row_to_stored(row)?;
-                s.message_id = row.get(10)?;
+                s.message_id = row.get(11)?;
                 Ok(s)
             })
             .map_err(|e| StoreError::Db(e.to_string()))?;
@@ -1789,7 +1796,8 @@ impl Store {
         let mut stmt = conn
             .prepare(
                 "SELECT id, from_addr, from_name, subject, body_preview, \
-                    received_at, is_read, bec_score, bec_verdict, to_addrs \
+                    received_at, is_read, bec_score, bec_verdict, to_addrs, \
+                    jmap_id \
              FROM messages \
              WHERE account_id = ?1 AND is_deleted = 0 \
                AND ( subject      LIKE ?2 ESCAPE '\\' \
@@ -1831,6 +1839,9 @@ fn row_to_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredMessage> {
             .ok()
             .and_then(|raw| serde_json::from_str::<Vec<String>>(&raw).ok())
             .unwrap_or_default(),
+        // jmap_id 列は呼び出し元の SELECT に必ず含める。
+        // NULL の過去行は空文字 (サーバ ID なし) として返す。
+        jmap_id: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
         // message_id 列は呼び出し元で SELECT に含めた場合のみ Some。
         // 既定クエリ (list_messages/search) では列がないため None を入れ、
         // スレッド系クエリが呼び出し側で上書きする。
@@ -1868,6 +1879,36 @@ mod message_persistence_tests {
             bec_score: None,
             bec_verdict: None,
         }
+    }
+
+    /// D81: `StoredMessage.id` は sha256 の内部主キーであり、JMAP サーバの
+    /// ID ではない。`mail_open` 等に内部 ID を渡すと必ず失敗するため、
+    /// 一覧/検索が `jmap_id` を返すことを固定する。
+    #[tokio::test]
+    async fn listとsearchはjmap_idを返す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-42", "検索対象の件名"))
+            .await
+            .unwrap();
+
+        let listed = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].jmap_id, "jmap-42");
+        assert_ne!(listed[0].id, "jmap-42", "id は内部主キーで別物");
+
+        let found = store
+            .search_messages("acct1", "検索対象", 10)
+            .await
+            .unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].jmap_id, "jmap-42", "検索結果も jmap_id を返すべき");
     }
 
     /// 同じ `jmap_id` を別の `mailbox_id` で再保存すると (JMAP 側でのフォルダ移動の

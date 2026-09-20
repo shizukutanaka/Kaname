@@ -52,7 +52,10 @@ interface BodyDto {
 
 /** `mail_search` / `mail_list_stored` が返す保存済みメール。 */
 interface StoredMessage {
+  /** 内部 ID (sha256 主キー)。サーバ操作には使えない — jmap_id を使う。 */
   id: string;
+  /** JMAP 側のメール ID。mail_open / mail_mark_read / mail_trash 等に渡す正しい ID。 */
+  jmap_id: string;
   from_addr: string;
   from_name: string | null;
   subject: string | null;
@@ -74,11 +77,15 @@ const extractEmailAddr = (from: string): string => {
 /**
  * 保存済みメールを一覧表示用に詰め替える。
  *
+ * `id` には内部 sha256 ID ではなく JMAP 側の `jmap_id` を入れる —
+ * `m.id` を渡すと mail_open が JMAP サーバに内部 ID を問い合わせて
+ * 必ず失敗し、検索/オフライン一覧からメールが一切開けなかった (D81)。
+ *
  * starred / MLS の情報は保存していないため false を入れる
  * (不明な値を true と偽らない)。
  */
 const storedToListItem = (m: StoredMessage): EmailListItem => ({
-  id:          m.id,
+  id:          m.jmap_id,
   from_name:   m.from_name,
   from_addr:   m.from_addr,
   subject:     m.subject,
