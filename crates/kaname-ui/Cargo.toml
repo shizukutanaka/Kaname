@@ -48,11 +48,3 @@ rand = { workspace = true }
 
 [dev-dependencies]
 
-[features]
-# tauri-app: src-tauri からビルドする際に tauri::command マクロを有効化
-tauri-app = ["dep:tauri"]
-default = []
-
-[dependencies.tauri]
-version = "2"
-optional = true
