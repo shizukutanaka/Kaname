@@ -26,6 +26,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - docker-compose の Rust イメージを `rust:1.82-bookworm` → `rust:bookworm` に修正 — workspace の MSRV (1.85) を下回っており `docker compose up` でビルドが失敗していた
 - **BEC 警戒バッジが初回ロード以降更新されなかった**: `mail:summary_updated`/`bec:alert` の購読側だけ存在し emit 側がゼロのデッドイベントだった → `mail_fetch`/`mail_mark_read`/`mail_trash` 成功時に実集計値を emit するよう配線。`bec:alert` (開封ごとに +1 で fetch 時の集計と二重計上する誤りがあった) は削除
 
+- **オンボーディング完了画面の残り虚偽表示**: 「Phi-4-mini AI モデルはすでに準備されています」(LLM はスタブ) と「⌘K でコマンドパレット」(パレット未実装) を実在する機能の記述に訂正
+
+- **オンボーディングの虚偽表示を除去**: 「メールは MLS RFC 9420 で暗号化されます。件名も含めて」の虚偽広告を削除 (MLS は未実装 D1、サーバ上の本文は平文) — 「解析はデバイス上で完結」に訂正。機能しない「Continuity (Handoff)」トグルも削除 (kaname-continuity クレート自体が削除済み)。`settings_save_onboarding` から `continuity` 引数を除去
+
+- **オンボーディングのデモ解析が演出だった**: 「信頼度 92%」と固定シグナル
+  リストを見せるだけで実エンジンを通していなかった → 新 IPC
+  `mail_analyze_bytes` で埋め込み .eml を実 `analyze_raw_email` に通し、
+  実 BEC 判定・スコア・シグナルを表示。E2E モックの `bec_score` を実
+  スケール (0.0–1.0) に訂正。
+
 - **ゴミ箱移動がサーバー側で実際に移動していなかった欠陥**: `Email/set` の `mailboxIds` パッチは `{trash: true}` だけだと追加のみで受信トレイから除去されない (RFC 8621 §4.6) → 現在の所属を `Email/get` で取得し全て `null` で除去するパッチに修正
 
 - **オンボーディングが完全に無スタイルで描画されていた欠陥**: `k-*` クラス37個が CSS 未定義のまま残存 (アーカイブ移行時にスタイル定義が欠落) → ダークテーマのスタイルブロックをコンポーネント内に定義。トグル・進捗ドット・危険カード等すべて正しく描画されるようになった

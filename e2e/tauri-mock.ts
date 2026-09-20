@@ -46,7 +46,7 @@ const OPENED_SAFE = {
   from: "営業部 田中 <tanaka@example.co.jp>",
   subject: "Q2予算レビューのお願い",
   auth: "spf=pass dkim=pass",
-  bec_verdict: "SAFE", bec_score: 5, bec_signals: [],
+  bec_verdict: "SAFE", bec_score: 0.05, bec_signals: [],
   attachments: [],
   body: {
     srcdoc: "<p>来週の会議でご確認ください。</p>",
@@ -65,7 +65,7 @@ const OPENED_DANGEROUS = {
   from: "経理担当 鈴木 <suzuki@examp1e.co.jp>",
   subject: "【至急】振込先口座変更のご連絡",
   auth: "dkim=fail",
-  bec_verdict: "DANGEROUS", bec_score: 85,
+  bec_verdict: "DANGEROUS", bec_score: 0.85,
   bec_signals: ["similar_domain", "urgency_language"],
   attachments: [
     { filename: "請求書.pdf", risks: [], is_dangerous: false },
@@ -119,13 +119,13 @@ const STORED = [
   {
     id: "s-1", from_addr: "tanaka@example.co.jp", from_name: "営業部 田中",
     subject: "Q2予算レビューのお願い", body_preview: "来週の会議で…",
-    received_at: NOW, is_read: true, bec_score: 5, bec_verdict: "SAFE",
+    received_at: NOW, is_read: true, bec_score: 0.05, bec_verdict: "SAFE",
     to_addrs: ["me@example.co.jp"],
   },
   {
     id: "s-2", from_addr: "suzuki@examp1e.co.jp", from_name: "経理担当 鈴木",
     subject: "【至急】振込先口座変更のご連絡", body_preview: "口座情報が…",
-    received_at: NOW, is_read: false, bec_score: 85, bec_verdict: "DANGEROUS",
+    received_at: NOW, is_read: false, bec_score: 0.85, bec_verdict: "DANGEROUS",
     to_addrs: ["me@example.co.jp"],
   },
 ];
@@ -230,6 +230,9 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             return /dlp|danger|bec|phish/i.test(String(args.path ?? ""))
               ? openedDangerousDlp
               : openedSafe;
+          case "mail_analyze_bytes":
+            // オンボーディングのデモ解析経路 — 実シグネチャで応答
+            return openedDangerous;
           case "mail_scan_folder":        return folderScan;
           case "oobv_start":
             return {
