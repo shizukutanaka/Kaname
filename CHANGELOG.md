@@ -20,6 +20,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Added
 - **監査ログへの実イベント書き込みを配線** — `audit_log` テーブル (不変トリガー + SHA-256 ハッシュチェーン + `verify_audit_chain` 検証) は実装済みだったが、本番コードから一度も書き込まれていなかった。セキュリティ上重要な4イベントを記録: `STORE_OPEN` (履歴 DB オープン時・チェーン検証とセット)、`MAIL_CONNECT`/`MAIL_DISCONNECT`、`SENDER_VERIFIED` (送信者の確認済み化 — BEC 判定を左右する操作)、`ATTACHMENT_DOWNLOAD` (拒否時も含む)。書き込みは best-effort で監査失敗が本来の操作を妨げない
+- **添付検査結果を `attachments` テーブルに記録** — `scan_verdict`/`blob_path` 列を持つ設計だったが INSERT 経路が存在せず死んだスキーマだった。`Store::record_attachment_scan` を追加し `mail_download_attachment` で記録 (保存済みメールにのみ紐付け、同一添付の再ダウンロードは冪等に上書き)
 ### Fixed
 - **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
   - `kaname-render`: `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加し mail-parser から抽出

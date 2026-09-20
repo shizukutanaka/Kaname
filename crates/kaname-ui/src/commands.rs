@@ -2386,6 +2386,32 @@ pub async fn mail_download_attachment(
         Some(path.to_string_lossy().into_owned())
     };
 
+    // 検査結果を attachments テーブルに記録する (フォレンジック証跡)。
+    // メールが未保存なら何も書かない。記録の失敗でダウンロード自体を
+    // 失敗させない。
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Err(e) = store
+            .record_attachment_scan(
+                client.account_id(),
+                &kaname_store::AttachmentScanRecord {
+                    jmap_id: &email_id,
+                    filename: &filename,
+                    declared_mime: &mime,
+                    size_bytes: scan.size_bytes,
+                    scan_verdict: if scan.is_dangerous {
+                        "dangerous"
+                    } else {
+                        "scanned"
+                    },
+                    blob_path: saved_path.as_deref(),
+                },
+            )
+            .await
+        {
+            warn!(error = %e, "添付検査結果の記録に失敗");
+        }
+    }
+
     // 添付のディスク書き出し/拒否はセキュリティ上重要な出口イベント。
     // 危険判定で拒否した場合こそ証跡が必要なため、拒否時も記録する。
     audit_event(
