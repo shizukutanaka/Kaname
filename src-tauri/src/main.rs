@@ -232,9 +232,10 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app, "settings", "設定...", true, Some("CmdOrCtrl+,"))?,
+            // 「設定」「Kaname について」項目は対応する UI ビューが存在せず
+            // emit 先が無いため削除 (押しても何も起きないデッドコントロール)。
+            // ビューを実装する際に git 履歴から復元すること。
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "about", "Kaname について", true, None::<&str>)?,
             &MenuItem::with_id(app, "quit", "Kaname を終了", true, Some("CmdOrCtrl+Q"))?,
         ],
     )?;
@@ -266,12 +267,6 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             "security" => {
                 let _ = app.emit("menu:security", ());
-            }
-            "settings" => {
-                let _ = app.emit("menu:settings", ());
-            }
-            "about" => {
-                let _ = app.emit("menu:about", ());
             }
             "quit" => app.exit(0),
             _ => {}
