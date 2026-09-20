@@ -13,6 +13,7 @@
 
 import { createSignal, For, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { OobvCeremony } from "./OobvCeremony";
 
 interface BodyDto {
   srcdoc: string;
@@ -378,26 +379,14 @@ export function EmlImport() {
                 </Show>
               </dl>
 
-              {/* 帯域外検証 (OOBV) の推奨 */}
-              <Show when={r().oobv_level === "strong"}>
-                <div style={{
-                  padding: "10px 12px", "border-radius": "8px",
-                  background: "#FDECEC", border: "1px solid #E5484D60",
-                  color: "#8A1F22", "font-size": "13px",
-                  "line-height": "1.6", "margin-bottom": "12px", "font-weight": "600",
-                }}>
-                  📞 {r().oobv_message}
-                </div>
-              </Show>
-              <Show when={r().oobv_level === "optional"}>
-                <div style={{
-                  padding: "8px 12px", "border-radius": "8px",
-                  background: "#FBF6E9", border: "1px solid #E5A50060",
-                  color: "#6B4E00", "font-size": "12px",
-                  "line-height": "1.6", "margin-bottom": "12px",
-                }}>
-                  📞 {r().oobv_message}
-                </div>
+              {/* 帯域外検証 (OOBV) の推奨 + 電話確認セレモニー */}
+              <Show when={r().oobv_level !== "none"}>
+                <OobvCeremony
+                  level={r().oobv_level}
+                  message={r().oobv_message}
+                  emailId={path()}
+                  sender={r().from}
+                />
               </Show>
 
               {/* Deepfake (音声/動画添付) の警告 */}

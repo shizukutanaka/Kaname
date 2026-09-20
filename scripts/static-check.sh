@@ -194,10 +194,13 @@ reg = set(re.findall(r'^\s*([a-z_][a-z0-9_]*),\s*$',
 # fn シグネチャからパラメータ名を集める
 sigs = {}
 for m in re.finditer(r'(?:async\s+)?fn\s+([a-z_][a-z0-9_]*)\s*\(([^)]*)\)', main_rs):
-    # `name: Type` の name を拾う。`commands::Foo` のようなパス型の
-    # 先頭セグメントを引数名と誤認しないよう、`:` の直後に `:` が
-    # 続くもの (パス区切り `::`) は除外する。
-    params = set(re.findall(r'([a-z_][a-z0-9_]*)\s*:(?!:)', m.group(2)))
+    # 引数名のみ抽出。「name: Type」の name のみ (パス内の `::` 区切りは
+    # `(?!:)` で除外)。`tauri::State`/`AppHandle` などフレームワーク注入の
+    # 引数は invoke 呼び出し側が送らないため型に `tauri::` を含むものは除外。
+    params = set()
+    for pm in re.finditer(r'([a-z_][a-z0-9_]*)\s*:(?!:)\s*([^,)]+)', m.group(2)):
+        if 'tauri::' not in pm.group(2):
+            params.add(pm.group(1))
     sigs[m.group(1)] = params
 
 def camel_to_snake(k):
