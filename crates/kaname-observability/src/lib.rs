@@ -438,9 +438,7 @@ mod tests {
         let mut w = SanitizingWriter::new(Vec::<u8>::new());
         use std::io::Write as _;
         // tests モジュールは unwrap/expect deny の対象 (他テストも同様に避ける)
-        if let Err(e) = w
-            .write_all(b"INFO  login ok user=alice@example.com token=Bearer abc123")
-        {
+        if let Err(e) = w.write_all(b"INFO  login ok user=alice@example.com token=Bearer abc123") {
             panic!("write_all 失敗: {e}");
         }
         let out = match String::from_utf8(w.into_inner()) {

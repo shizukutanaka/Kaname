@@ -11,7 +11,7 @@
 
 北極星: 「AIが受信箱全体を読まない。メール1通のみ解析する。」
 
-技術スタック: Rust (23 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
+技術スタック: Rust (21 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
 
 ---
 
@@ -38,17 +38,29 @@ CLAUDE.md → Cargo.toml → docs/threat-model.md → 対象クレートの lib.
 
 ## クレート依存グラフ (単方向)
 
+実測の依存関係 (D101 — 以前の記述は設計意図であり実装と一致していなかった):
+
 ```
-kaname-observability, kaname-privacy, kaname-screen
-  └── kaname-crypto, kaname-store
-              └── kaname-mls, kaname-render (→ kaname-screen)
-                    └── kaname-bec, kaname-dlp, kaname-ai
-                          └── kaname-jmap, kaname-sandbox
-                                └── kaname-oobv, kaname-pivot, kaname-radar, kaname-ssa, kaname-saas-guard (→ kaname-screen)
-                                      └── kaname-ui → src-tauri
+葉クレート (kaname-* への依存なし):
+  kaname-screen, kaname-pivot, kaname-memory-guard, kaname-crypto,
+  kaname-store, kaname-jmap, kaname-privacy, kaname-observability,
+  kaname-radar, kaname-ssa, kaname-mls, kaname-sandbox, kaname-mockserver
+
+kaname-render     → kaname-screen
+kaname-saas-guard → kaname-screen
+kaname-ai         → kaname-screen
+kaname-bec        → kaname-screen, kaname-pivot, kaname-memory-guard
+kaname-dlp        → kaname-render
+kaname-oobv       → kaname-crypto, kaname-memory-guard
+kaname-tests      → kaname-ai, kaname-screen (テスト専用)
+kaname-ui         → kaname-bec, kaname-dlp, kaname-jmap, kaname-memory-guard,
+                    kaname-oobv, kaname-privacy, kaname-radar, kaname-render,
+                    kaname-saas-guard, kaname-ssa, kaname-store,
+                    kaname-observability
+src-tauri         → kaname-ui
 ```
 
-循環依存は禁止。新クレート追加時はグラフを更新すること。
+循環依存は禁止 (Cargo 自体が検出する)。新クレート追加時はグラフを更新すること。
 
 ---
 
