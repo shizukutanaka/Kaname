@@ -23,7 +23,6 @@ interface OnboardingState {
   step: Step;
   emailConsent:        boolean;
   telemetryOptIn:      boolean;
-  continuityEnabled:   boolean;
   notificationsAllowed: boolean;
 }
 
@@ -34,7 +33,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     step: "welcome",
     emailConsent: false,
     telemetryOptIn: false,
-    continuityEnabled: false,
     notificationsAllowed: false,
   });
 
@@ -111,12 +109,16 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
       <div class="k-principle">
         <div class="k-principle-icon">🌐</div>
         <div class="k-principle-content">
-          <h3>サーバーは中身を読めない</h3>
+          <h3>解析はデバイス上で完結</h3>
           <p>
-            あなたのメールは MLS RFC 9420 で暗号化されます。
-            <strong>件名も含めて</strong>。
-            Kaname サーバーは暗号化された箱だけを保存します。
+            メールの解析・履歴・監査証跡はすべてこのデバイスの
+            ローカル DB (SQLCipher 暗号化) に保存され、
+            Kaname が運営するサーバーは存在しません。
           </p>
+          {/* 2026-09 修正: 以前は「メールは MLS RFC 9420 で暗号化されます。
+              件名も含めて」と表示していたが、MLS は未実装 (D1、XOR モック) で
+              メールサーバ上の本文は平文 — セキュリティ製品の虚偽広告だった。
+              MLS 実装時に git 履歴から復元する。 */}
         </div>
       </div>
 
@@ -147,14 +149,9 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
         recommended={true}
       />
 
-      <PermissionToggle
-        title="Continuity を有効化"
-        description="iPhone と Mac で同じメールを引き継ぐ (Handoff)"
-        checked={state().continuityEnabled}
-        onChange={v => setState(s => ({ ...s, continuityEnabled: v }))}
-        recommended={false}
-      />
-
+      {/* 2026-09 削除: "Continuity (Handoff)" トグルは kaname-continuity
+          クレート自体が削除済みのため、機能しない機能を約束する虚偽 UI
+          だった。復元は git 履歴から。 */}
       <PermissionToggle
         title="匿名利用統計を送信"
         description="クラッシュレポートと匿名のクリック数のみ。メール本文は絶対に送りません"
@@ -236,7 +233,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     onMount(() => {
       invoke("settings_save_onboarding", {
         notifications: state().notificationsAllowed,
-        continuity:    state().continuityEnabled,
         telemetry:     state().telemetryOptIn,
       }).catch(() => {
         // オンボーディング設定保存の失敗は致命的ではないため無視して続行するが、
@@ -255,7 +251,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
         <div class="k-ready-features">
           <div>🛡 BEC 検出は<strong>すでに動いています</strong></div>
-          <div>🤖 Phi-4-mini AI モデルは<strong>すでに準備されています</strong></div>
+          <div>📎 添付ファイルは<strong>隔離して検査されます</strong></div>
           <div>🔒 ローカル DB は<strong>すでに暗号化されています</strong></div>
         </div>
 
@@ -264,7 +260,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
         </button>
 
         <p class="k-tip">
-          💡 ⌘K でいつでもコマンドパレットを開けます
+          💡 警告が出たメールの送金・手続きは、必ず別経路 (電話等) で確認してください
         </p>
       </div>
     );
