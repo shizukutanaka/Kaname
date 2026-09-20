@@ -812,6 +812,21 @@ mod tests {
     }
 
     #[test]
+    fn extract_mls_envelopes_はmlsパートを取り出す() {
+        // base64("hello-mls")
+        let raw = b"From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nhi\r\n--B\r\nContent-Type: application/mls-envelope+cbor\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8tbWxz\r\n--B--\r\n";
+        let found = extract_mls_envelopes(raw);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0], b"hello-mls");
+    }
+
+    #[test]
+    fn extract_mls_envelopes_はmlsパート無しで空を返す() {
+        let raw = b"From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\n\r\nplain body";
+        assert!(extract_mls_envelopes(raw).is_empty());
+    }
+
+    #[test]
     fn oversized_message_is_rejected() {
         let big = vec![b'A'; 101 * 1024 * 1024];
         assert!(parse(&big).is_err());
@@ -1236,6 +1251,46 @@ pub struct AttachmentScan {
 /// 常駐させることになり大きな添付で不利なため、**バイトはこのクレート内で
 /// 完結させ**、検査結果だけを返す。
 ///
+/// 生 RFC5322 メールから MLS エンベロープパート
+/// (`Content-Type: application/mls-envelope+cbor`) の復号済みボディを
+/// すべて取り出す (D1 Phase 4 — 受信経路)。
+///
+/// `Content-Disposition: attachment` に限らず全 MIME パートを走査する —
+/// 相手クライアントがインラインで挿入する可能性があるため。
+/// `mail-parser` は `msg.parts` に全パートをフラットに持ち、入れ子の
+/// message/rfc822 は `PartType::Message` として現れるため再帰で潜る。
+/// transfer-encoding は復号済みの `contents()` を返す。
+#[must_use]
+pub fn extract_mls_envelopes(raw: &[u8]) -> Vec<Vec<u8>> {
+    let Some(msg) = MessageParser::default().parse(raw) else {
+        return Vec::new();
+    };
+    fn collect(part: &mail_parser::MessagePart<'_>, out: &mut Vec<Vec<u8>>) {
+        let is_mls = part
+            .content_type()
+            .map(|ct| {
+                ct.ctype().eq_ignore_ascii_case("application")
+                    && ct
+                        .subtype()
+                        .is_some_and(|s| s.eq_ignore_ascii_case("mls-envelope+cbor"))
+            })
+            .unwrap_or(false);
+        if is_mls {
+            out.push(part.contents().to_vec());
+        }
+        if let mail_parser::PartType::Message(sub) = &part.body {
+            for p in &sub.parts {
+                collect(p, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for part in &msg.parts {
+        collect(part, &mut out);
+    }
+    out
+}
+
 /// # DoS 対策
 ///
 /// 1 添付あたり検査するのは先頭 10 MB まで。それを超える部分は読まない。

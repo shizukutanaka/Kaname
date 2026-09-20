@@ -433,6 +433,13 @@ interface AiModelStatus {
   expected_size_bytes: number | null;
 }
 
+// D1 Phase 4: MLS E2E の状態 (kaname-ui::commands::MlsStatus)
+interface MlsStatus {
+  initialized: boolean;
+  email: string | null;
+  conversations: number;
+}
+
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
   const [accessLog] = createSignal<AiAccessEntry[]>([]);
   const [auditLog, setAuditLog] = createSignal<AuditLogView | null>(null);
@@ -451,6 +458,21 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
     }
   };
   createEffect(refreshAiModel);
+
+  // D1 Phase 4: MLS E2E の実状態。未初期化でもエラーではなく
+  // initialized=false が返るため、偽の「E2E 稼働中」は表示しない。
+  const [mls, setMls] = createSignal<MlsStatus | null>(null);
+  const [mlsEmail, setMlsEmail] = createSignal("");
+  const [mlsKp, setMlsKp] = createSignal("");
+  const [mlsBusy, setMlsBusy] = createSignal(false);
+  const refreshMls = async () => {
+    try {
+      setMls(await invoke<MlsStatus>("mls_status"));
+    } catch {
+      setMls(null);
+    }
+  };
+  createEffect(refreshMls);
 
   // 監査証跡 (audit_log テーブル) は実在データ — 起動時に読み出す。
   createEffect(async () => {
@@ -600,6 +622,112 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
         </Show>
       </div>
 
+      {/* D1 Phase 4: MLS E2E 暗号化 */}
+      <div style={{
+        background: "#0D1219", border: "1px solid #1F2833",
+        "border-radius": "8px", padding: "14px",
+      }}>
+        <div style={{
+          "font-size": "13px", "font-weight": "600", "margin-bottom": "8px",
+        }}>
+          🔐 MLS E2E 暗号化
+        </div>
+        <Show when={mls()} fallback={
+          <div style={{ "font-size": "11px", color: "#8B96A5" }}>
+            MLS の状態を取得できませんでした
+          </div>
+        }>
+          {(s) => (
+            <div>
+              <div style={{ "font-size": "11px", color: "#8B96A5", "margin-bottom": "8px" }}>
+                {s().initialized
+                  ? `${s().email ?? ""} として有効 — 会話 ${s().conversations} 件。受信メール内の MLS エンベロープは開封時に自動で処理されます (X-Wing / ML-KEM-768 ハイブリッド)`
+                  : "未初期化 — 自分のメールアドレスを入力して有効化してください (状態は mls.db に暗号化保存されます)"}
+              </div>
+              <Show when={!s().initialized}>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    placeholder="あなたのメールアドレス"
+                    value={mlsEmail()}
+                    onInput={(e) => setMlsEmail(e.currentTarget.value)}
+                    style={{
+                      background: "#1A2129", border: "1px solid #2A3441",
+                      color: "#F5F7FA", "border-radius": "4px",
+                      padding: "4px 8px", "font-size": "11px",
+                      "font-family": "monospace", width: "260px",
+                    }}
+                  />
+                  <button
+                    disabled={mlsBusy() || !mlsEmail().includes("@")}
+                    onClick={async () => {
+                      setMlsBusy(true);
+                      try {
+                        setMls(await invoke<MlsStatus>("mls_init", { email: mlsEmail().trim() }));
+                      } catch { /* 失敗は状態表示に反映される */ }
+                      await refreshMls();
+                      setMlsBusy(false);
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px",
+                      cursor: mlsBusy() || !mlsEmail().includes("@") ? "default" : "pointer",
+                    }}
+                  >
+                    {mlsBusy() ? "初期化中…" : "有効化"}
+                  </button>
+                </div>
+              </Show>
+              <Show when={s().initialized}>
+                <div style={{ display: "flex", gap: "8px", "align-items": "center" }}>
+                  <button
+                    disabled={mlsBusy()}
+                    onClick={async () => {
+                      try {
+                        setMlsKp(await invoke<string>("mls_key_package"));
+                      } catch {
+                        setMlsKp("");
+                      }
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px", cursor: mlsBusy() ? "default" : "pointer",
+                    }}
+                  >
+                    この端末の KeyPackage を表示
+                  </button>
+                  <Show when={mlsKp() !== ""}>
+                    <button
+                      onClick={() => { void navigator.clipboard.writeText(mlsKp()); }}
+                      style={{
+                        background: "#1A2129", color: "#8B96A5",
+                        border: "1px solid #2A3441", "border-radius": "4px",
+                        padding: "4px 10px", "font-size": "11px", cursor: "pointer",
+                      }}
+                    >
+                      コピー
+                    </button>
+                  </Show>
+                </div>
+                <Show when={mlsKp() !== ""}>
+                  <div style={{
+                    "font-size": "10px", color: "#6B7A94", "margin-top": "6px",
+                    "font-family": "monospace", "word-break": "break-all",
+                  }}>
+                    {mlsKp()}
+                  </div>
+                </Show>
+                <div style={{ "font-size": "10px", color: "#6B7A94", "margin-top": "6px" }}>
+                  KeyPackage を相手の Kaname に渡すと会話に招待できます。
+                  配送経路は未実装のため (D1 Phase 3)、当面は手で共有する運用です
+                </div>
+              </Show>
+            </div>
+          )}
+        </Show>
+      </div>
+
       {/* コンタクトインテリジェンス */}
       <div>
         <div style={{
@@ -633,7 +761,7 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
           ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策、実データで稼働"],
           ["✓", "監査証跡",           "append-only + ハッシュチェーン — 上の「監査証跡」セクションで実データを閲覧可能"],
           ["⚠", "ローカル AI 推論",     "実装済み (D2 Phase 1-5) — モデルダウンロード・ロード後に BEC 意味解析が有効化。未ロード時は決定論的シグナルのみ"],
-          ["✗", "MLS + PQC 暗号化",    "未実装 (docs/gap-analysis.md D1)。現状は単一バイト XOR のモック"],
+          ["⚠", "MLS + PQC 暗号化",    "実装済み (D1 Phase 1/2/4) — openmls + X-Wing (ML-KEM-768) ハイブリッド、SQLCipher 永続化、受信エンベロープの自動処理。KeyPackage 配送と安全番号 UI は未実装 (Phase 3/5)"],
         ] as [string, string, string][]).map(([icon, name, desc]) => (
           <div style={{
             display: "flex", gap: "8px", padding: "4px 0",
