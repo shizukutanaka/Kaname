@@ -11,9 +11,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
-- **`mail_get_summary` を履歴 DB の実集計に接続** — 起動時に呼ばれるのに常に `{unread:0, bec_alerts:0, total:0}` を返すスタブだった。`Store::message_stats` (COUNT + `is_read`/`bec_verdict` 集計) を追加し、Store オープン+アカウント特定時は実数を返す。未接続なら 0 (ローカルにメールが無い実態として正しい)
-### Added
-||||||| bb15439
 - **作成画面の送信前アドバイザリに `oobv_recommend` を配線** (D24 残件 — 台帳記載の想定用途どおり)
   - 本文入力の debounce が「DLP 事前チェック」を意図しながら空のスタブだったため実装に置き換え。送金要求・急迫表現等の別経路確認推奨文脈を送信前に助言表示 (ブロックではなく助言。呼び出し失敗は送信を妨げない)
 - **OOBV 電話確認セレモニーの UI 配線**: 📞 バナー (メール開封ビュー / .eml 解析結果) に「電話で確認を開始」ボタンを追加。`oobv_start` で6単語の合い言葉+挑戦番号を発行し、電話で相手が読み上げた単語を `oobv_verify` で照合 → Verified/Mismatch/Expired/Locked を表示。共有コンポーネント `src/ui/OobvCeremony.tsx`。登録済みコマンドの UI 未呼出は `oobv_recommend` のみとなる (#145 で配線済み)
@@ -23,9 +20,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `e2e/tauri-mock.ts`: `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入で、Tauri ランタイムなしの `npm run dev` 上で UI 層 E2E を実現。コマンド呼び出しログ (`__KANAME_MOCK_LOG`) で invoke 引数まで検証可能
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
-### Added
-- **監査ログへの実イベント書き込みを配線** — `audit_log` テーブル (不変トリガー + SHA-256 ハッシュチェーン + `verify_audit_chain` 検証) は実装済みだったが、本番コードから一度も書き込まれていなかった。セキュリティ上重要な4イベントを記録: `STORE_OPEN` (履歴 DB オープン時・チェーン検証とセット)、`MAIL_CONNECT`/`MAIL_DISCONNECT`、`SENDER_VERIFIED` (送信者の確認済み化 — BEC 判定を左右する操作)、`ATTACHMENT_DOWNLOAD` (拒否時も含む)、`MAIL_SEND`/`DLP_BLOCK` (外部宛送信とその阻止 — どのルールで止めたかを残す)、`MAIL_IMPORT`/`FOLDER_SCAN` (外部 .eml の取り込み経路 — パス・判定・件数)。書き込みは best-effort で監査失敗が本来の操作を妨げない
-- **添付検査結果を `attachments` テーブルに記録** — `scan_verdict`/`blob_path` 列を持つ設計だったが INSERT 経路が存在せず死んだスキーマだった。`Store::record_attachment_scan` を追加し `mail_download_attachment` で記録 (保存済みメールにのみ紐付け、同一添付の再ダウンロードは冪等に上書き)
 ### Fixed
 - **トレイメニューのデッドコントロール**: 「新規作成...」「セキュリティポスチャー...」は emit 先のリスナーがフロントエンドに存在せずクリックしても無反応だった → `menu:compose`/`menu:security` をビュー遷移に接続。「設定...」「Kaname について」は対応ビュー自体が存在しないためメニューから削除 (実装時に git 履歴から復元)
 
