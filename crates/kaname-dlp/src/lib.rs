@@ -705,10 +705,11 @@ fn detect_credit_card(text: &str) -> bool {
     // 各マッチから数字のみ抽出して桁数 (Amex=15 / その他=16) と Luhn を検証する。
     // 以前は「連続16桁ラン」しか拾わず区切り付き PAN が素通りし、かつ 16桁固定
     // 判定のため 15桁の Amex は原理的に検出できなかった。
-    re.find_iter(text).any(|m| {
+    let matched = re.find_iter(text).any(|m| {
         let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
         (digits.len() == 15 || digits.len() == 16) && luhn_check(&digits)
-    })
+    });
+    matched
 }
 
 fn luhn_check(digits: &str) -> bool {
@@ -735,10 +736,11 @@ fn detect_iban(text: &str) -> bool {
     // 正規表現だけでは "US00ABCD1234" 等の非 IBAN にも一致し得るため、
     // ISO 7064 MOD 97-10 のチェックディジット検証で誤検知を抑える。
     let Ok(re) = Regex::new(r"\b[A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]){11,30}\b") else { return false };
-    re.find_iter(text).any(|m| {
+    let matched = re.find_iter(text).any(|m| {
         let compact: String = m.as_str().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
         iban_checksum_valid(&compact)
-    })
+    });
+    matched
 }
 
 /// ISO 7064 MOD 97-10 アルゴリズムで IBAN のチェックディジットを検証する。
