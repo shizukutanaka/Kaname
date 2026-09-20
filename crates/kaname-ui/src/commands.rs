@@ -1029,6 +1029,22 @@ mod tests {
         assert!(log_error("test".into()).await.is_ok());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn key_file_は生成時点から0600() -> Result<(), String> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let p = dir.path().join("history.key");
+        write_key_file(&p, &"a".repeat(64))?;
+        let mode = std::fs::metadata(&p)
+            .map_err(|e| e.to_string())?
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "鍵ファイルは生成時点から 0600 であるべき");
+        Ok(())
+    }
+
     // ── analyze_raw_email: mail_import_eml / mail_open 共通の解析経路 ──
     //
     // これまで一度もテストされていなかった (docs/gap-analysis.md の
@@ -1882,6 +1898,30 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 鍵ファイルを新規生成する。Unix では生成時点から 0600 —
+/// `fs::write` + 後付け chmod だと書き込み〜chmod の間に鍵が
+/// umask 許可 (通常 0644) で読める競合窓ができ、chmod 失敗も
+/// 無言で握り潰されていた。
+#[cfg(unix)]
+fn write_key_file(path: &std::path::Path, hex: &str) -> Result<(), String> {
+    use std::io::Write as _;
+    use std::os::unix::fs::OpenOptionsExt as _;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .map_err(|e| format!("鍵ファイルを開けません: {e}"))?
+        .write_all(hex.as_bytes())
+        .map_err(|e| format!("鍵ファイルを書けません: {e}"))
+}
+
+#[cfg(not(unix))]
+fn write_key_file(path: &std::path::Path, hex: &str) -> Result<(), String> {
+    std::fs::write(path, hex).map_err(|e| format!("鍵ファイルを書けません: {e}"))
+}
+
 /// 既定の場所に履歴データベースを開く (アプリ起動時に呼ぶ)。
 ///
 /// # なぜ必要か
@@ -1913,12 +1953,7 @@ pub async fn history_open_default() -> Result<String, String> {
             let mut raw = [0u8; 32];
             rand::rngs::OsRng.fill_bytes(&mut raw);
             let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
-            std::fs::write(&key_path, &hex).map_err(|e| format!("鍵ファイルを書けません: {e}"))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt as _;
-                let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
-            }
+            write_key_file(&key_path, &hex)?;
             hex
         }
     };
