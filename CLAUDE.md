@@ -11,7 +11,7 @@
 
 北極星: 「AIが受信箱全体を読まない。メール1通のみ解析する。」
 
-技術スタック: Rust (24 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
+技術スタック: Rust (23 クレート) + SolidJS + Tauri 2.x + MLS RFC 9420 + ML-KEM-768
 
 ---
 
