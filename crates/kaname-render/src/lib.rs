@@ -393,8 +393,8 @@ impl SanitizedBody {
 ///               tbody, tr, td, th, h1..h6, img (src=cid: only)
 ///   除去タグ: script, style, iframe, object, embed, form, input,
 ///               button, svg, math, link, meta, base, noscript, template
-///   <a> で許可する属性: href (http/https only), title
-///   <img> で許可する属性: src (cid: scheme only — no remote loading), alt, width, height
+///   `<a>` で許可する属性: href (http/https only), title
+///   `<img>` で許可する属性: src (cid: scheme only — no remote loading), alt, width, height
 ///   除去する属性: on*, data-*, srcset, action, formaction, xlink:*
 ///   許可する URL スキーム: http, https, mailto, cid
 ///   BiDi オーバーライド文字: 除去
