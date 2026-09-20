@@ -1742,17 +1742,35 @@ pub async fn mail_send_real(
     let dlp = engine.evaluate(&ctx, kaname_dlp::Direction::Outbound);
     if matches!(dlp.verdict, kaname_dlp::Action::Block) {
         let reasons: Vec<String> = dlp.findings.iter().map(|f| f.rule_name.clone()).collect();
+        let reason_str = reasons.join(" / ");
+        // 外部宛送信の阻止は最重要の証跡 — どのルールで止めたかを残す
+        // (件名・本文・宛先は書かない)。
+        audit_event(
+            Some(client.account_id()),
+            "DLP_BLOCK",
+            serde_json::json!({ "to_count": to.len(), "rules": reasons }),
+        )
+        .await;
         return Err(format!(
-            "DLP により送信をブロックしました: {}。機微情報が含まれていないか確認してください",
-            reasons.join(" / ")
+            "DLP により送信をブロックしました: {reason_str}。機微情報が含まれていないか確認してください"
         ));
     }
 
     let to_refs: Vec<&str> = to.iter().map(String::as_str).collect();
-    client
+    let result = client
         .send_email(&from, &to_refs, &subject, &body, None)
         .await
-        .map_err(|e| format!("送信に失敗しました: {e}"))
+        .map_err(|e| format!("送信に失敗しました: {e}"))?;
+
+    // 実際に送信が行われた出口イベント (件名・本文・宛先アドレスは書かない)。
+    audit_event(
+        Some(client.account_id()),
+        "MAIL_SEND",
+        serde_json::json!({ "to_count": to.len() }),
+    )
+    .await;
+
+    Ok(result)
 }
 
 // ============================================================================
