@@ -105,22 +105,15 @@ pub struct BodyDto {
     pub render_risks: Vec<String>,
 }
 
-/// 受信箱のメール本文を取得する。
-///
-/// # サーバ未接続のため未実装
-///
-/// JMAP 受信が未配線 (D10) のため、受信箱には本物のメールが存在しない。
-/// 従来はモックデータの preview をサニタイズして返していたが、
-/// **実在しないメールの本文を表示するのは偽装**である。
-///
-/// サニタイズ経路自体は健在で、「ファイル解析」タブ (`mail_import_eml`) が
-/// 実際の `.eml` に対して同じ `sanitize_html` → `to_srcdoc` を実行する。
 /// サーバ上のメールを開き、**ローカル `.eml` と同じパイプライン**で解析する。
 ///
 /// JMAP の `Email.blobId` は生 RFC 5322 全体を指す。これを `download_blob` で
 /// 取得して `analyze_raw_email` に渡せば、本文サニタイズ・BEC スコア・
 /// シグナル・添付検査・DLP・リンク評価がすべて得られる。
 /// 「サーバのメールを開く」ために新しい解析コードは不要である。
+///
+/// (旧実装は「サーバ未接続のため未実装」でモック preview を返す設計だったが
+/// D10 解消で実装に置き換えられた。)
 pub async fn mail_open(email_id: String) -> Result<ImportedEmail, String> {
     let client = jmap_client().await?;
     let full = client
@@ -458,7 +451,6 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // `is_mls` バッジはエンベロープの有無で決める — メッセージ本体が
     // エンベロープ内にあるため外側パースでは内容が見えない。
     let mls_envelopes = kaname_render::extract_mls_envelopes(bytes);
-    let is_mls = !mls_envelopes.is_empty();
     let (mls_events, mls_plaintexts) = process_mls_envelopes(&mls_envelopes);
 
     Ok(ImportedEmail {
@@ -473,7 +465,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             srcdoc: srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),
             csp: srcdoc.csp.to_string(),
-            is_mls,
+            is_mls: kaname_render::is_mls_message(bytes),
             render_risks,
         },
         dlp_findings,
@@ -1026,12 +1018,43 @@ pub async fn log_error(message: String) -> Result<(), String> {
 
 // ── テスト ────────────────────────────────────────────────────────────────────
 
+// テスト間の直列化 (D115): `STORE`/`JMAP_SESSION`/`STYLE_PROFILES` は
+// プロセス内共有の OnceLock グローバルのため、それらを触るテストが
+// 並行実行されると互いの状態を踏んで不定失敗する (実際に
+// `persist_org_domain_if_unset`/`文体プロファイル`/`outbound_dlp_eval`/
+// `analyze_raw_email_uses_verified_sender_history` が競合で落ちた)。
+// 全 `#[tokio::test]` は先頭でこのロックを取ること。
+#[cfg(test)]
+static TEST_SERIAL: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+
+#[cfg(test)]
+async fn test_serial() -> tokio::sync::MutexGuard<'static, ()> {
+    TEST_SERIAL
+        .get_or_init(|| tokio::sync::Mutex::new(()))
+        .lock()
+        .await
+}
+
+/// テストの決定的初期状態。直列化だけでは先行テストが残した
+/// Store/JMAP/文体プロファイルが後続に漏れる (`if is_none()` ガードは
+/// 「他テストの Store を流用する」ため却って汚染源になる)。
+/// 各テストはロック取得直後にこれを呼び、必要なら自分の Store を開く。
+#[cfg(test)]
+async fn reset_globals() {
+    *jmap_slot().lock().await = None;
+    *store_slot().lock().await = None;
+    style_profiles().lock().await.clear();
+    *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn health_returns_ok() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let r = health_check().await.map_err(|e| e.to_string())?;
         assert!(r.ok);
         assert!(!r.version.is_empty());
@@ -1040,6 +1063,8 @@ mod tests {
 
     #[tokio::test]
     async fn summary_has_counts() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let r = mail_get_summary().await.map_err(|e| e.to_string())?;
         assert!(r.unread <= r.total);
         Ok(())
@@ -1047,6 +1072,8 @@ mod tests {
 
     #[tokio::test]
     async fn log_error_ok() {
+        let _serial = test_serial().await;
+        reset_globals().await;
         assert!(log_error("test".into()).await.is_ok());
     }
 
@@ -1092,6 +1119,8 @@ mod tests {
 
     #[tokio::test]
     async fn analyze_raw_email_safe_message_is_quiet() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let r = analyze_raw_email(SAFE_EML).await?;
         assert_eq!(r.bec_verdict, "SAFE");
         assert_eq!(
@@ -1110,6 +1139,8 @@ mod tests {
 
     #[tokio::test]
     async fn analyze_raw_email_bec_wire_transfer_triggers_oobv() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let r = analyze_raw_email(BEC_WIRE_EML).await?;
         assert_ne!(
             r.bec_verdict, "SAFE",
@@ -1130,6 +1161,8 @@ mod tests {
     #[tokio::test]
     async fn analyze_raw_email_deepfake_high_severity_for_financial_media_attachment(
     ) -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         // 音声添付 + 金融/緊急性のある本文 → Deepfake 警告は High になるべき。
         let raw: &[u8] = b"From: cfo@example.com\r\n\
             To: you@example.com\r\n\
@@ -1159,6 +1192,8 @@ mod tests {
 
     #[tokio::test]
     async fn analyze_raw_email_dangerous_attachment_is_flagged() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         // 二重拡張子 (.pdf.lnk) は危険拡張子として検出されるべき。
         let raw: &[u8] = b"From: alice@example.com\r\n\
             To: bob@example.com\r\n\
@@ -1232,6 +1267,8 @@ mod tests {
     /// ことを確認する (Welcome 参加 → 暗号メッセージの復号)。
     #[tokio::test]
     async fn analyze_raw_email_はmlsエンベロープを処理して復号する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let mut alice = kaname_mls::MlsMailClient::try_new(mls_test_identity("alice@kaname.app")?)
             .map_err(|e| format!("{e}"))?;
         let bob = kaname_mls::MlsMailClient::try_new(mls_test_identity("bob@kaname.app")?)
@@ -1284,8 +1321,8 @@ mod tests {
     #[tokio::test]
     async fn analyze_raw_email_mls未初期化ではイベントのみ返す() -> Result<(), String> {
         // MLS スロットが空の状態で mls パートを含むメールを解析する。
-        // (先に上のテストが走っていても、ここで明示的に空にする)
-        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        let _serial = test_serial().await;
+        reset_globals().await;
         let raw: &[u8] = b"From: a@kaname.app\r\n\
             To: b@kaname.app\r\n\
             Subject: mls\r\n\
@@ -1316,6 +1353,8 @@ mod tests {
     /// プロセス内キャッシュ消去 (再起動相当) 後も復元される。
     #[tokio::test]
     async fn 文体プロファイルが再起動相当のキャッシュ消去後も復元される() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let dir = std::env::temp_dir().join(format!("kaname-d112-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         history_open(
@@ -1370,19 +1409,20 @@ mod tests {
 
     #[tokio::test]
     async fn analyze_raw_email_uses_verified_sender_history() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         // D100 回帰: 一覧評価 (assess_listing) にのみ送信者履歴が供給され、
         // 詳細解析 (analyze_raw_email) は sender_history=None 固定だった。
         // 「本人確認済み」の -0.20 寄与が詳細表示に効かず、同一メールで
         // 一覧と詳細の判定が食い違った。検証済み送信者のメールで
         // 「検証済み差出人」シグナルが出ることで配線を証明する。
         //
-        // 注意: STORE はプロセス共有の OnceLock のため、このテスト以降に
-        // 走る他テストも「空の Store が開いている」状態になる。ただし
-        // 履歴の無い送信者には None が返り挙動は不変のため影響は無い。
-        if store_slot().lock().await.is_none() {
-            let db = std::env::temp_dir().join(format!("kaname-d100-{}.db", std::process::id()));
-            history_open(db.to_string_lossy().into_owned(), "0".repeat(64)).await?;
-        }
+        // 注意: STORE はプロセス共有の OnceLock。先頭の `reset_globals()`
+        // でスロットを空にしてから自分専用の Store を開くため、
+        // 他テストの履歴が混ざることはない (D115)。
+        let db = std::env::temp_dir().join(format!("kaname-d100-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        history_open(db.to_string_lossy().into_owned(), "0".repeat(64)).await?;
         let store = store_slot()
             .lock()
             .await
@@ -1440,6 +1480,8 @@ mod tests {
     /// 未設定なら小文字化して書き込み、既存値は上書きしないことを固定する。
     #[tokio::test]
     async fn persist_org_domain_if_unset_は未設定時のみ書き込む() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let dir = std::env::temp_dir().join(format!("kaname-d109-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         let db = dir.join("history.db");
@@ -1474,6 +1516,8 @@ mod tests {
     /// 偽って話題急変シグナルを誤発火させないため)。
     #[tokio::test]
     async fn record_received_に_none_を渡すと話題プロファイルが作られない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let dir = std::env::temp_dir().join(format!("kaname-d111-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         history_open(
@@ -1698,6 +1742,8 @@ mod v02_tests {
 
     #[tokio::test]
     async fn oobv_start_creates_ceremony() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let state = V02AppState::new();
         let resp = oobv_start(
             state.clone(),
@@ -1715,6 +1761,8 @@ mod v02_tests {
 
     #[tokio::test]
     async fn oobv_verify_correct_word() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let state = V02AppState::new();
         let start = oobv_start(
             state.clone(),
@@ -1741,6 +1789,8 @@ mod v02_tests {
 
     #[tokio::test]
     async fn oobv_recommend_strong() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let resp = oobv_recommend(OobvRecommendRequest {
             email_body: "至急振込先変更".into(),
         })
@@ -1773,6 +1823,8 @@ mod v02_tests {
     #[tokio::test]
     async fn oobv_start_は終端セレモニーを追い出し有効なものが満杯なら拒否する(
     ) -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let state = V02AppState::new();
         // 256件の終端セレモニーを詰める (Verified は二度と検証できないため
         // 追い出されてよい)
@@ -1888,6 +1940,8 @@ mod v02_tests {
 
     #[tokio::test]
     async fn dlp_precheck_は機密マーカーの_warn_所見を返す() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let resp = mail_dlp_precheck(DlpPrecheckRequest {
             from: "alice@corp.example".into(),
             to: vec!["bob@example.com".into()],
@@ -1905,6 +1959,8 @@ mod v02_tests {
 
     #[tokio::test]
     async fn dlp_precheck_は平文メールで警告を返さない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let resp = mail_dlp_precheck(DlpPrecheckRequest {
             from: "alice@corp.example".into(),
             to: vec!["bob@corp.example".into()],
@@ -1954,6 +2010,8 @@ mod v02_tests {
     // (crop-partnr.com は連絡先の corp-partner.com と距離2のタイポ)
     #[tokio::test]
     async fn outbound_dlp_eval_は既知宛先のタイポドメインを疑う() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
         let dir = std::env::temp_dir().join(format!("kaname-d104-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         history_open(
@@ -3517,10 +3575,16 @@ async fn current_account_id() -> String {
 /// 留める — audit_log は messages/contacts と同じ暗号化 DB 内だが、
 /// 不要な本文・トークン・パスは絶対に書かない。
 async fn audit_event(account_id: Option<&str>, event_type: &str, payload: serde_json::Value) {
-    if let Some(store) = store_slot().lock().await.clone() {
-        if let Err(e) = store.audit(account_id, event_type, &payload).await {
-            warn!(error=%e, "監査ログの書き込みに失敗");
+    match store_slot().lock().await.clone() {
+        Some(store) => {
+            if let Err(e) = store.audit(account_id, event_type, &payload).await {
+                warn!(error=%e, "監査ログの書き込みに失敗");
+            }
         }
+        // Store が開いていなくても監査イベントを握り潰さない。
+        // DLP_BLOCK のような最重要証跡が無言で失われるのを防ぐ
+        // (D23 の教訓: サイレント失敗は欠陥を隠す)。
+        None => warn!(event_type, "Store 未接続のため監査イベントを破棄"),
     }
 }
 

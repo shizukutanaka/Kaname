@@ -983,6 +983,43 @@ mod tests {
     }
 
     #[test]
+    fn is_mls_message_detects_envelope_parts() {
+        // multipart/mixed 中の MLS エンベロープ
+        let with_mls = "From: a@example.com\r\n\
+                        Subject: sealed\r\n\
+                        MIME-Version: 1.0\r\n\
+                        Content-Type: multipart/mixed; boundary=\"b1\"\r\n\
+                        \r\n\
+                        --b1\r\n\
+                        Content-Type: text/plain\r\n\
+                        \r\n\
+                        encrypted\r\n\
+                        --b1\r\n\
+                        Content-Type: application/mls-envelope+cbor\r\n\
+                        \r\n\
+                        <opaque>\r\n\
+                        --b1--\r\n";
+        assert!(is_mls_message(with_mls.as_bytes()));
+
+        // ルート自体が MLS エンベロープ (添付扱いされない経路)
+        let root_mls = "From: a@example.com\r\n\
+                        Subject: sealed\r\n\
+                        MIME-Version: 1.0\r\n\
+                        Content-Type: application/mls-envelope+cbor\r\n\
+                        \r\n\
+                        <opaque>\r\n";
+        assert!(is_mls_message(root_mls.as_bytes()));
+
+        // 平文メールは false
+        let plain = "From: a@example.com\r\n\
+                     Subject: hi\r\n\
+                     \r\n\
+                     hello\r\n";
+        assert!(!is_mls_message(plain.as_bytes()));
+        assert!(!is_mls_message(b""));
+    }
+
+    #[test]
     fn bidi_stripped_in_sanitize() {
         let raw = RawHtml("Hello\u{202E}World".to_string());
         let s = sanitize_html(&raw);
@@ -1321,6 +1358,24 @@ pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
         ));
     }
     out
+}
+
+/// メール全体が MLS エンベロープ (`application/mls-envelope+cbor`) を
+/// 含むかを判定する。ルートパートを含む全 MIME パートを検査するため、
+/// 添付扱いされない本文直下のエンベロープも検出できる。
+/// `kaname-jmap::BodyPart::is_mls_envelope` と同じ判定基準。
+#[must_use]
+pub fn is_mls_message(raw: &[u8]) -> bool {
+    const MLS_MIME: &str = "application/mls-envelope+cbor";
+    let Some(msg) = MessageParser::default().parse(raw) else {
+        return false;
+    };
+    msg.parts.iter().any(|part| {
+        part.content_type().is_some_and(|ct| {
+            format!("{}/{}", ct.ctype(), ct.subtype().unwrap_or_default())
+                .eq_ignore_ascii_case(MLS_MIME)
+        })
+    })
 }
 
 /// 1 添付分のバイト列を各検出器にかける。

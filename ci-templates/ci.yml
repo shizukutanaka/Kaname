@@ -159,7 +159,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.7
       - name: cargo bench
-        run: cargo bench --workspace --bench '*' -- --output-format bencher | tee bench_output.txt
+        # --bench '*' は glob として解釈されない (D119) — 実在ベンチ名を指定
+        run: cargo bench --workspace --bench core_bench -- --output-format bencher | tee bench_output.txt
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         with:
