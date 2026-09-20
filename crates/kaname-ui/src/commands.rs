@@ -293,11 +293,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         spf: map_auth(env.auth_results.spf),
         dkim: map_auth(env.auth_results.dkim),
         dmarc: map_auth(env.auth_results.dmarc),
-        arc: None,
+        arc: match env.auth_results.arc {
+            kaname_render::AuthResult::None => None,
+            r => Some(map_auth(r)),
+        },
     };
     let auth_desc = format!(
-        "SPF={:?} DKIM={:?} DMARC={:?}",
-        env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc
+        "SPF={:?} DKIM={:?} DMARC={:?} ARC={:?}",
+        env.auth_results.spf, env.auth_results.dkim, env.auth_results.dmarc, env.auth_results.arc
     );
 
     // 本文からリンクを抽出し、bec の URL シグナルに供給する。
@@ -631,7 +634,10 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             spf: map_auth(env.auth_results.spf),
             dkim: map_auth(env.auth_results.dkim),
             dmarc: map_auth(env.auth_results.dmarc),
-            arc: None,
+            arc: match env.auth_results.arc {
+                kaname_render::AuthResult::None => None,
+                r => Some(map_auth(r)),
+            },
         };
         // 認証のいずれかが失敗していれば radar に伝える。
         let auth_partial_fail = matches!(
@@ -1814,7 +1820,10 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
             spf: map_auth(parsed_auth.spf),
             dkim: map_auth(parsed_auth.dkim),
             dmarc: map_auth(parsed_auth.dmarc),
-            arc: None,
+            arc: match parsed_auth.arc {
+                kaname_render::AuthResult::None => None,
+                r => Some(map_auth(r)),
+            },
         },
         sender_history: history.as_ref(),
         our_domain,
