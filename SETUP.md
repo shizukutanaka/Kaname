@@ -72,7 +72,6 @@ kaname/
 │   └── capabilities/       # Tauri 権限ポリシー
 │
 ├── crates/                 # Rust クレート (単方向依存グラフ)
-│   ├── kaname-core/        # 基礎型・AppState・UX 機能
 │   ├── kaname-error/       # 共通エラー型
 │   ├── kaname-ai/          # ★ Dual-LLM 型安全 (北極星)
 │   │   └── src/dual_llm.rs # Content<Untrusted> + Bridge

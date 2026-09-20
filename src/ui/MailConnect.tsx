@@ -33,7 +33,6 @@ interface EmailRow {
   is_starred: boolean;
   bec_verdict: string;
   is_mls: boolean;
-  triage: string;
 }
 
 function verdictStyle(v: string): { bg: string; fg: string; border: string } {

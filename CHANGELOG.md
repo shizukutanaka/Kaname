@@ -77,6 +77,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `h1` 不在 (Inbox 見出しを `<h1>` 化)、ナビゲーションに `role="navigation"`、コンテンツ領域に `role="main"`、作成画面の `×` に `aria-label="閉じる"`、`prefers-reduced-motion` で全 transition を 0.01ms に短縮、`:focus-visible` のフォーカスリングをグローバル保証
 
 ### Removed
+- **`EmailRow.triage` と `kaname-core` クレートを削除** (D97): TS 側 `triageEmail` を Rust `TriageEngine` に集約した際、UI は仕分け値を読む箇所を持たず、行ごとに計算・シリアライズされるだけの dead 出力だった。E11 が残置根拠とした「TriageEngine のみ利用中」が消えたためクレートごと削除 (git 履歴に残る)。workspace 23→22 クレート、出荷到達は cargo tree 実測 16
 - **E2E の陳腐化した架空シナリオと未使用インフラを削除** (D8 関連)
   - 旧 `north-star-demo.spec.ts` は Smart Reply 3候補・スワイプアーカイブ・Cmd+Z 取り消し・`ai_summarize_email` HTTP 傍受など未実装 UI を前提としており実行不能だったため、実 UI のゴールデンパスで全面書き換え
   - spec が一切呼ばない `cargo run -p kaname-mockserver` の webServer エントリと Mobile Safari のスワイプ project (spec 不在) を `playwright.config.ts` から除去 — これにより `npm run test:e2e` がフロントエンドのみで実行可能に

@@ -44,7 +44,6 @@ DRI は:
 | `kaname-privacy` | Privacy Lead | GDPR、トラッキング検出 |
 | `kaname-mockserver` | DevX Lead | E2E テスト、開発者体験 |
 | `kaname-error` | Foundation Lead | 共通基盤、API 設計 |
-| `kaname-core` | Architecture Lead | 全体設計、依存グラフ |
 
 ### 2.2 機能 DRI
 

@@ -2062,13 +2062,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kaname-core"
-version = "0.7.1"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "kaname-crypto"
 version = "0.7.1"
 dependencies = [
@@ -2289,7 +2282,6 @@ version = "0.7.1"
 dependencies = [
  "dirs",
  "kaname-bec",
- "kaname-core",
  "kaname-dlp",
  "kaname-jmap",
  "kaname-memory-guard",

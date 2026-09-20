@@ -17,14 +17,13 @@
 import { describe, it, expect } from "vitest";
 import { formatDate } from "../ui/Inbox";
 
-// ── 1. トリアージ (判定は Rust 側へ集約済み) ────────────────────────────
+// ── 1. トリアージ ────────────────────────────────────────────────────────
 
 // 注: triageEmail の TypeScript 実装 (src/ui/KanameApp.tsx) は削除した。
-// 同じ仕分けロジックが kaname-core::ux_features::TriageEngine に実装されており、
-// バックエンドの mail_fetch が返す EmailRow.triage が唯一の判定元になった。
-// テストは crates/kaname-core/src/ux_features.rs の #[cfg(test)] 側にあり、
-// paper_trail / feed / BEC important / 送信者ルール / 大小文字回避まで
-// TypeScript 版より広くカバーしている。二重実装は二重の真実を生むため残さない。
+// 移管先だった Rust 側 EmailRow.triage は「唯一の判定元」と謳いながら
+// UI が一度も読まない dead 出力だったため、フィールド・計算・kaname-core
+// クレートごと削除済み (D97)。仕分けグルーピング UI が必要になれば
+// git 履歴から TriageEngine を復元できる。
 //
 // 併せて、上記の削除で使い道を失っていた makeEmail() ヘルパーも削除した。
 // どこからも呼ばれていない未使用コードでありながら、消えた KanameApp.tsx
