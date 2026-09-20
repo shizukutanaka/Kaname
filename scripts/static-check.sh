@@ -160,6 +160,11 @@ for f, src in files.items():
     # クロージャ束縛も局所的な「定義」として扱う (テストの make_req 等)。
     local_defs = set(re.findall(r'(?:^|\s)fn\s+([a-zA-Z_][a-zA-Z0-9_]*)', src))
     local_defs |= set(re.findall(r'\blet\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?::[^=]*)?=\s*(?:move\s*)?\|', body))
+    # `name: impl Fn...` / `mut name: impl FnMut` のように引数として
+    # 渡されたクロージャも局所的な定義として扱う (progress コールバック等)。
+    local_defs |= set(re.findall(
+        r'(?:^|[,(]\s*)(?:mut\s+)?([a-z_][a-z0-9_]*)\s*:\s*(?:impl|&impl|Box<dyn)\s+Fn',
+        body))
     # `!` の直前 (マクロ) と `.`/`::` の直後 (メソッド・パス) を除く裸呼び出しのみを拾う。
     calls = set(re.findall(r'(?<![a-zA-Z0-9_:.])\b([a-z_][a-z0-9_]*)\s*\(', body))
     for sym in sorted(calls):
