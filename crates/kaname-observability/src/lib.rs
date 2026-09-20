@@ -25,7 +25,6 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use serde::{Deserialize, Serialize};
->>>>>>> ee46f3f (chore: 外部参照ゼロのモジュール・API 群を削除 (E7 デッドコード掃除 ~2,400行))
 
 pub struct PrivacySanitizer;
 
