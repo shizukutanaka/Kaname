@@ -2205,15 +2205,22 @@ pub async fn mail_search(
         .map_err(|e| format!("検索に失敗しました: {e}"))
 }
 
-/// 現在の JMAP アカウント ID を返す。未接続なら空文字。
+/// 現在の JMAP アカウント ID を返す。
 ///
-/// 保存・検索はサーバ未接続でも行えるべきだが、どのアカウントの
-/// メールかを区別する必要があるため、接続時の ID を使う。
+/// JMAP 未接続でも保存済みメールの一覧・検索が機能するよう、
+/// 接続されていなければ履歴 DB に登録済みのアカウントへフォールバックする
+/// (ローカルファースト: サーバが落ちても過去の受信メールは読めるべき)。
+/// 両方とも無ければ空文字。
 async fn current_account_id() -> String {
-    match jmap_client().await {
-        Ok(c) => c.account_id().to_string(),
-        Err(_) => String::new(),
+    if let Ok(c) = jmap_client().await {
+        return c.account_id().to_string();
     }
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Ok(Some(id)) = store.primary_account_id().await {
+            return id;
+        }
+    }
+    String::new()
 }
 
 /// メールアドレスからドメイン部を取り出す (小文字化)。
