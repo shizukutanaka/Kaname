@@ -1,7 +1,7 @@
 // src/ui/Compose.tsx — メール作成コンポーネント
 //
 // 機能:
-//   - DLP 事前チェック (送信前にリアルタイム警告)
+//   - 送信前アドバイザリ (oobv_recommend で別経路確認推奨の文脈を検出)
 //   - (AI 返信草案は LLM 推論がスタブのため提供しない。以前は定型文を
 //      「AI 草案」と表示して挿入しており、AI 出力を偽っていた)
 //   - MLS 暗号化状態表示
@@ -26,21 +26,36 @@ export const Compose = (props: ComposeProps) => {
   const [subject,  setSubject] = createSignal(props.initialSubject || "");
   const [body,     setBody]    = createSignal("");
   const [sending,  setSending] = createSignal(false);
-  const [dlpWarn,  setDlpWarn] = createSignal<string | null>(null);
+  const [advice,   setAdvice]  = createSignal<string | null>(null);
   const [error,    setError]   = createSignal<string | null>(null);
   const [mlsReady, setMlsReady] = createSignal<boolean | null>(null);
 
-  // DLP リアルタイムチェック (debounced)
-  let dlpTimer: ReturnType<typeof setTimeout>;
+  // 送信前アドバイザリ (debounced): 本文が「受信側で別経路確認を推奨」
+  // される文脈 (送金要求・急迫表現等) に一致するかを `oobv_recommend`
+  // で判定し、送信者が事前に確認経路を明記できるよう助言する。
+  // ブロックではなく助言。送信時の DLP Block 判定は別途 mail_send が実行。
+  let adviceTimer: ReturnType<typeof setTimeout>;
   createEffect(() => {
     const b = body();
-    clearTimeout(dlpTimer);
-    dlpTimer = setTimeout(async () => {
-      if (b.length < 20) { setDlpWarn(null); return; }
-      // 注: 入力中のリアルタイム DLP 警告用コマンドは未実装。ただし
-      // **送信時には mail_send が Direction::Outbound の DLP を実行し、
-      // Block 判定なら送信せずエラーを返す** (commands.rs: mail_send_real)。
-      // 保護は効いており、ここで欠けているのは事前警告の UX のみ。
+    clearTimeout(adviceTimer);
+    adviceTimer = setTimeout(async () => {
+      if (b.length < 20) { setAdvice(null); return; }
+      try {
+        const res = await invoke<{ level: string; message_i18n_key: string }>(
+          "oobv_recommend",
+          { req: { email_body: b } },
+        );
+        setAdvice(
+          res.level === "Strong"
+            ? "本文が送金要求・急迫表現を含み、受信側で別経路確認が必要と判断される可能性が高い内容です"
+            : res.level === "Optional"
+              ? "本文の内容は受信側で別経路確認が推奨される可能性があります"
+              : null,
+        );
+      } catch {
+        // アドバイザリの失敗で送信を妨げない
+        setAdvice(null);
+      }
     }, 600);
   });
 
@@ -143,16 +158,16 @@ export const Compose = (props: ComposeProps) => {
         >×</button>
       </div>
 
-      {/* DLP 警告 */}
-      <Show when={dlpWarn()}>
+      {/* 送信前アドバイザリ (OOBV 推奨判定) */}
+      <Show when={advice()}>
         <div style={{
           padding: "8px 16px",
-          background: "#E5484D12",
-          "border-bottom": "1px solid #E5484D30",
+          background: "#FFB22412",
+          "border-bottom": "1px solid #FFB22430",
           "font-size": "12px",
-          color: "#E5484D",
+          color: "#FFB224",
         }}>
-          ⚠ DLP ポリシー: {dlpWarn()}
+          📞 {advice()}
         </div>
       </Show>
 
