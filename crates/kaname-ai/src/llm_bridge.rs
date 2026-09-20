@@ -331,42 +331,6 @@ fn build_phi4_prompt(req: &InferenceRequest) -> String {
     prompt
 }
 
-// ============================================================================
-// Quarantined LLM wrapper — implements the analysis path
-// ============================================================================
-
-/// Drives the Quarantined LLM for mail content analysis.
-///
-/// - Receives `Content<Untrusted>` wrapped in `<untrusted_content>` tags
-/// - Returns `AnalysisReport` (structured JSON, pre-validated by Bridge)
-/// - NO tools available — the runner config has no tool list
-pub struct QuarantinedLlmImpl {
-    runner: Arc<Mutex<LocalLlmRunner>>,
-}
-
-impl QuarantinedLlmImpl {
-    /// 新規インスタンスを作成する。
-    pub fn new(runner: Arc<Mutex<LocalLlmRunner>>) -> Self {
-        Self { runner }
-    }
-
-    /// Analyze untrusted mail content.
-    pub fn analyze(&self, untrusted_text: &str) -> Result<RawAnalysisOutput, LlmError> {
-        let runner = self.runner.lock().map_err(|_| LlmError::ModelLocked)?;
-        let req = InferenceRequest {
-            system_prompt: QUARANTINED_SYSTEM_PROMPT.into(),
-            user_message: format!(
-                "<untrusted_content>\n{}\n</untrusted_content>",
-                untrusted_text
-            ),
-            history: vec![],
-        };
-        let result = runner.infer(&req)?;
-        // レスポンスから JSON をパース試行
-        parse_analysis_json(&result.text)
-    }
-}
-
 /// Bridge バリデーション前の Q-LLM からの生 JSON 出力。
 #[derive(Debug, Deserialize)]
 pub struct RawAnalysisOutput {
@@ -381,7 +345,11 @@ pub struct RawAnalysisOutput {
     pub mentions: Vec<serde_json::Value>,
 }
 
-fn parse_analysis_json(text: &str) -> Result<RawAnalysisOutput, LlmError> {
+/// Q-LLM の生出力から JSON オブジェクトを抽出する。
+///
+/// 将来 `QuarantinedLlm` trait 実装 (D17(c), D2 と同時) が呼ぶ正規の
+/// パーサー。現状はテストからのみ呼ばれる。
+pub fn parse_analysis_json(text: &str) -> Result<RawAnalysisOutput, LlmError> {
     // 出力から JSON を検索 (model may add preamble despite instructions)
     let start = text
         .find('{')
@@ -393,46 +361,6 @@ fn parse_analysis_json(text: &str) -> Result<RawAnalysisOutput, LlmError> {
         return Err(LlmError::InvalidOutput("malformed JSON range"));
     }
     serde_json::from_str(&text[start..=end]).map_err(|e| LlmError::ParseError(e.to_string()))
-}
-
-// ============================================================================
-// Privileged LLM wrapper — implements the compose / assist path
-// ============================================================================
-
-/// Drives the Privileged LLM for user-instruction tasks.
-///
-/// Accepts ONLY `Content<Trusted>` (user instructions) plus a `SafeContext`
-/// (structured summary from Bridge — never raw mail text).
-pub struct PrivilegedLlmImpl {
-    runner: Arc<Mutex<LocalLlmRunner>>,
-}
-
-impl PrivilegedLlmImpl {
-    /// 新規インスタンスを作成する。
-    pub fn new(runner: Arc<Mutex<LocalLlmRunner>>) -> Self {
-        Self { runner }
-    }
-
-    /// Compose a draft reply based on user instruction + optional context.
-    pub fn compose_draft(
-        &self,
-        user_instruction: &str,
-        context_summary: Option<&str>,
-        history: Vec<Turn>,
-    ) -> Result<String, LlmError> {
-        let runner = self.runner.lock().map_err(|_| LlmError::ModelLocked)?;
-        let user_msg = match context_summary {
-            Some(ctx) => format!("{}\n\n[メール要約: {}]", user_instruction, ctx),
-            None => user_instruction.into(),
-        };
-        let req = InferenceRequest {
-            system_prompt: PRIVILEGED_SYSTEM_PROMPT.into(),
-            user_message: user_msg,
-            history,
-        };
-        let result = runner.infer(&req)?;
-        Ok(result.text)
-    }
 }
 
 // ============================================================================
