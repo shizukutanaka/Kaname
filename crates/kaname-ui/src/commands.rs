@@ -214,6 +214,16 @@ pub struct ImportedEmail {
     /// 添付一覧と本文はここで既に手元にあるため、解析経路で直接評価する
     /// (単独の `deepfake_evaluate` コマンドは呼び手ゼロのため E11 で削除済み)。
     pub deepfake_advisory: AdvisoryReport,
+    /// MLS E2E: メール内の `application/mls-envelope+cbor` パートを
+    /// 処理した結果のイベント (人間可読) (D1 Phase 4)。
+    ///
+    /// 例: 「暗号メッセージを復号しました」「新しい会話に参加しました」。
+    /// MLS 未初期化時は「初期化が必要」のイベントが入る。
+    pub mls_events: Vec<String>,
+    /// MLS E2E: 復号されたメール本文 (平文)。暗号化メールの内容は
+    /// サーバ側 DLP/BEC では見えないため、復号後にローカルで解析する
+    /// 設計判断は別途必要 (現状は表示のみ)。
+    pub mls_plaintexts: Vec<String>,
 }
 
 /// ローカルの `.eml` / `.mbox` ファイルを読み込み、**実際のメール**を
@@ -444,6 +454,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(style_risks);
     let dlp_findings = scan_dlp_inbound(&subject, &body_text, &our);
 
+    // MLS エンベロープの検出と処理 (D1 Phase 4)。
+    // `is_mls` バッジはエンベロープの有無で決める — メッセージ本体が
+    // エンベロープ内にあるため外側パースでは内容が見えない。
+    let mls_envelopes = kaname_render::extract_mls_envelopes(bytes);
+    let is_mls = !mls_envelopes.is_empty();
+    let (mls_events, mls_plaintexts) = process_mls_envelopes(&mls_envelopes);
+
     Ok(ImportedEmail {
         from,
         subject,
@@ -456,7 +473,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             srcdoc: srcdoc.content,
             sandbox: srcdoc.sandbox.to_string(),
             csp: srcdoc.csp.to_string(),
-            is_mls: false,
+            is_mls,
             render_risks,
         },
         dlp_findings,
@@ -478,6 +495,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             }
         },
         deepfake_advisory,
+        mls_events,
+        mls_plaintexts,
     })
 }
 
@@ -1165,6 +1184,134 @@ mod tests {
         Ok(())
     }
 
+    fn mls_test_identity(addr: &str) -> Result<kaname_mls::Identity, String> {
+        Ok(kaname_mls::Identity {
+            email: kaname_mls::EmailAddress::parse(addr).map_err(|e| format!("{e}"))?,
+            display_name: None,
+            default_ciphersuite: kaname_mls::Ciphersuite::KanameHybridPqc,
+        })
+    }
+
+    /// テスト用 quoted-printable エンコーダ (CBOR の高バイトを =XX に逃がす)。
+    /// base64 を依存に増やさないため、mail-parser がデコードできる QP を使う。
+    fn qp_encode(bytes: &[u8]) -> String {
+        let mut out = String::new();
+        for &b in bytes {
+            if (0x20..=0x7e).contains(&b) && b != b'=' {
+                out.push(b as char);
+            } else {
+                out.push_str(&format!("={b:02X}"));
+            }
+        }
+        out
+    }
+
+    fn mls_eml(envelope_cbor: &[u8]) -> String {
+        format!(
+            "From: alice@kaname.app\r\n\
+             To: bob@kaname.app\r\n\
+             Subject: mls\r\n\
+             MIME-Version: 1.0\r\n\
+             Content-Type: multipart/mixed; boundary=\"B\"\r\n\
+             \r\n\
+             --B\r\n\
+             Content-Type: text/plain\r\n\
+             \r\n\
+             外側の本文\r\n\
+             --B\r\n\
+             Content-Type: application/mls-envelope+cbor\r\n\
+             Content-Transfer-Encoding: quoted-printable\r\n\
+             \r\n\
+             {}\r\n\
+             --B--\r\n",
+            qp_encode(envelope_cbor)
+        )
+    }
+
+    /// D1 Phase 4: 受信メール内の MLS エンベロープが解析経路で実処理される
+    /// ことを確認する (Welcome 参加 → 暗号メッセージの復号)。
+    #[tokio::test]
+    async fn analyze_raw_email_はmlsエンベロープを処理して復号する() -> Result<(), String> {
+        let mut alice = kaname_mls::MlsMailClient::try_new(mls_test_identity("alice@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+        let bob = kaname_mls::MlsMailClient::try_new(mls_test_identity("bob@kaname.app")?)
+            .map_err(|e| format!("{e}"))?;
+
+        // alice が bob の KP で 1:1 会話を開始し、Welcome を生成
+        let bob_kp = bob
+            .generate_key_package()
+            .ok_or("bob の KeyPackage 生成に失敗")?;
+        let (mut conv, welcome) = alice
+            .start_one_to_one(
+                kaname_mls::EmailAddress::parse("bob@kaname.app").map_err(|e| format!("{e}"))?,
+                bob_kp,
+            )
+            .map_err(|e| format!("{e}"))?;
+
+        // bob 側クライアントをグローバルスロットに差し込み、受信経路を通す
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(bob);
+
+        let r =
+            analyze_raw_email(mls_eml(&welcome.to_cbor().map_err(|e| format!("{e}"))?).as_bytes())
+                .await?;
+        assert!(r.body.is_mls, "mls エンベロープで is_mls が立つべき");
+        assert!(
+            r.mls_events.iter().any(|e| e.contains("参加")),
+            "WelcomeJoined イベントが必要: {:?}",
+            r.mls_events
+        );
+
+        // alice → bob の暗号メッセージを受信経路で復号できるか
+        let sealed = alice
+            .encrypt_message(&mut conv, "これは暗号化された本文です".as_bytes())
+            .map_err(|e| format!("{e}"))?;
+        let r2 =
+            analyze_raw_email(mls_eml(&sealed.to_cbor().map_err(|e| format!("{e}"))?).as_bytes())
+                .await?;
+        assert!(
+            r2.mls_plaintexts
+                .iter()
+                .any(|p| p.contains("暗号化された本文")),
+            "復号された本文が返るべき: {:?}",
+            r2.mls_plaintexts
+        );
+
+        // グローバル状態を掃除 — 後続テストへの影響を防ぐ
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn analyze_raw_email_mls未初期化ではイベントのみ返す() -> Result<(), String> {
+        // MLS スロットが空の状態で mls パートを含むメールを解析する。
+        // (先に上のテストが走っていても、ここで明示的に空にする)
+        *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        let raw: &[u8] = b"From: a@kaname.app\r\n\
+            To: b@kaname.app\r\n\
+            Subject: mls\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"B\"\r\n\
+            \r\n\
+            --B\r\n\
+            Content-Type: text/plain\r\n\
+            \r\n\
+            body\r\n\
+            --B\r\n\
+            Content-Type: application/mls-envelope+cbor\r\n\
+            \r\n\
+            not-an-envelope\r\n\
+            --B--\r\n";
+        let r = analyze_raw_email(raw).await?;
+        assert!(r.body.is_mls);
+        assert!(
+            r.mls_events.iter().any(|e| e.contains("初期化")),
+            "未初期化イベントが必要: {:?}",
+            r.mls_events
+        );
+        assert!(r.mls_plaintexts.is_empty());
+        Ok(())
+    }
+
     /// D112: 文体プロファイルは settings テーブルへ永続化され、
     /// プロセス内キャッシュ消去 (再起動相当) 後も復元される。
     #[tokio::test]
@@ -1680,10 +1827,12 @@ mod v02_tests {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
         // 1. 新規: 64桁hex の鍵が作られ、再呼出しで同じ値を返す
-        let k1 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        let k1 =
+            resolve_or_create_key(&dir, "history.key", "history.db").map_err(|e| e.to_string())?;
         assert_eq!(k1.len(), 64);
         assert!(k1.chars().all(|c| c.is_ascii_hexdigit()));
-        let k2 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        let k2 =
+            resolve_or_create_key(&dir, "history.key", "history.db").map_err(|e| e.to_string())?;
         assert_eq!(k1, k2, "再呼出しで別鍵を生成してはいけない");
         #[cfg(unix)]
         {
@@ -1701,7 +1850,8 @@ mod v02_tests {
 
         // 2. 鍵のみ破損 (DB なし) → 自己修復で再生成
         std::fs::write(dir.join("history.key"), b"corrupt").map_err(|e| e.to_string())?;
-        let k3 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        let k3 =
+            resolve_or_create_key(&dir, "history.key", "history.db").map_err(|e| e.to_string())?;
         assert_ne!(k3.len(), 0);
         assert_eq!(k3.len(), 64);
 
@@ -1712,7 +1862,7 @@ mod v02_tests {
         )
         .map_err(|e| e.to_string())?;
         std::fs::write(dir.join("history.key"), b"corrupt").map_err(|e| e.to_string())?;
-        match resolve_or_create_key(&dir) {
+        match resolve_or_create_key(&dir, "history.key", "history.db") {
             Err(e) => assert!(e.contains("鍵"), "破損鍵の旨を伝えるべき: {e}"),
             Ok(_) => panic!("DB があるのに鍵が壊れていたら再生成してはいけない"),
         }
@@ -1721,14 +1871,15 @@ mod v02_tests {
         std::fs::remove_file(dir.join("history.key")).ok();
         std::fs::write(dir.join("history.db"), b"SQLite format 3\x00rest")
             .map_err(|e| e.to_string())?;
-        match resolve_or_create_key(&dir) {
+        match resolve_or_create_key(&dir, "history.key", "history.db") {
             Err(e) => assert!(e.contains("平文"), "平文 DB の旨を伝えるべき: {e}"),
             Ok(_) => panic!("平文 DB を鍵生成で上書きしてはいけない"),
         }
 
         // 5. 有効な鍵 + DB あり → そのまま返す
         std::fs::write(dir.join("history.key"), k3.as_bytes()).map_err(|e| e.to_string())?;
-        let k4 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        let k4 =
+            resolve_or_create_key(&dir, "history.key", "history.db").map_err(|e| e.to_string())?;
         assert_eq!(k4, k3);
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -2479,6 +2630,160 @@ fn llm_slot() -> &'static std::sync::Mutex<
     LLM_RUNNER.get_or_init(|| std::sync::Mutex::new(None))
 }
 
+// ============================================================================
+// MLS E2E 暗号化 (D1 Phase 4): クライアント初期化と受信エンベロープ処理
+// ============================================================================
+
+/// MLS クライアントスロット。`mls_init` で初期化される。
+///
+/// `tokio::Mutex` ではなく `std::sync::Mutex` の理由: `process_incoming` は
+/// 同期 API でありガードを跨ぐ await がない。ポイズンされたら into_inner で
+/// 復旧する (ロック保持中の panic でクライアントが失われないように)。
+static MLS_CLIENT: std::sync::OnceLock<std::sync::Mutex<Option<kaname_mls::MlsMailClient>>> =
+    std::sync::OnceLock::new();
+
+fn mls_slot() -> &'static std::sync::Mutex<Option<kaname_mls::MlsMailClient>> {
+    MLS_CLIENT.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// MLS の状態。
+#[derive(Debug, Serialize)]
+pub struct MlsStatus {
+    /// クライアントが初期化済みか。
+    pub initialized: bool,
+    /// 自身のメールアドレス (初期化済みの場合)。
+    pub email: Option<String>,
+    /// 参加/復元済みの会話数。
+    pub conversations: usize,
+}
+
+/// MLS (E2E 暗号化) をこの端末で初期化する。
+///
+/// `email` はユーザー入力 — JMAP の Session/account 応答にはメール
+/// アドレスが含まれないため自動導出できない。状態は
+/// `<data_dir>/kaname/mls.db` (SQLCipher、鍵は `mls.key` — history.key と
+/// 同じ 0600 ファイル運用) に永続化され、再起動後は同じ会話・署名鍵・
+/// Welcome リプレイ帳簿が復元される (D1 Phase 2)。
+///
+/// 既定暗号スイートは `KanameHybridPqc` (X-Wing = ML-KEM-768 + X25519
+/// ハイブリッド) — 製品が謳う耐量子 E2E の実体。
+pub async fn mls_init(email: String) -> Result<MlsStatus, String> {
+    let addr = kaname_mls::EmailAddress::parse(email.as_str())
+        .map_err(|e| format!("メールアドレスが不正です: {e}"))?;
+    let base = dirs::data_dir()
+        .ok_or_else(|| "データディレクトリを特定できません".to_string())?
+        .join("kaname");
+    std::fs::create_dir_all(&base)
+        .map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
+    let key_hex = resolve_or_create_key(&base, "mls.key", "mls.db")?;
+    let client = kaname_mls::MlsMailClient::try_new_persistent(
+        kaname_mls::Identity {
+            email: addr,
+            display_name: None,
+            default_ciphersuite: kaname_mls::Ciphersuite::KanameHybridPqc,
+        },
+        &base.join("mls.db"),
+        &key_hex,
+    )
+    .map_err(|e| format!("MLS の初期化に失敗: {e}"))?;
+    let status = MlsStatus {
+        initialized: true,
+        email: Some(client.identity.email.as_str().to_string()),
+        conversations: client.list_conversations().len(),
+    };
+    *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(client);
+    Ok(status)
+}
+
+/// MLS の現在の状態を返す (未初期化でもエラーにしない)。
+pub async fn mls_status() -> MlsStatus {
+    let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+    match guard.as_ref() {
+        Some(c) => MlsStatus {
+            initialized: true,
+            email: Some(c.identity.email.as_str().to_string()),
+            conversations: c.list_conversations().len(),
+        },
+        None => MlsStatus {
+            initialized: false,
+            email: None,
+            conversations: 0,
+        },
+    }
+}
+
+/// この端末の MLS KeyPackage を 16 進文字列で返す。
+///
+/// 相手の Kaname がこれを取り込むと自分を会話に招待できるようになる
+/// (KeyPackage は公開情報 — 配布してよい)。配送経路は未実装のため
+/// (D1 Phase 3)、当面は手でコピーして渡す運用。
+pub async fn mls_key_package() -> Result<String, String> {
+    let guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "MLS が初期化されていません (mls_init を先に呼んでください)".to_string())?;
+    let kp = client
+        .generate_key_package()
+        .ok_or_else(|| "KeyPackage の生成に失敗しました".to_string())?;
+    Ok(kp.bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// `analyze_raw_email` 内で呼ぶ MLS エンベロープ処理。
+///
+/// 返り値は `(イベント列, 復号された本文列)`。未初期化時はエラーを起こさず
+/// 「初期化が必要」のイベントを返す — E2E はオプトイン機能であり、
+/// 未設定ユーザーのメール表示を壊してはいけない。
+fn process_mls_envelopes(envelopes: &[Vec<u8>]) -> (Vec<String>, Vec<String>) {
+    let mut events = Vec::new();
+    let mut plaintexts = Vec::new();
+    let mut guard = mls_slot().lock().unwrap_or_else(|e| e.into_inner());
+    let Some(client) = guard.as_mut() else {
+        if !envelopes.is_empty() {
+            events.push(
+                "MLS エンベロープを検出しましたが、MLS が初期化されていません (設定から有効化してください)"
+                    .to_string(),
+            );
+        }
+        return (events, plaintexts);
+    };
+    for raw in envelopes {
+        let envelope = match kaname_mls::Envelope::from_cbor(raw) {
+            Ok(e) => e,
+            Err(e) => {
+                events.push(format!("MLS エンベロープの解析に失敗: {e}"));
+                continue;
+            }
+        };
+        match client.process_incoming(&envelope) {
+            Ok(kaname_mls::IncomingResult::Application(bytes)) => {
+                plaintexts.push(String::from_utf8_lossy(&bytes).into_owned());
+                events.push("暗号メッセージを復号しました".to_string());
+            }
+            Ok(kaname_mls::IncomingResult::WelcomeJoined(conv)) => {
+                events.push(format!(
+                    "新しい会話に参加しました (メンバー {} 名{})",
+                    conv.members.len(),
+                    conv.safety_number
+                        .map(|s| format!("、安全番号: {s}"))
+                        .unwrap_or_default()
+                ));
+            }
+            Ok(kaname_mls::IncomingResult::MembershipChange { added, removed, .. }) => {
+                events.push(format!(
+                    "メンバーシップが変更されました (追加 {} 名、削除 {} 名)",
+                    added.len(),
+                    removed.len()
+                ));
+            }
+            Ok(kaname_mls::IncomingResult::Control) => {
+                events.push("MLS 制御メッセージを処理しました".to_string());
+            }
+            Err(e) => events.push(format!("MLS メッセージを処理できません: {e}")),
+        }
+    }
+    (events, plaintexts)
+}
+
 /// `LocalLlm` の `score_bec` に渡す関数本体。
 /// クロージャではなく fn 項目にするのは HRTB (全ライフタイムで Fn を
 /// 満たす) 上の理由による — クロージャだと `Option<&str>` のライフタイムが
@@ -2644,7 +2949,7 @@ pub async fn history_open_default() -> Result<String, String> {
     std::fs::create_dir_all(&base)
         .map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
 
-    let key_hex = resolve_or_create_key(&base)?;
+    let key_hex = resolve_or_create_key(&base, "history.key", "history.db")?;
 
     let db_path = base.join("history.db");
     let shown = db_path.to_string_lossy().into_owned();
@@ -2652,17 +2957,22 @@ pub async fn history_open_default() -> Result<String, String> {
     Ok(shown)
 }
 
-/// `history.key` を読むか、無ければ新規生成して返す (D89)。
+/// 鍵ファイルを読むか、無ければ新規生成して返す (D89)。
 ///
-/// - 書き込みは `history.key.tmp` → rename でアトミック
+/// - 書き込みは `<key>.tmp` → rename でアトミック
 ///   (クラッシュでの半書き残し = 無効鍵 = DB 全損を防ぐ)
 /// - 作成時点で 0600 (write→chmod の窓を塞ぐ)
 /// - DB が存在するのに鍵が無い/壊れている場合は再生成せずエラー
 ///   (新鍵は既存 DB を読めないため、勝手に作ると静かな全損になる)
 /// - 平文 SQLite DB (D75 以前) には別メッセージを返す
-fn resolve_or_create_key(base: &std::path::Path) -> Result<String, String> {
-    let key_path = base.join("history.key");
-    let db_path = base.join("history.db");
+fn resolve_or_create_key(
+    base: &std::path::Path,
+    key_name: &str,
+    db_name: &str,
+) -> Result<String, String> {
+    let key_path = base.join(key_name);
+    let db_path = base.join(db_name);
+    let tmp_name = format!("{key_name}.tmp");
     match std::fs::read_to_string(&key_path) {
         Ok(k) if k.trim().len() == 64 && k.trim().chars().all(|c| c.is_ascii_hexdigit()) => {
             Ok(k.trim().to_string())
@@ -2680,13 +2990,17 @@ fn resolve_or_create_key(base: &std::path::Path) -> Result<String, String> {
                     .map(|h| h == *b"SQLite format 3\x00")
                     .unwrap_or(false);
                 let msg = if is_plaintext {
-                    "履歴データベースは暗号化以前の平文形式です (D75)。\
-                     読み取るには移行が必要ですが未実装のため、\
-                     history.db を退避して新しい DB を作ってください"
+                    format!(
+                        "データベースは暗号化以前の平文形式です (D75)。\
+                         読み取るには移行が必要ですが未実装のため、\
+                         {db_name} を退避して新しい DB を作ってください"
+                    )
                 } else {
-                    "履歴データベースの鍵ファイルが壊れているか存在しません。\
-                     自動で新しい鍵を作ると既存データが読めなくなるため、\
-                     history.key を復旧するか history.db を退避してください"
+                    format!(
+                        "データベースの鍵ファイルが壊れているか存在しません。\
+                         自動で新しい鍵を作ると既存データが読めなくなるため、\
+                         {key_name} を復旧するか {db_name} を退避してください"
+                    )
                 };
                 return Err(msg.to_string());
             }
@@ -2694,7 +3008,7 @@ fn resolve_or_create_key(base: &std::path::Path) -> Result<String, String> {
             let mut raw = [0u8; 32];
             rand::rngs::OsRng.fill_bytes(&mut raw);
             let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
-            let tmp = base.join("history.key.tmp");
+            let tmp = base.join(&tmp_name);
             // 前回のクラッシュで tmp が残っていると create_new が永久に
             // 失敗するため、先に消す。
             let _ = std::fs::remove_file(&tmp);

@@ -2846,6 +2846,7 @@ dependencies = [
  "kaname-dlp",
  "kaname-jmap",
  "kaname-memory-guard",
+ "kaname-mls",
  "kaname-observability",
  "kaname-oobv",
  "kaname-privacy",

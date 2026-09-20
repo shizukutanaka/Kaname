@@ -32,6 +32,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - 永続化テスト 3 本: 再起動後の暗号往復継続 / 再起動跨ぎ Welcome リプレイ拒否 / 発行済み KP の秘密鍵永続化 (38 テスト全パス)
   - 残存: `try_new_persistent` の呼出元は未配線 (Phase 4 で kaname-ui に kaname-mls 依存辺を追加して接続 — DB パス/鍵は kaname-store の history.key 方式に倣う)。KeyPackage 配送経路は Phase 3、`kp_cache` は意図的に揮発のまま
 
+### Security — D1 Phase 4: 受信経路への MLS 配線
+
+- **`kaname_render::extract_mls_envelopes` を新設**: multipart を再帰走査 (入れ子 `message/rfc822` を含む) し、`application/mls-envelope+cbor` パートの復号済みボディを取り出す。`Content-Disposition` を問わず全パートを検査 (インライン挿入にも対応)
+- **kaname-ui が kaname-mls に接続**: `analyze_raw_email` (mail_open / mail_import_eml / mail_analyze_bytes の唯一の解析経路) がエンベロープを自動で `process_incoming` に通し、`mls_events` (Welcome 参加・メンバー変更・復号イベント) と `mls_plaintexts` (復号された本文) を `ImportedEmail` に追加。`is_mls` バッジも実エンベロープ検出で立つように
+- **IPC 3 件追加** (登録33 = 呼出33 = モック33): `mls_init(email)` — `<data_dir>/kaname/mls.db` (SQLCipher、`mls.key` は history.key と同じ 0600 ファイル運用。`resolve_or_create_key` をファイル名引数に汎用化) で `try_new_persistent` を起動、`mls_status` — 初期化状態と会話数、`mls_key_package` — この端末の KeyPackage を hex で返す (相手に手渡しする運用 — 配送経路は Phase 3 未実装)
+- SecurityDashboard に「MLS E2E 暗号化」カードを追加 (初期化フォーム・状態・KP 表示/コピー)。既定 ciphersuite は `KanameHybridPqc` (X-Wing = ML-KEM-768 + X25519 ハイブリッド)
+- 未初期化時はエラーにせず「初期化が必要」のイベントを返す — E2E はオプトインであり未設定ユーザーのメール表示を壊さない
+- kaname-ui テストで Welcome 参加 → 暗号往復の実ラウンドトリップを解析経路経由で実証
+- 残存: 送信側 (Compose への `encrypt_message` 統合と KeyPackage 配送 = Phase 3、`mail_send_real` の添付非対応がブロッカー)、Safety Number セレモニー UI (Phase 5)
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 

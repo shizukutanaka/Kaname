@@ -39,6 +39,10 @@ interface ImportedEmail {
   /** 上記の人間可読メッセージ (oobv_level === "none" のときは空文字列)。 */
   oobv_message: string;
   deepfake_advisory: DeepfakeAdvisory;
+  /** MLS エンベロープの処理イベント (D1 Phase 4)。旧モックでは欠落可。 */
+  mls_events?: string[];
+  /** MLS で復号された本文 (平文)。 */
+  mls_plaintexts?: string[];
 }
 
 /** `AdvisoryReport` (kaname-render::deepfake_advisory) の JSON 表現。 */
@@ -441,6 +445,44 @@ export function EmlImport() {
                     本文の解析で注意点が見つかりました
                   </div>
                   <For each={r().body.render_risks}>{(risk) => <div>・{risk}</div>}</For>
+                </div>
+              </Show>
+
+              {/* MLS E2E: 処理イベント + 復号された本文 (D1 Phase 4) */}
+              <Show when={(r().mls_events ?? []).length > 0}>
+                <div style={{
+                  padding: "10px 12px", "border-radius": "8px",
+                  background: "#EAF6EC", border: "1px solid #9CC9A6",
+                  color: "#1E5B2A", "font-size": "13px",
+                  "line-height": "1.6", "margin-bottom": "12px",
+                }}>
+                  <div style={{ "font-weight": "600", "margin-bottom": "4px" }}>
+                    🔐 MLS エンベロープを検出・処理しました
+                  </div>
+                  <For each={r().mls_events}>{(e) => <div>・{e}</div>}</For>
+                </div>
+              </Show>
+              <Show when={(r().mls_plaintexts ?? []).length > 0}>
+                <div style={{
+                  padding: "10px 12px", "border-radius": "8px",
+                  background: "#EAF6EC", border: "1px solid #9CC9A6",
+                  "margin-bottom": "12px",
+                }}>
+                  <div style={{
+                    "font-weight": "600", "font-size": "13px", color: "#1E5B2A",
+                    "margin-bottom": "4px",
+                  }}>
+                    復号された本文 (E2E — サーバでは読めない内容)
+                  </div>
+                  <For each={r().mls_plaintexts}>
+                    {(t) => (
+                      <pre style={{
+                        "font-size": "13px", color: "#1E5B2A",
+                        "white-space": "pre-wrap", "font-family": "inherit",
+                        margin: "0", "line-height": "1.6",
+                      }}>{t}</pre>
+                    )}
+                  </For>
                 </div>
               </Show>
 
