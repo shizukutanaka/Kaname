@@ -56,6 +56,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - fix(ci): static-check 検査9 の空転 (heredoc 実行で `__file__="<stdin>"` → repo 親 dir への誤 chdir) を修正 + corpus↔target↔bin 対応の検査10追加 (D103 再発防止/D105)
   - fix(kaname-ui): オフライン時に保存済みメールが読めない不具合 + オンボーディングのデモメールを実解析エンジンに接続
   - docs: CLAUDE.md のクレート依存グラフを設計意図の記述から実測へ修正 (D101)
+- **kaname-ui の async テストが共有グローバル状態で不定失敗していた問題を修正 (D115)**: `STORE`/`JMAP_SESSION`/`STYLE_PROFILES` (OnceLock) を並行テストが共有し実行順次第で相互破壊 — 全 `#[tokio::test]` 18件を `test_serial()` ロックで直列化
 - **DLP 既定ポリシーが実装済み12分類器のうち8つを有効化していなかった問題を修正 (D57)**: 米国 SSN・医療情報を Outbound `Block`、弁護士秘匿特権・案件コードネーム・IBAN・SWIFT BIC を Outbound `Warn` として既定追加 + Inbound にも同6分類器の Warn を追加 (SSN/IBAN/医療データ等が既定設定で無検査のまま送信できた)。法人番号 (公表情報) と IP アドレス (単体では機微でない) は既定化を意図的に見送り — kaname-dlp 変更のため security-lead 承認要
 - **SSA 文体認証の学習がアプリ再起動で全消去されていた問題を修正 (D112)**: 送信者文体プロファイルを暗号化 DB (`settings`) に永続化 — 従来は警告に必要な 10 サンプルが再起動ごとにリセットされ、実運用では一度も発火し得なかった
 
