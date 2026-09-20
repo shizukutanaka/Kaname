@@ -48,5 +48,5 @@ Kaname はオフラインファースト設計:
 
 サーバー側の問題か、ユーザー側か:
 - サーバー応答ヘッダーを `Network` ペインで確認
-- `kaname-observability` のメトリクス `jmap_errors` をチェック
-- 直近 1 時間の `jmap_requests` 成功率
+- アプリログ (`kaname-observability` の `PrivacyLayer` 経由 tracing) で
+  `mail_connect`/`mail_fetch` のエラー行を確認 — メトリクス基盤は未実装

@@ -1,5 +1,10 @@
 # Runbook: MLS ハンドシェイク失敗
 
+> **現状 (2026-09)**: MLS E2E 暗号化は未実装 (`kaname-mls` は XOR モック、
+> openmls 未統合 — gap-analysis D1)。本 runbook は openmls 統合後を想定した
+> 先行文書であり、現行ビルドでは記載のエラー (`MlsKeyExchange`,
+> `openmls::treesync::*`, safety number 通知) は発生しない。
+
 > 想定対応時間: 15 分以内
 > リスク: 暗号化メールが送受信不能
 
