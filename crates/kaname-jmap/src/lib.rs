@@ -275,6 +275,26 @@ impl JmapClient {
         position: u32,
         limit: u32,
     ) -> Result<Vec<EmailListItem>, JmapError> {
+        Ok(self
+            .query_emails_page(mailbox_id, position, limit)
+            .await?
+            .items)
+    }
+
+    /// `query_emails` に応答メタ (実効 limit / position) を付けて返す。
+    ///
+    /// `applied_limit` はサーバーが `Email/query` 応答でエコーした
+    /// 実効 limit (RFC 8620 §5.5)。呼び出し側は
+    /// `position == 0 && items.len() < min(要求limit, applied_limit)` で
+    /// 「メールボックス全体を見た」を判定でき、ローカル reconcile の
+    /// 前提条件に使う (サーバーが要求より小さい limit を適用した
+    /// 場合に「短いページ」を全件と誤認しないため)。
+    pub async fn query_emails_page(
+        &self,
+        mailbox_id: &str,
+        position: u32,
+        limit: u32,
+    ) -> Result<EmailQueryPage, JmapError> {
         const MAX_QUERY_LIMIT: u32 = 500;
         let limit = limit.min(MAX_QUERY_LIMIT);
         let rs = self
@@ -313,7 +333,18 @@ impl JmapClient {
             )
             .await?;
 
-        find_result(&rs, "emails", "list")
+        let items: Vec<EmailListItem> = find_result(&rs, "emails", "list")?;
+        // "q" 応答の実効 limit / position を拾う (エコーが無いサーバーは None/要求値)
+        let q = rs.iter().find(|r| r.call_id == "q");
+        let applied_limit = q.and_then(|r| r.args["limit"].as_u64());
+        let applied_position = q
+            .and_then(|r| r.args["position"].as_u64())
+            .unwrap_or(position as u64);
+        Ok(EmailQueryPage {
+            items,
+            position: applied_position,
+            applied_limit,
+        })
     }
 
     /// 単一メールの完全な本文を取得する。
@@ -718,6 +749,17 @@ pub struct MethodResponse {
     pub method: String,
     pub args: serde_json::Value,
     pub call_id: String,
+}
+
+/// `query_emails_page` の結果: メール一覧 + `Email/query` 応答メタ。
+#[derive(Debug)]
+pub struct EmailQueryPage {
+    /// 取得できたメール (最大 `limit` 件)。
+    pub items: Vec<EmailListItem>,
+    /// サーバーが返した `position` (結果の先頭インデックス)。
+    pub position: u64,
+    /// サーバーが応答でエコーした実効 `limit` (未エコーなら None)。
+    pub applied_limit: Option<u64>,
 }
 
 /// メールボックス

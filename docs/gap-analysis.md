@@ -297,3 +297,43 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 - 判断に迷う場合 (例: D6のRedis要否、D1のopenmlsバージョン選定など)
   アーキテクチャ判断が要る項目は Opus に、決まった手順の実装 (プラグイン導入・
   ファイル移動・依存追加等) は Sonnet に割り振るのが効率的。
+
+### D80 — サーバ側で削除されたメールがローカル DB に永久に残り続けていた (修正済み・第10ラウンド)
+
+- **症状**: `mail_fetch` は JMAP からの取得分を `save_message` (upsert) するだけで、
+  サーバで expunge / フォルダから消えたメールをローカル `messages` から
+  外す経路が存在しなかった。全読み出し (`list_messages`/`search`/`stats`) が
+  `is_deleted = 0` フィルタなのに、`is_deleted = 1` にする書き込みは
+  アプリ内ゴミ箱操作 (D77) のみ — **他クライアントや Web UI で消したメールが
+  オフライン一覧・検索・未読集計に永久に残る**。local-first キャッシュが
+  「サーバの写像」ではなく「単調増加の溜まり」になっていた。
+- **設計の要点**: 「不在 = サーバ削除」の推論はメールボックス全体を見た
+  場合のみ成立する (部分ページでは消えていない行も不在に見える)。
+  `Email/query` は `calculateTotal: false` で総数を返さないため、
+  「先頭からの取得件数 < 実効 limit」= これ以上ページが無い、を全件カバーの
+  判定に使う。サーバが要求より小さい limit を適用した場合に短いページを
+  全件と誤認しないよう、`Email/query` 応答の `limit` エコー (実効 limit)
+  を `EmailQueryPage.applied_limit` として `query_emails_page` で返し、
+  `min(要求, 実効)` を上限に比較する。
+- **修正**:
+  - kaname-jmap: `EmailQueryPage { items, position, applied_limit }` と
+    `query_emails_page` を追加 (`query_emails` は委譲する薄い互換層に)。
+  - kaname-store: `reconcile_mailbox(account_id, mailbox_id, live_ids)` —
+    `live_ids` に無い jmap_id の行を `is_deleted = 1` (tombstone)。
+    物理削除ではなく tombstone に留め、誤判定でも upsert で復活可能に。
+    `live_ids` 空 = サーバでメールボックスが空 → 全行 tombstone。
+  - kaname-store: `save_message` の `ON CONFLICT` に `is_deleted = 0` を追加 —
+    再取得で tombstone が復活する (ゴミ箱からの復元・誤 reconcile 双方を治す)。
+  - kaname-ui: `mail_fetch` で全件カバー条件成立時のみ reconcile を best-effort 実行。
+- **テスト**: `reconcile_mailbox_はサーバで消えたメールをtombstone化し再取得で復活する` /
+  `reconcile_mailbox_はサーバ空なら全行をtombstone化する` — tombstone 化・
+  他フォルダ非対象・upsert 復活・空メールボックスの4分岐を固定。
+- **残課題**: 部分ページ中のサーバ削除は reconcile の適用外 (次の全件カバー
+  取得まで残存)。完全な差分同期は JMAP `Email/changes` (queryState ベース)
+  の実装が正解 — 本修正は「全件見えた時だけ整合する」安全な近似。
+  併せて `is_starred` (JMAP `$flagged`) は一覧データに流れるが UI に
+  表示もトグルも無い carried-only フィールド — スター表示は未実装の
+  機能ギャップとして記録 (実装かフィールド削除かは要判断)。
+- **教訓**: 書き込み経路 (upsert) だけ整っていても「消す経路」が無ければ
+  ローカルストアは単調増加し、読み出し側のフィルタ前提 (is_deleted=0 が
+  サーバの写像) が静かに破綻する。双方向の reconcile を設計に含めること。

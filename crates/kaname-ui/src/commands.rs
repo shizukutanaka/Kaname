@@ -1542,15 +1542,17 @@ fn triage_bucket(from_addr: &str, subject: &str, verdict: &str) -> String {
 pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<EmailRow>, String> {
     let client = jmap_client().await?;
     let account_id = client.account_id().to_string();
-    let items = client
-        .query_emails(&mailbox_id, 0, limit.unwrap_or(50))
+    let requested = limit.unwrap_or(50).min(500);
+    let page = client
+        .query_emails_page(&mailbox_id, 0, requested)
         .await
         .map_err(|e| format!("メール一覧の取得に失敗しました: {e}"))?;
+    let items = &page.items;
 
     // 自組織ドメイン (D44) は一覧全体で1回だけ解決する (行ごとの DB 参照を避ける)。
     let our = our_domain(&account_id, None).await;
     let mut rows = Vec::with_capacity(items.len());
-    for it in &items {
+    for it in items {
         let from_addr = it
             .from
             .as_ref()
@@ -1648,6 +1650,35 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             triage,
         });
     }
+
+    // サーバ側で消えたメールのローカル残存を tombstone 化する (D80)。
+    // 「不在 = 削除」の推論はメールボックス全体を見た時のみ成立するため、
+    // 先頭ページの取得件数が実効 limit 未満 (= これ以上ページが無い) のとき
+    // だけ実行する。サーバが要求より小さい limit をエコーした場合は
+    // そちらを上限として使う。
+    let effective_limit = page
+        .applied_limit
+        .map(|l| l.min(requested as u64))
+        .unwrap_or(requested as u64);
+    if page.position == 0 && (page.items.len() as u64) < effective_limit {
+        if let Some(store) = store_slot().lock().await.clone() {
+            let live_ids: Vec<String> = page.items.iter().map(|i| i.id.clone()).collect();
+            match store
+                .reconcile_mailbox(&account_id, &mailbox_id, &live_ids)
+                .await
+            {
+                Ok(n) if n > 0 => {
+                    tracing::info!(
+                        count = n,
+                        "サーバで削除されたメールをローカルで tombstone 化"
+                    );
+                }
+                Err(e) => tracing::warn!(error = %e, "ローカルメールの reconcile に失敗"),
+                _ => {}
+            }
+        }
+    }
+
     Ok(rows)
 }
 
