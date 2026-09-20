@@ -64,7 +64,10 @@ hkdf         = "0.12"
 ammonia      = "4.0"
 hmac         = "0.12"
 zeroize      = { version = "1.7", features = ["derive"] }
-rusqlite     = { version = "0.31", features = ["bundled-sqlcipher"] }
+# 0.37 に揃える: openmls (kaname-mls) が内部で openmls_sqlite_storage→
+# rusqlite 0.37 を要求し、libsqlite3-sys の links="sqlite3" が
+# 0.31 (libsqlite3-sys 0.28) と競合するため。
+rusqlite     = { version = "0.37", features = ["bundled-sqlcipher"] }
 tauri        = { version = "2.1", features = ["tray-icon", "macos-private-api"] }
 tauri-build  = { version = "2.0" }
 proptest     = "1.4"

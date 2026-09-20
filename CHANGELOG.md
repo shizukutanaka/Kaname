@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1 Phase 1: 実 MLS 暗号化 (openmls)
+
+- **`kaname-mls` の XOR モック暗号を実 openmls 0.9 に全面置換** (D1 Phase 1)
+  - `encrypt_message` は `MlsGroup::create_message` による本物の MLS Application 暗号文を生成 (従来は `plaintext ^ conv_id[0]` の単一バイト XOR — 鍵空間256・鍵自体が公開情報だった)
+  - `process_incoming` は `MlsMessageIn` → `StagedWelcome::new_from_welcome` / `process_message` + `merge_staged_commit` で実プロトコル処理
+  - `generate_key_package` は署名付きの実 `KeyPackageIn` (TLS シリアライズ) を生成 — 受け取り側は `validate()` で署名検証
+  - グループ ID = `ConversationId` を `new_with_group_id` で整合させ、両側が同一の会話 ID を導出
+  - 安全番号は `group.epoch_authenticator()` (全メンバーが同一値を持つ MLS の認証子) から導出 — メールアドレス+epoch の疑似ハッシュから本物の暗号素材へ
+  - `Ciphersuite::KanameHybridPqc` は `MLS_256_XWING_CHACHA20POLY1305_SHA256_Ed25519` (draft-ietf-mls-pq-ciphersuites の ML-KEM-768+X25519 ハイブリッド) にマッピング — 設計書の「PQ ciphersuite を最初から選定」要件を充足
+  - `MlsMailClient::try_new` を追加 (CSPRNG 初期化失敗を Result で返す)
+  - `generate_key_package` の戻り値を `Option<KeyPackage>` に変更 (生成失敗を表現可能に)
+  - D122 修正: `seen_welcomes` の記録を `into_group` 成功後に移動 — 不正 Welcome によるリプレイ防止スロットの燃尽 DoS を解消
+  - kaname-tests の `mls_tests` を恒真テスト (内部自前 XOR) から実 `MlsMailClient` 経路に全面書き換え — 安全番号の両側不一致を正準化で解消
+
+### Security — D1 Phase 2: MLS 状態の SQLCipher 永続化
+
+- **`MlsMailClient::try_new_persistent(identity, db_path, key_hex)` を追加** (D1 Phase 2)
+  - `openmls_sqlite_storage` の `SqliteStorageProvider` を内蔵した独自 `KanameProvider` (libcrux 暗号 + rusqlite/SQLCipher ストレージ) に差し替え — `LibcruxProvider` は MemoryStorage 固定で永続化不能だった
+  - openmls グループ状態・署名鍵ペア (秘密鍵は openmls storage 内、公開鍵をメタに保存して `SignatureKeyPair::read` で復元)・会話メタ・`seen_welcomes` リプレイ帳簿を SQLCipher ファイルに永続化 — **再起動跨ぎの Welcome リプレイ防止が実効化**
+  - メタ書き込みは best-effort (暗号操作成功後の失敗は warn のみ — 操作の成功自体は維持)
+  - `list_conversations()` を追加 — 再起動後の UI 復元用
+  - 永続化テスト 3 本: 再起動後の暗号往復継続 / 再起動跨ぎ Welcome リプレイ拒否 / 発行済み KP の秘密鍵永続化 (38 テスト全パス)
+  - 残存: `try_new_persistent` の呼出元は未配線 (Phase 4 で kaname-ui に kaname-mls 依存辺を追加して接続 — DB パス/鍵は kaname-store の history.key 方式に倣う)。KeyPackage 配送経路は Phase 3、`kp_cache` は意図的に揮発のまま
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 

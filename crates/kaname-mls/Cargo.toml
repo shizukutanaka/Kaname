@@ -9,10 +9,25 @@ publish             = false
 [dependencies]
 serde      = { workspace = true }
 serde_json = { workspace = true }
+# Envelope の実 CBOR 化 (MIME `+cbor` の実態に合わせる — serde_json だと
+# Vec<u8> が数値配列化し ~4 倍に膨れる)。ciborium は lockfile 既入りの
+# 推移依存で新規供給面は増やさない。
+ciborium   = "0.2"
 thiserror  = { workspace = true }
 tracing    = { workspace = true }
 sha2         = { workspace = true }
 rand         = { workspace = true }
+# openmls 0.9: RFC 9420 実装。libcrux プロバイダで X-Wing
+# (ML-KEM-768 + X25519 ハイブリッド) ciphersuite を利用可能にするため
+# draft-ietf-mls-pq-ciphersuites を有効化。
+openmls                  = { version = "0.9", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_libcrux_crypto   = { version = "0.4", features = ["draft-ietf-mls-pq-ciphersuites"] }
+openmls_basic_credential = "0.6"
+# D1 Phase 2: openmls 状態を SQLite (SQLCipher) に永続化。
+# rusqlite は workspace の bundled-sqlcipher 版を共有 (libsqlite3-sys の
+# links 衝突を避けるため workspace 依存を使う)。
+openmls_sqlite_storage = { version = "0.3", features = ["draft-ietf-mls-pq-ciphersuites"] }
+rusqlite               = { workspace = true }
 
 [dev-dependencies]
 

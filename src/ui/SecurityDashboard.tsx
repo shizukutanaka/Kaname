@@ -537,7 +537,7 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
                   未配線のため、現状を隠さず表示する */}
               <Show when={m().state === "loaded"}>
                 <div style={{ "font-size": "10px", color: "#6B7A94", "margin-bottom": "8px", "font-family": "monospace" }}>
-                  推論はインプロセスで実行されます (サブプロセス分離は未配線: D121)
+                  推論はインプロセスで実行されます (サブプロセス分離は未配線 — D121)
                 </div>
               </Show>
               <div style={{ display: "flex", gap: "8px" }}>
