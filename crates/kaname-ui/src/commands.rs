@@ -243,7 +243,7 @@ pub struct ImportedEmail {
 /// 4. `sanitize_html` → `to_srcdoc` によるサニタイズ
 /// 5. レンダリング系検出器 (HTMLスマグリング / テキストQR / CSS外部参照)
 pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
-    info!(path=%path, "mail_import_eml");
+    info!(path=%redact_path(&path), "mail_import_eml");
 
     if let Ok(meta) = std::fs::metadata(&path) {
         if meta.len() > MAX_EML_BYTES {
@@ -564,7 +564,7 @@ pub struct CampaignSummary {
 /// メールボックスのエクスポート (`.eml` の集合) を丸ごと投入して
 /// トリアージする、という実運用にも合致する。
 pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> {
-    info!(path=%path, "mail_scan_folder");
+    info!(path=%redact_path(&path), "mail_scan_folder");
 
     let dir =
         std::fs::read_dir(&path).map_err(|e| format!("フォルダを開けません ({path}): {e}"))?;
@@ -958,6 +958,15 @@ fn evaluate_link_risks(urls: &[String]) -> Vec<String> {
     risks
 }
 
+/// ログ用にパスを葉名だけに落とす (I5: フルパスは `/Users/<name>` 等の
+/// OS ユーザー名・ディレクトリ構造をログへ漏らすため) (D96)。
+fn redact_path(p: &str) -> &str {
+    std::path::Path::new(p)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("<path>")
+}
+
 fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
     match r {
         kaname_render::AuthResult::Pass => kaname_bec::AuthVerdict::Pass,
@@ -1027,6 +1036,20 @@ mod tests {
     #[tokio::test]
     async fn log_error_ok() {
         assert!(log_error("test".into()).await.is_ok());
+    }
+
+    #[test]
+    fn redact_path_はフルパスを葉名に落とす() {
+        // D96/I5: `/Users/<name>` のような OS ユーザー名を含む親パスが
+        // ログに出ないことを固定する。
+        assert_eq!(
+            redact_path("/Users/alice/Library/Application Support/Kaname/history.db"),
+            "history.db"
+        );
+        assert_eq!(redact_path("/home/bob/mail/田中さん.eml"), "田中さん.eml");
+        assert_eq!(redact_path("history.db"), "history.db");
+        assert_eq!(redact_path(""), "<path>");
+        assert_eq!(redact_path("/"), "<path>");
     }
 
     // ── analyze_raw_email: mail_import_eml / mail_open 共通の解析経路 ──
@@ -1954,7 +1977,7 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
         warn!(error=%e, "監査ログの書き込みに失敗");
     }
     *store_slot().lock().await = Some(std::sync::Arc::new(store));
-    info!(path=%path, "history_open");
+    info!(path=%redact_path(&path), "history_open");
     Ok(())
 }
 

@@ -271,6 +271,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
 | D75 | ~~**「暗号化ローカルストア」が一度も暗号化されていなかった**: workspace の rusqlite が `features = ["bundled"]` (素の SQLite3) で、`SqlCipherParams::apply` の `PRAGMA key`/`cipher_*` は全て no-op。DB ファイルは平文で保存されていた~~ **(2026-09-20 解消)** | P0 | 実測証明: `PRAGMA cipher_version` が存在せず、DB 本文に `CREATE TABLE`/既知文字列が平文残存。`bundled` → `bundled-sqlcipher` に変更後、`cipher_version = 4.5.3 community` + 本文にマーカー非出現を実測確認。**既存の平文 history.db は移行措置なしのため旧環境では開けなくなる** (プレリリース・ローカル実データ前提のため許容判断、要レビュー)。恒久回帰テスト `dbファイルは暗号化され既知文字列が平文で残らない` を追加 — feature を戻すと検知される。コメントの「0.32/sqlcipher」記述も実態 (0.31/bundled-sqlcipher) に訂正 |
+| D96 | ~~**I5「ログに PII を含めない」の見落とし面 — ファイルパス**: `info!(path=%path)` が4箇所 (`ストア開通`/`mail_import_eml`/`mail_scan_folder`/`history_open`) でフルパスを出力。`/Users/<name>/Library/...` は OS ユーザー名 + ディレクトリ構造を確定的に漏らす。PrivacySanitizer はメール/トークンを覆うがファイルシステムパスは対象外だった~~ **(2026-09-20 解消)** | P3 | `redact_path` で葉名のみをログ (`history.db` 等)。kaname-store と kaname-ui に同名ヘルパを配置 (dep graph 上 ui→store 参照は不可)。回帰テスト `redact_path_はフルパスを葉名に落とす` で固定 |
+
 
 ### 完了判定の変更
 
@@ -291,6 +293,13 @@ DB は平文だった (D75)。丁寧なパラメータ定義・鍵検証・Zeroi
 全て実装済みだったが、依存 feature 一つの違いで中核の約束が成立して
 いなかった。「実装が丁寧」は「機能している」の証拠にならない ——
 出力物 (ファイルの実バイト) を見るまで確かにならない。
+
+**2026-09-20 (追記・I5 の残り面)**: PII サニタイズはメールアドレスと
+トークンを覆うが、ファイルシステムパスは対象外だった (D96)。
+`/Users/<name>/Library/...` は確定的な識別子であり「ローカルだから
+問題ない」ではない — ログはサポート送信・クラッシュ解析で外部に
+出ることがある。I5 のリント対象は今後「メッセージ文字列だけ」でなく
+構造化フィールドの値も含めて考える。
 
 ## Opus/Sonnet への申し送り事項
 
