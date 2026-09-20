@@ -277,6 +277,9 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D98 | ~~**fuzz ターゲット 3本中2本がコンパイル不能**: `use kaname_render::mime`/`::sanitize` はモジュールリネームで消滅していた。`fuzz/` は workspace `exclude` のため `cargo check/test/clippy` が一切届かず、`npm run fuzz:*` も実行時に即失敗 — 「堅牢性ファジング」は一度も走れない状態だった~~ **(2026-09-20 解消)** | P2 | 現行 API に修正 (`kaname_render::parse`, `kaname_render::sanitize_html(&RawHtml::new(..))`)。修復後の初実行で**ハーネス自身**が誤検知した件も併せて修正: `onerror=` 部分一致がエスケープ済み属性値内の不活性テキスト (`title="&lt;img src=x onerror=alert(1)&gt;"`) を捕捉 — 属性コンテキストを走査する小さなスキャナ `tag_attrs` に置換 (D73 と同型の「素朴な部分文字列照合」欠陥が検査器側にも存在した)。実走検証: mime_parser 609k exec・html_sanitizer 25k exec・prompt_injection 1.2M exec いずれもクラッシュなし。再発防止として static-check.sh に検査9 (fuzz ターゲットの `use kaname_*::` が対象 lib.rs の pub 宣言に実在するかの照合) を追加し、合成違反で検知を実測。残課題: `fuzz/corpus/` の `aitm_urls`/`calendar_phishing`/`ssa_bypass` には対応ターゲット未定義 (孤児コーパス)
 
 
+| D102 | ~~**AiTM スコアが契約上限を超過**: `AitmRisk.score` は doc 上 0-100 のはずが無上限加算で、出荷済みコーパス種 (tycoon-auth.net URL) で実測 130+ — verdict 閾値には影響しないが契約虚偽~~ **(2026-09-20 解消)** | P4 | `score.min(100)` クランプ + doc 閾値訂正 (80+ → 50+) |
+| D103 | ~~**fuzz コーパス3件が孤立**: `aitm_urls`/`calendar_phishing`/`ssa_bypass` に種ファイルが存在するが対応ターゲット未定義で一度も実行不能~~ **(2026-09-20 解消)** | P4 | 3ターゲットを不変条件付きで実装し全コーパス消化可能に。実走で aitm が D102 を即座に検出 — 孤立コーパスの存在が本来の検証価値を果たしていなかった証左 |
+
 ### 完了判定の変更
 
 初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。

@@ -1,0 +1,8 @@
+BEGIIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEvENT
+SUMMARY:緊急会議
+DESCRIPTION:今すぐ参加してくだ�要です
+ORGNIZER:cfo@company.co.jp.evil.com
+URL:https://microsoft365-auth.phND:VEVENT
+END:VCALENDAR

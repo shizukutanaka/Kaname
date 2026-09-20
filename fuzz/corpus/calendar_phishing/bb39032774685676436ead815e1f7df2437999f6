@@ -1,0 +1,10 @@
+BEGIIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEvENT
+SUMMARY:緊急会議
+DESCRIPTION:今すぐ参加してください: httl.com
+URL:https://microsoft365-auth.phish.net/join�が必要です
+ORGNIZER:cfo@company.co.jp.evil.com
+URL:https://microsoft365-auth.phish.net/join
+END:VEVENT
+END:VCALENDAR

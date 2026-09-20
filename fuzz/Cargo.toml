@@ -12,6 +12,8 @@ cargo-fuzz       = true
 libfuzzer-sys    = "0.4"
 kaname-render    = { path = "../crates/kaname-render" }
 kaname-ai        = { path = "../crates/kaname-ai" }
+kaname-bec       = { path = "../crates/kaname-bec" }
+kaname-ssa       = { path = "../crates/kaname-ssa" }
 
 [[bin]]
 name              = "mime_parser"
@@ -30,6 +32,27 @@ bench             = false
 [[bin]]
 name              = "prompt_injection"
 path              = "fuzz_targets/prompt_injection.rs"
+test              = false
+doc               = false
+bench             = false
+
+[[bin]]
+name              = "aitm_urls"
+path              = "fuzz_targets/aitm_urls.rs"
+test              = false
+doc               = false
+bench             = false
+
+[[bin]]
+name              = "calendar_phishing"
+path              = "fuzz_targets/calendar_phishing.rs"
+test              = false
+doc               = false
+bench             = false
+
+[[bin]]
+name              = "ssa_bypass"
+path              = "fuzz_targets/ssa_bypass.rs"
 test              = false
 doc               = false
 bench             = false
