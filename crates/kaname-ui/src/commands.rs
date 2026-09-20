@@ -1321,6 +1321,42 @@ mod tests {
         assert_eq!(v2.as_deref(), Some("corp-example.com"));
         Ok(())
     }
+
+    /// D111: `record_received` に `None` を渡した場合、
+    /// `topic_summary` は設定されない (直前件名を「いつもの話題」と
+    /// 偽って話題急変シグナルを誤発火させないため)。
+    #[tokio::test]
+    async fn record_received_に_none_を渡すと話題プロファイルが作られない() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d111-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        history_open(
+            dir.join("history.db").to_string_lossy().into_owned(),
+            "00".repeat(32),
+        )
+        .await?;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        for _ in 0..6 {
+            store
+                .record_received("acct-d111", "alice@example.com", None, None)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        let profile = store
+            .get_sender_profile("acct-d111", "alice@example.com")
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or("profile not created")?;
+        assert_eq!(profile.message_count, 6);
+        assert!(
+            profile.topic_summary.is_none(),
+            "topic_summary は None のままであるべき (件名の流用は話題プロファイルではない)"
+        );
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -2025,13 +2061,14 @@ pub async fn mail_fetch(
         // Store 未接続なら何もしない。失敗しても解析結果は返す
         // (保存できないことは表示できない理由にならない)。
         if let Some(store) = store_slot().lock().await.clone() {
+            // D111: `topic_summary` に当該メールの件名を渡すと
+            // 「いつもの話題」が直前1通の件名に退化し、
+            // `contains_unusual_topic` が「話題が毎回変わる普通の連絡先」に
+            // 構造的に誤発火する (cosine < 0.15 → +0.15 「話題の急変」)。
+            // 真の話題集計 (LLM 要約) が無い現状では、誤信号を供給するより
+            // None を渡して話題シグナルをスキップするのが正直な挙動。
             if let Err(e) = store
-                .record_received(
-                    &account_id,
-                    &from_addr,
-                    from_name.as_deref(),
-                    it.subject.as_deref(),
-                )
+                .record_received(&account_id, &from_addr, from_name.as_deref(), None)
                 .await
             {
                 tracing::warn!(error=%e, "送信者履歴の記録に失敗");
