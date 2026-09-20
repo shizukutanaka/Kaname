@@ -1050,6 +1050,8 @@ async fn reset_globals() {
     *store_slot().lock().await = None;
     style_profiles().lock().await.clear();
     *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+    // Drop でワーカープロセスが終了する
+    *llm_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 #[cfg(test)]
@@ -1499,6 +1501,28 @@ mod tests {
         // Welcome コミットで epoch は 1 に進む
         assert_eq!(peers[0].epoch, 1);
         *mls_slot().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(())
+    }
+
+    /// D121: `ai_llm_start` はモデル未配置の場合にモック起動せず
+    /// エラーを返す (spawn のモックフォールバックを Ready ゲートで抑止)。
+    /// モデル配置済みの環境ではワーカー実起動になるため本テストは
+    /// Missing のときのみ断言する。
+    #[tokio::test]
+    async fn ai_llm_start_はモデル未配置でエラーを返す() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let cfg = kaname_ai::llm_bridge::ModelConfig::quarantined();
+        if !matches!(
+            kaname_ai::llm_bridge::check_model(&cfg),
+            kaname_ai::llm_bridge::ModelStatus::Missing { .. }
+        ) {
+            return Ok(()); // モデル配置済み環境では本テストの前提が成立しない
+        }
+        match ai_llm_start().await {
+            Err(e) => assert!(e.contains("ダウンロード"), "未配置エラーであるべき: {e}"),
+            Ok(_) => return Err("モデル未配置なのに起動成功してしまった".into()),
+        }
         Ok(())
     }
 
@@ -2954,21 +2978,24 @@ fn store_slot() -> &'static tokio::sync::Mutex<Option<std::sync::Arc<kaname_stor
 // ローカル LLM (D2 Phase 5): Phi-4-mini の遅延ロードと BEC への配線
 // ============================================================================
 
-/// ロード済み Q-LLM ランナー。モデル未取得/未ロード時は None。
+/// 起動済み Q-LLM サブプロセス。モデル未取得/未起動時は None。
+///
+/// 不信メール本文は `kaname-llm-runner` ワーカープロセスに送られる
+/// (I1 の隔離境界をプロセス分離として実効化 — D121)。ワーカーは
+/// macOS で `sandbox-exec`、Linux で seccomp 経由で起動される。
+/// `Drop` でワーカーを終了させる。
 ///
 /// `tokio::Mutex` ではなく `std::sync::Mutex` を使う理由: `kaname_bec::
 /// LocalLlm` は同期 trait のためクロージャ内で await できない。ガードは
-/// Arc クローンの瞬間だけ保持し、推論中の長いブロッキングでは保持しない。
-static LLM_RUNNER: std::sync::OnceLock<
-    std::sync::Mutex<
-        Option<std::sync::Arc<std::sync::Mutex<kaname_ai::llm_bridge::LocalLlmRunner>>>,
-    >,
+/// Arc クローンの瞬間だけ保持し、推論中の長いブロッキングでは保持しない
+/// (stdin/stdout の直列化は `LlmSubprocess` 内部の Mutex が担う)。
+static LLM_SUBPROCESS: std::sync::OnceLock<
+    std::sync::Mutex<Option<std::sync::Arc<kaname_ai::subprocess::LlmSubprocess>>>,
 > = std::sync::OnceLock::new();
 
-fn llm_slot() -> &'static std::sync::Mutex<
-    Option<std::sync::Arc<std::sync::Mutex<kaname_ai::llm_bridge::LocalLlmRunner>>>,
-> {
-    LLM_RUNNER.get_or_init(|| std::sync::Mutex::new(None))
+fn llm_slot(
+) -> &'static std::sync::Mutex<Option<std::sync::Arc<kaname_ai::subprocess::LlmSubprocess>>> {
+    LLM_SUBPROCESS.get_or_init(|| std::sync::Mutex::new(None))
 }
 
 // ============================================================================
@@ -3440,11 +3467,11 @@ fn process_mls_key_packages(parts: &[Vec<u8>], from_addr: &str, events: &mut Vec
 /// 満たす) 上の理由による — クロージャだと `Option<&str>` のライフタイムが
 /// 具体化されて `for<'a>` を満たせない。
 fn bec_llm_score(subject: &str, body: &str, context: Option<&str>) -> kaname_bec::LlmScore {
-    let runner = llm_slot().lock().unwrap_or_else(|e| e.into_inner()).clone();
-    match runner {
-        Some(r) => {
+    let sp = llm_slot().lock().unwrap_or_else(|e| e.into_inner()).clone();
+    match sp {
+        Some(sp) => {
             let (probability, explanation) =
-                kaname_ai::llm_bridge::bec_score(&r, subject, body, context);
+                kaname_ai::llm_bridge::bec_score_subprocess(&sp, subject, body, context);
             kaname_bec::LlmScore {
                 probability,
                 explanation,
@@ -3506,10 +3533,14 @@ pub async fn ai_model_status() -> Result<AiModelStatus, String> {
     })
 }
 
-/// 配置済みモデルをロードし BEC 意味解析を有効化する (D2 Phase 5)。
+/// Q-LLM ワーカープロセスを起動し BEC 意味解析を有効化する (D121)。
 ///
 /// モデル未取得時はエラー — 先に `ai_model_download` を呼ぶこと。
-/// ロードは数秒かかるブロッキング処理 (`spawn_blocking` 内で実行)。
+/// ワーカーは `kaname-llm-runner` バイナリを `sandbox-exec` (macOS) /
+/// seccomp (Linux) 経由で起動するため、不信本文はホストプロセスの
+/// llama.cpp に入らない (I1)。ロード+応答確認がブロッキングのため
+/// `spawn_blocking` 内で実行。タイムアウトは初回のモデルロードを
+/// カバーするため長め (120 秒)。
 pub async fn ai_llm_start() -> Result<&'static str, String> {
     {
         let slot = llm_slot().lock().unwrap_or_else(|e| e.into_inner());
@@ -3518,11 +3549,32 @@ pub async fn ai_llm_start() -> Result<&'static str, String> {
         }
     }
     let cfg = kaname_ai::llm_bridge::ModelConfig::quarantined();
-    let runner = kaname_ai::llm_bridge::LocalLlmRunner::load(cfg)
-        .await
-        .map_err(|e| format!("モデルのロードに失敗: {e}"))?;
-    *llm_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(runner);
-    tracing::info!("Q-LLM ロード完了 — BEC 意味解析が有効化");
+    // モデル不在時に spawn するとモックモード (spawn_mock) に
+    // フォールバックして「起動したが推論は固定応答」になるため、
+    // Ready を先に確認しておく
+    if !matches!(
+        kaname_ai::llm_bridge::check_model(&cfg),
+        kaname_ai::llm_bridge::ModelStatus::Ready { .. }
+    ) {
+        return Err("モデルが未配置です — 先にダウンロードしてください".to_string());
+    }
+    let sp = tokio::task::spawn_blocking(move || {
+        let sp = kaname_ai::subprocess::LlmSubprocess::spawn(
+            kaname_ai::subprocess::SubprocessMode::Quarantined,
+            &cfg.model_path,
+            std::time::Duration::from_secs(120),
+        )
+        .map_err(|e| format!("LLM ワーカーの起動に失敗: {e}"))?;
+        // ワーカーはモデルロード後に stdin を読む — ウォームアップで
+        // ロード完了を確認し、ロード失敗の即終了をここで検出する
+        sp.healthcheck()
+            .map_err(|e| format!("LLM ワーカーが応答しません (モデルロード失敗の可能性): {e}"))?;
+        Ok::<_, String>(sp)
+    })
+    .await
+    .map_err(|e| format!("ワーカー起動タスクの失敗: {e}"))??;
+    *llm_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(std::sync::Arc::new(sp));
+    tracing::info!("Q-LLM ワーカー起動完了 — BEC 意味解析が有効化 (プロセス分離)");
     Ok("loaded")
 }
 

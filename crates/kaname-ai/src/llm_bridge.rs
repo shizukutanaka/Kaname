@@ -497,18 +497,9 @@ pub fn bec_score(
     body: &str,
     context: Option<&str>,
 ) -> (f32, String) {
-    let mut user_message = format!(
-        "件名: {}\n本文:\n{}",
-        truncate_chars(subject, 256),
-        truncate_chars(body, 4000)
-    );
-    if let Some(ctx) = context {
-        user_message.push_str(&format!("\nコンテキスト: {}", truncate_chars(ctx, 1024)));
-    }
-
     let req = InferenceRequest {
         system_prompt: format!("{QUARANTINED_SYSTEM_PROMPT}\n{BEC_SCORE_INSTRUCTION}"),
-        user_message,
+        user_message: bec_user_message(subject, body, context),
         history: vec![],
     };
 
@@ -524,7 +515,75 @@ pub fn bec_score(
         }
     };
 
-    match parse_analysis_json(&result.text) {
+    parse_bec_output(&result.text)
+}
+
+/// `bec_score` と同じ意味解析を **Q-LLM サブプロセス**経由で呼ぶ (D121)。
+///
+/// 不信メール本文がホストプロセスの llama.cpp に入らないため、I1 の
+/// 隔離境界がプロセス分離として実効する。ワーカー死亡・タイムアウト・
+/// スキーマ違反はすべて `(0.0, 理由)` — `bec_score` と同じ安全側失敗。
+///
+/// `LlmRequest` はワーカー (`kaname-llm-runner`) 側で `InferenceRequest`
+/// に変換される (最後の user メッセージがプロンプト本体)。
+#[must_use]
+pub fn bec_score_subprocess(
+    sp: &crate::subprocess::LlmSubprocess,
+    subject: &str,
+    body: &str,
+    context: Option<&str>,
+) -> (f32, String) {
+    let req = crate::subprocess::LlmRequest {
+        request_id: crate::subprocess::new_request_id(),
+        system_prompt: format!("{QUARANTINED_SYSTEM_PROMPT}\n{BEC_SCORE_INSTRUCTION}"),
+        messages: vec![crate::subprocess::LlmMessage {
+            role: "user".into(),
+            content: bec_user_message(subject, body, context),
+        }],
+        max_tokens: 256,
+        temperature: 0.0,
+    };
+
+    let resp = match sp.infer(&req) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "BEC LLM サブプロセス推論失敗 — 0 寄与にフォールバック");
+            return (
+                0.0,
+                format!("意味解析失敗 ({e}) — 決定論的シグナルのみで判定"),
+            );
+        }
+    };
+    if let Some(e) = resp.error {
+        tracing::warn!(error = %e, "BEC LLM ワーカー内推論失敗 — 0 寄与にフォールバック");
+        return (
+            0.0,
+            format!("意味解析失敗 ({e}) — 決定論的シグナルのみで判定"),
+        );
+    }
+
+    parse_bec_output(&resp.text)
+}
+
+/// BEC スコアリング用の user メッセージを構築する。
+/// 件名・本文・context は `Content<Untrusted>` 由来を想定し、件名 256 /
+/// 本文 4000 / context 1024 chars に切り詰めてプロンプトサイズを制限する。
+fn bec_user_message(subject: &str, body: &str, context: Option<&str>) -> String {
+    let mut user_message = format!(
+        "件名: {}\n本文:\n{}",
+        truncate_chars(subject, 256),
+        truncate_chars(body, 4000)
+    );
+    if let Some(ctx) = context {
+        user_message.push_str(&format!("\nコンテキスト: {}", truncate_chars(ctx, 1024)));
+    }
+    user_message
+}
+
+/// モデル出力テキストを BEC スコアに変換する。
+/// スキーマ違反・未知 risk は `(0.0, 理由)` — 安全側フォールバック。
+fn parse_bec_output(text: &str) -> (f32, String) {
+    match parse_analysis_json(text) {
         Ok(out) => match risk_to_probability(&out.risk) {
             Some(p) => (p, truncate_chars(&out.summary, 120).to_string()),
             None => {

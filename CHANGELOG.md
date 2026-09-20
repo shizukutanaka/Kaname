@@ -60,6 +60,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **UI**: SecurityDashboard の会話カードに 3 状態バッジ (⚠ 番号変更 / ✓ 照合済み / 未検証) +「相手と照合しました (記録)」ボタン (別経路確認を前提とする注記付き)。Compose の MLS 選択肢にも照合前に警告を表示
 - これで D1 の 5 フェーズすべてが実装済み: 実 openmls (X-Wing) → SQLCipher 永続化 → KP 添付往復 + 暗号送信 → 受信自動処理 → 信頼確立のセレモニー記録
 
+### Security — D121: BEC 意味解析を Q-LLM サブプロセス経由に (I1 の実効化)
+
+- kaname-ui の LLM スロットをインプロセス `LocalLlmRunner` から `Arc<LlmSubprocess>` に置き換え — 不信メール本文は `kaname-llm-runner` ワーカー (sandbox-exec `deny network*` / seccomp) に送られ、ホストプロセスの llama.cpp に入らない。ワーカー死亡・タイムアウト・スキーマ違反はすべて LLM 寄与 0 の安全側フォールバック
+- `bec_score_subprocess` (kaname-ai) 追加 — `bec_score` と同じ切詰め・パース・フォールバックを共有。`LlmSubprocess::healthcheck` でモデルロード失敗の即終了を起動時に検出。モデル未配置時に spawn がモックプロセスに落ちる経路を `check_model` Ready ゲートで抑止
+- 実行ファイル隣接 → PATH の順でワーカーを解決。**配布物への同梱は未設定** — `externalBin` はバイナリ不在でビルドを失敗させるため登録見送り; リリース時に `src-tauri/binaries/kaname-llm-runner-<triple>` 配置 + `externalBin` 有効化が必要
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 

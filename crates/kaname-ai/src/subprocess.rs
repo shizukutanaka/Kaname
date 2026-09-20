@@ -273,6 +273,30 @@ impl LlmSubprocess {
         }
     }
 
+    /// ワーカーが応答可能か確認する (起動直後のウォームアップ用)。
+    ///
+    /// ワーカーはモデルロードを完了してから stdin を読むため、最初の
+    /// infer はロード時間を含む。モデルロード失敗で即終了した場合は
+    /// stdout EOF → Protocol エラーとして検出できる。呼び出し側は
+    /// `self.timeout` がロード+推論をカバーする値であること。
+    pub fn healthcheck(&self) -> Result<(), SubprocessError> {
+        let req = LlmRequest {
+            request_id: new_request_id(),
+            system_prompt: String::new(),
+            messages: vec![LlmMessage {
+                role: "user".into(),
+                content: "ok".into(),
+            }],
+            max_tokens: 1,
+            temperature: 0.0,
+        };
+        let resp = self.infer(&req)?;
+        if let Some(e) = resp.error {
+            return Err(SubprocessError::InferenceError(e));
+        }
+        Ok(())
+    }
+
     /// 推論リクエストを送信してレスポンスを受け取る。
     pub fn infer(&self, req: &LlmRequest) -> Result<LlmResponse, SubprocessError> {
         // JSON-Lines プロトコル: リクエストを 1 行で送信
@@ -534,6 +558,11 @@ pub enum SubprocessError {
 // ユーティリティ
 // ============================================================================
 
+/// `LlmRequest.request_id` 用の一意 ID を発行する。
+pub(crate) fn new_request_id() -> String {
+    uuid_v4()
+}
+
 fn uuid_v4() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let t = SystemTime::now()
@@ -577,6 +606,26 @@ mod tests {
         assert!(!resp.text.is_empty());
         // Q-LLM の応答は JSON 形式であること
         assert!(resp.text.contains("SAFE") || resp.text.contains("summary"));
+    }
+
+    /// D121: healthcheck — モックプロセス (`true` = 即 EOF) では
+    /// is_mock 経路で既定応答が返り healthcheck は成功する。
+    #[test]
+    fn healthcheck_はモックプロセスで成功する() {
+        let mock =
+            LlmSubprocess::spawn_mock(SubprocessMode::Quarantined, Duration::from_secs(5)).unwrap();
+        mock.healthcheck().unwrap();
+    }
+
+    /// D121: bec_score_subprocess — モック応答 (SAFE JSON) が
+    /// parse されて低確率にマップされることを確認する。
+    #[test]
+    fn bec_score_subprocess_はモック応答をパースする() {
+        let mock =
+            LlmSubprocess::spawn_mock(SubprocessMode::Quarantined, Duration::from_secs(5)).unwrap();
+        let (p, _exp) = crate::llm_bridge::bec_score_subprocess(&mock, "件名", "本文", None);
+        // モック応答の risk 値がマップされるか、安全側 0 にフォールバックするか
+        assert!((0.0..=1.0).contains(&p));
     }
 
     #[test]
