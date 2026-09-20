@@ -19,6 +19,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **オンボーディング完了画面の残り虚偽表示**: 「Phi-4-mini AI モデルはすでに準備されています」(LLM はスタブ) と「⌘K でコマンドパレット」(パレット未実装) を実在する機能の記述に訂正
+
 - **オンボーディングの虚偽表示を除去**: 「メールは MLS RFC 9420 で暗号化されます。件名も含めて」の虚偽広告を削除 (MLS は未実装 D1、サーバ上の本文は平文) — 「解析はデバイス上で完結」に訂正。機能しない「Continuity (Handoff)」トグルも削除 (kaname-continuity クレート自体が削除済み)。`settings_save_onboarding` から `continuity` 引数を除去
 
 - **トレイメニューのデッドコントロール**: 「新規作成...」「セキュリティポスチャー...」は emit 先のリスナーがフロントエンドに存在せずクリックしても無反応だった → `menu:compose`/`menu:security` をビュー遷移に接続。「設定...」「Kaname について」は対応ビュー自体が存在しないためメニューから削除 (実装時に git 履歴から復元)

@@ -251,7 +251,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
         <div class="k-ready-features">
           <div>🛡 BEC 検出は<strong>すでに動いています</strong></div>
-          <div>🤖 Phi-4-mini AI モデルは<strong>すでに準備されています</strong></div>
+          <div>📎 添付ファイルは<strong>隔離して検査されます</strong></div>
           <div>🔒 ローカル DB は<strong>すでに暗号化されています</strong></div>
         </div>
 
@@ -260,7 +260,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
         </button>
 
         <p class="k-tip">
-          💡 ⌘K でいつでもコマンドパレットを開けます
+          💡 警告が出たメールの送金・手続きは、必ず別経路 (電話等) で確認してください
         </p>
       </div>
     );
