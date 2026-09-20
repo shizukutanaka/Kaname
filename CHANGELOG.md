@@ -23,6 +23,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(fuzz): 3ターゲット中2本がコンパイル不能だった問題を修正 (D98) — `kaname_render::mime`/`::sanitize` の消滅参照を現行 API (`parse`/`sanitize_html(&RawHtml)`) に修正し libFuzzer 実走で検証 (609k/25k/1.2M exec 全クラッシュなし)。併せてハーネス側の `onerror=` 部分一致誤検知を属性スキャナに置換。static-check.sh に fuzz import 実在照合 (検査9) を追加
 - fix(kaname-jmap): 送信メッセージを RFC 5322/2047 準拠に (D94) — 非 ASCII 件名を `=?UTF-8?B?` encoded-word にエンコード、本文を base64 + `MIME-Version: 1.0`/`Content-Transfer-Encoding: base64` で送出。生 UTF-8 のままでは SMTPUTF8 非対応経路で件名文字化け・本文破壊の可能性があった。base64 本文は `.` を含まないため SMTP Smuggling 終端シーケンスの構造的起因も消去
 - fix(kaname-jmap): `send_email` の `draft_id` 死んだパラメータを削除 (D95) — 唯一の呼び出し元が `None` 固定で下書き削除分岐は到達不能だった
 - fix(kaname-store): 「暗号化ローカルストア」が実際には平文だった問題を修正 (D75) — workspace の rusqlite が `bundled` (素の SQLite3) で `PRAGMA key`/`cipher_*` が全て silent no-op だったため DB は平文保存されていた。`bundled-sqlcipher` へ切替し `cipher_version=4.5.3` の動作を実測確認。既知文字列非出現を固定する恒久回帰テストを追加。平文期間の既存 history.db は新ビルドで開けない (移行措置なし — プレリリースのため許容判断)

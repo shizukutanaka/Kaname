@@ -274,6 +274,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D94 | ~~**送信メッセージが RFC 5322/2047 非準拠**: `send_email` は件名を生文字列のまま `Subject:` に書き、本文も生 UTF-8 で `Content-Transfer-Encoding`/`MIME-Version` なし — 日本語件名は SMTPUTF8 非対応経路で文字化け、日本語本文は 7bit MTA で破壊されうる。日本語優先プロダクトで最も基本的な経路が規格非準拠~~ **(2026-09-20 解消)** | P2 | 件名は `encode_header_utf8` で RFC 2047 `=?UTF-8?B?` (45B チャンク分割、word ≤75 字)、本文は base64 + `MIME-Version: 1.0`/`Content-Transfer-Encoding: base64` に。base64 は `.` を含まないため SMTP 終端シーケンスの構造的起因も消去。`build_raw_message`/`base64_encode`/`wrap76` を抽出し合成テスト3件 (既知値・word 上限・ヘッダ ASCII 性) で固定 |
 | D95 | ~~**`send_email` の `draft_id` が常に `None` の死んだパラメータ**: 唯一の呼び出し元 (`mail_send_real`) が `None` 固定で、下書き削除の分岐は到達不能 — 下書きを作るコマンド自体が存在しない~~ **(2026-09-20 解消)** | P4 | パラメータと「送信後に下書き削除」分岐を削除。下書き機能の実装時に git 履歴から復元可能 |
 
+| D98 | ~~**fuzz ターゲット 3本中2本がコンパイル不能**: `use kaname_render::mime`/`::sanitize` はモジュールリネームで消滅していた。`fuzz/` は workspace `exclude` のため `cargo check/test/clippy` が一切届かず、`npm run fuzz:*` も実行時に即失敗 — 「堅牢性ファジング」は一度も走れない状態だった~~ **(2026-09-20 解消)** | P2 | 現行 API に修正 (`kaname_render::parse`, `kaname_render::sanitize_html(&RawHtml::new(..))`)。修復後の初実行で**ハーネス自身**が誤検知した件も併せて修正: `onerror=` 部分一致がエスケープ済み属性値内の不活性テキスト (`title="&lt;img src=x onerror=alert(1)&gt;"`) を捕捉 — 属性コンテキストを走査する小さなスキャナ `tag_attrs` に置換 (D73 と同型の「素朴な部分文字列照合」欠陥が検査器側にも存在した)。実走検証: mime_parser 609k exec・html_sanitizer 25k exec・prompt_injection 1.2M exec いずれもクラッシュなし。再発防止として static-check.sh に検査9 (fuzz ターゲットの `use kaname_*::` が対象 lib.rs の pub 宣言に実在するかの照合) を追加し、合成違反で検知を実測。残課題: `fuzz/corpus/` の `aitm_urls`/`calendar_phishing`/`ssa_bypass` には対応ターゲット未定義 (孤児コーパス)
+
 
 ### 完了判定の変更
 
