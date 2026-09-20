@@ -1013,22 +1013,6 @@ mod tests {
         assert!(log_error("test".into()).await.is_ok());
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn key_file_は生成時点から0600() -> Result<(), String> {
-        use std::os::unix::fs::PermissionsExt as _;
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let p = dir.path().join("history.key");
-        write_key_file(&p, &"a".repeat(64))?;
-        let mode = std::fs::metadata(&p)
-            .map_err(|e| e.to_string())?
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600, "鍵ファイルは生成時点から 0600 であるべき");
-        Ok(())
-    }
-
     // ── analyze_raw_email: mail_import_eml / mail_open 共通の解析経路 ──
     //
     // これまで一度もテストされていなかった (docs/gap-analysis.md の
@@ -1450,6 +1434,7 @@ mod v02_tests {
         Ok(())
     }
 
+<<<<<<< HEAD
     /// D87: 同名添付の連続保存で先のファイルが上書きされないことを固定。
     #[test]
     fn write_unique_は同名を別名で保存し既存を上書きしない() -> Result<(), String> {
@@ -1465,7 +1450,6 @@ mod v02_tests {
         let p3 = write_unique(&dir, "noext", b"x").map_err(|e| e.to_string())?;
         let p4 = write_unique(&dir, "noext", b"y").map_err(|e| e.to_string())?;
         assert_ne!(p3, p4);
-        let _ = std::fs::remove_dir_all(&dir);
         Ok(())
     }
 
@@ -1520,6 +1504,70 @@ mod v02_tests {
         Ok(())
     }
 
+||||||| parent of d5ed10c (fix(kaname-ui): 履歴 DB 鍵の非アトミック書き込みと壊鍵時の黙殺再生成を修正 (D89))
+=======
+    /// D89: 鍵ファイルの生成・再読・破損ガードを固定。
+    #[test]
+    fn resolve_or_create_key_は生成と破損ガードを正しく行う() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-keytest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+        // 1. 新規: 64桁hex の鍵が作られ、再呼出しで同じ値を返す
+        let k1 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_eq!(k1.len(), 64);
+        assert!(k1.chars().all(|c| c.is_ascii_hexdigit()));
+        let k2 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_eq!(k1, k2, "再呼出しで別鍵を生成してはいけない");
+        #[cfg(unix)]
+            let mode = std::fs::metadata(dir.join("history.key"))
+                .map_err(|e| e.to_string())?
+                .permissions()
+                .mode();
+            assert_eq!(
+                mode & 0o777,
+                0o600,
+                "鍵は作成時から 0600 であるべき: {mode:o}"
+            );
+        }
+
+        // 2. 鍵のみ破損 (DB なし) → 自己修復で再生成
+        std::fs::write(dir.join("history.key"), b"corrupt").map_err(|e| e.to_string())?;
+        let k3 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_ne!(k3.len(), 0);
+        assert_eq!(k3.len(), 64);
+
+        // 3. DB が存在し鍵が壊れている → 再生成せずエラー (新鍵は旧DBを読めない)
+        std::fs::write(
+            dir.join("history.db"),
+            b"\x00encrypted-bytes-not-sqlite-header",
+        )
+        .map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("history.key"), b"corrupt").map_err(|e| e.to_string())?;
+        match resolve_or_create_key(&dir) {
+            Err(e) => assert!(e.contains("鍵"), "破損鍵の旨を伝えるべき: {e}"),
+            Ok(_) => panic!("DB があるのに鍵が壊れていたら再生成してはいけない"),
+        }
+
+        // 4. 平文 SQLite DB + 鍵なし → 「旧形式」と教える
+        std::fs::remove_file(dir.join("history.key")).ok();
+        std::fs::write(dir.join("history.db"), b"SQLite format 3\x00rest")
+            .map_err(|e| e.to_string())?;
+        match resolve_or_create_key(&dir) {
+            Err(e) => assert!(e.contains("平文"), "平文 DB の旨を伝えるべき: {e}"),
+            Ok(_) => panic!("平文 DB を鍵生成で上書きしてはいけない"),
+        }
+
+        // 5. 有効な鍵 + DB あり → そのまま返す
+        std::fs::write(dir.join("history.key"), k3.as_bytes()).map_err(|e| e.to_string())?;
+        let k4 = resolve_or_create_key(&dir).map_err(|e| e.to_string())?;
+        assert_eq!(k4, k3);
+
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+>>>>>>> d5ed10c (fix(kaname-ui): 履歴 DB 鍵の非アトミック書き込みと壊鍵時の黙殺再生成を修正 (D89))
     #[tokio::test]
     async fn dlp_precheck_は機密マーカーの_warn_所見を返す() -> Result<(), String> {
         let resp = mail_dlp_precheck(DlpPrecheckRequest {
@@ -1535,7 +1583,6 @@ mod v02_tests {
             resp.warnings
         );
         Ok(())
-    }
 
     #[tokio::test]
     async fn dlp_precheck_は平文メールで警告を返さない() -> Result<(), String> {
@@ -2155,30 +2202,6 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
     Ok(())
 }
 
-/// 鍵ファイルを新規生成する。Unix では生成時点から 0600 —
-/// `fs::write` + 後付け chmod だと書き込み〜chmod の間に鍵が
-/// umask 許可 (通常 0644) で読める競合窓ができ、chmod 失敗も
-/// 無言で握り潰されていた。
-#[cfg(unix)]
-fn write_key_file(path: &std::path::Path, hex: &str) -> Result<(), String> {
-    use std::io::Write as _;
-    use std::os::unix::fs::OpenOptionsExt as _;
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|e| format!("鍵ファイルを開けません: {e}"))?
-        .write_all(hex.as_bytes())
-        .map_err(|e| format!("鍵ファイルを書けません: {e}"))
-}
-
-#[cfg(not(unix))]
-fn write_key_file(path: &std::path::Path, hex: &str) -> Result<(), String> {
-    std::fs::write(path, hex).map_err(|e| format!("鍵ファイルを書けません: {e}"))
-}
-
 /// 既定の場所に履歴データベースを開く (アプリ起動時に呼ぶ)。
 ///
 /// # なぜ必要か
@@ -2202,23 +2225,80 @@ pub async fn history_open_default() -> Result<String, String> {
     std::fs::create_dir_all(&base)
         .map_err(|e| format!("データディレクトリを作成できません: {e}"))?;
 
-    let key_path = base.join("history.key");
-    let key_hex = match std::fs::read_to_string(&key_path) {
-        Ok(k) if k.trim().len() == 64 => k.trim().to_string(),
-        _ => {
-            use rand::RngCore as _;
-            let mut raw = [0u8; 32];
-            rand::rngs::OsRng.fill_bytes(&mut raw);
-            let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
-            write_key_file(&key_path, &hex)?;
-            hex
-        }
-    };
+    let key_hex = resolve_or_create_key(&base)?;
 
     let db_path = base.join("history.db");
     let shown = db_path.to_string_lossy().into_owned();
     history_open(shown.clone(), key_hex).await?;
     Ok(shown)
+}
+
+/// `history.key` を読むか、無ければ新規生成して返す (D89)。
+///
+/// - 書き込みは `history.key.tmp` → rename でアトミック
+///   (クラッシュでの半書き残し = 無効鍵 = DB 全損を防ぐ)
+/// - 作成時点で 0600 (write→chmod の窓を塞ぐ)
+/// - DB が存在するのに鍵が無い/壊れている場合は再生成せずエラー
+///   (新鍵は既存 DB を読めないため、勝手に作ると静かな全損になる)
+/// - 平文 SQLite DB (D75 以前) には別メッセージを返す
+fn resolve_or_create_key(base: &std::path::Path) -> Result<String, String> {
+    let key_path = base.join("history.key");
+    let db_path = base.join("history.db");
+    match std::fs::read_to_string(&key_path) {
+        Ok(k) if k.trim().len() == 64 && k.trim().chars().all(|c| c.is_ascii_hexdigit()) => {
+            Ok(k.trim().to_string())
+        }
+        _ => {
+            if db_path.exists() {
+                // 平文 SQLite はヘッダが "SQLite format 3\0" で始まる。
+                // 鍵が無いのに平文 DB なら「鍵紛失」ではなく「未移行の旧 DB」。
+                let is_plaintext = std::fs::File::open(&db_path)
+                    .and_then(|mut f| {
+                        use std::io::Read as _;
+                        let mut head = [0u8; 16];
+                        f.read_exact(&mut head).map(|_| head)
+                    })
+                    .map(|h| h == *b"SQLite format 3\x00")
+                    .unwrap_or(false);
+                let msg = if is_plaintext {
+                    "履歴データベースは暗号化以前の平文形式です (D75)。\
+                     読み取るには移行が必要ですが未実装のため、\
+                     history.db を退避して新しい DB を作ってください"
+                } else {
+                    "履歴データベースの鍵ファイルが壊れているか存在しません。\
+                     自動で新しい鍵を作ると既存データが読めなくなるため、\
+                     history.key を復旧するか history.db を退避してください"
+                };
+                return Err(msg.to_string());
+            }
+            use rand::RngCore as _;
+            let mut raw = [0u8; 32];
+            rand::rngs::OsRng.fill_bytes(&mut raw);
+            let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+            let tmp = base.join("history.key.tmp");
+            // 前回のクラッシュで tmp が残っていると create_new が永久に
+            // 失敗するため、先に消す。
+            let _ = std::fs::remove_file(&tmp);
+            {
+                let mut opts = std::fs::OpenOptions::new();
+                opts.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt as _;
+                    opts.mode(0o600);
+                }
+                let mut f = opts
+                    .open(&tmp)
+                    .map_err(|e| format!("鍵ファイルを作成できません: {e}"))?;
+                use std::io::Write as _;
+                f.write_all(hex.as_bytes())
+                    .map_err(|e| format!("鍵ファイルを書けません: {e}"))?;
+            }
+            std::fs::rename(&tmp, &key_path)
+                .map_err(|e| format!("鍵ファイルを確定できません: {e}"))?;
+            Ok(hex)
+        }
+    }
 }
 
 /// 監査ログ閲覧の応答。
