@@ -226,7 +226,7 @@ npm run tauri:dev
 
 - 設計を理解する: `docs/design.md`、`docs/adr/`
 - 脅威モデル: `docs/threat-model.md`
-- 製品ビジョン: `docs/keynote.md`
+- 製品ビジョン: `docs/vision-keynote.md`
 - リリースプロセス: `LAUNCH.md`
 - セキュリティ報告: `SECURITY.md`
 
