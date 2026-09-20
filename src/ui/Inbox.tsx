@@ -984,9 +984,14 @@ export const Inbox = () => {
           emailId={selectedEmail()}
           onClose={() => setSelectedEmail(null)}
           onTrashed={() => void loadEmails(selectedMbx())}
-          onRead={(id) =>
-            setEmails(list => list.map(e => (e.id === id ? { ...e, is_read: true } : e)))
-          }
+          onRead={(id) => {
+            setEmails(list => list.map(e => (e.id === id ? { ...e, is_read: true } : e)));
+            setMailboxes(list =>
+              list.map(m => (m.id === selectedMbx() && m.unread_emails > 0
+                ? { ...m, unread_emails: m.unread_emails - 1 }
+                : m))
+            );
+          }}
         />
       </Show>
 
