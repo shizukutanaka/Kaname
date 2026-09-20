@@ -3,7 +3,7 @@
 //! - HTTPS over TLS 1.3 のみ
 //! - Email/get、Email/query、Email/set、Mailbox/get
 
-// crates/kaname-core/src/jmap.rs
+// (旧 crates/kaname-core/src/jmap.rs 由来 — kaname-core は D97 で削除済み)
 //
 // JMAP クライアント完全実装 (reqwest HTTP wire)。
 //
