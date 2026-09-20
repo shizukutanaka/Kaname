@@ -1878,7 +1878,18 @@ pub async fn mail_mark_read(ids: Vec<String>) -> Result<(), String> {
     client
         .mark_read(&refs)
         .await
-        .map_err(|e| format!("既読化に失敗しました: {e}"))
+        .map_err(|e| format!("既読化に失敗しました: {e}"))?;
+
+    // ローカル保存分も同期する。JMAP だけを更新していたため、保存済み一覧
+    // (オフライン表示) とサマリの未読数が永遠に古いままだった (D77)。
+    // Store 未接続・更新失敗でも既読化自体は成立しているため best-effort。
+    if let Some(store) = store_slot().lock().await.clone() {
+        let account_id = current_account_id().await;
+        if let Err(e) = store.mark_messages_read(&account_id, &ids).await {
+            warn!(error = %e, "ローカルの既読同期に失敗");
+        }
+    }
+    Ok(())
 }
 
 /// メールをゴミ箱へ移動する。
@@ -1892,16 +1903,14 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
         .await
         .map_err(|e| format!("削除に失敗しました: {e}"))?;
 
-    // JMAP 側でゴミ箱へ移した後、ローカルの保存済み一覧にも削除を反映する。
-    // ここで立てないと `list_messages` が `is_deleted = 0` で拾い続け、
-    // 削除済みメールがオフライン表示に残る。ローカル行が無い (未保存) なら
-    // 何もしない — best-effort。
-    let account_id = current_account_id().await;
-    if !account_id.is_empty() {
-        if let Some(store) = store_slot().lock().await.clone() {
-            if let Err(e) = store.mark_deleted(&account_id, &email_id).await {
-                tracing::warn!(error=%e, "ローカル削除の反映に失敗");
-            }
+    // ローカル保存分も論理削除する。JMAP だけを更新していたため、
+    // ゴミ箱へ移したメールが保存済み一覧・検索・サマリに出続けていた
+    // (D77)。Store 未接続・更新失敗でも JMAP 側の移動は成立している
+    // ため best-effort。
+    if let Some(store) = store_slot().lock().await.clone() {
+        let account_id = current_account_id().await;
+        if let Err(e) = store.mark_message_deleted(&account_id, &email_id).await {
+            warn!(error = %e, "ローカルの削除同期に失敗");
         }
     }
     Ok(())

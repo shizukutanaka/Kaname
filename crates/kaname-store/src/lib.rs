@@ -1645,6 +1645,7 @@ impl Store {
                 body_preview = ?11, \
                 received_at  = COALESCE(?12, received_at), \
                 is_read      = ?13, \
+                is_deleted   = 0, \
                 bec_score    = ?14, \
                 bec_verdict  = ?15, \
                 updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
@@ -1671,29 +1672,65 @@ impl Store {
         Ok(())
     }
 
-    /// メールをローカルで削除済みにする (ソフトデリート)。
+    /// JMAP 側で既読にしたメールをローカルにも反映する。
     ///
-    /// JMAP 側でゴミ箱へ移したメールを呼ぶ想定。`list_messages` 等は
-    /// `is_deleted = 0` でフィルタするため、ここで立てないと削除した
-    /// メールがオフライン一覧に残り続ける。`jmap_id` 一致で1行だけ
-    /// 更新する (id を知らない呼び出し側のため)。対象が無ければ false。
-    pub async fn mark_deleted(&self, account_id: &str, jmap_id: &str) -> Result<bool, StoreError> {
+    /// `mail_mark_read` は JMAP だけを更新していたため、保存済み一覧
+    /// (オフライン表示) と `mail_get_summary` の未読数が古いままに
+    /// なっていた (D77)。更新件数を返す (該当なし = 0 でエラーにしない)。
+    pub async fn mark_messages_read(
+        &self,
+        account_id: &str,
+        jmap_ids: &[String],
+    ) -> Result<usize, StoreError> {
         validate_text_field(account_id, "account_id", 256)?;
-        validate_text_field(jmap_id, "jmap_id", 256)?;
-
+        for id in jmap_ids {
+            validate_text_field(id, "jmap_id", 256)?;
+        }
+        if jmap_ids.is_empty() {
+            return Ok(0);
+        }
         let conn = self
             .conn
             .lock()
             .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
-        let n = conn
-            .execute(
-                "UPDATE messages SET is_deleted = 1, \
-                    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
-                 WHERE account_id = ?1 AND jmap_id = ?2 AND is_deleted = 0;",
-                params![account_id, jmap_id],
-            )
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-        Ok(n > 0)
+        let sql = format!(
+            "UPDATE messages SET is_read = 1, \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+             WHERE account_id = ?1 AND jmap_id IN ({})",
+            jmap_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+        );
+        let mut params_vec: Vec<rusqlite::types::Value> = Vec::with_capacity(jmap_ids.len() + 1);
+        params_vec.push(account_id.to_string().into());
+        for id in jmap_ids {
+            params_vec.push(id.clone().into());
+        }
+        conn.execute(&sql, rusqlite::params_from_iter(params_vec))
+            .map_err(|e| StoreError::Db(e.to_string()))
+    }
+
+    /// JMAP 側でゴミ箱へ移したメールをローカルで論理削除する。
+    ///
+    /// `mail_trash` は JMAP だけを更新していたため、保存済み一覧・検索・
+    /// サマリに削除済みメールが出続けていた (D77)。`is_deleted = 1` にして
+    /// 全読み出し経路 (`is_deleted = 0` フィルタ) から外す。
+    pub async fn mark_message_deleted(
+        &self,
+        account_id: &str,
+        jmap_id: &str,
+    ) -> Result<usize, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(jmap_id, "jmap_id", 256)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        conn.execute(
+            "UPDATE messages SET is_deleted = 1, \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+             WHERE account_id = ?1 AND jmap_id = ?2",
+            params![account_id, jmap_id],
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))
     }
 
     /// メールボックスの保存済みメールを新しい順に返す。
@@ -2098,6 +2135,80 @@ mod message_persistence_tests {
         assert_eq!(rows[0].from_name.as_deref(), Some("Bob"));
     }
 
+    /// D77: `mail_mark_read` が JMAP しか更新しなかったため、
+    /// 保存済みの `is_read` が永遠に古いままだった。
+    /// `mark_messages_read` が既読をローカルに反映することを固定する。
+    #[tokio::test]
+    async fn mark_messages_read_で未読が既読になる() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "件名B"))
+            .await
+            .unwrap();
+
+        let n = store
+            .mark_messages_read("acct1", &["jmap-1".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let r1 = rows
+            .iter()
+            .find(|r| r.subject.as_deref() == Some("件名A"))
+            .unwrap();
+        let r2 = rows
+            .iter()
+            .find(|r| r.subject.as_deref() == Some("件名B"))
+            .unwrap();
+        assert!(r1.is_read, "jmap-1 (件名A) は既読のはず");
+        assert!(!r2.is_read, "jmap-2 (件名B) は未読のままのはず");
+    }
+
+    /// D77: `mail_trash` が JMAP しか更新しなかったため、ゴミ箱に移した
+    /// メールが保存済み一覧・検索・サマリに出続けていた。
+    /// `mark_message_deleted` が `is_deleted` を立て、全読み出し経路
+    /// (`is_deleted = 0` フィルタ) から外れることを固定する。
+    /// あわせて、ゴミ箱から戻されたメールが次回の fetch upsert で
+    /// `is_deleted = 0` に戻ること (復元の反映) も固定する。
+    #[tokio::test]
+    async fn mark_message_deleted_で一覧から外れ再保存で復活する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+
+        let n = store.mark_message_deleted("acct1", "jmap-1").await.unwrap();
+        assert_eq!(n, 1);
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert!(rows.is_empty(), "論理削除後は一覧に出てはいけない");
+
+        // 復元 (JMAP 側でゴミ箱から戻され、次回 fetch で upsert) を模す。
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
+            .await
+            .unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(rows.len(), 1, "復元されたメールは再び見えるべき");
+    }
+
     /// `to_addrs` 列はスキーマ上 NOT NULL で存在したが `NewMessage` に
     /// フィールドが無く常に `''` で書かれていたため、保存時に宛先が
     /// 全て消失していた。往復で読み戻せることと、再保存時に更新される
@@ -2366,47 +2477,5 @@ mod message_persistence_tests {
         assert_eq!(count, 1);
         assert_eq!(verdict, "scanned");
         assert_eq!(size, 2048);
-    }
-||||||| parent of f31f398 (fix(kaname-store): ゴミ箱移動をローカル一覧にも反映)
-
-    /// `is_deleted` を立てる経路が無く、JMAP でゴミ箱へ移したメールが
-    /// ローカル一覧に残り続ける欠陥があった (オフライン表示の不整合)。
-    /// `mark_deleted` で一覧から外れること・未保存メールでは何もしない
-    /// こと・冪等であることを固定する。
-    #[tokio::test]
-    async fn mark_deleted_は一覧からメールを外す() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
-            .await
-            .unwrap();
-        store.migrate().await.unwrap();
-        seed_account(&store, "acct1").await;
-
-        store
-            .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
-            .await
-            .unwrap();
-        assert_eq!(
-            store
-                .list_messages("acct1", "inbox", 10)
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-
-        assert!(store.mark_deleted("acct1", "jmap-1").await.unwrap());
-        assert!(
-            store
-                .list_messages("acct1", "inbox", 10)
-                .await
-                .unwrap()
-                .is_empty(),
-            "削除済みは一覧に残ってはいけない"
-        );
-
-        // 冪等: 既に削除済み / 存在しないメールでは false で何もしない
-        assert!(!store.mark_deleted("acct1", "jmap-1").await.unwrap());
-        assert!(!store.mark_deleted("acct1", "jmap-missing").await.unwrap());
     }
 }
