@@ -23,6 +23,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **Dual-LLM 型不変条件の serde 迂回穴を閉塞** (D17 部分解消): `Content<L>` から `Serialize`/`Deserialize` derive を除去 — `serde_json::from_str::<Content<Trusted>>` で Bridge を迂回し任意テキストを Trusted 偽造できた経路と、生本文の JSON 漏洩経路を閉塞。`Content<Untrusted>::as_text()` を `pub(crate)` 化、`TopicTag` を `serde(try_from)` 化し検証迂回を封じた。kaname-ai 変更のため security-lead 承認が必要。併せて `llm_bridge` の `QuarantinedLlmImpl`/`PrivilegedLlmImpl` (subprocess 側と同名の重複で、呼び出し元・テストすら存在しない in-process 経路のデッドコード ~90行) を削除 — D3 のプロセス隔離設計に反する迂回経路を消去
 - **開封済みメールが一覧で未読のまま残る UI 不整合**: `EmailDetailPanel` が `mail_mark_read` を呼んでも一覧側の `is_read` が更新されず、再取得まで太字・未読ドットが残っていた。`onRead` コールバックで mark_read 成功時に一覧の該当行をローカル既読に反映 (メールボックスの未読バッジも同時に減算)
+||||||| parent of edc9e3f (fix(ui): 送信フォームでカンマ/セミコロン区切りの複数宛先をサポート)
+- **開封済みメールが一覧で未読のまま残る UI 不整合**: `EmailDetailPanel` が `mail_mark_read` を呼んでも一覧側の `is_read` が更新されず、再取得まで太字・未読ドットが残っていた。`onRead` コールバックで mark_read 成功時に一覧の該当行をローカル既読に反映
+- **送信フォームが複数宛先を扱えなかった**: `to` を単一文字列のまま1要素配列で送信していたため「a@x, b@y」と入力すると1つの不正な宛先として送信されていた。カンマ/セミコロンで分割して実配列化 + プレースホルダに複数可を明記
+
 
 - **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
   - `kaname-render`: `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加し mail-parser から抽出
