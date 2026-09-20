@@ -21,6 +21,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - **ゴミ箱へ移したメールがオフライン一覧に残り続ける欠陥**: `is_deleted` 列を立てる経路が存在せず、`mail_trash` 後も `mail_list_stored` が拾い続けていた。`Store::mark_deleted` (jmap_id 一致・冪等) を追加し `mail_trash` で JMAP 側成功後に best-effort 反映
 
+- **Compose の到達不能な MLS バッジを削除**: `mlsReady` が永久に null のため非表示だった E2E/📧SMTP バッジ UI とチェック用 effect を削除 (常時非表示のデッドコード。実装時は git 履歴から復元)
+
 - **オンボーディングが完全に無スタイルで描画されていた欠陥**: `k-*` クラス37個が CSS 未定義のまま残存 (アーカイブ移行時にスタイル定義が欠落) → ダークテーマのスタイルブロックをコンポーネント内に定義。トグル・進捗ドット・危険カード等すべて正しく描画されるようになった
 
 - **bec-scoring-spec.md が実装と乖離**: 閾値 (0.5/0.7 → 実装 0.6/0.85)・「7 信号」→ ~14 経路・最終スコア式 (線形クリップ → ロジスティック変換) を実装に合わせて訂正
