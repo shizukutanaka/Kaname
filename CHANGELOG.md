@@ -23,6 +23,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(kaname-jmap): `max_retries` が宣言のみでリトライ実装ゼロだった — 冪等メソッド (get/query 系) と GET に限り指数バックオフで再試行。非冪等な set/import は二重実行防止のため再送しない (D84)
 - fix(kaname-jmap): JMAP ベアラトークンを Zeroizing 保持 + Debug 出力で伏字 — 切断後もヒープに残らないように (SQLCipher 鍵と同一の取り扱い)
 
 - fix(kaname-ui): OOBV 検証結果を改ざん検知付きの永続監査ログに記録 — 以前は読み出し経路の無いインメモリ Vec のみでプロセス終了時に証跡が消失していた
