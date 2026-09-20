@@ -21,6 +21,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **Compose の到達不能な MLS バッジを削除**: `mlsReady` が永久に null のため非表示だった E2E/📧SMTP バッジ UI とチェック用 effect を削除 (常時非表示のデッドコード。実装時は git 履歴から復元)
+
 - **Dual-LLM 型不変条件の serde 迂回穴を閉塞** (D17 部分解消): `Content<L>` から `Serialize`/`Deserialize` derive を除去 — `serde_json::from_str::<Content<Trusted>>` で Bridge を迂回し任意テキストを Trusted 偽造できた経路と、生本文の JSON 漏洩経路を閉塞。`Content<Untrusted>::as_text()` を `pub(crate)` 化、`TopicTag` を `serde(try_from)` 化し検証迂回を封じた。kaname-ai 変更のため security-lead 承認が必要。併せて `llm_bridge` の `QuarantinedLlmImpl`/`PrivilegedLlmImpl` (subprocess 側と同名の重複で、呼び出し元・テストすら存在しない in-process 経路のデッドコード ~90行) を削除 — D3 のプロセス隔離設計に反する迂回経路を消去
 - **`.eml` インポート/フォルダ一括解析の無制限ファイル読み込み**: `fs::read` がサイズ確認なしで巨大ファイルを丸ごとメモリに読み込んでいた。50MB 上限 (`MAX_EML_BYTES`) を設け、超過時は正直なエラー/失敗リスト入りに
 
