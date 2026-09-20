@@ -263,8 +263,14 @@ impl Envelope {
     pub const MIME_TYPE: &'static str = "application/mls-envelope+cbor";
 
     /// CBOR にシリアライズする (MIME パートのバイト列)。
+    ///
+    /// wire_bytes/welcome は MLS メッセージのバイト列 — serde_json だと
+    /// 数値配列化して ~4 倍に膨れるため実 CBOR (ciborium) を使う。
     pub fn to_cbor(&self) -> Result<Vec<u8>, MlsMailError> {
-        serde_json::to_vec(self).map_err(|e| MlsMailError::Serialization(e.to_string()))
+        let mut buf = Vec::new();
+        ciborium::into_writer(self, &mut buf)
+            .map_err(|e| MlsMailError::Serialization(e.to_string()))?;
+        Ok(buf)
     }
 
     /// MIME パートからパースする。
@@ -280,7 +286,8 @@ impl Envelope {
                 MAX_ENVELOPE_BYTES
             )));
         }
-        serde_json::from_slice(bytes).map_err(|e| MlsMailError::Malformed(e.to_string()))
+        ciborium::from_reader(std::io::Cursor::new(bytes))
+            .map_err(|e| MlsMailError::Malformed(e.to_string()))
     }
 }
 

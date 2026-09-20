@@ -2676,6 +2676,7 @@ dependencies = [
 name = "kaname-mls"
 version = "0.7.1"
 dependencies = [
+ "ciborium",
  "openmls",
  "openmls_basic_credential",
  "openmls_libcrux_crypto",

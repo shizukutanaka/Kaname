@@ -9,6 +9,10 @@ publish             = false
 [dependencies]
 serde      = { workspace = true }
 serde_json = { workspace = true }
+# Envelope の実 CBOR 化 (MIME `+cbor` の実態に合わせる — serde_json だと
+# Vec<u8> が数値配列化し ~4 倍に膨れる)。ciborium は lockfile 既入りの
+# 推移依存で新規供給面は増やさない。
+ciborium   = "0.2"
 thiserror  = { workspace = true }
 tracing    = { workspace = true }
 sha2         = { workspace = true }
