@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 // ============================================================================
 // セッション (RFC 8620 §2)
@@ -86,19 +87,36 @@ pub struct Account {
 // ============================================================================
 
 /// JMAP クライアント設定
-#[derive(Debug, Clone)]
+///
+/// `bearer_token` は Zeroizing で保持し、クライアント破棄時にヒープから
+/// 消去する (切断後もメモリダンプからトークンが回復されないようにするため)。
+/// なお `derive(Debug)` はトークンを平文で出力してしまうため、手動実装で
+/// 伏せている (I5: ログに秘密を出さない)。
+#[derive(Clone)]
 pub struct ClientConfig {
-    pub bearer_token: String,
+    pub bearer_token: Zeroizing<String>,
     pub connect_timeout: Duration,
     pub request_timeout: Duration,
     pub max_retries: u32,
     pub user_agent: String,
 }
 
+impl std::fmt::Debug for ClientConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClientConfig")
+            .field("bearer_token", &"[redacted]")
+            .field("connect_timeout", &self.connect_timeout)
+            .field("request_timeout", &self.request_timeout)
+            .field("max_retries", &self.max_retries)
+            .field("user_agent", &self.user_agent)
+            .finish()
+    }
+}
+
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            bearer_token: String::new(),
+            bearer_token: Zeroizing::new(String::new()),
             connect_timeout: Duration::from_secs(10),
             request_timeout: Duration::from_secs(30),
             max_retries: 3,
@@ -143,7 +161,7 @@ impl JmapClient {
 
         let resp = http
             .get(format!("{base_url}/.well-known/jmap"))
-            .bearer_auth(&config.bearer_token)
+            .bearer_auth(config.bearer_token.as_str())
             .send()
             .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
@@ -199,7 +217,7 @@ impl JmapClient {
         let resp = self
             .http
             .post(&self.api_url)
-            .bearer_auth(&self.config.bearer_token)
+            .bearer_auth(self.config.bearer_token.as_str())
             .header("Content-Type", "application/json")
             .json(&body)
             .send()
@@ -606,7 +624,7 @@ impl JmapClient {
         let resp = self
             .http
             .get(&url)
-            .bearer_auth(&self.config.bearer_token)
+            .bearer_auth(self.config.bearer_token.as_str())
             .send()
             .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
@@ -645,7 +663,7 @@ impl JmapClient {
         let resp = self
             .http
             .post(&url)
-            .bearer_auth(&self.config.bearer_token)
+            .bearer_auth(self.config.bearer_token.as_str())
             .header("Content-Type", "application/octet-stream")
             .body(data.to_vec())
             .send()
