@@ -24,6 +24,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - ビルドプロファイル設定の二重管理を解消 — `.cargo/config.toml` の `[profile.*]` は Cargo.toml をキー単位でオーバーライドするため値が分散していた (release/bench は完全重複、dev の `split-debuginfo` は config.toml にのみ存在)。全設定を Cargo.toml に集約
 - static-check.sh の誤検出を修正 — コメント内の孤立 `"` が文字列パリティを崩し SQL 内の `strftime()`/`accounts()` を「未定義関数呼び出し」と誤報していた問題を、文字列/コメント/char を単一パスで処理する状態機械に置き換えて解消。Tauri 注入引数 (`AppHandle` 等) の裸名も除外対象に追加
 - docker-compose の Rust イメージを `rust:1.82-bookworm` → `rust:bookworm` に修正 — workspace の MSRV (1.85) を下回っており `docker compose up` でビルドが失敗していた
+- gap-analysis.md の台帳ドリフト修正 — #173 で解消済みの D45残件/D52/D54/D56/D58/D59 が「未修正」のまま残っていた記述を実態に同期
 - **BEC 警戒バッジが初回ロード以降更新されなかった**: `mail:summary_updated`/`bec:alert` の購読側だけ存在し emit 側がゼロのデッドイベントだった → `mail_fetch`/`mail_mark_read`/`mail_trash` 成功時に実集計値を emit するよう配線。`bec:alert` (開封ごとに +1 で fetch 時の集計と二重計上する誤りがあった) は削除
 
 - **ゴミ箱移動がサーバー側で実際に移動していなかった欠陥**: `Email/set` の `mailboxIds` パッチは `{trash: true}` だけだと追加のみで受信トレイから除去されない (RFC 8621 §4.6) → 現在の所属を `Email/get` で取得し全て `null` で除去するパッチに修正
