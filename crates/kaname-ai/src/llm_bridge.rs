@@ -15,8 +15,10 @@
 //   - GGUF format via llama.cpp
 //
 // llama.cpp integration:
-//   Production: `llama-cpp-2` crate (safe Rust wrapper around llama.cpp FFI)
-//   Dev stub: MockLlm that returns deterministic outputs for testing
+//   `llama-cpp-2` crate (safe Rust wrapper around llama.cpp FFI) — 実装済み。
+//   モデルファイル未配置の環境では `load()` が `ModelNotFound` を返し、
+//   呼び出し側は `NullLlm` フォールバックで動作する (BEC 判定は
+//   決定論的シグナルのみ — llm_bridge の availability に非依存)。
 //
 // Subprocess isolation (replacing todo!() in kaname-ai):
 //   The QuarantinedLlm subprocess runs with seccomp profile `quarantined.json`:
@@ -32,7 +34,14 @@
 //!
 //! Drives Phi-4-mini for both quarantined and privileged inference paths.
 
+use llama_cpp_2::context::params::LlamaContextParams;
+use llama_cpp_2::llama_backend::LlamaBackend;
+use llama_cpp_2::llama_batch::LlamaBatch;
+use llama_cpp_2::model::params::LlamaModelParams;
+use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::sampling::LlamaSampler;
 use serde::{Deserialize, Serialize};
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -206,14 +215,15 @@ pub struct InferenceResult {
 /// 一度に 1 つの推論のみ実行 per instance (the model is not re-entrant).
 /// The Q-LLM and P-LLM each hold their OWN `LocalLlmRunner` instance with
 /// separate configs — they cannot share model state.
+///
+/// コンテキスト (`LlamaContext`) は推論ごとに生成・破棄する。
+/// KV キャッシュを推論間で持ち越さないことで、あるメールの解析状態が
+/// 別のメールの判定に漏れないことを保証する (Dual-LLM の分離要件)。
 pub struct LocalLlmRunner {
     config: ModelConfig,
-    /// 本番では: llama_cpp_2::model::LlamaModel held here.
-    _model: ModelStub,
+    backend: LlamaBackend,
+    model: LlamaModel,
 }
-
-/// プレースホルダー for llama_cpp_2::model::LlamaModel.
-struct ModelStub;
 
 impl LocalLlmRunner {
     /// このランナーのモデル設定。
@@ -226,58 +236,125 @@ impl LocalLlmRunner {
     ///
     /// これは低速 (1-5 seconds). Call it once at startup in a background task.
     /// ウォームモデルは AppState に保持 for the app lifetime.
+    /// モデルロードはブロッキングのため `spawn_blocking` で実行する。
     pub async fn load(config: ModelConfig) -> Result<Arc<Mutex<Self>>, LlmError> {
         if !config.model_path.exists() {
             return Err(LlmError::ModelNotFound(config.model_path.clone()));
         }
 
-        // 本番:
-        //   let backend = llama_cpp_2::llama_backend::LlamaBackend::init()?;
-        //   let model = llama_cpp_2::model::LlamaModel::load_from_file(
-        //     &backend, &config.model_path,
-        //     &llama_cpp_2::model::params::LlamaModelParams::default()
-        //       .with_n_gpu_layers(config.n_gpu_layers),
-        //   )?;
-        tracing::info!(
-            model = %config.model_path.display(),
-            "model loaded (stub)"
-        );
+        let cfg = config.clone();
+        let runner = tokio::task::spawn_blocking(move || -> Result<Self, LlmError> {
+            let backend =
+                LlamaBackend::init().map_err(|e| LlmError::BackendInit(format!("{e}")))?;
+            let params = LlamaModelParams::default().with_n_gpu_layers(cfg.n_gpu_layers);
+            let model = LlamaModel::load_from_file(&backend, &cfg.model_path, &params)
+                .map_err(|e| LlmError::ModelLoad(format!("{e}")))?;
+            Ok(Self {
+                config: cfg,
+                backend,
+                model,
+            })
+        })
+        .await
+        .map_err(|e| LlmError::BackendInit(format!("load task failed: {e}")))??;
 
-        Ok(Arc::new(Mutex::new(Self {
-            config,
-            _model: ModelStub,
-        })))
+        tracing::info!(
+            model = %runner.config.model_path.display(),
+            "model loaded"
+        );
+        Ok(Arc::new(Mutex::new(runner)))
     }
 
-    /// Run inference. Blocks the current thread for `latency_ms`.
+    /// Run inference. Blocks the calling thread for `latency_ms`.
     ///
-    /// In production, this calls llama_cpp_2 to:
+    /// llama_cpp_2 で以下を実行する:
     ///   1. Tokenize [system_prompt + history + user_message]
     ///   2. Run forward pass
     ///   3. Decode tokens to UTF-8 string
-    ///   4. Return InferenceResult
+    ///   4. Return InferenceResult (tokens_in/tokens_out は実測値)
+    ///
+    /// `temperature == 0.0` なら greedy サンプリング (決定論的、
+    /// セキュリティ判定パス用)。`> 0.0` なら温度サンプリング。
     pub fn infer(&self, req: &InferenceRequest) -> Result<InferenceResult, LlmError> {
         let start = std::time::Instant::now();
 
-        // 本番: build the prompt in Phi-4 chat template format:
-        //   <|system|>\n{system}\n<|end|>\n
-        //   <|user|>\n{user}\n<|end|>\n
-        //   <|assistant|>\n
-        let _prompt = build_phi4_prompt(req);
+        let prompt = build_phi4_prompt(req);
 
-        // スタブ: return a minimal valid JSON for Q-LLM or a draft for P-LLM
-        let text = if req.system_prompt.contains("untrusted_content") {
-            // Q-LLM の応答
-            r#"{"summary":"メールの内容を解析しました。","risk":"SAFE","language":"JA","mentions":[]}"#.into()
+        // 1. Tokenize
+        let tokens = self
+            .model
+            .str_to_token(&prompt, AddBos::Always)
+            .map_err(|e| LlmError::Inference(format!("トークン化に失敗: {e}")))?;
+        let tokens_in = tokens.len() as u32;
+        if tokens.len() + self.config.max_tokens as usize > self.config.ctx_size as usize {
+            return Err(LlmError::ContextWindowExceeded);
+        }
+
+        // 2. 推論ごとに新しいコンテキスト (KV キャッシュの持ち越しを防ぐ)
+        let n_ctx = NonZeroU32::new(self.config.ctx_size)
+            .ok_or(LlmError::Inference("ctx_size は 0 不可".into()))?;
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(Some(n_ctx))
+            .with_n_threads(self.config.n_threads as i32)
+            .with_n_threads_batch(self.config.n_threads as i32);
+        let mut ctx = self
+            .model
+            .new_context(&self.backend, ctx_params)
+            .map_err(|e| LlmError::Inference(format!("コンテキスト生成に失敗: {e}")))?;
+
+        // 3. プロンプトをバッチ投入し forward pass
+        let mut batch = LlamaBatch::new(self.config.ctx_size as usize, 1);
+        let last = tokens.len() - 1;
+        for (i, token) in tokens.iter().enumerate() {
+            batch
+                .add(*token, i as i32, &[0], i == last)
+                .map_err(|e| LlmError::Inference(format!("バッチ追加に失敗: {e}")))?;
+        }
+        ctx.decode(&mut batch)
+            .map_err(|e| LlmError::Inference(format!("プロンプト評価に失敗: {e}")))?;
+
+        // 4. サンプラー (temperature=0 → greedy、それ以外 → 温度付き)
+        let mut sampler = if self.config.temperature <= 0.0 {
+            LlamaSampler::greedy()
         } else {
-            // P-LLM の応答
-            "了解しました。返信の下書きを作成します。".into()
+            LlamaSampler::chain_simple([
+                LlamaSampler::temp(self.config.temperature),
+                LlamaSampler::dist(rand::random::<u32>()),
+            ])
         };
 
+        // 5. 生成ループ
+        let mut output = String::new();
+        let mut n_cur = tokens.len();
+        let max = tokens.len() + self.config.max_tokens as usize;
+        let mut tokens_out = 0u32;
+        while n_cur < max {
+            // -1 = 最終トークンの logits (プロンプト末尾/生成トークンいずれも
+            // logits=true は最後の1つのみなので常に正しい位置を指す)
+            let token = sampler.sample(&ctx, -1);
+            sampler.accept(token);
+            if self.model.is_eog_token(token) {
+                break;
+            }
+            let piece = self
+                .model
+                .token_to_piece(token, &mut encoding_rs::UTF_8.new_decoder(), true, None)
+                .map_err(|e| LlmError::Inference(format!("デトークン化に失敗: {e}")))?;
+            output.push_str(&piece);
+            tokens_out += 1;
+            batch.clear();
+            batch
+                .add(token, n_cur as i32, &[0], true)
+                .map_err(|e| LlmError::Inference(format!("バッチ追加に失敗: {e}")))?;
+            n_cur += 1;
+            ctx.decode(&mut batch)
+                .map_err(|e| LlmError::Inference(format!("生成に失敗: {e}")))?;
+        }
+
         Ok(InferenceResult {
-            text,
-            tokens_in: 0,
-            tokens_out: 0,
+            text: output,
+            tokens_in,
+            tokens_out,
             latency_ms: start.elapsed().as_millis() as u64,
         })
     }
@@ -432,6 +509,18 @@ pub enum LlmError {
     /// 推論タイムアウト。
     #[error("inference timeout")]
     Timeout,
+
+    /// llama.cpp バックエンドの初期化失敗。
+    #[error("llama backend init failed: {0}")]
+    BackendInit(String),
+
+    /// モデルファイルの読み込み失敗 (破損・非GGUF等)。
+    #[error("model load failed: {0}")]
+    ModelLoad(String),
+
+    /// 推論実行中のエラー (トークン化/デコード/生成)。
+    #[error("inference failed: {0}")]
+    Inference(String),
 }
 
 // ============================================================================
@@ -591,5 +680,40 @@ mod tests {
         let prompt = build_phi4_prompt(&req);
         // システムプロンプト由来の <|end|> は保持されるべき
         assert!(prompt.starts_with("<|system|>"));
+    }
+
+    /// 実モデルがある環境のみで走る統合テスト。
+    /// `KANAME_TEST_MODEL` に GGUF パスを指定した時のみ実行
+    /// (CI/開発環境に2.4GBモデルは存在しないためデフォルトではスキップ)。
+    #[test]
+    fn real_inference_produces_finite_tokens() {
+        let Ok(model_path) = std::env::var("KANAME_TEST_MODEL") else {
+            eprintln!("KANAME_TEST_MODEL 未設定のためスキップ");
+            return;
+        };
+        let config = ModelConfig {
+            model_path: PathBuf::from(model_path),
+            ctx_size: 4096,
+            n_threads: 2,
+            n_gpu_layers: 0,
+            temperature: 0.0,
+            max_tokens: 32,
+        };
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let runner = rt
+            .block_on(LocalLlmRunner::load(config))
+            .expect("モデルロード");
+        let req = InferenceRequest {
+            system_prompt: QUARANTINED_SYSTEM_PROMPT.into(),
+            user_message: "会議の件で明日15時に電話します。".into(),
+            history: vec![],
+        };
+        let result = runner.lock().unwrap().infer(&req).expect("推論");
+        assert!(result.tokens_in > 0, "tokens_in が実測されているべき");
+        assert!(result.tokens_out > 0, "tokens_out が実測されているべき");
+        assert!(!result.text.is_empty());
     }
 }

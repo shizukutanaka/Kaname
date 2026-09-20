@@ -16,6 +16,11 @@ sha2       = { workspace = true }
 hmac       = { workspace = true }
 rand       = { workspace = true }
 kaname-screen = { path = "../kaname-screen" }
+tokio         = { workspace = true }
+# llama.cpp FFI の safe wrapper。0.1.x は API 破壊的変更が頻繁なため
+# 実装検証済みのバージョンにピン留め (D2 Phase 1)。
+llama-cpp-2   = "=0.1.156"
+encoding_rs   = "0.8"  # llama-cpp-2 の token_to_piece が要求する UTF-8 デコーダ
 
 [dev-dependencies]
 proptest = { workspace = true }
