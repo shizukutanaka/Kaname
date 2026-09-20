@@ -309,10 +309,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     let style_risks =
         evaluate_sender_style(&from_addr_only, &body_text, send_hour, has_financial).await;
 
-    let contacts: Vec<String> = Vec::new();
+    // 連絡先ベースの詐称検出 (Reply-To 偽装・タイポスクワット) に使う。
+    // Store 未接続の .eml 単体解析では空になり、そのシグナルはスキップされる。
+    let contacts = lookup_contacts(&current_account_id().await).await;
+    // Reply-To / Return-Path をヘッダ文字列として渡す (返信横取り検出)。
+    let reply_to = env.reply_to.first().map(|a| match &a.display_name {
+        Some(n) => format!("{n} <{}>", a.addr.as_string()),
+        None => a.addr.as_string(),
+    });
+    let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
     let req = kaname_bec::AssessmentRequest {
         from_header: &from,
-        return_path: None,
+        return_path: return_path.as_deref(),
         subject: &subject,
         body_text: &body_text,
         auth,
@@ -320,7 +328,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         our_domain: &our,
         known_contacts: &contacts,
         extracted_urls: &urls,
-        reply_to: None,
+        reply_to: reply_to.as_deref(),
         thread_context: None,
         past_thread_bodies: &[],
         dkim_signature_header: None,
@@ -576,10 +584,12 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let urls = extract_urls_from_text(&body_text);
         let link_domains: Vec<String> = urls.iter().filter_map(|u| url_host(u)).collect();
 
-        let contacts: Vec<String> = Vec::new();
+        let contacts = lookup_contacts(&current_account_id().await).await;
+        let reply_to = env.reply_to.first().map(|a| a.addr.as_string());
+        let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
         let req = kaname_bec::AssessmentRequest {
             from_header: &from,
-            return_path: None,
+            return_path: return_path.as_deref(),
             subject: &subject,
             body_text: &body_text,
             auth,
@@ -587,7 +597,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             our_domain: &our,
             known_contacts: &contacts,
             extracted_urls: &urls,
-            reply_to: None,
+            reply_to: reply_to.as_deref(),
             thread_context: None,
             past_thread_bodies: &[],
             dkim_signature_header: None,
@@ -1400,6 +1410,11 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             .and_then(|a| a.name.clone());
         let subject = it.subject.clone().unwrap_or_default();
         let preview = it.preview.clone().unwrap_or_default();
+        let reply_to = it
+            .reply_to
+            .as_ref()
+            .and_then(|v| v.first())
+            .map(|a| a.email.clone());
 
         // 一覧の時点では Authentication-Results ヘッダを取得していないため
         // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
@@ -1410,6 +1425,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             &subject,
             &preview,
             &our,
+            reply_to.as_deref(),
         )
         .await;
 
@@ -1485,13 +1501,14 @@ async fn assess_listing(
     subject: &str,
     preview: &str,
     our_domain: &str,
+    reply_to: Option<&str>,
 ) -> String {
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
         None => from_addr.to_string(),
     };
     let urls = extract_urls_from_text(preview);
-    let contacts: Vec<String> = Vec::new();
+    let contacts = lookup_contacts(account_id).await;
     // 送信者履歴を引く。無ければ None のままで、BEC は履歴シグナルを
     // 評価しない (履歴が無いことを「初回連絡」と断定しない)。
     let history = lookup_sender_history(account_id, from_addr).await;
@@ -1510,7 +1527,7 @@ async fn assess_listing(
         our_domain,
         known_contacts: &contacts,
         extracted_urls: &urls,
-        reply_to: None,
+        reply_to,
         thread_context: None,
         past_thread_bodies: &[],
         dkim_signature_header: None,
@@ -1758,6 +1775,20 @@ pub async fn history_mark_verified(email: String) -> Result<(), String> {
         .mark_sender_verified(&account_id, &email)
         .await
         .map_err(|e| format!("検証済みマークに失敗しました: {e}"))
+}
+
+/// Store から連絡先一覧を引き、BEC の `known_contacts` に渡す。
+///
+/// Store が開かれていない・失敗した場合は空リストを返す
+/// (連絡先ベースの詐称検出がスキップされるだけで、誤判定にはならない)。
+async fn lookup_contacts(account_id: &str) -> Vec<String> {
+    let Some(store) = store_slot().lock().await.clone() else {
+        return Vec::new();
+    };
+    store.list_contacts(account_id).await.unwrap_or_else(|e| {
+        tracing::warn!(error=%e, "連絡先一覧の取得に失敗");
+        Vec::new()
+    })
 }
 
 /// Store から送信者履歴を引き、BEC の `SenderHistory` に変換する。

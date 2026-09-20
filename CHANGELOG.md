@@ -19,6 +19,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **BEC 評価への連絡先・Reply-To・Return-Path 実データ配線** (検出ギャップ — 実装済み検出器が本番経路で一度も発火していなかった)
+  - `kaname-render`: `Envelope` に `reply_to`/`return_path` を追加し mail-parser から抽出
+  - `kaname-jmap`: `Email/get` の properties に `replyTo` を追加、`EmailListItem.reply_to` に格納
+  - `kaname-store`: `list_contacts` を新規追加 (kaname-bec が期待する `"表示名" <email>` / `email` 書式、5,000 件上限)
+  - `kaname-ui`: 全3評価経路 (analyze_raw_email / mail_scan_folder / assess_listing) で `known_contacts`・`reply_to`・`return_path` を実データに接続 — 従来は全て `Vec::new()`/`None` 固定
 - **BEC/DLP セキュリティクレートの台帳残件を修正** (D45残/D52/D54/D56/D58/D59 — 要セキュリティリード承認)
   - D45 残: kaname-bec のキーワード照合2系統 (本文のルート変更/チャネル移行/緊急・金銭マーカー群 + `contains_high_risk_topic` 件名照合) が語間ゼロ幅挿入で回避可能 → `normalize_for_matching_spaced` 併用の二重照合化。Cialdini 説得原理スコアも両正規化の max を採用
   - D52: `kaname-dlp::edm` の SHA-256 ハッシュが先頭8バイト (u64) に切り詰められ実効誕生日境界 ~2^32 → フル 256bit ダイジェスト保持に変更 (doc comment の 2^128 主張と実装が一致)。**永続化済みフィンガープリントとの互換性はなく、再登録が必要**

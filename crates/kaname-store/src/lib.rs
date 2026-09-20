@@ -551,6 +551,48 @@ impl Store {
         }
     }
 
+    /// 連絡先のアドレス一覧を返す。
+    ///
+    /// 各エントリは `"表示名" <email>` または `email` 形式
+    /// (kaname-bec の `AssessmentRequest.known_contacts` が期待する書式)。
+    /// 表示名の `"` は SQLite 出力時点で除外する (アドレス書式の破壊防止)。
+    /// 上限 5,000 件 — それを超える利用は out-of-band で扱う規模のため、
+    /// メモリを制限するため打ち切る。
+    pub async fn list_contacts(&self, account_id: &str) -> Result<Vec<String>, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT email, display_name FROM contacts \
+                 WHERE account_id = ?1 \
+                 ORDER BY message_count DESC LIMIT 5000;",
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![account_id], |row| {
+                let email: String = row.get(0)?;
+                let name: Option<String> = row.get(1)?;
+                Ok(match name {
+                    Some(n) if !n.is_empty() => {
+                        format!("{} <{}>", n.replace('"', ""), email)
+                    }
+                    _ => email,
+                })
+            })
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r.map_err(|e| StoreError::Db(e.to_string()))?);
+        }
+        Ok(out)
+    }
+
     /// 受信メールを記録して送信者プロフィールを更新する。
     ///
     /// - 初回受信: 新規レコードを INSERT
@@ -840,6 +882,53 @@ mod tests {
         assert_eq!(p.message_count, 1);
         assert!(!p.user_verified);
         assert!(p.topic_summary.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_contacts_は名称付きと裸のアドレスを返す() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .record_received("acct1", "alice@corp.com", Some("Alice"), None)
+            .await
+            .unwrap();
+        store
+            .record_received("acct1", "bob@corp.com", None, None)
+            .await
+            .unwrap();
+
+        let mut contacts = store.list_contacts("acct1").await.unwrap();
+        contacts.sort();
+        assert_eq!(contacts.len(), 2);
+        assert!(contacts.contains(&"Alice <alice@corp.com>".to_string()));
+        assert!(contacts.contains(&"bob@corp.com".to_string()));
+
+        // 他アカウントの連絡先は混ざらない。
+        let empty = store.list_contacts("acct2").await.unwrap();
+        assert!(empty.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_contacts_は表示名のクォートを除去する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .record_received("acct1", "evil@x.com", Some("Weird \"Name\""), None)
+            .await
+            .unwrap();
+
+        let contacts = store.list_contacts("acct1").await.unwrap();
+        assert_eq!(contacts, vec!["Weird Name <evil@x.com>".to_string()]);
     }
 
     #[tokio::test]

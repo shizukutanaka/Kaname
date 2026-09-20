@@ -260,6 +260,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D62 | **rustfmt ドリフト**: `cargo fmt --check` で 1,610 箇所の差分 (64ファイル)。コードベース全体が rustfmt 非準拠 | P2 | 機械的 `cargo fmt` で解消可能だが diff が巨大のため別 PR 化を推奨。sweep PR マージ後に実施 |
 | D63 | **CI テンプレートが未配置**: `ci-templates/` に ci.yml 等があるが `.github/workflows/` が存在せず CI が実際に動いていない (D7 と同一根因) | P0 (権限必要) | `cp ci-templates/*.yml .github/workflows/` ではなく、テンプレートのブランチ/ジョブ定義をレビューしてから配置する人間作業が必要 |
 | D64 | `cargo-nextest` 未インストール (Makefile/CLAUDE.md は nextest 前提だが環境に無し) | P3 | `cargo test` で代替可能だが CI 想定時は `cargo install cargo-nextest` が必要 |
+| D65 | ~~**BEC 評価への連絡先・Reply-To・Return-Path が未配線**: 全3経路で `known_contacts`=`Vec::new()`、`reply_to`/`return_path`=`None` 固定 — 実装済みの Reply-To 詐称・連絡先詐称検出が本番で一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | kaname-render の `Envelope` に `reply_to`/`return_path` を追加、kaname-jmap の `Email/get` に `replyTo` を要求、kaname-store に `list_contacts` を追加し kaname-ui の全経路で配線。nextest 439 pass 実測 |
+| D66 | **runbook が存在しない `kaname-cli` を参照**: `docs/runbook/bec-alert.md` の5箇所が未実装の CLI を前提にしている | P3 | 実在の手段 (sqlcipher → `audit_log`/`messages`/`contacts`) への書き換え、または kaname-cli 実装後の有効化が必要 |
 
 ### 完了判定の変更
 
