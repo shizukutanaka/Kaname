@@ -87,10 +87,14 @@ pub fn detect_misdirected_recipients(
         .iter()
         .filter_map(|r| extract_domain(r))
         .collect();
-    let all_internal_except_last = recipient_domains.len() > 1
-        && recipient_domains[..recipient_domains.len().saturating_sub(1)]
+    // 「社内のみのスレッドにフリーメール混入」を位置に依存せず検出する (D54):
+    // スレッドに社内宛先が1件以上存在し、社内・フリーメール以外の外部ドメインが
+    // 含まれない場合、そのスレッド内の全フリーメール宛先を疑い対象とする。
+    let internal_freemail_thread = recipient_domains.len() > 1
+        && recipient_domains.iter().any(|d| d == &our_domain_lower)
+        && recipient_domains
             .iter()
-            .all(|d| d == &our_domain_lower);
+            .all(|d| d == &our_domain_lower || FREE_MAIL_DOMAINS.contains(&d.as_str()));
 
     let mut suspicious = Vec::new();
 
@@ -120,7 +124,7 @@ pub fn detect_misdirected_recipients(
         }
 
         // 2. 社内のみのスレッドにフリーメールが混入
-        if all_internal_except_last && FREE_MAIL_DOMAINS.contains(&domain.as_str()) {
+        if internal_freemail_thread && FREE_MAIL_DOMAINS.contains(&domain.as_str()) {
             suspicious.push(SuspiciousRecipient {
                 address: recipient.clone(),
                 reason: MisdirectReason::FreeMailInInternalThread,
@@ -239,6 +243,55 @@ mod tests {
             result.iter().any(|r| r.address == "leak@gmail.com"
                 && matches!(r.reason, MisdirectReason::FreeMailInInternalThread)),
             "社内スレッドへのフリーメール混入が検出されるべき: {result:?}"
+        );
+    }
+
+    #[test]
+    fn free_mail_in_internal_thread_position_independent() {
+        // D54: フリーメール宛先が先頭・中間にあっても検出される
+        for recipients in [
+            vec!["leak@gmail.com", "alice@us.com", "bob@us.com"],
+            vec!["alice@us.com", "leak@gmail.com", "bob@us.com"],
+        ] {
+            let owned: Vec<String> = recipients.iter().map(|s| (*s).to_string()).collect();
+            let result = detect_misdirected_recipients(&owned, "us.com", &[]);
+            assert!(
+                result.iter().any(|r| r.address == "leak@gmail.com"),
+                "先頭/中間のフリーメールも検出されるべき: {owned:?} -> {result:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn multiple_free_mail_recipients_all_flagged() {
+        // D54: フリーメールが複数混入していても個々に検出される
+        let recipients = vec![
+            "alice@us.com".to_string(),
+            "x@gmail.com".to_string(),
+            "y@yahoo.com".to_string(),
+        ];
+        let result = detect_misdirected_recipients(&recipients, "us.com", &[]);
+        assert_eq!(
+            result.len(),
+            2,
+            "両フリーメール宛先が検出されるべき: {result:?}"
+        );
+    }
+
+    #[test]
+    fn freemail_with_other_external_domain_not_flagged() {
+        // 社内+フリーメール以外の外部ドメインが混在するスレッドでは誤検出しない
+        let recipients = vec![
+            "alice@us.com".to_string(),
+            "partner@acme-vendor.example".to_string(),
+            "x@gmail.com".to_string(),
+        ];
+        let result = detect_misdirected_recipients(&recipients, "us.com", &[]);
+        assert!(
+            result
+                .iter()
+                .all(|r| !matches!(r.reason, MisdirectReason::FreeMailInInternalThread)),
+            "他の外部ドメインが混在するスレッドでは FreeMailInInternalThread は付かないべき: {result:?}"
         );
     }
 

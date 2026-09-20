@@ -596,6 +596,11 @@ impl BecDetector {
         // 2026 年の実キャンペーンで観測された手法 (件名の encoded-word に
         // soft hyphen を散布) への対策。
         let b = kaname_memory_guard::normalize_for_matching(body_slice);
+        // ゼロ幅文字を語間に挿入する回避 (wire\u{200B}transfer → 削除正規化では
+        // "wiretransfer" になり複数単語句の照合が壊れる) への対策として、
+        // ゼロ幅をスペース化する正規化でも併せて照合する (D45)。
+        let b_spaced = kaname_memory_guard::normalize_for_matching_spaced(body_slice);
+        let hit = |m: &&str| b.contains(m) || b_spaced.contains(m);
 
         // 緊急性 + 金銭の組み合わせ (典型的な BEC)。
         let urgency_markers = ["urgent", "asap", "至急", "本日中", "今すぐ", "immediately"];
@@ -609,8 +614,8 @@ impl BecDetector {
             "請求書",
         ];
 
-        let has_urgency = urgency_markers.iter().any(|m| b.contains(m));
-        let has_money = money_markers.iter().any(|m| b.contains(m));
+        let has_urgency = urgency_markers.iter().any(&hit);
+        let has_money = money_markers.iter().any(&hit);
 
         if has_urgency && has_money {
             signals.push(Signal {
@@ -632,7 +637,7 @@ impl BecDetector {
             "change of bank",
             "振込先が変更",
         ];
-        if route_change.iter().any(|m| b.contains(m)) {
+        if route_change.iter().any(&hit) {
             signals.push(Signal {
                 family: SignalFamily::Content,
                 contribution: 0.30,
@@ -644,7 +649,7 @@ impl BecDetector {
         // Cialdini 説得原理スコアリング (MDPI 2025 研究に基づく)
         // AI 生成フィッシングは文法的に正確なため、説得心理パターンで検出する。
         // 「権威」「希少性」「一貫性」「社会的証明」が高密度で出現 → BEC の典型。
-        let cialdini_score = calculate_cialdini_score(&b);
+        let cialdini_score = calculate_cialdini_score(&b).max(calculate_cialdini_score(&b_spaced));
         if cialdini_score >= 2 {
             let contribution = (0.10 * cialdini_score as f32).min(0.40);
             signals.push(Signal {
@@ -691,7 +696,7 @@ impl BecDetector {
             "smsで送って",
             "テキストで送って",
         ];
-        if channel_migration_phrases.iter().any(|m| b.contains(m)) {
+        if channel_migration_phrases.iter().any(&hit) {
             signals.push(Signal {
                 family: SignalFamily::Content,
                 contribution: 0.35,
@@ -1278,9 +1283,12 @@ fn levenshtein1(a: &str, b: &str) -> bool {
 /// | Domain + Thread(hijack) | +0.15 | ドメイン偽装 + スレッド乗っ取りの二重攻撃 |
 fn apply_cross_signal_escalation(signals: &mut Vec<Signal>) {
     // 先に全てのフラグを収集してからシグナルを追加 (借用の競合を避ける)
+    // 「認証問題あり」を意味するのは正の寄与 (加点) を持つシグナルのみ。
+    // ARC 成功による減点シグナル (contribution < 0) は正当な転送を示す緩和シグナル
+    // なので複合攻撃の発火条件に含めない (D59)。
     let has_auth = signals
         .iter()
-        .any(|s| s.family == SignalFamily::Authentication);
+        .any(|s| s.family == SignalFamily::Authentication && s.contribution > 0.0);
     let has_domain = signals.iter().any(|s| s.family == SignalFamily::Domain);
     let has_content = signals.iter().any(|s| s.family == SignalFamily::Content);
     let has_first_contact = signals.iter().any(|s| s.label.contains("初回受信"));
@@ -1370,7 +1378,11 @@ fn contains_high_risk_topic(subject: &str) -> bool {
     // `to_ascii_lowercase()` はこれらも全角ラテンも処理しないため、
     // 「至\u{00AD}急」のような表記でキーワード検出を完全に回避できていた。
     let lower = kaname_memory_guard::normalize_for_matching(subject);
-    HIGH_RISK_KEYWORDS.iter().any(|kw| lower.contains(kw))
+    // 語間のゼロ幅挿入 ("password\u{200B}reset") への対策としてスペース化正規化でも照合 (D45)。
+    let lower_spaced = kaname_memory_guard::normalize_for_matching_spaced(subject);
+    HIGH_RISK_KEYWORDS
+        .iter()
+        .any(|kw| lower.contains(kw) || lower_spaced.contains(kw))
 }
 
 /// 上位ブランドに対してはレーベンシュタイン距離 2 まで検出 (複数文字タイポスクワット対策)。
@@ -2666,6 +2678,102 @@ mod tests {
             a.signals.iter().any(|s| s.label.contains("AI 意味解析")),
             "通常本文では LLM 解析シグナルが出るべき: {:?}",
             a.signals
+        );
+    }
+
+    // ── D45: ゼロ幅文字を語間に挿入する回避の回帰テスト ──────────────────
+
+    #[test]
+    fn high_risk_topic_detected_despite_zero_width_separator() {
+        // "password reset" の語間に U+200B を挿入する回避は
+        // 削除正規化 ("passwordreset") で単語句に潰れて見逃されていた。
+        assert!(contains_high_risk_topic("password\u{200B}reset"));
+        assert!(contains_high_risk_topic("wire\u{200B}transfer"));
+        assert!(contains_high_risk_topic("振\u{200B}込"));
+    }
+
+    #[test]
+    fn route_change_detected_despite_zero_width_separator() {
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "normal".into(),
+        }));
+        let contacts: Vec<String> = vec![];
+        let a = det
+            .assess(plain_req(
+                "重要な連絡です。please don't\u{200B}call for this matter.",
+                &contacts,
+            ))
+            .expect("assess failed");
+        assert!(
+            a.signals
+                .iter()
+                .any(|s| s.label.contains("連絡経路の強制変更")),
+            "語間ゼロ幅挿入の経路変更フレーズが検出されるべき: {:?}",
+            a.signals
+        );
+    }
+
+    // ── D59: ARC 減点シグナルによる複合ボーナス誤発火の回帰テスト ──────────
+
+    #[test]
+    fn negative_auth_signal_does_not_trigger_cluster_bonus() {
+        // ARC 検証成功などのリスク緩和シグナル (contribution < 0) のみの場合、
+        // 「認証問題あり」を前提とする複合攻撃ボーナスは発火してはならない。
+        let mut signals = vec![
+            Signal {
+                family: SignalFamily::Authentication,
+                contribution: -0.10,
+                label: "ARC 検証成功".to_string(),
+                rationale: String::new(),
+            },
+            Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.10,
+                label: "類似ドメイン".to_string(),
+                rationale: String::new(),
+            },
+            Signal {
+                family: SignalFamily::Content,
+                contribution: 0.10,
+                label: "高リスク内容".to_string(),
+                rationale: String::new(),
+            },
+        ];
+        apply_cross_signal_escalation(&mut signals);
+        assert!(
+            !signals.iter().any(|s| s.label.contains("複合シグナル")),
+            "緩和シグナルのみで複合ボーナスは発火しないべき: {:?}",
+            signals
+        );
+    }
+
+    #[test]
+    fn positive_auth_signal_still_triggers_cluster_bonus() {
+        let mut signals = vec![
+            Signal {
+                family: SignalFamily::Authentication,
+                contribution: 0.10,
+                label: "SPF 失敗".to_string(),
+                rationale: String::new(),
+            },
+            Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.10,
+                label: "類似ドメイン".to_string(),
+                rationale: String::new(),
+            },
+            Signal {
+                family: SignalFamily::Content,
+                contribution: 0.10,
+                label: "高リスク内容".to_string(),
+                rationale: String::new(),
+            },
+        ];
+        apply_cross_signal_escalation(&mut signals);
+        assert!(
+            signals.iter().any(|s| s.label.contains("複合シグナル")),
+            "真の認証問題では複合ボーナスが発火すべき"
         );
     }
 }

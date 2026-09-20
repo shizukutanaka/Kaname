@@ -96,9 +96,15 @@ pub fn analyze_dkim_header(header_value: &str) -> DkimHeaderAnalysis {
 ///
 /// 同一 `(domain, signature_prefix)` を短時間に複数回受信したら警告する。
 /// インメモリ実装 — 本番では Redis 等で永続化推奨。
+/// 正常な DKIM 署名もメールごとに異なるため、上限なしでは通常受信だけで
+/// プロセス寿命分メモリが増殖する (D58)。`MAX_ENTRIES` を超えたら
+/// 最古のエントリから FIFO で退避する。
+const MAX_ENTRIES: usize = 10_000;
+
 #[derive(Debug, Default)]
 pub struct DkimReplayTracker {
     seen: std::collections::HashMap<(String, String), u32>,
+    order: std::collections::VecDeque<(String, String)>,
 }
 
 impl DkimReplayTracker {
@@ -115,9 +121,18 @@ impl DkimReplayTracker {
             return 1;
         };
         let key = (d.clone(), b.clone());
+        if !self.seen.contains_key(&key) {
+            self.order.push_back(key.clone());
+        }
         let count = self.seen.entry(key).or_insert(0);
         *count = count.saturating_add(1);
-        *count
+        let result = *count;
+        while self.seen.len() > MAX_ENTRIES {
+            if let Some(oldest) = self.order.pop_front() {
+                self.seen.remove(&oldest);
+            }
+        }
+        result
     }
 
     /// 観測数 (テスト用)。
@@ -178,6 +193,21 @@ mod tests {
         assert_eq!(t.observe(&a), 1, "初回観測");
         assert_eq!(t.observe(&a), 2, "2 回目 → リプレイ兆候");
         assert_eq!(t.observe(&a), 3, "3 回目");
+    }
+
+    #[test]
+    fn replay_tracker_evicts_oldest_beyond_capacity() {
+        // D58: 上限を超えたら最古エントリから退避し、メモリが無制限に増えない。
+        let mut t = DkimReplayTracker::new();
+        for i in 0..=MAX_ENTRIES {
+            let h = format!("d=example{i}.com; b=SIG{i}");
+            let a = analyze_dkim_header(&h);
+            t.observe(&a);
+        }
+        assert_eq!(t.len(), MAX_ENTRIES, "上限を超えた分は退避されるべき");
+        // 最古のエントリ (i=0) は退避済み → 再観測はカウント1に戻る
+        let a0 = analyze_dkim_header("d=example0.com; b=SIG0");
+        assert_eq!(t.observe(&a0), 1, "退避済みエントリは新規扱い");
     }
 
     #[test]

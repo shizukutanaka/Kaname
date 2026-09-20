@@ -1076,6 +1076,12 @@ fn detect_medical_data(text: &str) -> bool {
 // ============================================================================
 // Default rule set (Starter tier)
 // ============================================================================
+//
+// D57: 既定で有効なのはこの5ルールのみ。実装済み12分類器のうち
+// JpMyNumber / CreditCardPan / ConfidentialMarker / SourceCode の4つが
+// 既定で使用される。残り8つ (JpCorporateNumber, Iban, SwiftBic, UsSsn,
+// IpAddress, AttorneyClientPrivilege, DealCodename, MedicalData) は
+// カスタムルール読み込み (from_db) 未実装のため現在有効化する経路がない。
 
 fn default_rules() -> Vec<Rule> {
     vec![
