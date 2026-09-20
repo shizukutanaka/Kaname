@@ -24,6 +24,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `kaname-jmap`: `Email/get` の properties に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を追加
   - `kaname-store`: `NewMessage`/`messages` テーブルに `message_id`/`thread_id` を永続化し、`list_thread_messages`/`list_messages_by_message_ids` を新規追加
   - `kaname-ui`: 全3評価経路 (analyze_raw_email / mail_scan_folder / assess_listing) で `thread_context`・`past_thread_bodies`・`dkim_signature_header` を実データに接続 — 従来は全て `None`/`&[]` 固定
+  - 一覧経路でも `header:Authentication-Results:asText` を取得し SPF/DKIM/DMARC を実値評価 (kaname-render に `parse_auth_results_str` を公開) — 従来は一覧では全て `None` で認証系シグナルが不在だった
 - **BEC 評価への連絡先・Reply-To・Return-Path 実データ配線** (検出ギャップ — 実装済み検出器が本番経路で一度も発火していなかった)
   - `kaname-render`: `Envelope` に `reply_to`/`return_path` を追加し mail-parser から抽出
   - `kaname-jmap`: `Email/get` の properties に `replyTo` を追加、`EmailListItem.reply_to` に格納

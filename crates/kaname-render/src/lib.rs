@@ -353,6 +353,19 @@ fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
         })
         .unwrap_or_default();
 
+    parse_auth_results_str(&header_text)
+}
+
+/// Authentication-Results ヘッダーの**値**をパースする。
+///
+/// `.eml` 全文がある経路は `parse`/`Envelope` 経由で内部から呼ばれるが、
+/// JMAP 一覧のようにヘッダ文字列だけが手元にある経路 (kaname-ui の
+/// `header:Authentication-Results:asText` 取得) でも同じ解釈を再利用するため
+/// 公開する。解釈ルールは RFC 8601 — 機構結果として認めるのは各部の
+/// `mechanism=result` トークンのみで、プロパティ値内の擬似トークンは
+/// 機構結果と誤読しない (gap-analysis D18)。
+#[must_use]
+pub fn parse_auth_results_str(header_text: &str) -> AuthResultsHeader {
     // authserv-id は最初の `;` の前にある先頭トークン (RFC 8601 §2.2)。
     // `=` を含まない先頭トークンがそれに相当する。
     let authserv_id = header_text
@@ -362,9 +375,9 @@ fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
         .filter(|tok| !tok.contains('='))
         .map(|tok| tok.to_string());
 
-    let spf = extract_auth_result(&header_text, "spf");
-    let dkim = extract_auth_result(&header_text, "dkim");
-    let dmarc = extract_auth_result(&header_text, "dmarc");
+    let spf = extract_auth_result(header_text, "spf");
+    let dkim = extract_auth_result(header_text, "dkim");
+    let dmarc = extract_auth_result(header_text, "dmarc");
 
     AuthResultsHeader {
         spf,
@@ -848,6 +861,23 @@ mod tests {
             env.auth_results.authserv_id.as_deref(),
             Some("mx.example.com")
         );
+    }
+
+    /// `parse_auth_results_str` は JMAP 一覧経路 (`header:Authentication-Results:asText`)
+    /// が使う公開入口。`Envelope` 経由と同一の解釈を返すことを固定する。
+    #[test]
+    fn parse_auth_results_str_はヘッダ値から同じ解釈を返す() {
+        let h = parse_auth_results_str(
+            "mx.example.com; spf=softfail smtp.mailfrom=x.test; dkim=pass header.d=x.test; dmarc=fail header.from=x.test",
+        );
+        assert_eq!(h.spf, AuthResult::SoftFail);
+        assert_eq!(h.dkim, AuthResult::Pass);
+        assert_eq!(h.dmarc, AuthResult::Fail);
+        assert_eq!(h.authserv_id.as_deref(), Some("mx.example.com"));
+
+        let empty = parse_auth_results_str("");
+        assert_eq!(empty.spf, AuthResult::None);
+        assert_eq!(empty.authserv_id, None);
     }
 
     #[test]
