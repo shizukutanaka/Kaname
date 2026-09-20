@@ -850,10 +850,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn phishing_score_in_range() -> Result<(), String> {
-        let r = ai_detect_phishing("e1".into()).await.map_err(|e| e.to_string())?;
-        assert!((0.0f32..=1.0).contains(&r.score));
-        Ok(())
+    async fn phishing_未接続時はエラーを返す() {
+        // 偽データ経路削除後の正直な契約: 未配線の ai_detect_phishing は
+        // パニックせず Err を返す (I5/I6: 未接続を silent にしない)。
+        assert!(ai_detect_phishing("e1".into()).await.is_err());
     }
 
     #[tokio::test]

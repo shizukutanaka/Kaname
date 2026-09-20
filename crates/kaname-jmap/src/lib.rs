@@ -1203,7 +1203,7 @@ mod tests {
     }
 
     #[test]
-    fn session_username_省略時はNone() {
+    fn session_username_省略時はnone() {
         // RFC 8620 では必須だが、準拠しないサーバが省略しても失敗させない (D44)
         let s: Session = serde_json::from_value(session_json(None))
             .expect("username なしセッションもパースできるべき");
