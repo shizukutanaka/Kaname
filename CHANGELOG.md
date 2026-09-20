@@ -49,6 +49,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - fix(scripts): release.sh の「CI が自動リリース」主張を手動配布指示に訂正 (D7 で CI 不在) + `--bench '*'` を `--bench core_bench` に修正 (glob 非対応でベンチが走らなかった) (D119)
 - fix(kaname-ui): Store 未接続時に監査イベントを無言破棄していたのを warn 化 — DLP_BLOCK 等の証跡喪失を防止 (D120)
 - fix(ci-templates): ci.yml の `--bench '*'` を `--bench core_bench` に修正 (D119 と同型の glob 無効バグ — ワークフロー復活時にベンチが走らなかった)
+- docs: D2 (ローカル LLM 推論) を5フェーズの実装計画に解体 — `docs/design-d2-local-llm.md` (現行コードの構造に沿った Phase 別タスク・完了条件・リスク)
 - docs: maturity.md の出荷クレート数を cargo metadata 実測で訂正 (19/23 → 17/22、非出荷5件に kaname-ai を追記) / gap-analysis の D20/D37 に「現在の環境では cargo が実行可能」の追記
   - fix(kaname-ui): 詳細解析・フォルダ一括解析にも送信者履歴を供給 — `sender_history` が `None` 固定で一覧と詳細の BEC 判定が食い違っていた (D100)
   - fix(kaname-dlp,kaname-ui): 受信側 DLP に既定ルール3件を追加 (構造的に空だった) + 誤配検出へ既知宛先ドメインを連絡先履歴から供給 (D104) — kaname-dlp 変更のため security-lead 承認要
