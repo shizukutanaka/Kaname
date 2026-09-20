@@ -229,6 +229,63 @@ fn mask_jp_phone_numbers(s: &str) -> String {
 }
 
 // ============================================================================
+// SanitizingWriter — fmt::layer の出力を PII マスクしてから書き出す
+// ============================================================================
+
+/// `PrivacyLayer` の「検知しても元イベントはそのまま出力される」盲点を
+/// 塞ぐため、`fmt::layer` の Writer 側で出力バイト列そのものを
+/// `PrivacySanitizer` に通してから書き出す (docs/gap-analysis.md D28 の
+/// 残作業 — 当時「Filter::event_enabled への再設計が要る」と記録されて
+/// いたが、`event_enabled` は false を返しても他レイヤーの `on_event`
+/// は止められないため、抑制は Writer 側が確実)。
+///
+/// `write()` 呼び出しは通常イベント1回分だが分割されうるため、
+/// UTF-8 境界をまたぐマーカーは捉えきれない可能性がある (lossy 変換)。
+/// 値パターン (メール/Bearer/電話/カード番号) が対象で、フィールド名
+/// ベースの検知は `PrivacyLayer` の警告が担い続ける。
+pub struct SanitizingWriter<W> {
+    inner: W,
+}
+
+impl<W> SanitizingWriter<W> {
+    /// 任意の writer を包む。テストでは `Vec<u8>` を差して出力を検査する。
+    pub fn new(inner: W) -> Self {
+        Self { inner }
+    }
+
+    /// 内側の writer を取り出す (主にテスト用)。
+    pub fn into_inner(self) -> W {
+        self.inner
+    }
+}
+
+impl<W: std::io::Write> std::io::Write for SanitizingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let masked = PrivacySanitizer::sanitize(&String::from_utf8_lossy(buf));
+        self.inner.write_all(masked.as_bytes())?;
+        // 書き込んだのはマスク後バイト列だが、契約上は入力の消費量を返す
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// `fmt::layer().with_writer(...)` に渡す `MakeWriter`。
+/// fmt が書く全イベントを `PrivacySanitizer` に通してから stdout に流す。
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SanitizingStdout;
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for SanitizingStdout {
+    type Writer = SanitizingWriter<std::io::Stdout>;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        SanitizingWriter::new(std::io::stdout())
+    }
+}
+
+// ============================================================================
 // PrivacyLayer — tracing-subscriber Layer で PII 漏洩を検知
 // ============================================================================
 
@@ -242,14 +299,15 @@ fn mask_jp_phone_numbers(s: &str) -> String {
 /// - 文字列フィールドを `PrivacySanitizer::sanitize()` / フィールド名の
 ///   許可リストで検査する
 /// - PII を検出した場合: `target: "kaname::privacy"` で警告ログを追加発行する
-/// - **元のイベント自体は他の Layer (`fmt::layer()` 等) にもそのまま渡り、
-///   PII を含んだまま出力される。** `Layer::on_event` には他レイヤーへの
-///   伝播を止める権限が無く、それを行うには `Filter::event_enabled` で
-///   イベント構築前に判定する設計へ変更する必要がある (未実装)。
+/// - 元のイベントの値パターンレベルのマスクは `SanitizingWriter`
+///   (`fmt::layer` の Writer) が担う (D28 残作業の実装済み)。
+///   `Layer::on_event`/`event_enabled` には他レイヤーへの伝播を止める
+///   権限が無いため、抑制は Writer 側で行うのが確実。
 ///   このコメント自体、以前は「イベントをドロップし代替ログを出力する」
 ///   と誤って書かれており、`PrivacyLayer` がどの subscriber にも登録
 ///   されていなかったことと合わせて**多重に空文だった**
-///   (docs/gap-analysis.md D28)。まずは検知だけでも動かす。
+///   (docs/gap-analysis.md D28)。フィールド名ベースの検知は引き続き
+///   ここが担い (Writer は値パターンしか見えない)、警告を発行する。
 pub struct PrivacyLayer;
 
 /// PII を含む可能性のあるフィールドを収集するビジター。
@@ -372,6 +430,33 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sanitizing_writer_masks_pii_in_output_bytes() {
+        // D28 残作業の回帰テスト: fmt が書く出力そのものに
+        // メールアドレスが平文で残らないことを固定する
+        let mut w = SanitizingWriter::new(Vec::<u8>::new());
+        use std::io::Write as _;
+        // tests モジュールは unwrap/expect deny の対象 (他テストも同様に避ける)
+        if let Err(e) = w
+            .write_all(b"INFO  login ok user=alice@example.com token=Bearer abc123")
+        {
+            panic!("write_all 失敗: {e}");
+        }
+        let out = match String::from_utf8(w.into_inner()) {
+            Ok(s) => s,
+            Err(e) => panic!("出力が UTF-8 でない: {e}"),
+        };
+        assert!(!out.contains("alice@"), "メールアドレスが平文で残る: {out}");
+        assert!(
+            !out.contains("Bearer abc123"),
+            "トークンが平文で残る: {out}"
+        );
+        assert!(
+            out.contains("login ok"),
+            "非 PII 部分は保持されるべき: {out}"
+        );
+    }
 
     #[test]
     fn privacy_email_address_masking() {

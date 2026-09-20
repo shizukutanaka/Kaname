@@ -25,7 +25,11 @@ pub fn run() {
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("kaname=debug,warn"));
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer()
+                // 出力バイト列を PrivacySanitizer に通す (D28 残作業 —
+                // PrivacyLayer は検知のみで元イベントは止められないため、
+                // 抑制は fmt の Writer 側で行う)
+                .with_writer(kaname_observability::SanitizingStdout))
         .with(kaname_observability::PrivacyLayer)
         .init();
     tracing::info!(version = env!("CARGO_PKG_VERSION"), "Kaname starting");
