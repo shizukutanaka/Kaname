@@ -72,17 +72,6 @@ pub async fn mail_get_summary() -> Result<MailSummary, String> {
     Ok(MailSummary { unread: 0, bec_alerts: 0, total: 0 })
 }
 
-#[instrument(skip(_mailbox))]
-/// 受信箱のメール一覧を返す。
-///
-/// # サーバ未接続のため常に空
-///
-/// 従来はモックデータ (`mock_emails()`) を返しており、**実在しないメールを
-/// 受信箱に表示していた**。JMAP 受信が未配線 (D10) である以上、
-/// 表示できる本物のメールは存在しない。
-///
-/// 偽のメールを並べるより空を返す方が正確であり、利用者を欺かない。
-
 /// サニタイズ済み本文 (iframe 描画用)。
 ///
 /// フロントエンド (`src/ui/Inbox.tsx` の `BodyDto`) が期待する形。
@@ -350,6 +339,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     };
     let srcdoc = kaname_render::to_srcdoc(&sanitized, Some(&body_text));
 
+    // 構造体にムーブする前に、from/subject を使う評価を先に済ませる。
+    // 本文の構造リスクに加え、リンク先の評判判定も併記する。
+    let mut render_risks = analyze_body_risks(&body_text);
+    render_risks.extend(evaluate_link_risks(&urls));
+    render_risks.extend(evaluate_saas_links(&urls, &from));
+    render_risks.extend(style_risks);
+    let dlp_findings = scan_dlp_inbound(&subject, &body_text, &our);
+
     Ok(ImportedEmail {
         from,
         subject,
@@ -363,16 +360,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             sandbox: srcdoc.sandbox.to_string(),
             csp:     srcdoc.csp.to_string(),
             is_mls:  false,
-            render_risks: {
-                // 本文の構造リスクに加え、リンク先の評判判定も併記する。
-                let mut risks = analyze_body_risks(&body_text);
-                risks.extend(evaluate_link_risks(&urls));
-                risks.extend(evaluate_saas_links(&urls, &from));
-                risks.extend(style_risks);
-                risks
-            },
+            render_risks,
         },
-        dlp_findings: scan_dlp_inbound(&subject, &body_text, &our),
+        dlp_findings,
         oobv_level: match oobv_level {
             kaname_oobv::RecommendationLevel::None     => "none",
             kaname_oobv::RecommendationLevel::Optional => "optional",
@@ -655,7 +645,7 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
             continue;
         }
         // 末尾に付きがちな句読点・括弧を落とす
-        let trimmed = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ')' | ';' | ']' | '!' | '?'));
+        let trimmed = token.trim_end_matches(['.', ',', ')', ';', ']', '!', '?']);
         if trimmed.len() < 12 {
             // "http://a.b" 未満は URL として意味を成さない
             continue;
@@ -860,10 +850,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn phishing_score_in_range() -> Result<(), String> {
-        let r = ai_detect_phishing("e1".into()).await.map_err(|e| e.to_string())?;
-        assert!((0.0f32..=1.0).contains(&r.score));
-        Ok(())
+    async fn phishing_未接続時はエラーを返す() {
+        // 偽データ経路削除後の正直な契約: 未配線の ai_detect_phishing は
+        // パニックせず Err を返す (I5/I6: 未接続を silent にしない)。
+        assert!(ai_detect_phishing("e1".into()).await.is_err());
     }
 
     #[tokio::test]
@@ -1352,7 +1342,10 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             is_read:     it.is_read(),
             is_starred:  it.is_starred(),
             bec_verdict: verdict,
-            is_mls:      it.is_mls_envelope(),
+            // EmailListItem は一覧用途のため body_structure を持たず、
+            // MLS かどうかはここでは判別できない (is_mls_envelope は BodyPart
+            // のメソッド)。判別不能を真と偽らず false にする。
+            is_mls:      false,
             triage,
         });
     }
@@ -1410,6 +1403,32 @@ async fn assess_listing(
             "UNKNOWN".to_string()
         }
     }
+}
+
+/// メールを既読にする。
+///
+/// `src-tauri/main.rs` の同名コマンドから呼ばれる。JMAP サーバへ
+/// `Email/set` で `$seen` キーワードを立てる。ローカル Store の `is_read`
+/// は次回 `mail_fetch` の `ON CONFLICT` 更新で追随する。
+pub async fn mail_mark_read(ids: Vec<String>) -> Result<(), String> {
+    let client = jmap_client().await?;
+    let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+    client
+        .mark_read(&refs)
+        .await
+        .map_err(|e| format!("既読化に失敗しました: {e}"))
+}
+
+/// メールをゴミ箱へ移動する。
+///
+/// `src-tauri/main.rs` の同名コマンドから呼ばれる。JMAP の
+/// `role == "trash"` メールボックスへ移す。
+pub async fn mail_trash(email_id: String) -> Result<(), String> {
+    let client = jmap_client().await?;
+    client
+        .trash(&email_id)
+        .await
+        .map_err(|e| format!("削除に失敗しました: {e}"))
 }
 
 /// メールを送信する。

@@ -16,7 +16,7 @@ opt-level = 3
 [alias]
 t   = "nextest run --workspace"
 c   = "clippy --workspace --all-targets -- -D warnings"
-fmt = "fmt --all"
+
 doc = "doc --workspace --no-deps --open"
 
 [net]

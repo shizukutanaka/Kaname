@@ -84,6 +84,7 @@ fn detect_pdf_metadata(bytes: &[u8]) -> Vec<MetadataRisk> {
 /// PDF の文字列リテラルは 2 形式ある:
 /// - literal string: `(Alice)`
 /// - hex string:     `<416c696365>` (= "Alice")
+///
 /// 両方に対応する (以前は `(...)` のみ対応し、hex string を握り潰していたため
 /// 作成者名等が hex エンコードされた PDF でメタデータ検出が漏れていた)。
 fn find_pdf_field(text: &str, field: &str) -> Option<String> {

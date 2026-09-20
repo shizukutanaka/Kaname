@@ -624,7 +624,7 @@ impl ContactIntelligenceEngine {
             *hour_freq.entry(h).or_insert(0) += 1;
         }
         let mut hours: Vec<(u8, u32)> = hour_freq.into_iter().collect();
-        hours.sort_by(|a, b| b.1.cmp(&a.1));
+        hours.sort_by_key(|a| std::cmp::Reverse(a.1));
         let typical_hours: Vec<u8> = hours.iter().take(3).map(|(h, _)| *h).collect();
 
         // 信頼レベル

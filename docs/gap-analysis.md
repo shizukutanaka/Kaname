@@ -230,13 +230,47 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 |---|---|---|---|
 | U1 | Paper Trail (HEY風) フィルター機能 | `src/ui/KanameDesign.tsx` の `"paper_trail"` view state | 修正済み。フィルタロジック自体は実装済みだったが、対応するナビゲーション項目 (`navItems`) が存在せず永久に到達不能だった。ナビ項目・型定義・ラベルマップを追加して結線 |
 
+## 2026-09-20 cargo 初実走監査 (macOS 環境 — D20 一部解除を確認)
+
+組織ポリシー上の crates.io 遮断 (D20) は本環境では適用されておらず、
+`cargo +stable check`/`test`/`clippy` が実走可能だった。初実走で発覚した
+潜伏問題とその処置を記録する (全て PR #161/#162/#163 に反映済み)。
+
+### 発見・修正済み
+
+| # | 内容 | 状態 |
+|---|---|---|
+| C1 | **main が `cargo check` でコンパイル不能** (kaname-dlp E0597 ×2、kaname-ui 残骸 `#[instrument]`/存在しない `is_mls_envelope`/E0382/`mail_mark_read`/`mail_trash` 未定義) — 検証不能環境 (D20) で蓄積 | PR #161 で修正済み。検証環境不在の間に入った4コミットが全てコンパイル非検証だった |
+| C2 | **kaname-saas-guard 偽装ドメイン素通り** (セキュリティ退行): `identify_platform` のドット境界厳格化後、`evaluate()` が `notdocusign.com`/`mail.google.com.evil.com` で早期 `None` 返却し警告ゼロ。`find_impersonated_platform` で検査継続するよう復旧 | PR #161 |
+| C3 | **Cargo.lock 破損**: ワークスペース crate version が 0.5.0 のまま (マニフェスト 0.7.1)、`is-wsl` が version/checksum 不一致の手編集痕跡 | cargo 再生成で修復 (PR #161) |
+| C4 | **rust-toolchain.toml の 1.94.1 ピンが本 macOS 環境で rustup 解決不能** (component rename 衝突)。`+stable` (1.98.1) で検証 | 環境依存事項として記録。toolchain ファイル自体は変更せず |
+| C5 | `.cargo/config.toml` の `fmt` エイリアスが自己再帰 (`fmt -> fmt`) で `cargo fmt` 起動不能 | PR #161 で削除 |
+| C6 | clippy --all-targets 未実走による警告エラー多数 (map_unwrap_or/sort_by/repeat_n/doc_lazy_continuation/unused_async_trait_impl/テストモジュールの unwrap_used) | PR #161 で全解消 |
+| C7 | テスト失敗2件: kaname-ui `phishing_score_in_range` (削除済み偽データ前提) → 未接続 Err 契約テストに置換; jmap の non-snake-case 関数名 → リネーム | PR #161 |
+| C8 | **クローズ済み未マージ PR 2件の取りこぼし**: e2e-rescue (D8 解消の IPC モック E2E + a11y 修正、実走グリーン) と rescue-sweep (E7/E8/D48/E10 のデッドコード削除 ~5,200行) が main に未反映のまま放置 | リベース・残留エラー修正のうえ PR #162/#163 として再提出 |
+
+### 新規・未解決
+
+| # | 内容 | 優先度 | 備考 |
+|---|---|---|---|
+| D62 | **rustfmt ドリフト**: `cargo fmt --check` で 1,610 箇所の差分 (64ファイル)。コードベース全体が rustfmt 非準拠 | P2 | 機械的 `cargo fmt` で解消可能だが diff が巨大のため別 PR 化を推奨。sweep PR マージ後に実施 |
+| D63 | **CI テンプレートが未配置**: `ci-templates/` に ci.yml 等があるが `.github/workflows/` が存在せず CI が実際に動いていない (D7 と同一根因) | P0 (権限必要) | `cp ci-templates/*.yml .github/workflows/` ではなく、テンプレートのブランチ/ジョブ定義をレビューしてから配置する人間作業が必要 |
+| D64 | `cargo-nextest` 未インストール (Makefile/CLAUDE.md は nextest 前提だが環境に無し) | P3 | `cargo test` で代替可能だが CI 想定時は `cargo install cargo-nextest` が必要 |
+
+### 完了判定の変更
+
+初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。
+テスト 1,290 合格 / clippy 0 エラー / 静的検査 8/8 / TS 系全グリーン。
+残る P0 は D63 (CI 未配置 — 人間権限) のみ。
+
 ## Opus/Sonnet への申し送り事項
 
-- D1〜D6 (モック/スタブ) は外部クレート統合が必須で、現在のネットワーク制限
-  (crates.io への egress が組織ポリシーで 403 拒否) がある環境では着手不可能。
-  ネットワーク制限のないセッションでの実装が前提。
+- D1〜D6 (モック/スタブ) は外部クレート統合が必須。crates.io 遮断は環境依存
+  (2026-09-20 確認: 遮断の無い macOS 環境が存在する)。実走可能な環境で着手する。
 - D7 (CI) は権限の問題であり、コード変更では解決しない。人間の管理者操作が必要。
-- D8 (E2E検証) はネットワーク制限が解ければ即座に検証可能。
+  (ci-templates → .github/workflows 配置、D63 参照)
+- D8 (E2E検証) は **解消済み** (PR #163): Tauri IPC モック注入で mockserver/
+  Tauri バックエンド不要の実走に切替、62 pass / 1 skip を実測済み。
 - E1〜E6・U1 は全て解決済み。再スキャンは不要だが、同種の
   「重複ファイル」「未参照コード」「非推奨API」「unwrap起因のパニック」は
   他のクレートにも潜んでいる可能性があるため、次回監査時のチェック観点として残す。

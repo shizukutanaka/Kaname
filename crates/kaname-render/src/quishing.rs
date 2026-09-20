@@ -367,10 +367,9 @@ fn extract_domain(url: &str) -> Option<String> {
     // スキームのみ http/https を許可
     let after_scheme = if let Some(rest) = url.strip_prefix("https://") {
         rest
-    } else if let Some(rest) = url.strip_prefix("http://") {
-        rest
     } else {
-        return None; // ftp/data/javascript/protocol-relative 等は除外
+        // ftp/data/javascript/protocol-relative 等は除外
+        url.strip_prefix("http://")?
     };
 
     // パスを除去: 最初の `/` または `?` または `#` まで
@@ -485,6 +484,7 @@ pub enum QuishingError {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -748,7 +748,7 @@ mod tests {
     fn detects_ascii_qr_block() {
         let d = QuishingDefense::new();
         let line = "█▀▄▀█▄▀█▀▄▀█▄▀█▀▄▀█▄▀█";
-        let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
+        let body: String = std::iter::repeat_n(line, 10).collect::<Vec<_>>().join("\n");
         assert!(d.detect_ascii_qr(&body), "ブロック文字の羅列が ASCII QR として検出されなかった");
     }
 
@@ -787,7 +787,7 @@ mod tests {
         // Barracuda が観測した点字ブロックによるテキスト QR
         let d = QuishingDefense::new();
         let line = "\u{2801}\u{28FF}\u{2847}\u{28B6}\u{2809}\u{28FE}\u{2840}\u{28DB}\u{2807}\u{28F0}";
-        let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
+        let body: String = std::iter::repeat_n(line, 10).collect::<Vec<_>>().join("\n");
         assert!(d.detect_ascii_qr(&body), "点字ブロックのテキスト QR が検出されなかった");
     }
 
@@ -796,7 +796,7 @@ mod tests {
         // 幾何学記号による QR
         let d = QuishingDefense::new();
         let line = "■□■■□■□■□■■□■□■■□■□■";
-        let body: String = std::iter::repeat(line).take(10).collect::<Vec<_>>().join("\n");
+        let body: String = std::iter::repeat_n(line, 10).collect::<Vec<_>>().join("\n");
         assert!(d.detect_ascii_qr(&body), "幾何学記号のテキスト QR が検出されなかった");
     }
 
@@ -812,7 +812,7 @@ mod tests {
         let d = QuishingDefense::new();
         // MIN_QR_LINES (8) 未満の連続では検出しない
         let line = "████████████████";
-        let body: String = std::iter::repeat(line).take(3).collect::<Vec<_>>().join("\n");
+        let body: String = std::iter::repeat_n(line, 3).collect::<Vec<_>>().join("\n");
         assert!(!d.detect_ascii_qr(&body), "短すぎるブロック行の連続を誤検出した");
     }
 
@@ -821,9 +821,9 @@ mod tests {
         let d = QuishingDefense::new();
         let block_line = "█▀▄▀█▄▀█▀▄▀█▄▀█▀▄▀█▄▀█";
         // 5行 + 空行 + 5行 (空行で連続カウントがリセットされ 8 行連続に届かない)
-        let mut lines: Vec<&str> = std::iter::repeat(block_line).take(5).collect();
+        let mut lines: Vec<&str> = std::iter::repeat_n(block_line, 5).collect();
         lines.push("");
-        lines.extend(std::iter::repeat(block_line).take(5));
+        lines.extend(std::iter::repeat_n(block_line, 5));
         let body = lines.join("\n");
         assert!(!d.detect_ascii_qr(&body), "空行を挟んだ分断ブロックを誤検出した");
     }

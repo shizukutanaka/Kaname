@@ -313,7 +313,14 @@ impl SaasLinkInspector {
         if let Some(short_finding) = self.check_shortened(url) {
             return Some(short_finding);
         }
-        let platform = self.identify_platform(url)?;
+        // 正規ドメイン名を含むが正当なホストではない偽装ドメイン
+        // (notdocusign.com、mail.google.com.evil.com 等) は
+        // identify_platform が None を返すが、警告なしに素通りさせると
+        // 偽 SaaS リンク攻撃を見逃すため、偽装先プラットフォームとして検査を継続する。
+        let platform = match self.identify_platform(url) {
+            Some(p) => p,
+            None => self.find_impersonated_platform(url)?,
+        };
         let mut reasons = Vec::new();
         let mut risk = SaasLinkRisk::Safe;
 
@@ -421,6 +428,26 @@ impl SaasLinkInspector {
             }
         }
         false
+    }
+
+    /// ホスト名に正規ドメイン文字列を埋め込んだ偽装ドメイン
+    /// (`notdocusign.com`、`mail.google.com.evil.com` 等) から
+    /// 偽装されているプラットフォームを特定する。
+    /// ホスト部分のみを対象とするため、クエリ内の正規ドメイン
+    /// (`evil.com/?to=drive.google.com`) では発火しない。
+    fn find_impersonated_platform(&self, url: &str) -> Option<SaasPlatform> {
+        let actual = extract_actual_domain(url)?;
+        for platform in &self.platforms {
+            for legit in platform.domains() {
+                if actual.contains(legit)
+                    && actual != legit
+                    && !actual.ends_with(&format!(".{legit}"))
+                {
+                    return Some(platform.clone());
+                }
+            }
+        }
+        None
     }
 }
 
@@ -873,7 +900,7 @@ mod property_tests {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod security_tests {
     use super::*;
 

@@ -36,11 +36,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `kaname-jmap` の `Session` に RFC 8620 の `username` フィールドを追加し `JmapClient::account_domain()` でメールドメインを自動導出。`commands.rs` の新ヘルパー `our_domain()` が 設定 `org_domain` → 呼び出し側ヒント (`from` アドレス) → 接続中アカウント導出 → 空文字 (両検出器が安全スキップ) の順で解決。`mail_connect` は `ConnectResult.org_domain` を返し、接続画面が導出した組織ドメインを表示する (設定 UI は不要 — 導出でユーザー操作ゼロ)。一覧表示では `mail_fetch` が1回だけ解決して各行に渡す (N+1 回避)
 
 ### Security
+- **kaname-saas-guard: 偽装 SaaS ドメインが警告なしで素通りしていた退行を修正** — `identify_platform` のドット境界厳格化で `evaluate()` が偽装ホスト (`notdocusign.com`、`mail.google.com.evil.com` 等) を早期 `None` 返却していた。`find_impersonated_platform` で偽装先プラットフォームとして検査継続 → `is_fake_saas_subdomain` → Suspicious、注入検出で Block 格上げのパイプラインが復活
 - **フロントエンド devDependencies の既知脆弱性を全件解消 (10件→0件)** (D61 解消)
   - `postcss`/`nanoid`/`js-yaml`/`browserslist`/`brace-expansion`/`baseline-browser-mapping` を非破壊的に更新 (lockfile のみ)
   - **残り4件もメジャー更新で解消**: `vite` 5→8 (rolldown 系)、`vitest` 1→5、`jsdom` 最新化、`@types/node` ^24。rolldown で `manualChunks` のオブジェクト形式が廃止されたため `vite.config.ts` を関数形式に書き換え (チャンク分割は維持)。`npm audit` 0件を実測確認
 
 ### Fixed
+- **main が `cargo check` でコンパイル不能だった一連の潜伏エラーを解消** — crates.io 遮断環境では構文チェック止まりで検出不能だった5件: kaname-dlp の借用 E0597 ×2 (尾部式を let 束縛へ)、kaname-ui の `#[instrument]` 残骸・存在しない `is_mls_envelope` 呼出・E0382 ムーブ後借用・`mail_mark_read`/`mail_trash` 未定義 (JmapClient 実装で復元 — UI は既に呼出済み)
+- **初の cargo test 実走で検出されたテスト失敗2件を解消** — kaname-jmap の non-snake-case 関数名をリネーム、kaname-ui の偽データ前提テストを「未接続時 Err」契約検証に置換。全 1,290 テスト合格
+- **初の clippy --all-targets 実走で検出された警告エラーを一括解消** — `.cargo/config.toml` の自己再帰 `fmt` エイリアス削除、`map().unwrap_or()`→`map_or()`、`sort_by`→`sort_by_key`、`repeat().take(n)`→`repeat_n()`、`#[cfg(test)]` モジュールへの `#[allow(clippy::unwrap_used)]` 追補 (I6 は本番コード限定の意図を維持) 等
+- **Cargo.lock の破損を修復** — ワークスペース crate バージョンが 0.5.0 のまま (マニフェスト 0.7.1)、`is-wsl` の version/checksum 不一致という手編集痕跡を cargo 再生成で訂正
 - **実装済みの `oobv_start`/`oobv_verify`/`pivot_analyze` 3コマンドを Tauri に配線して到達可能化** (D15 残件)
   - `main.rs` に `.manage(commands::V02AppState::new())` を追加し、3コマンドを `tauri::State<'_, Arc<V02AppState>>` ラッパー経由で `invoke_handler` に登録。これで `commands.rs` の全公開コマンドが登録済みに。呼び出す UI は依然未実装 (static-check の「UI 未呼出」WARN に移行)
 - **`kaname-bec::apply_cross_signal_escalation` がリスク緩和シグナル (ARC検証成功) を認証問題と誤認し複合シグナルボーナスを誤って付与することを記録** (D59・未修正・記録のみ)
