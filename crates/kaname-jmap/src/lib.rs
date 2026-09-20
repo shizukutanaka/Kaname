@@ -316,27 +316,17 @@ impl JmapClient {
         find_result(&rs, "emails", "list")
     }
 
-    /// 単一メールの完全な本文を取得する。
+    /// 単一メールのメタ情報 (blobId・添付一覧) を取得する。
+    ///
+    /// 本文表示は blobId 経由の `download_blob` (生 RFC5322) で行うため、
+    /// `bodyValues`/`fetch*BodyValues` は要求しない — 以前は読み手ゼロの
+    /// まま最大 ~1MB/通を転送していた (D93)。
     pub async fn get_email_body(&self, email_id: &str) -> Result<EmailFull, JmapError> {
         let rs = self
             .call(
                 vec![(
                     "Email/get".into(),
-                    serde_json::json!({
-                        "accountId": self.account_id,
-                        "ids": [email_id],
-                        "properties": [
-                            "id","blobId","bodyStructure","bodyValues",
-                            "textBody","htmlBody","attachments","headers",
-                        ],
-                        "bodyProperties": [
-                            "partId","blobId","type","size","name",
-                            "charset","disposition","subParts",
-                        ],
-                        "fetchTextBodyValues": true,
-                        "fetchHTMLBodyValues": true,
-                        "maxBodyValueBytes":   524288,
-                    }),
+                    email_body_get_args(&self.account_id, email_id),
                     "body".into(),
                 )],
                 &[Session::JMAP_CORE, Session::JMAP_MAIL],
@@ -904,6 +894,25 @@ fn find_result<T: for<'de> Deserialize<'de>>(
     serde_json::from_value(r.args[key].clone()).map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
+/// `get_email_body` の Email/get 引数を構築する。
+///
+/// 消費されるのは `blobId` と `attachments` のみ。本文表示は blobId 経由の
+/// `download_blob` (生 RFC5322) で行うため `bodyValues`/`fetch*BodyValues`
+/// (最大 ~1MB/通) は要求しない (D93)。
+fn email_body_get_args(account_id: &str, email_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "accountId": account_id,
+        "ids": [email_id],
+        "properties": [
+            "id","blobId","attachments",
+        ],
+        "bodyProperties": [
+            "partId","blobId","type","size","name",
+            "charset","disposition","subParts",
+        ],
+    })
+}
+
 /// Email/set `mailboxIds` パッチを構築する: `trash_id` を追加し、
 /// 現在所属する他の全メールボックスを `null` で除去する。
 /// (RFC 8621 §4.6: パッチは `true`=追加・`null`=除去)
@@ -1251,5 +1260,42 @@ mod tests {
         assert_eq!(Session::domain_part("plain-name"), None);
         assert_eq!(Session::domain_part("alice@"), None);
         assert_eq!(Session::domain_part(""), None);
+    }
+
+    #[test]
+    fn email_body_get_args_は読み手の無い本文取得を要求しない() {
+        // D93: 消費されるのは blobId と attachments のみ。bodyValues 系を
+        // 要求するとメールを開くたび最大 ~1MB の未使用転送が発生する。
+        // fetch フラグ・bodyValues プロパティの再追加を検出する。
+        let args = email_body_get_args("acct", "mail-1");
+        assert_eq!(args["accountId"], "acct");
+        assert_eq!(args["ids"], serde_json::json!(["mail-1"]));
+        let props = args["properties"].as_array().expect("properties は配列");
+        let prop_strs: Vec<&str> = props.iter().filter_map(|p| p.as_str()).collect();
+        assert!(prop_strs.contains(&"blobId"));
+        assert!(prop_strs.contains(&"attachments"));
+        for dead in [
+            "bodyValues",
+            "textBody",
+            "htmlBody",
+            "bodyStructure",
+            "headers",
+        ] {
+            assert!(
+                !prop_strs.contains(&dead),
+                "未消費プロパティ {dead} が再要求されている"
+            );
+        }
+        let obj = args.as_object().expect("args はオブジェクト");
+        for flag in [
+            "fetchTextBodyValues",
+            "fetchHTMLBodyValues",
+            "maxBodyValueBytes",
+        ] {
+            assert!(
+                !obj.contains_key(flag),
+                "未消費の fetch フラグ {flag} が再要求されている"
+            );
+        }
     }
 }

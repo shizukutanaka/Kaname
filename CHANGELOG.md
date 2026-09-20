@@ -23,6 +23,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(kaname-jmap): `get_email_body` が読み手ゼロの本文値を最大 ~1MB/通転送していた無駄を除去 (D93) — properties を `id`/`blobId`/`attachments` に削減し `fetchTextBodyValues`/`fetchHTMLBodyValues`/`maxBodyValueBytes`/`bodyValues` 要求を廃止。本文表示は `download_blob` (生 RFC5322) が担うため挙動変化なし。再追加を検出する回帰テスト追加
 - fix(kaname-store): 「暗号化ローカルストア」が実際には平文だった問題を修正 (D75) — workspace の rusqlite が `bundled` (素の SQLite3) で `PRAGMA key`/`cipher_*` が全て silent no-op だったため DB は平文保存されていた。`bundled-sqlcipher` へ切替し `cipher_version=4.5.3` の動作を実測確認。既知文字列非出現を固定する恒久回帰テストを追加。平文期間の既存 history.db は新ビルドで開けない (移行措置なし — プレリリースのため許容判断)
 - fix(kaname-jmap): JMAP ベアラトークンを Zeroizing 保持 + Debug 出力で伏字 — 切断後もヒープに残らないように (SQLCipher 鍵と同一の取り扱い)
 

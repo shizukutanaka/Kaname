@@ -271,6 +271,10 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
 | D75 | ~~**「暗号化ローカルストア」が一度も暗号化されていなかった**: workspace の rusqlite が `features = ["bundled"]` (素の SQLite3) で、`SqlCipherParams::apply` の `PRAGMA key`/`cipher_*` は全て no-op。DB ファイルは平文で保存されていた~~ **(2026-09-20 解消)** | P0 | 実測証明: `PRAGMA cipher_version` が存在せず、DB 本文に `CREATE TABLE`/既知文字列が平文残存。`bundled` → `bundled-sqlcipher` に変更後、`cipher_version = 4.5.3 community` + 本文にマーカー非出現を実測確認。**既存の平文 history.db は移行措置なしのため旧環境では開けなくなる** (プレリリース・ローカル実データ前提のため許容判断、要レビュー)。恒久回帰テスト `dbファイルは暗号化され既知文字列が平文で残らない` を追加 — feature を戻すと検知される。コメントの「0.32/sqlcipher」記述も実態 (0.31/bundled-sqlcipher) に訂正 |
+=======
+| D93 | ~~**`get_email_body` が読み手ゼロの本文値を最大 ~1MB/通転送**: Email/get で `bodyValues`/`fetchTextBodyValues`/`fetchHTMLBodyValues`/`maxBodyValueBytes=512KB` を要求していたが、3 つの呼び出し元 (`mail_open`/`mail_list_attachment_blobs`/`mail_download_attachment`) が消費するのは `blob_id` と `attachments` のみ — 本文表示は `download_blob` (生 RFC5322) が担う。`EmailFull` の `body_structure`/`text_body`/`html_body`/`headers`/`body_values` にワークスペース内の読み手はゼロ~~ **(2026-09-20 解消)** | P4 | properties を `id`/`blobId`/`attachments` に削減し fetch フラグを除去。`email_body_get_args` に抽出し、未消費プロパティ・フラグの再追加を検出する合成回帰テスト `email_body_get_args_は読み手の無い本文取得を要求しない` を追加。「要求するが読まない」は D86 (hasAttachment) と同型 — JMAP リクエストの properties は消費側と対で監査対象 |
+
+
 
 ### 完了判定の変更
 
@@ -291,6 +295,13 @@ DB は平文だった (D75)。丁寧なパラメータ定義・鍵検証・Zeroi
 全て実装済みだったが、依存 feature 一つの違いで中核の約束が成立して
 いなかった。「実装が丁寧」は「機能している」の証拠にならない ——
 出力物 (ファイルの実バイト) を見るまで確かにならない。
+
+**2026-09-20 (追記・転送も監査対象)**: `get_email_body` は本文値を
+最大 ~1MB/通要求していたが、読み手は全く存在しなかった (D93)。
+「リクエストが大きい」は bug ではなく無駄に見えるが、帯域・
+サーバ負荷・レスポンス時間の実害があり、かつ「取得したのに
+使わないデータ」はメモリ上の攻撃面でもある。D86 の hasAttachment
+と同型 — **要求フィールドは消費側と対にして初めて正当**。
 
 ## Opus/Sonnet への申し送り事項
 
