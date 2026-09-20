@@ -23,6 +23,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(kaname-ui): 同名添付の保存が既存ファイルを黙って上書きしていた — `create_new` で `name (1).ext` 形式に退避し、TOCTOU 競合も解消 (D87)
+- fix(kaname-ui): OOBV セレモニーが `V02AppState.ceremonies` に無限に蓄積 — 上限256で終端/期限切れを追い出し、有効な Pending が満杯なら新規開始を拒否 (D88)
 - fix(kaname-jmap): JMAP ベアラトークンを Zeroizing 保持 + Debug 出力で伏字 — 切断後もヒープに残らないように (SQLCipher 鍵と同一の取り扱い)
 
 - fix(kaname-ui): OOBV 検証結果を改ざん検知付きの永続監査ログに記録 — 以前は読み出し経路の無いインメモリ Vec のみでプロセス終了時に証跡が消失していた

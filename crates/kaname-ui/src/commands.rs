@@ -1215,11 +1215,21 @@ pub async fn oobv_start(
         challenge_number: ceremony.challenge_number(),
         expires_at_unix: ceremony.expires_at_unix,
     };
-    state
-        .ceremonies
-        .lock()
-        .await
-        .insert(ceremony.id.clone(), ceremony);
+    let mut ceremonies = state.ceremonies.lock().await;
+    // セレモニーは一度も削除されず map が無限に育つため、上限で止める (D88)。
+    // Pending 以外 (Verified/Expired/Locked) は verify が AlreadyCompleted を
+    // 返すため二度と使えず、期限切れ Pending も verify できない — 追い出してよい。
+    const MAX_CEREMONIES: usize = 256;
+    if ceremonies.len() >= MAX_CEREMONIES {
+        let now = now_unix_secs();
+        ceremonies.retain(|_, c| c.state == CeremonyState::Pending && c.expires_at_unix > now);
+    }
+    if ceremonies.len() >= MAX_CEREMONIES {
+        return Err(V02CommandError::InvalidState(
+            "進行中の検証が多すぎます。少し待ってから再度お試しください".into(),
+        ));
+    }
+    ceremonies.insert(ceremony.id.clone(), ceremony);
     Ok(response)
 }
 
@@ -1381,6 +1391,76 @@ mod v02_tests {
         .await
         .map_err(|e| e.to_string())?;
         assert_eq!(resp.level, RecommendationLevel::Strong);
+        Ok(())
+    }
+
+    /// D87: 同名添付の連続保存で先のファイルが上書きされないことを固定。
+    #[test]
+    fn write_unique_は同名を別名で保存し既存を上書きしない() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let p1 = write_unique(&dir, "report.pdf", b"first").map_err(|e| e.to_string())?;
+        let p2 = write_unique(&dir, "report.pdf", b"second").map_err(|e| e.to_string())?;
+        assert_ne!(p1, p2, "同名なのに同じパスを返した");
+        assert_eq!(std::fs::read(&p1).map_err(|e| e.to_string())?, b"first");
+        assert_eq!(std::fs::read(&p2).map_err(|e| e.to_string())?, b"second");
+        assert!(p2.to_string_lossy().contains("(1)"));
+        // 拡張子なし・先頭ドットの名でも別名になる
+        let p3 = write_unique(&dir, "noext", b"x").map_err(|e| e.to_string())?;
+        let p4 = write_unique(&dir, "noext", b"y").map_err(|e| e.to_string())?;
+        assert_ne!(p3, p4);
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
+    }
+
+    /// D88: セレモニーが上限を超えるとき、終端のものは追い出され
+    /// 有効な Pending が上限を超える場合のみエラーになることを固定。
+    #[tokio::test]
+    async fn oobv_start_は終端セレモニーを追い出し有効なものが満杯なら拒否する(
+    ) -> Result<(), String> {
+        let state = V02AppState::new();
+        // 256件の終端セレモニーを詰める (Verified は二度と検証できないため
+        // 追い出されてよい)
+        {
+            let mut map = state.ceremonies.lock().await;
+            for i in 0..256 {
+                let mut c = VerificationCeremony::new(format!("e{i}"), "a@b.com");
+                c.state = CeremonyState::Verified;
+                map.insert(c.id.clone(), c);
+            }
+        }
+        // 終端だけが詰まっているので追い出されて成功するはず
+        let resp = oobv_start(
+            state.clone(),
+            OobvStartRequest {
+                email_id: "new".into(),
+                sender: "a@b.com".into(),
+            },
+        )
+        .await;
+        assert!(resp.is_ok(), "終端セレモニーは追い出されるべき: {resp:?}");
+
+        // 今度は有効な Pending 256件で埋める
+        {
+            let mut map = state.ceremonies.lock().await;
+            map.clear();
+            for i in 0..256 {
+                let c = VerificationCeremony::new(format!("e{i}"), "a@b.com");
+                map.insert(c.id.clone(), c);
+            }
+        }
+        let resp = oobv_start(
+            state.clone(),
+            OobvStartRequest {
+                email_id: "overflow".into(),
+                sender: "a@b.com".into(),
+            },
+        )
+        .await;
+        assert!(
+            matches!(resp, Err(V02CommandError::InvalidState(_))),
+            "有効な Pending が上限を超えたら拒否すべき: {resp:?}"
+        );
         Ok(())
     }
 
@@ -2418,6 +2498,14 @@ async fn audit_event(account_id: Option<&str>, event_type: &str, payload: serde_
 
 /// メールアドレスからドメイン部を取り出す (小文字化)。
 /// `"Name <a@b.com>"` のような表示名付きにも耐える。アドレス形でなければ None。
+/// 現在時刻の UNIX 秒 (セレモニー期限の比較用)。
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 fn email_domain(addr: &str) -> Option<String> {
     let (_, domain) = addr.rsplit_once('@')?;
     let domain: String = domain
@@ -2576,8 +2664,8 @@ pub async fn mail_download_attachment(
         if let Err(e) = std::fs::create_dir_all(&dir) {
             return Err(format!("保存先を作成できません: {e}"));
         }
-        let path = dir.join(&safe_name);
-        std::fs::write(&path, &bytes).map_err(|e| format!("保存に失敗しました: {e}"))?;
+        let path = write_unique(&dir, &safe_name, &bytes)
+            .map_err(|e| format!("保存に失敗しました: {e}"))?;
         Some(path.to_string_lossy().into_owned())
     };
 
@@ -2655,4 +2743,41 @@ fn sanitize_filename(name: &str) -> String {
     } else {
         trimmed.chars().take(200).collect()
     }
+}
+
+/// 既存ファイルを上書きせず、同名があれば `name (1).ext` の形で別名にする。
+///
+/// 別メール由来の同名添付で先に保存したファイルを黙って上書きしないため
+/// (D87)。`create_new` のアトミック作成で exists-then-write の競合も避ける。
+fn write_unique(
+    dir: &std::path::Path,
+    name: &str,
+    bytes: &[u8],
+) -> Result<std::path::PathBuf, std::io::Error> {
+    use std::io::ErrorKind;
+    let (stem, ext) = match name.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+        _ => (name.to_string(), String::new()),
+    };
+    for i in 0..1000u32 {
+        let candidate = if i == 0 {
+            dir.join(name)
+        } else {
+            dir.join(format!("{stem} ({i}){ext}"))
+        };
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(mut f) => {
+                use std::io::Write as _;
+                f.write_all(bytes)?;
+                return Ok(candidate);
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(ErrorKind::AlreadyExists.into())
 }
