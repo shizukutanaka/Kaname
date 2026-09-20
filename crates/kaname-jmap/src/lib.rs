@@ -446,7 +446,6 @@ impl JmapClient {
         to: &[&str],
         subject: &str,
         body: &str,
-        draft_id: Option<&str>,
     ) -> Result<String, JmapError> {
         // 宛先数の上限 (DoS 防止: 100 件超えは拒否)
         const MAX_RECIPIENTS: usize = 100;
@@ -516,10 +515,7 @@ impl JmapClient {
 
         let now = chrono::Utc::now().to_rfc2822();
         let msg_id = format!("<{}@kaname.app>", uuid::Uuid::new_v4().simple());
-        let raw = format!(
-            "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {}\r\nSubject: {subject}\r\nDate: {now}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n{body}",
-            to.join(", ")
-        );
+        let raw = build_raw_message(&from, &to.join(", "), &subject, body, &msg_id, &now);
 
         // BLOB アップロード → Email/import → EmailSubmission/set
         let blob_id = self.upload_blob(raw.as_bytes()).await?;
@@ -573,26 +569,6 @@ impl JmapClient {
             &[Session::JMAP_CORE, Session::JMAP_MAIL],
         )
         .await?;
-
-        if let Some(id) = draft_id {
-            if let Err(e) = self
-                .call(
-                    vec![(
-                        "Email/set".into(),
-                        serde_json::json!({
-                            "accountId": self.account_id, "destroy": [id],
-                        }),
-                        "del".into(),
-                    )],
-                    &[Session::JMAP_CORE, Session::JMAP_MAIL],
-                )
-                .await
-            {
-                // 送信は既に成功しているため致命的ではないが、下書きが残留する
-                // ことをログに残さないと利用者もサポートも気付けない。
-                tracing::warn!(error = %e, "送信後の下書き削除に失敗しました (下書きが残留している可能性があります)");
-            }
-        }
 
         Ok(email_id)
     }
@@ -904,6 +880,28 @@ fn find_result<T: for<'de> Deserialize<'de>>(
     serde_json::from_value(r.args[key].clone()).map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
+/// 送信用の生 RFC 5322 メッセージを構築する。
+///
+/// RFC 5322 ヘッダーは US-ASCII のみ許容 — 非 ASCII 件名は RFC 2047
+/// encoded-word にエンコードする (SMTPUTF8 非対応経路での文字化け防止)。
+/// 本文は base64 + MIME-Version/CTE で送出する: 生 UTF-8 のままだと
+/// 7bit 前提の下流 MTA で破壊されうる (base64 は `.` を含まないため
+/// SMTP Smuggling の終端シーケンスも構造的に起きない) (D94)。
+fn build_raw_message(
+    from: &str,
+    to_header: &str,
+    subject: &str,
+    body: &str,
+    msg_id: &str,
+    date: &str,
+) -> String {
+    let subject = encode_header_utf8(subject);
+    let body_b64 = wrap76(&base64_encode(body.as_bytes()));
+    format!(
+        "Message-ID: {msg_id}\r\nFrom: {from}\r\nTo: {to_header}\r\nSubject: {subject}\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n{body_b64}"
+    )
+}
+
 /// Email/set `mailboxIds` パッチを構築する: `trash_id` を追加し、
 /// 現在所属する他の全メールボックスを `null` で除去する。
 /// (RFC 8621 §4.6: パッチは `true`=追加・`null`=除去)
@@ -926,6 +924,77 @@ fn str_arr(v: &serde_json::Value) -> Vec<String> {
             .filter_map(|x| x.as_str().map(str::to_owned))
             .collect()
     })
+}
+
+/// RFC 4648 base64 (標準 alphabet、パディングあり)。
+///
+/// 外部依存を増やさないため自前実装 (kaname-screen の decode_base64 と対称)。
+/// 本クレートでは RFC 2047 encoded-word と MIME 本文の base64 に使う。
+fn base64_encode(data: &[u8]) -> String {
+    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let b0 = u32::from(c[0]);
+        let b1 = u32::from(*c.get(1).unwrap_or(&0));
+        let b2 = u32::from(*c.get(2).unwrap_or(&0));
+        let v = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TBL[(v >> 18) as usize & 63] as char);
+        out.push(TBL[(v >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 {
+            TBL[(v >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            TBL[v as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// 非 ASCII を含むヘッダー値を RFC 2047 encoded-word にエンコードする。
+///
+/// 件名などの非構造化ヘッダーは RFC 5322 では US-ASCII しか許容されない。
+/// 生の UTF-8 を書くと SMTPUTF8 非対応の経路で文字化けするため、
+/// `=?UTF-8?B?<base64>?=` にエンコードする (全 MUA がデコード可能)。
+/// encoded-word は 75 文字上限 (RFC 2047 §2) のため 45 バイト単位で分割
+/// (UTF-8 文字境界を跨がない)。アドレス (addr-spec) に encoded-word は
+/// 使えないため呼び出し側は件名などのテキストヘッダーに限ること。
+fn encode_header_utf8(s: &str) -> String {
+    if s.is_ascii() {
+        return s.to_owned();
+    }
+    const MAX_RAW_BYTES_PER_WORD: usize = 45; // base64 で 60 文字 → word 全体 ≤ 75
+    let mut out = String::new();
+    let mut chunk = String::new();
+    for ch in s.chars() {
+        if chunk.len() + ch.len_utf8() > MAX_RAW_BYTES_PER_WORD {
+            out.push_str("=?UTF-8?B?");
+            out.push_str(&base64_encode(chunk.as_bytes()));
+            out.push_str("?= ");
+            chunk.clear();
+        }
+        chunk.push(ch);
+    }
+    // 非 ASCII を含む場合 chunk は必ず非空 (ループは常に push する)。
+    out.push_str("=?UTF-8?B?");
+    out.push_str(&base64_encode(chunk.as_bytes()));
+    out.push_str("?=");
+    out
+}
+
+/// 76 桁で CRLF 折り返し (MIME base64 の行長上限)。
+fn wrap76(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + s.len() / 76 * 2);
+    for (i, c) in s.as_bytes().chunks(76).enumerate() {
+        if i > 0 {
+            out.push_str("\r\n");
+        }
+        out.push_str(std::str::from_utf8(c).unwrap_or_default());
+    }
+    out
 }
 
 /// ヘッダー値のバリデーション (テストからも利用)。
@@ -1251,5 +1320,64 @@ mod tests {
         assert_eq!(Session::domain_part("plain-name"), None);
         assert_eq!(Session::domain_part("alice@"), None);
         assert_eq!(Session::domain_part(""), None);
+    }
+
+    #[test]
+    fn base64_encode_はrfc4648準拠() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+        assert_eq!(base64_encode("要".as_bytes()), "6KaB");
+    }
+
+    #[test]
+    fn encode_header_utf8_はasciiをそのまま返し非asciiをencoded_word化する() {
+        assert_eq!(encode_header_utf8("hello"), "hello");
+        assert_eq!(encode_header_utf8(""), "");
+        // 「テスト」= E3 83 86 E3 82 B9 E3 83 88 → base64 "44OG44K544OI"
+        let enc = encode_header_utf8("テスト");
+        assert_eq!(enc, "=?UTF-8?B?44OG44K544OI?=");
+        // 長い件名は 75 文字上限の encoded-word に分割される
+        let long = encode_header_utf8(&"あ".repeat(40)); // 120 bytes → 3 words
+        for w in long.split(' ') {
+            assert!(w.len() <= 75, "encoded-word が 75 文字超: {w}");
+            assert!(w.starts_with("=?UTF-8?B?") && w.ends_with("?="));
+        }
+        assert!(long.contains(' '));
+        // 混在: ASCII 部分も word 化される (RFC 2047 は非 ASCII 値全体を対象)
+        let mixed = encode_header_utf8("Re: 確認");
+        assert!(mixed.starts_with("=?UTF-8?B?"));
+    }
+
+    #[test]
+    fn build_raw_message_はrfc5322_準拠のヘッダとbase64本文を出力する() {
+        let raw = build_raw_message(
+            "alice@example.com",
+            "bob@example.com",
+            "会議の件",
+            "本文です。\r\n2 行目",
+            "<m@x>",
+            "Mon, 01 Jan 2024 00:00:00 +0000",
+        );
+        // ヘッダーは全て ASCII (件名は encoded-word)
+        let (head, body) = raw.split_once("\r\n\r\n").expect("ヘッダ/本文区切り");
+        assert!(head.is_ascii(), "ヘッダーに非 ASCII: {head}");
+        assert!(head.contains("Subject: =?UTF-8?B?"));
+        assert!(head.contains("MIME-Version: 1.0"));
+        assert!(head.contains("Content-Transfer-Encoding: base64"));
+        // 本文は base64 で折り返し 76 桁以下 — 「本文です。\r\n2 行目」の base64
+        for line in body.split("\r\n") {
+            assert!(line.len() <= 76);
+            assert!(line
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '='));
+        }
+        // 既知値: "本文です。\r\n2 行目" UTF-8 → base64
+        assert_eq!(
+            base64_encode("本文です。\r\n2 行目".as_bytes()),
+            body.replace("\r\n", "")
+        );
     }
 }

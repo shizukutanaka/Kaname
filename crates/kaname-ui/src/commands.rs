@@ -1890,7 +1890,7 @@ pub async fn mail_send_real(
 
     let to_refs: Vec<&str> = to.iter().map(String::as_str).collect();
     let result = client
-        .send_email(&from, &to_refs, &subject, &body, None)
+        .send_email(&from, &to_refs, &subject, &body)
         .await
         .map_err(|e| format!("送信に失敗しました: {e}"))?;
 
