@@ -271,6 +271,9 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
 | D75 | ~~**「暗号化ローカルストア」が一度も暗号化されていなかった**: workspace の rusqlite が `features = ["bundled"]` (素の SQLite3) で、`SqlCipherParams::apply` の `PRAGMA key`/`cipher_*` は全て no-op。DB ファイルは平文で保存されていた~~ **(2026-09-20 解消)** | P0 | 実測証明: `PRAGMA cipher_version` が存在せず、DB 本文に `CREATE TABLE`/既知文字列が平文残存。`bundled` → `bundled-sqlcipher` に変更後、`cipher_version = 4.5.3 community` + 本文にマーカー非出現を実測確認。**既存の平文 history.db は移行措置なしのため旧環境では開けなくなる** (プレリリース・ローカル実データ前提のため許容判断、要レビュー)。恒久回帰テスト `dbファイルは暗号化され既知文字列が平文で残らない` を追加 — feature を戻すと検知される。コメントの「0.32/sqlcipher」記述も実態 (0.31/bundled-sqlcipher) に訂正 |
+| D94 | ~~**送信メッセージが RFC 5322/2047 非準拠**: `send_email` は件名を生文字列のまま `Subject:` に書き、本文も生 UTF-8 で `Content-Transfer-Encoding`/`MIME-Version` なし — 日本語件名は SMTPUTF8 非対応経路で文字化け、日本語本文は 7bit MTA で破壊されうる。日本語優先プロダクトで最も基本的な経路が規格非準拠~~ **(2026-09-20 解消)** | P2 | 件名は `encode_header_utf8` で RFC 2047 `=?UTF-8?B?` (45B チャンク分割、word ≤75 字)、本文は base64 + `MIME-Version: 1.0`/`Content-Transfer-Encoding: base64` に。base64 は `.` を含まないため SMTP 終端シーケンスの構造的起因も消去。`build_raw_message`/`base64_encode`/`wrap76` を抽出し合成テスト3件 (既知値・word 上限・ヘッダ ASCII 性) で固定 |
+| D95 | ~~**`send_email` の `draft_id` が常に `None` の死んだパラメータ**: 唯一の呼び出し元 (`mail_send_real`) が `None` 固定で、下書き削除の分岐は到達不能 — 下書きを作るコマンド自体が存在しない~~ **(2026-09-20 解消)** | P4 | パラメータと「送信後に下書き削除」分岐を削除。下書き機能の実装時に git 履歴から復元可能 |
+
 
 ### 完了判定の変更
 
@@ -291,6 +294,13 @@ DB は平文だった (D75)。丁寧なパラメータ定義・鍵検証・Zeroi
 全て実装済みだったが、依存 feature 一つの違いで中核の約束が成立して
 いなかった。「実装が丁寧」は「機能している」の証拠にならない ——
 出力物 (ファイルの実バイト) を見るまで確かにならない。
+
+**2026-09-20 (追記・ワイヤ上の規格準拠)**: `send_email` が組み立てる
+生メッセージは RFC 5322 非準拠だった (D94) — 日本語件名を生 UTF-8
+ヘッダで、日本語本文を 7bit 無保証のまま送出する。「テストが通る」
+は「規格に適合する」ではない — 出力バイト列を RFC と対照するまで
+確かにならない。併せて常に None の `draft_id` 死んだパラメータも
+削除した (D95)。
 
 ## Opus/Sonnet への申し送り事項
 
