@@ -45,6 +45,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - fix(kaname-ui): 履歴 DB 鍵の生成を tmp+rename アトミック化し、壊鍵時の黙殺再生成 (既存 DB が復号不能になる経路) をエラー化 — 平文 DB 検出時は「旧形式」と誘導文を返す (D89)
 - fix(kaname-render,kaname-ui): `is_mls` が構造的に永遠に false だった欠陥を修正 — `kaname_render::is_mls_message()` を新設し全 MIME パートの `application/mls-envelope+cbor` を検査、EML インポート経路の `BodyDto.is_mls` に配線 (JMAP 一覧は body_structure 非所持のため判別不能=false を維持) (D116)
 - fix(e2e): Tauri モックの `default:` が未登録コマンドをサイレント成功させていた偽陽性経路を閉塞 — 実 Tauri と同じくエラー化し、消滅済み `ai_detect_phishing` のモック残留を削除 (D117)
+- docs(performance): performance-history.md のベンチコード不在5項目 (AI summary/MLS/SQLCipher/JMAP/sanitize — うち2項目は未実装サブシステム) を「実測」から訂正 — 再現不能な数値に警告注記 (D118)
   - fix(kaname-ui): 詳細解析・フォルダ一括解析にも送信者履歴を供給 — `sender_history` が `None` 固定で一覧と詳細の BEC 判定が食い違っていた (D100)
   - fix(kaname-dlp,kaname-ui): 受信側 DLP に既定ルール3件を追加 (構造的に空だった) + 誤配検出へ既知宛先ドメインを連絡先履歴から供給 (D104) — kaname-dlp 変更のため security-lead 承認要
   - fix(kaname-jmap,kaname-ui): 一覧経路に Return-Path を配線し From vs Return-Path 不一致検出を実効化 + e2e モック欠落3コマンド補完 (D106/D107)

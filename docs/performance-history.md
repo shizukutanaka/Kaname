@@ -54,7 +54,9 @@ JMAP Email/get (mock)              4.2 ms ± 0.4 ms
 HTML sanitize (10KB email)         210 µs ± 15 µs
 ```
 
-**所見**: 全項目で Apple HIG 目標を満たす。BEC 判定が予想より速い (50ms 目標 → 47µs 実測 = 1000x マージン)。
+**所見**: ~~全項目で Apple HIG 目標を満たす。~~ BEC 判定が予想より速い (50ms 目標 → 47µs 実測 = 1000x マージン)。
+
+> ⚠️ **2026-09-20 訂正 (D118)**: 上表のうち **AI summary / MLS Welcome / SQLCipher write/read / JMAP Email/get / HTML sanitize の5項目は対応するベンチマークコードがこのリポジトリに一度も存在せず再現不能** (`crates/kaname-tests/benches/core_bench.rs` が唯一のベンチで bec_detection/ai_phishing/triage/dlp/aitm/sender_style/campaign_radar/html_smuggling/calendar_guard の9系のみ)。さらに AI summary (Dual-LLM Bridge) は D2 で未実装、MLS Welcome は D1 の XOR モックであり、実在するサブシステムの測定値ですらない。BEC verdict / Triage / DLP の3行のみが実ベンチと対応する。これらの数値は「目標値」として読むべきであり「実測」ではない — v0.1.0/v0.1.4 の行比較も実測ではない。
 
 ---
 
@@ -74,7 +76,7 @@ JMAP Email/get (mock)              4.2 ms          +0.0 ms   (= 0%)
 HTML sanitize (10KB email)         208 µs          -2 µs     (▲ 1.0%)
 ```
 
-**所見**: 軽微な改善 (キャッシュ効率) のみ。回帰なし。
+**所見**: ~~軽微な改善 (キャッシュ効率) のみ。回帰なし。~~ (D118 参照 — ベンチコード不在の5行は再現不能な数値であり、Δ 比較も測定に基づかない)
 
 ---
 
