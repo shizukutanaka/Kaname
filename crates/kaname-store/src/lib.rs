@@ -1648,6 +1648,7 @@ impl Store {
                 is_deleted   = 0, \
                 bec_score    = ?14, \
                 bec_verdict  = ?15, \
+                is_deleted   = 0, \
                 updated_at   = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
             params![
                 id,
@@ -2007,6 +2008,58 @@ impl Store {
         }
         Ok(out)
     }
+
+    /// サーバで消えたメールをローカルで tombstone (`is_deleted = 1`) にする。
+    ///
+    /// `live_ids` は該当メールボックスにサーバ上で現存する `jmap_id` の
+    /// **全件**である必要がある。**全件が見えたとき (先頭からの取得件数が
+    /// 実効 limit 未満) のみ呼ぶこと** — 部分ページでは「不在 = サーバ削除」
+    /// の推論が成立しない。返値は tombstone 化した行数。
+    ///
+    /// tombstone は物理削除ではなく `is_deleted = 1` とし、
+    /// 再取得時の upsert (`is_deleted = 0`) で復活できるようにする。
+    pub async fn reconcile_mailbox(
+        &self,
+        account_id: &str,
+        mailbox_id: &str,
+        live_ids: &[String],
+    ) -> Result<usize, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(mailbox_id, "mailbox_id", 256)?;
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+
+        if live_ids.is_empty() {
+            // サーバ上でメールボックスが空 → ローカル行は全て tombstone
+            return conn
+                .execute(
+                    "UPDATE messages SET is_deleted = 1, \
+                        updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+                     WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0;",
+                    params![account_id, mailbox_id],
+                )
+                .map_err(|e| StoreError::Db(e.to_string()));
+        }
+
+        let marks = live_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "UPDATE messages SET is_deleted = 1, \
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') \
+             WHERE account_id = ? AND mailbox_id = ? AND is_deleted = 0 \
+               AND jmap_id NOT IN ({marks});"
+        );
+        let mut params_vec: Vec<rusqlite::types::Value> = Vec::with_capacity(live_ids.len() + 2);
+        params_vec.push(account_id.to_string().into());
+        params_vec.push(mailbox_id.to_string().into());
+        for id in live_ids {
+            params_vec.push(id.clone().into());
+        }
+        conn.execute(&sql, rusqlite::params_from_iter(params_vec))
+            .map_err(|e| StoreError::Db(e.to_string()))
+    }
 }
 
 /// `messages` の 1 行を `StoredMessage` に変換する。
@@ -2207,6 +2260,97 @@ mod message_persistence_tests {
             .unwrap();
         let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
         assert_eq!(rows.len(), 1, "復元されたメールは再び見えるべき");
+    }
+
+    /// D80: `reconcile_mailbox` は「全件が見えた」前提でのみ呼ばれ、
+    /// `live_ids` に無い jmap_id のローカル行を is_deleted=1 にする。
+    /// つまりサーバ側で削除されたメールがローカルに残り続ける欠陥を直す。
+    /// 誤 tombstone でも upsert (`is_deleted = 0`) で復活できることを併せて固定。
+    #[tokio::test]
+    async fn reconcile_mailbox_はサーバで消えたメールをtombstone化し再取得で復活する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "残る件名"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "消える件名"))
+            .await
+            .unwrap();
+        // 他フォルダのメールは対象外であること
+        store
+            .save_message("acct1", "archive", &msg("jmap-3", "別箱"))
+            .await
+            .unwrap();
+
+        // サーバには jmap-1 だけ残っている
+        let n = store
+            .reconcile_mailbox("acct1", "inbox", &["jmap-1".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(n, 1, "消えた 1 件だけ tombstone");
+
+        let inbox = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(inbox.len(), 1);
+        assert_eq!(inbox[0].subject.as_deref(), Some("残る件名"));
+        // 別フォルダは無関係
+        assert_eq!(
+            store
+                .list_messages("acct1", "archive", 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // 誤 tombstone でもサーバが再び返せば upsert で復活する
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "消える件名"))
+            .await
+            .unwrap();
+        let inbox2 = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        assert_eq!(inbox2.len(), 2, "再取得で is_deleted=0 に復活すべき");
+    }
+
+    /// サーバ側でメールボックスが空になった場合はローカル行を全て
+    /// tombstone にする (live_ids 空 → NOT IN 句なしの全行更新)。
+    #[tokio::test]
+    async fn reconcile_mailbox_はサーバ空なら全行をtombstone化する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .save_message("acct1", "inbox", &msg("jmap-1", "A"))
+            .await
+            .unwrap();
+        store
+            .save_message("acct1", "inbox", &msg("jmap-2", "B"))
+            .await
+            .unwrap();
+
+        let n = store
+            .reconcile_mailbox("acct1", "inbox", &[])
+            .await
+            .unwrap();
+        assert_eq!(n, 2);
+        assert!(
+            store
+                .list_messages("acct1", "inbox", 10)
+                .await
+                .unwrap()
+                .is_empty(),
+            "空メールボックスなら一覧も空になるべき"
+        );
     }
 
     /// `to_addrs` 列はスキーマ上 NOT NULL で存在したが `NewMessage` に
