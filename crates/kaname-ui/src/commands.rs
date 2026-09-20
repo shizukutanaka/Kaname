@@ -2139,7 +2139,6 @@ pub async fn security_audit_log(limit: Option<i64>) -> Result<AuditLogView, Stri
 /// アカウント接続前でも動くよう account_id は固定の "local" を使う。
 pub async fn settings_save_onboarding(
     notifications: bool,
-    continuity: bool,
     telemetry: bool,
 ) -> Result<(), String> {
     let store = store_slot()
@@ -2149,7 +2148,6 @@ pub async fn settings_save_onboarding(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     for (k, v) in [
         ("notifications", notifications),
-        ("continuity", continuity),
         ("telemetry", telemetry),
         ("onboarding_done", true),
     ] {
