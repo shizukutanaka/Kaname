@@ -9,7 +9,6 @@ name = "kaname_ui"
 
 [dependencies]
 serde              = { workspace = true }
-serde_json         = { workspace = true }
 thiserror          = { workspace = true }
 tokio              = { workspace = true }
 tracing            = { workspace = true }
@@ -49,7 +48,6 @@ dirs = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]
-tokio-test = "0.4"
 
 [features]
 # tauri-app: src-tauri からビルドする際に tauri::command マクロを有効化
