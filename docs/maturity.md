@@ -28,8 +28,9 @@
 > スペース化する `normalize_for_matching_spaced` を新設し memory-guard/oobv/ui の
 > 3箇所で二重照合とした (kaname-bec の2箇所はセキュリティレビュー必須クレートのため残件)。
 > `extract_auth_result` を機構スコープ限定パースに修正し `authserv_id` を露出 (D18 部分対応、
-> `mail-auth` 導入は未実施)。npm devDeps の脆弱性は `npm audit fix` で10→4件に削減 (D61、
-> 残りは vitest/vite メジャー更新が前提)。
+> `mail-auth` 導入は未実施)。npm devDeps の脆弱性は全件解消 (D61 — `vite` 5→8
+> rolldown 系・`vitest` 1→5・`jsdom` 最新・`@types/node` ^24。rolldown で廃止された
+> `manualChunks` オブジェクト形式は関数形式に書き換え、`npm audit` 0件を実測)。
 > **2026-09 続報 (D51 完全解消・D24 残件)**: 「機能デモ」タブ (KanameAppleFeatures.tsx、
 > 偽データで未実装機能を見せる遊技場、1,244 行) をファイルごと削除しナビから除去 —
 > 部分解消ラベルでもデモ画面を出荷する理由が無かった (到達可能 UI 9/9 → 8/8、
