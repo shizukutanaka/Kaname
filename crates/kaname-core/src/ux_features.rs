@@ -26,37 +26,68 @@ pub struct TriageEngine;
 
 impl TriageEngine {
     /// 新規インスタンスを作成する。
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// メールを自動仕分けする。
     pub fn triage(
         &self,
-        from_addr:   &str,
-        subject:     &str,
+        from_addr: &str,
+        subject: &str,
         bec_verdict: Option<&str>,
     ) -> TriageBucket {
         let subject_lower = subject.to_lowercase();
-        let from_lower    = from_addr.to_lowercase();
+        let from_lower = from_addr.to_lowercase();
 
         // Paper Trail: 取引・確認メール
         let paper_trail_markers = [
-            "receipt", "order", "invoice", "confirmation", "booking",
-            "reservation", "shipping", "delivery", "statement", "transaction",
-            "領収書", "注文", "請求書", "予約確認", "配送", "振替",
-            "ご注文", "発送", "取引明細",
+            "receipt",
+            "order",
+            "invoice",
+            "confirmation",
+            "booking",
+            "reservation",
+            "shipping",
+            "delivery",
+            "statement",
+            "transaction",
+            "領収書",
+            "注文",
+            "請求書",
+            "予約確認",
+            "配送",
+            "振替",
+            "ご注文",
+            "発送",
+            "取引明細",
         ];
-        if paper_trail_markers.iter().any(|m| subject_lower.contains(m))
-           || from_lower.contains("noreply")
-           || from_lower.contains("no-reply")
-           || from_lower.contains("donotreply") {
+        if paper_trail_markers
+            .iter()
+            .any(|m| subject_lower.contains(m))
+            || from_lower.contains("noreply")
+            || from_lower.contains("no-reply")
+            || from_lower.contains("donotreply")
+        {
             return TriageBucket::PaperTrail;
         }
 
         // Feed: ニュースレター・更新情報
         let feed_markers = [
-            "newsletter", "unsubscribe", "weekly digest", "monthly digest",
-            "update", "announcement", "new features", "changelog",
-            "ニュースレター", "配信", "週刊", "月刊", "お知らせ", "更新情報",
+            "newsletter",
+            "unsubscribe",
+            "weekly digest",
+            "monthly digest",
+            "update",
+            "announcement",
+            "new features",
+            "changelog",
+            "ニュースレター",
+            "配信",
+            "週刊",
+            "月刊",
+            "お知らせ",
+            "更新情報",
         ];
         if feed_markers.iter().any(|m| subject_lower.contains(m)) {
             return TriageBucket::Feed;

@@ -123,7 +123,10 @@ impl TieredRiskController {
     /// Green は確認不要。Yellow は Untrusted の場合のみ。Red は常に確認。
     #[must_use]
     pub fn requires_confirmation(action: &AgentAction, involves_untrusted: bool) -> bool {
-        !matches!(Self::decide(action, involves_untrusted), AccessDecision::Allow)
+        !matches!(
+            Self::decide(action, involves_untrusted),
+            AccessDecision::Allow
+        )
     }
 }
 
@@ -185,9 +188,15 @@ mod tests {
     #[test]
     fn prompt_fatigue_reduction() {
         // Green は確認不要 (prompt fatigue 低減)
-        assert!(!TieredRiskController::requires_confirmation(&AgentAction::ReadEmail, true));
+        assert!(!TieredRiskController::requires_confirmation(
+            &AgentAction::ReadEmail,
+            true
+        ));
         // Red は確認必要
-        assert!(TieredRiskController::requires_confirmation(&AgentAction::SendEmail, false));
+        assert!(TieredRiskController::requires_confirmation(
+            &AgentAction::SendEmail,
+            false
+        ));
     }
 }
 

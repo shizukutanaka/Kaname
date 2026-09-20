@@ -91,7 +91,10 @@ pub enum ThreadHijackSignal {
     /// 送信者ドメインがスレッド内で突然変わった。
     SenderDomainChanged { from: String, to: String },
     /// スレッド内で言語が急変した。
-    LanguageShift { from: ThreadLanguage, to: ThreadLanguage },
+    LanguageShift {
+        from: ThreadLanguage,
+        to: ThreadLanguage,
+    },
     /// 返信スレッドに高リスクトピックが突然出現。
     HighRiskTopicInjected { keyword: String },
     /// 件名に Re: が付いているが元件名との一致度が低い。
@@ -118,7 +121,10 @@ pub fn analyze_thread_hijack(ctx: &ThreadContext<'_>) -> ThreadHijackResult {
         // RFC 5322: Message-ID はケースセンシティブだが実装上は大文字小文字を無視して比較
         // (攻撃者が <ABC@example.com> vs 既知 <abc@example.com> でバイパスする手法を防ぐ)
         if !ref_id_clean.is_empty()
-            && !ctx.known_thread_message_ids.iter().any(|id| id.eq_ignore_ascii_case(ref_id_clean))
+            && !ctx
+                .known_thread_message_ids
+                .iter()
+                .any(|id| id.eq_ignore_ascii_case(ref_id_clean))
         {
             signals.push(ThreadHijackSignal::UnknownMessageIdReferenced {
                 message_id: ref_id_clean.to_string(),
@@ -195,7 +201,10 @@ pub fn analyze_thread_hijack(ctx: &ThreadContext<'_>) -> ThreadHijackResult {
 
     // スコアを [0, 1] にクランプ
     let risk_score = score.min(1.0);
-    ThreadHijackResult { risk_score, signals }
+    ThreadHijackResult {
+        risk_score,
+        signals,
+    }
 }
 
 /// テキストの主要言語を推定する (簡易ヒューリスティック)。
@@ -230,11 +239,26 @@ fn detect_language(text: &str) -> ThreadLanguage {
 /// 高リスクキーワードを本文から検索する。
 fn detect_high_risk_keyword(text: &str) -> Option<&'static str> {
     const HIGH_RISK: &[&str] = &[
-        "wire transfer", "bank transfer", "urgent payment", "send money",
-        "bitcoin", "cryptocurrency", "wallet address", "gift card",
-        "invoice attached", "overdue payment", "immediate action",
-        "至急", "緊急", "送金", "振込", "口座番号", "ビットコイン",
-        "仮想通貨", "暗号資産", "プレゼントカード",
+        "wire transfer",
+        "bank transfer",
+        "urgent payment",
+        "send money",
+        "bitcoin",
+        "cryptocurrency",
+        "wallet address",
+        "gift card",
+        "invoice attached",
+        "overdue payment",
+        "immediate action",
+        "至急",
+        "緊急",
+        "送金",
+        "振込",
+        "口座番号",
+        "ビットコイン",
+        "仮想通貨",
+        "暗号資産",
+        "プレゼントカード",
     ];
     let lower = text.to_ascii_lowercase();
     HIGH_RISK.iter().find(|&&kw| lower.contains(kw)).copied()
@@ -317,8 +341,16 @@ mod tests {
             "来週の議事録を確認しました。よろしくお願いします。",
         );
         let r = analyze_thread_hijack(&ctx);
-        assert!(r.risk_score < 0.20, "正規返信はスコアが低いべき: {}", r.risk_score);
-        assert!(r.signals.is_empty(), "シグナルなしであるべき: {:?}", r.signals);
+        assert!(
+            r.risk_score < 0.20,
+            "正規返信はスコアが低いべき: {}",
+            r.risk_score
+        );
+        assert!(
+            r.signals.is_empty(),
+            "シグナルなしであるべき: {:?}",
+            r.signals
+        );
     }
 
     #[test]
@@ -337,7 +369,9 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
+            r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
             "未知の MessageID はシグナルを発するべき"
         );
         assert!(r.risk_score >= 0.30);
@@ -359,7 +393,8 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.contains(&ThreadHijackSignal::ReplySubjectWithoutInReplyTo),
+            r.signals
+                .contains(&ThreadHijackSignal::ReplySubjectWithoutInReplyTo),
             "In-Reply-To なし Re: はシグナルを発するべき"
         );
     }
@@ -380,7 +415,9 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::SenderDomainChanged { .. })),
+            r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::SenderDomainChanged { .. })),
             "ドメイン変化はシグナルを発するべき"
         );
         assert!(r.risk_score >= 0.35);
@@ -402,7 +439,9 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::LanguageShift { .. })),
+            r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::LanguageShift { .. })),
             "言語シフトはシグナルを発するべき"
         );
     }
@@ -423,7 +462,9 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::HighRiskTopicInjected { .. })),
+            r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::HighRiskTopicInjected { .. })),
             "返信に高リスクトピックが注入された場合はシグナルを発するべき"
         );
     }
@@ -444,7 +485,9 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::SubjectManipulated { .. })),
+            r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::SubjectManipulated { .. })),
             "件名が大きく変化した場合はシグナルを発するべき"
         );
     }
@@ -458,25 +501,39 @@ mod tests {
             Some("<forged@attacker.com>"), // 未知 MessageID
             &known_ids,
             &domains,
-            "examp1e.com",               // ドメイン変化
+            "examp1e.com", // ドメイン変化
             Some("通常業務の報告"),
             "Re: 通常業務の報告",
             Some(ThreadLanguage::Japanese),
             "Please wire transfer $100,000 immediately to account 1234567890.", // 言語シフト + 高リスク
         );
         let r = analyze_thread_hijack(&ctx);
-        assert!(r.risk_score >= 0.80, "複合攻撃はリスクスコアが高いべき: {}", r.risk_score);
-        assert!(r.signals.len() >= 3, "複数シグナルが検出されるべき: {:?}", r.signals);
+        assert!(
+            r.risk_score >= 0.80,
+            "複合攻撃はリスクスコアが高いべき: {}",
+            r.risk_score
+        );
+        assert!(
+            r.signals.len() >= 3,
+            "複数シグナルが検出されるべき: {:?}",
+            r.signals
+        );
     }
 
     #[test]
     fn detect_language_japanese() {
-        assert_eq!(detect_language("こんにちは、お世話になっております。"), ThreadLanguage::Japanese);
+        assert_eq!(
+            detect_language("こんにちは、お世話になっております。"),
+            ThreadLanguage::Japanese
+        );
     }
 
     #[test]
     fn detect_language_english() {
-        assert_eq!(detect_language("Please send the invoice immediately."), ThreadLanguage::English);
+        assert_eq!(
+            detect_language("Please send the invoice immediately."),
+            ThreadLanguage::English
+        );
     }
 
     #[test]
@@ -515,8 +572,11 @@ mod tests {
         let r = analyze_thread_hijack(&ctx);
         // 大文字小文字のみ異なる既知 MessageID は「未知」として扱わない
         assert!(
-            !r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
-            "大文字小文字のみ異なる MessageID は既知として扱われるべき: {:?}", r.signals
+            !r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
+            "大文字小文字のみ異なる MessageID は既知として扱われるべき: {:?}",
+            r.signals
         );
     }
 
@@ -537,7 +597,9 @@ mod tests {
         );
         let r = analyze_thread_hijack(&ctx);
         assert!(
-            r.signals.iter().any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
+            r.signals
+                .iter()
+                .any(|s| matches!(s, ThreadHijackSignal::UnknownMessageIdReferenced { .. })),
             "完全に異なる MessageID は依然としてフラグを立てるべき"
         );
     }
