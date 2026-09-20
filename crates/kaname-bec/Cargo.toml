@@ -14,3 +14,6 @@ kaname-pivot  = { path = "../kaname-pivot" }
 kaname-memory-guard = { path = "../kaname-memory-guard" }
 
 [dev-dependencies]
+
+[lints]
+workspace = true

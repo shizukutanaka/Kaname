@@ -322,8 +322,10 @@ PY
 
 echo ""
 echo "== 6. 本番コードに .unwrap() が無いこと (CLAUDE.md 不変条件 I6) =="
-# I6: 「unwrap() は本番コードに使用禁止」。#[deny(clippy::unwrap_used)] で
-# 強制する設計だが、clippy は D20 により実行できず一度も検証されていない。
+# I6: 「unwrap() は本番コードに使用禁止」。各クレートの
+# #![deny(clippy::unwrap_used)] と [lints] workspace = true 継承で
+# clippy レベルでも強制される (2026-09-20 に全クレートへ有効化)。
+# この検査は clippy が実行できない環境向けの代替として残す。
 # テストコード (#[cfg(test)] mod / 個々の #[test] 関数) は対象外。
 python3 - <<'PY' || fail=1
 import re, glob, sys
@@ -331,6 +333,62 @@ import re, glob, sys
 def _blank(text: str) -> str:
     # 除去した範囲を同じ改行数の空白に置き換える (行番号がズレないように)。
     return '\n' * text.count('\n')
+
+def strip_strings_comments(src: str) -> str:
+    # 文字列・char・コメントを単一パスで空白化する (改行は保持し行番号を維持)。
+    # 検査2の strip_noise と同じ状態機械だが、#[cfg(test)] / #[test] の検出に
+    # 必要なため属性テキストは残す (属性内の文字列は通常通り空白化される)。
+    # 旧 strip_comments_and_strings は「raw文字列→char→文字列→コメント」の
+    # 正規表現カスケードで、コメント内の孤立 " が後続の文字列リテラルと
+    # ペア化して parity を反転させ、本番 .unwrap() を文字列内に飲み込んで
+    # 見逃す欠陥があった (合成テストで実証: 検出行なし)。
+    src = re.sub(r'(?<![a-zA-Z0-9_])r(#*)"(?:.*?)"\1',
+                 lambda m: _blank(m.group(0)), src, flags=re.S)
+    out = []
+    i, n = 0, len(src)
+    NORMAL, IN_STR, IN_LINE, IN_BLOCK = 0, 1, 2, 3
+    state = NORMAL
+    block_depth = 0
+    while i < n:
+        c = src[i]
+        if state == NORMAL:
+            if c == '/' and i + 1 < n and src[i + 1] == '/':
+                state = IN_LINE; i += 2; continue
+            if c == '/' and i + 1 < n and src[i + 1] == '*':
+                state = IN_BLOCK; block_depth = 1; i += 2; continue
+            if c == '"':
+                state = IN_STR; i += 1; continue
+            if c == "'":
+                # char リテラルは 'x'/'\\n'/'}' 等1要素のみ。
+                # ライフタイム 'a / 'static は閉じ ' が無いので残す。
+                m = re.match(r"'(?:[^'\\]|\\.)'", src[i:])
+                if m:
+                    out.append(' ' * m.end()); i += m.end(); continue
+                out.append(c); i += 1; continue
+            out.append(c); i += 1; continue
+        if state == IN_STR:
+            if c == '\\':
+                i += 2; continue          # \" \\ \<改行> 等のエスケープ/継続
+            if c == '"':
+                state = NORMAL; i += 1; continue
+            if c == '\n':
+                out.append('\n')
+            i += 1; continue
+        if state == IN_LINE:
+            if c == '\n':
+                out.append('\n'); state = NORMAL
+            i += 1; continue
+        # IN_BLOCK: Rust のブロックコメントはネストする
+        if src.startswith('/*', i):
+            block_depth += 1; i += 2; continue
+        if src.startswith('*/', i):
+            block_depth -= 1; i += 2
+            if block_depth == 0: state = NORMAL
+            continue
+        if c == '\n':
+            out.append('\n')
+        i += 1
+    return ''.join(out)
 
 def strip_cfg_test_mods(src):
     out, i, n = [], 0, len(src)
@@ -354,10 +412,14 @@ def strip_cfg_test_mods(src):
     return ''.join(out)
 
 def strip_single_test_fns(src):
-    # #[test] / #[tokio::test] が付いた個々の関数本体を、ブレース対応で除去する
-    # (mod tests { } の外に単発で置かれているテスト関数のため)。
+    # #[test] / #[tokio::test] / #[rstest] が付いた個々の関数本体を、
+    # ブレース対応で除去する (mod tests { } の外に単発で置かれるテスト用)。
+    # 属性引数 `#[tokio::test(flavor = "...")]` は `]` が1つなので
+    # `[^\]\n]*` で閉じ `]` まで読む。旧パターンの `[^\]]*` は改行も
+    # 飲んでしまい、`#[test]\nfn t() { ... }` の関数本体全体を「属性」として
+    # 貪欲に消費してテスト除去が一切機能していなかった (合成テストで実証)。
     out, i, n = [], 0, len(src)
-    pat = re.compile(r'#\[(?:tokio::)?test\][^\]]*\]?\s*\n')
+    pat = re.compile(r'#\[(?:(?:tokio|async_std)::)?(?:test|rstest)\b[^\]\n]*\]\s*\n')
     while i < n:
         m = pat.search(src, i)
         if not m:
@@ -394,7 +456,12 @@ for f in glob.glob('crates/**/*.rs', recursive=True) + glob.glob('src-tauri/**/*
     if '/target/' in f:
         continue
     src = open(f, encoding='utf-8', errors='replace').read()
-    prod = strip_comments_and_strings(strip_single_test_fns(strip_cfg_test_mods(src)))
+    # 先に文字列/コメントを空白化してからブレース対応を取る。
+    # 生ソースでブレース対応を取ると、テスト内の "}" や '}' が
+    # 深さカウンタを壊して mod/fn が早期に閉じ、テストコードが本番扱いで
+    # 誤検知される (合成テストで実証: '}': char の後の unwrap が NG 報告)。
+    masked = strip_strings_comments(src)
+    prod = strip_single_test_fns(strip_cfg_test_mods(masked))
     if re.search(r'\.unwrap\(\)', prod):
         for m in re.finditer(r'\.unwrap\(\)', prod):
             ln = prod[:m.start()].count('\n') + 1
@@ -437,13 +504,65 @@ BUILTIN_TYPES = {
 }
 
 def strip_ts_noise(src: str) -> str:
-    src = re.sub(r'r#*"(?:.*?)"#*', '""', src, flags=re.S)
-    src = re.sub(r"'(?:[^'\\]|\\.)*'", "''", src, flags=re.S)
-    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src, flags=re.S)
-    src = re.sub(r'`(?:[^`\\]|\\.)*`', '``', src, flags=re.S)
-    src = re.sub(r'/\*.*?\*/', ' ', src, flags=re.S)
-    src = re.sub(r'//[^\n]*', '', src)
-    return src
+    # Rust 側と同じく単一パスで文字列/コメントを除去する。
+    # 旧実装は正規表現カスケードで、コメント内の孤立 ' (don't 等) が
+    # 後続のリテラルとペア化して parity を反転させ、リテラル間のコードを
+    # 見えなくする欠陥があった。また先頭の r#*"..."#* パターンは Rust の
+    # 生文字列のもので、TS には存在しない構文を誤って持ち込んでいた。
+    # `...` テンプレート内の ${...} は式なので、中身は残して再帰的に除去する
+    # (${x as Foo} の Foo のような型参照を検出対象に含めるため)。
+    out = []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '/' and src[i + 1:i + 2] == '/':
+            j = src.find('\n', i)
+            i = n if j < 0 else j
+            continue
+        if c == '/' and src[i + 1:i + 2] == '*':
+            j = src.find('*/', i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c in '\'"':
+            # 引用符は残す — import 抽出 (`from "..."`) が引用符の有無で
+            # 文を識別するため、消すと import が見えなくなる (誤検知になる)。
+            out.append(c)
+            q = c; i += 1
+            while i < n:
+                if src[i] == '\\': i += 2; continue
+                if src[i] == q: out.append(src[i]); i += 1; break
+                if src[i] == '\n': break  # '...' "..." は改行を跨げない
+                i += 1
+            continue
+        if c == '`':
+            out.append(c); i += 1
+            while i < n:
+                if src[i] == '\\': i += 2; continue
+                if src[i] == '`': out.append(src[i]); i += 1; break
+                if src.startswith('${', i):
+                    j, depth = i + 2, 1
+                    while j < n and depth:
+                        ch = src[j]
+                        if ch == '{': depth += 1
+                        elif ch == '}': depth -= 1
+                        elif ch in '\'"`':
+                            q = ch; j += 1
+                            while j < n:
+                                if src[j] == '\\': j += 2; continue
+                                if src[j] == q: break
+                                j += 1
+                        elif ch == '/' and src[j+1:j+2] == '/':
+                            k = src.find('\n', j); j = n if k < 0 else k; continue
+                        elif ch == '/' and src[j+1:j+2] == '*':
+                            k = src.find('*/', j+2); j = n if k < 0 else k+2; continue
+                        j += 1
+                    out.append(strip_ts_noise(src[i + 2:j - 1]))
+                    i = j
+                    continue
+                i += 1
+            continue
+        out.append(c); i += 1
+    return ''.join(out)
 
 bad = 0
 for f, raw in files.items():

@@ -10,3 +10,6 @@ publish             = false
 
 [dev-dependencies]
 # テスト用依存をここに追加
+
+[lints]
+workspace = true

@@ -257,7 +257,7 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 
 | # | 内容 | 優先度 | 備考 |
 |---|---|---|---|
-| D62 | **rustfmt ドリフト**: `cargo fmt --check` で 1,610 箇所の差分 (64ファイル)。コードベース全体が rustfmt 非準拠 | P2 | 機械的 `cargo fmt` で解消可能だが diff が巨大のため別 PR 化を推奨。sweep PR マージ後に実施 |
+| D62 | ~~**rustfmt ドリフト**: `cargo fmt --check` で 1,610 箇所の差分 (64ファイル)。コードベース全体が rustfmt 非準拠~~ **(2026-09-20 解消確認)** | P2 | sweep PR 群で解消済み: `cargo +stable fmt --all --check` が差分ゼロで通過するのを実測 |
 | D63 | **CI テンプレートが未配置**: `ci-templates/` に ci.yml 等があるが `.github/workflows/` が存在せず CI が実際に動いていない (D7 と同一根因) | P0 (権限必要) | `cp ci-templates/*.yml .github/workflows/` ではなく、テンプレートのブランチ/ジョブ定義をレビューしてから配置する人間作業が必要 |
 | D64 | `cargo-nextest` 未インストール (Makefile/CLAUDE.md は nextest 前提だが環境に無し) | P3 | `cargo test` で代替可能だが CI 想定時は `cargo install cargo-nextest` が必要 |
 | D65 | ~~**BEC 評価への連絡先・Reply-To・Return-Path が未配線**: 全3経路で `known_contacts`=`Vec::new()`、`reply_to`/`return_path`=`None` 固定 — 実装済みの Reply-To 詐称・連絡先詐称検出が本番で一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | kaname-render の `Envelope` に `reply_to`/`return_path` を追加、kaname-jmap の `Email/get` に `replyTo` を要求、kaname-store に `list_contacts` を追加し kaname-ui の全経路で配線。nextest 439 pass 実測 |
@@ -267,12 +267,21 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D67 | ~~**BEC 評価へのスレッド文脈・DKIM 署名が未配線**: 全3経路で `thread_context`=`None`、`past_thread_bodies`=`&[]`、`dkim_signature_header`=`None` 固定 — 実装済みのスレッド乗っ取り・口座差し替え・DKIM `l=` 乱用/リプレイ検出が本番で一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | kaname-render の `Envelope` に `in_reply_to`/`references`/`dkim_signature` を追加、kaname-jmap の `Email/get` に `messageId`/`inReplyTo`/`references`/`header:DKIM-Signature:asText` を要求、kaname-store の `messages` に `message_id`/`thread_id` 永続化 + `list_thread_messages`/`list_messages_by_message_ids` 追加、kaname-ui 全経路で配線 (kaname-bec `detect_language` を pub 化 — 要 security-lead 承認)。一覧経路の Authentication-Results (SPF/DKIM/DMARC) も `header:Authentication-Results:asText` で実値化 (kaname-render `parse_auth_results_str` 公開)。nextest 1,183 pass 実測 |
 | D68b | **メール一覧にページネーションが無い**: `mail_fetch`/`mail_list_stored` は `position=0` 固定・先頭 `limit` (≤500) 件のみ — 受信箱に51通目以降のメールを表示する経路がない (UI に「もっと読む」も無い) | P3 | kaname-jmap `query_emails` の `position` パラメータは実在するため、UI にページ送り/無限スクロールを追加し offset を渡せば実現可能。現状は「最新50件のみ表示」制限として明記 |
 | D70 | **オンボーディングの通知/テレメトリトグルが書き込み専用**: `settings_save_onboarding` は `notifications`/`telemetry` を `settings` テーブルへ永続化するが、読み出すコードパスが存在しない (通知送信・テレメトリ送信の機能自体が未実装)。ユーザーは「通知を有効にした」が通知は一切来ない placebo 状態 | P4 | 機能実装時に `get_setting` で読み出して利用する。現状は設定値が inert データである旨をここに明記 (偽装ではなく先行収集だが、ユーザー期待との乖離はある) |
+| D73 | ~~**static-check.sh 検査6/7 に同型の字句解析欠陥が残置**~~ **(2026-09-20 解消)** | P1 | PR #209 は検査2/4 のみ状態機械化しており、検査6 の `strip_comments_and_strings` (正規表現カスケード) と検査7 の `strip_ts_noise` は未修正だった。実証した実害2種: (a) doc コメント内の孤立 `"` が後続文字列とペア化して**本番 .unwrap() を見逃す** (合成 p1 で検出行なし)、(b) `strip_single_test_fns` のパターン `[^\]]*\]?\s*\n` が `[^\]]*` に改行を許すため `#[test]` から文末までを「属性」として貪欲消費し、**テスト関数除去が一度も機能していなかった** (テスト内 unwrap が本番扱いで誤 NG)。さらに検査6/検査内の mod 検出は生ソースでブレース対応を取っており `"}"`/`'}'` で早期閉じしうる、検査7 は Rust の `r#` パターンを TS に誤持込 + テンプレート `${}` 内の式 (型参照を含みうる) を丸ごと抹消していた。修正: 検査6は属性テキスト保持の単一パス字句解析 (`strip_strings_comments`) + mask 済みテキストでのブレース対応、検査7は単一パス + `${}` 内再帰除去に置き換え、引用符は import 文識別のため残す。合成回帰3件 (孤立"後の本番 unwrap 検出・テスト内 unwrap 非検出・文字列内 unwrap 非検出) を実測確認 |
+| D74 | ~~**[workspace.lints] が死んだ設定**: root Cargo.toml に `await_holding_lock`/`await_holding_refcell_ref` を deny と明記しているが、24 パッケージ全てが `[lints] workspace = true` 未宣言で誰にも継承されていなかった — 「P0/Concurrency の静的検出」は一度も発火していなかった~~ **(2026-09-20 解消)** | P1 | 全24 Cargo.toml に `[lints] workspace = true` を追記して継承有効化。`cargo +stable clippy --workspace --all-targets` 既存コード 0 違反、合成違反 (MutexGuard を .await 跨ぎで保持) で `-D clippy::await-holding-lock` の発火を実測確認 |
 
 ### 完了判定の変更
 
 初の全検証実走により:「ビルド不可 (C1)」は P0 級の完成阻害だったが解消。
 テスト 1,290 合格 / clippy 0 エラー / 静的検査 8/8 / TS 系全グリーン。
 残る P0 は D63 (CI 未配置 — 人間権限) のみ。
+
+**2026-09-20 (追記・安全網の再監査)**: 「静的検査 8/8」の裏で検査6/7 の
+字句解析は同型欠陥を残したままだった (D73 — PR #209 が検査2/4 のみ修正)。
+`strip_single_test_fns` に至ってはパターンの貪欲消費で**一度も機能してい
+なかった**。さらに `[workspace.lints]` は member crate 未継承の死んだ
+設定だった (D74)。「書いてある検査が効いている」は毎回合成テストで
+証明するまで信用しない、がこのドキュメントの方針。D62 は解消確認済み。
 
 ## Opus/Sonnet への申し送り事項
 
