@@ -26,6 +26,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - docker-compose の Rust イメージを `rust:1.82-bookworm` → `rust:bookworm` に修正 — workspace の MSRV (1.85) を下回っており `docker compose up` でビルドが失敗していた
 - **BEC 警戒バッジが初回ロード以降更新されなかった**: `mail:summary_updated`/`bec:alert` の購読側だけ存在し emit 側がゼロのデッドイベントだった → `mail_fetch`/`mail_mark_read`/`mail_trash` 成功時に実集計値を emit するよう配線。`bec:alert` (開封ごとに +1 で fetch 時の集計と二重計上する誤りがあった) は削除
 
+- **ARC 検証結果を BEC 評価に実配線**: `Authentication-Results` ヘッダの `arc=` を解析対象に追加し、kaname-bec の ARC シグナル (転送チェーン改ざん +0.35 / 正当な崩れ緩和 −0.10) が実データで発火するようにした — 従来は全3経路で `arc: None` 固定
+
 - **ゴミ箱移動がサーバー側で実際に移動していなかった欠陥**: `Email/set` の `mailboxIds` パッチは `{trash: true}` だけだと追加のみで受信トレイから除去されない (RFC 8621 §4.6) → 現在の所属を `Email/get` で取得し全て `null` で除去するパッチに修正
 
 - **オンボーディングが完全に無スタイルで描画されていた欠陥**: `k-*` クラス37個が CSS 未定義のまま残存 (アーカイブ移行時にスタイル定義が欠落) → ダークテーマのスタイルブロックをコンポーネント内に定義。トグル・進捗ドット・危険カード等すべて正しく描画されるようになった

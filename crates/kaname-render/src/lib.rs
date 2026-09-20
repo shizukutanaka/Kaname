@@ -160,6 +160,10 @@ pub struct AuthResultsHeader {
     pub dkim: AuthResult,
     /// DMARC 検証結果。
     pub dmarc: AuthResult,
+    /// ARC 検証結果 (転送チェーンの真正性。RFC 8617)。
+    /// メーリングリスト等の正当な転送で SPF/DKIM が崩れたときの
+    /// 緩和シグナル、および転送経路での改ざんシグナルとして使う。
+    pub arc: AuthResult,
     /// ヘッダを記述した MTA の識別子 (authserv-id, RFC 8601 §2.2)。
     ///
     /// RFC 8601 §7.1 は、MUA が信頼する authserv-id のリストと照合して
@@ -378,11 +382,13 @@ pub fn parse_auth_results_str(header_text: &str) -> AuthResultsHeader {
     let spf = extract_auth_result(header_text, "spf");
     let dkim = extract_auth_result(header_text, "dkim");
     let dmarc = extract_auth_result(header_text, "dmarc");
+    let arc = extract_auth_result(header_text, "arc");
 
     AuthResultsHeader {
         spf,
         dkim,
         dmarc,
+        arc,
         authserv_id,
     }
 }
@@ -878,6 +884,20 @@ mod tests {
         let empty = parse_auth_results_str("");
         assert_eq!(empty.spf, AuthResult::None);
         assert_eq!(empty.authserv_id, None);
+    }
+
+    /// ARC 結果も解析対象 — kaname-bec の ARC シグナル (転送チェーンの
+    /// 改ざん/正当な崩れ) はここからしか供給されない。
+    #[test]
+    fn parse_auth_results_str_は_arc_も解析する() {
+        let h = parse_auth_results_str(
+            "mx.example.com; spf=pass smtp.mailfrom=x.test; dkim=fail header.d=x.test; \
+             dmarc=pass header.from=x.test; arc=fail i=2",
+        );
+        assert_eq!(h.arc, AuthResult::Fail);
+
+        let none = parse_auth_results_str("mx.example.com; spf=pass");
+        assert_eq!(none.arc, AuthResult::None);
     }
 
     #[test]
