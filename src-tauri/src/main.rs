@@ -50,99 +50,8 @@ async fn ai_detect_phishing(email_id: String) -> Result<commands::PhishingAnalys
 }
 
 #[tauri::command]
-async fn ai_summarize_email(email_id: String) -> Result<commands::SafeSummary, String> {
-    commands::ai_summarize_email(email_id).await
-}
-
-#[tauri::command]
-async fn ai_smart_reply(email_id: String) -> Result<Vec<commands::SmartReplyCandidate>, String> {
-    commands::ai_smart_reply(email_id).await
-}
-
-#[tauri::command]
-async fn settings_set(account_id: String, key: String, value: String) -> Result<(), String> {
-    commands::settings_set(account_id, key, value).await
-}
-
-#[tauri::command]
-async fn settings_get(account_id: String, key: String) -> Result<Option<String>, String> {
-    commands::settings_get(account_id, key).await
-}
-
-#[tauri::command]
 async fn log_error(message: String) -> Result<(), String> {
     commands::log_error(message).await
-}
-
-// ============================================================================
-// arxiv 研究ベースの防御コマンド (これまで未登録で到達不能だったもの)
-//
-// これらは kaname-ui に実装・テスト済みだが、`invoke_handler` に登録されて
-// おらず、かつ commands.rs 側の `#[cfg_attr(feature = "tauri-app", ...)]` も
-// src-tauri が `features = ["tauri-app"]` を指定していないため無効だった。
-// 結果としてフロントエンドから一切呼び出せない「死蔵」状態だった。
-// 既存コマンドと同じラッパー方式で登録し、実際に到達可能にする。
-// ============================================================================
-
-/// 入力スクリーニング (arxiv 2505.22852 §2.1)。
-#[tauri::command]
-async fn screen_user_input(input: String) -> Result<commands::ScreenResponse, String> {
-    commands::screen_user_input(input).await
-}
-
-/// AI 出力監査 (arxiv 2505.22852 §2.2)。
-#[tauri::command]
-async fn audit_ai_output(output: String) -> Result<bool, String> {
-    commands::audit_ai_output(output).await
-}
-
-/// Tiered-Risk アクセス制御 (arxiv 2505.22852 §3)。
-#[tauri::command]
-async fn check_action_risk(action_name: String, involves_untrusted: bool) -> Result<String, String> {
-    commands::check_action_risk(action_name, involves_untrusted).await
-}
-
-/// メモリ汚染防御の信頼スコア (arxiv 2601.05504)。
-#[tauri::command]
-async fn check_memory_trust(source_kind: String, content_hint: String) -> Result<f32, String> {
-    commands::check_memory_trust(source_kind, content_hint).await
-}
-
-/// Rule of Two 判定 (arxiv 2601.17548)。
-#[tauri::command]
-async fn check_rule_of_two(
-    process_untrusted: bool,
-    access_sensitive: bool,
-    external_comm: bool,
-) -> Result<String, String> {
-    commands::check_rule_of_two(process_untrusted, access_sensitive, external_comm).await
-}
-
-/// ツール引数すり替え検証 (arxiv 2601.11893)。
-#[tauri::command]
-async fn validate_tool_argument(
-    expected_recipient: String,
-    actual_arg: String,
-) -> Result<bool, String> {
-    commands::validate_tool_argument(expected_recipient, actual_arg).await
-}
-
-/// エージェント行動履歴の記録 (トラジェクトリ監視)。
-#[tauri::command]
-async fn record_agent_step(
-    action: String,
-    touched_untrusted: bool,
-    accessed_sensitive: bool,
-    external_comm: bool,
-    timestamp_ms: u64,
-) -> Result<Vec<String>, String> {
-    commands::record_agent_step(action, touched_untrusted, accessed_sensitive, external_comm, timestamp_ms).await
-}
-
-/// トラジェクトリのリセット。
-#[tauri::command]
-async fn reset_trajectory() -> Result<(), String> {
-    commands::reset_trajectory().await
 }
 
 /// OOBV (電話確認) の必要性判定。
@@ -153,18 +62,10 @@ async fn oobv_recommend(
     commands::oobv_recommend(req).await
 }
 
-/// Deepfake 添付の警告判定。
-#[tauri::command]
-async fn deepfake_evaluate(
-    req: commands::DeepfakeEvaluateRequest,
-) -> Result<commands::AdvisoryReport, commands::V02CommandError> {
-    commands::deepfake_evaluate(req).await
-}
-
-// ── V02AppState を共有する3コマンド (D15 残件) ────────────────────────────────
+// ── V02AppState を共有するコマンド (D15 残件) ────────────────────────────────
 //
-// oobv_start / oobv_verify / pivot_analyze は `Arc<V02AppState>` を引数に取る
-// ため、`.manage()` でステートを登録し `tauri::State` として受け取る必要が
+// oobv_start / oobv_verify は `Arc<V02AppState>` を引数に取るため、
+// `.manage()` でステートを登録し `tauri::State` として受け取る必要が
 // あった。ここで配線して到達可能にする。
 
 /// OOBV (Out-of-Band Verification) セレモニーを開始する。
@@ -183,15 +84,6 @@ async fn oobv_verify(
     req: commands::OobvVerifyRequest,
 ) -> Result<commands::OobvVerifyResponse, commands::V02CommandError> {
     commands::oobv_verify(state.inner().clone(), req).await
-}
-
-/// Pivot 攻撃 (電話番号・別チャネルへの誘導) を解析する。
-#[tauri::command]
-async fn pivot_analyze(
-    state: tauri::State<'_, std::sync::Arc<commands::V02AppState>>,
-    req: commands::PivotAnalyzeRequest,
-) -> Result<commands::PivotAnalyzeResponse, commands::V02CommandError> {
-    commands::pivot_analyze(state.inner().clone(), req).await
 }
 
 // ============================================================================
@@ -278,21 +170,6 @@ async fn mail_search(
     limit: Option<u32>,
 ) -> Result<Vec<commands::StoredMessage>, String> {
     commands::mail_search(query, limit).await
-}
-
-/// 送信者履歴データベース (SQLCipher) を開く。
-///
-/// 履歴があると BEC の履歴シグナル (初回連絡 / 久しぶりの連絡 /
-/// 普段と違うトピック / 検証済み) が有効になる。
-#[tauri::command]
-async fn history_open(path: String, key_hex: String) -> Result<(), String> {
-    commands::history_open(path, key_hex).await
-}
-
-/// 履歴データベースを閉じる。
-#[tauri::command]
-async fn history_close() -> Result<(), String> {
-    commands::history_close().await
 }
 
 /// 送信者を「検証済み」としてマークする。
@@ -405,8 +282,8 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        // OOBV セレモニー / Pivot 履歴 / 監査ログの共有状態 (D15 残件)。
-        // `oobv_start`/`oobv_verify`/`pivot_analyze` が tauri::State 経由で受け取る。
+        // OOBV セレモニー / 監査ログの共有状態 (D15 残件)。
+        // `oobv_start`/`oobv_verify` が tauri::State 経由で受け取る。
         .manage(commands::V02AppState::new())
         .setup(|app| {
             #[cfg(desktop)]
@@ -421,26 +298,11 @@ fn main() {
             mail_mark_read,
             mail_trash,
             ai_detect_phishing,
-            ai_summarize_email,
-            ai_smart_reply,
-            settings_set,
-            settings_get,
             log_error,
-            // arxiv 研究ベースの防御コマンド (今回登録して到達可能化)
-            screen_user_input,
-            audit_ai_output,
-            check_action_risk,
-            check_memory_trust,
-            check_rule_of_two,
-            validate_tool_argument,
-            record_agent_step,
-            reset_trajectory,
             oobv_recommend,
-            deepfake_evaluate,
             // V02AppState を共有するコマンド (D15 残件、.manage() で配線)
             oobv_start,
             oobv_verify,
-            pivot_analyze,
             // 実メールの入口 (ローカル .eml インポート)
             mail_import_eml,
             mail_scan_folder,
@@ -453,8 +315,6 @@ fn main() {
             mail_list_attachment_blobs,
             mail_list_stored,
             mail_search,
-            history_open,
-            history_close,
             history_mark_verified,
             // 未配線であることを明示的に返すコマンド (UI の不可解な失敗を解消)
             mail_send,

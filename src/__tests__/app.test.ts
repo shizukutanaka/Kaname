@@ -67,33 +67,3 @@ describe("formatDate", () => {
   });
 });
 
-// ── 3. セキュリティ不変条件 (契約テスト) ─────────────────────────────────────
-// Kaname の核心: AI は単一メールのみアクセス可能。
-// これは実際の Rust 側 (kaname-ai::SafeSummaryEngine 等) の出力契約を
-// フロントエンドが正しく前提としているかのドキュメント的テスト。
-// Rust 側の実挙動は crates/kaname-ai の単体テストで別途検証済み。
-
-describe("セキュリティ不変条件 (契約テスト)", () => {
-  it("SafeSummary の契約: single_email_only は常に true", () => {
-    const mockSummary = {
-      summary: "テスト要約",
-      risk: "SAFE",
-      email_id: "e1",
-      single_email_only: true,
-      local_inference:   true,
-      data_sources:      ["email:e1"],
-    };
-
-    expect(mockSummary.single_email_only).toBe(true);
-    expect(mockSummary.local_inference).toBe(true);
-    expect(mockSummary.data_sources.every(s => !s.includes("inbox"))).toBe(true);
-    expect(mockSummary.data_sources.every(s => !s.includes("all_emails"))).toBe(true);
-    expect(mockSummary.data_sources.every(s => s.includes("email:"))).toBe(true);
-  });
-
-  it("DLPブロック verdict の契約: type/reason フィールドを持つ", () => {
-    const dlpDecision = { type: "Block", reason: "極秘ラベル付きメールのAI処理は禁止" };
-    expect(dlpDecision.type).toBe("Block");
-    expect(dlpDecision.reason).toBeTruthy();
-  });
-});
