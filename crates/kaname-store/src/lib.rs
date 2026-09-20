@@ -320,6 +320,36 @@ impl Store {
         Ok(())
     }
 
+    /// アカウントの保存済みメール件数を集計する (`mail_get_summary` 用)。
+    ///
+    /// `is_deleted = 0` のみ。`bec_alerts` は `SUSPICIOUS`/`DANGEROUS` 判定の件数。
+    pub async fn message_stats(&self, account_id: &str) -> Result<MessageStats, StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT COUNT(*),                     SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END),                     SUM(CASE WHEN bec_verdict IN ('SUSPICIOUS','DANGEROUS') THEN 1 ELSE 0 END)                  FROM messages                  WHERE account_id = ?1 AND is_deleted = 0;",
+            )
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        let (total, unread, bec) = stmt
+            .query_row(params![account_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                    row.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                ))
+            })
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(MessageStats {
+            total: total.max(0) as u32,
+            unread: unread.max(0) as u32,
+            bec_alerts: bec.max(0) as u32,
+        })
+    }
+
     /// 不変の監査ログにエントリを追加する。
     pub async fn audit(
         &self,
@@ -1292,6 +1322,20 @@ pub struct StoredMessage {
     pub message_id: Option<String>,
 }
 
+/// `mail_get_summary` 用の件数集計 (messages テーブルの COUNT)。
+///
+/// `is_deleted = 0` のみを対象。`bec_alerts` は verdict が
+/// `SUSPICIOUS`/`DANGEROUS` のもの (ADVISORY は助言レベルなので除く)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MessageStats {
+    /// 保存済みメール総数。
+    pub total: u32,
+    /// 未読件数。
+    pub unread: u32,
+    /// BEC 警戒判定 (SUSPICIOUS + DANGEROUS) 件数。
+    pub bec_alerts: u32,
+}
+
 /// `LIKE` パターンのメタ文字をエスケープする。
 ///
 /// `%` `_` をそのまま渡すと利用者の検索語がワイルドカードとして解釈され、
@@ -1880,5 +1924,39 @@ mod message_persistence_tests {
             .list_messages_by_message_ids("acct1", &too_many)
             .await
             .is_err());
+    }
+    #[tokio::test]
+    async fn message_stats_は未読と_bec_警戒を集計する() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        // 空 DB は全ゼロ。
+        let s0 = store.message_stats("acct1").await.unwrap();
+        assert_eq!(
+            s0,
+            (MessageStats {
+                total: 0,
+                unread: 0,
+                bec_alerts: 0
+            })
+        );
+
+        // 未読1件 (SAFE) + 既読1件 (DANGEROUS) を保存。
+        let mut m1 = msg("jmap-1", "安全");
+        m1.bec_verdict = Some("SAFE".into());
+        let mut m2 = msg("jmap-2", "詐欺");
+        m2.is_read = true;
+        m2.bec_verdict = Some("DANGEROUS".into());
+        store.save_message("acct1", "inbox", &m1).await.unwrap();
+        store.save_message("acct1", "inbox", &m2).await.unwrap();
+
+        let s1 = store.message_stats("acct1").await.unwrap();
+        assert_eq!(s1.total, 2);
+        assert_eq!(s1.unread, 1);
+        assert_eq!(s1.bec_alerts, 1);
     }
 }
