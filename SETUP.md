@@ -47,7 +47,7 @@ npm run tauri:dev
 
 ```
 kaname/
-├── Cargo.toml              # Rust workspace (19 クレート)
+├── Cargo.toml              # Rust workspace (24 クレート — 出荷 19 + kaname-tauri + 開発用4)
 ├── package.json            # Node 依存
 ├── index.html              # Vite エントリ
 ├── vite.config.ts          # Vite 設定 (ポート 1420 固定)
@@ -198,9 +198,10 @@ npm run tauri:dev
 #    → 赤色バナー表示
 #    → 「危険・BEC攻撃の可能性」テキスト
 
-# 4. 「AI で要約」をクリック
-#    → 「このメール 1 通のみ分析」セキュリティ証明
-#    → 受信箱全体にアクセスしないことが UI で明示
+# 4. BEC 警告の操作を確認
+#    → OOBV セレモニー (📞 電話確認パネル) が表示される
+#    → 「本人確認済みにする」ボタンで信頼度が上がる
+#    (AI 要約機能は固定応答を返すスタブだったためコマンドごと削除済み — E11)
 
 # 5. 視覚的確認
 #    Liquid Glass サイドバー (backdrop-blur)
@@ -225,7 +226,7 @@ npm run tauri:dev
 
 - 設計を理解する: `docs/design.md`、`docs/adr/`
 - 脅威モデル: `docs/threat-model.md`
-- 製品ビジョン: `docs/keynote.md`
+- 製品ビジョン: `docs/vision-keynote.md`
 - リリースプロセス: `LAUNCH.md`
 - セキュリティ報告: `SECURITY.md`
 
