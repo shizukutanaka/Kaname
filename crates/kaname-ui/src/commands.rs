@@ -1410,12 +1410,26 @@ pub async fn mail_connect(base_url: String, token: String) -> Result<ConnectResu
     };
 
     *jmap_slot().lock().await = Some(std::sync::Arc::new(client));
+    audit_event(
+        Some(&result.account_id),
+        "MAIL_CONNECT",
+        serde_json::json!({"mailboxes": result.mailboxes.len()}),
+    )
+    .await;
     Ok(result)
 }
 
 /// 接続を破棄する (トークンをメモリから落とす)。
 pub async fn mail_disconnect() -> Result<(), String> {
-    *jmap_slot().lock().await = None;
+    let client = jmap_slot().lock().await.take();
+    if let Some(c) = client {
+        audit_event(
+            Some(c.account_id()),
+            "MAIL_DISCONNECT",
+            serde_json::json!({}),
+        )
+        .await;
+    }
     Ok(())
 }
 
@@ -1774,6 +1788,12 @@ async fn history_open(path: String, key_hex: String) -> Result<(), String> {
     if let Ok(false) = store.verify_audit_chain().await {
         warn!("監査ログのハッシュチェーンが破損 — 改ざんの可能性があります");
     }
+    if let Err(e) = store
+        .audit(None, "STORE_OPEN", &serde_json::json!({}))
+        .await
+    {
+        warn!(error=%e, "監査ログの書き込みに失敗");
+    }
     *store_slot().lock().await = Some(std::sync::Arc::new(store));
     info!(path=%path, "history_open");
     Ok(())
@@ -1886,7 +1906,16 @@ pub async fn history_mark_verified(email: String) -> Result<(), String> {
     store
         .mark_sender_verified(&account_id, &email)
         .await
-        .map_err(|e| format!("検証済みマークに失敗しました: {e}"))
+        .map_err(|e| format!("検証済みマークに失敗しました: {e}"))?;
+    // 送信者の「確認済み」化は以後の BEC 判定 (user_verified シグナル) を
+    // 変えるため、改ざん検知付きの監査ログに残す。
+    audit_event(
+        Some(&account_id),
+        "SENDER_VERIFIED",
+        serde_json::json!({"sender": email}),
+    )
+    .await;
+    Ok(())
 }
 
 /// Store から連絡先一覧を引き、BEC の `known_contacts` に渡す。
@@ -2178,6 +2207,20 @@ async fn current_account_id() -> String {
     }
 }
 
+/// 監査ログ (audit_log, ハッシュチェーン付き) への書き込み — best-effort。
+///
+/// Store が開かれていなければ記録しない。監査の失敗で本来の操作
+/// (メール送受信・添付保存等) を失敗させない。ペイロードは最小限に
+/// 留める — audit_log は messages/contacts と同じ暗号化 DB 内だが、
+/// 不要な本文・トークン・パスは絶対に書かない。
+async fn audit_event(account_id: Option<&str>, event_type: &str, payload: serde_json::Value) {
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Err(e) = store.audit(account_id, event_type, &payload).await {
+            warn!(error=%e, "監査ログの書き込みに失敗");
+        }
+    }
+}
+
 /// メールアドレスからドメイン部を取り出す (小文字化)。
 /// `"Name <a@b.com>"` のような表示名付きにも耐える。アドレス形でなければ None。
 fn email_domain(addr: &str) -> Option<String> {
@@ -2342,6 +2385,20 @@ pub async fn mail_download_attachment(
         std::fs::write(&path, &bytes).map_err(|e| format!("保存に失敗しました: {e}"))?;
         Some(path.to_string_lossy().into_owned())
     };
+
+    // 添付のディスク書き出し/拒否はセキュリティ上重要な出口イベント。
+    // 危険判定で拒否した場合こそ証跡が必要なため、拒否時も記録する。
+    audit_event(
+        Some(client.account_id()),
+        "ATTACHMENT_DOWNLOAD",
+        serde_json::json!({
+            "email_id": email_id,
+            "filename": filename,
+            "is_dangerous": scan.is_dangerous,
+            "saved": saved_path.is_some(),
+        }),
+    )
+    .await;
 
     Ok(AttachmentDownload {
         filename,
