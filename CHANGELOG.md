@@ -18,6 +18,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `e2e/tauri-mock.ts`: `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入で、Tauri ランタイムなしの `npm run dev` 上で UI 層 E2E を実現。コマンド呼び出しログ (`__KANAME_MOCK_LOG`) で invoke 引数まで検証可能
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
+### Added
+- **監査ログへの実イベント書き込みを配線** — `audit_log` テーブル (不変トリガー + SHA-256 ハッシュチェーン + `verify_audit_chain` 検証) は実装済みだったが、本番コードから一度も書き込まれていなかった。セキュリティ上重要な4イベントを記録: `STORE_OPEN` (履歴 DB オープン時・チェーン検証とセット)、`MAIL_CONNECT`/`MAIL_DISCONNECT`、`SENDER_VERIFIED` (送信者の確認済み化 — BEC 判定を左右する操作)、`ATTACHMENT_DOWNLOAD` (拒否時も含む)。書き込みは best-effort で監査失敗が本来の操作を妨げない
 ### Fixed
 - **Dual-LLM 型不変条件の serde 迂回穴を閉塞** (D17 部分解消): `Content<L>` から `Serialize`/`Deserialize` derive を除去 — `serde_json::from_str::<Content<Trusted>>` で Bridge を迂回し任意テキストを Trusted 偽造できた経路と、生本文の JSON 漏洩経路を閉塞。`Content<Untrusted>::as_text()` を `pub(crate)` 化、`TopicTag` を `serde(try_from)` 化し検証迂回を封じた。kaname-ai 変更のため security-lead 承認が必要。併せて `llm_bridge` の `QuarantinedLlmImpl`/`PrivilegedLlmImpl` (subprocess 側と同名の重複で、呼び出し元・テストすら存在しない in-process 経路のデッドコード ~90行) を削除 — D3 のプロセス隔離設計に反する迂回経路を消去
 - **BEC 評価へのスレッド文脈・DKIM 署名の実データ配線** (検出ギャップ — スレッド乗っ取り/口座差し替え/DKIM `l=` 乱用検出が本番経路で発火していなかった)
