@@ -353,6 +353,7 @@ impl JmapClient {
                                 "messageId","inReplyTo","references",
                                 "header:DKIM-Signature:asText",
                                 "header:Authentication-Results:asText",
+                                "header:Return-Path:asText",
                             ],
                         }),
                         "emails".into(),
@@ -835,6 +836,12 @@ pub struct EmailListItem {
     /// (gap-analysis D18/D44)。
     #[serde(rename = "header:Authentication-Results:asText", default)]
     pub auth_results: Option<String>,
+    /// Return-Path ヘッダーの生値 (`header:Return-Path:asText`)。
+    /// From と Return-Path のドメイン不一致は BEC/スプーフィングの古典的
+    /// シグナルで、kaname-bec の `return_path` シグナルに供給する。
+    /// 取得していない間は一覧評価でこの検査が構造的に不発だった (D106)。
+    #[serde(rename = "header:Return-Path:asText", default)]
+    pub return_path: Option<String>,
 }
 
 impl EmailListItem {
@@ -1535,9 +1542,32 @@ mod tests {
             references: None,
             dkim_signature: None,
             auth_results: None,
+            return_path: None,
         };
         assert!(e.is_read());
         assert!(!e.is_starred());
+    }
+
+    // D106: `header:Return-Path:asText` が `return_path` にデシリアライズ
+    // されること (serde rename の固定)。無ければ BEC の From/Return-Path
+    // 不一致シグナルは一覧経路で構造的に不発のまま。
+    #[test]
+    fn email_list_item_はカスタムヘッダプロパティをデシリアライズする() {
+        let json = serde_json::json!({
+            "id": "e1",
+            "mailboxIds": {},
+            "keywords": {},
+            "header:Return-Path:asText": "<bounce@evil.example>",
+            "header:Authentication-Results:asText": "mx; spf=fail",
+            "header:DKIM-Signature:asText": "v=1; d=sig.example; s=sel",
+        });
+        let e: EmailListItem = serde_json::from_value(json).unwrap();
+        assert_eq!(e.return_path.as_deref(), Some("<bounce@evil.example>"));
+        assert_eq!(e.auth_results.as_deref(), Some("mx; spf=fail"));
+        assert_eq!(
+            e.dkim_signature.as_deref(),
+            Some("v=1; d=sig.example; s=sel")
+        );
     }
 
     #[test]
