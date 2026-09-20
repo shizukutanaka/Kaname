@@ -1751,7 +1751,21 @@ pub async fn mail_trash(email_id: String) -> Result<(), String> {
     client
         .trash(&email_id)
         .await
-        .map_err(|e| format!("削除に失敗しました: {e}"))
+        .map_err(|e| format!("削除に失敗しました: {e}"))?;
+
+    // JMAP 側でゴミ箱へ移した後、ローカルの保存済み一覧にも削除を反映する。
+    // ここで立てないと `list_messages` が `is_deleted = 0` で拾い続け、
+    // 削除済みメールがオフライン表示に残る。ローカル行が無い (未保存) なら
+    // 何もしない — best-effort。
+    let account_id = current_account_id().await;
+    if !account_id.is_empty() {
+        if let Some(store) = store_slot().lock().await.clone() {
+            if let Err(e) = store.mark_deleted(&account_id, &email_id).await {
+                tracing::warn!(error=%e, "ローカル削除の反映に失敗");
+            }
+        }
+    }
+    Ok(())
 }
 
 /// メールを送信する。
@@ -2305,15 +2319,22 @@ pub async fn mail_search(
         .map_err(|e| format!("検索に失敗しました: {e}"))
 }
 
-/// 現在の JMAP アカウント ID を返す。未接続なら空文字。
+/// 現在の JMAP アカウント ID を返す。
 ///
-/// 保存・検索はサーバ未接続でも行えるべきだが、どのアカウントの
-/// メールかを区別する必要があるため、接続時の ID を使う。
+/// JMAP 未接続でも保存済みメールの一覧・検索が機能するよう、
+/// 接続されていなければ履歴 DB に登録済みのアカウントへフォールバックする
+/// (ローカルファースト: サーバが落ちても過去の受信メールは読めるべき)。
+/// 両方とも無ければ空文字。
 async fn current_account_id() -> String {
-    match jmap_client().await {
-        Ok(c) => c.account_id().to_string(),
-        Err(_) => String::new(),
+    if let Ok(c) = jmap_client().await {
+        return c.account_id().to_string();
     }
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Ok(Some(id)) = store.primary_account_id().await {
+            return id;
+        }
+    }
+    String::new()
 }
 
 /// 監査ログ (audit_log, ハッシュチェーン付き) への書き込み — best-effort。

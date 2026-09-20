@@ -51,3 +51,4 @@ crates/kaname-mockserver/**  linguist-vendored
 # 生成物を統計から除外
 *.lock          linguist-generated
 fuzz/corpus/**  linguist-generated
+CHANGELOG.md merge=union

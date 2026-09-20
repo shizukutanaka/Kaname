@@ -28,8 +28,6 @@ export const Compose = (props: ComposeProps) => {
   const [sending,  setSending] = createSignal(false);
   const [advice,   setAdvice]  = createSignal<string | null>(null);
   const [error,    setError]   = createSignal<string | null>(null);
-  const [mlsReady, setMlsReady] = createSignal<boolean | null>(null);
-
   // 送信前アドバイザリ (debounced): 本文が「受信側で別経路確認を推奨」
   // される文脈 (送金要求・急迫表現等) に一致するかを `oobv_recommend`
   // で判定し、送信者が事前に確認経路を明記できるよう助言する。
@@ -59,17 +57,8 @@ export const Compose = (props: ComposeProps) => {
     }, 600);
   });
 
-  // MLS 対応チェック
-  //
-  // 以前はドメイン名の接尾辞だけを見て「MLS 対応」と表示していたが、
-  // kaname-mls は XOR モック段階 (gap-analysis D1) であり、宛先が何であれ
-  // 実際に MLS 暗号化は行われない。実装されていない保護を UI が
-  // 「対応済み」と示すのは利用者を欺くため、常に null (非対応) を返す。
-  // KPD による実確認は MLS 本実装と同時に入れる。
-  createEffect(() => {
-    to();
-    setMlsReady(null);
-  });
+  // E2E 暗号化バッジは表示しない — MLS は未実装 (D1) で、実際の暗号化は
+  // 行われないため「対応済み」と示すのは利用者を欺く。実装時に復元する。
 
   const handleSend = async () => {
     if (!from().trim() || !to().trim() || !subject().trim() || !body().trim()) {
@@ -137,17 +126,6 @@ export const Compose = (props: ComposeProps) => {
         <span style={{ "font-size": "14px", "font-weight": "600", flex: "1" }}>
           {props.replyToId ? "返信" : "新規メール"}
         </span>
-        <Show when={mlsReady() !== null}>
-          <span style={{
-            "font-size": "11px",
-            color: mlsReady() ? "#00C4CC" : "#8B96A5",
-            padding: "2px 8px",
-            border: `1px solid ${mlsReady() ? "#00C4CC30" : "#2A3441"}`,
-            "border-radius": "4px",
-          }}>
-            {mlsReady() ? "🔐 E2E 暗号化" : "📧 SMTP"}
-          </span>
-        </Show>
         <button
           onClick={props.onClose}
           aria-label="閉じる"

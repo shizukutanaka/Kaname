@@ -25,6 +25,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - static-check.sh の誤検出を修正 — コメント内の孤立 `"` が文字列パリティを崩し SQL 内の `strftime()`/`accounts()` を「未定義関数呼び出し」と誤報していた問題を、文字列/コメント/char を単一パスで処理する状態機械に置き換えて解消。Tauri 注入引数 (`AppHandle` 等) の裸名も除外対象に追加
 - docker-compose の Rust イメージを `rust:1.82-bookworm` → `rust:bookworm` に修正 — workspace の MSRV (1.85) を下回っており `docker compose up` でビルドが失敗していた
 - **BEC 警戒バッジが初回ロード以降更新されなかった**: `mail:summary_updated`/`bec:alert` の購読側だけ存在し emit 側がゼロのデッドイベントだった → `mail_fetch`/`mail_mark_read`/`mail_trash` 成功時に実集計値を emit するよう配線。`bec:alert` (開封ごとに +1 で fetch 時の集計と二重計上する誤りがあった) は削除
+- **ゴミ箱へ移したメールがオフライン一覧に残り続ける欠陥**: `is_deleted` 列を立てる経路が存在せず、`mail_trash` 後も `mail_list_stored` が拾い続けていた。`Store::mark_deleted` (jmap_id 一致・冪等) を追加し `mail_trash` で JMAP 側成功後に best-effort 反映
+
+- **Compose の到達不能な MLS バッジを削除**: `mlsReady` が永久に null のため非表示だった E2E/📧SMTP バッジ UI とチェック用 effect を削除 (常時非表示のデッドコード。実装時は git 履歴から復元)
+
+- **iframe に CSP 属性を適用**: `BodyDto.csp` はバックエンドから返されていたがフロントエンドで一度も使われていなかった → `<iframe csp>` として適用し、srcdoc 内 `<meta>` CSP に加えブラウザ側でも独立に CSP を強制 (二重防御、Inbox + EmlImport)
+
+- **オフライン時に保存済みメールが読めない不具合を修正**: `mail_list_stored`/`mail_search`/`mail_get_summary` が JMAP 接続中のアカウント ID に依存し、未接続時は `""` で照合して全て空を返していた → `Store::primary_account_id` を追加し履歴 DB のアカウントにフォールバック (ローカルファーストの実質化)
 
 - **ゴミ箱移動がサーバー側で実際に移動していなかった欠陥**: `Email/set` の `mailboxIds` パッチは `{trash: true}` だけだと追加のみで受信トレイから除去されない (RFC 8621 §4.6) → 現在の所属を `Email/get` で取得し全て `null` で除去するパッチに修正
 
