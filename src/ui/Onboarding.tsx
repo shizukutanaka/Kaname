@@ -12,7 +12,7 @@
 //   4. 戻れる、スキップできる、後で変更できる
 //   5. 終わった瞬間にユーザーは **すでに価値を得ている**
 
-import { Component, createSignal, Show, onMount } from "solid-js";
+import { Component, createSignal, Show, For, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 // ── 型定義 ───────────────────────────────────────────────────────────────
@@ -172,54 +172,102 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
   // ── Step 4: FIRST EMAIL ─────────────────────────────────────────
   // **重要**: 終わった瞬間にユーザーは価値を得ている
-  // BEC 攻撃メールのデモを見せる
+  // BEC 攻撃メールのデモを**実際の解析エンジンで**解析して見せる
 
-  const FirstEmail = () => (
-    <div class="k-onboard-step">
-      <h2>実際の脅威を見てみましょう</h2>
-      <p class="k-subtitle">
-        これは実際の BEC 攻撃メールの例です
-      </p>
+  // デモ用の .eml (実際に解析パイプラインに投入する実バイト列)。
+  // 以前は「信頼度 92%」などの固定表示で、実エンジンの出力を装った
+  // デモだった (判定結果が演出だった) — 実解析に差し替え。
+  const DEMO_EML = [
+    "From: \"CFO\" <cfo@arnazon-billing.com>",
+    "To: user@company.example",
+    "Subject: 【至急】振込先変更のご連絡",
+    "Authentication-Results: mx.company.example; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com",
+    "Content-Type: text/plain; charset=\"utf-8\"",
+    "",
+    "新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。",
+  ].join("\r\n");
 
-      {/* 模擬メールカード */}
-      <div class="k-demo-mail-card k-bec-danger">
-        <div class="k-demo-banner">
-          ⚠ 危険・BEC攻撃の可能性 (信頼度: 92%)
+  interface DemoAnalysis {
+    bec_verdict: string;
+    bec_score:   number;
+    bec_signals: string[];
+    auth:        string;
+  }
+
+  const FirstEmail = () => {
+    const [analysis, setAnalysis] = createSignal<DemoAnalysis | null>(null);
+    const [failed, setFailed] = createSignal(false);
+
+    onMount(async () => {
+      try {
+        const bytes = Array.from(new TextEncoder().encode(DEMO_EML));
+        setAnalysis(await invoke<DemoAnalysis>("mail_analyze_bytes", { bytes }));
+      } catch {
+        // 解析に失敗したら偽の結果を見せず「解析できなかった」とだけ伝える
+        setFailed(true);
+      }
+    });
+
+    const verdictLabel = (v: string) => ({
+      DANGEROUS: "⚠ 危険・BEC攻撃の可能性",
+      SUSPICIOUS: "⚠ 疑わしい・要注意",
+      ADVISORY: "△ 助言レベル",
+      SAFE: "✓ 安全",
+    } as Record<string, string>)[v] ?? v;
+
+    return (
+      <div class="k-onboard-step">
+        <h2>実際の脅威を見てみましょう</h2>
+        <p class="k-subtitle">
+          このデモメールを Kaname の実解析エンジンで解析しています
+        </p>
+
+        <div class="k-demo-mail-card k-bec-danger">
+          <div class="k-demo-banner">
+            {analysis()
+              ? `${verdictLabel(analysis()!.bec_verdict)} (スコア: ${(analysis()!.bec_score * 100).toFixed(0)}%)`
+              : failed() ? "解析を実行できませんでした" : "解析中…"}
+          </div>
+          <div class="k-demo-from">
+            From: <strong>CFO</strong> &lt;cfo@<span class="k-typo">arnazon</span>-billing.com&gt;
+          </div>
+          <div class="k-demo-subject">
+            【至急】振込先変更のご連絡
+          </div>
+          <div class="k-demo-body">
+            新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。
+          </div>
         </div>
-        <div class="k-demo-from">
-          From: <strong>CFO</strong> &lt;cfo@<span class="k-typo">arnazon</span>-billing.com&gt;
-        </div>
-        <div class="k-demo-subject">
-          【至急】振込先変更のご連絡
-        </div>
-        <div class="k-demo-body">
-          新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。
+
+        <Show when={analysis()}>
+          <div class="k-detection-explanation">
+            <h3>検出された信号 (実解析の出力)</h3>
+            <ul>
+              <For each={analysis()!.bec_signals}>
+                {(sig) => <li>✓ {sig}</li>}
+              </For>
+            </ul>
+            <Show when={analysis()!.bec_signals.length === 0}>
+              <p style={{ "font-size": "12px", color: "#8B96A5" }}>
+                シグナルは検出されませんでした
+              </p>
+            </Show>
+          </div>
+        </Show>
+
+        <p class="k-callout">
+          💡 実際の受信トレイでもこの解析が毎日動作します。
+        </p>
+
+        <div class="k-step-controls">
+          <button class="k-btn-text" onClick={() => next("permissions")}>戻る</button>
+          <button class="k-btn-primary" onClick={() => next("ready")}>
+            理解しました
+          </button>
         </div>
       </div>
-
-      <div class="k-detection-explanation">
-        <h3>Kaname が検出した信号</h3>
-        <ul>
-          <li>✓ ドメイン偽装 (amazon → arnazon の Levenshtein 距離 1)</li>
-          <li>✓ 緊急性マーカー (「至急」「本日中」)</li>
-          <li>✓ 振込パターン (「振込先変更」「200 万円」)</li>
-          <li>✓ 送信者名と実ドメインの不一致</li>
-        </ul>
-      </div>
-
-      <p class="k-callout">
-        💡 Kaname はこのようなメールを毎日防いでいます。
-        実際の受信トレイで動作を確認できます。
-      </p>
-
-      <div class="k-step-controls">
-        <button class="k-btn-text" onClick={() => next("permissions")}>戻る</button>
-        <button class="k-btn-primary" onClick={() => next("ready")}>
-          理解しました
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ── Step 5: READY ──────────────────────────────────────────────
   // **完了の瞬間**: ユーザーはすでに価値を得ている

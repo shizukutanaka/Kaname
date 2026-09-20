@@ -257,10 +257,24 @@ pub async fn mail_import_eml(path: String) -> Result<ImportedEmail, String> {
     analyze_raw_email(&bytes).await
 }
 
+/// 生 RFC 5322 バイト列を直接解析する IPC コマンド。
+///
+/// オンボーディングのデモメールなど、ファイルパスを持たない入力を
+/// `analyze_raw_email` に通すための経路。50MB 上限は `mail_import_eml`
+/// と同じ。
+#[instrument(skip(bytes))]
+pub async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<ImportedEmail, String> {
+    if bytes.len() > MAX_EML_BYTES as usize {
+        return Err("メールが大きすぎます (50MB 超)".to_string());
+    }
+    analyze_raw_email(&bytes).await
+}
+
 /// 生 RFC 5322 バイト列を解析パイプライン全体に通す。
 ///
-/// ローカル `.eml` (`mail_import_eml`) とサーバ上のメール (`mail_open`) の
-/// **唯一の解析経路**。入口が複数あっても検出器は一つに集約する。
+/// ローカル `.eml` (`mail_import_eml`)・サーバ上のメール (`mail_open`)・
+/// デモ用バイト列 (`mail_analyze_bytes`) の**唯一の解析経路**。
+/// 入口が複数あっても検出器は一つに集約する。
 pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     let env = kaname_render::parse(bytes).map_err(|e| format!("メールの解析に失敗: {e}"))?;
 
