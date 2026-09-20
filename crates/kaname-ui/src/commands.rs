@@ -1413,6 +1413,98 @@ mod v02_tests {
         assert!(resp.warnings.is_empty(), "{:?}", resp.warnings);
         Ok(())
     }
+
+    // D104: 受信側 DLP (scan_dlp_inbound) は Direction::Inbound で評価するが、
+    // Inbound ルールが0件だったため構造的に常に空を返していた。
+    #[test]
+    fn scan_dlp_inbound_は受信本文中のマイナンバーを検出する() {
+        let findings = scan_dlp_inbound("件名", "マイナンバーは 123456789018 です", "corp.example");
+        assert!(
+            findings.iter().any(|f| f.contains("マイナンバー")),
+            "受信メールの機微情報が検出されるべき: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn scan_dlp_inbound_は平文本文で誤検出しない() {
+        let findings = scan_dlp_inbound("ランチ", "12時に食堂で会いましょう", "corp.example");
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    // D104: outbound_dlp_eval の known_recipient_domains が常に空で
+    // タイポドメイン誤配検出が不発だった。連絡先ドメイン抽出の検査。
+    #[test]
+    fn contact_domain_は表示名付きと裸のアドレスからドメインを抽出する() {
+        assert_eq!(
+            contact_domain("\"田中 太郎\" <tanaka@Corp.Example>"),
+            Some("corp.example".to_string())
+        );
+        assert_eq!(
+            contact_domain("sato@Example.co.jp"),
+            Some("example.co.jp".to_string())
+        );
+        assert_eq!(contact_domain("not-an-email"), None);
+        assert_eq!(contact_domain("a@"), None);
+    }
+
+    // D104: 連絡先履歴が既知ドメインに供給され、タイポドメイン宛の
+    // 機微メール送信が Block にエスカレートされることを端到端で検査。
+    // (crop-partnr.com は連絡先の corp-partner.com と距離2のタイポ)
+    #[tokio::test]
+    async fn outbound_dlp_eval_は既知宛先のタイポドメインを疑う() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!("kaname-d104-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        history_open(
+            dir.join("history.db").to_string_lossy().to_string(),
+            "0".repeat(64),
+        )
+        .await?;
+        let account = "acct-d104";
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("store not opened")?;
+        store
+            .record_received(account, "alice@corp-partner.com", None, None)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let res = outbound_dlp_eval(
+            account,
+            "me@us.example",
+            &["x@corp-partnr.com".to_string()],
+            "件名",
+            "【社外秘】この資料を転送します",
+        )
+        .await;
+        assert!(
+            res.findings
+                .iter()
+                .any(|f| f.rule_id == "misdirected-recipient"),
+            "タイポドメイン宛が疑われるべき: {:?}",
+            res.findings
+        );
+        assert!(matches!(res.verdict, kaname_dlp::Action::Block));
+
+        // 対照: 正しい既知ドメイン宛は誤配として疑われない
+        let ok = outbound_dlp_eval(
+            account,
+            "me@us.example",
+            &["x@corp-partner.com".to_string()],
+            "件名",
+            "【社外秘】この資料を転送します",
+        )
+        .await;
+        assert!(
+            !ok.findings
+                .iter()
+                .any(|f| f.rule_id == "misdirected-recipient"),
+            "既知ドメイン宛を誤配扱いしない: {:?}",
+            ok.findings
+        );
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -1809,7 +1901,10 @@ async fn outbound_dlp_eval(
 ) -> kaname_dlp::DlpResult {
     let engine = kaname_dlp::DlpEngine::default_engine();
     let mimes: Vec<String> = Vec::new();
-    let domains: Vec<String> = Vec::new();
+    // D104: 誤配検出 (タイポドメイン照合) は「既知の宛先ドメイン」に対する
+    // 類似度で判定するが、ここに常に空リストが渡されていたため
+    // LookalikeDomain 検査が構造的に不発だった。連絡先履歴から供給する。
+    let domains = lookup_known_domains(account_id).await;
     let edm: std::collections::HashMap<String, kaname_dlp::edm::EdmFingerprints> =
         std::collections::HashMap::new();
     let our = our_domain(account_id, Some(from)).await;
@@ -2125,6 +2220,32 @@ async fn lookup_contacts(account_id: &str) -> Vec<String> {
         tracing::warn!(error=%e, "連絡先一覧の取得に失敗");
         Vec::new()
     })
+}
+
+/// 連絡先エントリ (`"表示名" <email>` または裸の `email`) からドメインを抽出する。
+fn contact_domain(contact: &str) -> Option<String> {
+    let addr = match contact.rfind('<') {
+        Some(i) => contact[i + 1..].trim_end_matches('>').trim(),
+        None => contact.trim(),
+    };
+    let at = addr.rfind('@')?;
+    let domain = addr[at + 1..].trim();
+    if domain.is_empty() {
+        None
+    } else {
+        Some(domain.to_lowercase())
+    }
+}
+
+/// Store の連絡先履歴から既知宛先ドメインの一覧を返す (DLP の
+/// タイポドメイン誤配検出用)。未接続・失敗・0件なら空で、
+/// その検査がスキップされるだけ。
+async fn lookup_known_domains(account_id: &str) -> Vec<String> {
+    let contacts = lookup_contacts(account_id).await;
+    let mut domains: Vec<String> = contacts.iter().filter_map(|c| contact_domain(c)).collect();
+    domains.sort();
+    domains.dedup();
+    domains
 }
 
 /// Store からスレッド内メッセージを引く。

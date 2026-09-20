@@ -279,6 +279,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 
 | D102 | ~~**AiTM スコアが契約上限を超過**: `AitmRisk.score` は doc 上 0-100 のはずが無上限加算で、出荷済みコーパス種 (tycoon-auth.net URL) で実測 130+ — verdict 閾値には影響しないが契約虚偽~~ **(2026-09-20 解消)** | P4 | `score.min(100)` クランプ + doc 閾値訂正 (80+ → 50+) |
 | D103 | ~~**fuzz コーパス3件が孤立**: `aitm_urls`/`calendar_phishing`/`ssa_bypass` に種ファイルが存在するが対応ターゲット未定義で一度も実行不能~~ **(2026-09-20 解消)** | P4 | 3ターゲットを不変条件付きで実装し全コーパス消化可能に。実走で aitm が D102 を即座に検出 — 孤立コーパスの存在が本来の検証価値を果たしていなかった証左 |
+| D104 | ~~**受信側 DLP が構造的に空 + 誤配検出の主入力が常に空**: (a) 既定ルール全5件が `Direction::Outbound` のため `Direction::Inbound` で評価する `scan_dlp_inbound` は常に所見ゼロ — UI の「機微情報の検出 (DLP)」表示が死んでいた。(b) `outbound_dlp_eval` の `known_recipient_domains` が常に空でタイポドメイン誤配検出 (`misdirected_recipient` の主検査) が不発~~ **(2026-09-20 解消)** | P3 | (a) Inbound 既定ルール3件追加 (受信マイナンバー/カード番号/機密マーカー → Warn)。(b) 連絡先履歴から既知宛先ドメインを供給。端到端回帰テストでタイポ宛+機微 → Block エスカレーションを固定。**kaname-dlp 変更のため security-lead 承認要** |
+| D105 | ~~**static-check 検査9 が空転**: heredoc stdin 実行では `__file__ = "<stdin>"` となり `abspath→dirname×2` が repo の親 dir に chdir → glob が0件ヒットで常に OK。D98 で導入した検査が一度も中身を見ていなかった (D73 と同型: 検査器自身の欠陥)~~ **(2026-09-20 解消)** | P3 | chdir 除去 (シェル冒頭の `cd` に一本化) + 合成違反で検知を実測。併せて検査10 (corpus↔target↔bin 対応) を新設し D103 再発を機械防止 |
 
 ### 完了判定の変更
 
