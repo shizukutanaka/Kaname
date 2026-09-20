@@ -460,6 +460,92 @@ pub fn check_model(config: &ModelConfig) -> ModelStatus {
     }
 }
 
+/// モデルファイルを HTTPS でストリーミングダウンロードし、SHA-256 を
+/// 検証して配置する (D2 Phase 2)。
+///
+/// - `<model_path>.part` に逐次書き込み → 検証 → `rename` の順で
+///   アトミックに配置 (途中失敗で部分ファイルが残っても本物と誤認しない)
+/// - `expected_sha256` は 64 桁 hex。不一致時は部分ファイルを削除して
+///   `ChecksumMismatch` を返す (改ざん/破損モデルをロードさせない)
+/// - 失敗時の呼び出し側の約束: モデル不在として扱い NullLlm
+///   フォールバックを維持する (BEC 判定は LLM なしで動作)
+pub async fn download_model(
+    config: &ModelConfig,
+    expected_sha256: &str,
+    mut progress: impl FnMut(u64, u64) + Send,
+) -> Result<(), LlmError> {
+    use futures_util::StreamExt;
+    use sha2::Digest;
+    use tokio::io::AsyncWriteExt;
+
+    let expected = expected_sha256.trim().to_lowercase();
+    if expected.len() != 64 || !expected.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(LlmError::InvalidChecksumFormat);
+    }
+    let url = match check_model(config) {
+        ModelStatus::Ready { .. } => return Ok(()),
+        ModelStatus::Missing { download_url, .. } => download_url,
+    };
+    if let Some(parent) = config.model_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| LlmError::Download(format!("モデル保存先の作成に失敗: {e}")))?;
+    }
+    let tmp_path = config.model_path.with_extension("gguf.part");
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| LlmError::Download(format!("HTTP クライアント初期化失敗: {e}")))?;
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| LlmError::Download(format!("ダウンロード開始に失敗: {e}")))?;
+    let total = resp.content_length().unwrap_or(0);
+
+    let mut file = tokio::fs::File::create(&tmp_path)
+        .await
+        .map_err(|e| LlmError::Download(format!("部分ファイル作成に失敗: {e}")))?;
+    let mut hasher = sha2::Sha256::new();
+    let mut downloaded = 0u64;
+    let mut stream = resp.bytes_stream();
+    let result: Result<(), LlmError> = async {
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| LlmError::Download(format!("受信失敗: {e}")))?;
+            hasher.update(&chunk);
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| LlmError::Download(format!("書き込み失敗: {e}")))?;
+            downloaded += chunk.len() as u64;
+            progress(downloaded, total);
+        }
+        file.flush()
+            .await
+            .map_err(|e| LlmError::Download(format!("フラッシュ失敗: {e}")))?;
+        Ok(())
+    }
+    .await;
+    drop(file);
+    if let Err(e) = result {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(e);
+    }
+
+    let actual: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    if actual != expected {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(LlmError::ChecksumMismatch { expected, actual });
+    }
+    std::fs::rename(&tmp_path, &config.model_path)
+        .map_err(|e| LlmError::Download(format!("配置に失敗: {e}")))?;
+    Ok(())
+}
+
 /// モデルファイルの存在状態。
 #[derive(Debug)]
 pub enum ModelStatus {
@@ -521,6 +607,23 @@ pub enum LlmError {
     /// 推論実行中のエラー (トークン化/デコード/生成)。
     #[error("inference failed: {0}")]
     Inference(String),
+
+    /// チェックサムの形式が不正 (64桁 hex ではない)。
+    #[error("expected_sha256 must be a 64-char hex string")]
+    InvalidChecksumFormat,
+
+    /// モデルのダウンロード/配置に失敗。
+    #[error("model download failed: {0}")]
+    Download(String),
+
+    /// ダウンロードしたモデルの SHA-256 が期待値と不一致 (改ざん/破損)。
+    #[error("model checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch {
+        /// 期待していた 64 桁 hex ダイジェスト。
+        expected: String,
+        /// 実際に計算された 64 桁 hex ダイジェスト。
+        actual: String,
+    },
 }
 
 // ============================================================================
@@ -715,5 +818,34 @@ mod tests {
         assert!(result.tokens_in > 0, "tokens_in が実測されているべき");
         assert!(result.tokens_out > 0, "tokens_out が実測されているべき");
         assert!(!result.text.is_empty());
+    }
+
+    #[tokio::test]
+    async fn download_model_rejects_bad_checksum_format() {
+        let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
+        let cfg = ModelConfig {
+            model_path: dir.join("m.gguf"),
+            ..ModelConfig::quarantined()
+        };
+        let err = download_model(&cfg, "not-hex", |_, _| {})
+            .await
+            .unwrap_err();
+        assert!(matches!(err, LlmError::InvalidChecksumFormat));
+    }
+
+    #[tokio::test]
+    async fn download_model_is_noop_when_model_ready() {
+        let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("m.gguf");
+        std::fs::write(&path, b"already here").unwrap();
+        let cfg = ModelConfig {
+            model_path: path.clone(),
+            ..ModelConfig::quarantined()
+        };
+        // 不正な checksum でも Ready なら early return — ただし形式検証は先に行う
+        let ok = download_model(&cfg, &"a".repeat(64), |_, _| {}).await;
+        assert!(ok.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
