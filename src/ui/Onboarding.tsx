@@ -12,7 +12,7 @@
 //   4. 戻れる、スキップできる、後で変更できる
 //   5. 終わった瞬間にユーザーは **すでに価値を得ている**
 
-import { Component, createSignal, Show, onMount } from "solid-js";
+import { Component, createSignal, Show, For, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 
 // ── 型定義 ───────────────────────────────────────────────────────────────
@@ -23,7 +23,6 @@ interface OnboardingState {
   step: Step;
   emailConsent:        boolean;
   telemetryOptIn:      boolean;
-  continuityEnabled:   boolean;
   notificationsAllowed: boolean;
 }
 
@@ -34,7 +33,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     step: "welcome",
     emailConsent: false,
     telemetryOptIn: false,
-    continuityEnabled: false,
     notificationsAllowed: false,
   });
 
@@ -111,12 +109,16 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
       <div class="k-principle">
         <div class="k-principle-icon">🌐</div>
         <div class="k-principle-content">
-          <h3>サーバーは中身を読めない</h3>
+          <h3>解析はデバイス上で完結</h3>
           <p>
-            あなたのメールは MLS RFC 9420 で暗号化されます。
-            <strong>件名も含めて</strong>。
-            Kaname サーバーは暗号化された箱だけを保存します。
+            メールの解析・履歴・監査証跡はすべてこのデバイスの
+            ローカル DB (SQLCipher 暗号化) に保存され、
+            Kaname が運営するサーバーは存在しません。
           </p>
+          {/* 2026-09 修正: 以前は「メールは MLS RFC 9420 で暗号化されます。
+              件名も含めて」と表示していたが、MLS は未実装 (D1、XOR モック) で
+              メールサーバ上の本文は平文 — セキュリティ製品の虚偽広告だった。
+              MLS 実装時に git 履歴から復元する。 */}
         </div>
       </div>
 
@@ -147,14 +149,9 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
         recommended={true}
       />
 
-      <PermissionToggle
-        title="Continuity を有効化"
-        description="iPhone と Mac で同じメールを引き継ぐ (Handoff)"
-        checked={state().continuityEnabled}
-        onChange={v => setState(s => ({ ...s, continuityEnabled: v }))}
-        recommended={false}
-      />
-
+      {/* 2026-09 削除: "Continuity (Handoff)" トグルは kaname-continuity
+          クレート自体が削除済みのため、機能しない機能を約束する虚偽 UI
+          だった。復元は git 履歴から。 */}
       <PermissionToggle
         title="匿名利用統計を送信"
         description="クラッシュレポートと匿名のクリック数のみ。メール本文は絶対に送りません"
@@ -175,54 +172,102 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
   // ── Step 4: FIRST EMAIL ─────────────────────────────────────────
   // **重要**: 終わった瞬間にユーザーは価値を得ている
-  // BEC 攻撃メールのデモを見せる
+  // BEC 攻撃メールのデモを**実際の解析エンジンで**解析して見せる
 
-  const FirstEmail = () => (
-    <div class="k-onboard-step">
-      <h2>実際の脅威を見てみましょう</h2>
-      <p class="k-subtitle">
-        これは実際の BEC 攻撃メールの例です
-      </p>
+  // デモ用の .eml (実際に解析パイプラインに投入する実バイト列)。
+  // 以前は「信頼度 92%」などの固定表示で、実エンジンの出力を装った
+  // デモだった (判定結果が演出だった) — 実解析に差し替え。
+  const DEMO_EML = [
+    "From: \"CFO\" <cfo@arnazon-billing.com>",
+    "To: user@company.example",
+    "Subject: 【至急】振込先変更のご連絡",
+    "Authentication-Results: mx.company.example; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com",
+    "Content-Type: text/plain; charset=\"utf-8\"",
+    "",
+    "新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。",
+  ].join("\r\n");
 
-      {/* 模擬メールカード */}
-      <div class="k-demo-mail-card k-bec-danger">
-        <div class="k-demo-banner">
-          ⚠ 危険・BEC攻撃の可能性 (信頼度: 92%)
+  interface DemoAnalysis {
+    bec_verdict: string;
+    bec_score:   number;
+    bec_signals: string[];
+    auth:        string;
+  }
+
+  const FirstEmail = () => {
+    const [analysis, setAnalysis] = createSignal<DemoAnalysis | null>(null);
+    const [failed, setFailed] = createSignal(false);
+
+    onMount(async () => {
+      try {
+        const bytes = Array.from(new TextEncoder().encode(DEMO_EML));
+        setAnalysis(await invoke<DemoAnalysis>("mail_analyze_bytes", { bytes }));
+      } catch {
+        // 解析に失敗したら偽の結果を見せず「解析できなかった」とだけ伝える
+        setFailed(true);
+      }
+    });
+
+    const verdictLabel = (v: string) => ({
+      DANGEROUS: "⚠ 危険・BEC攻撃の可能性",
+      SUSPICIOUS: "⚠ 疑わしい・要注意",
+      ADVISORY: "△ 助言レベル",
+      SAFE: "✓ 安全",
+    } as Record<string, string>)[v] ?? v;
+
+    return (
+      <div class="k-onboard-step">
+        <h2>実際の脅威を見てみましょう</h2>
+        <p class="k-subtitle">
+          このデモメールを Kaname の実解析エンジンで解析しています
+        </p>
+
+        <div class="k-demo-mail-card k-bec-danger">
+          <div class="k-demo-banner">
+            {analysis()
+              ? `${verdictLabel(analysis()!.bec_verdict)} (スコア: ${(analysis()!.bec_score * 100).toFixed(0)}%)`
+              : failed() ? "解析を実行できませんでした" : "解析中…"}
+          </div>
+          <div class="k-demo-from">
+            From: <strong>CFO</strong> &lt;cfo@<span class="k-typo">arnazon</span>-billing.com&gt;
+          </div>
+          <div class="k-demo-subject">
+            【至急】振込先変更のご連絡
+          </div>
+          <div class="k-demo-body">
+            新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。
+          </div>
         </div>
-        <div class="k-demo-from">
-          From: <strong>CFO</strong> &lt;cfo@<span class="k-typo">arnazon</span>-billing.com&gt;
-        </div>
-        <div class="k-demo-subject">
-          【至急】振込先変更のご連絡
-        </div>
-        <div class="k-demo-body">
-          新しい銀行口座に 200 万円をご送金ください。本日中の処理をお願いします。
+
+        <Show when={analysis()}>
+          <div class="k-detection-explanation">
+            <h3>検出された信号 (実解析の出力)</h3>
+            <ul>
+              <For each={analysis()!.bec_signals}>
+                {(sig) => <li>✓ {sig}</li>}
+              </For>
+            </ul>
+            <Show when={analysis()!.bec_signals.length === 0}>
+              <p style={{ "font-size": "12px", color: "#8B96A5" }}>
+                シグナルは検出されませんでした
+              </p>
+            </Show>
+          </div>
+        </Show>
+
+        <p class="k-callout">
+          💡 実際の受信トレイでもこの解析が毎日動作します。
+        </p>
+
+        <div class="k-step-controls">
+          <button class="k-btn-text" onClick={() => next("permissions")}>戻る</button>
+          <button class="k-btn-primary" onClick={() => next("ready")}>
+            理解しました
+          </button>
         </div>
       </div>
-
-      <div class="k-detection-explanation">
-        <h3>Kaname が検出した信号</h3>
-        <ul>
-          <li>✓ ドメイン偽装 (amazon → arnazon の Levenshtein 距離 1)</li>
-          <li>✓ 緊急性マーカー (「至急」「本日中」)</li>
-          <li>✓ 振込パターン (「振込先変更」「200 万円」)</li>
-          <li>✓ 送信者名と実ドメインの不一致</li>
-        </ul>
-      </div>
-
-      <p class="k-callout">
-        💡 Kaname はこのようなメールを毎日防いでいます。
-        実際の受信トレイで動作を確認できます。
-      </p>
-
-      <div class="k-step-controls">
-        <button class="k-btn-text" onClick={() => next("permissions")}>戻る</button>
-        <button class="k-btn-primary" onClick={() => next("ready")}>
-          理解しました
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ── Step 5: READY ──────────────────────────────────────────────
   // **完了の瞬間**: ユーザーはすでに価値を得ている
@@ -236,7 +281,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     onMount(() => {
       invoke("settings_save_onboarding", {
         notifications: state().notificationsAllowed,
-        continuity:    state().continuityEnabled,
         telemetry:     state().telemetryOptIn,
       }).catch(() => {
         // オンボーディング設定保存の失敗は致命的ではないため無視して続行するが、
@@ -255,7 +299,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
 
         <div class="k-ready-features">
           <div>🛡 BEC 検出は<strong>すでに動いています</strong></div>
-          <div>🤖 Phi-4-mini AI モデルは<strong>すでに準備されています</strong></div>
+          <div>📎 添付ファイルは<strong>隔離して検査されます</strong></div>
           <div>🔒 ローカル DB は<strong>すでに暗号化されています</strong></div>
         </div>
 
@@ -264,7 +308,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
         </button>
 
         <p class="k-tip">
-          💡 ⌘K でいつでもコマンドパレットを開けます
+          💡 警告が出たメールの送金・手続きは、必ず別経路 (電話等) で確認してください
         </p>
       </div>
     );
