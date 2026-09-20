@@ -9,7 +9,6 @@ publish             = false
 [dependencies]
 kaname-ai = { path = "../kaname-ai" }
 kaname-screen = { path = "../kaname-screen" }
-kaname-bec = { path = "../kaname-bec" }
 serde_json = { workspace = true }
 
 proptest  = { workspace = true }

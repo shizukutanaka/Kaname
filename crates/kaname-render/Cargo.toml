@@ -15,4 +15,3 @@ ammonia      = { workspace = true }
 regex        = { workspace = true }
 
 [dev-dependencies]
-proptest = { workspace = true }
