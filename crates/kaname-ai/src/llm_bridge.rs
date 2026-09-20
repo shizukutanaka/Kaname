@@ -564,8 +564,12 @@ pub fn check_model(config: &ModelConfig) -> ModelStatus {
 ///
 /// - `<model_path>.part` に逐次書き込み → 検証 → `rename` の順で
 ///   アトミックに配置 (途中失敗で部分ファイルが残っても本物と誤認しない)
-/// - `expected_sha256` は 64 桁 hex。不一致時は部分ファイルを削除して
-///   `ChecksumMismatch` を返す (改ざん/破損モデルをロードさせない)
+/// - `expected_sha256` は 64 桁 hex の期待ダイジェスト。**モデルファイルの
+///   公式ハッシュはリリースノート/社内 IT が配布する値を渡すこと** (コードに
+///   ピン留めしない理由: HF 側がモデルを更新すると破損した固定値を残して
+///   しまい、かつ開発環境ではゲート済みリポにアクセスできず実測できない)。
+///   不一致時は部分ファイルを削除して `ChecksumMismatch` を返す
+///   (改ざん/破損モデルをロードさせない)
 /// - 失敗時の呼び出し側の約束: モデル不在として扱い NullLlm
 ///   フォールバックを維持する (BEC 判定は LLM なしで動作)
 pub async fn download_model(
@@ -638,7 +642,10 @@ pub async fn download_model(
         .collect();
     if actual != expected {
         let _ = std::fs::remove_file(&tmp_path);
-        return Err(LlmError::ChecksumMismatch { expected, actual });
+        return Err(LlmError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        });
     }
     std::fs::rename(&tmp_path, &config.model_path)
         .map_err(|e| LlmError::Download(format!("配置に失敗: {e}")))?;
@@ -920,6 +927,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn download_model_is_noop_when_model_ready() {
+        let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("m.gguf");
+        std::fs::write(&path, b"already here").unwrap();
+        let cfg = ModelConfig {
+            model_path: path.clone(),
+            ..ModelConfig::quarantined()
+        };
+        let ok = download_model(&cfg, &"a".repeat(64), |_, _| {}).await;
+        assert!(ok.is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
     async fn download_model_rejects_bad_checksum_format() {
         let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
         let cfg = ModelConfig {
@@ -930,21 +952,5 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, LlmError::InvalidChecksumFormat));
-    }
-
-    #[tokio::test]
-    async fn download_model_is_noop_when_model_ready() {
-        let dir = std::env::temp_dir().join(format!("kaname-dl-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("m.gguf");
-        std::fs::write(&path, b"already here").unwrap();
-        let cfg = ModelConfig {
-            model_path: path.clone(),
-            ..ModelConfig::quarantined()
-        };
-        // 不正な checksum でも Ready なら early return — ただし形式検証は先に行う
-        let ok = download_model(&cfg, &"a".repeat(64), |_, _| {}).await;
-        assert!(ok.is_ok());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

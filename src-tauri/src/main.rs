@@ -247,6 +247,23 @@ async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<commands::ImportedEmail, S
     commands::mail_analyze_bytes(bytes).await
 }
 
+// ── ローカル LLM (D2 Phase 5) ──────────────────────────────────────────────
+
+#[tauri::command]
+async fn ai_model_status() -> Result<commands::AiModelStatus, String> {
+    commands::ai_model_status().await
+}
+
+#[tauri::command]
+async fn ai_llm_start() -> Result<&'static str, String> {
+    commands::ai_llm_start().await
+}
+
+#[tauri::command]
+async fn ai_model_download(expected_sha256: String) -> Result<&'static str, String> {
+    commands::ai_model_download(expected_sha256).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -378,6 +395,10 @@ fn main() {
             history_open_default,
             security_audit_log,
             mail_analyze_bytes,
+            // ローカル LLM (D2 Phase 5)
+            ai_model_status,
+            ai_llm_start,
+            ai_model_download,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");

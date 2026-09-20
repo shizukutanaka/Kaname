@@ -406,7 +406,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         dkim_signature_header: env.dkim_signature.as_deref(),
     };
 
-    let assessment = kaname_bec::BecDetector::deterministic_only()
+    let assessment = bec_detector()
         .assess(req)
         .map_err(|e| format!("BEC 判定に失敗: {e}"))?;
 
@@ -714,7 +714,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             dkim_signature_header: env.dkim_signature.as_deref(),
         };
 
-        let (verdict, score) = match kaname_bec::BecDetector::deterministic_only().assess(req) {
+        let (verdict, score) = match bec_detector().assess(req) {
             Ok(a) => {
                 let v = match a.verdict {
                     kaname_bec::Verdict::Safe => "SAFE",
@@ -2258,7 +2258,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         past_thread_bodies: &past_bodies,
         dkim_signature_header: dkim_signature,
     };
-    match kaname_bec::BecDetector::deterministic_only().assess(req) {
+    match bec_detector().assess(req) {
         Ok(a) => match a.verdict {
             kaname_bec::Verdict::Safe => "SAFE",
             kaname_bec::Verdict::Advisory => "ADVISORY",
@@ -2456,6 +2456,138 @@ static STORE: std::sync::OnceLock<tokio::sync::Mutex<Option<std::sync::Arc<kanam
 
 fn store_slot() -> &'static tokio::sync::Mutex<Option<std::sync::Arc<kaname_store::Store>>> {
     STORE.get_or_init(|| tokio::sync::Mutex::new(None))
+}
+
+// ============================================================================
+// ローカル LLM (D2 Phase 5): Phi-4-mini の遅延ロードと BEC への配線
+// ============================================================================
+
+/// ロード済み Q-LLM ランナー。モデル未取得/未ロード時は None。
+///
+/// `tokio::Mutex` ではなく `std::sync::Mutex` を使う理由: `kaname_bec::
+/// LocalLlm` は同期 trait のためクロージャ内で await できない。ガードは
+/// Arc クローンの瞬間だけ保持し、推論中の長いブロッキングでは保持しない。
+static LLM_RUNNER: std::sync::OnceLock<
+    std::sync::Mutex<
+        Option<std::sync::Arc<std::sync::Mutex<kaname_ai::llm_bridge::LocalLlmRunner>>>,
+    >,
+> = std::sync::OnceLock::new();
+
+fn llm_slot() -> &'static std::sync::Mutex<
+    Option<std::sync::Arc<std::sync::Mutex<kaname_ai::llm_bridge::LocalLlmRunner>>>,
+> {
+    LLM_RUNNER.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+/// `LocalLlm` の `score_bec` に渡す関数本体。
+/// クロージャではなく fn 項目にするのは HRTB (全ライフタイムで Fn を
+/// 満たす) 上の理由による — クロージャだと `Option<&str>` のライフタイムが
+/// 具体化されて `for<'a>` を満たせない。
+fn bec_llm_score(subject: &str, body: &str, context: Option<&str>) -> kaname_bec::LlmScore {
+    let runner = llm_slot().lock().unwrap_or_else(|e| e.into_inner()).clone();
+    match runner {
+        Some(r) => {
+            let (probability, explanation) =
+                kaname_ai::llm_bridge::bec_score(&r, subject, body, context);
+            kaname_bec::LlmScore {
+                probability,
+                explanation,
+            }
+        }
+        None => kaname_bec::LlmScore {
+            probability: 0.0,
+            explanation: "意味解析は無効 (決定論的シグナルのみで判定)".to_string(),
+        },
+    }
+}
+
+/// BEC 検出器を構築する。
+///
+/// Q-LLM がロード済みなら意味解析シグナルも有効化し、未ロード (モデル未取得
+/// または `ai_llm_start` 未実行) なら LLM 寄与 0 — 決定論的シグナルのみで
+/// 判定する。LLM なしでも製品が動く設計を維持する (`NullLlm` と同じ失敗側)。
+fn bec_detector() -> kaname_bec::BecDetector {
+    kaname_bec::BecDetector::new(Box::new(bec_llm_score))
+}
+
+/// AI モデル状態の IPC 向け DTO (D2 Phase 5)。
+#[derive(Debug, Clone, Serialize)]
+pub struct AiModelStatus {
+    /// `"loaded"` (推論可能) / `"ready"` (配置済み・未ロード) / `"missing"` (未取得)。
+    pub state: &'static str,
+    /// 配置済みファイルサイズ (bytes)。missing 時は None。
+    pub size_bytes: Option<u64>,
+    /// 配布元 URL (missing 時のみ Some)。
+    pub download_url: Option<String>,
+    /// 配布モデルの期待サイズ (missing 時のみ Some)。
+    pub expected_size_bytes: Option<u64>,
+}
+
+/// ローカル AI モデルの状態を返す (D2 Phase 5)。
+pub async fn ai_model_status() -> Result<AiModelStatus, String> {
+    let cfg = kaname_ai::llm_bridge::ModelConfig::quarantined();
+    let loaded = llm_slot()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some();
+    Ok(match kaname_ai::llm_bridge::check_model(&cfg) {
+        kaname_ai::llm_bridge::ModelStatus::Ready { size_bytes } => AiModelStatus {
+            state: if loaded { "loaded" } else { "ready" },
+            size_bytes: Some(size_bytes),
+            download_url: None,
+            expected_size_bytes: None,
+        },
+        kaname_ai::llm_bridge::ModelStatus::Missing {
+            download_url,
+            size_bytes,
+            ..
+        } => AiModelStatus {
+            state: "missing",
+            size_bytes: None,
+            download_url: Some(download_url),
+            expected_size_bytes: Some(size_bytes),
+        },
+    })
+}
+
+/// 配置済みモデルをロードし BEC 意味解析を有効化する (D2 Phase 5)。
+///
+/// モデル未取得時はエラー — 先に `ai_model_download` を呼ぶこと。
+/// ロードは数秒かかるブロッキング処理 (`spawn_blocking` 内で実行)。
+pub async fn ai_llm_start() -> Result<&'static str, String> {
+    {
+        let slot = llm_slot().lock().unwrap_or_else(|e| e.into_inner());
+        if slot.is_some() {
+            return Ok("already_loaded");
+        }
+    }
+    let cfg = kaname_ai::llm_bridge::ModelConfig::quarantined();
+    let runner = kaname_ai::llm_bridge::LocalLlmRunner::load(cfg)
+        .await
+        .map_err(|e| format!("モデルのロードに失敗: {e}"))?;
+    *llm_slot().lock().unwrap_or_else(|e| e.into_inner()) = Some(runner);
+    tracing::info!("Q-LLM ロード完了 — BEC 意味解析が有効化");
+    Ok("loaded")
+}
+
+/// Phi-4-mini モデルをダウンロードする (D2 Phase 5)。
+///
+/// `expected_sha256` はモデルファイルの公式 SHA-256 (64桁 hex) —
+/// HF リポジトリがゲート済みのためコードにピン留めできず、配布元から
+/// 発行されるハッシュ (リリースノート/社内 IT が検証した値) を渡す。
+/// 完了後に `ai_llm_start` でロード可能になる。
+///
+/// 進捗イベントは送出しない — kaname-ui は Tauri に依存しない設計のため
+/// AppHandle を持てない。UI は不確定プログレス (スピナ) を表示すること
+/// (イベント配線は src-tauri 側の拡張事項)。
+pub async fn ai_model_download(expected_sha256: String) -> Result<&'static str, String> {
+    let cfg = kaname_ai::llm_bridge::ModelConfig::quarantined();
+    kaname_ai::llm_bridge::download_model(&cfg, &expected_sha256, |done, total| {
+        tracing::info!(done, total, "AI モデルダウンロード進捗");
+    })
+    .await
+    .map_err(|e| format!("モデルのダウンロードに失敗: {e}"))?;
+    Ok("downloaded")
 }
 
 /// 送信者履歴データベースを開く。

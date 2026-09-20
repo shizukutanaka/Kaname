@@ -425,9 +425,32 @@ const ActionItemsList = (props: {
 // メインダッシュボード
 // ============================================================================
 
+// D2 Phase 5: ローカル AI モデルの状態 (kaname-ai::llm_bridge::check_model)
+interface AiModelStatus {
+  state: "loaded" | "ready" | "missing";
+  size_bytes: number | null;
+  download_url: string | null;
+  expected_size_bytes: number | null;
+}
+
 export const SecurityDashboard = (props: { selectedEmailId: string | null }) => {
   const [accessLog] = createSignal<AiAccessEntry[]>([]);
   const [auditLog, setAuditLog] = createSignal<AuditLogView | null>(null);
+
+  // D2 Phase 5: モデルの実状態 (missing / ready / loaded) を表示し、
+  // ダウンロード・ロードを実行する。未ロード時は BEC が決定論的
+  // シグナルのみで動くことを明示する (偽の「AI 稼働中」を見せない)。
+  const [aiModel, setAiModel] = createSignal<AiModelStatus | null>(null);
+  const [aiBusy, setAiBusy] = createSignal(false);
+  const [aiHash, setAiHash] = createSignal("");
+  const refreshAiModel = async () => {
+    try {
+      setAiModel(await invoke<AiModelStatus>("ai_model_status"));
+    } catch {
+      setAiModel(null);
+    }
+  };
+  createEffect(refreshAiModel);
 
   // 監査証跡 (audit_log テーブル) は実在データ — 起動時に読み出す。
   createEffect(async () => {
@@ -486,6 +509,90 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
         />
       </div>
 
+      {/* D2 Phase 5: ローカル AI モデル管理 (Phi-4-mini) */}
+      <div style={{
+        background: "#0D1219", border: "1px solid #1F2833",
+        "border-radius": "8px", padding: "14px",
+      }}>
+        <div style={{
+          "font-size": "13px", "font-weight": "600", "margin-bottom": "8px",
+        }}>
+          🤖 ローカル AI モデル
+        </div>
+        <Show when={aiModel()} fallback={
+          <div style={{ "font-size": "11px", color: "#8B96A5" }}>
+            モデル状態を取得できませんでした
+          </div>
+        }>
+          {(m) => (
+            <div>
+              <div style={{ "font-size": "11px", color: "#8B96A5", "margin-bottom": "8px" }}>
+                {m().state === "loaded"
+                  ? "Phi-4-mini ロード済み — BEC 意味解析が有効です"
+                  : m().state === "ready"
+                    ? "モデル配置済み — ロードすると BEC 意味解析が有効になります"
+                    : `モデル未取得 (約 ${(Number(m().expected_size_bytes ?? 0) / 1e9).toFixed(1)}GB) — 未取得の間は BEC は決定論的シグナルのみで判定します`}
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Show when={m().state === "missing"}>
+                  {/* HF リポジトリはゲート済みのため、配布元が発行する
+                      公式 SHA-256 を管理者が入力する運用 */}
+                  <input
+                    placeholder="モデルの公式 SHA-256 (64桁)"
+                    value={aiHash()}
+                    onInput={(e) => setAiHash(e.currentTarget.value)}
+                    style={{
+                      background: "#1A2129", border: "1px solid #2A3441",
+                      color: "#F5F7FA", "border-radius": "4px",
+                      padding: "4px 8px", "font-size": "11px",
+                      "font-family": "monospace", width: "340px",
+                    }}
+                  />
+                  <button
+                    disabled={aiBusy() || aiHash().trim().length !== 64}
+                    onClick={async () => {
+                      setAiBusy(true);
+                      try {
+                        await invoke("ai_model_download", { expectedSha256: aiHash().trim() });
+                        await invoke("ai_llm_start");
+                      } catch { /* 失敗は状態表示に反映される */ }
+                      await refreshAiModel();
+                      setAiBusy(false);
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px",
+                      cursor: aiBusy() || aiHash().trim().length !== 64 ? "default" : "pointer",
+                    }}
+                  >
+                    {aiBusy() ? "ダウンロード中…" : "モデルをダウンロード"}
+                  </button>
+                </Show>
+                <Show when={m().state === "ready"}>
+                  <button
+                    disabled={aiBusy()}
+                    onClick={async () => {
+                      setAiBusy(true);
+                      try { await invoke("ai_llm_start"); } catch { /* 同上 */ }
+                      await refreshAiModel();
+                      setAiBusy(false);
+                    }}
+                    style={{
+                      background: "#00C4CC20", color: "#00C4CC", border: "none",
+                      "border-radius": "4px", padding: "4px 10px",
+                      "font-size": "11px", cursor: aiBusy() ? "default" : "pointer",
+                    }}
+                  >
+                    {aiBusy() ? "ロード中…" : "モデルをロード"}
+                  </button>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
+      </div>
+
       {/* コンタクトインテリジェンス */}
       <div>
         <div style={{
@@ -518,7 +625,7 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
           ["✓", "BEC/なりすまし検出",       "kaname-bec の実データ判定 (精度の数値は本環境で未検証、docs/gap-analysis.md D36 参照)。「AI生成か」の判定は LLM 未配線のため非対応 (D2/D92)"],
           ["✓", "DLPラベル強制 AI 制御", "Microsoft Copilot CVE 対策、実データで稼働"],
           ["✓", "監査証跡",           "append-only + ハッシュチェーン — 上の「監査証跡」セクションで実データを閲覧可能"],
-          ["✗", "ローカル AI 推論",     "未実装 (docs/gap-analysis.md D2)。LLM 推論は固定応答のスタブ"],
+          ["⚠", "ローカル AI 推論",     "実装済み (D2 Phase 1-5) — モデルダウンロード・ロード後に BEC 意味解析が有効化。未ロード時は決定論的シグナルのみ"],
           ["✗", "MLS + PQC 暗号化",    "未実装 (docs/gap-analysis.md D1)。現状は単一バイト XOR のモック"],
         ] as [string, string, string][]).map(([icon, name, desc]) => (
           <div style={{

@@ -2347,6 +2347,7 @@ name = "kaname-ui"
 version = "0.7.1"
 dependencies = [
  "dirs",
+ "kaname-ai",
  "kaname-bec",
  "kaname-dlp",
  "kaname-jmap",

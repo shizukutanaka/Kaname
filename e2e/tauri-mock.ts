@@ -273,6 +273,18 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             };
           case "security_audit_log":
             return ov.auditLog ?? { entries: [], chain_valid: true };
+          // ローカル LLM (D2 Phase 5): 既定はモデル未取得・未ロード
+          case "ai_model_status":
+            return ov.aiModelStatus ?? {
+              state: "missing",
+              size_bytes: null,
+              download_url: "https://huggingface.co/mock/model.gguf",
+              expected_size_bytes: 2400000000,
+            };
+          case "ai_llm_start":
+            return ov.aiLlmStart ?? "loaded";
+          case "ai_model_download":
+            return ov.aiModelDownload ?? "downloaded";
           case "ai_detect_phishing":      return { verdict: "SAFE", score: 0 };
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":
