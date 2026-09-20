@@ -1470,9 +1470,8 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             .and_then(|v| v.first())
             .map(|a| a.email.clone());
 
-        // 一覧の時点では Authentication-Results ヘッダを取得していないため
-        // None を渡す。Pass と偽ると認証シグナルが不当に安全側へ倒れる。
-        // スレッド情報は JMAP の messageId/inReplyTo/references/threadId から供給。
+        // スレッド情報は JMAP の messageId/inReplyTo/references/threadId、
+        // 認証結果は header:Authentication-Results:asText から供給。
         let verdict = assess_listing(ListingInput {
             account_id: &account_id,
             from_name: &from_name,
@@ -1485,6 +1484,7 @@ pub async fn mail_fetch(mailbox_id: String, limit: Option<u32>) -> Result<Vec<Em
             in_reply_to: it.in_reply_to.as_deref().unwrap_or(&[]),
             references: it.references.as_deref().unwrap_or(&[]),
             dkim_signature: it.dkim_signature.as_deref(),
+            auth_results: it.auth_results.as_deref(),
         })
         .await;
 
@@ -1565,6 +1565,8 @@ struct ListingInput<'a> {
     in_reply_to: &'a [String],
     references: &'a [String],
     dkim_signature: Option<&'a str>,
+    /// Authentication-Results ヘッダーの生値 (未取得時は None)。
+    auth_results: Option<&'a str>,
 }
 
 /// 一覧表示用の簡易 BEC 判定。
@@ -1585,6 +1587,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         in_reply_to,
         references,
         dkim_signature,
+        auth_results,
     } = input;
     let from_header = match from_name {
         Some(n) => format!("{n} <{from_addr}>"),
@@ -1624,15 +1627,21 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
             current_body_snippet: &body_snippet,
         })
     };
+    // 一覧でも Authentication-Results を取得していれば実値を使う。
+    // ヘッダが無い経路では全て None — Pass と偽ると認証シグナルが
+    // 不当に安全側へ倒れるため。
+    let parsed_auth = auth_results
+        .map(kaname_render::parse_auth_results_str)
+        .unwrap_or_default();
     let req = kaname_bec::AssessmentRequest {
         from_header: &from_header,
         return_path: None,
         subject,
         body_text: preview,
         auth: kaname_bec::AuthResults {
-            spf: kaname_bec::AuthVerdict::None,
-            dkim: kaname_bec::AuthVerdict::None,
-            dmarc: kaname_bec::AuthVerdict::None,
+            spf: map_auth(parsed_auth.spf),
+            dkim: map_auth(parsed_auth.dkim),
+            dmarc: map_auth(parsed_auth.dmarc),
             arc: None,
         },
         sender_history: history.as_ref(),

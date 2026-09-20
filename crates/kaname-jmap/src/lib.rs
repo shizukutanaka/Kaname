@@ -285,6 +285,7 @@ impl JmapClient {
                                 "from","to","replyTo","preview","hasAttachment","threadId",
                                 "messageId","inReplyTo","references",
                                 "header:DKIM-Signature:asText",
+                                "header:Authentication-Results:asText",
                             ],
                         }),
                         "emails".into(),
@@ -725,6 +726,12 @@ pub struct EmailListItem {
     /// `l=` タグ乱用・リプレイ検出に使用。
     #[serde(rename = "header:DKIM-Signature:asText", default)]
     pub dkim_signature: Option<String>,
+    /// Authentication-Results ヘッダーの生値
+    /// (`header:Authentication-Results:asText`)。一覧時点の SPF/DKIM/DMARC
+    /// 評価に使用。ヘッダ値は受信 MTA の記述であり暗号学的検証ではない
+    /// (gap-analysis D18/D44)。
+    #[serde(rename = "header:Authentication-Results:asText", default)]
+    pub auth_results: Option<String>,
 }
 
 impl EmailListItem {
@@ -929,6 +936,7 @@ mod tests {
             in_reply_to: None,
             references: None,
             dkim_signature: None,
+            auth_results: None,
         };
         assert!(e.is_read());
         assert!(!e.is_starred());
