@@ -94,7 +94,7 @@ export function OobvCeremony(props: {
       padding: strong() ? "10px 12px" : "8px 12px",
       "border-radius": "8px",
       background: strong() ? "#FDECEC" : "#FBF6E9",
-      border: `1px solid ${strong() ? "#E5484D60" : "#E5A50060"}`,
+      border: `1px solid ${strong() ? "#FF6B7060" : "#E5A50060"}`,
       color: strong() ? "#8A1F22" : "#6B4E00",
       "font-size": strong() ? "13px" : "12px",
       "line-height": "1.6",

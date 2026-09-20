@@ -14,8 +14,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **OOBV 電話確認セレモニーの UI 配線**: 📞 バナー (メール開封ビュー / .eml 解析結果) に「電話で確認を開始」ボタンを追加。`oobv_start` で6単語の合い言葉+挑戦番号を発行し、電話で相手が読み上げた単語を `oobv_verify` で照合 → Verified/Mismatch/Expired/Locked を表示。共有コンポーネント `src/ui/OobvCeremony.tsx`。登録済みコマンドの UI 未呼出は `oobv_recommend` のみとなる (#145 で配線済み)
 - **static-check の invoke 引数検査が `tauri::State` 注入引数を誤検出するバグを修正**: シグネチャ内の `tauri::`/`std::`/`commands::` パスセグメントを引数名と誤認していた。`State`/`AppHandle` 等のフレームワーク注入引数を除外
 
+- **Playwright E2E が実際に実行可能になった** (D8 解消 — #147 はコンフリクトで未マージクローズのため再適用)
+  - `e2e/tauri-mock.ts`: `@tauri-apps/api` の mockIPC と同構造の `__TAURI_INTERNALS__` 注入で、Tauri ランタイムなしの `npm run dev` 上で UI 層 E2E を実現。コマンド呼び出しログ (`__KANAME_MOCK_LOG`) で invoke 引数まで検証可能
+  - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
+  - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
+### Fixed
+- **E2E 実行が検出した実 a11y 欠陥を修正** (D8 関連)
+  - ミュートテキスト `#5A6473` が背景に対しコントラスト 2.7–3.2:1 で WCAG AA (4.5:1) 未達 → `#8B96A5` へ全置換
+  - 危険色 `#E5484D` が自身の tint 背景上で 4.15:1 → `#FF6B70` へ全置換
+  - ナビ非選択テキスト `rgba(255,255,255,.3)` (2.61:1) → `.55` へ
+  - `h1` 不在 (Inbox 見出しを `<h1>` 化)、ナビゲーションに `role="navigation"`、コンテンツ領域に `role="main"`、作成画面の `×` に `aria-label="閉じる"`、`prefers-reduced-motion` で全 transition を 0.01ms に短縮、`:focus-visible` のフォーカスリングをグローバル保証
 
 ### Removed
+- **E2E の陳腐化した架空シナリオと未使用インフラを削除** (D8 関連)
+  - 旧 `north-star-demo.spec.ts` は Smart Reply 3候補・スワイプアーカイブ・Cmd+Z 取り消し・`ai_summarize_email` HTTP 傍受など未実装 UI を前提としており実行不能だったため、実 UI のゴールデンパスで全面書き換え
+  - spec が一切呼ばない `cargo run -p kaname-mockserver` の webServer エントリと Mobile Safari のスワイプ project (spec 不在) を `playwright.config.ts` から除去 — これにより `npm run test:e2e` がフロントエンドのみで実行可能に
+  - `scripts/init-snapshots.sh` と `e2e/__snapshots__/` の空プレースホルダ (toHaveScreenshot spec は残っていない)
 - **出荷バイナリ・ワークスペースから一度も到達不能だった4クレートを削除** (D19・D6)
   - `kaname-billing` (課金 — スコープ外、永続化未実装だった D6 も消滅)、`kaname-continuity` (デバイス間ハンドオフ — 単一デバイスで完結するスコープに不要)、`kaname-i18n` (翻訳カタログ — 正規実装は `src/i18n.ts` + `src/locales/`)、`kaname-tray` (トレイ生成 — `src-tauri` の内蔵トレイと重複)
   - ワークスペース 27→23 クレート (出荷 19、意図的除外 4: mls/sandbox/mockserver/tests)。実装は git 履歴に残り将来復元可能

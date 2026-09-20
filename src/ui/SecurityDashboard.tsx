@@ -62,7 +62,7 @@ interface ActionItem {
 
 const PhishingScoreBar = (props: { score: number; likely: boolean }) => {
   const color = props.likely
-    ? "#E5484D"
+    ? "#FF6B70"
     : props.score > 0.4 ? "#F5A623" : "#00B368";
 
   return (
@@ -91,7 +91,7 @@ const PhishingScoreBar = (props: { score: number; likely: boolean }) => {
       <Show when={props.likely}>
         <div style={{
           "margin-top": "4px", "font-size": "10px",
-          color: "#E5484D", "font-weight": "600",
+          color: "#FF6B70", "font-weight": "600",
         }}>
           ⚠ AI生成フィッシングの疑いが高い
         </div>
@@ -106,7 +106,7 @@ const PhishingScoreBar = (props: { score: number; likely: boolean }) => {
 
 const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
   const decisionLabel = (entry: AiAccessEntry) => {
-    if ("Block" in entry.decision) return { text: "ブロック", color: "#E5484D" };
+    if ("Block" in entry.decision) return { text: "ブロック", color: "#FF6B70" };
     if ("AllowWithWarning" in entry.decision) return { text: "警告許可", color: "#F5A623" };
     return { text: "許可", color: "#00B368" };
   };
@@ -134,7 +134,7 @@ const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
           AI アクセス監査ログ
         </span>
         <span style={{
-          "font-size": "10px", color: "#5A6473",
+          "font-size": "10px", color: "#8B96A5",
           padding: "1px 6px", background: "#1A2129",
           "border-radius": "3px",
         }}>
@@ -145,7 +145,7 @@ const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
       <Show
         when={props.entries.length > 0}
         fallback={
-          <div style={{ padding: "16px", "text-align": "center", color: "#5A6473", "font-size": "12px" }}>
+          <div style={{ padding: "16px", "text-align": "center", color: "#8B96A5", "font-size": "12px" }}>
             AI アクセスの記録なし
           </div>
         }
@@ -164,7 +164,7 @@ const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
                   "align-items": "center",
                   "font-size": "11px",
                 }}>
-                  <span style={{ color: "#5A6473" }}>{formatTime(entry.timestamp)}</span>
+                  <span style={{ color: "#8B96A5" }}>{formatTime(entry.timestamp)}</span>
                   <div>
                     <span style={{ color: "#8B96A5" }}>{entry.operation}</span>
                     <span style={{ color: "#3A4451", "margin-left": "6px" }}>
@@ -195,7 +195,7 @@ const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
         padding: "10px 16px",
         "border-top": "1px solid #1F2833",
         "font-size": "11px",
-        color: "#5A6473",
+        color: "#8B96A5",
         display: "flex",
         gap: "16px",
       }}>
@@ -208,12 +208,12 @@ const AiAccessLog = (props: { entries: AiAccessEntry[] }) => {
 };
 
 const getLabelColor = (label: string) => ({
-  "Public": "#5A6473",
+  "Public": "#8B96A5",
   "Internal": "#8B96A5",
   "Confidential": "#F5A623",
-  "HighlyConfidential": "#E5484D",
-  "LegalPrivilege": "#E5484D",
-})[label] || "#5A6473";
+  "HighlyConfidential": "#FF6B70",
+  "LegalPrivilege": "#FF6B70",
+})[label] || "#8B96A5";
 
 // ============================================================================
 // コンタクトカード
@@ -223,8 +223,8 @@ const ContactCard = (props: { contact: ContactIntelligence }) => {
   const { contact: c } = props;
 
   const trustColor = {
-    High: "#00B368", Medium: "#00C4CC", Low: "#F5A623", Unverified: "#5A6473",
-  }[c.trust_level] || "#5A6473";
+    High: "#00B368", Medium: "#00C4CC", Low: "#F5A623", Unverified: "#8B96A5",
+  }[c.trust_level] || "#8B96A5";
 
   const strengthPercent = Math.round(c.relationship_strength * 100);
 
@@ -253,7 +253,7 @@ const ContactCard = (props: { contact: ContactIntelligence }) => {
           }}>
             {c.display_name || c.email_addr}
           </div>
-          <div style={{ "font-size": "11px", color: "#5A6473" }}>
+          <div style={{ "font-size": "11px", color: "#8B96A5" }}>
             {c.email_addr}
           </div>
         </div>
@@ -275,7 +275,7 @@ const ContactCard = (props: { contact: ContactIntelligence }) => {
       <div style={{ "margin-bottom": "8px" }}>
         <div style={{
           display: "flex", "justify-content": "space-between",
-          "font-size": "10px", color: "#5A6473", "margin-bottom": "3px",
+          "font-size": "10px", color: "#8B96A5", "margin-bottom": "3px",
         }}>
           <span>関係強度</span>
           <span style={{ color: "#F5F7FA" }}>{strengthPercent}%</span>
@@ -295,14 +295,14 @@ const ContactCard = (props: { contact: ContactIntelligence }) => {
         display: "grid", "grid-template-columns": "1fr 1fr",
         gap: "6px", "font-size": "11px",
       }}>
-        <div style={{ color: "#5A6473" }}>
+        <div style={{ color: "#8B96A5" }}>
           通信数: <span style={{ color: "#F5F7FA" }}>{c.total_messages}</span>
         </div>
-        <div style={{ color: "#5A6473" }}>
+        <div style={{ color: "#8B96A5" }}>
           直近30日: <span style={{ color: "#F5F7FA" }}>{c.recent_30d}</span>
         </div>
         <Show when={c.avg_response_min !== null}>
-          <div style={{ color: "#5A6473" }}>
+          <div style={{ color: "#8B96A5" }}>
             平均応答: <span style={{ color: "#F5F7FA" }}>
               {c.avg_response_min! < 60
                 ? `${c.avg_response_min}分`
@@ -310,7 +310,7 @@ const ContactCard = (props: { contact: ContactIntelligence }) => {
             </span>
           </div>
         </Show>
-        <div style={{ color: "#5A6473" }}>
+        <div style={{ color: "#8B96A5" }}>
           分類: <span style={{ color: "#8B96A5" }}>{c.category}</span>
         </div>
       </div>
@@ -337,14 +337,14 @@ const ActionItemsList = (props: {
   })[t] || "•";
 
   const priorityColor = (p: number) =>
-    p > 0.8 ? "#E5484D" : p > 0.6 ? "#F5A623" : "#8B96A5";
+    p > 0.8 ? "#FF6B70" : p > 0.6 ? "#F5A623" : "#8B96A5";
 
   return (
     <div>
       <Show
         when={props.items.length > 0}
         fallback={
-          <div style={{ "font-size": "12px", color: "#5A6473", padding: "8px 0" }}>
+          <div style={{ "font-size": "12px", color: "#8B96A5", padding: "8px 0" }}>
             アクションアイテムなし
           </div>
         }
@@ -376,7 +376,7 @@ const ActionItemsList = (props: {
                 style={{
                   background: "#1A2129", border: "none", "border-radius": "4px",
                   padding: "3px 8px", "font-size": "11px",
-                  color: "#5A6473", cursor: "pointer",
+                  color: "#8B96A5", cursor: "pointer",
                 }}
               >
                 完了
@@ -453,7 +453,7 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
             display: "flex", "align-items": "center", gap: "8px",
           }}>
             🔍 AI生成フィッシング検出
-            <span style={{ "font-size": "10px", color: "#5A6473" }}>
+            <span style={{ "font-size": "10px", color: "#8B96A5" }}>
               (全競合が未実装)
             </span>
           </div>
@@ -467,12 +467,12 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
             </div>
           </Show>
           <Show when={phishingError()}>
-            <div style={{ "font-size": "11px", color: "#E5484D", "line-height": "1.5" }}>
+            <div style={{ "font-size": "11px", color: "#FF6B70", "line-height": "1.5" }}>
               ⚠ {phishingError()}
             </div>
           </Show>
           <Show when={loading()}>
-            <div style={{ "font-size": "12px", color: "#5A6473" }}>分析中...</div>
+            <div style={{ "font-size": "12px", color: "#8B96A5" }}>分析中...</div>
           </Show>
         </div>
       </Show>
@@ -544,12 +544,12 @@ export const SecurityDashboard = (props: { selectedEmailId: string | null }) => 
             "font-size": "11px",
           }}>
             <span style={{
-              color: icon === "✓" ? "#00B368" : icon === "⚠" ? "#F5A623" : "#E5484D",
+              color: icon === "✓" ? "#00B368" : icon === "⚠" ? "#F5A623" : "#FF6B70",
               "font-weight": "700",
             }}>{icon}</span>
             <div>
               <span style={{ color: "#D0D5DD" }}>{name}</span>
-              <span style={{ color: "#5A6473", "margin-left": "6px" }}>{desc}</span>
+              <span style={{ color: "#8B96A5", "margin-left": "6px" }}>{desc}</span>
             </div>
           </div>
         ))}
