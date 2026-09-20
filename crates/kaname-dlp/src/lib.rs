@@ -1077,11 +1077,14 @@ fn detect_medical_data(text: &str) -> bool {
 // Default rule set (Starter tier)
 // ============================================================================
 //
-// D57: 既定で有効な Outbound ルールは5件。実装済み12分類器のうち
-// JpMyNumber / CreditCardPan / ConfidentialMarker / SourceCode の4つが
-// 既定で使用される。残り8つ (JpCorporateNumber, Iban, SwiftBic, UsSsn,
-// IpAddress, AttorneyClientPrivilege, DealCodename, MedicalData) は
-// カスタムルール読み込み (from_db) 未実装のため現在有効化する経路がない。
+// D57 (2026-09-20 解消): かつて既定ルールは Outbound 5件のみで、
+// 実装済み12分類器のうち8つが有効化経路の無いまま不活性だった。
+// 現在は UsSsn/MedicalData/AttorneyClientPrivilege/DealCodename/Iban/
+// SwiftBic の6分類器を Outbound + Inbound の既定ルールに追加済み
+// (default-006..011 / default-in-004..009)。JpCorporateNumber (公表情報)
+// と IpAddress (単体では機微でない) は意図的に既定化を見送った。
+// 残る制約: カスタムルール読み込み (from_db / dlp_rules テーブル) は
+// 未実装のため、既定を超えるポリシー変更はまだ不可能。
 //
 // D104: Inbound ルールが0件だったため、受信メールの DLP 評価
 // (Direction::Inbound) は常に所見ゼロを返していた — UI の
@@ -1202,6 +1205,150 @@ fn default_rules() -> Vec<Rule> {
             action: Action::Warn,
             condition: Condition::matches(Predicate::Classifier {
                 classifier: ClassifierId::ConfidentialMarker,
+            }),
+        },
+        // D57: 以下、実装済みだが既定ルールから参照されていなかった分類器を
+        // 既定有効化。規制対象の個人識別子 (SSN・医療情報) は既存の
+        // マイナンバー/カード番号と同じく Outbound で Block、その他の
+        // 座標・マーカー系は誤検知余地があるため Warn で助言する。
+        //
+        // 既定化を見送った2分類器 (理由):
+        // - JpCorporateNumber: 法人番号は国税庁の公表情報であり、単体の
+        //   検出を警告しても正常業務メールへのノイズになる。
+        // - IpAddress: IP アドレス単体は機微情報ではない (ヘッダ・DNS に
+        //   常態的に出る)。設定主体の組み合わせ検出はカスタムルールの役目。
+        Rule {
+            id: "default-006".into(),
+            name: "米国SSN外部送信防止".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 10,
+            action: Action::Block,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::UsSsn,
+            }),
+        },
+        Rule {
+            id: "default-007".into(),
+            name: "医療情報外部送信防止".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 10,
+            action: Action::Block,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::MedicalData,
+            }),
+        },
+        Rule {
+            id: "default-008".into(),
+            name: "弁護士秘匿特権マーカー外部送信警告".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::AttorneyClientPrivilege,
+            }),
+        },
+        Rule {
+            id: "default-009".into(),
+            name: "案件コードネーム外部送信警告".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::DealCodename,
+            }),
+        },
+        Rule {
+            id: "default-010".into(),
+            name: "IBAN外部送信警告".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::Iban,
+            }),
+        },
+        Rule {
+            id: "default-011".into(),
+            name: "SWIFT BIC外部送信警告".into(),
+            enabled: true,
+            direction: Direction::Outbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::SwiftBic,
+            }),
+        },
+        // Inbound 側も同じ6分類器を Warn で報告する (D104 と同じ方針:
+        // 受信は遮断せず、転送・返信時の漏洩リスクを可視化する)。
+        Rule {
+            id: "default-in-004".into(),
+            name: "受信メールに米国SSN".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::UsSsn,
+            }),
+        },
+        Rule {
+            id: "default-in-005".into(),
+            name: "受信メールに医療情報".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::MedicalData,
+            }),
+        },
+        Rule {
+            id: "default-in-006".into(),
+            name: "受信メールに弁護士秘匿特権マーカー".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::AttorneyClientPrivilege,
+            }),
+        },
+        Rule {
+            id: "default-in-007".into(),
+            name: "受信メールに案件コードネーム".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::DealCodename,
+            }),
+        },
+        Rule {
+            id: "default-in-008".into(),
+            name: "受信メールにIBAN".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::Iban,
+            }),
+        },
+        Rule {
+            id: "default-in-009".into(),
+            name: "受信メールにSWIFT BIC".into(),
+            enabled: true,
+            direction: Direction::Inbound,
+            priority: 20,
+            action: Action::Warn,
+            condition: Condition::matches(Predicate::Classifier {
+                classifier: ClassifierId::SwiftBic,
             }),
         },
     ]
@@ -1564,6 +1711,126 @@ mod tests {
         assert!(
             result.findings.iter().any(|f| f.action == Action::Warn),
             "should warn on confidential marker"
+        );
+    }
+
+    // ---- D57: 既定ルールで新規有効化した分類器の回帰 ----
+
+    #[test]
+    fn us_ssn_outbound_blocked_by_default() {
+        // "123-45-6789": area/group/serial いずれも妥当 (is_plausible_ssn 通過)。
+        let to = vec!["vendor@external.com".into()];
+        let result = engine().evaluate(
+            &ctx("SSN は 123-45-6789 です", "me@corp.com", &to),
+            Direction::Outbound,
+        );
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.rule_id == "default-006" && f.action == Action::Block),
+            "米国 SSN の外部送信は既定で Block すべき: {:?}",
+            result.findings
+        );
+    }
+
+    #[test]
+    fn medical_data_outbound_blocked_by_default() {
+        let to = vec!["vendor@external.com".into()];
+        let result = engine().evaluate(
+            &ctx("患者id: P-123 / diagnosis: confirmed", "me@corp.com", &to),
+            Direction::Outbound,
+        );
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|f| f.rule_id == "default-007" && f.action == Action::Block),
+            "医療情報の外部送信は既定で Block すべき: {:?}",
+            result.findings
+        );
+    }
+
+    #[test]
+    fn iban_and_bic_outbound_warn_by_default() {
+        // MOD-97 有効な IBAN (GB82 WEST 1234 5698 7654 32) と有効 BIC。
+        let to = vec!["vendor@external.com".into()];
+        let result = engine().evaluate(
+            &ctx(
+                "振込先: GB82 WEST 1234 5698 7654 32 / BIC BANKJPJTXXX",
+                "me@corp.com",
+                &to,
+            ),
+            Direction::Outbound,
+        );
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "default-010" && f.action == Action::Warn));
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "default-011" && f.action == Action::Warn));
+    }
+
+    #[test]
+    fn privilege_marker_and_deal_codename_outbound_warn() {
+        let to = vec!["opposing@lawfirm.example".into()];
+        let result = engine().evaluate(
+            &ctx(
+                "This is attorney-client privileged. Re: Project OMEGA timeline",
+                "me@corp.com",
+                &to,
+            ),
+            Direction::Outbound,
+        );
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "default-008" && f.action == Action::Warn));
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "default-009" && f.action == Action::Warn));
+    }
+
+    #[test]
+    fn inbound_medical_and_ssn_warn_by_default() {
+        let result = engine().evaluate(
+            &ctx(
+                "添付に患者id: P-9 と SSN 123-45-6789 を含みます",
+                "ext@x.jp",
+                &[],
+            ),
+            Direction::Inbound,
+        );
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "default-in-004" && f.action == Action::Warn));
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "default-in-005" && f.action == Action::Warn));
+    }
+
+    #[test]
+    fn corporate_number_and_ip_alone_stay_clean() {
+        // JpCorporateNumber / IpAddress は既定ルールに含めない (公開情報・
+        // 単体で機微でない) — これらだけを含む本文で所見が出ないことを固定。
+        let to = vec!["vendor@external.com".into()];
+        let result = engine().evaluate(
+            &ctx(
+                "当社の法人番号は 7123456789012、サーバ IP は 203.0.113.10 です",
+                "me@corp.com",
+                &to,
+            ),
+            Direction::Outbound,
+        );
+        assert!(
+            result.is_clean(),
+            "法人番号/IP 単体で誤検出しない: {:?}",
+            result.findings
         );
     }
 

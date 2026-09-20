@@ -273,7 +273,6 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
             };
           case "security_audit_log":
             return ov.auditLog ?? { entries: [], chain_valid: true };
-          case "ai_detect_phishing":      return { verdict: "SAFE", score: 0 };
           // 副作用系: 成功を返すだけ
           case "mail_mark_read":
           case "mail_trash":
@@ -283,8 +282,11 @@ export async function installTauriMock(page: Page, ov: MockOverrides = {}) {
           case "history_mark_verified":
           case "log_error":
             return null;
+          // 未登録コマンドは本物の Tauri と同じく失敗させる。
+          // `return null` だと存在しないコマンドを呼ぶ spec が
+          // モック上だけ緑になり偽陽性を生む (D117)。
           default:
-            return null;
+            throw new Error(`unknown command: ${cmd}`);
         }
       };
     },
