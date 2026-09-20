@@ -227,10 +227,9 @@ async fn mail_get_mailboxes() -> Result<Vec<commands::MailboxRow>, String> {
 #[tauri::command]
 async fn settings_save_onboarding(
     notifications: bool,
-    continuity: bool,
     telemetry: bool,
 ) -> Result<(), String> {
-    commands::settings_save_onboarding(notifications, continuity, telemetry).await
+    commands::settings_save_onboarding(notifications, telemetry).await
 }
 
 #[tauri::command]

@@ -274,6 +274,8 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 | D94 | ~~**送信メッセージが RFC 5322/2047 非準拠**: `send_email` は件名を生文字列のまま `Subject:` に書き、本文も生 UTF-8 で `Content-Transfer-Encoding`/`MIME-Version` なし — 日本語件名は SMTPUTF8 非対応経路で文字化け、日本語本文は 7bit MTA で破壊されうる。日本語優先プロダクトで最も基本的な経路が規格非準拠~~ **(2026-09-20 解消)** | P2 | 件名は `encode_header_utf8` で RFC 2047 `=?UTF-8?B?` (45B チャンク分割、word ≤75 字)、本文は base64 + `MIME-Version: 1.0`/`Content-Transfer-Encoding: base64` に。base64 は `.` を含まないため SMTP 終端シーケンスの構造的起因も消去。`build_raw_message`/`base64_encode`/`wrap76` を抽出し合成テスト3件 (既知値・word 上限・ヘッダ ASCII 性) で固定 |
 | D95 | ~~**`send_email` の `draft_id` が常に `None` の死んだパラメータ**: 唯一の呼び出し元 (`mail_send_real`) が `None` 固定で、下書き削除の分岐は到達不能 — 下書きを作るコマンド自体が存在しない~~ **(2026-09-20 解消)** | P4 | パラメータと「送信後に下書き削除」分岐を削除。下書き機能の実装時に git 履歴から復元可能 |
 
+| D99 | ~~**「Continuity を有効化」トグルが削除済み機能を謳っていた**: オンボーディングの権限画面に「iPhone と Mac で同じメールを引き継ぐ (Handoff)」の選択肢があり `settings` テーブルへ永続化していたが、`kaname-continuity` クレート自体が D19 で削除済み — 読み手が将来にわたり存在しない。通知/テレメトリは「未実装機能の先行オプトイン」(D70) だが、continuity は「存在しない機能の選択肢」であり placebo~~ **(2026-09-20 解消)** | P4 | `settings_save_onboarding` から `continuity` 引数を削除 (コマンド契約の変更 — 唯一の呼び出し側 Onboarding.tsx も更新)。UI の PermissionToggle と `continuityEnabled` state を除去。既存 DB の `settings('local','continuity')` レコードは読み手なしのため移行・削除不要
+
 
 ### 完了判定の変更
 

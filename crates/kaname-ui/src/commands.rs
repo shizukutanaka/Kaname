@@ -2046,9 +2046,12 @@ pub async fn security_audit_log(limit: Option<i64>) -> Result<AuditLogView, Stri
 /// 以前は `not_wired` を返すスタブで、そのために Onboarding 画面は
 /// 意図的に未到達にしていた (D22)。`settings` テーブルに保存する。
 /// アカウント接続前でも動くよう account_id は固定の "local" を使う。
+///
+/// notifications/telemetry は機能未実装のため読み出し経路が無い
+/// (inert データ — D70)。kaname-continuity は削除済み (D19) で
+/// 読み手が将来も存在しないため、continuity 設定自体を削除した (D99)。
 pub async fn settings_save_onboarding(
     notifications: bool,
-    continuity: bool,
     telemetry: bool,
 ) -> Result<(), String> {
     let store = store_slot()
@@ -2058,7 +2061,6 @@ pub async fn settings_save_onboarding(
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
     for (k, v) in [
         ("notifications", notifications),
-        ("continuity", continuity),
         ("telemetry", telemetry),
         ("onboarding_done", true),
     ] {

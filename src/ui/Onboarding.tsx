@@ -23,7 +23,6 @@ interface OnboardingState {
   step: Step;
   emailConsent:        boolean;
   telemetryOptIn:      boolean;
-  continuityEnabled:   boolean;
   notificationsAllowed: boolean;
 }
 
@@ -34,7 +33,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     step: "welcome",
     emailConsent: false,
     telemetryOptIn: false,
-    continuityEnabled: false,
     notificationsAllowed: false,
   });
 
@@ -148,14 +146,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
       />
 
       <PermissionToggle
-        title="Continuity を有効化"
-        description="iPhone と Mac で同じメールを引き継ぐ (Handoff)"
-        checked={state().continuityEnabled}
-        onChange={v => setState(s => ({ ...s, continuityEnabled: v }))}
-        recommended={false}
-      />
-
-      <PermissionToggle
         title="匿名利用統計を送信"
         description="クラッシュレポートと匿名のクリック数のみ。メール本文は絶対に送りません"
         checked={state().telemetryOptIn}
@@ -236,7 +226,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     onMount(() => {
       invoke("settings_save_onboarding", {
         notifications: state().notificationsAllowed,
-        continuity:    state().continuityEnabled,
         telemetry:     state().telemetryOptIn,
       }).catch(() => {
         // オンボーディング設定保存の失敗は致命的ではないため無視して続行するが、
