@@ -391,5 +391,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 
 | # | 内容 | 優先度 | 備考 |
 |---|---|---|---|
+| D115 | ~~**kaname-ui の async テストが共有グローバル (`STORE`/`JMAP_SESSION`/`STYLE_PROFILES`) を並行に触り不定失敗**~~ **(2026-09-20 解消)** | P3 | `#[tokio::test]` 群が OnceLock グローバルを共有するため、ストアを開くテスト同士が実行順で互いの状態を破壊し、`persist_org_domain_if_unset`/`文体プロファイル`/`outbound_dlp_eval_は既知宛先のタイポドメイン`/`analyze_raw_email_uses_verified_sender_history` が断続的に失敗していた (同じコードで1回目 4 件失敗・2回目全パスを確認)。`test_serial()` (tokio Mutex) を新設し全18 async テストの先頭でロック取得。3連続実行で全パス確認 |
 | D113 | ~~**cargo-machete 検出の未使用依存 44件削除が未適用**~~ **(2026-09-20 解消)** | P3 | ~~孤児コミット 20b8ca2 は移動済み Cargo.toml 群に広く衝突し救出不能。修復は古い差分の移植ではなく `cargo machete` の fresh 実行で再導出すべき (依存宣言は時価)~~ **追記**: `cargo-machete v0.9.2` を fresh 実行したところ **未使用依存ゼロ** ("didn't find any unused dependencies")。kaname-core/kaname-error 削除等の救出作業で既に依存宣言は整合済みだった — 44件は当時の古いツリーに対する計測で、現在は適用すべき差分が存在しない |
 | D114 | **修正 PR の取りこぼしが2回発生したプロセス欠陥** | P1 | 「修正した」は PR がマージされるまで成立しない。クローズ済み未マージ PR を一覧する定期検査 (例: `gh pr list --state closed --json mergedAt` で mergedAt=null) を static-check か運用手順に組み込むべき。人間がマージするワークフローの限界 |
