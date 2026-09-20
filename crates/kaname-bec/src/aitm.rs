@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 /// AiTM リスク評価。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AitmRisk {
-    /// 集約スコア (0-100、80+ = 危険)
+    /// 集約スコア (0-100、50 以上 = 危険)
     pub score: u32,
     /// 検出シグナル一覧
     pub signals: Vec<String>,
@@ -187,6 +187,10 @@ impl AitmDetector {
             score += 20;
             signals.push("URL 内にリダイレクト先 URL が埋め込まれている".to_string());
         }
+
+        // スコアは契約上 0-100 に収める (D102: 高リスクパラメータ多重 +
+        // PhaaS パターン + 偽ドメインの重複加点で 100 を超え得た)。
+        let score = score.min(100);
 
         // スコアからバーディクト
         let verdict = if score >= 50 {

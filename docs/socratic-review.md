@@ -497,3 +497,41 @@ A: package.json に `fuzz:mime`/`fuzz:html`/`fuzz:prompt` が揃い、
    実走結果: mime_parser 609k / html_sanitizer 25k / prompt_injection
    1.2M exec でいずれもクラッシュゼロ。static-check 検査9 を追加し
    合成違反で検知を実測済み。
+
+
+---
+
+## ラウンド 28 (2026-09-20)
+
+**問い**: fuzz/corpus/ に置かれた種ファイルは、実際に何かを検証しているか?
+
+**A**: 半分はしていなかった。6 コーパス中 3 件 (aitm_urls /
+calendar_phishing / ssa_bypass) に対応する fuzz ターゲットが存在せず、
+Storm-1747・Tycoon2FA 等の実観測攻撃パターンの種ファイルは
+**書かれた時点から一度も実行されていなかった** (D103)。
+workspace exclude の fuzz/ は全検査の死角であり (D98)、コーパスの
+存在がターゲットの存在を保証しないことも見逃されていた。
+
+**Q: 孤立していたのはコーパスだけか?**
+
+A: 違う。ターゲットを新設して種を食わせた途端、aitm_urls の
+コーパス1番目 (tycoon2fa_pattern.txt) が不変条件 `score <= 100`
+を即座に違反 — `AitmRisk.score` の doc 契約「0-100」は虚偽で、
+実装は無上限加算だった (D102)。**種が「検出するため」に書かれた
+攻撃 URL が、スコア上限を突破して何も報告していなかった**。
+verdict 閾値 (50) 自体は超過していて実害は限定的だが、契約文書と
+実装の乖離はこの系譜の典型。`score.min(100)` でクランプし
+doc 記述 (80+ → 50+) も実装に合わせた。
+
+**Q: ssa_bypass の種は機能したか?**
+
+A: はい。`EmailStyleFeatures::extract` は 500KB 切り捨て・
+`send_hour % 24` 正規化・NaN 可能性を is_finite() で露出する
+設計が正しく、1.13M exec でクラッシュゼロ。有限性を呼び出し側が
+検査する契約も fuzz 側から固定した。
+
+**教訓**: 検証資産 (シード/コーパス/テストケース) は「存在」ではなく
+「実行経路が生きているか」で評価する。`fuzz/corpus/<name>` と
+`fuzz_targets/<name>` の対応関係は1対1でなければ無意味であり、
+今回のようにコーパスが先に書かれターゲットが忘れられる退行は
+起きうる。

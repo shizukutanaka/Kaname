@@ -23,6 +23,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- fix(kaname-bec): AiTM スコアが契約上限 0-100 を超過していた (D102) — 高リスク認証パラメータ多重・PhaaS パターン・偽ドメインが重複加点され、出荷済み fuzz コーパスの種入力 (Tycoon2FA 系 URL) で実測 130+ に到達。`score.min(100)` でクランプし doc の閾値記述 (80+ → 実装の 50+) も修正。**kaname-bec 変更のため security-lead 承認要**
+- feat(fuzz): 孤立していた fuzz コーパス3件に対応ターゲットを実装 (D103) — `aitm_urls`/`calendar_phishing`/`ssa_bypass` の種ファイル群はターゲット未定義で一度も実行されていなかった。`AitmDetector::analyze` (score≤100・verdict 整合性)、`CalendarGuard::analyze` (リスク⇄レベル整合性)、`EmailStyleFeatures::extract`+`assess_self_send_anomaly` (send_hour 正規化・有限性契約) を不変条件付きで追加。実走: aitm 859k / calendar 257k / ssa 1.13M exec クラッシュゼロ
 - fix(fuzz): 3ターゲット中2本がコンパイル不能だった問題を修正 (D98) — `kaname_render::mime`/`::sanitize` の消滅参照を現行 API (`parse`/`sanitize_html(&RawHtml)`) に修正し libFuzzer 実走で検証 (609k/25k/1.2M exec 全クラッシュなし)。併せてハーネス側の `onerror=` 部分一致誤検知を属性スキャナに置換。static-check.sh に fuzz import 実在照合 (検査9) を追加
 - fix(kaname-jmap): 送信メッセージを RFC 5322/2047 準拠に (D94) — 非 ASCII 件名を `=?UTF-8?B?` encoded-word にエンコード、本文を base64 + `MIME-Version: 1.0`/`Content-Transfer-Encoding: base64` で送出。生 UTF-8 のままでは SMTPUTF8 非対応経路で件名文字化け・本文破壊の可能性があった。base64 本文は `.` を含まないため SMTP Smuggling 終端シーケンスの構造的起因も消去
 - fix(kaname-jmap): `send_email` の `draft_id` 死んだパラメータを削除 (D95) — 唯一の呼び出し元が `None` 固定で下書き削除分岐は到達不能だった
