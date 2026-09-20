@@ -297,3 +297,24 @@ DLPは送信メールのPII漏洩防止 (outbound) が目的で、外部attacker
 - 判断に迷う場合 (例: D6のRedis要否、D1のopenmlsバージョン選定など)
   アーキテクチャ判断が要る項目は Opus に、決まった手順の実装 (プラグイン導入・
   ファイル移動・依存追加等) は Sonnet に割り振るのが効率的。
+
+### D83 — セッション応答の apiUrl/downloadUrl/uploadUrl がオリジン未検証 (修正済み・第13ラウンド)
+
+- **症状**: `connect()` は `base_url` にのみ SSRF 検査を行い、セッション応答の
+  `apiUrl`/`downloadUrl`/`uploadUrl` は無検証のまま `bearer_auth` 付きリクエストの
+  宛先として使っていた。悪意ある/侵害された JMAP サーバが `apiUrl` に
+  `https://attacker.example/` を返せば、以後の全 API 呼出しで
+  Bearer トークンが外部ホストに送信される — **認証情報の流出経路**。
+- **修正**: `verify_session_url_origins` を `connect()` 内セッションパース直後に
+  追加。各 URL について (a) https 必須、(b) ホストが接続先と同一または
+  そのサブドメイン (`host == base_host || host.ends_with(".{base}")`)、
+  (c) `check_url_for_ssrf` で DNS 再解決+プライベート IP 拒否。
+  オリジン判定は純粋関数 `session_url_origin_ok` に分離してテスト可能に。
+  厳格化の影響: api./download. 等の同一ドメインサブドメインは許可、
+  別 apex ドメインの CDN は拒否される (セキュアクライアントとして意図的)。
+- **テスト**: `session_url_origin_ok_は外部ホストと非httpsを拒否する` —
+  同一ホスト/サブドメイン/大文字混じり許可、別ホスト/偽装サフィックス/
+  http/不正URL 拒否を固定。
+- **教訓**: 「入口だけ検査する」SSRF 防御は、レスポンス内の二次 URL を
+  見逃す。認証情報を載せる宛先は「最初の URL」だけでなく
+  **応答が返してくる全 URL** を検査対象に含めること。

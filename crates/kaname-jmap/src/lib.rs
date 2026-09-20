@@ -178,6 +178,13 @@ impl JmapClient {
             .await
             .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
+        // セッション応答の URL (apiUrl/downloadUrl/uploadUrl) は
+        // Bearer 認証付きリクエストの宛先になる。悪意ある/侵害された
+        // サーバが別ホストを返せばトークンが流出するため、接続先と
+        // 同一ホスト (またはそのサブドメイン) であることを検証し、
+        // 各 URL について SSRF 再検査も行う (DNS リバインディング対策)。
+        verify_session_url_origins(base_url, &session).await?;
+
         if !session.has_capability(Session::JMAP_MAIL) {
             return Err(JmapError::MissingCapability(Session::JMAP_MAIL.to_string()));
         }
@@ -886,6 +893,54 @@ pub enum JmapError {
 // ユーティリティ
 // ============================================================================
 
+/// セッション応答の `apiUrl`/`downloadUrl`/`uploadUrl` が接続先の
+/// オリジン内であることを検証する (D83)。
+///
+/// これらの URL は `bearer_auth` を付けてリクエストを送る宛先であり、
+/// サーバ応答に外部ホストを含めるとトークンが外部へ流出する。
+/// 許可条件: スキーム https かつホストが接続先と同一、または
+/// そのサブドメイン (例: `api.example.com` vs `example.com`)。
+/// 併せて各 URL に SSRF 検査 (DNS 解決 → プライベート IP 拒否) を行う。
+async fn verify_session_url_origins(base_url: &str, session: &Session) -> Result<(), JmapError> {
+    let base = reqwest::Url::parse(base_url)
+        .map_err(|e| JmapError::Ssrf(format!("base_url が URL として不正: {e}")))?;
+    let base_host = base.host_str().unwrap_or_default().to_ascii_lowercase();
+
+    for (name, raw) in [
+        ("apiUrl", session.api_url.as_str()),
+        ("downloadUrl", session.download_url.as_str()),
+        ("uploadUrl", session.upload_url.as_str()),
+    ] {
+        session_url_origin_ok(&base_host, name, raw)?;
+        // DNS リバインディング対策: 個別 URL についても IP を再検査する
+        ssrf_guard::check_url_for_ssrf(raw)
+            .await
+            .map_err(|e| JmapError::Ssrf(format!("{name}: {e}")))?;
+    }
+    Ok(())
+}
+
+/// `raw` が接続先 `base_host` のオリジン内 https URL かを検査する (純粋関数)。
+fn session_url_origin_ok(base_host: &str, name: &str, raw: &str) -> Result<(), JmapError> {
+    let url = reqwest::Url::parse(raw)
+        .map_err(|e| JmapError::Ssrf(format!("{name} が URL として不正 ({raw}): {e}")))?;
+    if url.scheme() != "https" {
+        return Err(JmapError::Ssrf(format!(
+            "{name} が https でありません: {raw}"
+        )));
+    }
+    let host = url
+        .host_str()
+        .map(|h| h.to_ascii_lowercase())
+        .ok_or_else(|| JmapError::Ssrf(format!("{name} にホストがありません: {raw}")))?;
+    if host != base_host && !host.ends_with(&format!(".{base_host}")) {
+        return Err(JmapError::Ssrf(format!(
+            "{name} のホスト {host} は接続先 {base_host} のオリジン外です"
+        )));
+    }
+    Ok(())
+}
+
 fn find_result<T: for<'de> Deserialize<'de>>(
     rs: &[MethodResponse],
     call_id: &str,
@@ -971,6 +1026,49 @@ fn contains_smtp_terminator(body: &str) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    /// D83: セッション応答 URL は Bearer 認証付きリクエストの宛先。
+    /// 別ホストを返す悪意あるサーバへのトークン流出を防ぐオリジン検査。
+    #[test]
+    fn session_url_origin_ok_は外部ホストと非httpsを拒否する() {
+        // 同一ホスト・サブドメインは許可
+        assert!(session_url_origin_ok(
+            "mail.example.com",
+            "apiUrl",
+            "https://mail.example.com/jmap/"
+        )
+        .is_ok());
+        assert!(session_url_origin_ok(
+            "mail.example.com",
+            "apiUrl",
+            "https://api.mail.example.com/x"
+        )
+        .is_ok());
+        assert!(
+            session_url_origin_ok("mail.example.com", "apiUrl", "https://MAIL.EXAMPLE.COM/x")
+                .is_ok()
+        );
+        // 別ホストは拒否 (トークン流出経路)
+        assert!(session_url_origin_ok("mail.example.com", "apiUrl", "https://evil.com/x").is_err());
+        // 末尾一致で誤魔化す偽装ドメインは拒否
+        assert!(session_url_origin_ok(
+            "mail.example.com",
+            "apiUrl",
+            "https://notmail.example.com.evil.com/x"
+        )
+        .is_err());
+        assert!(
+            session_url_origin_ok("example.com", "apiUrl", "https://badexample.com/x").is_err()
+        );
+        // http は拒否
+        assert!(
+            session_url_origin_ok("mail.example.com", "apiUrl", "http://mail.example.com/x")
+                .is_err()
+        );
+        // ホストなし/不正 URL も拒否
+        assert!(session_url_origin_ok("mail.example.com", "apiUrl", "not a url").is_err());
+        assert!(session_url_origin_ok("mail.example.com", "apiUrl", "https:///x").is_err());
+    }
 
     #[test]
     fn trash_mailbox_patch_は現所属を全てnullにしてtrashを追加する() {
