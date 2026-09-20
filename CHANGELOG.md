@@ -19,6 +19,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `north-star-demo.spec.ts` を実 UI のゴールデンパスに全面書き換え (起動初期化 / 一覧 / BEC 危険バッジ+警告バナー / 本人確認 / 検索 / 作成→mail_send / サーバ接続 / オフラインフォールバック / オンボーディングゲート)、`a11y.spec.ts` を axe-core 実測に更新
   - 全行列 (Chromium/WebKit/Firefox/Accessibility) で 62 pass / 1 skip (WebKit の Tab フォーカスは OS 既定仕様のため明示スキップ)
 ### Fixed
+- **ゴミ箱へ移したメールがオフライン一覧に残り続ける欠陥**: `is_deleted` 列を立てる経路が存在せず、`mail_trash` 後も `mail_list_stored` が拾い続けていた。`Store::mark_deleted` (jmap_id 一致・冪等) を追加し `mail_trash` で JMAP 側成功後に best-effort 反映
+
 - **オンボーディングが完全に無スタイルで描画されていた欠陥**: `k-*` クラス37個が CSS 未定義のまま残存 (アーカイブ移行時にスタイル定義が欠落) → ダークテーマのスタイルブロックをコンポーネント内に定義。トグル・進捗ドット・危険カード等すべて正しく描画されるようになった
 
 - **bec-scoring-spec.md が実装と乖離**: 閾値 (0.5/0.7 → 実装 0.6/0.85)・「7 信号」→ ~14 経路・最終スコア式 (線形クリップ → ロジスティック変換) を実装に合わせて訂正
