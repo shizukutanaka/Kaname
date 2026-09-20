@@ -213,6 +213,11 @@ async fn history_open_default() -> Result<String, String> {
     commands::history_open_default().await
 }
 
+#[tauri::command]
+async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<commands::ImportedEmail, String> {
+    commands::mail_analyze_bytes(bytes).await
+}
+
 // ============================================================================
 // トレイアイコンセットアップ
 // ============================================================================
@@ -348,6 +353,7 @@ fn main() {
             settings_save_onboarding,
             settings_is_onboarded,
             history_open_default,
+            mail_analyze_bytes,
         ])
         .build(tauri::generate_context!())
         .expect("Failed to build Tauri application");
