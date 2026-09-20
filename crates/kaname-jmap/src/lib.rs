@@ -694,11 +694,6 @@ fn find_result<T: for<'de> Deserialize<'de>>(
         .map_err(|e| JmapError::Deserialize(e.to_string()))
 }
 
-fn str_arr(v: &serde_json::Value) -> Vec<String> {
-    v.as_array().unwrap_or(&vec![])
-        .iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()
-}
-
 /// ヘッダー値のバリデーション (テストからも利用)。
 #[cfg(test)]
 fn sanitize_header_value(s: &str) -> Result<String, JmapError> {
