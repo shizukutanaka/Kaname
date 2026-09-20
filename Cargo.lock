@@ -2264,6 +2264,7 @@ name = "kaname-tauri"
 version = "0.7.1"
 dependencies = [
  "kaname-ui",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",
