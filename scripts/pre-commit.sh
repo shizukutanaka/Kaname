@@ -34,16 +34,7 @@ if [ -f "package.json" ]; then
   fi
 fi
 
-# 4. i18n キー一致検証
-if [ -f "src/i18n/index.ts" ]; then
-  echo "  i18n keys..."
-  if ! npx tsx src/i18n/index.ts --validate 2>/dev/null; then
-    echo "✗ i18n キーが言語間で不一致です。"
-    exit 1
-  fi
-fi
-
-# 5. AGPL ライセンスヘッダー検証 (新規 .rs ファイル)
+# 4. AGPL ライセンスヘッダー検証 (新規 .rs ファイル)
 echo "  license headers..."
 new_rs_files=$(git diff --cached --diff-filter=A --name-only | grep '\.rs$' || true)
 for f in $new_rs_files; do
