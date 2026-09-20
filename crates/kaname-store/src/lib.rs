@@ -2224,7 +2224,7 @@ mod message_persistence_tests {
             .unwrap();
         assert_eq!(n, 1);
 
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         let r1 = rows
             .iter()
             .find(|r| r.subject.as_deref() == Some("件名A"))
@@ -2259,7 +2259,7 @@ mod message_persistence_tests {
 
         let n = store.mark_message_deleted("acct1", "jmap-1").await.unwrap();
         assert_eq!(n, 1);
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert!(rows.is_empty(), "論理削除後は一覧に出てはいけない");
 
         // 復元 (JMAP 側でゴミ箱から戻され、次回 fetch で upsert) を模す。
@@ -2267,7 +2267,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &msg("jmap-1", "件名A"))
             .await
             .unwrap();
-        let rows = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let rows = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(rows.len(), 1, "復元されたメールは再び見えるべき");
     }
 
@@ -2305,13 +2305,13 @@ mod message_persistence_tests {
             .unwrap();
         assert_eq!(n, 1, "消えた 1 件だけ tombstone");
 
-        let inbox = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let inbox = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(inbox.len(), 1);
         assert_eq!(inbox[0].subject.as_deref(), Some("残る件名"));
         // 別フォルダは無関係
         assert_eq!(
             store
-                .list_messages("acct1", "archive", 10)
+                .list_messages("acct1", "archive", 10, 0)
                 .await
                 .unwrap()
                 .len(),
@@ -2323,7 +2323,7 @@ mod message_persistence_tests {
             .save_message("acct1", "inbox", &msg("jmap-2", "消える件名"))
             .await
             .unwrap();
-        let inbox2 = store.list_messages("acct1", "inbox", 10).await.unwrap();
+        let inbox2 = store.list_messages("acct1", "inbox", 10, 0).await.unwrap();
         assert_eq!(inbox2.len(), 2, "再取得で is_deleted=0 に復活すべき");
     }
 
@@ -2354,7 +2354,7 @@ mod message_persistence_tests {
         assert_eq!(n, 2);
         assert!(
             store
-                .list_messages("acct1", "inbox", 10)
+                .list_messages("acct1", "inbox", 10, 0)
                 .await
                 .unwrap()
                 .is_empty(),
