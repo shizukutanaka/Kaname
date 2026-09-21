@@ -388,6 +388,9 @@ impl OutputAuditor {
         } else {
             output
         };
+        // D133: 単語ごとに findings が伸びるため上限を設ける — 攻撃者が
+        // 大量のメール/URL を並べた出力を流せば findings が無制限に膨らむ。
+        const MAX_WORD_FINDINGS: usize = 256;
         let mut findings = Vec::new();
         // 全角 Unicode・ゼロ幅文字による回避を防ぐため正規化してから照合する
         let lower = normalize_for_matching(output);
@@ -407,9 +410,6 @@ impl OutputAuditor {
         // 検出対象そのもの (漏洩先メールアドレス/URL) には効かないという
         // 非対称な欠陥があった (docs/gap-analysis.md D53)。`lower` を走査するよう統一する。
         //
-        // D133: 単語ごとに findings が伸びるため上限を設ける — 攻撃者が
-        // 大量のメール/URL を並べた出力を流せば findings が無制限に膨らむ。
-        const MAX_WORD_FINDINGS: usize = 256;
         for word in lower.split_whitespace() {
             if findings.len() >= MAX_WORD_FINDINGS {
                 break;
