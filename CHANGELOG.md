@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D148: MLS 復号本文が全検出器を素通りしていた問題を修正
+
+- `analyze_raw_email` は復号後も外側の固定カバー文を採点していたため、E2E 暗号メールの内容が BEC・文体認証・DLP・OOBV・リンク評価を一切通らなかった — 復号・`subject\x00body` 分割を解析の前に移動し、解析対象本文と表示件名を内側ペイロードに差し替え (認証・差出人は外側ヘッダ由来の配送層属性として維持)
+- 併せて修正: `subject\x00body` が分割されず生ペイロードが UI に表示され、件名も外側カバー「(暗号化メッセージ)」のままだった — 分割後の本文のみを復号パネルに、内側件名を表示件名に
+
+
 ### Security — D147: BEC LLM 経路の `&str` 入口を `Content<Untrusted>` 必須に変更
 
 - D17 が警告した「型を迂回する最短経路」が出荷経路で現実化していた — D121 で配線された `bec_score`/`bec_score_subprocess` が生 `&str` を受け、`Content<Untrusted>` 境界を経ずに不信メール本文が LLM に到達していた

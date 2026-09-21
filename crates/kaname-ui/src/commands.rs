@@ -289,11 +289,39 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         })
         .unwrap_or_default();
 
-    let subject = env.subject.clone().unwrap_or_default();
+    let mut subject = env.subject.clone().unwrap_or_default();
 
     // 本文はプレーンテキストを優先し、無ければ空。
     // (HTML 本文は RawHtml のまま sanitize に渡すため別扱い)
     let body_text = env.text_body.clone().unwrap_or_default();
+
+    // MLS エンベロープを解析の「前」に処理する — 暗号メールでは実件名・
+    // 実本文がエンベロープ内の `subject\x00body` ペイロードにあり、外側は
+    // 固定カバー文 (「このメールは Kaname MLS で E2E 暗号化されています…」)。
+    // 外側を採点すると全検出器がカバー文を解析してしまい、E2E メールが
+    // 検査を完全にすり抜ける (D148)。認証・差出人は外側ヘッダ由来の
+    // 配送層属性で正しいため、差し替えるのは件名と本文のみ。
+    let mls_envelopes = kaname_render::extract_mls_envelopes(bytes);
+    let (mut mls_events, mls_payloads) = process_mls_envelopes(&mls_envelopes);
+    let mut mls_plaintexts: Vec<String> = Vec::with_capacity(mls_payloads.len());
+    for payload in &mls_payloads {
+        let (inner_subject, inner_body) = payload
+            .split_once('\u{0}')
+            .map_or(("", payload.as_str()), |(s, b)| (s, b));
+        if !inner_subject.is_empty() {
+            subject = inner_subject.to_string();
+        }
+        mls_plaintexts.push(inner_body.to_string());
+    }
+    // 解析対象本文: 復号内容があればそちら、無ければ外側本文。
+    // 画面表示用の `body_text` / srcdoc は外側のまま残す (復号本文は
+    // 別枠の `mls_plaintexts` で表示)。
+    let decrypted_body = mls_plaintexts.join("\n");
+    let analysis_text: &str = if mls_payloads.is_empty() {
+        &body_text
+    } else {
+        &decrypted_body
+    };
 
     // **実際の Authentication-Results をそのまま使う**。
     // モックでは None を渡していたが、ここでは実データが得られる。
@@ -313,7 +341,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // 本文からリンクを抽出し、bec の URL シグナルに供給する。
     // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
-    let urls = extract_urls_from_text(&body_text);
+    let urls = extract_urls_from_text(analysis_text);
 
     // 自組織ドメイン (D44): 設定 `org_domain` → 接続中アカウントから導出。
     // 未設定・未接続なら空文字で、自己ドメインを前提とする検出は安全にスキップされる。
@@ -334,8 +362,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         // D45: 複数単語キーワード ("wire transfer") はゼロ幅文字を単語間に
         // 挿入されると削除版正規化では "wiretransfer" に結合されて
         // すり抜ける。スペース化版でも照合して捕捉する。
-        let n = kaname_memory_guard::normalize_for_matching(&body_text);
-        let n_spaced = kaname_memory_guard::normalize_for_matching_spaced(&body_text);
+        let n = kaname_memory_guard::normalize_for_matching(analysis_text);
+        let n_spaced = kaname_memory_guard::normalize_for_matching_spaced(analysis_text);
         [
             "振込",
             "送金",
@@ -348,7 +376,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .any(|k| n.contains(k) || n_spaced.contains(k))
     };
     let style_risks =
-        evaluate_sender_style(&from_addr_only, &body_text, send_hour, has_financial).await;
+        evaluate_sender_style(&from_addr_only, analysis_text, send_hour, has_financial).await;
 
     // 連絡先ベースの詐称検出 (Reply-To 偽装・タイポスクワット) に使う。
     // Store 未接続の .eml 単体解析では空になり、そのシグナルはスキップされる。
@@ -377,7 +405,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .next()
         .map(|d| d.to_lowercase())
         .unwrap_or_default();
-    let body_snippet: String = body_text.chars().take(500).collect();
+    let body_snippet: String = analysis_text.chars().take(500).collect();
     let in_reply_to_first = env.in_reply_to.first();
     let thread_ctx = if known_ids.is_empty() && in_reply_to_first.is_none() {
         None
@@ -397,7 +425,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         from_header: &from,
         return_path: return_path.as_deref(),
         subject: &subject,
-        body_text: &body_text,
+        body_text: analysis_text,
         auth,
         sender_history: sender_history.as_ref(),
         our_domain: &our,
@@ -413,7 +441,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .assess(req)
         .map_err(|e| format!("BEC 判定に失敗: {e}"))?;
 
-    let oobv_level = kaname_oobv::OobvRecommender::new().recommend(&body_text);
+    let oobv_level = kaname_oobv::OobvRecommender::new().recommend(analysis_text);
 
     // 添付を一度だけ検査し、危険判定 (attachments フィールド) と
     // Deepfake 判定の両方に使い回す (filename/declared_mime だけで足りる)。
@@ -422,7 +450,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .iter()
         .map(|a| (a.filename.clone(), a.declared_mime.clone()))
         .collect();
-    let deepfake_advisory = DeepfakeAdvisory::new().evaluate(&deepfake_pairs, &body_text);
+    let deepfake_advisory = DeepfakeAdvisory::new().evaluate(&deepfake_pairs, analysis_text);
 
     let bec_verdict = match assessment.verdict {
         kaname_bec::Verdict::Safe => "SAFE",
@@ -441,17 +469,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // 構造体にムーブする前に、from/subject を使う評価を先に済ませる。
     // 本文の構造リスクに加え、リンク先の評判判定も併記する。
-    let mut render_risks = analyze_body_risks(&body_text);
+    let mut render_risks = analyze_body_risks(analysis_text);
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
-    let dlp_findings = scan_dlp_inbound(&subject, &body_text, &our);
+    let dlp_findings = scan_dlp_inbound(&subject, analysis_text, &our);
 
-    // MLS エンベロープの検出と処理 (D1 Phase 4)。
     // `is_mls` バッジはエンベロープの有無で決める — メッセージ本体が
     // エンベロープ内にあるため外側パースでは内容が見えない。
-    let mls_envelopes = kaname_render::extract_mls_envelopes(bytes);
-    let (mut mls_events, mls_plaintexts) = process_mls_envelopes(&mls_envelopes);
 
     // MLS KeyPackage 添付の受信 (D1 Phase 3) — 検証して kp_cache に投入。
     // 送信者は外側の From アドレス (エンベロープ内ではなく配送層の属性)。
@@ -1310,6 +1335,37 @@ mod tests {
                 .any(|p| p.contains("暗号化された本文")),
             "復号された本文が返るべき: {:?}",
             r2.mls_plaintexts
+        );
+
+        // D148: `subject\x00body` ペイロードは受信側で分割され、
+        // 内側の件名・本文が表示名・解析対象になることを固定する。
+        let payload = "内側の件名\u{0}緊急です。今すぐ振込先口座を変更してください";
+        let sealed2 = alice
+            .encrypt_message(&mut conv, payload.as_bytes())
+            .map_err(|e| format!("{e}"))?;
+        let r3 =
+            analyze_raw_email(mls_eml(&sealed2.to_cbor().map_err(|e| format!("{e}"))?).as_bytes())
+                .await?;
+        assert_eq!(
+            r3.subject, "内側の件名",
+            "内側の件名が表示件名になるべき (外側カバー件名ではない)"
+        );
+        assert!(
+            r3.mls_plaintexts
+                .iter()
+                .any(|p| p == "緊急です。今すぐ振込先口座を変更してください"),
+            "ペイロードは \\x00 で分割された本文のみを返すべき: {:?}",
+            r3.mls_plaintexts
+        );
+        assert!(
+            r3.mls_plaintexts.iter().all(|p| !p.contains('\u{0}')),
+            "生ペイロード (件名\\x00本文) がそのまま UI に出てはいけない"
+        );
+        // 解析対象は復号本文 — カバー文「このメールは Kaname MLS で…」ではない。
+        // 振込要求を含む内側本文が oobv 推奨に届くことを確認する。
+        assert_ne!(
+            r3.oobv_level, "none",
+            "復号本文の金銭要求が OOBV 推奨に反映されるべき (カバー文の採点ではない)"
         );
 
         // グローバル状態を掃除 — 後続テストへの影響を防ぐ
