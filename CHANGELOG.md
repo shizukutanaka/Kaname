@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed — D146: 読み手のいないオンボーディング設定を削除
+
+- 「通知を表示する」「匿名利用統計を送信」のトグルを削除 — システム通知の発行経路もテレメトリ送信コードも存在せず、保存先の `notifications`/`telemetry` キーはどこからも読まれなかった (write-only)。テレメトリのプライバシー説明リンク (kaname.app/privacy/telemetry) は 404 — 存在しない機能に虚偽の文脈を添えていた。`settings_save_onboarding` は `onboarding_done` のみ記録する形に簡素化
+- Principles 画面の stale 注記を更新: 「MLS 未実装」のため削除していた E2E 暗号化の説明を、D1 実装済み (件名を含む `subject\x00body` ペイロードを MLS で暗号化) を反映して限定付きで復元
+
 ### Removed — D139: kaname-ai::threat_intel モジュールを削除
 
 - 呼出元ゼロの dead 設計シーム (AiPhishingDetector・AiAccessController・ContactIntelligenceEngine・ActionExtractor、1482行) を削除 — 出荷機能 (kaname-store contacts/audit_log、kaname-bec) と重複し誤読の温床だった
