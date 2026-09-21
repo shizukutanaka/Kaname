@@ -83,6 +83,33 @@ pub struct LlmMessage {
     pub content: String,
 }
 
+/// ワーカー応答行の上限 (8 MiB)。
+///
+/// JSON-Lines プロトコルの応答は 1 行。`BufRead::read_line` は改行まで
+/// 無制限に読むため、異常なワーカーが改行を送らず巨大な出力を垂れ流すと
+/// ホスト側の `String` が無制限に膨張する。推論結果の JSON は実用上
+/// 数 KiB 〜 数百 KiB のため 8 MiB で十分に大きい。
+const MAX_RESPONSE_LINE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// 上限付きの 1 行読み取り。`max` バイトを超える応答はプロトコル異常として
+/// 打ち切る (無制限 `read_line` の代替)。
+///
+/// `take(max + 1)` で読み切り上限を設ける: `max + 1` バイト読めた時点で
+/// 超過確定。それ以下なら改行終端か EOF の完全な行なので受理する
+/// (改行無しで EOF の場合は後続の JSON パースが安全側に失敗する)。
+fn read_capped_line<R: BufRead>(reader: &mut R, max: u64) -> Result<String, SubprocessError> {
+    let mut line = String::new();
+    let n = std::io::Read::take(&mut *reader, max + 1)
+        .read_line(&mut line)
+        .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
+    if n as u64 > max {
+        return Err(SubprocessError::Protocol(format!(
+            "LLM 応答行が上限 {max} バイトを超過しました"
+        )));
+    }
+    Ok(line)
+}
+
 // ============================================================================
 // サブプロセスハンドル
 // ============================================================================
@@ -338,11 +365,7 @@ impl LlmSubprocess {
                 let mut stdout = stdout
                     .lock()
                     .map_err(|_| SubprocessError::Protocol("stdout ロック失敗".into()))?;
-                let mut line = String::new();
-                stdout
-                    .read_line(&mut line)
-                    .map_err(|e| SubprocessError::Protocol(e.to_string()))?;
-                Ok(line)
+                read_capped_line(&mut *stdout, MAX_RESPONSE_LINE_BYTES)
             })();
             // 受信側が既にタイムアウトで rx を drop している場合、send は Err に
             // なるが無視してよい (結果は不要)。
@@ -646,5 +669,31 @@ mod tests {
             elapsed < Duration::from_secs(5),
             "即座に返る応答で 30 秒タイムアウトを待ってはならない (実測 {elapsed:?})"
         );
+    }
+
+    /// D156: ワーカー応答の `read_line` は行長に上限がなく、異常なワーカーが
+    /// 改行を送らず巨大な出力を垂れ流すとホストの `String` が無制限に
+    /// 膨張しうる欠陥があった。`read_capped_line` は上限+1 バイト目が
+    /// 読めた時点で打ち切り、上限以下の行はそのまま受理する。
+    #[test]
+    fn read_capped_line_は上限超過行を打ち切る() {
+        // 上限 (16 バイトで検証) を超える改行無しの出力。
+        let mut cur = std::io::Cursor::new(vec![b'x'; 100]);
+        let r = read_capped_line(&mut cur, 16);
+        assert!(
+            matches!(r, Err(SubprocessError::Protocol(ref m)) if m.contains("上限")),
+            "上限超過は Protocol エラー: {r:?}"
+        );
+
+        // 上限ちょうどの改行終端行は受理される。
+        let mut cur = std::io::Cursor::new(b"123456789012345\n".to_vec());
+        let line = read_capped_line(&mut cur, 16).unwrap();
+        assert_eq!(line.len(), 16);
+        assert!(line.ends_with('\n'));
+
+        // 上限未満で EOF 終端 (改行無し) は受理 — JSON パースが安全側に落とす。
+        let mut cur = std::io::Cursor::new(b"{\"a\":1}".to_vec());
+        let line = read_capped_line(&mut cur, 16).unwrap();
+        assert_eq!(line, "{\"a\":1}");
     }
 }

@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D156: LLM ワーカー応答の無制限 read_line に行長上限を追加
+
+- `LlmSubprocess::infer` はワーカー stdout を `read_line` で無制限に読んでいた — 改行を送らない異常なワーカー出力でホスト側メモリが無制限に膨張し得た。上限 8 MiB の `read_capped_line` に置換し、超過時は Protocol エラーで打ち切る
+
 ### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
 
 - HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正
