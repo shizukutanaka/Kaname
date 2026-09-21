@@ -24,7 +24,7 @@
 #![deny(clippy::expect_used)]
 #![allow(missing_docs)]
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -400,6 +400,17 @@ impl Store {
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
+            // D132: 不変トリガーは UPDATE/DELETE を拒否するため、監査ログは
+            // 保持期限を設けない限り無制限に増大する。上限超過時は古い区間を
+            // genesis 行 (AUDIT_EPOCH、旧チェーンの tip ハッシュを封緘) に
+            // 集約して削除し、チェーンの先端方向の検証可能性を維持する。
+            let count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM audit_log;", [], |r| r.get(0))
+                .map_err(|e| StoreError::Db(e.to_string()))?;
+            if count > MAX_AUDIT_ROWS {
+                rotate_audit_log_conn(&conn, AUDIT_KEEP_ROWS)?;
+            }
+
             Ok(())
         })();
 
@@ -424,10 +435,10 @@ impl Store {
             "SELECT seq, account_id, event_type, payload_json, prev_hash, hash FROM audit_log ORDER BY seq;"
         ).map_err(|e| StoreError::Db(e.to_string()))?;
 
-        let mut prev_hash = String::new();
-        let mut valid = true;
-
-        let rows = stmt
+        // D132: ローテーション genesis 行 (AUDIT_EPOCH) が宣言する封緘点 —
+        // sealed_at_seq / sealed_prev_hash。先頭行の prev_hash が空でない
+        // 場合、いずれかの封緘点と一致すれば正規のローテーション境界とみなす。
+        let rows: Vec<(i64, Option<String>, String, String, String, String)> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
@@ -438,30 +449,55 @@ impl Store {
                     row.get::<_, String>(5)?,
                 ))
             })
+            .map_err(|e| StoreError::Db(e.to_string()))?
+            .collect::<Result<_, _>>()
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
-        for row in rows {
-            let (seq, account_id, event_type, payload_json, stored_prev, stored_hash) =
-                row.map_err(|e| StoreError::Db(e.to_string()))?;
+        let seals: Vec<(i64, String)> = rows
+            .iter()
+            .filter(|r| r.2 == AUDIT_EPOCH_EVENT)
+            .filter_map(|r| {
+                let v: serde_json::Value = serde_json::from_str(&r.3).ok()?;
+                Some((
+                    v.get("sealed_at_seq")?.as_i64()?,
+                    v.get("sealed_prev_hash")?.as_str()?.to_string(),
+                ))
+            })
+            .collect();
 
-            if stored_prev != prev_hash {
+        let mut prev_hash = String::new();
+        let mut valid = true;
+
+        for (idx, (seq, account_id, event_type, payload_json, stored_prev, stored_hash)) in
+            rows.iter().enumerate()
+        {
+            let chain_ok = if *stored_prev == prev_hash {
+                true
+            } else {
+                // 先頭行のみ、封緘点と一致する非空 prev_hash を受理する。
+                idx == 0
+                    && seals
+                        .iter()
+                        .any(|(s_seq, s_prev)| s_seq == seq && s_prev == stored_prev)
+            };
+            if !chain_ok {
                 tracing::error!(seq, "監査ログのハッシュチェーンが破損 (prev_hash 不一致)");
                 valid = false;
                 break;
             }
 
             let expected = sha256_hex_fields(&[
-                prev_hash.as_bytes(),
+                stored_prev.as_bytes(),
                 account_id.as_deref().unwrap_or("").as_bytes(),
                 event_type.as_bytes(),
                 payload_json.as_bytes(),
             ]);
-            if expected != stored_hash {
+            if expected != *stored_hash {
                 tracing::error!(seq, "監査ログのハッシュが不正");
-                return Err(StoreError::AuditChainBroken(seq));
+                return Err(StoreError::AuditChainBroken(*seq));
             }
 
-            prev_hash = stored_hash;
+            prev_hash = stored_hash.clone();
         }
 
         Ok(valid)
@@ -860,6 +896,103 @@ fn sha256_hex_fields(fields: &[&[u8]]) -> String {
         h.update(f);
     }
     h.finalize().iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// 監査ログローテーションの genesis 行に使う event_type (D132)。
+const AUDIT_EPOCH_EVENT: &str = "AUDIT_EPOCH";
+
+/// 監査ログの上限行数。超過時に古い行を genesis 行に封緘して削除する。
+/// audit() が EXCLUSIVE トランザクション内で行うため追加の IPC 経路は不要。
+const MAX_AUDIT_ROWS: i64 = 50_000;
+
+/// ローテーション時に残す最新行数。
+const AUDIT_KEEP_ROWS: i64 = 10_000;
+
+/// 監査ログをローテーションする: `keep_last` 件だけ残して古い行を削除し、
+/// チェーン末尾に genesis 行 (AUDIT_EPOCH) を通常連鎖で追記する。
+///
+/// genesis 行の payload は封緘点 (`sealed_at_seq`: ローテーション後の最古行の
+/// seq と、その行が指していた削除済み区間への `sealed_prev_hash`) を記録する。
+/// 外部にエクスポートした旧チェーンの完全性はこの hash で照合できる。
+/// 不変トリガーを一時的に外すため、EXCLUSIVE トランザクション内でのみ呼ぶ。
+fn rotate_audit_log_conn(conn: &Connection, keep_last: i64) -> Result<usize, StoreError> {
+    let Some((tip_seq, tip_hash)) = conn
+        .query_row(
+            "SELECT seq, hash FROM audit_log ORDER BY seq DESC LIMIT 1;",
+            [],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|e| StoreError::Db(e.to_string()))?
+    else {
+        return Ok(0);
+    };
+
+    // ローテーション後の最古行 (keep_last 件の先頭)。その prev_hash が
+    // 削除済み区間への最後のポインタになるため封緘する。
+    let Some((sealed_seq, sealed_prev_hash)) = conn
+        .query_row(
+            "SELECT seq, prev_hash FROM audit_log ORDER BY seq DESC LIMIT 1 OFFSET ?1 - 1;",
+            params![keep_last],
+            |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|e| StoreError::Db(e.to_string()))?
+    else {
+        return Ok(0); // 行数が keep_last 未満
+    };
+    if sealed_seq >= tip_seq {
+        return Ok(0);
+    }
+
+    let deleted: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM audit_log WHERE seq < ?1;",
+            params![sealed_seq],
+            |r| r.get(0),
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
+    if deleted == 0 {
+        return Ok(0);
+    }
+
+    let payload_json = serde_json::to_string(&serde_json::json!({
+        "event": "epoch_rotation",
+        "sealed_at_seq": sealed_seq,
+        "sealed_prev_hash": sealed_prev_hash,
+        "deleted_count": deleted,
+    }))
+    .map_err(|e| StoreError::Db(e.to_string()))?;
+
+    let hash = sha256_hex_fields(&[
+        tip_hash.as_bytes(),
+        b"",
+        AUDIT_EPOCH_EVENT.as_bytes(),
+        payload_json.as_bytes(),
+    ]);
+
+    conn.execute(
+        "INSERT INTO audit_log (account_id, event_type, payload_json, prev_hash, hash)
+         VALUES (NULL, ?1, ?2, ?3, ?4);",
+        params![AUDIT_EPOCH_EVENT, payload_json, tip_hash, hash],
+    )
+    .map_err(|e| StoreError::Db(e.to_string()))?;
+
+    // 不変トリガーを一時的に外して削除し、直ちに再作成する。
+    conn.execute_batch("DROP TRIGGER audit_log_no_delete;")
+        .map_err(|e| StoreError::Db(e.to_string()))?;
+    let delete_res = conn.execute("DELETE FROM audit_log WHERE seq < ?1;", params![sealed_seq]);
+    let recreate_res = conn.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+         BEFORE DELETE ON audit_log
+         BEGIN SELECT RAISE(ABORT, 'audit_log は不変です'); END;",
+    );
+    match (delete_res, recreate_res) {
+        (Ok(_), Ok(())) => {}
+        (Err(e), _) | (_, Err(e)) => return Err(StoreError::Db(e.to_string())),
+    }
+
+    usize::try_from(deleted).map_err(|_| StoreError::Db("deleted count overflow".into()))
 }
 
 /// テキストフィールドの基本バリデーション。
@@ -1458,6 +1591,110 @@ mod tests {
 
         let ok = store.verify_audit_chain().await.unwrap();
         assert!(ok);
+    }
+
+    #[tokio::test]
+    async fn audit_rotation_で古い行がgenesisに封緘されチェーンは検証可能() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        for i in 0..10 {
+            store
+                .audit(None, &format!("EV{i}"), &serde_json::json!({"i": i}))
+                .await
+                .unwrap();
+        }
+
+        // 最新 4 行を残してローテーション (genesis + 4 = 5 行が残る)
+        let deleted = {
+            let conn = store.conn.lock().unwrap();
+            rotate_audit_log_conn(&conn, 4).unwrap()
+        };
+        assert_eq!(deleted, 6);
+
+        let entries = store.audit_entries(100).await.unwrap();
+        assert_eq!(entries.len(), 5);
+        // genesis (AUDIT_EPOCH) はチェーン末尾 = 新しい順の先頭に来る。
+        // 封緘点 (sealed_at_seq / sealed_prev_hash) を payload に持つ。
+        let genesis = entries.first().unwrap();
+        assert_eq!(genesis.event_type, "AUDIT_EPOCH");
+        assert!(genesis.payload_json.contains("epoch_rotation"));
+        // 最古の残存行は通常イベント (sealed_at_seq の行)
+        assert_eq!(entries.last().unwrap().event_type, "EV6");
+
+        // ローテーション後もチェーンは有効
+        assert!(store.verify_audit_chain().await.unwrap());
+
+        // ローテーション後の追記も通常どおり連鎖する
+        store
+            .audit(None, "AFTER", &serde_json::json!({}))
+            .await
+            .unwrap();
+        assert!(store.verify_audit_chain().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn audit_rotation_後の行改ざんは検知される() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        for i in 0..6 {
+            store
+                .audit(None, &format!("EV{i}"), &serde_json::json!({"i": i}))
+                .await
+                .unwrap();
+        }
+        {
+            let conn = store.conn.lock().unwrap();
+            rotate_audit_log_conn(&conn, 2).unwrap();
+        }
+
+        // ローテーション後に残った行 (genesis ではない通常行) を改ざん
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute_batch(
+                "DROP TRIGGER audit_log_no_update;
+                 UPDATE audit_log SET event_type = 'FORGED' WHERE event_type = 'EV5';
+                 CREATE TRIGGER audit_log_no_update
+                    BEFORE UPDATE ON audit_log
+                    BEGIN SELECT RAISE(ABORT, 'audit_log は不変です'); END;",
+            )
+            .unwrap();
+        }
+
+        let r = store.verify_audit_chain().await;
+        assert!(r.is_err() || r.ok() == Some(false));
+    }
+
+    #[tokio::test]
+    async fn audit_rotation_は行数不足なら何もしない() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+
+        // 空テーブル
+        {
+            let conn = store.conn.lock().unwrap();
+            assert_eq!(rotate_audit_log_conn(&conn, 5).unwrap(), 0);
+        }
+        // keep_last より行数が少ない
+        store
+            .audit(None, "ONLY", &serde_json::json!({}))
+            .await
+            .unwrap();
+        {
+            let conn = store.conn.lock().unwrap();
+            assert_eq!(rotate_audit_log_conn(&conn, 5).unwrap(), 0);
+        }
+        assert!(store.verify_audit_chain().await.unwrap());
     }
 
     #[tokio::test]

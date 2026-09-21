@@ -144,8 +144,8 @@ export interface MockOverrides {
   attachmentRefs?: { filename: string; blob_id: string; mime: string; size: number }[];
   /** `mail_download_attachment` の戻り値 (既定は良性ファイル保存成功)。 */
   attachmentDownload?: { filename: string; is_dangerous: boolean; risks: string[]; saved_path: string | null };
-  /** `security_audit_log` の戻り値 (既定は空の正常チェーン)。 */
-  auditLog?: { entries: { id: number; action: string; detail_json: string; created_at: string }[]; chain_valid: boolean };
+  /** `security_audit_log` の戻り値 (既定は空の正常チェーン)。AuditEntry 形状。 */
+  auditLog?: { entries: { seq: number; event_type: string; payload_json: string; created_at: string }[]; chain_valid: boolean };
   /** `ai_model_status` の戻り値 (既定はモデル未取得)。 */
   aiModelStatus?: { state: string; size_bytes: number | null; download_url: string | null; expected_size_bytes: number | null };
   /** `ai_llm_start` の戻り値 (既定は "loaded")。 */

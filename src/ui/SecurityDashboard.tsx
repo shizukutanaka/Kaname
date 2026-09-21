@@ -182,6 +182,7 @@ const EVENT_LABEL: Record<string, string> = {
   MAIL_IMPORT:         ".eml 取り込み",
   FOLDER_SCAN:         "フォルダ一括解析",
   OOBV_VERIFY:         "帯域外検証の結果",
+  AUDIT_EPOCH:         "監査ログ区切り (ローテーション)",
 };
 
 const AuditTrail = (props: { view: AuditLogView | null }) => {
