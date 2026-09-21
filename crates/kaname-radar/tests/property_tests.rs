@@ -1,23 +1,11 @@
 //! kaname-radar プロパティテスト
 
-use kaname_radar::{extract_sld, CampaignRadar, EmailMetadata, SubjectLengthBucket};
+use kaname_radar::{CampaignRadar, EmailMetadata, SubjectLengthBucket};
 use proptest::prelude::*;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-fn now_unix() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
-}
-
 fn meta(id: &str, domain: &str) -> EmailMetadata {
     EmailMetadata {
         email_id: id.to_string(),
         from_domain: domain.to_string(),
-        return_path_domain: None,
-        dkim_domain: None,
-        link_domains: vec![],
-        received_at: now_unix(),
         subject_length_bucket: SubjectLengthBucket::Medium,
         auth_partial_fail: false,
     }
@@ -28,7 +16,6 @@ proptest! {
     #[test]
     fn threat_score_in_range(n in 1usize..=20) {
         let mut r = CampaignRadar::new();
-        r.register_domain("evil.com", "infra-x");
         for i in 0..n { let _ = r.analyze(&meta(&format!("e{i}"), "evil.com")); }
         for g in r.groups() {
             prop_assert!((0.0..=1.0).contains(&g.threat_score));
@@ -39,7 +26,6 @@ proptest! {
     #[test]
     fn alertable_iff_three_or_more(n in 0usize..=10) {
         let mut r = CampaignRadar::new();
-        r.register_domain("evil.com", "infra-y");
         for i in 0..n { let _ = r.analyze(&meta(&format!("e{i}"), "evil.com")); }
         for g in r.groups() {
             prop_assert_eq!(g.is_alertable(), g.email_ids.len() >= 3);
@@ -50,7 +36,6 @@ proptest! {
     #[test]
     fn no_duplicate_ids(n in 1usize..=5) {
         let mut r = CampaignRadar::new();
-        r.register_domain("evil.com", "infra-z");
         for _ in 0..n { let _ = r.analyze(&meta("same-id", "evil.com")); }
         for g in r.groups() {
             let unique: std::collections::HashSet<_> = g.email_ids.iter().collect();
@@ -58,11 +43,11 @@ proptest! {
         }
     }
 
-    /// extract_sld は常に空でなく元以下の長さ
+    /// 異なる送信ドメインは異なるグループに振り分けられる
     #[test]
-    fn sld_length(domain in "[a-z]{2,8}\\.[a-z]{2,4}") {
-        let sld = extract_sld(&domain);
-        prop_assert!(!sld.is_empty());
-        prop_assert!(sld.len() <= domain.len());
+    fn distinct_domains_form_distinct_groups(n in 1usize..=8) {
+        let mut r = CampaignRadar::new();
+        for i in 0..n { let _ = r.analyze(&meta(&format!("e{i}"), &format!("d{i}.com"))); }
+        prop_assert_eq!(r.groups().len(), n);
     }
 }

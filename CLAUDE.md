@@ -102,7 +102,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 - `crates/kaname-ai/` — Dual-LLM 境界
 - `crates/kaname-bec/` — BEC 検出ロジック
 - `crates/kaname-mls/` — 暗号実装
-- `crates/kaname-crypto/` — PQC ハイブリッド
+- `crates/kaname-crypto/` — 定数時間比較ユーティリティ (旧 PQC trait 面は D143 で削除)
 - `crates/kaname-dlp/` — DLP ルール
 
 **これらのクレートへの PR は `@kaname-app/security-lead` の承認が必須。**

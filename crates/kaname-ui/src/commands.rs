@@ -573,7 +573,7 @@ pub struct FolderScanEntry {
 /// 検出されたキャンペーンの要約。
 #[derive(Debug, Serialize)]
 pub struct CampaignSummary {
-    /// 共有インフラ (グルーピングの根拠)。
+    /// クラスタリングの根拠を示す表示用文字列 (共通送信ドメイン / 構造パターン)。
     pub shared_infrastructure: String,
     /// 所属メール数。
     pub email_count: usize,
@@ -681,9 +681,8 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
                 | (_, _, kaname_render::AuthResult::Fail)
         );
 
-        // 本文からリンクを抽出し、bec の URL シグナルとキャンペーン相関に供給する。
+        // 本文からリンクを抽出し、bec の URL シグナルに供給する。
         let urls = extract_urls_from_text(&body_text);
-        let link_domains: Vec<String> = urls.iter().filter_map(|u| url_host(u)).collect();
 
         let reply_to = env.reply_to.first().map(|a| a.addr.as_string());
         let return_path = env.return_path.as_ref().map(|a| a.addr.as_string());
@@ -752,10 +751,6 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let meta = kaname_radar::EmailMetadata {
             email_id: file_name.clone(),
             from_domain,
-            return_path_domain: None,
-            dkim_domain: None,
-            link_domains,
-            received_at: env.date.unwrap_or(0).max(0) as u64,
             subject_length_bucket: kaname_radar::SubjectLengthBucket::from_subject(&subject),
             auth_partial_fail,
         };
@@ -791,7 +786,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         .alertable_groups()
         .into_iter()
         .map(|g| CampaignSummary {
-            shared_infrastructure: g.shared_infrastructure.clone(),
+            shared_infrastructure: describe_campaign_key(&g.shared_infrastructure),
             email_count: g.email_ids.len(),
             threat_score: g.threat_score,
         })
@@ -822,6 +817,20 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
 /// (`Fail` に倒すと過検出、`Pass` に倒すと危険側の見逃しになる)。
 /// 本文から http/https の URL を抽出する。
 ///
+/// キャンペーングループの内部キーをユーザー向けの説明文に変換する。
+///
+/// `unknown:<domain>` → 同一送信ドメイン、`pattern:auth_fail:subject_<bucket>` →
+/// 認証失敗と件名長の共通構造パターン。
+fn describe_campaign_key(key: &str) -> String {
+    if let Some(domain) = key.strip_prefix("unknown:") {
+        return format!("同一送信ドメイン: {domain}");
+    }
+    if let Some(bucket) = key.strip_prefix("pattern:auth_fail:subject_") {
+        return format!("認証失敗+件名の長さ ({bucket}) の共通パターン");
+    }
+    key.to_string()
+}
+
 /// # なぜこの関数が必要か
 ///
 /// `kaname-bec` は URL 評価シグナル (フリーホスティング/危険 TLD 等) を
@@ -856,23 +865,6 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
         }
     }
     out
-}
-
-/// URL のホスト部を取り出す (`https://host/path` → `host`)。
-///
-/// キャンペーン相関 (`EmailMetadata.link_domains`) 用の簡易抽出。
-/// userinfo (`user@host`) やポートは落とす。
-fn url_host(url: &str) -> Option<String> {
-    let rest = url.split("://").nth(1)?;
-    let host_port = rest.split(['/', '?', '#']).next()?;
-    // userinfo 混乱攻撃 (https://trusted.com@evil.com/) 対策: 最後の '@' 以降を採る
-    let host = host_port.rsplit('@').next()?;
-    let host = host.split(':').next()?.trim().to_ascii_lowercase();
-    if host.is_empty() {
-        None
-    } else {
-        Some(host)
-    }
 }
 
 /// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。

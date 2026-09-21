@@ -21,7 +21,7 @@
 > `kaname-memory-guard` のゼロ幅文字除去が複数単語キーワードの語境界を壊す新たな回避経路 (D45)、
 > `kaname-crypto` (ハイブリッド PQC クレート) に実暗号バックエンドが皆無で `kaname-mls` とは
 > 独立に未実装のままであること (D47) は、セキュリティレビュー必須クレートに触れるため未修正の
-> まま記録のみ。詳細は `docs/gap-analysis.md` D43〜D50。
+> まま記録のみ (→ その後 trait 面の利用者ゼロが判明し D143 でクレートを ct_eq のみに縮小)。詳細は `docs/gap-analysis.md` D43〜D50。
 > **2026-09 続報 (D60〜D61 および D45/D18 部分対応)**: `SecurityDashboard.tsx` の
 > 未使用 setter が `npm run build` を main で壊していた出荷ブロッカー (D60) を修正。
 > `kaname-memory-guard` の複数単語キーワード回避経路 (D45) は、ゼロ幅文字を
@@ -245,7 +245,7 @@ D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成し
 | 入力スクリーニング (プロンプト注入検出) | `kaname-screen` | |
 | SSRF 対策 (DNS再検証込みリダイレクトガード) | `kaname-jmap::ssrf_guard` | |
 | 監査ログ (SHA-256 ハッシュチェーン — 無鍵、改ざんは再計算で回避可能) | `kaname-store` | ※ maturity 表の旧記述「HMAC-SHA256 鍵付き」は未配線モジュール (threat_intel, D139 で削除) の主張であり、出荷側は無鍵 SHA-256。鍵付き化または外部アンカーは改善余地 |
-| PQC ハイブリッド鍵カプセル化 (X25519 + ML-KEM) | `kaname-crypto` | **注意**: コード内の "X-Wing" 表記は独自 HKDF 合成 (`combine_kem_secrets`, info=`kaname-xwing-v1`) であり、IETF 標準の X-Wing (draft-connolly-cfrg-xwing-kem) とはワイヤ非互換。外部監査時に名称で混同しないこと。また X25519/ML-KEM の実体は `Kem` トレイト経由のバックエンド注入で、テストは MockKem のみ (実アルゴリズムバックエンドの結合は未検証) |
+| PQC ハイブリッド鍵カプセル化 (X-Wing: X25519 + ML-KEM-768) | `kaname-mls` (openmls) | **D143 で修正**: 旧 `kaname-crypto` の Kem trait/MockKem/独自 "X-Wing" HKDF 合成 (`combine_kem_secrets`) は利用者ゼロのため全削除 — 実 PQ ハイブリッドは openmls の draft-ietf-mls-pq-ciphersuites X-Wing ciphersuite が担う (IETF 標準とワイヤ互換)。kaname-crypto は `ct_eq`/`ct_eq_ascii_ci` のみ残存 |
 
 ---
 
@@ -358,7 +358,10 @@ SafeSummary (~550行)。`verify_audit_chain` のみ改ざん検出として価�
 型名が他ファイルに一度も現れない `pub` 項目を走査し、到達不能な
 機能群 ~1,100行を追加削除 (E8): `ZeroKnowledgeSearch` 群 (D40 解消)、
 saas-guard の `oauth_state`/`jwt_inspect`、radar の DNS リゾルバー群、
-ssa の `OrgStyleBaseline`/`assess_with_fallback`。
+ssa の `OrgStyleBaseline`/`assess_with_fallback`。さらに D142 で
+screen/memory-guard/pivot の dead チェッカー群、D143 で kaname-crypto の
+PQC trait 面、D144 で kaname-radar の infra 解決・ユーザー報告経路を削除
+(いずれも呼出元ゼロ)。
 
 ### 依存クレート掃除 (2026-09, E10)
 

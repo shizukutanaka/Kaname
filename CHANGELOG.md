@@ -17,6 +17,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `rule_of_two.rs`・`tiered_risk.rs`・subprocess の `PrivilegedLlmImpl`/`QuarantinedLlmImpl`/`spawn_both` を削除 (約550行) — 出荷経路は `LlmSubprocess` 直接利用のため型付きペア API は dead
 
+### Removed — D143: kaname-crypto を定数時間比較ユーティリティに縮小
+
+- 実暗号バックエンド不在 (D47) のまま残っていた「ML-KEM-768 + X25519 PQC ハイブリッド」の trait/API 面 (AlgId・SharedSecret・Kem・combine_kem_secrets・validate_x25519_output・MockKem・KAT テスト等 ~1,300行) を削除 — 唯一の利用者は kaname-oobv の `ct_eq`/`ct_eq_ascii_ci` だった。実 PQ は kaname-mls (openmls X-Wing) に存在
+
+### Removed — D144: kaname-radar の dead 経路を削除
+
+- ドメイン→インフラ解決 (`register_domain`/`resolve_infra`/`domain_to_infra`)、ユーザー報告 API (`report_email_malicious`/`is_email_in_reported_campaign`/`ReportImpact`/`user_reported_count`)、`with_retention`/`group_count`/`seen_email_count`/`extract_sld`/`all_domains` を削除 — いずれも呼出元ゼロまたは注入経路不在 (DNS 実装なし)。`EmailMetadata` の未読フィールドと commands.rs の `url_host` も除去。UI のキャンペーン表示を内部キーから人間可読ラベルに変換
+
 ### Security — D141: BEC LLM 経路に注入スクリーニングと出力監査を配線
 
 - kaname-ai: `bec_score`/`bec_score_subprocess` の入力に `PromptScreener` (Blocked→推論スキップ)、出力に `OutputAuditor` (不合格→0寄与) を接続 — E11 で未配線だった kaname-screen の防衛が実 LLM 経路に実効化 (いずれも安全側フォールバック)
