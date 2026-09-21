@@ -102,32 +102,30 @@ pub struct SvgScan {
 /// 内容が SVG かどうかを判定する。
 ///
 /// `magic_bytes::is_svg` は先頭 256 バイトしか見ないため、長い XML 宣言や
-/// コメントで `<svg` を押し下げると検出を回避できてしまう。本関数は
-/// より広い範囲 (先頭 8 KB) を走査してこの回避を塞ぐ。
+/// コメントで `<svg` を押し下げると検出を回避できてしまう。先頭部分だけ
+/// 見る実装は「任意長の合法コメント/PI を前置して回避」に弱いため、
+/// 入力全体を走査する (D159 — 検査対象と配信される実体を一致させる)。
 #[must_use]
 pub fn looks_like_svg(content: &str) -> bool {
-    const SCAN_BYTES: usize = 8 * 1024;
-    let end = if content.len() > SCAN_BYTES {
-        // UTF-8 境界で安全に切る
-        (0..=SCAN_BYTES)
-            .rev()
-            .find(|&i| content.is_char_boundary(i))
-            .unwrap_or(0)
-    } else {
-        content.len()
-    };
-    content[..end].to_ascii_lowercase().contains("<svg")
+    content.to_ascii_lowercase().contains("<svg")
 }
+
+/// `scan_svg` が実際に検査する先頭バイト数の上限。
+///
+/// この上限を超える SVG は末尾が未検査になるため、呼び出し側は
+/// 「検査不能な領域を含む」として扱うこと (添付経路では危険扱い)。
+pub const SVG_SCAN_LIMIT_BYTES: usize = 512 * 1024;
 
 /// SVG の内容を解析して危険な要素を検出する。
 ///
 /// 引数は SVG のテキスト内容。バイナリの場合は UTF-8 として解釈できる範囲で渡す。
 #[must_use]
 pub fn scan_svg(content: &str) -> SvgScan {
-    // DoS 防止: 解析は先頭 512 KB まで。
-    const MAX_SCAN_BYTES: usize = 512 * 1024;
-    let content = if content.len() > MAX_SCAN_BYTES {
-        let end = (0..=MAX_SCAN_BYTES)
+    // DoS 防止: 解析は先頭 SVG_SCAN_LIMIT_BYTES まで。
+    // 超過分は未検査のまま残る — 呼び出し側が打ち切りを
+    // 判断できるよう上限を公開している (D159)。
+    let content = if content.len() > SVG_SCAN_LIMIT_BYTES {
+        let end = (0..=SVG_SCAN_LIMIT_BYTES)
             .rev()
             .find(|&i| content.is_char_boundary(i))
             .unwrap_or(0);

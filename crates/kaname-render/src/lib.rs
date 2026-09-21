@@ -1306,6 +1306,69 @@ mod tests {
             "@ なしアドレスは None を返すべき"
         );
     }
+
+    // ---- D159: 添付テキスト検査は配信実体 (full) 全体を対象とする ----
+
+    /// 修正前は先頭 10MB (MAX_SCAN_BYTES) のみを検査していたため、
+    /// 10MB 以降に <script> を置いた SVG が未検出のまま通過した。
+    #[test]
+    fn svg_script_beyond_scan_cap_is_flagged() {
+        let mut svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\">".to_vec();
+        svg.extend(std::iter::repeat_n(b' ', 11 * 1024 * 1024)); // 11MB padding
+        svg.extend(b"<script>alert(1)</script></svg>".iter());
+        let r = scan_attachment_bytes("evil.svg", "image/svg+xml", &svg);
+        assert!(
+            r.is_dangerous,
+            "検査上限超過 + script を含む SVG は危険扱いであるべき"
+        );
+    }
+
+    /// `<svg` が 8KB 以降に現れる (合法コメントパディング) 場合でも
+    /// SVG と判定する — looks_like_svg の先頭 8KB 上限は回避可能だった。
+    #[test]
+    fn svg_with_long_leading_comment_is_detected() {
+        let mut body = b"<!-- ".to_vec();
+        body.extend(std::iter::repeat_n(b'A', 9 * 1024)); // 9KB コメント
+        body.extend(
+            b" --><svg xmlns=\"http://www.w3.org/2000/svg\"><script>x</script></svg>".iter(),
+        );
+        let r = scan_attachment_bytes("img.svg", "image/svg+xml", &body);
+        assert!(
+            r.is_dangerous,
+            "パディング前置の script 入り SVG を見逃してはいけない"
+        );
+    }
+
+    /// UTF-16 BOM 付き等、UTF-8 として解釈不能な SVG 宣言添付は
+    /// ブラウザが解釈してスクリプトを実行しうるため危険扱い (fail-closed)。
+    #[test]
+    fn non_utf8_declared_svg_is_flagged_dangerous() {
+        // UTF-16LE BOM + "<svg" (UTF-16LE) — UTF-8 では不正。
+        let mut body = vec![0xFF, 0xFE];
+        for b in b"<svg><script>alert(1)</script></svg>" {
+            body.push(*b);
+            body.push(0);
+        }
+        let r = scan_attachment_bytes("chart.svg", "image/svg+xml", &body);
+        assert!(
+            r.is_dangerous,
+            "UTF-8 不能な SVG 宣言添付は検査不能のため危険扱いすべき"
+        );
+    }
+
+    /// 宣言 MIME/拡張子が SVG でない通常添付は UTF-8 不能でも
+    /// 危険扱いしない (既存のバイナリ添付の誤検知を防ぐ)。
+    #[test]
+    fn non_utf8_non_svg_attachment_is_not_dangerous() {
+        // 0xC3 は UTF-8 では継続バイトを要求するため from_utf8 は失敗するが、
+        // 既知のマジックシグネチャとも一致しない中立バイト列。
+        let body = vec![0xC3, 0x28, 0x41, 0x42, 0x7F];
+        let r = scan_attachment_bytes("photo.bin", "application/octet-stream", &body);
+        assert!(
+            !r.is_dangerous,
+            "SVG 宣言でないバイナリは UTF-8 不能でも危険扱いしない"
+        );
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -1528,8 +1591,17 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     }
 
     // 4. SVG のスクリプト実行 / XXE / プロンプト注入
-    if let Ok(text) = std::str::from_utf8(bytes) {
-        if svg_guard::looks_like_svg(text) {
+    //    テキスト系検査は配信される実体 (full) 全体に対して行う。
+    //    先頭 MAX_SCAN_BYTES だけを検査すると、10MB 以降に <script> を
+    //    置くだけで検査を回避できる (D159)。また UTF-8 として解釈
+    //    不能な SVG 宣言添付は「検査不能な実行可能形式」として危険扱いに
+    //    する — ブラウザは UTF-16 BOM 付き等の非 UTF-8 SVG も解釈する。
+    let declared_svg = filename.to_ascii_lowercase().ends_with(".svg")
+        || declared_mime
+            .to_ascii_lowercase()
+            .starts_with("image/svg+xml");
+    match std::str::from_utf8(full) {
+        Ok(text) if svg_guard::looks_like_svg(text) || declared_svg => {
             let scan = svg_guard::scan_svg(text);
             if !scan.safe_as_attachment {
                 for r in &scan.risks {
@@ -1537,11 +1609,27 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
                 }
                 is_dangerous = true;
             }
+            // scan_svg の検査範囲を超える SVG は末尾が未検査 — 検査不能な
+            // 領域を含む実行可能形式として危険扱い (fail-closed)。
+            if full.len() > svg_guard::SVG_SCAN_LIMIT_BYTES {
+                risks.push(format!(
+                    "SVG が検査上限 ({} KB) を超えるため末尾は未検査です",
+                    svg_guard::SVG_SCAN_LIMIT_BYTES / 1024
+                ));
+                is_dangerous = true;
+            }
         }
+        Ok(_) => {}
+        Err(_) if declared_svg => {
+            risks.push("SVG を宣言されているが UTF-8 として解釈不能なため検査不能です".to_string());
+            is_dangerous = true;
+        }
+        Err(_) => {}
     }
 
     // 5. カレンダー招待 (.ics) の検査 (CalPhishing)
-    if let Ok(text) = std::str::from_utf8(bytes) {
+    //    SVG と同じく full に対して行う (10MB 以降の VCALENDAR も検出)。
+    if let Ok(text) = std::str::from_utf8(full) {
         let is_ics = filename.to_ascii_lowercase().ends_with(".ics")
             || declared_mime.to_ascii_lowercase().contains("text/calendar")
             || text.contains("BEGIN:VCALENDAR");

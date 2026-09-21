@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D159: 添付のテキスト検査が先頭部分のみで検査範囲外を素通りしていた問題を修正
+
+- `scan_attachment_bytes` の SVG/ICS 検査が先頭 10MB のみを対象とし、`looks_like_svg` も先頭 8KB 上限だったため、パディングや後置 `<script>` で検査を回避可能だった — テキスト検査を `full` 全体に適用し、`scan_svg` の検査上限を `SVG_SCAN_LIMIT_BYTES` として公開。上限超過 SVG および UTF-8 として解釈不能な SVG 宣言添付を危険扱い (fail-closed) に
+
 ### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
 
 - HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正
