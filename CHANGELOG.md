@@ -66,6 +66,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `bec_score_subprocess` (kaname-ai) 追加 — `bec_score` と同じ切詰め・パース・フォールバックを共有。`LlmSubprocess::healthcheck` でモデルロード失敗の即終了を起動時に検出。モデル未配置時に spawn がモックプロセスに落ちる経路を `check_model` Ready ゲートで抑止
 - 実行ファイル隣接 → PATH の順でワーカーを解決。**配布物への同梱は未設定** — `externalBin` はバイナリ不在でビルドを失敗させるため登録見送り; リリース時に `src-tauri/binaries/kaname-llm-runner-<triple>` 配置 + `externalBin` 有効化が必要
 
+### Fixed — D124: KeyPackageCache のアドレス数上限とエントリ解放
+
+- `KeyPackageCache` にアドレス種類数の上限 (`MAX_KP_EMAILS = 500`) を追加 — アドレス毎 100件×64KB の制限だけでは無数の送信者からの KP 添付でメモリが無制限に膨らみ得た
+- `consume` が全消費後に空エントリを残して枠を占有し続ける自己 DoS を修正 (空エントリは除去し新規アドレスに解放)
+
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 

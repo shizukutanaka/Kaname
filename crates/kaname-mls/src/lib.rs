@@ -349,7 +349,13 @@ impl KeyPackageCache {
     pub fn add(&mut self, email: EmailAddress, kp: KeyPackage) {
         const MAX_KP_BYTES: usize = 64 * 1024;
         const MAX_KP_PER_EMAIL: usize = 100;
+        // アドレス種類数の上限。アドレス毎の件数/サイズ制限だけでは
+        // 無数のアドレスからの KP 添付でメモリが無制限に膨らむ (D124)。
+        const MAX_KP_EMAILS: usize = 500;
         if kp.bytes.len() > MAX_KP_BYTES {
+            return;
+        }
+        if !self.cache.contains_key(&email) && self.cache.len() >= MAX_KP_EMAILS {
             return;
         }
         let pkgs = self.cache.entry(email).or_default();
@@ -366,7 +372,13 @@ impl KeyPackageCache {
         if pkgs.is_empty() {
             return None;
         }
-        Some(pkgs.remove(0))
+        let kp = pkgs.remove(0);
+        // 空になったエントリは枠を占有し続けて新規アドレスを拒否する
+        // ため除去する (アドレス数上限との組合せで自己 DoS になる)
+        if pkgs.is_empty() {
+            self.cache.remove(email);
+        }
+        Some(kp)
     }
 
     /// キーパッケージが存在するかチェックする。
@@ -1983,6 +1995,59 @@ mod tests {
             count += 1;
         }
         assert_eq!(count, 100, "KP は最大 100件まで: 実際 {count}");
+    }
+
+    #[test]
+    fn key_package_cache_アドレス種類数の上限を強制する() {
+        // D124: アドレス毎の件数/サイズ制限があっても、アドレスの種類数が
+        // 無制限なら無数の送信者からの KP 添付でメモリが無制限に膨らむ。
+        let mut cache = KeyPackageCache::new();
+
+        for i in 0..600usize {
+            let email = EmailAddress::parse(format!("attacker{i}@kaname.app")).unwrap();
+            cache.add(
+                email,
+                KeyPackage {
+                    bytes: vec![0u8; 32],
+                },
+            );
+        }
+        // 501 番目以降のアドレスは拒否される (cap=500)
+        let accepted_500 = EmailAddress::parse("attacker499@kaname.app").unwrap();
+        let rejected_501 = EmailAddress::parse("attacker500@kaname.app").unwrap();
+        assert!(cache.has(&accepted_500), "500 番目まではキャッシュされる");
+        assert!(
+            !cache.has(&rejected_501),
+            "501 番目のアドレスはキャッシュされてはならない"
+        );
+
+        // 既に登録済みのアドレスは上限内なら引き続き追加できる
+        let known = EmailAddress::parse("attacker0@kaname.app").unwrap();
+        assert!(cache.has(&known), "登録済みアドレスはキャッシュされている");
+        cache.add(
+            known.clone(),
+            KeyPackage {
+                bytes: vec![1u8; 32],
+            },
+        );
+        let mut count = 0usize;
+        while cache.consume(&known).is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 2, "登録済みアドレスへの追加は可能であること");
+
+        // 全消費で空になったエントリは除去され、枠が新規アドレスに解放される
+        let newcomer = EmailAddress::parse("newcomer@kaname.app").unwrap();
+        cache.add(
+            newcomer.clone(),
+            KeyPackage {
+                bytes: vec![0u8; 32],
+            },
+        );
+        assert!(
+            cache.has(&newcomer),
+            "消費済みエントリが除去されていれば新規アドレスを受け入れられる"
+        );
     }
 
     // P1: Welcome リプレイ防止テスト (openmls 上位層責務)
