@@ -13,6 +13,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 呼出元ゼロの dead 設計シーム (AiPhishingDetector・AiAccessController・ContactIntelligenceEngine・ActionExtractor、1482行) を削除 — 出荷機能 (kaname-store contacts/audit_log、kaname-bec) と重複し誤読の温床だった
 - maturity.md の誤帰属を修正: 「監査ログ (HMAC-SHA256 鍵付き)」は threat_intel の主張で、出荷側は kaname-store の無鍵 SHA-256 チェーン — 正直化した
 
+### Removed — D140: 呼出元ゼロの kaname-ai モジュール群を削除
+
+- `rule_of_two.rs`・`tiered_risk.rs`・subprocess の `PrivilegedLlmImpl`/`QuarantinedLlmImpl`/`spawn_both` を削除 (約550行) — 出荷経路は `LlmSubprocess` 直接利用のため型付きペア API は dead
+
+### Security — D141: BEC LLM 経路に注入スクリーニングと出力監査を配線
+
+- kaname-ai: `bec_score`/`bec_score_subprocess` の入力に `PromptScreener` (Blocked→推論スキップ)、出力に `OutputAuditor` (不合格→0寄与) を接続 — E11 で未配線だった kaname-screen の防衛が実 LLM 経路に実効化 (いずれも安全側フォールバック)
+
 ### Security — D136: 文体プロファイルの送信者数に上限
 
 - kaname-ui: STYLE_PROFILES がユニーク送信者数 (攻撃者制御) で無制限増大し settings テーブルにも永続化されていた → `MAX_STYLE_PROFILES = 1_000` で新規プロファイルを打ち切り
