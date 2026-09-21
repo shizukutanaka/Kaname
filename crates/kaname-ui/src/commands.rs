@@ -1679,6 +1679,42 @@ mod tests {
         Ok(())
     }
 
+    /// D136: STYLE_PROFILES はユニーク送信者数に比例して増えるため
+    /// 上限で打ち切る。上限到達後も既知送信者は更新可能であること、
+    /// 新規送信者はプロファイルを作らず評価もしないことを固定する。
+    #[tokio::test]
+    async fn 文体プロファイルは送信者数の上限で打ち切る() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+
+        // 既知送信者 1 名を先に作り、残りをダミーで上限まで埋める
+        let known = "d136-known@example.test";
+        let _ = evaluate_sender_style(known, "短い本文です。", Some(10), false).await;
+        {
+            let mut profiles = style_profiles().lock().await;
+            for i in 0..999 {
+                profiles.insert(
+                    format!("d136-dummy-{i}@example.test"),
+                    kaname_ssa::SenderStyleProfile::new("x"),
+                );
+            }
+            assert_eq!(profiles.len(), 1_000);
+        }
+
+        // 上限到達後: 新規送信者はプロファイルを作らない (警告も出ない —
+        // プロファイル非存在なので InsufficientData として評価不能)
+        let warnings =
+            evaluate_sender_style("d136-new@example.test", "本文です。", Some(10), false).await;
+        assert!(warnings.is_empty(), "上限超過の新規送信者は評価しないべき");
+        assert_eq!(style_profiles().lock().await.len(), 1_000);
+
+        // 既知送信者は上限を超えても更新・評価が継続する
+        let _ = evaluate_sender_style(known, "別の本文です。", Some(11), false).await;
+        assert_eq!(style_profiles().lock().await.len(), 1_000);
+        assert!(style_profiles().lock().await.contains_key(known));
+        Ok(())
+    }
+
     #[tokio::test]
     async fn analyze_raw_email_uses_verified_sender_history() -> Result<(), String> {
         let _serial = test_serial().await;
@@ -4087,7 +4123,14 @@ async fn evaluate_sender_style(
     let store = store_slot().lock().await.clone();
     let style_key = format!("style_profile:{sender}");
 
+    // D136: 送信者文字列は攻撃者制御 — ユニーク送信者の数だけ
+    // HashMap と settings 行が増えるため、新規プロファイル数に上限を設ける。
+    // 既知送信者の更新は上限を超えても継続する。
+    const MAX_STYLE_PROFILES: usize = 1_000;
     let mut profiles = style_profiles().lock().await;
+    if profiles.len() >= MAX_STYLE_PROFILES && !profiles.contains_key(sender) {
+        return Vec::new();
+    }
     if let std::collections::hash_map::Entry::Vacant(e) = profiles.entry(sender.to_string()) {
         let loaded = match &store {
             Some(s) => s
