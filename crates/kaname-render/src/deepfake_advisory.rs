@@ -105,17 +105,6 @@ impl AdvisorySeverity {
             Self::High => "🚨",
         }
     }
-
-    /// UI で表示する i18n キー。
-    #[must_use]
-    pub fn i18n_key(&self) -> &'static str {
-        match self {
-            Self::None => "",
-            Self::Info => "deepfake.advisory.info",
-            Self::Medium => "deepfake.advisory.medium",
-            Self::High => "deepfake.advisory.high",
-        }
-    }
 }
 
 // ============================================================================

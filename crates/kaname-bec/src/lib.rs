@@ -298,27 +298,10 @@ where
 impl BecDetector {
     /// LLM を使わず決定論的シグナルのみで判定する検出器を構築する。
     ///
-    /// ローカル LLM が未配線の環境でも BEC 検出を有効化するための入口。
-    /// 認証・ドメイン・送信者履歴・内容・AiTM・Reply-To・スレッド乗っ取り・
-    /// 口座差替・DKIM の 9 シグナルファミリーは通常どおり評価される。
-    #[must_use]
-    pub fn deterministic_only() -> Self {
-        Self::new(Box::new(NullLlm))
-    }
-
     /// Construct with default thresholds.
     pub fn new(llm: Box<dyn LocalLlm>) -> Self {
         Self {
             thresholds: Thresholds::default(),
-            llm,
-            dkim_replay_tracker: std::sync::Mutex::new(dkim_check::DkimReplayTracker::new()),
-        }
-    }
-
-    /// Construct with custom thresholds.
-    pub fn with_thresholds(llm: Box<dyn LocalLlm>, thresholds: Thresholds) -> Self {
-        Self {
-            thresholds,
             llm,
             dkim_replay_tracker: std::sync::Mutex::new(dkim_check::DkimReplayTracker::new()),
         }

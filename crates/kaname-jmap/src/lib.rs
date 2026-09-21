@@ -63,7 +63,6 @@ pub struct OutgoingAttachment {
 impl Session {
     pub const JMAP_CORE: &'static str = "urn:ietf:params:jmap:core";
     pub const JMAP_MAIL: &'static str = "urn:ietf:params:jmap:mail";
-    pub const KANAME_MLS: &'static str = "urn:kaname:params:jmap:mls";
 
     #[must_use]
     pub fn has_capability(&self, urn: &str) -> bool {
