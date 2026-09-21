@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D136: 文体プロファイルの送信者数に上限
+
+- kaname-ui: STYLE_PROFILES がユニーク送信者数 (攻撃者制御) で無制限増大し settings テーブルにも永続化されていた → `MAX_STYLE_PROFILES = 1_000` で新規プロファイルを打ち切り
 ### Security — D130: MIME 入れ子メールの再帰深度に上限
 
 - kaname-render: `extract_parts_by_media_type` の `message/rfc822` 再帰に `MAX_NESTED_DEPTH = 16` — 極端に深い入れ子でスタック枯渇し得た
