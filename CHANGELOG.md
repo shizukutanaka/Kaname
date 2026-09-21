@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D131: フォルダ一括スキャンにファイル数上限
+
+- kaname-ui: `mail_scan_folder` は .eml の個数上限なく全走査 — `MAX_SCAN_FILES = 5_000` で打ち切り、`FolderScanResult.truncated` + UI バナーで可視化。`failed` リストも 200 件でキャップ
 ### Security — D1 Phase 1: 実 MLS 暗号化 (openmls)
 
 - **`kaname-mls` の XOR モック暗号を実 openmls 0.9 に全面置換** (D1 Phase 1)

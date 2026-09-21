@@ -111,6 +111,7 @@ const FOLDER_SCAN = {
   campaigns: [
     { shared_infrastructure: "examp1e.co.jp", email_count: 2, threat_score: 0.82 },
   ],
+  truncated: false,
 };
 
 const OOBV_PHRASE = ["apple", "river", "mountain", "bridge", "silver", "garden"];

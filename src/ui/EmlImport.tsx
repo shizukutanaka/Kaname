@@ -103,6 +103,7 @@ interface FolderScanResult {
   verdict_counts: [string, number][];
   emails: FolderScanEntry[];
   campaigns: CampaignSummary[];
+  truncated: boolean;
 }
 
 export function EmlImport() {
@@ -231,6 +232,16 @@ export function EmlImport() {
             <div style={{ "font-size": "15px", "font-weight": "600", "margin-bottom": "8px" }}>
               {f().analyzed} 件を解析しました
             </div>
+
+            <Show when={f().truncated}>
+              <div style={{
+                padding: "8px 12px", "border-radius": "8px",
+                background: "#FFF4E5", border: "1px solid #F5C97B",
+                color: "#7A4B00", "font-size": "13px", "margin-bottom": "12px",
+              }}>
+                フォルダ内のメールが上限 (5,000 件) を超えたため、先頭分のみを解析しました。
+              </div>
+            </Show>
 
             {/* 判定の内訳 */}
             <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap", "margin-bottom": "12px" }}>

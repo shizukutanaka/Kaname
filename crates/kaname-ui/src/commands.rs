@@ -20,6 +20,14 @@ pub struct HealthResponse {
 /// (一般的なメールは数百KB 程度; 添付込みでも 50MB を超える正規利用は稀)。
 const MAX_EML_BYTES: u64 = 50 * 1024 * 1024;
 
+/// `mail_scan_folder` が一度に走査する .eml の最大数。
+/// フォルダはユーザー選択だが、巨大なエクスポート (数万件) を
+/// 上限なく走査するとファイル数 × パース+BEC+radar の CPU と
+/// `entries`/`failed` のメモリが無制限に膨らむ (D131)。
+const MAX_SCAN_FILES: usize = 5_000;
+/// `failed` リストの上限 — 大量失敗時に Vec が肥大しないようにする。
+const MAX_FAILED_ENTRIES: usize = 200;
+
 #[derive(Debug, Serialize, Clone)]
 pub struct EmailRow {
     pub id: String,
@@ -549,6 +557,8 @@ pub struct FolderScanResult {
     pub emails: Vec<FolderScanEntry>,
     /// 複数メールを横断して検出されたキャンペーン。
     pub campaigns: Vec<CampaignSummary>,
+    /// `MAX_SCAN_FILES` に達して走査が打ち切られたか (D131)。
+    pub truncated: bool,
 }
 
 /// フォルダ一括解析における 1 通分の結果。
@@ -600,6 +610,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
 
     let mut entries: Vec<FolderScanEntry> = Vec::new();
     let mut failed: Vec<(String, String)> = Vec::new();
+    let mut truncated = false;
     let mut radar = kaname_radar::CampaignRadar::new();
     let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     // アカウント・自組織ドメイン (D44)・連絡先一覧は走査全体で1回だけ
@@ -620,30 +631,40 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         if !is_eml {
             continue;
         }
+        if entries.len() + failed.len() >= MAX_SCAN_FILES {
+            truncated = true;
+            break;
+        }
         let file_name = p
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("?")
             .to_string();
 
+        macro_rules! push_failed {
+            ($reason:expr) => {{
+                if failed.len() < MAX_FAILED_ENTRIES {
+                    failed.push((file_name.clone(), $reason));
+                }
+                continue;
+            }};
+        }
+
         let bytes = match std::fs::metadata(&p) {
             Ok(m) if m.len() > MAX_EML_BYTES => {
-                failed.push((file_name, "ファイルが大きすぎます (50MB 超)".to_string()));
-                continue;
+                push_failed!("ファイルが大きすぎます (50MB 超)".to_string());
             }
             _ => match std::fs::read(&p) {
                 Ok(b) => b,
                 Err(e) => {
-                    failed.push((file_name, format!("読み込み失敗: {e}")));
-                    continue;
+                    push_failed!(format!("読み込み失敗: {e}"));
                 }
             },
         };
         let env = match kaname_render::parse(&bytes) {
             Ok(e) => e,
             Err(e) => {
-                failed.push((file_name, format!("解析失敗: {e}")));
-                continue;
+                push_failed!(format!("解析失敗: {e}"));
             }
         };
 
@@ -813,6 +834,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         verdict_counts: counts.into_iter().collect(),
         emails: entries,
         campaigns,
+        truncated,
     })
 }
 
