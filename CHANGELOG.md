@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D134: MLS 会話数に上限を追加
+
+- kaname-mls: 公開 KeyPackage 経由の有効 Welcome で `groups`/`conversations`/`seen_welcomes` が無制限に膨らむ招待攻勢 DoS を修正 — `MAX_CONVERSATIONS = 1_000`・`MAX_SEEN_WELCOMES = 10_000`
 ### Security — D130: MIME 入れ子メールの再帰深度に上限
 
 - kaname-render: `extract_parts_by_media_type` の `message/rfc822` 再帰に `MAX_NESTED_DEPTH = 16` — 極端に深い入れ子でスタック枯渇し得た

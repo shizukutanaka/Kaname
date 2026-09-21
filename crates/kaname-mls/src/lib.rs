@@ -486,6 +486,14 @@ fn open_db(path: Option<&Path>, key_hex: Option<&str>) -> Result<Connection, Mls
 ///
 /// `kp_cache` は揮発のまま — 他人の公開 KeyPackage のキャッシュであり、
 /// 失われても再取得可能なため永続化しない (D1 Phase 2 スコープ)。
+/// 同時保持する会話数の上限 — 有効な Welcome は公開された KeyPackage で
+/// 誰でも生成できるため、参加先グループ数に上限がないと攻撃者の招待攻勢で
+/// `groups`/`conversations`/`seen_welcomes` が無制限に膨らむ (D134)。
+const MAX_CONVERSATIONS: usize = 1_000;
+/// Welcome リプレイ防止帳簿の上限 — 会話数上限では同一会話への再参加
+/// (新エポック) を束ねられないため別途制限する。
+const MAX_SEEN_WELCOMES: usize = 10_000;
+
 const META_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS kaname_mls_meta (
     key   TEXT PRIMARY KEY NOT NULL,
@@ -1101,6 +1109,15 @@ impl MlsMailClient {
                     safety_number: Some(safety_number),
                 };
 
+                // D134: 公開 KP 経由で誰でも有効な Welcome を作れるため、
+                // 参加先会話数に上限を設けて招待攻勢によるメモリ・DB 増大を防ぐ
+                if !self.conversations.contains_key(&envelope.conversation_id)
+                    && self.conversations.len() >= MAX_CONVERSATIONS
+                {
+                    return Err(MlsMailError::TooManyConversations {
+                        max: MAX_CONVERSATIONS,
+                    });
+                }
                 self.groups.insert(envelope.conversation_id.clone(), group);
                 self.conversations.insert(
                     envelope.conversation_id.clone(),
@@ -1110,9 +1127,14 @@ impl MlsMailClient {
                 );
                 self.epochs.insert(envelope.conversation_id.clone(), epoch);
                 // 参加成功 — ここで初めて Welcome を処理済みとして記録する
-                self.seen_welcomes.insert(key);
+                // 帳簿が上限に達した場合は記録を省略 (当該 Welcome は既処理のため
+                // 即時再送は replay にならない。長期的な旧鍵の再送耐性は低下するが
+                // メモリ無制限増大より優先)
+                if self.seen_welcomes.len() < MAX_SEEN_WELCOMES {
+                    self.seen_welcomes.insert(key);
+                    self.persist_seen_welcome(&envelope.conversation_id, epoch);
+                }
                 self.persist_conversation(&conversation);
-                self.persist_seen_welcome(&envelope.conversation_id, epoch);
 
                 tracing::info!(
                     conv_id = %envelope.conversation_id.as_hex(),
@@ -1191,6 +1213,13 @@ impl MlsMailClient {
                         epoch,
                         safety_number: Some(safety_number),
                     };
+                    if !self.conversations.contains_key(&envelope.conversation_id)
+                        && self.conversations.len() >= MAX_CONVERSATIONS
+                    {
+                        return Err(MlsMailError::TooManyConversations {
+                            max: MAX_CONVERSATIONS,
+                        });
+                    }
                     self.groups.insert(envelope.conversation_id.clone(), group);
                     self.conversations.insert(
                         envelope.conversation_id.clone(),
@@ -1459,6 +1488,10 @@ pub enum MlsMailError {
     /// 同一 `(conversation_id, epoch)` の Welcome を 2 回以上処理した。
     #[error("Welcome リプレイを検出: conv_id={conv_id_hex} epoch={epoch}")]
     WelcomeReplay { conv_id_hex: String, epoch: u64 },
+
+    /// 保持中会話数が上限に達した (D134)。
+    #[error("会話数が上限に達しました ({max})。不要な会話を削除してください")]
+    TooManyConversations { max: usize },
 }
 
 // ============================================================================
@@ -2018,6 +2051,37 @@ mod tests {
             matches!(second, Err(MlsMailError::WelcomeReplay { .. })),
             "リプレイされた Welcome は拒否されるべき: {second:?}"
         );
+    }
+
+    #[test]
+    fn welcome_会話数上限に達した参加は拒否される() {
+        // D134: 公開 KP 経由で誰でも有効な Welcome を作れるため、
+        // 招待攻勢で groups/conversations が無制限に膨らむのを防ぐ
+        let mut alice = make_client("alice@kaname.app");
+        let mut bob = make_client("bob@kaname.app");
+
+        // bob の会話帳簿を上限まで埋める (会話内容はダミーでよい —
+        // 上限判定は conversations の件数のみを見る)
+        for i in 0..MAX_CONVERSATIONS {
+            let mut id = [0u8; 32];
+            id[..8].copy_from_slice(&(i as u64).to_le_bytes());
+            bob.conversations
+                .insert(ConversationId(id), GroupState { bytes: vec![0] });
+        }
+        assert_eq!(bob.conversations.len(), MAX_CONVERSATIONS);
+
+        let bob_kp = bob.generate_key_package().unwrap();
+        let bob_email = EmailAddress::parse("bob@kaname.app").unwrap();
+        let (_conv, env) = alice.start_one_to_one(bob_email, bob_kp).unwrap();
+
+        let result = bob.process_incoming(&welcome_envelope(&env));
+        assert!(
+            matches!(result, Err(MlsMailError::TooManyConversations { .. })),
+            "上限到達後の新規会話参加は拒否されるべき: {result:?}"
+        );
+        // 拒否側の帳簿は増えていない
+        assert_eq!(bob.conversations.len(), MAX_CONVERSATIONS);
+        assert_eq!(bob.groups.len(), 0);
     }
 
     #[test]
