@@ -460,10 +460,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     .to_string();
 
-    // 本文をサニタイズする。HTML 本文があればそれを、無ければテキストを包む。
+    // 本文をサニタイズする。HTML 本文があればそれを使う。
+    // text/plain 本文を RawHtml としてパースさせると、プレーンテキスト中の
+    // `<a href>` 等が「本文として書かれた HTML」として解釈され、テキスト
+    // メール内にクリック可能なリンク/装飾が出現する (D152 — 送信者は
+    // text/plain で HTML を注入できる)。空サニタイズ結果にして
+    // `to_srcdoc` の text_fallback (HTML エスケープ済み pre-wrap) に
+    // フォールバックさせる。
     let sanitized = match &env.html_body {
         Some(html) => kaname_render::sanitize_html(html),
-        None => kaname_render::sanitize_html(&kaname_render::RawHtml::new(body_text.clone())),
+        None => kaname_render::sanitize_html(&kaname_render::RawHtml::new(String::new())),
     };
     let srcdoc = kaname_render::to_srcdoc(&sanitized, Some(&body_text));
 
@@ -1217,6 +1223,33 @@ mod tests {
         );
         assert!(r.attachments.is_empty());
         assert!(r.dlp_findings.is_empty());
+        Ok(())
+    }
+
+    /// D152: text/plain メールを HTML としてパースすると、本文中の
+    /// `<a href>` がクリック可能なリンクになる — プレーンテキストとして
+    /// 届いたメールに送信者が HTML を注入できる。srcdoc に未エスケープの
+    /// `<a ` タグが残らないことを固定する。
+    #[tokio::test]
+    async fn analyze_raw_email_はプレーン本文中のhtmlをリンク化しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: mallory@evil.example\r\n\
+            To: bob@example.com\r\n\
+            Subject: plain text mail\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            See <a href=\"https://phish.example/login\">your invoice</a> here.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            !r.body.srcdoc.contains("<a "),
+            "text/plain 本文中の HTML が解釈されている: {}",
+            &r.body.srcdoc[..r.body.srcdoc.len().min(500)]
+        );
+        assert!(
+            r.body.srcdoc.contains("&lt;a "),
+            "本文テキストはエスケープされて表示されるべき"
+        );
         Ok(())
     }
 

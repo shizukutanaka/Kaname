@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
+
+- HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正
+
 ### Fixed — D148: MLS 復号本文が全検出器を素通りしていた問題を修正
 
 - `analyze_raw_email` は復号後も外側の固定カバー文を採点していたため、E2E 暗号メールの内容が BEC・文体認証・DLP・OOBV・リンク評価を一切通らなかった — 復号・`subject\x00body` 分割を解析の前に移動し、解析対象本文と表示件名を内側ペイロードに差し替え (認証・差出人は外側ヘッダ由来の配送層属性として維持)
