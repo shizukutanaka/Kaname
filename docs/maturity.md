@@ -88,7 +88,9 @@ Kaname は現在 **「ローカル・メールセキュリティ解析ツール�
 動作確認用のサンプルを [`examples/emails/`](../examples/) に同梱している。
 
 **このスコープの外にあるもの** (次段階):
-MLS 暗号化 (モック)、ローカル LLM 推論 (スタブ)。
+なし — MLS 暗号化 (openmls/X-Wing) とローカル LLM 推論 (llama.cpp) は
+2026-09-20 に実装・配線済み (D1/D2)。残る未実装は Firecracker
+サンドボックスのみ。
 
 **認証情報を永続化しない設計**: Bearer トークンはプロセスのメモリ内にのみ
 保持し、ディスクへは書かない。`kaname-store` の鍵管理が keyfile への
@@ -101,18 +103,19 @@ OS キーチェーン統合が入るまで、起動のたびに接続し直す�
 ## 出荷バイナリに含まれないクレートとその理由 (2026-07 仕分け)
 
 依存グラフ実測で「到達可能 10/27」だった状態から組み立てを進め、
-現在 **17/22** が出荷バイナリに含まれる (2026-09-20 に cargo metadata
+現在 **19/22** が出荷バイナリに含まれる (2026-09-20 に cargo metadata
 で再実測: billing/continuity/i18n/tray + kaname-error/kaname-core を削除し
-ワークスペースは 27→22 メンバー。到達 = kaname-tauri + 16 ライブラリ)。
-残る 5 個は**意図的に含めていない**:
+ワークスペースは 22 メンバー。到達 = kaname-tauri + 18 ライブラリ。
+D1 で `kaname-mls` (openmls)、D2 で `kaname-ai` (llama.cpp) が出荷に入った)。
+残る 3 個は**意図的に含めていない**:
 
 | クレート | 含めない理由 |
 |---|---|
-| `kaname-ai` | **Dual-LLM 推論未実装** (llm_bridge が固定文字列を返すスタブ — D2)。kaname-tests 経由でのみ到達 |
-| `kaname-mls` | **モック暗号 (単一バイト XOR)**。組み込むと「暗号化されている」と偽ることになる。`openmls` 統合まで含めない方が安全 |
 | `kaname-sandbox` | **no-op** (`spawn_vm` が VM を起動しない)。同上、隔離されていないものを隔離済みと見せない |
 | `kaname-mockserver` | 開発用の JMAP モックサーバ。製品に含めるものではない |
 | `kaname-tests` | 統合テスト・敵対テスト用クレート。同上 |
+
+`kaname-ai`/`kaname-mls` は 2026-09-20 時点で実装済みのため出荷バイナリに到達する。
 
 削除済み (下表の判定に基づき 2026-09 にワークスペースから除去。履歴は git に残る):
 
@@ -123,9 +126,10 @@ OS キーチェーン統合が入るまで、起動のたびに接続し直す�
 | `kaname-i18n` | 翻訳カタログ。フロント側 `src/i18n.ts` + `src/locales/` も呼び出し実績ゼロで削除済み (E9) — UI は日本語ハードコードのみ |
 | `kaname-tray` | トレイアイコン生成。`src-tauri` が独自にトレイを持つため重複 |
 
-**モック実装を組み込まない判断が最も重要**である。`kaname-mls` や
+**モック実装を組み込まない判断が最も重要**である。当時 `kaname-mls` は
+XOR モックのため意図的に出荷外としていた (openmls 実装で解消済み)。
 `kaname-sandbox` を「到達可能クレート数」のために繋ぐと、
-動かない暗号・隔離を動いているかのように見せることになる。
+動かない隔離を動いているかのように見せることになる。
 
 ---
 
@@ -249,17 +253,17 @@ D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成し
 
 ---
 
-## モック/スタブ段階 (要外部クレート統合、本セッションのネットワーク制限では実装不能)
+## モック/スタブ段階 → 実装済みへの移行 (2026-09-20 更新)
 
-これらは**コアロジックが実際には動作しない**。誤って本番運用しないよう、
-呼び出し箇所には目立つログ (`tracing::error!`) を仕込んである場合はその旨を記載する。
+かつてこの節には「コアロジックが実際には動作しない」機能を列挙していた。
+D1/D2/D121 でほぼ実装・配線済みとなり、残るのは Firecracker と自動アップデートのみ:
 
 | 機能 | クレート | 現状 | 実装に必要なもの |
 |---|---|---|---|
-| MLS グループ E2E 暗号化 | `kaname-mls` | 単一バイト XOR (鍵=公開 ConversationId 先頭バイト、鍵空間256)。`INSECURE_MOCK_CRYPTO` ログで検知可能 | `openmls` クレート統合 |
-| ローカル LLM 推論 (Q-LLM/P-LLM) | `kaname-ai::llm_bridge` | 固定文字列応答 (`{"risk":"SAFE",...}` 等)、`tokens_in/out` は常に 0 | `llama.cpp`/`candle` 等での実推論、Phi-4-mini 等のモデル配布 |
-| Q-LLM/P-LLM プロセス分離 | `kaname-ai::subprocess` | seccomp プロファイルのパス文字列を生成するのみ。実際の seccomp 適用は外部バイナリ `kaname-llm-runner` 側に委譲 (存在未確認) | `kaname-llm-runner` バイナリの実装、seccomp-bpf/sandbox-exec/Job Object の実適用 |
-| Firecracker microVM サンドボックス | `kaname-sandbox` | `spawn_vm`/`VsockChannel` が no-op。セマフォ管理・プール衛生は実装済みだが VM 自体は起動しない | Firecracker バイナリ統合、vsock 通信実装 |
+| ~~MLS グループ E2E 暗号化~~ | `kaname-mls` | **実装済み (D1)** — openmls + X-Wing ハイブリッド (ML-KEM-768+X25519)。XOR モックは削除済み | — |
+| ~~ローカル LLM 推論~~ | `kaname-ai::llm_bridge` | **実装済み (D2)** — llama.cpp 実推論 (llama-cpp-2)。モデル手動配置が前提、未配置なら NullLlm フォールバック | モデル配布/同梱 |
+| ~~Q-LLM プロセス分離~~ | `kaname-ai::subprocess` | **実装済み (D2/D121)** — `kaname-llm-runner` ワーカーバイナリ実装済み。macOS は sandbox-exec seatbelt 適用、Linux/Windows は未実装のためフェイルクローズ (D128) | リリース時の externalBin 同梱 |
+| Firecracker microVM サンドボックス | `kaname-sandbox` | `spawn_vm`/`VsockChannel` が no-op。セマフォ管理・プール衛生は実装済みだが VM 自体は起動しない | Firecracker バイナリ統合、vsock 通信実装 (Linux/KVM 専用) |
 | 自動アップデート | `src-tauri` | `tauri.conf.json` から `updater` 設定を削除済み (2026-07 修正)。`tauri-plugin-updater` 未導入 | プラグイン導入 + 署名鍵生成 + 配信サーバー構築 |
 | ~~課金基盤の永続化~~ (2026-09 解消) | ~~`kaname-billing`~~ | ~~エンタイトルメント/冪等性キーが in-memory のみ~~ | **クレートごと削除** — 課金はスコープ外 (D6) |
 

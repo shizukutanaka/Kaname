@@ -13,8 +13,9 @@
 ## ⚠️ 実装ステータス (公開前に必読)
 
 **本リポジトリは v0.7.1 です。メールの解析・受信・送信・永続化・検索・添付ダウンロード・
-削除・本人確認・帯域外検証 (OOBV)・Deepfake 警告は実装され配線済みですが、MLS 暗号化とローカル LLM 推論はモック/スタブのままです。
-また開発環境の制約により型検査 (`cargo check`) が未実施です。**
+削除・本人確認・帯域外検証 (OOBV)・Deepfake 警告に加え、MLS 暗号化 (openmls / X-Wing PQ)
+とローカル LLM 推論 (llama.cpp) も実装・配線済みです。
+Firecracker サンドボックスは未実装 (no-op) のままです。**
 製品の長所・短所・改善点と「完成の定義」は [`docs/socratic-review.md`](docs/socratic-review.md) に
 自問形式でまとめています。
 機能ごとの成熟度は [`docs/maturity.md`](docs/maturity.md) と [`docs/gap-analysis.md`](docs/gap-analysis.md) に
@@ -23,9 +24,12 @@
 - **実装済み・実テストで検証済み (本番出荷可)**: BEC 多信号検出 (`kaname-bec`)、DLP 分類器 (`kaname-dlp`)、
   Quishing / カレンダー招待 / HTML スマグリング検出 (`kaname-render`)、Out-of-Band Verification (`kaname-oobv`)、入力スクリーニング (`kaname-screen`)、SSRF 対策 (`kaname-jmap`)、
   Dual-LLM の**型境界** (`kaname-ai::dual_llm`)。
-- **モック / スタブ段階 (本番運用不可)**: MLS グループ暗号化 (`kaname-mls` — 現状は XOR モック)、
-  ローカル LLM 推論 (`kaname-ai::llm_bridge` — 固定応答)、Firecracker サンドボックス (`kaname-sandbox` — no-op)、
+- **モック / スタブ段階 (本番運用不可)**: Firecracker サンドボックス (`kaname-sandbox` — no-op)、
   自動アップデート。これらは外部クレート統合が必要。
+- **実装済みだが運用上の条件あり**: MLS E2E 暗号化 (`kaname-mls` — openmls / X-Wing ハイブリッド、
+  Kaname ユーザー同士の会話のみ有効・KP は添付往復・安全番号照合あり) とローカル LLM 推論
+  (`kaname-ai::llm_bridge` — llama.cpp 実推論、GGUF モデルの手動配置が必要、
+  `kaname-llm-runner` ワーカーのリリース同梱は未対応)。
 - **組み立て状況 (2026-09 更新)**: 依存グラフを実測したところ、出荷バイナリに到達可能なのは
   **23 クレート中 18 個**です (当初 10 個)。「部品を作る」のをやめ「組み立てる」方針に転換し、
   スコープ外・重複と判定した 4 クレート (billing/continuity/i18n/tray) はワークスペースから削除済みです (2026-09)。
@@ -47,11 +51,12 @@
   攻撃者に制御・偽装された場合、認証系シグナルは無条件に偽装されえます。
   詳細は [`docs/threat-model.md`](docs/threat-model.md) §3.15b / [`docs/gap-analysis.md`](docs/gap-analysis.md) D18。
 - **永続化・検索・添付ダウンロードも配線済み**: 受信したメールは SQLCipher に保存され
-  (MLS がモックのため暗号化列には書かず `body_preview` のみ)、検索欄から LIKE 検索できます。
+  (件名・本文は `body_preview` 平文列のみ — DB 全体が SQLCipher で暗号化されるため
+  保存時の機密性は DB 暗号化に依存。`body_encrypted` 列は未使用)、検索欄から LIKE 検索できます。
   添付は **ディスクに書く前に必ず検査**し、危険と判定したものは**保存せず**理由だけ返します
   (`kaname-sandbox` が no-op のため実行は許さず「検査して警告」に徹する方針)。
-- **まだ無いもの**: MLS 暗号化 (XOR モック)、ローカル LLM 推論 (要約・スマートリプライ、固定応答)、
-  Firecracker サンドボックス (no-op)、OS キーチェーン統合は未実装です。
+- **まだ無いもの**: Firecracker サンドボックス (no-op)、OS キーチェーン統合、
+  自動アップデート、LLM 要約・スマートリプライ (BEC 意味解析以外の LLM 用途) は未実装です。
   詳細は [`docs/maturity.md`](docs/maturity.md) / [`docs/gap-analysis.md`](docs/gap-analysis.md)。
 - **検証状況 (2026-09-20 更新)**: `cargo check` / `cargo nextest run --workspace` (1,182 全パス) /
   `cargo clippy -D warnings` / `cargo fmt --check` / `cargo audit` / `cargo deny` はすべて
@@ -70,11 +75,11 @@
 |---|---|---|---|---|
 | プロンプト注入 (CVE確認済) | ✗ 脆弱 | N/A | ✗ 脆弱 | ✅ 型で防止 |
 | DLP バイパス (CW1226324) | N/A | N/A | ✗ 発生 | ✅ ラベル強制 |
-| AI生成フィッシング | ✗ 未対応 | ✗ 未対応 | ✗ 未対応 | ⚠ 決定論的検出のみ (LLM 未接続) |
+| AI生成フィッシング | ✗ 未対応 | ✗ 未対応 | ✗ 未対応 | 🔶 決定論的検出 + LLM 意味解析 (モデル配置時) |
 | BEC 多信号検出 | ✗ | ✗ | △ | ✅ 7信号 |
-| 量子コンピューター対策 | ✗ | △ (PQC研究中) | ✗ | 🔶 MLS X-Wing ハイブリッド (openmls 経由で鍵交換のみ実装) |
+| 量子コンピューター対策 | ✗ | △ (PQC研究中) | ✗ | 🔶 MLS X-Wing ハイブリッド (openmls 実装済み・Kaname 間のみ) |
 | ローカル AI 推論 | ✗ (クラウド) | ✗ | ✗ (Copilot) | 🔶 Phi-4-mini (llama.cpp 実推論・モデル手動配置) |
-| 件名暗号化 | ✗ 平文 | ✗ 平文 | ✗ 平文 | 🔶 MLS RFC 9420 (openmls 実装・KP 添付往復) |
+| 件名暗号化 | ✗ 平文 | ✗ 平文 | ✗ 平文 | 🔶 MLS RFC 9420 (実装済み・件名はエンベロープ内・Kaname 間のみ) |
 
 ---
 

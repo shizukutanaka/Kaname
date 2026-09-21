@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs — D149: D1/D2 実装後の stale 主張を一括正直化
+
+- README・maturity.md・brand-guidelines.md が「MLS は XOR モック」「LLM は固定応答スタブ」「型システムで保証は使用禁止」「RFC 9420 準拠は使用禁止」を実装済み後も現在形で主張し続けていた — 実測 (cargo metadata で出荷到達 19/22) に基づき一括更新
+- `kaname-store::save_message` の「MLS がモック段階のため body_encrypted に書かない」コメントを実態に修正 (保存時暗号化は SQLCipher に委ねる設計)
+- 表現禁止は範囲限定で解除: 「不信メールデータは Content<Untrusted> 型でのみ隔離 LLM に渡る」「Kaname 同士の会話は MLS (RFC 9420) で E2E 暗号化」
+
 ### Security — D147: BEC LLM 経路の `&str` 入口を `Content<Untrusted>` 必須に変更
 
 - D17 が警告した「型を迂回する最短経路」が出荷経路で現実化していた — D121 で配線された `bec_score`/`bec_score_subprocess` が生 `&str` を受け、`Content<Untrusted>` 境界を経ずに不信メール本文が LLM に到達していた
