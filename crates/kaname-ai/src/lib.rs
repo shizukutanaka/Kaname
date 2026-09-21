@@ -15,10 +15,6 @@
 
 /// Phantom Type による型レベル AI 境界 (公開 API)。
 pub mod dual_llm;
-/// Rule-of-Two: 単一 LLM 出力を盲信しない多数決機構。
-pub mod rule_of_two;
-/// Tiered-Risk アクセス制御 (arxiv 2505.22852 §3)。
-pub mod tiered_risk;
 
 /// ローカル LLM (Phi-4-mini) 統合。現状はスタブ実装 (docs/maturity.md 参照)。
 pub mod llm_bridge;
