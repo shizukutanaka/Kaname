@@ -12,7 +12,9 @@ serde_json = { workspace = true }
 thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-reqwest      = { workspace = true }
+reqwest      = { workspace = true, features = ["stream"] }
+# 応答ボディの上限付きストリーム読み (D129)
+futures-util = "0.3"
 uuid       = { workspace = true }
 chrono     = { workspace = true }
 # bearer_token を Zeroizing で保持 (切断後にヒープへ残さない)

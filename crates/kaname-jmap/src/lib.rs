@@ -20,6 +20,7 @@
 pub mod ssrf_guard;
 pub use ssrf_guard::SsrfError;
 
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -138,6 +139,38 @@ impl Default for ClientConfig {
     }
 }
 
+/// 応答ボディサイズの上限 (侵害されたサーバによる巨大応答 DoS の防御、D129)。
+/// セッション応答は小さいJSONのみを期待するため 8MB、API 応答は一覧/本文取得を
+/// 考慮して 64MB、アップロード応答は blobId を含む小さな JSON のみで 1MB。
+const MAX_SESSION_BYTES: usize = 8 * 1024 * 1024;
+const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
+const MAX_UPLOAD_RESPONSE_BYTES: usize = 1024 * 1024;
+
+/// 応答ボディを `max` バイトまで読み切る。Content-Length の事前検査と
+/// ストリーム累積の二段で上限を強制する — 長さを偽った応答や chunked
+/// 転送でも確実に弾く。
+async fn read_body_capped(resp: reqwest::Response, max: usize) -> Result<Vec<u8>, JmapError> {
+    if let Some(len) = resp.content_length() {
+        if len > max as u64 {
+            return Err(JmapError::Http(format!(
+                "応答が大きすぎます ({len} バイト > {max} バイト上限)"
+            )));
+        }
+    }
+    let mut stream = resp.bytes_stream();
+    let mut buf = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| JmapError::Http(e.to_string()))?;
+        if buf.len() + chunk.len() > max {
+            return Err(JmapError::Http(format!(
+                "応答が上限を超えました ({max} バイト上限)"
+            )));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf)
+}
+
 // ============================================================================
 // JMAP クライアント本体
 // ============================================================================
@@ -204,10 +237,11 @@ impl JmapClient {
             )));
         }
 
-        let session: Session = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        // 侵害されたサーバが巨大な応答を返してメモリを枯渇させる DoS を防ぐため、
+        // 応答ボディは常にサイズ上限付きで読む (D129)。
+        let session: Session =
+            serde_json::from_slice(&read_body_capped(resp, MAX_SESSION_BYTES).await?)
+                .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
         // セッション応答の URL (apiUrl/downloadUrl/uploadUrl) は
         // Bearer 認証付きリクエストの宛先になる。悪意ある/侵害された
@@ -267,10 +301,9 @@ impl JmapClient {
             .await?;
 
         let status = resp.status();
-        let raw: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        let raw: serde_json::Value =
+            serde_json::from_slice(&read_body_capped(resp, MAX_RESPONSE_BYTES).await?)
+                .map_err(|e| JmapError::Deserialize(e.to_string()))?;
 
         if !status.is_success() {
             return Err(JmapError::JmapProblem {
@@ -756,23 +789,9 @@ impl JmapClient {
             )));
         }
 
-        // Content-Length で事前に上限を弾く (ストリームを読み切る前に拒否)。
-        if let Some(len) = resp.content_length() {
-            if len as usize > MAX_BLOB_BYTES {
-                return Err(JmapError::Http(format!(
-                    "添付が大きすぎます ({len} バイト > {MAX_BLOB_BYTES} バイト上限)"
-                )));
-            }
-        }
-
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
-        if bytes.len() > MAX_BLOB_BYTES {
-            return Err(JmapError::Http("添付が上限を超えました".into()));
-        }
-        Ok(bytes.to_vec())
+        // Content-Length 事前検査 + ストリーム累積の二段で上限を強制する
+        // (長さを偽った応答や chunked 転送でも確実に弾く)。
+        read_body_capped(resp, MAX_BLOB_BYTES).await
     }
 
     async fn upload_blob(&self, data: &[u8]) -> Result<String, JmapError> {
@@ -790,10 +809,9 @@ impl JmapClient {
             .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let json: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        let json: serde_json::Value =
+            serde_json::from_slice(&read_body_capped(resp, MAX_UPLOAD_RESPONSE_BYTES).await?)
+                .map_err(|e| JmapError::Deserialize(e.to_string()))?;
         json["blobId"]
             .as_str()
             .map(String::from)
