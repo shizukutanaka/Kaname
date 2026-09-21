@@ -75,6 +75,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - kaname-ai `threat_intel`: `MAX_CONTACTS = 10_000` を追加 (偽装 From フラッドで contacts マップが無制限に膨張するのを抑制) + `response_times`/`send_hours` を VecDeque 化して `interaction_unix_times` と同じ 10_000 上限を適用 (片方だけの上限ではもう片方が無制限だった)
 - 注記: 本モジュールは現在呼び出し元ゼロ (未配線) — 接続時は送信者数のスロットリングも検討
 
+### Fixed — D9: SSA のデッド次元を距離関数に配線
+
+- kaname-ssa: `paragraphs`/`sentences_per_paragraph`/`signature_lines` は抽出・EMA 保持済みだが `style_distance` に寄与しないデッド次元だった → 距離を正規化から重み付き和の 1.0 キャップに変更し各 0.05 で配線。旧検出面を完全保存しつつ、旧3軸+新3軸の乖離で High (0.80) に到達するよう強化
 ### Added — D9 Phase 2 (部分): SSA 検出面の敵対的実測ハーネス
 
 - kaname-ssa に `calibration_tests` モジュール追加 — 「プロファイルを完全に知る攻撃者が各軸を最大乖離させる」31 軸サブセットを列挙し、閾値 0.40/0.60/0.75 の実際の検出面を回帰ガードとして固定

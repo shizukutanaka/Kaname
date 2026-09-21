@@ -81,6 +81,19 @@ pub struct SenderStyleProfile {
     pub last_updated_unix: u64,
 }
 
+/// 比率ベースの次元距離: `avg` を基準にした `val` の相対乖離を [0,1] に丸める。
+/// `avg == 0` (プロファイル上その次元が観測ゼロ) で `val > 0` の場合は
+/// 「存在しないはずの特徴が現れた」= 構造的異常として最大距離 1.0 を返す。
+fn ratio_dist(avg: f32, val: f32) -> f32 {
+    if avg > 0.0 {
+        (val / avg - 1.0).abs().min(1.0)
+    } else if val <= 0.0 {
+        0.0
+    } else {
+        1.0
+    }
+}
+
 impl SenderStyleProfile {
     /// 新規空プロファイルを作成。
     #[must_use]
@@ -171,8 +184,10 @@ impl SenderStyleProfile {
             return 1.0; // NaN/Inf 特徴量は最大距離 (最悪ケース) として扱う
         }
 
+        // 距離は各軸の重み付き寄与の「和」を 1.0 でキャップ (正規化しない)。
+        // 軸を追加しても既存軸の寄与が希釈されず、D9 Phase 2 で実測した
+        // 検出面 (1軸 0.25 / 最強3軸 0.65 / 全軸 1.0) が保存される。
         let mut weighted_dist = 0.0_f32;
-        let mut weight_sum = 0.0_f32;
 
         // 送信時刻 (重み: 0.25) — AiTM/なりすましで深夜送信が多い
         // send_hour は u8 (0-255) かつ EmailStyleFeatures のフィールドは pub のため、
@@ -181,45 +196,39 @@ impl SenderStyleProfile {
         let hour_prob = self.send_hour_distribution[hour];
         let hour_dist = 1.0 - hour_prob.clamp(0.0, 1.0);
         weighted_dist += 0.25 * hour_dist;
-        weight_sum += 0.25;
 
         // フォーマリティ (重み: 0.25) — AI は過丁寧になりやすい
         let form_dist = (self.formality_score - features.formality_score).abs();
         weighted_dist += 0.25 * form_dist.min(1.0);
-        weight_sum += 0.25;
 
         // 文の長さ (重み: 0.20)
-        let sent_dist = if self.avg_chars_per_sentence > 0.0 {
-            let ratio = (features.chars_per_sentence / self.avg_chars_per_sentence - 1.0).abs();
-            ratio.min(1.0)
-        } else {
-            0.0
-        };
+        let sent_dist = ratio_dist(self.avg_chars_per_sentence, features.chars_per_sentence);
         weighted_dist += 0.20 * sent_dist;
-        weight_sum += 0.20;
 
         // メール長 (重み: 0.15)
-        let len_dist = if self.avg_email_length > 0.0 {
-            let ratio = (features.email_length as f32 / self.avg_email_length - 1.0).abs();
-            ratio.min(1.0)
-        } else {
-            0.0
-        };
+        let len_dist = ratio_dist(self.avg_email_length, features.email_length as f32);
         weighted_dist += 0.15 * len_dist;
-        weight_sum += 0.15;
 
         // 句読点密度 (重み: 0.15)
         let punct_dist = (self.punctuation_density - features.punctuation_density)
             .abs()
             .min(1.0);
         weighted_dist += 0.15 * punct_dist;
-        weight_sum += 0.15;
 
-        if weight_sum > 0.0 {
-            weighted_dist / weight_sum
-        } else {
-            0.0
-        }
+        // 段落数・段落あたり文数・署名行数 (各 0.05) — D9 Phase 2 の実測で
+        // 抽出・EMA 保持済みだが距離に未寄与のデッド次元と判明したため配線。
+        // 単独では警告に届かない補強次元として、攻撃者が文体を真似る際の
+        // コストを上げる。
+        weighted_dist += 0.05 * ratio_dist(self.avg_paragraphs, features.paragraphs as f32);
+        weighted_dist += 0.05
+            * ratio_dist(
+                self.avg_sentences_per_paragraph,
+                features.sentences_per_paragraph,
+            );
+        weighted_dist +=
+            0.05 * ratio_dist(self.avg_signature_lines, features.signature_lines as f32);
+
+        weighted_dist.min(1.0)
     }
 
     /// スタイル距離から警告レベルを判定する。
@@ -950,7 +959,8 @@ mod calibration_tests {
     use super::tests::make_profile;
     use super::*;
 
-    /// 距離に寄与する 5 軸の識別子。
+    /// 距離に寄与する 8 軸の識別子 (D9: 段落/段落あたり文数/署名行数は
+    /// かつてデッド次元だったが配線済み)。
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     enum Axis {
         Hour,
@@ -958,19 +968,26 @@ mod calibration_tests {
         SentLen,
         Length,
         Punct,
+        Paragraphs,
+        SentPerPara,
+        Signature,
     }
 
-    const AXES: [Axis; 5] = [
+    const AXES: [Axis; 8] = [
         Axis::Hour,
         Axis::Formality,
         Axis::SentLen,
         Axis::Length,
         Axis::Punct,
+        Axis::Paragraphs,
+        Axis::SentPerPara,
+        Axis::Signature,
     ];
 
     /// プロファイルの想定文体を完全に真似た特徴量を返し、指定された軸
     /// だけを「その軸で到達可能な最大乖離」に書き換える。
-    /// (プロファイル値: cps=40, len=200, punct=2.5, formality=0.8, hour=10)
+    /// (プロファイル値: cps=40, len=200, punct=2.5, formality=0.8, hour=10,
+    ///  paragraphs=2, spp=2.0, sig=3)
     fn mimicry(overrides: &[Axis]) -> EmailStyleFeatures {
         let mut f = EmailStyleFeatures {
             paragraphs: 2,
@@ -994,18 +1011,24 @@ mod calibration_tests {
                 Axis::Length => f.email_length = 4000,
                 // 読点 20/100文字 (|2.5-20| → cap 1.0)
                 Axis::Punct => f.punctuation_density = 20.0,
+                // 10 倍の段落数 (ratio cap 1.0)
+                Axis::Paragraphs => f.paragraphs = 20,
+                // 1 段落 10 文 (ratio 4.0 → cap 1.0)
+                Axis::SentPerPara => f.sentences_per_paragraph = 10.0,
+                // 署名 30 行 (ratio 9.0 → cap 1.0)
+                Axis::Signature => f.signature_lines = 30,
             }
         }
         f
     }
 
-    /// 全軸サブセット (31 通り) の距離を実測して返す。
+    /// 全軸サブセット (255 通り) の距離を実測して返す。
     fn enumerate_surface() -> Vec<(Vec<Axis>, f32, StyleWarning)> {
         let profile = make_profile(30);
         assert!(profile.is_reliable());
         let mut out = Vec::new();
         // 部分集合を bitmask で列挙
-        for mask in 1u32..(1 << 5) {
+        for mask in 1u32..(1 << AXES.len()) {
             let axes: Vec<Axis> = AXES
                 .iter()
                 .copied()
@@ -1063,10 +1086,25 @@ mod calibration_tests {
     #[test]
     fn 全軸乖離はhighに到達する() {
         for (axes, _d, w) in enumerate_surface() {
-            if axes.len() == 5 {
+            if axes.len() == AXES.len() {
                 assert_eq!(w, StyleWarning::High);
             }
         }
+    }
+
+    /// 段落/段落あたり文数/署名行数は距離に寄与する (デッド次元の再発防止)。
+    /// ただし補強次元なので、これら 3 軸だけを外した攻撃は単独では警告に
+    /// 届かない (0.15/1.15 ≈ 0.13 < Low 0.40)。
+    #[test]
+    fn 旧デッド次元は配線済みだが単独では警告に届かない() {
+        let profile = make_profile(30);
+        let f = mimicry(&[Axis::Paragraphs, Axis::SentPerPara, Axis::Signature]);
+        let d = profile.style_distance(&f);
+        assert!(d > 0.0, "3 軸乖離が距離に寄与していない (再デッド化)");
+        assert!(
+            matches!(profile.warning_level(d), StyleWarning::None),
+            "補強次元のみの乖離が警告になった (d={d})"
+        );
     }
 
     /// 誤検知面の基線: 正当なばらつき (数値 ±20%・formality -0.05・
