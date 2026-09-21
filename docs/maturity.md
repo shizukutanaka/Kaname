@@ -244,7 +244,7 @@ D10/D21 で「UI から呼ばれるコマンドはすべて実装」を達成し
 | Out-of-Band Verification (電話確認セレモニー) | `kaname-oobv` | |
 | 入力スクリーニング (プロンプト注入検出) | `kaname-screen` | |
 | SSRF 対策 (DNS再検証込みリダイレクトガード) | `kaname-jmap::ssrf_guard` | |
-| 監査ログ (HMAC-SHA256 鍵付きハッシュチェーン) | `kaname-ai::threat_intel` | |
+| 監査ログ (SHA-256 ハッシュチェーン — 無鍵、改ざんは再計算で回避可能) | `kaname-store` | ※ maturity 表の旧記述「HMAC-SHA256 鍵付き」は未配線モジュール (threat_intel, D139 で削除) の主張であり、出荷側は無鍵 SHA-256。鍵付き化または外部アンカーは改善余地 |
 | PQC ハイブリッド鍵カプセル化 (X25519 + ML-KEM) | `kaname-crypto` | **注意**: コード内の "X-Wing" 表記は独自 HKDF 合成 (`combine_kem_secrets`, info=`kaname-xwing-v1`) であり、IETF 標準の X-Wing (draft-connolly-cfrg-xwing-kem) とはワイヤ非互換。外部監査時に名称で混同しないこと。また X25519/ML-KEM の実体は `Kem` トレイト経由のバックエンド注入で、テストは MockKem のみ (実アルゴリズムバックエンドの結合は未検証) |
 
 ---
