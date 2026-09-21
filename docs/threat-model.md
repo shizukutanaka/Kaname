@@ -86,7 +86,7 @@ We **out-of-scope**: threats from the operating system kernel being malicious (w
 |---|---|---|
 | Attachment ZIP bomb | Recursive archive explodes on decompress | アプリは添付を展開しない (検査後にディスク保存のみ)。展開系の分離 VM は *(設計意図・未実装)* — 展開を実装するなら別経路で再検討要 |
 | Regex DoS in filter rules | User Sieve script triggers worst-case regex | Sieve エンジン/ユーザールールは存在しない *(未実装 — 実装時は RE2 系エンジン必須)* |
-| MIME parse bomb | Pathological MIME tree | Parser has depth cap (8) and field count cap (256); fuzz-tested |
+| MIME parse bomb | Pathological MIME tree | 実装済み: メッセージ 100MB 上限、ネスト収集 depth 16・同一種パート 32 件上限 (kaname-render)、BEC 本文解析 1MB 上限 (kaname-pivot)、fuzz 済み。「depth cap 8 / field count cap 256」の旧記述は実装と不一致だったため訂正 |
 | Mailbox flood | Attacker sends 1M messages | 受信側レート制限/クォータは JMAP サーバ側の責務。クライアント側の対策 (一覧の 500 件上限・オフライン cap) のみ実装 |
 | Font/image parser exploit causing crash | Crafted ttf/png | フォント/画像は WebView (iframe sandbox + CSP) が描画。WASM/Firecracker VM 分離は *(設計意図・未実装)* — WebView プロセスのクラッシュは残存リスク |
 
