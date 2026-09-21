@@ -1829,7 +1829,7 @@ impl Store {
                     received_at, is_read, bec_score, bec_verdict, to_addrs \
              FROM messages \
              WHERE account_id = ?1 AND mailbox_id = ?2 AND is_deleted = 0 \
-             ORDER BY received_at DESC LIMIT ?3 OFFSET ?4;",
+             ORDER BY received_at DESC, id DESC LIMIT ?3 OFFSET ?4;",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
@@ -2064,7 +2064,7 @@ impl Store {
                   OR from_addr    LIKE ?2 ESCAPE '\\' \
                   OR from_name    LIKE ?2 ESCAPE '\\' \
                   OR body_preview LIKE ?2 ESCAPE '\\' ) \
-             ORDER BY received_at DESC LIMIT ?3 OFFSET ?4;",
+             ORDER BY received_at DESC, id DESC LIMIT ?3 OFFSET ?4;",
             )
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
@@ -2487,6 +2487,63 @@ mod message_persistence_tests {
             rows[0].to_addrs.is_empty(),
             "'' は宛先不明として空配列に倒す"
         );
+    }
+
+    /// `ORDER BY received_at DESC` は全順序ではない — 同一時刻の行は
+    /// SQLite が任意順で返すため、タイブレーカー無しの OFFSET ページングは
+    /// ページ境界の行を重複/脱落させうる (D155)。`id DESC` を連結した
+    /// 全順序で、同一時刻メールもページ往復で重複なく全件返ることを固定する。
+    #[tokio::test]
+    async fn list_messages_のoffsetページングは同一時刻メールを脱落させない() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        // msg() の既定 received_at は全件同一 — 全順序でなければ境界が壊れる。
+        const N: usize = 12;
+        for i in 0..N {
+            store
+                .save_message("acct1", "inbox", &msg(&format!("jmap-{i}"), "同時刻"))
+                .await
+                .unwrap();
+        }
+
+        let mut seen = std::collections::HashSet::new();
+        let mut offset = 0u32;
+        while seen.len() < N {
+            let page = store
+                .list_messages("acct1", "inbox", 5, offset)
+                .await
+                .unwrap();
+            assert!(
+                !page.is_empty(),
+                "offset {offset} で空ページは全件未到達の印"
+            );
+            for m in page {
+                assert!(seen.insert(m.id), "ページ間で id の重複");
+            }
+            offset += 5;
+        }
+        assert_eq!(seen.len(), N);
+
+        // 検索経路も同じ構造のため同時に固定。
+        let mut seen = std::collections::HashSet::new();
+        let mut offset = 0u32;
+        while seen.len() < N {
+            let page = store
+                .search_messages("acct1", "alice@corp.com", 5, offset)
+                .await
+                .unwrap();
+            assert!(!page.is_empty());
+            for m in page {
+                assert!(seen.insert(m.id), "検索ページ間で id の重複");
+            }
+            offset += 5;
+        }
+        assert_eq!(seen.len(), N);
     }
 
     /// `list_thread_messages` は同一 `thread_id` のメッセージを `received_at`

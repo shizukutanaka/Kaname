@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D155: OFFSET ページングの非全順序ソートを id タイブレーカーで修正
+
+- `list_messages`/`search_messages` の `ORDER BY received_at DESC` は同一時刻行を任意順に返しうるため、保存済み一覧/検索の「さらに読み込む」で境界行が重複・脱落し得た — `id DESC` を連結して全順序化
+
 ### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
 
 - HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正
