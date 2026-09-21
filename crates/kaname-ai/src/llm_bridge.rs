@@ -21,11 +21,11 @@
 //   決定論的シグナルのみ — llm_bridge の availability に非依存)。
 //
 // Subprocess isolation (replacing todo!() in kaname-ai):
-//   The QuarantinedLlm subprocess runs with seccomp profile `quarantined.json`:
-//     - Allowed syscalls: read, write, mmap, brk, futex, exit_group
-//     - Blocked: network (connect, socket), exec, fork, ptrace, mount
-//   The PrivilegedLlm subprocess runs with seccomp profile `privileged.json`:
-//     - Same block list EXCEPT network is allowed only to approved HTTPS endpoints
+//   The QuarantinedLlm subprocess (`kaname-llm-runner`) is spawned by
+//   `subprocess.rs`. macOS: `sandbox-exec` seatbelt profile applied at spawn.
+//   Linux/Windows: sandbox profile not implemented — spawn fails closed
+//   (`SandboxUnavailable`, D128) so untrusted text never reaches an
+//   unsandboxed llama.cpp.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
@@ -34,6 +34,7 @@
 //!
 //! Drives Phi-4-mini for both quarantined and privileged inference paths.
 
+use crate::dual_llm::{Content, Untrusted};
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
@@ -487,15 +488,17 @@ fn truncate_chars(s: &str, max: usize) -> &str {
 ///
 /// 呼び出し側の約束: `config` は `ModelConfig::quarantined()`
 /// (temperature=0、同一入力に決定論的 — `LocalLlm` の契約) を使うこと。
-/// 件名・本文・context は `Content<Untrusted>` 由来を想定し、件名 256 /
-/// 本文 4000 / context 1024 chars に切り詰めてプロンプトサイズを制限する。
+/// 件名・本文・context は `Content<Untrusted>` で受け取る (D147 —
+/// `&str` 入口は D17 が警告した「型を迂回する最短経路」だったため、
+/// 不信メールデータの LLM 流入を型レベルで provenance 付きに強制する)。
+/// 件名 256 / 本文 4000 / context 1024 chars に切り詰めてプロンプトサイズを制限する。
 /// `<|end|>` 等の特殊トークンは `build_phi4_prompt` が除去する。
 #[must_use]
 pub fn bec_score(
     runner: &Mutex<LocalLlmRunner>,
-    subject: &str,
-    body: &str,
-    context: Option<&str>,
+    subject: &Content<Untrusted>,
+    body: &Content<Untrusted>,
+    context: Option<&Content<Untrusted>>,
 ) -> (f32, String) {
     if let Some(msg) = screen_bec_input(subject, body, context) {
         return msg;
@@ -525,8 +528,17 @@ pub fn bec_score(
 /// フレーズでスコアを誘導されないよう kaname-screen で事前検査する。
 /// `Blocked` なら推論を呼ばず `Some((0.0, 理由))` (Suspicious は
 /// 記録のみで通す — メール本文は往々に怪しい語を含むため過剰遮断しない)。
-fn screen_bec_input(subject: &str, body: &str, context: Option<&str>) -> Option<(f32, String)> {
-    let screened = format!("{subject}\n{body}\n{}", context.unwrap_or(""));
+fn screen_bec_input(
+    subject: &Content<Untrusted>,
+    body: &Content<Untrusted>,
+    context: Option<&Content<Untrusted>>,
+) -> Option<(f32, String)> {
+    let screened = format!(
+        "{}\n{}\n{}",
+        subject.as_text(),
+        body.as_text(),
+        context.map_or("", |c| c.as_text())
+    );
     let result = kaname_screen::PromptScreener::new().screen(&screened);
     match result.verdict {
         kaname_screen::ScreenVerdict::Blocked => {
@@ -578,9 +590,9 @@ fn audit_bec_output(text: &str) -> Option<(f32, String)> {
 #[must_use]
 pub fn bec_score_subprocess(
     sp: &crate::subprocess::LlmSubprocess,
-    subject: &str,
-    body: &str,
-    context: Option<&str>,
+    subject: &Content<Untrusted>,
+    body: &Content<Untrusted>,
+    context: Option<&Content<Untrusted>>,
 ) -> (f32, String) {
     let req = crate::subprocess::LlmRequest {
         request_id: crate::subprocess::new_request_id(),
@@ -618,16 +630,23 @@ pub fn bec_score_subprocess(
 }
 
 /// BEC スコアリング用の user メッセージを構築する。
-/// 件名・本文・context は `Content<Untrusted>` 由来を想定し、件名 256 /
-/// 本文 4000 / context 1024 chars に切り詰めてプロンプトサイズを制限する。
-fn bec_user_message(subject: &str, body: &str, context: Option<&str>) -> String {
+/// 件名 256 / 本文 4000 / context 1024 chars に切り詰めて
+/// プロンプトサイズを制限する。
+fn bec_user_message(
+    subject: &Content<Untrusted>,
+    body: &Content<Untrusted>,
+    context: Option<&Content<Untrusted>>,
+) -> String {
     let mut user_message = format!(
         "件名: {}\n本文:\n{}",
-        truncate_chars(subject, 256),
-        truncate_chars(body, 4000)
+        truncate_chars(subject.as_text(), 256),
+        truncate_chars(body.as_text(), 4000)
     );
     if let Some(ctx) = context {
-        user_message.push_str(&format!("\nコンテキスト: {}", truncate_chars(ctx, 1024)));
+        user_message.push_str(&format!(
+            "\nコンテキスト: {}",
+            truncate_chars(ctx.as_text(), 1024)
+        ));
     }
     user_message
 }
