@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D130: MIME 入れ子メールの再帰深度に上限
+
+- kaname-render: `extract_parts_by_media_type` の `message/rfc822` 再帰に `MAX_NESTED_DEPTH = 16` — 極端に深い入れ子でスタック枯渇し得た
 ### Security — D1 Phase 1: 実 MLS 暗号化 (openmls)
 
 - **`kaname-mls` の XOR モック暗号を実 openmls 0.9 に全面置換** (D1 Phase 1)
