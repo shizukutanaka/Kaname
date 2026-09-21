@@ -158,6 +158,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - fix(kaname-jmap): 一覧取得で `hasAttachment` プロパティを要求・パースしていたが消費者ゼロ — プロパティとフィールドを削除 (D86)
 
 ### Fixed
+- **LLM ワーカーのタイムアウト後に推論経路が永続的に wedged する問題を修正 (D150)**: ハングした子プロセスを kill して以後の呼出を即座に失敗させる (従来は放棄スレッドが stdout ロックを握り続け、全推論が毎回フルタイムアウトを繰り返した)
+
 - **クローズ済み未マージ PR に置き去りになっていた修正群を救出** (取りこぼし第2回 — 履歴再構築により D76–D111 系の ~30 件が孤児化していた):
   - fix(kaname-store): 既読/ゴミ箱操作がローカル DB に反映されず再起動で巻き戻る欠陥を修正 — `mark_messages_read`/`mark_message_deleted` + upsert の `is_deleted=0` ガード (D77)
   - fix(kaname-store): サーバ側で消えたメールがローカルに永久残存する欠陥を修正 — `reconcile_mailbox` で tombstone 化し、一覧先頭ページの部分取得時のみ走査 (D80)
