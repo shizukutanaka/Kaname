@@ -241,7 +241,7 @@ Kaname は arxiv の最新研究を継続的に反映している:
 | 入力スクリーニング | kaname-screen `PromptScreener` | 2505.22852 §2.1 |
 | 出力監査 | kaname-screen `OutputAuditor` | 2505.22852 §2.2 |
 | ~~Tiered-Risk 制御~~ (呼出元ゼロのため D140 で削除) | — | 2505.22852 §3 |
-| メモリ汚染防御 | kaname-memory-guard | 2601.05504 |
+| ~~メモリ汚染防御~~ (D142 で削除 — 基盤不在で呼出元ゼロ) | — | 2601.05504 |
 | X25519 出力検証 | kaname-crypto `validate_x25519_output` | eprint 2026/192 |
 
 検証境界は [docs/verification-boundary.md](docs/verification-boundary.md) に明示。

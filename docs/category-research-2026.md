@@ -16,7 +16,7 @@
   - 制御フローは固定でも、引数に untrusted データが混入する経路が残る
 - Progent は programmable privilege control で攻撃成功率を 41.2% → 2.2% に低減
 
-**実装**: `kaname-screen::ArgumentValidator`
+**実装**: ~~`kaname-screen::ArgumentValidator`~~ (D142 で削除 — ツール呼出し経路不在)
 - `validate_recipient`: untrusted データによる宛先すり替えを検出
 - `detect_smuggled_target`: 許可外ドメインの紛れ込みを検出
 
@@ -95,7 +95,7 @@ Rust 側の `kaname-i18n` クレートも重複のため同時期に削除 (D19)
 
 | カテゴリ | 改善 | 出典 |
 |---|---|---|
-| 1. AI セキュリティ | ArgumentValidator | arxiv 2601.11893 |
+| 1. AI セキュリティ | ~~ArgumentValidator~~ (D142 削除) | arxiv 2601.11893 |
 | 2. エージェント認可 | Rule of Two | arxiv 2601.17548 (Meta) |
 
 両者とも Dual-LLM / Tiered-Risk を補完する独立した防御層。

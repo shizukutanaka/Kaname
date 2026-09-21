@@ -207,14 +207,16 @@ cargo nextest run --workspace --no-fail-fast 2>&1 | tail -5
 | 出力監査 | kaname-screen `OutputAuditor` | arxiv 2505.22852 §2.2 |
 | UserUpload provenance | kaname-ai `Provenance::UserUpload` | arxiv 2505.22852 §2.3 |
 | ~~Tiered-Risk アクセス制御~~ (削除済み D140 — 呼出元ゼロ) | — | arxiv 2505.22852 §3 |
-| メモリ汚染防御 | kaname-memory-guard | arxiv 2601.05504 |
+| ~~メモリ汚染防御~~ (削除済み D142 — 基盤不在で呼出元ゼロ) | — | arxiv 2601.05504 |
 
 これらのクレートはライブラリとして残っているが、エージェント監視 UI が
 製品に存在しないため IPC コマンド層 (screen_user_input / audit_ai_output /
 check_action_risk / check_memory_trust / check_rule_of_two /
 validate_tool_argument / record_agent_step / reset_trajectory) は
-呼び出し元ゼロで削除済み (2026-09, gap-analysis E11)。クレートの機能は
-`kaname_memory_guard::normalize_for_matching*` 等として解析経路で利用中。
+呼び出し元ゼロで削除済み (2026-09, gap-analysis E11)。クレート側の dead API も段階的に削除 (D139/D140/D142): threat_intel・
+rule_of_two・tiered_risk・ArgumentValidator・RateLimiter・
+TrustScorer/MemorySanitizer・PivotHistory/trust_score は呼出元ゼロのため削除済み。
+kaname-memory-guard の残存機能は `normalize_for_matching*` のみ。
 
 ## よく使うコマンド (Makefile)
 
