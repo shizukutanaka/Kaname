@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D137: 文体プロファイル学習を送信者認証にゲート
+
+- kaname-ui: 未認証の From で SSA プロファイルを汚染できた敵対的ポイズニング経路を遮断 — DMARC pass または SPF+DKIM pass の場合のみ学習・永続化 (未認証は評価のみ)
 ### Security — D136: 文体プロファイルの送信者数に上限
 
 - kaname-ui: STYLE_PROFILES がユニーク送信者数 (攻撃者制御) で無制限増大し settings テーブルにも永続化されていた → `MAX_STYLE_PROFILES = 1_000` で新規プロファイルを打ち切り
