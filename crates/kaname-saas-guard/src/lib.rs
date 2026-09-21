@@ -566,13 +566,47 @@ fn extract_redirect_param_domain(url: &str) -> Option<String> {
     for pair in query.split('&') {
         for key in REDIRECT_PARAM_KEYS {
             if let Some(value) = pair.strip_prefix(*key) {
-                if value.starts_with("http://") || value.starts_with("https://") {
-                    return extract_actual_domain(value);
+                // パーセントエンコードされたリダイレクト先を復号する。
+                // `?next=https%3A%2F%2Fevil.com` はブラウザが復号して遷移する
+                // が、エンコードのままでは `starts_with("http")` に合わず
+                // 検査を素通りしていた (D154)。
+                let decoded = percent_decode(value);
+                if decoded.starts_with("http://") || decoded.starts_with("https://") {
+                    return extract_actual_domain(&decoded);
                 }
             }
         }
     }
     None
+}
+
+/// `%XX` 形式のパーセントエンコードをバイト単位で復号する。
+/// URL クエリ値の検査用 — ドメイン部分は ASCII のため lossy 変換で十分。
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push(h * 16 + l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 // ============================================================================
@@ -1064,6 +1098,45 @@ mod security_tests {
             result.map(|l| l.risk),
             Some(SaasLinkRisk::Block),
             "evil.com のサブドメインは引き続き Block されるべき"
+        );
+    }
+
+    /// D154: `?next=https%3A%2F%2Fevil.com` のようにパーセントエンコード
+    /// されたリダイレクト先は、ブラウザが復号して遷移するにも関わらず
+    /// 検査を素通りしていた。復号後に実ドメインを照合することを固定する。
+    #[test]
+    fn percent_encoded_redirect_param_is_decoded_and_blocked() {
+        let mut inspector = SaasLinkInspector::new();
+        inspector.add_malicious("evil.com");
+        let hist = SaasHistory::new();
+        for url in [
+            "https://drive.google.com/?next=https%3A%2F%2Fevil.com%2Fsteal",
+            "https://www.docusign.net/?redirect=http%3A%2F%2Fsub.evil.com",
+        ] {
+            let result = inspector.evaluate(url, "sender@company.com", &hist);
+            assert_eq!(
+                result.map(|l| l.risk),
+                Some(SaasLinkRisk::Block),
+                "エンコード済み悪意リダイレクトも Block されるべき: {url}"
+            );
+        }
+    }
+
+    /// D154: エンコードされていない正当な値 (非 URL) は誤検知しない。
+    #[test]
+    fn percent_encoded_non_url_param_is_ignored() {
+        let inspector = SaasLinkInspector::new();
+        let hist = SaasHistory::new();
+        let result = inspector.evaluate(
+            "https://drive.google.com/?next=%2Fdashboard%2Fhome%3Ftab%3Dfiles",
+            "sender@company.com",
+            &hist,
+        );
+        let risk = result.map(|l| l.risk);
+        assert_ne!(
+            risk,
+            Some(SaasLinkRisk::Block),
+            "非 URL のパラメータ値は Block にならないべき"
         );
     }
 
