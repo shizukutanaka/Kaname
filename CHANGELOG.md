@@ -66,6 +66,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `bec_score_subprocess` (kaname-ai) 追加 — `bec_score` と同じ切詰め・パース・フォールバックを共有。`LlmSubprocess::healthcheck` でモデルロード失敗の即終了を起動時に検出。モデル未配置時に spawn がモックプロセスに落ちる経路を `check_model` Ready ゲートで抑止
 - 実行ファイル隣接 → PATH の順でワーカーを解決。**配布物への同梱は未設定** — `externalBin` はバイナリ不在でビルドを失敗させるため登録見送り; リリース時に `src-tauri/binaries/kaname-llm-runner-<triple>` 配置 + `externalBin` 有効化が必要
 
+### Added — D9 Phase 2 (部分): SSA 検出面の敵対的実測ハーネス
+
+- kaname-ssa に `calibration_tests` モジュール追加 — 「プロファイルを完全に知る攻撃者が各軸を最大乖離させる」31 軸サブセットを列挙し、閾値 0.40/0.60/0.75 の実際の検出面を回帰ガードとして固定
+- **実測された検出面**: 1 軸のみの最大乖離は警告にすら届かない (最大 0.25 — 「文体を完璧に真似たが深夜送信」は素通し)、2 軸は Low まで、最強 3 軸で Medium、全軸で High。誤検知面は健全 (正当なばらつき ±20% で警告なし)
+- **発見**: `paragraphs`/`sentences_per_paragraph`/`signature_lines` は抽出されるが `style_distance` に一切寄与しないデッド次元 — 攻撃者が自由に変えられる次元 (design-d9 に記録)
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
