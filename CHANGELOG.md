@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — D132: 監査ログに epoch ローテーションを実装
+
+- `audit_log` が 50,000 行を超えたら `audit()` が自動ローテーション: 最新 10,000 行を残して古い行を削除し、チェーン末尾に `AUDIT_EPOCH` 行を追記 — payload に削除区間への最後のポインタ (`sealed_at_seq`/`sealed_prev_hash`) を封緘するため、エクスポート済みの旧チェーンはこの値で照合可能
+- `verify_audit_chain` はローテーション後も `true` を返す: 先頭行の非空 `prev_hash` は genesis が宣言する封緘点との一致でのみ受理し、それ以降は従来どおり逐行連鎖検証 (ローテーション後の改ざん・途中削除も検知)
+- SecurityDashboard の監査証跡ラベルに `AUDIT_EPOCH` (「監査ログ区切り (ローテーション)」) を追加
+
 ### Removed — D139: kaname-ai::threat_intel モジュールを削除
 
 - 呼出元ゼロの dead 設計シーム (AiPhishingDetector・AiAccessController・ContactIntelligenceEngine・ActionExtractor、1482行) を削除 — 出荷機能 (kaname-store contacts/audit_log、kaname-bec) と重複し誤読の温床だった
