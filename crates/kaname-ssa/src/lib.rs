@@ -502,7 +502,7 @@ fn count_occurrences(text: &str, pattern: &str) -> u32 {
 mod tests {
     use super::*;
 
-    fn make_profile(sample_count: u32) -> SenderStyleProfile {
+    pub(crate) fn make_profile(sample_count: u32) -> SenderStyleProfile {
         let mut p = SenderStyleProfile::new("cfo@company.co.jp");
         // 典型的な CFO のメールパターン
         for i in 0..sample_count {
@@ -918,6 +918,180 @@ mod tests {
         assert_eq!(
             escalate_warning(StyleWarning::InsufficientData),
             StyleWarning::InsufficientData
+        );
+    }
+}
+
+// ============================================================================
+// 校正ハーネス (D9): 閾値の検出面を敵対的列挙で実測
+// ============================================================================
+//
+// `docs/design-d9-ssa-calibration.md` Phase 2 (測定) のうちモデル不要の
+// 決定論的部分をテストとして固定する。「被害者プロファイルを完全に知る
+// 攻撃者が、任意の軸を最大限に外したメールを送ったとき、どの軸の組合せで
+// 警告が出るか」を全 31 通りの軸サブセットについて列挙する。
+//
+// style_distance の有効次元は 5 軸のみ (send_hour 0.25 / formality 0.25 /
+// chars_per_sentence 0.20 / email_length 0.15 / punctuation_density 0.15)。
+// paragraphs / sentences_per_paragraph / signature_lines は抽出されるが
+// 距離計算に一切寄与しない (抽出のみのデッド次元)。
+//
+// 実測された検出面 (下のテストが回帰ガードとして固定):
+//   - 1 軸のみを完全に外す攻撃: 最大 0.25 — **警告すら出ない** (Low 0.40
+//     にも届かない)。「文体を完全に真似たが深夜送信」は検出対象外
+//   - 2 軸を完全に外す攻撃: 最大 ~0.45 — Low まで。**Medium には到達不能**
+//   - 3 軸を完全に外す攻撃: 0.50-0.65 — 一部のみ Medium に到達
+//   - 全 5 軸を外す攻撃: 1.0 — High
+// これが閾値 0.40/0.60/0.75 の実際の検出面であり、D9 校正の基線である。
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::float_cmp)]
+mod calibration_tests {
+    use super::tests::make_profile;
+    use super::*;
+
+    /// 距離に寄与する 5 軸の識別子。
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    enum Axis {
+        Hour,
+        Formality,
+        SentLen,
+        Length,
+        Punct,
+    }
+
+    const AXES: [Axis; 5] = [
+        Axis::Hour,
+        Axis::Formality,
+        Axis::SentLen,
+        Axis::Length,
+        Axis::Punct,
+    ];
+
+    /// プロファイルの想定文体を完全に真似た特徴量を返し、指定された軸
+    /// だけを「その軸で到達可能な最大乖離」に書き換える。
+    /// (プロファイル値: cps=40, len=200, punct=2.5, formality=0.8, hour=10)
+    fn mimicry(overrides: &[Axis]) -> EmailStyleFeatures {
+        let mut f = EmailStyleFeatures {
+            paragraphs: 2,
+            sentences_per_paragraph: 2.0,
+            chars_per_sentence: 40.0,
+            punctuation_density: 2.5,
+            formality_score: 0.8,
+            email_length: 200,
+            signature_lines: 3,
+            send_hour: 10,
+        };
+        for axis in overrides {
+            match axis {
+                // 深夜 3 時 — プロファイル上ほぼ 0% の時間帯
+                Axis::Hour => f.send_hour = 3,
+                // 超丁寧な CFO が完全な口語に (dist = 0.8 が最大)
+                Axis::Formality => f.formality_score = 0.0,
+                // 1 文 200 文字の極端に長い文 (ratio 4.0 → cap 1.0)
+                Axis::SentLen => f.chars_per_sentence = 200.0,
+                // 20 倍の長文 (ratio cap 1.0)
+                Axis::Length => f.email_length = 4000,
+                // 読点 20/100文字 (|2.5-20| → cap 1.0)
+                Axis::Punct => f.punctuation_density = 20.0,
+            }
+        }
+        f
+    }
+
+    /// 全軸サブセット (31 通り) の距離を実測して返す。
+    fn enumerate_surface() -> Vec<(Vec<Axis>, f32, StyleWarning)> {
+        let profile = make_profile(30);
+        assert!(profile.is_reliable());
+        let mut out = Vec::new();
+        // 部分集合を bitmask で列挙
+        for mask in 1u32..(1 << 5) {
+            let axes: Vec<Axis> = AXES
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(i, _)| mask & (1 << i) != 0)
+                .map(|(_, a)| a)
+                .collect();
+            let f = mimicry(&axes);
+            let d = profile.style_distance(&f);
+            out.push((axes, d, profile.warning_level(d)));
+        }
+        out
+    }
+
+    /// 検出面の基線: 1 軸のみを最大乖離しても警告は **一切出ない**。
+    /// 「文体を完璧に真似たが送信時刻だけ異常」な BEC は素通しになる。
+    #[test]
+    fn 単一軸の最大乖離は警告に届かない() {
+        for (axes, d, w) in enumerate_surface() {
+            if axes.len() == 1 {
+                assert!(
+                    matches!(w, StyleWarning::None),
+                    "{axes:?} が {d} で警告 {w:?} — 単一軸攻撃が可視化されてしまった (これは良い変化だが検出面の記録を更新すること)"
+                );
+            }
+        }
+    }
+
+    /// 検出面の基線: 2 軸まで同時に完全に外されても Medium 以上には
+    /// 到達しない (最大でも Low)。
+    #[test]
+    fn 二軸の最大乖離はlowまででmediumに届かない() {
+        for (axes, _d, w) in enumerate_surface() {
+            if axes.len() == 2 {
+                assert!(
+                    matches!(w, StyleWarning::None | StyleWarning::Low),
+                    "{axes:?} が {w:?} — 二軸攻撃が Medium に到達"
+                );
+            }
+        }
+    }
+
+    /// 検出面の基線: 最強の 3 軸組合せ (送信時刻+フォーマリティ+文長)
+    /// で初めて Medium に到達する。
+    #[test]
+    fn 最強三軸で初めてmediumに到達する() {
+        for (axes, _d, w) in enumerate_surface() {
+            if axes == [Axis::Hour, Axis::Formality, Axis::SentLen] {
+                assert_eq!(w, StyleWarning::Medium, "最強3軸は Medium のはず");
+            }
+        }
+    }
+
+    /// 検出面の基線: 全軸を外すと必ず High。
+    #[test]
+    fn 全軸乖離はhighに到達する() {
+        for (axes, _d, w) in enumerate_surface() {
+            if axes.len() == 5 {
+                assert_eq!(w, StyleWarning::High);
+            }
+        }
+    }
+
+    /// 誤検知面の基線: 正当なばらつき (数値 ±20%・formality -0.05・
+    /// 1 時間ずれ) の同時発生では警告が出ないこと。
+    #[test]
+    fn 正当なばらつきでは警告が出ない() {
+        let profile = make_profile(30);
+        let legit = EmailStyleFeatures {
+            paragraphs: 3,
+            sentences_per_paragraph: 2.4,
+            chars_per_sentence: 48.0, // +20%
+            punctuation_density: 3.0, // +20%
+            formality_score: 0.75,
+            email_length: 240, // +20%
+            signature_lines: 3,
+            send_hour: 11, // プロファイルに稀に存在する時間帯
+        };
+        let d = profile.style_distance(&legit);
+        assert!(
+            matches!(
+                profile.warning_level(d),
+                StyleWarning::None | StyleWarning::Low
+            ),
+            "正当なばらつきが {w:?} (d={d}) — 誤検知",
+            w = profile.warning_level(d),
         );
     }
 }
