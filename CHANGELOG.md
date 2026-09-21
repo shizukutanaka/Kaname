@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D138: 送信者帳簿の学習を送信者認証にゲート
+
+- kaname-ui: `record_received` を `is_sender_authenticated` (DMARC pass または SPF+DKIM pass) でゲート — 未認証の偽装 From による帳簿汚染 (初回受信消去・検証済み減点・既知連絡先化) を遮断。D137 と同型のポイズニング対策を履歴帳簿にも適用
+
 ### Security — D134: MLS 会話数に上限を追加
 
 - kaname-mls: 公開 KeyPackage 経由の有効 Welcome で `groups`/`conversations`/`seen_welcomes` が無制限に膨らむ招待攻勢 DoS を修正 — `MAX_CONVERSATIONS = 1_000`・`MAX_SEEN_WELCOMES = 10_000`
