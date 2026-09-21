@@ -2,26 +2,31 @@
 //
 // Dual-LLM サブプロセス管理。
 //
-// seccomp プロファイル適用: quarantined.json と privileged.json
+// サンドボックス分離の実効状態 (D128 で実測訂正):
+//   macOS   : `sandbox-exec` を実適用 (deny default + deny network*)
+//   Linux   : 未実装 — `--seccomp` 引数は渡されるが runner 側も親側も
+//             何も適用せず、プロファイル JSON も不存在だった。
+//             フェイルクローズ (`SandboxUnavailable`) に変更済み。
+//             実装には seccompiler/libseccomp による runner 側適用 +
+//             `resources/seccomp/{quarantined,privileged}.json` の作成が必要
+//   Windows : 未実装 — 「Job Object/WFP で制限」とコメントされていたが
+//             実適用はなかった。同様にフェイルクローズ。
 //
 // アーキテクチャ (ADR-020):
-//   PrivilegedLlm  → P-LLM プロセス (seccomp: privileged.json)
-//   QuarantinedLlm → Q-LLM プロセス (seccomp: quarantined.json)
+//   PrivilegedLlm  → P-LLM プロセス (サンドボックス: privileged 相当)
+//   QuarantinedLlm → Q-LLM プロセス (サンドボックス: quarantined 相当)
 //
 // プロセス間通信:
 //   stdin/stdout JSON-Lines プロトコル (TLS 不要、同一マシン)
 //   フォーマット: { "role": "user"|"system", "content": "..." } per line
 //
-// Q-LLM seccomp 許可 syscall (quarantined.json):
+// Linux seccomp 実装時の許可 syscall 設計メモ (quarantined):
 //   read, write, mmap, mmap2, mremap, munmap, brk,
 //   futex, nanosleep, clock_gettime, exit_group, close,
 //   fstat, lseek, openat (モデルファイルのみ)
 //   禁止: socket, connect, bind, fork, execve, ptrace
-//
-// P-LLM seccomp 許可 syscall (privileged.json):
-//   Q-LLM の許可リストに加えて:
-//   socket, connect (承認エンドポイントのみ), sendto, recvfrom
-//   禁止: fork, execve, ptrace, mount
+// P-LLM はこれに加えて socket/connect (承認エンドポイントのみ),
+// sendto, recvfrom を許可。禁止: fork, execve, ptrace, mount
 
 #![deny(unsafe_code)]
 
@@ -229,13 +234,15 @@ impl LlmSubprocess {
     ) -> Result<Command, SubprocessError> {
         #[cfg(target_os = "linux")]
         {
-            // Linux: seccomp-bpf 経由でシステムコールをフィルタリング
-            // kaname-llm-runner バイナリが自身に seccomp を適用してから推論を実行
-            let mut cmd = Command::new(Self::runner_program("kaname-llm-runner"));
-            cmd.arg("--mode").arg(format!("{:?}", mode).to_lowercase());
-            cmd.arg("--model").arg(model_path);
-            cmd.arg("--seccomp").arg(mode.seccomp_profile_path());
-            return Ok(cmd);
+            // D128: seccomp は現状「主張のみ・実装なし」だった —
+            // 親が `--seccomp` 引数を渡しても runner 側は何も適用せず、
+            // プロファイル JSON (`resources/seccomp/*.json`) も存在しない。
+            // 不信本文を無サンドボックスで処理するのは主張>実装の
+            // 最悪形なので、実装 (seccompiler/libseccomp + プロファイル)
+            // が揃うまではフェイルクローズする。
+            return Err(SubprocessError::SandboxUnavailable(
+                "Linux seccomp 隔離は未実装です (プロファイルと runner 側の適用が必要)".into(),
+            ));
         }
 
         #[cfg(target_os = "macos")]
@@ -259,12 +266,11 @@ impl LlmSubprocess {
 
         #[cfg(target_os = "windows")]
         {
-            // Windows: Job Object によるリソース制限
-            // ネットワーク制限は Windows Filtering Platform 経由
-            let mut cmd = Command::new(Self::runner_program("kaname-llm-runner.exe"));
-            cmd.arg("--mode").arg(format!("{:?}", mode).to_lowercase());
-            cmd.arg("--model").arg(model_path);
-            return Ok(cmd);
+            // D128: 「Job Object / WFP で制限」とコメントしていたが
+            // 実際には何も適用されていなかった — フェイルクローズする。
+            return Err(SubprocessError::SandboxUnavailable(
+                "Windows のサンドボックス隔離は未実装です (Job Object/WFP の適用が必要)".into(),
+            ));
         }
 
         #[allow(unreachable_code)]
@@ -552,6 +558,13 @@ pub enum SubprocessError {
     /// このプラットフォームではサンドボックス分離を提供できない。
     #[error("未対応のプラットフォーム")]
     UnsupportedPlatform,
+
+    /// サンドボックス機構が利用不能または未構成のため起動を拒否した。
+    /// 不信本文を処理するワーカーを「分離なし」で動かすことは
+    /// サンドボックスを主張していることより危険なため、
+    /// フェイルクローズする (D128)。
+    #[error("サンドボックス機構が利用できません: {0}")]
+    SandboxUnavailable(String),
 }
 
 // ============================================================================

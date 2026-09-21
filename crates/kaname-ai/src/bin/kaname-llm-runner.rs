@@ -34,7 +34,11 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     let mode = get("--mode").unwrap_or_else(|| "quarantined".into());
-    // --seccomp は受理するが適用は親側 (build_command) の責務
+    // D128: --seccomp 引数は受理するが、seccomp の適用は現状どこにも
+    // 実装されていない (親側は渡すだけ、ここも読み捨てるだけだった —
+    // 「適用は親側の責務」というコメントは相互に無責任なすれ違いだった)。
+    // Linux 側は実装が揃うまで build_command が SandboxUnavailable で
+    // フェイルクローズするため、この引数が届くことはない。
     let _seccomp = get("--seccomp");
 
     let config = match mode.as_str() {
