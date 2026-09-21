@@ -72,9 +72,9 @@
 | DLP バイパス (CW1226324) | N/A | N/A | ✗ 発生 | ✅ ラベル強制 |
 | AI生成フィッシング | ✗ 未対応 | ✗ 未対応 | ✗ 未対応 | ⚠ 決定論的検出のみ (LLM 未接続) |
 | BEC 多信号検出 | ✗ | ✗ | △ | ✅ 7信号 |
-| 量子コンピューター対策 | ✗ | △ (PQC研究中) | ✗ | 🔶 ML-KEM-768 (設計のみ・実装はモック) |
-| ローカル AI 推論 | ✗ (クラウド) | ✗ | ✗ (Copilot) | 🔶 Phi-4-mini (スタブ・固定応答) |
-| 件名暗号化 | ✗ 平文 | ✗ 平文 | ✗ 平文 | 🔶 MLS RFC 9420 (設計のみ・実装はモック) |
+| 量子コンピューター対策 | ✗ | △ (PQC研究中) | ✗ | 🔶 MLS X-Wing ハイブリッド (openmls 経由で鍵交換のみ実装) |
+| ローカル AI 推論 | ✗ (クラウド) | ✗ | ✗ (Copilot) | 🔶 Phi-4-mini (llama.cpp 実推論・モデル手動配置) |
+| 件名暗号化 | ✗ 平文 | ✗ 平文 | ✗ 平文 | 🔶 MLS RFC 9420 (openmls 実装・KP 添付往復) |
 
 ---
 
@@ -192,7 +192,7 @@ kaname/
 │   └── src/main.rs
 ├── crates/                 # Rust クレート (単方向依存)
 │   ├── kaname-core/        # 基礎型・UX機能
-│   ├── kaname-crypto/      # ML-KEM-768 + Ed25519 + X25519
+│   ├── kaname-crypto/      # 定数時間比較ユーティリティ (oobv 用)
 │   ├── kaname-store/       # SQLite + SQLCipher
 │   ├── kaname-render/      # MIME パーサー + HTML サンドボックス
 │   ├── kaname-ai/          # Dual-LLM 型安全 AI パイプライン
@@ -242,7 +242,7 @@ Kaname は arxiv の最新研究を継続的に反映している:
 | 出力監査 | kaname-screen `OutputAuditor` | 2505.22852 §2.2 |
 | ~~Tiered-Risk 制御~~ (呼出元ゼロのため D140 で削除) | — | 2505.22852 §3 |
 | メモリ汚染防御 | kaname-memory-guard | 2601.05504 |
-| X25519 出力検証 | kaname-crypto `validate_x25519_output` | eprint 2026/192 |
+| ~~X25519 出力検証~~ | ~~kaname-crypto `validate_x25519_output`~~ (D143 で削除 — 実暗号バックエンド不在の trait 面だった) | eprint 2026/192 |
 
 検証境界は [docs/verification-boundary.md](docs/verification-boundary.md) に明示。
 「形式検証済み」を盲信せず、独自 sanity check + KAT + microVM 分離で多層防御する。
