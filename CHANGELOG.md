@@ -75,6 +75,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - kaname-ai `threat_intel`: `MAX_CONTACTS = 10_000` を追加 (偽装 From フラッドで contacts マップが無制限に膨張するのを抑制) + `response_times`/`send_hours` を VecDeque 化して `interaction_unix_times` と同じ 10_000 上限を適用 (片方だけの上限ではもう片方が無制限だった)
 - 注記: 本モジュールは現在呼び出し元ゼロ (未配線) — 接続時は送信者数のスロットリングも検討
 
+### Security — D128: LLM サブプロセスの未適用サンドボックスをフェイルクローズ化
+
+- kaname-ai: Linux の seccomp 分離と Windows の Job Object 制限は**コメント上の主張のみで実装が存在しなかった** (runner は `--seccomp` を無視、プロファイル JSON も不存在) — `SandboxUnavailable` を新設し両 OS で spawn をフェイルクローズに変更。不信本文を無分離で処理するより「利用不可」が正しい。macOS の sandbox-exec は実適用を確認済み
+
 ### Added — D9 Phase 2 (部分): SSA 検出面の敵対的実測ハーネス
 
 - kaname-ssa に `calibration_tests` モジュール追加 — 「プロファイルを完全に知る攻撃者が各軸を最大乖離させる」31 軸サブセットを列挙し、閾値 0.40/0.60/0.75 の実際の検出面を回帰ガードとして固定
