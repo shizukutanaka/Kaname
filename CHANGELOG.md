@@ -158,6 +158,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - fix(kaname-jmap): 一覧取得で `hasAttachment` プロパティを要求・パースしていたが消費者ゼロ — プロパティとフィールドを削除 (D86)
 
 ### Fixed
+- **フォルダ一括解析がサブフォルダ内の .eml を全て未走査のまま完了表示していた問題を修正 (D149)**: 再帰走査 (深度8・5,000件上限、超過分は理由付きで一覧表出) に変更 — ネストしたエクスポート構造で大半が黙って抜けていた
+
 - **クローズ済み未マージ PR に置き去りになっていた修正群を救出** (取りこぼし第2回 — 履歴再構築により D76–D111 系の ~30 件が孤児化していた):
   - fix(kaname-store): 既読/ゴミ箱操作がローカル DB に反映されず再起動で巻き戻る欠陥を修正 — `mark_messages_read`/`mark_message_deleted` + upsert の `is_deleted=0` ガード (D77)
   - fix(kaname-store): サーバ側で消えたメールがローカルに永久残存する欠陥を修正 — `reconcile_mailbox` で tombstone 化し、一覧先頭ページの部分取得時のみ走査 (D80)
