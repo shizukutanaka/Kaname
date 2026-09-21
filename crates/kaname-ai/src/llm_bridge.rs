@@ -497,6 +497,9 @@ pub fn bec_score(
     body: &str,
     context: Option<&str>,
 ) -> (f32, String) {
+    if let Some(msg) = screen_bec_input(subject, body, context) {
+        return msg;
+    }
     let req = InferenceRequest {
         system_prompt: format!("{QUARANTINED_SYSTEM_PROMPT}\n{BEC_SCORE_INSTRUCTION}"),
         user_message: bec_user_message(subject, body, context),
@@ -515,7 +518,53 @@ pub fn bec_score(
         }
     };
 
-    parse_bec_output(&result.text)
+    audit_bec_output(&result.text).unwrap_or_else(|| parse_bec_output(&result.text))
+}
+
+/// D141: Q-LLM への入力は不信メール本文そのもの — 本文中の注入
+/// フレーズでスコアを誘導されないよう kaname-screen で事前検査する。
+/// `Blocked` なら推論を呼ばず `Some((0.0, 理由))` (Suspicious は
+/// 記録のみで通す — メール本文は往々に怪しい語を含むため過剰遮断しない)。
+fn screen_bec_input(subject: &str, body: &str, context: Option<&str>) -> Option<(f32, String)> {
+    let screened = format!("{subject}\n{body}\n{}", context.unwrap_or(""));
+    let result = kaname_screen::PromptScreener::new().screen(&screened);
+    match result.verdict {
+        kaname_screen::ScreenVerdict::Blocked => {
+            // 件数のみログ — 検出内容 (注入フレーズ) は攻撃者制御の
+            // 文字列を含みうるため PII として扱い本文は出さない (I5)。
+            tracing::warn!(
+                risks = result.risks.len(),
+                "BEC LLM 入力に注入兆候 — 推論スキップ (0 寄与)"
+            );
+            Some((
+                0.0,
+                "意味解析スキップ (入力スクリーニングで注入兆候を検出)".to_string(),
+            ))
+        }
+        kaname_screen::ScreenVerdict::Suspicious => {
+            tracing::debug!(
+                risks = result.risks.len(),
+                "BEC LLM 入力に注入兆候あり (通過)"
+            );
+            None
+        }
+        kaname_screen::ScreenVerdict::Clean => None,
+    }
+}
+
+/// D141: モデル出力の監査 — 「検証済み」等の判定詐称・外部送信先・
+/// 不可視文字注入を含む出力はスコア化せず `Some((0.0, 理由))`。
+fn audit_bec_output(text: &str) -> Option<(f32, String)> {
+    let audit = kaname_screen::OutputAuditor::new().audit(text);
+    if audit.safe_to_display {
+        None
+    } else {
+        tracing::warn!(
+            findings = audit.findings.len(),
+            "BEC LLM 出力が監査不合格 — 0 寄与にフォールバック"
+        );
+        Some((0.0, "意味解析出力が出力監査に不合格 — 0 寄与".to_string()))
+    }
 }
 
 /// `bec_score` と同じ意味解析を **Q-LLM サブプロセス**経由で呼ぶ (D121)。
@@ -544,6 +593,9 @@ pub fn bec_score_subprocess(
         temperature: 0.0,
     };
 
+    if let Some(msg) = screen_bec_input(subject, body, context) {
+        return msg;
+    }
     let resp = match sp.infer(&req) {
         Ok(r) => r,
         Err(e) => {
@@ -562,7 +614,7 @@ pub fn bec_score_subprocess(
         );
     }
 
-    parse_bec_output(&resp.text)
+    audit_bec_output(&resp.text).unwrap_or_else(|| parse_bec_output(&resp.text))
 }
 
 /// BEC スコアリング用の user メッセージを構築する。
