@@ -262,7 +262,7 @@ export function EmlImport() {
                 <For each={f().campaigns}>
                   {(c) => (
                     <div>
-                      ・共有インフラ: {c.shared_infrastructure}（{c.email_count} 通 / 脅威スコア {c.threat_score.toFixed(2)}）
+                      ・共通パターン: {c.shared_infrastructure}（{c.email_count} 通 / 脅威スコア {c.threat_score.toFixed(2)}）
                     </div>
                   )}
                 </For>

@@ -2627,14 +2627,6 @@ dependencies = [
 [[package]]
 name = "kaname-crypto"
 version = "0.7.1"
-dependencies = [
- "hkdf 0.12.4",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 1.0.69",
- "zeroize",
-]
 
 [[package]]
 name = "kaname-dlp"
