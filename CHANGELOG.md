@@ -66,6 +66,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `bec_score_subprocess` (kaname-ai) 追加 — `bec_score` と同じ切詰め・パース・フォールバックを共有。`LlmSubprocess::healthcheck` でモデルロード失敗の即終了を起動時に検出。モデル未配置時に spawn がモックプロセスに落ちる経路を `check_model` Ready ゲートで抑止
 - 実行ファイル隣接 → PATH の順でワーカーを解決。**配布物への同梱は未設定** — `externalBin` はバイナリ不在でビルドを失敗させるため登録見送り; リリース時に `src-tauri/binaries/kaname-llm-runner-<triple>` 配置 + `externalBin` 有効化が必要
 
+### Fixed — D126: MLS パート数の上限 (1通あたりの暗号演算 DoS)
+
+- kaname-render: `extract_parts_by_media_type` に `MAX_MATCHING_PARTS = 32` を追加 — 無制限だと 1 通のメールに詰めた MLS エンベロープ/KeyPackage パートがそれぞれ `process_incoming` (into_group 実暗号処理) / `validate_key_package` (署名検証) を無制限に呼べ、かつ `mls_slot` Mutex が全 MLS 操作をブロックした
+
 ### Added — D9 Phase 2 (部分): SSA 検出面の敵対的実測ハーネス
 
 - kaname-ssa に `calibration_tests` モジュール追加 — 「プロファイルを完全に知る攻撃者が各軸を最大乖離させる」31 軸サブセットを列挙し、閾値 0.40/0.60/0.75 の実際の検出面を回帰ガードとして固定

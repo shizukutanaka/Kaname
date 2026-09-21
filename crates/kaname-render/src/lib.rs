@@ -838,6 +838,40 @@ mod tests {
     }
 
     #[test]
+    fn extract_mls_envelopes_はパート数上限を強制する() {
+        // D126: 1 通のメールに同種 MLS パートを大量に詰めても、
+        // 収集は 32 個まで — 各エンベロープは実暗号処理
+        // (into_group/復号) を呼ぶため無制限は CPU DoS になる。
+        let mut raw = String::from(
+            "From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\n\
+             MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n",
+        );
+        for _ in 0..50 {
+            raw.push_str(
+                "--B\r\nContent-Type: application/mls-envelope+cbor\r\n\
+                 Content-Transfer-Encoding: base64\r\n\r\naGVsbG8tbWxz\r\n",
+            );
+        }
+        raw.push_str("--B--\r\n");
+        let found = extract_mls_envelopes(raw.as_bytes());
+        assert_eq!(found.len(), 32, "MLS パートは最大 32 個まで収集");
+        // KeyPackage パートも同じ上限を共有する
+        let mut raw2 = String::from(
+            "From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\n\
+             MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n",
+        );
+        for _ in 0..50 {
+            raw2.push_str(
+                "--B\r\nContent-Type: application/mls-key-package\r\n\
+                 Content-Transfer-Encoding: base64\r\n\r\na3AtYnl0ZXM=\r\n",
+            );
+        }
+        raw2.push_str("--B--\r\n");
+        let found2 = extract_mls_key_packages(raw2.as_bytes());
+        assert_eq!(found2.len(), 32, "KP パートも最大 32 個まで");
+    }
+
+    #[test]
     fn oversized_message_is_rejected() {
         let big = vec![b'A'; 101 * 1024 * 1024];
         assert!(parse(&big).is_err());
@@ -1335,12 +1369,21 @@ fn extract_parts_by_media_type(raw: &[u8], ctype: &str, subtype: &str) -> Vec<Ve
     let Some(msg) = MessageParser::default().parse(raw) else {
         return Vec::new();
     };
+    // 1 通のメールに収集する同種パート数の上限 (D126)。
+    // 各エンベロープは MLS の into_group / 復号という実暗号処理を呼び、
+    // 各 KeyPackage は TLS デシリアライズ + 署名検証を呼ぶため、
+    // 無制限だと 1 通のメールで大量の暗号演算を強制できる (CPU DoS)。
+    // 正規のメールで同種 MLS パートが 32 を超えることはない。
+    const MAX_MATCHING_PARTS: usize = 32;
     fn collect(
         part: &mail_parser::MessagePart<'_>,
         ctype: &str,
         subtype: &str,
         out: &mut Vec<Vec<u8>>,
     ) {
+        if out.len() >= MAX_MATCHING_PARTS {
+            return;
+        }
         let matched = part
             .content_type()
             .map(|ct| {
