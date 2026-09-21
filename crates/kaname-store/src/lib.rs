@@ -1,7 +1,7 @@
 //! kaname-store — SQLCipher 暗号化永続化層。
 //!
 //! - AES-256 で全データを暗号化
-//! - OS Keychain でデータベースキー保管
+//! - DB キーは `<data_dir>/kaname/history.key` の 0600 ファイルで保管 (OS Keychain/Secure Enclave 統合は未実装)
 //! - 監査ログのハッシュチェーン (SHA-256) で改ざん検出
 
 // crates/kaname-store/src/lib.rs
@@ -15,7 +15,7 @@
 //
 // 設計 (ADR-007):
 //   - SQLCipher パラメータ: PAGE_SIZE=4096, KDF_ITER=256000, HMAC=SHA512
-//   - DB キーは OS Keyring / Secure Enclave に保存 (ハンドルのみ保持)
+//   - DB キーは `history.key` (0600 ファイル) に保存 — OS Keyring/SE 統合は未実装 (D158)
 //   - マイグレーション: 追加のみ (破壊的変更は shadow table + copy + rename)
 //   - audit_log は BEFORE UPDATE/DELETE トリガーで不変
 

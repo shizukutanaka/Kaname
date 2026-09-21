@@ -39,6 +39,8 @@ We **out-of-scope**: threats from the operating system kernel being malicious (w
 
 ## 2. STRIDE — classical threat axes
 
+> **実装状況の凡例**: 下表の Control 列は実装済みの対策と設計意図 (未実装) が混在していた。実測と照合し、未実装の対策には *(設計意図・未実装)* を明示した (D158)。
+
 ### 2.1 Spoofing
 
 | Threat | Example | Control |
@@ -47,54 +49,54 @@ We **out-of-scope**: threats from the operating system kernel being malicious (w
 | Homoglyph domain | mitsui-g1obal.co.jp (l→1) | Punycode expansion + Levenshtein distance from user's contacts |
 | BEC (business email compromise) | Fake vendor requesting wire transfer | Multi-signal local LLM scoring; hard-block on score ≥ threshold |
 | DKIM/SPF/DMARC fail | Any of the three fails | UI red banner; AI pipeline refuses to summarize |
-| MLS identity spoofing | Attacker forges a Kaname identity | Identity keys in Secure Enclave; out-of-band verification UI for first-contact |
+| MLS identity spoofing | Attacker forges a Kaname identity | Out-of-band verification UI for first-contact + safety-number 照合 (D122 リプレイ帳簿)。署名鍵の実保管は `mls.db` (SQLCipher) + `<data_dir>/kaname/mls.key` の 0600 ファイル — Secure Enclave/Keychain 統合は**未実装** |
 
 ### 2.2 Tampering
 
 | Threat | Example | Control |
 |---|---|---|
-| MITM on transport | Downgraded TLS, stripped STARTTLS | MTA-STS + DANE/TLSA enforcement; no cleartext fallback |
+| MITM on transport | Downgraded TLS, stripped STARTTLS | JMAP クライアントは HTTPS/TLS のみ (cleartext fallback なし)。MTA-STS/DANE/TLSA の強制は受信経路ではなくサーバ側設定であり本クライアントの実装範囲外 *(設計意図・未実装)* |
 | In-transit body modification | Malicious relay mutates content | DKIM verification + (for Kaname-to-Kaname) MLS AEAD |
 | At-rest DB tampering | Attacker with disk access modifies SQLite | SQLCipher (bundled-sqlcipher; D75 で実効化。鍵は `<data_dir>/kaname/history.key` の 0600 ファイル — SE/Keychain 統合は未実装); tamper-evident hash chain over critical records |
-| Supply-chain code injection | Compromised dependency ships malware | SBOM, cargo-vet, reproducible builds, code signing, update channel with Ed25519+ML-DSA dual signatures |
+| Supply-chain code injection | Compromised dependency ships malware | `deny.toml` + release 時の `cargo audit`/`cargo-deny` (scripts/release.sh)。SBOM・cargo-vet・再現ビルド・Ed25519+ML-DSA 署名付き更新チャネルは *(設計意図・未実装)* |
 
 ### 2.3 Repudiation
 
 | Threat | Example | Control |
 |---|---|---|
 | Sender denies sending | Business dispute | For Kaname-to-Kaname: MLS authenticated sender; for classic mail: DKIM signature captured and archived |
-| Admin action denied | Admin denies having changed policy | All admin actions signed with admin passkey; hash-chain audit log |
-| Message tampering post-receipt | User claims they received something different | Immutable message archive with hash on receipt (per-message Merkle leaf, daily root published) |
+| Admin action denied | Admin denies having changed policy | 監査ログの SHA-256 ハッシュチェーンは実装済み (kaname-store、BEFORE UPDATE/DELETE トリガーで不変)。管理者機能・passkey 署名は存在しない *(未実装)* |
+| Message tampering post-receipt | User claims they received something different | 監査ログハッシュチェーンは実装済み。メッセージ単位の Merkle 葉/日次ルート公開は *(設計意図・未実装)* |
 
 ### 2.4 Information disclosure
 
 | Threat | Example | Control |
 |---|---|---|
-| Tracking pixel | Sender sees when you opened | KMPP relay pre-fetches all remote content; IP hidden; open-time randomized |
-| Metadata leak in headers | `X-Mailer`, internal hostnames, message-ID format | Kaname strips/normalizes headers on send |
+| Tracking pixel | Sender sees when you opened | kaname-privacy がトラッキングピクセルを検出し、iframe CSP `img-src cid:` で外部読み込みを遮断 (実装済み)。KMPP リレー事前フェッチ/IP 秘匿/開封時刻ランダム化は *(設計意図・未実装)* |
+| Metadata leak in headers | `X-Mailer`, internal hostnames, message-ID format | 送信メッセージは RFC 5322 で最小構成 (D94) — X-Mailer 等は付与しない。既存ヘッダの「除去/正規化」機能は *(未実装)* |
 | Search index leakage | Cloud indexing reveals content | Index is local-only; no cloud search telemetry |
 | HNDL (Harvest Now, Decrypt Later) | Attacker records TLS now, decrypts in 15 years | Hybrid PQC (ML-KEM-768 + X25519) from day 1 |
-| Memory-scraping malware on device | Endpoint is already compromised | Defense in depth only; document that keys in SE aren't readable by user-mode malware |
-| Misdelivery | User sends to wrong recipient | Large-blast-radius detection: warn before sending to >N external addresses; send-undo window; DLP pattern scan |
-| Forensics by device seizure | Corporate IT or adversary acquires device | Full-disk encryption relied upon; we add app-level encrypted-at-rest; remote wipe via MDM integration |
+| Memory-scraping malware on device | Endpoint is already compromised | 鍵は 0600 ファイル/DB (SQLCipher) に保管、トークンは Zeroizing メモリのみ — SE 非対応のためユーザーモードマルウェアには残存リスク |
+| Misdelivery | User sends to wrong recipient | 送信前 DLP プリチェック (mail_dlp_precheck: タイポドメイン誤配/機微情報) は実装済み。大量外部宛警告・送信取消ウィンドウは *(設計意図・未実装)* |
+| Forensics by device seizure | Corporate IT or adversary acquires device | アプリレベル暗号化 (SQLCipher history.db/mls.db) は実装済み。MDM リモートワイプは *(設計意図・未実装)* |
 
 ### 2.5 Denial of service
 
 | Threat | Example | Control |
 |---|---|---|
-| Attachment ZIP bomb | Recursive archive explodes on decompress | Extraction runs in Firecracker VM with strict size and depth caps; VM is destroyed on overrun |
-| Regex DoS in filter rules | User Sieve script triggers worst-case regex | Sieve executor uses RE2-class engine (no backtracking); per-rule CPU budget |
+| Attachment ZIP bomb | Recursive archive explodes on decompress | アプリは添付を展開しない (検査後にディスク保存のみ)。展開系の分離 VM は *(設計意図・未実装)* — 展開を実装するなら別経路で再検討要 |
+| Regex DoS in filter rules | User Sieve script triggers worst-case regex | Sieve エンジン/ユーザールールは存在しない *(未実装 — 実装時は RE2 系エンジン必須)* |
 | MIME parse bomb | Pathological MIME tree | Parser has depth cap (8) and field count cap (256); fuzz-tested |
-| Mailbox flood | Attacker sends 1M messages | Rate limiting on inbound SMTP; mailbox quota; priority queue |
-| Font/image parser exploit causing crash | Crafted ttf/png | Rendering in WASM or Firecracker VM; host process unaffected by crashes |
+| Mailbox flood | Attacker sends 1M messages | 受信側レート制限/クォータは JMAP サーバ側の責務。クライアント側の対策 (一覧の 500 件上限・オフライン cap) のみ実装 |
+| Font/image parser exploit causing crash | Crafted ttf/png | フォント/画像は WebView (iframe sandbox + CSP) が描画。WASM/Firecracker VM 分離は *(設計意図・未実装)* — WebView プロセスのクラッシュは残存リスク |
 
 ### 2.6 Elevation of privilege
 
 | Threat | Example | Control |
 |---|---|---|
-| HTML/CSS renderer escape | CVE in WebView | Content renders in isolated process with seccomp profile; does not have access to user data |
-| Attachment viewer RCE | 0-day in PDF/Office viewer | Viewer runs in Firecracker VM, no host access, no network; output is a rendered image |
-| Sandbox escape to host | Firecracker CVE | Accept as residual risk; patching cadence + defense in depth (SE-held keys still safe) |
+| HTML/CSS renderer escape | CVE in WebView | 本文は sandboxed `iframe` (no scripts/forms/popups 許可なし + CSP `default-src 'none'` + iframe `csp` 属性二重適用) で描画。アプリ側が別プロセス分離/seccomp を張る実装は**無い** — 隔離は sandbox 属性と CSP に依存する (WebView 自体の脆弱性は残存リスクとして別項で扱う) |
+| Attachment viewer RCE | 0-day in PDF/Office viewer | アプリ内ビューアは存在しない — 添付はマジックバイト/SVG/polyglot/.ics 検査を通してディスクに保存し、OS の外部アプリで開く (kaname-render scan)。分離 VM ビューアは**未実装**であり「安全に開ける」保証はない |
+| Sandbox escape to host | WebView/iframe サンドボックスの CVE | Accept as residual risk; patching cadence + defense in depth (iframe sandbox + CSP の多層防御) |
 | Local privilege escalation to steal SE key | Malicious user-mode app | SE access requires biometric + app entitlement; OS provides the actual barrier |
 | Admin-token theft | Session token stolen, admin actions taken | Admin actions require passkey re-auth (not cached); short-lived token; IP anomaly detection |
 
@@ -254,7 +256,7 @@ Ranked by `likelihood × impact`:
 4. **Mis-configured customer deployment exposing admin console** — likelihood medium, impact high
 5. **Cryptographic library CVE in ring/openmls** — likelihood low, impact high
 6. **Supply chain compromise of a Cargo dep** — likelihood low, impact high
-7. **User lost Secure Enclave device, no recovery path** — likelihood medium, impact medium (data loss, not disclosure)
+7. **User loses device / key files (`history.key`/`mls.key`), no recovery path** — likelihood medium, impact medium (data loss, not disclosure)。現状鍵は 0600 ファイルであり SE ではない (復旧経路の設計は未着手)
 8. **LLM model file compromised in distribution** — likelihood low, impact medium
 9. **Apple/Microsoft OS CVE affecting webview** — likelihood medium, impact medium
 10. **Legal subpoena / CLOUD Act against Kaname servers** — likelihood medium, impact high **for content** is low (server holds encrypted blobs only for Kaname-to-Kaname), medium for metadata (we minimize but don't eliminate)

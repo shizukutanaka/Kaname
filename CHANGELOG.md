@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs — D158: threat-model/store 文書の未実装対策記述を実態に修正
+
+- STRIDE 対策表の「Secure Enclave 鍵保管」「seccomp 分離プロセス」「Firecracker VM」等の未実装対策に *(設計意図・未実装)* を明示。kaname-store 文書の「OS Keychain」「FNV-1a」記述を 0600 鍵ファイル/SHA-256 に修正
+
 ### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
 
 - HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正
