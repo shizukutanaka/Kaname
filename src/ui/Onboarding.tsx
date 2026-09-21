@@ -17,13 +17,11 @@ import { invoke } from "@tauri-apps/api/core";
 
 // ── 型定義 ───────────────────────────────────────────────────────────────
 
-type Step = "welcome" | "principles" | "permissions" | "first_email" | "ready";
+type Step = "welcome" | "principles" | "first_email" | "ready";
 
 interface OnboardingState {
   step: Step;
   emailConsent:        boolean;
-  telemetryOptIn:      boolean;
-  notificationsAllowed: boolean;
 }
 
 // ── オンボーディングコンポーネント ───────────────────────────────────────────
@@ -32,8 +30,6 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
   const [state, setState] = createSignal<OnboardingState>({
     step: "welcome",
     emailConsent: false,
-    telemetryOptIn: false,
-    notificationsAllowed: false,
   });
 
   const next = (step: Step) =>
@@ -114,55 +110,14 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
             メールの解析・履歴・監査証跡はすべてこのデバイスの
             ローカル DB (SQLCipher 暗号化) に保存され、
             Kaname が運営するサーバーは存在しません。
+            Kaname ユーザー同士の会話では、メール本文は
+            MLS (RFC 9420) でエンドツーエンド暗号化されます。
           </p>
-          {/* 2026-09 修正: 以前は「メールは MLS RFC 9420 で暗号化されます。
-              件名も含めて」と表示していたが、MLS は未実装 (D1、XOR モック) で
-              メールサーバ上の本文は平文 — セキュリティ製品の虚偽広告だった。
-              MLS 実装時に git 履歴から復元する。 */}
         </div>
       </div>
 
       <div class="k-step-controls">
         <button class="k-btn-text" onClick={() => next("welcome")}>戻る</button>
-        <button class="k-btn-primary" onClick={() => next("permissions")}>
-          続ける
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── Step 3: PERMISSIONS ─────────────────────────────────────────
-  // すべて明示的、すべてオプトイン
-
-  const Permissions = () => (
-    <div class="k-onboard-step">
-      <h2>権限を設定する</h2>
-      <p class="k-subtitle">
-        いずれも後で変更できます。すべてオプトインです。
-      </p>
-
-      <PermissionToggle
-        title="通知を表示する"
-        description="新着メールと BEC 警告のシステム通知"
-        checked={state().notificationsAllowed}
-        onChange={v => setState(s => ({ ...s, notificationsAllowed: v }))}
-        recommended={true}
-      />
-
-      {/* 2026-09 削除: "Continuity (Handoff)" トグルは kaname-continuity
-          クレート自体が削除済みのため、機能しない機能を約束する虚偽 UI
-          だった。復元は git 履歴から。 */}
-      <PermissionToggle
-        title="匿名利用統計を送信"
-        description="クラッシュレポートと匿名のクリック数のみ。メール本文は絶対に送りません"
-        checked={state().telemetryOptIn}
-        onChange={v => setState(s => ({ ...s, telemetryOptIn: v }))}
-        recommended={false}
-        privacyNote="送信されるデータは https://kaname.app/privacy/telemetry で確認できます"
-      />
-
-      <div class="k-step-controls">
-        <button class="k-btn-text" onClick={() => next("principles")}>戻る</button>
         <button class="k-btn-primary" onClick={() => next("first_email")}>
           続ける
         </button>
@@ -170,7 +125,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     </div>
   );
 
-  // ── Step 4: FIRST EMAIL ─────────────────────────────────────────
+  // ── Step 3: FIRST EMAIL ─────────────────────────────────────────
   // **重要**: 終わった瞬間にユーザーは価値を得ている
   // BEC 攻撃メールのデモを**実際の解析エンジンで**解析して見せる
 
@@ -260,7 +215,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
         </p>
 
         <div class="k-step-controls">
-          <button class="k-btn-text" onClick={() => next("permissions")}>戻る</button>
+          <button class="k-btn-text" onClick={() => next("principles")}>戻る</button>
           <button class="k-btn-primary" onClick={() => next("ready")}>
             理解しました
           </button>
@@ -279,10 +234,7 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
     // 同期コンポーネント契約に違反する — 従来は @ts-ignore で
     // この型エラーを隠していたが、根本原因はこの async 構造だった)。
     onMount(() => {
-      invoke("settings_save_onboarding", {
-        notifications: state().notificationsAllowed,
-        telemetry:     state().telemetryOptIn,
-      }).catch(() => {
+      invoke("settings_save_onboarding").catch(() => {
         // オンボーディング設定保存の失敗は致命的ではないため無視して続行するが、
         // 完全に沈黙させず開発時に気付けるようログだけ残す。
         console.warn("[Onboarding] settings_save_onboarding failed");
@@ -441,14 +393,12 @@ export const Onboarding: Component<{ onComplete: () => void }> = (props) => {
       <div class="k-onboarding-progress">
         <ProgressDot active={state().step === "welcome"} />
         <ProgressDot active={state().step === "principles"} />
-        <ProgressDot active={state().step === "permissions"} />
         <ProgressDot active={state().step === "first_email"} />
         <ProgressDot active={state().step === "ready"} />
       </div>
 
       <Show when={state().step === "welcome"}>     <Welcome /> </Show>
       <Show when={state().step === "principles"}>  <Principles /> </Show>
-      <Show when={state().step === "permissions"}> <Permissions /> </Show>
       <Show when={state().step === "first_email"}> <FirstEmail /> </Show>
       <Show when={state().step === "ready"}>
         <Ready />
@@ -464,38 +414,6 @@ const Pillar: Component<{ emoji: string; title: string; desc: string }> = (p) =>
     <div class="k-pillar-emoji">{p.emoji}</div>
     <div class="k-pillar-title">{p.title}</div>
     <div class="k-pillar-desc">{p.desc}</div>
-  </div>
-);
-
-const PermissionToggle: Component<{
-  title: string;
-  description: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  recommended: boolean;
-  privacyNote?: string;
-}> = (p) => (
-  <div class="k-permission-row">
-    <div class="k-permission-content">
-      <div class="k-permission-title">
-        {p.title}
-        <Show when={p.recommended}>
-          <span class="k-recommended-badge">推奨</span>
-        </Show>
-      </div>
-      <div class="k-permission-desc">{p.description}</div>
-      <Show when={p.privacyNote}>
-        <div class="k-privacy-note">🔒 {p.privacyNote}</div>
-      </Show>
-    </div>
-    <label class="k-toggle">
-      <input
-        type="checkbox"
-        checked={p.checked}
-        onChange={(e) => p.onChange(e.currentTarget.checked)}
-      />
-      <span class="k-toggle-slider"></span>
-    </label>
   </div>
 );
 

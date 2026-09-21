@@ -3801,27 +3801,21 @@ pub async fn security_audit_log(limit: Option<i64>) -> Result<AuditLogView, Stri
     })
 }
 
-/// オンボーディングで選んだ設定を保存する。
+/// オンボーディング完了を記録する。
 ///
 /// 以前は `not_wired` を返すスタブで、そのために Onboarding 画面は
 /// 意図的に未到達にしていた (D22)。`settings` テーブルに保存する。
 /// アカウント接続前でも動くよう account_id は固定の "local" を使う。
-pub async fn settings_save_onboarding(notifications: bool, telemetry: bool) -> Result<(), String> {
+pub async fn settings_save_onboarding() -> Result<(), String> {
     let store = store_slot()
         .lock()
         .await
         .clone()
         .ok_or_else(|| "履歴データベースが開かれていません".to_string())?;
-    for (k, v) in [
-        ("notifications", notifications),
-        ("telemetry", telemetry),
-        ("onboarding_done", true),
-    ] {
-        store
-            .set_setting("local", k, if v { "true" } else { "false" })
-            .await
-            .map_err(|e| format!("設定の保存に失敗しました: {e}"))?;
-    }
+    store
+        .set_setting("local", "onboarding_done", "true")
+        .await
+        .map_err(|e| format!("設定の保存に失敗しました: {e}"))?;
     Ok(())
 }
 
