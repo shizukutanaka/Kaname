@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed — D157: kaname-pivot の呼出元ゼロだった信頼スコア層を削除
+
+- `PivotHistory`・`trust_score`・`trust_score_with_bec_context` は設計上「既知チャネル加点 + BEC 複合減点」の評価層だったが外部呼出元が皆無 — 実利用は `analyze`/`is_high_risk`/`channel_name` のみ。dead 層ごと削除
+
 ### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
 
 - HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正

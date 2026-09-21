@@ -707,9 +707,7 @@ impl BecDetector {
         // kaname-pivot による構造化チャネル誘導検出。
         // 上記の channel_migration_phrases はフレーズ表現 (URL なし) の
         // 補完として残し、実際のチャットアプリリンク/暗号通貨アドレス/電話番号は
-        // kaname-pivot::PivotDetector で精密に検出する。両者は
-        // kaname-pivot 側の doc コメント (lib.rs §「複合信頼スコア」) が
-        // 指摘していた通り本来連携すべきもの。高リスク pivot
+        // kaname-pivot::PivotDetector で精密に検出する。高リスク pivot
         // (crypto wallet / WhatsApp / Telegram / Signal / 緊急性を伴う電話) を
         // Content シグナルとして 1 件だけ加点する (重複カウント防止)。
         let pivots = kaname_pivot::PivotDetector::new().analyze(req.body_text);
