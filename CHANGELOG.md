@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed — D142: 基盤不在の防衛モジュールを削除 (約1,000行)
+
+- kaname-screen: `ArgumentValidator` (ツール引数の宛先すり替え検出)・`RateLimiter` (トークンバケット) — 製品にツール呼出し経路がなく呼出元ゼロ
+- kaname-memory-guard: `TrustScorer`/`MemorySanitizer`/`MemoryEntry`/`MemorySource` — エージェントメモリ基盤が存在せず呼出元ゼロ。残存は `normalize_for_matching*` のみ
+- kaname-pivot: `PivotHistory`/`trust_score`/`trust_score_with_bec_context` — bec は `analyze()` のみ使用
+- docs: owasp-agentic-mapping の ASI-02/03/04/05/07/09/10 行を ⚠️ に正直化、README/CLAUDE.md のメモリ汚染防御行を更新
+
 ### Removed — D139: kaname-ai::threat_intel モジュールを削除
 
 - 呼出元ゼロの dead 設計シーム (AiPhishingDetector・AiAccessController・ContactIntelligenceEngine・ActionExtractor、1482行) を削除 — 出荷機能 (kaname-store contacts/audit_log、kaname-bec) と重複し誤読の温床だった
