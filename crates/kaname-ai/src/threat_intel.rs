@@ -604,8 +604,10 @@ struct ContactStats {
     /// 「直近30日以内」を実時刻と比較して算出する。
     /// 無制限増加を防ぐため上限 (`MAX_TRACKED_INTERACTIONS`) でキャップする。
     interaction_unix_times: std::collections::VecDeque<u64>,
-    response_times: Vec<u32>, // 分単位
-    send_hours: Vec<u8>,
+    // D127: `interaction_unix_times` と同じ上限を兄弟フィールドにも
+    // 適用 — 片方だけの上限ではもう片方が無制限に膨張する
+    response_times: std::collections::VecDeque<u32>, // 分単位
+    send_hours: std::collections::VecDeque<u8>,
     last_interaction: Option<String>,
     has_mls: bool,
     domain: String,
@@ -614,6 +616,11 @@ struct ContactStats {
 /// コンタクトごとに保持するタイムスタンプ履歴の上限。
 /// これを超えると古いものから破棄する (DoS/メモリ増大防止)。
 const MAX_TRACKED_INTERACTIONS: usize = 10_000;
+
+/// 追跡するコンタクト (メールアドレス) の総数の上限 (D127)。
+/// 送信者アドレスは攻撃者が無制限に偽装できるため、上限なしだと
+/// 偽装 From フラッドで contacts マップが無制限に膨張する。
+const MAX_CONTACTS: usize = 10_000;
 
 /// 直近判定の窓 (30 日) を秒に換算。
 const RECENT_WINDOW_SECS: u64 = 30 * 24 * 60 * 60;
@@ -637,6 +644,11 @@ impl ContactIntelligenceEngine {
         has_mls: bool,
     ) {
         let domain = email_addr.split('@').nth(1).unwrap_or("").to_owned();
+        // D127: 上限到達後は新規コンタクトを追跡しない
+        // (偽装 From フラッドによるメモリ DoS 対策)
+        if !self.contacts.contains_key(email_addr) && self.contacts.len() >= MAX_CONTACTS {
+            return;
+        }
         let stats = self
             .contacts
             .entry(email_addr.to_owned())
@@ -662,13 +674,19 @@ impl ContactIntelligenceEngine {
         stats.last_interaction = Some(timestamp_iso.to_owned());
 
         if let Some(mins) = response_to_minutes {
-            stats.response_times.push(mins);
+            stats.response_times.push_back(mins);
+            if stats.response_times.len() > MAX_TRACKED_INTERACTIONS {
+                stats.response_times.pop_front();
+            }
         }
 
         // 時間帯の記録 (ISO タイムスタンプから時を抽出)
         if let Some(hour_str) = timestamp_iso.get(11..13) {
             if let Ok(hour) = hour_str.parse::<u8>() {
-                stats.send_hours.push(hour);
+                stats.send_hours.push_back(hour);
+                if stats.send_hours.len() > MAX_TRACKED_INTERACTIONS {
+                    stats.send_hours.pop_front();
+                }
             }
         }
 
