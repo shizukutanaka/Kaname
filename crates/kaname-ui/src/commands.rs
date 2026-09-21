@@ -3059,6 +3059,22 @@ async fn send_mail_core(
         .await
         .map_err(|e| format!("送信に失敗しました: {e}"))?;
 
+    // 送信済み宛先を連絡先履歴に記録 — DLP のタイポドメイン誤配検出は
+    // `known_recipient_domains` (contacts 由来) にのみ効くため、受信した
+    // ことのない相手への送信では検査が構造的に不発だった (D153)。
+    // `record_correspondent` は message_count を増やさないため BEC の
+    // 「初回連絡」シグナルの意味論を変えない。失敗は送信を止めない。
+    if let Some(store) = store_slot().lock().await.clone() {
+        for addr in to {
+            let Some(email) = bare_addr(addr) else {
+                continue;
+            };
+            if let Err(e) = store.record_correspondent(client.account_id(), email).await {
+                tracing::warn!(error=%e, "送信先の連絡先記録に失敗");
+            }
+        }
+    }
+
     // 実際に送信が行われた出口イベント (件名・本文・宛先アドレスは書かない)。
     audit_event(
         Some(client.account_id()),
@@ -4030,6 +4046,16 @@ async fn lookup_contacts(account_id: &str) -> Vec<String> {
         tracing::warn!(error=%e, "連絡先一覧の取得に失敗");
         Vec::new()
     })
+}
+
+/// 連絡先エントリから裸のアドレス部分を取り出す。
+/// `"表示名" <email>` → `email`、裸の `email` → そのまま。`@` が無ければ None。
+fn bare_addr(contact: &str) -> Option<&str> {
+    let addr = match contact.rfind('<') {
+        Some(i) => contact[i + 1..].trim_end_matches('>').trim(),
+        None => contact.trim(),
+    };
+    (addr.contains('@') && !addr.is_empty()).then_some(addr)
 }
 
 /// 連絡先エントリ (`"表示名" <email>` または裸の `email`) からドメインを抽出する。

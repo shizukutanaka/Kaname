@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D153: 送信したことのある相手のドメインが DLP 誤配検出の既知宛先に供給されなかった問題を修正
+
+- タイポドメイン誤配検出の `known_recipient_domains` は受信履歴 (contacts) にしか載らず、送信のみ行う取引先へのタイポ宛送信が検査されなかった — `Store::record_correspondent` (BEC の受信件数を歪めない upsert) を新設し送信成功後に記録するよう修正
+
 ### Fixed — D148: MLS 復号本文が全検出器を素通りしていた問題を修正
 
 - `analyze_raw_email` は復号後も外側の固定カバー文を採点していたため、E2E 暗号メールの内容が BEC・文体認証・DLP・OOBV・リンク評価を一切通らなかった — 復号・`subject\x00body` 分割を解析の前に移動し、解析対象本文と表示件名を内側ペイロードに差し替え (認証・差出人は外側ヘッダ由来の配送層属性として維持)

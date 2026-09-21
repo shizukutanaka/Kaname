@@ -799,6 +799,47 @@ impl Store {
         Ok(())
     }
 
+    /// 送信済み宛先を連絡先として記録する (受信しない相手のドメインも
+    /// `known_recipient_domains` に供給するため — D153)。
+    ///
+    /// `record_received` との違い: `message_count` を増やさない。
+    /// 送信先は「初回連絡」検出の母数ではないため、送信件数で
+    /// BEC の履歴シグナルを水増ししない。
+    ///
+    /// - 初回送信: 新規レコードを INSERT (message_count = 0)
+    /// - 既知: `last_seen_at` のみ更新
+    ///
+    /// # Errors
+    /// `email` がバリデーション (320 文字・NULL バイト等) に違反する場合。
+    pub async fn record_correspondent(
+        &self,
+        account_id: &str,
+        email: &str,
+    ) -> Result<(), StoreError> {
+        validate_text_field(account_id, "account_id", 256)?;
+        validate_text_field(email, "email", 320)?;
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
+        Self::ensure_account_sync(&conn, account_id)?;
+
+        let id = sha256_hex(format!("{account_id}:{email}").as_bytes());
+        conn.execute(
+            "INSERT INTO contacts \
+                (id, account_id, email, first_seen_at, last_seen_at) \
+             VALUES (?1, ?2, ?3, \
+                     strftime('%Y-%m-%dT%H:%M:%SZ','now'), \
+                     strftime('%Y-%m-%dT%H:%M:%SZ','now')) \
+             ON CONFLICT (account_id, email) DO UPDATE SET \
+                last_seen_at = strftime('%Y-%m-%dT%H:%M:%SZ','now');",
+            params![id, account_id, email],
+        )
+        .map_err(|e| StoreError::Db(e.to_string()))?;
+        Ok(())
+    }
+
     /// 送信者を「検証済み」としてマークする。
     ///
     /// BEC リスクスコアを `-0.20` 押し下げる `user_verified` フラグを設定。
@@ -1298,6 +1339,92 @@ mod tests {
         assert!(
             matches!(result, Err(StoreError::InvalidInput { field: "email", .. })),
             "NULL バイトを含むメールアドレスは拒否されるべき: {result:?}"
+        );
+    }
+
+    /// D153: 送信先の記録は contacts に載る (known_recipient_domains の
+    /// 供給源) が、`message_count` を増やさない — BEC の「初回連絡」
+    /// シグナルを送信件数で水増ししないことを固定する。
+    #[tokio::test]
+    async fn record_correspondent_は連絡先に載るがmessage_countを増やさない() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        // 送信済み宛先が連絡先一覧に出る (DLP タイポドメイン検出の供給)
+        store
+            .record_correspondent("acct1", "partner@acme-corp.com")
+            .await
+            .unwrap();
+        let contacts = store.list_contacts("acct1").await.unwrap();
+        assert!(
+            contacts.iter().any(|c| c.contains("partner@acme-corp.com")),
+            "送信先は連絡先一覧に含まれるべき: {contacts:?}"
+        );
+
+        // message_count は増えない — BEC の初回連絡シグナルを歪めない
+        let profile = store
+            .get_sender_profile("acct1", "partner@acme-corp.com")
+            .await
+            .unwrap()
+            .expect("送信先のプロフィールが作られるべき");
+        assert_eq!(
+            profile.message_count, 0,
+            "送信側記録は message_count を増やしてはいけない"
+        );
+        assert!(!profile.user_verified);
+
+        // 重複送信で重複行が作られない (冪等 upsert)
+        store
+            .record_correspondent("acct1", "partner@acme-corp.com")
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .list_contacts("acct1")
+                .await
+                .unwrap()
+                .iter()
+                .filter(|c| c.contains("partner@acme-corp.com"))
+                .count(),
+            1
+        );
+    }
+
+    /// D153: record_correspondent → 受信 → プロフィールの流れで
+    /// 受信側の件数カウントが従来通り動くこと (統合)。
+    #[tokio::test]
+    async fn record_correspondent_後の受信は従来通りカウントする() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("test.db"), &"A".repeat(64))
+            .await
+            .unwrap();
+        store.migrate().await.unwrap();
+        seed_account(&store, "acct1").await;
+
+        store
+            .record_correspondent("acct1", "them@corp.com")
+            .await
+            .unwrap();
+        store
+            .record_received("acct1", "them@corp.com", Some("Them"), None)
+            .await
+            .unwrap();
+        let p = store
+            .get_sender_profile("acct1", "them@corp.com")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(p.message_count, 1);
+        let contacts = store.list_contacts("acct1").await.unwrap();
+        assert!(
+            contacts
+                .iter()
+                .any(|c| c.contains("them@corp.com") && c.contains("Them")),
+            "受信後は display_name が反映されるべき: {contacts:?}"
         );
     }
 
