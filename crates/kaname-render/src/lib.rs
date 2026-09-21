@@ -872,6 +872,33 @@ mod tests {
     }
 
     #[test]
+    fn extract_mls_envelopes_は入れ子深度で打ち切る() {
+        // D130: message/rfc822 を極端に深く入れ子にしたメールでも
+        // 再帰深度 16 で打ち切り、スタックを使い切らない。
+        // 浅い層 (depth 1) のパートは正常に抽出される。
+        let inner_env = "Content-Type: application/mls-envelope+cbor\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\naGVsbG8tbWxz\r\n";
+        // 100 段の message/rfc822 を構築 (最深部に MLS パートを入れる)
+        let mut deep =
+            format!("From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\n\r\n{inner_env}");
+        for _ in 0..100 {
+            deep = format!("From: a@kaname.app\r\nContent-Type: message/rfc822\r\n\r\n{deep}");
+        }
+        let raw = format!(
+            "From: a@kaname.app\r\nTo: b@kaname.app\r\nSubject: x\r\n\
+             MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\n\
+             --B\r\nContent-Type: application/mls-envelope+cbor\r\n\
+             Content-Transfer-Encoding: base64\r\n\r\nc2hhbGxvdw==\r\n\
+             --B\r\nContent-Type: message/rfc822\r\n\r\n{deep}\r\n--B--\r\n"
+        );
+        let found = extract_mls_envelopes(raw.as_bytes());
+        // 浅い層のエンベロープは取れるが、深度 16 を超える内部の
+        // エンベロープは収集されない (かつクラッシュしない)
+        assert!(found.contains(&b"shallow".to_vec()));
+        assert!(!found.contains(&b"hello-mls".to_vec()));
+    }
+
+    #[test]
     fn oversized_message_is_rejected() {
         let big = vec![b'A'; 101 * 1024 * 1024];
         assert!(parse(&big).is_err());
@@ -1375,13 +1402,18 @@ fn extract_parts_by_media_type(raw: &[u8], ctype: &str, subtype: &str) -> Vec<Ve
     // 無制限だと 1 通のメールで大量の暗号演算を強制できる (CPU DoS)。
     // 正規のメールで同種 MLS パートが 32 を超えることはない。
     const MAX_MATCHING_PARTS: usize = 32;
+    // message/rfc822 の入れ子深度の上限 — パーサ自体の制限に依存せず
+    // 自前で再帰深度を止めておかないと、極端に深い入れ子メールで
+    // スタックを使い切り得る (D130)。正規の転送入れ子は数段まで。
+    const MAX_NESTED_DEPTH: usize = 16;
     fn collect(
         part: &mail_parser::MessagePart<'_>,
         ctype: &str,
         subtype: &str,
         out: &mut Vec<Vec<u8>>,
+        depth: usize,
     ) {
-        if out.len() >= MAX_MATCHING_PARTS {
+        if out.len() >= MAX_MATCHING_PARTS || depth > MAX_NESTED_DEPTH {
             return;
         }
         let matched = part
@@ -1398,13 +1430,13 @@ fn extract_parts_by_media_type(raw: &[u8], ctype: &str, subtype: &str) -> Vec<Ve
         }
         if let mail_parser::PartType::Message(sub) = &part.body {
             for p in &sub.parts {
-                collect(p, ctype, subtype, out);
+                collect(p, ctype, subtype, out, depth + 1);
             }
         }
     }
     let mut out = Vec::new();
     for part in &msg.parts {
-        collect(part, ctype, subtype, &mut out);
+        collect(part, ctype, subtype, &mut out, 0);
     }
     out
 }
