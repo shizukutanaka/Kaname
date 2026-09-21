@@ -3498,8 +3498,22 @@ fn bec_llm_score(subject: &str, body: &str, context: Option<&str>) -> kaname_bec
     let sp = llm_slot().lock().unwrap_or_else(|e| e.into_inner()).clone();
     match sp {
         Some(sp) => {
-            let (probability, explanation) =
-                kaname_ai::llm_bridge::bec_score_subprocess(&sp, subject, body, context);
+            // D147: 不信メールデータは `Content<Untrusted>` で LLM 境界に
+            // 入る — llm_bridge の入口が `&str` のままだと D17 が警告した
+            // 「型を迂回する最短経路」になるため、ここで provenance 付きに包む。
+            // BEC の LocalLlm trait は汎用の &str を運ぶため、型付けは
+            // kaname-ai の入口でのみ強制される (provenance id は
+            // パイプライン経路のラベル — 実 email_id はここでは持たない)。
+            let subject_u = kaname_ai::dual_llm::Content::from_network(subject, "mail_pipeline");
+            let body_u = kaname_ai::dual_llm::Content::from_network(body, "mail_pipeline");
+            let context_u =
+                context.map(|c| kaname_ai::dual_llm::Content::from_network(c, "mail_pipeline"));
+            let (probability, explanation) = kaname_ai::llm_bridge::bec_score_subprocess(
+                &sp,
+                &subject_u,
+                &body_u,
+                context_u.as_ref(),
+            );
             kaname_bec::LlmScore {
                 probability,
                 explanation,
