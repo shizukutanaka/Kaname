@@ -4088,6 +4088,15 @@ async fn evaluate_sender_style(
     let style_key = format!("style_profile:{sender}");
 
     let mut profiles = style_profiles().lock().await;
+    // D125: 新規送信者プロファイル数の上限。送信者アドレスは攻撃者が
+    // 無制限に偽装できるため、上限なしだとメモリと settings 行が
+    // フラッドで膨張する。上限到達後は新規 sender を学習しない
+    // (警告は出せないが、学習データ不足と同じ安全側の挙動)。
+    const MAX_STYLE_PROFILES: usize = 10_000;
+    if !profiles.contains_key(sender) && profiles.len() >= MAX_STYLE_PROFILES {
+        tracing::warn!("文体プロファイル数が上限に達したため新規送信者を学習しません");
+        return Vec::new();
+    }
     if let std::collections::hash_map::Entry::Vacant(e) = profiles.entry(sender.to_string()) {
         let loaded = match &store {
             Some(s) => s

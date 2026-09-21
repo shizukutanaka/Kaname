@@ -72,6 +72,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `consume` が全消費後に空エントリを残して枠を占有し続ける自己 DoS を修正 (空エントリは除去し新規アドレスに解放)
 
 
+### Fixed — D125: 攻撃者制御コレクションの無制限成長 (MLS 会話 + 文体プロファイル)
+
+- kaname-mls: `MAX_CONVERSATIONS = 1000` を追加 — 公開 KP を持つ攻撃者の Welcome 量産で `conversations`/`seen_welcomes`/永続行が無制限に膨張し得た。Welcome・ExternalJoin・`start_one_to_one` の3経路で `TooManyConversations` を返す
+- kaname-ui: `MAX_STYLE_PROFILES = 10_000` — 偽装 From アドレスのフラッドで sender 毎のプロファイル + settings 行が無制限に増えた。上限到達後は新規送信者を学習しない (安全側フォールバック)
+
 ### Added
 - **監査証跡の閲覧経路**: `Store::audit_entries` + `security_audit_log` コマンドを追加し、SecurityDashboard に「監査証跡」セクションを実装 — append-only + ハッシュチェーンで保護された `audit_log` が書き込み専用だったのを、実データ閲覧 + チェーン検証ステータス表示可能にした
 
