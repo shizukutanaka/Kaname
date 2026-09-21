@@ -254,18 +254,6 @@ impl Content<Trusted> {
         }
     }
 
-    /// システム生成データを Trusted として構築する。
-    #[must_use]
-    pub fn from_system(text: impl Into<String>, generator: impl Into<String>) -> Self {
-        Self {
-            inner: text.into(),
-            provenance: Provenance::System {
-                generator: generator.into(),
-            },
-            _level: PhantomData,
-        }
-    }
-
     /// テキストアクセス (P-LLM や UI 表示用)。
     #[must_use]
     pub fn as_text(&self) -> &str {
@@ -669,20 +657,6 @@ impl Bridge {
             report.summary.into(),
             source_email_id,
         ))
-    }
-
-    /// `AnalysisReport` 構造体全体を検証だけ行う (昇格はしない)。
-    ///
-    /// # Errors
-    ///
-    /// 検証失敗時にエラーを返す。
-    pub fn validate_report(
-        &self,
-        report: &AnalysisReport,
-        untrusted_source: &Content<Untrusted>,
-    ) -> Result<(), BridgeError> {
-        let _ = self.validate_and_promote(report.clone(), untrusted_source)?;
-        Ok(())
     }
 }
 

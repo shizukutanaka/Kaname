@@ -2722,7 +2722,6 @@ name = "kaname-pivot"
 version = "0.7.1"
 dependencies = [
  "serde",
- "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -2759,7 +2758,6 @@ dependencies = [
  "kaname-screen",
  "proptest",
  "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]

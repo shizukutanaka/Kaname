@@ -25,6 +25,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - ドメイン→インフラ解決 (`register_domain`/`resolve_infra`/`domain_to_infra`)、ユーザー報告 API (`report_email_malicious`/`is_email_in_reported_campaign`/`ReportImpact`/`user_reported_count`)、`with_retention`/`group_count`/`seen_email_count`/`extract_sld`/`all_domains` を削除 — いずれも呼出元ゼロまたは注入経路不在 (DNS 実装なし)。`EmailMetadata` の未読フィールドと commands.rs の `url_host` も除去。UI のキャンペーン表示を内部キーから人間可読ラベルに変換
 
+### Removed — D145: 残クレートの zero-caller API を一括削除
+
+- `SaasGuardError`・`PivotError` (返さないエラー enum)、`deepfake_advisory::i18n_key`、`Session::KANAME_MLS`、`BecDetector::deterministic_only`/`with_thresholds`、`Content::from_system`/`Bridge::validate_report` を削除 — saas-guard/pivot の thiserror 依存も除去
+
 ### Security — D141: BEC LLM 経路に注入スクリーニングと出力監査を配線
 
 - kaname-ai: `bec_score`/`bec_score_subprocess` の入力に `PromptScreener` (Blocked→推論スキップ)、出力に `OutputAuditor` (不合格→0寄与) を接続 — E11 で未配線だった kaname-screen の防衛が実 LLM 経路に実効化 (いずれも安全側フォールバック)
