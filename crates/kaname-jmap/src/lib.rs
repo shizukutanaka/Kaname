@@ -203,10 +203,7 @@ impl JmapClient {
             )));
         }
 
-        let session: Session = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        let session: Session = read_json_capped(resp).await?;
 
         // セッション応答の URL (apiUrl/downloadUrl/uploadUrl) は
         // Bearer 認証付きリクエストの宛先になる。悪意ある/侵害された
@@ -266,10 +263,7 @@ impl JmapClient {
             .await?;
 
         let status = resp.status();
-        let raw: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        let raw: serde_json::Value = read_json_capped(resp).await?;
 
         if !status.is_success() {
             return Err(JmapError::JmapProblem {
@@ -764,16 +758,52 @@ impl JmapClient {
             }
         }
 
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|e| JmapError::Http(e.to_string()))?;
-        if bytes.len() > MAX_BLOB_BYTES {
-            return Err(JmapError::Http("添付が上限を超えました".into()));
-        }
-        Ok(bytes.to_vec())
+        // Content-Length が無い/嘘をつくサーバ対策: `resp.bytes()` は
+        // 全ボディをメモリに読み切ってからしか検査できず、上限超過分も
+        // 確保してしまう (メモリ DoS)。チャンク読みで上限超過の時点で
+        // 打ち切る (D151)。
+        collect_body_capped(resp.bytes_stream(), MAX_BLOB_BYTES).await
     }
+}
 
+/// JSON 応答の上限。JMAP の methodResponses / Session / upload 応答は
+/// 本文 (blobId 経由) を含まないため 32MiB で十分。`.json()` は
+/// Content-Length 欠落/虚偽のサーバで無制限にメモリを確保するため
+/// 全 JSON 応答にこの上限を適用する (D151)。
+const MAX_JSON_BYTES: usize = 32 * 1024 * 1024;
+
+/// レスポンスボディをチャンク単位で読み、`max` を超えた時点で打ち切る。
+/// `resp.bytes()` と違い上限超過分をメモリに確保しない (D151)。
+async fn collect_body_capped<S, C, E>(mut stream: S, max: usize) -> Result<Vec<u8>, JmapError>
+where
+    S: futures_util::Stream<Item = Result<C, E>> + Unpin,
+    C: AsRef<[u8]>,
+    E: std::fmt::Display,
+{
+    use futures_util::StreamExt;
+    let mut buf = Vec::new();
+    while let Some(item) = stream.next().await {
+        let chunk = item.map_err(|e| JmapError::Http(e.to_string()))?;
+        let chunk = chunk.as_ref();
+        if buf.len() + chunk.len() > max {
+            return Err(JmapError::Http(
+                "添付が上限を超えました (ストリーム打ち切り)".into(),
+            ));
+        }
+        buf.extend_from_slice(chunk);
+    }
+    Ok(buf)
+}
+
+/// 上限付きで JSON 応答を読む (`resp.json()` の代替、D151)。
+async fn read_json_capped<T: serde::de::DeserializeOwned>(
+    resp: reqwest::Response,
+) -> Result<T, JmapError> {
+    let body = collect_body_capped(resp.bytes_stream(), MAX_JSON_BYTES).await?;
+    serde_json::from_slice(&body).map_err(|e| JmapError::Deserialize(e.to_string()))
+}
+
+impl JmapClient {
     async fn upload_blob(&self, data: &[u8]) -> Result<String, JmapError> {
         let url = self
             .session
@@ -789,10 +819,7 @@ impl JmapClient {
             .await
             .map_err(|e| JmapError::Http(e.to_string()))?;
 
-        let json: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| JmapError::Deserialize(e.to_string()))?;
+        let json: serde_json::Value = read_json_capped(resp).await?;
         json["blobId"]
             .as_str()
             .map(String::from)
@@ -2093,6 +2120,39 @@ mod tests {
                 !obj.contains_key(flag),
                 "未消費の fetch フラグ {flag} が再要求されている"
             );
+        }
+    }
+
+    /// D151: `resp.bytes()` は上限検査より先に全ボディをメモリへ確保する。
+    /// `collect_body_capped` は上限超過のチャンク到達時点で打ち切り、
+    /// 残りのストリームを消費しないことを固定する。
+    #[tokio::test]
+    async fn collect_body_capped_は上限超過で打ち切り残りを消費しない() {
+        use futures_util::stream;
+
+        // 上限ちょうど/以内は成功 (非誤検知)
+        let ok_chunks: Vec<Result<Vec<u8>, std::io::Error>> =
+            vec![Ok(vec![0u8; 8]), Ok(vec![1u8; 8]), Ok(vec![2u8; 8])];
+        let body = collect_body_capped(stream::iter(ok_chunks), 24)
+            .await
+            .expect("上限以内は成功すべき");
+        assert_eq!(body.len(), 24);
+        assert_eq!(body[0], 0);
+        assert_eq!(body[16], 2);
+
+        // 超過チャンクの後に配置した Err が読まれない =
+        // 打ち切りが実際に後続を消費していない証拠
+        let chunks: Vec<Result<Vec<u8>, std::io::Error>> = vec![
+            Ok(vec![0u8; 16]),
+            Ok(vec![1u8; 16]), // ここで 32 > 24 → 打ち切り
+            Err(std::io::Error::other("読まれたら失敗になるErr")),
+        ];
+        let err = collect_body_capped(stream::iter(chunks), 24)
+            .await
+            .expect_err("上限超過はエラーになるべき");
+        match err {
+            JmapError::Http(m) => assert!(m.contains("上限"), "上限エラーであるべき: {m}"),
+            other => panic!("Http エラーであるべき: {other:?}"),
         }
     }
 }

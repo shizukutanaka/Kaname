@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D151: HTTP 応答ボディの上限が読み切り後検査で実効していなかった問題を修正
+
+- `download_blob` が `resp.bytes()` で全ボディをメモリへ確保してから上限検査していたため、Content-Length 欠落/虚偽のサーバからの巨大応答で上限超過分まで確保されていた — チャンク読み (`collect_body_capped`) で上限超過の時点で打ち切るよう修正
+- `connect` のセッション応答・`call` の methodResponses・`upload_blob` の `.json()` にも無上限読みが残存 — `read_json_capped` (32MiB 上限) で全 JSON 応答経路に上限を適用
+
 ### Fixed — D148: MLS 復号本文が全検出器を素通りしていた問題を修正
 
 - `analyze_raw_email` は復号後も外側の固定カバー文を採点していたため、E2E 暗号メールの内容が BEC・文体認証・DLP・OOBV・リンク評価を一切通らなかった — 復号・`subject\x00body` 分割を解析の前に移動し、解析対象本文と表示件名を内側ペイロードに差し替え (認証・差出人は外側ヘッダ由来の配送層属性として維持)

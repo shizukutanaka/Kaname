@@ -12,11 +12,12 @@ serde_json = { workspace = true }
 thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tracing    = { workspace = true }
-reqwest      = { workspace = true }
+reqwest      = { workspace = true, features = ["stream"] }
 uuid       = { workspace = true }
 chrono     = { workspace = true }
 # bearer_token を Zeroizing で保持 (切断後にヒープへ残さない)
 zeroize    = { workspace = true }
+futures-util = { workspace = true }
 
 [dev-dependencies]
 
