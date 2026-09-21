@@ -104,6 +104,14 @@ pub struct AuthResults {
     pub dmarc: AuthVerdict,
     /// ARC chain result if present.
     pub arc: Option<AuthVerdict>,
+    /// Authentication-Results が受信 MTA 由来で検証可能か。
+    ///
+    /// JMAP 経由で取得したメールでは受信サーバが先頭に A-R を追記するため
+    /// `true`。`.eml` インポート等、攻撃者がメール全文を制御する経路では
+    /// A-R 自体が攻撃者の申告であり `false` にする — このとき Pass/Neutral
+    /// や「ヘッダ欠如」による加点、ARC Pass による緩和は全て偽造可能な
+    /// ため評価せず、Fail/Reject の自己申告のみを採用する (D160)。
+    pub verified: bool,
 }
 
 /// 認証の 1 軸。
@@ -381,6 +389,13 @@ impl BecDetector {
     // --- Signal family implementations ---
 
     fn check_auth(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
+        // verified=false (.eml インポート等、配送経路を検証できない入力)
+        // の A-R は攻撃者が本文に自由に書き込める申告に過ぎない。
+        // そのため「Pass/Neutral や欠如」を根拠にする評価は全て偽造可能 —
+        // 偽造して不利になる Fail/Reject の自己申告のみ採用し、
+        // 欠如ペナルティと ARC 緩和は適用しない (D160)。
+        let verified = req.auth.verified;
+
         let fail_count = [&req.auth.spf, &req.auth.dkim, &req.auth.dmarc]
             .iter()
             .filter(|v| matches!(***v, AuthVerdict::Fail | AuthVerdict::Reject))
@@ -404,27 +419,32 @@ impl BecDetector {
 
         // 認証ヘッダ「欠如」検出: None が 3 つ揃うと Fail よりむしろ危険
         // (正規の大手送信者は必ず SPF/DKIM/DMARC を設定している)
-        let none_count = [&req.auth.spf, &req.auth.dkim, &req.auth.dmarc]
-            .iter()
-            .filter(|v| matches!(***v, AuthVerdict::None))
-            .count();
-        if none_count == 3 {
-            signals.push(Signal {
-                family: SignalFamily::Authentication,
-                contribution: 0.30,
-                label: "認証ヘッダが全て欠如".to_string(),
-                rationale: "SPF/DKIM/DMARC ヘッダが全て存在しません。\
-                    正規送信者では通常あり得ない構成です。ドメイン詐称の可能性があります。"
-                    .to_string(),
-            });
-        } else if none_count == 2 && fail_count == 0 {
-            signals.push(Signal {
-                family: SignalFamily::Authentication,
-                contribution: 0.15,
-                label: "認証ヘッダ欠如 (2/3)".to_string(),
-                rationale: "認証ヘッダの大部分が存在しません。送信元の正当性を確認してください。"
-                    .to_string(),
-            });
+        // — A-R が受信 MTA 由来のときのみ意味を持つ。検証不能な入力では
+        // 攻撃者が Pass を書き込んで欠如を免れられるため評価しない。
+        if verified {
+            let none_count = [&req.auth.spf, &req.auth.dkim, &req.auth.dmarc]
+                .iter()
+                .filter(|v| matches!(***v, AuthVerdict::None))
+                .count();
+            if none_count == 3 {
+                signals.push(Signal {
+                    family: SignalFamily::Authentication,
+                    contribution: 0.30,
+                    label: "認証ヘッダが全て欠如".to_string(),
+                    rationale: "SPF/DKIM/DMARC ヘッダが全て存在しません。\
+                        正規送信者では通常あり得ない構成です。ドメイン詐称の可能性があります。"
+                        .to_string(),
+                });
+            } else if none_count == 2 && fail_count == 0 {
+                signals.push(Signal {
+                    family: SignalFamily::Authentication,
+                    contribution: 0.15,
+                    label: "認証ヘッダ欠如 (2/3)".to_string(),
+                    rationale:
+                        "認証ヘッダの大部分が存在しません。送信元の正当性を確認してください。"
+                            .to_string(),
+                });
+            }
         }
 
         if let AuthVerdict::Reject = req.auth.dmarc {
@@ -451,7 +471,9 @@ impl BecDetector {
                     });
                 }
                 // ARC Pass + SPF/DKIM Fail → 転送による正当な崩れ (スコアを緩和)
-                AuthVerdict::Pass if fail_count >= 1 => {
+                // verified=false では ARC Pass は攻撃者の申告に過ぎず、
+                // `arc=pass` 一行で減点できてしまうため緩和に使わない。
+                AuthVerdict::Pass if verified && fail_count >= 1 => {
                     signals.push(Signal {
                         family: SignalFamily::Authentication,
                         contribution: -0.10,
@@ -936,11 +958,14 @@ impl BecDetector {
                 || d_lower.ends_with(&format!(".{from_lower}"));
             if !aligned {
                 // DKIM 自体が pass している場合ほど危険 (認証通過に見えるため)。
-                let contribution = if matches!(req.auth.dkim, AuthVerdict::Pass) {
-                    0.40
-                } else {
-                    0.20
-                };
+                // ただし A-R が検証不能 (verified=false) の経路では dkim=pass
+                // 自体が攻撃者の申告なので増幅には使わない (D160)。
+                let contribution =
+                    if matches!(req.auth.dkim, AuthVerdict::Pass) && req.auth.verified {
+                        0.40
+                    } else {
+                        0.20
+                    };
                 signals.push(Signal {
                     family: SignalFamily::Authentication,
                     contribution,
@@ -1656,6 +1681,7 @@ mod tests {
             dkim: AuthVerdict::Pass,
             dmarc: AuthVerdict::Pass,
             arc: None,
+            verified: true,
         }
     }
 
@@ -1665,6 +1691,7 @@ mod tests {
             dkim: AuthVerdict::Fail,
             dmarc: AuthVerdict::Fail,
             arc: None,
+            verified: true,
         }
     }
 
@@ -2279,6 +2306,7 @@ mod tests {
                 dkim: AuthVerdict::Pass,  // 正規署名なので DKIM は通る
                 dmarc: AuthVerdict::Pass, // OR 判定のため DMARC も通ってしまう
                 arc: None,
+                verified: true,
             },
             sender_history: None,
             our_domain: "corp.example",
@@ -2468,6 +2496,7 @@ mod tests {
                 dkim: AuthVerdict::None,
                 dmarc: AuthVerdict::None,
                 arc: None,
+                verified: true,
             },
             sender_history: None,
             our_domain: "mycompany.com",
@@ -2504,6 +2533,7 @@ mod tests {
                 dkim: AuthVerdict::Fail,
                 dmarc: AuthVerdict::None,
                 arc: Some(AuthVerdict::Fail),
+                verified: true,
             },
             sender_history: None,
             our_domain: "mycompany.com",
@@ -2539,6 +2569,7 @@ mod tests {
                 dkim: AuthVerdict::Pass,
                 dmarc: AuthVerdict::Pass,
                 arc: Some(AuthVerdict::Pass),
+                verified: true,
             },
             sender_history: None,
             our_domain: "mycompany.com",
@@ -2553,6 +2584,144 @@ mod tests {
         assert!(
             a.signals.iter().any(|s| s.contribution < 0.0),
             "ARC Pass は緩和シグナル (負の寄与) を生成すべき: {:?}",
+            a.signals
+        );
+    }
+
+    // ---- D160: 検証不能な A-R (verified=false) — .eml インポート等 ----
+    // .eml の Authentication-Results は攻撃者が本文に自由に書き込める
+    // 申告に過ぎない。Pass/欠如による加点・ARC 緩和は全て偽造可能なため
+    // 適用せず、Fail/Reject の自己申告のみ採用する。
+
+    #[test]
+    fn unverified_forged_pass_gains_nothing() {
+        // .eml に `spf=pass dkim=pass dmarc=pass` を書き込んでも
+        // 「認証ヘッダ欠如」ペナルティを回避できない — 逆に言えば
+        // 偽造 Pass とヘッダ全欠如でスコアが変わらないことが誠実な挙動。
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "ok".into(),
+        }));
+        let base = |auth: AuthResults| AssessmentRequest {
+            from_header: "attacker@evil.example",
+            return_path: None,
+            subject: "確認のお願い",
+            body_text: "内容をご確認ください。",
+            auth,
+            sender_history: None,
+            our_domain: "mycompany.com",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let forged = det
+            .assess(base(AuthResults {
+                spf: AuthVerdict::Pass,
+                dkim: AuthVerdict::Pass,
+                dmarc: AuthVerdict::Pass,
+                arc: None,
+                verified: false,
+            }))
+            .expect("assessment failed");
+        let absent = det
+            .assess(base(AuthResults {
+                spf: AuthVerdict::None,
+                dkim: AuthVerdict::None,
+                dmarc: AuthVerdict::None,
+                arc: None,
+                verified: false,
+            }))
+            .expect("assessment failed");
+        assert!(
+            (forged.score - absent.score).abs() < f32::EPSILON,
+            "検証不能な A-R の Pass 申告に加点/減点の差があってはならない: forged={} absent={}",
+            forged.score,
+            absent.score
+        );
+        assert!(
+            !forged
+                .signals
+                .iter()
+                .any(|s| s.family == SignalFamily::Authentication),
+            "検証不能な Pass 申告で認証シグナルが発火してはいけない: {:?}",
+            forged.signals
+        );
+    }
+
+    #[test]
+    fn unverified_fail_claims_still_count() {
+        // 偽造で不利になる Fail/Reject は検証不能経路でも採用する
+        // (攻撃者が自ら Fail を書く動機がない = 書かれているなら実際に
+        // 失敗した正規エクスポートの可能性が高い)。
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "ok".into(),
+        }));
+        let req = AssessmentRequest {
+            from_header: "spoof@evil.example",
+            return_path: None,
+            subject: "通知",
+            body_text: "ご確認ください。",
+            auth: AuthResults {
+                spf: AuthVerdict::Fail,
+                dkim: AuthVerdict::Fail,
+                dmarc: AuthVerdict::Fail,
+                arc: None,
+                verified: false,
+            },
+            sender_history: None,
+            our_domain: "mycompany.com",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("認証失敗")),
+            "verified=false でも Fail 申告は評価されるべき: {:?}",
+            a.signals
+        );
+    }
+
+    #[test]
+    fn unverified_arc_pass_no_mitigation() {
+        // verified=false では `arc=pass` は攻撃者が書き込める緩和申告 —
+        // SPF Fail + ARC Pass でも緩和シグナル (負の寄与) を出さない。
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "ok".into(),
+        }));
+        let req = AssessmentRequest {
+            from_header: "forwarded@example.com",
+            return_path: None,
+            subject: "転送メール",
+            body_text: "転送されました。",
+            auth: AuthResults {
+                spf: AuthVerdict::Fail,
+                dkim: AuthVerdict::Pass,
+                dmarc: AuthVerdict::Pass,
+                arc: Some(AuthVerdict::Pass),
+                verified: false,
+            },
+            sender_history: None,
+            our_domain: "mycompany.com",
+            known_contacts: &[],
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            !a.signals.iter().any(|s| s.contribution < 0.0),
+            "検証不能な ARC Pass で緩和シグナルを出してはいけない: {:?}",
             a.signals
         );
     }
@@ -2575,6 +2744,7 @@ mod tests {
                 dkim: AuthVerdict::Fail,
                 dmarc: AuthVerdict::None,
                 arc: None,
+                verified: true,
             },
             sender_history: None,
             our_domain: "mitsui-global.co.jp",

@@ -8,6 +8,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D160: `.eml` 内の Authentication-Results が受信 MTA 追記と同格で評価され、偽造 pass で検出緩和が可能だった問題を修正
+
+- `.eml` インポート/フォルダ走査経路では A-R ヘッダは攻撃者制御の申告 — `AuthResults.verified` を追加し、検証不能経路では Fail/Reject のみ採用 (欠如ペナルティ・ARC 緩和・dkim-pass 増幅は JMAP 経路に限定)。SSA 文体プロファイルも検証不能入力では学習しないよう `allow_learning` ゲートを追加
+
 ### Fixed — D152: text/plain メールが HTML としてパースされリンク注入できた問題を修正
 
 - HTML 本文が無いメールで `sanitize_html` にプレーンテキストを `RawHtml` として渡していたため、text/plain 本文中の `<a href>` がクリック可能なリンクとして描画されていた — HTML 不在時はエスケープ済み text_fallback 経路にフォールバックするよう修正

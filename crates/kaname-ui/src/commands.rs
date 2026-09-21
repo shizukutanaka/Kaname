@@ -127,7 +127,9 @@ pub async fn mail_open(email_id: String) -> Result<ImportedEmail, String> {
         .download_blob(&blob_id, "message/rfc822", "message.eml")
         .await
         .map_err(|e| format!("メール本文の取得に失敗しました: {e}"))?;
-    analyze_raw_email(&bytes).await
+    // サーバから取得したメールの Authentication-Results は受信 MTA が
+    // 先頭に追記したもの (検証可能) として扱う (D160)。
+    analyze_raw_email_verified(&bytes).await
 }
 
 /// 受信トレイ UI 用のメールボックス行。
@@ -276,7 +278,29 @@ pub async fn mail_analyze_bytes(bytes: Vec<u8>) -> Result<ImportedEmail, String>
 /// ローカル `.eml` (`mail_import_eml`)・サーバ上のメール (`mail_open`)・
 /// デモ用バイト列 (`mail_analyze_bytes`) の**唯一の解析経路**。
 /// 入口が複数あっても検出器は一つに集約する。
+///
+/// この関数は `.eml` ファイルやデモバイト列のような「配送経路を検証
+/// できない入力」向け — `Authentication-Results` ヘッダは攻撃者が
+/// 自由に書き込めるため、BEC 評価では `auth.verified=false` として
+/// Fail/Reject の自己申告のみ採用する (D160)。サーバ経由で取得した
+/// メール (受信 MTA の A-R が先頭に来る) は `analyze_raw_email_verified`
+/// を使うこと。
 pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
+    analyze_raw_email_inner(bytes, false).await
+}
+
+/// サーバ (JMAP) 経由で取得したメール用の解析経路。
+///
+/// `analyze_raw_email` と同じだが、Authentication-Results を受信 MTA の
+/// 追記として信頼する (`verified=true`)。`mail_open` のみが使う。
+async fn analyze_raw_email_verified(bytes: &[u8]) -> Result<ImportedEmail, String> {
+    analyze_raw_email_inner(bytes, true).await
+}
+
+async fn analyze_raw_email_inner(
+    bytes: &[u8],
+    auth_verified: bool,
+) -> Result<ImportedEmail, String> {
     let env = kaname_render::parse(bytes).map_err(|e| format!("メールの解析に失敗: {e}"))?;
 
     // 差出人ヘッダを復元する。
@@ -333,6 +357,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             kaname_render::AuthResult::None => None,
             r => Some(map_auth(r)),
         },
+        verified: auth_verified,
     };
     let auth_desc = format!(
         "SPF={:?} DKIM={:?} DMARC={:?} ARC={:?}",
@@ -375,8 +400,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .iter()
         .any(|k| n.contains(k) || n_spaced.contains(k))
     };
-    let style_risks =
-        evaluate_sender_style(&from_addr_only, analysis_text, send_hour, has_financial).await;
+    // D160: 配送経路を検証できない入力 (.eml 等) では From も攻撃者制御
+    // — その文体で学習するとプロファイルが汚染される (なりすまし文で
+    // 「普段の文体」を攻撃者側へ引き寄せる学習攻撃)。検証不能な入力は
+    // 判定のみ行い学習しない。
+    let style_risks = evaluate_sender_style(
+        &from_addr_only,
+        analysis_text,
+        send_hour,
+        has_financial,
+        auth_verified,
+    )
+    .await;
 
     // 連絡先ベースの詐称検出 (Reply-To 偽装・タイポスクワット) に使う。
     // Store 未接続の .eml 単体解析では空になり、そのシグナルはスキップされる。
@@ -750,6 +785,8 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         let subject = env.subject.clone().unwrap_or_default();
         let body_text = env.text_body.clone().unwrap_or_default();
 
+        // .eml ファイル中の A-R は受信 MTA 追記ではなく攻撃者制御の
+        // 申告 — verified=false で Fail/Reject のみ採用する (D160)。
         let auth = kaname_bec::AuthResults {
             spf: map_auth(env.auth_results.spf),
             dkim: map_auth(env.auth_results.dkim),
@@ -758,6 +795,7 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
                 kaname_render::AuthResult::None => None,
                 r => Some(map_auth(r)),
             },
+            verified: false,
         };
         // 認証のいずれかが失敗していれば radar に伝える。
         let auth_partial_fail = matches!(
@@ -1270,6 +1308,37 @@ mod tests {
         assert!(
             r.oobv_message.contains("電話"),
             "推奨理由が人間可読でなければならない"
+        );
+        Ok(())
+    }
+
+    /// D160: `.eml` 内の Authentication-Results は攻撃者が書き込める
+    /// 申告に過ぎない — `spf=pass dkim=pass dmarc=pass` を書き込んでも
+    /// 「認証ヘッダ欠如」ペナルティの回避や ARC 緩和の恩恵を得られない。
+    /// 同じメールで A-R の有無がスコアを変えないことを固定する。
+    #[tokio::test]
+    async fn analyze_raw_email_forged_auth_header_gains_nothing() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        const BASE: &str = "From: \"CFO\" <cfo@arnazon-billing.com>\r\n\
+            To: you@example.com\r\n\
+            Subject: URGENT wire transfer needed today\r\n\
+            Date: Mon, 26 Apr 2026 10:15:00 +0900\r\n\
+            Reply-To: cfo.private@gmail.com\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n";
+        const BODY: &str = "\r\n\
+            I need you to process an urgent wire transfer immediately.\r\n\
+            Do not discuss this with anyone.\r\n";
+        let with_forged = format!(
+            "{BASE}Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=arnazon-billing.com; dkim=pass header.d=arnazon-billing.com; dmarc=pass header.from=arnazon-billing.com; arc=pass\r\n{BODY}"
+        );
+        let without = format!("{BASE}{BODY}");
+        let r_forged = analyze_raw_email(with_forged.as_bytes()).await?;
+        let r_bare = analyze_raw_email(without.as_bytes()).await?;
+        assert_eq!(
+            r_forged.bec_score, r_bare.bec_score,
+            ".eml 内の偽造 pass 申告がスコアを変えてはいけない: forged={} bare={}",
+            r_forged.bec_score, r_bare.bec_score
         );
         Ok(())
     }
@@ -1803,7 +1872,8 @@ mod tests {
         style_profiles().lock().await.remove(sender);
 
         // 1 通評価すると、永続化済みの 3 サンプルから再開されるべき。
-        let _ = evaluate_sender_style(sender, "こんにちは。お元気ですか。", Some(10), false).await;
+        let _ = evaluate_sender_style(sender, "こんにちは。お元気ですか。", Some(10), false, true)
+            .await;
 
         let json = store
             .get_setting(&account_id, &key)
@@ -1829,7 +1899,7 @@ mod tests {
 
         // 既知送信者 1 名を先に作り、残りをダミーで上限まで埋める
         let known = "d136-known@example.test";
-        let _ = evaluate_sender_style(known, "短い本文です。", Some(10), false).await;
+        let _ = evaluate_sender_style(known, "短い本文です。", Some(10), false, true).await;
         {
             let mut profiles = style_profiles().lock().await;
             for i in 0..999 {
@@ -1844,12 +1914,13 @@ mod tests {
         // 上限到達後: 新規送信者はプロファイルを作らない (警告も出ない —
         // プロファイル非存在なので InsufficientData として評価不能)
         let warnings =
-            evaluate_sender_style("d136-new@example.test", "本文です。", Some(10), false).await;
+            evaluate_sender_style("d136-new@example.test", "本文です。", Some(10), false, true)
+                .await;
         assert!(warnings.is_empty(), "上限超過の新規送信者は評価しないべき");
         assert_eq!(style_profiles().lock().await.len(), 1_000);
 
         // 既知送信者は上限を超えても更新・評価が継続する
-        let _ = evaluate_sender_style(known, "別の本文です。", Some(11), false).await;
+        let _ = evaluate_sender_style(known, "別の本文です。", Some(11), false, true).await;
         assert_eq!(style_profiles().lock().await.len(), 1_000);
         assert!(style_profiles().lock().await.contains_key(known));
         Ok(())
@@ -2926,6 +2997,8 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         return_path,
         subject,
         body_text: preview,
+        // JMAP が保持する A-R は受信 MTA が配送時に追記したもの
+        // (サーバ側で先頭に来る) — verified=true として評価する (D160)。
         auth: kaname_bec::AuthResults {
             spf: map_auth(parsed_auth.spf),
             dkim: map_auth(parsed_auth.dkim),
@@ -2934,6 +3007,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
                 kaname_render::AuthResult::None => None,
                 r => Some(map_auth(r)),
             },
+            verified: true,
         },
         sender_history: history.as_ref(),
         our_domain,
@@ -4275,6 +4349,10 @@ async fn evaluate_sender_style(
     body: &str,
     send_hour: Option<u8>,
     contains_financial_request: bool,
+    // 配送経路を検証できた入力のみプロファイルを更新する (D160)。
+    // false のときは判定のみ (攻撃者制御の入力で文体プロファイルを
+    // 汚染しないため)。
+    allow_learning: bool,
 ) -> Vec<String> {
     // 送信者不明のメールに文体プロファイルを帰属させられない。
     if sender.is_empty() {
@@ -4328,17 +4406,19 @@ async fn evaluate_sender_style(
     // なりすましメール自身がプロファイルを引き寄せて検出が鈍る。
     let warning =
         kaname_ssa::assess_self_send_anomaly(profile, &features, contains_financial_request);
-    profile.update(&features);
+    if allow_learning {
+        profile.update(&features);
 
-    // 永続化の失敗で警告自体を失わせない (best-effort)。
-    if let Some(s) = &store {
-        match serde_json::to_string(profile) {
-            Ok(json) => {
-                if let Err(e) = s.set_setting(&account_id, &style_key, &json).await {
-                    tracing::warn!(error = %e, "文体プロファイルの保存に失敗");
+        // 永続化の失敗で警告自体を失わせない (best-effort)。
+        if let Some(s) = &store {
+            match serde_json::to_string(profile) {
+                Ok(json) => {
+                    if let Err(e) = s.set_setting(&account_id, &style_key, &json).await {
+                        tracing::warn!(error = %e, "文体プロファイルの保存に失敗");
+                    }
                 }
+                Err(e) => tracing::warn!(error = %e, "文体プロファイルのシリアライズに失敗"),
             }
-            Err(e) => tracing::warn!(error = %e, "文体プロファイルのシリアライズに失敗"),
         }
     }
 
