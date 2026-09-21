@@ -206,7 +206,7 @@ cargo nextest run --workspace --no-fail-fast 2>&1 | tail -5
 | 入力スクリーニング | kaname-screen `PromptScreener` | arxiv 2505.22852 §2.1 |
 | 出力監査 | kaname-screen `OutputAuditor` | arxiv 2505.22852 §2.2 |
 | UserUpload provenance | kaname-ai `Provenance::UserUpload` | arxiv 2505.22852 §2.3 |
-| Tiered-Risk アクセス制御 | kaname-ai `tiered_risk` | arxiv 2505.22852 §3 |
+| ~~Tiered-Risk アクセス制御~~ (削除済み D140 — 呼出元ゼロ) | — | arxiv 2505.22852 §3 |
 | メモリ汚染防御 | kaname-memory-guard | arxiv 2601.05504 |
 
 これらのクレートはライブラリとして残っているが、エージェント監視 UI が

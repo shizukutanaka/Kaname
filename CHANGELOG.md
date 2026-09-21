@@ -8,6 +8,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed — D139: kaname-ai::threat_intel モジュールを削除
+
+- 呼出元ゼロの dead 設計シーム (AiPhishingDetector・AiAccessController・ContactIntelligenceEngine・ActionExtractor、1482行) を削除 — 出荷機能 (kaname-store contacts/audit_log、kaname-bec) と重複し誤読の温床だった
+- maturity.md の誤帰属を修正: 「監査ログ (HMAC-SHA256 鍵付き)」は threat_intel の主張で、出荷側は kaname-store の無鍵 SHA-256 チェーン — 正直化した
+
 ### Security — D136: 文体プロファイルの送信者数に上限
 
 - kaname-ui: STYLE_PROFILES がユニーク送信者数 (攻撃者制御) で無制限増大し settings テーブルにも永続化されていた → `MAX_STYLE_PROFILES = 1_000` で新規プロファイルを打ち切り

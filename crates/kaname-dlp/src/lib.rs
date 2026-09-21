@@ -3,8 +3,9 @@
 //! 12 種の boolean 式木分類器。
 //! ラベル: Public / Internal / Confidential / HighlyConfidential / LegalPrivilege
 //!
-//! AiAccessController が HighlyConfidential 以上の AI 処理をブロック。
-//! Microsoft Copilot CVE CW1226324 対策の核心。
+//! ※ HighlyConfidential 以上を AI 処理でブロックする AiAccessController は
+//! 未配線のまま削除済み (D139 — gap-analysis D11 の配線案は git 履歴参照)。
+//! Microsoft Copilot CVE CW1226324 対策の設計意図は docs/threat-model.md を参照。
 
 // crates/kaname-dlp/src/lib.rs
 //
