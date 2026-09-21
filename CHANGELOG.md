@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D129: JMAP 応答ボディにサイズ上限を強制
+
+- kaname-jmap: 全 `.json()`/`.bytes()` 経路を `read_body_capped` (Content-Length 事前検査 + ストリーム累積上限) に置換 — 侵害された JMAP サーバの巨大応答によるメモリ DoS を防止。上限: セッション 8MB / API 応答 64MB / upload 応答 1MB / 添付 blob 25MB
 ### Security — D1 Phase 1: 実 MLS 暗号化 (openmls)
 
 - **`kaname-mls` の XOR モック暗号を実 openmls 0.9 に全面置換** (D1 Phase 1)
