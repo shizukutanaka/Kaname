@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D147: BEC LLM 経路の `&str` 入口を `Content<Untrusted>` 必須に変更
+
+- D17 が警告した「型を迂回する最短経路」が出荷経路で現実化していた — D121 で配線された `bec_score`/`bec_score_subprocess` が生 `&str` を受け、`Content<Untrusted>` 境界を経ずに不信メール本文が LLM に到達していた
+- 両入口を `&Content<Untrusted>` 要求に変更し、呼出側 (`kaname-ui::bec_llm_score`) が `Content::from_network` で provenance 付きに包む構造に — 不信データを LLM に渡すには呼出側が型レベルで「これは Untrusted」と宣言しなければコンパイルできない
+- `docs/threat-model.md` §3.16 の D17 記述を実態に更新 (推論はスタブではなく出荷済み、出荷経路の I1 型境界は関数 API で実効)
+- 残件: Privileged モードの sandbox プロファイルと I4 の矛盾 (同モードを spawn するコードがないため非活性)
+
+
 ### Removed — D146: 読み手のいないオンボーディング設定を削除
 
 - 「通知を表示する」「匿名利用統計を送信」のトグルを削除 — システム通知の発行経路もテレメトリ送信コードも存在せず、保存先の `notifications`/`telemetry` キーはどこからも読まれなかった (write-only)。テレメトリのプライバシー説明リンク (kaname.app/privacy/telemetry) は 404 — 存在しない機能に虚偽の文脈を添えていた。`settings_save_onboarding` は `onboarding_done` のみ記録する形に簡素化
