@@ -620,9 +620,6 @@ pub struct CampaignSummary {
 pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> {
     info!(path=%redact_path(&path), "mail_scan_folder");
 
-    let dir =
-        std::fs::read_dir(&path).map_err(|e| format!("フォルダを開けません ({path}): {e}"))?;
-
     let mut entries: Vec<FolderScanEntry> = Vec::new();
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut radar = kaname_radar::CampaignRadar::new();
@@ -634,17 +631,79 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
     let our = our_domain(&account_id, None).await;
     let contacts = lookup_contacts(&account_id).await;
 
-    for item in dir {
-        let Ok(item) = item else { continue };
-        let p = item.path();
-        // .eml のみを対象にする (拡張子の大小は問わない)。
-        let is_eml = p
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e.eq_ignore_ascii_case("eml"));
-        if !is_eml {
-            continue;
+    // D149: エクスポートされたメールボックスは通常フォルダ単位で
+    // ネストしているのに、走査は `read_dir` 一段のみでサブフォルダ内の
+    // .eml を**黙って無視**していた — ユーザーが親フォルダを選ぶと
+    // 大部分が未走査のまま「解析完了」と表示された。再帰走査に変更し、
+    // 深度・件数の上限を明示 (上限超過分は failed に理由付きで表出)。
+    const MAX_SCAN_DEPTH: usize = 8;
+    const MAX_SCAN_FILES: usize = 5_000;
+
+    let mut eml_paths: Vec<std::path::PathBuf> = Vec::new();
+    let mut skipped_deep_dirs = 0usize;
+    let mut truncated = false;
+    let mut stack = vec![(std::path::PathBuf::from(&path), 0usize)];
+    while let Some((dir_path, depth)) = stack.pop() {
+        let dir = match std::fs::read_dir(&dir_path) {
+            Ok(d) => d,
+            Err(e) => {
+                if depth == 0 {
+                    return Err(format!("フォルダを開けません ({path}): {e}"));
+                }
+                failed.push((
+                    dir_path.to_string_lossy().into_owned(),
+                    format!("サブフォルダを開けません: {e}"),
+                ));
+                continue;
+            }
+        };
+        for item in dir.flatten() {
+            let p = item.path();
+            match item.file_type() {
+                // file_type はシンボリックリンクを辿らないため、
+                // リンク先ディレクトリはここに来ずループしない。
+                Ok(ft) if ft.is_dir() => {
+                    if depth < MAX_SCAN_DEPTH {
+                        stack.push((p, depth + 1));
+                    } else {
+                        skipped_deep_dirs += 1;
+                    }
+                }
+                _ => {
+                    // .eml のみを対象にする (拡張子の大小は問わない)。
+                    if p.extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("eml"))
+                    {
+                        eml_paths.push(p);
+                    }
+                }
+            }
+            if eml_paths.len() >= MAX_SCAN_FILES {
+                truncated = true;
+                break;
+            }
         }
+        if truncated {
+            break;
+        }
+    }
+    if skipped_deep_dirs > 0 {
+        failed.push((
+            format!("深度{MAX_SCAN_DEPTH}超のサブフォルダ {skipped_deep_dirs} 件"),
+            "走査深度の上限を超えたため未走査".to_string(),
+        ));
+    }
+    if truncated {
+        failed.push((
+            format!("{MAX_SCAN_FILES} 件以降の .eml"),
+            "走査件数の上限を超えたため残りは未走査".to_string(),
+        ));
+    }
+    // read_dir の列挙順は OS 依存なので、結果の再現性のため整列する。
+    eml_paths.sort();
+
+    for p in eml_paths {
         let file_name = p
             .file_name()
             .and_then(|n| n.to_str())
@@ -1901,6 +1960,33 @@ mod tests {
         assert!(
             profile.topic_summary.is_none(),
             "topic_summary は None のままであるべき (件名の流用は話題プロファイルではない)"
+        );
+        Ok(())
+    }
+
+    /// D149: `mail_scan_folder` はサブフォルダ内の .eml も走査する。
+    /// 修正前は `read_dir` 一段のみで、ネストしたエクスポート構造の
+    /// 大部分が「解析完了」表示の裏で黙って未走査だった。
+    #[tokio::test]
+    async fn mail_scan_folder_はネストしたフォルダ内のemlも解析する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let dir = std::env::temp_dir().join(format!("kaname-d149-{}", std::process::id()));
+        let nested = dir.join("INBOX").join("重要");
+        std::fs::create_dir_all(&nested).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("top.eml"), SAFE_EML).map_err(|e| e.to_string())?;
+        std::fs::write(nested.join("nested.eml"), SAFE_EML).map_err(|e| e.to_string())?;
+        std::fs::write(nested.join("not-mail.txt"), "hello").map_err(|e| e.to_string())?;
+
+        let r = mail_scan_folder(dir.to_string_lossy().into_owned()).await?;
+        assert_eq!(
+            r.analyzed, 2,
+            "トップレベル + ネスト2段の .eml が両方解析されるべき (failed={:?})",
+            r.failed
+        );
+        assert!(
+            r.emails.iter().any(|e| e.file == "nested.eml"),
+            "ネストしたファイルが結果に含まれるべき"
         );
         Ok(())
     }
