@@ -8,6 +8,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D133: OutputAuditor の findings 数に上限
+
+- kaname-screen: exfiltration 検査が一致する単語ごとに findings を push — `MAX_WORD_FINDINGS = 256` で打ち切り (大量のメール/URL を並べた出力でのメモリ膨張を防止)
 ### Security — D130: MIME 入れ子メールの再帰深度に上限
 
 - kaname-render: `extract_parts_by_media_type` の `message/rfc822` 再帰に `MAX_NESTED_DEPTH = 16` — 極端に深い入れ子でスタック枯渇し得た

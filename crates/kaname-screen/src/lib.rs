@@ -406,7 +406,14 @@ impl OutputAuditor {
         // 同一モジュールが防ぐはずの回避手口 (全角 Unicode・ホモグリフ) が
         // 検出対象そのもの (漏洩先メールアドレス/URL) には効かないという
         // 非対称な欠陥があった (docs/gap-analysis.md D53)。`lower` を走査するよう統一する。
+        //
+        // D133: 単語ごとに findings が伸びるため上限を設ける — 攻撃者が
+        // 大量のメール/URL を並べた出力を流せば findings が無制限に膨らむ。
+        const MAX_WORD_FINDINGS: usize = 256;
         for word in lower.split_whitespace() {
+            if findings.len() >= MAX_WORD_FINDINGS {
+                break;
+            }
             if word.contains('@') && word.contains('.') && is_email_like(word) {
                 findings.push(AuditFinding::ExfiltrationTarget(word.to_string()));
             }
@@ -418,6 +425,9 @@ impl OutputAuditor {
         // (D53: こちらも正規化済み `lower` を走査するよう統一。`lower` は既に
         // 小文字化済みのため個別の to_lowercase() は不要)
         for word in lower.split_whitespace() {
+            if findings.len() >= MAX_WORD_FINDINGS {
+                break;
+            }
             if (word.starts_with("http://") || word.starts_with("https://"))
                 && is_suspicious_exfil_url(word)
             {
