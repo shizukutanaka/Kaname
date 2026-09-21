@@ -778,6 +778,32 @@ impl Store {
             .map_err(|_| StoreError::Db("ロック取得失敗".into()))?;
         Self::ensure_account_sync(&conn, account_id)?;
 
+        // 送信者帳簿はメール受信のたび攻撃者制御のアドレスで増えるため、
+        // 新規エントリ数に上限を設ける (既知送信者の更新は上限を超えても通す)。
+        const MAX_CONTACTS: usize = 10_000;
+        let exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM contacts WHERE account_id = ?1 AND email = ?2 LIMIT 1",
+                params![account_id, email],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        if !exists {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM contacts WHERE account_id = ?1",
+                    params![account_id],
+                    |r| r.get(0),
+                )
+                .map_err(|e| StoreError::Db(e.to_string()))?;
+            if count >= MAX_CONTACTS as i64 {
+                tracing::warn!(
+                    "contacts が上限 {MAX_CONTACTS} に達したため新規送信者の記録をスキップ"
+                );
+                return Ok(());
+            }
+        }
+
         let id = sha256_hex(format!("{account_id}:{email}").as_bytes());
 
         conn.execute(

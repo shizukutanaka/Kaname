@@ -413,6 +413,20 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .assess(req)
         .map_err(|e| format!("BEC 判定に失敗: {e}"))?;
 
+    // 送信者帳簿を更新する (D135)。初回受信・検証済み送信者・
+    // known_contacts 詐称検出はすべてこの蓄積に依存する。
+    // 評価の「後」に記録する — 先に記録すると当メール自身が
+    // 「初回でない」と誤判定される。失敗は warn のみ (D120 と同型)。
+    if let Some(store) = store_slot().lock().await.clone() {
+        let display_name = env.from.first().and_then(|a| a.display_name.as_deref());
+        if let Err(e) = store
+            .record_received(&account_id, &from_addr_only, display_name, None)
+            .await
+        {
+            tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+        }
+    }
+
     let oobv_level = kaname_oobv::OobvRecommender::new().recommend(&body_text);
 
     // 添付を一度だけ検査し、危険判定 (attachments フィールド) と
@@ -747,6 +761,17 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             }
         };
         *counts.entry(verdict.clone()).or_insert(0) += 1;
+
+        // 送信者帳簿を更新する (D135) — 評価の「後」に記録する。
+        if let Some(store) = store_slot().lock().await.clone() {
+            let display_name = env.from.first().and_then(|a| a.display_name.as_deref());
+            if let Err(e) = store
+                .record_received(&account_id, &from, display_name, None)
+                .await
+            {
+                tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+            }
+        }
 
         // キャンペーン検出へ投入する。
         let meta = kaname_radar::EmailMetadata {
@@ -1748,6 +1773,69 @@ mod tests {
         Ok(())
     }
 
+    /// D135: `record_received` の呼出元がゼロで contacts 帳簿が
+    /// 永久に空だった — BEC の履歴系シグナル (初回受信・検証済み・
+    /// 話題急変) と known_contacts 詐称検出が恒久的に死んでいた。
+    /// 解析のたび送信者が記録され、2 通目から履歴が効くことを固定する。
+    #[tokio::test]
+    async fn analyze_raw_email_は送信者履歴を帳簿に記録する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let db = std::env::temp_dir().join(format!("kaname-d135-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        history_open(db.to_string_lossy().into_owned(), "0".repeat(64)).await?;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("テスト用 Store を開けませんでした")?;
+
+        let sender = "d135-sender@example.test";
+        let mk = || -> Vec<u8> {
+            format!(
+                "From: {sender}\r\n\
+                 To: you@example.test\r\n\
+                 Subject: hello\r\n\
+                 Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+                 Content-Type: text/plain; charset=utf-8\r\n\
+                 \r\n\
+                 hi\r\n"
+            )
+            .into_bytes()
+        };
+
+        // 1 通目: 履歴なし → 「初回受信」シグナルが出て、評価後に記録される
+        let first = analyze_raw_email(&mk()).await?;
+        assert!(
+            first.bec_signals.iter().any(|s| s.contains("初回受信")),
+            "初受信の送信者に初回受信シグナルが出るべき: {:?}",
+            first.bec_signals
+        );
+        let p1 = store
+            .get_sender_profile("", sender)
+            .await
+            .map_err(|e| e.to_string())?;
+        assert_eq!(
+            p1.map(|p| p.message_count),
+            Some(1),
+            "解析後に送信者が帳簿へ記録されるべき (D135)"
+        );
+
+        // 2 通目: 履歴が存在するため「初回受信」は消える
+        let second = analyze_raw_email(&mk()).await?;
+        assert!(
+            !second.bec_signals.iter().any(|s| s.contains("初回受信")),
+            "既知の送信者に初回受信シグナルが出てはいけない: {:?}",
+            second.bec_signals
+        );
+        let p2 = store
+            .get_sender_profile("", sender)
+            .await
+            .map_err(|e| e.to_string())?;
+        assert_eq!(p2.map(|p| p.message_count), Some(2));
+        Ok(())
+    }
+
     /// D109: `org_domain` 設定は接続時の導出値で初めて実在する。
     /// 未設定なら小文字化して書き込み、既存値は上書きしないことを固定する。
     #[tokio::test]
@@ -2741,7 +2829,7 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
         past_thread_bodies: &past_bodies,
         dkim_signature_header: dkim_signature,
     };
-    match bec_detector().assess(req) {
+    let verdict = match bec_detector().assess(req) {
         Ok(a) => match a.verdict {
             kaname_bec::Verdict::Safe => "SAFE",
             kaname_bec::Verdict::Advisory => "ADVISORY",
@@ -2753,7 +2841,19 @@ async fn assess_listing(input: ListingInput<'_>) -> String {
             tracing::warn!(error=%e, "一覧の BEC 判定に失敗");
             "UNKNOWN".to_string()
         }
+    };
+
+    // 送信者帳簿を更新する (D135) — 評価の「後」に記録する。
+    if let Some(store) = store_slot().lock().await.clone() {
+        if let Err(e) = store
+            .record_received(account_id, from_addr, from_name.as_deref(), None)
+            .await
+        {
+            tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+        }
     }
+
+    verdict
 }
 
 /// メールを既読にする。
