@@ -393,6 +393,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             current_body_snippet: &body_snippet,
         })
     };
+    // D138: `auth` は req にムーブされるため、帳簿学習の信頼ゲートはここで計算。
+    let sender_authd = is_sender_authenticated(&auth);
     let req = kaname_bec::AssessmentRequest {
         from_header: &from,
         return_path: return_path.as_deref(),
@@ -417,13 +419,17 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // known_contacts 詐称検出はすべてこの蓄積に依存する。
     // 評価の「後」に記録する — 先に記録すると当メール自身が
     // 「初回でない」と誤判定される。失敗は warn のみ (D120 と同型)。
-    if let Some(store) = store_slot().lock().await.clone() {
-        let display_name = env.from.first().and_then(|a| a.display_name.as_deref());
-        if let Err(e) = store
-            .record_received(&account_id, &from_addr_only, display_name, None)
-            .await
-        {
-            tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+    // D138: 記録は送信者認証済みメールのみ — 未認証の偽装 From で
+    // 帳簿を育てて「初回受信」消去・既知連絡先化できないようにする。
+    if sender_authd {
+        if let Some(store) = store_slot().lock().await.clone() {
+            let display_name = env.from.first().and_then(|a| a.display_name.as_deref());
+            if let Err(e) = store
+                .record_received(&account_id, &from_addr_only, display_name, None)
+                .await
+            {
+                tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+            }
         }
     }
 
@@ -728,6 +734,8 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
                 current_body_snippet: &body_snippet,
             })
         };
+        // D138: `auth` は req にムーブされるため先に信頼ゲートを計算。
+        let sender_authd = is_sender_authenticated(&auth);
         let req = kaname_bec::AssessmentRequest {
             from_header: &from,
             return_path: return_path.as_deref(),
@@ -763,13 +771,16 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
         *counts.entry(verdict.clone()).or_insert(0) += 1;
 
         // 送信者帳簿を更新する (D135) — 評価の「後」に記録する。
-        if let Some(store) = store_slot().lock().await.clone() {
-            let display_name = env.from.first().and_then(|a| a.display_name.as_deref());
-            if let Err(e) = store
-                .record_received(&account_id, &from, display_name, None)
-                .await
-            {
-                tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+        // D138: 未認証の偽装 From による帳簿汚染を防ぐため認証済みのみ。
+        if sender_authd {
+            if let Some(store) = store_slot().lock().await.clone() {
+                let display_name = env.from.first().and_then(|a| a.display_name.as_deref());
+                if let Err(e) = store
+                    .record_received(&account_id, &from, display_name, None)
+                    .await
+                {
+                    tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+                }
             }
         }
 
@@ -1027,6 +1038,18 @@ fn redact_path(p: &str) -> &str {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("<path>")
+}
+
+/// D138: 学習系帳簿 (contacts・文体プロファイル) の信頼ゲート。
+/// From ヘッダは未認証で偽装可能なため、DMARC pass または
+/// SPF pass かつ DKIM pass のときのみ「認証済み送信者」として
+/// 学習 (record_received / プロファイル更新) に載せる。
+/// SPF 単独は Return-Path 側ドメインの認証であり From の整合を
+/// 保証しないため不採用。
+fn is_sender_authenticated(auth: &kaname_bec::AuthResults) -> bool {
+    matches!(auth.dmarc, kaname_bec::AuthVerdict::Pass)
+        || (matches!(auth.spf, kaname_bec::AuthVerdict::Pass)
+            && matches!(auth.dkim, kaname_bec::AuthVerdict::Pass))
 }
 
 fn map_auth(r: kaname_render::AuthResult) -> kaname_bec::AuthVerdict {
@@ -1791,9 +1814,12 @@ mod tests {
             .ok_or("テスト用 Store を開けませんでした")?;
 
         let sender = "d135-sender@example.test";
+        // D138: 帳簿記録は送信者認証済みのみ — テストメールに
+        // dmarc=pass の Authentication-Results を付与する。
         let mk = || -> Vec<u8> {
             format!(
-                "From: {sender}\r\n\
+                "Authentication-Results: mx.example.test; spf=pass smtp.mailfrom=example.test; dkim=pass header.d=example.test; dmarc=pass header.from=example.test\r\n\
+                 From: {sender}\r\n\
                  To: you@example.test\r\n\
                  Subject: hello\r\n\
                  Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
@@ -1833,6 +1859,48 @@ mod tests {
             .await
             .map_err(|e| e.to_string())?;
         assert_eq!(p2.map(|p| p.message_count), Some(2));
+        Ok(())
+    }
+
+    /// D138: 未認証の From で帳簿を育てられてはいけない — 偽装送信者が
+    /// 「初回受信」シグナルの消去や既知連絡先化に使えないよう、
+    /// Authentication-Results なし (全 None) のメールは記録しない。
+    #[tokio::test]
+    async fn 未認証送信者は帳簿に記録されない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let db = std::env::temp_dir().join(format!("kaname-d138-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&db);
+        history_open(db.to_string_lossy().into_owned(), "0".repeat(64)).await?;
+        let store = store_slot()
+            .lock()
+            .await
+            .clone()
+            .ok_or("テスト用 Store を開けませんでした")?;
+
+        let sender = "d138-spoofed@example.test";
+        let email: Vec<u8> = format!(
+            "From: {sender}\r\n\
+             To: you@example.test\r\n\
+             Subject: hello\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\
+             \r\n\
+             hi\r\n"
+        )
+        .into_bytes();
+
+        for _ in 0..3 {
+            let _ = analyze_raw_email(&email).await?;
+        }
+        let p = store
+            .get_sender_profile("", sender)
+            .await
+            .map_err(|e| e.to_string())?;
+        assert!(
+            p.is_none(),
+            "未認証送信者は帳簿に記録されてはいけない (D138): {:?}",
+            p
+        );
         Ok(())
     }
 
@@ -2631,6 +2699,21 @@ pub async fn mail_fetch(
         // 受信を履歴に記録し、メール本体も保存する。
         // Store 未接続なら何もしない。失敗しても解析結果は返す
         // (保存できないことは表示できない理由にならない)。
+        // D138: 帳簿への記録は送信者認証済みのみ — 偽装 From で育てない。
+        // メール本体の保存は認証と無関係に行う。
+        let sender_authd = {
+            let p = it
+                .auth_results
+                .as_deref()
+                .map(kaname_render::parse_auth_results_str)
+                .unwrap_or_default();
+            is_sender_authenticated(&kaname_bec::AuthResults {
+                spf: map_auth(p.spf),
+                dkim: map_auth(p.dkim),
+                dmarc: map_auth(p.dmarc),
+                arc: None,
+            })
+        };
         if let Some(store) = store_slot().lock().await.clone() {
             // D111: `topic_summary` に当該メールの件名を渡すと
             // 「いつもの話題」が直前1通の件名に退化し、
@@ -2638,11 +2721,13 @@ pub async fn mail_fetch(
             // 構造的に誤発火する (cosine < 0.15 → +0.15 「話題の急変」)。
             // 真の話題集計 (LLM 要約) が無い現状では、誤信号を供給するより
             // None を渡して話題シグナルをスキップするのが正直な挙動。
-            if let Err(e) = store
-                .record_received(&account_id, &from_addr, from_name.as_deref(), None)
-                .await
-            {
-                tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+            if sender_authd {
+                if let Err(e) = store
+                    .record_received(&account_id, &from_addr, from_name.as_deref(), None)
+                    .await
+                {
+                    tracing::warn!(error=%e, "送信者履歴の記録に失敗");
+                }
             }
 
             let new_msg = kaname_store::NewMessage {
