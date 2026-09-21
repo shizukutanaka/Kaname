@@ -347,8 +347,21 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .iter()
         .any(|k| n.contains(k) || n_spaced.contains(k))
     };
-    let style_risks =
-        evaluate_sender_style(&from_addr_only, &body_text, send_hour, has_financial).await;
+    // D137: 文体プロファイルへの学習は送信者認証済みメールのみに限定する。
+    // From は未認証で偽装可能なため、無条件に学習すると攻撃者が
+    // 偽装先のプロファイルを汚染できる (正規メールを誤検知させる /
+    // 攻撃メールを正常化させる双方向のポイズニング)。
+    let sender_authenticated = matches!(auth.dmarc, kaname_bec::AuthVerdict::Pass)
+        || (matches!(auth.spf, kaname_bec::AuthVerdict::Pass)
+            && matches!(auth.dkim, kaname_bec::AuthVerdict::Pass));
+    let style_risks = evaluate_sender_style(
+        &from_addr_only,
+        &body_text,
+        send_hour,
+        has_financial,
+        sender_authenticated,
+    )
+    .await;
 
     // 連絡先ベースの詐称検出 (Reply-To 偽装・タイポスクワット) に使う。
     // Store 未接続の .eml 単体解析では空になり、そのシグナルはスキップされる。
@@ -1663,7 +1676,8 @@ mod tests {
         style_profiles().lock().await.remove(sender);
 
         // 1 通評価すると、永続化済みの 3 サンプルから再開されるべき。
-        let _ = evaluate_sender_style(sender, "こんにちは。お元気ですか。", Some(10), false).await;
+        let _ = evaluate_sender_style(sender, "こんにちは。お元気ですか。", Some(10), false, true)
+            .await;
 
         let json = store
             .get_setting(&account_id, &key)
@@ -1689,7 +1703,7 @@ mod tests {
 
         // 既知送信者 1 名を先に作り、残りをダミーで上限まで埋める
         let known = "d136-known@example.test";
-        let _ = evaluate_sender_style(known, "短い本文です。", Some(10), false).await;
+        let _ = evaluate_sender_style(known, "短い本文です。", Some(10), false, true).await;
         {
             let mut profiles = style_profiles().lock().await;
             for i in 0..999 {
@@ -1704,12 +1718,13 @@ mod tests {
         // 上限到達後: 新規送信者はプロファイルを作らない (警告も出ない —
         // プロファイル非存在なので InsufficientData として評価不能)
         let warnings =
-            evaluate_sender_style("d136-new@example.test", "本文です。", Some(10), false).await;
+            evaluate_sender_style("d136-new@example.test", "本文です。", Some(10), false, true)
+                .await;
         assert!(warnings.is_empty(), "上限超過の新規送信者は評価しないべき");
         assert_eq!(style_profiles().lock().await.len(), 1_000);
 
         // 既知送信者は上限を超えても更新・評価が継続する
-        let _ = evaluate_sender_style(known, "別の本文です。", Some(11), false).await;
+        let _ = evaluate_sender_style(known, "別の本文です。", Some(11), false, true).await;
         assert_eq!(style_profiles().lock().await.len(), 1_000);
         assert!(style_profiles().lock().await.contains_key(known));
         Ok(())
@@ -4095,11 +4110,16 @@ fn style_profiles(
 ///
 /// 戻り値が空なのは「警告なし」または「学習データ不足」のいずれか。
 /// **不足を「問題なし」と偽らない**ため、UI には警告のみを出す。
+/// `sender_authenticated`: 送信者の認証が確認できたか (D137)。
+/// false の場合、既存プロファイルへの評価は行うが学習 (update・永続化)
+/// は行わない — 未認証の From によるプロファイル汚染を防ぐ。
+/// 未知の送信者が未認証の場合はプロファイル自体を作らない。
 async fn evaluate_sender_style(
     sender: &str,
     body: &str,
     send_hour: Option<u8>,
     contains_financial_request: bool,
+    sender_authenticated: bool,
 ) -> Vec<String> {
     // 送信者不明のメールに文体プロファイルを帰属させられない。
     if sender.is_empty() {
@@ -4131,6 +4151,12 @@ async fn evaluate_sender_style(
     if profiles.len() >= MAX_STYLE_PROFILES && !profiles.contains_key(sender) {
         return Vec::new();
     }
+    // D137: 未認証送信者は既存プロファイルへの評価のみ行い、
+    // 新規プロファイル作成・学習・永続化は行わない。
+    if !sender_authenticated && !profiles.contains_key(sender) {
+        // 未認証の新規送信者 — プロファイルが無いので評価不能
+        return Vec::new();
+    }
     if let std::collections::hash_map::Entry::Vacant(e) = profiles.entry(sender.to_string()) {
         let loaded = match &store {
             Some(s) => s
@@ -4153,17 +4179,22 @@ async fn evaluate_sender_style(
     // なりすましメール自身がプロファイルを引き寄せて検出が鈍る。
     let warning =
         kaname_ssa::assess_self_send_anomaly(profile, &features, contains_financial_request);
-    profile.update(&features);
+    if sender_authenticated {
+        profile.update(&features);
+    }
 
     // 永続化の失敗で警告自体を失わせない (best-effort)。
-    if let Some(s) = &store {
-        match serde_json::to_string(profile) {
-            Ok(json) => {
-                if let Err(e) = s.set_setting(&account_id, &style_key, &json).await {
-                    tracing::warn!(error = %e, "文体プロファイルの保存に失敗");
+    // 未認証メールは update していないため書き戻しも不要 (D137)。
+    if sender_authenticated {
+        if let Some(s) = &store {
+            match serde_json::to_string(profile) {
+                Ok(json) => {
+                    if let Err(e) = s.set_setting(&account_id, &style_key, &json).await {
+                        tracing::warn!(error = %e, "文体プロファイルの保存に失敗");
+                    }
                 }
+                Err(e) => tracing::warn!(error = %e, "文体プロファイルのシリアライズに失敗"),
             }
-            Err(e) => tracing::warn!(error = %e, "文体プロファイルのシリアライズに失敗"),
         }
     }
 
