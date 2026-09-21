@@ -90,7 +90,11 @@ pub struct LlmMessage {
 /// LLM サブプロセスへのハンドル。
 /// Drop 時にプロセスを終了させる。
 pub struct LlmSubprocess {
-    child: Option<Child>,
+    // Mutex にするのは `infer(&self)` のタイムアウト時に子プロセスを
+    // kill するため (D150: `&self` から触れない構造では、ハングした
+    // ワーカーを死なせられず、放棄された読み取りスレッドが stdout の
+    // Mutex を永久保持して以後の全推論がフルタイムアウトを繰り返した)。
+    child: Mutex<Option<Child>>,
     stdin: Arc<Mutex<ChildStdin>>,
     stdout: Arc<Mutex<BufReader<ChildStdout>>>,
     timeout: Duration,
@@ -167,7 +171,7 @@ impl LlmSubprocess {
         tracing::info!(mode = ?mode, "LLM サブプロセス起動完了");
 
         Ok(Self {
-            child: Some(child),
+            child: Mutex::new(Some(child)),
             stdin: Arc::new(Mutex::new(stdin)),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
@@ -200,7 +204,7 @@ impl LlmSubprocess {
             .ok_or_else(|| SubprocessError::SpawnFailed("stdout 取得失敗".into()))?;
 
         Ok(Self {
-            child: Some(child),
+            child: Mutex::new(Some(child)),
             stdin: Arc::new(Mutex::new(stdin)),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
@@ -352,7 +356,14 @@ impl LlmSubprocess {
         let line = match rx.recv_timeout(self.timeout) {
             Ok(result) => result?,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                return Err(SubprocessError::Timeout)
+                // D150: タイムアウトしたままワーカーを生かすと、放棄された
+                // 読み取りスレッドが stdout Mutex を握ったままハングし続け、
+                // 以後の infer が全て timeout 全時間を待ち続ける
+                // (出荷設定は 120 秒 — メール1通ごとに2分のストール)。
+                // ハングしたプロセスは信用できないため kill し、次回呼出を
+                // EOF/EPIPE で即座に失敗させる (fail-fast)。
+                self.kill_child();
+                return Err(SubprocessError::Timeout);
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(SubprocessError::Protocol(
@@ -375,6 +386,23 @@ impl LlmSubprocess {
         }
 
         serde_json::from_str(line.trim()).map_err(|e| SubprocessError::Protocol(e.to_string()))
+    }
+
+    /// 子プロセスを終了させる (タイムアウト時の fail-fast 用)。
+    /// Drop と同じ kill+wait を `&self` から行う。
+    fn kill_child(&self) {
+        let Ok(mut guard) = self.child.lock() else {
+            return;
+        };
+        if let Some(mut child) = guard.take() {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
+        }
     }
 
     /// モックレスポンス (開発・テスト用)。
@@ -401,23 +429,25 @@ impl LlmSubprocess {
 
 impl Drop for LlmSubprocess {
     fn drop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            // グレースフルシャットダウン。
-            // 注: ゼロ依存方針のため SIGTERM シグナル は使わず、
-            // std::process::Child::kill (SIGKILL) のみを使用する。
-            // try_wait で既に終了していれば追加の kill をスキップ。
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    // 既に終了済み
-                }
-                _ => {
-                    // まだ実行中: 終了を要求
-                    let _ = child.kill();
-                    let _ = child.wait();
+        // グレースフルシャットダウン。
+        // 注: ゼロ依存方針のため SIGTERM シグナル は使わず、
+        // std::process::Child::kill (SIGKILL) のみを使用する。
+        // try_wait で既に終了していれば追加の kill をスキップ。
+        if let Ok(mut guard) = self.child.lock() {
+            if let Some(mut child) = guard.take() {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        // 既に終了済み
+                    }
+                    _ => {
+                        // まだ実行中: 終了を要求
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
                 }
             }
-            tracing::debug!(mode = ?self.mode, "LLM サブプロセス終了");
         }
+        tracing::debug!(mode = ?self.mode, "LLM サブプロセス終了");
     }
 }
 
@@ -584,7 +614,7 @@ mod tests {
         let stdin = child.stdin.take()?;
         let stdout = child.stdout.take()?;
         Some(LlmSubprocess {
-            child: Some(child),
+            child: Mutex::new(Some(child)),
             stdin: Arc::new(Mutex::new(stdin)),
             stdout: Arc::new(Mutex::new(BufReader::new(stdout))),
             timeout,
@@ -624,6 +654,35 @@ mod tests {
         assert!(
             elapsed < Duration::from_secs(5),
             "タイムアウトは即座に発火すべき (実測 {elapsed:?}) — 永久ブロックバグの回帰防止"
+        );
+    }
+
+    #[test]
+    fn タイムアウト後のワーカーはkillされ次回呼出が即座に失敗する() {
+        // D150: ハングしたワーカーは kill されなければならない。
+        // 修正前: 放棄された読み取りスレッドが stdout Mutex を永久保持し、
+        // 2回目以降の infer が毎回フルタイムアウト (本番 120 秒) を待ち
+        // 続けた。修正後は Timeout で子プロセスを kill するため、
+        // 2回目は EOF/EPIPE で即座にエラーを返す。
+        let Some(proc) = spawn_hanging(Duration::from_millis(200)) else {
+            eprintln!("sleep コマンドが利用不可; テストをスキップ");
+            return;
+        };
+
+        let first = proc.infer(&sample_req());
+        assert!(matches!(first, Err(SubprocessError::Timeout)));
+
+        let start = std::time::Instant::now();
+        let second = proc.infer(&sample_req());
+        let elapsed = start.elapsed();
+
+        assert!(
+            second.is_err(),
+            "kill 済みワーカーへの infer は失敗すべき: {second:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "2回目の呼出で再びタイムアウトを待ってはならない (実測 {elapsed:?})"
         );
     }
 
