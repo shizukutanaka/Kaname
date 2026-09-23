@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D596: `X-Isejingu-*`/`X-Meijijingu-*`/`X-IzumoTaisha-*` 等の神社仏閣・宗教印自称が未検査
+
+- **問題**: `X-Isejingu-*` (伊勢神宮)、`X-Meijijingu-*` (明治神宮)、`X-IzumoTaisha-*` (出雲大社)、`X-FushimiInari-*`/`X-Sensoji-*`/`X-Kinkakuji-*`/`X-Kiyomizudera-*`/`X-Todaiji-*`/`X-Koyasan-*`/`X-Hieizan-*`/`X-Zenkoji-*`/`X-Naritasan-*`/`X-Dazaifu-*`/`X-SumiyoshiTaisha-*`/`X-AtsutaJingu-*`/`X-HikawaJinja-*`/`X-HiedaJinja-*`/`X-Tsurugaoka-*`/`X-KitanoTenmangu-*`/`X-Itsukushima-*`/`X-SuwaTaisha-*`/`X-KashimaJingu-*`/`X-KatoriJingu-*`/`X-Ishikiri-*`/`X-UsaJingu-*`/`X-YahikoJinja-*`/`X-Shirahige-*`/`X-KetaTaisha-*`/`X-KagoshimaJingu-*`/`X-MotoIse-*`/`X-Konpira-*`/`X-OyamaAfuri-*`/`X-Kunozan-*`/`X-Toshogu-*`/`X-Rinnoji-*`/`X-Chusonji-*`/`X-Motsuji-*`/`X-Zuiganji-*`/`X-Eiheiji-*`/`X-Sojiji-*`/`X-Chionin-*`/`X-HigashiHonganji-*`/`X-NishiHonganji-*`/`X-Tenryuji-*`/`X-Nanzenji-*`/`X-Daitokuji-*`/`X-Myoshinji-*`/`X-Kenninji-*`/`X-Tofukuji-*`/`X-Ryoanji-*`/`X-Ginkakuji-*`/`X-Saihoji-*`/`X-Horyuji-*`/`X-Yakushiji-*`/`X-Toshodaiji-*`/`X-Saidaiji-*`/`X-Shitennoji-*`/`X-Katsuoji-*`/`X-Nakayamadera-*`/`X-Zojoji-*`/`X-TsukijiHongwanji-*` 等 は社機の通知記録 — 送信側が書くことは自称。祈祷料・お布施・御朱印・法要案内の偽装は信仰悪用詐欺の典型手口。
+- **修正**: `Envelope` に `shrine_marks` + `has_shrine_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 社印の自署を問え。
+
+### Security — D597: `X-WeWork-*`/`X-Regus-*`/`X-Servcorp-*` 等のコワーキング・貸会議室印自称が未検査
+
+- **問題**: `X-WeWork-*`/`X-Regus-*`/`X-Servcorp-*`/`X-CompassOffice-*`/`X-BusinessAirport-*`/`X-ExpertOffice-*`/`X-Resonance-*`/`X-TKP-*`/`X-DEFHub-*`/`X-Spaces-*`/`X-AntreSalon-*`/`X-IiOffice-*`/`X-H1T-*`/`X-WorkingSwitch-*`/`X-CoworkingSpot-*`/`X-RentalMeeting-*`/`X-RoomShare-*`/`X-OfficeShare-*`/`X-DropIn-*`/`X-ShareOffice-*`/`X-OfficePass-*`/`X-DeskPass-*`/`X-OfficeAnywhere-*`/`X-WorkationSpot-*`/`X-OfficeSuite-*`/`X-MeetingRoomPro-*`/`X-ConferenceRoomHub-*`/`X-WorkLounge-*`/`X-RemoteWorkHub-*`/`X-SatelliteOffice-*`/`X-OfficeRental-*`/`X-CoWorkHub-*`/`X-WorkFlex-*`/`X-OpenOfficeNet-*`/`X-SharedOffice-*`/`X-WorkBox-*`/`X-MeetingHub-*`/`X-RoomRental-*`/`X-OfficeBase-*`/`X-TeleworkHub-*`/`X-OfficeMetro-*`/`X-WorkPlaceNet-*`/`X-CoWorkSpace-*`/`X-OfficeLounge-*`/`X-BizAirport-*`/`X-OfficePort-*`/`X-WorkNest-*`/`X-OfficeHive-*`/`X-ShareDesk-*`/`X-HotDesk-*`/`X-BoothRental-*`/`X-PodiumOffice-*`/`X-OfficeLink-*`/`X-DeskNet-*`/`X-CoworkNet-*`/`X-OfficeGate-*`/`X-WorkGate-*`/`X-OfficeLoop-*` は働機の通知記録 — 送信側が書くことは自称。会議室予約・月額会費・入館証の偽装はリモートワーカー狙い詐欺の典型手口。
+- **修正**: `Envelope` に `coworking_marks` + `has_coworking_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 働印の自署を問え。
+
+### Security — D598: `X-Freee-*`/`X-MoneyForward-*`/`X-Yayoi-*` 等の会計ソフト・税務申告印自称が未検査
+
+- **問題**: `X-Freee-*` (freee)、`X-MoneyForward-*` (マネーフォワード)、`X-Yayoi-*` (弥生会計)、`X-TKC-*`/`X-PCASoft-*`/`X-KanjoBugyo-*`/`X-JDL-*`/`X-KaikeiO-*`/`X-Tsukael-*`/`X-Misoca-*`/`X-Sweep-*`/`X-Zeirishi-*`/`X-Shinkoku-*`/`X-KakuteiShinkoku-*`/`X-DrakeTax-*`/`X-Lacerte-*`/`X-ProSeries-*`/`X-UltraTax-*`/`X-TaxSlayer-*`/`X-JacksonHewitt-*`/`X-LibertyTax-*`/`X-TaxReturn-*`/`X-RefundTax-*`/`X-KanpuTax-*`/`X-TaxHelper-*`/`X-MyTax-*`/`X-IncomeTax-*`/`X-CorpTax-*`/`X-Bookkeeping-*` 等 は税機の通知記録 — 送信側が書くことは自称。確定申告受理・還付金・税務通知の偽装は還付金詐欺の典型手口。(監査・格付機は D546、e-Tax・国税庁機は D518、TurboTax/H&R Block/TaxAct は既存族)
+- **修正**: `Envelope` に `taxfiling_marks` + `has_taxfiling_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 税印の自署を問え。
+
 ### Security — D593: `X-Moppy-*`/`X-Hapitas-*`/`X-Gendama-*` 等のポイ活・お小遣いサイト印自称が未検査
 
 - **問題**: `X-Moppy-*` (モッピー)、`X-Hapitas-*` (ハピタス)、`X-Gendama-*` (げん玉)、`X-PointIncome-*`/`X-Chobirich-*`/`X-PointTown-*`/`X-ECNavi-*`/`X-LifeMedia-*`/`X-PointAnytime-*`/`X-GetMoney-*`/`X-Warau-*`/`X-Sugotama-*`/`X-Powl-*`/`X-GPoint-*`/`X-PointLand-*`/`X-Macroidail-*`/`X-CoinOffer-*`/`X-OkaneMochi-*`/`X-PointFunnel-*`/`X-PointRibon-*`/`X-SumiPoint-*`/`X-PointWorld-*`/`X-PointBridge-*`/`X-PointFlow-*`/`X-Milama-*`/`X-Potora-*`/`X-MoneyTicket-*`/`X-PointOK-*`/`X-PointHunter-*`/`X-KozukaiPoint-*`/`X-PointStar-*`/`X-PointFan-*`/`X-PointGo-*`/`X-PointUp-*`/`X-PointDeals-*`/`X-Poita-*`/`X-RakutenPoint-*`/`X-KakuPoint-*`/`X-PointMessage-*`/`X-PointMail-*`/`X-PointMini-*`/`X-PointRace-*`/`X-ChibiPoint-*`/`X-PointGuide-*`/`X-Poicha-*`/`X-PointCatalog-*`/`X-PointStore-*`/`X-PotoraPoint-*`/`X-HapitasMini-*`/`X-PointTownship-*`/`X-PointSale-*`/`X-PointParadise-*`/`X-Gendamita-*`/`X-EbiPoint-*`/`X-NekoPoint-*` は稼機の通知記録 — 送信側が書くことは自称。ポイント増量・換金完了・獲得通知の偽装はポイ活詐欺の典型手口。(ポイント・決済機は D568)
