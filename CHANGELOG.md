@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D471: `X-Revolut-*`/`X-Plaid-*`/`X-Affirm-*`/`X-Venmo-*`/`X-Robinhood-*`/`X-N26-*`/`X-Monzo-*` 等のネオバンク・フィンテック印 (第二群) 自称が未検査
+
+- **問題**: `X-Plaid-*` (Plaid)、`X-Revolut-*` (Revolut)、`X-Affirm-*` (Affirm)、`X-N26-*`/`X-Monzo-*`/`X-SoFi-*`/`X-Robinhood-*`/`X-Venmo-*`/`X-Skrill-*`/`X-Neteller-*`/`X-Remitly-*`/`X-TrueLayer-*`/`X-Tink-*`/`X-Yodlee-*`/`X-Afterpay-*`/`X-Tabby-*`/`X-Tamara-*`/`X-Scalapay-*`/`X-Rapyd-*`/`X-MoneyGram-*`/`X-Paysend-*`/`X-Nubank-*`/`X-PicPay-*` は金融機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `fintech_marks` + `has_fintech_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 金融印の自署を問え。
+
+### Security — D472: `X-Coinbase-*`/`X-Binance-*`/`X-Kraken-*`/`X-Ledger-*`/`X-OpenSea-*`/`X-Etherscan-*` 等の暗号資産・取引所印自称が未検査
+
+- **問題**: `X-Coinbase-*` (Coinbase)、`X-Binance-*` (Binance)、`X-Kraken-*` (Kraken)、`X-Ledger-*`/`X-Trezor-*` (ウォレット)、`X-Bitfinex-*`/`X-Bitstamp-*`/`X-Gemini-*`/`X-OKX-*`/`X-Bybit-*`/`X-KuCoin-*`/`X-HTX-*`/`X-Huobi-*`/`X-MEXC-*`/`X-Bitget-*`/`X-Nexo-*`/`X-ConsenSys-*`/`X-CoinGecko-*`/`X-CoinMarketCap-*`/`X-Etherscan-*`/`X-OpenSea-*`/`X-Rarible-*`/`X-MagicEden-*`/`X-Alchemy-*`/`X-Infura-*`/`X-QuickNode-*`/`X-Moralis-*`/`X-Chainalysis-*`/`X-Elliptic-*`/`X-Messari-*` は暗号資産機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `crypto_marks` + `has_crypto_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 暗号資産印の自署を問え。
+
+### Security — D473: `X-Xbox-*`/`X-Blizzard-*`/`X-Nintendo-*`/`X-Roblox-*`/`X-Steam-*`/`X-Wargaming-*` 等のゲーム・エンタメ印自称が未検査
+
+- **問題**: `X-Xbox-*` (Xbox)、`X-Blizzard-*` (Blizzard)、`X-Nintendo-*` (Nintendo)、`X-Steam-*`/`X-Valve-*` (Valve)、`X-EpicGames-*`/`X-Riot-*`/`X-Activision-*`/`X-Ubisoft-*`/`X-Rockstar-*`/`X-PlayStation-*`/`X-Mojang-*`/`X-Roblox-*`/`X-Bungie-*`/`X-SquareEnix-*`/`X-BandaiNamco-*`/`X-Sega-*`/`X-Konami-*`/`X-Niantic-*`/`X-Supercell-*`/`X-Zynga-*`/`X-Scopely-*`/`X-Rovio-*`/`X-Unity-*`/`X-BattleNet-*`/`X-Wargaming-*`/`X-Gaijin-*`/`X-GOG-*`/`X-Itch-*`/`X-CyGames-*`/`X-GungHo-*`/`X-DeNA-*`/`X-Mobage-*`/`X-GREE-*` (日本系) はゲーム機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `gaming_marks` + `has_gaming_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — ゲーム印の自署を問え。
+
+
 ### Security — D468: `X-Airbnb-*`/`X-Booking-*`/`X-Uber-*`/`X-DoorDash-*`/`X-Grab-*`/`X-DiDi-*`/`X-Zomato-*` 等の旅行・運輸・フードデリバリー印自称が未検査
 
 - **問題**: `X-Uber-*` (Uber)、`X-DoorDash-*` (DoorDash)、`X-Grab-*` (Grab)、`X-Airbnb-*`/`X-Booking-*`/`X-Expedia-*`/`X-Agoda-*` (旅行)、`X-DiDi-*`/`X-Bolt-*`/`X-Gojek-*`/`X-Lyft-*`/`X-Ola-*` (配車)、`X-Deliveroo-*`/`X-JustEat-*`/`X-Zomato-*`/`X-Swiggy-*`/`X-Rappi-*`/`X-iFood-*`/`X-Coupang-*`/`X-Grubhub-*`/`X-Instacart-*`/`X-Postmates-*`/`X-Foodpanda-*`/`X-Hotels-*`/`X-Tripadvisor-*`/`X-Kayak-*`/`X-Skyscanner-*`/`X-Priceline-*`/`X-Hopper-*`/`X-FreeNow-*`/`X-Gett-*`/`X-Cabify-*` は旅行・配車・フード機の発信記録 — 送信側が書くことは自称。

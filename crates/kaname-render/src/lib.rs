@@ -438,6 +438,28 @@ pub struct Envelope {
     /// メディア・クリエイター・ニュースレター印があるか —
     /// メディア機の発信記録を送信側が自称する兆候 (D470)。
     pub media_marks: bool,
+    /// `X-Revolut-*`/`X-N26-*`/`X-Monzo-*`/`X-SoFi-*`/`X-Robinhood-*`/
+    /// `X-Venmo-*`/`X-Skrill-*`/`X-Nubank-*`/`X-Remitly-*`/`X-Plaid-*`/
+    /// `X-TrueLayer-*`/`X-Yodlee-*`/`X-Affirm-*`/`X-Afterpay-*`/
+    /// `X-Tabby-*`/`X-Tamara-*`/`X-Rapyd-*`/`X-MoneyGram-*` 等の
+    /// ネオバンク・フィンテック印 (第二群) があるか — 金融機の
+    /// 通知記録を送信側が自称する兆候 (D471)。
+    pub fintech_marks: bool,
+    /// `X-Coinbase-*`/`X-Binance-*`/`X-Kraken-*`/`X-Gemini-*`/
+    /// `X-OKX-*`/`X-Bybit-*`/`X-KuCoin-*`/`X-Bitstamp-*`/`X-Ledger-*`/
+    /// `X-Trezor-*`/`X-CoinGecko-*`/`X-Etherscan-*`/`X-OpenSea-*`/
+    /// `X-Alchemy-*`/`X-Infura-*`/`X-Chainalysis-*` 等の暗号資産・
+    /// 取引所印があるか — 暗号資産機の通知記録を送信側が自称する
+    /// 兆候 (D472)。
+    pub crypto_marks: bool,
+    /// `X-Steam-*`/`X-Valve-*`/`X-EpicGames-*`/`X-Riot-*`/
+    /// `X-Blizzard-*`/`X-Ubisoft-*`/`X-Nintendo-*`/`X-Xbox-*`/
+    /// `X-PlayStation-*`/`X-Mojang-*`/`X-Roblox-*`/`X-Niantic-*`/
+    /// `X-Supercell-*`/`X-Unity-*`/`X-BattleNet-*`/`X-Wargaming-*`/
+    /// `X-CyGames-*`/`X-DeNA-*`/`X-Mobage-*`/`X-GREE-*` 等の
+    /// ゲーム・エンタメ印があるか — ゲーム機の通知記録を
+    /// 送信側が自称する兆候 (D473)。
+    pub gaming_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -769,6 +791,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         travel_marks: has_travel_marks(raw),
         cdn_marks: has_cdn_marks(raw),
         media_marks: has_media_marks(raw),
+        fintech_marks: has_fintech_marks(raw),
+        crypto_marks: has_crypto_marks(raw),
+        gaming_marks: has_gaming_marks(raw),
     })
 }
 
@@ -2892,6 +2917,155 @@ fn has_media_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-fc2-")
             || l.starts_with("x-artstation-")
             || l.starts_with("x-vsco-")
+    })
+}
+
+/// `X-Revolut-*`/`X-N26-*`/`X-Monzo-*`/`X-SoFi-*`/`X-Robinhood-*`/
+/// `X-Venmo-*`/`X-Skrill-*`/`X-Neteller-*`/`X-Remitly-*`/`X-Plaid-*`/
+/// `X-TrueLayer-*`/`X-Tink-*`/`X-Yodlee-*`/`X-Affirm-*`/`X-Afterpay-*`/
+/// `X-Tabby-*`/`X-Tamara-*`/`X-Scalapay-*`/`X-Rapyd-*`/`X-MoneyGram-*`/
+/// `X-Paysend-*`/`X-Nubank-*`/`X-PicPay-*` 等のネオバンク・
+/// フィンテック印 (第二群) があるか判定する (D471)。
+///
+/// `X-Plaid-*` (Plaid)、`X-Revolut-*` (Revolut)、`X-Affirm-*`
+/// (Affirm) は金融機の通知記録 — 送信側から届くこれは自称。
+fn has_fintech_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-revolut-")
+            || l.starts_with("x-n26-")
+            || l.starts_with("x-monzo-")
+            || l.starts_with("x-sofi-")
+            || l.starts_with("x-robinhood-")
+            || l.starts_with("x-venmo-")
+            || l.starts_with("x-skrill-")
+            || l.starts_with("x-neteller-")
+            || l.starts_with("x-remitly-")
+            || l.starts_with("x-plaid-")
+            || l.starts_with("x-truelayer-")
+            || l.starts_with("x-tink-")
+            || l.starts_with("x-yodlee-")
+            || l.starts_with("x-affirm-")
+            || l.starts_with("x-afterpay-")
+            || l.starts_with("x-tabby-")
+            || l.starts_with("x-tamara-")
+            || l.starts_with("x-scalapay-")
+            || l.starts_with("x-rapyd-")
+            || l.starts_with("x-moneygram-")
+            || l.starts_with("x-paysend-")
+            || l.starts_with("x-nubank-")
+            || l.starts_with("x-picpay-")
+    })
+}
+
+/// `X-Coinbase-*`/`X-Binance-*`/`X-Kraken-*`/`X-Bitfinex-*`/
+/// `X-Bitstamp-*`/`X-Gemini-*`/`X-OKX-*`/`X-Bybit-*`/`X-KuCoin-*`/
+/// `X-HTX-*`/`X-Huobi-*`/`X-MEXC-*`/`X-Bitget-*`/`X-Nexo-*`/
+/// `X-Ledger-*`/`X-Trezor-*`/`X-ConsenSys-*`/`X-CoinGecko-*`/
+/// `X-CoinMarketCap-*`/`X-Etherscan-*`/`X-OpenSea-*`/`X-Rarible-*`/
+/// `X-MagicEden-*`/`X-Alchemy-*`/`X-Infura-*`/`X-QuickNode-*`/
+/// `X-Moralis-*`/`X-Chainalysis-*`/`X-Elliptic-*`/`X-Messari-*` 等の
+/// 暗号資産・取引所印があるか判定する (D472)。
+///
+/// `X-Coinbase-*` (Coinbase)、`X-Binance-*` (Binance)、`X-Kraken-*`
+/// (Kraken) は暗号資産機の通知記録 — 送信側から届くこれは自称。
+fn has_crypto_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-coinbase-")
+            || l.starts_with("x-binance-")
+            || l.starts_with("x-kraken-")
+            || l.starts_with("x-bitfinex-")
+            || l.starts_with("x-bitstamp-")
+            || l.starts_with("x-gemini-")
+            || l.starts_with("x-okx-")
+            || l.starts_with("x-bybit-")
+            || l.starts_with("x-kucoin-")
+            || l.starts_with("x-htx-")
+            || l.starts_with("x-huobi-")
+            || l.starts_with("x-mexc-")
+            || l.starts_with("x-bitget-")
+            || l.starts_with("x-nexo-")
+            || l.starts_with("x-ledger-")
+            || l.starts_with("x-trezor-")
+            || l.starts_with("x-consensys-")
+            || l.starts_with("x-coingecko-")
+            || l.starts_with("x-coinmarketcap-")
+            || l.starts_with("x-etherscan-")
+            || l.starts_with("x-opensea-")
+            || l.starts_with("x-rarible-")
+            || l.starts_with("x-magiceden-")
+            || l.starts_with("x-alchemy-")
+            || l.starts_with("x-infura-")
+            || l.starts_with("x-quicknode-")
+            || l.starts_with("x-moralis-")
+            || l.starts_with("x-chainalysis-")
+            || l.starts_with("x-elliptic-")
+            || l.starts_with("x-messari-")
+    })
+}
+
+/// `X-Steam-*`/`X-Valve-*`/`X-EpicGames-*`/`X-Riot-*`/`X-RiotGames-*`/
+/// `X-Blizzard-*`/`X-Activision-*`/`X-Ubisoft-*`/`X-Rockstar-*`/
+/// `X-Nintendo-*`/`X-Xbox-*`/`X-PlayStation-*`/`X-PSN-*`/`X-Mojang-*`/
+/// `X-Roblox-*`/`X-Bungie-*`/`X-SquareEnix-*`/`X-BandaiNamco-*`/
+/// `X-Sega-*`/`X-Konami-*`/`X-CyGames-*`/`X-GungHo-*`/`X-DeNA-*`/
+/// `X-Mobage-*`/`X-GREE-*`/`X-Niantic-*`/`X-Supercell-*`/`X-Zynga-*`/
+/// `X-Scopely-*`/`X-Rovio-*`/`X-Unity-*`/`X-BattleNet-*`/`X-BNet-*`/
+/// `X-Wargaming-*`/`X-Gaijin-*`/`X-GOG-*`/`X-Itch-*` 等の
+/// ゲーム・エンタメ印があるか判定する (D473)。
+///
+/// `X-Xbox-*` (Xbox)、`X-Blizzard-*` (Blizzard)、`X-Nintendo-*`
+/// (Nintendo) はゲーム機の通知記録 — 送信側から届くこれは自称。
+fn has_gaming_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-steam-")
+            || l.starts_with("x-valve-")
+            || l.starts_with("x-epicgames-")
+            || l.starts_with("x-riot-")
+            || l.starts_with("x-riotgames-")
+            || l.starts_with("x-blizzard-")
+            || l.starts_with("x-activision-")
+            || l.starts_with("x-ubisoft-")
+            || l.starts_with("x-rockstar-")
+            || l.starts_with("x-nintendo-")
+            || l.starts_with("x-xbox-")
+            || l.starts_with("x-playstation-")
+            || l.starts_with("x-psn-")
+            || l.starts_with("x-mojang-")
+            || l.starts_with("x-roblox-")
+            || l.starts_with("x-bungie-")
+            || l.starts_with("x-squareenix-")
+            || l.starts_with("x-bandainamco-")
+            || l.starts_with("x-sega-")
+            || l.starts_with("x-konami-")
+            || l.starts_with("x-cygames-")
+            || l.starts_with("x-gungho-")
+            || l.starts_with("x-dena-")
+            || l.starts_with("x-mobage-")
+            || l.starts_with("x-gree-")
+            || l.starts_with("x-niantic-")
+            || l.starts_with("x-supercell-")
+            || l.starts_with("x-zynga-")
+            || l.starts_with("x-scopely-")
+            || l.starts_with("x-rovio-")
+            || l.starts_with("x-unity-")
+            || l.starts_with("x-battlenet-")
+            || l.starts_with("x-bnet-")
+            || l.starts_with("x-wargaming-")
+            || l.starts_with("x-gaijin-")
+            || l.starts_with("x-gog-")
+            || l.starts_with("x-itch-")
     })
 }
 
@@ -6345,6 +6519,72 @@ mod tests {
         assert!(has_media_marks(f1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_media_marks(clean));
+    }
+
+    #[test]
+    fn scan_はネオバンクフィンテック印を検出する() {
+        let r1 = b"X-Revolut-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(r1));
+        let p1 = b"X-Plaid-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(p1));
+        let a1 = b"X-Affirm-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(a1));
+        let v1 = b"X-Venmo-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(v1));
+        let n1 = b"X-N26-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(n1));
+        let m1 = b"X-Monzo-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(m1));
+        let s1 = b"X-SoFi-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(s1));
+        let r2 = b"X-Robinhood-Notify: x\r\n\r\nx";
+        assert!(has_fintech_marks(r2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_fintech_marks(clean));
+    }
+
+    #[test]
+    fn scan_は暗号資産取引所印を検出する() {
+        let c1 = b"X-Coinbase-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(c1));
+        let b1 = b"X-Binance-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(b1));
+        let k1 = b"X-Kraken-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(k1));
+        let l1 = b"X-Ledger-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(l1));
+        let o1 = b"X-OpenSea-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(o1));
+        let e1 = b"X-Etherscan-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(e1));
+        let a1 = b"X-Alchemy-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(a1));
+        let c2 = b"X-Chainalysis-Notify: x\r\n\r\nx";
+        assert!(has_crypto_marks(c2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_crypto_marks(clean));
+    }
+
+    #[test]
+    fn scan_はゲームエンタメ印を検出する() {
+        let s1 = b"X-Steam-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(s1));
+        let x1 = b"X-Xbox-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(x1));
+        let b1 = b"X-Blizzard-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(b1));
+        let n1 = b"X-Nintendo-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(n1));
+        let r1 = b"X-Roblox-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(r1));
+        let p1 = b"X-PlayStation-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(p1));
+        let u1 = b"X-Unity-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(u1));
+        let w1 = b"X-Wargaming-Notify: x\r\n\r\nx";
+        assert!(has_gaming_marks(w1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gaming_marks(clean));
     }
 }
 
