@@ -1524,6 +1524,52 @@ pub struct Envelope {
     /// 兆候 (D569)。(`X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*` 等の
     /// キャリア本体は D511 で検出済み)
     pub esim_marks: bool,
+    /// `X-Gulliver-*`/`X-Nextage-*`/`X-Bigmotor-*`/`X-Carseven-*`/
+    /// `X-AppleKaitori-*`/`X-RabbitKaitori-*`/`X-Upos-*`/`X-Autobacs-*`/
+    /// `X-YellowHat-*`/`X-James-*`/`X-Tirekan-*`/`X-Autowave-*`/
+    /// `X-Carconbi-*`/`X-Navikuru-*`/`X-Carcone-*`/`X-Carsensor-*`/
+    /// `X-MOTA-*`/`X-Ucarpac-*`/`X-ZubattoKaitori-*`/`X-Carview-*`/
+    /// `X-Webike-*`/`X-Bikeou-*`/`X-RedBaron-*`/`X-Bikeone-*`/
+    /// `X-Autotrader-*`/`X-CarsDotCom-*`/`X-Carvana-*`/`X-Vroom-*`/
+    /// `X-CarGurus-*`/`X-CarMax-*`/`X-AutoScout24-*`/`X-MobileDe-*`/
+    /// `X-Webmotors-*`/`X-Carsales-*`/`X-Encar-*`/`X-KCar-*`/
+    /// `X-CarPrice-*`/`X-Car24-*`/`X-Cazana-*`/`X-Motory-*`/
+    /// `X-Carro-*`/`X-Kavak-*`/`X-Spinny-*`/`X-Carsome-*` 等の
+    /// 車買取・中古車・カー用品印があるか — 売機の通知記録を送信側が
+    /// 自称する兆候 (D572)。(`X-Toyota-*`/`X-Honda-*` 等メーカー本体・
+    /// `X-Hertz-*` 等レンタカーは D521、`X-Goo-*` は既存族で検出済み)
+    pub cartrade_marks: bool,
+    /// `X-HIS-*`/`X-JTB-*`/`X-KNT-*`/`X-ClubTourism-*`/`X-HankyuTravel-*`/
+    /// `X-YomioTravel-*`/`X-NihonTravel-*`/`X-Jalpak-*`/`X-ANAHotel-*`/
+    /// `X-Trip-*`/`X-Ctrip-*`/`X-GetYourGuide-*`/`X-Viator-*`/
+    /// `X-Klook-*`/`X-KKday-*`/`X-Veltra-*`/`X-ActivityJapan-*`/
+    /// `X-Sotoasobi-*`/`X-Japanican-*`/`X-Contiki-*`/`X-GAdventures-*`/
+    /// `X-Intrepid-*`/`X-Topdeck-*`/`X-Trafalgar-*`/`X-Exodus-*`/
+    /// `X-TourRadar-*`/`X-Tiqets-*`/`X-Musement-*`/`X-Headout-*`/
+    /// `X-Civitatis-*`/`X-GoCity-*`/`X-Travelzoo-*`/`X-Tourlane-*`/
+    /// `X-AsiaYo-*`/`X-Relux-*`/`X-Oyado-*`/`X-Yukoyuko-*`/
+    /// `X-Ikkyu-*`/`X-AirTrip-*`/`X-SkyTicket-*`/`X-Ennet-*`/
+    /// `X-TourHero-*`/`X-WillerTravel-*` 等の旅行代理店・
+    /// ツアー催行印があるか — 旅機の通知記録を送信側が自称する
+    /// 兆候 (D573)。(`X-Expedia-*`/`X-Booking-*`/`X-Agoda-*` 等 OTA は
+    /// D468、`X-Jalan-*`/`X-RakutenTravel-*`/`X-Marriott-*` 等
+    /// ホテル機は D535、`X-ANA-*`/`X-JAL-*` 等航空機は D513 で検出済み)
+    pub tour_marks: bool,
+    /// `X-Vernis-*`/`X-WillUranai-*`/`X-Purely-*`/`X-Callis-*`/
+    /// `X-ExciteUranai-*`/`X-Uranaikan-*`/`X-Senrigan-*`/`X-Minden-*`/
+    /// `X-Urara-*`/`X-GachiUranai-*`/`X-Pixer-*`/`X-Spica-*`/
+    /// `X-LineUranai-*`/`X-Destiny-*`/`X-Feel-*`/`X-Sator-*`/
+    /// `X-KagamiRyuji-*`/`X-Getters-*`/`X-HoshiHitomi-*`/
+    /// `X-SuishoTamako-*`/`X-Shiitake-*`/`X-HosokiKazuko-*`/
+    /// `X-DrKopa-*`/`X-LeeKuan-*`/`X-Kasamba-*`/`X-Keen-*`/
+    /// `X-CaliforniaPsychics-*`/`X-PsychicSource-*`/`X-PurpleGarden-*`/
+    /// `X-BitWine-*`/`X-AskNow-*`/`X-PathForward-*`/`X-AstroYogi-*`/
+    /// `X-AstroGuide-*`/`X-Nebula-*`/`X-Sanctuary-*`/`X-CoStar-*`/
+    /// `X-Chani-*`/`X-TimePassages-*`/`X-ThePattern-*`/`X-AstrologyZone-*`/
+    /// `X-Tarot-*`/`X-Voyance-*`/`X-Wengo-*` 等の占い・電話占い・
+    /// 占星術アプリ印があるか — 鑑機の通知記録を送信側が自称する
+    /// 兆候 (D574)。
+    pub fortune_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1973,6 +2019,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         creditcard_marks: has_creditcard_marks(hdr),
         pointcard_marks: has_pointcard_marks(hdr),
         esim_marks: has_esim_marks(hdr),
+        cartrade_marks: has_cartrade_marks(hdr),
+        tour_marks: has_tour_marks(hdr),
+        fortune_marks: has_fortune_marks(hdr),
     })
 }
 
@@ -9499,6 +9548,214 @@ fn has_esim_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Gulliver-*`/`X-Nextage-*`/`X-Bigmotor-*`/`X-Carseven-*`/
+/// `X-AppleKaitori-*`/`X-RabbitKaitori-*`/`X-Upos-*`/`X-Autobacs-*`/
+/// `X-YellowHat-*`/`X-James-*`/`X-Tirekan-*`/`X-Autowave-*`/
+/// `X-Carconbi-*`/`X-Navikuru-*`/`X-Carcone-*`/`X-Carsensor-*`/
+/// `X-MOTA-*`/`X-Ucarpac-*`/`X-ZubattoKaitori-*`/`X-Carview-*`/
+/// `X-Webike-*`/`X-Bikeou-*`/`X-RedBaron-*`/`X-Bikeone-*`/
+/// `X-Autotrader-*`/`X-CarsDotCom-*`/`X-Carvana-*`/`X-Vroom-*`/
+/// `X-CarGurus-*`/`X-CarMax-*`/`X-AutoScout24-*`/`X-MobileDe-*`/
+/// `X-Webmotors-*`/`X-Carsales-*`/`X-Encar-*`/`X-KCar-*`/
+/// `X-CarPrice-*`/`X-Car24-*`/`X-Cazana-*`/`X-Motory-*`/`X-Carro-*`/
+/// `X-Kavak-*`/`X-Spinny-*`/`X-Carsome-*` 等の車買取・中古車・
+/// カー用品印があるか判定する (D572)。
+///
+/// `X-Gulliver-*` (ガリバー)、`X-Autobacs-*` (オートバックス)、
+/// `X-Carvana-*` (Carvana) は売機の通知記録 — 送信側から届く
+/// これは自称。査定完了・買取金額提示・オークション結果偽装は
+/// 中古車売買詐欺の典型。
+fn has_cartrade_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gulliver-")
+            || l.starts_with("x-nextage-")
+            || l.starts_with("x-bigmotor-")
+            || l.starts_with("x-carseven-")
+            || l.starts_with("x-applekaitori-")
+            || l.starts_with("x-rabbitkaitori-")
+            || l.starts_with("x-upos-")
+            || l.starts_with("x-autobacs-")
+            || l.starts_with("x-yellowhat-")
+            || l.starts_with("x-james-")
+            || l.starts_with("x-tirekan-")
+            || l.starts_with("x-autowave-")
+            || l.starts_with("x-carconbi-")
+            || l.starts_with("x-navikuru-")
+            || l.starts_with("x-carcone-")
+            || l.starts_with("x-carsensor-")
+            || l.starts_with("x-mota-")
+            || l.starts_with("x-ucarpac-")
+            || l.starts_with("x-zubattokaitori-")
+            || l.starts_with("x-carview-")
+            || l.starts_with("x-webike-")
+            || l.starts_with("x-bikeou-")
+            || l.starts_with("x-redbaron-")
+            || l.starts_with("x-bikeone-")
+            || l.starts_with("x-autotrader-")
+            || l.starts_with("x-carsdotcom-")
+            || l.starts_with("x-carvana-")
+            || l.starts_with("x-vroom-")
+            || l.starts_with("x-cargurus-")
+            || l.starts_with("x-carmax-")
+            || l.starts_with("x-autoscout24-")
+            || l.starts_with("x-mobilede-")
+            || l.starts_with("x-webmotors-")
+            || l.starts_with("x-carsales-")
+            || l.starts_with("x-encar-")
+            || l.starts_with("x-kcar-")
+            || l.starts_with("x-carprice-")
+            || l.starts_with("x-car24-")
+            || l.starts_with("x-cazana-")
+            || l.starts_with("x-motory-")
+            || l.starts_with("x-carro-")
+            || l.starts_with("x-kavak-")
+            || l.starts_with("x-spinny-")
+            || l.starts_with("x-carsome-")
+    })
+}
+
+/// `X-HIS-*`/`X-JTB-*`/`X-KNT-*`/`X-ClubTourism-*`/`X-HankyuTravel-*`/
+/// `X-YomioTravel-*`/`X-NihonTravel-*`/`X-Jalpak-*`/`X-ANAHotel-*`/
+/// `X-Trip-*`/`X-Ctrip-*`/`X-GetYourGuide-*`/`X-Viator-*`/`X-Klook-*`/
+/// `X-KKday-*`/`X-Veltra-*`/`X-ActivityJapan-*`/`X-Sotoasobi-*`/
+/// `X-Japanican-*`/`X-Contiki-*`/`X-GAdventures-*`/`X-Intrepid-*`/
+/// `X-Topdeck-*`/`X-Trafalgar-*`/`X-Exodus-*`/`X-TourRadar-*`/
+/// `X-Tiqets-*`/`X-Musement-*`/`X-Headout-*`/`X-Civitatis-*`/
+/// `X-GoCity-*`/`X-Travelzoo-*`/`X-Tourlane-*`/`X-AsiaYo-*`/
+/// `X-Relux-*`/`X-Oyado-*`/`X-Yukoyuko-*`/`X-Ikkyu-*`/`X-AirTrip-*`/
+/// `X-SkyTicket-*`/`X-Ennet-*`/`X-TourHero-*`/`X-WillerTravel-*` 等の
+/// 旅行代理店・ツアー催行印があるか判定する (D573)。
+///
+/// `X-JTB-*` (JTB)、`X-HIS-*` (エイチ・アイ・エス)、`X-Klook-*`
+/// (Klook) は旅機の通知記録 — 送信側から届くこれは自称。
+/// ツアー催行中止・キャンセル料請求・現地オプション当選偽装は
+/// 旅行詐欺の典型。
+fn has_tour_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-his-")
+            || l.starts_with("x-jtb-")
+            || l.starts_with("x-knt-")
+            || l.starts_with("x-clubtourism-")
+            || l.starts_with("x-hankyutravel-")
+            || l.starts_with("x-yomiotravel-")
+            || l.starts_with("x-nihontravel-")
+            || l.starts_with("x-jalpak-")
+            || l.starts_with("x-anahotel-")
+            || l.starts_with("x-trip-")
+            || l.starts_with("x-ctrip-")
+            || l.starts_with("x-getyourguide-")
+            || l.starts_with("x-viator-")
+            || l.starts_with("x-klook-")
+            || l.starts_with("x-kkday-")
+            || l.starts_with("x-veltra-")
+            || l.starts_with("x-activityjapan-")
+            || l.starts_with("x-sotoasobi-")
+            || l.starts_with("x-japanican-")
+            || l.starts_with("x-contiki-")
+            || l.starts_with("x-gadventures-")
+            || l.starts_with("x-intrepid-")
+            || l.starts_with("x-topdeck-")
+            || l.starts_with("x-trafalgar-")
+            || l.starts_with("x-exodus-")
+            || l.starts_with("x-tourradar-")
+            || l.starts_with("x-tiqets-")
+            || l.starts_with("x-musement-")
+            || l.starts_with("x-headout-")
+            || l.starts_with("x-civitatis-")
+            || l.starts_with("x-gocity-")
+            || l.starts_with("x-travelzoo-")
+            || l.starts_with("x-tourlane-")
+            || l.starts_with("x-asiayo-")
+            || l.starts_with("x-relux-")
+            || l.starts_with("x-oyado-")
+            || l.starts_with("x-yukoyuko-")
+            || l.starts_with("x-ikkyu-")
+            || l.starts_with("x-airtrip-")
+            || l.starts_with("x-skyticket-")
+            || l.starts_with("x-ennet-")
+            || l.starts_with("x-tourhero-")
+            || l.starts_with("x-willertravel-")
+    })
+}
+
+/// `X-Vernis-*`/`X-WillUranai-*`/`X-Purely-*`/`X-Callis-*`/
+/// `X-ExciteUranai-*`/`X-Uranaikan-*`/`X-Senrigan-*`/`X-Minden-*`/
+/// `X-Urara-*`/`X-GachiUranai-*`/`X-Pixer-*`/`X-Spica-*`/
+/// `X-LineUranai-*`/`X-Destiny-*`/`X-Feel-*`/`X-Sator-*`/
+/// `X-KagamiRyuji-*`/`X-Getters-*`/`X-HoshiHitomi-*`/
+/// `X-SuishoTamako-*`/`X-Shiitake-*`/`X-HosokiKazuko-*`/`X-DrKopa-*`/
+/// `X-LeeKuan-*`/`X-Kasamba-*`/`X-Keen-*`/`X-CaliforniaPsychics-*`/
+/// `X-PsychicSource-*`/`X-PurpleGarden-*`/`X-BitWine-*`/`X-AskNow-*`/
+/// `X-PathForward-*`/`X-AstroYogi-*`/`X-AstroGuide-*`/`X-Nebula-*`/
+/// `X-Sanctuary-*`/`X-CoStar-*`/`X-Chani-*`/`X-TimePassages-*`/
+/// `X-ThePattern-*`/`X-AstrologyZone-*`/`X-Tarot-*`/`X-Voyance-*`/
+/// `X-Wengo-*` 等の占い・電話占い・占星術アプリ印があるか判定する
+/// (D574)。
+///
+/// `X-Vernis-*` (電話占いヴェルニ)、`X-Minden-*` (みん電占い)、
+/// `X-Keen-*` (Keen) は鑑機の通知記録 — 送信側から届くこれは自称。
+/// 「呪い解除」「高額鑑定」「先祖の因縁」勧誘偽装は占い詐欺の典型。
+fn has_fortune_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-vernis-")
+            || l.starts_with("x-willuranai-")
+            || l.starts_with("x-purely-")
+            || l.starts_with("x-callis-")
+            || l.starts_with("x-exciteuranai-")
+            || l.starts_with("x-uranaikan-")
+            || l.starts_with("x-senrigan-")
+            || l.starts_with("x-minden-")
+            || l.starts_with("x-urara-")
+            || l.starts_with("x-gachiuranai-")
+            || l.starts_with("x-pixer-")
+            || l.starts_with("x-spica-")
+            || l.starts_with("x-lineuranai-")
+            || l.starts_with("x-destiny-")
+            || l.starts_with("x-feel-")
+            || l.starts_with("x-sator-")
+            || l.starts_with("x-kagamiryuji-")
+            || l.starts_with("x-getters-")
+            || l.starts_with("x-hoshihitomi-")
+            || l.starts_with("x-suishotamako-")
+            || l.starts_with("x-shiitake-")
+            || l.starts_with("x-hosokikazuko-")
+            || l.starts_with("x-drkopa-")
+            || l.starts_with("x-leekuan-")
+            || l.starts_with("x-kasamba-")
+            || l.starts_with("x-keen-")
+            || l.starts_with("x-californiapsychics-")
+            || l.starts_with("x-psychicsource-")
+            || l.starts_with("x-purplegarden-")
+            || l.starts_with("x-bitwine-")
+            || l.starts_with("x-asknow-")
+            || l.starts_with("x-pathforward-")
+            || l.starts_with("x-astroyogi-")
+            || l.starts_with("x-astroguide-")
+            || l.starts_with("x-nebula-")
+            || l.starts_with("x-sanctuary-")
+            || l.starts_with("x-costar-")
+            || l.starts_with("x-chani-")
+            || l.starts_with("x-timepassages-")
+            || l.starts_with("x-thepattern-")
+            || l.starts_with("x-astrologyzone-")
+            || l.starts_with("x-tarot-")
+            || l.starts_with("x-voyance-")
+            || l.starts_with("x-wengo-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -15435,4 +15692,152 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks,
         is_dangerous,
     }
+}
+
+
+#[test]
+fn scan_は売機印を検出する() {
+    let g1 = b"From: a@b
+X-Gulliver-Id: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nextage-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-Autobacs-Ref: 1
+
+x";
+    let y1 = b"From: a@b
+X-YellowHat-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-Carvana-Order: 1
+
+x";
+    let m1 = b"From: a@b
+X-CarMax-Appraisal: 1
+
+x";
+    let w1 = b"From: a@b
+X-Webike-Ship: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kavak-Deal: 1
+
+x";
+    assert!(has_cartrade_marks(g1));
+    assert!(has_cartrade_marks(n1));
+    assert!(has_cartrade_marks(a1));
+    assert!(has_cartrade_marks(y1));
+    assert!(has_cartrade_marks(c1));
+    assert!(has_cartrade_marks(m1));
+    assert!(has_cartrade_marks(w1));
+    assert!(has_cartrade_marks(k1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_cartrade_marks(clean));
+}
+
+#[test]
+fn scan_は旅機印を検出する() {
+    let j1 = b"From: a@b
+X-JTB-Reserve: 1
+
+x";
+    let h1 = b"From: a@b
+X-HIS-Tour: 1
+
+x";
+    let k1 = b"From: a@b
+X-KNT-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-ClubTourism-Ref: 1
+
+x";
+    let t1 = b"From: a@b
+X-Trip-Order: 1
+
+x";
+    let v1 = b"From: a@b
+X-Viator-Act: 1
+
+x";
+    let k2 = b"From: a@b
+X-Klook-Book: 1
+
+x";
+    let r1 = b"From: a@b
+X-Relux-Stay: 1
+
+x";
+    assert!(has_tour_marks(j1));
+    assert!(has_tour_marks(h1));
+    assert!(has_tour_marks(k1));
+    assert!(has_tour_marks(c1));
+    assert!(has_tour_marks(t1));
+    assert!(has_tour_marks(v1));
+    assert!(has_tour_marks(k2));
+    assert!(has_tour_marks(r1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_tour_marks(clean));
+}
+
+#[test]
+fn scan_は鑑機印を検出する() {
+    let v1 = b"From: a@b
+X-Vernis-Call: 1
+
+x";
+    let w1 = b"From: a@b
+X-WillUranai-Id: 1
+
+x";
+    let p1 = b"From: a@b
+X-Purely-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-Minden-Ref: 1
+
+x";
+    let k1 = b"From: a@b
+X-Keen-Reading: 1
+
+x";
+    let c1 = b"From: a@b
+X-CoStar-Daily: 1
+
+x";
+    let s1 = b"From: a@b
+X-Shiitake-Week: 1
+
+x";
+    let g1 = b"From: a@b
+X-Getters-Talk: 1
+
+x";
+    assert!(has_fortune_marks(v1));
+    assert!(has_fortune_marks(w1));
+    assert!(has_fortune_marks(p1));
+    assert!(has_fortune_marks(m1));
+    assert!(has_fortune_marks(k1));
+    assert!(has_fortune_marks(c1));
+    assert!(has_fortune_marks(s1));
+    assert!(has_fortune_marks(g1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_fortune_marks(clean));
 }
