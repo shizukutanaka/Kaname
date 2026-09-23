@@ -415,6 +415,29 @@ pub struct Envelope {
     /// EC・マーケットプレイス印があるか — EC 機の発信記録を
     /// 送信側が自称する兆候 (D467)。
     pub ecommerce_marks: bool,
+    /// `X-Airbnb-*`/`X-Booking-*`/`X-Expedia-*`/`X-Agoda-*`/
+    /// `X-Uber-*`/`X-Lyft-*`/`X-Grab-*`/`X-DiDi-*`/`X-Bolt-*`/
+    /// `X-Gojek-*`/`X-DoorDash-*`/`X-Deliveroo-*`/`X-JustEat-*`/
+    /// `X-Zomato-*`/`X-Swiggy-*`/`X-Rappi-*`/`X-iFood-*`/`X-Coupang-*`
+    /// 等の旅行・運輸・フードデリバリー印があるか — 旅行・
+    /// 配車・フード機の発信記録を送信側が自称する兆候 (D468)。
+    pub travel_marks: bool,
+    /// `X-Cloudflare-*`/`X-Fastly-*`/`X-CloudFront-*`/`X-StackPath-*`/
+    /// `X-KeyCDN-*`/`X-CDN77-*`/`X-BunnyCDN-*`/`X-Limelight-*`/
+    /// `X-Edgio-*`/`X-Incapsula-*`/`X-Imperva-*`/`X-Sucuri-*`/
+    /// `X-Varnish:`/`X-WPEngine-*`/`X-Kinsta-*`/`X-Pantheon-*`/
+    /// `X-Acquia-*`/`X-Flywheel-*`/`X-WPE-*` 等の CDN・エッジ・
+    /// マネージドホスティング印があるか — CDN・ホスティング機の
+    /// 経路記録を送信側が自称する兆候 (D469)。
+    pub cdn_marks: bool,
+    /// `X-Patreon-*`/`X-Substack-*`/`X-Beehiiv-*`/`X-ConvertKit-*`/
+    /// `X-Flodesk-*`/`X-Simplecast-*`/`X-Libsyn-*`/`X-Buzzsprout-*`/
+    /// `X-Podbean-*`/`X-Spreaker-*`/`X-Vimeo-*`/`X-Flickr-*`/
+    /// `X-Behance-*`/`X-Dribbble-*`/`X-Pixiv-*`/`X-Ameba-*`/
+    /// `X-Seesaa-*`/`X-FC2-*`/`X-ArtStation-*`/`X-VSCO-*` 等の
+    /// メディア・クリエイター・ニュースレター印があるか —
+    /// メディア機の発信記録を送信側が自称する兆候 (D470)。
+    pub media_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -743,6 +766,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         jp_service_marks: has_jp_service_marks(raw),
         hr_marks: has_hr_marks(raw),
         ecommerce_marks: has_ecommerce_marks(raw),
+        travel_marks: has_travel_marks(raw),
+        cdn_marks: has_cdn_marks(raw),
+        media_marks: has_media_marks(raw),
     })
 }
 
@@ -2734,6 +2760,138 @@ fn has_ecommerce_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-grailed-")
             || l.starts_with("x-thredup-")
             || l.starts_with("x-vestiaire-")
+    })
+}
+
+/// `X-Airbnb-*`/`X-Booking-*`/`X-Expedia-*`/`X-Hotels-*`/
+/// `X-Tripadvisor-*`/`X-Kayak-*`/`X-Skyscanner-*`/`X-Agoda-*`/
+/// `X-Priceline-*`/`X-Hopper-*`/`X-Uber-*`/`X-Lyft-*`/`X-Grab-*`/
+/// `X-Ola-*`/`X-DiDi-*`/`X-Bolt-*`/`X-FreeNow-*`/`X-Gett-*`/
+/// `X-Cabify-*`/`X-Gojek-*`/`X-Deliveroo-*`/`X-DoorDash-*`/
+/// `X-Grubhub-*`/`X-Instacart-*`/`X-Postmates-*`/`X-JustEat-*`/
+/// `X-Foodpanda-*`/`X-Zomato-*`/`X-Swiggy-*`/`X-Rappi-*`/`X-iFood-*`/
+/// `X-Coupang-*` 等の旅行・運輸・フードデリバリー印があるか
+/// 判定する (D468)。
+///
+/// `X-Uber-*` (Uber)、`X-DoorDash-*` (DoorDash)、`X-Grab-*` (Grab)
+/// は旅行・配車・フード機の発信記録 — 送信側から届くこれは自称。
+fn has_travel_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-airbnb-")
+            || l.starts_with("x-booking-")
+            || l.starts_with("x-expedia-")
+            || l.starts_with("x-hotels-")
+            || l.starts_with("x-tripadvisor-")
+            || l.starts_with("x-kayak-")
+            || l.starts_with("x-skyscanner-")
+            || l.starts_with("x-agoda-")
+            || l.starts_with("x-priceline-")
+            || l.starts_with("x-hopper-")
+            || l.starts_with("x-uber-")
+            || l.starts_with("x-lyft-")
+            || l.starts_with("x-grab-")
+            || l.starts_with("x-ola-")
+            || l.starts_with("x-didi-")
+            || l.starts_with("x-bolt-")
+            || l.starts_with("x-freenow-")
+            || l.starts_with("x-gett-")
+            || l.starts_with("x-cabify-")
+            || l.starts_with("x-gojek-")
+            || l.starts_with("x-deliveroo-")
+            || l.starts_with("x-doordash-")
+            || l.starts_with("x-grubhub-")
+            || l.starts_with("x-instacart-")
+            || l.starts_with("x-postmates-")
+            || l.starts_with("x-justeat-")
+            || l.starts_with("x-foodpanda-")
+            || l.starts_with("x-zomato-")
+            || l.starts_with("x-swiggy-")
+            || l.starts_with("x-rappi-")
+            || l.starts_with("x-ifood-")
+            || l.starts_with("x-coupang-")
+    })
+}
+
+/// `X-Cloudflare-*`/`X-Fastly-*`/`X-CloudFront-*`/`X-StackPath-*`/
+/// `X-KeyCDN-*`/`X-CDN77-*`/`X-BunnyCDN-*`/`X-Limelight-*`/
+/// `X-Edgio-*`/`X-Incapsula-*`/`X-Imperva-*`/`X-Sucuri-*`/`X-Varnish:`/
+/// `X-WPEngine-*`/`X-Kinsta-*`/`X-Pantheon-*`/`X-Acquia-*`/
+/// `X-Flywheel-*`/`X-WPE-*` 等の CDN・エッジ・マネージド
+/// ホスティング印があるか判定する (D469)。
+///
+/// `X-Varnish:` (Varnish キャッシュ)、`X-Fastly-*` (Fastly)、
+/// `X-Sucuri-*` (Sucuri WAF) は CDN・経路機の記録 — 送信側から
+/// 届くこれは自称。
+fn has_cdn_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-cloudflare-")
+            || l.starts_with("x-fastly-")
+            || l.starts_with("x-cloudfront-")
+            || l.starts_with("x-stackpath-")
+            || l.starts_with("x-keycdn-")
+            || l.starts_with("x-cdn77-")
+            || l.starts_with("x-bunnycdn-")
+            || l.starts_with("x-limelight-")
+            || l.starts_with("x-edgio-")
+            || l.starts_with("x-incapsula-")
+            || l.starts_with("x-imperva-")
+            || l.starts_with("x-sucuri-")
+            || l.starts_with("x-varnish:")
+            || l.starts_with("x-wpengine-")
+            || l.starts_with("x-kinsta-")
+            || l.starts_with("x-pantheon-")
+            || l.starts_with("x-acquia-")
+            || l.starts_with("x-flywheel-")
+            || l.starts_with("x-wpe-")
+    })
+}
+
+/// `X-Patreon-*`/`X-Substack-*`/`X-Beehiiv-*`/`X-ConvertKit-*`/
+/// `X-Kit-*`/`X-Flodesk-*`/`X-Simplecast-*`/`X-Libsyn-*`/
+/// `X-Buzzsprout-*`/`X-Podbean-*`/`X-Spreaker-*`/`X-Vimeo-*`/
+/// `X-Flickr-*`/`X-Behance-*`/`X-Dribbble-*`/`X-Pixiv-*`/`X-Ameba-*`/
+/// `X-Seesaa-*`/`X-FC2-*`/`X-ArtStation-*`/`X-VSCO-*` 等の
+/// メディア・クリエイター・ニュースレター印があるか判定する
+/// (D470)。
+///
+/// `X-Patreon-*` (Patreon)、`X-Substack-*` (Substack)、
+/// `X-Libsyn-*` (Libsyn) はメディア・クリエイター機の発信記録 —
+/// 送信側から届くこれは自称。
+fn has_media_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-patreon-")
+            || l.starts_with("x-substack-")
+            || l.starts_with("x-beehiiv-")
+            || l.starts_with("x-convertkit-")
+            || l.starts_with("x-kit-")
+            || l.starts_with("x-flodesk-")
+            || l.starts_with("x-simplecast-")
+            || l.starts_with("x-libsyn-")
+            || l.starts_with("x-buzzsprout-")
+            || l.starts_with("x-podbean-")
+            || l.starts_with("x-spreaker-")
+            || l.starts_with("x-vimeo-")
+            || l.starts_with("x-flickr-")
+            || l.starts_with("x-behance-")
+            || l.starts_with("x-dribbble-")
+            || l.starts_with("x-pixiv-")
+            || l.starts_with("x-ameba-")
+            || l.starts_with("x-seesaa-")
+            || l.starts_with("x-fc2-")
+            || l.starts_with("x-artstation-")
+            || l.starts_with("x-vsco-")
     })
 }
 
@@ -6121,6 +6279,72 @@ mod tests {
         assert!(has_ecommerce_marks(p1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_ecommerce_marks(clean));
+    }
+
+    #[test]
+    fn scan_は旅行配車フード印を検出する() {
+        let a1 = b"X-Airbnb-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(a1));
+        let u1 = b"X-Uber-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(u1));
+        let d1 = b"X-DoorDash-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(d1));
+        let g1 = b"X-Grab-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(g1));
+        let b1 = b"X-Booking-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(b1));
+        let d2 = b"X-DiDi-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(d2));
+        let z1 = b"X-Zomato-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(z1));
+        let c1 = b"X-Coupang-Notify: x\r\n\r\nx";
+        assert!(has_travel_marks(c1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_travel_marks(clean));
+    }
+
+    #[test]
+    fn scan_はCDNエッジホスティング印を検出する() {
+        let c1 = b"X-Cloudflare-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(c1));
+        let f1 = b"X-Fastly-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(f1));
+        let v1 = b"X-Varnish: 123\r\n\r\nx";
+        assert!(has_cdn_marks(v1));
+        let s1 = b"X-Sucuri-ID: 123\r\n\r\nx";
+        assert!(has_cdn_marks(s1));
+        let w1 = b"X-WPEngine-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(w1));
+        let k1 = b"X-Kinsta-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(k1));
+        let p1 = b"X-Pantheon-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(p1));
+        let b1 = b"X-BunnyCDN-Notify: x\r\n\r\nx";
+        assert!(has_cdn_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cdn_marks(clean));
+    }
+
+    #[test]
+    fn scan_はメディアクリエイター印を検出する() {
+        let p1 = b"X-Patreon-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(p1));
+        let s1 = b"X-Substack-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(s1));
+        let b1 = b"X-Beehiiv-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(b1));
+        let l1 = b"X-Libsyn-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(l1));
+        let v1 = b"X-Vimeo-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(v1));
+        let p2 = b"X-Pixiv-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(p2));
+        let a1 = b"X-Ameba-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(a1));
+        let f1 = b"X-FC2-Notify: x\r\n\r\nx";
+        assert!(has_media_marks(f1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_media_marks(clean));
     }
 }
 
