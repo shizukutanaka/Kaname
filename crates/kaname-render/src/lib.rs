@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-Loop:`/`X-Autoresponse:`/`X-MS-Exchange-Inbox-Rules-Loop:` 等の
+    /// 自動応答ループ抑制ヘッダがあるか — 「既に処理済み」の体裁で
+    /// 受信側の自動応答を黙らせる制御自称の兆候 (D330)。
+    pub loop_headers: bool,
+    /// `Return-Receipt-To:`/`X-Confirm-Reading-To:`/`X-Acknowledge-To:`
+    /// 等の旧式受領要求ヘッダがあるか — DNT 以前の開封確認経路の
+    /// 兆候 (D331)。
+    pub legacy_receipt: bool,
+    /// `Supersedes:`/`Replaces:`/`Obsoletes:` 等の差し替え宣言が
+    /// あるか — 「前のメッセージを置き換えろ」と送信側が指図する
+    /// 偽装の兆候 (D332)。
+    pub supersedes: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        loop_headers: has_loop_headers(raw),
+        legacy_receipt: has_legacy_receipt(raw),
+        supersedes: has_supersedes(raw),
     })
 }
 
@@ -487,6 +502,62 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-Loop:`/`X-Autoresponse:`/`X-MS-Exchange-Inbox-Rules-Loop:` 等の
+/// 自動応答ループ抑制ヘッダがあるか判定する (D330)。
+///
+/// `X-Loop:` は「このメッセージは既に自動応答ループを回った」と
+/// 名乗る値 — 受信側の vacation/auto-reply を黙らせる制御自称。
+/// D301 (自動応答制御) のループ印版。
+fn has_loop_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-loop:")
+            || l.starts_with("x-autoresponse:")
+            || l.starts_with("x-no-auto-reply:")
+            || l.starts_with("x-ms-exchange-inbox-rules-loop:")
+            || l.starts_with("x-inbox-rules-loop:")
+    })
+}
+
+/// `Return-Receipt-To:`/`X-Confirm-Reading-To:`/`X-Acknowledge-To:` 等の
+/// 旧式受領要求ヘッダがあるか判定する (D331)。
+///
+/// Disposition-Notification-To (D309) 以前の MUAs が使う旧式の
+/// 開封確認経路 — 「開いた」ことを送信者に通知する生存確認を
+/// 旧式ヘッダで要求する仕込み。
+fn has_legacy_receipt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("return-receipt-to:")
+            || l.starts_with("x-confirm-reading-to:")
+            || l.starts_with("x-acknowledge-to:")
+            || l.starts_with("x-ack:")
+            || l.starts_with("registered-mail-reply-requested-by:")
+    })
+}
+
+/// `Supersedes:`/`Replaces:`/`Obsoletes:` 等の差し替え宣言があるか
+/// 判定する (D332)。
+///
+/// `Supersedes:` は「このメッセージは指定 ID を置き換える」と名乗る
+/// 値 — 受信側が保管済みの既存メッセージを「消えた」「更新された」
+/// ように見せる差し替え指図。正当用途は Usenet 系で限定的。
+fn has_supersedes(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("supersedes:") || l.starts_with("replaces:") || l.starts_with("obsoletes:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2811,44 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はループ抑制を検出する() {
+        let xl = b"X-Loop: a@b\r\n\r\nx";
+        assert!(has_loop_headers(xl));
+        let xa = b"X-Autoresponse: yes\r\n\r\nx";
+        assert!(has_loop_headers(xa));
+        let ms = b"X-MS-Exchange-Inbox-Rules-Loop: x\r\n\r\ny";
+        assert!(has_loop_headers(ms));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_loop_headers(clean));
+        let body = b"From: a@b\r\n\r\nX-Loop: a@b";
+        assert!(!has_loop_headers(body));
+    }
+
+    #[test]
+    fn scan_は旧式受領を検出する() {
+        let rr = b"Return-Receipt-To: a@b\r\n\r\nx";
+        assert!(has_legacy_receipt(rr));
+        let xc = b"X-Confirm-Reading-To: a@b\r\n\r\nx";
+        assert!(has_legacy_receipt(xc));
+        let xk = b"X-Acknowledge-To: a@b\r\n\r\nx";
+        assert!(has_legacy_receipt(xk));
+        let clean = b"Disposition-Notification-To: a@b\r\n\r\nx";
+        assert!(!has_legacy_receipt(clean));
+    }
+
+    #[test]
+    fn scan_は差し替え宣言を検出する() {
+        let sp = b"Supersedes: <a@b>\r\n\r\nx";
+        assert!(has_supersedes(sp));
+        let rp = b"Replaces: <a@b>\r\n\r\nx";
+        assert!(has_supersedes(rp));
+        let ob = b"Obsoletes: <a@b>\r\n\r\nx";
+        assert!(has_supersedes(ob));
+        let clean = b"In-Reply-To: <a@b>\r\n\r\nx";
+        assert!(!has_supersedes(clean));
     }
 }
 

@@ -581,6 +581,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D330: 自動応答ループ抑制自称
+    if env.loop_headers {
+        render_risks.push(
+            "X-Loop/X-Autoresponse 等 — 「既に処理済み」の体裁で自動応答を黙らせる制御自称の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D331: 旧式受領要求
+    if env.legacy_receipt {
+        render_risks.push(
+            "Return-Receipt-To/X-Confirm-Reading-To 等 — 旧式の開封確認経路を要求する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D332: 差し替え指図
+    if env.supersedes {
+        render_risks.push(
+            "Supersedes/Replaces/Obsoletes — 既存メッセージの置き換えを指図する偽装の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

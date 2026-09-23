@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D330: `X-Loop:`/`X-Autoresponse:`/`X-MS-Exchange-Inbox-Rules-Loop:` 等の自動応答ループ抑制自称が未検査
+
+- `X-Loop:` は「既に自動応答ループを回った」と名乗る値 — 受信側の vacation/auto-reply を黙らせる制御自称 (D301 のループ印版) だが未検査だった
+- 対処: `has_loop_headers` 新設 → `Envelope.loop_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D331: `Return-Receipt-To:`/`X-Confirm-Reading-To:` 等の旧式受領要求が未検査
+
+- Disposition-Notification-To (D309) 以前の MUAs が使う旧式の開封確認経路 — 生存確認を旧式ヘッダで要求する仕込みだが未検査だった
+- 対処: `has_legacy_receipt` 新設 → `Envelope.legacy_receipt` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D332: `Supersedes:`/`Replaces:`/`Obsoletes:` 差し替え宣言が未検査
+
+- `Supersedes:` は「このメッセージは指定 ID を置き換える」と名乗る値 — 保管済みの既存メッセージを「消えた」「更新された」ように見せる差し替え指図だが未検査だった
+- 対処: `has_supersedes` 新設 → `Envelope.supersedes` → `render_risks` 兆候報告
+- テスト +4 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

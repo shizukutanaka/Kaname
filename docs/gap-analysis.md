@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D330 | ~~**`X-Loop:`/`X-Autoresponse:`/`X-MS-Exchange-Inbox-Rules-Loop:` 等の自動応答ループ抑制自称が未検査**~~ **(解消済み)** | P2 | 「既に処理済み」の体裁で自動応答を黙らせる制御自称だが未検査だった。修正: `has_loop_headers` で検出、`loop_headers` → `render_risks` 兆候報告 | 応答の印は応答側が付ける — 黙らせる印を問え |
+| D331 | ~~**`Return-Receipt-To:`/`X-Confirm-Reading-To:` 等の旧式受領要求が未検査**~~ **(解消済み)** | P2 | 旧式の開封確認経路を要求する仕込みだが未検査だった。修正: `has_legacy_receipt` で検出、`legacy_receipt` → `render_risks` 兆候報告 | 受領の要求は新しい名前でも届く — 前世代の返し方を問え |
+| D332 | ~~**`Supersedes:`/`Replaces:`/`Obsoletes:` 差し替え宣言が未検査**~~ **(解消済み)** | P2 | 保管済みメッセージの置き換えを指図する偽装だが未検査だった。修正: `has_supersedes` で検出、`supersedes` → `render_risks` 兆候報告 | 消すのは保管側 — 替える指図を問え |
