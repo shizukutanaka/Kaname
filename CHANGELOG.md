@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D252: 緊急性を主張するヘッダ (X-Priority/Importance 等) が未検査
+
+- `X-Priority: 1`・`Importance: high`・`X-MSMail-Priority: high`・`Priority: urgent` — 「今すぐ対応しろ」を文面でなくヘッダ値で演出する BEC/恐喝メールの常套手段を誰も見ていなかった
+- 対処: `has_urgency_claim_header` 新設 (トップレベルヘッダブロックのみ検査) → `Envelope.urgency_claim` → `render_risks` 兆候報告
+- テスト +0 件 (依存ハーネスで実走)
+
+### Security — D253: `charset=us-ascii` 宣言なのに非 ASCII バイト混入が未検査
+
+- 宣言文字集合を「見えない文字」として使い実体に非 ASCII を潜ませる宣言偽装 — 検査テキストと表示テキストを分ける parser differential
+- 対処: `has_ascii_charset_lie` 新設 → `Envelope.ascii_charset_lie` → `render_risks` 兆候報告
+- テスト +0 件 (依存ハーネスで実走)
+
+### Security — D254: text/html 側にしか存在しない URL (multipart/alternative 分岐) が未検査
+
+- `multipart/alternative` で text/plain に無害文・text/html に攻撃文を置く分岐 — 両本文を併合解析はするが「片側にしかない URL」自体は兆候として見ていなかった
+- 対処: `has_html_only_urls` 新設で両本文の URL 集合を比較 → `render_risks` 兆候報告
+- テスト +0 件 (UI 層の組み合わせ)
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

@@ -100,6 +100,19 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// 緊急性を主張するヘッダ (X-Priority/Importance/X-MSMail-Priority/
+    /// Priority) を送信者が付けている。
+    ///
+    /// 「今すぐ対応しろ」という圧力を表示器でなくヘッダ値で主張する
+    /// 手口 — BEC/恐喝メールの常套手段。正当な緊急は通常文面に
+    /// 書かれ、ヘッダで緊急性を宣言するのは送信者側の意図的演出。
+    pub urgency_claim: bool,
+    /// `charset=us-ascii` 宣言なのに非 ASCII バイトを含む (D253)。
+    ///
+    /// 宣言文字集合を「見えない文字」として使い、実体に非 ASCII を
+    /// 潜ませる宣言偽装 — 検査テキストと表示テキストを分ける
+    /// parser differential の一形態。
+    pub ascii_charset_lie: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +353,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D252: 緊急性自称ヘッダ — 「今すぐ対応しろ」を値で主張する演出
+    let urgency_claim = has_urgency_claim_header(bytes);
+
+    // D253: us-ascii 宣言なのに非 ASCII バイト混入 (宣言偽装)
+    let ascii_charset_lie = has_ascii_charset_lie(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,7 +377,45 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        urgency_claim,
+        ascii_charset_lie,
     })
+}
+
+/// 緊急性を主張するヘッダがあるか判定する (D252)。
+///
+/// `X-Priority: 1`・`Importance: high`・`X-MSMail-Priority: high`・
+/// `Priority: urgent` — 「今すぐ対応しろ」を表示器でなくヘッダ値で
+/// 主張する BEC/恐喝メールの常套手段。正当な緊急は文面に書かれ、
+/// ヘッダで緊急性を宣言するのは送信者側の演出。
+/// ボディ混入を避けるためトップレベルヘッダブロックのみ検査する。
+pub fn has_urgency_claim_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        (l.starts_with("x-priority:") && l.contains('1'))
+            || (l.starts_with("importance:") && l.contains("high"))
+            || (l.starts_with("x-msmail-priority:") && l.contains("high"))
+            || (l.starts_with("priority:") && l.contains("urgent"))
+    })
+}
+
+/// `charset=us-ascii` 宣言なのに非 ASCII バイトを含むか判定する (D253)。
+///
+/// 宣言文字集合を「見えない文字」として使い実体に非 ASCII を潜ませる
+/// 宣言偽装 — 検査テキストと表示テキストを分ける parser differential。
+pub fn has_ascii_charset_lie(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    let declares_ascii = header.contains("charset=us-ascii")
+        || header.contains("charset=\"us-ascii\"")
+        || header.contains("charset='us-ascii'");
+    if !declares_ascii {
+        return false;
+    }
+    raw.iter().any(|b| *b >= 0x80)
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {

@@ -542,6 +542,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D252: 緊急性を主張するヘッダ (X-Priority 等) を送信者が付ける
+    if env.urgency_claim {
+        render_risks.push(
+            "緊急性を主張するヘッダ (X-Priority/Importance 等) — 圧力を値で演出する BEC/恐喝の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D253: us-ascii 宣言なのに非 ASCII バイト混入
+    if env.ascii_charset_lie {
+        render_risks.push(
+            "charset=us-ascii 宣言なのに非 ASCII バイト混入 — 検査テキストと表示テキストを分ける宣言偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D254: text/html 側にしか存在しない URL (multipart/alternative 分岐)
+    if has_html_only_urls(&body_text, html_extract.as_ref()) {
+        render_risks.push(
+            "text/html 側にしか存在しない URL — text/plain 側と攻撃文を分けるパート分岐の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1058,6 +1082,24 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
 ///   表示パーサ差異のリスクは残る (軽い兆候)
 /// - 単一 From + `Sender:` ドメイン不一致 → 「on behalf of」委任送信の
 ///   正常形なので報告しない (ESP 経由配信で頻出するため誤検出が多い)
+/// text/html 側にしか存在しない URL があるか判定する (D254)。
+///
+/// `multipart/alternative` で text/plain に無害文・text/html に攻撃
+/// 文を置く分岐 — 両本文の URL 集合を比較し、HTML 側にしか現れない
+/// URL を兆候として検出する。
+fn has_html_only_urls(
+    body_text: &str,
+    html_extract: Option<&kaname_render::ExtractedBodyText>,
+) -> bool {
+    let Some(extract) = html_extract else {
+        return false;
+    };
+    let plain_urls = extract_urls_from_text(body_text);
+    extract_urls_from_text(&extract.text)
+        .iter()
+        .any(|u| !plain_urls.contains(u))
+}
+
 fn from_header_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
     if env.from.len() <= 1 {
         return Vec::new();
