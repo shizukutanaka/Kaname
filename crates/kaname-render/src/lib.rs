@@ -300,6 +300,23 @@ pub struct Envelope {
     /// 等のセキュリティアプライアンス印 (第四群) があるか —
     /// 製品の検査記録を送信側が自称する兆候 (D449)。
     pub appliance4_marks: bool,
+    /// `X-Received-SPF:`/`X-SPF-*`/`X-SID-*`/`X-DomainKeys-*`/
+    /// `X-DKIM-Result`/`X-Verify-*`/`X-Verification-*` 等の
+    /// 受信側認証結果印があるか — 認証機の検証記録を送信側が
+    /// 自称する兆候 (D450)。
+    pub auth_result_marks: bool,
+    /// `X-AppRiver-*`/`X-MessageLabs-*`/`X-FrontBridge-*`/`X-FOPE-*`/
+    /// `X-RedCondor-*`/`X-SpamArrest-*`/`X-AVG-*`/`X-BullGuard-*`/
+    /// `X-Cyberoam-*`/`X-AltoSpam-*`/`X-MailDistiller-*` 等の
+    /// セキュリティアプライアンス印 (第五群) があるか — 製品の
+    /// 検査記録を送信側が自称する兆候 (D451)。
+    pub appliance5_marks: bool,
+    /// `X-AuditID:`/`X-Audit-*`/`X-Entity-Ref-ID`/`X-ASG-Debug-ID`/
+    /// `X-GBUdb-*`/`X-CT-RefID`/`X-Track-*`/`X-Trace-*`/
+    /// `X-Correlation-*`/`X-Conversation-*`/`X-Thread-*` 等の
+    /// 追跡・監査印があるか — 監査・追跡機の記録を送信側が
+    /// 自称する兆候 (D452)。
+    pub tracking_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -610,6 +627,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mailinglist_marks: has_mailinglist_marks(raw),
         saas_notify_marks: has_saas_notify_marks(raw),
         appliance4_marks: has_appliance4_marks(raw),
+        auth_result_marks: has_auth_result_marks(raw),
+        appliance5_marks: has_appliance5_marks(raw),
+        tracking_marks: has_tracking_marks(raw),
     })
 }
 
@@ -1838,6 +1858,119 @@ fn has_appliance4_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-skyhigh-")
             || l.starts_with("x-antispameurope-")
             || l.starts_with("x-hornet-")
+    })
+}
+
+/// `X-Received-SPF:`/`X-SPF-*`/`X-SenderID-*`/`X-Sender-ID-*`/
+/// `X-SID-*`/`X-DomainKeys-*`/`X-DomainKey-*`/`X-DKIM-Result`/
+/// `X-DKIM-Check`/`X-DKIM-Authentication`/`X-DKIMVerify`/
+/// `X-DKIM-Filter`/`X-Verification-*`/`X-Verify-*` 等の受信側
+/// 認証結果印があるか判定する (D450)。
+///
+/// `X-Received-SPF:`/`X-SPF-Result` (受信側 SPF 判定 — RFC 4408
+/// 慣行)、`X-SID-PRA`/`X-SID-Result` (SenderID)、`X-DomainKeys-
+/// Status` (DomainKeys) は受信機の検証記録 — 送信側から届く
+/// これは自称。`DKIM-Signature:` 自体は送信者が正規に付ける
+/// ため対象外 (受信機が書く `X-DKIM-Result`/`X-DKIM-Check` 系のみ)。
+fn has_auth_result_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-received-spf")
+            || l.starts_with("x-spf-")
+            || l.starts_with("x-senderid-")
+            || l.starts_with("x-sender-id-")
+            || l.starts_with("x-sid-")
+            || l.starts_with("x-domainkeys-")
+            || l.starts_with("x-domainkey-")
+            || l.starts_with("x-dkim-result")
+            || l.starts_with("x-dkim-check")
+            || l.starts_with("x-dkim-authentication")
+            || l.starts_with("x-dkimverify")
+            || l.starts_with("x-dkim-filter")
+            || l.starts_with("x-verification-")
+            || l.starts_with("x-verify-")
+    })
+}
+
+/// `X-AppRiver-*`/`X-MessageLabs-*`/`X-FrontBridge-*`/`X-FOPE-*`/
+/// `X-MessageCast-*`/`X-RedCondor-*`/`X-SpamArrest-*`/`X-MailDistiller-*`/
+/// `X-OnlyMyEmail-*`/`X-OmyEmail-*`/`X-AltoSpam-*`/`X-Cyberoam-*`/
+/// `X-AVG-*`/`X-BullGuard-*`/`X-MXHero-*`/`X-DuoCircle-*`/
+/// `X-ElectricMail-*`/`X-Perimeter-*`/`X-CrystalTech-*` 等の
+/// セキュリティアプライアンス印 (第五群) があるか判定する (D451)。
+///
+/// `X-MessageLabs-*` (Symantec.cloud/MessageLabs)、`X-FrontBridge-*`/
+/// `X-FOPE-*` (Microsoft FrontBridge/FOPE)、`X-AppRiver-*` は製品の
+/// 検査記録 — 送信側から届くこれは自称。
+fn has_appliance5_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-appriver-")
+            || l.starts_with("x-messagelabs-")
+            || l.starts_with("x-frontbridge-")
+            || l.starts_with("x-fope-")
+            || l.starts_with("x-messagecast-")
+            || l.starts_with("x-redcondor-")
+            || l.starts_with("x-spamarrest-")
+            || l.starts_with("x-maildistiller-")
+            || l.starts_with("x-onlymyemail-")
+            || l.starts_with("x-omyemail-")
+            || l.starts_with("x-altospam-")
+            || l.starts_with("x-cyberoam-")
+            || l.starts_with("x-avg-")
+            || l.starts_with("x-bullguard-")
+            || l.starts_with("x-mxhero-")
+            || l.starts_with("x-duocircle-")
+            || l.starts_with("x-electricmail-")
+            || l.starts_with("x-perimeter-")
+            || l.starts_with("x-crystaltech-")
+    })
+}
+
+/// `X-AuditID:`/`X-Audit-*`/`X-Entity-Ref-ID`/`X-ASG-Debug-ID`/
+/// `X-GBUdb-*`/`X-CT-RefID`/`X-Track-*`/`X-Trace-*`/`X-Correlation-*`/
+/// `X-Conversation-*`/`X-Thread-*`/`X-Session-*`/`X-Request-*`/
+/// `X-LibVersion:`/`X-Failed-Recipients:`/`X-NDR-*`/`X-Delayed-*`/
+/// `X-Deferred-*`/`X-NonDelivery-*`/`X-Undeliverable-*` 等の
+/// 追跡・監査・配信失敗印があるか判定する (D452)。
+///
+/// `X-AuditID`/`X-Entity-Ref-ID`/`X-ASG-Debug-ID`/`X-GBUdb-Analysis`
+/// (レジストリ掲載)、`X-CT-RefID` (MailMarshal 参照 ID)、
+/// `X-Failed-Recipients` (Exchange/Postfix 配信失敗記録) は
+/// 監査・追跡機の記録 — 送信側から届くこれは自称。
+fn has_tracking_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-auditid")
+            || l.starts_with("x-audit-")
+            || l.starts_with("x-entity-")
+            || l.starts_with("x-asg-")
+            || l.starts_with("x-gbudb-")
+            || l.starts_with("x-ct-")
+            || l.starts_with("x-track-")
+            || l.starts_with("x-tracking-")
+            || l.starts_with("x-trace-")
+            || l.starts_with("x-correlation-")
+            || l.starts_with("x-conversation-")
+            || l.starts_with("x-thread-")
+            || l.starts_with("x-session-")
+            || l.starts_with("x-request-id")
+            || l.starts_with("x-libversion")
+            || l.starts_with("x-failed-recipients")
+            || l.starts_with("x-ndr-")
+            || l.starts_with("x-delayed-")
+            || l.starts_with("x-deferred-")
+            || l.starts_with("x-nondelivery-")
+            || l.starts_with("x-undeliverable-")
     })
 }
 
@@ -4830,6 +4963,71 @@ mod tests {
         assert!(has_appliance4_marks(w2));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_appliance4_marks(clean));
+    }
+
+    #[test]
+    fn scan_は認証結果印を検出する() {
+        let s1 = b"X-Received-SPF: pass\r\n\r\nx";
+        assert!(has_auth_result_marks(s1));
+        let s2 = b"X-SPF-Result: pass\r\n\r\nx";
+        assert!(has_auth_result_marks(s2));
+        let s3 = b"X-SID-Result: pass\r\n\r\nx";
+        assert!(has_auth_result_marks(s3));
+        let d1 = b"X-DomainKeys-Status: good\r\n\r\nx";
+        assert!(has_auth_result_marks(d1));
+        let d2 = b"X-DKIM-Result: pass\r\n\r\nx";
+        assert!(has_auth_result_marks(d2));
+        let v1 = b"X-Verification-Result: pass\r\n\r\nx";
+        assert!(has_auth_result_marks(v1));
+        // DKIM-Signature: は送信者の正規印 — 対象外
+        let legit = b"DKIM-Signature: v=1\r\n\r\nx";
+        assert!(!has_auth_result_marks(legit));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_auth_result_marks(clean));
+    }
+
+    #[test]
+    fn scan_はアプライアンス第五群印を検出する() {
+        let a1 = b"X-AppRiver-Spam: x\r\n\r\nx";
+        assert!(has_appliance5_marks(a1));
+        let m1 = b"X-MessageLabs-Spam: x\r\n\r\nx";
+        assert!(has_appliance5_marks(m1));
+        let f1 = b"X-FrontBridge-Spam: x\r\n\r\nx";
+        assert!(has_appliance5_marks(f1));
+        let f2 = b"X-FOPE-SpamFilter: x\r\n\r\nx";
+        assert!(has_appliance5_marks(f2));
+        let r1 = b"X-RedCondor-Spam: x\r\n\r\nx";
+        assert!(has_appliance5_marks(r1));
+        let s1 = b"X-SpamArrest-Spam: x\r\n\r\nx";
+        assert!(has_appliance5_marks(s1));
+        let a2 = b"X-AVG-Certified: x\r\n\r\nx";
+        assert!(has_appliance5_marks(a2));
+        let a3 = b"X-AltoSpam-Result: x\r\n\r\nx";
+        assert!(has_appliance5_marks(a3));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_appliance5_marks(clean));
+    }
+
+    #[test]
+    fn scan_は追跡監査印を検出する() {
+        let a1 = b"X-AuditID: abc\r\n\r\nx";
+        assert!(has_tracking_marks(a1));
+        let e1 = b"X-Entity-Ref-ID: abc\r\n\r\nx";
+        assert!(has_tracking_marks(e1));
+        let a2 = b"X-ASG-Debug-ID: abc\r\n\r\nx";
+        assert!(has_tracking_marks(a2));
+        let g1 = b"X-GBUdb-Analysis: x\r\n\r\nx";
+        assert!(has_tracking_marks(g1));
+        let c1 = b"X-CT-RefID: x\r\n\r\nx";
+        assert!(has_tracking_marks(c1));
+        let t1 = b"X-Tracking-ID: x\r\n\r\nx";
+        assert!(has_tracking_marks(t1));
+        let f1 = b"X-Failed-Recipients: a@b\r\n\r\nx";
+        assert!(has_tracking_marks(f1));
+        let d1 = b"X-Deferred-Until: x\r\n\r\nx";
+        assert!(has_tracking_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_tracking_marks(clean));
     }
 }
 

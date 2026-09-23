@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D450: `X-Received-SPF:`/`X-SPF-*`/`X-SID-*`/`X-DomainKeys-*`/`X-DKIM-Result`/`X-DKIM-Check`/`X-Verify-*`/`X-Verification-*` 等の受信側認証結果印自称が未検査
+
+- **問題**: `X-Received-SPF:`/`X-SPF-Result` (受信側 SPF 判定)、`X-SID-PRA`/`X-SID-Result` (SenderID)、`X-DomainKeys-Status` (DomainKeys)、`X-DKIM-Result`/`X-DKIM-Check`/`X-DKIMVerify`/`X-Verification-*`/`X-Verify-*` は受信機の検証記録 — 送信側が書くことは自称。`DKIM-Signature:` 自体は送信者が正規に付けるため対象外。
+- **修正**: `Envelope` に `auth_result_marks` + `has_auth_result_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 検証の記録は検証機が記す — 認証結果印の自署を問え。
+
+### Security — D451: `X-AppRiver-*`/`X-MessageLabs-*`/`X-FrontBridge-*`/`X-FOPE-*`/`X-RedCondor-*`/`X-SpamArrest-*`/`X-AVG-*`/`X-AltoSpam-*` 等のセキュリティアプライアンス印 (第五群) 自称が未検査
+
+- **問題**: `X-MessageLabs-*` (Symantec.cloud)、`X-FrontBridge-*`/`X-FOPE-*` (Microsoft FrontBridge/FOPE)、`X-AppRiver-*`/`X-RedCondor-*`/`X-SpamArrest-*`/`X-MailDistiller-*`/`X-OnlyMyEmail-*`/`X-AltoSpam-*`/`X-Cyberoam-*`/`X-AVG-*`/`X-BullGuard-*`/`X-MXHero-*`/`X-DuoCircle-*`/`X-ElectricMail-*`/`X-Perimeter-*`/`X-CrystalTech-*`/`X-MessageCast-*` は製品の検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `appliance5_marks` + `has_appliance5_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 検査の記録は検査機が記す — アプライアンス印の自署を問え。
+
+### Security — D452: `X-AuditID:`/`X-Entity-Ref-ID`/`X-ASG-Debug-ID`/`X-GBUdb-*`/`X-CT-RefID`/`X-Failed-Recipients:`/`X-NDR-*`/`X-Deferred-*` 等の追跡・監査・配信失敗印自称が未検査
+
+- **問題**: `X-AuditID`/`X-Entity-Ref-ID`/`X-ASG-Debug-ID`/`X-GBUdb-Analysis` (レジストリ掲載)、`X-CT-RefID` (MailMarshal 参照 ID)、`X-Failed-Recipients` (Exchange/Postfix 配信失敗記録)、`X-Track-*`/`X-Trace-*`/`X-Correlation-*`/`X-Conversation-*`/`X-Thread-*`/`X-Session-*`/`X-Request-*`/`X-LibVersion:`/`X-NDR-*`/`X-Delayed-*`/`X-Deferred-*`/`X-NonDelivery-*`/`X-Undeliverable-*` は監査・追跡機の記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `tracking_marks` + `has_tracking_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 監査の記録は監査機が記す — 追跡印の自署を問え。
+
+
 ### Security — D447: `X-ML-*`/`X-MLName:`/`X-Mail-Count:`/`X-Mailman-*`/`X-List-*`/`X-Listserv-*`/`X-Sympa-*`/`X-Majordomo-*`/`X-eGroups-*`/`X-Topica-*` 等のリスト配信・ML 印自称が未検査
 
 - **問題**: `X-MLName`/`X-Mail-Count`/`X-MLServer`/`X-ML-Id` (fml)、`X-Mailman-Version`/`X-Listprocessor-Version`/`X-List-Administrivia` (レジストリ掲載)、`X-eGroups-Approved-By`/`X-YahooGroup-*`/`X-Topica-*`/`X-Freelists-*`/`X-Groupsio-*`/`X-SmartList-*`/`X-Listar-*`/`X-Ecartis-*`/`X-CiviCRM-*` 等の ML・リスト配送記録は送信側が書くことは自称。
