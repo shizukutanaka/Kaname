@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D480: `X-Zillow-*`/`X-Redfin-*`/`X-Rightmove-*`/`X-SUUMO-*`/`X-Idealista-*`/`X-Zoopla-*` 等の不動産・ホームサービス印自称が未検査
+
+- **問題**: `X-Zillow-*` (Zillow)、`X-Redfin-*` (Redfin)、`X-Rightmove-*` (Rightmove)、`X-Realtor-*`/`X-Trulia-*`/`X-Apartments-*`/`X-Zumper-*`/`X-Compass-*`/`X-Opendoor-*`/`X-LoopNet-*`/`X-CoStar-*`/`X-Idealista-*`/`X-Immobiliare-*`/`X-Fotocasa-*`/`X-Zoopla-*`/`X-OnTheMarket-*`/`X-PrimeLocation-*`/`X-SpareRoom-*`/`X-OpenRent-*`/`X-Realestate-*`/`X-Domain-*`/`X-Homely-*`/`X-Allhomes-*`/`X-Lianjia-*`/`X-Beike-*`/`X-Anjuke-*`/`X-Ziroom-*`/`X-SUUMO-*`/`X-LIFULL-*`/`X-athome-*` は不動産機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `realestate_marks` + `has_realestate_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 不動産印の自署を問え。
+
+### Security — D481: `X-Zocdoc-*`/`X-GoodRx-*`/`X-Doximity-*`/`X-LabCorp-*`/`X-Ancestry-*`/`X-MyChart-*` 等のヘルスケア・薬局・DNA 検査印自称が未検査
+
+- **問題**: `X-Zocdoc-*` (Zocdoc)、`X-GoodRx-*` (GoodRx)、`X-Doximity-*` (Doximity)、`X-LabCorp-*`/`X-Quest-*`/`X-MyChart-*`/`X-FollowMyHealth-*`/`X-Ancestry-*`/`X-MyHeritage-*`/`X-23andMe-*`/`X-Invitae-*`/`X-Natera-*`/`X-SingleCare-*`/`X-Hims-*`/`X-Optum-*`/`X-CVS-*`/`X-Walgreens-*`/`X-Cigna-*`/`X-Aetna-*`/`X-Humana-*`/`X-Anthem-*`/`X-Kaiser-*`/`X-Oscar-*`/`X-Cerner-*`/`X-OracleHealth-*` は医療機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `health_marks` + `has_health_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 医療印の自署を問え。
+
+### Security — D482: `X-Indeed-*`/`X-Glassdoor-*`/`X-ZipRecruiter-*`/`X-Wellfound-*`/`X-Mynavi-*`/`X-doda-*` 等の求職・人材印自称が未検査
+
+- **問題**: `X-Indeed-*` (Indeed)、`X-Glassdoor-*` (Glassdoor)、`X-ZipRecruiter-*` (ZipRecruiter)、`X-Monster-*`/`X-CareerBuilder-*`/`X-Dice-*`/`X-Wellfound-*`/`X-Randstad-*`/`X-Adecco-*`/`X-Manpower-*`/`X-Kforce-*`/`X-RobertHalf-*`/`X-Hays-*`/`X-PageGroup-*`/`X-Pasona-*`/`X-en-japan-*`/`X-Mynavi-*`/`X-doda-*`/`X-GaijinPot-*`/`X-Daijob-*` は人材機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `jobs_marks` + `has_jobs_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 人材印の自署を問え。
+
+
 ### Security — D477: `X-Coursera-*`/`X-Duolingo-*`/`X-HackerRank-*`/`X-Udemy-*`/`X-Canvas-*`/`X-Blackboard-*` 等の教育・LMS 印自称が未検査
 
 - **問題**: `X-Coursera-*` (Coursera)、`X-Duolingo-*` (Duolingo)、`X-HackerRank-*` (HackerRank)、`X-Udemy-*`/`X-edX-*`/`X-Udacity-*`/`X-Pluralsight-*`/`X-Skillshare-*`/`X-DataCamp-*`/`X-Codecademy-*`/`X-LeetCode-*`/`X-CodeWars-*`/`X-Exercism-*`/`X-Topcoder-*`/`X-Codeforces-*`/`X-KhanAcademy-*`/`X-Brilliant-*`/`X-Canvas-*`/`X-Instructure-*`/`X-Blackboard-*`/`X-D2L-*` は教育機の通知記録 — 送信側が書くことは自称。
