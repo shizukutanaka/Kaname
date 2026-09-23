@@ -103,6 +103,22 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// multipart 宣言なのに `boundary=` パラメータがない (D279)。
+    ///
+    /// 区切りを定義しない multipart は解析不能 — 手作り生成品の
+    /// 兆候。区切り文字列が宣言されるも本文に現れない phantom
+    /// boundary とは別系。
+    pub missing_boundary_param: bool,
+    /// `Content-Type:` ヘッダの欠落 (D280)。
+    ///
+    /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
+    /// ヘッダの欠落で、手作り生成品の兆候。
+    pub missing_content_type: bool,
+    /// `Return-Path:` が `<` を含まない不正値 (D281)。
+    ///
+    /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
+    /// 手作り生成品の兆候。
+    pub malformed_return_path: bool,
 }
 
 /// An RFC 5322 address.
@@ -343,6 +359,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D279: boundary= パラメータ欠落
+    let missing_boundary_param = has_missing_boundary_param(bytes);
+
+    // D280: Content-Type 欠落
+    let missing_content_type = has_missing_content_type(bytes);
+
+    // D281: Return-Path の不正値
+    let malformed_return_path = has_malformed_return_path(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -362,6 +387,48 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        missing_boundary_param,
+        missing_content_type,
+        malformed_return_path,
+    })
+}
+
+/// multipart 宣言なのに `boundary=` パラメータがないか判定する
+/// (D279)。
+///
+/// 区切りを定義しない multipart は解析不能 — 手作り生成品の兆候。
+pub fn has_missing_boundary_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = &text[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("content-type:")
+            && l.contains("multipart/")
+            && !l.contains("boundary=")
+    })
+}
+
+/// `Content-Type:` ヘッダが欠落しているか判定する (D280)。
+///
+/// 型を名乗らないメッセージ — 正規 MUA が必ず付ける必須系ヘッダの
+/// 欠落で、手作り生成品の兆候。
+pub fn has_missing_content_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    !header.lines().any(|l| l.starts_with("content-type:"))
+}
+
+/// `Return-Path:` が `<` を含まない不正値か判定する (D281)。
+///
+/// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は手作り
+/// 生成品の兆候。
+pub fn has_malformed_return_path(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("return-path:") && !l.contains('<')
     })
 }
 
