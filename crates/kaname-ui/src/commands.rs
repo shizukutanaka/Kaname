@@ -892,6 +892,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D450: 認証結果印自称
+    if env.auth_result_marks {
+        render_risks.push(
+            "X-Received-SPF/X-SPF-*/X-SID-*/X-DomainKeys-*/X-DKIM-Result 等 — 認証機の検証記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D451: アプライアンス印自称 (第五群)
+    if env.appliance5_marks {
+        render_risks.push(
+            "X-AppRiver-*/X-MessageLabs-*/X-FrontBridge-*/X-FOPE-*/X-RedCondor-*/X-AVG-* 等 — 製品の検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D452: 追跡・監査印自称
+    if env.tracking_marks {
+        render_risks.push(
+            "X-AuditID/X-Entity-Ref-ID/X-ASG-Debug-ID/X-CT-RefID/X-Failed-Recipients 等 — 監査・追跡機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
