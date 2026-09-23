@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Domino-*`/`X-Notes-*`/`X-Lotus-*`/`X-IBM-*` 等の
+    /// Domino/Notes 印があるか — groupware 基盤の印を送信側が
+    /// 自称する兆候 (D390)。
+    pub domino_marks: bool,
+    /// `X-GroupWise-*`/`X-Novell-*`/`X-Zarafa-*`/`X-Kopano-*`/
+    /// `X-OpenXchange-*` 等の groupware 印 (第二群) があるか
+    /// — 基盤の印を送信側が自称する兆候 (D391)。
+    pub groupware_marks: bool,
+    /// `X-Local-*`/`X-LocalAddr:`/`X-Local-Delivery:`/
+    /// `X-Local-Host:`/`X-Delivered-Locally:` 等のローカル配送印があるか
+    /// — 配送機の記録を送信側が自称する兆候 (D392)。
+    pub local_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        domino_marks: has_domino_marks(raw),
+        groupware_marks: has_groupware_marks(raw),
+        local_marks: has_local_marks(raw),
     })
 }
 
@@ -624,6 +639,66 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Domino-*`/`X-Notes-*`/`X-Lotus-*`/`X-IBM-*`/`X-HCL-*` 等の
+/// Domino/Notes 印があるか判定する (D390)。
+///
+/// Domino/Notes 基盤が配送時に記す印 — 送信側から届くこれは
+/// 「この groupware 基盤を通った」体裁を内容側が主張する自称。
+fn has_domino_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-domino-")
+            || l.starts_with("x-notes-")
+            || l.starts_with("x-lotus-")
+            || l.starts_with("x-ibm-")
+            || l.starts_with("x-hcl-")
+    })
+}
+
+/// `X-GroupWise-*`/`X-Novell-*`/`X-Zarafa-*`/`X-Kopano-*`/
+/// `X-OpenXchange-*`/`X-OX-*` 等の groupware 印 (第二群)
+/// があるか判定する (D391)。
+///
+/// GroupWise/Zarafa/Open-Xchange 基盤が記す印 — 送信側から届く
+/// これは「この groupware 基盤を通った」体裁を内容側が主張する自称。
+fn has_groupware_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-groupwise-")
+            || l.starts_with("x-novell-")
+            || l.starts_with("x-zarafa-")
+            || l.starts_with("x-kopano-")
+            || l.starts_with("x-openxchange-")
+            || l.starts_with("x-ox-")
+    })
+}
+
+/// `X-Local-*`/`X-LocalAddr:`/`X-Local-Delivery:`/`X-Local-Host:`/
+/// `X-Delivered-Locally:`/`X-Local-IP:` 等のローカル配送印があるか
+/// 判定する (D392)。
+///
+/// ローカル配送の記録は配送機が残す — 送信側から届くこれは
+/// 「ローカルで届けた」体裁を内容側が主張する自称。
+fn has_local_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-local-")
+            || l.starts_with("x-localaddr:")
+            || l.starts_with("x-local-delivery:")
+            || l.starts_with("x-local-host:")
+            || l.starts_with("x-delivered-locally:")
     })
 }
 
@@ -2952,6 +3027,48 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はDomino印を検出する() {
+        let dm = b"X-Domino-Primary-Directory: d\r\n\r\nx";
+        assert!(has_domino_marks(dm));
+        let nt = b"X-Notes-Item: i\r\n\r\nx";
+        assert!(has_domino_marks(nt));
+        let lt = b"X-Lotus-FromDomain: f\r\n\r\nx";
+        assert!(has_domino_marks(lt));
+        let ib = b"X-IBM-Notes: n\r\n\r\nx";
+        assert!(has_domino_marks(ib));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_domino_marks(clean));
+    }
+
+    #[test]
+    fn scan_はgroupware印を検出する() {
+        let gw = b"X-GroupWise-Version: 1\r\n\r\nx";
+        assert!(has_groupware_marks(gw));
+        let nv = b"X-Novell-Version: v\r\n\r\nx";
+        assert!(has_groupware_marks(nv));
+        let zf = b"X-Zarafa-Version: z\r\n\r\nx";
+        assert!(has_groupware_marks(zf));
+        let ox = b"X-OpenXchange-Version: o\r\n\r\nx";
+        assert!(has_groupware_marks(ox));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_groupware_marks(clean));
+    }
+
+    #[test]
+    fn scan_はローカル配送印を検出する() {
+        let ld = b"X-Local-Delivery: l\r\n\r\nx";
+        assert!(has_local_marks(ld));
+        let la = b"X-LocalAddr: a\r\n\r\nx";
+        assert!(has_local_marks(la));
+        let lh = b"X-Local-Host: h\r\n\r\nx";
+        assert!(has_local_marks(lh));
+        let dl = b"X-Delivered-Locally: yes\r\n\r\nx";
+        assert!(has_local_marks(dl));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_local_marks(clean));
     }
 }
 

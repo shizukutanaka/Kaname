@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D390: Domino/Notes 印自称
+    if env.domino_marks {
+        render_risks.push(
+            "X-Domino-*/X-Notes-*/X-Lotus-* 等 — Domino/Notes 基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D391: groupware 印 (第二群) 自称
+    if env.groupware_marks {
+        render_risks.push(
+            "X-GroupWise-*/X-Zarafa-*/X-OpenXchange-* 等 — groupware 基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D392: ローカル配送印自称
+    if env.local_marks {
+        render_risks.push(
+            "X-Local-*/X-LocalAddr/X-Local-Delivery 等 — 「ローカルで届けた」記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

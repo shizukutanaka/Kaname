@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D390: `X-Domino-*`/`X-Notes-*`/`X-Lotus-*`/`X-IBM-*`/`X-HCL-*` 等の Domino/Notes 印自称が未検査
+
+- Domino/Notes 基盤が配送時に記す印 — 送信側から届くのは「この groupware 基盤を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_domino_marks` 新設 → `Envelope.domino_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D391: `X-GroupWise-*`/`X-Novell-*`/`X-Zarafa-*`/`X-Kopano-*`/`X-OpenXchange-*`/`X-OX-*` 等の groupware 印 (第二群) 自称が未検査
+
+- GroupWise/Zarafa/Open-Xchange 基盤が記す印 — 送信側から届くのは「この groupware 基盤を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_groupware_marks` 新設 → `Envelope.groupware_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D392: `X-Local-*`/`X-LocalAddr:`/`X-Local-Delivery:`/`X-Local-Host:`/`X-Delivered-Locally:`/`X-Local-IP:` 等のローカル配送印自称が未検査
+
+- ローカル配送の記録は配送機が残す — 送信側から届くのは「ローカルで届けた」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_local_marks` 新設 → `Envelope.local_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった
