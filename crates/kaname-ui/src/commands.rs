@@ -514,6 +514,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D206: 送信者側のフィルタ評価ヘッダ (verdict 注入) の兆候。
+    if env.forged_filter_verdict {
+        render_risks.push(
+            "送信者側がフィルタ評価ヘッダ (X-Spam-Flag 等) を付与 — 受信側判定を自称する verdict 注入の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

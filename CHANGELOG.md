@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D204: 添付 PDF の自動実行キー (/JavaScript, /OpenAction, /AA, /Launch) を検出
+
+- PDF 仕様の「文書を開いたときに動作を起こす」トリガー (/JavaScript スクリプト、/OpenAction 起動動作、/AA 追加動作、/Launch 外部プロセス) は PDF ボーンのマルウェア配布・フィッシング誘導に使われる (Unit42/JPCERT の PDF 添付フィッシング継続報告)。従来は「文書だから読み物」として内容の動作起点性を見ていなかった
+- 対処: `pdf_has_auto_action` で `%PDF` 実体内のキーを走査して `scan_attachment_bytes` に配線
+- テスト +2 件
+
+### Security — D205: OOXML (ZIP) 内の `vbaProject.bin` を実体スキャンで検出
+
+- docx/xlsx/pptx は ZIP コンテナで、マクロ有効文書は `vbaProject.bin` エントリを持つ — `.docx` 等のマクロ無効拡張子を名乗りながら実体はマクロ入りという拡張子偽装を、宣言・拡張子に依存せず実体で検出
+- 対処: `zip_contains_vba_project` (PK マジック + `vbaProject` エントリ走査) を `scan_attachment_bytes` に配線
+- テスト +2 件
+
+### Security — D206: 送信者側のフィルタ評価ヘッダ (verdict 注入) を検出
+
+- `X-Spam-Flag`/`X-Spam-Status`/`X-Spam-Score`/`X-Virus-Scanned` は本来「受信側のスキャナが付ける」ヘッダ — 送信側がこれらを付与すれば、下流フィルタや受信者に「既に合格済み」とアピールして検査を潜る verdict 注入になる
+- 対処: `sender_supplied_header` でトップレベルヘッダ存在を走査 → `forged_filter_verdict` → `render_risks` に兆候報告
+- テスト +2 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

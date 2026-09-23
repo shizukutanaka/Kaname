@@ -273,6 +273,38 @@ pub fn check_mime_mismatch(declared: &str, bytes: &[u8]) -> Option<MimeMismatch>
     }
 }
 
+/// バイト列中に needle が出現するか。
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    needle.is_empty() || haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// PDF 実体内に自動実行系キーがあるか判定する (D204)。
+///
+/// `/JavaScript`/`/OpenAction`/`/AA`/`/Launch` は PDF 仕様が定める
+/// 「文書を開いたときに動作を起こす」トリガーで、PDF ボーンの
+/// マルウェア配布・フィッシング誘導に使われる (Unit42/JPCERT が
+/// PDF 添付フィッシングを継続報告)。文書本体が「ただの読み物」で
+/// なく動作起点であることを検出する。
+#[must_use]
+pub fn pdf_has_auto_action(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"%PDF")
+        && (contains_bytes(bytes, b"/JavaScript")
+            || contains_bytes(bytes, b"/OpenAction")
+            || contains_bytes(bytes, b"/Launch")
+            || contains_bytes(bytes, b"/AA"))
+}
+
+/// ZIP/OOXML 実体内に `vbaProject.bin` が含まれるか判定する (D205)。
+///
+/// OOXML (docx/xlsx/pptx) は ZIP コンテナで、マクロ有効文書は
+/// `vbaProject.bin` エントリを持つ — `.docx` 等のマクロ無効拡張子
+/// を名乗りながら実体はマクロ入りという拡張子偽装を、宣言や
+/// 拡張子に依存せず実体スキャンで検出する。
+#[must_use]
+pub fn zip_contains_vba_project(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"PK\x03\x04") && contains_bytes(bytes, b"vbaProject")
+}
+
 /// 宣言と検出の組み合わせが危険かどうか判定する。
 ///
 /// PE/ELF/シェルスクリプト/Mach-O を別の無害なタイプとして偽装する場合は危険。
@@ -604,5 +636,37 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    #[test]
+    fn pdf_auto_action_detected() {
+        // /JavaScript トリガー付き PDF
+        assert!(pdf_has_auto_action(
+            b"%PDF-1.4 obj << /JavaScript (app.alert()) >>"
+        ));
+        // /OpenAction トリガー
+        assert!(pdf_has_auto_action(
+            b"%PDF-1.4 obj << /OpenAction /GoToR >>"
+        ));
+        // /Launch (外部プロセス起動)
+        assert!(pdf_has_auto_action(b"%PDF-1.4 obj << /Launch (cmd.exe) >>"));
+        // 実行キーを持たない通常 PDF
+        assert!(!pdf_has_auto_action(b"%PDF-1.4 obj << /Page /Text >>"));
+        // PDF 実体でなければ対象外
+        assert!(!pdf_has_auto_action(b"PK\x03\x04 /JavaScript"));
+    }
+
+    #[test]
+    fn zip_vba_project_detected() {
+        // ZIP 実体内の vbaProject エントリ
+        assert!(zip_contains_vba_project(
+            b"PK\x03\x04 word/vbaProject.bin content"
+        ));
+        // vbaProject を持たない通常 ZIP (docx 偽装でない)
+        assert!(!zip_contains_vba_project(
+            b"PK\x03\x04 word/document.xml content"
+        ));
+        // ZIP 実体でなければ対象外
+        assert!(!zip_contains_vba_project(b"%PDF vbaProject"));
     }
 }

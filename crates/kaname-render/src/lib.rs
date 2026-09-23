@@ -96,6 +96,11 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// トップレベルヘッダに送信者側のフィルタ評価ヘッダ
+    /// (`X-Spam-Flag`/`X-Spam-Status`/`X-Spam-Score`/`X-Virus-Scanned`)
+    /// が含まれるか — 受信側フィルタの判定を予め「合格」と自称する
+    /// verdict 注入の兆候 (D206)。
+    pub forged_filter_verdict: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +335,18 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D206: 送信者側が付与したフィルタ評価ヘッダ (verdict 注入)。
+    // これらは本来「受信側のスキャナが付ける」ヘッダ — 送信側に
+    // 存在すること自体が、下流フィルタへの合否アピール。
+    let forged_filter_verdict = [
+        "x-spam-flag",
+        "x-spam-status",
+        "x-spam-score",
+        "x-virus-scanned",
+    ]
+    .iter()
+    .any(|h| sender_supplied_header(raw, h));
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +364,25 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        forged_filter_verdict,
     })
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) に指定ヘッダが
+/// 存在するか判定する (D206)。値は見ず「送信者がそのヘッダを
+/// 付けている」こと自体を問う用途。
+fn sender_supplied_header(raw: &[u8], name: &str) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        if line.to_ascii_lowercase().starts_with(&prefix) {
+            return true;
+        }
+    }
+    false
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1952,6 +1987,57 @@ mod tests {
         );
     }
 
+    /// D204/D205: 添付の PDF 自動実行キーと OOXML マクロを検出。
+    #[test]
+    fn scan_attachment_pdf_auto_action_and_vba_detected() {
+        // /JavaScript 付き PDF
+        let scan = scan_attachment_bytes(
+            "invoice.pdf",
+            "application/pdf",
+            b"%PDF-1.4 1 0 obj << /OpenAction /JavaScript (x) >>",
+        );
+        assert!(scan.is_dangerous, "自動実行キーを持つ PDF は危険であるべき");
+        assert!(scan.risks.iter().any(|r| r.contains("自動実行")));
+        // vbaProject を含む ZIP (拡張子は .docx でも検出)
+        let scan2 = scan_attachment_bytes(
+            "report.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            b"PK\x03\x04 word/vbaProject.bin payload",
+        );
+        assert!(
+            scan2.is_dangerous,
+            "vbaProject を含む OOXML は危険であるべき"
+        );
+        // 通常 PDF/ZIP は検出しない
+        let scan3 = scan_attachment_bytes("clean.pdf", "application/pdf", b"%PDF-1.4 clean");
+        assert!(!scan3.risks.iter().any(|r| r.contains("自動実行")));
+        let scan4 = scan_attachment_bytes("a.zip", "application/zip", b"PK\x03\x04 a.txt");
+        assert!(!scan4.risks.iter().any(|r| r.contains("vbaProject")));
+    }
+
+    /// D206: 送信者側のフィルタ評価ヘッダを parse が検出。
+    #[test]
+    fn parse_はverdict注入ヘッダを検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    X-Spam-Flag: NO\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.forged_filter_verdict);
+        let raw2 = b"From: alice@example.com\r\n\
+                     X-Virus-Scanned: Debian amavisd-new at x\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(env2.forged_filter_verdict);
+        // 送信者側ヘッダが無い通常メールは検出しない
+        let raw3 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.forged_filter_verdict);
+    }
+
     #[test]
     fn addr_normal_email_splits_correctly() {
         let addr = mail_parser::Addr {
@@ -2543,6 +2629,22 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
             "MIME 偽装の疑い: {} と宣言されていますが実体は {} です",
             mismatch.declared, mismatch.detected
         ));
+        is_dangerous = true;
+    }
+
+    // 2.5. PDF の自動実行キー (/JavaScript, /OpenAction, /AA, /Launch —
+    //      文書を開くと動作する PDF ボーン攻撃、D204)
+    if magic_bytes::pdf_has_auto_action(bytes) {
+        risks.push(
+            "PDF に自動実行キー (/JavaScript 等) — 文書を開くと動作する PDF ボーンの兆候です"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
+    // 2.6. OOXML (ZIP) 内の vbaProject.bin — 拡張子非依存のマクロ検出 (D205)
+    if magic_bytes::zip_contains_vba_project(bytes) {
+        risks.push("OOXML 内に vbaProject.bin — 拡張子に関わらずマクロ有効文書です".to_string());
         is_dangerous = true;
     }
 
