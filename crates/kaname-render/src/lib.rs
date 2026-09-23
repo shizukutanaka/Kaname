@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Webmail-*`/`X-WebmailClientIP`/`X-HTTPMail-*`/`X-UEA-*`/
+    /// `X-MDRemoteIP`/`X-WebApp` 等の Webmail 記録印があるか —
+    /// Webmail 接続記録を送信側が自称する兆候 (D405)。
+    pub webmail_marks: bool,
+    /// `X-Queue-*`/`X-Queued-*`/`X-Queue-ID:`/`X-Delivery-ID:`/
+    /// `X-Injected-via:`/`X-Injection-Info:` 等のキュー・注入印が
+    /// あるか — キュー機の記録を送信側が自称する兆候 (D406)。
+    pub queue_marks: bool,
+    /// `X-MX-*`/`X-Gateway-Status:`/`X-Edge-*`/`X-Boundary-*`/
+    /// `X-Front-*` 等のゲート・MX 印があるか — 境界機の記録を
+    /// 送信側が自称する兆候 (D407)。
+    pub gate_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        webmail_marks: has_webmail_marks(raw),
+        queue_marks: has_queue_marks(raw),
+        gate_marks: has_gate_marks(raw),
     })
 }
 
@@ -624,6 +639,67 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Webmail-*`/`X-WebmailClientIP`/`X-HTTPMail-*`/`X-UEA-*`/
+/// `X-MDRemoteIP`/`X-WebApp` 等の Webmail 記録印があるか
+/// 判定する (D405)。
+///
+/// Webmail の接続記録は Webmail 機・受信機が残す — 送信側から届く
+/// これは「この Webmail から送った」体裁を内容側が主張する自称。
+fn has_webmail_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-webmail-")
+            || l.starts_with("x-webmailclientip")
+            || l.starts_with("x-httpmail-")
+            || l.starts_with("x-uea-")
+            || l.starts_with("x-mdremoteip")
+            || l.starts_with("x-webapp")
+    })
+}
+
+/// `X-Queue-*`/`X-Queued-*`/`X-Queue-ID:`/`X-Delivery-ID:`/
+/// `X-Injected-via:`/`X-Injection-Info:` 等のキュー・注入印が
+/// あるか判定する (D406)。
+///
+/// キューの記録はキュー機・注入機が残す — 送信側から届くこれは
+/// 「キューを通った」体裁を内容側が主張する自称。
+fn has_queue_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-queue-")
+            || l.starts_with("x-queued-")
+            || l.starts_with("x-queue-id:")
+            || l.starts_with("x-delivery-id:")
+            || l.starts_with("x-injected-via:")
+            || l.starts_with("x-injection-info:")
+    })
+}
+
+/// `X-MX-*`/`X-Gateway-Status:`/`X-Edge-*`/`X-Boundary-*`/
+/// `X-Front-*` 等のゲート・MX 印があるか判定する (D407)。
+///
+/// MX・エッジ境界機の記録は境界機が残す — 送信側から届くこれは
+/// 「境界を通った」体裁を内容側が主張する自称。
+fn has_gate_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-mx-")
+            || l.starts_with("x-gateway-status:")
+            || l.starts_with("x-edge-")
+            || l.starts_with("x-boundary-")
+            || l.starts_with("x-front-")
     })
 }
 
@@ -2952,6 +3028,58 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はwebmail印を検出する() {
+        let w1 = b"X-Webmail-Domain: d\r\n\r\nx";
+        assert!(has_webmail_marks(w1));
+        let w2 = b"X-WebmailClientIP: 1.2.3.4\r\n\r\nx";
+        assert!(has_webmail_marks(w2));
+        let w3 = b"X-HTTPMail-User: u\r\n\r\nx";
+        assert!(has_webmail_marks(w3));
+        let w4 = b"X-UEA-Args: a\r\n\r\nx";
+        assert!(has_webmail_marks(w4));
+        let w5 = b"X-MDRemoteIP: 1\r\n\r\nx";
+        assert!(has_webmail_marks(w5));
+        let w6 = b"X-WebApp: a\r\n\r\nx";
+        assert!(has_webmail_marks(w6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_webmail_marks(clean));
+    }
+
+    #[test]
+    fn scan_はキュー印を検出する() {
+        let q1 = b"X-Queue-Status: s\r\n\r\nx";
+        assert!(has_queue_marks(q1));
+        let q2 = b"X-Queued-At: t\r\n\r\nx";
+        assert!(has_queue_marks(q2));
+        let q3 = b"X-Queue-ID: q\r\n\r\nx";
+        assert!(has_queue_marks(q3));
+        let q4 = b"X-Delivery-ID: d\r\n\r\nx";
+        assert!(has_queue_marks(q4));
+        let q5 = b"X-Injected-via: v\r\n\r\nx";
+        assert!(has_queue_marks(q5));
+        let q6 = b"X-Injection-Info: i\r\n\r\nx";
+        assert!(has_queue_marks(q6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_queue_marks(clean));
+    }
+
+    #[test]
+    fn scan_はゲート印を検出する() {
+        let g1 = b"X-MX-Host: h\r\n\r\nx";
+        assert!(has_gate_marks(g1));
+        let g2 = b"X-Gateway-Status: ok\r\n\r\nx";
+        assert!(has_gate_marks(g2));
+        let g3 = b"X-Edge-ID: e\r\n\r\nx";
+        assert!(has_gate_marks(g3));
+        let g4 = b"X-Boundary-Scan: s\r\n\r\nx";
+        assert!(has_gate_marks(g4));
+        let g5 = b"X-Front-Relay: f\r\n\r\nx";
+        assert!(has_gate_marks(g5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gate_marks(clean));
     }
 }
 

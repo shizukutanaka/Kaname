@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D405: Webmail 記録印自称
+    if env.webmail_marks {
+        render_risks.push(
+            "X-Webmail-*/X-WebmailClientIP/X-HTTPMail-* 等 — Webmail 接続記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D406: キュー・注入印自称
+    if env.queue_marks {
+        render_risks.push(
+            "X-Queue-*/X-Queued-*/X-Injected-via 等 — キュー機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D407: ゲート・MX 印自称
+    if env.gate_marks {
+        render_risks.push(
+            "X-MX-*/X-Edge-*/X-Boundary-* 等 — 境界機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

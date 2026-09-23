@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D405: `X-Webmail-*`/`X-WebmailClientIP`/`X-HTTPMail-*`/`X-UEA-*`/`X-MDRemoteIP`/`X-WebApp` 等の Webmail 記録印自称が未検査
+
+- Webmail の接続記録は Webmail 機・受信機が残す — 送信側から届くのは「この Webmail から送った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_webmail_marks` 新設 → `Envelope.webmail_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D406: `X-Queue-*`/`X-Queued-*`/`X-Queue-ID:`/`X-Delivery-ID:`/`X-Injected-via:`/`X-Injection-Info:` 等のキュー・注入印自称が未検査
+
+- キューの記録はキュー機・注入機が残す — 送信側から届くのは「キューを通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_queue_marks` 新設 → `Envelope.queue_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D407: `X-MX-*`/`X-Gateway-Status:`/`X-Edge-*`/`X-Boundary-*`/`X-Front-*` 等のゲート・MX 印自称が未検査
+
+- MX・エッジ境界機の記録は境界機が残す — 送信側から届くのは「境界を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_gate_marks` 新設 → `Envelope.gate_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった
