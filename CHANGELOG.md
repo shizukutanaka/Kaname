@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D158: 不可視・タグ文字を正規化層で復号・除去しキーワード回避を遮断
+
+- `normalize_for_matching`/`normalize_for_matching_spaced` (kaname-memory-guard) が Unicode Tag ブロック (U+E0000–E007F) 全体を未定義のまま素通し、Variation Selector (U+FE00–FE0F / U+E0100–E01EF)・不可視フォーマット文字 (U+1D173–U+1D17A, U+3164, U+2800, U+110BD, U+13430–U+13455, U+1BCA0–U+1BCA3, U+FFF9–U+FFFB 等) も除去対象外だった — 「タグ文字に平文化した指示」(ASCII Smuggling, Embrace The Red 2024 / M365 Copilot 事例) や不可視文字で区切った BEC キーワードが Cialdini・金銭キーワード検出を素通りしていた
+- 対処: 文字ごとに Tag 文字を ASCII へ復号 → 拡張した不可視文字セットを除去 (spaced 版は語境界として空白化) → 全角・ホモグリフを畳み込む一貫した正規化に統一。`homoglyph_to_ascii` を kaname-screen・idn_homograph::fold_homoglyphs と同一集合に合流 (3 箇所同期の注意書き付き)
+- 参考: Embrace The Red「ASCII Smuggling」、Sneaky Bits (Paul Butler, 2025)、Trend Micro Japan 不可視プロンプトインジェクション解説、Unicode TR36/TR39
+
+### Security — D159: From 表示名のホモグラフ検出を `check_reply_to_spoof` に配線
+
+- `idn_homograph::analyze_display_name` は実装・テスト済みだったが呼出元が皆無で、Unit 42 (2025) / arXiv 2604.04926 が指摘する「表示名への Cyrillic/Greek 類似字混入」(例: `"Suррогt Center"`、全 Cyrillic の `"СЕО"`) が一切未検出だった — 表示名はレジストラ制約を受けず任意 Unicode を置けるためドメイン IDN より悪用が容易
+- `check_reply_to_spoof` で From 表示名を `analyze_display_name` に通し、検出時は Domain ファミリの独立シグナル (寄与 0.15–0.30、表示名は自由記述のため IDN ドメインより抑えめ) を立てる — 既知連絡先との一致を問わず機能
+- 併せて `is_homoglyph` の盲点を修正: Cyrillic/Greek の大文字類似字 (А Е О Р С Х У І В М Н К Т、Ο Α Β Ε Ζ Η Ι Κ Μ Ν Ρ Τ Υ Χ) と Greek ε が表に無く、全大文字の表示名攻撃が素通りだった — fold 表 (3 箇所) にも 03B5/0396/0399/03A5 を追加して同一集合に揃えた
+
 ### Removed — D157: kaname-pivot の呼出元ゼロだった信頼スコア層を削除
 
 - `PivotHistory`・`trust_score`・`trust_score_with_bec_context` は設計上「既知チャネル加点 + BEC 複合減点」の評価層だったが外部呼出元が皆無 — 実利用は `analyze`/`is_high_risk`/`channel_name` のみ。dead 層ごと削除
