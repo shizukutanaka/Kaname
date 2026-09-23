@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D513: `X-ANA-*`/`X-JAL-*`/`X-United-*`/`X-Delta-*`/`X-Emirates-*`/`X-Qantas-*` 等の航空・マイレージ印自称が未検査
+
+- **問題**: `X-ANA-*` (ANA)、`X-JAL-*` (JAL)、`X-United-*` (United)、`X-Delta-*`/`X-AmericanAir-*`/`X-Southwest-*`/`X-Emirates-*`/`X-QatarAirways-*`/`X-Lufthansa-*`/`X-BritishAirways-*`/`X-AirFrance-*`/`X-KLM-*`/`X-SingaporeAir-*`/`X-Cathay-*`/`X-Qantas-*`/`X-Jetstar-*`/`X-Peach-*`/`X-Spring-*`/`X-Ryanair-*`/`X-EasyJet-*`/`X-Norwegian-*`/`X-TurkishAirlines-*`/`X-AirCanada-*`/`X-AlaskaAir-*`/`X-Frontier-*`/`X-SpiritAirlines-*`/`X-ANA-Mileage-*`/`X-JAL-Mileage-*`/`X-Skymark-*`/`X-PeachAviation-*` は空機の通知記録 — 送信側が書くことは自称。航空予約・マイル偽装はフィッシングの典型手口。
+- **修正**: `Envelope` に `airline_marks` + `has_airline_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 空印の自署を問え。
+
+### Security — D514: `X-Chase-*`/`X-MUFG-*`/`X-SMBC-*`/`X-HSBC-*`/`X-WellsFargo-*`/`X-Barclays-*` 等の伝統銀行・証券印自称が未検査
+
+- **問題**: `X-Chase-*` (Chase)、`X-MUFG-*` (三菱UFJ)、`X-SMBC-*` (SMBC)、`X-BankOfAmerica-*`/`X-WellsFargo-*`/`X-Citi-*`/`X-Barclays-*`/`X-HSBC-*`/`X-Mizuho-*`/`X-Resona-*`/`X-JPBank-*`/`X-SBI-*`/`X-GoldmanSachs-*`/`X-MorganStanley-*`/`X-DeutscheBank-*`/`X-CreditAgricole-*`/`X-BNP-*`/`X-SocieteGenerale-*`/`X-ING-*`/`X-Santander-*`/`X-BBVA-*`/`X-USBank-*`/`X-PNC-*`/`X-CapitalOne-*`/`X-TD-*`/`X-RBC-*`/`X-Scotiabank-*`/`X-NAB-*`/`X-CommBank-*`/`X-Westpac-*`/`X-ANZ-*`/`X-MitsubishiUFJ-*`/`X-SevenBank-*`/`X-RakutenBank-*`/`X-SonyBank-*`/`X-PayPayBank-*`/`X-AeonBank-*`/`X-AuJibun-*` は金機の通知記録 — 送信側が書くことは自称。銀行通知の偽装は BEC/フィッシングの第一標的。
+- **修正**: `Envelope` に `bank_marks` + `has_bank_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 金印の自署を問え。
+
+### Security — D515: `X-MongoDB-*`/`X-Redis-*`/`X-Snowflake-*`/`X-PlanetScale-*`/`X-Neon-*`/`X-Firebase-*` 等のデータベース・データウェアハウス印自称が未検査
+
+- **問題**: `X-MongoDB-*` (MongoDB)、`X-Redis-*` (Redis)、`X-Snowflake-*` (Snowflake)、`X-PlanetScale-*`/`X-Neon-*`/`X-Turso-*`/`X-Fauna-*`/`X-CockroachDB-*`/`X-Cassandra-*`/`X-ScyllaDB-*`/`X-ClickHouse-*`/`X-Databricks-*`/`X-BigQuery-*`/`X-Redshift-*`/`X-MotherDuck-*`/`X-DuckDB-*`/`X-SQLite-*`/`X-CouchDB-*`/`X-Firebase-*`/`X-SurrealDB-*`/`X-EdgeDB-*`/`X-Tigris-*`/`X-Xata-*`/`X-Upstash-*`/`X-KeyDB-*`/`X-Dragonfly-*`/`X-Valkey-*`/`X-TiDB-*`/`X-Cockroach-*`/`X-InfluxData-*` は庫機の通知記録 — 送信側が書くことは自称。(`X-Supabase-*` は D509 で検出済み)
+- **修正**: `Envelope` に `database_marks` + `has_database_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 庫印の自署を問え。
+
+
 ### Security — D510: `X-OpenAI-*`/`X-Anthropic-*`/`X-Cohere-*`/`X-HuggingFace-*`/`X-Mistral-*`/`X-Pinecone-*` 等の AI・LLM・音声合成・会話インテリジェンス印自称が未検査
 
 - **問題**: `X-OpenAI-*` (OpenAI)、`X-Anthropic-*` (Anthropic)、`X-Cohere-*` (Cohere)、`X-HuggingFace-*`/`X-Replicate-*`/`X-TogetherAI-*`/`X-Mistral-*`/`X-Perplexity-*`/`X-Groq-*`/`X-DeepSeek-*`/`X-OpenRouter-*`/`X-LangChain-*`/`X-Pinecone-*`/`X-Weaviate-*`/`X-Qdrant-*`/`X-Milvus-*`/`X-Chroma-*`/`X-Ollama-*`/`X-ElevenLabs-*`/`X-Runway-*`/`X-StabilityAI-*`/`X-Midjourney-*`/`X-CharacterAI-*`/`X-Jasper-*`/`X-CopyAI-*`/`X-WriteSonic-*`/`X-Synthesia-*`/`X-HeyGen-*`/`X-Descript-*`/`X-OtterAI-*`/`X-Fireflies-*`/`X-Grain-*`/`X-ReadAI-*`/`X-Gong-*`/`X-Chorus-*`/`X-Clari-*`/`X-PeopleAI-*`/`X-vLLM-*`/`X-LlamaIndex-*`/`X-Haystack-*`/`X-SemanticKernel-*`/`X-AutoGen-*`/`X-CrewAI-*` は智機の通知記録 — 送信側が書くことは自称。

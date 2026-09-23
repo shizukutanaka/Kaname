@@ -844,6 +844,38 @@ pub struct Envelope {
     /// ブラウザ・検索エンジン印があるか — 覧機の通知記録を送信側が
     /// 自称する兆候 (D512)。
     pub browser_marks: bool,
+    /// `X-ANA-*`/`X-JAL-*`/`X-United-*`/`X-Delta-*`/`X-AmericanAir-*`/
+    /// `X-Southwest-*`/`X-Emirates-*`/`X-QatarAirways-*`/`X-Lufthansa-*`/
+    /// `X-BritishAirways-*`/`X-AirFrance-*`/`X-KLM-*`/`X-SingaporeAir-*`/
+    /// `X-Cathay-*`/`X-Qantas-*`/`X-Jetstar-*`/`X-Peach-*`/`X-Spring-*`/
+    /// `X-Ryanair-*`/`X-EasyJet-*`/`X-Norwegian-*`/`X-TurkishAirlines-*`/
+    /// `X-AirCanada-*`/`X-AlaskaAir-*`/`X-Frontier-*`/`X-SpiritAirlines-*`/
+    /// `X-ANA-Mileage-*`/`X-JAL-Mileage-*`/`X-Skymark-*`/`X-PeachAviation-*` 等の
+    /// 航空・マイレージ印があるか — 空機の通知記録を送信側が自称する
+    /// 兆候 (D513)。
+    pub airline_marks: bool,
+    /// `X-Chase-*`/`X-BankOfAmerica-*`/`X-WellsFargo-*`/`X-Citi-*`/
+    /// `X-Barclays-*`/`X-HSBC-*`/`X-MUFG-*`/`X-SMBC-*`/`X-Mizuho-*`/
+    /// `X-Resona-*`/`X-JPBank-*`/`X-SBI-*`/`X-GoldmanSachs-*`/
+    /// `X-MorganStanley-*`/`X-DeutscheBank-*`/`X-CreditAgricole-*`/
+    /// `X-BNP-*`/`X-SocieteGenerale-*`/`X-ING-*`/`X-Santander-*`/
+    /// `X-BBVA-*`/`X-USBank-*`/`X-PNC-*`/`X-CapitalOne-*`/`X-TD-*`/
+    /// `X-RBC-*`/`X-Scotiabank-*`/`X-NAB-*`/`X-CommBank-*`/`X-Westpac-*`/
+    /// `X-ANZ-*`/`X-MitsubishiUFJ-*`/`X-SevenBank-*`/`X-RakutenBank-*`/
+    /// `X-SonyBank-*`/`X-PayPayBank-*`/`X-AeonBank-*`/`X-AuJibun-*` 等の
+    /// 伝統銀行・証券印があるか — 金機の通知記録を送信側が自称する
+    /// 兆候 (D514)。
+    pub bank_marks: bool,
+    /// `X-MongoDB-*`/`X-Redis-*`/`X-PlanetScale-*`/`X-Neon-*`/`X-Turso-*`/
+    /// `X-Fauna-*`/`X-CockroachDB-*`/`X-Cassandra-*`/`X-ScyllaDB-*`/
+    /// `X-ClickHouse-*`/`X-Snowflake-*`/`X-Databricks-*`/`X-BigQuery-*`/
+    /// `X-Redshift-*`/`X-MotherDuck-*`/`X-DuckDB-*`/`X-SQLite-*`/
+    /// `X-CouchDB-*`/`X-Firebase-*`/`X-SurrealDB-*`/`X-EdgeDB-*`/
+    /// `X-Tigris-*`/`X-Xata-*`/`X-Upstash-*`/`X-KeyDB-*`/`X-Dragonfly-*`/
+    /// `X-Valkey-*`/`X-TiDB-*`/`X-Cockroach-*`/`X-InfluxData-*` 等の
+    /// データベース・データウェアハウス印があるか — 庫機の通知記録を
+    /// 送信側が自称する兆候 (D515)。
+    pub database_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1217,6 +1249,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ai_marks: has_ai_marks(raw),
         telecom_marks: has_telecom_marks(raw),
         browser_marks: has_browser_marks(raw),
+        airline_marks: has_airline_marks(raw),
+        bank_marks: has_bank_marks(raw),
+        database_marks: has_database_marks(raw),
     })
 }
 
@@ -5433,6 +5468,167 @@ fn has_browser_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-samsunginternet-")
             || l.starts_with("x-huaweibrowser-")
             || l.starts_with("x-mibrowser-")
+    })
+}
+
+/// `X-ANA-*`/`X-JAL-*`/`X-United-*`/`X-Delta-*`/`X-AmericanAir-*`/
+/// `X-Southwest-*`/`X-Emirates-*`/`X-QatarAirways-*`/`X-Lufthansa-*`/
+/// `X-BritishAirways-*`/`X-AirFrance-*`/`X-KLM-*`/`X-SingaporeAir-*`/
+/// `X-Cathay-*`/`X-Qantas-*`/`X-Jetstar-*`/`X-Peach-*`/`X-Spring-*`/
+/// `X-Ryanair-*`/`X-EasyJet-*`/`X-Norwegian-*`/`X-TurkishAirlines-*`/
+/// `X-AirCanada-*`/`X-AlaskaAir-*`/`X-Frontier-*`/`X-SpiritAirlines-*`/
+/// `X-ANA-Mileage-*`/`X-JAL-Mileage-*`/`X-Skymark-*`/`X-PeachAviation-*` 等の
+/// 航空・マイレージ印があるか判定する (D513)。
+///
+/// `X-ANA-*` (ANA)、`X-JAL-*` (JAL)、`X-United-*` (United) は空機の
+/// 通知記録 — 送信側から届くこれは自称。
+fn has_airline_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ana-")
+            || l.starts_with("x-jal-")
+            || l.starts_with("x-united-")
+            || l.starts_with("x-delta-")
+            || l.starts_with("x-americanair-")
+            || l.starts_with("x-southwest-")
+            || l.starts_with("x-emirates-")
+            || l.starts_with("x-qatarairways-")
+            || l.starts_with("x-lufthansa-")
+            || l.starts_with("x-britishairways-")
+            || l.starts_with("x-airfrance-")
+            || l.starts_with("x-klm-")
+            || l.starts_with("x-singaporeair-")
+            || l.starts_with("x-cathay-")
+            || l.starts_with("x-qantas-")
+            || l.starts_with("x-jetstar-")
+            || l.starts_with("x-peach-")
+            || l.starts_with("x-spring-")
+            || l.starts_with("x-ryanair-")
+            || l.starts_with("x-easyjet-")
+            || l.starts_with("x-norwegian-")
+            || l.starts_with("x-turkishairlines-")
+            || l.starts_with("x-aircanada-")
+            || l.starts_with("x-alaskaair-")
+            || l.starts_with("x-frontier-")
+            || l.starts_with("x-spiritairlines-")
+            || l.starts_with("x-ana-mileage-")
+            || l.starts_with("x-jal-mileage-")
+            || l.starts_with("x-skymark-")
+            || l.starts_with("x-peachaviation-")
+    })
+}
+
+/// `X-Chase-*`/`X-BankOfAmerica-*`/`X-WellsFargo-*`/`X-Citi-*`/
+/// `X-Barclays-*`/`X-HSBC-*`/`X-MUFG-*`/`X-SMBC-*`/`X-Mizuho-*`/
+/// `X-Resona-*`/`X-JPBank-*`/`X-SBI-*`/`X-GoldmanSachs-*`/`X-MorganStanley-*`/
+/// `X-DeutscheBank-*`/`X-CreditAgricole-*`/`X-BNP-*`/`X-SocieteGenerale-*`/
+/// `X-ING-*`/`X-Santander-*`/`X-BBVA-*`/`X-USBank-*`/`X-PNC-*`/
+/// `X-CapitalOne-*`/`X-TD-*`/`X-RBC-*`/`X-Scotiabank-*`/`X-NAB-*`/
+/// `X-CommBank-*`/`X-Westpac-*`/`X-ANZ-*`/`X-MitsubishiUFJ-*`/`X-SevenBank-*`/
+/// `X-RakutenBank-*`/`X-SonyBank-*`/`X-PayPayBank-*`/`X-AeonBank-*`/
+/// `X-AuJibun-*` 等の伝統銀行・証券印があるか判定する (D514)。
+///
+/// `X-Chase-*` (Chase)、`X-MUFG-*` (三菱UFJ)、`X-SMBC-*` (SMBC) は金機の
+/// 通知記録 — 送信側から届くこれは自称。銀行通知の偽装はフィッシングの
+/// 典型手口。
+fn has_bank_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-chase-")
+            || l.starts_with("x-bankofamerica-")
+            || l.starts_with("x-wellsfargo-")
+            || l.starts_with("x-citi-")
+            || l.starts_with("x-barclays-")
+            || l.starts_with("x-hsbc-")
+            || l.starts_with("x-mufg-")
+            || l.starts_with("x-smbc-")
+            || l.starts_with("x-mizuho-")
+            || l.starts_with("x-resona-")
+            || l.starts_with("x-jpbank-")
+            || l.starts_with("x-sbi-")
+            || l.starts_with("x-goldmansachs-")
+            || l.starts_with("x-morganstanley-")
+            || l.starts_with("x-deutschebank-")
+            || l.starts_with("x-creditagricole-")
+            || l.starts_with("x-bnp-")
+            || l.starts_with("x-societegenerale-")
+            || l.starts_with("x-ing-")
+            || l.starts_with("x-santander-")
+            || l.starts_with("x-bbva-")
+            || l.starts_with("x-usbank-")
+            || l.starts_with("x-pnc-")
+            || l.starts_with("x-capitalone-")
+            || l.starts_with("x-td-")
+            || l.starts_with("x-rbc-")
+            || l.starts_with("x-scotiabank-")
+            || l.starts_with("x-nab-")
+            || l.starts_with("x-commbank-")
+            || l.starts_with("x-westpac-")
+            || l.starts_with("x-anz-")
+            || l.starts_with("x-mitsubishiufj-")
+            || l.starts_with("x-sevenbank-")
+            || l.starts_with("x-rakutenbank-")
+            || l.starts_with("x-sonybank-")
+            || l.starts_with("x-paypaybank-")
+            || l.starts_with("x-aeonbank-")
+            || l.starts_with("x-aujibun-")
+    })
+}
+
+/// `X-MongoDB-*`/`X-Redis-*`/`X-PlanetScale-*`/`X-Neon-*`/`X-Turso-*`/
+/// `X-Fauna-*`/`X-CockroachDB-*`/`X-Cassandra-*`/`X-ScyllaDB-*`/
+/// `X-ClickHouse-*`/`X-Snowflake-*`/`X-Databricks-*`/`X-BigQuery-*`/
+/// `X-Redshift-*`/`X-MotherDuck-*`/`X-DuckDB-*`/`X-SQLite-*`/`X-CouchDB-*`/
+/// `X-Firebase-*`/`X-SurrealDB-*`/`X-EdgeDB-*`/`X-Tigris-*`/`X-Xata-*`/
+/// `X-Upstash-*`/`X-KeyDB-*`/`X-Dragonfly-*`/`X-Valkey-*`/`X-TiDB-*`/
+/// `X-Cockroach-*`/`X-InfluxData-*` 等の
+/// データベース・データウェアハウス印があるか判定する (D515)。
+///
+/// `X-MongoDB-*` (MongoDB)、`X-Redis-*` (Redis)、`X-Snowflake-*`
+/// (Snowflake) は庫機の通知記録 — 送信側から届くこれは自称。
+/// `X-Supabase-*` は D509 で検出済み。
+fn has_database_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-mongodb-")
+            || l.starts_with("x-redis-")
+            || l.starts_with("x-planetscale-")
+            || l.starts_with("x-neon-")
+            || l.starts_with("x-turso-")
+            || l.starts_with("x-fauna-")
+            || l.starts_with("x-cockroachdb-")
+            || l.starts_with("x-cassandra-")
+            || l.starts_with("x-scylladb-")
+            || l.starts_with("x-clickhouse-")
+            || l.starts_with("x-snowflake-")
+            || l.starts_with("x-databricks-")
+            || l.starts_with("x-bigquery-")
+            || l.starts_with("x-redshift-")
+            || l.starts_with("x-motherduck-")
+            || l.starts_with("x-duckdb-")
+            || l.starts_with("x-sqlite-")
+            || l.starts_with("x-couchdb-")
+            || l.starts_with("x-firebase-")
+            || l.starts_with("x-surrealdb-")
+            || l.starts_with("x-edgedb-")
+            || l.starts_with("x-tigris-")
+            || l.starts_with("x-xata-")
+            || l.starts_with("x-upstash-")
+            || l.starts_with("x-keydb-")
+            || l.starts_with("x-dragonfly-")
+            || l.starts_with("x-valkey-")
+            || l.starts_with("x-tidb-")
+            || l.starts_with("x-cockroach-")
+            || l.starts_with("x-influxdata-")
     })
 }
 
@@ -9810,6 +10006,72 @@ mod tests {
         assert!(has_browser_marks(l1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_browser_marks(clean));
+    }
+
+    #[test]
+    fn scan_は航空印を検出する() {
+        let a1 = b"X-ANA-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(a1));
+        let j1 = b"X-JAL-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(j1));
+        let u1 = b"X-United-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(u1));
+        let d1 = b"X-Delta-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(d1));
+        let e1 = b"X-Emirates-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(e1));
+        let q1 = b"X-Qantas-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(q1));
+        let r1 = b"X-Ryanair-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(r1));
+        let s1 = b"X-Skymark-Notify: x\r\n\r\nx";
+        assert!(has_airline_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_airline_marks(clean));
+    }
+
+    #[test]
+    fn scan_は銀行印を検出する() {
+        let c1 = b"X-Chase-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(c1));
+        let m1 = b"X-MUFG-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(m1));
+        let s1 = b"X-SMBC-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(s1));
+        let h1 = b"X-HSBC-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(h1));
+        let w1 = b"X-WellsFargo-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(w1));
+        let b1 = b"X-Barclays-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(b1));
+        let r1 = b"X-RakutenBank-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(r1));
+        let s2 = b"X-SonyBank-Notify: x\r\n\r\nx";
+        assert!(has_bank_marks(s2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bank_marks(clean));
+    }
+
+    #[test]
+    fn scan_はデータベース印を検出する() {
+        let m1 = b"X-MongoDB-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(m1));
+        let r1 = b"X-Redis-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(r1));
+        let s1 = b"X-Snowflake-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(s1));
+        let p1 = b"X-PlanetScale-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(p1));
+        let n1 = b"X-Neon-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(n1));
+        let c1 = b"X-ClickHouse-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(c1));
+        let f1 = b"X-Firebase-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(f1));
+        let u1 = b"X-Upstash-Notify: x\r\n\r\nx";
+        assert!(has_database_marks(u1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_database_marks(clean));
     }
 }
 
