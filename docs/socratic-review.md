@@ -1756,3 +1756,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この家機が通知した」「この育機が通知した」「この訳機が通知した」は誰が記すか?
 
 答: **X-AirConRepair-*/X-KadenShuuri-*/X-ApplianceFix-* は「この家機が通知した」を名乗り、X-KidsLine-*/X-HoikuenNavi-*/X-GakudouNavi-* は「この育機が通知した」を名乗り、X-Gengo-*/X-HonyakuPro-*/X-TuuyakuPro-* は「この訳機が通知した」を名乗る — いずれも家機・育機・訳機が記す値を送信側が書いた自称**。家印・育印・訳印はすべて兆候として数えよ。
+
+## ラウンド 229
+
+問: 「この整機が通知した」「この獣機が通知した」「この廃機が通知した」は誰が記すか?
+
+答: **X-Sekkotsuin-*/X-Seitai-*/X-Shinkyu-* は「この整機が通知した」を名乗り、X-AnimalHospital-*/X-VetNavi-*/X-JuiNavi-* は「この獣機が通知した」を名乗り、X-Fuyohin-*/X-IhinNavi-*/X-SoudaiNavi-* は「この廃機が通知した」を名乗る — いずれも整機・獣機・廃機が記す値を送信側が書いた自称**。整印・獣印・廃印はすべて兆候として数えよ。

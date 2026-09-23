@@ -2308,6 +2308,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D629: 接骨院・鍼灸・整体印自称
+    if env.bonesetter_marks {
+        render_risks.push(
+            "X-Sekkotsuin-*/X-Seitai-*/X-Shinkyu-*/X-Bonesetter-*/X-Chirorin-*/X-Hari-*/X-KaradaNavi-*/X-Moxa-* 等 — 整機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D630: 動物病院・ペット医療印自称
+    if env.animalhospital_marks {
+        render_risks.push(
+            "X-AnimalHospital-*/X-VetNavi-*/X-PetVet-*/X-JuiNavi-*/X-DobutsuNavi-*/X-AhbNavi-*/X-WanwanNavi-*/X-PetCareNavi-* 等 — 獣機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D631: 不用品回収・遺品整理・粗大ゴミ印自称
+    if env.bulkwaste_marks {
+        render_risks.push(
+            "X-Fuyohin-*/X-IhinNavi-*/X-SoudaiNavi-*/X-KaishuunNavi-*/X-WasteNavi-*/X-JunkNavi-*/X-GomigoNavi-*/X-BenriyaNavi-* 等 — 廃機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
