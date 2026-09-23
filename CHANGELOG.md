@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D477: `X-Coursera-*`/`X-Duolingo-*`/`X-HackerRank-*`/`X-Udemy-*`/`X-Canvas-*`/`X-Blackboard-*` 等の教育・LMS 印自称が未検査
+
+- **問題**: `X-Coursera-*` (Coursera)、`X-Duolingo-*` (Duolingo)、`X-HackerRank-*` (HackerRank)、`X-Udemy-*`/`X-edX-*`/`X-Udacity-*`/`X-Pluralsight-*`/`X-Skillshare-*`/`X-DataCamp-*`/`X-Codecademy-*`/`X-LeetCode-*`/`X-CodeWars-*`/`X-Exercism-*`/`X-Topcoder-*`/`X-Codeforces-*`/`X-KhanAcademy-*`/`X-Brilliant-*`/`X-Canvas-*`/`X-Instructure-*`/`X-Blackboard-*`/`X-D2L-*` は教育機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `edu_marks` + `has_edu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 教育印の自署を問え。
+
+### Security — D478: `X-EchoSign-*`/`X-PandaDoc-*`/`X-HelloSign-*`/`X-OneSpan-*`/`X-Yousign-*`/`X-Ironclad-*` 等の電子署名・契約管理印自称が未検査
+
+- **問題**: `X-EchoSign-*` (Adobe Sign)、`X-OneSpan-*` (OneSpan)、`X-PandaDoc-*` (PandaDoc)、`X-AdobeSign-*`/`X-HelloSign-*`/`X-DropboxSign-*`/`X-SignNow-*`/`X-RightSignature-*`/`X-SignRequest-*`/`X-Yousign-*`/`X-Oneflow-*`/`X-GetAccept-*`/`X-Juro-*`/`X-Ironclad-*`/`X-Evisort-*`/`X-Icertis-*`/`X-Agiloft-*`/`X-Conga-*`/`X-Namirial-*`/`X-Skribble-*`/`X-ZohoSign-*`/`X-pdfFiller-*`/`X-LexisNexis-*`/`X-WoltersKluwer-*` は契約機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `esign_marks` + `has_esign_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 契約印の自署を問え。
+
+### Security — D479: `X-GoFundMe-*`/`X-Kickstarter-*`/`X-Indiegogo-*`/`X-Ko-fi-*`/`X-JustGiving-*`/`X-Blackbaud-*` 等のクラウドファンディング・寄付印自称が未検査
+
+- **問題**: `X-GoFundMe-*` (GoFundMe)、`X-Kickstarter-*` (Kickstarter)、`X-Indiegogo-*` (Indiegogo)、`X-Ko-fi-*`/`X-BuyMeACoffee-*`/`X-OpenCollective-*`/`X-JustGiving-*`/`X-Crowdfunder-*`/`X-Blackbaud-*`/`X-Bloomerang-*`/`X-Kindful-*`/`X-Donorbox-*`/`X-Qgiv-*`/`X-Givebutter-*`/`X-Fundly-*`/`X-Mightycause-*` は寄付機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `donation_marks` + `has_donation_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 寄付印の自署を問え。
+
+
 ### Security — D474: `X-Okta-*`/`X-Auth0-*`/`X-CrowdStrike-*`/`X-Snyk-*`/`X-HashiCorp-*`/`X-Bitbucket-*` 等の開発・ID・セキュリティ SaaS 印自称が未検査
 
 - **問題**: `X-Okta-*` (Okta)、`X-CrowdStrike-*` (CrowdStrike)、`X-Snyk-*` (Snyk)、`X-Auth0-*`/`X-PingIdentity-*`/`X-OneLogin-*`/`X-Duo-*` (ID)、`X-CyberArk-*`/`X-BeyondTrust-*`/`X-HashiCorp-*`/`X-Pulumi-*`/`X-Docker-*`/`X-Bitbucket-*`/`X-TeamCity-*`/`X-Buildkite-*`/`X-Octopus-*`/`X-SonarCloud-*`/`X-SonarQube-*`/`X-JFrog-*`/`X-Sonatype-*`/`X-Veracode-*`/`X-Checkmarx-*`/`X-SentinelOne-*`/`X-Cybereason-*`/`X-Tanium-*`/`X-PaloAlto-*`/`X-PANW-*`/`X-Mandiant-*` は業務 SaaS 機の通知記録 — 送信側が書くことは自称。
