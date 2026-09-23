@@ -276,10 +276,24 @@ impl Default for MemorySanitizer {
 /// キーワード照合の前処理として他クレート (`kaname-oobv` 等) からも再利用できる
 /// よう公開している。全角ラテン文字やゼロ幅文字挿入によるキーワード回避
 /// (例: `ＵＲＧＥＮＴ`、`urg\u{200B}ent`) を防ぐ共通の入口正規化。
+///
+/// D158 で追加した回避対策:
+/// - Unicode タグブロック (U+E0020..=U+E007E) を ASCII に**復号** — キーワードを
+///   タグ文字にエンコードする "ASCII Smuggling" (Embrace The Red 2024、M365 Copilot
+///   への実攻撃) では、不可視のまま本文に `wire transfer` 等を埋め込める。
+///   除去だけでは検出語そのものが消失するため、復号して照合可能にする。
+/// - Cyrillic/Greek/Armenian の Latin 類似文字を ASCII に折り畳み — `invоice`
+///   (о = U+043E) のように1文字だけ置き換える回避を防ぐ。テーブルは
+///   `kaname-bec::idn_homograph::fold_homoglyphs` と同一集合 (Unicode TR36 準拠)。
+/// - 異体字セレクタ・制御文字・アラビア圏フォーマット等、残りの不可視文字群を
+///   除去 — "Sneaky Bits" (Variation Selector へのデータ密輸、2025) 等。
 #[must_use]
 pub fn normalize_for_matching(s: &str) -> String {
     s.chars()
         .filter_map(|c| {
+            if let Some(decoded) = decode_unicode_tag(c) {
+                return Some(decoded);
+            }
             if is_zero_width_or_format(c) {
                 return None;
             }
@@ -290,6 +304,10 @@ pub fn normalize_for_matching(s: &str) -> String {
             // 全角スペース (U+3000) → 半角スペース
             if c == '\u{3000}' {
                 return Some(' ');
+            }
+            // ホモグリフ → ASCII (D158)
+            if let Some(folded) = homoglyph_to_ascii(c) {
+                return Some(folded);
             }
             Some(c)
         })
@@ -309,11 +327,17 @@ pub fn normalize_for_matching(s: &str) -> String {
 /// 連続する空白を1つに畳み込む。複数単語キーワードを照合する呼び出し側は
 /// `normalize_for_matching` (削除版) と本関数 (スペース化版) の両方で照合
 /// すること (単語内挿入は削除版、単語間挿入はスペース化版がそれぞれ捕捉)。
+///
+/// Unicode タグ文字の ASCII 復号とホモグリフ折り畳みは削除版と同じく適用する
+/// (D158)。
 #[must_use]
 pub fn normalize_for_matching_spaced(s: &str) -> String {
     let replaced: String = s
         .chars()
         .map(|c| {
+            if let Some(decoded) = decode_unicode_tag(c) {
+                return decoded;
+            }
             if is_zero_width_or_format(c) {
                 return ' ';
             }
@@ -324,6 +348,9 @@ pub fn normalize_for_matching_spaced(s: &str) -> String {
             // 全角スペース (U+3000) → 半角スペース
             if c == '\u{3000}' {
                 return ' ';
+            }
+            if let Some(folded) = homoglyph_to_ascii(c) {
+                return folded;
             }
             c
         })
@@ -364,15 +391,124 @@ fn count_pattern_hits(text: &str, pat: &str) -> u32 {
     hits
 }
 
+/// Unicode タグブロックの ASCII ミラー領域 (U+E0020..=U+E007E) を ASCII に復号する。
+///
+/// タグ文字は ASCII 全体を U+E0000 だけオフセットして複写したもので、全フォントで
+/// 幅ゼロ・不可視。LLM はタグ文字を ASCII として解釈するため、人間には見えない
+/// 命令を埋め込む "ASCII Smuggling" に悪用される (Embrace The Red 2024)。
+/// 除去ではなく復号を行うのは、キーワード全体をタグ文字にエンコードされると
+/// 検出語が正規化結果から消失し、照合が成立しなくなるため (D158)。
+fn decode_unicode_tag(c: char) -> Option<char> {
+    if ('\u{E0020}'..='\u{E007E}').contains(&c) {
+        char::from_u32(c as u32 - 0xE0000)
+    } else {
+        None
+    }
+}
+
+/// Cyrillic / Greek / Armenian / Latin Extended のうち ASCII に視覚的に似た文字を
+/// ASCII に折りたたむ。
+///
+/// `invоice` (о = Cyrillic U+043E) のように、キーワード中の1文字だけを類似文字に
+/// 置き換えると `contains()` 照合をすり抜ける (D158)。テーブルは
+/// `kaname-bec::idn_homograph::fold_homoglyphs` および `kaname-screen` 側の同一関数と
+/// 同一集合 (Unicode TR36 Confusables 準拠) — 変更時は3箇所を揃えること。
+fn homoglyph_to_ascii(c: char) -> Option<char> {
+    Some(match c {
+        // Cyrillic 小文字 → Latin 類似字
+        '\u{0430}' => 'a',
+        '\u{0435}' => 'e',
+        '\u{0456}' => 'i',
+        '\u{043E}' => 'o',
+        '\u{0440}' => 'p',
+        '\u{0441}' => 'c',
+        '\u{0445}' => 'x',
+        '\u{0443}' => 'y',
+        '\u{0455}' => 's',
+        '\u{0454}' => 'e',
+        '\u{0458}' => 'j',
+        '\u{0433}' => 'r',
+        // Cyrillic 大文字 → Latin 類似字
+        '\u{0410}' => 'a',
+        '\u{0415}' => 'e',
+        '\u{041E}' => 'o',
+        '\u{0420}' => 'p',
+        '\u{0421}' => 'c',
+        '\u{0425}' => 'x',
+        '\u{0423}' => 'y',
+        '\u{0406}' => 'i',
+        '\u{0412}' => 'b',
+        '\u{041C}' => 'm',
+        '\u{041D}' => 'h',
+        '\u{041A}' => 'k',
+        '\u{0422}' => 't',
+        // Greek → Latin 類似字
+        '\u{03BF}' => 'o',
+        '\u{03C1}' => 'p',
+        '\u{03BD}' => 'v',
+        '\u{03C9}' => 'w',
+        '\u{03B1}' => 'a',
+        '\u{03B5}' => 'e',
+        '\u{039F}' => 'o',
+        '\u{0391}' => 'a',
+        '\u{0392}' => 'b',
+        '\u{0395}' => 'e',
+        '\u{0396}' => 'z',
+        '\u{0397}' => 'h',
+        '\u{0399}' => 'i',
+        '\u{039A}' => 'k',
+        '\u{039C}' => 'm',
+        '\u{039D}' => 'n',
+        '\u{03A1}' => 'p',
+        '\u{03A4}' => 't',
+        '\u{03A5}' => 'y',
+        '\u{03A7}' => 'x',
+        // Armenian → Latin 類似字
+        '\u{0585}' => 'q',
+        '\u{0578}' => 'o',
+        // Latin Extended 類似字
+        '\u{01A1}' => 'o',
+        '\u{0261}' => 'g',
+        _ => return None,
+    })
+}
+
 /// ゼロ幅・フォーマット文字 (回避に悪用される不可視文字) を判定する。
+///
+/// D158 で Unicode の Format (Cf) および不可視として利用される領域へ拡張。
+/// `kaname-screen` 側の同名関数と同一集合 (タグブロックの扱いのみ意図的に異なる
+/// — こちらは ASCII 復号のため U+E0020..=U+E007E を含めない)。
 fn is_zero_width_or_format(c: char) -> bool {
     matches!(c,
-        '\u{00AD}'                // Soft Hyphen
-        | '\u{200B}'..='\u{200F}' // ZWSP, ZWNJ, ZWJ, LRM, RLM
-        | '\u{202A}'..='\u{202E}' // BiDi embedding/override
-        | '\u{2060}'..='\u{2064}' // Word Joiner, 不可視演算子
-        | '\u{2066}'..='\u{2069}' // BiDi isolate
-        | '\u{FEFF}'              // BOM / ZWNBSP
+        // C0 制御文字 (空白類 \t\n\v\f\r を除く) / DEL / C1 制御文字
+        '\u{0000}'..='\u{0008}'
+        | '\u{000E}'..='\u{001F}'
+        | '\u{007F}'..='\u{009F}'
+        | '\u{00AD}'                 // Soft Hyphen
+        // アラビア文字圏のフォーマット制御 (不可視)
+        | '\u{0600}'..='\u{0605}'    // Arabic Number Sign 等
+        | '\u{061C}'                 // Arabic Letter Mark
+        | '\u{06DD}'                 // Arabic End of Ayah
+        | '\u{070F}'                 // Syriac Abbreviation Mark
+        | '\u{08E2}'                 // Arabic Disputed End of Ayah
+        | '\u{115F}' | '\u{1160}'   // Hangul Jamo Filler (不可視)
+        | '\u{180E}'                 // Mongolian Vowel Separator
+        | '\u{200B}'..='\u{200F}'    // ZWSP, ZWNJ, ZWJ, LRM, RLM
+        | '\u{202A}'..='\u{202E}'    // BiDi embedding/override
+        | '\u{2060}'..='\u{206F}'    // Word Joiner, 不可視演算子, 非推奨フォーマット, BiDi isolate
+        | '\u{2800}'                 // Braille Pattern Blank
+        | '\u{3164}'                 // Hangul Filler
+        | '\u{FE00}'..='\u{FE0F}'    // Variation Selectors 1-16 (異体字データ密輸 — Sneaky Bits 2025)
+        | '\u{FEFF}'                 // BOM / ZWNBSP
+        | '\u{FFA0}'                 // Halfwidth Hangul Filler
+        | '\u{FFF9}'..='\u{FFFB}'    // Interlinear Annotation
+        | '\u{110BD}' | '\u{110CD}' // Kaithi Number Sign
+        | '\u{13430}'..='\u{13455}' // Egyptian Hieroglyph Format Controls
+        | '\u{1BCA0}'..='\u{1BCA3}' // Shorthand Format Controls
+        | '\u{1D173}'..='\u{1D17A}' // Musical Format Controls
+        | '\u{E0000}'..='\u{E001F}' // タグブロック非印刷領域 (復号対象外)
+        | '\u{E007F}'                // Cancel Tag
+        | '\u{E0100}'..='\u{E01EF}' // Variation Selectors Supplement
     )
 }
 
@@ -514,6 +650,78 @@ mod tests {
             ),
             "単語間ゼロ幅挿入の汚染メモリが受理された"
         );
+    }
+
+    #[test]
+    fn unicode_tag_payload_decodes_to_matchable_ascii() {
+        // D158: ASCII Smuggling — キーワード全体をタグ文字にエンコードすると
+        // 不可視になり、旧実装ではタグ文字がそのまま正規化結果に残り
+        // "wire transfer" の照合が成立しなかった。ASCII 復号で捕捉する。
+        let tagged: String = "wire transfer"
+            .chars()
+            .map(|c| char::from_u32(c as u32 + 0xE0000).unwrap_or(c))
+            .collect();
+        assert_eq!(normalize_for_matching(&tagged), "wire transfer");
+        assert_eq!(normalize_for_matching_spaced(&tagged), "wire transfer");
+    }
+
+    #[test]
+    fn tag_char_mixed_into_keyword_still_matches() {
+        // 可視 ASCII とタグ文字の混在でも、復号後にキーワードとして成立する。
+        let g_tag = char::from_u32(0xE0047).unwrap_or('?');
+        assert_eq!(normalize_for_matching(&format!("ur{g_tag}ent")), "urgent");
+    }
+
+    #[test]
+    fn expanded_invisible_chars_restore_word_boundaries() {
+        // D158: 従来の ZWSP 以外の不可視文字も単語間挿入に使える。
+        // 異体字セレクタ (Sneaky Bits 2025)・音楽記号フォーマット・
+        // ハングルフィラー・Braille 空・制御文字等をスペース化版で捕捉。
+        for sep in [
+            '\u{FE0F}', '\u{E0100}', '\u{1D173}', '\u{3164}', '\u{2800}', '\u{110BD}',
+            '\u{13430}', '\u{1BCA0}', '\u{180E}', '\u{FFF9}', '\u{0600}', '\u{061C}',
+            '\u{007F}', '\u{0085}',
+        ] {
+            let evasion = format!("wire{sep}transfer");
+            assert_eq!(
+                normalize_for_matching_spaced(&evasion),
+                "wire transfer",
+                "{sep:?} が語境界を破壊している"
+            );
+        }
+    }
+
+    #[test]
+    fn expanded_invisible_chars_inside_word_still_join() {
+        // 単語内挿入は削除版が捕捉する (D45 の二元照合の片側)。
+        for sep in ['\u{1D17A}', '\u{3164}', '\u{FE0F}', '\u{0007}', '\u{180E}'] {
+            let evasion = format!("ur{sep}gent");
+            assert_eq!(
+                normalize_for_matching(&evasion),
+                "urgent",
+                "{sep:?} が単語内結合を破壊している"
+            );
+        }
+    }
+
+    #[test]
+    fn homoglyph_in_keyword_folds_to_ascii() {
+        // D158: Cyrillic/Greek の1文字置き換えによるキーワード回避を防ぐ。
+        assert_eq!(normalize_for_matching("inv\u{043E}ice"), "invoice"); // о = Cyrillic
+        assert_eq!(
+            normalize_for_matching("\u{0430}\u{0455}\u{0430}\u{0440}"),
+            "asap"
+        ); // аѕар (全て Cyrillic 類似字)
+        assert_eq!(normalize_for_matching("p\u{03B1}ypal"), "paypal"); // α = Greek
+        assert_eq!(normalize_for_matching_spaced("wir\u{0435} transf\u{0435}r"), "wire transfer");
+    }
+
+    #[test]
+    fn legit_text_unchanged_by_expanded_normalization() {
+        // 日本語・通常 ASCII・絵文字基底文字は変更しない (異体字セレクタのみ除去)。
+        assert_eq!(normalize_for_matching("至急 振込"), "至急 振込");
+        assert_eq!(normalize_for_matching("会議❤️"), "会議❤");
+        assert_eq!(normalize_for_matching("Q3 Budget Review"), "q3 budget review");
     }
 
     #[test]

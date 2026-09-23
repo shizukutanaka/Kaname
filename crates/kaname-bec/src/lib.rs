@@ -799,6 +799,31 @@ impl BecDetector {
                 ),
             });
         }
+
+        // D159: 表示名ホモグラフ検出 — `analyze_display_name` は実装済みだが
+        // 呼出元がなく、Unit 42 (2025) / arxiv 2604.04926 が指摘する「表示名への
+        // Cyrillic/Greek 類似字混入」が既知連絡先との一致を問わず未検出だった。
+        // 既知連絡先の impersonation (上記) と別に、表示名に混入した非 Latin
+        // 類似字そのものを独立シグナルとして立てる。
+        // ドメインの IDN 検出より寄与を抑える — 表示名は自由記述で、正規の
+        // 非 Latin 名前にも類似字が混ざりうるため。
+        if let Some(name) = extract_display_name_from_addr(req.from_header) {
+            let name_risks = idn_homograph::analyze_display_name(&name);
+            if !name_risks.is_empty() {
+                let score = idn_homograph::idn_risk_score(&name_risks);
+                let descriptions: Vec<String> =
+                    name_risks.iter().map(|r| r.to_string()).collect();
+                signals.push(Signal {
+                    family: SignalFamily::Domain,
+                    contribution: (score * 0.5).clamp(0.15, 0.30),
+                    label: format!("表示名ホモグラフの疑い ({})", name),
+                    rationale: format!(
+                        "From 表示名 \"{name}\" に Latin 類似の非 ASCII 文字が混入しています: {}",
+                        descriptions.join("; ")
+                    ),
+                });
+            }
+        }
     }
 
     fn check_thread_hijack(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
@@ -2091,6 +2116,143 @@ mod tests {
             "IDN ホモグラフシグナルが出ていない: {:?}",
             a.signals
         );
+    }
+
+    #[test]
+    fn tag_encoded_urgency_and_money_keywords_detected() {
+        // D158: "urgent" をタグ文字 (U+E0000+ASCII) にエンコードすると不可視になり、
+        // 旧正規化ではキーワード照合を素通りしていた。復号後に照合できることを確認。
+        let tagged_urgent: String = "urgent"
+            .chars()
+            .map(|c| char::from_u32(c as u32 + 0xE0000).unwrap_or(c))
+            .collect();
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "ok".into(),
+        }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "経理部 <accounting@ally-corp.com>",
+            return_path: None,
+            subject: "お知らせ",
+            body_text: &format!("{tagged_urgent} 送金してください"),
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("送金 + 緊急性")),
+            "タグ文字エンコードされた urgency+money シグナルが出ていない: {:?}",
+            a.signals
+        );
+    }
+
+    #[test]
+    fn homoglyph_keywords_in_body_detected() {
+        // D158: "invoice" の o を Cyrillic U+043E に置き換える回避を防ぐ。
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "ok".into(),
+        }));
+        let contacts: Vec<String> = vec![];
+        let req = AssessmentRequest {
+            from_header: "経理部 <accounting@ally-corp.com>",
+            return_path: None,
+            subject: "お知らせ",
+            body_text: "urgent inv\u{043E}ice attached", // о = Cyrillic
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals.iter().any(|s| s.label.contains("送金 + 緊急性")),
+            "ホモグリフ混入キーワードのシグナルが出ていない: {:?}",
+            a.signals
+        );
+    }
+
+    #[test]
+    fn display_name_homoglyph_flagged_without_contact_match() {
+        // D159: 既知連絡先と一致しなくても、表示名の Cyrillic 混入は独立シグナル。
+        let det = BecDetector::new(Box::new(MockLlm {
+            prob: 0.05,
+            expl: "ok".into(),
+        }));
+        let contacts: Vec<String> = vec![];
+        let from = "Su\u{0440}\u{0440}ort Center <support@ally-corp.com>"; // рр = Cyrillic
+        let req = AssessmentRequest {
+            from_header: &from,
+            return_path: None,
+            subject: "notice",
+            body_text: "please review",
+            auth: baseline_auth_all_pass(),
+            sender_history: None,
+            our_domain: "example.com",
+            known_contacts: &contacts,
+            extracted_urls: &[],
+            reply_to: None,
+            thread_context: None,
+            past_thread_bodies: &[],
+            dkim_signature_header: None,
+        };
+        let a = det.assess(req).expect("assessment failed");
+        assert!(
+            a.signals
+                .iter()
+                .any(|s| s.label.contains("表示名ホモグラフ")),
+            "表示名ホモグラフシグナルが出ていない: {:?}",
+            a.signals
+        );
+    }
+
+    #[test]
+    fn clean_display_names_not_flagged() {
+        // D159: 正規の ASCII/日本語表示名は誤検知しない。
+        for name in ["Support Center", "山田 太郎", "経理部"] {
+            let from = format!("{name} <staff@ally-corp.com>");
+            let det = BecDetector::new(Box::new(MockLlm {
+                prob: 0.05,
+                expl: "ok".into(),
+            }));
+            let contacts: Vec<String> = vec![];
+            let req = AssessmentRequest {
+                from_header: &from,
+                return_path: None,
+                subject: "notice",
+                body_text: "please review",
+                auth: baseline_auth_all_pass(),
+                sender_history: None,
+                our_domain: "example.com",
+                known_contacts: &contacts,
+                extracted_urls: &[],
+                reply_to: None,
+                thread_context: None,
+                past_thread_bodies: &[],
+                dkim_signature_header: None,
+            };
+            let a = det.assess(req).expect("assessment failed");
+            assert!(
+                !a.signals
+                    .iter()
+                    .any(|s| s.label.contains("表示名ホモグラフ")),
+                "正規の表示名 {name:?} が誤検知された: {:?}",
+                a.signals
+            );
+        }
     }
 
     #[test]

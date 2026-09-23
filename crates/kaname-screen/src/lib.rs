@@ -598,39 +598,69 @@ pub fn normalize_for_matching_spaced(s: &str) -> String {
         .to_lowercase()
 }
 
-/// Cyrillic / Greek の Latin 字に視覚的に似た文字を ASCII に折りたたむ。
+/// Cyrillic / Greek / Armenian / Latin Extended のうち ASCII に視覚的に似た
+/// 文字を ASCII に折りたたむ。
 ///
 /// ホモグリフ攻撃 (A3): 攻撃者が `ignоre` (о は Cyrillic U+043E) と書けば
-/// `ignore` 検出をすり抜けるが視覚的に同一。よくある混同文字のみ対象。
+/// `ignore` 検出をすり抜けるが視覚的に同一。テーブルは
+/// `kaname-bec::idn_homograph::fold_homoglyphs` および `kaname-memory-guard` 側の
+/// 同一関数と同一集合 (Unicode TR36 Confusables 準拠) — 変更時は3箇所を揃えること。
 fn homoglyph_to_ascii(c: char) -> Option<char> {
     Some(match c {
-        // 小文字: 各 ASCII にマップ (Cyrillic / Greek を統合)
-        '\u{0430}' | '\u{03B1}' => 'a', // а α
-        '\u{0435}' | '\u{03B5}' => 'e', // е ε
-        '\u{043E}' | '\u{03BF}' => 'o', // о ο
-        '\u{0440}' | '\u{03C1}' => 'p', // р ρ
-        '\u{0441}' => 'c',              // с
-        '\u{0443}' => 'y',              // у
-        '\u{0445}' => 'x',              // х
-        '\u{0456}' => 'i',              // і
-        '\u{0458}' => 'j',              // ј
-        '\u{03BD}' => 'v',              // ν
-        // 大文字: 各 ASCII にマップ
-        '\u{0410}' | '\u{0391}' => 'A',
-        '\u{0412}' | '\u{0392}' => 'B',
-        '\u{0421}' => 'C',
-        '\u{0415}' | '\u{0395}' => 'E',
-        '\u{041D}' | '\u{0397}' => 'H',
-        '\u{0406}' | '\u{0399}' => 'I',
-        '\u{041A}' | '\u{039A}' => 'K',
-        '\u{041C}' | '\u{039C}' => 'M',
-        '\u{039D}' => 'N',
-        '\u{041E}' | '\u{039F}' => 'O',
-        '\u{0420}' | '\u{03A1}' => 'P',
-        '\u{0422}' | '\u{03A4}' => 'T',
-        '\u{03A5}' => 'Y',
-        '\u{0425}' | '\u{03A7}' => 'X',
-        '\u{0396}' => 'Z',
+        // Cyrillic 小文字 → Latin 類似字
+        '\u{0430}' => 'a',
+        '\u{0435}' => 'e',
+        '\u{0456}' => 'i',
+        '\u{043E}' => 'o',
+        '\u{0440}' => 'p',
+        '\u{0441}' => 'c',
+        '\u{0445}' => 'x',
+        '\u{0443}' => 'y',
+        '\u{0455}' => 's',
+        '\u{0454}' => 'e',
+        '\u{0458}' => 'j',
+        '\u{0433}' => 'r',
+        // Cyrillic 大文字 → Latin 類似字
+        '\u{0410}' => 'a',
+        '\u{0415}' => 'e',
+        '\u{041E}' => 'o',
+        '\u{0420}' => 'p',
+        '\u{0421}' => 'c',
+        '\u{0425}' => 'x',
+        '\u{0423}' => 'y',
+        '\u{0406}' => 'i',
+        '\u{0412}' => 'b',
+        '\u{041C}' => 'm',
+        '\u{041D}' => 'h',
+        '\u{041A}' => 'k',
+        '\u{0422}' => 't',
+        // Greek → Latin 類似字
+        '\u{03BF}' => 'o',
+        '\u{03C1}' => 'p',
+        '\u{03BD}' => 'v',
+        '\u{03C9}' => 'w',
+        '\u{03B1}' => 'a',
+        '\u{03B5}' => 'e',
+        '\u{039F}' => 'o',
+        '\u{0391}' => 'a',
+        '\u{0392}' => 'b',
+        '\u{0395}' => 'e',
+        '\u{0396}' => 'z',
+        '\u{0397}' => 'h',
+        '\u{0399}' => 'i',
+        '\u{039A}' => 'k',
+        '\u{039C}' => 'm',
+        '\u{039D}' => 'n',
+        '\u{03A1}' => 'p',
+        '\u{03A4}' => 't',
+        '\u{03A5}' => 'y',
+        '\u{03A7}' => 'x',
+        // Armenian → Latin 類似字
+        '\u{0585}' => 'q',
+        '\u{0578}' => 'o',
+        // Latin Extended 類似字
+        '\u{01A1}' => 'o',
+        '\u{0261}' => 'g',
         _ => return None,
     })
 }
@@ -641,13 +671,34 @@ fn homoglyph_to_ascii(c: char) -> Option<char> {
 /// 攻撃者が LLM だけが読める命令を埋め込むのに悪用される (P0/A1: Qiita 報告)。
 fn is_zero_width_or_format(c: char) -> bool {
     matches!(c,
-        '\u{00AD}'                // Soft Hyphen
-        | '\u{200B}'..='\u{200F}' // ZWSP, ZWNJ, ZWJ, LRM, RLM
-        | '\u{202A}'..='\u{202E}' // BiDi embedding/override
-        | '\u{2060}'..='\u{2064}' // Word Joiner, 不可視演算子
-        | '\u{2066}'..='\u{2069}' // BiDi isolate
-        | '\u{FEFF}'              // BOM / ZWNBSP
+        // C0 制御文字 (空白類 \t\n\v\f\r を除く) / DEL / C1 制御文字
+        '\u{0000}'..='\u{0008}'
+        | '\u{000E}'..='\u{001F}'
+        | '\u{007F}'..='\u{009F}'
+        | '\u{00AD}'                 // Soft Hyphen
+        // アラビア文字圏のフォーマット制御 (不可視)
+        | '\u{0600}'..='\u{0605}'    // Arabic Number Sign 等
+        | '\u{061C}'                 // Arabic Letter Mark
+        | '\u{06DD}'                 // Arabic End of Ayah
+        | '\u{070F}'                 // Syriac Abbreviation Mark
+        | '\u{08E2}'                 // Arabic Disputed End of Ayah
+        | '\u{115F}' | '\u{1160}'   // Hangul Jamo Filler (不可視)
+        | '\u{180E}'                 // Mongolian Vowel Separator
+        | '\u{200B}'..='\u{200F}'    // ZWSP, ZWNJ, ZWJ, LRM, RLM
+        | '\u{202A}'..='\u{202E}'    // BiDi embedding/override
+        | '\u{2060}'..='\u{206F}'    // Word Joiner, 不可視演算子, 非推奨フォーマット, BiDi isolate
+        | '\u{2800}'                 // Braille Pattern Blank
+        | '\u{3164}'                 // Hangul Filler
+        | '\u{FE00}'..='\u{FE0F}'    // Variation Selectors 1-16 (異体字データ密輸 — Sneaky Bits 2025)
+        | '\u{FEFF}'                 // BOM / ZWNBSP
+        | '\u{FFA0}'                 // Halfwidth Hangul Filler
+        | '\u{FFF9}'..='\u{FFFB}'    // Interlinear Annotation
+        | '\u{110BD}' | '\u{110CD}' // Kaithi Number Sign
+        | '\u{13430}'..='\u{13455}' // Egyptian Hieroglyph Format Controls
+        | '\u{1BCA0}'..='\u{1BCA3}' // Shorthand Format Controls
+        | '\u{1D173}'..='\u{1D17A}' // Musical Format Controls
         | '\u{E0000}'..='\u{E007F}' // Unicode タグブロック (不可視命令注入)
+        | '\u{E0100}'..='\u{E01EF}' // Variation Selectors Supplement
     )
 }
 

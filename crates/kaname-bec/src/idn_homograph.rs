@@ -117,12 +117,41 @@ fn is_homoglyph(c: char) -> bool {
         | '\u{0454}' // є (Cyrillic Ukrainian ie, ≈ є)
         | '\u{0458}' // ј (Cyrillic je ≈ j)
         | '\u{0433}' // г (Cyrillic ghe ≈ r)
+        // Cyrillic uppercase: Latin 大文字に酷似 ("СЕО" 等)
+        | '\u{0410}' // А (Cyrillic A)
+        | '\u{0415}' // Е (Cyrillic E)
+        | '\u{041E}' // О (Cyrillic O)
+        | '\u{0420}' // Р (Cyrillic R)
+        | '\u{0421}' // С (Cyrillic C)
+        | '\u{0425}' // Х (Cyrillic X)
+        | '\u{0423}' // У (Cyrillic Y)
+        | '\u{0406}' // І (Cyrillic I)
+        | '\u{0412}' // В (Cyrillic B)
+        | '\u{041C}' // М (Cyrillic M)
+        | '\u{041D}' // Н (Cyrillic H)
+        | '\u{041A}' // К (Cyrillic K)
+        | '\u{0422}' // Т (Cyrillic T)
         // Greek: Latin に酷似
         | '\u{03BF}' // ο (Greek omicron)
         | '\u{03C1}' // ρ (Greek rho ≈ p/r)
         | '\u{03BD}' // ν (Greek nu ≈ v)
         | '\u{03C9}' // ω (Greek omega ≈ w)
         | '\u{03B1}' // α (Greek alpha ≈ a)
+        | '\u{03B5}' // ε (Greek epsilon ≈ e)
+        | '\u{039F}' // Ο (Greek Omicron)
+        | '\u{0391}' // Α (Greek Alpha)
+        | '\u{0392}' // Β (Greek Beta)
+        | '\u{0395}' // Ε (Greek Epsilon)
+        | '\u{0396}' // Ζ (Greek Zeta)
+        | '\u{0397}' // Η (Greek Eta)
+        | '\u{0399}' // Ι (Greek Iota)
+        | '\u{039A}' // Κ (Greek Kappa)
+        | '\u{039C}' // Μ (Greek Mu)
+        | '\u{039D}' // Ν (Greek Nu)
+        | '\u{03A1}' // Ρ (Greek Rho)
+        | '\u{03A4}' // Τ (Greek Tau)
+        | '\u{03A5}' // Υ (Greek Upsilon)
+        | '\u{03A7}' // Χ (Greek Chi)
         // Armenian
         | '\u{0585}' // փ (Armenian ≈ q)
         | '\u{0578}' // ո (Armenian ≈ o)
@@ -215,16 +244,20 @@ pub fn fold_homoglyphs(s: &str) -> String {
             '\u{03BD}' => 'v',
             '\u{03C9}' => 'w',
             '\u{03B1}' => 'a',
+            '\u{03B5}' => 'e',
             '\u{039F}' => 'o',
             '\u{0391}' => 'a',
             '\u{0392}' => 'b',
             '\u{0395}' => 'e',
+            '\u{0396}' => 'z',
             '\u{0397}' => 'h',
+            '\u{0399}' => 'i',
             '\u{039A}' => 'k',
             '\u{039C}' => 'm',
             '\u{039D}' => 'n',
             '\u{03A1}' => 'p',
             '\u{03A4}' => 't',
+            '\u{03A5}' => 'y',
             '\u{03A7}' => 'x',
             // Armenian → Latin lookalike
             '\u{0585}' => 'q',
@@ -435,5 +468,51 @@ mod tests {
         assert_eq!(fold_homoglyphs("CEO"), "ceo");
         // 日本語は変化しない
         assert_eq!(fold_homoglyphs("山田"), "山田");
+    }
+
+    // ── D159 拡張: 大文字ホモグリフ ─────────────────────────────────────
+
+    #[test]
+    fn all_caps_cyrillic_display_name_flagged() {
+        // "СЕО" は全て Cyrillic 大文字 — 小文字しか持たない旧判定では未検出だった
+        let risks = analyze_display_name("\u{0421}\u{0415}\u{041E}");
+        assert!(
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
+            "Cyrillic 大文字のみの表示名を誤って通した: {risks:?}"
+        );
+    }
+
+    #[test]
+    fn greek_capital_display_name_flagged() {
+        // "ΡΑΥΡΑL" 風に Greek 大文字を混ぜた表示名
+        let risks = analyze_display_name("\u{03A1}\u{0391}\u{03A5}\u{03A1}\u{0391}L");
+        assert!(
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
+            "Greek 大文字を誤って通した: {risks:?}"
+        );
+    }
+
+    #[test]
+    fn greek_lowercase_epsilon_flagged() {
+        // Greek ε (U+03B5) は fold 表にあったが is_homoglyph には無かった
+        let risks = analyze_display_name("ignor\u{03B5} this");
+        assert!(
+            risks
+                .iter()
+                .any(|r| matches!(r, IdnRisk::HomoglyphCharacters { .. })),
+            "Greek ε を誤って通した: {risks:?}"
+        );
+    }
+
+    #[test]
+    fn fold_homoglyphs_handles_new_greek_lookalikes() {
+        assert_eq!(fold_homoglyphs("\u{03B5}"), "e");
+        assert_eq!(fold_homoglyphs("\u{0396}"), "z");
+        assert_eq!(fold_homoglyphs("\u{0399}"), "i");
+        assert_eq!(fold_homoglyphs("\u{03A5}"), "y");
     }
 }
