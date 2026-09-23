@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D402: `X-MessageScanner-*`/`X-Scanner-*`/`X-Content-Filtered-*`/`X-VirusFilter-*`/`X-AntispamFilter-*` 等のフィルタ・スキャン印自称 (第二群) が未検査
+
+- フィルタ機・スキャン機が記す印 — 送信側から届くのは「走査を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_filter2_marks` 新設 → `Envelope.filter2_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D403: `X-Backend-*`/`X-Cluster-*`/`X-Shard-*`/`X-Node-*`/`X-Replica-*`/`X-DC-*` 等のクラスタ・バックエンド印自称が未検査
+
+- クラスタ・シャード・ノードの内部値は配信基盤が残す — 送信側から届くのは「この基盤を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_cluster_marks` 新設 → `Envelope.cluster_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D404: `X-Report-*`/`X-Reporting-*`/`X-CS-Report-*`/`X-CT-RefID:`/`X-OpenSRS-*`/`X-Tucows-*` 等のレポート・照会印自称が未検査
+
+- レポート基盤・照会機が記す印 — 送信側から届くのは「レポートを通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_report_marks` 新設 → `Envelope.report_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった

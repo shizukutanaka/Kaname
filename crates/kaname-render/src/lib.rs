@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-MessageScanner-*`/`X-Scanner-*`/`X-Content-Filtered-*`/
+    /// `X-VirusFilter-*`/`X-AntispamFilter-*` 等のフィルタ・スキャン印
+    /// (第二群) があるか — 検査機の記録を送信側が自称する兆候 (D402)。
+    pub filter2_marks: bool,
+    /// `X-Backend-*`/`X-Cluster-*`/`X-Shard-*`/`X-Node-*`/`X-Replica-*`/
+    /// `X-DC-*` 等のクラスタ・バックエンド印があるか — 配信基盤内部の
+    /// 記録を送信側が自称する兆候 (D403)。
+    pub cluster_marks: bool,
+    /// `X-Report-*`/`X-Reporting-*`/`X-CT-RefID:`/`X-OpenSRS-*`/
+    /// `X-Tucows-*` 等のレポート・照会印があるか — レポート基盤の
+    /// 記録を送信側が自称する兆候 (D404)。
+    pub report_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        filter2_marks: has_filter2_marks(raw),
+        cluster_marks: has_cluster_marks(raw),
+        report_marks: has_report_marks(raw),
     })
 }
 
@@ -624,6 +639,68 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-MessageScanner-*`/`X-Scanner-*`/`X-Content-Filtered-*`/
+/// `X-VirusFilter-*`/`X-AntispamFilter-*`/`X-MessageScan-*` 等の
+/// フィルタ・スキャン印 (第二群) があるか判定する (D402)。
+///
+/// フィルタ機・スキャン機が記す印 — 送信側から届くこれは
+/// 「走査を通った」体裁を内容側が主張する自称。
+fn has_filter2_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-messagescanner-")
+            || l.starts_with("x-messagescan-")
+            || l.starts_with("x-scanner-")
+            || l.starts_with("x-content-filtered-")
+            || l.starts_with("x-virusfilter-")
+            || l.starts_with("x-antispamfilter")
+    })
+}
+
+/// `X-Backend-*`/`X-Cluster-*`/`X-Shard-*`/`X-Node-*`/`X-Replica-*`/
+/// `X-DC-*` 等のクラスタ・バックエンド印があるか判定する (D403)。
+///
+/// クラスタ・シャード・ノードの内部値は配信基盤が残す — 送信側から
+/// 届くこれは「この基盤を通った」体裁を内容側が主張する自称。
+fn has_cluster_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-backend-")
+            || l.starts_with("x-cluster-")
+            || l.starts_with("x-shard-")
+            || l.starts_with("x-node-")
+            || l.starts_with("x-replica-")
+            || l.starts_with("x-dc-")
+    })
+}
+
+/// `X-Report-*`/`X-Reporting-*`/`X-CS-Report-*`/`X-CT-RefID:`/
+/// `X-OpenSRS-*`/`X-Tucows-*` 等のレポート・照会印があるか
+/// 判定する (D404)。
+///
+/// レポート基盤・照会機が記す印 — 送信側から届くこれは
+/// 「レポートを通った」体裁を内容側が主張する自称。
+fn has_report_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-report-")
+            || l.starts_with("x-reporting-")
+            || l.starts_with("x-cs-report-")
+            || l.starts_with("x-ct-refid:")
+            || l.starts_with("x-opensrs-")
+            || l.starts_with("x-tucows-")
     })
 }
 
@@ -2952,6 +3029,58 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフィルタ印を検出する() {
+        let f1 = b"X-MessageScanner-From: a\r\n\r\nx";
+        assert!(has_filter2_marks(f1));
+        let f2 = b"X-Scanner-Result: ok\r\n\r\nx";
+        assert!(has_filter2_marks(f2));
+        let f3 = b"X-Content-Filtered-By: s\r\n\r\nx";
+        assert!(has_filter2_marks(f3));
+        let f4 = b"X-VirusFilter-Result: v\r\n\r\nx";
+        assert!(has_filter2_marks(f4));
+        let f5 = b"X-AntispamFilter: 1\r\n\r\nx";
+        assert!(has_filter2_marks(f5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_filter2_marks(clean));
+    }
+
+    #[test]
+    fn scan_はクラスタ印を検出する() {
+        let c1 = b"X-Backend-Node: n\r\n\r\nx";
+        assert!(has_cluster_marks(c1));
+        let c2 = b"X-Cluster-ID: c\r\n\r\nx";
+        assert!(has_cluster_marks(c2));
+        let c3 = b"X-Shard-ID: s\r\n\r\nx";
+        assert!(has_cluster_marks(c3));
+        let c4 = b"X-Node-Index: 1\r\n\r\nx";
+        assert!(has_cluster_marks(c4));
+        let c5 = b"X-Replica-Set: r\r\n\r\nx";
+        assert!(has_cluster_marks(c5));
+        let c6 = b"X-DC-Name: d\r\n\r\nx";
+        assert!(has_cluster_marks(c6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cluster_marks(clean));
+    }
+
+    #[test]
+    fn scan_はレポート印を検出する() {
+        let r1 = b"X-Report-Abuse-To: t\r\n\r\nx";
+        assert!(has_report_marks(r1));
+        let r2 = b"X-Reporting-ID: i\r\n\r\nx";
+        assert!(has_report_marks(r2));
+        let r3 = b"X-CS-Report-ID: c\r\n\r\nx";
+        assert!(has_report_marks(r3));
+        let r4 = b"X-CT-RefID: r\r\n\r\nx";
+        assert!(has_report_marks(r4));
+        let r5 = b"X-OpenSRS-Domain: d\r\n\r\nx";
+        assert!(has_report_marks(r5));
+        let r6 = b"X-Tucows-Mail-ID: t\r\n\r\nx";
+        assert!(has_report_marks(r6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_report_marks(clean));
     }
 }
 
