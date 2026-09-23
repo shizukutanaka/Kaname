@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D163: 有名ブランド名を名乗る表示名の別ドメイン送信 (ブランドなりすまし) を検出
+
+- `analyze_spoof` の表示名詐称は「既知連絡先の名前との一致」のみ — `From: "PayPal Support" <attacker@evil.xyz>` のように表示名が有名ブランドを名乗るケースは、連絡先にブランドが登録されていなければ一切未検出だった (display name spoofing — Valimail/Avanan/Proofpoint が BEC 常用手口として報告)。ドメイン側の `TYPOSQUAT_WATCHLIST` は From/Reply-To アドレスのタイポスクワットのみを見ており、表示名は対象外
+- 対処: `BRAND_DOMAINS` テーブル (Microsoft/Google/Amazon/Apple/PayPal/Netflix/Docusign/Zoom/Rakuten/Mercari 等 20 件 → 正規ドメイン) を新設し `kaname-bec` の表示名スプーフ検査に追加。表示名トークンをホモグリフ畳み込み + 数字置換正規化 (`0`→`o`/`1`→`l`/`3`→`e`/`5`→`s`) して比較し、ブランド名を名乗る表示名がブランド非正規ドメインから届けば `brand_impersonation` を立てる (Domain ファミリ、寄与 0.35、フリーメール送信なら +0.15)
+- 捕捉する変種: `"micr0soft"`/`"paypa1"` の数字置換、`"PаyPal"` (Cyrillic) のホモグリフ、`"micrsoft"` の 1 文字タイポ (levenshtein-1)、`"PayPal セキュリティセンター"` の文中埋め込み、サフィックス偽装 `paypal.com.evil.xyz`
+- 誤検出対策: 正規ドメイン・そのサブドメイン (`mail.paypal.com`、`teams.microsoft.com`、`aws.com` 等) からの送信は無視、`"applebee"` のようなトークン境界のない部分一致はブランドとみなさない、4 文字未満のトークン・非英数字境界のみで切り出せない候補は評価しない
+- テスト +14 件 (基本ブランド・正規ドメイン・フリーメール加点・数字置換・Cyrillic・タイポ・部分一致・サブドメイン・サフィックス攻撃・大小文字)
+
 ### Security — D160: HTML のみメールの本文解析欠落を修正し hidden text salting を遮断
 
 - `analyze_raw_email`/`mail_scan_folder` は解析対象を `Envelope::text_body` (text/plain パート) のみから取っていたため、**text/html のみのメールでは解析入力が空文字列になり**、BEC キーワード・Cialdini・金銭要求・DLP・OOBV・リンク評価・文体認証の全てが一切検査を通らなかった — HTML 単体メールは BEC/フィッシングで一般的であり、multipart/alternative で text/plain に無害デコイ・text/html に攻撃文を置く「パート不一致」回避も同じ穴を使っていた

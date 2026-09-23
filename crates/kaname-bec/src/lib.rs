@@ -799,6 +799,21 @@ impl BecDetector {
                 ),
             });
         }
+        if analysis.brand_impersonation {
+            let brand = analysis.impersonated_brand.as_deref().unwrap_or("不明");
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.35,
+                label: format!("ブランド表示名なりすまし ({})", brand),
+                rationale: format!(
+                    "表示名が有名ブランド \"{brand}\" を名乗っていますが、\
+                    送信ドメインはそのブランドの正規ドメインではありません。\
+                    メールクライアントは表示名を差出人名として表示するため、\
+                    ブランド公式からのメールと誤認する可能性があります\
+                    (display name spoofing)。"
+                ),
+            });
+        }
     }
 
     fn check_thread_hijack(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {
