@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D498: `X-Arduino-*`/`X-Prusa-*`/`X-JLCPCB-*`/`X-ESP32-*`/`X-Particle-*`/`X-ThingSpeak-*` 等の IoT・3D プリント・電子部品印自称が未検査
+
+- **問題**: `X-Arduino-*` (Arduino)、`X-Prusa-*` (Prusa)、`X-JLCPCB-*` (JLCPCB)、`X-RaspberryPi-*`/`X-ESP32-*`/`X-Particle-*`/`X-Blynk-*`/`X-ThingSpeak-*`/`X-Adafruit-*`/`X-SparkFun-*`/`X-Tindie-*`/`X-Seeed-*`/`X-Pololu-*`/`X-DFRobot-*`/`X-Pimoroni-*`/`X-Elegoo-*`/`X-Creality-*`/`X-Bambu-*`/`X-Anycubic-*`/`X-Ultimaker-*`/`X-Formlabs-*`/`X-Markforged-*`/`X-Stratasys-*`/`X-3DSystems-*`/`X-Materialise-*`/`X-Shapeways-*`/`X-Sculpteo-*`/`X-Protolabs-*`/`X-Xometry-*`/`X-Fictiv-*`/`X-Hubs-*`/`X-PCBWay-*`/`X-OSH-Park-*`/`X-Aisler-*`/`X-Eurocircuits-*`/`X-DigiKey-*`/`X-Mouser-*`/`X-Farnell-*`/`X-RSComponents-*`/`X-Avnet-*`/`X-Arrow-*`/`X-TME-*` は製造機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `maker_marks` + `has_maker_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 製造印の自署を問え。
+
+### Security — D499: `X-Nagios-*`/`X-Zabbix-*`/`X-Graylog-*`/`X-InfluxDB-*`/`X-Fluentd-*`/`X-SolarWinds-*` 等の監視・ログ基盤印自称が未検査
+
+- **問題**: `X-Nagios-*` (Nagios)、`X-Zabbix-*` (Zabbix)、`X-Graylog-*` (Graylog)、`X-SolarWinds-*`/`X-PRTG-*`/`X-Icinga-*`/`X-Checkmk-*`/`X-LibreNMS-*`/`X-Observium-*`/`X-Cacti-*`/`X-Munin-*`/`X-collectd-*`/`X-Telegraf-*`/`X-InfluxDB-*`/`X-TimescaleDB-*`/`X-VictoriaMetrics-*`/`X-Mimir-*`/`X-Thanos-*`/`X-Cortex-*`/`X-Loki-*`/`X-Elasticsearch-*`/`X-OpenSearch-*`/`X-Mezmo-*`/`X-LogDNA-*`/`X-Scalyr-*`/`X-Fluentd-*`/`X-Logstash-*`/`X-Vector-*`/`X-Filebeat-*`/`X-rsyslog-*`/`X-syslog-ng-*`/`X-journald-*` は監視機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `monitoring_marks` + `has_monitoring_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 監視印の自署を問え。
+
+### Security — D500: `X-Postman-*`/`X-VisualStudio-*`/`X-Statuspage-*`/`X-Xcode-*`/`X-IntelliJ-*`/`X-OhDear-*` 等の IDE・エディタ・API・稼働監視ツール印自称が未検査
+
+- **問題**: `X-Postman-*` (Postman)、`X-VisualStudio-*` (Visual Studio)、`X-Statuspage-*` (Statuspage)、`X-Xcode-*`/`X-AndroidStudio-*`/`X-IntelliJ-*`/`X-WebStorm-*`/`X-PhpStorm-*`/`X-PyCharm-*`/`X-RubyMine-*`/`X-GoLand-*`/`X-CLion-*`/`X-Rider-*`/`X-DataGrip-*`/`X-Aqua-*`/`X-Fleet-*`/`X-Eclipse-*`/`X-NetBeans-*`/`X-VSCode-*`/`X-VSCodium-*`/`X-Zed-*`/`X-Nova-*`/`X-BBEdit-*`/`X-TextMate-*`/`X-Sublime-*`/`X-Emacs-*`/`X-Vim-*`/`X-Neovim-*`/`X-Helix-*`/`X-Micro-*`/`X-Kakoune-*`/`X-JetBrains-*`/`X-Insomnia-*`/`X-HTTPie-*`/`X-Paw-*`/`X-RapidAPI-*`/`X-Checkly-*`/`X-Runscope-*`/`X-BetterStack-*`/`X-Cachet-*`/`X-Upptime-*`/`X-Site24x7-*`/`X-Freshping-*`/`X-HetrixTools-*`/`X-NodePing-*`/`X-Pulsetic-*`/`X-Hyperping-*`/`X-OhDear-*` はツール機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `devtools_marks` + `has_devtools_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — ツール印の自署を問え。
+
+
 ### Security — D495: `X-AWS-*`/`X-Azure-*`/`X-GoogleCloud-*`/`X-Alibaba-*`/`X-Oracle-Cloud-*`/`X-IBMCloud-*` 等のクラウドプラットフォーム印自称が未検査
 
 - **問題**: `X-AWS-*` (Amazon Web Services)、`X-Azure-*` (Microsoft Azure)、`X-GoogleCloud-*` (Google Cloud)、`X-AmazonSES-*`/`X-GCP-*`/`X-Alibaba-*`/`X-Baidu-*`/`X-Oracle-Cloud-*`/`X-IBMCloud-*` はクラウド機の通知記録 — 送信側が書くことは自称。

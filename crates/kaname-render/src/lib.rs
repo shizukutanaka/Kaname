@@ -670,6 +670,46 @@ pub struct Envelope {
     /// 音楽制作・オーディオ印があるか — 音響機の通知記録を送信側が
     /// 自称する兆候 (D497)。
     pub audio_marks: bool,
+    /// `X-Arduino-*`/`X-RaspberryPi-*`/`X-ESP32-*`/`X-Particle-*`/
+    /// `X-Blynk-*`/`X-ThingSpeak-*`/`X-Adafruit-*`/`X-SparkFun-*`/
+    /// `X-Tindie-*`/`X-Seeed-*`/`X-Pololu-*`/`X-DFRobot-*`/
+    /// `X-Pimoroni-*`/`X-Elegoo-*`/`X-Creality-*`/`X-Prusa-*`/
+    /// `X-Bambu-*`/`X-Anycubic-*`/`X-Ultimaker-*`/`X-Formlabs-*`/
+    /// `X-Markforged-*`/`X-Stratasys-*`/`X-3DSystems-*`/
+    /// `X-Materialise-*`/`X-Shapeways-*`/`X-Sculpteo-*`/
+    /// `X-Protolabs-*`/`X-Xometry-*`/`X-Fictiv-*`/`X-Hubs-*`/
+    /// `X-JLCPCB-*`/`X-PCBWay-*`/`X-OSH-Park-*`/`X-Aisler-*`/
+    /// `X-Eurocircuits-*`/`X-DigiKey-*`/`X-Mouser-*`/`X-Farnell-*`/
+    /// `X-Avnet-*`/`X-Arrow-*`/`X-TME-*` 等の IoT・3D プリント・
+    /// 電子部品印があるか — 製造機の通知記録を送信側が自称する
+    /// 兆候 (D498)。
+    pub maker_marks: bool,
+    /// `X-SolarWinds-*`/`X-Nagios-*`/`X-Zabbix-*`/`X-PRTG-*`/
+    /// `X-Icinga-*`/`X-Checkmk-*`/`X-LibreNMS-*`/`X-Observium-*`/
+    /// `X-Cacti-*`/`X-Munin-*`/`X-collectd-*`/`X-Telegraf-*`/
+    /// `X-InfluxDB-*`/`X-TimescaleDB-*`/`X-VictoriaMetrics-*`/
+    /// `X-Mimir-*`/`X-Thanos-*`/`X-Cortex-*`/`X-Loki-*`/
+    /// `X-Elasticsearch-*`/`X-OpenSearch-*`/`X-Mezmo-*`/`X-LogDNA-*`/
+    /// `X-Scalyr-*`/`X-Graylog-*`/`X-Fluentd-*`/`X-Logstash-*`/
+    /// `X-Vector-*`/`X-Filebeat-*`/`X-rsyslog-*`/`X-syslog-ng-*`/
+    /// `X-journald-*` 等の監視・ログ基盤印があるか — 監視機の
+    /// 通知記録を送信側が自称する兆候 (D499)。
+    pub monitoring_marks: bool,
+    /// `X-VisualStudio-*`/`X-Xcode-*`/`X-AndroidStudio-*`/
+    /// `X-IntelliJ-*`/`X-WebStorm-*`/`X-PhpStorm-*`/`X-PyCharm-*`/
+    /// `X-RubyMine-*`/`X-GoLand-*`/`X-CLion-*`/`X-Rider-*`/
+    /// `X-DataGrip-*`/`X-Aqua-*`/`X-Fleet-*`/`X-Eclipse-*`/
+    /// `X-NetBeans-*`/`X-VSCode-*`/`X-VSCodium-*`/`X-Zed-*`/
+    /// `X-Nova-*`/`X-BBEdit-*`/`X-TextMate-*`/`X-Sublime-*`/
+    /// `X-Emacs-*`/`X-Vim-*`/`X-Neovim-*`/`X-Helix-*`/`X-Kakoune-*`/
+    /// `X-Postman-*`/`X-Insomnia-*`/`X-HTTPie-*`/`X-Paw-*`/
+    /// `X-RapidAPI-*`/`X-Checkly-*`/`X-Runscope-*`/`X-BetterStack-*`/
+    /// `X-Statuspage-*`/`X-Cachet-*`/`X-Upptime-*`/`X-Site24x7-*`/
+    /// `X-Freshping-*`/`X-HetrixTools-*`/`X-NodePing-*`/
+    /// `X-Pulsetic-*`/`X-Hyperping-*`/`X-OhDear-*` 等の IDE・
+    /// エディタ・API・稼働監視ツール印があるか — ツール機の
+    /// 通知記録を送信側が自称する兆候 (D500)。
+    pub devtools_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1028,6 +1068,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cloudprovider_marks: has_cloudprovider_marks(raw),
         device_marks: has_device_marks(raw),
         audio_marks: has_audio_marks(raw),
+        maker_marks: has_maker_marks(raw),
+        monitoring_marks: has_monitoring_marks(raw),
+        devtools_marks: has_devtools_marks(raw),
     })
 }
 
@@ -4406,6 +4449,198 @@ fn has_audio_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-cinesamples-")
             || l.starts_with("x-projectsam-")
             || l.starts_with("x-8dio-")
+    })
+}
+
+/// `X-Arduino-*`/`X-RaspberryPi-*`/`X-ESP32-*`/`X-Particle-*`/
+/// `X-Blynk-*`/`X-ThingSpeak-*`/`X-Adafruit-*`/`X-SparkFun-*`/
+/// `X-Tindie-*`/`X-Seeed-*`/`X-Pololu-*`/`X-DFRobot-*`/`X-Pimoroni-*`/
+/// `X-Elegoo-*`/`X-Creality-*`/`X-Prusa-*`/`X-Bambu-*`/`X-Anycubic-*`/
+/// `X-Ultimaker-*`/`X-Formlabs-*`/`X-Markforged-*`/`X-Stratasys-*`/
+/// `X-3DSystems-*`/`X-Materialise-*`/`X-Shapeways-*`/`X-Sculpteo-*`/
+/// `X-Protolabs-*`/`X-Xometry-*`/`X-Fictiv-*`/`X-Hubs-*`/`X-JLCPCB-*`/
+/// `X-PCBWay-*`/`X-OSH-Park-*`/`X-Aisler-*`/`X-Eurocircuits-*`/
+/// `X-DigiKey-*`/`X-Mouser-*`/`X-Farnell-*`/`X-RSComponents-*`/
+/// `X-Avnet-*`/`X-Arrow-*`/`X-TME-*` 等の IoT・3D プリント・
+/// 電子部品印があるか判定する (D498)。
+///
+/// `X-Arduino-*` (Arduino)、`X-Prusa-*` (Prusa)、`X-JLCPCB-*`
+/// (JLCPCB) は製造機の通知記録 — 送信側から届くこれは自称。
+fn has_maker_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-iot-")
+            || l.starts_with("x-arduino-")
+            || l.starts_with("x-raspberrypi-")
+            || l.starts_with("x-esp32-")
+            || l.starts_with("x-particle-")
+            || l.starts_with("x-blynk-")
+            || l.starts_with("x-thingspeak-")
+            || l.starts_with("x-adafruit-")
+            || l.starts_with("x-sparkfun-")
+            || l.starts_with("x-tindie-")
+            || l.starts_with("x-seeed-")
+            || l.starts_with("x-pololu-")
+            || l.starts_with("x-dfrobot-")
+            || l.starts_with("x-pimoroni-")
+            || l.starts_with("x-elegoo-")
+            || l.starts_with("x-creality-")
+            || l.starts_with("x-prusa-")
+            || l.starts_with("x-bambu-")
+            || l.starts_with("x-anycubic-")
+            || l.starts_with("x-ultimaker-")
+            || l.starts_with("x-formlabs-")
+            || l.starts_with("x-markforged-")
+            || l.starts_with("x-stratasys-")
+            || l.starts_with("x-3dsystems-")
+            || l.starts_with("x-materialise-")
+            || l.starts_with("x-shapeways-")
+            || l.starts_with("x-sculpteo-")
+            || l.starts_with("x-protolabs-")
+            || l.starts_with("x-xometry-")
+            || l.starts_with("x-fictiv-")
+            || l.starts_with("x-hubs-")
+            || l.starts_with("x-jlcpcb-")
+            || l.starts_with("x-pcbway-")
+            || l.starts_with("x-oshpark-")
+            || l.starts_with("x-aisler-")
+            || l.starts_with("x-eurocircuits-")
+            || l.starts_with("x-digikey-")
+            || l.starts_with("x-mouser-")
+            || l.starts_with("x-farnell-")
+            || l.starts_with("x-rscomponents-")
+            || l.starts_with("x-avnet-")
+            || l.starts_with("x-arrow-")
+            || l.starts_with("x-tme-")
+    })
+}
+
+/// `X-SolarWinds-*`/`X-Nagios-*`/`X-Zabbix-*`/`X-PRTG-*`/`X-Icinga-*`/
+/// `X-Checkmk-*`/`X-LibreNMS-*`/`X-Observium-*`/`X-Cacti-*`/
+/// `X-Munin-*`/`X-collectd-*`/`X-Telegraf-*`/`X-InfluxDB-*`/
+/// `X-TimescaleDB-*`/`X-VictoriaMetrics-*`/`X-Mimir-*`/`X-Thanos-*`/
+/// `X-Cortex-*`/`X-Loki-*`/`X-Elasticsearch-*`/`X-OpenSearch-*`/
+/// `X-Mezmo-*`/`X-LogDNA-*`/`X-Scalyr-*`/`X-Graylog-*`/`X-Fluentd-*`/
+/// `X-Logstash-*`/`X-Vector-*`/`X-Filebeat-*`/`X-rsyslog-*`/
+/// `X-syslog-ng-*`/`X-journald-*` 等の監視・ログ基盤印があるか
+/// 判定する (D499)。
+///
+/// `X-Nagios-*` (Nagios)、`X-Zabbix-*` (Zabbix)、`X-Graylog-*`
+/// (Graylog) は監視機の通知記録 — 送信側から届くこれは自称。
+fn has_monitoring_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-solarwinds-")
+            || l.starts_with("x-nagios-")
+            || l.starts_with("x-zabbix-")
+            || l.starts_with("x-prtg-")
+            || l.starts_with("x-icinga-")
+            || l.starts_with("x-checkmk-")
+            || l.starts_with("x-librenms-")
+            || l.starts_with("x-observium-")
+            || l.starts_with("x-cacti-")
+            || l.starts_with("x-munin-")
+            || l.starts_with("x-collectd-")
+            || l.starts_with("x-telegraf-")
+            || l.starts_with("x-influxdb-")
+            || l.starts_with("x-timescaledb-")
+            || l.starts_with("x-victoriametrics-")
+            || l.starts_with("x-mimir-")
+            || l.starts_with("x-thanos-")
+            || l.starts_with("x-cortex-")
+            || l.starts_with("x-loki-")
+            || l.starts_with("x-elasticsearch-")
+            || l.starts_with("x-opensearch-")
+            || l.starts_with("x-mezmo-")
+            || l.starts_with("x-logdna-")
+            || l.starts_with("x-scalyr-")
+            || l.starts_with("x-graylog-")
+            || l.starts_with("x-fluentd-")
+            || l.starts_with("x-logstash-")
+            || l.starts_with("x-vector-")
+            || l.starts_with("x-filebeat-")
+            || l.starts_with("x-rsyslog-")
+            || l.starts_with("x-syslogng-")
+            || l.starts_with("x-journald-")
+    })
+}
+
+/// `X-VisualStudio-*`/`X-Xcode-*`/`X-AndroidStudio-*`/`X-IntelliJ-*`/
+/// `X-WebStorm-*`/`X-PhpStorm-*`/`X-PyCharm-*`/`X-RubyMine-*`/
+/// `X-GoLand-*`/`X-CLion-*`/`X-Rider-*`/`X-DataGrip-*`/`X-Aqua-*`/
+/// `X-Fleet-*`/`X-Eclipse-*`/`X-NetBeans-*`/`X-VSCode-*`/
+/// `X-VSCodium-*`/`X-Zed-*`/`X-Nova-*`/`X-BBEdit-*`/`X-TextMate-*`/
+/// `X-Sublime-*`/`X-Emacs-*`/`X-Vim-*`/`X-Neovim-*`/`X-Helix-*`/
+/// `X-Micro-*`/`X-Kakoune-*`/`X-JetBrains-*`/`X-Postman-*`/
+/// `X-Insomnia-*`/`X-HTTPie-*`/`X-Paw-*`/`X-RapidAPI-*`/`X-Checkly-*`/
+/// `X-Runscope-*`/`X-BetterStack-*`/`X-Statuspage-*`/`X-Cachet-*`/
+/// `X-Upptime-*`/`X-Site24x7-*`/`X-Freshping-*`/`X-HetrixTools-*`/
+/// `X-NodePing-*`/`X-Pulsetic-*`/`X-Hyperping-*`/`X-OhDear-*` 等の
+/// IDE・エディタ・API・稼働監視ツール印があるか判定する (D500)。
+///
+/// `X-Postman-*` (Postman)、`X-VisualStudio-*` (Visual Studio)、
+/// `X-Statuspage-*` (Statuspage) はツール機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_devtools_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-visualstudio-")
+            || l.starts_with("x-xcode-")
+            || l.starts_with("x-androidstudio-")
+            || l.starts_with("x-intellij-")
+            || l.starts_with("x-webstorm-")
+            || l.starts_with("x-phpstorm-")
+            || l.starts_with("x-pycharm-")
+            || l.starts_with("x-rubymine-")
+            || l.starts_with("x-goland-")
+            || l.starts_with("x-clion-")
+            || l.starts_with("x-rider-")
+            || l.starts_with("x-datagrip-")
+            || l.starts_with("x-aqua-")
+            || l.starts_with("x-fleet-")
+            || l.starts_with("x-eclipse-")
+            || l.starts_with("x-netbeans-")
+            || l.starts_with("x-vscode-")
+            || l.starts_with("x-vscodium-")
+            || l.starts_with("x-zed-")
+            || l.starts_with("x-nova-")
+            || l.starts_with("x-bbedit-")
+            || l.starts_with("x-textmate-")
+            || l.starts_with("x-sublime-")
+            || l.starts_with("x-emacs-")
+            || l.starts_with("x-vim-")
+            || l.starts_with("x-neovim-")
+            || l.starts_with("x-helix-")
+            || l.starts_with("x-micro-")
+            || l.starts_with("x-kakoune-")
+            || l.starts_with("x-jetbrains-")
+            || l.starts_with("x-postman-")
+            || l.starts_with("x-insomnia-")
+            || l.starts_with("x-httpie-")
+            || l.starts_with("x-paw-")
+            || l.starts_with("x-rapidapi-")
+            || l.starts_with("x-checkly-")
+            || l.starts_with("x-runscope-")
+            || l.starts_with("x-betterstack-")
+            || l.starts_with("x-statuspage-")
+            || l.starts_with("x-cachet-")
+            || l.starts_with("x-upptime-")
+            || l.starts_with("x-site24x7-")
+            || l.starts_with("x-freshping-")
+            || l.starts_with("x-hetrixtools-")
+            || l.starts_with("x-nodeping-")
+            || l.starts_with("x-pulsetic-")
+            || l.starts_with("x-hyperping-")
+            || l.starts_with("x-ohdear-")
     })
 }
 
@@ -8453,6 +8688,72 @@ mod tests {
         assert!(has_audio_marks(b1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_audio_marks(clean));
+    }
+
+    #[test]
+    fn scan_はIoT3Dプリント部品印を検出する() {
+        let a1 = b"X-Arduino-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(a1));
+        let p1 = b"X-Prusa-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(p1));
+        let j1 = b"X-JLCPCB-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(j1));
+        let b1 = b"X-Bambu-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(b1));
+        let r1 = b"X-RaspberryPi-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(r1));
+        let s1 = b"X-SparkFun-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(s1));
+        let d1 = b"X-DigiKey-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(d1));
+        let m1 = b"X-Mouser-Notify: x\r\n\r\nx";
+        assert!(has_maker_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_maker_marks(clean));
+    }
+
+    #[test]
+    fn scan_は監視ログ基盤印を検出する() {
+        let n1 = b"X-Nagios-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(n1));
+        let z1 = b"X-Zabbix-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(z1));
+        let g1 = b"X-Graylog-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(g1));
+        let i1 = b"X-InfluxDB-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(i1));
+        let e1 = b"X-Elasticsearch-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(e1));
+        let s1 = b"X-SolarWinds-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(s1));
+        let c1 = b"X-Checkmk-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(c1));
+        let f1 = b"X-Fluentd-Notify: x\r\n\r\nx";
+        assert!(has_monitoring_marks(f1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_monitoring_marks(clean));
+    }
+
+    #[test]
+    fn scan_はIDEエディタAPI稼働印を検出する() {
+        let p1 = b"X-Postman-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(p1));
+        let v1 = b"X-VisualStudio-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(v1));
+        let s1 = b"X-Statuspage-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(s1));
+        let x1 = b"X-Xcode-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(x1));
+        let i1 = b"X-IntelliJ-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(i1));
+        let n1 = b"X-Neovim-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(n1));
+        let o1 = b"X-OhDear-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(o1));
+        let e1 = b"X-Eclipse-Notify: x\r\n\r\nx";
+        assert!(has_devtools_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_devtools_marks(clean));
     }
 }
 
