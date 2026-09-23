@@ -265,6 +265,23 @@ pub struct Envelope {
     /// 業務・採用ツール印があるか — 業務システムの発信記録を
     /// 送信側が自称する兆候 (D443)。
     pub enterprise_marks: bool,
+    /// `X-Env-*`/`X-Envelope-*`/`X-MailFrom`/`X-Errors-To`/
+    /// `X-Bounces-*`/`X-VERP-*`/`X-PRVS-*`/`X-Subaddress-*`/
+    /// `X-Redirect-*`/`X-Forwarding-*` 等のエンベロープ配送記録印が
+    /// あるか — 配送経路・返送の記録を送信側が自称する兆候 (D444)。
+    pub envelope_trace_marks: bool,
+    /// `X-Originating-IP`/`X-Source-IP`/`X-Client-IP`/`X-Remote-IP`/
+    /// `X-HELO-*`/`X-EHLO-*`/`X-Reverse-DNS*`/`X-EIP:`/`X-IADB-*`/
+    /// `X-CSA-*`/`X-Lumos-*`/`X-CAN-SPAM-*` 等の送信元 IP・認定印が
+    /// あるか — 送信元の IP 記録・認定記録を送信側が自称する兆候
+    /// (D445)。
+    pub source_ip_marks: bool,
+    /// `X-GFIME-*`/`X-SA-Exim-*`/`X-SpamExperts-*`/`X-MailMarshal*`/
+    /// `X-InterScan-*`/`X-Clearswift-*`/`X-MIMEsweeper-*`/
+    /// `X-Purgate-*`/`X-Esva*`/`X-MailFoundry-*`/`X-Gateprotect-*`
+    /// 等の商用ゲートウェイ・フィルタ製品印 (第三群) があるか —
+    /// 製品の検査記録を送信側が自称する兆候 (D446)。
+    pub gateway_product_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -569,6 +586,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ms_eop_marks: has_ms_eop_marks(raw),
         marketing_marks: has_marketing_marks(raw),
         enterprise_marks: has_enterprise_marks(raw),
+        envelope_trace_marks: has_envelope_trace_marks(raw),
+        source_ip_marks: has_source_ip_marks(raw),
+        gateway_product_marks: has_gateway_product_marks(raw),
     })
 }
 
@@ -1545,6 +1565,124 @@ fn has_enterprise_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-kenexa-")
             || l.starts_with("x-brassring-")
             || l.starts_with("x-peoplesoft-")
+    })
+}
+
+/// `X-Env-*`/`X-Envelope-*`/`X-MailFrom`/`X-Mail-From`/
+/// `X-Original-Sender`/`X-Orig-Sender`/`X-Originator`/`X-Errors-To`/
+/// `X-Bounces-*`/`X-Bounce-*`/`X-Return-*`/`X-VERP-*`/`X-PRVS-*`/
+/// `X-Subaddress-*`/`X-Tag-*`/`X-NF-*`/`X-Redirect-*`/`X-Forwarding-*`
+/// 等のエンベロープ配送記録印があるか判定する (D444)。
+///
+/// `X-Env-From`/`X-Envelope-From`/`X-Errors-To`/`X-MailFrom` (カスタム
+/// ヘッダレジストリ掲載) は配送エージェントのエンベロープ記録 —
+/// 送信側から届くこれは自称。
+fn has_envelope_trace_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-env-")
+            || l.starts_with("x-envelope-")
+            || l.starts_with("x-mailfrom")
+            || l.starts_with("x-mail-from")
+            || l.starts_with("x-original-sender")
+            || l.starts_with("x-orig-sender")
+            || l.starts_with("x-originator")
+            || l.starts_with("x-errors-")
+            || l.starts_with("x-errors-to")
+            || l.starts_with("x-bounces-")
+            || l.starts_with("x-bounce-")
+            || l.starts_with("x-return-")
+            || l.starts_with("x-verp-")
+            || l.starts_with("x-prvs-")
+            || l.starts_with("x-subaddress-")
+            || l.starts_with("x-tag-")
+            || l.starts_with("x-nf-")
+            || l.starts_with("x-redirect-")
+            || l.starts_with("x-forwarding-")
+    })
+}
+
+/// `X-Originating-IP`/`X-Orig-IP`/`X-Source-IP`/`X-Sender-IP`/
+/// `X-Client-IP`/`X-Remote-IP`/`X-Reverse-DNS*`/`X-HELO-*`/`X-EHLO-*`/
+/// `X-Connecting-*`/`X-Incoming-*`/`X-Relay-IP`/`X-Sending-IP`/
+/// `X-Outgoing-IP`/`X-EIP:`/`X-IADB-*`/`X-CSA-*`/`X-Lumos-*`/
+/// `X-CAN-SPAM-*` 等の送信元 IP・認定印があるか判定する (D445)。
+///
+/// `X-Originating-IP` (Sympa/Hotmail 実測)、`X-EIP`/`X-IADB-*`/
+/// `X-CSA-*`/`X-Lumos-SenderID`/`X-CAN-SPAM-*` (カスタムヘッダ
+/// レジストリ掲載 — 認定・IP 評価記録) は受信機の送信元記録 —
+/// 送信側から届くこれは自称。
+fn has_source_ip_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-originating-ip")
+            || l.starts_with("x-orig-ip")
+            || l.starts_with("x-source-ip")
+            || l.starts_with("x-sender-ip")
+            || l.starts_with("x-client-ip")
+            || l.starts_with("x-remote-ip")
+            || l.starts_with("x-reverse-dns")
+            || l.starts_with("x-helo-")
+            || l.starts_with("x-ehlo-")
+            || l.starts_with("x-connecting-")
+            || l.starts_with("x-incoming-")
+            || l.starts_with("x-relay-ip")
+            || l.starts_with("x-sending-ip")
+            || l.starts_with("x-outgoing-ip")
+            || l.starts_with("x-eip:")
+            || l.starts_with("x-iadb-")
+            || l.starts_with("x-csa-")
+            || l.starts_with("x-lumos-")
+            || l.starts_with("x-can-spam-")
+    })
+}
+
+/// `X-GFIME-*`/`X-GFI-*`/`X-SA-Exim-*`/`X-SpamExperts-*`/
+/// `X-SpamTitan-*`/`X-MMS-*`/`X-MailMarshal*`/`X-InterScan-*`/
+/// `X-ESA-*`/`X-SpamCatch-*`/`X-SpamCop-*`/`X-SpamFighter-*`/
+/// `X-SpamDetect-*`/`X-PerlMx-*`/`X-CScan-*`/`X-Purgate-*`/
+/// `X-Libra-*`/`X-Esva*`/`X-Clearswift-*`/`X-MIMEsweeper-*`/
+/// `X-MailFoundry-*`/`X-Gateprotect-*`/`X-Secpoint-*` 等の商用
+/// ゲートウェイ・フィルタ製品印 (第三群) があるか判定する (D446)。
+///
+/// `X-GFIME-*` (GFI MailEssentials)、`X-SA-Exim-*` (SA-Exim
+/// Connect-IP/RcptTo/Version)、`X-SpamExperts-*` は製品の検査記録
+/// — 送信側から届くこれは自称。
+fn has_gateway_product_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gfime-")
+            || l.starts_with("x-gfi-")
+            || l.starts_with("x-sa-exim-")
+            || l.starts_with("x-spamexperts-")
+            || l.starts_with("x-spamtitan-")
+            || l.starts_with("x-mms-")
+            || l.starts_with("x-mailmarshal")
+            || l.starts_with("x-interscan-")
+            || l.starts_with("x-esa-")
+            || l.starts_with("x-spamcatch-")
+            || l.starts_with("x-spamcop-")
+            || l.starts_with("x-spamfighter-")
+            || l.starts_with("x-spamdetect-")
+            || l.starts_with("x-perlmx-")
+            || l.starts_with("x-cscan-")
+            || l.starts_with("x-purgate-")
+            || l.starts_with("x-libra-")
+            || l.starts_with("x-esva")
+            || l.starts_with("x-clearswift-")
+            || l.starts_with("x-mimesweeper-")
+            || l.starts_with("x-mailfoundry-")
+            || l.starts_with("x-gateprotect-")
+            || l.starts_with("x-secpoint-")
     })
 }
 
@@ -4405,6 +4543,72 @@ mod tests {
         assert!(has_enterprise_marks(w1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_enterprise_marks(clean));
+    }
+
+    #[test]
+    fn scan_はエンベロープ記録印を検出する() {
+        let e1 = b"X-Env-From: a@b\r\n\r\nx";
+        assert!(has_envelope_trace_marks(e1));
+        let e2 = b"X-Envelope-To: a@b\r\n\r\nx";
+        assert!(has_envelope_trace_marks(e2));
+        let m1 = b"X-Mailfrom: a@b\r\n\r\nx";
+        assert!(has_envelope_trace_marks(m1));
+        let e3 = b"X-Errors-To: a@b\r\n\r\nx";
+        assert!(has_envelope_trace_marks(e3));
+        let b1 = b"X-Bounces-Address: a@b\r\n\r\nx";
+        assert!(has_envelope_trace_marks(b1));
+        let v1 = b"X-VERP: x\r\n\r\nx";
+        assert!(has_envelope_trace_marks(v1));
+        let s1 = b"X-Subaddress-Encoded: x\r\n\r\nx";
+        assert!(has_envelope_trace_marks(s1));
+        let r1 = b"X-Redirect-By: x\r\n\r\nx";
+        assert!(has_envelope_trace_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_envelope_trace_marks(clean));
+    }
+
+    #[test]
+    fn scan_は送信元IP認定印を検出する() {
+        let o1 = b"X-Originating-IP: [1.1.1.1]\r\n\r\nx";
+        assert!(has_source_ip_marks(o1));
+        let s1 = b"X-Source-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(s1));
+        let c1 = b"X-Client-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(c1));
+        let r1 = b"X-Reverse-DNS: x\r\n\r\nx";
+        assert!(has_source_ip_marks(r1));
+        let h1 = b"X-HELO-Domain: x\r\n\r\nx";
+        assert!(has_source_ip_marks(h1));
+        let e1 = b"X-EIP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(e1));
+        let i1 = b"X-IADB-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_source_ip_marks(i1));
+        let c2 = b"X-CSA-Complaints: x\r\n\r\nx";
+        assert!(has_source_ip_marks(c2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_source_ip_marks(clean));
+    }
+
+    #[test]
+    fn scan_は商用ゲートウェイ印を検出する() {
+        let g1 = b"X-GFIME-MASPAM: x\r\n\r\nx";
+        assert!(has_gateway_product_marks(g1));
+        let s1 = b"X-SA-Exim-Connect-IP: 1.1.1.1\r\n\r\nx";
+        assert!(has_gateway_product_marks(s1));
+        let s2 = b"X-SpamExperts-Class: ham\r\n\r\nx";
+        assert!(has_gateway_product_marks(s2));
+        let m1 = b"X-MMS-Security: x\r\n\r\nx";
+        assert!(has_gateway_product_marks(m1));
+        let m2 = b"X-MailMarshal-Rule: x\r\n\r\nx";
+        assert!(has_gateway_product_marks(m2));
+        let i1 = b"X-InterScan-Antivirus: x\r\n\r\nx";
+        assert!(has_gateway_product_marks(i1));
+        let c1 = b"X-Clearswift-Result: x\r\n\r\nx";
+        assert!(has_gateway_product_marks(c1));
+        let m3 = b"X-MIMEsweeper-Info: x\r\n\r\nx";
+        assert!(has_gateway_product_marks(m3));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gateway_product_marks(clean));
     }
 }
 

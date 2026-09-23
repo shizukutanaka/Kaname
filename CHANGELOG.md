@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D444: `X-Env-*`/`X-Envelope-*`/`X-MailFrom`/`X-Errors-To`/`X-Bounces-*`/`X-VERP-*`/`X-PRVS-*`/`X-Subaddress-*`/`X-Redirect-*`/`X-Forwarding-*` 等のエンベロープ配送記録印自称が未検査
+
+- **問題**: `X-Env-From`/`X-Envelope-From`/`X-MailFrom`/`X-Errors-To`/`X-Original-Sender` (カスタムヘッダレジストリ掲載)、`X-Bounces-*`/`X-VERP-*`/`X-PRVS-*`/`X-Subaddress-*`/`X-Tag-*`/`X-NF-*`/`X-Redirect-*`/`X-Forwarding-*` は配送エージェントのエンベロープ記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `envelope_trace_marks` + `has_envelope_trace_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 配送の記録は配送機が記す — エンベロープ印の自署を問え。
+
+### Security — D445: `X-Originating-IP`/`X-Source-IP`/`X-Client-IP`/`X-Reverse-DNS*`/`X-HELO-*`/`X-EHLO-*`/`X-EIP:`/`X-IADB-*`/`X-CSA-*`/`X-Lumos-*`/`X-CAN-SPAM-*` 等の送信元 IP・認定印自称が未検査
+
+- **問題**: `X-Originating-IP` (Sympa/Hotmail 実測)、`X-EIP:`/`X-IADB-*`/`X-CSA-*`/`X-Lumos-SenderID`/`X-CAN-SPAM-*` (カスタムヘッダレジストリ掲載 — IP 認定・評価記録)、`X-HELO-*`/`X-EHLO-*`/`X-Reverse-DNS*`/`X-Client-IP`/`X-Remote-IP`/`X-Connecting-*`/`X-Incoming-*`/`X-Relay-IP`/`X-Sending-IP` は受信機の送信元記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `source_ip_marks` + `has_source_ip_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 送信元の記録は受信機が記す — IP・認定印の自署を問え。
+
+### Security — D446: `X-GFIME-*`/`X-SA-Exim-*`/`X-SpamExperts-*`/`X-MailMarshal*`/`X-InterScan-*`/`X-Clearswift-*`/`X-MIMEsweeper-*`/`X-Purgate-*`/`X-Esva*`/`X-MailFoundry-*`/`X-Gateprotect-*` 等の商用ゲートウェイ・フィルタ製品印 (第三群) 自称が未検査
+
+- **問題**: `X-GFIME-*` (GFI MailEssentials)、`X-SA-Exim-*` (SA-Exim Connect-IP/RcptTo/Version)、`X-SpamExperts-*`/`X-SpamTitan-*`/`X-MMS-*`/`X-MailMarshal*`/`X-InterScan-*`/`X-ESA-*`/`X-SpamCatch-*`/`X-SpamCop-*`/`X-SpamFighter-*`/`X-SpamDetect-*`/`X-PerlMx-*`/`X-CScan-*`/`X-Purgate-*`/`X-Libra-*`/`X-Esva*`/`X-Clearswift-*`/`X-MIMEsweeper-*`/`X-MailFoundry-*`/`X-Gateprotect-*`/`X-Secpoint-*` は製品の検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `gateway_product_marks` + `has_gateway_product_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 検査の記録は検査機が記す — ゲートウェイ印の自署を問え。
+
+
 ### Security — D441: `X-EOP*`/`X-Microsoft-Antispam:`/`X-Forefront-*`/`X-HM-*`/`X-MS-Exchange-*Loop*`/`X-MS-GCC-*`/`X-CrossPremises-*` 等の Microsoft 365/EOP/Exchange 内部印自称が未検査
 
 - **問題**: `X-Microsoft-Antispam`/`X-Forefront-Antispam-Report` (Microsoft Learn 公式)、`X-EOPAttributedMessage`/`X-EOPTenantAttributedMessage`/`X-MS-Exchange-*-Loop`/`X-MS-Exchange-Generated-Message-Source`/`X-MS-Gcc-Journal-Report`/`X-LD-Processed` (Microsoft Exchange ループ防止公式文書) は EOP/Exchange の処理記録 — 送信側が書くことは自称。
