@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D264: `X-Original-*`/`X-Apparently-*` 系の provenance 自称ヘッダが未検査
+
+- 送信者が「本当の差出人はこれ」と自称するヘッダ — 検査が From を見るのに対し、表示器が `X-Original-From` を見せる実装差を突く provenance 偽装
+- 対処: `has_forged_provenance_header` 新設 → `Envelope.forged_provenance` → `render_risks` 兆候報告
+
+### Security — D265: `MIME-Version:` が `1.x` 以外を名乗る変則値が未検査
+
+- MIME 実装は 1.0 のみ実在 — 変則バージョン値は手作り生成品の兆候
+- 対処: `has_malformed_mime_version` 新設 → `Envelope.malformed_mime_version` → `render_risks` 兆候報告
+
+### Security — D266: トップレベル `text/plain` 宣言なのに本文が HTML (polyglot) が未検査
+
+- 「テキストメール」と名乗りつつ実体が HTML — 宣言型と実体をずらして、テキスト経路の検査をすり抜けて HTML 解釈を誘導する偽装
+- 対処: `has_plain_declared_html` 新設 → `Envelope.plain_html_polyglot` → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

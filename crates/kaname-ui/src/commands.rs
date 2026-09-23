@@ -542,6 +542,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D264: X-Original-*/X-Apparently-* — provenance 自称
+    if env.forged_provenance {
+        render_risks.push(
+            "provenance 自称ヘッダ (X-Original-*/X-Apparently-*) — 検査値と表示値を分ける偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D265: MIME-Version の変則値
+    if env.malformed_mime_version {
+        render_risks.push(
+            "MIME-Version が 1.x 以外 — 手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D266: text/plain 宣言 + HTML 実体
+    if env.plain_html_polyglot {
+        render_risks.push(
+            "text/plain 宣言なのに本文が HTML — 宣言型と実体をずらす polyglot 偽装の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

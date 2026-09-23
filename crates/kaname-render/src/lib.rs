@@ -100,6 +100,24 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `X-Original-*`/`X-Apparently-*` 系の provenance 自称ヘッダ
+    /// (D264)。
+    ///
+    /// 送信者が「本当の差出人はこれ」と自称するヘッダ — 検査が From
+    /// を見るのに対し、表示器が X-Original-From を見せる実装差を
+    /// 突く provenance 偽装の兆候。
+    pub forged_provenance: bool,
+    /// `MIME-Version:` が `1.x` 以外を名乗る (D265)。
+    ///
+    /// MIME 実装は 1.0 のみ実在 — 変則バージョン値は手作り生成品の
+    /// 兆候。
+    pub malformed_mime_version: bool,
+    /// トップレベル `text/plain` 宣言なのに本文が HTML (D266)。
+    ///
+    /// 「テキストメール」と名乗りつつ実体が HTML — 宣言型と実体の
+    /// 不一致で、テキスト経路の検査をすり抜けて HTML 解釈を
+    /// 誘導する polyglot 偽装。
+    pub plain_html_polyglot: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +358,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D264: X-Original-*/X-Apparently-* — provenance 自称
+    let forged_provenance = has_forged_provenance_header(bytes);
+
+    // D265: MIME-Version の変則値
+    let malformed_mime_version = has_malformed_mime_version(bytes);
+
+    // D266: text/plain 宣言 + HTML 実体
+    let plain_html_polyglot = has_plain_declared_html(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,7 +385,59 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        forged_provenance,
+        malformed_mime_version,
+        plain_html_polyglot,
     })
+}
+
+/// `X-Original-*`/`X-Apparently-*` 系の provenance 自称ヘッダが
+/// あるか判定する (D264)。
+///
+/// 検査が From を見るのに対し表示器が X-Original-From を見せる
+/// 実装差を突く provenance 偽装の兆候。
+pub fn has_forged_provenance_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("x-original-from:")
+            || l.starts_with("x-original-sender:")
+            || l.starts_with("x-original-to:")
+            || l.starts_with("x-apparently-from:")
+            || l.starts_with("x-apparently-to:")
+    })
+}
+
+/// `MIME-Version:` が `1.x` 以外を名乗るか判定する (D265)。
+///
+/// MIME 実装は 1.0 のみ実在 — 変則バージョン値は手作り生成品の兆候。
+pub fn has_malformed_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("mime-version:") && !l.trim_start_matches("mime-version:").trim_start().starts_with("1.")
+    })
+}
+
+/// トップレベル `text/plain` 宣言なのに本文が HTML か判定する (D266)。
+///
+/// 「テキストメール」と名乗りつつ実体が HTML — 宣言型と実体の不一致
+/// で、テキスト経路の検査をすり抜けて HTML 解釈を誘導する polyglot。
+pub fn has_plain_declared_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = &text[..header_end];
+    let declares_plain = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("text/plain")
+    });
+    if !declares_plain {
+        return false;
+    }
+    let body = &text[header_end..];
+    body.contains("<html") || body.contains("<!doctype") || body.contains("<script")
+        || body.contains("<body") || body.contains("<a ")
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
