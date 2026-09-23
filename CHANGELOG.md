@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D167: 転送メール添付 (message/rfc822/.eml) 内側コンテンツの検査素通りを遮断
+
+- `scan_attachments` は外側の添付パートのみを検査していたため、「無害な外側メール + 攻撃文・リンク・実行ファイルを内包した .eml 添付」の構成で内側コンテンツが全検出器 (危険拡張子・MIME 偽装・polyglot・SVG・ICS・メタデータ) を素通りしていた — 転送メール経由の検査回避は Microsoft Defender の detonation 対象としても文書化される代表的な手口 (Proofpoint 等も .eml 添付フィッシングを報告)
+- 対処: `scan_message_attachments` を新設し `msg.parts` 全走査に変更 — `message/rfc822`/`PartType::Message`/`.eml` の入れ子パートを検出して内側の添付を再帰スキャン (深度 3・総数 64 上限)。内側で検出された添付・リスクは「転送メール内の添付 <name>」として外側スキャンの risks に畳み込み、内側の危険判定を `is_dangerous` に伝播
+- `Content-Disposition` なしの digest 型入れ子メールも配送経路として報告。内側をパースできない .eml も「外側スキャンを通らない経路」として注記
+- テスト +5 件 (内側 exe 伝播・クリーン内側の注記・digest 型・深い入れ子の打切り・添付総数上限)
+
 ### Security — D164: 複数 From アドレス / Sender ヘッダ不整合 (parser differential なりすまし) を検出
 
 - `env.from.first()` — 解析・表示・BEC 判定の全経路が From ヘッダの**最初の 1 アドレスだけ**を見ていたため、`From: ceo@corp.example, attacker@evil.example` のような複数 From メールで 2 番目以降の混入アドレスは誰も評価していなかった。RFC 5322 §3.6.2 は複数 From に `Sender:` を必須とするが、クライアントが表示に採用するアドレスは実装ごとに差があり (先頭/末尾/連結)、この「どの差出人として見えるかが環境依存」という差異を突く parser differential 型なりすましが知られている (Dmarcian/FlashStart 等が報告)

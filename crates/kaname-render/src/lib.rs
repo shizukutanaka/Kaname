@@ -2268,6 +2268,125 @@ mod tests {
         assert_eq!(e.link_mismatches.len(), 1);
         assert!(e.link_mismatches[0].shown_text.chars().count() <= 80);
     }
+
+    // ---- D167: 転送メール (message/rfc822 / .eml) の内側添付 ----
+
+    /// 内側コンテンツを持つ転送メール添付 (.eml) を含むメールを組み立てる。
+    fn nested_eml_raw(inner_body: &[u8]) -> Vec<u8> {
+        [
+            b"From: a@b.example\r\nSubject: fwd\r\nMIME-Version: 1.0\r\n\
+              Content-Type: multipart/mixed; boundary=\"O\"\r\n\r\n\
+              --O\r\nContent-Type: text/plain\r\n\r\nhi\r\n\
+              --O\r\nContent-Type: message/rfc822\r\n\
+              Content-Disposition: attachment; filename=\"fwd.eml\"\r\n\r\n"
+                .as_slice(),
+            inner_body,
+            b"\r\n--O--\r\n".as_slice(),
+        ]
+        .concat()
+    }
+
+    #[test]
+    fn nested_eml_with_exe_is_dangerous() {
+        // 回帰: 内側の .exe は外側スキャンを素通りしていた
+        let inner = b"From: x@a.example\r\nSubject: hi\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"I\"\r\n\r\n\
+            --I\r\nContent-Type: text/plain\r\n\r\nbody\r\n\
+            --I\r\nContent-Type: application/octet-stream; name=\"evil.exe\"\r\n\
+            Content-Disposition: attachment; filename=\"evil.exe\"\r\n\r\n\
+            MZ\x90\x00payload\r\n--I--\r\n";
+        let scans = scan_attachments(&nested_eml_raw(inner));
+        assert_eq!(scans.len(), 1, ".eml パート自体が 1 件として返る");
+        assert!(scans[0].is_dangerous, "内側の .exe を危険と伝播する");
+        assert!(
+            scans[0]
+                .risks
+                .iter()
+                .any(|r| r.contains("evil.exe") && r.contains("転送メール内")),
+            "内側添付名を含む risk: {:?}",
+            scans[0].risks
+        );
+    }
+
+    #[test]
+    fn nested_eml_clean_inner_is_reported_not_dangerous() {
+        let inner = b"From: x@a.example\r\nSubject: hi\r\n\
+            Content-Type: text/plain\r\n\r\nplain body only\r\n";
+        let scans = scan_attachments(&nested_eml_raw(inner));
+        assert_eq!(scans.len(), 1);
+        assert!(
+            scans[0]
+                .risks
+                .iter()
+                .any(|r| r.contains("転送") || r.contains(".eml")),
+            "配送経路の注記: {:?}",
+            scans[0].risks
+        );
+        assert!(!scans[0].is_dangerous);
+    }
+
+    #[test]
+    fn inline_rfc822_without_disposition_is_scanned() {
+        // Content-Disposition なしの入れ子メール (digest 型) も配送経路として拾う
+        let raw = b"From: a@b.example\r\nSubject: fwd\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/digest; boundary=\"O\"\r\n\r\n\
+            --O\r\nContent-Type: message/rfc822\r\n\r\n\
+            From: x@a.example\r\nSubject: n\r\n\
+            Content-Type: application/octet-stream; name=\"evil.exe\"\r\n\
+            Content-Disposition: attachment; filename=\"evil.exe\"\r\n\r\n\
+            MZ\x90\x00p\r\n\r\n--O--\r\n";
+        let scans = scan_attachments(raw);
+        assert!(
+            scans.iter().any(|s| s
+                .risks
+                .iter()
+                .any(|r| r.contains("転送") || r.contains("evil.exe"))),
+            "inline rfc822 の内側も検査: {scans:?}"
+        );
+    }
+
+    #[test]
+    fn deeply_nested_does_not_hang() {
+        // 4 段の入れ子 — 深度上限で打ち切り、返ってくることを確認
+        let mut raw = b"From: d@e.example\r\nSubject: deep\r\n\
+            Content-Type: application/octet-stream; name=\"evil.exe\"\r\n\
+            Content-Disposition: attachment; filename=\"evil.exe\"\r\n\r\n\
+            MZ\x90\x00p\r\n"
+            .to_vec();
+        for _ in 0..4 {
+            raw = [
+                b"From: a@b.example\r\nSubject: w\r\nMIME-Version: 1.0\r\n\
+                  Content-Type: multipart/mixed; boundary=\"W\"\r\n\r\n\
+                  --W\r\nContent-Type: message/rfc822\r\n\r\n"
+                    .as_slice(),
+                raw.as_slice(),
+                b"\r\n--W--\r\n".as_slice(),
+            ]
+            .concat();
+        }
+        let scans = scan_attachments(&raw);
+        assert!(!scans.is_empty());
+    }
+
+    #[test]
+    fn total_scan_cap_terminates() {
+        // 添付 70 件のメール — 64 件上限で打ち切る
+        let mut raw = b"From: a@b.example\r\nSubject: m\r\nMIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"M\"\r\n\r\n"
+            .to_vec();
+        for i in 0..70 {
+            raw.extend(
+                format!(
+                    "--M\r\nContent-Type: application/octet-stream; name=\"f{i}.txt\"\r\n\
+                     Content-Disposition: attachment; filename=\"f{i}.txt\"\r\n\r\nx\r\n"
+                )
+                .into_bytes(),
+            );
+        }
+        raw.extend(b"--M--\r\n");
+        let scans = scan_attachments(&raw);
+        assert!(scans.len() <= 64);
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2406,15 +2525,39 @@ fn extract_parts_by_media_type(raw: &[u8], ctype: &str, subtype: &str) -> Vec<Ve
 /// # DoS 対策
 ///
 /// 1 添付あたり検査するのは先頭 10 MB まで。それを超える部分は読まない。
+/// 転送メールの入れ子は 3 段、全添付数は 64 件まで (どちらも CPU/メモリ DoS 対策)。
 #[must_use]
 pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
     let Some(msg) = MessageParser::default().parse(raw) else {
         return Vec::new();
     };
-
     let mut out = Vec::new();
-    for part in msg.attachments() {
-        let filename = part.attachment_name().unwrap_or("unnamed").to_string();
+    scan_message_attachments(&msg, 0, &mut out);
+    out
+}
+
+/// `msg.attachments()` に加え、入れ子 `message/rfc822` (`.eml`) の
+/// 内側の添付も再帰検査する (D167)。
+///
+/// 従来は外側の添付パートだけを検査していたため、
+/// 「無害なメール + 攻撃文・リンク・実行ファイルを内包した .eml 添付」
+/// という構成 (転送メール経由の検査回避 — Microsoft Defender の detonation
+/// 対象としても文書化されている代表的な手口) で内側のコンテンツが
+/// 全検出器を素通りしていた。
+fn scan_message_attachments(
+    msg: &mail_parser::Message<'_>,
+    depth: usize,
+    out: &mut Vec<AttachmentScan>,
+) {
+    /// 入れ子メールの再帰深度上限 — 深い入れ子でスタック/CPU を使い切らせない。
+    const MAX_NESTED_DEPTH: usize = 3;
+    /// 1 通あたりの添付スキャン総数上限。
+    const MAX_TOTAL_SCANS: usize = 64;
+
+    for part in &msg.parts {
+        if out.len() >= MAX_TOTAL_SCANS {
+            return;
+        }
         let declared_mime = part
             .content_type()
             .map(|ct| {
@@ -2425,14 +2568,60 @@ pub fn scan_attachments(raw: &[u8]) -> Vec<AttachmentScan> {
                 }
             })
             .unwrap_or_else(|| "application/octet-stream".to_string());
+        let is_nested = declared_mime.eq_ignore_ascii_case("message/rfc822")
+            || matches!(part.body, mail_parser::PartType::Message(_));
+        // attachment でなく入れ子メールでもないパートはスキップ
+        // (text/plain・text/html 本文等はスキャン対象外)。
+        if !part.is_attachment() && !is_nested {
+            continue;
+        }
 
-        out.push(scan_attachment_bytes(
-            &filename,
-            &declared_mime,
-            part.contents(),
-        ));
+        let filename = part.attachment_name().unwrap_or("unnamed").to_string();
+        let mut scan = scan_attachment_bytes(&filename, &declared_mime, part.contents());
+
+        // `.eml` 拡張子だが octet-stream 宣言で PartType が Message に
+        // ならなかった場合 — 内容をメールとしてパースして内側を検査する
+        // (宣言偽装による配送経路隠しを閉じる)。
+        let filename_is_eml = filename.to_ascii_lowercase().ends_with(".eml");
+
+        if is_nested || filename_is_eml {
+            let mut inner = Vec::new();
+            if let mail_parser::PartType::Message(sub) = &part.body {
+                if depth < MAX_NESTED_DEPTH {
+                    scan_message_attachments(sub, depth + 1, &mut inner);
+                }
+            } else if filename_is_eml && depth < MAX_NESTED_DEPTH {
+                if let Some(sub) = MessageParser::default().parse(part.contents()) {
+                    scan_message_attachments(&sub, depth + 1, &mut inner);
+                }
+            }
+            if inner.is_empty() {
+                // 内側をパースできない message/rfc822・.eml も配送経路として報告
+                scan.risks.push(
+                    "転送されたメール添付 (.eml/message/rfc822) — 内側のコンテンツは外側のスキャンを通らない配送経路です"
+                        .to_string(),
+                );
+            } else {
+                scan.risks.push(format!(
+                    "転送されたメール添付 — 内側に {} 件の添付を検出",
+                    inner.len()
+                ));
+                for s in &inner {
+                    if s.is_dangerous || !s.risks.is_empty() {
+                        scan.risks.extend(
+                            s.risks
+                                .iter()
+                                .map(|r| format!("転送メール内の添付 {}: {r}", s.filename)),
+                        );
+                        if s.is_dangerous {
+                            scan.is_dangerous = true;
+                        }
+                    }
+                }
+            }
+        }
+        out.push(scan);
     }
-    out
 }
 
 /// メール全体が MLS エンベロープ (`application/mls-envelope+cbor`) を
