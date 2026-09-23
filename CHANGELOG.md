@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D161: 表示名に埋め込まれたアドレスの別ドメイン詐称 (フレンドリ名アドレス詐称) を検出
+
+- `analyze_spoof` の表示名詐称チェックは「既知連絡先の**名前**との一致」のみを見ており、表示名自体がメールアドレスである `From: "support@paypal.com" <attacker@evil.xyz>` のような手口を一切検出していなかった — メールクライアントは表示名を差出人名として表示するため、実アドレスとは別のドメインを差出人と誤認させられる (RFC 5322 では表示名は任意テキスト。Valimail「friendly name spoofing」、JPCERT/CC の BEC 解析で頻出)
+- 対処: 表示名から `local@domain.tld` 形の埋め込みアドレスを抽出し (`extract_embedded_email_domain`)、ホモグリフ畳み込み後のドメインが実送信ドメインと異なれば `display_name_email_spoof` を立てる (Domain ファミリ、寄与 0.35)。埋め込みドメインが既知連絡先のドメインと一致する場合は狙い撃ち詐称として +0.15
+- 併せて `extract_display_name` を `find('<')` から `rfind('<')` に修正 — `"<support@paypal.com>" <a@b.c>` のように表示名自身が山括弧を含むと最初の括弧で切断され表示名が空になって検査自体を回避できた
+- テスト +13 件 (同ドメイン正当・Cyrillic 埋め込み・連絡先ドメイン狙い・テキスト混在・区切り括弧・TLD なし等)
+
 ### Removed — D157: kaname-pivot の呼出元ゼロだった信頼スコア層を削除
 
 - `PivotHistory`・`trust_score`・`trust_score_with_bec_context` は設計上「既知チャネル加点 + BEC 複合減点」の評価層だったが外部呼出元が皆無 — 実利用は `analyze`/`is_high_risk`/`channel_name` のみ。dead 層ごと削除
