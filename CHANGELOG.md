@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D516: `X-Netflix-*`/`X-Hulu-*`/`X-DisneyPlus-*`/`X-PrimeVideo-*`/`X-DAZN-*`/`X-TVer-*` 等の動画配信・OTT 印自称が未検査
+
+- **問題**: `X-Netflix-*` (Netflix)、`X-Hulu-*` (Hulu)、`X-DisneyPlus-*` (Disney+)、`X-HBOMax-*`/`X-Max-*`/`X-ParamountPlus-*`/`X-Peacock-*`/`X-PrimeVideo-*`/`X-DAZN-*`/`X-UNEXT-*`/`X-Abema-*`/`X-TVer-*`/`X-Crunchyroll-*`/`X-Funimation-*`/`X-Viki-*`/`X-iQiyi-*`/`X-WeTV-*`/`X-DiscoveryPlus-*`/`X-AppleTVPlus-*`/`X-Roku-*`/`X-SlingTV-*`/`X-FuboTV-*`/`X-PlutoTV-*`/`X-Tubi-*`/`X-RakutenTV-*`/`X-Lemino-*`/`X-Mubi-*`/`X-BritBox-*`/`X-ITVX-*`/`X-Channel4-*`/`X-My5-*`/`X-SBSOnDemand-*`/`X-Kayo-*`/`X-Stan-*`/`X-Binge-*`/`X-Foxtel-*` は映機の通知記録 — 送信側が書くことは自称。アカウント停止詐欺の典型印。(`X-Twitch-*`/`X-YouTube-*` は D459 で検出済み)
+- **修正**: `Envelope` に `streaming_marks` + `has_streaming_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 映印の自署を問え。
+
+### Security — D517: `X-1Password-*`/`X-Bitwarden-*`/`X-NordVPN-*`/`X-Mullvad-*`/`X-Backblaze-*`/`X-Veeam-*` 等のパスワード管理・VPN・バックアップ印自称が未検査
+
+- **問題**: `X-1Password-*` (1Password)、`X-Bitwarden-*` (Bitwarden)、`X-NordVPN-*` (NordVPN)、`X-LastPass-*`/`X-Dashlane-*`/`X-Keeper-*`/`X-ExpressVPN-*`/`X-Mullvad-*`/`X-Surfshark-*`/`X-CyberGhost-*`/`X-Windscribe-*`/`X-TunnelBear-*`/`X-Tailscale-*`/`X-ZeroTier-*`/`X-CloudflareWARP-*`/`X-PIA-*`/`X-ProtonVPN-*`/`X-Backblaze-*`/`X-Carbonite-*`/`X-CrashPlan-*`/`X-Acronis-*`/`X-Veeam-*`/`X-iDrive-*`/`X-Duplicati-*`/`X-restic-*`/`X-Rclone-*`/`X-ArqBackup-*`/`X-Enpass-*`/`X-RoboForm-*`/`X-StickyPassword-*`/`X-LogMeOnce-*`/`X-Passbolt-*`/`X-Strongbox-*`/`X-SafeInCloud-*` は鑰機の通知記録 — 送信側が書くことは自称。マスターパスワード詐取の典型印。
+- **修正**: `Envelope` に `consumer_security_marks` + `has_consumer_security_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鑰印の自署を問え。
+
+### Security — D518: `X-IRS-*`/`X-NTA-*`/`X-GovUK-*`/`X-SSA-*`/`X-HMRC-*`/`X-myGov-*` 等の政府・税務・公共機関印自称が未検査
+
+- **問題**: `X-IRS-*` (IRS)、`X-NTA-*` (国税庁)、`X-GovUK-*` (GOV.UK)、`X-eLTAX-*`/`X-MyNaportal-*`/`X-GovDelivery-*`/`X-SSA-*`/`X-Medicare-*`/`X-HealthCareGov-*`/`X-DMV-*`/`X-TurboTax-*`/`X-HRBlock-*`/`X-TaxAct-*`/`X-FreeTaxUSA-*`/`X-eTax-*`/`X-Kokuzeicho-*`/`X-ePost-*`/`X-SydneyWater-*`/`X-Energex-*`/`X-OriginEnergy-*`/`X-AGL-*`/`X-WaterCorp-*`/`X-USAGov-*`/`X-GovInfo-*`/`X-Grants-*`/`X-FEMA-*`/`X-CBSA-*`/`X-CRA-*`/`X-HMRC-*`/`X-DWP-*`/`X-NHS-*`/`X-Centrelink-*`/`X-myGov-*`/`X-ATO-*`/`X-ServiceNSW-*`/`X-ICBC-*` は官機の通知記録 — 送信側が書くことは自称。還付金・給付金詐欺の典型印。
+- **修正**: `Envelope` に `government_marks` + `has_government_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 官印の自署を問え。
+
+
 ### Security — D513: `X-ANA-*`/`X-JAL-*`/`X-United-*`/`X-Delta-*`/`X-Emirates-*`/`X-Qantas-*` 等の航空・マイレージ印自称が未検査
 
 - **問題**: `X-ANA-*` (ANA)、`X-JAL-*` (JAL)、`X-United-*` (United)、`X-Delta-*`/`X-AmericanAir-*`/`X-Southwest-*`/`X-Emirates-*`/`X-QatarAirways-*`/`X-Lufthansa-*`/`X-BritishAirways-*`/`X-AirFrance-*`/`X-KLM-*`/`X-SingaporeAir-*`/`X-Cathay-*`/`X-Qantas-*`/`X-Jetstar-*`/`X-Peach-*`/`X-Spring-*`/`X-Ryanair-*`/`X-EasyJet-*`/`X-Norwegian-*`/`X-TurkishAirlines-*`/`X-AirCanada-*`/`X-AlaskaAir-*`/`X-Frontier-*`/`X-SpiritAirlines-*`/`X-ANA-Mileage-*`/`X-JAL-Mileage-*`/`X-Skymark-*`/`X-PeachAviation-*` は空機の通知記録 — 送信側が書くことは自称。航空予約・マイル偽装はフィッシングの典型手口。
