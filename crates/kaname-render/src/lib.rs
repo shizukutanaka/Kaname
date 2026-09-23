@@ -972,6 +972,40 @@ pub struct Envelope {
     /// 出会い系・マッチングアプリ印があるか — 遇機の通知記録を送信側が
     /// 自称する兆候 (D524)。
     pub dating_marks: bool,
+    /// `X-Kroger-*`/`X-Tesco-*`/`X-Sainsbury-*`/`X-ASDA-*`/`X-Morrisons-*`/
+    /// `X-Aldi-*`/`X-Lidl-*`/`X-AEON-*`/`X-SevenI-*`/`X-FamilyMart-*`/
+    /// `X-Lawson-*`/`X-Ministop-*`/`X-Woolworths-*`/`X-Coles-*`/`X-Safeway-*`/
+    /// `X-Publix-*`/`X-Wegmans-*`/`X-TraderJoes-*`/`X-WholeFoods-*`/
+    /// `X-Sprouts-*`/`X-Yamada-*`/`X-BicCamera-*`/`X-Yodobashi-*`/`X-Joshin-*`/
+    /// `X-Kojima-*`/`X-Edion-*`/`X-MediaMarkt-*`/`X-Saturn-*`/`X-Elkjop-*`/
+    /// `X-Gigantti-*`/`X-Uniqlo-*`/`X-GU-*`/`X-Shimamura-*`/`X-Workman-*`/
+    /// `X-AOKI-*`/`X-Aoyama-*`/`X-Macys-*`/`X-Nordstrom-*`/`X-Bloomingdales-*`/
+    /// `X-Kohls-*`/`X-JCPenney-*`/`X-Dillards-*` 等の
+    /// 食料品・日用品・コンビニ・家電・アパレル・百貨店印があるか —
+    /// 商機の通知記録を送信側が自称する兆候 (D525)。(`X-Walmart-*` は
+    /// D494 で検出済み)
+    pub grocery_marks: bool,
+    /// `X-IKEA-*`/`X-Wayfair-*`/`X-Houzz-*`/`X-PotteryBarn-*`/`X-WestElm-*`/
+    /// `X-CrateBarrel-*`/`X-CB2-*`/`X-RH-*`/`X-HermanMiller-*`/
+    /// `X-Steelcase-*`/`X-Vitra-*`/`X-Nitori-*`/`X-Muji-*`/`X-Francfranc-*`/
+    /// `X-Loft-*`/`X-TokyuHands-*`/`X-Donki-*`/`X-MegaDonki-*`/
+    /// `X-Cainz-*`/`X-Komeri-*`/`X-DCM-*`/`X-HomeDepot-*`/`X-Lowes-*`/
+    /// `X-Menards-*`/`X-AceHardware-*`/`X-TractorSupply-*`/`X-FloorDecor-*`/
+    /// `X-BuildDotCom-*`/`X-Rona-*`/`X-RenoDepot-*`/`X-HomeHardware-*`/
+    /// `X-Bunnings-*`/`X-Mitre10-*`/`X-Masters-*` 等の
+    /// 家具・ホームセンター・インテリア印があるか — 具機の通知記録を
+    /// 送信側が自称する兆候 (D526)。
+    pub furniture_marks: bool,
+    /// `X-Boots-*`/`X-Matsukiyo-*`/`X-Welcia-*`/`X-SugiDrug-*`/`X-Tsuruha-*`/
+    /// `X-Cosmos-*`/`X-Cocokara-*`/`X-Shoppers-*`/`X-Rexall-*`/
+    /// `X-ChemistWarehouse-*`/`X-DuaneReade-*`/`X-RiteAid-*`/`X-Mannings-*`/
+    /// `X-Watsons-*`/`X-Guardian-*`/`X-Sundrug-*`/`X-DaikokuDrug-*`/
+    /// `X-Kirindo-*`/`X-Tomods-*`/`X-Sephora-*`/`X-Ulta-*`/`X-LOccitane-*`/
+    /// `X-TheBodyShop-*`/`X-Lush-*`/`X-BathBodyWorks-*`/`X-VictoriasSecret-*`/
+    /// `X-iHerb-*`/`X-GNC-*`/`X-VitaminShoppe-*`/`X-HollandBarrett-*` 等の
+    /// ドラッグストア・調剤・化粧品印があるか — 薬機の通知記録を送信側が
+    /// 自称する兆候 (D527)。(`X-CVS-*`/`X-Walgreens-*` は D481 で検出済み)
+    pub drugstore_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1357,6 +1391,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         rail_marks: has_rail_marks(raw),
         legal_marks: has_legal_marks(raw),
         dating_marks: has_dating_marks(raw),
+        grocery_marks: has_grocery_marks(raw),
+        furniture_marks: has_furniture_marks(raw),
+        drugstore_marks: has_drugstore_marks(raw),
     })
 }
 
@@ -6234,6 +6271,177 @@ fn has_dating_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Kroger-*`/`X-Tesco-*`/`X-Sainsbury-*`/`X-ASDA-*`/`X-Morrisons-*`/
+/// `X-Aldi-*`/`X-Lidl-*`/`X-AEON-*`/`X-SevenI-*`/`X-FamilyMart-*`/`X-Lawson-*`/
+/// `X-Ministop-*`/`X-Woolworths-*`/`X-Coles-*`/`X-Safeway-*`/`X-Publix-*`/
+/// `X-Wegmans-*`/`X-TraderJoes-*`/`X-WholeFoods-*`/`X-Sprouts-*`/`X-Yamada-*`/
+/// `X-BicCamera-*`/`X-Yodobashi-*`/`X-Joshin-*`/`X-Kojima-*`/`X-Edion-*`/
+/// `X-MediaMarkt-*`/`X-Saturn-*`/`X-Elkjop-*`/`X-Gigantti-*`/`X-Uniqlo-*`/
+/// `X-GU-*`/`X-Shimamura-*`/`X-Workman-*`/`X-AOKI-*`/`X-Aoyama-*`/`X-Macys-*`/
+/// `X-Nordstrom-*`/`X-Bloomingdales-*`/`X-Kohls-*`/`X-JCPenney-*`/
+/// `X-Dillards-*` 等の食料品・日用品・コンビニ・家電・アパレル・百貨店印が
+/// あるか判定する (D525)。
+///
+/// `X-Kroger-*` (Kroger)、`X-Tesco-*` (Tesco)、`X-AEON-*` (イオン) は
+/// 商機の通知記録 — 送信側から届くこれは自称。ポイント・クーポン詐欺の
+/// 典型印。`X-Walmart-*` は D494 で検出済み。
+fn has_grocery_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-kroger-")
+            || l.starts_with("x-tesco-")
+            || l.starts_with("x-sainsbury-")
+            || l.starts_with("x-asda-")
+            || l.starts_with("x-morrisons-")
+            || l.starts_with("x-aldi-")
+            || l.starts_with("x-lidl-")
+            || l.starts_with("x-aeon-")
+            || l.starts_with("x-seveni-")
+            || l.starts_with("x-familymart-")
+            || l.starts_with("x-lawson-")
+            || l.starts_with("x-ministop-")
+            || l.starts_with("x-woolworths-")
+            || l.starts_with("x-coles-")
+            || l.starts_with("x-safeway-")
+            || l.starts_with("x-publix-")
+            || l.starts_with("x-wegmans-")
+            || l.starts_with("x-traderjoes-")
+            || l.starts_with("x-wholefoods-")
+            || l.starts_with("x-sprouts-")
+            || l.starts_with("x-yamada-")
+            || l.starts_with("x-biccamera-")
+            || l.starts_with("x-yodobashi-")
+            || l.starts_with("x-joshin-")
+            || l.starts_with("x-kojima-")
+            || l.starts_with("x-edion-")
+            || l.starts_with("x-mediamarkt-")
+            || l.starts_with("x-saturn-")
+            || l.starts_with("x-elkjop-")
+            || l.starts_with("x-gigantti-")
+            || l.starts_with("x-uniqlo-")
+            || l.starts_with("x-gu-")
+            || l.starts_with("x-shimamura-")
+            || l.starts_with("x-workman-")
+            || l.starts_with("x-aoki-")
+            || l.starts_with("x-aoyama-")
+            || l.starts_with("x-macys-")
+            || l.starts_with("x-nordstrom-")
+            || l.starts_with("x-bloomingdales-")
+            || l.starts_with("x-kohls-")
+            || l.starts_with("x-jcpenney-")
+            || l.starts_with("x-dillards-")
+    })
+}
+
+/// `X-IKEA-*`/`X-Wayfair-*`/`X-Houzz-*`/`X-PotteryBarn-*`/`X-WestElm-*`/
+/// `X-CrateBarrel-*`/`X-CB2-*`/`X-RH-*`/`X-HermanMiller-*`/`X-Steelcase-*`/
+/// `X-Vitra-*`/`X-Nitori-*`/`X-Muji-*`/`X-Francfranc-*`/`X-Loft-*`/
+/// `X-TokyuHands-*`/`X-Donki-*`/`X-MegaDonki-*`/`X-Cainz-*`/`X-Komeri-*`/
+/// `X-DCM-*`/`X-HomeDepot-*`/`X-Lowes-*`/`X-Menards-*`/`X-AceHardware-*`/
+/// `X-TractorSupply-*`/`X-FloorDecor-*`/`X-BuildDotCom-*`/`X-Rona-*`/
+/// `X-RenoDepot-*`/`X-HomeHardware-*`/`X-Bunnings-*`/`X-Mitre10-*`/
+/// `X-Masters-*` 等の家具・ホームセンター・インテリア印があるか判定する
+/// (D526)。
+///
+/// `X-IKEA-*` (IKEA)、`X-Wayfair-*` (Wayfair)、`X-Nitori-*` (ニトリ) は
+/// 具機の通知記録 — 送信側から届くこれは自称。
+fn has_furniture_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ikea-")
+            || l.starts_with("x-wayfair-")
+            || l.starts_with("x-houzz-")
+            || l.starts_with("x-potterybarn-")
+            || l.starts_with("x-westelm-")
+            || l.starts_with("x-cratebarrel-")
+            || l.starts_with("x-cb2-")
+            || l.starts_with("x-rh-")
+            || l.starts_with("x-hermanmiller-")
+            || l.starts_with("x-steelcase-")
+            || l.starts_with("x-vitra-")
+            || l.starts_with("x-nitori-")
+            || l.starts_with("x-muji-")
+            || l.starts_with("x-francfranc-")
+            || l.starts_with("x-loft-")
+            || l.starts_with("x-tokyuhands-")
+            || l.starts_with("x-donki-")
+            || l.starts_with("x-megadonki-")
+            || l.starts_with("x-cainz-")
+            || l.starts_with("x-komeri-")
+            || l.starts_with("x-dcm-")
+            || l.starts_with("x-homedepot-")
+            || l.starts_with("x-lowes-")
+            || l.starts_with("x-menards-")
+            || l.starts_with("x-acehardware-")
+            || l.starts_with("x-tractorsupply-")
+            || l.starts_with("x-floordecor-")
+            || l.starts_with("x-builddotcom-")
+            || l.starts_with("x-rona-")
+            || l.starts_with("x-renodepot-")
+            || l.starts_with("x-homehardware-")
+            || l.starts_with("x-bunnings-")
+            || l.starts_with("x-mitre10-")
+            || l.starts_with("x-masters-")
+    })
+}
+
+/// `X-Boots-*`/`X-Matsukiyo-*`/`X-Welcia-*`/`X-SugiDrug-*`/`X-Tsuruha-*`/
+/// `X-Cosmos-*`/`X-Cocokara-*`/`X-Shoppers-*`/`X-Rexall-*`/
+/// `X-ChemistWarehouse-*`/`X-DuaneReade-*`/`X-RiteAid-*`/`X-Mannings-*`/
+/// `X-Watsons-*`/`X-Guardian-*`/`X-Sundrug-*`/`X-DaikokuDrug-*`/`X-Kirindo-*`/
+/// `X-Tomods-*`/`X-Sephora-*`/`X-Ulta-*`/`X-LOccitane-*`/`X-TheBodyShop-*`/
+/// `X-Lush-*`/`X-BathBodyWorks-*`/`X-VictoriasSecret-*`/`X-iHerb-*`/`X-GNC-*`/
+/// `X-VitaminShoppe-*`/`X-HollandBarrett-*` 等の
+/// ドラッグストア・調剤・化粧品印があるか判定する (D527)。
+///
+/// `X-Boots-*` (Boots)、`X-Matsukiyo-*` (マツキヨ)、`X-Sephora-*`
+/// (Sephora) は薬機の通知記録 — 送信側から届くこれは自称。
+/// `X-CVS-*`/`X-Walgreens-*` は D481 で検出済み。
+fn has_drugstore_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-boots-")
+            || l.starts_with("x-matsukiyo-")
+            || l.starts_with("x-welcia-")
+            || l.starts_with("x-sugidrug-")
+            || l.starts_with("x-tsuruha-")
+            || l.starts_with("x-cosmos-")
+            || l.starts_with("x-cocokara-")
+            || l.starts_with("x-shoppers-")
+            || l.starts_with("x-rexall-")
+            || l.starts_with("x-chemistwarehouse-")
+            || l.starts_with("x-duanereade-")
+            || l.starts_with("x-riteaid-")
+            || l.starts_with("x-mannings-")
+            || l.starts_with("x-watsons-")
+            || l.starts_with("x-guardian-")
+            || l.starts_with("x-sundrug-")
+            || l.starts_with("x-daikokudrug-")
+            || l.starts_with("x-kirindo-")
+            || l.starts_with("x-tomods-")
+            || l.starts_with("x-sephora-")
+            || l.starts_with("x-ulta-")
+            || l.starts_with("x-loccitane-")
+            || l.starts_with("x-thebodyshop-")
+            || l.starts_with("x-lush-")
+            || l.starts_with("x-bathbodyworks-")
+            || l.starts_with("x-victoriassecret-")
+            || l.starts_with("x-iherb-")
+            || l.starts_with("x-gnc-")
+            || l.starts_with("x-vitaminshoppe-")
+            || l.starts_with("x-hollandbarrett-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -10872,6 +11080,72 @@ mod tests {
         assert!(has_dating_marks(e1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_dating_marks(clean));
+    }
+
+    #[test]
+    fn scan_は小売印を検出する() {
+        let k1 = b"X-Kroger-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(k1));
+        let t1 = b"X-Tesco-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(t1));
+        let a1 = b"X-AEON-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(a1));
+        let l1 = b"X-Lawson-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(l1));
+        let u1 = b"X-Uniqlo-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(u1));
+        let y1 = b"X-Yodobashi-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(y1));
+        let m1 = b"X-Macys-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(m1));
+        let c1 = b"X-Coles-Notify: x\r\n\r\nx";
+        assert!(has_grocery_marks(c1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_grocery_marks(clean));
+    }
+
+    #[test]
+    fn scan_は家具印を検出する() {
+        let i1 = b"X-IKEA-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(i1));
+        let w1 = b"X-Wayfair-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(w1));
+        let n1 = b"X-Nitori-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(n1));
+        let m1 = b"X-Muji-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(m1));
+        let h1 = b"X-HomeDepot-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(h1));
+        let b1 = b"X-Bunnings-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(b1));
+        let h2 = b"X-HermanMiller-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(h2));
+        let d1 = b"X-Donki-Notify: x\r\n\r\nx";
+        assert!(has_furniture_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_furniture_marks(clean));
+    }
+
+    #[test]
+    fn scan_は薬機印を検出する() {
+        let b1 = b"X-Boots-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(b1));
+        let m1 = b"X-Matsukiyo-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(m1));
+        let s1 = b"X-Sephora-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(s1));
+        let w1 = b"X-Welcia-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(w1));
+        let t1 = b"X-Tsuruha-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(t1));
+        let i1 = b"X-iHerb-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(i1));
+        let c1 = b"X-ChemistWarehouse-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(c1));
+        let u1 = b"X-Ulta-Notify: x\r\n\r\nx";
+        assert!(has_drugstore_marks(u1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_drugstore_marks(clean));
     }
 }
 
