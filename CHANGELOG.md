@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D222: 送信者側の Exchange 内部認証自称ヘッダを検出
+
+- `X-MS-Exchange-Organization-AuthAs: Internal`/`X-Internal:`/`X-Originating-Organization:` 等は組織内配送経路が付け・境界で除去すべき値 — 送信側が注入すれば「内部から来た」処理を自称できる経路偽装 (X-Spam verdict 注入 D206・輸送ヘッダ D213 と同系列)
+- 対処: `top_level_header_value` でトップレベルヘッダの生値を走査 → `forged_internal_headers` → `render_risks` に兆候報告。`AuthAs: Anonymous` 等の非内部値は対象外
+- テスト +1 件
+
+### Security — D223: `Thread-Topic:` と件名の不一致 (返信連鎖偽装) を検出
+
+- Outlook は返信時に元件名を `Thread-Topic` に保持する — 本当のスレッド題名と受信者に見せる Subject を別物にできるため、「無関係な件名で既存スレッドに潜り込む」偽装を行える (Abnormal/Armorblox 系の BEC 解析で報告)
+- 対処: `strip_reply_prefix` で Re:/Fwd:/返信: 系を全て剥がして件名・Thread-Topic を比較 → 不一致なら `fake_reply_thread` → `render_risks` に兆候報告。一致・Thread-Topic なしは対象外
+- テスト +1 件
+
+### Security — D224: データソース/設定ファイル系の危険拡張子を追加
+
+- `.chm` (内部 JS 実行可能な Compiled HTML Help)・`.iqy`/`.slk` (Excel 外部データソース — DDE/外部参照で NTLM 漏洩)・`.cab` (実行ファイル同梱容器)・`.mht`/`.mhtml` (スクリプト実行可能 web アーカイブ)・`.settingcontent-ms`/`.search-ms`/`.searchconnector-ms`/`.library-ms` (Windows 設定・検索経路ハイジャック、2022-2024 報告) が未収録だった
+- 対処: 危険拡張子リストに追加 — hyphen/dash 系は末尾一致で判定
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

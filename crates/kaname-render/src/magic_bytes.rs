@@ -160,7 +160,19 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "img"   // ディスクイメージ — 同上
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
-    )
+        // データソース/設定ファイル — 外部参照で NTLM 漏洩・
+        // 任意コマンド実行 (D224)。拡張子に hyphen/dash を含むため
+        // 厳密には ext ではなく末尾一致が必要 (下の ends_with 判定)。
+        | "chm"   // Compiled HTML Help — 内部 JS 実行可能
+        | "iqy"   // Internet Query — Excel が外部データソースを開く
+        | "slk"   // Symbolic Link — 同上 (DDE/外部参照)
+        | "cab"   // キャビネット — 実行ファイルの同梱容器
+        | "mht"   // MHTML — スクリプト実行可能な web アーカイブ
+        | "mhtml" // 同上
+    ) || lower.ends_with(".settingcontent-ms")  // 設定ハイジャック
+        || lower.ends_with(".search-ms")       // 検索経路ハイジャック
+        || lower.ends_with(".searchconnector-ms")
+        || lower.ends_with(".library-ms") // ライブラリ定義偽装
 }
 
 /// ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれるか判定する。
@@ -597,6 +609,32 @@ mod tests {
         assert!(has_bidi_override_filename("a\u{202B}b.txt"));
         assert!(has_bidi_override_filename("a\u{202C}b.txt"));
         assert!(has_bidi_override_filename("a\u{202D}b.txt"));
+    }
+
+    /// D224: データソース/設定ファイル系の危険拡張子。
+    #[test]
+    fn datasource_and_settings_exts_are_dangerous() {
+        for name in [
+            "report.chm",
+            "data.iqy",
+            "query.slk",
+            "setup.cab",
+            "page.mht",
+            "page.mhtml",
+            "run.settingcontent-ms",
+            "query.search-ms",
+            "sc.searchconnector-ms",
+            "docs.library-ms",
+        ] {
+            assert!(
+                is_dangerous_windows_attachment(name),
+                "{name} が検出されない"
+            );
+        }
+        // 安全側の同名系は対象外
+        assert!(!is_dangerous_windows_attachment("notes.txt"));
+        assert!(!is_dangerous_windows_attachment("archive.tar"));
+        assert!(!is_dangerous_windows_attachment("image.png"));
     }
 
     #[test]

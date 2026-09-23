@@ -96,6 +96,13 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// 送信者側が組織内認証を自称する Exchange 系ヘッダ
+    /// (`X-MS-Exchange-Organization-AuthAs: Internal` 等) が
+    /// 含まれるか — 配送経路が除去すべき内部処理の自称 (D222)。
+    pub forged_internal_headers: bool,
+    /// `Thread-Topic:` と実際の件名が一致しない (返信連鎖偽装) か —
+    /// Re:/Fwd: 系件名で受信者の既存スレッドに潜り込もうとする兆候 (D223)。
+    pub fake_reply_thread: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +337,26 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D222: Exchange 系の「内部認証済み」自称ヘッダ — 本来は組織内
+    // 配送経路が付け・境界で除去すべき値を送信側が入れる経路偽装。
+    let forged_internal_headers = [
+        "x-ms-exchange-organization-authas",
+        "x-ms-exchange-crosstenant-authas",
+        "x-ms-oob-message",
+    ]
+    .iter()
+    .any(|h| top_level_header_value(raw, h).is_some_and(|v| v.contains("internal")))
+        || ["x-internal", "x-originating-organization"]
+            .iter()
+            .any(|h| top_level_header_value(raw, h).is_some());
+
+    // D223: Thread-Topic と件名が一致しない返信連鎖偽装。
+    let thread_topic = top_level_header_value(raw, "thread-topic");
+    let fake_reply_thread = thread_topic
+        .as_deref()
+        .zip(subject.as_deref())
+        .is_some_and(|(t, s)| fake_reply_thread_marker(s, t));
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +374,79 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        forged_internal_headers,
+        fake_reply_thread,
     })
+}
+
+/// トップレベルヘッダブロック内の指定ヘッダの生値を返す。
+///
+/// 最初の空行までのヘッダ領域のみ走査し、`name:` で始まる行の
+/// コロン以降を返す。mail_parser の HeaderValue を通さず
+/// raw bytes から読むため、パーサが捨てるヘッダも見える。
+fn top_level_header_value(raw: &[u8], name: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with(&prefix) {
+            return Some(line[prefix.len()..].trim().to_string());
+        }
+    }
+    None
+}
+
+/// 件名から Re:/Fwd: 系の返信マーカーを全て剥がす。
+fn strip_reply_prefix(subject: &str) -> &str {
+    let mut s = subject.trim_start();
+    loop {
+        let lower = s.to_ascii_lowercase();
+        let mut advanced = false;
+        for p in ["re:", "fwd:", "fw:", "aw:", "sv:", "rv:", "wg:"] {
+            if lower.starts_with(p) {
+                s = s[p.len()..].trim_start();
+                advanced = true;
+                break;
+            }
+        }
+        if advanced {
+            continue;
+        }
+        if let Some(rest) = s.strip_prefix('返') {
+            if let Some(rest2) = rest.strip_prefix('信') {
+                if let Some(rest3) = rest2.strip_prefix(':') {
+                    s = rest3.trim_start();
+                    continue;
+                }
+            }
+        }
+        if let Some(rest) = s.strip_prefix('転') {
+            if let Some(rest2) = rest.strip_prefix('送') {
+                if let Some(rest3) = rest2.strip_prefix(':') {
+                    s = rest3.trim_start();
+                    continue;
+                }
+            }
+        }
+        break;
+    }
+    s
+}
+
+/// Thread-Topic と件名が一致しない (返信連鎖偽装) か判定する。
+///
+/// Outlook は返信時に元件名を Thread-Topic に保持する —
+/// Thread-Topic があれば件名の本来のスレッド題名が分かる。
+/// 両者を返信マーカー除去後に比較し、不一致なら「無関係な件名で
+/// 別スレッドを装う」偽装の兆候。
+fn fake_reply_thread_marker(subject: &str, thread_topic: &str) -> bool {
+    let s = strip_reply_prefix(subject).to_ascii_lowercase();
+    let t = strip_reply_prefix(thread_topic).to_ascii_lowercase();
+    // 件名・Thread-Topic の実体が両方あり、かつ一致しない場合のみ。
+    !s.is_empty() && !t.is_empty() && s != t
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1950,6 +2049,64 @@ mod tests {
             result.addr.local, "\"ceo@trusted.com\"",
             "quoted local part は @ の前の部分全体であるべき"
         );
+    }
+
+    /// D222: Exchange 系「内部認証済み」自称ヘッダの検出。
+    #[test]
+    fn parse_は内部認証自称を検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    X-MS-Exchange-Organization-AuthAs: Internal\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.forged_internal_headers);
+        let raw2 = b"From: alice@example.com\r\n\
+                     X-Internal: 1234\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(env2.forged_internal_headers);
+        // 値が internal でない AuthAs は対象外
+        let raw3 = b"From: alice@example.com\r\n\
+                     X-MS-Exchange-Organization-AuthAs: Anonymous\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.forged_internal_headers);
+        let raw4 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env4 = parse(raw4).expect("parse should succeed");
+        assert!(!env4.forged_internal_headers);
+    }
+
+    /// D223: Thread-Topic と件名の不一致 (返信連鎖偽装) の検出。
+    #[test]
+    fn parse_は返信連鎖偽装を検出する() {
+        // Thread-Topic = 本当のスレッド件名、Subject = 偽装された別件名
+        let raw = b"From: alice@example.com\r\n\
+                    Subject: Re: Your invoice\r\n\
+                    Thread-Topic: Quarterly planning meeting\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.fake_reply_thread);
+        // 一致する場合は対象外 (正規の返信)
+        let raw2 = b"From: alice@example.com\r\n\
+                     Subject: Re: Meeting tomorrow\r\n\
+                     Thread-Topic: Meeting tomorrow\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.fake_reply_thread);
+        // Thread-Topic なしは対象外
+        let raw3 = b"From: alice@example.com\r\n\
+                     Subject: Re: Hello\r\n\
+                     \r\n\
+                     body";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.fake_reply_thread);
     }
 
     #[test]

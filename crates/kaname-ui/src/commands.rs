@@ -514,6 +514,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D222: 送信者側の Exchange 内部認証自称ヘッダの兆候。
+    if env.forged_internal_headers {
+        render_risks.push(
+            "送信者側に Exchange 内部認証ヘッダ (X-MS-Exchange-Organization-AuthAs 等) — \
+             中継が付けるべき内部処理を自称する経路偽装の兆候"
+                .to_string(),
+        );
+    }
+    // D223: Thread-Topic と件名の不一致 (返信連鎖偽装) の兆候。
+    if env.fake_reply_thread {
+        render_risks.push(
+            "Thread-Topic と件名が一致しません — 無関係な件名で既存スレッドを装う \
+             返信連鎖偽装 (BEC) の兆候"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
