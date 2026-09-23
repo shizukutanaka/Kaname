@@ -1180,6 +1180,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D486: チャット・会議印自称
+    if env.meeting_marks {
+        render_risks.push(
+            "X-Telegram-*/X-WhatsApp-*/X-Mattermost-*/X-Element-*/X-Chatwoot-*/X-BlueJeans-* 等 — 会議機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D487: 予約・スケジューリング印自称
+    if env.booking_marks {
+        render_risks.push(
+            "X-Doodle-*/X-Acuity-*/X-Mindbody-*/X-Vagaro-*/X-Fresha-*/X-Trainerize-* 等 — 予約機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D488: フィールドサービス・設備管理印自称
+    if env.fieldservice_marks {
+        render_risks.push(
+            "X-ServiceTitan-*/X-Jobber-*/X-UpKeep-*/X-Housecall-*/X-MaintainX-*/X-Workiz-* 等 — 設備管理機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

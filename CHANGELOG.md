@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D486: `X-Telegram-*`/`X-WhatsApp-*`/`X-Mattermost-*`/`X-Element-*`/`X-Chatwoot-*`/`X-BlueJeans-*` 等のチャット・会議印自称が未検査
+
+- **問題**: `X-Telegram-*` (Telegram)、`X-WhatsApp-*` (WhatsApp)、`X-Mattermost-*` (Mattermost)、`X-Olark-*`/`X-Tawk-*`/`X-Crisp-*`/`X-Chatwoot-*`/`X-HelpCrunch-*`/`X-SnapEngage-*`/`X-Rocket-*`/`X-Element-*`/`X-Matrix-*`/`X-Signal-*`/`X-Viber-*`/`X-WeChat-*`/`X-Teams-*`/`X-Meet-*`/`X-Chime-*`/`X-BlueJeans-*`/`X-GoToWebinar-*`/`X-WebinarJam-*`/`X-Crowdcast-*`/`X-Hopin-*`/`X-Rally-*` は会議機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `meeting_marks` + `has_meeting_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 会議印の自署を問え。
+
+### Security — D487: `X-Doodle-*`/`X-Acuity-*`/`X-Mindbody-*`/`X-Vagaro-*`/`X-Fresha-*`/`X-Trainerize-*` 等の予約・スケジューリング印自称が未検査
+
+- **問題**: `X-Doodle-*` (Doodle)、`X-Acuity-*` (Acuity Scheduling)、`X-Mindbody-*` (Mindbody)、`X-Appointlet-*`/`X-Bookings-*`/`X-Vagaro-*`/`X-Booksy-*`/`X-Fresha-*`/`X-SimplyBook-*`/`X-Setmore-*`/`X-YouCanBook-*`/`X-Coconut-*`/`X-Momence-*`/`X-Pike13-*`/`X-Glofox-*`/`X-WellnessLiving-*`/`X-ZenPlanner-*`/`X-Wodify-*`/`X-PushPress-*`/`X-TrainHeroic-*`/`X-TeamBuildr-*`/`X-PTDistinction-*`/`X-Trainerize-*`/`X-Everfit-*` は予約機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `booking_marks` + `has_booking_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 予約印の自署を問え。
+
+### Security — D488: `X-ServiceTitan-*`/`X-Jobber-*`/`X-UpKeep-*`/`X-Housecall-*`/`X-MaintainX-*`/`X-Workiz-*` 等のフィールドサービス・設備管理印自称が未検査
+
+- **問題**: `X-ServiceTitan-*` (ServiceTitan)、`X-Jobber-*` (Jobber)、`X-UpKeep-*` (UpKeep)、`X-Housecall-*`/`X-FieldEdge-*`/`X-ServiceFusion-*`/`X-Workiz-*`/`X-ServiceChannel-*`/`X-Limble-*`/`X-Fiix-*`/`X-eMaint-*`/`X-MPulse-*`/`X-Fracttal-*`/`X-MaintainX-*`/`X-Hippo-*`/`X-BlueFolder-*`/`X-Corrigo-*`/`X-WebTMA-*`/`X-MainSim-*`/`X-eAM-*`/`X-CMMS-*`/`X-MEX-*`/`X-FMX-*`/`X-ManagerPlus-*`/`X-Reach-*` は設備管理機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `fieldservice_marks` + `has_fieldservice_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 設備管理印の自署を問え。
+
+
 ### Security — D483: `X-OneDrive-*`/`X-SharePoint-*`/`X-GoogleDrive-*`/`X-Nextcloud-*`/`X-WeTransfer-*`/`X-Egnyte-*` 等のファイル共有・クラウドストレージ印自称が未検査
 
 - **問題**: `X-OneDrive-*` (OneDrive)、`X-SharePoint-*` (SharePoint)、`X-GoogleDrive-*` (Google Drive)、`X-Egnyte-*`/`X-Druva-*`/`X-Sync-*`/`X-pCloud-*`/`X-Nextcloud-*`/`X-ownCloud-*`/`X-Seafile-*`/`X-Koofr-*`/`X-WeTransfer-*`/`X-Resilio-*` はストレージ機の通知記録 — 送信側が書くことは自称。
