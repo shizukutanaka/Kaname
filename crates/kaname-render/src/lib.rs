@@ -2560,6 +2560,51 @@ mod tests {
         let env = parse(raw).expect("parse");
         assert!(env.list_unsubscribe.is_none());
     }
+
+    #[test]
+    fn scan_はファイル名encoded_wordを検出する() {
+        let r = scan_attachment_bytes("=?UTF-8?B?ZG9j?=.exe", "text/plain", b"x");
+        assert!(r.is_dangerous);
+        assert!(r.risks.iter().any(|x| x.contains("encoded-word")));
+        let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
+        assert!(!r.risks.iter().any(|x| x.contains("encoded-word")));
+    }
+
+    #[test]
+    fn scan_は宣言imageのHTML混入を検出する() {
+        let r = scan_attachment_bytes(
+            "img.png",
+            "image/png",
+            b"<html><body><a href=\"http://e\">x</a></body></html>",
+        );
+        assert!(r.is_dangerous);
+        assert!(r.risks.iter().any(|x| x.contains("HTML")));
+        let r2 = scan_attachment_bytes(
+            "img.png",
+            "image/png",
+            b"<script>alert(1)</script>",
+        );
+        assert!(r2.is_dangerous);
+        let r3 = scan_attachment_bytes(
+            "doc.html",
+            "text/html",
+            b"<html><body>x</body></html>",
+        );
+        assert!(!r3.risks.iter().any(|x| x.contains("polyglot")));
+        let real_png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let r4 = scan_attachment_bytes("img.png", "image/png", &real_png);
+        assert!(!r4.risks.iter().any(|x| x.contains("polyglot")));
+    }
+
+    #[test]
+    fn scan_はファイル名末尾句読点を検出する() {
+        let r = scan_attachment_bytes("evil.exe.", "text/plain", b"x");
+        assert!(r.is_dangerous);
+        let r = scan_attachment_bytes("evil.exe ", "text/plain", b"x");
+        assert!(r.is_dangerous);
+        let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
+        assert!(!r.risks.iter().any(|x| x.contains("末尾")));
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2826,6 +2871,40 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks.push(format!("メタデータが含まれます: {r:?}"));
     }
 
+    // 7. ファイル名の RFC 2047 encoded-word (D246) —
+    //    `=?UTF-8?B?...?=` で拡張子を難読化する parser differential。
+    //    正当なエンコードは RFC 2231 filename* であり、filename=
+    //    内の encoded-word は旧式/不規則な回避手口。
+    if is_encoded_word_filename(filename) {
+        risks.push(
+            "ファイル名に encoded-word (=?...?=) が含まれており、拡張子を難読化している可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
+    // 8. 宣言 image/* の中身が HTML (D247) — 「画像」宣言の中に
+    //    HTML/JS を仕込む polyglot 的配送 (image ビューアが
+    //    HTML を解釈する文脈で動く) を検出。
+    if is_html_in_declared_image(declared_mime, bytes) {
+        risks.push(
+            "宣言が画像 (image/*) ですが中身が HTML — 「画像」の体裁でスクリプトを仕込む polyglot の可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
+    // 9. ファイル名末尾の '.'・空白 (D248) — Windows が保存時に
+    //    末尾のドット/空白を除去するため `evil.exe.` は .exe
+    //    になるが、文字列比較では危険拡張子として見えない。
+    if has_trailing_ext_punctuation(filename) {
+        risks.push(
+            "ファイル名の末尾が '.' または空白 — Windows が末尾を除去するため実際の拡張子を隠している可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
     AttachmentScan {
         filename: filename.to_string(),
         declared_mime: declared_mime.to_string(),
@@ -2833,4 +2912,46 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks,
         is_dangerous,
     }
+}
+
+/// ファイル名が RFC 2047 encoded-word を含むか判定する (D246)。
+///
+/// `=?UTF-8?B?...?=`/`=?UTF-8?Q?...?=` の形は拡張子を難読化する
+/// parser differential — 正規のエンコードは RFC 2231 `filename*` であり、
+/// `filename=` 内の encoded-word は旧式/不規則な回避手口。
+fn is_encoded_word_filename(filename: &str) -> bool {
+    filename.contains("=?") && filename.contains("?=")
+}
+
+/// 宣言 `image/*` の中身が HTML か判定する (D247)。
+///
+/// 「画像」宣言の中に `<html`/`<script`/`<a `/`<form`/`href=` の
+/// いずれかがあれば polyglot 的配送 — 画像ビューアが HTML を
+/// 解釈する文脈で動く。冒頭の空白・改行を飛ばして判定。
+fn is_html_in_declared_image(declared_mime: &str, bytes: &[u8]) -> bool {
+    if !declared_mime.to_ascii_lowercase().starts_with("image/") {
+        return false;
+    }
+    let start = bytes
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .unwrap_or(bytes.len());
+    let head = &bytes[start..bytes.len().min(start + 512)];
+    let head_lower: Vec<u8> = head.iter().map(|b| b.to_ascii_lowercase()).collect();
+    let head_str = String::from_utf8_lossy(&head_lower);
+    head_str.starts_with('<')
+        && (head_str.contains("<html")
+            || head_str.contains("<script")
+            || head_str.contains("<a ")
+            || head_str.contains("<form")
+            || head_str.contains("href="))
+}
+
+/// ファイル名の末尾が '.' または空白か判定する (D248)。
+///
+/// Windows は保存時に末尾のドット/空白を除去するため
+/// `evil.exe.` は .exe として実行可能になるが、文字列比較では
+/// 危険拡張子として見えない — 末尾の記号を兆候として検出。
+fn has_trailing_ext_punctuation(filename: &str) -> bool {
+    filename.ends_with('.') || filename.ends_with(' ')
 }

@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D246: ファイル名の RFC 2047 encoded-word による拡張子難読化が未検査
+
+- `filename="=?UTF-8?B?ZG9j?=.exe"` のように filename= 内に encoded-word を仕込むと、拡張子チェックがデコード前の文字列を見て危険判定を素通りする parser differential — 正規のエンコードは RFC 2231 `filename*` であり、filename= 内の encoded-word は旧式/不規則な回避手口
+- 対処: `is_encoded_word_filename` 新設で `=?`/`?=` の存在を検出 → `scan_attachment_bytes` に配線して危険判定
+- テスト +2 件
+
+### Security — D247: 宣言 image/* の中身が HTML (polyglot 的配送) が未検査
+
+- 「画像」宣言の中に `<html`/`<script`/`<a `/`<form`/`href=` を仕込むと、画像ビューアが HTML を解釈する文脈で動く polyglot — magic bytes による MIME 不一致検査は HTML にマジックがないため見逃す
+- 対処: `is_html_in_declared_image` 新設で先頭 512 バイトを走査 → `scan_attachment_bytes` に配線して危険判定
+- テスト +4 件
+
+### Security — D248: ファイル名末尾の '.'・空白による拡張子隠蔽が未検査
+
+- Windows は保存時に末尾のドット/空白を除去するため `evil.exe.` は .exe として実行可能になるが、`ends_with(".exe")` 文字列比較では危険拡張子として見えない — Windows canonicalization を前提にした文字列検査の穴
+- 対処: `has_trailing_ext_punctuation` 新設で末尾の `.`/空白を検出 → `scan_attachment_bytes` に配線して危険判定
+- テスト +3 件
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)
