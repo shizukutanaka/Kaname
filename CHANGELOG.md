@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D378: `X-SparkPost-*`/`X-MSYS-API`/`X-MailChannels-*`/`X-SMTP2GO-*`/`X-SendPulse-*`/`X-SMTPCom-*` 等の ESP 印 (第二群) 自称が未検査
+
+- SparkPost/MailChannels/SMTP2GO 等の配信基盤が配送時に記す印 — 送信側から届くのは「この配信基盤から発送した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_esp2_stamps` 新設 → `Envelope.esp2_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D379: `X-Abuse-Info:`/`X-Antiabuse:`/`X-Abuse-Contact:`/`X-Complaints-Info:`/`X-Abuse-Report:`/`X-Anti-Abuse:` 等の abuse 情報印自称が未検査
+
+- 「監視窓口あり」の体裁 — abuse 連絡情報は正当な経路で公表するものであり、内容側が書くのは体裁だけの自称だが未検査だった
+- 対処: `has_abuseinfo_marks` 新設 → `Envelope.abuseinfo_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D380: `X-Spam-Notice:`/`X-Virus-Notice:`/`X-Message-Status:`/`X-Message-Flag:`/`X-Antispam-Result:`/`X-Bulk:`/`X-Notice:` 等の通知・状態印自称が未検査
+
+- 判定機・受信側が状態の記録として記す値 — 送信側から届くのは「状態まで判定済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_notice_marks` 新設 → `Envelope.notice_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった
