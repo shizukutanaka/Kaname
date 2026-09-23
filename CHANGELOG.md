@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D342: `X-Spam-*` SpamAssassin 判定印自称が未検査
+
+- `X-Spam-Status:`/`X-Spam-Score:`/`X-Spam-Flag:`/`X-Spam-Level:` 等は SpamAssassin が通過時に記す判定値 — 送信側から届くのは「SA の判定を受けた」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_spam_report` 新設 → `Envelope.spam_report` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D343: `X-Whitelisted:`/`X-Trusted-*`/`X-Allow-*` 許可印自称が未検査
+
+- フィルタの allowlist 判定印 — 送信側から届くのは「この送信者は許可済み」の印を内容側が主張する自称だが未検査だった
+- 対処: `has_whitelist_claim` 新設 → `Envelope.whitelist_claim` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D344: `X-IronPort-*`/`X-Mimecast-*`/`X-Proofpoint-*` 等の商用アプライアンス印自称が未検査
+
+- メールセキュリティアプライアンスのブランド印 — 送信側から届くのは「この製品で検査した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_appliance_stamps` 新設 → `Envelope.appliance_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

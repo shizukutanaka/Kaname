@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D342 | ~~**`X-Spam-*` SpamAssassin 判定印自称が未検査**~~ **(解消済み)** | P2 | SA 判定値を送信側が自称する兆候だが未検査だった。修正: `has_spam_report` で検出、`spam_report` → `render_risks` 兆候報告 | 得点は判定機が記す — 判定値の自署を問え |
+| D343 | ~~**`X-Whitelisted:`/`X-Trusted-*`/`X-Allow-*` 許可印自称が未検査**~~ **(解消済み)** | P2 | 「許可済み」の印を送信側が自称する兆候だが未検査だった。修正: `has_whitelist_claim` で検出、`whitelist_claim` → `render_risks` 兆候報告 | 許可は許可する側が書く — 許可印の自署を問え |
+| D344 | ~~**`X-IronPort-*`/`X-Mimecast-*`/`X-Proofpoint-*` 等の商用アプライアンス印自称が未検査**~~ **(解消済み)** | P2 | 商用検査機器のブランド印を送信側が自称する兆候だが未検査だった。修正: `has_appliance_stamps` で検出、`appliance_stamps` → `render_risks` 兆候報告 | 機器の印は機器が押す — ブランド印の自署を問え |

@@ -581,6 +581,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D342: SpamAssassin 判定印自称
+    if env.spam_report {
+        render_risks.push(
+            "X-Spam-Status/X-Spam-Score 等 — SA 判定値を送信側が自称する兆候です".to_string(),
+        );
+    }
+
+    // D343: 許可印自称
+    if env.whitelist_claim {
+        render_risks.push(
+            "X-Whitelisted/X-Trusted-*/X-Allow-* — 「許可済み」の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D344: アプライアンス印自称
+    if env.appliance_stamps {
+        render_risks.push(
+            "X-IronPort-*/X-Mimecast-*/X-Proofpoint-* 等 — 商用検査機器の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

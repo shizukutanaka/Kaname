@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-Spam-Status:`/`X-Spam-Score:`/`X-Spam-Flag:`/`X-Spam-Level:`
+    /// 等の SpamAssassin 判定印があるか — フィルタ判定を送信側が
+    /// 自称する兆候 (D342)。
+    pub spam_report: bool,
+    /// `X-Whitelisted:`/`X-WhiteList:`/`X-Trusted-*`/`X-Allow-*` 等の
+    /// 許可印があるか — 「この送信者は許可済み」の印を送信側が
+    /// 自称する兆候 (D343)。
+    pub whitelist_claim: bool,
+    /// `X-IronPort-*`/`X-Mimecast-*`/`X-Proofpoint-*`/`X-CheckPoint-*`
+    /// /`X-Cyren-*` 等の商用アプライアンス印があるか — 検査機器の
+    /// ブランド印を送信側が自称する兆候 (D344)。
+    pub appliance_stamps: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        spam_report: has_spam_report(raw),
+        whitelist_claim: has_whitelist_claim(raw),
+        appliance_stamps: has_appliance_stamps(raw),
     })
 }
 
@@ -487,6 +502,69 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-Spam-Status:`/`X-Spam-Score:`/`X-Spam-Flag:`/`X-Spam-Level:` 等の
+/// SpamAssassin 判定印があるか判定する (D342)。
+///
+/// `X-Spam-*` は SpamAssassin が通過時に記す判定値 — 送信側から
+/// 届くこれは「SA の判定を受けた」体裁を内容側が主張する自称
+/// (D335 スキャン印の SA 版)。
+fn has_spam_report(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spam-status:")
+            || l.starts_with("x-spam-score:")
+            || l.starts_with("x-spam-flag:")
+            || l.starts_with("x-spam-level:")
+            || l.starts_with("x-spam-checker-version:")
+    })
+}
+
+/// `X-Whitelisted:`/`X-WhiteList:`/`X-Trusted-*`/`X-Allow-*` 等の
+/// 許可印があるか判定する (D343)。
+///
+/// フィルタの allowlist 判定印 — 送信側から届くこれは「この
+/// 送信者は許可済み」の印を内容側が主張する自称。許可印は
+/// フィルタ側が押す。
+fn has_whitelist_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-whitelisted:")
+            || l.starts_with("x-whitelist:")
+            || l.starts_with("x-trusted-")
+            || l.starts_with("x-allow-")
+            || l.starts_with("x-approved:")
+    })
+}
+
+/// `X-IronPort-*`/`X-Mimecast-*`/`X-Proofpoint-*`/`X-CheckPoint-*`/
+/// `X-Cyren-*` 等の商用アプライアンス印があるか判定する (D344)。
+///
+/// メールセキュリティアプライアンスのブランド印 — 送信側から届く
+/// これは「この製品で検査した」体裁を内容側が主張する自称
+/// (D335 スキャン印の商用版)。
+fn has_appliance_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ironport-")
+            || l.starts_with("x-mimecast-")
+            || l.starts_with("x-proofpoint-")
+            || l.starts_with("x-checkpoint-")
+            || l.starts_with("x-cyren-")
+            || l.starts_with("x-brightmail-")
+            || l.starts_with("x-barracuda-")
+            || l.starts_with("x-sonicwall-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2818,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はSA印を検出する() {
+        let ss = b"X-Spam-Status: No, score=1.2\r\n\r\nx";
+        assert!(has_spam_report(ss));
+        let sc = b"X-Spam-Score: 1.2\r\n\r\nx";
+        assert!(has_spam_report(sc));
+        let sf = b"X-Spam-Flag: NO\r\n\r\nx";
+        assert!(has_spam_report(sf));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_spam_report(clean));
+        let body = b"From: a@b\r\n\r\nX-Spam-Status: No";
+        assert!(!has_spam_report(body));
+    }
+
+    #[test]
+    fn scan_は許可印を検出する() {
+        let wl = b"X-Whitelisted: yes\r\n\r\nx";
+        assert!(has_whitelist_claim(wl));
+        let tr = b"X-Trusted-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_whitelist_claim(tr));
+        let al = b"X-Allow-All: yes\r\n\r\nx";
+        assert!(has_whitelist_claim(al));
+        let ap = b"X-Approved: yes\r\n\r\nx";
+        assert!(has_whitelist_claim(ap));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_whitelist_claim(clean));
+    }
+
+    #[test]
+    fn scan_はアプライアンス印を検出する() {
+        let ip = b"X-IronPort-AV: clean\r\n\r\nx";
+        assert!(has_appliance_stamps(ip));
+        let mc = b"X-Mimecast-Spam-Score: 0\r\n\r\nx";
+        assert!(has_appliance_stamps(mc));
+        let pp = b"X-Proofpoint-Spam-Details: x\r\n\r\ny";
+        assert!(has_appliance_stamps(pp));
+        let cp = b"X-CheckPoint-Message: x\r\n\r\ny";
+        assert!(has_appliance_stamps(cp));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_appliance_stamps(clean));
     }
 }
 
