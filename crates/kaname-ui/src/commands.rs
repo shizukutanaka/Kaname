@@ -2428,6 +2428,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D644: 建設・ゼネコン・工事印自称
+    if env.construction_marks {
+        render_risks.push(
+            "X-Kashima-*/X-Obayashi-*/X-Shimizu-*/X-Zenekon-*/X-ZenekonNavi-*/X-KensetsuNavi-*/X-GenbaNavi-*/X-ShokuninNavi-* 等 — 建機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D645: レンタル・リース印自称
+    if env.rental_marks {
+        render_risks.push(
+            "X-NipponRental-*/X-Nikken-*/X-RentalNavi-*/X-LeaseNavi-*/X-RentlareNavi-*/X-KenkireNavi-*/X-Aktio-*/X-Rentrun-* 等 — 貸機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D646: 倉庫・物流センター印自称
+    if env.warehouse_marks {
+        render_risks.push(
+            "X-Souko-*/X-SoukoNavi-*/X-LogisticsNavi-*/X-RojiweedNavi-*/X-RojisuteidoNavi-*/X-OroukuriNavi-*/X-Trunkroom-*/X-HokanNavi-* 等 — 倉機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
