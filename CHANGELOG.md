@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D540: `X-Boeing-*`/`X-SpaceX-*`/`X-JAXA-*` 等の航空宇宙・防衛印自称が未検査
+
+- **問題**: `X-Boeing-*` (Boeing)、`X-SpaceX-*` (SpaceX)、`X-JAXA-*` (JAXA)、`X-Airbus-*`/`X-Lockheed-*`/`X-Raytheon-*`/`X-Northrop-*`/`X-BAE-*`/`X-GeneralDynamics-*`/`X-L3Harris-*`/`X-Embraer-*`/`X-Bombardier-*`/`X-MitsubishiHeavy-*`/`X-KawasakiHeavy-*`/`X-GEAviation-*`/`X-PrattWhitney-*`/`X-Safran-*`/`X-Leonardo-*`/`X-Thales-*`/`X-Dassault-*`/`X-BlueOrigin-*`/`X-RocketLab-*`/`X-ULA-*`/`X-NASA-*`/`X-Ball-*`/`X-Maxar-*`/`X-AerojetRocketdyne-*`/`X-SierraSpace-*`/`X-FireflyAerospace-*`/`X-RelativitySpace-*`/`X-Arianespace-*` は航機の通知記録 — 送信側が書くことは自称。受注・保守通知偽装は防衛産業 BEC の典型。(`X-IHI-*`/`X-Kawasaki-*` は D538、`X-Garmin-*` は D530 で検出済み)
+- **修正**: `Envelope` に `aerospace_marks` + `has_aerospace_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 航印の自署を問え。
+
+### Security — D541: `X-TomTom-*`/`X-Navitime-*`/`X-Pioneer-*` 等の地図・ナビ・カーオーディオ・ホームオーディオ印自称が未検査
+
+- **問題**: `X-TomTom-*` (TomTom)、`X-Navitime-*` (NAVITIME)、`X-Pioneer-*` (Pioneer)、`X-HERE-*`/`X-Mapbox-*`/`X-GoogleMaps-*`/`X-OpenStreetMap-*`/`X-MapQuest-*`/`X-BingMaps-*`/`X-Zenrin-*`/`X-Mapion-*`/`X-MapFan-*`/`X-Alpine-*`/`X-Kenwood-*`/`X-Clarion-*`/`X-JVC-*`/`X-Carrozzeria-*`/`X-Kicker-*`/`X-JLAudio-*`/`X-Focal-*`/`X-Audison-*`/`X-RockfordFosgate-*`/`X-MTX-*`/`X-HarmanKardon-*`/`X-JBL-*`/`X-Bose-*`/`X-Sonos-*`/`X-Denon-*`/`X-Marantz-*`/`X-Onkyo-*`/`X-TEAC-*` は図機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `navigation_marks` + `has_navigation_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 図印の自署を問え。
+
+### Security — D542: `X-Pfizer-*`/`X-Takeda-*`/`X-Eisai-*` 等の製薬・バイオ印自称が未検査
+
+- **問題**: `X-Pfizer-*` (Pfizer)、`X-Takeda-*` (武田)、`X-Eisai-*` (エーザイ)、`X-Moderna-*`/`X-Novartis-*`/`X-Roche-*`/`X-AstraZeneca-*`/`X-GSK-*`/`X-Merck-*`/`X-EliLilly-*`/`X-Bayer-*`/`X-Sanofi-*`/`X-JNJ-*`/`X-BMS-*`/`X-Astellas-*`/`X-DaiichiSankyo-*`/`X-Otsuka-*`/`X-Chugai-*`/`X-Shionogi-*`/`X-Ono-*`/`X-KyowaKirin-*`/`X-MeijiSeika-*`/`X-Taisho-*`/`X-Hisamitsu-*`/`X-Teijin-*`/`X-AbbVie-*`/`X-Amgen-*`/`X-Gilead-*`/`X-Biogen-*`/`X-Regeneron-*`/`X-Vertex-*`/`X-CSL-*`/`X-Novo-*`/`X-BoehringerIngelheim-*` は製薬機の通知記録 — 送信側が書くことは自称。治験・処方通知偽装は医療詐欺の典型。
+- **修正**: `Envelope` に `pharma_marks` + `has_pharma_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 薬印の自署を問え。
+
+
 ### Security — D537: `X-Intel-*`/`X-NVIDIA-*`/`X-TSMC-*` 等の半導体・ストレージ印自称が未検査
 
 - **問題**: `X-Intel-*` (Intel)、`X-NVIDIA-*` (NVIDIA)、`X-TSMC-*` (TSMC)、`X-AMD-*`/`X-Qualcomm-*`/`X-Broadcom-*`/`X-Micron-*`/`X-TI-*`/`X-ST-*`/`X-NXP-*`/`X-Infineon-*`/`X-Renesas-*`/`X-Analog-*`/`X-Marvell-*`/`X-ARM-*`/`X-GlobalFoundries-*`/`X-UMC-*`/`X-SMIC-*`/`X-MediaTek-*`/`X-Skyworks-*`/`X-Qorvo-*`/`X-Realtek-*`/`X-Winbond-*`/`X-Cypress-*`/`X-Microchip-*`/`X-onsemi-*`/`X-ROHM-*`/`X-Kioxia-*`/`X-WesternDigital-*`/`X-Seagate-*`/`X-SanDisk-*`/`X-Kingston-*`/`X-ADATA-*`/`X-Transcend-*`/`X-Crucial-*`/`X-SKHynix-*`/`X-Solidigm-*` は半導体機の通知記録 — 送信側が書くことは自称。

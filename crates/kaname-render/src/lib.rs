@@ -1141,6 +1141,38 @@ pub struct Envelope {
     /// `X-EPSON-*`/`X-Brother-*`/`X-Kyocera-*`/`X-Fujitsu-*`/`X-NEC-*`/
     /// `X-Toshiba-*`/`X-Panasonic-*`/`X-Sony-*` は D496 で検出済み)
     pub office_marks: bool,
+    /// `X-Boeing-*`/`X-Airbus-*`/`X-Lockheed-*`/`X-Raytheon-*`/
+    /// `X-Northrop-*`/`X-BAE-*`/`X-GeneralDynamics-*`/`X-L3Harris-*`/
+    /// `X-Embraer-*`/`X-Bombardier-*`/`X-MitsubishiHeavy-*`/
+    /// `X-KawasakiHeavy-*`/`X-GEAviation-*`/`X-PrattWhitney-*`/`X-Safran-*`/
+    /// `X-Leonardo-*`/`X-Thales-*`/`X-Dassault-*`/`X-SpaceX-*`/
+    /// `X-BlueOrigin-*`/`X-RocketLab-*`/`X-ULA-*`/`X-NASA-*`/`X-JAXA-*`/
+    /// `X-Ball-*`/`X-Maxar-*`/`X-AerojetRocketdyne-*`/`X-SierraSpace-*`/
+    /// `X-FireflyAerospace-*`/`X-RelativitySpace-*`/`X-Arianespace-*` 等の
+    /// 航空宇宙・防衛印があるか — 航機の通知記録を送信側が自称する
+    /// 兆候 (D540)。(`X-IHI-*`/`X-Kawasaki-*` は D538、`X-Garmin-*` は
+    /// D530 で検出済み)
+    pub aerospace_marks: bool,
+    /// `X-TomTom-*`/`X-HERE-*`/`X-Mapbox-*`/`X-GoogleMaps-*`/
+    /// `X-OpenStreetMap-*`/`X-MapQuest-*`/`X-BingMaps-*`/`X-Navitime-*`/
+    /// `X-Zenrin-*`/`X-Mapion-*`/`X-MapFan-*`/`X-Alpine-*`/`X-Kenwood-*`/
+    /// `X-Clarion-*`/`X-Pioneer-*`/`X-JVC-*`/`X-Carrozzeria-*`/`X-Kicker-*`/
+    /// `X-JLAudio-*`/`X-Focal-*`/`X-Audison-*`/`X-RockfordFosgate-*`/
+    /// `X-MTX-*`/`X-HarmanKardon-*`/`X-JBL-*`/`X-Bose-*`/`X-Sonos-*`/
+    /// `X-Denon-*`/`X-Marantz-*`/`X-Onkyo-*`/`X-TEAC-*` 等の
+    /// 地図・ナビ・カーオーディオ・ホームオーディオ印があるか —
+    /// 図機の通知記録を送信側が自称する兆候 (D541)。
+    pub navigation_marks: bool,
+    /// `X-Pfizer-*`/`X-Moderna-*`/`X-Novartis-*`/`X-Roche-*`/
+    /// `X-AstraZeneca-*`/`X-GSK-*`/`X-Merck-*`/`X-EliLilly-*`/`X-Bayer-*`/
+    /// `X-Sanofi-*`/`X-JNJ-*`/`X-BMS-*`/`X-Takeda-*`/`X-Astellas-*`/
+    /// `X-DaiichiSankyo-*`/`X-Eisai-*`/`X-Otsuka-*`/`X-Chugai-*`/
+    /// `X-Shionogi-*`/`X-Ono-*`/`X-KyowaKirin-*`/`X-MeijiSeika-*`/
+    /// `X-Taisho-*`/`X-Hisamitsu-*`/`X-Teijin-*`/`X-AbbVie-*`/`X-Amgen-*`/
+    /// `X-Gilead-*`/`X-Biogen-*`/`X-Regeneron-*`/`X-Vertex-*`/`X-CSL-*`/
+    /// `X-Novo-*`/`X-BoehringerIngelheim-*` 等の製薬・バイオ印があるか —
+    /// 製薬機の通知記録を送信側が自称する兆候 (D542)。
+    pub pharma_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1541,6 +1573,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         semiconductor_marks: has_semiconductor_marks(raw),
         industrial_marks: has_industrial_marks(raw),
         office_marks: has_office_marks(raw),
+        aerospace_marks: has_aerospace_marks(raw),
+        navigation_marks: has_navigation_marks(raw),
+        pharma_marks: has_pharma_marks(raw),
     })
 }
 
@@ -7256,6 +7291,166 @@ fn has_office_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Boeing-*`/`X-Airbus-*`/`X-Lockheed-*`/`X-Raytheon-*`/`X-Northrop-*`/
+/// `X-BAE-*`/`X-GeneralDynamics-*`/`X-L3Harris-*`/`X-Embraer-*`/
+/// `X-Bombardier-*`/`X-MitsubishiHeavy-*`/`X-KawasakiHeavy-*`/
+/// `X-GEAviation-*`/`X-PrattWhitney-*`/`X-Safran-*`/`X-Leonardo-*`/
+/// `X-Thales-*`/`X-Dassault-*`/`X-SpaceX-*`/`X-BlueOrigin-*`/`X-RocketLab-*`/
+/// `X-ULA-*`/`X-NASA-*`/`X-JAXA-*`/`X-Ball-*`/`X-Maxar-*`/
+/// `X-AerojetRocketdyne-*`/`X-SierraSpace-*`/`X-FireflyAerospace-*`/
+/// `X-RelativitySpace-*`/`X-Arianespace-*` 等の航空宇宙・防衛印があるか
+/// 判定する (D540)。
+///
+/// `X-Boeing-*` (Boeing)、`X-SpaceX-*` (SpaceX)、`X-JAXA-*` (JAXA) は
+/// 航機の通知記録 — 送信側から届くこれは自称。受注・保守通知偽装は
+/// 防衛産業 BEC の典型。`X-IHI-*`/`X-Kawasaki-*` は D538、
+/// `X-Garmin-*` は D530 で検出済み。
+fn has_aerospace_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-boeing-")
+            || l.starts_with("x-airbus-")
+            || l.starts_with("x-lockheed-")
+            || l.starts_with("x-raytheon-")
+            || l.starts_with("x-northrop-")
+            || l.starts_with("x-bae-")
+            || l.starts_with("x-generaldynamics-")
+            || l.starts_with("x-l3harris-")
+            || l.starts_with("x-embraer-")
+            || l.starts_with("x-bombardier-")
+            || l.starts_with("x-mitsubishiheavy-")
+            || l.starts_with("x-kawasakiheavy-")
+            || l.starts_with("x-geaviation-")
+            || l.starts_with("x-prattwhitney-")
+            || l.starts_with("x-safran-")
+            || l.starts_with("x-leonardo-")
+            || l.starts_with("x-thales-")
+            || l.starts_with("x-dassault-")
+            || l.starts_with("x-spacex-")
+            || l.starts_with("x-blueorigin-")
+            || l.starts_with("x-rocketlab-")
+            || l.starts_with("x-ula-")
+            || l.starts_with("x-nasa-")
+            || l.starts_with("x-jaxa-")
+            || l.starts_with("x-ball-")
+            || l.starts_with("x-maxar-")
+            || l.starts_with("x-aerojetrocketdyne-")
+            || l.starts_with("x-sierraspace-")
+            || l.starts_with("x-fireflyaerospace-")
+            || l.starts_with("x-relativityspace-")
+            || l.starts_with("x-arianespace-")
+    })
+}
+
+/// `X-TomTom-*`/`X-HERE-*`/`X-Mapbox-*`/`X-GoogleMaps-*`/`X-OpenStreetMap-*`/
+/// `X-MapQuest-*`/`X-BingMaps-*`/`X-Navitime-*`/`X-Zenrin-*`/`X-Mapion-*`/
+/// `X-MapFan-*`/`X-Alpine-*`/`X-Kenwood-*`/`X-Clarion-*`/`X-Pioneer-*`/
+/// `X-JVC-*`/`X-Carrozzeria-*`/`X-Kicker-*`/`X-JLAudio-*`/`X-Focal-*`/
+/// `X-Audison-*`/`X-RockfordFosgate-*`/`X-MTX-*`/`X-HarmanKardon-*`/
+/// `X-JBL-*`/`X-Bose-*`/`X-Sonos-*`/`X-Denon-*`/`X-Marantz-*`/`X-Onkyo-*`/
+/// `X-TEAC-*` 等の地図・ナビ・カーオーディオ・ホームオーディオ印が
+/// あるか判定する (D541)。
+///
+/// `X-TomTom-*` (TomTom)、`X-Navitime-*` (NAVITIME)、`X-Pioneer-*`
+/// (Pioneer) は図機の通知記録 — 送信側から届くこれは自称。
+fn has_navigation_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-tomtom-")
+            || l.starts_with("x-here-")
+            || l.starts_with("x-mapbox-")
+            || l.starts_with("x-googlemaps-")
+            || l.starts_with("x-openstreetmap-")
+            || l.starts_with("x-mapquest-")
+            || l.starts_with("x-bingmaps-")
+            || l.starts_with("x-navitime-")
+            || l.starts_with("x-zenrin-")
+            || l.starts_with("x-mapion-")
+            || l.starts_with("x-mapfan-")
+            || l.starts_with("x-alpine-")
+            || l.starts_with("x-kenwood-")
+            || l.starts_with("x-clarion-")
+            || l.starts_with("x-pioneer-")
+            || l.starts_with("x-jvc-")
+            || l.starts_with("x-carrozzeria-")
+            || l.starts_with("x-kicker-")
+            || l.starts_with("x-jlaudio-")
+            || l.starts_with("x-focal-")
+            || l.starts_with("x-audison-")
+            || l.starts_with("x-rockfordfosgate-")
+            || l.starts_with("x-mtx-")
+            || l.starts_with("x-harmankardon-")
+            || l.starts_with("x-jbl-")
+            || l.starts_with("x-bose-")
+            || l.starts_with("x-sonos-")
+            || l.starts_with("x-denon-")
+            || l.starts_with("x-marantz-")
+            || l.starts_with("x-onkyo-")
+            || l.starts_with("x-teac-")
+    })
+}
+
+/// `X-Pfizer-*`/`X-Moderna-*`/`X-Novartis-*`/`X-Roche-*`/`X-AstraZeneca-*`/
+/// `X-GSK-*`/`X-Merck-*`/`X-EliLilly-*`/`X-Bayer-*`/`X-Sanofi-*`/`X-JNJ-*`/
+/// `X-BMS-*`/`X-Takeda-*`/`X-Astellas-*`/`X-DaiichiSankyo-*`/`X-Eisai-*`/
+/// `X-Otsuka-*`/`X-Chugai-*`/`X-Shionogi-*`/`X-Ono-*`/`X-KyowaKirin-*`/
+/// `X-MeijiSeika-*`/`X-Taisho-*`/`X-Hisamitsu-*`/`X-Teijin-*`/`X-AbbVie-*`/
+/// `X-Amgen-*`/`X-Gilead-*`/`X-Biogen-*`/`X-Regeneron-*`/`X-Vertex-*`/
+/// `X-CSL-*`/`X-Novo-*`/`X-BoehringerIngelheim-*` 等の製薬・バイオ印が
+/// あるか判定する (D542)。
+///
+/// `X-Pfizer-*` (Pfizer)、`X-Takeda-*` (武田)、`X-Eisai-*` (エーザイ) は
+/// 製薬機の通知記録 — 送信側から届くこれは自称。治験・処方通知偽装は
+/// 医療詐欺の典型。
+fn has_pharma_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-pfizer-")
+            || l.starts_with("x-moderna-")
+            || l.starts_with("x-novartis-")
+            || l.starts_with("x-roche-")
+            || l.starts_with("x-astrazeneca-")
+            || l.starts_with("x-gsk-")
+            || l.starts_with("x-merck-")
+            || l.starts_with("x-elililly-")
+            || l.starts_with("x-bayer-")
+            || l.starts_with("x-sanofi-")
+            || l.starts_with("x-jnj-")
+            || l.starts_with("x-bms-")
+            || l.starts_with("x-takeda-")
+            || l.starts_with("x-astellas-")
+            || l.starts_with("x-daiichisankyo-")
+            || l.starts_with("x-eisai-")
+            || l.starts_with("x-otsuka-")
+            || l.starts_with("x-chugai-")
+            || l.starts_with("x-shionogi-")
+            || l.starts_with("x-ono-")
+            || l.starts_with("x-kyowakirin-")
+            || l.starts_with("x-meijiseika-")
+            || l.starts_with("x-taisho-")
+            || l.starts_with("x-hisamitsu-")
+            || l.starts_with("x-teijin-")
+            || l.starts_with("x-abbvie-")
+            || l.starts_with("x-amgen-")
+            || l.starts_with("x-gilead-")
+            || l.starts_with("x-biogen-")
+            || l.starts_with("x-regeneron-")
+            || l.starts_with("x-vertex-")
+            || l.starts_with("x-csl-")
+            || l.starts_with("x-novo-")
+            || l.starts_with("x-boehringeringelheim-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -12224,6 +12419,72 @@ mod tests {
         assert!(has_office_marks(m1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_office_marks(clean));
+    }
+
+    #[test]
+    fn scan_は航機印を検出する() {
+        let b1 = b"X-Boeing-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(b1));
+        let s1 = b"X-SpaceX-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(s1));
+        let j1 = b"X-JAXA-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(j1));
+        let a1 = b"X-Airbus-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(a1));
+        let l1 = b"X-Lockheed-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(l1));
+        let m1 = b"X-MitsubishiHeavy-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(m1));
+        let n1 = b"X-NASA-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(n1));
+        let r1 = b"X-RocketLab-Notify: x\r\n\r\nx";
+        assert!(has_aerospace_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_aerospace_marks(clean));
+    }
+
+    #[test]
+    fn scan_は図機印を検出する() {
+        let t1 = b"X-TomTom-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(t1));
+        let n1 = b"X-Navitime-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(n1));
+        let p1 = b"X-Pioneer-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(p1));
+        let z1 = b"X-Zenrin-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(z1));
+        let b1 = b"X-Bose-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(b1));
+        let m1 = b"X-Mapbox-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(m1));
+        let k1 = b"X-Kenwood-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(k1));
+        let s1 = b"X-Sonos-Notify: x\r\n\r\nx";
+        assert!(has_navigation_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_navigation_marks(clean));
+    }
+
+    #[test]
+    fn scan_は製薬機印を検出する() {
+        let p1 = b"X-Pfizer-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(p1));
+        let t1 = b"X-Takeda-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(t1));
+        let e1 = b"X-Eisai-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(e1));
+        let m1 = b"X-Moderna-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(m1));
+        let n1 = b"X-Novartis-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(n1));
+        let a1 = b"X-Astellas-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(a1));
+        let s1 = b"X-Shionogi-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(s1));
+        let g1 = b"X-Gilead-Notify: x\r\n\r\nx";
+        assert!(has_pharma_marks(g1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_pharma_marks(clean));
     }
 }
 
