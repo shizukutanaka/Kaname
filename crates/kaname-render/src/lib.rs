@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Milter-*`/`X-Rspamd-*`/`X-Opendkim-*`/`X-Dkim-Filter-*`/
+    /// `X-Amavis-Alert` 等の milter/plugin 判定印があるか —
+    /// 判定プラグインの印を送信側が自称する兆候 (D393)。
+    pub milter_marks: bool,
+    /// `X-Quarantine-*`/`X-Quarantined-*`/`X-Detained-*`/
+    /// `X-Held-*` 等の隔離印があるか — 隔離機の記録を送信側が
+    /// 自称する兆候 (D394)。
+    pub quarantine_marks: bool,
+    /// `X-DSN-*`/`X-MDN-*`/`X-Notary-*`/`X-Notifications-*`
+    /// 等の配送通知印があるか — 配送状態報告の記録を送信側が
+    /// 自称する兆候 (D395)。
+    pub dsn_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        milter_marks: has_milter_marks(raw),
+        quarantine_marks: has_quarantine_marks(raw),
+        dsn_marks: has_dsn_marks(raw),
     })
 }
 
@@ -624,6 +639,70 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Milter-*`/`X-Rspamd-*`/`X-Opendkim-*`/`X-Dkim-Filter-*`/
+/// `X-Amavis-Alert*`/`X-Sid-Filter-*` 等の milter/plugin 判定印があるか
+/// 判定する (D393)。
+///
+/// milter 系プラグイン・Rspamd 等の判定機が輸送中に記す印 —
+/// 送信側から届くこれは「この判定基盤を通った」体裁を内容側が
+/// 主張する自称。
+fn has_milter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-milter-")
+            || l.starts_with("x-miltered:")
+            || l.starts_with("x-rspamd-")
+            || l.starts_with("x-opendkim-")
+            || l.starts_with("x-dkim-filter-")
+            || l.starts_with("x-amavis-alert")
+            || l.starts_with("x-sid-filter-")
+    })
+}
+
+/// `X-Quarantine-*`/`X-Quarantined-*`/`X-Detained-*`/`X-Held-*`/
+/// `X-Quarantined-By:` 等の隔離印があるか判定する (D394)。
+///
+/// 「隔離した」の記録は検査機が残す — 送信側から届くこれは
+/// 「隔離を通った」体裁を内容側が主張する自称。
+fn has_quarantine_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-quarantine-")
+            || l.starts_with("x-quarantined-")
+            || l.starts_with("x-quarantined-by:")
+            || l.starts_with("x-detained-")
+            || l.starts_with("x-held-")
+    })
+}
+
+/// `X-DSN-*`/`X-MDN-*`/`X-Notary-*`/`X-Notifications-*`/
+/// `X-Delivery-Report-*`/`X-Final-Recipient:` 等の配送通知印があるか
+/// 判定する (D395)。
+///
+/// DSN/MDN は配送状態の報告プロトコル — その値は配送機が残す。
+/// 送信側から届くこれは「配送報告まで記録済み」体裁を内容側が
+/// 主張する自称。
+fn has_dsn_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dsn-")
+            || l.starts_with("x-mdn-")
+            || l.starts_with("x-notary-")
+            || l.starts_with("x-notifications-")
+            || l.starts_with("x-delivery-report-")
+            || l.starts_with("x-final-recipient:")
     })
 }
 
@@ -2952,6 +3031,54 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はmilter印を検出する() {
+        let ml = b"X-Milter-Version: 1\r\n\r\nx";
+        assert!(has_milter_marks(ml));
+        let md = b"X-Miltered: y\r\n\r\nx";
+        assert!(has_milter_marks(md));
+        let rs = b"X-Rspamd-Result: r\r\n\r\nx";
+        assert!(has_milter_marks(rs));
+        let od = b"X-Opendkim-Domain: d\r\n\r\nx";
+        assert!(has_milter_marks(od));
+        let df = b"X-Dkim-Filter-Result: r\r\n\r\nx";
+        assert!(has_milter_marks(df));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_milter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は隔離印を検出する() {
+        let qt = b"X-Quarantine-Reason: r\r\n\r\nx";
+        assert!(has_quarantine_marks(qt));
+        let qd = b"X-Quarantined-By: q\r\n\r\nx";
+        assert!(has_quarantine_marks(qd));
+        let qf = b"X-Quarantined-For: f\r\n\r\nx";
+        assert!(has_quarantine_marks(qf));
+        let dt = b"X-Detained-Reason: d\r\n\r\nx";
+        assert!(has_quarantine_marks(dt));
+        let hd = b"X-Held-For: h\r\n\r\nx";
+        assert!(has_quarantine_marks(hd));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_quarantine_marks(clean));
+    }
+
+    #[test]
+    fn scan_はDSN印を検出する() {
+        let ds = b"X-DSN-Notification: n\r\n\r\nx";
+        assert!(has_dsn_marks(ds));
+        let md = b"X-MDN-Receipt: r\r\n\r\nx";
+        assert!(has_dsn_marks(md));
+        let nt = b"X-Notary-Receipt: r\r\n\r\nx";
+        assert!(has_dsn_marks(nt));
+        let nf = b"X-Notifications-Result: r\r\n\r\nx";
+        assert!(has_dsn_marks(nf));
+        let dr = b"X-Delivery-Report-Status: d\r\n\r\nx";
+        assert!(has_dsn_marks(dr));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dsn_marks(clean));
     }
 }
 

@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D393: milter/plugin 判定印自称
+    if env.milter_marks {
+        render_risks.push(
+            "X-Milter-*/X-Rspamd-*/X-Opendkim-* 等 — milter 系判定機の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D394: 隔離印自称
+    if env.quarantine_marks {
+        render_risks.push(
+            "X-Quarantine-*/X-Quarantined-*/X-Detained-* 等 — 「隔離を通った」記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D395: DSN/MDN 配送通知印自称
+    if env.dsn_marks {
+        render_risks.push(
+            "X-DSN-*/X-MDN-*/X-Notary-* 等 — 配送状態報告の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

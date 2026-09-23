@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D393: `X-Milter-*`/`X-Rspamd-*`/`X-Opendkim-*`/`X-Dkim-Filter-*`/`X-Amavis-Alert*`/`X-Sid-Filter-*`/`X-Miltered:` 等の milter/plugin 判定印自称が未検査
+
+- milter 系プラグイン・Rspamd 等の判定機が輸送中に記す印 — 送信側から届くのは「この判定基盤を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_milter_marks` 新設 → `Envelope.milter_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D394: `X-Quarantine-*`/`X-Quarantined-*`/`X-Quarantined-By:`/`X-Detained-*`/`X-Held-*` 等の隔離印自称が未検査
+
+- 「隔離した」の記録は検査機が残す — 送信側から届くのは「隔離を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_quarantine_marks` 新設 → `Envelope.quarantine_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D395: `X-DSN-*`/`X-MDN-*`/`X-Notary-*`/`X-Notifications-*`/`X-Delivery-Report-*`/`X-Final-Recipient:` 等の配送通知印自称が未検査
+
+- DSN/MDN は配送状態の報告プロトコル — その値は配送機が残す。送信側から届くのは「配送報告まで記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_dsn_marks` 新設 → `Envelope.dsn_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった
