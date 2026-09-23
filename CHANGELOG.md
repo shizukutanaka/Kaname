@@ -6,7 +6,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+### Security — D572: `X-Gulliver-*`/`X-Nextage-*`/`X-Autobacs-*` 等の車買取・中古車・カー用品印自称が未検査
+
+- **問題**: `X-Gulliver-*` (ガリバー)、`X-Nextage-*` (ネクステージ)、`X-Autobacs-*` (オートバックス)、`X-Bigmotor-*`/`X-Carseven-*`/`X-AppleKaitori-*`/`X-RabbitKaitori-*`/`X-Upos-*`/`X-YellowHat-*`/`X-James-*`/`X-Tirekan-*`/`X-Autowave-*`/`X-Carconbi-*`/`X-Navikuru-*`/`X-Carcone-*`/`X-Carsensor-*`/`X-MOTA-*`/`X-Ucarpac-*`/`X-ZubattoKaitori-*`/`X-Carview-*`/`X-Webike-*`/`X-Bikeou-*`/`X-RedBaron-*`/`X-Bikeone-*`/`X-Autotrader-*`/`X-CarsDotCom-*`/`X-Carvana-*`/`X-Vroom-*`/`X-CarGurus-*`/`X-CarMax-*`/`X-AutoScout24-*`/`X-MobileDe-*`/`X-Webmotors-*`/`X-Carsales-*`/`X-Encar-*`/`X-KCar-*`/`X-CarPrice-*`/`X-Car24-*`/`X-Cazana-*`/`X-Motory-*`/`X-Carro-*`/`X-Kavak-*`/`X-Spinny-*`/`X-Carsome-*` は売機の通知記録 — 送信側が書くことは自称。査定完了・買取金額提示・オークション結果の偽装は中古車売買詐欺の典型。(`X-Toyota-*`/`X-Honda-*` 等メーカー本体・`X-Hertz-*` 等レンタカーは D521、`X-Goo-*` は既存族で検出済み)
+- **修正**: `Envelope` に `cartrade_marks` + `has_cartrade_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 売印の自署を問え。
+
+### Security — D573: `X-JTB-*`/`X-HIS-*`/`X-KNT-*` 等の旅行代理店・ツアー催行印自称が未検査
+
+- **問題**: `X-JTB-*` (JTB)、`X-HIS-*` (エイチ・アイ・エス)、`X-KNT-*` (近畿日本ツーリスト)、`X-ClubTourism-*`/`X-HankyuTravel-*`/`X-YomioTravel-*`/`X-NihonTravel-*`/`X-Jalpak-*`/`X-ANAHotel-*`/`X-Trip-*`/`X-Ctrip-*`/`X-GetYourGuide-*`/`X-Viator-*`/`X-Klook-*`/`X-KKday-*`/`X-Veltra-*`/`X-ActivityJapan-*`/`X-Sotoasobi-*`/`X-Japanican-*`/`X-Contiki-*`/`X-GAdventures-*`/`X-Intrepid-*`/`X-Topdeck-*`/`X-Trafalgar-*`/`X-Exodus-*`/`X-TourRadar-*`/`X-Tiqets-*`/`X-Musement-*`/`X-Headout-*`/`X-Civitatis-*`/`X-GoCity-*`/`X-Travelzoo-*`/`X-Tourlane-*`/`X-AsiaYo-*`/`X-Relux-*`/`X-Oyado-*`/`X-Yukoyuko-*`/`X-Ikkyu-*`/`X-AirTrip-*`/`X-SkyTicket-*`/`X-Ennet-*`/`X-TourHero-*`/`X-WillerTravel-*` は旅機の通知記録 — 送信側が書くことは自称。ツアー催行中止・キャンセル料請求・現地オプション当選の偽装は旅行詐欺の典型。(`X-Expedia-*`/`X-Booking-*`/`X-Agoda-*` 等 OTA は D468、`X-Jalan-*`/`X-RakutenTravel-*`/`X-Marriott-*` 等ホテル機は D535、`X-ANA-*`/`X-JAL-*` 等航空機は D513 で検出済み)
+- **修正**: `Envelope` に `tour_marks` + `has_tour_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 旅印の自署を問え。
+
+### Security — D574: `X-Vernis-*`/`X-WillUranai-*`/`X-Keen-*` 等の占い・電話占い・占星術アプリ印自称が未検査
+
+- **問題**: `X-Vernis-*` (電話占いヴェルニ)、`X-WillUranai-*` (電話占いウィル)、`X-Keen-*` (Keen)、`X-Purely-*`/`X-Callis-*`/`X-ExciteUranai-*`/`X-Uranaikan-*`/`X-Senrigan-*`/`X-Minden-*`/`X-Urara-*`/`X-GachiUranai-*`/`X-Pixer-*`/`X-Spica-*`/`X-LineUranai-*`/`X-Destiny-*`/`X-Feel-*`/`X-Sator-*`/`X-KagamiRyuji-*`/`X-Getters-*`/`X-HoshiHitomi-*`/`X-SuishoTamako-*`/`X-Shiitake-*`/`X-HosokiKazuko-*`/`X-DrKopa-*`/`X-LeeKuan-*`/`X-Kasamba-*`/`X-CaliforniaPsychics-*`/`X-PsychicSource-*`/`X-PurpleGarden-*`/`X-BitWine-*`/`X-AskNow-*`/`X-PathForward-*`/`X-AstroYogi-*`/`X-AstroGuide-*`/`X-Nebula-*`/`X-Sanctuary-*`/`X-CoStar-*`/`X-Chani-*`/`X-TimePassages-*`/`X-ThePattern-*`/`X-AstrologyZone-*`/`X-Tarot-*`/`X-Voyance-*`/`X-Wengo-*` は鑑機の通知記録 — 送信側が書くことは自称。「呪い解除」「高額鑑定」「先祖の因縁」勧誘の偽装は占い詐欺の典型。
+- **修正**: `Envelope` に `fortune_marks` + `has_fortune_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鑑印の自署を問え。
 
 ### Performance / Fixed — D570: `has_*_marks` 155 関数がヘッダのためだけに全文を複製していた
 
