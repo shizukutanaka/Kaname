@@ -748,6 +748,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D432: 欧州 ISP 印自称
+    if env.eu_provider_marks {
+        render_risks.push(
+            "X-GMX-*/X-UI-*/X-me-*/X-ProXad-* 等 — 欧州プロバイダの判定記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D433: CIS・韓国系プロバイダ印自称
+    if env.cis_provider_marks {
+        render_risks.push(
+            "X-Mras/X-Mru-*/X-Yandex-*/X-Naver-* 等 — CIS・韓国系プロバイダの判定記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D434: 自動応答・優先度印自称
+    if env.autoreply_marks {
+        render_risks.push(
+            "Auto-Submitted/Precedence/X-Loop/X-Auto-Response-Suppress 等 — 応答機・配送機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

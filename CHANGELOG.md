@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D432: `X-GMX-*`/`X-UI-*`/`UI-InboundReport:`/`X-me-*`/`X-ProXad-*` 等の欧州系 ISP 印自称が未検査
+
+- GMX (`X-GMX-Antispam`/`X-GMX-Antivirus`、SpamAssassin 公式ルール・KMail プラグイン記載)・United Internet (`X-UI-Filterresults:`/`UI-InboundReport:`、1&1/GMX/WEB.DE 実測)・Orange/Wanadoo 系 ME プラットフォーム (`X-me-spamlevel`/`X-ME-Helo`/`X-ME-IP`、実測ヘッダ)・Free (`X-ProXad-*`) の受信判定記録は各 ISP が残す — 送信側から届くのは自称だが未検査だった
+- 対処: `has_eu_provider_marks` 新設 → `Envelope.eu_provider_marks` → `render_risks` 兆候報告
+- テスト +9 件
+
+### Security — D433: `X-Mras:`/`X-Mru-*`/`X-Yandex-*`/`X-Mailru-*`/`X-Rambler-*`/`X-Naver-*`/`X-Daum-*`/`X-Hanmail-*`/`X-Nate-*`/`X-Kornet-*` 等の CIS・韓国系プロバイダ印自称が未検査
+
+- Mail.ru Anti-Spam (MRAS) の判定記録 (`X-Mras: Ok`/`X-Mru-Authenticated-Sender`、実測ヘッダ)・Yandex (`X-Yandex-Spam`、yandex/NwSMTP 公式設定文書)・韓国系 Naver/Daum/Hanmail/Nate/Kornet の判定記録は各プロバイダが残す — 送信側から届くのは自称だが未検査だった
+- 対処: `has_cis_provider_marks` 新設 → `Envelope.cis_provider_marks` → `render_risks` 兆候報告
+- テスト +9 件
+
+### Security — D434: `Auto-Submitted:`/`Precedence:`/`X-Loop:`/`X-AutoReply:`/`X-Autorespond:`/`X-Auto-Response-Suppress:`/`X-FC-Auto-Response:`/`X-MDRemoteIP:` 等の自動応答・優先度印自称が未検査
+
+- `Auto-Submitted:` は自動応答機が応答生成時に付ける印 (RFC 3834 — 同ヘッダを含むメールへの自動応答は禁じられるため、送信側が書けば応答抑制・配送ステータス偽装に使える)、`Precedence:`/`X-Loop:` はリスト配送機の記録 (RFC 2076)、`X-MDRemoteIP:` は MailEnable の受信 IP 記録 — いずれも応答機・配送機が残す値であり送信側から届くのは自称だが未検査だった
+- 対処: `has_autoreply_marks` 新設 → `Envelope.autoreply_marks` → `render_risks` 兆候報告
+- テスト +9 件
+
 ### Security — D429: `X-QQ-*`/`X-Coremail-*`/`X-CM-*`/`X-Alimail-*`/`X-Sina-*` 等の中国・東アジア系プロバイダ印自称が未検査
 
 - Tencent QQ メール (`X-QQ-SSF`/`X-QQ-mid` 等)・網易系 Coremail (`X-Coremail-Antispam`/`X-CM-TRANSID`/`X-CM-SenderInfo`、実測ヘッダ)・アリババ企業メール (`X-Alimail-AntiSpam`、Alibaba Cloud 公式文書) の検査・発信記録は各プロバイダが残す — 送信側から届くのは自称だが未検査だった

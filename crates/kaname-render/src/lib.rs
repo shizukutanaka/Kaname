@@ -205,6 +205,19 @@ pub struct Envelope {
     /// あるか — PHP `mail()`/cPanel・Exim 等の発信経路記録を
     /// 送信側が自称する兆候 (D431)。
     pub webscript_marks: bool,
+    /// `X-GMX-*`/`X-UI-*`/`UI-InboundReport:`/`X-me-*`/`X-ProXad-*`
+    /// 等の欧州系 ISP 印があるか — GMX/United Internet/
+    /// Orange・Free 等の判定記録を送信側が自称する兆候 (D432)。
+    pub eu_provider_marks: bool,
+    /// `X-Mras:`/`X-Mru-*`/`X-Yandex-*`/`X-Naver-*`/`X-Daum-*`
+    /// 等の CIS・韓国系プロバイダ印があるか — Mail.ru/Yandex/
+    /// Naver 等の判定記録を送信側が自称する兆候 (D433)。
+    pub cis_provider_marks: bool,
+    /// `Auto-Submitted:`/`Precedence:`/`X-Loop:`/`X-AutoResponse-*`/
+    /// `X-FC-Auto-Response:*`/`X-MDRemoteIP:` 等の自動応答・優先度印が
+    /// あるか — 応答機・リスト配送機の記録を送信側が自称する兆候
+    /// (D434)。
+    pub autoreply_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -497,6 +510,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cn_provider_marks: has_cn_provider_marks(raw),
         av3_marks: has_av3_marks(raw),
         webscript_marks: has_webscript_marks(raw),
+        eu_provider_marks: has_eu_provider_marks(raw),
+        cis_provider_marks: has_cis_provider_marks(raw),
+        autoreply_marks: has_autoreply_marks(raw),
     })
 }
 
@@ -1051,6 +1067,98 @@ fn has_webscript_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-source-sender:")
             || l.starts_with("x-source-mailfrom:")
             || l.starts_with("x-source-rcptto:")
+    })
+}
+
+/// `X-GMX-*`/`X-UI-*`/`UI-InboundReport:`/`X-me-*`/`X-ProXad-*` 等の
+/// 欧州系 ISP 印があるか判定する (D432)。
+///
+/// `X-GMX-Antispam`/`X-GMX-Antivirus` は GMX、`X-UI-Filterresults:`/
+/// `UI-InboundReport:` は United Internet (1&1/GMX/WEB.DE)、
+/// `X-me-*` は Orange/Wanadoo 系 ME プラットフォーム
+/// (`X-me-spamlevel`/`X-ME-Helo`/`X-ME-IP` 等、実測ヘッダ)、
+/// `X-ProXad-*` は Free の受信判定記録 — 送信側から届くこれは自称。
+fn has_eu_provider_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gmx-")
+            || l.starts_with("x-ui-")
+            || l.starts_with("ui-inboundreport:")
+            || l.starts_with("x-webde-")
+            || l.starts_with("x-1und1-")
+            || l.starts_with("x-1and1-")
+            || l.starts_with("x-freenet-")
+            || l.starts_with("x-me-")
+            || l.starts_with("x-proxad-")
+            || l.starts_with("x-sfr-")
+            || l.starts_with("x-laposte-")
+            || l.starts_with("x-telenet-")
+            || l.starts_with("x-proximus-")
+            || l.starts_with("x-sky-")
+            || l.starts_with("x-bt-")
+            || l.starts_with("x-btconnect-")
+            || l.starts_with("x-virginmedia-")
+            || l.starts_with("x-libero-")
+            || l.starts_with("x-virgilio-")
+            || l.starts_with("x-tiscali-")
+    })
+}
+
+/// `X-Mras:`/`X-Mru-*`/`X-Yandex-*`/`X-Mailru-*`/`X-Rambler-*`/
+/// `X-Naver-*`/`X-Daum-*`/`X-Hanmail-*`/`X-Nate-*`/`X-Kornet-*` 等の
+/// CIS・韓国系プロバイダ印があるか判定する (D433)。
+///
+/// `X-Mras:`/`X-Mru-*` は Mail.ru Anti-Spam (MRAS) の判定記録
+/// (`X-Mras: Ok`/`X-Mru-Authenticated-Sender`、実測ヘッダ)、
+/// `X-Yandex-*` は Yandex (`X-Yandex-Spam`、NwSMTP 公式設定文書)、
+/// `X-Naver-*`/`X-Daum-*`/`X-Hanmail-*` 等は韓国系プロバイダの
+/// 判定記録 — 送信側から届くこれは自称。
+fn has_cis_provider_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-mras:")
+            || l.starts_with("x-mru-")
+            || l.starts_with("x-yandex-")
+            || l.starts_with("x-mailru-")
+            || l.starts_with("x-rambler-")
+            || l.starts_with("x-naver-")
+            || l.starts_with("x-daum-")
+            || l.starts_with("x-hanmail-")
+            || l.starts_with("x-nate-")
+            || l.starts_with("x-kornet-")
+    })
+}
+
+/// `Auto-Submitted:`/`Precedence:`/`X-Loop:`/`X-AutoReply:`/
+/// `X-Autorespond:`/`X-Auto-Response-Suppress:`/`X-FC-Auto-Response:`/
+/// `X-MDRemoteIP:` 等の自動応答・優先度印があるか判定する (D434)。
+///
+/// `Auto-Submitted:` は自動応答機が応答生成時に付ける印 (RFC 3834。
+/// これを含むメールへの自動応答は禁じられるため、送信側が書くと
+/// 「自動応答済み」体裁を自称し応答を抑止できる)、`Precedence:`/
+/// `X-Loop:` はリスト配送機の扱い・ループ記録 (RFC 2076)、
+/// `X-MDRemoteIP:` は MailEnable が接続元 IP を記す受信記録 —
+/// 送信側から届くこれは自称。
+fn has_autoreply_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("auto-submitted:")
+            || l.starts_with("x-autoreply:")
+            || l.starts_with("x-autorespond:")
+            || l.starts_with("x-auto-response-suppress:")
+            || l.starts_with("x-fc-auto-response:")
+            || l.starts_with("precedence:")
+            || l.starts_with("x-loop:")
+            || l.starts_with("x-mdremoteip:")
     })
 }
 
@@ -3649,6 +3757,70 @@ mod tests {
         assert!(has_webscript_marks(v1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_webscript_marks(clean));
+    }
+
+    #[test]
+    fn scan_は欧州ISP印を検出する() {
+        let g1 = b"X-GMX-Antispam: 0\r\n\r\nx";
+        assert!(has_eu_provider_marks(g1));
+        let g2 = b"X-GMX-Antivirus: 0\r\n\r\nx";
+        assert!(has_eu_provider_marks(g2));
+        let u1 = b"X-UI-Filterresults: notjunk\r\n\r\nx";
+        assert!(has_eu_provider_marks(u1));
+        let u2 = b"UI-InboundReport: junk:10\r\n\r\nx";
+        assert!(has_eu_provider_marks(u2));
+        let m1 = b"X-me-spamlevel: not-spam\r\n\r\nx";
+        assert!(has_eu_provider_marks(m1));
+        let m2 = b"X-ME-Helo: server.localdomain\r\n\r\nx";
+        assert!(has_eu_provider_marks(m2));
+        let p1 = b"X-ProXad-Spam: no\r\n\r\nx";
+        assert!(has_eu_provider_marks(p1));
+        let w1 = b"X-WEBDE-Spam: no\r\n\r\nx";
+        assert!(has_eu_provider_marks(w1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_eu_provider_marks(clean));
+    }
+
+    #[test]
+    fn scan_はCIS韓国印を検出する() {
+        let m1 = b"X-Mras: Ok\r\n\r\nx";
+        assert!(has_cis_provider_marks(m1));
+        let m2 = b"X-Mru-Authenticated-Sender: a@b\r\n\r\nx";
+        assert!(has_cis_provider_marks(m2));
+        let y1 = b"X-Yandex-Spam: 1\r\n\r\nx";
+        assert!(has_cis_provider_marks(y1));
+        let r1 = b"X-Rambler-Spam: no\r\n\r\nx";
+        assert!(has_cis_provider_marks(r1));
+        let n1 = b"X-Naver-Spam: no\r\n\r\nx";
+        assert!(has_cis_provider_marks(n1));
+        let d1 = b"X-Daum-Spam-Info: x\r\n\r\nx";
+        assert!(has_cis_provider_marks(d1));
+        let h1 = b"X-Hanmail-Antispam: x\r\n\r\nx";
+        assert!(has_cis_provider_marks(h1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cis_provider_marks(clean));
+    }
+
+    #[test]
+    fn scan_は自動応答優先度印を検出する() {
+        let a1 = b"Auto-Submitted: auto-replied\r\n\r\nx";
+        assert!(has_autoreply_marks(a1));
+        let a2 = b"X-AutoReply: yes\r\n\r\nx";
+        assert!(has_autoreply_marks(a2));
+        let a3 = b"X-Autorespond: yes\r\n\r\nx";
+        assert!(has_autoreply_marks(a3));
+        let s1 = b"X-Auto-Response-Suppress: OOF\r\n\r\nx";
+        assert!(has_autoreply_marks(s1));
+        let f1 = b"X-FC-Auto-Response: yes\r\n\r\nx";
+        assert!(has_autoreply_marks(f1));
+        let p1 = b"Precedence: bulk\r\n\r\nx";
+        assert!(has_autoreply_marks(p1));
+        let l1 = b"X-Loop: list@x\r\n\r\nx";
+        assert!(has_autoreply_marks(l1));
+        let m1 = b"X-MDRemoteIP: 203.0.113.1\r\n\r\nx";
+        assert!(has_autoreply_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_autoreply_marks(clean));
     }
 }
 
