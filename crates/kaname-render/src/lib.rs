@@ -942,6 +942,36 @@ pub struct Envelope {
     /// 自動車メーカー・レンタカー・カーシェア印があるか — 車機の通知記録を
     /// 送信側が自称する兆候 (D521)。
     pub automotive_marks: bool,
+    /// `X-JREast-*`/`X-JRWest-*`/`X-JRCentral-*`/`X-JRKyushu-*`/`X-JRHokkaido-*`/
+    /// `X-Tokyu-*`/`X-Odakyu-*`/`X-Keikyu-*`/`X-Keio-*`/`X-Seibu-*`/`X-Tobu-*`/
+    /// `X-Hankyu-*`/`X-Hanshin-*`/`X-Kintetsu-*`/`X-Nankai-*`/`X-Nishitetsu-*`/
+    /// `X-TokyoMetro-*`/`X-Amtrak-*`/`X-DeutscheBahn-*`/`X-SNCF-*`/
+    /// `X-Trenitalia-*`/`X-Eurostar-*`/`X-Thalys-*`/`X-NSInternational-*`/
+    /// `X-SBB-*`/`X-Renfe-*`/`X-IRCTC-*`/`X-ViaRail-*`/`X-KMB-*`/`X-MTR-*`/
+    /// `X-TOEI-*`/`X-OsakaMetro-*`/`X-KyotoSubway-*`/`X-YokohamaSubway-*`/
+    /// `X-SapporoSubway-*`/`X-SendaiSubway-*`/`X-NagoyaSubway-*` 等の
+    /// 鉄道・公共交通印があるか — 軌機の通知記録を送信側が自称する兆候
+    /// (D522)。
+    pub rail_marks: bool,
+    /// `X-Clio-*`/`X-LegalZoom-*`/`X-RocketLawyer-*`/`X-Westlaw-*`/
+    /// `X-PACER-*`/`X-CourtListener-*`/`X-ThomsonReuters-*`/`X-CaseText-*`/
+    /// `X-LinkSquares-*`/`X-LegalServer-*`/`X-Filevine-*`/`X-MyCase-*`/
+    /// `X-PracticePanther-*`/`X-Smokeball-*`/`X-CosmoLex-*`/`X-ZolaSuite-*`/
+    /// `X-CareT-*`/`X-AbacusLaw-*`/`X-Actionstep-*`/`X-Centerbase-*`/
+    /// `X-Litify-*`/`X-NeotaLogic-*`/`X-HotDocs-*`/`X-ContractPodAi-*`/
+    /// `X-Relativity-*`/`X-Everlaw-*`/`X-Logikcull-*`/`X-Disco-*`/
+    /// `X-Reveal-*`/`X-Exterro-*`/`X-Nuix-*` 等の法務・法曹実務印があるか —
+    /// 法機の通知記録を送信側が自称する兆候 (D523)。(契約管理の一部は
+    /// D478 で検出済み)
+    pub legal_marks: bool,
+    /// `X-Tinder-*`/`X-Bumble-*`/`X-Hinge-*`/`X-Match-*`/`X-OkCupid-*`/
+    /// `X-Grindr-*`/`X-Pairs-*`/`X-Omiai-*`/`X-Tapple-*`/`X-With-*`/
+    /// `X-Happn-*`/`X-CoffeeMeetsBagel-*`/`X-Zoosk-*`/`X-eHarmony-*`/
+    /// `X-Badoo-*`/`X-Tantan-*`/`X-Momo-*`/`X-Paktor-*`/`X-TheLeague-*`/
+    /// `X-Raya-*`/`X-Feeld-*`/`X-HER-*`/`X-Thursday-*`/`X-Snack-*` 等の
+    /// 出会い系・マッチングアプリ印があるか — 遇機の通知記録を送信側が
+    /// 自称する兆候 (D524)。
+    pub dating_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1324,6 +1354,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         insurance_marks: has_insurance_marks(raw),
         utility_marks: has_utility_marks(raw),
         automotive_marks: has_automotive_marks(raw),
+        rail_marks: has_rail_marks(raw),
+        legal_marks: has_legal_marks(raw),
+        dating_marks: has_dating_marks(raw),
     })
 }
 
@@ -6047,6 +6080,160 @@ fn has_automotive_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-JREast-*`/`X-JRWest-*`/`X-JRCentral-*`/`X-JRKyushu-*`/`X-JRHokkaido-*`/
+/// `X-Tokyu-*`/`X-Odakyu-*`/`X-Keikyu-*`/`X-Keio-*`/`X-Seibu-*`/`X-Tobu-*`/
+/// `X-Hankyu-*`/`X-Hanshin-*`/`X-Kintetsu-*`/`X-Nankai-*`/`X-Nishitetsu-*`/
+/// `X-TokyoMetro-*`/`X-Amtrak-*`/`X-DeutscheBahn-*`/`X-SNCF-*`/`X-Trenitalia-*`/
+/// `X-Eurostar-*`/`X-Thalys-*`/`X-NSInternational-*`/`X-SBB-*`/`X-Renfe-*`/
+/// `X-IRCTC-*`/`X-ViaRail-*`/`X-KMB-*`/`X-MTR-*`/`X-TOEI-*`/`X-OsakaMetro-*`/
+/// `X-KyotoSubway-*`/`X-YokohamaSubway-*`/`X-SapporoSubway-*`/
+/// `X-SendaiSubway-*`/`X-NagoyaSubway-*` 等の鉄道・公共交通印があるか
+/// 判定する (D522)。
+///
+/// `X-JREast-*` (JR東日本)、`X-Tokyu-*` (東急)、`X-Amtrak-*` (Amtrak)
+/// は軌機の通知記録 — 送信側から届くこれは自称。乗車券・ポイント詐欺の
+/// 典型印。
+fn has_rail_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-jreast-")
+            || l.starts_with("x-jrwest-")
+            || l.starts_with("x-jrcentral-")
+            || l.starts_with("x-jrkyushu-")
+            || l.starts_with("x-jrhokkaido-")
+            || l.starts_with("x-tokyu-")
+            || l.starts_with("x-odakyu-")
+            || l.starts_with("x-keikyu-")
+            || l.starts_with("x-keio-")
+            || l.starts_with("x-seibu-")
+            || l.starts_with("x-tobu-")
+            || l.starts_with("x-hankyu-")
+            || l.starts_with("x-hanshin-")
+            || l.starts_with("x-kintetsu-")
+            || l.starts_with("x-nankai-")
+            || l.starts_with("x-nishitetsu-")
+            || l.starts_with("x-tokyometro-")
+            || l.starts_with("x-amtrak-")
+            || l.starts_with("x-deutschebahn-")
+            || l.starts_with("x-sncf-")
+            || l.starts_with("x-trenitalia-")
+            || l.starts_with("x-eurostar-")
+            || l.starts_with("x-thalys-")
+            || l.starts_with("x-nsinternational-")
+            || l.starts_with("x-sbb-")
+            || l.starts_with("x-renfe-")
+            || l.starts_with("x-irctc-")
+            || l.starts_with("x-viarail-")
+            || l.starts_with("x-kmb-")
+            || l.starts_with("x-mtr-")
+            || l.starts_with("x-toei-")
+            || l.starts_with("x-osakametro-")
+            || l.starts_with("x-kyotosubway-")
+            || l.starts_with("x-yokohamasubway-")
+            || l.starts_with("x-sapporosubway-")
+            || l.starts_with("x-sendaisubway-")
+            || l.starts_with("x-nagoyasubway-")
+    })
+}
+
+/// `X-Clio-*`/`X-LegalZoom-*`/`X-RocketLawyer-*`/`X-Westlaw-*`/`X-PACER-*`/
+/// `X-CourtListener-*`/`X-ThomsonReuters-*`/`X-CaseText-*`/`X-LinkSquares-*`/
+/// `X-LegalServer-*`/`X-Filevine-*`/`X-MyCase-*`/`X-PracticePanther-*`/
+/// `X-Smokeball-*`/`X-CosmoLex-*`/`X-ZolaSuite-*`/`X-CareT-*`/`X-AbacusLaw-*`/
+/// `X-Actionstep-*`/`X-Centerbase-*`/`X-Litify-*`/`X-NeotaLogic-*`/
+/// `X-HotDocs-*`/`X-ContractPodAi-*`/`X-Relativity-*`/`X-Everlaw-*`/
+/// `X-Logikcull-*`/`X-Disco-*`/`X-Reveal-*`/`X-Exterro-*`/`X-Nuix-*` 等の
+/// 法務・法曹実務印があるか判定する (D523)。
+///
+/// `X-Clio-*` (Clio)、`X-LegalZoom-*` (LegalZoom)、`X-Westlaw-*`
+/// (Westlaw) は法機の通知記録 — 送信側から届くこれは自称。
+/// `X-LexisNexis-*`/`X-Ironclad-*`/`X-Evisort-*`/`X-Juro-*`/`X-Icertis-*`/
+/// `X-Agiloft-*`/`X-Conga-*` は D478 で検出済み。
+fn has_legal_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-clio-")
+            || l.starts_with("x-legalzoom-")
+            || l.starts_with("x-rocketlawyer-")
+            || l.starts_with("x-westlaw-")
+            || l.starts_with("x-pacer-")
+            || l.starts_with("x-courtlistener-")
+            || l.starts_with("x-thomsonreuters-")
+            || l.starts_with("x-casetext-")
+            || l.starts_with("x-linksquares-")
+            || l.starts_with("x-legalserver-")
+            || l.starts_with("x-filevine-")
+            || l.starts_with("x-mycase-")
+            || l.starts_with("x-practicepanther-")
+            || l.starts_with("x-smokeball-")
+            || l.starts_with("x-cosmolex-")
+            || l.starts_with("x-zolasuite-")
+            || l.starts_with("x-caret-")
+            || l.starts_with("x-abacuslaw-")
+            || l.starts_with("x-actionstep-")
+            || l.starts_with("x-centerbase-")
+            || l.starts_with("x-litify-")
+            || l.starts_with("x-neotalogic-")
+            || l.starts_with("x-hotdocs-")
+            || l.starts_with("x-contractpodai-")
+            || l.starts_with("x-relativity-")
+            || l.starts_with("x-everlaw-")
+            || l.starts_with("x-logikcull-")
+            || l.starts_with("x-disco-")
+            || l.starts_with("x-reveal-")
+            || l.starts_with("x-exterro-")
+            || l.starts_with("x-nuix-")
+    })
+}
+
+/// `X-Tinder-*`/`X-Bumble-*`/`X-Hinge-*`/`X-Match-*`/`X-OkCupid-*`/
+/// `X-Grindr-*`/`X-Pairs-*`/`X-Omiai-*`/`X-Tapple-*`/`X-With-*`/`X-Happn-*`/
+/// `X-CoffeeMeetsBagel-*`/`X-Zoosk-*`/`X-eHarmony-*`/`X-Badoo-*`/`X-Tantan-*`/
+/// `X-Momo-*`/`X-Paktor-*`/`X-TheLeague-*`/`X-Raya-*`/`X-Feeld-*`/`X-HER-*`/
+/// `X-Thursday-*`/`X-Snack-*` 等の出会い系・マッチングアプリ印があるか
+/// 判定する (D524)。
+///
+/// `X-Tinder-*` (Tinder)、`X-Bumble-*` (Bumble)、`X-Pairs-*` (Pairs) は
+/// 遇機の通知記録 — 送信側から届くこれは自称。ロマンス詐欺の典型印。
+fn has_dating_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-tinder-")
+            || l.starts_with("x-bumble-")
+            || l.starts_with("x-hinge-")
+            || l.starts_with("x-match-")
+            || l.starts_with("x-okcupid-")
+            || l.starts_with("x-grindr-")
+            || l.starts_with("x-pairs-")
+            || l.starts_with("x-omiai-")
+            || l.starts_with("x-tapple-")
+            || l.starts_with("x-with-")
+            || l.starts_with("x-happn-")
+            || l.starts_with("x-coffeemeetsbagel-")
+            || l.starts_with("x-zoosk-")
+            || l.starts_with("x-eharmony-")
+            || l.starts_with("x-badoo-")
+            || l.starts_with("x-tantan-")
+            || l.starts_with("x-momo-")
+            || l.starts_with("x-paktor-")
+            || l.starts_with("x-theleague-")
+            || l.starts_with("x-raya-")
+            || l.starts_with("x-feeld-")
+            || l.starts_with("x-her-")
+            || l.starts_with("x-thursday-")
+            || l.starts_with("x-snack-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -10619,6 +10806,72 @@ mod tests {
         assert!(has_automotive_marks(s1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_automotive_marks(clean));
+    }
+
+    #[test]
+    fn scan_は鉄道印を検出する() {
+        let j1 = b"X-JREast-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(j1));
+        let t1 = b"X-Tokyu-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(t1));
+        let a1 = b"X-Amtrak-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(a1));
+        let d1 = b"X-DeutscheBahn-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(d1));
+        let s1 = b"X-SNCF-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(s1));
+        let k1 = b"X-Kintetsu-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(k1));
+        let m1 = b"X-TokyoMetro-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(m1));
+        let o1 = b"X-Odakyu-Notify: x\r\n\r\nx";
+        assert!(has_rail_marks(o1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_rail_marks(clean));
+    }
+
+    #[test]
+    fn scan_は法務印を検出する() {
+        let c1 = b"X-Clio-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(c1));
+        let l1 = b"X-LegalZoom-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(l1));
+        let w1 = b"X-Westlaw-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(w1));
+        let p1 = b"X-PACER-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(p1));
+        let r1 = b"X-Relativity-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(r1));
+        let n1 = b"X-Nuix-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(n1));
+        let f1 = b"X-Filevine-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(f1));
+        let m1 = b"X-MyCase-Notify: x\r\n\r\nx";
+        assert!(has_legal_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_legal_marks(clean));
+    }
+
+    #[test]
+    fn scan_は出会い系印を検出する() {
+        let t1 = b"X-Tinder-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(t1));
+        let b1 = b"X-Bumble-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(b1));
+        let h1 = b"X-Hinge-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(h1));
+        let p1 = b"X-Pairs-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(p1));
+        let o1 = b"X-Omiai-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(o1));
+        let m1 = b"X-Match-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(m1));
+        let g1 = b"X-Grindr-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(g1));
+        let e1 = b"X-eHarmony-Notify: x\r\n\r\nx";
+        assert!(has_dating_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dating_marks(clean));
     }
 }
 
