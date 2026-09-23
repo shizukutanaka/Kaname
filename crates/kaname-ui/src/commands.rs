@@ -1060,6 +1060,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D471: ネオバンク・フィンテック印自称 (第二群)
+    if env.fintech_marks {
+        render_risks.push(
+            "X-Revolut-*/X-Plaid-*/X-Affirm-*/X-Venmo-*/X-Robinhood-*/X-Nubank-* 等 — 金融機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D472: 暗号資産・取引所印自称
+    if env.crypto_marks {
+        render_risks.push(
+            "X-Coinbase-*/X-Binance-*/X-Kraken-*/X-Ledger-*/X-OpenSea-*/X-Etherscan-* 等 — 暗号資産機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D473: ゲーム・エンタメ印自称
+    if env.gaming_marks {
+        render_risks.push(
+            "X-Xbox-*/X-Blizzard-*/X-Nintendo-*/X-Roblox-*/X-Steam-*/X-Wargaming-* 等 — ゲーム機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
