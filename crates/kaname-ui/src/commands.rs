@@ -605,6 +605,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D372: メールゲートウェイ印自称
+    if env.gateway_stamps {
+        render_risks.push(
+            "X-InterScan-*/X-MailMarshal-*/X-GFI-* 等 — ゲートウェイ機器の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D373: 旧式クライアント自署印
+    if env.legacy_agent_marks {
+        render_risks.push(
+            "X-User-Agent/X-Newsreader/X-MimeOLE 等 — 旧式生成ツールの名乗りが残る兆候です"
+                .to_string(),
+        );
+    }
+
+    // D374: 中継・受信経路印自称
+    if env.relay_marks {
+        render_risks.push(
+            "X-Relay-*/X-Incoming-*/X-Sent-via 等 — 経路の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

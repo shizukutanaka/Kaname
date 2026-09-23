@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D372: `X-InterScan-*`/`X-MailMarshal-*`/`X-GFI-*`/`X-Websense-*`/`X-IMSS-*`/`X-Memorx-*` 等のメールゲートウェイ印自称が未検査
+
+- メールセキュリティゲートウェイが通過時に記す印 — 送信側から届くのは「検査ゲートウェイを通過した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_gateway_stamps` 新設 → `Envelope.gateway_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D373: `X-User-Agent:`/`X-Newsreader:`/`X-News-Software:`/`X-MimeOLE:`/`X-Mail-User-Agent:` 等の旧式クライアント自署印が未検査
+
+- 旧式メール/ニュースクライアントの名乗り — 正規 MUA は X-Mailer/User-Agent で名乗り、非規格の旧式ヘッダで名乗るのは手作り生成品または難読化の兆候だが未検査だった
+- 対処: `has_legacy_agent_marks` 新設 → `Envelope.legacy_agent_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D374: `X-Relay-*`/`X-Incoming-*`/`X-Inbound-*`/`X-Sent-via:`/`X-Sent-through:` 等の中継・受信経路印自称が未検査
+
+- 中継・受信側が経路の記録として記す値 — 送信側から届くのは「この経路を通ってきた」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_relay_marks` 新設 → `Envelope.relay_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D327: `Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査
 
 - 本物の ESP/ISP は abuse 窓口を自社ドメインで運用し受信側が確認できる — 送信側が窓口を名乗るのは「監視されている体裁」の自署だが未検査だった

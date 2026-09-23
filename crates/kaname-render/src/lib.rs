@@ -130,6 +130,18 @@ pub struct Envelope {
     /// 識別子があるか — 「ISP と苦情報告を共有している」の体裁を自署する
     /// 兆候 (D329)。
     pub feedback_id: bool,
+    /// `X-InterScan-*`/`X-MailMarshal-*`/`X-GFI-*`/`X-Websense-*`
+    /// 等のメールセキュリティゲートウェイ印があるか — ゲートウェイ機器
+    /// の印を送信側が自称する兆候 (D372)。
+    pub gateway_stamps: bool,
+    /// `X-User-Agent:`/`X-Newsreader:`/`X-News-Software:`/`X-MimeOLE:`
+    /// 等の旧式クライアント自署印があるか — 古い生成ツールの名乗りを
+    /// 検査する兆候 (D373)。
+    pub legacy_agent_marks: bool,
+    /// `X-Relay-*`/`X-Incoming-*`/`X-Inbound-*`/`X-Sent-via:` 等の
+    /// 中継・受信経路印があるか — 経路の記録を送信側が自称する
+    /// 兆候 (D374)。
+    pub relay_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -404,6 +416,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         abuse_headers: has_abuse_headers(raw),
         has_attach_claim: has_attach_claim(raw),
         feedback_id: has_feedback_id(raw),
+        gateway_stamps: has_gateway_stamps(raw),
+        legacy_agent_marks: has_legacy_agent_marks(raw),
+        relay_marks: has_relay_marks(raw),
     })
 }
 
@@ -554,6 +569,67 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-InterScan-*`/`X-MailMarshal-*`/`X-GFI-*`/`X-Websense-*`/
+/// `X-IMSS-*` 等のメールセキュリティゲートウェイ印があるか
+/// 判定する (D372)。
+///
+/// メールセキュリティゲートウェイが通過時に記す印 — 送信側から届く
+/// これは「検査ゲートウェイを通過した」体裁を内容側が主張する自称
+/// (D344 機器印の第二群)。
+fn has_gateway_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-interscan-")
+            || l.starts_with("x-mailmarshal-")
+            || l.starts_with("x-gfi-")
+            || l.starts_with("x-websense-")
+            || l.starts_with("x-imss-")
+            || l.starts_with("x-memorx-")
+    })
+}
+
+/// `X-User-Agent:`/`X-Newsreader:`/`X-News-Software:`/`X-MimeOLE:`
+/// 等の旧式クライアント自署印があるか判定する (D373)。
+///
+/// 旧式のメール/ニュースクライアント名乗り — 正規 MUA は
+/// `X-Mailer:`/`User-Agent:` で名乗る (D261 で検出済み) のに、
+/// 非規格の旧式ヘッダで名乗るのは手作り生成品または難読化の兆候。
+fn has_legacy_agent_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-user-agent:")
+            || l.starts_with("x-newsreader:")
+            || l.starts_with("x-news-software:")
+            || l.starts_with("x-mimeole:")
+            || l.starts_with("x-mail-user-agent:")
+    })
+}
+
+/// `X-Relay-*`/`X-Incoming-*`/`X-Inbound-*`/`X-Sent-via:` 等の
+/// 中継・受信経路印があるか判定する (D374)。
+///
+/// 中継・受信側が経路の記録として記す値 — 送信側から届くこれは
+/// 「この経路を通ってきた」体裁を内容側が主張する自称。
+fn has_relay_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-relay-")
+            || l.starts_with("x-incoming-")
+            || l.starts_with("x-inbound-")
+            || l.starts_with("x-sent-via:")
+            || l.starts_with("x-sent-through:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2841,6 +2917,48 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はゲートウェイ印を検出する() {
+        let is = b"X-InterScan-Version: 1\r\n\r\nx";
+        assert!(has_gateway_stamps(is));
+        let mm = b"X-MailMarshal-SpamReport: s\r\n\r\nx";
+        assert!(has_gateway_stamps(mm));
+        let gf = b"X-GFI-SMTP-Test: 1\r\n\r\nx";
+        assert!(has_gateway_stamps(gf));
+        let im = b"X-IMSS-Spam-Result: x\r\n\r\nx";
+        assert!(has_gateway_stamps(im));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gateway_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は旧式agent印を検出する() {
+        let ua = b"X-User-Agent: Mozilla/4.0\r\n\r\nx";
+        assert!(has_legacy_agent_marks(ua));
+        let nr = b"X-Newsreader: Forte Agent 1.8\r\n\r\nx";
+        assert!(has_legacy_agent_marks(nr));
+        let mo = b"X-MimeOLE: Produced By Microsoft\r\n\r\nx";
+        assert!(has_legacy_agent_marks(mo));
+        let ns = b"X-News-Software: x\r\n\r\nx";
+        assert!(has_legacy_agent_marks(ns));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_legacy_agent_marks(clean));
+    }
+
+    #[test]
+    fn scan_は中継印を検出する() {
+        let rl = b"X-Relay-Countries: us\r\n\r\nx";
+        assert!(has_relay_marks(rl));
+        let ic = b"X-Incoming-Header: x\r\n\r\nx";
+        assert!(has_relay_marks(ic));
+        let ib = b"X-Inbound-Country: jp\r\n\r\nx";
+        assert!(has_relay_marks(ib));
+        let sv = b"X-Sent-via: smtp\r\n\r\nx";
+        assert!(has_relay_marks(sv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_relay_marks(clean));
     }
 }
 
