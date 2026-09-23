@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D201: 宣言 boundary が本文に存在しない「ファントム boundary」を検出
+
+- `multipart/*` を宣言するのに宣言された `--boundary` が本文に一切出現しないメッセージは、パーサが「全体を preamble として破棄」「boundary を推測」「本文ごと非 MIME として扱う」のいずれかに分かれる — 検査器と表示側で解析結果を分けられる MIME parser differential (Cisco/Mimecast 系の解析差異研究)。`boundary=` パラメータ自体が無い宣言も同型
+- 対処: `top_header_get` (継続行連結ありの生ヘッダ取り出し) + `header_param_value` + `has_phantom_boundary` で `multipart_boundary_missing` → `render_risks` に兆候報告
+- テスト +4 件
+
+### Security — D202: 送信者側の `Auto-Submitted` 設定 (自動応答抑制) を検出
+
+- `Auto-Submitted:` は RFC 3834 が自動応答側に設置を求めるヘッダで、送信者側が `auto-generated` 等に設定すれば OOO/バウンス等の自動応答を抑止できる — フィッシング後の警告メールを黙らせる手口
+- 対処: トップレベル `auto-submitted` が `no` 以外に設定されていれば `sender_set_auto_submitted` → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D203: Message-ID / Date ヘッダ欠落 (生成メールの外形) を検出
+
+- RFC 5322 の SHOULD ヘッダである Message-ID と Date は人のメールではほぼ必ず存在するが、phish kit/スパムボットの生成メールは省く傾向がある — 「ヘッダが無いこと自体」が外形的兆候
+- 対処: `missing_rfc_headers` (message_id.is_none() || date.is_none()) → `render_risks` に兆候報告
+- テスト +2 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

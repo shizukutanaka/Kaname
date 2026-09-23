@@ -96,6 +96,20 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// トップレベルが `multipart/*` を宣言するのに宣言 boundary が
+    /// 本文に出現しない (または boundary パラメータ自体が無い) か。
+    /// 「ファントム boundary」は MIME 解析結果がパーサ実装ごとに
+    /// 変わり、検査テキストと表示テキストを分離できる parser
+    /// differential の兆候 (D201)。
+    pub multipart_boundary_missing: bool,
+    /// `Auto-Submitted:` が `no` 以外の値で送信者側から設定されているか
+    /// (RFC 3834 — 自動応答を止めることで OOO/バウンス等の
+    /// 事後検知を抑止する手口の兆候、D202)。
+    pub sender_set_auto_submitted: bool,
+    /// Message-ID または Date ヘッダが欠落しているか — 生成メール
+    /// (phish kit / スパムボット) は RFC 5322 の SHOULD ヘッダを省く
+    /// 傾向がある外形的兆候 (D203)。
+    pub missing_rfc_headers: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +344,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D201: 宣言 boundary が本文に出現しないファントム boundary。
+    let multipart_boundary_missing = has_phantom_boundary(raw);
+    // D202: `Auto-Submitted:` が送信者側で `no` 以外に設定 — 自動応答抑制。
+    let sender_set_auto_submitted = top_header_get(raw, "auto-submitted").is_some_and(|v| {
+        let v = v.trim().to_ascii_lowercase();
+        !v.is_empty() && v != "no"
+    });
+    // D203: Message-ID / Date の欠落 — 生成メール特有の外形。
+    let missing_rfc_headers = message_id.is_none() || date.is_none();
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +371,81 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        multipart_boundary_missing,
+        sender_set_auto_submitted,
+        missing_rfc_headers,
     })
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) から指定ヘッダの
+/// 生の値を取り出す。継続行 (unfolding) は連結する。重複ヘッダは
+/// 最後のものを返す。
+fn top_header_get(raw: &[u8], name: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    let mut found: Option<String> = None;
+    let mut continuing = false;
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        if (line.starts_with(' ') || line.starts_with('\t')) && continuing {
+            if let Some(v) = found.as_mut() {
+                v.push(' ');
+                v.push_str(line.trim());
+            }
+            continue;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with(&prefix) {
+            found = Some(line[prefix.len()..].trim().to_string());
+            continuing = true;
+        } else {
+            continuing = false;
+        }
+    }
+    found
+}
+
+/// ヘッダ値 (`;` 区切り) から `name=value` パラメータを取り出す。
+fn header_param_value(header_value: &str, name: &str) -> Option<String> {
+    let key = format!("{}=", name.to_ascii_lowercase());
+    for part in header_value.split(';').skip(1) {
+        let part = part.trim();
+        if part.to_ascii_lowercase().starts_with(&key) {
+            let v = &part[key.len()..];
+            return Some(v.trim().trim_matches('"').to_string());
+        }
+    }
+    None
+}
+
+/// トップレベルが `multipart/*` を宣言するのに宣言 boundary が
+/// 本文に出現しない (または boundary パラメータ自体が無い) か判定 (D201)。
+///
+/// 宣言された `--boundary` が一度も現れない multipart メッセージは、
+/// パーサが「全体を preamble として破棄」「boundary を推測」
+/// 「本文ごと非 MIME として扱う」のいずれかに分かれるため、
+/// 検査器と表示側で解析結果を分けられる MIME parser differential。
+/// `boundary=` パラメータ自体が無い multipart 宣言も同型。
+fn has_phantom_boundary(raw: &[u8]) -> bool {
+    let Some(ct) = top_header_get(raw, "content-type") else {
+        return false;
+    };
+    if !ct.to_ascii_lowercase().starts_with("multipart/") {
+        return false;
+    }
+    let Some(boundary) = header_param_value(&ct, "boundary") else {
+        // multipart 宣言なのに boundary パラメータが無い — 実装差で
+        // boundary を推測される余地がある。
+        return true;
+    };
+    if boundary.is_empty() {
+        return true;
+    }
+    // `--boundary` が生バイト列のどこにも出現しなければファントム。
+    let needle = format!("--{boundary}");
+    !raw.windows(needle.len()).any(|w| w == needle.as_bytes())
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1950,6 +2048,91 @@ mod tests {
             result.addr.local, "\"ceo@trusted.com\"",
             "quoted local part は @ の前の部分全体であるべき"
         );
+    }
+
+    /// D201: 宣言 boundary が本文に出現しない multipart を検出。
+    #[test]
+    fn has_phantom_boundary_検出() {
+        // 宣言 boundary が本文に一切出現しない → ファントム
+        assert!(has_phantom_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"xyz\"\r\n\
+              From: a@b\r\n\r\nno boundary markers here"
+        ));
+        // boundary パラメータ自体が無い multipart → ファントム
+        assert!(has_phantom_boundary(
+            b"Content-Type: multipart/mixed\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // boundary="" も同型
+        assert!(has_phantom_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"\"\r\n\r\nbody"
+        ));
+        // 宣言通り boundary が出現する → 検出しない
+        assert!(!has_phantom_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"xyz\"\r\n\r\n--xyz\r\npart\r\n--xyz--"
+        ));
+        // 非 multipart → 対象外
+        assert!(!has_phantom_boundary(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    /// D202: 送信者側の Auto-Submitted 設定を parse が検出。
+    #[test]
+    fn parse_はauto_submitted設定を検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    Auto-Submitted: auto-generated\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.sender_set_auto_submitted);
+        // Auto-Submitted: no は正常 (明示的に「自動ではない」宣言)
+        let raw2 = b"From: alice@example.com\r\n\
+                     Auto-Submitted: no\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.sender_set_auto_submitted);
+        // ヘッダ自体が無いのが通常形
+        let raw3 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.sender_set_auto_submitted);
+    }
+
+    /// D203: Message-ID / Date の欠落を parse が検出。
+    #[test]
+    fn parse_は必須ヘッダ欠落を検出する() {
+        // Message-ID も Date も無い
+        let raw = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.missing_rfc_headers);
+        // 両方ある通常メールでは検出しない
+        let raw2 = b"From: alice@example.com\r\n\
+                     Subject: x\r\n\
+                     Date: Mon, 01 Jan 2026 10:00:00 +0000\r\n\
+                     Message-ID: <abc@x>\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.missing_rfc_headers);
+    }
+
+    /// D201: phantom boundary が Envelope に伝播すること。
+    #[test]
+    fn parse_はphantom_boundaryを検出する() {
+        let raw = b"Content-Type: multipart/mixed; boundary=\"xyz\"\r\n\
+                    From: a@b\r\n\
+                    \r\n\
+                    no boundary here";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.multipart_boundary_missing);
+        let raw2 = b"Content-Type: multipart/mixed; boundary=\"xyz\"\r\n\
+                     From: a@b\r\n\
+                     \r\n\
+                     --xyz\r\nContent-Type: text/plain\r\n\r\nbody\r\n--xyz--";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.multipart_boundary_missing);
     }
 
     #[test]

@@ -514,6 +514,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D201: 宣言 boundary が本文に存在しないファントム boundary の兆候。
+    if env.multipart_boundary_missing {
+        render_risks.push(
+            "multipart の宣言 boundary が本文に存在しません — MIME 解析が実装依存になる検査回避の兆候です"
+                .to_string(),
+        );
+    }
+    // D202: 送信者側で Auto-Submitted が設定されている兆候。
+    if env.sender_set_auto_submitted {
+        render_risks.push(
+            "送信者側で Auto-Submitted が設定されています — 自動応答を抑制する兆候です".to_string(),
+        );
+    }
+    // D203: Message-ID / Date の欠落 (生成メールの外形) の兆候。
+    if env.missing_rfc_headers {
+        render_risks.push(
+            "Message-ID または Date ヘッダがありません — 生成メール特有の外形的兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1599,6 +1619,44 @@ mod tests {
                 .iter()
                 .any(|s| s.contains("複数アドレス") || s.contains("Sender")),
             "単一 From の委任 Sender は報告すべきでない: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D201/D202/D203: phantom boundary・Auto-Submitted・ヘッダ欠落が兆候になる。
+    #[tokio::test]
+    async fn analyze_raw_email_は外形異常を検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        // phantom boundary + Auto-Submitted + Message-ID 欠落
+        let eml = b"Content-Type: multipart/mixed; boundary=\"xyz\"\r\n\
+            From: a@b.com\r\n\
+            Auto-Submitted: auto-generated\r\n\
+            To: you@example.com\r\n\
+            Subject: Hi\r\n\
+            \r\n\
+            no boundary markers";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("boundary") || s.contains("ファントム")),
+            "phantom boundary が兆候になるべき: {:?}",
+            r.render_risks
+        );
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("Auto-Submitted") || s.contains("自動応答")),
+            "Auto-Submitted が兆候になるべき: {:?}",
+            r.render_risks
+        );
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("Message-ID") || s.contains("Date")),
+            "ヘッダ欠落が兆候になるべき: {:?}",
             r.render_risks
         );
         Ok(())
