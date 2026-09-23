@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
+
+- 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)
+- 対処: `kaname_render::find_obfuscated_url_tokens` を新設し、`commands.rs` で兆候 (`render_risks`) として報告。defanged/バックスラッシュは正規化 URL として復元してリンク評価に併記、見せかけスキームは復元不能なため兆候のみ報告
+- テスト +9 件 (hxxp/hxxps/defanged、\\・:\\・/\\ バックスラッシュ 3 系、Cyrillic scheme、否定、HTML 文脈、山括弧内)
+
+### Security — D174: `List-Unsubscribe` ヘッダー内リンクがリンク評価を素通り
+
+- ワンクリック配信解除 (`List-Unsubscribe: <https://…>`) の URL はヘッダー内のみに存在し本文には現れないため、本文 URL 抽出を起点とする評判判定・SaaS リンク評価の対象外だった — 解除リンクを装ったフィッシング先誘導 (解除要求でメアド生存確認 → 本格攻撃) は定形手口
+- 対処: `Envelope::list_unsubscribe` を新設してヘッダー生値を保持し、`commands.rs` で `<…>` 内の http リンクを `urls` に併記 → `evaluate_link_risks`/`evaluate_saas_links` がそのまま評価
+- テスト +2 件 (抽出確認、非存在で None)
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

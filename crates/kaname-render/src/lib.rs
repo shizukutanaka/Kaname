@@ -96,6 +96,10 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// List-Unsubscribe ヘッダーの生値 (D174 — 配信経路専用リンクの
+    /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
+    /// ため、ヘッダー由来のリンクを明示的に検査に回す。
+    pub list_unsubscribe: Option<String>,
 }
 
 /// An RFC 5322 address.
@@ -327,6 +331,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         .header_values("DKIM-Signature")
         .find_map(|v| v.as_text().map(|s| s.to_string()));
 
+    // List-Unsubscribe ヘッダー (ワンクリック登録解除リンク。
+    // メタスペースでの評判判定・ドメイン不一致検査に回すため保持)
+    let list_unsubscribe = msg
+        .header_values("List-Unsubscribe")
+        .find_map(|v| v.as_text().map(|s| s.to_string()));
+
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
@@ -347,6 +357,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        list_unsubscribe,
     })
 }
 
@@ -869,6 +880,123 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         hidden_content: hidden_chars >= 32,
         link_mismatches,
     }
+}
+
+/// 本文中の難読化 URL トークンの種別。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObfuscatedUrlKind {
+    /// `hxxp://` / `hxxps://` — フィッシングキットがフィルタを
+    /// 避けるために使う defanged スキーム。ブラウザ補完で
+    /// そのまま開かれることもある。
+    DefangedScheme,
+    /// `http:\evil.example` / `https:\\evil.example` —
+    /// ブラウザは `\` を `/` として受理するため移動は成功
+    /// するが、`http://` 始まりのトークン抽出を通らない。
+    BackslashSeparator,
+    /// `httр://` (Cyrillic р U+0440) 等、ASCII と見分けの
+    /// つかないスキーム — ユーザーには http と見えるが
+    /// スキームとしては無効/別物で抽出をすり抜ける。
+    LookalikeScheme,
+}
+
+/// 難読化 URL トークン 1 件。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObfuscatedUrl {
+    /// 本文に現れたトークンそのまま。
+    pub token: String,
+    /// 難読化の種別。
+    pub kind: ObfuscatedUrlKind,
+    /// 評判判定に使える正規化 URL (defanged/backslash のみ。
+    /// LookalikeScheme は正当な URL に復元できないため None)。
+    pub normalized: Option<String>,
+}
+
+/// 本文から `http://`/`https://` で始まらない URL 形難読化
+/// トークンを抽出する (D173)。
+///
+/// 既存の URL 抽出は `http://`/`https://` 始まりのみを拾うため、
+/// `hxxp://` (defanged)・`http:\\` (ブラウザは `\` を `/` と
+/// して受理)・`httр://` (Cyrillic スキーム) の 3 系統は
+/// 評判判定・不一致検査のどちらにも渡らなかった。
+/// PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形。
+#[must_use]
+pub fn find_obfuscated_url_tokens(text: &str) -> Vec<ObfuscatedUrl> {
+    const MAX_TOKENS: usize = 20;
+    let mut out: Vec<ObfuscatedUrl> = Vec::new();
+    for token in
+        text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'')
+    {
+        if token.len() < 8 {
+            continue;
+        }
+        let lower = token.to_ascii_lowercase();
+        // hxxp(s) — defanged
+        if lower.starts_with("hxxp://") || lower.starts_with("hxxps://") {
+            let norm = if lower.starts_with("hxxps://") {
+                format!("https://{}", &token["hxxps://".len()..])
+            } else {
+                format!("http://{}", &token["hxxp://".len()..])
+            };
+            out.push(ObfuscatedUrl {
+                token: token.to_string(),
+                kind: ObfuscatedUrlKind::DefangedScheme,
+                normalized: Some(norm),
+            });
+        // `http:\` / `https:\` / `http:\\` / `https:\\` — バックスラッシュ
+        } else if lower.starts_with("http:\\")
+            || lower.starts_with("https:\\")
+            || lower.starts_with("http:/\\")
+            || lower.starts_with("https:/\\")
+        {
+            let scheme_end = lower.find(':').unwrap_or(0);
+            let norm = format!(
+                "{}://{}",
+                &lower[..scheme_end],
+                token[scheme_end + 1..]
+                    .trim_start_matches(['\\', '/'])
+                    .replace('\\', "/")
+            );
+            out.push(ObfuscatedUrl {
+                token: token.to_string(),
+                kind: ObfuscatedUrlKind::BackslashSeparator,
+                normalized: Some(norm),
+            });
+        // スキーム自体が ASCII でない (Cyrillic 等の見せかけ)
+        } else if !lower.is_ascii() {
+            // ASCII に畳める Cyrillic 類似字でスキーム判定
+            let folded: String = lower
+                .chars()
+                .map(|c| match c {
+                    '\u{04bb}' => 'h', // һ
+                    '\u{0442}' => 't', // т
+                    '\u{0440}' => 'p', // р
+                    '\u{0455}' => 's', // ѕ
+                    '\u{0435}' => 'e', // е
+                    '\u{0430}' => 'a', // а
+                    '\u{0458}' => 'j', // ј
+                    '\u{0445}' => 'x', // х
+                    '\u{043e}' => 'o', // о
+                    '\u{0441}' => 'c', // с
+                    '\u{0456}' => 'i', // і
+                    c => c,
+                })
+                .collect();
+            if (folded.starts_with("http://") || folded.starts_with("https://"))
+                && !lower.starts_with("http://")
+                && !lower.starts_with("https://")
+            {
+                out.push(ObfuscatedUrl {
+                    token: token.to_string(),
+                    kind: ObfuscatedUrlKind::LookalikeScheme,
+                    normalized: None,
+                });
+            }
+        }
+        if out.len() >= MAX_TOKENS {
+            break;
+        }
+    }
+    out
 }
 
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
@@ -2324,6 +2452,113 @@ mod tests {
     fn scan_attachment_safe_pdf_not_dangerous() {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
+    }
+
+    // ---------- D173: URL スキーム難読化 ----------
+
+    #[test]
+    fn obfuscated_url_hxxp_detected() {
+        let found = find_obfuscated_url_tokens("詳細は hxxp://phish.example/login へ");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::DefangedScheme);
+        assert_eq!(
+            found[0].normalized.as_deref(),
+            Some("http://phish.example/login")
+        );
+    }
+
+    #[test]
+    fn obfuscated_url_hxxps_detected() {
+        let found = find_obfuscated_url_tokens("hxxps://evil.example/a");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::DefangedScheme);
+        assert_eq!(
+            found[0].normalized.as_deref(),
+            Some("https://evil.example/a")
+        );
+    }
+
+    #[test]
+    fn obfuscated_url_backslash_detected() {
+        let found = find_obfuscated_url_tokens("https:\\\\evil.example\\path");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::BackslashSeparator);
+        assert_eq!(
+            found[0].normalized.as_deref(),
+            Some("https://evil.example/path")
+        );
+    }
+
+    #[test]
+    fn obfuscated_url_single_backslash_detected() {
+        let found = find_obfuscated_url_tokens("http:\\evil.example");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::BackslashSeparator);
+        assert_eq!(found[0].normalized.as_deref(), Some("http://evil.example"));
+    }
+
+    #[test]
+    fn obfuscated_url_cyrillic_scheme_detected() {
+        // httр:// — р は Cyrillic U+0440。見た目は http と同一。
+        let found = find_obfuscated_url_tokens("htt\u{440}://evil.example");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::LookalikeScheme);
+        assert!(found[0].normalized.is_none());
+    }
+
+    #[test]
+    fn obfuscated_url_plain_https_not_flagged() {
+        assert!(find_obfuscated_url_tokens("https://example.com").is_empty());
+        assert!(find_obfuscated_url_tokens("http://example.com").is_empty());
+        assert!(find_obfuscated_url_tokens("特にURLはありません").is_empty());
+        assert!(find_obfuscated_url_tokens("ht").is_empty());
+    }
+
+    #[test]
+    fn obfuscated_url_in_html_context_detected() {
+        let found = find_obfuscated_url_tokens(
+            "<a href=\"hxxp://x.example\">link</a> 詳しくは http:\\\\y.example",
+        );
+        assert_eq!(found.len(), 2);
+    }
+
+    #[test]
+    fn obfuscated_url_slash_backslash_detected() {
+        let found = find_obfuscated_url_tokens("http:/\\evil.example");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::BackslashSeparator);
+        assert_eq!(found[0].normalized.as_deref(), Some("http://evil.example"));
+    }
+
+    #[test]
+    fn obfuscated_url_in_angle_brackets_detected() {
+        // <URL> 形式でもトークン分割が働き検出できる
+        let found = find_obfuscated_url_tokens("解除は <hxxps://unsub.example/x> から");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, ObfuscatedUrlKind::DefangedScheme);
+    }
+
+    // ---------- D174: List-Unsubscribe ヘッダー ----------
+
+    #[test]
+    fn parse_extracts_list_unsubscribe() {
+        let raw = b"From: a@example.com\r\n\
+                    List-Unsubscribe: <https://unsub.example.com/u?id=1>, <mailto:u@example.com>\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse");
+        assert_eq!(
+            env.list_unsubscribe.as_deref(),
+            Some("<https://unsub.example.com/u?id=1>, <mailto:u@example.com>")
+        );
+    }
+
+    #[test]
+    fn parse_no_list_unsubscribe_is_none() {
+        let raw = b"From: a@example.com\r\nSubject: x\r\n\r\nbody";
+        let env = parse(raw).expect("parse");
+        assert!(env.list_unsubscribe.is_none());
     }
 }
 
