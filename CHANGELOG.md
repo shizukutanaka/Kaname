@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D504: `X-Drone-*`/`X-Concourse-*`/`X-Bazel-*`/`X-Gradle-*`/`X-AppVeyor-*`/`X-Webpack-*` 等の CI/CD・ビルド・バンドラ印自称が未検査
+
+- **問題**: `X-Drone-*` (Drone)、`X-Concourse-*` (Concourse)、`X-Bazel-*` (Bazel)、`X-Semaphore-*`/`X-Woodpecker-*`/`X-GoCD-*`/`X-Bamboo-*`/`X-AppVeyor-*`/`X-AzurePipelines-*`/`X-AzureDevOps-*`/`X-Bitbucket-Pipelines-*`/`X-Bitrise-*`/`X-Codemagic-*`/`X-fastlane-*`/`X-Gradle-*`/`X-Maven-*`/`X-sbt-*`/`X-CMake-*`/`X-Buck-*`/`X-Pants-*`/`X-Nx-*`/`X-Turborepo-*`/`X-Lerna-*`/`X-Rush-*`/`X-esbuild-*`/`X-SWC-*`/`X-Vite-*`/`X-Rollup-*`/`X-Webpack-*`/`X-Parcel-*`/`X-Snowpack-*`/`X-Rome-*`/`X-Biome-*`/`X-OXC-*`/`X-dprint-*`/`X-Prettier-*`/`X-ESLint-*`/`X-Stylelint-*` は構築機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `ci_marks` + `has_ci_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 構築印の自署を問え。
+
+### Security — D505: `X-CodeQL-*`/`X-Dependabot-*`/`X-Trivy-*`/`X-Renovate-*`/`X-Semgrep-*`/`X-Wiz-*` 等のコード品質・依存・コンテナセキュリティ印自称が未検査
+
+- **問題**: `X-CodeQL-*` (CodeQL)、`X-Dependabot-*` (Dependabot)、`X-Trivy-*` (Trivy)、`X-Codacy-*`/`X-CodeClimate-*`/`X-DeepSource-*`/`X-Coverity-*`/`X-Fortify-*`/`X-Mend-*`/`X-WhiteSource-*`/`X-Renovate-*`/`X-Grype-*`/`X-Syft-*`/`X-Clair-*`/`X-Twistlock-*`/`X-Prisma-*`/`X-Wiz-*`/`X-Orca-*`/`X-Lacework-*`/`X-Sysdig-*`/`X-Falco-*`/`X-Semgrep-*` は検査機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `codequality_marks` + `has_codequality_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 検査印の自署を問え。
+
+### Security — D506: `X-npmjs-*`/`X-PyPI-*`/`X-Docker-Hub-*`/`X-Homebrew-*`/`X-NuGet-*`/`X-GHCR-*` 等のパッケージ・レジストリ印自称が未検査
+
+- **問題**: `X-npmjs-*` (npm)、`X-PyPI-*` (PyPI)、`X-Docker-Hub-*` (Docker Hub)、`X-RubyGems-*`/`X-NuGet-*`/`X-Packagist-*`/`X-Homebrew-*`/`X-Chocolatey-*`/`X-Scoop-*`/`X-winget-*`/`X-Flatpak-*`/`X-Snapcraft-*`/`X-AppImage-*`/`X-Nixpkgs-*`/`X-Conda-*`/`X-Anaconda-*`/`X-DockerHub-*`/`X-Quay-*`/`X-GHCR-*`/`X-Harbor-*`/`X-Nexus-*`/`X-Verdaccio-*`/`X-Yarn-*`/`X-pnpm-*`/`X-Composer-*`/`X-Poetry-*`/`X-Pipenv-*`/`X-CocoaPods-*`/`X-Carthage-*`/`X-SPM-*`/`X-pub-*`/`X-Hex-*`/`X-CPAN-*`/`X-CRAN-*`/`X-Clojars-*`/`X-vcpkg-*`/`X-Conan-*` は庫機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `package_marks` + `has_package_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 庫印の自署を問え。
+
+
 ### Security — D501: `X-GoDaddy-*`/`X-Namecheap-*`/`X-DNSimple-*`/`X-Porkbun-*`/`X-Gandi-*`/`X-Route53-*` 等の DNS・ドメイン・DDNS 印自称が未検査
 
 - **問題**: `X-GoDaddy-*` (GoDaddy)、`X-Namecheap-*` (Namecheap)、`X-DNSimple-*` (DNSimple)、`X-Porkbun-*`/`X-Dynadot-*`/`X-Gandi-*`/`X-NetworkSolutions-*`/`X-eNom-*`/`X-Tucows-*`/`X-Register-*`/`X-MarkMonitor-*`/`X-CSCGlobal-*`/`X-BrandShield-*`/`X-Versio-*`/`X-TransIP-*`/`X-Epik-*`/`X-Joker-*`/`X-NameBay-*`/`X-NameSilo-*`/`X-EuroDNS-*`/`X-easyDNS-*`/`X-Hover-*`/`X-No-IP-*`/`X-Afraid-*`/`X-ChangeIP-*`/`X-DDNS-*`/`X-DuckDNS-*`/`X-Dynu-*`/`X-FreeDNS-*`/`X-Route53-*`/`X-AzureDNS-*`/`X-GoogleDomains-*`/`X-CloudflareDNS-*` は名簿機の通知記録 — 送信側が書くことは自称。
