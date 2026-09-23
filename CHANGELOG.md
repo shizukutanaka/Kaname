@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D381: `X-Authentication-Warning:`/`X-Verify-Results:`/`X-Verification-Status:`/`X-Verified:`/`X-Auth-Warning:`/`X-Sender-Verified:` 等の認証警告・検証印自称が未検査
+
+- sendmail の `X-Authentication-Warning` は受信 MTA が記す警告 — 送信側から届くのは「警告・検証まで記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_authwarn_marks` 新設 → `Envelope.authwarn_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D382: `X-DKIM-Result:`/`X-SPF-Result:`/`X-DMARC-Result:`/`X-Auth-Result:`/`X-Verify-Result:`/`X-DomainKey-Result:` 等の旧式結果印自称が未検査
+
+- 認証結果は受信側の判定機が記す値 — 送信側から届くのは「認証を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_result_marks` 新設 → `Envelope.result_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D383: `X-AMP-*`/`X-Google-AMP-*`/`X-App-Source-*`/`X-Apple-Mail-*`/`X-Apple-Content-*` 等の AMP・プラットフォーム経路印自称が未検査
+
+- AMP メールや配信側機器が記す経路印 — 送信側から届くのは「この経路を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_amp_marks` 新設 → `Envelope.amp_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった

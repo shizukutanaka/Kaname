@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D381: 認証警告・検証印自称
+    if env.authwarn_marks {
+        render_risks.push(
+            "X-Authentication-Warning/X-Verify-Results/X-Verified 等 — 受信側が記す警告・検証印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D382: 旧式結果印自称
+    if env.result_marks {
+        render_risks.push(
+            "X-DKIM-Result/X-SPF-Result/X-DMARC-Result 等 — 認証判定値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D383: AMP・プラットフォーム経路印自称
+    if env.amp_marks {
+        render_risks.push(
+            "X-AMP-*/X-Google-AMP-*/X-Apple-Mail-* 等 — AMP・プラットフォーム経路印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

@@ -141,6 +141,19 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Authentication-Warning:`/`X-Verify-Results:`/
+    /// `X-Verification-Status:`/`X-Verified:`/`X-Auth-Warning:` 等の
+    /// 認証警告・検証印があるか — 受信側が記す警告を送信側が
+    /// 自称する兆候 (D381)。
+    pub authwarn_marks: bool,
+    /// `X-DKIM-Result:`/`X-SPF-Result:`/`X-DMARC-Result:`/
+    /// `X-Auth-Result:`/`X-Verify-Result:` 等の旧式結果印があるか
+    /// — 判定値を送信側が自称する兆候 (D382)。
+    pub result_marks: bool,
+    /// `X-AMP-*`/`X-Google-AMP-*`/`X-App-Source-*`/`X-Apple-*`
+    /// 等の AMP・プラットフォーム経路印があるか — 配送経路を送信側が
+    /// 自称する兆候 (D383)。
+    pub amp_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +431,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        authwarn_marks: has_authwarn_marks(raw),
+        result_marks: has_result_marks(raw),
+        amp_marks: has_amp_marks(raw),
     })
 }
 
@@ -624,6 +640,69 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Authentication-Warning:`/`X-Verify-Results:`/
+/// `X-Verification-Status:`/`X-Verified:`/`X-Auth-Warning:`
+/// `X-Sender-Verified:` 等の認証警告・検証印があるか判定する (D381)。
+///
+/// sendmail の `X-Authentication-Warning` は受信 MTA が記す警告 —
+/// 送信側から届くこれは「警告・検証まで記録済み」体裁を内容側が
+/// 主張する自称。
+fn has_authwarn_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-authentication-warning:")
+            || l.starts_with("x-auth-warning:")
+            || l.starts_with("x-verify-results:")
+            || l.starts_with("x-verification-status:")
+            || l.starts_with("x-verified:")
+            || l.starts_with("x-sender-verified:")
+    })
+}
+
+/// `X-DKIM-Result:`/`X-SPF-Result:`/`X-DMARC-Result:`/
+/// `X-Auth-Result:`/`X-Verify-Result:`/`X-DomainKey-Result:` 等の
+/// 旧式結果印があるか判定する (D382)。
+///
+/// 認証結果は受信側の判定機が記す値 — 送信側から届くこれは
+/// 「認証を通った」体裁を内容側が主張する自称 (D306 の結果値版)。
+fn has_result_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dkim-result:")
+            || l.starts_with("x-spf-result:")
+            || l.starts_with("x-dmarc-result:")
+            || l.starts_with("x-auth-result:")
+            || l.starts_with("x-verify-result:")
+            || l.starts_with("x-domainkey-result:")
+    })
+}
+
+/// `X-AMP-*`/`X-Google-AMP-*`/`X-App-Source-*`/`X-Apple-Mail-*`
+/// `X-Apple-Content-Encrypted-Remote-Content-Location:` 等の
+/// AMP・プラットフォーム経路印があるか判定する (D383)。
+///
+/// AMP メールや配信側機器が記す経路印 — 送信側から届くこれは
+/// 「この経路を通った」体裁を内容側が主張する自称。
+fn has_amp_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-amp-")
+            || l.starts_with("x-google-amp-")
+            || l.starts_with("x-app-source-")
+            || l.starts_with("x-apple-mail-")
+            || l.starts_with("x-apple-content-")
     })
 }
 
@@ -2952,6 +3031,48 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_は認証警告印を検出する() {
+        let aw = b"X-Authentication-Warning: w\r\n\r\nx";
+        assert!(has_authwarn_marks(aw));
+        let vr = b"X-Verify-Results: ok\r\n\r\nx";
+        assert!(has_authwarn_marks(vr));
+        let vs = b"X-Verification-Status: v\r\n\r\nx";
+        assert!(has_authwarn_marks(vs));
+        let vd = b"X-Verified: yes\r\n\r\nx";
+        assert!(has_authwarn_marks(vd));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_authwarn_marks(clean));
+    }
+
+    #[test]
+    fn scan_は結果印を検出する() {
+        let dk = b"X-DKIM-Result: pass\r\n\r\nx";
+        assert!(has_result_marks(dk));
+        let sp = b"X-SPF-Result: pass\r\n\r\nx";
+        assert!(has_result_marks(sp));
+        let dm = b"X-DMARC-Result: pass\r\n\r\nx";
+        assert!(has_result_marks(dm));
+        let ar = b"X-Auth-Result: ok\r\n\r\nx";
+        assert!(has_result_marks(ar));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_result_marks(clean));
+    }
+
+    #[test]
+    fn scan_はAMP経路印を検出する() {
+        let am = b"X-AMP-Result: ok\r\n\r\nx";
+        assert!(has_amp_marks(am));
+        let ga = b"X-Google-AMP-Result: ok\r\n\r\nx";
+        assert!(has_amp_marks(ga));
+        let ap = b"X-App-Source-Mail: m\r\n\r\nx";
+        assert!(has_amp_marks(ap));
+        let aam = b"X-Apple-Mail-Version: 1\r\n\r\nx";
+        assert!(has_amp_marks(aam));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_amp_marks(clean));
     }
 }
 
