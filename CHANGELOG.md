@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D584: `X-Bears-*`/`X-CaSy-*`/`X-Osoujihonpo-*` 等の家事代行・ハウスクリーニング印自称が未検査
+
+- **問題**: `X-Bears-*` (ベアーズ)、`X-CaSy-*` (CaSy)、`X-Osoujihonpo-*` (おそうじ本舗)、`X-Minimaid-*`/`X-Pinai-*`/`X-Taskaji-*`/`X-Kajita-*`/`X-Kajitaku-*`/`X-Mitsume-*`/`X-MaggieMaid-*`/`X-Iekeeping-*`/`X-Okatazuke-*`/`X-Edai-*`/`X-Housekeeping-*`/`X-Umamori-*`/`X-Cathand-*`/`X-TokyoOsoji-*`/`X-Maruzyou-*`/`X-Arukaji-*`/`X-Rakumama-*`/`X-Kajiapo-*`/`X-Osoji-*`/`X-MerryMaid-*`/`X-DuskinMaid-*`/`X-MollyMaid-*`/`X-Homejoy-*`/`X-Handy-*`/`X-Takl-*`/`X-Maids-*`/`X-Tidy-*`/`X-Takuji-*`/`X-Hitosaji-*`/`X-Hatarako-*`/`X-Grapes-*`/`X-Bikubo-*`/`X-Sansei-*`/`X-Daikou-*`/`X-PickMe-*`/`X-HouseCall-*`/`X-Zehitomo-*`/`X-Kurashino-*`/`X-Mitibata-*`/`X-Odegawa-*`/`X-Osamade-*`/`X-HouseKeeper-*`/`X-Sumai-*`/`X-Cocole-*`/`X-Asumi-*`/`X-Rakuchin-*`/`X-Suki-*`/`X-Aizin-*`/`X-Osekkai-*` は房機の通知記録 — 送信側が書くことは自称。見積提示・定期契約・クリーニング代金の偽装は高齢者狙い詐欺の典型。(警備・施設機は D548)
+- **修正**: `Envelope` に `housekeeping_marks` + `has_housekeeping_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 房印の自署を問え。
+
+### Security — D585: `X-QVC-*`/`X-Japanet-*`/`X-Nissen-*` 等の通販・TVショッピング印自称が未検査
+
+- **問題**: `X-QVC-*` (QVC)、`X-Japanet-*` (ジャパネット)、`X-Nissen-*` (ニッセン)、`X-ShopChannel-*`/`X-Bellemaison-*`/`X-Cecile-*`/`X-Dinos-*`/`X-Scroll-*`/`X-CatalogHouse-*`/`X-ShopJapan-*`/`X-OakLawn-*`/`X-Image-*`/`X-PeachJohn-*`/`X-Belluna-*`/`X-Felissimo-*`/`X-Halmek-*`/`X-Senchikai-*`/`X-NihonOnegai-*`/`X-ShoppingChannel-*`/`X-TVShop-*`/`X-HSN-*`/`X-Evine-*`/`X-IdealWorld-*`/`X-Highland-*`/`X-TJC-*`/`X-Qoo10Shop-*`/`X-HomeShopping-*`/`X-RakutenIchibaShop-*`/`X-PlusShop-*`/`X-Ikkyu-*`/`X-SelectShop-*`/`X-Tsuhanshop-*`/`X-KatazukeClub-*`/`X-Nippan-*`/`X-Rakuno-*`/`X-Yumiku-*`/`X-Vantan-*`/`X-Stylecover-*`/`X-DHCShop-*`/`X-OtonaMuse-*`/`X-Rusia-*`/`X-Mikko-*`/`X-RyuRyu-*`/`X-Urara-*`/`X-Nolty-*`/`X-UrbanShop-*`/`X-Kumonoit-*`/`X-Sunao-*`/`X-Modus-*`/`X-Shimauma-*`/`X-PixelShop-*` は購機の通知記録 — 送信側が書くことは自称。定期購入・商品未着・解約違約金の偽装は通販詐欺の典型。(楽天/メルカリ等 EC 機は既存族、宅食機は D555)
+- **修正**: `Envelope` に `mailorder_marks` + `has_mailorder_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 購印の自署を問え。
+
+### Security — D586: `X-AichiLaw-*`/`X-TokyoMinerva-*`/`X-Avance-*` 等の債務整理・過払い金印自称が未検査
+
+- **問題**: `X-AichiLaw-*` (愛知司法書士)、`X-TokyoMinerva-*` (東京ミネルヴァ)、`X-Avance-*` (アヴァンス)、`X-NihonPlum-*`/`X-DaiichiSogo-*`/`X-HomeWon-*`/`X-WithYou-*`/`X-Hibari-*`/`X-Sugiyama-*`/`X-GreenLeaf-*`/`X-Masuda-*`/`X-Licio-*`/`X-Kabarai-*`/`X-Saimuseiri-*`/`X-Hitotohito-*`/`X-FrontierLaw-*`/`X-KokoroNoMori-*`/`X-Shihoushoshi-*`/`X-JMAssociates-*`/`X-LegalPro-*`/`X-NihonSaimu-*`/`X-TokiwaLaw-*`/`X-ShinyoLaw-*`/`X-SaiseiLaw-*`/`X-HikariLaw-*`/`X-MatsuriLaw-*`/`X-ChuoLaw-*`/`X-FrontierAdvisors-*`/`X-Kanbe-*`/`X-OgawaLaw-*`/`X-TamaruyaLaw-*`/`X-AikoLaw-*`/`X-Reisui-*`/`X-Tomorrow-*`/`X-SunriseLaw-*`/`X-MiraiLaw-*`/`X-HopeLaw-*`/`X-RenaissanceLaw-*`/`X-HarvestLaw-*`/`X-ArchLaw-*`/`X-BaseLaw-*`/`X-HikoLaw-*`/`X-TokyoLaw-*`/`X-OsakaLaw-*`/`X-NagoyaLaw-*`/`X-Kabaraikin-*`/`X-KanyuLaw-*`/`X-SaimuShori-*`/`X-MinnaSaimu-*`/`X-ToshoLaw-*`/`X-UraraLaw-*`/`X-NihonLaw-*`/`X-GrandLaw-*`/`X-FujiLaw-*`/`X-YamatoLaw-*` は務機の通知記録 — 送信側が書くことは自称。過払い金報酬・債務整理手数料の偽装は債務者狙い詐欺の典型。(法務サービス機は D523、消費者金融機は D581)
+- **修正**: `Envelope` に `debtrelief_marks` + `has_debtrelief_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 務印の自署を問え。
+
 ### Security — D581: `X-Acom-*`/`X-Promise-*`/`X-Aiful-*`/`X-Mobit-*` 等の消費者金融・カードローン印自称が未検査
 
 - **問題**: `X-Acom-*` (アコム)、`X-Promise-*` (プロミス)、`X-Aiful-*` (アイフル)、`X-Mobit-*` (モビット)、`X-LakeALSA-*`/`X-Central-*`/`X-Futaba-*`/`X-DirectOne-*`/`X-Fukuho-*`/`X-Eiwa-*`/`X-SkyOffice-*`/`X-Canet-*`/`X-Arco-*`/`X-Arrow-*`/`X-Lifet-*`/`X-Mirai-*`/`X-Ufa-*`/`X-HelloHappy-*`/`X-Espoir-*`/`X-Aline-*`/`X-APlus-*`/`X-SMBCMobby-*`/`X-AuJibun-*`/`X-Hanacred-*`/`X-Askpa-*`/`X-Fukumaru-*`/`X-Nyusen-*`/`X-Sekishin-*`/`X-Taisei-*`/`X-Haruka-*`/`X-LifeSuite-*`/`X-Columbia-*`/`X-Anfan-*`/`X-Fujimaru-*`/`X-Kimura-*`/`X-AIUCred-*`/`X-SHinki-*`/`X-SmileShosan-*`/`X-Harukaze-*`/`X-BellunaMoney-*`/`X-SpaceRental-*` は銭機の通知記録 — 送信側が書くことは自称。残高確認・支払催促・審査通過の偽装は闇金・架空請求の典型。(`X-VISA-*`/`X-Amex-*`/`X-Saison-*`/`X-オリコ-*` 等のカード機は D567、銀行機は D514/D554)

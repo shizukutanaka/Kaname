@@ -1948,6 +1948,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D584: 家事代行・ハウスクリーニング印自称
+    if env.housekeeping_marks {
+        render_risks.push(
+            "X-Bears-*/X-CaSy-*/X-Minimaid-*/X-Pinai-*/X-Taskaji-*/X-Osoujihonpo-*/X-Kajita-*/X-Zehitomo-* 等 — 房機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D585: 通販・TVショッピング印自称
+    if env.mailorder_marks {
+        render_risks.push(
+            "X-QVC-*/X-ShopChannel-*/X-Japanet-*/X-Bellemaison-*/X-Nissen-*/X-Cecile-*/X-Dinos-*/X-Felissimo-* 等 — 購機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D586: 債務整理・過払い金印自称
+    if env.debtrelief_marks {
+        render_risks.push(
+            "X-AichiLaw-*/X-TokyoMinerva-*/X-NihonPlum-*/X-DaiichiSogo-*/X-HomeWon-*/X-Avance-*/X-Sugiyama-*/X-Kabarai-* 等 — 務機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
