@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
+
+- **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
+- **修正**: `Envelope` に `license_marks` + `has_license_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 検印の自署を問え。
+
+### Security — D612: `X-RyugakuJournal-*`/`X-SeikoRyugaku-*`/`X-Smaryu-*` 等の留学・語学スクール印自称が未検査
+
+- **問題**: `X-RyugakuJournal-*` (留学ジャーナル)、`X-SeikoRyugaku-*` (成功する留学)、`X-Smaryu-*` (スマ留)、`X-RyugakuJohokan-*`/`X-YumekanaRyugaku-*`/`X-WISHRyugaku-*`/`X-EFRyugaku-*`/`X-ILACRyugaku-*`/`X-RyugakuNavi-*`/`X-RyugakuCompass-*`/`X-StudyInJapan-*`/`X-StudyAbroad-*`/`X-AbroadNavi-*`/`X-KaigaiRyugaku-*`/`X-RyugakuHoken-*`/`X-RyugakuCenter-*`/`X-GlobalStudy-*`/`X-LanguageSchool-*`/`X-GogakuSchool-*`/`X-BerkeleyRyugaku-*`/`X-UCLARyugaku-*`/`X-HarvardRyugaku-*`/`X-OxfordRyugaku-*`/`X-CambridgeRyugaku-*`/`X-SydneyRyugaku-*`/`X-MelbourneRyugaku-*`/`X-TorontoRyugaku-*`/`X-VancouverRyugaku-*`/`X-LondonRyugaku-*`/`X-ParisRyugaku-*`/`X-SeoulRyugaku-*`/`X-TaipeiRyugaku-*`/`X-ManilaRyugaku-*`/`X-CebuRyugaku-*`/`X-BangkokRyugaku-*`/`X-AucklandRyugaku-*`/`X-MaltaRyugaku-*`/`X-HawaiiRyugaku-*`/`X-GuamRyugaku-*`/`X-ChinaRyugaku-*`/`X-EuropeRyugaku-*`/`X-AmericaRyugaku-*`/`X-AustraliaRyugaku-*`/`X-CanadaRyugaku-*` 等 は留機の通知記録 — 送信側が書くことは自称。留学費用・ビザ申請・ホームステイ斡旋の偽装は留学詐欺の典型手口。(英会話機は既存族、旅行代理店は D573)
+- **修正**: `Envelope` に `abroad_marks` + `has_abroad_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 留印の自署を問え。
+
+### Security — D613: `X-Makita-*`/`X-HiKOKI-*`/`X-TruscoNakayama-*` 等の電動工具・DIY印自称が未検査
+
+- **問題**: `X-Makita-*` (マキタ)、`X-HiKOKI-*` (HiKOKI)、`X-TruscoNakayama-*` (トラスコ中山)、`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*`/`X-BlackDeckerTool-*`/`X-KainzDIY-*`/`X-KonanPro-*`/`X-VivaHomeDIY-*`/`X-PowerKomeri-*`/`X-KeiyoDIY-*`/`X-Nafco-*`/`X-Homac-*`/`X-Shimachu-*`/`X-SankyuTool-*`/`X-TodaiTool-*`/`X-Sk11Tool-*`/`X-ToneTool-*`/`X-KTCtool-*`/`X-Nepros-*`/`X-SnapOn-*`/`X-WeraTools-*`/`X-Vessel-*`/`X-EngineerTools-*`/`X-HozanTool-*`/`X-GootSolder-*`/`X-Hakko-*`/`X-WellerTool-*`/`X-Nichigoh-*`/`X-MonotaROTool-*`/`X-MisumiTool-*`/`X-Ichinen-*`/`X-SangyoTool-*`/`X-SudoTool-*`/`X-YamawaTool-*`/`X-NachitTool-*`/`X-OSGTool-*`/`X-MitsubishiTool-*`/`X-KyoceraTool-*`/`X-Tungaloy-*`/`X-IscarTool-*`/`X-SandvikTool-*`/`X-Kennametal-*`/`X-DijetTool-*`/`X-NtkTool-*`/`X-BigDaishowa-*`/`X-Nikkentool-*`/`X-RegoTool-*` 等 は具機の通知記録 — 送信側が書くことは自称。工具セット特価・在庫処分・会員価格の偽装は工具詐欺の典型手口。(ワークマン・DCM・コメリは既存族、建機は D538)
+- **修正**: `Envelope` に `diytool_marks` + `has_diytool_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 具印の自署を問え。
+
 ### Security — D608: `X-Musee-*`/`X-TBC-*`/`X-Kireimo-*` 等のエステ・脱毛・美容クリニック印自称が未検査
 
 - **問題**: `X-Musee-*` (ミュゼ)、`X-TBC-*` (TBC)、`X-Kireimo-*` (キレイモ)、`X-Erucenne-*`/`X-SlimBeauty-*`/`X-TakanoYuri-*`/`X-Mispa-*`/`X-DandyHouse-*`/`X-MensTBC-*`/`X-GorillaClinic-*`/`X-ShonanHiyou-*`/`X-ShinagawaHiyou-*`/`X-Joumoto-*`/`X-Takasu-*`/`X-RizeClinic-*`/`X-AliciaClinic-*`/`X-Strash-*`/`X-C3Esthe-*`/`X-GinzaCalla-*`/`X-Koihada-*`/`X-Lacoco-*`/`X-Eminal-*`/`X-JibunClinic-*`/`X-FureaClinic-*`/`X-SBCShonan-*`/`X-TokyoBiyo-*`/`X-HifuKa-*`/`X-BiyoIin-*`/`X-MedicalEpilation-*`/`X-DatsumouSalon-*`/`X-LaserHair-*`/`X-KireiClinic-*`/`X-BiyoClinic-*`/`X-EstheSalon-*`/`X-EstheNavi-*`/`X-SalonNavi-*`/`X-YaseSalon-*`/`X-DietSalon-*`/`X-FacialSalon-*`/`X-BridalEsthe-*`/`X-MensEsthe-*`/`X-LadiesEsthe-*`/`X-EstheClinic-*` 等 は嬢機の通知記録 — 送信側が書くことは自称。契約更新・回数券残・キャンペーンの偽装はエステ詐欺の典型手口。(美容・コスメ機は D531、リラク機は D594)

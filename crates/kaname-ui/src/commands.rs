@@ -2164,6 +2164,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D611: 資格スクール・通信講座印自称
+    if env.license_marks {
+        render_risks.push(
+            "X-UCan-*/X-TACShool-*/X-OharaSchool-*/X-LECShikaku-*/X-Studing-*/X-Agaroot-*/X-EikenKentei-*/X-MentalKentei-* 等 — 検機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D612: 留学・語学スクール印自称
+    if env.abroad_marks {
+        render_risks.push(
+            "X-RyugakuJournal-*/X-SeikoRyugaku-*/X-RyugakuJohokan-*/X-Smaryu-*/X-WISHRyugaku-*/X-GlobalStudy-*/X-CebuRyugaku-*/X-CanadaRyugaku-* 等 — 留機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D613: 電動工具・DIY印自称
+    if env.diytool_marks {
+        render_risks.push(
+            "X-Makita-*/X-HiKOKI-*/X-BoschTools-*/X-DeWalt-*/X-TruscoNakayama-*/X-SnapOn-*/X-Vessel-*/X-KyoceraTool-* 等 — 具機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

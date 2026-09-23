@@ -1733,6 +1733,12 @@ pub struct Envelope {
     pub bike_marks: bool,
     /// `X-Fender-*`/`X-Gibson-*`/`X-Ibanez-*`/`X-ESPGuitars-*`/`X-Takamine-*`/`X-MartinGuitar-*`/`X-TaylorGuitar-*`/`X-PRSGuitars-*` 等の楽器・DTM通知記録印を送信側が自称している (D610)
     pub instrument_marks: bool,
+    /// `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*`/`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*` 等の資格スクール・通信講座通知記録印を送信側が自称している (D611)
+    pub license_marks: bool,
+    /// `X-RyugakuJournal-*`/`X-SeikoRyugaku-*`/`X-RyugakuJohokan-*`/`X-Smaryu-*`/`X-YumekanaRyugaku-*`/`X-WISHRyugaku-*` 等の留学・語学スクール通知記録印を送信側が自称している (D612)
+    pub abroad_marks: bool,
+    /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
+    pub diytool_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2221,6 +2227,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         esthe_marks: has_esthe_marks(hdr),
         bike_marks: has_bike_marks(hdr),
         instrument_marks: has_instrument_marks(hdr),
+        license_marks: has_license_marks(hdr),
+        abroad_marks: has_abroad_marks(hdr),
+        diytool_marks: has_diytool_marks(hdr),
     })
 }
 
@@ -12424,6 +12433,217 @@ fn has_instrument_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*`/`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-JukenShikaku-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ShikakuApp-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-Gyoseishoshi-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` (資格スクール・通信講座・検定の通知記録) を送信側が自称しているかどうか。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
+fn has_license_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ucan-")
+            || l.starts_with("x-tacshool-")
+            || l.starts_with("x-oharaschool-")
+            || l.starts_with("x-lecshikaku-")
+            || l.starts_with("x-creair-")
+            || l.starts_with("x-foresight-")
+            || l.starts_with("x-studing-")
+            || l.starts_with("x-agaroot-")
+            || l.starts_with("x-humanacademy-")
+            || l.starts_with("x-shikakugetto-")
+            || l.starts_with("x-bokischool-")
+            || l.starts_with("x-takkenschool-")
+            || l.starts_with("x-sharoshischool-")
+            || l.starts_with("x-gyoseischool-")
+            || l.starts_with("x-shihoshoshischool-")
+            || l.starts_with("x-fpschool-")
+            || l.starts_with("x-itpassport-")
+            || l.starts_with("x-jukenshikaku-")
+            || l.starts_with("x-shikakutaizen-")
+            || l.starts_with("x-shikakudaigaku-")
+            || l.starts_with("x-shikakuchannel-")
+            || l.starts_with("x-shikakuking-")
+            || l.starts_with("x-shikakunavi-")
+            || l.starts_with("x-shikakuapp-")
+            || l.starts_with("x-manseishikaku-")
+            || l.starts_with("x-shikakumaster-")
+            || l.starts_with("x-gyoseishoshi-")
+            || l.starts_with("x-somukentei-")
+            || l.starts_with("x-businesskentei-")
+            || l.starts_with("x-moskentei-")
+            || l.starts_with("x-toeicschool-")
+            || l.starts_with("x-eikenkentei-")
+            || l.starts_with("x-kanken-")
+            || l.starts_with("x-suuken-")
+            || l.starts_with("x-zenkenkentei-")
+            || l.starts_with("x-hokenkentei-")
+            || l.starts_with("x-officekentei-")
+            || l.starts_with("x-webdesignkentei-")
+            || l.starts_with("x-colorkentei-")
+            || l.starts_with("x-fashionkentei-")
+            || l.starts_with("x-foodkentei-")
+            || l.starts_with("x-sakekentei-")
+            || l.starts_with("x-winekentei-")
+            || l.starts_with("x-coffeekentei-")
+            || l.starts_with("x-teakentei-")
+            || l.starts_with("x-fortunekentei-")
+            || l.starts_with("x-petkentei-")
+            || l.starts_with("x-nailkentei-")
+            || l.starts_with("x-cleaningkentei-")
+            || l.starts_with("x-storagekentei-")
+            || l.starts_with("x-healthkentei-")
+            || l.starts_with("x-mentalkentei-")
+            || l.starts_with("x-wordkentei-")
+            || l.starts_with("x-englishkentei-")
+            || l.starts_with("x-itkentei-")
+            || l.starts_with("x-statkentei-")
+            || l.starts_with("x-gyoumukentei-")
+            || l.starts_with("x-legalkentei-")
+            || l.starts_with("x-kaigokentei-")
+            || l.starts_with("x-iryokentei-")
+            || l.starts_with("x-kangokentei-")
+    })
+}
+
+/// `X-RyugakuJournal-*`/`X-SeikoRyugaku-*`/`X-RyugakuJohokan-*`/`X-Smaryu-*`/`X-YumekanaRyugaku-*`/`X-WISHRyugaku-*`/`X-EFRyugaku-*`/`X-ILACRyugaku-*`/`X-RyugakuNavi-*`/`X-RyugakuCompass-*`/`X-RyugakuSoken-*`/`X-StudyInJapan-*`/`X-StudyAbroad-*`/`X-AbroadNavi-*`/`X-AbroadStudy-*`/`X-KaigaiRyugaku-*`/`X-RyugakuHoken-*`/`X-RyugakuCenter-*`/`X-RyugakuStation-*`/`X-RyugakuGate-*`/`X-RyugakuWorld-*`/`X-RyugakuPlus-*`/`X-GlobalStudy-*`/`X-GlobalNavi-*`/`X-LanguageSchool-*`/`X-LanguageStudy-*`/`X-EikaiwaRyugaku-*`/`X-GogakuSchool-*`/`X-GogakuRyugaku-*`/`X-BerkeleyRyugaku-*`/`X-WashingtonRyugaku-*`/`X-UCLARyugaku-*`/`X-HarvardRyugaku-*`/`X-OxfordRyugaku-*`/`X-CambridgeRyugaku-*`/`X-SydneyRyugaku-*`/`X-MelbourneRyugaku-*`/`X-TorontoRyugaku-*`/`X-VancouverRyugaku-*`/`X-LondonRyugaku-*`/`X-ParisRyugaku-*`/`X-BerlinRyugaku-*`/`X-SeoulRyugaku-*`/`X-TaipeiRyugaku-*`/`X-ManilaRyugaku-*`/`X-CebuRyugaku-*`/`X-BangkokRyugaku-*`/`X-HanoiRyugaku-*`/`X-AucklandRyugaku-*`/`X-DublinRyugaku-*`/`X-MaltaRyugaku-*`/`X-HawaiiRyugaku-*`/`X-GuamRyugaku-*`/`X-ChinaRyugaku-*`/`X-IndiaRyugaku-*`/`X-EuropeRyugaku-*`/`X-AmericaRyugaku-*`/`X-AustraliaRyugaku-*`/`X-CanadaRyugaku-*` (留学・語学スクール・ワーキングホリデーの通知記録) を送信側が書いた自称。留学費用・ビザ申請・ホームステイ斡旋の偽装は留学詐欺の典型手口。(英会話機は既存族/ECC・ベルリッツ・NOVA・GABA・イーオン、旅行代理店は D573)
+fn has_abroad_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ryugakujournal-")
+            || l.starts_with("x-seikoryugaku-")
+            || l.starts_with("x-ryugakujohokan-")
+            || l.starts_with("x-smaryu-")
+            || l.starts_with("x-yumekanaryugaku-")
+            || l.starts_with("x-wishryugaku-")
+            || l.starts_with("x-efryugaku-")
+            || l.starts_with("x-ilacryugaku-")
+            || l.starts_with("x-ryugakunavi-")
+            || l.starts_with("x-ryugakucompass-")
+            || l.starts_with("x-ryugakusoken-")
+            || l.starts_with("x-studyinjapan-")
+            || l.starts_with("x-studyabroad-")
+            || l.starts_with("x-abroadnavi-")
+            || l.starts_with("x-abroadstudy-")
+            || l.starts_with("x-kaigairyugaku-")
+            || l.starts_with("x-ryugakuhoken-")
+            || l.starts_with("x-ryugakucenter-")
+            || l.starts_with("x-ryugakustation-")
+            || l.starts_with("x-ryugakugate-")
+            || l.starts_with("x-ryugakuworld-")
+            || l.starts_with("x-ryugakuplus-")
+            || l.starts_with("x-globalstudy-")
+            || l.starts_with("x-globalnavi-")
+            || l.starts_with("x-languageschool-")
+            || l.starts_with("x-languagestudy-")
+            || l.starts_with("x-eikaiwaryugaku-")
+            || l.starts_with("x-gogakuschool-")
+            || l.starts_with("x-gogakuryugaku-")
+            || l.starts_with("x-berkeleyryugaku-")
+            || l.starts_with("x-washingtonryugaku-")
+            || l.starts_with("x-uclaryugaku-")
+            || l.starts_with("x-harvardryugaku-")
+            || l.starts_with("x-oxfordryugaku-")
+            || l.starts_with("x-cambridgeryugaku-")
+            || l.starts_with("x-sydneyryugaku-")
+            || l.starts_with("x-melbourneryugaku-")
+            || l.starts_with("x-torontoryugaku-")
+            || l.starts_with("x-vancouverryugaku-")
+            || l.starts_with("x-londonryugaku-")
+            || l.starts_with("x-parisryugaku-")
+            || l.starts_with("x-berlinryugaku-")
+            || l.starts_with("x-seoulryugaku-")
+            || l.starts_with("x-taipeiryugaku-")
+            || l.starts_with("x-manilaryugaku-")
+            || l.starts_with("x-ceburyugaku-")
+            || l.starts_with("x-bangkokryugaku-")
+            || l.starts_with("x-hanoiryugaku-")
+            || l.starts_with("x-aucklandryugaku-")
+            || l.starts_with("x-dublinryugaku-")
+            || l.starts_with("x-maltaryugaku-")
+            || l.starts_with("x-hawaiiryugaku-")
+            || l.starts_with("x-guamryugaku-")
+            || l.starts_with("x-chinaryugaku-")
+            || l.starts_with("x-indiaryugaku-")
+            || l.starts_with("x-europeryugaku-")
+            || l.starts_with("x-americaryugaku-")
+            || l.starts_with("x-australiaryugaku-")
+            || l.starts_with("x-canadaryugaku-")
+    })
+}
+
+/// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*`/`X-BlackDeckerTool-*`/`X-MakitaDIY-*`/`X-KainzDIY-*`/`X-KonanPro-*`/`X-VivaHomeDIY-*`/`X-ArclandsDIY-*`/`X-PowerKomeri-*`/`X-HimalayaPro-*`/`X-KeiyoDIY-*`/`X-Nafco-*`/`X-Homac-*`/`X-Shimachu-*`/`X-SankyuTool-*`/`X-TodaiTool-*`/`X-Exlarge-*`/`X-AstorsTool-*`/`X-Sk11Tool-*`/`X-ToneTool-*`/`X-KTCtool-*`/`X-Nepros-*`/`X-ToneSet-*`/`X-SnapOn-*`/`X-WeraTools-*`/`X-Vessel-*`/`X-EngineerTools-*`/`X-HozanTool-*`/`X-GootSolder-*`/`X-Hakko-*`/`X-WellerTool-*`/`X-Nichigoh-*`/`X-TruscoNakayama-*`/`X-MonotaROTool-*`/`X-MisumiTool-*`/`X-Ichinen-*`/`X-SangyoTool-*`/`X-SudoTool-*`/`X-YamawaTool-*`/`X-NachitTool-*`/`X-OSGTool-*`/`X-MitsubishiTool-*`/`X-KyoceraTool-*`/`X-Tungaloy-*`/`X-IscarTool-*`/`X-SandvikTool-*`/`X-Kennametal-*`/`X-DijetTool-*`/`X-NtkTool-*`/`X-BigDaishowa-*`/`X-Nikkentool-*`/`X-RegoTool-*` (電動工具・DIY・工作機械工具の通知記録) を送信側が書いた自称。工具セット特価・在庫処分・会員価格の偽装は工具詐欺の典型手口。(ワークマン・DCM・コメリは既存族、建機は D538)
+fn has_diytool_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-makita-")
+            || l.starts_with("x-hikoki-")
+            || l.starts_with("x-boschtools-")
+            || l.starts_with("x-dewalt-")
+            || l.starts_with("x-milwaukeetool-")
+            || l.starts_with("x-ryobitools-")
+            || l.starts_with("x-earthman-")
+            || l.starts_with("x-einhell-")
+            || l.starts_with("x-blackdeckertool-")
+            || l.starts_with("x-makitadiy-")
+            || l.starts_with("x-kainzdiy-")
+            || l.starts_with("x-konanpro-")
+            || l.starts_with("x-vivahomediy-")
+            || l.starts_with("x-arclandsdiy-")
+            || l.starts_with("x-powerkomeri-")
+            || l.starts_with("x-himalayapro-")
+            || l.starts_with("x-keiyodiy-")
+            || l.starts_with("x-nafco-")
+            || l.starts_with("x-homac-")
+            || l.starts_with("x-shimachu-")
+            || l.starts_with("x-sankyutool-")
+            || l.starts_with("x-todaitool-")
+            || l.starts_with("x-exlarge-")
+            || l.starts_with("x-astorstool-")
+            || l.starts_with("x-sk11tool-")
+            || l.starts_with("x-tonetool-")
+            || l.starts_with("x-ktctool-")
+            || l.starts_with("x-nepros-")
+            || l.starts_with("x-toneset-")
+            || l.starts_with("x-snapon-")
+            || l.starts_with("x-weratools-")
+            || l.starts_with("x-vessel-")
+            || l.starts_with("x-engineertools-")
+            || l.starts_with("x-hozantool-")
+            || l.starts_with("x-gootsolder-")
+            || l.starts_with("x-hakko-")
+            || l.starts_with("x-wellertool-")
+            || l.starts_with("x-nichigoh-")
+            || l.starts_with("x-trusconakayama-")
+            || l.starts_with("x-monotarotool-")
+            || l.starts_with("x-misumitool-")
+            || l.starts_with("x-ichinen-")
+            || l.starts_with("x-sangyotool-")
+            || l.starts_with("x-sudotool-")
+            || l.starts_with("x-yamawatool-")
+            || l.starts_with("x-nachittool-")
+            || l.starts_with("x-osgtool-")
+            || l.starts_with("x-mitsubishitool-")
+            || l.starts_with("x-kyoceratool-")
+            || l.starts_with("x-tungaloy-")
+            || l.starts_with("x-iscartool-")
+            || l.starts_with("x-sandviktool-")
+            || l.starts_with("x-kennametal-")
+            || l.starts_with("x-dijettool-")
+            || l.starts_with("x-ntktool-")
+            || l.starts_with("x-bigdaishowa-")
+            || l.starts_with("x-nikkentool-")
+            || l.starts_with("x-regotool-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -17484,7 +17704,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は資機印を検出する() {
+    fn scan_は検機印を検出する() {
         let s1 = b"X-Shell-Notify: x\r\n\r\nx";
         assert!(has_energy_marks(s1));
         let e1 = b"X-ENEOS-Notify: x\r\n\r\nx";
@@ -20273,5 +20493,152 @@ X-Other: 1
 
 body";
     assert!(!has_instrument_marks(clean));
+}
+
+#[test]
+fn scan_は資機印を検出する() {
+    let u1 = b"From: a@b
+X-UCan-Id: 1
+
+x";
+    let t1 = b"From: a@b
+X-TACShool-Trace: 1
+
+x";
+    let o1 = b"From: a@b
+X-OharaSchool-Notice: 1
+
+x";
+    let l1 = b"From: a@b
+X-LECShikaku-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-Studing-Entry: 1
+
+x";
+    let b1 = b"From: a@b
+X-BokiSchool-Record: 1
+
+x";
+    let e1 = b"From: a@b
+X-EikenKentei-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-MentalKentei-Stamp: 1
+
+x";
+    assert!(has_license_marks(u1));
+    assert!(has_license_marks(t1));
+    assert!(has_license_marks(o1));
+    assert!(has_license_marks(l1));
+    assert!(has_license_marks(s1));
+    assert!(has_license_marks(b1));
+    assert!(has_license_marks(e1));
+    assert!(has_license_marks(m1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_license_marks(clean));
+}
+
+#[test]
+fn scan_は留機印を検出する() {
+    let r1 = b"From: a@b
+X-RyugakuJournal-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-SeikoRyugaku-Trace: 1
+
+x";
+    let j1 = b"From: a@b
+X-RyugakuJohokan-Notice: 1
+
+x";
+    let m1 = b"From: a@b
+X-Smaryu-Flag: 1
+
+x";
+    let w1 = b"From: a@b
+X-WISHRyugaku-Entry: 1
+
+x";
+    let g1 = b"From: a@b
+X-GlobalStudy-Record: 1
+
+x";
+    let c1 = b"From: a@b
+X-CebuRyugaku-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-CanadaRyugaku-Stamp: 1
+
+x";
+    assert!(has_abroad_marks(r1));
+    assert!(has_abroad_marks(s1));
+    assert!(has_abroad_marks(j1));
+    assert!(has_abroad_marks(m1));
+    assert!(has_abroad_marks(w1));
+    assert!(has_abroad_marks(g1));
+    assert!(has_abroad_marks(c1));
+    assert!(has_abroad_marks(a1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_abroad_marks(clean));
+}
+
+#[test]
+fn scan_は具機印を検出する() {
+    let m1 = b"From: a@b
+X-Makita-Id: 1
+
+x";
+    let h1 = b"From: a@b
+X-HiKOKI-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-BoschTools-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-DeWalt-Flag: 1
+
+x";
+    let t1 = b"From: a@b
+X-TruscoNakayama-Entry: 1
+
+x";
+    let s1 = b"From: a@b
+X-SnapOn-Record: 1
+
+x";
+    let v1 = b"From: a@b
+X-Vessel-Trace: 1
+
+x";
+    let k1 = b"From: a@b
+X-KyoceraTool-Stamp: 1
+
+x";
+    assert!(has_diytool_marks(m1));
+    assert!(has_diytool_marks(h1));
+    assert!(has_diytool_marks(b1));
+    assert!(has_diytool_marks(d1));
+    assert!(has_diytool_marks(t1));
+    assert!(has_diytool_marks(s1));
+    assert!(has_diytool_marks(v1));
+    assert!(has_diytool_marks(k1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_diytool_marks(clean));
 }
 }
