@@ -1348,6 +1348,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D507: ノート・執筆・PKM 印自称
+    if env.notes_marks {
+        render_risks.push(
+            "X-Joplin-*/X-Logseq-*/X-HackMD-*/X-Typora-*/X-Anytype-*/X-Notability-*/X-DokuWiki-*/X-RemNote-* 等 — 筆記機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D508: 図解・ホワイトボード・マインドマップ印自称
+    if env.diagram_marks {
+        render_risks.push(
+            "X-Excalidraw-*/X-Visio-*/X-MindMeister-*/X-tldraw-*/X-XMind-*/X-Creately-*/X-Padlet-*/X-Ayoa-* 等 — 図機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D509: ローコード・社内ツール・ヘッドレス CMS 印自称
+    if env.lowcode_marks {
+        render_risks.push(
+            "X-Retool-*/X-Supabase-*/X-Strapi-*/X-Budibase-*/X-NocoDB-*/X-Appwrite-*/X-Contentful-*/X-Directus-* 等 — 内機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
