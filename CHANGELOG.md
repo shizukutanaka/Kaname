@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D360: `X-RBL-*`/`X-DNSBL-*`/`X-Spamhaus-*`/`X-SURBL-*` 等の DNSBL 照会印自称が未検査
+
+- DNSBL ブラックリスト照会機が判定時に記す印 — 送信側から届くのは「RBL に掲載されていない」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_dnsbl_marks` 新設 → `Envelope.dnsbl_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D361: `X-Source-IP:`/`X-Remote-IP:`/`X-Sender-IP:`/`X-OrigIP:` 等の接続元 IP 印自称が未検査
+
+- 接続元 IP を記した印 — 送信側から届くのは「この IP から送った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_sourceip_marks` 新設 → `Envelope.sourceip_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D362: `X-Zimbra-*`/`X-OVH-*`/`X-Gandi-*`/`X-Fastmail-*`/`X-Proton-*` 等のプロバイダ内部印 (第二群) 自称が未検査
+
+- Zimbra/OVH/Gandi/Fastmail/Proton 等の内部配送値 — 送信側から届くのは「このプロバイダ経由」の体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_provider2_stamps` 新設 → `Envelope.provider2_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

@@ -581,6 +581,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D360: DNSBL 照会印自称
+    if env.dnsbl_marks {
+        render_risks.push(
+            "X-RBL-*/X-DNSBL-* 等 — ブラックリスト照会の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D361: 接続元 IP 印自称
+    if env.sourceip_marks {
+        render_risks.push(
+            "X-Source-IP/X-Remote-IP 等 — 接続元 IP の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D362: プロバイダ内部印 (第二群) 自称
+    if env.provider2_stamps {
+        render_risks.push(
+            "X-Zimbra-*/X-OVH-*/X-Gandi-* 等 — プロバイダ内部値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

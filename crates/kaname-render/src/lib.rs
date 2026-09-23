@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-RBL-*`/`X-DNSBL-*`/`X-Spamhaus-*`/`X-SURBL-*` 等の
+    /// DNSBL 照会印があるか — ブラックリスト照会機の印を送信側が
+    /// 自称する兆候 (D360)。
+    pub dnsbl_marks: bool,
+    /// `X-Source-IP:`/`X-Remote-IP:`/`X-Sender-IP:`/`X-OrigIP:` 等の
+    /// 接続元 IP 印があるか — 接続記録機が記す値を送信側が
+    /// 自称する兆候 (D361)。
+    pub sourceip_marks: bool,
+    /// `X-Zimbra-*`/`X-OVH-*`/`X-Gandi-*`/`X-Fastmail-*`/`X-Proton-*`
+    /// 等のプロバイダ内部印 (第二群) があるか — プロバイダ内部値を
+    /// 送信側が自称する兆候 (D362)。
+    pub provider2_stamps: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        dnsbl_marks: has_dnsbl_marks(raw),
+        sourceip_marks: has_sourceip_marks(raw),
+        provider2_stamps: has_provider2_stamps(raw),
     })
 }
 
@@ -487,6 +502,69 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-RBL-*`/`X-DNSBL-*`/`X-Spamhaus-*`/`X-SURBL-*` 等の DNSBL
+/// 照会印があるか判定する (D360)。
+///
+/// DNSBL ブラックリスト照会機が判定時に記す印 — 送信側から届く
+/// これは「RBL に掲載されていない」体裁を内容側が主張する自称
+/// (ブラックリストの印は照会機が記す)。
+fn has_dnsbl_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rbl-")
+            || l.starts_with("x-dnsbl-")
+            || l.starts_with("x-spamhaus-")
+            || l.starts_with("x-surbl-")
+            || l.starts_with("x-blacklist-")
+    })
+}
+
+/// `X-Source-IP:`/`X-Remote-IP:`/`X-Sender-IP:`/`X-OrigIP:` 等の
+/// 接続元 IP 印があるか判定する (D361)。
+///
+/// 接続元 IP を記した印 — 送信側から届くこれは「この IP から
+/// 送った」体裁を内容側が主張する自称 (接続元の記録は接続側が
+/// 記す)。
+fn has_sourceip_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-source-ip:")
+            || l.starts_with("x-remote-ip:")
+            || l.starts_with("x-remoteip:")
+            || l.starts_with("x-sender-ip:")
+            || l.starts_with("x-origip:")
+            || l.starts_with("x-sourceip:")
+    })
+}
+
+/// `X-Zimbra-*`/`X-OVH-*`/`X-Gandi-*`/`X-Fastmail-*`/`X-Proton-*`
+/// 等のプロバイダ内部印 (第二群) があるか判定する (D362)。
+///
+/// Zimbra/OVH/Gandi/Fastmail/Proton 等の内部配送値 — 送信側から
+/// 届くこれは「このプロバイダ経由」の体裁を内容側が主張する自称
+/// (D347 プロバイダ印の第二群)。
+fn has_provider2_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-zimbra-")
+            || l.starts_with("x-ovh-")
+            || l.starts_with("x-gandi-")
+            || l.starts_with("x-fastmail-")
+            || l.starts_with("x-proton-")
+            || l.starts_with("x-mailinabox-")
+            || l.starts_with("x-infomaniak-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2818,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はDNSBL印を検出する() {
+        let rb = b"X-RBL-Check: pass\r\n\r\nx";
+        assert!(has_dnsbl_marks(rb));
+        let db = b"X-DNSBL-Result: none\r\n\r\nx";
+        assert!(has_dnsbl_marks(db));
+        let sh = b"X-Spamhaus-Status: clean\r\n\r\nx";
+        assert!(has_dnsbl_marks(sh));
+        let su = b"X-SURBL-Test: pass\r\n\r\nx";
+        assert!(has_dnsbl_marks(su));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dnsbl_marks(clean));
+    }
+
+    #[test]
+    fn scan_はIP印を検出する() {
+        let si = b"X-Source-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_sourceip_marks(si));
+        let ri = b"X-Remote-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_sourceip_marks(ri));
+        let sp = b"X-Sender-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_sourceip_marks(sp));
+        let oi = b"X-OrigIP: 1.2.3.4\r\n\r\nx";
+        assert!(has_sourceip_marks(oi));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sourceip_marks(clean));
+    }
+
+    #[test]
+    fn scan_はプロバイダ印2を検出する() {
+        let zb = b"X-Zimbra-DL: list@x\r\n\r\nx";
+        assert!(has_provider2_stamps(zb));
+        let ov = b"X-OVH-Remote: 1\r\n\r\nx";
+        assert!(has_provider2_stamps(ov));
+        let ga = b"X-Gandi-Antispam: 0\r\n\r\nx";
+        assert!(has_provider2_stamps(ga));
+        let fm = b"X-Fastmail-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_provider2_stamps(fm));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_provider2_stamps(clean));
     }
 }
 
