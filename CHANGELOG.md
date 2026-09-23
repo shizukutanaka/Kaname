@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D321: `Message-Context:` デバイス種別自称が未検査
+
+- RFC 3458 の `Message-Context:` は voice-message/fax-message/pager-message/multimedia-message 等のメッセージ種別を宣言する値 — 「メールではなく別デバイス向け」の体裁で検査経路を分ける種別自称だが未検査だった
+- 対処: `has_message_context` 新設 → `Envelope.message_context` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D322: `Content-Features:`/`Content-Alternative:`/`Alternates:` コンテンツ交渉ヘッダが未検査
+
+- コンテンツ交渉ヘッダは「受信側が宣言した能力で内容を分ける」機構 — メールでは表示する側が交渉しないため、これらは検査に見える内容とユーザーに見える内容を分ける仕込みになるが未検査だった
+- 対処: `has_content_negotiation` 新設 → `Envelope.content_negotiation` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D323: `Alternate-Recipient:`/`X400-*`/`P2-*` 等の X.400 ゲートウェイ系ヘッダが未検査
+
+- `Alternate-Recipient:`/`Disallowed-Recipients:`/`Original-Encoded-Information-Types:`/`X400-*`/`P2-*` は X.400 世界のアドレス・配達機構を記す値 — メールに混じるのは X.400 経路を名乗る経路偽装だが未検査だった
+- 対処: `has_x400_headers` 新設 → `Envelope.x400_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

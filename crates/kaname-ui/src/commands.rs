@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D321: Message-Context 種別自称
+    if env.message_context {
+        render_risks.push(
+            "Message-Context ヘッダ — 「メール以外の装置向け」の種別を自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D322: コンテンツ交渉ヘッダ
+    if env.content_negotiation {
+        render_risks.push(
+            "Content-Features/Content-Alternative/Alternates — 受信側で内容を分ける交渉の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D323: X.400 系ヘッダ
+    if env.x400_headers {
+        render_risks.push(
+            "Alternate-Recipient/X400-*/P2-* ヘッダ — X.400 経路を名乗る偽装の可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

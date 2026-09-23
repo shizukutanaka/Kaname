@@ -103,6 +103,18 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `Message-Context:` が voice-message/fax-message 等のデバイス種別を
+    /// 名乗るか — 「メール以外の装置向け」の体裁で検査をすり抜ける
+    /// 種別自称の兆候 (D321)。
+    pub message_context: bool,
+    /// `Content-Features:`/`Content-Alternative:`/`Alternates:` 等の
+    /// コンテンツ交渉ヘッダがあるか — 表示内容を受信側の交渉で分ける
+    /// 兆候 (D322)。
+    pub content_negotiation: bool,
+    /// `Alternate-Recipient:`/`Original-Encoded-Information-Types:`
+    /// /`X400-*`/`P2-*` 等の X.400 ゲートウェイ系ヘッダがあるか —
+    /// X.400 変換経路を名乗る経路偽装の兆候 (D323)。
+    pub x400_headers: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +374,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        message_context: has_message_context(raw),
+        content_negotiation: has_content_negotiation(raw),
+        x400_headers: has_x400_headers(raw),
     })
 }
 
@@ -422,6 +437,62 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `Message-Context:` がデバイス種別を名乗るか判定する (D321)。
+///
+/// RFC 3458 の `Message-Context:` は voice-message/fax-message/
+/// pager-message/multimedia-message 等のメッセージ種別を宣言する
+/// 値 — 「メールではなく別デバイス向け」の体裁で検査経路を分ける
+/// 種別自称。
+fn has_message_context(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("message-context:"))
+}
+
+/// `Content-Features:`/`Content-Alternative:`/`Alternates:` があるか
+/// 判定する (D322)。
+///
+/// コンテンツ交渉ヘッダは「受信側が宣言した能力で内容を分ける」
+/// 機構 — メールでは表示する側が交渉しないため、これらは検査に
+/// 見える内容とユーザーに見える内容を分ける仕込みになる。
+fn has_content_negotiation(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("content-features:")
+            || l.starts_with("content-alternative:")
+            || l.starts_with("alternates:")
+    })
+}
+
+/// X.400 ゲートウェイ系ヘッダがあるか判定する (D323)。
+///
+/// `Alternate-Recipient:`/`Disallowed-Recipients:`/
+/// `Original-Encoded-Information-Types:`/`X400-Content-Type:`/
+/// `P2-Originator:`/`P2-Recipient:`/`X400-Trace:`/`X400-Originator:`
+/// は X.400 世界のアドレス・配達機構を記す値 — メールにこれらが
+/// 混じるのは X.400 経路を名乗る経路偽装。
+fn has_x400_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("alternate-recipient:")
+            || l.starts_with("disallowed-recipients:")
+            || l.starts_with("original-encoded-information-types:")
+            || l.starts_with("x400-")
+            || l.starts_with("p2-originator:")
+            || l.starts_with("p2-recipient:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2746,44 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はMessageContextを検出する() {
+        let vm = b"Message-Context: voice-message\r\n\r\nx";
+        assert!(has_message_context(vm));
+        let fx = b"Message-Context: fax-message\r\n\r\nx";
+        assert!(has_message_context(fx));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_message_context(clean));
+        let body = b"From: a@b\r\n\r\nMessage-Context: voice-message";
+        assert!(!has_message_context(body));
+    }
+
+    #[test]
+    fn scan_はコンテンツ交渉を検出する() {
+        let cf = b"Content-Features: table HTML3.2\r\n\r\nx";
+        assert!(has_content_negotiation(cf));
+        let ca = b"Content-Alternative: 3\r\n\r\nx";
+        assert!(has_content_negotiation(ca));
+        let al = b"Alternates: {\"a\" 1}\r\n\r\nx";
+        assert!(has_content_negotiation(al));
+        let clean = b"Content-Type: text/html\r\n\r\nx";
+        assert!(!has_content_negotiation(clean));
+    }
+
+    #[test]
+    fn scan_はX400を検出する() {
+        let ar = b"Alternate-Recipient: \"x\"\r\n\r\ny";
+        assert!(has_x400_headers(ar));
+        let xt = b"X400-Trace: (42) foo\r\n\r\nx";
+        assert!(has_x400_headers(xt));
+        let p2 = b"P2-Originator: x\r\n\r\ny";
+        assert!(has_x400_headers(p2));
+        let oe = b"Original-Encoded-Information-Types: ia5-text\r\n\r\nx";
+        assert!(has_x400_headers(oe));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_x400_headers(clean));
     }
 }
 
