@@ -2020,6 +2020,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D593: ポイ活・お小遣いサイト印自称
+    if env.pointkatsu_marks {
+        render_risks.push(
+            "X-Moppy-*/X-Hapitas-*/X-Gendama-*/X-Chobirich-*/X-PointTown-*/X-ECNavi-*/X-Warau-*/X-GetMoney-* 等 — 稼機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D594: マッサージ・整体・リラク印自称
+    if env.massage_marks {
+        render_risks.push(
+            "X-Rirakuru-*/X-Raffine-*/X-Temomin-*/X-KaradaFactory-*/X-Manistare-*/X-Rafure-*/X-Bantomiere-*/X-Taraso-* 等 — 揉機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D595: 駐車場・コインパーキング印自称
+    if env.parking_marks {
+        render_risks.push(
+            "X-TimesPark-*/X-Times24-*/X-MitsuRepark-*/X-NPC24H-*/X-ApplePark-*/X-CoinPark-*/X-SmartPark-*/X-MyParking-* 等 — 停機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

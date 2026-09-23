@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D593: `X-Moppy-*`/`X-Hapitas-*`/`X-Gendama-*` 等のポイ活・お小遣いサイト印自称が未検査
+
+- **問題**: `X-Moppy-*` (モッピー)、`X-Hapitas-*` (ハピタス)、`X-Gendama-*` (げん玉)、`X-PointIncome-*`/`X-Chobirich-*`/`X-PointTown-*`/`X-ECNavi-*`/`X-LifeMedia-*`/`X-PointAnytime-*`/`X-GetMoney-*`/`X-Warau-*`/`X-Sugotama-*`/`X-Powl-*`/`X-GPoint-*`/`X-PointLand-*`/`X-Macroidail-*`/`X-CoinOffer-*`/`X-OkaneMochi-*`/`X-PointFunnel-*`/`X-PointRibon-*`/`X-SumiPoint-*`/`X-PointWorld-*`/`X-PointBridge-*`/`X-PointFlow-*`/`X-Milama-*`/`X-Potora-*`/`X-MoneyTicket-*`/`X-PointOK-*`/`X-PointHunter-*`/`X-KozukaiPoint-*`/`X-PointStar-*`/`X-PointFan-*`/`X-PointGo-*`/`X-PointUp-*`/`X-PointDeals-*`/`X-Poita-*`/`X-RakutenPoint-*`/`X-KakuPoint-*`/`X-PointMessage-*`/`X-PointMail-*`/`X-PointMini-*`/`X-PointRace-*`/`X-ChibiPoint-*`/`X-PointGuide-*`/`X-Poicha-*`/`X-PointCatalog-*`/`X-PointStore-*`/`X-PotoraPoint-*`/`X-HapitasMini-*`/`X-PointTownship-*`/`X-PointSale-*`/`X-PointParadise-*`/`X-Gendamita-*`/`X-EbiPoint-*`/`X-NekoPoint-*` は稼機の通知記録 — 送信側が書くことは自称。ポイント増量・換金完了・獲得通知の偽装はポイ活詐欺の典型手口。(ポイント・決済機は D568)
+- **修正**: `Envelope` に `pointkatsu_marks` + `has_pointkatsu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 稼印の自署を問え。
+
+### Security — D594: `X-Rirakuru-*`/`X-Raffine-*`/`X-Temomin-*` 等のマッサージ・整体・リラク印自称が未検査
+
+- **問題**: `X-Rirakuru-*` (りらくる)、`X-Raffine-*` (ラフィネ)、`X-Temomin-*` (てもみん)、`X-KaradaFactory-*`/`X-Manistare-*`/`X-Rafure-*`/`X-Asubi-*`/`X-Mukatamu-*`/`X-Toraibu-*`/`X-Ribafi-*`/`X-Bantomiere-*`/`X-Taraso-*`/`X-MassagePlaza-*`/`X-FootJoy-*`/`X-Ashiraku-*`/`X-Temonigiri-*`/`X-TemomiLabo-*`/`X-BodyTune-*`/`X-Momivale-*`/`X-ChiroSuiden-*`/`X-MominoTsuchi-*`/`X-Tenowa-*`/`X-Hogushite-*`/`X-KaradaPlus-*`/`X-Rirakuya-*`/`X-Momitei-*`/`X-MomiYa-*`/`X-Genkido-*`/`X-Tsuyoshi-*`/`X-Nidanashi-*`/`X-MasajiKun-*`/`X-Hogusubi-*`/`X-Riraku-*`/`X-YutoriKan-*`/`X-Otenami-*`/`X-Ubub-*`/`X-Chiryoen-*`/`X-BodyLab-*`/`X-FootSalon-*`/`X-RefleKaikan-*`/`X-ItokiKaikan-*`/`X-MomiSukki-*`/`X-Rakua-*`/`X-Fumino-*`/`X-AshiMomi-*`/`X-NagomiTei-*`/`X-ShiatsuKan-*`/`X-AcuRetreat-*`/`X-SpaRise-*`/`X-MeroPeach-*`/`X-Nemomi-*`/`X-Hoguretu-*`/`X-TeShin-*`/`X-Hogureba-*`/`X-MomiLabo-*`/`X-RilakSPA-*`/`X-SoreEgao-*`/`X-KaradaRaku-*`/`X-FuwaRaku-*` は揉機の通知記録 — 送信側が書くことは自称。回数券・施術予約・コース勧誘の偽装はリラク詐欺の典型手口。
+- **修正**: `Envelope` に `massage_marks` + `has_massage_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 揉印の自署を問え。
+
+### Security — D595: `X-TimesPark-*`/`X-Times24-*`/`X-MitsuRepark-*` 等の駐車場・コインパーキング印自称が未検査
+
+- **問題**: `X-TimesPark-*` (タイムズパーキング)、`X-Times24-*` (タイムズ)、`X-MitsuRepark-*` (三井のリパーク)、`X-NPC24H-*`/`X-ApplePark-*`/`X-TimesCar-*`/`X-NPCParking-*`/`X-Parca-*`/`X-WisdomCar-*`/`X-ELeaf-*`/`X-Seiyaken-*`/`X-NipponParking-*`/`X-ParkJPN-*`/`X-MiyamaPark-*`/`X-ParkMoto-*`/`X-MotoPark-*`/`X-ParkingLot-*`/`X-CoinPark-*`/`X-YorozuPark-*`/`X-SFC-Park-*`/`X-AoiPark-*`/`X-FudoPark-*`/`X-MotomachiPark-*`/`X-TokyoPark-*`/`X-NambaPark-*`/`X-KobePark-*`/`X-OsakaPark-*`/`X-NagoyaPark-*`/`X-SapporoPark-*`/`X-FukuokaPark-*`/`X-KanazawaPark-*`/`X-SendaiPark-*`/`X-HiroshimaPark-*`/`X-KitaPark-*`/`X-MinamiPark-*`/`X-RoutePark-*`/`X-MultiPark-*`/`X-StationPark-*`/`X-AirportPark-*`/`X-CenterPark-*`/`X-ParkYourCar-*`/`X-CarPark-*`/`X-OffStreet-*`/`X-InnerPark-*`/`X-ZonePark-*`/`X-RakudaPark-*`/`X-MotoChin-*`/`X-ValleyPark-*`/`X-MotoGate-*`/`X-ParkMate-*`/`X-MotoZone-*`/`X-ParkingNet-*`/`X-ParkingLab-*`/`X-ParkOnline-*`/`X-DigitalPark-*`/`X-SmartPark-*`/`X-MyParking-*` は停機の通知記録 — 送信側が書くことは自称。駐車違反金・月極料金・駐車場検索の偽装はドライバー狙い詐欺の典型手口。(自動車機は D521、車買取機は D572)
+- **修正**: `Envelope` に `parking_marks` + `has_parking_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 停印の自署を問え。
+
 ### Security — D590: `X-Raksul-*`/`X-Printpac-*`/`X-Vistaprint-*` 等の印刷・名刺通販印自称が未検査
 
 - **問題**: `X-Raksul-*` (ラクスル)、`X-Printpac-*` (プリントパック)、`X-Vistaprint-*` (Vistaprint)、`X-Graphic-*`/`X-Banfu-*`/`X-Irodori-*`/`X-Meishi21-*`/`X-Papuri-*`/`X-KingPrinters-*`/`X-Cocomite-*`/`X-PrintMall-*`/`X-NetPrintJP-*`/`X-PrintMarche-*`/`X-SpeedPrint-*`/`X-Kitamura-*`/`X-Jijinsha-*`/`X-Irori-*`/`X-PrintBuddy-*`/`X-Ashida-*`/`X-Primedia-*`/`X-Optimum-*`/`X-Pazza-*`/`X-Prijitsu-*`/`X-WePrint-*`/`X-OnPrint-*`/`X-BoxPrint-*`/`X-KinkoPrint-*`/`X-PrintMonster-*`/`X-Pixable-*`/`X-Moo-*`/`X-Shutterfly-*`/`X-CanvaPrint-*`/`X-Printful-*`/`X-GotPrint-*`/`X-OvernightPrints-*`/`X-UPrinting-*`/`X-PrintPlace-*`/`X-Jukebox-*`/`X-48HourPrint-*`/`X-Printify-*`/`X-Gelato-*`/`X-PrintReleaf-*`/`X-FedexOffice-*`/`X-StaplesPrint-*`/`X-OfficeDepotPrint-*`/`X-Smartpress-*`/`X-PrintRunner-*`/`X-UPrint-*`/`X-Printingforless-*`/`X-Imbue-*`/`X-Zazzle-*`/`X-CafePress-*`/`X-Redbubble-*`/`X-Society6-*`/`X-Teepublic-*`/`X-Threadless-*`/`X-Spreadshop-*`/`X-PrintBest-*` は刷機の通知記録 — 送信側が書くことは自称。名刺発注・チラシ印刷・データ入稿の偽装は小規模事業者狙い詐欺の典型。
