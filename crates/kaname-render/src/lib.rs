@@ -100,6 +100,11 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// 本文パートの Content-Type が `text/enriched`/`text/richtext` 等の
+    /// 旧式マークアップ型か — クライアントが表示として解釈しながら
+    /// テキスト検査ではプレーンテキストに見える parser differential
+    /// 型偽装の兆候 (D233)。
+    pub obsolete_body_content_type: bool,
 }
 
 /// An RFC 5322 address.
@@ -358,7 +363,31 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        obsolete_body_content_type: has_obsolete_body_content_type(raw),
     })
+}
+
+/// 添付ファイル名自体にパス区切りまたは上位参照があるか判定する (D232)。
+///
+/// ZIP 内部の `../` (D216) とは別に、添付の `filename=` そのものに
+/// `/`、`\\`、`..` を書き込むと保存時のパストラバーサルに使える
+/// (MimeCast/メール添付 traversal 報告)。
+fn filename_has_path_separators(filename: &str) -> bool {
+    filename.contains("..") || filename.contains('/') || filename.contains('\\')
+}
+
+/// 旧式マークアップ Content-Type (`text/enriched`/`text/richtext`) を
+/// 本文パートに持つか判定する (D233)。
+///
+/// `text/enriched`/`text/richtext` は旧式のリッチテキスト型で、
+/// クライアントがタグを表示として解釈しながら、テキスト抽出では
+/// マークアップのまま見える — 「表示器」と「検査器」で本文が
+/// 異なる parser differential になる。
+fn has_obsolete_body_content_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    (lower.contains("content-type:") && lower.contains("text/enriched"))
+        || (lower.contains("content-type:") && lower.contains("text/richtext"))
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2080,6 +2109,41 @@ mod tests {
         );
     }
 
+    /// D232: 添付ファイル名のパス区切り・上位参照の検出。
+    #[test]
+    fn filename_はパス区切りを検出する() {
+        assert!(filename_has_path_separators("../evil.exe"));
+        assert!(filename_has_path_separators("dir/sub/file.exe"));
+        assert!(filename_has_path_separators("dir\\file.exe"));
+        assert!(filename_has_path_separators("file..exe"));
+        assert!(!filename_has_path_separators("file.exe"));
+        assert!(!filename_has_path_separators("report.pdf"));
+        assert!(!filename_has_path_separators(""));
+    }
+
+    /// D233: 旧式マークアップ Content-Type の検出。
+    #[test]
+    fn parse_は旧式content_typeを検出する() {
+        assert!(has_obsolete_body_content_type(
+            b"Content-Type: text/enriched\r\n\r\nbody"
+        ));
+        assert!(has_obsolete_body_content_type(
+            b"Content-Type: text/richtext\r\n\r\nbody"
+        ));
+        assert!(!has_obsolete_body_content_type(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+        assert!(!has_obsolete_body_content_type(
+            b"Content-Type: text/html\r\n\r\nbody"
+        ));
+        assert!(!has_obsolete_body_content_type(b""));
+        let raw = b"From: a@e.com\r\nContent-Type: text/enriched\r\n\
+                    \r\n\
+                    <body>bold</body>";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.obsolete_body_content_type);
+    }
+
     #[test]
     fn addr_normal_email_splits_correctly() {
         let addr = mail_parser::Addr {
@@ -2824,6 +2888,17 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
     for r in metadata_check::detect_metadata_risks(filename, bytes) {
         risks.push(format!("メタデータが含まれます: {r:?}"));
+    }
+
+    // 7. ファイル名自体のパス区切り・上位参照 (D232) — ZIP 内部でなく
+    //    添付のファイル名そのものに `..`/`/`/`\\` を書き込む
+    //    パストラバーサルの兆候。
+    if filename_has_path_separators(filename) {
+        risks.push(
+            "添付ファイル名にパス区切りまたは `..` — 保存時のパストラバーサル兆候"
+                .to_string(),
+        );
+        is_dangerous = true;
     }
 
     AttachmentScan {

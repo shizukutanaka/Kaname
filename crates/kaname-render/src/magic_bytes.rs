@@ -160,6 +160,12 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "img"   // ディスクイメージ — 同上
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
+        // ドキュメント型コンテナ — 「文書 = 読み物」の前提で
+        // 中にリンク・埋め込みを仕込める (D231)
+        | "one"   // OneNote — 中身にリンク・添付を仕込める (2023- フィッシング波)
+        | "onepkg" // OneNote パッケージ — 同上
+        | "pub"   // Publisher — 同上
+        | "xlsb" // Excel バイナリ — マクロが静的検査で見えにくい
     )
 }
 
@@ -571,6 +577,10 @@ mod tests {
     #[test]
     fn safe_archive_extensions_not_dangerous() {
         // zip/rar/7z は通常の配送手段 — コンテナ形式とは区別する
+        assert!(is_dangerous_windows_attachment("note.one"));
+        assert!(is_dangerous_windows_attachment("pack.onepkg"));
+        assert!(is_dangerous_windows_attachment("news.pub"));
+        assert!(is_dangerous_windows_attachment("sheet.xlsb"));
         assert!(!is_dangerous_windows_attachment("archive.zip"));
         assert!(!is_dangerous_windows_attachment("backup.rar"));
         assert!(!is_dangerous_windows_attachment("photos.tar"));

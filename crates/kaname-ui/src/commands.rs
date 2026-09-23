@@ -542,6 +542,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D233: 旧式マークアップ Content-Type (parser differential) の兆候。
+    if env.obsolete_body_content_type {
+        render_risks.push(
+            "本文パートに text/enriched/richtext 系の旧式 Content-Type — 表示器と検査器で              本文が異なる parser differential 型偽装の兆候"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
