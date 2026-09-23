@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `<a ping="…">` クリック計測属性があるか — href 抽出を
+    /// 素通りする属性内ビーコンの兆候 (D297)。
+    pub a_ping_attr: bool,
+    /// `<video>`/`<audio>`/`<source>`/`<track>`/`<frame>`/`<frameset>`
+    /// のメディア・フレーム系タグがあるか (D298)。
+    pub media_frame_tag: bool,
+    /// `Content-Type` の形違反 (型トークンに `/` なし / 空パラメータ値)
+    /// があるか (D299)。
+    pub malformed_content_type: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +371,83 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        a_ping_attr: has_a_ping_attr(raw),
+        media_frame_tag: has_media_frame_tag(raw),
+        malformed_content_type: has_malformed_content_type(raw),
     })
+}
+
+/// `<a ping="…">` クリック計測属性を検出する (D297)。
+///
+/// `ping=` はクリック時にブラウザが別 URL へビーコンを送る属性 —
+/// href を起点にした URL 抽出を素通りする発信経路。正規メールには
+/// ほぼ出現しない。
+fn has_a_ping_attr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(pos) = rest.find("<a") {
+        let tail = &rest[pos..];
+        // `<a` の直後が空白/改行/`>` の場合のみ a タグ (abbr/address/area 除外)
+        let is_a_tag = tail[2..]
+            .chars()
+            .next()
+            .is_some_and(|c| matches!(c, ' ' | '\t' | '\r' | '\n' | '>'));
+        if is_a_tag {
+            let tag_end = tail.find('>').unwrap_or(tail.len());
+            if tail[..tag_end].contains("ping=") {
+                return true;
+            }
+            rest = &tail[tag_end..];
+        } else {
+            rest = &tail[2..];
+        }
+    }
+    false
+}
+
+/// メディア・フレーム系タグを検出する (D298)。
+///
+/// `<video>`/`<audio>`/`<source>`/`<track>`/`<frame>`/`<frameset>` は
+/// メール本文に正当な用途がなく、リモート読み込み・フレーム内ロードの
+/// 起点になる。
+fn has_media_frame_tag(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    ["<video", "<audio", "<source", "<track", "<frame"]
+        .iter()
+        .any(|t| lower.contains(t))
+}
+
+/// `Content-Type` の形違反を検出する (D299)。
+///
+/// 型トークンに `/` がない (`Content-Type: garbage`) か、パラメータの
+/// 値が空 (`charset=;`) か — 規格の形を欠く宣言はパーサごとに受理が
+/// 分かれる非準拠形。
+fn has_malformed_content_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-type:"))
+        .any(|l| {
+            let val = &l[13..];
+            let type_tok = val.split(';').next().unwrap_or("").trim();
+            if !type_tok.contains('/') {
+                return true;
+            }
+            // パラメータ値が空 (= の直後が `;` か行末)
+            val.char_indices().any(|(i, c)| {
+                c == '='
+                    && val[i + 1..]
+                        .trim_start()
+                        .chars()
+                        .next()
+                        .is_none_or(|n| n == ';')
+            })
+        })
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2760,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はa_ping属性を検出する() {
+        let ping = b"<a href=\"https://a.example\" ping=\"https://track.example/beacon\">click</a>";
+        assert!(has_a_ping_attr(ping));
+        let two = b"<p>x</p><a\n ping=\"https://t.example\">y</a>";
+        assert!(has_a_ping_attr(two));
+        let clean = b"<a href=\"https://a.example\">click</a>";
+        assert!(!has_a_ping_attr(clean));
+        let abbr = b"<abbr title=\"ping=pong\">x</abbr>";
+        assert!(!has_a_ping_attr(abbr));
+        let area = b"<area ping=\"x\">";
+        assert!(!has_a_ping_attr(area));
+    }
+
+    #[test]
+    fn scan_はメディアフレームタグを検出する() {
+        let v = b"<video src=\"https://e.example/v.mp4\"></video>";
+        assert!(has_media_frame_tag(v));
+        let s = b"<audio><source src=\"https://e.example/a.mp3\"></audio>";
+        assert!(has_media_frame_tag(s));
+        let f = b"<frameset><frame src=\"https://e.example\"></frameset>";
+        assert!(has_media_frame_tag(f));
+        let t = b"<track src=\"cap.vtt\">";
+        assert!(has_media_frame_tag(t));
+        let clean = b"<p>hello</p>";
+        assert!(!has_media_frame_tag(clean));
+    }
+
+    #[test]
+    fn scan_はcontenttype形違反を検出する() {
+        let noslash = b"Content-Type: garbage\r\n\r\nx";
+        assert!(has_malformed_content_type(noslash));
+        let emptyp = b"Content-Type: text/plain; charset=;\r\n\r\nx";
+        assert!(has_malformed_content_type(emptyp));
+        let emptyend = b"Content-Type: text/plain; name=\r\n\r\nx";
+        assert!(has_malformed_content_type(emptyend));
+        let ok = b"Content-Type: text/plain; charset=utf-8\r\n\r\nx";
+        assert!(!has_malformed_content_type(ok));
+        let noct = b"Subject: x\r\n\r\nbody";
+        assert!(!has_malformed_content_type(noct));
     }
 }
 

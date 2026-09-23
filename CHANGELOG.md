@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D297: `<a ping="…">` クリック計測属性が未検査
+
+- `ping=` はクリック時にブラウザが別 URL へ POST ビーコンを送る属性 — href を起点にした URL 抽出を素通りする発信経路であり、正規メールにはほぼ出現しないが未検査だった
+- 対処: `has_a_ping_attr` 新設で `<a` タグ内の `ping=` を検出 (abbr/address/area 誤認を除外するタグ名境界チェック付き) → `Envelope.a_ping_attr` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D298: メディア・フレーム系タグが未検査
+
+- `<video>`/`<audio>`/`<source>`/`<track>`/`<frame>`/`<frameset>` はメール本文に正当な用途がなく、リモート読み込み・フレーム内ロードの起点になるが未検査だった
+- 対処: `has_media_frame_tag` 新設 → `Envelope.media_frame_tag` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D299: `Content-Type` の形違反が未検査
+
+- 型トークンに `/` がない (`Content-Type: garbage`) かパラメータ値が空 (`charset=;`) か — 規格の形を欠く宣言はパーサごとに受理が分かれる非準拠形だが未検査だった
+- 対処: `has_malformed_content_type` 新設 → `Envelope.malformed_content_type` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

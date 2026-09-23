@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D297: <a ping="..."> 計測属性
+    if env.a_ping_attr {
+        render_risks.push(
+            "<a ping=\"…\"> クリック計測属性 — href 抽出を素通りするビーコン経路の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D298: メディア・フレーム系タグ
+    if env.media_frame_tag {
+        render_risks.push(
+            "<video>/<audio>/<source>/<track>/<frame> 系タグ — メールに正当な用途のないリモート読み込み起点の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D299: Content-Type の形違反
+    if env.malformed_content_type {
+        render_risks.push(
+            "Content-Type の形が規格違反です (型トークンに / なし・空パラメータ値) — 非準拠生成品の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
