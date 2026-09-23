@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D369: `X-Scanned-By:`/`X-CanIt-*`/`X-AntiVirus:`/`X-Avira-*`/`X-AVG-*`/`X-Eset-*`/`X-BitDefender-*`/`X-ClamAV-*` 等の AV 走査印 (第二群) 自称が未検査
+
+- 走査機が検査時に記す印 — 送信側から届くのは「ウイルス走査済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_av2_stamps` 新設 → `Envelope.av2_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D370: `X-Bogosity*`/`X-SpamCop-*`/`X-SpamBayes-*`/`X-Pyzor-*` 等の統計判定印 (第二群) 自称が未検査
+
+- bogofilter/SpamCop/SpamBayes/Pyzor の判定値 — 送信側から届くのは「統計フィルタが通した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_statfilter2_marks` 新設 → `Envelope.statfilter2_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D371: `X-Provags-ID:`/`X-MailCheck-*`/`X-1und1-*`/`X-GMX-*`/`X-WEB.DE-*`/`X-UI-*` 等のドイツ系 ISP 内部印自称が未検査
+
+- GMX/WEB.DE/1&1 等が内部配送で記す値 — 送信側から届くのは「このプロバイダ経由」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_deisp_stamps` 新設 → `Envelope.deisp_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D327: `Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査
 
 - 本物の ESP/ISP は abuse 窓口を自社ドメインで運用し受信側が確認できる — 送信側が窓口を名乗るのは「監視されている体裁」の自署だが未検査だった

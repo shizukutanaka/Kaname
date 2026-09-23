@@ -605,6 +605,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D369: AV 走査印 (第二群) 自称
+    if env.av2_stamps {
+        render_risks.push(
+            "X-Scanned-By/X-CanIt-*/X-ClamAV-* 等 — AV 走査機の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D370: 統計判定印 (第二群) 自称
+    if env.statfilter2_marks {
+        render_risks.push(
+            "X-Bogosity*/X-SpamCop-*/X-SpamBayes-* 等 — 統計フィルタ判定を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D371: ドイツ系 ISP 印自称
+    if env.deisp_stamps {
+        render_risks.push(
+            "X-Provags-ID/X-1und1-*/X-GMX-* 等 — プロバイダ内部値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

@@ -130,6 +130,18 @@ pub struct Envelope {
     /// 識別子があるか — 「ISP と苦情報告を共有している」の体裁を自署する
     /// 兆候 (D329)。
     pub feedback_id: bool,
+    /// `X-Scanned-By:`/`X-CanIt-*`/`X-AntiVirus:`/`X-Avira-*`/`X-AVG-*`/
+    /// `X-Eset-*`/`X-BitDefender-*`/`X-ClamAV-*` 等の AV 走査印 (第二群)
+    /// があるか — 走査機が記す印を送信側が自称する兆候 (D369)。
+    pub av2_stamps: bool,
+    /// `X-Bogosity*`/`X-SpamCop-*`/`X-SpamBayes-*` 等の統計判定印
+    /// (第二群) があるか — 統計フィルタの判定を送信側が自称する
+    /// 兆候 (D370)。
+    pub statfilter2_marks: bool,
+    /// `X-Provags-ID:`/`X-MailCheck-*`/`X-1und1-*`/`X-GMX-*`/
+    /// `X-WEB.DE-*`/`X-UI-*` 等のドイツ系 ISP 内部印があるか —
+    /// プロバイダ内部値を送信側が自称する兆候 (D371)。
+    pub deisp_stamps: bool,
 }
 
 /// An RFC 5322 address.
@@ -404,6 +416,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         abuse_headers: has_abuse_headers(raw),
         has_attach_claim: has_attach_claim(raw),
         feedback_id: has_feedback_id(raw),
+        av2_stamps: has_av2_stamps(raw),
+        statfilter2_marks: has_statfilter2_marks(raw),
+        deisp_stamps: has_deisp_stamps(raw),
     })
 }
 
@@ -554,6 +569,70 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-Scanned-By:`/`X-CanIt-*`/`X-AntiVirus:`/`X-Avira-*`/`X-AVG-*`/
+/// `X-Eset-*`/`X-BitDefender-*`/`X-ClamAV-*` 等の AV 走査印があるか
+/// 判定する (D369)。
+///
+/// 走査機が検査時に記す印 — 送信側から届くこれは「ウイルス走査済み」
+/// の体裁を内容側が主張する自称 (D335 走査印の第二群)。
+fn has_av2_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-scanned-by:")
+            || l.starts_with("x-canit-")
+            || l.starts_with("x-antivirus:")
+            || l.starts_with("x-avira-")
+            || l.starts_with("x-avg-")
+            || l.starts_with("x-eset-")
+            || l.starts_with("x-bitdefender-")
+            || l.starts_with("x-clamav-")
+            || l.starts_with("x-clam-av-")
+    })
+}
+
+/// `X-Bogosity*`/`X-SpamCop-*`/`X-SpamBayes-*`/`X-Pyzor-*` 等の
+/// 統計判定印があるか判定する (D370)。
+///
+/// bogofilter/SpamCop/SpamBayes/Pyzor の判定値 — 送信側から届くこれは
+/// 「統計フィルタが通した」体裁を内容側が主張する自称
+/// (D352 統計フィルタ印の第二群)。
+fn has_statfilter2_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-bogosity")
+            || l.starts_with("x-spamcop-")
+            || l.starts_with("x-spambayes-")
+            || l.starts_with("x-pyzor-")
+    })
+}
+
+/// `X-Provags-ID:`/`X-MailCheck-*`/`X-1und1-*`/`X-GMX-*`/`X-WEB.DE-*`/
+/// `X-UI-*` 等のドイツ系 ISP 内部印があるか判定する (D371)。
+///
+/// GMX/WEB.DE/1&1 等が内部配送で記す値 — 送信側から届くこれは
+/// 「このプロバイダ経由」の体裁を内容側が主張する自称
+/// (D347 プロバイダ印の第三群)。
+fn has_deisp_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-provags-id:")
+            || l.starts_with("x-mailcheck-")
+            || l.starts_with("x-1und1-")
+            || l.starts_with("x-gmx-")
+            || l.starts_with("x-web.de-")
+            || l.starts_with("x-ui-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2841,6 +2920,48 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はAV印2を検出する() {
+        let sb = b"X-Scanned-By: av-engine\r\n\r\nx";
+        assert!(has_av2_stamps(sb));
+        let ci = b"X-CanIt-Geo: ip=1.2.3.4\r\n\r\nx";
+        assert!(has_av2_stamps(ci));
+        let cv = b"X-ClamAV-Status: clean\r\n\r\nx";
+        assert!(has_av2_stamps(cv));
+        let av = b"X-Avira-Checked: yes\r\n\r\nx";
+        assert!(has_av2_stamps(av));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_av2_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は統計印2を検出する() {
+        let bg = b"X-Bogosity: Ham, tests=bogofilter\r\n\r\nx";
+        assert!(has_statfilter2_marks(bg));
+        let bl = b"X-Bogosity-Level: 0.1\r\n\r\nx";
+        assert!(has_statfilter2_marks(bl));
+        let sc = b"X-SpamCop-Checked: 1\r\n\r\nx";
+        assert!(has_statfilter2_marks(sc));
+        let py = b"X-Pyzor-Report: whitelisted\r\n\r\nx";
+        assert!(has_statfilter2_marks(py));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_statfilter2_marks(clean));
+    }
+
+    #[test]
+    fn scan_は独ISP印を検出する() {
+        let pv = b"X-Provags-ID: V03\r\n\r\nx";
+        assert!(has_deisp_stamps(pv));
+        let uu = b"X-1und1-Spam: 0\r\n\r\nx";
+        assert!(has_deisp_stamps(uu));
+        let gx = b"X-GMX-Antispam: 0\r\n\r\nx";
+        assert!(has_deisp_stamps(gx));
+        let mc = b"X-MailCheck-Time: 1\r\n\r\nx";
+        assert!(has_deisp_stamps(mc));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_deisp_stamps(clean));
     }
 }
 
