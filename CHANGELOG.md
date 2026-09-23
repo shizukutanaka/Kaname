@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D519: `X-Geico-*`/`X-AXA-*`/`X-TokioMarine-*`/`X-StateFarm-*`/`X-MetLife-*`/`X-NipponLife-*` 等の保険会社印自称が未検査
+
+- **問題**: `X-Geico-*` (GEICO)、`X-AXA-*` (AXA)、`X-TokioMarine-*` (東京海上)、`X-StateFarm-*`/`X-Progressive-*`/`X-Allstate-*`/`X-Allianz-*`/`X-Zurich-*`/`X-AIG-*`/`X-MetLife-*`/`X-Prudential-*`/`X-Aflac-*`/`X-LibertyMutual-*`/`X-Travelers-*`/`X-Nationwide-*`/`X-Chubb-*`/`X-Sompo-*`/`X-MSAD-*`/`X-DaiichiLife-*`/`X-NipponLife-*`/`X-MeijiYasuda-*`/`X-T&D-*`/`X-Manulife-*`/`X-SunLife-*`/`X-Aviva-*`/`X-Generali-*`/`X-Lemonade-*`/`X-OscarHealth-*`/`X-Academy-*`/`X-Everest-*`/`X-ArchCapital-*`/`X-RenaissanceRe-*`/`X-Hanover-*`/`X-CNA-*`/`X-Markel-*`/`X-Beazley-*`/`X-Hiscox-*`/`X-TokioKiln-*` は保機の通知記録 — 送信側が書くことは自称。保険金・解約返戻金詐欺の典型印。
+- **修正**: `Envelope` に `insurance_marks` + `has_insurance_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 保印の自署を問え。
+
+### Security — D520: `X-PGE-*`/`X-TEPCO-*`/`X-TokyoGas-*`/`X-EDF-*`/`X-DukeEnergy-*`/`X-NationalGrid-*` 等の公益事業印自称が未検査
+
+- **問題**: `X-PGE-*` (PG&E)、`X-TEPCO-*` (東京電力)、`X-TokyoGas-*` (東京ガス)、`X-ConEd-*`/`X-DukeEnergy-*`/`X-Dominion-*`/`X-NationalGrid-*`/`X-EON-*`/`X-EDF-*`/`X-Enel-*`/`X-Iberdrola-*`/`X-Kanden-*`/`X-ChubuElectric-*`/`X-OsakaGas-*`/`X-Veolia-*`/`X-Suez-*`/`X-SouthernCompany-*`/`X-Exelon-*`/`X-NextEra-*`/`X-Ameren-*`/`X-XcelEnergy-*`/`X-PSEG-*`/`X-HokkaidoElectric-*`/`X-TohokuElectric-*`/`X-HokurikuElectric-*`/`X-ChugokuElectric-*`/`X-ShikokuElectric-*`/`X-KyushuElectric-*`/`X-OkinawaElectric-*`/`X-SaibuGas-*`/`X-HiroshimaGas-*` は灯機の通知記録 — 送信側が書くことは自称。料金未払い停止詐欺の典型印。(水道会社の一部は D518 で検出済み)
+- **修正**: `Envelope` に `utility_marks` + `has_utility_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 灯印の自署を問え。
+
+### Security — D521: `X-Toyota-*`/`X-Honda-*`/`X-Hertz-*`/`X-Tesla-*`/`X-BMW-*`/`X-Ford-*` 等の自動車メーカー・レンタカー・カーシェア印自称が未検査
+
+- **問題**: `X-Toyota-*` (Toyota)、`X-Honda-*` (Honda)、`X-Hertz-*` (Hertz)、`X-Avis-*`/`X-Enterprise-*`/`X-Turo-*`/`X-Getaround-*`/`X-TimesCar-*`/`X-OrixRental-*`/`X-ToyotaRental-*`/`X-NissanRental-*`/`X-Nissan-*`/`X-Ford-*`/`X-GM-*`/`X-Volkswagen-*`/`X-BMW-*`/`X-Mercedes-*`/`X-Audi-*`/`X-Porsche-*`/`X-Hyundai-*`/`X-Kia-*`/`X-Volvo-*`/`X-Tesla-*`/`X-Subaru-*`/`X-Mazda-*`/`X-MitsubishiMotors-*`/`X-Suzuki-*`/`X-Daihatsu-*`/`X-Lexus-*`/`X-Rivian-*`/`X-BYD-*`/`X-Polaris-*`/`X-Isuzu-*`/`X-Hino-*`/`X-Fuso-*`/`X-UDTrucks-*`/`X-MINI-*`/`X-Jaguar-*`/`X-LandRover-*`/`X-VolvoCars-*`/`X-Stellantis-*` は車機の通知記録 — 送信側が書くことは自称。リコール・車検詐欺の典型印。(`X-Lucid-*` は Lucid 系として既カバー)
+- **修正**: `Envelope` に `automotive_marks` + `has_automotive_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 車印の自署を問え。
+
+
 ### Security — D516: `X-Netflix-*`/`X-Hulu-*`/`X-DisneyPlus-*`/`X-PrimeVideo-*`/`X-DAZN-*`/`X-TVer-*` 等の動画配信・OTT 印自称が未検査
 
 - **問題**: `X-Netflix-*` (Netflix)、`X-Hulu-*` (Hulu)、`X-DisneyPlus-*` (Disney+)、`X-HBOMax-*`/`X-Max-*`/`X-ParamountPlus-*`/`X-Peacock-*`/`X-PrimeVideo-*`/`X-DAZN-*`/`X-UNEXT-*`/`X-Abema-*`/`X-TVer-*`/`X-Crunchyroll-*`/`X-Funimation-*`/`X-Viki-*`/`X-iQiyi-*`/`X-WeTV-*`/`X-DiscoveryPlus-*`/`X-AppleTVPlus-*`/`X-Roku-*`/`X-SlingTV-*`/`X-FuboTV-*`/`X-PlutoTV-*`/`X-Tubi-*`/`X-RakutenTV-*`/`X-Lemino-*`/`X-Mubi-*`/`X-BritBox-*`/`X-ITVX-*`/`X-Channel4-*`/`X-My5-*`/`X-SBSOnDemand-*`/`X-Kayo-*`/`X-Stan-*`/`X-Binge-*`/`X-Foxtel-*` は映機の通知記録 — 送信側が書くことは自称。アカウント停止詐欺の典型印。(`X-Twitch-*`/`X-YouTube-*` は D459 で検出済み)
