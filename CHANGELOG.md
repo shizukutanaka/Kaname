@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D489: `X-Expensify-*`/`X-Ramp-*`/`X-Concur-*`/`X-Pleo-*`/`X-Navan-*`/`X-Dext-*` 等の経費・精算印自称が未検査
+
+- **問題**: `X-Expensify-*` (Expensify)、`X-Ramp-*` (Ramp)、`X-Concur-*` (SAP Concur)、`X-Bill-*`/`X-Pleo-*`/`X-Divvy-*`/`X-Navan-*`/`X-TripActions-*`/`X-Coupa-*`/`X-Procurify-*`/`X-Certify-*`/`X-Chrome-River-*`/`X-Abacus-*`/`X-Fyle-*`/`X-Zoho-Expense-*`/`X-Dext-*`/`X-AutoEntry-*`/`X-Hubdoc-*`/`X-Receipt-Bank-*`/`X-Veryfi-*`/`X-Datamolino-*`/`X-Nanonets-*`/`X-Klippa-*` は経費機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `expense_marks` + `has_expense_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 経費印の自署を問え。
+
+### Security — D490: `X-Zapier-*`/`X-n8n-*`/`X-Fivetran-*`/`X-IFTTT-*`/`X-Workato-*`/`X-Airbyte-*` 等の自動化・データパイプライン印自称が未検査
+
+- **問題**: `X-Zapier-*` (Zapier)、`X-n8n-*` (n8n)、`X-Fivetran-*` (Fivetran)、`X-DocParser-*`/`X-Parsio-*`/`X-MailParser-*`/`X-Make-*`/`X-Integromat-*`/`X-IFTTT-*`/`X-Workato-*`/`X-Tray-*`/`X-MuleSoft-*`/`X-Boomi-*`/`X-Informatica-*`/`X-Talend-*`/`X-Airbyte-*`/`X-Stitch-*`/`X-Hevo-*`/`X-RudderStack-*`/`X-mParticle-*`/`X-Tealium-*`/`X-Lytics-*`/`X-Insider-*`/`X-Optimove-*` は自動化機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `automation_marks` + `has_automation_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 自動化印の自署を問え。
+
+### Security — D491: `X-Hotjar-*`/`X-FullStory-*`/`X-Pendo-*`/`X-Survicate-*`/`X-WalkMe-*`/`X-Appcues-*` 等の顧客体験・アンケート印自称が未検査
+
+- **問題**: `X-Hotjar-*` (Hotjar)、`X-FullStory-*` (FullStory)、`X-Pendo-*` (Pendo)、`X-NICE-*`/`X-InMoment-*`/`X-Momentive-*`/`X-AskNicely-*`/`X-Delighted-*`/`X-Retently-*`/`X-SatisMeter-*`/`X-Promoter-*`/`X-Wootric-*`/`X-SimpleSat-*`/`X-CustomerThermometer-*`/`X-Zenloop-*`/`X-Startquestion-*`/`X-Questback-*`/`X-Alchemer-*`/`X-SurveyGizmo-*`/`X-SmartSurvey-*`/`X-Survicate-*`/`X-CrazyEgg-*`/`X-Mouseflow-*`/`X-LuckyOrange-*`/`X-Smartlook-*`/`X-Contentsquare-*`/`X-Quantum-Metric-*`/`X-Glassbox-*`/`X-Decibel-*`/`X-Usabilla-*`/`X-UserVoice-*`/`X-Qualaroo-*`/`X-UserReport-*`/`X-WalkMe-*`/`X-Userlane-*`/`X-Appcues-*`/`X-Chameleon-*`/`X-Userpilot-*`/`X-CustomerGauge-*` は顧客体験機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `cx_marks` + `has_cx_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 顧客体験印の自署を問え。
+
+
 ### Security — D486: `X-Telegram-*`/`X-WhatsApp-*`/`X-Mattermost-*`/`X-Element-*`/`X-Chatwoot-*`/`X-BlueJeans-*` 等のチャット・会議印自称が未検査
 
 - **問題**: `X-Telegram-*` (Telegram)、`X-WhatsApp-*` (WhatsApp)、`X-Mattermost-*` (Mattermost)、`X-Olark-*`/`X-Tawk-*`/`X-Crisp-*`/`X-Chatwoot-*`/`X-HelpCrunch-*`/`X-SnapEngage-*`/`X-Rocket-*`/`X-Element-*`/`X-Matrix-*`/`X-Signal-*`/`X-Viber-*`/`X-WeChat-*`/`X-Teams-*`/`X-Meet-*`/`X-Chime-*`/`X-BlueJeans-*`/`X-GoToWebinar-*`/`X-WebinarJam-*`/`X-Crowdcast-*`/`X-Hopin-*`/`X-Rally-*` は会議機の通知記録 — 送信側が書くことは自称。

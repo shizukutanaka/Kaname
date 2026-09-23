@@ -578,6 +578,36 @@ pub struct Envelope {
     /// 設備管理印があるか — 設備管理機の通知記録を送信側が
     /// 自称する兆候 (D488)。
     pub fieldservice_marks: bool,
+    /// `X-Expensify-*`/`X-Bill-*`/`X-Pleo-*`/`X-Ramp-*`/
+    /// `X-Divvy-*`/`X-Navan-*`/`X-TripActions-*`/`X-Coupa-*`/
+    /// `X-Procurify-*`/`X-Concur-*`/`X-Certify-*`/`X-Chrome-River-*`/
+    /// `X-Abacus-*`/`X-Fyle-*`/`X-Zoho-Expense-*`/`X-Dext-*`/
+    /// `X-AutoEntry-*`/`X-Hubdoc-*`/`X-Receipt-Bank-*`/`X-Veryfi-*`/
+    /// `X-Datamolino-*`/`X-Nanonets-*`/`X-Klippa-*` 等の
+    /// 経費・精算印があるか — 経費機の通知記録を送信側が
+    /// 自称する兆候 (D489)。
+    pub expense_marks: bool,
+    /// `X-DocParser-*`/`X-Parsio-*`/`X-MailParser-*`/`X-Zapier-*`/
+    /// `X-Make-*`/`X-Integromat-*`/`X-IFTTT-*`/`X-n8n-*`/
+    /// `X-Workato-*`/`X-Tray-*`/`X-MuleSoft-*`/`X-Boomi-*`/
+    /// `X-Informatica-*`/`X-Talend-*`/`X-Fivetran-*`/`X-Airbyte-*`/
+    /// `X-Stitch-*`/`X-Hevo-*`/`X-RudderStack-*`/`X-mParticle-*`/
+    /// `X-Tealium-*`/`X-Lytics-*` 等の自動化・データパイプライン印
+    /// があるか — 自動化機の通知記録を送信側が自称する兆候 (D490)。
+    pub automation_marks: bool,
+    /// `X-CustomerGauge-*`/`X-NICE-*`/`X-InMoment-*`/
+    /// `X-Momentive-*`/`X-AskNicely-*`/`X-Delighted-*`/
+    /// `X-Retently-*`/`X-SatisMeter-*`/`X-Promoter-*`/`X-Wootric-*`/
+    /// `X-SimpleSat-*`/`X-CustomerThermometer-*`/`X-Zenloop-*`/
+    /// `X-Startquestion-*`/`X-Questback-*`/`X-Alchemer-*`/
+    /// `X-SurveyGizmo-*`/`X-SmartSurvey-*`/`X-Survicate-*`/
+    /// `X-Hotjar-*`/`X-CrazyEgg-*`/`X-Mouseflow-*`/`X-LuckyOrange-*`/
+    /// `X-FullStory-*`/`X-Smartlook-*`/`X-Contentsquare-*`/
+    /// `X-Quantum-Metric-*`/`X-Glassbox-*`/`X-Pendo-*`/`X-WalkMe-*`/
+    /// `X-Userlane-*`/`X-Appcues-*`/`X-Chameleon-*`/`X-Userpilot-*` 等の
+    /// 顧客体験・アンケート印があるか — 顧客体験機の通知記録を
+    /// 送信側が自称する兆候 (D491)。
+    pub cx_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -927,6 +957,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         meeting_marks: has_meeting_marks(raw),
         booking_marks: has_booking_marks(raw),
         fieldservice_marks: has_fieldservice_marks(raw),
+        expense_marks: has_expense_marks(raw),
+        automation_marks: has_automation_marks(raw),
+        cx_marks: has_cx_marks(raw),
     })
 }
 
@@ -3839,6 +3872,153 @@ fn has_fieldservice_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-fmx-")
             || l.starts_with("x-managerplus-")
             || l.starts_with("x-reach-")
+    })
+}
+
+/// `X-Expensify-*`/`X-Bill-*`/`X-Pleo-*`/`X-Ramp-*`/`X-Divvy-*`/
+/// `X-Navan-*`/`X-TripActions-*`/`X-Coupa-*`/`X-Procurify-*`/
+/// `X-Concur-*`/`X-Certify-*`/`X-Chrome-River-*`/`X-Abacus-*`/
+/// `X-Fyle-*`/`X-Zoho-Expense-*`/`X-Dext-*`/`X-AutoEntry-*`/
+/// `X-Hubdoc-*`/`X-Receipt-Bank-*`/`X-Veryfi-*`/`X-Datamolino-*`/
+/// `X-Nanonets-*`/`X-Klippa-*` 等の経費・精算印があるか判定する
+/// (D489)。
+///
+/// `X-Expensify-*` (Expensify)、`X-Ramp-*` (Ramp)、`X-Concur-*`
+/// (SAP Concur) は経費機の通知記録 — 送信側から届くこれは自称。
+fn has_expense_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-expensify-")
+            || l.starts_with("x-bill-")
+            || l.starts_with("x-pleo-")
+            || l.starts_with("x-ramp-")
+            || l.starts_with("x-divvy-")
+            || l.starts_with("x-navan-")
+            || l.starts_with("x-tripactions-")
+            || l.starts_with("x-coupa-")
+            || l.starts_with("x-procurify-")
+            || l.starts_with("x-concur-")
+            || l.starts_with("x-certify-")
+            || l.starts_with("x-chrome-river-")
+            || l.starts_with("x-abacus-")
+            || l.starts_with("x-fyle-")
+            || l.starts_with("x-zoho-expense-")
+            || l.starts_with("x-dext-")
+            || l.starts_with("x-autoentry-")
+            || l.starts_with("x-hubdoc-")
+            || l.starts_with("x-receipt-bank-")
+            || l.starts_with("x-veryfi-")
+            || l.starts_with("x-datamolino-")
+            || l.starts_with("x-nanonets-")
+            || l.starts_with("x-klippa-")
+    })
+}
+
+/// `X-DocParser-*`/`X-Parsio-*`/`X-MailParser-*`/`X-Zapier-*`/
+/// `X-Make-*`/`X-Integromat-*`/`X-IFTTT-*`/`X-n8n-*`/`X-Workato-*`/
+/// `X-Tray-*`/`X-MuleSoft-*`/`X-Boomi-*`/`X-Informatica-*`/
+/// `X-Talend-*`/`X-Fivetran-*`/`X-Airbyte-*`/`X-Stitch-*`/
+/// `X-Hevo-*`/`X-RudderStack-*`/`X-mParticle-*`/`X-Tealium-*`/
+/// `X-Lytics-*`/`X-Insider-*`/`X-Optimove-*`/`X-CustomerGauge-*` の
+/// 自動化・データパイプライン印があるか判定する (D490)。
+///
+/// `X-Zapier-*` (Zapier)、`X-n8n-*` (n8n)、`X-Fivetran-*` (Fivetran)
+/// は自動化機の通知記録 — 送信側から届くこれは自称。
+fn has_automation_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-docparser-")
+            || l.starts_with("x-parsio-")
+            || l.starts_with("x-mailparser-")
+            || l.starts_with("x-zapier-")
+            || l.starts_with("x-make-")
+            || l.starts_with("x-integromat-")
+            || l.starts_with("x-ifttt-")
+            || l.starts_with("x-n8n-")
+            || l.starts_with("x-workato-")
+            || l.starts_with("x-tray-")
+            || l.starts_with("x-mulesoft-")
+            || l.starts_with("x-boomi-")
+            || l.starts_with("x-informatica-")
+            || l.starts_with("x-talend-")
+            || l.starts_with("x-fivetran-")
+            || l.starts_with("x-airbyte-")
+            || l.starts_with("x-stitch-")
+            || l.starts_with("x-hevo-")
+            || l.starts_with("x-rudderstack-")
+            || l.starts_with("x-mparticle-")
+            || l.starts_with("x-tealium-")
+            || l.starts_with("x-lytics-")
+            || l.starts_with("x-insider-")
+            || l.starts_with("x-optimove-")
+    })
+}
+
+/// `X-NICE-*`/`X-InMoment-*`/`X-Momentive-*`/`X-AskNicely-*`/
+/// `X-Delighted-*`/`X-Retently-*`/`X-SatisMeter-*`/`X-Promoter-*`/
+/// `X-Wootric-*`/`X-SimpleSat-*`/`X-CustomerThermometer-*`/
+/// `X-Zenloop-*`/`X-Startquestion-*`/`X-Questback-*`/`X-Alchemer-*`/
+/// `X-SurveyGizmo-*`/`X-SmartSurvey-*`/`X-Survicate-*`/`X-Hotjar-*`/
+/// `X-CrazyEgg-*`/`X-Mouseflow-*`/`X-LuckyOrange-*`/`X-FullStory-*`/
+/// `X-Smartlook-*`/`X-Contentsquare-*`/`X-Quantum-Metric-*`/
+/// `X-Glassbox-*`/`X-Decibel-*`/`X-Usabilla-*`/`X-UserVoice-*`/
+/// `X-Qualaroo-*`/`X-UserReport-*`/`X-Pendo-*`/`X-WalkMe-*`/
+/// `X-Userlane-*`/`X-Appcues-*`/`X-Chameleon-*`/`X-Userpilot-*` 等の
+/// 顧客体験・アンケート・ヒートマップ印があるか判定する (D491)。
+///
+/// `X-Hotjar-*` (Hotjar)、`X-FullStory-*` (FullStory)、`X-Pendo-*`
+/// (Pendo) は顧客体験機の通知記録 — 送信側から届くこれは自称。
+fn has_cx_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-customergauge-")
+            || l.starts_with("x-nice-")
+            || l.starts_with("x-inmoment-")
+            || l.starts_with("x-momentive-")
+            || l.starts_with("x-asknicely-")
+            || l.starts_with("x-delighted-")
+            || l.starts_with("x-retently-")
+            || l.starts_with("x-satismeter-")
+            || l.starts_with("x-promoter-")
+            || l.starts_with("x-wootric-")
+            || l.starts_with("x-simplesat-")
+            || l.starts_with("x-customerthermometer-")
+            || l.starts_with("x-zenloop-")
+            || l.starts_with("x-startquestion-")
+            || l.starts_with("x-questback-")
+            || l.starts_with("x-alchemer-")
+            || l.starts_with("x-surveygizmo-")
+            || l.starts_with("x-smartsurvey-")
+            || l.starts_with("x-survicate-")
+            || l.starts_with("x-hotjar-")
+            || l.starts_with("x-crazyegg-")
+            || l.starts_with("x-mouseflow-")
+            || l.starts_with("x-luckyorange-")
+            || l.starts_with("x-fullstory-")
+            || l.starts_with("x-smartlook-")
+            || l.starts_with("x-contentsquare-")
+            || l.starts_with("x-quantum-metric-")
+            || l.starts_with("x-glassbox-")
+            || l.starts_with("x-decibel-")
+            || l.starts_with("x-usabilla-")
+            || l.starts_with("x-uservoice-")
+            || l.starts_with("x-qualaroo-")
+            || l.starts_with("x-userreport-")
+            || l.starts_with("x-pendo-")
+            || l.starts_with("x-walkme-")
+            || l.starts_with("x-userlane-")
+            || l.starts_with("x-appcues-")
+            || l.starts_with("x-chameleon-")
+            || l.starts_with("x-userpilot-")
     })
 }
 
@@ -7688,6 +7868,72 @@ mod tests {
         assert!(has_fieldservice_marks(w1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_fieldservice_marks(clean));
+    }
+
+    #[test]
+    fn scan_は経費精算印を検出する() {
+        let e1 = b"X-Expensify-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(e1));
+        let r1 = b"X-Ramp-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(r1));
+        let c1 = b"X-Concur-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(c1));
+        let p1 = b"X-Pleo-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(p1));
+        let n1 = b"X-Navan-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(n1));
+        let d1 = b"X-Dext-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(d1));
+        let b1 = b"X-Bill-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(b1));
+        let v1 = b"X-Veryfi-Notify: x\r\n\r\nx";
+        assert!(has_expense_marks(v1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_expense_marks(clean));
+    }
+
+    #[test]
+    fn scan_は自動化データパイプライン印を検出する() {
+        let z1 = b"X-Zapier-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(z1));
+        let n1 = b"X-n8n-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(n1));
+        let f1 = b"X-Fivetran-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(f1));
+        let i1 = b"X-IFTTT-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(i1));
+        let w1 = b"X-Workato-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(w1));
+        let m1 = b"X-MailParser-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(m1));
+        let a1 = b"X-Airbyte-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(a1));
+        let t1 = b"X-Tealium-Notify: x\r\n\r\nx";
+        assert!(has_automation_marks(t1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_automation_marks(clean));
+    }
+
+    #[test]
+    fn scan_は顧客体験アンケート印を検出する() {
+        let h1 = b"X-Hotjar-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(h1));
+        let f1 = b"X-FullStory-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(f1));
+        let p1 = b"X-Pendo-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(p1));
+        let s1 = b"X-Survicate-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(s1));
+        let w1 = b"X-WalkMe-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(w1));
+        let a1 = b"X-Appcues-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(a1));
+        let d1 = b"X-Delighted-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(d1));
+        let c1 = b"X-Contentsquare-Notify: x\r\n\r\nx";
+        assert!(has_cx_marks(c1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cx_marks(clean));
     }
 }
 
