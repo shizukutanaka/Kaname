@@ -1089,9 +1089,7 @@ fn return_path_domain_mismatch(env: &kaname_render::Envelope) -> bool {
     let Some(from) = env.from.first() else {
         return false;
     };
-    !rp.addr
-        .domain
-        .eq_ignore_ascii_case(&from.addr.domain)
+    !rp.addr.domain.eq_ignore_ascii_case(&from.addr.domain)
         && registrable_domain(&rp.addr.domain) != registrable_domain(&from.addr.domain)
 }
 
