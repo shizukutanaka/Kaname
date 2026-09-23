@@ -8,6 +8,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D169: HTML 添付 (認証情報フィッシング主ベクター) と TNEF 不透明コンテナが未検査
+
+- `.hta` は危険拡張子として遮断済みだったが、**プレーンな `.html`/`.htm`/`.shtml`/`.xhtml` 添付はどの検出器も見ていなかった** — 受信者がブラウザで開くと `sanitize_html` を通らない HTML がそのまま実行され、偽ログインページによる認証情報フィッシングの経路になる (Barracuda/Kaspersky 等の観測では悪意あるメール添付で HTML が最大級の比率)。対処: `is_html_like_attachment` で拡張子・宣言 MIME のどちらでも捕捉し兆候報告、`html_attachment_has_active_content` で script/form/iframe/password input を含む場合は危険判定
+- `application/ms-tnef` / `winmail.dat` は内部に別添付を内包できる不透明コンテナで、TNEF パーサを持たない実装では内部を一切検査できず検査回避に使える形だった → `is_tnef_attachment` で兆候報告 (危険判定はしない)
+
+### Security — D170: ストリクトパースルール S04 (MIME 入れ子深度) が未実装
+
+- `parse()` のドキュメントは S04 「ネストされた MIME 深度 > 8 → 拒否」を謳っていたが、parse 段階に深度検査は存在しなかった (抽出側の MAX_NESTED_DEPTH=16 とは別経路)。極端に深い入れ子メールは再帰スキャン・復号・表示経路それぞれでリソースを使い切る
+- 対処: `max_rfc822_depth` で `PartType::Message` の再帰深度を計測し、深度 > 8 で parse を拒否。mail-parser の内部制限に依存せず仕様値を自前で強制
+- テスト +8 件 (D169: HTML 拡張子/宣言 MIME/form・script で危険/txt 非該当/TNEF 名・MIME/PDF 非該当、D170: 深度 8 受理・9 拒否)
+
 ### Security — D164: 複数 From アドレス / Sender ヘッダ不整合 (parser differential なりすまし) を検出
 
 - `env.from.first()` — 解析・表示・BEC 判定の全経路が From ヘッダの**最初の 1 アドレスだけ**を見ていたため、`From: ceo@corp.example, attacker@evil.example` のような複数 From メールで 2 番目以降の混入アドレスは誰も評価していなかった。RFC 5322 §3.6.2 は複数 From に `Sender:` を必須とするが、クライアントが表示に採用するアドレスは実装ごとに差があり (先頭/末尾/連結)、この「どの差出人として見えるかが環境依存」という差異を突く parser differential 型なりすましが知られている (Dmarcian/FlashStart 等が報告)

