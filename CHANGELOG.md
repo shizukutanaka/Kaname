@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D357: `X-Env-*`/`X-HELO-*`/`X-Original-HELO:`/`X-SMTP-HELO:` 等の接続挨拶印自称が未検査
+
+- SMTP 挨拶 (HELO/EHLO) や封筒接続情報を記した印 — 送信側から届くのは「こう名乗った」を内容側が主張する自称だが未検査だった
+- 対処: `has_helo_marks` 新設 → `Envelope.helo_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D358: `X-Bounced-*`/`X-Failed-Recipients:`/`X-Undelivered-*`/`X-NDR-*` 等の NDR 印自称が未検査
+
+- 配送失敗機が記す印 — 送信側から届くのは「届かなかった」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_bounce_marks` 新設 → `Envelope.bounce_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D359: `X-Sophos-*`/`X-TrendMicro*`/`X-SpamExperts-*`/`X-Halon-*`/`X-MDaemon-*` 等のアプライアンス印 (第二群) 自称が未検査
+
+- メールセキュリティアプライアンスのブランド印 — 送信側から届くのは「この製品で検査した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_appliance2_stamps` 新設 → `Envelope.appliance2_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

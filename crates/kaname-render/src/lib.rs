@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-Env-*`/`X-HELO-*`/`X-Original-HELO:`/`X-SMTP-HELO:` 等の
+    /// 接続挨拶印があるか — 接続側が記す値を送信側が自称する
+    /// 兆候 (D357)。
+    pub helo_marks: bool,
+    /// `X-Bounced-*`/`X-Failed-Recipients:`/`X-Undelivered-*`/
+    /// `X-Bounce-*` 等の NDR 印があるか — 配送失敗機が記す値を
+    /// 送信側が自称する兆候 (D358)。
+    pub bounce_marks: bool,
+    /// `X-Sophos-*`/`X-TrendMicro*`/`X-SpamExperts-*`/`X-Halon-*`/
+    /// `X-MDaemon-*` 等のアプライアンス印 (第二群) があるか —
+    /// 検査機器のブランド印を送信側が自称する兆候 (D359)。
+    pub appliance2_stamps: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        helo_marks: has_helo_marks(raw),
+        bounce_marks: has_bounce_marks(raw),
+        appliance2_stamps: has_appliance2_stamps(raw),
     })
 }
 
@@ -487,6 +502,70 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-Env-*`/`X-HELO-*`/`X-Original-HELO:`/`X-SMTP-HELO:` 等の
+/// 接続挨拶印があるか判定する (D357)。
+///
+/// SMTP 挨拶 (HELO/EHLO) や封筒接続情報を記した印 — 送信側から
+/// 届くこれは「こう名乗った」を内容側が主張する自称
+/// (D341 封筒値の挨拶版)。
+fn has_helo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-env-")
+            || l.starts_with("x-helo-")
+            || l.starts_with("x-original-helo:")
+            || l.starts_with("x-smtp-helo")
+            || l.starts_with("x-helo-domain:")
+    })
+}
+
+/// `X-Bounced-*`/`X-Failed-Recipients:`/`X-Undelivered-*`/
+/// `X-Bounce-*` 等の NDR 印があるか判定する (D358)。
+///
+/// 配送失敗機 (バウンス処理系) が記す印 — 送信側から届くこれは
+/// 「この宛先に届かなかった」体裁を内容側が主張する自称
+/// (配送失敗の印は失敗処理機が記す)。
+fn has_bounce_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-bounced-")
+            || l.starts_with("x-failed-recipients:")
+            || l.starts_with("x-undelivered-")
+            || l.starts_with("x-bounce-")
+            || l.starts_with("x-ndr-")
+    })
+}
+
+/// `X-Sophos-*`/`X-TrendMicro*`/`X-SpamExperts-*`/`X-Halon-*`/
+/// `X-MDaemon-*`/`X-Spamgourmet-*`/`X-MDAV-*` 等のアプライアンス
+/// 印 (第二群) があるか判定する (D359)。
+///
+/// メールセキュリティアプライアンスのブランド印 — 送信側から届く
+/// これは「この製品で検査した」体裁を内容側が主張する自称
+/// (D344 アプライアンス印の第二群)。
+fn has_appliance2_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sophos-")
+            || l.starts_with("x-trendmicro")
+            || l.starts_with("x-spamexperts-")
+            || l.starts_with("x-halon-")
+            || l.starts_with("x-mdaemon-")
+            || l.starts_with("x-mdav-")
+            || l.starts_with("x-spamtitan-")
+            || l.starts_with("x-horde-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2819,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は挨拶印を検出する() {
+        let en = b"X-Env-Sender: a@b\r\n\r\nx";
+        assert!(has_helo_marks(en));
+        let hl = b"X-HELO-Check: pass\r\n\r\nx";
+        assert!(has_helo_marks(hl));
+        let oh = b"X-Original-HELO: mail.x\r\n\r\nx";
+        assert!(has_helo_marks(oh));
+        let sh = b"X-SMTP-HELO: mail.x\r\n\r\nx";
+        assert!(has_helo_marks(sh));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_helo_marks(clean));
+    }
+
+    #[test]
+    fn scan_はNDR印を検出する() {
+        let bc = b"X-Bounced-Address: a@b\r\n\r\nx";
+        assert!(has_bounce_marks(bc));
+        let fr = b"X-Failed-Recipients: a@b\r\n\r\nx";
+        assert!(has_bounce_marks(fr));
+        let un = b"X-Undelivered-To: a@b\r\n\r\nx";
+        assert!(has_bounce_marks(un));
+        let nd = b"X-NDR-Reason: 550\r\n\r\nx";
+        assert!(has_bounce_marks(nd));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bounce_marks(clean));
+    }
+
+    #[test]
+    fn scan_はアプライアンス印2を検出する() {
+        let so = b"X-Sophos-AV: clean\r\n\r\nx";
+        assert!(has_appliance2_stamps(so));
+        let tm = b"X-TrendMicro-DVS: clean\r\n\r\nx";
+        assert!(has_appliance2_stamps(tm));
+        let se = b"X-SpamExperts-Class: notspam\r\n\r\nx";
+        assert!(has_appliance2_stamps(se));
+        let md = b"X-MDaemon-Deliver-To: a@b\r\n\r\nx";
+        assert!(has_appliance2_stamps(md));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_appliance2_stamps(clean));
     }
 }
 

@@ -581,6 +581,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D357: 接続挨拶印自称
+    if env.helo_marks {
+        render_risks.push(
+            "X-Env-*/X-HELO-*/X-Original-HELO 等 — 接続挨拶値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D358: NDR 印自称
+    if env.bounce_marks {
+        render_risks.push(
+            "X-Bounced-*/X-Failed-Recipients 等 — 配送失敗機の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D359: アプライアンス印 (第二群) 自称
+    if env.appliance2_stamps {
+        render_risks.push(
+            "X-Sophos-*/X-TrendMicro*/X-MDaemon-* 等 — 検査機器の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D357 | ~~**`X-Env-*`/`X-HELO-*`/`X-Original-HELO:`/`X-SMTP-HELO:` 等の接続挨拶印自称が未検査**~~ **(解消済み)** | P2 | 接続挨拶値を送信側が自称する兆候だが未検査だった。修正: `has_helo_marks` で検出、`helo_marks` → `render_risks` 兆候報告 | 挨拶の記録は接続側が記す — 挨拶印の自署を問え |
+| D358 | ~~**`X-Bounced-*`/`X-Failed-Recipients:`/`X-Undelivered-*`/`X-NDR-*` 等の NDR 印自称が未検査**~~ **(解消済み)** | P2 | 配送失敗機の印を送信側が自称する兆候だが未検査だった。修正: `has_bounce_marks` で検出、`bounce_marks` → `render_risks` 兆候報告 | 失敗の記録は失敗処理機が記す — 失敗印の自署を問え |
+| D359 | ~~**`X-Sophos-*`/`X-TrendMicro*`/`X-SpamExperts-*`/`X-Halon-*`/`X-MDaemon-*` 等のアプライアンス印 (第二群) 自称が未検査**~~ **(解消済み)** | P2 | 検査機器のブランド印を送信側が自称する兆候だが未検査だった。修正: `has_appliance2_stamps` で検出、`appliance2_stamps` → `render_risks` 兆候報告 | 機器の印は機器が記す — 第二群の機器印を問え |
