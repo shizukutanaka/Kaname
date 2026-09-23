@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D276: `Date:` ヘッダの欠落が未検査
+
+- RFC 5322 必須ヘッダ — 正規 MUA は必ず付ける。欠落は手作り生成品の兆候
+- 対処: `has_missing_date_header` 新設 → `Envelope.missing_date` → `render_risks` 兆候報告
+
+### Security — D277: トップレベル `Content-Disposition: attachment` が未検査
+
+- メッセージ全体を「添付」と宣言 — 本文として描画しない実装との差異を突く構造偽装
+- 対処: `has_top_level_attachment_disposition` 新設 → `Envelope.top_level_attachment` → `render_risks` 兆候報告
+
+### Security — D278: multipart 構造なのに実質 1 パートのみが未検査
+
+- 無意味な包みは中身の真の型をフラットな検査から隠す構造偽装 — boundary が開始+終了の 2 回のみ出現
+- 対処: `has_single_part_multipart` 新設 → `Envelope.single_part_multipart` → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

@@ -542,6 +542,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D276: Date 欠落
+    if env.missing_date {
+        render_risks.push(
+            "Date: ヘッダがありません — RFC 必須ヘッダを欠く手作り生成品の兆候です".to_string(),
+        );
+    }
+
+    // D277: トップレベル attachment 宣言
+    if env.top_level_attachment {
+        render_risks.push(
+            "メッセージ全体が Content-Disposition: attachment を宣言 — 本文として描画しない実装差を突く構造偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D278: 単一パート multipart
+    if env.single_part_multipart {
+        render_risks.push(
+            "multipart 構造なのに実質 1 パートのみ — 中身の真の型を隠す無意味な包みの兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

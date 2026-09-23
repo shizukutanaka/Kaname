@@ -100,6 +100,21 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `Date:` ヘッダの欠落 (D276)。
+    ///
+    /// RFC 5322 必須ヘッダ — 正規 MUA は必ず付ける。欠落は
+    /// 手作り生成品の兆候。
+    pub missing_date: bool,
+    /// トップレベル `Content-Disposition: attachment` (D277)。
+    ///
+    /// メッセージ全体を「添付」と宣言 — 本文として描画しない
+    /// 実装との差異を突く構造偽装。
+    pub top_level_attachment: bool,
+    /// multipart 構造なのに実質 1 パートしかない (D278)。
+    ///
+    /// 無意味な包みは中身の真の型をフラットな検査から隠す
+    /// 構造偽装 — boundary が開始+終了の 2 回のみ出現。
+    pub single_part_multipart: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +355,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D276: Date 欠落
+    let missing_date = has_missing_date_header(bytes);
+
+    // D277: トップレベル attachment 宣言
+    let top_level_attachment = has_top_level_attachment_disposition(bytes);
+
+    // D278: 単一パート multipart
+    let single_part_multipart = has_single_part_multipart(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,7 +382,65 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        missing_date,
+        top_level_attachment,
+        single_part_multipart,
     })
+}
+
+/// `Date:` ヘッダが欠落しているか判定する (D276)。
+///
+/// RFC 5322 必須ヘッダ — 正規 MUA は必ず付ける。欠落は手作り
+/// 生成品の兆候。
+pub fn has_missing_date_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    !header.lines().any(|l| l.starts_with("date:"))
+}
+
+/// トップレベル `Content-Disposition: attachment` か判定する (D277)。
+///
+/// メッセージ全体を「添付」と宣言 — 本文として描画しない実装との
+/// 差異を突く構造偽装。
+pub fn has_top_level_attachment_disposition(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("content-disposition:") && l.contains("attachment")
+    })
+}
+
+/// multipart 構造なのに実質 1 パートしかないか判定する (D278)。
+///
+/// 無意味な包みは中身の真の型をフラットな検査から隠す構造偽装 —
+/// boundary が開始+終了の 2 回のみ出現したら実質単一パート。
+pub fn has_single_part_multipart(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = &text[..header_end];
+    let is_multipart = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart/")
+    });
+    if !is_multipart {
+        return false;
+    }
+    let Some(boundary) = header.lines().find_map(|l| {
+        if !l.starts_with("content-type:") || !l.contains("multipart/") {
+            return None;
+        }
+        l.split("boundary=").nth(1).map(|b| b.trim_matches(['"', ' ', '\t']))
+    }) else {
+        return false;
+    };
+    if boundary.len() < 4 {
+        return false;
+    }
+    let body = &text[header_end..];
+    let occurrences = body.matches(boundary).count();
+    // boundary は開始行 (--) と終了行 (--+--) で計 2 回 = 実質 1 パート
+    occurrences <= 2
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
