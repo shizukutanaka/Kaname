@@ -581,6 +581,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D351: MS 輸送内部印自称
+    if env.ms_transport {
+        render_risks.push(
+            "X-MS-TNEF-*/X-MS-TrafficTypeDiagnostic 等 — Exchange 輸送内部値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D352: 統計フィルタ判定印自称
+    if env.statfilter_stamps {
+        render_risks.push(
+            "X-DSPAM-*/X-CRM114-* 等 — 統計フィルタの判定印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D353: IMAP/保管印自称
+    if env.imap_marks {
+        render_risks.push(
+            "X-IMAP-*/X-UIDL 等 — 保管機の内部値を送信側が自称する兆候です".to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

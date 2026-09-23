@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D351: `X-MS-TNEF-*`/`X-MS-TrafficTypeDiagnostic`/`X-MS-PublicTrafficType`/`X-MS-Exchange-Transport-*` MS 輸送内部印自称が未検査
+
+- Exchange/TNEF 輸送の内部値 — 送信側から届くのは「組織内輸送経路」を内容側が主張する自称だが未検査だった
+- 対処: `has_ms_transport` 新設 → `Envelope.ms_transport` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D352: `X-DSPAM-*`/`X-CRM114-*`/`X-Classification:` 等の統計フィルタ判定印自称が未検査
+
+- DSPAM/CRM114 等の統計的フィルタが判定時に記す印 — 送信側から届くのは「統計フィルタの判定を受けた」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_statfilter_stamps` 新設 → `Envelope.statfilter_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D353: `X-IMAP-*`/`X-UIDL:`/`X-Mbox-*` 等の IMAP/保管印自称が未検査
+
+- IMAP 保管機が記録する内部値 — 送信側から届くのは「この保管状態」の体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_imap_marks` 新設 → `Envelope.imap_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

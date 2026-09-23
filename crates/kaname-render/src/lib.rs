@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-MS-TNEF-*`/`X-MS-TrafficTypeDiagnostic`/
+    /// `X-MS-PublicTrafficType`/`X-MS-Exchange-Transport-*` 等の
+    /// MS 輸送内部印があるか — Exchange 内部値を送信側が
+    /// 自称する兆候 (D351)。
+    pub ms_transport: bool,
+    /// `X-DSPAM-*`/`X-CRM114-*`/`X-Classification:` 等の
+    /// 統計フィルタ判定印があるか — 統計判定機の印を送信側が
+    /// 自称する兆候 (D352)。
+    pub statfilter_stamps: bool,
+    /// `X-IMAP-*`/`X-UIDL:`/`X-YMODoVar*` 等の IMAP/保管印があるか
+    /// — 保管機が記す値を送信側が自称する兆候 (D353)。
+    pub imap_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        ms_transport: has_ms_transport(raw),
+        statfilter_stamps: has_statfilter_stamps(raw),
+        imap_marks: has_imap_marks(raw),
     })
 }
 
@@ -487,6 +502,65 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-MS-TNEF-*`/`X-MS-TrafficTypeDiagnostic`/`X-MS-PublicTrafficType`/
+/// `X-MS-Exchange-Transport-*` 等の MS 輸送内部印があるか判定する (D351)。
+///
+/// Exchange/TNEF 輸送の内部値 — 送信側から届くこれは「組織内輸送
+/// 経路」を内容側が主張する自称 (D333 Exchange 輸送印の残部)。
+fn has_ms_transport(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ms-tnef-")
+            || l.starts_with("x-ms-traffictypediagnostic:")
+            || l.starts_with("x-ms-publictraffictype:")
+            || l.starts_with("x-ms-exchange-transport-")
+            || l.starts_with("x-ms-exchange-organization-")
+            || l.starts_with("x-ms-office365-filtering-")
+    })
+}
+
+/// `X-DSPAM-*`/`X-CRM114-*`/`X-Classification:` 等の統計フィルタ
+/// 判定印があるか判定する (D352)。
+///
+/// DSPAM/CRM114 等の統計的フィルタが判定時に記す印 — 送信側から
+/// 届くこれは「統計フィルタの判定を受けた」体裁を内容側が主張する
+/// 自称 (D342 SA 判定印の統計機版)。
+fn has_statfilter_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dspam-")
+            || l.starts_with("x-crm114-")
+            || l.starts_with("x-classification:")
+            || l.starts_with("x-bayes-")
+            || l.starts_with("x-mdauth-")
+    })
+}
+
+/// `X-IMAP-*`/`X-UIDL:`/`X-YMODoVar*` 等の IMAP/保管印があるか
+/// 判定する (D353)。
+///
+/// IMAP 保管機が記録する内部値 — 送信側から届くこれは「この
+/// 保管状態」の体裁を内容側が主張する自称 (D316 状態印の保管版)。
+fn has_imap_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-imap-")
+            || l.starts_with("x-imapbase-")
+            || l.starts_with("x-uidl:")
+            || l.starts_with("x-ymodovar")
+            || l.starts_with("x-mbox-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2814,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はMS輸送印を検出する() {
+        let tn = b"X-MS-TNEF-Correlator: x\r\n\r\ny";
+        assert!(has_ms_transport(tn));
+        let tt = b"X-MS-TrafficTypeDiagnostic: x\r\n\r\ny";
+        assert!(has_ms_transport(tt));
+        let pt = b"X-MS-PublicTrafficType: Email\r\n\r\nx";
+        assert!(has_ms_transport(pt));
+        let et = b"X-MS-Exchange-Transport-Forked: x\r\n\r\ny";
+        assert!(has_ms_transport(et));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ms_transport(clean));
+    }
+
+    #[test]
+    fn scan_は統計印を検出する() {
+        let ds = b"X-DSPAM-Result: Innocent\r\n\r\nx";
+        assert!(has_statfilter_stamps(ds));
+        let cr = b"X-CRM114-Status: Good\r\n\r\nx";
+        assert!(has_statfilter_stamps(cr));
+        let cl = b"X-Classification: Clean\r\n\r\nx";
+        assert!(has_statfilter_stamps(cl));
+        let by = b"X-Bayes-Score: 0.01\r\n\r\nx";
+        assert!(has_statfilter_stamps(by));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_statfilter_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は保管印を検出する() {
+        let im = b"X-IMAP-Base: 123\r\n\r\nx";
+        assert!(has_imap_marks(im));
+        let uid = b"X-UIDL: abc123\r\n\r\nx";
+        assert!(has_imap_marks(uid));
+        let ym = b"X-YMODoVar: 1\r\n\r\nx";
+        assert!(has_imap_marks(ym));
+        let mb = b"X-Mbox-Status: O\r\n\r\nx";
+        assert!(has_imap_marks(mb));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_imap_marks(clean));
     }
 }
 
