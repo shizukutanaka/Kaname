@@ -908,6 +908,40 @@ pub struct Envelope {
     /// 政府・税務・公共機関印があるか — 官機の通知記録を送信側が自称する
     /// 兆候 (D518)。
     pub government_marks: bool,
+    /// `X-StateFarm-*`/`X-Geico-*`/`X-Progressive-*`/`X-Allstate-*`/
+    /// `X-AXA-*`/`X-Allianz-*`/`X-Zurich-*`/`X-AIG-*`/`X-MetLife-*`/
+    /// `X-Prudential-*`/`X-Aflac-*`/`X-LibertyMutual-*`/`X-Travelers-*`/
+    /// `X-Nationwide-*`/`X-Chubb-*`/`X-TokioMarine-*`/`X-Sompo-*`/
+    /// `X-MSAD-*`/`X-DaiichiLife-*`/`X-NipponLife-*`/`X-MeijiYasuda-*`/
+    /// `X-T&D-*`/`X-Manulife-*`/`X-SunLife-*`/`X-Aviva-*`/`X-Generali-*`/
+    /// `X-Lemonade-*`/`X-OscarHealth-*`/`X-Academy-*`/`X-Everest-*`/
+    /// `X-ArchCapital-*`/`X-RenaissanceRe-*`/`X-Hanover-*`/`X-CNA-*`/
+    /// `X-Markel-*`/`X-Beazley-*`/`X-Hiscox-*`/`X-TokioKiln-*` 等の
+    /// 保険会社印があるか — 保機の通知記録を送信側が自称する兆候 (D519)。
+    pub insurance_marks: bool,
+    /// `X-PGE-*`/`X-ConEd-*`/`X-DukeEnergy-*`/`X-Dominion-*`/`X-NationalGrid-*`/
+    /// `X-EON-*`/`X-EDF-*`/`X-Enel-*`/`X-Iberdrola-*`/`X-TEPCO-*`/
+    /// `X-Kanden-*`/`X-ChubuElectric-*`/`X-TokyoGas-*`/`X-OsakaGas-*`/
+    /// `X-Veolia-*`/`X-Suez-*`/`X-SouthernCompany-*`/`X-Exelon-*`/
+    /// `X-NextEra-*`/`X-Ameren-*`/`X-XcelEnergy-*`/`X-PSEG-*`/
+    /// `X-HokkaidoElectric-*`/`X-TohokuElectric-*`/`X-HokurikuElectric-*`/
+    /// `X-ChugokuElectric-*`/`X-ShikokuElectric-*`/`X-KyushuElectric-*`/
+    /// `X-OkinawaElectric-*`/`X-SaibuGas-*`/`X-HiroshimaGas-*` 等の
+    /// 電力・ガス・水道等の公益事業印があるか — 灯機の通知記録を送信側が
+    /// 自称する兆候 (D520)。(水道会社の一部は D518 で検出済み)
+    pub utility_marks: bool,
+    /// `X-Hertz-*`/`X-Avis-*`/`X-Enterprise-*`/`X-Turo-*`/`X-Getaround-*`/
+    /// `X-TimesCar-*`/`X-OrixRental-*`/`X-ToyotaRental-*`/`X-NissanRental-*`/
+    /// `X-Toyota-*`/`X-Honda-*`/`X-Nissan-*`/`X-Ford-*`/`X-GM-*`/
+    /// `X-Volkswagen-*`/`X-BMW-*`/`X-Mercedes-*`/`X-Audi-*`/`X-Porsche-*`/
+    /// `X-Hyundai-*`/`X-Kia-*`/`X-Volvo-*`/`X-Tesla-*`/`X-Subaru-*`/
+    /// `X-Mazda-*`/`X-MitsubishiMotors-*`/`X-Suzuki-*`/`X-Daihatsu-*`/
+    /// `X-Lexus-*`/`X-Rivian-*`/`X-BYD-*`/`X-Polaris-*`/`X-Isuzu-*`/
+    /// `X-Hino-*`/`X-Fuso-*`/`X-UDTrucks-*`/`X-MINI-*`/`X-Jaguar-*`/
+    /// `X-LandRover-*`/`X-VolvoCars-*`/`X-Stellantis-*` 等の
+    /// 自動車メーカー・レンタカー・カーシェア印があるか — 車機の通知記録を
+    /// 送信側が自称する兆候 (D521)。
+    pub automotive_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1287,6 +1321,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         streaming_marks: has_streaming_marks(raw),
         consumer_security_marks: has_consumer_security_marks(raw),
         government_marks: has_government_marks(raw),
+        insurance_marks: has_insurance_marks(raw),
+        utility_marks: has_utility_marks(raw),
+        automotive_marks: has_automotive_marks(raw),
     })
 }
 
@@ -5837,6 +5874,179 @@ fn has_government_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-StateFarm-*`/`X-Geico-*`/`X-Progressive-*`/`X-Allstate-*`/`X-AXA-*`/
+/// `X-Allianz-*`/`X-Zurich-*`/`X-AIG-*`/`X-MetLife-*`/`X-Prudential-*`/
+/// `X-Aflac-*`/`X-LibertyMutual-*`/`X-Travelers-*`/`X-Nationwide-*`/
+/// `X-Chubb-*`/`X-TokioMarine-*`/`X-Sompo-*`/`X-MSAD-*`/`X-DaiichiLife-*`/
+/// `X-NipponLife-*`/`X-MeijiYasuda-*`/`X-T&D-*`/`X-Manulife-*`/`X-SunLife-*`/
+/// `X-Aviva-*`/`X-Generali-*`/`X-Lemonade-*`/`X-OscarHealth-*`/`X-Academy-*`/
+/// `X-Everest-*`/`X-ArchCapital-*`/`X-RenaissanceRe-*`/`X-Hanover-*`/
+/// `X-CNA-*`/`X-Markel-*`/`X-Beazley-*`/`X-Hiscox-*`/`X-TokioKiln-*` 等の
+/// 保険会社印があるか判定する (D519)。
+///
+/// `X-Geico-*` (GEICO)、`X-AXA-*` (AXA)、`X-TokioMarine-*` (東京海上)
+/// は保機の通知記録 — 送信側から届くこれは自称。
+fn has_insurance_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-statefarm-")
+            || l.starts_with("x-geico-")
+            || l.starts_with("x-progressive-")
+            || l.starts_with("x-allstate-")
+            || l.starts_with("x-axa-")
+            || l.starts_with("x-allianz-")
+            || l.starts_with("x-zurich-")
+            || l.starts_with("x-aig-")
+            || l.starts_with("x-metlife-")
+            || l.starts_with("x-prudential-")
+            || l.starts_with("x-aflac-")
+            || l.starts_with("x-libertymutual-")
+            || l.starts_with("x-travelers-")
+            || l.starts_with("x-nationwide-")
+            || l.starts_with("x-chubb-")
+            || l.starts_with("x-tokiomarine-")
+            || l.starts_with("x-sompo-")
+            || l.starts_with("x-msad-")
+            || l.starts_with("x-daiichilife-")
+            || l.starts_with("x-nipponlife-")
+            || l.starts_with("x-meijiyasuda-")
+            || l.starts_with("x-t&d-")
+            || l.starts_with("x-manulife-")
+            || l.starts_with("x-sunlife-")
+            || l.starts_with("x-aviva-")
+            || l.starts_with("x-generali-")
+            || l.starts_with("x-lemonade-")
+            || l.starts_with("x-oscarhealth-")
+            || l.starts_with("x-academy-")
+            || l.starts_with("x-everest-")
+            || l.starts_with("x-archcapital-")
+            || l.starts_with("x-renaissancere-")
+            || l.starts_with("x-hanover-")
+            || l.starts_with("x-cna-")
+            || l.starts_with("x-markel-")
+            || l.starts_with("x-beazley-")
+            || l.starts_with("x-hiscox-")
+            || l.starts_with("x-tokiokiln-")
+    })
+}
+
+/// `X-PGE-*`/`X-ConEd-*`/`X-DukeEnergy-*`/`X-Dominion-*`/`X-NationalGrid-*`/
+/// `X-EON-*`/`X-EDF-*`/`X-Enel-*`/`X-Iberdrola-*`/`X-TEPCO-*`/`X-Kanden-*`/
+/// `X-ChubuElectric-*`/`X-TokyoGas-*`/`X-OsakaGas-*`/`X-Veolia-*`/`X-Suez-*`/
+/// `X-SouthernCompany-*`/`X-Exelon-*`/`X-NextEra-*`/`X-Ameren-*`/
+/// `X-XcelEnergy-*`/`X-PSEG-*`/`X-HokkaidoElectric-*`/`X-TohokuElectric-*`/
+/// `X-HokurikuElectric-*`/`X-ChugokuElectric-*`/`X-ShikokuElectric-*`/
+/// `X-KyushuElectric-*`/`X-OkinawaElectric-*`/`X-SaibuGas-*`/`X-HiroshimaGas-*`
+/// 等の公益事業印があるか判定する (D520)。
+///
+/// `X-PGE-*` (PG&E)、`X-TEPCO-*` (東京電力)、`X-TokyoGas-*` (東京ガス)
+/// は灯機の通知記録 — 送信側から届くこれは自称。料金未払い停止詐欺の
+/// 典型印。
+fn has_utility_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-pge-")
+            || l.starts_with("x-coned-")
+            || l.starts_with("x-dukeenergy-")
+            || l.starts_with("x-dominion-")
+            || l.starts_with("x-nationalgrid-")
+            || l.starts_with("x-eon-")
+            || l.starts_with("x-edf-")
+            || l.starts_with("x-enel-")
+            || l.starts_with("x-iberdrola-")
+            || l.starts_with("x-tepco-")
+            || l.starts_with("x-kanden-")
+            || l.starts_with("x-chubuelectric-")
+            || l.starts_with("x-tokyogas-")
+            || l.starts_with("x-osakagas-")
+            || l.starts_with("x-veolia-")
+            || l.starts_with("x-suez-")
+            || l.starts_with("x-southerncompany-")
+            || l.starts_with("x-exelon-")
+            || l.starts_with("x-nextera-")
+            || l.starts_with("x-ameren-")
+            || l.starts_with("x-xcelenergy-")
+            || l.starts_with("x-pseg-")
+            || l.starts_with("x-hokkaidoelectric-")
+            || l.starts_with("x-tohokuelectric-")
+            || l.starts_with("x-hokurikuelectric-")
+            || l.starts_with("x-chugokuelectric-")
+            || l.starts_with("x-shikokuelectric-")
+            || l.starts_with("x-kyushuelectric-")
+            || l.starts_with("x-okinawaelectric-")
+            || l.starts_with("x-saibugas-")
+            || l.starts_with("x-hiroshimagas-")
+    })
+}
+
+/// `X-Hertz-*`/`X-Avis-*`/`X-Enterprise-*`/`X-Turo-*`/`X-Getaround-*`/
+/// `X-TimesCar-*`/`X-OrixRental-*`/`X-ToyotaRental-*`/`X-NissanRental-*`/
+/// `X-Toyota-*`/`X-Honda-*`/`X-Nissan-*`/`X-Ford-*`/`X-GM-*`/`X-Volkswagen-*`/
+/// `X-BMW-*`/`X-Mercedes-*`/`X-Audi-*`/`X-Porsche-*`/`X-Hyundai-*`/`X-Kia-*`/
+/// `X-Volvo-*`/`X-Tesla-*`/`X-Subaru-*`/`X-Mazda-*`/`X-MitsubishiMotors-*`/
+/// `X-Suzuki-*`/`X-Daihatsu-*`/`X-Lexus-*`/`X-Rivian-*`/`X-BYD-*`/
+/// `X-Polaris-*`/`X-Isuzu-*`/`X-Hino-*`/`X-Fuso-*`/`X-UDTrucks-*`/`X-MINI-*`/
+/// `X-Jaguar-*`/`X-LandRover-*`/`X-VolvoCars-*`/`X-Stellantis-*` 等の
+/// 自動車メーカー・レンタカー・カーシェア印があるか判定する (D521)。
+///
+/// `X-Toyota-*` (Toyota)、`X-Honda-*` (Honda)、`X-Hertz-*` (Hertz) は
+/// 車機の通知記録 — 送信側から届くこれは自称。リコール・車検詐欺の典型印。
+fn has_automotive_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-hertz-")
+            || l.starts_with("x-avis-")
+            || l.starts_with("x-enterprise-")
+            || l.starts_with("x-turo-")
+            || l.starts_with("x-getaround-")
+            || l.starts_with("x-timescar-")
+            || l.starts_with("x-orixrental-")
+            || l.starts_with("x-toyotarental-")
+            || l.starts_with("x-nissanrental-")
+            || l.starts_with("x-toyota-")
+            || l.starts_with("x-honda-")
+            || l.starts_with("x-nissan-")
+            || l.starts_with("x-ford-")
+            || l.starts_with("x-gm-")
+            || l.starts_with("x-volkswagen-")
+            || l.starts_with("x-bmw-")
+            || l.starts_with("x-mercedes-")
+            || l.starts_with("x-audi-")
+            || l.starts_with("x-porsche-")
+            || l.starts_with("x-hyundai-")
+            || l.starts_with("x-kia-")
+            || l.starts_with("x-volvo-")
+            || l.starts_with("x-tesla-")
+            || l.starts_with("x-subaru-")
+            || l.starts_with("x-mazda-")
+            || l.starts_with("x-mitsubishimotors-")
+            || l.starts_with("x-suzuki-")
+            || l.starts_with("x-daihatsu-")
+            || l.starts_with("x-lexus-")
+            || l.starts_with("x-rivian-")
+            || l.starts_with("x-byd-")
+            || l.starts_with("x-polaris-")
+            || l.starts_with("x-isuzu-")
+            || l.starts_with("x-hino-")
+            || l.starts_with("x-fuso-")
+            || l.starts_with("x-udtrucks-")
+            || l.starts_with("x-mini-")
+            || l.starts_with("x-jaguar-")
+            || l.starts_with("x-landrover-")
+            || l.starts_with("x-volvocars-")
+            || l.starts_with("x-stellantis-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -10343,6 +10553,72 @@ mod tests {
         assert!(has_government_marks(a1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_government_marks(clean));
+    }
+
+    #[test]
+    fn scan_は保険印を検出する() {
+        let g1 = b"X-Geico-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(g1));
+        let a1 = b"X-AXA-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(a1));
+        let t1 = b"X-TokioMarine-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(t1));
+        let s1 = b"X-StateFarm-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(s1));
+        let m1 = b"X-MetLife-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(m1));
+        let n1 = b"X-NipponLife-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(n1));
+        let c1 = b"X-Chubb-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(c1));
+        let l1 = b"X-Lemonade-Notify: x\r\n\r\nx";
+        assert!(has_insurance_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_insurance_marks(clean));
+    }
+
+    #[test]
+    fn scan_は公益事業印を検出する() {
+        let p1 = b"X-PGE-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(p1));
+        let t1 = b"X-TEPCO-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(t1));
+        let t2 = b"X-TokyoGas-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(t2));
+        let e1 = b"X-EDF-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(e1));
+        let v1 = b"X-Veolia-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(v1));
+        let d1 = b"X-DukeEnergy-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(d1));
+        let k1 = b"X-KyushuElectric-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(k1));
+        let h1 = b"X-HokkaidoElectric-Notify: x\r\n\r\nx";
+        assert!(has_utility_marks(h1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_utility_marks(clean));
+    }
+
+    #[test]
+    fn scan_は自動車印を検出する() {
+        let t1 = b"X-Toyota-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(t1));
+        let h1 = b"X-Honda-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(h1));
+        let h2 = b"X-Hertz-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(h2));
+        let t2 = b"X-Tesla-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(t2));
+        let b1 = b"X-BMW-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(b1));
+        let v1 = b"X-Volvo-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(v1));
+        let a1 = b"X-Avis-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(a1));
+        let s1 = b"X-Stellantis-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_automotive_marks(clean));
     }
 }
 
