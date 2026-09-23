@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D315: 暗号化コンテナ体裁
+    if env.encrypted_container {
+        render_risks.push(
+            "Content-Type が暗号化コンテナを名乗っています — 「検査不可」の体裁で内容を隠す可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D316: メールボックス状態自称
+    if env.mbox_state_headers {
+        render_risks.push(
+            "Status/X-Mozilla-Status 等の状態ヘッダ — 「既読」等の状態を送信側が仕込んでいる可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D317: ニュース経路自称
+    if env.news_headers {
+        render_risks.push(
+            "Newsgroups/Xref/Path 等のニュースヘッダ — ニュース配信の経路を名乗る偽装の可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

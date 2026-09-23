@@ -103,6 +103,18 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// トップレベルが `multipart/encrypted`/`application/pgp-encrypted`
+    /// 等の暗号化コンテナを名乗るか — 「暗号化された」の体裁で中身を
+    /// 検査から隠すコンテナ偽装の兆候 (D315)。
+    pub encrypted_container: bool,
+    /// `Status:`/`X-Status:`/`X-Mozilla-Status*`/`X-Keywords:`/`X-UID:`
+    /// 等のメールボックス状態ヘッダがあるか — 「既読」「返信済み」の
+    /// 状態を送信側が仕込む自称の兆候 (D316)。
+    pub mbox_state_headers: bool,
+    /// `Newsgroups:`/`Followup-To:`/`Xref:`/`NNTP-Posting-Host:`/`Path:`
+    /// /`Control:` 等のニュース経路ヘッダがあるか — ニュース配信の
+    /// 経路を名乗る経路偽装の兆候 (D317)。
+    pub news_headers: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +374,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        encrypted_container: has_encrypted_container(raw),
+        mbox_state_headers: has_mbox_state_headers(raw),
+        news_headers: has_news_headers(raw),
     })
 }
 
@@ -422,6 +437,68 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// トップレベルが暗号化コンテナを名乗るか判定する (D315)。
+///
+/// `multipart/encrypted`/`application/pgp-encrypted`/
+/// `application/pkcs7-mime` をメッセージ全体として名乗ると、中身は
+/// 「暗号文」の体裁で検査を素通りする — 暗号化は内容を隠すだけで
+/// なく「検査不可」の体裁そのものを騙る。
+fn has_encrypted_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-type:"))
+        .any(|l| {
+            l.contains("multipart/encrypted")
+                || l.contains("application/pgp-encrypted")
+                || l.contains("application/pkcs7-mime")
+        })
+}
+
+/// メールボックス状態ヘッダがあるか判定する (D316)。
+///
+/// `Status:`/`X-Status:`/`X-Mozilla-Status`/`X-Mozilla-Status2`/
+/// `X-Keywords:`/`X-UID:` は mbox/Thunderbird が「既読」「返信済み」
+/// 等のローカル状態を記す値 — 送信側が書き込んで届くのは受信者の
+/// 状態表示を操作する自称 (「読んだことになっている」「返信済み」)。
+fn has_mbox_state_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("status:")
+            || l.starts_with("x-status:")
+            || l.starts_with("x-mozilla-status")
+            || l.starts_with("x-keywords:")
+            || l.starts_with("x-uid:")
+    })
+}
+
+/// ニュース経路ヘッダがあるか判定する (D317)。
+///
+/// `Newsgroups:`/`Followup-To:`/`Xref:`/`NNTP-Posting-Host:`/
+/// `NNTP-Posting-Date:`/`Path:`/`Control:` は Usenet/NNTP の配信経路
+/// を記す値 — メールにこれらが混じるのはニュース配信の経路を名乗る
+/// 偽装か、経路変換で検査をすり抜ける仕込み。
+fn has_news_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("newsgroups:")
+            || l.starts_with("followup-to:")
+            || l.starts_with("xref:")
+            || l.starts_with("nntp-posting-")
+            || l.starts_with("path:")
+            || l.starts_with("control:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2752,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は暗号化コンテナを検出する() {
+        let enc = b"Content-Type: multipart/encrypted; protocol=\"x\"\r\n\r\nx";
+        assert!(has_encrypted_container(enc));
+        let pgp = b"Content-Type: application/pgp-encrypted\r\n\r\nx";
+        assert!(has_encrypted_container(pgp));
+        let s7 = b"Content-Type: application/pkcs7-mime\r\n\r\nx";
+        assert!(has_encrypted_container(s7));
+        let plain = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(!has_encrypted_container(plain));
+        let part = b"Content-Type: multipart/mixed; boundary=B\r\n\r\n--B\r\nContent-Type: application/pgp-encrypted\r\n\r\ny";
+        assert!(!has_encrypted_container(part));
+    }
+
+    #[test]
+    fn scan_はメールボックス状態を検出する() {
+        let st = b"From: a@b\r\nStatus: RO\r\n\r\nx";
+        assert!(has_mbox_state_headers(st));
+        let mz = b"From: a@b\r\nX-Mozilla-Status: 0009\r\n\r\nx";
+        assert!(has_mbox_state_headers(mz));
+        let kw = b"From: a@b\r\nX-Keywords: $label1\r\n\r\nx";
+        assert!(has_mbox_state_headers(kw));
+        let uid = b"From: a@b\r\nX-UID: 42\r\n\r\nx";
+        assert!(has_mbox_state_headers(uid));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mbox_state_headers(clean));
+    }
+
+    #[test]
+    fn scan_はニュースヘッダを検出する() {
+        let ng = b"From: a@b\r\nNewsgroups: misc.test\r\n\r\nx";
+        assert!(has_news_headers(ng));
+        let xr = b"From: a@b\r\nXref: news misc.test:1\r\n\r\nx";
+        assert!(has_news_headers(xr));
+        let pt = b"From: a@b\r\nPath: news!nntp\r\n\r\nx";
+        assert!(has_news_headers(pt));
+        let ct = b"From: a@b\r\nControl: cancel <x@y>\r\n\r\nx";
+        assert!(has_news_headers(ct));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_news_headers(clean));
     }
 }
 

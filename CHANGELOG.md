@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D315: トップレベルの暗号化コンテナ名乗りが未検査
+
+- `multipart/encrypted`/`application/pgp-encrypted`/`application/pkcs7-mime` をメッセージ全体として名乗ると中身は「暗号文」の体裁で検査を素通りする — 暗号化は内容を隠すだけでなく「検査不可」の体裁そのものを騙るが未検査だった
+- 対処: `has_encrypted_container` 新設 → `Envelope.encrypted_container` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D316: `Status:`/`X-Mozilla-Status*` 等のメールボックス状態自称が未検査
+
+- `Status:`/`X-Status:`/`X-Mozilla-Status`/`X-Mozilla-Status2`/`X-Keywords:`/`X-UID:` は mbox/Thunderbird が「既読」「返信済み」等のローカル状態を記す値 — 送信側が書き込んで届くのは受信者の状態表示を操作する自称だが未検査だった
+- 対処: `has_mbox_state_headers` 新設 → `Envelope.mbox_state_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D317: `Newsgroups:`/`Xref:`/`Path:`/`Control:` 等のニュース経路自称が未検査
+
+- `Newsgroups:`/`Followup-To:`/`Xref:`/`NNTP-Posting-*`/`Path:`/`Control:` は Usenet/NNTP の配信経路を記す値 — メールに混じるのはニュース配信の経路を名乗る偽装か経路変換で検査をすり抜ける仕込みだが未検査だった
+- 対処: `has_news_headers` 新設 → `Envelope.news_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
