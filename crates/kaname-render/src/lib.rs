@@ -103,6 +103,11 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `<svg>`/`<math>` の外来名前空間マークアップがあるか —
+    /// メール HTML が正当に使わない名前空間の仕込みの兆候 (D286)。
+    pub foreign_markup: bool,
+    /// `From:` ドメインが IP リテラルまたは単一ラベルの異常形か (D287)。
+    pub anomalous_from_domain: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +367,48 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        foreign_markup: has_foreign_markup(raw),
+        anomalous_from_domain: has_anomalous_from_domain(raw),
     })
+}
+
+/// `<svg>`/`<math>` の外来名前空間マークアップを検出する (D286)。
+///
+/// メール HTML は SVG ・ MathML を正当には使わない — 外来名前空間は
+/// 解析器と表示器で解釈が分かれる mXSS 系の潜み場所、およびスクリプト
+/// 実行の起点になる。
+fn has_foreign_markup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<svg") || lower.contains("<math")
+}
+
+/// `From:` のドメインが異常形 (IP リテラル・単一ラベル) か判定する
+/// (D287)。
+///
+/// `ceo@[192.0.2.1]` の IP リテラルや `a@localhost` の単一ラベルドメインは
+/// 正規 MUA・MTA が生成しない形 — 手作り生成品の兆候。
+fn has_anomalous_from_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let Some(from_line) = header.lines().find(|l| l.starts_with("from:")) else {
+        return false;
+    };
+    // addr-spec のドメイン部 (最後の '@' の後ろ、`>` か空白まで) を拾う
+    let Some(at) = from_line.rfind('@') else {
+        return false;
+    };
+    let domain = from_line[at + 1..]
+        .split(|c: char| c == '>' || c.is_whitespace())
+        .next()
+        .unwrap_or("")
+        .trim();
+    if domain.is_empty() {
+        return false;
+    }
+    domain.contains('[') || domain.contains(']') || !domain.contains('.')
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2721,32 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は外来名前空間を検出する() {
+        let svg = b"<html><body><svg><script>evil()</script></svg></body></html>";
+        assert!(has_foreign_markup(svg));
+        let math = b"<p><math><mtext>x</mtext></math></p>";
+        assert!(has_foreign_markup(math));
+        let clean = b"<p>plain html</p>";
+        assert!(!has_foreign_markup(clean));
+        let img = b"<img src=\"a.png\">";
+        assert!(!has_foreign_markup(img));
+    }
+
+    #[test]
+    fn scan_はfromドメイン異常形を検出する() {
+        let ip = b"From: CEO <ceo@[192.0.2.1]>\r\n\r\nx";
+        assert!(has_anomalous_from_domain(ip));
+        let single = b"From: a@localhost\r\n\r\nx";
+        assert!(has_anomalous_from_domain(single));
+        let ok = b"From: a@corp.example\r\n\r\nx";
+        assert!(!has_anomalous_from_domain(ok));
+        let named = b"From: Boss <a@corp.example>\r\n\r\nx";
+        assert!(!has_anomalous_from_domain(named));
+        let nofrom = b"To: b@x.example\r\n\r\nx";
+        assert!(!has_anomalous_from_domain(nofrom));
     }
 }
 

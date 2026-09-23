@@ -558,6 +558,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D286: <svg>/<math> 外来名前空間
+    if env.foreign_markup {
+        render_risks.push(
+            "<svg>/<math> の外来名前空間マークアップ — メールが正当に使わない仕込みの可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D287: From ドメインの異常形
+    if env.anomalous_from_domain {
+        render_risks.push(
+            "From: ドメインが IP リテラルまたは単一ラベルの異常形です — 手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

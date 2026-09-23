@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D285: 接続・ショートカット・アドイン・信頼ストア系添付拡張子の欠落
+
+- `.webloc`/`.website`/`.desktop` (URL ショートカット)、`.library-ms`/`.searchconnector-ms` (リモート WebDAV 参照 — APT28 系報告)、`.rdp` (接続ファイル — リダイレクト漏洩)、`.theme`/`.themepack` (リモート壁紙で NTLM 漏洩)、`.xll`/`.xlam`/`.ppam`/`.msc` (アドイン・コンソール経由のコード実行)、`.msix`/`.appx` 系 (パッケージインストーラ)、`.diagcab` (msdt 経由実行)、`.reg` (レジストリ書き込み)、`.cer`/`.crt`/`.der`/`.p7b`/`.pfx`/`.p12` (信頼ストアへの証明書インストール — TLS 傍受の土台) — 「開く = 外部に触れる / 信頼基盤を書き換える」形式が `is_dangerous_windows_attachment` に欠落
+- 対処: 同関数のマッチリストに 25 形式を追加
+- テスト +29 件 (肯定 25 件・否定 4 件)
+
+### Security — D286: `<svg>`/`<math>` の外来名前空間マークアップが未検査
+
+- メール HTML は SVG・MathML を正当には使わない — 外来名前空間は解析器と表示器で解釈が分かれる mXSS 系の潜み場所、およびスクリプト実行の起点になるが未検査だった
+- 対処: `has_foreign_markup` 新設で `<svg`/`<math` タグを検出 → `Envelope.foreign_markup` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D287: `From:` ドメインの異常形 (IP リテラル・単一ラベル) が未検査
+
+- `ceo@[192.0.2.1]` の IP リテラルや `a@localhost` の単一ラベルドメインは正規 MUA・MTA が生成しない形 — 手作り生成品の兆候だが、ドメインの形自体の検査がなかった
+- 対処: `has_anomalous_from_domain` 新設で From の addr-spec ドメインを判定 → `Envelope.anomalous_from_domain` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

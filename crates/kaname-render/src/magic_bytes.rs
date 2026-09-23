@@ -160,6 +160,37 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "img"   // ディスクイメージ — 同上
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
+        // URL ショートカット・リモート参照・接続ファイル (D285) —
+        // 「開く = 外部に触れる」形式で、ペイロード本体を内包しないため
+        // 実体検査の対象外に見えるが接続先が攻撃者ドメイン/UNC になる
+        | "webloc" // macOS プロパティリスト URL ショートカット
+        | "website" // Windows ピン留めサイトショートカット
+        | "desktop" // Linux .desktop — Exec= でコマンド実行可能
+        | "library-ms" // Windows ライブラリ — リモート WebDAV 参照 (APT28 系)
+        | "searchconnector-ms" // Search Connector — 同上系列
+        | "rdp"   // Remote Desktop — 攻撃者サーバへの接続・リダイレクト漏洩
+        | "theme" // テーマ — リモート壁紙参照で NTLM 漏洩
+        | "themepack" // テーマパック — 同上
+        | "deskthemepack" // デスクトップテーマパック — 同上
+        // コード読み込み・パッケージ形式 (D285)
+        | "xll"   // Excel アドイン DLL — 読み込みでコード実行
+        | "xlam"  // Excel アドイン — 同上
+        | "ppam"  // PowerPoint アドイン — 同上
+        | "msc"   // MMC コンソール — スナップイン経由のコード実行
+        | "msix"  // パッケージインストーラ
+        | "msixbundle" // 同上
+        | "appx"  // パッケージインストーラ
+        | "appxbundle" // 同上
+        | "diagcab" // トラブルシューティングパック — msdt 経由実行
+        // 信頼ストア・レジストリ書き込み系 (D285) —
+        // 「開く」で証明書ストア/レジストリへの書き込みになる形式
+        | "reg"   // レジストリマージ — 関連付けハイジャック・永続化
+        | "cer"   // 証明書 — 信頼ストアへのインストールで TLS 傍受の土台
+        | "crt"   // 同上
+        | "der"   // 同上
+        | "p7b"   // 証明書チェーン — 同上
+        | "pfx"   // 秘密鍵付き証明書 — 同上
+        | "p12" // 同上
     )
 }
 
@@ -550,6 +581,48 @@ mod tests {
         assert!(is_dangerous_windows_attachment("SETUP.EXE"));
         assert!(is_dangerous_windows_attachment("run.com"));
         assert!(is_dangerous_windows_attachment("app.jar"));
+    }
+
+    #[test]
+    fn shortcut_connection_and_truststore_ext_are_dangerous() {
+        // D285 — 「開く = 外部に触れる / 信頼ストア・レジストリを書き換える」
+        // 形式の欠落回帰
+        for name in [
+            "link.webloc",
+            "site.website",
+            "run.desktop",
+            "docs.library-ms",
+            "x.searchconnector-ms",
+            "jump.rdp",
+            "look.theme",
+            "pack.themepack",
+            "pack.deskthemepack",
+            "add.xll",
+            "add.xlam",
+            "add.ppam",
+            "cons.msc",
+            "pkg.msix",
+            "pkg.msixbundle",
+            "pkg.appx",
+            "pkg.appxbundle",
+            "fix.diagcab",
+            "tweak.reg",
+            "ca.cer",
+            "ca.crt",
+            "ca.der",
+            "ca.p7b",
+            "key.pfx",
+            "key.p12",
+        ] {
+            assert!(
+                is_dangerous_windows_attachment(name),
+                "{name} が危険拡張子として検出されるべき"
+            );
+        }
+        // 否定: 通常の文書・画像・連絡先は許容
+        for name in ["note.txt", "photo.jpg", "card.vcf", "data.csv"] {
+            assert!(!is_dangerous_windows_attachment(name));
+        }
     }
 
     #[test]
