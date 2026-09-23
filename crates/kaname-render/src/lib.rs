@@ -1524,6 +1524,51 @@ pub struct Envelope {
     /// 兆候 (D569)。(`X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*` 等の
     /// キャリア本体は D511 で検出済み)
     pub esim_marks: bool,
+    /// `X-NEXCO-*`/`X-E-NEXCO-*`/`X-NexcoEast-*`/`X-NexcoCentral-*`/
+    /// `X-NexcoWest-*`/`X-ETC-*`/`X-ETCMeisai-*`/`X-Shutoko-*`/
+    /// `X-HanshinExpressway-*`/`X-HonshiKaido-*`/`X-NagoyaExpressway-*`/
+    /// `X-FukuokaKitakyushu-*`/`X-HiroshimaExpressway-*`/`X-JEHDA-*`/
+    /// `X-EZPass-*`/`X-FasTrak-*`/`X-SunPass-*`/`X-TxTag-*`/
+    /// `X-PeachPass-*`/`X-E470-*`/`X-KTAG-*`/`X-Pikepass-*`/
+    /// `X-TollTag-*`/`X-GoodToGo-*`/`X-ExpressToll-*`/`X-TheTollRoads-*`/
+    /// `X-91ExpressLanes-*`/`X-NCQuickPass-*`/`X-RiverLink-*`/
+    /// `X-ExpressLanes-*`/`X-IPass-*`/`X-DriveEzMD-*`/`X-TollByPlate-*`/
+    /// `X-Vignette-*`/`X-Telepass-*`/`X-BipAndGo-*`/`X-ViaVerde-*`/
+    /// `X-Autostrade-*`/`X-SANEF-*`/`X-TollCollect-*`/`X-GoMaut-*`/
+    /// `X-ASFINAG-*`/`X-APRR-*`/`X-LiberT-*`/`X-Emovis-*`/
+    /// `X-Easytrip-*` 等の高速道路・通行料金印があるか —
+    /// 路機の通知記録を送信側が自称する兆候 (D572)。
+    /// (`X-Yamato-*`/`X-Sagawa-*` 等の宅配便印は既存族で検出済み)
+    pub highway_marks: bool,
+    /// `X-Aiful-*`/`X-Promise-*`/`X-Acom-*`/`X-SMBCMobit-*`/`X-Mobit-*`/
+    /// `X-Lake-*`/`X-SAEL-*`/`X-DICL-*`/`X-JScore-*`/`X-LinePocket-*`/
+    /// `X-OrixCredit-*`/`X-Lifecard-*`/`X-LoanMe-*`/`X-Avant-*`/
+    /// `X-MoneyLion-*`/`X-Upstart-*`/`X-LendingClub-*`/`X-Prosper-*`/
+    /// `X-OnDeck-*`/`X-BlueVine-*`/`X-Fundbox-*`/`X-Lendio-*`/
+    /// `X-SmartBiz-*`/`X-Credibly-*`/`X-Accion-*`/`X-Kiva-*`/
+    /// `X-FundingCircle-*`/`X-Iwoca-*`/`X-OakNorth-*`/`X-Lendable-*`/
+    /// `X-Zopa-*`/`X-Oakam-*`/`X-EarnIn-*`/`X-Dave-*`/`X-Brigit-*`/
+    /// `X-PossibleFinance-*`/`X-Fig-*`/`X-OppFi-*`/`X-NetCredit-*`/
+    /// `X-RISECredit-*`/`X-Mariner-*`/`X-OneMain-*`/`X-WorldFinance-*`/
+    /// `X-TowerLoan-*`/`X-RegionalFinance-*`/`X-CheckCity-*`/
+    /// `X-ACECashExpress-*` 等の消費者金融・オンラインローン印が
+    /// あるか — 貸機の通知記録を送信側が自称する兆候 (D573)。
+    /// (`X-Sofi-*`/`X-Klarna-*` は既存族で検出済み)
+    pub loan_marks: bool,
+    /// `X-Eiken-*`/`X-Kanken-*`/`X-Suuken-*`/`X-Boken-*`/`X-Zenken-*`/
+    /// `X-TOEIC-*`/`X-TOEFL-*`/`X-JLPT-*`/`X-IELTS-*`/`X-ETS-*`/
+    /// `X-Prometric-*`/`X-PearsonVUE-*`/`X-Certiport-*`/
+    /// `X-PSIExams-*`/`X-OnVUE-*`/`X-CollegeBoard-*`/`X-ACTTest-*`/
+    /// `X-LSAT-*`/`X-MCAT-*`/`X-GMAT-*`/`X-GRE-*`/`X-PTE-*`/`X-OET-*`/
+    /// `X-BritishCouncil-*`/`X-CambridgeEnglish-*`/`X-PMI-*`/`X-PMP-*`/
+    /// `X-ISACA-*`/`X-ISC2-*`/`X-CompTIA-*`/`X-LPIC-*`/`X-IPA-*`/
+    /// `X-FPKentei-*`/`X-Kinzai-*`/`X-Takken-*`/`X-Gyouseishoshi-*`/
+    /// `X-ShakaiHoken-*`/`X-ShihoShoshi-*`/`X-Zeirishi-*`/`X-Benrishi-*`/
+    /// `X-Credly-*`/`X-OpenBadges-*`/`X-ProctorU-*`/`X-Honorlock-*`/
+    /// `X-Kryterion-*`/`X-Webassessor-*` 等の検定・資格試験印が
+    /// あるか — 検機の通知記録を送信側が自称する兆候 (D574)。
+    /// (`X-Duolingo-*` は既存族で検出済み)
+    pub exam_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1973,6 +2018,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         creditcard_marks: has_creditcard_marks(hdr),
         pointcard_marks: has_pointcard_marks(hdr),
         esim_marks: has_esim_marks(hdr),
+        highway_marks: has_highway_marks(hdr),
+        loan_marks: has_loan_marks(hdr),
+        exam_marks: has_exam_marks(hdr),
     })
 }
 
@@ -9496,6 +9544,224 @@ fn has_esim_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-esim2go-")
             || l.starts_with("x-instabridge-")
             || l.starts_with("x-redteago-")
+    })
+}
+
+/// `X-NEXCO-*`/`X-E-NEXCO-*`/`X-NexcoEast-*`/`X-NexcoCentral-*`/
+/// `X-NexcoWest-*`/`X-ETC-*`/`X-ETCMeisai-*`/`X-Shutoko-*`/
+/// `X-HanshinExpressway-*`/`X-HonshiKaido-*`/`X-NagoyaExpressway-*`/
+/// `X-FukuokaKitakyushu-*`/`X-HiroshimaExpressway-*`/`X-JEHDA-*`/
+/// `X-EZPass-*`/`X-FasTrak-*`/`X-SunPass-*`/`X-TxTag-*`/`X-PeachPass-*`/
+/// `X-E470-*`/`X-KTAG-*`/`X-Pikepass-*`/`X-TollTag-*`/`X-GoodToGo-*`/
+/// `X-ExpressToll-*`/`X-TheTollRoads-*`/`X-91ExpressLanes-*`/
+/// `X-NCQuickPass-*`/`X-RiverLink-*`/`X-ExpressLanes-*`/`X-IPass-*`/
+/// `X-DriveEzMD-*`/`X-TollByPlate-*`/`X-Vignette-*`/`X-Telepass-*`/
+/// `X-BipAndGo-*`/`X-ViaVerde-*`/`X-Autostrade-*`/`X-SANEF-*`/
+/// `X-TollCollect-*`/`X-GoMaut-*`/`X-ASFINAG-*`/`X-APRR-*`/
+/// `X-LiberT-*`/`X-Emovis-*`/`X-Easytrip-*` 等の高速道路・
+/// 通行料金印があるか判定する (D572)。
+///
+/// `X-NEXCO-*` (NEXCO東・中・西日本)、`X-ETC-*` (ETC利用照会
+/// サービス)、`X-EZPass-*` (E-ZPass) は路機の通知記録 — 送信側から
+/// 届くこれは自称。「ETCカードの有効期限切れ」「通行料金未納」の
+/// 偽装は ETC・通行料金詐欺の典型。`X-Yamato-*`/`X-Sagawa-*` 等の
+/// 宅配便印は既存族で検出済み。
+fn has_highway_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-nexco-")
+            || l.starts_with("x-e-nexco-")
+            || l.starts_with("x-nexcoeast-")
+            || l.starts_with("x-nexcocentral-")
+            || l.starts_with("x-nexcowest-")
+            || l.starts_with("x-etc-")
+            || l.starts_with("x-etcmeisai-")
+            || l.starts_with("x-shutoko-")
+            || l.starts_with("x-hanshinexpressway-")
+            || l.starts_with("x-honshikaido-")
+            || l.starts_with("x-nagoyaexpressway-")
+            || l.starts_with("x-fukuokakitakyushu-")
+            || l.starts_with("x-hiroshimaexpressway-")
+            || l.starts_with("x-jehda-")
+            || l.starts_with("x-ezpass-")
+            || l.starts_with("x-fastrak-")
+            || l.starts_with("x-sunpass-")
+            || l.starts_with("x-txtag-")
+            || l.starts_with("x-peachpass-")
+            || l.starts_with("x-e470-")
+            || l.starts_with("x-ktag-")
+            || l.starts_with("x-pikepass-")
+            || l.starts_with("x-tolltag-")
+            || l.starts_with("x-goodtogo-")
+            || l.starts_with("x-expresstoll-")
+            || l.starts_with("x-thetollroads-")
+            || l.starts_with("x-91expresslanes-")
+            || l.starts_with("x-ncquickpass-")
+            || l.starts_with("x-riverlink-")
+            || l.starts_with("x-expresslanes-")
+            || l.starts_with("x-ipass-")
+            || l.starts_with("x-driveezmd-")
+            || l.starts_with("x-tollbyplate-")
+            || l.starts_with("x-vignette-")
+            || l.starts_with("x-telepass-")
+            || l.starts_with("x-bipandgo-")
+            || l.starts_with("x-viaverde-")
+            || l.starts_with("x-autostrade-")
+            || l.starts_with("x-sanef-")
+            || l.starts_with("x-tollcollect-")
+            || l.starts_with("x-gomaut-")
+            || l.starts_with("x-asfinag-")
+            || l.starts_with("x-aprr-")
+            || l.starts_with("x-libert-")
+            || l.starts_with("x-emovis-")
+            || l.starts_with("x-easytrip-")
+    })
+}
+
+/// `X-Aiful-*`/`X-Promise-*`/`X-Acom-*`/`X-SMBCMobit-*`/`X-Mobit-*`/
+/// `X-Lake-*`/`X-SAEL-*`/`X-DICL-*`/`X-JScore-*`/`X-LinePocket-*`/
+/// `X-OrixCredit-*`/`X-Lifecard-*`/`X-LoanMe-*`/`X-Avant-*`/
+/// `X-MoneyLion-*`/`X-Upstart-*`/`X-LendingClub-*`/`X-Prosper-*`/
+/// `X-OnDeck-*`/`X-BlueVine-*`/`X-Fundbox-*`/`X-Lendio-*`/`X-SmartBiz-*`/
+/// `X-Credibly-*`/`X-Accion-*`/`X-Kiva-*`/`X-FundingCircle-*`/
+/// `X-Iwoca-*`/`X-OakNorth-*`/`X-Lendable-*`/`X-Zopa-*`/`X-Oakam-*`/
+/// `X-EarnIn-*`/`X-Dave-*`/`X-Brigit-*`/`X-PossibleFinance-*`/`X-Fig-*`/
+/// `X-OppFi-*`/`X-NetCredit-*`/`X-RISECredit-*`/`X-Mariner-*`/
+/// `X-OneMain-*`/`X-WorldFinance-*`/`X-TowerLoan-*`/
+/// `X-RegionalFinance-*`/`X-CheckCity-*`/`X-ACECashExpress-*` 等の
+/// 消費者金融・オンラインローン印があるか判定する (D573)。
+///
+/// `X-Aiful-*` (アイフル)、`X-Acom-*` (アコム)、`X-Promise-*`
+/// (プロミス) は貸機の通知記録 — 送信側から届くこれは自称。
+/// 「融資審査通過」「返済督促」偽装は消費者金融詐欺の典型。
+/// `X-Sofi-*`/`X-Klarna-*` は既存族で検出済み。
+fn has_loan_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-aiful-")
+            || l.starts_with("x-promise-")
+            || l.starts_with("x-acom-")
+            || l.starts_with("x-smbcmobit-")
+            || l.starts_with("x-mobit-")
+            || l.starts_with("x-lake-")
+            || l.starts_with("x-sael-")
+            || l.starts_with("x-dicl-")
+            || l.starts_with("x-jscore-")
+            || l.starts_with("x-linepocket-")
+            || l.starts_with("x-orixcredit-")
+            || l.starts_with("x-lifecard-")
+            || l.starts_with("x-loanme-")
+            || l.starts_with("x-avant-")
+            || l.starts_with("x-moneylion-")
+            || l.starts_with("x-upstart-")
+            || l.starts_with("x-lendingclub-")
+            || l.starts_with("x-prosper-")
+            || l.starts_with("x-ondeck-")
+            || l.starts_with("x-bluevine-")
+            || l.starts_with("x-fundbox-")
+            || l.starts_with("x-lendio-")
+            || l.starts_with("x-smartbiz-")
+            || l.starts_with("x-credibly-")
+            || l.starts_with("x-accion-")
+            || l.starts_with("x-kiva-")
+            || l.starts_with("x-fundingcircle-")
+            || l.starts_with("x-iwoca-")
+            || l.starts_with("x-oaknorth-")
+            || l.starts_with("x-lendable-")
+            || l.starts_with("x-zopa-")
+            || l.starts_with("x-oakam-")
+            || l.starts_with("x-earnin-")
+            || l.starts_with("x-dave-")
+            || l.starts_with("x-brigit-")
+            || l.starts_with("x-possiblefinance-")
+            || l.starts_with("x-fig-")
+            || l.starts_with("x-oppfi-")
+            || l.starts_with("x-netcredit-")
+            || l.starts_with("x-risecredit-")
+            || l.starts_with("x-mariner-")
+            || l.starts_with("x-onemain-")
+            || l.starts_with("x-worldfinance-")
+            || l.starts_with("x-towerloan-")
+            || l.starts_with("x-regionalfinance-")
+            || l.starts_with("x-checkcity-")
+            || l.starts_with("x-acecashexpress-")
+    })
+}
+
+/// `X-Eiken-*`/`X-Kanken-*`/`X-Suuken-*`/`X-Boken-*`/`X-Zenken-*`/
+/// `X-TOEIC-*`/`X-TOEFL-*`/`X-JLPT-*`/`X-IELTS-*`/`X-ETS-*`/
+/// `X-Prometric-*`/`X-PearsonVUE-*`/`X-Certiport-*`/`X-PSIExams-*`/
+/// `X-OnVUE-*`/`X-CollegeBoard-*`/`X-ACTTest-*`/`X-LSAT-*`/`X-MCAT-*`/
+/// `X-GMAT-*`/`X-GRE-*`/`X-PTE-*`/`X-OET-*`/`X-BritishCouncil-*`/
+/// `X-CambridgeEnglish-*`/`X-PMI-*`/`X-PMP-*`/`X-ISACA-*`/`X-ISC2-*`/
+/// `X-CompTIA-*`/`X-LPIC-*`/`X-IPA-*`/`X-FPKentei-*`/`X-Kinzai-*`/
+/// `X-Takken-*`/`X-Gyouseishoshi-*`/`X-ShakaiHoken-*`/`X-ShihoShoshi-*`/
+/// `X-Zeirishi-*`/`X-Benrishi-*`/`X-Credly-*`/`X-OpenBadges-*`/
+/// `X-ProctorU-*`/`X-Honorlock-*`/`X-Kryterion-*`/`X-Webassessor-*` 等の
+/// 検定・資格試験印があるか判定する (D574)。
+///
+/// `X-Eiken-*` (英検)、`X-TOEIC-*` (TOEIC)、`X-JLPT-*` (日本語能力
+/// 試験) は検機の通知記録 — 送信側から届くこれは自称。「試験結果
+/// 速報」「資格失効・更新期限」偽装は資格試験詐欺の典型。
+/// `X-Duolingo-*` は既存族で検出済み。
+fn has_exam_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-eiken-")
+            || l.starts_with("x-kanken-")
+            || l.starts_with("x-suuken-")
+            || l.starts_with("x-boken-")
+            || l.starts_with("x-zenken-")
+            || l.starts_with("x-toeic-")
+            || l.starts_with("x-toefl-")
+            || l.starts_with("x-jlpt-")
+            || l.starts_with("x-ielts-")
+            || l.starts_with("x-ets-")
+            || l.starts_with("x-prometric-")
+            || l.starts_with("x-pearsonvue-")
+            || l.starts_with("x-certiport-")
+            || l.starts_with("x-psiexams-")
+            || l.starts_with("x-onvue-")
+            || l.starts_with("x-collegeboard-")
+            || l.starts_with("x-acttest-")
+            || l.starts_with("x-lsat-")
+            || l.starts_with("x-mcat-")
+            || l.starts_with("x-gmat-")
+            || l.starts_with("x-gre-")
+            || l.starts_with("x-pte-")
+            || l.starts_with("x-oet-")
+            || l.starts_with("x-britishcouncil-")
+            || l.starts_with("x-cambridgeenglish-")
+            || l.starts_with("x-pmi-")
+            || l.starts_with("x-pmp-")
+            || l.starts_with("x-isaca-")
+            || l.starts_with("x-isc2-")
+            || l.starts_with("x-comptia-")
+            || l.starts_with("x-lpic-")
+            || l.starts_with("x-ipa-")
+            || l.starts_with("x-fpkentei-")
+            || l.starts_with("x-kinzai-")
+            || l.starts_with("x-takken-")
+            || l.starts_with("x-gyouseishoshi-")
+            || l.starts_with("x-shakaihoken-")
+            || l.starts_with("x-shihoshoshi-")
+            || l.starts_with("x-zeirishi-")
+            || l.starts_with("x-benrishi-")
+            || l.starts_with("x-credly-")
+            || l.starts_with("x-openbadges-")
+            || l.starts_with("x-proctoru-")
+            || l.starts_with("x-honorlock-")
+            || l.starts_with("x-kryterion-")
+            || l.starts_with("x-webassessor-")
     })
 }
 

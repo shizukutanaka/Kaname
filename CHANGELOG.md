@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D572: `X-NEXCO-*`/`X-ETC-*`/`X-EZPass-*` 等の高速道路・通行料金印自称が未検査
+
+- **問題**: `X-NEXCO-*` (NEXCO東・中・西日本)、`X-ETC-*` (ETC利用照会サービス)、`X-EZPass-*` (E-ZPass)、`X-E-NEXCO-*`/`X-NexcoEast-*`/`X-NexcoCentral-*`/`X-NexcoWest-*`/`X-ETCMeisai-*`/`X-Shutoko-*`/`X-HanshinExpressway-*`/`X-HonshiKaido-*`/`X-NagoyaExpressway-*`/`X-FukuokaKitakyushu-*`/`X-HiroshimaExpressway-*`/`X-JEHDA-*`/`X-FasTrak-*`/`X-SunPass-*`/`X-TxTag-*`/`X-PeachPass-*`/`X-E470-*`/`X-KTAG-*`/`X-Pikepass-*`/`X-TollTag-*`/`X-GoodToGo-*`/`X-ExpressToll-*`/`X-TheTollRoads-*`/`X-91ExpressLanes-*`/`X-NCQuickPass-*`/`X-RiverLink-*`/`X-ExpressLanes-*`/`X-IPass-*`/`X-DriveEzMD-*`/`X-TollByPlate-*`/`X-Vignette-*`/`X-Telepass-*`/`X-BipAndGo-*`/`X-ViaVerde-*`/`X-Autostrade-*`/`X-SANEF-*`/`X-TollCollect-*`/`X-GoMaut-*`/`X-ASFINAG-*`/`X-APRR-*`/`X-LiberT-*`/`X-Emovis-*`/`X-Easytrip-*` は路機の通知記録 — 送信側が書くことは自称。「ETCカード有効期限切れ」「通行料金未納」の偽装は ETC・通行料金詐欺の典型 (フィッシング対策協議会 2022/11/15 緊急情報、NEXCO東日本 注意喚起)。(`X-Yamato-*`/`X-Sagawa-*` 等の宅配便印は既存族で検出済み)
+- **修正**: `Envelope` に `highway_marks` + `has_highway_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 路印の自署を問え。
+
+### Security — D573: `X-Aiful-*`/`X-Acom-*`/`X-Promise-*` 等の消費者金融・オンラインローン印自称が未検査
+
+- **問題**: `X-Aiful-*` (アイフル)、`X-Acom-*` (アコム)、`X-Promise-*` (プロミス)、`X-SMBCMobit-*`/`X-Mobit-*`/`X-Lake-*`/`X-SAEL-*`/`X-DICL-*`/`X-JScore-*`/`X-LinePocket-*`/`X-OrixCredit-*`/`X-Lifecard-*`/`X-LoanMe-*`/`X-Avant-*`/`X-MoneyLion-*`/`X-Upstart-*`/`X-LendingClub-*`/`X-Prosper-*`/`X-OnDeck-*`/`X-BlueVine-*`/`X-Fundbox-*`/`X-Lendio-*`/`X-SmartBiz-*`/`X-Credibly-*`/`X-Accion-*`/`X-Kiva-*`/`X-FundingCircle-*`/`X-Iwoca-*`/`X-OakNorth-*`/`X-Lendable-*`/`X-Zopa-*`/`X-Oakam-*`/`X-EarnIn-*`/`X-Dave-*`/`X-Brigit-*`/`X-PossibleFinance-*`/`X-Fig-*`/`X-OppFi-*`/`X-NetCredit-*`/`X-RISECredit-*`/`X-Mariner-*`/`X-OneMain-*`/`X-WorldFinance-*`/`X-TowerLoan-*`/`X-RegionalFinance-*`/`X-CheckCity-*`/`X-ACECashExpress-*` は貸機の通知記録 — 送信側が書くことは自称。「融資審査通過」「返済督促」「振込予約」偽装は消費者金融詐欺の典型 (プロミス/SMBC フィッシングメール注意喚起 2024/11、アイフル公式)。(`X-Sofi-*`/`X-Klarna-*` は既存族で検出済み)
+- **修正**: `Envelope` に `loan_marks` + `has_loan_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 貸印の自署を問え。
+
+### Security — D574: `X-Eiken-*`/`X-TOEIC-*`/`X-ETS-*` 等の検定・資格試験印自称が未検査
+
+- **問題**: `X-Eiken-*` (英検)、`X-TOEIC-*` (TOEIC)、`X-JLPT-*` (日本語能力試験)、`X-Kanken-*`/`X-Suuken-*`/`X-Boken-*`/`X-Zenken-*`/`X-TOEFL-*`/`X-IELTS-*`/`X-ETS-*`/`X-Prometric-*`/`X-PearsonVUE-*`/`X-Certiport-*`/`X-PSIExams-*`/`X-OnVUE-*`/`X-CollegeBoard-*`/`X-ACTTest-*`/`X-LSAT-*`/`X-MCAT-*`/`X-GMAT-*`/`X-GRE-*`/`X-PTE-*`/`X-OET-*`/`X-BritishCouncil-*`/`X-CambridgeEnglish-*`/`X-PMI-*`/`X-PMP-*`/`X-ISACA-*`/`X-ISC2-*`/`X-CompTIA-*`/`X-LPIC-*`/`X-IPA-*`/`X-FPKentei-*`/`X-Kinzai-*`/`X-Takken-*`/`X-Gyouseishoshi-*`/`X-ShakaiHoken-*`/`X-ShihoShoshi-*`/`X-Zeirishi-*`/`X-Benrishi-*`/`X-Credly-*`/`X-OpenBadges-*`/`X-ProctorU-*`/`X-Honorlock-*`/`X-Kryterion-*`/`X-Webassessor-*` は検機の通知記録 — 送信側が書くことは自称。「試験結果速報」「資格失効・更新期限」「受験料未納」偽装は資格試験詐欺の典型。(`X-Duolingo-*` は既存族で検出済み)
+- **修正**: `Envelope` に `exam_marks` + `has_exam_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 検印の自署を問え。
+
 ### Performance / Fixed — D570: `has_*_marks` 155 関数がヘッダのためだけに全文を複製していた
 
 - **問題**: `kaname-render` の `has_*_marks` 155 関数がそれぞれメッセージ全体 (最大 100 MB) を `from_utf8_lossy` + `to_ascii_lowercase` で複製してからヘッダだけを見ており、1 回の `parse()` で約 310 回の全文コピーが起きていた。さらに空行判定が `\r\n\r\n` のみで、LF 改行の `.eml` では本文全体がヘッダ扱いされ本文行で誤検出していた。
