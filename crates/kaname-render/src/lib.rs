@@ -100,6 +100,22 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `X-Mailer:`/`User-Agent:` がバルク送信ツールを名乗る (D261)。
+    ///
+    /// `phpmailer`/`swiftmailer`/`sendblaster`/`supermailer`/`listmail`
+    /// 等の一斉送信ツールの自署 — 「個人の手書き」体裁を装いながら
+    /// 大量送信ツールで作られたメールの兆候。
+    pub bulk_mailer_claim: bool,
+    /// 件名が encoded-word を含む (D262)。
+    ///
+    /// `=?utf-8?b?...?=` 等のエンコード件名 — キーワード走査を
+    /// すり抜けるためのエンコード難読化の兆候。
+    pub encoded_word_subject: bool,
+    /// `Content-Description:` に URL を仕込む (D263)。
+    ///
+    /// 添付の「説明欄」は表示器が提示するが本文検査の外 — 説明文に
+    /// 誘導リンクを忍ばせる経路。
+    pub description_url: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +356,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D261: X-Mailer/User-Agent のバルクツール自署
+    let bulk_mailer_claim = has_bulk_mailer_signature(bytes);
+
+    // D262: 件名の encoded-word 難読化
+    let encoded_word_subject = has_encoded_word_subject(bytes);
+
+    // D263: Content-Description 内の URL 誘導
+    let description_url = has_description_url(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,7 +383,70 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        bulk_mailer_claim,
+        encoded_word_subject,
+        description_url,
     })
+}
+
+/// `X-Mailer:`/`User-Agent:` がバルク送信ツールを名乗るか判定する
+/// (D261)。
+///
+/// 「個人の手書き」体裁を装いながら大量送信ツールで作られたメール —
+/// ツール自署名は値として残る兆候。
+pub fn has_bulk_mailer_signature(raw: &[u8]) -> bool {
+    const BULK_TOOLS: &[&str] = &[
+        "phpmailer",
+        "swiftmailer",
+        "sendblaster",
+        "supermailer",
+        "listmail",
+        "groupmail",
+        "bulk mailer",
+        "mass mailer",
+        "atomic mail",
+        "sendmail.php",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        (l.starts_with("x-mailer:") || l.starts_with("user-agent:"))
+            && BULK_TOOLS.iter().any(|t| l.contains(t))
+    })
+}
+
+/// 件名が encoded-word を含むか判定する (D262)。
+///
+/// `=?utf-8?b?...?=` 等のエンコード件名 — キーワード走査をすり抜ける
+/// エンコード難読化の兆候。
+pub fn has_encoded_word_subject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header
+        .lines()
+        .any(|l| l.starts_with("subject:") && l.contains("=?") && l.contains("?="))
+}
+
+/// `Content-Description:` に URL を仕込むか判定する (D263)。
+///
+/// 添付の「説明欄」は表示器が提示するが本文検査の外 — 説明文に誘導
+/// リンクを忍ばせる経路。全域走査する (パートヘッダにも現れるため)。
+pub fn has_description_url(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut search = lower.as_str();
+    while let Some(pos) = search.find("content-description:") {
+        let rest = &search[pos + "content-description:".len()..];
+        let line_end = rest.find('\n').unwrap_or(rest.len());
+        let line = &rest[..line_end.min(512)];
+        if line.contains("http://") || line.contains("https://") || line.contains("www.") {
+            return true;
+        }
+        search = &search[pos + "content-description:".len()..];
+    }
+    false
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {

@@ -542,6 +542,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D261: X-Mailer/User-Agent のバルクツール自署
+    if env.bulk_mailer_claim {
+        render_risks.push(
+            "バルク送信ツールの自署 (X-Mailer/User-Agent) — 「個人の手書き」体裁を装う大量送信の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D262: 件名の encoded-word 難読化
+    if env.encoded_word_subject {
+        render_risks.push(
+            "件名の encoded-word — キーワード走査をすり抜けるエンコード難読化の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D263: Content-Description 内の URL 誘導
+    if env.description_url {
+        render_risks.push(
+            "Content-Description 内の URL — 添付説明欄に仕込まれた誘導リンクの兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D261: `X-Mailer:`/`User-Agent:` のバルク送信ツール自署が未検査
+
+- `phpmailer`/`swiftmailer`/`sendblaster`/`supermailer`/`listmail` 等の一斉送信ツールの自署 — 「個人の手書き」体裁を装いながら大量送信ツールで作られたメールの兆候
+- 対処: `has_bulk_mailer_signature` 新設 → `Envelope.bulk_mailer_claim` → `render_risks` 兆候報告
+
+### Security — D262: 件名の encoded-word 難読化が未検査
+
+- `=?utf-8?b?...?=` 等のエンコード件名 — キーワード走査をすり抜けるエンコード難読化の兆候
+- 対処: `has_encoded_word_subject` 新設 → `Envelope.encoded_word_subject` → `render_risks` 兆候報告
+
+### Security — D263: `Content-Description:` 内の URL 誘導が未検査
+
+- 添付の「説明欄」は表示器が提示するが本文検査の外 — 説明文に誘導リンクを忍ばせる経路
+- 対処: `has_description_url` 新設 → `Envelope.description_url` → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)
