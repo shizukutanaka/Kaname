@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D417: `X-No-Junk-*`/`X-Anti-Junk-*`/`X-JunkMail-*`/`X-NotJunkMail*`/`X-SpamSafe*`/`X-Junk-*` 等の Junk 申告印自称が未検査
+
+- 「スパムではない」判定は受信側の判定機が下す — 送信側から届くのは「ジャンクではない」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_junk_marks` 新設 → `Envelope.junk_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D418: `X-Trace-*`/`X-Tracked-*`/`X-Monitor-*`/`X-Logged-*`/`X-Captured-*`/`X-AuditTrail-*` 等の追跡・監視記録印自称が未検査
+
+- 追跡・監視の記録は受信側・監視機が残す — 送信側から届くのは「追跡は記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_trace_marks` 新設 → `Envelope.trace_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D419: `X-Batched-*`/`X-Bundle-*`/`X-Digest-Index:`/`X-ListDigest-*`/`X-DailyDigest-*`/`X-BundleDigest-*` 等のダイジェスト・束ね印自称が未検査
+
+- ダイジェスト化・束ねの記録は束ね機・リスト機が残す — 送信側から届くのは「束ねに入った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_digest_marks` 新設 → `Envelope.digest_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D408: `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/`X-Abaca-*` 等のアプライアンス印自称 (第三群) が未検査
 
 - 商用メール機器のブランド印は機器が記す — 送信側から届くのは「この機器を通った」体裁を内容側が主張する自称だが未検査だった

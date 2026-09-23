@@ -166,6 +166,18 @@ pub struct Envelope {
     /// `X-Digest-*` 等の整合性・ハッシュ印があるか — 検査機の
     /// 記録を送信側が自称する兆候 (D410)。
     pub hash_marks: bool,
+    /// `X-No-Junk-*`/`X-Anti-Junk-*`/`X-JunkMail-*`/`X-NotJunkMail*`/
+    /// `X-SpamSafe*`/`X-Junk-*` 等の Junk 申告印があるか —
+    /// 「スパムではない」表明を送信側が自称する兆候 (D417)。
+    pub junk_marks: bool,
+    /// `X-Trace-*`/`X-Tracked-*`/`X-Monitor-*`/`X-Logged-*`/
+    /// `X-Captured-*`/`X-AuditTrail-*` 等の追跡・監視記録印が
+    /// あるか — 追跡機の記録を送信側が自称する兆候 (D418)。
+    pub trace_marks: bool,
+    /// `X-Batched-*`/`X-Bundle-*`/`X-Digest-Index:`/
+    /// `X-ListDigest-*`/`X-DailyDigest-*` 等のダイジェスト・束ね印が
+    /// あるか — 束ね機の記録を送信側が自称する兆候 (D419)。
+    pub digest_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -447,6 +459,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         appliance3_marks: has_appliance3_marks(raw),
         finalrcpt_marks: has_finalrcpt_marks(raw),
         hash_marks: has_hash_marks(raw),
+        junk_marks: has_junk_marks(raw),
+        trace_marks: has_trace_marks(raw),
+        digest_marks: has_digest_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -781,6 +796,69 @@ fn has_hash_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-sha1-")
             || l.starts_with("x-sha256-")
             || l.starts_with("x-digest-")
+    })
+}
+
+/// `X-No-Junk-*`/`X-Anti-Junk-*`/`X-JunkMail-*`/`X-NotJunkMail*`/
+/// `X-SpamSafe*`/`X-Junk-*` 等の Junk 申告印があるか
+/// 判定する (D417)。
+///
+/// 「スパムではない」判定は受信側の判定機が下す — 送信側から届く
+/// これは「ジャンクではない」体裁を内容側が主張する自称。
+fn has_junk_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-no-junk-")
+            || l.starts_with("x-anti-junk-")
+            || l.starts_with("x-junkmail-")
+            || l.starts_with("x-notjunkmail")
+            || l.starts_with("x-spamsafe")
+            || l.starts_with("x-junk-")
+    })
+}
+
+/// `X-Trace-*`/`X-Tracked-*`/`X-Monitor-*`/`X-Logged-*`/
+/// `X-Captured-*`/`X-AuditTrail-*` 等の追跡・監視記録印があるか
+/// 判定する (D418)。
+///
+/// 追跡・監視の記録は受信側・監視機が残す — 送信側から届くこれは
+/// 「追跡は記録済み」体裁を内容側が主張する自称。
+fn has_trace_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-trace-")
+            || l.starts_with("x-tracked-")
+            || l.starts_with("x-monitor-")
+            || l.starts_with("x-logged-")
+            || l.starts_with("x-captured-")
+            || l.starts_with("x-audittrail-")
+    })
+}
+
+/// `X-Batched-*`/`X-Bundle-*`/`X-Digest-Index:`/`X-ListDigest-*`/
+/// `X-DailyDigest-*`/`X-BundleDigest-*` 等のダイジェスト・束ね印が
+/// あるか判定する (D419)。
+///
+/// ダイジェスト化・束ねの記録は束ね機・リスト機が残す — 送信側から
+/// 届くこれは「束ねに入った」体裁を内容側が主張する自称。
+fn has_digest_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-batched-")
+            || l.starts_with("x-bundle-")
+            || l.starts_with("x-digest-index:")
+            || l.starts_with("x-listdigest-")
+            || l.starts_with("x-dailydigest")
+            || l.starts_with("x-bundledigest")
     })
 }
 
@@ -3203,6 +3281,58 @@ mod tests {
         assert!(has_hash_marks(h6));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_hash_marks(clean));
+    }
+
+    #[test]
+    fn scan_はjunk印を検出する() {
+        let j1 = b"X-No-Junk-Mail: j\r\n\r\nx";
+        assert!(has_junk_marks(j1));
+        let j2 = b"X-Anti-Junk-Level: l\r\n\r\nx";
+        assert!(has_junk_marks(j2));
+        let j3 = b"X-JunkMail-Flag: f\r\n\r\nx";
+        assert!(has_junk_marks(j3));
+        let j4 = b"X-NotJunkMail: y\r\n\r\nx";
+        assert!(has_junk_marks(j4));
+        let j5 = b"X-SpamSafe: s\r\n\r\nx";
+        assert!(has_junk_marks(j5));
+        let j6 = b"X-Junk-Score: s\r\n\r\nx";
+        assert!(has_junk_marks(j6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_junk_marks(clean));
+    }
+
+    #[test]
+    fn scan_は追跡印を検出する() {
+        let t1 = b"X-Trace-Path: t\r\n\r\nx";
+        assert!(has_trace_marks(t1));
+        let t2 = b"X-Tracked-ID: t\r\n\r\nx";
+        assert!(has_trace_marks(t2));
+        let m1 = b"X-Monitor-Status: m\r\n\r\nx";
+        assert!(has_trace_marks(m1));
+        let l1 = b"X-Logged-By: l\r\n\r\nx";
+        assert!(has_trace_marks(l1));
+        let c1 = b"X-Captured-At: c\r\n\r\nx";
+        assert!(has_trace_marks(c1));
+        let a1 = b"X-AuditTrail-ID: a\r\n\r\nx";
+        assert!(has_trace_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_trace_marks(clean));
+    }
+
+    #[test]
+    fn scan_はダイジェスト印を検出する() {
+        let b1 = b"X-Batched-Mail: b\r\n\r\nx";
+        assert!(has_digest_marks(b1));
+        let b2 = b"X-Bundle-ID: b\r\n\r\nx";
+        assert!(has_digest_marks(b2));
+        let d1 = b"X-Digest-Index: 3\r\n\r\nx";
+        assert!(has_digest_marks(d1));
+        let l1 = b"X-ListDigest-No: l\r\n\r\nx";
+        assert!(has_digest_marks(l1));
+        let d2 = b"X-DailyDigest: d\r\n\r\nx";
+        assert!(has_digest_marks(d2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_digest_marks(clean));
     }
 }
 

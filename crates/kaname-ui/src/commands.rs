@@ -676,6 +676,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D417: Junk 申告印自称
+    if env.junk_marks {
+        render_risks.push(
+            "X-No-Junk-*/X-Anti-Junk-*/X-JunkMail-*/X-SpamSafe* 等 — 「スパムではない」表明を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D418: 追跡・監視記録印自称
+    if env.trace_marks {
+        render_risks.push(
+            "X-Trace-*/X-Tracked-*/X-Monitor-* 等 — 追跡機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D419: ダイジェスト・束ね印自称
+    if env.digest_marks {
+        render_risks.push(
+            "X-Batched-*/X-Bundle-*/X-ListDigest-* 等 — 束ね機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
