@@ -1260,6 +1260,103 @@ fn url_shaped_domains(text: &str) -> Vec<String> {
     out
 }
 
+/// 不可視・フォーマット文字を含む URL トークン (D180)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvisibleCharUrl {
+    /// 本文に現れたトークンそのまま。
+    pub token: String,
+    /// 不可視・フォーマット文字を除去した URL — 「見せている」
+    /// ドメインとしてリンク評価に供給できる。
+    pub cleaned: String,
+}
+
+/// URL トークン内で「表示に影響しないが文字列比較を壊す」文字か
+/// 判定する (D180)。
+fn is_invisible_url_char(c: char) -> bool {
+    matches!(c,
+        '\u{200B}' | '\u{200C}' | '\u{200D}'  // ZWSP / ZWNJ / ZWJ
+        | '\u{00AD}'                           // SHY (soft hyphen)
+        | '\u{FEFF}'                           // BOM / ZWNBSP
+        | '\u{2060}'                           // WORD JOINER
+        | '\u{2061}'..='\u{2064}'              // 数学用不可視演算子
+        | '\u{202A}'..='\u{202E}'              // 双方向制御
+        | '\u{2066}'..='\u{2069}'              // 双方向アイソレート
+        | '\u{FE00}'..='\u{FE0F}'              // Variation Selectors
+        | '\u{E0000}'..='\u{E007F}'            // タグ文字
+    )
+}
+
+/// 本文から `http(s)://` URL トークンのうち不可視・フォーマット
+/// 文字を含むものを抽出する (D180)。
+///
+/// ZWSP/ZWNJ/SHY/双方向制御/タグ文字等を URL に埋めると、
+/// フィルタのドメイン抽出・文字列照合は壊れた文字列を見るが
+/// ユーザーの表示はほぼ変わらない — Perception Point/Talos 系で
+/// 観測されるフィルタ回避の定形。不可視文字を除去した
+/// `cleaned` を「見せている URL」としてリンク評価に戻す。
+#[must_use]
+pub fn find_invisible_char_urls(text: &str) -> Vec<InvisibleCharUrl> {
+    const MAX_TOKENS: usize = 20;
+    let mut out = Vec::new();
+    for token in
+        text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'')
+    {
+        let lower = token.to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            continue;
+        }
+        if token.chars().all(|c| !is_invisible_url_char(c)) {
+            continue;
+        }
+        let cleaned: String = token
+            .chars()
+            .filter(|c| !is_invisible_url_char(*c))
+            .collect();
+        out.push(InvisibleCharUrl {
+            token: token.to_string(),
+            cleaned,
+        });
+        if out.len() >= MAX_TOKENS {
+            break;
+        }
+    }
+    out
+}
+
+/// Date ヘッダが異常 (未来日付または 1970 以前) か判定する (D178)。
+///
+/// 未来日付のメールは多くのクライアントの受信箱でソート順を
+/// 悪用して先頭に留まる — 既知の配送テクニック (スパム/BEC で
+/// 「最新」に見せる手口として観測)。48 時間を超える未来か
+/// 負のタイムスタンプを異常とする。
+#[must_use]
+pub fn is_date_anomaly(ts: i64, now: i64) -> bool {
+    ts < 0 || ts > now + 48 * 3600
+}
+
+/// 件名が返信/転送形か判定する (D179)。
+///
+/// `Re:`/`Fwd:`/`返信:`/`転送:` 等の返信系プレフィックスを持つ件名は
+/// スレッドの続きに見える — In-Reply-To/References を持たない
+/// 偽の返信装い (Abnormal Security 系 BEC 報告の常套手段) を
+/// 見抜くための手掛かり。
+#[must_use]
+pub fn subject_has_reply_marker(subject: &str) -> bool {
+    let t = subject.trim_start();
+    let lower = t.to_lowercase();
+    lower.starts_with("re:")
+        || lower.starts_with("re[")
+        || lower.starts_with("fw:")
+        || lower.starts_with("fwd:")
+        || lower.starts_with("aw:")
+        || lower.starts_with("sv:")
+        || lower.starts_with("rv:")
+        || t.starts_with("返信")
+        || t.starts_with("転送")
+        || t.starts_with("Ｒｅ")
+        || t.starts_with("ｒｅ")
+}
+
 /// `label(.label)+` 形で、TLD が 2 字以上の英字 (または非 ASCII) の妥当な
 /// ホストか。ラベルは Unicode 英数字・ハイフン — Cyrillic 埋め込み
 /// (`payраl.com`) を拾えるよう Unicode に寛容にする。
@@ -2324,6 +2421,75 @@ mod tests {
     fn scan_attachment_safe_pdf_not_dangerous() {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
+    }
+
+    // ---------- D178: Date 異常 ----------
+
+    #[test]
+    fn date_anomaly_future_detected() {
+        let now = 1_700_000_000i64;
+        assert!(is_date_anomaly(now + 72 * 3600, now));
+        assert!(!is_date_anomaly(now + 24 * 3600, now));
+        assert!(!is_date_anomaly(now, now));
+    }
+
+    #[test]
+    fn date_anomaly_past_normal() {
+        let now = 1_700_000_000i64;
+        assert!(!is_date_anomaly(now - 365 * 86_400, now));
+        assert!(is_date_anomaly(-1, now));
+    }
+
+    // ---------- D179: 返信系件名マーカー ----------
+
+    #[test]
+    fn reply_marker_detected() {
+        assert!(subject_has_reply_marker("Re: 見積もりについて"));
+        assert!(subject_has_reply_marker("re: hello"));
+        assert!(subject_has_reply_marker("Fwd: invoice"));
+        assert!(subject_has_reply_marker("返信: 確認依頼"));
+        assert!(subject_has_reply_marker("転送: 請求書"));
+        assert!(subject_has_reply_marker("  Re: padded"));
+    }
+
+    #[test]
+    fn non_reply_marker_not_detected() {
+        assert!(!subject_has_reply_marker("お知らせ"));
+        assert!(!subject_has_reply_marker("Renewal notice"));
+        assert!(!subject_has_reply_marker("re hello")); // コロンなしは非検出
+        assert!(!subject_has_reply_marker(""));
+    }
+
+    // ---------- D180: URL 内の不可視文字 ----------
+
+    #[test]
+    fn invisible_char_url_detected_and_cleaned() {
+        let found = find_invisible_char_urls("https://payp\u{200B}al.com/login");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].cleaned, "https://paypal.com/login");
+    }
+
+    #[test]
+    fn invisible_char_url_variants_detected() {
+        assert_eq!(find_invisible_char_urls("https://a\u{00AD}b.com").len(), 1);
+        assert_eq!(find_invisible_char_urls("https://a\u{200C}b.com").len(), 1);
+        assert_eq!(find_invisible_char_urls("https://a\u{FEFF}b.com").len(), 1);
+        assert_eq!(find_invisible_char_urls("https://a\u{2060}b.com").len(), 1);
+    }
+
+    #[test]
+    fn normal_url_no_invisible_char() {
+        assert!(find_invisible_char_urls("https://paypal.com").is_empty());
+        assert!(find_invisible_char_urls("https://a-b.com/x?y=1").is_empty());
+        assert!(find_invisible_char_urls("特にURLなし").is_empty());
+    }
+
+    #[test]
+    fn invisible_char_only_in_path_detected() {
+        // パス内の不可視文字も兆候として検出する
+        let found = find_invisible_char_urls("https://example.com/pa\u{200B}th");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].cleaned, "https://example.com/path");
     }
 }
 

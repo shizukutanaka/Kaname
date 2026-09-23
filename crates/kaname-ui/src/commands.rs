@@ -359,7 +359,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // 本文からリンクを抽出し、bec の URL シグナルに供給する。
     // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
-    let urls = extract_urls_from_text(analysis_text);
+    let mut urls = extract_urls_from_text(analysis_text);
+    // D180: URL に不可視・フォーマット文字 (ZWSP/SHY/双方向制御等) —
+    // フィルタのドメイン抽出を壊しつつ表示を保つ回避手口。除去した
+    // cleaned を「見せている URL」として評価に併記する。
+    let invisible_urls = kaname_render::find_invisible_char_urls(analysis_text);
+    for u in &invisible_urls {
+        if !urls.iter().any(|x| x == &u.cleaned) {
+            urls.push(u.cleaned.clone());
+        }
+    }
 
     // 自組織ドメイン (D44): 設定 `org_domain` → 接続中アカウントから導出。
     // 未設定・未接続なら空文字で、自己ドメインを前提とする検出は安全にスキップされる。
@@ -511,6 +520,35 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 m.shown_domain, m.href_domain
             ));
         }
+    }
+    // D178: Date 異常 (未来日付ソート悪用 / 1970 以前)。
+    if let Some(ts) = env.date {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        if kaname_render::is_date_anomaly(ts, now) {
+            render_risks.push(
+                "Date ヘッダが異常です (未来日付または無効値) — 受信箱ソートの悪用または偽装の兆候"
+                    .to_string(),
+            );
+        }
+    }
+    // D179: Re:/Fwd: 系件名だが In-Reply-To/References がない — 偽返信装い。
+    if env.in_reply_to.is_empty()
+        && env.references.is_empty()
+        && kaname_render::subject_has_reply_marker(&subject)
+    {
+        render_risks.push(
+            "件名は返信形 (Re: 等) ですが In-Reply-To/References がなく、偽の返信を装っている可能性があります"
+                .to_string(),
+        );
+    }
+    // D180: URL 内の不可視・フォーマット文字 — フィルタ回避の兆候。
+    if !invisible_urls.is_empty() {
+        render_risks.push(
+            "URL に不可視文字 (ZWSP/SHY 等) が埋め込まれています — フィルタ回避の兆候".to_string(),
+        );
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));

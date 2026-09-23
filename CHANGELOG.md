@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D178: Date ヘッダの未来日付異常 (受信箱ソート悪用) を検出
+
+- `env.date` を評価する経路が文体認証の送信時刻のみで、Date 自体の異常は誰も見ていなかった — 未来日付のメールは多くのクライアントでソート順を悪用して受信箱先頭に留まる既知の配送テクニック (スパム/BEC で「最新」に見せる手口)
+- 対処: `is_date_anomaly` で 48 時間を超える未来・負値 (1970 以前) を検出 → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D179: Re:/Fwd: 系件名だが In-Reply-To/References が無い偽返信装いを検出
+
+- `Re:`/`Fwd:`/`返信:`/`転送:` 等の返信系件名はスレッドの続きに見えるが、In-Reply-To/References を持たない初回連絡で返信系件名を使う「偽返信」は BEC の常套手段 (Abnormal Security 系報告) — スレッド検査は参照先の有無を見るが、件名側の見せかけは未検査だった
+- 対処: `subject_has_reply_marker` で件名判定 → 参照ヘッダを一切持たない返信系件名を `render_risks` に兆候報告 (独 Aw:/北欧 Sv:/西 Rv: も対象)
+- テスト +2 件
+
+### Security — D180: URL 内の不可視・フォーマット文字 (ZWSP/SHY/双方向制御等) を検出
+
+- `https://payp\u{200B}al.com` のように URL に ZWSP/ZWNJ/SHY/BOM/双方向制御/ワード結合子/Variation Selector/タグ文字を埋めると、フィルタのドメイン抽出は壊れた文字列を見るがユーザーの表示はほぼ変わらない — Perception Point/Talos 系で観測されるフィルタ回避の定形
+- 対処: `find_invisible_char_urls` で検出 → 不可視文字を除去した `cleaned` を「見せている URL」として評価 URL に併記、`render_risks` に兆候報告
+- テスト +4 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)
