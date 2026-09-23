@@ -218,6 +218,21 @@ pub struct Envelope {
     /// あるか — 応答機・リスト配送機の記録を送信側が自称する兆候
     /// (D434)。
     pub autoreply_marks: bool,
+    /// `X-Rspamd-*`/`X-Spamd-*`/`X-Amavis-*`/`X-MailScanner-*`/
+    /// `X-MIMEDefang-*`/`X-Scanned-By:` 等の OSS スキャナ・
+    /// milter 印があるか — 検査機の記録を送信側が自称する兆候
+    /// (D435)。
+    pub oss_scan_marks: bool,
+    /// `X-DSPAM-*`/`X-Bogosity:`/`X-CRM114-*`/`X-Razor*`/
+    /// `X-Pyzor-*`/`X-Greylist*`/`X-Policy-*`/`X-DNSBL-*` 等の
+    /// 統計・照合フィルタ印があるか — 統計機・照合機の記録を
+    /// 送信側が自称する兆候 (D436)。
+    pub stat_filter_marks: bool,
+    /// `X-Postfix-*`/`X-Original-To:`/`X-Exim-*`/`X-Qmail-*`/
+    /// `X-Kerio-*`/`X-MDAV-*`/`X-IMSS-*`/`X-TM-AS-*`/`X-Domino-*`/
+    /// `X-Zimbra-*` 等の MTA・メール製品印があるか — MTA/製品の
+    /// 受信・検査記録を送信側が自称する兆候 (D437)。
+    pub mta_product_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -513,6 +528,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         eu_provider_marks: has_eu_provider_marks(raw),
         cis_provider_marks: has_cis_provider_marks(raw),
         autoreply_marks: has_autoreply_marks(raw),
+        oss_scan_marks: has_oss_scan_marks(raw),
+        stat_filter_marks: has_stat_filter_marks(raw),
+        mta_product_marks: has_mta_product_marks(raw),
     })
 }
 
@@ -1159,6 +1177,105 @@ fn has_autoreply_marks(raw: &[u8]) -> bool {
             || l.starts_with("precedence:")
             || l.starts_with("x-loop:")
             || l.starts_with("x-mdremoteip:")
+    })
+}
+
+/// `X-Rspamd-*`/`X-Spamd-*`/`X-Stat-Signature:`/`X-OS-Fingerprint:`/
+/// `X-Amavis-*`/`X-MailScanner-*`/`X-MIMEDefang-*`/`X-Scanned-By:` 等の
+/// OSS スキャナ・milter 印があるか判定する (D435)。
+///
+/// `X-Rspamd-*`/`X-Spamd-*`/`X-Stat-Signature:`/`X-OS-Fingerprint:`
+/// は rspamd の milter_headers が付与 (公式ソースに一覧)、
+/// `X-Amavis-*` は amavisd-new、`X-MailScanner-*` は MailScanner
+/// の検査記録 — 送信側から届くこれは自称。
+fn has_oss_scan_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rspamd-")
+            || l.starts_with("x-rmilter-")
+            || l.starts_with("x-spamd-")
+            || l.starts_with("x-stat-signature:")
+            || l.starts_with("x-os-fingerprint:")
+            || l.starts_with("x-amavis-")
+            || l.starts_with("x-amavisd-")
+            || l.starts_with("x-mailscanner-")
+            || l.starts_with("x-mimedefang-")
+            || l.starts_with("x-scanned-by:")
+            || l.starts_with("x-antivirus-scanned:")
+    })
+}
+
+/// `X-DSPAM-*`/`X-Bogosity:`/`X-Bogofilter-*`/`X-CRM114-*`/
+/// `X-Spamprobe-*`/`X-Razor*`/`X-Pyzor-*`/`X-Greylist*`/`X-Policy-*`/
+/// `X-DNSBL-*`/`X-RBL-*` 等の統計・照合フィルタ印があるか判定する
+/// (D436)。
+///
+/// `X-DSPAM-*` は DSPAM (`X-DSPAM-Result`/`X-DSPAM-Signature` 等)、
+/// `X-Bogosity:` は bogofilter、`X-Razor*`/`X-Pyzor-*`/`X-CRM114-*`
+/// は分散照合・統計フィルタ、`X-Greylist*`/`X-Policy-*`/`X-DNSBL-*`
+/// は遅延・ポリシー・DNSBL 判定機の記録 — 送信側から届くこれは自称。
+fn has_stat_filter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dspam-")
+            || l.starts_with("x-bogosity:")
+            || l.starts_with("x-bogofilter-")
+            || l.starts_with("x-crm114-")
+            || l.starts_with("x-spamprobe-")
+            || l.starts_with("x-razor-")
+            || l.starts_with("x-razor2-")
+            || l.starts_with("x-pyzor-")
+            || l.starts_with("x-greylist-")
+            || l.starts_with("x-greylisted-")
+            || l.starts_with("x-policy-")
+            || l.starts_with("x-dnsbl-")
+            || l.starts_with("x-rbl-")
+    })
+}
+
+/// `X-Postfix-*`/`X-Original-To:`/`X-Exim-*`/`X-Qmail-*`/
+/// `X-Sendmail-*`/`X-MailEnable-*`/`X-MDaemon-*`/`X-MDAV-*`/
+/// `X-Kerio-*`/`X-IMSS-*`/`X-TM-AS-*`/`X-Domino-*`/`X-Notes-*`/
+/// `X-GroupWise-*`/`X-Zimbra-*` 等の MTA・メール製品印があるか
+/// 判定する (D437)。
+///
+/// `X-Original-To:` は Postfix のエイリアス展開記録、`X-MDAV-*`/
+/// `X-Spam-Processed:` は MDaemon、`X-Kerio-Anti-Spam` は Kerio
+/// Connect、`X-imss-scan-details`/`X-TM-AS-Result` は Trend Micro
+/// IMSS (公式 X-ヘッダ文書) の記録 — 送信側から届くこれは自称。
+fn has_mta_product_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-postfix-")
+            || l.starts_with("x-original-to:")
+            || l.starts_with("x-exim-")
+            || l.starts_with("x-qmail-")
+            || l.starts_with("x-sendmail-")
+            || l.starts_with("x-mailenable-")
+            || l.starts_with("x-mdaemon-")
+            || l.starts_with("x-mdav-")
+            || l.starts_with("x-spam-processed:")
+            || l.starts_with("x-kerio-")
+            || l.starts_with("x-icewarp-")
+            || l.starts_with("x-communigate-")
+            || l.starts_with("x-scalix-")
+            || l.starts_with("x-axigen-")
+            || l.starts_with("x-surgemail-")
+            || l.starts_with("x-tm-as-")
+            || l.starts_with("x-imss-")
+            || l.starts_with("x-domino-")
+            || l.starts_with("x-notes-")
+            || l.starts_with("x-groupwise-")
+            || l.starts_with("x-zimbra-")
     })
 }
 
@@ -3821,6 +3938,74 @@ mod tests {
         assert!(has_autoreply_marks(m1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autoreply_marks(clean));
+    }
+
+    #[test]
+    fn scan_はOSSスキャナ印を検出する() {
+        let r1 = b"X-Rspamd-Action: no action\r\n\r\nx";
+        assert!(has_oss_scan_marks(r1));
+        let r2 = b"X-Rspamd-Server: mx\r\n\r\nx";
+        assert!(has_oss_scan_marks(r2));
+        let s1 = b"X-Spamd-Result: default\r\n\r\nx";
+        assert!(has_oss_scan_marks(s1));
+        let s2 = b"X-Stat-Signature: abc\r\n\r\nx";
+        assert!(has_oss_scan_marks(s2));
+        let o1 = b"X-OS-Fingerprint: linux\r\n\r\nx";
+        assert!(has_oss_scan_marks(o1));
+        let a1 = b"X-Amavis-Alert: bad\r\n\r\nx";
+        assert!(has_oss_scan_marks(a1));
+        let m1 = b"X-MailScanner-SpamCheck: spam\r\n\r\nx";
+        assert!(has_oss_scan_marks(m1));
+        let m2 = b"X-MIMEDefang-Notify: x\r\n\r\nx";
+        assert!(has_oss_scan_marks(m2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_oss_scan_marks(clean));
+    }
+
+    #[test]
+    fn scan_は統計フィルタ印を検出する() {
+        let d1 = b"X-DSPAM-Result: Innocent\r\n\r\nx";
+        assert!(has_stat_filter_marks(d1));
+        let d2 = b"X-DSPAM-Signature: abc\r\n\r\nx";
+        assert!(has_stat_filter_marks(d2));
+        let b1 = b"X-Bogosity: Ham\r\n\r\nx";
+        assert!(has_stat_filter_marks(b1));
+        let c1 = b"X-CRM114-Status: Good\r\n\r\nx";
+        assert!(has_stat_filter_marks(c1));
+        let r1 = b"X-Razor2-Spam: no\r\n\r\nx";
+        assert!(has_stat_filter_marks(r1));
+        let p1 = b"X-Pyzor: spam\r\n\r\nx";
+        assert!(has_stat_filter_marks(p1));
+        let g1 = b"X-Greylist: delayed\r\n\r\nx";
+        assert!(has_stat_filter_marks(g1));
+        let p2 = b"X-Policy-Weight: ok\r\n\r\nx";
+        assert!(has_stat_filter_marks(p2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_stat_filter_marks(clean));
+    }
+
+    #[test]
+    fn scan_はMTA製品印を検出する() {
+        let p1 = b"X-Postfix-Queue-ID: 123\r\n\r\nx";
+        assert!(has_mta_product_marks(p1));
+        let o1 = b"X-Original-To: u@h\r\n\r\nx";
+        assert!(has_mta_product_marks(o1));
+        let e1 = b"X-Exim-Version: 4\r\n\r\nx";
+        assert!(has_mta_product_marks(e1));
+        let q1 = b"X-Qmail-Scanner: 1\r\n\r\nx";
+        assert!(has_mta_product_marks(q1));
+        let k1 = b"X-Kerio-Anti-Spam: no\r\n\r\nx";
+        assert!(has_mta_product_marks(k1));
+        let m1 = b"X-MDAV-Result: clean\r\n\r\nx";
+        assert!(has_mta_product_marks(m1));
+        let s1 = b"X-Spam-Processed: mx\r\n\r\nx";
+        assert!(has_mta_product_marks(s1));
+        let i1 = b"X-imss-scan-details: x\r\n\r\nx";
+        assert!(has_mta_product_marks(i1));
+        let t1 = b"X-TM-AS-Result: No\r\n\r\nx";
+        assert!(has_mta_product_marks(t1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mta_product_marks(clean));
     }
 }
 
