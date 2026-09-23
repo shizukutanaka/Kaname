@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D528: `X-McDonalds-*`/`X-Starbucks-*`/`X-Sushiro-*` 等のファストフード・飲食チェーン印自称が未検査
+
+- **問題**: `X-McDonalds-*` (マクドナルド)、`X-Starbucks-*` (Starbucks)、`X-Dominos-*`/`X-KFC-*`/`X-Subway-*`/`X-BurgerKing-*`/`X-PizzaHut-*`/`X-Wendys-*`/`X-Chipotle-*`/`X-TacoBell-*`/`X-Dunkin-*`/`X-TimHortons-*`/`X-ChickFilA-*`/`X-PandaExpress-*`/`X-MosBurger-*`/`X-Sukiya-*`/`X-Yoshinoya-*`/`X-Matsuya-*`/`X-Saizeriya-*`/`X-Dennys-*`/`X-KuraSushi-*`/`X-Sushiro-*`/`X-HamaSushi-*`/`X-KappaSushi-*`/`X-Torikizoku-*`/`X-Skylark-*`/`X-Cocos-*`/`X-Jonathans-*`/`X-Bamiyan-*`/`X-RoyalHost-*`/`X-OliveGarden-*`/`X-CrackerBarrel-*`/`X-CheesecakeFactory-*`/`X-Nandos-*`/`X-Wagamama-*`/`X-Zizzi-*`/`X-Wetherspoons-*`/`X-Greggs-*`/`X-PretAManger-*` は食機の通知記録 — 送信側が書くことは自称。食事券・クーポン詐欺の典型印。(`X-Gusto-*` は D466 で検出済み)
+- **修正**: `Envelope` に `restaurant_marks` + `has_restaurant_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 食印の自署を問え。
+
+### Security — D529: `X-Nike-*`/`X-Adidas-*`/`X-Decathlon-*`/`X-Montbell-*` 等のスポーツ・アウトドアブランド印自称が未検査
+
+- **問題**: `X-Nike-*` (Nike)、`X-Adidas-*` (adidas)、`X-Decathlon-*` (Decathlon)、`X-Montbell-*` (mont-bell)、`X-Puma-*`/`X-UnderArmour-*`/`X-NewBalance-*`/`X-ASICS-*`/`X-Mizuno-*`/`X-OnRunning-*`/`X-HOKA-*`/`X-Salomon-*`/`X-TheNorthFace-*`/`X-Patagonia-*`/`X-Columbia-*`/`X-Arcteryx-*`/`X-REI-*`/`X-BassPro-*`/`X-Cabelas-*`/`X-Dicks-*`/`X-Fanatics-*`/`X-Xebio-*`/`X-Himaraya-*`/`X-Alpen-*`/`X-Wilson-*`/`X-Yonex-*`/`X-Babolat-*`/`X-Callaway-*`/`X-TaylorMade-*`/`X-Ping-*`/`X-Titleist-*`/`X-Fila-*`/`X-Lotto-*`/`X-Umbro-*`/`X-Diadora-*` は武具機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `sports_marks` + `has_sports_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 武具印の自署を問え。
+
+### Security — D530: `X-Fitbit-*`/`X-Garmin-*`/`X-Peloton-*`/`X-GoldGym-*` 等のフィットネス・ウェアラブル・ジム印自称が未検査
+
+- **問題**: `X-Fitbit-*` (Fitbit)、`X-Garmin-*` (Garmin)、`X-Peloton-*` (Peloton)、`X-GoldGym-*` (ゴールドジム)、`X-Polar-*`/`X-Suunto-*`/`X-Coros-*`/`X-Whoop-*`/`X-Oura-*`/`X-Strava-*`/`X-Zwift-*`/`X-MyFitnessPal-*`/`X-Noom-*`/`X-Freeletics-*`/`X-Runkeeper-*`/`X-MapMyRun-*`/`X-Komoot-*`/`X-AllTrails-*`/`X-Calm-*`/`X-Headspace-*`/`X-BetterSleep-*`/`X-Bodybuilding-*`/`X-NikeTraining-*`/`X-AdidasRunning-*`/`X-Fiit-*`/`X-Anytime-*`/`X-Tipness-*`/`X-Renaissance-*`/`X-KonamiSports-*`/`X-CentralSports-*`/`X-Major4-*`/`X-LAVA-*`/`X-Curves-*` は健機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `fitness_marks` + `has_fitness_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 健印の自署を問え。
+
+
 ### Security — D525: `X-Kroger-*`/`X-Tesco-*`/`X-AEON-*`/`X-Lawson-*`/`X-Uniqlo-*`/`X-Yodobashi-*` 等の食料品・日用品・コンビニ・家電・アパレル・百貨店印自称が未検査
 
 - **問題**: `X-Kroger-*` (Kroger)、`X-Tesco-*` (Tesco)、`X-AEON-*` (イオン)、`X-Sainsbury-*`/`X-ASDA-*`/`X-Morrisons-*`/`X-Aldi-*`/`X-Lidl-*`/`X-SevenI-*`/`X-FamilyMart-*`/`X-Lawson-*`/`X-Ministop-*`/`X-Woolworths-*`/`X-Coles-*`/`X-Safeway-*`/`X-Publix-*`/`X-Wegmans-*`/`X-TraderJoes-*`/`X-WholeFoods-*`/`X-Sprouts-*`/`X-Yamada-*`/`X-BicCamera-*`/`X-Yodobashi-*`/`X-Joshin-*`/`X-Kojima-*`/`X-Edion-*`/`X-MediaMarkt-*`/`X-Saturn-*`/`X-Elkjop-*`/`X-Gigantti-*`/`X-Uniqlo-*`/`X-GU-*`/`X-Shimamura-*`/`X-Workman-*`/`X-AOKI-*`/`X-Aoyama-*`/`X-Macys-*`/`X-Nordstrom-*`/`X-Bloomingdales-*`/`X-Kohls-*`/`X-JCPenney-*`/`X-Dillards-*` は商機の通知記録 — 送信側が書くことは自称。ポイント・クーポン詐欺の典型印。(`X-Walmart-*` は D494 で検出済み)
