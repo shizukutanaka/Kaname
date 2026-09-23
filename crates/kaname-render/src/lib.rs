@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-Hankoya-*`/`X-InkanHyakka-*`/`X-Trodat-*`/`X-Xstamper-*`/`X-RubberStamps-*` 等の印章・はんこ・ゴム印通知記録印を送信側が自称している (D623)
+    pub stamp_marks: bool,
+    /// `X-DriveSavers-*`/`X-Ontrack-*`/`X-SecureData-*`/`X-AOSData-*`/`X-GeekSquad-*`/`X-uBreakiFix-*` 等のデータ復旧・端末修理通知記録印を送信側が自称している (D624)
+    pub recovery_marks: bool,
+    /// `X-Kagi110-*`/`X-Key110-*`/`X-Miwa-*`/`X-GoalLock-*`/`X-Abus-*`/`X-Schlage-*`/`X-PopALock-*` 等の鍵屋・錠前・防犯鍵通知記録印を送信側が自称している (D625)
+    pub locksmith_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        stamp_marks: has_stamp_marks(hdr),
+        recovery_marks: has_recovery_marks(hdr),
+        locksmith_marks: has_locksmith_marks(hdr),
     })
 }
 
@@ -10623,7 +10632,6 @@ fn has_housekeeping_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-bikubo-")
             || l.starts_with("x-sansei-")
             || l.starts_with("x-daikou-")
-            || l.starts_with("x-pickme-")
             || l.starts_with("x-housecall-")
             || l.starts_with("x-zehitomo-")
             || l.starts_with("x-kurashino-")
@@ -12101,7 +12109,6 @@ fn has_stationery_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-frixion-")
             || l.starts_with("x-kurutoga-")
             || l.starts_with("x-emott-")
-            || l.starts_with("x-shachihata-")
             || l.starts_with("x-collect-")
             || l.starts_with("x-bunbougu-")
             || l.starts_with("x-hobonichi-")
@@ -12641,6 +12648,284 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-bigdaishowa-")
             || l.starts_with("x-nikkentool-")
             || l.starts_with("x-regotool-")
+    })
+}
+
+
+/// `X-Hankoya-*` (ハンコヤドットコム)、`X-Hankoya21-*` (はんこ屋さん21)、`X-Hankozukka-*` (はんこズッカ)、`X-InkanHyakka-*` (印鑑百貨)、`X-HankoMan-*` (ハンコマン)、`X-InkanClub-*`/`X-Hanko-Shop-*`/`X-HankyShop-*`/`X-Inkan.com-*`/`X-Hankoya-Honpo-*`/`X-Inkan-Honpo-*`/`X-Hanko-King-*`/`X-InkanDirect-*`/`X-HankoStore-*`/`X-Inban-*`/`X-Insho-*`/`X-Jitsuin-*`/`X-Ginkoin-*`/`X-Mitomein-*`/`X-DenshiInkan-*`/`X-Einkan-*`/`X-ElephantStamp-*`/`X-Gyosho-*`/`X-Tensho-*`/`X-Reisho-*`/`X-Kaisho-*`/`X-Kizamiya-*`/`X-Musashino-*`/`X-Taiyotosho-*`/`X-TamuraInkan-*`/`X-UemuraInkan-*`/`X-YamadaInkan-*`/`X-NihonInkan-*`/`X-Maruichi-*`/`X-Sanby-*`/`X-TaiyoTimer-*`/`X-BeverlyStamp-*`/`X-BenriN-*`/`X-IrodrillStamp-*`/`X-Trodat-*`/`X-Colop-*`/`X-Xstamper-*`/`X-ShinySelfInk-*`/`X-ExcelMark-*`/`X-MaxLight-*`/`X-Printy-*`/`X-Cosco2000-*`/`X-RubberStamps-*`/`X-SimplyStamps-*`/`X-FastStamps-*`/`X-Stamprints-*`/`X-StampStore-*`/`X-TheStampMaker-*`/`X-RubberStampChamp-*`/`X-Stampson-*`/`X-Stamplus-*`/`X-HollandStamp-*`/`X-NotaryStamp-*`/`X-SealPress-*`/`X-Embosser-*`/`X-CorpSeal-*`/`X-WaxSeal-*`/`X-CustomStamp-*`/`X-InstantStamp-*`/`X-RapidStamp-*`/`X-ProStamp-*`/`X-Stamptitude-*`/`X-StampinUp-*` 等 は章機の通知記録 — 送信側が書くことは自称。
+/// (名刺・各種印刷は printing 機、電子契約は esign 機で検出済み)
+fn has_stamp_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hankoya-")
+            || l.starts_with("x-hankoya21-")
+            || l.starts_with("x-hankozukka-")
+            || l.starts_with("x-inkanhyakka-")
+            || l.starts_with("x-hankoman-")
+            || l.starts_with("x-inkanclub-")
+            || l.starts_with("x-hanko-shop-")
+            || l.starts_with("x-hankoshop-")
+            || l.starts_with("x-inkan.com-")
+            || l.starts_with("x-hankoya-honpo-")
+            || l.starts_with("x-hankoyahonpo-")
+            || l.starts_with("x-inkan-honpo-")
+            || l.starts_with("x-inkanhonpo-")
+            || l.starts_with("x-hanko-king-")
+            || l.starts_with("x-hankoking-")
+            || l.starts_with("x-inkandirect-")
+            || l.starts_with("x-hankostore-")
+            || l.starts_with("x-inban-")
+            || l.starts_with("x-insho-")
+            || l.starts_with("x-jitsuin-")
+            || l.starts_with("x-ginkoin-")
+            || l.starts_with("x-mitomein-")
+            || l.starts_with("x-denshiinkan-")
+            || l.starts_with("x-einkan-")
+            || l.starts_with("x-elephantstamp-")
+            || l.starts_with("x-gyosho-")
+            || l.starts_with("x-tensho-")
+            || l.starts_with("x-reisho-")
+            || l.starts_with("x-kaisho-")
+            || l.starts_with("x-kizamiya-")
+            || l.starts_with("x-musashino-")
+            || l.starts_with("x-taiyotosho-")
+            || l.starts_with("x-tamurainkan-")
+            || l.starts_with("x-uemurainkan-")
+            || l.starts_with("x-yamadainkan-")
+            || l.starts_with("x-nihoninkan-")
+            || l.starts_with("x-maruichi-")
+            || l.starts_with("x-sanby-")
+            || l.starts_with("x-taiyotimer-")
+            || l.starts_with("x-beverlystamp-")
+            || l.starts_with("x-benrin-")
+            || l.starts_with("x-irodrillstamp-")
+            || l.starts_with("x-trodat-")
+            || l.starts_with("x-colop-")
+            || l.starts_with("x-xstamper-")
+            || l.starts_with("x-shinyselfink-")
+            || l.starts_with("x-excelmark-")
+            || l.starts_with("x-maxlight-")
+            || l.starts_with("x-printy-")
+            || l.starts_with("x-cosco2000-")
+            || l.starts_with("x-rubberstamps-")
+            || l.starts_with("x-simplystamps-")
+            || l.starts_with("x-faststamps-")
+            || l.starts_with("x-stamprints-")
+            || l.starts_with("x-stampstore-")
+            || l.starts_with("x-thestampmaker-")
+            || l.starts_with("x-rubberstampchamp-")
+            || l.starts_with("x-stampson-")
+            || l.starts_with("x-stamplus-")
+            || l.starts_with("x-hollandstamp-")
+            || l.starts_with("x-notarystamp-")
+            || l.starts_with("x-sealpress-")
+            || l.starts_with("x-embosser-")
+            || l.starts_with("x-corpseal-")
+            || l.starts_with("x-waxseal-")
+            || l.starts_with("x-customstamp-")
+            || l.starts_with("x-instantstamp-")
+            || l.starts_with("x-rapidstamp-")
+            || l.starts_with("x-prostamp-")
+            || l.starts_with("x-stamptitude-")
+            || l.starts_with("x-stampinup-")
+    })
+}
+
+/// `X-DriveSavers-*`/`X-Ontrack-*`/`X-KrollOntrack-*`/`X-SecureData-*`/`X-SecureDataRecovery-*`/`X-SalvageData-*`/`X-AOSData-*`/`X-DataRescue-*`/`X-DataFukkyu-*`/`X-DataTech-*`/`X-DTData-*`/`X-Recoveo-*`/`X-Gillware-*`/`X-ProsoftEng-*`/`X-MRTlab-*`/`X-HDDoctor-*`/`X-DFL-*`/`X-WeDataRecovery-*`/`X-DataRecoveryServices-*`/`X-DataRecovery-*`/`X-DataRecoveryHQ-*`/`X-TechFusion-*`/`X-TotalRecall-*`/`X-PlatinumData-*`/`X-SeagateRecovery-*`/`X-LC-Tech-*`/`X-FlashbackData-*`/`X-Memofix-*`/`X-DatLabs-*`/`X-Fields-DataRecovery-*`/`X-OntrackRecovery-*`/`X-AceDataRecovery-*`/`X-CBL-*`/`X-CBLDataRecovery-*`/`X-IBAS-*`/`X-ActionFront-*`/`X-Vogon-*`/`X-DiskInternals-*`/`X-EaseUS-*`/`X-Recoverit-*`/`X-Wondershare-*`/`X-MiniTool-*`/`X-GetDataBack-*`/`X-HetmanRecovery-*`/`X-RStudio-*`/`X-DiskDrill-*`/`X-CleverFiles-*`/`X-Recuva-*`/`X-PhotoRec-*`/`X-TestDisk-*`/`X-ActiveUndelete-*`/`X-DoYourData-*`/`X-Magoshare-*`/`X-iBoysoft-*`/`X-AnyRecover-*`/`X-iMyFone-*`/`X-Tenorshare-*`/`X-DrFone-*`/`X-FoneDog-*`/`X-iBeeSoft-*`/`X-Cisdem-*`/`X-GeekSquad-*`/`X-uBreakiFix-*`/`X-CPRRepair-*`/`X-BatteriesPlus-*`/`X-Experimac-*`/`X-iResQ-*`/`X-MobileKlinik-*`/`X-DrPhoneFix-*`/`X-CellSavers-*`/`X-FixMyPhone-*`/`X-SmartphoneMedic-*`/`X-MissionRepair-*`/`X-SquareTrade-*`/`X-Asurion-*`/`X-BrightStar-*`/`X-DoctorHomeNet-*`/`X-PCDepot-*`/`X-QuickGarage-*`/`X-SumahoSpital-*`/`X-Janpara-*`/`X-RepairNet-*`/`X-iCracked-*`/`X-iFixit-*` 等 は復機の通知記録 — 送信側が書くことは自称。
+/// (ストレージ販売は storage 機、端末保険は insurance 機で検出済み)
+fn has_recovery_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-drivesavers-")
+            || l.starts_with("x-ontrack-")
+            || l.starts_with("x-krollontrack-")
+            || l.starts_with("x-securedata-")
+            || l.starts_with("x-securedatarecovery-")
+            || l.starts_with("x-salvagedata-")
+            || l.starts_with("x-aosdata-")
+            || l.starts_with("x-datarescue-")
+            || l.starts_with("x-datafukkyu-")
+            || l.starts_with("x-datatech-")
+            || l.starts_with("x-dtdata-")
+            || l.starts_with("x-recoveo-")
+            || l.starts_with("x-gillware-")
+            || l.starts_with("x-prosofteng-")
+            || l.starts_with("x-mrtlab-")
+            || l.starts_with("x-hddoctor-")
+            || l.starts_with("x-dfl-")
+            || l.starts_with("x-wedatarecovery-")
+            || l.starts_with("x-datarecoveryservices-")
+            || l.starts_with("x-datarecovery-")
+            || l.starts_with("x-datarecoveryhq-")
+            || l.starts_with("x-techfusion-")
+            || l.starts_with("x-totalrecall-")
+            || l.starts_with("x-platinumdata-")
+            || l.starts_with("x-seagaterecovery-")
+            || l.starts_with("x-lc-tech-")
+            || l.starts_with("x-lctech-")
+            || l.starts_with("x-flashbackdata-")
+            || l.starts_with("x-memofix-")
+            || l.starts_with("x-datlabs-")
+            || l.starts_with("x-fields-datarecovery-")
+            || l.starts_with("x-fieldsdatarecovery-")
+            || l.starts_with("x-ontrackrecovery-")
+            || l.starts_with("x-acedatarecovery-")
+            || l.starts_with("x-cbl-")
+            || l.starts_with("x-cbldatarecovery-")
+            || l.starts_with("x-ibas-")
+            || l.starts_with("x-actionfront-")
+            || l.starts_with("x-vogon-")
+            || l.starts_with("x-diskinternals-")
+            || l.starts_with("x-easeus-")
+            || l.starts_with("x-recoverit-")
+            || l.starts_with("x-wondershare-")
+            || l.starts_with("x-minitool-")
+            || l.starts_with("x-getdataback-")
+            || l.starts_with("x-hetmanrecovery-")
+            || l.starts_with("x-rstudio-")
+            || l.starts_with("x-diskdrill-")
+            || l.starts_with("x-cleverfiles-")
+            || l.starts_with("x-recuva-")
+            || l.starts_with("x-photorec-")
+            || l.starts_with("x-testdisk-")
+            || l.starts_with("x-activeundelete-")
+            || l.starts_with("x-doyourdata-")
+            || l.starts_with("x-magoshare-")
+            || l.starts_with("x-iboysoft-")
+            || l.starts_with("x-anyrecover-")
+            || l.starts_with("x-imyfone-")
+            || l.starts_with("x-tenorshare-")
+            || l.starts_with("x-drfone-")
+            || l.starts_with("x-fonedog-")
+            || l.starts_with("x-ibeesoft-")
+            || l.starts_with("x-cisdem-")
+            || l.starts_with("x-geeksquad-")
+            || l.starts_with("x-ubreakifix-")
+            || l.starts_with("x-cprrepair-")
+            || l.starts_with("x-batteriesplus-")
+            || l.starts_with("x-experimac-")
+            || l.starts_with("x-iresq-")
+            || l.starts_with("x-mobileklinik-")
+            || l.starts_with("x-drphonefix-")
+            || l.starts_with("x-cellsavers-")
+            || l.starts_with("x-fixmyphone-")
+            || l.starts_with("x-smartphonemedic-")
+            || l.starts_with("x-missionrepair-")
+            || l.starts_with("x-squaretrade-")
+            || l.starts_with("x-asurion-")
+            || l.starts_with("x-brightstar-")
+            || l.starts_with("x-doctorhomenet-")
+            || l.starts_with("x-pcdepot-")
+            || l.starts_with("x-quickgarage-")
+            || l.starts_with("x-sumahospital-")
+            || l.starts_with("x-sumahosp-")
+            || l.starts_with("x-janpara-")
+            || l.starts_with("x-repairnet-")
+            || l.starts_with("x-icracked-")
+            || l.starts_with("x-ifixit-")
+    })
+}
+
+/// `X-Kagi110-*` (カギの110番)/`X-Key110-*`/`X-Kagi24-*`/`X-LockService-*`/`X-AiKagi-*`/`X-LockNKey-*`/`X-KagiKyujyo-*`/`X-SeikatsuKyujyo-*`/`X-Miwa-*` (美和ロック)/`X-MiwaLock-*`/`X-GoalLock-*` (GOAL)/`X-Showalock-*` (ショワ)/`X-U-Shin-Showa-*`/`X-Horikyo-*`/`X-Fuki-Lock-*`/`X-Kakuda-*`/`X-Alpha-Lock-*`/`X-Abus-*`/`X-Schlage-*`/`X-Kwikset-*`/`X-Weiser-*`/`X-MasterLock-*`/`X-Medeco-*`/`X-AssaAbloy-*`/`X-Sargent-*`/`X-CorbinRusswin-*`/`X-BestLock-*`/`X-FalconLock-*`/`X-ArrowLock-*`/`X-PDQ-*`/`X-Dormakaba-*`/`X-Dorma-*`/`X-Kaba-*`/`X-Allegion-*`/`X-CodeLocks-*`/`X-Mul-T-Lock-*`/`X-MultLock-*`/`X-Bilock-*`/`X-YaleLock-*`/`X-AugustLock-*`/`X-LevelLock-*`/`X-SchlageEncode-*`/`X-PopALock-*`/`X-FlyingLocksmiths-*`/`X-MrRekey-*`/`X-GetALocksmith-*`/`X-AsapLock-*`/`X-1800Locksmith-*`/`X-CarmelLock-*`/`X-LocksmithPros-*`/`X-LocksmithPlus-*`/`X-KeyMe-*`/`X-MinuteKey-*`/`X-KeyExpress-*`/`X-LockDoctor-*`/`X-DrLock-*`/`X-TheKeyGuys-*`/`X-KeyMasters-*`/`X-LocksmithService-*`/`X-ASecureLife-*`/`X-LockMob-*`/`X-DenverLocksmith-*`/`X-LockRanger-*`/`X-Locksquad-*`/`X-Lokco-*`/`X-AbleLock-*`/`X-AnytimeLock-*`/`X-SpeedyLock-*`/`X-DynoLock-*`/`X-Locksafe-*`/`X-Keytek-*`/`X-Lockforce-*`/`X-TimonLock-*`/`X-ClockLock-*`/`X-LockWorld-*`/`X-FortLock-*`/`X-VitalLock-*`/`X-KeyWell-*`/`X-SigmaLock-*` 等 は錠機の通知記録 — 送信側が書くことは自称。
+/// (ホームセキュリティ ADT/SECOM は facility 機、車・バイクは automotive 機で検出済み)
+fn has_locksmith_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kagi110-")
+            || l.starts_with("x-key110-")
+            || l.starts_with("x-kagi24-")
+            || l.starts_with("x-lockservice-")
+            || l.starts_with("x-aikagi-")
+            || l.starts_with("x-locknkey-")
+            || l.starts_with("x-kagikyujyo-")
+            || l.starts_with("x-seikatsukyujyo-")
+            || l.starts_with("x-miwa-")
+            || l.starts_with("x-miwalock-")
+            || l.starts_with("x-goallock-")
+            || l.starts_with("x-goal-lock-")
+            || l.starts_with("x-showalock-")
+            || l.starts_with("x-u-shin-showa-")
+            || l.starts_with("x-ushinshowa-")
+            || l.starts_with("x-horikyo-")
+            || l.starts_with("x-fukilock-")
+            || l.starts_with("x-kakuda-")
+            || l.starts_with("x-alpha-lock-")
+            || l.starts_with("x-alphalock-")
+            || l.starts_with("x-abus-")
+            || l.starts_with("x-schlage-")
+            || l.starts_with("x-kwikset-")
+            || l.starts_with("x-weiser-")
+            || l.starts_with("x-masterlock-")
+            || l.starts_with("x-medeco-")
+            || l.starts_with("x-assaabloy-")
+            || l.starts_with("x-sargent-")
+            || l.starts_with("x-corbinrusswin-")
+            || l.starts_with("x-bestlock-")
+            || l.starts_with("x-falconlock-")
+            || l.starts_with("x-arrowlock-")
+            || l.starts_with("x-pdq-")
+            || l.starts_with("x-dormakaba-")
+            || l.starts_with("x-dorma-")
+            || l.starts_with("x-kaba-")
+            || l.starts_with("x-allegion-")
+            || l.starts_with("x-codelocks-")
+            || l.starts_with("x-mul-t-lock-")
+            || l.starts_with("x-multlock-")
+            || l.starts_with("x-bilock-")
+            || l.starts_with("x-yalelock-")
+            || l.starts_with("x-yale-lock-")
+            || l.starts_with("x-augustlock-")
+            || l.starts_with("x-levellock-")
+            || l.starts_with("x-schlageencode-")
+            || l.starts_with("x-popalock-")
+            || l.starts_with("x-pop-a-lock-")
+            || l.starts_with("x-flyinglocksmiths-")
+            || l.starts_with("x-mrrekey-")
+            || l.starts_with("x-getalocksmith-")
+            || l.starts_with("x-asaplock-")
+            || l.starts_with("x-1800locksmith-")
+            || l.starts_with("x-carmellock-")
+            || l.starts_with("x-locksmithpros-")
+            || l.starts_with("x-locksmithplus-")
+            || l.starts_with("x-keyme-")
+            || l.starts_with("x-minutekey-")
+            || l.starts_with("x-keyexpress-")
+            || l.starts_with("x-lockdoctor-")
+            || l.starts_with("x-drlock-")
+            || l.starts_with("x-thekeyguys-")
+            || l.starts_with("x-keymasters-")
+            || l.starts_with("x-locksmithservice-")
+            || l.starts_with("x-asecurelife-")
+            || l.starts_with("x-lockmob-")
+            || l.starts_with("x-denverlocksmith-")
+            || l.starts_with("x-lockranger-")
+            || l.starts_with("x-locksquad-")
+            || l.starts_with("x-lokco-")
+            || l.starts_with("x-ablelock-")
+            || l.starts_with("x-anytimelock-")
+            || l.starts_with("x-speedylock-")
+            || l.starts_with("x-dynolock-")
+            || l.starts_with("x-locksafe-")
+            || l.starts_with("x-keytek-")
+            || l.starts_with("x-lockforce-")
+            || l.starts_with("x-timonlock-")
+            || l.starts_with("x-lockworld-")
+            || l.starts_with("x-fortlock-")
+            || l.starts_with("x-vitallock-")
+            || l.starts_with("x-keywell-")
+            || l.starts_with("x-sigmalock-")
     })
 }
 
@@ -20640,5 +20925,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は章機印を検出する() {
+    let h1 = b"From: a@b
+X-Hankoya-Id: 1
+
+x";
+    let i1 = b"From: a@b
+X-InkanHyakka-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-Trodat-Notice: 1
+
+x";
+    let x1 = b"From: a@b
+X-Xstamper-Flag: 1
+
+x";
+    let c1 = b"From: a@b
+X-Colop-Entry: 1
+
+x";
+    let s1 = b"From: a@b
+X-SimplyStamps-Record: 1
+
+x";
+    let e1 = b"From: a@b
+X-Embosser-Trace: 1
+
+x";
+    let j1 = b"From: a@b
+X-Jitsuin-Stamp: 1
+
+x";
+    assert!(has_stamp_marks(h1));
+    assert!(has_stamp_marks(i1));
+    assert!(has_stamp_marks(t1));
+    assert!(has_stamp_marks(x1));
+    assert!(has_stamp_marks(c1));
+    assert!(has_stamp_marks(s1));
+    assert!(has_stamp_marks(e1));
+    assert!(has_stamp_marks(j1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_stamp_marks(clean));
+}
+
+#[test]
+fn scan_は復機印を検出する() {
+    let d1 = b"From: a@b
+X-DriveSavers-Id: 1
+
+x";
+    let o1 = b"From: a@b
+X-Ontrack-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SecureData-Notice: 1
+
+x";
+    let g1 = b"From: a@b
+X-GeekSquad-Flag: 1
+
+x";
+    let u1 = b"From: a@b
+X-uBreakiFix-Entry: 1
+
+x";
+    let e1 = b"From: a@b
+X-EaseUS-Record: 1
+
+x";
+    let a1 = b"From: a@b
+X-AOSData-Trace: 1
+
+x";
+    let r1 = b"From: a@b
+X-Recoverit-Stamp: 1
+
+x";
+    assert!(has_recovery_marks(d1));
+    assert!(has_recovery_marks(o1));
+    assert!(has_recovery_marks(s1));
+    assert!(has_recovery_marks(g1));
+    assert!(has_recovery_marks(u1));
+    assert!(has_recovery_marks(e1));
+    assert!(has_recovery_marks(a1));
+    assert!(has_recovery_marks(r1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_recovery_marks(clean));
+}
+
+#[test]
+fn scan_は錠機印を検出する() {
+    let k1 = b"From: a@b
+X-Kagi110-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-Miwa-Trace: 1
+
+x";
+    let g1 = b"From: a@b
+X-GoalLock-Notice: 1
+
+x";
+    let a1 = b"From: a@b
+X-Abus-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-Schlage-Entry: 1
+
+x";
+    let p1 = b"From: a@b
+X-PopALock-Record: 1
+
+x";
+    let d1 = b"From: a@b
+X-Dormakaba-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-KeyMe-Stamp: 1
+
+x";
+    assert!(has_locksmith_marks(k1));
+    assert!(has_locksmith_marks(m1));
+    assert!(has_locksmith_marks(g1));
+    assert!(has_locksmith_marks(a1));
+    assert!(has_locksmith_marks(s1));
+    assert!(has_locksmith_marks(p1));
+    assert!(has_locksmith_marks(d1));
+    assert!(has_locksmith_marks(c1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_locksmith_marks(clean));
 }
 }
