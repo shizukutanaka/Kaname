@@ -514,6 +514,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D213: 送信者側の輸送・経路系ヘッダ (経路偽装) の兆候。
+    if env.forged_transport_headers {
+        render_risks.push(
+            "送信者側が輸送・経路系ヘッダ (X-Originating-IP/Delivered-To 等) を付与しています — \
+            中継が付ける値を送信側が自称する経路偽装の兆候です"
+                .to_string(),
+        );
+    }
+    // D214: MIME 構造を持つのに MIME-Version がない非準拠の兆候。
+    if env.mime_version_missing {
+        render_risks.push(
+            "MIME 構造を持つのに MIME-Version ヘッダがありません — \
+            正規の MUA が必ず付ける値がない手作り品の兆候です"
+                .to_string(),
+        );
+    }
+    // D215: Content-Location による実体偽装の兆候。
+    if env.content_location_present {
+        render_risks.push(
+            "Content-Location ヘッダがあります — MHTML 形式でパートを外部リソースとして\
+            装わせる実体偽装の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

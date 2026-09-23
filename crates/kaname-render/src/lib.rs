@@ -96,6 +96,17 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// トップレベルヘッダに送信者側の輸送・経路系ヘッダ
+    /// (`X-Originating-IP`/`X-Forwarded-For`/`Delivered-To`/
+    /// `X-Envelope-From`/`X-Envelope-To`) が含まれるか — 中継が付ける
+    /// ヘッダを送信側が自称する経路偽装の兆候 (D213)。
+    pub forged_transport_headers: bool,
+    /// MIME 構造 (multipart Content-Type か非 7bit CTE) を持つのに
+    /// `MIME-Version:` ヘッダがないか — RFC 2045 違反の手作り品兆候 (D214)。
+    pub mime_version_missing: bool,
+    /// `Content-Location:` ヘッダが存在するか — MHTML 形式でパートを
+    /// 外部リソースとして装わせる実体偽装の兆候 (D215)。
+    pub content_location_present: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +341,26 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D213: 送信者側が付与した輸送・経路系ヘッダ。これらは中継・
+    // 配送側が付けるもの — 送信側に存在すること自体が経路偽装。
+    let forged_transport_headers = [
+        "x-originating-ip",
+        "x-forwarded-for",
+        "delivered-to",
+        "x-envelope-from",
+        "x-envelope-to",
+    ]
+    .iter()
+    .any(|h| top_level_header_present(raw, h));
+
+    // D214: MIME 構造を持つのに MIME-Version がない = 非準拠。
+    let mime_version_missing =
+        !top_level_header_present(raw, "mime-version") && raw_has_mime_constructs(raw);
+
+    // D215: Content-Location は MHTML でパートを外部リソースとして
+    // 装わせる機構 — メール内では実体偽装の兆候。
+    let content_location_present = raw_has_header(raw, "content-location");
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +378,69 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        forged_transport_headers,
+        mime_version_missing,
+        content_location_present,
     })
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) に指定ヘッダが
+/// 存在するか判定する (D210)。
+fn top_level_header_present(raw: &[u8], name: &str) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        if line.to_ascii_lowercase().starts_with(&prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 生メッセージ全域に指定ヘッダが現れるか判定する (D215)。
+/// パートヘッダにも現れるため全域走査 — Content-Location 等の
+/// 用途で、トップレベル限定判定と区別する。
+fn raw_has_header(raw: &[u8], name: &str) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    text.lines().take(8192).any(|line| {
+        // 行頭 = ヘッダ名開始 (folding 行は空白始まりのため対象外)
+        !line.starts_with(' ')
+            && !line.starts_with('\t')
+            && line.to_ascii_lowercase().starts_with(&prefix)
+    })
+}
+
+/// MIME 構造 (multipart Content-Type または非 7bit Content-Transfer-
+/// Encoding) を持つか判定する (D214)。MIME-Version 欠落判定の
+/// 前提条件として使う。
+fn raw_has_mime_constructs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let mut in_headers = true;
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if !in_headers {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with("content-type:") && lower.contains("multipart/") {
+            return true;
+        }
+        if lower.starts_with("content-transfer-encoding:")
+            && !lower.contains("7bit")
+            && !lower.contains("8bit")
+            && !lower.contains("binary")
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1950,6 +2043,77 @@ mod tests {
             result.addr.local, "\"ceo@trusted.com\"",
             "quoted local part は @ の前の部分全体であるべき"
         );
+    }
+
+    /// D213: 送信者側の輸送・経路系ヘッダ検出。
+    #[test]
+    fn parse_は輸送ヘッダ注入を検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    X-Originating-IP: [10.0.0.1]\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.forged_transport_headers);
+        let raw2 = b"From: alice@example.com\r\n\
+                     Delivered-To: bob@example.com\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(env2.forged_transport_headers);
+        let raw3 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.forged_transport_headers);
+    }
+
+    /// D214: MIME 構造を持つのに MIME-Version がない非準拠検出。
+    #[test]
+    fn parse_はmime_version欠落を検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    Content-Type: multipart/mixed; boundary=\"b\"\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    --b\r\n\
+                    body\r\n\
+                    --b--\r\n";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.mime_version_missing);
+        // MIME-Version あり → 検出しない
+        let raw2 = b"From: alice@example.com\r\n\
+                     MIME-Version: 1.0\r\n\
+                     Content-Type: multipart/mixed; boundary=\"b\"\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     --b\r\n\
+                     body\r\n\
+                     --b--\r\n";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.mime_version_missing);
+        // MIME 構造なし (text/plain) で MIME-Version なし → 検出しない
+        let raw3 = b"From: alice@example.com\r\n\
+                     Content-Type: text/plain\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.mime_version_missing);
+    }
+
+    /// D215: Content-Location ヘッダ検出。
+    #[test]
+    fn parse_はcontent_locationを検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    Content-Type: text/html\r\n\
+                    Content-Location: http://evil.example/login.html\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    <html></html>";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.content_location_present);
+        let raw2 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.content_location_present);
     }
 
     #[test]

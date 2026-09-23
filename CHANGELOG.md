@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D213: 送信者側の輸送・経路系ヘッダ (経路偽装) を検出
+
+- `X-Originating-IP`/`X-Forwarded-For`/`Delivered-To`/`X-Envelope-From`/`X-Envelope-To` は中継・配送側が付けるヘッダ — 送信側が付与すれば実際の送信元や経路を偽装できる (X-Spam verdict 注入 D206 と同じ「評価側が付ける値を被評価側が自称する」系列)
+- 対処: `top_level_header_present` でトップレベルヘッダを走査 → `forged_transport_headers` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D214: MIME 構造を持つのに `MIME-Version:` がない非準拠メールを検出
+
+- RFC 2045 は MIME メッセージに `MIME-Version: 1.0` を必須とする — 正規の MUA は必ず付けるため、multipart や非 7bit CTE を持つのに同ヘッダがないメッセージは手作り品・非標準ツール生成の兆候
+- 対処: `top_level_header_present` + `raw_has_mime_constructs` → `mime_version_missing` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D215: `Content-Location:` ヘッダ (MHTML 実体偽装) を検出
+
+- RFC 2557 MHTML の Content-Location はパートを「外部リソースのコピー」として装わせる機構 — メールパートが `http://trusted.example/` の内容であるかのように見せられる実体偽装で、メール内で正規利用は稀
+- 対処: `raw_has_header` で全域走査 (パートヘッダにも現れるため) → `content_location_present` → `render_risks` に兆候報告
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)
