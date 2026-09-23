@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D318: `<marquee>`/`<blink>`/`<bgsound>` の廃止表現タグが未検査
+
+- 廃止された表現タグは現行パーサでの扱いが実装ごとに分かれ、`<bgsound>` はクリック不要の音声読み込み起点 — 解析器と表示器の解釈を分ける潜み場所になる (D305 廃止コンテナの姉妹: 表現系) が未検査だった
+- 対処: `has_presentational_obsolete` 新設 → `Envelope.presentational_obsolete` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D319: `List-Post`/`List-Archive`/`X-ML-Name` 等のリスト系ヘッダ自称が未検査
+
+- RFC 2369 のリストヘッダ (List-Post/List-Archive/List-Subscribe/List-Owner/List-Help) および X-ML-Name/X-Mail-Count/X-Mailing-List は ML が配信時に付ける値 — 送信側が書き込んで届くのは「リスト経由の正当な配信」の体裁を騙る自称だが未検査だった
+- 対処: `has_list_family_headers` 新設 → `Envelope.list_family_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D320: `Content-Script-Type:`/`Content-Style-Type:` 制御自称が未検査
+
+- 文書内スクリプト/スタイルの既定言語を指定する制御値 — メールで内容側が描画器の既定言語を指定するのは meta http-equiv 制御 (D302) のヘッダ版で正当な用途がないが未検査だった
+- 対処: `has_content_script_type` 新設 → `Envelope.content_script_type` → `render_risks` 兆候報告
+- テスト +4 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

@@ -103,6 +103,16 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// 本文 HTML に `<marquee>`/`<blink>`/`<bgsound>` があるか —
+    /// 廃止された表現タグで解析器と表示器の解釈を分ける兆候 (D318)。
+    pub presentational_obsolete: bool,
+    /// `List-Post`/`List-Archive`/`List-Subscribe`/`List-Owner`/
+    /// `List-Help`/`X-ML-Name`/`X-Mail-Count` 等のリスト系ヘッダが
+    /// あるか — ML 経由の体裁を騙る自称の兆候 (D319)。
+    pub list_family_headers: bool,
+    /// `Content-Script-Type:`/`Content-Style-Type:` ヘッダがあるか —
+    /// 描画器の既定言語を内容側が指定する制御自称の兆候 (D320)。
+    pub content_script_type: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +372,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        presentational_obsolete: has_presentational_obsolete(raw),
+        list_family_headers: has_list_family_headers(raw),
+        content_script_type: has_content_script_type(raw),
     })
 }
 
@@ -422,6 +435,58 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// 本文 HTML に `<marquee>`/`<blink>`/`<bgsound>` があるか判定する
+/// (D318)。
+///
+/// 廃止された表現タグは現行パーサでの扱いが実装ごとに分かれ、
+/// `<bgsound>` はクリック不要の音声読み込み起点 — 解析器と表示器の
+/// 解釈を分ける潜み場所になる (D305 廃止コンテナの姉妹: 表現系)。
+fn has_presentational_obsolete(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<marquee") || lower.contains("<blink") || lower.contains("<bgsound")
+}
+
+/// `List-Post`/`List-Archive`/`List-Subscribe`/`List-Owner`/`List-Help`
+/// 等のリスト系ヘッダがあるか判定する (D319)。
+///
+/// RFC 2369 のリストヘッダは ML が配信時に付ける値 — 送信側が書き
+/// 込んで届くのは「リスト経由の正当な配信」の体裁を騙る自称
+/// (D271 の List-Id/Unsubscribe ペアとは別系のリストヘッダ群)。
+fn has_list_family_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("list-post:")
+            || l.starts_with("list-archive:")
+            || l.starts_with("list-subscribe:")
+            || l.starts_with("list-owner:")
+            || l.starts_with("list-help:")
+            || l.starts_with("x-ml-name:")
+            || l.starts_with("x-mail-count:")
+            || l.starts_with("x-mailing-list:")
+    })
+}
+
+/// `Content-Script-Type:`/`Content-Style-Type:` ヘッダがあるか判定
+/// する (D320)。
+///
+/// これらは文書内スクリプト/スタイルの既定言語を指定する制御値 —
+/// メールで内容側が描画器の既定言語を指定するのは meta http-equiv
+/// 制御 (D302) のヘッダ版で、正当な用途がない。
+fn has_content_script_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("content-script-type:")
+            || l.starts_with("content-style-type:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2740,44 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は廃止表現タグを検出する() {
+        let m = b"<marquee>scroll</marquee>";
+        assert!(has_presentational_obsolete(m));
+        let b = b"<blink>flash</blink>";
+        assert!(has_presentational_obsolete(b));
+        let bg = b"<bgsound src=\"a.mid\">";
+        assert!(has_presentational_obsolete(bg));
+        let clean = b"<p>ok</p>";
+        assert!(!has_presentational_obsolete(clean));
+    }
+
+    #[test]
+    fn scan_はリスト系ヘッダを検出する() {
+        let lp = b"From: a@b\r\nList-Post: <mailto:l@x>\r\n\r\nx";
+        assert!(has_list_family_headers(lp));
+        let la = b"From: a@b\r\nList-Archive: <https://x>\r\n\r\nx";
+        assert!(has_list_family_headers(la));
+        let ml = b"From: a@b\r\nX-ML-Name: dev\r\n\r\nx";
+        assert!(has_list_family_headers(ml));
+        let mc = b"From: a@b\r\nX-Mail-Count: 12\r\n\r\nx";
+        assert!(has_list_family_headers(mc));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_list_family_headers(clean));
+    }
+
+    #[test]
+    fn scan_はスクリプト型指定を検出する() {
+        let sc = b"Content-Script-Type: text/javascript\r\n\r\nx";
+        assert!(has_content_script_type(sc));
+        let st = b"Content-Style-Type: text/css\r\n\r\nx";
+        assert!(has_content_script_type(st));
+        let clean = b"Content-Type: text/html\r\n\r\nx";
+        assert!(!has_content_script_type(clean));
+        let body = b"From: a@b\r\n\r\nContent-Script-Type: x";
+        assert!(!has_content_script_type(body));
     }
 }
 

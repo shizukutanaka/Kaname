@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D318: 廃止表現タグ
+    if env.presentational_obsolete {
+        render_risks.push(
+            "<marquee>/<blink>/<bgsound> タグ — 廃止表現タグで解析と表示を分ける兆候です"
+                .to_string(),
+        );
+    }
+
+    // D319: リスト系ヘッダ自称
+    if env.list_family_headers {
+        render_risks.push(
+            "List-Post/List-Archive/X-ML-Name 等 — ML 経由の体裁を送信側が自称している可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D320: スクリプト/スタイル型指定
+    if env.content_script_type {
+        render_risks.push(
+            "Content-Script-Type/Content-Style-Type — 描画器の既定言語を内容側が指定する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
