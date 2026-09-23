@@ -1972,6 +1972,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D587: サプリメント・健康食品印自称
+    if env.supplement_marks {
+        render_risks.push(
+            "X-Yazuya-*/X-Egao-*/X-Kyusai-*/X-NatureMade-*/X-Orihiro-*/X-SeedComs-*/X-AFC-*/X-USANA-* 等 — 滋機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D588: ウォーターサーバー・宅配水印自称
+    if env.waterserver_marks {
+        render_risks.push(
+            "X-Crecla-*/X-AquaClara-*/X-CosmoWater-*/X-Frecious-*/X-PremiumWater-*/X-Urunon-*/X-Kirala-*/X-WaterStand-* 等 — 水機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D589: M&A・事業承継印自称
+    if env.maadvisory_marks {
+        render_risks.push(
+            "X-NihonMA-*/X-StrikeMA-*/X-Batonz-*/X-Tranbi-*/X-Atracs-*/X-MASoken-*/X-Fundbook-*/X-RecofMA-* 等 — 継機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
