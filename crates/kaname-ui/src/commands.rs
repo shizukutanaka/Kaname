@@ -676,6 +676,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D420: 反スパム自称印 (第二群)
+    if env.uce_marks {
+        render_risks.push(
+            "X-UCE-*/X-Antispam-*/X-Blacklist-* 等 — 「反スパムは通過済み」表明を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D421: 発送記録印自称
+    if env.dispatch_marks {
+        render_risks.push(
+            "X-Sent-*/X-Dispatched-*/X-Outbox-* 等 — 発送機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D422: 経路印 (第二群) 自称
+    if env.route_marks {
+        render_risks.push(
+            "X-Transit-*/X-Routed-*/X-Route-* 等 — 経由機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

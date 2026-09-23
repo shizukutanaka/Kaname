@@ -166,6 +166,18 @@ pub struct Envelope {
     /// `X-Digest-*` 等の整合性・ハッシュ印があるか — 検査機の
     /// 記録を送信側が自称する兆候 (D410)。
     pub hash_marks: bool,
+    /// `X-UCE-*`/`X-Antispam-*`/`X-Badword-*`/`X-Blacklist-*`/
+    /// `X-Spamtrap-*` 等の反スパム自称印 (第二群) があるか —
+    /// 判定機の記録を送信側が自称する兆候 (D420)。
+    pub uce_marks: bool,
+    /// `X-Sent-*`/`X-Dispatched-*`/`X-Despatched-*`/`X-Outbox-*`/
+    /// `X-Mailing-Machine:` 等の発送記録印があるか — 発送機の
+    /// 記録を送信側が自称する兆候 (D421)。
+    pub dispatch_marks: bool,
+    /// `X-Transit-*`/`X-Routed-*`/`X-Route-*`/`X-Traverse-*`/
+    /// `X-Carried-*` 等の経路印 (第二群) があるか — 経由機の
+    /// 記録を送信側が自称する兆候 (D422)。
+    pub route_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -447,6 +459,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         appliance3_marks: has_appliance3_marks(raw),
         finalrcpt_marks: has_finalrcpt_marks(raw),
         hash_marks: has_hash_marks(raw),
+        uce_marks: has_uce_marks(raw),
+        dispatch_marks: has_dispatch_marks(raw),
+        route_marks: has_route_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -781,6 +796,64 @@ fn has_hash_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-sha1-")
             || l.starts_with("x-sha256-")
             || l.starts_with("x-digest-")
+    })
+}
+
+/// `X-UCE-*`/`X-Antispam-*`/`X-Badword-*`/`X-Blacklist-*`/
+/// `X-Spamtrap-*` 等の反スパム自称印 (第二群) があるか
+/// 判定する (D420)。
+///
+/// 反スパム判定は受信側の判定機が下す — 送信側から届くこれは
+/// 「反スパムは通過済み」体裁を内容側が主張する自称。
+fn has_uce_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-uce-")
+            || l.starts_with("x-antispam-")
+            || l.starts_with("x-badword-")
+            || l.starts_with("x-blacklist-")
+            || l.starts_with("x-spamtrap-")
+    })
+}
+
+/// `X-Sent-*`/`X-Dispatched-*`/`X-Despatched-*`/`X-Outbox-*`/
+/// `X-Mailing-Machine:` 等の発送記録印があるか判定する (D421)。
+///
+/// 発送・送出の記録は発送機・受信機が残す — 送信側から届くこれは
+/// 「発送は記録済み」体裁を内容側が主張する自称。
+fn has_dispatch_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sent-")
+            || l.starts_with("x-dispatched-")
+            || l.starts_with("x-despatched-")
+            || l.starts_with("x-outbox-")
+            || l.starts_with("x-mailing-machine:")
+    })
+}
+
+/// `X-Transit-*`/`X-Routed-*`/`X-Route-*`/`X-Traverse-*`/
+/// `X-Carried-*` 等の経路印 (第二群) があるか判定する (D422)。
+///
+/// 経由・運送の記録は経由機が残す — 送信側から届くこれは
+/// 「この経路を通った」体裁を内容側が主張する自称。
+fn has_route_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-transit-")
+            || l.starts_with("x-routed-")
+            || l.starts_with("x-route-")
+            || l.starts_with("x-traverse-")
+            || l.starts_with("x-carried-")
     })
 }
 
@@ -3203,6 +3276,54 @@ mod tests {
         assert!(has_hash_marks(h6));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_hash_marks(clean));
+    }
+
+    #[test]
+    fn scan_は反スパム印を検出する() {
+        let u1 = b"X-UCE-Status: pass\r\n\r\nx";
+        assert!(has_uce_marks(u1));
+        let a1 = b"X-Antispam-Result: ok\r\n\r\nx";
+        assert!(has_uce_marks(a1));
+        let b1 = b"X-Badword-Hit: b\r\n\r\nx";
+        assert!(has_uce_marks(b1));
+        let b2 = b"X-Blacklist-Check: c\r\n\r\nx";
+        assert!(has_uce_marks(b2));
+        let s1 = b"X-Spamtrap-Hit: s\r\n\r\nx";
+        assert!(has_uce_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_uce_marks(clean));
+    }
+
+    #[test]
+    fn scan_は発送記録印を検出する() {
+        let s1 = b"X-Sent-Time: t\r\n\r\nx";
+        assert!(has_dispatch_marks(s1));
+        let d1 = b"X-Dispatched-By: d\r\n\r\nx";
+        assert!(has_dispatch_marks(d1));
+        let d2 = b"X-Despatched-At: a\r\n\r\nx";
+        assert!(has_dispatch_marks(d2));
+        let o1 = b"X-Outbox-ID: o\r\n\r\nx";
+        assert!(has_dispatch_marks(o1));
+        let m1 = b"X-Mailing-Machine: m\r\n\r\nx";
+        assert!(has_dispatch_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dispatch_marks(clean));
+    }
+
+    #[test]
+    fn scan_は経路印を検出する() {
+        let t1 = b"X-Transit-Path: t\r\n\r\nx";
+        assert!(has_route_marks(t1));
+        let r1 = b"X-Routed-Via: r\r\n\r\nx";
+        assert!(has_route_marks(r1));
+        let r2 = b"X-Route-Path: p\r\n\r\nx";
+        assert!(has_route_marks(r2));
+        let t2 = b"X-Traverse-Count: t\r\n\r\nx";
+        assert!(has_route_marks(t2));
+        let c1 = b"X-Carried-By: c\r\n\r\nx";
+        assert!(has_route_marks(c1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_route_marks(clean));
     }
 }
 

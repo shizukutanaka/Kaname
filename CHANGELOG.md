@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D420: `X-UCE-*`/`X-Antispam-*`/`X-Badword-*`/`X-Blacklist-*`/`X-Spamtrap-*` 等の反スパム自称印 (第二群) が未検査
+
+- 反スパム判定は受信側の判定機が下す — 送信側から届くのは「反スパムは通過済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_uce_marks` 新設 → `Envelope.uce_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D421: `X-Sent-*`/`X-Dispatched-*`/`X-Despatched-*`/`X-Outbox-*`/`X-Mailing-Machine:` 等の発送記録印自称が未検査
+
+- 発送・送出の記録は発送機・受信機が残す — 送信側から届くのは「発送は記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_dispatch_marks` 新設 → `Envelope.dispatch_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D422: `X-Transit-*`/`X-Routed-*`/`X-Route-*`/`X-Traverse-*`/`X-Carried-*` 等の経路印自称 (第二群) が未検査
+
+- 経由・運送の記録は経由機が残す — 送信側から届くのは「この経路を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_route_marks` 新設 → `Envelope.route_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D408: `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/`X-Abaca-*` 等のアプライアンス印自称 (第三群) が未検査
 
 - 商用メール機器のブランド印は機器が記す — 送信側から届くのは「この機器を通った」体裁を内容側が主張する自称だが未検査だった
