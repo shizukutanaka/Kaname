@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D608: `X-Musee-*`/`X-TBC-*`/`X-Kireimo-*` 等のエステ・脱毛・美容クリニック印自称が未検査
+
+- **問題**: `X-Musee-*` (ミュゼ)、`X-TBC-*` (TBC)、`X-Kireimo-*` (キレイモ)、`X-Erucenne-*`/`X-SlimBeauty-*`/`X-TakanoYuri-*`/`X-Mispa-*`/`X-DandyHouse-*`/`X-MensTBC-*`/`X-GorillaClinic-*`/`X-ShonanHiyou-*`/`X-ShinagawaHiyou-*`/`X-Joumoto-*`/`X-Takasu-*`/`X-RizeClinic-*`/`X-AliciaClinic-*`/`X-Strash-*`/`X-C3Esthe-*`/`X-GinzaCalla-*`/`X-Koihada-*`/`X-Lacoco-*`/`X-Eminal-*`/`X-JibunClinic-*`/`X-FureaClinic-*`/`X-SBCShonan-*`/`X-TokyoBiyo-*`/`X-HifuKa-*`/`X-BiyoIin-*`/`X-MedicalEpilation-*`/`X-DatsumouSalon-*`/`X-LaserHair-*`/`X-KireiClinic-*`/`X-BiyoClinic-*`/`X-EstheSalon-*`/`X-EstheNavi-*`/`X-SalonNavi-*`/`X-YaseSalon-*`/`X-DietSalon-*`/`X-FacialSalon-*`/`X-BridalEsthe-*`/`X-MensEsthe-*`/`X-LadiesEsthe-*`/`X-EstheClinic-*` 等 は嬢機の通知記録 — 送信側が書くことは自称。契約更新・回数券残・キャンペーンの偽装はエステ詐欺の典型手口。(美容・コスメ機は D531、リラク機は D594)
+- **修正**: `Envelope` に `esthe_marks` + `has_esthe_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 嬢印の自署を問え。
+
+### Security — D609: `X-BikeO-*`/`X-Harley-*`/`X-Ducati-*` 等のバイク・二輪印自称が未検査
+
+- **問題**: `X-BikeO-*` (バイク王)、`X-Harley-*` (Harley)、`X-Ducati-*` (Ducati)、`X-RedBaronMoto-*`/`X-NirinKan-*`/`X-BikeKan-*`/`X-HondaBike-*`/`X-KawasakiBike-*`/`X-YamahaBike-*`/`X-SuzukiBike-*`/`X-BMWMoto-*`/`X-KTMMoto-*`/`X-TriumphMoto-*`/`X-Aprilia-*`/`X-MVAgusta-*`/`X-RoyalEnfield-*`/`X-Bimota-*`/`X-HusqvarnaMoto-*`/`X-Vespa-*`/`X-Piaggio-*`/`X-Adiva-*`/`X-RideZ-*`/`X-MotorcycleShop-*`/`X-BikeShop-*`/`X-NirinSha-*`/`X-MotoTouring-*`/`X-MotoCamp-*`/`X-MotoPark-*`/`X-HelmetShop-*`/`X-Arai-*`/`X-Shoei-*`/`X-OgkKabuto-*`/`X-WinsHelmet-*`/`X-Komine-*`/`X-RSTaichi-*`/`X-Hyod-*`/`X-Kushitani-*`/`X-PowerAge-*`/`X-Marushin-*`/`X-DaytonaBike-*`/`X-KijimaParts-*`/`X-TanaxShokai-*`/`X-DRCMoto-*`/`X-EnduranceMoto-*`/`X-WebikeNews-*`/`X-MotoRaku-*`/`X-MotoAuction-*`/`X-BikeKing-*`/`X-BikeMarche-*`/`X-MotoNavi-*`/`X-BikeNavi-*` 等 は騎機の通知記録 — 送信側が書くことは自称。買取査定・ツーリング案内・車検満了の偽装はライダー狙い詐欺の典型手口。(四輪・車買取は D521/D572、自転車は D577)
+- **修正**: `Envelope` に `bike_marks` + `has_bike_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 騎印の自署を問え。
+
+### Security — D610: `X-Fender-*`/`X-Gibson-*`/`X-IkebeGakki-*` 等の楽器・DTM印自称が未検査
+
+- **問題**: `X-Fender-*` (Fender)、`X-Gibson-*` (Gibson)、`X-IkebeGakki-*` (イケベ)、`X-Ibanez-*`/`X-ESPGuitars-*`/`X-Takamine-*`/`X-MartinGuitar-*`/`X-TaylorGuitar-*`/`X-PRSGuitars-*`/`X-MoonGuitar-*`/`X-GrecoGuitars-*`/`X-TokaiGuitars-*`/`X-FujigenGuitar-*`/`X-MomoseGuitars-*`/`X-SugiGuitars-*`/`X-MikiGakki-*`/`X-YamanoGakki-*`/`X-KurosawaGakki-*`/`X-IshibashiGakki-*`/`X-OchanomizuGakki-*`/`X-SoundMesse-*`/`X-DrSound-*`/`X-BeatKinosato-*`/`X-WatanabeGakki-*`/`X-SeasideGakki-*`/`X-EgawaGakki-*`/`X-YamahaGakki-*`/`X-KawaiGakki-*`/`X-MatsumotoGakki-*`/`X-OngakuKan-*`/`X-GakkiCenter-*`/`X-GakkiNavi-*`/`X-GuitarPlanet-*`/`X-BassCellar-*`/`X-DrumStation-*`/`X-DrummerParadise-*`/`X-PianoPlaza-*`/`X-PianoShop-*`/`X-KeyboardShop-*`/`X-SynthShop-*`/`X-DTMStation-*`/`X-DTMNavi-*`/`X-RecGakki-*`/`X-StudioGakki-*`/`X-BandGakki-*`/`X-ViolinShop-*`/`X-BrassShop-*`/`X-TrumpetShop-*`/`X-SaxShop-*`/`X-ClarinetShop-*`/`X-FluteShop-*`/`X-DrumShop-*`/`X-PercussionShop-*`/`X-ElectricGuitar-*`/`X-BassGuitar-*`/`X-UkuleleShop-*` 等 は弦機の通知記録 — 送信側が書くことは自称。中古入荷・限定品・展示セールの偽装は楽器詐欺の典型手口。(島村楽器・KORG・Roland・YAMAHA は既存族、音楽制作ソフトは D497)
+- **修正**: `Envelope` に `instrument_marks` + `has_instrument_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 弦印の自署を問え。
+
 ### Security — D605: `X-YotsuyaOhtsuka-*`/`X-Eikoh-*`/`X-Nichinoken-*` 等の学習塾・予備校印自称が未検査
 
 - **問題**: `X-YotsuyaOhtsuka-*` (四谷大塚)、`X-Eikoh-*` (栄光)、`X-Nichinoken-*` (日能研)、`X-Meikoh-*`/`X-TryJyuku-*`/`X-WasedaAcademy-*`/`X-Sapix-*`/`X-Ichishin-*`/`X-Rinkai-*`/`X-Shuei-*`/`X-Surara-*`/`X-ZKai-*`/`X-Hamagakuen-*`/`X-NozomiGakuen-*`/`X-Tetsuryokukai-*`/`X-YoyogiSeminar-*`/`X-EnaJyuku-*`/`X-IttoJyuku-*`/`X-Jukucho-*`/`X-Jyukunavi-*`/`X-ScolaJyuku-*`/`X-DrSeminar-*`/`X-KobetsuShido-*`/`X-Katekyo-*`/`X-HomeTeacher-*`/`X-MeikoGijuku-*`/`X-AsahiJyuku-*`/`X-Jishin-*`/`X-Jyuken-*`/`X-Nyushi-*`/`X-GakushuJyuku-*`/`X-OnlineJyuku-*`/`X-SwimSchool-*`/`X-BalletSchool-*` 等 は塾機の通知記録 — 送信側が書くことは自称。入塾案内・講習費・模試結果の偽装は保護者狙い詐欺の典型手口。(河合塾・駿台・東進・武田塾・ベネッセ・進研ゼミは既存族)

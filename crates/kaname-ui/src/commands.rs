@@ -2140,6 +2140,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D608: エステ・脱毛・美容クリニック印自称
+    if env.esthe_marks {
+        render_risks.push(
+            "X-Musee-*/X-TBC-*/X-Kireimo-*/X-GinzaCalla-*/X-ShonanHiyou-*/X-GorillaClinic-*/X-DatsumouSalon-*/X-BiyoClinic-* 等 — 嬢機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D609: バイク・二輪印自称
+    if env.bike_marks {
+        render_risks.push(
+            "X-BikeO-*/X-Harley-*/X-Ducati-*/X-KTMMoto-*/X-Vespa-*/X-Arai-*/X-Shoei-*/X-NirinKan-* 等 — 騎機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D610: 楽器・DTM印自称
+    if env.instrument_marks {
+        render_risks.push(
+            "X-Fender-*/X-Gibson-*/X-Ibanez-*/X-ESPGuitars-*/X-Takamine-*/X-MartinGuitar-*/X-IkebeGakki-*/X-DrumShop-* 等 — 弦機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
