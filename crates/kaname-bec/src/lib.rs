@@ -799,6 +799,20 @@ impl BecDetector {
                 ),
             });
         }
+        if analysis.display_name_email_spoof {
+            let emb = analysis.embedded_domain.as_deref().unwrap_or("不明");
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.35,
+                label: format!("表示名に別ドメインのアドレス ({})", emb),
+                rationale: format!(
+                    "表示名に埋め込まれたアドレスのドメイン {emb} が実際の送信ドメインと\
+                    異なります。クライアントは表示名を差出人名として表示するため、\
+                    ユーザーが {emb} からのメールと誤認する可能性があります\
+                    (フレンドリ名アドレス詐称)。"
+                ),
+            });
+        }
     }
 
     fn check_thread_hijack(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {

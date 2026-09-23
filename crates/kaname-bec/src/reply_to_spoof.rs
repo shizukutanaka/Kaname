@@ -5,6 +5,11 @@
 //!    `Reply-To: ceo@gmail.com` で返信を横取り
 //! 2. **表示名詐称** — `From: "CEO 山田" <attacker@evil.com>` で
 //!    正規アドレスに見せかける
+//! 3. **フレンドリ名アドレス詐称** — `From: "support@paypal.com"
+//!    <attacker@evil.xyz>` で、クライアントが表示名を差出人として見せるため
+//!    ユーザーに `support@paypal.com` からのメールと誤認させる
+//!    (RFC 5322 では表示名は任意テキスト。Valimail「friendly name spoofing」、
+//!    JPCERT/CC の BEC 解析で頻出する手口)
 
 /// Reply-To スプーフィング + 表示名詐称の評価結果。
 #[derive(Debug, PartialEq)]
@@ -17,6 +22,11 @@ pub struct SpoofAnalysis {
     pub display_name_impersonation: bool,
     /// 詐称が疑われる表示名。
     pub suspicious_display_name: Option<String>,
+    /// 表示名にメールアドレスが埋め込まれ、かつそのドメインが実際の
+    /// 送信ドメインと異なる (フレンドリ名アドレス詐称)。
+    pub display_name_email_spoof: bool,
+    /// 表示名に埋め込まれていたアドレスのドメイン (詐称の場合のみ Some)。
+    pub embedded_domain: Option<String>,
     /// スコア寄与 (0.0..=1.0)。
     pub risk_score: f32,
 }
@@ -79,6 +89,33 @@ pub fn analyze_spoof(
             false
         };
 
+    // 3. フレンドリ名アドレス詐称チェック
+    // 表示名がそのものメールアドレスである (`"support@paypal.com"
+    // <attacker@evil.xyz>`) 場合、クライアントが表示名を差出人名として
+    // 見せるため、ユーザーは実アドレスではなく埋め込まれたアドレスを
+    // 差出人と誤認する。既知連絡先との一致を問わず、埋め込みドメインが
+    // 実送信ドメインと異なれば詐称。
+    let embedded_domain = display_name
+        .as_deref()
+        .and_then(extract_embedded_email_domain);
+    let display_name_email_spoof = match (&embedded_domain, &from_domain) {
+        // 両方ホモグリフ畳み込みして比較 — `"support@раypal.com" <x@paypal.com>`
+        // (Cyrillic) のようなケースで畳み込み後に一致すれば詐称ではない
+        (Some(emb), Some(fd)) => emb != &crate::idn_homograph::fold_homoglyphs(fd),
+        _ => false,
+    };
+    // 埋め込みドメインが既知連絡先のドメインと一致する場合は、
+    // その連絡先を狙った詐称 (より悪質)。
+    let embedded_targets_contact = if display_name_email_spoof {
+        embedded_domain.as_ref().is_some_and(|emb| {
+            known_contacts
+                .iter()
+                .any(|(_, d)| emb == &d.to_lowercase().trim().to_string())
+        })
+    } else {
+        false
+    };
+
     // スコア計算
     let mut score = 0.0f32;
     if reply_to_domain_mismatch {
@@ -93,13 +130,25 @@ pub fn analyze_spoof(
     if display_name_impersonation {
         score += 0.3;
     }
+    if display_name_email_spoof {
+        score += 0.35;
+        if embedded_targets_contact {
+            score += 0.15;
+        }
+    }
 
     SpoofAnalysis {
         reply_to_domain_mismatch,
         reply_to_domain,
         display_name_impersonation,
         suspicious_display_name: if display_name_impersonation {
-            display_name
+            display_name.clone()
+        } else {
+            None
+        },
+        display_name_email_spoof,
+        embedded_domain: if display_name_email_spoof {
+            embedded_domain
         } else {
             None
         },
@@ -144,12 +193,91 @@ fn extract_domain_from_header(header: &str) -> Option<String> {
     Some(email[at + 1..].trim().to_lowercase())
 }
 
+/// 表示名からメールアドレスの区切り文字判定。
+/// アドレストークン内に現れない文字のみを境界とする (空白・クォート・
+/// 括弧・山括弧・区切り記号)。Unicode 文字は区切りではないので
+/// `"support@раypal.com"` (Cyrillic) のような埋め込みドメインも
+/// 丸ごと拾える。
+fn is_addr_delim(c: char) -> bool {
+    c.is_whitespace()
+        || matches!(
+            c,
+            '"' | '\'' | '<' | '>' | '(' | ')' | '[' | ']' | '{' | '}' | ',' | ';'
+        )
+}
+
+/// 表示名文字列に埋め込まれたメールアドレスのドメインを抽出する。
+///
+/// `From: "support@paypal.com" <attacker@evil.xyz>` のような
+/// フレンドリ名アドレス詐称用。複数候補がある場合は最初の有効なものを返す。
+/// 戻り値はホモグリフ畳み込み済み・小文字正規化済みのドメイン。
+///
+/// 有効条件: `local@domain` の local が 1 文字以上、domain が
+/// `label.label` 形 (ラベルは ASCII 英数字・ハイフン) — 畳み込み後に判定。
+fn extract_embedded_email_domain(display_name: &str) -> Option<String> {
+    for (at, _) in display_name.match_indices('@') {
+        // local: '@' から左へ、区切り文字に当たるまで遡る。
+        // rfind は byte offset を返す — 区切り文字は全て ASCII なので
+        // +1 で区切り文字の直後 (char 境界) になる。
+        let start = display_name[..at]
+            .rfind(is_addr_delim)
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let local = &display_name[start..at];
+        if local.is_empty() {
+            continue;
+        }
+
+        // domain: '@' の右へ、区切り文字に当たるまで進む
+        let rest = &display_name[at + 1..];
+        let domain_len = rest.find(is_addr_delim).unwrap_or(rest.len());
+        let raw_domain = &rest[..domain_len];
+        // 末尾の句読点・閉じ括弧などを除去
+        let raw_domain = raw_domain.trim_end_matches(|c: char| {
+            matches!(c, '.' | ',' | '!' | '?' | ':' | ';' | ')' | ']' | '}')
+        });
+        if raw_domain.is_empty() {
+            continue;
+        }
+
+        let folded = crate::idn_homograph::fold_homoglyphs(raw_domain).to_lowercase();
+        if !is_plausible_domain(&folded) {
+            continue;
+        }
+        return Some(folded);
+    }
+    None
+}
+
+/// `label(.label)+` 形の妥当なドメインか (ASCII 英数字・ハイフンのみ)。
+fn is_plausible_domain(domain: &str) -> bool {
+    let mut labels = domain.split('.');
+    let mut count = 0usize;
+    for label in &mut labels {
+        count += 1;
+        if label.is_empty()
+            || label.len() > 63
+            || !label
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            || label.starts_with('-')
+            || label.ends_with('-')
+        {
+            return false;
+        }
+    }
+    count >= 2
+}
+
 /// ヘッダーから表示名を抽出する。
 ///
 /// `"表示名" <email>` → `Some("表示名")`
 /// `<email>` または `email` → `None`
 fn extract_display_name(header: &str) -> Option<String> {
-    let lt_pos = header.find('<')?;
+    // 最後の '<' を使う — 表示名自体が `"<support@paypal.com>"` のような
+    // 山括弧を含む場合に最初の '<' で切ると表示名が空になってしまう。
+    // 実アドレスの addr-spec は常に最後の山括弧ペア。
+    let lt_pos = header.rfind('<')?;
     let name_part = header[..lt_pos].trim();
     if name_part.is_empty() {
         return None;
@@ -337,5 +465,159 @@ mod tests {
         assert!(is_free_mail_domain("gmail.com"));
         assert!(is_free_mail_domain("YAHOO.CO.JP"));
         assert!(!is_free_mail_domain("company.com"));
+    }
+
+    // ── D161: フレンドリ名アドレス詐称 ──────────────────────────────────────
+
+    #[test]
+    fn display_name_email_spoof_detected() {
+        // `"support@paypal.com" <attacker@evil.xyz>` — 表示名がアドレスで
+        // そのドメインが実送信ドメインと異なる → 詐称
+        let result = analyze_spoof(
+            "\"support@paypal.com\" <attacker@evil.xyz>",
+            None,
+            &[],
+        );
+        assert!(result.display_name_email_spoof);
+        assert_eq!(result.embedded_domain.as_deref(), Some("paypal.com"));
+    }
+
+    #[test]
+    fn display_name_email_same_domain_is_clean() {
+        // 表示名のアドレスが実アドレスと同ドメイン → 正当 (自分のアドレスを
+        // 表示名に設定する利用者は多い)
+        let result = analyze_spoof(
+            "\"alice@company.com\" <alice@company.com>",
+            None,
+            &[],
+        );
+        assert!(!result.display_name_email_spoof);
+        assert!(result.embedded_domain.is_none());
+    }
+
+    #[test]
+    fn display_name_email_targets_known_contact() {
+        // 埋め込みドメインが既知連絡先のドメイン → より高スコア
+        let result = analyze_spoof(
+            "\"ceo@company.com\" <attacker@evil.xyz>",
+            None,
+            &[("CEO 山田", "company.com")],
+        );
+        assert!(result.display_name_email_spoof);
+        assert!(result.risk_score >= 0.5);
+    }
+
+    #[test]
+    fn display_name_email_cyrillic_homoglyph_detected() {
+        // 埋め込みドメインの Cyrillic 類似字も畳み込みで拾う
+        // "support@раypal.com" の 'а' は Cyrillic
+        let result = analyze_spoof(
+            "\"support@раypal.com\" <attacker@evil.xyz>",
+            None,
+            &[],
+        );
+        assert!(result.display_name_email_spoof);
+        assert_eq!(result.embedded_domain.as_deref(), Some("paypal.com"));
+    }
+
+    #[test]
+    fn display_name_email_cyrillic_homoglyph_same_domain_clean() {
+        // 埋め込みが Cyrillic で書かれていても畳み込み後に実ドメインと
+        // 一致すれば詐称ではない
+        let result = analyze_spoof(
+            "\"alice@соmpany.com\" <alice@company.com>",
+            None,
+            &[],
+        );
+        // "соmpany.com" の 'о' が Cyrillic → fold すると "company.com"
+        assert!(!result.display_name_email_spoof);
+    }
+
+    #[test]
+    fn display_name_email_inside_text_detected() {
+        // 表示名がテキスト + アドレス混在でも埋め込みを拾う
+        let result = analyze_spoof(
+            "\"PayPal サポート support@paypal.com\" <attacker@evil.xyz>",
+            None,
+            &[],
+        );
+        assert!(result.display_name_email_spoof);
+        assert_eq!(result.embedded_domain.as_deref(), Some("paypal.com"));
+    }
+
+    #[test]
+    fn display_name_email_in_angle_brackets_detected() {
+        // 表示名内の <addr> 形式
+        let result = analyze_spoof(
+            "\"<support@paypal.com>\" <attacker@evil.xyz>",
+            None,
+            &[],
+        );
+        assert!(result.display_name_email_spoof);
+        assert_eq!(result.embedded_domain.as_deref(), Some("paypal.com"));
+    }
+
+    #[test]
+    fn display_name_email_trailing_punctuation_trimmed() {
+        // 末尾のピリオド等を除去してドメインを抽出
+        let result = analyze_spoof(
+            "\"連絡先: support@paypal.com.\" <attacker@evil.xyz>",
+            None,
+            &[],
+        );
+        assert!(result.display_name_email_spoof);
+        assert_eq!(result.embedded_domain.as_deref(), Some("paypal.com"));
+    }
+
+    #[test]
+    fn display_name_email_domain_without_tld_ignored() {
+        // "a@b" のような TLD なしはメールアドレスとして妥当ではない
+        let result = analyze_spoof("\"a@b\" <attacker@evil.xyz>", None, &[]);
+        assert!(!result.display_name_email_spoof);
+    }
+
+    #[test]
+    fn display_name_email_no_display_name_clean() {
+        // 表示名がない From は対象外
+        let result = analyze_spoof("attacker@evil.xyz", None, &[]);
+        assert!(!result.display_name_email_spoof);
+    }
+
+    #[test]
+    fn display_name_email_free_mail_embedded_detected() {
+        // フリーメールアドレスの埋め込みも検出 (ドメイン不一致なら)
+        let result = analyze_spoof(
+            "\"経理 keiri@gmail.com\" <attacker@evil.xyz>",
+            None,
+            &[],
+        );
+        assert!(result.display_name_email_spoof);
+        assert_eq!(result.embedded_domain.as_deref(), Some("gmail.com"));
+    }
+
+    #[test]
+    fn extract_embedded_email_domain_unit() {
+        assert_eq!(
+            extract_embedded_email_domain("support@paypal.com").as_deref(),
+            Some("paypal.com")
+        );
+        assert_eq!(
+            extract_embedded_email_domain("PayPal support@paypal.com").as_deref(),
+            Some("paypal.com")
+        );
+        assert_eq!(
+            extract_embedded_email_domain("a@b").as_deref(),
+            None,
+            "TLD なしはドメインではない"
+        );
+        assert_eq!(
+            extract_embedded_email_domain("plain name").as_deref(),
+            None
+        );
+        assert_eq!(
+            extract_embedded_email_domain("@nodomain.com").as_deref(),
+            None,
+            "local なし"
+        );
     }
 }
