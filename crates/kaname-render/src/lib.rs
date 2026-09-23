@@ -402,9 +402,7 @@ pub fn has_missing_boundary_param(raw: &[u8]) -> bool {
     let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
     let header = &text[..header_end];
     header.lines().any(|l| {
-        l.starts_with("content-type:")
-            && l.contains("multipart/")
-            && !l.contains("boundary=")
+        l.starts_with("content-type:") && l.contains("multipart/") && !l.contains("boundary=")
     })
 }
 
@@ -427,9 +425,9 @@ pub fn has_malformed_return_path(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
     let header = text[..header_end].to_ascii_lowercase();
-    header.lines().any(|l| {
-        l.starts_with("return-path:") && !l.contains('<')
-    })
+    header
+        .lines()
+        .any(|l| l.starts_with("return-path:") && !l.contains('<'))
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
