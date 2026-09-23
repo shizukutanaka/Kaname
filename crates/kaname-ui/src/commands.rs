@@ -514,6 +514,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D207: punycode ドメイン (xn--) が差出人系アドレスに残る兆候。
+    render_risks.extend(punycode_domain_anomalies(&env));
+    // D208: filename* パラメータによる拡張子隠しの兆候。
+    if env.rfc2231_filename_params {
+        render_risks.push(
+            "添付ファイル名に RFC 2231 の filename* パラメータ (分割・charset 埋め込み) があり、\
+            filename= のみを見るフィルタから拡張子を隠している可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1068,6 +1078,39 @@ fn from_header_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
                 )]
             }
         }
+    }
+}
+
+/// D207: 差出人系アドレス (From/Reply-To/Return-Path/Sender) の
+/// ドメインに punycode ラベル (`xn--`) が残る場合に兆候を報告する。
+///
+/// IDN フィッシングは DNS 上 `xn--` 形式で登録される — クライアントが
+/// Unicode 表示に戻すと見た目は正規ドメインでも実ドメインは別物で、
+/// エンコード形がアドレスに残っていれば受信者が差出人ドメインを
+/// 誤認する余地がある。
+fn punycode_domain_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
+    let mut risks = Vec::new();
+    for a in env.from.iter().take(3) {
+        push_punycode_risk(&mut risks, "From", &a.addr.domain);
+    }
+    for a in env.reply_to.iter().take(3) {
+        push_punycode_risk(&mut risks, "Reply-To", &a.addr.domain);
+    }
+    for a in env.return_path.iter().take(2) {
+        push_punycode_risk(&mut risks, "Return-Path", &a.addr.domain);
+    }
+    if let Some(s) = &env.sender {
+        push_punycode_risk(&mut risks, "Sender", &s.addr.domain);
+    }
+    risks
+}
+
+fn push_punycode_risk(risks: &mut Vec<String>, label: &str, domain: &str) {
+    if kaname_render::domain_has_punycode(domain) {
+        risks.push(format!(
+            "{label} のドメイン ({domain}) が punycode (xn--) エンコード形です — \
+            IDN フィッシングで使われるドメイン表現の兆候"
+        ));
     }
 }
 

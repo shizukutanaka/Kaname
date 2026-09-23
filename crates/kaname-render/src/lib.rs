@@ -96,6 +96,10 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// 生メッセージ内に RFC 2231 の `filename*` 系パラメータ
+    /// (`filename*0=`/`filename*1=` 分割、`filename*'=` charset 埋め込み)
+    /// が現れるか — filename= だけを見るフィルタへの拡張子隠しの兆候 (D208)。
+    pub rfc2231_filename_params: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +334,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D208: RFC 2231 filename* パラメータ — 分割・charset 埋め込みで
+    // filename= だけを読むフィルタから拡張子を隠す配送形。
+    let rfc2231_filename_params = has_rfc2231_filename_params(raw);
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +355,41 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        rfc2231_filename_params,
     })
+}
+
+/// 生メッセージ内に RFC 2231 の `filename*` パラメータが現れるか判定 (D208)。
+/// `filename*0=`/`filename*1=` 等の分割継続、`filename*='utf-8''..` の
+/// charset 埋め込みの両方を対象とする。パラメータ名はヘッダ行にのみ
+/// 現れる構文のため行走査で判定する。
+fn has_rfc2231_filename_params(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    for line in text.lines().take(8192) {
+        let lower = line.to_ascii_lowercase();
+        let mut rest = lower.as_str();
+        while let Some(pos) = rest.find("filename*") {
+            rest = &rest[pos + "filename*".len()..];
+            // filename* の直後が数字 (分割) か ' (charset 埋め込み) か =
+            // (filename*= 単体) のいずれかなら RFC 2231 パラメータ。
+            let next = rest.chars().next();
+            if matches!(next, Some(c) if c.is_ascii_digit() || c == '\'' || c == '=') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// ドメインが punycode ラベル (`xn--` プレフィックス) を含むか判定 (D207)。
+/// IDN フィッシングは `xn--` 形式で DNS に登録される — アドレス側に
+/// エンコード形が残っていれば受信者が Unicode 表示と異なる実ドメインを
+/// 見落とす余地がある。
+#[must_use]
+pub fn domain_has_punycode(domain: &str) -> bool {
+    domain
+        .split('.')
+        .any(|label| label.len() >= 4 && label[..4].eq_ignore_ascii_case("xn--"))
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1952,6 +1994,74 @@ mod tests {
         );
     }
 
+    /// D207: punycode ラベルを含むドメインの検出。
+    #[test]
+    fn domain_has_punycode_detected() {
+        assert!(domain_has_punycode("xn--pple-43d.example.com"));
+        assert!(domain_has_punycode("sub.xn--nxasmq6b.example"));
+        // 大文字小文字非依存
+        assert!(domain_has_punycode("XN--P1AI.example.com"));
+        // 通常ドメインは検出しない
+        assert!(!domain_has_punycode("example.com"));
+        assert!(!domain_has_punycode("mail.corp.example.co.jp"));
+        // 途中の xn-- はラベル先頭でなければ対象外
+        assert!(!domain_has_punycode("axn--bc.example.com"));
+    }
+
+    /// D208: filename* パラメータの走査。
+    #[test]
+    fn rfc2231_filename_params_detected() {
+        // 分割継続パラメータ
+        assert!(has_rfc2231_filename_params(
+            b"Content-Disposition: attachment;\r\n filename*0=\"evil.\";\r\n filename*1=\"exe\"\r\n\r\nbody"
+        ));
+        // charset 埋め込み単体パラメータ
+        assert!(has_rfc2231_filename_params(
+            b"Content-Type: application/pdf; filename*='utf-8''%e3%81%82.pdf\r\n\r\nbody"
+        ));
+        // filename*= (値なし変種)
+        assert!(has_rfc2231_filename_params(
+            b"Content-Disposition: attachment; filename*=evil.exe\r\n\r\nb"
+        ));
+        // 通常の filename= のみ → 検出しない
+        assert!(!has_rfc2231_filename_params(
+            b"Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\r\nb"
+        ));
+        // filenameext のような前方一致語は filename* に一致しない
+        assert!(!has_rfc2231_filename_params(
+            b"Content-Disposition: attachment; filenameext=\"x\"\r\n\r\nb"
+        ));
+    }
+
+    /// D209: 制御文字を含むファイル名の添付スキャン検出。
+    #[test]
+    fn scan_attachment_control_char_filename_is_dangerous() {
+        let scan = scan_attachment_bytes("evil.exe\u{0000}.jpg", "image/jpeg", b"\xFF\xD8\xFF\xE0");
+        assert!(scan.is_dangerous, "NUL 埋め込みファイル名は危険であるべき");
+        assert!(scan.risks.iter().any(|r| r.contains("制御文字")));
+        let scan2 = scan_attachment_bytes("normal.pdf", "application/pdf", b"%PDF-1.4 x");
+        assert!(!scan2.risks.iter().any(|r| r.contains("制御文字")));
+    }
+
+    /// D208: parse が filename* パラメータを検出してフラグを立てる。
+    #[test]
+    fn parse_はrfc2231_filenameを検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    Content-Type: multipart/mixed; boundary=\"b\"\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    --b\r\n\
+                    Content-Disposition: attachment; filename*0*=\"utf-8''evil.\"; filename*1*=\"exe\"\r\n\
+                    \r\n\
+                    payload\r\n\
+                    --b--\r\n";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.rfc2231_filename_params);
+        let raw2 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.rfc2231_filename_params);
+    }
+
     #[test]
     fn addr_normal_email_splits_correctly() {
         let addr = mail_parser::Addr {
@@ -2532,6 +2642,15 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     if magic_bytes::has_bidi_override_filename(filename) {
         risks.push(
             "ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれており、拡張子の表示が反転して実際の形式を隠している可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+    // D209: NUL/C0 制御文字を含むファイル名 — バイト列処理経路での
+    // 文字列切断で表示名と実拡張子を分離させるトランケーション攻撃。
+    if magic_bytes::has_control_char_filename(filename) {
+        risks.push(
+            "ファイル名に制御文字 (NUL 等) が含まれており、表示と実際の拡張子が分離する可能性があります"
                 .to_string(),
         );
         is_dangerous = true;

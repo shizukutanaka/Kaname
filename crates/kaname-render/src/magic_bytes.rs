@@ -191,6 +191,19 @@ pub fn has_bidi_override_filename(filename: &str) -> bool {
     })
 }
 
+/// ファイル名に C0 制御文字 (NUL 含む) または DEL が含まれるか判定 (D209)。
+///
+/// `evil.exe\x00.jpg` のような NUL 埋め込みは、バイト列で処理する
+/// 経路で文字列を途中切断させ、表示名と実ファイルの拡張子を分離させる
+/// 古典的なトランケーション攻撃 (メールクライアント CVE として複数報告)。
+/// C0 制御文字全般・DEL も同様にエディタ表示で拡張子を隠しうるため検出。
+#[must_use]
+pub fn has_control_char_filename(filename: &str) -> bool {
+    filename
+        .chars()
+        .any(|c| c.is_control() && c != '\u{FEFF}' || c == '\u{007F}')
+}
+
 /// Windows LNK (Shell Link) ファイルか magic bytes で判定する。
 ///
 /// LNK ファイルのヘッダー: `4C 00 00 00 01 14 02 00` (CLSID_ShellLink)
@@ -604,5 +617,19 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    #[test]
+    fn control_char_filename_detected() {
+        // NUL 埋め込み — バイト列処理で文字列切断するトランケーション攻撃
+        assert!(has_control_char_filename("evil.exe\u{0000}.jpg"));
+        // C0 制御文字
+        assert!(has_control_char_filename("a\u{0001}b.txt"));
+        assert!(has_control_char_filename("a\u{001F}b.txt"));
+        // DEL
+        assert!(has_control_char_filename("a\u{007F}b.txt"));
+        // 通常ファイル名は検出しない
+        assert!(!has_control_char_filename("invoice.pdf"));
+        assert!(!has_control_char_filename("請求書_2025.pdf"));
     }
 }

@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D207: 差出人系アドレスの punycode (xn--) ドメインを検出
+
+- IDN フィッシングは DNS 上 `xn--` 形式で登録される — クライアントが Unicode 表示に戻すと見た目は正規ドメインでも実ドメインは別物で、エンコード形がアドレスに残っていれば差出人ドメインの誤認を誘う。From/Reply-To/Return-Path/Sender のドメインに punycode ラベルが残る兆候を未検出だった
+- 対処: `domain_has_punycode` でラベル先頭 `xn--` を判定し `punycode_domain_anomalies` で `render_risks` 報告
+- テスト +1 件
+
+### Security — D208: RFC 2231 `filename*` パラメータによる拡張子隠しを検出
+
+- `filename*0=`/`filename*1=` の分割継続や `filename*='charset'..` の charset 埋め込みは RFC 2231 の合法表現だが、`filename=` のみを読むフィルタから真の拡張子を隠せる — 添付名の parser differential 型回避として既報
+- 対処: `has_rfc2231_filename_params` で生メッセージを行走査 → `rfc2231_filename_params` → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D209: 添付ファイル名の NUL/C0 制御文字 (トランケーション攻撃) を検出
+
+- `evil.exe\x00.jpg` のような NUL 埋め込みは、バイト列で処理する経路で文字列を途中切断させ、表示名と実ファイルの拡張子を分離させる (メールクライアントの CVE として複数報告)。RTLO 表示反転 (D166) と同じ「見た目で拡張子を誤認させる」系列だが文字種が異なり未検出だった
+- 対処: `has_control_char_filename` (C0 制御文字・DEL) を新設して `scan_attachment_bytes` に配線
+- テスト +2 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)
