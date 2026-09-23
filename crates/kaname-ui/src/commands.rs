@@ -605,6 +605,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D375: MTA 印 (第二群) 自称
+    if env.mta2_stamps {
+        render_risks.push(
+            "X-SmarterMail-*/X-hMailServer-*/X-Kerio-* 等 — 中小 MTA の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D376: Sender ID 系旧式認証印自称
+    if env.senderid_marks {
+        render_risks.push(
+            "X-Sender-Id/X-SID/X-PRVS 等 — 旧式送信者認証の値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D377: Vade/Cloudmark 判定印自称
+    if env.vade_stamps {
+        render_risks.push(
+            "X-Vade-*/X-CTCH-*/X-Cloudmark-* 等 — 商用判定基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

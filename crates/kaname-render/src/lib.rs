@@ -130,6 +130,18 @@ pub struct Envelope {
     /// 識別子があるか — 「ISP と苦情報告を共有している」の体裁を自署する
     /// 兆候 (D329)。
     pub feedback_id: bool,
+    /// `X-SmarterMail-*`/`X-hMailServer-*`/`X-Kerio-*`/`X-IceWarp-*`/
+    /// `X-Merak-*` 等の MTA 印 (第二群) があるか — 中小 MTA の印を
+    /// 送信側が自称する兆候 (D375)。
+    pub mta2_stamps: bool,
+    /// `X-Sender-Id:`/`X-SID:`/`X-PRVS:`/`X-Orig-Sender:` 等の
+    /// Sender ID 系旧式認証印があるか — 旧式送信者認証の値を送信側が
+    /// 自称する兆候 (D376)。
+    pub senderid_marks: bool,
+    /// `X-Vade-*`/`X-VadeSecure-*`/`X-CTCH-*`/`X-CT-*` 等の
+    /// Vade/Cloudmark 判定印があるか — 商用判定基盤の印を送信側が
+    /// 自称する兆候 (D377)。
+    pub vade_stamps: bool,
 }
 
 /// An RFC 5322 address.
@@ -404,6 +416,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         abuse_headers: has_abuse_headers(raw),
         has_attach_claim: has_attach_claim(raw),
         feedback_id: has_feedback_id(raw),
+        mta2_stamps: has_mta2_stamps(raw),
+        senderid_marks: has_senderid_marks(raw),
+        vade_stamps: has_vade_stamps(raw),
     })
 }
 
@@ -554,6 +569,68 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-SmarterMail-*`/`X-hMailServer-*`/`X-Kerio-*`/`X-IceWarp-*`/
+/// `X-Merak-*`/`X-MD-*` 等の MTA 印があるか判定する (D375)。
+///
+/// SmarterMail/hMailServer/Kerio/IceWarp 等の中小 MTA が配送時に記す
+/// 印 — 送信側から届くこれは「この MTA が運んだ」体裁を内容側が
+/// 主張する自称 (D354 OSS MTA 印の第二群)。
+fn has_mta2_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-smartermail-")
+            || l.starts_with("x-hmailserver-")
+            || l.starts_with("x-kerio-")
+            || l.starts_with("x-icewarp-")
+            || l.starts_with("x-merak-")
+            || l.starts_with("x-md-")
+    })
+}
+
+/// `X-Sender-Id:`/`X-SID:`/`X-PRVS:`/`X-Orig-Sender:`/
+/// `X-Sender-Policy:` 等の Sender ID 系旧式認証印があるか
+/// 判定する (D376)。
+///
+/// Sender ID/SPF 移行期の旧式認証値 — 送信側から届くこれは
+/// 「送信者認証を通った」体裁を内容側が主張する自称
+/// (D339 SPF 印の旧式系統)。
+fn has_senderid_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sender-id:")
+            || l.starts_with("x-sid:")
+            || l.starts_with("x-prvs:")
+            || l.starts_with("x-orig-sender:")
+            || l.starts_with("x-sender-policy:")
+    })
+}
+
+/// `X-Vade-*`/`X-VadeSecure-*`/`X-CTCH-*`/`X-CT-*`/
+/// `X-Cloudmark-*` 等の Vade/Cloudmark 判定印があるか判定する
+/// (D377)。
+///
+/// Vade Secure/Cloudmark が判定時に記す印 — 送信側から届くこれは
+/// 「商用判定基盤を通った」体裁を内容側が主張する自称。
+fn has_vade_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-vade-")
+            || l.starts_with("x-vadesecure-")
+            || l.starts_with("x-ctch-")
+            || l.starts_with("x-ct-")
+            || l.starts_with("x-cloudmark-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2841,6 +2918,48 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はMTA印2を検出する() {
+        let sm = b"X-SmarterMail-Spam: 0\r\n\r\nx";
+        assert!(has_mta2_stamps(sm));
+        let hm = b"X-hMailServer-LoopCount: 1\r\n\r\nx";
+        assert!(has_mta2_stamps(hm));
+        let kr = b"X-Kerio-AntiSpam: off\r\n\r\nx";
+        assert!(has_mta2_stamps(kr));
+        let iw = b"X-IceWarp-Filter: pass\r\n\r\nx";
+        assert!(has_mta2_stamps(iw));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mta2_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はSenderID印を検出する() {
+        let si = b"X-Sender-Id: e@x\r\n\r\nx";
+        assert!(has_senderid_marks(si));
+        let sd = b"X-SID: pass\r\n\r\nx";
+        assert!(has_senderid_marks(sd));
+        let pv = b"X-PRVS: 1234=5\r\n\r\nx";
+        assert!(has_senderid_marks(pv));
+        let os = b"X-Orig-Sender: e@x\r\n\r\nx";
+        assert!(has_senderid_marks(os));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_senderid_marks(clean));
+    }
+
+    #[test]
+    fn scan_はVade印を検出する() {
+        let vd = b"X-Vade-Status: clean\r\n\r\nx";
+        assert!(has_vade_stamps(vd));
+        let vs = b"X-VadeSecure-Score: 10\r\n\r\nx";
+        assert!(has_vade_stamps(vs));
+        let ct = b"X-CTCH-Spam: Unknown\r\n\r\nx";
+        assert!(has_vade_stamps(ct));
+        let cm = b"X-Cloudmark-Score: 0.1\r\n\r\nx";
+        assert!(has_vade_stamps(cm));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_vade_stamps(clean));
     }
 }
 

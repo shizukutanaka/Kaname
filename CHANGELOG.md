@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D375: `X-SmarterMail-*`/`X-hMailServer-*`/`X-Kerio-*`/`X-IceWarp-*`/`X-Merak-*`/`X-MD-*` 等の MTA 印 (第二群) 自称が未検査
+
+- SmarterMail/hMailServer/Kerio/IceWarp 等の中小 MTA が配送時に記す印 — 送信側から届くのは「この MTA が運んだ」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_mta2_stamps` 新設 → `Envelope.mta2_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D376: `X-Sender-Id:`/`X-SID:`/`X-PRVS:`/`X-Orig-Sender:`/`X-Sender-Policy:` 等の Sender ID 系旧式認証印自称が未検査
+
+- Sender ID/SPF 移行期の旧式認証値 — 送信側から届くのは「送信者認証を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_senderid_marks` 新設 → `Envelope.senderid_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D377: `X-Vade-*`/`X-VadeSecure-*`/`X-CTCH-*`/`X-CT-*`/`X-Cloudmark-*` 等の Vade/Cloudmark 判定印自称が未検査
+
+- Vade Secure/Cloudmark が判定時に記す印 — 送信側から届くのは「商用判定基盤を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_vade_stamps` 新設 → `Envelope.vade_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D327: `Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査
 
 - 本物の ESP/ISP は abuse 窓口を自社ドメインで運用し受信側が確認できる — 送信側が窓口を名乗るのは「監視されている体裁」の自署だが未検査だった
