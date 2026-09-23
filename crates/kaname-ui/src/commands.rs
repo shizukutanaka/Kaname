@@ -1708,6 +1708,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D552: 宝飾・時計・高級ブランド印自称
+    if env.luxury_marks {
+        render_risks.push(
+            "X-Rolex-*/X-Cartier-*/X-Hermes-*/X-Mikimoto-*/X-Omega-*/X-Tiffany-*/X-GrandSeiko-*/X-LouisVuitton-* 等 — 奢機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D553: 広告代理店・PR・芸能事務所印自称
+    if env.advertising_marks {
+        render_risks.push(
+            "X-Dentsu-*/X-Hakuhodo-*/X-PRTIMES-*/X-WPP-*/X-CyberAgent-*/X-Avex-*/X-Yoshimoto-*/X-HoriPro-* 等 — 広機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D554: 地方銀行・信用金庫・労金・JA・政府系金融印自称
+    if env.regional_bank_marks {
+        render_risks.push(
+            "X-YokohamaBank-*/X-Shinkin-*/X-JABank-*/X-ChibaBank-*/X-Norinchukin-*/X-77Bank-*/X-FukuokaBank-*/X-Rokin-* 等 — 地機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

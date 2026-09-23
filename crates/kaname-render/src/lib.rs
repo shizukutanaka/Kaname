@@ -1283,6 +1283,51 @@ pub struct Envelope {
     /// 送信側が自称する兆候 (D551)。(`X-Unilever-*`/`X-PG-*` 等の
     /// 日用品機は D533 で検出済み)
     pub food_marks: bool,
+    /// `X-Rolex-*`/`X-Omega-*`/`X-PatekPhilippe-*`/`X-TAGHeuer-*`/
+    /// `X-Breitling-*`/`X-IWC-*`/`X-GrandSeiko-*`/`X-Cartier-*`/
+    /// `X-Tiffany-*`/`X-Bulgari-*`/`X-VanCleef-*`/`X-HarryWinston-*`/
+    /// `X-Mikimoto-*`/`X-Tasaki-*`/`X-4C-*`/`X-Swarovski-*`/`X-Hermes-*`/
+    /// `X-LouisVuitton-*`/`X-Gucci-*`/`X-Prada-*`/`X-Chanel-*`/
+    /// `X-Dior-*`/`X-Burberry-*`/`X-Coach-*`/`X-Fendi-*`/`X-Loewe-*`/
+    /// `X-Celine-*`/`X-Balenciaga-*`/`X-Bottega-*`/`X-SaintLaurent-*`/
+    /// `X-Givenchy-*`/`X-Valentino-*`/`X-Ferragamo-*`/`X-Bally-*`/
+    /// `X-Tods-*`/`X-Montblanc-*`/`X-Chaumet-*`/`X-Boucheron-*`/
+    /// `X-Piaget-*`/`X-Chopard-*`/`X-Jaeger-*`/`X-Audemars-*`/
+    /// `X-RichardMille-*`/`X-Hublot-*`/`X-Zenith-*`/`X-Tudor-*`/
+    /// `X-Longines-*`/`X-Orient-*`/`X-Tissot-*` 等の宝飾・時計・
+    /// 高級ブランド印があるか — 奢機の通知記録を送信側が自称する
+    /// 兆候 (D552)。(`X-Pandora-*`/`X-Seiko-*`/`X-Citizen-*`/
+    /// `X-Casio-*` は D493/D496 で検出済み)
+    pub luxury_marks: bool,
+    /// `X-Dentsu-*`/`X-Hakuhodo-*`/`X-ADK-*`/`X-WPP-*`/`X-Omnicom-*`/
+    /// `X-Publicis-*`/`X-IPG-*`/`X-Havas-*`/`X-CyberAgent-*`/
+    /// `X-Septeni-*`/`X-PRTIMES-*`/`X-DentsuPR-*`/`X-Daiko-*`/
+    /// `X-Oriental-*`/`X-Beacon-*`/`X-Coconuts-*`/`X-DaiichiKikaku-*`/
+    /// `X-Asatsu-*`/`X-Cerebrum-*`/`X-Adire-*`/`X-Cremo-*`/
+    /// `X-Tohokushinsha-*`/`X-AdComms-*`/`X-ShochikuGeino-*`/
+    /// `X-HoriPro-*`/`X-Avex-*`/`X-Amuse-*`/`X-Stardust-*`/
+    /// `X-Burning-*`/`X-KDash-*`/`X-Yoshimoto-*`/`X-Oscar-*`/
+    /// `X-Kenon-*`/`X-JapanMusic-*`/`X-Igosso-*` 等の広告代理店・PR・
+    /// 芸能事務所印があるか — 広機の通知記録を送信側が自称する
+    /// 兆候 (D553)。(`X-Vector-*`/`X-Kirin-*` は既存族で検出済み)
+    pub advertising_marks: bool,
+    /// `X-YokohamaBank-*`/`X-ChibaBank-*`/`X-FukuokaBank-*`/
+    /// `X-ShizuokaBank-*`/`X-SurugaBank-*`/`X-KyotoBank-*`/
+    /// `X-KansaiMirai-*`/`X-Ikeda-*`/`X-NishiNihonCity-*`/`X-HiroshimaBank-*`/
+    /// `X-114Bank-*`/`X-IyoBank-*`/`X-ShikokuBank-*`/`X-YamaguchiBank-*`/
+    /// `X-Momiji-*`/`X-HokkaidoBank-*`/`X-Hokuto-*`/`X-Tottori-*`/
+    /// `X-SanInGodo-*`/`X-77Bank-*`/`X-TohoBank-*`/`X-GunmaBank-*`/
+    /// `X-AshikagaBank-*`/`X-JoyoBank-*`/`X-TsukubaBank-*`/
+    /// `X-MusashinoBank-*`/`X-Kiraboshi-*`/`X-DaitoBank-*`/`X-TowaBank-*`/
+    /// `X-TochigiBank-*`/`X-KochiBank-*`/`X-MiyazakiBank-*`/
+    /// `X-OkinawaBank-*`/`X-RyukyuBank-*`/`X-JABank-*`/`X-Rokin-*`/
+    /// `X-Shinkin-*`/`X-Shinkumi-*`/`X-Norinchukin-*`/`X-ShokoChukin-*`/
+    /// `X-JFC-*`/`X-Shinsei-*`/`X-Aozora-*` 等の地方銀行・信用金庫・
+    /// 労金・JA・政府系金融印があるか — 地機の通知記録を送信側が
+    /// 自称する兆候 (D554)。(`X-MUFG-*`/`X-SMBC-*`/`X-Mizuho-*`/
+    /// `X-SevenBank-*`/`X-AeonBank-*` 等の大手・ネット銀行は
+    /// D514 で検出済み)
+    pub regional_bank_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1695,6 +1740,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         broadcast_marks: has_broadcast_marks(raw),
         newspaper_marks: has_newspaper_marks(raw),
         food_marks: has_food_marks(raw),
+        luxury_marks: has_luxury_marks(raw),
+        advertising_marks: has_advertising_marks(raw),
+        regional_bank_marks: has_regional_bank_marks(raw),
     })
 }
 
@@ -8101,6 +8149,208 @@ fn has_food_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Rolex-*`/`X-Omega-*`/`X-PatekPhilippe-*`/`X-TAGHeuer-*`/
+/// `X-Breitling-*`/`X-IWC-*`/`X-GrandSeiko-*`/`X-Cartier-*`/`X-Tiffany-*`/
+/// `X-Bulgari-*`/`X-VanCleef-*`/`X-HarryWinston-*`/`X-Mikimoto-*`/
+/// `X-Tasaki-*`/`X-4C-*`/`X-Swarovski-*`/`X-Hermes-*`/`X-LouisVuitton-*`/
+/// `X-Gucci-*`/`X-Prada-*`/`X-Chanel-*`/`X-Dior-*`/`X-Burberry-*`/
+/// `X-Coach-*`/`X-Fendi-*`/`X-Loewe-*`/`X-Celine-*`/`X-Balenciaga-*`/
+/// `X-Bottega-*`/`X-SaintLaurent-*`/`X-Givenchy-*`/`X-Valentino-*`/
+/// `X-Ferragamo-*`/`X-Bally-*`/`X-Tods-*`/`X-Montblanc-*`/`X-Chaumet-*`/
+/// `X-Boucheron-*`/`X-Piaget-*`/`X-Chopard-*`/`X-Jaeger-*`/`X-Audemars-*`/
+/// `X-RichardMille-*`/`X-Hublot-*`/`X-Zenith-*`/`X-Tudor-*`/`X-Longines-*`/
+/// `X-Orient-*`/`X-Tissot-*` 等の宝飾・時計・高級ブランド印があるか
+/// 判定する (D552)。
+///
+/// `X-Rolex-*` (Rolex)、`X-Cartier-*` (Cartier)、`X-Hermes-*` (Hermes)
+/// は奢機の通知記録 — 送信側から届くこれは自称。修理・買取・
+/// 会員特典偽装は高級品詐欺の典型。`X-Pandora-*`/`X-Seiko-*`/
+/// `X-Citizen-*`/`X-Casio-*` は D493/D496 で検出済み。
+fn has_luxury_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rolex-")
+            || l.starts_with("x-omega-")
+            || l.starts_with("x-patekphilippe-")
+            || l.starts_with("x-tagheuer-")
+            || l.starts_with("x-breitling-")
+            || l.starts_with("x-iwc-")
+            || l.starts_with("x-grandseiko-")
+            || l.starts_with("x-cartier-")
+            || l.starts_with("x-tiffany-")
+            || l.starts_with("x-bulgari-")
+            || l.starts_with("x-vancleef-")
+            || l.starts_with("x-harrywinston-")
+            || l.starts_with("x-mikimoto-")
+            || l.starts_with("x-tasaki-")
+            || l.starts_with("x-4c-")
+            || l.starts_with("x-swarovski-")
+            || l.starts_with("x-hermes-")
+            || l.starts_with("x-louisvuitton-")
+            || l.starts_with("x-gucci-")
+            || l.starts_with("x-prada-")
+            || l.starts_with("x-chanel-")
+            || l.starts_with("x-dior-")
+            || l.starts_with("x-burberry-")
+            || l.starts_with("x-coach-")
+            || l.starts_with("x-fendi-")
+            || l.starts_with("x-loewe-")
+            || l.starts_with("x-celine-")
+            || l.starts_with("x-balenciaga-")
+            || l.starts_with("x-bottega-")
+            || l.starts_with("x-saintlaurent-")
+            || l.starts_with("x-givenchy-")
+            || l.starts_with("x-valentino-")
+            || l.starts_with("x-ferragamo-")
+            || l.starts_with("x-bally-")
+            || l.starts_with("x-tods-")
+            || l.starts_with("x-montblanc-")
+            || l.starts_with("x-chaumet-")
+            || l.starts_with("x-boucheron-")
+            || l.starts_with("x-piaget-")
+            || l.starts_with("x-chopard-")
+            || l.starts_with("x-jaeger-")
+            || l.starts_with("x-audemars-")
+            || l.starts_with("x-richardmille-")
+            || l.starts_with("x-hublot-")
+            || l.starts_with("x-zenith-")
+            || l.starts_with("x-tudor-")
+            || l.starts_with("x-longines-")
+            || l.starts_with("x-orient-")
+            || l.starts_with("x-tissot-")
+    })
+}
+
+/// `X-Dentsu-*`/`X-Hakuhodo-*`/`X-ADK-*`/`X-WPP-*`/`X-Omnicom-*`/
+/// `X-Publicis-*`/`X-IPG-*`/`X-Havas-*`/`X-CyberAgent-*`/`X-Septeni-*`/
+/// `X-PRTIMES-*`/`X-DentsuPR-*`/`X-Daiko-*`/`X-Oriental-*`/`X-Beacon-*`/
+/// `X-Coconuts-*`/`X-DaiichiKikaku-*`/`X-Asatsu-*`/`X-Cerebrum-*`/
+/// `X-Adire-*`/`X-Cremo-*`/`X-Tohokushinsha-*`/`X-AdComms-*`/
+/// `X-ShochikuGeino-*`/`X-HoriPro-*`/`X-Avex-*`/`X-Amuse-*`/
+/// `X-Stardust-*`/`X-Burning-*`/`X-KDash-*`/`X-Yoshimoto-*`/`X-Oscar-*`/
+/// `X-Kenon-*`/`X-JapanMusic-*`/`X-Igosso-*` 等の広告代理店・PR・
+/// 芸能事務所印があるか判定する (D553)。
+///
+/// `X-Dentsu-*` (電通)、`X-Hakuhodo-*` (博報堂)、`X-PRTIMES-*` (PR
+/// TIMES) は広機の通知記録 — 送信側から届くこれは自称。広告掲載・
+/// 芸能スカウト偽装は広告詐欺の典型。
+fn has_advertising_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dentsu-")
+            || l.starts_with("x-hakuhodo-")
+            || l.starts_with("x-adk-")
+            || l.starts_with("x-wpp-")
+            || l.starts_with("x-omnicom-")
+            || l.starts_with("x-publicis-")
+            || l.starts_with("x-ipg-")
+            || l.starts_with("x-havas-")
+            || l.starts_with("x-cyberagent-")
+            || l.starts_with("x-septeni-")
+            || l.starts_with("x-prtimes-")
+            || l.starts_with("x-dentsupr-")
+            || l.starts_with("x-daiko-")
+            || l.starts_with("x-oriental-")
+            || l.starts_with("x-beacon-")
+            || l.starts_with("x-coconuts-")
+            || l.starts_with("x-daiichikikaku-")
+            || l.starts_with("x-asatsu-")
+            || l.starts_with("x-cerebrum-")
+            || l.starts_with("x-adire-")
+            || l.starts_with("x-cremo-")
+            || l.starts_with("x-tohokushinsha-")
+            || l.starts_with("x-adcomms-")
+            || l.starts_with("x-shochikugeino-")
+            || l.starts_with("x-horipro-")
+            || l.starts_with("x-avex-")
+            || l.starts_with("x-amuse-")
+            || l.starts_with("x-stardust-")
+            || l.starts_with("x-burning-")
+            || l.starts_with("x-kdash-")
+            || l.starts_with("x-yoshimoto-")
+            || l.starts_with("x-oscar-")
+            || l.starts_with("x-kenon-")
+            || l.starts_with("x-japanmusic-")
+            || l.starts_with("x-igosso-")
+    })
+}
+
+/// `X-YokohamaBank-*`/`X-ChibaBank-*`/`X-FukuokaBank-*`/`X-ShizuokaBank-*`/
+/// `X-SurugaBank-*`/`X-KyotoBank-*`/`X-KansaiMirai-*`/`X-Ikeda-*`/
+/// `X-NishiNihonCity-*`/`X-HiroshimaBank-*`/`X-114Bank-*`/`X-IyoBank-*`/
+/// `X-ShikokuBank-*`/`X-YamaguchiBank-*`/`X-Momiji-*`/`X-HokkaidoBank-*`/
+/// `X-Hokuto-*`/`X-Tottori-*`/`X-SanInGodo-*`/`X-77Bank-*`/`X-TohoBank-*`/
+/// `X-GunmaBank-*`/`X-AshikagaBank-*`/`X-JoyoBank-*`/`X-TsukubaBank-*`/
+/// `X-MusashinoBank-*`/`X-Kiraboshi-*`/`X-DaitoBank-*`/`X-TowaBank-*`/
+/// `X-TochigiBank-*`/`X-KochiBank-*`/`X-MiyazakiBank-*`/`X-OkinawaBank-*`/
+/// `X-RyukyuBank-*`/`X-JABank-*`/`X-Rokin-*`/`X-Shinkin-*`/`X-Shinkumi-*`/
+/// `X-Norinchukin-*`/`X-ShokoChukin-*`/`X-JFC-*`/`X-Shinsei-*`/
+/// `X-Aozora-*` 等の地方銀行・信用金庫・労金・JA・政府系金融印が
+/// あるか判定する (D554)。
+///
+/// `X-YokohamaBank-*` (横浜銀行)、`X-Shinkin-*` (信用金庫)、`X-JABank-*`
+/// (JA バンク) は地機の通知記録 — 送信側から届くこれは自称。
+/// 口座凍結・振込確認の偽装は地域金融詐欺の典型。`X-MUFG-*`/
+/// `X-SMBC-*`/`X-Mizuho-*`/`X-SevenBank-*`/`X-AeonBank-*` 等の大手・
+/// ネット銀行は D514 で検出済み。
+fn has_regional_bank_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-yokohamabank-")
+            || l.starts_with("x-chibabank-")
+            || l.starts_with("x-fukuokabank-")
+            || l.starts_with("x-shizuokabank-")
+            || l.starts_with("x-surugabank-")
+            || l.starts_with("x-kyotobank-")
+            || l.starts_with("x-kansaimirai-")
+            || l.starts_with("x-ikeda-")
+            || l.starts_with("x-nishinihoncity-")
+            || l.starts_with("x-hiroshimabank-")
+            || l.starts_with("x-114bank-")
+            || l.starts_with("x-iyobank-")
+            || l.starts_with("x-shikokubank-")
+            || l.starts_with("x-yamaguchibank-")
+            || l.starts_with("x-momiji-")
+            || l.starts_with("x-hokkaidobank-")
+            || l.starts_with("x-hokuto-")
+            || l.starts_with("x-tottori-")
+            || l.starts_with("x-saningodo-")
+            || l.starts_with("x-77bank-")
+            || l.starts_with("x-tohobank-")
+            || l.starts_with("x-gunmabank-")
+            || l.starts_with("x-ashikagabank-")
+            || l.starts_with("x-joyobank-")
+            || l.starts_with("x-tsukubabank-")
+            || l.starts_with("x-musashinobank-")
+            || l.starts_with("x-kiraboshi-")
+            || l.starts_with("x-daitobank-")
+            || l.starts_with("x-towabank-")
+            || l.starts_with("x-tochigibank-")
+            || l.starts_with("x-kochibank-")
+            || l.starts_with("x-miyazakibank-")
+            || l.starts_with("x-okinawabank-")
+            || l.starts_with("x-ryukyubank-")
+            || l.starts_with("x-jabank-")
+            || l.starts_with("x-rokin-")
+            || l.starts_with("x-shinkin-")
+            || l.starts_with("x-shinkumi-")
+            || l.starts_with("x-norinchukin-")
+            || l.starts_with("x-shokochukin-")
+            || l.starts_with("x-jfc-")
+            || l.starts_with("x-shinsei-")
+            || l.starts_with("x-aozora-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -13333,6 +13583,72 @@ mod tests {
         assert!(has_food_marks(g1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_food_marks(clean));
+    }
+
+    #[test]
+    fn scan_は奢機印を検出する() {
+        let r1 = b"X-Rolex-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(r1));
+        let c1 = b"X-Cartier-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(c1));
+        let h1 = b"X-Hermes-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(h1));
+        let m1 = b"X-Mikimoto-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(m1));
+        let o1 = b"X-Omega-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(o1));
+        let t1 = b"X-Tiffany-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(t1));
+        let g1 = b"X-GrandSeiko-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(g1));
+        let l1 = b"X-LouisVuitton-Notify: x\r\n\r\nx";
+        assert!(has_luxury_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_luxury_marks(clean));
+    }
+
+    #[test]
+    fn scan_は広機印を検出する() {
+        let d1 = b"X-Dentsu-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(d1));
+        let h1 = b"X-Hakuhodo-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(h1));
+        let p1 = b"X-PRTIMES-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(p1));
+        let w1 = b"X-WPP-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(w1));
+        let c1 = b"X-CyberAgent-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(c1));
+        let a1 = b"X-Avex-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(a1));
+        let y1 = b"X-Yoshimoto-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(y1));
+        let h2 = b"X-HoriPro-Notify: x\r\n\r\nx";
+        assert!(has_advertising_marks(h2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_advertising_marks(clean));
+    }
+
+    #[test]
+    fn scan_は地機印を検出する() {
+        let y1 = b"X-YokohamaBank-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(y1));
+        let s1 = b"X-Shinkin-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(s1));
+        let j1 = b"X-JABank-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(j1));
+        let c1 = b"X-ChibaBank-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(c1));
+        let n1 = b"X-Norinchukin-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(n1));
+        let b1 = b"X-77Bank-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(b1));
+        let f1 = b"X-FukuokaBank-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(f1));
+        let r1 = b"X-Rokin-Notify: x\r\n\r\nx";
+        assert!(has_regional_bank_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_regional_bank_marks(clean));
     }
 }
 
