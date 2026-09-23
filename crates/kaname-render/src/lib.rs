@@ -1697,6 +1697,12 @@ pub struct Envelope {
     pub eldercare_marks: bool,
     /// `X-HokenNoMadoguchi-*`/`X-HokenMinoshi-*`/`X-HokenClinic-*`/`X-ManeDoc-*`/`X-HokenIchiba-*` 等の保険相談・保険比較通知記録印を送信側が自称している (D592)
     pub insconsult_marks: bool,
+    /// `X-Moppy-*`/`X-Hapitas-*`/`X-Gendama-*`/`X-Chobirich-*`/`X-GetMoney-*` 等のポイ活・お小遣いサイト通知記録印を送信側が自称している (D593)
+    pub pointkatsu_marks: bool,
+    /// `X-Rirakuru-*`/`X-Raffine-*`/`X-Temomin-*`/`X-KaradaFactory-*`/`X-Manistare-*` 等のマッサージ・整体・リラクゼーション通知記録印を送信側が自称している (D594)
+    pub massage_marks: bool,
+    /// `X-TimesPark-*`/`X-Times24-*`/`X-MitsuRepark-*`/`X-NPC24H-*`/`X-ApplePark-*` 等の駐車場・コインパーキング通知記録印を送信側が自称している (D595)
+    pub parking_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2167,6 +2173,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         printing_marks: has_printing_marks(hdr),
         eldercare_marks: has_eldercare_marks(hdr),
         insconsult_marks: has_insconsult_marks(hdr),
+        pointkatsu_marks: has_pointkatsu_marks(hdr),
+        massage_marks: has_massage_marks(hdr),
+        parking_marks: has_parking_marks(hdr),
     })
 }
 
@@ -11117,6 +11126,210 @@ fn has_insconsult_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Moppy-*`/`X-PointIncome-*`/`X-Hapitas-*`/`X-Gendama-*`/`X-Chobirich-*`/`X-PointTown-*`/`X-ECNavi-*`/`X-LifeMedia-*`/`X-PointAnytime-*`/`X-GetMoney-*`/`X-Warau-*`/`X-Sugotama-*`/`X-Powl-*`/`X-GPoint-*`/`X-PointLand-*`/`X-Macroidail-*`/`X-CoinOffer-*`/`X-OkaneMochi-*`/`X-PointFunnel-*`/`X-PointRibon-*`/`X-SumiPoint-*`/`X-PointWorld-*`/`X-PointBridge-*`/`X-PointFlow-*`/`X-Milama-*`/`X-Potora-*`/`X-MoneyTicket-*`/`X-PointOK-*`/`X-PointHunter-*`/`X-KozukaiPoint-*`/`X-PointStar-*`/`X-PointFan-*`/`X-PointGo-*`/`X-PointUp-*`/`X-PointDeals-*`/`X-Poita-*`/`X-RakutenPoint-*`/`X-KakuPoint-*`/`X-PointMessage-*`/`X-PointMail-*`/`X-PointMini-*`/`X-PointRace-*`/`X-ChibiPoint-*`/`X-PointGuide-*`/`X-Poicha-*`/`X-PointCatalog-*`/`X-PointStore-*`/`X-PotoraPoint-*`/`X-HapitasMini-*`/`X-PointTownship-*`/`X-Pointsale-*`/`X-PointParadise-*`/`X-Gendamita-*`/`X-EbiPoint-*`/`X-NekoPoint-*` (ポイ活・お小遣いサイト・ポイント交換の通知記録) を送信側が自称しているかどうか。ポイント増量・換金完了・獲得通知の偽装はポイ活詐欺の典型手口。
+fn has_pointkatsu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-moppy-")
+            || l.starts_with("x-pointincome-")
+            || l.starts_with("x-hapitas-")
+            || l.starts_with("x-gendama-")
+            || l.starts_with("x-chobirich-")
+            || l.starts_with("x-pointtown-")
+            || l.starts_with("x-ecnavi-")
+            || l.starts_with("x-lifemedia-")
+            || l.starts_with("x-pointanytime-")
+            || l.starts_with("x-getmoney-")
+            || l.starts_with("x-warau-")
+            || l.starts_with("x-sugotama-")
+            || l.starts_with("x-powl-")
+            || l.starts_with("x-gpoint-")
+            || l.starts_with("x-pointland-")
+            || l.starts_with("x-macroidail-")
+            || l.starts_with("x-coinoffer-")
+            || l.starts_with("x-okanemochi-")
+            || l.starts_with("x-pointfunnel-")
+            || l.starts_with("x-pointribon-")
+            || l.starts_with("x-sumipoint-")
+            || l.starts_with("x-pointworld-")
+            || l.starts_with("x-pointbridge-")
+            || l.starts_with("x-pointflow-")
+            || l.starts_with("x-milama-")
+            || l.starts_with("x-potora-")
+            || l.starts_with("x-moneyticket-")
+            || l.starts_with("x-pointok-")
+            || l.starts_with("x-pointhunter-")
+            || l.starts_with("x-kozukaipoint-")
+            || l.starts_with("x-pointstar-")
+            || l.starts_with("x-pointfan-")
+            || l.starts_with("x-pointgo-")
+            || l.starts_with("x-pointup-")
+            || l.starts_with("x-pointdeals-")
+            || l.starts_with("x-poita-")
+            || l.starts_with("x-rakutenpoint-")
+            || l.starts_with("x-kakupoint-")
+            || l.starts_with("x-pointmessage-")
+            || l.starts_with("x-pointmail-")
+            || l.starts_with("x-pointmini-")
+            || l.starts_with("x-pointrace-")
+            || l.starts_with("x-chibipoint-")
+            || l.starts_with("x-pointguide-")
+            || l.starts_with("x-poicha-")
+            || l.starts_with("x-pointcatalog-")
+            || l.starts_with("x-pointstore-")
+            || l.starts_with("x-potorapoint-")
+            || l.starts_with("x-hapitasmini-")
+            || l.starts_with("x-pointtownship-")
+            || l.starts_with("x-pointsale-")
+            || l.starts_with("x-pointparadise-")
+            || l.starts_with("x-gendamita-")
+            || l.starts_with("x-ebipoint-")
+            || l.starts_with("x-nekopoint-")
+    })
+}
+
+/// `X-Rirakuru-*`/`X-Raffine-*`/`X-Temomin-*`/`X-KaradaFactory-*`/`X-Manistare-*`/`X-Rafure-*`/`X-Asubi-*`/`X-Mukatamu-*`/`X-Toraibu-*`/`X-Ribafi-*`/`X-Bantomiere-*`/`X-Taraso-*`/`X-MassagePlaza-*`/`X-FootJoy-*`/`X-Ashiraku-*`/`X-Temonigiri-*`/`X-TemomiLabo-*`/`X-BodyTune-*`/`X-Momivale-*`/`X-ChiroSuiden-*`/`X-MominoTsuchi-*`/`X-Tenowa-*`/`X-Hogushite-*`/`X-KaradaPlus-*`/`X-Rirakuya-*`/`X-Momitei-*`/`X-MomiYa-*`/`X-Genkido-*`/`X-Tsuyoshi-*`/`X-Nidanashi-*`/`X-MasajiKun-*`/`X-Hogusubi-*`/`X-Riraku-*`/`X-YutoriKan-*`/`X-Otenami-*`/`X-Ubub-*`/`X-Chiryoen-*`/`X-MomiTei-*`/`X-BodyLab-*`/`X-FootSalon-*`/`X-RefleKaikan-*`/`X-ItokiKaikan-*`/`X-MomiSukki-*`/`X-Rakua-*`/`X-Fumino-*`/`X-AshiMomi-*`/`X-NagomiTei-*`/`X-ShiatsuKan-*`/`X-Acuretreat-*`/`X-SpaRise-*`/`X-MeroPeach-*`/`X-Nemomi-*`/`X-Hoguretu-*`/`X-TeShin-*`/`X-Hogureba-*`/`X-MomiLabo-*`/`X-RilakSPA-*`/`X-SoreEgao-*`/`X-KaradaRaku-*`/`X-FuwaRaku-*` (マッサージ・整体・リラクゼーション・もみほぐしの通知記録) を送信側が自称しているかどうか。回数券・施術予約・コース勧誘の偽装はリラク詐欺の典型手口。
+fn has_massage_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-rirakuru-")
+            || l.starts_with("x-raffine-")
+            || l.starts_with("x-temomin-")
+            || l.starts_with("x-karadafactory-")
+            || l.starts_with("x-manistare-")
+            || l.starts_with("x-rafure-")
+            || l.starts_with("x-asubi-")
+            || l.starts_with("x-mukatamu-")
+            || l.starts_with("x-toraibu-")
+            || l.starts_with("x-ribafi-")
+            || l.starts_with("x-bantomiere-")
+            || l.starts_with("x-taraso-")
+            || l.starts_with("x-massageplaza-")
+            || l.starts_with("x-footjoy-")
+            || l.starts_with("x-ashiraku-")
+            || l.starts_with("x-temonigiri-")
+            || l.starts_with("x-temomilabo-")
+            || l.starts_with("x-bodytune-")
+            || l.starts_with("x-momivale-")
+            || l.starts_with("x-chirosuiden-")
+            || l.starts_with("x-mominotsuchi-")
+            || l.starts_with("x-tenowa-")
+            || l.starts_with("x-hogushite-")
+            || l.starts_with("x-karadaplus-")
+            || l.starts_with("x-rirakuya-")
+            || l.starts_with("x-momitei-")
+            || l.starts_with("x-momiya-")
+            || l.starts_with("x-genkido-")
+            || l.starts_with("x-tsuyoshi-")
+            || l.starts_with("x-nidanashi-")
+            || l.starts_with("x-masajikun-")
+            || l.starts_with("x-hogusubi-")
+            || l.starts_with("x-riraku-")
+            || l.starts_with("x-yutorikan-")
+            || l.starts_with("x-otenami-")
+            || l.starts_with("x-ubub-")
+            || l.starts_with("x-chiryoen-")
+            || l.starts_with("x-bodylab-")
+            || l.starts_with("x-footsalon-")
+            || l.starts_with("x-reflekaikan-")
+            || l.starts_with("x-itokikaikan-")
+            || l.starts_with("x-momisukki-")
+            || l.starts_with("x-rakua-")
+            || l.starts_with("x-fumino-")
+            || l.starts_with("x-ashimomi-")
+            || l.starts_with("x-nagomitei-")
+            || l.starts_with("x-shiatsukan-")
+            || l.starts_with("x-acuretreat-")
+            || l.starts_with("x-sparise-")
+            || l.starts_with("x-meropeach-")
+            || l.starts_with("x-nemomi-")
+            || l.starts_with("x-hoguretu-")
+            || l.starts_with("x-teshin-")
+            || l.starts_with("x-hogureba-")
+            || l.starts_with("x-momilabo-")
+            || l.starts_with("x-rilakspa-")
+            || l.starts_with("x-soreegao-")
+            || l.starts_with("x-karadaraku-")
+            || l.starts_with("x-fuwaraku-")
+    })
+}
+
+/// `X-TimesPark-*`/`X-Times24-*`/`X-MitsuRepark-*`/`X-NPC24H-*`/`X-ApplePark-*`/`X-TimesCar-*`/`X-NPCParking-*`/`X-Parca-*`/`X-WisdomCar-*`/`X-ELeaf-*`/`X-Seiyaken-*`/`X-NipponParking-*`/`X-ParkJPN-*`/`X-MiyamaPark-*`/`X-ParkMoto-*`/`X-MotoPark-*`/`X-ParkingLot-*`/`X-CoinPark-*`/`X-YorozuPark-*`/`X-SFC-Park-*`/`X-AoiPark-*`/`X-FudoPark-*`/`X-MotomachiPark-*`/`X-TokyoPark-*`/`X-NambaPark-*`/`X-KobePark-*`/`X-OsakaPark-*`/`X-NagoyaPark-*`/`X-SapporoPark-*`/`X-FukuokaPark-*`/`X-KanazawaPark-*`/`X-SendaiPark-*`/`X-HiroshimaPark-*`/`X-KitaPark-*`/`X-MinamiPark-*`/`X-RoutePark-*`/`X-MultiPark-*`/`X-StationPark-*`/`X-AirportPark-*`/`X-CenterPark-*`/`X-ParkYourCar-*`/`X-CarPark-*`/`X-OffStreet-*`/`X-InnerPark-*`/`X-ZonePark-*`/`X-RakudaPark-*`/`X-MotoChin-*`/`X-ValleyPark-*`/`X-MotoGate-*`/`X-ParkMate-*`/`X-MotoZone-*`/`X-ParkingNet-*`/`X-ParkingLab-*`/`X-ParkOnline-*`/`X-DigitalPark-*`/`X-SmartPark-*`/`X-MyParking-*` (駐車場・コインパーキング・月極駐車場の通知記録) を送信側が自称しているかどうか。駐車違反金・月極料金・駐車場検索の偽装はドライバー狙い詐欺の典型手口。
+fn has_parking_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-timespark-")
+            || l.starts_with("x-times24-")
+            || l.starts_with("x-mitsurepark-")
+            || l.starts_with("x-npc24h-")
+            || l.starts_with("x-applepark-")
+            || l.starts_with("x-timescar-")
+            || l.starts_with("x-npcparking-")
+            || l.starts_with("x-parca-")
+            || l.starts_with("x-wisdomcar-")
+            || l.starts_with("x-eleaf-")
+            || l.starts_with("x-seiyaken-")
+            || l.starts_with("x-nipponparking-")
+            || l.starts_with("x-parkjpn-")
+            || l.starts_with("x-miyamapark-")
+            || l.starts_with("x-parkmoto-")
+            || l.starts_with("x-motopark-")
+            || l.starts_with("x-parkinglot-")
+            || l.starts_with("x-coinpark-")
+            || l.starts_with("x-yorozupark-")
+            || l.starts_with("x-sfc-park-")
+            || l.starts_with("x-aoipark-")
+            || l.starts_with("x-fudopark-")
+            || l.starts_with("x-motomachipark-")
+            || l.starts_with("x-tokyopark-")
+            || l.starts_with("x-nambapark-")
+            || l.starts_with("x-kobepark-")
+            || l.starts_with("x-osakapark-")
+            || l.starts_with("x-nagoyapark-")
+            || l.starts_with("x-sapporopark-")
+            || l.starts_with("x-fukuokapark-")
+            || l.starts_with("x-kanazawapark-")
+            || l.starts_with("x-sendaipark-")
+            || l.starts_with("x-hiroshimapark-")
+            || l.starts_with("x-kitapark-")
+            || l.starts_with("x-minamipark-")
+            || l.starts_with("x-routepark-")
+            || l.starts_with("x-multipark-")
+            || l.starts_with("x-stationpark-")
+            || l.starts_with("x-airportpark-")
+            || l.starts_with("x-centerpark-")
+            || l.starts_with("x-parkyourcar-")
+            || l.starts_with("x-carpark-")
+            || l.starts_with("x-offstreet-")
+            || l.starts_with("x-innerpark-")
+            || l.starts_with("x-zonepark-")
+            || l.starts_with("x-rakudapark-")
+            || l.starts_with("x-motochin-")
+            || l.starts_with("x-valleypark-")
+            || l.starts_with("x-motogate-")
+            || l.starts_with("x-parkmate-")
+            || l.starts_with("x-motozone-")
+            || l.starts_with("x-parkingnet-")
+            || l.starts_with("x-parkinglab-")
+            || l.starts_with("x-parkonline-")
+            || l.starts_with("x-digitalpark-")
+            || l.starts_with("x-smartpark-")
+            || l.starts_with("x-myparking-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -18084,5 +18297,152 @@ X-Other: 1
 
 body";
     assert!(!has_insconsult_marks(clean));
+}
+
+#[test]
+fn scan_は稼機印を検出する() {
+    let m1 = b"From: a@b
+X-Moppy-Id: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hapitas-Trace: 1
+
+x";
+    let g1 = b"From: a@b
+X-Gendama-Notice: 1
+
+x";
+    let c1 = b"From: a@b
+X-Chobirich-Flag: 1
+
+x";
+    let p1 = b"From: a@b
+X-PointTown-Entry: 1
+
+x";
+    let e1 = b"From: a@b
+X-ECNavi-Record: 1
+
+x";
+    let w1 = b"From: a@b
+X-Warau-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-GetMoney-Stamp: 1
+
+x";
+    assert!(has_pointkatsu_marks(m1));
+    assert!(has_pointkatsu_marks(h1));
+    assert!(has_pointkatsu_marks(g1));
+    assert!(has_pointkatsu_marks(c1));
+    assert!(has_pointkatsu_marks(p1));
+    assert!(has_pointkatsu_marks(e1));
+    assert!(has_pointkatsu_marks(w1));
+    assert!(has_pointkatsu_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_pointkatsu_marks(clean));
+}
+
+#[test]
+fn scan_は揉機印を検出する() {
+    let r1 = b"From: a@b
+X-Rirakuru-Id: 1
+
+x";
+    let a1 = b"From: a@b
+X-Raffine-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-Temomin-Notice: 1
+
+x";
+    let k1 = b"From: a@b
+X-KaradaFactory-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-Manistare-Entry: 1
+
+x";
+    let f1 = b"From: a@b
+X-Rafure-Record: 1
+
+x";
+    let b1 = b"From: a@b
+X-Bantomiere-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Taraso-Stamp: 1
+
+x";
+    assert!(has_massage_marks(r1));
+    assert!(has_massage_marks(a1));
+    assert!(has_massage_marks(t1));
+    assert!(has_massage_marks(k1));
+    assert!(has_massage_marks(m1));
+    assert!(has_massage_marks(f1));
+    assert!(has_massage_marks(b1));
+    assert!(has_massage_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_massage_marks(clean));
+}
+
+#[test]
+fn scan_は停機印を検出する() {
+    let t1 = b"From: a@b
+X-TimesPark-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-MitsuRepark-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-NPC24H-Notice: 1
+
+x";
+    let a1 = b"From: a@b
+X-ApplePark-Flag: 1
+
+x";
+    let p1 = b"From: a@b
+X-ParkingLot-Entry: 1
+
+x";
+    let c1 = b"From: a@b
+X-CoinPark-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-SmartPark-Trace: 1
+
+x";
+    let w1 = b"From: a@b
+X-MyParking-Stamp: 1
+
+x";
+    assert!(has_parking_marks(t1));
+    assert!(has_parking_marks(m1));
+    assert!(has_parking_marks(n1));
+    assert!(has_parking_marks(a1));
+    assert!(has_parking_marks(p1));
+    assert!(has_parking_marks(c1));
+    assert!(has_parking_marks(s1));
+    assert!(has_parking_marks(w1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_parking_marks(clean));
 }
 }
