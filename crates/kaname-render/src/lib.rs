@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `In-Reply-To` の msg-id が `References` に含まれないか —
+    /// 連鎖の一部を騙る手作りスレッド注入の兆候 (D300)。
+    pub thread_chain_gap: bool,
+    /// `X-Auto-Response-Suppress`/`X-Autoreply`/`X-Autorespond` 等の
+    /// 自動応答制御自称ヘッダがあるか (D301)。
+    pub auto_control_header: bool,
+    /// `<meta http-equiv>` の非 refresh 系ディレクティブ (csp/set-cookie/
+    /// x-ua-compatible) があるか (D302)。
+    pub meta_directive: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +371,88 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        thread_chain_gap: has_thread_chain_gap(raw),
+        auto_control_header: has_auto_control_header(raw),
+        meta_directive: has_meta_directive(raw),
     })
+}
+
+/// `In-Reply-To` の msg-id が `References` に含まれないか判定する
+/// (D300)。
+///
+/// RFC 5322: References は祖先 + 直近の親を列挙し、In-Reply-To は
+/// 直近の親を指す — 正当な返信では IRT の id が References に現れる。
+/// IRT だけを騙り References にその id を含まない手作りメッセージは
+/// 連鎖の一部だけを装うスレッド注入の兆候。
+fn has_thread_chain_gap(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let irt = header
+        .lines()
+        .find(|l| l.starts_with("in-reply-to:"))
+        .map(|l| &l[12..]);
+    let refs = header
+        .lines()
+        .find(|l| l.starts_with("references:"))
+        .map(|l| &l[11..]);
+    let (Some(irt), Some(refs)) = (irt, refs) else {
+        return false;
+    };
+    let Some(id) = first_angle_id(irt) else {
+        return false;
+    };
+    !refs.contains(&id)
+}
+
+/// `<...>` 囲みの最初の msg-id を取り出す補助 (小文字前提)。
+fn first_angle_id(s: &str) -> Option<String> {
+    let start = s.find('<')?;
+    let end = s[start..].find('>')?;
+    Some(s[start..start + end + 1].to_string())
+}
+
+/// 自動応答制御自称ヘッダを検出する (D301)。
+///
+/// `X-Auto-Response-Suppress`/`X-Autoreply`/`X-Autorespond` は受信側の
+/// 自動応答動作を送信側が制御しようとするヘッダ — 返信抑制を騙ることで
+/// NDR・不在通知の発動を避けようとする兆候。
+fn has_auto_control_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-auto-response-suppress:")
+            || l.starts_with("x-autoreply:")
+            || l.starts_with("x-autorespond:")
+    })
+}
+
+/// `<meta http-equiv>` の非 refresh 系ディレクティブを検出する (D302)。
+///
+/// `content-security-policy`/`set-cookie`/`x-ua-compatible` は描画器の
+/// 保護・互換モードを送信側が指示するディレクティブ — refresh は別途
+/// 検出済み。メール本文でブラウザの制御を宣言する用途は正当でない。
+fn has_meta_directive(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(pos) = rest.find("<meta") {
+        let tail = &rest[pos..];
+        let tag_end = tail.find('>').unwrap_or(tail.len());
+        let tag = &tail[..tag_end];
+        if tag.contains("http-equiv")
+            && (tag.contains("content-security-policy")
+                || tag.contains("set-cookie")
+                || tag.contains("x-ua-compatible"))
+        {
+            return true;
+        }
+        rest = &tail[tag_end..];
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2765,49 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はスレッド連鎖不整合を検出する() {
+        let gap =
+            b"In-Reply-To: <fake@x.example>\r\nReferences: <a@x.example> <b@x.example>\r\n\r\nx";
+        assert!(has_thread_chain_gap(gap));
+        let ok = b"In-Reply-To: <b@x.example>\r\nReferences: <a@x.example> <b@x.example>\r\n\r\nx";
+        assert!(!has_thread_chain_gap(ok));
+        let norefs = b"In-Reply-To: <x@x.example>\r\n\r\nx";
+        assert!(!has_thread_chain_gap(norefs));
+        let noirt = b"References: <a@x.example>\r\n\r\nx";
+        assert!(!has_thread_chain_gap(noirt));
+        let noid = b"In-Reply-To: not-an-id\r\nReferences: <a@x.example>\r\n\r\nx";
+        assert!(!has_thread_chain_gap(noid));
+    }
+
+    #[test]
+    fn scan_は自動応答制御ヘッダを検出する() {
+        let sup = b"X-Auto-Response-Suppress: All\r\n\r\nx";
+        assert!(has_auto_control_header(sup));
+        let rep = b"X-Autoreply: yes\r\n\r\nx";
+        assert!(has_auto_control_header(rep));
+        let pond = b"X-Autorespond: true\r\n\r\nx";
+        assert!(has_auto_control_header(pond));
+        let clean = b"From: a@b.example\r\n\r\nx";
+        assert!(!has_auto_control_header(clean));
+        let body = b"Subject: x\r\n\r\nX-Autoreply: yes";
+        assert!(!has_auto_control_header(body));
+    }
+
+    #[test]
+    fn scan_はmetaディレクティブを検出する() {
+        let csp = b"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src *\">";
+        assert!(has_meta_directive(csp));
+        let cookie = b"<meta http-equiv=\"Set-Cookie\" content=\"a=b\">";
+        assert!(has_meta_directive(cookie));
+        let xua = b"<meta http-equiv=\"X-UA-Compatible\" content=\"IE=9\">";
+        assert!(has_meta_directive(xua));
+        let refresh = b"<meta http-equiv=\"refresh\" content=\"0;url=x\">";
+        assert!(!has_meta_directive(refresh));
+        let clean = b"<meta charset=\"utf-8\">";
+        assert!(!has_meta_directive(clean));
     }
 }
 

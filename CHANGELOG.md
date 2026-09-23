@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D300: `In-Reply-To` の msg-id が `References` に含まれない未検査
+
+- RFC 5322: References は祖先 + 直近の親を列挙し In-Reply-To は直近の親を指す — 正当な返信では IRT の id が References に現れる。IRT だけを騙り References にその id を含まない手作りメッセージは連鎖の一部だけを装うスレッド注入の兆候だが未検査だった (参照 id の形式検査は D251、連鎖の整合性は別区画)
+- 対処: `has_thread_chain_gap` 新設で IRT の msg-id が References に含まれない場合を検出 → `Envelope.thread_chain_gap` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D301: 自動応答制御自称ヘッダが未検査
+
+- `X-Auto-Response-Suppress`/`X-Autoreply`/`X-Autorespond` は受信側の自動応答動作を送信側が制御しようとするヘッダ — 返信抑制を騙って NDR・不在通知の発動を避ける兆候だが未検査だった
+- 対処: `has_auto_control_header` 新設 → `Envelope.auto_control_header` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D302: `<meta http-equiv>` の非 refresh 系ディレクティブが未検査
+
+- `content-security-policy`/`set-cookie`/`x-ua-compatible` は描画器の保護・互換モードを送信側が指示するディレクティブ — メール本文でブラウザの制御を宣言する用途は正当でないが未検査だった (refresh は別途検出)
+- 対処: `has_meta_directive` 新設 → `Envelope.meta_directive` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

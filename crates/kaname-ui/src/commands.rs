@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D300: In-Reply-To / References 連鎖不整合
+    if env.thread_chain_gap {
+        render_risks.push(
+            "In-Reply-To の msg-id が References に含まれていません — 連鎖の一部を騙るスレッド注入の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D301: 自動応答制御自称ヘッダ
+    if env.auto_control_header {
+        render_risks.push(
+            "X-Auto-Response-Suppress/X-Autoreply/X-Autorespond — 受信側の自動応答を制御する自称ヘッダの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D302: meta http-equiv 非 refresh ディレクティブ
+    if env.meta_directive {
+        render_risks.push(
+            "<meta http-equiv> の csp/set-cookie/x-ua-compatible ディレクティブ — 描画器の制御を自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
