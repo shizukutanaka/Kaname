@@ -1300,6 +1300,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D501: DNS・ドメイン・DDNS 印自称
+    if env.domain_marks {
+        render_risks.push(
+            "X-GoDaddy-*/X-Namecheap-*/X-DNSimple-*/X-Porkbun-*/X-Hover-*/X-Route53-*/X-easyDNS-*/X-AzureDNS-* 等 — 名簿機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D502: ウェブホスティング印自称
+    if env.webhost_marks {
+        render_risks.push(
+            "X-DreamHost-*/X-Bluehost-*/X-HostGator-*/X-SiteGround-*/X-Hostinger-*/X-Cloudways-*/X-Nexcess-*/X-AccuWeb-* 等 — 宿機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D503: プライバシーメール印自称
+    if env.mailprivacy_marks {
+        render_risks.push(
+            "X-Proton-*/X-Tutanota-*/X-Fastmail-*/X-Runbox-*/X-Migadu-*/X-StartMail-*/X-Disroot-*/X-Hey-* 等 — 秘匿機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
