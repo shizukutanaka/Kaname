@@ -503,6 +503,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
         );
     }
+    // D228: file:/UNC 参照の NTLM 漏洩兆候。
+    if html_extract.as_ref().is_some_and(|e| e.ntlm_leak_path) {
+        render_risks.push(
+            "HTML 本文に file: または \\\\ UNC 参照 — 解決時に NTLM 認証情報を \
+             外部へ漏す資格情報窃取経路の兆候"
+                .to_string(),
+        );
+    }
     // D162: 表示 URL と実リンク先のドメイン不一致 (URL 偽装)。
     if let Some(e) = &html_extract {
         for m in e.link_mismatches.iter().take(3) {
@@ -514,6 +522,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D229: 配送ステータス通知構造 (fake NDR) の兆候。
+    if env.auto_report_structure {
+        render_risks.push(
+            "配送ステータス通知構造 (multipart/report 等) — 本物のバウンスと同じ形式を \
+             手作りした NDR backscatter の兆候"
+                .to_string(),
+        );
+    }
+    // D230: 添付の name= と filename= の不一致 (parser differential) の兆候。
+    if env.attachment_name_mismatch {
+        render_risks.push(
+            "添付の name= と filename= が異なる — 表示器と検査器で採用する拡張子を \
+             分けられる parser differential 型偽装の兆候"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

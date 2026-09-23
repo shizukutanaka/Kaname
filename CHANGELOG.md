@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D228: `file:` / UNC パス参照の NTLM 漏洩経路を検出
+
+- `src="file:"`/`href="file:"`/`src="\\server"` 型の参照は解決時に NTLM 認証情報を外部サーバへ送信する資格情報窃取経路 (Outlook NTLM leak / relay 攻撃) — http(s) のみを見る URL 検査では見えない
+- 対処: `has_ntlm_leak_path` で tag 属性内の file: スキームと `\\` UNC パスを検出 → `ntlm_leak_path` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D229: 配送ステータス通知構造 (fake NDR) を検出
+
+- `multipart/report`/`report-type=delivery-status`/`message/delivery-status` の形式を構造だけ手作りすると、内容を完全に制御した「送信失敗通知」を作れる (NDR backscatter)。本物のバウンスと形式を共有するため危険判定ではなく兆候
+- 対処: 生メッセージ全域走査で構造キーワードを検出 → `auto_report_structure` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D230: 添付の `name=` と `filename=` の不一致 (parser differential) を検出
+
+- `Content-Type: name=` と `Content-Disposition: filename=` が両方あって値が異なると、表示器が片方・検査器がもう片方を採用することで「見せている拡張子」と「実際の拡張子」を分けられる parser differential
+- 対処: `attachment_name_disagreement` で生メッセージ全域を走査し不一致を検出 → `attachment_name_mismatch` → `render_risks` に兆候報告
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

