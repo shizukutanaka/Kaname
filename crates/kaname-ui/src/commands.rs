@@ -1924,6 +1924,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D581: 消費者金融・カードローン印自称
+    if env.consumerloan_marks {
+        render_risks.push(
+            "X-Acom-*/X-Promise-*/X-Aiful-*/X-Mobit-*/X-LakeALSA-*/X-Central-*/X-Futaba-*/X-SkyOffice-* 等 — 銭機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D582: ベビー・子育て印自称
+    if env.baby_marks {
+        render_risks.push(
+            "X-Akachan-*/X-Nishimatsuya-*/X-Pigeon-*/X-Combi-*/X-Mikihouse-*/X-ToysRUs-*/X-Ergobaby-*/X-Babybjorn-* 等 — 児機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D583: 花・フラワーギフト印自称
+    if env.flower_marks {
+        render_risks.push(
+            "X-Hibiya-*/X-Hanacupid-*/X-AoyamaFlower-*/X-Teleflora-*/X-Interflora-*/X-FTD-*/X-UrbanStems-*/X-1-800Flowers-* 等 — 花機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
