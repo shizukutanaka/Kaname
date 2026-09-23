@@ -516,10 +516,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // 本文の構造リスクに加え、リンク先の評判判定も併記する。
     let mut render_risks = analyze_body_risks(analysis_text);
     // D160: 非表示テキスト混入 (hidden text salting) の兆候。
-    if html_extract
-        .as_ref()
-        .is_some_and(|e| e.hidden_content)
-    {
+    if html_extract.as_ref().is_some_and(|e| e.hidden_content) {
         render_risks.push(
             "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
         );
@@ -578,6 +575,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D339: 旧式 SPF 判定印自称
+    if env.spf_report {
+        render_risks
+            .push("Received-SPF/X-SPF-* — 旧式 SPF verdict を送信側が自称する兆候です".to_string());
+    }
+
+    // D340: DomainKeys/X-DKIM 印自称
+    if env.domainkey {
+        render_risks.push(
+            "DomainKey-Signature/X-DKIM-* — 旧式署名・検証印を送信側が自称する兆候です".to_string(),
+        );
+    }
+
+    // D341: エンベロープ値自称
+    if env.envelope_headers {
+        render_risks.push(
+            "X-Envelope-*/Envelope-To/X-RCPT-TO/X-SMTP-* — SMTP 封筒の値を内容側が名乗る兆候です"
                 .to_string(),
         );
     }
@@ -1481,7 +1499,9 @@ mod tests {
             r.bec_signals
         );
         assert!(
-            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            r.bec_signals
+                .iter()
+                .any(|s| s.contains("送金") || s.contains("緊急")),
             "HTML 本文の金融/緊急キーワードがシグナル化されるべき: {:?}",
             r.bec_signals
         );
@@ -1508,7 +1528,9 @@ mod tests {
         );
         let r = analyze_raw_email(eml.as_bytes()).await?;
         assert!(
-            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            r.bec_signals
+                .iter()
+                .any(|s| s.contains("送金") || s.contains("緊急")),
             "salt で分断されたキーワードを復元して検出すべき: {:?}",
             r.bec_signals
         );
@@ -1544,7 +1566,9 @@ mod tests {
             --alt--\r\n";
         let r = analyze_raw_email(eml).await?;
         assert!(
-            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            r.bec_signals
+                .iter()
+                .any(|s| s.contains("送金") || s.contains("緊急")),
             "text/plain のデコイに関わらず HTML 側の攻撃文を検出すべき: {:?}",
             r.bec_signals
         );
@@ -1614,9 +1638,7 @@ mod tests {
             Please proceed.\r\n";
         let r = analyze_raw_email(eml).await?;
         assert!(
-            r.render_risks
-                .iter()
-                .any(|s| s.contains("一致しません")),
+            r.render_risks.iter().any(|s| s.contains("一致しません")),
             "From 群にない Sender は RFC 違反として報告されるべき: {:?}",
             r.render_risks
         );
@@ -1684,9 +1706,7 @@ mod tests {
             Hello.\r\n";
         let r = analyze_raw_email(eml).await?;
         assert!(
-            !r.render_risks
-                .iter()
-                .any(|s| s.contains("複数アドレス")),
+            !r.render_risks.iter().any(|s| s.contains("複数アドレス")),
             "通常メールで複数アドレス警告は出ないべき: {:?}",
             r.render_risks
         );

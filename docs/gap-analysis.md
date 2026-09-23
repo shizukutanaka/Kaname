@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D339 | ~~**`Received-SPF:`/`X-SPF-*` 旧式 SPF 判定印自称が未検査**~~ **(解消済み)** | P2 | 旧式 SPF verdict を送信側が自称する兆候だが未検査だった。修正: `has_spf_report` で検出、`spf_report` → `render_risks` 兆候報告 | 判定印は判定機が押す — 旧式の verdict 自署を問え |
+| D340 | ~~**`DomainKey-Signature:`/`X-DKIM-*` 旧式署名印自称が未検査**~~ **(解消済み)** | P2 | DomainKeys/X-DKIM の署名・検証体裁を送信側が自称する兆候だが未検査だった。修正: `has_domainkey` で検出、`domainkey` → `render_risks` 兆候報告 | 署名は型が決める — 前身の名乗りを問え |
+| D341 | ~~**`X-Envelope-*`/`Envelope-To:`/`X-RCPT-TO:`/`X-SMTP-*` エンベロープ値自称が未検査**~~ **(解消済み)** | P2 | SMTP 封筒の値を内容側が名乗る経路偽装だが未検査だった。修正: `has_envelope_headers` で検出、`envelope_headers` → `render_risks` 兆候報告 | 封筒は輸送の外側 — 消える値の名乗りを問え |

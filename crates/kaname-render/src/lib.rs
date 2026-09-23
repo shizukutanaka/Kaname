@@ -119,6 +119,17 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Received-SPF:`/`X-SPF-*` 等の旧式 SPF 判定印があるか —
+    /// AR 以前の SPF verdict を送信側が自称する兆候 (D339)。
+    pub spf_report: bool,
+    /// `DomainKey-Signature:`/`X-DKIM-*` 等の旧式署名印があるか —
+    /// DomainKeys (DKIM 前身) または署名の体裁を送信側が自称する
+    /// 兆候 (D340)。
+    pub domainkey: bool,
+    /// `X-Envelope-From:`/`X-Envelope-To:`/`X-Envelope-Date:` 等の
+    /// エンベロープ値ヘッダがあるか — SMTP 封筒の値を内容側が
+    /// 自称する経路偽装の兆候 (D341)。
+    pub envelope_headers: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +401,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        spf_report: has_spf_report(raw),
+        domainkey: has_domainkey(raw),
+        envelope_headers: has_envelope_headers(raw),
     })
 }
 
@@ -487,6 +501,63 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `Received-SPF:`/`X-SPF-*` 等の旧式 SPF 判定印があるか判定する
+/// (D339)。
+///
+/// `Received-SPF:` は Authentication-Results 以前に MTA が記した
+/// SPF 判定印 — 送信側から届くこれは「SPF を通過した」体裁を
+/// 内容側が主張する自称 (D306 と同じ受信側印の自署、旧式版)。
+fn has_spf_report(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("received-spf:")
+            || l.starts_with("x-spf-")
+            || l.starts_with("x-orig-spf-result:")
+    })
+}
+
+/// `DomainKey-Signature:`/`X-DKIM-*` 等の旧式署名印があるか判定する
+/// (D340)。
+///
+/// `DomainKey-Signature:` は DKIM 前身の Yahoo DomainKeys 署名 —
+/// `X-DKIM-*` は DKIM 検査機が記す判定の体裁 — いずれも署名・検証
+/// の体裁を送信側が書いた自称。正当な署名は `DKIM-Signature:`
+/// で届く。
+fn has_domainkey(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("domainkey-signature:")
+            || l.starts_with("x-dkim-")
+            || l.starts_with("x-dkim-sig")
+    })
+}
+
+/// `X-Envelope-From:`/`X-Envelope-To:`/`X-Envelope-Date:` 等の
+/// エンベロープ値ヘッダがあるか判定する (D341)。
+///
+/// SMTP 封筒 (MAIL FROM/RCPT TO) の値を内容側に写した形 —
+/// 「エンベロープはこうだった」と送信側が名乗る自称。封筒は
+/// 輸送時に消える値であり内容に残るのは偽装の兆候。
+fn has_envelope_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-envelope-")
+            || l.starts_with("envelope-to:")
+            || l.starts_with("x-einfo-")
+            || l.starts_with("x-rcpt-to:")
+            || l.starts_with("x-smtp-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -881,8 +952,29 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     ];
     /// テキストを区切るブロック要素 (開・閉どちらのタグでも改行を挿入)。
     const BLOCK_TAGS: &[&str] = &[
-        "p", "div", "br", "li", "tr", "td", "th", "table", "ul", "ol", "h1", "h2", "h3", "h4",
-        "h5", "h6", "blockquote", "pre", "section", "article", "header", "footer", "hr",
+        "p",
+        "div",
+        "br",
+        "li",
+        "tr",
+        "td",
+        "th",
+        "table",
+        "ul",
+        "ol",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "blockquote",
+        "pre",
+        "section",
+        "article",
+        "header",
+        "footer",
+        "hr",
     ];
 
     let bytes = html.as_bytes();
@@ -1417,9 +1509,7 @@ fn url_host(url: &str) -> Option<String> {
     let rest = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
-    let authority_end = rest
-        .find(['/', '?', '#'])
-        .unwrap_or(rest.len());
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..authority_end];
     // userinfo を除去 (`https://paypal.com@evil.com/` → evil.com)
     let host_port = match authority.rfind('@') {
@@ -1455,12 +1545,12 @@ fn registrable_domain(host: &str) -> String {
     }
     /// ラベルがさらに国コードを前置する代表的な第二階層 TLD。
     const TWO_LEVEL: &[&str] = &[
-        "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ed.jp", "gr.jp", "lg.jp", "geo.jp",
-        "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "edu.au",
-        "com.br", "com.cn", "net.cn", "org.cn", "com.tw", "co.kr", "or.kr", "co.nz",
-        "co.in", "firm.in", "net.in", "org.in", "gen.in", "ind.in", "com.sg", "com.hk",
-        "com.mx", "com.ar", "com.tr", "co.za", "com.pl", "com.my", "com.ph", "com.vn",
-        "co.th", "or.th", "co.id", "com.ua", "co.il", "com.pk", "com.bd", "com.np",
+        "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ed.jp", "gr.jp", "lg.jp", "geo.jp", "co.uk",
+        "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "edu.au", "com.br", "com.cn",
+        "net.cn", "org.cn", "com.tw", "co.kr", "or.kr", "co.nz", "co.in", "firm.in", "net.in",
+        "org.in", "gen.in", "ind.in", "com.sg", "com.hk", "com.mx", "com.ar", "com.tr", "co.za",
+        "com.pl", "com.my", "com.ph", "com.vn", "co.th", "or.th", "co.id", "com.ua", "co.il",
+        "com.pk", "com.bd", "com.np",
     ];
     let labels: Vec<&str> = host.split('.').collect();
     if labels.len() <= 2 {
@@ -1513,9 +1603,7 @@ fn url_shaped_domains(text: &str) -> Vec<String> {
             }
         }
         // 2. www. / 裸ドメイン — パス・クエリ前までをホストとして評価
-        let host_part = token
-            .find(['/', '?', '#'])
-            .map_or(token, |i| &token[..i]);
+        let host_part = token.find(['/', '?', '#']).map_or(token, |i| &token[..i]);
         let host_part = host_part.trim_end_matches('.').to_lowercase();
         if host_part.starts_with("www.") && host_part.len() > 4 {
             let h = &host_part[4..];
@@ -2303,7 +2391,10 @@ mod tests {
         );
         let e = html_to_text(&html);
         assert!(e.text.contains("wire transfer"), "{}", e.text);
-        assert!(e.hidden_content, "大量の非表示テキストで hidden_content が立つべき");
+        assert!(
+            e.hidden_content,
+            "大量の非表示テキストで hidden_content が立つべき"
+        );
     }
 
     #[test]
@@ -2377,7 +2468,10 @@ mod tests {
         // 閉じないタグ・裸の不等号・コメント・data-style 誤マッチ
         assert_eq!(html_to_text("<b>bold tail").text, "bold tail");
         assert_eq!(html_to_text("a<!-- salt -->b").text, "ab");
-        assert_eq!(html_to_text("<span data-style=\"display:none\">keep</span>").text, "keep");
+        assert_eq!(
+            html_to_text("<span data-style=\"display:none\">keep</span>").text,
+            "keep"
+        );
         assert!(html_to_text("a < b").text.contains("a < b"));
     }
 
@@ -2415,45 +2509,36 @@ mod tests {
     #[test]
     fn link_mismatch_subdomain_same_base_is_clean() {
         // 登録ドメインが同じならサブドメイン差は誤検出しない
-        let e = html_to_text(
-            r#"<p><a href="https://www.paypal.com/x">paypal.com</a></p>"#,
-        );
+        let e = html_to_text(r#"<p><a href="https://www.paypal.com/x">paypal.com</a></p>"#);
         assert!(e.link_mismatches.is_empty());
     }
 
     #[test]
     fn link_mismatch_userinfo_confusion_flagged() {
         // href の userinfo 偽装: 表示は legit、実 host は attacker
-        let e = html_to_text(
-            r#"<p><a href="https://paypal.com@evil.example/">paypal.com</a></p>"#,
-        );
+        let e = html_to_text(r#"<p><a href="https://paypal.com@evil.example/">paypal.com</a></p>"#);
         assert_eq!(e.link_mismatches.len(), 1);
         assert_eq!(e.link_mismatches[0].href_domain, "evil.example");
     }
 
     #[test]
     fn link_mismatch_www_prefixed_text() {
-        let e = html_to_text(
-            r#"<p><a href="https://evil.example">www.paypal.com</a></p>"#,
-        );
+        let e = html_to_text(r#"<p><a href="https://evil.example">www.paypal.com</a></p>"#);
         assert_eq!(e.link_mismatches.len(), 1);
         assert_eq!(e.link_mismatches[0].shown_domain, "paypal.com");
     }
 
     #[test]
     fn link_mismatch_bare_domain_text() {
-        let e = html_to_text(
-            r#"<p><a href="https://tracker.example/c?id=1">paypal.com/login</a></p>"#,
-        );
+        let e =
+            html_to_text(r#"<p><a href="https://tracker.example/c?id=1">paypal.com/login</a></p>"#);
         assert_eq!(e.link_mismatches.len(), 1);
         assert_eq!(e.link_mismatches[0].shown_domain, "paypal.com");
     }
 
     #[test]
     fn link_mismatch_non_url_text_no_flag() {
-        let e = html_to_text(
-            r#"<p><a href="https://evil.example">請求書はこちら</a></p>"#,
-        );
+        let e = html_to_text(r#"<p><a href="https://evil.example">請求書はこちら</a></p>"#);
         assert!(e.link_mismatches.is_empty());
     }
 
@@ -2478,24 +2563,19 @@ mod tests {
     #[test]
     fn link_mismatch_two_level_tld() {
         // co.jp 系: 登録ドメイン比較は末尾 3 ラベル
-        let e = html_to_text(
-            r#"<p><a href="https://evil.example">https://bank.co.jp/login</a></p>"#,
-        );
+        let e =
+            html_to_text(r#"<p><a href="https://evil.example">https://bank.co.jp/login</a></p>"#);
         assert_eq!(e.link_mismatches.len(), 1);
         assert_eq!(e.link_mismatches[0].shown_domain, "bank.co.jp");
         // 同一登録ドメインの深いサブドメインは誤検出しない
-        let e2 = html_to_text(
-            r#"<p><a href="https://www.bank.co.jp/x">bank.co.jp</a></p>"#,
-        );
+        let e2 = html_to_text(r#"<p><a href="https://www.bank.co.jp/x">bank.co.jp</a></p>"#);
         assert!(e2.link_mismatches.is_empty());
     }
 
     #[test]
     fn link_mismatch_ip_literal_href_flagged() {
         // 表示はドメイン形、実リンクは IP — 典型的な偽装
-        let e = html_to_text(
-            r#"<p><a href="http://203.0.113.9/x">https://paypal.com</a></p>"#,
-        );
+        let e = html_to_text(r#"<p><a href="http://203.0.113.9/x">https://paypal.com</a></p>"#);
         assert_eq!(e.link_mismatches.len(), 1);
         assert_eq!(e.link_mismatches[0].href_domain, "203.0.113.9");
     }
@@ -2503,17 +2583,13 @@ mod tests {
     #[test]
     fn link_mismatch_non_http_href_skipped() {
         // mailto: 等は比較対象外 (URL 偽装の形でない)
-        let e = html_to_text(
-            r#"<p><a href="mailto:pay@paypal.com">https://paypal.com</a></p>"#,
-        );
+        let e = html_to_text(r#"<p><a href="mailto:pay@paypal.com">https://paypal.com</a></p>"#);
         assert!(e.link_mismatches.is_empty());
     }
 
     #[test]
     fn link_mismatch_unclosed_anchor_evaluated_at_eof() {
-        let e = html_to_text(
-            r#"<p><a href="https://evil.example">https://paypal.com"#,
-        );
+        let e = html_to_text(r#"<p><a href="https://evil.example">https://paypal.com"#);
         assert_eq!(e.link_mismatches.len(), 1);
     }
 
@@ -2521,9 +2597,7 @@ mod tests {
     fn link_mismatch_cyrillic_domain_text() {
         // 表示テキストの Cyrillic 埋め込みドメインも不一致として捕捉
         // ("payраl.com" の 'а' は Cyrillic — raw 比較で href と不一致)
-        let e = html_to_text(
-            "<p><a href=\"https://evil.example\">pay\u{0440}al.com</a></p>",
-        );
+        let e = html_to_text("<p><a href=\"https://evil.example\">pay\u{0440}al.com</a></p>");
         assert_eq!(e.link_mismatches.len(), 1);
     }
 
@@ -2740,6 +2814,44 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は旧式SPFを検出する() {
+        let rs = b"Received-SPF: pass\r\n\r\nx";
+        assert!(has_spf_report(rs));
+        let xs = b"X-SPF-Result: pass\r\n\r\nx";
+        assert!(has_spf_report(xs));
+        let clean = b"Authentication-Results: mx; spf=pass\r\n\r\nx";
+        assert!(!has_spf_report(clean));
+        let body = b"From: a@b\r\n\r\nReceived-SPF: pass";
+        assert!(!has_spf_report(body));
+    }
+
+    #[test]
+    fn scan_はDomainKeys印を検出する() {
+        let dk = b"DomainKey-Signature: a=rsa; s=x\r\n\r\ny";
+        assert!(has_domainkey(dk));
+        let xd = b"X-DKIM-Result: pass\r\n\r\nx";
+        assert!(has_domainkey(xd));
+        let ok = b"DKIM-Signature: v=1; a=rsa\r\n\r\nx";
+        assert!(!has_domainkey(ok));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_domainkey(clean));
+    }
+
+    #[test]
+    fn scan_はエンベロープ自称を検出する() {
+        let ef = b"X-Envelope-From: a@b\r\n\r\nx";
+        assert!(has_envelope_headers(ef));
+        let et = b"Envelope-To: a@b\r\n\r\nx";
+        assert!(has_envelope_headers(et));
+        let xr = b"X-RCPT-TO: a@b\r\n\r\nx";
+        assert!(has_envelope_headers(xr));
+        let sm = b"X-SMTP-MAIL: a@b\r\n\r\nx";
+        assert!(has_envelope_headers(sm));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_envelope_headers(clean));
     }
 }
 

@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D339: `Received-SPF:`/`X-SPF-*` 旧式 SPF 判定印自称が未検査
+
+- `Received-SPF:` は Authentication-Results 以前に MTA が記した SPF 判定印 — 送信側から届くのは「SPF を通過した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_spf_report` 新設 → `Envelope.spf_report` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D340: `DomainKey-Signature:`/`X-DKIM-*` 旧式署名印自称が未検査
+
+- `DomainKey-Signature:` は DKIM 前身の Yahoo DomainKeys、`X-DKIM-*` は検査機判定の体裁 — 署名・検証の体裁を送信側が書く自称だが未検査だった
+- 対処: `has_domainkey` 新設 → `Envelope.domainkey` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D341: `X-Envelope-*`/`Envelope-To:`/`X-RCPT-TO:`/`X-SMTP-*` エンベロープ値自称が未検査
+
+- SMTP 封筒 (MAIL FROM/RCPT TO) の値を内容側に写した形 — 輸送時に消える値が内容に残るのは「エンベロープはこうだった」を名乗る経路偽装だが未検査だった
+- 対処: `has_envelope_headers` 新設 → `Envelope.envelope_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
