@@ -1721,6 +1721,12 @@ pub struct Envelope {
     pub boardgame_marks: bool,
     /// `X-Photoback-*`/`X-Albus-*`/`X-Dotti-*`/`X-Asukabook-*`/`X-DreamPages-*` 等の写真プリント・フォトブック通知記録印を送信側が自称している (D604)
     pub photoprint_marks: bool,
+    /// `X-YotsuyaOhtsuka-*`/`X-Eikoh-*`/`X-Meikoh-*`/`X-TryJyuku-*`/`X-Nichinoken-*`/`X-Sapix-*`/`X-Ichishin-*`/`X-Rinkai-*` 等の学習塾・予備校通知記録印を送信側が自称している (D605)
+    pub jyuku_marks: bool,
+    /// `X-Kokuyo-*`/`X-PlusStationery-*`/`X-SakuraCraypas-*`/`X-Pentel-*`/`X-MitsubishiPencil-*`/`X-PilotPen-*`/`X-Tombow-*` 等の文房具・画材通知記録印を送信側が自称している (D606)
+    pub stationery_marks: bool,
+    /// `X-Zaim-*`/`X-Kakebo-*`/`X-WealthNavi-*`/`X-MoneyTree-*`/`X-DrWallet-*`/`X-Acorn-*`/`X-Finbee-*`/`X-Toraneko-*` 等の家計簿・資産管理アプリ通知記録印を送信側が自称している (D607)
+    pub budgetapp_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2203,6 +2209,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         yoga_marks: has_yoga_marks(hdr),
         boardgame_marks: has_boardgame_marks(hdr),
         photoprint_marks: has_photoprint_marks(hdr),
+        jyuku_marks: has_jyuku_marks(hdr),
+        stationery_marks: has_stationery_marks(hdr),
+        budgetapp_marks: has_budgetapp_marks(hdr),
     })
 }
 
@@ -11982,6 +11991,218 @@ fn has_photoprint_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-YotsuyaOhtsuka-*`/`X-Eikoh-*`/`X-Meikoh-*`/`X-TryJyuku-*`/`X-WasedaAcademy-*`/`X-Nichinoken-*`/`X-Sapix-*`/`X-Ichishin-*`/`X-Rinkai-*`/`X-Shuei-*`/`X-Surara-*`/`X-ZKai-*`/`X-Hamagakuen-*`/`X-NozomiGakuen-*`/`X-Tetsuryokukai-*`/`X-SEGJyuku-*`/`X-YoyogiSeminar-*`/`X-EnaJyuku-*`/`X-ManabiJyuku-*`/`X-Gokakkokukai-*`/`X-IttoJyuku-*`/`X-JiyugaokaJyuku-*`/`X-Jukucho-*`/`X-Jyukunavi-*`/`X-Sakusaku-*`/`X-TakedaJyuku2-*`/`X-HikariJyuku-*`/`X-Akatsuki-*`/`X-ScolaJyuku-*`/`X-DrSeminar-*`/`X-KobetsuShido-*`/`X-Katekyo-*`/`X-HomeTeacher-*`/`X-TryIt-*`/`X-MeikoGijuku-*`/`X-SciEdu-*`/`X-WasedaShin-*`/`X-AsahiJyuku-*`/`X-Rokkousha-*`/`X-Ichigaku-*`/`X-Morigakuen-*`/`X-Jishin-*`/`X-Hamatome-*`/`X-ShonanJyuku-*`/`X-TohokuJyuku-*`/`X-KyushuJyuku-*`/`X-HokkaidoJyuku-*`/`X-ChubuJyuku-*`/`X-KansaiJyuku-*`/`X-KantoJyuku-*`/`X-Nobishiro-*`/`X-Manavi-*`/`X-Benkyo-*`/`X-KenteiJyuku-*`/`X-Jyuken-*`/`X-Nyushi-*`/`X-GakushuJyuku-*`/`X-OnlineJyuku-*`/`X-SwimSchool-*`/`X-BalletSchool-*` (学習塾・予備校・個別指導の通知記録) を送信側が自称しているかどうか。入塾案内・講習費・模試結果の偽装は保護者狙い詐欺の典型手口。(河合塾・駿台・東進・武田塾・ベネッセ・進研ゼミは既存族)
+fn has_jyuku_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-yotsuyaohtsuka-")
+            || l.starts_with("x-eikoh-")
+            || l.starts_with("x-meikoh-")
+            || l.starts_with("x-tryjyuku-")
+            || l.starts_with("x-wasedaacademy-")
+            || l.starts_with("x-nichinoken-")
+            || l.starts_with("x-sapix-")
+            || l.starts_with("x-ichishin-")
+            || l.starts_with("x-rinkai-")
+            || l.starts_with("x-shuei-")
+            || l.starts_with("x-surara-")
+            || l.starts_with("x-zkai-")
+            || l.starts_with("x-hamagakuen-")
+            || l.starts_with("x-nozomigakuen-")
+            || l.starts_with("x-tetsuryokukai-")
+            || l.starts_with("x-segjyuku-")
+            || l.starts_with("x-yoyogiseminar-")
+            || l.starts_with("x-enajyuku-")
+            || l.starts_with("x-manabijyuku-")
+            || l.starts_with("x-gokakkokukai-")
+            || l.starts_with("x-ittojyuku-")
+            || l.starts_with("x-jiyugaokajyuku-")
+            || l.starts_with("x-jukucho-")
+            || l.starts_with("x-jyukunavi-")
+            || l.starts_with("x-sakusaku-")
+            || l.starts_with("x-takedajyuku2-")
+            || l.starts_with("x-hikarijyuku-")
+            || l.starts_with("x-akatsuki-")
+            || l.starts_with("x-scolajyuku-")
+            || l.starts_with("x-drseminar-")
+            || l.starts_with("x-kobetsushido-")
+            || l.starts_with("x-katekyo-")
+            || l.starts_with("x-hometeacher-")
+            || l.starts_with("x-tryit-")
+            || l.starts_with("x-meikogijuku-")
+            || l.starts_with("x-sciedu-")
+            || l.starts_with("x-wasedashin-")
+            || l.starts_with("x-asahijyuku-")
+            || l.starts_with("x-rokkousha-")
+            || l.starts_with("x-ichigaku-")
+            || l.starts_with("x-morigakuen-")
+            || l.starts_with("x-jishin-")
+            || l.starts_with("x-hamatome-")
+            || l.starts_with("x-shonanjyuku-")
+            || l.starts_with("x-tohokujyuku-")
+            || l.starts_with("x-kyushujyuku-")
+            || l.starts_with("x-hokkaidojyuku-")
+            || l.starts_with("x-chubujyuku-")
+            || l.starts_with("x-kansaijyuku-")
+            || l.starts_with("x-kantojyuku-")
+            || l.starts_with("x-nobishiro-")
+            || l.starts_with("x-manavi-")
+            || l.starts_with("x-benkyo-")
+            || l.starts_with("x-kenteijyuku-")
+            || l.starts_with("x-jyuken-")
+            || l.starts_with("x-nyushi-")
+            || l.starts_with("x-gakushujyuku-")
+            || l.starts_with("x-onlinejyuku-")
+            || l.starts_with("x-swimschool-")
+            || l.starts_with("x-balletschool-")
+    })
+}
+
+/// `X-Kokuyo-*`/`X-PlusStationery-*`/`X-SakuraCraypas-*`/`X-Pentel-*`/`X-MitsubishiPencil-*`/`X-PilotPen-*`/`X-Tombow-*`/`X-Staedtler-*`/`X-FaberCastell-*`/`X-HiTecC-*`/`X-Frixion-*`/`X-KuruToga-*`/`X-Emott-*`/`X-Shachihata-*`/`X-Collect-*`/`X-Bunbougu-*`/`X-Hobonichi-*`/`X-HighTide-*`/`X-Kuretake-*`/`X-Ochibi-*`/`X-Sekaido-*`/`X-KingJim-*`/`X-Tanosee-*`/`X-CampusNote-*`/`X-DotLiner-*`/`X-Sarasa-*`/`X-JuicePen-*`/`X-Jetstream-*`/`X-Energel-*`/`X-Acroball-*`/`X-DelGuard-*`/`X-SmashPen-*`/`X-DrGrip-*`/`X-Progrex-*`/`X-SuperGrip-*`/`X-OptPencil-*`/`X-MonoEraser-*`/`X-AirTouch-*`/`X-GreenFrame-*`/`X-TapeGlue-*`/`X-Norino-*`/`X-Pitt-*`/`X-TackMemo-*`/`X-BlockMemo-*`/`X-LooseLeaf-*`/`X-ReportPad-*`/`X-ClearFile-*`/`X-FlatFile-*`/`X-RingFile-*`/`X-ZFile-*`/`X-IndividualFolder-*`/`X-HolderFile-*`/`X-SmartRing-*`/`X-ColorTag-*`/`X-PenCase-*`/`X-PenStand-*`/`X-DeskMat-*`/`X-CuttingMat-*`/`X-NameCard-*`/`X-CardFile-*` (文房具・画材・オフィス用品の通知記録) を送信側が自称しているかどうか。大量発注・見積・請求の偽装は文具調達担当者狙い詐欺の典型手口。(ZEBRA・ロフト・丸善・ミドリは既存族)
+fn has_stationery_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kokuyo-")
+            || l.starts_with("x-plusstationery-")
+            || l.starts_with("x-sakuracraypas-")
+            || l.starts_with("x-pentel-")
+            || l.starts_with("x-mitsubishipencil-")
+            || l.starts_with("x-pilotpen-")
+            || l.starts_with("x-tombow-")
+            || l.starts_with("x-staedtler-")
+            || l.starts_with("x-fabercastell-")
+            || l.starts_with("x-hitecc-")
+            || l.starts_with("x-frixion-")
+            || l.starts_with("x-kurutoga-")
+            || l.starts_with("x-emott-")
+            || l.starts_with("x-shachihata-")
+            || l.starts_with("x-collect-")
+            || l.starts_with("x-bunbougu-")
+            || l.starts_with("x-hobonichi-")
+            || l.starts_with("x-hightide-")
+            || l.starts_with("x-kuretake-")
+            || l.starts_with("x-ochibi-")
+            || l.starts_with("x-sekaido-")
+            || l.starts_with("x-kingjim-")
+            || l.starts_with("x-tanosee-")
+            || l.starts_with("x-campusnote-")
+            || l.starts_with("x-dotliner-")
+            || l.starts_with("x-sarasa-")
+            || l.starts_with("x-juicepen-")
+            || l.starts_with("x-jetstream-")
+            || l.starts_with("x-energel-")
+            || l.starts_with("x-acroball-")
+            || l.starts_with("x-delguard-")
+            || l.starts_with("x-smashpen-")
+            || l.starts_with("x-drgrip-")
+            || l.starts_with("x-progrex-")
+            || l.starts_with("x-supergrip-")
+            || l.starts_with("x-optpencil-")
+            || l.starts_with("x-monoeraser-")
+            || l.starts_with("x-airtouch-")
+            || l.starts_with("x-greenframe-")
+            || l.starts_with("x-tapeglue-")
+            || l.starts_with("x-norino-")
+            || l.starts_with("x-pitt-")
+            || l.starts_with("x-tackmemo-")
+            || l.starts_with("x-blockmemo-")
+            || l.starts_with("x-looseleaf-")
+            || l.starts_with("x-reportpad-")
+            || l.starts_with("x-clearfile-")
+            || l.starts_with("x-flatfile-")
+            || l.starts_with("x-ringfile-")
+            || l.starts_with("x-zfile-")
+            || l.starts_with("x-individualfolder-")
+            || l.starts_with("x-holderfile-")
+            || l.starts_with("x-smartring-")
+            || l.starts_with("x-colortag-")
+            || l.starts_with("x-pencase-")
+            || l.starts_with("x-penstand-")
+            || l.starts_with("x-deskmat-")
+            || l.starts_with("x-cuttingmat-")
+            || l.starts_with("x-namecard-")
+            || l.starts_with("x-cardfile-")
+    })
+}
+
+/// `X-Zaim-*`/`X-Kakebo-*`/`X-OsushiKakeibo-*`/`X-WealthNavi-*`/`X-MoneyTree-*`/`X-Gridy-*`/`X-Kaneyo-*`/`X-Osarafu-*`/`X-DrWallet-*`/`X-MoneyReco-*`/`X-IdoMoney-*`/`X-Kakeico-*`/`X-Hanaimeshi-*`/`X-MoneySquare-*`/`X-MoneyTasu-*`/`X-Kakeibon-*`/`X-Folio-*`/`X-Theo-*`/`X-RoboPro-*`/`X-WealthAdvisor-*`/`X-PayPayAssets-*`/`X-SBIWealth-*`/`X-RakutenToushi-*`/`X-TsumitateNavi-*`/`X-NISA-*`/`X-IDeCo-*`/`X-AssetView-*`/`X-PortfolioView-*`/`X-KakeiView-*`/`X-HouseholdBook-*`/`X-BudgetBook-*`/`X-ExpenseNote-*`/`X-SpendingTracker-*`/`X-BudgetPlanner-*`/`X-SavingGoal-*`/`X-MoneyDiary-*`/`X-YosanBook-*`/`X-ShisanKanri-*`/`X-KakeiPro-*`/`X-MoneyLog-*`/`X-CashLog-*`/`X-OkaneNikki-*`/`X-FubMoney-*`/`X-KakeiboApp-*`/`X-BokinApp-*`/`X-ChokinApp-*`/`X-TsumitateApp-*`/`X-ToushiApp-*`/`X-PointAssets-*`/`X-KaimonoKiroku-*`/`X-ReciptScan-*`/`X-ReciptOCR-*`/`X-SeikyuKanri-*`/`X-ShiharaiKanri-*`/`X-KakeiReport-*`/`X-BudgetReport-*`/`X-AssetReport-*`/`X-MoneyReport-*`/`X-FinReport-*` (家計簿・資産管理・投資アプリの通知記録) を送信側が自称しているかどうか。家計簿連携切れ・資産残高アラートの偽装は金融アプリ詐欺の典型手口。(MoneyForward・ラクマ・銀行機は既存族/D514/D554)
+fn has_budgetapp_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-zaim-")
+            || l.starts_with("x-kakebo-")
+            || l.starts_with("x-osushikakeibo-")
+            || l.starts_with("x-wealthnavi-")
+            || l.starts_with("x-moneytree-")
+            || l.starts_with("x-gridy-")
+            || l.starts_with("x-kaneyo-")
+            || l.starts_with("x-osarafu-")
+            || l.starts_with("x-drwallet-")
+            || l.starts_with("x-moneyreco-")
+            || l.starts_with("x-idomoney-")
+            || l.starts_with("x-kakeico-")
+            || l.starts_with("x-hanaimeshi-")
+            || l.starts_with("x-moneysquare-")
+            || l.starts_with("x-moneytasu-")
+            || l.starts_with("x-kakeibon-")
+            || l.starts_with("x-folio-")
+            || l.starts_with("x-theo-")
+            || l.starts_with("x-robopro-")
+            || l.starts_with("x-wealthadvisor-")
+            || l.starts_with("x-paypayassets-")
+            || l.starts_with("x-sbiwealth-")
+            || l.starts_with("x-rakutentoushi-")
+            || l.starts_with("x-tsumitatenavi-")
+            || l.starts_with("x-nisa-")
+            || l.starts_with("x-ideco-")
+            || l.starts_with("x-assetview-")
+            || l.starts_with("x-portfolioview-")
+            || l.starts_with("x-kakeiview-")
+            || l.starts_with("x-householdbook-")
+            || l.starts_with("x-budgetbook-")
+            || l.starts_with("x-expensenote-")
+            || l.starts_with("x-spendingtracker-")
+            || l.starts_with("x-budgetplanner-")
+            || l.starts_with("x-savinggoal-")
+            || l.starts_with("x-moneydiary-")
+            || l.starts_with("x-yosanbook-")
+            || l.starts_with("x-shisankanri-")
+            || l.starts_with("x-kakeipro-")
+            || l.starts_with("x-moneylog-")
+            || l.starts_with("x-cashlog-")
+            || l.starts_with("x-okanenikki-")
+            || l.starts_with("x-fubmoney-")
+            || l.starts_with("x-kakeiboapp-")
+            || l.starts_with("x-bokinapp-")
+            || l.starts_with("x-chokinapp-")
+            || l.starts_with("x-tsumitateapp-")
+            || l.starts_with("x-toushiapp-")
+            || l.starts_with("x-pointassets-")
+            || l.starts_with("x-kaimonokiroku-")
+            || l.starts_with("x-reciptscan-")
+            || l.starts_with("x-reciptocr-")
+            || l.starts_with("x-seikyukanri-")
+            || l.starts_with("x-shiharaikanri-")
+            || l.starts_with("x-kakeireport-")
+            || l.starts_with("x-budgetreport-")
+            || l.starts_with("x-assetreport-")
+            || l.starts_with("x-moneyreport-")
+            || l.starts_with("x-finreport-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -19537,5 +19758,152 @@ X-Other: 1
 
 body";
     assert!(!has_photoprint_marks(clean));
+}
+
+#[test]
+fn scan_は塾機印を検出する() {
+    let y1 = b"From: a@b
+X-YotsuyaOhtsuka-Id: 1
+
+x";
+    let e1 = b"From: a@b
+X-Eikoh-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-Meikoh-Notice: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nichinoken-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sapix-Entry: 1
+
+x";
+    let i1 = b"From: a@b
+X-Ichishin-Record: 1
+
+x";
+    let z1 = b"From: a@b
+X-ZKai-Trace: 1
+
+x";
+    let o1 = b"From: a@b
+X-OnlineJyuku-Stamp: 1
+
+x";
+    assert!(has_jyuku_marks(y1));
+    assert!(has_jyuku_marks(e1));
+    assert!(has_jyuku_marks(m1));
+    assert!(has_jyuku_marks(n1));
+    assert!(has_jyuku_marks(s1));
+    assert!(has_jyuku_marks(i1));
+    assert!(has_jyuku_marks(z1));
+    assert!(has_jyuku_marks(o1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_jyuku_marks(clean));
+}
+
+#[test]
+fn scan_は筆機印を検出する() {
+    let k1 = b"From: a@b
+X-Kokuyo-Id: 1
+
+x";
+    let p1 = b"From: a@b
+X-PlusStationery-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SakuraCraypas-Notice: 1
+
+x";
+    let e1 = b"From: a@b
+X-Pentel-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-MitsubishiPencil-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-Tombow-Record: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hobonichi-Trace: 1
+
+x";
+    let j1 = b"From: a@b
+X-Jetstream-Stamp: 1
+
+x";
+    assert!(has_stationery_marks(k1));
+    assert!(has_stationery_marks(p1));
+    assert!(has_stationery_marks(s1));
+    assert!(has_stationery_marks(e1));
+    assert!(has_stationery_marks(m1));
+    assert!(has_stationery_marks(t1));
+    assert!(has_stationery_marks(h1));
+    assert!(has_stationery_marks(j1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_stationery_marks(clean));
+}
+
+#[test]
+fn scan_は簿機印を検出する() {
+    let z1 = b"From: a@b
+X-Zaim-Id: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kakebo-Trace: 1
+
+x";
+    let w1 = b"From: a@b
+X-WealthNavi-Notice: 1
+
+x";
+    let m1 = b"From: a@b
+X-MoneyTree-Flag: 1
+
+x";
+    let d1 = b"From: a@b
+X-DrWallet-Entry: 1
+
+x";
+    let n1 = b"From: a@b
+X-NISA-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-SavingGoal-Trace: 1
+
+x";
+    let r1 = b"From: a@b
+X-ReciptOCR-Stamp: 1
+
+x";
+    assert!(has_budgetapp_marks(z1));
+    assert!(has_budgetapp_marks(k1));
+    assert!(has_budgetapp_marks(w1));
+    assert!(has_budgetapp_marks(m1));
+    assert!(has_budgetapp_marks(d1));
+    assert!(has_budgetapp_marks(n1));
+    assert!(has_budgetapp_marks(s1));
+    assert!(has_budgetapp_marks(r1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_budgetapp_marks(clean));
 }
 }

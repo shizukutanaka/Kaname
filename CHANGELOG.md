@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D605: `X-YotsuyaOhtsuka-*`/`X-Eikoh-*`/`X-Nichinoken-*` 等の学習塾・予備校印自称が未検査
+
+- **問題**: `X-YotsuyaOhtsuka-*` (四谷大塚)、`X-Eikoh-*` (栄光)、`X-Nichinoken-*` (日能研)、`X-Meikoh-*`/`X-TryJyuku-*`/`X-WasedaAcademy-*`/`X-Sapix-*`/`X-Ichishin-*`/`X-Rinkai-*`/`X-Shuei-*`/`X-Surara-*`/`X-ZKai-*`/`X-Hamagakuen-*`/`X-NozomiGakuen-*`/`X-Tetsuryokukai-*`/`X-YoyogiSeminar-*`/`X-EnaJyuku-*`/`X-IttoJyuku-*`/`X-Jukucho-*`/`X-Jyukunavi-*`/`X-ScolaJyuku-*`/`X-DrSeminar-*`/`X-KobetsuShido-*`/`X-Katekyo-*`/`X-HomeTeacher-*`/`X-MeikoGijuku-*`/`X-AsahiJyuku-*`/`X-Jishin-*`/`X-Jyuken-*`/`X-Nyushi-*`/`X-GakushuJyuku-*`/`X-OnlineJyuku-*`/`X-SwimSchool-*`/`X-BalletSchool-*` 等 は塾機の通知記録 — 送信側が書くことは自称。入塾案内・講習費・模試結果の偽装は保護者狙い詐欺の典型手口。(河合塾・駿台・東進・武田塾・ベネッセ・進研ゼミは既存族)
+- **修正**: `Envelope` に `jyuku_marks` + `has_jyuku_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 塾印の自署を問え。
+
+### Security — D606: `X-Kokuyo-*`/`X-Pentel-*`/`X-MitsubishiPencil-*` 等の文房具・画材印自称が未検査
+
+- **問題**: `X-Kokuyo-*` (コクヨ)、`X-Pentel-*` (ぺんてる)、`X-MitsubishiPencil-*` (三菱鉛筆)、`X-PlusStationery-*`/`X-SakuraCraypas-*`/`X-PilotPen-*`/`X-Tombow-*`/`X-Staedtler-*`/`X-FaberCastell-*`/`X-HiTecC-*`/`X-Frixion-*`/`X-KuruToga-*`/`X-Emott-*`/`X-Shachihata-*`/`X-Hobonichi-*`/`X-HighTide-*`/`X-Kuretake-*`/`X-Ochibi-*`/`X-Sekaido-*`/`X-KingJim-*`/`X-Tanosee-*`/`X-CampusNote-*`/`X-DotLiner-*`/`X-Sarasa-*`/`X-Jetstream-*`/`X-Energel-*`/`X-Acroball-*`/`X-DelGuard-*`/`X-DrGrip-*`/`X-MonoEraser-*`/`X-TapeGlue-*`/`X-Norino-*`/`X-LooseLeaf-*`/`X-ClearFile-*`/`X-RingFile-*`/`X-PenCase-*`/`X-CuttingMat-*`/`X-CardFile-*` 等 は筆機の通知記録 — 送信側が書くことは自称。大量発注・見積・請求の偽装は文具調達担当者狙い詐欺の典型手口。(ZEBRA・ロフト・丸善・ミドリは既存族)
+- **修正**: `Envelope` に `stationery_marks` + `has_stationery_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 筆印の自署を問え。
+
+### Security — D607: `X-Zaim-*`/`X-WealthNavi-*`/`X-MoneyTree-*` 等の家計簿・資産管理アプリ印自称が未検査
+
+- **問題**: `X-Zaim-*` (Zaim)、`X-WealthNavi-*` (WealthNavi)、`X-MoneyTree-*` (Moneytree)、`X-Kakebo-*`/`X-OsushiKakeibo-*`/`X-Gridy-*`/`X-Kaneyo-*`/`X-Osarafu-*`/`X-DrWallet-*`/`X-MoneyReco-*`/`X-Kakeico-*`/`X-MoneySquare-*`/`X-Kakeibon-*`/`X-Folio-*`/`X-Theo-*`/`X-RoboPro-*`/`X-WealthAdvisor-*`/`X-PayPayAssets-*`/`X-SBIWealth-*`/`X-RakutenToushi-*`/`X-TsumitateNavi-*`/`X-NISA-*`/`X-IDeCo-*`/`X-AssetView-*`/`X-PortfolioView-*`/`X-HouseholdBook-*`/`X-BudgetBook-*`/`X-ExpenseNote-*`/`X-SpendingTracker-*`/`X-BudgetPlanner-*`/`X-SavingGoal-*`/`X-MoneyDiary-*`/`X-ShisanKanri-*`/`X-KakeiPro-*`/`X-MoneyLog-*`/`X-KakeiboApp-*`/`X-BokinApp-*`/`X-ChokinApp-*`/`X-TsumitateApp-*`/`X-ToushiApp-*`/`X-PointAssets-*`/`X-ReciptScan-*`/`X-ReciptOCR-*`/`X-SeikyuKanri-*`/`X-ShiharaiKanri-*`/`X-KakeiReport-*`/`X-BudgetReport-*`/`X-AssetReport-*`/`X-FinReport-*` 等 は簿機の通知記録 — 送信側が書くことは自称。家計簿連携切れ・資産残高アラートの偽装は金融アプリ詐欺の典型手口。(MoneyForward・ラクマ・銀行機は既存族/D514/D554)
+- **修正**: `Envelope` に `budgetapp_marks` + `has_budgetapp_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 簿印の自署を問え。
+
 ### Security — D602: `X-Caldo-*`/`X-ZenPlace-*`/`X-Loive-*` 等のヨガ・ピラティス印自称が未検査
 
 - **問題**: `X-Caldo-*` (カルド)、`X-ZenPlace-*` (zen place)、`X-Loive-*` (ロイブ)、`X-HotYoga-*`/`X-StudioYoga-*`/`X-YogaWorks-*`/`X-YogaJaya-*`/`X-Bikram-*`/`X-YogaLab-*`/`X-BestBody-*`/`X-PilatesK-*`/`X-UrbanPilates-*`/`X-StudioPilates-*`/`X-NamasteYoga-*`/`X-YogaRoom-*`/`X-BeyondYoga-*`/`X-AloMoves-*`/`X-GloYoga-*`/`X-YogaInternational-*`/`X-CorePowerYoga-*`/`X-PureYoga-*`/`X-YogaSix-*`/`X-HotYogaClub-*`/`X-SunYoga-*`/`X-MoonYoga-*`/`X-YinYoga-*`/`X-KundaliniYoga-*`/`X-AshtangaYoga-*`/`X-HathaYoga-*`/`X-IyengarYoga-*`/`X-RestorativeYoga-*`/`X-VinyasaYoga-*`/`X-AerialYoga-*`/`X-MamaYoga-*`/`X-MaternityYoga-*`/`X-SeniorYoga-*`/`X-KidsYoga-*`/`X-OnlineYoga-*`/`X-HomeYoga-*`/`X-YogaLesson-*`/`X-YogaInstructor-*`/`X-YogaSchool-*`/`X-YogaFesta-*` 等 は瑜機の通知記録 — 送信側が書くことは自称。月額会費・体験レッスン・回数券の偽装はヨガ詐欺の典型手口。(フィットネスジム機は D530、LAVA は既存族)
