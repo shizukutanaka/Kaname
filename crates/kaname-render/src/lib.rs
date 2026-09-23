@@ -103,6 +103,14 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `<link rel>` の先読み系指示 (dns-prefetch / preconnect / prefetch /
+    /// preload) があるか — 「踏ませなくても触る」外部接続の兆候 (D282)。
+    pub prefetch_link: bool,
+    /// `on*=` イベントハンドラ属性 (onload/onerror/onclick 等) があるか —
+    /// script タグを使わない動作仕込みの兆候 (D283)。
+    pub event_handler_attr: bool,
+    /// 最終 boundary 後に実データがあるか — epilogue 潜みの兆候 (D284)。
+    pub data_outside_boundary: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +370,118 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        prefetch_link: has_prefetch_link(raw),
+        event_handler_attr: has_event_handler_attr(raw),
+        data_outside_boundary: has_data_outside_boundary(raw),
     })
+}
+
+/// `<link rel>` の先読み系指示 (dns-prefetch / preconnect / prefetch /
+/// preload) を検出する (D282)。
+///
+/// 「クリック不要」でブラウザに外部接続を指示する宣言 — トラッキングや
+/// ペイロード先読みの配送経路になる。正規メールにはほぼ出現しない。
+fn has_prefetch_link(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(pos) = rest.find("<link") {
+        let tail = &rest[pos..];
+        let tag_end = tail.find('>').unwrap_or(tail.len());
+        let tag = &tail[..tag_end];
+        if tag.contains("dns-prefetch")
+            || tag.contains("prefetch")
+            || tag.contains("preload")
+            || tag.contains("preconnect")
+        {
+            return true;
+        }
+        rest = &tail[tag_end..];
+    }
+    false
+}
+
+/// `on*=` イベントハンドラ属性 (onload/onerror/onclick 等) を検出する
+/// (D283)。
+///
+/// script タグを使わず要素属性に直接 JavaScript を仕込む動作実行 —
+/// script 除去をすり抜ける難読化の定形。正規メールにはほぼ出現しない。
+fn has_event_handler_attr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(pos) = rest.find('<') {
+        let tail = &rest[pos + 1..];
+        let tag_end = tail.find('>').unwrap_or(tail.len());
+        if tag_has_on_attr(&tail[..tag_end]) {
+            return true;
+        }
+        rest = &tail[tag_end..];
+    }
+    false
+}
+
+/// タグ内部に `on` + 英字 + `=` の属性があるか判定する補助。
+fn tag_has_on_attr(tag: &str) -> bool {
+    let b = tag.as_bytes();
+    let mut i = 0;
+    while i + 3 < b.len() {
+        let boundary = matches!(b[i], b' ' | b'\t' | b'\r' | b'\n');
+        if boundary && b[i + 1] == b'o' && b[i + 2] == b'n' {
+            let mut j = i + 3;
+            while j < b.len() && b[j].is_ascii_lowercase() {
+                j += 1;
+            }
+            if j > i + 3 && j < b.len() && b[j] == b'=' {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// 最終 boundary 後に実データがあるか判定する (D284)。
+///
+/// `--<boundary>--` の後は epilogue で、表示器は無視する — そこに実データを
+/// 置くと検査器と表示器で見える内容が分かれる潜み場所になる。
+fn has_data_outside_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let Some(ct_line) = header
+        .lines()
+        .find(|l| l.starts_with("content-type:") && l.contains("multipart/"))
+    else {
+        return false;
+    };
+    let Some(bpos) = ct_line.find("boundary=") else {
+        return false;
+    };
+    let mut boundary = &ct_line[bpos + 9..];
+    boundary = boundary.trim_matches(|c: char| c == '"' || c == '\'');
+    if let Some(semi) = boundary.find(';') {
+        boundary = &boundary[..semi];
+    }
+    let boundary = boundary.trim();
+    if boundary.is_empty() {
+        return false;
+    }
+    let delim_close = format!("--{}--", boundary);
+    let body = &lower[header_end..];
+    match body.find(&delim_close) {
+        Some(p) => {
+            let after = &body[p + delim_close.len()..];
+            after
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .take(24)
+                .count()
+                >= 24
+        }
+        None => false,
+    }
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2794,50 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はlink先読み指示を検出する() {
+        let dns = b"<html><link rel=\"dns-prefetch\" href=\"//evil.example\"></html>";
+        assert!(has_prefetch_link(dns));
+        let pre = b"<link rel=\"preconnect\" href=\"https://evil.example\">";
+        assert!(has_prefetch_link(pre));
+        let fetch = b"<link rel=\"prefetch\" href=\"https://evil.example/x.bin\">";
+        assert!(has_prefetch_link(fetch));
+        let css = b"<link rel=\"stylesheet\" href=\"https://ok.example/a.css\">";
+        assert!(!has_prefetch_link(css));
+        let none = b"<p>no link</p>";
+        assert!(!has_prefetch_link(none));
+    }
+
+    #[test]
+    fn scan_はon属性を検出する() {
+        let onload = b"<body onload=\"evil()\">x</body>";
+        assert!(has_event_handler_attr(onload));
+        let onerr = b"<img src=\"x\" onerror=\"evil()\">";
+        assert!(has_event_handler_attr(onerr));
+        let onclick = b"<a href=\"#\" onclick=\"evil()\">x</a>";
+        assert!(has_event_handler_attr(onclick));
+        let clean = b"<a href=\"https://ok.example\">ok</a>";
+        assert!(!has_event_handler_attr(clean));
+        let json = b"<x data-json=\"a\">y</x>";
+        assert!(!has_event_handler_attr(json));
+        let session = b"<x session=\"a\">y</x>";
+        assert!(!has_event_handler_attr(session));
+    }
+
+    #[test]
+    fn scan_はboundary後の実データを検出する() {
+        let epilogue = b"Content-Type: multipart/mixed; boundary=BB\r\n\r\n--BB\r\nx\r\n--BB--\r\n<payload-hidden-here-0123456789abcdef>";
+        assert!(has_data_outside_boundary(epilogue));
+        let clean = b"Content-Type: multipart/mixed; boundary=BB\r\n\r\n--BB\r\nx\r\n--BB--\r\n";
+        assert!(!has_data_outside_boundary(clean));
+        let nomp = b"Content-Type: text/plain\r\n\r\nhello";
+        assert!(!has_data_outside_boundary(nomp));
+        let nob = b"Content-Type: multipart/mixed\r\n\r\n--XX\r\nx\r\n--XX--\r\n";
+        assert!(!has_data_outside_boundary(nob));
+        let quoted = b"Content-Type: multipart/mixed; boundary=\"BB\"\r\n\r\n--BB\r\nx\r\n--BB--\r\n<payload-hidden-here-0123456789abcdef>";
+        assert!(has_data_outside_boundary(quoted));
     }
 }
 

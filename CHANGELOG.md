@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D282: `<link rel>` の先読み系指示 (dns-prefetch / preconnect / prefetch / preload) が未検査
+
+- `<link rel="dns-prefetch">`/`preconnect`/`prefetch`/`preload` はクリック不要でブラウザに外部接続を指示する宣言 — 開くだけで発信者ドメインへ触れる計測・ペイロード先読みの配送経路になるが、URL 抽出もリモート読み込み検査も対象外だった
+- 対処: `has_prefetch_link` 新設で `<link` タグ内の先読み系 rel を検出 → `prefetch_link` → `render_risks` に兆候報告
+- テスト +5 件
+
+### Security — D283: `on*=` イベントハンドラ属性 (onload / onerror / onclick 等) が未検査
+
+- `<img onerror="evil()">` のような要素属性への JavaScript 直接仕込み — script タグ除去・`<script>` 検出をすり抜ける動作実行の難読化定形だが、属性内の実行起点は未検査だった
+- 対処: `has_event_handler_attr` (+ `tag_has_on_attr` 補助) 新設で `<...>` タグ内の `on` + 英字 + `=` 属性を検出 → `event_handler_attr` → `render_risks` に兆候報告
+- テスト +6 件
+
+### Security — D284: 最終 boundary 後の実データ (epilogue 潜み) が未検査
+
+- `--<boundary>--` 以降の epilogue は表示器が無視する区画 — そこに実データを置くと検査器と表示器で見える内容が分かれる潜み場所になる (parser differential) が、境界後の残データは未検査だった
+- 対処: `has_data_outside_boundary` 新設で最終境界後の非空白 24 文字以上を検出 → `data_outside_boundary` → `render_risks` に兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

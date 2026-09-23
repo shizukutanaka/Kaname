@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D282: <link rel> 先読み系指示
+    if env.prefetch_link {
+        render_risks.push(
+            "<link> の先読み系指示 (dns-prefetch/preconnect/prefetch/preload) — 「踏ませなくても触る」外部接続の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D283: on*= イベントハンドラ属性
+    if env.event_handler_attr {
+        render_risks.push(
+            "on*= イベントハンドラ属性 (onload/onerror 等) — script タグを使わない動作仕込みの可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D284: 最終 boundary 後の実データ (epilogue 潜み)
+    if env.data_outside_boundary {
+        render_risks.push(
+            "最終 boundary の後に実データがあります — 表示器が無視する区画への潜み (epilogue) の可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
