@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D453: `X-Arcor-*`/`X-Strato-*`/`X-IONOS-*`/`X-Ziggo-*`/`X-KPN-*`/`X-Bluewin-*`/`X-Telia-*`/`X-Elisa-*`/`X-Fastweb-*` 等の欧州・豪州 ISP 印 (第二群) 自称が未検査
+
+- **問題**: `X-Strato-*` (STRATO)、`X-Bluewin-*` (Swisscom Bluewin)、`X-Arcor-*` (Arcor/Vodafone)、`X-TalkTalk-*`/`X-Plusnet-*`/`X-Demon-*`/`X-Pipex-*`/`X-NTL-*`/`X-Chello-*`/`X-AON-*`/`X-Tele2-*`/`X-Telia-*`/`X-Bredband-*`/`X-ComHem-*`/`X-Elisa-*`/`X-DNA-*`/`X-Sonera-*`/`X-TDC-*`/`X-Altibox-*`/`X-Lyse-*`/`X-Sunrise-*`/`X-Cablecom-*`/`X-Hispeed-*`/`X-Fastweb-*`/`X-Terra-*`/`X-Claranet-*`/`X-Easynet-*`/`X-T-Online-*`/`X-TOI-*`/`X-Versatel-*`/`X-XS4ALL-*`/`X-UPC-*`/`X-Unitybox-*`/`X-O2-*`/`X-Eir-*`/`X-Magnet-*`/`X-Virgin-*`/`X-KPN-*`/`X-Ziggo-*`/`X-IONOS-*` は ISP の受信・検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `eu_isp2_marks` + `has_eu_isp2_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 受信の記録は受信機が記す — ISP 印の自署を問え。
+
+### Security — D454: `X-Virus-Status`/`X-Virus-Found`/`X-Virus-Checked`/`X-KAV-*`/`X-Norman-*`/`X-FProt-*`/`X-Malware-*`/`X-Infected-*` 等のウイルススキャン印 (第六群) 自称が未検査
+
+- **問題**: `X-Virus-Status:`/`X-Virus-Found:`/`X-Virus-Checked:`/`X-Virus-Report:`/`X-Virus-Alert:` (amavisd-new/clamav-milter 実測)、`X-KAV-*` (Kaspersky AV)、`X-Norman-*`/`X-FProt-*`/`X-ESAV-*`/`X-VBA32-*`/`X-Webroot-*`/`X-Emsisoft-*`/`X-QuickHeal-*`/`X-eScan-*`/`X-SecureAge-*`/`X-VScan-*`/`X-ScanMail-*`/`X-ClamAV-*`/`X-Antivir-*`/`X-AV-Check`/`X-AV-Scan`/`X-Mfilter-*`/`X-Infected-*`/`X-Malware-*`/`X-Trojan-*` はスキャン機の検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `virus_scan_marks` + `has_virus_scan_marks` 追加; `commands.rs` で render_risks 兆候報告。`X-Virus-Scanned:` は別ブランチでカバー済みのため対象外。
+- **教訓**: 検査の記録は検査機が記す — ウイルススキャン印の自署を問え。
+
+### Security — D455: `X-Valimail-*`/`X-dmarcian-*`/`X-EasyDMARC-*`/`X-OnDMARC-*`/`X-PhishMe-*`/`X-Cofense-*`/`X-GoPhish-*`/`X-PhishLabs-*` 等の DMARC 運用・フィッシング評価印自称が未検査
+
+- **問題**: `X-Valimail-*` (Valimail)、`X-dmarcian-*` (dmarcian)、`X-EasyDMARC-*`/`X-OnDMARC-*`/`X-RedSift-*`/`X-Fraudmarc-*`/`X-DMARCAnalyzer-*` (DMARC 運用サービス)、`X-PhishMe-*`/`X-Cofense-*` (Cofense/PhishMe 訓練)、`X-GoPhish-*` (GoPhish OSS)、`X-Lucy-*`/`X-Wombat-*`/`X-PhishLabs-*`/`X-PhishTank-*`/`X-OpenPhish-*`/`X-Abnormal-*` は評価・運用機の記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `phish_eval_marks` + `has_phish_eval_marks` 追加; `commands.rs` で render_risks 兆候報告。`X-DMARC-*` 印は別ブランチでカバー済みのため対象外。
+- **教訓**: 評価の記録は評価機が記す — DMARC・フィッシング印の自署を問え。
+
+
 ### Security — D450: `X-Received-SPF:`/`X-SPF-*`/`X-SID-*`/`X-DomainKeys-*`/`X-DKIM-Result`/`X-DKIM-Check`/`X-Verify-*`/`X-Verification-*` 等の受信側認証結果印自称が未検査
 
 - **問題**: `X-Received-SPF:`/`X-SPF-Result` (受信側 SPF 判定)、`X-SID-PRA`/`X-SID-Result` (SenderID)、`X-DomainKeys-Status` (DomainKeys)、`X-DKIM-Result`/`X-DKIM-Check`/`X-DKIMVerify`/`X-Verification-*`/`X-Verify-*` は受信機の検証記録 — 送信側が書くことは自称。`DKIM-Signature:` 自体は送信者が正規に付けるため対象外。

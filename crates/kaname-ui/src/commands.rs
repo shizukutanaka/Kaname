@@ -916,6 +916,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D453: 欧州・豪州 ISP 印自称 (第二群)
+    if env.eu_isp2_marks {
+        render_risks.push(
+            "X-Arcor-*/X-Strato-*/X-IONOS-*/X-Ziggo-*/X-KPN-*/X-Bluewin-*/X-Telia-*/X-Fastweb-* 等 — ISP の受信記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D454: ウイルススキャン印自称 (第六群)
+    if env.virus_scan_marks {
+        render_risks.push(
+            "X-Virus-Status/X-Virus-Found/X-KAV-*/X-Norman-*/X-FProt-*/X-Malware-* 等 — スキャン機の検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D455: DMARC運用・フィッシング評価印自称
+    if env.phish_eval_marks {
+        render_risks.push(
+            "X-Valimail-*/X-dmarcian-*/X-PhishMe-*/X-Cofense-*/X-GoPhish-*/X-PhishLabs-* 等 — 評価機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

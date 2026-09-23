@@ -317,6 +317,24 @@ pub struct Envelope {
     /// 追跡・監査印があるか — 監査・追跡機の記録を送信側が
     /// 自称する兆候 (D452)。
     pub tracking_marks: bool,
+    /// `X-Arcor-*`/`X-Strato-*`/`X-IONOS-*`/`X-Ziggo-*`/`X-KPN-*`/
+    /// `X-Bluewin-*`/`X-Telia-*`/`X-Elisa-*`/`X-TDC-*`/`X-Fastweb-*`/
+    /// `X-T-Online-*`/`X-Versatel-*`/`X-Tele2-*`/`X-ComHem-*` 等の
+    /// 欧州・豪州 ISP 印 (第二群) があるか — ISP の受信記録を
+    /// 送信側が自称する兆候 (D453)。
+    pub eu_isp2_marks: bool,
+    /// `X-Virus-Status`/`X-Virus-Found`/`X-Virus-Checked`/
+    /// `X-KAV-*`/`X-Norman-*`/`X-FProt-*`/`X-eScan-*`/`X-Webroot-*`/
+    /// `X-Emsisoft-*`/`X-QuickHeal-*`/`X-Malware-*`/`X-Infected-*` 等の
+    /// ウイルススキャン印 (第六群) があるか — スキャン機の検査記録を
+    /// 送信側が自称する兆候 (D454)。
+    pub virus_scan_marks: bool,
+    /// `X-Valimail-*`/`X-dmarcian-*`/`X-EasyDMARC-*`/`X-OnDMARC-*`/
+    /// `X-RedSift-*`/`X-Fraudmarc-*`/`X-PhishMe-*`/`X-Cofense-*`/
+    /// `X-GoPhish-*`/`X-Wombat-*`/`X-PhishLabs-*`/`X-Abnormal-*` 等の
+    /// DMARC 運用・フィッシング評価印があるか — 評価機の記録を
+    /// 送信側が自称する兆候 (D455)。
+    pub phish_eval_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -630,6 +648,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         auth_result_marks: has_auth_result_marks(raw),
         appliance5_marks: has_appliance5_marks(raw),
         tracking_marks: has_tracking_marks(raw),
+        eu_isp2_marks: has_eu_isp2_marks(raw),
+        virus_scan_marks: has_virus_scan_marks(raw),
+        phish_eval_marks: has_phish_eval_marks(raw),
     })
 }
 
@@ -1971,6 +1992,152 @@ fn has_tracking_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-deferred-")
             || l.starts_with("x-nondelivery-")
             || l.starts_with("x-undeliverable-")
+    })
+}
+
+/// `X-Arcor-*`/`X-Strato-*`/`X-IONOS-*`/`X-Ziggo-*`/`X-KPN-*`/
+/// `X-Virgin-*`/`X-TalkTalk-*`/`X-Plusnet-*`/`X-Demon-*`/`X-Pipex-*`/
+/// `X-NTL-*`/`X-Chello-*`/`X-AON-*`/`X-Tele2-*`/`X-Telia-*`/
+/// `X-Bredband-*`/`X-ComHem-*`/`X-Elisa-*`/`X-DNA-*`/`X-Sonera-*`/
+/// `X-TDC-*`/`X-Altibox-*`/`X-Lyse-*`/`X-Bluewin-*`/`X-Sunrise-*`/
+/// `X-Cablecom-*`/`X-Hispeed-*`/`X-Fastweb-*`/`X-Terra-*`/
+/// `X-Claranet-*`/`X-Easynet-*`/`X-T-Online-*`/`X-TOI-*`/
+/// `X-Versatel-*`/`X-XS4ALL-*`/`X-UPC-*`/`X-Unitybox-*`/`X-O2-*`/
+/// `X-Eir-*`/`X-Magnet-*` 等の欧州・豪州 ISP 印 (第二群) が
+/// あるか判定する (D453)。
+///
+/// `X-Strato-*` (STRATO)、`X-Bluewin-*` (Swisscom Bluewin)、
+/// `X-Arcor-*` (Arcor/Vodafone) 等は ISP の受信・検査記録 —
+/// 送信側から届くこれは自称。
+fn has_eu_isp2_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-arcor-")
+            || l.starts_with("x-strato-")
+            || l.starts_with("x-ionos-")
+            || l.starts_with("x-ziggo-")
+            || l.starts_with("x-kpn-")
+            || l.starts_with("x-virgin-")
+            || l.starts_with("x-talktalk-")
+            || l.starts_with("x-plusnet-")
+            || l.starts_with("x-demon-")
+            || l.starts_with("x-pipex-")
+            || l.starts_with("x-ntl-")
+            || l.starts_with("x-chello-")
+            || l.starts_with("x-aon-")
+            || l.starts_with("x-tele2-")
+            || l.starts_with("x-telia-")
+            || l.starts_with("x-bredband-")
+            || l.starts_with("x-comhem-")
+            || l.starts_with("x-elisa-")
+            || l.starts_with("x-dna-")
+            || l.starts_with("x-sonera-")
+            || l.starts_with("x-tdc-")
+            || l.starts_with("x-altibox-")
+            || l.starts_with("x-lyse-")
+            || l.starts_with("x-bluewin-")
+            || l.starts_with("x-sunrise-")
+            || l.starts_with("x-cablecom-")
+            || l.starts_with("x-hispeed-")
+            || l.starts_with("x-fastweb-")
+            || l.starts_with("x-terra-")
+            || l.starts_with("x-claranet-")
+            || l.starts_with("x-easynet-")
+            || l.starts_with("x-t-online-")
+            || l.starts_with("x-toi-")
+            || l.starts_with("x-versatel-")
+            || l.starts_with("x-xs4all-")
+            || l.starts_with("x-upc-")
+            || l.starts_with("x-unitybox-")
+            || l.starts_with("x-o2-")
+            || l.starts_with("x-eir-")
+            || l.starts_with("x-magnet-")
+    })
+}
+
+/// `X-Virus-Status`/`X-Virus-Found`/`X-Virus-Checked`/
+/// `X-Virus-Report`/`X-Virus-Alert`/`X-KAV-*`/`X-Mfilter-*`/
+/// `X-Infected-*`/`X-Malware-*`/`X-Trojan-*`/`X-FProt-*`/
+/// `X-Norman-*`/`X-ESAV-*`/`X-VBA32-*`/`X-Webroot-*`/
+/// `X-Emsisoft-*`/`X-QuickHeal-*`/`X-eScan-*`/`X-SecureAge-*`/
+/// `X-VScan-*`/`X-ScanMail-*`/`X-ClamAV-*`/`X-Antivir-*`/
+/// `X-AV-Check`/`X-AV-Scan` 等のウイルススキャン印 (第六群) が
+/// あるか判定する (D454)。
+///
+/// `X-Virus-Status:`/`X-Virus-Found:` (amavisd-new/clamav-milter
+/// 実測)、`X-KAV-*` (Kaspersky Anti-Virus)、`X-Norman-*` (Norman
+/// AV) はスキャン機の検査記録 — 送信側から届くこれは自称。
+/// `X-Virus-Scanned:` は別ブランチで扱うため対象外。
+fn has_virus_scan_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-virus-status")
+            || l.starts_with("x-virus-found")
+            || l.starts_with("x-virus-checked")
+            || l.starts_with("x-virus-report")
+            || l.starts_with("x-virus-alert")
+            || l.starts_with("x-kav-")
+            || l.starts_with("x-mfilter-")
+            || l.starts_with("x-infected-")
+            || l.starts_with("x-malware-")
+            || l.starts_with("x-trojan-")
+            || l.starts_with("x-fprot-")
+            || l.starts_with("x-norman-")
+            || l.starts_with("x-esav-")
+            || l.starts_with("x-vba32-")
+            || l.starts_with("x-webroot-")
+            || l.starts_with("x-emsisoft-")
+            || l.starts_with("x-quickheal-")
+            || l.starts_with("x-escan-")
+            || l.starts_with("x-secureage-")
+            || l.starts_with("x-vscan-")
+            || l.starts_with("x-scanmail-")
+            || l.starts_with("x-clamav-")
+            || l.starts_with("x-antivir-")
+            || l.starts_with("x-av-check")
+            || l.starts_with("x-av-scan")
+    })
+}
+
+/// `X-Valimail-*`/`X-dmarcian-*`/`X-EasyDMARC-*`/`X-OnDMARC-*`/
+/// `X-RedSift-*`/`X-Fraudmarc-*`/`X-DMARCAnalyzer-*`/`X-PhishMe-*`/
+/// `X-Cofense-*`/`X-GoPhish-*`/`X-Lucy-*`/`X-Wombat-*`/
+/// `X-PhishLabs-*`/`X-PhishTank-*`/`X-OpenPhish-*`/`X-Abnormal-*`
+/// 等の DMARC 運用・フィッシング評価印があるか判定する (D455)。
+///
+/// `X-Valimail-*` (Valimail)、`X-dmarcian-*` (dmarcian)、
+/// `X-PhishMe-*`/`X-Cofense-*` (Cofense/PhishMe 訓練プラット
+/// フォーム)、`X-GoPhish-*` (GoPhish OSS) は評価・運用機の
+/// 記録 — 送信側から届くこれは自称。`X-DMARC-*` 印は別ブラン
+/// チで扱うため対象外。
+fn has_phish_eval_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-valimail-")
+            || l.starts_with("x-dmarcian-")
+            || l.starts_with("x-easydmarc-")
+            || l.starts_with("x-ondmarc-")
+            || l.starts_with("x-redsift-")
+            || l.starts_with("x-fraudmarc-")
+            || l.starts_with("x-dmarcanalyzer-")
+            || l.starts_with("x-phishme-")
+            || l.starts_with("x-cofense-")
+            || l.starts_with("x-gophish-")
+            || l.starts_with("x-lucy-")
+            || l.starts_with("x-wombat-")
+            || l.starts_with("x-phishlabs-")
+            || l.starts_with("x-phishtank-")
+            || l.starts_with("x-openphish-")
+            || l.starts_with("x-abnormal-")
     })
 }
 
@@ -5028,6 +5195,72 @@ mod tests {
         assert!(has_tracking_marks(d1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_tracking_marks(clean));
+    }
+
+    #[test]
+    fn scan_は欧州ISP第二群印を検出する() {
+        let a1 = b"X-Arcor-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(a1));
+        let s1 = b"X-Strato-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(s1));
+        let i1 = b"X-IONOS-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(i1));
+        let z1 = b"X-Ziggo-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(z1));
+        let b1 = b"X-Bluewin-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(b1));
+        let t1 = b"X-Telia-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(t1));
+        let e1 = b"X-Elisa-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(e1));
+        let f1 = b"X-Fastweb-Spam: x\r\n\r\nx";
+        assert!(has_eu_isp2_marks(f1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_eu_isp2_marks(clean));
+    }
+
+    #[test]
+    fn scan_はウイルススキャン第六群印を検出する() {
+        let v1 = b"X-Virus-Status: clean\r\n\r\nx";
+        assert!(has_virus_scan_marks(v1));
+        let v2 = b"X-Virus-Found: eicar\r\n\r\nx";
+        assert!(has_virus_scan_marks(v2));
+        let k1 = b"X-KAV-Result: clean\r\n\r\nx";
+        assert!(has_virus_scan_marks(k1));
+        let n1 = b"X-Norman-Result: x\r\n\r\nx";
+        assert!(has_virus_scan_marks(n1));
+        let f1 = b"X-FProt-Result: x\r\n\r\nx";
+        assert!(has_virus_scan_marks(f1));
+        let w1 = b"X-Webroot-Result: x\r\n\r\nx";
+        assert!(has_virus_scan_marks(w1));
+        let e1 = b"X-Emsisoft-Result: x\r\n\r\nx";
+        assert!(has_virus_scan_marks(e1));
+        let m1 = b"X-Malware-Status: x\r\n\r\nx";
+        assert!(has_virus_scan_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_virus_scan_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフィッシング評価印を検出する() {
+        let v1 = b"X-Valimail-Result: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(v1));
+        let d1 = b"X-dmarcian-Result: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(d1));
+        let e1 = b"X-EasyDMARC-Result: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(e1));
+        let p1 = b"X-PhishMe-Campaign: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(p1));
+        let c1 = b"X-Cofense-Result: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(c1));
+        let g1 = b"X-GoPhish-Campaign: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(g1));
+        let w1 = b"X-Wombat-Result: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(w1));
+        let a1 = b"X-Abnormal-Result: x\r\n\r\nx";
+        assert!(has_phish_eval_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_phish_eval_marks(clean));
     }
 }
 
