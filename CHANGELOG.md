@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D411: `X-Assp-*`/`X-Declude-*`/`X-Vipre-*`/`X-Panda-*`/`X-Bitdefender-*`/`X-AVK-*` 等のフィルタ印自称 (第三群) が未検査
+
+- ASSP/Declude/Vipre/Panda/Bitdefender 等のフィルタ機が記す印 — 送信側から届くのは「このフィルタを通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_filter3_marks` 新設 → `Envelope.filter3_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D412: `X-Enc-*`/`X-Encrypt-*`/`X-Crypto-*`/`X-Smime-*`/`X-Pkc-*` 等の暗号経路印自称が未検査
+
+- 「暗号経路を通った」記録は輸送機・暗号機が残す — 送信側から届くのは「暗号化を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_crypto_marks` 新設 → `Envelope.crypto_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D413: `X-Sig-*`/`X-Sign-*`/`X-Countersign-*`/`X-Endorsed-*`/`X-Signature-Valid:` 等の署名・裏書印自称が未検査
+
+- 署名検証・裏書の記録は検証機が残す — 送信側から届くのは「署名は検証済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_sig_marks` 新設 → `Envelope.sig_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D378: `X-SparkPost-*`/`X-MSYS-API`/`X-MailChannels-*`/`X-SMTP2GO-*`/`X-SendPulse-*`/`X-SMTPCom-*` 等の ESP 印 (第二群) 自称が未検査
 
 - SparkPost/MailChannels/SMTP2GO 等の配信基盤が配送時に記す印 — 送信側から届くのは「この配信基盤から発送した」体裁を内容側が主張する自称だが未検査だった

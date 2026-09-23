@@ -154,6 +154,18 @@ pub struct Envelope {
     /// 通知・状態印があるか — 判定機の通知を送信側が自称する
     /// 兆候 (D380)。
     pub notice_marks: bool,
+    /// `X-Assp-*`/`X-Declude-*`/`X-Vipre-*`/`X-Panda-*`/
+    /// `X-Bitdefender-*`/`X-AVK-*` 等のフィルタ印 (第三群) があるか
+    /// — 検査機の記録を送信側が自称する兆候 (D411)。
+    pub filter3_marks: bool,
+    /// `X-Enc-*`/`X-Encrypt-*`/`X-Crypto-*`/`X-Smime-*`/`X-Pkc-*`
+    /// 等の暗号経路印があるか — 「暗号経路を通った」記録を
+    /// 送信側が自称する兆候 (D412)。
+    pub crypto_marks: bool,
+    /// `X-Sig-*`/`X-Sign-*`/`X-Countersign-*`/`X-Endorsed-*`/
+    /// `X-Signature-Valid:` 等の署名・裏書印があるか — 検証機の
+    /// 記録を送信側が自称する兆候 (D413)。
+    pub sig_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -432,6 +444,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
         esp2_stamps: has_esp2_stamps(raw),
+        filter3_marks: has_filter3_marks(raw),
+        crypto_marks: has_crypto_marks(raw),
+        sig_marks: has_sig_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -705,6 +720,65 @@ fn has_notice_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-antispam-result:")
             || l.starts_with("x-bulk:")
             || l.starts_with("x-notice:")
+    })
+}
+
+/// `X-Assp-*`/`X-Declude-*`/`X-Vipre-*`/`X-Panda-*`/`X-Bitdefender-*`/
+/// `X-AVK-*` 等のフィルタ印 (第三群) があるか判定する (D411)。
+///
+/// ASSP/Declude/Vipre/Panda/Bitdefender 等のフィルタ機が記す印 —
+/// 送信側から届くこれは「このフィルタを通った」体裁を内容側が
+/// 主張する自称。
+fn has_filter3_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-assp-")
+            || l.starts_with("x-declude-")
+            || l.starts_with("x-vipre-")
+            || l.starts_with("x-panda-")
+            || l.starts_with("x-bitdefender-")
+            || l.starts_with("x-avk-")
+    })
+}
+
+/// `X-Enc-*`/`X-Encrypt-*`/`X-Crypto-*`/`X-Smime-*`/`X-Pkc-*` 等の
+/// 暗号経路印があるか判定する (D412)。
+///
+/// 「暗号経路を通った」記録は輸送機・暗号機が残す — 送信側から
+/// 届くこれは「暗号化を通った」体裁を内容側が主張する自称。
+fn has_crypto_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-enc-")
+            || l.starts_with("x-encrypt-")
+            || l.starts_with("x-crypto-")
+            || l.starts_with("x-smime-")
+            || l.starts_with("x-pkc-")
+    })
+}
+
+/// `X-Sig-*`/`X-Sign-*`/`X-Countersign-*`/`X-Endorsed-*`/
+/// `X-Signature-Valid:` 等の署名・裏書印があるか判定する (D413)。
+///
+/// 署名検証・裏書の記録は検証機が残す — 送信側から届くこれは
+/// 「署名は検証済み」体裁を内容側が主張する自称。
+fn has_sig_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sig-")
+            || l.starts_with("x-sign-")
+            || l.starts_with("x-countersign-")
+            || l.starts_with("x-endorsed-")
+            || l.starts_with("x-signature-valid:")
     })
 }
 
@@ -3077,6 +3151,56 @@ mod tests {
         assert!(has_notice_marks(bk));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_notice_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフィルタ印3を検出する() {
+        let as_ = b"X-Assp-Received: r\r\n\r\nx";
+        assert!(has_filter3_marks(as_));
+        let dc = b"X-Declude-Result: d\r\n\r\nx";
+        assert!(has_filter3_marks(dc));
+        let vp = b"X-Vipre-Status: v\r\n\r\nx";
+        assert!(has_filter3_marks(vp));
+        let pd = b"X-Panda-Scan: p\r\n\r\nx";
+        assert!(has_filter3_marks(pd));
+        let bd = b"X-Bitdefender-Verdict: b\r\n\r\nx";
+        assert!(has_filter3_marks(bd));
+        let av = b"X-AVK-Result: a\r\n\r\nx";
+        assert!(has_filter3_marks(av));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_filter3_marks(clean));
+    }
+
+    #[test]
+    fn scan_は暗号経路印を検出する() {
+        let e1 = b"X-Enc-Method: m\r\n\r\nx";
+        assert!(has_crypto_marks(e1));
+        let e2 = b"X-Encrypt-Algo: a\r\n\r\nx";
+        assert!(has_crypto_marks(e2));
+        let c1 = b"X-Crypto-Status: c\r\n\r\nx";
+        assert!(has_crypto_marks(c1));
+        let s1 = b"X-Smime-Verify: s\r\n\r\nx";
+        assert!(has_crypto_marks(s1));
+        let p1 = b"X-Pkc-Info: p\r\n\r\nx";
+        assert!(has_crypto_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_crypto_marks(clean));
+    }
+
+    #[test]
+    fn scan_は署名印を検出する() {
+        let s1 = b"X-Sig-Result: ok\r\n\r\nx";
+        assert!(has_sig_marks(s1));
+        let s2 = b"X-Sign-Status: s\r\n\r\nx";
+        assert!(has_sig_marks(s2));
+        let cs = b"X-Countersign-By: c\r\n\r\nx";
+        assert!(has_sig_marks(cs));
+        let en = b"X-Endorsed-By: e\r\n\r\nx";
+        assert!(has_sig_marks(en));
+        let sv = b"X-Signature-Valid: yes\r\n\r\nx";
+        assert!(has_sig_marks(sv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sig_marks(clean));
     }
 }
 

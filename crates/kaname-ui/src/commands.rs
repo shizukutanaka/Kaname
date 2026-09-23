@@ -652,6 +652,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D411: フィルタ印 (第三群) 自称
+    if env.filter3_marks {
+        render_risks.push(
+            "X-Assp-*/X-Declude-*/X-Vipre-*/X-Panda-* 等 — フィルタ機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D412: 暗号経路印自称
+    if env.crypto_marks {
+        render_risks.push(
+            "X-Enc-*/X-Crypto-*/X-Smime-* 等 — 「暗号経路を通った」記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D413: 署名・裏書印自称
+    if env.sig_marks {
+        render_risks.push(
+            "X-Sig-*/X-Sign-*/X-Endorsed-* 等 — 検証機の署名記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
