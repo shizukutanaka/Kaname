@@ -8,14 +8,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D571: ブランド「自称」印が From ドメインを見ず正規メールでも警告 (解消)
+
+- **問題**: `has_*_marks` 155 分類は `X-<Brand>-*` ヘッダの存在だけで「送信側が自称する兆候」と警告しており、Visa/Amex 等の正規通知メール (ブランド自身のドメインからの送信) にも警告が出ていた。`X-<Brand>-*` の存在自体は送信側 MTA/ESP が自由に付けられるため、なりすましの証拠にならず、警告疲れで BEC 警告全体の信頼性を下げていた。
+- **修正**: `uncovered_brand_claim` を新設し、parse() 内の全 155 フィールドを経由させた。発火原因行を個別に再走査し、発火行がすべて `X-<brand>-*` 型でかつ全ブランドトークンが From の登録可能ラベル (`registrable_label`、ハイフン正規化・主要2段サフィックス対応) と一致する場合に限り抑制。1行でも非 `X-` ヘッダや未一致ブランドが混ざれば従来どおり警告。From の真正性 (成りすまし) 自体は SPF/DKIM/DMARC と BEC ドメイン解析が担う層として引き続き分離。
+- **回帰**: 抑制/非抑制/紛らわしいドメイン/2段サフィックス/混在ブランド/非 X- 印/`registrable_label` 単体の計8テスト追加。`static-check.sh` 検査11を更新し `*_marks: has_X(hdr)` 素呼びを NG 化。
+- **境界**: ブランド名とドメインが不規則に対応する場合 (`X-FMarinos-*` ↔ `f-marinos.com` はハイフン正規化で一致; `X-ManUnited-*` ↔ `manutd.com` は不一致で警告維持 — 抑制方向には誤らない) は ledger に記録。
+
 ### Performance / Fixed — D570: `has_*_marks` 155 関数がヘッダのためだけに全文を複製していた
 
 - **問題**: `kaname-render` の `has_*_marks` 155 関数がそれぞれメッセージ全体 (最大 100 MB) を `from_utf8_lossy` + `to_ascii_lowercase` で複製してからヘッダだけを見ており、1 回の `parse()` で約 310 回の全文コピーが起きていた。さらに空行判定が `\r\n\r\n` のみで、LF 改行の `.eml` では本文全体がヘッダ扱いされ本文行で誤検出していた。
 - **修正**: `header_section()` (CRLF/LF 両対応) を追加し、`parse()` で一度だけ切り出したヘッダ部を渡す。関数本体・シグネチャは不変。回帰テスト3件、`static-check.sh` 検査11 (`parse()` 内の `has_*_marks(raw)` を禁止) を追加。
-
-### Recorded — D571: ブランド「自称」印が From ドメインを見ないため正規メールでも警告 (未修正)
-
-- `X-<Brand>-*` ヘッダの存在だけで警告するため、ブランド自身の正規メールでも「自称の兆候」が出る。製品判断が必要なため記録のみ (詳細: `docs/gap-analysis.md` D571)。
 
 ### Security — D567: `X-VISA-*`/`X-Amex-*`/`X-Saison-*` 等のクレジットカード印自称が未検査
 

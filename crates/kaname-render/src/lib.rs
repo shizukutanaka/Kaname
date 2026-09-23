@@ -48,7 +48,7 @@ use ammonia::Builder;
 use thiserror::Error;
 
 use mail_parser::{MessageParser, MimeHeaders};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::marker::PhantomData;
 
 // ============================================================================
@@ -1661,6 +1661,106 @@ fn header_section(raw: &[u8]) -> &[u8] {
     &raw[..end]
 }
 
+/// ブランド比較用の正規化: ASCII 英数字以外を落とす (D571)。
+/// `x-fmarinos-*` 系の印トークンと `f-marinos.com` 系のドメインラベルを
+/// 同一視するために使う。
+fn brand_label_norm(s: &str) -> String {
+    s.chars().filter(|c| c.is_ascii_alphanumeric()).collect()
+}
+
+/// ドメインの登録可能ラベル (eTLD+1 の先頭ラベル) を返す (D571)。
+///
+/// 「自称」印が主張するブランドと差出人ドメインの一致判定に使う。
+/// 完全な Public Suffix List は持たず、ブランド系企業ドメインで頻出の
+/// 2 段サフィックス (co.jp / co.uk / com.au 等) のみ扱う — 未収録の
+/// 2 段サフィックスでは一致しない側に倒れるため、抑制方向には誤らない。
+fn registrable_label(domain: &str) -> String {
+    const SECOND_LEVEL: &[&str] = &[
+        "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ad.jp", "ed.jp", "gr.jp", "lg.jp",
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "ltd.uk", "me.uk", "net.uk", "nhs.uk", "plc.uk",
+        "com.au", "net.au", "org.au", "edu.au", "gov.au",
+        "com.br", "net.br", "org.br",
+        "com.cn", "net.cn", "org.cn", "com.tw", "org.tw", "com.hk", "org.hk",
+        "co.kr", "or.kr", "ne.kr", "re.kr",
+        "com.sg", "com.my", "co.in", "net.in", "org.in", "firm.in", "gen.in", "ind.in",
+        "ac.in", "edu.in", "co.nz", "org.nz", "net.nz", "ac.nz", "govt.nz",
+        "com.mx", "com.tr", "com.ar", "com.co", "co.za", "org.za", "com.ph", "com.vn",
+        "co.th", "co.id", "co.il", "org.il", "com.ua", "com.pl", "com.es", "nom.es",
+        "com.pt", "com.pk", "co.ke", "com.ng", "com.eg", "com.sa", "com.ae", "com.pe",
+        "com.ve", "com.uy", "com.ec", "com.gt", "com.do", "co.cr", "com.py",
+        "com.bd", "com.lk", "com.np", "com.mm",
+    ];
+    let d = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    if d.is_empty() {
+        return String::new();
+    }
+    let labels: Vec<&str> = d.split('.').collect();
+    if labels.len() <= 2 {
+        return labels.first().copied().unwrap_or_default().to_string();
+    }
+    let last2 = format!("{}.{}", labels[labels.len() - 2], labels[labels.len() - 1]);
+    if SECOND_LEVEL.contains(&last2.as_str()) {
+        labels
+            .get(labels.len() - 3)
+            .copied()
+            .unwrap_or_default()
+            .to_string()
+    } else {
+        labels[labels.len() - 2].to_string()
+    }
+}
+
+/// 差出人アドレス群からブランド比較用ラベル集合を作る (D571)。
+fn sender_brand_labels(from: &[Address]) -> BTreeSet<String> {
+    from.iter()
+        .map(|a| brand_label_norm(&registrable_label(&a.addr.domain)))
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// D571: `detector` (has_*_marks) が発火したとき、その発火原因となりうる
+/// 各行を個別に再走査し、発火行がすべて `X-<brand>-*` 型のブランド自称で
+/// かつ全ブランドが差出人ドメイン自身と一致する場合に限り発火を抑制する
+/// (ブランド自身からの正規メールでの false positive 対策)。
+///
+/// 1 行でも `X-` 以外のヘッダ (ARC-Seal 等) や一致しないブランドの印が
+/// 発火原因なら発火扱いを維持する。From そのものの真正性 (成りすまし) は
+/// SPF/DKIM/DMARC と BEC ドメイン解析が担う層であり、ここでは扱わない。
+fn uncovered_brand_claim(
+    hdr: &[u8],
+    detector: fn(&[u8]) -> bool,
+    sender_labels: &BTreeSet<String>,
+) -> bool {
+    if !detector(hdr) {
+        return false;
+    }
+    if sender_labels.is_empty() {
+        return true;
+    }
+    let text = String::from_utf8_lossy(hdr).to_ascii_lowercase();
+    let mut saw_covered = false;
+    for line in text.lines() {
+        if !detector(line.as_bytes()) {
+            continue;
+        }
+        // この行だけで発火する = 発火原因候補。`x-<brand>-` のブランド部を
+        // 取り出し、差出人の登録可能ラベルと照合する。
+        let token = line
+            .strip_prefix("x-")
+            .and_then(|rest| rest.split(|c: char| !c.is_ascii_alphanumeric()).next())
+            .filter(|t| !t.is_empty());
+        match token {
+            Some(t) if sender_labels.contains(&brand_label_norm(t)) => {
+                saw_covered = true;
+            }
+            _ => return true,
+        }
+    }
+    // 発火したのに単独行では1行も再現しない (複数行条件等) なら検証不能
+    // → 警告を維持。すべての発火行が自前ブランドの印のみ → 抑制。
+    !saw_covered
+}
+
 pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // S05: サイズ上限チェック (DoS 対策)
     if raw.is_empty() {
@@ -1792,6 +1892,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D281: Return-Path の不正値
     let malformed_return_path = has_malformed_return_path(bytes);
 
+    // D571: ブランド「自称」印の From 一致抑制用ラベル集合
+    let sender_labels = sender_brand_labels(&from);
+
     Ok(Envelope {
         message_id,
         from,
@@ -1817,162 +1920,162 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         abuse_headers: has_abuse_headers(raw),
         has_attach_claim: has_attach_claim(raw),
         feedback_id: has_feedback_id(raw),
-        spam_detail_marks: has_spam_detail_marks(hdr),
-        dcc_marks: has_dcc_marks(hdr),
-        autogen_marks: has_autogen_marks(hdr),
+        spam_detail_marks: uncovered_brand_claim(hdr, has_spam_detail_marks, &sender_labels),
+        dcc_marks: uncovered_brand_claim(hdr, has_dcc_marks, &sender_labels),
+        autogen_marks: uncovered_brand_claim(hdr, has_autogen_marks, &sender_labels),
         esp2_stamps: has_esp2_stamps(raw),
-        appliance3_marks: has_appliance3_marks(hdr),
-        finalrcpt_marks: has_finalrcpt_marks(hdr),
-        hash_marks: has_hash_marks(hdr),
-        bulk_marks: has_bulk_marks(hdr),
-        filter4_marks: has_filter4_marks(hdr),
-        frag_marks: has_frag_marks(hdr),
-        jp_provider_marks: has_jp_provider_marks(hdr),
-        arc_bimi_marks: has_arc_bimi_marks(hdr),
-        resent_marks: has_resent_marks(hdr),
-        abuseinfo_marks: has_abuseinfo_marks(hdr),
-        notice_marks: has_notice_marks(hdr),
-        cn_provider_marks: has_cn_provider_marks(hdr),
-        av3_marks: has_av3_marks(hdr),
-        webscript_marks: has_webscript_marks(hdr),
-        eu_provider_marks: has_eu_provider_marks(hdr),
-        cis_provider_marks: has_cis_provider_marks(hdr),
-        autoreply_marks: has_autoreply_marks(hdr),
-        oss_scan_marks: has_oss_scan_marks(hdr),
-        stat_filter_marks: has_stat_filter_marks(hdr),
-        mta_product_marks: has_mta_product_marks(hdr),
-        webmail_internal_marks: has_webmail_internal_marks(hdr),
-        store_status_marks: has_store_status_marks(hdr),
-        classifier_marks: has_classifier_marks(hdr),
-        ms_eop_marks: has_ms_eop_marks(hdr),
-        marketing_marks: has_marketing_marks(hdr),
-        enterprise_marks: has_enterprise_marks(hdr),
-        envelope_trace_marks: has_envelope_trace_marks(hdr),
-        source_ip_marks: has_source_ip_marks(hdr),
-        gateway_product_marks: has_gateway_product_marks(hdr),
-        mailinglist_marks: has_mailinglist_marks(hdr),
-        saas_notify_marks: has_saas_notify_marks(hdr),
-        appliance4_marks: has_appliance4_marks(hdr),
-        auth_result_marks: has_auth_result_marks(hdr),
-        appliance5_marks: has_appliance5_marks(hdr),
-        tracking_marks: has_tracking_marks(hdr),
-        eu_isp2_marks: has_eu_isp2_marks(hdr),
-        virus_scan_marks: has_virus_scan_marks(hdr),
-        phish_eval_marks: has_phish_eval_marks(hdr),
-        forum_issue_marks: has_forum_issue_marks(hdr),
-        archive_marks: has_archive_marks(hdr),
-        cn_sec_marks: has_cn_sec_marks(hdr),
-        sns_platform_marks: has_sns_platform_marks(hdr),
-        payment_marks: has_payment_marks(hdr),
-        esp4_marks: has_esp4_marks(hdr),
-        cloud_host_marks: has_cloud_host_marks(hdr),
-        observability_marks: has_observability_marks(hdr),
-        productivity_marks: has_productivity_marks(hdr),
-        jp_service_marks: has_jp_service_marks(hdr),
-        hr_marks: has_hr_marks(hdr),
-        ecommerce_marks: has_ecommerce_marks(hdr),
-        travel_marks: has_travel_marks(hdr),
-        cdn_marks: has_cdn_marks(hdr),
-        media_marks: has_media_marks(hdr),
-        fintech_marks: has_fintech_marks(hdr),
-        crypto_marks: has_crypto_marks(hdr),
-        gaming_marks: has_gaming_marks(hdr),
-        enterprise_saas_marks: has_enterprise_saas_marks(hdr),
-        shipping_marks: has_shipping_marks(hdr),
-        comms_marks: has_comms_marks(hdr),
-        edu_marks: has_edu_marks(hdr),
-        esign_marks: has_esign_marks(hdr),
-        donation_marks: has_donation_marks(hdr),
-        realestate_marks: has_realestate_marks(hdr),
-        health_marks: has_health_marks(hdr),
-        jobs_marks: has_jobs_marks(hdr),
-        storage_marks: has_storage_marks(hdr),
-        creative_marks: has_creative_marks(hdr),
-        project_marks: has_project_marks(hdr),
-        meeting_marks: has_meeting_marks(hdr),
-        booking_marks: has_booking_marks(hdr),
-        fieldservice_marks: has_fieldservice_marks(hdr),
-        expense_marks: has_expense_marks(hdr),
-        automation_marks: has_automation_marks(hdr),
-        cx_marks: has_cx_marks(hdr),
-        docsite_marks: has_docsite_marks(hdr),
-        music_marks: has_music_marks(hdr),
-        retail_marks: has_retail_marks(hdr),
-        cloudprovider_marks: has_cloudprovider_marks(hdr),
-        device_marks: has_device_marks(hdr),
-        audio_marks: has_audio_marks(hdr),
-        maker_marks: has_maker_marks(hdr),
-        monitoring_marks: has_monitoring_marks(hdr),
-        devtools_marks: has_devtools_marks(hdr),
-        domain_marks: has_domain_marks(hdr),
-        webhost_marks: has_webhost_marks(hdr),
-        mailprivacy_marks: has_mailprivacy_marks(hdr),
-        ci_marks: has_ci_marks(hdr),
-        codequality_marks: has_codequality_marks(hdr),
-        package_marks: has_package_marks(hdr),
-        notes_marks: has_notes_marks(hdr),
-        diagram_marks: has_diagram_marks(hdr),
-        lowcode_marks: has_lowcode_marks(hdr),
-        ai_marks: has_ai_marks(hdr),
-        telecom_marks: has_telecom_marks(hdr),
-        browser_marks: has_browser_marks(hdr),
-        airline_marks: has_airline_marks(hdr),
-        bank_marks: has_bank_marks(hdr),
-        database_marks: has_database_marks(hdr),
-        streaming_marks: has_streaming_marks(hdr),
-        consumer_security_marks: has_consumer_security_marks(hdr),
-        government_marks: has_government_marks(hdr),
-        insurance_marks: has_insurance_marks(hdr),
-        utility_marks: has_utility_marks(hdr),
-        automotive_marks: has_automotive_marks(hdr),
-        rail_marks: has_rail_marks(hdr),
-        legal_marks: has_legal_marks(hdr),
-        dating_marks: has_dating_marks(hdr),
-        grocery_marks: has_grocery_marks(hdr),
-        furniture_marks: has_furniture_marks(hdr),
-        drugstore_marks: has_drugstore_marks(hdr),
-        restaurant_marks: has_restaurant_marks(hdr),
-        sports_marks: has_sports_marks(hdr),
-        fitness_marks: has_fitness_marks(hdr),
-        beauty_marks: has_beauty_marks(hdr),
-        cram_marks: has_cram_marks(hdr),
-        fmcg_marks: has_fmcg_marks(hdr),
-        ticket_marks: has_ticket_marks(hdr),
-        hotel_marks: has_hotel_marks(hdr),
-        leisure_marks: has_leisure_marks(hdr),
-        semiconductor_marks: has_semiconductor_marks(hdr),
-        industrial_marks: has_industrial_marks(hdr),
-        office_marks: has_office_marks(hdr),
-        aerospace_marks: has_aerospace_marks(hdr),
-        navigation_marks: has_navigation_marks(hdr),
-        pharma_marks: has_pharma_marks(hdr),
-        energy_marks: has_energy_marks(hdr),
-        medtech_marks: has_medtech_marks(hdr),
-        freight_marks: has_freight_marks(hdr),
-        accounting_marks: has_accounting_marks(hdr),
-        gambling_marks: has_gambling_marks(hdr),
-        facility_marks: has_facility_marks(hdr),
-        broadcast_marks: has_broadcast_marks(hdr),
-        newspaper_marks: has_newspaper_marks(hdr),
-        food_marks: has_food_marks(hdr),
-        luxury_marks: has_luxury_marks(hdr),
-        advertising_marks: has_advertising_marks(hdr),
-        regional_bank_marks: has_regional_bank_marks(hdr),
-        mealkit_marks: has_mealkit_marks(hdr),
-        charity_marks: has_charity_marks(hdr),
-        manga_marks: has_manga_marks(hdr),
-        toy_marks: has_toy_marks(hdr),
-        hobby_marks: has_hobby_marks(hdr),
-        department_marks: has_department_marks(hdr),
-        pet_service_marks: has_pet_service_marks(hdr),
-        bridal_marks: has_bridal_marks(hdr),
-        zoo_marks: has_zoo_marks(hdr),
-        sports_team_marks: has_sports_team_marks(hdr),
-        optical_marks: has_optical_marks(hdr),
-        disaster_marks: has_disaster_marks(hdr),
-        creditcard_marks: has_creditcard_marks(hdr),
-        pointcard_marks: has_pointcard_marks(hdr),
-        esim_marks: has_esim_marks(hdr),
+        appliance3_marks: uncovered_brand_claim(hdr, has_appliance3_marks, &sender_labels),
+        finalrcpt_marks: uncovered_brand_claim(hdr, has_finalrcpt_marks, &sender_labels),
+        hash_marks: uncovered_brand_claim(hdr, has_hash_marks, &sender_labels),
+        bulk_marks: uncovered_brand_claim(hdr, has_bulk_marks, &sender_labels),
+        filter4_marks: uncovered_brand_claim(hdr, has_filter4_marks, &sender_labels),
+        frag_marks: uncovered_brand_claim(hdr, has_frag_marks, &sender_labels),
+        jp_provider_marks: uncovered_brand_claim(hdr, has_jp_provider_marks, &sender_labels),
+        arc_bimi_marks: uncovered_brand_claim(hdr, has_arc_bimi_marks, &sender_labels),
+        resent_marks: uncovered_brand_claim(hdr, has_resent_marks, &sender_labels),
+        abuseinfo_marks: uncovered_brand_claim(hdr, has_abuseinfo_marks, &sender_labels),
+        notice_marks: uncovered_brand_claim(hdr, has_notice_marks, &sender_labels),
+        cn_provider_marks: uncovered_brand_claim(hdr, has_cn_provider_marks, &sender_labels),
+        av3_marks: uncovered_brand_claim(hdr, has_av3_marks, &sender_labels),
+        webscript_marks: uncovered_brand_claim(hdr, has_webscript_marks, &sender_labels),
+        eu_provider_marks: uncovered_brand_claim(hdr, has_eu_provider_marks, &sender_labels),
+        cis_provider_marks: uncovered_brand_claim(hdr, has_cis_provider_marks, &sender_labels),
+        autoreply_marks: uncovered_brand_claim(hdr, has_autoreply_marks, &sender_labels),
+        oss_scan_marks: uncovered_brand_claim(hdr, has_oss_scan_marks, &sender_labels),
+        stat_filter_marks: uncovered_brand_claim(hdr, has_stat_filter_marks, &sender_labels),
+        mta_product_marks: uncovered_brand_claim(hdr, has_mta_product_marks, &sender_labels),
+        webmail_internal_marks: uncovered_brand_claim(hdr, has_webmail_internal_marks, &sender_labels),
+        store_status_marks: uncovered_brand_claim(hdr, has_store_status_marks, &sender_labels),
+        classifier_marks: uncovered_brand_claim(hdr, has_classifier_marks, &sender_labels),
+        ms_eop_marks: uncovered_brand_claim(hdr, has_ms_eop_marks, &sender_labels),
+        marketing_marks: uncovered_brand_claim(hdr, has_marketing_marks, &sender_labels),
+        enterprise_marks: uncovered_brand_claim(hdr, has_enterprise_marks, &sender_labels),
+        envelope_trace_marks: uncovered_brand_claim(hdr, has_envelope_trace_marks, &sender_labels),
+        source_ip_marks: uncovered_brand_claim(hdr, has_source_ip_marks, &sender_labels),
+        gateway_product_marks: uncovered_brand_claim(hdr, has_gateway_product_marks, &sender_labels),
+        mailinglist_marks: uncovered_brand_claim(hdr, has_mailinglist_marks, &sender_labels),
+        saas_notify_marks: uncovered_brand_claim(hdr, has_saas_notify_marks, &sender_labels),
+        appliance4_marks: uncovered_brand_claim(hdr, has_appliance4_marks, &sender_labels),
+        auth_result_marks: uncovered_brand_claim(hdr, has_auth_result_marks, &sender_labels),
+        appliance5_marks: uncovered_brand_claim(hdr, has_appliance5_marks, &sender_labels),
+        tracking_marks: uncovered_brand_claim(hdr, has_tracking_marks, &sender_labels),
+        eu_isp2_marks: uncovered_brand_claim(hdr, has_eu_isp2_marks, &sender_labels),
+        virus_scan_marks: uncovered_brand_claim(hdr, has_virus_scan_marks, &sender_labels),
+        phish_eval_marks: uncovered_brand_claim(hdr, has_phish_eval_marks, &sender_labels),
+        forum_issue_marks: uncovered_brand_claim(hdr, has_forum_issue_marks, &sender_labels),
+        archive_marks: uncovered_brand_claim(hdr, has_archive_marks, &sender_labels),
+        cn_sec_marks: uncovered_brand_claim(hdr, has_cn_sec_marks, &sender_labels),
+        sns_platform_marks: uncovered_brand_claim(hdr, has_sns_platform_marks, &sender_labels),
+        payment_marks: uncovered_brand_claim(hdr, has_payment_marks, &sender_labels),
+        esp4_marks: uncovered_brand_claim(hdr, has_esp4_marks, &sender_labels),
+        cloud_host_marks: uncovered_brand_claim(hdr, has_cloud_host_marks, &sender_labels),
+        observability_marks: uncovered_brand_claim(hdr, has_observability_marks, &sender_labels),
+        productivity_marks: uncovered_brand_claim(hdr, has_productivity_marks, &sender_labels),
+        jp_service_marks: uncovered_brand_claim(hdr, has_jp_service_marks, &sender_labels),
+        hr_marks: uncovered_brand_claim(hdr, has_hr_marks, &sender_labels),
+        ecommerce_marks: uncovered_brand_claim(hdr, has_ecommerce_marks, &sender_labels),
+        travel_marks: uncovered_brand_claim(hdr, has_travel_marks, &sender_labels),
+        cdn_marks: uncovered_brand_claim(hdr, has_cdn_marks, &sender_labels),
+        media_marks: uncovered_brand_claim(hdr, has_media_marks, &sender_labels),
+        fintech_marks: uncovered_brand_claim(hdr, has_fintech_marks, &sender_labels),
+        crypto_marks: uncovered_brand_claim(hdr, has_crypto_marks, &sender_labels),
+        gaming_marks: uncovered_brand_claim(hdr, has_gaming_marks, &sender_labels),
+        enterprise_saas_marks: uncovered_brand_claim(hdr, has_enterprise_saas_marks, &sender_labels),
+        shipping_marks: uncovered_brand_claim(hdr, has_shipping_marks, &sender_labels),
+        comms_marks: uncovered_brand_claim(hdr, has_comms_marks, &sender_labels),
+        edu_marks: uncovered_brand_claim(hdr, has_edu_marks, &sender_labels),
+        esign_marks: uncovered_brand_claim(hdr, has_esign_marks, &sender_labels),
+        donation_marks: uncovered_brand_claim(hdr, has_donation_marks, &sender_labels),
+        realestate_marks: uncovered_brand_claim(hdr, has_realestate_marks, &sender_labels),
+        health_marks: uncovered_brand_claim(hdr, has_health_marks, &sender_labels),
+        jobs_marks: uncovered_brand_claim(hdr, has_jobs_marks, &sender_labels),
+        storage_marks: uncovered_brand_claim(hdr, has_storage_marks, &sender_labels),
+        creative_marks: uncovered_brand_claim(hdr, has_creative_marks, &sender_labels),
+        project_marks: uncovered_brand_claim(hdr, has_project_marks, &sender_labels),
+        meeting_marks: uncovered_brand_claim(hdr, has_meeting_marks, &sender_labels),
+        booking_marks: uncovered_brand_claim(hdr, has_booking_marks, &sender_labels),
+        fieldservice_marks: uncovered_brand_claim(hdr, has_fieldservice_marks, &sender_labels),
+        expense_marks: uncovered_brand_claim(hdr, has_expense_marks, &sender_labels),
+        automation_marks: uncovered_brand_claim(hdr, has_automation_marks, &sender_labels),
+        cx_marks: uncovered_brand_claim(hdr, has_cx_marks, &sender_labels),
+        docsite_marks: uncovered_brand_claim(hdr, has_docsite_marks, &sender_labels),
+        music_marks: uncovered_brand_claim(hdr, has_music_marks, &sender_labels),
+        retail_marks: uncovered_brand_claim(hdr, has_retail_marks, &sender_labels),
+        cloudprovider_marks: uncovered_brand_claim(hdr, has_cloudprovider_marks, &sender_labels),
+        device_marks: uncovered_brand_claim(hdr, has_device_marks, &sender_labels),
+        audio_marks: uncovered_brand_claim(hdr, has_audio_marks, &sender_labels),
+        maker_marks: uncovered_brand_claim(hdr, has_maker_marks, &sender_labels),
+        monitoring_marks: uncovered_brand_claim(hdr, has_monitoring_marks, &sender_labels),
+        devtools_marks: uncovered_brand_claim(hdr, has_devtools_marks, &sender_labels),
+        domain_marks: uncovered_brand_claim(hdr, has_domain_marks, &sender_labels),
+        webhost_marks: uncovered_brand_claim(hdr, has_webhost_marks, &sender_labels),
+        mailprivacy_marks: uncovered_brand_claim(hdr, has_mailprivacy_marks, &sender_labels),
+        ci_marks: uncovered_brand_claim(hdr, has_ci_marks, &sender_labels),
+        codequality_marks: uncovered_brand_claim(hdr, has_codequality_marks, &sender_labels),
+        package_marks: uncovered_brand_claim(hdr, has_package_marks, &sender_labels),
+        notes_marks: uncovered_brand_claim(hdr, has_notes_marks, &sender_labels),
+        diagram_marks: uncovered_brand_claim(hdr, has_diagram_marks, &sender_labels),
+        lowcode_marks: uncovered_brand_claim(hdr, has_lowcode_marks, &sender_labels),
+        ai_marks: uncovered_brand_claim(hdr, has_ai_marks, &sender_labels),
+        telecom_marks: uncovered_brand_claim(hdr, has_telecom_marks, &sender_labels),
+        browser_marks: uncovered_brand_claim(hdr, has_browser_marks, &sender_labels),
+        airline_marks: uncovered_brand_claim(hdr, has_airline_marks, &sender_labels),
+        bank_marks: uncovered_brand_claim(hdr, has_bank_marks, &sender_labels),
+        database_marks: uncovered_brand_claim(hdr, has_database_marks, &sender_labels),
+        streaming_marks: uncovered_brand_claim(hdr, has_streaming_marks, &sender_labels),
+        consumer_security_marks: uncovered_brand_claim(hdr, has_consumer_security_marks, &sender_labels),
+        government_marks: uncovered_brand_claim(hdr, has_government_marks, &sender_labels),
+        insurance_marks: uncovered_brand_claim(hdr, has_insurance_marks, &sender_labels),
+        utility_marks: uncovered_brand_claim(hdr, has_utility_marks, &sender_labels),
+        automotive_marks: uncovered_brand_claim(hdr, has_automotive_marks, &sender_labels),
+        rail_marks: uncovered_brand_claim(hdr, has_rail_marks, &sender_labels),
+        legal_marks: uncovered_brand_claim(hdr, has_legal_marks, &sender_labels),
+        dating_marks: uncovered_brand_claim(hdr, has_dating_marks, &sender_labels),
+        grocery_marks: uncovered_brand_claim(hdr, has_grocery_marks, &sender_labels),
+        furniture_marks: uncovered_brand_claim(hdr, has_furniture_marks, &sender_labels),
+        drugstore_marks: uncovered_brand_claim(hdr, has_drugstore_marks, &sender_labels),
+        restaurant_marks: uncovered_brand_claim(hdr, has_restaurant_marks, &sender_labels),
+        sports_marks: uncovered_brand_claim(hdr, has_sports_marks, &sender_labels),
+        fitness_marks: uncovered_brand_claim(hdr, has_fitness_marks, &sender_labels),
+        beauty_marks: uncovered_brand_claim(hdr, has_beauty_marks, &sender_labels),
+        cram_marks: uncovered_brand_claim(hdr, has_cram_marks, &sender_labels),
+        fmcg_marks: uncovered_brand_claim(hdr, has_fmcg_marks, &sender_labels),
+        ticket_marks: uncovered_brand_claim(hdr, has_ticket_marks, &sender_labels),
+        hotel_marks: uncovered_brand_claim(hdr, has_hotel_marks, &sender_labels),
+        leisure_marks: uncovered_brand_claim(hdr, has_leisure_marks, &sender_labels),
+        semiconductor_marks: uncovered_brand_claim(hdr, has_semiconductor_marks, &sender_labels),
+        industrial_marks: uncovered_brand_claim(hdr, has_industrial_marks, &sender_labels),
+        office_marks: uncovered_brand_claim(hdr, has_office_marks, &sender_labels),
+        aerospace_marks: uncovered_brand_claim(hdr, has_aerospace_marks, &sender_labels),
+        navigation_marks: uncovered_brand_claim(hdr, has_navigation_marks, &sender_labels),
+        pharma_marks: uncovered_brand_claim(hdr, has_pharma_marks, &sender_labels),
+        energy_marks: uncovered_brand_claim(hdr, has_energy_marks, &sender_labels),
+        medtech_marks: uncovered_brand_claim(hdr, has_medtech_marks, &sender_labels),
+        freight_marks: uncovered_brand_claim(hdr, has_freight_marks, &sender_labels),
+        accounting_marks: uncovered_brand_claim(hdr, has_accounting_marks, &sender_labels),
+        gambling_marks: uncovered_brand_claim(hdr, has_gambling_marks, &sender_labels),
+        facility_marks: uncovered_brand_claim(hdr, has_facility_marks, &sender_labels),
+        broadcast_marks: uncovered_brand_claim(hdr, has_broadcast_marks, &sender_labels),
+        newspaper_marks: uncovered_brand_claim(hdr, has_newspaper_marks, &sender_labels),
+        food_marks: uncovered_brand_claim(hdr, has_food_marks, &sender_labels),
+        luxury_marks: uncovered_brand_claim(hdr, has_luxury_marks, &sender_labels),
+        advertising_marks: uncovered_brand_claim(hdr, has_advertising_marks, &sender_labels),
+        regional_bank_marks: uncovered_brand_claim(hdr, has_regional_bank_marks, &sender_labels),
+        mealkit_marks: uncovered_brand_claim(hdr, has_mealkit_marks, &sender_labels),
+        charity_marks: uncovered_brand_claim(hdr, has_charity_marks, &sender_labels),
+        manga_marks: uncovered_brand_claim(hdr, has_manga_marks, &sender_labels),
+        toy_marks: uncovered_brand_claim(hdr, has_toy_marks, &sender_labels),
+        hobby_marks: uncovered_brand_claim(hdr, has_hobby_marks, &sender_labels),
+        department_marks: uncovered_brand_claim(hdr, has_department_marks, &sender_labels),
+        pet_service_marks: uncovered_brand_claim(hdr, has_pet_service_marks, &sender_labels),
+        bridal_marks: uncovered_brand_claim(hdr, has_bridal_marks, &sender_labels),
+        zoo_marks: uncovered_brand_claim(hdr, has_zoo_marks, &sender_labels),
+        sports_team_marks: uncovered_brand_claim(hdr, has_sports_team_marks, &sender_labels),
+        optical_marks: uncovered_brand_claim(hdr, has_optical_marks, &sender_labels),
+        disaster_marks: uncovered_brand_claim(hdr, has_disaster_marks, &sender_labels),
+        creditcard_marks: uncovered_brand_claim(hdr, has_creditcard_marks, &sender_labels),
+        pointcard_marks: uncovered_brand_claim(hdr, has_pointcard_marks, &sender_labels),
+        esim_marks: uncovered_brand_claim(hdr, has_esim_marks, &sender_labels),
     })
 }
 
@@ -10763,6 +10866,65 @@ mod tests {
         let raw = b"From: a@example.com\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\n\r\nbody\r\n";
         let env = parse(raw).expect("parse");
         assert!(env.creditcard_marks);
+    }
+
+    /// D571: 自称印が主張するブランドと From ドメインが一致する場合は
+    /// 「自称」警告を抑制する (ブランド自身からの正規メールの FP 対策)。
+    #[test]
+    fn parse_は_fromがブランド自身なら自称印を抑制する() {
+        let raw = b"From: alerts@mail.visa.com\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\n\r\nbody\r\n";
+        let env = parse(raw).expect("parse");
+        assert!(!env.creditcard_marks, "visa.com 自身からの X-VISA-* は自称ではない");
+    }
+
+    #[test]
+    fn parse_は_fromがブランドと不一致なら自称印を検出する() {
+        let raw = b"From: a@evil.example\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\n\r\nbody\r\n";
+        let env = parse(raw).expect("parse");
+        assert!(env.creditcard_marks);
+    }
+
+    #[test]
+    fn parse_は_fromが紛らわしい上位ドメインなら抑制しない() {
+        // visa.evil.example の登録可能ラベルは evil — visa ではない
+        let raw = b"From: a@visa.evil.example\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\n\r\nbody\r\n";
+        let env = parse(raw).expect("parse");
+        assert!(env.creditcard_marks, "visa.evil.example は visa ブランドではない");
+    }
+
+    #[test]
+    fn parse_は_2段サフィックスのブランドドメインでも抑制する() {
+        let raw = b"From: noreply@notice.visa.co.jp\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\n\r\nbody\r\n";
+        let env = parse(raw).expect("parse");
+        assert!(!env.creditcard_marks, "visa.co.jp 自身からの X-VISA-* は自称ではない");
+    }
+
+    #[test]
+    fn parse_は_別ブランドの印が混ざれば抑制しない() {
+        // visa.com からのメールでも X-AMEX-* まで自称していれば visa 以外の
+        // ブランドを名乗っているため警告を維持する
+        let raw = b"From: a@visa.com\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\nX-Amex-Notify: y\r\n\r\nbody\r\n";
+        let env = parse(raw).expect("parse");
+        assert!(env.creditcard_marks, "amex の印まであるなら自称を疑う");
+    }
+
+    #[test]
+    fn parse_は_非x印の検出系は抑制対象外() {
+        // Resent-From 等の X- で始まらない印はトークン照合できないため
+        // From 一致でも従来どおり検出する
+        let raw = b"From: a@example.com\r\nTo: b@example.com\r\nResent-From: c@example.com\r\nSubject: hi\r\n\r\nbody\r\n";
+        let env = parse(raw).expect("parse");
+        assert!(env.resent_marks);
+    }
+
+    #[test]
+    fn registrable_label_は登録可能ラベルを返す() {
+        assert_eq!(registrable_label("mail.visa.com"), "visa");
+        assert_eq!(registrable_label("visa.com"), "visa");
+        assert_eq!(registrable_label("notice.visa.co.jp"), "visa");
+        assert_eq!(registrable_label("a.b.c.co.uk"), "c");
+        assert_eq!(registrable_label("localhost"), "localhost");
+        assert_eq!(registrable_label(""), "");
     }
 
     #[test]

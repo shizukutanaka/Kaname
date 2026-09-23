@@ -762,10 +762,11 @@ if bad:
 print(f"  OK: corpus {len(corpora)} 件 / target {len(targets)} 件 / bin {len(bins)} 件の対応が一致")
 PY
 
-echo "== 11. kaname-render parse() が has_*_marks にヘッダ部のみを渡すこと =="
+echo "== 11. kaname-render parse() が has_*_marks にヘッダ部のみを、From 照合経由で渡すこと =="
 # D570: has_*_marks はヘッダしか見ないのに parse() が raw 全体を渡していたため、
 # 各関数が最大 100 MB の本文ごと複製・小文字化していた (155 関数 × 2 コピー)。
-# parse() 内では header_section() で切り出した hdr を渡すこと。
+# D571: parse() 内の各 *_marks フィールドは uncovered_brand_claim(hdr, has_X, &sender_labels)
+# 経由とし、発火ブランドと From ドメインの一致抑制を共通で適用する。
 python3 - <<'PY' || fail=1
 import re, sys
 s = open('crates/kaname-render/src/lib.rs', encoding='utf-8').read()
@@ -779,8 +780,15 @@ for name in bad:
     print(f"  NG parse() が {name}(raw) を呼んでいる — header_section() の hdr を渡すこと (D570)")
 if bad:
     sys.exit(1)
-n = len(re.findall(r'has_[a-z0-9_]+_marks\(hdr\)', body))
-print(f"  OK: has_*_marks {n} 件すべてにヘッダ部のみを渡している")
+bare = re.findall(r'[a-z0-9_]+_marks: has_[a-z0-9_]+_marks\(hdr\)', body)
+for name in bare:
+    print(f"  NG parse() が {name} を素呼びしている — uncovered_brand_claim 経由にすること (D571)")
+if bare:
+    sys.exit(1)
+n = len(re.findall(r'uncovered_brand_claim\(hdr, has_[a-z0-9_]+_marks, &sender_labels\)', body))
+if n == 0:
+    print("  NG parse() に uncovered_brand_claim 経由の has_*_marks 呼び出しが1件もない (D571)"); sys.exit(1)
+print(f"  OK: has_*_marks {n} 件すべて hdr + uncovered_brand_claim 経由")
 PY
 
 echo ""
