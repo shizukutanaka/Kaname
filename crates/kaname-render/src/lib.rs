@@ -1727,6 +1727,12 @@ pub struct Envelope {
     pub stationery_marks: bool,
     /// `X-Zaim-*`/`X-Kakebo-*`/`X-WealthNavi-*`/`X-MoneyTree-*`/`X-DrWallet-*`/`X-Acorn-*`/`X-Finbee-*`/`X-Toraneko-*` 等の家計簿・資産管理アプリ通知記録印を送信側が自称している (D607)
     pub budgetapp_marks: bool,
+    /// `X-Musee-*`/`X-TBC-*`/`X-Erucenne-*`/`X-SlimBeauty-*`/`X-TakanoYuri-*`/`X-Mispa-*`/`X-GorillaClinic-*`/`X-ShonanHiyou-*` 等のエステ・脱毛・美容クリニック通知記録印を送信側が自称している (D608)
+    pub esthe_marks: bool,
+    /// `X-BikeO-*`/`X-NirinKan-*`/`X-Harley-*`/`X-Ducati-*`/`X-KTMMoto-*`/`X-TriumphMoto-*`/`X-Aprilia-*`/`X-Vespa-*` 等のバイク・二輪通知記録印を送信側が自称している (D609)
+    pub bike_marks: bool,
+    /// `X-Fender-*`/`X-Gibson-*`/`X-Ibanez-*`/`X-ESPGuitars-*`/`X-Takamine-*`/`X-MartinGuitar-*`/`X-TaylorGuitar-*`/`X-PRSGuitars-*` 等の楽器・DTM通知記録印を送信側が自称している (D610)
+    pub instrument_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2212,6 +2218,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         jyuku_marks: has_jyuku_marks(hdr),
         stationery_marks: has_stationery_marks(hdr),
         budgetapp_marks: has_budgetapp_marks(hdr),
+        esthe_marks: has_esthe_marks(hdr),
+        bike_marks: has_bike_marks(hdr),
+        instrument_marks: has_instrument_marks(hdr),
     })
 }
 
@@ -12203,6 +12212,218 @@ fn has_budgetapp_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Musee-*`/`X-TBC-*`/`X-Erucenne-*`/`X-SlimBeauty-*`/`X-TakanoYuri-*`/`X-Mispa-*`/`X-DandyHouse-*`/`X-MensTBC-*`/`X-GorillaClinic-*`/`X-ShonanHiyou-*`/`X-ShinagawaHiyou-*`/`X-Joumoto-*`/`X-Takasu-*`/`X-RizeClinic-*`/`X-AliciaClinic-*`/`X-Strash-*`/`X-Kireimo-*`/`X-C3Esthe-*`/`X-GinzaCalla-*`/`X-Koihada-*`/`X-Lacoco-*`/`X-Eminal-*`/`X-JibunClinic-*`/`X-FureaClinic-*`/`X-FujiiClinic-*`/`X-OguraClinic-*`/`X-SBCShonan-*`/`X-TokyoIseya-*`/`X-TokyoBiyo-*`/`X-AoyamaBiyo-*`/`X-EbisuBiyo-*`/`X-MotomachiBiyo-*`/`X-OsakaBiyo-*`/`X-NagoyaBiyo-*`/`X-FukuokaBiyo-*`/`X-SapporoBiyo-*`/`X-KobeBiyo-*`/`X-KyotoBiyo-*`/`X-HiroshimaBiyo-*`/`X-SendaiBiyo-*`/`X-HifuKa-*`/`X-BiyoIin-*`/`X-Ihada-*`/`X-ShimiTorik-*`/`X-HariKibo-*`/`X-MedicalEpilation-*`/`X-DatsumouSalon-*`/`X-LaserHair-*`/`X-KireiClinic-*`/`X-BiyoClinic-*`/`X-EstheSalon-*`/`X-EstheNavi-*`/`X-SalonNavi-*`/`X-YaseSalon-*`/`X-DietSalon-*`/`X-FacialSalon-*`/`X-BridalEsthe-*`/`X-MensEsthe-*`/`X-LadiesEsthe-*`/`X-EstheClinic-*` (エステ・脱毛・美容クリニックの通知記録) を送信側が自称しているかどうか。契約更新・回数券残・キャンペーンの偽装はエステ詐欺の典型手口。(美容・コスメ機は D531、リラク機は D594)
+fn has_esthe_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-musee-")
+            || l.starts_with("x-tbc-")
+            || l.starts_with("x-erucenne-")
+            || l.starts_with("x-slimbeauty-")
+            || l.starts_with("x-takanoyuri-")
+            || l.starts_with("x-mispa-")
+            || l.starts_with("x-dandyhouse-")
+            || l.starts_with("x-menstbc-")
+            || l.starts_with("x-gorillaclinic-")
+            || l.starts_with("x-shonanhiyou-")
+            || l.starts_with("x-shinagawahiyou-")
+            || l.starts_with("x-joumoto-")
+            || l.starts_with("x-takasu-")
+            || l.starts_with("x-rizeclinic-")
+            || l.starts_with("x-aliciaclinic-")
+            || l.starts_with("x-strash-")
+            || l.starts_with("x-kireimo-")
+            || l.starts_with("x-c3esthe-")
+            || l.starts_with("x-ginzacalla-")
+            || l.starts_with("x-koihada-")
+            || l.starts_with("x-lacoco-")
+            || l.starts_with("x-eminal-")
+            || l.starts_with("x-jibunclinic-")
+            || l.starts_with("x-fureaclinic-")
+            || l.starts_with("x-fujiiclinic-")
+            || l.starts_with("x-oguraclinic-")
+            || l.starts_with("x-sbcshonan-")
+            || l.starts_with("x-tokyoiseya-")
+            || l.starts_with("x-tokyobiyo-")
+            || l.starts_with("x-aoyamabiyo-")
+            || l.starts_with("x-ebisubiyo-")
+            || l.starts_with("x-motomachibiyo-")
+            || l.starts_with("x-osakabiyo-")
+            || l.starts_with("x-nagoyabiyo-")
+            || l.starts_with("x-fukuokabiyo-")
+            || l.starts_with("x-sapporobiyo-")
+            || l.starts_with("x-kobebiyo-")
+            || l.starts_with("x-kyotobiyo-")
+            || l.starts_with("x-hiroshimabiyo-")
+            || l.starts_with("x-sendaibiyo-")
+            || l.starts_with("x-hifuka-")
+            || l.starts_with("x-biyoiin-")
+            || l.starts_with("x-ihada-")
+            || l.starts_with("x-shimitorik-")
+            || l.starts_with("x-harikibo-")
+            || l.starts_with("x-medicalepilation-")
+            || l.starts_with("x-datsumousalon-")
+            || l.starts_with("x-laserhair-")
+            || l.starts_with("x-kireiclinic-")
+            || l.starts_with("x-biyoclinic-")
+            || l.starts_with("x-esthesalon-")
+            || l.starts_with("x-esthenavi-")
+            || l.starts_with("x-salonnavi-")
+            || l.starts_with("x-yasesalon-")
+            || l.starts_with("x-dietsalon-")
+            || l.starts_with("x-facialsalon-")
+            || l.starts_with("x-bridalesthe-")
+            || l.starts_with("x-mensesthe-")
+            || l.starts_with("x-ladiesesthe-")
+            || l.starts_with("x-estheclinic-")
+    })
+}
+
+/// `X-BikeO-*`/`X-RedBaronMoto-*`/`X-NirinKan-*`/`X-BikeKan-*`/`X-HondaBike-*`/`X-KawasakiBike-*`/`X-YamahaBike-*`/`X-SuzukiBike-*`/`X-Harley-*`/`X-Ducati-*`/`X-BMWMoto-*`/`X-KTMMoto-*`/`X-TriumphMoto-*`/`X-Aprilia-*`/`X-MVAgusta-*`/`X-RoyalEnfield-*`/`X-Bimota-*`/`X-HusqvarnaMoto-*`/`X-Vespa-*`/`X-Piaggio-*`/`X-Adiva-*`/`X-RideZ-*`/`X-MotorcycleShop-*`/`X-BikeShop-*`/`X-NirinSha-*`/`X-MotoTouring-*`/`X-MotoCamp-*`/`X-MotoPark-*`/`X-HelmetShop-*`/`X-Arai-*`/`X-Shoei-*`/`X-OgkKabuto-*`/`X-WinsHelmet-*`/`X-Komine-*`/`X-RSTaichi-*`/`X-Hyod-*`/`X-Kushitani-*`/`X-PowerAge-*`/`X-SimpsonHelmet-*`/`X-AstarsHelmet-*`/`X-AraiTouring-*`/`X-JamHelmet-*`/`X-Marushin-*`/`X-DaytonaBike-*`/`X-KijimaParts-*`/`X-TanaxShokai-*`/`X-DRCMoto-*`/`X-EnduranceMoto-*`/`X-WebikeNews-*`/`X-MotoRaku-*`/`X-MotoAuction-*`/`X-BikeKing-*`/`X-BikeMarche-*`/`X-MotoBeem-*`/`X-BikeSo-*`/`X-NirinWorld-*`/`X-TouringNavi-*`/`X-MotoNavi-*`/`X-BikeNavi-*` (バイク・二輪・ツーリング用品の通知記録) を送信側が自称しているかどうか。買取査定・ツーリング案内・車検満了の偽装はライダー狙い詐欺の典型手口。(四輪・車買取は D521/D572、自転車は D577)
+fn has_bike_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-bikeo-")
+            || l.starts_with("x-redbaronmoto-")
+            || l.starts_with("x-nirinkan-")
+            || l.starts_with("x-bikekan-")
+            || l.starts_with("x-hondabike-")
+            || l.starts_with("x-kawasakibike-")
+            || l.starts_with("x-yamahabike-")
+            || l.starts_with("x-suzukibike-")
+            || l.starts_with("x-harley-")
+            || l.starts_with("x-ducati-")
+            || l.starts_with("x-bmwmoto-")
+            || l.starts_with("x-ktmmoto-")
+            || l.starts_with("x-triumphmoto-")
+            || l.starts_with("x-aprilia-")
+            || l.starts_with("x-mvagusta-")
+            || l.starts_with("x-royalenfield-")
+            || l.starts_with("x-bimota-")
+            || l.starts_with("x-husqvarnamoto-")
+            || l.starts_with("x-vespa-")
+            || l.starts_with("x-piaggio-")
+            || l.starts_with("x-adiva-")
+            || l.starts_with("x-ridez-")
+            || l.starts_with("x-motorcycleshop-")
+            || l.starts_with("x-bikeshop-")
+            || l.starts_with("x-nirinsha-")
+            || l.starts_with("x-mototouring-")
+            || l.starts_with("x-motocamp-")
+            || l.starts_with("x-motopark-")
+            || l.starts_with("x-helmetshop-")
+            || l.starts_with("x-arai-")
+            || l.starts_with("x-shoei-")
+            || l.starts_with("x-ogkkabuto-")
+            || l.starts_with("x-winshelmet-")
+            || l.starts_with("x-komine-")
+            || l.starts_with("x-rstaichi-")
+            || l.starts_with("x-hyod-")
+            || l.starts_with("x-kushitani-")
+            || l.starts_with("x-powerage-")
+            || l.starts_with("x-simpsonhelmet-")
+            || l.starts_with("x-astarshelmet-")
+            || l.starts_with("x-araitouring-")
+            || l.starts_with("x-jamhelmet-")
+            || l.starts_with("x-marushin-")
+            || l.starts_with("x-daytonabike-")
+            || l.starts_with("x-kijimaparts-")
+            || l.starts_with("x-tanaxshokai-")
+            || l.starts_with("x-drcmoto-")
+            || l.starts_with("x-endurancemoto-")
+            || l.starts_with("x-webikenews-")
+            || l.starts_with("x-motoraku-")
+            || l.starts_with("x-motoauction-")
+            || l.starts_with("x-bikeking-")
+            || l.starts_with("x-bikemarche-")
+            || l.starts_with("x-motobeem-")
+            || l.starts_with("x-bikeso-")
+            || l.starts_with("x-nirinworld-")
+            || l.starts_with("x-touringnavi-")
+            || l.starts_with("x-motonavi-")
+            || l.starts_with("x-bikenavi-")
+    })
+}
+
+/// `X-Fender-*`/`X-Gibson-*`/`X-Ibanez-*`/`X-ESPGuitars-*`/`X-Takamine-*`/`X-MartinGuitar-*`/`X-TaylorGuitar-*`/`X-PRSGuitars-*`/`X-MoonGuitar-*`/`X-GrecoGuitars-*`/`X-TokaiGuitars-*`/`X-FujigenGuitar-*`/`X-MomoseGuitars-*`/`X-SugiGuitars-*`/`X-IkebeGakki-*`/`X-MikiGakki-*`/`X-YamanoGakki-*`/`X-KurosawaGakki-*`/`X-IshibashiGakki-*`/`X-OchanomizuGakki-*`/`X-SoundMesse-*`/`X-DrSound-*`/`X-BeatKinosato-*`/`X-WatanabeGakki-*`/`X-SeasideGakki-*`/`X-EgawaGakki-*`/`X-YamahaGakki-*`/`X-KawaiGakki-*`/`X-MatsumotoGakki-*`/`X-JyoshinGakki-*`/`X-OngakuKan-*`/`X-GakkiCenter-*`/`X-GakkiNavi-*`/`X-GuitarPlanet-*`/`X-BassCellar-*`/`X-DrumStation-*`/`X-DrummerParadise-*`/`X-PianoPlaza-*`/`X-PianoShop-*`/`X-KeyboardShop-*`/`X-SynthShop-*`/`X-DTMStation-*`/`X-DTMNavi-*`/`X-RecGakki-*`/`X-StudioGakki-*`/`X-BandGakki-*`/`X-ViolinShop-*`/`X-CelloShop-*`/`X-BrassShop-*`/`X-WindShop-*`/`X-TrumpetShop-*`/`X-SaxShop-*`/`X-ClarinetShop-*`/`X-FluteShop-*`/`X-DrumShop-*`/`X-PercussionShop-*`/`X-AccousticShop-*`/`X-ElectricGuitar-*`/`X-BassGuitar-*`/`X-UkuleleShop-*` (楽器・DTM・楽器店の通知記録) を送信側が自称しているかどうか。中古入荷・限定品・展示セールの偽装は楽器詐欺の典型手口。(島村楽器・KORG・Roland・YAMAHA は既存族、音楽制作ソフトは D497)
+fn has_instrument_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-fender-")
+            || l.starts_with("x-gibson-")
+            || l.starts_with("x-ibanez-")
+            || l.starts_with("x-espguitars-")
+            || l.starts_with("x-takamine-")
+            || l.starts_with("x-martinguitar-")
+            || l.starts_with("x-taylorguitar-")
+            || l.starts_with("x-prsguitars-")
+            || l.starts_with("x-moonguitar-")
+            || l.starts_with("x-grecoguitars-")
+            || l.starts_with("x-tokaiguitars-")
+            || l.starts_with("x-fujigenguitar-")
+            || l.starts_with("x-momoseguitars-")
+            || l.starts_with("x-sugiguitars-")
+            || l.starts_with("x-ikebegakki-")
+            || l.starts_with("x-mikigakki-")
+            || l.starts_with("x-yamanogakki-")
+            || l.starts_with("x-kurosawagakki-")
+            || l.starts_with("x-ishibashigakki-")
+            || l.starts_with("x-ochanomizugakki-")
+            || l.starts_with("x-soundmesse-")
+            || l.starts_with("x-drsound-")
+            || l.starts_with("x-beatkinosato-")
+            || l.starts_with("x-watanabegakki-")
+            || l.starts_with("x-seasidegakki-")
+            || l.starts_with("x-egawagakki-")
+            || l.starts_with("x-yamahagakki-")
+            || l.starts_with("x-kawaigakki-")
+            || l.starts_with("x-matsumotogakki-")
+            || l.starts_with("x-jyoshingakki-")
+            || l.starts_with("x-ongakukan-")
+            || l.starts_with("x-gakkicenter-")
+            || l.starts_with("x-gakkinavi-")
+            || l.starts_with("x-guitarplanet-")
+            || l.starts_with("x-basscellar-")
+            || l.starts_with("x-drumstation-")
+            || l.starts_with("x-drummerparadise-")
+            || l.starts_with("x-pianoplaza-")
+            || l.starts_with("x-pianoshop-")
+            || l.starts_with("x-keyboardshop-")
+            || l.starts_with("x-synthshop-")
+            || l.starts_with("x-dtmstation-")
+            || l.starts_with("x-dtmnavi-")
+            || l.starts_with("x-recgakki-")
+            || l.starts_with("x-studiogakki-")
+            || l.starts_with("x-bandgakki-")
+            || l.starts_with("x-violinshop-")
+            || l.starts_with("x-celloshop-")
+            || l.starts_with("x-brassshop-")
+            || l.starts_with("x-windshop-")
+            || l.starts_with("x-trumpetshop-")
+            || l.starts_with("x-saxshop-")
+            || l.starts_with("x-clarinetshop-")
+            || l.starts_with("x-fluteshop-")
+            || l.starts_with("x-drumshop-")
+            || l.starts_with("x-percussionshop-")
+            || l.starts_with("x-accousticshop-")
+            || l.starts_with("x-electricguitar-")
+            || l.starts_with("x-bassguitar-")
+            || l.starts_with("x-ukuleleshop-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -18389,7 +18610,7 @@ body";
 }
 
 #[test]
-fn scan_は輪機印を検出する() {
+fn scan_は騎機印を検出する() {
     let g1 = b"From: a@b
 X-Giant-Id: 1
 
@@ -19905,5 +20126,152 @@ X-Other: 1
 
 body";
     assert!(!has_budgetapp_marks(clean));
+}
+
+#[test]
+fn scan_は嬢機印を検出する() {
+    let m1 = b"From: a@b
+X-Musee-Id: 1
+
+x";
+    let t1 = b"From: a@b
+X-TBC-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-Erucenne-Notice: 1
+
+x";
+    let s1 = b"From: a@b
+X-SlimBeauty-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kireimo-Entry: 1
+
+x";
+    let g1 = b"From: a@b
+X-GorillaClinic-Record: 1
+
+x";
+    let d1 = b"From: a@b
+X-DatsumouSalon-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-BiyoClinic-Stamp: 1
+
+x";
+    assert!(has_esthe_marks(m1));
+    assert!(has_esthe_marks(t1));
+    assert!(has_esthe_marks(e1));
+    assert!(has_esthe_marks(s1));
+    assert!(has_esthe_marks(k1));
+    assert!(has_esthe_marks(g1));
+    assert!(has_esthe_marks(d1));
+    assert!(has_esthe_marks(b1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_esthe_marks(clean));
+}
+
+#[test]
+fn scan_は輪機印を検出する() {
+    let b1 = b"From: a@b
+X-BikeO-Id: 1
+
+x";
+    let h1 = b"From: a@b
+X-Harley-Trace: 1
+
+x";
+    let d1 = b"From: a@b
+X-Ducati-Notice: 1
+
+x";
+    let k1 = b"From: a@b
+X-KTMMoto-Flag: 1
+
+x";
+    let v1 = b"From: a@b
+X-Vespa-Entry: 1
+
+x";
+    let a1 = b"From: a@b
+X-Arai-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-Shoei-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-NirinKan-Stamp: 1
+
+x";
+    assert!(has_bike_marks(b1));
+    assert!(has_bike_marks(h1));
+    assert!(has_bike_marks(d1));
+    assert!(has_bike_marks(k1));
+    assert!(has_bike_marks(v1));
+    assert!(has_bike_marks(a1));
+    assert!(has_bike_marks(s1));
+    assert!(has_bike_marks(n1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_bike_marks(clean));
+}
+
+#[test]
+fn scan_は弦機印を検出する() {
+    let f1 = b"From: a@b
+X-Fender-Id: 1
+
+x";
+    let g1 = b"From: a@b
+X-Gibson-Trace: 1
+
+x";
+    let i1 = b"From: a@b
+X-Ibanez-Notice: 1
+
+x";
+    let e1 = b"From: a@b
+X-ESPGuitars-Flag: 1
+
+x";
+    let t1 = b"From: a@b
+X-Takamine-Entry: 1
+
+x";
+    let m1 = b"From: a@b
+X-MartinGuitar-Record: 1
+
+x";
+    let i2 = b"From: a@b
+X-IkebeGakki-Trace: 1
+
+x";
+    let d1 = b"From: a@b
+X-DrumShop-Stamp: 1
+
+x";
+    assert!(has_instrument_marks(f1));
+    assert!(has_instrument_marks(g1));
+    assert!(has_instrument_marks(i1));
+    assert!(has_instrument_marks(e1));
+    assert!(has_instrument_marks(t1));
+    assert!(has_instrument_marks(m1));
+    assert!(has_instrument_marks(i2));
+    assert!(has_instrument_marks(d1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_instrument_marks(clean));
 }
 }
