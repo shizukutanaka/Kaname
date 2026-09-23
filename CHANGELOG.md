@@ -8,6 +8,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D164: 複数 From アドレス / Sender ヘッダ不整合 (parser differential なりすまし) を検出
+
+- `env.from.first()` — 解析・表示・BEC 判定の全経路が From ヘッダの**最初の 1 アドレスだけ**を見ていたため、`From: ceo@corp.example, attacker@evil.example` のような複数 From メールで 2 番目以降の混入アドレスは誰も評価していなかった。RFC 5322 §3.6.2 は複数 From に `Sender:` を必須とするが、クライアントが表示に採用するアドレスは実装ごとに差があり (先頭/末尾/連結)、この「どの差出人として見えるかが環境依存」という差異を突く parser differential 型なりすましが知られている (Dmarcian/FlashStart 等が報告)
+- 対処: `Envelope::sender` を新設し `Sender:` ヘッダをパース保持 → `kaname-ui` の `from_header_anomalies` で 3 段判定して `render_risks` に兆候報告
+  - 複数 From + Sender なし → RFC 違反 (強い兆候)
+  - 複数 From + Sender が From 群に不一致 → RFC 違反 (Sender は From メールボックスの 1 つであるべき)
+  - 複数 From + Sender が From 群に一致 → 規定準拠だが表示パーサ差異リスクは残る (軽い兆候)
+- 誤検出対策: 単一 From + Sender ドメイン不一致は「on behalf of」委任送信の正常形 (ESP 経由配信で頻出) のため報告しない。From アドレス列挙は 5 件までに制限
+- テスト +8 件 (kaname-render: Sender パース 3 件、kaname-ui: 4 判定ケース + 通常メール 5 件)
+
 ### Security — D162: アンカーテキストとリンク先のドメイン不一致 (URL 偽装) を検出
 
 - `<a href="https://evil.example">https://paypal.com/login</a>` のように、**表示されるテキストが URL 形で、そのドメインが実リンク先と異なる**リンクを一切検査していなかった — メールクライアントは href 先をあまり目立たせないため、表示側の URL 形テキストを装うだけで誤認を誘える (フィッシングの基礎手口 — APWG 各報告・Unit 42/Avanan 等の観測で頻出)

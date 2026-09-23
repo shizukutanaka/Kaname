@@ -512,6 +512,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             ));
         }
     }
+    // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
+    render_risks.extend(from_header_anomalies(&env));
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1009,6 +1011,66 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
     out
 }
 
+/// D164: From ヘッダの複数アドレス / Sender ヘッダ不整合の兆候を返す。
+///
+/// RFC 5322 §3.6.2 — From が複数アドレスを持つ場合、実送信者を示す
+/// `Sender:` が必須とされる。しかしメールクライアントは表示に複数
+/// From のどのアドレスを採用するか実装ごとに差があり (あるパーサは
+/// 先頭、別のパーサは末尾や全体連結を表示)、この差異を突く
+/// 「parser differential」型のなりすましが知られている
+/// (`From: ceo@corp.com, attacker@evil.xyz` でクライアントには
+/// CEO と見せる)。検査側も `env.from.first()` で最初の 1 件だけを
+/// 見ていたため、2 番目以降の混入アドレスは誰も評価していなかった。
+///
+/// 判定:
+/// - 複数 From + `Sender:` なし → RFC 違反 (強い兆候)
+/// - 複数 From + `Sender:` が From 群のいずれとも不一致 → RFC 違反
+///   (Sender は From メールボックスの 1 つであるべき)
+/// - 複数 From + `Sender:` が From 群に一致 → 規定準拠だが
+///   表示パーサ差異のリスクは残る (軽い兆候)
+/// - 単一 From + `Sender:` ドメイン不一致 → 「on behalf of」委任送信の
+///   正常形なので報告しない (ESP 経由配信で頻出するため誤検出が多い)
+fn from_header_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
+    if env.from.len() <= 1 {
+        return Vec::new();
+    }
+    let addrs: Vec<String> = env
+        .from
+        .iter()
+        .take(5)
+        .map(|a| a.addr.as_string())
+        .collect();
+    let joined = addrs.join(", ");
+    let more = if env.from.len() > 5 {
+        format!(" 他 {} 件", env.from.len() - 5)
+    } else {
+        String::new()
+    };
+    match &env.sender {
+        None => vec![format!(
+            "From ヘッダに複数アドレスがあります ({joined}{more}) — Sender ヘッダがなく \
+            RFC 5322 違反。クライアントにより表示される差出人が変わる、\
+            なりすまし (parser differential) の兆候です"
+        )],
+        Some(s) => {
+            let s_addr = s.addr.as_string();
+            if env.from.iter().any(|a| a.addr.as_string() == s_addr) {
+                vec![format!(
+                    "From ヘッダに複数アドレスがあります ({joined}{more}) — \
+                    クライアントにより表示される差出人が変わる可能性がある \
+                    (parser differential) の兆候です"
+                )]
+            } else {
+                vec![format!(
+                    "From ヘッダに複数アドレス ({joined}{more}) があり、Sender \
+                    ({s_addr}) がいずれとも一致しません — Sender は From の \
+                    1 つであるべきという RFC 5322 違反。なりすましの兆候です"
+                )]
+            }
+        }
+    }
+}
+
 /// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
 ///
 /// `kaname-render` は既に `kaname-ui` の依存に入っており各検出器も実装済み
@@ -1442,6 +1504,123 @@ mod tests {
         assert!(
             r.render_risks.iter().any(|s| s.contains("URL 偽装")),
             "表示 URL と実リンク先のドメイン不一致は兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D164: `From: a@x, b@y` (Sender なし) — RFC 5322 違反の複数
+    /// From は表示側のパーサ差異を突くなりすまし。兆候として報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_はsenderなし複数fromを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example, attacker@evil.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Urgent request\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("複数アドレス") && s.contains("Sender")),
+            "Sender なし複数 From は RFC 違反として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D164: 複数 From + Sender が From 群に不一致 — RFC 5322 違反
+    /// (Sender は From メールボックスの 1 つであるべき)。
+    #[tokio::test]
+    async fn analyze_raw_email_はfrom群にないsenderを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example, attacker@evil.example\r\n\
+            Sender: unrelated@third.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Urgent request\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("一致しません")),
+            "From 群にない Sender は RFC 違反として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D164: 複数 From + Sender が From 群に一致 — RFC 準拠だが
+    /// parser differential の兆候は報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_は正当sender付き複数fromを軽く報告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example, pa@corp.example\r\n\
+            Sender: pa@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Hello\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Hello.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("parser differential")),
+            "Sender 一致の複数 From でも兆候は報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D164: 単一 From + Sender ドメイン不一致 — 「on behalf of」委任
+    /// 送信の正常形 (ESP 経由配信) なので報告しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は単一fromの委任senderを報告しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            Sender: bounce@esp-mail.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Hello\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Hello.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            !r.render_risks
+                .iter()
+                .any(|s| s.contains("複数アドレス") || s.contains("Sender")),
+            "単一 From の委任 Sender は報告すべきでない: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D164: 単一 From 通常メールでは何も報告しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は通常の単一fromで静か() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: alice@example.com\r\n\
+            To: you@example.com\r\n\
+            Subject: Hello\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Hello.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            !r.render_risks
+                .iter()
+                .any(|s| s.contains("複数アドレス")),
+            "通常メールで複数アドレス警告は出ないべき: {:?}",
             r.render_risks
         );
         Ok(())
