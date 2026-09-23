@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D543: `X-Shell-*`/`X-ENEOS-*`/`X-SaudiAramco-*` 等の石油・鉱業・エネルギー資源印自称が未検査
+
+- **問題**: `X-Shell-*` (Shell)、`X-ENEOS-*` (ENEOS)、`X-SaudiAramco-*` (Saudi Aramco)、`X-BP-*`/`X-Exxon-*`/`X-Chevron-*`/`X-TotalEnergies-*`/`X-Eni-*`/`X-Repsol-*`/`X-Equinor-*`/`X-ConocoPhillips-*`/`X-Petronas-*`/`X-ADNOC-*`/`X-QatarEnergy-*`/`X-Texaco-*`/`X-Mobil-*`/`X-Esso-*`/`X-Idemitsu-*`/`X-JERA-*`/`X-Schlumberger-*`/`X-Halliburton-*`/`X-BakerHughes-*`/`X-Vitol-*`/`X-Trafigura-*`/`X-Glencore-*`/`X-BHP-*`/`X-RioTinto-*`/`X-Vale-*`/`X-AngloAmerican-*`/`X-Freeport-*`/`X-JX-*`/`X-SumitomoMetal-*`/`X-MarubeniEnergy-*` は資機の通知記録 — 送信側が書くことは自称。燃料カード・請求書偽装は資源業界 BEC の典型。(`X-PGE-*`/`X-TEPCO-*`/`X-TokyoGas-*` 等の電気・ガス料金機は D520 で検出済み)
+- **修正**: `Envelope` に `energy_marks` + `has_energy_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 資印の自署を問え。
+
+### Security — D544: `X-Medtronic-*`/`X-Terumo-*`/`X-Sysmex-*` 等の医療機器・ライフサイエンス印自称が未検査
+
+- **問題**: `X-Medtronic-*` (Medtronic)、`X-Terumo-*` (テルモ)、`X-Sysmex-*` (シスメックス)、`X-SiemensHealthineers-*`/`X-GEHealthcare-*`/`X-PhilipsHealthcare-*`/`X-Abbott-*`/`X-BostonScientific-*`/`X-Stryker-*`/`X-BD-*`/`X-Baxter-*`/`X-Fresenius-*`/`X-NihonKohden-*`/`X-Shimadzu-*`/`X-CanonMedical-*`/`X-FujifilmHealthcare-*`/`X-Hoya-*`/`X-Pentax-*`/`X-KarlStorz-*`/`X-ZimmerBiomet-*`/`X-SmithNephew-*`/`X-Cook-*`/`X-Edwards-*`/`X-Intuitive-*`/`X-Dexcom-*`/`X-ResMed-*`/`X-Varian-*`/`X-Elekta-*`/`X-Bruker-*`/`X-PerkinElmer-*`/`X-ThermoFisher-*`/`X-Agilent-*`/`X-Waters-*`/`X-Danaher-*`/`X-OlympusMedical-*` は医機の通知記録 — 送信側が書くことは自称。機器リコール・検査結果通知偽装は医療詐欺の典型。(`X-Bayer-*` 等の製薬は D542 で検出済み)
+- **修正**: `Envelope` に `medtech_marks` + `has_medtech_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 医印の自署を問え。
+
+### Security — D545: `X-Maersk-*`/`X-NYK-*`/`X-DBSchenker-*` 等の海運・貨物鉄道・フォワーダ印自称が未検査
+
+- **問題**: `X-Maersk-*` (Maersk)、`X-NYK-*` (日本郵船)、`X-DBSchenker-*` (DB Schenker)、`X-MSC-*`/`X-CMACGM-*`/`X-COSCO-*`/`X-HapagLloyd-*`/`X-Evergreen-*`/`X-OOCL-*`/`X-YangMing-*`/`X-Zim-*`/`X-HMM-*`/`X-WanHai-*`/`X-PIL-*`/`X-Swire-*`/`X-MOL-*`/`X-KLine-*`/`X-UnionPacific-*`/`X-BNSF-*`/`X-CSX-*`/`X-NorfolkSouthern-*`/`X-CN-*`/`X-CPKCS-*`/`X-KuehneNagel-*`/`X-DSV-*`/`X-CEVA-*`/`X-Expeditors-*`/`X-CHRobinson-*`/`X-Panalpina-*`/`X-Dachser-*`/`X-Geodis-*`/`X-Hellmann-*`/`X-Seino-*`/`X-Fukuyama-*`/`X-Tonami-*`/`X-Meitetsu-*`/`X-SBS-*` は貨機の通知記録 — 送信側が書くことは自称。B/L・港湾費請求偽装は貿易詐欺の典型。(`X-FedEx-*`/`X-DHL-*`/`X-UPS-*`/`X-JapanPost-*`/`X-Sagawa-*`/`X-NX-*` 等の宅配・速達機は D475 で検出済み)
+- **修正**: `Envelope` に `freight_marks` + `has_freight_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 貨印の自署を問え。
+
+
 ### Security — D540: `X-Boeing-*`/`X-SpaceX-*`/`X-JAXA-*` 等の航空宇宙・防衛印自称が未検査
 
 - **問題**: `X-Boeing-*` (Boeing)、`X-SpaceX-*` (SpaceX)、`X-JAXA-*` (JAXA)、`X-Airbus-*`/`X-Lockheed-*`/`X-Raytheon-*`/`X-Northrop-*`/`X-BAE-*`/`X-GeneralDynamics-*`/`X-L3Harris-*`/`X-Embraer-*`/`X-Bombardier-*`/`X-MitsubishiHeavy-*`/`X-KawasakiHeavy-*`/`X-GEAviation-*`/`X-PrattWhitney-*`/`X-Safran-*`/`X-Leonardo-*`/`X-Thales-*`/`X-Dassault-*`/`X-BlueOrigin-*`/`X-RocketLab-*`/`X-ULA-*`/`X-NASA-*`/`X-Ball-*`/`X-Maxar-*`/`X-AerojetRocketdyne-*`/`X-SierraSpace-*`/`X-FireflyAerospace-*`/`X-RelativitySpace-*`/`X-Arianespace-*` は航機の通知記録 — 送信側が書くことは自称。受注・保守通知偽装は防衛産業 BEC の典型。(`X-IHI-*`/`X-Kawasaki-*` は D538、`X-Garmin-*` は D530 で検出済み)

@@ -1636,6 +1636,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D543: 石油・鉱業・エネルギー資源印自称
+    if env.energy_marks {
+        render_risks.push(
+            "X-Shell-*/X-ENEOS-*/X-SaudiAramco-*/X-BP-*/X-Chevron-*/X-Vitol-*/X-RioTinto-*/X-JERA-* 等 — 資機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D544: 医療機器・ライフサイエンス印自称
+    if env.medtech_marks {
+        render_risks.push(
+            "X-Medtronic-*/X-Terumo-*/X-Sysmex-*/X-GEHealthcare-*/X-Shimadzu-*/X-Abbott-*/X-BD-*/X-OlympusMedical-* 等 — 医機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D545: 海運・貨物鉄道・フォワーダ印自称
+    if env.freight_marks {
+        render_risks.push(
+            "X-Maersk-*/X-NYK-*/X-DBSchenker-*/X-CMACGM-*/X-KuehneNagel-*/X-BNSF-*/X-Seino-*/X-HapagLloyd-* 等 — 貨機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

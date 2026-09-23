@@ -1173,6 +1173,43 @@ pub struct Envelope {
     /// `X-Novo-*`/`X-BoehringerIngelheim-*` 等の製薬・バイオ印があるか —
     /// 製薬機の通知記録を送信側が自称する兆候 (D542)。
     pub pharma_marks: bool,
+    /// `X-Shell-*`/`X-BP-*`/`X-Exxon-*`/`X-Chevron-*`/`X-TotalEnergies-*`/
+    /// `X-Eni-*`/`X-Repsol-*`/`X-Equinor-*`/`X-ConocoPhillips-*`/
+    /// `X-Petronas-*`/`X-ADNOC-*`/`X-SaudiAramco-*`/`X-QatarEnergy-*`/
+    /// `X-Texaco-*`/`X-Mobil-*`/`X-Esso-*`/`X-Idemitsu-*`/`X-ENEOS-*`/
+    /// `X-JERA-*`/`X-Schlumberger-*`/`X-Halliburton-*`/`X-BakerHughes-*`/
+    /// `X-Vitol-*`/`X-Trafigura-*`/`X-Glencore-*`/`X-BHP-*`/`X-RioTinto-*`/
+    /// `X-Vale-*`/`X-AngloAmerican-*`/`X-Freeport-*`/`X-JX-*`/
+    /// `X-SumitomoMetal-*`/`X-MarubeniEnergy-*` 等の石油・鉱業・
+    /// エネルギー資源印があるか — 資機の通知記録を送信側が自称する
+    /// 兆候 (D543)。(`X-PGE-*`/`X-TEPCO-*`/`X-TokyoGas-*` 等の電気・
+    /// ガス料金機は D520 で検出済み)
+    pub energy_marks: bool,
+    /// `X-SiemensHealthineers-*`/`X-GEHealthcare-*`/`X-PhilipsHealthcare-*`/
+    /// `X-Medtronic-*`/`X-Abbott-*`/`X-BostonScientific-*`/`X-Stryker-*`/
+    /// `X-BD-*`/`X-Baxter-*`/`X-Fresenius-*`/`X-Terumo-*`/`X-Sysmex-*`/
+    /// `X-NihonKohden-*`/`X-Shimadzu-*`/`X-CanonMedical-*`/
+    /// `X-FujifilmHealthcare-*`/`X-Hoya-*`/`X-Pentax-*`/`X-KarlStorz-*`/
+    /// `X-ZimmerBiomet-*`/`X-SmithNephew-*`/`X-Cook-*`/`X-Edwards-*`/
+    /// `X-Intuitive-*`/`X-Dexcom-*`/`X-ResMed-*`/`X-Varian-*`/`X-Elekta-*`/
+    /// `X-Bruker-*`/`X-PerkinElmer-*`/`X-ThermoFisher-*`/`X-Agilent-*`/
+    /// `X-Waters-*`/`X-Danaher-*`/`X-OlympusMedical-*` 等の医療機器・
+    /// ライフサイエンス印があるか — 医機の通知記録を送信側が自称する
+    /// 兆候 (D544)。(`X-Bayer-*` 等の製薬は D542 で検出済み)
+    pub medtech_marks: bool,
+    /// `X-Maersk-*`/`X-MSC-*`/`X-CMACGM-*`/`X-COSCO-*`/`X-HapagLloyd-*`/
+    /// `X-Evergreen-*`/`X-OOCL-*`/`X-YangMing-*`/`X-Zim-*`/`X-HMM-*`/
+    /// `X-WanHai-*`/`X-PIL-*`/`X-Swire-*`/`X-MOL-*`/`X-NYK-*`/`X-KLine-*`/
+    /// `X-UnionPacific-*`/`X-BNSF-*`/`X-CSX-*`/`X-NorfolkSouthern-*`/
+    /// `X-CN-*`/`X-CPKCS-*`/`X-DBSchenker-*`/`X-KuehneNagel-*`/`X-DSV-*`/
+    /// `X-CEVA-*`/`X-Expeditors-*`/`X-CHRobinson-*`/`X-Panalpina-*`/
+    /// `X-Dachser-*`/`X-Geodis-*`/`X-Hellmann-*`/`X-Seino-*`/
+    /// `X-Fukuyama-*`/`X-Tonami-*`/`X-Meitetsu-*`/`X-SBS-*` 等の
+    /// 海運・貨物鉄道・フォワーダ印があるか — 貨機の通知記録を
+    /// 送信側が自称する兆候 (D545)。(`X-FedEx-*`/`X-DHL-*`/`X-UPS-*`/
+    /// `X-JapanPost-*`/`X-Sagawa-*`/`X-NX-*` 等の宅配・速達機は
+    /// D475 で検出済み)
+    pub freight_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1576,6 +1613,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         aerospace_marks: has_aerospace_marks(raw),
         navigation_marks: has_navigation_marks(raw),
         pharma_marks: has_pharma_marks(raw),
+        energy_marks: has_energy_marks(raw),
+        medtech_marks: has_medtech_marks(raw),
+        freight_marks: has_freight_marks(raw),
     })
 }
 
@@ -7451,6 +7491,181 @@ fn has_pharma_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Shell-*`/`X-BP-*`/`X-Exxon-*`/`X-Chevron-*`/`X-TotalEnergies-*`/
+/// `X-Eni-*`/`X-Repsol-*`/`X-Equinor-*`/`X-ConocoPhillips-*`/`X-Petronas-*`/
+/// `X-ADNOC-*`/`X-SaudiAramco-*`/`X-QatarEnergy-*`/`X-Texaco-*`/`X-Mobil-*`/
+/// `X-Esso-*`/`X-Idemitsu-*`/`X-ENEOS-*`/`X-JERA-*`/`X-Schlumberger-*`/
+/// `X-Halliburton-*`/`X-BakerHughes-*`/`X-Vitol-*`/`X-Trafigura-*`/
+/// `X-Glencore-*`/`X-BHP-*`/`X-RioTinto-*`/`X-Vale-*`/`X-AngloAmerican-*`/
+/// `X-Freeport-*`/`X-JX-*`/`X-SumitomoMetal-*`/`X-MarubeniEnergy-*` 等の
+/// 石油・鉱業・エネルギー資源印があるか判定する (D543)。
+///
+/// `X-Shell-*` (Shell)、`X-ENEOS-*` (ENEOS)、`X-SaudiAramco-*` (Saudi
+/// Aramco) は資機の通知記録 — 送信側から届くこれは自称。燃料カード・
+/// 請求書偽装は資源業界 BEC の典型。`X-PGE-*`/`X-TEPCO-*`/
+/// `X-TokyoGas-*` 等の電気・ガス料金機は D520 で検出済み。
+fn has_energy_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-shell-")
+            || l.starts_with("x-bp-")
+            || l.starts_with("x-exxon-")
+            || l.starts_with("x-chevron-")
+            || l.starts_with("x-totalenergies-")
+            || l.starts_with("x-eni-")
+            || l.starts_with("x-repsol-")
+            || l.starts_with("x-equinor-")
+            || l.starts_with("x-conocophillips-")
+            || l.starts_with("x-petronas-")
+            || l.starts_with("x-adnoc-")
+            || l.starts_with("x-saudiaramco-")
+            || l.starts_with("x-qatarenergy-")
+            || l.starts_with("x-texaco-")
+            || l.starts_with("x-mobil-")
+            || l.starts_with("x-esso-")
+            || l.starts_with("x-idemitsu-")
+            || l.starts_with("x-eneos-")
+            || l.starts_with("x-jera-")
+            || l.starts_with("x-schlumberger-")
+            || l.starts_with("x-halliburton-")
+            || l.starts_with("x-bakerhughes-")
+            || l.starts_with("x-vitol-")
+            || l.starts_with("x-trafigura-")
+            || l.starts_with("x-glencore-")
+            || l.starts_with("x-bhp-")
+            || l.starts_with("x-riotinto-")
+            || l.starts_with("x-vale-")
+            || l.starts_with("x-angloamerican-")
+            || l.starts_with("x-freeport-")
+            || l.starts_with("x-jx-")
+            || l.starts_with("x-sumitomometal-")
+            || l.starts_with("x-marubenienergy-")
+    })
+}
+
+/// `X-SiemensHealthineers-*`/`X-GEHealthcare-*`/`X-PhilipsHealthcare-*`/
+/// `X-Medtronic-*`/`X-Abbott-*`/`X-BostonScientific-*`/`X-Stryker-*`/
+/// `X-BD-*`/`X-Baxter-*`/`X-Fresenius-*`/`X-Terumo-*`/`X-Sysmex-*`/
+/// `X-NihonKohden-*`/`X-Shimadzu-*`/`X-CanonMedical-*`/`X-FujifilmHealthcare-*`/
+/// `X-Hoya-*`/`X-Pentax-*`/`X-KarlStorz-*`/`X-ZimmerBiomet-*`/
+/// `X-SmithNephew-*`/`X-Cook-*`/`X-Edwards-*`/`X-Intuitive-*`/`X-Dexcom-*`/
+/// `X-ResMed-*`/`X-Varian-*`/`X-Elekta-*`/`X-Bruker-*`/`X-PerkinElmer-*`/
+/// `X-ThermoFisher-*`/`X-Agilent-*`/`X-Waters-*`/`X-Danaher-*`/
+/// `X-OlympusMedical-*` 等の医療機器・ライフサイエンス印があるか判定する
+/// (D544)。
+///
+/// `X-Medtronic-*` (Medtronic)、`X-Terumo-*` (テルモ)、`X-Sysmex-*`
+/// (シスメックス) は医機の通知記録 — 送信側から届くこれは自称。
+/// 機器リコール・検査結果通知偽装は医療詐欺の典型。`X-Bayer-*` 等の
+/// 製薬は D542 で検出済み。
+fn has_medtech_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-siemenshealthineers-")
+            || l.starts_with("x-gehealthcare-")
+            || l.starts_with("x-philipshealthcare-")
+            || l.starts_with("x-medtronic-")
+            || l.starts_with("x-abbott-")
+            || l.starts_with("x-bostonscientific-")
+            || l.starts_with("x-stryker-")
+            || l.starts_with("x-bd-")
+            || l.starts_with("x-baxter-")
+            || l.starts_with("x-fresenius-")
+            || l.starts_with("x-terumo-")
+            || l.starts_with("x-sysmex-")
+            || l.starts_with("x-nihonkohden-")
+            || l.starts_with("x-shimadzu-")
+            || l.starts_with("x-canonmedical-")
+            || l.starts_with("x-fujifilmhealthcare-")
+            || l.starts_with("x-hoya-")
+            || l.starts_with("x-pentax-")
+            || l.starts_with("x-karlstorz-")
+            || l.starts_with("x-zimmerbiomet-")
+            || l.starts_with("x-smithnephew-")
+            || l.starts_with("x-cook-")
+            || l.starts_with("x-edwards-")
+            || l.starts_with("x-intuitive-")
+            || l.starts_with("x-dexcom-")
+            || l.starts_with("x-resmed-")
+            || l.starts_with("x-varian-")
+            || l.starts_with("x-elekta-")
+            || l.starts_with("x-bruker-")
+            || l.starts_with("x-perkinelmer-")
+            || l.starts_with("x-thermofisher-")
+            || l.starts_with("x-agilent-")
+            || l.starts_with("x-waters-")
+            || l.starts_with("x-danaher-")
+            || l.starts_with("x-olympusmedical-")
+    })
+}
+
+/// `X-Maersk-*`/`X-MSC-*`/`X-CMACGM-*`/`X-COSCO-*`/`X-HapagLloyd-*`/
+/// `X-Evergreen-*`/`X-OOCL-*`/`X-YangMing-*`/`X-Zim-*`/`X-HMM-*`/
+/// `X-WanHai-*`/`X-PIL-*`/`X-Swire-*`/`X-MOL-*`/`X-NYK-*`/`X-KLine-*`/
+/// `X-UnionPacific-*`/`X-BNSF-*`/`X-CSX-*`/`X-NorfolkSouthern-*`/`X-CN-*`/
+/// `X-CPKCS-*`/`X-DBSchenker-*`/`X-KuehneNagel-*`/`X-DSV-*`/`X-CEVA-*`/
+/// `X-Expeditors-*`/`X-CHRobinson-*`/`X-Panalpina-*`/`X-Dachser-*`/
+/// `X-Geodis-*`/`X-Hellmann-*`/`X-Seino-*`/`X-Fukuyama-*`/`X-Tonami-*`/
+/// `X-Meitetsu-*`/`X-SBS-*` 等の海運・貨物鉄道・フォワーダ印があるか
+/// 判定する (D545)。
+///
+/// `X-Maersk-*` (Maersk)、`X-NYK-*` (日本郵船)、`X-DBSchenker-*`
+/// (DB Schenker) は貨機の通知記録 — 送信側から届くこれは自称。
+/// B/L・港湾費請求偽装は貿易詐欺の典型。`X-FedEx-*`/`X-DHL-*`/
+/// `X-UPS-*`/`X-JapanPost-*`/`X-Sagawa-*`/`X-NX-*` 等の宅配・速達機は
+/// D475 で検出済み。
+fn has_freight_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-maersk-")
+            || l.starts_with("x-msc-")
+            || l.starts_with("x-cmacgm-")
+            || l.starts_with("x-cosco-")
+            || l.starts_with("x-hapaglloyd-")
+            || l.starts_with("x-evergreen-")
+            || l.starts_with("x-oocl-")
+            || l.starts_with("x-yangming-")
+            || l.starts_with("x-zim-")
+            || l.starts_with("x-hmm-")
+            || l.starts_with("x-wanhai-")
+            || l.starts_with("x-pil-")
+            || l.starts_with("x-swire-")
+            || l.starts_with("x-mol-")
+            || l.starts_with("x-nyk-")
+            || l.starts_with("x-kline-")
+            || l.starts_with("x-unionpacific-")
+            || l.starts_with("x-bnsf-")
+            || l.starts_with("x-csx-")
+            || l.starts_with("x-norfolksouthern-")
+            || l.starts_with("x-cn-")
+            || l.starts_with("x-cpkcs-")
+            || l.starts_with("x-dbschenker-")
+            || l.starts_with("x-kuehnenagel-")
+            || l.starts_with("x-dsv-")
+            || l.starts_with("x-ceva-")
+            || l.starts_with("x-expeditors-")
+            || l.starts_with("x-chrobinson-")
+            || l.starts_with("x-panalpina-")
+            || l.starts_with("x-dachser-")
+            || l.starts_with("x-geodis-")
+            || l.starts_with("x-hellmann-")
+            || l.starts_with("x-seino-")
+            || l.starts_with("x-fukuyama-")
+            || l.starts_with("x-tonami-")
+            || l.starts_with("x-meitetsu-")
+            || l.starts_with("x-sbs-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -12485,6 +12700,72 @@ mod tests {
         assert!(has_pharma_marks(g1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_pharma_marks(clean));
+    }
+
+    #[test]
+    fn scan_は資機印を検出する() {
+        let s1 = b"X-Shell-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(s1));
+        let e1 = b"X-ENEOS-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(e1));
+        let a1 = b"X-SaudiAramco-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(a1));
+        let b1 = b"X-BP-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(b1));
+        let c1 = b"X-Chevron-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(c1));
+        let v1 = b"X-Vitol-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(v1));
+        let r1 = b"X-RioTinto-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(r1));
+        let j1 = b"X-JERA-Notify: x\r\n\r\nx";
+        assert!(has_energy_marks(j1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_energy_marks(clean));
+    }
+
+    #[test]
+    fn scan_は医機印を検出する() {
+        let m1 = b"X-Medtronic-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(m1));
+        let t1 = b"X-Terumo-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(t1));
+        let s1 = b"X-Sysmex-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(s1));
+        let g1 = b"X-GEHealthcare-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(g1));
+        let s2 = b"X-Shimadzu-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(s2));
+        let a1 = b"X-Abbott-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(a1));
+        let b1 = b"X-BD-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(b1));
+        let o1 = b"X-OlympusMedical-Notify: x\r\n\r\nx";
+        assert!(has_medtech_marks(o1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_medtech_marks(clean));
+    }
+
+    #[test]
+    fn scan_は貨機印を検出する() {
+        let m1 = b"X-Maersk-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(m1));
+        let n1 = b"X-NYK-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(n1));
+        let d1 = b"X-DBSchenker-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(d1));
+        let c1 = b"X-CMACGM-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(c1));
+        let k1 = b"X-KuehneNagel-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(k1));
+        let b1 = b"X-BNSF-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(b1));
+        let s1 = b"X-Seino-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(s1));
+        let h1 = b"X-HapagLloyd-Notify: x\r\n\r\nx";
+        assert!(has_freight_marks(h1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_freight_marks(clean));
     }
 }
 
