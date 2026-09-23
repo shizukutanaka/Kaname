@@ -2452,6 +2452,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D647: 大学・専門学校・受験印自称
+    if env.college_marks {
+        render_risks.push(
+            "X-DaigakuNavi-*/X-SenmonGakkouNavi-*/X-YobikouNavi-*/X-BenesseK-*/X-Juuken-*/X-CollegeNavi-*/X-UniversityNavi-*/X-NyuushiNavi-* 等 — 受機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D648: 防犯カメラ・監視印自称
+    if env.securitycam_marks {
+        render_risks.push(
+            "X-BousanNavi-*/X-KanshiKamera-*/X-SecurityCamera-*/X-CameraNavi-*/X-MonitorNavi-*/X-Cctv-*/X-Hikvision-*/X-Dahua-* 等 — 録機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D649: フェリー・クルーズ・船舶印自称
+    if env.ferry_marks {
+        render_risks.push(
+            "X-Ferry-*/X-FerryNavi-*/X-Cruise-*/X-CruiseNavi-*/X-Senpaku-*/X-KaijiNavi-*/X-ShinMoji-*/X-HankyuFerry-* 等 — 船機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

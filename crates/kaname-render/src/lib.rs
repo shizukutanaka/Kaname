@@ -1805,6 +1805,12 @@ pub struct Envelope {
     pub rental_marks: bool,
     /// `X-Souko-*`/`X-Soukonavi-*`/`X-Soukocenter-*` 等の倉庫・物流センター印を送信側が自称する兆候 (D646)
     pub warehouse_marks: bool,
+    /// `X-Daigakunavi-*`/`X-Daigakucenter-*`/`X-Daigakushop-*` 等の大学・専門学校・受験印を送信側が自称する兆候 (D647)
+    pub college_marks: bool,
+    /// `X-Bousannavi-*`/`X-Bousancenter-*`/`X-Bousanshop-*` 等の防犯カメラ・監視印を送信側が自称する兆候 (D648)
+    pub securitycam_marks: bool,
+    /// `X-Ferry-*`/`X-Ferries-*`/`X-Ferrynavi-*` 等のフェリー・クルーズ・船舶印を送信側が自称する兆候 (D649)
+    pub ferry_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2329,6 +2335,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         construction_marks: has_construction_marks(hdr),
         rental_marks: has_rental_marks(hdr),
         warehouse_marks: has_warehouse_marks(hdr),
+        college_marks: has_college_marks(hdr),
+        securitycam_marks: has_securitycam_marks(hdr),
+        ferry_marks: has_ferry_marks(hdr),
     })
 }
 
@@ -15317,6 +15326,250 @@ fn has_warehouse_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-yamatekinpro-"))
 }
 
+/// `X-Daigakunavi-*`/`X-Daigakucenter-*`/`X-Daigakushop-*`/`X-Daigakupro-*`/`X-Daigakudoctor-*`/`X-Daigakurescue-*`/`X-Daigaku24-*`/`X-Daigaku-*`/`X-Senmongakkounavi-*`/`X-Senmongakkoucenter-*`/`X-Senmongakkoushop-*`/`X-Senmongakkoupro-*`/`X-Yobikounavi-*`/`X-Yobikoucenter-*`/`X-Yobikoushop-*`/`X-Yobikoupro-*`/`X-Benessek-*`/`X-Juuken-*`/`X-Juukennavi-*`/`X-Juukencenter-*`/`X-Juukenshop-*`/`X-Juukenpro-*`/`X-Juukendoctor-*`/`X-Juukenrescue-*`/`X-Juuken24-*`/`X-College-*`/`X-Collegenavi-*`/`X-Collegecenter-*`/`X-Collegeshop-*`/`X-Collegepro-*`/`X-Collegedoctor-*`/`X-Collegerescue-*`/`X-College24-*`/`X-University-*`/`X-Universitynavi-*`/`X-Universitycenter-*`/`X-Universityshop-*`/`X-Universitypro-*`/`X-Daigakumart-*`/`X-Daigakuplus-*`/`X-Daigakusmart-*`/`X-Daigakufamily-*`/`X-Juukenmart-*`/`X-Juukenplus-*`/`X-Juukensmart-*`/`X-Juukenfamily-*`/`X-Nyuushinavi-*`/`X-Nyuushicenter-*`/`X-Nyuushishop-*`/`X-Nyuushipro-*`/`X-Nyuushidoctor-*`/`X-Nyuushirescue-*`/`X-Nyuushi24-*`/`X-Zenkokumononavi-*`/`X-Zenkokumonocenter-*`/`X-Zenkokumonoshop-*`/`X-Zenkokumonopro-*`/`X-Hyousennavi-*`/`X-Hyousencenter-*`/`X-Hyousenshop-*`/`X-Hyousenpro-*`/`X-Hensachinavi-*`/`X-Hensachicenter-*`/`X-Hensachishop-*`/`X-Hensachipro-*`/`X-Suishojsyo-*`/`X-Oshirase-*`/`X-Kyoushikinnavi-*`/`X-Kyoushikincenter-*`/`X-Kyoushikinshop-*`/`X-Kyoushikinpro-*` 等の大学・専門学校・受験印を送信側が自称する兆候を検出する
+fn has_college_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-daigakunavi-")
+            || l.starts_with("x-daigakucenter-")
+            || l.starts_with("x-daigakushop-")
+            || l.starts_with("x-daigakupro-")
+            || l.starts_with("x-daigakudoctor-")
+            || l.starts_with("x-daigakurescue-")
+            || l.starts_with("x-daigaku24-")
+            || l.starts_with("x-daigaku-")
+            || l.starts_with("x-senmongakkounavi-")
+            || l.starts_with("x-senmongakkoucenter-")
+            || l.starts_with("x-senmongakkoushop-")
+            || l.starts_with("x-senmongakkoupro-")
+            || l.starts_with("x-yobikounavi-")
+            || l.starts_with("x-yobikoucenter-")
+            || l.starts_with("x-yobikoushop-")
+            || l.starts_with("x-yobikoupro-")
+            || l.starts_with("x-benessek-")
+            || l.starts_with("x-juuken-")
+            || l.starts_with("x-juukennavi-")
+            || l.starts_with("x-juukencenter-")
+            || l.starts_with("x-juukenshop-")
+            || l.starts_with("x-juukenpro-")
+            || l.starts_with("x-juukendoctor-")
+            || l.starts_with("x-juukenrescue-")
+            || l.starts_with("x-juuken24-")
+            || l.starts_with("x-college-")
+            || l.starts_with("x-collegenavi-")
+            || l.starts_with("x-collegecenter-")
+            || l.starts_with("x-collegeshop-")
+            || l.starts_with("x-collegepro-")
+            || l.starts_with("x-collegedoctor-")
+            || l.starts_with("x-collegerescue-")
+            || l.starts_with("x-college24-")
+            || l.starts_with("x-university-")
+            || l.starts_with("x-universitynavi-")
+            || l.starts_with("x-universitycenter-")
+            || l.starts_with("x-universityshop-")
+            || l.starts_with("x-universitypro-")
+            || l.starts_with("x-daigakumart-")
+            || l.starts_with("x-daigakuplus-")
+            || l.starts_with("x-daigakusmart-")
+            || l.starts_with("x-daigakufamily-")
+            || l.starts_with("x-juukenmart-")
+            || l.starts_with("x-juukenplus-")
+            || l.starts_with("x-juukensmart-")
+            || l.starts_with("x-juukenfamily-")
+            || l.starts_with("x-nyuushinavi-")
+            || l.starts_with("x-nyuushicenter-")
+            || l.starts_with("x-nyuushishop-")
+            || l.starts_with("x-nyuushipro-")
+            || l.starts_with("x-nyuushidoctor-")
+            || l.starts_with("x-nyuushirescue-")
+            || l.starts_with("x-nyuushi24-")
+            || l.starts_with("x-zenkokumononavi-")
+            || l.starts_with("x-zenkokumonocenter-")
+            || l.starts_with("x-zenkokumonoshop-")
+            || l.starts_with("x-zenkokumonopro-")
+            || l.starts_with("x-hyousennavi-")
+            || l.starts_with("x-hyousencenter-")
+            || l.starts_with("x-hyousenshop-")
+            || l.starts_with("x-hyousenpro-")
+            || l.starts_with("x-hensachinavi-")
+            || l.starts_with("x-hensachicenter-")
+            || l.starts_with("x-hensachishop-")
+            || l.starts_with("x-hensachipro-")
+            || l.starts_with("x-suishojsyo-")
+            || l.starts_with("x-oshirase-")
+            || l.starts_with("x-kyoushikinnavi-")
+            || l.starts_with("x-kyoushikincenter-")
+            || l.starts_with("x-kyoushikinshop-")
+            || l.starts_with("x-kyoushikinpro-"))
+}
+
+/// `X-Bousannavi-*`/`X-Bousancenter-*`/`X-Bousanshop-*`/`X-Bousanpro-*`/`X-Bousandoctor-*`/`X-Bousanrescue-*`/`X-Bousan24-*`/`X-Kanshikamera-*`/`X-Kanshinavi-*`/`X-Kanshicenter-*`/`X-Kanshishop-*`/`X-Kanshipro-*`/`X-Kanshidoctor-*`/`X-Kanshirescue-*`/`X-Kanshi24-*`/`X-Securitycamera-*`/`X-Cameranavi-*`/`X-Cameracenter-*`/`X-Camerashop-*`/`X-Camerapro-*`/`X-Cameradoctor-*`/`X-Camerarescue-*`/`X-Camera24-*`/`X-Monitornavi-*`/`X-Monitorcenter-*`/`X-Monitorshop-*`/`X-Monitorpro-*`/`X-Monitordoctor-*`/`X-Monitorrescue-*`/`X-Monitor24-*`/`X-Cctv-*`/`X-Cctvnavi-*`/`X-Cctvcenter-*`/`X-Cctvshop-*`/`X-Cctvpro-*`/`X-Cctvmart-*`/`X-Cctvplus-*`/`X-Cctvsmart-*`/`X-Cctvfamily-*`/`X-Hikvision-*`/`X-Dahua-*`/`X-Axis-*`/`X-Avigilon-*`/`X-Bosch-*`/`X-Pelco-*`/`X-Vivotek-*`/`X-Hanwha-*`/`X-Uniview-*`/`X-Tiandy-*`/`X-Ikegami-*`/`X-Sunell-*`/`X-Verint-*`/`X-Miharu-*`/`X-Cameramart-*`/`X-Cameraplus-*`/`X-Camerasmart-*`/`X-Camerafamily-*`/`X-Kanshimart-*`/`X-Kanshiplus-*`/`X-Kanshismart-*`/`X-Kanshifamily-*`/`X-Denbannavi-*`/`X-Denbancenter-*`/`X-Denbanshop-*`/`X-Denbanpro-*`/`X-Pasonavi-*`/`X-Pasocenter-*`/`X-Pasoshop-*`/`X-Pasopro-*` 等の防犯カメラ・監視印を送信側が自称する兆候を検出する
+fn has_securitycam_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-bousannavi-")
+            || l.starts_with("x-bousancenter-")
+            || l.starts_with("x-bousanshop-")
+            || l.starts_with("x-bousanpro-")
+            || l.starts_with("x-bousandoctor-")
+            || l.starts_with("x-bousanrescue-")
+            || l.starts_with("x-bousan24-")
+            || l.starts_with("x-kanshikamera-")
+            || l.starts_with("x-kanshinavi-")
+            || l.starts_with("x-kanshicenter-")
+            || l.starts_with("x-kanshishop-")
+            || l.starts_with("x-kanshipro-")
+            || l.starts_with("x-kanshidoctor-")
+            || l.starts_with("x-kanshirescue-")
+            || l.starts_with("x-kanshi24-")
+            || l.starts_with("x-securitycamera-")
+            || l.starts_with("x-cameranavi-")
+            || l.starts_with("x-cameracenter-")
+            || l.starts_with("x-camerashop-")
+            || l.starts_with("x-camerapro-")
+            || l.starts_with("x-cameradoctor-")
+            || l.starts_with("x-camerarescue-")
+            || l.starts_with("x-camera24-")
+            || l.starts_with("x-monitornavi-")
+            || l.starts_with("x-monitorcenter-")
+            || l.starts_with("x-monitorshop-")
+            || l.starts_with("x-monitorpro-")
+            || l.starts_with("x-monitordoctor-")
+            || l.starts_with("x-monitorrescue-")
+            || l.starts_with("x-monitor24-")
+            || l.starts_with("x-cctv-")
+            || l.starts_with("x-cctvnavi-")
+            || l.starts_with("x-cctvcenter-")
+            || l.starts_with("x-cctvshop-")
+            || l.starts_with("x-cctvpro-")
+            || l.starts_with("x-cctvmart-")
+            || l.starts_with("x-cctvplus-")
+            || l.starts_with("x-cctvsmart-")
+            || l.starts_with("x-cctvfamily-")
+            || l.starts_with("x-hikvision-")
+            || l.starts_with("x-dahua-")
+            || l.starts_with("x-axis-")
+            || l.starts_with("x-avigilon-")
+            || l.starts_with("x-bosch-")
+            || l.starts_with("x-pelco-")
+            || l.starts_with("x-vivotek-")
+            || l.starts_with("x-hanwha-")
+            || l.starts_with("x-uniview-")
+            || l.starts_with("x-tiandy-")
+            || l.starts_with("x-ikegami-")
+            || l.starts_with("x-sunell-")
+            || l.starts_with("x-verint-")
+            || l.starts_with("x-miharu-")
+            || l.starts_with("x-cameramart-")
+            || l.starts_with("x-cameraplus-")
+            || l.starts_with("x-camerasmart-")
+            || l.starts_with("x-camerafamily-")
+            || l.starts_with("x-kanshimart-")
+            || l.starts_with("x-kanshiplus-")
+            || l.starts_with("x-kanshismart-")
+            || l.starts_with("x-kanshifamily-")
+            || l.starts_with("x-denbannavi-")
+            || l.starts_with("x-denbancenter-")
+            || l.starts_with("x-denbanshop-")
+            || l.starts_with("x-denbanpro-")
+            || l.starts_with("x-pasonavi-")
+            || l.starts_with("x-pasocenter-")
+            || l.starts_with("x-pasoshop-")
+            || l.starts_with("x-pasopro-"))
+}
+
+/// `X-Ferry-*`/`X-Ferries-*`/`X-Ferrynavi-*`/`X-Ferrycenter-*`/`X-Ferryshop-*`/`X-Ferrypro-*`/`X-Ferrydoctor-*`/`X-Ferryrescue-*`/`X-Ferry24-*`/`X-Cruise-*`/`X-Cruisenavi-*`/`X-Cruisecenter-*`/`X-Cruiseshop-*`/`X-Cruisepro-*`/`X-Cruisedoctor-*`/`X-Cruiserescue-*`/`X-Cruise24-*`/`X-Norimononavi-*`/`X-Norimonocenter-*`/`X-Norimonoshop-*`/`X-Norimonopro-*`/`X-Senpaku-*`/`X-Senpakunavi-*`/`X-Senpakucenter-*`/`X-Senpakushop-*`/`X-Senpakupro-*`/`X-Kaiji-*`/`X-Kaijinnavi-*`/`X-Kaijincenter-*`/`X-Kaijinshop-*`/`X-Kaijinpro-*`/`X-Kaijindoctor-*`/`X-Kaijinrescue-*`/`X-Kaijin24-*`/`X-Shinmoji-*`/`X-Shinmojinavi-*`/`X-Shinmojicenter-*`/`X-Shinmojishop-*`/`X-Shinmojipro-*`/`X-Hankyuferry-*`/`X-Hankyuferrynavi-*`/`X-Hankyuferrycenter-*`/`X-Hankyuferryshop-*`/`X-Hankyuferrypro-*`/`X-Oceantrans-*`/`X-Oceantransnavi-*`/`X-Oceantranscenter-*`/`X-Oceantransshop-*`/`X-Oceantranspro-*`/`X-Dreamferry-*`/`X-Dreamferrynavi-*`/`X-Dreamferrycenter-*`/`X-Dreamferryshop-*`/`X-Dreamferrypro-*`/`X-Ferrymart-*`/`X-Ferryplus-*`/`X-Ferrysmart-*`/`X-Ferryfamily-*`/`X-Cruisemart-*`/`X-Cruiseplus-*`/`X-Cruisesmart-*`/`X-Cruisefamily-*`/`X-Funabinavi-*`/`X-Funabicenter-*`/`X-Funabishop-*`/`X-Funabipro-*`/`X-Funabadoctor-*`/`X-Funabarescue-*`/`X-Funaba24-*`/`X-Sunflowernavi-*`/`X-Sunflowercenter-*`/`X-Sunflowershop-*`/`X-Sunflowerpro-*`/`X-Oceankourossonavi-*`/`X-Oceankourossocenter-*`/`X-Oceankourossoshop-*`/`X-Oceankourossopro-*` 等のフェリー・クルーズ・船舶印を送信側が自称する兆候を検出する
+fn has_ferry_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-ferry-")
+            || l.starts_with("x-ferries-")
+            || l.starts_with("x-ferrynavi-")
+            || l.starts_with("x-ferrycenter-")
+            || l.starts_with("x-ferryshop-")
+            || l.starts_with("x-ferrypro-")
+            || l.starts_with("x-ferrydoctor-")
+            || l.starts_with("x-ferryrescue-")
+            || l.starts_with("x-ferry24-")
+            || l.starts_with("x-cruise-")
+            || l.starts_with("x-cruisenavi-")
+            || l.starts_with("x-cruisecenter-")
+            || l.starts_with("x-cruiseshop-")
+            || l.starts_with("x-cruisepro-")
+            || l.starts_with("x-cruisedoctor-")
+            || l.starts_with("x-cruiserescue-")
+            || l.starts_with("x-cruise24-")
+            || l.starts_with("x-norimononavi-")
+            || l.starts_with("x-norimonocenter-")
+            || l.starts_with("x-norimonoshop-")
+            || l.starts_with("x-norimonopro-")
+            || l.starts_with("x-senpaku-")
+            || l.starts_with("x-senpakunavi-")
+            || l.starts_with("x-senpakucenter-")
+            || l.starts_with("x-senpakushop-")
+            || l.starts_with("x-senpakupro-")
+            || l.starts_with("x-kaiji-")
+            || l.starts_with("x-kaijinnavi-")
+            || l.starts_with("x-kaijincenter-")
+            || l.starts_with("x-kaijinshop-")
+            || l.starts_with("x-kaijinpro-")
+            || l.starts_with("x-kaijindoctor-")
+            || l.starts_with("x-kaijinrescue-")
+            || l.starts_with("x-kaijin24-")
+            || l.starts_with("x-shinmoji-")
+            || l.starts_with("x-shinmojinavi-")
+            || l.starts_with("x-shinmojicenter-")
+            || l.starts_with("x-shinmojishop-")
+            || l.starts_with("x-shinmojipro-")
+            || l.starts_with("x-hankyuferry-")
+            || l.starts_with("x-hankyuferrynavi-")
+            || l.starts_with("x-hankyuferrycenter-")
+            || l.starts_with("x-hankyuferryshop-")
+            || l.starts_with("x-hankyuferrypro-")
+            || l.starts_with("x-oceantrans-")
+            || l.starts_with("x-oceantransnavi-")
+            || l.starts_with("x-oceantranscenter-")
+            || l.starts_with("x-oceantransshop-")
+            || l.starts_with("x-oceantranspro-")
+            || l.starts_with("x-dreamferry-")
+            || l.starts_with("x-dreamferrynavi-")
+            || l.starts_with("x-dreamferrycenter-")
+            || l.starts_with("x-dreamferryshop-")
+            || l.starts_with("x-dreamferrypro-")
+            || l.starts_with("x-ferrymart-")
+            || l.starts_with("x-ferryplus-")
+            || l.starts_with("x-ferrysmart-")
+            || l.starts_with("x-ferryfamily-")
+            || l.starts_with("x-cruisemart-")
+            || l.starts_with("x-cruiseplus-")
+            || l.starts_with("x-cruisesmart-")
+            || l.starts_with("x-cruisefamily-")
+            || l.starts_with("x-funabinavi-")
+            || l.starts_with("x-funabicenter-")
+            || l.starts_with("x-funabishop-")
+            || l.starts_with("x-funabipro-")
+            || l.starts_with("x-funabadoctor-")
+            || l.starts_with("x-funabarescue-")
+            || l.starts_with("x-funaba24-")
+            || l.starts_with("x-sunflowernavi-")
+            || l.starts_with("x-sunflowercenter-")
+            || l.starts_with("x-sunflowershop-")
+            || l.starts_with("x-sunflowerpro-")
+            || l.starts_with("x-oceankourossonavi-")
+            || l.starts_with("x-oceankourossocenter-")
+            || l.starts_with("x-oceankourossoshop-")
+            || l.starts_with("x-oceankourossopro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -24272,5 +24525,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_warehouse_marks(clean));
+    }
+    #[test]
+    fn scan_は受機印を検出する() {
+        for raw in [
+            br"X-DaigakuNavi-Alert: 1",
+            br"X-SenmonGakkouNavi-Notice: 1",
+            br"X-YobikouNavi-Info: 1",
+            br"X-BenesseK-Report: 1",
+            br"X-Juuken-Bulletin: 1",
+            br"X-JuukenNavi-News: 1",
+            br"X-CollegeNavi-Flash: 1",
+            br"X-UniversityNavi-Release: 1",
+        ] {
+            assert!(has_college_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_college_marks(clean));
+    }
+
+    #[test]
+    fn scan_は録機印を検出する() {
+        for raw in [
+            br"X-BousanNavi-Alert: 1",
+            br"X-KanshiKamera-Notice: 1",
+            br"X-SecurityCamera-Info: 1",
+            br"X-CameraNavi-Report: 1",
+            br"X-MonitorNavi-Bulletin: 1",
+            br"X-Cctv-News: 1",
+            br"X-Hikvision-Flash: 1",
+            br"X-Dahua-Release: 1",
+        ] {
+            assert!(has_securitycam_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_securitycam_marks(clean));
+    }
+
+    #[test]
+    fn scan_は船機印を検出する() {
+        for raw in [
+            br"X-Ferry-Alert: 1",
+            br"X-FerryNavi-Notice: 1",
+            br"X-Cruise-Info: 1",
+            br"X-CruiseNavi-Report: 1",
+            br"X-Senpaku-Bulletin: 1",
+            br"X-KaijiNavi-News: 1",
+            br"X-ShinMoji-Flash: 1",
+            br"X-HankyuFerry-Release: 1",
+        ] {
+            assert!(has_ferry_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_ferry_marks(clean));
     }
 }
