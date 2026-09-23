@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D336: `X-Originating-IP:`/`X-Originating-User:` 等の WebMail 出自自称が未検査
+
+- Hotmail/Exchange WebMail が送信時に記す接続元情報 — 送信側から届くのは「WebMail 経由で送った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_originating_headers` 新設 → `Envelope.originating_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D337: `X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:`/`X-MS-Office365-*` 等の O365 ATP/フィルタ印自称が未検査
+
+- Microsoft 365 のフィルタ・ATP が通過時に記す判定レポート — 送信側から届くのは「MS フィルタを通過した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_atp_report` 新設 → `Envelope.atp_report` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D338: `X-SES-*:`/`X-Amzn-*:`/`X-AWS-*` 等の Amazon SES 印自称が未検査
+
+- SES が配送時に記す配信基盤スタンプ — 送信側から届くのは「SES 経由で送った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_ses_headers` 新設 → `Envelope.ses_headers` → `render_risks` 兆候報告
+- テスト +4 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

@@ -581,6 +581,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D336: WebMail 出自自称
+    if env.originating_headers {
+        render_risks.push(
+            "X-Originating-* ヘッダ — 接続元情報を送信側が自称する兆候です".to_string(),
+        );
+    }
+
+    // D337: O365 ATP/フィルタ印自称
+    if env.atp_report {
+        render_risks.push(
+            "X-Forefront-Antispam/X-Microsoft-Antispam/X-MS-Office365-* 等 — MS フィルタ判定を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D338: SES 印自称
+    if env.ses_headers {
+        render_risks.push(
+            "X-SES-*/X-Amzn-* — SES 配信基盤のスタンプを送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

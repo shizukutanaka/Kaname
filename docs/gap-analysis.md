@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D336 | ~~**`X-Originating-*` 等の WebMail 出自自称が未検査**~~ **(解消済み)** | P2 | 接続元情報を送信側が自称する兆候だが未検査だった。修正: `has_originating_headers` で検出、`originating_headers` → `render_risks` 兆候報告 | 出自は接続側が知る — 接続元の自署を問え |
+| D337 | ~~**`X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:`/`X-MS-Office365-*` 等の O365 ATP/フィルタ印自称が未検査**~~ **(解消済み)** | P2 | MS フィルタ判定を送信側が自称する兆候だが未検査だった。修正: `has_atp_report` で検出、`atp_report` → `render_risks` 兆候報告 | 判定は判定機が記す — 判定印の自署を問え |
+| D338 | ~~**`X-SES-*:`/`X-Amzn-*:`/`X-AWS-*` 等の Amazon SES 印自称が未検査**~~ **(解消済み)** | P2 | SES 配信基盤のスタンプを送信側が自称する兆候だが未検査だった。修正: `has_ses_headers` で検出、`ses_headers` → `render_risks` 兆候報告 | 基盤の印は基盤が押す — 配信印の自署を問え |

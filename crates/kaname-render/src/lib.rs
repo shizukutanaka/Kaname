@@ -119,6 +119,19 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-Originating-IP:`/`X-Originating-User:`/`X-Originating-Email:`
+    /// 等の WebMail 出自ヘッダがあるか — 接続元情報を送信側が自称する
+    /// 兆候 (D336)。
+    pub originating_headers: bool,
+    /// `X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:`/
+    /// `X-MS-Exchange-ATP*:`/`X-MS-Office365-*:` 等の O365 ATP/フィルタ
+    /// 印があるか — Microsoft 365 フィルタ判定を送信側が自称する
+    /// 兆候 (D337)。
+    pub atp_report: bool,
+    /// `X-SES-*:`/`X-Amzn-*:`/`X-SES-Outgoing:` 等の Amazon SES
+    /// 印があるか — SES 配信基盤のスタンプを送信側が自称する
+    /// 兆候 (D338)。
+    pub ses_headers: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +403,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        originating_headers: has_originating_headers(raw),
+        atp_report: has_atp_report(raw),
+        ses_headers: has_ses_headers(raw),
     })
 }
 
@@ -487,6 +503,62 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-Originating-IP:`/`X-Originating-User:`/`X-Originating-Email:` 等の
+/// WebMail 出自ヘッダがあるか判定する (D336)。
+///
+/// Hotmail/Exchange WebMail が送信時に記す接続元情報 — 送信側から
+/// 届くこれは「WebMail 経由で送った」体裁を内容側が主張する自称
+/// (接続情報は配送機構が見る値)。
+fn has_originating_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-originating-ip:")
+            || l.starts_with("x-originating-user:")
+            || l.starts_with("x-originating-email:")
+            || l.starts_with("x-orig-ip:")
+            || l.starts_with("x-sender-ip:")
+    })
+}
+
+/// `X-Forefront-Antispam-Report:`/`X-Microsoft-Antispam:`/`X-MS-Exchange-ATP*`/
+/// `X-MS-Office365-*:` 等の O365 ATP/フィルタ印があるか判定する (D337)。
+///
+/// Microsoft 365 のフィルタ・ATP が通過時に記す判定レポート —
+/// 送信側から届くこれは「MS フィルタを通過した」体裁を内容側が
+/// 主張する自称 (D335 スキャン印の MS 版)。
+fn has_atp_report(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-forefront-antispam-report:")
+            || l.starts_with("x-microsoft-antispam:")
+            || l.starts_with("x-ms-exchange-atp")
+            || l.starts_with("x-ms-office365-")
+            || l.starts_with("x-ms-exchange-safelinks")
+    })
+}
+
+/// `X-SES-*:`/`X-Amzn-*:`/`X-SES-Outgoing:` 等の Amazon SES 印があるか
+/// 判定する (D338)。
+///
+/// SES が配送時に記す配信基盤スタンプ — 送信側から届くこれは
+/// 「SES 経由で送った」体裁を内容側が主張する自称。配信インフラの
+/// 印は配信インフラが書く。
+fn has_ses_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ses-") || l.starts_with("x-amzn-") || l.starts_with("x-aws-")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2812,46 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はWebMail出自を検出する() {
+        let ip = b"X-Originating-IP: [1.2.3.4]\r\n\r\nx";
+        assert!(has_originating_headers(ip));
+        let eu = b"X-Originating-User: a@b\r\n\r\nx";
+        assert!(has_originating_headers(eu));
+        let si = b"X-Sender-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_originating_headers(si));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_originating_headers(clean));
+        let body = b"From: a@b\r\n\r\nX-Originating-IP: [1.2.3.4]";
+        assert!(!has_originating_headers(body));
+    }
+
+    #[test]
+    fn scan_はO365ATP印を検出する() {
+        let ff = b"X-Forefront-Antispam-Report: x\r\n\r\ny";
+        assert!(has_atp_report(ff));
+        let ma = b"X-Microsoft-Antispam: x\r\n\r\ny";
+        assert!(has_atp_report(ma));
+        let o3 = b"X-MS-Office365-Filtering-Correlation-Id: x\r\n\r\ny";
+        assert!(has_atp_report(o3));
+        let at = b"X-MS-Exchange-ATPMessageProperties: x\r\n\r\ny";
+        assert!(has_atp_report(at));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_atp_report(clean));
+    }
+
+    #[test]
+    fn scan_はSES印を検出する() {
+        let se = b"X-SES-Outgoing: 1\r\n\r\nx";
+        assert!(has_ses_headers(se));
+        let am = b"X-Amzn-Trace-Id: x\r\n\r\ny";
+        assert!(has_ses_headers(am));
+        let aw = b"X-AWS-Outgoing: x\r\n\r\ny";
+        assert!(has_ses_headers(aw));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ses_headers(clean));
     }
 }
 
