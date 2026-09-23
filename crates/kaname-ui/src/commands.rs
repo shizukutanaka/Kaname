@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D303: 属性内ペイロード・誘導先
+    if env.hiding_attr {
+        render_risks.push(
+            "srcdoc=/formaction=/background= 属性 — 要素走査を素通りする属性経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D304: トップレベル message サブタイプ
+    if env.message_subtype_top {
+        render_risks.push(
+            "Content-Type が message/rfc822・message/global 等を名乗っています — 包み込み構造を騙る兆候です"
+                .to_string(),
+        );
+    }
+
+    // D305: 廃止・不活性コンテナタグ
+    if env.obsolete_container_tag {
+        render_risks.push(
+            "<template>/<keygen>/<isindex> タグ — メールに正当な用途のない潜み場所の可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

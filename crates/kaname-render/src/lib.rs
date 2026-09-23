@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `srcdoc=`/`formaction=`/`background=` の属性内ペイロード・
+    /// 誘導先があるか — 要素走査を素通りする属性経路の兆候 (D303)。
+    pub hiding_attr: bool,
+    /// トップレベル `Content-Type` が `message/rfc822`/`message/global`/
+    /// `message/news` 等の message サブタイプを名乗るか (D304)。
+    pub message_subtype_top: bool,
+    /// `<template>`/`<keygen>`/`<isindex>` の廃止・不活性コンテナ
+    /// タグがあるか (D305)。
+    pub obsolete_container_tag: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +371,58 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        hiding_attr: has_hiding_attr(raw),
+        message_subtype_top: has_message_subtype_top(raw),
+        obsolete_container_tag: has_obsolete_container_tag(raw),
     })
+}
+
+/// `srcdoc=`/`formaction=`/`background=` の属性内ペイロード・誘導先を
+/// 検出する (D303)。
+///
+/// `srcdoc=` は iframe の内容を属性値に内蔵させて要素走査から隠し、
+/// `formaction=` は送信先を属性で上書きし、`background=` はリモート
+/// 読み込み先を属性で指定する — いずれも「属性が経路を運ぶ」仕込み。
+fn has_hiding_attr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    [" srcdoc=", " formaction=", " background="]
+        .iter()
+        .any(|t| lower.contains(t))
+}
+
+/// トップレベル `Content-Type` が message サブタイプを名乗るか判定する
+/// (D304)。
+///
+/// `message/rfc822`/`message/global*`/`message/news` をメッセージ全体
+/// として名乗ることは、包み込みメッセージの構造を騙る parser
+/// differential — .eml 添付はパートレベルなのでトップレベル宣言は
+/// 異常形。
+fn has_message_subtype_top(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-type:"))
+        .any(|l| {
+            l.contains("message/rfc822")
+                || l.contains("message/global")
+                || l.contains("message/news")
+        })
+}
+
+/// `<template>`/`<keygen>`/`<isindex>` の廃止・不活性コンテナタグを
+/// 検出する (D305)。
+///
+/// `<template>` は描画・解析されない不活性コンテナ (内容隠蔽の器)、
+/// `<keygen>`/`<isindex>` は廃止済みの動作要素 — メールに正当な用途が
+/// なく、解析器と表示器の解釈を分ける潜み場所になる。
+fn has_obsolete_container_tag(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<template") || lower.contains("<keygen") || lower.contains("<isindex")
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2735,46 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は属性内ペイロードを検出する() {
+        let sd = b"<iframe srcdoc=\"<script>x</script>\"></iframe>";
+        assert!(has_hiding_attr(sd));
+        let fa = b"<button formaction=\"https://evil.example\">go</button>";
+        assert!(has_hiding_attr(fa));
+        let bg = b"<body background=\"https://track.example/bg.png\">";
+        assert!(has_hiding_attr(bg));
+        let clean = b"<p>ok</p>";
+        assert!(!has_hiding_attr(clean));
+        let datasrcdoc = b"<div data-srcdoc=\"x\">y</div>";
+        assert!(!has_hiding_attr(datasrcdoc));
+    }
+
+    #[test]
+    fn scan_はmessageサブタイプを検出する() {
+        let rfc822 = b"Content-Type: message/rfc822\r\n\r\nx";
+        assert!(has_message_subtype_top(rfc822));
+        let global = b"Content-Type: message/global\r\n\r\nx";
+        assert!(has_message_subtype_top(global));
+        let news = b"Content-Type: message/news\r\n\r\nx";
+        assert!(has_message_subtype_top(news));
+        let mixed = b"Content-Type: multipart/mixed; boundary=B\r\n\r\n--B\r\nContent-Type: message/rfc822\r\n\r\ny";
+        assert!(!has_message_subtype_top(mixed));
+        let ok = b"Content-Type: text/html\r\n\r\nx";
+        assert!(!has_message_subtype_top(ok));
+    }
+
+    #[test]
+    fn scan_は廃止コンテナタグを検出する() {
+        let t = b"<template><script>x</script></template>";
+        assert!(has_obsolete_container_tag(t));
+        let k = b"<keygen name=\"k\">";
+        assert!(has_obsolete_container_tag(k));
+        let i = b"<isindex prompt=\"x\">";
+        assert!(has_obsolete_container_tag(i));
+        let clean = b"<p>ok</p>";
+        assert!(!has_obsolete_container_tag(clean));
     }
 }
 

@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D303: `srcdoc=`/`formaction=`/`background=` の属性内ペイロード・誘導先が未検査
+
+- `srcdoc=` は iframe の内容を属性値に内蔵させて要素走査から隠し、`formaction=` は送信先を属性で上書きし、`background=` はリモート読み込み先を属性で指定する — いずれも「属性が経路を運ぶ」仕込みで未検査だった
+- 対処: `has_hiding_attr` 新設 (`data-srcdoc` 等の誤認を避ける前方空白チェック付き) → `Envelope.hiding_attr` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D304: トップレベル `Content-Type` の message サブタイプが未検査
+
+- `message/rfc822`/`message/global*`/`message/news` をメッセージ全体として名乗ることは包み込みメッセージの構造を騙る parser differential — .eml 添付はパートレベルなのでトップレベル宣言は異常形だが未検査だった
+- 対処: `has_message_subtype_top` 新設 → `Envelope.message_subtype_top` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D305: `<template>`/`<keygen>`/`<isindex>` の廃止・不活性コンテナタグが未検査
+
+- `<template>` は描画・解析されない不活性コンテナ (内容隠蔽の器)、`<keygen>`/`<isindex>` は廃止済みの動作要素 — メールに正当な用途がなく解析器と表示器の解釈を分ける潜み場所になるが未検査だった
+- 対処: `has_obsolete_container_tag` 新設 → `Envelope.obsolete_container_tag` → `render_risks` 兆候報告
+- テスト +4 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
