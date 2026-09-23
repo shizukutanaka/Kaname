@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D549: `X-NHK-*`/`X-BBC-*`/`X-ESPN-*` 等の放送局・チャンネル印自称が未検査
+
+- **問題**: `X-NHK-*` (NHK)、`X-BBC-*` (BBC)、`X-ESPN-*` (ESPN)、`X-NTV-*`/`X-TBS-*`/`X-FujiTV-*`/`X-TVAsahi-*`/`X-TVTokyo-*`/`X-WOWOW-*`/`X-CNN-*`/`X-FOX-*`/`X-ABC-*`/`X-CBS-*`/`X-NBC-*`/`X-PBS-*`/`X-CBC-*`/`X-ARD-*`/`X-ZDF-*`/`X-RAI-*`/`X-FranceTV-*`/`X-KBS-*`/`X-MBC-*`/`X-JTBC-*`/`X-tvN-*`/`X-NHKWorld-*`/`X-HBO-*`/`X-Cinemax-*`/`X-Showtime-*`/`X-Starz-*`/`X-AMC-*`/`X-FX-*`/`X-Cartoon-*`/`X-Nickelodeon-*`/`X-Discovery-*`/`X-NationalGeographic-*`/`X-HistoryChannel-*`/`X-AnimalPlanet-*` は放機の通知記録 — 送信側が書くことは自称。受信料・番組案内偽装は放送詐欺の典型。(`X-ABEMA-*`/`X-TVer-*`/`X-Netflix-*` 等の配信機は D516、`X-Sky-*` は D511、`X-OCN-*` は D426 で検出済み)
+- **修正**: `Envelope` に `broadcast_marks` + `has_broadcast_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 放印の自署を問え。
+
+### Security — D550: `X-Nikkei-*`/`X-Reuters-*`/`X-Kyodo-*` 等の新聞・通信社・経済・スポーツメディア印自称が未検査
+
+- **問題**: `X-Nikkei-*` (日本経済新聞)、`X-Reuters-*` (Reuters)、`X-Kyodo-*` (共同通信)、`X-Asahi-*`/`X-Mainichi-*`/`X-Yomiuri-*`/`X-Sankei-*`/`X-NYT-*`/`X-WSJ-*`/`X-WashingtonPost-*`/`X-Times-*`/`X-APNews-*`/`X-AFP-*`/`X-Jiji-*`/`X-Bloomberg-*`/`X-DPA-*`/`X-PA-*`/`X-NewsCorp-*`/`X-NikkeiBP-*`/`X-Diamond-*`/`X-President-*`/`X-ToyoKeizai-*`/`X-Zakzak-*`/`X-TokyoSports-*`/`X-BizJournals-*`/`X-NikkanSports-*`/`X-SportsNippon-*`/`X-Hochi-*`/`X-Sanspo-*`/`X-Sponichi-*`/`X-DailySports-*` は報機の通知記録 — 送信側が書くことは自称。購読料・記事案内偽装は報道詐欺の典型。(`X-Guardian-*` は D489 で検出済み)
+- **修正**: `Envelope` に `newspaper_marks` + `has_newspaper_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 報印の自署を問え。
+
+### Security — D551: `X-Nestle-*`/`X-Suntory-*`/`X-Nissin-*` 等の食品・飲料・酒・菓子メーカー印自称が未検査
+
+- **問題**: `X-Nestle-*` (Nestle)、`X-Suntory-*` (サントリー)、`X-Nissin-*` (日清食品)、`X-Danone-*`/`X-Fonterra-*`/`X-Kirin-*`/`X-AsahiBeer-*`/`X-Meiji-*`/`X-Morinaga-*`/`X-Ajinomoto-*`/`X-Nippn-*`/`X-Nichirei-*`/`X-Itoham-*`/`X-NihonHam-*`/`X-Yakult-*`/`X-Calbee-*`/`X-Kewpie-*`/`X-House-*`/`X-Kikkoman-*`/`X-ToyoSuisan-*`/`X-Glico-*`/`X-Lotte-*`/`X-SnowMeg-*`/`X-PrimaHam-*`/`X-Kameda-*`/`X-Nongshim-*`/`X-CJ-*`/`X-Ottogi-*`/`X-Heinz-*`/`X-Kraft-*`/`X-FritoLay-*`/`X-PepsiCo-*`/`X-CocaCola-*`/`X-Mars-*`/`X-Hershey-*`/`X-Lindt-*`/`X-Godiva-*`/`X-Royce-*`/`X-Morozoff-*`/`X-YokuMoku-*`/`X-Budweiser-*`/`X-Heineken-*`/`X-Carlsberg-*`/`X-Guinness-*`/`X-Stella-*`/`X-Corona-*`/`X-Peroni-*`/`X-SapporoBeer-*`/`X-Ebisu-*`/`X-JimBeam-*`/`X-JackDaniels-*`/`X-Absolut-*`/`X-Smirnoff-*`/`X-Bacardi-*`/`X-JohnnieWalker-*`/`X-Chivas-*`/`X-Ballantines-*`/`X-Glenfiddich-*`/`X-Nikka-*`/`X-Yamazaki-*`/`X-Hibiki-*`/`X-Hakushu-*`/`X-JT-*` は食機の通知記録 — 送信側が書くことは自称。懸賞・モニター募集偽装は食品詐欺の典型。(`X-Unilever-*`/`X-PG-*` 等の日用品機は D533 で検出済み)
+- **修正**: `Envelope` に `food_marks` + `has_food_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 食印の自署を問え。
+
+
 ### Security — D546: `X-Deloitte-*`/`X-KPMG-*`/`X-McKinsey-*` 等の監査・コンサル・格付印自称が未検査
 
 - **問題**: `X-Deloitte-*` (Deloitte)、`X-KPMG-*` (KPMG)、`X-McKinsey-*` (McKinsey)、`X-PwC-*`/`X-EY-*`/`X-BCG-*`/`X-Bain-*`/`X-Accenture-*`/`X-Capgemini-*`/`X-Cognizant-*`/`X-Infosys-*`/`X-TCS-*`/`X-Wipro-*`/`X-GrantThornton-*`/`X-BDO-*`/`X-RSM-*`/`X-Mazars-*`/`X-Crowe-*`/`X-BakerTilly-*`/`X-Protiviti-*`/`X-Mercer-*`/`X-WTW-*`/`X-MarshMcLennan-*`/`X-Gartner-*`/`X-Forrester-*`/`X-IDC-*`/`X-Moodys-*`/`X-Fitch-*`/`X-SPGlobal-*`/`X-RI-*`/`X-JCR-*`/`X-EisnerAmper-*`/`X-MossAdams-*` は監機の通知記録 — 送信側が書くことは自称。監査通知・格付変更の偽装は金融 BEC の典型。(`X-Aon-*` は D519 で検出済み)

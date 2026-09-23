@@ -1684,6 +1684,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D549: 放送局・チャンネル印自称
+    if env.broadcast_marks {
+        render_risks.push(
+            "X-NHK-*/X-BBC-*/X-ESPN-*/X-FujiTV-*/X-WOWOW-*/X-HBO-*/X-CNN-*/X-KBS-* 等 — 放機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D550: 新聞・通信社・経済・スポーツメディア印自称
+    if env.newspaper_marks {
+        render_risks.push(
+            "X-Nikkei-*/X-Reuters-*/X-Kyodo-*/X-Yomiuri-*/X-WSJ-*/X-Bloomberg-*/X-AFP-*/X-ToyoKeizai-* 等 — 報機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D551: 食品・飲料・酒・菓子メーカー印自称
+    if env.food_marks {
+        render_risks.push(
+            "X-Nestle-*/X-Suntory-*/X-Nissin-*/X-Ajinomoto-*/X-Heineken-*/X-CocaCola-*/X-Kikkoman-*/X-Glico-* 等 — 食機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

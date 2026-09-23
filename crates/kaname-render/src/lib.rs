@@ -1241,6 +1241,48 @@ pub struct Envelope {
     /// 等の警備・清掃・施設管理・引越・ストレージ印があるか —
     /// 施機の通知記録を送信側が自称する兆候 (D548)。
     pub facility_marks: bool,
+    /// `X-NHK-*`/`X-NTV-*`/`X-TBS-*`/`X-FujiTV-*`/`X-TVAsahi-*`/
+    /// `X-TVTokyo-*`/`X-WOWOW-*`/`X-CNN-*`/`X-BBC-*`/`X-FOX-*`/`X-ESPN-*`/
+    /// `X-ABC-*`/`X-CBS-*`/`X-NBC-*`/`X-PBS-*`/`X-CBC-*`/`X-ARD-*`/
+    /// `X-ZDF-*`/`X-RAI-*`/`X-FranceTV-*`/`X-KBS-*`/`X-MBC-*`/`X-JTBC-*`/
+    /// `X-tvN-*`/`X-NHKWorld-*`/`X-HBO-*`/`X-Cinemax-*`/`X-Showtime-*`/
+    /// `X-Starz-*`/`X-AMC-*`/`X-FX-*`/`X-Cartoon-*`/`X-Nickelodeon-*`/
+    /// `X-Discovery-*`/`X-NationalGeographic-*`/`X-HistoryChannel-*`/
+    /// `X-AnimalPlanet-*` 等の放送局・チャンネル印があるか — 放機の
+    /// 通知記録を送信側が自称する兆候 (D549)。(`X-ABEMA-*`/`X-TVer-*`/
+    /// `X-Netflix-*` 等の配信機は D516、`X-Sky-*` は D511、
+    /// `X-OCN-*` は D426 で検出済み)
+    pub broadcast_marks: bool,
+    /// `X-Nikkei-*`/`X-Asahi-*`/`X-Mainichi-*`/`X-Yomiuri-*`/
+    /// `X-Sankei-*`/`X-NYT-*`/`X-WSJ-*`/`X-WashingtonPost-*`/`X-Times-*`/
+    /// `X-Reuters-*`/`X-APNews-*`/`X-AFP-*`/`X-Kyodo-*`/`X-Jiji-*`/
+    /// `X-Bloomberg-*`/`X-DPA-*`/`X-PA-*`/`X-NewsCorp-*`/`X-NikkeiBP-*`/
+    /// `X-Diamond-*`/`X-President-*`/`X-ToyoKeizai-*`/`X-Zakzak-*`/
+    /// `X-TokyoSports-*`/`X-BizJournals-*`/`X-NikkanSports-*`/
+    /// `X-SportsNippon-*`/`X-Hochi-*`/`X-Sanspo-*`/`X-Sponichi-*`/
+    /// `X-DailySports-*` 等の新聞・通信社・経済・スポーツメディア印が
+    /// あるか — 報機の通知記録を送信側が自称する兆候 (D550)。
+    /// (`X-Guardian-*` は D489 で検出済み)
+    pub newspaper_marks: bool,
+    /// `X-Nestle-*`/`X-Danone-*`/`X-Fonterra-*`/`X-Kirin-*`/
+    /// `X-AsahiBeer-*`/`X-Suntory-*`/`X-Meiji-*`/`X-Morinaga-*`/
+    /// `X-Ajinomoto-*`/`X-Nippn-*`/`X-Nichirei-*`/`X-Itoham-*`/
+    /// `X-NihonHam-*`/`X-Yakult-*`/`X-Calbee-*`/`X-Kewpie-*`/`X-House-*`/
+    /// `X-Kikkoman-*`/`X-Nissin-*`/`X-ToyoSuisan-*`/`X-Glico-*`/
+    /// `X-Lotte-*`/`X-SnowMeg-*`/`X-PrimaHam-*`/`X-Kameda-*`/
+    /// `X-Nongshim-*`/`X-CJ-*`/`X-Ottogi-*`/`X-Heinz-*`/`X-Kraft-*`/
+    /// `X-FritoLay-*`/`X-PepsiCo-*`/`X-CocaCola-*`/`X-Mars-*`/
+    /// `X-Hershey-*`/`X-Lindt-*`/`X-Godiva-*`/`X-Royce-*`/`X-Morozoff-*`/
+    /// `X-YokuMoku-*`/`X-Budweiser-*`/`X-Heineken-*`/`X-Carlsberg-*`/
+    /// `X-Guinness-*`/`X-Stella-*`/`X-Corona-*`/`X-Peroni-*`/
+    /// `X-SapporoBeer-*`/`X-Ebisu-*`/`X-JimBeam-*`/`X-JackDaniels-*`/
+    /// `X-Absolut-*`/`X-Smirnoff-*`/`X-Bacardi-*`/`X-JohnnieWalker-*`/
+    /// `X-Chivas-*`/`X-Ballantines-*`/`X-Glenfiddich-*`/`X-Nikka-*`/
+    /// `X-Yamazaki-*`/`X-Hibiki-*`/`X-Hakushu-*`/`X-JT-*` 等の
+    /// 食品・飲料・酒・菓子メーカー印があるか — 食機の通知記録を
+    /// 送信側が自称する兆候 (D551)。(`X-Unilever-*`/`X-PG-*` 等の
+    /// 日用品機は D533 で検出済み)
+    pub food_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1650,6 +1692,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         accounting_marks: has_accounting_marks(raw),
         gambling_marks: has_gambling_marks(raw),
         facility_marks: has_facility_marks(raw),
+        broadcast_marks: has_broadcast_marks(raw),
+        newspaper_marks: has_newspaper_marks(raw),
+        food_marks: has_food_marks(raw),
     })
 }
 
@@ -7853,6 +7898,209 @@ fn has_facility_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-NHK-*`/`X-NTV-*`/`X-TBS-*`/`X-FujiTV-*`/`X-TVAsahi-*`/`X-TVTokyo-*`/
+/// `X-WOWOW-*`/`X-CNN-*`/`X-BBC-*`/`X-FOX-*`/`X-ESPN-*`/`X-ABC-*`/
+/// `X-CBS-*`/`X-NBC-*`/`X-PBS-*`/`X-CBC-*`/`X-ARD-*`/`X-ZDF-*`/`X-RAI-*`/
+/// `X-FranceTV-*`/`X-KBS-*`/`X-MBC-*`/`X-JTBC-*`/`X-tvN-*`/`X-NHKWorld-*`/
+/// `X-HBO-*`/`X-Cinemax-*`/`X-Showtime-*`/`X-Starz-*`/`X-AMC-*`/`X-FX-*`/
+/// `X-Cartoon-*`/`X-Nickelodeon-*`/`X-Discovery-*`/`X-NationalGeographic-*`/
+/// `X-HistoryChannel-*`/`X-AnimalPlanet-*` 等の放送局・チャンネル印が
+/// あるか判定する (D549)。
+///
+/// `X-NHK-*` (NHK)、`X-BBC-*` (BBC)、`X-ESPN-*` (ESPN) は放機の
+/// 通知記録 — 送信側から届くこれは自称。受信料・番組案内偽装は
+/// 放送詐欺の典型。`X-ABEMA-*`/`X-TVer-*`/`X-Netflix-*` 等の配信機は
+/// D516、`X-Sky-*` は D511、`X-OCN-*` は D426 で検出済み。
+fn has_broadcast_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-nhk-")
+            || l.starts_with("x-ntv-")
+            || l.starts_with("x-tbs-")
+            || l.starts_with("x-fujitv-")
+            || l.starts_with("x-tvasahi-")
+            || l.starts_with("x-tvtokyo-")
+            || l.starts_with("x-wowow-")
+            || l.starts_with("x-cnn-")
+            || l.starts_with("x-bbc-")
+            || l.starts_with("x-fox-")
+            || l.starts_with("x-espn-")
+            || l.starts_with("x-abc-")
+            || l.starts_with("x-cbs-")
+            || l.starts_with("x-nbc-")
+            || l.starts_with("x-pbs-")
+            || l.starts_with("x-cbc-")
+            || l.starts_with("x-ard-")
+            || l.starts_with("x-zdf-")
+            || l.starts_with("x-rai-")
+            || l.starts_with("x-francetv-")
+            || l.starts_with("x-kbs-")
+            || l.starts_with("x-mbc-")
+            || l.starts_with("x-jtbc-")
+            || l.starts_with("x-tvn-")
+            || l.starts_with("x-nhkworld-")
+            || l.starts_with("x-hbo-")
+            || l.starts_with("x-cinemax-")
+            || l.starts_with("x-showtime-")
+            || l.starts_with("x-starz-")
+            || l.starts_with("x-amc-")
+            || l.starts_with("x-fx-")
+            || l.starts_with("x-cartoon-")
+            || l.starts_with("x-nickelodeon-")
+            || l.starts_with("x-discovery-")
+            || l.starts_with("x-nationalgeographic-")
+            || l.starts_with("x-historychannel-")
+            || l.starts_with("x-animalplanet-")
+    })
+}
+
+/// `X-Nikkei-*`/`X-Asahi-*`/`X-Mainichi-*`/`X-Yomiuri-*`/`X-Sankei-*`/
+/// `X-NYT-*`/`X-WSJ-*`/`X-WashingtonPost-*`/`X-Times-*`/`X-Reuters-*`/
+/// `X-APNews-*`/`X-AFP-*`/`X-Kyodo-*`/`X-Jiji-*`/`X-Bloomberg-*`/`X-DPA-*`/
+/// `X-PA-*`/`X-NewsCorp-*`/`X-NikkeiBP-*`/`X-Diamond-*`/`X-President-*`/
+/// `X-ToyoKeizai-*`/`X-Zakzak-*`/`X-TokyoSports-*`/`X-BizJournals-*`/
+/// `X-NikkanSports-*`/`X-SportsNippon-*`/`X-Hochi-*`/`X-Sanspo-*`/
+/// `X-Sponichi-*`/`X-DailySports-*` 等の新聞・通信社・経済・
+/// スポーツメディア印があるか判定する (D550)。
+///
+/// `X-Nikkei-*` (日本経済新聞)、`X-Reuters-*` (Reuters)、`X-Kyodo-*`
+/// (共同通信) は報機の通知記録 — 送信側から届くこれは自称。
+/// 購読料・記事案内偽装は報道詐欺の典型。`X-Guardian-*` は D489 で
+/// 検出済み。
+fn has_newspaper_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-nikkei-")
+            || l.starts_with("x-asahi-")
+            || l.starts_with("x-mainichi-")
+            || l.starts_with("x-yomiuri-")
+            || l.starts_with("x-sankei-")
+            || l.starts_with("x-nyt-")
+            || l.starts_with("x-wsj-")
+            || l.starts_with("x-washingtonpost-")
+            || l.starts_with("x-times-")
+            || l.starts_with("x-reuters-")
+            || l.starts_with("x-apnews-")
+            || l.starts_with("x-afp-")
+            || l.starts_with("x-kyodo-")
+            || l.starts_with("x-jiji-")
+            || l.starts_with("x-bloomberg-")
+            || l.starts_with("x-dpa-")
+            || l.starts_with("x-pa-")
+            || l.starts_with("x-newscorp-")
+            || l.starts_with("x-nikkeibp-")
+            || l.starts_with("x-diamond-")
+            || l.starts_with("x-president-")
+            || l.starts_with("x-toyokeizai-")
+            || l.starts_with("x-zakzak-")
+            || l.starts_with("x-tokyosports-")
+            || l.starts_with("x-bizjournals-")
+            || l.starts_with("x-nikkansports-")
+            || l.starts_with("x-sportsnippon-")
+            || l.starts_with("x-hochi-")
+            || l.starts_with("x-sanspo-")
+            || l.starts_with("x-sponichi-")
+            || l.starts_with("x-dailysports-")
+    })
+}
+
+/// `X-Nestle-*`/`X-Danone-*`/`X-Fonterra-*`/`X-Kirin-*`/`X-AsahiBeer-*`/
+/// `X-Suntory-*`/`X-Meiji-*`/`X-Morinaga-*`/`X-Ajinomoto-*`/`X-Nippn-*`/
+/// `X-Nichirei-*`/`X-Itoham-*`/`X-NihonHam-*`/`X-Yakult-*`/`X-Calbee-*`/
+/// `X-Kewpie-*`/`X-House-*`/`X-Kikkoman-*`/`X-Nissin-*`/`X-ToyoSuisan-*`/
+/// `X-Glico-*`/`X-Lotte-*`/`X-SnowMeg-*`/`X-PrimaHam-*`/`X-Kameda-*`/
+/// `X-Nongshim-*`/`X-CJ-*`/`X-Ottogi-*`/`X-Heinz-*`/`X-Kraft-*`/
+/// `X-FritoLay-*`/`X-PepsiCo-*`/`X-CocaCola-*`/`X-Mars-*`/`X-Hershey-*`/
+/// `X-Lindt-*`/`X-Godiva-*`/`X-Royce-*`/`X-Morozoff-*`/`X-YokuMoku-*`/
+/// `X-Budweiser-*`/`X-Heineken-*`/`X-Carlsberg-*`/`X-Guinness-*`/
+/// `X-Stella-*`/`X-Corona-*`/`X-Peroni-*`/`X-SapporoBeer-*`/`X-Ebisu-*`/
+/// `X-JimBeam-*`/`X-JackDaniels-*`/`X-Absolut-*`/`X-Smirnoff-*`/
+/// `X-Bacardi-*`/`X-JohnnieWalker-*`/`X-Chivas-*`/`X-Ballantines-*`/
+/// `X-Glenfiddich-*`/`X-Nikka-*`/`X-Yamazaki-*`/`X-Hibiki-*`/`X-Hakushu-*`/
+/// `X-JT-*` 等の食品・飲料・酒・菓子メーカー印があるか判定する (D551)。
+///
+/// `X-Nestle-*` (Nestle)、`X-Suntory-*` (サントリー)、`X-Nissin-*`
+/// (日清食品) は食機の通知記録 — 送信側から届くこれは自称。
+/// 懸賞・モニター募集偽装は食品詐欺の典型。`X-Unilever-*`/`X-PG-*`
+/// 等の日用品機は D533 で検出済み。
+fn has_food_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-nestle-")
+            || l.starts_with("x-danone-")
+            || l.starts_with("x-fonterra-")
+            || l.starts_with("x-kirin-")
+            || l.starts_with("x-asahibeer-")
+            || l.starts_with("x-suntory-")
+            || l.starts_with("x-meiji-")
+            || l.starts_with("x-morinaga-")
+            || l.starts_with("x-ajinomoto-")
+            || l.starts_with("x-nippn-")
+            || l.starts_with("x-nichirei-")
+            || l.starts_with("x-itoham-")
+            || l.starts_with("x-nihonham-")
+            || l.starts_with("x-yakult-")
+            || l.starts_with("x-calbee-")
+            || l.starts_with("x-kewpie-")
+            || l.starts_with("x-house-")
+            || l.starts_with("x-kikkoman-")
+            || l.starts_with("x-nissin-")
+            || l.starts_with("x-toyosuisan-")
+            || l.starts_with("x-glico-")
+            || l.starts_with("x-lotte-")
+            || l.starts_with("x-snowmeg-")
+            || l.starts_with("x-primaham-")
+            || l.starts_with("x-kameda-")
+            || l.starts_with("x-nongshim-")
+            || l.starts_with("x-cj-")
+            || l.starts_with("x-ottogi-")
+            || l.starts_with("x-heinz-")
+            || l.starts_with("x-kraft-")
+            || l.starts_with("x-fritolay-")
+            || l.starts_with("x-pepsico-")
+            || l.starts_with("x-cocacola-")
+            || l.starts_with("x-mars-")
+            || l.starts_with("x-hershey-")
+            || l.starts_with("x-lindt-")
+            || l.starts_with("x-godiva-")
+            || l.starts_with("x-royce-")
+            || l.starts_with("x-morozoff-")
+            || l.starts_with("x-yokumoku-")
+            || l.starts_with("x-budweiser-")
+            || l.starts_with("x-heineken-")
+            || l.starts_with("x-carlsberg-")
+            || l.starts_with("x-guinness-")
+            || l.starts_with("x-stella-")
+            || l.starts_with("x-corona-")
+            || l.starts_with("x-peroni-")
+            || l.starts_with("x-sapporobeer-")
+            || l.starts_with("x-ebisu-")
+            || l.starts_with("x-jimbeam-")
+            || l.starts_with("x-jackdaniels-")
+            || l.starts_with("x-absolut-")
+            || l.starts_with("x-smirnoff-")
+            || l.starts_with("x-bacardi-")
+            || l.starts_with("x-johnniewalker-")
+            || l.starts_with("x-chivas-")
+            || l.starts_with("x-ballantines-")
+            || l.starts_with("x-glenfiddich-")
+            || l.starts_with("x-nikka-")
+            || l.starts_with("x-yamazaki-")
+            || l.starts_with("x-hibiki-")
+            || l.starts_with("x-hakushu-")
+            || l.starts_with("x-jt-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -13019,6 +13267,72 @@ mod tests {
         assert!(has_facility_marks(d1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_facility_marks(clean));
+    }
+
+    #[test]
+    fn scan_は放機印を検出する() {
+        let n1 = b"X-NHK-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(n1));
+        let b1 = b"X-BBC-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(b1));
+        let e1 = b"X-ESPN-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(e1));
+        let f1 = b"X-FujiTV-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(f1));
+        let w1 = b"X-WOWOW-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(w1));
+        let h1 = b"X-HBO-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(h1));
+        let c1 = b"X-CNN-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(c1));
+        let k1 = b"X-KBS-Notify: x\r\n\r\nx";
+        assert!(has_broadcast_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_broadcast_marks(clean));
+    }
+
+    #[test]
+    fn scan_は報機印を検出する() {
+        let n1 = b"X-Nikkei-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(n1));
+        let r1 = b"X-Reuters-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(r1));
+        let k1 = b"X-Kyodo-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(k1));
+        let y1 = b"X-Yomiuri-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(y1));
+        let w1 = b"X-WSJ-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(w1));
+        let b1 = b"X-Bloomberg-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(b1));
+        let a1 = b"X-AFP-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(a1));
+        let t1 = b"X-ToyoKeizai-Notify: x\r\n\r\nx";
+        assert!(has_newspaper_marks(t1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_newspaper_marks(clean));
+    }
+
+    #[test]
+    fn scan_は食機印を検出する() {
+        let n1 = b"X-Nestle-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(n1));
+        let s1 = b"X-Suntory-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(s1));
+        let n2 = b"X-Nissin-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(n2));
+        let a1 = b"X-Ajinomoto-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(a1));
+        let h1 = b"X-Heineken-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(h1));
+        let c1 = b"X-CocaCola-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(c1));
+        let k1 = b"X-Kikkoman-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(k1));
+        let g1 = b"X-Glico-Notify: x\r\n\r\nx";
+        assert!(has_food_marks(g1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_food_marks(clean));
     }
 }
 
