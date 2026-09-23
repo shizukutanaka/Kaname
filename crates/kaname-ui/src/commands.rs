@@ -1252,6 +1252,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D495: クラウドプラットフォーム印自称
+    if env.cloudprovider_marks {
+        render_risks.push(
+            "X-AWS-*/X-Azure-*/X-GoogleCloud-*/X-Alibaba-*/X-Oracle-Cloud-*/X-IBMCloud-* 等 — クラウド機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D496: スマートフォン・家電メーカー印自称
+    if env.device_marks {
+        render_risks.push(
+            "X-Samsung-*/X-Sony-*/X-Canon-*/X-Panasonic-*/X-Xiaomi-*/X-Nikon-* 等 — メーカーの通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D497: 音楽制作・オーディオ印自称
+    if env.audio_marks {
+        render_risks.push(
+            "X-YAMAHA-*/X-Ableton-*/X-Steinberg-*/X-Roland-*/X-iZotope-*/X-Waves-* 等 — 音響機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

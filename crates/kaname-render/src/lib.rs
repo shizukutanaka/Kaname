@@ -641,6 +641,35 @@ pub struct Envelope {
     /// `X-Thule-*` 等の EC・PC パーツ印があるか — 販売機の通知記録を
     /// 送信側が自称する兆候 (D494)。
     pub retail_marks: bool,
+    /// `X-AWS-*`/`X-AmazonSES-*`/`X-Azure-*`/`X-GCP-*`/
+    /// `X-GoogleCloud-*`/`X-Alibaba-*`/`X-Baidu-*`/`X-Oracle-Cloud-*`/
+    /// `X-IBMCloud-*` 等のクラウドプラットフォーム印があるか —
+    /// クラウド機の通知記録を送信側が自称する兆候 (D495)。
+    pub cloudprovider_marks: bool,
+    /// `X-Samsung-*`/`X-Xiaomi-*`/`X-OPPO-*`/`X-vivo-*`/`X-HONOR-*`/
+    /// `X-OnePlus-*`/`X-realme-*`/`X-Sony-*`/`X-Panasonic-*`/
+    /// `X-SHARP-*`/`X-TOSHIBA-*`/`X-Hitachi-*`/`X-NEC-*`/`X-Fujitsu-*`/
+    /// `X-FUJIFILM-*`/`X-OLYMPUS-*`/`X-Canon-*`/`X-Nikon-*`/`X-Ricoh-*`/
+    /// `X-KYOCERA-*`/`X-EPSON-*`/`X-Brother-*`/`X-CASIO-*`/
+    /// `X-SEIKO-*`/`X-CITIZEN-*` 等のスマートフォン・家電メーカー印が
+    /// あるか — メーカーの通知記録を送信側が自称する兆候 (D496)。
+    pub device_marks: bool,
+    /// `X-YAMAHA-*`/`X-KAWAI-*`/`X-Roland-*`/`X-KORG-*`/`X-Akai-*`/
+    /// `X-Novation-*`/`X-Ableton-*`/`X-Native-Instruments-*`/
+    /// `X-Focusrite-*`/`X-Universal-Audio-*`/`X-Apogee-*`/`X-MOTU-*`/
+    /// `X-PreSonus-*`/`X-Steinberg-*`/`X-Avid-*`/`X-ProTools-*`/
+    /// `X-Logic-*`/`X-Cubase-*`/`X-FLStudio-*`/`X-Reason-*`/
+    /// `X-Bitwig-*`/`X-StudioOne-*`/`X-Ardour-*`/`X-REAPER-*`/
+    /// `X-Audacity-*`/`X-GarageBand-*`/`X-Soundtrap-*`/`X-BandLab-*`/
+    /// `X-Splice-*`/`X-Loopcloud-*`/`X-LANDR-*`/`X-eMastered-*`/
+    /// `X-Ozone-*`/`X-iZotope-*`/`X-Waves-*`/`X-FabFilter-*`/
+    /// `X-Valhalla-*`/`X-Soundtoys-*`/`X-PluginBoutique-*`/
+    /// `X-Kilohearts-*`/`X-Cableguys-*`/`X-Output-*`/`X-Heavyocity-*`/
+    /// `X-Spitfire-*`/`X-Soniccouture-*`/`X-Vienna-*`/`X-EastWest-*`/
+    /// `X-Cinesamples-*`/`X-ProjectSAM-*`/`X-8Dio-*` 等の
+    /// 音楽制作・オーディオ印があるか — 音響機の通知記録を送信側が
+    /// 自称する兆候 (D497)。
+    pub audio_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -996,6 +1025,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         docsite_marks: has_docsite_marks(raw),
         music_marks: has_music_marks(raw),
         retail_marks: has_retail_marks(raw),
+        cloudprovider_marks: has_cloudprovider_marks(raw),
+        device_marks: has_device_marks(raw),
+        audio_marks: has_audio_marks(raw),
     })
 }
 
@@ -4229,6 +4261,151 @@ fn has_retail_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-moment-")
             || l.starts_with("x-peak-design-")
             || l.starts_with("x-thule-")
+    })
+}
+
+/// `X-AWS-*`/`X-AmazonSES-*`/`X-Azure-*`/`X-GCP-*`/`X-GoogleCloud-*`/
+/// `X-Alibaba-*`/`X-Baidu-*`/`X-Oracle-Cloud-*`/`X-IBMCloud-*` 等の
+/// クラウドプラットフォーム印があるか判定する (D495)。
+///
+/// `X-AWS-*` (Amazon Web Services)、`X-Azure-*` (Microsoft Azure)、
+/// `X-GoogleCloud-*` (Google Cloud) はクラウド機の通知記録 —
+/// 送信側から届くこれは自称。
+fn has_cloudprovider_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-aws-")
+            || l.starts_with("x-amazonses-")
+            || l.starts_with("x-azure-")
+            || l.starts_with("x-gcp-")
+            || l.starts_with("x-googlecloud-")
+            || l.starts_with("x-alibaba-")
+            || l.starts_with("x-baidu-")
+            || l.starts_with("x-oracle-cloud-")
+            || l.starts_with("x-ibmcloud-")
+    })
+}
+
+/// `X-Samsung-*`/`X-Xiaomi-*`/`X-OPPO-*`/`X-vivo-*`/`X-HONOR-*`/
+/// `X-OnePlus-*`/`X-realme-*`/`X-Sony-*`/`X-Panasonic-*`/
+/// `X-SHARP-*`/`X-TOSHIBA-*`/`X-Hitachi-*`/`X-NEC-*`/`X-Fujitsu-*`/
+/// `X-FUJIFILM-*`/`X-OLYMPUS-*`/`X-Canon-*`/`X-Nikon-*`/`X-Ricoh-*`/
+/// `X-KYOCERA-*`/`X-EPSON-*`/`X-Brother-*`/`X-CASIO-*`/`X-SEIKO-*`/
+/// `X-CITIZEN-*` 等のスマートフォン・家電メーカー印があるか判定する
+/// (D496)。
+///
+/// `X-Samsung-*` (Samsung)、`X-Sony-*` (Sony)、`X-Canon-*` (Canon)
+/// はメーカーの通知記録 — 送信側から届くこれは自称。
+fn has_device_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-samsung-")
+            || l.starts_with("x-xiaomi-")
+            || l.starts_with("x-oppo-")
+            || l.starts_with("x-vivo-")
+            || l.starts_with("x-honor-")
+            || l.starts_with("x-oneplus-")
+            || l.starts_with("x-realme-")
+            || l.starts_with("x-sony-")
+            || l.starts_with("x-panasonic-")
+            || l.starts_with("x-sharp-")
+            || l.starts_with("x-toshiba-")
+            || l.starts_with("x-hitachi-")
+            || l.starts_with("x-nec-")
+            || l.starts_with("x-fujitsu-")
+            || l.starts_with("x-fujifilm-")
+            || l.starts_with("x-olympus-")
+            || l.starts_with("x-canon-")
+            || l.starts_with("x-nikon-")
+            || l.starts_with("x-ricoh-")
+            || l.starts_with("x-kyocera-")
+            || l.starts_with("x-epson-")
+            || l.starts_with("x-brother-")
+            || l.starts_with("x-casio-")
+            || l.starts_with("x-seiko-")
+            || l.starts_with("x-citizen-")
+    })
+}
+
+/// `X-YAMAHA-*`/`X-KAWAI-*`/`X-Roland-*`/`X-KORG-*`/`X-Akai-*`/
+/// `X-Novation-*`/`X-Ableton-*`/`X-Native-Instruments-*`/
+/// `X-Focusrite-*`/`X-Universal-Audio-*`/`X-Apogee-*`/`X-MOTU-*`/
+/// `X-PreSonus-*`/`X-Steinberg-*`/`X-Avid-*`/`X-ProTools-*`/
+/// `X-Logic-*`/`X-Cubase-*`/`X-FLStudio-*`/`X-Reason-*`/`X-Bitwig-*`/
+/// `X-StudioOne-*`/`X-Ardour-*`/`X-REAPER-*`/`X-Audacity-*`/
+/// `X-GarageBand-*`/`X-Soundtrap-*`/`X-BandLab-*`/`X-Splice-*`/
+/// `X-Loopcloud-*`/`X-LANDR-*`/`X-eMastered-*`/`X-Ozone-*`/
+/// `X-iZotope-*`/`X-Waves-*`/`X-FabFilter-*`/`X-Valhalla-*`/
+/// `X-Soundtoys-*`/`X-PluginBoutique-*`/`X-Kilohearts-*`/
+/// `X-Cableguys-*`/`X-Output-*`/`X-Heavyocity-*`/`X-Spitfire-*`/
+/// `X-Soniccouture-*`/`X-Vienna-*`/`X-EastWest-*`/`X-Cinesamples-*`/
+/// `X-ProjectSAM-*`/`X-8Dio-*` 等の音楽制作・オーディオ印があるか
+/// 判定する (D497)。
+///
+/// `X-YAMAHA-*` (YAMAHA)、`X-Ableton-*` (Ableton)、`X-Steinberg-*`
+/// (Steinberg) は音響機の通知記録 — 送信側から届くこれは自称。
+fn has_audio_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-yamaha-")
+            || l.starts_with("x-kawai-")
+            || l.starts_with("x-roland-")
+            || l.starts_with("x-korg-")
+            || l.starts_with("x-akai-")
+            || l.starts_with("x-novation-")
+            || l.starts_with("x-ableton-")
+            || l.starts_with("x-native-instruments-")
+            || l.starts_with("x-focusrite-")
+            || l.starts_with("x-universal-audio-")
+            || l.starts_with("x-apogee-")
+            || l.starts_with("x-motu-")
+            || l.starts_with("x-presonus-")
+            || l.starts_with("x-steinberg-")
+            || l.starts_with("x-avid-")
+            || l.starts_with("x-protools-")
+            || l.starts_with("x-logic-")
+            || l.starts_with("x-cubase-")
+            || l.starts_with("x-flstudio-")
+            || l.starts_with("x-reason-")
+            || l.starts_with("x-bitwig-")
+            || l.starts_with("x-studioone-")
+            || l.starts_with("x-ardour-")
+            || l.starts_with("x-reaper-")
+            || l.starts_with("x-audacity-")
+            || l.starts_with("x-garageband-")
+            || l.starts_with("x-soundtrap-")
+            || l.starts_with("x-bandlab-")
+            || l.starts_with("x-splice-")
+            || l.starts_with("x-loopcloud-")
+            || l.starts_with("x-landr-")
+            || l.starts_with("x-emastered-")
+            || l.starts_with("x-ozone-")
+            || l.starts_with("x-izotope-")
+            || l.starts_with("x-waves-")
+            || l.starts_with("x-fabfilter-")
+            || l.starts_with("x-valhalla-")
+            || l.starts_with("x-soundtoys-")
+            || l.starts_with("x-pluginboutique-")
+            || l.starts_with("x-kilohearts-")
+            || l.starts_with("x-cableguys-")
+            || l.starts_with("x-output-")
+            || l.starts_with("x-heavyocity-")
+            || l.starts_with("x-spitfire-")
+            || l.starts_with("x-soniccouture-")
+            || l.starts_with("x-vienna-")
+            || l.starts_with("x-eastwest-")
+            || l.starts_with("x-cinesamples-")
+            || l.starts_with("x-projectsam-")
+            || l.starts_with("x-8dio-")
     })
 }
 
@@ -8210,6 +8387,72 @@ mod tests {
         assert!(has_retail_marks(k1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_retail_marks(clean));
+    }
+
+    #[test]
+    fn scan_はクラウドプラットフォーム印を検出する() {
+        let a1 = b"X-AWS-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(a1));
+        let a2 = b"X-Azure-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(a2));
+        let g1 = b"X-GoogleCloud-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(g1));
+        let a3 = b"X-Alibaba-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(a3));
+        let b1 = b"X-Baidu-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(b1));
+        let o1 = b"X-Oracle-Cloud-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(o1));
+        let i1 = b"X-IBMCloud-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(i1));
+        let s1 = b"X-AmazonSES-Notify: x\r\n\r\nx";
+        assert!(has_cloudprovider_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cloudprovider_marks(clean));
+    }
+
+    #[test]
+    fn scan_はスマートフォン家電印を検出する() {
+        let s1 = b"X-Samsung-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(s1));
+        let s2 = b"X-Sony-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(s2));
+        let c1 = b"X-Canon-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(c1));
+        let x1 = b"X-Xiaomi-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(x1));
+        let p1 = b"X-Panasonic-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(p1));
+        let n1 = b"X-Nikon-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(n1));
+        let e1 = b"X-EPSON-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(e1));
+        let b1 = b"X-Brother-Notify: x\r\n\r\nx";
+        assert!(has_device_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_device_marks(clean));
+    }
+
+    #[test]
+    fn scan_は音楽制作オーディオ印を検出する() {
+        let y1 = b"X-YAMAHA-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(y1));
+        let a1 = b"X-Ableton-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(a1));
+        let s1 = b"X-Steinberg-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(s1));
+        let r1 = b"X-Roland-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(r1));
+        let f1 = b"X-Focusrite-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(f1));
+        let i1 = b"X-iZotope-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(i1));
+        let w1 = b"X-Waves-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(w1));
+        let b1 = b"X-BandLab-Notify: x\r\n\r\nx";
+        assert!(has_audio_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_audio_marks(clean));
     }
 }
 
