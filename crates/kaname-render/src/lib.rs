@@ -100,6 +100,13 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// 返送先を制御するヘッダ (`Errors-To:`/`X-Return-Path:`) を
+    /// 送信者が付けている (D255)。
+    ///
+    /// バウンス・エラー通知の返送先は本来配送経路 (envelope) が
+    /// 決める値 — メッセージ内容側で送信者が指定するのは
+    /// エラー通知を攻撃者ドメインへ誘導する返送先乗っ取りの兆候。
+    pub bounce_hijack: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +347,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D255: Errors-To/X-Return-Path — 返送先を内容側で指定する
+    // エラー通知乗っ取りの兆候
+    let bounce_hijack = has_bounce_hijack_header(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,6 +369,34 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        bounce_hijack,
+    })
+}
+
+/// 返送先を制御するヘッダがあるか判定する (D255)。
+///
+/// `Errors-To:`/`X-Return-Path:` — エラー通知の返送先は配送経路が
+/// 決める値であり、内容側で送信者が指定するのは返送先乗っ取りの
+/// 兆候。ボディ混入を避けるためトップレベルヘッダのみ検査する。
+pub fn has_bounce_hijack_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header
+        .lines()
+        .any(|l| l.starts_with("errors-to:") || l.starts_with("x-return-path:"))
+}
+
+/// HTML 本文中のコメント塩 (word 内部を裂く `<!-- -->`) を検出する
+/// (D256)。
+///
+/// `pa<!-- -->ypal` のように可視文字の間にコメントを挟み、テキスト
+/// 抽出後のキーワード一致を崩す難読化 — コメントはサニタイザが除去
+/// するが「挟んでいた事実」自体が兆候。英字直後の `<!--` を検出。
+pub fn has_comment_salting(html: &str) -> bool {
+    let bytes = html.as_bytes();
+    bytes.windows(5).any(|w| {
+        w[0].is_ascii_alphabetic() && w[1] == b'<' && w[2] == b'!' && w[3] == b'-' && w[4] == b'-'
     })
 }
 

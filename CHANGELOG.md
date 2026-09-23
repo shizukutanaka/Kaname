@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D255: `Errors-To:`/`X-Return-Path:` で返送先を内容側が指定 (返送先乗っ取り) が未検査
+
+- エラー通知の返送先は配送経路 (envelope) が決める値 — メッセージ内容側で送信者が指定するのはエラー通知を攻撃者ドメインへ誘導する返送先乗っ取りの兆候
+- 対処: `has_bounce_hijack_header` 新設 (トップレベルヘッダのみ検査) → `Envelope.bounce_hijack` → `render_risks` 兆候報告
+
+### Security — D256: 可視文字の間に HTML コメントを挟むコメント塩が未検査
+
+- `pa<!-- -->ypal` のように可視文字の間にコメントを挟み、テキスト抽出後のキーワード一致を崩す難読化 — コメントはサニタイザが除去するが「挟んでいた事実」自体が兆候
+- 対処: `has_comment_salting` 新設 (英字直後の `<!--` を検出) → `render_risks` 兆候報告
+
+### Security — D257: `src="cid:"` が参照する Content-ID に対応する添付がないが未検査
+
+- 「画像がある体裁」を装うだけで実添付がない手作りメール — サニタイザは cid: を許すが「参照先の添付があるか」は未検証だった
+- 対処: `has_missing_cid_reference` 新設で cid 参照を添付 Content-ID と照合 → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

@@ -542,6 +542,36 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D255: Errors-To/X-Return-Path — 返送先を内容側で指定する
+    // エラー通知乗っ取りの兆候
+    if env.bounce_hijack {
+        render_risks.push(
+            "Errors-To/X-Return-Path ヘッダ — エラー通知の返送先を内容側で指定する乗っ取りの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D256: 可視文字の間に HTML コメントを挟むコメント塩
+    if env
+        .html_body
+        .as_ref()
+        .map(|h| kaname_render::has_comment_salting(h.as_str()))
+        .unwrap_or(false)
+    {
+        render_risks.push(
+            "HTML 本文のコメント塩 — キーワード一致を崩す難読化の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D257: src="cid:" が参照する Content-ID に対応する添付がない
+    if has_missing_cid_reference(&env) {
+        render_risks.push(
+            "inline 参照 (cid:) の Content-ID に対応する添付がない — 装飾だけの inline 体裁の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1058,6 +1088,44 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
 ///   表示パーサ差異のリスクは残る (軽い兆候)
 /// - 単一 From + `Sender:` ドメイン不一致 → 「on behalf of」委任送信の
 ///   正常形なので報告しない (ESP 経由配信で頻出するため誤検出が多い)
+/// HTML 本文の `src="cid:..."`/`src='cid:...'` 参照が対応する添付
+/// の Content-ID を持つか判定する (D257)。
+///
+/// 「画像がある体裁」を装うだけで実添付がない手作りメール —
+/// サニタイザは cid: を許すが「参照先の添付があるか」は未検証だった。
+fn has_missing_cid_reference(env: &kaname_render::Envelope) -> bool {
+    let Some(html) = env.html_body.as_ref() else {
+        return false;
+    };
+    let text = html.as_str().to_ascii_lowercase();
+    let mut cids: Vec<String> = Vec::new();
+    for pat in ["src=\"cid:", "src='cid:"] {
+        let mut search = text.as_str();
+        while let Some(pos) = search.find(pat) {
+            let rest = &search[pos + pat.len()..];
+            let end = rest
+                .find(['"', '\'', ' ', '>'])
+                .unwrap_or(rest.len().min(256));
+            let cid = rest[..end.min(256)].trim_matches(['<', '>']).to_string();
+            if !cid.is_empty() && !cids.contains(&cid) {
+                cids.push(cid);
+            }
+            search = &search[pos + pat.len()..];
+        }
+    }
+    if cids.is_empty() {
+        return false;
+    }
+    cids.iter().any(|cid| {
+        !env.attachments.iter().any(|a| {
+            a.content_id
+                .as_deref()
+                .map(|id| id.trim_matches(['<', '>']).eq_ignore_ascii_case(cid))
+                .unwrap_or(false)
+        })
+    })
+}
+
 fn from_header_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
     if env.from.len() <= 1 {
         return Vec::new();
