@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D507: `X-Joplin-*`/`X-Logseq-*`/`X-HackMD-*`/`X-Typora-*`/`X-Anytype-*`/`X-RemNote-*` 等のノート・執筆・PKM 印自称が未検査
+
+- **問題**: `X-Joplin-*` (Joplin)、`X-Logseq-*` (Logseq)、`X-HackMD-*` (HackMD)、`X-Foam-*`/`X-Dendron-*`/`X-Trilium-*`/`X-Simplenote-*`/`X-StandardNotes-*`/`X-Bear-*`/`X-Ulysses-*`/`X-iAWriter-*`/`X-Inkdrop-*`/`X-Zettlr-*`/`X-MarkText-*`/`X-Typora-*`/`X-BoostNote-*`/`X-HedgeDoc-*`/`X-CodiMD-*`/`X-Etherpad-*`/`X-CryptPad-*`/`X-SiYuan-*`/`X-Anytype-*`/`X-Capacities-*`/`X-Tana-*`/`X-RemNote-*`/`X-Amplenote-*`/`X-Notejoy-*`/`X-Notability-*`/`X-GoodNotes-*`/`X-Squid-*`/`X-Nebo-*`/`X-Flexcil-*`/`X-Scapple-*`/`X-Freeplane-*`/`X-FreeMind-*`/`X-TiddlyWiki-*`/`X-Mem-*`/`X-Supernotes-*`/`X-Quip-*`/`X-Paper-*`/`X-Slab-*`/`X-Slite-*`/`X-Nuclino-*`/`X-Outline-*`/`X-BookStack-*`/`X-DokuWiki-*`/`X-Craft-*` は筆記機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `notes_marks` + `has_notes_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 筆記印の自署を問え。
+
+### Security — D508: `X-Excalidraw-*`/`X-Visio-*`/`X-MindMeister-*`/`X-tldraw-*`/`X-XMind-*`/`X-Padlet-*` 等の図解・ホワイトボード・マインドマップ印自称が未検査
+
+- **問題**: `X-Excalidraw-*` (Excalidraw)、`X-Visio-*` (Visio)、`X-MindMeister-*` (MindMeister)、`X-FigJam-*`/`X-tldraw-*`/`X-Diagrams-*`/`X-Gliffy-*`/`X-XMind-*`/`X-MindNode-*`/`X-Mindomo-*`/`X-Coggle-*`/`X-MindMup-*`/`X-Bubbl-*`/`X-Stormboard-*`/`X-Ayoa-*`/`X-Creately-*`/`X-Milanote-*`/`X-Conceptboard-*`/`X-Padlet-*`/`X-Jamboard-*`/`X-Ziteboard-*`/`X-Awesome-Table-*` は図機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `diagram_marks` + `has_diagram_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 図印の自署を問え。
+
+### Security — D509: `X-Retool-*`/`X-Supabase-*`/`X-Strapi-*`/`X-Budibase-*`/`X-NocoDB-*`/`X-Contentful-*` 等のローコード・社内ツール・ヘッドレス CMS 印自称が未検査
+
+- **問題**: `X-Retool-*` (Retool)、`X-Supabase-*` (Supabase)、`X-Strapi-*` (Strapi)、`X-SmartSuite-*`/`X-Baserow-*`/`X-NocoDB-*`/`X-AppSheet-*`/`X-Budibase-*`/`X-Appsmith-*`/`X-ToolJet-*`/`X-Zenkit-*`/`X-Fibery-*`/`X-Softr-*`/`X-Stacker-*`/`X-Glide-*`/`X-Adalo-*`/`X-Thunkable-*`/`X-Bubble-*`/`X-DrapCode-*`/`X-WeWeb-*`/`X-Xano-*`/`X-Appwrite-*`/`X-PocketBase-*`/`X-Directus-*`/`X-Keystone-*`/`X-Sanity-*`/`X-Contentful-*`/`X-Prismic-*`/`X-Storyblok-*`/`X-DatoCMS-*`/`X-Hygraph-*`/`X-TinaCMS-*`/`X-Decap-*`/`X-Forestry-*` は内機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `lowcode_marks` + `has_lowcode_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 内印の自署を問え。
+
+
 ### Security — D504: `X-Drone-*`/`X-Concourse-*`/`X-Bazel-*`/`X-Gradle-*`/`X-AppVeyor-*`/`X-Webpack-*` 等の CI/CD・ビルド・バンドラ印自称が未検査
 
 - **問題**: `X-Drone-*` (Drone)、`X-Concourse-*` (Concourse)、`X-Bazel-*` (Bazel)、`X-Semaphore-*`/`X-Woodpecker-*`/`X-GoCD-*`/`X-Bamboo-*`/`X-AppVeyor-*`/`X-AzurePipelines-*`/`X-AzureDevOps-*`/`X-Bitbucket-Pipelines-*`/`X-Bitrise-*`/`X-Codemagic-*`/`X-fastlane-*`/`X-Gradle-*`/`X-Maven-*`/`X-sbt-*`/`X-CMake-*`/`X-Buck-*`/`X-Pants-*`/`X-Nx-*`/`X-Turborepo-*`/`X-Lerna-*`/`X-Rush-*`/`X-esbuild-*`/`X-SWC-*`/`X-Vite-*`/`X-Rollup-*`/`X-Webpack-*`/`X-Parcel-*`/`X-Snowpack-*`/`X-Rome-*`/`X-Biome-*`/`X-OXC-*`/`X-dprint-*`/`X-Prettier-*`/`X-ESLint-*`/`X-Stylelint-*` は構築機の通知記録 — 送信側が書くことは自称。

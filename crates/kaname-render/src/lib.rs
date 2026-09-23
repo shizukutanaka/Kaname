@@ -773,6 +773,41 @@ pub struct Envelope {
     /// レジストリ印があるか — 庫機の通知記録を送信側が自称する
     /// 兆候 (D506)。
     pub package_marks: bool,
+    /// `X-Logseq-*`/`X-Foam-*`/`X-Dendron-*`/`X-Trilium-*`/
+    /// `X-Joplin-*`/`X-Simplenote-*`/`X-StandardNotes-*`/`X-Bear-*`/
+    /// `X-Ulysses-*`/`X-iAWriter-*`/`X-Inkdrop-*`/`X-Zettlr-*`/
+    /// `X-MarkText-*`/`X-Typora-*`/`X-BoostNote-*`/`X-HackMD-*`/
+    /// `X-HedgeDoc-*`/`X-CodiMD-*`/`X-Etherpad-*`/`X-CryptPad-*`/
+    /// `X-SiYuan-*`/`X-Anytype-*`/`X-Capacities-*`/`X-Tana-*`/
+    /// `X-RemNote-*`/`X-Amplenote-*`/`X-Notejoy-*`/`X-Notability-*`/
+    /// `X-GoodNotes-*`/`X-Squid-*`/`X-Nebo-*`/`X-Flexcil-*`/
+    /// `X-Scapple-*`/`X-Freeplane-*`/`X-FreeMind-*`/`X-TiddlyWiki-*`/
+    /// `X-Mem-*`/`X-Supernotes-*`/`X-Quip-*`/`X-Paper-*`/`X-Slab-*`/
+    /// `X-Slite-*`/`X-Nuclino-*`/`X-Outline-*`/`X-BookStack-*`/
+    /// `X-DokuWiki-*`/`X-Craft-*` 等のノート・執筆・PKM 印があるか —
+    /// 筆記機の通知記録を送信側が自称する兆候 (D507)。
+    pub notes_marks: bool,
+    /// `X-FigJam-*`/`X-Excalidraw-*`/`X-tldraw-*`/`X-Diagrams-*`/
+    /// `X-Visio-*`/`X-Gliffy-*`/`X-MindMeister-*`/`X-XMind-*`/
+    /// `X-MindNode-*`/`X-Mindomo-*`/`X-Coggle-*`/`X-MindMup-*`/
+    /// `X-Bubbl-*`/`X-Stormboard-*`/`X-Ayoa-*`/`X-Creately-*`/
+    /// `X-Milanote-*`/`X-Conceptboard-*`/`X-Padlet-*`/`X-MURAL-*`/
+    /// `X-Jamboard-*`/`X-Ziteboard-*`/`X-Awesome-Table-*` 等の
+    /// 図解・ホワイトボード・マインドマップ印があるか — 図機の
+    /// 通知記録を送信側が自称する兆候 (D508)。
+    pub diagram_marks: bool,
+    /// `X-SmartSuite-*`/`X-Baserow-*`/`X-NocoDB-*`/`X-AppSheet-*`/
+    /// `X-Retool-*`/`X-Budibase-*`/`X-Appsmith-*`/`X-ToolJet-*`/
+    /// `X-Zenkit-*`/`X-Fibery-*`/`X-Softr-*`/`X-Stacker-*`/
+    /// `X-Glide-*`/`X-Adalo-*`/`X-Thunkable-*`/`X-Bubble-*`/
+    /// `X-Webflow-Logic-*`/`X-DrapCode-*`/`X-WeWeb-*`/`X-Xano-*`/
+    /// `X-Supabase-*`/`X-Appwrite-*`/`X-PocketBase-*`/`X-Directus-*`/
+    /// `X-Strapi-*`/`X-Keystone-*`/`X-Sanity-*`/`X-Contentful-*`/
+    /// `X-Prismic-*`/`X-Storyblok-*`/`X-DatoCMS-*`/`X-Hygraph-*`/
+    /// `X-TinaCMS-*`/`X-NetlifyCMS-*`/`X-Decap-*`/`X-Forestry-*` 等の
+    /// ローコード・社内ツール・ヘッドレス CMS 印があるか — 内機の
+    /// 通知記録を送信側が自称する兆候 (D509)。
+    pub lowcode_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1140,6 +1175,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ci_marks: has_ci_marks(raw),
         codequality_marks: has_codequality_marks(raw),
         package_marks: has_package_marks(raw),
+        notes_marks: has_notes_marks(raw),
+        diagram_marks: has_diagram_marks(raw),
+        lowcode_marks: has_lowcode_marks(raw),
     })
 }
 
@@ -5010,6 +5048,176 @@ fn has_package_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-clojars-")
             || l.starts_with("x-vcpkg-")
             || l.starts_with("x-conan-")
+    })
+}
+
+/// `X-Logseq-*`/`X-Foam-*`/`X-Dendron-*`/`X-Trilium-*`/`X-Joplin-*`/
+/// `X-Simplenote-*`/`X-StandardNotes-*`/`X-Bear-*`/`X-Ulysses-*`/
+/// `X-iAWriter-*`/`X-Inkdrop-*`/`X-Zettlr-*`/`X-MarkText-*`/
+/// `X-Typora-*`/`X-BoostNote-*`/`X-HackMD-*`/`X-HedgeDoc-*`/
+/// `X-CodiMD-*`/`X-Etherpad-*`/`X-CryptPad-*`/`X-SiYuan-*`/
+/// `X-Anytype-*`/`X-Capacities-*`/`X-Tana-*`/`X-RemNote-*`/
+/// `X-Amplenote-*`/`X-Notejoy-*`/`X-Notability-*`/`X-GoodNotes-*`/
+/// `X-Squid-*`/`X-Nebo-*`/`X-Flexcil-*`/`X-Scapple-*`/`X-Freeplane-*`/
+/// `X-FreeMind-*`/`X-TiddlyWiki-*`/`X-Mem-*`/`X-Supernotes-*`/
+/// `X-Quip-*`/`X-Paper-*`/`X-Slab-*`/`X-Slite-*`/`X-Nuclino-*`/
+/// `X-Outline-*`/`X-BookStack-*`/`X-DokuWiki-*`/`X-Craft-*` 等の
+/// ノート・執筆・PKM 印があるか判定する (D507)。
+///
+/// `X-Joplin-*` (Joplin)、`X-Logseq-*` (Logseq)、`X-HackMD-*`
+/// (HackMD) は筆記機の通知記録 — 送信側から届くこれは自称。
+fn has_notes_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-logseq-")
+            || l.starts_with("x-foam-")
+            || l.starts_with("x-dendron-")
+            || l.starts_with("x-trilium-")
+            || l.starts_with("x-joplin-")
+            || l.starts_with("x-simplenote-")
+            || l.starts_with("x-standardnotes-")
+            || l.starts_with("x-bear-")
+            || l.starts_with("x-ulysses-")
+            || l.starts_with("x-iawriter-")
+            || l.starts_with("x-inkdrop-")
+            || l.starts_with("x-zettlr-")
+            || l.starts_with("x-marktext-")
+            || l.starts_with("x-typora-")
+            || l.starts_with("x-boostnote-")
+            || l.starts_with("x-hackmd-")
+            || l.starts_with("x-hedgedoc-")
+            || l.starts_with("x-codimd-")
+            || l.starts_with("x-etherpad-")
+            || l.starts_with("x-cryptpad-")
+            || l.starts_with("x-siyuan-")
+            || l.starts_with("x-anytype-")
+            || l.starts_with("x-capacities-")
+            || l.starts_with("x-tana-")
+            || l.starts_with("x-remnote-")
+            || l.starts_with("x-amplenote-")
+            || l.starts_with("x-notejoy-")
+            || l.starts_with("x-notability-")
+            || l.starts_with("x-goodnotes-")
+            || l.starts_with("x-squid-")
+            || l.starts_with("x-nebo-")
+            || l.starts_with("x-flexcil-")
+            || l.starts_with("x-scapple-")
+            || l.starts_with("x-freeplane-")
+            || l.starts_with("x-freemind-")
+            || l.starts_with("x-tiddlywiki-")
+            || l.starts_with("x-mem-")
+            || l.starts_with("x-supernotes-")
+            || l.starts_with("x-quip-")
+            || l.starts_with("x-paper-")
+            || l.starts_with("x-slab-")
+            || l.starts_with("x-slite-")
+            || l.starts_with("x-nuclino-")
+            || l.starts_with("x-outline-")
+            || l.starts_with("x-bookstack-")
+            || l.starts_with("x-dokuwiki-")
+            || l.starts_with("x-craft-")
+    })
+}
+
+/// `X-FigJam-*`/`X-Excalidraw-*`/`X-tldraw-*`/`X-Diagrams-*`/
+/// `X-Visio-*`/`X-Gliffy-*`/`X-MindMeister-*`/`X-XMind-*`/
+/// `X-MindNode-*`/`X-Mindomo-*`/`X-Coggle-*`/`X-MindMup-*`/
+/// `X-Bubbl-*`/`X-Stormboard-*`/`X-Ayoa-*`/`X-Creately-*`/
+/// `X-Milanote-*`/`X-Conceptboard-*`/`X-Padlet-*`/`X-MURAL-*`/
+/// `X-Jamboard-*`/`X-Ziteboard-*`/`X-Awesome-Table-*` 等の
+/// 図解・ホワイトボード・マインドマップ印があるか判定する
+/// (D508)。
+///
+/// `X-Excalidraw-*` (Excalidraw)、`X-Visio-*` (Visio)、
+/// `X-MindMeister-*` (MindMeister) は図機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_diagram_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-figjam-")
+            || l.starts_with("x-excalidraw-")
+            || l.starts_with("x-tldraw-")
+            || l.starts_with("x-diagrams-")
+            || l.starts_with("x-visio-")
+            || l.starts_with("x-gliffy-")
+            || l.starts_with("x-mindmeister-")
+            || l.starts_with("x-xmind-")
+            || l.starts_with("x-mindnode-")
+            || l.starts_with("x-mindomo-")
+            || l.starts_with("x-coggle-")
+            || l.starts_with("x-mindmup-")
+            || l.starts_with("x-bubbl-")
+            || l.starts_with("x-stormboard-")
+            || l.starts_with("x-ayoa-")
+            || l.starts_with("x-creately-")
+            || l.starts_with("x-milanote-")
+            || l.starts_with("x-conceptboard-")
+            || l.starts_with("x-padlet-")
+            || l.starts_with("x-jamboard-")
+            || l.starts_with("x-ziteboard-")
+            || l.starts_with("x-awesometable-")
+    })
+}
+
+/// `X-SmartSuite-*`/`X-Baserow-*`/`X-NocoDB-*`/`X-AppSheet-*`/
+/// `X-Retool-*`/`X-Budibase-*`/`X-Appsmith-*`/`X-ToolJet-*`/
+/// `X-Zenkit-*`/`X-Fibery-*`/`X-Softr-*`/`X-Stacker-*`/`X-Glide-*`/
+/// `X-Adalo-*`/`X-Thunkable-*`/`X-Bubble-*`/`X-DrapCode-*`/
+/// `X-WeWeb-*`/`X-Xano-*`/`X-Supabase-*`/`X-Appwrite-*`/
+/// `X-PocketBase-*`/`X-Directus-*`/`X-Strapi-*`/`X-Keystone-*`/
+/// `X-Sanity-*`/`X-Contentful-*`/`X-Prismic-*`/`X-Storyblok-*`/
+/// `X-DatoCMS-*`/`X-Hygraph-*`/`X-TinaCMS-*`/`X-Decap-*`/
+/// `X-Forestry-*` 等のローコード・社内ツール・ヘッドレス CMS 印が
+/// あるか判定する (D509)。
+///
+/// `X-Retool-*` (Retool)、`X-Supabase-*` (Supabase)、`X-Strapi-*`
+/// (Strapi) は内機の通知記録 — 送信側から届くこれは自称。
+fn has_lowcode_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-smartsuite-")
+            || l.starts_with("x-baserow-")
+            || l.starts_with("x-nocodb-")
+            || l.starts_with("x-appsheet-")
+            || l.starts_with("x-retool-")
+            || l.starts_with("x-budibase-")
+            || l.starts_with("x-appsmith-")
+            || l.starts_with("x-tooljet-")
+            || l.starts_with("x-zenkit-")
+            || l.starts_with("x-fibery-")
+            || l.starts_with("x-softr-")
+            || l.starts_with("x-stacker-")
+            || l.starts_with("x-glide-")
+            || l.starts_with("x-adalo-")
+            || l.starts_with("x-thunkable-")
+            || l.starts_with("x-bubble-")
+            || l.starts_with("x-drapcode-")
+            || l.starts_with("x-weweb-")
+            || l.starts_with("x-xano-")
+            || l.starts_with("x-supabase-")
+            || l.starts_with("x-appwrite-")
+            || l.starts_with("x-pocketbase-")
+            || l.starts_with("x-directus-")
+            || l.starts_with("x-strapi-")
+            || l.starts_with("x-keystone-")
+            || l.starts_with("x-sanity-")
+            || l.starts_with("x-contentful-")
+            || l.starts_with("x-prismic-")
+            || l.starts_with("x-storyblok-")
+            || l.starts_with("x-datocms-")
+            || l.starts_with("x-hygraph-")
+            || l.starts_with("x-tinacms-")
+            || l.starts_with("x-decap-")
+            || l.starts_with("x-forestry-")
     })
 }
 
@@ -9255,6 +9463,72 @@ mod tests {
         assert!(has_package_marks(v1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_package_marks(clean));
+    }
+
+    #[test]
+    fn scan_はノート執筆PKM印を検出する() {
+        let j1 = b"X-Joplin-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(j1));
+        let l1 = b"X-Logseq-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(l1));
+        let h1 = b"X-HackMD-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(h1));
+        let t1 = b"X-Typora-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(t1));
+        let a1 = b"X-Anytype-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(a1));
+        let n1 = b"X-Notability-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(n1));
+        let d1 = b"X-DokuWiki-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(d1));
+        let r1 = b"X-RemNote-Notify: x\r\n\r\nx";
+        assert!(has_notes_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_notes_marks(clean));
+    }
+
+    #[test]
+    fn scan_は図解ホワイトボード印を検出する() {
+        let e1 = b"X-Excalidraw-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(e1));
+        let v1 = b"X-Visio-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(v1));
+        let m1 = b"X-MindMeister-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(m1));
+        let t1 = b"X-tldraw-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(t1));
+        let x1 = b"X-XMind-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(x1));
+        let c1 = b"X-Creately-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(c1));
+        let p1 = b"X-Padlet-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(p1));
+        let a1 = b"X-Ayoa-Notify: x\r\n\r\nx";
+        assert!(has_diagram_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_diagram_marks(clean));
+    }
+
+    #[test]
+    fn scan_はローコードCMS印を検出する() {
+        let r1 = b"X-Retool-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(r1));
+        let s1 = b"X-Supabase-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(s1));
+        let t1 = b"X-Strapi-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(t1));
+        let b1 = b"X-Budibase-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(b1));
+        let n1 = b"X-NocoDB-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(n1));
+        let a1 = b"X-Appwrite-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(a1));
+        let c1 = b"X-Contentful-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(c1));
+        let d1 = b"X-Directus-Notify: x\r\n\r\nx";
+        assert!(has_lowcode_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_lowcode_marks(clean));
     }
 }
 
