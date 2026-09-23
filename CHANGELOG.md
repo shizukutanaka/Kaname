@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D483: `X-OneDrive-*`/`X-SharePoint-*`/`X-GoogleDrive-*`/`X-Nextcloud-*`/`X-WeTransfer-*`/`X-Egnyte-*` 等のファイル共有・クラウドストレージ印自称が未検査
+
+- **問題**: `X-OneDrive-*` (OneDrive)、`X-SharePoint-*` (SharePoint)、`X-GoogleDrive-*` (Google Drive)、`X-Egnyte-*`/`X-Druva-*`/`X-Sync-*`/`X-pCloud-*`/`X-Nextcloud-*`/`X-ownCloud-*`/`X-Seafile-*`/`X-Koofr-*`/`X-WeTransfer-*`/`X-Resilio-*` はストレージ機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `storage_marks` + `has_storage_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — ストレージ印の自署を問え。
+
+### Security — D484: `X-Framer-*`/`X-Zeplin-*`/`X-Sketch-*`/`X-Photoshop-*`/`X-Illustrator-*`/`X-DaVinci-*` 等のデザイン・クリエイティブ印自称が未検査
+
+- **問題**: `X-Framer-*` (Framer)、`X-Zeplin-*` (Zeplin)、`X-Sketch-*` (Sketch)、`X-Lucidspark-*`/`X-drawio-*`/`X-Abstract-*`/`X-Avocode-*`/`X-Marvel-*`/`X-UXPin-*`/`X-Origami-*`/`X-Principle-*`/`X-Affinity-*`/`X-CorelDRAW-*`/`X-Photoshop-*`/`X-Illustrator-*`/`X-InDesign-*`/`X-Lightroom-*`/`X-Premiere-*`/`X-AfterEffects-*`/`X-DaVinci-*`/`X-FFmpeg-*`/`X-OBS-*`/`X-Streamlabs-*`/`X-Procreate-*`/`X-Clip-*`/`X-Blender-*` は制作機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `creative_marks` + `has_creative_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 制作印の自署を問え。
+
+### Security — D485: `X-Qiita-*`/`X-Zenn-*`/`X-Backlog-*`/`X-Kibela-*`/`X-Taiga-*`/`X-Pipedrive-*` 等のナレッジ・タスク管理・CRM 印自称が未検査
+
+- **問題**: `X-Qiita-*` (Qiita)、`X-Zenn-*` (Zenn)、`X-Backlog-*` (Backlog)、`X-Cacoo-*`/`X-Kibela-*`/`X-Note-*`/`X-Planio-*`/`X-OpenProject-*`/`X-Taiga-*`/`X-Wekan-*`/`X-Vivify-*`/`X-YouGile-*`/`X-Launchpad-*`/`X-Codeberg-*`/`X-SourceForge-*`/`X-Podio-*`/`X-Zoho-*`/`X-Freshworks-*`/`X-Pipedrive-*`/`X-Insightly-*`/`X-Capsule-*`/`X-Streak-*`/`X-Nimble-*`/`X-SugarCRM-*`/`X-Obsidian-*`/`X-OneNote-*`/`X-AnyDo-*`/`X-TickTick-*`/`X-Microsoft-Todo-*` は管理機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `project_marks` + `has_project_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 管理印の自署を問え。
+
+
 ### Security — D480: `X-Zillow-*`/`X-Redfin-*`/`X-Rightmove-*`/`X-SUUMO-*`/`X-Idealista-*`/`X-Zoopla-*` 等の不動産・ホームサービス印自称が未検査
 
 - **問題**: `X-Zillow-*` (Zillow)、`X-Redfin-*` (Redfin)、`X-Rightmove-*` (Rightmove)、`X-Realtor-*`/`X-Trulia-*`/`X-Apartments-*`/`X-Zumper-*`/`X-Compass-*`/`X-Opendoor-*`/`X-LoopNet-*`/`X-CoStar-*`/`X-Idealista-*`/`X-Immobiliare-*`/`X-Fotocasa-*`/`X-Zoopla-*`/`X-OnTheMarket-*`/`X-PrimeLocation-*`/`X-SpareRoom-*`/`X-OpenRent-*`/`X-Realestate-*`/`X-Domain-*`/`X-Homely-*`/`X-Allhomes-*`/`X-Lianjia-*`/`X-Beike-*`/`X-Anjuke-*`/`X-Ziroom-*`/`X-SUUMO-*`/`X-LIFULL-*`/`X-athome-*` は不動産機の通知記録 — 送信側が書くことは自称。
