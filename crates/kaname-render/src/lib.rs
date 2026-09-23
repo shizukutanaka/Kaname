@@ -211,13 +211,16 @@ pub enum AuthResult {
 
 /// Parse raw RFC 5322 bytes into an Envelope.
 ///
-/// KTR-07 §3 (STRICT_PARSE_RULES) に従ってストリクトモードを強制:
-///   S01 – 複数の Content-Type ヘッダー → 拒否
-///   S02 – MIME 境界不一致 → 拒否  
-///   S03 – 許可リストにない文字セット → U+FFFD で置換してログ
-///   S04 – ネストされた MIME 深度 > 8 → 拒否 (DoS)
+/// KTR-07 §3 (STRICT_PARSE_RULES):
+///   S01 – 複数の Content-Type ヘッダー → 拒否 (D168 で強制済み)
+///   S02 – MIME 境界不一致 → 拒否 (D168: multipart 宣言で boundary
+///         未指定 or 宣言された境界が本文に一度も現れない場合)
+///   S03 – UTF-7 charset 宣言 → 拒否 (D168: 歴史的 XSS 経路かつ
+///         mail-parser が非対応のため宣言自体を拒否)
 ///   S05 – 合計デコードサイズ > 100 MB → 拒否
-///   S06 – 不明な Content-Transfer-Encoding 値 → 8bit として扱い、ログ
+///
+/// なお S04 (ネスト深度) は D167 で添付スキャン側に深度上限として
+/// 実装済み。パース段階の拒否は S01/S02/S03/S05 が現行の強制セット。
 pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // S05: サイズ上限チェック (DoS 対策)
     if raw.is_empty() {
@@ -226,6 +229,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     if raw.len() > 100 * 1024 * 1024 {
         return Err(RenderError::Parse("S05: message exceeds 100 MB".into()));
     }
+
+    // D168: S01–S03 を生ヘッダブロックに対して強制する。
+    // これらのルールはドキュメント上は強制済みとされていたが実装が
+    // 存在しなかった — 二重 Content-Type・境界不一致は scanner と
+    // クライアントで解釈が割れる parser differential の基盤。
+    check_strict_headers(raw)?;
 
     let msg = MessageParser::default()
         .parse(raw)
@@ -348,6 +357,134 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
     })
+}
+
+/// トップレベルヘッダブロックに対する S01/S02/S03 強制 (D168)。
+///
+/// `mail-parser` は寛容なパーサであり、二重 Content-Type や未出現の
+/// 境界をそのまま通す — scanner とクライアントで境界解釈が割れる
+/// 隙間 (parser differential / MIME smuggling) を塞ぐため、パース前に
+/// 生バイトで検査する。
+fn check_strict_headers(raw: &[u8]) -> Result<(), RenderError> {
+    // トップレベルヘッダブロック = 最初の空行まで (上限 64 KB で打切り)
+    const MAX_HEADER_BYTES: usize = 64 * 1024;
+    let search_end = raw.len().min(MAX_HEADER_BYTES);
+    let head = &raw[..search_end];
+    let header_end = head
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .or_else(|| head.windows(2).position(|w| w == b"\n\n"))
+        .map(|p| p)
+        .unwrap_or(search_end);
+    let header_block = &head[..header_end];
+
+    // ヘッダ行を走査 — 継続行 (空白/タブ始まり) は前の値の折り返し
+    // なので直前ヘッダの値に畳み込む。`Name :` の空白揺れも拾う。
+    let mut content_type_count = 0usize;
+    let mut first_content_type = String::new();
+    let mut folding_into_ct = false;
+    for line in header_block.split(|b| *b == b'\n') {
+        if !line.is_empty() && matches!(line[0], b' ' | b'\t') {
+            if folding_into_ct {
+                first_content_type.push(' ');
+                first_content_type.push_str(&String::from_utf8_lossy(line));
+            }
+            continue;
+        }
+        folding_into_ct = false;
+        let Some(colon) = line.iter().position(|b| *b == b':') else {
+            continue;
+        };
+        let (name, value) = (&line[..colon], &line[colon + 1..]);
+        if name.trim_ascii().eq_ignore_ascii_case(b"content-type") {
+            content_type_count += 1;
+            if content_type_count == 1 {
+                first_content_type = String::from_utf8_lossy(value).into_owned();
+                folding_into_ct = true;
+            }
+        }
+    }
+
+    // S01: 複数の Content-Type ヘッダー → 拒否
+    // (scanner が先頭、クライアントが末尾を読む等の解釈不一致を作る)
+    if content_type_count > 1 {
+        return Err(RenderError::Parse(
+            "S01: multiple Content-Type headers".into(),
+        ));
+    }
+
+    if !first_content_type.is_empty() {
+        let lower = first_content_type.to_ascii_lowercase();
+        // パラメータ名の位置は小文字化した文字列で探し、値は元の文字列
+        // から取る — boundary 値は RFC 2046 で大小区別される。
+        let param = |name: &str| -> Option<String> {
+            // パラメータ名は ; または空白の直後にあるべき —
+            // name="myboundary.txt" のような値の内側での誤一致を防ぐ
+            let pos = {
+                let mut from = 0usize;
+                loop {
+                    let p = lower[from..].find(name)? + from;
+                    let prev_ok = p == 0 || !lower.as_bytes()[p - 1].is_ascii_alphanumeric();
+                    // 名の直後が (空白を挟んで) '=' のときだけパラメータと
+                    // 認める — "boundaryfoo=..." の前方一致誤認を防ぐ
+                    let next_ok = lower[p + name.len()..].trim_start().starts_with('=');
+                    if prev_ok && next_ok {
+                        break p;
+                    }
+                    from = p + 1;
+                }
+            };
+            let eq = lower[pos..].find('=')? + pos;
+            let val = first_content_type.get(eq + 1..)?.trim_start();
+            // 引用符つき値は空白を含みうるため閉じ引用符まで取る
+            // (boundary="-- =_NextPart..." 形。RFC 2046 では空白入りの
+            // boundary は引用符必須)。非引用値は ; または空白で打切り。
+            let token = if let Some(quoted) = val.strip_prefix('"') {
+                let close = quoted.find('"').unwrap_or(quoted.len());
+                &quoted[..close]
+            } else {
+                let end = val
+                    .find(|c: char| matches!(c, ';' | ' ' | '\t' | '\r' | '\n'))
+                    .unwrap_or(val.len());
+                &val[..end]
+            };
+            let v = token.trim_matches(|c| matches!(c, '"' | '\''));
+            if v.is_empty() {
+                None
+            } else {
+                Some(v.to_string())
+            }
+        };
+
+        // S03: UTF-7 charset 宣言 → 拒否。
+        // UTF-7 は歴史的に XSS 経路 (IE/古いパーサが +ADw- を < に展開) で、
+        // 現在の mail-parser は UTF-7 をデコードしないため宣言自体を拒否する。
+        if param("charset")
+            .is_some_and(|c| c.eq_ignore_ascii_case("utf-7") || c.eq_ignore_ascii_case("utf7"))
+        {
+            return Err(RenderError::Parse("S03: utf-7 charset is forbidden".into()));
+        }
+
+        // S02: multipart 宣言の境界が本文に一度も現れない → 拒否。
+        // boundary= パラメータ未指定の multipart も同じく拒否。
+        if lower.contains("multipart/") {
+            let Some(boundary) = param("boundary") else {
+                return Err(RenderError::Parse(
+                    "S02: multipart content without boundary parameter".into(),
+                ));
+            };
+            let marker = format!("--{boundary}").into_bytes();
+            let body = &raw[header_end.min(raw.len())..];
+            let found = body.windows(marker.len()).any(|w| w == marker.as_slice());
+            if !found {
+                return Err(RenderError::Parse(
+                    "S02: declared MIME boundary not present in body".into(),
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2267,6 +2404,64 @@ mod tests {
         let e = html_to_text(&html);
         assert_eq!(e.link_mismatches.len(), 1);
         assert!(e.link_mismatches[0].shown_text.chars().count() <= 80);
+    }
+
+    // ---- D168: S01/S02/S03 ストリクトパース強制 ----
+
+    #[test]
+    fn parse_rejects_duplicate_content_type() {
+        let raw = b"From: a@b.example\r\nSubject: x\r\n\
+            Content-Type: text/plain\r\n\
+            Content-Type: text/html\r\n\r\nbody";
+        let err = parse(raw).unwrap_err();
+        assert!(err.to_string().contains("S01"));
+    }
+
+    #[test]
+    fn parse_rejects_missing_boundary_in_body() {
+        let raw = b"From: a@b.example\r\n\
+            Content-Type: multipart/mixed; boundary=\"DECLARED\"\r\n\r\n\
+            --OTHER\r\nContent-Type: text/plain\r\n\r\nbody\r\n--OTHER--\r\n";
+        let err = parse(raw).unwrap_err();
+        assert!(err.to_string().contains("S02"));
+    }
+
+    #[test]
+    fn parse_rejects_boundary_case_mismatch() {
+        // boundary 値は RFC 2046 で大小区別 — 宣言と本文で大小が違えば拒否
+        let raw = b"Content-Type: multipart/mixed; boundary=AbC9\r\n\r\n\
+            --abc9\r\nx\r\n--abc9--\r\n";
+        assert!(parse(raw).is_err());
+    }
+
+    #[test]
+    fn parse_rejects_multipart_without_boundary_param() {
+        let raw = b"Content-Type: multipart/mixed\r\n\r\nbody";
+        let err = parse(raw).unwrap_err();
+        assert!(err.to_string().contains("S02"));
+    }
+
+    #[test]
+    fn parse_rejects_utf7_charset() {
+        let raw = b"Content-Type: text/plain; charset=utf-7\r\n\r\n+ADw-script+AD4-";
+        let err = parse(raw).unwrap_err();
+        assert!(err.to_string().contains("S03"));
+    }
+
+    #[test]
+    fn parse_accepts_normal_multipart() {
+        let raw = b"From: a@b.example\r\nSubject: x\r\n\
+            Content-Type: multipart/mixed; boundary=\"B1\"\r\n\r\n\
+            --B1\r\nContent-Type: text/plain\r\n\r\nhello\r\n--B1--\r\n";
+        assert!(parse(raw).is_ok());
+    }
+
+    #[test]
+    fn parse_accepts_folded_boundary() {
+        // 継続行に boundary= がある折り返し宣言も本文出現で受理
+        let raw = b"Content-Type: multipart/mixed;\r\n boundary=\"BF\"\r\n\r\n\
+            --BF\r\nx\r\n--BF--\r\n";
+        assert!(parse(raw).is_ok());
     }
 }
 

@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D168: ストリクトパースルール S01/S02/S03 の未実装を解消 (parser differential 遮断)
+
+- `parse()` のドキュメントには S01–S06 のストリクト強制が記載されていたが、実装には S05 (100 MB 上限) のみ存在し、S01 (複数 Content-Type)・S02 (MIME 境界不一致)・S03 (危険 charset) は何のチェックもされていなかった — **宣言された防御が存在しない**状態で、scanner とクライアントで解釈が割れる parser differential / MIME smuggling の基盤が残っていた
+- 対処: `check_strict_headers` を新設し生ヘッダブロック (64 KB 上限) をパース前に検査
+  - S01: トップレベルの Content-Type が 2 件以上 → 拒否 (scanner が先頭・クライアントが末尾を読む解釈割れを作る)
+  - S02: `multipart/*` で boundary 未指定、または宣言境界が本文に一度も現れない → 拒否 (boundary 値は RFC 2046 準拠で大小区別を維持、継続行の折り返し宣言も畳み込んで抽出)
+  - S03: `charset=utf-7` → 拒否 (歴史的 XSS 経路で mail-parser も非対応のため宣言自体を無効化)
+- テスト +8 件 (二重 CT・境界未出現/大小不一致/未指定・UTF-7・正常 multipart/折り返し boundary の受理)
+
 ### Security — D164: 複数 From アドレス / Sender ヘッダ不整合 (parser differential なりすまし) を検出
 
 - `env.from.first()` — 解析・表示・BEC 判定の全経路が From ヘッダの**最初の 1 アドレスだけ**を見ていたため、`From: ceo@corp.example, attacker@evil.example` のような複数 From メールで 2 番目以降の混入アドレスは誰も評価していなかった。RFC 5322 §3.6.2 は複数 From に `Sender:` を必須とするが、クライアントが表示に採用するアドレスは実装ごとに差があり (先頭/末尾/連結)、この「どの差出人として見えるかが環境依存」という差異を突く parser differential 型なりすましが知られている (Dmarcian/FlashStart 等が報告)
