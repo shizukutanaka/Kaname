@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `<plaintext>`/`<xmp>`/`<listing>` の旧式テキスト化タグがあるか —
+    /// 以降を非マークアップ化して内容を隠す仕込みの兆候 (D291)。
+    pub plaintext_tag: bool,
+    /// `Resent-*` ブロックの必須要素が欠落しているか (D292)。
+    /// resent-* 系ヘッダがあるのに Resent-From/Resent-Date がない。
+    pub incomplete_resent_block: bool,
+    /// ヘッダ名とコロンの間に空白があるか — 受理実装が分かれる
+    /// 非準拠形の兆候 (D293)。
+    pub space_before_colon: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +371,59 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        plaintext_tag: has_plaintext_tag(raw),
+        incomplete_resent_block: has_incomplete_resent_block(raw),
+        space_before_colon: has_space_before_colon(raw),
+    })
+}
+
+/// `<plaintext>`/`<xmp>`/`<listing>` の旧式テキスト化タグを検出する
+/// (D291)。
+///
+/// `<plaintext>` は以降の文書全体を非マークアップとして描画させ、
+/// `<xmp>`/`<listing>` は同系の旧式タグ — タグ以降の内容を検査器の
+/// マークアップ解析から隠す仕込みになる。正規メールにはほぼ出現しない。
+fn has_plaintext_tag(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<plaintext") || lower.contains("<xmp") || lower.contains("<listing")
+}
+
+/// `Resent-*` ブロックの必須要素が欠落しているか判定する (D292)。
+///
+/// RFC 5322 §3.6.6: resent フィールドは Resent-From と Resent-Date を
+/// 必須とする。resent-* 系ヘッダだけをつまみ食いして必須要素を欠く
+/// メッセージは再送経路の体裁だけを装う手作り生成品の兆候。
+fn has_incomplete_resent_block(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let has_resent = header.lines().any(|l| l.starts_with("resent-"));
+    let has_from = header.lines().any(|l| l.starts_with("resent-from:"));
+    let has_date = header.lines().any(|l| l.starts_with("resent-date:"));
+    has_resent && !(has_from && has_date)
+}
+
+/// ヘッダ名とコロンの間に空白があるか判定する (D293)。
+///
+/// RFC 5322 はフィールド名と `:` の間の空白を認めない — `Subject : x`
+/// のような非準拠形は受理するパーサと拒否するパーサでヘッダの解釈が
+/// 分かれ、スマグリングの土台になる。
+fn has_space_before_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = &text[..header_end];
+    header.lines().any(|l| {
+        let Some(colon) = l.find(':') else {
+            return false;
+        };
+        let name = &l[..colon];
+        name.len() > 1
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == ' ' || c == '\t')
+            && (name.ends_with(' ') || name.ends_with('\t'))
     })
 }
 
@@ -2675,6 +2737,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は旧式テキスト化タグを検出する() {
+        let pt = b"<html><body><plaintext>hidden after this</body></html>";
+        assert!(has_plaintext_tag(pt));
+        let xmp = b"<p><xmp><a href=\"evil\">x</a></xmp></p>";
+        assert!(has_plaintext_tag(xmp));
+        let listing = b"<listing>text</listing>";
+        assert!(has_plaintext_tag(listing));
+        let clean = b"<p>plain</p>";
+        assert!(!has_plaintext_tag(clean));
+        let pre = b"<pre>code</pre>";
+        assert!(!has_plaintext_tag(pre));
+    }
+
+    #[test]
+    fn scan_はresent不完全ブロックを検出する() {
+        let lone = b"Resent-To: x@y.example\r\nFrom: a@b.example\r\n\r\nx";
+        assert!(has_incomplete_resent_block(lone));
+        let partial = b"Resent-From: a@b.example\r\nResent-To: x@y.example\r\n\r\nx";
+        assert!(has_incomplete_resent_block(partial));
+        let complete = b"Resent-From: a@b.example\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-To: x@y.example\r\n\r\nx";
+        assert!(!has_incomplete_resent_block(complete));
+        let none = b"From: a@b.example\r\n\r\nx";
+        assert!(!has_incomplete_resent_block(none));
+    }
+
+    #[test]
+    fn scan_はコロン前空白を検出する() {
+        let sp = b"Subject : hello\r\nFrom: a@b.example\r\n\r\nx";
+        assert!(has_space_before_colon(sp));
+        let tab = b"From:\t a@b.example\r\n\r\nx";
+        assert!(!has_space_before_colon(tab));
+        let tabname = b"X-Foo \t: v\r\n\r\nx";
+        assert!(has_space_before_colon(tabname));
+        let ok = b"Subject: hello\r\nFrom: a@b.example\r\n\r\nx";
+        assert!(!has_space_before_colon(ok));
+        let body = b"Subject: ok\r\n\r\nNote : this is body";
+        assert!(!has_space_before_colon(body));
+        let fold = b"Subject: a\r\n continuation\r\n\r\nx";
+        assert!(!has_space_before_colon(fold));
     }
 }
 

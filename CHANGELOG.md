@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D291: `<plaintext>`/`<xmp>`/`<listing>` の旧式テキスト化タグが未検査
+
+- `<plaintext>` は以降の文書全体を非マークアップとして描画させる旧式タグ — タグ以降の内容を検査器のマークアップ解析から隠す仕込みになる (mXSS 系) が未検査だった
+- 対処: `has_plaintext_tag` 新設で `<plaintext`/`<xmp`/`<listing` を検出 → `Envelope.plaintext_tag` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D292: `Resent-*` ブロックの必須要素欠落が未検査
+
+- RFC 5322 §3.6.6 は resent フィールドに Resent-From と Resent-Date を必須とする — `Resent-To:` だけをつまみ食いして必須要素を欠くメッセージは再送経路の体裁だけを装う手作り生成品の兆候だが未検査だった (resent 内容の検証は D211、ブロックの構造的完全性は別区画)
+- 対処: `has_incomplete_resent_block` 新設で resent-* 存在 + Resent-From/Resent-Date 欠落を検出 → `Envelope.incomplete_resent_block` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D293: ヘッダ名とコロンの間の空白が未検査
+
+- RFC 5322 はフィールド名と `:` の間の空白を認めない — `Subject : x` のような非準拠形は受理するパーサと拒否するパーサでヘッダ解釈が分かれ、スマグリングの土台になるが未検査だった
+- 対処: `has_space_before_colon` 新設でヘッダ名末尾の空白を検出 → `Envelope.space_before_colon` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D291: 旧式テキスト化タグ
+    if env.plaintext_tag {
+        render_risks.push(
+            "<plaintext>/<xmp>/<listing> タグ — 以降の内容を非マークアップ化して隠す仕込みの可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D292: Resent-* ブロック必須要素欠落
+    if env.incomplete_resent_block {
+        render_risks.push(
+            "Resent-* ヘッダがあるのに Resent-From/Resent-Date がありません — 再送体裁だけの生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D293: ヘッダ名とコロンの間の空白
+    if env.space_before_colon {
+        render_risks.push(
+            "ヘッダ名とコロンの間に空白があります — 受理実装が分かれる非準拠形の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
