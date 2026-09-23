@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D294: base64 宣言と実体の不一致
+    if env.malformed_base64_body {
+        render_risks.push(
+            "base64 宣言なのに本文に非 base64 文字があります — 宣言エンコードと実体の不一致の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D295: quoted-printable 宣言と実体の不一致
+    if env.malformed_qp_body {
+        render_risks.push(
+            "quoted-printable 宣言なのに不正な = エスケープがあります — 宣言エンコードと実体の不一致の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D296: XML 宣言混入
+    if env.entity_markup {
+        render_risks.push(
+            "<!ENTITY>/<![CDATA[ 等の XML 宣言部品 — XML/HTML パーサで解釈が分かれる仕込みの可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

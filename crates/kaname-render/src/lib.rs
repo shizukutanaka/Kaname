@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `base64` 宣言なのに本文に非 base64 文字があるか — 宣言
+    /// エンコードと実体の不一致の兆候 (D294)。
+    pub malformed_base64_body: bool,
+    /// `quoted-printable` 宣言なのに `=` の後が hex/EOL でない箇所が
+    /// あるか — 宣言エンコードと実体の不一致の兆候 (D295)。
+    pub malformed_qp_body: bool,
+    /// `<!ENTITY>`/`<![CDATA[` 等の XML 宣言混入があるか — XML
+    /// 系パーサと HTML 系パーサで解釈が分かれる仕込みの兆候 (D296)。
+    pub entity_markup: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +371,115 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        malformed_base64_body: has_malformed_base64_body(raw),
+        malformed_qp_body: has_malformed_qp_body(raw),
+        entity_markup: has_entity_markup(raw),
     })
+}
+
+/// トップレベル `Content-Transfer-Encoding:` の値を小文字で返す補助。
+fn top_level_cte(header: &str) -> Option<String> {
+    header
+        .lines()
+        .find(|l| l.starts_with("content-transfer-encoding:"))
+        .map(|l| l[26..].trim().to_string())
+}
+
+/// トップレベルが multipart 宣言か判定する補助。
+fn is_multipart_top(header: &str) -> bool {
+    header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart/")
+    })
+}
+
+/// `base64` 宣言なのに本文に非 base64 文字があるか判定する (D294)。
+///
+/// 宣言エンコードと実体の不一致はデコーダ実装 (寛容/厳格) で内容が
+/// 分かれる parser differential。multipart は各パートが自身の CTE を
+/// 持つため対象外。
+fn has_malformed_base64_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let Some(header_end) = lower.find("\r\n\r\n") else {
+        return false;
+    };
+    let header = &lower[..header_end];
+    if is_multipart_top(header) {
+        return false;
+    }
+    let Some(cte) = top_level_cte(header) else {
+        return false;
+    };
+    if !cte.contains("base64") {
+        return false;
+    }
+    let body = &text[header_end + 4..];
+    body.chars().any(|c| {
+        !c.is_ascii_alphanumeric()
+            && !matches!(c, '+' | '/' | '=' | '\r' | '\n' | ' ' | '\t')
+    })
+}
+
+/// `quoted-printable` 宣言なのに `=` の後が hex/EOL でない箇所があるか
+/// 判定する (D295)。
+///
+/// `=` はエスケープの先頭またはソフトブレーク (行末 `=`) としてのみ
+/// 正当 — それ以外の `=` はデコーダ実装で表示が分かれる。
+fn has_malformed_qp_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let Some(header_end) = lower.find("\r\n\r\n") else {
+        return false;
+    };
+    let header = &lower[..header_end];
+    if is_multipart_top(header) {
+        return false;
+    }
+    let Some(cte) = top_level_cte(header) else {
+        return false;
+    };
+    if !cte.contains("quoted-printable") {
+        return false;
+    }
+    let body = &text.as_bytes()[header_end + 4..];
+    let hex = |b: u8| b.is_ascii_hexdigit();
+    let mut i = 0;
+    while i < body.len() {
+        if body[i] == b'=' {
+            let next1 = body.get(i + 1).copied();
+            match next1 {
+                Some(b'\r') => i += 2,
+                Some(b'\n') => i += 2,
+                Some(a) if hex(a) => {
+                    if matches!(body.get(i + 2), Some(&b) if hex(b)) {
+                        i += 3;
+                        continue;
+                    }
+                    return true;
+                }
+                Some(_) => return true,
+                None => return true,
+            }
+            continue;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// `<!ENTITY>`/`<![CDATA[`/`<!ELEMENT`/`<!ATTLIST` の XML 宣言混入を
+/// 検出する (D296)。
+///
+/// メール本文は HTML — XML 系の宣言部品は XML 系パーサと HTML 系
+/// パーサで解釈が分かれる仕込み (XXE/CDATA 系の潜み場所) になる。
+/// `<!DOCTYPE` は正当な HTML メールも使うため対象外。
+fn has_entity_markup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<!entity")
+        || lower.contains("<![cdata[")
+        || lower.contains("<!element")
+        || lower.contains("<!attlist")
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2792,56 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はbase64不一致を検出する() {
+        let bad =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nSGVsbG8<script>";
+        assert!(has_malformed_base64_body(bad));
+        let ok =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nSGVsbG8gd29ybGQ=\r\n";
+        assert!(!has_malformed_base64_body(ok));
+        let mp =
+            b"Content-Type: multipart/mixed; boundary=B\r\nContent-Transfer-Encoding: base64\r\n\r\n--B\r\nx<script>";
+        assert!(!has_malformed_base64_body(mp));
+        let nocte = b"Content-Type: text/plain\r\n\r\nplain <text>";
+        assert!(!has_malformed_base64_body(nocte));
+        let qp =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\na<b";
+        assert!(!has_malformed_base64_body(qp));
+    }
+
+    #[test]
+    fn scan_はqp不一致を検出する() {
+        let bad =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nprice =3x high";
+        assert!(has_malformed_qp_body(bad));
+        let bad2 =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nend=";
+        assert!(has_malformed_qp_body(bad2));
+        let ok =
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\na=3Db soft=\r\nbreak";
+        assert!(!has_malformed_qp_body(ok));
+        let mp =
+            b"Content-Type: multipart/mixed; boundary=B\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n--B\r\n=x";
+        assert!(!has_malformed_qp_body(mp));
+        let b64 = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\na=x";
+        assert!(!has_malformed_qp_body(b64));
+    }
+
+    #[test]
+    fn scan_はxml宣言混入を検出する() {
+        let ent = b"<html><!ENTITY xxe SYSTEM \"file:///etc/passwd\"></html>";
+        assert!(has_entity_markup(ent));
+        let cd = b"<p><![CDATA[ <script>evil()</script> ]]></p>";
+        assert!(has_entity_markup(cd));
+        let el = b"<!ELEMENT br EMPTY><p>x</p>";
+        assert!(has_entity_markup(el));
+        let doct = b"<!DOCTYPE html><p>ok</p>";
+        assert!(!has_entity_markup(doct));
+        let clean = b"<p>plain</p>";
+        assert!(!has_entity_markup(clean));
     }
 }
 

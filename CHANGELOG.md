@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D294: `base64` 宣言なのに本文に非 base64 文字が混入する未検査
+
+- 宣言エンコードと実体の不一致はデコーダ実装 (寛容: 無視する / 厳格: 失敗する) で内容が分かれる parser differential — `<script>` のような非アルファベット断片を base64 本文に混ぜれば寛容デコーダの表示と検査テキストがずれるが未検査だった
+- 対処: `has_malformed_base64_body` 新設 (multipart は各パートが自身の CTE を持つため対象外) → `Envelope.malformed_base64_body` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D295: `quoted-printable` 宣言なのに `=` の後が hex/EOL でない未検査
+
+- `=` はエスケープ先頭または行末ソフトブレークとしてのみ正当 — `=3x` や裸の `=` はデコーダ実装で表示が分かれる parser differential だが未検査だった
+- 対処: `has_malformed_qp_body` 新設で `=` の後を検査 (multipart 対象外) → `Envelope.malformed_qp_body` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D296: `<!ENTITY>`/`<![CDATA[` 等の XML 宣言混入が未検査
+
+- メール本文は HTML — `<!ENTITY>`/`<![CDATA[`/`<!ELEMENT`/`<!ATTLIST` の XML 宣言部品は XML 系パーサと HTML 系パーサで解釈が分かれる仕込み (XXE/CDATA 系の潜み場所) だが未検査だった。`<!DOCTYPE` は正当な HTML メールも使うため対象外
+- 対処: `has_entity_markup` 新設 → `Envelope.entity_markup` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
