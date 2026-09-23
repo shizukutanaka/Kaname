@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D561: `X-Anicom-*`/`X-iPet-*`/`X-Rover-*` 等のペット保険・ペットサービス印自称が未検査
+
+- **問題**: `X-Anicom-*` (アニコム)、`X-iPet-*` (アイペット)、`X-Rover-*` (Rover)、`X-FPC-*`/`X-PSInsurance-*`/`X-PetFamily-*`/`X-RakutenPet-*`/`X-Wag-*`/`X-Banfield-*`/`X-VCA-*`/`X-BluePearl-*`/`X-Medivet-*`/`X-Petplan-*`/`X-Trupanion-*`/`X-HealthyPaws-*`/`X-EmbracePet-*`/`X-FetchPet-*`/`X-LemonadePet-*`/`X-PetsBest-*`/`X-SpotPet-*`/`X-Figo-*`/`X-ManyPets-*`/`X-Waggel-*`/`X-PetsOkay-*`/`X-PetsitterSOS-*`/`X-DoggyBox-*`/`X-CocoGourmet-*`/`X-PetOla-*`/`X-PETOKOTO-*`/`X-Peco-*` は愛機の通知記録 — 送信側が書くことは自称。保険金・手術費用偽装はペット保険詐欺の典型。(`X-PetSmart-*`/`X-Chewy-*`/`X-Zooplus-*` 等のペット用品店は D533 で検出済み)
+- **修正**: `Envelope` に `pet_service_marks` + `has_pet_service_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 愛印の自署を問え。
+
+### Security — D562: `X-Zexy-*`/`X-IBJ-*`/`X-Onet-*` 等の結婚式場・結婚相談所印自称が未検査
+
+- **問題**: `X-Zexy-*` (ゼクシィ)、`X-IBJ-*` (IBJ)、`X-Onet-*` (オーネット)、`X-Hanayume-*`/`X-WeddingPark-*`/`X-BridalNet-*`/`X-MinnaWedding-*`/`X-Maricuru-*`/`X-Anniversaire-*`/`X-Escreet-*`/`X-BleuBlanc-*`/`X-TGN-*`/`X-BestBridal-*`/`X-Claudia-*`/`X-PlanDoSee-*`/`X-HappoEn-*`/`X-MeijiKinenkan-*`/`X-Zwei-*`/`X-PartnerAgent-*`/`X-Nozze-*`/`X-Fiori-*`/`X-SanMarie-*`/`X-EnKonkatsu-*`/`X-ZexyEng-*`/`X-Smaridge-*`/`X-Marrish-*`/`X-Infinity-*`/`X-Naco-*` は婚機の通知記録 — 送信側が書くことは自称。式場見学・お見合い料金偽装はブライダル詐欺の典型。(`X-Minavi-*`/`X-Gurunavi-*` は D482/D555 で検出済み)
+- **修正**: `Envelope` に `bridal_marks` + `has_bridal_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 婚印の自署を問え。
+
+### Security — D563: `X-UenoZoo-*`/`X-Kaiyukan-*`/`X-Churaumi-*` 等の動物園・水族館・牧場印自称が未検査
+
+- **問題**: `X-UenoZoo-*` (上野動物園)、`X-Kaiyukan-*` (海遊館)、`X-Churaumi-*` (美ら海水族館)、`X-Asahiyama-*`/`X-TamaZoo-*`/`X-HigashiyamaZoo-*`/`X-TennojiZoo-*`/`X-AdventureWorld-*`/`X-Nasu-*`/`X-MotherBokujo-*`/`X-TobuZoo-*`/`X-Zoorasia-*`/`X-YokohamaZoo-*`/`X-Nonhoi-*`/`X-Sunshine-*`/`X-Nagoyako-*`/`X-Sumasui-*`/`X-Kamogawa-*`/`X-AquaPark-*`/`X-Sumida-*`/`X-Enosui-*`/`X-Kasai-*`/`X-Toba-*`/`X-Kaiyokan-*`/`X-Kushimoto-*`/`X-AnimalPark-*` は園機の通知記録 — 送信側が書くことは自称。チケット・イベント当選偽装は動物園詐欺の典型。(`X-USJ-*`/`X-Disney-*`/`X-Legoland-*` 等のテーマパークは D536 で検出済み)
+- **修正**: `Envelope` に `zoo_marks` + `has_zoo_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 園印の自署を問え。
+
+
 ### Security — D558: `X-LEGO-*`/`X-TakaraTomy-*`/`X-Bandai-*` 等の玩具・フィギュア・TCG 印自称が未検査
 
 - **問題**: `X-LEGO-*` (LEGO)、`X-TakaraTomy-*` (タカラトミー)、`X-Bandai-*` (バンダイ)、`X-GoodSmile-*`/`X-Kotobukiya-*`/`X-MegaHouse-*`/`X-Alter-*`/`X-PhatCompany-*`/`X-FREEing-*`/`X-QuesQ-*`/`X-Revolve-*`/`X-PopParade-*`/`X-Prime1Studio-*`/`X-HotToys-*`/`X-Sideshow-*`/`X-Funko-*`/`X-POPMART-*`/`X-Volks-*`/`X-Tamiya-*`/`X-Hasegawa-*`/`X-Aoshima-*`/`X-Fujimi-*`/`X-Wave-*`/`X-Plarail-*`/`X-Tomica-*`/`X-Licca-*`/`X-Sylvanian-*`/`X-Beyblade-*`/`X-DuelMasters-*`/`X-YuGiOh-*`/`X-MTG-*`/`X-Wizards-*`/`X-PokemonTCG-*`/`X-Cardfight-*`/`X-Bushiroad-*`/`X-WIXOSS-*`/`X-WeissSchwarz-*`/`X-OnePieceCard-*`/`X-Hasbro-*`/`X-Mattel-*`/`X-FisherPrice-*`/`X-Nerf-*`/`X-Barbie-*`/`X-HotWheels-*`/`X-Tamagotchi-*`/`X-Amiibo-*`/`X-ReBirth-*`/`X-Vividz-*`/`X-Playmobil-*`/`X-LOLSurprise-*`/`X-Matchbox-*`/`X-FunkoPop-*`/`X-Nendoroid-*`/`X-Figma-*`/`X-SHFiguarts-*`/`X-RobotDamashii-*`/`X-MetalBuild-*`/`X-SOC-*`/`X-Chogokin-*`/`X-HG-*`/`X-MG-*`/`X-PG-*`/`X-RG-*`/`X-EG-*`/`X-SD-*` は玩機の通知記録 — 送信側が書くことは自称。限定抽選・予約開始偽装は玩具詐欺の典型。(`X-BandaiNamco-*` 等のゲーム機は D473 で検出済み)

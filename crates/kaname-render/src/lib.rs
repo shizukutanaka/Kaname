@@ -1407,6 +1407,40 @@ pub struct Envelope {
     /// 送信側が自称する兆候 (D560)。(`X-AEON-*`/`X-Tokyu-*` 等の
     /// 小売・鉄道系は D522/D525 で検出済み)
     pub department_marks: bool,
+    /// `X-Anicom-*`/`X-iPet-*`/`X-FPC-*`/`X-PSInsurance-*`/
+    /// `X-PetFamily-*`/`X-RakutenPet-*`/`X-Rover-*`/`X-Wag-*`/
+    /// `X-Banfield-*`/`X-VCA-*`/`X-BluePearl-*`/`X-Medivet-*`/
+    /// `X-Petplan-*`/`X-Trupanion-*`/`X-HealthyPaws-*`/`X-EmbracePet-*`/
+    /// `X-FetchPet-*`/`X-LemonadePet-*`/`X-PetsBest-*`/`X-SpotPet-*`/
+    /// `X-Figo-*`/`X-ManyPets-*`/`X-Waggel-*`/`X-PetsOkay-*`/
+    /// `X-PetsitterSOS-*`/`X-DoggyBox-*`/`X-CocoGourmet-*`/
+    /// `X-PetOla-*`/`X-PETOKOTO-*`/`X-Peco-*` 等のペット保険・
+    /// ペットサービス印があるか — 愛機の通知記録を送信側が自称する
+    /// 兆候 (D561)。(`X-PetSmart-*`/`X-Chewy-*`/`X-Zooplus-*` 等の
+    /// ペット用品店は D533 で検出済み)
+    pub pet_service_marks: bool,
+    /// `X-Zexy-*`/`X-Hanayume-*`/`X-WeddingPark-*`/`X-BridalNet-*`/
+    /// `X-MinnaWedding-*`/`X-Maricuru-*`/`X-Anniversaire-*`/
+    /// `X-Escreet-*`/`X-BleuBlanc-*`/`X-TGN-*`/`X-BestBridal-*`/
+    /// `X-Claudia-*`/`X-PlanDoSee-*`/`X-HappoEn-*`/`X-MeijiKinenkan-*`/
+    /// `X-IBJ-*`/`X-Onet-*`/`X-Zwei-*`/`X-PartnerAgent-*`/`X-Nozze-*`/
+    /// `X-Fiori-*`/`X-SanMarie-*`/`X-EnKonkatsu-*`/`X-ZexyEng-*`/
+    /// `X-Smaridge-*`/`X-Marrish-*`/`X-Infinity-*`/`X-Naco-*` 等の
+    /// 結婚式場・結婚相談所印があるか — 婚機の通知記録を送信側が
+    /// 自称する兆候 (D562)。(`X-Minavi-*`/`X-Gurunavi-*` は
+    /// D482/D555 で検出済み)
+    pub bridal_marks: bool,
+    /// `X-Asahiyama-*`/`X-UenoZoo-*`/`X-TamaZoo-*`/`X-HigashiyamaZoo-*`/
+    /// `X-TennojiZoo-*`/`X-AdventureWorld-*`/`X-Nasu-*`/
+    /// `X-MotherBokujo-*`/`X-TobuZoo-*`/`X-Zoorasia-*`/
+    /// `X-YokohamaZoo-*`/`X-Nonhoi-*`/`X-Sunshine-*`/`X-Kaiyukan-*`/
+    /// `X-Nagoyako-*`/`X-Sumasui-*`/`X-Kamogawa-*`/`X-Churaumi-*`/
+    /// `X-AquaPark-*`/`X-Sumida-*`/`X-Enosui-*`/`X-Kasai-*`/`X-Toba-*`/
+    /// `X-Kaiyokan-*`/`X-Kushimoto-*`/`X-AnimalPark-*` 等の動物園・
+    /// 水族館・牧場印があるか — 園機の通知記録を送信側が自称する
+    /// 兆候 (D563)。(`X-USJ-*`/`X-Disney-*`/`X-Legoland-*` 等の
+    /// テーマパークは D536 で検出済み)
+    pub zoo_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1828,6 +1862,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         toy_marks: has_toy_marks(raw),
         hobby_marks: has_hobby_marks(raw),
         department_marks: has_department_marks(raw),
+        pet_service_marks: has_pet_service_marks(raw),
+        bridal_marks: has_bridal_marks(raw),
+        zoo_marks: has_zoo_marks(raw),
     })
 }
 
@@ -8812,6 +8849,156 @@ fn has_department_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Anicom-*`/`X-iPet-*`/`X-FPC-*`/`X-PSInsurance-*`/
+/// `X-PetFamily-*`/`X-RakutenPet-*`/`X-Rover-*`/`X-Wag-*`/
+/// `X-Banfield-*`/`X-VCA-*`/`X-BluePearl-*`/`X-Medivet-*`/
+/// `X-Petplan-*`/`X-Trupanion-*`/`X-HealthyPaws-*`/`X-EmbracePet-*`/
+/// `X-FetchPet-*`/`X-LemonadePet-*`/`X-PetsBest-*`/`X-SpotPet-*`/
+/// `X-Figo-*`/`X-ManyPets-*`/`X-Waggel-*`/`X-PetsOkay-*`/
+/// `X-PetsitterSOS-*`/`X-DoggyBox-*`/`X-CocoGourmet-*`/`X-PetOla-*`/
+/// `X-PETOKOTO-*`/`X-Peco-*` 等のペット保険・ペットサービス印が
+/// あるか判定する (D561)。
+///
+/// `X-Anicom-*` (アニコム)、`X-iPet-*` (アイペット)、`X-Rover-*`
+/// (Rover) は愛機の通知記録 — 送信側から届くこれは自称。
+/// 保険金・手術費用偽装はペット保険詐欺の典型。
+fn has_pet_service_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-anicom-")
+            || l.starts_with("x-ipet-")
+            || l.starts_with("x-fpc-")
+            || l.starts_with("x-psinsurance-")
+            || l.starts_with("x-petfamily-")
+            || l.starts_with("x-rakutenpet-")
+            || l.starts_with("x-rover-")
+            || l.starts_with("x-wag-")
+            || l.starts_with("x-banfield-")
+            || l.starts_with("x-vca-")
+            || l.starts_with("x-bluepearl-")
+            || l.starts_with("x-medivet-")
+            || l.starts_with("x-petplan-")
+            || l.starts_with("x-trupanion-")
+            || l.starts_with("x-healthypaws-")
+            || l.starts_with("x-embracepet-")
+            || l.starts_with("x-fetchpet-")
+            || l.starts_with("x-lemonadepet-")
+            || l.starts_with("x-petsbest-")
+            || l.starts_with("x-spotpet-")
+            || l.starts_with("x-figo-")
+            || l.starts_with("x-manypets-")
+            || l.starts_with("x-waggel-")
+            || l.starts_with("x-petsokay-")
+            || l.starts_with("x-petsittersos-")
+            || l.starts_with("x-doggybox-")
+            || l.starts_with("x-cocogourmet-")
+            || l.starts_with("x-petola-")
+            || l.starts_with("x-petokoto-")
+            || l.starts_with("x-peco-")
+    })
+}
+
+/// `X-Zexy-*`/`X-Hanayume-*`/`X-WeddingPark-*`/`X-BridalNet-*`/
+/// `X-MinnaWedding-*`/`X-Maricuru-*`/`X-Anniversaire-*`/`X-Escreet-*`/
+/// `X-BleuBlanc-*`/`X-TGN-*`/`X-BestBridal-*`/`X-Claudia-*`/
+/// `X-PlanDoSee-*`/`X-HappoEn-*`/`X-MeijiKinenkan-*`/`X-IBJ-*`/
+/// `X-Onet-*`/`X-Zwei-*`/`X-PartnerAgent-*`/`X-Nozze-*`/`X-Fiori-*`/
+/// `X-SanMarie-*`/`X-EnKonkatsu-*`/`X-ZexyEng-*`/`X-Smaridge-*`/
+/// `X-Marrish-*`/`X-Infinity-*`/`X-Naco-*` 等の結婚式場・
+/// 結婚相談所印があるか判定する (D562)。
+///
+/// `X-Zexy-*` (ゼクシィ)、`X-IBJ-*` (IBJ)、`X-Onet-*` (オーネット) は
+/// 婚機の通知記録 — 送信側から届くこれは自称。式場見学・
+/// お見合い料金偽装はブライダル詐欺の典型。
+fn has_bridal_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-zexy-")
+            || l.starts_with("x-hanayume-")
+            || l.starts_with("x-weddingpark-")
+            || l.starts_with("x-bridalnet-")
+            || l.starts_with("x-minnawedding-")
+            || l.starts_with("x-maricuru-")
+            || l.starts_with("x-anniversaire-")
+            || l.starts_with("x-escreet-")
+            || l.starts_with("x-bleublanc-")
+            || l.starts_with("x-tgn-")
+            || l.starts_with("x-bestbridal-")
+            || l.starts_with("x-claudia-")
+            || l.starts_with("x-plandosee-")
+            || l.starts_with("x-happoen-")
+            || l.starts_with("x-meijikinenkan-")
+            || l.starts_with("x-ibj-")
+            || l.starts_with("x-onet-")
+            || l.starts_with("x-zwei-")
+            || l.starts_with("x-partneragent-")
+            || l.starts_with("x-nozze-")
+            || l.starts_with("x-fiori-")
+            || l.starts_with("x-sanmarie-")
+            || l.starts_with("x-enkonkatsu-")
+            || l.starts_with("x-zexyeng-")
+            || l.starts_with("x-smaridge-")
+            || l.starts_with("x-marrish-")
+            || l.starts_with("x-infinity-")
+            || l.starts_with("x-naco-")
+    })
+}
+
+/// `X-Asahiyama-*`/`X-UenoZoo-*`/`X-TamaZoo-*`/`X-HigashiyamaZoo-*`/
+/// `X-TennojiZoo-*`/`X-AdventureWorld-*`/`X-Nasu-*`/`X-MotherBokujo-*`/
+/// `X-TobuZoo-*`/`X-Zoorasia-*`/`X-YokohamaZoo-*`/`X-Nonhoi-*`/
+/// `X-Sunshine-*`/`X-Kaiyukan-*`/`X-Nagoyako-*`/`X-Sumasui-*`/
+/// `X-Kamogawa-*`/`X-Churaumi-*`/`X-AquaPark-*`/`X-Sumida-*`/
+/// `X-Enosui-*`/`X-Kasai-*`/`X-Toba-*`/`X-Kaiyokan-*`/`X-Kushimoto-*`/
+/// `X-AnimalPark-*` 等の動物園・水族館・牧場印があるか判定する
+/// (D563)。
+///
+/// `X-UenoZoo-*` (上野動物園)、`X-Kaiyukan-*` (海遊館)、
+/// `X-Churaumi-*` (美ら海水族館) は園機の通知記録 — 送信側から
+/// 届くこれは自称。チケット・イベント当選偽装は動物園詐欺の典型。
+/// `X-USJ-*`/`X-Disney-*`/`X-Legoland-*` 等のテーマパークは
+/// D536 で検出済み。
+fn has_zoo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-asahiyama-")
+            || l.starts_with("x-uenozoo-")
+            || l.starts_with("x-tamazoo-")
+            || l.starts_with("x-higashiyamazoo-")
+            || l.starts_with("x-tennojizoo-")
+            || l.starts_with("x-adventureworld-")
+            || l.starts_with("x-nasu-")
+            || l.starts_with("x-motherbokujo-")
+            || l.starts_with("x-tobuzoo-")
+            || l.starts_with("x-zoorasia-")
+            || l.starts_with("x-yokohamazoo-")
+            || l.starts_with("x-nonhoi-")
+            || l.starts_with("x-sunshine-")
+            || l.starts_with("x-kaiyukan-")
+            || l.starts_with("x-nagoyako-")
+            || l.starts_with("x-sumasui-")
+            || l.starts_with("x-kamogawa-")
+            || l.starts_with("x-churaumi-")
+            || l.starts_with("x-aquapark-")
+            || l.starts_with("x-sumida-")
+            || l.starts_with("x-enosui-")
+            || l.starts_with("x-kasai-")
+            || l.starts_with("x-toba-")
+            || l.starts_with("x-kaiyokan-")
+            || l.starts_with("x-kushimoto-")
+            || l.starts_with("x-animalpark-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -14242,6 +14429,72 @@ mod tests {
         assert!(has_department_marks(r1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_department_marks(clean));
+    }
+
+    #[test]
+    fn scan_は愛機印を検出する() {
+        let a1 = b"X-Anicom-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(a1));
+        let i1 = b"X-iPet-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(i1));
+        let r1 = b"X-Rover-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(r1));
+        let t1 = b"X-Trupanion-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(t1));
+        let b1 = b"X-Banfield-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(b1));
+        let f1 = b"X-FPC-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(f1));
+        let p1 = b"X-Petplan-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(p1));
+        let f2 = b"X-Figo-Notify: x\r\n\r\nx";
+        assert!(has_pet_service_marks(f2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_pet_service_marks(clean));
+    }
+
+    #[test]
+    fn scan_は婚機印を検出する() {
+        let z1 = b"X-Zexy-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(z1));
+        let i1 = b"X-IBJ-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(i1));
+        let o1 = b"X-Onet-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(o1));
+        let h1 = b"X-Hanayume-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(h1));
+        let w1 = b"X-WeddingPark-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(w1));
+        let t1 = b"X-TGN-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(t1));
+        let m1 = b"X-Marrish-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(m1));
+        let p1 = b"X-PlanDoSee-Notify: x\r\n\r\nx";
+        assert!(has_bridal_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bridal_marks(clean));
+    }
+
+    #[test]
+    fn scan_は園機印を検出する() {
+        let u1 = b"X-UenoZoo-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(u1));
+        let k1 = b"X-Kaiyukan-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(k1));
+        let c1 = b"X-Churaumi-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(c1));
+        let a1 = b"X-Asahiyama-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(a1));
+        let t1 = b"X-TamaZoo-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(t1));
+        let a2 = b"X-AdventureWorld-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(a2));
+        let s1 = b"X-Sunshine-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(s1));
+        let e1 = b"X-Enosui-Notify: x\r\n\r\nx";
+        assert!(has_zoo_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_zoo_marks(clean));
     }
 }
 
