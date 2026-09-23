@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D185: http(s) 以外のスキームを持つリンク (javascript:/data:/file:/tel: 等) を検出
+
+- リンク評価は http(s) URL のみ — `javascript:`/`data:text/html`/`file:`/`vbscript:`/`tel:`/`sms:` 等の `<a href>` は検査を素通りしていた。`data:text/html` はペイロード内蔵、`file:` は UNC 経由の NTLM 漏洩ベクター (Akamai 系)、`tel:` はコールバック型フィッシング (BazarCall 系)
+- 対処: `risky_href_scheme` でスキーム判定 (RFC 3986 §3.1 妥当性検証で相対参照見せかけを除外) → `risky_scheme_links` に収集 → `render_risks` に兆候報告
+- テスト +3 件 (kaname-render) + 1 件 (kaname-ui E2E)
+
+### Security — D186: `<base href>` タグによる相対リンク解決先の書き換え (base tag phishing) を検出
+
+- `<base href="https://evil.example">` は文書内の全相対リンクの解決先を一括して書き換える — Symantec 系が報告する base tag phishing の定形。`<base>` は `<head>` 内が典型で、抽出処理が `<head>` を丸ごと破棄するため兆候自体を見ていなかった
+- 対処: head サブツリー破棄時に断片を走査する `contains_base_tag` を新設 → `has_base_tag` に記録 → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D187: 開封確認ヘッダが差出人と別ドメインへ通知を送る (トラッキング) を検出
+
+- `Disposition-Notification-To`/`Return-Receipt-To`/`X-Confirm-Reading-To` は受信者の UA に読了通知を返させる — 要求先が別ドメインだと「開封した」情報が外部へ漏れるトラッキング経路。いずれのヘッダも未抽出だった
+- 対処: `Envelope::receipt_recipients` に 3 ヘッダの宛先を収集 → 宛先ドメインが From ドメインと異なる場合に `render_risks` に兆候報告
+- テスト +3 件
+
+### Security — D188: 暗号化 ZIP 添付 (パスワード保護による検査回避) を検出
+
+- パスワード付き ZIP は中身の検査を回避する配送形として BEC 定番 (JPCERT/TrendMicro 観測の「パスワードは別メール」型)。ZIP 自体は通常アーカイブとして非対象だった
+- 対処: `is_encrypted_zip` でローカルファイルヘッダの汎用フラグ bit0 を検査 → `scan_attachment_bytes` に配線して危険判定 + `risks` 報告
+- テスト +4 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

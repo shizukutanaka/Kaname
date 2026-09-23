@@ -96,6 +96,10 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// 開封確認の要求先 (`Disposition-Notification-To` /
+    /// `Return-Receipt-To` / `X-Confirm-Reading-To`) — 読了通知で
+    /// 外部へ「開封した」情報を漏らすトラッキング経路の検出に使用 (D187)。
+    pub receipt_recipients: Vec<Address>,
 }
 
 /// An RFC 5322 address.
@@ -327,6 +331,21 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         .header_values("DKIM-Signature")
         .find_map(|v| v.as_text().map(|s| s.to_string()));
 
+    // 開封確認要求 (D187) — 受信者の UA が通知を返すと外部へ開封情報が
+    // 漏れるトラッキング経路。3 系の既知ヘッダから宛先アドレスを収集する。
+    let mut receipt_recipients = Vec::new();
+    for name in [
+        "Disposition-Notification-To",
+        "Return-Receipt-To",
+        "X-Confirm-Reading-To",
+    ] {
+        for v in msg.header_values(name) {
+            if let mail_parser::HeaderValue::Address(a) = v {
+                receipt_recipients.extend(a.iter().filter_map(addr_to_address));
+            }
+        }
+    }
+
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
@@ -347,6 +366,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        receipt_recipients,
     })
 }
 
@@ -683,6 +703,13 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// http(s)/mailto/cid 以外のスキームを持つ `<a href>` のスキーム名群
+    /// (小文字 — `javascript:`/`data:`/`file:`/`vbscript:`/`tel:` 等、
+    /// http(s) URL のみを見る検査を素通りする経路の兆候)。
+    pub risky_scheme_links: Vec<String>,
+    /// `<base href>` タグの存在 — 相対リンクの解決先を書き換える
+    /// ベースタグ偽装 (base tag phishing、Symantec 系が報告)。
+    pub has_base_tag: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -748,6 +775,8 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     let mut hrefs: Vec<&str> = Vec::new();
     let mut hidden_chars = 0usize;
     let mut link_mismatches: Vec<LinkMismatch> = Vec::new();
+    let mut risky_scheme_links: Vec<String> = Vec::new();
+    let mut has_base_tag = false;
     // 可視 <a> の中では、アンカーテキストを別途バッファに集め、
     // 閉タグ時に「表示 URL と実リンク先のドメイン一致」を評価する (D162)。
     let mut current_anchor: Option<(&str, String)> = None;
@@ -797,6 +826,12 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         let lower = name.to_ascii_lowercase();
         let name = lower.as_str();
 
+        // D186: <base> — 相対リンクの解決先を丸ごと書き換える
+        // ベースタグ偽装の兆候。void 要素なので void 判定の前に記録する。
+        if !is_end && name == "base" {
+            has_base_tag = true;
+        }
+
         if is_end {
             if name == "a" {
                 if let Some((href, buf)) = current_anchor.take() {
@@ -827,6 +862,15 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         let hidden = has_hiding_marker(tag_inner);
         if DROP_TAGS.contains(&name) || hidden {
             let (skipped, end) = skip_subtree(html, tag_end, name);
+            // D186: <base> は <head> 内が典型 — 丸ごと捨てた範囲だけを
+            // 走査して兆候だけは記録する。
+            if name == "head" {
+                let frag_end = end.min(bytes.len());
+                let frag_start = tag_end.min(frag_end);
+                if contains_base_tag(&html[frag_start..frag_end]) {
+                    has_base_tag = true;
+                }
+            }
             if hidden && !DROP_TAGS.contains(&name) {
                 hidden_chars += skipped;
             }
@@ -845,6 +889,11 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         if name == "a" {
             if let Some(h) = attr_value(tag_inner, "href") {
                 hrefs.push(h);
+                // D185: http(s)/mailto/cid 以外のスキーム — http(s) のみを
+                // 見る検査を素通りする経路 (javascript:/data:/file:/tel: 等)。
+                if let Some(scheme) = risky_href_scheme(h) {
+                    risky_scheme_links.push(scheme.to_ascii_lowercase());
+                }
                 if current_anchor.is_none() {
                     current_anchor = Some((h, String::new()));
                 }
@@ -868,7 +917,47 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        risky_scheme_links,
+        has_base_tag,
     }
+}
+
+/// 捨てられた `<head>` 断片内に `<base` タグがあるか (D186 —
+/// ベースタグ偽装兆候の記録専用)。`<base` プレフィックスの単純走査。
+fn contains_base_tag(fragment: &str) -> bool {
+    fragment.to_ascii_lowercase().contains("<base")
+}
+
+/// href のスキームが http(s) 中心の URL 検査を素通りするものかを返す
+/// (D185)。http(s)/mailto/cid/相対/フラグメントは None。
+/// `javascript:`/`data:`/`file:`/`vbscript:`/`tel:`/`sms:`/`callto:` 等を
+/// スキーム名 (小文字、`:` なし) で返す。
+fn risky_href_scheme(href: &str) -> Option<&str> {
+    let h = href.trim();
+    if h.starts_with('#') || h.starts_with('/') || h.starts_with('?') {
+        return None;
+    }
+    let colon = h.find(':')?;
+    let scheme = &h[..colon];
+    // スキーム名の妥当性 (先頭英字、英数字+-. のみ、RFC 3986 §3.1) を
+    // 確認して `foo:bar` のような相対参照見せかけは除く。
+    let valid = scheme.len() >= 2
+        && scheme.len() <= 16
+        && scheme
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    if !valid {
+        return None;
+    }
+    // 安全側スキーム/相対参照は対象外。
+    if ["http", "https", "mailto", "cid"].contains(&scheme.to_ascii_lowercase().as_str()) {
+        return None;
+    }
+    Some(scheme)
 }
 
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
@@ -2325,6 +2414,88 @@ mod tests {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
     }
+
+    // ---------- D185: 非 http スキームのリンク ----------
+
+    #[test]
+    fn risky_scheme_javascript_detected() {
+        let e = html_to_text(r#"<p><a href="javascript:alert(1)">x</a></p>"#);
+        assert_eq!(e.risky_scheme_links, vec!["javascript"]);
+    }
+
+    #[test]
+    fn risky_scheme_data_file_tel_detected() {
+        let e = html_to_text(
+            r#"<a href="data:text/html;base64,AAAA">d</a><a href="file:///\\evil\x">f</a><a href="tel:+1234">t</a>"#,
+        );
+        assert!(e.risky_scheme_links.contains(&"data".to_string()));
+        assert!(e.risky_scheme_links.contains(&"file".to_string()));
+        assert!(e.risky_scheme_links.contains(&"tel".to_string()));
+    }
+
+    #[test]
+    fn safe_schemes_and_relatives_ignored() {
+        let e = html_to_text(
+            "<a href=\"https://a.example\">a</a><a href=\"mailto:b@x.example\">b</a><a href=\"#frag\">c</a><a href=\"/rel/path\">d</a>",
+        );
+        assert!(e.risky_scheme_links.is_empty());
+    }
+
+    // ---------- D186: <base> タグ偽装 ----------
+
+    #[test]
+    fn base_tag_detected() {
+        let e = html_to_text(
+            r#"<html><head><base href="https://evil.example/"></head><body><a href="/login">login</a></body></html>"#,
+        );
+        assert!(e.has_base_tag);
+    }
+
+    #[test]
+    fn normal_html_no_base_tag() {
+        let e = html_to_text("<html><body><p>hi</p></body></html>");
+        assert!(!e.has_base_tag);
+    }
+
+    // ---------- D188: 暗号化 ZIP 添付 ----------
+
+    #[test]
+    fn encrypted_zip_attachment_flagged() {
+        // PK\x03\x04 + 汎用フラグ bit0=1 (offset 6)
+        let mut zip = vec![0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x01, 0x00];
+        zip.extend_from_slice(&[0u8; 32]);
+        let scan = scan_attachment_bytes("files.zip", "application/zip", &zip);
+        assert!(scan.is_dangerous);
+        assert!(scan.risks.iter().any(|r| r.contains("暗号化")));
+    }
+
+    #[test]
+    fn plain_zip_not_flagged_encrypted() {
+        let mut zip = vec![0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00];
+        zip.extend_from_slice(&[0u8; 32]);
+        let scan = scan_attachment_bytes("files.zip", "application/zip", &zip);
+        assert!(!scan.risks.iter().any(|r| r.contains("暗号化")));
+    }
+
+    // ---------- D187: 開封確認ヘッダの抽出 ----------
+
+    #[test]
+    fn receipt_headers_parsed() {
+        let eml = b"From: a@x.example\r\nDisposition-Notification-To: track@evil.example\r\nReturn-Receipt-To: rr@x.example\r\nSubject: s\r\n\r\nhi\r\n";
+        let env = parse(eml).expect("parse");
+        assert_eq!(env.receipt_recipients.len(), 2);
+        assert!(env
+            .receipt_recipients
+            .iter()
+            .any(|a| a.addr.domain == "evil.example"));
+    }
+
+    #[test]
+    fn no_receipt_headers_empty() {
+        let eml = b"From: a@x.example\r\nSubject: s\r\n\r\nhi\r\n";
+        let env = parse(eml).expect("parse");
+        assert!(env.receipt_recipients.is_empty());
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2543,6 +2714,16 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
             "MIME 偽装の疑い: {} と宣言されていますが実体は {} です",
             mismatch.declared, mismatch.detected
         ));
+        is_dangerous = true;
+    }
+
+    // 2.5 暗号化 ZIP — パスワード保護で中身の検査を回避する配送形
+    // (BEC 定番、JPCERT/TrendMicro 観測の「パスワードは別メール」型)。
+    if magic_bytes::is_encrypted_zip(bytes) {
+        risks.push(
+            "暗号化 ZIP 添付です — パスワード保護により内容検査を回避する配送形 (BEC 定番の手口)"
+                .to_string(),
+        );
         is_dangerous = true;
     }
 

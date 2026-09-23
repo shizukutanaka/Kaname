@@ -208,6 +208,17 @@ pub fn is_svg(bytes: &[u8]) -> bool {
     detect_mime_from_magic(bytes) == Some("image/svg+xml")
 }
 
+/// ZIP ローカルファイルヘッダの汎用フラグ bit0 (暗号化) が立つか。
+///
+/// パスワード付き ZIP は中身の検査を回避する配送形として BEC で定番
+/// (JPCERT/TrendMicro 観測 — 「パスワードは別メール」型)。
+/// PK\x03\x04 ヘッダの offset 6-7 が汎用ビットフラグ (little-endian)、
+/// bit0=1 は暗号化。先頭エントリのフラグだけ見るヒューリスティック。
+#[must_use]
+pub fn is_encrypted_zip(bytes: &[u8]) -> bool {
+    bytes.len() >= 8 && bytes.starts_with(b"PK\x03\x04") && (bytes[6] & 0x01) == 1
+}
+
 /// Polyglot ファイルを検出する。
 ///
 /// Polyglot ファイルは複数のフォーマットとして同時に有効な binary。
@@ -322,6 +333,25 @@ mod tests {
     fn zip_detected() {
         let bytes = b"PK\x03\x04\x14\x00";
         assert_eq!(detect_mime_from_magic(bytes), Some("application/zip"));
+    }
+
+    // ---------- D188: 暗号化 ZIP ----------
+
+    #[test]
+    fn encrypted_zip_flag_detected() {
+        // 汎用フラグ (offset 6) bit0=1 → 暗号化
+        let mut bytes = vec![0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x01, 0x00];
+        bytes.extend_from_slice(&[0u8; 16]);
+        assert!(is_encrypted_zip(&bytes));
+    }
+
+    #[test]
+    fn plain_zip_and_non_zip_not_encrypted() {
+        let mut bytes = vec![0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00];
+        bytes.extend_from_slice(&[0u8; 16]);
+        assert!(!is_encrypted_zip(&bytes));
+        assert!(!is_encrypted_zip(b"%PDF-1.5"));
+        assert!(!is_encrypted_zip(b"PK"));
     }
 
     #[test]

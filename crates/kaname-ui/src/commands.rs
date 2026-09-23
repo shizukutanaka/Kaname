@@ -512,6 +512,32 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             ));
         }
     }
+    // D185/D186: 非 http スキームリンク / base タグ偽装の兆候。
+    if let Some(e) = &html_extract {
+        for scheme in e.risky_scheme_links.iter().take(3) {
+            render_risks.push(format!(
+                "http(s) 以外のスキーム ({scheme}:) を持つリンク — URL 検査を回避する経路の兆候"
+            ));
+        }
+        if e.has_base_tag {
+            render_risks.push(
+                "HTML 本文に <base> タグ — 相対リンクの解決先を書き換える偽装の兆候".to_string(),
+            );
+        }
+    }
+    // D187: 開封確認要求が差出人と別ドメインへ通知を送る (トラッキング)。
+    {
+        let from_domain = env.from.first().map(|a| a.addr.domain.to_ascii_lowercase());
+        for r in &env.receipt_recipients {
+            let rd = r.addr.domain.to_ascii_lowercase();
+            if from_domain.as_ref() != Some(&rd) {
+                render_risks.push(format!(
+                    "開封確認 ({rd}) が差出人ドメインと異なります — 開封情報を外部へ漏らすトラッキングの兆候"
+                ));
+                break;
+            }
+        }
+    }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
     render_risks.extend(evaluate_link_risks(&urls));
@@ -1621,6 +1647,50 @@ mod tests {
                 .iter()
                 .any(|s| s.contains("複数アドレス")),
             "通常メールで複数アドレス警告は出ないべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D187: 開封確認要求が差出人と別ドメインへ通知を送る
+    /// (トラッキング) — 兆候として報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_は別ドメインへの開封確認を検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: vendor@corp.example\r\n\
+            Disposition-Notification-To: track@evil.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Invoice\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please review.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("開封確認")),
+            "別ドメインへの開封確認は兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D185: javascript:/data:/file: 等の非 http スキームリンクを検出する。
+    #[tokio::test]
+    async fn analyze_raw_email_は非httpスキームリンクを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: it@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Click\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            \r\n\
+            <html><body><a href=\"data:text/html;base64,PHNjcmlwdD4=\">open</a></body></html>\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("スキーム")),
+            "非 http スキームのリンクは兆候として報告されるべき: {:?}",
             r.render_risks
         );
         Ok(())
