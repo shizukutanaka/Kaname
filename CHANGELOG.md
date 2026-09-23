@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D354: `X-Exim-*`/`X-Qmail-*`/`X-Sendmail-*`/`X-Courier-*` 等の OSS MTA スタンプ自称が未検査
+
+- Exim/qmail/Sendmail/Courier 等の配送機が記す印 — 送信側から届くのは「この MTA が運んだ」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_mta_stamps` 新設 → `Envelope.mta_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D355: `X-OriginalMailFrom:`/`X-OriginalRcptTo:`/`X-Original-Sender:`/`X-Original-Recipient:` 等のエンベロープ原本値自称が未検査
+
+- 輸送機が原本値を退避して記す印 — 送信側から届くのは「原本はこうだった」を内容側が主張する自称だが未検査だった
+- 対処: `has_orig_marks` 新設 → `Envelope.orig_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D356: `X-Sieve-*`/`Sieve-Notice:`/`X-Filtered-*`/`X-Redirected-By:` 等の振り分け機印自称が未検査
+
+- Sieve 等の受信側フィルタ機が処理時に記す印 — 送信側から届くのは「フィルタが処理した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_sieve_marks` 新設 → `Envelope.sieve_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

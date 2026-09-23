@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-Exim-*`/`X-Qmail-*`/`X-Sendmail-*`/`X-Courier-*` 等の
+    /// OSS MTA スタンプがあるか — 配送機の印を送信側が自称する
+    /// 兆候 (D354)。
+    pub mta_stamps: bool,
+    /// `X-OriginalMailFrom:`/`X-OriginalRcptTo:`/`X-Original-Sender:`
+    /// /`X-Original-Recipient:` 等のエンベロープ原本値があるか —
+    /// 輸送機が記す値を送信側が自称する兆候 (D355)。
+    pub orig_marks: bool,
+    /// `X-Sieve-*`/`Sieve-Notice:`/`X-Filtered-*`/`X-Redirected-By:`
+    /// 等の振り分け機印があるか — フィルタ機の印を送信側が
+    /// 自称する兆候 (D356)。
+    pub sieve_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        mta_stamps: has_mta_stamps(raw),
+        orig_marks: has_orig_marks(raw),
+        sieve_marks: has_sieve_marks(raw),
     })
 }
 
@@ -487,6 +502,68 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-Exim-*`/`X-Qmail-*`/`X-Sendmail-*`/`X-Courier-*` 等の OSS
+/// MTA スタンプがあるか判定する (D354)。
+///
+/// Exim/qmail/Sendmail/Courier 等の配送機が記す印 — 送信側から
+/// 届くこれは「この MTA が運んだ」体裁を内容側が主張する自称
+/// (D348 配送印の MTA 版)。
+fn has_mta_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-exim-")
+            || l.starts_with("x-qmail-")
+            || l.starts_with("x-sendmail-")
+            || l.starts_with("x-courier-")
+            || l.starts_with("x-mta-")
+            || l.starts_with("x-smtpserver")
+    })
+}
+
+/// `X-OriginalMailFrom:`/`X-OriginalRcptTo:`/`X-Original-Sender:`/
+/// `X-Original-Recipient:` 等のエンベロープ原本値があるか判定する
+/// (D355)。
+///
+/// 輸送機が原本値を退避して記す印 — 送信側から届くこれは「原本
+/// はこうだった」を内容側が主張する自称 (D341 封筒値の原本版)。
+fn has_orig_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-originalmailfrom:")
+            || l.starts_with("x-originalrcptto:")
+            || l.starts_with("x-original-sender:")
+            || l.starts_with("x-original-recipient:")
+            || l.starts_with("x-original-mail-from:")
+            || l.starts_with("x-original-rcpt-to:")
+    })
+}
+
+/// `X-Sieve-*`/`Sieve-Notice:`/`X-Filtered-*`/`X-Redirected-By:`
+/// 等の振り分け機印があるか判定する (D356)。
+///
+/// Sieve 等の受信側フィルタ機が処理時に記す印 — 送信側から届く
+/// これは「フィルタが処理した」体裁を内容側が主張する自称
+/// (フィルタの印はフィルタ機が記す)。
+fn has_sieve_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sieve-")
+            || l.starts_with("sieve-notice:")
+            || l.starts_with("x-filtered-")
+            || l.starts_with("x-redirected-by:")
+            || l.starts_with("x-filter:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2817,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はMTA印を検出する() {
+        let ex = b"X-Exim-Version: 4.9\r\n\r\nx";
+        assert!(has_mta_stamps(ex));
+        let qm = b"X-Qmail-Scanner: 1.2\r\n\r\nx";
+        assert!(has_mta_stamps(qm));
+        let sm = b"X-Sendmail-Version: 8.1\r\n\r\nx";
+        assert!(has_mta_stamps(sm));
+        let co = b"X-Courier-Imap: 1\r\n\r\nx";
+        assert!(has_mta_stamps(co));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mta_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は原本印を検出する() {
+        let mf = b"X-OriginalMailFrom: a@b\r\n\r\nx";
+        assert!(has_orig_marks(mf));
+        let rt = b"X-OriginalRcptTo: a@b\r\n\r\nx";
+        assert!(has_orig_marks(rt));
+        let sn = b"X-Original-Sender: a@b\r\n\r\nx";
+        assert!(has_orig_marks(sn));
+        let rp = b"X-Original-Recipient: a@b\r\n\r\nx";
+        assert!(has_orig_marks(rp));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_orig_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフィルタ印を検出する() {
+        let sv = b"X-Sieve-Filtered: yes\r\n\r\nx";
+        assert!(has_sieve_marks(sv));
+        let sn = b"Sieve-Notice: delivered\r\n\r\nx";
+        assert!(has_sieve_marks(sn));
+        let ft = b"X-Filtered-To: a@b\r\n\r\nx";
+        assert!(has_sieve_marks(ft));
+        let rb = b"X-Redirected-By: sieve\r\n\r\nx";
+        assert!(has_sieve_marks(rb));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sieve_marks(clean));
     }
 }
 

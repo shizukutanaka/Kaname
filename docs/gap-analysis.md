@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D354 | ~~**`X-Exim-*`/`X-Qmail-*`/`X-Sendmail-*`/`X-Courier-*` 等の OSS MTA スタンプ自称が未検査**~~ **(解消済み)** | P2 | MTA の印を送信側が自称する兆候だが未検査だった。修正: `has_mta_stamps` で検出、`mta_stamps` → `render_risks` 兆候報告 | 運んだ印は運んだ側が記す — MTA 印の自署を問え |
+| D355 | ~~**`X-OriginalMailFrom:`/`X-OriginalRcptTo:`/`X-Original-Sender:`/`X-Original-Recipient:` 等のエンベロープ原本値自称が未検査**~~ **(解消済み)** | P2 | 輸送機が記す原本値を送信側が自称する兆候だが未検査だった。修正: `has_orig_marks` で検出、`orig_marks` → `render_risks` 兆候報告 | 原本の記録は輸送機が記す — 原本印の自署を問え |
+| D356 | ~~**`X-Sieve-*`/`Sieve-Notice:`/`X-Filtered-*`/`X-Redirected-By:` 等の振り分け機印自称が未検査**~~ **(解消済み)** | P2 | フィルタ機の印を送信側が自称する兆候だが未検査だった。修正: `has_sieve_marks` で検出、`sieve_marks` → `render_risks` 兆候報告 | 振り分けの印はフィルタ機が記す — フィルタ印の自署を問え |

@@ -581,6 +581,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D354: OSS MTA スタンプ自称
+    if env.mta_stamps {
+        render_risks.push(
+            "X-Exim-*/X-Qmail-*/X-Sendmail-* 等 — MTA の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D355: エンベロープ原本値自称
+    if env.orig_marks {
+        render_risks.push(
+            "X-OriginalMailFrom/X-OriginalRcptTo 等 — 輸送機が記す原本値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D356: 振り分け機印自称
+    if env.sieve_marks {
+        render_risks.push(
+            "X-Sieve-*/X-Filtered-* 等 — フィルタ機の印を送信側が自称する兆候です".to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
