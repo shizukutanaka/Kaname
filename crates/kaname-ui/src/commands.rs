@@ -542,6 +542,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D270: Precedence: bulk/list/junk の自署
+    if env.precedence_bulk {
+        render_risks.push(
+            "Precedence: bulk/list/junk を自署 — 「個人の手書き」体裁で実は量産品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D271: リスト系ヘッダ + List-Unsubscribe 欠落
+    if env.fake_list_headers {
+        render_risks.push(
+            "List-Id 等のリスト系ヘッダがありつつ List-Unsubscribe がありません — 偽のリスト文脈で一斉送信を正当化する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D272: Content-Base: ヘッダ
+    if env.content_base {
+        render_risks.push(
+            "Content-Base: ヘッダ — 相対 URI 解決基準を外部へ書き換える実体偽装の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

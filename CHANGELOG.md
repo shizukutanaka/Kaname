@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D270: `Precedence:` が `bulk`/`list`/`junk` を名乗る自署が未検査
+
+- 「個人の手書き」の体裁で実は大量送信だと自署 — 重要メール体裁に bulk 印が残るのは量産品の兆候
+- 対処: `has_bulk_precedence` 新設 → `Envelope.precedence_bulk` → `render_risks` 兆候報告
+
+### Security — D271: リスト系ヘッダ + `List-Unsubscribe` 欠落が未検査
+
+- 「メーリングリスト経由」の体裁を装いつつ正当なリストなら必須の解除機構を欠く — 偽のリスト文脈で一斉送信を正当化
+- 対処: `has_fake_list_headers` 新設 → `Envelope.fake_list_headers` → `render_risks` 兆候報告
+
+### Security — D272: `Content-Base:` ヘッダが未検査
+
+- MHTML でパートの相対 URI 解決基準を外部へ書き換える実体偽装 (`Content-Location` と同系列)
+- 対処: `has_content_base_header` 新設 (全域走査) → `Envelope.content_base` → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

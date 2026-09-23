@@ -100,6 +100,22 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `Precedence:` が `bulk`/`list`/`junk` を名乗る (D270)。
+    ///
+    /// 「個人の手書き」の体裁で実は大量送信だと自署 — 重要メール
+    /// 体裁のメッセージに bulk 印が残るのは量産品の兆候。
+    pub precedence_bulk: bool,
+    /// `List-Id:`/`List-Post:`/`List-Help:`/`List-Archive:` が
+    /// あるのに `List-Unsubscribe` がない (D271)。
+    ///
+    /// 「メーリングリスト経由」の体裁を装いつつ、正当なリストなら
+    /// 必須の解除機構を欠く — 偽のリスト文脈で一斉送信を正当化する兆候。
+    pub fake_list_headers: bool,
+    /// `Content-Base:` ヘッダ (D272)。
+    ///
+    /// MHTML でパートの相対 URI 解決基準を外部へ書き換える実体偽装
+    /// (`Content-Location` と同系列の解決起点ハイジャック)。
+    pub content_base: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +356,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D270: Precedence: bulk/list/junk の自署
+    let precedence_bulk = has_bulk_precedence(bytes);
+
+    // D271: リスト系ヘッダ + List-Unsubscribe 欠落
+    let fake_list_headers = has_fake_list_headers(bytes);
+
+    // D272: Content-Base: ヘッダ
+    let content_base = has_content_base_header(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,7 +383,54 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        precedence_bulk,
+        fake_list_headers,
+        content_base,
     })
+}
+
+/// `Precedence:` が `bulk`/`list`/`junk` を名乗るか判定する (D270)。
+///
+/// 「個人の手書き」の体裁で実は大量送信だと自署 — 重要メール体裁の
+/// メッセージに bulk 印が残るのは量産品の兆候。
+pub fn has_bulk_precedence(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("precedence:")
+            && (l.contains("bulk") || l.contains("list") || l.contains("junk"))
+    })
+}
+
+/// リスト系ヘッダがあるのに `List-Unsubscribe` がないか判定する (D271)。
+///
+/// 「メーリングリスト経由」の体裁を装いつつ正当なリストなら必須の
+/// 解除機構を欠く — 偽のリスト文脈で一斉送信を正当化する兆候。
+pub fn has_fake_list_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    let has_list = header.lines().any(|l| {
+        l.starts_with("list-id:")
+            || l.starts_with("list-post:")
+            || l.starts_with("list-help:")
+            || l.starts_with("list-archive:")
+    });
+    let has_unsub = header
+        .lines()
+        .any(|l| l.starts_with("list-unsubscribe:"));
+    has_list && !has_unsub
+}
+
+/// `Content-Base:` ヘッダがあるか判定する (D272)。
+///
+/// MHTML でパートの相対 URI 解決基準を外部へ書き換える実体偽装
+/// (`Content-Location` と同系列の解決起点ハイジャック)。パート内
+/// ヘッダにも潜むため全メッセージを走査する。
+pub fn has_content_base_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines().any(|l| l.starts_with("content-base:"))
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
