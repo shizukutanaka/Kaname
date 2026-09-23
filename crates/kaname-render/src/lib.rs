@@ -1829,6 +1829,12 @@ pub struct Envelope {
     pub window_marks: bool,
     /// `X-Sukii-*`/`X-Sukiinavi-*`/`X-Sukiicenter-*` 等のスキー・ゲレンデ・スノボ印を送信側が自称する兆候 (D658)
     pub ski_marks: bool,
+    /// `X-Sauna-*`/`X-Onyoku-*`/`X-Onyokunavi-*` 等のサウナ・温浴・スパ印を送信側が自称する兆候 (D659)
+    pub sauna_marks: bool,
+    /// `X-Karaoke-*`/`X-Karaokenavi-*`/`X-Karaokecenter-*` 等のカラオケ・ネットカフェ印を送信側が自称する兆候 (D660)
+    pub karaoke_marks: bool,
+    /// `X-Bowling-*`/`X-Bowlingnavi-*`/`X-Bowlingcenter-*` 等のボウリング・ダーツ・ビリヤード印を送信側が自称する兆候 (D661)
+    pub bowling_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2365,6 +2371,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bus_marks: has_bus_marks(hdr),
         window_marks: has_window_marks(hdr),
         ski_marks: has_ski_marks(hdr),
+        sauna_marks: has_sauna_marks(hdr),
+        karaoke_marks: has_karaoke_marks(hdr),
+        bowling_marks: has_bowling_marks(hdr),
     })
 }
 
@@ -16355,6 +16364,245 @@ fn has_ski_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-bakukantoripro-"))
 }
 
+/// `X-Sauna-*`/`X-Onyoku-*`/`X-Onyokunavi-*`/`X-Onyokucenter-*`/`X-Onyokushop-*`/`X-Onyokupro-*`/`X-Onyokudoctor-*`/`X-Onyokurescue-*`/`X-Onyoku24-*`/`X-Supa-*`/`X-Supanavi-*`/`X-Supacenter-*`/`X-Supashop-*`/`X-Supapro-*`/`X-Supadoctor-*`/`X-Suparescue-*`/`X-Supa24-*`/`X-Totonoi-*`/`X-Totonoinavi-*`/`X-Totonoicenter-*`/`X-Totonoishop-*`/`X-Totonoipro-*`/`X-Totorou-*`/`X-Totorounavi-*`/`X-Totoroucenter-*`/`X-Totoroushop-*`/`X-Totoroupro-*`/`X-Kenkouland-*`/`X-Kenkounavi-*`/`X-Kenkoucenter-*`/`X-Kenkoushop-*`/`X-Kenkoupro-*`/`X-Spalaqua-*`/`X-Raqu-*`/`X-Panpus-*`/`X-Yunessun-*`/`X-Saunamart-*`/`X-Saunaplus-*`/`X-Saunasmart-*`/`X-Saunafamily-*`/`X-Onyokumart-*`/`X-Onyokuplus-*`/`X-Onyokusmart-*`/`X-Onyokufamily-*`/`X-Supamart-*`/`X-Supaplus-*`/`X-Supasmart-*`/`X-Supafamily-*`/`X-Totonoimart-*`/`X-Totonoiplus-*`/`X-Totonoismart-*`/`X-Totonoifamily-*`/`X-Kannamanavi-*`/`X-Kannamacenter-*`/`X-Kannamashop-*`/`X-Kannamapro-*`/`X-Kannamadoctor-*`/`X-Kannamarescue-*`/`X-Kannama24-*`/`X-Rasshuanavi-*`/`X-Rasshuacenter-*`/`X-Rasshuashop-*`/`X-Rasshuapro-*`/`X-Rasshuadoctor-*`/`X-Rasshuarescue-*`/`X-Rasshua24-*`/`X-Rakuspanavi-*`/`X-Rakuspackenter-*`/`X-Rakuspashop-*`/`X-Rakuspaopro-*`/`X-Rakuspadoctor-*`/`X-Rakusparescue-*`/`X-Rakuspa24-*` 等のサウナ・温浴・スパ印を送信側が自称する兆候を検出する
+fn has_sauna_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sauna-")
+            || l.starts_with("x-onyoku-")
+            || l.starts_with("x-onyokunavi-")
+            || l.starts_with("x-onyokucenter-")
+            || l.starts_with("x-onyokushop-")
+            || l.starts_with("x-onyokupro-")
+            || l.starts_with("x-onyokudoctor-")
+            || l.starts_with("x-onyokurescue-")
+            || l.starts_with("x-onyoku24-")
+            || l.starts_with("x-supa-")
+            || l.starts_with("x-supanavi-")
+            || l.starts_with("x-supacenter-")
+            || l.starts_with("x-supashop-")
+            || l.starts_with("x-supapro-")
+            || l.starts_with("x-supadoctor-")
+            || l.starts_with("x-suparescue-")
+            || l.starts_with("x-supa24-")
+            || l.starts_with("x-totonoi-")
+            || l.starts_with("x-totonoinavi-")
+            || l.starts_with("x-totonoicenter-")
+            || l.starts_with("x-totonoishop-")
+            || l.starts_with("x-totonoipro-")
+            || l.starts_with("x-totorou-")
+            || l.starts_with("x-totorounavi-")
+            || l.starts_with("x-totoroucenter-")
+            || l.starts_with("x-totoroushop-")
+            || l.starts_with("x-totoroupro-")
+            || l.starts_with("x-kenkouland-")
+            || l.starts_with("x-kenkounavi-")
+            || l.starts_with("x-kenkoucenter-")
+            || l.starts_with("x-kenkoushop-")
+            || l.starts_with("x-kenkoupro-")
+            || l.starts_with("x-spalaqua-")
+            || l.starts_with("x-raqu-")
+            || l.starts_with("x-panpus-")
+            || l.starts_with("x-yunessun-")
+            || l.starts_with("x-saunamart-")
+            || l.starts_with("x-saunaplus-")
+            || l.starts_with("x-saunasmart-")
+            || l.starts_with("x-saunafamily-")
+            || l.starts_with("x-onyokumart-")
+            || l.starts_with("x-onyokuplus-")
+            || l.starts_with("x-onyokusmart-")
+            || l.starts_with("x-onyokufamily-")
+            || l.starts_with("x-supamart-")
+            || l.starts_with("x-supaplus-")
+            || l.starts_with("x-supasmart-")
+            || l.starts_with("x-supafamily-")
+            || l.starts_with("x-totonoimart-")
+            || l.starts_with("x-totonoiplus-")
+            || l.starts_with("x-totonoismart-")
+            || l.starts_with("x-totonoifamily-")
+            || l.starts_with("x-kannamanavi-")
+            || l.starts_with("x-kannamacenter-")
+            || l.starts_with("x-kannamashop-")
+            || l.starts_with("x-kannamapro-")
+            || l.starts_with("x-kannamadoctor-")
+            || l.starts_with("x-kannamarescue-")
+            || l.starts_with("x-kannama24-")
+            || l.starts_with("x-rasshuanavi-")
+            || l.starts_with("x-rasshuacenter-")
+            || l.starts_with("x-rasshuashop-")
+            || l.starts_with("x-rasshuapro-")
+            || l.starts_with("x-rasshuadoctor-")
+            || l.starts_with("x-rasshuarescue-")
+            || l.starts_with("x-rasshua24-")
+            || l.starts_with("x-rakuspanavi-")
+            || l.starts_with("x-rakuspackenter-")
+            || l.starts_with("x-rakuspashop-")
+            || l.starts_with("x-rakuspaopro-")
+            || l.starts_with("x-rakuspadoctor-")
+            || l.starts_with("x-rakusparescue-")
+            || l.starts_with("x-rakuspa24-"))
+}
+
+/// `X-Karaoke-*`/`X-Karaokenavi-*`/`X-Karaokecenter-*`/`X-Karaokeshop-*`/`X-Karaokepro-*`/`X-Karaokedoctor-*`/`X-Karaokerescue-*`/`X-Karaoke24-*`/`X-Manekineko-*`/`X-Koodajuu-*`/`X-Nekafee-*`/`X-Nekafeenavi-*`/`X-Nekafeecenter-*`/`X-Nekafeeshop-*`/`X-Nekafeepro-*`/`X-Nekafeedoctor-*`/`X-Nekafeerescue-*`/`X-Nekafee24-*`/`X-Kaikatsu-*`/`X-Jiyuukukan-*`/`X-Jiyuu-*`/`X-Jiyuunavi-*`/`X-Jiyuucenter-*`/`X-Jiyuushop-*`/`X-Jiyuupro-*`/`X-Jiyuudoctor-*`/`X-Jiyuurescue-*`/`X-Jiyuu24-*`/`X-Internetcafe-*`/`X-Mediacafe-*`/`X-Spacecreate-*`/`X-Bagusu-*`/`X-Hexaforo-*`/`X-Karaoke7-*`/`X-Karaokekan-*`/`X-Karaokehonpo-*`/`X-Utahiroba-*`/`X-Singing-*`/`X-Singingnavi-*`/`X-Singingcenter-*`/`X-Singingshop-*`/`X-Singingpro-*`/`X-Karaokemart-*`/`X-Karaokeplus-*`/`X-Karaokesmart-*`/`X-Karaokefamily-*`/`X-Nekafeemart-*`/`X-Nekafeeplus-*`/`X-Nekafeesmart-*`/`X-Nekafeefamily-*`/`X-Utasenavi-*`/`X-Utasecenter-*`/`X-Utaseshop-*`/`X-Utasepro-*`/`X-Utasedoctor-*`/`X-Utaserescue-*`/`X-Utase24-*`/`X-Manganavi-*`/`X-Mangacenter-*`/`X-Mangashop-*`/`X-Mangapro-*`/`X-Mangadoctor-*`/`X-Mangarescue-*`/`X-Manga24-*`/`X-Comickunavi-*`/`X-Comickucenter-*`/`X-Comickushop-*`/`X-Comickupro-*`/`X-Comickudoctor-*`/`X-Comickurescue-*`/`X-Comicku24-*` 等のカラオケ・ネットカフェ印を送信側が自称する兆候を検出する
+fn has_karaoke_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-karaoke-")
+            || l.starts_with("x-karaokenavi-")
+            || l.starts_with("x-karaokecenter-")
+            || l.starts_with("x-karaokeshop-")
+            || l.starts_with("x-karaokepro-")
+            || l.starts_with("x-karaokedoctor-")
+            || l.starts_with("x-karaokerescue-")
+            || l.starts_with("x-karaoke24-")
+            || l.starts_with("x-manekineko-")
+            || l.starts_with("x-koodajuu-")
+            || l.starts_with("x-nekafee-")
+            || l.starts_with("x-nekafeenavi-")
+            || l.starts_with("x-nekafeecenter-")
+            || l.starts_with("x-nekafeeshop-")
+            || l.starts_with("x-nekafeepro-")
+            || l.starts_with("x-nekafeedoctor-")
+            || l.starts_with("x-nekafeerescue-")
+            || l.starts_with("x-nekafee24-")
+            || l.starts_with("x-kaikatsu-")
+            || l.starts_with("x-jiyuukukan-")
+            || l.starts_with("x-jiyuu-")
+            || l.starts_with("x-jiyuunavi-")
+            || l.starts_with("x-jiyuucenter-")
+            || l.starts_with("x-jiyuushop-")
+            || l.starts_with("x-jiyuupro-")
+            || l.starts_with("x-jiyuudoctor-")
+            || l.starts_with("x-jiyuurescue-")
+            || l.starts_with("x-jiyuu24-")
+            || l.starts_with("x-internetcafe-")
+            || l.starts_with("x-mediacafe-")
+            || l.starts_with("x-spacecreate-")
+            || l.starts_with("x-bagusu-")
+            || l.starts_with("x-hexaforo-")
+            || l.starts_with("x-karaoke7-")
+            || l.starts_with("x-karaokekan-")
+            || l.starts_with("x-karaokehonpo-")
+            || l.starts_with("x-utahiroba-")
+            || l.starts_with("x-singing-")
+            || l.starts_with("x-singingnavi-")
+            || l.starts_with("x-singingcenter-")
+            || l.starts_with("x-singingshop-")
+            || l.starts_with("x-singingpro-")
+            || l.starts_with("x-karaokemart-")
+            || l.starts_with("x-karaokeplus-")
+            || l.starts_with("x-karaokesmart-")
+            || l.starts_with("x-karaokefamily-")
+            || l.starts_with("x-nekafeemart-")
+            || l.starts_with("x-nekafeeplus-")
+            || l.starts_with("x-nekafeesmart-")
+            || l.starts_with("x-nekafeefamily-")
+            || l.starts_with("x-utasenavi-")
+            || l.starts_with("x-utasecenter-")
+            || l.starts_with("x-utaseshop-")
+            || l.starts_with("x-utasepro-")
+            || l.starts_with("x-utasedoctor-")
+            || l.starts_with("x-utaserescue-")
+            || l.starts_with("x-utase24-")
+            || l.starts_with("x-manganavi-")
+            || l.starts_with("x-mangacenter-")
+            || l.starts_with("x-mangashop-")
+            || l.starts_with("x-mangapro-")
+            || l.starts_with("x-mangadoctor-")
+            || l.starts_with("x-mangarescue-")
+            || l.starts_with("x-manga24-")
+            || l.starts_with("x-comickunavi-")
+            || l.starts_with("x-comickucenter-")
+            || l.starts_with("x-comickushop-")
+            || l.starts_with("x-comickupro-")
+            || l.starts_with("x-comickudoctor-")
+            || l.starts_with("x-comickurescue-")
+            || l.starts_with("x-comicku24-"))
+}
+
+/// `X-Bowling-*`/`X-Bowlingnavi-*`/`X-Bowlingcenter-*`/`X-Bowlingshop-*`/`X-Bowlingpro-*`/`X-Bowlingdoctor-*`/`X-Bowlingrescue-*`/`X-Bowling24-*`/`X-Roundone-*`/`X-Darts-*`/`X-Dartsnavi-*`/`X-Dartscenter-*`/`X-Dartsshop-*`/`X-Dartspro-*`/`X-Dartsdoctor-*`/`X-Dartsrescue-*`/`X-Darts24-*`/`X-Dartslive-*`/`X-Phoenixdarts-*`/`X-Phoenix-*`/`X-Biliyard-*`/`X-Billiard-*`/`X-Billiardnavi-*`/`X-Billiardcenter-*`/`X-Billiardshop-*`/`X-Billiardpro-*`/`X-Batting-*`/`X-Battingcenter-*`/`X-Battingnavi-*`/`X-Youkyuu-*`/`X-Youkyuunavi-*`/`X-Youkyuucenter-*`/`X-Youkyuushop-*`/`X-Youkyuupro-*`/`X-Amipara-*`/`X-Amiparanavi-*`/`X-Amiparacenter-*`/`X-Amiparashop-*`/`X-Amiparapro-*`/`X-Bowlingmart-*`/`X-Bowlingplus-*`/`X-Bowlingsmart-*`/`X-Bowlingfamily-*`/`X-Dartsmart-*`/`X-Dartsplus-*`/`X-Dartssmart-*`/`X-Dartsfamily-*`/`X-Sukouanavi-*`/`X-Sukouacenter-*`/`X-Sukouashop-*`/`X-Sukouapro-*`/`X-Sukouadoctor-*`/`X-Sukouarescue-*`/`X-Sukoua24-*`/`X-Nagekominnavi-*`/`X-Nagekomincenter-*`/`X-Nagekominshop-*`/`X-Nagekominpro-*`/`X-Nagekomindoctor-*`/`X-Nagekominrescue-*`/`X-Nagekomin24-*`/`X-Raundowannavi-*`/`X-Raundowancenter-*`/`X-Raundowanshop-*`/`X-Raundowanpro-*`/`X-Raundowandoctor-*`/`X-Raundowanrescue-*`/`X-Raundowan24-*` 等のボウリング・ダーツ・ビリヤード印を送信側が自称する兆候を検出する
+fn has_bowling_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-bowling-")
+            || l.starts_with("x-bowlingnavi-")
+            || l.starts_with("x-bowlingcenter-")
+            || l.starts_with("x-bowlingshop-")
+            || l.starts_with("x-bowlingpro-")
+            || l.starts_with("x-bowlingdoctor-")
+            || l.starts_with("x-bowlingrescue-")
+            || l.starts_with("x-bowling24-")
+            || l.starts_with("x-roundone-")
+            || l.starts_with("x-darts-")
+            || l.starts_with("x-dartsnavi-")
+            || l.starts_with("x-dartscenter-")
+            || l.starts_with("x-dartsshop-")
+            || l.starts_with("x-dartspro-")
+            || l.starts_with("x-dartsdoctor-")
+            || l.starts_with("x-dartsrescue-")
+            || l.starts_with("x-darts24-")
+            || l.starts_with("x-dartslive-")
+            || l.starts_with("x-phoenixdarts-")
+            || l.starts_with("x-phoenix-")
+            || l.starts_with("x-biliyard-")
+            || l.starts_with("x-billiard-")
+            || l.starts_with("x-billiardnavi-")
+            || l.starts_with("x-billiardcenter-")
+            || l.starts_with("x-billiardshop-")
+            || l.starts_with("x-billiardpro-")
+            || l.starts_with("x-batting-")
+            || l.starts_with("x-battingcenter-")
+            || l.starts_with("x-battingnavi-")
+            || l.starts_with("x-youkyuu-")
+            || l.starts_with("x-youkyuunavi-")
+            || l.starts_with("x-youkyuucenter-")
+            || l.starts_with("x-youkyuushop-")
+            || l.starts_with("x-youkyuupro-")
+            || l.starts_with("x-amipara-")
+            || l.starts_with("x-amiparanavi-")
+            || l.starts_with("x-amiparacenter-")
+            || l.starts_with("x-amiparashop-")
+            || l.starts_with("x-amiparapro-")
+            || l.starts_with("x-bowlingmart-")
+            || l.starts_with("x-bowlingplus-")
+            || l.starts_with("x-bowlingsmart-")
+            || l.starts_with("x-bowlingfamily-")
+            || l.starts_with("x-dartsmart-")
+            || l.starts_with("x-dartsplus-")
+            || l.starts_with("x-dartssmart-")
+            || l.starts_with("x-dartsfamily-")
+            || l.starts_with("x-sukouanavi-")
+            || l.starts_with("x-sukouacenter-")
+            || l.starts_with("x-sukouashop-")
+            || l.starts_with("x-sukouapro-")
+            || l.starts_with("x-sukouadoctor-")
+            || l.starts_with("x-sukouarescue-")
+            || l.starts_with("x-sukoua24-")
+            || l.starts_with("x-nagekominnavi-")
+            || l.starts_with("x-nagekomincenter-")
+            || l.starts_with("x-nagekominshop-")
+            || l.starts_with("x-nagekominpro-")
+            || l.starts_with("x-nagekomindoctor-")
+            || l.starts_with("x-nagekominrescue-")
+            || l.starts_with("x-nagekomin24-")
+            || l.starts_with("x-raundowannavi-")
+            || l.starts_with("x-raundowancenter-")
+            || l.starts_with("x-raundowanshop-")
+            || l.starts_with("x-raundowanpro-")
+            || l.starts_with("x-raundowandoctor-")
+            || l.starts_with("x-raundowanrescue-")
+            || l.starts_with("x-raundowan24-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -25522,5 +25770,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_ski_marks(clean));
+    }
+    #[test]
+    fn scan_は浴機印を検出する() {
+        for raw in [
+            br"X-Sauna-Alert: 1",
+            br"X-Onyoku-Notice: 1",
+            br"X-OnyokuNavi-Info: 1",
+            br"X-Supa-Report: 1",
+            br"X-SupaNavi-Bulletin: 1",
+            br"X-Totonoi-News: 1",
+            br"X-Totorou-Flash: 1",
+            br"X-Kenkouland-Release: 1",
+        ] {
+            assert!(has_sauna_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_sauna_marks(clean));
+    }
+
+    #[test]
+    fn scan_は歌機印を検出する() {
+        for raw in [
+            br"X-Karaoke-Alert: 1",
+            br"X-KaraokeNavi-Notice: 1",
+            br"X-Manekineko-Info: 1",
+            br"X-Nekafee-Report: 1",
+            br"X-NekafeeNavi-Bulletin: 1",
+            br"X-Kaikatsu-News: 1",
+            br"X-InternetCafe-Flash: 1",
+            br"X-MediaCafe-Release: 1",
+        ] {
+            assert!(has_karaoke_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_karaoke_marks(clean));
+    }
+
+    #[test]
+    fn scan_は投機印を検出する() {
+        for raw in [
+            br"X-Bowling-Alert: 1",
+            br"X-BowlingNavi-Notice: 1",
+            br"X-RoundOne-Info: 1",
+            br"X-Darts-Report: 1",
+            br"X-DartsNavi-Bulletin: 1",
+            br"X-DartsLive-News: 1",
+            br"X-Billiard-Flash: 1",
+            br"X-Batting-Release: 1",
+        ] {
+            assert!(has_bowling_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_bowling_marks(clean));
     }
 }
