@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-SG-*`/`X-Mailgun-*`/`X-PM-*`/`X-Mandrill-*` 等の
+    /// ESP 配信スタンプがあるか — 配信基盤の印を送信側が
+    /// 自称する兆候 (D345)。
+    pub esp_stamps: bool,
+    /// `X-BeenThere:`/`X-Mailman-*`/`List-Software:` 等の
+    /// リスト管理機スタンプがあるか — 配信ソフトウェアの印を
+    /// 送信側が自称する兆候 (D346)。
+    pub listmgr_stamps: bool,
+    /// `X-Yahoo-*`/`X-YMail-*`/`X-AOL-*`/`X-Zoho*`/`X-Yandex-*`
+    /// 等のプロバイダ内部印があるか — プロバイダ内部値を
+    /// 送信側が自称する兆候 (D347)。
+    pub provider_stamps: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        esp_stamps: has_esp_stamps(raw),
+        listmgr_stamps: has_listmgr_stamps(raw),
+        provider_stamps: has_provider_stamps(raw),
     })
 }
 
@@ -487,6 +502,74 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-SG-*`/`X-Mailgun-*`/`X-PM-*`/`X-Mandrill-*`/`X-SparkPost-*`
+/// 等の ESP 配信スタンプがあるか判定する (D345)。
+///
+/// SendGrid (X-SG-)/Mailgun/Postmark (X-PM-)/Mandrill/SparkPost の
+/// 配信スタンプ — 送信側から届くこれは「この基盤で配信した」
+/// 体裁を内容側が主張する自称 (D338 SES 印の ESP 版)。
+fn has_esp_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sg-")
+            || l.starts_with("x-mailgun-")
+            || l.starts_with("x-pm-")
+            || l.starts_with("x-mandrill-")
+            || l.starts_with("x-sparkpost-")
+            || l.starts_with("x-elastic-")
+            || l.starts_with("x-sendinblue-")
+            || l.starts_with("x-brevo-")
+    })
+}
+
+/// `X-BeenThere:`/`X-Mailman-*`/`List-Software:` 等のリスト管理機
+/// スタンプがあるか判定する (D346)。
+///
+/// Mailman 等のリスト管理ソフトが配送時に記す印 — 送信側から届く
+/// これは「リスト経由で配信した」体裁を内容側が主張する自称
+/// (D319 リスト系自称のソフトウェア版)。
+fn has_listmgr_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-beenthere:")
+            || l.starts_with("x-mailman-")
+            || l.starts_with("list-software:")
+            || l.starts_with("x-listagent-")
+            || l.starts_with("x-listserv-")
+            || l.starts_with("x-listar-")
+            || l.starts_with("x-dlist-")
+            || l.starts_with("x-mlserver-")
+    })
+}
+
+/// `X-Yahoo-*`/`X-YMail-*`/`X-AOL-*`/`X-Zoho*`/`X-Yandex-*` 等の
+/// プロバイダ内部印があるか判定する (D347)。
+///
+/// Yahoo/AOL/Zoho/Yandex の内部配送値 — 送信側から届くこれは
+/// 「このプロバイダ経由」の体裁を内容側が主張する自称
+/// (D334 Gmail 内部印の他社版)。
+fn has_provider_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-yahoo-")
+            || l.starts_with("x-ymail-")
+            || l.starts_with("x-aol-")
+            || l.starts_with("x-zoho")
+            || l.starts_with("x-yandex-")
+            || l.starts_with("x-mailru-")
+            || l.starts_with("x-yandex-spam")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2823,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はESP印を検出する() {
+        let sg = b"X-SG-EID: abc\r\n\r\nx";
+        assert!(has_esp_stamps(sg));
+        let mg = b"X-Mailgun-Sid: abc\r\n\r\nx";
+        assert!(has_esp_stamps(mg));
+        let pm = b"X-PM-Message-Id: abc\r\n\r\nx";
+        assert!(has_esp_stamps(pm));
+        let md = b"X-Mandrill-User: abc\r\n\r\nx";
+        assert!(has_esp_stamps(md));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はリスト機印を検出する() {
+        let bt = b"X-BeenThere: list@x\r\n\r\nx";
+        assert!(has_listmgr_stamps(bt));
+        let mv = b"X-Mailman-Version: 2.1\r\n\r\nx";
+        assert!(has_listmgr_stamps(mv));
+        let ls = b"List-Software: Mailman 2\r\n\r\nx";
+        assert!(has_listmgr_stamps(ls));
+        let sv = b"X-ListServer: v1\r\n\r\nx";
+        assert!(!has_listmgr_stamps(sv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_listmgr_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はプロバイダ印を検出する() {
+        let ya = b"X-Yahoo-Newman-Property: x\r\n\r\ny";
+        assert!(has_provider_stamps(ya));
+        let ym = b"X-YMail-OSG: x\r\n\r\ny";
+        assert!(has_provider_stamps(ym));
+        let ao = b"X-AOL-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_provider_stamps(ao));
+        let zo = b"X-Zoho-Virus-Status: 0\r\n\r\nx";
+        assert!(has_provider_stamps(zo));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_provider_stamps(clean));
     }
 }
 

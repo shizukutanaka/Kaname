@@ -581,6 +581,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D345: ESP 配信スタンプ自称
+    if env.esp_stamps {
+        render_risks.push(
+            "X-SG-*/X-Mailgun-*/X-PM-* 等 — ESP 配信基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D346: リスト管理機スタンプ自称
+    if env.listmgr_stamps {
+        render_risks.push(
+            "X-BeenThere/X-Mailman-* 等 — リスト管理ソフトの印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D347: プロバイダ内部印自称
+    if env.provider_stamps {
+        render_risks.push(
+            "X-Yahoo-*/X-AOL-*/X-Zoho* 等 — プロバイダ内部値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

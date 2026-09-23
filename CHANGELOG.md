@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D345: `X-SG-*`/`X-Mailgun-*`/`X-PM-*`/`X-Mandrill-*` 等の ESP 配信スタンプ自称が未検査
+
+- SendGrid/Mailgun/Postmark/Mandrill/SparkPost 等の配信スタンプ — 送信側から届くのは「この基盤で配信した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_esp_stamps` 新設 → `Envelope.esp_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D346: `X-BeenThere:`/`X-Mailman-*`/`List-Software:` 等のリスト管理機スタンプ自称が未検査
+
+- Mailman 等のリスト管理ソフトが配送時に記す印 — 送信側から届くのは「リスト経由で配信した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_listmgr_stamps` 新設 → `Envelope.listmgr_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D347: `X-Yahoo-*`/`X-YMail-*`/`X-AOL-*`/`X-Zoho*`/`X-Yandex-*` プロバイダ内部印自称が未検査
+
+- Yahoo/AOL/Zoho/Yandex の内部配送値 — 送信側から届くのは「このプロバイダ経由」の体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_provider_stamps` 新設 → `Envelope.provider_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
