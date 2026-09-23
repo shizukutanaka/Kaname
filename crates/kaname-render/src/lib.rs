@@ -1073,6 +1073,41 @@ pub struct Envelope {
     /// 日用品・消費財・100 円ショップ・ペット用品印があるか —
     /// 日用品機の通知記録を送信側が自称する兆候 (D533)。
     pub fmcg_marks: bool,
+    /// `X-Ticketmaster-*`/`X-LiveNation-*`/`X-StubHub-*`/`X-Viagogo-*`/
+    /// `X-SeatGeek-*`/`X-TicketWeb-*`/`X-Eplus-*`/`X-LawsonTicket-*`/
+    /// `X-CNPlayGuide-*`/`X-RakutenTicket-*`/`X-AXS-*`/`X-SeeTickets-*`/
+    /// `X-TicketOne-*`/`X-Ticketek-*`/`X-Ticketcorner-*`/`X-Eventim-*`/
+    /// `X-Dice-*`/`X-GigsAndTours-*`/`X-Skiddle-*`/`X-TicketSellers-*`/
+    /// `X-Gigsberg-*`/`X-TickPick-*`/`X-VividSeats-*`/`X-TicketCity-*`/
+    /// `X-TicketNetwork-*`/`X-HelloTickets-*`/`X-TicketSwap-*`/
+    /// `X-Tixr-*`/`X-ShowClix-*`/`X-SeeTix-*`/`X-TicketFairy-*`/
+    /// `X-CrowdTix-*` 等のチケット販売・プレイガイド印があるか —
+    /// 券機の通知記録を送信側が自称する兆候 (D534)。(`X-Eventbrite-*`/
+    /// `X-Meetup-*` は D459、`X-Pia-*` は先行で検出済み)
+    pub ticket_marks: bool,
+    /// `X-Marriott-*`/`X-Hilton-*`/`X-Hyatt-*`/`X-IHG-*`/`X-Accor-*`/
+    /// `X-Sheraton-*`/`X-Westin-*`/`X-RitzCarlton-*`/`X-FourSeasons-*`/
+    /// `X-MandarinOriental-*`/`X-Peninsula-*`/`X-ShangriLa-*`/
+    /// `X-InterContinental-*`/`X-HolidayInn-*`/`X-BestWestern-*`/
+    /// `X-ChoiceHotels-*`/`X-Wyndham-*`/`X-Radisson-*`/`X-PremierInn-*`/
+    /// `X-Travelodge-*`/`X-TokyuHotel-*`/`X-PrinceHotel-*`/`X-APAHotel-*`/
+    /// `X-RouteInn-*`/`X-ToyokoInn-*`/`X-SuperHotel-*`/`X-DormyInn-*`/
+    /// `X-ComfortInn-*`/`X-Jalan-*`/`X-RakutenTravel-*`/`X-Rurubu-*`/
+    /// `X-TripAdvisor-*`/`X-CapsuleHotel-*`/`X-NineHours-*` 等の
+    /// ホテル・宿泊予約印があるか — 宿機の通知記録を送信側が
+    /// 自称する兆候 (D535)。(`X-Expedia-*`/`X-Hotels-*`/`X-Airbnb-*`/
+    /// `X-Booking-*`/`X-Agoda-*`/`X-Kayak-*` は D468 で検出済み)
+    pub hotel_marks: bool,
+    /// `X-Disney-*`/`X-UniversalStudios-*`/`X-Legoland-*`/`X-Fujikyu-*`/
+    /// `X-Toshimaen-*`/`X-Nagashima-*`/`X-USJ-*`/`X-JRA-*`/`X-BoatRace-*`/
+    /// `X-Keirin-*`/`X-AutoRace-*`/`X-Pachinko-*`/`X-Dynam-*`/`X-Marukan-*`/
+    /// `X-Nirasaki-*`/`X-TOHO-*`/`X-AeonCinema-*`/`X-109Cinemas-*`/
+    /// `X-Shochiku-*`/`X-MOVIX-*`/`X-BigEcho-*`/`X-Shidax-*`/`X-JoySound-*`/
+    /// `X-DAM-*`/`X-Round1-*`/`X-Gokurakuyu-*`/`X-RaikuSpa-*`/`X-Spadium-*`/
+    /// `X-Ofuro-*`/`X-Tenpoyu-*`/`X-KenkoLand-*`/`X-Minatomachi-*` 等の
+    /// テーマパーク・公営競技・映画館・カラオケ・温浴印があるか —
+    /// 娯楽機の通知記録を送信側が自称する兆候 (D536)。
+    pub leisure_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1467,6 +1502,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         beauty_marks: has_beauty_marks(raw),
         cram_marks: has_cram_marks(raw),
         fmcg_marks: has_fmcg_marks(raw),
+        ticket_marks: has_ticket_marks(raw),
+        hotel_marks: has_hotel_marks(raw),
+        leisure_marks: has_leisure_marks(raw),
     })
 }
 
@@ -6857,6 +6895,172 @@ fn has_fmcg_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Ticketmaster-*`/`X-LiveNation-*`/`X-StubHub-*`/`X-Viagogo-*`/
+/// `X-SeatGeek-*`/`X-TicketWeb-*`/`X-Eplus-*`/`X-LawsonTicket-*`/
+/// `X-CNPlayGuide-*`/`X-RakutenTicket-*`/`X-AXS-*`/`X-SeeTickets-*`/
+/// `X-TicketOne-*`/`X-Ticketek-*`/`X-Ticketcorner-*`/`X-Eventim-*`/`X-Dice-*`/
+/// `X-GigsAndTours-*`/`X-Skiddle-*`/`X-TicketSellers-*`/`X-Gigsberg-*`/
+/// `X-TickPick-*`/`X-VividSeats-*`/`X-TicketCity-*`/`X-TicketNetwork-*`/
+/// `X-HelloTickets-*`/`X-TicketSwap-*`/`X-Tixr-*`/`X-ShowClix-*`/`X-SeeTix-*`/
+/// `X-TicketFairy-*`/`X-CrowdTix-*` 等のチケット販売・プレイガイド印が
+/// あるか判定する (D534)。
+///
+/// `X-Ticketmaster-*` (Ticketmaster)、`X-Eplus-*` (イープラス)、
+/// `X-LawsonTicket-*` (ローチケ) は券機の通知記録 — 送信側から届くこれは
+/// 自称。当選・リセール詐欺の典型印。`X-Eventbrite-*`/`X-Meetup-*` は
+/// D459、`X-Pia-*` は先行で検出済み。
+fn has_ticket_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ticketmaster-")
+            || l.starts_with("x-livenation-")
+            || l.starts_with("x-stubhub-")
+            || l.starts_with("x-viagogo-")
+            || l.starts_with("x-seatgeek-")
+            || l.starts_with("x-ticketweb-")
+            || l.starts_with("x-eplus-")
+            || l.starts_with("x-lawsonticket-")
+            || l.starts_with("x-cnplayguide-")
+            || l.starts_with("x-rakutenticket-")
+            || l.starts_with("x-axs-")
+            || l.starts_with("x-seetickets-")
+            || l.starts_with("x-ticketone-")
+            || l.starts_with("x-ticketek-")
+            || l.starts_with("x-ticketcorner-")
+            || l.starts_with("x-eventim-")
+            || l.starts_with("x-dice-")
+            || l.starts_with("x-gigsandtours-")
+            || l.starts_with("x-skiddle-")
+            || l.starts_with("x-ticketsellers-")
+            || l.starts_with("x-gigsberg-")
+            || l.starts_with("x-tickpick-")
+            || l.starts_with("x-vividseats-")
+            || l.starts_with("x-ticketcity-")
+            || l.starts_with("x-ticketnetwork-")
+            || l.starts_with("x-hellotickets-")
+            || l.starts_with("x-ticketswap-")
+            || l.starts_with("x-tixr-")
+            || l.starts_with("x-showclix-")
+            || l.starts_with("x-seetix-")
+            || l.starts_with("x-ticketfairy-")
+            || l.starts_with("x-crowdtix-")
+    })
+}
+
+/// `X-Marriott-*`/`X-Hilton-*`/`X-Hyatt-*`/`X-IHG-*`/`X-Accor-*`/
+/// `X-Sheraton-*`/`X-Westin-*`/`X-RitzCarlton-*`/`X-FourSeasons-*`/
+/// `X-MandarinOriental-*`/`X-Peninsula-*`/`X-ShangriLa-*`/
+/// `X-InterContinental-*`/`X-HolidayInn-*`/`X-BestWestern-*`/
+/// `X-ChoiceHotels-*`/`X-Wyndham-*`/`X-Radisson-*`/`X-PremierInn-*`/
+/// `X-Travelodge-*`/`X-TokyuHotel-*`/`X-PrinceHotel-*`/`X-APAHotel-*`/
+/// `X-RouteInn-*`/`X-ToyokoInn-*`/`X-SuperHotel-*`/`X-DormyInn-*`/
+/// `X-ComfortInn-*`/`X-Jalan-*`/`X-RakutenTravel-*`/`X-Rurubu-*`/
+/// `X-TripAdvisor-*`/`X-CapsuleHotel-*`/`X-NineHours-*` 等の
+/// ホテル・宿泊予約印があるか判定する (D535)。
+///
+/// `X-Marriott-*` (Marriott)、`X-Hilton-*` (Hilton)、`X-ToyokoInn-*`
+/// (東横イン) は宿機の通知記録 — 送信側から届くこれは自称。
+/// `X-Expedia-*`/`X-Hotels-*`/`X-Airbnb-*`/`X-Booking-*`/`X-Agoda-*`/
+/// `X-Kayak-*` は D468 で検出済み。
+fn has_hotel_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-marriott-")
+            || l.starts_with("x-hilton-")
+            || l.starts_with("x-hyatt-")
+            || l.starts_with("x-ihg-")
+            || l.starts_with("x-accor-")
+            || l.starts_with("x-sheraton-")
+            || l.starts_with("x-westin-")
+            || l.starts_with("x-ritzcarlton-")
+            || l.starts_with("x-fourseasons-")
+            || l.starts_with("x-mandarinoriental-")
+            || l.starts_with("x-peninsula-")
+            || l.starts_with("x-shangrila-")
+            || l.starts_with("x-intercontinental-")
+            || l.starts_with("x-holidayinn-")
+            || l.starts_with("x-bestwestern-")
+            || l.starts_with("x-choicehotels-")
+            || l.starts_with("x-wyndham-")
+            || l.starts_with("x-radisson-")
+            || l.starts_with("x-premierinn-")
+            || l.starts_with("x-travelodge-")
+            || l.starts_with("x-tokyuhotel-")
+            || l.starts_with("x-princehotel-")
+            || l.starts_with("x-apahotel-")
+            || l.starts_with("x-routeinn-")
+            || l.starts_with("x-toyokoinn-")
+            || l.starts_with("x-superhotel-")
+            || l.starts_with("x-dormyinn-")
+            || l.starts_with("x-comfortinn-")
+            || l.starts_with("x-jalan-")
+            || l.starts_with("x-rakutentravel-")
+            || l.starts_with("x-rurubu-")
+            || l.starts_with("x-tripadvisor-")
+            || l.starts_with("x-capsulehotel-")
+            || l.starts_with("x-ninehours-")
+    })
+}
+
+/// `X-Disney-*`/`X-UniversalStudios-*`/`X-Legoland-*`/`X-Fujikyu-*`/
+/// `X-Toshimaen-*`/`X-Nagashima-*`/`X-USJ-*`/`X-JRA-*`/`X-BoatRace-*`/
+/// `X-Keirin-*`/`X-AutoRace-*`/`X-Pachinko-*`/`X-Dynam-*`/`X-Marukan-*`/
+/// `X-Nirasaki-*`/`X-TOHO-*`/`X-AeonCinema-*`/`X-109Cinemas-*`/
+/// `X-Shochiku-*`/`X-MOVIX-*`/`X-BigEcho-*`/`X-Shidax-*`/`X-JoySound-*`/
+/// `X-DAM-*`/`X-Round1-*`/`X-Gokurakuyu-*`/`X-RaikuSpa-*`/`X-Spadium-*`/
+/// `X-Ofuro-*`/`X-Tenpoyu-*`/`X-KenkoLand-*`/`X-Minatomachi-*` 等の
+/// テーマパーク・公営競技・映画館・カラオケ・温浴印があるか判定する
+/// (D536)。
+///
+/// `X-Disney-*` (Disney)、`X-USJ-*` (USJ)、`X-JRA-*` (JRA) は娯楽機の
+/// 通知記録 — 送信側から届くこれは自称。
+fn has_leisure_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-disney-")
+            || l.starts_with("x-universalstudios-")
+            || l.starts_with("x-legoland-")
+            || l.starts_with("x-fujikyu-")
+            || l.starts_with("x-toshimaen-")
+            || l.starts_with("x-nagashima-")
+            || l.starts_with("x-usj-")
+            || l.starts_with("x-jra-")
+            || l.starts_with("x-boatrace-")
+            || l.starts_with("x-keirin-")
+            || l.starts_with("x-autorace-")
+            || l.starts_with("x-pachinko-")
+            || l.starts_with("x-dynam-")
+            || l.starts_with("x-marukan-")
+            || l.starts_with("x-nirasaki-")
+            || l.starts_with("x-toho-")
+            || l.starts_with("x-aeoncinema-")
+            || l.starts_with("x-109cinemas-")
+            || l.starts_with("x-shochiku-")
+            || l.starts_with("x-movix-")
+            || l.starts_with("x-bigecho-")
+            || l.starts_with("x-shidax-")
+            || l.starts_with("x-joysound-")
+            || l.starts_with("x-dam-")
+            || l.starts_with("x-round1-")
+            || l.starts_with("x-gokurakuyu-")
+            || l.starts_with("x-raikuspa-")
+            || l.starts_with("x-spadium-")
+            || l.starts_with("x-ofuro-")
+            || l.starts_with("x-tenpoyu-")
+            || l.starts_with("x-kenkoland-")
+            || l.starts_with("x-minatomachi-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -11693,6 +11897,72 @@ mod tests {
         assert!(has_fmcg_marks(a1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_fmcg_marks(clean));
+    }
+
+    #[test]
+    fn scan_は券機印を検出する() {
+        let t1 = b"X-Ticketmaster-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(t1));
+        let e1 = b"X-Eplus-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(e1));
+        let l1 = b"X-LawsonTicket-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(l1));
+        let s1 = b"X-StubHub-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(s1));
+        let a1 = b"X-AXS-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(a1));
+        let e2 = b"X-Eventim-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(e2));
+        let c1 = b"X-CNPlayGuide-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(c1));
+        let d1 = b"X-Dice-Notify: x\r\n\r\nx";
+        assert!(has_ticket_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ticket_marks(clean));
+    }
+
+    #[test]
+    fn scan_は宿機印を検出する() {
+        let m1 = b"X-Marriott-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(m1));
+        let h1 = b"X-Hilton-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(h1));
+        let t1 = b"X-ToyokoInn-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(t1));
+        let h2 = b"X-Hyatt-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(h2));
+        let j1 = b"X-Jalan-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(j1));
+        let a1 = b"X-APAHotel-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(a1));
+        let r1 = b"X-RakutenTravel-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(r1));
+        let d1 = b"X-DormyInn-Notify: x\r\n\r\nx";
+        assert!(has_hotel_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_hotel_marks(clean));
+    }
+
+    #[test]
+    fn scan_は娯楽機印を検出する() {
+        let d1 = b"X-Disney-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(d1));
+        let u1 = b"X-USJ-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(u1));
+        let j1 = b"X-JRA-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(j1));
+        let t1 = b"X-TOHO-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(t1));
+        let p1 = b"X-Pachinko-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(p1));
+        let j2 = b"X-JoySound-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(j2));
+        let r1 = b"X-Round1-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(r1));
+        let g1 = b"X-Gokurakuyu-Notify: x\r\n\r\nx";
+        assert!(has_leisure_marks(g1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_leisure_marks(clean));
     }
 }
 

@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D534: `X-Ticketmaster-*`/`X-Eplus-*`/`X-LawsonTicket-*` 等のチケット販売・プレイガイド印自称が未検査
+
+- **問題**: `X-Ticketmaster-*` (Ticketmaster)、`X-Eplus-*` (イープラス)、`X-LawsonTicket-*` (ローチケ)、`X-LiveNation-*`/`X-StubHub-*`/`X-Viagogo-*`/`X-SeatGeek-*`/`X-TicketWeb-*`/`X-CNPlayGuide-*`/`X-RakutenTicket-*`/`X-AXS-*`/`X-SeeTickets-*`/`X-TicketOne-*`/`X-Ticketek-*`/`X-Ticketcorner-*`/`X-Eventim-*`/`X-Dice-*`/`X-GigsAndTours-*`/`X-Skiddle-*`/`X-TicketSellers-*`/`X-Gigsberg-*`/`X-TickPick-*`/`X-VividSeats-*`/`X-TicketCity-*`/`X-TicketNetwork-*`/`X-HelloTickets-*`/`X-TicketSwap-*`/`X-Tixr-*`/`X-ShowClix-*`/`X-SeeTix-*`/`X-TicketFairy-*`/`X-CrowdTix-*` は券機の通知記録 — 送信側が書くことは自称。当選・リセール詐欺の典型印。(`X-Eventbrite-*`/`X-Meetup-*` は D459、`X-Pia-*` は先行で検出済み)
+- **修正**: `Envelope` に `ticket_marks` + `has_ticket_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 券印の自署を問え。
+
+### Security — D535: `X-Marriott-*`/`X-Hilton-*`/`X-ToyokoInn-*` 等のホテル・宿泊予約印自称が未検査
+
+- **問題**: `X-Marriott-*` (Marriott)、`X-Hilton-*` (Hilton)、`X-ToyokoInn-*` (東横イン)、`X-Hyatt-*`/`X-IHG-*`/`X-Accor-*`/`X-Sheraton-*`/`X-Westin-*`/`X-RitzCarlton-*`/`X-FourSeasons-*`/`X-MandarinOriental-*`/`X-Peninsula-*`/`X-ShangriLa-*`/`X-InterContinental-*`/`X-HolidayInn-*`/`X-BestWestern-*`/`X-ChoiceHotels-*`/`X-Wyndham-*`/`X-Radisson-*`/`X-PremierInn-*`/`X-Travelodge-*`/`X-TokyuHotel-*`/`X-PrinceHotel-*`/`X-APAHotel-*`/`X-RouteInn-*`/`X-SuperHotel-*`/`X-DormyInn-*`/`X-ComfortInn-*`/`X-Jalan-*`/`X-RakutenTravel-*`/`X-Rurubu-*`/`X-TripAdvisor-*`/`X-CapsuleHotel-*`/`X-NineHours-*` は宿機の通知記録 — 送信側が書くことは自称。予約キャンセル・ポイント失効詐欺の典型印。(`X-Expedia-*`/`X-Hotels-*`/`X-Airbnb-*`/`X-Booking-*`/`X-Agoda-*`/`X-Kayak-*` は D468 で検出済み)
+- **修正**: `Envelope` に `hotel_marks` + `has_hotel_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 宿印の自署を問え。
+
+### Security — D536: `X-Disney-*`/`X-USJ-*`/`X-JRA-*` 等のテーマパーク・公営競技・映画館・カラオケ・温浴印自称が未検査
+
+- **問題**: `X-Disney-*` (Disney)、`X-USJ-*` (USJ)、`X-JRA-*` (JRA)、`X-UniversalStudios-*`/`X-Legoland-*`/`X-Fujikyu-*`/`X-Toshimaen-*`/`X-Nagashima-*`/`X-BoatRace-*`/`X-Keirin-*`/`X-AutoRace-*`/`X-Pachinko-*`/`X-Dynam-*`/`X-Marukan-*`/`X-Nirasaki-*`/`X-TOHO-*`/`X-AeonCinema-*`/`X-109Cinemas-*`/`X-Shochiku-*`/`X-MOVIX-*`/`X-BigEcho-*`/`X-Shidax-*`/`X-JoySound-*`/`X-DAM-*`/`X-Round1-*`/`X-Gokurakuyu-*`/`X-RaikuSpa-*`/`X-Spadium-*`/`X-Ofuro-*`/`X-Tenpoyu-*`/`X-KenkoLand-*`/`X-Minatomachi-*` は娯楽機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `leisure_marks` + `has_leisure_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 娯楽印の自署を問え。
+
+
 ### Security — D531: `X-Shiseido-*`/`X-DHC-*`/`X-Amway-*` 等の化粧品・スキンケア・MLM 美容印自称が未検査
 
 - **問題**: `X-Shiseido-*` (資生堂)、`X-DHC-*` (DHC)、`X-Amway-*` (Amway)、`X-Kose-*`/`X-Pola-*`/`X-Fancl-*`/`X-Orbis-*`/`X-EsteeLauder-*`/`X-Lancome-*`/`X-Kiehls-*`/`X-Clinique-*`/`X-Revlon-*`/`X-MaryKay-*`/`X-Avon-*`/`X-NuSkin-*`/`X-Herbalife-*`/`X-Tupperware-*`/`X-MAC-*`/`X-NARS-*`/`X-ShuUemura-*`/`X-THREE-*`/`X-RMK-*`/`X-SUQQU-*`/`X-CPB-*`/`X-Decorte-*`/`X-Albion-*`/`X-Covermark-*`/`X-Kanebo-*`/`X-Sofina-*`/`X-Biore-*`/`X-Curel-*`/`X-Freeplus-*`/`X-Minon-*`/`X-HadaLabo-*`/`X-MelanoCC-*`/`X-ROHTO-*`/`X-Sante-*`/`X-Garnier-*`/`X-LOreal-*`/`X-Nivea-*`/`X-Neutrogena-*`/`X-CeraVe-*`/`X-Aveeno-*`/`X-Vaseline-*` は美機の通知記録 — 送信側が書くことは自称。無料モニター・サンプル詐欺の典型印。
