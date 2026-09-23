@@ -82,6 +82,13 @@ pub struct Envelope {
     pub reply_to: Vec<Address>,
     /// Return-Path ヘッダーのアドレス (MAIL FROM; なりすまし検出に使用)。
     pub return_path: Option<Address>,
+    /// Sender ヘッダーのアドレス (RFC 5322 §3.6.2 — 実送信者)。
+    ///
+    /// From が複数アドレスを持つ場合に必須とされる「真の差出人」
+    /// 宣言。複数 From + Sender 不在はプロトコル違反であり、
+    /// 表示側がどのアドレスを採用するかパーサごとに差が出るため
+    /// なりすましの手段となる (D164)。
+    pub sender: Option<Address>,
     /// In-Reply-To が参照する Message-ID 群 (スレッド乗っ取り検出に使用)。
     pub in_reply_to: Vec<String>,
     /// References が参照する Message-ID 群 (スレッド乗っ取り検出に使用)。
@@ -308,6 +315,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         .map(|s| s.to_string())
         .collect();
 
+    // Sender ヘッダー (RFC 5322 §3.6.2 — 複数 From の場合の実送信者宣言)。
+    // 複数 From + Sender 不在はプロトコル違反のなりすまし兆候 (D164)。
+    let sender = msg.header_values("Sender").find_map(|v| match v {
+        mail_parser::HeaderValue::Address(a) => a.iter().next().and_then(addr_to_address),
+        _ => None,
+    });
+
     // DKIM-Signature ヘッダーの生値 (複数ある場合は先頭のみ — `l=` 検査用)
     let dkim_signature = msg
         .header_values("DKIM-Signature")
@@ -329,6 +343,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         auth_results,
         reply_to,
         return_path,
+        sender,
         in_reply_to,
         references,
         dkim_signature,
@@ -1589,6 +1604,45 @@ mod tests {
             env.auth_results.authserv_id.as_deref(),
             Some("mx.example.com")
         );
+    }
+
+    // ── D164: Sender ヘッダ / 複数 From ──────────────────────────────────
+
+    #[test]
+    fn parse_extracts_sender_header() {
+        let raw = b"From: ceo@corp.example, attacker@evil.example\r\n\
+                    Sender: attacker@evil.example\r\n\
+                    To: victim@target.example\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.from.len(), 2);
+        let sender = env.sender.expect("Sender should be parsed");
+        assert_eq!(sender.addr.as_string(), "attacker@evil.example");
+    }
+
+    #[test]
+    fn parse_sender_absent_is_none() {
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.sender.is_none());
+        assert_eq!(env.from.len(), 1);
+    }
+
+    #[test]
+    fn parse_multiple_from_without_sender() {
+        // RFC 5322 違反形: Sender なしの複数 From — 両アドレスが保持されること
+        let raw = b"From: ceo@corp.example, attacker@evil.example\r\n\
+                    To: victim@target.example\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert_eq!(env.from.len(), 2);
+        assert_eq!(env.from[1].addr.as_string(), "attacker@evil.example");
+        assert!(env.sender.is_none());
     }
 
     /// `parse_auth_results_str` は JMAP 一覧経路 (`header:Authentication-Results:asText`)
