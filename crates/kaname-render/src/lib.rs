@@ -100,6 +100,9 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `multipart/signed` 宣言があるのに署名パートが無いか —
+    /// 「署名済み」の体裁を持つが検証対象が存在しない偽装の兆候 (D241)。
+    pub incomplete_signed_structure: bool,
 }
 
 /// An RFC 5322 address.
@@ -358,7 +361,28 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        incomplete_signed_structure: has_incomplete_signed_structure(raw),
     })
+}
+
+/// `multipart/signed` 宣言があるのに署名パートが無いか判定する (D241)。
+///
+/// `multipart/signed` は「本文 + 署名」の構造宣言 — 署名パート
+/// (`application/pgp-signature`/`application/pkcs7-signature`/`pkcs7-mime`)
+/// が無いなら「署名済み」の体裁を持ちながら検証対象が存在しない
+/// 偽装であり、正当な構造では成立しない。生ヘッダ走査で判定。
+fn has_incomplete_signed_structure(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    if !lower.contains("content-type: multipart/signed") {
+        return false;
+    }
+    let has_sig_part = lower.contains("content-type: application/pgp-signature")
+        || lower.contains("content-type: application/pkcs7-signature")
+        || lower.contains("content-type: application/pkcs7-mime")
+        || lower.contains("content-type: application/x-pkcs7-signature")
+        || lower.contains("content-type: application/x-pkcs7-mime");
+    !has_sig_part
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2559,6 +2583,19 @@ mod tests {
         let raw = b"From: a@example.com\r\nSubject: x\r\n\r\nbody";
         let env = parse(raw).expect("parse");
         assert!(env.list_unsubscribe.is_none());
+    }
+
+    #[test]
+    fn scan_は未完了multipart_signed構造を検出する() {
+        let bad = b"Content-Type: multipart/signed; boundary=\"b\"\r\n\r\nbody";
+        assert!(has_incomplete_signed_structure(bad));
+        let good = b"Content-Type: multipart/signed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: application/pgp-signature\r\n\r\nsig\r\n--b--";
+        assert!(!has_incomplete_signed_structure(good));
+        let good2 = b"Content-Type: multipart/signed\r\n\r\nx\r\nContent-Type: application/pkcs7-signature\r\n\r\ns";
+        assert!(!has_incomplete_signed_structure(good2));
+        let other = b"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\nx";
+        assert!(!has_incomplete_signed_structure(other));
+        assert!(!has_incomplete_signed_structure(b""));
     }
 }
 

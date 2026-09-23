@@ -542,6 +542,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D240: From == To の自己差出人偽装 (「あなたの口座から
+    // 送信した」恐喝スパム — From 値を To と同じにする体裁)
+    let from_first_addr = env.from.first().map(|a| a.addr.as_string());
+    if let Some(ref fa) = from_first_addr {
+        if env.to.iter().any(|t| &t.addr.as_string() == fa) {
+            render_risks.push(
+                "差出人アドレスと宛先アドレスが同一 — 「あなた自身から送信した」と装う恐喝系偽装の可能性があります"
+                    .to_string(),
+            );
+        }
+    }
+
+    // D241: multipart/signed 宣言があるのに署名パートが無い
+    if env.incomplete_signed_structure {
+        render_risks.push(
+            "multipart/signed 宣言があるのに署名パートが無い — 「署名済み」の体裁だけの偽装の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D242: 件名なし + 添付あり (無言配送型の外形)
+    if env.subject.is_none() && !env.attachments.is_empty() {
+        render_risks.push(
+            "件名がなく添付がある — 無言配送型の外形をしています"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

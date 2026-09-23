@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D240: From == To の自己差出人偽装 (恐喝系スパム) が未検査
+
+- 「あなたの口座から送信した」恐喝スパムの外形は `From: victim@x To: victim@x` — From と To が同一アドレスの構造は受信者に「自分の口座から送られてきた」という誤認を生じさせるが、From/To の一致自体を見る検査がなかった
+- 対処: `commands.rs` で `env.from.first()` と `env.to` の一致を兆候として `render_risks` に報告
+- テスト +0 件 (UI 層の組み合わせ — 関連の単体検査は他層に在り)
+
+### Security — D241: `multipart/signed` 宣言があるのに署名パートが無い (体裁だけの署名偽装) が未検査
+
+- `multipart/signed` は「本文 + 署名」の構造宣言 — `application/pgp-signature`/`pkcs7-signature`/`pkcs7-mime` パートが無いなら「署名済み」の体裁を持ちながら検証対象が存在しない偽装であり、正当な構造では成立しない
+- 対処: `has_incomplete_signed_structure` 新設で生ヘッダ走査 (multipart/signed + 署名パート不在) → `incomplete_signed_structure` → `render_risks` に兆候報告
+- テスト +5 件
+
+### Security — D242: 件名なし + 添付あり (無言配送型の外形) が未検査
+
+- 「件名を書かずに添付だけ送る」は BazaCall 系・請求書偽装配送で頻出する外形 — 件名のないメールに添付だけがある構造自体を兆候としていなかった
+- 対処: `env.subject.is_none() && !env.attachments.is_empty()` を `render_risks` に兆候として報告
+- テスト +0 件 (UI 層の組み合わせ)
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)
