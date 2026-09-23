@@ -558,6 +558,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D312: X-Forwarded 転送経路自称
+    if env.forwarded_headers {
+        render_risks.push(
+            "X-Forwarded-* ヘッダ — 転送経路の履歴を送信側が自称している可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D313: boundary 危険文字
+    if env.boundary_dangerous_chars {
+        render_risks.push(
+            "boundary 値に引用の効かない区切り文字 — パーサで解釈が分かれる兆候です".to_string(),
+        );
+    }
+
+    // D314: noscript 二重内容
+    if env.noscript_tag {
+        render_risks.push(
+            "<noscript>/<noembed> タグ — メールでは常に表示される二重内容区画の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

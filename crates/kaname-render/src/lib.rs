@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `X-Forwarded-*`/`X-Originally-From` 等の転送経路ヘッダがあるか —
+    /// 中継が記す転送履歴を送信側が自称する経路偽装の兆候 (D312)。
+    pub forwarded_headers: bool,
+    /// `boundary=` の非引用値が `"`/`\`/空白を含むか — 引用の効かない
+    /// boundary が解析を分ける兆候 (D313)。
+    pub boundary_dangerous_chars: bool,
+    /// 本文 HTML に `<noscript>`/`<noembed>` があるか — メールでは常に
+    /// 内容が表示される二重内容区画の兆候 (D314)。
+    pub noscript_tag: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +371,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        forwarded_headers: has_forwarded_headers(raw),
+        boundary_dangerous_chars: has_boundary_dangerous_chars(raw),
+        noscript_tag: has_noscript_tag(raw),
     })
 }
 
@@ -422,6 +434,70 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-Forwarded-*`/`X-Originally-From` 等の転送経路ヘッダがあるか判定
+/// する (D312)。
+///
+/// `X-Forwarded-For`/`X-Forwarded-Host`/`X-Forwarded-Message-Id`/
+/// `X-Forwarded-Encrypted`/`X-Originally-From` は転送・中継経路が記す
+/// 履歴 — 送信側が書き込んで届くのは「正当な転送経路を通った」体裁
+/// を騙る経路偽装 (D206/D213/D222 と同系列の値自称)。
+fn has_forwarded_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-forwarded-")
+            || l.starts_with("x-originally-from:")
+            || l.starts_with("x-forwarded:")
+    })
+}
+
+/// `boundary=` の値がパラメータ区切り文字を含むか判定する (D313)。
+///
+/// 非引用の boundary に `"`/`\`/空白が混じると、パラメータの引用
+/// 解釈がパーサごとに分かれる — 区切りの見つかる場所が実装で違う
+/// parser differential。
+fn has_boundary_dangerous_chars(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut pos = 0;
+    while let Some(bpos) = header[pos..].find("boundary=") {
+        let rest = &header[pos + bpos + 9..];
+        // 値は `;` (次パラメータ) または行末まで — 引用があるなら閉じ引用まで。
+        let (value, quoted) = if rest.starts_with('"') {
+            let end = rest[1..]
+                .find('"')
+                .map(|i| i + 2)
+                .unwrap_or(rest.len());
+            (&rest[..end], true)
+        } else {
+            let end = rest.find([';', '\r', '\n']).unwrap_or(rest.len());
+            (&rest[..end], false)
+        };
+        if !quoted
+            && (value.contains('"') || value.contains('\\') || value.contains(' '))
+        {
+            return true;
+        }
+        pos += bpos + 9;
+    }
+    false
+}
+
+/// 本文 HTML に `<noscript>`/`<noembed>` があるか判定する (D314)。
+///
+/// `<noscript>` は「script が動かない環境だけに見える」二重内容区画 —
+/// メールは JS を走らせないため常に noscript 側が表示され、解析器が
+/// 見る区画とユーザーが見る区画を分けられる。`<noembed>` も同構造。
+fn has_noscript_tag(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<noscript") || lower.contains("<noembed")
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2751,46 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はXForwarded自称を検出する() {
+        let ff = b"From: a@b\r\nX-Forwarded-For: 1.2.3.4\r\n\r\nx";
+        assert!(has_forwarded_headers(ff));
+        let fo = b"From: a@b\r\nX-Originally-From: c@d\r\n\r\nx";
+        assert!(has_forwarded_headers(fo));
+        let fh = b"From: a@b\r\nX-Forwarded-Host: h\r\n\r\nx";
+        assert!(has_forwarded_headers(fh));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_forwarded_headers(clean));
+        let body = b"From: a@b\r\n\r\nX-Forwarded-For: 1.2.3.4";
+        assert!(!has_forwarded_headers(body));
+    }
+
+    #[test]
+    fn scan_はboundary危険文字を検出する() {
+        let sp = b"Content-Type: multipart/mixed; boundary=a b\r\n\r\nx";
+        assert!(has_boundary_dangerous_chars(sp));
+        let bs = b"Content-Type: multipart/mixed; boundary=a\\b\r\n\r\nx";
+        assert!(has_boundary_dangerous_chars(bs));
+        let dq = b"Content-Type: multipart/mixed; boundary=a\"b\r\n\r\nx";
+        assert!(has_boundary_dangerous_chars(dq));
+        let quoted = b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nx";
+        assert!(!has_boundary_dangerous_chars(quoted));
+        let normal = b"Content-Type: multipart/mixed; boundary=abc; charset=x\r\n\r\nx";
+        assert!(!has_boundary_dangerous_chars(normal));
+        let simple = b"Content-Type: multipart/mixed; boundary=abc\r\n\r\nx";
+        assert!(!has_boundary_dangerous_chars(simple));
+    }
+
+    #[test]
+    fn scan_はnoscriptを検出する() {
+        let ns = b"<html><noscript><a href=\"e\">x</a></noscript></html>";
+        assert!(has_noscript_tag(ns));
+        let ne = b"<noembed>x</noembed>";
+        assert!(has_noscript_tag(ne));
+        let clean = b"<p>ok</p>";
+        assert!(!has_noscript_tag(clean));
     }
 }
 

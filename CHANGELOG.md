@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D312: `X-Forwarded-*`/`X-Originally-From` 転送経路自称が未検査
+
+- `X-Forwarded-For`/`X-Forwarded-Host`/`X-Forwarded-Message-Id`/`X-Forwarded-Encrypted`/`X-Originally-From` は転送・中継経路が記す履歴 — 送信側が書き込んで届くのは「正当な転送経路を通った」体裁を騙る経路偽装 (D206/D213/D222 と同系列の値自称) だが未検査だった
+- 対処: `has_forwarded_headers` 新設 → `Envelope.forwarded_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D313: `boundary=` の非引用値の区切り文字混入が未検査
+
+- 非引用の boundary に `"`/`\`/空白が混じるとパラメータの引用解釈がパーサごとに分かれる — 区切りの見つかる場所が実装で違う parser differential だが未検査だった
+- 対処: `has_boundary_dangerous_chars` 新設 → `Envelope.boundary_dangerous_chars` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D314: `<noscript>`/`<noembed>` の二重内容区画が未検査
+
+- `<noscript>` は「script が動かない環境だけに見える」二重内容区画 — メールは JS を走らせないため常に noscript 側が表示され、解析器が見る区画とユーザーが見る区画を分けられる (D291 旧式タグ・D305 廃止タグの姉妹) が未検査だった
+- 対処: `has_noscript_tag` 新設 → `Envelope.noscript_tag` → `render_risks` 兆候報告
+- テスト +3 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
