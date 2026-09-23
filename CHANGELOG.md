@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D465: `X-Rakuten-*`/`X-Mercari-*`/`X-PayPay-*`/`X-Livedoor-*`/`X-Doorkeeper-*`/`X-AtCoder-*` 等の日本系サービス印自称が未検査
+
+- **問題**: `X-Rakuten-*` (楽天)、`X-Mercari-*` (メルカリ)、`X-PayPay-*` (PayPay)、`X-DMM-*`/`X-Livedoor-*`/`X-Hatena-*`/`X-Cookpad-*`/`X-Recruit-*`/`X-BizReach-*`/`X-Wantedly-*`/`X-Findy-*`/`X-LAPRAS-*`/`X-Lancers-*`/`X-Coconala-*`/`X-Doorkeeper-*`/`X-Peatix-*`/`X-Kakaku-*`/`X-AtCoder-*`/`X-Paiza-*`/`X-Excite-*`/`X-Goo-*`/`X-Niconico-*`/`X-Dwango-*` は日本系サービス通知機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `jp_service_marks` + `has_jp_service_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — サービス印の自署を問え。
+
+### Security — D466: `X-Greenhouse-*`/`X-Lever-*`/`X-BambooHR-*`/`X-ADP-*`/`X-Gusto-*`/`X-Rippling-*`/`X-Workable-*` 等の HR・採用印 (第二群) 自称が未検査
+
+- **問題**: `X-Greenhouse-*` (Greenhouse ATS)、`X-Lever-*` (Lever)、`X-BambooHR-*`/`X-ADP-*`/`X-Gusto-*`/`X-Rippling-*`/`X-Deel-*`/`X-Paylocity-*`/`X-Paycom-*`/`X-Paychex-*`/`X-Zenefits-*`/`X-UKG-*`/`X-UltiPro-*` (人事・給与)、`X-SmartRecruiters-*`/`X-Ashby-*`/`X-Jobvite-*`/`X-Workable-*`/`X-Recruitee-*`/`X-Teamtailor-*`/`X-Personio-*`/`X-Hibob-*`/`X-CultureAmp-*`/`X-Medallia-*` は HR 機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `hr_marks` + `has_hr_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 採用印の自署を問え。
+
+### Security — D467: `X-Shopify-*`/`X-Etsy-*`/`X-Squarespace-*`/`X-Wix-*`/`X-Magento-*`/`X-AliExpress-*`/`X-Zalando-*` 等の EC・マーケットプレイス印自称が未検査
+
+- **問題**: `X-Shopify-*` (Shopify)、`X-Etsy-*` (Etsy)、`X-Squarespace-*`/`X-Wix-*`/`X-Weebly-*`/`X-Webflow-*`/`X-BigCommerce-*`/`X-Magento-*`/`X-WooCommerce-*`/`X-PrestaShop-*`/`X-OpenCart-*`/`X-Ecwid-*`/`X-AliExpress-*`/`X-Temu-*`/`X-SHEIN-*`/`X-Allegro-*`/`X-Bol-*`/`X-Cdiscount-*`/`X-ManoMano-*`/`X-Zalando-*`/`X-Otto-*`/`X-ASOS-*`/`X-Farfetch-*`/`X-Poshmark-*`/`X-Depop-*`/`X-Vinted-*`/`X-StockX-*`/`X-Grailed-*`/`X-ThredUp-*`/`X-Vestiaire-*` は EC 機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `ecommerce_marks` + `has_ecommerce_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 発信の記録は発信機が記す — EC 印の自署を問え。
+
+
 ### Security — D462: `X-Hetzner-*`/`X-Scaleway-*`/`X-Linode-*`/`X-Vultr-*`/`X-DigitalOcean-*`/`X-Heroku-*`/`X-Railway-*` 等のクラウド・ホスティング印自称が未検査
 
 - **問題**: `X-Hetzner-*` (Hetzner)、`X-Scaleway-*` (Scaleway)、`X-Linode-*`/`X-Akamai-*`/`X-Vultr-*`/`X-Oracle-*`/`X-IBM-*`/`X-DigitalOcean-*`/`X-Heroku-*`/`X-Render-*`/`X-Fly-*`/`X-Railway-*`/`X-OpenShift-*`/`X-CloudFoundry-*` はクラウド機の発信記録 — 送信側が書くことは自称。
