@@ -1540,6 +1540,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D531: 化粧品・スキンケア・MLM 美容印自称
+    if env.beauty_marks {
+        render_risks.push(
+            "X-Shiseido-*/X-DHC-*/X-Amway-*/X-Fancl-*/X-Kose-*/X-HadaLabo-*/X-Nivea-*/X-CeraVe-* 等 — 美機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D532: 塾・語学・子供教育印自称
+    if env.cram_marks {
+        render_risks.push(
+            "X-Kumon-*/X-Benesse-*/X-Shinkenzemi-*/X-Zkai-*/X-ECC-*/X-Berlitz-*/X-DMMeikaiwa-*/X-IXL-* 等 — 学習機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D533: 日用品・消費財・100 円ショップ・ペット用品印自称
+    if env.fmcg_marks {
+        render_risks.push(
+            "X-Daiso-*/X-PG-*/X-Chewy-*/X-Seria-*/X-Unilever-*/X-Kao-*/X-Zooplus-*/X-AeonPet-* 等 — 日用品機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

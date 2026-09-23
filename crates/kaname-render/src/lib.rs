@@ -1040,6 +1040,39 @@ pub struct Envelope {
     /// フィットネス・ウェアラブル・ジム印があるか — 健機の通知記録を
     /// 送信側が自称する兆候 (D530)。
     pub fitness_marks: bool,
+    /// `X-Shiseido-*`/`X-Kose-*`/`X-Pola-*`/`X-Fancl-*`/`X-DHC-*`/
+    /// `X-Orbis-*`/`X-EsteeLauder-*`/`X-Lancome-*`/`X-Kiehls-*`/
+    /// `X-Clinique-*`/`X-Revlon-*`/`X-MaryKay-*`/`X-Avon-*`/`X-Amway-*`/
+    /// `X-NuSkin-*`/`X-Herbalife-*`/`X-Tupperware-*`/`X-MAC-*`/`X-NARS-*`/
+    /// `X-ShuUemura-*`/`X-THREE-*`/`X-RMK-*`/`X-SUQQU-*`/`X-CPB-*`/
+    /// `X-Decorte-*`/`X-Albion-*`/`X-Covermark-*`/`X-Kanebo-*`/`X-Sofina-*`/
+    /// `X-Biore-*`/`X-Curel-*`/`X-Freeplus-*`/`X-Minon-*`/`X-HadaLabo-*`/
+    /// `X-MelanoCC-*`/`X-ROHTO-*`/`X-Sante-*`/`X-Garnier-*`/`X-LOreal-*`/
+    /// `X-Nivea-*`/`X-Neutrogena-*`/`X-CeraVe-*`/`X-Aveeno-*`/`X-Vaseline-*`
+    /// 等の化粧品・スキンケア・MLM 美容印があるか — 美機の通知記録を
+    /// 送信側が自称する兆候 (D531)。
+    pub beauty_marks: bool,
+    /// `X-Kumon-*`/`X-Benesse-*`/`X-Gakken-*`/`X-Shinkenzemi-*`/`X-Zkai-*`/
+    /// `X-Toshin-*`/`X-Sundai-*`/`X-Kawaijuku-*`/`X-Meiko-*`/`X-Nichii-*`/
+    /// `X-Gaba-*`/`X-AeonECC-*`/`X-ECC-*`/`X-NovaKids-*`/`X-Berlitz-*`/
+    /// `X-Rosetta-*`/`X-Babbel-*`/`X-iTalki-*`/`X-Preply-*`/`X-Cambly-*`/
+    /// `X-VIPKid-*`/`X-RareJob-*`/`X-NativeCamp-*`/`X-DMMeikaiwa-*`/
+    /// `X-Prodigy-*`/`X-TypingClub-*`/`X-IXL-*`/`X-Khan-*`/`X-Sumdog-*`/
+    /// `X-Smartick-*`/`X-EdClub-*`/`X-RazKids-*`/`X-ReadingEggs-*` 等の
+    /// 塾・語学・子供教育印があるか — 学習機の通知記録を送信側が
+    /// 自称する兆候 (D532)。(`X-Duolingo-*`/`X-KhanAcademy-*` は
+    /// D477 で検出済み)
+    pub cram_marks: bool,
+    /// `X-PG-*`/`X-Unilever-*`/`X-ColgatePalmolive-*`/`X-KimberlyClark-*`/
+    /// `X-Reckitt-*`/`X-Henkel-*`/`X-Kao-*`/`X-Lion-*`/`X-Johnson-*`/
+    /// `X-ScotchBrite-*`/`X-3M-*`/`X-Kobayashi-*`/`X-Earth-*`/`X-Estee-*`/
+    /// `X-Daiso-*`/`X-Seria-*`/`X-CanDo-*`/`X-Watts-*`/`X-3Coins-*`/
+    /// `X-NaturalKitchen-*`/`X-FlyingTiger-*`/`X-PetSmart-*`/`X-Petco-*`/
+    /// `X-Chewy-*`/`X-Zooplus-*`/`X-Fressnapf-*`/`X-PetValu-*`/
+    /// `X-AeonPet-*`/`X-KojimaPet-*`/`X-Himaraya-*`/`X-CainzPet-*` 等の
+    /// 日用品・消費財・100 円ショップ・ペット用品印があるか —
+    /// 日用品機の通知記録を送信側が自称する兆候 (D533)。
+    pub fmcg_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1431,6 +1464,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         restaurant_marks: has_restaurant_marks(raw),
         sports_marks: has_sports_marks(raw),
         fitness_marks: has_fitness_marks(raw),
+        beauty_marks: has_beauty_marks(raw),
+        cram_marks: has_cram_marks(raw),
+        fmcg_marks: has_fmcg_marks(raw),
     })
 }
 
@@ -6650,6 +6686,177 @@ fn has_fitness_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Shiseido-*`/`X-Kose-*`/`X-Pola-*`/`X-Fancl-*`/`X-DHC-*`/`X-Orbis-*`/
+/// `X-EsteeLauder-*`/`X-Lancome-*`/`X-Kiehls-*`/`X-Clinique-*`/`X-Revlon-*`/
+/// `X-MaryKay-*`/`X-Avon-*`/`X-Amway-*`/`X-NuSkin-*`/`X-Herbalife-*`/
+/// `X-Tupperware-*`/`X-MAC-*`/`X-NARS-*`/`X-ShuUemura-*`/`X-THREE-*`/
+/// `X-RMK-*`/`X-SUQQU-*`/`X-CPB-*`/`X-Decorte-*`/`X-Albion-*`/
+/// `X-Covermark-*`/`X-Kanebo-*`/`X-Sofina-*`/`X-Biore-*`/`X-Curel-*`/
+/// `X-Freeplus-*`/`X-Minon-*`/`X-HadaLabo-*`/`X-MelanoCC-*`/`X-ROHTO-*`/
+/// `X-Sante-*`/`X-Garnier-*`/`X-LOreal-*`/`X-Nivea-*`/`X-Neutrogena-*`/
+/// `X-CeraVe-*`/`X-Aveeno-*`/`X-Vaseline-*` 等の
+/// 化粧品・スキンケア・MLM 美容印があるか判定する (D531)。
+///
+/// `X-Shiseido-*` (資生堂)、`X-DHC-*` (DHC)、`X-Amway-*` (Amway) は
+/// 美機の通知記録 — 送信側から届くこれは自称。無料モニター・サンプル
+/// 詐欺の典型印。
+fn has_beauty_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-shiseido-")
+            || l.starts_with("x-kose-")
+            || l.starts_with("x-pola-")
+            || l.starts_with("x-fancl-")
+            || l.starts_with("x-dhc-")
+            || l.starts_with("x-orbis-")
+            || l.starts_with("x-esteelauder-")
+            || l.starts_with("x-lancome-")
+            || l.starts_with("x-kiehls-")
+            || l.starts_with("x-clinique-")
+            || l.starts_with("x-revlon-")
+            || l.starts_with("x-marykay-")
+            || l.starts_with("x-avon-")
+            || l.starts_with("x-amway-")
+            || l.starts_with("x-nuskin-")
+            || l.starts_with("x-herbalife-")
+            || l.starts_with("x-tupperware-")
+            || l.starts_with("x-mac-")
+            || l.starts_with("x-nars-")
+            || l.starts_with("x-shuuemura-")
+            || l.starts_with("x-three-")
+            || l.starts_with("x-rmk-")
+            || l.starts_with("x-suqqu-")
+            || l.starts_with("x-cpb-")
+            || l.starts_with("x-decorte-")
+            || l.starts_with("x-albion-")
+            || l.starts_with("x-covermark-")
+            || l.starts_with("x-kanebo-")
+            || l.starts_with("x-sofina-")
+            || l.starts_with("x-biore-")
+            || l.starts_with("x-curel-")
+            || l.starts_with("x-freeplus-")
+            || l.starts_with("x-minon-")
+            || l.starts_with("x-hadalabo-")
+            || l.starts_with("x-melanocc-")
+            || l.starts_with("x-rohto-")
+            || l.starts_with("x-sante-")
+            || l.starts_with("x-garnier-")
+            || l.starts_with("x-loreal-")
+            || l.starts_with("x-nivea-")
+            || l.starts_with("x-neutrogena-")
+            || l.starts_with("x-cerave-")
+            || l.starts_with("x-aveeno-")
+            || l.starts_with("x-vaseline-")
+    })
+}
+
+/// `X-Kumon-*`/`X-Benesse-*`/`X-Gakken-*`/`X-Shinkenzemi-*`/`X-Zkai-*`/
+/// `X-Toshin-*`/`X-Sundai-*`/`X-Kawaijuku-*`/`X-Meiko-*`/`X-Nichii-*`/
+/// `X-Gaba-*`/`X-AeonECC-*`/`X-ECC-*`/`X-NovaKids-*`/`X-Berlitz-*`/
+/// `X-Rosetta-*`/`X-Babbel-*`/`X-iTalki-*`/`X-Preply-*`/`X-Cambly-*`/
+/// `X-VIPKid-*`/`X-RareJob-*`/`X-NativeCamp-*`/`X-DMMeikaiwa-*`/
+/// `X-Prodigy-*`/`X-TypingClub-*`/`X-IXL-*`/`X-Khan-*`/`X-Sumdog-*`/
+/// `X-Smartick-*`/`X-EdClub-*`/`X-RazKids-*`/`X-ReadingEggs-*` 等の
+/// 塾・語学・子供教育印があるか判定する (D532)。
+///
+/// `X-Kumon-*` (くもん)、`X-Benesse-*` (ベネッセ)、`X-Shinkenzemi-*`
+/// (進研ゼミ) は学習機の通知記録 — 送信側から届くこれは自称。
+/// `X-Duolingo-*`/`X-KhanAcademy-*` は D477 で検出済み。
+fn has_cram_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-kumon-")
+            || l.starts_with("x-benesse-")
+            || l.starts_with("x-gakken-")
+            || l.starts_with("x-shinkenzemi-")
+            || l.starts_with("x-zkai-")
+            || l.starts_with("x-toshin-")
+            || l.starts_with("x-sundai-")
+            || l.starts_with("x-kawaijuku-")
+            || l.starts_with("x-meiko-")
+            || l.starts_with("x-nichii-")
+            || l.starts_with("x-gaba-")
+            || l.starts_with("x-aeonecc-")
+            || l.starts_with("x-ecc-")
+            || l.starts_with("x-novakids-")
+            || l.starts_with("x-berlitz-")
+            || l.starts_with("x-rosetta-")
+            || l.starts_with("x-babbel-")
+            || l.starts_with("x-italki-")
+            || l.starts_with("x-preply-")
+            || l.starts_with("x-cambly-")
+            || l.starts_with("x-vipkid-")
+            || l.starts_with("x-rarejob-")
+            || l.starts_with("x-nativecamp-")
+            || l.starts_with("x-dmmeikaiwa-")
+            || l.starts_with("x-prodigy-")
+            || l.starts_with("x-typingclub-")
+            || l.starts_with("x-ixl-")
+            || l.starts_with("x-khan-")
+            || l.starts_with("x-sumdog-")
+            || l.starts_with("x-smartick-")
+            || l.starts_with("x-edclub-")
+            || l.starts_with("x-razkids-")
+            || l.starts_with("x-readingeggs-")
+    })
+}
+
+/// `X-PG-*`/`X-Unilever-*`/`X-ColgatePalmolive-*`/`X-KimberlyClark-*`/
+/// `X-Reckitt-*`/`X-Henkel-*`/`X-Kao-*`/`X-Lion-*`/`X-Johnson-*`/
+/// `X-ScotchBrite-*`/`X-3M-*`/`X-Kobayashi-*`/`X-Earth-*`/`X-Estee-*`/
+/// `X-Daiso-*`/`X-Seria-*`/`X-CanDo-*`/`X-Watts-*`/`X-3Coins-*`/
+/// `X-NaturalKitchen-*`/`X-FlyingTiger-*`/`X-PetSmart-*`/`X-Petco-*`/
+/// `X-Chewy-*`/`X-Zooplus-*`/`X-Fressnapf-*`/`X-PetValu-*`/`X-AeonPet-*`/
+/// `X-KojimaPet-*`/`X-CainzPet-*` 等の日用品・消費財・100 円ショップ・
+/// ペット用品印があるか判定する (D533)。
+///
+/// `X-Daiso-*` (ダイソー)、`X-PG-*` (P&G)、`X-Chewy-*` (Chewy) は
+/// 日用品機の通知記録 — 送信側から届くこれは自称。
+fn has_fmcg_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-pg-")
+            || l.starts_with("x-unilever-")
+            || l.starts_with("x-colgatepalmolive-")
+            || l.starts_with("x-kimberlyclark-")
+            || l.starts_with("x-reckitt-")
+            || l.starts_with("x-henkel-")
+            || l.starts_with("x-kao-")
+            || l.starts_with("x-lion-")
+            || l.starts_with("x-johnson-")
+            || l.starts_with("x-scotchbrite-")
+            || l.starts_with("x-3m-")
+            || l.starts_with("x-kobayashi-")
+            || l.starts_with("x-earth-")
+            || l.starts_with("x-estee-")
+            || l.starts_with("x-daiso-")
+            || l.starts_with("x-seria-")
+            || l.starts_with("x-cando-")
+            || l.starts_with("x-watts-")
+            || l.starts_with("x-3coins-")
+            || l.starts_with("x-naturalkitchen-")
+            || l.starts_with("x-flyingtiger-")
+            || l.starts_with("x-petsmart-")
+            || l.starts_with("x-petco-")
+            || l.starts_with("x-chewy-")
+            || l.starts_with("x-zooplus-")
+            || l.starts_with("x-fressnapf-")
+            || l.starts_with("x-petvalu-")
+            || l.starts_with("x-aeonpet-")
+            || l.starts_with("x-kojimapet-")
+            || l.starts_with("x-cainzpet-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -11420,6 +11627,72 @@ mod tests {
         assert!(has_fitness_marks(a1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_fitness_marks(clean));
+    }
+
+    #[test]
+    fn scan_は美機印を検出する() {
+        let s1 = b"X-Shiseido-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(s1));
+        let d1 = b"X-DHC-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(d1));
+        let a1 = b"X-Amway-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(a1));
+        let f1 = b"X-Fancl-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(f1));
+        let k1 = b"X-Kose-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(k1));
+        let h1 = b"X-HadaLabo-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(h1));
+        let n1 = b"X-Nivea-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(n1));
+        let c1 = b"X-CeraVe-Notify: x\r\n\r\nx";
+        assert!(has_beauty_marks(c1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_beauty_marks(clean));
+    }
+
+    #[test]
+    fn scan_は学習機印を検出する() {
+        let k1 = b"X-Kumon-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(k1));
+        let b1 = b"X-Benesse-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(b1));
+        let s1 = b"X-Shinkenzemi-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(s1));
+        let z1 = b"X-Zkai-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(z1));
+        let e1 = b"X-ECC-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(e1));
+        let b2 = b"X-Berlitz-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(b2));
+        let d1 = b"X-DMMeikaiwa-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(d1));
+        let i1 = b"X-IXL-Notify: x\r\n\r\nx";
+        assert!(has_cram_marks(i1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cram_marks(clean));
+    }
+
+    #[test]
+    fn scan_は日用品機印を検出する() {
+        let d1 = b"X-Daiso-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(d1));
+        let p1 = b"X-PG-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(p1));
+        let c1 = b"X-Chewy-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(c1));
+        let s1 = b"X-Seria-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(s1));
+        let u1 = b"X-Unilever-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(u1));
+        let k1 = b"X-Kao-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(k1));
+        let z1 = b"X-Zooplus-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(z1));
+        let a1 = b"X-AeonPet-Notify: x\r\n\r\nx";
+        assert!(has_fmcg_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_fmcg_marks(clean));
     }
 }
 

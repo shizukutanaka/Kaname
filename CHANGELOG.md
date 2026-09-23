@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D531: `X-Shiseido-*`/`X-DHC-*`/`X-Amway-*` 等の化粧品・スキンケア・MLM 美容印自称が未検査
+
+- **問題**: `X-Shiseido-*` (資生堂)、`X-DHC-*` (DHC)、`X-Amway-*` (Amway)、`X-Kose-*`/`X-Pola-*`/`X-Fancl-*`/`X-Orbis-*`/`X-EsteeLauder-*`/`X-Lancome-*`/`X-Kiehls-*`/`X-Clinique-*`/`X-Revlon-*`/`X-MaryKay-*`/`X-Avon-*`/`X-NuSkin-*`/`X-Herbalife-*`/`X-Tupperware-*`/`X-MAC-*`/`X-NARS-*`/`X-ShuUemura-*`/`X-THREE-*`/`X-RMK-*`/`X-SUQQU-*`/`X-CPB-*`/`X-Decorte-*`/`X-Albion-*`/`X-Covermark-*`/`X-Kanebo-*`/`X-Sofina-*`/`X-Biore-*`/`X-Curel-*`/`X-Freeplus-*`/`X-Minon-*`/`X-HadaLabo-*`/`X-MelanoCC-*`/`X-ROHTO-*`/`X-Sante-*`/`X-Garnier-*`/`X-LOreal-*`/`X-Nivea-*`/`X-Neutrogena-*`/`X-CeraVe-*`/`X-Aveeno-*`/`X-Vaseline-*` は美機の通知記録 — 送信側が書くことは自称。無料モニター・サンプル詐欺の典型印。
+- **修正**: `Envelope` に `beauty_marks` + `has_beauty_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 美印の自署を問え。
+
+### Security — D532: `X-Kumon-*`/`X-Benesse-*`/`X-Shinkenzemi-*` 等の塾・語学・子供教育印自称が未検査
+
+- **問題**: `X-Kumon-*` (くもん)、`X-Benesse-*` (ベネッセ)、`X-Shinkenzemi-*` (進研ゼミ)、`X-Zkai-*`/`X-Toshin-*`/`X-Sundai-*`/`X-Kawaijuku-*`/`X-Meiko-*`/`X-Nichii-*`/`X-Gaba-*`/`X-AeonECC-*`/`X-ECC-*`/`X-NovaKids-*`/`X-Berlitz-*`/`X-Rosetta-*`/`X-Babbel-*`/`X-iTalki-*`/`X-Preply-*`/`X-Cambly-*`/`X-VIPKid-*`/`X-RareJob-*`/`X-NativeCamp-*`/`X-DMMeikaiwa-*`/`X-Prodigy-*`/`X-TypingClub-*`/`X-IXL-*`/`X-Khan-*`/`X-Sumdog-*`/`X-Smartick-*`/`X-EdClub-*`/`X-RazKids-*`/`X-ReadingEggs-*` は学習機の通知記録 — 送信側が書くことは自称。(`X-Duolingo-*`/`X-KhanAcademy-*` は D477 で検出済み)
+- **修正**: `Envelope` に `cram_marks` + `has_cram_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 学習印の自署を問え。
+
+### Security — D533: `X-Daiso-*`/`X-PG-*`/`X-Chewy-*` 等の日用品・消費財・100 円ショップ・ペット用品印自称が未検査
+
+- **問題**: `X-Daiso-*` (ダイソー)、`X-PG-*` (P&G)、`X-Chewy-*` (Chewy)、`X-Unilever-*`/`X-ColgatePalmolive-*`/`X-KimberlyClark-*`/`X-Reckitt-*`/`X-Henkel-*`/`X-Kao-*`/`X-Lion-*`/`X-Johnson-*`/`X-ScotchBrite-*`/`X-3M-*`/`X-Kobayashi-*`/`X-Earth-*`/`X-Estee-*`/`X-Seria-*`/`X-CanDo-*`/`X-Watts-*`/`X-3Coins-*`/`X-NaturalKitchen-*`/`X-FlyingTiger-*`/`X-PetSmart-*`/`X-Petco-*`/`X-Zooplus-*`/`X-Fressnapf-*`/`X-PetValu-*`/`X-AeonPet-*`/`X-KojimaPet-*`/`X-CainzPet-*` は日用品機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `fmcg_marks` + `has_fmcg_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 日用品印の自署を問え。
+
+
 ### Security — D528: `X-McDonalds-*`/`X-Starbucks-*`/`X-Sushiro-*` 等のファストフード・飲食チェーン印自称が未検査
 
 - **問題**: `X-McDonalds-*` (マクドナルド)、`X-Starbucks-*` (Starbucks)、`X-Dominos-*`/`X-KFC-*`/`X-Subway-*`/`X-BurgerKing-*`/`X-PizzaHut-*`/`X-Wendys-*`/`X-Chipotle-*`/`X-TacoBell-*`/`X-Dunkin-*`/`X-TimHortons-*`/`X-ChickFilA-*`/`X-PandaExpress-*`/`X-MosBurger-*`/`X-Sukiya-*`/`X-Yoshinoya-*`/`X-Matsuya-*`/`X-Saizeriya-*`/`X-Dennys-*`/`X-KuraSushi-*`/`X-Sushiro-*`/`X-HamaSushi-*`/`X-KappaSushi-*`/`X-Torikizoku-*`/`X-Skylark-*`/`X-Cocos-*`/`X-Jonathans-*`/`X-Bamiyan-*`/`X-RoyalHost-*`/`X-OliveGarden-*`/`X-CrackerBarrel-*`/`X-CheesecakeFactory-*`/`X-Nandos-*`/`X-Wagamama-*`/`X-Zizzi-*`/`X-Wetherspoons-*`/`X-Greggs-*`/`X-PretAManger-*` は食機の通知記録 — 送信側が書くことは自称。食事券・クーポン詐欺の典型印。(`X-Gusto-*` は D466 で検出済み)
