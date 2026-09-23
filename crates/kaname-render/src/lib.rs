@@ -1679,6 +1679,12 @@ pub struct Envelope {
     pub baby_marks: bool,
     /// `X-Hibiya-*`/`X-Hanacupid-*`/`X-Teleflora-*`/`X-Interflora-*`/`X-FTD-*` 等の花・フラワーギフト通知記録印を送信側が自称している (D583)
     pub flower_marks: bool,
+    /// `X-Bears-*`/`X-CaSy-*`/`X-Minimaid-*`/`X-Pinai-*`/`X-Taskaji-*`/`X-Osoujihonpo-*` 等の家事代行・ハウスクリーニング通知記録印を送信側が自称している (D584)
+    pub housekeeping_marks: bool,
+    /// `X-QVC-*`/`X-ShopChannel-*`/`X-Japanet-*`/`X-Bellemaison-*`/`X-Nissen-*`/`X-Cecile-*` 等の通販・TVショッピング通知記録印を送信側が自称している (D585)
+    pub mailorder_marks: bool,
+    /// `X-AichiLaw-*`/`X-TokyoMinerva-*`/`X-NihonPlum-*`/`X-DaiichiSogo-*`/`X-Avance-*`/`X-Sugiyama-*` 等の債務整理・過払い金通知記録印を送信側が自称している (D586)
+    pub debtrelief_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2140,6 +2146,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         consumerloan_marks: has_consumerloan_marks(hdr),
         baby_marks: has_baby_marks(hdr),
         flower_marks: has_flower_marks(hdr),
+        housekeeping_marks: has_housekeeping_marks(hdr),
+        mailorder_marks: has_mailorder_marks(hdr),
+        debtrelief_marks: has_debtrelief_marks(hdr),
     })
 }
 
@@ -10488,6 +10497,198 @@ fn has_flower_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Bears-*`/`X-CaSy-*`/`X-Minimaid-*`/`X-Pinai-*`/`X-Taskaji-*`/`X-Osoujihonpo-*`/`X-Kajita-*`/`X-Kajitaku-*`/`X-Mitsume-*`/`X-MaggieMaid-*`/`X-Iekeeping-*`/`X-Okatazuke-*`/`X-Edai-*`/`X-Housekeeping-*`/`X-Umamori-*`/`X-Cathand-*`/`X-TokyoOsoji-*`/`X-Maruzyou-*`/`X-Arukaji-*`/`X-Rakumama-*`/`X-Kajiapo-*`/`X-Osoji-*`/`X-MerryMaid-*`/`X-DuskinMaid-*`/`X-MollyMaid-*`/`X-Homejoy-*`/`X-Handy-*`/`X-Takl-*`/`X-Maids-*`/`X-Tidy-*`/`X-Takuji-*`/`X-Hitosaji-*`/`X-Hatarako-*`/`X-Grapes-*`/`X-Bikubo-*`/`X-Sansei-*`/`X-Daikou-*`/`X-PickMe-*`/`X-HouseCall-*`/`X-Zehitomo-*`/`X-Kurashino-*`/`X-Mitibata-*`/`X-Odegawa-*`/`X-Osamade-*`/`X-HouseKeeper-*`/`X-Sumai-*`/`X-Cocole-*`/`X-Asumi-*`/`X-Rakuchin-*`/`X-Suki-*`/`X-Aizin-*`/`X-Osekkai-*` (家事代行・ハウスクリーニングの通知記録) を送信側が自称しているかどうか。見積提示・定期契約・クリーニング代金の偽装は高齢者狙い詐欺の典型手口。
+fn has_housekeeping_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-bears-")
+            || l.starts_with("x-casy-")
+            || l.starts_with("x-minimaid-")
+            || l.starts_with("x-pinai-")
+            || l.starts_with("x-taskaji-")
+            || l.starts_with("x-osoujihonpo-")
+            || l.starts_with("x-kajita-")
+            || l.starts_with("x-kajitaku-")
+            || l.starts_with("x-mitsume-")
+            || l.starts_with("x-maggiemaid-")
+            || l.starts_with("x-iekeeping-")
+            || l.starts_with("x-okatazuke-")
+            || l.starts_with("x-edai-")
+            || l.starts_with("x-housekeeping-")
+            || l.starts_with("x-umamori-")
+            || l.starts_with("x-cathand-")
+            || l.starts_with("x-tokyoosoji-")
+            || l.starts_with("x-maruzyou-")
+            || l.starts_with("x-arukaji-")
+            || l.starts_with("x-rakumama-")
+            || l.starts_with("x-kajiapo-")
+            || l.starts_with("x-osoji-")
+            || l.starts_with("x-merrymaid-")
+            || l.starts_with("x-duskinmaid-")
+            || l.starts_with("x-mollymaid-")
+            || l.starts_with("x-homejoy-")
+            || l.starts_with("x-handy-")
+            || l.starts_with("x-takl-")
+            || l.starts_with("x-maids-")
+            || l.starts_with("x-tidy-")
+            || l.starts_with("x-takuji-")
+            || l.starts_with("x-hitosaji-")
+            || l.starts_with("x-hatarako-")
+            || l.starts_with("x-grapes-")
+            || l.starts_with("x-bikubo-")
+            || l.starts_with("x-sansei-")
+            || l.starts_with("x-daikou-")
+            || l.starts_with("x-pickme-")
+            || l.starts_with("x-housecall-")
+            || l.starts_with("x-zehitomo-")
+            || l.starts_with("x-kurashino-")
+            || l.starts_with("x-mitibata-")
+            || l.starts_with("x-odegawa-")
+            || l.starts_with("x-osamade-")
+            || l.starts_with("x-housekeeper-")
+            || l.starts_with("x-sumai-")
+            || l.starts_with("x-cocole-")
+            || l.starts_with("x-asumi-")
+            || l.starts_with("x-rakuchin-")
+            || l.starts_with("x-suki-")
+            || l.starts_with("x-aizin-")
+            || l.starts_with("x-osekkai-")
+    })
+}
+
+/// `X-QVC-*`/`X-ShopChannel-*`/`X-Japanet-*`/`X-Bellemaison-*`/`X-Nissen-*`/`X-Cecile-*`/`X-Dinos-*`/`X-Scroll-*`/`X-CatalogHouse-*`/`X-ShopJapan-*`/`X-OakLawn-*`/`X-Image-*`/`X-PeachJohn-*`/`X-Belluna-*`/`X-Felissimo-*`/`X-Halmek-*`/`X-Senchikai-*`/`X-NihonOnegai-*`/`X-ShoppingChannel-*`/`X-TVShop-*`/`X-HSN-*`/`X-Evine-*`/`X-IdealWorld-*`/`X-Highland-*`/`X-TJC-*`/`X-Qoo10Shop-*`/`X-HomeShopping-*`/`X-RakutenIchibaShop-*`/`X-PlusShop-*`/`X-Ikkyu-*`/`X-SelectShop-*`/`X-Tsuhanshop-*`/`X-KatazukeClub-*`/`X-Nippan-*`/`X-Rakuno-*`/`X-Yumiku-*`/`X-Vantan-*`/`X-Stylecover-*/X-DHCShop-*/`X-OtonaMuse-*`/`X-Rusia-*`/`X-Mikko-*`/`X-RyuRyu-*`/`X-Urara-*`/`X-Nolty-*`/`X-UrbanShop-*`/`X-Kumonoit-*`/`X-Sunao-*`/`X-Modus-*`/`X-RPric-*`/`X-Dante-*`/`X-Shimauma-*`/`X-PixelShop-*` (通信販売・TVショッピング・カタログ通販の通知記録) を送信側が自称しているかどうか。定期購入・商品未着・解約違約金の偽装は通販詐欺の典型手口。
+fn has_mailorder_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-qvc-")
+            || l.starts_with("x-shopchannel-")
+            || l.starts_with("x-japanet-")
+            || l.starts_with("x-bellemaison-")
+            || l.starts_with("x-nissen-")
+            || l.starts_with("x-cecile-")
+            || l.starts_with("x-dinos-")
+            || l.starts_with("x-scroll-")
+            || l.starts_with("x-cataloghouse-")
+            || l.starts_with("x-shopsjapan-")
+            || l.starts_with("x-shopjapan-")
+            || l.starts_with("x-oaklawn-")
+            || l.starts_with("x-image-")
+            || l.starts_with("x-peachjohn-")
+            || l.starts_with("x-belluna-")
+            || l.starts_with("x-felissimo-")
+            || l.starts_with("x-halmek-")
+            || l.starts_with("x-senchikai-")
+            || l.starts_with("x-nihononegai-")
+            || l.starts_with("x-shoppingchannel-")
+            || l.starts_with("x-tvshop-")
+            || l.starts_with("x-hsn-")
+            || l.starts_with("x-evine-")
+            || l.starts_with("x-idealworld-")
+            || l.starts_with("x-highland-")
+            || l.starts_with("x-tjc-")
+            || l.starts_with("x-qoo10shop-")
+            || l.starts_with("x-homeshopping-")
+            || l.starts_with("x-rakutenichibashop-")
+            || l.starts_with("x-plusshop-")
+            || l.starts_with("x-ikkyu-")
+            || l.starts_with("x-selectshop-")
+            || l.starts_with("x-tsuhanshop-")
+            || l.starts_with("x-katazukeclub-")
+            || l.starts_with("x-nippan-")
+            || l.starts_with("x-rakuno-")
+            || l.starts_with("x-yumiku-")
+            || l.starts_with("x-vantan-")
+            || l.starts_with("x-stylecover-")
+            || l.starts_with("x-dhcshop-")
+            || l.starts_with("x-otonamuse-")
+            || l.starts_with("x-rusia-")
+            || l.starts_with("x-mikko-")
+            || l.starts_with("x-ryuryu-")
+            || l.starts_with("x-urara-")
+            || l.starts_with("x-nolty-")
+            || l.starts_with("x-urbanshop-")
+            || l.starts_with("x-kumonoit-")
+            || l.starts_with("x-sunao-")
+            || l.starts_with("x-modus-")
+            || l.starts_with("x-shimauma-")
+            || l.starts_with("x-pixelshop-")
+    })
+}
+
+/// `X-AichiLaw-*`/`X-TokyoMinerva-*`/`X-NihonPlum-*`/`X-DaiichiSogo-*`/`X-HomeWon-*`/`X-WithYou-*`/`X-Avance-*`/`X-Hibari-*`/`X-Sugiyama-*`/`X-GreenLeaf-*`/`X-Masuda-*`/`X-Licio-*`/`X-Kabarai-*`/`X-Saimuseiri-*`/`X-Hitotohito-*`/`X-FrontierLaw-*`/`X-KokoroNoMori-*`/`X-Shihoushoshi-*`/`X-JMAssociates-*`/`X-LegalPro-*`/`X-NihonSaimu-*`/`X-TokiwaLaw-*`/`X-ShinyoLaw-*`/`X-SaiseiLaw-*`/`X-HikariLaw-*`/`X-MatsuriLaw-*`/`X-ChuoLaw-*`/`X-FrontierAdvisors-*`/`X-Kanbe-*`/`X-OgawaLaw-*`/`X-TamaruyaLaw-*`/`X-AikoLaw-*`/`X-Reisui-*`/`X-Tomorrow-*`/`X-SunriseLaw-*`/`X-MiraiLaw-*`/`X-HopeLaw-*`/`X-RenaissanceLaw-*`/`X-HarvestLaw-*`/`X-ArchLaw-*`/`X-BaseLaw-*`/`X-HikoLaw-*`/`X-TokyoLaw-*`/`X-OsakaLaw-*`/`X-NagoyaLaw-*`/`X-Kabaraikin-*`/`X-KanyuLaw-*`/`X-SaimuShori-*`/`X-MinnaSaimu-*`/`X-ToshoLaw-*`/`X-UraraLaw-*`/`X-NihonLaw-*`/`X-GrandLaw-*`/`X-FujiLaw-*`/`X-YamatoLaw-*` (債務整理・過払い金返還・自己破産の通知記録) を送信側が自称しているかどうか。過払い金報酬・債務整理手数料の偽装は債務者狙い詐欺の典型手口。
+fn has_debtrelief_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-aichilaw-")
+            || l.starts_with("x-tokyominerva-")
+            || l.starts_with("x-nihonplum-")
+            || l.starts_with("x-daiichisogo-")
+            || l.starts_with("x-homewon-")
+            || l.starts_with("x-withyou-")
+            || l.starts_with("x-avance-")
+            || l.starts_with("x-hibari-")
+            || l.starts_with("x-sugiyama-")
+            || l.starts_with("x-greenleaf-")
+            || l.starts_with("x-masuda-")
+            || l.starts_with("x-licio-")
+            || l.starts_with("x-kabarai-")
+            || l.starts_with("x-saimuseiri-")
+            || l.starts_with("x-hitotohito-")
+            || l.starts_with("x-frontierlaw-")
+            || l.starts_with("x-kokoronomori-")
+            || l.starts_with("x-shihoushoshi-")
+            || l.starts_with("x-jmassociates-")
+            || l.starts_with("x-legalpro-")
+            || l.starts_with("x-nihonsaimu-")
+            || l.starts_with("x-tokiwalaw-")
+            || l.starts_with("x-shinyolaw-")
+            || l.starts_with("x-saiselaw-")
+            || l.starts_with("x-hikarilaw-")
+            || l.starts_with("x-matsurilaw-")
+            || l.starts_with("x-chuolaw-")
+            || l.starts_with("x-frontieradvisors-")
+            || l.starts_with("x-kanbe-")
+            || l.starts_with("x-ogawalaw-")
+            || l.starts_with("x-tamaruyalaw-")
+            || l.starts_with("x-aikolaw-")
+            || l.starts_with("x-reisui-")
+            || l.starts_with("x-tomorrow-")
+            || l.starts_with("x-sunriselaw-")
+            || l.starts_with("x-mirailaw-")
+            || l.starts_with("x-hopelaw-")
+            || l.starts_with("x-renaissancelaw-")
+            || l.starts_with("x-harvestlaw-")
+            || l.starts_with("x-archlaw-")
+            || l.starts_with("x-baselaw-")
+            || l.starts_with("x-hikolaw-")
+            || l.starts_with("x-tokyolaw-")
+            || l.starts_with("x-osakalaw-")
+            || l.starts_with("x-nagoyalaw-")
+            || l.starts_with("x-kabaraikin-")
+            || l.starts_with("x-kanyulaw-")
+            || l.starts_with("x-saimushori-")
+            || l.starts_with("x-minnasaimu-")
+            || l.starts_with("x-tosholaw-")
+            || l.starts_with("x-uraralaw-")
+            || l.starts_with("x-nihonlaw-")
+            || l.starts_with("x-grandlaw-")
+            || l.starts_with("x-fujilaw-")
+            || l.starts_with("x-yamatolaw-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -17014,5 +17215,152 @@ X-Other: 1
 
 body";
     assert!(!has_flower_marks(clean));
+}
+
+#[test]
+fn scan_は房機印を検出する() {
+    let b1 = b"From: a@b
+X-Bears-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-CaSy-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-Minimaid-Notice: 1
+
+x";
+    let p1 = b"From: a@b
+X-Pinai-Flag: 1
+
+x";
+    let t1 = b"From: a@b
+X-Taskaji-Entry: 1
+
+x";
+    let o1 = b"From: a@b
+X-Osoujihonpo-Record: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kajita-Trace: 1
+
+x";
+    let z1 = b"From: a@b
+X-Zehitomo-Stamp: 1
+
+x";
+    assert!(has_housekeeping_marks(b1));
+    assert!(has_housekeeping_marks(c1));
+    assert!(has_housekeeping_marks(m1));
+    assert!(has_housekeeping_marks(p1));
+    assert!(has_housekeeping_marks(t1));
+    assert!(has_housekeeping_marks(o1));
+    assert!(has_housekeeping_marks(k1));
+    assert!(has_housekeeping_marks(z1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_housekeeping_marks(clean));
+}
+
+#[test]
+fn scan_は購機印を検出する() {
+    let q1 = b"From: a@b
+X-QVC-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-ShopChannel-Trace: 1
+
+x";
+    let j1 = b"From: a@b
+X-Japanet-Notice: 1
+
+x";
+    let b1 = b"From: a@b
+X-Bellemaison-Flag: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nissen-Entry: 1
+
+x";
+    let c1 = b"From: a@b
+X-Cecile-Record: 1
+
+x";
+    let d1 = b"From: a@b
+X-Dinos-Trace: 1
+
+x";
+    let f1 = b"From: a@b
+X-Felissimo-Stamp: 1
+
+x";
+    assert!(has_mailorder_marks(q1));
+    assert!(has_mailorder_marks(s1));
+    assert!(has_mailorder_marks(j1));
+    assert!(has_mailorder_marks(b1));
+    assert!(has_mailorder_marks(n1));
+    assert!(has_mailorder_marks(c1));
+    assert!(has_mailorder_marks(d1));
+    assert!(has_mailorder_marks(f1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_mailorder_marks(clean));
+}
+
+#[test]
+fn scan_は務機印を検出する() {
+    let a1 = b"From: a@b
+X-AichiLaw-Id: 1
+
+x";
+    let t1 = b"From: a@b
+X-TokyoMinerva-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-NihonPlum-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-DaiichiSogo-Flag: 1
+
+x";
+    let h1 = b"From: a@b
+X-HomeWon-Entry: 1
+
+x";
+    let w1 = b"From: a@b
+X-WithYou-Record: 1
+
+x";
+    let v1 = b"From: a@b
+X-Avance-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sugiyama-Stamp: 1
+
+x";
+    assert!(has_debtrelief_marks(a1));
+    assert!(has_debtrelief_marks(t1));
+    assert!(has_debtrelief_marks(n1));
+    assert!(has_debtrelief_marks(d1));
+    assert!(has_debtrelief_marks(h1));
+    assert!(has_debtrelief_marks(w1));
+    assert!(has_debtrelief_marks(v1));
+    assert!(has_debtrelief_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_debtrelief_marks(clean));
 }
 }
