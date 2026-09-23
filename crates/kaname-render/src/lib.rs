@@ -1793,6 +1793,12 @@ pub struct Envelope {
     pub theater_marks: bool,
     /// `X-Johnnys-*`/`X-Sakamichi-*`/`X-Akb48-*` 等のアイドル・声優・ファンクラブ印を送信側が自称する兆候 (D640)
     pub idol_marks: bool,
+    /// `X-Senkyo-*`/`X-Electionnavi-*`/`X-Electioncenter-*` 等の選挙・政党印を送信側が自称する兆候 (D641)
+    pub election_marks: bool,
+    /// `X-Rengou-*`/`X-Zenroren-*`/`X-Ishikai-*` 等の士業・職業団体・労働組合印を送信側が自称する兆候 (D642)
+    pub union_marks: bool,
+    /// `X-Drivingnavi-*`/`X-Drivingcenter-*`/`X-Drivingshop-*` 等の自動車教習所・免許印を送信側が自称する兆候 (D643)
+    pub drivingschool_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2311,6 +2317,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         museum_marks: has_museum_marks(hdr),
         theater_marks: has_theater_marks(hdr),
         idol_marks: has_idol_marks(hdr),
+        election_marks: has_election_marks(hdr),
+        union_marks: has_union_marks(hdr),
+        drivingschool_marks: has_drivingschool_marks(hdr),
     })
 }
 
@@ -14839,6 +14848,227 @@ fn has_idol_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-livemeetingpro-"))
 }
 
+/// `X-Senkyo-*`/`X-Electionnavi-*`/`X-Electioncenter-*`/`X-Electionshop-*`/`X-Electionpro-*`/`X-Electiondoctor-*`/`X-Electionrescue-*`/`X-Election24-*`/`X-Jimintou-*`/`X-Rikken-*`/`X-Koumei-*`/`X-Ishin-*`/`X-Kyousan-*`/`X-Kokumindou-*`/`X-Reiwa-*`/`X-Shamin-*`/`X-Senkyonavi-*`/`X-Senkyocenter-*`/`X-Senkyoshop-*`/`X-Senkyopro-*`/`X-Senkyodoctor-*`/`X-Senkyorescue-*`/`X-Senkyo24-*`/`X-Seijinavi-*`/`X-Seijicenter-*`/`X-Seijishop-*`/`X-Seijipro-*`/`X-Seijidoctor-*`/`X-Seijirescue-*`/`X-Seiji24-*`/`X-Seitonavi-*`/`X-Seitocenter-*`/`X-Seitoshop-*`/`X-Seitopro-*`/`X-Seitodoctor-*`/`X-Seitorescue-*`/`X-Seito24-*`/`X-Voterregistration-*`/`X-Kanboxnavi-*`/`X-Touhyounavi-*`/`X-Touhyoucenter-*`/`X-Touhyoushop-*`/`X-Touhyoupro-*`/`X-Electionmart-*`/`X-Electionplus-*`/`X-Electionsmart-*`/`X-Electionfamily-*`/`X-Senkyomart-*`/`X-Senkyoplus-*`/`X-Senkyosmart-*`/`X-Senkyofamily-*`/`X-Giinnavi-*`/`X-Giincenter-*`/`X-Giinshop-*`/`X-Giinpro-*`/`X-Giindoctor-*`/`X-Giinrescue-*`/`X-Giin24-*`/`X-Kouhoshanavi-*`/`X-Kouhoshacenter-*`/`X-Kouhoshashop-*`/`X-Kouhoshapro-*`/`X-Shuukainavi-*`/`X-Shuukaicenter-*`/`X-Shuukaishop-*`/`X-Shuukaipro-*` 等の選挙・政党印を送信側が自称する兆候を検出する
+fn has_election_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-senkyo-")
+            || l.starts_with("x-electionnavi-")
+            || l.starts_with("x-electioncenter-")
+            || l.starts_with("x-electionshop-")
+            || l.starts_with("x-electionpro-")
+            || l.starts_with("x-electiondoctor-")
+            || l.starts_with("x-electionrescue-")
+            || l.starts_with("x-election24-")
+            || l.starts_with("x-jimintou-")
+            || l.starts_with("x-rikken-")
+            || l.starts_with("x-koumei-")
+            || l.starts_with("x-ishin-")
+            || l.starts_with("x-kyousan-")
+            || l.starts_with("x-kokumindou-")
+            || l.starts_with("x-reiwa-")
+            || l.starts_with("x-shamin-")
+            || l.starts_with("x-senkyonavi-")
+            || l.starts_with("x-senkyocenter-")
+            || l.starts_with("x-senkyoshop-")
+            || l.starts_with("x-senkyopro-")
+            || l.starts_with("x-senkyodoctor-")
+            || l.starts_with("x-senkyorescue-")
+            || l.starts_with("x-senkyo24-")
+            || l.starts_with("x-seijinavi-")
+            || l.starts_with("x-seijicenter-")
+            || l.starts_with("x-seijishop-")
+            || l.starts_with("x-seijipro-")
+            || l.starts_with("x-seijidoctor-")
+            || l.starts_with("x-seijirescue-")
+            || l.starts_with("x-seiji24-")
+            || l.starts_with("x-seitonavi-")
+            || l.starts_with("x-seitocenter-")
+            || l.starts_with("x-seitoshop-")
+            || l.starts_with("x-seitopro-")
+            || l.starts_with("x-seitodoctor-")
+            || l.starts_with("x-seitorescue-")
+            || l.starts_with("x-seito24-")
+            || l.starts_with("x-voterregistration-")
+            || l.starts_with("x-kanboxnavi-")
+            || l.starts_with("x-touhyounavi-")
+            || l.starts_with("x-touhyoucenter-")
+            || l.starts_with("x-touhyoushop-")
+            || l.starts_with("x-touhyoupro-")
+            || l.starts_with("x-electionmart-")
+            || l.starts_with("x-electionplus-")
+            || l.starts_with("x-electionsmart-")
+            || l.starts_with("x-electionfamily-")
+            || l.starts_with("x-senkyomart-")
+            || l.starts_with("x-senkyoplus-")
+            || l.starts_with("x-senkyosmart-")
+            || l.starts_with("x-senkyofamily-")
+            || l.starts_with("x-giinnavi-")
+            || l.starts_with("x-giincenter-")
+            || l.starts_with("x-giinshop-")
+            || l.starts_with("x-giinpro-")
+            || l.starts_with("x-giindoctor-")
+            || l.starts_with("x-giinrescue-")
+            || l.starts_with("x-giin24-")
+            || l.starts_with("x-kouhoshanavi-")
+            || l.starts_with("x-kouhoshacenter-")
+            || l.starts_with("x-kouhoshashop-")
+            || l.starts_with("x-kouhoshapro-")
+            || l.starts_with("x-shuukainavi-")
+            || l.starts_with("x-shuukaicenter-")
+            || l.starts_with("x-shuukaishop-")
+            || l.starts_with("x-shuukaipro-"))
+}
+
+/// `X-Rengou-*`/`X-Zenroren-*`/`X-Ishikai-*`/`X-Shikaishikai-*`/`X-Yakuzai-*`/`X-Kango-*`/`X-Bengoshi-*`/`X-Kaihoken-*`/`X-Zeirishikai-*`/`X-Shakenshi-*`/`X-Gyouseishoshi-*`/`X-Unionnavi-*`/`X-Unioncenter-*`/`X-Unionshop-*`/`X-Unionpro-*`/`X-Uniondoctor-*`/`X-Unionrescue-*`/`X-Union24-*`/`X-Rodokumiai-*`/`X-Shokugyounavi-*`/`X-Shokugyoucenter-*`/`X-Shokugyoushop-*`/`X-Shokugyoupro-*`/`X-Kumainavi-*`/`X-Kumaicenter-*`/`X-Kumaishop-*`/`X-Kumaipro-*`/`X-Kumaidoctor-*`/`X-Kumairescue-*`/`X-Kumai24-*`/`X-Kyoushokai-*`/`X-Nichitei-*`/`X-Nichishikai-*`/`X-Nichikan-*`/`X-Shokuren-*`/`X-Kanzei-*`/`X-Koukuukai-*`/`X-Unionmart-*`/`X-Unionplus-*`/`X-Unionsmart-*`/`X-Unionfamily-*`/`X-Kumaimart-*`/`X-Kumaiplus-*`/`X-Kumaismart-*`/`X-Kumaifamily-*`/`X-Bengoshinavi-*`/`X-Bengoshicenter-*`/`X-Bengoshishop-*`/`X-Bengoshipro-*`/`X-Zeirishinavi-*`/`X-Zeirishicenter-*`/`X-Zeirishishop-*`/`X-Zeirishipro-*`/`X-Shakaineren-*`/`X-Jichiren-*`/`X-Kyoushokuin-*`/`X-Yubinkyoku-*`/`X-Koenkainavi-*`/`X-Koenkaicenter-*`/`X-Koenkaishop-*`/`X-Koenkaipro-*` 等の士業・職業団体・労働組合印を送信側が自称する兆候を検出する
+fn has_union_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-rengou-")
+            || l.starts_with("x-zenroren-")
+            || l.starts_with("x-ishikai-")
+            || l.starts_with("x-shikaishikai-")
+            || l.starts_with("x-yakuzai-")
+            || l.starts_with("x-kango-")
+            || l.starts_with("x-bengoshi-")
+            || l.starts_with("x-kaihoken-")
+            || l.starts_with("x-zeirishikai-")
+            || l.starts_with("x-shakenshi-")
+            || l.starts_with("x-gyouseishoshi-")
+            || l.starts_with("x-unionnavi-")
+            || l.starts_with("x-unioncenter-")
+            || l.starts_with("x-unionshop-")
+            || l.starts_with("x-unionpro-")
+            || l.starts_with("x-uniondoctor-")
+            || l.starts_with("x-unionrescue-")
+            || l.starts_with("x-union24-")
+            || l.starts_with("x-rodokumiai-")
+            || l.starts_with("x-shokugyounavi-")
+            || l.starts_with("x-shokugyoucenter-")
+            || l.starts_with("x-shokugyoushop-")
+            || l.starts_with("x-shokugyoupro-")
+            || l.starts_with("x-kumainavi-")
+            || l.starts_with("x-kumaicenter-")
+            || l.starts_with("x-kumaishop-")
+            || l.starts_with("x-kumaipro-")
+            || l.starts_with("x-kumaidoctor-")
+            || l.starts_with("x-kumairescue-")
+            || l.starts_with("x-kumai24-")
+            || l.starts_with("x-kyoushokai-")
+            || l.starts_with("x-nichitei-")
+            || l.starts_with("x-nichishikai-")
+            || l.starts_with("x-nichikan-")
+            || l.starts_with("x-shokuren-")
+            || l.starts_with("x-kanzei-")
+            || l.starts_with("x-koukuukai-")
+            || l.starts_with("x-unionmart-")
+            || l.starts_with("x-unionplus-")
+            || l.starts_with("x-unionsmart-")
+            || l.starts_with("x-unionfamily-")
+            || l.starts_with("x-kumaimart-")
+            || l.starts_with("x-kumaiplus-")
+            || l.starts_with("x-kumaismart-")
+            || l.starts_with("x-kumaifamily-")
+            || l.starts_with("x-bengoshinavi-")
+            || l.starts_with("x-bengoshicenter-")
+            || l.starts_with("x-bengoshishop-")
+            || l.starts_with("x-bengoshipro-")
+            || l.starts_with("x-zeirishinavi-")
+            || l.starts_with("x-zeirishicenter-")
+            || l.starts_with("x-zeirishishop-")
+            || l.starts_with("x-zeirishipro-")
+            || l.starts_with("x-shakaineren-")
+            || l.starts_with("x-jichiren-")
+            || l.starts_with("x-kyoushokuin-")
+            || l.starts_with("x-yubinkyoku-")
+            || l.starts_with("x-koenkainavi-")
+            || l.starts_with("x-koenkaicenter-")
+            || l.starts_with("x-koenkaishop-")
+            || l.starts_with("x-koenkaipro-"))
+}
+
+/// `X-Drivingnavi-*`/`X-Drivingcenter-*`/`X-Drivingshop-*`/`X-Drivingpro-*`/`X-Drivingdoctor-*`/`X-Drivingrescue-*`/`X-Driving24-*`/`X-Kyousyuujonavi-*`/`X-Kyousyuujocenter-*`/`X-Kyousyuujoshop-*`/`X-Kyousyuujopro-*`/`X-Kyousyuujodoctor-*`/`X-Kyousyuujorescue-*`/`X-Kyousyuujo24-*`/`X-Gasshukunavi-*`/`X-Gasshukucenter-*`/`X-Gasshukushop-*`/`X-Gasshukupro-*`/`X-Gasshukudoctor-*`/`X-Gasshukurescue-*`/`X-Gasshuku24-*`/`X-Menkyonavi-*`/`X-Menkyocenter-*`/`X-Menkyoshop-*`/`X-Menkyopro-*`/`X-Menkyodoctor-*`/`X-Menkyorescue-*`/`X-Menkyo24-*`/`X-Jidoushagakkounavi-*`/`X-Jidoushagakkoucenter-*`/`X-Jidoushagakkoushop-*`/`X-Jidoushagakkoupro-*`/`X-Untenshuuryoujounavi-*`/`X-Untenshuuryoujocenter-*`/`X-Untenshuuryoujoshop-*`/`X-Untenshuuryoujopro-*`/`X-Kyourikimajo-*`/`X-Alcc-*`/`X-Fujidriving-*`/`X-Drivingmart-*`/`X-Drivingplus-*`/`X-Drivingsmart-*`/`X-Drivingfamily-*`/`X-Menkyomart-*`/`X-Menkyoplus-*`/`X-Menkyosmart-*`/`X-Menkyofamily-*`/`X-Kyousyuujomart-*`/`X-Kyousyuujoplus-*`/`X-Kyousyuujosmart-*`/`X-Kyousyuujofamily-*`/`X-Mikaeshinavi-*`/`X-Mikaeshicenter-*`/`X-Mikaeshishop-*`/`X-Mikaeshipro-*`/`X-Hayaorinavi-*`/`X-Hayaoricenter-*`/`X-Hayaorishop-*`/`X-Hayaoripro-*`/`X-Shutokennavi-*`/`X-Shutokencenter-*`/`X-Shutokenshop-*`/`X-Shutokenpro-*`/`X-Kousokunavi-*`/`X-Kousokucenter-*`/`X-Kousokushop-*`/`X-Kousokupro-*` 等の自動車教習所・免許印を送信側が自称する兆候を検出する
+fn has_drivingschool_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-drivingnavi-")
+            || l.starts_with("x-drivingcenter-")
+            || l.starts_with("x-drivingshop-")
+            || l.starts_with("x-drivingpro-")
+            || l.starts_with("x-drivingdoctor-")
+            || l.starts_with("x-drivingrescue-")
+            || l.starts_with("x-driving24-")
+            || l.starts_with("x-kyousyuujonavi-")
+            || l.starts_with("x-kyousyuujocenter-")
+            || l.starts_with("x-kyousyuujoshop-")
+            || l.starts_with("x-kyousyuujopro-")
+            || l.starts_with("x-kyousyuujodoctor-")
+            || l.starts_with("x-kyousyuujorescue-")
+            || l.starts_with("x-kyousyuujo24-")
+            || l.starts_with("x-gasshukunavi-")
+            || l.starts_with("x-gasshukucenter-")
+            || l.starts_with("x-gasshukushop-")
+            || l.starts_with("x-gasshukupro-")
+            || l.starts_with("x-gasshukudoctor-")
+            || l.starts_with("x-gasshukurescue-")
+            || l.starts_with("x-gasshuku24-")
+            || l.starts_with("x-menkyonavi-")
+            || l.starts_with("x-menkyocenter-")
+            || l.starts_with("x-menkyoshop-")
+            || l.starts_with("x-menkyopro-")
+            || l.starts_with("x-menkyodoctor-")
+            || l.starts_with("x-menkyorescue-")
+            || l.starts_with("x-menkyo24-")
+            || l.starts_with("x-jidoushagakkounavi-")
+            || l.starts_with("x-jidoushagakkoucenter-")
+            || l.starts_with("x-jidoushagakkoushop-")
+            || l.starts_with("x-jidoushagakkoupro-")
+            || l.starts_with("x-untenshuuryoujounavi-")
+            || l.starts_with("x-untenshuuryoujocenter-")
+            || l.starts_with("x-untenshuuryoujoshop-")
+            || l.starts_with("x-untenshuuryoujopro-")
+            || l.starts_with("x-kyourikimajo-")
+            || l.starts_with("x-alcc-")
+            || l.starts_with("x-fujidriving-")
+            || l.starts_with("x-drivingmart-")
+            || l.starts_with("x-drivingplus-")
+            || l.starts_with("x-drivingsmart-")
+            || l.starts_with("x-drivingfamily-")
+            || l.starts_with("x-menkyomart-")
+            || l.starts_with("x-menkyoplus-")
+            || l.starts_with("x-menkyosmart-")
+            || l.starts_with("x-menkyofamily-")
+            || l.starts_with("x-kyousyuujomart-")
+            || l.starts_with("x-kyousyuujoplus-")
+            || l.starts_with("x-kyousyuujosmart-")
+            || l.starts_with("x-kyousyuujofamily-")
+            || l.starts_with("x-mikaeshinavi-")
+            || l.starts_with("x-mikaeshicenter-")
+            || l.starts_with("x-mikaeshishop-")
+            || l.starts_with("x-mikaeshipro-")
+            || l.starts_with("x-hayaorinavi-")
+            || l.starts_with("x-hayaoricenter-")
+            || l.starts_with("x-hayaorishop-")
+            || l.starts_with("x-hayaoripro-")
+            || l.starts_with("x-shutokennavi-")
+            || l.starts_with("x-shutokencenter-")
+            || l.starts_with("x-shutokenshop-")
+            || l.starts_with("x-shutokenpro-")
+            || l.starts_with("x-kousokunavi-")
+            || l.starts_with("x-kousokucenter-")
+            || l.starts_with("x-kousokushop-")
+            || l.starts_with("x-kousokupro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -23688,5 +23918,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_idol_marks(clean));
+    }
+    #[test]
+    fn scan_は選機印を検出する() {
+        for raw in [
+            br"X-Senkyo-Alert: 1",
+            br"X-ElectionNavi-Notice: 1",
+            br"X-Jimintou-Info: 1",
+            br"X-Rikken-Report: 1",
+            br"X-Koumei-Bulletin: 1",
+            br"X-Ishin-News: 1",
+            br"X-SeijiNavi-Flash: 1",
+            br"X-TouhyouNavi-Release: 1",
+        ] {
+            assert!(has_election_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_election_marks(clean));
+    }
+
+    #[test]
+    fn scan_は士機印を検出する() {
+        for raw in [
+            br"X-Rengou-Alert: 1",
+            br"X-Zenroren-Notice: 1",
+            br"X-Ishikai-Info: 1",
+            br"X-Bengoshi-Report: 1",
+            br"X-UnionNavi-Bulletin: 1",
+            br"X-RodoKumiai-News: 1",
+            br"X-Zeirishikai-Flash: 1",
+            br"X-KyouShokai-Release: 1",
+        ] {
+            assert!(has_union_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_union_marks(clean));
+    }
+
+    #[test]
+    fn scan_は習機印を検出する() {
+        for raw in [
+            br"X-DrivingNavi-Alert: 1",
+            br"X-KyousyuujoNavi-Notice: 1",
+            br"X-GasshukuNavi-Info: 1",
+            br"X-MenkyoNavi-Report: 1",
+            br"X-JidoushaGakkouNavi-Bulletin: 1",
+            br"X-UntenshuuryoujoNavi-News: 1",
+            br"X-Kyourikimajo-Flash: 1",
+            br"X-Alcc-Release: 1",
+        ] {
+            assert!(has_drivingschool_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_drivingschool_marks(clean));
     }
 }
