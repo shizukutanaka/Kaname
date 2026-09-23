@@ -1071,7 +1071,6 @@ fn has_anonymous_attachment(env: &kaname_render::Envelope) -> bool {
     env.attachments.iter().any(|a| a.filename.trim().is_empty())
 }
 
-
 /// D164: From ヘッダの複数アドレス / Sender ヘッダ不整合の兆候を返す。
 ///
 /// RFC 5322 §3.6.2 — From が複数アドレスを持つ場合、実送信者を示す
