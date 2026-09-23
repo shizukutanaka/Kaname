@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D522: `X-JREast-*`/`X-Tokyu-*`/`X-Amtrak-*`/`X-DeutscheBahn-*`/`X-SNCF-*`/`X-Kintetsu-*` 等の鉄道・公共交通印自称が未検査
+
+- **問題**: `X-JREast-*` (JR東日本)、`X-Tokyu-*` (東急)、`X-Amtrak-*` (Amtrak)、`X-JRWest-*`/`X-JRCentral-*`/`X-JRKyushu-*`/`X-JRHokkaido-*`/`X-Odakyu-*`/`X-Keikyu-*`/`X-Keio-*`/`X-Seibu-*`/`X-Tobu-*`/`X-Hankyu-*`/`X-Hanshin-*`/`X-Kintetsu-*`/`X-Nankai-*`/`X-Nishitetsu-*`/`X-TokyoMetro-*`/`X-DeutscheBahn-*`/`X-SNCF-*`/`X-Trenitalia-*`/`X-Eurostar-*`/`X-Thalys-*`/`X-NSInternational-*`/`X-SBB-*`/`X-Renfe-*`/`X-IRCTC-*`/`X-ViaRail-*`/`X-KMB-*`/`X-MTR-*`/`X-TOEI-*`/`X-OsakaMetro-*`/`X-KyotoSubway-*`/`X-YokohamaSubway-*`/`X-SapporoSubway-*`/`X-SendaiSubway-*`/`X-NagoyaSubway-*` は軌機の通知記録 — 送信側が書くことは自称。乗車券・ポイント詐欺の典型印。
+- **修正**: `Envelope` に `rail_marks` + `has_rail_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 軌印の自署を問え。
+
+### Security — D523: `X-Clio-*`/`X-LegalZoom-*`/`X-Westlaw-*`/`X-PACER-*`/`X-Relativity-*`/`X-Nuix-*` 等の法務・法曹実務印自称が未検査
+
+- **問題**: `X-Clio-*` (Clio)、`X-LegalZoom-*` (LegalZoom)、`X-Westlaw-*` (Westlaw)、`X-RocketLawyer-*`/`X-PACER-*`/`X-CourtListener-*`/`X-ThomsonReuters-*`/`X-CaseText-*`/`X-LinkSquares-*`/`X-LegalServer-*`/`X-Filevine-*`/`X-MyCase-*`/`X-PracticePanther-*`/`X-Smokeball-*`/`X-CosmoLex-*`/`X-ZolaSuite-*`/`X-CareT-*`/`X-AbacusLaw-*`/`X-Actionstep-*`/`X-Centerbase-*`/`X-Litify-*`/`X-NeotaLogic-*`/`X-HotDocs-*`/`X-ContractPodAi-*`/`X-Relativity-*`/`X-Everlaw-*`/`X-Logikcull-*`/`X-Disco-*`/`X-Reveal-*`/`X-Exterro-*`/`X-Nuix-*` は法機の通知記録 — 送信側が書くことは自称。(`X-LexisNexis-*`/`X-Ironclad-*`/`X-Evisort-*`/`X-Juro-*`/`X-Icertis-*`/`X-Agiloft-*`/`X-Conga-*` は D478 で検出済み)
+- **修正**: `Envelope` に `legal_marks` + `has_legal_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 法印の自署を問え。
+
+### Security — D524: `X-Tinder-*`/`X-Bumble-*`/`X-Hinge-*`/`X-Pairs-*`/`X-Omiai-*`/`X-Match-*` 等の出会い系・マッチングアプリ印自称が未検査
+
+- **問題**: `X-Tinder-*` (Tinder)、`X-Bumble-*` (Bumble)、`X-Pairs-*` (Pairs)、`X-Hinge-*`/`X-Match-*`/`X-OkCupid-*`/`X-Grindr-*`/`X-Omiai-*`/`X-Tapple-*`/`X-With-*`/`X-Happn-*`/`X-CoffeeMeetsBagel-*`/`X-Zoosk-*`/`X-eHarmony-*`/`X-Badoo-*`/`X-Tantan-*`/`X-Momo-*`/`X-Paktor-*`/`X-TheLeague-*`/`X-Raya-*`/`X-Feeld-*`/`X-HER-*`/`X-Thursday-*`/`X-Snack-*` は遇機の通知記録 — 送信側が書くことは自称。ロマンス詐欺の典型印。
+- **修正**: `Envelope` に `dating_marks` + `has_dating_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 遇印の自署を問え。
+
+
 ### Security — D519: `X-Geico-*`/`X-AXA-*`/`X-TokioMarine-*`/`X-StateFarm-*`/`X-MetLife-*`/`X-NipponLife-*` 等の保険会社印自称が未検査
 
 - **問題**: `X-Geico-*` (GEICO)、`X-AXA-*` (AXA)、`X-TokioMarine-*` (東京海上)、`X-StateFarm-*`/`X-Progressive-*`/`X-Allstate-*`/`X-Allianz-*`/`X-Zurich-*`/`X-AIG-*`/`X-MetLife-*`/`X-Prudential-*`/`X-Aflac-*`/`X-LibertyMutual-*`/`X-Travelers-*`/`X-Nationwide-*`/`X-Chubb-*`/`X-Sompo-*`/`X-MSAD-*`/`X-DaiichiLife-*`/`X-NipponLife-*`/`X-MeijiYasuda-*`/`X-T&D-*`/`X-Manulife-*`/`X-SunLife-*`/`X-Aviva-*`/`X-Generali-*`/`X-Lemonade-*`/`X-OscarHealth-*`/`X-Academy-*`/`X-Everest-*`/`X-ArchCapital-*`/`X-RenaissanceRe-*`/`X-Hanover-*`/`X-CNA-*`/`X-Markel-*`/`X-Beazley-*`/`X-Hiscox-*`/`X-TokioKiln-*` は保機の通知記録 — 送信側が書くことは自称。保険金・解約返戻金詐欺の典型印。

@@ -1468,6 +1468,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D522: 鉄道・公共交通印自称
+    if env.rail_marks {
+        render_risks.push(
+            "X-JREast-*/X-Tokyu-*/X-Amtrak-*/X-DeutscheBahn-*/X-SNCF-*/X-Kintetsu-*/X-TokyoMetro-*/X-Odakyu-* 等 — 軌機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D523: 法務・法曹実務印自称
+    if env.legal_marks {
+        render_risks.push(
+            "X-Clio-*/X-LegalZoom-*/X-Westlaw-*/X-PACER-*/X-Relativity-*/X-Nuix-*/X-Filevine-*/X-MyCase-* 等 — 法機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D524: 出会い系・マッチングアプリ印自称
+    if env.dating_marks {
+        render_risks.push(
+            "X-Tinder-*/X-Bumble-*/X-Hinge-*/X-Pairs-*/X-Omiai-*/X-Match-*/X-Grindr-*/X-eHarmony-* 等 — 遇機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
