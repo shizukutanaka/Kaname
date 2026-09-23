@@ -335,6 +335,25 @@ pub struct Envelope {
     /// DMARC 運用・フィッシング評価印があるか — 評価機の記録を
     /// 送信側が自称する兆候 (D455)。
     pub phish_eval_marks: bool,
+    /// `X-Bugzilla-*`/`X-Phabricator-*`/`X-Discourse-*`/`X-YouTrack-*`/
+    /// `X-MediaWiki-*`/`X-phpBB-*`/`X-XenForo-*`/`X-Invision-*`/
+    /// `X-vBulletin-*`/`X-Drupal-*`/`X-Moodle-*`/`X-Redmine-*` 等の
+    /// フォーラム・課題管理印があるか — フォーラム・課題機の通知
+    /// 記録を送信側が自称する兆候 (D456)。
+    pub forum_issue_marks: bool,
+    /// `X-GlobalRelay-*`/`X-Smarsh-*`/`X-ZL-*`/`X-Mimosa-*`/
+    /// `X-Jatheon-*`/`X-ArcTitan-*`/`X-MailStore-*`/`X-Cryoserver-*`/
+    /// `X-CommVault-*`/`X-Veritas-*`/`X-EVault-*`/`X-MetaLogix-*` 等の
+    /// アーカイブ・コンプライアンス印があるか — アーカイブ機の
+    /// 記録を送信側が自称する兆候 (D457)。
+    pub archive_marks: bool,
+    /// `X-Sangfor-*`/`X-NSFOCUS-*`/`X-TopSec-*`/`X-Hillstone-*`/
+    /// `X-Venustech-*`/`X-Huawei-*`/`X-H3C-*`/`X-LeadSec-*`/
+    /// `X-Qihoo-*`/`X-Qianxin-*`/`X-Antiy-*`/`X-Rising-*`/
+    /// `X-Kingsoft-*`/`X-DBAppSecurity-*`/`X-DPTech-*` 等の
+    /// 中国系セキュリティ製品印があるか — 製品の検査記録を
+    /// 送信側が自称する兆候 (D458)。
+    pub cn_sec_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -651,6 +670,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         eu_isp2_marks: has_eu_isp2_marks(raw),
         virus_scan_marks: has_virus_scan_marks(raw),
         phish_eval_marks: has_phish_eval_marks(raw),
+        forum_issue_marks: has_forum_issue_marks(raw),
+        archive_marks: has_archive_marks(raw),
+        cn_sec_marks: has_cn_sec_marks(raw),
     })
 }
 
@@ -2138,6 +2160,112 @@ fn has_phish_eval_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-phishtank-")
             || l.starts_with("x-openphish-")
             || l.starts_with("x-abnormal-")
+    })
+}
+
+/// `X-Bugzilla-*`/`X-Phabricator-*`/`X-Phorge-*`/`X-Discourse-*`/
+/// `X-YouTrack-*`/`X-MediaWiki-*`/`X-Redmine-*`/`X-Mantis-*`/
+/// `X-Trac-*`/`X-phpBB-*`/`X-XenForo-*`/`X-Invision-*`/
+/// `X-vBulletin-*`/`X-Flarum-*`/`X-SMF-*`/`X-MyBB-*`/`X-NodeBB-*`/
+/// `X-Drupal-*`/`X-Joomla-*`/`X-Moodle-*` 等のフォーラム・課題
+/// 管理印があるか判定する (D456)。
+///
+/// `X-Bugzilla-Reason`/`X-Bugzilla-Type` (Bugzilla 通知 — 公式
+/// 文書)、`X-Discourse-*` (Discourse)、`X-YouTrack-*` (YouTrack)
+/// はフォーラム・課題機の通知記録 — 送信側から届くこれは自称。
+fn has_forum_issue_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-bugzilla-")
+            || l.starts_with("x-phabricator-")
+            || l.starts_with("x-phorge-")
+            || l.starts_with("x-discourse-")
+            || l.starts_with("x-youtrack-")
+            || l.starts_with("x-mediawiki-")
+            || l.starts_with("x-redmine-")
+            || l.starts_with("x-mantis-")
+            || l.starts_with("x-trac-")
+            || l.starts_with("x-phpbb-")
+            || l.starts_with("x-xenforo-")
+            || l.starts_with("x-invision-")
+            || l.starts_with("x-vbulletin-")
+            || l.starts_with("x-flarum-")
+            || l.starts_with("x-smf-")
+            || l.starts_with("x-mybb-")
+            || l.starts_with("x-nodebb-")
+            || l.starts_with("x-drupal-")
+            || l.starts_with("x-joomla-")
+            || l.starts_with("x-moodle-")
+    })
+}
+
+/// `X-GlobalRelay-*`/`X-Smarsh-*`/`X-ZL-*`/`X-ZLTech-*`/`X-Mimosa-*`/
+/// `X-Jatheon-*`/`X-ArcTitan-*`/`X-MailStore-*`/`X-Cryoserver-*`/
+/// `X-CommVault-*`/`X-Veritas-*`/`X-EVault-*`/`X-MetaLogix-*`/
+/// `X-SourceOne-*`/`X-ES1-*` 等のアーカイブ・コンプライアンス印が
+/// あるか判定する (D457)。
+///
+/// `X-GlobalRelay-*` (Global Relay 記録保持)、`X-MailStore-*`
+/// (MailStore Server)、`X-Jatheon-*`/`X-ArcTitan-*` はアーカイブ
+/// 機の記録 — 送信側から届くこれは自称。
+fn has_archive_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-globalrelay-")
+            || l.starts_with("x-smarsh-")
+            || l.starts_with("x-zl-")
+            || l.starts_with("x-zltech-")
+            || l.starts_with("x-mimosa-")
+            || l.starts_with("x-jatheon-")
+            || l.starts_with("x-arctitan-")
+            || l.starts_with("x-mailstore-")
+            || l.starts_with("x-cryoserver-")
+            || l.starts_with("x-commvault-")
+            || l.starts_with("x-veritas-")
+            || l.starts_with("x-evault-")
+            || l.starts_with("x-metalogix-")
+            || l.starts_with("x-sourceone-")
+            || l.starts_with("x-es1-")
+    })
+}
+
+/// `X-Sangfor-*`/`X-NSFOCUS-*`/`X-TopSec-*`/`X-Hillstone-*`/
+/// `X-Venustech-*`/`X-Huawei-*`/`X-H3C-*`/`X-LeadSec-*`/
+/// `X-Qihoo-*`/`X-Qianxin-*`/`X-Antiy-*`/`X-Rising-*`/
+/// `X-Jiangmin-*`/`X-Kingsoft-*`/`X-DBAppSecurity-*`/`X-DPTech-*`
+/// 等の中国系セキュリティ製品印があるか判定する (D458)。
+///
+/// `X-Sangfor-*` (Sangfor)、`X-NSFOCUS-*` (緑盟科技)、
+/// `X-Rising-*` (瑞星)、`X-Antiy-*` (安天) は製品の検査記録 —
+/// 送信側から届くこれは自称。
+fn has_cn_sec_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sangfor-")
+            || l.starts_with("x-nsfocus-")
+            || l.starts_with("x-topsec-")
+            || l.starts_with("x-hillstone-")
+            || l.starts_with("x-venustech-")
+            || l.starts_with("x-huawei-")
+            || l.starts_with("x-h3c-")
+            || l.starts_with("x-leadsec-")
+            || l.starts_with("x-qihoo-")
+            || l.starts_with("x-qianxin-")
+            || l.starts_with("x-antiy-")
+            || l.starts_with("x-rising-")
+            || l.starts_with("x-jiangmin-")
+            || l.starts_with("x-kingsoft-")
+            || l.starts_with("x-dbappsecurity-")
+            || l.starts_with("x-dptech-")
     })
 }
 
@@ -5261,6 +5389,72 @@ mod tests {
         assert!(has_phish_eval_marks(a1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_phish_eval_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフォーラム課題管理印を検出する() {
+        let b1 = b"X-Bugzilla-Reason: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(b1));
+        let p1 = b"X-Phabricator-Stamp: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(p1));
+        let d1 = b"X-Discourse-Topic-Id: 1\r\n\r\nx";
+        assert!(has_forum_issue_marks(d1));
+        let y1 = b"X-YouTrack-Project: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(y1));
+        let m1 = b"X-MediaWiki-Message: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(m1));
+        let r1 = b"X-Redmine-Issue: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(r1));
+        let x1 = b"X-XenForo-User: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(x1));
+        let s1 = b"X-SMF-Topic: x\r\n\r\nx";
+        assert!(has_forum_issue_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_forum_issue_marks(clean));
+    }
+
+    #[test]
+    fn scan_はアーカイブ印を検出する() {
+        let g1 = b"X-GlobalRelay-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(g1));
+        let s1 = b"X-Smarsh-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(s1));
+        let z1 = b"X-ZL-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(z1));
+        let m1 = b"X-Mimosa-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(m1));
+        let j1 = b"X-Jatheon-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(j1));
+        let a1 = b"X-ArcTitan-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(a1));
+        let m2 = b"X-MailStore-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(m2));
+        let c1 = b"X-CommVault-Archive: x\r\n\r\nx";
+        assert!(has_archive_marks(c1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_archive_marks(clean));
+    }
+
+    #[test]
+    fn scan_は中国系セキュリティ製品印を検出する() {
+        let s1 = b"X-Sangfor-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(s1));
+        let n1 = b"X-NSFOCUS-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(n1));
+        let t1 = b"X-TopSec-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(t1));
+        let h1 = b"X-Hillstone-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(h1));
+        let v1 = b"X-Venustech-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(v1));
+        let h2 = b"X-Huawei-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(h2));
+        let r1 = b"X-Rising-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(r1));
+        let a1 = b"X-Antiy-Spam: x\r\n\r\nx";
+        assert!(has_cn_sec_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cn_sec_marks(clean));
     }
 }
 

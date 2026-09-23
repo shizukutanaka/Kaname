@@ -940,6 +940,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D456: フォーラム・課題管理印自称
+    if env.forum_issue_marks {
+        render_risks.push(
+            "X-Bugzilla-*/X-Phabricator-*/X-Discourse-*/X-YouTrack-*/X-phpBB-*/X-XenForo-* 等 — フォーラム・課題機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D457: アーカイブ・コンプライアンス印自称
+    if env.archive_marks {
+        render_risks.push(
+            "X-GlobalRelay-*/X-Smarsh-*/X-ZL-*/X-Mimosa-*/X-Jatheon-*/X-MailStore-* 等 — アーカイブ機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D458: 中国系セキュリティ製品印自称
+    if env.cn_sec_marks {
+        render_risks.push(
+            "X-Sangfor-*/X-NSFOCUS-*/X-TopSec-*/X-Hillstone-*/X-Rising-*/X-Kingsoft-* 等 — 製品の検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
