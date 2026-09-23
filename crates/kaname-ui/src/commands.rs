@@ -503,6 +503,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
         );
     }
+    // D225: CSS url() 経由の外部リソース読み込み (開封通知等) の兆候。
+    if html_extract.as_ref().is_some_and(|e| e.remote_css_resource) {
+        render_risks.push(
+            "HTML 本文の CSS url(...) に外部リソース参照 — <img> を使わず CSS 経由で \
+             開封通知・トラッキングを行う可能性の兆候"
+                .to_string(),
+        );
+    }
     // D162: 表示 URL と実リンク先のドメイン不一致 (URL 偽装)。
     if let Some(e) = &html_extract {
         for m in e.link_mismatches.iter().take(3) {
@@ -514,6 +522,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D227: アドレス本体の encoded-word 使用 (parser differential 偽装)。
+    if env.encoded_word_in_addr {
+        render_risks.push(
+            "アドレス本体に encoded-word (=?...?=) — 表示器によって復号されるアドレスが \
+             異なる parser differential 型偽装の兆候"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

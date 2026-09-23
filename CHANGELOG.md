@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D225: CSS `url(...)` 経由の外部リソース読み込みを検出
+
+- `<img>` ではなく CSS の `url(...)` (background/list-style/cursor 等) で外部コンテンツを読み込むと、開封通知トラッキング・フィンガープリント・コンテンツサイズ検査に使える — テキスト抽出では見えない読み込み経路
+- 対処: `has_remote_css_reference` で `url(` 直後が http/`//` のものを検出 → `remote_css_resource` → `render_risks` に兆候報告。`url(cid:)`/`url(data:)` は対象外
+- テスト +1 件
+
+### Security — D226: vCard 添付の外部参照 (URL/PHOTO/LOGO 等) を検出
+
+- `.vcf` 連絡先カードの `URL:`/`PHOTO;VALUE=URI:`/`LOGO:`/`SOURCE:`/`GEO:`/`IMPP:` 系プロパティで外部リソースを読み込み、開封通知・プロフィール取得・クリック誘導に使う (BleepingComputer/vCard phishing 報告)。「連絡先 = 無害なテキスト」の前提で中身の外部参照機構が未検査だった
+- 対処: `vcard_has_remote_reference` で `BEGIN:VCARD` 内の外部参照プロパティを検出 → `scan_attachment_bytes` に配線。内部参照のみ (FN/TEL) は対象外
+- テスト +1 件
+
+### Security — D227: アドレス本体の encoded-word (parser differential 偽装) を検出
+
+- RFC 2047 encoded-word (`=?charset?B?...?=`) は表示名用の機構 — local/domain に使うと表示器によって復号されるアドレスが異なり「検査が見る差出人」と「ユーザーが見る差出人」を分けられる (D164 と同系列の parser differential)
+- 対処: From/Reply-To/Return-Path/Sender の local/domain に `=?` が含まれるか検査 → `encoded_word_in_addr` → `render_risks` に兆候報告
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

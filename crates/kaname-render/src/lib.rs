@@ -96,6 +96,11 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// From/Reply-To/Return-Path/Sender のいずれかのアドレス本体
+    /// (local または domain) に RFC 2047 encoded-word (`=?...?=`) が
+    /// 含まれるか — 表示名と同じエンコード規則をアドレス本体に使う
+    /// parser differential 型偽装の兆候 (D227)。
+    pub encoded_word_in_addr: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +335,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D227: アドレス本体 (local/domain) の RFC 2047 encoded-word —
+    // 表示名と同じエンコードをアドレスに使うと、表示器によって
+    // 復号後のアドレスが異なる parser differential になる。
+    let encoded_word_in_addr = from
+        .iter()
+        .chain(reply_to.iter())
+        .chain(return_path.iter())
+        .chain(sender.iter())
+        .any(|a| a.addr.local.contains("=?") || a.addr.domain.contains("=?"));
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,6 +362,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        encoded_word_in_addr,
     })
 }
 
@@ -683,6 +699,10 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// `style=`/`url(...)` 内に外部リソース参照 (http や `//`) が
+    /// あるか — `<img>` を使わず CSS 経由で外部コンテンツを
+    /// 読み込み開封通知・フィンガープリントに使う経路の兆候 (D225)。
+    pub remote_css_resource: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -868,7 +888,33 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        remote_css_resource: has_remote_css_reference(html),
     }
+}
+
+/// CSS `url(...)` が外部リソース (http・`//` 始まり) を参照するか判定する。
+///
+/// `<img>` でなく CSS の background/list-style/cursor 等の `url(...)`
+/// で外部コンテンツを読み込むと、開封通知トラッキング・
+/// フィンガープリント・絵文字サイズ検査等に使える (D225)。
+/// `url(` の直後に空白・クォートを除いた先頭が `http`/`//` のものを検出。
+fn has_remote_css_reference(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let bytes = lower.as_bytes();
+    let mut pos = 0usize;
+    while let Some(rel) = lower[pos..].find("url(") {
+        let mut i = pos + rel + 4;
+        // `url(` 直後の空白・クォートを飛ばす
+        while i < bytes.len() && matches!(bytes[i], b' ' | b'\t' | b'"' | b'\'') {
+            i += 1;
+        }
+        let rest = &lower[i..];
+        if rest.starts_with("http") || rest.starts_with("//") {
+            return true;
+        }
+        pos = i;
+    }
+    false
 }
 
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
@@ -1952,6 +1998,68 @@ mod tests {
         );
     }
 
+    /// D225: CSS url() 経由の外部リソース参照の検出。
+    #[test]
+    fn parse_はcss外部参照を検出する() {
+        let e =
+            html_to_text("<body style=\"background:url('http://evil.example/t.gif')\">text</body>");
+        assert!(e.remote_css_resource);
+        let e2 = html_to_text("<p style=\"cursor:url('//evil.example/cur.png')\">x</p>");
+        assert!(e2.remote_css_resource);
+        // 内部/インライン url (cid:, data:) は対象外
+        let e3 = html_to_text("<p style=\"background:url(cid:img1)\">x</p>");
+        assert!(!e3.remote_css_resource);
+        let e4 = html_to_text("<p>plain text</p>");
+        assert!(!e4.remote_css_resource);
+    }
+
+    /// D226: vCard 外部参照の検出。
+    #[test]
+    fn vcard_は外部参照を検出する() {
+        assert!(vcard_has_remote_reference(
+            "BEGIN:VCARD\nURL:http://evil.example\nEND:VCARD"
+        ));
+        assert!(vcard_has_remote_reference(
+            "BEGIN:VCARD\nPHOTO;VALUE=URI:http://evil.example/p.png\nEND:VCARD"
+        ));
+        assert!(vcard_has_remote_reference(
+            "BEGIN:VCARD\nLOGO;VALUE=URI:https://e/x\nEND:VCARD"
+        ));
+        assert!(vcard_has_remote_reference(
+            "BEGIN:VCARD\nSOURCE:http://evil.example\nEND:VCARD"
+        ));
+        // 内部参照のみの vCard は対象外
+        assert!(!vcard_has_remote_reference(
+            "BEGIN:VCARD\nFN:Alice\nTEL:012-345\nEND:VCARD"
+        ));
+        // BEGIN:VCARD なしは対象外
+        assert!(!vcard_has_remote_reference("URL:http://evil.example"));
+        assert!(!vcard_has_remote_reference(""));
+    }
+
+    /// D227: アドレス本体の encoded-word 検出。
+    #[test]
+    fn parse_はアドレスencoded_wordを検出する() {
+        // local part に =? ... パターン
+        let raw = b"From: =?UTF-8?B?YWxpY2U=?=@example.com\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.encoded_word_in_addr);
+        // domain に =? ... パターン
+        let raw2 = b"From: alice@=?UTF-8?B?ZXZpbA==?=.example.com\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(env2.encoded_word_in_addr);
+        // 通常アドレスは対象外
+        let raw3 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.encoded_word_in_addr);
+    }
+
     #[test]
     fn addr_normal_email_splits_correctly() {
         let addr = mail_parser::Addr {
@@ -2510,6 +2618,27 @@ pub fn is_mls_message(raw: &[u8]) -> bool {
     })
 }
 
+/// vCard が外部参照を持つか判定する (D226)。
+///
+/// `BEGIN:VCARD` 内の `URL:`/`PHOTO`/`LOGO`/`SOURCE`/`PROFILE`/
+/// `GEO`/`IMPP`/`SOCIALPROFILE` 系プロパティで http・`//`・
+/// `VALUE=URI` を参照するものを検出 — 連絡先の体裁で外部リソースを
+/// 読み込み、開封通知・プロフィール取得・クリック誘導に使う
+/// (BleepingComputer/vCard phishing 報告)。
+fn vcard_has_remote_reference(text: &str) -> bool {
+    if !text.contains("BEGIN:VCARD") {
+        return false;
+    }
+    let lower = text.to_ascii_lowercase();
+    lower.contains("url:") && (lower.contains("http") || lower.contains("//"))
+        || lower.contains("photo") && lower.contains("value=uri")
+        || lower.contains("logo") && lower.contains("value=uri")
+        || lower.contains("source:") && lower.contains("http")
+        || lower.contains("profile:") && lower.contains("http")
+        || lower.contains("impp:") && (lower.contains("http") || lower.contains("sip:"))
+        || lower.contains("geo:") && lower.contains("http")
+}
+
 /// 1 添付分のバイト列を各検出器にかける。
 ///
 /// `scan_attachments` (メール全体) と、JMAP でダウンロードした単一 blob の
@@ -2589,6 +2718,19 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
     for r in metadata_check::detect_metadata_risks(filename, bytes) {
         risks.push(format!("メタデータが含まれます: {r:?}"));
+    }
+
+    // 7. vCard 外部参照 (D226) — 連絡先カードの URL/PHOTO/LOGO/
+    //    SOURCE 経由で外部リソースを読み込み開封通知等に使う。
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        if vcard_has_remote_reference(text) {
+            risks.push(
+                "vCard に外部参照 (URL/PHOTO/LOGO/SOURCE) — 連絡先の体裁で \
+                 外部リソースを読み込み開封通知等に使える可能性があります"
+                    .to_string(),
+            );
+            is_dangerous = true;
+        }
     }
 
     AttachmentScan {
