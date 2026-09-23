@@ -526,6 +526,32 @@ pub struct Envelope {
     /// `X-GaijinPot-*`/`X-Daijob-*` 等の求職・人材印があるか —
     /// 人材機の通知記録を送信側が自称する兆候 (D482)。
     pub jobs_marks: bool,
+    /// `X-OneDrive-*`/`X-SharePoint-*`/`X-GoogleDrive-*`/
+    /// `X-Egnyte-*`/`X-Druva-*`/`X-Sync-*`/`X-pCloud-*`/
+    /// `X-Nextcloud-*`/`X-ownCloud-*`/`X-Seafile-*`/`X-Koofr-*`/
+    /// `X-WeTransfer-*`/`X-Resilio-*` 等のファイル共有・
+    /// クラウドストレージ印があるか — ストレージ機の通知記録を
+    /// 送信側が自称する兆候 (D483)。
+    pub storage_marks: bool,
+    /// `X-Lucidspark-*`/`X-drawio-*`/`X-Framer-*`/`X-Zeplin-*`/
+    /// `X-Sketch-*`/`X-Abstract-*`/`X-Avocode-*`/`X-Marvel-*`/
+    /// `X-UXPin-*`/`X-Origami-*`/`X-Principle-*`/`X-Affinity-*`/
+    /// `X-CorelDRAW-*`/`X-Photoshop-*`/`X-Illustrator-*`/
+    /// `X-InDesign-*`/`X-Lightroom-*`/`X-Premiere-*`/
+    /// `X-AfterEffects-*`/`X-DaVinci-*`/`X-FFmpeg-*`/`X-OBS-*`/
+    /// `X-Streamlabs-*`/`X-Procreate-*`/`X-Clip-*`/`X-Blender-*` 等の
+    /// デザイン・クリエイティブ印があるか — 制作機の通知記録を
+    /// 送信側が自称する兆候 (D484)。
+    pub creative_marks: bool,
+    /// `X-Qiita-*`/`X-Zenn-*`/`X-Backlog-*`/`X-Cacoo-*`/
+    /// `X-Kibela-*`/`X-Note-*`/`X-Planio-*`/`X-OpenProject-*`/
+    /// `X-Taiga-*`/`X-Wekan-*`/`X-Launchpad-*`/`X-Codeberg-*`/
+    /// `X-SourceForge-*`/`X-Podio-*`/`X-Zoho-*`/`X-Freshworks-*`/
+    /// `X-Pipedrive-*`/`X-Insightly-*`/`X-Capsule-*`/`X-Streak-*`/
+    /// `X-Obsidian-*`/`X-OneNote-*`/`X-AnyDo-*`/`X-TickTick-*`/
+    /// `X-Microsoft-Todo-*` 等のナレッジ・タスク管理・CRM 印が
+    /// あるか — 管理機の通知記録を送信側が自称する兆候 (D485)。
+    pub project_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -869,6 +895,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         realestate_marks: has_realestate_marks(raw),
         health_marks: has_health_marks(raw),
         jobs_marks: has_jobs_marks(raw),
+        storage_marks: has_storage_marks(raw),
+        creative_marks: has_creative_marks(raw),
+        project_marks: has_project_marks(raw),
     })
 }
 
@@ -3521,6 +3550,132 @@ fn has_jobs_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-doda-")
             || l.starts_with("x-gaijinpot-")
             || l.starts_with("x-daijob-")
+    })
+}
+
+/// `X-OneDrive-*`/`X-SharePoint-*`/`X-GoogleDrive-*`/`X-Egnyte-*`/
+/// `X-Druva-*`/`X-Sync-*`/`X-pCloud-*`/`X-Nextcloud-*`/
+/// `X-ownCloud-*`/`X-Seafile-*`/`X-Koofr-*`/`X-WeTransfer-*`/
+/// `X-Resilio-*` 等のファイル共有・クラウドストレージ印があるか
+/// 判定する (D483)。
+///
+/// `X-OneDrive-*` (OneDrive)、`X-SharePoint-*` (SharePoint)、
+/// `X-GoogleDrive-*` (Google Drive) はストレージ機の通知記録 —
+/// 送信側から届くこれは自称。
+fn has_storage_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-onedrive-")
+            || l.starts_with("x-sharepoint-")
+            || l.starts_with("x-googledrive-")
+            || l.starts_with("x-egnyte-")
+            || l.starts_with("x-druva-")
+            || l.starts_with("x-sync-")
+            || l.starts_with("x-pcloud-")
+            || l.starts_with("x-nextcloud-")
+            || l.starts_with("x-owncloud-")
+            || l.starts_with("x-seafile-")
+            || l.starts_with("x-koofr-")
+            || l.starts_with("x-wetransfer-")
+            || l.starts_with("x-resilio-")
+    })
+}
+
+/// `X-Lucidspark-*`/`X-drawio-*`/`X-Framer-*`/`X-Zeplin-*`/
+/// `X-Sketch-*`/`X-Abstract-*`/`X-Avocode-*`/`X-Marvel-*`/
+/// `X-UXPin-*`/`X-Origami-*`/`X-Principle-*`/`X-Affinity-*`/
+/// `X-CorelDRAW-*`/`X-Photoshop-*`/`X-Illustrator-*`/`X-InDesign-*`/
+/// `X-Lightroom-*`/`X-Premiere-*`/`X-AfterEffects-*`/`X-DaVinci-*`/
+/// `X-FFmpeg-*`/`X-OBS-*`/`X-Streamlabs-*`/`X-Procreate-*`/
+/// `X-Clip-*`/`X-Blender-*` 等のデザイン・クリエイティブ印が
+/// あるか判定する (D484)。
+///
+/// `X-Framer-*` (Framer)、`X-Zeplin-*` (Zeplin)、`X-Sketch-*`
+/// (Sketch) は制作機の通知記録 — 送信側から届くこれは自称。
+fn has_creative_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-lucidspark-")
+            || l.starts_with("x-drawio-")
+            || l.starts_with("x-framer-")
+            || l.starts_with("x-zeplin-")
+            || l.starts_with("x-sketch-")
+            || l.starts_with("x-abstract-")
+            || l.starts_with("x-avocode-")
+            || l.starts_with("x-marvel-")
+            || l.starts_with("x-uxpin-")
+            || l.starts_with("x-origami-")
+            || l.starts_with("x-principle-")
+            || l.starts_with("x-affinity-")
+            || l.starts_with("x-coreldraw-")
+            || l.starts_with("x-photoshop-")
+            || l.starts_with("x-illustrator-")
+            || l.starts_with("x-indesign-")
+            || l.starts_with("x-lightroom-")
+            || l.starts_with("x-premiere-")
+            || l.starts_with("x-aftereffects-")
+            || l.starts_with("x-davinci-")
+            || l.starts_with("x-ffmpeg-")
+            || l.starts_with("x-obs-")
+            || l.starts_with("x-streamlabs-")
+            || l.starts_with("x-procreate-")
+            || l.starts_with("x-clip-")
+            || l.starts_with("x-blender-")
+    })
+}
+
+/// `X-Qiita-*`/`X-Zenn-*`/`X-Backlog-*`/`X-Cacoo-*`/`X-Kibela-*`/
+/// `X-Note-*`/`X-Planio-*`/`X-OpenProject-*`/`X-Taiga-*`/
+/// `X-Wekan-*`/`X-Vivify-*`/`X-YouGile-*`/`X-Launchpad-*`/
+/// `X-Codeberg-*`/`X-SourceForge-*`/`X-Podio-*`/`X-Zoho-*`/
+/// `X-Freshworks-*`/`X-Pipedrive-*`/`X-Insightly-*`/`X-Capsule-*`/
+/// `X-Streak-*`/`X-Nimble-*`/`X-SugarCRM-*`/`X-Obsidian-*`/
+/// `X-OneNote-*`/`X-AnyDo-*`/`X-TickTick-*`/`X-Microsoft-Todo-*` 等の
+/// ナレッジ・タスク管理・CRM 印があるか判定する (D485)。
+///
+/// `X-Qiita-*` (Qiita)、`X-Zenn-*` (Zenn)、`X-Backlog-*` (Backlog)
+/// は管理機の通知記録 — 送信側から届くこれは自称。
+fn has_project_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-qiita-")
+            || l.starts_with("x-zenn-")
+            || l.starts_with("x-backlog-")
+            || l.starts_with("x-cacoo-")
+            || l.starts_with("x-kibela-")
+            || l.starts_with("x-note-")
+            || l.starts_with("x-planio-")
+            || l.starts_with("x-openproject-")
+            || l.starts_with("x-taiga-")
+            || l.starts_with("x-wekan-")
+            || l.starts_with("x-vivify-")
+            || l.starts_with("x-yougile-")
+            || l.starts_with("x-launchpad-")
+            || l.starts_with("x-codeberg-")
+            || l.starts_with("x-sourceforge-")
+            || l.starts_with("x-podio-")
+            || l.starts_with("x-zoho-")
+            || l.starts_with("x-freshworks-")
+            || l.starts_with("x-pipedrive-")
+            || l.starts_with("x-insightly-")
+            || l.starts_with("x-capsule-")
+            || l.starts_with("x-streak-")
+            || l.starts_with("x-nimble-")
+            || l.starts_with("x-sugarcrm-")
+            || l.starts_with("x-obsidian-")
+            || l.starts_with("x-onenote-")
+            || l.starts_with("x-anydo-")
+            || l.starts_with("x-ticktick-")
+            || l.starts_with("x-microsoft-todo-")
     })
 }
 
@@ -7238,6 +7393,72 @@ mod tests {
         assert!(has_jobs_marks(p1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_jobs_marks(clean));
+    }
+
+    #[test]
+    fn scan_はファイル共有ストレージ印を検出する() {
+        let o1 = b"X-OneDrive-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(o1));
+        let s1 = b"X-SharePoint-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(s1));
+        let g1 = b"X-GoogleDrive-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(g1));
+        let n1 = b"X-Nextcloud-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(n1));
+        let w1 = b"X-WeTransfer-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(w1));
+        let e1 = b"X-Egnyte-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(e1));
+        let p1 = b"X-pCloud-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(p1));
+        let k1 = b"X-Koofr-Notify: x\r\n\r\nx";
+        assert!(has_storage_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_storage_marks(clean));
+    }
+
+    #[test]
+    fn scan_はデザインクリエイティブ印を検出する() {
+        let f1 = b"X-Framer-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(f1));
+        let z1 = b"X-Zeplin-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(z1));
+        let s1 = b"X-Sketch-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(s1));
+        let a1 = b"X-Affinity-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(a1));
+        let p1 = b"X-Photoshop-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(p1));
+        let d1 = b"X-DaVinci-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(d1));
+        let o1 = b"X-OBS-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(o1));
+        let b1 = b"X-Blender-Notify: x\r\n\r\nx";
+        assert!(has_creative_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_creative_marks(clean));
+    }
+
+    #[test]
+    fn scan_はナレッジタスク管理CRM印を検出する() {
+        let q1 = b"X-Qiita-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(q1));
+        let z1 = b"X-Zenn-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(z1));
+        let b1 = b"X-Backlog-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(b1));
+        let k1 = b"X-Kibela-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(k1));
+        let t1 = b"X-Taiga-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(t1));
+        let p1 = b"X-Pipedrive-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(p1));
+        let o1 = b"X-Obsidian-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(o1));
+        let m1 = b"X-Microsoft-Todo-Notify: x\r\n\r\nx";
+        assert!(has_project_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_project_marks(clean));
     }
 }
 
