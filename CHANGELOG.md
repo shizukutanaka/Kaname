@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
+
+- `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)
+- さらにファイル名への双方向テキスト制御文字 (U+202E RTLO 等) 混入が未検査だった — `invoice\u{202E}gpj.exe` は表示が反転して「invoiceexe.jpg」のように見え、実行ファイルを安全な文書・画像に見せかける古典的な表示偽装 (RTLO 攻撃、2013 年から現在も継続観測)
+- 対処: 危険拡張子リストに exe/com/jar + iso/img/vhd/vhdx を追加し、`has_bidi_override_filename` (RTLO/LRO/埋め込み/アイソレート制御の全 9 文字) を新設して `scan_attachment_bytes` の危険判定に配線 — RTLO 検出時は拡張子表示反転の旨を `risks` に報告
+- 誤検出対策: zip/rar/7z 等の通常アーカイブはコンテナ形式と区別して非対象。末尾拡張子判定のため `請求書.pdf.exe` の二重拡張子偽装も捕捉
+- テスト +13 件 (magic_bytes: 8 件、kaname-render 添付スキャン E2E: 5 件)
+
 ### Security — D164: 複数 From アドレス / Sender ヘッダ不整合 (parser differential なりすまし) を検出
 
 - `env.from.first()` — 解析・表示・BEC 判定の全経路が From ヘッダの**最初の 1 アドレスだけ**を見ていたため、`From: ceo@corp.example, attacker@evil.example` のような複数 From メールで 2 番目以降の混入アドレスは誰も評価していなかった。RFC 5322 §3.6.2 は複数 From に `Sender:` を必須とするが、クライアントが表示に採用するアドレスは実装ごとに差があり (先頭/末尾/連結)、この「どの差出人として見えるかが環境依存」という差異を突く parser differential 型なりすましが知られている (Dmarcian/FlashStart 等が報告)

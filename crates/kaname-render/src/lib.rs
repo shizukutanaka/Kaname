@@ -2268,6 +2268,63 @@ mod tests {
         assert_eq!(e.link_mismatches.len(), 1);
         assert!(e.link_mismatches[0].shown_text.chars().count() <= 80);
     }
+
+    // ---- D166: 添付の実行・コンテナ拡張子と RTLO ファイル名 ----
+
+    #[test]
+    fn scan_attachment_exe_is_dangerous() {
+        // 回帰: .exe が危険拡張子リストに無くフラグされなかった
+        let scan = scan_attachment_bytes(
+            "update.exe",
+            "application/octet-stream",
+            b"MZ\x90\x00binary",
+        );
+        assert!(scan.is_dangerous);
+        assert!(scan.risks.iter().any(|r| r.contains("拡張子")));
+    }
+
+    #[test]
+    fn scan_attachment_iso_container_is_dangerous() {
+        // MOTW bypass 配送経路: ISO 内のファイルは MOTW を継承しない
+        let scan = scan_attachment_bytes(
+            "files.iso",
+            "application/octet-stream",
+            b"\x00\x00iso container",
+        );
+        assert!(scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_double_extension_is_dangerous() {
+        let scan = scan_attachment_bytes(
+            "請求書.pdf.exe",
+            "application/octet-stream",
+            b"MZ\x90\x00binary",
+        );
+        assert!(scan.is_dangerous);
+        assert!(scan.risks.iter().any(|r| r.contains("拡張子")));
+    }
+
+    #[test]
+    fn scan_attachment_rtlo_filename_is_dangerous() {
+        // U+202E: 表示反転で .exe が .jpg に見える偽装
+        let scan = scan_attachment_bytes(
+            "invoice\u{202E}gpj.exe",
+            "application/octet-stream",
+            b"MZ\x90\x00binary",
+        );
+        assert!(scan.is_dangerous);
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| r.contains("RTLO") || r.contains("双方向")));
+    }
+
+    #[test]
+    fn scan_attachment_safe_pdf_not_dangerous() {
+        let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
+        assert!(!scan.is_dangerous);
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2466,9 +2523,17 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     let mut risks = Vec::new();
     let mut is_dangerous = false;
 
-    // 1. Windows で危険な拡張子 (.lnk / .docm / .scr 等)
+    // 1. Windows で危険な拡張子 (.lnk / .docm / .scr / .exe 等) と
+    //    双方向制御文字 (RTLO) を使った拡張子表示反転 (D166)
     if magic_bytes::is_dangerous_windows_attachment(filename) {
         risks.push(format!("危険な拡張子です: {filename}"));
+        is_dangerous = true;
+    }
+    if magic_bytes::has_bidi_override_filename(filename) {
+        risks.push(
+            "ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれており、拡張子の表示が反転して実際の形式を隠している可能性があります"
+                .to_string(),
+        );
         is_dangerous = true;
     }
 

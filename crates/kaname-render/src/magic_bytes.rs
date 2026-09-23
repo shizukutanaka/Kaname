@@ -115,13 +115,23 @@ pub fn detect_mime_from_magic(bytes: &[u8]) -> Option<&'static str> {
 ///
 /// `.lnk` (Shell Link) や `.url` (Internet Shortcut) は任意コマンド実行に使われる。
 /// マクロ有効の Office 形式 (`.docm`, `.xlsm`, `.pptm`) も高リスク。
+///
+/// D166: `.exe`/`.com`/`.jar` 等の直接実行ファイルと、`.iso`/`.img`/
+/// `.vhd`/`.vhdx` コンテナ形式を追加。コンテナは 2023 年以降 Microsoft が
+/// Office マクロの既定ブロック化を進めた代替として急増した配送経路で、
+/// コンテナ内のファイルは Mark-of-the-Web を継承しないため添付を展開
+/// すると警告が減る (MOTW bypass — Mandiant/Sekoia の Qbot・Pikabot・
+/// AgentTesla 各解析で報告される代表的な回避ベクトル)。
 #[must_use]
 pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
     let lower = filename.to_ascii_lowercase();
     let ext = lower.rsplit('.').next().unwrap_or("");
     matches!(
         ext,
-        "lnk"   // Windows Shell Link — 任意コマンド実行
+        "exe"   // PE 実行ファイル — 最も基本的な直接実行形式
+        | "com"   // 実行ファイル (DOS/Windows)
+        | "jar"   // Java アーカイブ — java -jar で実行可能
+        | "lnk"   // Windows Shell Link — 任意コマンド実行
         | "url"   // Internet Shortcut — UNC/SMB 漏洩
         | "scf"   // Shell Command File — NTLM hash 漏洩
         | "scr"   // Screen Saver — 実行可能
@@ -144,8 +154,41 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "xlsm"  // Office マクロ有効 Excel
         | "pptm"  // Office マクロ有効 PowerPoint
         | "xls"   // 古い Excel (VBA 埋め込み可能)
-        | "doc" // 古い Word (VBA 埋め込み可能)
+        | "doc"   // 古い Word (VBA 埋め込み可能)
+        // コンテナ/イメージ形式 — MOTW bypass の配送経路 (D166)
+        | "iso"   // ISO イメージ — 中身に MOTW が継承されない
+        | "img"   // ディスクイメージ — 同上
+        | "vhd"   // 仮想ハードディスク — 同上
+        | "vhdx" // 仮想ハードディスク — 同上
     )
+}
+
+/// ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれるか判定する。
+///
+/// U+202E (RIGHT-TO-LEFT OVERRIDE) や U+2066..U+2069 (LRI/RLI/PDI 系) を
+/// ファイル名に埋めると、OS の表示側はその後の文字を反転表示する —
+/// `invoicegpj.exe` (gpj ← jpg の逆順) が「invoice.jpg.exe」ではなく
+/// 「invoiceexe.jpg」のように見えるため、実行ファイルを安全な
+/// 文書/画像に見せかける古典的ななりすまし手法 (RTLO 攻撃 — Symantec/
+/// Bitdefender 2013〜現在まで継続観測、2024-2025 でも現役)。
+/// 拡張子が安全側に「見える」ため拡張子チェックを素通りさせる
+/// 補助手段として検出する (D166)。
+#[must_use]
+pub fn has_bidi_override_filename(filename: &str) -> bool {
+    filename.chars().any(|c| {
+        matches!(
+            c,
+            '\u{202A}' // LEFT-TO-RIGHT EMBEDDING
+            | '\u{202B}' // RIGHT-TO-LEFT EMBEDDING
+            | '\u{202C}' // POP DIRECTIONAL FORMATTING
+            | '\u{202D}' // LEFT-TO-RIGHT OVERRIDE
+            | '\u{202E}' // RIGHT-TO-LEFT OVERRIDE (RTLO)
+            | '\u{2066}' // LEFT-TO-RIGHT ISOLATE
+            | '\u{2067}' // RIGHT-TO-LEFT ISOLATE
+            | '\u{2068}' // FIRST STRONG ISOLATE
+            | '\u{2069}' // POP DIRECTIONAL ISOLATE
+        )
+    })
 }
 
 /// Windows LNK (Shell Link) ファイルか magic bytes で判定する。
@@ -496,5 +539,70 @@ mod tests {
             bytes,
         );
         assert!(mismatch.is_none(), "DOCX(ZIP) は危険な不一致でない");
+    }
+
+    // ---- D166: 実行・コンテナ拡張子と RTLO ファイル名 ----
+
+    #[test]
+    fn exe_and_com_are_dangerous() {
+        // 回帰: 最も基本的な直接実行形式がリストに欠けていた
+        assert!(is_dangerous_windows_attachment("invoice.exe"));
+        assert!(is_dangerous_windows_attachment("SETUP.EXE"));
+        assert!(is_dangerous_windows_attachment("run.com"));
+        assert!(is_dangerous_windows_attachment("app.jar"));
+    }
+
+    #[test]
+    fn double_extension_executable_is_dangerous() {
+        // 請求書.pdf.exe の二重拡張子偽装 — 末尾拡張子で判定
+        assert!(is_dangerous_windows_attachment("請求書.pdf.exe"));
+        assert!(is_dangerous_windows_attachment("report.docx.scr"));
+    }
+
+    #[test]
+    fn container_image_extensions_are_dangerous() {
+        // MOTW bypass: ISO/IMG/VHD 内のファイルは MOTW を継承しない
+        assert!(is_dangerous_windows_attachment("payload.iso"));
+        assert!(is_dangerous_windows_attachment("drive.img"));
+        assert!(is_dangerous_windows_attachment("disk.vhd"));
+        assert!(is_dangerous_windows_attachment("disk.vhdx"));
+    }
+
+    #[test]
+    fn safe_archive_extensions_not_dangerous() {
+        // zip/rar/7z は通常の配送手段 — コンテナ形式とは区別する
+        assert!(!is_dangerous_windows_attachment("archive.zip"));
+        assert!(!is_dangerous_windows_attachment("backup.rar"));
+        assert!(!is_dangerous_windows_attachment("photos.tar"));
+    }
+
+    #[test]
+    fn rtlo_filename_is_dangerous() {
+        // U+202E で「invoicegpj.exe」→「invoiceexe.jpg」と表示反転
+        let rtlo = "invoice\u{202E}gpj.exe";
+        assert!(has_bidi_override_filename(rtlo));
+    }
+
+    #[test]
+    fn isolate_controls_are_dangerous() {
+        assert!(has_bidi_override_filename("file\u{2067}name.pdf"));
+        assert!(has_bidi_override_filename("file\u{2068}name.pdf"));
+        assert!(has_bidi_override_filename("file\u{2066}name.exe"));
+        assert!(has_bidi_override_filename("file\u{2069}name.pdf"));
+    }
+
+    #[test]
+    fn embedding_and_pop_are_dangerous() {
+        assert!(has_bidi_override_filename("a\u{202A}b.txt"));
+        assert!(has_bidi_override_filename("a\u{202B}b.txt"));
+        assert!(has_bidi_override_filename("a\u{202C}b.txt"));
+        assert!(has_bidi_override_filename("a\u{202D}b.txt"));
+    }
+
+    #[test]
+    fn normal_filename_no_bidi() {
+        assert!(!has_bidi_override_filename("invoice.pdf"));
+        assert!(!has_bidi_override_filename("請求書_2025.pdf"));
+        assert!(!has_bidi_override_filename("no ext"));
     }
 }
