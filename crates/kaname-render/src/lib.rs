@@ -552,6 +552,32 @@ pub struct Envelope {
     /// `X-Microsoft-Todo-*` 等のナレッジ・タスク管理・CRM 印が
     /// あるか — 管理機の通知記録を送信側が自称する兆候 (D485)。
     pub project_marks: bool,
+    /// `X-Olark-*`/`X-Tawk-*`/`X-Crisp-*`/`X-Chatwoot-*`/
+    /// `X-HelpCrunch-*`/`X-SnapEngage-*`/`X-Rocket-*`/
+    /// `X-Mattermost-*`/`X-Element-*`/`X-Matrix-*`/`X-Telegram-*`/
+    /// `X-WhatsApp-*`/`X-Signal-*`/`X-Viber-*`/`X-WeChat-*`/
+    /// `X-Teams-*`/`X-Meet-*`/`X-Chime-*`/`X-BlueJeans-*`/
+    /// `X-GoToWebinar-*`/`X-WebinarJam-*`/`X-Crowdcast-*`/
+    /// `X-Hopin-*`/`X-Rally-*` 等のチャット・会議印があるか —
+    /// 会議機の通知記録を送信側が自称する兆候 (D486)。
+    pub meeting_marks: bool,
+    /// `X-Doodle-*`/`X-Acuity-*`/`X-Appointlet-*`/`X-Bookings-*`/
+    /// `X-Vagaro-*`/`X-Booksy-*`/`X-Fresha-*`/`X-SimplyBook-*`/
+    /// `X-Setmore-*`/`X-YouCanBook-*`/`X-Coconut-*`/`X-Mindbody-*`/
+    /// `X-Momence-*`/`X-Pike13-*`/`X-Glofox-*`/`X-WellnessLiving-*`/
+    /// `X-ZenPlanner-*` 等の予約・スケジューリング印があるか —
+    /// 予約機の通知記録を送信側が自称する兆候 (D487)。
+    pub booking_marks: bool,
+    /// `X-ServiceTitan-*`/`X-Jobber-*`/`X-Housecall-*`/
+    /// `X-FieldEdge-*`/`X-ServiceFusion-*`/`X-Workiz-*`/
+    /// `X-ServiceChannel-*`/`X-UpKeep-*`/`X-Limble-*`/`X-Fiix-*`/
+    /// `X-eMaint-*`/`X-MPulse-*`/`X-Fracttal-*`/`X-MaintainX-*`/
+    /// `X-Hippo-*`/`X-BlueFolder-*`/`X-Corrigo-*`/`X-WebTMA-*`/
+    /// `X-MainSim-*`/`X-eAM-*`/`X-CMMS-*`/`X-MEX-*`/`X-FMX-*`/
+    /// `X-ManagerPlus-*`/`X-Reach-*` 等のフィールドサービス・
+    /// 設備管理印があるか — 設備管理機の通知記録を送信側が
+    /// 自称する兆候 (D488)。
+    pub fieldservice_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -898,6 +924,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         storage_marks: has_storage_marks(raw),
         creative_marks: has_creative_marks(raw),
         project_marks: has_project_marks(raw),
+        meeting_marks: has_meeting_marks(raw),
+        booking_marks: has_booking_marks(raw),
+        fieldservice_marks: has_fieldservice_marks(raw),
     })
 }
 
@@ -3676,6 +3705,140 @@ fn has_project_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-anydo-")
             || l.starts_with("x-ticktick-")
             || l.starts_with("x-microsoft-todo-")
+    })
+}
+
+/// `X-Olark-*`/`X-Tawk-*`/`X-Crisp-*`/`X-Chatwoot-*`/`X-HelpCrunch-*`/
+/// `X-SnapEngage-*`/`X-Rocket-*`/`X-Mattermost-*`/`X-Element-*`/
+/// `X-Matrix-*`/`X-Telegram-*`/`X-WhatsApp-*`/`X-Signal-*`/
+/// `X-Viber-*`/`X-WeChat-*`/`X-Teams-*`/`X-Meet-*`/`X-Chime-*`/
+/// `X-BlueJeans-*`/`X-GoToWebinar-*`/`X-WebinarJam-*`/`X-Crowdcast-*`/
+/// `X-Hopin-*`/`X-Rally-*` 等のチャット・会議印があるか判定する
+/// (D486)。
+///
+/// `X-Telegram-*` (Telegram)、`X-WhatsApp-*` (WhatsApp)、
+/// `X-Mattermost-*` (Mattermost) は会議機の通知記録 —
+/// 送信側から届くこれは自称。
+fn has_meeting_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-olark-")
+            || l.starts_with("x-tawk-")
+            || l.starts_with("x-crisp-")
+            || l.starts_with("x-chatwoot-")
+            || l.starts_with("x-helpcrunch-")
+            || l.starts_with("x-snapengage-")
+            || l.starts_with("x-rocket-")
+            || l.starts_with("x-mattermost-")
+            || l.starts_with("x-element-")
+            || l.starts_with("x-matrix-")
+            || l.starts_with("x-telegram-")
+            || l.starts_with("x-whatsapp-")
+            || l.starts_with("x-signal-")
+            || l.starts_with("x-viber-")
+            || l.starts_with("x-wechat-")
+            || l.starts_with("x-teams-")
+            || l.starts_with("x-meet-")
+            || l.starts_with("x-chime-")
+            || l.starts_with("x-bluejeans-")
+            || l.starts_with("x-gotowebinar-")
+            || l.starts_with("x-webinarjam-")
+            || l.starts_with("x-crowdcast-")
+            || l.starts_with("x-hopin-")
+            || l.starts_with("x-rally-")
+    })
+}
+
+/// `X-Doodle-*`/`X-Acuity-*`/`X-Appointlet-*`/`X-Bookings-*`/
+/// `X-Vagaro-*`/`X-Booksy-*`/`X-Fresha-*`/`X-SimplyBook-*`/
+/// `X-Setmore-*`/`X-YouCanBook-*`/`X-Coconut-*`/`X-Mindbody-*`/
+/// `X-Momence-*`/`X-Pike13-*`/`X-Glofox-*`/`X-WellnessLiving-*`/
+/// `X-ZenPlanner-*`/`X-Wodify-*`/`X-PushPress-*`/`X-TrainHeroic-*`/
+/// `X-TeamBuildr-*`/`X-PTDistinction-*`/`X-Trainerize-*`/
+/// `X-Everfit-*` 等の予約・スケジューリング印があるか判定する
+/// (D487)。
+///
+/// `X-Doodle-*` (Doodle)、`X-Acuity-*` (Acuity Scheduling)、
+/// `X-Mindbody-*` (Mindbody) は予約機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_booking_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-doodle-")
+            || l.starts_with("x-acuity-")
+            || l.starts_with("x-appointlet-")
+            || l.starts_with("x-bookings-")
+            || l.starts_with("x-vagaro-")
+            || l.starts_with("x-booksy-")
+            || l.starts_with("x-fresha-")
+            || l.starts_with("x-simplybook-")
+            || l.starts_with("x-setmore-")
+            || l.starts_with("x-youcanbook-")
+            || l.starts_with("x-coconut-")
+            || l.starts_with("x-mindbody-")
+            || l.starts_with("x-momence-")
+            || l.starts_with("x-pike13-")
+            || l.starts_with("x-glofox-")
+            || l.starts_with("x-wellnessliving-")
+            || l.starts_with("x-zenplanner-")
+            || l.starts_with("x-wodify-")
+            || l.starts_with("x-pushpress-")
+            || l.starts_with("x-trainheroic-")
+            || l.starts_with("x-teambuildr-")
+            || l.starts_with("x-ptdistinction-")
+            || l.starts_with("x-trainerize-")
+            || l.starts_with("x-everfit-")
+    })
+}
+
+/// `X-ServiceTitan-*`/`X-Jobber-*`/`X-Housecall-*`/`X-FieldEdge-*`/
+/// `X-ServiceFusion-*`/`X-Workiz-*`/`X-ServiceChannel-*`/
+/// `X-UpKeep-*`/`X-Limble-*`/`X-Fiix-*`/`X-eMaint-*`/`X-MPulse-*`/
+/// `X-Fracttal-*`/`X-MaintainX-*`/`X-Hippo-*`/`X-BlueFolder-*`/
+/// `X-Corrigo-*`/`X-WebTMA-*`/`X-MainSim-*`/`X-eAM-*`/`X-CMMS-*`/
+/// `X-MEX-*`/`X-FMX-*`/`X-ManagerPlus-*`/`X-Reach-*` 等の
+/// フィールドサービス・設備管理印があるか判定する (D488)。
+///
+/// `X-ServiceTitan-*` (ServiceTitan)、`X-Jobber-*` (Jobber)、
+/// `X-UpKeep-*` (UpKeep) は設備管理機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_fieldservice_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-servicetitan-")
+            || l.starts_with("x-jobber-")
+            || l.starts_with("x-housecall-")
+            || l.starts_with("x-fieldedge-")
+            || l.starts_with("x-servicefusion-")
+            || l.starts_with("x-workiz-")
+            || l.starts_with("x-servicechannel-")
+            || l.starts_with("x-upkeep-")
+            || l.starts_with("x-limble-")
+            || l.starts_with("x-fiix-")
+            || l.starts_with("x-emaint-")
+            || l.starts_with("x-mpulse-")
+            || l.starts_with("x-fracttal-")
+            || l.starts_with("x-maintainx-")
+            || l.starts_with("x-hippo-")
+            || l.starts_with("x-bluefolder-")
+            || l.starts_with("x-corrigo-")
+            || l.starts_with("x-webtma-")
+            || l.starts_with("x-mainsim-")
+            || l.starts_with("x-eam-")
+            || l.starts_with("x-cmms-")
+            || l.starts_with("x-mex-")
+            || l.starts_with("x-fmx-")
+            || l.starts_with("x-managerplus-")
+            || l.starts_with("x-reach-")
     })
 }
 
@@ -7459,6 +7622,72 @@ mod tests {
         assert!(has_project_marks(m1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_project_marks(clean));
+    }
+
+    #[test]
+    fn scan_はチャット会議印を検出する() {
+        let t1 = b"X-Telegram-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(t1));
+        let w1 = b"X-WhatsApp-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(w1));
+        let m1 = b"X-Mattermost-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(m1));
+        let e1 = b"X-Element-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(e1));
+        let c1 = b"X-Chatwoot-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(c1));
+        let o1 = b"X-Olark-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(o1));
+        let b1 = b"X-BlueJeans-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(b1));
+        let h1 = b"X-Hopin-Notify: x\r\n\r\nx";
+        assert!(has_meeting_marks(h1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_meeting_marks(clean));
+    }
+
+    #[test]
+    fn scan_は予約スケジューリング印を検出する() {
+        let d1 = b"X-Doodle-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(d1));
+        let a1 = b"X-Acuity-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(a1));
+        let m1 = b"X-Mindbody-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(m1));
+        let v1 = b"X-Vagaro-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(v1));
+        let f1 = b"X-Fresha-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(f1));
+        let s1 = b"X-SimplyBook-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(s1));
+        let t1 = b"X-Trainerize-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(t1));
+        let z1 = b"X-ZenPlanner-Notify: x\r\n\r\nx";
+        assert!(has_booking_marks(z1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_booking_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフィールドサービス設備管理印を検出する() {
+        let s1 = b"X-ServiceTitan-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(s1));
+        let j1 = b"X-Jobber-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(j1));
+        let u1 = b"X-UpKeep-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(u1));
+        let h1 = b"X-Housecall-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(h1));
+        let f1 = b"X-Fiix-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(f1));
+        let m1 = b"X-MaintainX-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(m1));
+        let c1 = b"X-Corrigo-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(c1));
+        let w1 = b"X-Workiz-Notify: x\r\n\r\nx";
+        assert!(has_fieldservice_marks(w1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_fieldservice_marks(clean));
     }
 }
 
