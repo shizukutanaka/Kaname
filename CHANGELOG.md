@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D438: `X-Gm-*`/`X-Google-*`/`X-BeenThere:`/`X-Received:`/`X-YMail-*`/`X-Yahoo-*`/`X-AOL-*`/`X-iCloud-*` 等のクラウドメール・webmail 内部印自称が未検査
+
+- **問題**: `X-Gm-Message-State`/`X-Gm-Features`/`X-Gm-Gg` (Gmail — SpamAssassin bayes_ignore 公式一覧掲載)、`X-Google-Smtp-Source`、`X-Received:`/`X-Forwarded-Encrypted:`/`X-BeenThere:` (Google)、`X-YMail-OSG`/`X-Yahoo-Newman-Property` (Yahoo 内部配送印)、`X-AOL-Global-Disposition` (AOL 判定印 — rspamd ルールに記録) 等のクラウドメール内部記録は送信側が書くことは自称。
+- **修正**: `Envelope` に `webmail_internal_marks` + `has_webmail_internal_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 配送の記録はプロバイダが記す — webmail 内部印の自署を問え。
+
+### Security — D439: `X-Status:`/`X-Keywords:`/`X-UID:`/`X-UIDL:`/`X-Seen:`/`X-Mozilla-*`/`X-IMAPbase:`/`X-Folder:` 等のメールストア・ステータス印自称が未検査
+
+- **問題**: `X-Status:`/`X-Keywords:`/`X-UID:`/`X-UIDL:` (mbox/c-client の状態記録 — RFC 2076)、`X-Mozilla-Status*`/`X-Mozilla-Keys:` (Thunderbird mbox 互換)、`X-IMAPbase:`/`X-Folder:`/`X-Seen:`/`X-Answered:`/`X-Flagged:`/`X-Deleted:` 等のメールストア状態記録は「受信後のストアが記す」値 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `store_status_marks` + `has_store_status_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 状態の記録はストアが記す — ストア印の自署を問え。
+
+### Security — D440: `X-SB*`/`X-Spambayes-*`/`X-Hammie-*`/`X-Text-Classification:`/`X-POPFile-*`/`X-Sieve-*`/`X-Filtered-*` 等のユーザー側分類ツール印自称が未検査
+
+- **問題**: `X-SBClass`/`X-SBScore`/`X-SBRule`/`X-SBVer` (SpamBouncer 公式)、`X-Hammie-Disposition`/`X-Spambayes-Classification` (SpamBayes)、`X-Text-Classification:` (POPFile)、`X-Sieve-*`/`X-Procmail-*`/`X-Filtered-*`/`X-Milter-*`/`X-Mailfilter-*`/`X-Match:` 等の受信側分類・フィルタ記録は送信側が書くことは自称。
+- **修正**: `Envelope` に `classifier_marks` + `has_classifier_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 分類の記録は分類器が記す — ローカルツール印の自署を問え。
+
+
 ### Security — D435: `X-Rspamd-*`/`X-Spamd-*`/`X-Stat-Signature:`/`X-Amavis-*`/`X-MailScanner-*`/`X-MIMEDefang-*` 等の OSS スキャナ・milter 印自称が未検査
 
 - **問題**: `X-Rspamd-*`/`X-Spamd-*`/`X-Stat-Signature:`/`X-OS-Fingerprint:` (rspamd milter_headers — 公式ソース一覧)、`X-Amavis-*` (amavisd-new)、`X-MailScanner-*` (MailScanner)、`X-MIMEDefang-*`、`X-Scanned-By:` 等の OSS スキャナ印は「スキャナが記す検査記録」であり、受信 MTA が記す値を送信側が書くことは自称。

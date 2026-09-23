@@ -796,6 +796,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D438: webmail内部印自称
+    if env.webmail_internal_marks {
+        render_risks.push(
+            "X-Gm-*/X-Google-*/X-YMail-*/X-AOL-* 等 — クラウドメールの受信・配送記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D439: ストア状態印自称
+    if env.store_status_marks {
+        render_risks.push(
+            "X-Status/X-UID/X-UIDL/X-Mozilla-Status/X-IMAPbase 等 — メールストアの状態記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D440: 分類ツール印自称
+    if env.classifier_marks {
+        render_risks.push(
+            "X-SB*/X-Spambayes-*/X-Hammie-*/X-Text-Classification 等 — ローカル分類ツールの判定記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
