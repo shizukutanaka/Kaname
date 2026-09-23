@@ -1787,6 +1787,12 @@ pub struct Envelope {
     pub tatami_marks: bool,
     /// `X-Onsennavi-*`/`X-Onsencenter-*`/`X-Onsenshop-*` 等の温泉・銭湯・入浴印を送信側が自称する兆候 (D637)
     pub onsen_marks: bool,
+    /// `X-Museumnavi-*`/`X-Museumcenter-*`/`X-Museumshop-*` 等の美術館・博物館印を送信側が自称する兆候 (D638)
+    pub museum_marks: bool,
+    /// `X-Takarazuka-*`/`X-Revue-*`/`X-Shiki-*` 等の劇場・ミュージカル・歌舞伎印を送信側が自称する兆候 (D639)
+    pub theater_marks: bool,
+    /// `X-Johnnys-*`/`X-Sakamichi-*`/`X-Akb48-*` 等のアイドル・声優・ファンクラブ印を送信側が自称する兆候 (D640)
+    pub idol_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2302,6 +2308,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         knife_marks: has_knife_marks(hdr),
         tatami_marks: has_tatami_marks(hdr),
         onsen_marks: has_onsen_marks(hdr),
+        museum_marks: has_museum_marks(hdr),
+        theater_marks: has_theater_marks(hdr),
+        idol_marks: has_idol_marks(hdr),
     })
 }
 
@@ -14603,6 +14612,233 @@ fn has_onsen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-hakuzenpro-"))
 }
 
+/// `X-Museumnavi-*`/`X-Museumcenter-*`/`X-Museumshop-*`/`X-Museumpro-*`/`X-Museumdoctor-*`/`X-Museumrescue-*`/`X-Museum24-*`/`X-Kokuhaku-*`/`X-Tokyokokuritsu-*`/`X-Uenomuseum-*`/`X-Moma-*`/`X-Louvremuseum-*`/`X-Metmuseum-*`/`X-Britishmuseum-*`/`X-Bijutsukannavi-*`/`X-Bijutsukancenter-*`/`X-Bijutsukanshop-*`/`X-Bijutsukanpro-*`/`X-Bijutsukandoctor-*`/`X-Bijutsukanrescue-*`/`X-Bijutsukan24-*`/`X-Hakubutsukannavi-*`/`X-Hakubutsukancenter-*`/`X-Hakubutsukanshop-*`/`X-Hakubutsukanpro-*`/`X-Gallerynavi-*`/`X-Gallerycenter-*`/`X-Galleryshop-*`/`X-Gallerypro-*`/`X-Gallerydoctor-*`/`X-Galleryrescue-*`/`X-Gallery24-*`/`X-Artmuseumnavi-*`/`X-Artmuseumcenter-*`/`X-Artmuseumshop-*`/`X-Artmuseumpro-*`/`X-Exhibnavi-*`/`X-Exhibcenter-*`/`X-Exhibshop-*`/`X-Exhibpro-*`/`X-Exhibdoctor-*`/`X-Exhibrescue-*`/`X-Exhib24-*`/`X-Ghiblimuseum-*`/`X-Fujikomuseum-*`/`X-Museummart-*`/`X-Museumplus-*`/`X-Museumsmart-*`/`X-Museumfamily-*`/`X-Bijutsukanmart-*`/`X-Bijutsukanplus-*`/`X-Bijutsukansmart-*`/`X-Bijutsukanfamily-*`/`X-Tenjikannavi-*`/`X-Tenjikancenter-*`/`X-Tenjikanshop-*`/`X-Tenjikanpro-*`/`X-Bunkazainavi-*`/`X-Bunkazaicenter-*`/`X-Bunkazaishop-*`/`X-Bunkazaipro-*` 等の美術館・博物館印を送信側が自称する兆候を検出する
+fn has_museum_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-museumnavi-")
+            || l.starts_with("x-museumcenter-")
+            || l.starts_with("x-museumshop-")
+            || l.starts_with("x-museumpro-")
+            || l.starts_with("x-museumdoctor-")
+            || l.starts_with("x-museumrescue-")
+            || l.starts_with("x-museum24-")
+            || l.starts_with("x-kokuhaku-")
+            || l.starts_with("x-tokyokokuritsu-")
+            || l.starts_with("x-uenomuseum-")
+            || l.starts_with("x-moma-")
+            || l.starts_with("x-louvremuseum-")
+            || l.starts_with("x-metmuseum-")
+            || l.starts_with("x-britishmuseum-")
+            || l.starts_with("x-bijutsukannavi-")
+            || l.starts_with("x-bijutsukancenter-")
+            || l.starts_with("x-bijutsukanshop-")
+            || l.starts_with("x-bijutsukanpro-")
+            || l.starts_with("x-bijutsukandoctor-")
+            || l.starts_with("x-bijutsukanrescue-")
+            || l.starts_with("x-bijutsukan24-")
+            || l.starts_with("x-hakubutsukannavi-")
+            || l.starts_with("x-hakubutsukancenter-")
+            || l.starts_with("x-hakubutsukanshop-")
+            || l.starts_with("x-hakubutsukanpro-")
+            || l.starts_with("x-gallerynavi-")
+            || l.starts_with("x-gallerycenter-")
+            || l.starts_with("x-galleryshop-")
+            || l.starts_with("x-gallerypro-")
+            || l.starts_with("x-gallerydoctor-")
+            || l.starts_with("x-galleryrescue-")
+            || l.starts_with("x-gallery24-")
+            || l.starts_with("x-artmuseumnavi-")
+            || l.starts_with("x-artmuseumcenter-")
+            || l.starts_with("x-artmuseumshop-")
+            || l.starts_with("x-artmuseumpro-")
+            || l.starts_with("x-exhibnavi-")
+            || l.starts_with("x-exhibcenter-")
+            || l.starts_with("x-exhibshop-")
+            || l.starts_with("x-exhibpro-")
+            || l.starts_with("x-exhibdoctor-")
+            || l.starts_with("x-exhibrescue-")
+            || l.starts_with("x-exhib24-")
+            || l.starts_with("x-ghiblimuseum-")
+            || l.starts_with("x-fujikomuseum-")
+            || l.starts_with("x-museummart-")
+            || l.starts_with("x-museumplus-")
+            || l.starts_with("x-museumsmart-")
+            || l.starts_with("x-museumfamily-")
+            || l.starts_with("x-bijutsukanmart-")
+            || l.starts_with("x-bijutsukanplus-")
+            || l.starts_with("x-bijutsukansmart-")
+            || l.starts_with("x-bijutsukanfamily-")
+            || l.starts_with("x-tenjikannavi-")
+            || l.starts_with("x-tenjikancenter-")
+            || l.starts_with("x-tenjikanshop-")
+            || l.starts_with("x-tenjikanpro-")
+            || l.starts_with("x-bunkazainavi-")
+            || l.starts_with("x-bunkazaicenter-")
+            || l.starts_with("x-bunkazaishop-")
+            || l.starts_with("x-bunkazaipro-"))
+}
+
+/// `X-Takarazuka-*`/`X-Revue-*`/`X-Shiki-*`/`X-Imperialtheatre-*`/`X-Theatrenavi-*`/`X-Theatrecenter-*`/`X-Theatreshop-*`/`X-Theatrepro-*`/`X-Theatredoctor-*`/`X-Theatrerescue-*`/`X-Theatre24-*`/`X-Gekidannavi-*`/`X-Gekidancenter-*`/`X-Gekidanshop-*`/`X-Gekidanpro-*`/`X-Gekidandoctor-*`/`X-Gekidanrescue-*`/`X-Gekidan24-*`/`X-Meijiza-*`/`X-Kabukiza-*`/`X-Minamiza-*`/`X-Shochikuza-*`/`X-Newnational-*`/`X-Bunraku-*`/`X-Kabukinavi-*`/`X-Kabukicenter-*`/`X-Kabukishop-*`/`X-Kabukipro-*`/`X-Kabukidoctor-*`/`X-Kabukirescue-*`/`X-Kabuki24-*`/`X-Musicalnavi-*`/`X-Musicalcenter-*`/`X-Musicalshop-*`/`X-Musicalpro-*`/`X-Musicaldoctor-*`/`X-Musicalrescue-*`/`X-Musical24-*`/`X-Balletnavi-*`/`X-Balletcenter-*`/`X-Balletshop-*`/`X-Balletpro-*`/`X-Balletdoctor-*`/`X-Balletrescue-*`/`X-Ballet24-*`/`X-Operanavi-*`/`X-Operacenter-*`/`X-Operashop-*`/`X-Operapro-*`/`X-Operadoctor-*`/`X-Operarescue-*`/`X-Opera24-*`/`X-Nogaku-*`/`X-Rakugo-*`/`X-Yose-*`/`X-Engekinavi-*`/`X-Engekicenter-*`/`X-Engekishop-*`/`X-Engekipro-*`/`X-Theatremart-*`/`X-Theatreplus-*`/`X-Theatresmart-*`/`X-Theatrefamily-*`/`X-Musicalmart-*`/`X-Musicalplus-*`/`X-Musicalsmart-*`/`X-Musicalfamily-*` 等の劇場・ミュージカル・歌舞伎印を送信側が自称する兆候を検出する
+fn has_theater_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-takarazuka-")
+            || l.starts_with("x-revue-")
+            || l.starts_with("x-shiki-")
+            || l.starts_with("x-imperialtheatre-")
+            || l.starts_with("x-theatrenavi-")
+            || l.starts_with("x-theatrecenter-")
+            || l.starts_with("x-theatreshop-")
+            || l.starts_with("x-theatrepro-")
+            || l.starts_with("x-theatredoctor-")
+            || l.starts_with("x-theatrerescue-")
+            || l.starts_with("x-theatre24-")
+            || l.starts_with("x-gekidannavi-")
+            || l.starts_with("x-gekidancenter-")
+            || l.starts_with("x-gekidanshop-")
+            || l.starts_with("x-gekidanpro-")
+            || l.starts_with("x-gekidandoctor-")
+            || l.starts_with("x-gekidanrescue-")
+            || l.starts_with("x-gekidan24-")
+            || l.starts_with("x-meijiza-")
+            || l.starts_with("x-kabukiza-")
+            || l.starts_with("x-minamiza-")
+            || l.starts_with("x-shochikuza-")
+            || l.starts_with("x-newnational-")
+            || l.starts_with("x-bunraku-")
+            || l.starts_with("x-kabukinavi-")
+            || l.starts_with("x-kabukicenter-")
+            || l.starts_with("x-kabukishop-")
+            || l.starts_with("x-kabukipro-")
+            || l.starts_with("x-kabukidoctor-")
+            || l.starts_with("x-kabukirescue-")
+            || l.starts_with("x-kabuki24-")
+            || l.starts_with("x-musicalnavi-")
+            || l.starts_with("x-musicalcenter-")
+            || l.starts_with("x-musicalshop-")
+            || l.starts_with("x-musicalpro-")
+            || l.starts_with("x-musicaldoctor-")
+            || l.starts_with("x-musicalrescue-")
+            || l.starts_with("x-musical24-")
+            || l.starts_with("x-balletnavi-")
+            || l.starts_with("x-balletcenter-")
+            || l.starts_with("x-balletshop-")
+            || l.starts_with("x-balletpro-")
+            || l.starts_with("x-balletdoctor-")
+            || l.starts_with("x-balletrescue-")
+            || l.starts_with("x-ballet24-")
+            || l.starts_with("x-operanavi-")
+            || l.starts_with("x-operacenter-")
+            || l.starts_with("x-operashop-")
+            || l.starts_with("x-operapro-")
+            || l.starts_with("x-operadoctor-")
+            || l.starts_with("x-operarescue-")
+            || l.starts_with("x-opera24-")
+            || l.starts_with("x-nogaku-")
+            || l.starts_with("x-rakugo-")
+            || l.starts_with("x-yose-")
+            || l.starts_with("x-engekinavi-")
+            || l.starts_with("x-engekicenter-")
+            || l.starts_with("x-engekishop-")
+            || l.starts_with("x-engekipro-")
+            || l.starts_with("x-theatremart-")
+            || l.starts_with("x-theatreplus-")
+            || l.starts_with("x-theatresmart-")
+            || l.starts_with("x-theatrefamily-")
+            || l.starts_with("x-musicalmart-")
+            || l.starts_with("x-musicalplus-")
+            || l.starts_with("x-musicalsmart-")
+            || l.starts_with("x-musicalfamily-"))
+}
+
+/// `X-Johnnys-*`/`X-Sakamichi-*`/`X-Akb48-*`/`X-Nogizaka-*`/`X-Sakurazaka-*`/`X-Hinatazaka-*`/`X-Momiro-*`/`X-Lovelive-*`/`X-Umamusume-*`/`X-Proseka-*`/`X-Idolmaster-*`/`X-Idolnavi-*`/`X-Idolcenter-*`/`X-Idolshop-*`/`X-Idolpro-*`/`X-Idoldoctor-*`/`X-Idolrescue-*`/`X-Idol24-*`/`X-Seiyunavi-*`/`X-Seiyucenter-*`/`X-Seiyushop-*`/`X-Seiyupro-*`/`X-Seiyudoctor-*`/`X-Seiyurescue-*`/`X-Seiyu24-*`/`X-Fankurabu-*`/`X-Fcnavi-*`/`X-Fccenter-*`/`X-Fcshop-*`/`X-Fcpro-*`/`X-Fcdoctor-*`/`X-Fcrescue-*`/`X-Fc24-*`/`X-Fanclubnavi-*`/`X-Fanclubcenter-*`/`X-Fanclubshop-*`/`X-Fanclubpro-*`/`X-Fanclubdoctor-*`/`X-Fanclubrescue-*`/`X-Fanclub24-*`/`X-Oshikatsu-*`/`X-Oshinavi-*`/`X-Oshicenter-*`/`X-Oshishop-*`/`X-Oshipro-*`/`X-Oshidoctor-*`/`X-Oshirescue-*`/`X-Oshi24-*`/`X-Chekinavi-*`/`X-Chekicenter-*`/`X-Chekishop-*`/`X-Chekipro-*`/`X-Anstagram-*`/`X-Anistanavi-*`/`X-Anistacenter-*`/`X-Anistashop-*`/`X-Idolmart-*`/`X-Idolplus-*`/`X-Idolsmart-*`/`X-Idolfamily-*`/`X-Voternavi-*`/`X-Votercenter-*`/`X-Votershop-*`/`X-Voterpro-*`/`X-Handshakenavi-*`/`X-Handshakecenter-*`/`X-Handshakeshop-*`/`X-Handshakepro-*`/`X-Livemeetingnavi-*`/`X-Livemeetingcenter-*`/`X-Livemeetingshop-*`/`X-Livemeetingpro-*` 等のアイドル・声優・ファンクラブ印を送信側が自称する兆候を検出する
+fn has_idol_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-johnnys-")
+            || l.starts_with("x-sakamichi-")
+            || l.starts_with("x-akb48-")
+            || l.starts_with("x-nogizaka-")
+            || l.starts_with("x-sakurazaka-")
+            || l.starts_with("x-hinatazaka-")
+            || l.starts_with("x-momiro-")
+            || l.starts_with("x-lovelive-")
+            || l.starts_with("x-umamusume-")
+            || l.starts_with("x-proseka-")
+            || l.starts_with("x-idolmaster-")
+            || l.starts_with("x-idolnavi-")
+            || l.starts_with("x-idolcenter-")
+            || l.starts_with("x-idolshop-")
+            || l.starts_with("x-idolpro-")
+            || l.starts_with("x-idoldoctor-")
+            || l.starts_with("x-idolrescue-")
+            || l.starts_with("x-idol24-")
+            || l.starts_with("x-seiyunavi-")
+            || l.starts_with("x-seiyucenter-")
+            || l.starts_with("x-seiyushop-")
+            || l.starts_with("x-seiyupro-")
+            || l.starts_with("x-seiyudoctor-")
+            || l.starts_with("x-seiyurescue-")
+            || l.starts_with("x-seiyu24-")
+            || l.starts_with("x-fankurabu-")
+            || l.starts_with("x-fcnavi-")
+            || l.starts_with("x-fccenter-")
+            || l.starts_with("x-fcshop-")
+            || l.starts_with("x-fcpro-")
+            || l.starts_with("x-fcdoctor-")
+            || l.starts_with("x-fcrescue-")
+            || l.starts_with("x-fc24-")
+            || l.starts_with("x-fanclubnavi-")
+            || l.starts_with("x-fanclubcenter-")
+            || l.starts_with("x-fanclubshop-")
+            || l.starts_with("x-fanclubpro-")
+            || l.starts_with("x-fanclubdoctor-")
+            || l.starts_with("x-fanclubrescue-")
+            || l.starts_with("x-fanclub24-")
+            || l.starts_with("x-oshikatsu-")
+            || l.starts_with("x-oshinavi-")
+            || l.starts_with("x-oshicenter-")
+            || l.starts_with("x-oshishop-")
+            || l.starts_with("x-oshipro-")
+            || l.starts_with("x-oshidoctor-")
+            || l.starts_with("x-oshirescue-")
+            || l.starts_with("x-oshi24-")
+            || l.starts_with("x-chekinavi-")
+            || l.starts_with("x-chekicenter-")
+            || l.starts_with("x-chekishop-")
+            || l.starts_with("x-chekipro-")
+            || l.starts_with("x-anstagram-")
+            || l.starts_with("x-anistanavi-")
+            || l.starts_with("x-anistacenter-")
+            || l.starts_with("x-anistashop-")
+            || l.starts_with("x-idolmart-")
+            || l.starts_with("x-idolplus-")
+            || l.starts_with("x-idolsmart-")
+            || l.starts_with("x-idolfamily-")
+            || l.starts_with("x-voternavi-")
+            || l.starts_with("x-votercenter-")
+            || l.starts_with("x-votershop-")
+            || l.starts_with("x-voterpro-")
+            || l.starts_with("x-handshakenavi-")
+            || l.starts_with("x-handshakecenter-")
+            || l.starts_with("x-handshakeshop-")
+            || l.starts_with("x-handshakepro-")
+            || l.starts_with("x-livemeetingnavi-")
+            || l.starts_with("x-livemeetingcenter-")
+            || l.starts_with("x-livemeetingshop-")
+            || l.starts_with("x-livemeetingpro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -23399,5 +23635,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_onsen_marks(clean));
+    }
+    #[test]
+    fn scan_は博機印を検出する() {
+        for raw in [
+            br"X-MuseumNavi-Alert: 1",
+            br"X-Tokyokokuritsu-Notice: 1",
+            br"X-Moma-Info: 1",
+            br"X-Louvremuseum-Report: 1",
+            br"X-BijutsukanNavi-Bulletin: 1",
+            br"X-GalleryNavi-News: 1",
+            br"X-ExhibNavi-Flash: 1",
+            br"X-GhibliMuseum-Release: 1",
+        ] {
+            assert!(has_museum_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_museum_marks(clean));
+    }
+
+    #[test]
+    fn scan_は劇機印を検出する() {
+        for raw in [
+            br"X-Takarazuka-Alert: 1",
+            br"X-Shiki-Notice: 1",
+            br"X-Imperialtheatre-Info: 1",
+            br"X-TheatreNavi-Report: 1",
+            br"X-KabukiNavi-Bulletin: 1",
+            br"X-MusicalNavi-News: 1",
+            br"X-BalletNavi-Flash: 1",
+            br"X-OperaNavi-Release: 1",
+        ] {
+            assert!(has_theater_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_theater_marks(clean));
+    }
+
+    #[test]
+    fn scan_は推機印を検出する() {
+        for raw in [
+            br"X-Johnnys-Alert: 1",
+            br"X-Sakamichi-Notice: 1",
+            br"X-Nogizaka-Info: 1",
+            br"X-IdolNavi-Report: 1",
+            br"X-SeiyuNavi-Bulletin: 1",
+            br"X-FanclubNavi-News: 1",
+            br"X-OshiNavi-Flash: 1",
+            br"X-ChekiNavi-Release: 1",
+        ] {
+            assert!(has_idol_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_idol_marks(clean));
     }
 }

@@ -2380,6 +2380,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D638: 美術館・博物館印自称
+    if env.museum_marks {
+        render_risks.push(
+            "X-MuseumNavi-*/X-Tokyokokuritsu-*/X-Moma-*/X-Louvremuseum-*/X-BijutsukanNavi-*/X-GalleryNavi-*/X-ExhibNavi-*/X-GhibliMuseum-* 等 — 博機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D639: 劇場・ミュージカル・歌舞伎印自称
+    if env.theater_marks {
+        render_risks.push(
+            "X-Takarazuka-*/X-Shiki-*/X-Imperialtheatre-*/X-TheatreNavi-*/X-KabukiNavi-*/X-MusicalNavi-*/X-BalletNavi-*/X-OperaNavi-* 等 — 劇機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D640: アイドル・声優・ファンクラブ印自称
+    if env.idol_marks {
+        render_risks.push(
+            "X-Johnnys-*/X-Sakamichi-*/X-Nogizaka-*/X-IdolNavi-*/X-SeiyuNavi-*/X-FanclubNavi-*/X-OshiNavi-*/X-ChekiNavi-* 等 — 推機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
