@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D441: `X-EOP*`/`X-Microsoft-Antispam:`/`X-Forefront-*`/`X-HM-*`/`X-MS-Exchange-*Loop*`/`X-MS-GCC-*`/`X-CrossPremises-*` 等の Microsoft 365/EOP/Exchange 内部印自称が未検査
+
+- **問題**: `X-Microsoft-Antispam`/`X-Forefront-Antispam-Report` (Microsoft Learn 公式)、`X-EOPAttributedMessage`/`X-EOPTenantAttributedMessage`/`X-MS-Exchange-*-Loop`/`X-MS-Exchange-Generated-Message-Source`/`X-MS-Gcc-Journal-Report`/`X-LD-Processed` (Microsoft Exchange ループ防止公式文書) は EOP/Exchange の処理記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `ms_eop_marks` + `has_ms_eop_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 配送の記録は EOP が記す — MS 内部印の自署を問え。
+
+### Security — D442: `X-ELQ-*`/`X-Pardot-*`/`X-MC-*`/`X-Mailchimp-*`/`X-Mailjet-*`/`X-MJ-*`/`X-Mandrill-*`/`X-HubSpot-*`/`X-Report-Abuse:`/`X-Accounttype:` 等のマーケ・ESP 印 (第二群) 自称が未検査
+
+- **問題**: `X-Mailjet-Campaign`/`X-MJ-CustomID` (Mailjet 公式ヘルプ)、`X-MC-User`/`X-Report-Abuse:`/`X-Accounttype:` (Mailchimp 実測)、`X-Mandrill-User` (Mandrill)、`X-ELQ-*`/`X-Pardot-*`/`X-Marketo*`/`X-HubSpot-*`/`X-Bronto-*`/`X-Silverpop-*`/`X-Acoustic-*`/`X-Responsys-*`/`X-ExactTarget-*`/`X-Lyris-*`/`X-Sailthru-*`/`X-Klaviyo-*`/`X-Braze-*`/`X-Iterable-*`/`X-iContact-*`/`X-AWeber-*`/`X-GetResponse-*`/`X-Intercom-*`/`X-Brevo-*` 等の配信プラットフォーム記録は送信側が書くことは自称。
+- **修正**: `Envelope` に `marketing_marks` + `has_marketing_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 発信の記録はプラットフォームが記す — ESP 印の自署を問え。
+
+### Security — D443: `X-SFDC-*`/`X-ServiceNow-*`/`X-iCIMS-*`/`X-iRecruiter-*`/`X-Zendesk-*`/`X-Jira-*`/`X-SAP-*`/`X-Workday-*`/`X-Taleo-*`/`X-Kenexa-*` 等の業務・採用ツール印自称が未検査
+
+- **問題**: `X-SFDC-User`/`X-SFDC-LK`/`X-SFDC-EntityId`/`X-SFDC-EmailCategory`/`X-SFDC-ORGTYPE` (Salesforce 公式文書)、`X-iCIMS-Priority`/`X-iCIMS-Type`/`X-iRecruiter-*`/`X-ServiceNow-*`/`X-Zendesk-*`/`X-Freshdesk-*`/`X-Jira-*`/`X-SAP-*`/`X-Workday-*`/`X-Taleo-*`/`X-Kenexa-*`/`X-BrassRing-*` 等の業務システム発信記録は送信側が書くことは自称。
+- **修正**: `Envelope` に `enterprise_marks` + `has_enterprise_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 発信の記録はシステムが記す — 業務ツール印の自署を問え。
+
+
 ### Security — D438: `X-Gm-*`/`X-Google-*`/`X-BeenThere:`/`X-Received:`/`X-YMail-*`/`X-Yahoo-*`/`X-AOL-*`/`X-iCloud-*` 等のクラウドメール・webmail 内部印自称が未検査
 
 - **問題**: `X-Gm-Message-State`/`X-Gm-Features`/`X-Gm-Gg` (Gmail — SpamAssassin bayes_ignore 公式一覧掲載)、`X-Google-Smtp-Source`、`X-Received:`/`X-Forwarded-Encrypted:`/`X-BeenThere:` (Google)、`X-YMail-OSG`/`X-Yahoo-Newman-Property` (Yahoo 内部配送印)、`X-AOL-Global-Disposition` (AOL 判定印 — rspamd ルールに記録) 等のクラウドメール内部記録は送信側が書くことは自称。
