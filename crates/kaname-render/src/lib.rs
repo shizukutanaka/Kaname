@@ -876,6 +876,38 @@ pub struct Envelope {
     /// データベース・データウェアハウス印があるか — 庫機の通知記録を
     /// 送信側が自称する兆候 (D515)。
     pub database_marks: bool,
+    /// `X-Netflix-*`/`X-Hulu-*`/`X-DisneyPlus-*`/`X-HBOMax-*`/`X-Max-*`/
+    /// `X-ParamountPlus-*`/`X-Peacock-*`/`X-PrimeVideo-*`/`X-DAZN-*`/
+    /// `X-UNEXT-*`/`X-Abema-*`/`X-TVer-*`/`X-Crunchyroll-*`/`X-Funimation-*`/
+    /// `X-Viki-*`/`X-iQiyi-*`/`X-WeTV-*`/`X-DiscoveryPlus-*`/`X-AppleTVPlus-*`/
+    /// `X-Roku-*`/`X-SlingTV-*`/`X-FuboTV-*`/`X-PlutoTV-*`/`X-Tubi-*`/
+    /// `X-RakutenTV-*`/`X-Lemino-*`/`X-Mubi-*`/`X-BritBox-*`/`X-ITVX-*`/
+    /// `X-Channel4-*`/`X-My5-*`/`X-SBSOnDemand-*`/`X-Kayo-*`/`X-Stan-*`/
+    /// `X-Binge-*`/`X-Foxtel-*` 等の動画配信・OTT 印があるか — 映機の
+    /// 通知記録を送信側が自称する兆候 (D516)。
+    pub streaming_marks: bool,
+    /// `X-1Password-*`/`X-Bitwarden-*`/`X-LastPass-*`/`X-Dashlane-*`/
+    /// `X-Keeper-*`/`X-NordVPN-*`/`X-ExpressVPN-*`/`X-Mullvad-*`/
+    /// `X-Surfshark-*`/`X-CyberGhost-*`/`X-Windscribe-*`/`X-TunnelBear-*`/
+    /// `X-Tailscale-*`/`X-ZeroTier-*`/`X-CloudflareWARP-*`/`X-PIA-*`/
+    /// `X-ProtonVPN-*`/`X-Backblaze-*`/`X-Carbonite-*`/`X-CrashPlan-*`/
+    /// `X-Acronis-*`/`X-Veeam-*`/`X-iDrive-*`/`X-Duplicati-*`/`X-restic-*`/
+    /// `X-Rclone-*`/`X-ArqBackup-*`/`X-Enpass-*`/`X-RoboForm-*`/
+    /// `X-StickyPassword-*`/`X-LogMeOnce-*`/`X-Passbolt-*`/`X-Strongbox-*`/
+    /// `X-SafeInCloud-*` 等のパスワード管理・VPN・バックアップ印があるか —
+    /// 鑰機の通知記録を送信側が自称する兆候 (D517)。
+    pub consumer_security_marks: bool,
+    /// `X-IRS-*`/`X-NTA-*`/`X-eLTAX-*`/`X-MyNaportal-*`/`X-GovUK-*`/
+    /// `X-GovDelivery-*`/`X-SSA-*`/`X-Medicare-*`/`X-HealthCareGov-*`/
+    /// `X-DMV-*`/`X-TurboTax-*`/`X-HRBlock-*`/`X-TaxAct-*`/`X-FreeTaxUSA-*`/
+    /// `X-eTax-*`/`X-Kokuzeicho-*`/`X-ePost-*`/`X-SydneyWater-*`/
+    /// `X-Energex-*`/`X-OriginEnergy-*`/`X-AGL-*`/`X-WaterCorp-*`/
+    /// `X-USAGov-*`/`X-GovInfo-*`/`X-Grants-*`/`X-FEMA-*`/`X-CBSA-*`/
+    /// `X-CRA-*`/`X-HMRC-*`/`X-DWP-*`/`X-NHS-*`/`X-Centrelink-*`/
+    /// `X-myGov-*`/`X-ATO-*`/`X-ServiceNSW-*`/`X-ICBC-*` 等の
+    /// 政府・税務・公共機関印があるか — 官機の通知記録を送信側が自称する
+    /// 兆候 (D518)。
+    pub government_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1252,6 +1284,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         airline_marks: has_airline_marks(raw),
         bank_marks: has_bank_marks(raw),
         database_marks: has_database_marks(raw),
+        streaming_marks: has_streaming_marks(raw),
+        consumer_security_marks: has_consumer_security_marks(raw),
+        government_marks: has_government_marks(raw),
     })
 }
 
@@ -5629,6 +5664,176 @@ fn has_database_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-tidb-")
             || l.starts_with("x-cockroach-")
             || l.starts_with("x-influxdata-")
+    })
+}
+
+/// `X-Netflix-*`/`X-Hulu-*`/`X-DisneyPlus-*`/`X-HBOMax-*`/`X-Max-*`/
+/// `X-ParamountPlus-*`/`X-Peacock-*`/`X-PrimeVideo-*`/`X-DAZN-*`/
+/// `X-UNEXT-*`/`X-Abema-*`/`X-TVer-*`/`X-Crunchyroll-*`/`X-Funimation-*`/
+/// `X-Viki-*`/`X-iQiyi-*`/`X-WeTV-*`/`X-DiscoveryPlus-*`/`X-AppleTVPlus-*`/
+/// `X-Roku-*`/`X-SlingTV-*`/`X-FuboTV-*`/`X-PlutoTV-*`/`X-Tubi-*`/
+/// `X-RakutenTV-*`/`X-Lemino-*`/`X-Mubi-*`/`X-BritBox-*`/`X-ITVX-*`/
+/// `X-Channel4-*`/`X-My5-*`/`X-SBSOnDemand-*`/`X-Kayo-*`/`X-Stan-*`/
+/// `X-Binge-*`/`X-Foxtel-*` 等の動画配信・OTT 印があるか判定する (D516)。
+///
+/// `X-Netflix-*` (Netflix)、`X-Hulu-*` (Hulu)、`X-DisneyPlus-*`
+/// (Disney+) は映機の通知記録 — 送信側から届くこれは自称。
+/// `X-Twitch-*`/`X-YouTube-*` は D459 で検出済み。
+fn has_streaming_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-netflix-")
+            || l.starts_with("x-hulu-")
+            || l.starts_with("x-disneyplus-")
+            || l.starts_with("x-hbomax-")
+            || l.starts_with("x-max-")
+            || l.starts_with("x-paramountplus-")
+            || l.starts_with("x-peacock-")
+            || l.starts_with("x-primevideo-")
+            || l.starts_with("x-dazn-")
+            || l.starts_with("x-unext-")
+            || l.starts_with("x-abema-")
+            || l.starts_with("x-tver-")
+            || l.starts_with("x-crunchyroll-")
+            || l.starts_with("x-funimation-")
+            || l.starts_with("x-viki-")
+            || l.starts_with("x-iqiyi-")
+            || l.starts_with("x-wetv-")
+            || l.starts_with("x-discoveryplus-")
+            || l.starts_with("x-appletvplus-")
+            || l.starts_with("x-roku-")
+            || l.starts_with("x-slingtv-")
+            || l.starts_with("x-fubotv-")
+            || l.starts_with("x-plutotv-")
+            || l.starts_with("x-tubi-")
+            || l.starts_with("x-rakutentv-")
+            || l.starts_with("x-lemino-")
+            || l.starts_with("x-mubi-")
+            || l.starts_with("x-britbox-")
+            || l.starts_with("x-itvx-")
+            || l.starts_with("x-channel4-")
+            || l.starts_with("x-my5-")
+            || l.starts_with("x-sbsondemand-")
+            || l.starts_with("x-kayo-")
+            || l.starts_with("x-stan-")
+            || l.starts_with("x-binge-")
+            || l.starts_with("x-foxtel-")
+    })
+}
+
+/// `X-1Password-*`/`X-Bitwarden-*`/`X-LastPass-*`/`X-Dashlane-*`/
+/// `X-Keeper-*`/`X-NordVPN-*`/`X-ExpressVPN-*`/`X-Mullvad-*`/
+/// `X-Surfshark-*`/`X-CyberGhost-*`/`X-Windscribe-*`/`X-TunnelBear-*`/
+/// `X-Tailscale-*`/`X-ZeroTier-*`/`X-CloudflareWARP-*`/`X-PIA-*`/
+/// `X-ProtonVPN-*`/`X-Backblaze-*`/`X-Carbonite-*`/`X-CrashPlan-*`/
+/// `X-Acronis-*`/`X-Veeam-*`/`X-iDrive-*`/`X-Duplicati-*`/`X-restic-*`/
+/// `X-Rclone-*`/`X-ArqBackup-*`/`X-Enpass-*`/`X-RoboForm-*`/
+/// `X-StickyPassword-*`/`X-LogMeOnce-*`/`X-Passbolt-*`/`X-Strongbox-*`/
+/// `X-SafeInCloud-*` 等のパスワード管理・VPN・バックアップ印があるか
+/// 判定する (D517)。
+///
+/// `X-1Password-*` (1Password)、`X-Bitwarden-*` (Bitwarden)、
+/// `X-NordVPN-*` (NordVPN) は鑰機の通知記録 — 送信側から届くこれは自称。
+fn has_consumer_security_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-1password-")
+            || l.starts_with("x-bitwarden-")
+            || l.starts_with("x-lastpass-")
+            || l.starts_with("x-dashlane-")
+            || l.starts_with("x-keeper-")
+            || l.starts_with("x-nordvpn-")
+            || l.starts_with("x-expressvpn-")
+            || l.starts_with("x-mullvad-")
+            || l.starts_with("x-surfshark-")
+            || l.starts_with("x-cyberghost-")
+            || l.starts_with("x-windscribe-")
+            || l.starts_with("x-tunnelbear-")
+            || l.starts_with("x-tailscale-")
+            || l.starts_with("x-zerotier-")
+            || l.starts_with("x-cloudflarewarp-")
+            || l.starts_with("x-pia-")
+            || l.starts_with("x-protonvpn-")
+            || l.starts_with("x-backblaze-")
+            || l.starts_with("x-carbonite-")
+            || l.starts_with("x-crashplan-")
+            || l.starts_with("x-acronis-")
+            || l.starts_with("x-veeam-")
+            || l.starts_with("x-idrive-")
+            || l.starts_with("x-duplicati-")
+            || l.starts_with("x-restic-")
+            || l.starts_with("x-rclone-")
+            || l.starts_with("x-arqbackup-")
+            || l.starts_with("x-enpass-")
+            || l.starts_with("x-roboform-")
+            || l.starts_with("x-stickypassword-")
+            || l.starts_with("x-logmeonce-")
+            || l.starts_with("x-passbolt-")
+            || l.starts_with("x-strongbox-")
+            || l.starts_with("x-safeincloud-")
+    })
+}
+
+/// `X-IRS-*`/`X-NTA-*`/`X-eLTAX-*`/`X-MyNaportal-*`/`X-GovUK-*`/
+/// `X-GovDelivery-*`/`X-SSA-*`/`X-Medicare-*`/`X-HealthCareGov-*`/
+/// `X-DMV-*`/`X-TurboTax-*`/`X-HRBlock-*`/`X-TaxAct-*`/`X-FreeTaxUSA-*`/
+/// `X-eTax-*`/`X-Kokuzeicho-*`/`X-ePost-*`/`X-SydneyWater-*`/
+/// `X-Energex-*`/`X-OriginEnergy-*`/`X-AGL-*`/`X-WaterCorp-*`/
+/// `X-USAGov-*`/`X-GovInfo-*`/`X-Grants-*`/`X-FEMA-*`/`X-CBSA-*`/
+/// `X-CRA-*`/`X-HMRC-*`/`X-DWP-*`/`X-NHS-*`/`X-Centrelink-*`/
+/// `X-myGov-*`/`X-ATO-*`/`X-ServiceNSW-*`/`X-ICBC-*` 等の
+/// 政府・税務・公共機関印があるか判定する (D518)。
+///
+/// `X-IRS-*` (IRS)、`X-NTA-*` (国税庁)、`X-GovUK-*` (GOV.UK) は官機の
+/// 通知記録 — 送信側から届くこれは自称。還付金詐欺の典型印。
+fn has_government_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-irs-")
+            || l.starts_with("x-nta-")
+            || l.starts_with("x-eltax-")
+            || l.starts_with("x-mynaportal-")
+            || l.starts_with("x-govuk-")
+            || l.starts_with("x-govdelivery-")
+            || l.starts_with("x-ssa-")
+            || l.starts_with("x-medicare-")
+            || l.starts_with("x-healthcaregov-")
+            || l.starts_with("x-dmv-")
+            || l.starts_with("x-turbotax-")
+            || l.starts_with("x-hrblock-")
+            || l.starts_with("x-taxact-")
+            || l.starts_with("x-freetaxusa-")
+            || l.starts_with("x-etax-")
+            || l.starts_with("x-kokuzeicho-")
+            || l.starts_with("x-epost-")
+            || l.starts_with("x-sydneywater-")
+            || l.starts_with("x-energex-")
+            || l.starts_with("x-originenergy-")
+            || l.starts_with("x-agl-")
+            || l.starts_with("x-watercorp-")
+            || l.starts_with("x-usagov-")
+            || l.starts_with("x-govinfo-")
+            || l.starts_with("x-grants-")
+            || l.starts_with("x-fema-")
+            || l.starts_with("x-cbsa-")
+            || l.starts_with("x-cra-")
+            || l.starts_with("x-hmrc-")
+            || l.starts_with("x-dwp-")
+            || l.starts_with("x-nhs-")
+            || l.starts_with("x-centrelink-")
+            || l.starts_with("x-mygov-")
+            || l.starts_with("x-ato-")
+            || l.starts_with("x-servicensw-")
+            || l.starts_with("x-icbc-")
     })
 }
 
@@ -10072,6 +10277,72 @@ mod tests {
         assert!(has_database_marks(u1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_database_marks(clean));
+    }
+
+    #[test]
+    fn scan_は動画配信印を検出する() {
+        let n1 = b"X-Netflix-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(n1));
+        let h1 = b"X-Hulu-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(h1));
+        let d1 = b"X-DisneyPlus-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(d1));
+        let p1 = b"X-PrimeVideo-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(p1));
+        let c1 = b"X-Crunchyroll-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(c1));
+        let t1 = b"X-TVer-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(t1));
+        let a1 = b"X-Abema-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(a1));
+        let r1 = b"X-Roku-Notify: x\r\n\r\nx";
+        assert!(has_streaming_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_streaming_marks(clean));
+    }
+
+    #[test]
+    fn scan_は鑰機印を検出する() {
+        let p1 = b"X-1Password-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(p1));
+        let b1 = b"X-Bitwarden-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(b1));
+        let n1 = b"X-NordVPN-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(n1));
+        let m1 = b"X-Mullvad-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(m1));
+        let b2 = b"X-Backblaze-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(b2));
+        let v1 = b"X-Veeam-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(v1));
+        let t1 = b"X-Tailscale-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(t1));
+        let d1 = b"X-Dashlane-Notify: x\r\n\r\nx";
+        assert!(has_consumer_security_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_consumer_security_marks(clean));
+    }
+
+    #[test]
+    fn scan_は政府印を検出する() {
+        let i1 = b"X-IRS-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(i1));
+        let n1 = b"X-NTA-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(n1));
+        let g1 = b"X-GovUK-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(g1));
+        let s1 = b"X-SSA-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(s1));
+        let t1 = b"X-TurboTax-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(t1));
+        let h1 = b"X-HMRC-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(h1));
+        let m1 = b"X-myGov-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(m1));
+        let a1 = b"X-ATO-Notify: x\r\n\r\nx";
+        assert!(has_government_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_government_marks(clean));
     }
 }
 

@@ -1420,6 +1420,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D516: 動画配信・OTT 印自称
+    if env.streaming_marks {
+        render_risks.push(
+            "X-Netflix-*/X-Hulu-*/X-DisneyPlus-*/X-PrimeVideo-*/X-DAZN-*/X-TVer-*/X-Abema-*/X-Roku-* 等 — 映機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D517: パスワード管理・VPN・バックアップ印自称
+    if env.consumer_security_marks {
+        render_risks.push(
+            "X-1Password-*/X-Bitwarden-*/X-NordVPN-*/X-Mullvad-*/X-Backblaze-*/X-Veeam-*/X-Tailscale-*/X-Dashlane-* 等 — 鑰機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D518: 政府・税務・公共機関印自称
+    if env.government_marks {
+        render_risks.push(
+            "X-IRS-*/X-NTA-*/X-GovUK-*/X-SSA-*/X-TurboTax-*/X-HMRC-*/X-myGov-*/X-ATO-* 等 — 官機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
