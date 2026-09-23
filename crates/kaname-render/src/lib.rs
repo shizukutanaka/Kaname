@@ -417,9 +417,7 @@ pub fn has_fake_list_headers(raw: &[u8]) -> bool {
             || l.starts_with("list-help:")
             || l.starts_with("list-archive:")
     });
-    let has_unsub = header
-        .lines()
-        .any(|l| l.starts_with("list-unsubscribe:"));
+    let has_unsub = header.lines().any(|l| l.starts_with("list-unsubscribe:"));
     has_list && !has_unsub
 }
 
