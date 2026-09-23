@@ -136,6 +136,17 @@ impl RawHtml {
     pub fn new(html: String) -> Self {
         Self(html)
     }
+
+    /// 未サニタイズの HTML を文字列として参照する (解析用 — 表示には使わない)。
+    ///
+    /// 表示目的で中身を取り出す経路は `sanitize_html` のみ。本アクセサは
+    /// `html_to_text` のような「ユーザーが見る本文から検査用テキストを
+    /// 復元する」解析経路のための入口であり、返り値を iframe 等に
+    /// そのまま描画してはならない。
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Attachment header only. Bytes live on disk or in the sandbox.
@@ -639,6 +650,392 @@ fn is_zero_width(c: char) -> bool {
         | '\u{2060}'..='\u{2064}' // Word Joiner, 数学用不可視演算子
         | '\u{FEFF}'             // BOM / ZWNBSP
     )
+}
+
+// ============================================================================
+// HTML → 検査用テキスト抽出 (hidden text salting 対策)
+// ============================================================================
+
+/// `html_to_text` の抽出結果。
+#[derive(Debug, Clone)]
+pub struct ExtractedBodyText {
+    /// タグ除去・エンティティ復号・空白正規化済みのテキスト。
+    /// 末尾に `<a href>` の宛先 URL が別行として付加される (URL 検査経路へ供給)。
+    pub text: String,
+    /// CSS/属性による非表示コンテンツを一定量スキップしたか
+    /// (hidden text salting の兆候 — シグナル化に使う)。
+    pub hidden_content: bool,
+}
+
+/// HTML 本文から「ユーザーが見るテキスト」を復元する (解析用 — 表示には使わない)。
+///
+/// # なぜ必要か
+///
+/// `Envelope::text_body` は text/plain パートのみを返すため、HTML のみの
+/// メール (BEC/フィッシングで一般的) では本文解析への入力が空になり、
+/// キーワード系検出が全て素通りしていた。また multipart/alternative で
+/// text/plain にデコイ文・text/html に攻撃文を置く「パート不一致」回避も
+/// 同じ穴を使う — 解析対象は「ユーザーに実際に描画される側」を含める
+/// 必要がある。
+///
+/// # hidden text salting
+///
+/// Cisco Talos「Too salty to handle」(2025-10、2024-03〜2025-07 観測) が
+/// 報告する手法: `display:none`・`font-size:0`・`opacity:0`・`mso-hide:all`
+/// 等で見えないランダム文字列を本文に撒き、キーワードフィルタの語結合を
+/// 破壊する (例: `wi<s style="display:none">QX</s>re transfer` は単純な
+/// タグ除去では "wiQXre transfer" となり "wire transfer" に一致しない)。
+/// 本関数は非表示指定の要素をサブツリーごとスキップすることで、
+/// 可視テキストだけを結合する。一定量以上スキップした場合は
+/// `hidden_content = true` を立て、呼出側が兆候として報告できるようにする。
+///
+/// 完全な CSS 解釈 (クラス/継承) は行わない — インライン `style=` と
+/// `hidden` 属性の代表的な隠蔽指定のみを扱うヒューリスティック。
+/// 検出漏れ方向ではなく過剰検出方向に寄せるため、`color:transparent` や
+/// 負の `text-indent` も隠蔽指定に含める。
+#[must_use]
+pub fn html_to_text(html: &str) -> ExtractedBodyText {
+    /// コンテンツを持たないため閉タグ探索を要しない void 要素。
+    const VOID_TAGS: &[&str] = &[
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+        "source", "track", "wbr",
+    ];
+    /// 内容を丸ごと捨てる要素 (実行・スタイル・非描画メタ情報)。
+    const DROP_TAGS: &[&str] = &[
+        "script", "style", "head", "title", "template", "noscript", "object", "iframe", "svg",
+        "textarea",
+    ];
+    /// テキストを区切るブロック要素 (開・閉どちらのタグでも改行を挿入)。
+    const BLOCK_TAGS: &[&str] = &[
+        "p", "div", "br", "li", "tr", "td", "th", "table", "ul", "ol", "h1", "h2", "h3", "h4",
+        "h5", "h6", "blockquote", "pre", "section", "article", "header", "footer", "hr",
+    ];
+
+    let bytes = html.as_bytes();
+    let mut pos = 0usize;
+    let mut text = String::with_capacity(html.len() / 2);
+    let mut hrefs: Vec<&str> = Vec::new();
+    let mut hidden_chars = 0usize;
+
+    while pos < bytes.len() {
+        // ---- テキスト部分 (& 実体参照を復号しつつ次の '<' まで採る) ----
+        if bytes[pos] != b'<' {
+            let start = pos;
+            while pos < bytes.len() && bytes[pos] != b'<' {
+                pos += 1;
+            }
+            decode_entities_into(&html[start..pos], &mut text);
+            continue;
+        }
+        // ---- コメント / DOCTYPE / PI ----
+        if html[pos..].starts_with("<!--") {
+            pos = find_after(html, pos + 4, "-->", bytes.len());
+            continue;
+        }
+        if html[pos..].starts_with("<!") || html[pos..].starts_with("<?") {
+            pos = find_tag_end(html, pos + 2);
+            continue;
+        }
+        // ---- タグ名 ----
+        let (name, is_end, tag_start) = if bytes[pos + 1..].first() == Some(&b'/') {
+            (read_tag_name(html, pos + 2), true, pos + 2)
+        } else {
+            (read_tag_name(html, pos + 1), false, pos + 1)
+        };
+        if name.is_empty() {
+            // '<' がタグ開始でない (裸の不等号) — リテラルとして保持。
+            text.push('<');
+            pos += 1;
+            continue;
+        }
+        let tag_end = find_tag_end(html, tag_start + name.len());
+        let tag_inner = &html[tag_start..tag_end.min(bytes.len())];
+        let lower = name.to_ascii_lowercase();
+        let name = lower.as_str();
+
+        if is_end {
+            if BLOCK_TAGS.contains(&name) {
+                text.push('\n');
+            }
+            pos = tag_end;
+            continue;
+        }
+
+        // void 要素は閉タグを持たないため、隠蔽判定より先に処理する
+        // (<img style="display:none"> をサブツリー探索すると EOF まで落ちる)。
+        let self_closing = tag_inner.trim_end().ends_with('/');
+        if VOID_TAGS.contains(&name) || self_closing {
+            pos = tag_end;
+            if name == "br" {
+                text.push('\n');
+            }
+            continue;
+        }
+        // ---- 非表示指定 / DROP 要素のサブツリー捨て ----
+        let hidden = has_hiding_marker(tag_inner);
+        if DROP_TAGS.contains(&name) || hidden {
+            let (skipped, end) = skip_subtree(html, tag_end, name);
+            if hidden && !DROP_TAGS.contains(&name) {
+                hidden_chars += skipped;
+            }
+            pos = end;
+            continue;
+        }
+        if BLOCK_TAGS.contains(&name) {
+            text.push('\n');
+        }
+        // 可視 <a> の href は宛先 URL として末尾に付加する (リンク検査へ供給)。
+        if name == "a" {
+            if let Some(h) = attr_value(tag_inner, "href") {
+                hrefs.push(h);
+            }
+        }
+        pos = tag_end;
+    }
+
+    for h in &hrefs {
+        text.push('\n');
+        text.push_str(h);
+    }
+
+    ExtractedBodyText {
+        text: collapse_whitespace(&text),
+        // ごく短い隠し要素 (装飾��スペース等) では兆候を立てない。
+        hidden_content: hidden_chars >= 32,
+    }
+}
+
+/// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
+fn read_tag_name(html: &str, start: usize) -> &str {
+    let bytes = html.as_bytes();
+    let mut end = start;
+    while end < bytes.len() {
+        let b = bytes[end];
+        if b.is_ascii_alphanumeric() || b == b'-' {
+            end += 1;
+        } else {
+            break;
+        }
+    }
+    if end == start || !bytes[start].is_ascii_alphabetic() {
+        ""
+    } else {
+        &html[start..end]
+    }
+}
+
+/// 開タグ/単独タグの終端 `>` の直後位置を返す。クォート内の `>` は無視。
+/// 見つからなければ EOF。
+fn find_tag_end(html: &str, from: usize) -> usize {
+    let bytes = html.as_bytes();
+    let mut i = from;
+    let mut quote = 0u8;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if quote != 0 {
+            if b == quote {
+                quote = 0;
+            }
+        } else if b == b'"' || b == b'\'' {
+            quote = b;
+        } else if b == b'>' {
+            return i + 1;
+        }
+        i += 1;
+    }
+    bytes.len()
+}
+
+/// `needle` を `from` から探し、マッチ終端の位置を返す。見つからなければ `eof`。
+fn find_after(html: &str, from: usize, needle: &str, eof: usize) -> usize {
+    html[from..]
+        .find(needle)
+        .map_or(eof, |i| from + i + needle.len())
+}
+
+/// 同名閉タグまで要素をスキップし、(スキップしたテキスト量推定, 終了位置) を返す。
+/// 同名の開タグがネストする場合は深度を数える。閉タグが無ければ EOF まで落とす。
+fn skip_subtree(html: &str, from: usize, name: &str) -> (usize, usize) {
+    let mut depth = 1usize;
+    let mut i = from;
+    let bytes = html.as_bytes();
+    let mut skipped = 0usize;
+    while i < bytes.len() {
+        let lt = match html[i..].find('<') {
+            Some(off) => i + off,
+            None => break,
+        };
+        skipped += lt - i;
+        i = lt;
+        if html[i..].starts_with("<!--") {
+            i = find_after(html, i + 4, "-->", bytes.len());
+            continue;
+        }
+        let is_end = bytes[i + 1..].first() == Some(&b'/');
+        let nstart = if is_end { i + 2 } else { i + 1 };
+        let n = read_tag_name(html, nstart);
+        if n.eq_ignore_ascii_case(name) {
+            if is_end {
+                depth -= 1;
+                if depth == 0 {
+                    return (skipped, find_tag_end(html, nstart + n.len()));
+                }
+            } else {
+                depth += 1;
+            }
+        }
+        i = find_tag_end(html, nstart + n.len());
+    }
+    (skipped, bytes.len())
+}
+
+/// 開始タグ断片 (`name ...` から `>` まで) に代表的な非表示指定があるか。
+fn has_hiding_marker(tag_inner: &str) -> bool {
+    // `hidden` 属性 (値なし含む)。トークン末尾の `>` を落として比較する。
+    if tag_inner.split_whitespace().any(|t| {
+        let t = t.trim_end_matches('>');
+        t.eq_ignore_ascii_case("hidden") || t.to_ascii_lowercase().starts_with("hidden=")
+    }) {
+        return true;
+    }
+    let Some(style) = attr_value(tag_inner, "style") else {
+        return false;
+    };
+    let s = style.to_ascii_lowercase();
+    let s = s.replace(' ', "");
+    [
+        "display:none",
+        "visibility:hidden",
+        "font-size:0",
+        "opacity:0",
+        "max-height:0",
+        "height:0",
+        "width:0",
+        "max-width:0",
+        "line-height:0",
+        "mso-hide:all",
+        "color:transparent",
+        "text-indent:-",
+        // 注: `overflow:hidden`・`position:absolute` は単独では内容を隠さない
+        // (レイアウト用途が多い) ため含めない。left:-9999px 系の画面外配置は
+        // text-indent:- で代表して捕捉する。
+    ]
+    .iter()
+    .any(|marker| s.contains(marker))
+}
+
+/// 開始タグ断片から `name="value"` / `name='value'` / `name=value` / `name = "v"` の値を取る。
+/// 属性名の直前は空白またはクォートを要求する (`data-style` 等の誤マッチを防ぐ)。
+fn attr_value<'a>(tag_inner: &'a str, name: &str) -> Option<&'a str> {
+    let lower = tag_inner.to_ascii_lowercase();
+    let mut search_from = 0usize;
+    while let Some(rel) = lower[search_from..].find(name) {
+        let idx = search_from + rel;
+        search_from = idx + 1;
+        let bounded = lower[..idx]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_whitespace() || c == '/' || c == '"' || c == '\'');
+        if !bounded {
+            continue;
+        }
+        let after = &tag_inner[idx + name.len()..];
+        let after = after.trim_start();
+        let Some(v) = after.strip_prefix('=') else {
+            continue;
+        };
+        let v = v.trim_start();
+        return match v.as_bytes().first() {
+            Some(&b'"') => v[1..].find('"').map(|e| &v[1..1 + e]),
+            Some(&b'\'') => v[1..].find('\'').map(|e| &v[1..1 + e]),
+            _ => {
+                let e = v
+                    .find(|c: char| c.is_whitespace() || c == '>')
+                    .unwrap_or(v.len());
+                if e == 0 {
+                    None
+                } else {
+                    Some(&v[..e])
+                }
+            }
+        };
+    }
+    None
+}
+
+/// `&amp;` `&lt;` `&gt;` `&quot;` `&apos;` `&nbsp;` と 10 進/16 進数値参照を復号する。
+/// 数値参照によるキーワード難読化 (`w&#105;re`) は実体参照の形で撒かれる
+/// (hidden text salting の一角 — Talos 2025)。
+fn decode_entities_into(src: &str, out: &mut String) {
+    let mut rest = src;
+    while let Some(amp) = rest.find('&') {
+        out.push_str(&rest[..amp]);
+        let tail = &rest[amp..];
+        let Some(semi) = tail.find(';') else {
+            out.push('&');
+            rest = &tail[1..];
+            continue;
+        };
+        let entity = &tail[1..semi];
+        let decoded: Option<char> = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "nbsp" => Some(' '),
+            _ => {
+                if let Some(num) = entity.strip_prefix('#') {
+                    let cp = if let Some(hex) = num.strip_prefix(['x', 'X']) {
+                        u32::from_str_radix(hex, 16).ok()
+                    } else {
+                        num.parse::<u32>().ok()
+                    };
+                    cp.and_then(char::from_u32)
+                } else {
+                    None
+                }
+            }
+        };
+        match decoded {
+            Some(c) => {
+                out.push(c);
+                rest = &tail[semi + 1..];
+            }
+            // 不明な実体参照はそのまま残す (& だけ消さない)。
+            None => {
+                out.push('&');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+}
+
+/// 連続する空白を 1 つの半角空白に、行頭末の空白を除去する。
+fn collapse_whitespace(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut pending_space = false;
+    let mut at_line_start = true;
+    for c in s.chars() {
+        if c == '\n' {
+            pending_space = false;
+            if !out.ends_with('\n') && !out.is_empty() {
+                out.push('\n');
+            }
+            at_line_start = true;
+        } else if c.is_whitespace() {
+            pending_space = !at_line_start;
+        } else {
+            if pending_space {
+                out.push(' ');
+                pending_space = false;
+            }
+            out.push(c);
+            at_line_start = false;
+        }
+    }
+    out.trim().to_string()
 }
 
 // ============================================================================
@@ -1305,6 +1702,130 @@ mod tests {
             addr_to_address(&addr).is_none(),
             "@ なしアドレスは None を返すべき"
         );
+    }
+
+    // ── D160: html_to_text (HTML のみメールの解析対象化 + hidden text salting) ──
+
+    #[test]
+    fn html_to_text_strips_basic_tags() {
+        let e = html_to_text("<p>Hello <b>world</b></p>");
+        assert_eq!(e.text, "Hello world");
+        assert!(!e.hidden_content);
+    }
+
+    #[test]
+    fn html_to_text_drops_script_style_head() {
+        let e = html_to_text(
+            "<html><head><style>body{color:red}</style><title>t</title></head>\
+             <body>見える本文<script>alert(1)</script></body></html>",
+        );
+        assert_eq!(e.text, "見える本文", "{}", e.text);
+    }
+
+    #[test]
+    fn html_to_text_recovers_visible_text_from_salting() {
+        // Cisco Talos 型: 非表示スパンで語を分断する salt を捨てる
+        let e = html_to_text(
+            "<p>wi<span style=\"display:none\">QXJZ</span>re \
+             <span style=\"font-size:0\">AAAA</span>transfer urgently</p>",
+        );
+        assert_eq!(e.text, "wire transfer urgently", "{}", e.text);
+    }
+
+    #[test]
+    fn html_to_text_flags_bulk_hidden_content() {
+        let html = format!(
+            "<p>wi<span style=\"display:none\">{}</span>re transfer</p>",
+            "x".repeat(40)
+        );
+        let e = html_to_text(&html);
+        assert!(e.text.contains("wire transfer"), "{}", e.text);
+        assert!(e.hidden_content, "大量の非表示テキストで hidden_content が立つべき");
+    }
+
+    #[test]
+    fn html_to_text_drops_each_hiding_style() {
+        for style in [
+            "display:none",
+            "visibility:hidden",
+            "opacity:0",
+            "mso-hide:all",
+            "font-size:0px",
+            "color:transparent",
+            "text-indent:-9999px",
+        ] {
+            let html = format!("<p>a<span style=\"{style}\">hidden</span>b</p>");
+            let e = html_to_text(&html);
+            assert_eq!(e.text, "ab", "{style} の中身を落とすべき: {}", e.text);
+        }
+    }
+
+    #[test]
+    fn html_to_text_drops_hidden_attribute() {
+        let e = html_to_text("<p>a<span hidden>gone</span>b</p>");
+        assert_eq!(e.text, "ab");
+    }
+
+    #[test]
+    fn html_to_text_skips_nested_same_name_hidden() {
+        // display:none の div 内に同名 div がネストしても閉タグを取り違えない
+        let e = html_to_text("<div style=\"display:none\">x<div>y</div>z</div><p>ok</p>");
+        assert_eq!(e.text, "ok", "{}", e.text);
+    }
+
+    #[test]
+    fn html_to_text_decodes_entities() {
+        let e = html_to_text("<p>w&#105;re &amp; &#xA9; urgent&nbsp;invoice</p>");
+        assert_eq!(e.text, "wire & © urgent invoice", "{}", e.text);
+        assert_eq!(html_to_text("a&lt;b&gt;c&quot;").text, "a<b>c\"");
+    }
+
+    #[test]
+    fn html_to_text_appends_visible_hrefs() {
+        let e = html_to_text(
+            "<a href=\"https://phish.example/x\">click</a> and \
+             <a href='https://e2.jp'>here</a>",
+        );
+        assert!(e.text.contains("click"), "{}", e.text);
+        assert!(e.text.contains("https://phish.example/x"), "{}", e.text);
+        assert!(e.text.contains("https://e2.jp"), "{}", e.text);
+    }
+
+    #[test]
+    fn html_to_text_skips_hrefs_inside_hidden_elements() {
+        let e = html_to_text(
+            "<span style=\"display:none\"><a href=\"https://bad.example\">x</a>\
+             AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</span><a href=\"https://ok.example\">y</a>",
+        );
+        assert!(!e.text.contains("bad.example"), "{}", e.text);
+        assert!(e.text.contains("ok.example"), "{}", e.text);
+    }
+
+    #[test]
+    fn html_to_text_void_hidden_element_does_not_swallow_document() {
+        // 回帰: <img style="display:none"> は void — 閉タグを探して EOF まで
+        // 落ちると後続本文が全て失われる
+        let e = html_to_text("<img style=\"display:none\" src=\"x\">visible after");
+        assert!(e.text.contains("visible after"), "{}", e.text);
+    }
+
+    #[test]
+    fn html_to_text_handles_malformed_and_edge_cases() {
+        // 閉じないタグ・裸の不等号・コメント・data-style 誤マッチ
+        assert_eq!(html_to_text("<b>bold tail").text, "bold tail");
+        assert_eq!(html_to_text("a<!-- salt -->b").text, "ab");
+        assert_eq!(html_to_text("<span data-style=\"display:none\">keep</span>").text, "keep");
+        assert!(html_to_text("a < b").text.contains("a < b"));
+    }
+
+    #[test]
+    fn html_to_text_japanese_email_keywords_visible() {
+        let e = html_to_text(
+            "<html><body><p>至急、下記口座へ振込をお願いします。</p>\
+             <p>みずほ銀行 本店 普通 1234567</p></body></html>",
+        );
+        assert!(e.text.contains("至急"), "{}", e.text);
+        assert!(e.text.contains("振込"), "{}", e.text);
     }
 }
 
