@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D243: 返信先 (Reply-To) がフリーメールの「個人メール誘導」が未検査
+
+- `From: ceo@corp.example` + `Reply-To: ceo.private@gmail.com` は BEC の代名詞 — From は組織ドメインの体裁のまま「個人メールに返せ」と誘導するが、Reply-To ドメインの性質自体を見る検査がなかった
+- 対処: `reply_to_is_freemail` 新設 — From がフリーメールなら私的利用として非報告、Reply-To のみフリーメールで `render_risks` 兆候報告
+- テスト +0 件 (UI 層の組み合わせ)
+
+### Security — D244: `Expires:`/`Expiry-Date:`/`X-Deadline:` の「期限」宣言が未検査
+
+- 「有効期限」ヘッダーは正当なメールにほぼ出現しない — 「今すぐ返答せよ」という緊急性をメール自体が主張する手段として攻撃者が使う。存在自体が兆候
+- 対処: `has_expiry_deadline_header` 新設でトップレベルヘッダのみ走査 → `expiry_deadline` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D245: 本文 HTML の `<script>` タグが未検査
+
+- サニタイザが script を除去しても「仕込まれた」事実は兆候として残すべき — メールに script は正当な用途がなく、存在自体が悪意の形
+- 対処: `has_script_tag` 新設で `<script` を検出 → `script_tag` → `render_risks` 兆候報告
+- テスト +3 件
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

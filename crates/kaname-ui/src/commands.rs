@@ -542,6 +542,31 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D243: 返信先がフリーメール (From は組織ドメインの体裁のまま
+    // 「個人メールに返せ」と誘導する BEC 常套手段)
+    if reply_to_is_freemail(&env) {
+        render_risks.push(
+            "返信先 (Reply-To) がフリーメールドメイン — 「個人メールに返せ」と誘導する BEC の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D244: Expires/Expiry-Date/X-Deadline の「期限」宣言
+    if env.expiry_deadline {
+        render_risks.push(
+            "ヘッダーが期限 (Expires/Expiry-Date 等) を宣言 — 緊急性を主張する手段です"
+                .to_string(),
+        );
+    }
+
+    // D245: 本文 HTML の script 仕込み
+    if html_text.script_tag {
+        render_risks.push(
+            "本文 HTML に <script> タグ — メールに正当な用途のない動作仕込みです"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1058,6 +1083,56 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
 ///   表示パーサ差異のリスクは残る (軽い兆候)
 /// - 単一 From + `Sender:` ドメイン不一致 → 「on behalf of」委任送信の
 ///   正常形なので報告しない (ESP 経由配信で頻出するため誤検出が多い)
+/// 返信先 (Reply-To) がフリーメールドメインか判定する (D243)。
+///
+/// 「From は組織ドメインの体裁、返信先は個人メール」は BEC の
+/// 常套手段 — ユーザーが普通に返信すると個人メールに届く。
+/// From 自体がフリーメールなら私的利用として兆候としない。
+fn reply_to_is_freemail(env: &kaname_render::Envelope) -> bool {
+    const FREEMAIL: &[&str] = &[
+        "gmail.com",
+        "yahoo.com",
+        "yahoo.co.jp",
+        "hotmail.com",
+        "hotmail.co.jp",
+        "outlook.com",
+        "live.com",
+        "live.jp",
+        "aol.com",
+        "icloud.com",
+        "me.com",
+        "proton.me",
+        "protonmail.com",
+        "gmx.com",
+        "gmx.de",
+        "mail.com",
+        "yandex.com",
+        "yandex.ru",
+        "qq.com",
+        "163.com",
+        "126.com",
+        "nifty.com",
+        "biglobe.ne.jp",
+        "so-net.ne.jp",
+        "plala.or.jp",
+        "docomo.ne.jp",
+        "ezweb.ne.jp",
+        "softbank.ne.jp",
+        "au.com",
+    ];
+    let from_is_freemail = env
+        .from
+        .first()
+        .map(|f| FREEMAIL.iter().any(|d| f.addr.domain.eq_ignore_ascii_case(d)))
+        .unwrap_or(false);
+    if from_is_freemail {
+        return false;
+    }
+    env.reply_to
+        .iter()
+        .any(|r| FREEMAIL.iter().any(|d| r.addr.domain.eq_ignore_ascii_case(d)))
+}
+
 fn from_header_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
     if env.from.len() <= 1 {
         return Vec::new();

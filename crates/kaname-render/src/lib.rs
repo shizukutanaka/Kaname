@@ -100,6 +100,9 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `Expires:`/`Expiry-Date:`/`X-Deadline:` の「期限」宣言があるか —
+    /// ヘッダーで緊急性を主張する手段 (正当なメールにほぼ出現しない)。
+    pub expiry_deadline: bool,
 }
 
 /// An RFC 5322 address.
@@ -358,7 +361,29 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        expiry_deadline: has_expiry_deadline_header(raw),
     })
+}
+
+/// `Expires:`/`Expiry-Date:`/`X-Deadline:` の「期限」宣言があるか
+/// 判定する (D244)。
+///
+/// 「有効期限」ヘッダーは正当なメールにほぼ出現しない —
+/// 「今すぐ返答せよ」という緊急性をメール自体が主張する
+/// 手段として攻撃者が使う。存在自体が兆候。
+fn has_expiry_deadline_header(raw: &[u8]) -> bool {
+    // トップレベルヘッダ (\r\n\r\n で切る) のみを走査 — パート内部に
+    // 同名ヘッダがあっても構造として意味を持たないため。
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let hdr_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let hdr = &lower[..hdr_end];
+    hdr.starts_with("expires:")
+        || hdr.contains("\nexpires:")
+        || hdr.starts_with("expiry-date:")
+        || hdr.contains("\nexpiry-date:")
+        || hdr.starts_with("x-deadline:")
+        || hdr.contains("\nx-deadline:")
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -694,6 +719,9 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// 本文 HTML に `<script>` タグがあるか — 正規メールには
+    /// 出現しない「動作の仕込み」の兆候 (D245)。
+    pub script_tag: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -879,7 +907,18 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        script_tag: has_script_tag(html),
     }
+}
+
+/// 本文 HTML に `<script>` タグがあるか判定する (D245)。
+///
+/// サニタイザが script を除去しても「仕込まれた」事実は兆候として
+/// 残すべき — メールに script は正当な用途がなく、存在自体が悪意の
+/// 形として検出対象。
+fn has_script_tag(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    lower.contains("<script")
 }
 
 /// 本文中の難読化 URL トークンの種別。
@@ -2559,6 +2598,30 @@ mod tests {
         let raw = b"From: a@example.com\r\nSubject: x\r\n\r\nbody";
         let env = parse(raw).expect("parse");
         assert!(env.list_unsubscribe.is_none());
+    }
+
+    #[test]
+    fn scan_は期限宣言ヘッダを検出する() {
+        let exp = b"From: a@b.c\r\nExpires: Mon, 1 Jan 2024 00:00:00 +0900\r\nSubject: x\r\n\r\nbody";
+        assert!(has_expiry_deadline_header(exp));
+        let exp2 = b"From: a@b.c\r\nExpiry-Date: x\r\n\r\nbody";
+        assert!(has_expiry_deadline_header(exp2));
+        let exp3 = b"From: a@b.c\r\nX-Deadline: 48h\r\n\r\nbody";
+        assert!(has_expiry_deadline_header(exp3));
+        let none = b"From: a@b.c\r\nSubject: x\r\n\r\nbody";
+        assert!(!has_expiry_deadline_header(none));
+        let inner = b"From: a@b.c\r\n\r\nExpires: Mon\r\nbody";
+        assert!(!has_expiry_deadline_header(inner));
+    }
+
+    #[test]
+    fn html_to_text_はscript_tagを検出する() {
+        let html = r#"<div><script>alert(1)</script>x</div>"#;
+        assert!(html_to_text(html).script_tag);
+        let html2 = r#"<div>ok</div>"#;
+        assert!(!html_to_text(html2).script_tag);
+        let html3 = r#"<SCRIPT src="http://e/x"></SCRIPT>"#;
+        assert!(html_to_text(html3).script_tag);
     }
 }
 
