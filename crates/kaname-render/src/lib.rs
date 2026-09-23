@@ -504,6 +504,28 @@ pub struct Envelope {
     /// クラウドファンディング・寄付印があるか — 寄付機の通知記録を
     /// 送信側が自称する兆候 (D479)。
     pub donation_marks: bool,
+    /// `X-Zillow-*`/`X-Realtor-*`/`X-Redfin-*`/`X-Trulia-*`/
+    /// `X-Apartments-*`/`X-Zumper-*`/`X-Compass-*`/`X-Opendoor-*`/
+    /// `X-Idealista-*`/`X-Immobiliare-*`/`X-Fotocasa-*`/`X-Rightmove-*`/
+    /// `X-Zoopla-*`/`X-Realestate-*`/`X-SUUMO-*`/`X-LIFULL-*`/
+    /// `X-Lianjia-*`/`X-Beike-*`/`X-Anjuke-*` 等の不動産・
+    /// ホームサービス印があるか — 不動産機の通知記録を送信側が
+    /// 自称する兆候 (D480)。
+    pub realestate_marks: bool,
+    /// `X-Zocdoc-*`/`X-Doximity-*`/`X-GoodRx-*`/`X-LabCorp-*`/
+    /// `X-MyChart-*`/`X-FollowMyHealth-*`/`X-Ancestry-*`/
+    /// `X-MyHeritage-*`/`X-23andMe-*`/`X-Invitae-*`/`X-Optum-*`/
+    /// `X-CVS-*`/`X-Walgreens-*`/`X-Cigna-*`/`X-Aetna-*`/`X-Humana-*`/
+    /// `X-Anthem-*`/`X-Kaiser-*` 等のヘルスケア・薬局・DNA 検査印
+    /// があるか — 医療機の通知記録を送信側が自称する兆候 (D481)。
+    pub health_marks: bool,
+    /// `X-Indeed-*`/`X-Glassdoor-*`/`X-ZipRecruiter-*`/`X-Monster-*`/
+    /// `X-CareerBuilder-*`/`X-Dice-*`/`X-Wellfound-*`/`X-Randstad-*`/
+    /// `X-Adecco-*`/`X-Manpower-*`/`X-Kforce-*`/`X-RobertHalf-*`/
+    /// `X-Hays-*`/`X-Pasona-*`/`X-en-japan-*`/`X-Mynavi-*`/`X-doda-*`/
+    /// `X-GaijinPot-*`/`X-Daijob-*` 等の求職・人材印があるか —
+    /// 人材機の通知記録を送信側が自称する兆候 (D482)。
+    pub jobs_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -844,6 +866,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         edu_marks: has_edu_marks(raw),
         esign_marks: has_esign_marks(raw),
         donation_marks: has_donation_marks(raw),
+        realestate_marks: has_realestate_marks(raw),
+        health_marks: has_health_marks(raw),
+        jobs_marks: has_jobs_marks(raw),
     })
 }
 
@@ -3363,6 +3388,139 @@ fn has_donation_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-givebutter-")
             || l.starts_with("x-fundly-")
             || l.starts_with("x-mightycause-")
+    })
+}
+
+/// `X-Zillow-*`/`X-Realtor-*`/`X-Redfin-*`/`X-Trulia-*`/
+/// `X-Apartments-*`/`X-Zumper-*`/`X-Compass-*`/`X-Opendoor-*`/
+/// `X-LoopNet-*`/`X-CoStar-*`/`X-Idealista-*`/`X-Immobiliare-*`/
+/// `X-Fotocasa-*`/`X-Rightmove-*`/`X-Zoopla-*`/`X-OnTheMarket-*`/
+/// `X-PrimeLocation-*`/`X-SpareRoom-*`/`X-OpenRent-*`/`X-Realestate-*`/
+/// `X-Domain-*`/`X-Homely-*`/`X-Allhomes-*`/`X-Lianjia-*`/`X-Beike-*`/
+/// `X-Anjuke-*`/`X-Ziroom-*`/`X-SUUMO-*`/`X-LIFULL-*`/`X-athome-*` 等の
+/// 不動産・ホームサービス印があるか判定する (D480)。
+///
+/// `X-Zillow-*` (Zillow)、`X-Redfin-*` (Redfin)、`X-Rightmove-*`
+/// (Rightmove) は不動産機の通知記録 — 送信側から届くこれは自称。
+fn has_realestate_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-zillow-")
+            || l.starts_with("x-realtor-")
+            || l.starts_with("x-redfin-")
+            || l.starts_with("x-trulia-")
+            || l.starts_with("x-apartments-")
+            || l.starts_with("x-zumper-")
+            || l.starts_with("x-compass-")
+            || l.starts_with("x-opendoor-")
+            || l.starts_with("x-loopnet-")
+            || l.starts_with("x-costar-")
+            || l.starts_with("x-idealista-")
+            || l.starts_with("x-immobiliare-")
+            || l.starts_with("x-fotocasa-")
+            || l.starts_with("x-rightmove-")
+            || l.starts_with("x-zoopla-")
+            || l.starts_with("x-onthemarket-")
+            || l.starts_with("x-primelocation-")
+            || l.starts_with("x-spareroom-")
+            || l.starts_with("x-openrent-")
+            || l.starts_with("x-realestate-")
+            || l.starts_with("x-domain-")
+            || l.starts_with("x-homely-")
+            || l.starts_with("x-allhomes-")
+            || l.starts_with("x-lianjia-")
+            || l.starts_with("x-beike-")
+            || l.starts_with("x-anjuke-")
+            || l.starts_with("x-ziroom-")
+            || l.starts_with("x-suumo-")
+            || l.starts_with("x-lifull-")
+            || l.starts_with("x-athome-")
+    })
+}
+
+/// `X-Zocdoc-*`/`X-Doximity-*`/`X-GoodRx-*`/`X-LabCorp-*`/`X-Quest-*`/
+/// `X-MyChart-*`/`X-FollowMyHealth-*`/`X-Ancestry-*`/`X-MyHeritage-*`/
+/// `X-23andMe-*`/`X-Invitae-*`/`X-Natera-*`/`X-SingleCare-*`/
+/// `X-Hims-*`/`X-Optum-*`/`X-CVS-*`/`X-Walgreens-*`/`X-Cigna-*`/
+/// `X-Aetna-*`/`X-Humana-*`/`X-Anthem-*`/`X-Kaiser-*`/`X-Oscar-*`/
+/// `X-Cerner-*`/`X-OracleHealth-*` 等のヘルスケア・薬局・DNA 検査印
+/// があるか判定する (D481)。
+///
+/// `X-Zocdoc-*` (Zocdoc)、`X-GoodRx-*` (GoodRx)、`X-Doximity-*`
+/// (Doximity) は医療機の通知記録 — 送信側から届くこれは自称。
+fn has_health_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-zocdoc-")
+            || l.starts_with("x-doximity-")
+            || l.starts_with("x-goodrx-")
+            || l.starts_with("x-labcorp-")
+            || l.starts_with("x-quest-")
+            || l.starts_with("x-mychart-")
+            || l.starts_with("x-followmyhealth-")
+            || l.starts_with("x-ancestry-")
+            || l.starts_with("x-myheritage-")
+            || l.starts_with("x-23andme-")
+            || l.starts_with("x-invitae-")
+            || l.starts_with("x-natera-")
+            || l.starts_with("x-singlecare-")
+            || l.starts_with("x-hims-")
+            || l.starts_with("x-optum-")
+            || l.starts_with("x-cvs-")
+            || l.starts_with("x-walgreens-")
+            || l.starts_with("x-cigna-")
+            || l.starts_with("x-aetna-")
+            || l.starts_with("x-humana-")
+            || l.starts_with("x-anthem-")
+            || l.starts_with("x-kaiser-")
+            || l.starts_with("x-oscar-")
+            || l.starts_with("x-cerner-")
+            || l.starts_with("x-oraclehealth-")
+    })
+}
+
+/// `X-Indeed-*`/`X-Glassdoor-*`/`X-ZipRecruiter-*`/`X-Monster-*`/
+/// `X-CareerBuilder-*`/`X-Dice-*`/`X-Wellfound-*`/`X-Randstad-*`/
+/// `X-Adecco-*`/`X-Manpower-*`/`X-Kforce-*`/`X-RobertHalf-*`/
+/// `X-Hays-*`/`X-PageGroup-*`/`X-Pasona-*`/`X-en-japan-*`/
+/// `X-Mynavi-*`/`X-doda-*`/`X-GaijinPot-*`/`X-Daijob-*` 等の
+/// 求職・人材印があるか判定する (D482)。
+///
+/// `X-Indeed-*` (Indeed)、`X-Glassdoor-*` (Glassdoor)、
+/// `X-ZipRecruiter-*` (ZipRecruiter) は人材機の通知記録 —
+/// 送信側から届くこれは自称。
+fn has_jobs_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-indeed-")
+            || l.starts_with("x-glassdoor-")
+            || l.starts_with("x-ziprecruiter-")
+            || l.starts_with("x-monster-")
+            || l.starts_with("x-careerbuilder-")
+            || l.starts_with("x-dice-")
+            || l.starts_with("x-wellfound-")
+            || l.starts_with("x-randstad-")
+            || l.starts_with("x-adecco-")
+            || l.starts_with("x-manpower-")
+            || l.starts_with("x-kforce-")
+            || l.starts_with("x-roberthalf-")
+            || l.starts_with("x-hays-")
+            || l.starts_with("x-pagegroup-")
+            || l.starts_with("x-pasona-")
+            || l.starts_with("x-enjapan-")
+            || l.starts_with("x-mynavi-")
+            || l.starts_with("x-doda-")
+            || l.starts_with("x-gaijinpot-")
+            || l.starts_with("x-daijob-")
     })
 }
 
@@ -7014,6 +7172,72 @@ mod tests {
         assert!(has_donation_marks(b2));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_donation_marks(clean));
+    }
+
+    #[test]
+    fn scan_は不動産ホームサービス印を検出する() {
+        let z1 = b"X-Zillow-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(z1));
+        let r1 = b"X-Redfin-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(r1));
+        let r2 = b"X-Rightmove-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(r2));
+        let s1 = b"X-SUUMO-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(s1));
+        let i1 = b"X-Idealista-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(i1));
+        let a1 = b"X-Apartments-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(a1));
+        let z2 = b"X-Zoopla-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(z2));
+        let l1 = b"X-Lianjia-Notify: x\r\n\r\nx";
+        assert!(has_realestate_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_realestate_marks(clean));
+    }
+
+    #[test]
+    fn scan_はヘルスケア薬局DNA印を検出する() {
+        let z1 = b"X-Zocdoc-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(z1));
+        let g1 = b"X-GoodRx-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(g1));
+        let d1 = b"X-Doximity-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(d1));
+        let l1 = b"X-LabCorp-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(l1));
+        let a1 = b"X-Ancestry-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(a1));
+        let m1 = b"X-MyChart-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(m1));
+        let c1 = b"X-CVS-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(c1));
+        let k1 = b"X-Kaiser-Notify: x\r\n\r\nx";
+        assert!(has_health_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_health_marks(clean));
+    }
+
+    #[test]
+    fn scan_は求職人材印を検出する() {
+        let i1 = b"X-Indeed-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(i1));
+        let g1 = b"X-Glassdoor-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(g1));
+        let z1 = b"X-ZipRecruiter-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(z1));
+        let w1 = b"X-Wellfound-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(w1));
+        let r1 = b"X-Randstad-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(r1));
+        let m1 = b"X-Mynavi-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(m1));
+        let d1 = b"X-doda-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(d1));
+        let p1 = b"X-Pasona-Notify: x\r\n\r\nx";
+        assert!(has_jobs_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_jobs_marks(clean));
     }
 }
 
