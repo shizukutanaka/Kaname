@@ -2500,6 +2500,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D653: 給湯・ボイラー・キッチン設備印自称
+    if env.boiler_marks {
+        render_risks.push(
+            "X-Kyutou-*/X-KyutouNavi-*/X-Boiler-*/X-BoilerNavi-*/X-Noritsu-*/X-Rinnai-*/X-KitchenNavi-*/X-Renji-* 等 — 釜機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D654: 厨房・食品工場設備印自称
+    if env.kitchen_marks {
+        render_risks.push(
+            "X-Hoshizaki-*/X-FukushimaKougyou-*/X-Tanikou-*/X-MaruzenMaruzen-*/X-ChubouNavi-*/X-Shokukoujou-*/X-SangyouReitou-*/X-ReitouNavi-* 等 — 厨機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D655: 印鑑・ハンコ・名札印自称
+    if env.hanko_marks {
+        render_risks.push(
+            "X-Hanko-*/X-HankoNavi-*/X-Inkan-*/X-InkanNavi-*/X-Gomuin-*/X-Jitsuin-*/X-Mitomein-*/X-Nafuda-* 等 — 印機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
