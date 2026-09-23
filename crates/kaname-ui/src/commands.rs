@@ -514,6 +514,23 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D195: 件名/From 表示名への不可視・双方向制御文字混入の兆候。
+    if env.subject_has_invisible_chars {
+        render_risks.push(
+            "件名に不可視・双方向制御文字 — キーワード検査を分断する回避の兆候です".to_string(),
+        );
+    }
+    if env.from_name_has_invisible_chars {
+        render_risks.push(
+            "差出人の表示名に不可視・双方向制御文字 — なりすまし検査を回避する兆候です".to_string(),
+        );
+    }
+    // D197: `Return-Path: <>` (バウンス抑制) の兆候。
+    if env.empty_return_path {
+        render_risks.push(
+            "Return-Path が空 (<>) — 配送失敗通知を抑制し事後検知を回避する兆候です".to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -2372,6 +2389,32 @@ mod tests {
         assert!(
             r.emails.iter().any(|e| e.file == "nested.eml"),
             "ネストしたファイルが結果に含まれるべき"
+        );
+        Ok(())
+    }
+
+    /// D195/D197: 件名の不可視文字・空 Return-Path が兆候になる。
+    #[tokio::test]
+    async fn analyze_raw_email_は件名不可視文字と空return_pathを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "Return-Path: <>\r\n\
+                    From: alice@evil.example\r\n\
+                    To: bob@example.com\r\n\
+                    Subject: Urgent\u{200B}wire\r\n\
+                    \r\n\
+                    hello"
+            .as_bytes();
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("不可視")),
+            "件名の不可視文字が兆候になるべき: {:?}",
+            r.render_risks
+        );
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("Return-Path")),
+            "空 Return-Path が兆候になるべき: {:?}",
+            r.render_risks
         );
         Ok(())
     }

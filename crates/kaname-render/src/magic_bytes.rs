@@ -297,6 +297,38 @@ fn is_dangerous_mismatch(declared: &str, detected: &str) -> bool {
         && !declared_lower.contains("octet-stream") // binary/unknown は許可
 }
 
+/// 宣言 MIME タイプ自体が危険か判定する (D196)。
+///
+/// 中身の検査とは独立に、「その型として扱われること自体」が実行・外部
+/// 取得の経路になるタイプを拾う:
+/// - `message/external-body` — RFC 2046 の外部参照。パート本体ではなく
+///   `url=`/`access-type=` パラメータで外部リソースを指し、コンテンツ
+///   検査を素通りして外部データを取得する隠蔽経路として利用される
+/// - `application/hta` — HTML Application。mshta がそのまま実行する
+/// - 実行スクリプト/バイナリ系の宣言 (x-sh/x-msdownload/x-dosexec 等)
+///
+/// 中身が偽装されていても宣言だけで実行経路として扱われるため、
+/// マジックバイト不一致とは別の独立判定として検出する。
+#[must_use]
+pub fn is_dangerous_declared_mime(declared_mime: &str) -> bool {
+    let m = declared_mime.trim().to_ascii_lowercase();
+    matches!(
+        m.as_str(),
+        "message/external-body"
+            | "application/hta"
+            | "application/x-sh"
+            | "application/x-shellscript"
+            | "application/x-bat"
+            | "application/x-msdownload"
+            | "application/x-dosexec"
+            | "application/x-msdos-program"
+            | "application/x-executable"
+            | "application/x-elf"
+            | "application/java-archive"
+            | "application/vnd.microsoft.portable-executable"
+    )
+}
+
 // ============================================================================
 // テスト
 // ============================================================================
@@ -604,5 +636,23 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    #[test]
+    fn dangerous_declared_mime_detected() {
+        assert!(is_dangerous_declared_mime("message/external-body"));
+        assert!(is_dangerous_declared_mime("application/hta"));
+        assert!(is_dangerous_declared_mime("application/x-sh"));
+        assert!(is_dangerous_declared_mime("APPLICATION/X-MSDOWNLOAD"));
+        assert!(is_dangerous_declared_mime("application/java-archive"));
+    }
+
+    #[test]
+    fn safe_declared_mime_not_dangerous() {
+        assert!(!is_dangerous_declared_mime("application/pdf"));
+        assert!(!is_dangerous_declared_mime("text/plain"));
+        assert!(!is_dangerous_declared_mime("application/zip"));
+        assert!(!is_dangerous_declared_mime("application/octet-stream"));
+        assert!(!is_dangerous_declared_mime("message/rfc822"));
     }
 }

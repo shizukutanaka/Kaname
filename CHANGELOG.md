@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D195: 件名・From 表示名への不可視/双方向制御文字混入を検出
+
+- `Urgent\u{200B}wire` のような ZWSP/SHY/双方向制御文字を件名や差出人表示名に埋め込むと、キーワード照合・なりすまし照合を分断できる (Perception Point/Talos 系の不可視文字悪用と同型 — 本文 URL は既検査だが件名・表示名は未検査だった)
+- 対処: `is_zero_width`/`is_bidi_override` で件名と From 表示名を走査 → `subject_has_invisible_chars`/`from_name_has_invisible_chars` → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D196: 宣言 MIME タイプ自体が危険な添付を検出
+
+- `message/external-body` (RFC 2046) は本体を持たず `url=`/`access-type=` で外部リソースを指す外部参照 — コンテンツ検査を素通りする隠蔽経路。`application/hta` (mshta 実行)、`application/x-sh`/`x-msdownload`/`x-dosexec`/`java-archive` 等も宣言だけで実行経路として扱われる
+- 対処: `is_dangerous_declared_mime` を新設して `scan_attachment_bytes` に配線 — マジックバイト不一致とは独立の宣言側判定として危険化
+- テスト +3 件
+
+### Security — D197: 空 Return-Path (`<>`) によるバウンス抑制を検出
+
+- `Return-Path: <>` は配送失敗通知を返させない形 — 送信側がバウンスによる事後検知を回避する手口 (DSN/バウンス悪用)。MTA 付加の正当な `<>` (エラーレポート自身) と区別するため From との組み合わせ兆候として報告
+- 対処: `top_header_value` で生ヘッダ値を取り出し `<>` 判定 → `empty_return_path` → `render_risks` に兆候報告
+- テスト +3 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

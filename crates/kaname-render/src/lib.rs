@@ -96,6 +96,15 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// 件名への不可視/双方向制御文字の混入 (キーワード照合を壊す
+    /// 検査回避の兆候、D195)。
+    pub subject_has_invisible_chars: bool,
+    /// From 表示名への不可視/双方向制御文字の混入 (表示名の語分断で
+    /// なりすまし検査を回避する兆候、D195)。
+    pub from_name_has_invisible_chars: bool,
+    /// `Return-Path: <>` — バウンス抑制。配送失敗通知を返させない形は
+    /// 送信側が事後検知を回避する手口 (DSN/バウンス悪用の兆候、D197)。
+    pub empty_return_path: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +339,18 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D195: 件名・From 表示名への不可視/双方向制御文字の混入。
+    // キーワード照合・なりすまし照合を壊す検査回避の兆候。
+    let has_invis = |s: &str| s.chars().any(|c| is_zero_width(c) || is_bidi_override(c));
+    let subject_has_invisible_chars = subject.as_deref().is_some_and(|s| has_invis(s));
+    let from_name_has_invisible_chars = from
+        .iter()
+        .any(|a| a.display_name.as_deref().is_some_and(|n| has_invis(n)));
+
+    // D197: `Return-Path: <>` — バウンス抑制。配送失敗通知を返させない
+    // 形は送信側が事後検知を回避する手口。
+    let empty_return_path = top_header_value(raw, "return-path").is_some_and(|v| v == "<>");
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +368,28 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        subject_has_invisible_chars,
+        from_name_has_invisible_chars,
+        empty_return_path,
     })
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) から指定ヘッダの
+/// 生の値を取り出す。重複ヘッダは最後のものを返す。
+fn top_header_value(raw: &[u8], name: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    let mut found = None;
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        let lower = line.trim_start().to_ascii_lowercase();
+        if lower.starts_with(&prefix) {
+            found = Some(line.trim_start()[prefix.len()..].trim().to_string());
+        }
+    }
+    found
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2325,6 +2367,55 @@ mod tests {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
     }
+
+    #[test]
+    fn parse_は件名とfrom表示名の不可視文字を検出する() {
+        let raw = "From: \u{200B}Support <alice@example.com>\r\n\
+                    Subject: Urgent\u{202E} wire\r\n\
+                    \r\n\
+                    body"
+            .as_bytes();
+        let env = parse(raw).expect("parse");
+        assert!(env.subject_has_invisible_chars);
+        assert!(env.from_name_has_invisible_chars);
+        let raw2 = b"From: Support <alice@example.com>\r\n\
+                     Subject: Urgent wire\r\n\r\nbody";
+        let env2 = parse(raw2).expect("parse");
+        assert!(!env2.subject_has_invisible_chars);
+        assert!(!env2.from_name_has_invisible_chars);
+    }
+
+    #[test]
+    fn parse_は空のreturn_pathを検出する() {
+        let raw = b"Return-Path: <>\r\n\
+                    From: daemon@example.com\r\n\
+                    Subject: delivery\r\n\r\nbody";
+        assert!(parse(raw).expect("parse").empty_return_path);
+        let raw2 = b"Return-Path: <alice@example.com>\r\n\
+                     From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        assert!(!parse(raw2).expect("parse").empty_return_path);
+    }
+
+    #[test]
+    fn top_header_value_はトップレベルの生ヘッダ値を返す() {
+        let raw = b"Return-Path: <>\r\nFrom: a@b\r\n\r\nbody";
+        assert_eq!(top_header_value(raw, "return-path").as_deref(), Some("<>"));
+        assert_eq!(top_header_value(raw, "x-missing"), None);
+    }
+
+    #[test]
+    fn scan_attachment_dangerous_declared_mime_is_dangerous() {
+        // message/external-body: 本体なしの外部参照
+        let scan = scan_attachment_bytes("file.dat", "message/external-body", b"access-type=url");
+        assert!(scan.is_dangerous);
+        assert!(scan.risks.iter().any(|r| r.contains("MIME")));
+        // application/hta: mshta 実行
+        let scan2 = scan_attachment_bytes("a.hta", "application/hta", b"<html></html>");
+        assert!(scan2.is_dangerous);
+        // 通常の PDF は宣言でも安全
+        let scan3 = scan_attachment_bytes("x.pdf", "application/pdf", b"%PDF-1.4");
+        assert!(!scan3.is_dangerous);
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2534,6 +2625,15 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
             "ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれており、拡張子の表示が反転して実際の形式を隠している可能性があります"
                 .to_string(),
         );
+        is_dangerous = true;
+    }
+
+    // 1.5. 宣言 MIME タイプ自体が危険 (message/external-body 外部参照、
+    //    application/hta mshta 実行、シェルスクリプト等 — D196)
+    if magic_bytes::is_dangerous_declared_mime(declared_mime) {
+        risks.push(format!(
+            "宣言 MIME タイプが実行・外部取得経路です: {declared_mime}"
+        ));
         is_dangerous = true;
     }
 
