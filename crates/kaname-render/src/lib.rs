@@ -1441,6 +1441,51 @@ pub struct Envelope {
     /// 兆候 (D563)。(`X-USJ-*`/`X-Disney-*`/`X-Legoland-*` 等の
     /// テーマパークは D536 で検出済み)
     pub zoo_marks: bool,
+    /// `X-UrawaReds-*`/`X-Antlers-*`/`X-Frontale-*`/`X-FMarinos-*`/
+    /// `X-FCTokyo-*`/`X-Gamba-*`/`X-Cerezo-*`/`X-Grampus-*`/
+    /// `X-Sanfrecce-*`/`X-Vissel-*`/`X-Reysol-*`/`X-SPulse-*`/
+    /// `X-Jubilo-*`/`X-Consadole-*`/`X-Vegalta-*`/`X-Montedio-*`/
+    /// `X-Albirex-*`/`X-Bellmare-*`/`X-Sagan-*`/`X-Avispa-*`/
+    /// `X-Trinita-*`/`X-Verdy-*`/`X-Zelvia-*`/`X-KyotoSanga-*`/
+    /// `X-Fagiano-*`/`X-Zweigen-*`/`X-Roasso-*`/`X-Giravanz-*`/
+    /// `X-Varen-*`/`X-Kamatamare-*`/`X-FCRyukyu-*`/`X-Yankees-*`/
+    /// `X-Dodgers-*`/`X-Giants-*`/`X-Tigers-*`/`X-RedSox-*`/`X-Cubs-*`/
+    /// `X-Mets-*`/`X-Phillies-*`/`X-Padres-*`/`X-Mariners-*`/
+    /// `X-ManUnited-*`/`X-Liverpool-*`/`X-Arsenal-*`/`X-Chelsea-*`/
+    /// `X-Tottenham-*`/`X-ManCity-*`/`X-Newcastle-*`/`X-AstonVilla-*`/
+    /// `X-WestHam-*`/`X-Everton-*`/`X-Leicester-*`/`X-Brighton-*`/
+    /// `X-Fulham-*`/`X-Brentford-*`/`X-CrystalPalace-*`/`X-Wolves-*`/
+    /// `X-RealMadrid-*`/`X-Barcelona-*`/`X-Atletico-*`/`X-Bayern-*`/
+    /// `X-Dortmund-*`/`X-PSG-*`/`X-Juventus-*`/`X-ACMilan-*`/`X-Inter-*`/
+    /// `X-ASRoma-*`/`X-Napoli-*`/`X-Ajax-*`/`X-Porto-*`/`X-Benfica-*`/
+    /// `X-Celtic-*`/`X-Rangers-*`/`X-Feyenoord-*` 等のプロスポーツ
+    /// チーム印があるか — 球機の通知記録を送信側が自称する兆候
+    /// (D564)。(`X-Nike-*`/`X-Adidas-*` 等のスポーツ用品機は
+    /// D529 で検出済み)
+    pub sports_team_marks: bool,
+    /// `X-Zoff-*`/`X-JINS-*`/`X-OWNDAYS-*`/`X-ParisMiki-*`/
+    /// `X-WarbyParker-*`/`X-LensCrafters-*`/`X-Specsavers-*`/
+    /// `X-GrandVision-*`/`X-MeganeIchiba-*`/`X-BJClassic-*`/
+    /// `X-EYEVAN-*`/`X-Masunaga-*`/`X-Kaneko-*`/`X-OliverPeoples-*`/
+    /// `X-RayBan-*`/`X-Oakley-*`/`X-Persol-*`/`X-Bolon-*`/
+    /// `X-GentleMonster-*`/`X-SeeConcept-*`/`X-Rionet-*`/`X-Mirall-*`/
+    /// `X-Sonova-*`/`X-Phonak-*`/`X-Oticon-*`/`X-ReSound-*`/
+    /// `X-Signia-*`/`X-Widex-*`/`X-Starkey-*`/`X-Unitron-*`/
+    /// `X-Bernafon-*` 等の眼鏡・コンタクト・補聴器印があるか —
+    /// 眼機の通知記録を送信側が自称する兆候 (D565)。
+    pub optical_marks: bool,
+    /// `X-JMA-*`/`X-Yurekuru-*`/`X-WeatherNews-*`/`X-WeatherMap-*`/
+    /// `X-TenkiJP-*`/`X-LifeRanger-*`/`X-NERV-*`/`X-HazardMap-*`/
+    /// `X-BousaiSoku-*`/`X-YahooBousai-*`/`X-AccuWeather-*`/
+    /// `X-WeatherChannel-*`/`X-WUnderground-*`/`X-MetOffice-*`/
+    /// `X-BOM-*`/`X-Meteoblue-*`/`X-Windy-*`/`X-SoraNav-*`/
+    /// `X-StormShield-*`/`X-IAlert-*`/`X-JAlert-*`/`X-MetService-*`/
+    /// `X-KNMI-*`/`X-DWD-*`/`X-Meteociel-*`/`X-YR-*`/`X-Ventusky-*`/
+    /// `X-RainViewer-*`/`X-RadarScope-*`/`X-WeatherBug-*`/`X-Carrot-*`/
+    /// `X-FlowX-*`/`X-MyRadar-*` 等の気象・地震・防災印があるか —
+    /// 防機の通知記録を送信側が自称する兆候 (D566)。(`X-FEMA-*`
+    /// 等の政府機関は D518 で検出済み)
+    pub disaster_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1865,6 +1910,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pet_service_marks: has_pet_service_marks(raw),
         bridal_marks: has_bridal_marks(raw),
         zoo_marks: has_zoo_marks(raw),
+        sports_team_marks: has_sports_team_marks(raw),
+        optical_marks: has_optical_marks(raw),
+        disaster_marks: has_disaster_marks(raw),
     })
 }
 
@@ -8999,6 +9047,220 @@ fn has_zoo_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-UrawaReds-*`/`X-Antlers-*`/`X-Frontale-*`/`X-FMarinos-*`/
+/// `X-FCTokyo-*`/`X-Gamba-*`/`X-Cerezo-*`/`X-Grampus-*`/`X-Sanfrecce-*`/
+/// `X-Vissel-*`/`X-Reysol-*`/`X-SPulse-*`/`X-Jubilo-*`/`X-Consadole-*`/
+/// `X-Vegalta-*`/`X-Montedio-*`/`X-Albirex-*`/`X-Bellmare-*`/`X-Sagan-*`/
+/// `X-Avispa-*`/`X-Trinita-*`/`X-Verdy-*`/`X-Zelvia-*`/`X-KyotoSanga-*`/
+/// `X-Fagiano-*`/`X-Zweigen-*`/`X-Roasso-*`/`X-Giravanz-*`/`X-Varen-*`/
+/// `X-Kamatamare-*`/`X-FCRyukyu-*`/`X-Yankees-*`/`X-Dodgers-*`/
+/// `X-Giants-*`/`X-Tigers-*`/`X-RedSox-*`/`X-Cubs-*`/`X-Mets-*`/
+/// `X-Phillies-*`/`X-Padres-*`/`X-Mariners-*`/`X-ManUnited-*`/
+/// `X-Liverpool-*`/`X-Arsenal-*`/`X-Chelsea-*`/`X-Tottenham-*`/
+/// `X-ManCity-*`/`X-Newcastle-*`/`X-AstonVilla-*`/`X-WestHam-*`/
+/// `X-Everton-*`/`X-Leicester-*`/`X-Brighton-*`/`X-Fulham-*`/
+/// `X-Brentford-*`/`X-CrystalPalace-*`/`X-Wolves-*`/`X-RealMadrid-*`/
+/// `X-Barcelona-*`/`X-Atletico-*`/`X-Bayern-*`/`X-Dortmund-*`/`X-PSG-*`/
+/// `X-Juventus-*`/`X-ACMilan-*`/`X-Inter-*`/`X-ASRoma-*`/`X-Napoli-*`/
+/// `X-Ajax-*`/`X-Porto-*`/`X-Benfica-*`/`X-Celtic-*`/`X-Rangers-*`/
+/// `X-Feyenoord-*` 等のプロスポーツチーム印があるか判定する (D564)。
+///
+/// `X-FMarinos-*` (横浜F・マリノス)、`X-Dodgers-*` (ドジャース)、
+/// `X-ManUnited-*` (マンチェスター・ユナイテッド) は球機の通知
+/// 記録 — 送信側から届くこれは自称。チケット・グッズ当選偽装は
+/// スポーツ詐欺の典型。
+fn has_sports_team_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-urawareds-")
+            || l.starts_with("x-antlers-")
+            || l.starts_with("x-frontale-")
+            || l.starts_with("x-fmarinos-")
+            || l.starts_with("x-fctokyo-")
+            || l.starts_with("x-gamba-")
+            || l.starts_with("x-cerezo-")
+            || l.starts_with("x-grampus-")
+            || l.starts_with("x-sanfrecce-")
+            || l.starts_with("x-vissel-")
+            || l.starts_with("x-reysol-")
+            || l.starts_with("x-spulse-")
+            || l.starts_with("x-jubilo-")
+            || l.starts_with("x-consadole-")
+            || l.starts_with("x-vegalta-")
+            || l.starts_with("x-montedio-")
+            || l.starts_with("x-albirex-")
+            || l.starts_with("x-bellmare-")
+            || l.starts_with("x-sagan-")
+            || l.starts_with("x-avispa-")
+            || l.starts_with("x-trinita-")
+            || l.starts_with("x-verdy-")
+            || l.starts_with("x-zelvia-")
+            || l.starts_with("x-kyotosanga-")
+            || l.starts_with("x-fagiano-")
+            || l.starts_with("x-zweigen-")
+            || l.starts_with("x-roasso-")
+            || l.starts_with("x-giravanz-")
+            || l.starts_with("x-varen-")
+            || l.starts_with("x-kamatamare-")
+            || l.starts_with("x-fcryukyu-")
+            || l.starts_with("x-yankees-")
+            || l.starts_with("x-dodgers-")
+            || l.starts_with("x-giants-")
+            || l.starts_with("x-tigers-")
+            || l.starts_with("x-redsox-")
+            || l.starts_with("x-cubs-")
+            || l.starts_with("x-mets-")
+            || l.starts_with("x-phillies-")
+            || l.starts_with("x-padres-")
+            || l.starts_with("x-mariners-")
+            || l.starts_with("x-manunited-")
+            || l.starts_with("x-liverpool-")
+            || l.starts_with("x-arsenal-")
+            || l.starts_with("x-chelsea-")
+            || l.starts_with("x-tottenham-")
+            || l.starts_with("x-mancity-")
+            || l.starts_with("x-newcastle-")
+            || l.starts_with("x-astonvilla-")
+            || l.starts_with("x-westham-")
+            || l.starts_with("x-everton-")
+            || l.starts_with("x-leicester-")
+            || l.starts_with("x-brighton-")
+            || l.starts_with("x-fulham-")
+            || l.starts_with("x-brentford-")
+            || l.starts_with("x-crystalpalace-")
+            || l.starts_with("x-wolves-")
+            || l.starts_with("x-realmadrid-")
+            || l.starts_with("x-barcelona-")
+            || l.starts_with("x-atletico-")
+            || l.starts_with("x-bayern-")
+            || l.starts_with("x-dortmund-")
+            || l.starts_with("x-psg-")
+            || l.starts_with("x-juventus-")
+            || l.starts_with("x-acmilan-")
+            || l.starts_with("x-inter-")
+            || l.starts_with("x-asroma-")
+            || l.starts_with("x-napoli-")
+            || l.starts_with("x-ajax-")
+            || l.starts_with("x-porto-")
+            || l.starts_with("x-benfica-")
+            || l.starts_with("x-celtic-")
+            || l.starts_with("x-rangers-")
+            || l.starts_with("x-feyenoord-")
+    })
+}
+
+/// `X-Zoff-*`/`X-JINS-*`/`X-OWNDAYS-*`/`X-ParisMiki-*`/
+/// `X-WarbyParker-*`/`X-LensCrafters-*`/`X-Specsavers-*`/
+/// `X-GrandVision-*`/`X-MeganeIchiba-*`/`X-BJClassic-*`/`X-EYEVAN-*`/
+/// `X-Masunaga-*`/`X-Kaneko-*`/`X-OliverPeoples-*`/`X-RayBan-*`/
+/// `X-Oakley-*`/`X-Persol-*`/`X-Bolon-*`/`X-GentleMonster-*`/
+/// `X-SeeConcept-*`/`X-Rionet-*`/`X-Mirall-*`/`X-Sonova-*`/
+/// `X-Phonak-*`/`X-Oticon-*`/`X-ReSound-*`/`X-Signia-*`/`X-Widex-*`/
+/// `X-Starkey-*`/`X-Unitron-*`/`X-Bernafon-*` 等の眼鏡・
+/// コンタクト・補聴器印があるか判定する (D565)。
+///
+/// `X-Zoff-*` (Zoff)、`X-JINS-*` (JINS)、`X-OWNDAYS-*` (OWNDAYS) は
+/// 眼機の通知記録 — 送信側から届くこれは自称。視力検査・
+/// 度数更新偽装は眼鏡詐欺の典型。
+fn has_optical_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-zoff-")
+            || l.starts_with("x-jins-")
+            || l.starts_with("x-owndays-")
+            || l.starts_with("x-parismiki-")
+            || l.starts_with("x-warbyparker-")
+            || l.starts_with("x-lenscrafters-")
+            || l.starts_with("x-specsavers-")
+            || l.starts_with("x-grandvision-")
+            || l.starts_with("x-meganeichiba-")
+            || l.starts_with("x-bjclassic-")
+            || l.starts_with("x-eyevan-")
+            || l.starts_with("x-masunaga-")
+            || l.starts_with("x-kaneko-")
+            || l.starts_with("x-oliverpeoples-")
+            || l.starts_with("x-rayban-")
+            || l.starts_with("x-oakley-")
+            || l.starts_with("x-persol-")
+            || l.starts_with("x-bolon-")
+            || l.starts_with("x-gentlemonster-")
+            || l.starts_with("x-seeconcept-")
+            || l.starts_with("x-rionet-")
+            || l.starts_with("x-mirall-")
+            || l.starts_with("x-sonova-")
+            || l.starts_with("x-phonak-")
+            || l.starts_with("x-oticon-")
+            || l.starts_with("x-resound-")
+            || l.starts_with("x-signia-")
+            || l.starts_with("x-widex-")
+            || l.starts_with("x-starkey-")
+            || l.starts_with("x-unitron-")
+            || l.starts_with("x-bernafon-")
+    })
+}
+
+/// `X-JMA-*`/`X-Yurekuru-*`/`X-WeatherNews-*`/`X-WeatherMap-*`/
+/// `X-TenkiJP-*`/`X-LifeRanger-*`/`X-NERV-*`/`X-HazardMap-*`/
+/// `X-BousaiSoku-*`/`X-YahooBousai-*`/`X-AccuWeather-*`/
+/// `X-WeatherChannel-*`/`X-WUnderground-*`/`X-MetOffice-*`/`X-BOM-*`/
+/// `X-Meteoblue-*`/`X-Windy-*`/`X-SoraNav-*`/`X-StormShield-*`/
+/// `X-IAlert-*`/`X-JAlert-*`/`X-MetService-*`/`X-KNMI-*`/`X-DWD-*`/
+/// `X-Meteociel-*`/`X-YR-*`/`X-Ventusky-*`/`X-RainViewer-*`/
+/// `X-RadarScope-*`/`X-WeatherBug-*`/`X-Carrot-*`/`X-FlowX-*`/
+/// `X-MyRadar-*` 等の気象・地震・防災印があるか判定する (D566)。
+///
+/// `X-JMA-*` (気象庁)、`X-WeatherNews-*` (ウェザーニュース)、
+/// `X-Yurekuru-*` (ゆれくるコール) は防機の通知記録 — 送信側から
+/// 届くこれは自称。緊急速報・避難指示偽装は災害詐欺の典型。
+/// `X-FEMA-*` 等の政府機関は D518 で検出済み。
+fn has_disaster_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-jma-")
+            || l.starts_with("x-yurekuru-")
+            || l.starts_with("x-weathernews-")
+            || l.starts_with("x-weathermap-")
+            || l.starts_with("x-tenkijp-")
+            || l.starts_with("x-liferanger-")
+            || l.starts_with("x-nerv-")
+            || l.starts_with("x-hazardmap-")
+            || l.starts_with("x-bousaisoku-")
+            || l.starts_with("x-yahoobousai-")
+            || l.starts_with("x-accuweather-")
+            || l.starts_with("x-weatherchannel-")
+            || l.starts_with("x-wunderground-")
+            || l.starts_with("x-metoffice-")
+            || l.starts_with("x-bom-")
+            || l.starts_with("x-meteoblue-")
+            || l.starts_with("x-windy-")
+            || l.starts_with("x-soranav-")
+            || l.starts_with("x-stormshield-")
+            || l.starts_with("x-ialert-")
+            || l.starts_with("x-jalert-")
+            || l.starts_with("x-metservice-")
+            || l.starts_with("x-knmi-")
+            || l.starts_with("x-dwd-")
+            || l.starts_with("x-meteociel-")
+            || l.starts_with("x-yr-")
+            || l.starts_with("x-ventusky-")
+            || l.starts_with("x-rainviewer-")
+            || l.starts_with("x-radarscope-")
+            || l.starts_with("x-weatherbug-")
+            || l.starts_with("x-carrot-")
+            || l.starts_with("x-flowx-")
+            || l.starts_with("x-myradar-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -14495,6 +14757,72 @@ mod tests {
         assert!(has_zoo_marks(e1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_zoo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は球機印を検出する() {
+        let f1 = b"X-FMarinos-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(f1));
+        let d1 = b"X-Dodgers-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(d1));
+        let m1 = b"X-ManUnited-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(m1));
+        let g1 = b"X-Gamba-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(g1));
+        let r1 = b"X-RealMadrid-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(r1));
+        let b1 = b"X-Bayern-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(b1));
+        let y1 = b"X-Yankees-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(y1));
+        let a1 = b"X-Antlers-Notify: x\r\n\r\nx";
+        assert!(has_sports_team_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sports_team_marks(clean));
+    }
+
+    #[test]
+    fn scan_は眼機印を検出する() {
+        let z1 = b"X-Zoff-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(z1));
+        let j1 = b"X-JINS-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(j1));
+        let o1 = b"X-OWNDAYS-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(o1));
+        let w1 = b"X-WarbyParker-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(w1));
+        let s1 = b"X-Specsavers-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(s1));
+        let r1 = b"X-RayBan-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(r1));
+        let p1 = b"X-Phonak-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(p1));
+        let o2 = b"X-Oticon-Notify: x\r\n\r\nx";
+        assert!(has_optical_marks(o2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_optical_marks(clean));
+    }
+
+    #[test]
+    fn scan_は防機印を検出する() {
+        let j1 = b"X-JMA-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(j1));
+        let w1 = b"X-WeatherNews-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(w1));
+        let y1 = b"X-Yurekuru-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(y1));
+        let a1 = b"X-AccuWeather-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(a1));
+        let n1 = b"X-NERV-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(n1));
+        let t1 = b"X-TenkiJP-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(t1));
+        let m1 = b"X-MetOffice-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(m1));
+        let w2 = b"X-Windy-Notify: x\r\n\r\nx";
+        assert!(has_disaster_marks(w2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_disaster_marks(clean));
     }
 }
 

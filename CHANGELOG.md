@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D564: `X-FMarinos-*`/`X-Dodgers-*`/`X-ManUnited-*` 等のプロスポーツチーム印自称が未検査
+
+- **問題**: `X-FMarinos-*` (横浜F・マリノス)、`X-Dodgers-*` (ドジャース)、`X-ManUnited-*` (マンチェスター・ユナイテッド)、`X-UrawaReds-*`/`X-Antlers-*`/`X-Frontale-*`/`X-FCTokyo-*`/`X-Gamba-*`/`X-Cerezo-*`/`X-Grampus-*`/`X-Sanfrecce-*`/`X-Vissel-*`/`X-Reysol-*`/`X-SPulse-*`/`X-Jubilo-*`/`X-Consadole-*`/`X-Vegalta-*`/`X-Montedio-*`/`X-Albirex-*`/`X-Bellmare-*`/`X-Sagan-*`/`X-Avispa-*`/`X-Trinita-*`/`X-Verdy-*`/`X-Zelvia-*`/`X-KyotoSanga-*`/`X-Fagiano-*`/`X-Zweigen-*`/`X-Roasso-*`/`X-Giravanz-*`/`X-Varen-*`/`X-Kamatamare-*`/`X-FCRyukyu-*`/`X-Yankees-*`/`X-Giants-*`/`X-Tigers-*`/`X-RedSox-*`/`X-Cubs-*`/`X-Mets-*`/`X-Phillies-*`/`X-Padres-*`/`X-Mariners-*`/`X-Liverpool-*`/`X-Arsenal-*`/`X-Chelsea-*`/`X-Tottenham-*`/`X-ManCity-*`/`X-Newcastle-*`/`X-AstonVilla-*`/`X-WestHam-*`/`X-Everton-*`/`X-Leicester-*`/`X-Brighton-*`/`X-Fulham-*`/`X-Brentford-*`/`X-CrystalPalace-*`/`X-Wolves-*`/`X-RealMadrid-*`/`X-Barcelona-*`/`X-Atletico-*`/`X-Bayern-*`/`X-Dortmund-*`/`X-PSG-*`/`X-Juventus-*`/`X-ACMilan-*`/`X-Inter-*`/`X-ASRoma-*`/`X-Napoli-*`/`X-Ajax-*`/`X-Porto-*`/`X-Benfica-*`/`X-Celtic-*`/`X-Rangers-*`/`X-Feyenoord-*` は球機の通知記録 — 送信側が書くことは自称。チケット・グッズ当選偽装はスポーツ詐欺の典型。(`X-Nike-*`/`X-Adidas-*` 等のスポーツ用品機は D529 で検出済み)
+- **修正**: `Envelope` に `sports_team_marks` + `has_sports_team_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 球印の自署を問え。
+
+### Security — D565: `X-Zoff-*`/`X-JINS-*`/`X-OWNDAYS-*` 等の眼鏡・コンタクト・補聴器印自称が未検査
+
+- **問題**: `X-Zoff-*` (Zoff)、`X-JINS-*` (JINS)、`X-OWNDAYS-*` (OWNDAYS)、`X-ParisMiki-*`/`X-WarbyParker-*`/`X-LensCrafters-*`/`X-Specsavers-*`/`X-GrandVision-*`/`X-MeganeIchiba-*`/`X-BJClassic-*`/`X-EYEVAN-*`/`X-Masunaga-*`/`X-Kaneko-*`/`X-OliverPeoples-*`/`X-RayBan-*`/`X-Oakley-*`/`X-Persol-*`/`X-Bolon-*`/`X-GentleMonster-*`/`X-SeeConcept-*`/`X-Rionet-*`/`X-Mirall-*`/`X-Sonova-*`/`X-Phonak-*`/`X-Oticon-*`/`X-ReSound-*`/`X-Signia-*`/`X-Widex-*`/`X-Starkey-*`/`X-Unitron-*`/`X-Bernafon-*` は眼機の通知記録 — 送信側が書くことは自称。視力検査・度数更新偽装は眼鏡詐欺の典型。
+- **修正**: `Envelope` に `optical_marks` + `has_optical_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 眼印の自署を問え。
+
+### Security — D566: `X-JMA-*`/`X-WeatherNews-*`/`X-Yurekuru-*` 等の気象・地震・防災印自称が未検査
+
+- **問題**: `X-JMA-*` (気象庁)、`X-WeatherNews-*` (ウェザーニュース)、`X-Yurekuru-*` (ゆれくるコール)、`X-WeatherMap-*`/`X-TenkiJP-*`/`X-LifeRanger-*`/`X-NERV-*`/`X-HazardMap-*`/`X-BousaiSoku-*`/`X-YahooBousai-*`/`X-AccuWeather-*`/`X-WeatherChannel-*`/`X-WUnderground-*`/`X-MetOffice-*`/`X-BOM-*`/`X-Meteoblue-*`/`X-Windy-*`/`X-SoraNav-*`/`X-StormShield-*`/`X-IAlert-*`/`X-JAlert-*`/`X-MetService-*`/`X-KNMI-*`/`X-DWD-*`/`X-Meteociel-*`/`X-YR-*`/`X-Ventusky-*`/`X-RainViewer-*`/`X-RadarScope-*`/`X-WeatherBug-*`/`X-Carrot-*`/`X-FlowX-*`/`X-MyRadar-*` は防機の通知記録 — 送信側が書くことは自称。緊急速報・避難指示偽装は災害詐欺の典型。(`X-FEMA-*` 等の政府機関は D518 で検出済み)
+- **修正**: `Envelope` に `disaster_marks` + `has_disaster_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 防印の自署を問え。
+
+
 ### Security — D561: `X-Anicom-*`/`X-iPet-*`/`X-Rover-*` 等のペット保険・ペットサービス印自称が未検査
 
 - **問題**: `X-Anicom-*` (アニコム)、`X-iPet-*` (アイペット)、`X-Rover-*` (Rover)、`X-FPC-*`/`X-PSInsurance-*`/`X-PetFamily-*`/`X-RakutenPet-*`/`X-Wag-*`/`X-Banfield-*`/`X-VCA-*`/`X-BluePearl-*`/`X-Medivet-*`/`X-Petplan-*`/`X-Trupanion-*`/`X-HealthyPaws-*`/`X-EmbracePet-*`/`X-FetchPet-*`/`X-LemonadePet-*`/`X-PetsBest-*`/`X-SpotPet-*`/`X-Figo-*`/`X-ManyPets-*`/`X-Waggel-*`/`X-PetsOkay-*`/`X-PetsitterSOS-*`/`X-DoggyBox-*`/`X-CocoGourmet-*`/`X-PetOla-*`/`X-PETOKOTO-*`/`X-Peco-*` は愛機の通知記録 — 送信側が書くことは自称。保険金・手術費用偽装はペット保険詐欺の典型。(`X-PetSmart-*`/`X-Chewy-*`/`X-Zooplus-*` 等のペット用品店は D533 で検出済み)

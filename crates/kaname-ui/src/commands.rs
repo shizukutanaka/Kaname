@@ -1804,6 +1804,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D564: プロスポーツチーム印自称
+    if env.sports_team_marks {
+        render_risks.push(
+            "X-FMarinos-*/X-Dodgers-*/X-ManUnited-*/X-Gamba-*/X-RealMadrid-*/X-Bayern-*/X-Yankees-*/X-Antlers-* 等 — 球機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D565: 眼鏡・コンタクト・補聴器印自称
+    if env.optical_marks {
+        render_risks.push(
+            "X-Zoff-*/X-JINS-*/X-OWNDAYS-*/X-WarbyParker-*/X-Specsavers-*/X-RayBan-*/X-Phonak-*/X-Oticon-* 等 — 眼機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D566: 気象・地震・防災印自称
+    if env.disaster_marks {
+        render_risks.push(
+            "X-JMA-*/X-WeatherNews-*/X-Yurekuru-*/X-AccuWeather-*/X-NERV-*/X-TenkiJP-*/X-MetOffice-*/X-Windy-* 等 — 防機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
