@@ -6,7 +6,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased]
+### Security — D578: `X-Takarakuji-*`/`X-Loto6-*`/`X-Powerball-*` 等の宝くじ・ロト・懸賞当選印自称が未検査
+
+- **問題**: `X-Takarakuji-*` (宝くじ)、`X-Loto6-*` (ロト 6)、`X-Powerball-*` (Powerball)、`X-Loto7-*`/`X-MiniLoto-*`/`X-Numbers-*`/`X-Bingo5-*`/`X-TakarakujiScratch-*`/`X-MegaMillions-*`/`X-EuroMillions-*`/`X-Lotto6Aus49-*`/`X-OzLotto-*`/`X-LottoMax-*`/`X-SuperEnalotto-*`/`X-ElGordo-*`/`X-DreamJumbo-*`/`X-NenmatsuJumbo-*`/`X-SummerJumbo-*`/`X-HalloweenJumbo-*`/`X-ValentineJumbo-*`/`X-GreenJumbo-*`/`X-Big-*`/`X-MiniBig-*`/`X-TotoGoal-*`/`X-Winner-*`/`X-Lottery-*`/`X-Kuji-*`/`X-KujiHonpo-*`/`X-RakutenToto-*`/`X-ClubToto-*`/`X-TotoVote-*`/`X-MiniToto-*`/`X-Goal3-*`/`X-Sportec-*`/`X-LotteryOffice-*`/`X-StateLottery-*`/`X-Camelot-*`/`X-Loterias-*`/`X-Sorteos-*`/`X-MyLotto-*`/`X-Intralot-*` は宝機の通知記録 — 送信側が書くことは自称。高額当選・手数料前払いの偽装は宝くじ詐欺の典型。(`X-Bet365-*`/`X-VeraJohn-*`/`X-toto-*` 等の賭博機は D547 で検出済み)
+- **修正**: `Envelope` に `lottery_marks` + `has_lottery_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 宝印の自署を問え。
+
+### Security — D579: `X-DaiwaHouse-*`/`X-Lixil-*`/`X-HomePro-*` 等の住宅メーカー・リフォーム印自称が未検査
+
+- **問題**: `X-DaiwaHouse-*` (大和ハウス)、`X-Lixil-*` (LIXIL)、`X-HomePro-*` (ホームプロ)、`X-Sekisui-*`/`X-SekisuiHouse-*`/`X-SumitomoRingyo-*`/`X-Misawa-*`/`X-Hebel-*`/`X-Ichijo-*`/`X-SekisuiHeim-*`/`X-Tamahome-*`/`X-AifulHome-*`/`X-Cleverly-*`/`X-ToyotaHome-*`/`X-YKKAP-*`/`X-SankyoAlumi-*`/`X-NikkaHome-*`/`X-RishoNavi-*`/`X-PanasonicHomes-*`/`X-MitsuiHome-*`/`X-SwedenHouse-*`/`X-HomeAgent-*`/`X-MisawaHome-*`/`X-Toso-*`/`X-Cleanup-*`/`X-TakaraStandard-*`/`X-WoodOne-*`/`X-Daiken-*`/`X-MaezawaKasei-*`/`X-KyoceraHomes-*`/`X-AqaHome-*`/`X-Aqura-*`/`X-HikariHome-*`/`X-Arukotto-*`/`X-ALTS-*`/`X-AokiHome-*`/`X-Bess-*`/`X-MujiHome-*`/`X-Freesia-*`/`X-Aibro-*`/`X-HigashiConstruction-*`/`X-WatanabeKobo-*`/`X-Shinkenchiku-*`/`X-SxL-*`/`X-Yamatoya-*` は宅機の通知記録 — 送信側が書くことは自称。無料点検・リフォーム見積・耐震診断の偽装は点検商法・リフォーム詐欺の典型。
+- **修正**: `Envelope` に `housing_marks` + `has_housing_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 宅印の自署を問え。
+
+### Security — D580: `X-IiSougi-*`/`X-KamakuraShinsho-*`/`X-Tear-*` 等の葬儀・終活印自称が未検査
+
+- **問題**: `X-IiSougi-*` (いい葬儀)、`X-KamakuraShinsho-*` (鎌倉新書)、`X-Tear-*` (ティア)、`X-SagamiSourei-*`/`X-Ceremore-*`/`X-Koeisha-*`/`X-AeonSousai-*`/`X-Kokoro-*`/`X-Hanasou-*`/`X-YasashiiOsoushiki-*`/`X-Terakura-*`/`X-EndingPark-*`/`X-HinataOsoushiki-*`/`X-Souzoku-*`/`X-MemorialArt-*`/`X-OsoushikiReview-*`/`X-Eirii-*`/`X-LifeEnder-*`/`X-Rakushu-*`/`X-Owakare-*`/`X-Ens-*`/`X-Sousaiya-*`/`X-Tensou-*`/`X-Matsuya-*`/`X-Heian-*`/`X-Koushaisha-*`/`X-HeianPalace-*`/`X-WorldRe-*`/`X-Dainippon-*`/`X-Tokiwa-*`/`X-TokiwaSougi-*`/`X-EcoSougi-*`/`X-YoshinoSoushiki-*`/`X-Hisago-*`/`X-Boko-*`/`X-FamilyCera-*`/`X-MainHall-*`/`X-Mitou-*`/`X-Comet-*`/`X-Stella-*`/`X-Sora-*`/`X-Oyasumi-*`/`X-Chocho-*`/`X-KazokuSo-*`/`X-Nouveau-*`/`X-Graceful-*`/`X-Royal-*`/`X-Farewell-*` は葬機の通知記録 — 送信側が書くことは自称。葬儀費用前払い・墓石仏壇高額勧誘・香典返しの偽装は葬儀詐欺の典型。
+- **修正**: `Envelope` に `funeral_marks` + `has_funeral_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 葬印の自署を問え。
 
 ### Security — D575: `X-Curon-*`/`X-MICIN-*`/`X-Teladoc-*` 等のオンライン診療・健康アプリ印自称が未検査
 
