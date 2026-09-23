@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D387: `X-Authenticated-*`/`X-Auth-Sender:`/`X-SMTP-Auth:`/`X-AUTH-User:`/`X-Login-User:`/`X-SASL-*` 等の SMTP AUTH 印自称が未検査
+
+- 「認証済みの送信者である」の記録は MTA が残す — 送信側から届くのは「認証を通った発件」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_smtpauth_marks` 新設 → `Envelope.smtpauth_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D388: `X-TLS-*`/`X-SSL-*`/`X-Connection-Encrypted:`/`X-Transport-Layer-Security:`/`X-Cipher:`/`X-Encrypted-Connection:` 等の TLS 接続印自称が未検査
+
+- 「暗号化された接続で届いた」の記録は輸送機が残す — 送信側から届くのは「暗号経路を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_tls_marks` 新設 → `Envelope.tls_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D389: `X-Client-*`/`X-Peer-*`/`X-Origin-*`/`X-Remote-Addr:`/`X-Remote-Host:`/`X-From-IP:` 等の client/peer 印自称が未検査
+
+- 接続相手の記録は受信 MTA が残す — 送信側から届くのは「この相手から届いた」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_peer_marks` 新設 → `Envelope.peer_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった

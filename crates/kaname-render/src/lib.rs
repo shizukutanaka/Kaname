@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Authenticated-*`/`X-Auth-Sender:`/`X-SMTP-Auth:`/
+    /// `X-AUTH-User:`/`X-Login-User:` 等の SMTP AUTH 印があるか
+    /// — 認証済み送信件の記録を送信側が自称する兆候 (D387)。
+    pub smtpauth_marks: bool,
+    /// `X-TLS-*`/`X-SSL-*`/`X-Connection-Encrypted:`/
+    /// `X-Transport-Layer-Security:`/`X-Cipher:` 等の TLS 接続印があるか
+    /// — 暗号化接続の記録を送信側が自称する兆候 (D388)。
+    pub tls_marks: bool,
+    /// `X-Client-*`/`X-Peer-*`/`X-Origin-*`/`X-Remote-Addr:`
+    /// 等の client/peer 印があるか — 接続相手の記録を送信側が
+    /// 自称する兆候 (D389)。
+    pub peer_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        smtpauth_marks: has_smtpauth_marks(raw),
+        tls_marks: has_tls_marks(raw),
+        peer_marks: has_peer_marks(raw),
     })
 }
 
@@ -624,6 +639,70 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Authenticated-*`/`X-Auth-Sender:`/`X-SMTP-Auth:`/
+/// `X-AUTH-User:`/`X-Login-User:`/`X-SASL-*` 等の
+/// SMTP AUTH 印があるか判定する (D387)。
+///
+/// 「認証済みの送信者である」の記録は MTA が残す — 送信側から届く
+/// これは「認証を通った発件」体裁を内容側が主張する自称。
+fn has_smtpauth_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-authenticated-")
+            || l.starts_with("x-auth-sender:")
+            || l.starts_with("x-smtp-auth:")
+            || l.starts_with("x-smtp-auth-user:")
+            || l.starts_with("x-auth-user:")
+            || l.starts_with("x-login-user:")
+            || l.starts_with("x-sasl-")
+    })
+}
+
+/// `X-TLS-*`/`X-SSL-*`/`X-Connection-Encrypted:`/
+/// `X-Transport-Layer-Security:`/`X-Cipher:`/`X-Encrypted-Connection:`
+/// 等の TLS 接続印があるか判定する (D388)。
+///
+/// 「暗号化された接続で届いた」の記録は輸送機が残す — 送信側から
+/// 届くこれは「暗号経路を通った」体裁を内容側が主張する自称。
+fn has_tls_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-tls-")
+            || l.starts_with("x-ssl-")
+            || l.starts_with("x-connection-encrypted:")
+            || l.starts_with("x-transport-layer-security:")
+            || l.starts_with("x-cipher:")
+            || l.starts_with("x-encrypted-connection:")
+    })
+}
+
+/// `X-Client-*`/`X-Peer-*`/`X-Origin-*`/`X-Remote-Addr:`/
+/// `X-Remote-Host:`/`X-From-IP:` 等の client/peer 印があるか
+/// 判定する (D389)。
+///
+/// 接続相手の記録は受信 MTA が残す — 送信側から届くこれは
+/// 「この相手から届いた」体裁を内容側が主張する自称。
+fn has_peer_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-client-")
+            || l.starts_with("x-peer-")
+            || l.starts_with("x-origin-")
+            || l.starts_with("x-remote-addr:")
+            || l.starts_with("x-remote-host:")
+            || l.starts_with("x-from-ip:")
     })
 }
 
@@ -2952,6 +3031,54 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はSMTPAUTH印を検出する() {
+        let an = b"X-Authenticated-Sender: u\r\n\r\nx";
+        assert!(has_smtpauth_marks(an));
+        let sa = b"X-SMTP-Auth: yes\r\n\r\nx";
+        assert!(has_smtpauth_marks(sa));
+        let au = b"X-AUTH-User: u\r\n\r\nx";
+        assert!(has_smtpauth_marks(au));
+        let lu = b"X-Login-User: u\r\n\r\nx";
+        assert!(has_smtpauth_marks(lu));
+        let as_ = b"X-Auth-Sender: s\r\n\r\nx";
+        assert!(has_smtpauth_marks(as_));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_smtpauth_marks(clean));
+    }
+
+    #[test]
+    fn scan_はTLS接続印を検出する() {
+        let tl = b"X-TLS-Version: 1.3\r\n\r\nx";
+        assert!(has_tls_marks(tl));
+        let ss = b"X-SSL-Cipher: c\r\n\r\nx";
+        assert!(has_tls_marks(ss));
+        let ce = b"X-Connection-Encrypted: yes\r\n\r\nx";
+        assert!(has_tls_marks(ce));
+        let ts = b"X-Transport-Layer-Security: t\r\n\r\nx";
+        assert!(has_tls_marks(ts));
+        let cp = b"X-Cipher: AES\r\n\r\nx";
+        assert!(has_tls_marks(cp));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_tls_marks(clean));
+    }
+
+    #[test]
+    fn scan_はpeer印を検出する() {
+        let cl = b"X-Client-IP: 1\r\n\r\nx";
+        assert!(has_peer_marks(cl));
+        let pe = b"X-Peer-Addr: a\r\n\r\nx";
+        assert!(has_peer_marks(pe));
+        let or_ = b"X-Origin-IP: 1\r\n\r\nx";
+        assert!(has_peer_marks(or_));
+        let ra = b"X-Remote-Addr: a\r\n\r\nx";
+        assert!(has_peer_marks(ra));
+        let rh = b"X-Remote-Host: h\r\n\r\nx";
+        assert!(has_peer_marks(rh));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_peer_marks(clean));
     }
 }
 

@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D387: SMTP AUTH 印自称
+    if env.smtpauth_marks {
+        render_risks.push(
+            "X-Authenticated-*/X-SMTP-Auth/X-AUTH-User 等 — 「認証済み発件」の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D388: TLS 接続印自称
+    if env.tls_marks {
+        render_risks.push(
+            "X-TLS-*/X-SSL-*/X-Connection-Encrypted 等 — 「暗号経路を通った」記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D389: client/peer 印自称
+    if env.peer_marks {
+        render_risks.push(
+            "X-Client-*/X-Peer-*/X-Remote-Addr 等 — 接続相手の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
