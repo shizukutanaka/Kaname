@@ -558,6 +558,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D279: boundary= パラメータ欠落
+    if env.missing_boundary_param {
+        render_risks.push(
+            "multipart 宣言なのに boundary= パラメータがありません — 解析不能な手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D280: Content-Type 欠落
+    if env.missing_content_type {
+        render_risks.push(
+            "Content-Type: ヘッダがありません — 型を名乗らない手作り生成品の兆候です".to_string(),
+        );
+    }
+
+    // D281: Return-Path の不正値
+    if env.malformed_return_path {
+        render_risks.push(
+            "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

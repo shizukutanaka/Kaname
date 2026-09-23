@@ -8,6 +8,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
@@ -25,6 +26,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の体裁を持つ — 検証機構なしの表示では「信頼できる」に見えるため、体裁だけで信頼を獲得しつつ実行形式を内包し得る (S/MIME 偽装)。正当な署名付きメールは `multipart/signed` 型で届くため、単独添付の署名ファイルは体裁のみの偽装
 - 対処: `is_pseudo_signature_attachment` 新設で `scan_attachment_bytes` の step 7 に配線
 - テスト +4 件
+
+
+### Security — D279: multipart 宣言なのに `boundary=` パラメータがない
+
+- 区切りを定義しない multipart は解析不能 — 手作り生成品の兆候 (phantom boundary とは別系: 宣言自体が欠ける)
+- 対処: `has_missing_boundary_param` 新設 → `Envelope.missing_boundary_param` → `render_risks` 兆候報告
+
+### Security — D280: `Content-Type:` ヘッダの欠落が未検査
+
+- 型を名乗らないメッセージ — 正規 MUA が必ず付ける必須系ヘッダの欠落で手作り生成品の兆候
+- 対処: `has_missing_content_type` 新設 → `Envelope.missing_content_type` → `render_risks` 兆候報告
+
+### Security — D281: `Return-Path:` が `<` を含まない不正値が未検査
+
+- RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は手作り生成品の兆候
+- 対処: `has_malformed_return_path` 新設 → `Envelope.malformed_return_path` → `render_risks` 兆候報告
 
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
