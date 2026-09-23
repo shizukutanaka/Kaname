@@ -359,7 +359,19 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // 本文からリンクを抽出し、bec の URL シグナルに供給する。
     // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
-    let urls = extract_urls_from_text(analysis_text);
+    let mut urls = extract_urls_from_text(analysis_text);
+    // D177: authority にパーセントエンコードを含む URL — ブラウザは
+    // host をデコードして解釈するため移動は成功するが、評判判定が見る
+    // 生トークンは `%70aypal` のような形でドメイン比較と一致しない。
+    // デコード済み URL も評価対象に加える。
+    let percent_encoded_urls = kaname_render::find_percent_encoded_urls(analysis_text);
+    for p in &percent_encoded_urls {
+        if let Some(d) = &p.decoded {
+            if !urls.iter().any(|u| u == d) {
+                urls.push(d.clone());
+            }
+        }
+    }
 
     // 自組織ドメイン (D44): 設定 `org_domain` → 接続中アカウントから導出。
     // 未設定・未接続なら空文字で、自己ドメインを前提とする検出は安全にスキップされる。
@@ -511,6 +523,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 m.shown_domain, m.href_domain
             ));
         }
+    }
+    // D177: URL authority のパーセントエンコード (ドメイン難読化の兆候)。
+    if !percent_encoded_urls.is_empty() {
+        render_risks.push(
+            "URL のホスト名がパーセントエンコードで難読化されています (ドメイン偽装の兆候)"
+                .to_string(),
+        );
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));

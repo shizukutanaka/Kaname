@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D175: 添付拡張子欠落第2弾 — XML/設定系ショートカット形式を追加
+
+- `is_dangerous_windows_attachment` に 2024 年以降の代替配送ベクターが欠落: `.library-ms`/`.search-ms` (Windows Library / Search Connector の XML — WebDAV/C2 参照注入、APT28 2024 キャンペーン)、`.theme`/`.themepack` (リモート `.msstyles` 参照で NTLM 認証漏洩、Akamai 2025)、`.settingcontent-ms` (DeepLink 任意実行、CVE-2018-8414)、`.reg`、`.chm`、`.xll` (Excel アドイン、Cisco Talos 2023)、`.iqy`/`.slk` (式取り込み系)、`.diagcab`、`.rdp` (Black Basta 報告)
+- 対処: 上記 14 拡張子を危険リストに追加。`.lib`/`.ms` 等の類似安全拡張子は誤検出しない
+- テスト +3 件
+
+### Security — D176: ファイル名拡張子の ASCII 同形文字偽装 (`.ехе` 系) を検出
+
+- `report.ехе` (е=U+0435) は ASCII 拡張子比較を素通りするが、ユーザーには `report.exe` と見える — 拡張子自体は OS から見れば無害なため「危険拡張子に偽装した安全ファイル」として手動実行・リネームを誘う表示偽装 (Vordigital/PTSecurity 系の文書化された手口)
+- 対処: `fold_filename_lookalikes` (Cyrillic/Greek 類似字 → ASCII 畳み込み) と `filename_has_ascii_lookalikes` を新設。`scan_attachment_bytes` で畳み込み後の拡張子が危険なら実行偽装として `is_dangerous`、畳み込みだけなら表示偽装の兆候として `risks` 報告
+- テスト +5 件
+
+### Security — D177: URL authority のパーセントエンコード難読化を検出
+
+- WHATWG URL 仕様では host はパーセントデコードされるため、`https://%70aypal.example` は `paypal.example` としてブラウザ移動する — しかし本文 URL 抽出が得るのは生トークンで、`%70apal` 系は評判判定・偽装検査のドメイン比較と一致せず素通り
+- 対処: `find_percent_encoded_urls` で authority 内 `%` を検出 → authority のみパーセントデコードした正規化 URL を評価 URL に併記し、`render_risks` に難読化の兆候として報告
+- テスト +6 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

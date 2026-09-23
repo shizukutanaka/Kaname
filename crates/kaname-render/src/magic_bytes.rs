@@ -160,6 +160,20 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "img"   // ディスクイメージ — 同上
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
+        // XML/設定系ショートカット — 2024 年以降の代替配送ベクター (D175)
+        | "library-ms"        // Windows Library XML — WebDAV/C2 参照注入 (APT28 2024)
+        | "search-ms"         // Search Connector — リモート検索/SMB 漏洩
+        | "searchconnector-ms" // Search Connector — 同上
+        | "settingcontent-ms" // Settings Content — DeepLink 任意実行 (CVE-2018-8414)
+        | "theme"   // Windows テーマ — リモート .msstyles で NTLM 認証漏洩 (Akamai 2025)
+        | "themepack" // テーマパック — 同上
+        | "reg"     // レジストリ結合 — 永続化/設定改変
+        | "chm"     // Compiled HTML Help — 埋め込みスクリプト/exe 実行
+        | "xll"     // Excel アドイン DLL — ドロップ即ロード (Cisco Talos 2023)
+        | "iqy"     // Excel Web Query — 外部参照でリモート式取り込み
+        | "slk"     // SYLK — 式インジェクションでコマンド実行
+        | "diagcab" // 診断キャビネット — exe 内包可能
+        | "rdp" // リモートデスクトップ接続 — ローカル共有誘導 (Black Basta 報告)
     )
 }
 
@@ -189,6 +203,66 @@ pub fn has_bidi_override_filename(filename: &str) -> bool {
             | '\u{2069}' // POP DIRECTIONAL ISOLATE
         )
     })
+}
+
+/// ファイル名に含まれる ASCII 同形文字 (Cyrillic/Greek 類似字) を
+/// ASCII 類似字に畳んだ文字列を返す (D176)。
+///
+/// `report.ехе` (е = U+0435) は `is_dangerous_windows_attachment` の
+/// ASCII 拡張子比較を素通りするが、ユーザーには `report.exe` と
+/// 見える — 拡張子自体は OS から見れば無害なため「危険拡張子に
+/// 偽装した安全ファイル」としてユーザーの手動実行・リネームを
+/// 誘う表示偽装 (Vordigital/PTSecurity 系の文書化された手口)。
+/// 畳み込み後に通常の拡張子比較を行うことで検査に戻す。
+#[must_use]
+pub fn fold_filename_lookalikes(filename: &str) -> String {
+    filename
+        .chars()
+        .map(|c| match c {
+            '\u{0430}' => 'a', // Cyrillic а
+            '\u{0435}' => 'e', // Cyrillic е
+            '\u{0456}' => 'i', // Cyrillic і
+            '\u{043e}' => 'o', // Cyrillic о
+            '\u{0440}' => 'p', // Cyrillic р
+            '\u{0441}' => 'c', // Cyrillic с
+            '\u{0445}' => 'x', // Cyrillic х
+            '\u{0443}' => 'y', // Cyrillic у
+            '\u{0455}' => 's', // Cyrillic ѕ
+            '\u{0458}' => 'j', // Cyrillic ј
+            '\u{04bb}' => 'h', // Cyrillic һ
+            '\u{0442}' => 't', // Cyrillic т
+            '\u{043a}' => 'k', // Cyrillic к
+            '\u{043c}' => 'm', // Cyrillic м (小文字は m に見える)
+            '\u{043d}' => 'n', // Cyrillic н → H 系だが小文字比較用に
+            '\u{0391}' => 'a', // Greek Α
+            '\u{0392}' => 'b', // Greek Β
+            '\u{0395}' => 'e', // Greek Ε
+            '\u{0396}' => 'z', // Greek Ζ
+            '\u{0397}' => 'h', // Greek Η
+            '\u{0399}' => 'i', // Greek Ι
+            '\u{039a}' => 'k', // Greek Κ
+            '\u{039c}' => 'm', // Greek Μ
+            '\u{039d}' => 'n', // Greek Ν
+            '\u{039f}' => 'o', // Greek Ο
+            '\u{03a1}' => 'p', // Greek Ρ
+            '\u{03a4}' => 't', // Greek Τ
+            '\u{03a5}' => 'y', // Greek Υ
+            '\u{03a7}' => 'x', // Greek Χ
+            '\u{0432}' => 'b', // Cyrillic в → B 系
+            '\u{0437}' => 'z', // Cyrillic з → 3 系 (近似)
+            '\u{04cf}' => 'l', // Cyrillic ӏ (palochka)
+            c => c,
+        })
+        .collect()
+}
+
+/// ファイル名が ASCII 同形文字を含むか判定する (D176)。
+///
+/// `fold_filename_lookalikes` で文字が畳まれるか否か — 畳まれる文字が
+/// 1 つでもあれば、ユーザー表示は実際の文字列と異なりうる。
+#[must_use]
+pub fn filename_has_ascii_lookalikes(filename: &str) -> bool {
+    fold_filename_lookalikes(filename) != filename
 }
 
 /// Windows LNK (Shell Link) ファイルか magic bytes で判定する。
@@ -604,5 +678,70 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    // ---------- D175: XML/設定系ショートカット形式 ----------
+
+    #[test]
+    fn library_ms_and_search_ms_are_dangerous() {
+        // Windows Library / Search Connector XML — WebDAV/C2 参照注入 (APT28 2024)
+        assert!(is_dangerous_windows_attachment("docs.library-ms"));
+        assert!(is_dangerous_windows_attachment("files.search-ms"));
+        assert!(is_dangerous_windows_attachment("x.searchconnector-ms"));
+    }
+
+    #[test]
+    fn theme_and_settingcontent_are_dangerous() {
+        // .theme/.themepack — リモート msstyles で NTLM 漏洩 / Settings Content — DeepLink 実行
+        assert!(is_dangerous_windows_attachment("dark.theme"));
+        assert!(is_dangerous_windows_attachment("pack.themepack"));
+        assert!(is_dangerous_windows_attachment("wifi.settingcontent-ms"));
+    }
+
+    #[test]
+    fn reg_chm_xll_and_friends_are_dangerous() {
+        assert!(is_dangerous_windows_attachment("install.reg"));
+        assert!(is_dangerous_windows_attachment("help.chm"));
+        assert!(is_dangerous_windows_attachment("addin.xll"));
+        assert!(is_dangerous_windows_attachment("data.iqy"));
+        assert!(is_dangerous_windows_attachment("sheet.slk"));
+        assert!(is_dangerous_windows_attachment("fix.diagcab"));
+        assert!(is_dangerous_windows_attachment("server.rdp"));
+    }
+
+    #[test]
+    fn similar_safe_extensions_not_dangerous() {
+        // 類似だが安全な拡張子は誤検出しない
+        assert!(!is_dangerous_windows_attachment("app.lib"));
+        assert!(!is_dangerous_windows_attachment("notes.ms"));
+        assert!(!is_dangerous_windows_attachment("readme.txt"));
+    }
+
+    // ---------- D176: ファイル名の ASCII 同形文字 ----------
+
+    #[test]
+    fn fold_lookalikes_maps_cyrillic() {
+        assert_eq!(fold_filename_lookalikes("report.ехе"), "report.exe");
+        assert_eq!(fold_filename_lookalikes("invоice.pdf"), "invoice.pdf");
+        assert_eq!(fold_filename_lookalikes("normal.txt"), "normal.txt");
+    }
+
+    #[test]
+    fn lookalike_extension_detected() {
+        // е=U+0435 — ASCII の .exe と見分けがつかない
+        assert!(filename_has_ascii_lookalikes("report.ехе"));
+        // ファイル名途中の同形字も検出
+        assert!(filename_has_ascii_lookalikes("invоice.pdf"));
+        assert!(!filename_has_ascii_lookalikes("report.exe"));
+        assert!(!filename_has_ascii_lookalikes("請求書.pdf"));
+    }
+
+    #[test]
+    fn lookalike_ext_unfolds_to_dangerous() {
+        // 畳み込み後に危険拡張子になるか
+        let folded = fold_filename_lookalikes("doc.ехе");
+        assert!(is_dangerous_windows_attachment(&folded));
+        let folded = fold_filename_lookalikes("invоice.pdf");
+        assert!(!is_dangerous_windows_attachment(&folded));
     }
 }

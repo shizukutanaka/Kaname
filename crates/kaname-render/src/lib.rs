@@ -1139,6 +1139,105 @@ fn record_link_mismatch(anchor_text: &str, href: &str, out: &mut Vec<LinkMismatc
     }
 }
 
+/// authority 部にパーセントエンコードを含む URL トークン 1 件 (D177)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PercentEncodedUrl {
+    /// 本文に現れたトークンそのまま。
+    pub token: String,
+    /// authority のみパーセントデコードした正規化 URL
+    /// (デコード不能なバイト列がある場合 None)。
+    pub decoded: Option<String>,
+}
+
+/// `%XX` を authority 範囲のみデコードする (D177)。
+///
+/// ブラウザは URL の host をパーセントデコードして解釈する
+/// (`https://%70aypal.example` → paypal.example) が、本文 URL
+/// 抽出が得る文字列は生トークンのため `%70apal` は評判判定の
+/// ドメイン比較と一致しない — デコード済み文字列で判定に戻す。
+fn percent_decode_host_part(authority: &str) -> Option<String> {
+    if !authority.contains('%') {
+        return Some(authority.to_string());
+    }
+    let bytes = authority.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if i + 2 >= bytes.len() {
+                return None;
+            }
+            let hex = |b: u8| -> Option<u8> {
+                match b {
+                    b'0'..=b'9' => Some(b - b'0'),
+                    b'a'..=b'f' => Some(b - b'a' + 10),
+                    b'A'..=b'F' => Some(b - b'A' + 10),
+                    _ => None,
+                }
+            };
+            let hi = hex(bytes[i + 1])?;
+            let lo = hex(bytes[i + 2])?;
+            out.push((hi << 4) | lo);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// 本文から authority 部にパーセントエンコードを含む `http(s)://`
+/// URL トークンを抽出する (D177)。
+///
+/// WHATWG URL 仕様では host はパーセントデコードされるため、
+/// `https://%65xample.com` は example.com として移動する。
+/// しかし抽出されるのは生トークンなので、既存のドメイン比較
+/// (評判判定・偽装検査) とは一致しない — 検出してデコード済み
+/// URL も返す。
+#[must_use]
+pub fn find_percent_encoded_urls(text: &str) -> Vec<PercentEncodedUrl> {
+    const MAX_TOKENS: usize = 20;
+    let mut out = Vec::new();
+    for token in
+        text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'')
+    {
+        let lower = token.to_ascii_lowercase();
+        if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+            continue;
+        }
+        let scheme_len = if lower.starts_with("https://") {
+            "https://".len()
+        } else {
+            "http://".len()
+        };
+        let after_scheme = &token[scheme_len..];
+        let auth_end = after_scheme
+            .find(['/', '?', '#'])
+            .unwrap_or(after_scheme.len());
+        let authority = &after_scheme[..auth_end];
+        if !authority.contains('%') {
+            continue;
+        }
+        let decoded = percent_decode_host_part(authority).map(|auth| {
+            format!(
+                "{}{}{}",
+                &token[..scheme_len],
+                auth,
+                &after_scheme[auth_end..]
+            )
+        });
+        out.push(PercentEncodedUrl {
+            token: token.to_string(),
+            decoded,
+        });
+        if out.len() >= MAX_TOKENS {
+            break;
+        }
+    }
+    out
+}
+
 /// URL/URI 文字列からホスト名を小文字で取り出す。
 /// http(s) 以外のスキーム・相対参照・アンカーは None。
 /// userinfo (`https://a.com@b.com/` → `b.com`) とポートを除去する。
@@ -2325,6 +2424,82 @@ mod tests {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
     }
+
+    // ---------- D176: ファイル名の ASCII 同形文字偽装 ----------
+
+    #[test]
+    fn scan_attachment_lookalike_exe_ext_is_dangerous() {
+        // report.ехе (е=U+0435) — ASCII .exe と見分けがつかない表示偽装
+        let scan = scan_attachment_bytes(
+            "report.\u{0435}\u{0445}\u{0435}",
+            "application/octet-stream",
+            b"MZ\x90\x00binary",
+        );
+        assert!(scan.is_dangerous);
+        assert!(scan.risks.iter().any(|r| r.contains("同形文字")));
+    }
+
+    #[test]
+    fn scan_attachment_lookalike_safe_ext_is_risk_only() {
+        // fіle.pdf (і=U+0456) — 畳み込み後も安全だが表示偽装の兆候として報告
+        let scan = scan_attachment_bytes("f\u{0456}le.pdf", "application/pdf", b"%PDF-1.5 data");
+        assert!(!scan.is_dangerous);
+        assert!(scan.risks.iter().any(|r| r.contains("同形文字")));
+    }
+
+    // ---------- D177: URL authority のパーセントエンコード ----------
+
+    #[test]
+    fn percent_encoded_host_detected_and_decoded() {
+        let found = find_percent_encoded_urls("https://%70aypal.example/login");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].decoded.as_deref(),
+            Some("https://paypal.example/login")
+        );
+    }
+
+    #[test]
+    fn percent_encoded_host_path_and_query_preserved() {
+        let found = find_percent_encoded_urls("https://%65xample.com/a%20b?x=%31");
+        assert_eq!(found.len(), 1);
+        // authority のみデコード — パス/クエリはそのまま
+        assert_eq!(
+            found[0].decoded.as_deref(),
+            Some("https://example.com/a%20b?x=%31")
+        );
+    }
+
+    #[test]
+    fn percent_encoded_userinfo_host_detected() {
+        let found = find_percent_encoded_urls("https://user@%70ass.example/");
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            found[0].decoded.as_deref(),
+            Some("https://user@pass.example/")
+        );
+    }
+
+    #[test]
+    fn normal_url_not_flagged() {
+        assert!(find_percent_encoded_urls("https://example.com/100%").is_empty());
+        assert!(find_percent_encoded_urls("https://example.com").is_empty());
+        assert!(find_percent_encoded_urls("特にURLなし").is_empty());
+    }
+
+    #[test]
+    fn percent_encoded_bad_hex_not_decoded() {
+        let found = find_percent_encoded_urls("https://%zz.example/");
+        assert_eq!(found.len(), 1);
+        assert!(found[0].decoded.is_none());
+    }
+
+    #[test]
+    fn percent_encoded_in_text_context() {
+        let found = find_percent_encoded_urls("詳しくは https://%76erify.example から確認");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].decoded.as_deref(), Some("https://verify.example"));
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2535,6 +2710,25 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
                 .to_string(),
         );
         is_dangerous = true;
+    }
+    // D176: 拡張子・ファイル名の ASCII 同形文字 (Cyrillic/Greek 類似字)。
+    // `report.ехе` (е=U+0435) は ASCII 拡張子比較を素通りするが、
+    // ユーザーには `report.exe` と見える — 畳み込み後の拡張子が
+    // 危険なら実行偽装、畳み込みだけなら表示偽装の兆候として報告。
+    if magic_bytes::filename_has_ascii_lookalikes(filename) {
+        let folded = magic_bytes::fold_filename_lookalikes(filename);
+        if magic_bytes::is_dangerous_windows_attachment(&folded) {
+            risks.push(
+                "ファイル名の拡張子に同形文字が使われており、危険な実行形式に偽装されています"
+                    .to_string(),
+            );
+            is_dangerous = true;
+        } else {
+            risks.push(
+                "ファイル名に Cyrillic/Greek の ASCII 同形文字が含まれており、実際の拡張子とは別の見え方をします"
+                    .to_string(),
+            );
+        }
     }
 
     // 2. 宣言 MIME と実体の不一致 (実行ファイルを画像等に偽装)
