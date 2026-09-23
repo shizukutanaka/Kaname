@@ -512,6 +512,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             ));
         }
     }
+    // D171: text/plain 宣言の本文に HTML タグ — パーサ差異の兆候。
+    if env
+        .text_body
+        .as_deref()
+        .is_some_and(kaname_render::text_body_contains_html)
+    {
+        render_risks.push(
+            "text/plain 宣言の本文に HTML タグが含まれます — 別クライアントでは HTML として描画されうるパーサ差異の兆候".to_string(),
+        );
+    }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
     render_risks.extend(evaluate_link_risks(&urls));

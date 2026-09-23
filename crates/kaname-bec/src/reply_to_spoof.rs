@@ -17,6 +17,14 @@ pub struct SpoofAnalysis {
     pub display_name_impersonation: bool,
     /// 詐称が疑われる表示名。
     pub suspicious_display_name: Option<String>,
+    /// From アドレスのローカル部がドメイン形をなす場合の、
+    /// 見せかけのドメイントークン (例: `paypal.com@evil.example` の
+    /// `paypal.com`)。表示名詐称とは独立のベクター — 表示名を
+    /// 見ないクライアントや一覧表示でもアドレスの左側は常に
+    /// 見えるため、ここを既知ドメイン形にして「正規発信元」らしく
+    /// 見せる手口 (BEC の local part spoofing として Agari/
+    /// IRONSCALES 系レポートで観測)。
+    pub local_part_domain_mimicry: Option<String>,
     /// スコア寄与 (0.0..=1.0)。
     pub risk_score: f32,
 }
@@ -79,6 +87,17 @@ pub fn analyze_spoof(
             false
         };
 
+    // 3. ローカル部ドメイン偽装チェック
+    // `paypal.com@evil.example` のようにローカル部自体をドメイン形に
+    // する手口。ローカル部の末尾が既知のパブリックサフィックス系
+    // ラベルで終わるドット付きトークンを「見せかけドメイン」とみなす。
+    // ローカル部がそのまま実送信ドメインと同じ場合 (例:
+    // `paypal.com@paypal.com`) は偽装ではない。
+    let local_part_domain_mimicry = extract_addr_spec(from_header)
+        .and_then(|addr| addr.rfind('@').map(|at| addr[..at].to_string()))
+        .and_then(|local| mimicked_domain_token(&local))
+        .filter(|mimic| from_domain.as_deref() != Some(mimic.as_str()));
+
     // スコア計算
     let mut score = 0.0f32;
     if reply_to_domain_mismatch {
@@ -93,6 +112,9 @@ pub fn analyze_spoof(
     if display_name_impersonation {
         score += 0.3;
     }
+    if local_part_domain_mimicry.is_some() {
+        score += 0.3;
+    }
 
     SpoofAnalysis {
         reply_to_domain_mismatch,
@@ -103,6 +125,7 @@ pub fn analyze_spoof(
         } else {
             None
         },
+        local_part_domain_mimicry,
         risk_score: score.min(1.0),
     }
 }
@@ -142,6 +165,59 @@ fn extract_domain_from_header(header: &str) -> Option<String> {
 
     let at = email.rfind('@')?;
     Some(email[at + 1..].trim().to_lowercase())
+}
+
+/// ヘッダーから addr-spec (`user@domain`) を抽出する。
+fn extract_addr_spec(header: &str) -> Option<String> {
+    let email = if let Some(start) = header.rfind('<') {
+        let end = header.rfind('>')?;
+        if end > start {
+            &header[start + 1..end]
+        } else {
+            return None;
+        }
+    } else {
+        header.trim()
+    };
+    let trimmed = email.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+/// ローカル部が「見せかけのドメイン」かどうかを判定し、
+/// 該当する場合はそのドメイン形トークンを返す。
+///
+/// ローカル部 (`@` の前) がドットを含み、末尾が既知の
+/// パブリックサフィックス系ラベルで終わる場合にドメイン形と
+/// みなす — `paypal.com` / `support.paypal.com` / `secure-login.net`
+/// のような見せかけ送信元を捕捉する。`john.doe` (末尾が
+/// サフィックスでない人名形) や `reply.to` (非サフィックス) は
+/// 誤検出しない。
+fn mimicked_domain_token(local: &str) -> Option<String> {
+    let l = local
+        .trim_matches(|c| matches!(c, '"' | '\''))
+        .to_lowercase();
+    if !l.contains('.') {
+        return None;
+    }
+    let last = l.rsplit('.').next()?;
+    // 末尾が既知サフィックスでなければドメイン形でない
+    const KNOWN_SUFFIXES: &[&str] = &[
+        "com", "net", "org", "jp", "io", "app", "dev", "info", "biz", "me", "co", "de", "uk", "au",
+        "fr", "ru", "cn", "kr", "br", "in", "it", "es", "nl", "se", "ch", "us", "ca", "xyz", "top",
+        "site", "online",
+    ];
+    if !KNOWN_SUFFIXES.contains(&last) {
+        return None;
+    }
+    // 先頭ラベルも必要 — `.com` だけのローカル部はドメイン形でない
+    if l.split('.').count() < 2 || l.split('.').next().is_none_or(|f| f.is_empty()) {
+        return None;
+    }
+    Some(l)
 }
 
 /// ヘッダーから表示名を抽出する。
@@ -337,5 +413,57 @@ mod tests {
         assert!(is_free_mail_domain("gmail.com"));
         assert!(is_free_mail_domain("YAHOO.CO.JP"));
         assert!(!is_free_mail_domain("company.com"));
+    }
+
+    // ---- D172: ローカル部ドメイン偽装 ----
+
+    #[test]
+    fn local_part_domain_mimicry_detected() {
+        // paypal.com@evil.example — ローカル部がドメイン形
+        let result = analyze_spoof("paypal.com@evil.example", None, &[]);
+        assert_eq!(
+            result.local_part_domain_mimicry.as_deref(),
+            Some("paypal.com")
+        );
+        assert!(result.risk_score >= 0.3);
+    }
+
+    #[test]
+    fn local_part_subdomain_mimicry_detected() {
+        let result = analyze_spoof("\"PayPal\" <support.paypal.com@evil.example>", None, &[]);
+        assert!(result.local_part_domain_mimicry.is_some());
+    }
+
+    #[test]
+    fn local_part_matching_own_domain_not_flagged() {
+        // paypal.com@paypal.com — 見せかけでも実ドメインでも同じ
+        let result = analyze_spoof("paypal.com@paypal.com", None, &[]);
+        assert!(result.local_part_domain_mimicry.is_none());
+    }
+
+    #[test]
+    fn normal_local_part_not_flagged() {
+        for h in [
+            "john.doe@company.com",
+            "support@example.net",
+            "noreply@list.co.jp",
+            "user.name+tag@mail.io",
+            "a.b@x.com",
+        ] {
+            let r = analyze_spoof(h, None, &[]);
+            assert!(
+                r.local_part_domain_mimicry.is_none(),
+                "{h} should not be flagged"
+            );
+        }
+    }
+
+    #[test]
+    fn quoted_from_addr_local_part_mimicry() {
+        let r = analyze_spoof("\"営業部\" <secure-login.net@bad.xyz>", None, &[]);
+        assert_eq!(
+            r.local_part_domain_mimicry.as_deref(),
+            Some("secure-login.net")
+        );
     }
 }

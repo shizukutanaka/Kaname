@@ -871,6 +871,58 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     }
 }
 
+/// `text/plain` 宣言の本文が実際には HTML タグを含んでいるか (D171)。
+///
+/// Content-Type で text/plain と宣言しながら本文に HTML を混入させる
+/// 「プレーンテキストスマグリング」は、メールクライアントごとに
+/// 描画方法が割れる古典的なパーサ差異 — 多くのクライアントは
+/// プレーン表示するが、一部は HTML として描画しリンクやフォームを
+/// 有効にする。Kaname 自体は pre-wrap エスケープで安全側に倒れるが
+/// (D152)、構造として「宣言と内容が食い違う」こと自体が兆候であり
+/// 転送・他クライアントでは危険になり得る。
+///
+/// 判定は「閉じタグ `</`」と「`<` + ASCII 英字 2 文字以上で始まる
+/// 既知タグ名」の出現 — プレーンテキストに現れる確率が低い
+/// マーカーのみを見て誤検出を抑える。
+#[must_use]
+pub fn text_body_contains_html(text: &str) -> bool {
+    let head = text.get(..64 * 1024).unwrap_or(text);
+    let lower = head.to_ascii_lowercase();
+    // 閉じタグ (</ + 英字) はプレーンテキストにほぼ現れない強い証拠。
+    // `a</b` のような不等号表現との区別のため英字続きを要求する。
+    if lower
+        .as_bytes()
+        .windows(3)
+        .any(|w| w[0] == b'<' && w[1] == b'/' && w[2].is_ascii_alphabetic())
+    {
+        return true;
+    }
+    // タグ名マーカー — 「`<` + 英字」の形で始まるもののみ
+    const TAG_MARKERS: &[&str] = &[
+        "<a ",
+        "<a href",
+        "<img",
+        "<script",
+        "<form",
+        "<iframe",
+        "<table",
+        "<style",
+        "<html",
+        "<!doctype",
+        "<body",
+        "<div",
+        "<span",
+        "<p>",
+        "<br",
+        "<link",
+        "<meta",
+        "<input",
+        "<button",
+        "<video",
+    ];
+    TAG_MARKERS.iter().any(|m| lower.contains(m))
+}
+
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
 fn read_tag_name(html: &str, start: usize) -> &str {
     let bytes = html.as_bytes();
@@ -2267,6 +2319,45 @@ mod tests {
         let e = html_to_text(&html);
         assert_eq!(e.link_mismatches.len(), 1);
         assert!(e.link_mismatches[0].shown_text.chars().count() <= 80);
+    }
+
+    // ---- D171: text/plain 宣言の本文に HTML ----
+
+    #[test]
+    fn text_body_with_anchor_flagged() {
+        assert!(text_body_contains_html(
+            "Click here <a href=https://evil.example>link</a>"
+        ));
+    }
+
+    #[test]
+    fn text_body_with_form_flagged() {
+        assert!(text_body_contains_html(
+            "<form action=x><input type=password></form>"
+        ));
+    }
+
+    #[test]
+    fn text_body_with_only_closing_tag_flagged() {
+        assert!(text_body_contains_html("some text </div> more"));
+    }
+
+    #[test]
+    fn plain_text_not_flagged() {
+        for t in [
+            "See you at 3pm — call x<y when z",
+            "a<b and c>d",
+            "数学記号: x < y / z</2",
+            "Visit https://example.com for details",
+            "like this <thing> maybe",
+        ] {
+            assert!(!text_body_contains_html(t), "{t} flagged");
+        }
+    }
+
+    #[test]
+    fn doctype_in_text_flagged() {
+        assert!(text_body_contains_html("<!DOCTYPE html><p>x"));
     }
 }
 

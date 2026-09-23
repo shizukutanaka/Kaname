@@ -799,6 +799,18 @@ impl BecDetector {
                 ),
             });
         }
+        if let Some(ref mimic) = analysis.local_part_domain_mimicry {
+            signals.push(Signal {
+                family: SignalFamily::Domain,
+                contribution: 0.30,
+                label: format!("ローカル部ドメイン偽装の疑い ({})", mimic),
+                rationale: format!(
+                    "From アドレスのローカル部がドメイン形 \"{mimic}\" です。\
+                    アドレスの左側を見せかけの送信元にする local part \
+                    spoofing の兆候です。"
+                ),
+            });
+        }
     }
 
     fn check_thread_hijack(&self, req: &AssessmentRequest<'_>, signals: &mut Vec<Signal>) {

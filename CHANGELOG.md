@@ -8,6 +8,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D171: text/plain 宣言の本文に HTML 混入 (プレーンテキストスマグリング)
+
+- Content-Type で text/plain と宣言しながら本文に HTML を混入させる古典的なパーサ差異を未検査 — 多くのクライアントはプレーン表示するが一部は HTML として描画しリンクやフォームを有効にする。Kaname 自身は D152 の pre-wrap エスケープで安全側に倒れるが、構造として「宣言と内容が食い違う」ことは兆候であり転送・他クライアントでは危険
+- `text_body_contains_html` を新設: 閉じタグ (`</` + 英字) と既知タグ名マーカー (`<a href`/`<script`/`<form`/`<!doctype` 等) の出現で判定、`x<y` や `a</2` のような不等号表現との区別を保持 → `render_risks` に兆候報告
+
+### Security — D172: From ローカル部のドメイン偽装 (local part spoofing) が未検出
+
+- `paypal.com@evil.example` のように From のローカル部自体をドメイン形にする手口を誰も見ていなかった — 表示名詐称 (D159/D161) とは独立のベクターで、表示名を見ない一覧表示やクライアントでもアドレスの左側は常に見える (Agari/IRONSCALES 系レポートの local part spoofing)
+- `analyze_spoof` にローカル部抽出 (`extract_addr_spec`) と `mimicked_domain_token` を追加: ローカル部がドットを含み末尾が既知のパブリックサフィックス系ラベル (com/net/org/jp/io/app/...) で終わる場合に見せかけドメインとして Domain シグナル (0.30)。実送信ドメインと一致する場合 (`paypal.com@paypal.com`) と `john.doe` 等の人名形は誤検出しない
+- テスト +10 件 (D171×5: anchor/form/閉じタグ/doctype で検出、不等号表現・URL 単体で非検出。D172×5: ローカル部ドメイン形・サブドメイン形・自己ドメイン一致で非検出・人名形で非検出・引用形式)
+
 ### Security — D164: 複数 From アドレス / Sender ヘッダ不整合 (parser differential なりすまし) を検出
 
 - `env.from.first()` — 解析・表示・BEC 判定の全経路が From ヘッダの**最初の 1 アドレスだけ**を見ていたため、`From: ceo@corp.example, attacker@evil.example` のような複数 From メールで 2 番目以降の混入アドレスは誰も評価していなかった。RFC 5322 §3.6.2 は複数 From に `Sender:` を必須とするが、クライアントが表示に採用するアドレスは実装ごとに差があり (先頭/末尾/連結)、この「どの差出人として見えるかが環境依存」という差異を突く parser differential 型なりすましが知られている (Dmarcian/FlashStart 等が報告)
