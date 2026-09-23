@@ -1703,6 +1703,12 @@ pub struct Envelope {
     pub massage_marks: bool,
     /// `X-TimesPark-*`/`X-Times24-*`/`X-MitsuRepark-*`/`X-NPC24H-*`/`X-ApplePark-*` 等の駐車場・コインパーキング通知記録印を送信側が自称している (D595)
     pub parking_marks: bool,
+    /// `X-Isejingu-*`/`X-Meijijingu-*`/`X-IzumoTaisha-*`/`X-Sensoji-*`/`X-Kiyomizudera-*` 等の神社仏閣・宗教通知記録印を送信側が自称している (D596)
+    pub shrine_marks: bool,
+    /// `X-WeWork-*`/`X-Regus-*`/`X-Servcorp-*`/`X-CompassOffice-*`/`X-BusinessAirport-*` 等のコワーキング・貸会議室通知記録印を送信側が自称している (D597)
+    pub coworking_marks: bool,
+    /// `X-Freee-*`/`X-MoneyForward-*`/`X-Yayoi-*`/`X-TKC-*`/`X-Misoca-*` 等の会計ソフト・税務申告通知記録印を送信側が自称している (D598)
+    pub taxfiling_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2176,6 +2182,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pointkatsu_marks: has_pointkatsu_marks(hdr),
         massage_marks: has_massage_marks(hdr),
         parking_marks: has_parking_marks(hdr),
+        shrine_marks: has_shrine_marks(hdr),
+        coworking_marks: has_coworking_marks(hdr),
+        taxfiling_marks: has_taxfiling_marks(hdr),
     })
 }
 
@@ -11330,6 +11339,219 @@ fn has_parking_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Isejingu-*`/`X-Meijijingu-*`/`X-IzumoTaisha-*`/`X-FushimiInari-*`/`X-Sensoji-*`/`X-Kinkakuji-*`/`X-Kiyomizudera-*`/`X-Todaiji-*`/`X-Koyasan-*`/`X-Hieizan-*`/`X-Zenkoji-*`/`X-Naritasan-*`/`X-Dazaifu-*`/`X-SumiyoshiTaisha-*`/`X-AtsutaJingu-*`/`X-HikawaJinja-*`/`X-HiedaJinja-*`/`X-Tsurugaoka-*`/`X-KitanoTenmangu-*`/`X-Itsukushima-*`/`X-OkamiJinja-*`/`X-SuwaTaisha-*`/`X-KashimaJingu-*`/`X-KatoriJingu-*`/`X-Ishikiri-*`/`X-UsaJingu-*`/`X-YahikoJinja-*`/`X-Shirahige-*`/`X-KetaTaisha-*`/`X-KagoshimaJingu-*`/`X-MotoIse-*`/`X-OkamiJinja-*`/`X-Konpira-*`/`X-OyamaAfuri-*`/`X-Kunozan-*`/`X-Toshogu-*`/`X-Rinnoji-*`/`X-Chusonji-*`/`X-Motsuji-*`/`X-Zuiganji-*`/`X-Eiheiji-*`/`X-Sojiji-*`/`X-Chionin-*`/`X-HigashiHonganji-*`/`X-NishiHonganji-*`/`X-ShinshuOtani-*`/`X-Tenryuji-*`/`X-Nanzenji-*`/`X-Daitokuji-*`/`X-Myoshinji-*`/`X-Kenninji-*`/`X-Tofukuji-*`/`X-Ryoanji-*`/`X-Ginkakuji-*`/`X-Saihoji-*`/`X-Horyuji-*`/`X-Yakushiji-*`/`X-Toshodaiji-*`/`X-Saidaiji-*`/`X-Shitennoji-*`/`X-KatsuoJi-*`/`X-Katsuoji-*`/`X-Nakayamadera-*`/`X-Zojoji-*`/`X-TsukijiHongwanji-*` (神社仏閣・宗教法人の御守・祈祷・案内記録) を送信側が自称しているかどうか。祈祷料・お布施・御朱印・法要案内の偽装は信仰悪用詐欺の典型手口。
+fn has_shrine_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-isejingu-")
+            || l.starts_with("x-meijijingu-")
+            || l.starts_with("x-izumotaisha-")
+            || l.starts_with("x-fushimiinari-")
+            || l.starts_with("x-sensoji-")
+            || l.starts_with("x-kinkakuji-")
+            || l.starts_with("x-kiyomizudera-")
+            || l.starts_with("x-todaiji-")
+            || l.starts_with("x-koyasan-")
+            || l.starts_with("x-hieizan-")
+            || l.starts_with("x-zenkoji-")
+            || l.starts_with("x-naritasan-")
+            || l.starts_with("x-dazaifu-")
+            || l.starts_with("x-sumiyoshitaisha-")
+            || l.starts_with("x-atsutajingu-")
+            || l.starts_with("x-hikawajinja-")
+            || l.starts_with("x-hiedajinja-")
+            || l.starts_with("x-tsurugaoka-")
+            || l.starts_with("x-kitanotenmangu-")
+            || l.starts_with("x-itsukushima-")
+            || l.starts_with("x-okamijinja-")
+            || l.starts_with("x-suwataisha-")
+            || l.starts_with("x-kashimajingu-")
+            || l.starts_with("x-katorijingu-")
+            || l.starts_with("x-ishikiri-")
+            || l.starts_with("x-usajingu-")
+            || l.starts_with("x-yahikojinja-")
+            || l.starts_with("x-shirahige-")
+            || l.starts_with("x-ketataisha-")
+            || l.starts_with("x-kagoshimajingu-")
+            || l.starts_with("x-motoise-")
+            || l.starts_with("x-konpira-")
+            || l.starts_with("x-oyamaafuri-")
+            || l.starts_with("x-kunozan-")
+            || l.starts_with("x-toshogu-")
+            || l.starts_with("x-rinnoji-")
+            || l.starts_with("x-chusonji-")
+            || l.starts_with("x-motsuji-")
+            || l.starts_with("x-zuiganji-")
+            || l.starts_with("x-eiheiji-")
+            || l.starts_with("x-sojiji-")
+            || l.starts_with("x-chionin-")
+            || l.starts_with("x-higashihonganji-")
+            || l.starts_with("x-nishihonganji-")
+            || l.starts_with("x-shinshuotani-")
+            || l.starts_with("x-tenryuji-")
+            || l.starts_with("x-nanzenji-")
+            || l.starts_with("x-daitokuji-")
+            || l.starts_with("x-myoshinji-")
+            || l.starts_with("x-kenninji-")
+            || l.starts_with("x-tofukuji-")
+            || l.starts_with("x-ryoanji-")
+            || l.starts_with("x-ginkakuji-")
+            || l.starts_with("x-saihoji-")
+            || l.starts_with("x-horyuji-")
+            || l.starts_with("x-yakushiji-")
+            || l.starts_with("x-toshodaiji-")
+            || l.starts_with("x-saidaiji-")
+            || l.starts_with("x-shitennoji-")
+            || l.starts_with("x-katsuoji-")
+            || l.starts_with("x-nakayamadera-")
+            || l.starts_with("x-zojoji-")
+            || l.starts_with("x-tsukijihongwanji-")
+    })
+}
+
+/// `X-WeWork-*`/`X-Regus-*`/`X-Servcorp-*`/`X-CompassOffice-*`/`X-BusinessAirport-*`/`X-ExpertOffice-*`/`X-Resonance-*`/`X-TKP-*`/`X-DEFHub-*`/`X-Spaces-*`/`X-AntreSalon-*`/`X-IiOffice-*`/`X-H1T-*`/`X-WorkingSwitch-*`/`X-CoworkingSpot-*`/`X-RentalMeeting-*`/`X-RoomShare-*`/`X-OfficeShare-*`/`X-DropIn-*`/`X-ShareOffice-*`/`X-OfficePass-*`/`X-DeskPass-*`/`X-OfficeAnywhere-*`/`X-WorkationSpot-*`/`X-OfficeSuite-*`/`X-MeetingRoomPro-*`/`X-ConferenceRoomHub-*`/`X-WorkLounge-*`/`X-RemoteWorkHub-*`/`X-SatelliteOffice-*`/`X-OfficeRental-*`/`X-CoWorkHub-*`/`X-WorkFlex-*`/`X-OpenOfficeNet-*`/`X-SharedOffice-*`/`X-WorkBox-*`/`X-MeetingHub-*`/`X-RoomRental-*`/`X-OfficeBase-*`/`X-TeleworkHub-*`/`X-OfficeMetro-*`/`X-WorkPlaceNet-*`/`X-CoWorkSpace-*`/`X-OfficeLounge-*`/`X-BizAirport-*`/`X-OfficePort-*`/`X-WorkNest-*`/`X-OfficeHive-*`/`X-ShareDesk-*`/`X-HotDesk-*`/`X-BoothRental-*`/`X-PodiumOffice-*`/`X-OfficeLink-*`/`X-DeskNet-*`/`X-CoworkNet-*`/`X-OfficeGate-*`/`X-WorkGate-*`/`X-OfficeLoop-*` (コワーキング・貸会議室・シェアオフィスの通知記録) を送信側が自称しているかどうか。会議室予約・月額会費・入館証の偽装はリモートワーカー狙い詐欺の典型手口。
+fn has_coworking_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-wework-")
+            || l.starts_with("x-regus-")
+            || l.starts_with("x-servcorp-")
+            || l.starts_with("x-compassoffice-")
+            || l.starts_with("x-businessairport-")
+            || l.starts_with("x-expertoffice-")
+            || l.starts_with("x-resonance-")
+            || l.starts_with("x-tkp-")
+            || l.starts_with("x-defhub-")
+            || l.starts_with("x-spaces-")
+            || l.starts_with("x-antresalon-")
+            || l.starts_with("x-iioffice-")
+            || l.starts_with("x-h1t-")
+            || l.starts_with("x-workingswitch-")
+            || l.starts_with("x-coworkingspot-")
+            || l.starts_with("x-rentalmeeting-")
+            || l.starts_with("x-roomshare-")
+            || l.starts_with("x-officeshare-")
+            || l.starts_with("x-dropin-")
+            || l.starts_with("x-shareoffice-")
+            || l.starts_with("x-officepass-")
+            || l.starts_with("x-deskpass-")
+            || l.starts_with("x-officeanywhere-")
+            || l.starts_with("x-workationspot-")
+            || l.starts_with("x-officesuite-")
+            || l.starts_with("x-meetingroompro-")
+            || l.starts_with("x-conferenceroomhub-")
+            || l.starts_with("x-worklounge-")
+            || l.starts_with("x-remoteworkhub-")
+            || l.starts_with("x-satelliteoffice-")
+            || l.starts_with("x-officerental-")
+            || l.starts_with("x-coworkhub-")
+            || l.starts_with("x-workflex-")
+            || l.starts_with("x-openofficenet-")
+            || l.starts_with("x-sharedoffice-")
+            || l.starts_with("x-workbox-")
+            || l.starts_with("x-meetinghub-")
+            || l.starts_with("x-roomrental-")
+            || l.starts_with("x-officebase-")
+            || l.starts_with("x-teleworkhub-")
+            || l.starts_with("x-officemetro-")
+            || l.starts_with("x-workplacenet-")
+            || l.starts_with("x-coworkspace-")
+            || l.starts_with("x-officelounge-")
+            || l.starts_with("x-bizairport-")
+            || l.starts_with("x-officeport-")
+            || l.starts_with("x-worknest-")
+            || l.starts_with("x-officehive-")
+            || l.starts_with("x-sharedesk-")
+            || l.starts_with("x-hotdesk-")
+            || l.starts_with("x-boothrental-")
+            || l.starts_with("x-podiumoffice-")
+            || l.starts_with("x-officelink-")
+            || l.starts_with("x-desknet-")
+            || l.starts_with("x-coworknet-")
+            || l.starts_with("x-officegate-")
+            || l.starts_with("x-workgate-")
+            || l.starts_with("x-officeloop-")
+    })
+}
+
+/// `X-Freee-*`/`X-MoneyForward-*`/`X-Yayoi-*`/`X-TKC-*`/`X-PCASoft-*`/`X-KanjoBugyo-*`/`X-JDL-*`/`X-KaikeiO-*`/`X-Tsukael-*`/`X-Misoca-*`/`X-Sweep-*`/`X-Zeirishi-*`/`X-Kaikun-*`/`X-Shinkoku-*`/`X-JPTA-*`/`X-Minokame-*`/`X-DrakeTax-*`/`X-Lacerte-*`/`X-ProSeries-*`/`X-UltraTax-*`/`X-TaxSlayer-*`/`X-JacksonHewitt-*`/`X-LibertyTax-*`/`X-TaxGenius-*`/`X-Haihyo-*`/`X-KaikeiKing-*`/`X-KaikeiNext-*`/`X-SokujitsuKaikei-*`/`X-CloudKaikei-*`/`X-AccountSoft-*`/`X-TaxCloud-*`/`X-Finup-*`/`X-DigiTax-*`/`X-KanjoSoft-*`/`X-DaikoKaikei-*`/`X-KaikeiClub-*`/`X-KeiriSoft-*`/`X-ShinkokuSoft-*`/`X-KakuteiShinkoku-*`/`X-ZeiSoft-*`/`X-Zeimusoft-*`/`X-SinkokuNet-*`/`X-TaxReturn-*`/`X-RefundTax-*`/`X-KanpuTax-*`/`X-SumajinTax-*`/`X-TaxHelper-*`/`X-MyTax-*`/`X-E-TaxGate-*`/`X-KokuzeiNavi-*`/`X-TaxFile-*`/`X-ZeikanSoft-*`/`X-Bookkeeping-*`/`X-IncomeTax-*`/`X-CorpTax-*`/`X-ZeirishiOffice-*`/`X-KaikeiStaff-*`/`X-JournalSoft-*`/`X-KaikeiLink-*` (会計ソフト・税理士・確定申告・還付金の通知記録) を送信側が自称しているかどうか。確定申告受理・還付金・税務署通知の偽装は還付金詐欺の典型手口。(監査・格付機は D546、e-Tax・国税庁機は D518)
+fn has_taxfiling_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-freee-")
+            || l.starts_with("x-moneyforward-")
+            || l.starts_with("x-yayoi-")
+            || l.starts_with("x-tkc-")
+            || l.starts_with("x-pcasoft-")
+            || l.starts_with("x-kanjobugyo-")
+            || l.starts_with("x-jdl-")
+            || l.starts_with("x-kaikeio-")
+            || l.starts_with("x-tsukael-")
+            || l.starts_with("x-misoca-")
+            || l.starts_with("x-sweep-")
+            || l.starts_with("x-zeirishi-")
+            || l.starts_with("x-kaikun-")
+            || l.starts_with("x-shinkoku-")
+            || l.starts_with("x-jpta-")
+            || l.starts_with("x-minokame-")
+            || l.starts_with("x-draketax-")
+            || l.starts_with("x-lacerte-")
+            || l.starts_with("x-proseries-")
+            || l.starts_with("x-ultratax-")
+            || l.starts_with("x-taxslayer-")
+            || l.starts_with("x-jacksonhewitt-")
+            || l.starts_with("x-libertytax-")
+            || l.starts_with("x-taxgenius-")
+            || l.starts_with("x-haihyo-")
+            || l.starts_with("x-kaikeiking-")
+            || l.starts_with("x-kaikeinext-")
+            || l.starts_with("x-sokujitsukaikei-")
+            || l.starts_with("x-cloudkaikei-")
+            || l.starts_with("x-accountsoft-")
+            || l.starts_with("x-taxcloud-")
+            || l.starts_with("x-finup-")
+            || l.starts_with("x-digitax-")
+            || l.starts_with("x-kanjosoft-")
+            || l.starts_with("x-daikokaikei-")
+            || l.starts_with("x-kaikeiclub-")
+            || l.starts_with("x-keirisoft-")
+            || l.starts_with("x-shinkokusoft-")
+            || l.starts_with("x-kakuteishinkoku-")
+            || l.starts_with("x-zeisoft-")
+            || l.starts_with("x-zeimusoft-")
+            || l.starts_with("x-sinkokunet-")
+            || l.starts_with("x-taxreturn-")
+            || l.starts_with("x-refundtax-")
+            || l.starts_with("x-kanputax-")
+            || l.starts_with("x-sumajintax-")
+            || l.starts_with("x-taxhelper-")
+            || l.starts_with("x-mytax-")
+            || l.starts_with("x-e-taxgate-")
+            || l.starts_with("x-kokuzeinavi-")
+            || l.starts_with("x-taxfile-")
+            || l.starts_with("x-zeikansoft-")
+            || l.starts_with("x-bookkeeping-")
+            || l.starts_with("x-incometax-")
+            || l.starts_with("x-corptax-")
+            || l.starts_with("x-zeirishioffice-")
+            || l.starts_with("x-kaikeistaff-")
+            || l.starts_with("x-journalsoft-")
+            || l.starts_with("x-kaikeilink-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -18444,5 +18666,152 @@ X-Other: 1
 
 body";
     assert!(!has_parking_marks(clean));
+}
+
+#[test]
+fn scan_は社機印を検出する() {
+    let i1 = b"From: a@b
+X-Isejingu-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-Meijijingu-Trace: 1
+
+x";
+    let z1 = b"From: a@b
+X-IzumoTaisha-Notice: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sensoji-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kiyomizudera-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-Todaiji-Record: 1
+
+x";
+    let h1 = b"From: a@b
+X-Horyuji-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-Naritasan-Stamp: 1
+
+x";
+    assert!(has_shrine_marks(i1));
+    assert!(has_shrine_marks(m1));
+    assert!(has_shrine_marks(z1));
+    assert!(has_shrine_marks(s1));
+    assert!(has_shrine_marks(k1));
+    assert!(has_shrine_marks(t1));
+    assert!(has_shrine_marks(h1));
+    assert!(has_shrine_marks(n1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_shrine_marks(clean));
+}
+
+#[test]
+fn scan_は働機印を検出する() {
+    let w1 = b"From: a@b
+X-WeWork-Id: 1
+
+x";
+    let r1 = b"From: a@b
+X-Regus-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Servcorp-Notice: 1
+
+x";
+    let c1 = b"From: a@b
+X-CompassOffice-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-BusinessAirport-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-TKP-Record: 1
+
+x";
+    let h1 = b"From: a@b
+X-HotDesk-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-MeetingHub-Stamp: 1
+
+x";
+    assert!(has_coworking_marks(w1));
+    assert!(has_coworking_marks(r1));
+    assert!(has_coworking_marks(s1));
+    assert!(has_coworking_marks(c1));
+    assert!(has_coworking_marks(b1));
+    assert!(has_coworking_marks(t1));
+    assert!(has_coworking_marks(h1));
+    assert!(has_coworking_marks(m1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_coworking_marks(clean));
+}
+
+#[test]
+fn scan_は税機印を検出する() {
+    let f1 = b"From: a@b
+X-Freee-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-MoneyForward-Trace: 1
+
+x";
+    let y1 = b"From: a@b
+X-Yayoi-Notice: 1
+
+x";
+    let t1 = b"From: a@b
+X-TKC-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-KakuteiShinkoku-Entry: 1
+
+x";
+    let z1 = b"From: a@b
+X-Zeirishi-Record: 1
+
+x";
+    let r1 = b"From: a@b
+X-RefundTax-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Misoca-Stamp: 1
+
+x";
+    assert!(has_taxfiling_marks(f1));
+    assert!(has_taxfiling_marks(m1));
+    assert!(has_taxfiling_marks(y1));
+    assert!(has_taxfiling_marks(t1));
+    assert!(has_taxfiling_marks(k1));
+    assert!(has_taxfiling_marks(z1));
+    assert!(has_taxfiling_marks(r1));
+    assert!(has_taxfiling_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_taxfiling_marks(clean));
 }
 }
