@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Delivered-To:`/`X-Delivered-To:`/`X-Original-To:`/`X-As-Alias:`
+    /// 等の最終配送印があるか — 配送機が記す値を送信側が自称する
+    /// 兆候 (D348)。
+    pub delivered_marks: bool,
+    /// `X-MIME-Autoconverted:`/`X-MIMETrack:`/`X-Converted-*` 等の
+    /// ゲートウェイ変換印があるか — 変換機が記す値を送信側が
+    /// 自称する兆候 (D349)。
+    pub converter_stamps: bool,
+    /// `X-No-Spam:`/`X-Not-Spam:`/`X-Spam-Exempt:`/`X-SafeSender:`
+    /// 等の「スパムではない」表明があるか — 白状宣言を送信側が
+    /// 書く兆候 (D350)。
+    pub clean_assertion: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        delivered_marks: has_delivered_marks(raw),
+        converter_stamps: has_converter_stamps(raw),
+        clean_assertion: has_clean_assertion(raw),
     })
 }
 
@@ -487,6 +502,68 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `Delivered-To:`/`X-Delivered-To:`/`X-Original-To:`/`X-As-Alias:`
+/// 等の最終配送印があるか判定する (D348)。
+///
+/// 配送機 (MDA/LDA) が最終配送時に記す値 — 送信側から届くこれは
+/// 「この宛先に届いた」体裁を内容側が主張する自称。配送の印は
+/// 届ける側が記す。
+fn has_delivered_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("delivered-to:")
+            || l.starts_with("x-delivered-to:")
+            || l.starts_with("x-original-to:")
+            || l.starts_with("x-as-alias:")
+            || l.starts_with("x-resolved-to:")
+            || l.starts_with("x-postfix:")
+            || l.starts_with("x-delivery-")
+    })
+}
+
+/// `X-MIME-Autoconverted:`/`X-MIMETrack:`/`X-Converted-*` 等の
+/// ゲートウェイ変換印があるか判定する (D349)。
+///
+/// ゲートウェイが形式変換時に記す印 — 送信側から届くこれは
+/// 「この形式に変換された」体裁を内容側が主張する自称
+/// (変換の印は変換機が記す)。
+fn has_converter_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-mime-autoconverted:")
+            || l.starts_with("x-mimetrack:")
+            || l.starts_with("x-converted-")
+            || l.starts_with("x-gateway-")
+            || l.starts_with("x-originating-script-")
+    })
+}
+
+/// `X-No-Spam:`/`X-Not-Spam:`/`X-Spam-Exempt:`/`X-SafeSender:`
+/// 等の「スパムではない」表明があるか判定する (D350)。
+///
+/// 送信側が自ら書く「これはスパムではない」白状宣言 — 正規の
+/// 判定印ではなく内容側の単なる表明だが、白状自体が兆候。
+fn has_clean_assertion(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-no-spam:")
+            || l.starts_with("x-not-spam:")
+            || l.starts_with("x-spam-exempt:")
+            || l.starts_with("x-safesender:")
+            || l.starts_with("x-whitelist-request:")
+            || l.starts_with("x-priority-clean:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2817,48 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は配送印を検出する() {
+        let dt = b"Delivered-To: a@b\r\n\r\nx";
+        assert!(has_delivered_marks(dt));
+        let ot = b"X-Original-To: a@b\r\n\r\nx";
+        assert!(has_delivered_marks(ot));
+        let aa = b"X-As-Alias: a@b\r\n\r\nx";
+        assert!(has_delivered_marks(aa));
+        let pf = b"X-Postfix: delivered\r\n\r\nx";
+        assert!(has_delivered_marks(pf));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_delivered_marks(clean));
+    }
+
+    #[test]
+    fn scan_は変換印を検出する() {
+        let ac = b"X-MIME-Autoconverted: from 8bit to quoted-printable\r\n\r\nx";
+        assert!(has_converter_stamps(ac));
+        let mt = b"X-MIMETrack: Serialize by Router\r\n\r\nx";
+        assert!(has_converter_stamps(mt));
+        let cv = b"X-Converted-To-Plain-Text: yes\r\n\r\nx";
+        assert!(has_converter_stamps(cv));
+        let gw = b"X-Gateway-Info: converted\r\n\r\nx";
+        assert!(has_converter_stamps(gw));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_converter_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は白状を検出する() {
+        let ns = b"X-No-Spam: yes\r\n\r\nx";
+        assert!(has_clean_assertion(ns));
+        let nt = b"X-Not-Spam: true\r\n\r\nx";
+        assert!(has_clean_assertion(nt));
+        let ex = b"X-Spam-Exempt: yes\r\n\r\nx";
+        assert!(has_clean_assertion(ex));
+        let ss = b"X-SafeSender: a@b\r\n\r\nx";
+        assert!(has_clean_assertion(ss));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_clean_assertion(clean));
     }
 }
 

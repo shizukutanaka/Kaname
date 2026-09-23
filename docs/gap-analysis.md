@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D348 | ~~**`Delivered-To:`/`X-Original-To:`/`X-As-Alias:` 等の最終配送印自称が未検査**~~ **(解消済み)** | P2 | 配送機が記す値を送信側が自称する兆候だが未検査だった。修正: `has_delivered_marks` で検出、`delivered_marks` → `render_risks` 兆候報告 | 届ける側が記す — 配送印の自署を問え |
+| D349 | ~~**`X-MIME-Autoconverted:`/`X-MIMETrack:`/`X-Converted-*` 等のゲートウェイ変換印自称が未検査**~~ **(解消済み)** | P2 | 変換機の印を送信側が自称する兆候だが未検査だった。修正: `has_converter_stamps` で検出、`converter_stamps` → `render_risks` 兆候報告 | 変換は機械が記す — 変換印の自署を問え |
+| D350 | ~~**`X-No-Spam:`/`X-Not-Spam:`/`X-Spam-Exempt:`/`X-SafeSender:` 等の「スパムではない」白状が未検査**~~ **(解消済み)** | P2 | 送信側が自ら書く白状宣言だが未検査だった。修正: `has_clean_assertion` で検出、`clean_assertion` → `render_risks` 兆候報告 | 白状は疑われる者が書く — 白状の存在を問え |

@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D348: `Delivered-To:`/`X-Original-To:`/`X-As-Alias:` 等の最終配送印自称が未検査
+
+- 配送機 (MDA/LDA) が最終配送時に記す値 — 送信側から届くのは「この宛先に届いた」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_delivered_marks` 新設 → `Envelope.delivered_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D349: `X-MIME-Autoconverted:`/`X-MIMETrack:`/`X-Converted-*` 等のゲートウェイ変換印自称が未検査
+
+- ゲートウェイが形式変換時に記す印 — 送信側から届くのは「この形式に変換された」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_converter_stamps` 新設 → `Envelope.converter_stamps` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D350: `X-No-Spam:`/`X-Not-Spam:`/`X-Spam-Exempt:`/`X-SafeSender:` 等の「スパムではない」白状が未検査
+
+- 送信側が自ら書く「これはスパムではない」白状宣言 — 正規の判定印ではなく内容側の単なる表明だが、白状自体が兆候として未検査だった
+- 対処: `has_clean_assertion` 新設 → `Envelope.clean_assertion` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
