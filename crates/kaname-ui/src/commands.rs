@@ -359,7 +359,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
 
     // 本文からリンクを抽出し、bec の URL シグナルに供給する。
     // (従来は &[] を渡しており、実装済みの URL 評価が一度も発火していなかった)
-    let urls = extract_urls_from_text(analysis_text);
+    let mut urls = extract_urls_from_text(analysis_text);
+    // D174: List-Unsubscribe ヘッダー内のリンクも評価対象にする —
+    // 本文に現れない配信経路専用リンクは URL 抽出を通らなかった。
+    if let Some(lu) = &env.list_unsubscribe {
+        for part in lu.split(',') {
+            let p = part.trim().trim_matches(|c: char| c == '<' || c == '>');
+            if p.starts_with("http") && !urls.iter().any(|u| u == p) {
+                urls.push(p.to_string());
+            }
+        }
+    }
+    // D173: URL スキーム難読化 (hxxp:// defanged、http:\\ バックスラッシュ、
+    // Cyrillic 等の見せかけスキーム) — 評判判定には渡せない形のものは
+    // 兆候として報告し、正規化できるものは URL 一覧にも追加する。
+    let obfuscated_urls = kaname_render::find_obfuscated_url_tokens(analysis_text);
+    for o in &obfuscated_urls {
+        if let Some(n) = &o.normalized {
+            if !urls.iter().any(|u| u == n) {
+                urls.push(n.clone());
+            }
+        }
+    }
 
     // 自組織ドメイン (D44): 設定 `org_domain` → 接続中アカウントから導出。
     // 未設定・未接続なら空文字で、自己ドメインを前提とする検出は安全にスキップされる。
@@ -511,6 +532,13 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 m.shown_domain, m.href_domain
             ));
         }
+    }
+    // D173: URL スキーム難読化 (defanged / backslash / 見せかけスキーム)。
+    if !obfuscated_urls.is_empty() {
+        render_risks.push(
+            "URL スキーム難読化 (hxxp://、http:\\\\、見せかけスキーム等) — フィルタ回避の兆候"
+                .to_string(),
+        );
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
