@@ -1715,6 +1715,12 @@ pub struct Envelope {
     pub fishing_marks: bool,
     /// `X-Hakuyosha-*`/`X-PonyCleaning-*`/`X-HopeCleaning-*`/`X-Sentakubin-*`/`X-Lenet-*` 等のクリーニング・宅配洗濯通知記録印を送信側が自称している (D601)
     pub cleaning_marks: bool,
+    /// `X-Caldo-*`/`X-ZenPlace-*`/`X-Loive-*`/`X-HotYoga-*`/`X-StudioYoga-*` 等のヨガ・ピラティス通知記録印を送信側が自称している (D602)
+    pub yoga_marks: bool,
+    /// `X-ShogiWars-*`/`X-ShogiClub24-*`/`X-NihonKiin-*`/`X-81Dojo-*`/`X-Pandanet-*` 等の将棋・囲碁・ボードゲーム通知記録印を送信側が自称している (D603)
+    pub boardgame_marks: bool,
+    /// `X-Photoback-*`/`X-Albus-*`/`X-Dotti-*`/`X-Asukabook-*`/`X-DreamPages-*` 等の写真プリント・フォトブック通知記録印を送信側が自称している (D604)
+    pub photoprint_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2194,6 +2200,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         golfcourse_marks: has_golfcourse_marks(hdr),
         fishing_marks: has_fishing_marks(hdr),
         cleaning_marks: has_cleaning_marks(hdr),
+        yoga_marks: has_yoga_marks(hdr),
+        boardgame_marks: has_boardgame_marks(hdr),
+        photoprint_marks: has_photoprint_marks(hdr),
     })
 }
 
@@ -11765,6 +11774,214 @@ fn has_cleaning_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Caldo-*`/`X-ZenPlace-*`/`X-Loive-*`/`X-HotYoga-*`/`X-StudioYoga-*`/`X-YogaWorks-*`/`X-YogaJaya-*`/`X-Bikram-*`/`X-YogaLab-*`/`X-Amida-*`/`X-BestBody-*`/`X-PilatesK-*`/`X-UrbanPilates-*`/`X-StudioPilates-*`/`X-PilatesHouse-*`/`X-Intenso-*`/`X-NamasteYoga-*`/`X-YogaRoom-*`/`X-BeyondYoga-*`/`X-AloMoves-*`/`X-YogaWithAdriene-*`/`X-GloYoga-*`/`X-YogaInternational-*`/`X-DoYogaWithMe-*`/`X-DailyBurnYoga-*`/`X-CorePowerYoga-*`/`X-PureYoga-*`/`X-YogaSix-*`/`X-YogaBox-*`/`X-HotYogaClub-*`/`X-LavaYoga-*`/`X-YogaStudioSun-*`/`X-SunYoga-*`/`X-MoonYoga-*`/`X-BodyYoga-*`/`X-MindYoga-*`/`X-AeriYoga-*`/`X-YinYoga-*`/`X-YangYoga-*`/`X-KundaliniYoga-*`/`X-AshtangaYoga-*`/`X-HathaYoga-*`/`X-IyengarYoga-*`/`X-RestorativeYoga-*`/`X-VinyasaYoga-*`/`X-AerialYoga-*`/`X-SwingYoga-*`/`X-BungeeYoga-*`/`X-MamaYoga-*`/`X-MaternityYoga-*`/`X-SeniorYoga-*`/`X-KidsYoga-*`/`X-OnlineYoga-*`/`X-HomeYoga-*`/`X-YogaLesson-*`/`X-YogaInstructor-*`/`X-YogaSchool-*`/`X-YogaFesta-*` (ヨガ・ピラティススタジオの通知記録) を送信側が自称しているかどうか。月額会費・体験レッスン・回数券の偽装はヨガ詐欺の典型手口。(フィットネスジム機は D530、LAVA は既存族)
+fn has_yoga_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-caldo-")
+            || l.starts_with("x-zenplace-")
+            || l.starts_with("x-loive-")
+            || l.starts_with("x-hotyoga-")
+            || l.starts_with("x-studioyoga-")
+            || l.starts_with("x-yogaworks-")
+            || l.starts_with("x-yogajaya-")
+            || l.starts_with("x-bikram-")
+            || l.starts_with("x-yogalab-")
+            || l.starts_with("x-amida-")
+            || l.starts_with("x-bestbody-")
+            || l.starts_with("x-pilatesk-")
+            || l.starts_with("x-urbanpilates-")
+            || l.starts_with("x-studiopilates-")
+            || l.starts_with("x-pilateshouse-")
+            || l.starts_with("x-intenso-")
+            || l.starts_with("x-namasteyoga-")
+            || l.starts_with("x-yogaroom-")
+            || l.starts_with("x-beyondyoga-")
+            || l.starts_with("x-alomoves-")
+            || l.starts_with("x-yogawithadriene-")
+            || l.starts_with("x-gloyoga-")
+            || l.starts_with("x-yogainternational-")
+            || l.starts_with("x-doyogawithme-")
+            || l.starts_with("x-dailyburnyoga-")
+            || l.starts_with("x-corepoweryoga-")
+            || l.starts_with("x-pureyoga-")
+            || l.starts_with("x-yogasix-")
+            || l.starts_with("x-yogabox-")
+            || l.starts_with("x-hotyogaclub-")
+            || l.starts_with("x-lavayoga-")
+            || l.starts_with("x-yogastudiosun-")
+            || l.starts_with("x-sunyoga-")
+            || l.starts_with("x-moonyoga-")
+            || l.starts_with("x-bodyyoga-")
+            || l.starts_with("x-mindyoga-")
+            || l.starts_with("x-aeriyoga-")
+            || l.starts_with("x-yinyoga-")
+            || l.starts_with("x-yangyoga-")
+            || l.starts_with("x-kundaliniyoga-")
+            || l.starts_with("x-ashtangayoga-")
+            || l.starts_with("x-hathayoga-")
+            || l.starts_with("x-iyengaryoga-")
+            || l.starts_with("x-restorativeyoga-")
+            || l.starts_with("x-vinyasayoga-")
+            || l.starts_with("x-aerialyoga-")
+            || l.starts_with("x-swingyoga-")
+            || l.starts_with("x-bungeeyoga-")
+            || l.starts_with("x-mamayoga-")
+            || l.starts_with("x-maternityyoga-")
+            || l.starts_with("x-senioryoga-")
+            || l.starts_with("x-kidsyoga-")
+            || l.starts_with("x-onlineyoga-")
+            || l.starts_with("x-homeyoga-")
+            || l.starts_with("x-yogalesson-")
+            || l.starts_with("x-yogainstructor-")
+            || l.starts_with("x-yogaschool-")
+            || l.starts_with("x-yogafesta-")
+    })
+}
+
+/// `X-ShogiWars-*`/`X-ShogiClub24-*`/`X-IgoNet-*`/`X-NihonKiin-*`/`X-KansaiKiin-*`/`X-81Dojo-*`/`X-Pandanet-*`/`X-KGSGo-*`/`X-OGSGo-*`/`X-FoxGo-*`/`X-TygemGo-*`/`X-TomShogi-*`/`X-KifuClub-*`/`X-ShogiLive-*`/`X-ShogiQuest-*`/`X-ShogiDojo-*`/`X-IgoQuest-*`/`X-IgoClub-*`/`X-IgoRoom-*`/`X-GoQuest-*`/`X-GoSalon-*`/`X-Goseki-*`/`X-ShogiTaikai-*`/`X-ShogiKentei-*`/`X-ShogiAcademy-*`/`X-ShogiLesson-*`/`X-IgoLesson-*`/`X-IgoSalon-*`/`X-BoardGameCafe-*`/`X-BGG-*`/`X-TabletopDay-*`/`X-YellowSubmarine-*`/`X-JellyJellyCafe-*`/`X-Catan-*`/`X-Meeple-*`/`X-Dominion-*`/`X-Carcassonne-*`/`X-TicketToRide-*`/`X-Pandemic-*`/`X-Azul-*`/`X-Splendor-*`/`X-7Wonders-*`/`X-Agricola-*`/`X-Terraforming-*`/`X-Gloomhaven-*`/`X-Wingspan-*`/`X-RootGame-*`/`X-Scythe-*`/`X-TwilightStruggle-*`/`X-BrassBirmingham-*`/`X-ArkNova-*`/`X-ShogiOnline-*`/`X-ShogiSchool-*`/`X-ShogiLesson-*`/`X-ShogiRoom-*`/`X-ShogiIgo-*`/`X-BoardCafe-*`/`X-CardGame-*`/`X-TCGCafe-*` (将棋・囲碁・ボードゲームの通知記録) を送信側が自称しているかどうか。対局料・大会費・棋書購入の偽装は将棋・囲碁愛好家狙い詐欺の典型手口。(TCG・遊戯王・ポケカは D558)
+fn has_boardgame_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shogiwars-")
+            || l.starts_with("x-shogiclub24-")
+            || l.starts_with("x-igonet-")
+            || l.starts_with("x-nihonkiin-")
+            || l.starts_with("x-kansaikiin-")
+            || l.starts_with("x-81dojo-")
+            || l.starts_with("x-pandanet-")
+            || l.starts_with("x-kgsgo-")
+            || l.starts_with("x-ogsgo-")
+            || l.starts_with("x-foxgo-")
+            || l.starts_with("x-tygemgo-")
+            || l.starts_with("x-tomshogi-")
+            || l.starts_with("x-kifuclub-")
+            || l.starts_with("x-shogilive-")
+            || l.starts_with("x-shogiquest-")
+            || l.starts_with("x-shogidojo-")
+            || l.starts_with("x-igoquest-")
+            || l.starts_with("x-igoclub-")
+            || l.starts_with("x-igoroom-")
+            || l.starts_with("x-goquest-")
+            || l.starts_with("x-gosalon-")
+            || l.starts_with("x-goseki-")
+            || l.starts_with("x-shogitaikai-")
+            || l.starts_with("x-shogikentei-")
+            || l.starts_with("x-shogiacademy-")
+            || l.starts_with("x-shogilesson-")
+            || l.starts_with("x-igolesson-")
+            || l.starts_with("x-igosalon-")
+            || l.starts_with("x-boardgamecafe-")
+            || l.starts_with("x-bgg-")
+            || l.starts_with("x-tabletopday-")
+            || l.starts_with("x-yellowsubmarine-")
+            || l.starts_with("x-jellyjellycafe-")
+            || l.starts_with("x-catan-")
+            || l.starts_with("x-meeple-")
+            || l.starts_with("x-dominion-")
+            || l.starts_with("x-carcassonne-")
+            || l.starts_with("x-tickettoride-")
+            || l.starts_with("x-pandemic-")
+            || l.starts_with("x-azul-")
+            || l.starts_with("x-splendor-")
+            || l.starts_with("x-7wonders-")
+            || l.starts_with("x-agricola-")
+            || l.starts_with("x-terraforming-")
+            || l.starts_with("x-gloomhaven-")
+            || l.starts_with("x-wingspan-")
+            || l.starts_with("x-rootgame-")
+            || l.starts_with("x-scythe-")
+            || l.starts_with("x-twilightstruggle-")
+            || l.starts_with("x-brassbirmingham-")
+            || l.starts_with("x-arknova-")
+            || l.starts_with("x-shogionline-")
+            || l.starts_with("x-shogischool-")
+            || l.starts_with("x-shogiroom-")
+            || l.starts_with("x-shogiigo-")
+            || l.starts_with("x-boardcafe-")
+            || l.starts_with("x-cardgame-")
+            || l.starts_with("x-tcgcafe-")
+    })
+}
+
+/// `X-Photoback-*`/`X-Albus-*`/`X-Dotti-*`/`X-Asukabook-*`/`X-DreamPages-*`/`X-PhotobookJP-*`/`X-Caine-*`/`X-Kinekawa-*`/`X-Fuful-*`/`X-PhotoRevo-*`/`X-Picpic-*`/`X-Photocopi-*`/`X-MyPhotobook-*`/`X-FamilyAlbum-*`/`X-Memolee-*`/`X-PhotoBookStore-*`/`X-Pripri-*`/`X-AlbumCube-*`/`X-PhotoPri-*`/`X-OmoideBako-*`/`X-PrintStudio-*`/`X-FujifilmAlbum-*`/`X-ShinyPrint-*`/`X-MemoriesPrint-*`/`X-Fotokite-*`/`X-PhotoPiece-*`/`X-IrodoriPrint-*`/`X-Tanreisha-*`/`X-DigitalPrint-*`/`X-InkjetPri-*`/`X-SilverHalide-*`/`X-FilmScan-*`/`X-NegaScan-*`/`X-PhotoLab-*`/`X-FilmDev-*`/`X-PrintPhoto-*`/`X-HappyPrint-*`/`X-SmilePrint-*`/`X-OmoidePrint-*`/`X-KidsPhoto-*`/`X-BabyPhoto-*`/`X-WeddingPhoto-*`/`X-SchoolPhoto-*`/`X-AlbumShare-*`/`X-PhotoShare-*`/`X-FamilyShare-*`/`X-OmoideShare-*`/`X-MemorialPhoto-*`/`X-SnapshotPhoto-*`/`X-PhotoCalendar-*`/`X-PhotoGift-*`/`X-PhotoMug-*`/`X-PhotoCanvas-*`/`X-PhotoPanel-*`/`X-PhotoFrame-*`/`X-PhotoCard-*`/`X-PhotoSeal-*`/`X-PhotoSticker-*`/`X-PhotoKeychain-*` (写真プリント・フォトブック・現像の通知記録) を送信側が自称しているかどうか。印刷完了・納期遅延・データ破損の偽装は写真注文詐欺の典型手口。(印刷通販機は D590、しまうまプリント・みてねは既存族)
+fn has_photoprint_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-photoback-")
+            || l.starts_with("x-albus-")
+            || l.starts_with("x-dotti-")
+            || l.starts_with("x-asukabook-")
+            || l.starts_with("x-dreampages-")
+            || l.starts_with("x-photobookjp-")
+            || l.starts_with("x-caine-")
+            || l.starts_with("x-kinekawa-")
+            || l.starts_with("x-fuful-")
+            || l.starts_with("x-photorevo-")
+            || l.starts_with("x-picpic-")
+            || l.starts_with("x-photocopi-")
+            || l.starts_with("x-myphotobook-")
+            || l.starts_with("x-familyalbum-")
+            || l.starts_with("x-memolee-")
+            || l.starts_with("x-photobookstore-")
+            || l.starts_with("x-pripri-")
+            || l.starts_with("x-albumcube-")
+            || l.starts_with("x-photopri-")
+            || l.starts_with("x-omoidebako-")
+            || l.starts_with("x-printstudio-")
+            || l.starts_with("x-fujifilmalbum-")
+            || l.starts_with("x-shinyprint-")
+            || l.starts_with("x-memoriesprint-")
+            || l.starts_with("x-fotokite-")
+            || l.starts_with("x-photopiece-")
+            || l.starts_with("x-irodoriprint-")
+            || l.starts_with("x-tanreisha-")
+            || l.starts_with("x-digitalprint-")
+            || l.starts_with("x-inkjetpri-")
+            || l.starts_with("x-silverhalide-")
+            || l.starts_with("x-filmscan-")
+            || l.starts_with("x-negascan-")
+            || l.starts_with("x-photolab-")
+            || l.starts_with("x-filmdev-")
+            || l.starts_with("x-printphoto-")
+            || l.starts_with("x-happyprint-")
+            || l.starts_with("x-smileprint-")
+            || l.starts_with("x-omoideprint-")
+            || l.starts_with("x-kidsphoto-")
+            || l.starts_with("x-babyphoto-")
+            || l.starts_with("x-weddingphoto-")
+            || l.starts_with("x-schoolphoto-")
+            || l.starts_with("x-albumshare-")
+            || l.starts_with("x-photoshare-")
+            || l.starts_with("x-familyshare-")
+            || l.starts_with("x-omoideshare-")
+            || l.starts_with("x-memorialphoto-")
+            || l.starts_with("x-snapshotphoto-")
+            || l.starts_with("x-photocalendar-")
+            || l.starts_with("x-photogift-")
+            || l.starts_with("x-photomug-")
+            || l.starts_with("x-photocanvas-")
+            || l.starts_with("x-photopanel-")
+            || l.starts_with("x-photoframe-")
+            || l.starts_with("x-photocard-")
+            || l.starts_with("x-photoseal-")
+            || l.starts_with("x-photosticker-")
+            || l.starts_with("x-photokeychain-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -19173,5 +19390,152 @@ X-Other: 1
 
 body";
     assert!(!has_cleaning_marks(clean));
+}
+
+#[test]
+fn scan_は瑜機印を検出する() {
+    let c1 = b"From: a@b
+X-Caldo-Id: 1
+
+x";
+    let z1 = b"From: a@b
+X-ZenPlace-Trace: 1
+
+x";
+    let l1 = b"From: a@b
+X-Loive-Notice: 1
+
+x";
+    let h1 = b"From: a@b
+X-HotYoga-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-StudioYoga-Entry: 1
+
+x";
+    let p1 = b"From: a@b
+X-PilatesK-Record: 1
+
+x";
+    let a1 = b"From: a@b
+X-AloMoves-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-MoonYoga-Stamp: 1
+
+x";
+    assert!(has_yoga_marks(c1));
+    assert!(has_yoga_marks(z1));
+    assert!(has_yoga_marks(l1));
+    assert!(has_yoga_marks(h1));
+    assert!(has_yoga_marks(s1));
+    assert!(has_yoga_marks(p1));
+    assert!(has_yoga_marks(a1));
+    assert!(has_yoga_marks(m1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_yoga_marks(clean));
+}
+
+#[test]
+fn scan_は棋機印を検出する() {
+    let s1 = b"From: a@b
+X-ShogiWars-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-ShogiClub24-Trace: 1
+
+x";
+    let i1 = b"From: a@b
+X-IgoNet-Notice: 1
+
+x";
+    let n1 = b"From: a@b
+X-NihonKiin-Flag: 1
+
+x";
+    let d1 = b"From: a@b
+X-81Dojo-Entry: 1
+
+x";
+    let p1 = b"From: a@b
+X-Pandanet-Record: 1
+
+x";
+    let b1 = b"From: a@b
+X-BGG-Trace: 1
+
+x";
+    let w1 = b"From: a@b
+X-Wingspan-Stamp: 1
+
+x";
+    assert!(has_boardgame_marks(s1));
+    assert!(has_boardgame_marks(c1));
+    assert!(has_boardgame_marks(i1));
+    assert!(has_boardgame_marks(n1));
+    assert!(has_boardgame_marks(d1));
+    assert!(has_boardgame_marks(p1));
+    assert!(has_boardgame_marks(b1));
+    assert!(has_boardgame_marks(w1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_boardgame_marks(clean));
+}
+
+#[test]
+fn scan_は像機印を検出する() {
+    let p1 = b"From: a@b
+X-Photoback-Id: 1
+
+x";
+    let a1 = b"From: a@b
+X-Albus-Trace: 1
+
+x";
+    let d1 = b"From: a@b
+X-Dotti-Notice: 1
+
+x";
+    let s1 = b"From: a@b
+X-Asukabook-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-PhotobookJP-Entry: 1
+
+x";
+    let m1 = b"From: a@b
+X-Memolee-Record: 1
+
+x";
+    let f1 = b"From: a@b
+X-FotoKite-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-PhotoCanvas-Stamp: 1
+
+x";
+    assert!(has_photoprint_marks(p1));
+    assert!(has_photoprint_marks(a1));
+    assert!(has_photoprint_marks(d1));
+    assert!(has_photoprint_marks(s1));
+    assert!(has_photoprint_marks(b1));
+    assert!(has_photoprint_marks(m1));
+    assert!(has_photoprint_marks(f1));
+    assert!(has_photoprint_marks(c1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_photoprint_marks(clean));
 }
 }
