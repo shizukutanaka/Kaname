@@ -130,6 +130,17 @@ pub struct Envelope {
     /// 識別子があるか — 「ISP と苦情報告を共有している」の体裁を自署する
     /// 兆候 (D329)。
     pub feedback_id: bool,
+    /// `X-Cron-Env:`/`X-Cron-User:`/`X-Crontab:` 等の cron 配送印があるか —
+    /// スケジュール機が記す環境値を送信側が自称する兆候 (D366)。
+    pub cron_marks: bool,
+    /// `X-Google-Appengine-*`/`X-AppEngine-*`/`X-GAPI-*` 等の
+    /// Google/GAE 基盤印があるか — クラウド基盤の内部値を送信側が
+    /// 自称する兆候 (D367)。
+    pub gae_marks: bool,
+    /// `X-Host:`/`X-Smtp-Server:`/`X-Sending-IP:`/`X-Sending-Server:`
+    /// 等の送信ホスト印があるか — ホスト名・IP の記録を送信側が
+    /// 自称する兆候 (D368)。
+    pub sendhost_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -404,6 +415,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         abuse_headers: has_abuse_headers(raw),
         has_attach_claim: has_attach_claim(raw),
         feedback_id: has_feedback_id(raw),
+        cron_marks: has_cron_marks(raw),
+        gae_marks: has_gae_marks(raw),
+        sendhost_marks: has_sendhost_marks(raw),
     })
 }
 
@@ -554,6 +568,62 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-Cron-Env:`/`X-Cron-User:`/`X-Crontab:`/`X-Cron-*` 等の
+/// cron 配送印があるか判定する (D366)。
+///
+/// cron デーモンがメール配送時に記す環境値 — 送信側から届くこれは
+/// 「スケジュール基盤が生成した」体裁を内容側が主張する自称。
+fn has_cron_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-cron-env:")
+            || l.starts_with("x-cron-user:")
+            || l.starts_with("x-crontab:")
+            || l.starts_with("x-cron-")
+    })
+}
+
+/// `X-Google-Appengine-*`/`X-AppEngine-*`/`X-GAPI-*`/`X-GAE-*` 等の
+/// Google/GAE 基盤印があるか判定する (D367)。
+///
+/// App Engine 等クラウド基盤が配送時に記す内部値 — 送信側から届く
+/// これは「この基盤から発送した」体裁を内容側が主張する自称。
+fn has_gae_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-google-appengine-")
+            || l.starts_with("x-appengine-")
+            || l.starts_with("x-app-engine-")
+            || l.starts_with("x-gapi-")
+            || l.starts_with("x-gae-")
+    })
+}
+
+/// `X-Host:`/`X-Smtp-Server:`/`X-Sending-IP:`/`X-Sending-Server:`
+/// 等の送信ホスト印があるか判定する (D368)。
+///
+/// 送信側ホスト名・送信 IP は接続・配送側が記録する値 — 送信側から
+/// 届くこれは「このホストから発送した」体裁を内容側が主張する自称。
+fn has_sendhost_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-host:")
+            || l.starts_with("x-smtp-server:")
+            || l.starts_with("x-smtp-servers:")
+            || l.starts_with("x-sending-ip:")
+            || l.starts_with("x-sending-server:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2841,6 +2911,48 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はcron印を検出する() {
+        let ce = b"X-Cron-Env: <SHELL=/bin/sh>\r\n\r\nx";
+        assert!(has_cron_marks(ce));
+        let cu = b"X-Cron-User: root\r\n\r\nx";
+        assert!(has_cron_marks(cu));
+        let ct = b"X-Crontab: daily\r\n\r\nx";
+        assert!(has_cron_marks(ct));
+        let cx = b"X-Cron-Hostname: h\r\n\r\nx";
+        assert!(has_cron_marks(cx));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cron_marks(clean));
+    }
+
+    #[test]
+    fn scan_はGAE印を検出する() {
+        let ga = b"X-Google-Appengine-App-Id: s~app\r\n\r\nx";
+        assert!(has_gae_marks(ga));
+        let ae = b"X-AppEngine-Task-Name: t\r\n\r\nx";
+        assert!(has_gae_marks(ae));
+        let gp = b"X-GAPI-Version: 2\r\n\r\nx";
+        assert!(has_gae_marks(gp));
+        let gx = b"X-GAE-Region: x\r\n\r\nx";
+        assert!(has_gae_marks(gx));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gae_marks(clean));
+    }
+
+    #[test]
+    fn scan_は送信ホスト印を検出する() {
+        let h = b"X-Host: mail.example.com\r\n\r\nx";
+        assert!(has_sendhost_marks(h));
+        let ss = b"X-Smtp-Server: mta1\r\n\r\nx";
+        assert!(has_sendhost_marks(ss));
+        let si = b"X-Sending-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_sendhost_marks(si));
+        let sv = b"X-Sending-Server: s\r\n\r\nx";
+        assert!(has_sendhost_marks(sv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sendhost_marks(clean));
     }
 }
 

@@ -605,6 +605,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D366: cron 配送印自称
+    if env.cron_marks {
+        render_risks.push(
+            "X-Cron-*/X-Crontab 等 — スケジュール機の環境値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D367: Google/GAE 基盤印自称
+    if env.gae_marks {
+        render_risks.push(
+            "X-Google-Appengine-*/X-AppEngine-* 等 — クラウド基盤の内部値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D368: 送信ホスト印自称
+    if env.sendhost_marks {
+        render_risks.push(
+            "X-Host/X-Smtp-Server/X-Sending-IP 等 — 送信ホスト・IP の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

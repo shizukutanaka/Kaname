@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D366: `X-Cron-Env:`/`X-Cron-User:`/`X-Crontab:` 等の cron 配送印自称が未検査
+
+- cron デーモンが配送時に記す環境値 — 送信側から届くのは「スケジュール基盤が生成した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_cron_marks` 新設 → `Envelope.cron_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D367: `X-Google-Appengine-*`/`X-AppEngine-*`/`X-GAPI-*`/`X-GAE-*` 等の Google/GAE 基盤印自称が未検査
+
+- App Engine 等クラウド基盤が配送時に記す内部値 — 送信側から届くのは「この基盤から発送した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_gae_marks` 新設 → `Envelope.gae_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D368: `X-Host:`/`X-Smtp-Server:`/`X-Sending-IP:`/`X-Sending-Server:` 等の送信ホスト印自称が未検査
+
+- 送信ホスト名・送信 IP は接続・配送側が記録する値 — 送信側から届くのは「このホストから発送した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_sendhost_marks` 新設 → `Envelope.sendhost_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D327: `Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査
 
 - 本物の ESP/ISP は abuse 窓口を自社ドメインで運用し受信側が確認できる — 送信側が窓口を名乗るのは「監視されている体裁」の自署だが未検査だった

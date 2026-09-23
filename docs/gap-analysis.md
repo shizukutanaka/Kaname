@@ -435,3 +435,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D327 | ~~**`Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査**~~ **(解消済み)** | P2 | 「監視あり」の体裁を自署する兆候だが未検査だった。修正: `has_abuse_headers` で検出、`abuse_headers` → `render_risks` 兆候報告 | 窓口は運用者の肩書き — 監視の体裁を問え |
 | D328 | ~~**`X-MS-Has-Attach:`/`X-Has-Attach:` 添付存在自称が未検査**~~ **(解消済み)** | P2 | 輸送系が付ける添付印を送信側が自称する兆候だが未検査だった。修正: `has_attach_claim` で検出、`has_attach_claim` → `render_risks` 兆候報告 | 存在は機械が数える — 内容側の存在宣言は第 2 の宣言として問え |
 | D329 | ~~**`Feedback-ID:`/`X-Feedback-ID:` FBL 識別子自称が未検査**~~ **(解消済み)** | P2 | ISP 苦情ループ登録の体裁を自署する兆候だが未検査だった。修正: `has_feedback_id` で検出、`feedback_id` → `render_risks` 兆候報告 | 共有の印は相手が見ている — 名乗るだけの共有を問え |
+| D366 | ~~**`X-Cron-Env:`/`X-Cron-User:`/`X-Crontab:` 等の cron 配送印自称が未検査**~~ **(解消済み)** | P2 | cron 環境値を送信側が自称する兆候だが未検査だった。修正: `has_cron_marks` で検出、`cron_marks` → `render_risks` 兆候報告 | 時刻の記録は時刻機が記す — cron 印の自署を問え |
+| D367 | ~~**`X-Google-Appengine-*`/`X-AppEngine-*`/`X-GAPI-*`/`X-GAE-*` 等の Google/GAE 基盤印自称が未検査**~~ **(解消済み)** | P2 | クラウド基盤の内部値を送信側が自称する兆候だが未検査だった。修正: `has_gae_marks` で検出、`gae_marks` → `render_risks` 兆候報告 | 基盤の内部は基盤が記す — GAE 印の自署を問え |
+| D368 | ~~**`X-Host:`/`X-Smtp-Server:`/`X-Sending-IP:`/`X-Sending-Server:` 等の送信ホスト印自称が未検査**~~ **(解消済み)** | P2 | 送信ホスト・IP の記録を送信側が自称する兆候だが未検査だった。修正: `has_sendhost_marks` で検出、`sendhost_marks` → `render_risks` 兆候報告 | ホストの記録は配送機が記す — ホスト印の自署を問え |
