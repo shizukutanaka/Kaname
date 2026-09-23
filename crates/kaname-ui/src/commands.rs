@@ -772,6 +772,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D435: OSSスキャナ自称
+    if env.oss_scan_marks {
+        render_risks.push(
+            "X-Rspamd-*/X-Spamd-*/X-Amavis-*/X-MailScanner-* 等 — OSS スキャナの検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D436: 統計フィルタ自称
+    if env.stat_filter_marks {
+        render_risks.push(
+            "X-DSPAM-*/X-Bogosity/X-Razor*/X-Pyzor-*/X-Greylist*/X-Policy-* 等 — 統計・照合フィルタの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D437: MTA製品自称
+    if env.mta_product_marks {
+        render_risks.push(
+            "X-Original-To/X-Kerio-*/X-MDAV-*/X-IMSS-*/X-TM-AS-*/X-Domino-*/X-Zimbra-* 等 — MTA・メール製品の受信・検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

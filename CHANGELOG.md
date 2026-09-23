@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D435: `X-Rspamd-*`/`X-Spamd-*`/`X-Stat-Signature:`/`X-Amavis-*`/`X-MailScanner-*`/`X-MIMEDefang-*` 等の OSS スキャナ・milter 印自称が未検査
+
+- **問題**: `X-Rspamd-*`/`X-Spamd-*`/`X-Stat-Signature:`/`X-OS-Fingerprint:` (rspamd milter_headers — 公式ソース一覧)、`X-Amavis-*` (amavisd-new)、`X-MailScanner-*` (MailScanner)、`X-MIMEDefang-*`、`X-Scanned-By:` 等の OSS スキャナ印は「スキャナが記す検査記録」であり、受信 MTA が記す値を送信側が書くことは自称。
+- **修正**: `Envelope` に `oss_scan_marks` + `has_oss_scan_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 検査の記録は検査機が記す — OSS スキャナ印の自署を問え。
+
+### Security — D436: `X-DSPAM-*`/`X-Bogosity:`/`X-CRM114-*`/`X-Razor*`/`X-Pyzor-*`/`X-Greylist*`/`X-Policy-*`/`X-DNSBL-*` 等の統計・照合フィルタ印自称が未検査
+
+- **問題**: `X-DSPAM-*` (DSPAM: X-DSPAM-Result/Signature)、`X-Bogosity:` (bogofilter)、`X-CRM114-*`、`X-Razor*`/`X-Pyzor-*` (分散照合)、`X-Greylist*` (遅延判定)、`X-Policy-*`/`X-DNSBL-*`/`X-RBL-*` (ポリシー・DNSBL) の記録は「統計機・照合機・ポリシー機が記す」値 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `stat_filter_marks` + `has_stat_filter_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 照合の記録は照合機が記す — 統計フィルタ印の自署を問え。
+
+### Security — D437: `X-Postfix-*`/`X-Original-To:`/`X-Kerio-*`/`X-MDAV-*`/`X-IMSS-*`/`X-TM-AS-*`/`X-Domino-*`/`X-Zimbra-*` 等の MTA・メール製品印自称が未検査
+
+- **問題**: `X-Original-To:` (Postfix エイリアス展開記録)、`X-MDAV-*`/`X-Spam-Processed:` (MDaemon — ベンダ文書)、`X-Kerio-*` (Kerio Connect)、`X-imss-scan-details`/`X-TM-AS-Result` (Trend Micro IMSS 公式 X-ヘッダ文書)、`X-Domino-*`/`X-Notes-*`/`X-GroupWise-*`/`X-Zimbra-*`/`X-Postfix-*`/`X-Exim-*`/`X-Qmail-*`/`X-MailEnable-*`/`X-IceWarp-*`/`X-CommuniGate-*`/`X-Scalix-*`/`X-Axigen-*`/`X-SurgeMail-*` は MTA・製品の受信・検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `mta_product_marks` + `has_mta_product_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 配送の記録は配送機が記す — MTA/製品印の自署を問え。
+
+
 ### Security — D432: `X-GMX-*`/`X-UI-*`/`UI-InboundReport:`/`X-me-*`/`X-ProXad-*` 等の欧州系 ISP 印自称が未検査
 
 - GMX (`X-GMX-Antispam`/`X-GMX-Antivirus`、SpamAssassin 公式ルール・KMail プラグイン記載)・United Internet (`X-UI-Filterresults:`/`UI-InboundReport:`、1&1/GMX/WEB.DE 実測)・Orange/Wanadoo 系 ME プラットフォーム (`X-me-spamlevel`/`X-ME-Helo`/`X-ME-IP`、実測ヘッダ)・Free (`X-ProXad-*`) の受信判定記録は各 ISP が残す — 送信側から届くのは自称だが未検査だった
