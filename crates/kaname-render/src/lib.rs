@@ -100,6 +100,12 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// 件名が「外部」タグを自称している (D268)。
+    ///
+    /// `[EXTERNAL]`/`[外部]`/`[外部送信]` 等のマーカー — 受信側の
+    /// システムが付けるべき印を送信者が自署し、「外部からの安全な
+    /// 連絡」の体裁を装う偽装 (タグの常態化を狙う手口)。
+    pub external_tag_subject: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +346,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D268: 件名の「外部」タグ自称
+    let external_tag_subject = has_external_tag_subject(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,7 +367,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        external_tag_subject,
     })
+}
+
+/// 件名が「外部」タグを自称しているか判定する (D268)。
+///
+/// `[EXTERNAL]`/`[EXT]`/`[外部]`/`[外部送信]` — 受信側システムが
+/// 付ける印を送信者が自署し、「外部からの安全な連絡」の体裁を装う
+/// 偽装。ユーザーの警戒慣れを狙う手口として文書化されている。
+pub fn has_external_tag_subject(raw: &[u8]) -> bool {
+    const TAGS: &[&str] = &[
+        "[external]",
+        "[ext]",
+        "[external sender]",
+        "[外部]",
+        "[外部送信]",
+        "[external email]",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header
+        .lines()
+        .any(|l| l.starts_with("subject:") && TAGS.iter().any(|t| l.contains(t)))
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2769,6 +2801,13 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
             "ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれており、拡張子の表示が反転して実際の形式を隠している可能性があります"
                 .to_string(),
         );
+        is_dangerous = true;
+    }
+    // D269: ドット始まりの隠しファイル名
+    if magic_bytes::is_hidden_dot_filename(filename) {
+        risks.push(format!(
+            "ファイル名がドット始まりの隠しファイル形式です: {filename}"
+        ));
         is_dangerous = true;
     }
 

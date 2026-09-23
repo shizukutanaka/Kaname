@@ -191,6 +191,18 @@ pub fn has_bidi_override_filename(filename: &str) -> bool {
     })
 }
 
+/// ファイル名がドット始まり (UNIX 隠しファイル) か判定する (D269)。
+///
+/// `.bashrc`/`.htaccess` 型の隠しファイル名 — エクスプローラや
+/// 一覧表示で「見えない」ファイルを紛れ込ませる手段。`..` 自体は
+/// パストラバーサル系で別途扱うため、先頭が 1 個のドットで
+/// 2 文字目がドット以外の場合のみ。
+#[must_use]
+pub fn is_hidden_dot_filename(filename: &str) -> bool {
+    let name = filename.rsplit(['/', '\\']).next().unwrap_or(filename);
+    name.len() > 1 && name.starts_with('.') && !name.starts_with("..")
+}
+
 /// Windows LNK (Shell Link) ファイルか magic bytes で判定する。
 ///
 /// LNK ファイルのヘッダー: `4C 00 00 00 01 14 02 00` (CLSID_ShellLink)
@@ -604,5 +616,24 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    // ---------- D269: 隠しドットファイル名 ----------
+
+    #[test]
+    fn hidden_dot_filename() {
+        assert!(is_hidden_dot_filename(".bashrc"));
+        assert!(is_hidden_dot_filename(".htaccess"));
+        assert!(is_hidden_dot_filename(".evil.exe"));
+        assert!(is_hidden_dot_filename("dir/.hidden"));
+    }
+
+    #[test]
+    fn not_hidden_dot_filename() {
+        assert!(!is_hidden_dot_filename("invoice.pdf"));
+        assert!(!is_hidden_dot_filename("."));
+        assert!(!is_hidden_dot_filename(".."));
+        assert!(!is_hidden_dot_filename("normal.dot.pdf"));
+        assert!(!is_hidden_dot_filename("file.txt"));
     }
 }

@@ -542,6 +542,23 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D267: Return-Path のドメインが From と非一致 —
+    // 「差出人は社内の体裁だが返送先は外部」という分岐
+    if return_path_domain_mismatch(&env) {
+        render_risks.push(
+            "Return-Path (返送先) のドメインが From と一致しません — エラー通知先を別経路に分ける送信者隠蔽の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D268: 件名の「外部」タグ自称
+    if env.external_tag_subject {
+        render_risks.push(
+            "件名が [EXTERNAL]/[外部] タグを自称しています — 受信側が付ける印を送信者が自署する常態化狙いの偽装の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1058,6 +1075,35 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
 ///   表示パーサ差異のリスクは残る (軽い兆候)
 /// - 単一 From + `Sender:` ドメイン不一致 → 「on behalf of」委任送信の
 ///   正常形なので報告しない (ESP 経由配信で頻出するため誤検出が多い)
+/// `Return-Path` のドメインが `From` のドメインと一致するか判定する
+/// (D267)。
+///
+/// Return-Path は「届かなかったときの返送先」を宣言する — From と
+/// 異なるドメインを指すと、「見せる差出人」と「実際の返送経路」を
+/// 分ける送信者隠蔽の兆候。DMARC の relaxed alignment 相当で
+/// 登録ドメイン (末尾 2 ラベル) 一致なら許容する。
+fn return_path_domain_mismatch(env: &kaname_render::Envelope) -> bool {
+    let Some(rp) = &env.return_path else {
+        return false;
+    };
+    let Some(from) = env.from.first() else {
+        return false;
+    };
+    !rp.addr
+        .domain
+        .eq_ignore_ascii_case(&from.addr.domain)
+        && registrable_domain(&rp.addr.domain) != registrable_domain(&from.addr.domain)
+}
+
+/// 登録ドメイン (末尾 2 ラベル) を返す — relaxed alignment 相当の比較用。
+fn registrable_domain(d: &str) -> String {
+    let mut it = d.rsplit('.').take(2);
+    match (it.next(), it.next()) {
+        (Some(tld), Some(sld)) => format!("{sld}.{tld}").to_ascii_lowercase(),
+        _ => d.to_ascii_lowercase(),
+    }
+}
+
 fn from_header_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
     if env.from.len() <= 1 {
         return Vec::new();

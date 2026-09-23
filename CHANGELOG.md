@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D267: `Return-Path` のドメインが `From` と非一致が未検査
+
+- Return-Path は「届かなかったときの返送先」— From と異なるドメインを指すと「見せる差出人」と「実際の返送経路」を分ける送信者隠蔽
+- 対処: `return_path_domain_mismatch` 新設 (登録ドメイン一致なら許容) → `render_risks` 兆候報告
+
+### Security — D268: 件名の「外部」タグ自称が未検査
+
+- `[EXTERNAL]`/`[外部送信]` 等は受信側システムが付ける印 — 送信者が自署すると「外部からの安全な連絡」の体裁を装い警戒慣れを狙う偽装
+- 対処: `has_external_tag_subject` 新設 → `Envelope.external_tag_subject` → `render_risks` 兆候報告
+
+### Security — D269: ドット始まりの隠しファイル名添付が未検査
+
+- `.bashrc`/`.htaccess` 型の UNIX 隠しファイル名 — エクスプローラ一覧で「見えない」ファイルを紛れ込ませる手段
+- 対処: `is_hidden_dot_filename` 新設 → `scan_attachment_bytes` に配線
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)
