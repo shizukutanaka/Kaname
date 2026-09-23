@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D462: `X-Hetzner-*`/`X-Scaleway-*`/`X-Linode-*`/`X-Vultr-*`/`X-DigitalOcean-*`/`X-Heroku-*`/`X-Railway-*` 等のクラウド・ホスティング印自称が未検査
+
+- **問題**: `X-Hetzner-*` (Hetzner)、`X-Scaleway-*` (Scaleway)、`X-Linode-*`/`X-Akamai-*`/`X-Vultr-*`/`X-Oracle-*`/`X-IBM-*`/`X-DigitalOcean-*`/`X-Heroku-*`/`X-Render-*`/`X-Fly-*`/`X-Railway-*`/`X-OpenShift-*`/`X-CloudFoundry-*` はクラウド機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `cloud_host_marks` + `has_cloud_host_marks` 追加; `commands.rs` で render_risks 兆候報告。`X-OVH-*` は別ブランチで扱うため対象外。
+- **教訓**: 発信の記録は発信機が記す — クラウド印の自署を問え。
+
+### Security — D463: `X-PagerDuty-*`/`X-Datadog-*`/`X-NewRelic-*`/`X-Bugsnag-*`/`X-Rollbar-*`/`X-Grafana-*`/`X-Pingdom-*` 等の監視・インシデント・分析印自称が未検査
+
+- **問題**: `X-PagerDuty-*` (PagerDuty)、`X-Datadog-*` (Datadog)、`X-Bugsnag-*`/`X-Honeybadger-*`/`X-Rollbar-*`/`X-Airbrake-*`/`X-Raygun-*`/`X-GlitchTip-*` (エラー監視)、`X-Pingdom-*`/`X-UptimeRobot-*`/`X-StatusCake-*`/`X-Opsgenie-*`/`X-VictorOps-*`/`X-iLert-*`/`X-AlertOps-*`/`X-SIGNL4-*`/`X-NewRelic-*`/`X-Dynatrace-*`/`X-AppDynamics-*`/`X-Splunk-*`/`X-SumoLogic-*`/`X-Logz-*`/`X-Loggly-*`/`X-Papertrail-*`/`X-Sematext-*`/`X-Honeycomb-*`/`X-Lightstep-*`/`X-Grafana-*`/`X-LogRocket-*`/`X-Mixpanel-*`/`X-Amplitude-*` は監視機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `observability_marks` + `has_observability_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 監視印の自署を問え。
+
+### Security — D464: `X-Asana-*`/`X-Monday-*`/`X-Trello-*`/`X-Basecamp-*`/`X-Miro-*`/`X-Typeform-*`/`X-JotForm-*`/`X-Qualtrics-*` 等の生産性・フォームサービス印自称が未検査
+
+- **問題**: `X-Asana-*` (Asana)、`X-Monday-*` (Monday.com)、`X-Typeform-*`/`X-JotForm-*`/`X-Qualtrics-*`/`X-SurveyMonkey-*`/`X-SMG-*`/`X-Formstack-*`/`X-Wufoo-*` (フォーム)、`X-Trello-*`/`X-ClickUp-*`/`X-Basecamp-*`/`X-Wrike-*`/`X-Smartsheet-*`/`X-Teamwork-*`/`X-Todoist-*`/`X-Evernote-*`/`X-Coda-*`/`X-Miro-*`/`X-Mural-*`/`X-Whimsical-*`/`X-Lucid-*`/`X-Lucidchart-*`/`X-Canva-*` はサービス通知機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `productivity_marks` + `has_productivity_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — サービス印の自署を問え。
+
+
 ### Security — D459: `X-Facebook-*`/`X-Twitter-*`/`X-LinkedIn-*`/`X-Instagram-*`/`X-Discord-*`/`X-Spotify-*`/`X-Meetup-*` 等の SNS・プラットフォーム通知印自称が未検査
 
 - **問題**: `X-Facebook-Notify` (Facebook 通知メール — 実測)、`X-Twitter-*`/`X-LinkedIn-*`/`X-Instagram-*`/`X-YouTube-*`/`X-Pinterest-*`/`X-Reddit-*`/`X-Tumblr-*`/`X-Discord-*`/`X-Twitch-*`/`X-Spotify-*`/`X-Medium-*`/`X-Quora-*`/`X-ProductHunt-*`/`X-TikTok-*`/`X-Snapchat-*`/`X-VK-*`/`X-LINE-*`/`X-Kakao-*`/`X-Weibo-*`/`X-Xing-*`/`X-Meetup-*`/`X-Eventbrite-*` は SNS 通知機の発信記録 — 送信側が書くことは自称。

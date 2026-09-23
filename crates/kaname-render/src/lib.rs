@@ -375,6 +375,25 @@ pub struct Envelope {
     /// 配信 ESP・マーケ印 (第四群) があるか — 配信機の記録を
     /// 送信側が自称する兆候 (D461)。
     pub esp4_marks: bool,
+    /// `X-Hetzner-*`/`X-Scaleway-*`/`X-Linode-*`/`X-Vultr-*`/
+    /// `X-Oracle-*`/`X-IBM-*`/`X-DigitalOcean-*`/`X-Heroku-*`/
+    /// `X-Render-*`/`X-Fly-*`/`X-Railway-*`/`X-OpenShift-*`/
+    /// `X-CloudFoundry-*`/`X-Akamai-*` 等のクラウド・ホスティング印
+    /// があるか — クラウド機の発信記録を送信側が自称する兆候 (D462)。
+    pub cloud_host_marks: bool,
+    /// `X-Datadog-*`/`X-PagerDuty-*`/`X-NewRelic-*`/`X-Dynatrace-*`/
+    /// `X-Splunk-*`/`X-Rollbar-*`/`X-Bugsnag-*`/`X-Honeybadger-*`/
+    /// `X-Airbrake-*`/`X-Raygun-*`/`X-Pingdom-*`/`X-Grafana-*`/
+    /// `X-Mixpanel-*`/`X-Amplitude-*` 等の監視・インシデント・分析印
+    /// があるか — 監視機の通知記録を送信側が自称する兆候 (D463)。
+    pub observability_marks: bool,
+    /// `X-Asana-*`/`X-Monday-*`/`X-Trello-*`/`X-Basecamp-*`/
+    /// `X-ClickUp-*`/`X-Wrike-*`/`X-Smartsheet-*`/`X-Todoist-*`/
+    /// `X-Evernote-*`/`X-Miro-*`/`X-Canva-*`/`X-Typeform-*`/
+    /// `X-JotForm-*`/`X-Qualtrics-*`/`X-SurveyMonkey-*` 等の
+    /// 生産性・フォームサービス印があるか — サービス通知機の
+    /// 発信記録を送信側が自称する兆候 (D464)。
+    pub productivity_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -697,6 +716,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         sns_platform_marks: has_sns_platform_marks(raw),
         payment_marks: has_payment_marks(raw),
         esp4_marks: has_esp4_marks(raw),
+        cloud_host_marks: has_cloud_host_marks(raw),
+        observability_marks: has_observability_marks(raw),
+        productivity_marks: has_productivity_marks(raw),
     })
 }
 
@@ -2424,6 +2446,135 @@ fn has_esp4_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-bloomreach-")
             || l.starts_with("x-cordial-")
             || l.starts_with("x-blueshift-")
+    })
+}
+
+/// `X-Hetzner-*`/`X-Scaleway-*`/`X-Linode-*`/`X-Akamai-*`/
+/// `X-Vultr-*`/`X-Oracle-*`/`X-IBM-*`/`X-DigitalOcean-*`/
+/// `X-Heroku-*`/`X-Render-*`/`X-Fly-*`/`X-Railway-*`/
+/// `X-OpenShift-*`/`X-CloudFoundry-*` 等のクラウド・ホスティング印
+/// があるか判定する (D462)。
+///
+/// `X-Hetzner-*` (Hetzner)、`X-Scaleway-*` (Scaleway) は
+/// クラウド機の発信記録 — 送信側から届くこれは自称。
+/// `X-OVH-*` は別ブランチで扱うため対象外。
+fn has_cloud_host_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-hetzner-")
+            || l.starts_with("x-scaleway-")
+            || l.starts_with("x-linode-")
+            || l.starts_with("x-akamai-")
+            || l.starts_with("x-vultr-")
+            || l.starts_with("x-oracle-")
+            || l.starts_with("x-ibm-")
+            || l.starts_with("x-digitalocean-")
+            || l.starts_with("x-heroku-")
+            || l.starts_with("x-render-")
+            || l.starts_with("x-fly-")
+            || l.starts_with("x-railway-")
+            || l.starts_with("x-openshift-")
+            || l.starts_with("x-cloudfoundry-")
+    })
+}
+
+/// `X-Pingdom-*`/`X-UptimeRobot-*`/`X-StatusCake-*`/`X-PagerDuty-*`/
+/// `X-Opsgenie-*`/`X-VictorOps-*`/`X-iLert-*`/`X-AlertOps-*`/
+/// `X-SIGNL4-*`/`X-Datadog-*`/`X-NewRelic-*`/`X-Dynatrace-*`/
+/// `X-AppDynamics-*`/`X-Splunk-*`/`X-SumoLogic-*`/`X-Logz-*`/
+/// `X-Loggly-*`/`X-Papertrail-*`/`X-Sematext-*`/`X-Honeycomb-*`/
+/// `X-Lightstep-*`/`X-Grafana-*`/`X-Rollbar-*`/`X-Bugsnag-*`/
+/// `X-Honeybadger-*`/`X-Airbrake-*`/`X-Raygun-*`/`X-GlitchTip-*`/
+/// `X-LogRocket-*`/`X-Mixpanel-*`/`X-Amplitude-*` 等の監視・
+/// インシデント・分析印があるか判定する (D463)。
+///
+/// `X-PagerDuty-*` (PagerDuty)、`X-Datadog-*` (Datadog)、
+/// `X-Bugsnag-*`/`X-Honeybadger-*`/`X-Rollbar-*` (エラー監視)
+/// は監視機の通知記録 — 送信側から届くこれは自称。
+fn has_observability_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-pingdom-")
+            || l.starts_with("x-uptimerobot-")
+            || l.starts_with("x-statuscake-")
+            || l.starts_with("x-pagerduty-")
+            || l.starts_with("x-opsgenie-")
+            || l.starts_with("x-victorops-")
+            || l.starts_with("x-ilert-")
+            || l.starts_with("x-alertops-")
+            || l.starts_with("x-signl4-")
+            || l.starts_with("x-datadog-")
+            || l.starts_with("x-newrelic-")
+            || l.starts_with("x-dynatrace-")
+            || l.starts_with("x-appdynamics-")
+            || l.starts_with("x-splunk-")
+            || l.starts_with("x-sumologic-")
+            || l.starts_with("x-logz-")
+            || l.starts_with("x-loggly-")
+            || l.starts_with("x-papertrail-")
+            || l.starts_with("x-sematext-")
+            || l.starts_with("x-honeycomb-")
+            || l.starts_with("x-lightstep-")
+            || l.starts_with("x-grafana-")
+            || l.starts_with("x-rollbar-")
+            || l.starts_with("x-bugsnag-")
+            || l.starts_with("x-honeybadger-")
+            || l.starts_with("x-airbrake-")
+            || l.starts_with("x-raygun-")
+            || l.starts_with("x-glitchtip-")
+            || l.starts_with("x-logrocket-")
+            || l.starts_with("x-mixpanel-")
+            || l.starts_with("x-amplitude-")
+    })
+}
+
+/// `X-Asana-*`/`X-Trello-*`/`X-Monday-*`/`X-ClickUp-*`/
+/// `X-Basecamp-*`/`X-Wrike-*`/`X-Smartsheet-*`/`X-Teamwork-*`/
+/// `X-Todoist-*`/`X-Evernote-*`/`X-Coda-*`/`X-Miro-*`/`X-Mural-*`/
+/// `X-Whimsical-*`/`X-Lucid-*`/`X-Lucidchart-*`/`X-Canva-*`/
+/// `X-Typeform-*`/`X-JotForm-*`/`X-SurveyMonkey-*`/`X-SMG-*`/
+/// `X-Qualtrics-*`/`X-Formstack-*`/`X-Wufoo-*` 等の生産性・
+/// フォームサービス印があるか判定する (D464)。
+///
+/// `X-Asana-*` (Asana)、`X-Monday-*` (Monday.com)、`X-Typeform-*`/
+/// `X-JotForm-*` (フォーム) はサービス通知機の発信記録 —
+/// 送信側から届くこれは自称。
+fn has_productivity_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-asana-")
+            || l.starts_with("x-trello-")
+            || l.starts_with("x-monday-")
+            || l.starts_with("x-clickup-")
+            || l.starts_with("x-basecamp-")
+            || l.starts_with("x-wrike-")
+            || l.starts_with("x-smartsheet-")
+            || l.starts_with("x-teamwork-")
+            || l.starts_with("x-todoist-")
+            || l.starts_with("x-evernote-")
+            || l.starts_with("x-coda-")
+            || l.starts_with("x-miro-")
+            || l.starts_with("x-mural-")
+            || l.starts_with("x-whimsical-")
+            || l.starts_with("x-lucid-")
+            || l.starts_with("x-lucidchart-")
+            || l.starts_with("x-canva-")
+            || l.starts_with("x-typeform-")
+            || l.starts_with("x-jotform-")
+            || l.starts_with("x-surveymonkey-")
+            || l.starts_with("x-smg-")
+            || l.starts_with("x-qualtrics-")
+            || l.starts_with("x-formstack-")
+            || l.starts_with("x-wufoo-")
     })
 }
 
@@ -5679,6 +5830,72 @@ mod tests {
         assert!(has_esp4_marks(o2));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_esp4_marks(clean));
+    }
+
+    #[test]
+    fn scan_はクラウドホスティング印を検出する() {
+        let h1 = b"X-Hetzner-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(h1));
+        let s1 = b"X-Scaleway-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(s1));
+        let l1 = b"X-Linode-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(l1));
+        let v1 = b"X-Vultr-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(v1));
+        let o1 = b"X-Oracle-Cloud: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(o1));
+        let d1 = b"X-DigitalOcean-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(d1));
+        let h2 = b"X-Heroku-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(h2));
+        let r1 = b"X-Railway-Notice: x\r\n\r\nx";
+        assert!(has_cloud_host_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cloud_host_marks(clean));
+    }
+
+    #[test]
+    fn scan_は監視インシデント印を検出する() {
+        let p1 = b"X-PagerDuty-Alert: x\r\n\r\nx";
+        assert!(has_observability_marks(p1));
+        let d1 = b"X-Datadog-Alert: x\r\n\r\nx";
+        assert!(has_observability_marks(d1));
+        let n1 = b"X-NewRelic-Alert: x\r\n\r\nx";
+        assert!(has_observability_marks(n1));
+        let b1 = b"X-Bugsnag-Error: x\r\n\r\nx";
+        assert!(has_observability_marks(b1));
+        let h1 = b"X-Honeybadger-Error: x\r\n\r\nx";
+        assert!(has_observability_marks(h1));
+        let r1 = b"X-Rollbar-Error: x\r\n\r\nx";
+        assert!(has_observability_marks(r1));
+        let g1 = b"X-Grafana-Alert: x\r\n\r\nx";
+        assert!(has_observability_marks(g1));
+        let a1 = b"X-Amplitude-Report: x\r\n\r\nx";
+        assert!(has_observability_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_observability_marks(clean));
+    }
+
+    #[test]
+    fn scan_は生産性フォーム印を検出する() {
+        let a1 = b"X-Asana-Notify: x\r\n\r\nx";
+        assert!(has_productivity_marks(a1));
+        let m1 = b"X-Monday-Notify: x\r\n\r\nx";
+        assert!(has_productivity_marks(m1));
+        let t1 = b"X-Trello-Notify: x\r\n\r\nx";
+        assert!(has_productivity_marks(t1));
+        let b1 = b"X-Basecamp-Notify: x\r\n\r\nx";
+        assert!(has_productivity_marks(b1));
+        let m2 = b"X-Miro-Notify: x\r\n\r\nx";
+        assert!(has_productivity_marks(m2));
+        let t2 = b"X-Typeform-Response: x\r\n\r\nx";
+        assert!(has_productivity_marks(t2));
+        let j1 = b"X-JotForm-Response: x\r\n\r\nx";
+        assert!(has_productivity_marks(j1));
+        let q1 = b"X-Qualtrics-Survey: x\r\n\r\nx";
+        assert!(has_productivity_marks(q1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_productivity_marks(clean));
     }
 }
 
