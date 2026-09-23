@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D309: 開封確認要求
+    if env.receipt_request {
+        render_risks.push(
+            "開封確認要求 — 読んだことを送信側へ知らせる経路と圧力演出の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D310: 旧式・非標準 CTE
+    if env.legacy_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding が uuencode/binhex 等の旧式方式 — デコーダ差を突く兆候です"
+                .to_string(),
+        );
+    }
+
+    // D311: 8bit バイト + CTE 欠落
+    if env.missing_cte_8bit {
+        render_risks.push(
+            "Content-Transfer-Encoding なしで非 ASCII バイト混入 — 非準拠生成品の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

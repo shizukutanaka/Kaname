@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D309: `Disposition-Notification-To` 等の開封確認要求が未検査
+
+- 開封確認 (Disposition-Notification-To/Return-Receipt-To/X-Confirm-Reading-To/Return-Receipt-Requested) は「読んだか」を送信側へフィードバックする経路 — 攻撃者にとってアドレス生存確認の手段であり「緊急」文面と組み合わせた圧力演出にも使われるが未検査だった
+- 対処: `has_receipt_request` 新設 → `Envelope.receipt_request` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D310: `Content-Transfer-Encoding` の旧式・非標準方式が未検査
+
+- `x-uuencode`/`uuencode`/`x-binhex`/`mac-binhex40` 等は現行 RFC の値ではなく MUA/ゲートウェイごとにデコーダ実装が分かれる — 解析器と表示器が違うものを見る parser differential の素地だが未検査だった
+- 対処: `has_legacy_cte` 新設 → `Envelope.legacy_cte` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D311: 非 ASCII バイト + `Content-Transfer-Encoding` 欠落が未検査
+
+- 8bit バイトを運ぶには CTE の宣言が要る — 宣言なしで非 ASCII を含むのは受信側に解釈を委ねる非準拠生成品であり、宣言した側だけ見せる内容を分けられるが未検査だった (us-ascii 偽装 D253 の姉妹: 宣言なし版)
+- 対処: `has_missing_cte_8bit` 新設 → `Envelope.missing_cte_8bit` → `render_risks` 兆候報告
+- テスト +4 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

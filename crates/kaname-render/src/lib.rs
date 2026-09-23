@@ -103,6 +103,17 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `Disposition-Notification-To`/`Return-Receipt-To` 等の開封確認
+    /// 要求ヘッダがあるか — 読んだことを送信側にフィードバックする
+    /// 経路と圧力演出の兆候 (D309)。
+    pub receipt_request: bool,
+    /// `Content-Transfer-Encoding` が `x-uuencode`/`mac-binhex40` 等の
+    /// 廃止・非標準方式を名乗るか — デコーダの実装差を突く
+    /// parser differential の兆候 (D310)。
+    pub legacy_cte: bool,
+    /// 非 ASCII バイトを含むのに `Content-Transfer-Encoding` がないか —
+    /// 8bit をエンコード宣言なしで運ぶ非準拠生成品の兆候 (D311)。
+    pub missing_cte_8bit: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +373,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        receipt_request: has_receipt_request(raw),
+        legacy_cte: has_legacy_cte(raw),
+        missing_cte_8bit: has_missing_cte_8bit(raw),
     })
 }
 
@@ -422,6 +436,69 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `Disposition-Notification-To`/`Return-Receipt-To` 等の開封確認要求
+/// があるか判定する (D309)。
+///
+/// 開封確認は「読んだか」を送信側へフィードバックする経路 — 攻撃者
+/// にとってはアドレス生存確認の手段であり、本文の「緊急」文面と
+/// 組み合わせた圧力演出にも使われる。要求の存在自体が兆候。
+fn has_receipt_request(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("disposition-notification-to:")
+            || l.starts_with("return-receipt-to:")
+            || l.starts_with("x-confirm-reading-to:")
+            || l.starts_with("return-receipt-requested:")
+    })
+}
+
+/// `Content-Transfer-Encoding` が旧式・非標準方式を名乗るか判定する
+/// (D310)。
+///
+/// `x-uuencode`/`uuencode`/`x-binhex`/`mac-binhex40`/`x-zip` 等は現行
+/// RFC の値ではなく、MUA/ゲートウェイごとにデコーダ実装が分かれる —
+/// 解析器と表示器が違うものを見る parser differential の素地。
+fn has_legacy_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-transfer-encoding:"))
+        .any(|l| {
+            l.contains("x-uuencode")
+                || l.contains("uuencode")
+                || l.contains("x-binhex")
+                || l.contains("mac-binhex")
+                || l.contains("binhex")
+        })
+}
+
+/// 非 ASCII バイトを含むのに `Content-Transfer-Encoding` がないか判定
+/// する (D311)。
+///
+/// 8bit バイトを運ぶには CTE (8bit/binary/quoted-printable/base64)
+/// の宣言が要る — 宣言なしで非 ASCII を含むのは受信側に解釈を委ねる
+/// 非準拠生成品であり、宣言した側だけ見せる内容を分けられる。
+fn has_missing_cte_8bit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if header
+        .lines()
+        .any(|l| l.starts_with("content-transfer-encoding:"))
+    {
+        return false;
+    }
+    let raw_end = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(0);
+    raw[raw_end..].iter().any(|&b| b >= 0x80)
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2752,44 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_は開封確認要求を検出する() {
+        let d = b"From: a@b\r\nDisposition-Notification-To: a@b\r\n\r\nx";
+        assert!(has_receipt_request(d));
+        let r = b"From: a@b\r\nReturn-Receipt-To: a@b\r\n\r\nx";
+        assert!(has_receipt_request(r));
+        let x = b"From: a@b\r\nX-Confirm-Reading-To: a@b\r\n\r\nx";
+        assert!(has_receipt_request(x));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_receipt_request(clean));
+        let body = b"From: a@b\r\n\r\nReturn-Receipt-To: a@b";
+        assert!(!has_receipt_request(body));
+    }
+
+    #[test]
+    fn scan_は旧式CTEを検出する() {
+        let uu = b"Content-Transfer-Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_legacy_cte(uu));
+        let bh = b"Content-Transfer-Encoding: mac-binhex40\r\n\r\nx";
+        assert!(has_legacy_cte(bh));
+        let b64 = b"Content-Transfer-Encoding: base64\r\n\r\nx";
+        assert!(!has_legacy_cte(b64));
+        let seven = b"Content-Transfer-Encoding: 7bit\r\n\r\nx";
+        assert!(!has_legacy_cte(seven));
+    }
+
+    #[test]
+    fn scan_は8bit未宣言を検出する() {
+        let no_cte_8bit = b"From: a@b\r\n\r\nbody \xe3\x81\x82";
+        assert!(has_missing_cte_8bit(no_cte_8bit));
+        let cte_8bit = b"From: a@b\r\nContent-Transfer-Encoding: 8bit\r\n\r\nbody \xe3\x81\x82";
+        assert!(!has_missing_cte_8bit(cte_8bit));
+        let no_cte_ascii = b"From: a@b\r\n\r\nplain ascii";
+        assert!(!has_missing_cte_8bit(no_cte_ascii));
+        let b64_cte = b"From: a@b\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD";
+        assert!(!has_missing_cte_8bit(b64_cte));
     }
 }
 
