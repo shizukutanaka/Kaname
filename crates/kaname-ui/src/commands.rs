@@ -724,6 +724,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D429: 中国・東アジア系プロバイダ印自称
+    if env.cn_provider_marks {
+        render_risks.push(
+            "X-QQ-*/X-Coremail-*/X-CM-*/X-Alimail-* 等 — 中国系プロバイダの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D430: AV・検査印 (第三群) 自称
+    if env.av3_marks {
+        render_risks.push(
+            "X-KSMG-*/X-KLMS-*/X-DrWeb-*/X-NAI-* 等 — AV ベンダの検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D431: ウェブスクリプト発信印自称
+    if env.webscript_marks {
+        render_risks.push(
+            "X-PHP-*/X-Source-*/X-Authenticated-Sender 等 — ウェブメール発信経路の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

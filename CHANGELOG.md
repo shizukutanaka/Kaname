@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D429: `X-QQ-*`/`X-Coremail-*`/`X-CM-*`/`X-Alimail-*`/`X-Sina-*` 等の中国・東アジア系プロバイダ印自称が未検査
+
+- Tencent QQ メール (`X-QQ-SSF`/`X-QQ-mid` 等)・網易系 Coremail (`X-Coremail-Antispam`/`X-CM-TRANSID`/`X-CM-SenderInfo`、実測ヘッダ)・アリババ企業メール (`X-Alimail-AntiSpam`、Alibaba Cloud 公式文書) の検査・発信記録は各プロバイダが残す — 送信側から届くのは自称だが未検査だった
+- 対処: `has_cn_provider_marks` 新設 → `Envelope.cn_provider_marks` → `render_risks` 兆候報告
+- テスト +8 件
+
+### Security — D430: `X-KSMG-*`/`X-KLMS-*`/`X-DrWeb-*`/`X-NAI-*`/`X-McAfee-*`/`X-F-Secure-*`/`X-Comodo-*`/`X-Symantec-*`/`X-GData-*`/`X-Ikarus-*` 等の AV・検査印自称 (第三群) が未検査
+
+- Kaspersky KSMG/KLMS (公式 X-ヘッダ一覧文書)・Dr.Web (`X-DrWeb-SpamReason`、公式文書)・NAI/McAfee (`X-NAI-Spam-Score`、NCC Group 実測調査) 等の検査記録は AV ベンダのゲートウェイが残す — 送信側から届くのは自称だが未検査だった
+- 対処: `has_av3_marks` 新設 → `Envelope.av3_marks` → `render_risks` 兆候報告
+- テスト +9 件
+
+### Security — D431: `X-PHP-*`/`X-Source-*`/`X-Get-Message-Sender-Via:`/`X-Authenticated-Sender:` 等のウェブスクリプト発信印自称が未検査
+
+- `X-PHP-Originating-Script:` は PHP `mail.add_x_header` (php.net)、`X-PHP-Script:` は cPanel/Exim が nobody 実行メールへ付与、`X-Get-Message-Sender-Via:`/`X-Authenticated-Sender:`/`X-Source-*` は共有ホスティングの発信元追跡記録 — いずれも発信経路機が残す値であり送信側から届くのは自称だが未検査だった (侵害ウェブホスト経由のスパム典型印)
+- 対処: `has_webscript_marks` 新設 → `Envelope.webscript_marks` → `render_risks` 兆候報告
+- テスト +9 件
+
 ### Security — D426: `X-OCN-*`/`X-Biglobe-*`/`X-Nifty-*`/`X-MYASP-*`/`X-TERRACE-*`/`X-DTI-*` 等の日本 ISP・ホスティング印自称が未検査
 
 - 国内プロバイダの受信判定記録 (`X-OCN-SPAM-CHECK`/`X-Biglobe-spamcheck`/`X-Nifty-SrcIP`/`X-DTI-Spam-Flag` 等) はプロバイダの受信基盤が残す — 送信側から届くのは「このプロバイダが判定した」体裁を内容側が主張する自称だが未検査だった

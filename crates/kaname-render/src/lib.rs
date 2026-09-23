@@ -190,6 +190,21 @@ pub struct Envelope {
     /// `Resent-Message-ID:` 等の再送印があるか — 再送者が残す経路記録を
     /// 送信側が自称する兆候 (D428)。
     pub resent_marks: bool,
+    /// `X-QQ-*`/`X-Coremail-*`/`X-CM-*`/`X-Alimail-*`/`X-Sina-*`
+    /// 等の中国・東アジア系プロバイダ印があるか — Tencent/網易
+    /// (Coremail)/アリババ等の検査記録を送信側が自称する兆候
+    /// (D429)。
+    pub cn_provider_marks: bool,
+    /// `X-KSMG-*`/`X-KLMS-*`/`X-DrWeb-*`/`X-NAI-*`/`X-McAfee-*`/
+    /// `X-F-Secure-*`/`X-Comodo-*`/`X-Symantec-*`/`X-GData-*`/
+    /// `X-Ikarus-*` 等の検査印 (第三群) があるか — AV ベンダの
+    /// 検査記録を送信側が自称する兆候 (D430)。
+    pub av3_marks: bool,
+    /// `X-PHP-*`/`X-Source-*`/`X-Get-Message-Sender-Via:`/
+    /// `X-Authenticated-Sender:` 等のウェブスクリプト発信印が
+    /// あるか — PHP `mail()`/cPanel・Exim 等の発信経路記録を
+    /// 送信側が自称する兆候 (D431)。
+    pub webscript_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -479,6 +494,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_marks: has_resent_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
+        cn_provider_marks: has_cn_provider_marks(raw),
+        av3_marks: has_av3_marks(raw),
+        webscript_marks: has_webscript_marks(raw),
     })
 }
 
@@ -945,6 +963,94 @@ fn has_resent_marks(raw: &[u8]) -> bool {
             || l.starts_with("resent-bcc:")
             || l.starts_with("resent-date:")
             || l.starts_with("resent-message-id:")
+    })
+}
+
+/// `X-QQ-*`/`X-Coremail-*`/`X-CM-*`/`X-Alimail-*`/`X-Sina-*` 等の
+/// 中国・東アジア系プロバイダ印があるか判定する (D429)。
+///
+/// `X-QQ-*` は Tencent QQ メール (X-QQ-SSF/X-QQ-mid/X-QQ-Mailer 等)、
+/// `X-Coremail-*`/`X-CM-*` は網易系 Coremail (X-Coremail-Antispam/
+/// X-CM-TRANSID/X-CM-SenderInfo 等、実測メールヘッダで確認)、
+/// `X-Alimail-*` はアリババ企業メール (X-Alimail-AntiSpam、Alibaba
+/// Cloud 公式文書) の検査・発信記録 — 送信側から届くこれは自称。
+fn has_cn_provider_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-qq-")
+            || l.starts_with("x-coremail-")
+            || l.starts_with("x-cm-")
+            || l.starts_with("x-alimail-")
+            || l.starts_with("x-alidm-")
+            || l.starts_with("x-aliyun-")
+            || l.starts_with("x-netease-")
+            || l.starts_with("x-sina-")
+            || l.starts_with("x-sohu-")
+            || l.starts_with("x-tencent-")
+            || l.starts_with("x-foxmail-")
+    })
+}
+
+/// `X-KSMG-*`/`X-KLMS-*`/`X-DrWeb-*`/`X-NAI-*`/`X-McAfee-*`/
+/// `X-F-Secure-*`/`X-Comodo-*`/`X-Symantec-*`/`X-GData-*`/
+/// `X-Ikarus-*` 等の検査印 (第三群) があるか判定する (D430)。
+///
+/// `X-KSMG-*`/`X-KLMS-*` は Kaspersky (KSMG/KLMS 公式文書に
+/// X-ヘッダ一覧が記載)、`X-DrWeb-*` は Doctor Web (X-DrWeb-
+/// SpamReason 等、公式文書)、`X-NAI-*` は Network Associates
+/// /McAfee (X-NAI-Spam-Score — NCC Group のメールフィルタ製品
+/// 実測調査) の検査記録 — 送信側から届くこれは自称。
+fn has_av3_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ksmg-")
+            || l.starts_with("x-klms-")
+            || l.starts_with("x-drweb-")
+            || l.starts_with("x-nai-")
+            || l.starts_with("x-mcafee-")
+            || l.starts_with("x-fsecure-")
+            || l.starts_with("x-f-secure-")
+            || l.starts_with("x-comodo-")
+            || l.starts_with("x-symantec-")
+            || l.starts_with("x-gdata-")
+            || l.starts_with("x-g-data-")
+            || l.starts_with("x-ikarus-")
+    })
+}
+
+/// `X-PHP-*`/`X-Source-*`/`X-Get-Message-Sender-Via:`/
+/// `X-Authenticated-Sender:` 等のウェブスクリプト発信印があるか
+/// 判定する (D431)。
+///
+/// `X-PHP-Originating-Script:` は PHP `mail.add_x_header` (php.net
+/// 公式)、`X-PHP-Script:` は cPanel/Exim が nobody 実行メールへ
+/// 付与、`X-Get-Message-Sender-Via:`/`X-Authenticated-Sender:`/
+/// `X-Source-*` は共有ホスティングの発信元追跡記録 (Plesk/Stack
+/// Overflow/NCC Group で実測) — 送信側から届くこれは自称。
+fn has_webscript_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-php-script:")
+            || l.starts_with("x-php-originating-script:")
+            || l.starts_with("x-php-remote-addr:")
+            || l.starts_with("x-php-cpanel-")
+            || l.starts_with("x-get-message-sender-via:")
+            || l.starts_with("x-sender-via:")
+            || l.starts_with("x-authenticated-sender:")
+            || l.starts_with("x-source-args:")
+            || l.starts_with("x-source-dir:")
+            || l.starts_with("x-source-sender:")
+            || l.starts_with("x-source-mailfrom:")
+            || l.starts_with("x-source-rcptto:")
     })
 }
 
@@ -3479,6 +3585,70 @@ mod tests {
         assert!(has_resent_marks(m1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_resent_marks(clean));
+    }
+
+    #[test]
+    fn scan_は中国プロバイダ印を検出する() {
+        let q1 = b"X-QQ-SSF: 0000\r\n\r\nx";
+        assert!(has_cn_provider_marks(q1));
+        let q2 = b"X-QQ-mid: webmail\r\n\r\nx";
+        assert!(has_cn_provider_marks(q2));
+        let c1 = b"X-Coremail-Antispam: 1U55\r\n\r\nx";
+        assert!(has_cn_provider_marks(c1));
+        let c2 = b"X-CM-TRANSID: kCgv\r\n\r\nx";
+        assert!(has_cn_provider_marks(c2));
+        let a1 = b"X-Alimail-AntiSpam: AC=PASS\r\n\r\nx";
+        assert!(has_cn_provider_marks(a1));
+        let n1 = b"X-Netease-Spam-Info: x\r\n\r\nx";
+        assert!(has_cn_provider_marks(n1));
+        let s1 = b"X-Sina-Spam-Status: x\r\n\r\nx";
+        assert!(has_cn_provider_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cn_provider_marks(clean));
+    }
+
+    #[test]
+    fn scan_はAV印第三群を検出する() {
+        let k1 = b"X-KSMG-AntiVirus: 2.1\r\n\r\nx";
+        assert!(has_av3_marks(k1));
+        let k2 = b"X-KLMS-Rule-ID: 4\r\n\r\nx";
+        assert!(has_av3_marks(k2));
+        let d1 = b"X-DrWeb-SpamReason: encoded\r\n\r\nx";
+        assert!(has_av3_marks(d1));
+        let n1 = b"X-NAI-Spam-Score: 1.5\r\n\r\nx";
+        assert!(has_av3_marks(n1));
+        let m1 = b"X-McAfee-Spam-Report: x\r\n\r\nx";
+        assert!(has_av3_marks(m1));
+        let f1 = b"X-F-Secure-Antivirus: x\r\n\r\nx";
+        assert!(has_av3_marks(f1));
+        let s1 = b"X-Symantec-Antivirus: x\r\n\r\nx";
+        assert!(has_av3_marks(s1));
+        let i1 = b"X-Ikarus-Antispam: x\r\n\r\nx";
+        assert!(has_av3_marks(i1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_av3_marks(clean));
+    }
+
+    #[test]
+    fn scan_はwebscript発信印を検出する() {
+        let p1 = b"X-PHP-Script: site/sendmail.php\r\n\r\nx";
+        assert!(has_webscript_marks(p1));
+        let p2 = b"X-PHP-Originating-Script: 33:mail.php\r\n\r\nx";
+        assert!(has_webscript_marks(p2));
+        let g1 = b"X-Get-Message-Sender-Via: host\r\n\r\nx";
+        assert!(has_webscript_marks(g1));
+        let a1 = b"X-Authenticated-Sender: u@h\r\n\r\nx";
+        assert!(has_webscript_marks(a1));
+        let s1 = b"X-Source-Args: /usr/sbin/sendmail\r\n\r\nx";
+        assert!(has_webscript_marks(s1));
+        let s2 = b"X-Source-Dir: /home/u/public_html\r\n\r\nx";
+        assert!(has_webscript_marks(s2));
+        let s3 = b"X-Source-MailFrom: u@h\r\n\r\nx";
+        assert!(has_webscript_marks(s3));
+        let v1 = b"X-Sender-Via: nobody\r\n\r\nx";
+        assert!(has_webscript_marks(v1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_webscript_marks(clean));
     }
 }
 
