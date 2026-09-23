@@ -8,6 +8,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D216: ZIP エントリ名のパストラバーサル (zip-slip) を検出
+
+- ZIP 添付のエントリ名に `../`・絶対パス・ドライブレターが含まれると、解凍時に展開先ディレクトリの外へ書き込まれる "zip-slip" 攻撃が成立する (Snyk 2018 報告)。実体 (添付の中身) の検査はしても ZIP 構造自体は未検査だった
+- 対処: `zip_has_traversal_entry` でローカルファイルヘッダ (`PK\x03\x04`) を走査しファイル名フィールドを直接検査 (セントラルディレクトリを切り落とした改造品にも対応、1024 エントリ上限) → `scan_attachment_bytes` に配線
+- 誤検出対策: `..data.txt`・`a..b.txt` のような正当な連続ドット名は検出しない。非 ZIP 入力は対象外
+- テスト +3 件
+
+### Security — D217: OOXML 外部リレーションシップ (NTLM 漏洩) を検出
+
+- docx/xlsx 等の OOXML (ZIP) 内 `.rels` が `TargetMode="External"` + `Target="http://..."`/`"file://\\..."`/UNC を参照すると、開くだけで外部接続が発生し NTLM 認証情報の漏洩・リモートテンプレート注入を招く (Cubajufr/CrowdStrike の分析で報告)。「文書=ローカルな読み物」の前提で外部参照機構が未検査だった
+- 対処: `ooxml_has_external_relationship` で ZIP 実体から External モード + ネットワーク/UNC Target の組み合わせを検出 → `scan_attachment_bytes` に配線
+- 誤検出対策: 内部 rels (TargetMode なし) や External でも mailto 等の非ネットワーク参照は対象外
+- テスト +2 件
+
+### Security — D218: PDF 埋め込みファイル (PDF 内同梱) を検出
+
+- PDF は `/EmbeddedFile`/`/Filespec` で添付ファイルを内部に同梱できる (ポートフォリオ機能) — 外側が「安全な PDF」に見えても exe/iso 等を忍ばせられる配送経路 (Mandiant の PDF 内同梱マルウェア分析で報告)。PDF 自体の動作キー (D204) とは別の「中身の実体」検査
+- 対処: `pdf_has_embedded_file` で `%PDF` 実体の同梱キーを検出 → `scan_attachment_bytes` に配線
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

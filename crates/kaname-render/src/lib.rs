@@ -2591,6 +2591,37 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks.push(format!("メタデータが含まれます: {r:?}"));
     }
 
+    // 7. ZIP-slip — ZIP エントリ名のパストラバーサル (D216)
+    if magic_bytes::zip_has_traversal_entry(bytes) {
+        risks.push(
+            "ZIP 内のエントリ名にパストラバーサル (`../`・絶対パス等) — \
+             解凍時に指定外の場所へ書き込まれる可能性があります (zip-slip)"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
+    // 8. OOXML 外部リレーションシップ (D217)
+    if magic_bytes::ooxml_has_external_relationship(bytes) {
+        risks.push(
+            "Office 文書の外部リレーションシップ (TargetMode=\"External\" + \
+             http/UNC 参照) — 開くだけで外部接続し NTLM 認証情報が漏洩する \
+             可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
+    // 9. PDF 埋め込みファイル (D218)
+    if magic_bytes::pdf_has_embedded_file(bytes) {
+        risks.push(
+            "PDF に埋め込みファイル (/EmbeddedFile 等) — 見た目は文書ですが \
+             内部に別ファイルを同梱している可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+
     AttachmentScan {
         filename: filename.to_string(),
         declared_mime: declared_mime.to_string(),

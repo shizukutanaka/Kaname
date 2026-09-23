@@ -298,8 +298,126 @@ fn is_dangerous_mismatch(declared: &str, detected: &str) -> bool {
 }
 
 // ============================================================================
-// テスト
+// D216: ZIP-slip — ZIP エントリ名のパストラバーサル
 // ============================================================================
+
+/// ZIP 内のエントリ名に `../`・絶対パス・ドライブ文字の
+/// パストラバーサルが含まれるか判定する。
+///
+/// 解凍時に展開先ディレクトリの外へ書き込む "zip-slip" 攻撃
+/// (Snyk 2018 報告)。ローカルファイルヘッダ (`PK\x03\x04`) を
+/// 走査してファイル名フィールドを直接検査する (セントラル
+/// ディレクトリを切り落として走査を回避する改造品にも対応)。
+/// 上限 1024 エントリで打ち切る。
+#[must_use]
+pub fn zip_has_traversal_entry(bytes: &[u8]) -> bool {
+    if !bytes.starts_with(b"PK\x03\x04") {
+        return false;
+    }
+    let mut pos = 0usize;
+    for _ in 0..1024 {
+        // ローカルファイルヘッダ: sig(4) ver(2) flag(2) method(2)
+        // time(2) date(2) crc(4) csize(4) usize(4) nlen(2) elen(2)
+        if bytes.len() < pos + 30 || bytes[pos..pos + 4] != *b"PK\x03\x04" {
+            // 次のヘッダを前方探索 (データ記述子のため csize 不明時)
+            if bytes.len() < pos + 4 {
+                break;
+            }
+            match find_subslice(&bytes[pos + 4..], b"PK\x03\x04") {
+                Some(off) => {
+                    pos += 4 + off;
+                    continue;
+                }
+                None => break,
+            }
+        }
+        let nlen = u16::from_le_bytes([bytes[pos + 26], bytes[pos + 27]]) as usize;
+        let elen = u16::from_le_bytes([bytes[pos + 28], bytes[pos + 29]]) as usize;
+        let name_end = pos + 30 + nlen;
+        if name_end > bytes.len() {
+            break;
+        }
+        let name = &bytes[pos + 30..name_end];
+        if is_traversal_name(name) {
+            return true;
+        }
+        pos = name_end + elen;
+    }
+    false
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack.windows(needle.len()).position(|w| w == needle)
+}
+
+/// エントリ名がパストラバーサル形か判定する。
+///
+/// `../` (先頭・途中どちらも)、`/` ・ `\` 始まりの絶対パス、
+/// `C:` 等のドライブレター絶対パスを捕捉。
+fn is_traversal_name(name: &[u8]) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    // 絶対パス
+    if name[0] == b'/' || name[0] == b'\\' {
+        return true;
+    }
+    // ドライブレター "X:" (ASCII アルファベット + ':')
+    if name.len() >= 2 && name[0].is_ascii_alphabetic() && name[1] == b':' {
+        return true;
+    }
+    // "../" ・ "..\" を含む (正規化で `..` を残す形)
+    name.windows(3).any(|w| w == b"../" || w == b"..\\")
+        || name == b".."
+        || name.ends_with(b"/..")
+        || name.ends_with(b"\\..")
+}
+
+// ============================================================================
+// D217: OOXML 外部リレーションシップ (NTLM 漏洩 / リモートテンプレート注入)
+// ============================================================================
+
+/// OOXML (ZIP) 内の `.rels` が `TargetMode="External"` +
+/// ネットワーク/UNC 参照を持つか判定する。
+///
+/// 「External」リレーションで `Target="http://..."` ・
+/// `"file://\\\\..."` ・ `"\\\\host\\share"` を参照する docx/xlsx は、
+/// 開くだけで外部接続 (NTLM 認証漏洩・リモートテンプレート注入)
+/// を引き起こす (Cubajufr/CrowdStrike の分析で報告)。
+#[must_use]
+pub fn ooxml_has_external_relationship(bytes: &[u8]) -> bool {
+    if !bytes.starts_with(b"PK") {
+        return false;
+    }
+    let has_external = find_subslice(bytes, b"TargetMode=\"External\"").is_some()
+        || find_subslice(bytes, b"TargetMode='External'").is_some();
+    if !has_external {
+        return false;
+    }
+    find_subslice(bytes, b"Target=\"http").is_some()
+        || find_subslice(bytes, b"Target='http").is_some()
+        || find_subslice(bytes, b"Target=\"file:").is_some()
+        || find_subslice(bytes, b"Target='file:").is_some()
+        || find_subslice(bytes, b"Target=\"\\\\").is_some()
+        || find_subslice(bytes, b"Target='\\\\").is_some()
+}
+
+// ============================================================================
+// D218: PDF 埋め込みファイル (添付の PDF 内同梱)
+// ============================================================================
+
+/// PDF が `/EmbeddedFile` または `/Filespec` を持つか判定する。
+///
+/// PDF は添付ファイルを内部に同梱できる (ポートフォリオ/添付
+/// コレクション機能) — 外側が「安全な PDF」に見えても、内側に
+/// exe/iso 等を忍ばせられる (Mandiant の PDF 内同梱マルウェア
+/// 分析で報告)。実体走査でキーワードを検出する。
+#[must_use]
+pub fn pdf_has_embedded_file(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"%PDF")
+        && (find_subslice(bytes, b"/EmbeddedFile").is_some()
+            || find_subslice(bytes, b"/Filespec").is_some())
+}
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -604,5 +722,113 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    // ---------------------------------------------------------------
+    // D216: ZIP-slip パストラバーサル
+    // ---------------------------------------------------------------
+
+    fn zip_entry(name: &[u8]) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(b"PK\x03\x04");
+        v.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        v.extend_from_slice(&[0; 12]); // crc + csize + usize
+        let nlen = name.len() as u16;
+        v.extend_from_slice(&nlen.to_le_bytes());
+        v.extend_from_slice(&[0, 0]); // elen
+        v.extend_from_slice(name);
+        v
+    }
+
+    #[test]
+    fn zip_traversal_dotdot_detected() {
+        assert!(zip_has_traversal_entry(&zip_entry(b"../../etc/passwd")));
+        assert!(zip_has_traversal_entry(&zip_entry(b"safe/../../evil.exe")));
+        assert!(zip_has_traversal_entry(&zip_entry(b"a\\b\\..\\..\\c")));
+        assert!(zip_has_traversal_entry(&zip_entry(b"/etc/passwd")));
+        assert!(zip_has_traversal_entry(&zip_entry(b"\\\\evil\\share")));
+        assert!(zip_has_traversal_entry(&zip_entry(
+            b"C:\\Windows\\evil.dll"
+        )));
+        assert!(zip_has_traversal_entry(&zip_entry(b"dir\\..\\..\\x")));
+    }
+
+    #[test]
+    fn zip_safe_names_not_flagged() {
+        assert!(!zip_has_traversal_entry(&zip_entry(b"document.docx")));
+        assert!(!zip_has_traversal_entry(&zip_entry(b"dir/subdir/file.txt")));
+        assert!(!zip_has_traversal_entry(&zip_entry(b"..data.txt")));
+        assert!(!zip_has_traversal_entry(&zip_entry(b"a..b.txt")));
+        // 非 ZIP 入力は対象外
+        assert!(!zip_has_traversal_entry(b"not a zip at all"));
+        assert!(!zip_has_traversal_entry(b""));
+        // 通常名が複数連なっても検出しない
+        let mut two = zip_entry(b"a.txt");
+        two.extend_from_slice(&zip_entry(b"b.txt"));
+        assert!(!zip_has_traversal_entry(&two));
+    }
+
+    #[test]
+    fn zip_traversal_later_entry_detected() {
+        // 先頭が正常でも後続エントリの traversal を見逃さない
+        let mut data = zip_entry(b"safe.txt");
+        data.extend_from_slice(&zip_entry(b"../../../evil.sh"));
+        assert!(zip_has_traversal_entry(&data));
+    }
+
+    // ---------------------------------------------------------------
+    // D217: OOXML 外部リレーションシップ
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn ooxml_external_relationship_detected() {
+        let mut data = b"PK\x03\x04".to_vec();
+        data.extend_from_slice(
+            b"<Relationship TargetMode=\"External\"               Target=\"http://evil.example/t.dotm\"/>",
+        );
+        assert!(ooxml_has_external_relationship(&data));
+        let mut data2 = b"PK\x03\x04".to_vec();
+        data2.extend_from_slice(
+            b"<Relationship TargetMode='External'               Target='file:///\\\\\\\\evil\\\\share'/>",
+        );
+        assert!(ooxml_has_external_relationship(&data2));
+        let mut data3 = b"PK\x03\x04".to_vec();
+        data3.extend_from_slice(b"<Relationship TargetMode=\"External\" Target=\"\\\\evil\\s\"/>");
+        assert!(ooxml_has_external_relationship(&data3));
+    }
+
+    #[test]
+    fn ooxml_internal_relationship_safe() {
+        // External なし (内部 rels) は対象外
+        let mut data = b"PK\x03\x04".to_vec();
+        data.extend_from_slice(
+            b"<Relationship Target=\"word/document.xml\"               Type=\"http://x/relationships/officeDocument\"/>",
+        );
+        assert!(!ooxml_has_external_relationship(&data));
+        // External ありだが Target がネットワーク参照でない
+        let mut data2 = b"PK\x03\x04".to_vec();
+        data2.extend_from_slice(b"<Relationship TargetMode=\"External\" Target=\"mailto:a@b\"/>");
+        assert!(!ooxml_has_external_relationship(&data2));
+        // 非 ZIP 入力は対象外
+        assert!(!ooxml_has_external_relationship(b"plain text"));
+    }
+
+    // ---------------------------------------------------------------
+    // D218: PDF 埋め込みファイル
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn pdf_embedded_file_detected() {
+        let mut data = b"%PDF-1.5".to_vec();
+        data.extend_from_slice(b" obj <</Type /EmbeddedFile /EF <<>>>>");
+        assert!(pdf_has_embedded_file(&data));
+        let mut data2 = b"%PDF-1.7".to_vec();
+        data2.extend_from_slice(b" obj <</Type /Filespec /F (evil.exe)>>");
+        assert!(pdf_has_embedded_file(&data2));
+        // 通常 PDF (埋め込みなし) は対象外
+        assert!(!pdf_has_embedded_file(b"%PDF-1.5 plain document xref"));
+        // 非 PDF 入力は対象外
+        assert!(!pdf_has_embedded_file(b"not pdf /EmbeddedFile"));
+        assert!(!pdf_has_embedded_file(b""));
     }
 }
