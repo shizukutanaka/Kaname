@@ -141,6 +141,19 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Geo-*`/`X-Country-*`/`X-IP-Country:`/`X-Location-*`
+    /// 等の地理・国印があるか — 接続地理の記録を送信側が自称する
+    /// 兆候 (D396)。
+    pub geo_marks: bool,
+    /// `X-Identity-*`/`X-Message-Ref:`/`X-Parent-Message-ID:`/
+    /// `X-Resent-Message-ID:`/`X-Identifier:`/`X-ID:` 等の
+    /// 識別子印があるか — 輸送機が記す識別子を送信側が自称する
+    /// 兆候 (D397)。
+    pub ident_marks: bool,
+    /// `X-Redirected-*`/`X-Redir-*`/`X-Via-*`/`X-Redirect-By:`
+    /// 等のリダイレクト・経由印があるか — 経路の記録を送信側が
+    /// 自称する兆候 (D398)。
+    pub redir_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +431,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        geo_marks: has_geo_marks(raw),
+        ident_marks: has_ident_marks(raw),
+        redir_marks: has_redir_marks(raw),
     })
 }
 
@@ -624,6 +640,69 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Geo-*`/`X-Country-*`/`X-IP-Country:`/`X-Location-*`/
+/// `X-GeoIP-*`/`X-Region-*` 等の地理・国印があるか判定する (D396)。
+///
+/// 「どこから接続したか」の地理記録は受信 MTA が残す — 送信側から
+/// 届くこれは「この地から送った」体裁を内容側が主張する自称。
+fn has_geo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-geo-")
+            || l.starts_with("x-geoip-")
+            || l.starts_with("x-country-")
+            || l.starts_with("x-ip-country:")
+            || l.starts_with("x-location-")
+            || l.starts_with("x-region-")
+    })
+}
+
+/// `X-Identity-*`/`X-Message-Ref:`/`X-Parent-Message-ID:`/
+/// `X-Resent-Message-ID:`/`X-Identifier:`/`X-ID:`/`X-UID:` 等の
+/// 識別子印があるか判定する (D397)。
+///
+/// メッセージ識別は Message-ID: が送信側のもの — X- 系の識別値は
+/// 輸送機・保管機が残す。送信側から届くこれは「識別子まで記録済み」
+/// 体裁を内容側が主張する自称。
+fn has_ident_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-identity-")
+            || l.starts_with("x-message-ref:")
+            || l.starts_with("x-parent-message-id:")
+            || l.starts_with("x-resent-message-id:")
+            || l.starts_with("x-identifier:")
+            || l.starts_with("x-id:")
+    })
+}
+
+/// `X-Redirected-*`/`X-Redir-*`/`X-Via-*`/`X-Redirect-By:`/
+/// `X-Redirection-*`/`X-Rerouted-*` 等のリダイレクト・経由印があるか
+/// 判定する (D398)。
+///
+/// 経路変更の記録は経由機が残す — 送信側から届くこれは
+/// 「この経路を通った」体裁を内容側が主張する自称。
+fn has_redir_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-redirected-")
+            || l.starts_with("x-redir-")
+            || l.starts_with("x-via-")
+            || l.starts_with("x-redirect-by:")
+            || l.starts_with("x-redirection-")
+            || l.starts_with("x-rerouted-")
     })
 }
 
@@ -2952,6 +3031,54 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_は地理印を検出する() {
+        let ge = b"X-Geo-Country: JP\r\n\r\nx";
+        assert!(has_geo_marks(ge));
+        let gi = b"X-GeoIP-Region: r\r\n\r\nx";
+        assert!(has_geo_marks(gi));
+        let co = b"X-Country-Code: US\r\n\r\nx";
+        assert!(has_geo_marks(co));
+        let ic = b"X-IP-Country: JP\r\n\r\nx";
+        assert!(has_geo_marks(ic));
+        let lo = b"X-Location-Country: l\r\n\r\nx";
+        assert!(has_geo_marks(lo));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_geo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は識別子印を検出する() {
+        let id = b"X-Identity-Key: k\r\n\r\nx";
+        assert!(has_ident_marks(id));
+        let mr = b"X-Message-Ref: r\r\n\r\nx";
+        assert!(has_ident_marks(mr));
+        let pm = b"X-Parent-Message-ID: p\r\n\r\nx";
+        assert!(has_ident_marks(pm));
+        let rm = b"X-Resent-Message-ID: r\r\n\r\nx";
+        assert!(has_ident_marks(rm));
+        let i2 = b"X-Identifier: i\r\n\r\nx";
+        assert!(has_ident_marks(i2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ident_marks(clean));
+    }
+
+    #[test]
+    fn scan_はリダイレクト印を検出する() {
+        let rd = b"X-Redirected-To: t\r\n\r\nx";
+        assert!(has_redir_marks(rd));
+        let r2 = b"X-Redir-Address: a\r\n\r\nx";
+        assert!(has_redir_marks(r2));
+        let vi = b"X-Via-Host: h\r\n\r\nx";
+        assert!(has_redir_marks(vi));
+        let rb = b"X-Redirect-By: b\r\n\r\nx";
+        assert!(has_redir_marks(rb));
+        let rr = b"X-Rerouted-By: r\r\n\r\nx";
+        assert!(has_redir_marks(rr));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_redir_marks(clean));
     }
 }
 

@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D396: 地理・国印自称
+    if env.geo_marks {
+        render_risks.push(
+            "X-Geo-*/X-Country-*/X-IP-Country 等 — 接続地理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D397: 識別子印自称
+    if env.ident_marks {
+        render_risks.push(
+            "X-Identity-*/X-Message-Ref/X-Parent-Message-ID 等 — 輸送機が記す識別子を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D398: リダイレクト・経由印自称
+    if env.redir_marks {
+        render_risks.push(
+            "X-Redirected-*/X-Redir-*/X-Via-* 等 — 経路変更の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

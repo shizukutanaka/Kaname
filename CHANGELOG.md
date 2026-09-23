@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D396: `X-Geo-*`/`X-GeoIP-*`/`X-Country-*`/`X-IP-Country:`/`X-Location-*`/`X-Region-*` 等の地理・国印自称が未検査
+
+- 「どこから接続したか」の地理記録は受信 MTA が残す — 送信側から届くのは「この地から送った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_geo_marks` 新設 → `Envelope.geo_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D397: `X-Identity-*`/`X-Message-Ref:`/`X-Parent-Message-ID:`/`X-Resent-Message-ID:`/`X-Identifier:`/`X-ID:` 等の識別子印自称が未検査
+
+- メッセージ識別は Message-ID: が送信側のもの — X- 系の識別値は輸送機・保管機が残す。送信側から届くのは「識別子まで記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_ident_marks` 新設 → `Envelope.ident_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D398: `X-Redirected-*`/`X-Redir-*`/`X-Via-*`/`X-Redirect-By:`/`X-Redirection-*`/`X-Rerouted-*` 等のリダイレクト・経由印自称が未検査
+
+- 経路変更の記録は経由機が残す — 送信側から届くのは「この経路を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_redir_marks` 新設 → `Envelope.redir_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった
