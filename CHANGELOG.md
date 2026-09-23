@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D160: HTML のみメールの本文解析欠落を修正し hidden text salting を遮断
+
+- `analyze_raw_email`/`mail_scan_folder` は解析対象を `Envelope::text_body` (text/plain パート) のみから取っていたため、**text/html のみのメールでは解析入力が空文字列になり**、BEC キーワード・Cialdini・金銭要求・DLP・OOBV・リンク評価・文体認証の全てが一切検査を通らなかった — HTML 単体メールは BEC/フィッシングで一般的であり、multipart/alternative で text/plain に無害デコイ・text/html に攻撃文を置く「パート不一致」回避も同じ穴を使っていた
+- 対処: `kaname_render::html_to_text` を新設 — タグスープ走査で script/style/head 等を捨て、`display:none`・`visibility:hidden`・`font-size:0`・`opacity:0`・`mso-hide:all`・`color:transparent`・負 `text-indent`・`hidden` 属性の要素をサブツリーごと落とし、実体参照 (10進/16進数値参照の難読化含む) を復号した「ユーザーが実際に見るテキスト」を復元。`<a href>` の宛先は末尾に付加しリンク検査へ供給。解析対象を text/plain + HTML 抽出文の併合に変更 (双方があれば両方ヒット)
+- hidden text salting (Cisco Talos「Too salty to handle」2025-10、2024-03〜2025-07 観測): 非表示塩 `wi<span style="display:none">QXJZ</span>re` で `wire` を分断する回避を、非表示サブツリーごと捨てることで `wire` を復元。32 字以上の非表示テキストを落とした場合は `hidden_content` を立て `render_risks` に兆候を報告
+- `RawHtml::as_str` を追加 (解析用アクセサ — 表示経路は従来通り `sanitize_html` のみ)
+
 ### Removed — D157: kaname-pivot の呼出元ゼロだった信頼スコア層を削除
 
 - `PivotHistory`・`trust_score`・`trust_score_with_bec_context` は設計上「既知チャネル加点 + BEC 複合減点」の評価層だったが外部呼出元が皆無 — 実利用は `analyze`/`is_high_risk`/`channel_name` のみ。dead 層ごと削除
