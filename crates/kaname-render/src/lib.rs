@@ -1623,6 +1623,56 @@ pub struct Envelope {
     /// 自称する兆候 (D577)。(`X-Nike-*`/`X-Adidas-*` 等スポーツ用品機は
     /// D529、`X-Toyota-*`/`X-Honda-*` 等は D521 で検出済み)
     pub bicycle_marks: bool,
+    /// `X-Takarakuji-*`/`X-Loto6-*`/`X-Loto7-*`/`X-MiniLoto-*`/
+    /// `X-Numbers-*`/`X-Bingo5-*`/`X-TakarakujiScratch-*`/
+    /// `X-Powerball-*`/`X-MegaMillions-*`/`X-EuroMillions-*`/
+    /// `X-Lotto6Aus49-*`/`X-OzLotto-*`/`X-LottoMax-*`/
+    /// `X-SuperEnalotto-*`/`X-ElGordo-*`/`X-DreamJumbo-*`/
+    /// `X-NenmatsuJumbo-*`/`X-SummerJumbo-*`/`X-HalloweenJumbo-*`/
+    /// `X-ValentineJumbo-*`/`X-GreenJumbo-*`/`X-Big-*`/
+    /// `X-MiniBig-*`/`X-TotoGoal-*`/`X-Winner-*`/`X-Lottery-*`/
+    /// `X-Kuji-*`/`X-KujiHonpo-*`/`X-RakutenToto-*`/`X-ClubToto-*`/
+    /// `X-TotoVote-*`/`X-MiniToto-*`/`X-Goal3-*`/`X-Sportec-*`/
+    /// `X-Dres-*`/`X-Ishigaki-*`/`X-HyperFlash-*`/`X-LuckyLines-*`/
+    /// `X-LotteryOffice-*`/`X-StateLottery-*`/`X-Camelot-*`/
+    /// `X-Loterias-*`/`X-Sorteos-*`/`X-MyLotto-*`/`X-Intralot-*` 等の
+    /// 宝くじ・ロト・懸賞当選印があるか — 宝機の通知記録を送信側が
+    /// 自称する兆候 (D578)。(`X-Bet365-*`/`X-VeraJohn-*` 等の賭博機は
+    /// D547、`X-toto-*` は D547 で検出済み)
+    pub lottery_marks: bool,
+    /// `X-Sekisui-*`/`X-SekisuiHouse-*`/`X-DaiwaHouse-*`/
+    /// `X-SumitomoRingyo-*`/`X-Misawa-*`/`X-Hebel-*`/`X-Ichijo-*`/
+    /// `X-SekisuiHeim-*`/`X-Tamahome-*`/`X-AifulHome-*`/
+    /// `X-Cleverly-*`/`X-ToyotaHome-*`/`X-Lixil-*`/`X-YKKAP-*`/
+    /// `X-SankyoAlumi-*`/`X-NikkaHome-*`/`X-HomePro-*`/`X-RishoNavi-*`/
+    /// `X-PanasonicHomes-*`/`X-MitsuiHome-*`/`X-SwedenHouse-*`/
+    /// `X-HomeAgent-*`/`X-MisawaHome-*`/`X-Toso-*`/`X-Cleanup-*`/
+    /// `X-TakaraStandard-*`/`X-WoodOne-*`/`X-Daiken-*`/
+    /// `X-MaezawaKasei-*`/`X-KyoceraHomes-*`/`X-AqaHome-*`/
+    /// `X-Aqura-*`/`X-HikariHome-*`/`X-Arukotto-*`/`X-ALTS-*`/
+    /// `X-AokiHome-*`/`X-Bess-*`/`X-MujiHome-*`/`X-Freesia-*`/
+    /// `X-Aibro-*`/`X-HigashiConstruction-*`/`X-WatanabeKobo-*`/
+    /// `X-Shinkenchiku-*`/`X-SxL-*`/`X-Yamatoya-*` 等の
+    /// 住宅メーカー・リフォーム印があるか — 宅機の通知記録を送信側が
+    /// 自称する兆候 (D579)。(`X-Toyota-*`/`X-Panasonic-*` 等の
+    /// メーカー本体は既存族で検出済み)
+    pub housing_marks: bool,
+    /// `X-IiSougi-*`/`X-KamakuraShinsho-*`/`X-SagamiSourei-*`/
+    /// `X-Ceremore-*`/`X-Tear-*`/`X-Koeisha-*`/`X-AeonSousai-*`/
+    /// `X-Kokoro-*`/`X-Hanasou-*`/`X-YasashiiOsoushiki-*`/
+    /// `X-Terakura-*`/`X-EndingPark-*`/`X-HinataOsoushiki-*`/
+    /// `X-Souzoku-*`/`X-MemorialArt-*`/`X-OsoushikiReview-*`/
+    /// `X-Eirii-*`/`X-LifeEnder-*`/`X-Rakushu-*`/`X-Owakare-*`/
+    /// `X-Ens-*`/`X-Sousaiya-*`/`X-Tensou-*`/`X-Matsuya-*`/
+    /// `X-Heian-*`/`X-Koushaisha-*`/`X-HeianPalace-*`/`X-WorldRe-*`/
+    /// `X-Dainippon-*`/`X-Tokiwa-*`/`X-TokiwaSougi-*`/`X-EcoSougi-*`/
+    /// `X-YoshinoSoushiki-*`/`X-Hisago-*`/`X-Boko-*`/`X-FamilyCera-*`/
+    /// `X-MainHall-*`/`X-Mitou-*`/`X-Comet-*`/`X-Stella-*`/
+    /// `X-Sora-*`/`X-Oyasumi-*`/`X-Chocho-*`/`X-KazokuSo-*`/
+    /// `X-Nouveau-*`/`X-Graceful-*`/`X-Royal-*`/`X-Farewell-*` 等の
+    /// 葬儀・終活印があるか — 葬機の通知記録を送信側が自称する
+    /// 兆候 (D580)。
+    pub funeral_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2078,6 +2128,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         telehealth_marks: has_telehealth_marks(hdr),
         reuse_marks: has_reuse_marks(hdr),
         bicycle_marks: has_bicycle_marks(hdr),
+        lottery_marks: has_lottery_marks(hdr),
+        housing_marks: has_housing_marks(hdr),
+        funeral_marks: has_funeral_marks(hdr),
     })
 }
 
@@ -10033,6 +10086,212 @@ fn has_bicycle_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Takarakuji-*`/`X-Loto6-*`/`X-Loto7-*`/`X-MiniLoto-*`/
+/// `X-Numbers-*`/`X-Bingo5-*`/`X-Powerball-*`/`X-MegaMillions-*`/
+/// `X-EuroMillions-*`/`X-Lotto6Aus49-*`/`X-OzLotto-*`/`X-LottoMax-*`/
+/// `X-SuperEnalotto-*`/`X-ElGordo-*`/`X-DreamJumbo-*`/
+/// `X-NenmatsuJumbo-*`/`X-SummerJumbo-*`/`X-HalloweenJumbo-*`/
+/// `X-ValentineJumbo-*`/`X-GreenJumbo-*`/`X-Big-*`/`X-MiniBig-*`/
+/// `X-TotoGoal-*`/`X-Winner-*`/`X-Lottery-*`/`X-Kuji-*`/
+/// `X-RakutenToto-*`/`X-ClubToto-*`/`X-TotoVote-*`/`X-MiniToto-*`/
+/// `X-Sportec-*`/`X-StateLottery-*`/`X-Camelot-*`/`X-Loterias-*`/
+/// `X-Sorteos-*`/`X-MyLotto-*`/`X-Intralot-*` 等の宝くじ・ロト・
+/// 懸賞当選印があるか判定する (D578)。
+///
+/// `X-Takarakuji-*` (宝くじ)、`X-Loto6-*` (ロト 6)、`X-Powerball-*`
+/// (Powerball) は宝機の通知記録 — 送信側から届くこれは自称。
+/// 高額当選・手数料前払いの偽装は宝くじ詐欺の典型。
+fn has_lottery_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-takarakuji-")
+            || l.starts_with("x-loto6-")
+            || l.starts_with("x-loto7-")
+            || l.starts_with("x-miniloto-")
+            || l.starts_with("x-numbers-")
+            || l.starts_with("x-bingo5-")
+            || l.starts_with("x-takarakujiscratch-")
+            || l.starts_with("x-powerball-")
+            || l.starts_with("x-megamillions-")
+            || l.starts_with("x-euromillions-")
+            || l.starts_with("x-lotto6aus49-")
+            || l.starts_with("x-ozlotto-")
+            || l.starts_with("x-lottomax-")
+            || l.starts_with("x-superenalotto-")
+            || l.starts_with("x-elgordo-")
+            || l.starts_with("x-dreamjumbo-")
+            || l.starts_with("x-nenmatsujumbo-")
+            || l.starts_with("x-summerjumbo-")
+            || l.starts_with("x-halloweenjumbo-")
+            || l.starts_with("x-valentinejumbo-")
+            || l.starts_with("x-greenjumbo-")
+            || l.starts_with("x-big-")
+            || l.starts_with("x-minibig-")
+            || l.starts_with("x-totogoal-")
+            || l.starts_with("x-winner-")
+            || l.starts_with("x-lottery-")
+            || l.starts_with("x-kuji-")
+            || l.starts_with("x-kujihonpo-")
+            || l.starts_with("x-rakutentoto-")
+            || l.starts_with("x-clubtoto-")
+            || l.starts_with("x-totovote-")
+            || l.starts_with("x-minitoto-")
+            || l.starts_with("x-goal3-")
+            || l.starts_with("x-sportec-")
+            || l.starts_with("x-lotteryoffice-")
+            || l.starts_with("x-statelottery-")
+            || l.starts_with("x-camelot-")
+            || l.starts_with("x-loterias-")
+            || l.starts_with("x-sorteos-")
+            || l.starts_with("x-mylotto-")
+            || l.starts_with("x-intralot-")
+    })
+}
+
+/// `X-SekisuiHouse-*`/`X-DaiwaHouse-*`/`X-SumitomoRingyo-*`/
+/// `X-Misawa-*`/`X-Hebel-*`/`X-Ichijo-*`/`X-SekisuiHeim-*`/
+/// `X-Tamahome-*`/`X-AifulHome-*`/`X-Cleverly-*`/`X-ToyotaHome-*`/
+/// `X-Lixil-*`/`X-YKKAP-*`/`X-SankyoAlumi-*`/`X-NikkaHome-*`/
+/// `X-HomePro-*`/`X-RishoNavi-*`/`X-PanasonicHomes-*`/`X-MitsuiHome-*`/
+/// `X-SwedenHouse-*`/`X-MisawaHome-*`/`X-Toso-*`/`X-Cleanup-*`/
+/// `X-TakaraStandard-*`/`X-WoodOne-*`/`X-Daiken-*`/`X-MaezawaKasei-*`/
+/// `X-Aqura-*`/`X-HikariHome-*`/`X-Arukotto-*`/`X-ALTS-*`/
+/// `X-AokiHome-*`/`X-Bess-*`/`X-MujiHome-*`/`X-SxL-*` 等の
+/// 住宅メーカー・リフォーム印があるか判定する (D579)。
+///
+/// `X-DaiwaHouse-*` (大和ハウス)、`X-Lixil-*` (LIXIL)、
+/// `X-HomePro-*` (ホームプロ) は宅機の通知記録 — 送信側から
+/// 届くこれは自称。無料点検・リフォーム見積・耐震診断の偽装は
+/// 点検商法・リフォーム詐欺の典型。
+fn has_housing_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sekisui-")
+            || l.starts_with("x-sekisuihouse-")
+            || l.starts_with("x-daiwahouse-")
+            || l.starts_with("x-sumitomoringyo-")
+            || l.starts_with("x-misawa-")
+            || l.starts_with("x-hebel-")
+            || l.starts_with("x-ichijo-")
+            || l.starts_with("x-sekisuiheim-")
+            || l.starts_with("x-tamahome-")
+            || l.starts_with("x-aifulhome-")
+            || l.starts_with("x-cleverly-")
+            || l.starts_with("x-toyotahome-")
+            || l.starts_with("x-lixil-")
+            || l.starts_with("x-ykkap-")
+            || l.starts_with("x-sankyoalumi-")
+            || l.starts_with("x-nikkahome-")
+            || l.starts_with("x-homepro-")
+            || l.starts_with("x-rishonavi-")
+            || l.starts_with("x-panasonichomes-")
+            || l.starts_with("x-mitsuihome-")
+            || l.starts_with("x-swedenhouse-")
+            || l.starts_with("x-homeagent-")
+            || l.starts_with("x-misawahome-")
+            || l.starts_with("x-toso-")
+            || l.starts_with("x-cleanup-")
+            || l.starts_with("x-takarastandard-")
+            || l.starts_with("x-woodone-")
+            || l.starts_with("x-daiken-")
+            || l.starts_with("x-maezawakasei-")
+            || l.starts_with("x-kyocerahomes-")
+            || l.starts_with("x-aqahome-")
+            || l.starts_with("x-aqura-")
+            || l.starts_with("x-hikarihome-")
+            || l.starts_with("x-arukotto-")
+            || l.starts_with("x-alts-")
+            || l.starts_with("x-aokihome-")
+            || l.starts_with("x-bess-")
+            || l.starts_with("x-mujihome-")
+            || l.starts_with("x-freesia-")
+            || l.starts_with("x-aibro-")
+            || l.starts_with("x-higashiconstruction-")
+            || l.starts_with("x-watanabekobo-")
+            || l.starts_with("x-shinkenchiku-")
+            || l.starts_with("x-sxl-")
+            || l.starts_with("x-yamatoya-")
+    })
+}
+
+/// `X-IiSougi-*`/`X-KamakuraShinsho-*`/`X-SagamiSourei-*`/
+/// `X-Ceremore-*`/`X-Tear-*`/`X-Koeisha-*`/`X-AeonSousai-*`/
+/// `X-Kokoro-*`/`X-Hanasou-*`/`X-YasashiiOsoushiki-*`/`X-Terakura-*`/
+/// `X-EndingPark-*`/`X-HinataOsoushiki-*`/`X-Souzoku-*`/
+/// `X-MemorialArt-*`/`X-OsoushikiReview-*`/`X-Eirii-*`/
+/// `X-LifeEnder-*`/`X-Rakushu-*`/`X-Owakare-*`/`X-Ens-*`/
+/// `X-Sousaiya-*`/`X-Tensou-*`/`X-Matsuya-*`/`X-Heian-*`/
+/// `X-TokiwaSougi-*`/`X-EcoSougi-*`/`X-FamilyCera-*`/`X-KazokuSo-*`/
+/// `X-Nouveau-*`/`X-Graceful-*`/`X-Farewell-*` 等の葬儀・終活印が
+/// あるか判定する (D580)。
+///
+/// `X-IiSougi-*` (いい葬儀)、`X-KamakuraShinsho-*` (鎌倉新書)、
+/// `X-Tear-*` (株式会社ティア) は葬機の通知記録 — 送信側から
+/// 届くこれは自称。葬儀費用前払い・墓石仏壇高額勧誘・香典返しの
+/// 偽装は葬儀詐欺の典型。
+fn has_funeral_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-iisougi-")
+            || l.starts_with("x-kamakurashinsho-")
+            || l.starts_with("x-sagamisourei-")
+            || l.starts_with("x-ceremore-")
+            || l.starts_with("x-tear-")
+            || l.starts_with("x-koeisha-")
+            || l.starts_with("x-aeonsousai-")
+            || l.starts_with("x-kokoro-")
+            || l.starts_with("x-hanasou-")
+            || l.starts_with("x-yasashiiosoushiki-")
+            || l.starts_with("x-terakura-")
+            || l.starts_with("x-endingpark-")
+            || l.starts_with("x-hinataosoushiki-")
+            || l.starts_with("x-souzoku-")
+            || l.starts_with("x-memorialart-")
+            || l.starts_with("x-osoushikireview-")
+            || l.starts_with("x-eirii-")
+            || l.starts_with("x-lifeender-")
+            || l.starts_with("x-rakushu-")
+            || l.starts_with("x-owakare-")
+            || l.starts_with("x-ens-")
+            || l.starts_with("x-sousaiya-")
+            || l.starts_with("x-tensou-")
+            || l.starts_with("x-matsuya-")
+            || l.starts_with("x-heian-")
+            || l.starts_with("x-koushaisha-")
+            || l.starts_with("x-heianpalace-")
+            || l.starts_with("x-worldre-")
+            || l.starts_with("x-dainippon-")
+            || l.starts_with("x-tokiwa-")
+            || l.starts_with("x-tokiwasougi-")
+            || l.starts_with("x-ecosougi-")
+            || l.starts_with("x-yoshinosoushiki-")
+            || l.starts_with("x-hisago-")
+            || l.starts_with("x-boko-")
+            || l.starts_with("x-familycera-")
+            || l.starts_with("x-mainhall-")
+            || l.starts_with("x-mitou-")
+            || l.starts_with("x-comet-")
+            || l.starts_with("x-stella-")
+            || l.starts_with("x-sora-")
+            || l.starts_with("x-oyasumi-")
+            || l.starts_with("x-chocho-")
+            || l.starts_with("x-kazokuso-")
+            || l.starts_with("x-nouveau-")
+            || l.starts_with("x-graceful-")
+            || l.starts_with("x-royal-")
+            || l.starts_with("x-farewell-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -16265,4 +16524,152 @@ X-Other: 1
 
 body";
     assert!(!has_bicycle_marks(clean));
+}
+
+
+#[test]
+fn scan_は宝機印を検出する() {
+    let t1 = b"From: a@b
+X-Takarakuji-Id: 1
+
+x";
+    let l1 = b"From: a@b
+X-Loto6-Trace: 1
+
+x";
+    let l2 = b"From: a@b
+X-Loto7-Ref: 1
+
+x";
+    let p1 = b"From: a@b
+X-Powerball-Draw: 1
+
+x";
+    let e1 = b"From: a@b
+X-EuroMillions-Win: 1
+
+x";
+    let m1 = b"From: a@b
+X-MegaMillions-Id: 1
+
+x";
+    let j1 = b"From: a@b
+X-DreamJumbo-Entry: 1
+
+x";
+    let c1 = b"From: a@b
+X-Camelot-Result: 1
+
+x";
+    assert!(has_lottery_marks(t1));
+    assert!(has_lottery_marks(l1));
+    assert!(has_lottery_marks(l2));
+    assert!(has_lottery_marks(p1));
+    assert!(has_lottery_marks(e1));
+    assert!(has_lottery_marks(m1));
+    assert!(has_lottery_marks(j1));
+    assert!(has_lottery_marks(c1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_lottery_marks(clean));
+}
+
+#[test]
+fn scan_は宅機印を検出する() {
+    let s1 = b"From: a@b
+X-SekisuiHouse-Id: 1
+
+x";
+    let d1 = b"From: a@b
+X-DaiwaHouse-Trace: 1
+
+x";
+    let l1 = b"From: a@b
+X-Lixil-Ref: 1
+
+x";
+    let m1 = b"From: a@b
+X-Misawa-Order: 1
+
+x";
+    let h1 = b"From: a@b
+X-HomePro-Estimate: 1
+
+x";
+    let t1 = b"From: a@b
+X-Tamahome-Id: 1
+
+x";
+    let y1 = b"From: a@b
+X-YKKAP-Quote: 1
+
+x";
+    let c1 = b"From: a@b
+X-Cleanup-Plan: 1
+
+x";
+    assert!(has_housing_marks(s1));
+    assert!(has_housing_marks(d1));
+    assert!(has_housing_marks(l1));
+    assert!(has_housing_marks(m1));
+    assert!(has_housing_marks(h1));
+    assert!(has_housing_marks(t1));
+    assert!(has_housing_marks(y1));
+    assert!(has_housing_marks(c1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_housing_marks(clean));
+}
+
+#[test]
+fn scan_は葬機印を検出する() {
+    let i1 = b"From: a@b
+X-IiSougi-Id: 1
+
+x";
+    let k1 = b"From: a@b
+X-KamakuraShinsho-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SagamiSourei-Ref: 1
+
+x";
+    let t1 = b"From: a@b
+X-Tear-Memorial: 1
+
+x";
+    let a1 = b"From: a@b
+X-AeonSousai-Id: 1
+
+x";
+    let e1 = b"From: a@b
+X-EndingPark-Plan: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hanasou-Arrange: 1
+
+x";
+    let f1 = b"From: a@b
+X-Farewell-Service: 1
+
+x";
+    assert!(has_funeral_marks(i1));
+    assert!(has_funeral_marks(k1));
+    assert!(has_funeral_marks(s1));
+    assert!(has_funeral_marks(t1));
+    assert!(has_funeral_marks(a1));
+    assert!(has_funeral_marks(e1));
+    assert!(has_funeral_marks(h1));
+    assert!(has_funeral_marks(f1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_funeral_marks(clean));
 }
