@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-ArtHikkoshi-*`/`X-SakaiHikkoshi-*`/`X-Nittsu-*`/`X-U-Haul-*`/`X-AlliedVanLines-*`/`X-Mayflower-*` 等の引越・宅配運送通知記録印を送信側が自称している (D620)
+    pub moving_marks: bool,
+    /// `X-Dentrix-*`/`X-OpenDental-*`/`X-Invisalign-*`/`X-Straumann-*`/`X-NexHealth-*`/`X-OralB-*` 等の歯科・クリニック通知記録印を送信側が自称している (D621)
+    pub dental_marks: bool,
+    /// `X-MoMA-*`/`X-Louvre-*`/`X-Prado-*`/`X-BritishMuseum-*`/`X-Smithsonian-*`/`X-Miraikan-*`/`X-TeamLab-*`/`X-MoriArt-*` 等の美術館・博物館・文化施設通知記録印を送信側が自称している (D622)
+    pub museum_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        moving_marks: has_moving_marks(hdr),
+        dental_marks: has_dental_marks(hdr),
+        museum_marks: has_museum_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,302 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+
+/// `X-ArtHikkoshi-*` (アート引越センター)、`X-SakaiHikkoshi-*` (サカイ引越センター)、`X-Nittsu-*`/`X-NipponExpress-*` (日本通運)、`X-ArisanHikkoshi-*` (アリさんマーク)、`X-Akabo-*`/`X-HeartHikkoshi-*`/`X-Hikkoshi-Samurai-*`/`X-Zubatto-*`/`X-Cshikkoshi-*`/`X-DuckHikkoshi-*`/`X-Shimai-*`/`X-Hikkoshi-Hikyaku-*`/`X-Chujitsuso-*`/`X-MajiHikkoshi-*`/`X-FamilyHikkoshi-*`/`X-MovingWeb-*`/`X-Hikkoshi-Navi-*`/`X-U-Haul-*`/`X-TwoMen-*`/`X-AlliedVanLines-*`/`X-Mayflower-*`/`X-UnitedVanLines-*`/`X-AtlasVanLines-*`/`X-Bekins-*`/`X-NAVL-*`/`X-WheatonVL-*`/`X-ArmstrongRelo-*`/`X-Corrigan-*`/`X-IndependentMovers-*`/`X-Graebel-*`/`X-Sirva-*`/`X-Cartus-*`/`X-CrownRelo-*`/`X-SantaFeRelo-*`/`X-Sirelo-*`/`X-IntlVanLines-*`/`X-AmericanVanLines-*`/`X-Pods-*`/`X-ZippyShell-*`/`X-PackRat-*`/`X-GoMinis-*`/`X-SmartBox-*`/`X-UNITS-*`/`X-FlatRate-*`/`X-GentleGiant-*`/`X-Bellhop-*`/`X-CollegeHunks-*`/`X-DormRoom-*`/`X-MeatheadMovers-*`/`X-HunkMovers-*`/`X-WildcatMovers-*`/`X-JDMoving-*`/`X-ProMover-*`/`X-FIDI-*`/`X-IAMovers-*`/`X-OmniMoving-*`/`X-MoveHub-*`/`X-MoveOne-*`/`X-ReloSmart-*`/`X-AsianTigers-*`/`X-SantaFe-*`/`X-WriterRelocations-*`/`X-AgarwalMovers-*`/`X-NipponHikkoshi-*`/`X-Sannomiya-*`/`X-BestHikkoshi-*`/`X-SmartMoving-*`/`X-YamatoHomeConv-*`/`X-Konoike-*` 等 は引機の通知記録 — 送信側が書くことは自称。
+/// (宅配・貨物輸送は shipping 機、トランクルームは storage 機、U-Haul 本体は facility 機で検出済み)
+fn has_moving_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-arthikkoshi-")
+            || l.starts_with("x-art-hikkoshi-")
+            || l.starts_with("x-sakaihikkoshi-")
+            || l.starts_with("x-sakai-hikkoshi-")
+            || l.starts_with("x-arisanhikkoshi-")
+            || l.starts_with("x-arisan-")
+            || l.starts_with("x-nittsu-")
+            || l.starts_with("x-nipponexpress-")
+            || l.starts_with("x-nippon-express-")
+            || l.starts_with("x-akabo-")
+            || l.starts_with("x-akabou-")
+            || l.starts_with("x-hearthikkoshi-")
+            || l.starts_with("x-heart-hikkoshi-")
+            || l.starts_with("x-hikkoshi-samurai-")
+            || l.starts_with("x-hikkoshisamurai-")
+            || l.starts_with("x-zubatto-")
+            || l.starts_with("x-cshikkoshi-")
+            || l.starts_with("x-duckhikkoshi-")
+            || l.starts_with("x-shimai-")
+            || l.starts_with("x-hikkoshi-hikyaku-")
+            || l.starts_with("x-hikkoshihikyaku-")
+            || l.starts_with("x-chujitsuso-")
+            || l.starts_with("x-majihikkoshi-")
+            || l.starts_with("x-familyhikkoshi-")
+            || l.starts_with("x-movingweb-")
+            || l.starts_with("x-hikkoshi-navi-")
+            || l.starts_with("x-hikkoshinavi-")
+            || l.starts_with("x-u-haul-")
+            || l.starts_with("x-twomen-")
+            || l.starts_with("x-two-men-")
+            || l.starts_with("x-alliedvanlines-")
+            || l.starts_with("x-mayflower-")
+            || l.starts_with("x-unitedvanlines-")
+            || l.starts_with("x-atlasvanlines-")
+            || l.starts_with("x-bekins-")
+            || l.starts_with("x-navl-")
+            || l.starts_with("x-wheatonvl-")
+            || l.starts_with("x-armstrongrelo-")
+            || l.starts_with("x-corrigan-")
+            || l.starts_with("x-independentmovers-")
+            || l.starts_with("x-graebel-")
+            || l.starts_with("x-sirva-")
+            || l.starts_with("x-cartus-")
+            || l.starts_with("x-crownrelo-")
+            || l.starts_with("x-santaferelo-")
+            || l.starts_with("x-sirelo-")
+            || l.starts_with("x-intlvanlines-")
+            || l.starts_with("x-americanvanlines-")
+            || l.starts_with("x-pods-")
+            || l.starts_with("x-zippyshell-")
+            || l.starts_with("x-packrat-")
+            || l.starts_with("x-gominis-")
+            || l.starts_with("x-smartbox-")
+            || l.starts_with("x-units-")
+            || l.starts_with("x-flatrate-")
+            || l.starts_with("x-gentlegiant-")
+            || l.starts_with("x-bellhop-")
+            || l.starts_with("x-collegehunks-")
+            || l.starts_with("x-dormroom-")
+            || l.starts_with("x-meatheadmovers-")
+            || l.starts_with("x-hunkmovers-")
+            || l.starts_with("x-wildcatmovers-")
+            || l.starts_with("x-jdmoving-")
+            || l.starts_with("x-promover-")
+            || l.starts_with("x-fidi-")
+            || l.starts_with("x-iamovers-")
+            || l.starts_with("x-omnimoving-")
+            || l.starts_with("x-movehub-")
+            || l.starts_with("x-moveone-")
+            || l.starts_with("x-relosmart-")
+            || l.starts_with("x-asiantigers-")
+            || l.starts_with("x-santafe-")
+            || l.starts_with("x-writerrelocations-")
+            || l.starts_with("x-agarwalmovers-")
+            || l.starts_with("x-nipponhikkoshi-")
+            || l.starts_with("x-sannomiya-")
+            || l.starts_with("x-besthikkoshi-")
+            || l.starts_with("x-smartmoving-")
+            || l.starts_with("x-yamatohomeconv-")
+            || l.starts_with("x-konoike-")
+    })
+}
+
+/// `X-Dentrix-*`/`X-OpenDental-*`/`X-Eaglesoft-*`/`X-CurveDental-*`/`X-PlanetDDS-*`/`X-Denticon-*`/`X-Adstra-*`/`X-CareStack-*`/`X-Tab32-*`/`X-NexHealth-*`/`X-LocalMed-*`/`X-Solutionreach-*`/`X-RevenueWell-*`/`X-Lighthouse360-*`/`X-DentalIntel-*`/`X-Tebra-*`/`X-RecallMax-*`/`X-WeaveHQ-*`/`X-Legwork-*`/`X-FlexDental-*`/`X-Yapi-*`/`X-DentalWriter-*`/`X-DentalTap-*`/`X-AeronaDental-*`/`X-Dental4Windows-*`/`X-CorePractice-*`/`X-SFDental-*`/`X-PlanetHS-*`/`X-HenrySchein-*`/`X-PattersonDental-*`/`X-BencoDental-*`/`X-BurkhartDental-*`/`X-Straumann-*`/`X-NobelBiocare-*`/`X-Dentsply-*`/`X-DentsplySirona-*`/`X-Invisalign-*`/`X-AlignTech-*`/`X-3Shape-*`/`X-Carestream-*`/`X-Planmeca-*`/`X-Shofu-*`/`X-VitaZahnfabrik-*`/`X-Ivoclar-*`/`X-Kulzer-*`/`X-VocoDental-*`/`X-Ultradent-*`/`X-Biolase-*`/`X-Fotona-*`/`X-EMSDental-*`/`X-NSKDental-*`/`X-WandH-*`/`X-KaVo-*`/`X-Adec-*`/`X-Midmark-*`/`X-OralB-*`/`X-Sonicare-*`/`X-Colgate-*`/`X-Sensodyne-*`/`X-Listerine-*`/`X-Crest-*`/`X-Parodontax-*`/`X-Polident-*`/`X-Waterpik-*`/`X-QuipBrush-*`/`X-BurstOral-*`/`X-GobyBrush-*`/`X-SnowTeeth-*`/`X-EParkDental-*`/`X-Caloo-*`/`X-DocBest-*`/`X-Apollonia-*`/`X-Myonchis-*`/`X-I-Dental-*`/`X-IDental-*`/`X-DentaNet-*`/`X-DentaPass-*`/`X-DentaWeb-*`/`X-DentalForeveryone-*`/`X-ByoinNavi-*`/`X-Shika-Hikou-*`/`X-ShikaHikou-*`/`X-IkedaDental-*`/`X-MaedaDental-*`/`X-SmileDental-*`/`X-AiDental-*`/`X-HanaDental-*`/`X-MiraiDental-*` 等 は歯機の通知記録 — 送信側が書くことは自称。
+/// (総合医療予約 Doctolib/Zocdoc/Practo、医療機は telehealth・medtech 機で検出済み)
+fn has_dental_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-dentrix-")
+            || l.starts_with("x-opendental-")
+            || l.starts_with("x-eaglesoft-")
+            || l.starts_with("x-curvedental-")
+            || l.starts_with("x-planetdds-")
+            || l.starts_with("x-denticon-")
+            || l.starts_with("x-adstra-")
+            || l.starts_with("x-carestack-")
+            || l.starts_with("x-tab32-")
+            || l.starts_with("x-nexhealth-")
+            || l.starts_with("x-localmed-")
+            || l.starts_with("x-solutionreach-")
+            || l.starts_with("x-revenuewell-")
+            || l.starts_with("x-lighthouse360-")
+            || l.starts_with("x-dentalintel-")
+            || l.starts_with("x-tebra-")
+            || l.starts_with("x-recallmax-")
+            || l.starts_with("x-weavehq-")
+            || l.starts_with("x-legwork-")
+            || l.starts_with("x-flexdental-")
+            || l.starts_with("x-yapi-")
+            || l.starts_with("x-dentalwriter-")
+            || l.starts_with("x-dentaltap-")
+            || l.starts_with("x-aeronadental-")
+            || l.starts_with("x-dental4windows-")
+            || l.starts_with("x-corepractice-")
+            || l.starts_with("x-sfdental-")
+            || l.starts_with("x-planeths-")
+            || l.starts_with("x-henryschein-")
+            || l.starts_with("x-pattersondental-")
+            || l.starts_with("x-bencodental-")
+            || l.starts_with("x-burkhartdental-")
+            || l.starts_with("x-straumann-")
+            || l.starts_with("x-nobelbiocare-")
+            || l.starts_with("x-dentsply-")
+            || l.starts_with("x-dentsplysirona-")
+            || l.starts_with("x-invisalign-")
+            || l.starts_with("x-aligntech-")
+            || l.starts_with("x-3shape-")
+            || l.starts_with("x-carestream-")
+            || l.starts_with("x-planmeca-")
+            || l.starts_with("x-shofu-")
+            || l.starts_with("x-vitazahnfabrik-")
+            || l.starts_with("x-ivoclar-")
+            || l.starts_with("x-kulzer-")
+            || l.starts_with("x-vocodental-")
+            || l.starts_with("x-ultradent-")
+            || l.starts_with("x-biolase-")
+            || l.starts_with("x-fotona-")
+            || l.starts_with("x-emsdental-")
+            || l.starts_with("x-nskdental-")
+            || l.starts_with("x-wandh-")
+            || l.starts_with("x-kavo-")
+            || l.starts_with("x-adec-")
+            || l.starts_with("x-midmark-")
+            || l.starts_with("x-oralb-")
+            || l.starts_with("x-sonicare-")
+            || l.starts_with("x-colgate-")
+            || l.starts_with("x-sensodyne-")
+            || l.starts_with("x-listerine-")
+            || l.starts_with("x-crest-")
+            || l.starts_with("x-parodontax-")
+            || l.starts_with("x-polident-")
+            || l.starts_with("x-waterpik-")
+            || l.starts_with("x-quipbrush-")
+            || l.starts_with("x-burstoral-")
+            || l.starts_with("x-gobybrush-")
+            || l.starts_with("x-snowteeth-")
+            || l.starts_with("x-eparkdental-")
+            || l.starts_with("x-caloo-")
+            || l.starts_with("x-docbest-")
+            || l.starts_with("x-apollonia-")
+            || l.starts_with("x-myonchis-")
+            || l.starts_with("x-i-dental-")
+            || l.starts_with("x-idental-")
+            || l.starts_with("x-dentanet-")
+            || l.starts_with("x-dentapass-")
+            || l.starts_with("x-dentaweb-")
+            || l.starts_with("x-dentalforeveryone-")
+            || l.starts_with("x-byoinnavi-")
+            || l.starts_with("x-shika-hikou-")
+            || l.starts_with("x-shikahikou-")
+            || l.starts_with("x-ikedadental-")
+            || l.starts_with("x-maedadental-")
+            || l.starts_with("x-smiledental-")
+            || l.starts_with("x-aidental-")
+            || l.starts_with("x-hanadental-")
+            || l.starts_with("x-miraidental-")
+    })
+}
+
+/// `X-MoMA-*`/`X-MetMuseum-*`/`X-TheMet-*`/`X-Tate-*`/`X-Uffizi-*`/`X-Louvre-*`/`X-Orsay-*`/`X-MuseeOrsay-*`/`X-Prado-*`/`X-Rijksmuseum-*`/`X-VanGoghMuseum-*`/`X-AnneFrank-*`/`X-Getty-*`/`X-Guggenheim-*`/`X-VAMuseum-*`/`X-VAndA-*`/`X-BritishMuseum-*`/`X-Smithsonian-*`/`X-FieldMuseum-*`/`X-ArtIC-*`/`X-ArtInstituteChi-*`/`X-MFABoston-*`/`X-NGADC-*`/`X-NationalGalleryDC-*`/`X-Pompidou-*`/`X-CentrePompidou-*`/`X-Belvedere-*`/`X-KHMWien-*`/`X-Albertina-*`/`X-Stadel-*`/`X-NeueGalerie-*`/`X-Whitney-*`/`X-SFMoMA-*`/`X-LACMA-*`/`X-MoCA-*`/`X-TheBroad-*`/`X-BroadMuseum-*`/`X-Hirshhorn-*`/`X-PhillipsCollection-*`/`X-Warhol-*`/`X-FridaKahlo-*`/`X-Dali-*`/`X-AMNH-*`/`X-NHMLondon-*`/`X-DeYoung-*`/`X-Exploratorium-*`/`X-ScienceMuseum-*`/`X-ImperialWarMuseum-*`/`X-Carnavalet-*`/`X-FondationLV-*`/`X-BassinsLumieres-*`/`X-TeamLab-*`/`X-TeamLabPlanets-*`/`X-Bunkamura-*`/`X-TNM-*`/`X-Kahaku-*`/`X-Miraikan-*`/`X-NACT-*`/`X-MoriArt-*`/`X-Ichigokan-*`/`X-Artizon-*`/`X-PolaMuseum-*`/`X-OtsukaMuseum-*`/`X-Chichu-*`/`X-Kanazawa21-*`/`X-GhibliMuseum-*`/`X-Fujiko-*`/`X-TetsudoMuseum-*`/`X-Minpaku-*`/`X-EdoTokyoMuseum-*`/`X-Kyuhaku-*`/`X-Narahaku-*`/`X-Kyohaku-*`/`X-NMWA-*`/`X-TokyoNM-*`/`X-Hyokeikan-*`/`X-AdMuseum-*`/`X-JapanFolkcraft-*`/`X-Mingei-*`/`X-PrintMuseum-*`/`X-PaperMuseum-*`/`X-TobaccoMuseum-*`/`X-BeerMuseum-*`/`X-CupNoodlesMuseum-*`/`X-RamenMuseum-*`/`X-MintMuseum-*`/`X-MangaMuseum-*`/`X-ToyotaMuseum-*`/`X-FukuiDino-*`/`X-KagakuMiraikan-*`/`X-KodomonoKuni-*` 等 は博機の通知記録 — 送信側が書くことは自称。
+/// (動物園・水族館は zoo 機、劇場・チケットは ticket 機で検出済み)
+fn has_museum_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-moma-")
+            || l.starts_with("x-metmuseum-")
+            || l.starts_with("x-themet-")
+            || l.starts_with("x-tate-")
+            || l.starts_with("x-uffizi-")
+            || l.starts_with("x-louvre-")
+            || l.starts_with("x-orsay-")
+            || l.starts_with("x-museeorsay-")
+            || l.starts_with("x-prado-")
+            || l.starts_with("x-rijksmuseum-")
+            || l.starts_with("x-vangoghmuseum-")
+            || l.starts_with("x-annefrank-")
+            || l.starts_with("x-getty-")
+            || l.starts_with("x-guggenheim-")
+            || l.starts_with("x-vamuseum-")
+            || l.starts_with("x-vanda-")
+            || l.starts_with("x-britishmuseum-")
+            || l.starts_with("x-smithsonian-")
+            || l.starts_with("x-fieldmuseum-")
+            || l.starts_with("x-artic-")
+            || l.starts_with("x-artinstitutechi-")
+            || l.starts_with("x-mfaboston-")
+            || l.starts_with("x-ngadc-")
+            || l.starts_with("x-nationalgallerydc-")
+            || l.starts_with("x-pompidou-")
+            || l.starts_with("x-centrepompidou-")
+            || l.starts_with("x-belvedere-")
+            || l.starts_with("x-khmwien-")
+            || l.starts_with("x-albertina-")
+            || l.starts_with("x-stadel-")
+            || l.starts_with("x-neuegalerie-")
+            || l.starts_with("x-whitney-")
+            || l.starts_with("x-sfmoma-")
+            || l.starts_with("x-lacma-")
+            || l.starts_with("x-moca-")
+            || l.starts_with("x-thebroad-")
+            || l.starts_with("x-broadmuseum-")
+            || l.starts_with("x-hirshhorn-")
+            || l.starts_with("x-phillipscollection-")
+            || l.starts_with("x-warhol-")
+            || l.starts_with("x-fridakahlo-")
+            || l.starts_with("x-dali-")
+            || l.starts_with("x-amnh-")
+            || l.starts_with("x-nhmlondon-")
+            || l.starts_with("x-deyoung-")
+            || l.starts_with("x-exploratorium-")
+            || l.starts_with("x-sciencemuseum-")
+            || l.starts_with("x-imperialwarmuseum-")
+            || l.starts_with("x-carnavalet-")
+            || l.starts_with("x-fondationlv-")
+            || l.starts_with("x-bassinslumieres-")
+            || l.starts_with("x-teamlab-")
+            || l.starts_with("x-teamlabplanets-")
+            || l.starts_with("x-bunkamura-")
+            || l.starts_with("x-tnm-")
+            || l.starts_with("x-kahaku-")
+            || l.starts_with("x-miraikan-")
+            || l.starts_with("x-nact-")
+            || l.starts_with("x-moriart-")
+            || l.starts_with("x-ichigokan-")
+            || l.starts_with("x-artizon-")
+            || l.starts_with("x-polamuseum-")
+            || l.starts_with("x-otsukamuseum-")
+            || l.starts_with("x-chichu-")
+            || l.starts_with("x-kanazawa21-")
+            || l.starts_with("x-ghiblimuseum-")
+            || l.starts_with("x-fujiko-")
+            || l.starts_with("x-tetsudomuseum-")
+            || l.starts_with("x-minpaku-")
+            || l.starts_with("x-edotokyomuseum-")
+            || l.starts_with("x-kyuhaku-")
+            || l.starts_with("x-narahaku-")
+            || l.starts_with("x-kyohaku-")
+            || l.starts_with("x-nmwa-")
+            || l.starts_with("x-tokyonm-")
+            || l.starts_with("x-hyokeikan-")
+            || l.starts_with("x-admuseum-")
+            || l.starts_with("x-japanfolkcraft-")
+            || l.starts_with("x-mingei-")
+            || l.starts_with("x-printmuseum-")
+            || l.starts_with("x-papermuseum-")
+            || l.starts_with("x-tobaccomuseum-")
+            || l.starts_with("x-beermuseum-")
+            || l.starts_with("x-cupnoodlesmuseum-")
+            || l.starts_with("x-ramenmuseum-")
+            || l.starts_with("x-mintmuseum-")
+            || l.starts_with("x-mangamuseum-")
+            || l.starts_with("x-toyotamuseum-")
+            || l.starts_with("x-fukidino-")
+            || l.starts_with("x-kagakumiraikan-")
+            || l.starts_with("x-kodomonokuni-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20945,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は引機印を検出する() {
+    let a1 = b"From: a@b
+X-ArtHikkoshi-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-SakaiHikkoshi-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nittsu-Notice: 1
+
+x";
+    let u1 = b"From: a@b
+X-U-Haul-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-Mayflower-Entry: 1
+
+x";
+    let v1 = b"From: a@b
+X-AlliedVanLines-Record: 1
+
+x";
+    let p1 = b"From: a@b
+X-Pods-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-Bellhop-Stamp: 1
+
+x";
+    assert!(has_moving_marks(a1));
+    assert!(has_moving_marks(s1));
+    assert!(has_moving_marks(n1));
+    assert!(has_moving_marks(u1));
+    assert!(has_moving_marks(m1));
+    assert!(has_moving_marks(v1));
+    assert!(has_moving_marks(p1));
+    assert!(has_moving_marks(b1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_moving_marks(clean));
+}
+
+#[test]
+fn scan_は歯機印を検出する() {
+    let d1 = b"From: a@b
+X-Dentrix-Id: 1
+
+x";
+    let o1 = b"From: a@b
+X-OpenDental-Trace: 1
+
+x";
+    let i1 = b"From: a@b
+X-Invisalign-Notice: 1
+
+x";
+    let s1 = b"From: a@b
+X-Straumann-Flag: 1
+
+x";
+    let n1 = b"From: a@b
+X-NexHealth-Entry: 1
+
+x";
+    let h1 = b"From: a@b
+X-HenrySchein-Record: 1
+
+x";
+    let c1 = b"From: a@b
+X-Carestream-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-OralB-Stamp: 1
+
+x";
+    assert!(has_dental_marks(d1));
+    assert!(has_dental_marks(o1));
+    assert!(has_dental_marks(i1));
+    assert!(has_dental_marks(s1));
+    assert!(has_dental_marks(n1));
+    assert!(has_dental_marks(h1));
+    assert!(has_dental_marks(c1));
+    assert!(has_dental_marks(a1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_dental_marks(clean));
+}
+
+#[test]
+fn scan_は博機印を検出する() {
+    let m1 = b"From: a@b
+X-MoMA-Id: 1
+
+x";
+    let l1 = b"From: a@b
+X-Louvre-Trace: 1
+
+x";
+    let p1 = b"From: a@b
+X-Prado-Notice: 1
+
+x";
+    let b1 = b"From: a@b
+X-BritishMuseum-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-Smithsonian-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-TeamLab-Record: 1
+
+x";
+    let k1 = b"From: a@b
+X-Miraikan-Trace: 1
+
+x";
+    let g1 = b"From: a@b
+X-GhibliMuseum-Stamp: 1
+
+x";
+    assert!(has_museum_marks(m1));
+    assert!(has_museum_marks(l1));
+    assert!(has_museum_marks(p1));
+    assert!(has_museum_marks(b1));
+    assert!(has_museum_marks(s1));
+    assert!(has_museum_marks(t1));
+    assert!(has_museum_marks(k1));
+    assert!(has_museum_marks(g1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_museum_marks(clean));
 }
 }
