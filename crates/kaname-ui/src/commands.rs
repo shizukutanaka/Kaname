@@ -1084,6 +1084,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D474: 開発・ID・セキュリティ SaaS 印自称
+    if env.enterprise_saas_marks {
+        render_risks.push(
+            "X-Okta-*/X-Auth0-*/X-CrowdStrike-*/X-Snyk-*/X-HashiCorp-*/X-Bitbucket-* 等 — 業務 SaaS 機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D475: 宅配・物流印自称
+    if env.shipping_marks {
+        render_risks.push(
+            "X-FedEx-*/X-DHL-*/X-UPS-*/X-USPS-*/X-JapanPost-*/X-Yamato-* 等 — 配送機の発信記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D476: 通信 API・サポート印自称
+    if env.comms_marks {
+        render_risks.push(
+            "X-Twilio-*/X-Sinch-*/X-RingCentral-*/X-Vonage-*/X-Infobip-*/X-Webex-* 等 — 通信機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
