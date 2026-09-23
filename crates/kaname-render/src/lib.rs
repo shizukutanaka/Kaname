@@ -741,6 +741,38 @@ pub struct Envelope {
     /// `X-Cock-*`/`X-Lavabit-*` 等のプライバシーメール印があるか —
     /// 秘匿機の通知記録を送信側が自称する兆候 (D503)。
     pub mailprivacy_marks: bool,
+    /// `X-Semaphore-*`/`X-Drone-*`/`X-Woodpecker-*`/`X-Concourse-*`/
+    /// `X-GoCD-*`/`X-Bamboo-*`/`X-AppVeyor-*`/`X-AzurePipelines-*`/
+    /// `X-AzureDevOps-*`/`X-Bitbucket-Pipelines-*`/`X-Bitrise-*`/
+    /// `X-Codemagic-*`/`X-fastlane-*`/`X-Gradle-*`/`X-Maven-*`/
+    /// `X-sbt-*`/`X-CMake-*`/`X-Bazel-*`/`X-Buck-*`/`X-Pants-*`/
+    /// `X-Nx-*`/`X-Turborepo-*`/`X-Lerna-*`/`X-Rush-*`/`X-esbuild-*`/
+    /// `X-SWC-*`/`X-Vite-*`/`X-Rollup-*`/`X-Webpack-*`/`X-Parcel-*`/
+    /// `X-Snowpack-*`/`X-Rome-*`/`X-Biome-*`/`X-OXC-*`/`X-dprint-*`/
+    /// `X-Prettier-*`/`X-ESLint-*`/`X-Stylelint-*` 等の CI/CD・
+    /// ビルド・バンドラ印があるか — 構築機の通知記録を送信側が
+    /// 自称する兆候 (D504)。
+    pub ci_marks: bool,
+    /// `X-CodeQL-*`/`X-Codacy-*`/`X-CodeClimate-*`/`X-DeepSource-*`/
+    /// `X-Coverity-*`/`X-Fortify-*`/`X-Mend-*`/`X-WhiteSource-*`/
+    /// `X-Dependabot-*`/`X-Renovate-*`/`X-Trivy-*`/`X-Grype-*`/
+    /// `X-Syft-*`/`X-Clair-*`/`X-Twistlock-*`/`X-Prisma-*`/`X-Wiz-*`/
+    /// `X-Orca-*`/`X-Lacework-*`/`X-Sysdig-*`/`X-Falco-*`/
+    /// `X-Semgrep-*` 等のコード品質・依存・コンテナセキュリティ印が
+    /// あるか — 検査機の通知記録を送信側が自称する兆候 (D505)。
+    pub codequality_marks: bool,
+    /// `X-npmjs-*`/`X-PyPI-*`/`X-RubyGems-*`/`X-NuGet-*`/
+    /// `X-Packagist-*`/`X-Homebrew-*`/`X-Chocolatey-*`/`X-Scoop-*`/
+    /// `X-winget-*`/`X-Flatpak-*`/`X-Snapcraft-*`/`X-AppImage-*`/
+    /// `X-Nixpkgs-*`/`X-Conda-*`/`X-Anaconda-*`/`X-Docker-Hub-*`/
+    /// `X-DockerHub-*`/`X-Quay-*`/`X-GHCR-*`/`X-Harbor-*`/`X-Nexus-*`/
+    /// `X-Verdaccio-*`/`X-Yarn-*`/`X-pnpm-*`/`X-Composer-*`/
+    /// `X-Poetry-*`/`X-Pipenv-*`/`X-CocoaPods-*`/`X-Carthage-*`/
+    /// `X-SPM-*`/`X-pub-*`/`X-Hex-*`/`X-CPAN-*`/`X-CRAN-*`/
+    /// `X-Clojars-*`/`X-vcpkg-*`/`X-Conan-*` 等のパッケージ・
+    /// レジストリ印があるか — 庫機の通知記録を送信側が自称する
+    /// 兆候 (D506)。
+    pub package_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1105,6 +1137,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         domain_marks: has_domain_marks(raw),
         webhost_marks: has_webhost_marks(raw),
         mailprivacy_marks: has_mailprivacy_marks(raw),
+        ci_marks: has_ci_marks(raw),
+        codequality_marks: has_codequality_marks(raw),
+        package_marks: has_package_marks(raw),
     })
 }
 
@@ -4816,6 +4851,165 @@ fn has_mailprivacy_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-hey-")
             || l.starts_with("x-cock-")
             || l.starts_with("x-lavabit-")
+    })
+}
+
+/// `X-Semaphore-*`/`X-Drone-*`/`X-Woodpecker-*`/`X-Concourse-*`/
+/// `X-GoCD-*`/`X-Bamboo-*`/`X-AppVeyor-*`/`X-AzurePipelines-*`/
+/// `X-AzureDevOps-*`/`X-Bitbucket-Pipelines-*`/`X-Bitrise-*`/
+/// `X-Codemagic-*`/`X-fastlane-*`/`X-Gradle-*`/`X-Maven-*`/`X-sbt-*`/
+/// `X-CMake-*`/`X-Bazel-*`/`X-Buck-*`/`X-Pants-*`/`X-Nx-*`/
+/// `X-Turborepo-*`/`X-Lerna-*`/`X-Rush-*`/`X-esbuild-*`/`X-SWC-*`/
+/// `X-Vite-*`/`X-Rollup-*`/`X-Webpack-*`/`X-Parcel-*`/`X-Snowpack-*`/
+/// `X-Rome-*`/`X-Biome-*`/`X-OXC-*`/`X-dprint-*`/`X-Prettier-*`/
+/// `X-ESLint-*`/`X-Stylelint-*` 等の CI/CD・ビルド・バンドラ印が
+/// あるか判定する (D504)。
+///
+/// `X-Drone-*` (Drone)、`X-Concourse-*` (Concourse)、`X-Bazel-*`
+/// (Bazel) は構築機の通知記録 — 送信側から届くこれは自称。
+fn has_ci_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-semaphore-")
+            || l.starts_with("x-drone-")
+            || l.starts_with("x-woodpecker-")
+            || l.starts_with("x-concourse-")
+            || l.starts_with("x-gocd-")
+            || l.starts_with("x-bamboo-")
+            || l.starts_with("x-appveyor-")
+            || l.starts_with("x-azurepipelines-")
+            || l.starts_with("x-azuredevops-")
+            || l.starts_with("x-bitbucket-pipelines-")
+            || l.starts_with("x-bitrise-")
+            || l.starts_with("x-codemagic-")
+            || l.starts_with("x-fastlane-")
+            || l.starts_with("x-gradle-")
+            || l.starts_with("x-maven-")
+            || l.starts_with("x-sbt-")
+            || l.starts_with("x-cmake-")
+            || l.starts_with("x-bazel-")
+            || l.starts_with("x-buck-")
+            || l.starts_with("x-pants-")
+            || l.starts_with("x-nx-")
+            || l.starts_with("x-turborepo-")
+            || l.starts_with("x-lerna-")
+            || l.starts_with("x-rush-")
+            || l.starts_with("x-esbuild-")
+            || l.starts_with("x-swc-")
+            || l.starts_with("x-vite-")
+            || l.starts_with("x-rollup-")
+            || l.starts_with("x-webpack-")
+            || l.starts_with("x-parcel-")
+            || l.starts_with("x-snowpack-")
+            || l.starts_with("x-rome-")
+            || l.starts_with("x-biome-")
+            || l.starts_with("x-oxc-")
+            || l.starts_with("x-dprint-")
+            || l.starts_with("x-prettier-")
+            || l.starts_with("x-eslint-")
+            || l.starts_with("x-stylelint-")
+    })
+}
+
+/// `X-CodeQL-*`/`X-Codacy-*`/`X-CodeClimate-*`/`X-DeepSource-*`/
+/// `X-Coverity-*`/`X-Fortify-*`/`X-Mend-*`/`X-WhiteSource-*`/
+/// `X-Dependabot-*`/`X-Renovate-*`/`X-Trivy-*`/`X-Grype-*`/`X-Syft-*`/
+/// `X-Clair-*`/`X-Twistlock-*`/`X-Prisma-*`/`X-Wiz-*`/`X-Orca-*`/
+/// `X-Lacework-*`/`X-Sysdig-*`/`X-Falco-*`/`X-Semgrep-*` 等の
+/// コード品質・依存・コンテナセキュリティ印があるか判定する
+/// (D505)。
+///
+/// `X-CodeQL-*` (CodeQL)、`X-Dependabot-*` (Dependabot)、`X-Trivy-*`
+/// (Trivy) は検査機の通知記録 — 送信側から届くこれは自称。
+fn has_codequality_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-codeql-")
+            || l.starts_with("x-codacy-")
+            || l.starts_with("x-codeclimate-")
+            || l.starts_with("x-deepsource-")
+            || l.starts_with("x-coverity-")
+            || l.starts_with("x-fortify-")
+            || l.starts_with("x-mend-")
+            || l.starts_with("x-whitesource-")
+            || l.starts_with("x-dependabot-")
+            || l.starts_with("x-renovate-")
+            || l.starts_with("x-trivy-")
+            || l.starts_with("x-grype-")
+            || l.starts_with("x-syft-")
+            || l.starts_with("x-clair-")
+            || l.starts_with("x-twistlock-")
+            || l.starts_with("x-prisma-")
+            || l.starts_with("x-wiz-")
+            || l.starts_with("x-orca-")
+            || l.starts_with("x-lacework-")
+            || l.starts_with("x-sysdig-")
+            || l.starts_with("x-falco-")
+            || l.starts_with("x-semgrep-")
+    })
+}
+
+/// `X-npmjs-*`/`X-PyPI-*`/`X-RubyGems-*`/`X-NuGet-*`/`X-Packagist-*`/
+/// `X-Homebrew-*`/`X-Chocolatey-*`/`X-Scoop-*`/`X-winget-*`/
+/// `X-Flatpak-*`/`X-Snapcraft-*`/`X-AppImage-*`/`X-Nixpkgs-*`/
+/// `X-Conda-*`/`X-Anaconda-*`/`X-Docker-Hub-*`/`X-DockerHub-*`/
+/// `X-Quay-*`/`X-GHCR-*`/`X-Harbor-*`/`X-Nexus-*`/`X-Verdaccio-*`/
+/// `X-Yarn-*`/`X-pnpm-*`/`X-Composer-*`/`X-Poetry-*`/`X-Pipenv-*`/
+/// `X-CocoaPods-*`/`X-Carthage-*`/`X-SPM-*`/`X-pub-*`/`X-Hex-*`/
+/// `X-CPAN-*`/`X-CRAN-*`/`X-Clojars-*`/`X-vcpkg-*`/`X-Conan-*` 等の
+/// パッケージ・レジストリ印があるか判定する (D506)。
+///
+/// `X-npmjs-*` (npm)、`X-PyPI-*` (PyPI)、`X-Docker-Hub-*`
+/// (Docker Hub) は庫機の通知記録 — 送信側から届くこれは自称。
+fn has_package_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-npmjs-")
+            || l.starts_with("x-pypi-")
+            || l.starts_with("x-rubygems-")
+            || l.starts_with("x-nuget-")
+            || l.starts_with("x-packagist-")
+            || l.starts_with("x-homebrew-")
+            || l.starts_with("x-chocolatey-")
+            || l.starts_with("x-scoop-")
+            || l.starts_with("x-winget-")
+            || l.starts_with("x-flatpak-")
+            || l.starts_with("x-snapcraft-")
+            || l.starts_with("x-appimage-")
+            || l.starts_with("x-nixpkgs-")
+            || l.starts_with("x-conda-")
+            || l.starts_with("x-anaconda-")
+            || l.starts_with("x-docker-hub-")
+            || l.starts_with("x-dockerhub-")
+            || l.starts_with("x-quay-")
+            || l.starts_with("x-ghcr-")
+            || l.starts_with("x-harbor-")
+            || l.starts_with("x-nexus-")
+            || l.starts_with("x-verdaccio-")
+            || l.starts_with("x-yarn-")
+            || l.starts_with("x-pnpm-")
+            || l.starts_with("x-composer-")
+            || l.starts_with("x-poetry-")
+            || l.starts_with("x-pipenv-")
+            || l.starts_with("x-cocoapods-")
+            || l.starts_with("x-carthage-")
+            || l.starts_with("x-spm-")
+            || l.starts_with("x-pub-")
+            || l.starts_with("x-hex-")
+            || l.starts_with("x-cpan-")
+            || l.starts_with("x-cran-")
+            || l.starts_with("x-clojars-")
+            || l.starts_with("x-vcpkg-")
+            || l.starts_with("x-conan-")
     })
 }
 
@@ -8995,6 +9189,72 @@ mod tests {
         assert!(has_mailprivacy_marks(h1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_mailprivacy_marks(clean));
+    }
+
+    #[test]
+    fn scan_はCICDビルドバンドラ印を検出する() {
+        let d1 = b"X-Drone-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(d1));
+        let c1 = b"X-Concourse-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(c1));
+        let b1 = b"X-Bazel-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(b1));
+        let g1 = b"X-Gradle-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(g1));
+        let a1 = b"X-AppVeyor-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(a1));
+        let w1 = b"X-Webpack-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(w1));
+        let v1 = b"X-Vite-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(v1));
+        let e1 = b"X-ESLint-Notify: x\r\n\r\nx";
+        assert!(has_ci_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ci_marks(clean));
+    }
+
+    #[test]
+    fn scan_はコード品質セキュリティ印を検出する() {
+        let c1 = b"X-CodeQL-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(c1));
+        let d1 = b"X-Dependabot-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(d1));
+        let t1 = b"X-Trivy-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(t1));
+        let r1 = b"X-Renovate-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(r1));
+        let s1 = b"X-Semgrep-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(s1));
+        let w1 = b"X-Wiz-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(w1));
+        let f1 = b"X-Falco-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(f1));
+        let g1 = b"X-Grype-Notify: x\r\n\r\nx";
+        assert!(has_codequality_marks(g1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_codequality_marks(clean));
+    }
+
+    #[test]
+    fn scan_はパッケージレジストリ印を検出する() {
+        let n1 = b"X-npmjs-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(n1));
+        let p1 = b"X-PyPI-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(p1));
+        let d1 = b"X-Docker-Hub-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(d1));
+        let h1 = b"X-Homebrew-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(h1));
+        let r1 = b"X-RubyGems-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(r1));
+        let c1 = b"X-CocoaPods-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(c1));
+        let g1 = b"X-GHCR-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(g1));
+        let v1 = b"X-vcpkg-Notify: x\r\n\r\nx";
+        assert!(has_package_marks(v1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_package_marks(clean));
     }
 }
 

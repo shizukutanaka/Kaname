@@ -1324,6 +1324,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D504: CI/CD・ビルド・バンドラ印自称
+    if env.ci_marks {
+        render_risks.push(
+            "X-Drone-*/X-Concourse-*/X-Bazel-*/X-Gradle-*/X-AppVeyor-*/X-Webpack-*/X-Vite-*/X-ESLint-* 等 — 構築機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D505: コード品質・依存・コンテナセキュリティ印自称
+    if env.codequality_marks {
+        render_risks.push(
+            "X-CodeQL-*/X-Dependabot-*/X-Trivy-*/X-Renovate-*/X-Semgrep-*/X-Wiz-*/X-Falco-*/X-Grype-* 等 — 検査機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D506: パッケージ・レジストリ印自称
+    if env.package_marks {
+        render_risks.push(
+            "X-npmjs-*/X-PyPI-*/X-Docker-Hub-*/X-Homebrew-*/X-RubyGems-*/X-CocoaPods-*/X-GHCR-*/X-vcpkg-* 等 — 庫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
