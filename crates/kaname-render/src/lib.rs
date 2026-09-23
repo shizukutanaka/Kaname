@@ -608,6 +608,39 @@ pub struct Envelope {
     /// 顧客体験・アンケート印があるか — 顧客体験機の通知記録を
     /// 送信側が自称する兆候 (D491)。
     pub cx_marks: bool,
+    /// `X-GitBook-*`/`X-Docusaurus-*`/`X-MkDocs-*`/`X-Sphinx-*`/
+    /// `X-Jekyll-*`/`X-Hugo-*`/`X-Gatsby-*`/`X-Surge-*`/`X-Cyclic-*`/
+    /// `X-Glitch-*`/`X-Replit-*`/`X-CodeSandbox-*`/`X-StackBlitz-*`/
+    /// `X-CodePen-*`/`X-JSFiddle-*`/`X-Plunker-*`/`X-Observable-*`/
+    /// `X-Deepnote-*`/`X-Hexo-*`/`X-Ghost-*`/`X-WordPress-*`/
+    /// `X-Bloglovin-*`/`X-Feedly-*`/`X-Inoreader-*`/`X-NewsBlur-*` 等の
+    /// ドキュメント・静的サイト・リーダー印があるか — 文書機の
+    /// 通知記録を送信側が自称する兆候 (D492)。
+    pub docsite_marks: bool,
+    /// `X-Podpage-*`/`X-Captivate-*`/`X-Transistor-*`/`X-Megaphone-*`/
+    /// `X-Omny-*`/`X-Acast-*`/`X-Art19-*`/`X-iVoox-*`/`X-Audioboom-*`/
+    /// `X-SoundCloud-*`/`X-Mixcloud-*`/`X-HearThis-*`/`X-AudioMack-*`/
+    /// `X-Bandcamp-*`/`X-DistroKid-*`/`X-TuneCore-*`/`X-CDBaby-*`/
+    /// `X-Amuse-*`/`X-UnitedMasters-*`/`X-Deezer-*`/`X-Tidal-*`/
+    /// `X-Pandora-*`/`X-iHeartRadio-*`/`X-AmazonMusic-*`/
+    /// `X-YouTubeMusic-*`/`X-Audius-*` 等のポッドキャスト・音楽印が
+    /// あるか — 音楽機の通知記録を送信側が自称する兆候 (D493)。
+    pub music_marks: bool,
+    /// `X-EasyStore-*`/`X-MyShop-*`/`X-SHOPLINE-*`/`X-Cafe24-*`/
+    /// `X-CubeCart-*`/`X-ZenCart-*`/`X-osCommerce-*`/`X-VirtueMart-*`/
+    /// `X-HikaShop-*`/`X-Shopware-*`/`X-Sylius-*`/`X-Swell-*`/
+    /// `X-Medusa-*`/`X-Saleor-*`/`X-Vendure-*`/`X-Commerce.js-*`/
+    /// `X-ElasticPath-*`/`X-Fabric-*`/`X-commercetools-*`/
+    /// `X-Bolcom-*`/`X-Rakuma-*`/`X-Auctions-*`/`X-Walmart-*`/
+    /// `X-Target-*`/`X-Costco-*`/`X-BestBuy-*`/`X-Newegg-*`/
+    /// `X-Adorama-*`/`X-MicroCenter-*`/`X-Monoprice-*`/`X-Keychron-*`/
+    /// `X-Varmilo-*`/`X-Leopold-*`/`X-Filco-*`/`X-Logitech-*`/
+    /// `X-Razer-*`/`X-Corsair-*`/`X-SteelSeries-*`/`X-HyperX-*`/
+    /// `X-Elgato-*`/`X-Anker-*`/`X-Belkin-*`/`X-Ugreen-*`/
+    /// `X-Satechi-*`/`X-mophie-*`/`X-Moment-*`/`X-Peak-Design-*`/
+    /// `X-Thule-*` 等の EC・PC パーツ印があるか — 販売機の通知記録を
+    /// 送信側が自称する兆候 (D494)。
+    pub retail_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -960,6 +993,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         expense_marks: has_expense_marks(raw),
         automation_marks: has_automation_marks(raw),
         cx_marks: has_cx_marks(raw),
+        docsite_marks: has_docsite_marks(raw),
+        music_marks: has_music_marks(raw),
+        retail_marks: has_retail_marks(raw),
     })
 }
 
@@ -4019,6 +4055,180 @@ fn has_cx_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-appcues-")
             || l.starts_with("x-chameleon-")
             || l.starts_with("x-userpilot-")
+    })
+}
+
+/// `X-GitBook-*`/`X-Docusaurus-*`/`X-MkDocs-*`/`X-Sphinx-*`/
+/// `X-Jekyll-*`/`X-Hugo-*`/`X-Gatsby-*`/`X-Surge-*`/`X-Cyclic-*`/
+/// `X-Glitch-*`/`X-Replit-*`/`X-CodeSandbox-*`/`X-StackBlitz-*`/
+/// `X-CodePen-*`/`X-JSFiddle-*`/`X-Plunker-*`/`X-Observable-*`/
+/// `X-Deepnote-*`/`X-Hexo-*`/`X-Ghost-*`/`X-WordPress-*`/
+/// `X-Bloglovin-*`/`X-Feedly-*`/`X-Inoreader-*`/`X-NewsBlur-*` 等の
+/// ドキュメント・静的サイト・リーダー印があるか判定する (D492)。
+///
+/// `X-GitBook-*` (GitBook)、`X-WordPress-*` (WordPress)、
+/// `X-Ghost-*` (Ghost) は文書機の通知記録 — 送信側から届く
+/// これは自称。
+fn has_docsite_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gitbook-")
+            || l.starts_with("x-docusaurus-")
+            || l.starts_with("x-mkdocs-")
+            || l.starts_with("x-sphinx-")
+            || l.starts_with("x-jekyll-")
+            || l.starts_with("x-hugo-")
+            || l.starts_with("x-gatsby-")
+            || l.starts_with("x-surge-")
+            || l.starts_with("x-cyclic-")
+            || l.starts_with("x-glitch-")
+            || l.starts_with("x-replit-")
+            || l.starts_with("x-codesandbox-")
+            || l.starts_with("x-stackblitz-")
+            || l.starts_with("x-codepen-")
+            || l.starts_with("x-jsfiddle-")
+            || l.starts_with("x-plunker-")
+            || l.starts_with("x-observable-")
+            || l.starts_with("x-deepnote-")
+            || l.starts_with("x-hexo-")
+            || l.starts_with("x-ghost-")
+            || l.starts_with("x-wordpress-")
+            || l.starts_with("x-bloglovin-")
+            || l.starts_with("x-feedly-")
+            || l.starts_with("x-inoreader-")
+            || l.starts_with("x-newsblur-")
+    })
+}
+
+/// `X-Podpage-*`/`X-Captivate-*`/`X-Transistor-*`/`X-Megaphone-*`/
+/// `X-Omny-*`/`X-Acast-*`/`X-Art19-*`/`X-iVoox-*`/`X-Audioboom-*`/
+/// `X-SoundCloud-*`/`X-Mixcloud-*`/`X-HearThis-*`/`X-AudioMack-*`/
+/// `X-Bandcamp-*`/`X-DistroKid-*`/`X-TuneCore-*`/`X-CDBaby-*`/
+/// `X-Amuse-*`/`X-UnitedMasters-*`/`X-Deezer-*`/`X-Tidal-*`/
+/// `X-Pandora-*`/`X-iHeartRadio-*`/`X-AmazonMusic-*`/
+/// `X-YouTubeMusic-*`/`X-Audius-*` 等のポッドキャスト・音楽印が
+/// あるか判定する (D493)。
+///
+/// `X-SoundCloud-*` (SoundCloud)、`X-Acast-*` (Acast)、
+/// `X-DistroKid-*` (DistroKid) は音楽機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_music_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-podpage-")
+            || l.starts_with("x-captivate-")
+            || l.starts_with("x-transistor-")
+            || l.starts_with("x-megaphone-")
+            || l.starts_with("x-omny-")
+            || l.starts_with("x-acast-")
+            || l.starts_with("x-art19-")
+            || l.starts_with("x-ivoox-")
+            || l.starts_with("x-audioboom-")
+            || l.starts_with("x-soundcloud-")
+            || l.starts_with("x-mixcloud-")
+            || l.starts_with("x-hearthis-")
+            || l.starts_with("x-audiomack-")
+            || l.starts_with("x-bandcamp-")
+            || l.starts_with("x-distrokid-")
+            || l.starts_with("x-tunecore-")
+            || l.starts_with("x-cdbaby-")
+            || l.starts_with("x-amuse-")
+            || l.starts_with("x-unitedmasters-")
+            || l.starts_with("x-deezer-")
+            || l.starts_with("x-tidal-")
+            || l.starts_with("x-pandora-")
+            || l.starts_with("x-iheartradio-")
+            || l.starts_with("x-amazonmusic-")
+            || l.starts_with("x-youtubemusic-")
+            || l.starts_with("x-audius-")
+    })
+}
+
+/// `X-EasyStore-*`/`X-MyShop-*`/`X-SHOPLINE-*`/`X-Cafe24-*`/
+/// `X-CubeCart-*`/`X-ZenCart-*`/`X-osCommerce-*`/`X-VirtueMart-*`/
+/// `X-HikaShop-*`/`X-Shopware-*`/`X-Sylius-*`/`X-Swell-*`/
+/// `X-Medusa-*`/`X-Saleor-*`/`X-Vendure-*`/`X-Commerce.js-*`/
+/// `X-ElasticPath-*`/`X-Fabric-*`/`X-commercetools-*`/`X-Bolcom-*`/
+/// `X-Rakuma-*`/`X-Auctions-*`/`X-Walmart-*`/`X-Target-*`/
+/// `X-Costco-*`/`X-BestBuy-*`/`X-Newegg-*`/`X-Adorama-*`/
+/// `X-MicroCenter-*`/`X-Monoprice-*`/`X-Keychron-*`/`X-Varmilo-*`/
+/// `X-Leopold-*`/`X-Filco-*`/`X-DasKeyboard-*`/`X-Logitech-*`/
+/// `X-Razer-*`/`X-Corsair-*`/`X-SteelSeries-*`/`X-HyperX-*`/
+/// `X-Elgato-*`/`X-Aukey-*`/`X-Anker-*`/`X-Belkin-*`/`X-Ugreen-*`/
+/// `X-Satechi-*`/`X-Twelve-South-*`/`X-mophie-*`/`X-Native-Union-*`/
+/// `X-Moment-*`/`X-Peak-Design-*`/`X-Thule-*` 等の EC・PC パーツ印が
+/// あるか判定する (D494)。
+///
+/// `X-Walmart-*` (Walmart)、`X-Newegg-*` (Newegg)、`X-Logitech-*`
+/// (Logitech) は販売機の通知記録 — 送信側から届くこれは自称。
+fn has_retail_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-easystore-")
+            || l.starts_with("x-myshop-")
+            || l.starts_with("x-shopline-")
+            || l.starts_with("x-cafe24-")
+            || l.starts_with("x-cubecart-")
+            || l.starts_with("x-zencart-")
+            || l.starts_with("x-oscommerce-")
+            || l.starts_with("x-virtuemart-")
+            || l.starts_with("x-hikashop-")
+            || l.starts_with("x-shopware-")
+            || l.starts_with("x-sylius-")
+            || l.starts_with("x-swell-")
+            || l.starts_with("x-medusa-")
+            || l.starts_with("x-saleor-")
+            || l.starts_with("x-vendure-")
+            || l.starts_with("x-commercejs-")
+            || l.starts_with("x-elasticpath-")
+            || l.starts_with("x-fabric-")
+            || l.starts_with("x-commercetools-")
+            || l.starts_with("x-bolcom-")
+            || l.starts_with("x-rakuma-")
+            || l.starts_with("x-auctions-")
+            || l.starts_with("x-walmart-")
+            || l.starts_with("x-target-")
+            || l.starts_with("x-costco-")
+            || l.starts_with("x-bestbuy-")
+            || l.starts_with("x-newegg-")
+            || l.starts_with("x-adorama-")
+            || l.starts_with("x-microcenter-")
+            || l.starts_with("x-frys-")
+            || l.starts_with("x-tigerdirect-")
+            || l.starts_with("x-monoprice-")
+            || l.starts_with("x-massdrop-")
+            || l.starts_with("x-mechanicalkeyboards-")
+            || l.starts_with("x-keychron-")
+            || l.starts_with("x-varmilo-")
+            || l.starts_with("x-leopold-")
+            || l.starts_with("x-filco-")
+            || l.starts_with("x-daskeyboard-")
+            || l.starts_with("x-logitech-")
+            || l.starts_with("x-razer-")
+            || l.starts_with("x-corsair-")
+            || l.starts_with("x-steelseries-")
+            || l.starts_with("x-hyperx-")
+            || l.starts_with("x-elgato-")
+            || l.starts_with("x-aukey-")
+            || l.starts_with("x-anker-")
+            || l.starts_with("x-belkin-")
+            || l.starts_with("x-ugreen-")
+            || l.starts_with("x-satechi-")
+            || l.starts_with("x-twelve-south-")
+            || l.starts_with("x-mophie-")
+            || l.starts_with("x-native-union-")
+            || l.starts_with("x-moment-")
+            || l.starts_with("x-peak-design-")
+            || l.starts_with("x-thule-")
     })
 }
 
@@ -7934,6 +8144,72 @@ mod tests {
         assert!(has_cx_marks(c1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_cx_marks(clean));
+    }
+
+    #[test]
+    fn scan_はドキュメント静的サイト印を検出する() {
+        let g1 = b"X-GitBook-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(g1));
+        let w1 = b"X-WordPress-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(w1));
+        let h1 = b"X-Ghost-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(h1));
+        let r1 = b"X-Replit-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(r1));
+        let s1 = b"X-StackBlitz-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(s1));
+        let c1 = b"X-CodePen-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(c1));
+        let f1 = b"X-Feedly-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(f1));
+        let o1 = b"X-Observable-Notify: x\r\n\r\nx";
+        assert!(has_docsite_marks(o1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_docsite_marks(clean));
+    }
+
+    #[test]
+    fn scan_はポッドキャスト音楽印を検出する() {
+        let s1 = b"X-SoundCloud-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(s1));
+        let a1 = b"X-Acast-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(a1));
+        let d1 = b"X-DistroKid-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(d1));
+        let b1 = b"X-Bandcamp-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(b1));
+        let t1 = b"X-TuneCore-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(t1));
+        let p1 = b"X-Pandora-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(p1));
+        let m1 = b"X-Megaphone-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(m1));
+        let z1 = b"X-Deezer-Notify: x\r\n\r\nx";
+        assert!(has_music_marks(z1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_music_marks(clean));
+    }
+
+    #[test]
+    fn scan_はEC販売印を検出する() {
+        let w1 = b"X-Walmart-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(w1));
+        let n1 = b"X-Newegg-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(n1));
+        let l1 = b"X-Logitech-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(l1));
+        let r1 = b"X-Razer-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(r1));
+        let a1 = b"X-Anker-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(a1));
+        let s1 = b"X-Shopware-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(s1));
+        let m1 = b"X-Medusa-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(m1));
+        let k1 = b"X-Keychron-Notify: x\r\n\r\nx";
+        assert!(has_retail_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_retail_marks(clean));
     }
 }
 

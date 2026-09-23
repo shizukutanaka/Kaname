@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D492: `X-GitBook-*`/`X-WordPress-*`/`X-Ghost-*`/`X-Replit-*`/`X-StackBlitz-*`/`X-Feedly-*` 等のドキュメント・静的サイト印自称が未検査
+
+- **問題**: `X-GitBook-*` (GitBook)、`X-WordPress-*` (WordPress)、`X-Ghost-*` (Ghost)、`X-Docusaurus-*`/`X-MkDocs-*`/`X-Sphinx-*`/`X-Jekyll-*`/`X-Hugo-*`/`X-Gatsby-*`/`X-Surge-*`/`X-Cyclic-*`/`X-Glitch-*`/`X-Replit-*`/`X-CodeSandbox-*`/`X-StackBlitz-*`/`X-CodePen-*`/`X-JSFiddle-*`/`X-Plunker-*`/`X-Observable-*`/`X-Deepnote-*`/`X-Hexo-*`/`X-Bloglovin-*`/`X-Feedly-*`/`X-Inoreader-*`/`X-NewsBlur-*` は文書機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `docsite_marks` + `has_docsite_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 文書印の自署を問え。
+
+### Security — D493: `X-SoundCloud-*`/`X-Acast-*`/`X-DistroKid-*`/`X-Bandcamp-*`/`X-TuneCore-*`/`X-Deezer-*` 等のポッドキャスト・音楽印自称が未検査
+
+- **問題**: `X-SoundCloud-*` (SoundCloud)、`X-Acast-*` (Acast)、`X-DistroKid-*` (DistroKid)、`X-Podpage-*`/`X-Captivate-*`/`X-Transistor-*`/`X-Megaphone-*`/`X-Omny-*`/`X-Art19-*`/`X-iVoox-*`/`X-Audioboom-*`/`X-Mixcloud-*`/`X-HearThis-*`/`X-AudioMack-*`/`X-Bandcamp-*`/`X-TuneCore-*`/`X-CDBaby-*`/`X-Amuse-*`/`X-UnitedMasters-*`/`X-Deezer-*`/`X-Tidal-*`/`X-Pandora-*`/`X-iHeartRadio-*`/`X-AmazonMusic-*`/`X-YouTubeMusic-*`/`X-Audius-*` は音楽機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `music_marks` + `has_music_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 音楽印の自署を問え。
+
+### Security — D494: `X-Walmart-*`/`X-Newegg-*`/`X-Logitech-*`/`X-Shopware-*`/`X-Medusa-*`/`X-Anker-*` 等の EC・PC パーツ印自称が未検査
+
+- **問題**: `X-Walmart-*` (Walmart)、`X-Newegg-*` (Newegg)、`X-Logitech-*` (Logitech)、`X-EasyStore-*`/`X-MyShop-*`/`X-SHOPLINE-*`/`X-Cafe24-*`/`X-CubeCart-*`/`X-ZenCart-*`/`X-osCommerce-*`/`X-VirtueMart-*`/`X-HikaShop-*`/`X-Shopware-*`/`X-Sylius-*`/`X-Swell-*`/`X-Medusa-*`/`X-Saleor-*`/`X-Vendure-*`/`X-Commerce.js-*`/`X-ElasticPath-*`/`X-Fabric-*`/`X-commercetools-*`/`X-Bolcom-*`/`X-Rakuma-*`/`X-Auctions-*`/`X-Target-*`/`X-Costco-*`/`X-BestBuy-*`/`X-Adorama-*`/`X-MicroCenter-*`/`X-Monoprice-*`/`X-Keychron-*`/`X-Varmilo-*`/`X-Leopold-*`/`X-Filco-*`/`X-DasKeyboard-*`/`X-Razer-*`/`X-Corsair-*`/`X-SteelSeries-*`/`X-HyperX-*`/`X-Elgato-*`/`X-Aukey-*`/`X-Anker-*`/`X-Belkin-*`/`X-Ugreen-*`/`X-Satechi-*`/`X-Twelve-South-*`/`X-mophie-*`/`X-Native-Union-*`/`X-Moment-*`/`X-Peak-Design-*`/`X-Thule-*` は販売機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `retail_marks` + `has_retail_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 販売印の自署を問え。
+
+
 ### Security — D489: `X-Expensify-*`/`X-Ramp-*`/`X-Concur-*`/`X-Pleo-*`/`X-Navan-*`/`X-Dext-*` 等の経費・精算印自称が未検査
 
 - **問題**: `X-Expensify-*` (Expensify)、`X-Ramp-*` (Ramp)、`X-Concur-*` (SAP Concur)、`X-Bill-*`/`X-Pleo-*`/`X-Divvy-*`/`X-Navan-*`/`X-TripActions-*`/`X-Coupa-*`/`X-Procurify-*`/`X-Certify-*`/`X-Chrome-River-*`/`X-Abacus-*`/`X-Fyle-*`/`X-Zoho-Expense-*`/`X-Dext-*`/`X-AutoEntry-*`/`X-Hubdoc-*`/`X-Receipt-Bank-*`/`X-Veryfi-*`/`X-Datamolino-*`/`X-Nanonets-*`/`X-Klippa-*` は経費機の通知記録 — 送信側が書くことは自称。
