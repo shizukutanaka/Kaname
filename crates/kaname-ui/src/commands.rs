@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D306: Authentication-Results 自称
+    if env.forged_auth_results {
+        render_risks.push(
+            "Authentication-Results ヘッダ — 受信側が付ける認証結果を送信側が自称している可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D307: Message-ID 欠落
+    if env.missing_message_id {
+        render_risks.push(
+            "Message-ID ヘッダがありません — 識別子を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D308: Approved モデレーション自称
+    if env.approved_header {
+        render_risks.push(
+            "Approved ヘッダ — モデレータ承認を送信側が自称している可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

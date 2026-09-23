@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D306: 送信者側 `Authentication-Results:` (認証 verdict 注入) が未検査
+
+- `Authentication-Results` (RFC 8601) は spf/dkim/dmarc の認証結果を記録するが、本来これは受信側 MTA が配送経路で付ける値 — 送信側が書き込んで届くのは「審査済み」の体裁を騙る verdict 注入であり、DKIM-Signature と違い検証不可能な体裁だけを装う
+- 対処: `has_forged_auth_results` 新設 → `Envelope.forged_auth_results` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D307: `Message-ID:` ヘッダ欠落が未検査
+
+- RFC 5322 は Message-ID を SHOULD とし実装上ほぼすべての MUA/MTA が発行する — 欠落は手作り生成品の兆候。malformed (D250) は形を問い、こちらは存在自体を問うが未検査だった
+- 対処: `has_missing_message_id` 新設 → `Envelope.missing_message_id` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D308: `Approved:` モデレーション自称が未検査
+
+- `Approved:` はモデレートされた ML/ニュースグループでモデレータの承認を表す値で本来モデレータやゲートウェイが付ける — 送信側が書き込んで届くのは「承認済み配信」の体裁を騙る偽装だが未検査だった
+- 対処: `has_approved_header` 新設 → `Envelope.approved_header` → `render_risks` 兆候報告
+- テスト +4 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた

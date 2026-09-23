@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `Authentication-Results:` ヘッダがあるか — 本来受信側 MTA が
+    /// 付ける認証 verdict を送信側が自称する verdict 注入の兆候 (D306)。
+    pub forged_auth_results: bool,
+    /// `Message-ID:` ヘッダが欠けているか — RFC 5322 で SHOULD の識別子を
+    /// 欠く手作り生成品の兆候 (D307)。
+    pub missing_message_id: bool,
+    /// `Approved:` ヘッダがあるか — モデレート済みリスト/ニュースの
+    /// 承認印を送信側が自称するモデレーション偽装の兆候 (D308)。
+    pub approved_header: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +371,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        forged_auth_results: has_forged_auth_results(raw),
+        missing_message_id: has_missing_message_id(raw),
+        approved_header: has_approved_header(raw),
     })
 }
 
@@ -422,6 +434,49 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// 送信者側の `Authentication-Results:` ヘッダがあるか判定する (D306)。
+///
+/// `Authentication-Results` (RFC 8601) は spf=pass/dkim=pass/dmarc=pass
+/// 等の認証 verdict を記録するが、本来これは受信側 MTA が配送経路で
+/// 付ける値 — 送信側が書き込んで届くのは「審査済み」の体裁を騙る
+/// verdict 注入であり、DKIM-Signature と違い検証不可能な体裁だけを
+/// 装う。
+fn has_forged_auth_results(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("authentication-results:"))
+}
+
+/// `Message-ID:` ヘッダが欠けているか判定する (D307)。
+///
+/// RFC 5322 は Message-ID を SHOULD とするが、実装上ほぼすべての MUA/
+/// MTA が発行する — 欠落は手作り生成品の兆候。malformed (D250) は形を
+/// 問い、こちらは存在自体を問う。
+fn has_missing_message_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("message-id:"))
+}
+
+/// `Approved:` ヘッダがあるか判定する (D308)。
+///
+/// `Approved:` はモデレートされた ML/ニュースグループでモデレータの
+/// 承認を表す値で、本来はモデレータまたはゲートウェイが付ける — 送信
+/// 側が書き込んで届くのは「承認済み配信」の体裁を騙る偽装。
+fn has_approved_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("approved:"))
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2730,42 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はAuthenticationResults自称を検出する() {
+        let forged = b"From: a@b\r\nAuthentication-Results: evil.example; spf=pass dkim=pass dmarc=pass\r\n\r\nx";
+        assert!(has_forged_auth_results(forged));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_forged_auth_results(clean));
+        let body_only = b"From: a@b\r\n\r\nAuthentication-Results: x; spf=pass";
+        assert!(!has_forged_auth_results(body_only));
+        let other = b"From: a@b\r\nX-Authentication-Results: y; spf=pass\r\n\r\nx";
+        assert!(!has_forged_auth_results(other));
+    }
+
+    #[test]
+    fn scan_はMessageID欠落を検出する() {
+        let missing = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_message_id(missing));
+        let present = b"From: a@b\r\nMessage-ID: <x@b>\r\n\r\nx";
+        assert!(!has_missing_message_id(present));
+        let folded = b"From: a@b\r\nMessage-ID:\r\n <x@b>\r\n\r\nx";
+        assert!(!has_missing_message_id(folded));
+        let body_only = b"From: a@b\r\n\r\nMessage-ID: <x@b>";
+        assert!(has_missing_message_id(body_only));
+    }
+
+    #[test]
+    fn scan_はApproved自称を検出する() {
+        let forged = b"From: a@b\r\nApproved: mod@list\r\n\r\nx";
+        assert!(has_approved_header(forged));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_approved_header(clean));
+        let body_only = b"From: a@b\r\n\r\nApproved: mod@list";
+        assert!(!has_approved_header(body_only));
+        let other = b"From: a@b\r\nX-Approved: y\r\n\r\nx";
+        assert!(!has_approved_header(other));
     }
 }
 
