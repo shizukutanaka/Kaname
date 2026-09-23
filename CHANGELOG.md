@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D587: `X-Yazuya-*`/`X-Egao-*`/`X-NatureMade-*` 等のサプリメント・健康食品印自称が未検査
+
+- **問題**: `X-Yazuya-*` (やずや)、`X-Egao-*` (えがお)、`X-NatureMade-*` (ネイチャーメイド)、`X-Kyusai-*`/`X-YamamotoKanpo-*`/`X-LifeSupplement-*`/`X-USANA-*`/`X-Orihiro-*`/`X-ItohKanpo-*`/`X-SuntoryWellness-*`/`X-AsahiFoods-*`/`X-Ogaland-*`/`X-FineJapan-*`/`X-MoriSupplement-*`/`X-Hifumi-*`/`X-Nunokame-*`/`X-Ebis-*`/`X-BelleSere-*`/`X-SeedComs-*`/`X-Fukumi-*`/`X-Grassju-*`/`X-AFC-*`/`X-NatureLife-*`/`X-HealthHelper-*`/`X-SupplementJP-*`/`X-KaigoSapri-*`/`X-VitaSapri-*`/`X-PuritansPride-*`/`X-NowFoods-*`/`X-Solgar-*`/`X-Thorne-*`/`X-LifeExtension-*`/`X-DoctorBest-*`/`X-Jarrow-*`/`X-Swanson-*`/`X-NaturesWay-*`/`X-GardenOfLife-*`/`X-MegaFood-*`/`X-RainbowLight-*`/`X-SourceNaturals-*`/`X-Nutrigold-*`/`X-Sundown-*`/`X-NatureBounty-*`/`X-Natrol-*`/`X-Caltrate-*`/`X-Centrum-*`/`X-OneADay-*`/`X-Estheliv-*`/`X-Heliom-*`/`X-Mynus-*`/`X-Yawata-*`/`X-Revon-*`/`X-HyaDuo-*`/`X-MenardSupp-*`/`X-PolaSupp-*`/`X-ShiseidoSupp-*`/`X-OrbisSupp-*` は滋機の通知記録 — 送信側が書くことは自称。初回無料・定期購入・効能謳いの偽装は健康食品詐欺の典型。(化粧品機は D531、製薬機は D542)
+- **修正**: `Envelope` に `supplement_marks` + `has_supplement_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 滋印の自署を問え。
+
+### Security — D588: `X-Crecla-*`/`X-AquaClara-*`/`X-Frecious-*` 等のウォーターサーバー・宅配水印自称が未検査
+
+- **問題**: `X-Crecla-*` (クリクラ)、`X-AquaClara-*` (アクアクララ)、`X-Frecious-*` (フレシャス)、`X-CosmoWater-*`/`X-PremiumWater-*`/`X-Urunon-*`/`X-Alpina-*`/`X-Kirala-*`/`X-OneWay-*`/`X-Nafiel-*`/`X-FujiNoYusui-*`/`X-ShinanoYusui-*`/`X-EcoWater-*`/`X-WaterBox-*`/`X-AmadanaWater-*`/`X-Locc-*`/`X-KiralaWater-*`/`X-MizuNoKagayaki-*`/`X-AlpesWater-*`/`X-FujiWater-*`/`X-Rakusui-*`/`X-FujiKyokusui-*`/`X-ShingenWater-*`/`X-WaterServer-*`/`X-KanadenWater-*`/`X-AquaWave-*`/`X-MizunoHikari-*`/`X-FamiPure-*`/`X-MizuLand-*`/`X-PureBlu-*`/`X-Kyoubun-*`/`X-AquaStyle-*`/`X-TokiWater-*`/`X-AquaCube-*`/`X-NomuWater-*`/`X-DydoWater-*`/`X-YamatoWater-*`/`X-DewLand-*`/`X-OyuMizu-*`/`X-SierraWater-*`/`X-MaruMizu-*`/`X-QuolofWater-*`/`X-AquaPartner-*`/`X-WaterStand-*`/`X-KiranoWater-*`/`X-HatoMizu-*`/`X-NipponMizu-*`/`X-MizuKawa-*`/`X-YuukiWater-*`/`X-Suigen-*`/`X-SpringMizu-*`/`X-FujiPure-*`/`X-ItoEnWater-*`/`X-Shizuku-*`/`X-OzekiWater-*`/`X-AsahiWater-*`/`X-MizuHi-*` は水機の通知記録 — 送信側が書くことは自称。サーバー無料・定期水代・保守点検の偽装は水商売詐欺の典型。
+- **修正**: `Envelope` に `waterserver_marks` + `has_waterserver_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 水印の自署を問え。
+
+### Security — D589: `X-NihonMA-*`/`X-StrikeMA-*`/`X-Batonz-*`/`X-Tranbi-*` 等の M&A・事業承継印自称が未検査
+
+- **問題**: `X-NihonMA-*` (日本M&Aセンター)、`X-StrikeMA-*` (ストライク)、`X-Batonz-*` (バトンズ)、`X-Tranbi-*` (トランビ)、`X-MACP-*`/`X-Atracs-*`/`X-MASoken-*`/`X-Ondec-*`/`X-ESNetworks-*`/`X-Inte-*`/`X-Fundbook-*`/`X-MATech-*`/`X-Succession-*`/`X-Shokibo-*`/`X-MAOnline-*`/`X-JMACenter-*`/`X-MAAdvisors-*`/`X-NihonJiba-*`/`X-ChushoMA-*`/`X-BizReachSuccession-*`/`X-MATrust-*`/`X-RecofMA-*`/`X-YukoMA-*`/`X-Manebi-*`/`X-JVCM-*`/`X-MatchPoint-*`/`X-TsugiTe-*`/`X-Keieisoken-*`/`X-ShoninMA-*`/`X-MAParners-*`/`X-Inforights-*`/`X-UsamiMA-*`/`X-StrategicM-*`/`X-KeitakuMA-*`/`X-MABridge-*`/`X-MiraiMA-*`/`X-ErnstMA-*`/`X-MAConsulting-*`/`X-CorrMA-*`/`X-AozoraMA-*`/`X-RiverMA-*`/`X-CraftMA-*`/`X-FukuiMA-*`/`X-TokyoMA-*`/`X-NipponBridge-*`/`X-AccelMA-*`/`X-BridgePartner-*`/`X-Kachidoki-*`/`X-SouzokuMA-*`/`X-KeisanMA-*`/`X-JitsumuMA-*`/`X-SogoMA-*`/`X-ShinsuiMA-*` は継機の通知記録 — 送信側が書くことは自称。買収案件・承継相談・仲介手数料の偽装は中小企業狙い BEC の典型。(監査・コンサル機は D546)
+- **修正**: `Envelope` に `maadvisory_marks` + `has_maadvisory_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 継印の自署を問え。
+
 ### Security — D584: `X-Bears-*`/`X-CaSy-*`/`X-Osoujihonpo-*` 等の家事代行・ハウスクリーニング印自称が未検査
 
 - **問題**: `X-Bears-*` (ベアーズ)、`X-CaSy-*` (CaSy)、`X-Osoujihonpo-*` (おそうじ本舗)、`X-Minimaid-*`/`X-Pinai-*`/`X-Taskaji-*`/`X-Kajita-*`/`X-Kajitaku-*`/`X-Mitsume-*`/`X-MaggieMaid-*`/`X-Iekeeping-*`/`X-Okatazuke-*`/`X-Edai-*`/`X-Housekeeping-*`/`X-Umamori-*`/`X-Cathand-*`/`X-TokyoOsoji-*`/`X-Maruzyou-*`/`X-Arukaji-*`/`X-Rakumama-*`/`X-Kajiapo-*`/`X-Osoji-*`/`X-MerryMaid-*`/`X-DuskinMaid-*`/`X-MollyMaid-*`/`X-Homejoy-*`/`X-Handy-*`/`X-Takl-*`/`X-Maids-*`/`X-Tidy-*`/`X-Takuji-*`/`X-Hitosaji-*`/`X-Hatarako-*`/`X-Grapes-*`/`X-Bikubo-*`/`X-Sansei-*`/`X-Daikou-*`/`X-PickMe-*`/`X-HouseCall-*`/`X-Zehitomo-*`/`X-Kurashino-*`/`X-Mitibata-*`/`X-Odegawa-*`/`X-Osamade-*`/`X-HouseKeeper-*`/`X-Sumai-*`/`X-Cocole-*`/`X-Asumi-*`/`X-Rakuchin-*`/`X-Suki-*`/`X-Aizin-*`/`X-Osekkai-*` は房機の通知記録 — 送信側が書くことは自称。見積提示・定期契約・クリーニング代金の偽装は高齢者狙い詐欺の典型。(警備・施設機は D548)

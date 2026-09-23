@@ -1685,6 +1685,12 @@ pub struct Envelope {
     pub mailorder_marks: bool,
     /// `X-AichiLaw-*`/`X-TokyoMinerva-*`/`X-NihonPlum-*`/`X-DaiichiSogo-*`/`X-Avance-*`/`X-Sugiyama-*` 等の債務整理・過払い金通知記録印を送信側が自称している (D586)
     pub debtrelief_marks: bool,
+    /// `X-Yazuya-*`/`X-Egao-*`/`X-Kyusai-*`/`X-NatureMade-*`/`X-Orihiro-*` 等のサプリメント・健康食品通知記録印を送信側が自称している (D587)
+    pub supplement_marks: bool,
+    /// `X-Crecla-*`/`X-AquaClara-*`/`X-CosmoWater-*`/`X-Frecious-*`/`X-PremiumWater-*` 等のウォーターサーバー・宅配水通知記録印を送信側が自称している (D588)
+    pub waterserver_marks: bool,
+    /// `X-NihonMA-*`/`X-StrikeMA-*`/`X-Batonz-*`/`X-Tranbi-*`/`X-MASoken-*` 等の M&A・事業承継通知記録印を送信側が自称している (D589)
+    pub maadvisory_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2149,6 +2155,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         housekeeping_marks: has_housekeeping_marks(hdr),
         mailorder_marks: has_mailorder_marks(hdr),
         debtrelief_marks: has_debtrelief_marks(hdr),
+        supplement_marks: has_supplement_marks(hdr),
+        waterserver_marks: has_waterserver_marks(hdr),
+        maadvisory_marks: has_maadvisory_marks(hdr),
     })
 }
 
@@ -10577,7 +10586,6 @@ fn has_mailorder_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-dinos-")
             || l.starts_with("x-scroll-")
             || l.starts_with("x-cataloghouse-")
-            || l.starts_with("x-shopsjapan-")
             || l.starts_with("x-shopjapan-")
             || l.starts_with("x-oaklawn-")
             || l.starts_with("x-image-")
@@ -10686,6 +10694,206 @@ fn has_debtrelief_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-grandlaw-")
             || l.starts_with("x-fujilaw-")
             || l.starts_with("x-yamatolaw-")
+    })
+}
+
+/// `X-Yazuya-*`/`X-Egao-*`/`X-Kyusai-*`/`X-YamamotoKanpo-*`/`X-NatureMade-*`/`X-LifeSupplement-*`/`X-USANA-*`/`X-Orihiro-*`/`X-ItohKanpo-*`/`X-SuntoryWellness-*`/`X-AsahiFoods-*`/`X-Ogaland-*`/`X-FineJapan-*`/`X-MoriSupplement-*`/`X-Hifumi-*`/`X-Nunokame-*`/`X-Ebis-*`/`X-BelleSere-*`/`X-SeedComs-*`/`X-Fukumi-*`/`X-Grassju-*`/`X-AFC-*`/`X-NatureLife-*`/`X-HealthHelper-*`/`X-SupplementJP-*`/`X-KaigoSapri-*`/`X-VitaSapri-*`/`X-PuritansPride-*`/`X-NowFoods-*`/`X-Solgar-*`/`X-Thorne-*`/`X-LifeExtension-*`/`X-DoctorBest-*`/`X-Jarrow-*`/`X-Swanson-*`/`X-NaturesWay-*`/`X-GardenOfLife-*`/`X-MegaFood-*`/`X-RainbowLight-*`/`X-SourceNaturals-*`/`X-Nutrigold-*`/`X-Sundown-*`/`X-NatureBounty-*`/`X-Natrol-*`/`X-Caltrate-*`/`X-Centrum-*`/`X-OneADay-*`/`X-Estheliv-*`/`X-Heliom-*`/`X-Mynus-*`/`X-Yawata-*`/`X-Revon-*`/`X-HyaDuo-*`/`X-MenardSupp-*`/`X-NoevirSupp-*`/`X-PolaSupp-*`/`X-ShiseidoSupp-*`/`X-OrbisSupp-*` (サプリメント・健康食品・ビタミンの通知記録) を送信側が自称しているかどうか。初回無料・定期購入・効能謳いの偽装は健康食品詐欺の典型手口。
+fn has_supplement_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-yazuya-")
+            || l.starts_with("x-egao-")
+            || l.starts_with("x-kyusai-")
+            || l.starts_with("x-yamamotokanpo-")
+            || l.starts_with("x-naturemade-")
+            || l.starts_with("x-lifesupplement-")
+            || l.starts_with("x-usana-")
+            || l.starts_with("x-orihiro-")
+            || l.starts_with("x-itohkanpo-")
+            || l.starts_with("x-suntorywellness-")
+            || l.starts_with("x-asahifoods-")
+            || l.starts_with("x-ogaland-")
+            || l.starts_with("x-finejapan-")
+            || l.starts_with("x-morisupplement-")
+            || l.starts_with("x-hifumi-")
+            || l.starts_with("x-nunokame-")
+            || l.starts_with("x-ebis-")
+            || l.starts_with("x-bellesere-")
+            || l.starts_with("x-seedcoms-")
+            || l.starts_with("x-fukumi-")
+            || l.starts_with("x-grassju-")
+            || l.starts_with("x-afc-")
+            || l.starts_with("x-naturelife-")
+            || l.starts_with("x-healthhelper-")
+            || l.starts_with("x-supplementjp-")
+            || l.starts_with("x-kaigosapri-")
+            || l.starts_with("x-vitasapri-")
+            || l.starts_with("x-puritanspride-")
+            || l.starts_with("x-nowfoods-")
+            || l.starts_with("x-solgar-")
+            || l.starts_with("x-thorne-")
+            || l.starts_with("x-lifeextension-")
+            || l.starts_with("x-doctorbest-")
+            || l.starts_with("x-jarrow-")
+            || l.starts_with("x-swanson-")
+            || l.starts_with("x-naturesway-")
+            || l.starts_with("x-gardenoflife-")
+            || l.starts_with("x-megafood-")
+            || l.starts_with("x-rainbowlight-")
+            || l.starts_with("x-sourcenaturals-")
+            || l.starts_with("x-nutrigold-")
+            || l.starts_with("x-sundown-")
+            || l.starts_with("x-naturebounty-")
+            || l.starts_with("x-natrol-")
+            || l.starts_with("x-caltrate-")
+            || l.starts_with("x-centrum-")
+            || l.starts_with("x-oneaday-")
+            || l.starts_with("x-estheliv-")
+            || l.starts_with("x-heliom-")
+            || l.starts_with("x-mynus-")
+            || l.starts_with("x-yawata-")
+            || l.starts_with("x-revon-")
+            || l.starts_with("x-hyaduo-")
+            || l.starts_with("x-menardsupp-")
+            || l.starts_with("x-polasupp-")
+            || l.starts_with("x-shiseidosupp-")
+            || l.starts_with("x-orbissupp-")
+    })
+}
+
+/// `X-Crecla-*`/`X-AquaClara-*`/`X-CosmoWater-*`/`X-Frecious-*`/`X-PremiumWater-*`/`X-Urunon-*`/`X-Alpina-*`/`X-Kirala-*`/`X-OneWay-*`/`X-Nafiel-*`/`X-FujiNoYusui-*`/`X-ShinanoYusui-*`/`X-EcoWater-*`/`X-WaterBox-*`/`X-AmadanaWater-*`/`X-Locc-*`/`X-KiralaWater-*`/`X-MizuNoKagayaki-*`/`X-AlpesWater-*`/`X-FujiWater-*`/`X-Rakusui-*`/`X-FujiKyokusui-*`/`X-ShingenWater-*`/`X-WaterServer-*`/`X-KanadenWater-*`/`X-AquaWave-*`/`X-MizunoHikari-*`/`X-FamiPure-*`/`X-MizuLand-*`/`X-PureBlu-*`/`X-Kyoubun-*`/`X-AquaStyle-*`/`X-TokiWater-*`/`X-AquaCube-*`/`X-PremiumW-*`/`X-NomuWater-*`/`X-DydoWater-*`/`X-YamatoWater-*`/`X-DewLand-*`/`X-OyuMizu-*`/`X-SierraWater-*`/`X-MaruMizu-*`/`X-QuolofWater-*`/`X-AquaPartner-*`/`X-WaterStand-*`/`X-KiranoWater-*`/`X-HatoMizu-*`/`X-NipponMizu-*`/`X-MizuKawa-*`/`X-YuukiWater-*`/`X-Suigen-*`/`X-SpringMizu-*`/`X-FujiPure-*`/`X-ItoEnWater-*`/`X-Shizuku-*`/`X-OzekiWater-*`/`X-AsahiWater-*`/`X-MizuHi-*` (ウォーターサーバー・宅配水・浄水器の通知記録) を送信側が自称しているかどうか。サーバー無料・定期水代・保守点検の偽装は水商売詐欺の典型手口。
+fn has_waterserver_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-crecla-")
+            || l.starts_with("x-aquaclara-")
+            || l.starts_with("x-cosmowater-")
+            || l.starts_with("x-frecious-")
+            || l.starts_with("x-premiumwater-")
+            || l.starts_with("x-urunon-")
+            || l.starts_with("x-alpina-")
+            || l.starts_with("x-kirala-")
+            || l.starts_with("x-oneway-")
+            || l.starts_with("x-nafiel-")
+            || l.starts_with("x-fujinoyusui-")
+            || l.starts_with("x-shinanoyusui-")
+            || l.starts_with("x-ecowater-")
+            || l.starts_with("x-waterbox-")
+            || l.starts_with("x-amadanawater-")
+            || l.starts_with("x-locc-")
+            || l.starts_with("x-kiralawater-")
+            || l.starts_with("x-mizunokagayaki-")
+            || l.starts_with("x-alpeswater-")
+            || l.starts_with("x-fujiwater-")
+            || l.starts_with("x-rakusui-")
+            || l.starts_with("x-fujikyokusui-")
+            || l.starts_with("x-shingenwater-")
+            || l.starts_with("x-waterserver-")
+            || l.starts_with("x-kanadenwater-")
+            || l.starts_with("x-aquawave-")
+            || l.starts_with("x-mizunohikari-")
+            || l.starts_with("x-famipure-")
+            || l.starts_with("x-mizuland-")
+            || l.starts_with("x-pureblu-")
+            || l.starts_with("x-kyoubun-")
+            || l.starts_with("x-aquastyle-")
+            || l.starts_with("x-tokiwater-")
+            || l.starts_with("x-aquacube-")
+            || l.starts_with("x-nomuwater-")
+            || l.starts_with("x-dydowater-")
+            || l.starts_with("x-yamatowater-")
+            || l.starts_with("x-dewland-")
+            || l.starts_with("x-oyumizu-")
+            || l.starts_with("x-sierrawater-")
+            || l.starts_with("x-marumizu-")
+            || l.starts_with("x-quolofwater-")
+            || l.starts_with("x-aquapartner-")
+            || l.starts_with("x-waterstand-")
+            || l.starts_with("x-kiranowater-")
+            || l.starts_with("x-hatomizu-")
+            || l.starts_with("x-nipponmizu-")
+            || l.starts_with("x-mizukawa-")
+            || l.starts_with("x-yuukiwater-")
+            || l.starts_with("x-suigen-")
+            || l.starts_with("x-springmizu-")
+            || l.starts_with("x-fujipure-")
+            || l.starts_with("x-itoenwater-")
+            || l.starts_with("x-shizuku-")
+            || l.starts_with("x-ozekiwater-")
+            || l.starts_with("x-asahiwater-")
+            || l.starts_with("x-mizuhi-")
+    })
+}
+
+/// `X-NihonMA-*`/`X-StrikeMA-*`/`X-MACP-*`/`X-Batonz-*`/`X-Tranbi-*`/`X-Atracs-*`/`X-MASoken-*`/`X-Ondec-*`/`X-ESNetworks-*`/`X-Inte-*`/`X-Fundbook-*`/`X-MATech-*`/`X-Succession-*`/`X-Shokibo-*`/`X-MAOnline-*`/`X-JMACenter-*`/`X-MAAdvisors-*`/`X-NihonJiba-*`/`X-ChushoMA-*`/`X-BizReachSuccession-*`/`X-MATrust-*`/`X-RecofMA-*`/`X-YukoMA-*`/`X-Manebi-*`/`X-JVCM-*`/`X-MatchPoint-*`/`X-TsugiTe-*`/`X-Keieisoken-*`/`X-ShoninMA-*`/`X-MAParners-*`/`X-Inforights-*`/`X-UsamiMA-*`/`X-StrategicM-*`/`X-KeitakuMA-*`/`X-MABridge-*`/`X-MiraiMA-*`/`X-ErnstMA-*`/`X-MAConsulting-*`/`X-CorrMA-*`/`X-AozoraMA-*`/`X-RiverMA-*`/`X-CraftMA-*`/`X-FukuiMA-*`/`X-TokyoMA-*`/`X-NipponBridge-*`/`X-AccelMA-*`/`X-BridgePartner-*`/`X-Kachidoki-*`/`X-SouzokuMA-*`/`X-KeisanMA-*`/`X-JitsumuMA-*`/`X-SogoMA-*`/`X-ShinsuiMA-*` (M&A 仲介・事業承継・企業買収の通知記録) を送信側が自称しているかどうか。買収案件・承継相談・仲介手数料の偽装は中小企業狙い BEC の典型手口。
+fn has_maadvisory_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nihonma-")
+            || l.starts_with("x-strikema-")
+            || l.starts_with("x-macp-")
+            || l.starts_with("x-batonz-")
+            || l.starts_with("x-tranbi-")
+            || l.starts_with("x-atracs-")
+            || l.starts_with("x-masoken-")
+            || l.starts_with("x-ondec-")
+            || l.starts_with("x-esnetworks-")
+            || l.starts_with("x-inte-")
+            || l.starts_with("x-fundbook-")
+            || l.starts_with("x-matech-")
+            || l.starts_with("x-succession-")
+            || l.starts_with("x-shokibo-")
+            || l.starts_with("x-maonline-")
+            || l.starts_with("x-jmacenter-")
+            || l.starts_with("x-maadvisors-")
+            || l.starts_with("x-nihonjiba-")
+            || l.starts_with("x-chushoma-")
+            || l.starts_with("x-bizreachsuccession-")
+            || l.starts_with("x-matrust-")
+            || l.starts_with("x-recofma-")
+            || l.starts_with("x-yukoma-")
+            || l.starts_with("x-manebi-")
+            || l.starts_with("x-jvcm-")
+            || l.starts_with("x-matchpoint-")
+            || l.starts_with("x-tsugite-")
+            || l.starts_with("x-keieisoken-")
+            || l.starts_with("x-shoninma-")
+            || l.starts_with("x-maparners-")
+            || l.starts_with("x-inforights-")
+            || l.starts_with("x-usamima-")
+            || l.starts_with("x-strategicm-")
+            || l.starts_with("x-keitakuma-")
+            || l.starts_with("x-mabridge-")
+            || l.starts_with("x-miraima-")
+            || l.starts_with("x-ernstma-")
+            || l.starts_with("x-maconsulting-")
+            || l.starts_with("x-corrma-")
+            || l.starts_with("x-aozorama-")
+            || l.starts_with("x-riverma-")
+            || l.starts_with("x-craftma-")
+            || l.starts_with("x-fukuima-")
+            || l.starts_with("x-tokyoma-")
+            || l.starts_with("x-nipponbridge-")
+            || l.starts_with("x-accelma-")
+            || l.starts_with("x-bridgepartner-")
+            || l.starts_with("x-kachidoki-")
+            || l.starts_with("x-souzokuma-")
+            || l.starts_with("x-keisanma-")
+            || l.starts_with("x-jitsumuma-")
+            || l.starts_with("x-sogoma-")
+            || l.starts_with("x-shinsuima-")
     })
 }
 
@@ -17362,5 +17570,152 @@ X-Other: 1
 
 body";
     assert!(!has_debtrelief_marks(clean));
+}
+
+#[test]
+fn scan_は滋機印を検出する() {
+    let y1 = b"From: a@b
+X-Yazuya-Id: 1
+
+x";
+    let e1 = b"From: a@b
+X-Egao-Trace: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kyusai-Notice: 1
+
+x";
+    let n1 = b"From: a@b
+X-NatureMade-Flag: 1
+
+x";
+    let o1 = b"From: a@b
+X-Orihiro-Entry: 1
+
+x";
+    let s1 = b"From: a@b
+X-SeedComs-Record: 1
+
+x";
+    let a1 = b"From: a@b
+X-AFC-Trace: 1
+
+x";
+    let u1 = b"From: a@b
+X-USANA-Stamp: 1
+
+x";
+    assert!(has_supplement_marks(y1));
+    assert!(has_supplement_marks(e1));
+    assert!(has_supplement_marks(k1));
+    assert!(has_supplement_marks(n1));
+    assert!(has_supplement_marks(o1));
+    assert!(has_supplement_marks(s1));
+    assert!(has_supplement_marks(a1));
+    assert!(has_supplement_marks(u1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_supplement_marks(clean));
+}
+
+#[test]
+fn scan_は水機印を検出する() {
+    let c1 = b"From: a@b
+X-Crecla-Id: 1
+
+x";
+    let a1 = b"From: a@b
+X-AquaClara-Trace: 1
+
+x";
+    let o1 = b"From: a@b
+X-CosmoWater-Notice: 1
+
+x";
+    let f1 = b"From: a@b
+X-Frecious-Flag: 1
+
+x";
+    let p1 = b"From: a@b
+X-PremiumWater-Entry: 1
+
+x";
+    let u1 = b"From: a@b
+X-Urunon-Record: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kirala-Trace: 1
+
+x";
+    let w1 = b"From: a@b
+X-WaterStand-Stamp: 1
+
+x";
+    assert!(has_waterserver_marks(c1));
+    assert!(has_waterserver_marks(a1));
+    assert!(has_waterserver_marks(o1));
+    assert!(has_waterserver_marks(f1));
+    assert!(has_waterserver_marks(p1));
+    assert!(has_waterserver_marks(u1));
+    assert!(has_waterserver_marks(k1));
+    assert!(has_waterserver_marks(w1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_waterserver_marks(clean));
+}
+
+#[test]
+fn scan_は継機印を検出する() {
+    let n1 = b"From: a@b
+X-NihonMA-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-StrikeMA-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-Batonz-Notice: 1
+
+x";
+    let t1 = b"From: a@b
+X-Tranbi-Flag: 1
+
+x";
+    let a1 = b"From: a@b
+X-Atracs-Entry: 1
+
+x";
+    let m1 = b"From: a@b
+X-MASoken-Record: 1
+
+x";
+    let o1 = b"From: a@b
+X-Ondec-Trace: 1
+
+x";
+    let f1 = b"From: a@b
+X-Fundbook-Stamp: 1
+
+x";
+    assert!(has_maadvisory_marks(n1));
+    assert!(has_maadvisory_marks(s1));
+    assert!(has_maadvisory_marks(b1));
+    assert!(has_maadvisory_marks(t1));
+    assert!(has_maadvisory_marks(a1));
+    assert!(has_maadvisory_marks(m1));
+    assert!(has_maadvisory_marks(o1));
+    assert!(has_maadvisory_marks(f1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_maadvisory_marks(clean));
 }
 }
