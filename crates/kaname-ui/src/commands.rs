@@ -1396,6 +1396,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D513: 航空・マイレージ印自称
+    if env.airline_marks {
+        render_risks.push(
+            "X-ANA-*/X-JAL-*/X-United-*/X-Delta-*/X-Emirates-*/X-Qantas-*/X-Ryanair-*/X-Skymark-* 等 — 空機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D514: 伝統銀行・証券印自称
+    if env.bank_marks {
+        render_risks.push(
+            "X-Chase-*/X-MUFG-*/X-SMBC-*/X-HSBC-*/X-WellsFargo-*/X-Barclays-*/X-RakutenBank-*/X-SonyBank-* 等 — 金機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D515: データベース・データウェアハウス印自称
+    if env.database_marks {
+        render_risks.push(
+            "X-MongoDB-*/X-Redis-*/X-Snowflake-*/X-PlanetScale-*/X-Neon-*/X-ClickHouse-*/X-Firebase-*/X-Upstash-* 等 — 庫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
