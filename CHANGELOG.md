@@ -6,7 +6,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-### Security — D578: `X-Takarakuji-*`/`X-Loto6-*`/`X-Powerball-*` 等の宝くじ・ロト・懸賞当選印自称が未検査
+## [Unreleased]
+
+### Security — D581: `X-Acom-*`/`X-Promise-*`/`X-Aiful-*`/`X-Mobit-*` 等の消費者金融・カードローン印自称が未検査
+
+- **問題**: `X-Acom-*` (アコム)、`X-Promise-*` (プロミス)、`X-Aiful-*` (アイフル)、`X-Mobit-*` (モビット)、`X-LakeALSA-*`/`X-Central-*`/`X-Futaba-*`/`X-DirectOne-*`/`X-Fukuho-*`/`X-Eiwa-*`/`X-SkyOffice-*`/`X-Canet-*`/`X-Arco-*`/`X-Arrow-*`/`X-Lifet-*`/`X-Mirai-*`/`X-Ufa-*`/`X-HelloHappy-*`/`X-Espoir-*`/`X-Aline-*`/`X-APlus-*`/`X-SMBCMobby-*`/`X-AuJibun-*`/`X-Hanacred-*`/`X-Askpa-*`/`X-Fukumaru-*`/`X-Nyusen-*`/`X-Sekishin-*`/`X-Taisei-*`/`X-Haruka-*`/`X-LifeSuite-*`/`X-Columbia-*`/`X-Anfan-*`/`X-Fujimaru-*`/`X-Kimura-*`/`X-AIUCred-*`/`X-SHinki-*`/`X-SmileShosan-*`/`X-Harukaze-*`/`X-BellunaMoney-*`/`X-SpaceRental-*` は銭機の通知記録 — 送信側が書くことは自称。残高確認・支払催促・審査通過の偽装は闇金・架空請求の典型。(`X-VISA-*`/`X-Amex-*`/`X-Saison-*`/`X-オリコ-*` 等のカード機は D567、銀行機は D514/D554)
+- **修正**: `Envelope` に `consumerloan_marks` + `has_consumerloan_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 銭印の自署を問え。
+
+### Security — D582: `X-Akachan-*`/`X-Nishimatsuya-*`/`X-Mikihouse-*` 等のベビー・子育て印自称が未検査
+
+- **問題**: `X-Akachan-*` (アカチャンホンポ)、`X-Nishimatsuya-*` (西松屋)、`X-Mikihouse-*` (ミキハウス)、`X-Birthday-*`/`X-Pigeon-*`/`X-Combi-*`/`X-Aprica-*`/`X-BabiesRUs-*`/`X-Familiar-*`/`X-ToysRUs-*`/`X-Bornelund-*`/`X-Dadway-*`/`X-Ergobaby-*`/`X-Babybjorn-*`/`X-Medela-*`/`X-Drbetta-*`/`X-Beanstalk-*`/`X-Wakodo-*`/`X-MeijiBaby-*`/`X-MorinagaBaby-*`/`X-Akasugu-*`/`X-Tamahiyo-*`/`X-ZexyBaby-*`/`X-Babycome-*`/`X-Ninaas-*`/`X-PuremaBaby-*`/`X-BellemaBaby-*`/`X-Farbe-*`/`X-ChouChou-*`/`X-BabyFan-*`/`X-Kodomono-*`/`X-Mamanoco-*`/`X-Futafuta-*`/`X-Kiddyland-*`/`X-Bumbo-*`/`X-SkipHop-*`/`X-Cybex-*`/`X-Britax-*`/`X-MaxiCosi-*`/`X-Graco-*`/`X-Chicco-*`/`X-Evenflo-*`/`X-4moms-*`/`X-BabyDan-*`/`X-Babyzen-*`/`X-Stokke-*`/`X-Leander-*`/`X-Kidco-*`/`X-RecaroKids-*`/`X-LoveToDream-*`/`X-Aptamil-*`/`X-Similac-*` は児機の通知記録 — 送信側が書くことは自称。出産祝い・育児グッズ・粉ミルク割引の偽装は新米親狙い詐欺の典型。
+- **修正**: `Envelope` に `baby_marks` + `has_baby_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 児印の自署を問え。
+
+### Security — D583: `X-Hibiya-*`/`X-Hanacupid-*`/`X-Teleflora-*`/`X-Interflora-*` 等の花・フラワーギフト印自称が未検査
+
+- **問題**: `X-Hibiya-*` (日比谷花壇)、`X-Hanacupid-*` (花キューピット)、`X-AoyamaFlower-*` (青山フラワーマーケット)、`X-Hitohana-*`/`X-Sakaseru-*`/`X-HanaRe-*`/`X-BalloonShop-*`/`X-Hanagift-*`/`X-Fleuret-*`/`X-PremiumGarden-*`/`X-FirstFlower-*`/`X-AmanFlower-*`/`X-HibiyaKadan-*`/`X-1-800Flowers-*`/`X-ProFlowers-*`/`X-FTD-*`/`X-Teleflora-*`/`X-Interflora-*`/`X-BloomAndWild-*`/`X-FreddiesFlowers-*`/`X-TheBouqs-*`/`X-UrbanStems-*`/`X-Bloomon-*`/`X-EFlorist-*`/`X-SerenataFlowers-*`/`X-FlowerBud-*`/`X-Farmgirl-*`/`X-SendFlowers-*`/`X-FromYouFlowers-*`/`X-EnjoyFlowers-*`/`X-BloomsyBox-*`/`X-FieldBouquet-*`/`X-BotanyBox-*`/`X-FlyingFlowers-*`/`X-FlowerCard-*`/`X-PosyBouquet-*`/`X-PetalBox-*`/`X-LifullFlower-*`/`X-Hanamaru-*`/`X-Hanayoshi-*`/`X-FloristJapan-*`/`X-MotherDay-*`/`X-HanaOukoku-*`/`X-MerciBlossom-*`/`X-Orchidee-*`/`X-DahliaFlower-*`/`X-BlueJack-*`/`X-Mokuren-*`/`X-SakuraBloomy-*`/`X-HanaNoMura-*`/`X-Ohanashi-*`/`X-PetitHana-*`/`X-FlowerIs-*`/`X-HanaPrime-*`/`X-Floriado-*`/`X-FineFlowers-*`/`X-ArtistFlower-*`/`X-FlowerLand-*`/`X-FlowerKingdom-*`/`X-Hanasika-*`/`X-Kajuen-*` は花機の通知記録 — 送信側が書くことは自称。母の日・開店祝い・お供え花の偽装はギフト詐欺の典型。
+- **修正**: `Envelope` に `flower_marks` + `has_flower_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 花印の自署を問え。
+
+### Security — D578 `X-Takarakuji-*`/`X-Loto6-*`/`X-Powerball-*` 等の宝くじ・ロト・懸賞当選印自称が未検査
 
 - **問題**: `X-Takarakuji-*` (宝くじ)、`X-Loto6-*` (ロト 6)、`X-Powerball-*` (Powerball)、`X-Loto7-*`/`X-MiniLoto-*`/`X-Numbers-*`/`X-Bingo5-*`/`X-TakarakujiScratch-*`/`X-MegaMillions-*`/`X-EuroMillions-*`/`X-Lotto6Aus49-*`/`X-OzLotto-*`/`X-LottoMax-*`/`X-SuperEnalotto-*`/`X-ElGordo-*`/`X-DreamJumbo-*`/`X-NenmatsuJumbo-*`/`X-SummerJumbo-*`/`X-HalloweenJumbo-*`/`X-ValentineJumbo-*`/`X-GreenJumbo-*`/`X-Big-*`/`X-MiniBig-*`/`X-TotoGoal-*`/`X-Winner-*`/`X-Lottery-*`/`X-Kuji-*`/`X-KujiHonpo-*`/`X-RakutenToto-*`/`X-ClubToto-*`/`X-TotoVote-*`/`X-MiniToto-*`/`X-Goal3-*`/`X-Sportec-*`/`X-LotteryOffice-*`/`X-StateLottery-*`/`X-Camelot-*`/`X-Loterias-*`/`X-Sorteos-*`/`X-MyLotto-*`/`X-Intralot-*` は宝機の通知記録 — 送信側が書くことは自称。高額当選・手数料前払いの偽装は宝くじ詐欺の典型。(`X-Bet365-*`/`X-VeraJohn-*`/`X-toto-*` 等の賭博機は D547 で検出済み)
 - **修正**: `Envelope` に `lottery_marks` + `has_lottery_marks` 追加; `commands.rs` で render_risks 兆候報告。

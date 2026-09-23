@@ -1673,6 +1673,12 @@ pub struct Envelope {
     /// 葬儀・終活印があるか — 葬機の通知記録を送信側が自称する
     /// 兆候 (D580)。
     pub funeral_marks: bool,
+    /// `X-Acom-*`/`X-Promise-*`/`X-Aiful-*`/`X-Mobit-*`/`X-LakeALSA-*` 等の消費者金融・カードローン通知記録印を送信側が自称している (D581)
+    pub consumerloan_marks: bool,
+    /// `X-Akachan-*`/`X-Nishimatsuya-*`/`X-Pigeon-*`/`X-Combi-*`/`X-Mikihouse-*` 等のベビー・子育て通知記録印を送信側が自称している (D582)
+    pub baby_marks: bool,
+    /// `X-Hibiya-*`/`X-Hanacupid-*`/`X-Teleflora-*`/`X-Interflora-*`/`X-FTD-*` 等の花・フラワーギフト通知記録印を送信側が自称している (D583)
+    pub flower_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2131,6 +2137,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         lottery_marks: has_lottery_marks(hdr),
         housing_marks: has_housing_marks(hdr),
         funeral_marks: has_funeral_marks(hdr),
+        consumerloan_marks: has_consumerloan_marks(hdr),
+        baby_marks: has_baby_marks(hdr),
+        flower_marks: has_flower_marks(hdr),
     })
 }
 
@@ -10292,6 +10301,193 @@ fn has_funeral_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Acom-*`/`X-Promise-*`/`X-Aiful-*`/`X-Mobit-*`/`X-LakeALSA-*`/`X-Central-*`/`X-Futaba-*`/`X-DirectOne-*`/`X-Fukuho-*`/`X-Eiwa-*`/`X-SkyOffice-*`/`X-Canet-*`/`X-Arco-*`/`X-Arrow-*`/`X-Lifet-*`/`X-Mirai-*`/`X-Ufa-*`/`X-HelloHappy-*`/`X-Espoir-*`/`X-Aline-*`/`X-APlus-*`/`X-SMBCMobby-*`/`X-AuJibun-*`/`X-Hanacred-*`/`X-Askpa-*`/`X-Fukumaru-*`/`X-Nyusen-*`/`X-Sekishin-*`/`X-Taisei-*`/`X-Haruka-*`/`X-LifeSuite-*`/`X-Columbia-*`/`X-Anfan-*`/`X-Fujimaru-*`/`X-Asahi-*`/`X-Kimura-*`/`X-AIUCred-*`/`X-SHinki-*`/`X-SmileShosan-*`/`X-Harukaze-*`/`X-BellunaMoney-*`/`X-SpaceRental-*` (消費者金融・カードローン・街金の通知記録) を送信側が自称しているかどうか。残高確認・支払催促・審査通過の偽装は闇金・架空請求の典型手口。
+fn has_consumerloan_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-acom-")
+            || l.starts_with("x-promise-")
+            || l.starts_with("x-aiful-")
+            || l.starts_with("x-mobit-")
+            || l.starts_with("x-lakealsa-")
+            || l.starts_with("x-central-")
+            || l.starts_with("x-futaba-")
+            || l.starts_with("x-directone-")
+            || l.starts_with("x-fukuho-")
+            || l.starts_with("x-eiwa-")
+            || l.starts_with("x-skyoffice-")
+            || l.starts_with("x-canet-")
+            || l.starts_with("x-arco-")
+            || l.starts_with("x-arrow-")
+            || l.starts_with("x-lifet-")
+            || l.starts_with("x-mirai-")
+            || l.starts_with("x-ufa-")
+            || l.starts_with("x-hellohappy-")
+            || l.starts_with("x-espoir-")
+            || l.starts_with("x-aline-")
+            || l.starts_with("x-aplus-")
+            || l.starts_with("x-smbcmobby-")
+            || l.starts_with("x-aujibun-")
+            || l.starts_with("x-hanacred-")
+            || l.starts_with("x-askpa-")
+            || l.starts_with("x-fukumaru-")
+            || l.starts_with("x-nyusen-")
+            || l.starts_with("x-sekishin-")
+            || l.starts_with("x-taisei-")
+            || l.starts_with("x-haruka-")
+            || l.starts_with("x-lifesuite-")
+            || l.starts_with("x-columbia-")
+            || l.starts_with("x-anfan-")
+            || l.starts_with("x-fujimaru-")
+            || l.starts_with("x-kimura-")
+            || l.starts_with("x-aiucred-")
+            || l.starts_with("x-shinki-")
+            || l.starts_with("x-smileshosan-")
+            || l.starts_with("x-harukaze-")
+            || l.starts_with("x-bellunamoney-")
+            || l.starts_with("x-spacerental-")
+    })
+}
+
+/// `X-Akachan-*`/`X-Nishimatsuya-*`/`X-Birthday-*`/`X-Pigeon-*`/`X-Combi-*`/`X-Aprica-*`/`X-BabiesRUs-*`/`X-Familiar-*`/`X-Mikihouse-*`/`X-ToysRUs-*`/`X-Bornelund-*`/`X-Dadway-*`/`X-Ergobaby-*`/`X-Babybjorn-*`/`X-Medela-*`/`X-Drbetta-*`/`X-Beanstalk-*`/`X-Wakodo-*`/`X-MeijiBaby-*`/`X-MorinagaBaby-*`/`X-Akasugu-*`/`X-Tamahiyo-*`/`X-ZexyBaby-*`/`X-Babycome-*`/`X-Ninaas-*`/`X-PuremaBaby-*`/`X-BellemaBaby-*`/`X-Farbe-*`/`X-ChouChou-*`/`X-BabyFan-*`/`X-Kodomono-*`/`X-Mamanoco-*`/`X-Futafuta-*`/`X-Kiddyland-*`/`X-Bumbo-*`/`X-SkipHop-*`/`X-Cybex-*`/`X-Britax-*`/`X-MaxiCosi-*`/`X-Graco-*`/`X-Chicco-*`/`X-Evenflo-*`/`X-4moms-*`/`X-BabyDan-*`/`X-Babyzen-*`/`X-Stokke-*`/`X-Leander-*`/`X-Kidco-*`/`X-RecaroKids-*`/`X-LoveToDream-*`/`X-Aptamil-*`/`X-Similac-*` (ベビー・子育て・ベビー用品の通知記録) を送信側が自称しているかどうか。出産祝い・育児グッズ・粉ミルク割引の偽装は新米親狙い詐欺の典型手口。
+fn has_baby_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-akachan-")
+            || l.starts_with("x-nishimatsuya-")
+            || l.starts_with("x-birthday-")
+            || l.starts_with("x-pigeon-")
+            || l.starts_with("x-combi-")
+            || l.starts_with("x-aprica-")
+            || l.starts_with("x-babiesrus-")
+            || l.starts_with("x-familiar-")
+            || l.starts_with("x-mikihouse-")
+            || l.starts_with("x-toysrus-")
+            || l.starts_with("x-bornelund-")
+            || l.starts_with("x-dadway-")
+            || l.starts_with("x-ergobaby-")
+            || l.starts_with("x-babybjorn-")
+            || l.starts_with("x-medela-")
+            || l.starts_with("x-drbetta-")
+            || l.starts_with("x-beanstalk-")
+            || l.starts_with("x-wakodo-")
+            || l.starts_with("x-meijibaby-")
+            || l.starts_with("x-morinagababy-")
+            || l.starts_with("x-akasugu-")
+            || l.starts_with("x-tamahiyo-")
+            || l.starts_with("x-zexybaby-")
+            || l.starts_with("x-babycome-")
+            || l.starts_with("x-ninaas-")
+            || l.starts_with("x-puremababy-")
+            || l.starts_with("x-bellemababy-")
+            || l.starts_with("x-farbe-")
+            || l.starts_with("x-chouchou-")
+            || l.starts_with("x-babyfan-")
+            || l.starts_with("x-kodomono-")
+            || l.starts_with("x-mamanoco-")
+            || l.starts_with("x-futafuta-")
+            || l.starts_with("x-kiddyland-")
+            || l.starts_with("x-bumbo-")
+            || l.starts_with("x-skiphop-")
+            || l.starts_with("x-cybex-")
+            || l.starts_with("x-britax-")
+            || l.starts_with("x-maxicosi-")
+            || l.starts_with("x-graco-")
+            || l.starts_with("x-chicco-")
+            || l.starts_with("x-evenflo-")
+            || l.starts_with("x-4moms-")
+            || l.starts_with("x-babydan-")
+            || l.starts_with("x-babyzen-")
+            || l.starts_with("x-stokke-")
+            || l.starts_with("x-leander-")
+            || l.starts_with("x-kidco-")
+            || l.starts_with("x-recarokids-")
+            || l.starts_with("x-lovetodream-")
+            || l.starts_with("x-aptamil-")
+            || l.starts_with("x-similac-")
+    })
+}
+
+/// `X-Hibiya-*`/`X-Hanacupid-*`/`X-AoyamaFlower-*`/`X-Hitohana-*`/`X-Sakaseru-*`/`X-HanaRe-*`/`X-BalloonShop-*`/`X-Hanagift-*`/`X-Fleuret-*`/`X-PremiumGarden-*`/`X-FirstFlower-*`/`X-AmanFlower-*`/`X-HibiyaKadan-*`/`X-1-800Flowers-*`/`X-ProFlowers-*`/`X-FTD-*`/`X-Teleflora-*`/`X-Interflora-*`/`X-BloomAndWild-*`/`X-FreddiesFlowers-*`/`X-TheBouqs-*`/`X-UrbanStems-*`/`X-Bloomon-*`/`X-EFlorist-*`/`X-SerenataFlowers-*`/`X-FlowerBud-*`/`X-Farmgirl-*`/`X-SendFlowers-*`/`X-FromYouFlowers-*`/`X-EnjoyFlowers-*`/`X-BloomsyBox-*`/`X-FieldBouquet-*`/`X-BotanyBox-*`/`X-FlyingFlowers-*`/`X-FlowerCard-*`/`X-PosyBouquet-*`/`X-PetalBox-*`/`X-LifullFlower-*`/`X-Hanamaru-*`/`X-Hanayoshi-*`/`X-FloristJapan-*`/`X-MotherDay-*`/`X-HanaOukoku-*`/`X-MerciBlossom-*`/`X-Orchidee-*`/`X-DahliaFlower-*`/`X-BlueJack-*`/`X-Mokuren-*`/`X-SakuraBloomy-*`/`X-HanaNoMura-*`/`X-Ohanashi-*`/`X-PetitHana-*`/`X-FlowerIs-*`/`X-HanaPrime-*`/`X-Floriado-*`/`X-FineFlowers-*`/`X-ArtistFlower-*`/`X-FlowerLand-*`/`X-FlowerKingdom-*`/`X-Hanasika-*`/`X-Kajuen-*` (花・フラワーギフト・祝花の通知記録) を送信側が自称しているかどうか。母の日・開店祝い・お供え花の偽装はギフト詐欺の典型手口。
+fn has_flower_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hibiya-")
+            || l.starts_with("x-hanacupid-")
+            || l.starts_with("x-aoyamaflower-")
+            || l.starts_with("x-hitohana-")
+            || l.starts_with("x-sakaseru-")
+            || l.starts_with("x-hanare-")
+            || l.starts_with("x-balloonshop-")
+            || l.starts_with("x-hanagift-")
+            || l.starts_with("x-fleuret-")
+            || l.starts_with("x-premiumgarden-")
+            || l.starts_with("x-firstflower-")
+            || l.starts_with("x-amanflower-")
+            || l.starts_with("x-hibiyakadan-")
+            || l.starts_with("x-1-800flowers-")
+            || l.starts_with("x-proflowers-")
+            || l.starts_with("x-ftd-")
+            || l.starts_with("x-teleflora-")
+            || l.starts_with("x-interflora-")
+            || l.starts_with("x-bloomandwild-")
+            || l.starts_with("x-freddiesflowers-")
+            || l.starts_with("x-thebouqs-")
+            || l.starts_with("x-urbanstems-")
+            || l.starts_with("x-bloomon-")
+            || l.starts_with("x-eflorist-")
+            || l.starts_with("x-serenataflowers-")
+            || l.starts_with("x-flowerbud-")
+            || l.starts_with("x-farmgirl-")
+            || l.starts_with("x-sendflowers-")
+            || l.starts_with("x-fromyouflowers-")
+            || l.starts_with("x-enjoyflowers-")
+            || l.starts_with("x-bloomsybox-")
+            || l.starts_with("x-fieldbouquet-")
+            || l.starts_with("x-botanybox-")
+            || l.starts_with("x-flyingflowers-")
+            || l.starts_with("x-flowercard-")
+            || l.starts_with("x-posybouquet-")
+            || l.starts_with("x-petalbox-")
+            || l.starts_with("x-lifullflower-")
+            || l.starts_with("x-hanamaru-")
+            || l.starts_with("x-hanayoshi-")
+            || l.starts_with("x-floristjapan-")
+            || l.starts_with("x-motherday-")
+            || l.starts_with("x-hanaoukoku-")
+            || l.starts_with("x-merciblossom-")
+            || l.starts_with("x-orchidee-")
+            || l.starts_with("x-dahliaflower-")
+            || l.starts_with("x-bluejack-")
+            || l.starts_with("x-mokuren-")
+            || l.starts_with("x-sakurabloomy-")
+            || l.starts_with("x-hananomura-")
+            || l.starts_with("x-ohanashi-")
+            || l.starts_with("x-petithana-")
+            || l.starts_with("x-floweris-")
+            || l.starts_with("x-hanaprime-")
+            || l.starts_with("x-floriado-")
+            || l.starts_with("x-fineflowers-")
+            || l.starts_with("x-artistflower-")
+            || l.starts_with("x-flowerland-")
+            || l.starts_with("x-flowerkingdom-")
+            || l.starts_with("x-hanasika-")
+            || l.starts_with("x-kajuen-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -16672,4 +16868,151 @@ X-Other: 1
 
 body";
     assert!(!has_funeral_marks(clean));
+
+#[test]
+fn scan_は銭機印を検出する() {
+    let a1 = b"From: a@b
+X-Acom-Id: 1
+
+x";
+    let p1 = b"From: a@b
+X-Promise-Trace: 1
+
+x";
+    let f1 = b"From: a@b
+X-Aiful-Ref: 1
+
+x";
+    let m1 = b"From: a@b
+X-Mobit-Notice: 1
+
+x";
+    let l1 = b"From: a@b
+X-LakeALSA-Flag: 1
+
+x";
+    let c1 = b"From: a@b
+X-Central-Entry: 1
+
+x";
+    let d1 = b"From: a@b
+X-Fukuho-Record: 1
+
+x";
+    let e1 = b"From: a@b
+X-SkyOffice-Trace: 1
+
+x";
+    assert!(has_consumerloan_marks(a1));
+    assert!(has_consumerloan_marks(p1));
+    assert!(has_consumerloan_marks(f1));
+    assert!(has_consumerloan_marks(m1));
+    assert!(has_consumerloan_marks(l1));
+    assert!(has_consumerloan_marks(c1));
+    assert!(has_consumerloan_marks(d1));
+    assert!(has_consumerloan_marks(e1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_consumerloan_marks(clean));
+}
+
+#[test]
+fn scan_は児機印を検出する() {
+    let a1 = b"From: a@b
+X-Akachan-Id: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nishimatsuya-Trace: 1
+
+x";
+    let p1 = b"From: a@b
+X-Pigeon-Notice: 1
+
+x";
+    let c1 = b"From: a@b
+X-Combi-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-Mikihouse-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-ToysRUs-Record: 1
+
+x";
+    let e1 = b"From: a@b
+X-Ergobaby-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-Babybjorn-Mark: 1
+
+x";
+    assert!(has_baby_marks(a1));
+    assert!(has_baby_marks(n1));
+    assert!(has_baby_marks(p1));
+    assert!(has_baby_marks(c1));
+    assert!(has_baby_marks(m1));
+    assert!(has_baby_marks(t1));
+    assert!(has_baby_marks(e1));
+    assert!(has_baby_marks(b1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_baby_marks(clean));
+}
+
+#[test]
+fn scan_は花機印を検出する() {
+    let h1 = b"From: a@b
+X-Hibiya-Id: 1
+
+x";
+    let k1 = b"From: a@b
+X-Hanacupid-Trace: 1
+
+x";
+    let i1 = b"From: a@b
+X-Interflora-Notice: 1
+
+x";
+    let f1 = b"From: a@b
+X-FTD-Mark: 1
+
+x";
+    let t1 = b"From: a@b
+X-Teleflora-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-BloomAndWild-Entry: 1
+
+x";
+    let u1 = b"From: a@b
+X-UrbanStems-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-1-800Flowers-Stamp: 1
+
+x";
+    assert!(has_flower_marks(h1));
+    assert!(has_flower_marks(k1));
+    assert!(has_flower_marks(i1));
+    assert!(has_flower_marks(f1));
+    assert!(has_flower_marks(t1));
+    assert!(has_flower_marks(b1));
+    assert!(has_flower_marks(u1));
+    assert!(has_flower_marks(n1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_flower_marks(clean));
+}
 }
