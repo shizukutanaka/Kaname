@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D399: `X-DLP-*`/`X-Data-Loss-*`/`X-Compliance-*`/`X-Retention-*` 等の DLP・コンプライアンス印自称が未検査
+
+- DLP 検査機・コンプライアンス機が記す印 — 送信側から届くのは「検査を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_dlphdr_marks` 新設 → `Envelope.dlphdr_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D400: `X-Audit-*`/`X-Archive-*`/`X-Backup-*`/`X-Archive-Stamp:`/`X-Journal-*`/`X-Record-*` 等の監査・アーカイブ印自称が未検査
+
+- ジャーナリング・監査記録は受信側・記録機が残す — 送信側から届くのは「監査に通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_audit_marks` 新設 → `Envelope.audit_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D401: `X-Greylist-*`/`X-Greylisted-*`/`X-SpamPal`/`X-Policy-*`/`X-Channel-*`/`X-Rate-Limit-*` 等の greylist・policy 印自称が未検査
+
+- greylist・制御機が記す印 — 送信側から届くのは「制御機を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_greylist_marks` 新設 → `Envelope.greylist_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった

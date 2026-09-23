@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-DLP-*`/`X-Data-Loss-*`/`X-Compliance-*`/`X-Retention-*`
+    /// 等の DLP・コンプライアンス印があるか — 検査機の記録を送信側が
+    /// 自称する兆候 (D399)。
+    pub dlphdr_marks: bool,
+    /// `X-Audit-*`/`X-Archive-*`/`X-Backup-*`/`X-Archive-Stamp:`
+    /// 等の監査・アーカイブ印があるか — 記録機の印を送信側が
+    /// 自称する兆候 (D400)。
+    pub audit_marks: bool,
+    /// `X-Greylist-*`/`X-Greylisted-*`/`X-SpamPal`/`X-Policy-*`/
+    /// `X-Channel-*` 等の greylist・policy 印があるか — 制御機の
+    /// 記録を送信側が自称する兆候 (D401)。
+    pub greylist_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        dlphdr_marks: has_dlphdr_marks(raw),
+        audit_marks: has_audit_marks(raw),
+        greylist_marks: has_greylist_marks(raw),
     })
 }
 
@@ -624,6 +639,68 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-DLP-*`/`X-Data-Loss-*`/`X-Compliance-*`/`X-Retention-*`/
+/// `X-DataLoss-*`/`X-DLP-Policy` 等の DLP・コンプライアンス印があるか
+/// 判定する (D399)。
+///
+/// DLP 検査機・コンプライアンス機が記す印 — 送信側から届くこれは
+/// 「検査を通った」体裁を内容側が主張する自称。
+fn has_dlphdr_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dlp-")
+            || l.starts_with("x-dataloss-")
+            || l.starts_with("x-data-loss-")
+            || l.starts_with("x-compliance-")
+            || l.starts_with("x-retention-")
+    })
+}
+
+/// `X-Audit-*`/`X-Archive-*`/`X-Backup-*`/`X-Archive-Stamp:`/
+/// `X-Journal-*`/`X-Record-*` 等の監査・アーカイブ印があるか
+/// 判定する (D400)。
+///
+/// ジャーナリング・監査記録は受信側・記録機が残す — 送信側から届く
+/// これは「監査に通った」体裁を内容側が主張する自称。
+fn has_audit_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-audit-")
+            || l.starts_with("x-archive-")
+            || l.starts_with("x-backup-")
+            || l.starts_with("x-archive-stamp:")
+            || l.starts_with("x-journal-")
+            || l.starts_with("x-record-")
+    })
+}
+
+/// `X-Greylist-*`/`X-Greylisted-*`/`X-SpamPal`/`X-Policy-*`/
+/// `X-Channel-*`/`X-Rate-Limit-*` 等の greylist・policy 印があるか
+/// 判定する (D401)。
+///
+/// greylist・制御機が記す印 — 送信側から届くこれは
+/// 「制御機を通った」体裁を内容側が主張する自称。
+fn has_greylist_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-greylist-")
+            || l.starts_with("x-greylisted-")
+            || l.starts_with("x-spampal")
+            || l.starts_with("x-policy-")
+            || l.starts_with("x-channel-")
+            || l.starts_with("x-rate-limit-")
     })
 }
 
@@ -2952,6 +3029,56 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はdlp印を検出する() {
+        let d1 = b"X-DLP-Result: pass\r\n\r\nx";
+        assert!(has_dlphdr_marks(d1));
+        let d2 = b"X-DataLoss-Policy: p\r\n\r\nx";
+        assert!(has_dlphdr_marks(d2));
+        let d3 = b"X-Compliance-Rule: r\r\n\r\nx";
+        assert!(has_dlphdr_marks(d3));
+        let d4 = b"X-Retention-Policy: r\r\n\r\nx";
+        assert!(has_dlphdr_marks(d4));
+        let d5 = b"X-Data-Loss-Event: e\r\n\r\nx";
+        assert!(has_dlphdr_marks(d5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dlphdr_marks(clean));
+    }
+
+    #[test]
+    fn scan_は監査印を検出する() {
+        let a1 = b"X-Audit-Trail: t\r\n\r\nx";
+        assert!(has_audit_marks(a1));
+        let a2 = b"X-Archive-Stamp: s\r\n\r\nx";
+        assert!(has_audit_marks(a2));
+        let a3 = b"X-Backup-Status: b\r\n\r\nx";
+        assert!(has_audit_marks(a3));
+        let a4 = b"X-Journal-Ref: j\r\n\r\nx";
+        assert!(has_audit_marks(a4));
+        let a5 = b"X-Record-Date: d\r\n\r\nx";
+        assert!(has_audit_marks(a5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_audit_marks(clean));
+    }
+
+    #[test]
+    fn scan_はgreylist印を検出する() {
+        let g1 = b"X-Greylist-Status: s\r\n\r\nx";
+        assert!(has_greylist_marks(g1));
+        let g2 = b"X-Greylisted-Time: t\r\n\r\nx";
+        assert!(has_greylist_marks(g2));
+        let g3 = b"X-SpamPal: 1\r\n\r\nx";
+        assert!(has_greylist_marks(g3));
+        let g4 = b"X-Policy-Hit: h\r\n\r\nx";
+        assert!(has_greylist_marks(g4));
+        let g5 = b"X-Channel-ID: c\r\n\r\nx";
+        assert!(has_greylist_marks(g5));
+        let g6 = b"X-Rate-Limit-Remaining: 5\r\n\r\nx";
+        assert!(has_greylist_marks(g6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_greylist_marks(clean));
     }
 }
 

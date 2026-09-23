@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D399: DLP・コンプライアンス印自称
+    if env.dlphdr_marks {
+        render_risks.push(
+            "X-DLP-*/X-Data-Loss-*/X-Compliance-* 等 — 検査機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D400: 監査・アーカイブ印自称
+    if env.audit_marks {
+        render_risks.push(
+            "X-Audit-*/X-Archive-*/X-Backup-*/X-Journal-* 等 — 記録機の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D401: greylist・policy 印自称
+    if env.greylist_marks {
+        render_risks.push(
+            "X-Greylist-*/X-SpamPal/X-Policy-* 等 — 制御機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
