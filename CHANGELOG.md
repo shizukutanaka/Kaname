@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D552: `X-Rolex-*`/`X-Cartier-*`/`X-Hermes-*` 等の宝飾・時計・高級ブランド印自称が未検査
+
+- **問題**: `X-Rolex-*` (Rolex)、`X-Cartier-*` (Cartier)、`X-Hermes-*` (Hermes)、`X-Omega-*`/`X-PatekPhilippe-*`/`X-TAGHeuer-*`/`X-Breitling-*`/`X-IWC-*`/`X-GrandSeiko-*`/`X-Tiffany-*`/`X-Bulgari-*`/`X-VanCleef-*`/`X-HarryWinston-*`/`X-Mikimoto-*`/`X-Tasaki-*`/`X-4C-*`/`X-Swarovski-*`/`X-LouisVuitton-*`/`X-Gucci-*`/`X-Prada-*`/`X-Chanel-*`/`X-Dior-*`/`X-Burberry-*`/`X-Coach-*`/`X-Fendi-*`/`X-Loewe-*`/`X-Celine-*`/`X-Balenciaga-*`/`X-Bottega-*`/`X-SaintLaurent-*`/`X-Givenchy-*`/`X-Valentino-*`/`X-Ferragamo-*`/`X-Bally-*`/`X-Tods-*`/`X-Montblanc-*`/`X-Chaumet-*`/`X-Boucheron-*`/`X-Piaget-*`/`X-Chopard-*`/`X-Jaeger-*`/`X-Audemars-*`/`X-RichardMille-*`/`X-Hublot-*`/`X-Zenith-*`/`X-Tudor-*`/`X-Longines-*`/`X-Orient-*`/`X-Tissot-*` は奢機の通知記録 — 送信側が書くことは自称。修理・買取・会員特典偽装は高級品詐欺の典型。(`X-Pandora-*`/`X-Seiko-*`/`X-Citizen-*`/`X-Casio-*` は D493/D496 で検出済み)
+- **修正**: `Envelope` に `luxury_marks` + `has_luxury_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 奢印の自署を問え。
+
+### Security — D553: `X-Dentsu-*`/`X-Hakuhodo-*`/`X-PRTIMES-*` 等の広告代理店・PR・芸能事務所印自称が未検査
+
+- **問題**: `X-Dentsu-*` (電通)、`X-Hakuhodo-*` (博報堂)、`X-PRTIMES-*` (PR TIMES)、`X-ADK-*`/`X-WPP-*`/`X-Omnicom-*`/`X-Publicis-*`/`X-IPG-*`/`X-Havas-*`/`X-CyberAgent-*`/`X-Septeni-*`/`X-DentsuPR-*`/`X-Daiko-*`/`X-Oriental-*`/`X-Beacon-*`/`X-Coconuts-*`/`X-DaiichiKikaku-*`/`X-Asatsu-*`/`X-Cerebrum-*`/`X-Adire-*`/`X-Cremo-*`/`X-Tohokushinsha-*`/`X-AdComms-*`/`X-ShochikuGeino-*`/`X-HoriPro-*`/`X-Avex-*`/`X-Amuse-*`/`X-Stardust-*`/`X-Burning-*`/`X-KDash-*`/`X-Yoshimoto-*`/`X-Oscar-*`/`X-Kenon-*`/`X-JapanMusic-*`/`X-Igosso-*` は広機の通知記録 — 送信側が書くことは自称。広告掲載・芸能スカウト偽装は広告詐欺の典型。
+- **修正**: `Envelope` に `advertising_marks` + `has_advertising_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 広印の自署を問え。
+
+### Security — D554: `X-YokohamaBank-*`/`X-Shinkin-*`/`X-JABank-*` 等の地方銀行・信用金庫・労金・JA・政府系金融印自称が未検査
+
+- **問題**: `X-YokohamaBank-*` (横浜銀行)、`X-Shinkin-*` (信用金庫)、`X-JABank-*` (JA バンク)、`X-ChibaBank-*`/`X-FukuokaBank-*`/`X-ShizuokaBank-*`/`X-SurugaBank-*`/`X-KyotoBank-*`/`X-KansaiMirai-*`/`X-Ikeda-*`/`X-NishiNihonCity-*`/`X-HiroshimaBank-*`/`X-114Bank-*`/`X-IyoBank-*`/`X-ShikokuBank-*`/`X-YamaguchiBank-*`/`X-Momiji-*`/`X-HokkaidoBank-*`/`X-Hokuto-*`/`X-Tottori-*`/`X-SanInGodo-*`/`X-77Bank-*`/`X-TohoBank-*`/`X-GunmaBank-*`/`X-AshikagaBank-*`/`X-JoyoBank-*`/`X-TsukubaBank-*`/`X-MusashinoBank-*`/`X-Kiraboshi-*`/`X-DaitoBank-*`/`X-TowaBank-*`/`X-TochigiBank-*`/`X-KochiBank-*`/`X-MiyazakiBank-*`/`X-OkinawaBank-*`/`X-RyukyuBank-*`/`X-Rokin-*`/`X-Shinkumi-*`/`X-Norinchukin-*`/`X-ShokoChukin-*`/`X-JFC-*`/`X-Shinsei-*`/`X-Aozora-*` は地機の通知記録 — 送信側が書くことは自称。口座凍結・振込確認の偽装は地域金融詐欺の典型。(`X-MUFG-*`/`X-SMBC-*`/`X-Mizuho-*`/`X-SevenBank-*`/`X-AeonBank-*` 等の大手・ネット銀行は D514 で検出済み)
+- **修正**: `Envelope` に `regional_bank_marks` + `has_regional_bank_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 地印の自署を問え。
+
+
 ### Security — D549: `X-NHK-*`/`X-BBC-*`/`X-ESPN-*` 等の放送局・チャンネル印自称が未検査
 
 - **問題**: `X-NHK-*` (NHK)、`X-BBC-*` (BBC)、`X-ESPN-*` (ESPN)、`X-NTV-*`/`X-TBS-*`/`X-FujiTV-*`/`X-TVAsahi-*`/`X-TVTokyo-*`/`X-WOWOW-*`/`X-CNN-*`/`X-FOX-*`/`X-ABC-*`/`X-CBS-*`/`X-NBC-*`/`X-PBS-*`/`X-CBC-*`/`X-ARD-*`/`X-ZDF-*`/`X-RAI-*`/`X-FranceTV-*`/`X-KBS-*`/`X-MBC-*`/`X-JTBC-*`/`X-tvN-*`/`X-NHKWorld-*`/`X-HBO-*`/`X-Cinemax-*`/`X-Showtime-*`/`X-Starz-*`/`X-AMC-*`/`X-FX-*`/`X-Cartoon-*`/`X-Nickelodeon-*`/`X-Discovery-*`/`X-NationalGeographic-*`/`X-HistoryChannel-*`/`X-AnimalPlanet-*` は放機の通知記録 — 送信側が書くことは自称。受信料・番組案内偽装は放送詐欺の典型。(`X-ABEMA-*`/`X-TVer-*`/`X-Netflix-*` 等の配信機は D516、`X-Sky-*` は D511、`X-OCN-*` は D426 で検出済み)
