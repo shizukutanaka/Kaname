@@ -665,6 +665,22 @@ pub struct ExtractedBodyText {
     /// CSS/属性による非表示コンテンツを一定量スキップしたか
     /// (hidden text salting の兆候 — シグナル化に使う)。
     pub hidden_content: bool,
+    /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
+    /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
+    pub link_mismatches: Vec<LinkMismatch>,
+}
+
+/// 表示テキストと実リンク先が一致しないリンク (D162)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkMismatch {
+    /// アンカーテキスト (可視部分、80 字で打切り)。
+    pub shown_text: String,
+    /// `href` の生の値。
+    pub href: String,
+    /// アンカーテキスト内の URL 形ドメイン (小文字)。
+    pub shown_domain: String,
+    /// href のホスト名 (小文字)。
+    pub href_domain: String,
 }
 
 /// HTML 本文から「ユーザーが見るテキスト」を復元する (解析用 — 表示には使わない)。
@@ -716,6 +732,10 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     let mut text = String::with_capacity(html.len() / 2);
     let mut hrefs: Vec<&str> = Vec::new();
     let mut hidden_chars = 0usize;
+    let mut link_mismatches: Vec<LinkMismatch> = Vec::new();
+    // 可視 <a> の中では、アンカーテキストを別途バッファに集め、
+    // 閉タグ時に「表示 URL と実リンク先のドメイン一致」を評価する (D162)。
+    let mut current_anchor: Option<(&str, String)> = None;
 
     while pos < bytes.len() {
         // ---- テキスト部分 (& 実体参照を復号しつつ次の '<' まで採る) ----
@@ -724,7 +744,16 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
             while pos < bytes.len() && bytes[pos] != b'<' {
                 pos += 1;
             }
-            decode_entities_into(&html[start..pos], &mut text);
+            if let Some((_, ref mut buf)) = current_anchor {
+                // アンカー内は可視テキストを両方へ (表示分のみ — 非表示
+                // サブツリーは既に skip_subtree で落とされている)。
+                let mut tmp = String::new();
+                decode_entities_into(&html[start..pos], &mut tmp);
+                text.push_str(&tmp);
+                buf.push_str(&tmp);
+            } else {
+                decode_entities_into(&html[start..pos], &mut text);
+            }
             continue;
         }
         // ---- コメント / DOCTYPE / PI ----
@@ -754,8 +783,16 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         let name = lower.as_str();
 
         if is_end {
+            if name == "a" {
+                if let Some((href, buf)) = current_anchor.take() {
+                    record_link_mismatch(&buf, href, &mut link_mismatches);
+                }
+            }
             if BLOCK_TAGS.contains(&name) {
                 text.push('\n');
+                if let Some((_, ref mut buf)) = current_anchor {
+                    buf.push('\n');
+                }
             }
             pos = tag_end;
             continue;
@@ -783,14 +820,27 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         }
         if BLOCK_TAGS.contains(&name) {
             text.push('\n');
+            if let Some((_, ref mut buf)) = current_anchor {
+                buf.push('\n');
+            }
         }
         // 可視 <a> の href は宛先 URL として末尾に付加する (リンク検査へ供給)。
+        // 併せてアンカーテキストの収集を開始し、閉タグで表示 URL と
+        // リンク先の一致を評価する (URL 偽装 — D162)。
         if name == "a" {
             if let Some(h) = attr_value(tag_inner, "href") {
                 hrefs.push(h);
+                if current_anchor.is_none() {
+                    current_anchor = Some((h, String::new()));
+                }
             }
         }
         pos = tag_end;
+    }
+
+    // 閉タグなしの未完了アンカーも評価対象にする。
+    if let Some((href, buf)) = current_anchor.take() {
+        record_link_mismatch(&buf, href, &mut link_mismatches);
     }
 
     for h in &hrefs {
@@ -800,8 +850,9 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
 
     ExtractedBodyText {
         text: collapse_whitespace(&text),
-        // ごく短い隠し要素 (装飾��スペース等) では兆候を立てない。
+        // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
+        link_mismatches,
     }
 }
 
@@ -1036,6 +1087,193 @@ fn collapse_whitespace(s: &str) -> String {
         }
     }
     out.trim().to_string()
+}
+
+// ============================================================================
+// URL 偽装リンク検出 (D162 — anchor text vs href domain mismatch)
+// ============================================================================
+
+/// アンカーテキストに URL 形のドメインがあり、その登録ドメインが href の
+/// ホストと異なる場合に `LinkMismatch` を記録する。
+///
+/// `<a href="https://evil.example">https://paypal.com/login</a>` のような
+/// 「表示は正規サイト・実リンクは別ドメイン」の偽装を検出する
+/// (フィッシングの基礎手口 — APWG/セキュリティベンダ各社の観測で頻出。
+/// メールクライアントは href 先をあまり目立たせないため、表示側の
+/// URL 形テキストを装うだけで誤認を誘える)。
+///
+/// 上限 20 件 — 大量生成によるメモリ消費を抑える。
+fn record_link_mismatch(anchor_text: &str, href: &str, out: &mut Vec<LinkMismatch>) {
+    if out.len() >= 20 {
+        return;
+    }
+    let Some(href_host) = url_host(href) else {
+        return;
+    };
+    let href_base = registrable_domain(&href_host);
+    for shown in url_shaped_domains(anchor_text) {
+        if registrable_domain(&shown) != href_base {
+            out.push(LinkMismatch {
+                shown_text: anchor_text.trim().chars().take(80).collect(),
+                href: href.to_string(),
+                shown_domain: shown,
+                href_domain: href_host,
+            });
+            return;
+        }
+    }
+}
+
+/// URL/URI 文字列からホスト名を小文字で取り出す。
+/// http(s) 以外のスキーム・相対参照・アンカーは None。
+/// userinfo (`https://a.com@b.com/` → `b.com`) とポートを除去する。
+fn url_host(url: &str) -> Option<String> {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+    let authority_end = rest
+        .find(['/', '?', '#'])
+        .unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    // userinfo を除去 (`https://paypal.com@evil.com/` → evil.com)
+    let host_port = match authority.rfind('@') {
+        Some(at) => &authority[at + 1..],
+        None => authority,
+    };
+    let host = if host_port.starts_with('[') {
+        // IPv6: [::1] or [::1]:443
+        match host_port.find(']') {
+            Some(close) => &host_port[1..close],
+            None => host_port,
+        }
+    } else {
+        host_port.split(':').next().unwrap_or(host_port)
+    };
+    let host = host.trim_end_matches('.').to_lowercase();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
+}
+
+/// ホストの「登録ドメイン」近似 — 末尾 2 ラベル、ただし既知の 2 階層
+/// 接尾辞 (co.jp, or.jp, co.uk, com.au, ...) の下では末尾 3 ラベル。
+/// IPv4/IPv6 らしきホストは全体をそのまま使う。
+/// 完全な PSL (public suffix list) ではなく、メール検査で実害の多い
+/// 主要 2 階層 ccTLD のみ扱うヒューリスティック。
+fn registrable_domain(host: &str) -> String {
+    // IPv4/IPv6 らしきものは全体をそのまま使う
+    if host.chars().all(|c| c.is_ascii_digit() || c == '.') || host.contains(':') {
+        return host.to_string();
+    }
+    /// ラベルがさらに国コードを前置する代表的な第二階層 TLD。
+    const TWO_LEVEL: &[&str] = &[
+        "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp", "ed.jp", "gr.jp", "lg.jp", "geo.jp",
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "edu.au",
+        "com.br", "com.cn", "net.cn", "org.cn", "com.tw", "co.kr", "or.kr", "co.nz",
+        "co.in", "firm.in", "net.in", "org.in", "gen.in", "ind.in", "com.sg", "com.hk",
+        "com.mx", "com.ar", "com.tr", "co.za", "com.pl", "com.my", "com.ph", "com.vn",
+        "co.th", "or.th", "co.id", "com.ua", "co.il", "com.pk", "com.bd", "com.np",
+    ];
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() <= 2 {
+        return host.to_string();
+    }
+    let last_two = format!("{}.{}", labels[labels.len() - 2], labels[labels.len() - 1]);
+    if TWO_LEVEL.contains(&last_two.as_str()) && labels.len() >= 3 {
+        labels[labels.len() - 3..].join(".")
+    } else {
+        last_two
+    }
+}
+
+/// テキストから URL 形のドメイン候補を抽出する (小文字)。
+/// `scheme://host`、`www.` 始まり、および裸の `domain.tld[/path]` 形を拾う。
+/// アンカーテキスト内を想定 — メールアドレス形 (`@` 含む) は除外する。
+fn url_shaped_domains(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for token in text.split(|c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '<' | '>' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | '\'' | '|' | '`'
+            )
+    }) {
+        let token = token.trim_matches(|c: char| {
+            matches!(c, '.' | ',' | '!' | '?' | ':' | ';' | '*' | '~' | '^')
+        });
+        if token.is_empty() || token.contains('@') {
+            continue;
+        }
+        // 1. scheme://host
+        if let Some(p) = token.find("://") {
+            let scheme = &token[..p];
+            let ok_scheme = scheme.len() >= 2
+                && scheme
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphabetic())
+                && scheme
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.');
+            if ok_scheme {
+                if let Some(h) = url_host(token) {
+                    if is_plausible_host(&h) {
+                        out.push(h);
+                        continue;
+                    }
+                }
+            }
+        }
+        // 2. www. / 裸ドメイン — パス・クエリ前までをホストとして評価
+        let host_part = token
+            .find(['/', '?', '#'])
+            .map_or(token, |i| &token[..i]);
+        let host_part = host_part.trim_end_matches('.').to_lowercase();
+        if host_part.starts_with("www.") && host_part.len() > 4 {
+            let h = &host_part[4..];
+            if is_plausible_host(h) {
+                out.push(h.to_string());
+                continue;
+            }
+        }
+        if is_plausible_host(&host_part) {
+            out.push(host_part);
+        }
+    }
+    out
+}
+
+/// `label(.label)+` 形で、TLD が 2 字以上の英字 (または非 ASCII) の妥当な
+/// ホストか。ラベルは Unicode 英数字・ハイフン — Cyrillic 埋め込み
+/// (`payраl.com`) を拾えるよう Unicode に寛容にする。
+/// IP リテラル (全数字・ドット) も妥当として通す。
+fn is_plausible_host(host: &str) -> bool {
+    if host.is_empty() || host.len() > 253 {
+        return false;
+    }
+    // IPv4 リテラル
+    if host.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return host.split('.').count() == 4;
+    }
+    let labels: Vec<&str> = host.split('.').collect();
+    if labels.len() < 2 {
+        return false;
+    }
+    for label in &labels[..labels.len() - 1] {
+        if label.is_empty()
+            || label.len() > 63
+            || !label.chars().all(|c| c.is_alphanumeric() || c == '-')
+            || label.starts_with('-')
+            || label.ends_with('-')
+        {
+            return false;
+        }
+    }
+    // TLD: 2 字以上、全て文字 (数字 TLD は存在しない)
+    let tld = labels[labels.len() - 1];
+    tld.len() >= 2 && tld.chars().all(|c| c.is_alphabetic())
 }
 
 // ============================================================================
@@ -1826,6 +2064,155 @@ mod tests {
         );
         assert!(e.text.contains("至急"), "{}", e.text);
         assert!(e.text.contains("振込"), "{}", e.text);
+    }
+
+    // ---- D162: リンク表示 vs 実リンク先のドメイン不一致 (URL 偽装) ----
+
+    #[test]
+    fn link_mismatch_basic_scheme_url_text() {
+        let e = html_to_text(
+            r#"<p><a href="https://evil.example/steal">https://paypal.com/login</a></p>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+        let m = &e.link_mismatches[0];
+        assert_eq!(m.shown_domain, "paypal.com");
+        assert_eq!(m.href_domain, "evil.example");
+    }
+
+    #[test]
+    fn link_mismatch_same_domain_is_clean() {
+        let e = html_to_text(
+            r#"<p><a href="https://paypal.com/login">https://paypal.com/login</a></p>"#,
+        );
+        assert!(e.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_subdomain_same_base_is_clean() {
+        // 登録ドメインが同じならサブドメイン差は誤検出しない
+        let e = html_to_text(
+            r#"<p><a href="https://www.paypal.com/x">paypal.com</a></p>"#,
+        );
+        assert!(e.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_userinfo_confusion_flagged() {
+        // href の userinfo 偽装: 表示は legit、実 host は attacker
+        let e = html_to_text(
+            r#"<p><a href="https://paypal.com@evil.example/">paypal.com</a></p>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+        assert_eq!(e.link_mismatches[0].href_domain, "evil.example");
+    }
+
+    #[test]
+    fn link_mismatch_www_prefixed_text() {
+        let e = html_to_text(
+            r#"<p><a href="https://evil.example">www.paypal.com</a></p>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+        assert_eq!(e.link_mismatches[0].shown_domain, "paypal.com");
+    }
+
+    #[test]
+    fn link_mismatch_bare_domain_text() {
+        let e = html_to_text(
+            r#"<p><a href="https://tracker.example/c?id=1">paypal.com/login</a></p>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+        assert_eq!(e.link_mismatches[0].shown_domain, "paypal.com");
+    }
+
+    #[test]
+    fn link_mismatch_non_url_text_no_flag() {
+        let e = html_to_text(
+            r#"<p><a href="https://evil.example">請求書はこちら</a></p>"#,
+        );
+        assert!(e.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_inside_hidden_anchor_not_reported() {
+        // display:none のアンカーはユーザーに見えないので判定しない
+        let e = html_to_text(
+            r#"<p><a style="display:none" href="https://evil.example">https://paypal.com</a></p>"#,
+        );
+        assert!(e.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_hidden_span_inside_anchor_ignored() {
+        // アンカー内の非表示塩は表示テキストから除外される
+        let e = html_to_text(
+            r#"<p><a href="https://paypal.com">pay<span style="display:none">QXJZ</span>pal.com</a></p>"#,
+        );
+        assert!(e.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_two_level_tld() {
+        // co.jp 系: 登録ドメイン比較は末尾 3 ラベル
+        let e = html_to_text(
+            r#"<p><a href="https://evil.example">https://bank.co.jp/login</a></p>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+        assert_eq!(e.link_mismatches[0].shown_domain, "bank.co.jp");
+        // 同一登録ドメインの深いサブドメインは誤検出しない
+        let e2 = html_to_text(
+            r#"<p><a href="https://www.bank.co.jp/x">bank.co.jp</a></p>"#,
+        );
+        assert!(e2.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_ip_literal_href_flagged() {
+        // 表示はドメイン形、実リンクは IP — 典型的な偽装
+        let e = html_to_text(
+            r#"<p><a href="http://203.0.113.9/x">https://paypal.com</a></p>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+        assert_eq!(e.link_mismatches[0].href_domain, "203.0.113.9");
+    }
+
+    #[test]
+    fn link_mismatch_non_http_href_skipped() {
+        // mailto: 等は比較対象外 (URL 偽装の形でない)
+        let e = html_to_text(
+            r#"<p><a href="mailto:pay@paypal.com">https://paypal.com</a></p>"#,
+        );
+        assert!(e.link_mismatches.is_empty());
+    }
+
+    #[test]
+    fn link_mismatch_unclosed_anchor_evaluated_at_eof() {
+        let e = html_to_text(
+            r#"<p><a href="https://evil.example">https://paypal.com"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+    }
+
+    #[test]
+    fn link_mismatch_cyrillic_domain_text() {
+        // 表示テキストの Cyrillic 埋め込みドメインも不一致として捕捉
+        // ("payраl.com" の 'а' は Cyrillic — raw 比較で href と不一致)
+        let e = html_to_text(
+            "<p><a href=\"https://evil.example\">pay\u{0440}al.com</a></p>",
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+    }
+
+    #[test]
+    fn link_mismatch_shown_text_truncated() {
+        // 長いアンカーテキストは 80 字で打切り (ログ・表示の安全性)
+        let long_text = "x".repeat(200);
+        let html = format!(
+            "<p><a href=\"https://evil.example\">https://paypal.com/{}</a></p>",
+            long_text
+        );
+        let e = html_to_text(&html);
+        assert_eq!(e.link_mismatches.len(), 1);
+        assert!(e.link_mismatches[0].shown_text.chars().count() <= 80);
     }
 }
 

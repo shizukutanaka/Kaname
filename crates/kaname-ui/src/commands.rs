@@ -503,6 +503,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
         );
     }
+    // D162: 表示 URL と実リンク先のドメイン不一致 (URL 偽装)。
+    if let Some(e) = &html_extract {
+        for m in e.link_mismatches.iter().take(3) {
+            render_risks.push(format!(
+                "リンク表示先 ({}) と実際のリンク先 ({}) のドメインが異なります (URL 偽装の兆候)",
+                m.shown_domain, m.href_domain
+            ));
+        }
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1409,6 +1418,31 @@ mod tests {
             r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
             "text/plain のデコイに関わらず HTML 側の攻撃文を検出すべき: {:?}",
             r.bec_signals
+        );
+        Ok(())
+    }
+
+    /// D162: アンカーテキストが URL 形で実リンク先とドメインが異なる
+    /// (表示は正規サイト・実リンクは別ドメイン) — render_risks に
+    /// URL 偽装の兆候を報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_は表示urlと実リンクの不一致を検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: notice@arnazon-billing.com\r\n\
+            To: you@example.com\r\n\
+            Subject: Account verification\r\n\
+            Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            \r\n\
+            <html><body><p>Verify your account: \
+            <a href=\"https://evil-credential-harvest.example/login\">https://paypal.com/login</a>\
+            </p></body></html>\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("URL 偽装")),
+            "表示 URL と実リンク先のドメイン不一致は兆候として報告されるべき: {:?}",
+            r.render_risks
         );
         Ok(())
     }
