@@ -1828,6 +1828,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D567: クレジットカード印自称
+    if env.creditcard_marks {
+        render_risks.push(
+            "X-VISA-*/X-Mastercard-*/X-Amex-*/X-Saison-*/X-RakutenCard-*/X-Epos-*/X-JACCS-*/X-Orico-* 等 — 札機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D568: ポイント・交通系IC・QR決済印自称
+    if env.pointcard_marks {
+        render_risks.push(
+            "X-TPoint-*/X-Suica-*/X-Ponta-*/X-DPoint-*/X-WAON-*/X-Nanaco-*/X-Merpay-*/X-ICOCA-* 等 — 点機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D569: eSIM・旅行SIM印自称
+    if env.esim_marks {
+        render_risks.push(
+            "X-Airalo-*/X-Holafly-*/X-Ubigi-*/X-Saily-*/X-Nomad-*/X-GigSky-*/X-AloSIM-*/X-MayaMobile-* 等 — 仮機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
