@@ -559,10 +559,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         .map(|h| kaname_render::has_comment_salting(h.as_str()))
         .unwrap_or(false)
     {
-        render_risks.push(
-            "HTML 本文のコメント塩 — キーワード一致を崩す難読化の兆候です"
-                .to_string(),
-        );
+        render_risks
+            .push("HTML 本文のコメント塩 — キーワード一致を崩す難読化の兆候です".to_string());
     }
 
     // D257: src="cid:" が参照する Content-ID に対応する添付がない
