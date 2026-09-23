@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D510: `X-OpenAI-*`/`X-Anthropic-*`/`X-Cohere-*`/`X-HuggingFace-*`/`X-Mistral-*`/`X-Pinecone-*` 等の AI・LLM・音声合成・会話インテリジェンス印自称が未検査
+
+- **問題**: `X-OpenAI-*` (OpenAI)、`X-Anthropic-*` (Anthropic)、`X-Cohere-*` (Cohere)、`X-HuggingFace-*`/`X-Replicate-*`/`X-TogetherAI-*`/`X-Mistral-*`/`X-Perplexity-*`/`X-Groq-*`/`X-DeepSeek-*`/`X-OpenRouter-*`/`X-LangChain-*`/`X-Pinecone-*`/`X-Weaviate-*`/`X-Qdrant-*`/`X-Milvus-*`/`X-Chroma-*`/`X-Ollama-*`/`X-ElevenLabs-*`/`X-Runway-*`/`X-StabilityAI-*`/`X-Midjourney-*`/`X-CharacterAI-*`/`X-Jasper-*`/`X-CopyAI-*`/`X-WriteSonic-*`/`X-Synthesia-*`/`X-HeyGen-*`/`X-Descript-*`/`X-OtterAI-*`/`X-Fireflies-*`/`X-Grain-*`/`X-ReadAI-*`/`X-Gong-*`/`X-Chorus-*`/`X-Clari-*`/`X-PeopleAI-*`/`X-vLLM-*`/`X-LlamaIndex-*`/`X-Haystack-*`/`X-SemanticKernel-*`/`X-AutoGen-*`/`X-CrewAI-*` は智機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `ai_marks` + `has_ai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 智印の自署を問え。
+
+### Security — D511: `X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*`/`X-Verizon-*`/`X-TMobile-*`/`X-Vodafone-*` 等の通信キャリア・MVNO 印自称が未検査
+
+- **問題**: `X-Docomo-*` (docomo)、`X-KDDI-*` (KDDI)、`X-SoftBank-*` (SoftBank)、`X-AUOne-*`/`X-UQWiMAX-*`/`X-RakutenMobile-*`/`X-IIJmio-*`/`X-SoNet-*`/`X-JCOM-*`/`X-Plala-*`/`X-Verizon-*`/`X-ATT-*`/`X-TMobile-*`/`X-Sprint-*`/`X-Vodafone-*`/`X-O2-*`/`X-EE-*`/`X-Three-*`/`X-BT-*`/`X-SkyBroadband-*`/`X-Telstra-*`/`X-Optus-*`/`X-Rogers-*`/`X-Bell-*`/`X-Telus-*`/`X-Shaw-*`/`X-OrangeMobile-*`/`X-Movistar-*`/`X-Telefonica-*`/`X-Telenor-*`/`X-TeliaSonera-*`/`X-SwisscomMobile-*`/`X-TIM-*`/`X-WindTre-*`/`X-Bouygues-*`/`X-SFR-*`/`X-FreeMobile-*` は線機の通知記録 — 送信側が書くことは自称。(`X-OCN-*`/`X-BIGLOBE-*`/`X-nifty-*`/`X-dti-*` は D426 で検出済み)
+- **修正**: `Envelope` に `telecom_marks` + `has_telecom_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 線印の自署を問え。
+
+### Security — D512: `X-Chrome-*`/`X-Firefox-*`/`X-Brave-*`/`X-DuckDuckGo-*`/`X-Safari-*`/`X-Kagi-*` 等のブラウザ・検索エンジン印自称が未検査
+
+- **問題**: `X-Chrome-*` (Chrome)、`X-Firefox-*` (Firefox)、`X-Brave-*` (Brave)、`X-Opera-*`/`X-Vivaldi-*`/`X-Safari-*`/`X-Edge-*`/`X-TorBrowser-*`/`X-Waterfox-*`/`X-LibreWolf-*`/`X-DuckDuckGo-*`/`X-Startpage-*`/`X-Ecosia-*`/`X-Qwant-*`/`X-Kagi-*`/`X-Neeva-*`/`X-Mojeek-*`/`X-BraveSearch-*`/`X-Iron-*`/`X-Midori-*`/`X-Falkon-*`/`X-Qutebrowser-*`/`X-NetSurf-*`/`X-Lynx-*`/`X-PaleMoon-*`/`X-SeaMonkey-*`/`X-Maxthon-*`/`X-UCBrowser-*`/`X-SamsungInternet-*`/`X-HuaweiBrowser-*`/`X-MiBrowser-*` は覧機の通知記録 — 送信側が書くことは自称。(`X-ARC-*` は D427、`X-Chrome-River-*` は D489 で検出済み)
+- **修正**: `Envelope` に `browser_marks` + `has_browser_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 覧印の自署を問え。
+
+
 ### Security — D507: `X-Joplin-*`/`X-Logseq-*`/`X-HackMD-*`/`X-Typora-*`/`X-Anytype-*`/`X-RemNote-*` 等のノート・執筆・PKM 印自称が未検査
 
 - **問題**: `X-Joplin-*` (Joplin)、`X-Logseq-*` (Logseq)、`X-HackMD-*` (HackMD)、`X-Foam-*`/`X-Dendron-*`/`X-Trilium-*`/`X-Simplenote-*`/`X-StandardNotes-*`/`X-Bear-*`/`X-Ulysses-*`/`X-iAWriter-*`/`X-Inkdrop-*`/`X-Zettlr-*`/`X-MarkText-*`/`X-Typora-*`/`X-BoostNote-*`/`X-HedgeDoc-*`/`X-CodiMD-*`/`X-Etherpad-*`/`X-CryptPad-*`/`X-SiYuan-*`/`X-Anytype-*`/`X-Capacities-*`/`X-Tana-*`/`X-RemNote-*`/`X-Amplenote-*`/`X-Notejoy-*`/`X-Notability-*`/`X-GoodNotes-*`/`X-Squid-*`/`X-Nebo-*`/`X-Flexcil-*`/`X-Scapple-*`/`X-Freeplane-*`/`X-FreeMind-*`/`X-TiddlyWiki-*`/`X-Mem-*`/`X-Supernotes-*`/`X-Quip-*`/`X-Paper-*`/`X-Slab-*`/`X-Slite-*`/`X-Nuclino-*`/`X-Outline-*`/`X-BookStack-*`/`X-DokuWiki-*`/`X-Craft-*` は筆記機の通知記録 — 送信側が書くことは自称。
