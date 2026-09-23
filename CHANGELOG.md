@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D599: `X-Nomura-*`/`X-DaiwaSec-*`/`X-RakutenSec-*` 等の証券・投資印自称が未検査
+
+- **問題**: `X-Nomura-*` (野村證券)、`X-DaiwaSec-*` (大和証券)、`X-SMBCNikko-*` (SMBC日興証券)、`X-RakutenSec-*`/`X-Monex-*`/`X-Matsui-*`/`X-Kabucom-*`/`X-GaClick-*`/`X-Okasan-*`/`X-TokaiTokyo-*`/`X-IwaiSec-*`/`X-ToyoSec-*`/`X-Marusan-*`/`X-MitoSec-*`/`X-KyokutoSec-*`/`X-TakagiSec-*`/`X-TachibanaSec-*`/`X-KoseiSec-*`/`X-AizawaSec-*`/`X-Ichiyoshi-*`/`X-NaitoSec-*`/`X-HimawariSec-*`/`X-MusashiSec-*`/`X-DMMKabu-*`/`X-LineSec-*`/`X-PayPaySec-*`/`X-StreamSec-*`/`X-SaxoBank-*`/`X-IGSec-*`/`X-Moomoo-*`/`X-Webull-*`/`X-InteractiveBrokers-*`/`X-IBKR-*`/`X-CharlesSchwab-*`/`X-FidelitySec-*`/`X-VanguardSec-*`/`X-TDAmeritrade-*`/`X-Firstrade-*`/`X-TradeStation-*`/`X-EToro-*`/`X-DEGIRO-*`/`X-XTB-*`/`X-Trading212-*`/`X-MerrillEdge-*`/`X-WealthNavi-*`/`X-THEO-*`/`X-NikkoAM-*`/`X-DaiwaAM-*`/`X-iShares-*`/`X-SPDR-*` 等 は証機の通知記録 — 送信側が書くことは自称。口座開設完了・取引報告・入出金・確定申告資料の偽装は証券口座乗取り・投資詐欺の典型手口 (JPX・日本証券業協会・FINRA が証券会社なりすましを警告)。(銀行機は bank_marks、暗号資産機は crypto_marks)
+- **修正**: `Envelope` に `securities_marks` + `has_securities_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 証印の自署を問え。
+
+### Security — D600: `X-TOEIC-*`/`X-Eiken-*`/`X-JLPT-*` 等の検定・資格試験印自称が未検査
+
+- **問題**: `X-TOEIC-*` (TOEIC)、`X-Eiken-*` (実用英語技能検定)、`X-JLPT-*` (日本語能力試験)、`X-IELTS-*`/`X-ETS-*`/`X-TOPIK-*`/`X-HSK-*`/`X-KanjiKentei-*`/`X-Suken-*`/`X-Nissho-*`/`X-Boki-*`/`X-Zenkei-*`/`X-Zensho-*`/`X-MOS-Exam-*`/`X-ITPassport-*`/`X-IpaFE-*`/`X-IpaAP-*`/`X-IpaST-*`/`X-JSTQB-*`/`X-LPIC-*`/`X-CCNA-*`/`X-AWSCert-*`/`X-AzureCert-*`/`X-PMI-*`/`X-PMP-*`/`X-ITIL-*`/`X-Takken-*`/`X-FPKentei-*`/`X-Sharoushi-*`/`X-Gyoseishoshi-*`/`X-Shihoshoshi-*`/`X-Benrishi-*`/`X-ChushoKigyo-*`/`X-Eiyoshi-*`/`X-Chorishi-*`/`X-EiseiKanri-*`/`X-Kikenbutsu-*`/`X-DenkiKouji-*`/`X-Denken-*`/`X-SekoKanri-*`/`X-Kenchikushi-*`/`X-Gijutsushi-*`/`X-Kisho-*`/`X-GTEC-*`/`X-GinkoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。申込受理・受験票・合格通知・登録更新料の偽装は資格詐欺・個人情報収集の典型手口。(塾・通信教育機は cram_marks、オンライン学習機は edu_marks)
+- **修正**: `Envelope` に `kentei_marks` + `has_kentei_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 検印の自署を問え。
+
+### Security — D601: `X-ArisanMark-*`/`X-NipponExpress-*`/`X-HeartHikkoshi-*` 等の引越し・搬送印自称が未検査
+
+- **問題**: `X-ArisanMark-*` (アリさんマーク引越社)、`X-NipponExpress-*` (日本通運)、`X-HeartHikkoshi-*`/`X-FamilyHikkoshi-*`/`X-BestHikkoshi-*`/`X-StarHikkoshi-*`/`X-AppleHikkoshi-*`/`X-DuckHikkoshi-*`/`X-MitsuwaHikkoshi-*`/`X-Akabou-*`/`X-PelicanBin-*`/`X-KogumaBin-*`/`X-PandaHikkoshi-*`/`X-SaikaiHikkoshi-*`/`X-HiroseHikkoshi-*`/`X-AlpsHikkoshi-*`/`X-Hikkosha-*`/`X-TanshinPack-*`/`X-MayflowerTransit-*`/`X-NorthAmericanVan-*`/`X-AtlasVanLines-*`/`X-UnitedVanLines-*`/`X-Bekins-*`/`X-StevensWorldwide-*`/`X-JKMoving-*`/`X-GentleGiant-*`/`X-TwoMenAndATruck-*`/`X-CollegeHunks-*`/`X-Bellhop-*`/`X-PODS-*`/`X-UPack-*`/`X-Suddath-*`/`X-Graebel-*`/`X-Cartus-*`/`X-CrownRelocation-*`/`X-SantaFeRelocation-*`/`X-AGSMovers-*`/`X-Pickfords-*`/`X-BritanniaMovers-*`/`X-AsianTigers-*` 等 は搬機の通知記録 — 送信側が書くことは自称。見積もり確定・搬送予約・キャンセル料の偽装は引越し費用詐欺の典型手口。(`X-UHaul-*`/`X-Art0073-*`/`X-Sakai-*` は facility_marks、宅配機は shipping_marks、貨物機は freight_marks で検出済み)
+- **修正**: `Envelope` に `moving_marks` + `has_moving_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 搬印の自署を問え。
+
 ### Security — D596: `X-Isejingu-*`/`X-Meijijingu-*`/`X-IzumoTaisha-*` 等の神社仏閣・宗教印自称が未検査
 
 - **問題**: `X-Isejingu-*` (伊勢神宮)、`X-Meijijingu-*` (明治神宮)、`X-IzumoTaisha-*` (出雲大社)、`X-FushimiInari-*`/`X-Sensoji-*`/`X-Kinkakuji-*`/`X-Kiyomizudera-*`/`X-Todaiji-*`/`X-Koyasan-*`/`X-Hieizan-*`/`X-Zenkoji-*`/`X-Naritasan-*`/`X-Dazaifu-*`/`X-SumiyoshiTaisha-*`/`X-AtsutaJingu-*`/`X-HikawaJinja-*`/`X-HiedaJinja-*`/`X-Tsurugaoka-*`/`X-KitanoTenmangu-*`/`X-Itsukushima-*`/`X-SuwaTaisha-*`/`X-KashimaJingu-*`/`X-KatoriJingu-*`/`X-Ishikiri-*`/`X-UsaJingu-*`/`X-YahikoJinja-*`/`X-Shirahige-*`/`X-KetaTaisha-*`/`X-KagoshimaJingu-*`/`X-MotoIse-*`/`X-Konpira-*`/`X-OyamaAfuri-*`/`X-Kunozan-*`/`X-Toshogu-*`/`X-Rinnoji-*`/`X-Chusonji-*`/`X-Motsuji-*`/`X-Zuiganji-*`/`X-Eiheiji-*`/`X-Sojiji-*`/`X-Chionin-*`/`X-HigashiHonganji-*`/`X-NishiHonganji-*`/`X-Tenryuji-*`/`X-Nanzenji-*`/`X-Daitokuji-*`/`X-Myoshinji-*`/`X-Kenninji-*`/`X-Tofukuji-*`/`X-Ryoanji-*`/`X-Ginkakuji-*`/`X-Saihoji-*`/`X-Horyuji-*`/`X-Yakushiji-*`/`X-Toshodaiji-*`/`X-Saidaiji-*`/`X-Shitennoji-*`/`X-Katsuoji-*`/`X-Nakayamadera-*`/`X-Zojoji-*`/`X-TsukijiHongwanji-*` 等 は社機の通知記録 — 送信側が書くことは自称。祈祷料・お布施・御朱印・法要案内の偽装は信仰悪用詐欺の典型手口。

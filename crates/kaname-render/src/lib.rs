@@ -1709,6 +1709,12 @@ pub struct Envelope {
     pub coworking_marks: bool,
     /// `X-Freee-*`/`X-MoneyForward-*`/`X-Yayoi-*`/`X-TKC-*`/`X-Misoca-*` 等の会計ソフト・税務申告通知記録印を送信側が自称している (D598)
     pub taxfiling_marks: bool,
+    /// `X-Nomura-*`/`X-DaiwaSec-*`/`X-SMBCNikko-*`/`X-RakutenSec-*`/`X-Monex-*` 等の証券・投資通知記録印を送信側が自称している (D599)
+    pub securities_marks: bool,
+    /// `X-TOEIC-*`/`X-Eiken-*`/`X-JLPT-*`/`X-IpaFE-*`/`X-Takken-*` 等の検定・資格試験通知記録印を送信側が自称している (D600)
+    pub kentei_marks: bool,
+    /// `X-ArisanMark-*`/`X-NipponExpress-*`/`X-HeartHikkoshi-*`/`X-MayflowerTransit-*`/`X-AtlasVanLines-*` 等の引越し・搬送通知記録印を送信側が自称している (D601)
+    pub moving_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2185,6 +2191,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         shrine_marks: has_shrine_marks(hdr),
         coworking_marks: has_coworking_marks(hdr),
         taxfiling_marks: has_taxfiling_marks(hdr),
+        securities_marks: has_securities_marks(hdr),
+        kentei_marks: has_kentei_marks(hdr),
+        moving_marks: has_moving_marks(hdr),
     })
 }
 
@@ -11552,6 +11561,246 @@ fn has_taxfiling_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Nomura-*`/`X-DaiwaSec-*`/`X-SMBCNikko-*`/`X-MufjSec-*`/`X-RakutenSec-*`/`X-Monex-*`/`X-Matsui-*`/`X-Kabucom-*`/`X-GaClick-*`/`X-Okasan-*`/`X-TokaiTokyo-*`/`X-IwaiSec-*`/`X-ToyoSec-*`/`X-Marusan-*`/`X-MitoSec-*`/`X-KyokutoSec-*`/`X-TakagiSec-*`/`X-TachibanaSec-*`/`X-KoseiSec-*`/`X-AizawaSec-*`/`X-Ichiyoshi-*`/`X-NaitoSec-*`/`X-HimawariSec-*`/`X-MusashiSec-*`/`X-MaruhachiSec-*`/`X-DMMKabu-*`/`X-LineSec-*`/`X-PayPaySec-*`/`X-StreamSec-*`/`X-SaxoBank-*`/`X-IGSec-*`/`X-Moomoo-*`/`X-Webull-*`/`X-MinnaKabu-*`/`X-InteractiveBrokers-*`/`X-IBKR-*`/`X-CharlesSchwab-*`/`X-FidelitySec-*`/`X-VanguardSec-*`/`X-ETradeSec-*`/`X-TDAmeritrade-*`/`X-MerrillEdge-*`/`X-AllyInvest-*`/`X-Firstrade-*`/`X-TradeStation-*`/`X-EToro-*`/`X-Plus500Sec-*`/`X-DEGIRO-*`/`X-XTB-*`/`X-Swissquote-*`/`X-Trading212-*`/`X-TigerTrade-*`/`X-FutuNN-*`/`X-Longbridge-*`/`X-Zerodha-*`/`X-Groww-*`/`X-Upstox-*`/`X-AngelOne-*`/`X-KotakSec-*`/`X-ICICIDirect-*`/`X-HDFCSec-*`/`X-Sharekhan-*`/`X-MotilalOswal-*`/`X-Geojit-*`/`X-WealthNavi-*`/`X-THEO-*`/`X-FolioSmart-*`/`X-ONCOMPASS-*`/`X-RakuWrap-*`/`X-NikkoAM-*`/`X-DaiwaAM-*`/`X-NomuraAM-*`/`X-SMDAM-*`/`X-MUFJAM-*`/`X-Invesco-*`/`X-iShares-*`/`X-SPDR-*`/`X-Amundi-*`/`X-Pictet-*`/`X-Schroders-*` (証券会社・投資信託・資産運用の通知記録) を送信側が自称しているかどうか。口座開設完了・取引報告・入出金・確定申告資料の偽装は証券口座乗取り・投資詐欺の典型手口。(銀行機は bank_marks、暗号資産機は crypto_marks、e-Tax・国税庁機は D518 で検出済み)
+fn has_securities_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nomura-")
+            || l.starts_with("x-daiwasec-")
+            || l.starts_with("x-smbcnikko-")
+            || l.starts_with("x-mufjsec-")
+            || l.starts_with("x-rakutensec-")
+            || l.starts_with("x-monex-")
+            || l.starts_with("x-matsui-")
+            || l.starts_with("x-kabucom-")
+            || l.starts_with("x-gaclick-")
+            || l.starts_with("x-okasan-")
+            || l.starts_with("x-tokaitokyo-")
+            || l.starts_with("x-iwaisec-")
+            || l.starts_with("x-toyosec-")
+            || l.starts_with("x-marusan-")
+            || l.starts_with("x-mitosec-")
+            || l.starts_with("x-kyokutosec-")
+            || l.starts_with("x-takagisec-")
+            || l.starts_with("x-tachibanasec-")
+            || l.starts_with("x-koseisec-")
+            || l.starts_with("x-aizawasec-")
+            || l.starts_with("x-ichiyoshi-")
+            || l.starts_with("x-naitosec-")
+            || l.starts_with("x-himawarisec-")
+            || l.starts_with("x-musashisec-")
+            || l.starts_with("x-maruhachisec-")
+            || l.starts_with("x-dmmkabu-")
+            || l.starts_with("x-linesec-")
+            || l.starts_with("x-paypaysec-")
+            || l.starts_with("x-streamsec-")
+            || l.starts_with("x-saxobank-")
+            || l.starts_with("x-igsec-")
+            || l.starts_with("x-moomoo-")
+            || l.starts_with("x-webull-")
+            || l.starts_with("x-minnakabu-")
+            || l.starts_with("x-interactivebrokers-")
+            || l.starts_with("x-ibkr-")
+            || l.starts_with("x-charlesschwab-")
+            || l.starts_with("x-fidelitysec-")
+            || l.starts_with("x-vanguardsec-")
+            || l.starts_with("x-etradesec-")
+            || l.starts_with("x-tdameritrade-")
+            || l.starts_with("x-merrilledge-")
+            || l.starts_with("x-allyinvest-")
+            || l.starts_with("x-firstrade-")
+            || l.starts_with("x-tradestation-")
+            || l.starts_with("x-etoro-")
+            || l.starts_with("x-plus500sec-")
+            || l.starts_with("x-degiro-")
+            || l.starts_with("x-xtb-")
+            || l.starts_with("x-swissquote-")
+            || l.starts_with("x-trading212-")
+            || l.starts_with("x-tigertrade-")
+            || l.starts_with("x-futunn-")
+            || l.starts_with("x-longbridge-")
+            || l.starts_with("x-zerodha-")
+            || l.starts_with("x-groww-")
+            || l.starts_with("x-upstox-")
+            || l.starts_with("x-angelone-")
+            || l.starts_with("x-kotaksec-")
+            || l.starts_with("x-icicidirect-")
+            || l.starts_with("x-hdfcsec-")
+            || l.starts_with("x-sharekhan-")
+            || l.starts_with("x-motilaloswal-")
+            || l.starts_with("x-geojit-")
+            || l.starts_with("x-wealthnavi-")
+            || l.starts_with("x-theo-")
+            || l.starts_with("x-foliosmart-")
+            || l.starts_with("x-oncompass-")
+            || l.starts_with("x-rakuwrap-")
+            || l.starts_with("x-nikkoam-")
+            || l.starts_with("x-daiwaam-")
+            || l.starts_with("x-nomuraam-")
+            || l.starts_with("x-smdam-")
+            || l.starts_with("x-mufjam-")
+            || l.starts_with("x-invesco-")
+            || l.starts_with("x-ishares-")
+            || l.starts_with("x-spdr-")
+            || l.starts_with("x-amundi-")
+            || l.starts_with("x-pictet-")
+            || l.starts_with("x-schroders-")
+    })
+}
+
+/// `X-TOEIC-*`/`X-IIBC-*`/`X-Eiken-*`/`X-ETS-*`/`X-IELTS-*`/`X-CambridgeAssessment-*`/`X-JLPT-*`/`X-JEES-*`/`X-TOPIK-*`/`X-HSK-*`/`X-DELE-*`/`X-DELF-*`/`X-Goethe-*`/`X-KanjiKentei-*`/`X-Suken-*`/`X-HishoKentei-*`/`X-BizBunsho-*`/`X-ShikisaiKentei-*`/`X-ColorCoordinator-*`/`X-Nissho-*`/`X-Boki-*`/`X-Zenkei-*`/`X-Zensho-*`/`X-KenKeiri-*`/`X-MOS-Exam-*`/`X-VBAExpert-*`/`X-ITPassport-*`/`X-IpaFE-*`/`X-IpaAP-*`/`X-IpaST-*`/`X-JSTQB-*`/`X-LPIC-*`/`X-OCJP-*`/`X-CCNA-*`/`X-AWSCert-*`/`X-AzureCert-*`/`X-GCPCert-*`/`X-PMI-*`/`X-PMP-*`/`X-ITIL-*`/`X-Takken-*`/`X-FPKentei-*`/`X-Sharoushi-*`/`X-Gyoseishoshi-*`/`X-Shihoshoshi-*`/`X-Benrishi-*`/`X-ChushoKigyo-*`/`X-KaigoFukushi-*`/`X-Eiyoshi-*`/`X-Chorishi-*`/`X-EiseiKanri-*`/`X-Kikenbutsu-*`/`X-Forklift-*`/`X-DenkiKouji-*`/`X-Denken-*`/`X-SekoKanri-*`/`X-Kenchikushi-*`/`X-Sokuryoushi-*`/`X-Gijutsushi-*`/`X-Kisho-*`/`X-TokeiKentei-*`/`X-GTEC-*`/`X-TEAP-*`/`X-RekishiKentei-*`/`X-SommelierKentei-*`/`X-SakeKentei-*`/`X-OnsenKentei-*`/`X-GinkoKentei-*`/`X-KojinJoboHoshi-*`/`X-MedicalClerk-*`/`X-Nikyo-*`/`X-ShuwaKentei-*`/`X-SeiriKen-*`/`X-SousaiDirector-*` (検定試験・資格認定機関の通知記録) を送信側が自称しているかどうか。申込受理・受験票・合格通知・登録更新料の偽装は資格詐欺・個人情報収集の典型手口。(塾・通信教育機は cram_marks、オンライン学習機は edu_marks、証券機は D599)
+fn has_kentei_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-toeic-")
+            || l.starts_with("x-iibc-")
+            || l.starts_with("x-eiken-")
+            || l.starts_with("x-ets-")
+            || l.starts_with("x-ielts-")
+            || l.starts_with("x-cambridgeassessment-")
+            || l.starts_with("x-jlpt-")
+            || l.starts_with("x-jees-")
+            || l.starts_with("x-topik-")
+            || l.starts_with("x-hsk-")
+            || l.starts_with("x-dele-")
+            || l.starts_with("x-delf-")
+            || l.starts_with("x-goethe-")
+            || l.starts_with("x-kanjikentei-")
+            || l.starts_with("x-suken-")
+            || l.starts_with("x-hishokentei-")
+            || l.starts_with("x-bizbunsho-")
+            || l.starts_with("x-shikisaikentei-")
+            || l.starts_with("x-colorcoordinator-")
+            || l.starts_with("x-nissho-")
+            || l.starts_with("x-boki-")
+            || l.starts_with("x-zenkei-")
+            || l.starts_with("x-zensho-")
+            || l.starts_with("x-kenkeiri-")
+            || l.starts_with("x-mos-exam-")
+            || l.starts_with("x-vbaexpert-")
+            || l.starts_with("x-itpassport-")
+            || l.starts_with("x-ipafe-")
+            || l.starts_with("x-ipaap-")
+            || l.starts_with("x-ipast-")
+            || l.starts_with("x-jstqb-")
+            || l.starts_with("x-lpic-")
+            || l.starts_with("x-ocjp-")
+            || l.starts_with("x-ccna-")
+            || l.starts_with("x-awscert-")
+            || l.starts_with("x-azurecert-")
+            || l.starts_with("x-gcpcert-")
+            || l.starts_with("x-pmi-")
+            || l.starts_with("x-pmp-")
+            || l.starts_with("x-itil-")
+            || l.starts_with("x-takken-")
+            || l.starts_with("x-fpkentei-")
+            || l.starts_with("x-sharoushi-")
+            || l.starts_with("x-gyoseishoshi-")
+            || l.starts_with("x-shihoshoshi-")
+            || l.starts_with("x-benrishi-")
+            || l.starts_with("x-chushokigyo-")
+            || l.starts_with("x-kaigofukushi-")
+            || l.starts_with("x-eiyoshi-")
+            || l.starts_with("x-chorishi-")
+            || l.starts_with("x-eiseikanri-")
+            || l.starts_with("x-kikenbutsu-")
+            || l.starts_with("x-forklift-")
+            || l.starts_with("x-denkikouji-")
+            || l.starts_with("x-denken-")
+            || l.starts_with("x-sekokanri-")
+            || l.starts_with("x-kenchikushi-")
+            || l.starts_with("x-sokuryoushi-")
+            || l.starts_with("x-gijutsushi-")
+            || l.starts_with("x-kisho-")
+            || l.starts_with("x-tokeikentei-")
+            || l.starts_with("x-gtec-")
+            || l.starts_with("x-teap-")
+            || l.starts_with("x-rekishikentei-")
+            || l.starts_with("x-sommelierkentei-")
+            || l.starts_with("x-sakekentei-")
+            || l.starts_with("x-onsenkentei-")
+            || l.starts_with("x-ginkokentei-")
+            || l.starts_with("x-kojinjobohoshi-")
+            || l.starts_with("x-medicalclerk-")
+            || l.starts_with("x-nikyo-")
+            || l.starts_with("x-shuwakentei-")
+            || l.starts_with("x-seiriken-")
+            || l.starts_with("x-sousaidirector-")
+    })
+}
+
+/// `X-ArisanMark-*`/`X-NipponExpress-*`/`X-HeartHikkoshi-*`/`X-FamilyHikkoshi-*`/`X-BestHikkoshi-*`/`X-StarHikkoshi-*`/`X-AppleHikkoshi-*`/`X-DuckHikkoshi-*`/`X-MitsuwaHikkoshi-*`/`X-Akabou-*`/`X-ThankYouHikkoshi-*`/`X-PelicanBin-*`/`X-KogumaBin-*`/`X-PandaHikkoshi-*`/`X-SaikaiHikkoshi-*`/`X-KitazawaHikkoshi-*`/`X-MarugotoHikkoshi-*`/`X-HiroseHikkoshi-*`/`X-AlpsHikkoshi-*`/`X-BlendHikkoshi-*`/`X-Hikkosha-*`/`X-TanshinPack-*`/`X-Hikkoshi-Tatsujin-*`/`X-Hikkoshi-Samurai-*`/`X-MayflowerTransit-*`/`X-NorthAmericanVan-*`/`X-AtlasVanLines-*`/`X-UnitedVanLines-*`/`X-Bekins-*`/`X-WheatonVan-*`/`X-ArpinVan-*`/`X-StevensWorldwide-*`/`X-JKMoving-*`/`X-GentleGiant-*`/`X-TwoMenAndATruck-*`/`X-CollegeHunks-*`/`X-Bellhop-*`/`X-YouMoveMe-*`/`X-PODS-*`/`X-UPack-*`/`X-ZippyShell-*`/`X-Suddath-*`/`X-Graebel-*`/`X-Cartus-*`/`X-Sirva-*`/`X-CrownRelocation-*`/`X-SantaFeRelocation-*`/`X-AGSMovers-*`/`X-Pickfords-*`/`X-BritanniaMovers-*`/`X-WhiteAndCompany-*`/`X-BishopsMove-*`/`X-AsianTigers-*` (引越し・搬送業者の通知記録) を送信側が自称しているかどうか。見積もり確定・搬送予約・キャンセル料の偽装は引越し費用詐欺の典型手口。(`X-UHaul-*`/`X-Art0073-*`/`X-Sakai-*` は facility_marks、宅配機は shipping_marks、貨物機は freight_marks で検出済み)
+fn has_moving_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-arisanmark-")
+            || l.starts_with("x-nipponexpress-")
+            || l.starts_with("x-hearthikkoshi-")
+            || l.starts_with("x-familyhikkoshi-")
+            || l.starts_with("x-besthikkoshi-")
+            || l.starts_with("x-starhikkoshi-")
+            || l.starts_with("x-applehikkoshi-")
+            || l.starts_with("x-duckhikkoshi-")
+            || l.starts_with("x-mitsuwahikkoshi-")
+            || l.starts_with("x-akabou-")
+            || l.starts_with("x-thankyouhikkoshi-")
+            || l.starts_with("x-pelicanbin-")
+            || l.starts_with("x-kogumabin-")
+            || l.starts_with("x-pandahikkoshi-")
+            || l.starts_with("x-saikaihikkoshi-")
+            || l.starts_with("x-kitazawahikkoshi-")
+            || l.starts_with("x-marugotohikkoshi-")
+            || l.starts_with("x-hirosehikkoshi-")
+            || l.starts_with("x-alpshikkoshi-")
+            || l.starts_with("x-blendhikkoshi-")
+            || l.starts_with("x-hikkosha-")
+            || l.starts_with("x-tanshinpack-")
+            || l.starts_with("x-hikkoshi-tatsujin-")
+            || l.starts_with("x-hikkoshi-samurai-")
+            || l.starts_with("x-mayflowertransit-")
+            || l.starts_with("x-northamericanvan-")
+            || l.starts_with("x-atlasvanlines-")
+            || l.starts_with("x-unitedvanlines-")
+            || l.starts_with("x-bekins-")
+            || l.starts_with("x-wheatonvan-")
+            || l.starts_with("x-arpinvan-")
+            || l.starts_with("x-stevensworldwide-")
+            || l.starts_with("x-jkmoving-")
+            || l.starts_with("x-gentlegiant-")
+            || l.starts_with("x-twomenandatruck-")
+            || l.starts_with("x-collegehunks-")
+            || l.starts_with("x-bellhop-")
+            || l.starts_with("x-youmoveme-")
+            || l.starts_with("x-pods-")
+            || l.starts_with("x-upack-")
+            || l.starts_with("x-zippyshell-")
+            || l.starts_with("x-suddath-")
+            || l.starts_with("x-graebel-")
+            || l.starts_with("x-cartus-")
+            || l.starts_with("x-sirva-")
+            || l.starts_with("x-crownrelocation-")
+            || l.starts_with("x-santaferelocation-")
+            || l.starts_with("x-agsmovers-")
+            || l.starts_with("x-pickfords-")
+            || l.starts_with("x-britanniamovers-")
+            || l.starts_with("x-whiteandcompany-")
+            || l.starts_with("x-bishopsmove-")
+            || l.starts_with("x-asiantigers-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -18813,5 +19062,152 @@ X-Other: 1
 
 body";
     assert!(!has_taxfiling_marks(clean));
+}
+
+#[test]
+fn scan_は証機印を検出する() {
+    let n1 = b"From: a@b
+X-Nomura-Id: 1
+
+x";
+    let d1 = b"From: a@b
+X-DaiwaSec-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SMBCNikko-Notice: 1
+
+x";
+    let r1 = b"From: a@b
+X-RakutenSec-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-Monex-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-Matsui-Record: 1
+
+x";
+    let o1 = b"From: a@b
+X-Moomoo-Trace: 1
+
+x";
+    let i1 = b"From: a@b
+X-InteractiveBrokers-Stamp: 1
+
+x";
+    assert!(has_securities_marks(n1));
+    assert!(has_securities_marks(d1));
+    assert!(has_securities_marks(s1));
+    assert!(has_securities_marks(r1));
+    assert!(has_securities_marks(m1));
+    assert!(has_securities_marks(t1));
+    assert!(has_securities_marks(o1));
+    assert!(has_securities_marks(i1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_securities_marks(clean));
+}
+
+#[test]
+fn scan_は検機印を検出する() {
+    let t1 = b"From: a@b
+X-TOEIC-Id: 1
+
+x";
+    let e1 = b"From: a@b
+X-Eiken-Trace: 1
+
+x";
+    let j1 = b"From: a@b
+X-JLPT-Notice: 1
+
+x";
+    let i1 = b"From: a@b
+X-IpaFE-Flag: 1
+
+x";
+    let c1 = b"From: a@b
+X-CCNA-Entry: 1
+
+x";
+    let p1 = b"From: a@b
+X-PMP-Record: 1
+
+x";
+    let k1 = b"From: a@b
+X-Takken-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nissho-Stamp: 1
+
+x";
+    assert!(has_kentei_marks(t1));
+    assert!(has_kentei_marks(e1));
+    assert!(has_kentei_marks(j1));
+    assert!(has_kentei_marks(i1));
+    assert!(has_kentei_marks(c1));
+    assert!(has_kentei_marks(p1));
+    assert!(has_kentei_marks(k1));
+    assert!(has_kentei_marks(n1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_kentei_marks(clean));
+}
+
+#[test]
+fn scan_は搬機印を検出する() {
+    let a1 = b"From: a@b
+X-ArisanMark-Id: 1
+
+x";
+    let n1 = b"From: a@b
+X-NipponExpress-Trace: 1
+
+x";
+    let h1 = b"From: a@b
+X-HeartHikkoshi-Notice: 1
+
+x";
+    let m1 = b"From: a@b
+X-MayflowerTransit-Flag: 1
+
+x";
+    let t1 = b"From: a@b
+X-AtlasVanLines-Entry: 1
+
+x";
+    let w1 = b"From: a@b
+X-TwoMenAndATruck-Record: 1
+
+x";
+    let p1 = b"From: a@b
+X-PODS-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-CrownRelocation-Stamp: 1
+
+x";
+    assert!(has_moving_marks(a1));
+    assert!(has_moving_marks(n1));
+    assert!(has_moving_marks(h1));
+    assert!(has_moving_marks(m1));
+    assert!(has_moving_marks(t1));
+    assert!(has_moving_marks(w1));
+    assert!(has_moving_marks(p1));
+    assert!(has_moving_marks(c1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_moving_marks(clean));
 }
 }
