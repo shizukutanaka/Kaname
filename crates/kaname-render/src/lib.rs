@@ -710,6 +710,37 @@ pub struct Envelope {
     /// エディタ・API・稼働監視ツール印があるか — ツール機の
     /// 通知記録を送信側が自称する兆候 (D500)。
     pub devtools_marks: bool,
+    /// `X-GoDaddy-*`/`X-Namecheap-*`/`X-Porkbun-*`/`X-Dynadot-*`/
+    /// `X-DNSimple-*`/`X-Gandi-*`/`X-NetworkSolutions-*`/`X-eNom-*`/
+    /// `X-Tucows-*`/`X-Register-*`/`X-MarkMonitor-*`/
+    /// `X-CSCGlobal-*`/`X-BrandShield-*`/`X-Versio-*`/`X-TransIP-*`/
+    /// `X-Epik-*`/`X-Joker-*`/`X-NameBay-*`/`X-NameSilo-*`/
+    /// `X-EuroDNS-*`/`X-easyDNS-*`/`X-Hover-*`/`X-No-IP-*`/
+    /// `X-Afraid-*`/`X-ChangeIP-*`/`X-DDNS-*`/`X-DuckDNS-*`/
+    /// `X-Dynu-*`/`X-FreeDNS-*`/`X-Route53-*`/`X-AzureDNS-*`/
+    /// `X-GoogleDomains-*`/`X-CloudflareDNS-*` 等の DNS・ドメイン・
+    /// DDNS 印があるか — 名簿機の通知記録を送信側が自称する
+    /// 兆候 (D501)。
+    pub domain_marks: bool,
+    /// `X-DreamHost-*`/`X-Bluehost-*`/`X-HostGator-*`/
+    /// `X-SiteGround-*`/`X-A2Hosting-*`/`X-InMotion-*`/
+    /// `X-Hostinger-*`/`X-HostPapa-*`/`X-GreenGeeks-*`/
+    /// `X-NearlyFreeSpeech-*`/`X-Hostwinds-*`/`X-LiquidWeb-*`/
+    /// `X-Nexcess-*`/`X-Flywheel-*`/`X-Cloudways-*`/`X-Pressable-*`/
+    /// `X-Interserver-*`/`X-NameHero-*`/`X-Verpex-*`/`X-ChemiCloud-*`/
+    /// `X-ScalaHosting-*`/`X-TMDHosting-*`/`X-AccuWeb-*`/
+    /// `X-MilesWeb-*`/`X-BigRock-*`/`X-ResellerClub-*` 等の
+    /// ウェブホスティング印があるか — 宿機の通知記録を送信側が
+    /// 自称する兆候 (D502)。
+    pub webhost_marks: bool,
+    /// `X-Proton-*`/`X-ProtonMail-*`/`X-Tutanota-*`/`X-Tuta-*`/
+    /// `X-Runbox-*`/`X-Posteo-*`/`X-Migadu-*`/`X-Purelymail-*`/
+    /// `X-Fastmail-*`/`X-Hushmail-*`/`X-Countermail-*`/
+    /// `X-Mailfence-*`/`X-StartMail-*`/`X-Disroot-*`/`X-Systemli-*`/
+    /// `X-Autistici-*`/`X-Riseup-*`/`X-Pobox-*`/`X-Hey-*`/
+    /// `X-Cock-*`/`X-Lavabit-*` 等のプライバシーメール印があるか —
+    /// 秘匿機の通知記録を送信側が自称する兆候 (D503)。
+    pub mailprivacy_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1071,6 +1102,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         maker_marks: has_maker_marks(raw),
         monitoring_marks: has_monitoring_marks(raw),
         devtools_marks: has_devtools_marks(raw),
+        domain_marks: has_domain_marks(raw),
+        webhost_marks: has_webhost_marks(raw),
+        mailprivacy_marks: has_mailprivacy_marks(raw),
     })
 }
 
@@ -4641,6 +4675,147 @@ fn has_devtools_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-pulsetic-")
             || l.starts_with("x-hyperping-")
             || l.starts_with("x-ohdear-")
+    })
+}
+
+/// `X-GoDaddy-*`/`X-Namecheap-*`/`X-Porkbun-*`/`X-Dynadot-*`/
+/// `X-DNSimple-*`/`X-Gandi-*`/`X-NetworkSolutions-*`/`X-eNom-*`/
+/// `X-Tucows-*`/`X-Register-*`/`X-MarkMonitor-*`/`X-CSCGlobal-*`/
+/// `X-BrandShield-*`/`X-Versio-*`/`X-TransIP-*`/`X-Epik-*`/`X-Joker-*`/
+/// `X-NameBay-*`/`X-NameSilo-*`/`X-EuroDNS-*`/`X-easyDNS-*`/`X-Hover-*`/
+/// `X-No-IP-*`/`X-Afraid-*`/`X-ChangeIP-*`/`X-DDNS-*`/`X-DuckDNS-*`/
+/// `X-Dynu-*`/`X-FreeDNS-*`/`X-Route53-*`/`X-AzureDNS-*`/
+/// `X-GoogleDomains-*`/`X-CloudflareDNS-*` 等の DNS・ドメイン・DDNS
+/// 印があるか判定する (D501)。
+///
+/// `X-GoDaddy-*` (GoDaddy)、`X-Namecheap-*` (Namecheap)、
+/// `X-DNSimple-*` (DNSimple) は名簿機の通知記録 — 送信側から届く
+/// これは自称。
+fn has_domain_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-godaddy-")
+            || l.starts_with("x-namecheap-")
+            || l.starts_with("x-porkbun-")
+            || l.starts_with("x-dynadot-")
+            || l.starts_with("x-dnsimple-")
+            || l.starts_with("x-gandi-")
+            || l.starts_with("x-networksolutions-")
+            || l.starts_with("x-enom-")
+            || l.starts_with("x-tucows-")
+            || l.starts_with("x-register-")
+            || l.starts_with("x-markmonitor-")
+            || l.starts_with("x-cscglobal-")
+            || l.starts_with("x-brandshield-")
+            || l.starts_with("x-versio-")
+            || l.starts_with("x-transip-")
+            || l.starts_with("x-epik-")
+            || l.starts_with("x-joker-")
+            || l.starts_with("x-namebay-")
+            || l.starts_with("x-namesilo-")
+            || l.starts_with("x-eurodns-")
+            || l.starts_with("x-easydns-")
+            || l.starts_with("x-hover-")
+            || l.starts_with("x-noip-")
+            || l.starts_with("x-afraid-")
+            || l.starts_with("x-changeip-")
+            || l.starts_with("x-ddns-")
+            || l.starts_with("x-duckdns-")
+            || l.starts_with("x-dynu-")
+            || l.starts_with("x-freedns-")
+            || l.starts_with("x-route53-")
+            || l.starts_with("x-azuredns-")
+            || l.starts_with("x-googledomains-")
+            || l.starts_with("x-cloudflaredns-")
+    })
+}
+
+/// `X-DreamHost-*`/`X-Bluehost-*`/`X-HostGator-*`/`X-SiteGround-*`/
+/// `X-A2Hosting-*`/`X-InMotion-*`/`X-Hostinger-*`/`X-HostPapa-*`/
+/// `X-GreenGeeks-*`/`X-NearlyFreeSpeech-*`/`X-Hostwinds-*`/
+/// `X-LiquidWeb-*`/`X-Nexcess-*`/`X-Flywheel-*`/`X-Cloudways-*`/
+/// `X-Pressable-*`/`X-Interserver-*`/`X-NameHero-*`/`X-Verpex-*`/
+/// `X-ChemiCloud-*`/`X-ScalaHosting-*`/`X-TMDHosting-*`/
+/// `X-AccuWeb-*`/`X-MilesWeb-*`/`X-BigRock-*`/`X-ResellerClub-*` 等の
+/// ウェブホスティング印があるか判定する (D502)。
+///
+/// `X-DreamHost-*` (DreamHost)、`X-Bluehost-*` (Bluehost)、
+/// `X-HostGator-*` (HostGator) は宿機の通知記録 — 送信側から届く
+/// これは自称。
+fn has_webhost_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dreamhost-")
+            || l.starts_with("x-bluehost-")
+            || l.starts_with("x-hostgator-")
+            || l.starts_with("x-siteground-")
+            || l.starts_with("x-a2hosting-")
+            || l.starts_with("x-inmotion-")
+            || l.starts_with("x-hostinger-")
+            || l.starts_with("x-hostpapa-")
+            || l.starts_with("x-greengeeks-")
+            || l.starts_with("x-nearlyfreespeech-")
+            || l.starts_with("x-hostwinds-")
+            || l.starts_with("x-liquidweb-")
+            || l.starts_with("x-nexcess-")
+            || l.starts_with("x-flywheel-")
+            || l.starts_with("x-cloudways-")
+            || l.starts_with("x-pressable-")
+            || l.starts_with("x-interserver-")
+            || l.starts_with("x-namehero-")
+            || l.starts_with("x-verpex-")
+            || l.starts_with("x-chemicloud-")
+            || l.starts_with("x-scalahosting-")
+            || l.starts_with("x-tmdhosting-")
+            || l.starts_with("x-accuweb-")
+            || l.starts_with("x-milesweb-")
+            || l.starts_with("x-bigrock-")
+            || l.starts_with("x-resellerclub-")
+    })
+}
+
+/// `X-Proton-*`/`X-ProtonMail-*`/`X-Tutanota-*`/`X-Tuta-*`/
+/// `X-Runbox-*`/`X-Posteo-*`/`X-Migadu-*`/`X-Purelymail-*`/
+/// `X-Fastmail-*`/`X-Hushmail-*`/`X-Countermail-*`/`X-Mailfence-*`/
+/// `X-StartMail-*`/`X-Disroot-*`/`X-Systemli-*`/`X-Autistici-*`/
+/// `X-Riseup-*`/`X-Pobox-*`/`X-Hey-*`/`X-Cock-*`/`X-Lavabit-*` 等の
+/// プライバシーメール印があるか判定する (D503)。
+///
+/// `X-Proton-*` (Proton)、`X-Tutanota-*` (Tutanota)、`X-Fastmail-*`
+/// (Fastmail) は秘匿機の通知記録 — 送信側から届くこれは自称。
+fn has_mailprivacy_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-proton-")
+            || l.starts_with("x-protonmail-")
+            || l.starts_with("x-tutanota-")
+            || l.starts_with("x-tuta-")
+            || l.starts_with("x-runbox-")
+            || l.starts_with("x-posteo-")
+            || l.starts_with("x-migadu-")
+            || l.starts_with("x-purelymail-")
+            || l.starts_with("x-fastmail-")
+            || l.starts_with("x-hushmail-")
+            || l.starts_with("x-countermail-")
+            || l.starts_with("x-mailfence-")
+            || l.starts_with("x-startmail-")
+            || l.starts_with("x-disroot-")
+            || l.starts_with("x-systemli-")
+            || l.starts_with("x-autistici-")
+            || l.starts_with("x-riseup-")
+            || l.starts_with("x-pobox-")
+            || l.starts_with("x-hey-")
+            || l.starts_with("x-cock-")
+            || l.starts_with("x-lavabit-")
     })
 }
 
@@ -8754,6 +8929,72 @@ mod tests {
         assert!(has_devtools_marks(e1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_devtools_marks(clean));
+    }
+
+    #[test]
+    fn scan_はDNSドメインDDNS印を検出する() {
+        let g1 = b"X-GoDaddy-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(g1));
+        let n1 = b"X-Namecheap-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(n1));
+        let d1 = b"X-DNSimple-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(d1));
+        let p1 = b"X-Porkbun-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(p1));
+        let h1 = b"X-Hover-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(h1));
+        let r1 = b"X-Route53-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(r1));
+        let e1 = b"X-easyDNS-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(e1));
+        let a1 = b"X-AzureDNS-Notify: x\r\n\r\nx";
+        assert!(has_domain_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_domain_marks(clean));
+    }
+
+    #[test]
+    fn scan_はウェブホスティング印を検出する() {
+        let d1 = b"X-DreamHost-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(d1));
+        let b1 = b"X-Bluehost-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(b1));
+        let h1 = b"X-HostGator-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(h1));
+        let s1 = b"X-SiteGround-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(s1));
+        let i1 = b"X-Hostinger-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(i1));
+        let c1 = b"X-Cloudways-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(c1));
+        let n1 = b"X-Nexcess-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(n1));
+        let a1 = b"X-AccuWeb-Notify: x\r\n\r\nx";
+        assert!(has_webhost_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_webhost_marks(clean));
+    }
+
+    #[test]
+    fn scan_はプライバシーメール印を検出する() {
+        let p1 = b"X-Proton-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(p1));
+        let t1 = b"X-Tutanota-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(t1));
+        let f1 = b"X-Fastmail-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(f1));
+        let r1 = b"X-Runbox-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(r1));
+        let m1 = b"X-Migadu-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(m1));
+        let s1 = b"X-StartMail-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(s1));
+        let d1 = b"X-Disroot-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(d1));
+        let h1 = b"X-Hey-Notify: x\r\n\r\nx";
+        assert!(has_mailprivacy_marks(h1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mailprivacy_marks(clean));
     }
 }
 

@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D501: `X-GoDaddy-*`/`X-Namecheap-*`/`X-DNSimple-*`/`X-Porkbun-*`/`X-Gandi-*`/`X-Route53-*` 等の DNS・ドメイン・DDNS 印自称が未検査
+
+- **問題**: `X-GoDaddy-*` (GoDaddy)、`X-Namecheap-*` (Namecheap)、`X-DNSimple-*` (DNSimple)、`X-Porkbun-*`/`X-Dynadot-*`/`X-Gandi-*`/`X-NetworkSolutions-*`/`X-eNom-*`/`X-Tucows-*`/`X-Register-*`/`X-MarkMonitor-*`/`X-CSCGlobal-*`/`X-BrandShield-*`/`X-Versio-*`/`X-TransIP-*`/`X-Epik-*`/`X-Joker-*`/`X-NameBay-*`/`X-NameSilo-*`/`X-EuroDNS-*`/`X-easyDNS-*`/`X-Hover-*`/`X-No-IP-*`/`X-Afraid-*`/`X-ChangeIP-*`/`X-DDNS-*`/`X-DuckDNS-*`/`X-Dynu-*`/`X-FreeDNS-*`/`X-Route53-*`/`X-AzureDNS-*`/`X-GoogleDomains-*`/`X-CloudflareDNS-*` は名簿機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `domain_marks` + `has_domain_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 名簿印の自署を問え。
+
+### Security — D502: `X-DreamHost-*`/`X-Bluehost-*`/`X-HostGator-*`/`X-SiteGround-*`/`X-Hostinger-*`/`X-Cloudways-*` 等のウェブホスティング印自称が未検査
+
+- **問題**: `X-DreamHost-*` (DreamHost)、`X-Bluehost-*` (Bluehost)、`X-HostGator-*` (HostGator)、`X-SiteGround-*`/`X-A2Hosting-*`/`X-InMotion-*`/`X-Hostinger-*`/`X-HostPapa-*`/`X-GreenGeeks-*`/`X-NearlyFreeSpeech-*`/`X-Hostwinds-*`/`X-LiquidWeb-*`/`X-Nexcess-*`/`X-Flywheel-*`/`X-Cloudways-*`/`X-Pressable-*`/`X-Interserver-*`/`X-NameHero-*`/`X-Verpex-*`/`X-ChemiCloud-*`/`X-ScalaHosting-*`/`X-TMDHosting-*`/`X-AccuWeb-*`/`X-MilesWeb-*`/`X-BigRock-*`/`X-ResellerClub-*` は宿機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `webhost_marks` + `has_webhost_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 宿印の自署を問え。
+
+### Security — D503: `X-Proton-*`/`X-Tutanota-*`/`X-Fastmail-*`/`X-Runbox-*`/`X-Migadu-*`/`X-Posteo-*` 等のプライバシーメール印自称が未検査
+
+- **問題**: `X-Proton-*` (Proton)、`X-Tutanota-*` (Tutanota)、`X-Fastmail-*` (Fastmail)、`X-ProtonMail-*`/`X-Tuta-*`/`X-Runbox-*`/`X-Posteo-*`/`X-Migadu-*`/`X-Purelymail-*`/`X-Hushmail-*`/`X-Countermail-*`/`X-Mailfence-*`/`X-StartMail-*`/`X-Disroot-*`/`X-Systemli-*`/`X-Autistici-*`/`X-Riseup-*`/`X-Pobox-*`/`X-Hey-*`/`X-Cock-*`/`X-Lavabit-*` は秘匿機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `mailprivacy_marks` + `has_mailprivacy_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 秘匿印の自署を問え。
+
+
 ### Security — D498: `X-Arduino-*`/`X-Prusa-*`/`X-JLCPCB-*`/`X-ESP32-*`/`X-Particle-*`/`X-ThingSpeak-*` 等の IoT・3D プリント・電子部品印自称が未検査
 
 - **問題**: `X-Arduino-*` (Arduino)、`X-Prusa-*` (Prusa)、`X-JLCPCB-*` (JLCPCB)、`X-RaspberryPi-*`/`X-ESP32-*`/`X-Particle-*`/`X-Blynk-*`/`X-ThingSpeak-*`/`X-Adafruit-*`/`X-SparkFun-*`/`X-Tindie-*`/`X-Seeed-*`/`X-Pololu-*`/`X-DFRobot-*`/`X-Pimoroni-*`/`X-Elegoo-*`/`X-Creality-*`/`X-Bambu-*`/`X-Anycubic-*`/`X-Ultimaker-*`/`X-Formlabs-*`/`X-Markforged-*`/`X-Stratasys-*`/`X-3DSystems-*`/`X-Materialise-*`/`X-Shapeways-*`/`X-Sculpteo-*`/`X-Protolabs-*`/`X-Xometry-*`/`X-Fictiv-*`/`X-Hubs-*`/`X-PCBWay-*`/`X-OSH-Park-*`/`X-Aisler-*`/`X-Eurocircuits-*`/`X-DigiKey-*`/`X-Mouser-*`/`X-Farnell-*`/`X-RSComponents-*`/`X-Avnet-*`/`X-Arrow-*`/`X-TME-*` は製造機の通知記録 — 送信側が書くことは自称。
