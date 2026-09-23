@@ -1208,3 +1208,34 @@ userinfo 偽装 (`paypal.com@evil.com`)・IP リテラル・未閉タグも捕�
 テキスト vs href (D162)、text/plain vs text/html (D160) はすべて
 同じ構造 — 攻撃者は「見える側」と「効く側」をずらす。
 表示側を信用するより「ずれ」を計測するほうが新種にも効く。
+
+## ラウンド 75 — 「合格」は何についての合格かを見ないと意味がない (D165)
+
+**発見**: `Authentication-Results` から `spf=`/`dkim=`/`dmarc=` の
+合否だけを取り込み、`smtp.mailfrom=`・`header.d=`・`header.from=`
+の識別子プロパティは捨てていた。しかし SPF が検証するのは
+MAIL FROM ドメイン、DKIM が検証するのは署名 `d=` ドメイン —
+どちらも表示される From ドメインではない。つまり
+`spf=pass smtp.mailfrom=bounce@evil.example` +
+`dkim=pass header.d=evil.example` + `From: ceo@corp.example`
+は「認証 pass」だが**別のドメインについての pass** であり、
+攻撃者は自前ドメインの正規な SPF/DKIM レコードを装備したまま
+任意の From を名乗れる。識別子の整合判定 (identifier
+alignment) は RFC 7489 が DMARC に課した役割であり、
+`dmarc=pass` なしで「認証が通った」と読むのは、合格証の
+被検査者名を読まずに合格と見るのと同じだった。
+
+**対応**: `AuthResultsHeader` に `mailfrom_domain`・`dkim_domain`・
+`dmarc_from_domain` を追加して識別子プロパティを保持し、
+`domains_aligned` (relaxed alignment — 登録ドメイン比較) で
+整合判定。`dmarc=pass` 以外で SPF/DKIM の識別子が表示 From と
+非整合なら `render_risks` に兆候として報告する。MTA が記録した
+`header.from=` と表示 From の不一致 (ヘッダ解釈不一致) も
+兆候として報告する。
+
+**原則**: **認証結果は「誰についての結果か」までが意味の一部**。
+verdict だけ取って識別子を捨てると、「正しい検査が別の対象に
+行われた」ことを検出できない — pass/fail より alignment が
+先に来る。認証が階層構造を持つとき (SPF=配送経路、DKIM=署名者、
+DMARC=整合判定)、下位の合格を上位なしで表示側の識別子に
+結びつけてはいけない。

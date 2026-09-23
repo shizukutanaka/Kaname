@@ -184,6 +184,20 @@ pub struct AuthResultsHeader {
     /// 使えるよう記述元を保持する。ヘッダ値をそのまま信頼する前提は
     /// 変わらない (docs/threat-model.md §3.15b, gap-analysis D18)。
     pub authserv_id: Option<String>,
+    /// SPF が検証したドメイン (`smtp.mailfrom=` プロパティのドメイン部、
+    /// RFC 8601 §4)。`spf=pass` は MAIL FROM ドメインについての結果で
+    /// あり、表示される From ドメインとは無関係になりうる —
+    /// DMARC の identifier alignment (RFC 7489 §3.1) が未検査だと
+    /// 「pass だが From と無関係なドメイン」のまま採点される (D165)。
+    pub mailfrom_domain: Option<String>,
+    /// DKIM が署名したドメイン (`header.d=` プロパティ)。
+    /// 第三者署名 (送信代行 ESP) では `d=` は ESP のドメインになり、
+    /// From ドメインとは非整合なのが常態 — 整合性は DMARC が担う (D165)。
+    pub dkim_domain: Option<String>,
+    /// DMARC が照合した From ドメイン (`header.from=` プロパティ)。
+    /// MTA が見た header.From を記録する — 表示 From と違う値は
+    /// パーサ不一致の兆候 (D165)。
+    pub dmarc_from_domain: Option<String>,
 }
 
 /// 個別の送信ドメイン認証結果。
@@ -395,12 +409,60 @@ pub fn parse_auth_results_str(header_text: &str) -> AuthResultsHeader {
     let dmarc = extract_auth_result(header_text, "dmarc");
     let arc = extract_auth_result(header_text, "arc");
 
+    // 識別子プロパティ (DMARC identifier alignment 検査用 — D165)。
+    // `smtp.mailfrom=` はアドレス形なのでドメイン部だけ取り出す。
+    let mailfrom_domain =
+        extract_auth_property(header_text, "smtp.mailfrom").and_then(|v| auth_prop_domain(&v));
+    let dkim_domain = extract_auth_property(header_text, "header.d").map(|v| v.to_lowercase());
+    let dmarc_from_domain =
+        extract_auth_property(header_text, "header.from").map(|v| v.to_lowercase());
+
     AuthResultsHeader {
         spf,
         dkim,
         dmarc,
         arc,
         authserv_id,
+        mailfrom_domain,
+        dkim_domain,
+        dmarc_from_domain,
+    }
+}
+
+/// Authentication-Results ヘッダーからプロパティ値 (`name=value`) を取り出す。
+///
+/// `header.d=`・`header.from=`・`smtp.mailfrom=` のような識別子プロパティ。
+/// 機構結果 (`spf=pass`) と同名プレフィックスを持たないため名前一致で検索
+/// するが、値に `=` を含むケース (Base64 断片等) は最初の `=` 以降を返す。
+fn extract_auth_property(header: &str, name: &str) -> Option<String> {
+    for token in header.split([';', ' ', '\t']) {
+        let Some((key, value)) = token.split_once('=') else {
+            continue;
+        };
+        if key.eq_ignore_ascii_case(name) && !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    None
+}
+
+/// `smtp.mailfrom=` 値からドメイン部を取り出す。
+///
+/// 形式は `user@domain`・`<user@domain>`・裸 `domain` の揺れがある。
+/// `<>` 空 MAIL FROM (バウンス) は `helo=`/`ehlo=` 側でしか検査
+/// されないため、ここではドメインが取れなければ None を返す。
+fn auth_prop_domain(value: &str) -> Option<String> {
+    let stripped = value.trim_matches(|c| matches!(c, '<' | '>' | '\"' | '\''));
+    let domain = stripped
+        .rsplit('@')
+        .next()
+        .unwrap_or(stripped)
+        .trim_end_matches('.')
+        .to_lowercase();
+    if domain.is_empty() {
+        None
+    } else {
+        Some(domain)
     }
 }
 
@@ -1188,6 +1250,22 @@ fn registrable_domain(host: &str) -> String {
     }
 }
 
+/// 二つのドメインが DMARC relaxed alignment (RFC 7489 §3.1) の意味で
+/// 同じ組織ドメインか判定する。
+///
+/// `registrable_domain` 比較 — `corp.example` と `mail.corp.example`、
+/// `corp.co.jp` と `a.b.corp.co.jp` は整合、別組織ドメインは非整合。
+/// SPF `smtp.mailfrom=` / DKIM `header.d=` と表示 From ドメインの
+/// 照合に使う (D165)。小文字化して比較する。
+#[must_use]
+pub fn domains_aligned(a: &str, b: &str) -> bool {
+    let a = a.trim_end_matches('.').to_lowercase();
+    let b = b.trim_end_matches('.').to_lowercase();
+    let ra = registrable_domain(&a);
+    let rb = registrable_domain(&b);
+    !ra.is_empty() && !rb.is_empty() && ra == rb
+}
+
 /// テキストから URL 形のドメイン候補を抽出する (小文字)。
 /// `scheme://host`、`www.` 始まり、および裸の `domain.tld[/path]` 形を拾う。
 /// アンカーテキスト内を想定 — メールアドレス形 (`@` 含む) は除外する。
@@ -1589,6 +1667,60 @@ mod tests {
             env.auth_results.authserv_id.as_deref(),
             Some("mx.example.com")
         );
+    }
+
+    // ── D165: AR 識別子プロパティ / ドメイン整合 ──────────────────────
+
+    #[test]
+    fn parse_auth_results_extracts_identifier_domains() {
+        let h = parse_auth_results_str(
+            "mx.example.com; \
+             spf=pass smtp.mailfrom=bounce@evil.example; \
+             dkim=pass header.d=evil.example; \
+             dmarc=none header.from=corp.example",
+        );
+        assert_eq!(h.mailfrom_domain.as_deref(), Some("evil.example"));
+        assert_eq!(h.dkim_domain.as_deref(), Some("evil.example"));
+        assert_eq!(h.dmarc_from_domain.as_deref(), Some("corp.example"));
+    }
+
+    #[test]
+    fn auth_prop_mailfrom_extracts_domain_from_address() {
+        // アドレス形・山括弧形・裸ドメイン形の揺れを吸収する
+        assert_eq!(
+            auth_prop_domain("bounce@mail.evil.example").as_deref(),
+            Some("mail.evil.example")
+        );
+        assert_eq!(
+            auth_prop_domain("<noreply@evil.example>").as_deref(),
+            Some("evil.example")
+        );
+        assert_eq!(
+            auth_prop_domain("evil.example").as_deref(),
+            Some("evil.example")
+        );
+        // 空 MAIL FROM (`<>`) はドメイン無し
+        assert!(auth_prop_domain("<>").is_none());
+    }
+
+    #[test]
+    fn auth_identifiers_absent_when_header_missing() {
+        let h = parse_auth_results_str("mx.example.com; spf=pass");
+        assert!(h.mailfrom_domain.is_none());
+        assert!(h.dkim_domain.is_none());
+        assert!(h.dmarc_from_domain.is_none());
+    }
+
+    #[test]
+    fn domains_aligned_relaxed_comparison() {
+        // relaxed alignment: 同じ登録ドメインなら整合
+        assert!(domains_aligned("corp.example", "mail.corp.example"));
+        assert!(domains_aligned("corp.co.jp", "a.b.corp.co.jp"));
+        assert!(domains_aligned("Corp.Example", "corp.example"));
+        assert!(!domains_aligned("corp.example", "evil.example"));
+        assert!(!domains_aligned("corp.example", "corp-example.evil.com"));
+        // サフィックス偽装は別ドメイン
+        assert!(!domains_aligned("corp.example.evil.com", "corp.example"));
     }
 
     /// `parse_auth_results_str` は JMAP 一覧経路 (`header:Authentication-Results:asText`)

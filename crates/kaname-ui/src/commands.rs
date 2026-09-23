@@ -512,6 +512,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             ));
         }
     }
+    // D165: SPF/DKIM の識別子が表示 From ドメインと非整合
+    // (DMARC alignment 未検証) — pass であっても別ドメインを
+    // 検証しただけの結果を信頼しない。
+    render_risks.extend(auth_alignment_anomalies(&env));
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1009,6 +1013,64 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
     out
 }
 
+/// D165: SPF/DKIM 認証の識別子が表示 From ドメインと非整合な場合の
+/// 兆候を返す (DMARC identifier alignment, RFC 7489 §3.1)。
+///
+/// `spf=pass smtp.mailfrom=evil.example` + `dkim=pass header.d=evil.example`
+/// のメールで `From: ceo@corp.example` を表示する構成は、認証としては
+/// 「全て pass」でも実際には**別のドメインについての pass** を見ている
+/// だけ — MTA が DMARC で整合性を検証しない限り、From 表示と認証結果は
+/// 無関係であり、攻撃者は自前ドメインの正規な認証を装備したまま
+/// 任意の From を名乗れる。認証機構の整合判定は DMARC が担うため、
+/// `dmarc=pass` があれば MTA が照合済みとして何も出さない。
+///
+/// 整合の定義は relaxed alignment — `registrable_domain` で同じ
+/// 組織ドメインなら整合とみなす (例: From `corp.example` vs
+/// mailfrom `bounce.corp.example` は整合)。
+fn auth_alignment_anomalies(env: &kaname_render::Envelope) -> Vec<String> {
+    use kaname_render::AuthResult as AR;
+    let ar = &env.auth_results;
+    // dmarc=pass は MTA が整合性を検証済み → 警告不要。
+    if matches!(ar.dmarc, AR::Pass) {
+        return Vec::new();
+    }
+    let Some(from_domain) = env.from.first().map(|a| a.addr.domain.to_lowercase()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    if matches!(ar.spf, AR::Pass) {
+        if let Some(d) = &ar.mailfrom_domain {
+            if !kaname_render::domains_aligned(d, &from_domain) {
+                out.push(format!(
+                    "SPF は配送経路ドメイン ({d}) のみを検証 — 表示 From ドメイン \
+                    ({from_domain}) と非整合です (DMARC alignment 欠落の兆候)"
+                ));
+            }
+        }
+    }
+    if matches!(ar.dkim, AR::Pass) {
+        if let Some(d) = &ar.dkim_domain {
+            if !kaname_render::domains_aligned(d, &from_domain) {
+                out.push(format!(
+                    "DKIM は署名ドメイン ({d}) を検証 — 表示 From ドメイン \
+                    ({from_domain}) と非整合です (第三者署名/なりすましの可能性)"
+                ));
+            }
+        }
+    }
+    // MTA が記録した header.From と、こちらが表示する From が違う —
+    // ヘッダの解釈が食い違うパーサ不一致の兆候。
+    if let Some(d) = &ar.dmarc_from_domain {
+        if !d.is_empty() && !kaname_render::domains_aligned(d, &from_domain) {
+            out.push(format!(
+                "MTA が検証した header.From ({d}) と表示される From \
+                ({from_domain}) が異なります (ヘッダ解釈不一致の兆候)"
+            ));
+        }
+    }
+    out
+}
+
 /// 本文に対してレンダリング系の検出器を実行し、人間可読なリスク一覧を返す。
 ///
 /// `kaname-render` は既に `kaname-ui` の依存に入っており各検出器も実装済み
@@ -1442,6 +1504,122 @@ mod tests {
         assert!(
             r.render_risks.iter().any(|s| s.contains("URL 偽装")),
             "表示 URL と実リンク先のドメイン不一致は兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D165: `spf=pass` が MAIL FROM ドメイン (evil.example) についての
+    /// 結果で表示 From (corp.example) と非整合 — DMARC alignment 未検証
+    /// の兆候として報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_はspfの非整合識別子を報告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Request\r\n\
+            Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=bounce@evil.example; dmarc=none\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("非整合") && s.contains("SPF")),
+            "SPF 識別子の非整合は報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D165: `dkim=pass` が署名ドメイン (evil.example) についての結果で
+    /// 表示 From (corp.example) と非整合。
+    #[tokio::test]
+    async fn analyze_raw_email_はdkimの非整合識別子を報告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Request\r\n\
+            Authentication-Results: mx.example.com; dkim=pass header.d=evil.example; dmarc=none\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("非整合") && s.contains("DKIM")),
+            "DKIM 識別子の非整合は報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D165: 識別子が同じ登録ドメイン (bounce.corp.example vs corp.example)
+    /// なら relaxed alignment で整合 — 報告しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は整合する識別子を報告しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Request\r\n\
+            Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=bounce@mail.corp.example; dkim=pass header.d=corp.example; dmarc=none\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            !r.render_risks.iter().any(|s| s.contains("非整合")),
+            "整合する識別子は報告すべきでない: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D165: `dmarc=pass` は MTA が整合性を検証済み — 識別子警告は出さない。
+    #[tokio::test]
+    async fn analyze_raw_email_はdmarc合格で識別子警告を出さない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Request\r\n\
+            Authentication-Results: mx.example.com; spf=pass smtp.mailfrom=bounce@esp.example; dkim=pass header.d=esp.example; dmarc=pass header.from=corp.example\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            !r.render_risks.iter().any(|s| s.contains("非整合")),
+            "dmarc=pass なら識別子警告は出ないべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D165: MTA が記録した header.From と表示 From の不一致
+    /// (ヘッダ解釈不一致)。
+    #[tokio::test]
+    async fn analyze_raw_email_はheader_from不一致を報告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Request\r\n\
+            Authentication-Results: mx.example.com; dmarc=fail header.from=other.example\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Please proceed.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("header.From")),
+            "MTA 記録の header.From 不一致は報告されるべき: {:?}",
             r.render_risks
         );
         Ok(())

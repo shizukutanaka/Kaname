@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D165: SPF/DKIM の識別子が表示 From ドメインと非整合 (DMARC alignment 未検証) を検出
+
+- `Authentication-Results` から `spf=`/`dkim=`/`dmarc=` の合否だけを取り込み、識別子プロパティ (`smtp.mailfrom=`/`header.d=`/`header.from=`) は捨てていた → `spf=pass smtp.mailfrom=bounce@evil.example` + `dkim=pass header.d=evil.example` + `From: ceo@corp.example` の構成は、攻撃者が自前ドメインの正規認証を装備したまま任意の From を名乗れても「認証 pass」として採点されていた。SPF は MAIL FROM ドメイン・DKIM は署名 `d=` ドメインを検証するもので、表示 From との整合判定は DMARC の役割 (RFC 7489 §3.1 identifier alignment) — `dmarc=pass` がなければ両者は無関係になりうる
+- 対処: `AuthResultsHeader` に `mailfrom_domain`・`dkim_domain`・`dmarc_from_domain` を追加し AR プロパティから抽出 (`smtp.mailfrom=` はアドレス形なのでドメイン部を取り出し) → `kaname_render::domains_aligned` (relaxed alignment: `registrable_domain` 比較) で整合判定 → `kaname-ui` の `auth_alignment_anomalies` が `dmarc=pass` 以外で識別子非整合を `render_risks` に兆候報告 (SPF/DKIM 各 1 件 + MTA 記録の header.From と表示 From の不一致)
+- 誤検出対策: `dmarc=pass` は MTA が整合性を検証済みとして警告しない、同じ登録ドメインのサブドメイン (`mail.corp.example` vs `corp.example`) は整合扱い
+- テスト +9 件 (kaname-render: 識別子抽出・mailfrom 形式揺れ・欠落・整合判定 4 件、kaname-ui: SPF/DKIM 非整合・整合・dmarc pass 抑制・header.From 不一致 5 件)
+
 ### Security — D162: アンカーテキストとリンク先のドメイン不一致 (URL 偽装) を検出
 
 - `<a href="https://evil.example">https://paypal.com/login</a>` のように、**表示されるテキストが URL 形で、そのドメインが実リンク先と異なる**リンクを一切検査していなかった — メールクライアントは href 先をあまり目立たせないため、表示側の URL 形テキストを装うだけで誤認を誘える (フィッシングの基礎手口 — APWG 各報告・Unit 42/Avanan 等の観測で頻出)
