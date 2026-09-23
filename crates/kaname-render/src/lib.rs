@@ -1691,6 +1691,12 @@ pub struct Envelope {
     pub waterserver_marks: bool,
     /// `X-NihonMA-*`/`X-StrikeMA-*`/`X-Batonz-*`/`X-Tranbi-*`/`X-MASoken-*` 等の M&A・事業承継通知記録印を送信側が自称している (D589)
     pub maadvisory_marks: bool,
+    /// `X-Raksul-*`/`X-Printpac-*`/`X-Graphic-*`/`X-Banfu-*`/`X-Meishi21-*` 等の印刷・名刺通販通知記録印を送信側が自称している (D590)
+    pub printing_marks: bool,
+    /// `X-Tsukui-*`/`X-Care21-*`/`X-SentCare-*`/`X-Solasto-*`/`X-Kiracare-*` 等の介護・ケアサービス通知記録印を送信側が自称している (D591)
+    pub eldercare_marks: bool,
+    /// `X-HokenNoMadoguchi-*`/`X-HokenMinoshi-*`/`X-HokenClinic-*`/`X-ManeDoc-*`/`X-HokenIchiba-*` 等の保険相談・保険比較通知記録印を送信側が自称している (D592)
+    pub insconsult_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2158,6 +2164,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         supplement_marks: has_supplement_marks(hdr),
         waterserver_marks: has_waterserver_marks(hdr),
         maadvisory_marks: has_maadvisory_marks(hdr),
+        printing_marks: has_printing_marks(hdr),
+        eldercare_marks: has_eldercare_marks(hdr),
+        insconsult_marks: has_insconsult_marks(hdr),
     })
 }
 
@@ -10897,6 +10906,217 @@ fn has_maadvisory_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Raksul-*`/`X-Printpac-*`/`X-Graphic-*`/`X-Banfu-*`/`X-Irodori-*`/`X-Meishi21-*`/`X-Papuri-*`/`X-KingPrinters-*`/`X-Cocomite-*`/`X-PrintMall-*`/`X-NetPrintJP-*`/`X-PrintMarche-*`/`X-SpeedPrint-*`/`X-Kitamura-*`/`X-Jijinsha-*`/`X-Irori-*`/`X-PrintBuddy-*`/`X-Ashida-*`/`X-Primedia-*`/`X-Optimum-*`/`X-Pazza-*`/`X-Prijitsu-*`/`X-WePrint-*`/`X-OnPrint-*`/`X-BoxPrint-*`/`X-KinkoPrint-*`/`X-PrintMonster-*`/`X-Pixable-*`/`X-Moo-*`/`X-Vistaprint-*`/`X-Shutterfly-*`/`X-CanvaPrint-*`/`X-Printful-*`/`X-GotPrint-*`/`X-OvernightPrints-*`/`X-UPrinting-*`/`X-PrintPlace-*`/`X-Jukebox-*`/`X-48HourPrint-*`/`X-Printify-*`/`X-Gelato-*`/`X-PrintReleaf-*`/`X-FedexOffice-*`/`X-StaplesPrint-*`/`X-OfficeDepotPrint-*`/`X-Smartpress-*`/`X-PrintRunner-*`/`X-UPrint-*`/`X-Printingforless-*`/`X-Imbue-*`/`X-Zazzle-*`/`X-CafePress-*`/`X-Redbubble-*`/`X-Society6-*`/`X-Teepublic-*`/`X-Threadless-*`/`X-Spreadshop-*`/`X-PrintBest-*` (印刷通販・名刺・販促物・オンデマンド印刷の通知記録) を送信側が自称しているかどうか。名刺発注・チラシ印刷・データ入稿の偽装は小規模事業者狙い詐欺の典型手口。
+fn has_printing_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-raksul-")
+            || l.starts_with("x-printpac-")
+            || l.starts_with("x-graphic-")
+            || l.starts_with("x-banfu-")
+            || l.starts_with("x-irodori-")
+            || l.starts_with("x-meishi21-")
+            || l.starts_with("x-papuri-")
+            || l.starts_with("x-kingprinters-")
+            || l.starts_with("x-cocomite-")
+            || l.starts_with("x-printmall-")
+            || l.starts_with("x-netprintjp-")
+            || l.starts_with("x-printmarche-")
+            || l.starts_with("x-speedprint-")
+            || l.starts_with("x-kitamura-")
+            || l.starts_with("x-jijinsha-")
+            || l.starts_with("x-irori-")
+            || l.starts_with("x-printbuddy-")
+            || l.starts_with("x-ashida-")
+            || l.starts_with("x-primedia-")
+            || l.starts_with("x-optimum-")
+            || l.starts_with("x-pazza-")
+            || l.starts_with("x-prijitsu-")
+            || l.starts_with("x-weprint-")
+            || l.starts_with("x-onprint-")
+            || l.starts_with("x-boxprint-")
+            || l.starts_with("x-kinkoprint-")
+            || l.starts_with("x-printmonster-")
+            || l.starts_with("x-pixable-")
+            || l.starts_with("x-moo-")
+            || l.starts_with("x-vistaprint-")
+            || l.starts_with("x-shutterfly-")
+            || l.starts_with("x-canvaprint-")
+            || l.starts_with("x-printful-")
+            || l.starts_with("x-gotprint-")
+            || l.starts_with("x-overnightprints-")
+            || l.starts_with("x-uprinting-")
+            || l.starts_with("x-printplace-")
+            || l.starts_with("x-jukebox-")
+            || l.starts_with("x-48hourprint-")
+            || l.starts_with("x-printify-")
+            || l.starts_with("x-gelato-")
+            || l.starts_with("x-printreleaf-")
+            || l.starts_with("x-fedexoffice-")
+            || l.starts_with("x-staplesprint-")
+            || l.starts_with("x-officedepotprint-")
+            || l.starts_with("x-smartpress-")
+            || l.starts_with("x-printrunner-")
+            || l.starts_with("x-uprint-")
+            || l.starts_with("x-printingforless-")
+            || l.starts_with("x-imbue-")
+            || l.starts_with("x-zazzle-")
+            || l.starts_with("x-cafepress-")
+            || l.starts_with("x-redbubble-")
+            || l.starts_with("x-society6-")
+            || l.starts_with("x-teepublic-")
+            || l.starts_with("x-threadless-")
+            || l.starts_with("x-spreadshop-")
+            || l.starts_with("x-printbest-")
+    })
+}
+
+/// `X-Tsukui-*`/`X-Care21-*`/`X-SentCare-*`/`X-Solasto-*`/`X-Kiracare-*`/`X-MagokoroKaigo-*`/`X-CarePartner-*`/`X-ActCare-*`/`X-MiraiCare-*`/`X-GoodCare-*`/`X-SigmaShio-*`/`X-Hohoemi-*`/`X-JobMedleyKaigo-*`/`X-UrbanCare-*`/`X-Longterm-*`/`X-Nimpo-*`/`X-SeniorLife-*`/`X-Ekr-*`/`X-TsukuiStaff-*`/`X-TsukuiHouse-*`/`X-CareNeeds-*`/`X-Fukushi-*`/`X-FukushiWorker-*`/`X-Carema-*`/`X-NursingCare-*`/`X-KaigoGym-*`/`X-NursingHome-*`/`X-DayService-*`/`X-HomeKaigo-*`/`X-KaigoBaito-*`/`X-KaigoPartner-*`/`X-VisitingCare-*`/`X-Asuki-*`/`X-HomeService-*`/`X-KaigoShien-*`/`X-Yuai-*`/`X-OliveCare-*`/`X-Cocofump-*`/`X-FukushiSogo-*`/`X-Ikikai-*`/`X-Medicus-*`/`X-MedicalCare-*`/`X-DoHaKaigo-*`/`X-SupportLife-*`/`X-Sawayaka-*`/`X-Mimy-*`/`X-KaigoPhone-*`/`X-Withma-*`/`X-CareStyle-*`/`X-HumanCare-*`/`X-MotherCare-*`/`X-Tsubomi-*`/`X-OrangeCare-*`/`X-HidamariCare-*`/`X-ShinwaKaigo-*`/`X-SmileKaigo-*`/`X-KokoroKaigo-*`/`X-RivaKaigo-*`/`X-HarmonyCare-*`/`X-MaruKaigo-*` (介護・デイサービス・ケアマネの通知記録) を送信側が自称しているかどうか。介護費用・補助金・サービス変更の偽装は高齢者・家族狙い詐欺の典型手口。
+fn has_eldercare_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tsukui-")
+            || l.starts_with("x-care21-")
+            || l.starts_with("x-sentcare-")
+            || l.starts_with("x-solasto-")
+            || l.starts_with("x-kiracare-")
+            || l.starts_with("x-magokorokaigo-")
+            || l.starts_with("x-carepartner-")
+            || l.starts_with("x-actcare-")
+            || l.starts_with("x-miraicare-")
+            || l.starts_with("x-goodcare-")
+            || l.starts_with("x-sigmashio-")
+            || l.starts_with("x-hohoemi-")
+            || l.starts_with("x-jobmedleykaigo-")
+            || l.starts_with("x-urbancare-")
+            || l.starts_with("x-longterm-")
+            || l.starts_with("x-nimpo-")
+            || l.starts_with("x-seniorlife-")
+            || l.starts_with("x-ekr-")
+            || l.starts_with("x-tsukuistaff-")
+            || l.starts_with("x-tsukuihouse-")
+            || l.starts_with("x-careneeds-")
+            || l.starts_with("x-fukushi-")
+            || l.starts_with("x-fukushiworker-")
+            || l.starts_with("x-carema-")
+            || l.starts_with("x-nursingcare-")
+            || l.starts_with("x-kaigogym-")
+            || l.starts_with("x-nursinghome-")
+            || l.starts_with("x-dayservice-")
+            || l.starts_with("x-homekaigo-")
+            || l.starts_with("x-kaigobaito-")
+            || l.starts_with("x-kaigopartner-")
+            || l.starts_with("x-visitingcare-")
+            || l.starts_with("x-asuki-")
+            || l.starts_with("x-homeservice-")
+            || l.starts_with("x-kaigoshien-")
+            || l.starts_with("x-yuai-")
+            || l.starts_with("x-olivecare-")
+            || l.starts_with("x-cocofump-")
+            || l.starts_with("x-fukushisogo-")
+            || l.starts_with("x-ikikai-")
+            || l.starts_with("x-medicus-")
+            || l.starts_with("x-medicalcare-")
+            || l.starts_with("x-dohakaigo-")
+            || l.starts_with("x-supportlife-")
+            || l.starts_with("x-sawayaka-")
+            || l.starts_with("x-mimy-")
+            || l.starts_with("x-kaigophone-")
+            || l.starts_with("x-withma-")
+            || l.starts_with("x-carestyle-")
+            || l.starts_with("x-humancare-")
+            || l.starts_with("x-mothercare-")
+            || l.starts_with("x-tsubomi-")
+            || l.starts_with("x-orangecare-")
+            || l.starts_with("x-hidamaricare-")
+            || l.starts_with("x-shinwakaigo-")
+            || l.starts_with("x-smilekaigo-")
+            || l.starts_with("x-kokorokaigo-")
+            || l.starts_with("x-rivakaigo-")
+            || l.starts_with("x-harmonycare-")
+            || l.starts_with("x-marukaigo-")
+    })
+}
+
+/// `X-HokenNoMadoguchi-*`/`X-HokenMinoshi-*`/`X-HokenClinic-*`/`X-ManeDoc-*`/`X-HokenSoudan-*`/`X-HokenSenka-*`/`X-HokenIchiba-*`/`X-HokenTerrace-*`/`X-HokenHouse-*`/`X-HokenMammoth-*`/`X-MitsubachiHoken-*`/`X-Boutatsu-*`/`X-HokenBuffet-*`/`X-HokenHyakka-*`/`X-HokenConnect-*`/`X-LifullHoken-*`/`X-NiaeruHoken-*`/`X-IryoHoken-*`/`X-GanHoken-*`/`X-NinshinHoken-*`/`X-KodomoHoken-*`/`X-PetHoken-*`/`X-GakueiHoken-*`/`X-RetirementHoken-*`/`X-MitumoriHoken-*`/`X-CompareHoken-*`/`X-HokenReview-*`/`X-HokenAdvice-*`/`X-HokenDesign-*`/`X-HokenSelect-*`/`X-HokenFair-*`/`X-HokenGate-*`/`X-HokenConsult-*`/`X-HokenLabo-*`/`X-HokenMimimoto-*`/`X-HokenNavi-*`/`X-MyHoken-*`/`X-HokenGarden-*`/`X-HokenSquare-*`/`X-HokenStage-*`/`X-HokenSken-*`/`X-HokenLine-*`/`X-HokenPro-*`/`X-HokenNet-*`/`X-HokenFirst-*`/`X-HokenPocket-*`/`X-HokenPlanet-*`/`X-HokenSpace-*`/`X-HokenDai-*`/`X-HokenDono-*`/`X-HokenHiroba-*`/`X-HokenJuku-*`/`X-HokenMint-*`/`X-HokenPia-*`/`X-HokenSalon-*`/`X-HokenStyle-*`/`X-HokenTable-*`/`X-HokenVoice-*`/`X-HokenWindow-*`/`X-HokenWorld-*` (保険相談・保険比較・見積依頼の通知記録) を送信側が自称しているかどうか。見直し相談・契約更改・給付金請求の偽装は保険勧誘詐欺の典型手口。
+fn has_insconsult_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hokennomadoguchi-")
+            || l.starts_with("x-hokenminoshi-")
+            || l.starts_with("x-hokenclinic-")
+            || l.starts_with("x-manedoc-")
+            || l.starts_with("x-hokensoudan-")
+            || l.starts_with("x-hokensenka-")
+            || l.starts_with("x-hokenichiba-")
+            || l.starts_with("x-hokenterrace-")
+            || l.starts_with("x-hokenhouse-")
+            || l.starts_with("x-hokenmammoth-")
+            || l.starts_with("x-mitsubachihoken-")
+            || l.starts_with("x-boutatsu-")
+            || l.starts_with("x-hokenbuffet-")
+            || l.starts_with("x-hokenhyakka-")
+            || l.starts_with("x-hokenconnect-")
+            || l.starts_with("x-lifullhoken-")
+            || l.starts_with("x-niaeruhoken-")
+            || l.starts_with("x-iryohoken-")
+            || l.starts_with("x-ganhoken-")
+            || l.starts_with("x-ninshinhoken-")
+            || l.starts_with("x-kodomohoken-")
+            || l.starts_with("x-pethoken-")
+            || l.starts_with("x-gakueihoken-")
+            || l.starts_with("x-retirementhoken-")
+            || l.starts_with("x-mitumorihoken-")
+            || l.starts_with("x-comparehoken-")
+            || l.starts_with("x-hokenreview-")
+            || l.starts_with("x-hokenadvice-")
+            || l.starts_with("x-hokendesign-")
+            || l.starts_with("x-hokenselect-")
+            || l.starts_with("x-hokenfair-")
+            || l.starts_with("x-hokengate-")
+            || l.starts_with("x-hokenconsult-")
+            || l.starts_with("x-hokenlabo-")
+            || l.starts_with("x-hokenmimimoto-")
+            || l.starts_with("x-hokennavi-")
+            || l.starts_with("x-myhoken-")
+            || l.starts_with("x-hokengarden-")
+            || l.starts_with("x-hokensquare-")
+            || l.starts_with("x-hokenstage-")
+            || l.starts_with("x-hokensken-")
+            || l.starts_with("x-hokenline-")
+            || l.starts_with("x-hokenpro-")
+            || l.starts_with("x-hokennet-")
+            || l.starts_with("x-hokenfirst-")
+            || l.starts_with("x-hokenpocket-")
+            || l.starts_with("x-hokenplanet-")
+            || l.starts_with("x-hokenspace-")
+            || l.starts_with("x-hokendai-")
+            || l.starts_with("x-hokendono-")
+            || l.starts_with("x-hokenhiroba-")
+            || l.starts_with("x-hokenjuku-")
+            || l.starts_with("x-hokenmint-")
+            || l.starts_with("x-hokenpia-")
+            || l.starts_with("x-hokensalon-")
+            || l.starts_with("x-hokenstyle-")
+            || l.starts_with("x-hokentable-")
+            || l.starts_with("x-hokenvoice-")
+            || l.starts_with("x-hokenwindow-")
+            || l.starts_with("x-hokenworld-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -17717,5 +17937,152 @@ X-Other: 1
 
 body";
     assert!(!has_maadvisory_marks(clean));
+}
+
+#[test]
+fn scan_は刷機印を検出する() {
+    let r1 = b"From: a@b
+X-Raksul-Id: 1
+
+x";
+    let p1 = b"From: a@b
+X-Printpac-Trace: 1
+
+x";
+    let g1 = b"From: a@b
+X-Graphic-Notice: 1
+
+x";
+    let b1 = b"From: a@b
+X-Banfu-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-Meishi21-Entry: 1
+
+x";
+    let v1 = b"From: a@b
+X-Vistaprint-Record: 1
+
+x";
+    let c1 = b"From: a@b
+X-CanvaPrint-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Shutterfly-Stamp: 1
+
+x";
+    assert!(has_printing_marks(r1));
+    assert!(has_printing_marks(p1));
+    assert!(has_printing_marks(g1));
+    assert!(has_printing_marks(b1));
+    assert!(has_printing_marks(m1));
+    assert!(has_printing_marks(v1));
+    assert!(has_printing_marks(c1));
+    assert!(has_printing_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_printing_marks(clean));
+}
+
+#[test]
+fn scan_は介機印を検出する() {
+    let t1 = b"From: a@b
+X-Tsukui-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-Care21-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SentCare-Notice: 1
+
+x";
+    let o1 = b"From: a@b
+X-Solasto-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kiracare-Entry: 1
+
+x";
+    let m1 = b"From: a@b
+X-MagokoroKaigo-Record: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hohoemi-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-NursingCare-Stamp: 1
+
+x";
+    assert!(has_eldercare_marks(t1));
+    assert!(has_eldercare_marks(c1));
+    assert!(has_eldercare_marks(s1));
+    assert!(has_eldercare_marks(o1));
+    assert!(has_eldercare_marks(k1));
+    assert!(has_eldercare_marks(m1));
+    assert!(has_eldercare_marks(h1));
+    assert!(has_eldercare_marks(n1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_eldercare_marks(clean));
+}
+
+#[test]
+fn scan_は保機印を検出する() {
+    let m1 = b"From: a@b
+X-HokenNoMadoguchi-Id: 1
+
+x";
+    let h1 = b"From: a@b
+X-HokenMinoshi-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-HokenClinic-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-ManeDoc-Flag: 1
+
+x";
+    let i1 = b"From: a@b
+X-HokenIchiba-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-HokenTerrace-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-MitsubachiHoken-Trace: 1
+
+x";
+    let l1 = b"From: a@b
+X-LifullHoken-Stamp: 1
+
+x";
+    assert!(has_insconsult_marks(m1));
+    assert!(has_insconsult_marks(h1));
+    assert!(has_insconsult_marks(c1));
+    assert!(has_insconsult_marks(d1));
+    assert!(has_insconsult_marks(i1));
+    assert!(has_insconsult_marks(t1));
+    assert!(has_insconsult_marks(s1));
+    assert!(has_insconsult_marks(l1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_insconsult_marks(clean));
 }
 }

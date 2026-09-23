@@ -1996,6 +1996,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D590: 印刷・名刺通販印自称
+    if env.printing_marks {
+        render_risks.push(
+            "X-Raksul-*/X-Printpac-*/X-Graphic-*/X-Banfu-*/X-Meishi21-*/X-Vistaprint-*/X-CanvaPrint-*/X-Shutterfly-* 等 — 刷機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D591: 介護・ケアサービス印自称
+    if env.eldercare_marks {
+        render_risks.push(
+            "X-Tsukui-*/X-Care21-*/X-SentCare-*/X-Solasto-*/X-Kiracare-*/X-MagokoroKaigo-*/X-Hohoemi-*/X-NursingCare-* 等 — 介機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D592: 保険相談・保険比較印自称
+    if env.insconsult_marks {
+        render_risks.push(
+            "X-HokenNoMadoguchi-*/X-HokenMinoshi-*/X-HokenClinic-*/X-ManeDoc-*/X-HokenIchiba-*/X-HokenTerrace-*/X-MitsubachiHoken-*/X-LifullHoken-* 等 — 保機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
