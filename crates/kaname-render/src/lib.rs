@@ -1745,6 +1745,12 @@ pub struct Envelope {
     pub pcrepair_marks: bool,
     /// `X-Nappu-*`/`X-SnowPeak-*`/`X-Coleman-*`/`X-Logos-*`/`X-CaptainStag-*`/`X-DODCamp-*`/`X-Ogawa-*`/`X-WeberCamp-*` 等のキャンプ・登山・アウトドア通知記録印を送信側が自称している (D616)
     pub camp_marks: bool,
+    /// `X-SuidouKyukyu-*`/`X-Mizumore-*`/`X-ToiletFix-*`/`X-DenkiKoji-*`/`X-Breaker110-*`/`X-Suidou110-*`/`X-MizuTrouble-*` 等の水道・電気・ガス緊急修理通知記録印を送信側が自称している (D617)
+    pub emergency_marks: bool,
+    /// `X-TechAcademy-*`/`X-DmmWebcamp-*`/`X-Potepan-*`/`X-TechCamp-*`/`X-Daitura-*`/`X-SamuraiEngineer-*`/`X-CodeCamp-*` 等のプログラミング・ITスクール通知記録印を送信側が自称している (D618)
+    pub codingschool_marks: bool,
+    /// `X-Zouen-*`/`X-Sakutei-*`/`X-Bassai-*`/`X-Niwashi-*`/`X-Uekiya-*`/`X-Gaikou-*`/`X-TreeCare-*` 等の造園・剪定・伐採通知記録印を送信側が自称している (D619)
+    pub garden_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2239,6 +2245,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         locksmith_marks: has_locksmith_marks(hdr),
         pcrepair_marks: has_pcrepair_marks(hdr),
         camp_marks: has_camp_marks(hdr),
+        emergency_marks: has_emergency_marks(hdr),
+        codingschool_marks: has_codingschool_marks(hdr),
+        garden_marks: has_garden_marks(hdr),
     })
 }
 
@@ -12866,6 +12875,228 @@ fn has_camp_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-SuidouKyukyu-*`/`X-Mizumore-*`/`X-ToiletFix-*`/`X-Senkyu-*`/`X-GasDenkyu-*`/`X-DenkiKoji-*`/`X-Breaker110-*`/`X-Suidou110-*`/`X-MizuTrouble-*`/`X-SuidouDoctor-*`/`X-SuidouPro-*`/`X-WaterRepair-*`/`X-Rokanare-*`/`X-Amenoarare-*`/`X-Suidou24-*`/`X-SuidouRescue-*`/`X-Denki24-*`/`X-GasRepair-*`/`X-WaterPro-*`/`X-SuidouCenter-*`/`X-SuidouShop-*`/`X-SuidouNavi-*`/`X-SuidouStation-*`/`X-SuidouHome-*`/`X-SuidouMart-*`/`X-SuidouMart-*`/`X-SuidouPlus-*`/`X-SuidouSmart-*`/`X-SuidouFamily-*/`X-ToiletRescue-*`/`X-ToiletDoctor-*`/`X-ToiletPro-*`/`X-Toilet24-*`/`X-FaucetFix-*`/`X-FaucetPro-*`/`X-PipeRepair-*`/`X-PipeDoctor-*`/`X-PipePro-*`/`X-DrainFix-*`/`X-DrainPro-*`/`X-DrainRescue-*`/`X-DrainDoctor-*`/`X-Drain24-*`/`X-LeakFix-*`/`X-LeakPro-*`/`X-LeakRescue-*`/`X-LeakDoctor-*`/`X-Leak24-*`/`X-DenkiRescue-*`/`X-DenkiDoctor-*`/`X-DenkiPro-*`/`X-DenkiNavi-*`/`X-DenkiCenter-*`/`X-DenkiShop-*`/`X-DenkiStation-*`/`X-DenkiHome-*`/`X-GasDoctor-*`/`X-GasPro-*`/`X-GasNavi-*`/`X-GasCenter-*`/`X-GasShop-*`/`X-GasHome-*`/`X-GasStationKoji-*`/`X-KyutoRescue-*`/`X-KyutoDoctor-*`/`X-KyutoPro-*` (水道・電気・ガスの緊急修理通知記録) を送信側が自称しているかどうか。水漏れ・トイレ詰まり・ガス漏れ・ブレーカー修理の偽装は緊急修理詐欺の典型手口。(水道・電気・ガス料金機は D520)
+fn has_emergency_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-suidoukyukyu-")
+            || l.starts_with("x-mizumore-")
+            || l.starts_with("x-toiletfix-")
+            || l.starts_with("x-senkyu-")
+            || l.starts_with("x-gasdenkyu-")
+            || l.starts_with("x-denkikoji-")
+            || l.starts_with("x-breaker110-")
+            || l.starts_with("x-suidou110-")
+            || l.starts_with("x-mizutrouble-")
+            || l.starts_with("x-suidoudoctor-")
+            || l.starts_with("x-suidoupro-")
+            || l.starts_with("x-waterrepair-")
+            || l.starts_with("x-rokanare-")
+            || l.starts_with("x-amenoarare-")
+            || l.starts_with("x-suidou24-")
+            || l.starts_with("x-suidourescue-")
+            || l.starts_with("x-denki24-")
+            || l.starts_with("x-gasrepair-")
+            || l.starts_with("x-waterpro-")
+            || l.starts_with("x-suidoucenter-")
+            || l.starts_with("x-suidoushop-")
+            || l.starts_with("x-suidounavi-")
+            || l.starts_with("x-suidoustation-")
+            || l.starts_with("x-suidouhome-")
+            || l.starts_with("x-suidoumart-")
+            || l.starts_with("x-suidouplus-")
+            || l.starts_with("x-suidousmart-")
+            || l.starts_with("x-suidoufamily-")
+            || l.starts_with("x-toiletrescue-")
+            || l.starts_with("x-toiletdoctor-")
+            || l.starts_with("x-toiletpro-")
+            || l.starts_with("x-toilet24-")
+            || l.starts_with("x-faucetfix-")
+            || l.starts_with("x-faucetpro-")
+            || l.starts_with("x-piperepair-")
+            || l.starts_with("x-pipedoctor-")
+            || l.starts_with("x-pipepro-")
+            || l.starts_with("x-drainfix-")
+            || l.starts_with("x-drainpro-")
+            || l.starts_with("x-drainrescue-")
+            || l.starts_with("x-draindoctor-")
+            || l.starts_with("x-drain24-")
+            || l.starts_with("x-leakfix-")
+            || l.starts_with("x-leakpro-")
+            || l.starts_with("x-leakrescue-")
+            || l.starts_with("x-leakdoctor-")
+            || l.starts_with("x-leak24-")
+            || l.starts_with("x-denkirescue-")
+            || l.starts_with("x-denkidoctor-")
+            || l.starts_with("x-denkipro-")
+            || l.starts_with("x-denkinavi-")
+            || l.starts_with("x-denkicenter-")
+            || l.starts_with("x-denkishop-")
+            || l.starts_with("x-denkistation-")
+            || l.starts_with("x-denkihome-")
+            || l.starts_with("x-gasdoctor-")
+            || l.starts_with("x-gaspro-")
+            || l.starts_with("x-gasnavi-")
+            || l.starts_with("x-gascenter-")
+            || l.starts_with("x-gasshop-")
+            || l.starts_with("x-gashome-")
+            || l.starts_with("x-gasstationkoji-")
+            || l.starts_with("x-kyutorescue-")
+            || l.starts_with("x-kyutodoctor-")
+            || l.starts_with("x-kyutopro-")
+    })
+}
+
+/// `X-TechAcademy-*`/`X-DmmWebcamp-*`/`X-Potepan-*`/`X-TechCamp-*`/`X-Daitura-*`/`X-SamuraiEngineer-*`/`X-CodeCamp-*`/`X-Runteq-*`/`X-ZeroIchi-*`/`X-TechPark-*`/`X-GrowWith-*`/`X-LinuxAcademy-*`/`X-KinoEdu-*`/`X-ProEngineer-*`/`X-TechDojo-*`/`X-CodeVillage-*`/`X-ProgrammingGym-*`/`X-AppDojo-*`/`X-WebPro-*`/`X-KidsDoor-*`/`X-TechBase-*`/`X-Terakoya-*`/`X-CodeZemi-*`/`X-GizTech-*`/`X-TechSchool-*`/`X-WebEngineerSchool-*`/`X-Progate-*`/`X-Dotinstall-*`/`X-Aidemy-*`/`X-UdemyTutor-*`/`X-DiveDigital-*`/`X-TechIan-*`/`X-CodeCrafter-*`/`X-Techful-*/`X-CodeStar-*`/`X-CodeShip-*`/`X-CodeLabo-*`/`X-CodeLab-*`/`X-CodingSchool-*`/`X-CodingBootcamp-*`/`X-TechBootcamp-*`/`X-DevBootcamp-*`/`X-CodeAcademy-*`/`X-ProgrammingSchool-*`/`X-ItSchool-*`/`X-ItAcademy-*`/`X-SeSchool-*`/`X-SeAcademy-*`/`X-EngineerGakuin-*`/`X-EngineerSchool-*`/`X-EngineerDojo-*`/`X-ProgrammerSchool-*`/`X-WebDesignerSchool-*`/`X-VideoEditorSchool-*`/`X-AnimeSchool-*`/`X-GameSchool-*`/`X-AiSchool-*`/`X-DataSchool-*`/`X-CloudSchool-*`/`X-SecuritySchool-*` (プログラミング・ITスクールの通知記録) を送信側が自称しているかどうか。受講料・転職保証・教材費の偽装はプログラミングスクール詐欺の典型手口。(塾・予備校機は D605、資格機は D611)
+fn has_codingschool_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-techacademy-")
+            || l.starts_with("x-dmmwebcamp-")
+            || l.starts_with("x-potepan-")
+            || l.starts_with("x-techcamp-")
+            || l.starts_with("x-daitura-")
+            || l.starts_with("x-samuraiengineer-")
+            || l.starts_with("x-codecamp-")
+            || l.starts_with("x-runteq-")
+            || l.starts_with("x-zeroichi-")
+            || l.starts_with("x-techpark-")
+            || l.starts_with("x-growwith-")
+            || l.starts_with("x-linuxacademy-")
+            || l.starts_with("x-kinoedu-")
+            || l.starts_with("x-proengineer-")
+            || l.starts_with("x-techdojo-")
+            || l.starts_with("x-codevillage-")
+            || l.starts_with("x-programminggym-")
+            || l.starts_with("x-appdojo-")
+            || l.starts_with("x-webpro-")
+            || l.starts_with("x-kidsdoor-")
+            || l.starts_with("x-techbase-")
+            || l.starts_with("x-terakoya-")
+            || l.starts_with("x-codezemi-")
+            || l.starts_with("x-giztech-")
+            || l.starts_with("x-techschool-")
+            || l.starts_with("x-webengineerschool-")
+            || l.starts_with("x-progate-")
+            || l.starts_with("x-dotinstall-")
+            || l.starts_with("x-aidemy-")
+            || l.starts_with("x-udemytutor-")
+            || l.starts_with("x-divedigital-")
+            || l.starts_with("x-techian-")
+            || l.starts_with("x-codecrafter-")
+            || l.starts_with("x-techful-")
+            || l.starts_with("x-codestar-")
+            || l.starts_with("x-codeship-")
+            || l.starts_with("x-codelabo-")
+            || l.starts_with("x-codelab-")
+            || l.starts_with("x-codingschool-")
+            || l.starts_with("x-codingbootcamp-")
+            || l.starts_with("x-techbootcamp-")
+            || l.starts_with("x-devbootcamp-")
+            || l.starts_with("x-codeacademy-")
+            || l.starts_with("x-programmingschool-")
+            || l.starts_with("x-itschool-")
+            || l.starts_with("x-itacademy-")
+            || l.starts_with("x-seschool-")
+            || l.starts_with("x-seacademy-")
+            || l.starts_with("x-engineergakuin-")
+            || l.starts_with("x-engineerschool-")
+            || l.starts_with("x-engineerdojo-")
+            || l.starts_with("x-programmerschool-")
+            || l.starts_with("x-webdesignerschool-")
+            || l.starts_with("x-videoeditorschool-")
+            || l.starts_with("x-animeschool-")
+            || l.starts_with("x-gameschool-")
+            || l.starts_with("x-aischool-")
+            || l.starts_with("x-dataschool-")
+            || l.starts_with("x-cloudschool-")
+            || l.starts_with("x-securityschool-")
+    })
+}
+
+/// `X-Zouen-*`/`X-Sakutei-*`/`X-Bassai-*`/`X-Niwashi-*`/`X-Uekiya-*`/`X-Gaikou-*`/`X-TreeCare-*`/`X-Logging-*`/`X-ForestWorks-*`/`X-TreeCut-*`/`X-Engei-*`/`X-PlantCare-*`/`X-SodCut-*`/`X-MowerWorks-*`/`X-TurfWorks-*`/`X-LawnCare-*`/`X-GreenKeep-*`/`X-GardenPro-*`/`X-GardenMaster-*`/`X-NiwaDoctor-*`/`X-TreeClinic-*`/`X-NiwaClinic-*`/`X-GardenRescue-*`/`X-GaikouPro-*`/`X-ProEnka-*`/`X-EngeiShop-*`/`X-GardeningNavi-*`/`X-GardenNavi-*`/`X-GardenDoctor-*`/`X-GardenCenter-*`/`X-GardenShop-*`/`X-GardenStore-*`/`X-GardenStation-*`/`X-NiwaNavi-*`/`X-NiwaCenter-*`/`X-NiwaShop-*`/`X-NiwaStore-*`/`X-NiwaStation-*`/`X-NiwaPro-*`/`X-NiwaMaster-*`/`X-NiwaRescue-*`/`X-Niwa24-*`/`X-TreeDoctor-*`/`X-TreePro-*`/`X-TreeRescue-*`/`X-TreeNavi-*`/`X-TreeCenter-*`/`X-TreeShop-*`/`X-TreeStore-*`/`X-BassaiPro-*`/`X-BassaiDoctor-*`/`X-BassaiNavi-*`/`X-BassaiCenter-*`/`X-BassaiShop-*`/`X-BassaiRescue-*`/`X-KoubokuCut-*`/`X-TachikiCut-*`/`X-ZouenPro-*`/`X-ZouenDoctor-*`/`X-ZouenNavi-*`/`X-ZouenCenter-*`/`X-ZouenShop-*`/`X-ZouenStore-*`/`X-ZouenRescue-*` (造園・剪定・伐採・外構の通知記録) を送信側が自称しているかどうか。見積・点検・剪定費用の偽装は造園業者詐欺の典型手口。(リフォーム機は D579)
+fn has_garden_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-zouen-")
+            || l.starts_with("x-sakutei-")
+            || l.starts_with("x-bassai-")
+            || l.starts_with("x-niwashi-")
+            || l.starts_with("x-uekiya-")
+            || l.starts_with("x-gaikou-")
+            || l.starts_with("x-treecare-")
+            || l.starts_with("x-logging-")
+            || l.starts_with("x-forestworks-")
+            || l.starts_with("x-treecut-")
+            || l.starts_with("x-engei-")
+            || l.starts_with("x-plantcare-")
+            || l.starts_with("x-sodcut-")
+            || l.starts_with("x-mowerworks-")
+            || l.starts_with("x-turfworks-")
+            || l.starts_with("x-lawncare-")
+            || l.starts_with("x-greenkeep-")
+            || l.starts_with("x-gardenpro-")
+            || l.starts_with("x-gardenmaster-")
+            || l.starts_with("x-niwadoctor-")
+            || l.starts_with("x-treeclinic-")
+            || l.starts_with("x-niwaclinic-")
+            || l.starts_with("x-gardenrescue-")
+            || l.starts_with("x-gaikoupro-")
+            || l.starts_with("x-proenka-")
+            || l.starts_with("x-engeishop-")
+            || l.starts_with("x-gardeningnavi-")
+            || l.starts_with("x-gardennavi-")
+            || l.starts_with("x-gardendoctor-")
+            || l.starts_with("x-gardencenter-")
+            || l.starts_with("x-gardenshop-")
+            || l.starts_with("x-gardenstore-")
+            || l.starts_with("x-gardenstation-")
+            || l.starts_with("x-niwanavi-")
+            || l.starts_with("x-niwacenter-")
+            || l.starts_with("x-niwashop-")
+            || l.starts_with("x-niwastore-")
+            || l.starts_with("x-niwastation-")
+            || l.starts_with("x-niwapro-")
+            || l.starts_with("x-niwamaster-")
+            || l.starts_with("x-niwarescue-")
+            || l.starts_with("x-niwa24-")
+            || l.starts_with("x-treedoctor-")
+            || l.starts_with("x-treepro-")
+            || l.starts_with("x-treerescue-")
+            || l.starts_with("x-treenavi-")
+            || l.starts_with("x-treecenter-")
+            || l.starts_with("x-treeshop-")
+            || l.starts_with("x-treestore-")
+            || l.starts_with("x-bassaipro-")
+            || l.starts_with("x-bassaidoctor-")
+            || l.starts_with("x-bassainavi-")
+            || l.starts_with("x-bassaicenter-")
+            || l.starts_with("x-bassaishop-")
+            || l.starts_with("x-bassairescue-")
+            || l.starts_with("x-koubokucut-")
+            || l.starts_with("x-tachikicut-")
+            || l.starts_with("x-zouenpro-")
+            || l.starts_with("x-zouendoctor-")
+            || l.starts_with("x-zouennavi-")
+            || l.starts_with("x-zouencenter-")
+            || l.starts_with("x-zouenshop-")
+            || l.starts_with("x-zouenstore-")
+            || l.starts_with("x-zouenrescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -21009,5 +21240,152 @@ X-Other: 1
 
 body";
     assert!(!has_camp_marks(clean));
+}
+
+#[test]
+fn scan_は配機印を検出する() {
+    let s1 = b"From: a@b
+X-SuidouKyukyu-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-Mizumore-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-ToiletFix-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-DenkiKoji-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-Breaker110-Entry: 1
+
+x";
+    let l1 = b"From: a@b
+X-LeakRescue-Record: 1
+
+x";
+    let g1 = b"From: a@b
+X-GasRepair-Trace: 1
+
+x";
+    let k1 = b"From: a@b
+X-KyutoPro-Stamp: 1
+
+x";
+    assert!(has_emergency_marks(s1));
+    assert!(has_emergency_marks(m1));
+    assert!(has_emergency_marks(t1));
+    assert!(has_emergency_marks(d1));
+    assert!(has_emergency_marks(b1));
+    assert!(has_emergency_marks(l1));
+    assert!(has_emergency_marks(g1));
+    assert!(has_emergency_marks(k1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_emergency_marks(clean));
+}
+
+#[test]
+fn scan_は算機印を検出する() {
+    let t1 = b"From: a@b
+X-TechAcademy-Id: 1
+
+x";
+    let d1 = b"From: a@b
+X-DmmWebcamp-Trace: 1
+
+x";
+    let p1 = b"From: a@b
+X-Potepan-Notice: 1
+
+x";
+    let s1 = b"From: a@b
+X-SamuraiEngineer-Flag: 1
+
+x";
+    let r1 = b"From: a@b
+X-Runteq-Entry: 1
+
+x";
+    let c1 = b"From: a@b
+X-CodingBootcamp-Record: 1
+
+x";
+    let a1 = b"From: a@b
+X-AiSchool-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-EngineerDojo-Stamp: 1
+
+x";
+    assert!(has_codingschool_marks(t1));
+    assert!(has_codingschool_marks(d1));
+    assert!(has_codingschool_marks(p1));
+    assert!(has_codingschool_marks(s1));
+    assert!(has_codingschool_marks(r1));
+    assert!(has_codingschool_marks(c1));
+    assert!(has_codingschool_marks(a1));
+    assert!(has_codingschool_marks(e1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_codingschool_marks(clean));
+}
+
+#[test]
+fn scan_は樹機印を検出する() {
+    let z1 = b"From: a@b
+X-Zouen-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sakutei-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-Bassai-Notice: 1
+
+x";
+    let n1 = b"From: a@b
+X-Niwashi-Flag: 1
+
+x";
+    let g1 = b"From: a@b
+X-Gaikou-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-TreeCare-Record: 1
+
+x";
+    let l1 = b"From: a@b
+X-LawnCare-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-EngeiShop-Stamp: 1
+
+x";
+    assert!(has_garden_marks(z1));
+    assert!(has_garden_marks(s1));
+    assert!(has_garden_marks(b1));
+    assert!(has_garden_marks(n1));
+    assert!(has_garden_marks(g1));
+    assert!(has_garden_marks(t1));
+    assert!(has_garden_marks(l1));
+    assert!(has_garden_marks(e1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_garden_marks(clean));
 }
 }
