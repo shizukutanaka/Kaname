@@ -407,9 +407,9 @@ pub fn has_top_level_attachment_disposition(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
     let header = text[..header_end].to_ascii_lowercase();
-    header.lines().any(|l| {
-        l.starts_with("content-disposition:") && l.contains("attachment")
-    })
+    header
+        .lines()
+        .any(|l| l.starts_with("content-disposition:") && l.contains("attachment"))
 }
 
 /// multipart 構造なのに実質 1 パートしかないか判定する (D278)。
@@ -420,9 +420,9 @@ pub fn has_single_part_multipart(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw).to_lowercase();
     let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
     let header = &text[..header_end];
-    let is_multipart = header.lines().any(|l| {
-        l.starts_with("content-type:") && l.contains("multipart/")
-    });
+    let is_multipart = header
+        .lines()
+        .any(|l| l.starts_with("content-type:") && l.contains("multipart/"));
     if !is_multipart {
         return false;
     }
@@ -430,7 +430,9 @@ pub fn has_single_part_multipart(raw: &[u8]) -> bool {
         if !l.starts_with("content-type:") || !l.contains("multipart/") {
             return None;
         }
-        l.split("boundary=").nth(1).map(|b| b.trim_matches(['"', ' ', '\t']))
+        l.split("boundary=")
+            .nth(1)
+            .map(|b| b.trim_matches(['"', ' ', '\t']))
     }) else {
         return false;
     };
