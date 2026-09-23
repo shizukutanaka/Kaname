@@ -514,6 +514,32 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D192: Received ヘッダ 0 本 (ローカル注入/手作り生成品) の兆候。
+    if env.received_count == 0 {
+        render_risks.push(
+            "Received ヘッダがありません — 実配信では MTA が必ず付加するため、\
+             ローカル注入または手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+    // D193: 宣言 charset / CTE の異常値 (宣言回避) の兆候。
+    if let Some(cs) = &env.unusual_charset {
+        render_risks.push(format!(
+            "異常な charset 宣言 ({cs}) — デコード結果がクライアントごとに異なり、\
+             検査テキストと表示テキストを分離できる兆候です"
+        ));
+    }
+    if let Some(cte) = &env.unusual_cte {
+        render_risks.push(format!(
+            "標準外の Content-Transfer-Encoding ({cte}) — パーサごとにデコードが異なる兆候です"
+        ));
+    }
+    // D194: 宛先非表示 (undisclosed-recipients / BCC 大量配信) の兆候。
+    if env.to.is_empty() && env.cc.is_empty() {
+        render_risks.push(
+            "宛先 (To/Cc) が表示されていません — BCC 大量配信または宛先隠しの兆候です".to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -2372,6 +2398,36 @@ mod tests {
         assert!(
             r.emails.iter().any(|e| e.file == "nested.eml"),
             "ネストしたファイルが結果に含まれるべき"
+        );
+        Ok(())
+    }
+
+    /// D192-D194: Received 0 本・異常 charset・宛先非表示が兆候になる。
+    #[tokio::test]
+    async fn analyze_raw_email_は外形異常を兆候として報告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        // To なし・Received なし・utf-7 宣言のメール
+        let eml = b"From: alice@evil.example\r\n\
+                    Subject: Hi\r\n\
+                    Content-Type: text/plain; charset=utf-7\r\n\
+                    \r\n\
+                    hello";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("Received")),
+            "Received 0 本が兆候になるべき: {:?}",
+            r.render_risks
+        );
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("charset")),
+            "utf-7 宣言が兆候になるべき: {:?}",
+            r.render_risks
+        );
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("宛先")),
+            "宛先非表示が兆候になるべき: {:?}",
+            r.render_risks
         );
         Ok(())
     }

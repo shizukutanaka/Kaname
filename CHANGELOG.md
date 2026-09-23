@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D192: Received ヘッダ 0 本 (ローカル注入/手作り生成品) を検出
+
+- 実配信では各 MTA が必ず `Received:` を付加する — 0 本はメールボックスへのローカル注入または配送経路を経ていない手作り生成品の兆候 (メールフォレンジックの定番チェック)
+- 対処: `received_count` に本数を記録 → 0 本なら `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D193: 異常な charset / Content-Transfer-Encoding 宣言 (宣言回避) を検出
+
+- `charset=utf-7`/`x-user-defined` 等はデコード結果がクライアントごとに異なり「検査が読むテキスト」と「表示されるテキスト」を分離できる宣言回避 (UTF-7 は Chrome が廃止した実績のあるインジェクション経路)。標準外 CTE (x-uuencode/uue 等) も同型の parser differential
+- 対処: トップレベルは生ヘッダ走査 (`scan_top_level_declarations`)、パートレベルは `ct.attribute("charset")` で宣言を収集 → 許可リスト外なら `unusual_charset`/`unusual_cte` → `render_risks` に兆候報告
+- テスト +4 件
+
+### Security — D194: 宛先非表示 (undisclosed-recipients / BCC 大量配信) を検出
+
+- To/Cc が両方空のメールは「宛先を見せない」配送形 — 大量送信フィッシングの外形 (undisclosed-recipients) として主要クライアントが警告する定番サイン。表示宛先を一切持たない外形は未検査だった
+- 対処: `env.to`/`env.cc` が両方空なら `render_risks` に兆候報告
+- テスト +1 件 (kaname-ui E2E)
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

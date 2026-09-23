@@ -96,6 +96,16 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// `Received:` ヘッダーの本数 — 配送経路を示す Received は実配信で
+    /// MTA が必ず付加する。0 本はローカル注入または手作り生成品の兆候 (D192)。
+    pub received_count: usize,
+    /// 異常な charset 宣言 (utf-7 / x-user-defined 等) — デコード結果が
+    /// クライアントごとに異なり、検査テキストと表示テキストを分離できる
+    /// 宣言回避 (D193)。通常の charset は None。
+    pub unusual_charset: Option<String>,
+    /// 異常な Content-Transfer-Encoding 宣言 — 標準外の CTE (x-uuencode
+    /// 等) はパーサごとにデコードが異なる parser differential (D193)。
+    pub unusual_cte: Option<String>,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +340,30 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D192: Received ヘッダの本数 — 実配信では各 MTA が必ず 1 本以上付加する。
+    // 0 本はローカル注入または手作り生成品の兆候。
+    let received_count = msg
+        .headers()
+        .iter()
+        .filter(|h| h.name.as_str().eq_ignore_ascii_case("received"))
+        .count();
+
+    // D193: 宣言 charset / CTE の異常値。デコード結果がクライアントごとに
+    // 異なるため、検査テキストと表示テキストを分離できる宣言回避。
+    let (decl_charset, decl_cte) = scan_top_level_declarations(raw);
+    let mut unusual_charset = decl_charset.filter(|cs| is_unusual_charset(cs));
+    // パートレベルの charset 宣言も走査 (トップレベルは raw 走査で捕捉済み)。
+    for part in &msg.parts {
+        if let Some(ct) = part.content_type() {
+            if let Some(cs) = ct.attribute("charset") {
+                if is_unusual_charset(cs) {
+                    unusual_charset = Some(cs.to_ascii_lowercase());
+                }
+            }
+        }
+    }
+    let unusual_cte = decl_cte.filter(|c| is_unusual_cte(c));
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +381,77 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        received_count,
+        unusual_charset,
+        unusual_cte,
     })
+}
+
+/// 標準的な charset の許可リスト — ここに無い宣言は異常として兆候化。
+const SAFE_CHARSETS: &[&str] = &[
+    "us-ascii",
+    "utf-8",
+    "utf-16",
+    "utf-16le",
+    "utf-16be",
+    "iso-8859-1",
+    "iso-8859-2",
+    "iso-8859-15",
+    "windows-1250",
+    "windows-1251",
+    "windows-1252",
+    "shift_jis",
+    "euc-jp",
+    "iso-2022-jp",
+    "gb2312",
+    "gbk",
+    "big5",
+    "koi8-r",
+];
+
+/// 宣言 charset が許可リスト外か判定する。
+fn is_unusual_charset(cs: &str) -> bool {
+    !SAFE_CHARSETS.contains(&cs.trim().trim_matches('"').to_ascii_lowercase().as_str())
+}
+
+/// 宣言 CTE が標準集合外か判定する。
+fn is_unusual_cte(cte: &str) -> bool {
+    !matches!(
+        cte.trim().to_ascii_lowercase().as_str(),
+        "7bit" | "8bit" | "binary" | "quoted-printable" | "base64"
+    )
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) から charset と
+/// Content-Transfer-Encoding の宣言値を取り出す生ヘッダ走査。
+/// 継続行 (`charset=` で始まる) にも対応する。
+fn scan_top_level_declarations(raw: &[u8]) -> (Option<String>, Option<String>) {
+    let text = String::from_utf8_lossy(raw);
+    let mut charset = None;
+    let mut cte = None;
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        let lower = line.trim_start().to_ascii_lowercase();
+        if let Some(v) = lower.strip_prefix("content-transfer-encoding:") {
+            cte = Some(v.trim().trim_end_matches(';').to_string());
+            continue;
+        }
+        if charset.is_none()
+            && (lower.starts_with("content-type:") || lower.starts_with("charset="))
+        {
+            if let Some(i) = lower.find("charset=") {
+                let rest = &lower[i + "charset=".len()..];
+                let val = rest.trim_start_matches(|c: char| c == '"' || c == ' ');
+                let end = val
+                    .find(|c: char| matches!(c, '"' | ';' | ' ' | '\t' | '\''))
+                    .unwrap_or(val.len());
+                charset = Some(val[..end].to_string());
+            }
+        }
+    }
+    (charset, cte)
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2324,6 +2428,52 @@ mod tests {
     fn scan_attachment_safe_pdf_not_dangerous() {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn parse_はreceivedの本数を数える() {
+        let raw = b"Received: from mx.a by mx.b\r\n\
+                    Received: from mx.c by mx.b\r\n\
+                    From: alice@example.com\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse");
+        assert_eq!(env.received_count, 2);
+        let raw2 = b"From: alice@example.com\r\n\r\nbody";
+        assert_eq!(parse(raw2).expect("parse").received_count, 0);
+    }
+
+    #[test]
+    fn scan_top_level_declarations_はcharsetとcteを取り出す() {
+        let (cs, cte) = scan_top_level_declarations(
+            b"Content-Type: text/html; charset=utf-7\r\n\
+              Content-Transfer-Encoding: x-uuencode\r\n\
+              \r\n\
+              body",
+        );
+        assert_eq!(cs.as_deref(), Some("utf-7"));
+        assert_eq!(cte.as_deref(), Some("x-uuencode"));
+        // 継続行上の charset も拾う
+        let (cs2, _) = scan_top_level_declarations(
+            b"Content-Type: text/plain;\r\n charset=\"utf-8\"\r\n\r\nx",
+        );
+        assert_eq!(cs2.as_deref(), Some("utf-8"));
+        // 宣言なし
+        let (cs3, cte3) = scan_top_level_declarations(b"From: a@b\r\n\r\nx");
+        assert!(cs3.is_none() && cte3.is_none());
+    }
+
+    #[test]
+    fn is_unusual判定は許可リスト外を検出する() {
+        assert!(is_unusual_charset("utf-7"));
+        assert!(is_unusual_charset("x-user-defined"));
+        assert!(!is_unusual_charset("utf-8"));
+        assert!(!is_unusual_charset("iso-2022-jp"));
+        assert!(is_unusual_cte("x-uuencode"));
+        assert!(is_unusual_cte("uue"));
+        assert!(!is_unusual_cte("base64"));
+        assert!(!is_unusual_cte("7bit"));
     }
 }
 
