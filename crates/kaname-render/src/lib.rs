@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-Yamaya-*`/`X-Kakuyasu-*`/`X-ENOTECA-*`/`X-TotalWine-*`/`X-Vivino-*` 等の酒販・ワイン通知記録印を送信側が自称している (D617)
+    pub liquor_marks: bool,
+    /// `X-HaraTantei-*`/`X-GALU-*`/`X-Pinkerton-*`/`X-Kroll-*`/`X-BeenVerified-*` 等の探偵・興信所・身元調査通知記録印を送信側が自称している (D618)
+    pub detective_marks: bool,
+    /// `X-Yahuoku-*`/`X-Aucfan-*`/`X-USSAuction-*`/`X-Sothebys-*`/`X-Copart-*` 等のオークション・競売通知記録印を送信側が自称している (D619)
+    pub auction_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        liquor_marks: has_liquor_marks(hdr),
+        detective_marks: has_detective_marks(hdr),
+        auction_marks: has_auction_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,290 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Yamaya-*`/`X-Kakuyasu-*`/`X-LiquorMountain-*`/`X-ENOTECA-*`/`X-IMADEYA-*`/`X-KURAND-*`/`X-Shinanoya-*`/`X-HasegawaSaketen-*`/`X-Ponshukan-*`/`X-Sakenowa-*`/`X-Sakenavi-*`/`X-Kawachiya-*`/`X-TakamuraWine-*`/`X-KyobashiWine-*`/`X-Ukiuki-Wine-*`/`X-Mottox-*`/`X-MikuniWine-*`/`X-VinosYamazaki-*`/`X-WineSommelier-*`/`X-Shuraku-*`/`X-Yahho-*`/`X-YonaYona-*`/`X-COEDO-*`/`X-BairdBeer-*`/`X-Beerma-*`/`X-AntennaAmerica-*`/`X-TotalWine-*`/`X-BevMo-*`/`X-WineCom-*`/`X-WineAccess-*`/`X-Vivino-*`/`X-Drizly-*`/`X-NakedWines-*`/`X-Winc-*`/`X-Firstleaf-*`/`X-BrightCellars-*`/`X-ReserveBar-*`/`X-Saucey-*`/`X-Minibar-*`/`X-Gopuff-*`/`X-WhiskyExchange-*`/`X-MasterOfMalt-*`/`X-Laithwaites-*`/`X-MajesticWine-*`/`X-DanMurphys-*`/`X-BWS-*`/`X-FirstChoiceLiquor-*`/`X-Liquorland-*`/`X-VintageCellars-*`/`X-Cellarmasters-*`/`X-LCBO-*`/`X-SAQ-*`/`X-Vinmonopolet-*`/`X-Systembolaget-*`/`X-Alko-*`/`X-CultWines-*`/`X-WineBid-*`/`X-WineEnthusiast-*`/`X-Decanter-*`/`X-Untappd-*`/`X-BrewDog-*`/`X-CraftShack-*`/`X-Beer52-*`/`X-Tippsy-*`/`X-TrueSake-*`/`X-UmamiMart-*`/`X-Flaviar-*`/`X-Caskers-*`/`X-ABCWine-*`/`X-Binnys-*`/`X-KLWine-*`/`X-AstorWines-*`/`X-ChambersWine-*`/`X-FlatironWine-*`/`X-PJWine-*`/`X-SherryLehmann-*`/`X-Zachys-*`/`X-WallysWine-*`/`X-GarysWine-*`/`X-UnionSquareWine-*`/`X-BerryBros-*`/`X-BBR-*`/`X-CorneyBarrow-*`/`X-Justerinis-*`/`X-HedonismWines-*`/`X-TheSampler-*`/`X-SakeHundred-*`/`X-SakeOne-*`/`X-SakeSocial-*`/`X-HalftimeBev-*`/`X-Vint-*`/`X-PlonkClub-*` (酒販店・ワイン商・リカー通販・酒蔵・ビール醸造所の通知記録) を送信側が自称しているかどうか。年齢確認・限定品抽選・定期便の偽装は酒販なりすまし詐欺の典型手口。(百貨店・スーパー・コンビニは既存族、飲食店は restaurant 機)
+fn has_liquor_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-yamaya-")
+            || l.starts_with("x-kakuyasu-")
+            || l.starts_with("x-liquormountain-")
+            || l.starts_with("x-enoteca-")
+            || l.starts_with("x-imadeya-")
+            || l.starts_with("x-kurand-")
+            || l.starts_with("x-shinanoya-")
+            || l.starts_with("x-hasegawasaketen-")
+            || l.starts_with("x-ponshukan-")
+            || l.starts_with("x-sakenowa-")
+            || l.starts_with("x-sakenavi-")
+            || l.starts_with("x-kawachiya-")
+            || l.starts_with("x-takamurawine-")
+            || l.starts_with("x-kyobashiwine-")
+            || l.starts_with("x-ukiuki-wine-")
+            || l.starts_with("x-ukiukiwine-")
+            || l.starts_with("x-mottox-")
+            || l.starts_with("x-mikuniwine-")
+            || l.starts_with("x-vinosyamazaki-")
+            || l.starts_with("x-winesommelier-")
+            || l.starts_with("x-shuraku-")
+            || l.starts_with("x-yahho-")
+            || l.starts_with("x-yonayona-")
+            || l.starts_with("x-coedo-")
+            || l.starts_with("x-bairdbeer-")
+            || l.starts_with("x-beerma-")
+            || l.starts_with("x-antennaamerica-")
+            || l.starts_with("x-totalwine-")
+            || l.starts_with("x-bevmo-")
+            || l.starts_with("x-winecom-")
+            || l.starts_with("x-wineaccess-")
+            || l.starts_with("x-vivino-")
+            || l.starts_with("x-drizly-")
+            || l.starts_with("x-nakedwines-")
+            || l.starts_with("x-winc-")
+            || l.starts_with("x-firstleaf-")
+            || l.starts_with("x-brightcellars-")
+            || l.starts_with("x-reservebar-")
+            || l.starts_with("x-saucey-")
+            || l.starts_with("x-minibar-")
+            || l.starts_with("x-gopuff-")
+            || l.starts_with("x-whiskyexchange-")
+            || l.starts_with("x-masterofmalt-")
+            || l.starts_with("x-laithwaites-")
+            || l.starts_with("x-majesticwine-")
+            || l.starts_with("x-danmurphys-")
+            || l.starts_with("x-bws-")
+            || l.starts_with("x-firstchoiceliquor-")
+            || l.starts_with("x-liquorland-")
+            || l.starts_with("x-vintagecellars-")
+            || l.starts_with("x-cellarmasters-")
+            || l.starts_with("x-lcbo-")
+            || l.starts_with("x-saq-")
+            || l.starts_with("x-vinmonopolet-")
+            || l.starts_with("x-systembolaget-")
+            || l.starts_with("x-alko-")
+            || l.starts_with("x-cultwines-")
+            || l.starts_with("x-winebid-")
+            || l.starts_with("x-wineenthusiast-")
+            || l.starts_with("x-decanter-")
+            || l.starts_with("x-untappd-")
+            || l.starts_with("x-brewdog-")
+            || l.starts_with("x-craftshack-")
+            || l.starts_with("x-beer52-")
+            || l.starts_with("x-tippsy-")
+            || l.starts_with("x-truesake-")
+            || l.starts_with("x-umamimart-")
+            || l.starts_with("x-flaviar-")
+            || l.starts_with("x-caskers-")
+            || l.starts_with("x-abcwine-")
+            || l.starts_with("x-binnys-")
+            || l.starts_with("x-klwine-")
+            || l.starts_with("x-astorwines-")
+            || l.starts_with("x-chamberswine-")
+            || l.starts_with("x-flatironwine-")
+            || l.starts_with("x-pjwine-")
+            || l.starts_with("x-sherrylehmann-")
+            || l.starts_with("x-zachys-")
+            || l.starts_with("x-wallyswine-")
+            || l.starts_with("x-garyswine-")
+            || l.starts_with("x-unionsquarewine-")
+            || l.starts_with("x-berrybros-")
+            || l.starts_with("x-bbr-")
+            || l.starts_with("x-corneybarrow-")
+            || l.starts_with("x-justerinis-")
+            || l.starts_with("x-hedonismwines-")
+            || l.starts_with("x-thesampler-")
+            || l.starts_with("x-sakehundred-")
+            || l.starts_with("x-sakeone-")
+            || l.starts_with("x-sakesocial-")
+            || l.starts_with("x-halftimebev-")
+            || l.starts_with("x-vint-")
+            || l.starts_with("x-plonkclub-")
+    })
+}
+
+/// `X-HaraTantei-*`/`X-HALTantei-*`/`X-GALU-*`/`X-GalAgency-*`/`X-MRTantei-*`/`X-MJResearch-*`/`X-IvyService-*`/`X-TeikokuChosa-*`/`X-SakuraSachiko-*`/`X-RalphTantei-*`/`X-FujiResearch-*`/`X-HibikiAgent-*`/`X-SecretResearch-*`/`X-PrivateResearch-*`/`X-CentralChosa-*`/`X-AmuseTantei-*`/`X-AiTantei-*`/`X-NihonKoshinjo-*`/`X-TeikokuKoshinjo-*`/`X-SogoTantei-*`/`X-TrustJapan-*`/`X-RiskMonster-*`/`X-AsiaTantei-*`/`X-Pinkerton-*`/`X-Kroll-*`/`X-ControlRisks-*`/`X-K2Integrity-*`/`X-Nardello-*`/`X-MintzGroup-*`/`X-GuidepostSol-*`/`X-Diligence-*`/`X-HillardHeintze-*`/`X-TMProtection-*`/`X-Insyte-*`/`X-BeenVerified-*`/`X-TruthFinder-*`/`X-Intelius-*`/`X-InstantCheckmate-*`/`X-USSearch-*`/`X-PeopleFinders-*`/`X-Spokeo-*`/`X-Whitepages-*`/`X-Radaris-*`/`X-CheckPeople-*`/`X-SpyFly-*`/`X-InfoTracer-*`/`X-TLOxp-*`/`X-Enformion-*`/`X-Delvepoint-*`/`X-TracersInfo-*`/`X-MicroBilt-*`/`X-SearchBug-*`/`X-SkipSmasher-*`/`X-IRBsearch-*`/`X-Docusearch-*`/`X-PeekYou-*`/`X-Pipl-*`/`X-ThatsThem-*`/`X-FastPeopleSearch-*`/`X-CyberBackgroundChecks-*`/`X-NumLooker-*`/`X-CocoFinder-*`/`X-TruePeopleSearch-*`/`X-FastBackgroundCheck-*`/`X-WAPI-*`/`X-CIIDetective-*` (探偵社・興信所・身元調査・バックグラウンドチェックの通知記録) を送信側が自称しているかどうか。浮気調査費・着手金・調査結果開示の偽装は探偵業者詐欺の典型手口。(信用調査・格付機は D546・調機 D616、警備会社は facility 機)
+fn has_detective_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-haratantei-")
+            || l.starts_with("x-hara-tantei-")
+            || l.starts_with("x-haltantei-")
+            || l.starts_with("x-hal-tantei-")
+            || l.starts_with("x-galu-")
+            || l.starts_with("x-gal-agency-")
+            || l.starts_with("x-galagency-")
+            || l.starts_with("x-mrtantei-")
+            || l.starts_with("x-mr-tantei-")
+            || l.starts_with("x-mjresearch-")
+            || l.starts_with("x-ivy-service-")
+            || l.starts_with("x-ivyservice-")
+            || l.starts_with("x-teikokuchosa-")
+            || l.starts_with("x-sakurasachiko-")
+            || l.starts_with("x-ralphtantei-")
+            || l.starts_with("x-fujiresearch-")
+            || l.starts_with("x-hibiki-agent-")
+            || l.starts_with("x-hibikiagent-")
+            || l.starts_with("x-secretresearch-")
+            || l.starts_with("x-privateresearch-")
+            || l.starts_with("x-centralchosa-")
+            || l.starts_with("x-amusetantei-")
+            || l.starts_with("x-ai-tantei-")
+            || l.starts_with("x-aitantei-")
+            || l.starts_with("x-nihonkoshinjo-")
+            || l.starts_with("x-teikokukoshinjo-")
+            || l.starts_with("x-sogotantei-")
+            || l.starts_with("x-trustjapan-")
+            || l.starts_with("x-riskmonster-")
+            || l.starts_with("x-asiatantei-")
+            || l.starts_with("x-pinkerton-")
+            || l.starts_with("x-kroll-")
+            || l.starts_with("x-controlrisks-")
+            || l.starts_with("x-k2integrity-")
+            || l.starts_with("x-nardello-")
+            || l.starts_with("x-mintzgroup-")
+            || l.starts_with("x-guidepostsol-")
+            || l.starts_with("x-diligence-")
+            || l.starts_with("x-hillardheintze-")
+            || l.starts_with("x-tmprotection-")
+            || l.starts_with("x-insyte-")
+            || l.starts_with("x-beenverified-")
+            || l.starts_with("x-truthfinder-")
+            || l.starts_with("x-intelius-")
+            || l.starts_with("x-instantcheckmate-")
+            || l.starts_with("x-ussearch-")
+            || l.starts_with("x-peoplefinders-")
+            || l.starts_with("x-spokeo-")
+            || l.starts_with("x-whitepages-")
+            || l.starts_with("x-radaris-")
+            || l.starts_with("x-checkpeople-")
+            || l.starts_with("x-spyfly-")
+            || l.starts_with("x-infotracer-")
+            || l.starts_with("x-tloxp-")
+            || l.starts_with("x-enformion-")
+            || l.starts_with("x-delvepoint-")
+            || l.starts_with("x-tracersinfo-")
+            || l.starts_with("x-microbilt-")
+            || l.starts_with("x-searchbug-")
+            || l.starts_with("x-skipsmasher-")
+            || l.starts_with("x-irbsearch-")
+            || l.starts_with("x-docusearch-")
+            || l.starts_with("x-peekyou-")
+            || l.starts_with("x-pipl-")
+            || l.starts_with("x-thatsthem-")
+            || l.starts_with("x-fastpeoplesearch-")
+            || l.starts_with("x-cyberbackgroundchecks-")
+            || l.starts_with("x-numlooker-")
+            || l.starts_with("x-cocofinder-")
+            || l.starts_with("x-truepeoplesearch-")
+            || l.starts_with("x-fastbackgroundcheck-")
+            || l.starts_with("x-wapi-")
+            || l.starts_with("x-ciidetective-")
+    })
+}
+
+/// `X-Yafuoku-*`/`X-YahooAuction-*`/`X-Yahuoku-*`/`X-Mbok-*`/`X-Aucfan-*`/`X-JBAuction-*`/`X-USSAuction-*`/`X-TAAuction-*`/`X-AraAuction-*`/`X-Hanaten-*`/`X-BDSAuction-*`/`X-StarBuyersAuction-*`/`X-Aucnet-*`/`X-AucnetAuction-*`/`X-MainichiAuction-*`/`X-ShinwaAuction-*`/`X-SBIArtAuction-*`/`X-EcoRingAuction-*`/`X-Heritage-*`/`X-HeritageAuctions-*`/`X-Sothebys-*`/`X-Christies-*`/`X-PhillipsAuction-*`/`X-Bonhams-*`/`X-DoyleNewYork-*`/`X-SwannGalleries-*`/`X-FreemansAuction-*`/`X-HindmanAuction-*`/`X-SkinnerInc-*`/`X-Cowans-*`/`X-CottoneAuction-*`/`X-RagoAuction-*`/`X-WrightAuction-*`/`X-Invaluable-*`/`X-LiveAuctioneers-*`/`X-Bidsquare-*`/`X-TheSaleroom-*`/`X-Drouot-*`/`X-Artcurial-*`/`X-Tajan-*`/`X-Aguttes-*`/`X-Dorotheum-*`/`X-Lempertz-*`/`X-VanHam-*`/`X-KettererKunst-*`/`X-NagelAuktionen-*`/`X-Bukowskis-*`/`X-Lauritz-*`/`X-LauritzCom-*`/`X-Barnebys-*`/`X-ArtnetAuctions-*`/`X-Catawiki-*`/`X-Venduehuis-*`/`X-RMSothebys-*`/`X-GoodingCo-*`/`X-GoodingAndCo-*`/`X-Mecum-*`/`X-BarrettJackson-*`/`X-BringATrailer-*`/`X-BaTrailer-*`/`X-CarsAndBids-*`/`X-CollectingCars-*`/`X-PCarMarket-*`/`X-BroadArrowAuction-*`/`X-Copart-*`/`X-IAAI-*`/`X-IAAInsurance-*`/`X-Manheim-*`/`X-ADESA-*`/`X-OPENLANE-*`/`X-GovDeals-*`/`X-GSAAuctions-*`/`X-PropertyRoom-*`/`X-ShopGoodwill-*`/`X-HiBid-*`/`X-AuctionTime-*`/`X-RitchieBros-*`/`X-RBAuction-*`/`X-IronPlanet-*`/`X-PurpleWave-*`/`X-Proxibid-*`/`X-BidSpotter-*`/`X-DealDash-*`/`X-eBid-*` (オークション・競売・入札プラットフォームの通知記録) を送信側が自称しているかどうか。落札通知・入札確認・出品手数料・高額入札の偽装はオークション詐欺の典型手口。(リユース・中古買取機は reuse 機、フリマアプリは既存族、eBay は既存族、自動車買取は車機)
+fn has_auction_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-yafuoku-")
+            || l.starts_with("x-yahooauction-")
+            || l.starts_with("x-yahuoku-")
+            || l.starts_with("x-mbok-")
+            || l.starts_with("x-aucfan-")
+            || l.starts_with("x-jbauction-")
+            || l.starts_with("x-ussauction-")
+            || l.starts_with("x-taauction-")
+            || l.starts_with("x-araauction-")
+            || l.starts_with("x-hanaten-")
+            || l.starts_with("x-bdsauction-")
+            || l.starts_with("x-starbuyersauction-")
+            || l.starts_with("x-aucnet-")
+            || l.starts_with("x-aucnet-auction-")
+            || l.starts_with("x-aucnetauction-")
+            || l.starts_with("x-mainichiauction-")
+            || l.starts_with("x-shinwaauction-")
+            || l.starts_with("x-sbiartauction-")
+            || l.starts_with("x-ecoringauction-")
+            || l.starts_with("x-heritage-")
+            || l.starts_with("x-heritageauctions-")
+            || l.starts_with("x-sothebys-")
+            || l.starts_with("x-christies-")
+            || l.starts_with("x-phillipsauction-")
+            || l.starts_with("x-bonhams-")
+            || l.starts_with("x-doylenewyork-")
+            || l.starts_with("x-swanngalleries-")
+            || l.starts_with("x-freemansauction-")
+            || l.starts_with("x-hindmanauction-")
+            || l.starts_with("x-skinnerinc-")
+            || l.starts_with("x-cowans-")
+            || l.starts_with("x-cottoneauction-")
+            || l.starts_with("x-ragoauction-")
+            || l.starts_with("x-wrightauction-")
+            || l.starts_with("x-invaluable-")
+            || l.starts_with("x-liveauctioneers-")
+            || l.starts_with("x-bidsquare-")
+            || l.starts_with("x-thesaleroom-")
+            || l.starts_with("x-drouot-")
+            || l.starts_with("x-artcurial-")
+            || l.starts_with("x-tajan-")
+            || l.starts_with("x-aguttes-")
+            || l.starts_with("x-dorotheum-")
+            || l.starts_with("x-lempertz-")
+            || l.starts_with("x-vanham-")
+            || l.starts_with("x-kettererkunst-")
+            || l.starts_with("x-nagelauktionen-")
+            || l.starts_with("x-bukowskis-")
+            || l.starts_with("x-lauritz-")
+            || l.starts_with("x-lauritzcom-")
+            || l.starts_with("x-barnebys-")
+            || l.starts_with("x-artnetauctions-")
+            || l.starts_with("x-catawiki-")
+            || l.starts_with("x-venduehuis-")
+            || l.starts_with("x-rmsothebys-")
+            || l.starts_with("x-goodingco-")
+            || l.starts_with("x-goodingandco-")
+            || l.starts_with("x-mecum-")
+            || l.starts_with("x-barrettjackson-")
+            || l.starts_with("x-bringatrailer-")
+            || l.starts_with("x-batrailer-")
+            || l.starts_with("x-carsandbids-")
+            || l.starts_with("x-collectingcars-")
+            || l.starts_with("x-pcarmarket-")
+            || l.starts_with("x-broadarrowauction-")
+            || l.starts_with("x-copart-")
+            || l.starts_with("x-iaai-")
+            || l.starts_with("x-iaainsurance-")
+            || l.starts_with("x-manheim-")
+            || l.starts_with("x-adesa-")
+            || l.starts_with("x-openlane-")
+            || l.starts_with("x-govdeals-")
+            || l.starts_with("x-gsaauctions-")
+            || l.starts_with("x-propertyroom-")
+            || l.starts_with("x-shopgoodwill-")
+            || l.starts_with("x-hibid-")
+            || l.starts_with("x-auctiontime-")
+            || l.starts_with("x-ritchiebros-")
+            || l.starts_with("x-rbauction-")
+            || l.starts_with("x-ironplanet-")
+            || l.starts_with("x-purplewave-")
+            || l.starts_with("x-proxibid-")
+            || l.starts_with("x-bidspotter-")
+            || l.starts_with("x-dealdash-")
+            || l.starts_with("x-ebid-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20933,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は酒機印を検出する() {
+    let y1 = b"From: a@b
+X-Yamaya-Id: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kakuyasu-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-ENOTECA-Notice: 1
+
+x";
+    let t1 = b"From: a@b
+X-TotalWine-Flag: 1
+
+x";
+    let v1 = b"From: a@b
+X-Vivino-Entry: 1
+
+x";
+    let n1 = b"From: a@b
+X-NakedWines-Record: 1
+
+x";
+    let d1 = b"From: a@b
+X-Drizly-Trace: 1
+
+x";
+    let l1 = b"From: a@b
+X-LCBO-Stamp: 1
+
+x";
+    assert!(has_liquor_marks(y1));
+    assert!(has_liquor_marks(k1));
+    assert!(has_liquor_marks(e1));
+    assert!(has_liquor_marks(t1));
+    assert!(has_liquor_marks(v1));
+    assert!(has_liquor_marks(n1));
+    assert!(has_liquor_marks(d1));
+    assert!(has_liquor_marks(l1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_liquor_marks(clean));
+}
+
+#[test]
+fn scan_は探機印を検出する() {
+    let h1 = b"From: a@b
+X-HaraTantei-Id: 1
+
+x";
+    let g1 = b"From: a@b
+X-GALU-Trace: 1
+
+x";
+    let p1 = b"From: a@b
+X-Pinkerton-Notice: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kroll-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-BeenVerified-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-TruthFinder-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-Spokeo-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-MJResearch-Stamp: 1
+
+x";
+    assert!(has_detective_marks(h1));
+    assert!(has_detective_marks(g1));
+    assert!(has_detective_marks(p1));
+    assert!(has_detective_marks(k1));
+    assert!(has_detective_marks(b1));
+    assert!(has_detective_marks(t1));
+    assert!(has_detective_marks(s1));
+    assert!(has_detective_marks(m1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_detective_marks(clean));
+}
+
+#[test]
+fn scan_は競機印を検出する() {
+    let y1 = b"From: a@b
+X-Yahuoku-Id: 1
+
+x";
+    let a1 = b"From: a@b
+X-Aucfan-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sothebys-Notice: 1
+
+x";
+    let c1 = b"From: a@b
+X-Christies-Flag: 1
+
+x";
+    let h1 = b"From: a@b
+X-Heritage-Entry: 1
+
+x";
+    let p1 = b"From: a@b
+X-Copart-Record: 1
+
+x";
+    let m1 = b"From: a@b
+X-Manheim-Trace: 1
+
+x";
+    let u1 = b"From: a@b
+X-USSAuction-Stamp: 1
+
+x";
+    assert!(has_auction_marks(y1));
+    assert!(has_auction_marks(a1));
+    assert!(has_auction_marks(s1));
+    assert!(has_auction_marks(c1));
+    assert!(has_auction_marks(h1));
+    assert!(has_auction_marks(p1));
+    assert!(has_auction_marks(m1));
+    assert!(has_auction_marks(u1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_auction_marks(clean));
 }
 }
