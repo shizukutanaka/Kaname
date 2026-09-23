@@ -103,6 +103,14 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// ヘッダ区画に NUL・C0 制御バイトがあるか — パーサ切断
+    /// (トランケーション) の兆候 (D288)。
+    pub ctl_chars_in_headers: bool,
+    /// RFC 5322 §2.1.1 の 998 文字を超えるヘッダ行があるか (D289)。
+    pub overlong_header_line: bool,
+    /// 同一 `Content-Type` 内に `boundary=` が重複するか — 採用値が
+    /// パーサ実装依存になる parser differential の兆候 (D290)。
+    pub duplicate_boundary_param: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,7 +370,54 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        ctl_chars_in_headers: has_ctl_chars_in_headers(raw),
+        overlong_header_line: has_overlong_header_line(raw),
+        duplicate_boundary_param: has_duplicate_boundary_param(raw),
     })
+}
+
+/// ヘッダ区画に NUL・C0 制御バイトがあるか判定する (D288)。
+///
+/// 制御バイトは C 系パーサで文字列切断 (トランケーション) を起こし、
+/// 検査値と表示値を分けられる。\t/\r/\n 以外の C0 (0x00-0x1F) と
+/// DEL (0x7F) を対象とする。
+fn has_ctl_chars_in_headers(raw: &[u8]) -> bool {
+    let header_end = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .unwrap_or(raw.len());
+    raw[..header_end].iter().any(|&b| {
+        matches!(b, 0x00..=0x08 | 0x0B | 0x0C | 0x0E..=0x1F | 0x7F)
+    })
+}
+
+/// RFC 5322 §2.1.1 の 998 文字を超えるヘッダ行があるか判定する (D289)。
+///
+/// 行長制限はバッファ設計の前提 — 超過行は規格を守るパーサと守らない
+/// パーサで折り返し境界がずれ、ヘッダスマグリングの土台になる。
+fn has_overlong_header_line(raw: &[u8]) -> bool {
+    let header_end = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .unwrap_or(raw.len());
+    raw[..header_end]
+        .split(|&b| b == b'\n')
+        .any(|line| line.len() > 998)
+}
+
+/// 同一 `Content-Type` 行内に `boundary=` が重複するか判定する (D290)。
+///
+/// `boundary=A; boundary=B` の採用値はパーサ実装依存 — 検査器と表示器で
+/// 異なる区切りを採用されると内容が分かれる parser differential。
+fn has_duplicate_boundary_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-type:"))
+        .any(|l| l.matches("boundary=").count() > 1)
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -2675,6 +2730,49 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はヘッダ制御バイトを検出する() {
+        let nul = b"From: a@b.example\x00evil\r\n\r\nx";
+        assert!(has_ctl_chars_in_headers(nul));
+        let vt = b"Subject: hi\x0Bx\r\n\r\nx";
+        assert!(has_ctl_chars_in_headers(vt));
+        let del = b"Subject: a\x7Fb\r\n\r\nx";
+        assert!(has_ctl_chars_in_headers(del));
+        let bodyctl = b"Subject: ok\r\n\r\nbody\x01with-ctl";
+        assert!(!has_ctl_chars_in_headers(bodyctl));
+        let clean = b"From: a@b.example\r\nSubject: hi\tthere\r\n\r\nx";
+        assert!(!has_ctl_chars_in_headers(clean));
+    }
+
+    #[test]
+    fn scan_は超過長ヘッダ行を検出する() {
+        let mut long = b"Subject: ".to_vec();
+        long.extend(vec![b'a'; 1000]);
+        long.extend_from_slice(b"\r\n\r\nx");
+        assert!(has_overlong_header_line(&long));
+        let ok = b"Subject: short\r\n\r\nx";
+        assert!(!has_overlong_header_line(ok));
+        let mut bodylong = b"Subject: ok\r\n\r\n".to_vec();
+        bodylong.extend(vec![b'b'; 2000]);
+        assert!(!has_overlong_header_line(&bodylong));
+        let mut edge = b"X: ".to_vec();
+        edge.extend(vec![b'a'; 995]);
+        edge.extend_from_slice(b"\r\n\r\nx");
+        assert!(!has_overlong_header_line(&edge));
+    }
+
+    #[test]
+    fn scan_はboundary重複を検出する() {
+        let dup = b"Content-Type: multipart/mixed; boundary=A; boundary=B\r\n\r\n--A--\r\n";
+        assert!(has_duplicate_boundary_param(dup));
+        let single = b"Content-Type: multipart/mixed; boundary=A\r\n\r\n--A--\r\n";
+        assert!(!has_duplicate_boundary_param(single));
+        let noct = b"Subject: x\r\n\r\nbody";
+        assert!(!has_duplicate_boundary_param(noct));
+        let text = b"Content-Type: text/plain; boundary=A; boundary=B\r\n\r\nx";
+        assert!(has_duplicate_boundary_param(text));
     }
 }
 

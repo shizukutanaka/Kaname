@@ -558,6 +558,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D288: ヘッダ区画の制御バイト
+    if env.ctl_chars_in_headers {
+        render_risks.push(
+            "ヘッダ区画に NUL・C0 制御バイトがあります — パーサ切断 (トランケーション) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D289: 998 文字超過のヘッダ行
+    if env.overlong_header_line {
+        render_risks.push(
+            "RFC 5322 の 998 文字を超えるヘッダ行があります — 折り返し境界がずれるヘッダスマグリングの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D290: boundary= パラメータ重複
+    if env.duplicate_boundary_param {
+        render_risks.push(
+            "Content-Type 内に boundary= が重複しています — 採用値がパーサ実装依存になる兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

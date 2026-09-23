@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D288: ヘッダ区画の NUL・C0 制御バイトが未検査
+
+- `From: a@b\x00evil` のような制御バイトは C 系パーサで文字列切断 (トランケーション) を起こし、検査値と表示値を分けられる parser differential — だがヘッダ区画の制御バイト存在は未検査だった (ファイル名の NUL は D209 で検出済み、ヘッダ区画は別区画)
+- 対処: `has_ctl_chars_in_headers` 新設で \t/\r/\n 以外の C0 (0x00-0x1F) と DEL を検出 → `Envelope.ctl_chars_in_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D289: RFC 5322 の 998 文字を超えるヘッダ行が未検査
+
+- 行長制限はバッファ設計の前提 — 超過行は規格を守るパーサと守らないパーサで折り返し境界がずれ、ヘッダスマグリング (検査値と表示値の分離) の土台になるが未検査だった
+- 対処: `has_overlong_header_line` 新設でヘッダ区画の 998 文字超過行を検出 → `Envelope.overlong_header_line` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D290: 同一 `Content-Type` 内の `boundary=` 重複が未検査
+
+- `boundary=A; boundary=B` の採用値はパーサ実装依存 (先勝ち/後勝ちが実装で異なる) — 検査器と表示器で異なる区切りを採用されると内容が分かれる parser differential だが未検査だった
+- 対処: `has_duplicate_boundary_param` 新設で同一 Content-Type 行の `boundary=` 2 回以上を検出 → `Envelope.duplicate_boundary_param` → `render_risks` 兆候報告
+- テスト +4 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
