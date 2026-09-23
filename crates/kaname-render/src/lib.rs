@@ -100,6 +100,18 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `Reply-By:`/`X-Reply-By:` の返信期限宣言 (D273)。
+    ///
+    /// 送信者がヘッダで「いつまでに返信せよ」と圧力をかける手段。
+    /// 文面の緊急性演出と同系列で、期限宣言を値として持つのは
+    /// BEC・恐喝系の兆候。
+    pub reply_by_claim: bool,
+    /// `Keywords:`/`Comments:` 内に URL (D274)。
+    ///
+    /// メタ欄にリンクを仕込み「表示・クリックさせるだけ」の
+    /// 補助経路を作る — 件名・本文の URL 評価を通らない区画の
+    /// 誘導リンク (件名/表示名 URL と同系列・別欄)。
+    pub meta_header_url: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +352,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D273: Reply-By 系の返信期限宣言
+    let reply_by_claim = has_reply_by_header(bytes);
+
+    // D274: Keywords/Comments 内の URL
+    let meta_header_url = has_meta_header_url(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,6 +376,36 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        reply_by_claim,
+        meta_header_url,
+    })
+}
+
+/// `Reply-By:`/`X-Reply-By:` の返信期限宣言があるか判定する (D273)。
+///
+/// 送信者がヘッダで「いつまでに返信せよ」と圧力をかける手段 — 文面
+/// の緊急性演出と同系列で、期限宣言を値として持つのは BEC・恐喝系
+/// の兆候。
+pub fn has_reply_by_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header
+        .lines()
+        .any(|l| l.starts_with("reply-by:") || l.starts_with("x-reply-by:"))
+}
+
+/// `Keywords:`/`Comments:` 内に URL があるか判定する (D274)。
+///
+/// メタ欄にリンクを仕込み「表示・クリックさせるだけ」の補助経路を作る
+/// — 件名・本文の URL 評価を通らない区画の誘導リンク。
+pub fn has_meta_header_url(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        (l.starts_with("keywords:") || l.starts_with("comments:"))
+            && (l.contains("http://") || l.contains("https://") || l.contains("www."))
     })
 }
 

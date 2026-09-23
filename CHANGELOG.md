@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D273: `Reply-By:`/`X-Reply-By:` の返信期限宣言が未検査
+
+- 送信者がヘッダで「いつまでに返信せよ」と圧力をかける手段 — 文面の緊急性演出と同系列で BEC・恐喝系の兆候
+- 対処: `has_reply_by_header` 新設 → `Envelope.reply_by_claim` → `render_risks` 兆候報告
+
+### Security — D274: `Keywords:`/`Comments:` 内の URL が未検査
+
+- メタ欄にリンクを仕込み「表示・クリックさせるだけ」の補助経路 — 件名・本文の URL 評価を通らない区画の誘導リンク
+- 対処: `has_meta_header_url` 新設 → `Envelope.meta_header_url` → `render_risks` 兆候報告
+
+### Security — D275: ファイル名を持たない無名添付が未検査
+
+- 正当な添付は名づけられる — 無名は拡張子判断を妨げる「匿名のペイロード」で中身の形式を曇らせる配送手段
+- 対処: `has_anonymous_attachment` 新設 → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

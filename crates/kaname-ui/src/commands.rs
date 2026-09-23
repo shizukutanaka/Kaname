@@ -542,6 +542,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D273: Reply-By 系の返信期限宣言
+    if env.reply_by_claim {
+        render_risks.push(
+            "Reply-By 系の返信期限宣言 — ヘッダで返信圧力をかける BEC・恐喝系の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D274: Keywords/Comments 内の URL
+    if env.meta_header_url {
+        render_risks.push(
+            "Keywords/Comments 欄に URL — メタ欄の誘導リンク (本文評価を通らない補助経路) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D275: ファイル名を持たない無名添付
+    if has_anonymous_attachment(&env) {
+        render_risks.push(
+            "ファイル名を持たない添付があります — 拡張子で判断できない無名ペイロードの兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1038,6 +1062,15 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
     }
     out
 }
+
+/// ファイル名を持たない添付があるか判定する (D275)。
+///
+/// 正当な添付は名づけられる — 無名は拡張子判断を妨げる「匿名の
+/// ペイロード」で、中身の形式を曇らせる配送手段の兆候。
+fn has_anonymous_attachment(env: &kaname_render::Envelope) -> bool {
+    env.attachments.iter().any(|a| a.filename.trim().is_empty())
+}
+
 
 /// D164: From ヘッダの複数アドレス / Sender ヘッダ不整合の兆候を返す。
 ///
