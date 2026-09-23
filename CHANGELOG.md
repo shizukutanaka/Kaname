@@ -8,6 +8,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D258: トップレベル `multipart/digest` 宣言が未検査
+
+- digest は複数メッセージをパートにまとめる配送形式 — ダイレクト送信で現れるのは「無害なまとめ」の体裁で中身を隠すコンテナ偽装の兆候
+- 対処: `has_digest_top_level` 新設 (トップレベルヘッダのみ検査) → `Envelope.digest_container` → `render_risks` 兆候報告
+
+### Security — D259: `Sensitivity:` ヘッダによる秘匿マーク演出が未検査
+
+- `private`/`confidential`/`company-confidential`/`personal` — 「これは秘匿だ・誰にも言うな」と被害者を孤立させる心理操作の手段 (BEC の「他の人に言うな」演出)
+- 対処: `has_sensitivity_marking` 新設 → `Envelope.sensitivity_marking` → `render_risks` 兆候報告
+
+### Security — D260: アバター/顔写真を装うヘッダ (Face/X-Face/X-Image-URL) が未検査
+
+- 表示器に顔写真を表示させて信頼を装うソーシャル偽装 — 送信者の「顔」を勝手に仕込める経路
+- 対処: `has_avatar_header` 新設 → `Envelope.avatar_header` → `render_risks` 兆候報告
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

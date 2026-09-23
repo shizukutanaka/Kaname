@@ -100,6 +100,23 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// トップレベル `Content-Type: multipart/digest` 宣言 (D258)。
+    ///
+    /// digest は複数メッセージをパートにまとめる配送形式 —
+    /// ダイレクト送信で現れるのは「無害なまとめ」の体裁で中身を
+    /// 隠すコンテナ偽装の兆候。
+    pub digest_container: bool,
+    /// `Sensitivity:` ヘッダによる秘匿マーク演出 (D259)。
+    ///
+    /// `private`/`confidential`/`company-confidential`/`personal` —
+    /// 「これは秘匿だ・誰にも言うな」と被害者を孤立させる心理操作の
+    /// 手段 (BEC の「他の人に言うな」演出)。
+    pub sensitivity_marking: bool,
+    /// 送信者のアバター/顔写真を装うヘッダ (D260)。
+    ///
+    /// `Face:`/`X-Face:`/`X-Image-URL:`/`X-Face-URL:` — 表示器に
+    /// 顔写真を表示させて信頼を装うソーシャル偽装の兆候。
+    pub avatar_header: bool,
 }
 
 /// An RFC 5322 address.
@@ -340,6 +357,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D258: トップレベル multipart/digest — 「まとめ」の体裁で中身を
+    // 隠すコンテナ偽装の兆候
+    let digest_container = has_digest_top_level(bytes);
+
+    // D259: Sensitivity: — 「誰にも言うな」の孤立演出
+    let sensitivity_marking = has_sensitivity_marking(bytes);
+
+    // D260: Face/X-Face/X-Image-URL — アバター偽装ヘッダ
+    let avatar_header = has_avatar_header(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -358,6 +385,55 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        digest_container,
+        sensitivity_marking,
+        avatar_header,
+    })
+}
+
+/// トップレベル `Content-Type: multipart/digest` 宣言があるか
+/// 判定する (D258)。
+///
+/// digest は複数メッセージをパートにまとめる配送形式 — ダイレクト
+/// 送信で現れるのは「無害なまとめ」の体裁で中身を隠すコンテナ偽装。
+pub fn has_digest_top_level(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header
+        .lines()
+        .any(|l| l.starts_with("content-type:") && l.contains("multipart/digest"))
+}
+
+/// `Sensitivity:` ヘッダによる秘匿マーク演出があるか判定する (D259)。
+///
+/// `private`/`confidential`/`company-confidential`/`personal` —
+/// 「誰にも言うな」と被害者を孤立させる心理操作の手段。
+pub fn has_sensitivity_marking(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("sensitivity:")
+            && (l.contains("private")
+                || l.contains("confidential")
+                || l.contains("personal"))
+    })
+}
+
+/// アバター/顔写真を装うヘッダがあるか判定する (D260)。
+///
+/// `Face:`/`X-Face:`/`X-Image-URL:`/`X-Face-URL:` — 表示器に顔写真を
+/// 表示させて信頼を装うソーシャル偽装。
+pub fn has_avatar_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text.find("\r\n\r\n").unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        l.starts_with("face:")
+            || l.starts_with("x-face:")
+            || l.starts_with("x-image-url:")
+            || l.starts_with("x-face-url:")
     })
 }
 

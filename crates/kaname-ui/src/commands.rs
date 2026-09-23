@@ -542,6 +542,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D258: トップレベル multipart/digest — コンテナ偽装
+    if env.digest_container {
+        render_risks.push(
+            "トップレベル multipart/digest — 「まとめ」の体裁で中身を隠すコンテナ偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D259: Sensitivity: — 「誰にも言うな」の孤立演出
+    if env.sensitivity_marking {
+        render_risks.push(
+            "Sensitivity: 秘匿マーク — 「誰にも言うな」と被害者を孤立させる心理操作の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D260: Face/X-Face/X-Image-URL — アバター偽装ヘッダ
+    if env.avatar_header {
+        render_risks.push(
+            "アバター偽装ヘッダ (Face/X-Face/X-Image-URL) — 表示器に顔写真を表示させて信頼を装う兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
