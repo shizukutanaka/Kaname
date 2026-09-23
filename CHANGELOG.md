@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D189: 外部リモート画像と 1px トラッキングピクセルを検出
+
+- `<img src="http(s)://…">` はリモート読み込みで開封を外部へ通知するトラッキング経路、`width="1"`/`height="1"` 指定の見えない画像はトラッキングピクセルの定形 (SpyCloud/WhoisXML 系の open-tracking 解析)。HTML 抽出で画像要素を未検査だった
+- 対処: `html_to_text` で img の src/tiny 判定 → `has_remote_image`/`tracking_pixel` に記録 → `render_risks` に兆候報告
+- テスト +3 件 (kaname-render) + 1 件 (独立ハーネス)
+
+### Security — D190: Message-ID ドメインが差出人ドメインと不一致 (送信経路偽装) を検出
+
+- Message-ID のドメイン部は生成 MTA/送信者を示す — `<id@evil.example>` を持つメールが `From: ceo@corp.example` を名乗るのは hand-crafted ID の兆候 (ヘッダ対査ツールの定番ヒューリスティック)
+- 対処: `message_id_domain` で ID ドメインを抽出 → From ドメインと不一致なら `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D191: クリティカルヘッダの重複 (parser differential) を検出
+
+- RFC 5322 §3.6 は Subject/From/To/Date/Message-ID/Content-Type 等の単一性を要求するが、重複ヘッダはパーサごとに採用値が異なる (先頭を採るか末尾を採るか) —「検査が見る値」と「表示される値」を別物にできる Mimecast/Cisco 系報告の回避経路
+- 対処: `duplicate_headers` にクリティカルヘッダの重複名を収集 → `render_risks` に兆候報告
+- テスト +3 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

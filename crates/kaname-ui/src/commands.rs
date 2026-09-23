@@ -514,6 +514,35 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D189: リモート画像 / トラッキングピクセルの兆候。
+    if let Some(e) = &html_extract {
+        if e.has_remote_image {
+            render_risks.push(
+                "外部 URL の画像を含む — リモート読み込みによる開封トラッキングの兆候".to_string(),
+            );
+        }
+        if e.tracking_pixel {
+            render_risks.push(
+                "1px 級の見えない画像 (トラッキングピクセル) — 開封を外部へ通知する兆候".to_string(),
+            );
+        }
+    }
+    // D190: Message-ID のドメインが差出人ドメインと異なる兆候。
+    if let Some(mid) = env.message_id.as_deref().and_then(message_id_domain) {
+        let from_domain = env.from.first().map(|a| a.addr.domain.to_ascii_lowercase());
+        if from_domain.as_ref() != Some(&mid) {
+            render_risks.push(format!(
+                "Message-ID のドメイン ({mid}) が差出人ドメインと異なります — 送信経路偽装の兆候"
+            ));
+        }
+    }
+    // D191: クリティカルヘッダの重複 (parser differential) の兆候。
+    if !env.duplicate_headers.is_empty() {
+        render_risks.push(format!(
+            "ヘッダの重複 ({}) — パーサごとに採用値が異なり、検査値と表示値を別物にできる兆候",
+            env.duplicate_headers.join(", ")
+        ));
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -2372,6 +2401,41 @@ mod tests {
         assert!(
             r.emails.iter().any(|e| e.file == "nested.eml"),
             "ネストしたファイルが結果に含まれるべき"
+        );
+        Ok(())
+    }
+
+    /// D190: `message_id_domain` のドメイン抽出。
+    #[test]
+    fn message_id_domain_はドメインを抽出する() {
+        assert_eq!(
+            message_id_domain("<abc123@mail.example.com>"),
+            Some("mail.example.com".to_string())
+        );
+        assert_eq!(message_id_domain("<no-domain>"), None);
+        assert_eq!(
+            message_id_domain("x@Y.EXAMPLE.COM"),
+            Some("y.example.com".to_string())
+        );
+    }
+
+    /// D190: Message-ID が差出人と別ドメインなら兆候として報告される。
+    #[tokio::test]
+    async fn analyze_raw_email_はmsgidドメイン不一致を検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: alice@corp.example\r\n\
+                    To: bob@example.com\r\n\
+                    Message-ID: <x1@evil.example>\r\n\
+                    Subject: Hi\r\n\
+                    Content-Type: text/plain\r\n\
+                    \r\n\
+                    hello";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("Message-ID")),
+            "msgid ドメイン不一致が兆候になるべき: {:?}",
+            r.render_risks
         );
         Ok(())
     }
@@ -4811,6 +4875,17 @@ fn now_unix_secs() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// Message-ID のドメイン部を抽出する (D190)。
+///
+/// `<id@domain>` または `id@domain` 形式の最後の `@` の右側を返す。
+/// From ドメインと不一致なら送信経路偽装 (hand-crafted Message-ID) の兆候。
+fn message_id_domain(msgid: &str) -> Option<String> {
+    let t = msgid.trim().trim_start_matches('<').trim_end_matches('>');
+    let (_, domain) = t.rsplit_once('@')?;
+    let domain = domain.trim().trim_end_matches('>').to_ascii_lowercase();
+    (!domain.is_empty()).then_some(domain)
 }
 
 fn email_domain(addr: &str) -> Option<String> {

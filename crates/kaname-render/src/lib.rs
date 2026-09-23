@@ -96,6 +96,11 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// クリティカルヘッダ (Subject/From/To/Date/Message-ID/Content-Type 等)
+    /// の重複名 (重複は RFC 5322 §3.6 違反 — パーサごとに採用値が
+    /// 異なり、「検査が見る値」と「表示される値」を別物にできる
+    /// parser differential の兆候、D191)。
+    pub duplicate_headers: Vec<String>,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +335,36 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D191: クリティカルヘッダの重複 — RFC 5322 §3.6 は単一性を
+    // 要求する。パーサごとに採用値が異なる (先頭を採るか末尾を採るか)
+    // ため、「検査が見る値」と「表示される値」を別物にできる。
+    const CRITICAL_UNIQUE_HEADERS: &[&str] = &[
+        "subject",
+        "from",
+        "to",
+        "cc",
+        "date",
+        "message-id",
+        "sender",
+        "reply-to",
+        "content-type",
+        "content-transfer-encoding",
+        "mime-version",
+        "references",
+        "in-reply-to",
+    ];
+    let mut seen = std::collections::BTreeMap::<String, u32>::new();
+    for h in msg.headers().iter() {
+        let name = h.name.as_str().to_ascii_lowercase();
+        *seen.entry(name).or_default() += 1;
+    }
+    let mut duplicate_headers: Vec<String> = seen
+        .into_iter()
+        .filter(|(name, n)| *n > 1 && CRITICAL_UNIQUE_HEADERS.contains(&name.as_str()))
+        .map(|(name, _)| name)
+        .collect();
+    duplicate_headers.sort();
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,6 +382,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        duplicate_headers,
     })
 }
 
@@ -683,6 +719,12 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// 外部 URL を読み込む `<img src="http(s)://…">` の存在
+    /// (リモート読み込みによる開封トラッキングの兆候、D189)。
+    pub has_remote_image: bool,
+    /// 1px 級の見えないリモート画像 (`width="1"`/`height="1"` 指定)
+    /// — 開封を外部へ通知するトラッキングピクセルの定形 (D189)。
+    pub tracking_pixel: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -748,6 +790,8 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     let mut hrefs: Vec<&str> = Vec::new();
     let mut hidden_chars = 0usize;
     let mut link_mismatches: Vec<LinkMismatch> = Vec::new();
+    let mut has_remote_image = false;
+    let mut tracking_pixel = false;
     // 可視 <a> の中では、アンカーテキストを別途バッファに集め、
     // 閉タグ時に「表示 URL と実リンク先のドメイン一致」を評価する (D162)。
     let mut current_anchor: Option<(&str, String)> = None;
@@ -815,6 +859,27 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
 
         // void 要素は閉タグを持たないため、隠蔽判定より先に処理する
         // (<img style="display:none"> をサブツリー探索すると EOF まで落ちる)。
+        // D189: <img src="http(s)"> — リモート読み込みの兆候。さらに
+        // width/height が 1 指定ならトラッキングピクセル (開封通知) の定形。
+        if !is_end && name == "img" {
+            if let Some(src) = attr_value(tag_inner, "src") {
+                let ls = src.trim().to_ascii_lowercase();
+                if ls.starts_with("http://") || ls.starts_with("https://") {
+                    has_remote_image = true;
+                    let tiny = |attr: &str| {
+                        attr_value(tag_inner, attr).is_some_and(|v| {
+                            v.trim()
+                                .trim_end_matches(|c: char| c == 'x' || c == '%' || c == 'p')
+                                .trim()
+                                == "1"
+                        })
+                    };
+                    if tiny("width") || tiny("height") {
+                        tracking_pixel = true;
+                    }
+                }
+            }
+        }
         let self_closing = tag_inner.trim_end().ends_with('/');
         if VOID_TAGS.contains(&name) || self_closing {
             pos = tag_end;
@@ -868,6 +933,8 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        has_remote_image,
+        tracking_pixel,
     }
 }
 
@@ -2324,6 +2391,55 @@ mod tests {
     fn scan_attachment_safe_pdf_not_dangerous() {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn html_to_text_はリモート画像を兆候として記録する() {
+        let e = html_to_text(r#"<p>x</p><img src="https://track.example/banner.png">"#);
+        assert!(e.has_remote_image);
+        assert!(!e.tracking_pixel);
+    }
+
+    #[test]
+    fn html_to_text_は1px画像をトラッキングピクセルとして検出する() {
+        let e =
+            html_to_text(r#"<p>x</p><img src="https://track.example/p.gif" width="1" height="1">"#);
+        assert!(e.tracking_pixel);
+        // 一方だけ 1px 指定でもピクセルとみなす
+        let e2 = html_to_text(r#"<img src="https://t.example/x" height="1">"#);
+        assert!(e2.tracking_pixel);
+    }
+
+    #[test]
+    fn html_to_text_はcidや画像なしでは画像兆候を立てない() {
+        let e = html_to_text(r#"<p>x</p><img src="cid:logo@corp">"#);
+        assert!(!e.has_remote_image);
+        assert!(!e.tracking_pixel);
+        let e2 = html_to_text("<p>plain</p>");
+        assert!(!e2.has_remote_image);
+    }
+
+    #[test]
+    fn parse_は重複したクリティカルヘッダを検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    Subject: First\r\n\
+                    Subject: Second\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse");
+        assert!(env.duplicate_headers.contains(&"subject".to_string()));
+    }
+
+    #[test]
+    fn parse_は単一ヘッダでは重複を検出しない() {
+        let raw = b"From: alice@example.com\r\n\
+                    To: bob@example.com\r\n\
+                    Subject: Only\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse");
+        assert!(env.duplicate_headers.is_empty());
     }
 }
 
