@@ -558,6 +558,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D324: pre-MIME 宣言ヘッダ
+    if env.premime_headers {
+        render_risks.push(
+            "Encoding:/Charset: ヘッダ — MIME 以前の転送宣言で解釈を分ける兆候です".to_string(),
+        );
+    }
+
+    // D325: Received 誤記・派生形
+    if env.received_typo {
+        render_risks.push(
+            "Recieved:/Recieve:/X-Received: 等 — 規格ヘッダではない手書き偽ホップの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D326: 配達日時自称
+    if env.delivery_date {
+        render_risks.push(
+            "Delivery-Date/X-OriginalArrivalTime — 受信側が記す配達時刻を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

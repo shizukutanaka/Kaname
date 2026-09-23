@@ -103,6 +103,15 @@ pub struct Envelope {
     /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
     /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
     pub inline_dangerous_attachment: bool,
+    /// `Encoding:`/`Charset:` の pre-MIME 宣言ヘッダがあるか — MIME 以前の
+    /// 転送エンコード宣言でデコーダ解釈を分ける兆候 (D324)。
+    pub premime_headers: bool,
+    /// `Recieved:`/`Recieve:`/`Recevied:`/`X-Received:` 等の Received 誤記/
+    /// 派生形があるか — 手書きの偽ホップの兆候 (D325)。
+    pub received_typo: bool,
+    /// `Delivery-Date:`/`X-Delivery-Date:`/`X-OriginalArrivalTime:` 等の
+    /// 配達日時ヘッダがあるか — 受信時刻を送信側が自称する兆候 (D326)。
+    pub delivery_date: bool,
 }
 
 /// An RFC 5322 address.
@@ -362,6 +371,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dkim_signature,
         list_unsubscribe,
         inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
+        premime_headers: has_premime_headers(raw),
+        received_typo: has_received_typo(raw),
+        delivery_date: has_delivery_date(raw),
     })
 }
 
@@ -422,6 +434,62 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `Encoding:`/`Charset:` の pre-MIME 宣言ヘッダがあるか判定する
+/// (D324)。
+///
+/// `Encoding:` (sendmail 系の旧転送エンコード宣言) と `Charset:`
+/// (旧文字コード宣言) は MIME 以前の規格値 — 現行 MUA は
+/// Content-Transfer-Encoding/charset= を使うため、これらはデコーダ
+/// の実装差を突く parser differential の素地。
+fn has_premime_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("encoding:") || l.starts_with("charset:"))
+}
+
+/// `Recieved:`/`Recieve:`/`Recevied:`/`X-Received:` 等の Received
+/// 誤記・派生形があるか判定する (D325)。
+///
+/// `Received:` は MTA が記すホップ履歴 — `Recieved:` (i/e 転倒)、
+/// `Recieve:`、`Recevied:`、`X-Received:` は規格ヘッダではなく、
+/// 手書きでホップを装う偽造履歴の兆候。
+fn has_received_typo(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("recieved:")
+            || l.starts_with("recieve:")
+            || l.starts_with("recevied:")
+            || l.starts_with("x-received:")
+            || l.starts_with("x-receive:")
+    })
+}
+
+/// `Delivery-Date:`/`X-Delivery-Date:`/`X-OriginalArrivalTime:` があるか
+/// 判定する (D326)。
+///
+/// 配達日時は受信側 MTA が配送時に記す値 — 送信側が書き込んで届く
+/// のは「いつ届いたか」を送信側が主張する自称 (D213 輸送ヘッダの
+/// 時刻版: Date: は送信時刻を名乗るが配達時刻は受信側が記す)。
+fn has_delivery_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("delivery-date:")
+            || l.starts_with("x-delivery-date:")
+            || l.starts_with("x-originalarrivaltime:")
+            || l.starts_with("x-original-arrival-time:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2675,6 +2743,44 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はpreMIME宣言を検出する() {
+        let en = b"Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_premime_headers(en));
+        let ch = b"Charset: shift_jis\r\n\r\nx";
+        assert!(has_premime_headers(ch));
+        let clean = b"Content-Transfer-Encoding: base64\r\n\r\nx";
+        assert!(!has_premime_headers(clean));
+        let body = b"From: a@b\r\n\r\nEncoding: base64";
+        assert!(!has_premime_headers(body));
+    }
+
+    #[test]
+    fn scan_はReceived誤記を検出する() {
+        let rc = b"Recieved: from a by b\r\n\r\nx";
+        assert!(has_received_typo(rc));
+        let rv = b"Recieve: from a by b\r\n\r\nx";
+        assert!(has_received_typo(rv));
+        let xr = b"X-Received: from a by b\r\n\r\nx";
+        assert!(has_received_typo(xr));
+        let ok = b"Received: from a by b\r\n\r\nx";
+        assert!(!has_received_typo(ok));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_received_typo(clean));
+    }
+
+    #[test]
+    fn scan_は配達日時を検出する() {
+        let dd = b"Delivery-Date: Fri, 22 Aug 2025 10:00:00 +0900\r\n\r\nx";
+        assert!(has_delivery_date(dd));
+        let xd = b"X-Delivery-Date: Fri, 22 Aug 2025\r\n\r\nx";
+        assert!(has_delivery_date(xd));
+        let xo = b"X-OriginalArrivalTime: 22 Aug 2025\r\n\r\nx";
+        assert!(has_delivery_date(xo));
+        let ok = b"Date: Fri, 22 Aug 2025 10:00:00 +0900\r\n\r\nx";
+        assert!(!has_delivery_date(ok));
     }
 }
 

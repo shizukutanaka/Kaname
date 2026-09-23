@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D324: `Encoding:`/`Charset:` pre-MIME 宣言ヘッダが未検査
+
+- `Encoding:` (sendmail 系の旧転送エンコード宣言) と `Charset:` (旧文字コード宣言) は MIME 以前の規格値 — 現行 MUA は CTE/charset= を使うためデコーダ差を突く素地だが未検査だった
+- 対処: `has_premime_headers` 新設 → `Envelope.premime_headers` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D325: `Recieved:`/`Recieve:`/`X-Received:` 等の Received 誤記・派生形が未検査
+
+- `Received:` は MTA が記すホップ履歴 — `Recieved:` (i/e 転倒)、`Recieve:`、`Recevied:`、`X-Received:`/`X-Receive:` は規格ヘッダではなく手書き偽ホップの兆候だが未検査だった
+- 対処: `has_received_typo` 新設 → `Envelope.received_typo` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D326: `Delivery-Date:`/`X-OriginalArrivalTime:` 等の配達日時自称が未検査
+
+- 配達日時は受信側 MTA が配送時に記す値 — 送信側が書き込んで届くのは「いつ届いたか」を送信側が主張する自称 (D213 の時刻版) だが未検査だった
+- 対処: `has_delivery_date` 新設 → `Envelope.delivery_date` → `render_risks` 兆候報告
+- テスト +4 件
+
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
 - `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
