@@ -700,6 +700,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D426: 日本プロバイダ印自称
+    if env.jp_provider_marks {
+        render_risks.push(
+            "X-OCN-*/X-Biglobe-*/X-Nifty-*/X-DTI-* 等 — 国内プロバイダの判定記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D427: ARC/BIMI 印自称
+    if env.arc_bimi_marks {
+        render_risks.push(
+            "ARC-Seal/ARC-Message-Signature/BIMI-Location 等 — 受領鎖・ブランド認証の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D428: 再送印自称
+    if env.resent_marks {
+        render_risks.push(
+            "Resent-From/Resent-Sender/Resent-Date 等 — 再送者の経路記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
