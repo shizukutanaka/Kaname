@@ -233,6 +233,21 @@ pub struct Envelope {
     /// `X-Zimbra-*` 等の MTA・メール製品印があるか — MTA/製品の
     /// 受信・検査記録を送信側が自称する兆候 (D437)。
     pub mta_product_marks: bool,
+    /// `X-Gm-*`/`X-Gmail-*`/`X-Google-*`/`X-BeenThere:`/`X-Received:`/
+    /// `X-YMail-*`/`X-Yahoo-*`/`X-AOL-*`/`X-iCloud-*` 等の
+    /// クラウドメール・webmail 内部印があるか — Gmail/Yahoo/AOL 等の
+    /// 受信・配送記録を送信側が自称する兆候 (D438)。
+    pub webmail_internal_marks: bool,
+    /// `X-Status:`/`X-Keywords:`/`X-UID:`/`X-UIDL:`/`X-Seen:`/
+    /// `X-Mozilla-*`/`X-IMAPbase:`/`X-Folder:` 等のメールストア・
+    /// ステータス印があるか — mbox/IMAP ストアの既読・状態記録を
+    /// 送信側が自称する兆候 (D439)。
+    pub store_status_marks: bool,
+    /// `X-SB*`/`X-Spambayes-*`/`X-Hammie-*`/`X-Text-Classification:`/
+    /// `X-POPFile-*`/`X-Sieve-*`/`X-Filtered-*` 等のユーザー側分類
+    /// ツール印があるか — ローカル分類器の判定記録を送信側が
+    /// 自称する兆候 (D440)。
+    pub classifier_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -531,6 +546,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         oss_scan_marks: has_oss_scan_marks(raw),
         stat_filter_marks: has_stat_filter_marks(raw),
         mta_product_marks: has_mta_product_marks(raw),
+        webmail_internal_marks: has_webmail_internal_marks(raw),
+        store_status_marks: has_store_status_marks(raw),
+        classifier_marks: has_classifier_marks(raw),
     })
 }
 
@@ -1276,6 +1294,106 @@ fn has_mta_product_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-notes-")
             || l.starts_with("x-groupwise-")
             || l.starts_with("x-zimbra-")
+    })
+}
+
+/// `X-Gm-*`/`X-Gmail-*`/`X-Google-*`/`X-BeenThere:`/`X-Received:`/
+/// `X-Forwarded-Encrypted:`/`X-YMail-*`/`X-Yahoo-*`/`X-AOL-*`/
+/// `X-MSN-*`/`X-Hotmail-*`/`X-iCloud-*`/`X-MobileMe-*`/`X-Apple-*`
+/// 等のクラウドメール・webmail 内部印があるか判定する (D438)。
+///
+/// `X-Gm-Message-State`/`X-Gm-Features`/`X-Gm-Gg` は Gmail 内部印
+/// (SpamAssassin bayes_ignore 公式一覧掲載)、`X-YMail-OSG`/
+/// `X-Yahoo-Newman-Property` は Yahoo 内部配送印、`X-AOL-Global-
+/// Disposition` は AOL 判定印 (rspamd ルールに記録) — 送信側から
+/// 届くこれは自称。
+fn has_webmail_internal_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gm-")
+            || l.starts_with("x-gmail-")
+            || l.starts_with("x-google-")
+            || l.starts_with("x-beenthere:")
+            || l.starts_with("x-received:")
+            || l.starts_with("x-forwarded-encrypted:")
+            || l.starts_with("x-ymail-")
+            || l.starts_with("x-yahoo-")
+            || l.starts_with("x-yprod-")
+            || l.starts_with("x-aol-")
+            || l.starts_with("x-msn-")
+            || l.starts_with("x-hotmail-")
+            || l.starts_with("x-icloud-")
+            || l.starts_with("x-mobileme-")
+            || l.starts_with("x-apple-")
+    })
+}
+
+/// `X-Status:`/`X-Keywords:`/`X-UID:`/`X-UIDL:`/`X-Seen:`/`X-Answered:`/
+/// `X-Flagged:`/`X-Draft:`/`X-Deleted:`/`X-Folder:`/`X-IMAP-*`/
+/// `X-IMAPbase:`/`X-Mailbox-*`/`X-Mbox-*`/`X-Mozilla-*` 等の
+/// メールストア・ステータス印があるか判定する (D439)。
+///
+/// `X-Status:`/`X-Keywords:`/`X-UID:`/`X-UIDL:` は mbox/c-client の
+/// 状態記録 (RFC 2076)、`X-Mozilla-Status*`/`X-Mozilla-Keys:` は
+/// Thunderbird mbox 互換記録、`X-IMAPbase:`/`X-Folder:` は
+/// IMAP ストア記録 — 送信側から届くこれは自称。
+fn has_store_status_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-status:")
+            || l.starts_with("x-keywords:")
+            || l.starts_with("x-uid:")
+            || l.starts_with("x-uidl:")
+            || l.starts_with("x-seen:")
+            || l.starts_with("x-answered:")
+            || l.starts_with("x-flagged:")
+            || l.starts_with("x-draft:")
+            || l.starts_with("x-deleted:")
+            || l.starts_with("x-folder:")
+            || l.starts_with("x-imap-")
+            || l.starts_with("x-imapbase:")
+            || l.starts_with("x-mailbox-")
+            || l.starts_with("x-mbox-")
+            || l.starts_with("x-mozilla-")
+    })
+}
+
+/// `X-SB*`/`X-Spambayes-*`/`X-Hammie-*`/`X-Text-Classification:`/
+/// `X-POPFile-*`/`X-Mailfilter-*`/`X-Sieve-*`/`X-Procmail-*`/
+/// `X-Filtered-*`/`X-Milter-*`/`X-Match:` 等のユーザー側分類
+/// ツール印があるか判定する (D440)。
+///
+/// `X-SBClass`/`X-SBScore`/`X-SBRule`/`X-SBVer` は SpamBouncer
+/// (公式文書)、`X-Hammie-Disposition`/`X-Spambayes-Classification`
+/// は SpamBayes、`X-Text-Classification:` は POPFile の
+/// ローカル分類記録 — 送信側から届くこれは自称。
+fn has_classifier_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sb-")
+            || l.starts_with("x-sbclass:")
+            || l.starts_with("x-sbscore:")
+            || l.starts_with("x-sbrule:")
+            || l.starts_with("x-sbver:")
+            || l.starts_with("x-spambayes-")
+            || l.starts_with("x-hammie-")
+            || l.starts_with("x-text-classification:")
+            || l.starts_with("x-popfile-")
+            || l.starts_with("x-mailfilter-")
+            || l.starts_with("x-sieve-")
+            || l.starts_with("x-procmail-")
+            || l.starts_with("x-filtered-")
+            || l.starts_with("x-milter-")
+            || l.starts_with("x-match:")
     })
 }
 
@@ -4006,6 +4124,72 @@ mod tests {
         assert!(has_mta_product_marks(t1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_mta_product_marks(clean));
+    }
+
+    #[test]
+    fn scan_はwebmail内部印を検出する() {
+        let g1 = b"X-Gm-Message-State: abc\r\n\r\nx";
+        assert!(has_webmail_internal_marks(g1));
+        let g2 = b"X-Gm-Features: x\r\n\r\nx";
+        assert!(has_webmail_internal_marks(g2));
+        let g3 = b"X-Google-Smtp-Source: x\r\n\r\nx";
+        assert!(has_webmail_internal_marks(g3));
+        let b1 = b"X-BeenThere: grp@g\r\n\r\nx";
+        assert!(has_webmail_internal_marks(b1));
+        let r1 = b"X-Received: by x\r\n\r\nx";
+        assert!(has_webmail_internal_marks(r1));
+        let y1 = b"X-YMail-OSG: abc\r\n\r\nx";
+        assert!(has_webmail_internal_marks(y1));
+        let y2 = b"X-Yahoo-Newman-Property: y\r\n\r\nx";
+        assert!(has_webmail_internal_marks(y2));
+        let a1 = b"X-AOL-Global-Disposition: S\r\n\r\nx";
+        assert!(has_webmail_internal_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_webmail_internal_marks(clean));
+    }
+
+    #[test]
+    fn scan_はストア状態印を検出する() {
+        let s1 = b"X-Status: R\r\n\r\nx";
+        assert!(has_store_status_marks(s1));
+        let k1 = b"X-Keywords: x\r\n\r\nx";
+        assert!(has_store_status_marks(k1));
+        let u1 = b"X-UID: 100\r\n\r\nx";
+        assert!(has_store_status_marks(u1));
+        let u2 = b"X-UIDL: abc\r\n\r\nx";
+        assert!(has_store_status_marks(u2));
+        let s2 = b"X-Seen: yes\r\n\r\nx";
+        assert!(has_store_status_marks(s2));
+        let f1 = b"X-Folder: inbox\r\n\r\nx";
+        assert!(has_store_status_marks(f1));
+        let i1 = b"X-IMAPbase: 1\r\n\r\nx";
+        assert!(has_store_status_marks(i1));
+        let m1 = b"X-Mozilla-Status: 0001\r\n\r\nx";
+        assert!(has_store_status_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_store_status_marks(clean));
+    }
+
+    #[test]
+    fn scan_は分類ツール印を検出する() {
+        let s1 = b"X-SBClass: Bulk\r\n\r\nx";
+        assert!(has_classifier_marks(s1));
+        let s2 = b"X-SBScore: 40\r\n\r\nx";
+        assert!(has_classifier_marks(s2));
+        let h1 = b"X-Hammie-Disposition: ham\r\n\r\nx";
+        assert!(has_classifier_marks(h1));
+        let s3 = b"X-Spambayes-Classification: spam\r\n\r\nx";
+        assert!(has_classifier_marks(s3));
+        let t1 = b"X-Text-Classification: spam\r\n\r\nx";
+        assert!(has_classifier_marks(t1));
+        let p1 = b"X-POPFile-Link: x\r\n\r\nx";
+        assert!(has_classifier_marks(p1));
+        let s4 = b"X-Sieve-Filtered: x\r\n\r\nx";
+        assert!(has_classifier_marks(s4));
+        let f1 = b"X-Filtered-By: x\r\n\r\nx";
+        assert!(has_classifier_marks(f1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_classifier_marks(clean));
     }
 }
 
