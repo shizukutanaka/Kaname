@@ -2236,6 +2236,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D620: 害虫・害獣駆除印自称
+    if env.pest_marks {
+        render_risks.push(
+            "X-Hachikujo-*/X-Shiroari-*/X-NezumiKujo-*/X-GaijuuKujo-*/X-PestControl24-*/X-KujoRescue-*/X-TermitePro-*/X-Hakubishin-* 等 — 駆機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D621: 霊園・墓石・仏壇印自称
+    if env.cemetery_marks {
+        render_risks.push(
+            "X-Reien-*/X-Hakaishi-*/X-Butsudan-*/X-Kaimyou-*/X-Noukotsudou-*/X-EidaiKuyou-*/X-MemorialPark-*/X-GraveStone-* 等 — 墓機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D622: 太陽光・蓄電池・エネルギー設備印自称
+    if env.solar_marks {
+        render_risks.push(
+            "X-Taiyoukou-*/X-Chikuden-*/X-Enefarm-*/X-Hems-*/X-SolarPro-*/X-PvPower-*/X-Uriden-*/X-EcoSolar-* 等 — 蓄機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
