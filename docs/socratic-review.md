@@ -1750,3 +1750,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この骨機が通知した」「この装機が通知した」「この箏機が通知した」は誰が記すか?
 
 答: **X-Kottou-*/X-Bijutsu-*/X-Antique-* は「この骨機が通知した」を名乗り、X-Kimono-*/X-Furisode-*/X-Hakama-* は「この装機が通知した」を名乗り、X-Shodou-*/X-AbcCooking-*/X-CultureNavi-* は「この箏機が通知した」を名乗る — いずれも骨機・装機・箏機が記す値を送信側が書いた自称**。骨印・装印・箏印はすべて兆候として数えよ。
+
+## ラウンド 228
+
+問: 「この家機が通知した」「この育機が通知した」「この訳機が通知した」は誰が記すか?
+
+答: **X-AirConRepair-*/X-KadenShuuri-*/X-ApplianceFix-* は「この家機が通知した」を名乗り、X-KidsLine-*/X-HoikuenNavi-*/X-GakudouNavi-* は「この育機が通知した」を名乗り、X-Gengo-*/X-HonyakuPro-*/X-TuuyakuPro-* は「この訳機が通知した」を名乗る — いずれも家機・育機・訳機が記す値を送信側が書いた自称**。家印・育印・訳印はすべて兆候として数えよ。
