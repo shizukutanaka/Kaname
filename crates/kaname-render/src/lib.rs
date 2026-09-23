@@ -354,6 +354,27 @@ pub struct Envelope {
     /// 中国系セキュリティ製品印があるか — 製品の検査記録を
     /// 送信側が自称する兆候 (D458)。
     pub cn_sec_marks: bool,
+    /// `X-Facebook-*`/`X-Twitter-*`/`X-LinkedIn-*`/`X-Instagram-*`/
+    /// `X-YouTube-*`/`X-Reddit-*`/`X-Discord-*`/`X-Twitch-*`/
+    /// `X-Spotify-*`/`X-Medium-*`/`X-Quora-*`/`X-TikTok-*`/
+    /// `X-Meetup-*`/`X-Eventbrite-*`/`X-Xing-*` 等の
+    /// SNS・プラットフォーム通知印があるか — SNS 通知機の
+    /// 発信記録を送信側が自称する兆候 (D459)。
+    pub sns_platform_marks: bool,
+    /// `X-Square-*`/`X-Adyen-*`/`X-Braintree-*`/`X-Worldpay-*`/
+    /// `X-Klarna-*`/`X-Wise-*`/`X-TransferWise-*`/`X-AuthNet-*`/
+    /// `X-Recurly-*`/`X-Chargebee-*`/`X-Zuora-*`/`X-Paddle-*`/
+    /// `X-Razorpay-*`/`X-Alipay-*`/`X-Mollie-*`/`X-Payoneer-*` 等の
+    /// 決済・金融サービス印があるか — 決済機の発信記録を
+    /// 送信側が自称する兆候 (D460)。
+    pub payment_marks: bool,
+    /// `X-PHPlist-*`/`X-Sendy-*`/`X-MailWizz-*`/`X-OpenEMM-*`/
+    /// `X-Agnitas-*`/`X-Mautic-*`/`X-Emma-*`/`X-JangoMail-*`/
+    /// `X-Netcore-*`/`X-MoEngage-*`/`X-CleverTap-*`/`X-OneSignal-*`/
+    /// `X-Urban-*`/`X-Emarsys-*`/`X-StrongView-*` 等の
+    /// 配信 ESP・マーケ印 (第四群) があるか — 配信機の記録を
+    /// 送信側が自称する兆候 (D461)。
+    pub esp4_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -673,6 +694,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         forum_issue_marks: has_forum_issue_marks(raw),
         archive_marks: has_archive_marks(raw),
         cn_sec_marks: has_cn_sec_marks(raw),
+        sns_platform_marks: has_sns_platform_marks(raw),
+        payment_marks: has_payment_marks(raw),
+        esp4_marks: has_esp4_marks(raw),
     })
 }
 
@@ -2266,6 +2290,140 @@ fn has_cn_sec_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-kingsoft-")
             || l.starts_with("x-dbappsecurity-")
             || l.starts_with("x-dptech-")
+    })
+}
+
+/// `X-Facebook-*`/`X-Twitter-*`/`X-LinkedIn-*`/`X-Instagram-*`/
+/// `X-YouTube-*`/`X-Pinterest-*`/`X-Reddit-*`/`X-Tumblr-*`/
+/// `X-Discord-*`/`X-Twitch-*`/`X-Spotify-*`/`X-Medium-*`/
+/// `X-Quora-*`/`X-ProductHunt-*`/`X-TikTok-*`/`X-Snapchat-*`/
+/// `X-VK-*`/`X-LINE-*`/`X-Kakao-*`/`X-Weibo-*`/`X-Xing-*`/
+/// `X-Meetup-*`/`X-Eventbrite-*` 等の SNS・プラットフォーム
+/// 通知印があるか判定する (D459)。
+///
+/// `X-Facebook-Notify` (Facebook 通知メール — 実測)、`X-LinkedIn-*`
+/// (LinkedIn)、`X-Twitter-*` は SNS 通知機の発信記録 — 送信側から
+/// 届くこれは自称。
+fn has_sns_platform_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-facebook-")
+            || l.starts_with("x-twitter-")
+            || l.starts_with("x-linkedin-")
+            || l.starts_with("x-instagram-")
+            || l.starts_with("x-youtube-")
+            || l.starts_with("x-pinterest-")
+            || l.starts_with("x-reddit-")
+            || l.starts_with("x-tumblr-")
+            || l.starts_with("x-discord-")
+            || l.starts_with("x-twitch-")
+            || l.starts_with("x-spotify-")
+            || l.starts_with("x-medium-")
+            || l.starts_with("x-quora-")
+            || l.starts_with("x-producthunt-")
+            || l.starts_with("x-tiktok-")
+            || l.starts_with("x-snapchat-")
+            || l.starts_with("x-vk-")
+            || l.starts_with("x-vkontakte-")
+            || l.starts_with("x-ok-")
+            || l.starts_with("x-odnoklassniki-")
+            || l.starts_with("x-line-")
+            || l.starts_with("x-kakao-")
+            || l.starts_with("x-weibo-")
+            || l.starts_with("x-xing-")
+            || l.starts_with("x-meetup-")
+            || l.starts_with("x-eventbrite-")
+    })
+}
+
+/// `X-Square-*`/`X-Adyen-*`/`X-Braintree-*`/`X-Worldpay-*`/
+/// `X-Klarna-*`/`X-Wise-*`/`X-TransferWise-*`/`X-Authorize-*`/
+/// `X-AuthNet-*`/`X-Recurly-*`/`X-Chargebee-*`/`X-Zuora-*`/
+/// `X-Paddle-*`/`X-FastSpring-*`/`X-Gumroad-*`/`X-Razorpay-*`/
+/// `X-Paytm-*`/`X-PayU-*`/`X-MercadoPago-*`/`X-PagSeguro-*`/
+/// `X-EBANX-*`/`X-Payoneer-*`/`X-Alipay-*`/`X-UnionPay-*`/
+/// `X-Mollie-*` 等の決済・金融サービス印があるか判定する (D460)。
+///
+/// `X-Square-*` (Square)、`X-Adyen-*` (Adyen)、`X-Razorpay-*`
+/// (Razorpay) は決済機の発信記録 — 送信側から届くこれは自称。
+fn has_payment_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-square-")
+            || l.starts_with("x-adyen-")
+            || l.starts_with("x-braintree-")
+            || l.starts_with("x-worldpay-")
+            || l.starts_with("x-klarna-")
+            || l.starts_with("x-wise-")
+            || l.starts_with("x-transferwise-")
+            || l.starts_with("x-authorize-")
+            || l.starts_with("x-authnet-")
+            || l.starts_with("x-recurly-")
+            || l.starts_with("x-chargebee-")
+            || l.starts_with("x-zuora-")
+            || l.starts_with("x-paddle-")
+            || l.starts_with("x-fastspring-")
+            || l.starts_with("x-gumroad-")
+            || l.starts_with("x-razorpay-")
+            || l.starts_with("x-paytm-")
+            || l.starts_with("x-payu-")
+            || l.starts_with("x-mercadopago-")
+            || l.starts_with("x-pagseguro-")
+            || l.starts_with("x-ebanx-")
+            || l.starts_with("x-payoneer-")
+            || l.starts_with("x-alipay-")
+            || l.starts_with("x-unionpay-")
+            || l.starts_with("x-mollie-")
+    })
+}
+
+/// `X-PHPlist-*`/`X-Sendy-*`/`X-MailWizz-*`/`X-OpenEMM-*`/
+/// `X-Agnitas-*`/`X-Mautic-*`/`X-Emma-*`/`X-JangoMail-*`/
+/// `X-WhatCounts-*`/`X-StrongView-*`/`X-Netcore-*`/`X-MoEngage-*`/
+/// `X-WebEngage-*`/`X-CleverTap-*`/`X-OneSignal-*`/`X-Airship-*`/
+/// `X-Urban-*`/`X-Attentive-*`/`X-Emarsys-*`/`X-Selligent-*`/
+/// `X-Dotdigital-*`/`X-Bloomreach-*`/`X-Cordial-*`/`X-Blueshift-*`
+/// 等の配信 ESP・マーケ印 (第四群) があるか判定する (D461)。
+///
+/// `X-MoEngage-*` (MoEngage)、`X-Urban-*` (Urban Airship)、
+/// `X-Netcore-*` (Netcore) は配信機の記録 — 送信側から届く
+/// これは自称。`X-Sailthru-*` は D442 でカバー済みのため対象外。
+fn has_esp4_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-phplist-")
+            || l.starts_with("x-sendy-")
+            || l.starts_with("x-mailwizz-")
+            || l.starts_with("x-openemm-")
+            || l.starts_with("x-agnitas-")
+            || l.starts_with("x-mautic-")
+            || l.starts_with("x-emma-")
+            || l.starts_with("x-jangomail-")
+            || l.starts_with("x-whatcounts-")
+            || l.starts_with("x-strongview-")
+            || l.starts_with("x-netcore-")
+            || l.starts_with("x-moengage-")
+            || l.starts_with("x-webengage-")
+            || l.starts_with("x-clevertap-")
+            || l.starts_with("x-onesignal-")
+            || l.starts_with("x-airship-")
+            || l.starts_with("x-urban-")
+            || l.starts_with("x-attentive-")
+            || l.starts_with("x-emarsys-")
+            || l.starts_with("x-selligent-")
+            || l.starts_with("x-dotdigital-")
+            || l.starts_with("x-bloomreach-")
+            || l.starts_with("x-cordial-")
+            || l.starts_with("x-blueshift-")
     })
 }
 
@@ -5455,6 +5613,72 @@ mod tests {
         assert!(has_cn_sec_marks(a1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_cn_sec_marks(clean));
+    }
+
+    #[test]
+    fn scan_はSNSプラットフォーム印を検出する() {
+        let f1 = b"X-Facebook-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(f1));
+        let t1 = b"X-Twitter-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(t1));
+        let l1 = b"X-LinkedIn-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(l1));
+        let i1 = b"X-Instagram-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(i1));
+        let d1 = b"X-Discord-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(d1));
+        let s1 = b"X-Spotify-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(s1));
+        let m1 = b"X-Meetup-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(m1));
+        let e1 = b"X-Eventbrite-Notify: x\r\n\r\nx";
+        assert!(has_sns_platform_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sns_platform_marks(clean));
+    }
+
+    #[test]
+    fn scan_は決済サービス印を検出する() {
+        let s1 = b"X-Square-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(s1));
+        let a1 = b"X-Adyen-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(a1));
+        let k1 = b"X-Klarna-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(k1));
+        let w1 = b"X-Wise-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(w1));
+        let r1 = b"X-Razorpay-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(r1));
+        let a2 = b"X-Alipay-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(a2));
+        let p1 = b"X-Paddle-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(p1));
+        let m1 = b"X-Mollie-Receipt: x\r\n\r\nx";
+        assert!(has_payment_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_payment_marks(clean));
+    }
+
+    #[test]
+    fn scan_はESP第四群印を検出する() {
+        let p1 = b"X-PHPlist-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(p1));
+        let s1 = b"X-Sendy-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(s1));
+        let m1 = b"X-MailWizz-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(m1));
+        let o1 = b"X-OpenEMM-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(o1));
+        let m2 = b"X-Mautic-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(m2));
+        let n1 = b"X-Netcore-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(n1));
+        let m3 = b"X-MoEngage-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(m3));
+        let o2 = b"X-OneSignal-Campaign: x\r\n\r\nx";
+        assert!(has_esp4_marks(o2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp4_marks(clean));
     }
 }
 

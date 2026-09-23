@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D459: `X-Facebook-*`/`X-Twitter-*`/`X-LinkedIn-*`/`X-Instagram-*`/`X-Discord-*`/`X-Spotify-*`/`X-Meetup-*` 等の SNS・プラットフォーム通知印自称が未検査
+
+- **問題**: `X-Facebook-Notify` (Facebook 通知メール — 実測)、`X-Twitter-*`/`X-LinkedIn-*`/`X-Instagram-*`/`X-YouTube-*`/`X-Pinterest-*`/`X-Reddit-*`/`X-Tumblr-*`/`X-Discord-*`/`X-Twitch-*`/`X-Spotify-*`/`X-Medium-*`/`X-Quora-*`/`X-ProductHunt-*`/`X-TikTok-*`/`X-Snapchat-*`/`X-VK-*`/`X-LINE-*`/`X-Kakao-*`/`X-Weibo-*`/`X-Xing-*`/`X-Meetup-*`/`X-Eventbrite-*` は SNS 通知機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `sns_platform_marks` + `has_sns_platform_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — SNS 印の自署を問え。
+
+### Security — D460: `X-Square-*`/`X-Adyen-*`/`X-Klarna-*`/`X-Wise-*`/`X-Razorpay-*`/`X-Alipay-*`/`X-Mollie-*`/`X-Paddle-*` 等の決済・金融サービス印自称が未検査
+
+- **問題**: `X-Square-*` (Square)、`X-Adyen-*` (Adyen)、`X-Razorpay-*` (Razorpay)、`X-Braintree-*`/`X-Worldpay-*`/`X-Klarna-*`/`X-Wise-*`/`X-TransferWise-*`/`X-Authorize-*`/`X-AuthNet-*`/`X-Recurly-*`/`X-Chargebee-*`/`X-Zuora-*`/`X-Paddle-*`/`X-FastSpring-*`/`X-Gumroad-*`/`X-Paytm-*`/`X-PayU-*`/`X-MercadoPago-*`/`X-PagSeguro-*`/`X-EBANX-*`/`X-Payoneer-*`/`X-Alipay-*`/`X-UnionPay-*`/`X-Mollie-*` は決済機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `payment_marks` + `has_payment_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 決済の記録は決済機が記す — 決済印の自署を問え。
+
+### Security — D461: `X-PHPlist-*`/`X-Sendy-*`/`X-MailWizz-*`/`X-Mautic-*`/`X-MoEngage-*`/`X-OneSignal-*`/`X-Urban-*`/`X-Netcore-*` 等の配信 ESP・マーケ印 (第四群) 自称が未検査
+
+- **問題**: `X-MoEngage-*` (MoEngage)、`X-Urban-*` (Urban Airship)、`X-Netcore-*` (Netcore)、`X-PHPlist-*`/`X-Sendy-*`/`X-MailWizz-*`/`X-OpenEMM-*`/`X-Agnitas-*`/`X-Mautic-*`/`X-Emma-*`/`X-JangoMail-*`/`X-WhatCounts-*`/`X-StrongView-*`/`X-WebEngage-*`/`X-CleverTap-*`/`X-OneSignal-*`/`X-Airship-*`/`X-Attentive-*`/`X-Emarsys-*`/`X-Selligent-*`/`X-Dotdigital-*`/`X-Bloomreach-*`/`X-Cordial-*`/`X-Blueshift-*` は配信機の記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `esp4_marks` + `has_esp4_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 配信の記録は配信機が記す — ESP 印の自署を問え。
+
+
 ### Security — D456: `X-Bugzilla-*`/`X-Phabricator-*`/`X-Discourse-*`/`X-YouTrack-*`/`X-MediaWiki-*`/`X-phpBB-*`/`X-XenForo-*`/`X-Redmine-*` 等のフォーラム・課題管理印自称が未検査
 
 - **問題**: `X-Bugzilla-Reason`/`X-Bugzilla-Type` (Bugzilla 通知 — 公式文書)、`X-Discourse-Topic-Id`/`X-Discourse-*` (Discourse)、`X-YouTrack-*`/`X-Phabricator-*`/`X-Phorge-*`/`X-MediaWiki-*`/`X-Redmine-*`/`X-Mantis-*`/`X-Trac-*`/`X-phpBB-*`/`X-XenForo-*`/`X-Invision-*`/`X-vBulletin-*`/`X-Flarum-*`/`X-SMF-*`/`X-MyBB-*`/`X-NodeBB-*`/`X-Drupal-*`/`X-Joomla-*`/`X-Moodle-*` はフォーラム・課題機の通知記録 — 送信側が書くことは自称。
