@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D426: `X-OCN-*`/`X-Biglobe-*`/`X-Nifty-*`/`X-MYASP-*`/`X-TERRACE-*`/`X-DTI-*` 等の日本 ISP・ホスティング印自称が未検査
+
+- 国内プロバイダの受信判定記録 (`X-OCN-SPAM-CHECK`/`X-Biglobe-spamcheck`/`X-Nifty-SrcIP`/`X-DTI-Spam-Flag` 等) はプロバイダの受信基盤が残す — 送信側から届くのは「このプロバイダが判定した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_jp_provider_marks` 新設 → `Envelope.jp_provider_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D427: `ARC-Seal:`/`ARC-Message-Signature:`/`ARC-Authentication-Results:`/`X-ARC-*`/`BIMI-Location:`/`BIMI-Indicator:`/`BIMI-Logo-Preference:`/`X-BIMI-*` 等の受領鎖・ブランド印自称が未検査
+
+- ARC Set は中継 ADMD が seal する受領鎖 (RFC 8617) で、BIMI-Location/BIMI-Indicator は検証後に受信 MTA が挿入するヘッダ (BIMI 仕様上送信者は設定禁止) — 送信側から届くのは「受領鎖・ブランド認証済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_arc_bimi_marks` 新設 → `Envelope.arc_bimi_marks` → `render_risks` 兆候報告
+- テスト +8 件
+
+### Security — D428: `Resent-From:`/`Resent-Sender:`/`Resent-To:`/`Resent-Cc:`/`Resent-Bcc:`/`Resent-Date:`/`Resent-Message-ID:` 等の再送印自称が未検査
+
+- `Resent-*` はメッセージを輸送系に再投入した再送者が残す経路記録 (RFC 5322 §3.6.6) — 送信側から届くのは「再送経路を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_resent_marks` 新設 → `Envelope.resent_marks` → `render_risks` 兆候報告
+- テスト +8 件
+
 ### Security — D414: `X-MSFBL`/`X-Campaign-*`/`X-Mailing-*`/`X-Newsletter-*`/`X-Bulk-Mailer`/`X-Mailout-*` 等のバルク配信印自称が未検査
 
 - バルク配信基盤のキャンペーン記録は基盤が残す — 送信側から届くのは「この基盤から発送した」体裁を内容側が主張する自称だが未検査だった

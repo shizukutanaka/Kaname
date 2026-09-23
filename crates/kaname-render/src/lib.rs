@@ -178,6 +178,18 @@ pub struct Envelope {
     /// `X-Partial-*`/`X-Segment-*` 等の断片・継続印があるか —
     /// 断片化機の記録を送信側が自称する兆候 (D416)。
     pub frag_marks: bool,
+    /// `X-OCN-*`/`X-Biglobe-*`/`X-Nifty-*`/`X-MYASP-*`/
+    /// `X-TERRACE-*`/`X-DTI-*` 等の日本 ISP・ホスティング印が
+    /// あるか — 国内プロバイダの判定記録を送信側が自称する兆候 (D426)。
+    pub jp_provider_marks: bool,
+    /// `ARC-Seal:`/`ARC-Message-Signature:`/`ARC-Authentication-Results:`/
+    /// `BIMI-Location:`/`BIMI-Indicator:` 等の受領鎖・ブランド印があるか
+    /// — 中継機・受信 MTA が残す印を送信側が自称する兆候 (D427)。
+    pub arc_bimi_marks: bool,
+    /// `Resent-From:`/`Resent-Sender:`/`Resent-To:`/`Resent-Date:`/
+    /// `Resent-Message-ID:` 等の再送印があるか — 再送者が残す経路記録を
+    /// 送信側が自称する兆候 (D428)。
+    pub resent_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -462,6 +474,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bulk_marks: has_bulk_marks(raw),
         filter4_marks: has_filter4_marks(raw),
         frag_marks: has_frag_marks(raw),
+        jp_provider_marks: has_jp_provider_marks(raw),
+        arc_bimi_marks: has_arc_bimi_marks(raw),
+        resent_marks: has_resent_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -859,6 +874,77 @@ fn has_frag_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-fragment-")
             || l.starts_with("x-partial-")
             || l.starts_with("x-segment-")
+    })
+}
+
+/// `X-OCN-*`/`X-Biglobe-*`/`X-Nifty-*`/`X-MYASP-*`/`X-TERRACE-*`/
+/// `X-DTI-*` 等の日本 ISP・ホスティング印があるか判定する (D426)。
+///
+/// 国内プロバイダの受信判定記録 (`X-OCN-SPAM-CHECK`/
+/// `X-Biglobe-spamcheck`/`X-Nifty-SrcIP`/`X-DTI-Spam-Flag` 等) は
+/// プロバイダの受信基盤が残す — 送信側から届くこれは
+/// 「このプロバイダが判定した」体裁を内容側が主張する自称。
+fn has_jp_provider_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ocn-")
+            || l.starts_with("x-biglobe-")
+            || l.starts_with("x-nifty-")
+            || l.starts_with("x-myasp-")
+            || l.starts_with("x-terrace-")
+            || l.starts_with("x-dti-")
+    })
+}
+
+/// `ARC-Seal:`/`ARC-Message-Signature:`/`ARC-Authentication-Results:`/
+/// `X-ARC-*`/`BIMI-Location:`/`BIMI-Indicator:`/`BIMI-Logo-Preference:`/
+/// `X-BIMI-*` 等の受領鎖・ブランド印があるか判定する (D427)。
+///
+/// ARC Set は中継 ADMD が seal する受領鎖 (RFC 8617) で、
+/// BIMI-Location/BIMI-Indicator は検証後に受信 MTA が挿入する
+/// ヘッダ (仕様上送信者が設定してはならない) — 送信側から届く
+/// これは「受領鎖・ブランド認証済み」体裁を内容側が主張する自称。
+fn has_arc_bimi_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("arc-seal:")
+            || l.starts_with("arc-message-signature:")
+            || l.starts_with("arc-authentication-results:")
+            || l.starts_with("x-arc-")
+            || l.starts_with("bimi-location:")
+            || l.starts_with("bimi-indicator:")
+            || l.starts_with("bimi-logo-preference:")
+            || l.starts_with("x-bimi-")
+    })
+}
+
+/// `Resent-From:`/`Resent-Sender:`/`Resent-To:`/`Resent-Cc:`/
+/// `Resent-Bcc:`/`Resent-Date:`/`Resent-Message-ID:` 等の再送印が
+/// あるか判定する (D428)。
+///
+/// `Resent-*` はメッセージを輸送系に再投入した再送者が残す経路記録
+/// (RFC 5322 §3.6.6) — 送信側から届くこれは「再送経路を通った」
+/// 体裁を内容側が主張する自称。From と Resent-From のどちらを
+/// 表示差出人とするかは実装差があり、表示偽装の素地にもなる。
+fn has_resent_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("resent-from:")
+            || l.starts_with("resent-sender:")
+            || l.starts_with("resent-to:")
+            || l.starts_with("resent-cc:")
+            || l.starts_with("resent-bcc:")
+            || l.starts_with("resent-date:")
+            || l.starts_with("resent-message-id:")
     })
 }
 
@@ -3335,6 +3421,64 @@ mod tests {
         assert!(has_frag_marks(s1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_frag_marks(clean));
+    }
+
+    #[test]
+    fn scan_は日本プロバイダ印を検出する() {
+        let o1 = b"X-OCN-SPAM-CHECK: 12%\r\n\r\nx";
+        assert!(has_jp_provider_marks(o1));
+        let b1 = b"X-Biglobe-spamcheck: 0.00%\r\n\r\nx";
+        assert!(has_jp_provider_marks(b1));
+        let n1 = b"X-Nifty-SrcIP: 203.0.113.1\r\n\r\nx";
+        assert!(has_jp_provider_marks(n1));
+        let m1 = b"X-MYASP-MQID: 123\r\n\r\nx";
+        assert!(has_jp_provider_marks(m1));
+        let t1 = b"X-TERRACE-SPAMMARK: yes\r\n\r\nx";
+        assert!(has_jp_provider_marks(t1));
+        let d1 = b"X-DTI-Spam-Flag: YES\r\n\r\nx";
+        assert!(has_jp_provider_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_jp_provider_marks(clean));
+    }
+
+    #[test]
+    fn scan_はARC_BIMI印を検出する() {
+        let a1 = b"ARC-Seal: i=1; s=arc\r\n\r\nx";
+        assert!(has_arc_bimi_marks(a1));
+        let a2 = b"ARC-Message-Signature: i=1; a=rsa\r\n\r\nx";
+        assert!(has_arc_bimi_marks(a2));
+        let a3 = b"ARC-Authentication-Results: i=1; mx\r\n\r\nx";
+        assert!(has_arc_bimi_marks(a3));
+        let x1 = b"X-ARC-Result: pass\r\n\r\nx";
+        assert!(has_arc_bimi_marks(x1));
+        let l1 = b"BIMI-Location: https://e/l.svg\r\n\r\nx";
+        assert!(has_arc_bimi_marks(l1));
+        let i1 = b"BIMI-Indicator: AAAB\r\n\r\nx";
+        assert!(has_arc_bimi_marks(i1));
+        let p1 = b"BIMI-Logo-Preference: f\r\n\r\nx";
+        assert!(has_arc_bimi_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_arc_bimi_marks(clean));
+    }
+
+    #[test]
+    fn scan_は再送印を検出する() {
+        let f1 = b"Resent-From: a@b\r\n\r\nx";
+        assert!(has_resent_marks(f1));
+        let s1 = b"Resent-Sender: a@b\r\n\r\nx";
+        assert!(has_resent_marks(s1));
+        let t1 = b"Resent-To: a@b\r\n\r\nx";
+        assert!(has_resent_marks(t1));
+        let c1 = b"Resent-Cc: a@b\r\n\r\nx";
+        assert!(has_resent_marks(c1));
+        let b1 = b"Resent-Bcc: a@b\r\n\r\nx";
+        assert!(has_resent_marks(b1));
+        let d1 = b"Resent-Date: Tue\r\n\r\nx";
+        assert!(has_resent_marks(d1));
+        let m1 = b"Resent-Message-ID: <1@x>\r\n\r\nx";
+        assert!(has_resent_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_resent_marks(clean));
     }
 }
 
