@@ -1372,6 +1372,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D510: AI・LLM・音声合成・会話インテリジェンス印自称
+    if env.ai_marks {
+        render_risks.push(
+            "X-OpenAI-*/X-Anthropic-*/X-Cohere-*/X-HuggingFace-*/X-Mistral-*/X-Pinecone-*/X-LangChain-*/X-ElevenLabs-* 等 — 智機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D511: 通信キャリア・MVNO 印自称
+    if env.telecom_marks {
+        render_risks.push(
+            "X-Docomo-*/X-KDDI-*/X-SoftBank-*/X-Verizon-*/X-TMobile-*/X-Vodafone-*/X-Telstra-*/X-Rogers-* 等 — 線機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D512: ブラウザ・検索エンジン印自称
+    if env.browser_marks {
+        render_risks.push(
+            "X-Chrome-*/X-Firefox-*/X-Brave-*/X-DuckDuckGo-*/X-Safari-*/X-Kagi-*/X-TorBrowser-*/X-LibreWolf-* 等 — 覧機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

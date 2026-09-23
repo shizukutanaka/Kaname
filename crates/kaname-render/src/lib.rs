@@ -808,6 +808,42 @@ pub struct Envelope {
     /// ローコード・社内ツール・ヘッドレス CMS 印があるか — 内機の
     /// 通知記録を送信側が自称する兆候 (D509)。
     pub lowcode_marks: bool,
+    /// `X-OpenAI-*`/`X-Anthropic-*`/`X-Cohere-*`/`X-HuggingFace-*`/
+    /// `X-Replicate-*`/`X-TogetherAI-*`/`X-Mistral-*`/`X-Perplexity-*`/
+    /// `X-Groq-*`/`X-DeepSeek-*`/`X-OpenRouter-*`/`X-LangChain-*`/
+    /// `X-Pinecone-*`/`X-Weaviate-*`/`X-Qdrant-*`/`X-Milvus-*`/
+    /// `X-Chroma-*`/`X-Ollama-*`/`X-ElevenLabs-*`/`X-Runway-*`/
+    /// `X-StabilityAI-*`/`X-Midjourney-*`/`X-CharacterAI-*`/
+    /// `X-Jasper-*`/`X-CopyAI-*`/`X-WriteSonic-*`/`X-Synthesia-*`/
+    /// `X-HeyGen-*`/`X-Descript-*`/`X-OtterAI-*`/`X-Fireflies-*`/
+    /// `X-Grain-*`/`X-ReadAI-*`/`X-Gong-*`/`X-Chorus-*`/
+    /// `X-Clari-*`/`X-PeopleAI-*`/`X-vLLM-*`/`X-LlamaIndex-*`/
+    /// `X-Haystack-*`/`X-SemanticKernel-*`/`X-AutoGen-*`/`X-CrewAI-*` 等の
+    /// AI・LLM・音声合成・会話インテリジェンス印があるか — 智機の
+    /// 通知記録を送信側が自称する兆候 (D510)。
+    pub ai_marks: bool,
+    /// `X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*`/`X-AUOne-*`/`X-UQWiMAX-*`/
+    /// `X-RakutenMobile-*`/`X-IIJmio-*`/`X-SoNet-*`/`X-JCOM-*`/`X-Plala-*`/
+    /// `X-Verizon-*`/`X-ATT-*`/`X-TMobile-*`/`X-Sprint-*`/`X-Vodafone-*`/
+    /// `X-O2-*`/`X-EE-*`/`X-Three-*`/`X-BT-*`/`X-SkyBroadband-*`/
+    /// `X-Telstra-*`/`X-Optus-*`/`X-Rogers-*`/`X-Bell-*`/`X-Telus-*`/
+    /// `X-Shaw-*`/`X-OrangeMobile-*`/`X-Movistar-*`/`X-Telefonica-*`/
+    /// `X-Telenor-*`/`X-TeliaSonera-*`/`X-SwisscomMobile-*`/`X-TIM-*`/
+    /// `X-WindTre-*`/`X-Bouygues-*`/`X-SFR-*`/`X-FreeMobile-*` 等の
+    /// 通信キャリア・MVNO 印があるか — 線機の通知記録を送信側が
+    /// 自称する兆候 (D511)。
+    pub telecom_marks: bool,
+    /// `X-Chrome-*`/`X-Firefox-*`/`X-Brave-*`/`X-Opera-*`/`X-Vivaldi-*`/
+    /// `X-Safari-*`/`X-Edge-*`/`X-TorBrowser-*`/`X-Waterfox-*`/
+    /// `X-LibreWolf-*`/`X-DuckDuckGo-*`/`X-Startpage-*`/`X-Ecosia-*`/
+    /// `X-Qwant-*`/`X-Kagi-*`/`X-Neeva-*`/`X-Mojeek-*`/`X-BraveSearch-*`/
+    /// `X-Iron-*`/`X-Midori-*`/`X-Falkon-*`/`X-Qutebrowser-*`/
+    /// `X-NetSurf-*`/`X-Lynx-*`/`X-PaleMoon-*`/`X-SeaMonkey-*`/
+    /// `X-Maxthon-*`/`X-UCBrowser-*`/`X-SamsungInternet-*`/
+    /// `X-HuaweiBrowser-*`/`X-MiBrowser-*` 等の
+    /// ブラウザ・検索エンジン印があるか — 覧機の通知記録を送信側が
+    /// 自称する兆候 (D512)。
+    pub browser_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1178,6 +1214,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notes_marks: has_notes_marks(raw),
         diagram_marks: has_diagram_marks(raw),
         lowcode_marks: has_lowcode_marks(raw),
+        ai_marks: has_ai_marks(raw),
+        telecom_marks: has_telecom_marks(raw),
+        browser_marks: has_browser_marks(raw),
     })
 }
 
@@ -5218,6 +5257,182 @@ fn has_lowcode_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-tinacms-")
             || l.starts_with("x-decap-")
             || l.starts_with("x-forestry-")
+    })
+}
+
+/// `X-OpenAI-*`/`X-Anthropic-*`/`X-Cohere-*`/`X-HuggingFace-*`/
+/// `X-Replicate-*`/`X-TogetherAI-*`/`X-Mistral-*`/`X-Perplexity-*`/
+/// `X-Groq-*`/`X-DeepSeek-*`/`X-OpenRouter-*`/`X-LangChain-*`/
+/// `X-Pinecone-*`/`X-Weaviate-*`/`X-Qdrant-*`/`X-Milvus-*`/`X-Chroma-*`/
+/// `X-Ollama-*`/`X-ElevenLabs-*`/`X-Runway-*`/`X-StabilityAI-*`/
+/// `X-Midjourney-*`/`X-CharacterAI-*`/`X-Jasper-*`/`X-CopyAI-*`/
+/// `X-WriteSonic-*`/`X-Synthesia-*`/`X-HeyGen-*`/`X-Descript-*`/
+/// `X-OtterAI-*`/`X-Fireflies-*`/`X-Grain-*`/`X-ReadAI-*`/`X-Gong-*`/
+/// `X-Chorus-*`/`X-Clari-*`/`X-PeopleAI-*`/`X-vLLM-*`/`X-LlamaIndex-*`/
+/// `X-Haystack-*`/`X-SemanticKernel-*`/`X-AutoGen-*`/`X-CrewAI-*` 等の
+/// AI・LLM 印があるか判定する (D510)。
+///
+/// `X-OpenAI-*` (OpenAI)、`X-Anthropic-*` (Anthropic)、`X-Cohere-*`
+/// (Cohere) は智機の通知記録 — 送信側から届くこれは自称。
+fn has_ai_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-openai-")
+            || l.starts_with("x-anthropic-")
+            || l.starts_with("x-cohere-")
+            || l.starts_with("x-huggingface-")
+            || l.starts_with("x-replicate-")
+            || l.starts_with("x-togetherai-")
+            || l.starts_with("x-mistral-")
+            || l.starts_with("x-perplexity-")
+            || l.starts_with("x-groq-")
+            || l.starts_with("x-deepseek-")
+            || l.starts_with("x-openrouter-")
+            || l.starts_with("x-langchain-")
+            || l.starts_with("x-pinecone-")
+            || l.starts_with("x-weaviate-")
+            || l.starts_with("x-qdrant-")
+            || l.starts_with("x-milvus-")
+            || l.starts_with("x-chroma-")
+            || l.starts_with("x-ollama-")
+            || l.starts_with("x-elevenlabs-")
+            || l.starts_with("x-runway-")
+            || l.starts_with("x-stabilityai-")
+            || l.starts_with("x-midjourney-")
+            || l.starts_with("x-characterai-")
+            || l.starts_with("x-jasper-")
+            || l.starts_with("x-copyai-")
+            || l.starts_with("x-writesonic-")
+            || l.starts_with("x-synthesia-")
+            || l.starts_with("x-heygen-")
+            || l.starts_with("x-descript-")
+            || l.starts_with("x-otterai-")
+            || l.starts_with("x-fireflies-")
+            || l.starts_with("x-grain-")
+            || l.starts_with("x-readai-")
+            || l.starts_with("x-gong-")
+            || l.starts_with("x-chorus-")
+            || l.starts_with("x-clari-")
+            || l.starts_with("x-peopleai-")
+            || l.starts_with("x-vllm-")
+            || l.starts_with("x-llamaindex-")
+            || l.starts_with("x-haystack-")
+            || l.starts_with("x-semantickernel-")
+            || l.starts_with("x-autogen-")
+            || l.starts_with("x-crewai-")
+    })
+}
+
+/// `X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*`/`X-AUOne-*`/`X-UQWiMAX-*`/
+/// `X-RakutenMobile-*`/`X-IIJmio-*`/`X-SoNet-*`/`X-JCOM-*`/`X-Plala-*`/
+/// `X-Verizon-*`/`X-ATT-*`/`X-TMobile-*`/`X-Sprint-*`/`X-Vodafone-*`/
+/// `X-O2-*`/`X-EE-*`/`X-Three-*`/`X-BT-*`/`X-SkyBroadband-*`/
+/// `X-Telstra-*`/`X-Optus-*`/`X-Rogers-*`/`X-Bell-*`/`X-Telus-*`/
+/// `X-Shaw-*`/`X-OrangeMobile-*`/`X-Movistar-*`/`X-Telefonica-*`/
+/// `X-Telenor-*`/`X-TeliaSonera-*`/`X-SwisscomMobile-*`/`X-TIM-*`/
+/// `X-WindTre-*`/`X-Bouygues-*`/`X-SFR-*`/`X-FreeMobile-*` 等の
+/// 通信キャリア・MVNO 印があるか判定する (D511)。
+///
+/// `X-Docomo-*` (docomo)、`X-KDDI-*` (KDDI)、`X-SoftBank-*` (SoftBank)
+/// は線機の通知記録 — 送信側から届くこれは自称。
+fn has_telecom_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-docomo-")
+            || l.starts_with("x-kddi-")
+            || l.starts_with("x-softbank-")
+            || l.starts_with("x-auone-")
+            || l.starts_with("x-uqwimax-")
+            || l.starts_with("x-rakutenmobile-")
+            || l.starts_with("x-iijmio-")
+            || l.starts_with("x-sonet-")
+            || l.starts_with("x-jcom-")
+            || l.starts_with("x-plala-")
+            || l.starts_with("x-verizon-")
+            || l.starts_with("x-att-")
+            || l.starts_with("x-tmobile-")
+            || l.starts_with("x-sprint-")
+            || l.starts_with("x-vodafone-")
+            || l.starts_with("x-o2-")
+            || l.starts_with("x-ee-")
+            || l.starts_with("x-three-")
+            || l.starts_with("x-bt-")
+            || l.starts_with("x-skybroadband-")
+            || l.starts_with("x-telstra-")
+            || l.starts_with("x-optus-")
+            || l.starts_with("x-rogers-")
+            || l.starts_with("x-bell-")
+            || l.starts_with("x-telus-")
+            || l.starts_with("x-shaw-")
+            || l.starts_with("x-orangemobile-")
+            || l.starts_with("x-movistar-")
+            || l.starts_with("x-telefonica-")
+            || l.starts_with("x-telenor-")
+            || l.starts_with("x-teliasonera-")
+            || l.starts_with("x-swisscommobile-")
+            || l.starts_with("x-tim-")
+            || l.starts_with("x-windtre-")
+            || l.starts_with("x-bouygues-")
+            || l.starts_with("x-sfr-")
+            || l.starts_with("x-freemobile-")
+    })
+}
+
+/// `X-Chrome-*`/`X-Firefox-*`/`X-Brave-*`/`X-Opera-*`/`X-Vivaldi-*`/
+/// `X-Safari-*`/`X-Edge-*`/`X-TorBrowser-*`/`X-Waterfox-*`/`X-LibreWolf-*`/
+/// `X-DuckDuckGo-*`/`X-Startpage-*`/`X-Ecosia-*`/`X-Qwant-*`/`X-Kagi-*`/
+/// `X-Neeva-*`/`X-Mojeek-*`/`X-BraveSearch-*`/`X-Iron-*`/`X-Midori-*`/
+/// `X-Falkon-*`/`X-Qutebrowser-*`/`X-NetSurf-*`/`X-Lynx-*`/`X-PaleMoon-*`/
+/// `X-SeaMonkey-*`/`X-Maxthon-*`/`X-UCBrowser-*`/`X-SamsungInternet-*`/
+/// `X-HuaweiBrowser-*`/`X-MiBrowser-*` 等の
+/// ブラウザ・検索エンジン印があるか判定する (D512)。
+///
+/// `X-Chrome-*` (Chrome)、`X-Firefox-*` (Firefox)、`X-DuckDuckGo-*`
+/// (DuckDuckGo) は覧機の通知記録 — 送信側から届くこれは自称。
+/// `X-Chrome-River-*` は Chrome River (経費) 印として D489 で検出済み。
+fn has_browser_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-chrome-")
+            || l.starts_with("x-firefox-")
+            || l.starts_with("x-brave-")
+            || l.starts_with("x-opera-")
+            || l.starts_with("x-vivaldi-")
+            || l.starts_with("x-safari-")
+            || l.starts_with("x-edge-")
+            || l.starts_with("x-torbrowser-")
+            || l.starts_with("x-waterfox-")
+            || l.starts_with("x-librewolf-")
+            || l.starts_with("x-duckduckgo-")
+            || l.starts_with("x-startpage-")
+            || l.starts_with("x-ecosia-")
+            || l.starts_with("x-qwant-")
+            || l.starts_with("x-kagi-")
+            || l.starts_with("x-neeva-")
+            || l.starts_with("x-mojeek-")
+            || l.starts_with("x-bravesearch-")
+            || l.starts_with("x-iron-")
+            || l.starts_with("x-midori-")
+            || l.starts_with("x-falkon-")
+            || l.starts_with("x-qutebrowser-")
+            || l.starts_with("x-netsurf-")
+            || l.starts_with("x-lynx-")
+            || l.starts_with("x-palemoon-")
+            || l.starts_with("x-seamonkey-")
+            || l.starts_with("x-maxthon-")
+            || l.starts_with("x-ucbrowser-")
+            || l.starts_with("x-samsunginternet-")
+            || l.starts_with("x-huaweibrowser-")
+            || l.starts_with("x-mibrowser-")
     })
 }
 
@@ -9529,6 +9744,72 @@ mod tests {
         assert!(has_lowcode_marks(d1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_lowcode_marks(clean));
+    }
+
+    #[test]
+    fn scan_はAI印を検出する() {
+        let o1 = b"X-OpenAI-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(o1));
+        let a1 = b"X-Anthropic-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(a1));
+        let c1 = b"X-Cohere-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(c1));
+        let h1 = b"X-HuggingFace-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(h1));
+        let m1 = b"X-Mistral-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(m1));
+        let e1 = b"X-ElevenLabs-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(e1));
+        let p1 = b"X-Pinecone-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(p1));
+        let l1 = b"X-LangChain-Notify: x\r\n\r\nx";
+        assert!(has_ai_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ai_marks(clean));
+    }
+
+    #[test]
+    fn scan_は通信キャリア印を検出する() {
+        let d1 = b"X-Docomo-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(d1));
+        let k1 = b"X-KDDI-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(k1));
+        let s1 = b"X-SoftBank-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(s1));
+        let v1 = b"X-Verizon-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(v1));
+        let t1 = b"X-TMobile-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(t1));
+        let v2 = b"X-Vodafone-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(v2));
+        let t2 = b"X-Telstra-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(t2));
+        let r1 = b"X-Rogers-Notify: x\r\n\r\nx";
+        assert!(has_telecom_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_telecom_marks(clean));
+    }
+
+    #[test]
+    fn scan_はブラウザ検索印を検出する() {
+        let c1 = b"X-Chrome-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(c1));
+        let f1 = b"X-Firefox-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(f1));
+        let b1 = b"X-Brave-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(b1));
+        let d1 = b"X-DuckDuckGo-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(d1));
+        let s1 = b"X-Safari-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(s1));
+        let k1 = b"X-Kagi-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(k1));
+        let t1 = b"X-TorBrowser-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(t1));
+        let l1 = b"X-LibreWolf-Notify: x\r\n\r\nx";
+        assert!(has_browser_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_browser_marks(clean));
     }
 }
 
