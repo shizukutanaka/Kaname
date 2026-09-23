@@ -394,6 +394,27 @@ pub struct Envelope {
     /// 生産性・フォームサービス印があるか — サービス通知機の
     /// 発信記録を送信側が自称する兆候 (D464)。
     pub productivity_marks: bool,
+    /// `X-Rakuten-*`/`X-Mercari-*`/`X-PayPay-*`/`X-DMM-*`/
+    /// `X-Livedoor-*`/`X-Hatena-*`/`X-Cookpad-*`/`X-Recruit-*`/
+    /// `X-Wantedly-*`/`X-Lancers-*`/`X-Doorkeeper-*`/`X-AtCoder-*`/
+    /// `X-Niconico-*`/`X-Excite-*`/`X-Goo-*` 等の日本系サービス印
+    /// があるか — サービス通知機の発信記録を送信側が自称する
+    /// 兆候 (D465)。
+    pub jp_service_marks: bool,
+    /// `X-Greenhouse-*`/`X-Lever-*`/`X-BambooHR-*`/`X-ADP-*`/
+    /// `X-Gusto-*`/`X-Rippling-*`/`X-Workable-*`/`X-Personio-*`/
+    /// `X-Jobvite-*`/`X-Ashby-*`/`X-SmartRecruiters-*`/`X-UKG-*`/
+    /// `X-Deel-*`/`X-CultureAmp-*`/`X-Medallia-*` 等の HR・採用印
+    /// (第二群) があるか — HR 機の通知記録を送信側が自称する
+    /// 兆候 (D466)。
+    pub hr_marks: bool,
+    /// `X-Shopify-*`/`X-Etsy-*`/`X-Squarespace-*`/`X-Wix-*`/
+    /// `X-Webflow-*`/`X-Magento-*`/`X-WooCommerce-*`/`X-AliExpress-*`/
+    /// `X-Temu-*`/`X-SHEIN-*`/`X-Allegro-*`/`X-Bol-*`/`X-Zalando-*`/
+    /// `X-ASOS-*`/`X-Poshmark-*`/`X-StockX-*` 等の
+    /// EC・マーケットプレイス印があるか — EC 機の発信記録を
+    /// 送信側が自称する兆候 (D467)。
+    pub ecommerce_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -719,6 +740,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cloud_host_marks: has_cloud_host_marks(raw),
         observability_marks: has_observability_marks(raw),
         productivity_marks: has_productivity_marks(raw),
+        jp_service_marks: has_jp_service_marks(raw),
+        hr_marks: has_hr_marks(raw),
+        ecommerce_marks: has_ecommerce_marks(raw),
     })
 }
 
@@ -2575,6 +2599,141 @@ fn has_productivity_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-qualtrics-")
             || l.starts_with("x-formstack-")
             || l.starts_with("x-wufoo-")
+    })
+}
+
+/// `X-Rakuten-*`/`X-Mercari-*`/`X-PayPay-*`/`X-DMM-*`/`X-Livedoor-*`/
+/// `X-Hatena-*`/`X-Cookpad-*`/`X-Recruit-*`/`X-BizReach-*`/
+/// `X-Wantedly-*`/`X-Findy-*`/`X-LAPRAS-*`/`X-Lancers-*`/
+/// `X-Coconala-*`/`X-Doorkeeper-*`/`X-Peatix-*`/`X-Kakaku-*`/
+/// `X-AtCoder-*`/`X-Paiza-*`/`X-Excite-*`/`X-Goo-*`/`X-Niconico-*`/
+/// `X-Dwango-*` 等の日本系サービス印があるか判定する (D465)。
+///
+/// `X-Doorkeeper-*` (Doorkeeper イベント通知)、`X-Livedoor-*`
+/// (ライブドア) は日本系サービス通知機の発信記録 — 送信側から
+/// 届くこれは自称。
+fn has_jp_service_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rakuten-")
+            || l.starts_with("x-mercari-")
+            || l.starts_with("x-paypay-")
+            || l.starts_with("x-dmm-")
+            || l.starts_with("x-livedoor-")
+            || l.starts_with("x-hatena-")
+            || l.starts_with("x-cookpad-")
+            || l.starts_with("x-recruit-")
+            || l.starts_with("x-bizreach-")
+            || l.starts_with("x-wantedly-")
+            || l.starts_with("x-findy-")
+            || l.starts_with("x-lapras-")
+            || l.starts_with("x-lancers-")
+            || l.starts_with("x-coconala-")
+            || l.starts_with("x-doorkeeper-")
+            || l.starts_with("x-peatix-")
+            || l.starts_with("x-kakaku-")
+            || l.starts_with("x-atcoder-")
+            || l.starts_with("x-paiza-")
+            || l.starts_with("x-excite-")
+            || l.starts_with("x-goo-")
+            || l.starts_with("x-niconico-")
+            || l.starts_with("x-dwango-")
+    })
+}
+
+/// `X-Greenhouse-*`/`X-Lever-*`/`X-SmartRecruiters-*`/`X-Ashby-*`/
+/// `X-Jobvite-*`/`X-BambooHR-*`/`X-Workable-*`/`X-Recruitee-*`/
+/// `X-Teamtailor-*`/`X-Personio-*`/`X-Hibob-*`/`X-Gusto-*`/
+/// `X-Rippling-*`/`X-Deel-*`/`X-ADP-*`/`X-Paylocity-*`/`X-Paycom-*`/
+/// `X-Paychex-*`/`X-Zenefits-*`/`X-UKG-*`/`X-UltiPro-*`/
+/// `X-CultureAmp-*`/`X-Medallia-*` 等の HR・採用印 (第二群) が
+/// あるか判定する (D466)。
+///
+/// `X-Greenhouse-*` (Greenhouse ATS)、`X-Lever-*` (Lever)、
+/// `X-BambooHR-*`/`X-ADP-*` (人事・給与) は HR 機の通知記録 —
+/// 送信側から届くこれは自称。
+fn has_hr_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-greenhouse-")
+            || l.starts_with("x-lever-")
+            || l.starts_with("x-smartrecruiters-")
+            || l.starts_with("x-ashby-")
+            || l.starts_with("x-jobvite-")
+            || l.starts_with("x-bamboohr-")
+            || l.starts_with("x-workable-")
+            || l.starts_with("x-recruitee-")
+            || l.starts_with("x-teamtailor-")
+            || l.starts_with("x-personio-")
+            || l.starts_with("x-hibob-")
+            || l.starts_with("x-gusto-")
+            || l.starts_with("x-rippling-")
+            || l.starts_with("x-deel-")
+            || l.starts_with("x-adp-")
+            || l.starts_with("x-paylocity-")
+            || l.starts_with("x-paycom-")
+            || l.starts_with("x-paychex-")
+            || l.starts_with("x-zenefits-")
+            || l.starts_with("x-ukg-")
+            || l.starts_with("x-ultipro-")
+            || l.starts_with("x-cultureamp-")
+            || l.starts_with("x-medallia-")
+    })
+}
+
+/// `X-Shopify-*`/`X-Etsy-*`/`X-Squarespace-*`/`X-Wix-*`/`X-Weebly-*`/
+/// `X-Webflow-*`/`X-BigCommerce-*`/`X-Magento-*`/`X-WooCommerce-*`/
+/// `X-PrestaShop-*`/`X-OpenCart-*`/`X-Ecwid-*`/`X-AliExpress-*`/
+/// `X-Temu-*`/`X-SHEIN-*`/`X-Allegro-*`/`X-Bol-*`/`X-Cdiscount-*`/
+/// `X-ManoMano-*`/`X-Zalando-*`/`X-Otto-*`/`X-ASOS-*`/`X-Farfetch-*`/
+/// `X-Poshmark-*`/`X-Depop-*`/`X-Vinted-*`/`X-StockX-*`/`X-Grailed-*`/
+/// `X-ThredUp-*`/`X-Vestiaire-*` 等の EC・マーケットプレイス印が
+/// あるか判定する (D467)。
+///
+/// `X-Shopify-*` (Shopify)、`X-Etsy-*` (Etsy)、`X-Squarespace-*`
+/// (Squarespace) は EC 機の発信記録 — 送信側から届くこれは自称。
+fn has_ecommerce_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-shopify-")
+            || l.starts_with("x-etsy-")
+            || l.starts_with("x-squarespace-")
+            || l.starts_with("x-wix-")
+            || l.starts_with("x-weebly-")
+            || l.starts_with("x-webflow-")
+            || l.starts_with("x-bigcommerce-")
+            || l.starts_with("x-magento-")
+            || l.starts_with("x-woocommerce-")
+            || l.starts_with("x-prestashop-")
+            || l.starts_with("x-opencart-")
+            || l.starts_with("x-ecwid-")
+            || l.starts_with("x-aliexpress-")
+            || l.starts_with("x-temu-")
+            || l.starts_with("x-shein-")
+            || l.starts_with("x-allegro-")
+            || l.starts_with("x-bol-")
+            || l.starts_with("x-cdiscount-")
+            || l.starts_with("x-manomano-")
+            || l.starts_with("x-zalando-")
+            || l.starts_with("x-otto-")
+            || l.starts_with("x-asos-")
+            || l.starts_with("x-farfetch-")
+            || l.starts_with("x-poshmark-")
+            || l.starts_with("x-depop-")
+            || l.starts_with("x-vinted-")
+            || l.starts_with("x-stockx-")
+            || l.starts_with("x-grailed-")
+            || l.starts_with("x-thredup-")
+            || l.starts_with("x-vestiaire-")
     })
 }
 
@@ -5896,6 +6055,72 @@ mod tests {
         assert!(has_productivity_marks(q1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_productivity_marks(clean));
+    }
+
+    #[test]
+    fn scan_は日本系サービス印を検出する() {
+        let r1 = b"X-Rakuten-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(r1));
+        let m1 = b"X-Mercari-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(m1));
+        let p1 = b"X-PayPay-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(p1));
+        let l1 = b"X-Livedoor-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(l1));
+        let h1 = b"X-Hatena-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(h1));
+        let d1 = b"X-Doorkeeper-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(d1));
+        let a1 = b"X-AtCoder-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(a1));
+        let n1 = b"X-Niconico-Notify: x\r\n\r\nx";
+        assert!(has_jp_service_marks(n1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_jp_service_marks(clean));
+    }
+
+    #[test]
+    fn scan_はHR採用第二群印を検出する() {
+        let g1 = b"X-Greenhouse-Candidate: x\r\n\r\nx";
+        assert!(has_hr_marks(g1));
+        let l1 = b"X-Lever-Candidate: x\r\n\r\nx";
+        assert!(has_hr_marks(l1));
+        let b1 = b"X-BambooHR-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(b1));
+        let a1 = b"X-ADP-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(a1));
+        let g2 = b"X-Gusto-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(g2));
+        let r1 = b"X-Rippling-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(r1));
+        let w1 = b"X-Workable-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(w1));
+        let d1 = b"X-Deel-Notify: x\r\n\r\nx";
+        assert!(has_hr_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_hr_marks(clean));
+    }
+
+    #[test]
+    fn scan_はECマーケットプレイス印を検出する() {
+        let s1 = b"X-Shopify-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(s1));
+        let e1 = b"X-Etsy-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(e1));
+        let s2 = b"X-Squarespace-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(s2));
+        let w1 = b"X-Wix-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(w1));
+        let m1 = b"X-Magento-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(m1));
+        let a1 = b"X-AliExpress-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(a1));
+        let z1 = b"X-Zalando-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(z1));
+        let p1 = b"X-Poshmark-Order: x\r\n\r\nx";
+        assert!(has_ecommerce_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ecommerce_marks(clean));
     }
 }
 
