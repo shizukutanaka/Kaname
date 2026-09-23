@@ -514,6 +514,33 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D210: 配達済みメッセージに Bcc が残る兆候。
+    if env.bcc_header_present {
+        render_risks.push(
+            "配達済みメッセージに Bcc ヘッダが残っています — 秘匿宛先の漏洩、または手作りメッセージの兆候です"
+                .to_string(),
+        );
+    }
+    // D211: Resent-From と From のドメイン不一致 (再送なりすまし)。
+    if env.resent_domain_divergence {
+        render_risks.push(
+            "Resent-* ヘッダブロックがあり、Resent-From のドメインが From と異なります — \
+            表示差出人と実際の送信者が分離する再送なりすましの兆候です"
+                .to_string(),
+        );
+    }
+    // D212: HTML 本文のアクティブ埋め込み (iframe/object 等)。
+    if env
+        .html_body
+        .as_ref()
+        .is_some_and(|h| kaname_render::has_active_embed(h.as_str()))
+    {
+        render_risks.push(
+            "HTML 本文に iframe/object/embed 等のアクティブ埋め込みタグがあります — \
+            外部コンテンツのフレーム内ロード・フィッシングフレームの兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

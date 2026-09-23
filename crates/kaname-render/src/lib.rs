@@ -96,6 +96,14 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// 配達済みメッセージに `Bcc:` ヘッダが残っているか — RFC 5322 は
+    /// MUA が送信時に Bcc を除去することを要求するため、残存は
+    /// 秘匿宛先の漏洩または手作りメッセージの兆候 (D210)。
+    pub bcc_header_present: bool,
+    /// `Resent-*` ヘッダブロックが存在し、かつ Resent-From のドメインが
+    /// From ドメインと異なるか — 表示上は元の差出人が残り実際の
+    /// 送信者が別ドメインになる再送なりすましの兆候 (D211)。
+    pub resent_domain_divergence: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +338,22 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D210: 配達済みメッセージに Bcc が残る (MUA が除去するはずの
+    // 秘匿宛先の漏洩、または手作りメッセージ)。
+    let bcc_header_present = top_level_header_present(raw, "bcc");
+
+    // D211: Resent-* ブロック — 元の差出人表示のまま実際の送信者を
+    // 別ドメインにできる再送なりすまし。Resent-From が From と
+    // ドメイン不一致なら兆候。
+    let resent_domain_divergence = top_level_header_present(raw, "resent-from")
+        && top_level_header_domain(raw, "resent-from")
+            .zip(from.first().map(|a| a.addr.domain.clone()))
+            .is_some_and(|(resent_dom, from_dom)| {
+                !resent_dom.is_empty()
+                    && !resent_dom.eq_ignore_ascii_case(&from_dom)
+                    && !domains_share_registrable(&resent_dom, &from_dom)
+            });
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +371,82 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        bcc_header_present,
+        resent_domain_divergence,
     })
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) に指定ヘッダが
+/// 存在するか判定する (D210)。
+fn top_level_header_present(raw: &[u8], name: &str) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        if line.to_ascii_lowercase().starts_with(&prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+/// トップレベルヘッダからアドレスドメインを抽出する (D211)。
+/// `<addr>` 表示形と裸アドレスの両方に対応。値は folding 無視の近似。
+fn top_level_header_domain(raw: &[u8], name: &str) -> Option<String> {
+    let text = String::from_utf8_lossy(raw);
+    let prefix = format!("{}:", name.to_ascii_lowercase());
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with(&prefix) {
+            let v = line[prefix.len()..].trim();
+            // <addr> があれば中身を、なければ行全体から最後の @ 以降を取る
+            let inner = v
+                .split('<')
+                .nth(1)
+                .map_or(v, |rest| rest.split('>').next().unwrap_or(rest));
+            let at = inner.rfind('@')?;
+            let dom = inner[at + 1..]
+                .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-')
+                .to_string();
+            return if dom.is_empty() { None } else { Some(dom) };
+        }
+    }
+    None
+}
+
+/// HTML 本文に `<iframe>`/`<object>`/`<embed>`/`<applet>` 等の
+/// アクティブ埋め込みタグが含まれるか判定 (D212)。
+/// `<img>` のリモート読み込み (D189) より強い、外部コンテンツの
+/// フレーム内ロード・プラグイン実行の兆候 — フィッシングフレームや
+/// clickjacking に使われる。サニタイザが除去しても兆候として報告する。
+#[must_use]
+pub fn has_active_embed(html: &str) -> bool {
+    const TAGS: &[&str] = &["<iframe", "<object", "<embed", "<applet"];
+    let lower = html.to_ascii_lowercase();
+    TAGS.iter().any(|t| lower.contains(t))
+}
+
+/// 2 ドメインが同じ登録ドメインに属するかの簡易判定 (D211)。
+/// co.jp 系は末尾 3 ラベル、それ以外は末尾 2 ラベルで比較。
+fn domains_share_registrable(a: &str, b: &str) -> bool {
+    fn registrable(d: &str) -> String {
+        let labels: Vec<&str> = d.split('.').collect();
+        let n = labels.len();
+        // co.jp / or.jp / ne.jp / ac.jp / go.jp 等の 2 階層 ccTLD は末尾 3 ラベル
+        let second = labels.get(n.wrapping_sub(2)).copied().unwrap_or("");
+        let take = if n >= 3 && matches!(second, "co" | "or" | "ne" | "ac" | "go") {
+            3
+        } else {
+            2
+        };
+        labels[n.saturating_sub(take)..].join(".")
+    }
+    registrable(&a.to_ascii_lowercase()) == registrable(&b.to_ascii_lowercase())
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1950,6 +2049,67 @@ mod tests {
             result.addr.local, "\"ceo@trusted.com\"",
             "quoted local part は @ の前の部分全体であるべき"
         );
+    }
+
+    /// D210: 配達済みメッセージの Bcc ヘッダ検出。
+    #[test]
+    fn parse_はbcc残存を検出する() {
+        let raw = b"From: alice@example.com\r\n\
+                    Bcc: hidden@example.com\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.bcc_header_present);
+        let raw2 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.bcc_header_present);
+    }
+
+    /// D211: Resent-From と From のドメイン不一致検出。
+    #[test]
+    fn parse_はresent不一致を検出する() {
+        let raw = b"Resent-From: attacker <attacker@evil.example>\r\n\
+                    From: CEO <ceo@corp.example>\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(
+            env.resent_domain_divergence,
+            "Resent-From が From と別ドメインなら兆候"
+        );
+        // Resent-From が From と同じ登録ドメイン → 検出しない
+        let raw2 = b"Resent-From: staff@mail.corp.example\r\n\
+                     From: ceo@corp.example\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.resent_domain_divergence);
+        // Resent-* が無い通常メール
+        let raw3 = b"From: alice@example.com\r\nSubject: x\r\n\r\nbody";
+        let env3 = parse(raw3).expect("parse should succeed");
+        assert!(!env3.resent_domain_divergence);
+    }
+
+    /// D212: アクティブ埋め込みタグの検出。
+    #[test]
+    fn active_embed_detected() {
+        assert!(has_active_embed(
+            r#"<html><body><iframe src="https://evil.example"></iframe></body></html>"#
+        ));
+        assert!(has_active_embed(
+            r#"<div><object data="x.swf"></object></div>"#
+        ));
+        assert!(has_active_embed(r#"<embed src="x.pdf">"#));
+        // 大文字・属性ありも検出
+        assert!(has_active_embed(r#"<IFRAME SRC="x"></IFRAME>"#));
+        // 通常 HTML は検出しない
+        assert!(!has_active_embed(
+            r#"<p>hello <a href="https://a.b">link</a></p>"#
+        ));
+        assert!(!has_active_embed(r#"<img src="cid:a">"#));
     }
 
     #[test]

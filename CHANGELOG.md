@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D210: 配達済みメッセージに残る `Bcc:` ヘッダを検出
+
+- RFC 5322 は MUA が送信時に Bcc を除去することを要求 — 配達済みメッセージに Bcc が残っていれば秘匿宛先の受信者への漏洩、または配送経路を経ない手作りメッセージの兆候になるが未検査だった
+- 対処: `top_level_header_present` でトップレベルヘッダを走査 → `bcc_header_present` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D211: Resent-From と From のドメイン不一致 (再送なりすまし) を検出
+
+- RFC 5322 §3.6.6 の Resent-* ブロックは「転送・再送時に送信者を残す」仕組みだが、クライアントが元の From を表示する実装と再送者を表示する実装で差が出る — `Resent-From: attacker@evil.example` + `From: ceo@corp.example` で表示上は元の差出人のまま実送信者が別ドメインになる parser differential 型なりすまし
+- 対処: `top_level_header_domain` で Resent-From を抽出し From ドメインと登録ドメイン比較 → `resent_domain_divergence` → `render_risks` 報告
+- テスト +1 件
+
+### Security — D212: HTML 本文のアクティブ埋め込みタグ (iframe/object/embed/applet) を検出
+
+- `<img>` のリモート読み込み (D189) より強い、外部コンテンツのフレーム内ロード・プラグイン実行はフィッシングフレーム・clickjacking の常套手段 — サニタイザが除去しても兆候の存在自体を見ていなかった (D182 のフォーム検出と同型の欠落)
+- 対処: `has_active_embed` で 4 タグを検出 → `render_risks` に兆候報告
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)
