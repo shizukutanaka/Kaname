@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D198: 添付ファイル名の末尾ドット/空白による拡張子曖昧化を検出
+
+- Win32 は保存時に末尾の `.` と空白を除去するため `evil.exe.` / `evil.exe ` は実際に `evil.exe` として保存・実行される (Microsoft 文書化の Win32 naming convention)。従来の `rsplit('.')` 拡張子抽出は末尾 `.` で `exe` 判定を素通りしていた
+- 対処: `is_dangerous_windows_attachment` の拡張子抽出前に末尾 `.`/空白を正規化除去、`has_trailing_dot_space` で除去を要したこと自体を兆候として `risks` に併記 (正規化後に危険と判定される場合のみ — 安全な拡張子での誤検出を回避)
+- テスト +2 件
+
+### Security — D199: `message/partial` 断片化配送を検出
+
+- RFC 2046 の `message/partial` は 1 通のメッセージを複数メールに分割配送する仕組み — 各断片の本文には「別のメールの一部」しか含まれず、検査対象の完全な content を断片ごとに持たないため内容検査を素通りする配送形 (Postfix/MDaemon 系設定例で content filter 回避として明記される古典的経路)
+- 対処: `has_fragmented_message_declaration` でトップレベル Content-Type を走査 (継続行含む) → `is_message_partial` → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D200: quoted local part の `@` 埋め込みによる表示偽装を検出
+
+- `"ceo@trusted.com"@attacker.com` は RFC 5321 で有効だが、UI が内側の `@` 以降 (`trusted.com`) をドメインのように見せてしまう — 受信者が正規ドメインからのメールと誤認する表示偽装
+- 対処: `local_part_has_at` で From アドレスのローカル部に `@` が含まれるか判定 (正規アドレスは含まない) → `from_local_has_at` → `render_risks` に兆候報告
+- テスト +3 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

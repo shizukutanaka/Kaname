@@ -96,6 +96,14 @@ pub struct Envelope {
     /// DKIM-Signature ヘッダーの生値 (`l=` タグ乱用・リプレイ検出に使用)。
     /// 複数署名がある場合は先頭のみ保持する。
     pub dkim_signature: Option<String>,
+    /// メッセージ全体が `message/partial` (RFC 2046 断片化配送) として
+    /// 宣言されているか。各断片の本文には検査対象の完全な content が
+    /// 含まれないため、内容検査を素通りする配送形の兆候 (D199)。
+    pub is_message_partial: bool,
+    /// From のいずれかのアドレスのローカル部に `@` が埋め込まれているか
+    /// (quoted local part — `"ceo@corp.example"@evil.example`)。
+    /// UI が内側の `@` 以降をドメインのように見せてしまう表示偽装の兆候 (D200)。
+    pub from_local_has_at: bool,
 }
 
 /// An RFC 5322 address.
@@ -330,6 +338,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // Authentication-Results ヘッダーをパース
     let auth_results = parse_auth_results(&msg);
 
+    // D199: トップレベルの Content-Type が `message/partial` — 本文を
+    // 複数メールに分割する断片化配送 (RFC 2046)。各断片の本文には
+    // 検査対象の完全な content が含まれないため内容検査を素通りする。
+    let is_message_partial = has_fragmented_message_declaration(raw);
+    // D200: quoted local part に `@` が埋め込まれた From アドレス —
+    // `"ceo@corp.example"@evil.example` は内側をドメインに見せる表示偽装。
+    let from_local_has_at = from.iter().any(|a| local_part_has_at(a));
+
     Ok(Envelope {
         message_id,
         from,
@@ -347,7 +363,53 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         in_reply_to,
         references,
         dkim_signature,
+        is_message_partial,
+        from_local_has_at,
     })
+}
+
+/// トップレベルヘッダブロック (最初の空行まで) で Content-Type が
+/// `message/partial` として宣言されているか判定する (D199)。
+///
+/// `message/partial` (RFC 2046) は 1 通のメッセージを複数メールに
+/// 分割して配送する仕組み。各断片の本文には「別のメールの一部」しか
+/// 含まれず、内容検査は断片ごとに完全な content を持たないため
+/// 検査を素通りする配送形 — Postfix/MDaemon の設定例でも
+/// 「message/partial を使うと content filter を回避できる」ことが
+/// 明記されている古典的な回避経路。
+#[must_use]
+pub fn has_fragmented_message_declaration(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let mut in_content_type = false;
+    for line in text.lines().take(4096) {
+        if line.trim().is_empty() {
+            break;
+        }
+        let lower = line.to_ascii_lowercase();
+        if line.starts_with(' ') || line.starts_with('\t') {
+            // 継続行 (unfolding) — 前のヘッダの値の一部
+            if in_content_type && lower.contains("message/partial") {
+                return true;
+            }
+            continue;
+        }
+        in_content_type = lower.trim_start().starts_with("content-type:");
+        if in_content_type && lower.contains("message/partial") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Address` のローカル部に `@` が埋め込まれているか判定する (D200)。
+///
+/// quoted local part (`"ceo@corp.example"@evil.example`) は RFC 5321 で
+/// 有効だが、内側に別アドレスを埋め込むことで UI が `ceo@corp.example` を
+/// ドメインのように見せてしまう表示偽装に使われる。正規のアドレスは
+/// local part に `@` を含まないため、存在自体が兆候。
+#[must_use]
+pub fn local_part_has_at(addr: &Address) -> bool {
+    addr.addr.local.contains('@')
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -1952,6 +2014,87 @@ mod tests {
         );
     }
 
+    /// D199: message/partial 宣言の検出 (トップレベルヘッダ)。
+    #[test]
+    fn has_fragmented_message_declaration_検出() {
+        // トップレベル Content-Type: message/partial
+        assert!(has_fragmented_message_declaration(
+            b"Content-Type: message/partial; id=\"<x@a>\"; number=1\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // 継続行に message/partial がある場合
+        assert!(has_fragmented_message_declaration(
+            b"Content-Type:\r\n message/partial; id=\"<x@a>\"\r\n\r\nbody"
+        ));
+        // 通常のメッセージは検出しない
+        assert!(!has_fragmented_message_declaration(
+            b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // multipart でも partial でなければ検出しない
+        assert!(!has_fragmented_message_declaration(
+            b"Content-Type: multipart/mixed; boundary=\"x\"\r\n\r\n--x\r\n"
+        ));
+    }
+
+    /// D200: local part に @ が埋め込まれたアドレスの検出。
+    #[test]
+    fn local_part_has_at_検出() {
+        // quoted local part `"ceo@trusted.com"@attacker.com` → local に @
+        let addr = Address {
+            display_name: None,
+            addr: EmailAddr {
+                local: "\"ceo@trusted.com\"".to_string(),
+                domain: "attacker.com".to_string(),
+            },
+        };
+        assert!(local_part_has_at(&addr));
+        // 通常のアドレスは local に @ を含まない
+        let normal = Address {
+            display_name: None,
+            addr: EmailAddr {
+                local: "alice".to_string(),
+                domain: "example.com".to_string(),
+            },
+        };
+        assert!(!local_part_has_at(&normal));
+    }
+
+    /// D200: parse() で quoted local @ が Envelope に伝播すること。
+    #[test]
+    fn parse_はquoted_local_atを検出する() {
+        let raw = b"From: \"ceo@trusted.com\"@attacker.com\r\n\
+                    To: bob@example.com\r\n\
+                    Subject: x\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.from_local_has_at, "quoted local @ が検出されるべき");
+        // 通常の From は検出しない
+        let raw2 = b"From: alice@example.com\r\n\
+                     Subject: x\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.from_local_has_at);
+    }
+
+    /// D199: parse() で message/partial が Envelope に伝播すること。
+    #[test]
+    fn parse_はmessage_partialを検出する() {
+        let raw = b"Content-Type: message/partial; id=\"<x@a>\"; number=1\r\n\
+                    From: a@b.com\r\n\
+                    Subject: part 1\r\n\
+                    \r\n\
+                    fragment";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.is_message_partial, "message/partial が検出されるべき");
+        let raw2 = b"Content-Type: text/plain\r\n\
+                     From: a@b.com\r\n\
+                     \r\n\
+                     body";
+        let env2 = parse(raw2).expect("parse should succeed");
+        assert!(!env2.is_message_partial);
+    }
+
     #[test]
     fn addr_normal_email_splits_correctly() {
         let addr = mail_parser::Addr {
@@ -2528,6 +2671,17 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     if magic_bytes::is_dangerous_windows_attachment(filename) {
         risks.push(format!("危険な拡張子です: {filename}"));
         is_dangerous = true;
+    }
+    // D198: 末尾 `.`/空白による拡張子曖昧化 — Win32 が保存時に除去する
+    // ため `evil.exe.` は実際に `evil.exe` として実行される。安全な
+    // 拡張子の場合の誤検出を避けるため、正規化後に危険と判定される
+    // 場合のみ併記する。
+    if magic_bytes::has_trailing_dot_space(filename)
+        && magic_bytes::is_dangerous_windows_attachment(filename)
+    {
+        risks.push(format!(
+            "末尾の `.`/空白が保存時に除去され拡張子を曖昧化します: {filename}"
+        ));
     }
     if magic_bytes::has_bidi_override_filename(filename) {
         risks.push(

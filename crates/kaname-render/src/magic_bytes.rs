@@ -124,7 +124,11 @@ pub fn detect_mime_from_magic(bytes: &[u8]) -> Option<&'static str> {
 /// AgentTesla 各解析で報告される代表的な回避ベクトル)。
 #[must_use]
 pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
-    let lower = filename.to_ascii_lowercase();
+    // Win32 は保存時に末尾の `.` と空白を除去するため、`evil.exe.` や
+    // `evil.exe ` は実際に `evil.exe` として保存・実行される。
+    // 拡張子抽出の前に除去しないと末尾ピリオドで `.exe` 判定を素通りする (D198)。
+    let normalized = filename.trim_end_matches([' ', '.']);
+    let lower = normalized.to_ascii_lowercase();
     let ext = lower.rsplit('.').next().unwrap_or("");
     matches!(
         ext,
@@ -161,6 +165,21 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
     )
+}
+
+/// ファイル名の末尾に `.` または空白が付いているか判定する。
+///
+/// Win32 は保存時に末尾の `.` と空白を除去するため、`evil.exe.` /
+/// `evil.exe ` のようなファイル名は実際に `evil.exe` として
+/// 保存・実行される — 表示は「`evil.exe.`」で拡張子の末尾が
+/// 「`exe.`」のように見え、静的な拡張子判定を素通りさせる
+/// 拡張子曖昧化 (Microsoft 文書化の Win32 naming convention)。
+/// `is_dangerous_windows_attachment` の拡張子抽出はこの除去を
+/// 内部で行うが、「除去を要したこと自体」が意図的な曖昧化の
+/// 兆候として報告価値を持つため公開する (D198)。
+#[must_use]
+pub fn has_trailing_dot_space(filename: &str) -> bool {
+    filename.trim_end_matches([' ', '.']).len() != filename.len()
 }
 
 /// ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれるか判定する。
@@ -604,5 +623,27 @@ mod tests {
         assert!(!has_bidi_override_filename("invoice.pdf"));
         assert!(!has_bidi_override_filename("請求書_2025.pdf"));
         assert!(!has_bidi_override_filename("no ext"));
+    }
+
+    #[test]
+    fn trailing_dot_space_extension_obfuscation_is_dangerous() {
+        // Win32 は保存時に末尾 `.`/空白を除去するため `evil.exe.` は
+        // 実際に `evil.exe` として実行される — 除去後の拡張子で判定すべき。
+        assert!(is_dangerous_windows_attachment("evil.exe."));
+        assert!(is_dangerous_windows_attachment("evil.exe "));
+        assert!(is_dangerous_windows_attachment("evil.exe.. "));
+        assert!(is_dangerous_windows_attachment("evil.scr. "));
+        // 末尾除去で安全になるのは既に危険な拡張子がある場合のみ
+        assert!(!is_dangerous_windows_attachment("notes.txt "));
+        assert!(!is_dangerous_windows_attachment("report. "));
+    }
+
+    #[test]
+    fn has_trailing_dot_space_detected() {
+        assert!(has_trailing_dot_space("evil.exe."));
+        assert!(has_trailing_dot_space("evil.exe "));
+        assert!(has_trailing_dot_space("evil.exe.."));
+        assert!(!has_trailing_dot_space("evil.exe"));
+        assert!(!has_trailing_dot_space("notes.txt"));
     }
 }

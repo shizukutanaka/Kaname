@@ -514,6 +514,20 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D199: message/partial 断片化配送の兆候。
+    if env.is_message_partial {
+        render_risks.push(
+            "message/partial 断片化配送 — 本文を複数メールに分割し内容検査を回避する配送形です"
+                .to_string(),
+        );
+    }
+    // D200: quoted local part の @ 埋め込みによる表示偽装の兆候。
+    if env.from_local_has_at {
+        render_risks.push(
+            "差出人アドレスのローカル部に @ が埋め込まれています — 内側アドレスをドメインのように見せる表示偽装の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1622,6 +1636,44 @@ mod tests {
                 .any(|s| s.contains("複数アドレス")),
             "通常メールで複数アドレス警告は出ないべき: {:?}",
             r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D199/D200: message/partial 宣言と quoted local @ が兆候になる。
+    #[tokio::test]
+    async fn analyze_raw_email_は断片化宣言とquoted_local_atを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        // message/partial
+        let eml = b"Content-Type: message/partial; id=\"<x@a>\"; number=1\r\n\
+            From: a@b.com\r\n\
+            To: you@example.com\r\n\
+            Subject: part 1\r\n\
+            \r\n\
+            fragment";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks
+                .iter()
+                .any(|s| s.contains("message/partial") || s.contains("断片化")),
+            "message/partial が兆候になるべき: {:?}",
+            r.render_risks
+        );
+        // quoted local @
+        let eml2 = b"From: \"ceo@trusted.com\"@attacker.com\r\n\
+            To: you@example.com\r\n\
+            Subject: Hi\r\n\
+            Content-Type: text/plain\r\n\
+            \r\n\
+            hello";
+        let r2 = analyze_raw_email(eml2).await?;
+        assert!(
+            r2.render_risks
+                .iter()
+                .any(|s| s.contains("ローカル部") || s.contains("表示偽装")),
+            "quoted local @ が兆候になるべき: {:?}",
+            r2.render_risks
         );
         Ok(())
     }
