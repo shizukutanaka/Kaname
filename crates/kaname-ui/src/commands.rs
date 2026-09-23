@@ -676,6 +676,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D414: バルク配信印自称
+    if env.bulk_marks {
+        render_risks.push(
+            "X-MSFBL/X-Campaign-*/X-Newsletter-* 等 — バルク配信基盤の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D415: フィルタ印 (第四群) 自称
+    if env.filter4_marks {
+        render_risks.push(
+            "X-SmartFilter-*/X-ClearMail-*/X-MailControl-* 等 — フィルタ機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D416: 断片・継続印自称
+    if env.frag_marks {
+        render_risks.push(
+            "X-Prev-*/X-Fragment-*/X-Partial-* 等 — 断片化機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

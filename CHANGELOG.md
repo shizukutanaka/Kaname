@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D414: `X-MSFBL`/`X-Campaign-*`/`X-Mailing-*`/`X-Newsletter-*`/`X-Bulk-Mailer`/`X-Mailout-*` 等のバルク配信印自称が未検査
+
+- バルク配信基盤のキャンペーン記録は基盤が残す — 送信側から届くのは「この基盤から発送した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_bulk_marks` 新設 → `Envelope.bulk_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D415: `X-SmartFilter-*`/`X-ClearMail-*`/`X-NetQ-*`/`X-Intego-*`/`X-MailControl-*`/`X-SecLil-*` 等のフィルタ印自称 (第四群) が未検査
+
+- ニッチなフィルタ機の記録は機器が残す — 送信側から届くのは「このフィルタを通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_filter4_marks` 新設 → `Envelope.filter4_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D416: `X-Prev-*`/`X-Next-*`/`X-Continuation-*`/`X-Fragment-*`/`X-Partial-*`/`X-Segment-*` 等の断片・継続印自称が未検査
+
+- 断片化・分割の記録は分割機・再構築機が残す — 送信側から届くのは「断片を積んだ」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_frag_marks` 新設 → `Envelope.frag_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
 ### Security — D408: `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/`X-Abaca-*` 等のアプライアンス印自称 (第三群) が未検査
 
 - 商用メール機器のブランド印は機器が記す — 送信側から届くのは「この機器を通った」体裁を内容側が主張する自称だが未検査だった

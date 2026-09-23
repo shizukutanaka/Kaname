@@ -166,6 +166,18 @@ pub struct Envelope {
     /// `X-Digest-*` 等の整合性・ハッシュ印があるか — 検査機の
     /// 記録を送信側が自称する兆候 (D410)。
     pub hash_marks: bool,
+    /// `X-MSFBL`/`X-Campaign-*`/`X-Mailing-*`/`X-Newsletter-*`/
+    /// `X-Bulk-Mailer`/`X-Mailout-*` 等のバルク配信印があるか —
+    /// 配信基盤の記録を送信側が自称する兆候 (D414)。
+    pub bulk_marks: bool,
+    /// `X-SmartFilter-*`/`X-ClearMail-*`/`X-NetQ-*`/`X-Intego-*`/
+    /// `X-MailControl-*`/`X-SecLil-*` 等のフィルタ印 (第四群) が
+    /// あるか — 検査機の記録を送信側が自称する兆候 (D415)。
+    pub filter4_marks: bool,
+    /// `X-Prev-*`/`X-Next-*`/`X-Continuation-*`/`X-Fragment-*`/
+    /// `X-Partial-*`/`X-Segment-*` 等の断片・継続印があるか —
+    /// 断片化機の記録を送信側が自称する兆候 (D416)。
+    pub frag_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -447,6 +459,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         appliance3_marks: has_appliance3_marks(raw),
         finalrcpt_marks: has_finalrcpt_marks(raw),
         hash_marks: has_hash_marks(raw),
+        bulk_marks: has_bulk_marks(raw),
+        filter4_marks: has_filter4_marks(raw),
+        frag_marks: has_frag_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -781,6 +796,69 @@ fn has_hash_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-sha1-")
             || l.starts_with("x-sha256-")
             || l.starts_with("x-digest-")
+    })
+}
+
+/// `X-MSFBL`/`X-Campaign-*`/`X-Mailing-*`/`X-Newsletter-*`/
+/// `X-Bulk-Mailer`/`X-Mailout-*` 等のバルク配信印があるか
+/// 判定する (D414)。
+///
+/// バルク配信基盤のキャンペーン記録は基盤が残す — 送信側から届く
+/// これは「この基盤から発送した」体裁を内容側が主張する自称。
+fn has_bulk_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-msfbl")
+            || l.starts_with("x-campaign-")
+            || l.starts_with("x-mailing-")
+            || l.starts_with("x-newsletter-")
+            || l.starts_with("x-bulk-mailer")
+            || l.starts_with("x-mailout-")
+    })
+}
+
+/// `X-SmartFilter-*`/`X-ClearMail-*`/`X-NetQ-*`/`X-Intego-*`/
+/// `X-MailControl-*`/`X-SecLil-*` 等のフィルタ印 (第四群) が
+/// あるか判定する (D415)。
+///
+/// ニッチなフィルタ機の記録は機器が残す — 送信側から届くこれは
+/// 「このフィルタを通った」体裁を内容側が主張する自称。
+fn has_filter4_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-smartfilter-")
+            || l.starts_with("x-clearmail-")
+            || l.starts_with("x-netq-")
+            || l.starts_with("x-intego-")
+            || l.starts_with("x-mailcontrol-")
+            || l.starts_with("x-seclil-")
+    })
+}
+
+/// `X-Prev-*`/`X-Next-*`/`X-Continuation-*`/`X-Fragment-*`/
+/// `X-Partial-*`/`X-Segment-*` 等の断片・継続印があるか
+/// 判定する (D416)。
+///
+/// 断片化・分割の記録は分割機・再構築機が残す — 送信側から届く
+/// これは「断片を積んだ」体裁を内容側が主張する自称。
+fn has_frag_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-prev-")
+            || l.starts_with("x-next-")
+            || l.starts_with("x-continuation-")
+            || l.starts_with("x-fragment-")
+            || l.starts_with("x-partial-")
+            || l.starts_with("x-segment-")
     })
 }
 
@@ -3203,6 +3281,60 @@ mod tests {
         assert!(has_hash_marks(h6));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_hash_marks(clean));
+    }
+
+    #[test]
+    fn scan_はバルク配信印を検出する() {
+        let m1 = b"X-MSFBL: 1\r\n\r\nx";
+        assert!(has_bulk_marks(m1));
+        let c1 = b"X-Campaign-ID: c\r\n\r\nx";
+        assert!(has_bulk_marks(c1));
+        let m2 = b"X-Mailing-List: m\r\n\r\nx";
+        assert!(has_bulk_marks(m2));
+        let n1 = b"X-Newsletter-ID: n\r\n\r\nx";
+        assert!(has_bulk_marks(n1));
+        let b1 = b"X-Bulk-Mailer: b\r\n\r\nx";
+        assert!(has_bulk_marks(b1));
+        let m3 = b"X-Mailout-ID: m\r\n\r\nx";
+        assert!(has_bulk_marks(m3));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bulk_marks(clean));
+    }
+
+    #[test]
+    fn scan_はフィルタ印4を検出する() {
+        let sf = b"X-SmartFilter-Result: s\r\n\r\nx";
+        assert!(has_filter4_marks(sf));
+        let cm = b"X-ClearMail-Status: c\r\n\r\nx";
+        assert!(has_filter4_marks(cm));
+        let nq = b"X-NetQ-Score: n\r\n\r\nx";
+        assert!(has_filter4_marks(nq));
+        let ig = b"X-Intego-Result: i\r\n\r\nx";
+        assert!(has_filter4_marks(ig));
+        let mc = b"X-MailControl-ID: m\r\n\r\nx";
+        assert!(has_filter4_marks(mc));
+        let sl = b"X-SecLil-Status: s\r\n\r\nx";
+        assert!(has_filter4_marks(sl));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_filter4_marks(clean));
+    }
+
+    #[test]
+    fn scan_は断片印を検出する() {
+        let p1 = b"X-Prev-Part: p\r\n\r\nx";
+        assert!(has_frag_marks(p1));
+        let n1 = b"X-Next-Part: n\r\n\r\nx";
+        assert!(has_frag_marks(n1));
+        let c1 = b"X-Continuation-Of: c\r\n\r\nx";
+        assert!(has_frag_marks(c1));
+        let f1 = b"X-Fragment-ID: f\r\n\r\nx";
+        assert!(has_frag_marks(f1));
+        let p2 = b"X-Partial-Seq: p\r\n\r\nx";
+        assert!(has_frag_marks(p2));
+        let s1 = b"X-Segment-No: s\r\n\r\nx";
+        assert!(has_frag_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_frag_marks(clean));
     }
 }
 
