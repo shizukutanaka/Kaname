@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D447: `X-ML-*`/`X-MLName:`/`X-Mail-Count:`/`X-Mailman-*`/`X-List-*`/`X-Listserv-*`/`X-Sympa-*`/`X-Majordomo-*`/`X-eGroups-*`/`X-Topica-*` 等のリスト配信・ML 印自称が未検査
+
+- **問題**: `X-MLName`/`X-Mail-Count`/`X-MLServer`/`X-ML-Id` (fml)、`X-Mailman-Version`/`X-Listprocessor-Version`/`X-List-Administrivia` (レジストリ掲載)、`X-eGroups-Approved-By`/`X-YahooGroup-*`/`X-Topica-*`/`X-Freelists-*`/`X-Groupsio-*`/`X-SmartList-*`/`X-Listar-*`/`X-Ecartis-*`/`X-CiviCRM-*` 等の ML・リスト配送記録は送信側が書くことは自称。
+- **修正**: `Envelope` に `mailinglist_marks` + `has_mailinglist_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 配送の記録は ML が記す — リスト印の自署を問え。
+
+### Security — D448: `X-GitHub-*`/`X-GitLab-*`/`X-Gitea-*`/`X-Jenkins-*`/`X-PayPal-*`/`X-DocuSign-*`/`X-Slack-*`/`X-Stripe-*` 等の SaaS 通知印自称が未検査
+
+- **問題**: `X-GitHub-Reason`/`X-GitHub-Sender`/`X-GitHub-Recipient`/`X-GitHub-Recipient-Address` (GitHub 公式文書)、`X-GitLab-NotificationReason`/`X-GitLab-Project` (GitLab)、`X-Gitea-*` (Gitea ソース)、`X-PayPal-*`/`X-DocuSign-*`/`X-Slack-*`/`X-Stripe-*`/`X-eBay-*`/`X-Amazon-*`/`X-Atlassian-*`/`X-Jenkins-*`/`X-Travis-*`/`X-CircleCI-*`/`X-Vercel-*`/`X-Netlify-*`/`X-Zoom-*`/`X-Notion-*`/`X-Figma-*`/`X-Calendly-*`/`X-Loom-*`/`X-Airtable-*`/`X-Dropbox-*`/`X-Box-*`/`X-Sentry-*` 等の SaaS 通知記録は送信側が書くことは自称。
+- **修正**: `Envelope` に `saas_notify_marks` + `has_saas_notify_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — SaaS 印の自署を問え。
+
+### Security — D449: `X-Postini-*`/`X-MXLogic-*`/`X-PMX-*`/`X-WatchGuard-*`/`X-CTCH-*`/`X-FireEye-*`/`X-Agari-*`/`X-Avast-*`/`X-ESET-*`/`X-Avira-*` 等のセキュリティアプライアンス印 (第四群) 自称が未検査
+
+- **問題**: `X-Postini-Spam` (Google Postini)、`X-MXLogic-*` (MX Logic)、`X-PMX-*` (Sophos PureMessage)、`X-CTCH-*`/`X-Commtouch-*` (Cyren)、`X-WatchGuard-*`/`X-SNCR-*`/`X-SonicWall-*`/`X-SpamSoap-*`/`X-iScan-*`/`X-GMS-*`/`X-Tumbleweed-*`/`X-NetSTAR-*`/`X-FireEye-*`/`X-Agari-*`/`X-Area1-*`/`X-Avast-*`/`X-Avira-*`/`X-ESET-*`/`X-NINJA-*`/`X-MWG-*`/`X-Websense-*`/`X-Forcepoint-*`/`X-Skyhigh-*`/`X-AntiSpamEurope-*`/`X-Hornet-*` は製品の検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `appliance4_marks` + `has_appliance4_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 検査の記録は検査機が記す — アプライアンス印の自署を問え。
+
+
 ### Security — D444: `X-Env-*`/`X-Envelope-*`/`X-MailFrom`/`X-Errors-To`/`X-Bounces-*`/`X-VERP-*`/`X-PRVS-*`/`X-Subaddress-*`/`X-Redirect-*`/`X-Forwarding-*` 等のエンベロープ配送記録印自称が未検査
 
 - **問題**: `X-Env-From`/`X-Envelope-From`/`X-MailFrom`/`X-Errors-To`/`X-Original-Sender` (カスタムヘッダレジストリ掲載)、`X-Bounces-*`/`X-VERP-*`/`X-PRVS-*`/`X-Subaddress-*`/`X-Tag-*`/`X-NF-*`/`X-Redirect-*`/`X-Forwarding-*` は配送エージェントのエンベロープ記録 — 送信側が書くことは自称。

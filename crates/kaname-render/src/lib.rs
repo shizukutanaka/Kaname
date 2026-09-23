@@ -282,6 +282,24 @@ pub struct Envelope {
     /// 等の商用ゲートウェイ・フィルタ製品印 (第三群) があるか —
     /// 製品の検査記録を送信側が自称する兆候 (D446)。
     pub gateway_product_marks: bool,
+    /// `X-ML-*`/`X-MLName:`/`X-Mail-Count:`/`X-MLServer:`/
+    /// `X-Mailman-*`/`X-List-*`/`X-Listserv-*`/`X-Sympa-*`/
+    /// `X-Majordomo-*`/`X-eGroups-*`/`X-Topica-*` 等の
+    /// リスト配信・ML 印があるか — ML/リスト配送機の記録を
+    /// 送信側が自称する兆候 (D447)。
+    pub mailinglist_marks: bool,
+    /// `X-GitHub-*`/`X-GitLab-*`/`X-Gitea-*`/`X-Jenkins-*`/
+    /// `X-Travis-*`/`X-CircleCI-*`/`X-PayPal-*`/`X-DocuSign-*`/
+    /// `X-Slack-*`/`X-Zoom-*`/`X-Notion-*`/`X-Figma-*`/`X-Stripe-*`
+    /// 等の SaaS 通知印があるか — SaaS 通知システムの発信記録を
+    /// 送信側が自称する兆候 (D448)。
+    pub saas_notify_marks: bool,
+    /// `X-Postini-*`/`X-MXLogic-*`/`X-PMX-*`/`X-WatchGuard-*`/
+    /// `X-SpamSoap-*`/`X-Commtouch-*`/`X-CTCH-*`/`X-FireEye-*`/
+    /// `X-Agari-*`/`X-Avast-*`/`X-ESET-*`/`X-Avira-*`/`X-Tumbleweed-*`
+    /// 等のセキュリティアプライアンス印 (第四群) があるか —
+    /// 製品の検査記録を送信側が自称する兆候 (D449)。
+    pub appliance4_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -589,6 +607,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         envelope_trace_marks: has_envelope_trace_marks(raw),
         source_ip_marks: has_source_ip_marks(raw),
         gateway_product_marks: has_gateway_product_marks(raw),
+        mailinglist_marks: has_mailinglist_marks(raw),
+        saas_notify_marks: has_saas_notify_marks(raw),
+        appliance4_marks: has_appliance4_marks(raw),
     })
 }
 
@@ -1683,6 +1704,140 @@ fn has_gateway_product_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-mailfoundry-")
             || l.starts_with("x-gateprotect-")
             || l.starts_with("x-secpoint-")
+    })
+}
+
+/// `X-ML-*`/`X-MLName:`/`X-Mail-Count:`/`X-MLServer:`/`X-Mailman-*`/
+/// `X-List-*`/`X-Listprocessor-*`/`X-Listserv-*`/`X-Sympa-*`/
+/// `X-Majordomo-*`/`X-eGroups-*`/`X-YahooGroup*`/`X-Topica-*`/
+/// `X-Freelists-*`/`X-Groupsio-*`/`X-Biglist-*`/`X-Dada-*`/
+/// `X-SmartList-*`/`X-Listar-*`/`X-Ecartis-*`/`X-CiviCRM-*` 等の
+/// リスト配信・ML 印があるか判定する (D447)。
+///
+/// `X-MLName`/`X-Mail-Count`/`X-MLServer` (fml)、`X-Mailman-Version`/
+/// `X-Listprocessor-Version`/`X-List-Administrivia` (レジストリ掲載)、
+/// `X-Loop` (Sympa/Majordomo 慣行) は ML・リスト配送機の記録 —
+/// 送信側から届くこれは自称。
+fn has_mailinglist_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ml-")
+            || l.starts_with("x-mlname")
+            || l.starts_with("x-mail-count")
+            || l.starts_with("x-mlserver")
+            || l.starts_with("x-mailman-")
+            || l.starts_with("x-list-")
+            || l.starts_with("x-listprocessor-")
+            || l.starts_with("x-listserv-")
+            || l.starts_with("x-sympa-")
+            || l.starts_with("x-majordomo-")
+            || l.starts_with("x-egroups-")
+            || l.starts_with("x-yahoogroup")
+            || l.starts_with("x-yahoo-group")
+            || l.starts_with("x-topica-")
+            || l.starts_with("x-freelists-")
+            || l.starts_with("x-groupsio-")
+            || l.starts_with("x-biglist-")
+            || l.starts_with("x-dada-")
+            || l.starts_with("x-smartlist-")
+            || l.starts_with("x-listar-")
+            || l.starts_with("x-ecartis-")
+            || l.starts_with("x-civicrm-")
+    })
+}
+
+/// `X-GitHub-*`/`X-GitLab-*`/`X-Gitea-*`/`X-Jenkins-*`/`X-Travis-*`/
+/// `X-CircleCI-*`/`X-Atlassian-*`/`X-Sentry-*`/`X-Vercel-*`/
+/// `X-Netlify-*`/`X-PayPal-*`/`X-PP-*`/`X-DocuSign-*`/`X-Slack-*`/
+/// `X-Zoom-*`/`X-Notion-*`/`X-Figma-*`/`X-Stripe-*`/`X-eBay-*`/
+/// `X-Amazon-*`/`X-Calendly-*`/`X-Loom-*`/`X-Airtable-*`/
+/// `X-Dropbox-*`/`X-Box-*` 等の SaaS 通知印があるか判定する
+/// (D448)。
+///
+/// `X-GitHub-Reason`/`X-GitHub-Sender`/`X-GitHub-Recipient` (GitHub
+/// 公式文書)、`X-GitLab-NotificationReason`/`X-GitLab-Project`
+/// (GitLab) は SaaS 通知システムの発信記録 — 送信側から届く
+/// これは自称。
+fn has_saas_notify_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-github-")
+            || l.starts_with("x-gitlab-")
+            || l.starts_with("x-gitea-")
+            || l.starts_with("x-jenkins-")
+            || l.starts_with("x-travis-")
+            || l.starts_with("x-circleci-")
+            || l.starts_with("x-atlassian-")
+            || l.starts_with("x-sentry-")
+            || l.starts_with("x-vercel-")
+            || l.starts_with("x-netlify-")
+            || l.starts_with("x-paypal-")
+            || l.starts_with("x-pp-")
+            || l.starts_with("x-docusign-")
+            || l.starts_with("x-slack-")
+            || l.starts_with("x-zoom-")
+            || l.starts_with("x-notion-")
+            || l.starts_with("x-figma-")
+            || l.starts_with("x-stripe-")
+            || l.starts_with("x-ebay-")
+            || l.starts_with("x-amazon-")
+            || l.starts_with("x-calendly-")
+            || l.starts_with("x-loom-")
+            || l.starts_with("x-airtable-")
+            || l.starts_with("x-dropbox-")
+            || l.starts_with("x-box-")
+    })
+}
+
+/// `X-Postini-*`/`X-MXLogic-*`/`X-PMX-*`/`X-WatchGuard-*`/`X-SNCR-*`/
+/// `X-SonicWall-*`/`X-SpamSoap-*`/`X-iScan-*`/`X-GMS-*`/
+/// `X-Tumbleweed-*`/`X-Commtouch-*`/`X-CTCH-*`/`X-NetSTAR-*`/
+/// `X-FireEye-*`/`X-Agari-*`/`X-Area1-*`/`X-Avast-*`/`X-Avira-*`/
+/// `X-ESET-*`/`X-NINJA-*`/`X-MWG-*`/`X-Websense-*`/`X-Forcepoint-*`/
+/// `X-Skyhigh-*`/`X-AntiSpamEurope-*`/`X-Hornet-*` 等の
+/// セキュリティアプライアンス印 (第四群) があるか判定する (D449)。
+///
+/// `X-Postini-Spam` (Google Postini)、`X-MXLogic-*` (MX Logic)、
+/// `X-PMX-*` (Sophos PureMessage)、`X-CTCH-*` (Cyren/Commtouch) は
+/// 製品の検査記録 — 送信側から届くこれは自称。
+fn has_appliance4_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-postini-")
+            || l.starts_with("x-mxlogic-")
+            || l.starts_with("x-pmx-")
+            || l.starts_with("x-watchguard-")
+            || l.starts_with("x-sncr-")
+            || l.starts_with("x-sonicwall-")
+            || l.starts_with("x-spamsoap-")
+            || l.starts_with("x-iscan-")
+            || l.starts_with("x-gms-")
+            || l.starts_with("x-tumbleweed-")
+            || l.starts_with("x-commtouch-")
+            || l.starts_with("x-ctch-")
+            || l.starts_with("x-netstar-")
+            || l.starts_with("x-fireeye-")
+            || l.starts_with("x-agari-")
+            || l.starts_with("x-area1-")
+            || l.starts_with("x-avast-")
+            || l.starts_with("x-avira-")
+            || l.starts_with("x-eset-")
+            || l.starts_with("x-ninja-")
+            || l.starts_with("x-mwg-")
+            || l.starts_with("x-websense-")
+            || l.starts_with("x-forcepoint-")
+            || l.starts_with("x-skyhigh-")
+            || l.starts_with("x-antispameurope-")
+            || l.starts_with("x-hornet-")
     })
 }
 
@@ -4609,6 +4764,72 @@ mod tests {
         assert!(has_gateway_product_marks(m3));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_gateway_product_marks(clean));
+    }
+
+    #[test]
+    fn scan_はML配信印を検出する() {
+        let m1 = b"X-ML-Id: 1\r\n\r\nx";
+        assert!(has_mailinglist_marks(m1));
+        let m2 = b"X-MLName: list\r\n\r\nx";
+        assert!(has_mailinglist_marks(m2));
+        let m3 = b"X-Mail-Count: 10\r\n\r\nx";
+        assert!(has_mailinglist_marks(m3));
+        let m4 = b"X-MLServer: fml\r\n\r\nx";
+        assert!(has_mailinglist_marks(m4));
+        let m5 = b"X-Mailman-Version: 2\r\n\r\nx";
+        assert!(has_mailinglist_marks(m5));
+        let l1 = b"X-List-Administrivia: yes\r\n\r\nx";
+        assert!(has_mailinglist_marks(l1));
+        let s1 = b"X-Sympa-Loop: x\r\n\r\nx";
+        assert!(has_mailinglist_marks(s1));
+        let e1 = b"X-eGroups-Approved-By: x\r\n\r\nx";
+        assert!(has_mailinglist_marks(e1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mailinglist_marks(clean));
+    }
+
+    #[test]
+    fn scan_はSaaS通知印を検出する() {
+        let g1 = b"X-GitHub-Reason: mention\r\n\r\nx";
+        assert!(has_saas_notify_marks(g1));
+        let g2 = b"X-GitHub-Recipient: u\r\n\r\nx";
+        assert!(has_saas_notify_marks(g2));
+        let g3 = b"X-GitLab-Project: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(g3));
+        let g4 = b"X-Gitea-Issue-ID: 1\r\n\r\nx";
+        assert!(has_saas_notify_marks(g4));
+        let j1 = b"X-Jenkins-Job: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(j1));
+        let p1 = b"X-PayPal-Transaction: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(p1));
+        let d1 = b"X-DocuSign-Envelope: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(d1));
+        let s1 = b"X-Slack-Request-Id: x\r\n\r\nx";
+        assert!(has_saas_notify_marks(s1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_saas_notify_marks(clean));
+    }
+
+    #[test]
+    fn scan_はアプライアンス第四群印を検出する() {
+        let p1 = b"X-Postini-Spam: x\r\n\r\nx";
+        assert!(has_appliance4_marks(p1));
+        let m1 = b"X-MXLogic-Spam: x\r\n\r\nx";
+        assert!(has_appliance4_marks(m1));
+        let p2 = b"X-PMX-Version: 5\r\n\r\nx";
+        assert!(has_appliance4_marks(p2));
+        let w1 = b"X-WatchGuard-Spam-Score: x\r\n\r\nx";
+        assert!(has_appliance4_marks(w1));
+        let c1 = b"X-CTCH-Spam: x\r\n\r\nx";
+        assert!(has_appliance4_marks(c1));
+        let f1 = b"X-FireEye-Spam: x\r\n\r\nx";
+        assert!(has_appliance4_marks(f1));
+        let a1 = b"X-Avast-Status: x\r\n\r\nx";
+        assert!(has_appliance4_marks(a1));
+        let w2 = b"X-Websense-Spam: x\r\n\r\nx";
+        assert!(has_appliance4_marks(w2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_appliance4_marks(clean));
     }
 }
 
