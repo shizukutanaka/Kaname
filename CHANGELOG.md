@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
+
+- `<a href="tel:+…">` リンクは「クリック不要・電話をかけさせる」誘導経路 — 国際番号・有料番号詐取や BazaCall 型コールバックフィッシング (「不正アクセスのためサポートに電話せよ」) の配送手段として観測されるが、`http(s)` のみの URL 抽出を完全に素通りしていた
+- 対処: `has_tel_link` 新設で `<a href="tel:`/`'tel:` を検出 → `tel_link` → `render_risks` に兆候報告
+- テスト +5 件
+
+### Security — D238: `Content-Disposition: inline` で危険拡張子添付が未検査
+
+- `inline` 宣言は「ユーザーに見せる」の意味 — その宣言のまま実行形式 (`filename="run.exe"` 等) を埋め込むと「見せるものが実行される」偽装になるが、宣言型と拡張子の組合せは未検査だった
+- 対処: `has_inline_dangerous_attachment` 新設で生ヘッダ走査 (inline + filename 近接) → `inline_dangerous_attachment` → `render_risks` に兆候報告
+- テスト +4 件
+
+### Security — D239: 疑似署名添付 (`signature.asc`/`smime.p7s` 等) が未検査
+
+- `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の体裁を持つ — 検証機構なしの表示では「信頼できる」に見えるため、体裁だけで信頼を獲得しつつ実行形式を内包し得る (S/MIME 偽装)。正当な署名付きメールは `multipart/signed` 型で届くため、単独添付の署名ファイルは体裁のみの偽装
+- 対処: `is_pseudo_signature_attachment` 新設で `scan_attachment_bytes` の step 7 に配線
+- テスト +4 件
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

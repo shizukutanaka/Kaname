@@ -542,6 +542,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D237: tel: リンク (BazaCall 型コールバックフィッシング)
+    if html_text.tel_link {
+        render_risks.push(
+            "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D238: Content-Disposition: inline で危険拡張子
+    if env.inline_dangerous_attachment {
+        render_risks.push(
+            "Content-Disposition: inline で実行形式の添付 — 「表示」の体裁で実行される偽装の可能性があります"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

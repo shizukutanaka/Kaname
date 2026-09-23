@@ -100,6 +100,9 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `Content-Disposition: inline` で危険拡張子を持つ添付があるか —
+    /// 「表示してあげる」宣言のまま実行形式を埋め込む偽装の兆候 (D238)。
+    pub inline_dangerous_attachment: bool,
 }
 
 /// An RFC 5322 address.
@@ -358,7 +361,67 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        inline_dangerous_attachment: has_inline_dangerous_attachment(raw),
     })
+}
+
+/// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
+///
+/// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
+/// 体裁を持つ — 検証機構なしの表示では「信頼できる」に見えるため
+/// 実行形式を内包し得る。正当な署名付きメールでは
+/// `multipart/signed` 型で届くため、単独添付として届く
+/// 署名ファイルは体裁だけの偽装として扱う。
+fn is_pseudo_signature_attachment(filename: &str) -> bool {
+    let lower = filename.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "signature.asc"
+            | "signature.p7s"
+            | "signature.p7m"
+            | "smime.p7s"
+            | "smime.p7m"
+            | "smime.p7w"
+            | "signed.p7s"
+            | "signed.p7m"
+    )
+}
+
+/// `Content-Disposition: inline` + 危険拡張子添付があるか判定する (D238)。
+///
+/// `inline` 宣言は「ユーザーに見せる」の意味 — その宣言のまま
+/// 実行形式 (exe/lnk 等) を埋め込むと「見せるものが実行される」
+/// 偽装になる。生ヘッダ走査で inline + filename の近接を検査。
+fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut pos = 0usize;
+    while let Some(rel) = lower[pos..].find("content-disposition:") {
+        let hpos = pos + rel;
+        // content-disposition: inline 宣言か
+        let hdr_end = lower[hpos..]
+            .find("\n\n")
+            .map(|e| hpos + e)
+            .unwrap_or(lower.len());
+        let hdr = &lower[hpos..hdr_end.min(hpos + 500)];
+        if hdr.contains("inline") {
+            // 同じ宣言ブロック内の filename= を拾い危険拡張子判定
+            if let Some(frel) = hdr.find("filename=") {
+                let fval = crate::magic_bytes::is_dangerous_windows_attachment(
+                    &hdr[frel + 9..]
+                        .trim_start_matches(|c| c == '"' || c == '\'')
+                        .split(|c: char| c == ';' || c == '"' || c.is_whitespace())
+                        .next()
+                        .unwrap_or(""),
+                );
+                if fval {
+                    return true;
+                }
+            }
+        }
+        pos = hpos + 21;
+    }
+    false
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -694,6 +757,10 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// `href="tel:"` 形式の電話番号リンクがあるか — 通話料金詐取・
+    /// コールバックフィッシング (BazaCall 型) で「クリック不要・
+    /// 電話をかけさせる」誘導経路の兆候 (D237)。
+    pub tel_link: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -879,7 +946,18 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        tel_link: has_tel_link(html),
     }
+}
+
+/// `<a href="tel:...">` 形式の電話番号リンクを検出する (D237)。
+///
+/// `tel:` リンクは「クリック不要・電話をかけさせる」誘導経路 —
+/// 国際番号・有料番号への誘導や BazaCall 型コールバック
+/// フィッシングで使われる。正規メールにほぼ出現しない。
+fn has_tel_link(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    lower.contains("href=\"tel:") || lower.contains("href='tel:")
 }
 
 /// 本文中の難読化 URL トークンの種別。
@@ -2560,6 +2638,44 @@ mod tests {
         let env = parse(raw).expect("parse");
         assert!(env.list_unsubscribe.is_none());
     }
+
+    #[test]
+    fn html_to_text_はtel_linkを検出する() {
+        let html = r#"<a href="tel:+1234567890">CALL NOW</a>"#;
+        assert!(html_to_text(html).tel_link);
+        let html2 = r#"<a href="tel:+819012345678">call</a>"#;
+        assert!(html_to_text(html2).tel_link);
+        let html3 = r#"<a href="https://example.com">ok</a>"#;
+        assert!(!html_to_text(html3).tel_link);
+        let html4 = r#"<a href="TEL:+123">x</a>"#;
+        assert!(html_to_text(html4).tel_link);
+        let html5 = "<a href='tel:+123'>x</a>";
+        assert!(html_to_text(html5).tel_link);
+    }
+
+    #[test]
+    fn scan_はinline危険添付を検出する() {
+        let inline_exe = b"Content-Disposition: inline; filename=\"run.exe\"\r\n\r\nMZ";
+        assert!(has_inline_dangerous_attachment(inline_exe));
+        let attach_exe = b"Content-Disposition: attachment; filename=\"run.exe\"\r\n\r\nMZ";
+        assert!(!has_inline_dangerous_attachment(attach_exe));
+        let inline_txt = b"Content-Disposition: inline; filename=\"note.txt\"\r\n\r\nx";
+        assert!(!has_inline_dangerous_attachment(inline_txt));
+        let inline_lnk = b"Content-Disposition: inline; filename=\"doc.lnk\"\r\n\r\nx";
+        assert!(has_inline_dangerous_attachment(inline_lnk));
+    }
+
+    #[test]
+    fn scan_は疑似署名添付を検出する() {
+        let r = scan_attachment_bytes("signature.asc", "text/plain", b"sig");
+        assert!(r.risks.iter().any(|x| x.contains("署名")));
+        let r = scan_attachment_bytes("smime.p7s", "application/pkcs7-signature", b"sig");
+        assert!(r.risks.iter().any(|x| x.contains("署名")));
+        let r = scan_attachment_bytes("signed.p7m", "application/x-pkcs7", b"sig");
+        assert!(r.risks.iter().any(|x| x.contains("署名")));
+        let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
+        assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
 }
 
 /// カレンダー招待 (ICS) のセキュリティ検査。
@@ -2824,6 +2940,17 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
     for r in metadata_check::detect_metadata_risks(filename, bytes) {
         risks.push(format!("メタデータが含まれます: {r:?}"));
+    }
+
+    // 7. 疑似署名添付 (D239) — `signature.asc`/`smime.p7s` 等の
+    //    「署名済み」を装う添付は、署名検証なしの体裁で
+    //    信頼を獲得しながら実行形式を内包し得る (S/MIME 偽装)。
+    if is_pseudo_signature_attachment(filename) {
+        risks.push(
+            "署名らしき添付 (signature.asc/smime.p7s 等) — 検証なしの体裁で \
+             信頼を装う可能性があります"
+                .to_string(),
+        );
     }
 
     AttachmentScan {
