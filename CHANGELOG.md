@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D384: `X-Forwarded-For:`/`X-Forwarded-Host:`/`X-Forward-For:`/`X-Forward-Server:`/`X-Proxy-*` 等の転送値自称が未検査
+
+- ゲートウェイ・プロキシ・転送機が記す経路値 — 送信側から届くのは「この経路を転送した」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_forward_marks` 新設 → `Envelope.forward_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D385: `X-Originating-Date:`/`X-Sent-Date:`/`X-Delivery-Timestamp:`/`X-Arrival-Time:`/`X-Received-Date:`/`X-Message-Date:` 等の時刻記録自称が未検査
+
+- 時刻は Date: が送信側のもの、残りは輸送機が記す — 送信側から届くのは「いつ届いたかまで記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_time_marks` 新設 → `Envelope.time_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D386: `X-Hop-Count:`/`X-Trace-Route:`/`X-Relay-Count:`/`X-Hops:`/`X-Traceroute:`/`X-Relay-Hops:`/`X-Route-Count:` 等のホップ経路印自称が未検査
+
+- 経由ホップ数の記録は輸送機が残す — 送信側から届くのは「経路を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_hop_marks` 新設 → `Envelope.hop_marks` → `render_risks` 兆候報告
+- テスト +5 件
+
 ### Security — D363: `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/`X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値自称が未検査
 
 - SpamAssassin が判定の内訳として記す値 — 送信側から届くのは「内訳まで判定済み」体裁を内容側が主張する自称だが未検査だった

@@ -141,6 +141,18 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-Forwarded-For:`/`X-Forwarded-Host:`/`X-Forward-For:`/
+    /// `X-Forward-Server:`/`X-Proxy-*` 等の転送値があるか —
+    /// ゲートウェイ・プロキシが記す経路値を送信側が自称する兆候 (D384)。
+    pub forward_marks: bool,
+    /// `X-Originating-Date:`/`X-Sent-Date:`/`X-Delivery-Timestamp:`/
+    /// `X-Arrival-Time:`/`X-Received-Date:` 等の時刻記録があるか —
+    /// 輸送機が記す時刻値を送信側が自称する兆候 (D385)。
+    pub time_marks: bool,
+    /// `X-Hop-Count:`/`X-Trace-Route:`/`X-Relay-Count:`/
+    /// `X-Hops:`/`X-Traceroute:` 等のホップ経路印があるか —
+    /// 経由数の記録を送信側が自称する兆候 (D386)。
+    pub hop_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +430,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        forward_marks: has_forward_marks(raw),
+        time_marks: has_time_marks(raw),
+        hop_marks: has_hop_marks(raw),
     })
 }
 
@@ -624,6 +639,74 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-Forwarded-For:`/`X-Forwarded-Host:`/`X-Forward-For:`/
+/// `X-Forward-Server:`/`X-Proxy-*`/`X-Forwarding-Server:*` 等の
+/// 転送値があるか判定する (D384)。
+///
+/// ゲートウェイ・プロキシ・転送機が記す経路値 — 送信側から届く
+/// これは「この経路を転送した」体裁を内容側が主張する自称
+/// (D312 X-Forwarded-* ブロック値の経路値版)。
+fn has_forward_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-forwarded-for:")
+            || l.starts_with("x-forwarded-host:")
+            || l.starts_with("x-forwarded-server:")
+            || l.starts_with("x-forwarded-port:")
+            || l.starts_with("x-forwarded-proto:")
+            || l.starts_with("x-forwarded-by:")
+            || l.starts_with("x-forward-for:")
+            || l.starts_with("x-forward-server:")
+            || l.starts_with("x-proxy-")
+    })
+}
+
+/// `X-Originating-Date:`/`X-Sent-Date:`/`X-Delivery-Timestamp:`/
+/// `X-Arrival-Time:`/`X-Received-Date:`/`X-Message-Date:` 等の
+/// 時刻記録があるか判定する (D385)。
+///
+/// 時刻は Date: が送信側のもの、残りは輸送機が記す — 送信側から
+/// 届くこれは「いつ届いたかまで記録済み」体裁を内容側が主張する自称。
+fn has_time_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-originating-date:")
+            || l.starts_with("x-sent-date:")
+            || l.starts_with("x-delivery-timestamp:")
+            || l.starts_with("x-arrival-time:")
+            || l.starts_with("x-received-date:")
+            || l.starts_with("x-message-date:")
+    })
+}
+
+/// `X-Hop-Count:`/`X-Trace-Route:`/`X-Relay-Count:`/`X-Hops:`/
+/// `X-Traceroute:`/`X-Relay-Hops:`/`X-Route-Count:` 等の
+/// ホップ経路印があるか判定する (D386)。
+///
+/// 経由ホップ数の記録は輸送機が残す — 送信側から届くこれは
+/// 「経路を通った」体裁を内容側が主張する自称。
+fn has_hop_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-hop-count:")
+            || l.starts_with("x-trace-route:")
+            || l.starts_with("x-relay-count:")
+            || l.starts_with("x-hops:")
+            || l.starts_with("x-traceroute:")
+            || l.starts_with("x-relay-hops:")
+            || l.starts_with("x-route-count:")
     })
 }
 
@@ -2952,6 +3035,52 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_は転送値を検出する() {
+        let ff = b"X-Forwarded-For: 1.2.3.4\r\n\r\nx";
+        assert!(has_forward_marks(ff));
+        let fh = b"X-Forwarded-Host: h\r\n\r\nx";
+        assert!(has_forward_marks(fh));
+        let fg = b"X-Forward-For: 1\r\n\r\nx";
+        assert!(has_forward_marks(fg));
+        let fs = b"X-Forward-Server: s\r\n\r\nx";
+        assert!(has_forward_marks(fs));
+        let px = b"X-Proxy-Remote-Addr: a\r\n\r\nx";
+        assert!(has_forward_marks(px));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_forward_marks(clean));
+    }
+
+    #[test]
+    fn scan_は時刻記録を検出する() {
+        let od = b"X-Originating-Date: d\r\n\r\nx";
+        assert!(has_time_marks(od));
+        let sd = b"X-Sent-Date: d\r\n\r\nx";
+        assert!(has_time_marks(sd));
+        let dt = b"X-Delivery-Timestamp: t\r\n\r\nx";
+        assert!(has_time_marks(dt));
+        let at = b"X-Arrival-Time: t\r\n\r\nx";
+        assert!(has_time_marks(at));
+        let rd = b"X-Received-Date: d\r\n\r\nx";
+        assert!(has_time_marks(rd));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_time_marks(clean));
+    }
+
+    #[test]
+    fn scan_はホップ印を検出する() {
+        let hc = b"X-Hop-Count: 3\r\n\r\nx";
+        assert!(has_hop_marks(hc));
+        let tr = b"X-Trace-Route: r\r\n\r\nx";
+        assert!(has_hop_marks(tr));
+        let rc = b"X-Relay-Count: 2\r\n\r\nx";
+        assert!(has_hop_marks(rc));
+        let hp = b"X-Hops: 4\r\n\r\nx";
+        assert!(has_hop_marks(hp));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_hop_marks(clean));
     }
 }
 

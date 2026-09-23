@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D384: 転送値自称
+    if env.forward_marks {
+        render_risks.push(
+            "X-Forwarded-For/X-Forwarded-Host/X-Forward-For 等 — 転送機が記す経路値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D385: 時刻記録自称
+    if env.time_marks {
+        render_risks.push(
+            "X-Originating-Date/X-Sent-Date/X-Delivery-Timestamp 等 — 輸送機が記す時刻を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D386: ホップ経路印自称
+    if env.hop_marks {
+        render_risks.push(
+            "X-Hop-Count/X-Trace-Route/X-Relay-Count 等 — 経由ホップ数の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
