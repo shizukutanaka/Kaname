@@ -844,6 +844,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D444: エンベロープ配送記録印自称
+    if env.envelope_trace_marks {
+        render_risks.push(
+            "X-Env-*/X-Envelope-*/X-Errors-To/X-VERP-*/X-Bounces-*/X-Redirect-* 等 — 配送経路・返送の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D445: 送信元IP・認定印自称
+    if env.source_ip_marks {
+        render_risks.push(
+            "X-Originating-IP/X-Client-IP/X-HELO-*/X-EIP/X-CSA-*/X-Lumos-* 等 — 送信元の IP・認定記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D446: 商用ゲートウェイ印自称 (第三群)
+    if env.gateway_product_marks {
+        render_risks.push(
+            "X-GFIME-*/X-SA-Exim-*/X-SpamExperts-*/X-MailMarshal*/X-InterScan-*/X-MIMEsweeper-* 等 — 製品の検査記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
