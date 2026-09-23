@@ -762,6 +762,27 @@ if bad:
 print(f"  OK: corpus {len(corpora)} 件 / target {len(targets)} 件 / bin {len(bins)} 件の対応が一致")
 PY
 
+echo "== 11. kaname-render parse() が has_*_marks にヘッダ部のみを渡すこと =="
+# D570: has_*_marks はヘッダしか見ないのに parse() が raw 全体を渡していたため、
+# 各関数が最大 100 MB の本文ごと複製・小文字化していた (155 関数 × 2 コピー)。
+# parse() 内では header_section() で切り出した hdr を渡すこと。
+python3 - <<'PY' || fail=1
+import re, sys
+s = open('crates/kaname-render/src/lib.rs', encoding='utf-8').read()
+start = s.find('pub fn parse(raw: &[u8])')
+if start < 0:
+    print("  NG parse() が見つからない"); sys.exit(1)
+end = s.find('\n}\n', start)
+body = s[start:end]
+bad = re.findall(r'(has_[a-z0-9_]+_marks)\(raw\)', body)
+for name in bad:
+    print(f"  NG parse() が {name}(raw) を呼んでいる — header_section() の hdr を渡すこと (D570)")
+if bad:
+    sys.exit(1)
+n = len(re.findall(r'has_[a-z0-9_]+_marks\(hdr\)', body))
+print(f"  OK: has_*_marks {n} 件すべてにヘッダ部のみを渡している")
+PY
+
 echo ""
 if [ "$fail" -eq 0 ]; then
   echo "静的検証: 問題なし"
