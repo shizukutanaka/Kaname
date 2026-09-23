@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D219: RTF OLE オブジェクト埋め込み (objdata 同梱) を検出
+
+- RTF の `\object` + `\objdata`/`\objemb` 制御語は OLE オブジェクト (実行ファイル・ショートカット等) を文書内に同梱できる — CVE-2017-0199 系を始めフィッシング定番の配送形式 (Proofpoint/Cofense の RTF 悪用分析で繰り返し報告)。「文書」の体裁で任意バイナリの容器になる
+- 対処: `rtf_has_embedded_object` で `{\rtf` 実体のオブジェクト制御語を検出 → `scan_attachment_bytes` に配線
+- テスト +1 件
+
+### Security — D220: Outlook 専用マークアップ (条件コメント/VML) を検出
+
+- `<!--[if mso]>...<![endif]-->` の条件コメントや `<v:rect>`/`<o:p>` 等の VML/Office 名前空間要素は、ブラウザ系の解析器には見えないコンテンツを Outlook だけに描画させる難読化手法 (Vade/Barracuda のフィッシング解析で報告) — 検査器と表示器で見える内容を分離できる
+- 対処: `html_to_text` で条件コメント接頭辞と `v:`/`o:` 名前空間要素を検出 → `outlook_only_markup` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D221: href の実体参照/パーセント難読化を検出
+
+- `<a href="j&#97;vascript:...">` や `%68ttps:` のように、数値文字参照やスキーム部パーセントエンコードで、「フィルタに見える文字列」と「ブラウザが復号して開く URL」を分ける難読化 — href の生値を検査するだけでは復号後の危険スキームが見えない
+- 対処: `is_obfuscated_href` で href 内の `&#` 参照とスキーム部 `%` を検出 (パス部の `%` は正当なため対象外、`&amp;` 等の名前付き実体も対象外) → `obfuscated_href` → `render_risks` に兆候報告
+- テスト +1 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

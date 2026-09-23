@@ -503,6 +503,22 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
         );
     }
+    // D220: Outlook 専用マークアップ (条件コメント/VML) の兆候。
+    if html_extract.as_ref().is_some_and(|e| e.outlook_only_markup) {
+        render_risks.push(
+            "HTML 本文に Outlook 専用マークアップ (条件コメント/VML) — \
+             ブラウザ系の解析では見えない内容を Outlook にだけ描画させる難読化の兆候"
+                .to_string(),
+        );
+    }
+    // D221: href の実体参照/パーセント難読化の兆候。
+    if html_extract.as_ref().is_some_and(|e| e.obfuscated_href) {
+        render_risks.push(
+            "リンク href に実体参照・パーセントエンコード難読化 — \
+             フィルタに見える URL と実際に開く URL を分ける兆候"
+                .to_string(),
+        );
+    }
     // D162: 表示 URL と実リンク先のドメイン不一致 (URL 偽装)。
     if let Some(e) = &html_extract {
         for m in e.link_mismatches.iter().take(3) {

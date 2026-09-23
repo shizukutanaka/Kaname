@@ -298,6 +298,32 @@ fn is_dangerous_mismatch(declared: &str, detected: &str) -> bool {
 }
 
 // ============================================================================
+// D219: RTF OLE オブジェクト埋め込み (objdata 実行ファイル同梱)
+// ============================================================================
+
+/// RTF が OLE オブジェクト埋め込み (`\objdata` 等) を持つか判定する。
+///
+/// RTF の `\object` + `\objdata` 制御語は OLE オブジェクト
+/// (実行ファイル・ショートカット・OLE 自動実行) を文書内に同梱
+/// できる — CVE-2017-0199 系を始めフィッシング定番の配送形式
+/// (Proofpoint/Cofense の RTF 悪用分析で繰り返し報告)。
+/// RTF は「文書」の体裁で届くが、実体は任意バイナリの容器になる。
+/// `\objdata` (オブジェクトデータ本体) または `\object`+`\objemb`
+/// の組み合わせを検出する。バックスラッシュ制御語のため
+/// `\objdata` の前方一致で誤判定は起きにくい。
+#[must_use]
+pub fn rtf_has_embedded_object(bytes: &[u8]) -> bool {
+    if !bytes.starts_with(b"{\\rtf") {
+        return false;
+    }
+    let contains = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+    if contains(b"\\objdata") {
+        return true;
+    }
+    contains(b"\\object") && contains(b"\\objemb")
+}
+
+// ============================================================================
 // テスト
 // ============================================================================
 
@@ -597,6 +623,33 @@ mod tests {
         assert!(has_bidi_override_filename("a\u{202B}b.txt"));
         assert!(has_bidi_override_filename("a\u{202C}b.txt"));
         assert!(has_bidi_override_filename("a\u{202D}b.txt"));
+    }
+
+    // ---------------------------------------------------------------
+    // D219: RTF OLE オブジェクト埋め込み
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn rtf_embedded_object_detected() {
+        // \\objdata (OLE オブジェクトデータ本体)
+        assert!(rtf_has_embedded_object(
+            b"{\\rtf1{\\object\\objdata 01050000}}"
+        ));
+        // \\object + \\objemb の組み合わせ
+        assert!(rtf_has_embedded_object(
+            b"{\\rtf1{\\object\\objemb{\\*\\objclass Word}}}}"
+        ));
+        // \\object だけ (\\objemb なし) は対象外 — フォント/スタイル
+        // など \\object を含まない通常 RTF も対象外
+        assert!(!rtf_has_embedded_object(
+            b"{\\rtf1{\\fonttbl{\\f0 Arial;}}plain text}"
+        ));
+        assert!(!rtf_has_embedded_object(b"{\\rtf1 hello world}"));
+        // \\object 単独 (\\objdata/\\objemb なし) は対象外
+        assert!(!rtf_has_embedded_object(b"{\\rtf1{\\object test}}"));
+        // 非 RTF 入力は対象外
+        assert!(!rtf_has_embedded_object(b"plain \\\\objdata text"));
+        assert!(!rtf_has_embedded_object(b""));
     }
 
     #[test]

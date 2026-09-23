@@ -683,6 +683,15 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// Outlook 専用マークアップ (`<!--[if ...]>` 条件コメントや
+    /// `<v:`/`<o:` の VML 名前空間) が含まれるか — ブラウザ系の
+    /// 解析器には見えないコンテンツを Outlook だけに描画させる
+    /// VML/条件コメント難読化の兆候 (D220)。
+    pub outlook_only_markup: bool,
+    /// `href` に数値文字参照 (`&#...;`) やスキーム部のパーセント
+    /// エンコードが含まれるか — フィルタに見える URL とブラウザが
+    /// 復号する URL を分ける難読化の兆候 (D221)。
+    pub obfuscated_href: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -748,6 +757,10 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     let mut hrefs: Vec<&str> = Vec::new();
     let mut hidden_chars = 0usize;
     let mut link_mismatches: Vec<LinkMismatch> = Vec::new();
+    // D220: Outlook 専用マークアップ (条件コメント/VML) の兆候。
+    let mut outlook_only_markup = false;
+    // D221: href の実体参照/パーセント難読化の兆候。
+    let mut obfuscated_href = false;
     // 可視 <a> の中では、アンカーテキストを別途バッファに集め、
     // 閉タグ時に「表示 URL と実リンク先のドメイン一致」を評価する (D162)。
     let mut current_anchor: Option<(&str, String)> = None;
@@ -773,6 +786,11 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         }
         // ---- コメント / DOCTYPE / PI ----
         if html[pos..].starts_with("<!--") {
+            // `<!--[if ...]>` の条件コメント — Outlook のみが評価する
+            // 領域で、ブラウザ系解析器から内容を隠す (D220)。
+            if html[pos..].starts_with("<!--[if") || html[pos..].starts_with("<!--[IF") {
+                outlook_only_markup = true;
+            }
             pos = find_after(html, pos + 4, "-->", bytes.len());
             continue;
         }
@@ -794,6 +812,16 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         }
         let tag_end = find_tag_end(html, tag_start + name.len());
         let tag_inner = &html[tag_start..tag_end.min(bytes.len())];
+        // `<v:rect>`/`<o:p>` 等の VML/Office 名前空間要素 — Outlook 専用
+        // マークアップで解析器には見えない (D220)。tag_inner は
+        // `v:rect ...` のように名前から始まる。
+        if tag_inner.starts_with("v:")
+            || tag_inner.starts_with("V:")
+            || tag_inner.starts_with("o:")
+            || tag_inner.starts_with("O:")
+        {
+            outlook_only_markup = true;
+        }
         let lower = name.to_ascii_lowercase();
         let name = lower.as_str();
 
@@ -844,6 +872,11 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // リンク先の一致を評価する (URL 偽装 — D162)。
         if name == "a" {
             if let Some(h) = attr_value(tag_inner, "href") {
+                // href 値の実体参照・パーセント難読化 — フィルタに見える
+                // 文字列とブラウザが復号して開く URL を分ける手口 (D221)。
+                if is_obfuscated_href(h) {
+                    obfuscated_href = true;
+                }
                 hrefs.push(h);
                 if current_anchor.is_none() {
                     current_anchor = Some((h, String::new()));
@@ -868,6 +901,25 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        outlook_only_markup,
+        obfuscated_href,
+    }
+}
+
+/// href 値が難読化されているか判定する (D221)。
+///
+/// 数値文字参照 (`&#116;`/`&#x74;`) が含まれる、またはスキーム部
+/// (`:` より前) にパーセントエンコードがある href は、「フィルタが
+/// 見る文字列」と「ブラウザが復号して開く URL」を分ける難読化の
+/// 兆候。`&amp;` 等の名前付き実体は URL 構造を変えないため対象外。
+fn is_obfuscated_href(href: &str) -> bool {
+    if href.contains("&#") {
+        return true;
+    }
+    // スキーム部のみ判定 — パス部の `%` は正当。
+    match href.find(':') {
+        Some(colon) => href[..colon].contains('%'),
+        None => false,
     }
 }
 
@@ -1998,6 +2050,41 @@ mod tests {
 
     // ── D160: html_to_text (HTML のみメールの解析対象化 + hidden text salting) ──
 
+    /// D220: Outlook 専用マークアップ (条件コメント/VML) の兆候検出。
+    #[test]
+    fn html_to_text_detects_outlook_only_markup() {
+        // 条件コメント (downlevel-revealed 難読化)
+        let e = html_to_text(
+            "<div><!--[if mso]><v:shape href=\"http://evil\"><![endif]--></div>visible",
+        );
+        assert!(e.outlook_only_markup);
+        // VML 名前空間要素
+        let e2 = html_to_text("<body><v:rect href=\"http://evil\">text</v:rect></body>");
+        assert!(e2.outlook_only_markup);
+        let e3 = html_to_text("<p><o:p>hidden para</o:p></p>");
+        assert!(e3.outlook_only_markup);
+        // 通常コメント・通常タグは対象外
+        let e4 = html_to_text("<!-- normal comment --><p>text</p>");
+        assert!(!e4.outlook_only_markup);
+    }
+
+    /// D221: href の実体参照/パーセント難読化の兆候検出。
+    #[test]
+    fn html_to_text_detects_obfuscated_href() {
+        // 数値文字参照でスキーム難読化
+        let e = html_to_text("<a href=\"j&#97;vascript:alert(1)\">click</a>text");
+        assert!(e.obfuscated_href);
+        // スキーム部のパーセントエンコード
+        let e2 = html_to_text("<a href=\"%68ttps://evil.example/\">click</a>");
+        assert!(e2.obfuscated_href);
+        // パス部の % は正当 → 対象外
+        let e3 = html_to_text("<a href=\"https://example.com/%41%42\">click</a>");
+        assert!(!e3.obfuscated_href);
+        // 通常の href・&amp; は対象外
+        let e4 = html_to_text("<a href=\"https://example.com/?a=1&amp;b=2\">click</a>");
+        assert!(!e4.obfuscated_href);
+    }
+
     #[test]
     fn html_to_text_strips_basic_tags() {
         let e = html_to_text("<p>Hello <b>world</b></p>");
@@ -2589,6 +2676,17 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
     for r in metadata_check::detect_metadata_risks(filename, bytes) {
         risks.push(format!("メタデータが含まれます: {r:?}"));
+    }
+
+    // 7. RTF OLE オブジェクト埋め込み (D219) — 「文書」の体裁で
+    //    実行ファイル等の任意バイナリを内蔵できる配送形式。
+    if magic_bytes::rtf_has_embedded_object(bytes) {
+        risks.push(
+            "RTF に OLE オブジェクト埋め込み (\\objdata 等) — 文書の体裁で \
+             実行ファイル等のバイナリを内蔵している可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
     }
 
     AttachmentScan {
