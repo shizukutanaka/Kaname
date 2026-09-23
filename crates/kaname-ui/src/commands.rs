@@ -1276,6 +1276,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D498: IoT・3D プリント・電子部品印自称
+    if env.maker_marks {
+        render_risks.push(
+            "X-Arduino-*/X-Prusa-*/X-JLCPCB-*/X-Bambu-*/X-RaspberryPi-*/X-SparkFun-*/X-DigiKey-*/X-Mouser-* 等 — 製造機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D499: 監視・ログ基盤印自称
+    if env.monitoring_marks {
+        render_risks.push(
+            "X-Nagios-*/X-Zabbix-*/X-Graylog-*/X-InfluxDB-*/X-Elasticsearch-*/X-SolarWinds-*/X-Checkmk-*/X-Fluentd-* 等 — 監視機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D500: IDE・エディタ・API・稼働監視ツール印自称
+    if env.devtools_marks {
+        render_risks.push(
+            "X-Postman-*/X-VisualStudio-*/X-Statuspage-*/X-Xcode-*/X-IntelliJ-*/X-Neovim-*/X-OhDear-*/X-Eclipse-* 等 — ツール機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
