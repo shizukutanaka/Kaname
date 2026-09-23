@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D599: `X-PGM-*`/`X-Accordia-*`/`X-GolfNow-*` 等のゴルフ場・練習場印自称が未検査
+
+- **問題**: `X-PGM-*` (PGM)、`X-Accordia-*` (アコーディア)、`X-GolfNow-*` (GolfNow)、`X-TaiheiyoClub-*`/`X-Tokow-*`/`X-JumboGolf-*`/`X-TsuruyaGolf-*`/`X-NikiGolf-*`/`X-Golf5-*`/`X-AlpenGolf-*`/`X-MizunoGolf-*`/`X-HonmaGolf-*`/`X-BridgestoneGolf-*`/`X-VictoriaGolf-*`/`X-PrestigeGC-*`/`X-TomeiCC-*`/`X-TotsukaCC-*`/`X-NagoyaGC-*`/`X-ChibaGC-*`/`X-GolfDigest-*`/`X-GolfPartner-*`/`X-FestivalGolf-*`/`X-GolfValue-*`/`X-Kasumigaseki-*`/`X-KawanaGC-*`/`X-NaruoGC-*`/`X-HironoGC-*`/`X-TokyoGC-*`/`X-AsamaGC-*`/`X-FujiGC-*`/`X-SenumaGC-*`/`X-OaraiGC-*`/`X-TopGolf-*`/`X-DrivingRange-*`/`X-IndoorGolf-*`/`X-SimGolf-*`/`X-GolfLesson-*`/`X-CountryClub-*`/`X-TeeTime-*` 等 は場機の通知記録 — 送信側が書くことは自称。会員権・予約確認・コンペ賞品の偽装はゴルファー狙い詐欺の典型手口。(スポーツ用品機は D529)
+- **修正**: `Envelope` に `golfcourse_marks` + `has_golfcourse_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 場印の自署を問え。
+
+### Security — D600: `X-Joshuya-*`/`X-Casting-*`/`X-DaiwaSeiko-*` 等の釣具・フィッシング印自称が未検査
+
+- **問題**: `X-Joshuya-*` (上州屋)、`X-Casting-*` (キャスティング)、`X-DaiwaSeiko-*` (ダイワ精工)、`X-Tsurigu-*`/`X-FishingYu-*`/`X-Gamakatsu-*`/`X-Megabass-*`/`X-Jackall-*`/`X-Issei-*`/`X-Zappu-*`/`X-OSP-*`/`X-EvergreenFishing-*`/`X-Marukyu-*`/`X-Sasame-*`/`X-OwnerHook-*`/`X-Varivas-*`/`X-Sunline-*`/`X-TorayFishing-*`/`X-DuelFishing-*`/`X-YoZuri-*`/`X-MariaFishing-*`/`X-TackleBerry-*`/`X-BunBunTsurigu-*`/`X-PointTsurigu-*`/`X-Fisherman-*`/`X-FlyFishing-*`/`X-Tenkara-*`/`X-BoatFishing-*`/`X-FishingMaru-*`/`X-TsuriMaru-*` 等 は釣機の通知記録 — 送信側が書くことは自称。限定ルアー・釣り船予約・ポイント失効の偽装は釣り人狙い詐欺の典型手口。(シマノは D577、BassPro は既存族)
+- **修正**: `Envelope` に `fishing_marks` + `has_fishing_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 釣印の自署を問え。
+
+### Security — D601: `X-Hakuyosha-*`/`X-PonyCleaning-*`/`X-Sentakubin-*` 等のクリーニング・宅配洗濯印自称が未検査
+
+- **問題**: `X-Hakuyosha-*` (白洋舎)、`X-PonyCleaning-*` (ポニークリーニング)、`X-Sentakubin-*` (せんたく便)、`X-HopeCleaning-*`/`X-CleanKing-*`/`X-Linavis-*`/`X-Kireina-*`/`X-DeaCleaning-*`/`X-FranceYa-*`/`X-PajamaCleaning-*`/`X-KuriRaba-*`/`X-Lenet-*`/`X-CleaningMonster-*`/`X-MyCleaning-*`/`X-KuriEpan-*`/`X-Tosho-*`/`X-Mammy-*`/`X-Kurie-*`/`X-Sansuisha-*`/`X-Whity-*`/`X-RebonCleaning-*`/`X-PontCleaning-*`/`X-CleaningDebut-*`/`X-KuruPlus-*`/`X-Swany-*`/`X-YuukiCleaning-*`/`X-Fuurin-*`/`X-KireiOukoku-*`/`X-CleanLife-*`/`X-HappyCleaning-*`/`X-SankoCleaning-*`/`X-CleaningExpress-*`/`X-SentakuYa-*`/`X-CleaningPro-*`/`X-DepotCleaning-*`/`X-Cleaning24-*`/`X-SumaClean-*`/`X-CleanNote-*`/`X-RoyalClean-*`/`X-LuxuryClean-*`/`X-BridalClean-*`/`X-SuitClean-*`/`X-FutonClean-*`/`X-KutsuClean-*`/`X-BagClean-*`/`X-FurClean-*`/`X-LeatherClean-*` 等 は濯機の通知記録 — 送信側が書くことは自称。預かり品完了・保管期限・送料請求の偽装はクリーニング詐欺の典型手口。
+- **修正**: `Envelope` に `cleaning_marks` + `has_cleaning_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 濯印の自署を問え。
+
 ### Security — D596: `X-Isejingu-*`/`X-Meijijingu-*`/`X-IzumoTaisha-*` 等の神社仏閣・宗教印自称が未検査
 
 - **問題**: `X-Isejingu-*` (伊勢神宮)、`X-Meijijingu-*` (明治神宮)、`X-IzumoTaisha-*` (出雲大社)、`X-FushimiInari-*`/`X-Sensoji-*`/`X-Kinkakuji-*`/`X-Kiyomizudera-*`/`X-Todaiji-*`/`X-Koyasan-*`/`X-Hieizan-*`/`X-Zenkoji-*`/`X-Naritasan-*`/`X-Dazaifu-*`/`X-SumiyoshiTaisha-*`/`X-AtsutaJingu-*`/`X-HikawaJinja-*`/`X-HiedaJinja-*`/`X-Tsurugaoka-*`/`X-KitanoTenmangu-*`/`X-Itsukushima-*`/`X-SuwaTaisha-*`/`X-KashimaJingu-*`/`X-KatoriJingu-*`/`X-Ishikiri-*`/`X-UsaJingu-*`/`X-YahikoJinja-*`/`X-Shirahige-*`/`X-KetaTaisha-*`/`X-KagoshimaJingu-*`/`X-MotoIse-*`/`X-Konpira-*`/`X-OyamaAfuri-*`/`X-Kunozan-*`/`X-Toshogu-*`/`X-Rinnoji-*`/`X-Chusonji-*`/`X-Motsuji-*`/`X-Zuiganji-*`/`X-Eiheiji-*`/`X-Sojiji-*`/`X-Chionin-*`/`X-HigashiHonganji-*`/`X-NishiHonganji-*`/`X-Tenryuji-*`/`X-Nanzenji-*`/`X-Daitokuji-*`/`X-Myoshinji-*`/`X-Kenninji-*`/`X-Tofukuji-*`/`X-Ryoanji-*`/`X-Ginkakuji-*`/`X-Saihoji-*`/`X-Horyuji-*`/`X-Yakushiji-*`/`X-Toshodaiji-*`/`X-Saidaiji-*`/`X-Shitennoji-*`/`X-Katsuoji-*`/`X-Nakayamadera-*`/`X-Zojoji-*`/`X-TsukijiHongwanji-*` 等 は社機の通知記録 — 送信側が書くことは自称。祈祷料・お布施・御朱印・法要案内の偽装は信仰悪用詐欺の典型手口。

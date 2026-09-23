@@ -1709,6 +1709,12 @@ pub struct Envelope {
     pub coworking_marks: bool,
     /// `X-Freee-*`/`X-MoneyForward-*`/`X-Yayoi-*`/`X-TKC-*`/`X-Misoca-*` 等の会計ソフト・税務申告通知記録印を送信側が自称している (D598)
     pub taxfiling_marks: bool,
+    /// `X-PGM-*`/`X-Accordia-*`/`X-TaiheiyoClub-*`/`X-JumboGolf-*`/`X-GolfNow-*` 等のゴルフ場・練習場通知記録印を送信側が自称している (D599)
+    pub golfcourse_marks: bool,
+    /// `X-Joshuya-*`/`X-Casting-*`/`X-Tsurigu-*`/`X-FishingYu-*`/`X-DaiwaSeiko-*` 等の釣具・フィッシング通知記録印を送信側が自称している (D600)
+    pub fishing_marks: bool,
+    /// `X-Hakuyosha-*`/`X-PonyCleaning-*`/`X-HopeCleaning-*`/`X-Sentakubin-*`/`X-Lenet-*` 等のクリーニング・宅配洗濯通知記録印を送信側が自称している (D601)
+    pub cleaning_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2185,6 +2191,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         shrine_marks: has_shrine_marks(hdr),
         coworking_marks: has_coworking_marks(hdr),
         taxfiling_marks: has_taxfiling_marks(hdr),
+        golfcourse_marks: has_golfcourse_marks(hdr),
+        fishing_marks: has_fishing_marks(hdr),
+        cleaning_marks: has_cleaning_marks(hdr),
     })
 }
 
@@ -11552,6 +11561,210 @@ fn has_taxfiling_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-PGM-*`/`X-Accordia-*`/`X-TaiheiyoClub-*`/`X-Tokow-*`/`X-JumboGolf-*`/`X-GolfNow-*`/`X-TsuruyaGolf-*`/`X-NikiGolf-*`/`X-Golf5-*`/`X-AlpenGolf-*`/`X-MizunoGolf-*`/`X-HonmaGolf-*`/`X-BridgestoneGolf-*`/`X-VictoriaGolf-*`/`X-PrestigeGC-*`/`X-TomeiCC-*`/`X-TotsukaCC-*`/`X-NagoyaGC-*`/`X-ChibaGC-*`/`X-GolfDigest-*`/`X-GolfPartner-*`/`X-FestivalGolf-*`/`X-GolfValue-*`/`X-Kasumigaseki-*`/`X-KawanaGC-*`/`X-NaruoGC-*`/`X-HironoGC-*`/`X-TokyoGC-*`/`X-AsamaGC-*`/`X-FujiGC-*`/`X-SenumaGC-*`/`X-OaraiGC-*`/`X-NissinGolf-*`/`X-CentralGolf-*`/`X-MetroGreen-*`/`X-WakasuGolf-*`/`X-TopGolf-*`/`X-DrivingRange-*`/`X-GolfAcademy-*`/`X-IndoorGolf-*`/`X-SimGolf-*`/`X-ZGolf-*`/`X-GolfLesson-*`/`X-GolfClub-*`/`X-CountryClub-*`/`X-GolfResort-*`/`X-PGMStone-*`/`X-PGMGrace-*`/`X-GolfDays-*`/`X-GolfSelect-*`/`X-GolfShop-*`/`X-GolfLand-*`/`X-MyGolf-*`/`X-GolfMail-*`/`X-GolfReserve-*`/`X-TeeTime-*`/`X-GolfPeak-*`/`X-GolfValley-*` (ゴルフ場・練習場・ゴルフ予約の通知記録) を送信側が自称しているかどうか。会員権・予約確認・コンペ賞品の偽装はゴルファー狙い詐欺の典型手口。(スポーツ用品機は D529)
+fn has_golfcourse_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-pgm-")
+            || l.starts_with("x-accordia-")
+            || l.starts_with("x-taiheiyoclub-")
+            || l.starts_with("x-tokow-")
+            || l.starts_with("x-jumbogolf-")
+            || l.starts_with("x-golfnow-")
+            || l.starts_with("x-tsuruyagolf-")
+            || l.starts_with("x-nikigolf-")
+            || l.starts_with("x-golf5-")
+            || l.starts_with("x-alpengolf-")
+            || l.starts_with("x-mizunogolf-")
+            || l.starts_with("x-honmagolf-")
+            || l.starts_with("x-bridgestonegolf-")
+            || l.starts_with("x-victoriagolf-")
+            || l.starts_with("x-prestigegc-")
+            || l.starts_with("x-tomeicc-")
+            || l.starts_with("x-totsukacc-")
+            || l.starts_with("x-nagoyagc-")
+            || l.starts_with("x-chibagc-")
+            || l.starts_with("x-golfdigest-")
+            || l.starts_with("x-golfpartner-")
+            || l.starts_with("x-festivalgolf-")
+            || l.starts_with("x-golfvalue-")
+            || l.starts_with("x-kasumigaseki-")
+            || l.starts_with("x-kawanagc-")
+            || l.starts_with("x-naruogc-")
+            || l.starts_with("x-hironogc-")
+            || l.starts_with("x-tokyogc-")
+            || l.starts_with("x-asamagc-")
+            || l.starts_with("x-fujigc-")
+            || l.starts_with("x-senumagc-")
+            || l.starts_with("x-oaraigc-")
+            || l.starts_with("x-nissingolf-")
+            || l.starts_with("x-centralgolf-")
+            || l.starts_with("x-metrogreen-")
+            || l.starts_with("x-wakasugolf-")
+            || l.starts_with("x-topgolf-")
+            || l.starts_with("x-drivingrange-")
+            || l.starts_with("x-golfacademy-")
+            || l.starts_with("x-indoorgolf-")
+            || l.starts_with("x-simgolf-")
+            || l.starts_with("x-zgolf-")
+            || l.starts_with("x-golflesson-")
+            || l.starts_with("x-golfclub-")
+            || l.starts_with("x-countryclub-")
+            || l.starts_with("x-golfresort-")
+            || l.starts_with("x-pgmstone-")
+            || l.starts_with("x-pgmgrace-")
+            || l.starts_with("x-golfdays-")
+            || l.starts_with("x-golfselect-")
+            || l.starts_with("x-golfshop-")
+            || l.starts_with("x-golfland-")
+            || l.starts_with("x-mygolf-")
+            || l.starts_with("x-golfmail-")
+            || l.starts_with("x-golfreserve-")
+            || l.starts_with("x-teetime-")
+            || l.starts_with("x-golfpeak-")
+            || l.starts_with("x-golfvalley-")
+    })
+}
+
+/// `X-Joshuya-*`/`X-Casting-*`/`X-Tsurigu-*`/`X-FishingYu-*`/`X-DaiwaSeiko-*`/`X-Gamakatsu-*`/`X-Megabass-*`/`X-Jackall-*`/`X-Issei-*`/`X-Zappu-*`/`X-OSP-*`/`X-EvergreenFishing-*`/`X-Marukyu-*`/`X-Sasame-*`/`X-OwnerHook-*`/`X-Varivas-*`/`X-Sunline-*`/`X-TorayFishing-*`/`X-DuelFishing-*`/`X-YoZuri-*`/`X-MariaFishing-*`/`X-TackleBerry-*`/`X-BunBunTsurigu-*`/`X-JoshinFishing-*`/`X-SatelliteFishing-*`/`X-PointTsurigu-*`/`X-Aikawa-*`/`X-TsuriyaSan-*`/`X-Bakuretsu-*`/`X-Tsuchino-*`/`X-Fisherman-*`/`X-FishingTackle-*`/`X-LureShop-*`/`X-BaitShop-*`/`X-FlyFishing-*`/`X-Tenkara-*`/`X-SeaBass-*`/`X-Ajingu-*`/`X-Egingu-*`/`X-Jiggingu-*`/`X-Tairaba-*`/`X-Sabiki-*`/`X-IkadaFishing-*`/`X-FunaTsuri-*`/`X-Wakasagi-*`/`X-HazeTsuri-*`/`X-KisuTsuri-*`/`X-HirameTsuri-*`/`X-MadaiTsuri-*`/`X-AjiTsuri-*`/`X-IsoTsuri-*`/`X-UmiTsuri-*`/`X-KawaTsuri-*`/`X-BoatFishing-*`/`X-FishingMaru-*`/`X-TsuriMaru-*` (釣具・フィッシング・釣り船の通知記録) を送信側が自称しているかどうか。限定ルアー・釣り船予約・ポイント失効の偽装は釣り人狙い詐欺の典型手口。(スポーツ用品機は D529、シマノは D577)
+fn has_fishing_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-joshuya-")
+            || l.starts_with("x-casting-")
+            || l.starts_with("x-tsurigu-")
+            || l.starts_with("x-fishingyu-")
+            || l.starts_with("x-daiwaseiko-")
+            || l.starts_with("x-gamakatsu-")
+            || l.starts_with("x-megabass-")
+            || l.starts_with("x-jackall-")
+            || l.starts_with("x-issei-")
+            || l.starts_with("x-zappu-")
+            || l.starts_with("x-osp-")
+            || l.starts_with("x-evergreenfishing-")
+            || l.starts_with("x-marukyu-")
+            || l.starts_with("x-sasame-")
+            || l.starts_with("x-ownerhook-")
+            || l.starts_with("x-varivas-")
+            || l.starts_with("x-sunline-")
+            || l.starts_with("x-torayfishing-")
+            || l.starts_with("x-duelfishing-")
+            || l.starts_with("x-yozuri-")
+            || l.starts_with("x-mariafishing-")
+            || l.starts_with("x-tackleberry-")
+            || l.starts_with("x-bunbuntsurigu-")
+            || l.starts_with("x-joshinfishing-")
+            || l.starts_with("x-satellitefishing-")
+            || l.starts_with("x-pointtsurigu-")
+            || l.starts_with("x-aikawa-")
+            || l.starts_with("x-tsuriyasan-")
+            || l.starts_with("x-bakuretsu-")
+            || l.starts_with("x-tsuchino-")
+            || l.starts_with("x-fisherman-")
+            || l.starts_with("x-fishingtackle-")
+            || l.starts_with("x-lureshop-")
+            || l.starts_with("x-baitshop-")
+            || l.starts_with("x-flyfishing-")
+            || l.starts_with("x-tenkara-")
+            || l.starts_with("x-seabass-")
+            || l.starts_with("x-ajingu-")
+            || l.starts_with("x-egingu-")
+            || l.starts_with("x-jiggingu-")
+            || l.starts_with("x-tairaba-")
+            || l.starts_with("x-sabiki-")
+            || l.starts_with("x-ikadafishing-")
+            || l.starts_with("x-funatsuri-")
+            || l.starts_with("x-wakasagi-")
+            || l.starts_with("x-hazetsuri-")
+            || l.starts_with("x-kisutsuri-")
+            || l.starts_with("x-hirametsuri-")
+            || l.starts_with("x-madaitsuri-")
+            || l.starts_with("x-ajitsuri-")
+            || l.starts_with("x-isotsuri-")
+            || l.starts_with("x-umitsuri-")
+            || l.starts_with("x-kawatsuri-")
+            || l.starts_with("x-boatfishing-")
+            || l.starts_with("x-fishingmaru-")
+            || l.starts_with("x-tsurimaru-")
+    })
+}
+
+/// `X-Hakuyosha-*`/`X-PonyCleaning-*`/`X-HopeCleaning-*`/`X-CleanKing-*`/`X-Sentakubin-*`/`X-Linavis-*`/`X-Kireina-*`/`X-DeaCleaning-*`/`X-FranceYa-*`/`X-PajamaCleaning-*`/`X-KuriRaba-*`/`X-Lenet-*`/`X-CleaningMonster-*`/`X-MyCleaning-*`/`X-KuriEpan-*`/`X-Tosho-*`/`X-Mammy-*`/`X-Kurie-*`/`X-Sansuisha-*`/`X-Whity-*`/`X-RebonCleaning-*`/`X-PontCleaning-*`/`X-CleaningDebut-*`/`X-KuruPlus-*`/`X-Swany-*`/`X-Ukii-*`/`X-Uccon-*`/`X-YuukiCleaning-*`/`X-Fuurin-*`/`X-KireiOukoku-*`/`X-CleanParc-*`/`X-CleanLife-*`/`X-HappyCleaning-*`/`X-SankoCleaning-*`/`X-CleaningExpress-*`/`X-CleaningBox-*`/`X-SentakuYa-*`/`X-CleaningPro-*`/`X-DepotCleaning-*`/`X-Cleaning24-*`/`X-SumaClean-*`/`X-CleanNote-*`/`X-WakuwakuClean-*`/`X-EbisuCleaning-*`/`X-DaikanyamaClean-*`/`X-GinzaCleaning-*`/`X-CleanPremium-*`/`X-RoyalClean-*`/`X-LuxuryClean-*`/`X-BridalClean-*`/`X-SuitClean-*`/`X-ShirtClean-*`/`X-FutonClean-*`/`X-KutsuClean-*`/`X-BagClean-*`/`X-FurClean-*`/`X-LeatherClean-*` (クリーニング・宅配洗濯の通知記録) を送信側が自称しているかどうか。預かり品完了・保管期限・送料請求の偽装はクリーニング詐欺の典型手口。
+fn has_cleaning_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hakuyosha-")
+            || l.starts_with("x-ponycleaning-")
+            || l.starts_with("x-hopecleaning-")
+            || l.starts_with("x-cleanking-")
+            || l.starts_with("x-sentakubin-")
+            || l.starts_with("x-linavis-")
+            || l.starts_with("x-kireina-")
+            || l.starts_with("x-deacleaning-")
+            || l.starts_with("x-franceya-")
+            || l.starts_with("x-pajamacleaning-")
+            || l.starts_with("x-kuriraba-")
+            || l.starts_with("x-lenet-")
+            || l.starts_with("x-cleaningmonster-")
+            || l.starts_with("x-mycleaning-")
+            || l.starts_with("x-kuriepan-")
+            || l.starts_with("x-tosho-")
+            || l.starts_with("x-mammy-")
+            || l.starts_with("x-kurie-")
+            || l.starts_with("x-sansuisha-")
+            || l.starts_with("x-whity-")
+            || l.starts_with("x-reboncleaning-")
+            || l.starts_with("x-pontcleaning-")
+            || l.starts_with("x-cleaningdebut-")
+            || l.starts_with("x-kuruplus-")
+            || l.starts_with("x-swany-")
+            || l.starts_with("x-ukii-")
+            || l.starts_with("x-uccon-")
+            || l.starts_with("x-yuukicleaning-")
+            || l.starts_with("x-fuurin-")
+            || l.starts_with("x-kireioukoku-")
+            || l.starts_with("x-cleanparc-")
+            || l.starts_with("x-cleanlife-")
+            || l.starts_with("x-happycleaning-")
+            || l.starts_with("x-sankocleaning-")
+            || l.starts_with("x-cleaningexpress-")
+            || l.starts_with("x-cleaningbox-")
+            || l.starts_with("x-sentakuya-")
+            || l.starts_with("x-cleaningpro-")
+            || l.starts_with("x-depotcleaning-")
+            || l.starts_with("x-cleaning24-")
+            || l.starts_with("x-sumaclean-")
+            || l.starts_with("x-cleannote-")
+            || l.starts_with("x-wakuwakuclean-")
+            || l.starts_with("x-ebisucleaning-")
+            || l.starts_with("x-daikanyamaclean-")
+            || l.starts_with("x-ginzacleaning-")
+            || l.starts_with("x-cleanpremium-")
+            || l.starts_with("x-royalclean-")
+            || l.starts_with("x-luxuryclean-")
+            || l.starts_with("x-bridalclean-")
+            || l.starts_with("x-suitclean-")
+            || l.starts_with("x-shirtclean-")
+            || l.starts_with("x-futonclean-")
+            || l.starts_with("x-kutsuclean-")
+            || l.starts_with("x-bagclean-")
+            || l.starts_with("x-furclean-")
+            || l.starts_with("x-leatherclean-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -17074,7 +17287,7 @@ mod tests {
     }
 
     #[test]
-    fn scan_は球機印を検出する() {
+    fn scan_は場機印を検出する() {
         let f1 = b"X-FMarinos-Notify: x\r\n\r\nx";
         assert!(has_sports_team_marks(f1));
         let d1 = b"X-Dodgers-Notify: x\r\n\r\nx";
@@ -18813,5 +19026,152 @@ X-Other: 1
 
 body";
     assert!(!has_taxfiling_marks(clean));
+}
+
+#[test]
+fn scan_は球機印を検出する() {
+    let p1 = b"From: a@b
+X-PGM-Id: 1
+
+x";
+    let a1 = b"From: a@b
+X-Accordia-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-TaiheiyoClub-Notice: 1
+
+x";
+    let j1 = b"From: a@b
+X-JumboGolf-Flag: 1
+
+x";
+    let g1 = b"From: a@b
+X-GolfNow-Entry: 1
+
+x";
+    let n1 = b"From: a@b
+X-NikiGolf-Record: 1
+
+x";
+    let v1 = b"From: a@b
+X-VictoriaGolf-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-CountryClub-Stamp: 1
+
+x";
+    assert!(has_golfcourse_marks(p1));
+    assert!(has_golfcourse_marks(a1));
+    assert!(has_golfcourse_marks(t1));
+    assert!(has_golfcourse_marks(j1));
+    assert!(has_golfcourse_marks(g1));
+    assert!(has_golfcourse_marks(n1));
+    assert!(has_golfcourse_marks(v1));
+    assert!(has_golfcourse_marks(c1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_golfcourse_marks(clean));
+}
+
+#[test]
+fn scan_は釣機印を検出する() {
+    let j1 = b"From: a@b
+X-Joshuya-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-Casting-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-Tsurigu-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-DaiwaSeiko-Flag: 1
+
+x";
+    let g1 = b"From: a@b
+X-Gamakatsu-Entry: 1
+
+x";
+    let m1 = b"From: a@b
+X-Megabass-Record: 1
+
+x";
+    let v1 = b"From: a@b
+X-Varivas-Trace: 1
+
+x";
+    let f1 = b"From: a@b
+X-FishingMaru-Stamp: 1
+
+x";
+    assert!(has_fishing_marks(j1));
+    assert!(has_fishing_marks(c1));
+    assert!(has_fishing_marks(t1));
+    assert!(has_fishing_marks(d1));
+    assert!(has_fishing_marks(g1));
+    assert!(has_fishing_marks(m1));
+    assert!(has_fishing_marks(v1));
+    assert!(has_fishing_marks(f1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_fishing_marks(clean));
+}
+
+#[test]
+fn scan_は濯機印を検出する() {
+    let h1 = b"From: a@b
+X-Hakuyosha-Id: 1
+
+x";
+    let p1 = b"From: a@b
+X-PonyCleaning-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sentakubin-Notice: 1
+
+x";
+    let l1 = b"From: a@b
+X-Lenet-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kireina-Entry: 1
+
+x";
+    let c1 = b"From: a@b
+X-CleanKing-Record: 1
+
+x";
+    let f1 = b"From: a@b
+X-FutonClean-Trace: 1
+
+x";
+    let r1 = b"From: a@b
+X-RoyalClean-Stamp: 1
+
+x";
+    assert!(has_cleaning_marks(h1));
+    assert!(has_cleaning_marks(p1));
+    assert!(has_cleaning_marks(s1));
+    assert!(has_cleaning_marks(l1));
+    assert!(has_cleaning_marks(k1));
+    assert!(has_cleaning_marks(c1));
+    assert!(has_cleaning_marks(f1));
+    assert!(has_cleaning_marks(r1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_cleaning_marks(clean));
 }
 }
