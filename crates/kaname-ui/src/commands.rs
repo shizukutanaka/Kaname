@@ -1516,6 +1516,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D528: ファストフード・飲食チェーン印自称
+    if env.restaurant_marks {
+        render_risks.push(
+            "X-McDonalds-*/X-Starbucks-*/X-Dominos-*/X-KFC-*/X-Sushiro-*/X-MosBurger-*/X-Sukiya-*/X-Wetherspoons-* 等 — 食機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D529: スポーツ・アウトドアブランド印自称
+    if env.sports_marks {
+        render_risks.push(
+            "X-Nike-*/X-Adidas-*/X-Decathlon-*/X-Montbell-*/X-ASICS-*/X-Wilson-*/X-Xebio-*/X-TheNorthFace-* 等 — 武具機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D530: フィットネス・ウェアラブル・ジム印自称
+    if env.fitness_marks {
+        render_risks.push(
+            "X-Fitbit-*/X-Garmin-*/X-Peloton-*/X-Strava-*/X-GoldGym-*/X-KonamiSports-*/X-Calm-*/X-AllTrails-* 等 — 健機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

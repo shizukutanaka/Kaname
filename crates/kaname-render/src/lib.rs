@@ -1006,6 +1006,40 @@ pub struct Envelope {
     /// ドラッグストア・調剤・化粧品印があるか — 薬機の通知記録を送信側が
     /// 自称する兆候 (D527)。(`X-CVS-*`/`X-Walgreens-*` は D481 で検出済み)
     pub drugstore_marks: bool,
+    /// `X-McDonalds-*`/`X-Starbucks-*`/`X-Dominos-*`/`X-KFC-*`/`X-Subway-*`/
+    /// `X-BurgerKing-*`/`X-PizzaHut-*`/`X-Wendys-*`/`X-Chipotle-*`/
+    /// `X-TacoBell-*`/`X-Dunkin-*`/`X-TimHortons-*`/`X-ChickFilA-*`/
+    /// `X-PandaExpress-*`/`X-MosBurger-*`/`X-Sukiya-*`/`X-Yoshinoya-*`/
+    /// `X-Matsuya-*`/`X-Saizeriya-*`/`X-Dennys-*`/`X-KuraSushi-*`/
+    /// `X-Sushiro-*`/`X-HamaSushi-*`/`X-KappaSushi-*`/`X-Torikizoku-*`/
+    /// `X-Skylark-*`/`X-Cocos-*`/`X-Jonathans-*`/`X-Bamiyan-*`/
+    /// `X-RoyalHost-*`/`X-OliveGarden-*`/`X-CrackerBarrel-*`/
+    /// `X-CheesecakeFactory-*`/`X-Nandos-*`/`X-Wagamama-*`/`X-Zizzi-*`/
+    /// `X-Wetherspoons-*`/`X-Greggs-*`/`X-PretAManger-*` 等の
+    /// ファストフード・飲食チェーン印があるか — 食機の通知記録を
+    /// 送信側が自称する兆候 (D528)。(`X-Gusto-*` は D466 で検出済み)
+    pub restaurant_marks: bool,
+    /// `X-Nike-*`/`X-Adidas-*`/`X-Puma-*`/`X-UnderArmour-*`/`X-Decathlon-*`/
+    /// `X-NewBalance-*`/`X-ASICS-*`/`X-Mizuno-*`/`X-OnRunning-*`/`X-HOKA-*`/
+    /// `X-Salomon-*`/`X-TheNorthFace-*`/`X-Patagonia-*`/`X-Columbia-*`/
+    /// `X-Arcteryx-*`/`X-Montbell-*`/`X-REI-*`/`X-BassPro-*`/`X-Cabelas-*`/
+    /// `X-Dicks-*`/`X-Fanatics-*`/`X-Xebio-*`/`X-Himaraya-*`/`X-Alpen-*`/
+    /// `X-Wilson-*`/`X-Yonex-*`/`X-Babolat-*`/`X-Callaway-*`/`X-TaylorMade-*`/
+    /// `X-Ping-*`/`X-Titleist-*`/`X-Fila-*`/`X-Lotto-*`/`X-Umbro-*`/
+    /// `X-Diadora-*` 等のスポーツ・アウトドアブランド印があるか —
+    /// 武具機の通知記録を送信側が自称する兆候 (D529)。
+    pub sports_marks: bool,
+    /// `X-Fitbit-*`/`X-Garmin-*`/`X-Polar-*`/`X-Suunto-*`/`X-Coros-*`/
+    /// `X-Whoop-*`/`X-Oura-*`/`X-Strava-*`/`X-Peloton-*`/`X-Zwift-*`/
+    /// `X-MyFitnessPal-*`/`X-Noom-*`/`X-Freeletics-*`/`X-Runkeeper-*`/
+    /// `X-MapMyRun-*`/`X-Komoot-*`/`X-AllTrails-*`/`X-Calm-*`/`X-Headspace-*`/
+    /// `X-BetterSleep-*`/`X-Bodybuilding-*`/`X-NikeTraining-*`/
+    /// `X-AdidasRunning-*`/`X-Fiit-*`/`X-Anytime-*`/`X-GoldGym-*`/
+    /// `X-Tipness-*`/`X-Renaissance-*`/`X-KonamiSports-*`/`X-CentralSports-*`/
+    /// `X-Major4-*`/`X-LAVA-*`/`X-Curves-*` 等の
+    /// フィットネス・ウェアラブル・ジム印があるか — 健機の通知記録を
+    /// 送信側が自称する兆候 (D530)。
+    pub fitness_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1394,6 +1428,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         grocery_marks: has_grocery_marks(raw),
         furniture_marks: has_furniture_marks(raw),
         drugstore_marks: has_drugstore_marks(raw),
+        restaurant_marks: has_restaurant_marks(raw),
+        sports_marks: has_sports_marks(raw),
+        fitness_marks: has_fitness_marks(raw),
     })
 }
 
@@ -6442,6 +6479,177 @@ fn has_drugstore_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-McDonalds-*`/`X-Starbucks-*`/`X-Dominos-*`/`X-KFC-*`/`X-Subway-*`/
+/// `X-BurgerKing-*`/`X-PizzaHut-*`/`X-Wendys-*`/`X-Chipotle-*`/`X-TacoBell-*`/
+/// `X-Dunkin-*`/`X-TimHortons-*`/`X-ChickFilA-*`/`X-PandaExpress-*`/
+/// `X-MosBurger-*`/`X-Sukiya-*`/`X-Yoshinoya-*`/`X-Matsuya-*`/`X-Saizeriya-*`/
+/// `X-Dennys-*`/`X-KuraSushi-*`/`X-Sushiro-*`/`X-HamaSushi-*`/`X-KappaSushi-*`/
+/// `X-Torikizoku-*`/`X-Skylark-*`/`X-Cocos-*`/`X-Jonathans-*`/`X-Bamiyan-*`/
+/// `X-RoyalHost-*`/`X-OliveGarden-*`/`X-CrackerBarrel-*`/
+/// `X-CheesecakeFactory-*`/`X-Nandos-*`/`X-Wagamama-*`/`X-Zizzi-*`/
+/// `X-Wetherspoons-*`/`X-Greggs-*`/`X-PretAManger-*` 等の
+/// ファストフード・飲食チェーン印があるか判定する (D528)。
+///
+/// `X-McDonalds-*` (マクドナルド)、`X-Starbucks-*` (Starbucks)、
+/// `X-Sushiro-*` (スシロー) は食機の通知記録 — 送信側から届くこれは自称。
+/// 食事券・クーポン詐欺の典型印。`X-Gusto-*` は D466 で検出済み。
+fn has_restaurant_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-mcdonalds-")
+            || l.starts_with("x-starbucks-")
+            || l.starts_with("x-dominos-")
+            || l.starts_with("x-kfc-")
+            || l.starts_with("x-subway-")
+            || l.starts_with("x-burgerking-")
+            || l.starts_with("x-pizzahut-")
+            || l.starts_with("x-wendys-")
+            || l.starts_with("x-chipotle-")
+            || l.starts_with("x-tacobell-")
+            || l.starts_with("x-dunkin-")
+            || l.starts_with("x-timhortons-")
+            || l.starts_with("x-chickfila-")
+            || l.starts_with("x-pandaexpress-")
+            || l.starts_with("x-mosburger-")
+            || l.starts_with("x-sukiya-")
+            || l.starts_with("x-yoshinoya-")
+            || l.starts_with("x-matsuya-")
+            || l.starts_with("x-saizeriya-")
+            || l.starts_with("x-dennys-")
+            || l.starts_with("x-kurasushi-")
+            || l.starts_with("x-sushiro-")
+            || l.starts_with("x-hamasushi-")
+            || l.starts_with("x-kappasushi-")
+            || l.starts_with("x-torikizoku-")
+            || l.starts_with("x-skylark-")
+            || l.starts_with("x-cocos-")
+            || l.starts_with("x-jonathans-")
+            || l.starts_with("x-bamiyan-")
+            || l.starts_with("x-royalhost-")
+            || l.starts_with("x-olivegarden-")
+            || l.starts_with("x-crackerbarrel-")
+            || l.starts_with("x-cheesecakefactory-")
+            || l.starts_with("x-nandos-")
+            || l.starts_with("x-wagamama-")
+            || l.starts_with("x-zizzi-")
+            || l.starts_with("x-wetherspoons-")
+            || l.starts_with("x-greggs-")
+            || l.starts_with("x-pretamanger-")
+    })
+}
+
+/// `X-Nike-*`/`X-Adidas-*`/`X-Puma-*`/`X-UnderArmour-*`/`X-Decathlon-*`/
+/// `X-NewBalance-*`/`X-ASICS-*`/`X-Mizuno-*`/`X-OnRunning-*`/`X-HOKA-*`/
+/// `X-Salomon-*`/`X-TheNorthFace-*`/`X-Patagonia-*`/`X-Columbia-*`/
+/// `X-Arcteryx-*`/`X-Montbell-*`/`X-REI-*`/`X-BassPro-*`/`X-Cabelas-*`/
+/// `X-Dicks-*`/`X-Fanatics-*`/`X-Xebio-*`/`X-Himaraya-*`/`X-Alpen-*`/
+/// `X-Wilson-*`/`X-Yonex-*`/`X-Babolat-*`/`X-Callaway-*`/`X-TaylorMade-*`/
+/// `X-Ping-*`/`X-Titleist-*`/`X-Fila-*`/`X-Lotto-*`/`X-Umbro-*`/`X-Diadora-*`
+/// 等のスポーツ・アウトドアブランド印があるか判定する (D529)。
+///
+/// `X-Nike-*` (Nike)、`X-Adidas-*` (adidas)、`X-Montbell-*` (mont-bell) は
+/// 武具機の通知記録 — 送信側から届くこれは自称。
+fn has_sports_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-nike-")
+            || l.starts_with("x-adidas-")
+            || l.starts_with("x-puma-")
+            || l.starts_with("x-underarmour-")
+            || l.starts_with("x-decathlon-")
+            || l.starts_with("x-newbalance-")
+            || l.starts_with("x-asics-")
+            || l.starts_with("x-mizuno-")
+            || l.starts_with("x-onrunning-")
+            || l.starts_with("x-hoka-")
+            || l.starts_with("x-salomon-")
+            || l.starts_with("x-thenorthface-")
+            || l.starts_with("x-patagonia-")
+            || l.starts_with("x-columbia-")
+            || l.starts_with("x-arcteryx-")
+            || l.starts_with("x-montbell-")
+            || l.starts_with("x-rei-")
+            || l.starts_with("x-basspro-")
+            || l.starts_with("x-cabelas-")
+            || l.starts_with("x-dicks-")
+            || l.starts_with("x-fanatics-")
+            || l.starts_with("x-xebio-")
+            || l.starts_with("x-himaraya-")
+            || l.starts_with("x-alpen-")
+            || l.starts_with("x-wilson-")
+            || l.starts_with("x-yonex-")
+            || l.starts_with("x-babolat-")
+            || l.starts_with("x-callaway-")
+            || l.starts_with("x-taylormade-")
+            || l.starts_with("x-ping-")
+            || l.starts_with("x-titleist-")
+            || l.starts_with("x-fila-")
+            || l.starts_with("x-lotto-")
+            || l.starts_with("x-umbro-")
+            || l.starts_with("x-diadora-")
+    })
+}
+
+/// `X-Fitbit-*`/`X-Garmin-*`/`X-Polar-*`/`X-Suunto-*`/`X-Coros-*`/`X-Whoop-*`/
+/// `X-Oura-*`/`X-Strava-*`/`X-Peloton-*`/`X-Zwift-*`/`X-MyFitnessPal-*`/
+/// `X-Noom-*`/`X-Freeletics-*`/`X-Runkeeper-*`/`X-MapMyRun-*`/`X-Komoot-*`/
+/// `X-AllTrails-*`/`X-Calm-*`/`X-Headspace-*`/`X-BetterSleep-*`/
+/// `X-Bodybuilding-*`/`X-NikeTraining-*`/`X-AdidasRunning-*`/`X-Fiit-*`/
+/// `X-Anytime-*`/`X-GoldGym-*`/`X-Tipness-*`/`X-Renaissance-*`/
+/// `X-KonamiSports-*`/`X-CentralSports-*`/`X-Major4-*`/`X-LAVA-*`/
+/// `X-Curves-*` 等のフィットネス・ウェアラブル・ジム印があるか判定する
+/// (D530)。
+///
+/// `X-Fitbit-*` (Fitbit)、`X-Garmin-*` (Garmin)、`X-GoldGym-*` (ゴールドジム)
+/// は健機の通知記録 — 送信側から届くこれは自称。
+fn has_fitness_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-fitbit-")
+            || l.starts_with("x-garmin-")
+            || l.starts_with("x-polar-")
+            || l.starts_with("x-suunto-")
+            || l.starts_with("x-coros-")
+            || l.starts_with("x-whoop-")
+            || l.starts_with("x-oura-")
+            || l.starts_with("x-strava-")
+            || l.starts_with("x-peloton-")
+            || l.starts_with("x-zwift-")
+            || l.starts_with("x-myfitnesspal-")
+            || l.starts_with("x-noom-")
+            || l.starts_with("x-freeletics-")
+            || l.starts_with("x-runkeeper-")
+            || l.starts_with("x-mapmyrun-")
+            || l.starts_with("x-komoot-")
+            || l.starts_with("x-alltrails-")
+            || l.starts_with("x-calm-")
+            || l.starts_with("x-headspace-")
+            || l.starts_with("x-bettersleep-")
+            || l.starts_with("x-bodybuilding-")
+            || l.starts_with("x-niketraining-")
+            || l.starts_with("x-adidasrunning-")
+            || l.starts_with("x-fiit-")
+            || l.starts_with("x-anytime-")
+            || l.starts_with("x-goldgym-")
+            || l.starts_with("x-tipness-")
+            || l.starts_with("x-renaissance-")
+            || l.starts_with("x-konamisports-")
+            || l.starts_with("x-centralsports-")
+            || l.starts_with("x-major4-")
+            || l.starts_with("x-lava-")
+            || l.starts_with("x-curves-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -11146,6 +11354,72 @@ mod tests {
         assert!(has_drugstore_marks(u1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_drugstore_marks(clean));
+    }
+
+    #[test]
+    fn scan_は飲食印を検出する() {
+        let m1 = b"X-McDonalds-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(m1));
+        let s1 = b"X-Starbucks-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(s1));
+        let d1 = b"X-Dominos-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(d1));
+        let k1 = b"X-KFC-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(k1));
+        let s2 = b"X-Sushiro-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(s2));
+        let m2 = b"X-MosBurger-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(m2));
+        let s3 = b"X-Sukiya-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(s3));
+        let w1 = b"X-Wetherspoons-Notify: x\r\n\r\nx";
+        assert!(has_restaurant_marks(w1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_restaurant_marks(clean));
+    }
+
+    #[test]
+    fn scan_は武具印を検出する() {
+        let n1 = b"X-Nike-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(n1));
+        let a1 = b"X-Adidas-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(a1));
+        let d1 = b"X-Decathlon-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(d1));
+        let m1 = b"X-Montbell-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(m1));
+        let a2 = b"X-ASICS-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(a2));
+        let w1 = b"X-Wilson-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(w1));
+        let x1 = b"X-Xebio-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(x1));
+        let t1 = b"X-TheNorthFace-Notify: x\r\n\r\nx";
+        assert!(has_sports_marks(t1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_sports_marks(clean));
+    }
+
+    #[test]
+    fn scan_は健機印を検出する() {
+        let f1 = b"X-Fitbit-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(f1));
+        let g1 = b"X-Garmin-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(g1));
+        let p1 = b"X-Peloton-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(p1));
+        let s1 = b"X-Strava-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(s1));
+        let g2 = b"X-GoldGym-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(g2));
+        let k1 = b"X-KonamiSports-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(k1));
+        let c1 = b"X-Calm-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(c1));
+        let a1 = b"X-AllTrails-Notify: x\r\n\r\nx";
+        assert!(has_fitness_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_fitness_marks(clean));
     }
 }
 
