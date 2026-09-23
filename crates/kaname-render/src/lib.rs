@@ -119,6 +119,17 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
+    /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
+    /// (D327)。
+    pub abuse_headers: bool,
+    /// `X-MS-Has-Attach:`/`X-Has-Attach:` 等の「添付あり」宣言があるか —
+    /// Exchange 輸送が付ける添付存在を送信側が自称する兆候 (D328)。
+    pub has_attach_claim: bool,
+    /// `Feedback-ID:`/`X-Feedback-ID:` 等の FBL (フィードバックループ)
+    /// 識別子があるか — 「ISP と苦情報告を共有している」の体裁を自署する
+    /// 兆候 (D329)。
+    pub feedback_id: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +401,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        abuse_headers: has_abuse_headers(raw),
+        has_attach_claim: has_attach_claim(raw),
+        feedback_id: has_feedback_id(raw),
     })
 }
 
@@ -487,6 +501,59 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
+/// 等の abuse 報告先ヘッダがあるか判定する (D327)。
+///
+/// 本物の ESP/ISP は abuse 窓口を自社ドメインで運用し受信側が確認
+/// できる — 送信側が窓口を名乗るのは「監視されている体裁」の自署で、
+/// 報告先が実在しないフリーメール等であることが多い。
+fn has_abuse_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("complaints-to:")
+            || l.starts_with("x-complaints-to:")
+            || l.starts_with("x-report-abuse:")
+            || l.starts_with("x-abuse-reports-to:")
+            || l.starts_with("x-abuse:")
+    })
+}
+
+/// `X-MS-Has-Attach:`/`X-Has-Attach:` 等の「添付あり」宣言があるか
+/// 判定する (D328)。
+///
+/// `X-MS-Has-Attach:` は Exchange の輸送パイプラインが MIME を
+/// 走査して付ける内部印 — 送信側から届くこれは「添付存在」を
+/// 内容側が主張する自称 (boundary/filename とは独立の第 2 の
+/// 添付宣言、parser differential の素地)。
+fn has_attach_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("x-ms-has-attach:") || l.starts_with("x-has-attach:"))
+}
+
+/// `Feedback-ID:`/`X-Feedback-ID:` 等の FBL 識別子があるか判定する
+/// (D329)。
+///
+/// `Feedback-ID:` は送信者が ISP の FBL (フィードバックループ: 苦情を
+/// 送り返す機構) に登録している印 — 「監視に応じる運用者」の体裁を
+/// 自署する値で、正当な登録がなく名乗るだけの擬装に使われる。
+fn has_feedback_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2807,40 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はabuse報告先を検出する() {
+        let ct = b"Complaints-To: abuse@x\r\n\r\nx";
+        assert!(has_abuse_headers(ct));
+        let xr = b"X-Report-Abuse: abuse@x\r\n\r\nx";
+        assert!(has_abuse_headers(xr));
+        let xa = b"X-Abuse-Reports-To: a@b\r\n\r\nx";
+        assert!(has_abuse_headers(xa));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_abuse_headers(clean));
+        let body = b"From: a@b\r\n\r\nComplaints-To: abuse@x";
+        assert!(!has_abuse_headers(body));
+    }
+
+    #[test]
+    fn scan_は添付存在自称を検出する() {
+        let ms = b"X-MS-Has-Attach: yes\r\n\r\nx";
+        assert!(has_attach_claim(ms));
+        let xh = b"X-Has-Attach: true\r\n\r\nx";
+        assert!(has_attach_claim(xh));
+        let clean = b"Content-Type: multipart/mixed\r\n\r\nx";
+        assert!(!has_attach_claim(clean));
+    }
+
+    #[test]
+    fn scan_はFeedbackIDを検出する() {
+        let fb = b"Feedback-ID: 12345:camp:x\r\n\r\ny";
+        assert!(has_feedback_id(fb));
+        let xf = b"X-Feedback-ID: camp:x\r\n\r\ny";
+        assert!(has_feedback_id(xf));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_feedback_id(clean));
     }
 }
 

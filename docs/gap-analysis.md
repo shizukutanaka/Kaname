@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D327 | ~~**`Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査**~~ **(解消済み)** | P2 | 「監視あり」の体裁を自署する兆候だが未検査だった。修正: `has_abuse_headers` で検出、`abuse_headers` → `render_risks` 兆候報告 | 窓口は運用者の肩書き — 監視の体裁を問え |
+| D328 | ~~**`X-MS-Has-Attach:`/`X-Has-Attach:` 添付存在自称が未検査**~~ **(解消済み)** | P2 | 輸送系が付ける添付印を送信側が自称する兆候だが未検査だった。修正: `has_attach_claim` で検出、`has_attach_claim` → `render_risks` 兆候報告 | 存在は機械が数える — 内容側の存在宣言は第 2 の宣言として問え |
+| D329 | ~~**`Feedback-ID:`/`X-Feedback-ID:` FBL 識別子自称が未検査**~~ **(解消済み)** | P2 | ISP 苦情ループ登録の体裁を自署する兆候だが未検査だった。修正: `has_feedback_id` で検出、`feedback_id` → `render_risks` 兆候報告 | 共有の印は相手が見ている — 名乗るだけの共有を問え |
