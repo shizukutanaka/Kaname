@@ -1210,6 +1210,37 @@ pub struct Envelope {
     /// `X-JapanPost-*`/`X-Sagawa-*`/`X-NX-*` 等の宅配・速達機は
     /// D475 で検出済み)
     pub freight_marks: bool,
+    /// `X-Deloitte-*`/`X-PwC-*`/`X-EY-*`/`X-KPMG-*`/`X-McKinsey-*`/
+    /// `X-BCG-*`/`X-Bain-*`/`X-Accenture-*`/`X-Capgemini-*`/
+    /// `X-Cognizant-*`/`X-Infosys-*`/`X-TCS-*`/`X-Wipro-*`/
+    /// `X-GrantThornton-*`/`X-BDO-*`/`X-RSM-*`/`X-Mazars-*`/`X-Crowe-*`/
+    /// `X-BakerTilly-*`/`X-Protiviti-*`/`X-Mercer-*`/`X-WTW-*`/
+    /// `X-MarshMcLennan-*`/`X-Gartner-*`/`X-Forrester-*`/`X-IDC-*`/
+    /// `X-Moodys-*`/`X-Fitch-*`/`X-SPGlobal-*`/`X-RI-*`/`X-JCR-*`/
+    /// `X-EisnerAmper-*`/`X-MossAdams-*` 等の監査・コンサル・格付印が
+    /// あるか — 監機の通知記録を送信側が自称する兆候 (D546)。
+    /// (`X-Aon-*` は D519 で検出済み)
+    pub accounting_marks: bool,
+    /// `X-Bet365-*`/`X-WilliamHill-*`/`X-Flutter-*`/`X-Entain-*`/
+    /// `X-Caesars-*`/`X-MGM-*`/`X-Wynn-*`/`X-Sands-*`/`X-PokerStars-*`/
+    /// `X-DraftKings-*`/`X-FanDuel-*`/`X-888-*`/`X-Betfair-*`/
+    /// `X-Betfred-*`/`X-Unibet-*`/`X-Bwin-*`/`X-Betway-*`/
+    /// `X-Sportsbet-*`/`X-Pinnacle-*`/`X-Bodog-*`/`X-SBOBET-*`/
+    /// `X-1xBet-*`/`X-Stake-*`/`X-Roobet-*`/`X-VeraJohn-*`/
+    /// `X-Casitabi-*`/`X-Bons-*`/`X-toto-*`/`X-BIG-*`/`X-QueenCasino-*`/
+    /// `X-LapinBet-*` 等の賭博・ブックメーカー・カジノ印があるか —
+    /// 賭機の通知記録を送信側が自称する兆候 (D547)。(`X-JRA-*`/
+    /// `X-Boatrace-*` 等の公営競技は D536 で検出済み)
+    pub gambling_marks: bool,
+    /// `X-SECOM-*`/`X-ALSOK-*`/`X-G4S-*`/`X-Securitas-*`/`X-Prosegur-*`/
+    /// `X-Brinks-*`/`X-AlliedUniversal-*`/`X-ZenNikkei-*`/`X-Rentokil-*`/
+    /// `X-Orkin-*`/`X-Terminix-*`/`X-Duskin-*`/`X-Cintas-*`/`X-Aramark-*`/
+    /// `X-Sodexo-*`/`X-CompassGroup-*`/`X-ISS-*`/`X-AeonDelight-*`/
+    /// `X-UHaul-*`/`X-Art0073-*`/`X-Sakai-*`/`X-PublicStorage-*`/
+    /// `X-ExtraSpace-*`/`X-CubeSmart-*`/`X-Quraz-*`/`X-StorageKing-*`
+    /// 等の警備・清掃・施設管理・引越・ストレージ印があるか —
+    /// 施機の通知記録を送信側が自称する兆候 (D548)。
+    pub facility_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1616,6 +1647,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         energy_marks: has_energy_marks(raw),
         medtech_marks: has_medtech_marks(raw),
         freight_marks: has_freight_marks(raw),
+        accounting_marks: has_accounting_marks(raw),
+        gambling_marks: has_gambling_marks(raw),
+        facility_marks: has_facility_marks(raw),
     })
 }
 
@@ -7666,6 +7700,159 @@ fn has_freight_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Deloitte-*`/`X-PwC-*`/`X-EY-*`/`X-KPMG-*`/`X-McKinsey-*`/`X-BCG-*`/
+/// `X-Bain-*`/`X-Accenture-*`/`X-Capgemini-*`/`X-Cognizant-*`/`X-Infosys-*`/
+/// `X-TCS-*`/`X-Wipro-*`/`X-GrantThornton-*`/`X-BDO-*`/`X-RSM-*`/`X-Mazars-*`/
+/// `X-Crowe-*`/`X-BakerTilly-*`/`X-Protiviti-*`/`X-Mercer-*`/`X-WTW-*`/
+/// `X-MarshMcLennan-*`/`X-Gartner-*`/`X-Forrester-*`/`X-IDC-*`/`X-Moodys-*`/
+/// `X-Fitch-*`/`X-SPGlobal-*`/`X-RI-*`/`X-JCR-*`/`X-EisnerAmper-*`/
+/// `X-MossAdams-*` 等の監査・コンサル・格付印があるか判定する (D546)。
+///
+/// `X-Deloitte-*` (Deloitte)、`X-KPMG-*` (KPMG)、`X-McKinsey-*`
+/// (McKinsey) は監機の通知記録 — 送信側から届くこれは自称。
+/// 監査通知・格付変更の偽装は金融 BEC の典型。`X-Aon-*` は
+/// D519 で検出済み。
+fn has_accounting_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-deloitte-")
+            || l.starts_with("x-pwc-")
+            || l.starts_with("x-ey-")
+            || l.starts_with("x-kpmg-")
+            || l.starts_with("x-mckinsey-")
+            || l.starts_with("x-bcg-")
+            || l.starts_with("x-bain-")
+            || l.starts_with("x-accenture-")
+            || l.starts_with("x-capgemini-")
+            || l.starts_with("x-cognizant-")
+            || l.starts_with("x-infosys-")
+            || l.starts_with("x-tcs-")
+            || l.starts_with("x-wipro-")
+            || l.starts_with("x-grantthornton-")
+            || l.starts_with("x-bdo-")
+            || l.starts_with("x-rsm-")
+            || l.starts_with("x-mazars-")
+            || l.starts_with("x-crowe-")
+            || l.starts_with("x-bakertilly-")
+            || l.starts_with("x-protiviti-")
+            || l.starts_with("x-mercer-")
+            || l.starts_with("x-wtw-")
+            || l.starts_with("x-marshmclennan-")
+            || l.starts_with("x-gartner-")
+            || l.starts_with("x-forrester-")
+            || l.starts_with("x-idc-")
+            || l.starts_with("x-moodys-")
+            || l.starts_with("x-fitch-")
+            || l.starts_with("x-spglobal-")
+            || l.starts_with("x-ri-")
+            || l.starts_with("x-jcr-")
+            || l.starts_with("x-eisneramper-")
+            || l.starts_with("x-mossadams-")
+    })
+}
+
+/// `X-Bet365-*`/`X-WilliamHill-*`/`X-Flutter-*`/`X-Entain-*`/`X-Caesars-*`/
+/// `X-MGM-*`/`X-Wynn-*`/`X-Sands-*`/`X-PokerStars-*`/`X-DraftKings-*`/
+/// `X-FanDuel-*`/`X-888-*`/`X-Betfair-*`/`X-Betfred-*`/`X-Unibet-*`/
+/// `X-Bwin-*`/`X-Betway-*`/`X-Sportsbet-*`/`X-Pinnacle-*`/`X-Bodog-*`/
+/// `X-SBOBET-*`/`X-1xBet-*`/`X-Stake-*`/`X-Roobet-*`/`X-VeraJohn-*`/
+/// `X-Casitabi-*`/`X-Bons-*`/`X-toto-*`/`X-BIG-*`/`X-QueenCasino-*`/
+/// `X-LapinBet-*` 等の賭博・ブックメーカー・カジノ印があるか判定する
+/// (D547)。
+///
+/// `X-Bet365-*` (bet365)、`X-toto-*` (スポーツくじ toto)、`X-VeraJohn-*`
+/// (ベラジョン) は賭機の通知記録 — 送信側から届くこれは自称。
+/// 当選・出金通知偽装は賭博詐欺の典型。`X-JRA-*`/`X-Boatrace-*` 等の
+/// 公営競技は D536 で検出済み。
+fn has_gambling_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-bet365-")
+            || l.starts_with("x-williamhill-")
+            || l.starts_with("x-flutter-")
+            || l.starts_with("x-entain-")
+            || l.starts_with("x-caesars-")
+            || l.starts_with("x-mgm-")
+            || l.starts_with("x-wynn-")
+            || l.starts_with("x-sands-")
+            || l.starts_with("x-pokerstars-")
+            || l.starts_with("x-draftkings-")
+            || l.starts_with("x-fanduel-")
+            || l.starts_with("x-888-")
+            || l.starts_with("x-betfair-")
+            || l.starts_with("x-betfred-")
+            || l.starts_with("x-unibet-")
+            || l.starts_with("x-bwin-")
+            || l.starts_with("x-betway-")
+            || l.starts_with("x-sportsbet-")
+            || l.starts_with("x-pinnacle-")
+            || l.starts_with("x-bodog-")
+            || l.starts_with("x-sbobet-")
+            || l.starts_with("x-1xbet-")
+            || l.starts_with("x-stake-")
+            || l.starts_with("x-roobet-")
+            || l.starts_with("x-verajohn-")
+            || l.starts_with("x-casitabi-")
+            || l.starts_with("x-bons-")
+            || l.starts_with("x-toto-")
+            || l.starts_with("x-big-")
+            || l.starts_with("x-queencasino-")
+            || l.starts_with("x-lapinbet-")
+    })
+}
+
+/// `X-SECOM-*`/`X-ALSOK-*`/`X-G4S-*`/`X-Securitas-*`/`X-Prosegur-*`/
+/// `X-Brinks-*`/`X-AlliedUniversal-*`/`X-ZenNikkei-*`/`X-Rentokil-*`/
+/// `X-Orkin-*`/`X-Terminix-*`/`X-Duskin-*`/`X-Cintas-*`/`X-Aramark-*`/
+/// `X-Sodexo-*`/`X-CompassGroup-*`/`X-ISS-*`/`X-AeonDelight-*`/`X-UHaul-*`/
+/// `X-Art0073-*`/`X-Sakai-*`/`X-PublicStorage-*`/`X-ExtraSpace-*`/
+/// `X-CubeSmart-*`/`X-Quraz-*`/`X-StorageKing-*` 等の警備・清掃・
+/// 施設管理・引越・ストレージ印があるか判定する (D548)。
+///
+/// `X-SECOM-*` (SECOM)、`X-ALSOK-*` (ALSOK)、`X-Sakai-*` (サカイ引越
+/// センター) は施機の通知記録 — 送信側から届くこれは自称。
+/// 見積・契約更新偽装は施設詐欺の典型。
+fn has_facility_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-secom-")
+            || l.starts_with("x-alsok-")
+            || l.starts_with("x-g4s-")
+            || l.starts_with("x-securitas-")
+            || l.starts_with("x-prosegur-")
+            || l.starts_with("x-brinks-")
+            || l.starts_with("x-allieduniversal-")
+            || l.starts_with("x-zennikkei-")
+            || l.starts_with("x-rentokil-")
+            || l.starts_with("x-orkin-")
+            || l.starts_with("x-terminix-")
+            || l.starts_with("x-duskin-")
+            || l.starts_with("x-cintas-")
+            || l.starts_with("x-aramark-")
+            || l.starts_with("x-sodexo-")
+            || l.starts_with("x-compassgroup-")
+            || l.starts_with("x-iss-")
+            || l.starts_with("x-aeondelight-")
+            || l.starts_with("x-uhaul-")
+            || l.starts_with("x-art0073-")
+            || l.starts_with("x-sakai-")
+            || l.starts_with("x-publicstorage-")
+            || l.starts_with("x-extraspace-")
+            || l.starts_with("x-cubesmart-")
+            || l.starts_with("x-quraz-")
+            || l.starts_with("x-storageking-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -12766,6 +12953,72 @@ mod tests {
         assert!(has_freight_marks(h1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_freight_marks(clean));
+    }
+
+    #[test]
+    fn scan_は監機印を検出する() {
+        let d1 = b"X-Deloitte-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(d1));
+        let k1 = b"X-KPMG-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(k1));
+        let m1 = b"X-McKinsey-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(m1));
+        let p1 = b"X-PwC-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(p1));
+        let e1 = b"X-EY-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(e1));
+        let m2 = b"X-Moodys-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(m2));
+        let g1 = b"X-Gartner-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(g1));
+        let a1 = b"X-Accenture-Notify: x\r\n\r\nx";
+        assert!(has_accounting_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_accounting_marks(clean));
+    }
+
+    #[test]
+    fn scan_は賭機印を検出する() {
+        let b1 = b"X-Bet365-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(b1));
+        let t1 = b"X-toto-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(t1));
+        let v1 = b"X-VeraJohn-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(v1));
+        let d1 = b"X-DraftKings-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(d1));
+        let p1 = b"X-PokerStars-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(p1));
+        let c1 = b"X-Caesars-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(c1));
+        let s1 = b"X-SBOBET-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(s1));
+        let b2 = b"X-BIG-Notify: x\r\n\r\nx";
+        assert!(has_gambling_marks(b2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gambling_marks(clean));
+    }
+
+    #[test]
+    fn scan_は施機印を検出する() {
+        let s1 = b"X-SECOM-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(s1));
+        let a1 = b"X-ALSOK-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(a1));
+        let s2 = b"X-Sakai-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(s2));
+        let r1 = b"X-Rentokil-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(r1));
+        let g1 = b"X-G4S-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(g1));
+        let u1 = b"X-UHaul-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(u1));
+        let p1 = b"X-PublicStorage-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(p1));
+        let d1 = b"X-Duskin-Notify: x\r\n\r\nx";
+        assert!(has_facility_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_facility_marks(clean));
     }
 }
 

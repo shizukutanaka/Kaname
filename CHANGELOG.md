@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D546: `X-Deloitte-*`/`X-KPMG-*`/`X-McKinsey-*` 等の監査・コンサル・格付印自称が未検査
+
+- **問題**: `X-Deloitte-*` (Deloitte)、`X-KPMG-*` (KPMG)、`X-McKinsey-*` (McKinsey)、`X-PwC-*`/`X-EY-*`/`X-BCG-*`/`X-Bain-*`/`X-Accenture-*`/`X-Capgemini-*`/`X-Cognizant-*`/`X-Infosys-*`/`X-TCS-*`/`X-Wipro-*`/`X-GrantThornton-*`/`X-BDO-*`/`X-RSM-*`/`X-Mazars-*`/`X-Crowe-*`/`X-BakerTilly-*`/`X-Protiviti-*`/`X-Mercer-*`/`X-WTW-*`/`X-MarshMcLennan-*`/`X-Gartner-*`/`X-Forrester-*`/`X-IDC-*`/`X-Moodys-*`/`X-Fitch-*`/`X-SPGlobal-*`/`X-RI-*`/`X-JCR-*`/`X-EisnerAmper-*`/`X-MossAdams-*` は監機の通知記録 — 送信側が書くことは自称。監査通知・格付変更の偽装は金融 BEC の典型。(`X-Aon-*` は D519 で検出済み)
+- **修正**: `Envelope` に `accounting_marks` + `has_accounting_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 監印の自署を問え。
+
+### Security — D547: `X-Bet365-*`/`X-toto-*`/`X-VeraJohn-*` 等の賭博・ブックメーカー・カジノ印自称が未検査
+
+- **問題**: `X-Bet365-*` (bet365)、`X-toto-*` (スポーツくじ toto)、`X-VeraJohn-*` (ベラジョン)、`X-WilliamHill-*`/`X-Flutter-*`/`X-Entain-*`/`X-Caesars-*`/`X-MGM-*`/`X-Wynn-*`/`X-Sands-*`/`X-PokerStars-*`/`X-DraftKings-*`/`X-FanDuel-*`/`X-888-*`/`X-Betfair-*`/`X-Betfred-*`/`X-Unibet-*`/`X-Bwin-*`/`X-Betway-*`/`X-Sportsbet-*`/`X-Pinnacle-*`/`X-Bodog-*`/`X-SBOBET-*`/`X-1xBet-*`/`X-Stake-*`/`X-Roobet-*`/`X-Casitabi-*`/`X-Bons-*`/`X-BIG-*`/`X-QueenCasino-*`/`X-LapinBet-*` は賭機の通知記録 — 送信側が書くことは自称。当選・出金通知偽装は賭博詐欺の典型。(`X-JRA-*`/`X-Boatrace-*` 等の公営競技は D536 で検出済み)
+- **修正**: `Envelope` に `gambling_marks` + `has_gambling_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 賭印の自署を問え。
+
+### Security — D548: `X-SECOM-*`/`X-ALSOK-*`/`X-Sakai-*` 等の警備・清掃・施設管理・引越・ストレージ印自称が未検査
+
+- **問題**: `X-SECOM-*` (SECOM)、`X-ALSOK-*` (ALSOK)、`X-Sakai-*` (サカイ引越センター)、`X-G4S-*`/`X-Securitas-*`/`X-Prosegur-*`/`X-Brinks-*`/`X-AlliedUniversal-*`/`X-ZenNikkei-*`/`X-Rentokil-*`/`X-Orkin-*`/`X-Terminix-*`/`X-Duskin-*`/`X-Cintas-*`/`X-Aramark-*`/`X-Sodexo-*`/`X-CompassGroup-*`/`X-ISS-*`/`X-AeonDelight-*`/`X-UHaul-*`/`X-Art0073-*`/`X-PublicStorage-*`/`X-ExtraSpace-*`/`X-CubeSmart-*`/`X-Quraz-*`/`X-StorageKing-*` は施機の通知記録 — 送信側が書くことは自称。見積・契約更新偽装は施設詐欺の典型。
+- **修正**: `Envelope` に `facility_marks` + `has_facility_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 施印の自署を問え。
+
+
 ### Security — D543: `X-Shell-*`/`X-ENEOS-*`/`X-SaudiAramco-*` 等の石油・鉱業・エネルギー資源印自称が未検査
 
 - **問題**: `X-Shell-*` (Shell)、`X-ENEOS-*` (ENEOS)、`X-SaudiAramco-*` (Saudi Aramco)、`X-BP-*`/`X-Exxon-*`/`X-Chevron-*`/`X-TotalEnergies-*`/`X-Eni-*`/`X-Repsol-*`/`X-Equinor-*`/`X-ConocoPhillips-*`/`X-Petronas-*`/`X-ADNOC-*`/`X-QatarEnergy-*`/`X-Texaco-*`/`X-Mobil-*`/`X-Esso-*`/`X-Idemitsu-*`/`X-JERA-*`/`X-Schlumberger-*`/`X-Halliburton-*`/`X-BakerHughes-*`/`X-Vitol-*`/`X-Trafigura-*`/`X-Glencore-*`/`X-BHP-*`/`X-RioTinto-*`/`X-Vale-*`/`X-AngloAmerican-*`/`X-Freeport-*`/`X-JX-*`/`X-SumitomoMetal-*`/`X-MarubeniEnergy-*` は資機の通知記録 — 送信側が書くことは自称。燃料カード・請求書偽装は資源業界 BEC の典型。(`X-PGE-*`/`X-TEPCO-*`/`X-TokyoGas-*` 等の電気・ガス料金機は D520 で検出済み)
