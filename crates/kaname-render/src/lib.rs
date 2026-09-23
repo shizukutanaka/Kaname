@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `X-MS-Exchange-Parent-Message-Id:`/`X-MS-Exchange-Generated-Message-Source:`
+    /// /`X-Exchange-Antispam-Report-*:` 等の Exchange 輸送内部ヘッダがあるか —
+    /// 組織内輸送が記す値を送信側が自称する経路偽装の兆候 (D333)。
+    pub exchange_transport: bool,
+    /// `X-Gm-Message-State:`/`X-Gmail-*:`/`X-Google-*:` 等の Gmail 内部
+    /// 印があるか — Gmail 配送経路が付ける印を送信側が自称する
+    /// 経路偽装の兆候 (D334)。
+    pub gmail_internal: bool,
+    /// `X-Virus-Scanned:`/`X-Antivirus:`/`X-Amavis:`/`X-Bogosity:`
+    /// 等のスキャン印があるか — 検査機器が付ける「走査済み」印を
+    /// 送信側が自称する兆候 (D335)。
+    pub scan_headers: bool,
 }
 
 /// An RFC 5322 address.
@@ -390,6 +402,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        exchange_transport: has_exchange_transport(raw),
+        gmail_internal: has_gmail_internal(raw),
+        scan_headers: has_scan_headers(raw),
     })
 }
 
@@ -487,6 +502,66 @@ fn has_inline_dangerous_attachment(raw: &[u8]) -> bool {
         pos = hpos + 21;
     }
     false
+}
+
+/// `X-MS-Exchange-Parent-Message-Id:`/`X-MS-Exchange-Generated-Message-Source:`
+/// /`X-Exchange-*:` 等の Exchange 輸送内部ヘッダがあるか判定する (D333)。
+///
+/// Exchange の輸送パイプラインが組織内配送で記す内部値 — D222
+/// (Exchange 内部認証自称) の輸送系版。送信側から届くこれは
+/// 「組織内配送を経た」体裁を内容側が主張する自称。
+fn has_exchange_transport(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ms-exchange-parent-message-id:")
+            || l.starts_with("x-ms-exchange-generated-message-source:")
+            || l.starts_with("x-ms-exchange-transport-endtoendlatency:")
+            || l.starts_with("x-exchange-antispam-report-")
+            || l.starts_with("x-ms-traffictypediagnostic:")
+    })
+}
+
+/// `X-Gm-Message-State:`/`X-Gmail-*:`/`X-Google-*:` 等の Gmail 内部印が
+/// あるか判定する (D334)。
+///
+/// `X-Gm-Message-State:` 等は Gmail の配送パイプラインが記す内部値 —
+/// 送信側から届くこれは「Gmail 経路を経た」体裁を内容側が主張する
+/// 自称。正当な経路印は受信側の配送機構が書く。
+fn has_gmail_internal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gm-message-state:")
+            || l.starts_with("x-gmail-")
+            || l.starts_with("x-google-")
+            || l.starts_with("x-googleplus-")
+            || l.starts_with("x-pmxgid:")
+    })
+}
+
+/// `X-Virus-Scanned:`/`X-Antivirus:`/`X-Amavis:`/`X-Bogosity:` 等の
+/// スキャン印があるか判定する (D335)。
+///
+/// ウイルス/スパム検査機器が通過時に記す「走査済み」印 — 送信側から
+/// 届くこれは「検査を通過した」体裁を内容側が主張する自称 (D306
+/// Authentication-Results と同じく受信側印の自署)。
+fn has_scan_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-virus-scanned:")
+            || l.starts_with("x-antivirus:")
+            || l.starts_with("x-amavis-")
+            || l.starts_with("x-bogosity:")
+            || l.starts_with("x-clean-message-id:")
+    })
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2740,6 +2815,46 @@ mod tests {
         assert!(r.risks.iter().any(|x| x.contains("署名")));
         let r = scan_attachment_bytes("doc.txt", "text/plain", b"x");
         assert!(!r.risks.iter().any(|x| x.contains("署名")));
+    }
+
+    #[test]
+    fn scan_はExchange輸送内部を検出する() {
+        let pm = b"X-MS-Exchange-Parent-Message-Id: x\r\n\r\ny";
+        assert!(has_exchange_transport(pm));
+        let gs = b"X-MS-Exchange-Generated-Message-Source: x\r\n\r\ny";
+        assert!(has_exchange_transport(gs));
+        let ar = b"X-Exchange-Antispam-Report-Test: x\r\n\r\ny";
+        assert!(has_exchange_transport(ar));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_exchange_transport(clean));
+        let body = b"From: a@b\r\n\r\nX-MS-Exchange-Parent-Message-Id: x";
+        assert!(!has_exchange_transport(body));
+    }
+
+    #[test]
+    fn scan_はGmail内部印を検出する() {
+        let gm = b"X-Gm-Message-State: abc\r\n\r\nx";
+        assert!(has_gmail_internal(gm));
+        let gx = b"X-Gmail-Labels: x\r\n\r\ny";
+        assert!(has_gmail_internal(gx));
+        let gp = b"X-PMXGID: abc\r\n\r\nx";
+        assert!(has_gmail_internal(gp));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_gmail_internal(clean));
+    }
+
+    #[test]
+    fn scan_はスキャン印を検出する() {
+        let vs = b"X-Virus-Scanned: clean\r\n\r\nx";
+        assert!(has_scan_headers(vs));
+        let av = b"X-Antivirus: AVG\r\n\r\nx";
+        assert!(has_scan_headers(av));
+        let am = b"X-Amavis-Alert: x\r\n\r\ny";
+        assert!(has_scan_headers(am));
+        let bg = b"X-Bogosity: Ham\r\n\r\nx";
+        assert!(has_scan_headers(bg));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_scan_headers(clean));
     }
 }
 

@@ -432,3 +432,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D279 | ~~**multipart 宣言なのに `boundary=` パラメータがない**~~ **(解消済み)** | P2 | 区切りを定義しない解析不能な宣言。修正: `has_missing_boundary_param` → `Envelope.missing_boundary_param` → `render_risks` 報告 | 宣言の必須部品を問え |
 | D280 | ~~**`Content-Type:` ヘッダの欠落が未検査**~~ **(解消済み)** | P2 | 型を名乗らない手作り生成品。修正: `has_missing_content_type` → `Envelope.missing_content_type` → `render_risks` 報告 | 形の欠落は独立した兆候 |
 | D281 | ~~**`Return-Path:` が `<` を含まない不正値が未検査**~~ **(解消済み)** | P2 | RFC 5321 の `<addr>`/`<>` 形を欠く手作り生成品。修正: `has_malformed_return_path` → `Envelope.malformed_return_path` → `render_risks` 報告 | 規格の形を欠く値は生成経路を裏切る |
+| D333 | ~~**`X-MS-Exchange-*`/`X-Exchange-*` 等の Exchange 輸送内部自称が未検査**~~ **(解消済み)** | P2 | 組織内輸送が記す値を送信側が自称する経路偽装だが未検査だった。修正: `has_exchange_transport` で検出、`exchange_transport` → `render_risks` 兆候報告 | 配送の印は機械が押す — 内部値の自署を問え |
+| D334 | ~~**`X-Gm-Message-State:`/`X-Gmail-*:`/`X-Google-*:` 等の Gmail 内部印自称が未検査**~~ **(解消済み)** | P2 | Gmail 配送経路の印を送信側が自称する経路偽装だが未検査だった。修正: `has_gmail_internal` で検出、`gmail_internal` → `render_risks` 兆候報告 | 経路の印は通った側が持つ — 経路印の自署を問え |
+| D335 | ~~**`X-Virus-Scanned:`/`X-Amavis-*:` 等のスキャン印自称が未検査**~~ **(解消済み)** | P2 | 「走査済み」の検査印を送信側が自称する兆候だが未検査だった。修正: `has_scan_headers` で検出、`scan_headers` → `render_risks` 兆候報告 | 検査の印は検査機が押す — 通過印の自署を問え |

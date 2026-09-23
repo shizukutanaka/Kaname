@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D333: `X-MS-Exchange-Parent-Message-Id:`/`X-MS-Exchange-Generated-Message-Source:`/`X-Exchange-*` 等の Exchange 輸送内部自称が未検査
+
+- Exchange の輸送パイプラインが組織内配送で記す内部値 (D222 Exchange 内部認証自称の輸送系版) — 送信側から届くのは「組織内配送を経た」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_exchange_transport` 新設 → `Envelope.exchange_transport` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D334: `X-Gm-Message-State:`/`X-Gmail-*:`/`X-Google-*:` 等の Gmail 内部印自称が未検査
+
+- Gmail の配送パイプラインが記す内部値 — 送信側から届くのは「Gmail 経路を経た」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_gmail_internal` 新設 → `Envelope.gmail_internal` → `render_risks` 兆候報告
+- テスト +4 件
+
+### Security — D335: `X-Virus-Scanned:`/`X-Antivirus:`/`X-Amavis-*:` 等のスキャン印自称が未検査
+
+- ウイルス/スパム検査機器が通過時に記す「走査済み」印 — 送信側から届くのは「検査を通過した」体裁を内容側が主張する自称 (D306 Authentication-Results と同じ受信側印の自署) だが未検査だった
+- 対処: `has_scan_headers` 新設 → `Envelope.scan_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 

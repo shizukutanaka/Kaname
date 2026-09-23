@@ -581,6 +581,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D333: Exchange 輸送内部自称
+    if env.exchange_transport {
+        render_risks.push(
+            "X-MS-Exchange-*/X-Exchange-* 輸送ヘッダ — 組織内配送の内部値を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D334: Gmail 内部印自称
+    if env.gmail_internal {
+        render_risks.push(
+            "X-Gm-Message-State/X-Gmail-* 等 — Gmail 配送経路の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D335: スキャン印自称
+    if env.scan_headers {
+        render_risks.push(
+            "X-Virus-Scanned/X-Amavis-* 等 — 「走査済み」の検査印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
