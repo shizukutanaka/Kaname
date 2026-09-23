@@ -8,6 +8,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Performance / Fixed — D570: `has_*_marks` 155 関数がヘッダのためだけに全文を複製していた
+
+- **問題**: `kaname-render` の `has_*_marks` 155 関数がそれぞれメッセージ全体 (最大 100 MB) を `from_utf8_lossy` + `to_ascii_lowercase` で複製してからヘッダだけを見ており、1 回の `parse()` で約 310 回の全文コピーが起きていた。さらに空行判定が `\r\n\r\n` のみで、LF 改行の `.eml` では本文全体がヘッダ扱いされ本文行で誤検出していた。
+- **修正**: `header_section()` (CRLF/LF 両対応) を追加し、`parse()` で一度だけ切り出したヘッダ部を渡す。関数本体・シグネチャは不変。回帰テスト3件、`static-check.sh` 検査11 (`parse()` 内の `has_*_marks(raw)` を禁止) を追加。
+
+### Recorded — D571: ブランド「自称」印が From ドメインを見ないため正規メールでも警告 (未修正)
+
+- `X-<Brand>-*` ヘッダの存在だけで警告するため、ブランド自身の正規メールでも「自称の兆候」が出る。製品判断が必要なため記録のみ (詳細: `docs/gap-analysis.md` D571)。
+
 ### Security — D567: `X-VISA-*`/`X-Amex-*`/`X-Saison-*` 等のクレジットカード印自称が未検査
 
 - **問題**: `X-VISA-*` (Visa)、`X-Amex-*` (アメックス)、`X-Saison-*` (セゾンカード)、`X-Mastercard-*`/`X-Diners-*`/`X-Discover-*`/`X-RakutenCard-*`/`X-SMBCCard-*`/`X-JACCS-*`/`X-Orico-*`/`X-Nicos-*`/`X-DCCard-*`/`X-UCCard-*`/`X-Aplus-*`/`X-Jacks-*`/`X-PocketCard-*`/`X-ViewCard-*`/`X-VJA-*`/`X-AmericanExpress-*`/`X-ChaseCard-*`/`X-CitiCard-*`/`X-BofACard-*`/`X-WellsFargoCard-*`/`X-USAA-*`/`X-CommBankCard-*`/`X-ANZCard-*`/`X-NABCard-*`/`X-WestpacCard-*`/`X-RBCard-*`/`X-TDCard-*`/`X-BMO-*`/`X-MBNA-*`/`X-VirginMoney-*`/`X-Halifax-*`/`X-Lloyds-*`/`X-SantanderCard-*`/`X-NationwideCard-*`/`X-Barclaycard-*`/`X-MonzoCard-*`/`X-RevolutCard-*`/`X-Epos-*`/`X-ToyotaFinance-*`/`X-MercedesBenzCard-*`/`X-BMWCard-*` は札機の通知記録 — 送信側が書くことは自称。カード利用停止・身に覚えのない決済の偽装はクレカ詐欺の典型。(`X-JCB-*`/`X-UnionPay-*`/`X-Scotiabank-*` は既存族で検出済み)
