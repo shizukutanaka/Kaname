@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D456: `X-Bugzilla-*`/`X-Phabricator-*`/`X-Discourse-*`/`X-YouTrack-*`/`X-MediaWiki-*`/`X-phpBB-*`/`X-XenForo-*`/`X-Redmine-*` 等のフォーラム・課題管理印自称が未検査
+
+- **問題**: `X-Bugzilla-Reason`/`X-Bugzilla-Type` (Bugzilla 通知 — 公式文書)、`X-Discourse-Topic-Id`/`X-Discourse-*` (Discourse)、`X-YouTrack-*`/`X-Phabricator-*`/`X-Phorge-*`/`X-MediaWiki-*`/`X-Redmine-*`/`X-Mantis-*`/`X-Trac-*`/`X-phpBB-*`/`X-XenForo-*`/`X-Invision-*`/`X-vBulletin-*`/`X-Flarum-*`/`X-SMF-*`/`X-MyBB-*`/`X-NodeBB-*`/`X-Drupal-*`/`X-Joomla-*`/`X-Moodle-*` はフォーラム・課題機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `forum_issue_marks` + `has_forum_issue_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — フォーラム・課題印の自署を問え。
+
+### Security — D457: `X-GlobalRelay-*`/`X-Smarsh-*`/`X-ZL-*`/`X-Mimosa-*`/`X-Jatheon-*`/`X-ArcTitan-*`/`X-MailStore-*`/`X-Cryoserver-*`/`X-CommVault-*`/`X-Veritas-*` 等のアーカイブ・コンプライアンス印自称が未検査
+
+- **問題**: `X-GlobalRelay-*` (Global Relay 記録保持)、`X-MailStore-*` (MailStore Server)、`X-Smarsh-*`/`X-ZL-*`/`X-ZLTech-*`/`X-Mimosa-*`/`X-Jatheon-*`/`X-ArcTitan-*`/`X-Cryoserver-*`/`X-CommVault-*`/`X-Veritas-*`/`X-EVault-*`/`X-MetaLogix-*`/`X-SourceOne-*`/`X-ES1-*` はアーカイブ機の記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `archive_marks` + `has_archive_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 保管の記録は保管機が記す — アーカイブ印の自署を問え。
+
+### Security — D458: `X-Sangfor-*`/`X-NSFOCUS-*`/`X-TopSec-*`/`X-Hillstone-*`/`X-Venustech-*`/`X-Huawei-*`/`X-Rising-*`/`X-Antiy-*`/`X-Kingsoft-*` 等の中国系セキュリティ製品印自称が未検査
+
+- **問題**: `X-Sangfor-*` (Sangfor)、`X-NSFOCUS-*` (緑盟科技)、`X-Rising-*` (瑞星)、`X-Antiy-*` (安天)、`X-TopSec-*`/`X-Hillstone-*`/`X-Venustech-*`/`X-Huawei-*`/`X-H3C-*`/`X-LeadSec-*`/`X-Qihoo-*`/`X-Qianxin-*`/`X-Jiangmin-*`/`X-Kingsoft-*`/`X-DBAppSecurity-*`/`X-DPTech-*` は製品の検査記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `cn_sec_marks` + `has_cn_sec_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 検査の記録は検査機が記す — 製品印の自署を問え。
+
+
 ### Security — D453: `X-Arcor-*`/`X-Strato-*`/`X-IONOS-*`/`X-Ziggo-*`/`X-KPN-*`/`X-Bluewin-*`/`X-Telia-*`/`X-Elisa-*`/`X-Fastweb-*` 等の欧州・豪州 ISP 印 (第二群) 自称が未検査
 
 - **問題**: `X-Strato-*` (STRATO)、`X-Bluewin-*` (Swisscom Bluewin)、`X-Arcor-*` (Arcor/Vodafone)、`X-TalkTalk-*`/`X-Plusnet-*`/`X-Demon-*`/`X-Pipex-*`/`X-NTL-*`/`X-Chello-*`/`X-AON-*`/`X-Tele2-*`/`X-Telia-*`/`X-Bredband-*`/`X-ComHem-*`/`X-Elisa-*`/`X-DNA-*`/`X-Sonera-*`/`X-TDC-*`/`X-Altibox-*`/`X-Lyse-*`/`X-Sunrise-*`/`X-Cablecom-*`/`X-Hispeed-*`/`X-Fastweb-*`/`X-Terra-*`/`X-Claranet-*`/`X-Easynet-*`/`X-T-Online-*`/`X-TOI-*`/`X-Versatel-*`/`X-XS4ALL-*`/`X-UPC-*`/`X-Unitybox-*`/`X-O2-*`/`X-Eir-*`/`X-Magnet-*`/`X-Virgin-*`/`X-KPN-*`/`X-Ziggo-*`/`X-IONOS-*` は ISP の受信・検査記録 — 送信側が書くことは自称。
