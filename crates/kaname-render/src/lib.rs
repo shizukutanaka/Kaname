@@ -483,6 +483,27 @@ pub struct Envelope {
     /// `X-LiveChat-*`/`X-Tidio-*` 等の通信 API・サポート印があるか —
     /// 通信機の通知記録を送信側が自称する兆候 (D476)。
     pub comms_marks: bool,
+    /// `X-Coursera-*`/`X-Udemy-*`/`X-edX-*`/`X-Udacity-*`/
+    /// `X-Pluralsight-*`/`X-Skillshare-*`/`X-DataCamp-*`/
+    /// `X-Codecademy-*`/`X-LeetCode-*`/`X-HackerRank-*`/`X-Duolingo-*`/
+    /// `X-KhanAcademy-*`/`X-Canvas-*`/`X-Instructure-*`/`X-Blackboard-*`
+    /// 等の教育・LMS 印があるか — 教育機の通知記録を送信側が
+    /// 自称する兆候 (D477)。
+    pub edu_marks: bool,
+    /// `X-EchoSign-*`/`X-AdobeSign-*`/`X-HelloSign-*`/`X-DropboxSign-*`/
+    /// `X-PandaDoc-*`/`X-SignNow-*`/`X-Yousign-*`/`X-Oneflow-*`/
+    /// `X-Juro-*`/`X-Ironclad-*`/`X-Icertis-*`/`X-Agiloft-*`/
+    /// `X-Conga-*`/`X-OneSpan-*`/`X-Namirial-*`/`X-Skribble-*`/
+    /// `X-ZohoSign-*` 等の電子署名・契約管理印があるか — 契約機の
+    /// 通知記録を送信側が自称する兆候 (D478)。
+    pub esign_marks: bool,
+    /// `X-GoFundMe-*`/`X-Kickstarter-*`/`X-Indiegogo-*`/`X-Ko-fi-*`/
+    /// `X-BuyMeACoffee-*`/`X-OpenCollective-*`/`X-JustGiving-*`/
+    /// `X-Crowdfunder-*`/`X-Blackbaud-*`/`X-Bloomerang-*`/`X-Kindful-*`/
+    /// `X-Donorbox-*`/`X-Qgiv-*`/`X-Givebutter-*`/`X-Fundly-*` 等の
+    /// クラウドファンディング・寄付印があるか — 寄付機の通知記録を
+    /// 送信側が自称する兆候 (D479)。
+    pub donation_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -820,6 +841,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         enterprise_saas_marks: has_enterprise_saas_marks(raw),
         shipping_marks: has_shipping_marks(raw),
         comms_marks: has_comms_marks(raw),
+        edu_marks: has_edu_marks(raw),
+        esign_marks: has_esign_marks(raw),
+        donation_marks: has_donation_marks(raw),
     })
 }
 
@@ -3220,6 +3244,125 @@ fn has_comms_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-drift-")
             || l.starts_with("x-livechat-")
             || l.starts_with("x-tidio-")
+    })
+}
+
+/// `X-Coursera-*`/`X-Udemy-*`/`X-edX-*`/`X-Udacity-*`/
+/// `X-Pluralsight-*`/`X-Skillshare-*`/`X-DataCamp-*`/`X-Codecademy-*`/
+/// `X-LeetCode-*`/`X-HackerRank-*`/`X-CodeWars-*`/`X-Exercism-*`/
+/// `X-Topcoder-*`/`X-Codeforces-*`/`X-KhanAcademy-*`/`X-Duolingo-*`/
+/// `X-Brilliant-*`/`X-Canvas-*`/`X-Instructure-*`/`X-Blackboard-*`/
+/// `X-D2L-*` 等の教育・LMS 印があるか判定する (D477)。
+///
+/// `X-Coursera-*` (Coursera)、`X-Duolingo-*` (Duolingo)、
+/// `X-HackerRank-*` (HackerRank) は教育機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_edu_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-coursera-")
+            || l.starts_with("x-udemy-")
+            || l.starts_with("x-edx-")
+            || l.starts_with("x-udacity-")
+            || l.starts_with("x-pluralsight-")
+            || l.starts_with("x-skillshare-")
+            || l.starts_with("x-datacamp-")
+            || l.starts_with("x-codecademy-")
+            || l.starts_with("x-leetcode-")
+            || l.starts_with("x-hackerrank-")
+            || l.starts_with("x-codewars-")
+            || l.starts_with("x-exercism-")
+            || l.starts_with("x-topcoder-")
+            || l.starts_with("x-codeforces-")
+            || l.starts_with("x-khanacademy-")
+            || l.starts_with("x-duolingo-")
+            || l.starts_with("x-brilliant-")
+            || l.starts_with("x-canvas-")
+            || l.starts_with("x-instructure-")
+            || l.starts_with("x-blackboard-")
+            || l.starts_with("x-d2l-")
+    })
+}
+
+/// `X-EchoSign-*`/`X-AdobeSign-*`/`X-HelloSign-*`/`X-DropboxSign-*`/
+/// `X-PandaDoc-*`/`X-SignNow-*`/`X-RightSignature-*`/`X-SignRequest-*`/
+/// `X-Yousign-*`/`X-Oneflow-*`/`X-GetAccept-*`/`X-Juro-*`/
+/// `X-Ironclad-*`/`X-Evisort-*`/`X-Icertis-*`/`X-Agiloft-*`/
+/// `X-Conga-*`/`X-OneSpan-*`/`X-Namirial-*`/`X-Skribble-*`/
+/// `X-ZohoSign-*`/`X-pdfFiller-*`/`X-LexisNexis-*`/`X-WoltersKluwer-*`
+/// 等の電子署名・契約管理印があるか判定する (D478)。
+///
+/// `X-EchoSign-*` (Adobe Sign)、`X-OneSpan-*` (OneSpan)、
+/// `X-PandaDoc-*` (PandaDoc) は契約機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_esign_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-echosign-")
+            || l.starts_with("x-adobesign-")
+            || l.starts_with("x-hellosign-")
+            || l.starts_with("x-dropboxsign-")
+            || l.starts_with("x-pandadoc-")
+            || l.starts_with("x-signnow-")
+            || l.starts_with("x-rightsignature-")
+            || l.starts_with("x-signrequest-")
+            || l.starts_with("x-yousign-")
+            || l.starts_with("x-oneflow-")
+            || l.starts_with("x-getaccept-")
+            || l.starts_with("x-juro-")
+            || l.starts_with("x-ironclad-")
+            || l.starts_with("x-evisort-")
+            || l.starts_with("x-icertis-")
+            || l.starts_with("x-agiloft-")
+            || l.starts_with("x-conga-")
+            || l.starts_with("x-onespan-")
+            || l.starts_with("x-namirial-")
+            || l.starts_with("x-skribble-")
+            || l.starts_with("x-zohosign-")
+            || l.starts_with("x-pdffiller-")
+            || l.starts_with("x-lexisnexis-")
+            || l.starts_with("x-wolterskluwer-")
+    })
+}
+
+/// `X-GoFundMe-*`/`X-Kickstarter-*`/`X-Indiegogo-*`/`X-Ko-fi-*`/
+/// `X-BuyMeACoffee-*`/`X-OpenCollective-*`/`X-JustGiving-*`/
+/// `X-Crowdfunder-*`/`X-Blackbaud-*`/`X-Bloomerang-*`/`X-Kindful-*`/
+/// `X-Donorbox-*`/`X-Qgiv-*`/`X-Givebutter-*`/`X-Fundly-*`/
+/// `X-Mightycause-*` 等のクラウドファンディング・寄付印があるか
+/// 判定する (D479)。
+///
+/// `X-GoFundMe-*` (GoFundMe)、`X-Kickstarter-*` (Kickstarter)、
+/// `X-Indiegogo-*` (Indiegogo) は寄付機の通知記録 — 送信側から
+/// 届くこれは自称。
+fn has_donation_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gofundme-")
+            || l.starts_with("x-kickstarter-")
+            || l.starts_with("x-indiegogo-")
+            || l.starts_with("x-ko-fi-")
+            || l.starts_with("x-buymeacoffee-")
+            || l.starts_with("x-opencollective-")
+            || l.starts_with("x-justgiving-")
+            || l.starts_with("x-crowdfunder-")
+            || l.starts_with("x-blackbaud-")
+            || l.starts_with("x-bloomerang-")
+            || l.starts_with("x-kindful-")
+            || l.starts_with("x-donorbox-")
+            || l.starts_with("x-qgiv-")
+            || l.starts_with("x-givebutter-")
+            || l.starts_with("x-fundly-")
+            || l.starts_with("x-mightycause-")
     })
 }
 
@@ -6805,6 +6948,72 @@ mod tests {
         assert!(has_comms_marks(d1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_comms_marks(clean));
+    }
+
+    #[test]
+    fn scan_は教育LMS印を検出する() {
+        let c1 = b"X-Coursera-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(c1));
+        let d1 = b"X-Duolingo-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(d1));
+        let h1 = b"X-HackerRank-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(h1));
+        let u1 = b"X-Udemy-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(u1));
+        let c2 = b"X-Canvas-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(c2));
+        let b1 = b"X-Blackboard-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(b1));
+        let k1 = b"X-KhanAcademy-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(k1));
+        let l1 = b"X-LeetCode-Notify: x\r\n\r\nx";
+        assert!(has_edu_marks(l1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_edu_marks(clean));
+    }
+
+    #[test]
+    fn scan_は電子署名契約管理印を検出する() {
+        let e1 = b"X-EchoSign-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(e1));
+        let o1 = b"X-OneSpan-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(o1));
+        let p1 = b"X-PandaDoc-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(p1));
+        let h1 = b"X-HelloSign-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(h1));
+        let y1 = b"X-Yousign-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(y1));
+        let i1 = b"X-Ironclad-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(i1));
+        let c1 = b"X-Conga-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(c1));
+        let n1 = b"X-Namirial-Notify: x\r\n\r\nx";
+        assert!(has_esign_marks(n1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esign_marks(clean));
+    }
+
+    #[test]
+    fn scan_はクラファン寄付印を検出する() {
+        let g1 = b"X-GoFundMe-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(g1));
+        let k1 = b"X-Kickstarter-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(k1));
+        let i1 = b"X-Indiegogo-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(i1));
+        let k2 = b"X-Ko-fi-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(k2));
+        let j1 = b"X-JustGiving-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(j1));
+        let b1 = b"X-Blackbaud-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(b1));
+        let d1 = b"X-Donorbox-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(d1));
+        let b2 = b"X-BuyMeACoffee-Notify: x\r\n\r\nx";
+        assert!(has_donation_marks(b2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_donation_marks(clean));
     }
 }
 
