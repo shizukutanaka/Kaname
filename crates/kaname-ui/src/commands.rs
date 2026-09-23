@@ -1780,6 +1780,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D561: ペット保険・ペットサービス印自称
+    if env.pet_service_marks {
+        render_risks.push(
+            "X-Anicom-*/X-iPet-*/X-Rover-*/X-Trupanion-*/X-Banfield-*/X-FPC-*/X-Petplan-*/X-Figo-* 等 — 愛機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D562: 結婚式場・結婚相談所印自称
+    if env.bridal_marks {
+        render_risks.push(
+            "X-Zexy-*/X-IBJ-*/X-Onet-*/X-Hanayume-*/X-WeddingPark-*/X-TGN-*/X-Marrish-*/X-PlanDoSee-* 等 — 婚機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D563: 動物園・水族館・牧場印自称
+    if env.zoo_marks {
+        render_risks.push(
+            "X-UenoZoo-*/X-Kaiyukan-*/X-Churaumi-*/X-Asahiyama-*/X-TamaZoo-*/X-AdventureWorld-*/X-Sunshine-*/X-Enosui-* 等 — 園機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
