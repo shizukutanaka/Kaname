@@ -1328,6 +1328,39 @@ pub struct Envelope {
     /// `X-SevenBank-*`/`X-AeonBank-*` 等の大手・ネット銀行は
     /// D514 で検出済み)
     pub regional_bank_marks: bool,
+    /// `X-BlueApron-*`/`X-HelloFresh-*`/`X-Gousto-*`/`X-MarleySpoon-*`/
+    /// `X-EveryPlate-*`/`X-Freshly-*`/`X-Factor75-*`/`X-HomeChef-*`/
+    /// `X-PurpleCarrot-*`/`X-Sakara-*`/`X-DailyHarvest-*`/`X-Hungryroot-*`/
+    /// `X-nosh-*`/`X-Watami-*`/`X-Oisix-*`/`X-RadishBooya-*`/`X-CoopDeli-*`/
+    /// `X-PalSystem-*`/`X-DaichiWoMamoru-*`/`X-Tabelog-*`/`X-Gurunavi-*`/
+    /// `X-HotPepper-*`/`X-Retty-*`/`X-Favy-*`/`X-Funpay-*`/`X-Luckey-*`/
+    /// `X-Futto-*` 等のミールキット・食材宅配・グルメメディア印が
+    /// あるか — 膳機の通知記録を送信側が自称する兆候 (D555)。
+    /// (`X-Kirimomirial-*` 等の既存族は別 D で検出済み)
+    pub mealkit_marks: bool,
+    /// `X-RedCross-*`/`X-UNICEF-*`/`X-WWF-*`/`X-PlanIntl-*`/`X-MSF-*`/
+    /// `X-SaveTheChildren-*`/`X-Care-*`/`X-Oxfam-*`/`X-Amnesty-*`/
+    /// `X-JapanPlatform-*`/`X-AAR-*`/`X-Peace-*`/`X-ICRC-*`/`X-UNDP-*`/
+    /// `X-Satofuru-*`/`X-Furunavi-*`/`X-FuruChoice-*`/`X-FurusatoMall-*`/
+    /// `X-AnaFurusato-*`/`X-FuruPo-*`/`X-RakutenFurusato-*`/
+    /// `X-FuruLabo-*`/`X-FurusatoPremier-*`/`X-JREMallFurusato-*`/
+    /// `X-AuFurusato-*`/`X-YahooFurusato-*`/`X-DocomoFurusato-*`/
+    /// `X-ANA-*` 等の寄付・ふるさと納税・NPO 印があるか — 善機の
+    /// 通知記録を送信側が自称する兆候 (D556)。(`X-GoFundMe-*`/
+    /// `X-Kickstarter-*`/`X-Indiegogo-*` 等のクラウドファンディング機は
+    /// D479 で検出済み)
+    pub charity_marks: bool,
+    /// `X-Piccoma-*`/`X-Webtoon-*`/`X-MechaComi-*`/`X-CMOA-*`/`X-Renta-*`/
+    /// `X-BookLive-*`/`X-AmebaManga-*`/`X-MangaKingdom-*`/`X-DMMBooks-*`/
+    /// `X-Honto-*`/`X-Kinokuniya-*`/`X-Maruzen-*`/`X-Junkudo-*`/
+    /// `X-BookOff-*`/`X-TsutayaBook-*`/`X-Yurindo-*`/`X-Sanseido-*`/
+    /// `X-Miraiya-*`/`X-Bunkyo-*`/`X-Kumazawa-*`/`X-Kodansha-*`/
+    /// `X-Shueisha-*`/`X-Shogakukan-*`/`X-Kadokawa-*`/`X-Akita-*`/
+    /// `X-Hakusensha-*`/`X-Takeshobo-*`/`X-Leed-*`/`X-NihonBungeisha-*`/
+    /// `X-Bunshun-*`/`X-Core-*`/`X-Ohta-*`/`X-ShonenJump-*` 等の
+    /// 漫画・電子書籍・書店・出版社印があるか — 書機の通知記録を
+    /// 送信側が自称する兆候 (D557)。
+    pub manga_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1743,6 +1776,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         luxury_marks: has_luxury_marks(raw),
         advertising_marks: has_advertising_marks(raw),
         regional_bank_marks: has_regional_bank_marks(raw),
+        mealkit_marks: has_mealkit_marks(raw),
+        charity_marks: has_charity_marks(raw),
+        manga_marks: has_manga_marks(raw),
     })
 }
 
@@ -8351,6 +8387,159 @@ fn has_regional_bank_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-BlueApron-*`/`X-HelloFresh-*`/`X-Gousto-*`/`X-MarleySpoon-*`/
+/// `X-EveryPlate-*`/`X-Freshly-*`/`X-Factor75-*`/`X-HomeChef-*`/
+/// `X-PurpleCarrot-*`/`X-Sakara-*`/`X-DailyHarvest-*`/`X-Hungryroot-*`/
+/// `X-nosh-*`/`X-Watami-*`/`X-Oisix-*`/`X-RadishBooya-*`/`X-CoopDeli-*`/
+/// `X-PalSystem-*`/`X-DaichiWoMamoru-*`/`X-Tabelog-*`/`X-Gurunavi-*`/
+/// `X-HotPepper-*`/`X-Retty-*`/`X-Favy-*`/`X-Funpay-*`/`X-Luckey-*`/
+/// `X-Futto-*` 等のミールキット・食材宅配・グルメメディア印があるか
+/// 判定する (D555)。
+///
+/// `X-HelloFresh-*` (HelloFresh)、`X-Oisix-*` (オイシックス)、
+/// `X-Tabelog-*` (食べログ) は膳機の通知記録 — 送信側から届く
+/// これは自称。定期購入・解約・クーポン偽装は食材宅配詐欺の典型。
+fn has_mealkit_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-blueapron-")
+            || l.starts_with("x-hellofresh-")
+            || l.starts_with("x-gousto-")
+            || l.starts_with("x-marleyspoon-")
+            || l.starts_with("x-everyplate-")
+            || l.starts_with("x-freshly-")
+            || l.starts_with("x-factor75-")
+            || l.starts_with("x-homechef-")
+            || l.starts_with("x-purplecarrot-")
+            || l.starts_with("x-sakara-")
+            || l.starts_with("x-dailyharvest-")
+            || l.starts_with("x-hungryroot-")
+            || l.starts_with("x-nosh-")
+            || l.starts_with("x-watami-")
+            || l.starts_with("x-oisix-")
+            || l.starts_with("x-radishbooya-")
+            || l.starts_with("x-coopdeli-")
+            || l.starts_with("x-palsystem-")
+            || l.starts_with("x-daichiwomamoru-")
+            || l.starts_with("x-tabelog-")
+            || l.starts_with("x-gurunavi-")
+            || l.starts_with("x-hotpepper-")
+            || l.starts_with("x-retty-")
+            || l.starts_with("x-favy-")
+            || l.starts_with("x-funpay-")
+            || l.starts_with("x-luckey-")
+            || l.starts_with("x-futto-")
+    })
+}
+
+/// `X-RedCross-*`/`X-UNICEF-*`/`X-WWF-*`/`X-PlanIntl-*`/`X-MSF-*`/
+/// `X-SaveTheChildren-*`/`X-Care-*`/`X-Oxfam-*`/`X-Amnesty-*`/
+/// `X-JapanPlatform-*`/`X-AAR-*`/`X-Peace-*`/`X-ICRC-*`/`X-UNDP-*`/
+/// `X-Satofuru-*`/`X-Furunavi-*`/`X-FuruChoice-*`/`X-FurusatoMall-*`/
+/// `X-AnaFurusato-*`/`X-FuruPo-*`/`X-RakutenFurusato-*`/`X-FuruLabo-*`/
+/// `X-FurusatoPremier-*`/`X-JREMallFurusato-*`/`X-AuFurusato-*`/
+/// `X-YahooFurusato-*`/`X-DocomoFurusato-*` 等の寄付・ふるさと納税・
+/// NPO 印があるか判定する (D556)。
+///
+/// `X-RedCross-*` (赤十字)、`X-Satofuru-*` (さとふる)、`X-UNICEF-*`
+/// (UNICEF) は善機の通知記録 — 送信側から届くこれは自称。
+/// 災害寄付・返礼品偽装は寄付詐欺の典型。`X-GoFundMe-*`/
+/// `X-Kickstarter-*`/`X-Indiegogo-*` 等のクラウドファンディング機は
+/// D479 で検出済み。
+fn has_charity_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-redcross-")
+            || l.starts_with("x-unicef-")
+            || l.starts_with("x-wwf-")
+            || l.starts_with("x-planintl-")
+            || l.starts_with("x-msf-")
+            || l.starts_with("x-savethechildren-")
+            || l.starts_with("x-care-")
+            || l.starts_with("x-oxfam-")
+            || l.starts_with("x-amnesty-")
+            || l.starts_with("x-japanplatform-")
+            || l.starts_with("x-aar-")
+            || l.starts_with("x-peace-")
+            || l.starts_with("x-icrc-")
+            || l.starts_with("x-undp-")
+            || l.starts_with("x-satofuru-")
+            || l.starts_with("x-furunavi-")
+            || l.starts_with("x-furuchoice-")
+            || l.starts_with("x-furusatomall-")
+            || l.starts_with("x-anafurusato-")
+            || l.starts_with("x-furupo-")
+            || l.starts_with("x-rakutenfurusato-")
+            || l.starts_with("x-furulabo-")
+            || l.starts_with("x-furusatopremier-")
+            || l.starts_with("x-jremallfurusato-")
+            || l.starts_with("x-aufurusato-")
+            || l.starts_with("x-yahoofurusato-")
+            || l.starts_with("x-docomofurusato-")
+    })
+}
+
+/// `X-Piccoma-*`/`X-Webtoon-*`/`X-MechaComi-*`/`X-CMOA-*`/`X-Renta-*`/
+/// `X-BookLive-*`/`X-AmebaManga-*`/`X-MangaKingdom-*`/`X-DMMBooks-*`/
+/// `X-Honto-*`/`X-Kinokuniya-*`/`X-Maruzen-*`/`X-Junkudo-*`/`X-BookOff-*`/
+/// `X-TsutayaBook-*`/`X-Yurindo-*`/`X-Sanseido-*`/`X-Miraiya-*`/
+/// `X-Bunkyo-*`/`X-Kumazawa-*`/`X-Kodansha-*`/`X-Shueisha-*`/
+/// `X-Shogakukan-*`/`X-Kadokawa-*`/`X-Akita-*`/`X-Hakusensha-*`/
+/// `X-Takeshobo-*`/`X-Leed-*`/`X-NihonBungeisha-*`/`X-Bunshun-*`/
+/// `X-Core-*`/`X-Ohta-*`/`X-ShonenJump-*` 等の漫画・電子書籍・
+/// 書店・出版社印があるか判定する (D557)。
+///
+/// `X-Piccoma-*` (ピッコマ)、`X-CMOA-*` (コミックシーモア)、
+/// `X-Kodansha-*` (講談社) は書機の通知記録 — 送信側から届く
+/// これは自称。ポイント失効・新刊案内偽装は書籍詐欺の典型。
+fn has_manga_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-piccoma-")
+            || l.starts_with("x-webtoon-")
+            || l.starts_with("x-mechacomi-")
+            || l.starts_with("x-cmoa-")
+            || l.starts_with("x-renta-")
+            || l.starts_with("x-booklive-")
+            || l.starts_with("x-amebamanga-")
+            || l.starts_with("x-mangakingdom-")
+            || l.starts_with("x-dmmbooks-")
+            || l.starts_with("x-honto-")
+            || l.starts_with("x-kinokuniya-")
+            || l.starts_with("x-maruzen-")
+            || l.starts_with("x-junkudo-")
+            || l.starts_with("x-bookoff-")
+            || l.starts_with("x-tsutayabook-")
+            || l.starts_with("x-yurindo-")
+            || l.starts_with("x-sanseido-")
+            || l.starts_with("x-miraiya-")
+            || l.starts_with("x-bunkyo-")
+            || l.starts_with("x-kumazawa-")
+            || l.starts_with("x-kodansha-")
+            || l.starts_with("x-shueisha-")
+            || l.starts_with("x-shogakukan-")
+            || l.starts_with("x-kadokawa-")
+            || l.starts_with("x-akita-")
+            || l.starts_with("x-hakusensha-")
+            || l.starts_with("x-takeshobo-")
+            || l.starts_with("x-leed-")
+            || l.starts_with("x-nihonbungeisha-")
+            || l.starts_with("x-bunshun-")
+            || l.starts_with("x-core-")
+            || l.starts_with("x-ohta-")
+            || l.starts_with("x-shonenjump-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -13649,6 +13838,72 @@ mod tests {
         assert!(has_regional_bank_marks(r1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_regional_bank_marks(clean));
+    }
+
+    #[test]
+    fn scan_は膳機印を検出する() {
+        let h1 = b"X-HelloFresh-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(h1));
+        let o1 = b"X-Oisix-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(o1));
+        let t1 = b"X-Tabelog-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(t1));
+        let b1 = b"X-BlueApron-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(b1));
+        let g1 = b"X-Gurunavi-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(g1));
+        let n1 = b"X-nosh-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(n1));
+        let p1 = b"X-PalSystem-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(p1));
+        let h2 = b"X-HotPepper-Notify: x\r\n\r\nx";
+        assert!(has_mealkit_marks(h2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mealkit_marks(clean));
+    }
+
+    #[test]
+    fn scan_は善機印を検出する() {
+        let r1 = b"X-RedCross-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(r1));
+        let s1 = b"X-Satofuru-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(s1));
+        let u1 = b"X-UNICEF-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(u1));
+        let f1 = b"X-Furunavi-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(f1));
+        let w1 = b"X-WWF-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(w1));
+        let o1 = b"X-Oxfam-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(o1));
+        let r2 = b"X-RakutenFurusato-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(r2));
+        let i1 = b"X-ICRC-Notify: x\r\n\r\nx";
+        assert!(has_charity_marks(i1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_charity_marks(clean));
+    }
+
+    #[test]
+    fn scan_は書機印を検出する() {
+        let p1 = b"X-Piccoma-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(p1));
+        let c1 = b"X-CMOA-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(c1));
+        let k1 = b"X-Kodansha-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(k1));
+        let w1 = b"X-Webtoon-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(w1));
+        let r1 = b"X-Renta-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(r1));
+        let s1 = b"X-Shueisha-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(s1));
+        let k2 = b"X-Kinokuniya-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(k2));
+        let b1 = b"X-BookLive-Notify: x\r\n\r\nx";
+        assert!(has_manga_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_manga_marks(clean));
     }
 }
 

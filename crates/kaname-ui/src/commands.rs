@@ -1732,6 +1732,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D555: ミールキット・食材宅配・グルメメディア印自称
+    if env.mealkit_marks {
+        render_risks.push(
+            "X-HelloFresh-*/X-Oisix-*/X-Tabelog-*/X-BlueApron-*/X-Gurunavi-*/X-nosh-*/X-PalSystem-*/X-HotPepper-* 等 — 膳機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D556: 寄付・ふるさと納税・NPO 印自称
+    if env.charity_marks {
+        render_risks.push(
+            "X-RedCross-*/X-Satofuru-*/X-UNICEF-*/X-Furunavi-*/X-WWF-*/X-Oxfam-*/X-RakutenFurusato-*/X-ICRC-* 等 — 善機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D557: 漫画・電子書籍・書店・出版社印自称
+    if env.manga_marks {
+        render_risks.push(
+            "X-Piccoma-*/X-CMOA-*/X-Kodansha-*/X-Webtoon-*/X-Renta-*/X-Shueisha-*/X-Kinokuniya-*/X-BookLive-* 等 — 書機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

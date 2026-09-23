@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D555: `X-HelloFresh-*`/`X-Oisix-*`/`X-Tabelog-*` 等のミールキット・食材宅配・グルメメディア印自称が未検査
+
+- **問題**: `X-HelloFresh-*` (HelloFresh)、`X-Oisix-*` (オイシックス)、`X-Tabelog-*` (食べログ)、`X-BlueApron-*`/`X-Gousto-*`/`X-MarleySpoon-*`/`X-EveryPlate-*`/`X-Freshly-*`/`X-Factor75-*`/`X-HomeChef-*`/`X-PurpleCarrot-*`/`X-Sakara-*`/`X-DailyHarvest-*`/`X-Hungryroot-*`/`X-nosh-*`/`X-Watami-*`/`X-RadishBooya-*`/`X-CoopDeli-*`/`X-PalSystem-*`/`X-DaichiWoMamoru-*`/`X-Gurunavi-*`/`X-HotPepper-*`/`X-Retty-*`/`X-Favy-*`/`X-Funpay-*`/`X-Luckey-*`/`X-Futto-*` は膳機の通知記録 — 送信側が書くことは自称。定期購入・解約・クーポン偽装は食材宅配詐欺の典型。
+- **修正**: `Envelope` に `mealkit_marks` + `has_mealkit_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 膳印の自署を問え。
+
+### Security — D556: `X-RedCross-*`/`X-Satofuru-*`/`X-UNICEF-*` 等の寄付・ふるさと納税・NPO 印自称が未検査
+
+- **問題**: `X-RedCross-*` (赤十字)、`X-Satofuru-*` (さとふる)、`X-UNICEF-*` (UNICEF)、`X-WWF-*`/`X-PlanIntl-*`/`X-MSF-*`/`X-SaveTheChildren-*`/`X-Care-*`/`X-Oxfam-*`/`X-Amnesty-*`/`X-JapanPlatform-*`/`X-AAR-*`/`X-Peace-*`/`X-ICRC-*`/`X-UNDP-*`/`X-Furunavi-*`/`X-FuruChoice-*`/`X-FurusatoMall-*`/`X-AnaFurusato-*`/`X-FuruPo-*`/`X-RakutenFurusato-*`/`X-FuruLabo-*`/`X-FurusatoPremier-*`/`X-JREMallFurusato-*`/`X-AuFurusato-*`/`X-YahooFurusato-*`/`X-DocomoFurusato-*` は善機の通知記録 — 送信側が書くことは自称。災害寄付・返礼品偽装は寄付詐欺の典型。(`X-GoFundMe-*`/`X-Kickstarter-*`/`X-Indiegogo-*` 等のクラウドファンディング機は D479 で検出済み)
+- **修正**: `Envelope` に `charity_marks` + `has_charity_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 善印の自署を問え。
+
+### Security — D557: `X-Piccoma-*`/`X-CMOA-*`/`X-Kodansha-*` 等の漫画・電子書籍・書店・出版社印自称が未検査
+
+- **問題**: `X-Piccoma-*` (ピッコマ)、`X-CMOA-*` (コミックシーモア)、`X-Kodansha-*` (講談社)、`X-Webtoon-*`/`X-MechaComi-*`/`X-Renta-*`/`X-BookLive-*`/`X-AmebaManga-*`/`X-MangaKingdom-*`/`X-DMMBooks-*`/`X-Honto-*`/`X-Kinokuniya-*`/`X-Maruzen-*`/`X-Junkudo-*`/`X-BookOff-*`/`X-TsutayaBook-*`/`X-Yurindo-*`/`X-Sanseido-*`/`X-Miraiya-*`/`X-Bunkyo-*`/`X-Kumazawa-*`/`X-Shueisha-*`/`X-Shogakukan-*`/`X-Kadokawa-*`/`X-Akita-*`/`X-Hakusensha-*`/`X-Takeshobo-*`/`X-Leed-*`/`X-NihonBungeisha-*`/`X-Bunshun-*`/`X-Core-*`/`X-Ohta-*`/`X-ShonenJump-*` は書機の通知記録 — 送信側が書くことは自称。ポイント失効・新刊案内偽装は書籍詐欺の典型。
+- **修正**: `Envelope` に `manga_marks` + `has_manga_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 書印の自署を問え。
+
+
 ### Security — D552: `X-Rolex-*`/`X-Cartier-*`/`X-Hermes-*` 等の宝飾・時計・高級ブランド印自称が未検査
 
 - **問題**: `X-Rolex-*` (Rolex)、`X-Cartier-*` (Cartier)、`X-Hermes-*` (Hermes)、`X-Omega-*`/`X-PatekPhilippe-*`/`X-TAGHeuer-*`/`X-Breitling-*`/`X-IWC-*`/`X-GrandSeiko-*`/`X-Tiffany-*`/`X-Bulgari-*`/`X-VanCleef-*`/`X-HarryWinston-*`/`X-Mikimoto-*`/`X-Tasaki-*`/`X-4C-*`/`X-Swarovski-*`/`X-LouisVuitton-*`/`X-Gucci-*`/`X-Prada-*`/`X-Chanel-*`/`X-Dior-*`/`X-Burberry-*`/`X-Coach-*`/`X-Fendi-*`/`X-Loewe-*`/`X-Celine-*`/`X-Balenciaga-*`/`X-Bottega-*`/`X-SaintLaurent-*`/`X-Givenchy-*`/`X-Valentino-*`/`X-Ferragamo-*`/`X-Bally-*`/`X-Tods-*`/`X-Montblanc-*`/`X-Chaumet-*`/`X-Boucheron-*`/`X-Piaget-*`/`X-Chopard-*`/`X-Jaeger-*`/`X-Audemars-*`/`X-RichardMille-*`/`X-Hublot-*`/`X-Zenith-*`/`X-Tudor-*`/`X-Longines-*`/`X-Orient-*`/`X-Tissot-*` は奢機の通知記録 — 送信側が書くことは自称。修理・買取・会員特典偽装は高級品詐欺の典型。(`X-Pandora-*`/`X-Seiko-*`/`X-Citizen-*`/`X-Casio-*` は D493/D496 で検出済み)
