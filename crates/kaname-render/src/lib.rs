@@ -1570,6 +1570,59 @@ pub struct Envelope {
     /// 占星術アプリ印があるか — 鑑機の通知記録を送信側が自称する
     /// 兆候 (D574)。
     pub fortune_marks: bool,
+    /// `X-Curon-*`/`X-MICIN-*`/`X-LineDoctor-*`/`X-Medley-*`/
+    /// `X-EPARK-*`/`X-AskDoctors-*`/`X-HealthTap-*`/`X-Teladoc-*`/
+    /// `X-MDLive-*`/`X-Amwell-*`/`X-BabylonHealth-*`/`X-Kry-*`/
+    /// `X-Livi-*`/`X-AdaHealth-*`/`X-KHealth-*`/`X-PlushCare-*`/
+    /// `X-BetterHelp-*`/`X-Talkspace-*`/`X-Cerebral-*`/
+    /// `X-MedicalNote-*`/`X-Doctolib-*`/`X-Practo-*`/`X-Mfine-*`/
+    /// `X-OkusuriTecho-*`/`X-GoodDoctor-*`/`X-EPARKKusuri-*`/
+    /// `X-Ninety8Point6-*`/`X-Ro-*`/`X-Nurx-*`/`X-ForwardHealth-*`/
+    /// `X-OneMedical-*`/`X-OscarHealth-*`/`X-Heal-*`/`X-Sesame-*`/
+    /// `X-Parsley-*`/`X-StepCounter-*`/`X-MyFitnessPalApp-*`/
+    /// `X-FiNC-*`/`X-Asobune-*`/`X-Kencom-*`/`X-PepUp-*`/
+    /// `X-Calobye-*`/`X-KaradaNote-*`/`X-Mamari-*`/`X-Ninshin-*`/
+    /// `X-Conomo-*`/`X-BabyTech-*`/`X-Yonda-*`/`X-LuneLune-*`/
+    /// `X-Sofi-*`/`X-KaradaKarte-*`/`X-HealthSync-*`/
+    /// `X-MinnanoKaigo-*`/`X-CareMane-*`/`X-Kaigo-*` 等の
+    /// オンライン診療・健康アプリ印があるか — 診機の通知記録を
+    /// 送信側が自称する兆候 (D575)。(`X-CVS-*`/`X-Walgreens-*`/
+    /// `X-Hims-*`/`X-Zocdoc-*` 等の医療・薬局機は既存族で検出済み)
+    pub telehealth_marks: bool,
+    /// `X-Komehyo-*`/`X-Daikokuya-*`/`X-Nanboya-*`/`X-Brandia-*`/
+    /// `X-Ecoring-*`/`X-Buyma-*`/`X-Secaimon-*`/`X-TheRealReal-*`/
+    /// `X-GOAT-*`/`X-Rebag-*`/`X-Fashionphile-*`/`X-Tradesy-*`/
+    /// `X-Carousell-*`/`X-Wallapop-*`/`X-HardOff-*`/`X-GeoKaitori-*`/
+    /// `X-Torrefa-*`/`X-SecondStreet-*`/`X-FuruhonIchiba-*`/
+    /// `X-KaitoriOuji-*`/`X-NetOff-*`/`X-ValueBooks-*`/`X-OfferUp-*`/
+    /// `X-VarageSale-*`/`X-Letgo-*`/`X-Shpock-*`/`X-Gumtree-*`/
+    /// `X-Subito-*`/`X-Leboncoin-*`/`X-Milanuncios-*`/`X-Craigslist-*`/
+    /// `X-FacebookMarket-*`/`X-MercadoLibre-*`/`X-OLX-*`/`X-Quikr-*`/
+    /// `X-Bunjang-*`/`X-Joonggonara-*`/`X-Karrot-*`/`X-Fril-*`/
+    /// `X-Bocho-*`/`X-Otoku-*`/`X-Kaitorikakomaru-*`/`X-Pollet-*` 等の
+    /// 中古買取・リユース・個人間取引印があるか — 買機の通知記録を
+    /// 送信側が自称する兆候 (D576)。(`X-Mercari-*`/`X-Rakuma-*`/
+    /// `X-Yahoo-*`/`X-Depop-*`/`X-Vinted-*`/`X-StockX-*` 等は既存族、
+    /// `X-BookOff-*`/`X-Surugaya-*`/`X-Mandarake-*` は D557/D559 で検出済み)
+    pub reuse_marks: bool,
+    /// `X-Giant-*`/`X-Trek-*`/`X-Specialized-*`/`X-Cannondale-*`/
+    /// `X-ScottBike-*`/`X-Bianchi-*`/`X-Pinarello-*`/`X-Merida-*`/
+    /// `X-Ridley-*`/`X-FujiBike-*`/`X-GTBike-*`/`X-Shimano-*`/
+    /// `X-Campagnolo-*`/`X-SRAM-*`/`X-FSA-*`/`X-Bontrager-*`/
+    /// `X-Giro-*`/`X-Kask-*`/`X-ContinentalTire-*`/`X-Vittoria-*`/
+    /// `X-Maxxis-*`/`X-SpecializedJPN-*`/`X-BridgestoneCycle-*`/
+    /// `X-PanasonicCycle-*`/`X-YamahaPAS-*`/`X-AsahiCycle-*`/
+    /// `X-YsRoad-*`/`X-BeckOn-*`/`X-DaisyMessenger-*`/`X-Daichari-*`/
+    /// `X-HelloCycling-*`/`X-DocomoBikeshare-*`/`X-Luup-*`/
+    /// `X-Cogogo-*`/`X-CycleSpot-*`/`X-ChariChari-*`/`X-Pigeon-*`/
+    /// `X-Wimby-*`/`X-Miyata-*`/`X-Marukin-*`/`X-Panaracer-*`/
+    /// `X-IRC-*`/`X-Dahon-*`/`X-Tern-*`/`X-Brompton-*`/`X-Birdy-*`/
+    /// `X-AlexMoulton-*`/`X-KHS-*`/`X-Brooks-*`/`X-SelleItalia-*`/
+    /// `X-Fizik-*`/`X-Tune-*`/`X-Lightweight-*`/`X-Zipp-*` 等の
+    /// 自転車・サイクル印があるか — 輪機の通知記録を送信側が
+    /// 自称する兆候 (D577)。(`X-Nike-*`/`X-Adidas-*` 等スポーツ用品機は
+    /// D529、`X-Toyota-*`/`X-Honda-*` 等は D521 で検出済み)
+    pub bicycle_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2022,6 +2075,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cartrade_marks: has_cartrade_marks(hdr),
         tour_marks: has_tour_marks(hdr),
         fortune_marks: has_fortune_marks(hdr),
+        telehealth_marks: has_telehealth_marks(hdr),
+        reuse_marks: has_reuse_marks(hdr),
+        bicycle_marks: has_bicycle_marks(hdr),
     })
 }
 
@@ -9756,6 +9812,227 @@ fn has_fortune_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Curon-*`/`X-MICIN-*`/`X-LineDoctor-*`/`X-Medley-*`/`X-EPARK-*`/
+/// `X-AskDoctors-*`/`X-HealthTap-*`/`X-Teladoc-*`/`X-MDLive-*`/
+/// `X-Amwell-*`/`X-BabylonHealth-*`/`X-Kry-*`/`X-Livi-*`/
+/// `X-AdaHealth-*`/`X-KHealth-*`/`X-PlushCare-*`/`X-BetterHelp-*`/
+/// `X-Talkspace-*`/`X-Cerebral-*`/`X-MedicalNote-*`/`X-Doctolib-*`/
+/// `X-Practo-*`/`X-Mfine-*`/`X-OkusuriTecho-*`/`X-GoodDoctor-*`/
+/// `X-EPARKKusuri-*`/`X-Ninety8Point6-*`/`X-Ro-*`/`X-Nurx-*`/
+/// `X-ForwardHealth-*`/`X-OneMedical-*`/`X-OscarHealth-*`/`X-Heal-*`/
+/// `X-Sesame-*`/`X-Parsley-*`/`X-FiNC-*`/`X-Kencom-*`/`X-PepUp-*`/
+/// `X-KaradaNote-*`/`X-Mamari-*`/`X-Ninshin-*`/`X-Conomo-*`/
+/// `X-BabyTech-*`/`X-Yonda-*`/`X-LuneLune-*`/`X-Sofi-*`/
+/// `X-KaradaKarte-*`/`X-MinnanoKaigo-*`/`X-CareMane-*`/`X-Kaigo-*` 等の
+/// オンライン診療・健康アプリ印があるか判定する (D575)。
+///
+/// `X-Curon-*` (クロン)、`X-Medley-*` (メドレー)、`X-Teladoc-*`
+/// (Teladoc) は診機の通知記録 — 送信側から届くこれは自称。
+/// 診察予約・処方通知・カウンセリング料金の偽装は
+/// 医療詐欺の典型。
+fn has_telehealth_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-curon-")
+            || l.starts_with("x-micin-")
+            || l.starts_with("x-linedoctor-")
+            || l.starts_with("x-medley-")
+            || l.starts_with("x-epark-")
+            || l.starts_with("x-askdoctors-")
+            || l.starts_with("x-healthtap-")
+            || l.starts_with("x-teladoc-")
+            || l.starts_with("x-mdlive-")
+            || l.starts_with("x-amwell-")
+            || l.starts_with("x-babylonhealth-")
+            || l.starts_with("x-kry-")
+            || l.starts_with("x-livi-")
+            || l.starts_with("x-adahealth-")
+            || l.starts_with("x-khealth-")
+            || l.starts_with("x-plushcare-")
+            || l.starts_with("x-betterhelp-")
+            || l.starts_with("x-talkspace-")
+            || l.starts_with("x-cerebral-")
+            || l.starts_with("x-medicalnote-")
+            || l.starts_with("x-doctolib-")
+            || l.starts_with("x-practo-")
+            || l.starts_with("x-mfine-")
+            || l.starts_with("x-okusuritecho-")
+            || l.starts_with("x-gooddoctor-")
+            || l.starts_with("x-eparkkusuri-")
+            || l.starts_with("x-ninety8point6-")
+            || l.starts_with("x-ro-")
+            || l.starts_with("x-nurx-")
+            || l.starts_with("x-forwardhealth-")
+            || l.starts_with("x-onemedical-")
+            || l.starts_with("x-oscarhealth-")
+            || l.starts_with("x-heal-")
+            || l.starts_with("x-sesame-")
+            || l.starts_with("x-parsley-")
+            || l.starts_with("x-finc-")
+            || l.starts_with("x-kencom-")
+            || l.starts_with("x-pepup-")
+            || l.starts_with("x-karadanote-")
+            || l.starts_with("x-mamari-")
+            || l.starts_with("x-ninshin-")
+            || l.starts_with("x-conomo-")
+            || l.starts_with("x-babytech-")
+            || l.starts_with("x-yonda-")
+            || l.starts_with("x-lunelune-")
+            || l.starts_with("x-sofi-")
+            || l.starts_with("x-karadakarte-")
+            || l.starts_with("x-minnanokaigo-")
+            || l.starts_with("x-caremane-")
+            || l.starts_with("x-kaigo-")
+    })
+}
+
+/// `X-Komehyo-*`/`X-Daikokuya-*`/`X-Nanboya-*`/`X-Brandia-*`/
+/// `X-Ecoring-*`/`X-Buyma-*`/`X-Secaimon-*`/`X-TheRealReal-*`/
+/// `X-GOAT-*`/`X-Rebag-*`/`X-Fashionphile-*`/`X-Tradesy-*`/
+/// `X-Carousell-*`/`X-Wallapop-*`/`X-HardOff-*`/`X-GeoKaitori-*`/
+/// `X-Torrefa-*`/`X-SecondStreet-*`/`X-FuruhonIchiba-*`/
+/// `X-KaitoriOuji-*`/`X-NetOff-*`/`X-ValueBooks-*`/`X-OfferUp-*`/
+/// `X-VarageSale-*`/`X-Letgo-*`/`X-Shpock-*`/`X-Gumtree-*`/
+/// `X-Subito-*`/`X-Leboncoin-*`/`X-Milanuncios-*`/`X-Craigslist-*`/
+/// `X-FacebookMarket-*`/`X-MercadoLibre-*`/`X-OLX-*`/`X-Quikr-*`/
+/// `X-Bunjang-*`/`X-Joonggonara-*`/`X-Karrot-*`/`X-Fril-*`/
+/// `X-Bocho-*`/`X-Otoku-*`/`X-Kaitorikakomaru-*`/`X-Pollet-*` 等の
+/// 中古買取・リユース・個人間取引印があるか判定する (D576)。
+///
+/// `X-Komehyo-*` (コメ兵)、`X-Daikokuya-*` (大黒屋)、`X-StockX-*`
+/// 系の通知記録 — 送信側から届くこれは自称。査定額提示・
+/// 売買成立・発送依頼の偽装は中古売買詐欺の典型。
+fn has_reuse_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-komehyo-")
+            || l.starts_with("x-daikokuya-")
+            || l.starts_with("x-nanboya-")
+            || l.starts_with("x-brandia-")
+            || l.starts_with("x-ecoring-")
+            || l.starts_with("x-buyma-")
+            || l.starts_with("x-secaimon-")
+            || l.starts_with("x-therealreal-")
+            || l.starts_with("x-goat-")
+            || l.starts_with("x-rebag-")
+            || l.starts_with("x-fashionphile-")
+            || l.starts_with("x-tradesy-")
+            || l.starts_with("x-carousell-")
+            || l.starts_with("x-wallapop-")
+            || l.starts_with("x-hardoff-")
+            || l.starts_with("x-geokaitori-")
+            || l.starts_with("x-torrefa-")
+            || l.starts_with("x-secondstreet-")
+            || l.starts_with("x-furuhonichiba-")
+            || l.starts_with("x-kaitoriouji-")
+            || l.starts_with("x-netoff-")
+            || l.starts_with("x-valuebooks-")
+            || l.starts_with("x-offerup-")
+            || l.starts_with("x-varagesale-")
+            || l.starts_with("x-letgo-")
+            || l.starts_with("x-shpock-")
+            || l.starts_with("x-gumtree-")
+            || l.starts_with("x-subito-")
+            || l.starts_with("x-leboncoin-")
+            || l.starts_with("x-milanuncios-")
+            || l.starts_with("x-craigslist-")
+            || l.starts_with("x-facebookmarket-")
+            || l.starts_with("x-mercadolibre-")
+            || l.starts_with("x-olx-")
+            || l.starts_with("x-quikr-")
+            || l.starts_with("x-bunjang-")
+            || l.starts_with("x-joonggonara-")
+            || l.starts_with("x-karrot-")
+            || l.starts_with("x-fril-")
+            || l.starts_with("x-bocho-")
+            || l.starts_with("x-otoku-")
+            || l.starts_with("x-kaitorikakomaru-")
+            || l.starts_with("x-pollet-")
+    })
+}
+
+/// `X-Giant-*`/`X-Trek-*`/`X-Specialized-*`/`X-Cannondale-*`/
+/// `X-ScottBike-*`/`X-Bianchi-*`/`X-Pinarello-*`/`X-Merida-*`/
+/// `X-Ridley-*`/`X-FujiBike-*`/`X-GTBike-*`/`X-Shimano-*`/
+/// `X-Campagnolo-*`/`X-SRAM-*`/`X-FSA-*`/`X-Bontrager-*`/`X-Giro-*`/
+/// `X-Kask-*`/`X-ContinentalTire-*`/`X-Vittoria-*`/`X-Maxxis-*`/
+/// `X-BridgestoneCycle-*`/`X-PanasonicCycle-*`/`X-YamahaPAS-*`/
+/// `X-AsahiCycle-*`/`X-YsRoad-*`/`X-BeckOn-*`/`X-Daichari-*`/
+/// `X-HelloCycling-*`/`X-DocomoBikeshare-*`/`X-Luup-*`/`X-Cogogo-*`/
+/// `X-CycleSpot-*`/`X-ChariChari-*`/`X-Wimby-*`/`X-Miyata-*`/
+/// `X-Marukin-*`/`X-Panaracer-*`/`X-IRC-*`/`X-Dahon-*`/`X-Tern-*`/
+/// `X-Brompton-*`/`X-Birdy-*`/`X-AlexMoulton-*`/`X-KHS-*`/
+/// `X-Brooks-*`/`X-SelleItalia-*`/`X-Fizik-*`/`X-Zipp-*` 等の
+/// 自転車・サイクル印があるか判定する (D577)。
+///
+/// `X-Giant-*` (Giant)、`X-Shimano-*` (シマノ)、`X-AsahiCycle-*`
+/// (サイクルベースあさひ) は輪機の通知記録 — 送信側から届く
+/// これは自称。偽ショップの大幅値引・在庫入荷・注文確定の
+/// 偽装は自転車詐欺の典型。
+fn has_bicycle_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-giant-")
+            || l.starts_with("x-trek-")
+            || l.starts_with("x-specialized-")
+            || l.starts_with("x-cannondale-")
+            || l.starts_with("x-scottbike-")
+            || l.starts_with("x-bianchi-")
+            || l.starts_with("x-pinarello-")
+            || l.starts_with("x-merida-")
+            || l.starts_with("x-ridley-")
+            || l.starts_with("x-fujibike-")
+            || l.starts_with("x-gtbike-")
+            || l.starts_with("x-shimano-")
+            || l.starts_with("x-campagnolo-")
+            || l.starts_with("x-sram-")
+            || l.starts_with("x-fsa-")
+            || l.starts_with("x-bontrager-")
+            || l.starts_with("x-giro-")
+            || l.starts_with("x-kask-")
+            || l.starts_with("x-continentaltire-")
+            || l.starts_with("x-vittoria-")
+            || l.starts_with("x-maxxis-")
+            || l.starts_with("x-bridgestonecycle-")
+            || l.starts_with("x-panasoniccycle-")
+            || l.starts_with("x-yamahapas-")
+            || l.starts_with("x-asahicycle-")
+            || l.starts_with("x-ysroad-")
+            || l.starts_with("x-beckon-")
+            || l.starts_with("x-daichari-")
+            || l.starts_with("x-hellocycling-")
+            || l.starts_with("x-docomobikeshare-")
+            || l.starts_with("x-luup-")
+            || l.starts_with("x-cogogo-")
+            || l.starts_with("x-cyclespot-")
+            || l.starts_with("x-charichari-")
+            || l.starts_with("x-wimby-")
+            || l.starts_with("x-miyata-")
+            || l.starts_with("x-marukin-")
+            || l.starts_with("x-panaracer-")
+            || l.starts_with("x-irc-")
+            || l.starts_with("x-dahon-")
+            || l.starts_with("x-tern-")
+            || l.starts_with("x-brompton-")
+            || l.starts_with("x-birdy-")
+            || l.starts_with("x-alexmoulton-")
+            || l.starts_with("x-khs-")
+            || l.starts_with("x-brooks-")
+            || l.starts_with("x-selleitalia-")
+            || l.starts_with("x-fizik-")
+            || l.starts_with("x-zipp-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -15840,4 +16117,152 @@ X-Other: 1
 
 body";
     assert!(!has_fortune_marks(clean));
+}
+
+
+#[test]
+fn scan_は診機印を検出する() {
+    let c1 = b"From: a@b
+X-Curon-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-MICIN-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-Teladoc-Ref: 1
+
+x";
+    let m2 = b"From: a@b
+X-Medley-Id: 1
+
+x";
+    let d1 = b"From: a@b
+X-Doctolib-Booking: 1
+
+x";
+    let b1 = b"From: a@b
+X-BetterHelp-Session: 1
+
+x";
+    let e1 = b"From: a@b
+X-EPARK-Reserve: 1
+
+x";
+    let a1 = b"From: a@b
+X-AskDoctors-Case: 1
+
+x";
+    assert!(has_telehealth_marks(c1));
+    assert!(has_telehealth_marks(m1));
+    assert!(has_telehealth_marks(t1));
+    assert!(has_telehealth_marks(m2));
+    assert!(has_telehealth_marks(d1));
+    assert!(has_telehealth_marks(b1));
+    assert!(has_telehealth_marks(e1));
+    assert!(has_telehealth_marks(a1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_telehealth_marks(clean));
+}
+
+#[test]
+fn scan_は買機印を検出する() {
+    let k1 = b"From: a@b
+X-Komehyo-Id: 1
+
+x";
+    let d1 = b"From: a@b
+X-Daikokuya-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nanboya-Ref: 1
+
+x";
+    let g1 = b"From: a@b
+X-GOAT-Order: 1
+
+x";
+    let c1 = b"From: a@b
+X-Carousell-Listing: 1
+
+x";
+    let l1 = b"From: a@b
+X-Leboncoin-Ad: 1
+
+x";
+    let s1 = b"From: a@b
+X-SecondStreet-Offer: 1
+
+x";
+    let b1 = b"From: a@b
+X-Buyma-Purchase: 1
+
+x";
+    assert!(has_reuse_marks(k1));
+    assert!(has_reuse_marks(d1));
+    assert!(has_reuse_marks(n1));
+    assert!(has_reuse_marks(g1));
+    assert!(has_reuse_marks(c1));
+    assert!(has_reuse_marks(l1));
+    assert!(has_reuse_marks(s1));
+    assert!(has_reuse_marks(b1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_reuse_marks(clean));
+}
+
+#[test]
+fn scan_は輪機印を検出する() {
+    let g1 = b"From: a@b
+X-Giant-Id: 1
+
+x";
+    let t1 = b"From: a@b
+X-Trek-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Specialized-Ref: 1
+
+x";
+    let c1 = b"From: a@b
+X-Cannondale-Order: 1
+
+x";
+    let m1 = b"From: a@b
+X-Shimano-Part: 1
+
+x";
+    let a1 = b"From: a@b
+X-AsahiCycle-Id: 1
+
+x";
+    let l1 = b"From: a@b
+X-Luup-Ride: 1
+
+x";
+    let b1 = b"From: a@b
+X-Brompton-Ship: 1
+
+x";
+    assert!(has_bicycle_marks(g1));
+    assert!(has_bicycle_marks(t1));
+    assert!(has_bicycle_marks(s1));
+    assert!(has_bicycle_marks(c1));
+    assert!(has_bicycle_marks(m1));
+    assert!(has_bicycle_marks(a1));
+    assert!(has_bicycle_marks(l1));
+    assert!(has_bicycle_marks(b1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_bicycle_marks(clean));
 }

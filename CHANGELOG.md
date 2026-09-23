@@ -6,6 +6,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Security — D575: `X-Curon-*`/`X-MICIN-*`/`X-Teladoc-*` 等のオンライン診療・健康アプリ印自称が未検査
+
+- **問題**: `X-Curon-*` (クロン)、`X-MICIN-*` (MICIN)、`X-Teladoc-*` (Teladoc)、`X-LineDoctor-*`/`X-Medley-*`/`X-EPARK-*`/`X-AskDoctors-*`/`X-HealthTap-*`/`X-MDLive-*`/`X-Amwell-*`/`X-BabylonHealth-*`/`X-Kry-*`/`X-Livi-*`/`X-AdaHealth-*`/`X-KHealth-*`/`X-PlushCare-*`/`X-BetterHelp-*`/`X-Talkspace-*`/`X-Cerebral-*`/`X-MedicalNote-*`/`X-Doctolib-*`/`X-Practo-*`/`X-Mfine-*`/`X-OkusuriTecho-*`/`X-GoodDoctor-*`/`X-EPARKKusuri-*`/`X-Ninety8Point6-*`/`X-Ro-*`/`X-Nurx-*`/`X-ForwardHealth-*`/`X-OneMedical-*`/`X-OscarHealth-*`/`X-Heal-*`/`X-Sesame-*`/`X-Parsley-*`/`X-FiNC-*`/`X-Kencom-*`/`X-PepUp-*`/`X-KaradaNote-*`/`X-Mamari-*`/`X-Ninshin-*`/`X-Conomo-*`/`X-BabyTech-*`/`X-Yonda-*`/`X-LuneLune-*`/`X-Sofi-*`/`X-KaradaKarte-*`/`X-MinnanoKaigo-*`/`X-CareMane-*`/`X-Kaigo-*` は診機の通知記録 — 送信側が書くことは自称。診察予約・処方通知・カウンセリング料金の偽装は医療詐欺の典型。(`X-CVS-*`/`X-Walgreens-*`/`X-Hims-*`/`X-Zocdoc-*` 等の医療・薬局機は既存族で検出済み)
+- **修正**: `Envelope` に `telehealth_marks` + `has_telehealth_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 診印の自署を問え。
+
+### Security — D576: `X-Komehyo-*`/`X-Daikokuya-*`/`X-StockX-*` 系の中古買取・リユース・個人間取引印自称が未検査
+
+- **問題**: `X-Komehyo-*` (コメ兵)、`X-Daikokuya-*` (大黒屋)、`X-Nanboya-*` (なんぼや)、`X-Brandia-*`/`X-Ecoring-*`/`X-Buyma-*`/`X-Secaimon-*`/`X-TheRealReal-*`/`X-GOAT-*`/`X-Rebag-*`/`X-Fashionphile-*`/`X-Tradesy-*`/`X-Carousell-*`/`X-Wallapop-*`/`X-HardOff-*`/`X-GeoKaitori-*`/`X-Torrefa-*`/`X-SecondStreet-*`/`X-FuruhonIchiba-*`/`X-KaitoriOuji-*`/`X-NetOff-*`/`X-ValueBooks-*`/`X-OfferUp-*`/`X-VarageSale-*`/`X-Letgo-*`/`X-Shpock-*`/`X-Gumtree-*`/`X-Subito-*`/`X-Leboncoin-*`/`X-Milanuncios-*`/`X-Craigslist-*`/`X-FacebookMarket-*`/`X-MercadoLibre-*`/`X-OLX-*`/`X-Quikr-*`/`X-Bunjang-*`/`X-Joonggonara-*`/`X-Karrot-*`/`X-Fril-*`/`X-Bocho-*`/`X-Otoku-*`/`X-Kaitorikakomaru-*`/`X-Pollet-*` は買機の通知記録 — 送信側が書くことは自称。査定額提示・売買成立・発送依頼の偽装は中古売買詐欺の典型。(`X-Mercari-*`/`X-Rakuma-*`/`X-Yahoo-*`/`X-Depop-*`/`X-Vinted-*`/`X-StockX-*` 等は既存族、`X-BookOff-*`/`X-Surugaya-*`/`X-Mandarake-*` は D557/D559 で検出済み)
+- **修正**: `Envelope` に `reuse_marks` + `has_reuse_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 買印の自署を問え。
+
+### Security — D577: `X-Giant-*`/`X-Trek-*`/`X-Shimano-*` 等の自転車・サイクル印自称が未検査
+
+- **問題**: `X-Giant-*` (Giant)、`X-Trek-*` (Trek)、`X-Shimano-*` (シマノ)、`X-Specialized-*`/`X-Cannondale-*`/`X-ScottBike-*`/`X-Bianchi-*`/`X-Pinarello-*`/`X-Merida-*`/`X-Ridley-*`/`X-FujiBike-*`/`X-GTBike-*`/`X-Campagnolo-*`/`X-SRAM-*`/`X-FSA-*`/`X-Bontrager-*`/`X-Giro-*`/`X-Kask-*`/`X-ContinentalTire-*`/`X-Vittoria-*`/`X-Maxxis-*`/`X-BridgestoneCycle-*`/`X-PanasonicCycle-*`/`X-YamahaPAS-*`/`X-AsahiCycle-*`/`X-YsRoad-*`/`X-BeckOn-*`/`X-Daichari-*`/`X-HelloCycling-*`/`X-DocomoBikeshare-*`/`X-Luup-*`/`X-Cogogo-*`/`X-CycleSpot-*`/`X-ChariChari-*`/`X-Wimby-*`/`X-Miyata-*`/`X-Marukin-*`/`X-Panaracer-*`/`X-IRC-*`/`X-Dahon-*`/`X-Tern-*`/`X-Brompton-*`/`X-Birdy-*`/`X-AlexMoulton-*`/`X-KHS-*`/`X-Brooks-*`/`X-SelleItalia-*`/`X-Fizik-*`/`X-Zipp-*` は輪機の通知記録 — 送信側が書くことは自称。偽ショップの大幅値引・在庫入荷・注文確定の偽装は自転車詐欺の典型。(`X-Nike-*`/`X-Adidas-*` 等スポーツ用品機は D529、`X-Toyota-*`/`X-Honda-*` 等は D521 で検出済み)
+- **修正**: `Envelope` に `bicycle_marks` + `has_bicycle_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 輪印の自署を問え。
+
 ### Security — D572: `X-Gulliver-*`/`X-Nextage-*`/`X-Autobacs-*` 等の車買取・中古車・カー用品印自称が未検査
 
 - **問題**: `X-Gulliver-*` (ガリバー)、`X-Nextage-*` (ネクステージ)、`X-Autobacs-*` (オートバックス)、`X-Bigmotor-*`/`X-Carseven-*`/`X-AppleKaitori-*`/`X-RabbitKaitori-*`/`X-Upos-*`/`X-YellowHat-*`/`X-James-*`/`X-Tirekan-*`/`X-Autowave-*`/`X-Carconbi-*`/`X-Navikuru-*`/`X-Carcone-*`/`X-Carsensor-*`/`X-MOTA-*`/`X-Ucarpac-*`/`X-ZubattoKaitori-*`/`X-Carview-*`/`X-Webike-*`/`X-Bikeou-*`/`X-RedBaron-*`/`X-Bikeone-*`/`X-Autotrader-*`/`X-CarsDotCom-*`/`X-Carvana-*`/`X-Vroom-*`/`X-CarGurus-*`/`X-CarMax-*`/`X-AutoScout24-*`/`X-MobileDe-*`/`X-Webmotors-*`/`X-Carsales-*`/`X-Encar-*`/`X-KCar-*`/`X-CarPrice-*`/`X-Car24-*`/`X-Cazana-*`/`X-Motory-*`/`X-Carro-*`/`X-Kavak-*`/`X-Spinny-*`/`X-Carsome-*` は売機の通知記録 — 送信側が書くことは自称。査定完了・買取金額提示・オークション結果の偽装は中古車売買詐欺の典型。(`X-Toyota-*`/`X-Honda-*` 等メーカー本体・`X-Hertz-*` 等レンタカーは D521、`X-Goo-*` は既存族で検出済み)
