@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D602: `X-Caldo-*`/`X-ZenPlace-*`/`X-Loive-*` 等のヨガ・ピラティス印自称が未検査
+
+- **問題**: `X-Caldo-*` (カルド)、`X-ZenPlace-*` (zen place)、`X-Loive-*` (ロイブ)、`X-HotYoga-*`/`X-StudioYoga-*`/`X-YogaWorks-*`/`X-YogaJaya-*`/`X-Bikram-*`/`X-YogaLab-*`/`X-BestBody-*`/`X-PilatesK-*`/`X-UrbanPilates-*`/`X-StudioPilates-*`/`X-NamasteYoga-*`/`X-YogaRoom-*`/`X-BeyondYoga-*`/`X-AloMoves-*`/`X-GloYoga-*`/`X-YogaInternational-*`/`X-CorePowerYoga-*`/`X-PureYoga-*`/`X-YogaSix-*`/`X-HotYogaClub-*`/`X-SunYoga-*`/`X-MoonYoga-*`/`X-YinYoga-*`/`X-KundaliniYoga-*`/`X-AshtangaYoga-*`/`X-HathaYoga-*`/`X-IyengarYoga-*`/`X-RestorativeYoga-*`/`X-VinyasaYoga-*`/`X-AerialYoga-*`/`X-MamaYoga-*`/`X-MaternityYoga-*`/`X-SeniorYoga-*`/`X-KidsYoga-*`/`X-OnlineYoga-*`/`X-HomeYoga-*`/`X-YogaLesson-*`/`X-YogaInstructor-*`/`X-YogaSchool-*`/`X-YogaFesta-*` 等 は瑜機の通知記録 — 送信側が書くことは自称。月額会費・体験レッスン・回数券の偽装はヨガ詐欺の典型手口。(フィットネスジム機は D530、LAVA は既存族)
+- **修正**: `Envelope` に `yoga_marks` + `has_yoga_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 瑜印の自署を問え。
+
+### Security — D603: `X-ShogiWars-*`/`X-ShogiClub24-*`/`X-NihonKiin-*` 等の将棋・囲碁・ボードゲーム印自称が未検査
+
+- **問題**: `X-ShogiWars-*` (将棋ウォーズ)、`X-ShogiClub24-*` (将棋倶楽部24)、`X-NihonKiin-*` (日本棋院)、`X-IgoNet-*`/`X-KansaiKiin-*`/`X-81Dojo-*`/`X-Pandanet-*`/`X-KGSGo-*`/`X-OGSGo-*`/`X-FoxGo-*`/`X-TygemGo-*`/`X-ShogiQuest-*`/`X-ShogiDojo-*`/`X-IgoQuest-*`/`X-GoQuest-*`/`X-Goseki-*`/`X-ShogiTaikai-*`/`X-ShogiKentei-*`/`X-ShogiAcademy-*`/`X-BoardGameCafe-*`/`X-BGG-*`/`X-YellowSubmarine-*`/`X-JellyJellyCafe-*`/`X-Catan-*`/`X-Meeple-*`/`X-Dominion-*`/`X-Carcassonne-*`/`X-TicketToRide-*`/`X-Pandemic-*`/`X-Azul-*`/`X-Splendor-*`/`X-7Wonders-*`/`X-Agricola-*`/`X-Terraforming-*`/`X-Gloomhaven-*`/`X-Wingspan-*`/`X-RootGame-*`/`X-Scythe-*`/`X-TwilightStruggle-*`/`X-BrassBirmingham-*`/`X-ArkNova-*`/`X-TCGCafe-*` 等 は棋機の通知記録 — 送信側が書くことは自称。対局料・大会費・棋書購入の偽装は将棋・囲碁愛好家狙い詐欺の典型手口。(TCG・遊戯王・ポケカは D558)
+- **修正**: `Envelope` に `boardgame_marks` + `has_boardgame_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 棋印の自署を問え。
+
+### Security — D604: `X-Photoback-*`/`X-Albus-*`/`X-Dotti-*` 等の写真プリント・フォトブック印自称が未検査
+
+- **問題**: `X-Photoback-*` (Photoback)、`X-Albus-*` (ALBUS)、`X-Dotti-*` (ドッティ)、`X-Asukabook-*`/`X-DreamPages-*`/`X-PhotobookJP-*`/`X-Caine-*`/`X-Kinekawa-*`/`X-Fuful-*`/`X-PhotoRevo-*`/`X-Picpic-*`/`X-Photocopi-*`/`X-MyPhotobook-*`/`X-FamilyAlbum-*`/`X-Memolee-*`/`X-PhotobookStore-*`/`X-Pripri-*`/`X-AlbumCube-*`/`X-PhotoPri-*`/`X-OmoideBako-*`/`X-PrintStudio-*`/`X-FujifilmAlbum-*`/`X-ShinyPrint-*`/`X-FotoKite-*`/`X-PhotoPiece-*`/`X-IrodoriPrint-*`/`X-Tanreisha-*`/`X-FilmScan-*`/`X-NegaScan-*`/`X-PhotoLab-*`/`X-FilmDev-*`/`X-PrintPhoto-*`/`X-HappyPrint-*`/`X-SmilePrint-*`/`X-OmoidePrint-*`/`X-KidsPhoto-*`/`X-BabyPhoto-*`/`X-WeddingPhoto-*`/`X-SchoolPhoto-*`/`X-AlbumShare-*`/`X-PhotoShare-*`/`X-MemorialPhoto-*`/`X-SnapshotPhoto-*`/`X-PhotoCalendar-*`/`X-PhotoGift-*`/`X-PhotoMug-*`/`X-PhotoCanvas-*`/`X-PhotoPanel-*`/`X-PhotoFrame-*`/`X-PhotoCard-*`/`X-PhotoSeal-*`/`X-PhotoSticker-*`/`X-PhotoKeychain-*` 等 は像機の通知記録 — 送信側が書くことは自称。印刷完了・納期遅延・データ破損の偽装は写真注文詐欺の典型手口。(印刷通販機は D590、しまうまプリント・みてねは既存族)
+- **修正**: `Envelope` に `photoprint_marks` + `has_photoprint_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 像印の自署を問え。
+
 ### Security — D599: `X-PGM-*`/`X-Accordia-*`/`X-GolfNow-*` 等のゴルフ場・練習場印自称が未検査
 
 - **問題**: `X-PGM-*` (PGM)、`X-Accordia-*` (アコーディア)、`X-GolfNow-*` (GolfNow)、`X-TaiheiyoClub-*`/`X-Tokow-*`/`X-JumboGolf-*`/`X-TsuruyaGolf-*`/`X-NikiGolf-*`/`X-Golf5-*`/`X-AlpenGolf-*`/`X-MizunoGolf-*`/`X-HonmaGolf-*`/`X-BridgestoneGolf-*`/`X-VictoriaGolf-*`/`X-PrestigeGC-*`/`X-TomeiCC-*`/`X-TotsukaCC-*`/`X-NagoyaGC-*`/`X-ChibaGC-*`/`X-GolfDigest-*`/`X-GolfPartner-*`/`X-FestivalGolf-*`/`X-GolfValue-*`/`X-Kasumigaseki-*`/`X-KawanaGC-*`/`X-NaruoGC-*`/`X-HironoGC-*`/`X-TokyoGC-*`/`X-AsamaGC-*`/`X-FujiGC-*`/`X-SenumaGC-*`/`X-OaraiGC-*`/`X-TopGolf-*`/`X-DrivingRange-*`/`X-IndoorGolf-*`/`X-SimGolf-*`/`X-GolfLesson-*`/`X-CountryClub-*`/`X-TeeTime-*` 等 は場機の通知記録 — 送信側が書くことは自称。会員権・予約確認・コンペ賞品の偽装はゴルファー狙い詐欺の典型手口。(スポーツ用品機は D529)
