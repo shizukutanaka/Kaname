@@ -1486,6 +1486,44 @@ pub struct Envelope {
     /// 防機の通知記録を送信側が自称する兆候 (D566)。(`X-FEMA-*`
     /// 等の政府機関は D518 で検出済み)
     pub disaster_marks: bool,
+    /// `X-VISA-*`/`X-Mastercard-*`/`X-Amex-*`/`X-Diners-*`/`X-Discover-*`/
+    /// `X-RakutenCard-*`/`X-SMBCCard-*`/`X-JACCS-*`/`X-Orico-*`/
+    /// `X-Saison-*`/`X-Nicos-*`/`X-DCCard-*`/`X-UCCard-*`/`X-Aplus-*`/
+    /// `X-Jacks-*`/`X-PocketCard-*`/`X-ViewCard-*`/`X-VJA-*`/
+    /// `X-AmericanExpress-*`/`X-ChaseCard-*`/`X-CitiCard-*`/
+    /// `X-BofACard-*`/`X-WellsFargoCard-*`/`X-USAA-*`/`X-CommBankCard-*`/
+    /// `X-ANZCard-*`/`X-NABCard-*`/`X-WestpacCard-*`/`X-RBCard-*`/
+    /// `X-TDCard-*`/`X-BMO-*`/`X-MBNA-*`/`X-VirginMoney-*`/`X-Halifax-*`/
+    /// `X-Lloyds-*`/`X-SantanderCard-*`/`X-NationwideCard-*`/
+    /// `X-Barclaycard-*`/`X-MonzoCard-*`/`X-RevolutCard-*`/`X-Epos-*`/
+    /// `X-ToyotaFinance-*`/`X-MercedesBenzCard-*`/`X-BMWCard-*` 等の
+    /// クレジットカード印があるか — 札機の通知記録を送信側が自称する
+    /// 兆候 (D567)。(`X-JCB-*`/`X-UnionPay-*`/`X-Scotiabank-*` は既存族で
+    /// 検出済み)
+    pub creditcard_marks: bool,
+    /// `X-TPoint-*`/`X-DPoint-*`/`X-RakutenPoint-*`/`X-Ponta-*`/
+    /// `X-WAON-*`/`X-Nanaco-*`/`X-Edy-*`/`X-Suica-*`/`X-ICOCA-*`/
+    /// `X-PASMO-*`/`X-Kitaca-*`/`X-TOICA-*`/`X-Manaca-*`/`X-SUGOCA-*`/
+    /// `X-Nimoca-*`/`X-Hayakaken-*`/`X-Majica-*`/`X-JREPoint-*`/
+    /// `X-RakutenEdy-*`/`X-VPoint-*`/`X-FamiPay-*`/`X-QUICPay-*`/
+    /// `X-ID-*`/`X-ApplePay-*`/`X-GooglePay-*`/`X-AuPay-*`/`X-Merpay-*`/
+    /// `X-LinePay-*`/`X-DBarai-*`/`X-RPay-*`/`X-SmartPay-*`/
+    /// `X-NetMile-*`/`X-GiftMall-*`/`X-Pochi-*`/`X-Gilpe-*`/`X-Posca-*`/
+    /// `X-Moneyk-*`/`X-Kimisuta-*`/`X-Satore-*` 等のポイント・
+    /// 交通系 IC・QR 決済印があるか — 点機の通知記録を送信側が
+    /// 自称する兆候 (D568)。(`X-PayPay-*`/`X-Origami-*` は既存族で
+    /// 検出済み)
+    pub pointcard_marks: bool,
+    /// `X-Airalo-*`/`X-Holafly-*`/`X-Ubigi-*`/`X-Truphone-*`/
+    /// `X-AloSIM-*`/`X-Nomad-*`/`X-Saily-*`/`X-Jetpac-*`/`X-BNesim-*`/
+    /// `X-Flexiroam-*`/`X-GigSky-*`/`X-MayaMobile-*`/`X-Airhub-*`/
+    /// `X-SIM2Fly-*`/`X-OrangeESIM-*`/`X-ETravelSim-*`/`X-IIJeSIM-*`/
+    /// `X-RakutenSim-*`/`X-WorldESIM-*`/`X-ESIMDB-*`/`X-E4ESIM-*`/
+    /// `X-ESIM2Go-*`/`X-Instabridge-*`/`X-RedTeago-*` 等の eSIM・
+    /// 旅行 SIM 印があるか — 仮機の通知記録を送信側が自称する
+    /// 兆候 (D569)。(`X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*` 等の
+    /// キャリア本体は D511 で検出済み)
+    pub esim_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1913,6 +1951,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         sports_team_marks: has_sports_team_marks(raw),
         optical_marks: has_optical_marks(raw),
         disaster_marks: has_disaster_marks(raw),
+        creditcard_marks: has_creditcard_marks(raw),
+        pointcard_marks: has_pointcard_marks(raw),
+        esim_marks: has_esim_marks(raw),
     })
 }
 
@@ -9261,6 +9302,184 @@ fn has_disaster_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-VISA-*`/`X-Mastercard-*`/`X-Amex-*`/`X-Diners-*`/`X-Discover-*`/
+/// `X-RakutenCard-*`/`X-SMBCCard-*`/`X-JACCS-*`/`X-Orico-*`/`X-Saison-*`/
+/// `X-Nicos-*`/`X-DCCard-*`/`X-UCCard-*`/`X-Aplus-*`/`X-Jacks-*`/
+/// `X-PocketCard-*`/`X-ViewCard-*`/`X-VJA-*`/`X-AmericanExpress-*`/
+/// `X-ChaseCard-*`/`X-CitiCard-*`/`X-BofACard-*`/`X-WellsFargoCard-*`/
+/// `X-USAA-*`/`X-CommBankCard-*`/`X-ANZCard-*`/`X-NABCard-*`/
+/// `X-WestpacCard-*`/`X-RBCard-*`/`X-TDCard-*`/`X-BMO-*`/`X-MBNA-*`/
+/// `X-VirginMoney-*`/`X-Halifax-*`/`X-Lloyds-*`/`X-SantanderCard-*`/
+/// `X-NationwideCard-*`/`X-Barclaycard-*`/`X-MonzoCard-*`/
+/// `X-RevolutCard-*`/`X-Epos-*`/`X-ToyotaFinance-*`/
+/// `X-MercedesBenzCard-*`/`X-BMWCard-*` 等のクレジットカード印が
+/// あるか判定する (D567)。
+///
+/// `X-VISA-*` (Visa)、`X-Amex-*` (アメックス)、`X-Saison-*`
+/// (セゾンカード) は札機の通知記録 — 送信側から届くこれは自称。
+/// カード利用停止・身に覚えのない決済の偽装はクレカ詐欺の典型。
+/// `X-JCB-*`/`X-UnionPay-*`/`X-Scotiabank-*` は既存族で検出済み。
+fn has_creditcard_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-visa-")
+            || l.starts_with("x-mastercard-")
+            || l.starts_with("x-amex-")
+            || l.starts_with("x-diners-")
+            || l.starts_with("x-discover-")
+            || l.starts_with("x-rakutencard-")
+            || l.starts_with("x-smbccard-")
+            || l.starts_with("x-jaccs-")
+            || l.starts_with("x-orico-")
+            || l.starts_with("x-saison-")
+            || l.starts_with("x-nicos-")
+            || l.starts_with("x-dccard-")
+            || l.starts_with("x-uccard-")
+            || l.starts_with("x-aplus-")
+            || l.starts_with("x-jacks-")
+            || l.starts_with("x-pocketcard-")
+            || l.starts_with("x-viewcard-")
+            || l.starts_with("x-vja-")
+            || l.starts_with("x-americanexpress-")
+            || l.starts_with("x-chasecard-")
+            || l.starts_with("x-citicard-")
+            || l.starts_with("x-bofacard-")
+            || l.starts_with("x-wellsfargocard-")
+            || l.starts_with("x-usaa-")
+            || l.starts_with("x-commbankcard-")
+            || l.starts_with("x-anzcard-")
+            || l.starts_with("x-nabcard-")
+            || l.starts_with("x-westpaccard-")
+            || l.starts_with("x-rbcard-")
+            || l.starts_with("x-tdcard-")
+            || l.starts_with("x-bmo-")
+            || l.starts_with("x-mbna-")
+            || l.starts_with("x-virginmoney-")
+            || l.starts_with("x-halifax-")
+            || l.starts_with("x-lloyds-")
+            || l.starts_with("x-santandercard-")
+            || l.starts_with("x-nationwidecard-")
+            || l.starts_with("x-barclaycard-")
+            || l.starts_with("x-monzocard-")
+            || l.starts_with("x-revolutcard-")
+            || l.starts_with("x-epos-")
+            || l.starts_with("x-toyotafinance-")
+            || l.starts_with("x-mercedesbenzcard-")
+            || l.starts_with("x-bmwcard-")
+    })
+}
+
+/// `X-TPoint-*`/`X-DPoint-*`/`X-RakutenPoint-*`/`X-Ponta-*`/`X-WAON-*`/
+/// `X-Nanaco-*`/`X-Edy-*`/`X-Suica-*`/`X-ICOCA-*`/`X-PASMO-*`/
+/// `X-Kitaca-*`/`X-TOICA-*`/`X-Manaca-*`/`X-SUGOCA-*`/`X-Nimoca-*`/
+/// `X-Hayakaken-*`/`X-Majica-*`/`X-JREPoint-*`/`X-RakutenEdy-*`/
+/// `X-VPoint-*`/`X-FamiPay-*`/`X-QUICPay-*`/`X-ID-*`/`X-ApplePay-*`/
+/// `X-GooglePay-*`/`X-AuPay-*`/`X-Merpay-*`/`X-LinePay-*`/`X-DBarai-*`/
+/// `X-RPay-*`/`X-SmartPay-*`/`X-NetMile-*`/`X-GiftMall-*`/`X-Pochi-*`/
+/// `X-Gilpe-*`/`X-Posca-*`/`X-Moneyk-*`/`X-Kimisuta-*`/`X-Satore-*` 等の
+/// ポイント・交通系 IC・QR 決済印があるか判定する (D568)。
+///
+/// `X-TPoint-*` (Tポイント)、`X-Suica-*` (Suica)、`X-Ponta-*` (Ponta)
+/// は点機の通知記録 — 送信側から届くこれは自称。ポイント失効・
+/// チャージ増量偽装はポイント詐欺の典型。`X-PayPay-*`/`X-Origami-*`
+/// は既存族で検出済み。
+fn has_pointcard_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-tpoint-")
+            || l.starts_with("x-dpoint-")
+            || l.starts_with("x-rakutenpoint-")
+            || l.starts_with("x-ponta-")
+            || l.starts_with("x-waon-")
+            || l.starts_with("x-nanaco-")
+            || l.starts_with("x-edy-")
+            || l.starts_with("x-suica-")
+            || l.starts_with("x-icoca-")
+            || l.starts_with("x-pasmo-")
+            || l.starts_with("x-kitaca-")
+            || l.starts_with("x-toica-")
+            || l.starts_with("x-manaca-")
+            || l.starts_with("x-sugoca-")
+            || l.starts_with("x-nimoca-")
+            || l.starts_with("x-hayakaken-")
+            || l.starts_with("x-majica-")
+            || l.starts_with("x-jrepoint-")
+            || l.starts_with("x-rakutenedy-")
+            || l.starts_with("x-vpoint-")
+            || l.starts_with("x-famipay-")
+            || l.starts_with("x-quicpay-")
+            || l.starts_with("x-id-")
+            || l.starts_with("x-applepay-")
+            || l.starts_with("x-googlepay-")
+            || l.starts_with("x-aupay-")
+            || l.starts_with("x-merpay-")
+            || l.starts_with("x-linepay-")
+            || l.starts_with("x-dbarai-")
+            || l.starts_with("x-rpay-")
+            || l.starts_with("x-smartpay-")
+            || l.starts_with("x-netmile-")
+            || l.starts_with("x-giftmall-")
+            || l.starts_with("x-pochi-")
+            || l.starts_with("x-gilpe-")
+            || l.starts_with("x-posca-")
+            || l.starts_with("x-moneyk-")
+            || l.starts_with("x-kimisuta-")
+            || l.starts_with("x-satore-")
+    })
+}
+
+/// `X-Airalo-*`/`X-Holafly-*`/`X-Ubigi-*`/`X-Truphone-*`/`X-AloSIM-*`/
+/// `X-Nomad-*`/`X-Saily-*`/`X-Jetpac-*`/`X-BNesim-*`/`X-Flexiroam-*`/
+/// `X-GigSky-*`/`X-MayaMobile-*`/`X-Airhub-*`/`X-SIM2Fly-*`/
+/// `X-OrangeESIM-*`/`X-ETravelSim-*`/`X-IIJeSIM-*`/`X-RakutenSim-*`/
+/// `X-WorldESIM-*`/`X-ESIMDB-*`/`X-E4ESIM-*`/`X-ESIM2Go-*`/
+/// `X-Instabridge-*`/`X-RedTeago-*` 等の eSIM・旅行 SIM 印があるか
+/// 判定する (D569)。
+///
+/// `X-Airalo-*` (Airalo)、`X-Holafly-*` (Holafly)、`X-Ubigi-*`
+/// (Ubigi) は仮機の通知記録 — 送信側から届くこれは自称。
+/// 海外データプラン・有効期限切れ偽装は eSIM 詐欺の典型。
+/// `X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*` 等のキャリア本体は
+/// D511 で検出済み。
+fn has_esim_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-airalo-")
+            || l.starts_with("x-holafly-")
+            || l.starts_with("x-ubigi-")
+            || l.starts_with("x-truphone-")
+            || l.starts_with("x-alosim-")
+            || l.starts_with("x-nomad-")
+            || l.starts_with("x-saily-")
+            || l.starts_with("x-jetpac-")
+            || l.starts_with("x-bnesim-")
+            || l.starts_with("x-flexiroam-")
+            || l.starts_with("x-gigsky-")
+            || l.starts_with("x-mayamobile-")
+            || l.starts_with("x-airhub-")
+            || l.starts_with("x-sim2fly-")
+            || l.starts_with("x-orangeesim-")
+            || l.starts_with("x-etravelsim-")
+            || l.starts_with("x-iijesim-")
+            || l.starts_with("x-rakutensim-")
+            || l.starts_with("x-worldesim-")
+            || l.starts_with("x-esimdb-")
+            || l.starts_with("x-e4esim-")
+            || l.starts_with("x-esim2go-")
+            || l.starts_with("x-instabridge-")
+            || l.starts_with("x-redteago-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -14823,6 +15042,72 @@ mod tests {
         assert!(has_disaster_marks(w2));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_disaster_marks(clean));
+    }
+
+    #[test]
+    fn scan_は札機印を検出する() {
+        let v1 = b"X-VISA-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(v1));
+        let a1 = b"X-Amex-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(a1));
+        let s1 = b"X-Saison-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(s1));
+        let m1 = b"X-Mastercard-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(m1));
+        let r1 = b"X-RakutenCard-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(r1));
+        let e1 = b"X-Epos-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(e1));
+        let j1 = b"X-JACCS-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(j1));
+        let o1 = b"X-Orico-Notify: x\r\n\r\nx";
+        assert!(has_creditcard_marks(o1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_creditcard_marks(clean));
+    }
+
+    #[test]
+    fn scan_は点機印を検出する() {
+        let t1 = b"X-TPoint-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(t1));
+        let s1 = b"X-Suica-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(s1));
+        let p1 = b"X-Ponta-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(p1));
+        let d1 = b"X-DPoint-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(d1));
+        let w1 = b"X-WAON-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(w1));
+        let n1 = b"X-Nanaco-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(n1));
+        let m1 = b"X-Merpay-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(m1));
+        let i1 = b"X-ICOCA-Notify: x\r\n\r\nx";
+        assert!(has_pointcard_marks(i1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_pointcard_marks(clean));
+    }
+
+    #[test]
+    fn scan_は仮機印を検出する() {
+        let a1 = b"X-Airalo-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(a1));
+        let h1 = b"X-Holafly-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(h1));
+        let u1 = b"X-Ubigi-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(u1));
+        let s1 = b"X-Saily-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(s1));
+        let n1 = b"X-Nomad-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(n1));
+        let g1 = b"X-GigSky-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(g1));
+        let a2 = b"X-AloSIM-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(a2));
+        let m1 = b"X-MayaMobile-Notify: x\r\n\r\nx";
+        assert!(has_esim_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esim_marks(clean));
     }
 }
 

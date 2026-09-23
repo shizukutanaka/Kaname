@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D567: `X-VISA-*`/`X-Amex-*`/`X-Saison-*` 等のクレジットカード印自称が未検査
+
+- **問題**: `X-VISA-*` (Visa)、`X-Amex-*` (アメックス)、`X-Saison-*` (セゾンカード)、`X-Mastercard-*`/`X-Diners-*`/`X-Discover-*`/`X-RakutenCard-*`/`X-SMBCCard-*`/`X-JACCS-*`/`X-Orico-*`/`X-Nicos-*`/`X-DCCard-*`/`X-UCCard-*`/`X-Aplus-*`/`X-Jacks-*`/`X-PocketCard-*`/`X-ViewCard-*`/`X-VJA-*`/`X-AmericanExpress-*`/`X-ChaseCard-*`/`X-CitiCard-*`/`X-BofACard-*`/`X-WellsFargoCard-*`/`X-USAA-*`/`X-CommBankCard-*`/`X-ANZCard-*`/`X-NABCard-*`/`X-WestpacCard-*`/`X-RBCard-*`/`X-TDCard-*`/`X-BMO-*`/`X-MBNA-*`/`X-VirginMoney-*`/`X-Halifax-*`/`X-Lloyds-*`/`X-SantanderCard-*`/`X-NationwideCard-*`/`X-Barclaycard-*`/`X-MonzoCard-*`/`X-RevolutCard-*`/`X-Epos-*`/`X-ToyotaFinance-*`/`X-MercedesBenzCard-*`/`X-BMWCard-*` は札機の通知記録 — 送信側が書くことは自称。カード利用停止・身に覚えのない決済の偽装はクレカ詐欺の典型。(`X-JCB-*`/`X-UnionPay-*`/`X-Scotiabank-*` は既存族で検出済み)
+- **修正**: `Envelope` に `creditcard_marks` + `has_creditcard_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 札印の自署を問え。
+
+### Security — D568: `X-TPoint-*`/`X-Suica-*`/`X-Ponta-*` 等のポイント・交通系 IC・QR 決済印自称が未検査
+
+- **問題**: `X-TPoint-*` (Tポイント)、`X-Suica-*` (Suica)、`X-Ponta-*` (Ponta)、`X-DPoint-*`/`X-RakutenPoint-*`/`X-WAON-*`/`X-Nanaco-*`/`X-Edy-*`/`X-ICOCA-*`/`X-PASMO-*`/`X-Kitaca-*`/`X-TOICA-*`/`X-Manaca-*`/`X-SUGOCA-*`/`X-Nimoca-*`/`X-Hayakaken-*`/`X-Majica-*`/`X-JREPoint-*`/`X-RakutenEdy-*`/`X-VPoint-*`/`X-FamiPay-*`/`X-QUICPay-*`/`X-ID-*`/`X-ApplePay-*`/`X-GooglePay-*`/`X-AuPay-*`/`X-Merpay-*`/`X-LinePay-*`/`X-DBarai-*`/`X-RPay-*`/`X-SmartPay-*`/`X-NetMile-*`/`X-GiftMall-*`/`X-Pochi-*`/`X-Gilpe-*`/`X-Posca-*`/`X-Moneyk-*`/`X-Kimisuta-*`/`X-Satore-*` は点機の通知記録 — 送信側が書くことは自称。ポイント失効・チャージ増量偽装はポイント詐欺の典型。(`X-PayPay-*`/`X-Origami-*` は既存族で検出済み)
+- **修正**: `Envelope` に `pointcard_marks` + `has_pointcard_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 点印の自署を問え。
+
+### Security — D569: `X-Airalo-*`/`X-Holafly-*`/`X-Ubigi-*` 等の eSIM・旅行 SIM 印自称が未検査
+
+- **問題**: `X-Airalo-*` (Airalo)、`X-Holafly-*` (Holafly)、`X-Ubigi-*` (Ubigi)、`X-Truphone-*`/`X-AloSIM-*`/`X-Nomad-*`/`X-Saily-*`/`X-Jetpac-*`/`X-BNesim-*`/`X-Flexiroam-*`/`X-GigSky-*`/`X-MayaMobile-*`/`X-Airhub-*`/`X-SIM2Fly-*`/`X-OrangeESIM-*`/`X-ETravelSim-*`/`X-IIJeSIM-*`/`X-RakutenSim-*`/`X-WorldESIM-*`/`X-ESIMDB-*`/`X-E4ESIM-*`/`X-ESIM2Go-*`/`X-Instabridge-*`/`X-RedTeago-*` は仮機の通知記録 — 送信側が書くことは自称。海外データプラン・有効期限切れ偽装は eSIM 詐欺の典型。(`X-Docomo-*`/`X-KDDI-*`/`X-SoftBank-*` 等のキャリア本体は D511 で検出済み)
+- **修正**: `Envelope` に `esim_marks` + `has_esim_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 仮印の自署を問え。
+
+
 ### Security — D564: `X-FMarinos-*`/`X-Dodgers-*`/`X-ManUnited-*` 等のプロスポーツチーム印自称が未検査
 
 - **問題**: `X-FMarinos-*` (横浜F・マリノス)、`X-Dodgers-*` (ドジャース)、`X-ManUnited-*` (マンチェスター・ユナイテッド)、`X-UrawaReds-*`/`X-Antlers-*`/`X-Frontale-*`/`X-FCTokyo-*`/`X-Gamba-*`/`X-Cerezo-*`/`X-Grampus-*`/`X-Sanfrecce-*`/`X-Vissel-*`/`X-Reysol-*`/`X-SPulse-*`/`X-Jubilo-*`/`X-Consadole-*`/`X-Vegalta-*`/`X-Montedio-*`/`X-Albirex-*`/`X-Bellmare-*`/`X-Sagan-*`/`X-Avispa-*`/`X-Trinita-*`/`X-Verdy-*`/`X-Zelvia-*`/`X-KyotoSanga-*`/`X-Fagiano-*`/`X-Zweigen-*`/`X-Roasso-*`/`X-Giravanz-*`/`X-Varen-*`/`X-Kamatamare-*`/`X-FCRyukyu-*`/`X-Yankees-*`/`X-Giants-*`/`X-Tigers-*`/`X-RedSox-*`/`X-Cubs-*`/`X-Mets-*`/`X-Phillies-*`/`X-Padres-*`/`X-Mariners-*`/`X-Liverpool-*`/`X-Arsenal-*`/`X-Chelsea-*`/`X-Tottenham-*`/`X-ManCity-*`/`X-Newcastle-*`/`X-AstonVilla-*`/`X-WestHam-*`/`X-Everton-*`/`X-Leicester-*`/`X-Brighton-*`/`X-Fulham-*`/`X-Brentford-*`/`X-CrystalPalace-*`/`X-Wolves-*`/`X-RealMadrid-*`/`X-Barcelona-*`/`X-Atletico-*`/`X-Bayern-*`/`X-Dortmund-*`/`X-PSG-*`/`X-Juventus-*`/`X-ACMilan-*`/`X-Inter-*`/`X-ASRoma-*`/`X-Napoli-*`/`X-Ajax-*`/`X-Porto-*`/`X-Benfica-*`/`X-Celtic-*`/`X-Rangers-*`/`X-Feyenoord-*` は球機の通知記録 — 送信側が書くことは自称。チケット・グッズ当選偽装はスポーツ詐欺の典型。(`X-Nike-*`/`X-Adidas-*` 等のスポーツ用品機は D529 で検出済み)
