@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D408: `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/`X-Abaca-*` 等のアプライアンス印自称 (第三群) が未検査
+
+- 商用メール機器のブランド印は機器が記す — 送信側から届くのは「この機器を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_appliance3_marks` 新設 → `Envelope.appliance3_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D409: `X-Final-Recipient:`/`X-Intended-Recipient:`/`X-Orig-Rcpt-*`/`X-MDRcpt-*`/`X-Rcpt-Info:`/`X-Final-To:` 等の最終宛先記録印自称が未検査
+
+- 最終宛先の記録は配送機・DSN 機が残す — 送信側から届くのは「届いた宛先は記録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_finalrcpt_marks` 新設 → `Envelope.finalrcpt_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D410: `X-Hash-*`/`X-Checksum-*`/`X-MD5-*`/`X-SHA1-*`/`X-SHA256-*`/`X-Digest-*` 等の整合性・ハッシュ印自称が未検査
+
+- ハッシュ・チェックサムの記録は検査機・照合機が残す — 送信側から届くのは「照合を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_hash_marks` 新設 → `Envelope.hash_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
 ### Security — D378: `X-SparkPost-*`/`X-MSYS-API`/`X-MailChannels-*`/`X-SMTP2GO-*`/`X-SendPulse-*`/`X-SMTPCom-*` 等の ESP 印 (第二群) 自称が未検査
 
 - SparkPost/MailChannels/SMTP2GO 等の配信基盤が配送時に記す印 — 送信側から届くのは「この配信基盤から発送した」体裁を内容側が主張する自称だが未検査だった
