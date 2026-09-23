@@ -460,6 +460,29 @@ pub struct Envelope {
     /// ゲーム・エンタメ印があるか — ゲーム機の通知記録を
     /// 送信側が自称する兆候 (D473)。
     pub gaming_marks: bool,
+    /// `X-Okta-*`/`X-Auth0-*`/`X-PingIdentity-*`/`X-OneLogin-*`/
+    /// `X-Duo-*`/`X-CyberArk-*`/`X-BeyondTrust-*`/`X-HashiCorp-*`/
+    /// `X-Pulumi-*`/`X-Docker-*`/`X-Bitbucket-*`/`X-TeamCity-*`/
+    /// `X-Buildkite-*`/`X-Octopus-*`/`X-SonarCloud-*`/`X-Snyk-*`/
+    /// `X-JFrog-*`/`X-Veracode-*`/`X-CrowdStrike-*`/`X-SentinelOne-*`
+    /// 等の開発・ID・セキュリティ SaaS 印があるか — 業務 SaaS 機の
+    /// 通知記録を送信側が自称する兆候 (D474)。
+    pub enterprise_saas_marks: bool,
+    /// `X-FedEx-*`/`X-UPS-*`/`X-USPS-*`/`X-DHL-*`/`X-DPD-*`/
+    /// `X-GLS-*`/`X-Evri-*`/`X-RoyalMail-*`/`X-PostNL-*`/`X-bpost-*`/
+    /// `X-Colissimo-*`/`X-InPost-*`/`X-Correos-*`/`X-PostNord-*`/
+    /// `X-CanadaPost-*`/`X-AusPost-*`/`X-JapanPost-*`/`X-Yamato-*`/
+    /// `X-Sagawa-*`/`X-Cainiao-*`/`X-AfterShip-*`/`X-EasyPost-*`/
+    /// `X-Shippo-*`/`X-ShipStation-*` 等の宅配・物流印があるか —
+    /// 配送機の発信記録を送信側が自称する兆候 (D475)。
+    pub shipping_marks: bool,
+    /// `X-Twilio-*`/`X-Vonage-*`/`X-MessageBird-*`/`X-Bird-*`/
+    /// `X-Sinch-*`/`X-Plivo-*`/`X-Telnyx-*`/`X-Infobip-*`/
+    /// `X-Clickatell-*`/`X-TeleSign-*`/`X-RingCentral-*`/`X-Dialpad-*`/
+    /// `X-Aircall-*`/`X-Webex-*`/`X-GoToMeeting-*`/`X-Drift-*`/
+    /// `X-LiveChat-*`/`X-Tidio-*` 等の通信 API・サポート印があるか —
+    /// 通信機の通知記録を送信側が自称する兆候 (D476)。
+    pub comms_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -794,6 +817,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         fintech_marks: has_fintech_marks(raw),
         crypto_marks: has_crypto_marks(raw),
         gaming_marks: has_gaming_marks(raw),
+        enterprise_saas_marks: has_enterprise_saas_marks(raw),
+        shipping_marks: has_shipping_marks(raw),
+        comms_marks: has_comms_marks(raw),
     })
 }
 
@@ -3066,6 +3092,134 @@ fn has_gaming_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-gaijin-")
             || l.starts_with("x-gog-")
             || l.starts_with("x-itch-")
+    })
+}
+
+/// `X-Okta-*`/`X-Auth0-*`/`X-PingIdentity-*`/`X-OneLogin-*`/`X-Duo-*`/
+/// `X-CyberArk-*`/`X-BeyondTrust-*`/`X-HashiCorp-*`/`X-Pulumi-*`/
+/// `X-Docker-*`/`X-Bitbucket-*`/`X-TeamCity-*`/`X-Buildkite-*`/
+/// `X-Octopus-*`/`X-SonarCloud-*`/`X-SonarQube-*`/`X-Snyk-*`/
+/// `X-JFrog-*`/`X-Sonatype-*`/`X-Veracode-*`/`X-Checkmarx-*`/
+/// `X-CrowdStrike-*`/`X-SentinelOne-*`/`X-Cybereason-*`/`X-Tanium-*`/
+/// `X-PaloAlto-*`/`X-PANW-*`/`X-Mandiant-*` 等の開発・ID・
+/// セキュリティ SaaS 印があるか判定する (D474)。
+///
+/// `X-Okta-*` (Okta)、`X-CrowdStrike-*` (CrowdStrike)、`X-Snyk-*`
+/// (Snyk) は業務 SaaS 機の通知記録 — 送信側から届くこれは自称。
+fn has_enterprise_saas_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-okta-")
+            || l.starts_with("x-auth0-")
+            || l.starts_with("x-pingidentity-")
+            || l.starts_with("x-onelogin-")
+            || l.starts_with("x-duo-")
+            || l.starts_with("x-cyberark-")
+            || l.starts_with("x-beyondtrust-")
+            || l.starts_with("x-hashicorp-")
+            || l.starts_with("x-pulumi-")
+            || l.starts_with("x-docker-")
+            || l.starts_with("x-bitbucket-")
+            || l.starts_with("x-teamcity-")
+            || l.starts_with("x-buildkite-")
+            || l.starts_with("x-octopus-")
+            || l.starts_with("x-sonarcloud-")
+            || l.starts_with("x-sonarqube-")
+            || l.starts_with("x-snyk-")
+            || l.starts_with("x-jfrog-")
+            || l.starts_with("x-sonatype-")
+            || l.starts_with("x-veracode-")
+            || l.starts_with("x-checkmarx-")
+            || l.starts_with("x-crowdstrike-")
+            || l.starts_with("x-sentinelone-")
+            || l.starts_with("x-cybereason-")
+            || l.starts_with("x-tanium-")
+            || l.starts_with("x-paloalto-")
+            || l.starts_with("x-panw-")
+            || l.starts_with("x-mandiant-")
+    })
+}
+
+/// `X-FedEx-*`/`X-UPS-*`/`X-USPS-*`/`X-DHL-*`/`X-DPD-*`/`X-GLS-*`/
+/// `X-Evri-*`/`X-RoyalMail-*`/`X-PostNL-*`/`X-bpost-*`/`X-Colissimo-*`/
+/// `X-Chronopost-*`/`X-InPost-*`/`X-Correos-*`/`X-PostNord-*`/
+/// `X-CanadaPost-*`/`X-AusPost-*`/`X-JapanPost-*`/`X-Yamato-*`/
+/// `X-Sagawa-*`/`X-Cainiao-*`/`X-AfterShip-*`/`X-EasyPost-*`/
+/// `X-Shippo-*`/`X-ShipStation-*` 等の宅配・物流印があるか
+/// 判定する (D475)。
+///
+/// `X-FedEx-*` (FedEx)、`X-DHL-*` (DHL)、`X-JapanPost-*`
+/// (日本郵便) は配送機の発信記録 — 送信側から届くこれは自称。
+/// 配送通知の偽装はフィッシングの典型手口。
+fn has_shipping_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-fedex-")
+            || l.starts_with("x-ups-")
+            || l.starts_with("x-usps-")
+            || l.starts_with("x-dhl-")
+            || l.starts_with("x-dpd-")
+            || l.starts_with("x-gls-")
+            || l.starts_with("x-evri-")
+            || l.starts_with("x-royalmail-")
+            || l.starts_with("x-postnl-")
+            || l.starts_with("x-bpost-")
+            || l.starts_with("x-colissimo-")
+            || l.starts_with("x-chronopost-")
+            || l.starts_with("x-inpost-")
+            || l.starts_with("x-correos-")
+            || l.starts_with("x-postnord-")
+            || l.starts_with("x-canadapost-")
+            || l.starts_with("x-auspost-")
+            || l.starts_with("x-japanpost-")
+            || l.starts_with("x-yamato-")
+            || l.starts_with("x-sagawa-")
+            || l.starts_with("x-cainiao-")
+            || l.starts_with("x-aftership-")
+            || l.starts_with("x-easypost-")
+            || l.starts_with("x-shippo-")
+            || l.starts_with("x-shipstation-")
+    })
+}
+
+/// `X-Twilio-*`/`X-Vonage-*`/`X-MessageBird-*`/`X-Bird-*`/`X-Sinch-*`/
+/// `X-Plivo-*`/`X-Telnyx-*`/`X-Infobip-*`/`X-Clickatell-*`/
+/// `X-TeleSign-*`/`X-RingCentral-*`/`X-Dialpad-*`/`X-Aircall-*`/
+/// `X-Webex-*`/`X-GoToMeeting-*`/`X-Drift-*`/`X-LiveChat-*`/
+/// `X-Tidio-*` 等の通信 API・サポート印があるか判定する (D476)。
+///
+/// `X-Twilio-*` (Twilio)、`X-Sinch-*` (Sinch)、`X-RingCentral-*`
+/// (RingCentral) は通信機の通知記録 — 送信側から届くこれは自称。
+fn has_comms_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-twilio-")
+            || l.starts_with("x-vonage-")
+            || l.starts_with("x-messagebird-")
+            || l.starts_with("x-bird-")
+            || l.starts_with("x-sinch-")
+            || l.starts_with("x-plivo-")
+            || l.starts_with("x-telnyx-")
+            || l.starts_with("x-infobip-")
+            || l.starts_with("x-clickatell-")
+            || l.starts_with("x-telesign-")
+            || l.starts_with("x-ringcentral-")
+            || l.starts_with("x-dialpad-")
+            || l.starts_with("x-aircall-")
+            || l.starts_with("x-webex-")
+            || l.starts_with("x-gotomeeting-")
+            || l.starts_with("x-drift-")
+            || l.starts_with("x-livechat-")
+            || l.starts_with("x-tidio-")
     })
 }
 
@@ -6585,6 +6739,72 @@ mod tests {
         assert!(has_gaming_marks(w1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_gaming_marks(clean));
+    }
+
+    #[test]
+    fn scan_は開発IDセキュリティSaaS印を検出する() {
+        let o1 = b"X-Okta-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(o1));
+        let c1 = b"X-CrowdStrike-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(c1));
+        let s1 = b"X-Snyk-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(s1));
+        let a1 = b"X-Auth0-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(a1));
+        let h1 = b"X-HashiCorp-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(h1));
+        let d1 = b"X-Docker-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(d1));
+        let s2 = b"X-SentinelOne-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(s2));
+        let b1 = b"X-Bitbucket-Notify: x\r\n\r\nx";
+        assert!(has_enterprise_saas_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_enterprise_saas_marks(clean));
+    }
+
+    #[test]
+    fn scan_は宅配物流印を検出する() {
+        let f1 = b"X-FedEx-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(f1));
+        let d1 = b"X-DHL-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(d1));
+        let u1 = b"X-UPS-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(u1));
+        let j1 = b"X-JapanPost-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(j1));
+        let y1 = b"X-Yamato-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(y1));
+        let s1 = b"X-Sagawa-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(s1));
+        let u2 = b"X-USPS-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(u2));
+        let s2 = b"X-ShipStation-Notify: x\r\n\r\nx";
+        assert!(has_shipping_marks(s2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_shipping_marks(clean));
+    }
+
+    #[test]
+    fn scan_は通信APIサポート印を検出する() {
+        let t1 = b"X-Twilio-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(t1));
+        let s1 = b"X-Sinch-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(s1));
+        let r1 = b"X-RingCentral-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(r1));
+        let v1 = b"X-Vonage-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(v1));
+        let p1 = b"X-Plivo-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(p1));
+        let i1 = b"X-Infobip-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(i1));
+        let w1 = b"X-Webex-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(w1));
+        let d1 = b"X-Drift-Notify: x\r\n\r\nx";
+        assert!(has_comms_marks(d1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_comms_marks(clean));
     }
 }
 

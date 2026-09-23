@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D474: `X-Okta-*`/`X-Auth0-*`/`X-CrowdStrike-*`/`X-Snyk-*`/`X-HashiCorp-*`/`X-Bitbucket-*` 等の開発・ID・セキュリティ SaaS 印自称が未検査
+
+- **問題**: `X-Okta-*` (Okta)、`X-CrowdStrike-*` (CrowdStrike)、`X-Snyk-*` (Snyk)、`X-Auth0-*`/`X-PingIdentity-*`/`X-OneLogin-*`/`X-Duo-*` (ID)、`X-CyberArk-*`/`X-BeyondTrust-*`/`X-HashiCorp-*`/`X-Pulumi-*`/`X-Docker-*`/`X-Bitbucket-*`/`X-TeamCity-*`/`X-Buildkite-*`/`X-Octopus-*`/`X-SonarCloud-*`/`X-SonarQube-*`/`X-JFrog-*`/`X-Sonatype-*`/`X-Veracode-*`/`X-Checkmarx-*`/`X-SentinelOne-*`/`X-Cybereason-*`/`X-Tanium-*`/`X-PaloAlto-*`/`X-PANW-*`/`X-Mandiant-*` は業務 SaaS 機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `enterprise_saas_marks` + `has_enterprise_saas_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 業務 SaaS 印の自署を問え。
+
+### Security — D475: `X-FedEx-*`/`X-DHL-*`/`X-UPS-*`/`X-USPS-*`/`X-JapanPost-*`/`X-Yamato-*` 等の宅配・物流印自称が未検査
+
+- **問題**: `X-FedEx-*` (FedEx)、`X-DHL-*` (DHL)、`X-JapanPost-*` (日本郵便)、`X-UPS-*`/`X-USPS-*`/`X-DPD-*`/`X-GLS-*`/`X-Evri-*`/`X-RoyalMail-*`/`X-PostNL-*`/`X-bpost-*`/`X-Colissimo-*`/`X-Chronopost-*`/`X-InPost-*`/`X-Correos-*`/`X-PostNord-*`/`X-CanadaPost-*`/`X-AusPost-*`/`X-Yamato-*`/`X-Sagawa-*`/`X-Cainiao-*`/`X-AfterShip-*`/`X-EasyPost-*`/`X-Shippo-*`/`X-ShipStation-*` は配送機の発信記録 — 送信側が書くことは自称。配送通知の偽装はフィッシングの典型手口。
+- **修正**: `Envelope` に `shipping_marks` + `has_shipping_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 発信の記録は発信機が記す — 配送印の自署を問え。
+
+### Security — D476: `X-Twilio-*`/`X-Sinch-*`/`X-RingCentral-*`/`X-Vonage-*`/`X-Infobip-*`/`X-Webex-*` 等の通信 API・サポート印自称が未検査
+
+- **問題**: `X-Twilio-*` (Twilio)、`X-Sinch-*` (Sinch)、`X-RingCentral-*` (RingCentral)、`X-Vonage-*`/`X-MessageBird-*`/`X-Bird-*`/`X-Plivo-*`/`X-Telnyx-*`/`X-Infobip-*`/`X-Clickatell-*`/`X-TeleSign-*`/`X-Dialpad-*`/`X-Aircall-*`/`X-Webex-*`/`X-GoToMeeting-*`/`X-Drift-*`/`X-LiveChat-*`/`X-Tidio-*` は通信機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `comms_marks` + `has_comms_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 通信印の自署を問え。
+
+
 ### Security — D471: `X-Revolut-*`/`X-Plaid-*`/`X-Affirm-*`/`X-Venmo-*`/`X-Robinhood-*`/`X-N26-*`/`X-Monzo-*` 等のネオバンク・フィンテック印 (第二群) 自称が未検査
 
 - **問題**: `X-Plaid-*` (Plaid)、`X-Revolut-*` (Revolut)、`X-Affirm-*` (Affirm)、`X-N26-*`/`X-Monzo-*`/`X-SoFi-*`/`X-Robinhood-*`/`X-Venmo-*`/`X-Skrill-*`/`X-Neteller-*`/`X-Remitly-*`/`X-TrueLayer-*`/`X-Tink-*`/`X-Yodlee-*`/`X-Afterpay-*`/`X-Tabby-*`/`X-Tamara-*`/`X-Scalapay-*`/`X-Rapyd-*`/`X-MoneyGram-*`/`X-Paysend-*`/`X-Nubank-*`/`X-PicPay-*` は金融機の通知記録 — 送信側が書くことは自称。
