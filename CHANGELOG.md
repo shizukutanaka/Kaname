@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D495: `X-AWS-*`/`X-Azure-*`/`X-GoogleCloud-*`/`X-Alibaba-*`/`X-Oracle-Cloud-*`/`X-IBMCloud-*` 等のクラウドプラットフォーム印自称が未検査
+
+- **問題**: `X-AWS-*` (Amazon Web Services)、`X-Azure-*` (Microsoft Azure)、`X-GoogleCloud-*` (Google Cloud)、`X-AmazonSES-*`/`X-GCP-*`/`X-Alibaba-*`/`X-Baidu-*`/`X-Oracle-Cloud-*`/`X-IBMCloud-*` はクラウド機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `cloudprovider_marks` + `has_cloudprovider_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — クラウド印の自署を問え。
+
+### Security — D496: `X-Samsung-*`/`X-Sony-*`/`X-Canon-*`/`X-Panasonic-*`/`X-Xiaomi-*`/`X-Nikon-*` 等のスマートフォン・家電メーカー印自称が未検査
+
+- **問題**: `X-Samsung-*` (Samsung)、`X-Sony-*` (Sony)、`X-Canon-*` (Canon)、`X-Xiaomi-*`/`X-OPPO-*`/`X-vivo-*`/`X-HONOR-*`/`X-OnePlus-*`/`X-realme-*`/`X-Panasonic-*`/`X-SHARP-*`/`X-TOSHIBA-*`/`X-Hitachi-*`/`X-NEC-*`/`X-Fujitsu-*`/`X-FUJIFILM-*`/`X-OLYMPUS-*`/`X-Nikon-*`/`X-Ricoh-*`/`X-KYOCERA-*`/`X-EPSON-*`/`X-Brother-*`/`X-CASIO-*`/`X-SEIKO-*`/`X-CITIZEN-*` はメーカーの通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `device_marks` + `has_device_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — メーカー印の自署を問え。
+
+### Security — D497: `X-YAMAHA-*`/`X-Ableton-*`/`X-Steinberg-*`/`X-Roland-*`/`X-iZotope-*`/`X-Waves-*` 等の音楽制作・オーディオ印自称が未検査
+
+- **問題**: `X-YAMAHA-*` (YAMAHA)、`X-Ableton-*` (Ableton)、`X-Steinberg-*` (Steinberg)、`X-KAWAI-*`/`X-Roland-*`/`X-KORG-*`/`X-Akai-*`/`X-Novation-*`/`X-Native-Instruments-*`/`X-Focusrite-*`/`X-Universal-Audio-*`/`X-Apogee-*`/`X-MOTU-*`/`X-PreSonus-*`/`X-Avid-*`/`X-ProTools-*`/`X-Logic-*`/`X-Cubase-*`/`X-FLStudio-*`/`X-Reason-*`/`X-Bitwig-*`/`X-StudioOne-*`/`X-Ardour-*`/`X-REAPER-*`/`X-Audacity-*`/`X-GarageBand-*`/`X-Soundtrap-*`/`X-BandLab-*`/`X-Splice-*`/`X-Loopcloud-*`/`X-LANDR-*`/`X-eMastered-*`/`X-Ozone-*`/`X-iZotope-*`/`X-Waves-*`/`X-FabFilter-*`/`X-Valhalla-*`/`X-Soundtoys-*`/`X-PluginBoutique-*`/`X-Kilohearts-*`/`X-Cableguys-*`/`X-Output-*`/`X-Heavyocity-*`/`X-Spitfire-*`/`X-Soniccouture-*`/`X-Vienna-*`/`X-EastWest-*`/`X-Cinesamples-*`/`X-ProjectSAM-*`/`X-8Dio-*` は音響機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `audio_marks` + `has_audio_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 音響印の自署を問え。
+
+
 ### Security — D492: `X-GitBook-*`/`X-WordPress-*`/`X-Ghost-*`/`X-Replit-*`/`X-StackBlitz-*`/`X-Feedly-*` 等のドキュメント・静的サイト印自称が未検査
 
 - **問題**: `X-GitBook-*` (GitBook)、`X-WordPress-*` (WordPress)、`X-Ghost-*` (Ghost)、`X-Docusaurus-*`/`X-MkDocs-*`/`X-Sphinx-*`/`X-Jekyll-*`/`X-Hugo-*`/`X-Gatsby-*`/`X-Surge-*`/`X-Cyclic-*`/`X-Glitch-*`/`X-Replit-*`/`X-CodeSandbox-*`/`X-StackBlitz-*`/`X-CodePen-*`/`X-JSFiddle-*`/`X-Plunker-*`/`X-Observable-*`/`X-Deepnote-*`/`X-Hexo-*`/`X-Bloglovin-*`/`X-Feedly-*`/`X-Inoreader-*`/`X-NewsBlur-*` は文書機の通知記録 — 送信側が書くことは自称。
