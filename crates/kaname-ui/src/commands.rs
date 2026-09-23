@@ -1228,6 +1228,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D492: ドキュメント・静的サイト印自称
+    if env.docsite_marks {
+        render_risks.push(
+            "X-GitBook-*/X-WordPress-*/X-Ghost-*/X-Replit-*/X-StackBlitz-*/X-Feedly-* 等 — 文書機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D493: ポッドキャスト・音楽印自称
+    if env.music_marks {
+        render_risks.push(
+            "X-SoundCloud-*/X-Acast-*/X-DistroKid-*/X-Bandcamp-*/X-TuneCore-*/X-Deezer-* 等 — 音楽機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D494: EC・PC パーツ印自称
+    if env.retail_marks {
+        render_risks.push(
+            "X-Walmart-*/X-Newegg-*/X-Logitech-*/X-Shopware-*/X-Medusa-*/X-Anker-* 等 — 販売機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
