@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D423: `X-FBL-*`/`X-Feedback-Loop-*`/`X-JMRP-*`/`X-ComplaintLoop-*`/`X-ARF-*` 等の苦情ループ印自称 (第二群) が未検査
+
+- Feedback Loop・苦情ループの登録は ISP・基盤が行う — 送信側から届くのは「苦情ループ登録済み」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_fbl_marks` 新設 → `Envelope.fbl_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
+### Security — D424: `X-OTRS-*`/`X-RequestTracker-*`/`X-RT-*`/`X-BOA-*`/`X-Helpdesk-*`/`X-Ticket-*` 等のチケット・支援機印自称が未検査
+
+- OTRS/RT/Helpdesk 等の支援基盤の記録は支援機が残す — 送信側から届くのは「支援窓口を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_ticket_marks` 新設 → `Envelope.ticket_marks` → `render_risks` 兆候報告
+- テスト +7 件
+
+### Security — D425: `X-SRS-*`/`X-SPR-*`/`X-Rewrite-*`/`X-MS-Ref-*`/`X-Rewritten-*` 等の SRS・書換印自称が未検査
+
+- SRS・書換の記録は書換機・転送機が残す — 送信側から届くのは「書換を通った」体裁を内容側が主張する自称だが未検査だった
+- 対処: `has_srs_marks` 新設 → `Envelope.srs_marks` → `render_risks` 兆候報告
+- テスト +6 件
+
 ### Security — D408: `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/`X-Abaca-*` 等のアプライアンス印自称 (第三群) が未検査
 
 - 商用メール機器のブランド印は機器が記す — 送信側から届くのは「この機器を通った」体裁を内容側が主張する自称だが未検査だった

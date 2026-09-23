@@ -166,6 +166,18 @@ pub struct Envelope {
     /// `X-Digest-*` 等の整合性・ハッシュ印があるか — 検査機の
     /// 記録を送信側が自称する兆候 (D410)。
     pub hash_marks: bool,
+    /// `X-FBL-*`/`X-Feedback-Loop-*`/`X-JMRP-*`/`X-ComplaintLoop-*`/
+    /// `X-ARF-*` 等の苦情ループ印 (第二群) があるか — FBL 登録の
+    /// 体裁を送信側が自称する兆候 (D423)。
+    pub fbl_marks: bool,
+    /// `X-OTRS-*`/`X-RequestTracker-*`/`X-RT-*`/`X-BOA-*`/
+    /// `X-Helpdesk-*`/`X-Ticket-*` 等のチケット・支援機印があるか
+    /// — 支援基盤の記録を送信側が自称する兆候 (D424)。
+    pub ticket_marks: bool,
+    /// `X-SRS-*`/`X-SPR-*`/`X-Rewrite-*`/`X-MS-Ref-*`/`X-Rewritten-*`
+    /// 等の SRS・書換印があるか — 書換機の記録を送信側が
+    /// 自称する兆候 (D425)。
+    pub srs_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -447,6 +459,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         appliance3_marks: has_appliance3_marks(raw),
         finalrcpt_marks: has_finalrcpt_marks(raw),
         hash_marks: has_hash_marks(raw),
+        fbl_marks: has_fbl_marks(raw),
+        ticket_marks: has_ticket_marks(raw),
+        srs_marks: has_srs_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -781,6 +796,65 @@ fn has_hash_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-sha1-")
             || l.starts_with("x-sha256-")
             || l.starts_with("x-digest-")
+    })
+}
+
+/// `X-FBL-*`/`X-Feedback-Loop-*`/`X-JMRP-*`/`X-ComplaintLoop-*`/
+/// `X-ARF-*` 等の苦情ループ印 (第二群) があるか判定する (D423)。
+///
+/// Feedback Loop・苦情ループの登録は ISP・基盤が行う — 送信側から
+/// 届くこれは「苦情ループ登録済み」体裁を内容側が主張する自称。
+fn has_fbl_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-fbl-")
+            || l.starts_with("x-feedback-loop-")
+            || l.starts_with("x-jmrp-")
+            || l.starts_with("x-complaintloop-")
+            || l.starts_with("x-arf-")
+    })
+}
+
+/// `X-OTRS-*`/`X-RequestTracker-*`/`X-RT-*`/`X-BOA-*`/
+/// `X-Helpdesk-*`/`X-Ticket-*` 等のチケット・支援機印があるか
+/// 判定する (D424)。
+///
+/// OTRS/RT/Helpdesk 等の支援基盤の記録は支援機が残す — 送信側から
+/// 届くこれは「支援窓口を通った」体裁を内容側が主張する自称。
+fn has_ticket_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-otrs-")
+            || l.starts_with("x-requesttracker-")
+            || l.starts_with("x-rt-")
+            || l.starts_with("x-boa-")
+            || l.starts_with("x-helpdesk-")
+            || l.starts_with("x-ticket-")
+    })
+}
+
+/// `X-SRS-*`/`X-SPR-*`/`X-Rewrite-*`/`X-MS-Ref-*`/`X-Rewritten-*`
+/// 等の SRS・書換印があるか判定する (D425)。
+///
+/// SRS・書換の記録は書換機・転送機が残す — 送信側から届くこれは
+/// 「書換を通った」体裁を内容側が主張する自称。
+fn has_srs_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-srs-")
+            || l.starts_with("x-spr-")
+            || l.starts_with("x-rewrite-")
+            || l.starts_with("x-ms-ref-")
+            || l.starts_with("x-rewritten-")
     })
 }
 
@@ -3203,6 +3277,56 @@ mod tests {
         assert!(has_hash_marks(h6));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_hash_marks(clean));
+    }
+
+    #[test]
+    fn scan_は苦情ループ印を検出する() {
+        let f1 = b"X-FBL-Type: t\r\n\r\nx";
+        assert!(has_fbl_marks(f1));
+        let f2 = b"X-Feedback-Loop-ID: f\r\n\r\nx";
+        assert!(has_fbl_marks(f2));
+        let j1 = b"X-JMRP-Ref: j\r\n\r\nx";
+        assert!(has_fbl_marks(j1));
+        let c1 = b"X-ComplaintLoop-ID: c\r\n\r\nx";
+        assert!(has_fbl_marks(c1));
+        let a1 = b"X-ARF-Received: a\r\n\r\nx";
+        assert!(has_fbl_marks(a1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_fbl_marks(clean));
+    }
+
+    #[test]
+    fn scan_はチケット印を検出する() {
+        let o1 = b"X-OTRS-Queue: q\r\n\r\nx";
+        assert!(has_ticket_marks(o1));
+        let r1 = b"X-RequestTracker-ID: r\r\n\r\nx";
+        assert!(has_ticket_marks(r1));
+        let r2 = b"X-RT-Ticket: t\r\n\r\nx";
+        assert!(has_ticket_marks(r2));
+        let b1 = b"X-BOA-Ref: b\r\n\r\nx";
+        assert!(has_ticket_marks(b1));
+        let h1 = b"X-Helpdesk-ID: h\r\n\r\nx";
+        assert!(has_ticket_marks(h1));
+        let t1 = b"X-Ticket-Ref: t\r\n\r\nx";
+        assert!(has_ticket_marks(t1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ticket_marks(clean));
+    }
+
+    #[test]
+    fn scan_はSRS印を検出する() {
+        let s1 = b"X-SRS-Rewrite: r\r\n\r\nx";
+        assert!(has_srs_marks(s1));
+        let s2 = b"X-SPR-Info: s\r\n\r\nx";
+        assert!(has_srs_marks(s2));
+        let r1 = b"X-Rewrite-From: r\r\n\r\nx";
+        assert!(has_srs_marks(r1));
+        let m1 = b"X-MS-Ref-Version: m\r\n\r\nx";
+        assert!(has_srs_marks(m1));
+        let r2 = b"X-Rewritten-Sender: r\r\n\r\nx";
+        assert!(has_srs_marks(r2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_srs_marks(clean));
     }
 }
 

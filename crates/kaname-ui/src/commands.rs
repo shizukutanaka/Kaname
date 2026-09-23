@@ -676,6 +676,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D423: 苦情ループ印 (第二群) 自称
+    if env.fbl_marks {
+        render_risks.push(
+            "X-FBL-*/X-Feedback-Loop-*/X-JMRP-* 等 — 苦情ループ登録の体裁を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D424: チケット・支援機印自称
+    if env.ticket_marks {
+        render_risks.push(
+            "X-OTRS-*/X-RT-*/X-Helpdesk-*/X-Ticket-* 等 — 支援基盤の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D425: SRS・書換印自称
+    if env.srs_marks {
+        render_risks.push(
+            "X-SRS-*/X-SPR-*/X-Rewrite-*/X-Rewritten-* 等 — 書換機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
