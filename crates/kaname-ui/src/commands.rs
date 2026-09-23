@@ -652,6 +652,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D408: アプライアンス印 (第三群) 自称
+    if env.appliance3_marks {
+        render_risks.push(
+            "X-Barracuda-*/X-Fortimail-*/X-Securence-* 等 — 機器ブランドの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D409: 最終宛先記録印自称
+    if env.finalrcpt_marks {
+        render_risks.push(
+            "X-Final-Recipient/X-Intended-Recipient/X-Orig-Rcpt-* 等 — 配送機の宛先記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D410: 整合性・ハッシュ印自称
+    if env.hash_marks {
+        render_risks.push(
+            "X-Hash-*/X-Checksum-*/X-MD5-*/X-SHA256-* 等 — 照合機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

@@ -154,6 +154,18 @@ pub struct Envelope {
     /// 通知・状態印があるか — 判定機の通知を送信側が自称する
     /// 兆候 (D380)。
     pub notice_marks: bool,
+    /// `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/
+    /// `X-Abaca-*` 等のアプライアンス印 (第三群) があるか —
+    /// 機器ブランドの記録を送信側が自称する兆候 (D408)。
+    pub appliance3_marks: bool,
+    /// `X-Final-Recipient:`/`X-Intended-Recipient:`/`X-Orig-Rcpt-*`/
+    /// `X-MDRcpt-*`/`X-Rcpt-Info:`/`X-Final-To:` 等の最終宛先記録印が
+    /// あるか — 配送機の記録を送信側が自称する兆候 (D409)。
+    pub finalrcpt_marks: bool,
+    /// `X-Hash-*`/`X-Checksum-*`/`X-MD5-*`/`X-SHA1-*`/`X-SHA256-*`/
+    /// `X-Digest-*` 等の整合性・ハッシュ印があるか — 検査機の
+    /// 記録を送信側が自称する兆候 (D410)。
+    pub hash_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -432,6 +444,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
         esp2_stamps: has_esp2_stamps(raw),
+        appliance3_marks: has_appliance3_marks(raw),
+        finalrcpt_marks: has_finalrcpt_marks(raw),
+        hash_marks: has_hash_marks(raw),
         abuseinfo_marks: has_abuseinfo_marks(raw),
         notice_marks: has_notice_marks(raw),
     })
@@ -705,6 +720,67 @@ fn has_notice_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-antispam-result:")
             || l.starts_with("x-bulk:")
             || l.starts_with("x-notice:")
+    })
+}
+
+/// `X-Barracuda-*`/`X-Fortimail-*`/`X-Securence-*`/`X-MailRoute-*`/
+/// `X-Abaca-*` 等のアプライアンス印 (第三群) があるか
+/// 判定する (D408)。
+///
+/// 商用メール機器のブランド印は機器が記す — 送信側から届くこれは
+/// 「この機器を通った」体裁を内容側が主張する自称。
+fn has_appliance3_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-barracuda-")
+            || l.starts_with("x-fortimail-")
+            || l.starts_with("x-securence-")
+            || l.starts_with("x-mailroute-")
+            || l.starts_with("x-abaca-")
+    })
+}
+
+/// `X-Final-Recipient:`/`X-Intended-Recipient:`/`X-Orig-Rcpt-*`/
+/// `X-MDRcpt-*`/`X-Rcpt-Info:`/`X-Final-To:` 等の最終宛先記録印が
+/// あるか判定する (D409)。
+///
+/// 最終宛先の記録は配送機・DSN 機が残す — 送信側から届くこれは
+/// 「届いた宛先は記録済み」体裁を内容側が主張する自称。
+fn has_finalrcpt_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-final-recipient:")
+            || l.starts_with("x-intended-recipient:")
+            || l.starts_with("x-orig-rcpt-")
+            || l.starts_with("x-mdrcpt-")
+            || l.starts_with("x-rcpt-info:")
+            || l.starts_with("x-final-to:")
+    })
+}
+
+/// `X-Hash-*`/`X-Checksum-*`/`X-MD5-*`/`X-SHA1-*`/`X-SHA256-*`/
+/// `X-Digest-*` 等の整合性・ハッシュ印があるか判定する (D410)。
+///
+/// ハッシュ・チェックサムの記録は検査機・照合機が残す — 送信側から
+/// 届くこれは「照合を通った」体裁を内容側が主張する自称。
+fn has_hash_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-hash-")
+            || l.starts_with("x-checksum-")
+            || l.starts_with("x-md5-")
+            || l.starts_with("x-sha1-")
+            || l.starts_with("x-sha256-")
+            || l.starts_with("x-digest-")
     })
 }
 
@@ -3077,6 +3153,56 @@ mod tests {
         assert!(has_notice_marks(bk));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_notice_marks(clean));
+    }
+
+    #[test]
+    fn scan_はアプライアンス印3を検出する() {
+        let bc = b"X-Barracuda-Spam-Score: 1\r\n\r\nx";
+        assert!(has_appliance3_marks(bc));
+        let fm = b"X-Fortimail-Result: ok\r\n\r\nx";
+        assert!(has_appliance3_marks(fm));
+        let sc = b"X-Securence-Status: s\r\n\r\nx";
+        assert!(has_appliance3_marks(sc));
+        let mr = b"X-MailRoute-Score: m\r\n\r\nx";
+        assert!(has_appliance3_marks(mr));
+        let ab = b"X-Abaca-Result: a\r\n\r\nx";
+        assert!(has_appliance3_marks(ab));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_appliance3_marks(clean));
+    }
+
+    #[test]
+    fn scan_は最終宛先印を検出する() {
+        let fr = b"X-Final-Recipient: rfc822; a@b\r\n\r\nx";
+        assert!(has_finalrcpt_marks(fr));
+        let ir = b"X-Intended-Recipient: i@x\r\n\r\nx";
+        assert!(has_finalrcpt_marks(ir));
+        let or_ = b"X-Orig-Rcpt-To: o@x\r\n\r\nx";
+        assert!(has_finalrcpt_marks(or_));
+        let md = b"X-MDRcpt-To: m@x\r\n\r\nx";
+        assert!(has_finalrcpt_marks(md));
+        let ri = b"X-Rcpt-Info: i\r\n\r\nx";
+        assert!(has_finalrcpt_marks(ri));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_finalrcpt_marks(clean));
+    }
+
+    #[test]
+    fn scan_はハッシュ印を検出する() {
+        let h1 = b"X-Hash-Body: abc\r\n\r\nx";
+        assert!(has_hash_marks(h1));
+        let h2 = b"X-Checksum-Value: c\r\n\r\nx";
+        assert!(has_hash_marks(h2));
+        let h3 = b"X-MD5-Sum: s\r\n\r\nx";
+        assert!(has_hash_marks(h3));
+        let h4 = b"X-SHA1-Hash: h\r\n\r\nx";
+        assert!(has_hash_marks(h4));
+        let h5 = b"X-SHA256-Sum: 2\r\n\r\nx";
+        assert!(has_hash_marks(h5));
+        let h6 = b"X-Digest-Ref: d\r\n\r\nx";
+        assert!(has_hash_marks(h6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_hash_marks(clean));
     }
 }
 
