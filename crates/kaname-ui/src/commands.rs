@@ -820,6 +820,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D441: MS EOP/Exchange 内部印自称
+    if env.ms_eop_marks {
+        render_risks.push(
+            "X-EOP*/X-Microsoft-Antispam/X-MS-Exchange-*Loop/X-MS-GCC-* 等 — EOP/Exchange の処理記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D442: マーケESP印自称 (第二群)
+    if env.marketing_marks {
+        render_risks.push(
+            "X-ELQ-*/X-MC-*/X-Mailjet-*/X-Pardot-*/X-Mandrill-*/X-Report-Abuse 等 — 配信プラットフォームの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D443: 業務ツール印自称
+    if env.enterprise_marks {
+        render_risks.push(
+            "X-SFDC-*/X-ServiceNow-*/X-iCIMS-*/X-Zendesk-*/X-Jira-*/X-Workday-* 等 — 業務システムの発信記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

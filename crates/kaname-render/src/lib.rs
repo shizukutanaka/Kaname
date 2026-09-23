@@ -248,6 +248,23 @@ pub struct Envelope {
     /// ツール印があるか — ローカル分類器の判定記録を送信側が
     /// 自称する兆候 (D440)。
     pub classifier_marks: bool,
+    /// `X-EOP*`/`X-Microsoft-Antispam:`/`X-Forefront-*`/`X-HM-*`/
+    /// `X-MS-Exchange-*Loop*`/`X-MS-GCC-*`/`X-CrossPremises-*` 等の
+    /// Microsoft 365 / EOP / Exchange 内部印があるか — EOP/Exchange
+    /// の処理記録を送信側が自称する兆候 (D441)。
+    pub ms_eop_marks: bool,
+    /// `X-ELQ-*`/`X-Pardot-*`/`X-Marketo*`/`X-Mandrill-*`/`X-MC-*`/
+    /// `X-Mailchimp-*`/`X-Mailjet-*`/`X-HubSpot-*`/`X-Bronto-*`/
+    /// `X-Report-Abuse:`/`X-Accounttype:` 等のマーケ・ESP 印
+    /// (第二群) があるか — 配信プラットフォームの記録を送信側が
+    /// 自称する兆候 (D442)。
+    pub marketing_marks: bool,
+    /// `X-SFDC-*`/`X-Salesforce-*`/`X-ServiceNow-*`/`X-iCIMS-*`/
+    /// `X-iRecruiter-*`/`X-Zendesk-*`/`X-Freshdesk-*`/`X-Jira-*`/
+    /// `X-SAP-*`/`X-Workday-*`/`X-Taleo-*`/`X-Kenexa-*` 等の
+    /// 業務・採用ツール印があるか — 業務システムの発信記録を
+    /// 送信側が自称する兆候 (D443)。
+    pub enterprise_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -549,6 +566,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         webmail_internal_marks: has_webmail_internal_marks(raw),
         store_status_marks: has_store_status_marks(raw),
         classifier_marks: has_classifier_marks(raw),
+        ms_eop_marks: has_ms_eop_marks(raw),
+        marketing_marks: has_marketing_marks(raw),
+        enterprise_marks: has_enterprise_marks(raw),
     })
 }
 
@@ -1394,6 +1414,137 @@ fn has_classifier_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-filtered-")
             || l.starts_with("x-milter-")
             || l.starts_with("x-match:")
+    })
+}
+
+/// `X-EOP*`/`X-Microsoft-Antispam:`/`X-MS-Antispam:`/`X-MS-Office365-*`/
+/// `X-Forefront-*`/`X-HM-*`/`X-CrossPremises-*`/`X-MS-Exchange-*Loop`/
+/// `X-MS-Exchange-Generated-*`/`X-MS-GCC-*`/`X-LD-Processed:` 等の
+/// Microsoft 365 / EOP / Exchange 内部印があるか判定する (D441)。
+///
+/// `X-Microsoft-Antispam`/`X-Forefront-Antispam-Report` (Microsoft
+/// Learn 公式)、`X-EOPAttributedMessage`/`X-EOPTenantAttributedMessage`/
+/// `X-MS-Exchange-*-Loop`/`X-MS-Exchange-Generated-Message-Source`/
+/// `X-MS-Gcc-Journal-Report`/`X-LD-Processed` (Microsoft Exchange
+/// ループ防止記録 — 公式文書) は EOP/Exchange の処理記録 — 送信側
+/// から届くこれは自称。
+fn has_ms_eop_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-eop-")
+            || l.starts_with("x-eopattributed")
+            || l.starts_with("x-eoptenantattributed")
+            || l.starts_with("x-microsoft-antispam")
+            || l.starts_with("x-ms-antispam")
+            || l.starts_with("x-ms-office365-")
+            || l.starts_with("x-forefront-")
+            || l.starts_with("x-hm-")
+            || l.starts_with("x-crosspremises-")
+            || l.starts_with("x-calculated-")
+            || l.starts_with("x-ms-exchange-inbox-")
+            || l.starts_with("x-ms-exchange-transport-")
+            || l.starts_with("x-ms-exchange-moderation-")
+            || l.starts_with("x-ms-exchange-forwardingloop")
+            || l.starts_with("x-ms-exchange-generated-")
+            || l.starts_with("x-ms-gcc-")
+            || l.starts_with("x-ld-processed:")
+    })
+}
+
+/// `X-ELQ-*`/`X-Eloqua-*`/`X-Pardot-*`/`X-Marketo*`/`X-Mandrill-*`/
+/// `X-MC-*`/`X-Mailchimp-*`/`X-HS-*`/`X-HubSpot-*`/`X-Bronto-*`/
+/// `X-Constant-*`/`X-Silverpop-*`/`X-Acoustic-*`/`X-Responsys-*`/
+/// `X-ExactTarget-*`/`X-Lyris-*`/`X-Sailthru-*`/`X-Cheetah-*`/
+/// `X-Mailjet-*`/`X-MJ-*`/`X-Sendinblue-*`/`X-Brevo-*`/`X-Klaviyo-*`/
+/// `X-Braze-*`/`X-Iterable-*`/`X-iContact-*`/`X-AWeber-*`/
+/// `X-GetResponse-*`/`X-Intercom-*`/`X-Accounttype:`/`X-Report-Abuse:`
+/// 等のマーケ・ESP 印 (第二群) があるか判定する (D442)。
+///
+/// `X-Mailjet-Campaign`/`X-MJ-CustomID` (Mailjet 公式)、`X-MC-User`/
+/// `X-Report-Abuse:`/`X-Accounttype:` (Mailchimp 実測)、
+/// `X-Mandrill-User` (Mandrill) は配信プラットフォームの発信記録
+/// — 送信側から届くこれは自称。
+fn has_marketing_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-elq-")
+            || l.starts_with("x-eloqua-")
+            || l.starts_with("x-pardot-")
+            || l.starts_with("x-marketo")
+            || l.starts_with("x-mandrill-")
+            || l.starts_with("x-mc-")
+            || l.starts_with("x-mailchimp-")
+            || l.starts_with("x-hs-")
+            || l.starts_with("x-hubspot-")
+            || l.starts_with("x-bronto-")
+            || l.starts_with("x-constant-")
+            || l.starts_with("x-silverpop-")
+            || l.starts_with("x-acoustic-")
+            || l.starts_with("x-responsys-")
+            || l.starts_with("x-exacttarget-")
+            || l.starts_with("x-lyris-")
+            || l.starts_with("x-sailthru-")
+            || l.starts_with("x-cheetah-")
+            || l.starts_with("x-mailjet-")
+            || l.starts_with("x-mj-")
+            || l.starts_with("x-sendinblue-")
+            || l.starts_with("x-brevo-")
+            || l.starts_with("x-klaviyo-")
+            || l.starts_with("x-braze-")
+            || l.starts_with("x-iterable-")
+            || l.starts_with("x-icontact-")
+            || l.starts_with("x-aweber-")
+            || l.starts_with("x-getresponse-")
+            || l.starts_with("x-intercom-")
+            || l.starts_with("x-accounttype:")
+            || l.starts_with("x-report-abuse:")
+    })
+}
+
+/// `X-SFDC-*`/`X-Salesforce-*`/`X-ServiceNow-*`/`X-iCIMS-*`/
+/// `X-iRecruiter-*`/`X-Zendesk-*`/`X-Freshdesk-*`/`X-HelpScout-*`/
+/// `X-Groove-*`/`X-DeskPro-*`/`X-osTicket-*`/`X-Zammad-*`/`X-Jira-*`/
+/// `X-Confluence-*`/`X-SAP-*`/`X-Workday-*`/`X-SuccessFactors-*`/
+/// `X-Taleo-*`/`X-Kenexa-*`/`X-BrassRing-*`/`X-PeopleSoft-*` 等の
+/// 業務・採用ツール印があるか判定する (D443)。
+///
+/// `X-SFDC-User`/`X-SFDC-LK`/`X-SFDC-EntityId`/`X-SFDC-EmailCategory`/
+/// `X-SFDC-ORGTYPE` (Salesforce 公式文書)、`X-iCIMS-Priority`/
+/// `X-iCIMS-Type`/`X-iRecruiter-*` は業務システムの発信記録 —
+/// 送信側から届くこれは自称。
+fn has_enterprise_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sfdc-")
+            || l.starts_with("x-salesforce-")
+            || l.starts_with("x-servicenow-")
+            || l.starts_with("x-icims-")
+            || l.starts_with("x-irecruiter-")
+            || l.starts_with("x-zendesk-")
+            || l.starts_with("x-freshdesk-")
+            || l.starts_with("x-helpscout-")
+            || l.starts_with("x-groove-")
+            || l.starts_with("x-deskpro-")
+            || l.starts_with("x-osticket-")
+            || l.starts_with("x-zammad-")
+            || l.starts_with("x-jira-")
+            || l.starts_with("x-confluence-")
+            || l.starts_with("x-sap-")
+            || l.starts_with("x-workday-")
+            || l.starts_with("x-successfactors-")
+            || l.starts_with("x-taleo-")
+            || l.starts_with("x-kenexa-")
+            || l.starts_with("x-brassring-")
+            || l.starts_with("x-peoplesoft-")
     })
 }
 
@@ -4190,6 +4341,70 @@ mod tests {
         assert!(has_classifier_marks(f1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_classifier_marks(clean));
+    }
+
+    #[test]
+    fn scan_はMSEOP印を検出する() {
+        let m1 = b"X-Microsoft-Antispam: BCL:0\r\n\r\nx";
+        assert!(has_ms_eop_marks(m1));
+        let e1 = b"X-EOPAttributedMessage: 1\r\n\r\nx";
+        assert!(has_ms_eop_marks(e1));
+        let e2 = b"X-EOPTenantAttributedMessage: g:0\r\n\r\nx";
+        assert!(has_ms_eop_marks(e2));
+        let f1 = b"X-Forefront-PRVS: abc\r\n\r\nx";
+        assert!(has_ms_eop_marks(f1));
+        let h1 = b"X-HM-SenderCID: x\r\n\r\nx";
+        assert!(has_ms_eop_marks(h1));
+        let l1 = b"X-MS-Exchange-ForwardingLoop: x\r\n\r\nx";
+        assert!(has_ms_eop_marks(l1));
+        let l2 = b"X-LD-Processed: x\r\n\r\nx";
+        assert!(has_ms_eop_marks(l2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ms_eop_marks(clean));
+    }
+
+    #[test]
+    fn scan_はマーケESP印を検出する() {
+        let e1 = b"X-ELQ-Customer: x\r\n\r\nx";
+        assert!(has_marketing_marks(e1));
+        let m1 = b"X-MC-User: abc\r\n\r\nx";
+        assert!(has_marketing_marks(m1));
+        let m2 = b"X-Mailjet-Campaign: 1\r\n\r\nx";
+        assert!(has_marketing_marks(m2));
+        let m3 = b"X-MJ-CustomID: x\r\n\r\nx";
+        assert!(has_marketing_marks(m3));
+        let m4 = b"X-Mandrill-User: x\r\n\r\nx";
+        assert!(has_marketing_marks(m4));
+        let h1 = b"X-HubSpot-Customer: x\r\n\r\nx";
+        assert!(has_marketing_marks(h1));
+        let a1 = b"X-Accounttype: pd\r\n\r\nx";
+        assert!(has_marketing_marks(a1));
+        let r1 = b"X-Report-Abuse: x\r\n\r\nx";
+        assert!(has_marketing_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_marketing_marks(clean));
+    }
+
+    #[test]
+    fn scan_は業務ツール印を検出する() {
+        let s1 = b"X-SFDC-User: abc\r\n\r\nx";
+        assert!(has_enterprise_marks(s1));
+        let s2 = b"X-SFDC-LK: x\r\n\r\nx";
+        assert!(has_enterprise_marks(s2));
+        let s3 = b"X-ServiceNow-Source: x\r\n\r\nx";
+        assert!(has_enterprise_marks(s3));
+        let i1 = b"X-iCIMS-Type: x\r\n\r\nx";
+        assert!(has_enterprise_marks(i1));
+        let i2 = b"X-iRecruiter-Type: x\r\n\r\nx";
+        assert!(has_enterprise_marks(i2));
+        let z1 = b"X-Zendesk-Origin: x\r\n\r\nx";
+        assert!(has_enterprise_marks(z1));
+        let j1 = b"X-Jira-Fingerprint: x\r\n\r\nx";
+        assert!(has_enterprise_marks(j1));
+        let w1 = b"X-Workday-Message-ID: x\r\n\r\nx";
+        assert!(has_enterprise_marks(w1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_enterprise_marks(clean));
     }
 }
 
