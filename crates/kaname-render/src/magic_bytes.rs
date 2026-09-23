@@ -160,6 +160,11 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "img"   // ディスクイメージ — 同上
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
+        // 実行・設定系 (D236) — 直接実行でなくシステム機構経由で動く形式
+        | "dll"   // DLL — メール添付としては正当用途がほぼない
+        | "inf"   // Setup Information — インストールスクリプト実行
+        | "ins"   // Internet Naming Service — IE 設定の自動適用
+        | "jnlp" // Java Web Start — JNLP 起動経路で外部 jar 実行
     )
 }
 

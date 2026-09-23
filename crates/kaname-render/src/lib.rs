@@ -100,6 +100,11 @@ pub struct Envelope {
     /// 検査に使用)。本文に現れないリンクは本文 URL 抽出を通らない
     /// ため、ヘッダー由来のリンクを明示的に検査に回す。
     pub list_unsubscribe: Option<String>,
+    /// `message/external-body` Content-Type の宣言があるか —
+    /// 本文を「外部参照で持ってくる」指示型で、受信側が解決時に
+    /// 外部リソースを読み込む経路の兆候 (D235)。廃止型のため
+    /// 正常な現代メールにはほぼ出現しない。
+    pub external_body_reference: bool,
 }
 
 /// An RFC 5322 address.
@@ -358,7 +363,19 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         references,
         dkim_signature,
         list_unsubscribe,
+        external_body_reference: has_external_body_declaration(raw),
     })
+}
+
+/// `message/external-body` Content-Type 宣言があるか判定する (D235)。
+///
+/// RFC 2017 の `message/external-body` は「本文は外部にある」という
+/// 参照指示型 — 受信側が解決時に外部リソースを読み込む。
+/// 廃止型のため現代の正規メールにはほぼ出現せず、宣言自体が兆候。
+fn has_external_body_declaration(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("content-type:") && lower.contains("message/external-body")
 }
 
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
@@ -2078,6 +2095,30 @@ mod tests {
             result.addr.local, "\"ceo@trusted.com\"",
             "quoted local part は @ の前の部分全体であるべき"
         );
+    }
+
+    /// D235: message/external-body 宣言の検出。
+    #[test]
+    fn parse_はexternal_bodyを検出する() {
+        assert!(has_external_body_declaration(
+            b"Content-Type: message/external-body; access-type=anon-ftp\r\n\r\nbody"
+        ));
+        assert!(has_external_body_declaration(
+            b"Content-Type: message/external-body\r\n\r\nbody"
+        ));
+        assert!(!has_external_body_declaration(
+            b"Content-Type: message/rfc822\r\n\r\nbody"
+        ));
+        assert!(!has_external_body_declaration(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+        assert!(!has_external_body_declaration(b""));
+        let raw = b"From: a@e.com\r\n\
+                    Content-Type: message/external-body; access-type=anon-ftp\r\n\
+                    \r\n\
+                    body";
+        let env = parse(raw).expect("parse should succeed");
+        assert!(env.external_body_reference);
     }
 
     #[test]

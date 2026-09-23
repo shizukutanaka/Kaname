@@ -542,6 +542,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+    // D235: message/external-body 宣言 (外部参照指示型) の兆候。
+    if env.external_body_reference {
+        render_risks.push(
+            "message/external-body 宣言 — 本文を外部参照で持ってくる指示型、解決時に \
+             外部リソースを読み込む経路の兆候"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

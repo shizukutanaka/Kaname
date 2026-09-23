@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D234: カレンダーアラーム (VALARM) の外部参照を検出
+
+- `BEGIN:VALARM` の `ACTION:AUDIO`/`ACTION:EMAIL` はトリガー時に `ATTACH;VALUE=URI:` の参照先を自動で読み込み/外部へメール送信 — 「会議通知」の体裁で外部リソース読み込み・外部送信をスケジュールできる攻撃経路 (iCalendar RFC 5545 機構の悪用)
+- 対処: `detect_valarm_external_reference` で VALARM ブロック内の URI 型 ATTACH・EMAIL アクションを検出 → `CalendarRisk::AlarmExternalReference`
+- テスト +1 件 (3 ケース)
+
+### Security — D235: `message/external-body` Content-Type 宣言を検出
+
+- RFC 2017 の `message/external-body` は「本文は外部にある」参照指示型 — 受信側が解決時に外部リソースを読み込む。廃止型のため現代の正規メールにはほぼ出現せず、宣言自体が兆候
+- 対処: `has_external_body_declaration` で宣言を検出 → `external_body_reference` → `render_risks` に兆候報告
+- テスト +1 件
+
+### Security — D236: `.dll`/`.inf`/`.ins`/`.jnlp` 等の実行・設定系拡張子を危険リストに追加
+
+- `.dll` (メール添付に正当用途がほぼない)、`.inf` (インストールスクリプト実行)、`.ins` (IE 設定自動適用)、`.jnlp` (Java Web Start 経由で外部 jar 実行) — 直接実行でなくシステム機構経由で動く形式
+- 対処: `is_dangerous_windows_attachment` の拡張子リストに追加
+- テスト +4 件 (is_dangerous_windows_attachment 内)
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)

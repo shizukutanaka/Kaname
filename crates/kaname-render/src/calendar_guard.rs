@@ -90,6 +90,18 @@ pub enum CalendarRisk {
         /// 検出されたリスクの要約 (`ScreenRisk` の Debug 表現)
         finding: String,
     },
+    /// VALARM アラームが外部リソースを参照する (D234)。
+    ///
+    /// `ACTION:AUDIO`/`ACTION:EMAIL` のアラームはトリガー時に
+    /// `ATTACH;VALUE=URI:` の参照先を自動で読み込む/送信する —
+    /// 「会議通知」の体裁で外部リソース読み込み・外部送信を
+    /// スケジュールできる攻撃経路。
+    AlarmExternalReference {
+        /// アラームの ACTION 値 (AUDIO/EMAIL 等)
+        action: String,
+        /// 検出された参照先の抜粋
+        reference: String,
+    },
     /// 自動登録型フィッシング (CalPhishing persistence、2026 年に活発化)。
     ///
     /// `METHOD:REQUEST` の招待は Outlook 等が受信時に自動でカレンダーへ
@@ -209,6 +221,11 @@ impl CalendarGuard {
         // 7. SEQUENCE 単調性チェック (known_sequence=0 は初回受信を意味する)
         if let Some(seq_risk) = check_sequence_monotonicity(ics_content, 0) {
             risks.push(seq_risk);
+        }
+
+        // 7.5 VALARM 外部参照検出 (D234)
+        for risk in detect_valarm_external_reference(ics_content) {
+            risks.push(risk);
         }
 
         // 8. DESCRIPTION/SUMMARY のプロンプト注入マーカー検査。
@@ -580,6 +597,45 @@ fn detect_binary_attachments(content: &str) -> Vec<CalendarRisk> {
 /// 受信時に自動 tentative 登録され、元メールを削除してもエントリが残る。
 /// 自動登録自体は正規招待でも使われるため、**既に検出済みの他のフィッシング
 /// 兆候と併存する場合のみ** リスクとして報告する (誤検出防止)。
+/// VALARM が外部リソース (URI 型 ATTACH・mailto 等) を参照するか検出する。
+///
+/// `BEGIN:VALARM` ブロック内の `ACTION:AUDIO`/`ACTION:EMAIL` は
+/// トリガー時に `ATTACH;VALUE=URI:` の参照先を自動で読み込み、
+/// または外部へメール送信する — 「会議通知」の体裁で
+/// 外部リソース読み込み/外部送信をスケジュールできる (D234)。
+/// DISPLAY アクションでも URI 型 ATTACH があれば読み込み経路になる。
+fn detect_valarm_external_reference(content: &str) -> Vec<CalendarRisk> {
+    let mut risks = Vec::new();
+    let upper = content.to_uppercase();
+    let mut rest = upper.as_str();
+    while let Some(bstart) = rest.find("BEGIN:VALARM") {
+        let after = &rest[bstart + 12..];
+        let bend = after.find("END:VALARM").unwrap_or(after.len());
+        let block = &after[..bend];
+        let action = block
+            .lines()
+            .find(|l| l.trim_start().starts_with("ACTION:"))
+            .and_then(|l| l.trim_start().strip_prefix("ACTION:"))
+            .map(|v| v.trim().to_string())
+            .unwrap_or_default();
+        // 外部参照: VALUE=URI の ATTACH、または http/file/mailto 参照
+        let has_uri_attach = block.contains("VALUE=URI")
+            || block.contains("ATTACH")
+                && (block.contains("HTTP") || block.contains("FTP") || block.contains("FILE:"));
+        let has_ext_ref = has_uri_attach || action == "EMAIL";
+        if has_ext_ref {
+            let reference = block
+                .lines()
+                .find(|l| l.trim_start().starts_with("ATTACH"))
+                .map(|l| l.trim().chars().take(80).collect::<String>())
+                .unwrap_or_else(|| action.clone());
+            risks.push(CalendarRisk::AlarmExternalReference { action, reference });
+        }
+        rest = &after[bend..];
+    }
+    risks
+}
+
 fn detect_auto_registration_abuse(
     content: &str,
     existing_risks: &[CalendarRisk],
@@ -1294,5 +1350,53 @@ END:VCALENDAR"#;
                 .any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
             "未知バイナリも検出されるべき"
         );
+    }
+
+    /// D234: VALARM 外部参照の検出。
+    #[test]
+    fn valarm_は外部参照を検出する() {
+        // URI 型 ATTACH を持つ AUDIO アラーム
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   BEGIN:VALARM\n\
+                   ACTION:AUDIO\n\
+                   ATTACH;VALUE=URI:http://evil.example/x.wav\n\
+                   END:VALARM\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let g = CalendarGuard;
+        let scan = g.analyze(ics);
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::AlarmExternalReference { .. })));
+        // EMAIL アクションは参照先なしでも検出 (外部送信をスケジュール)
+        let ics2 = "BEGIN:VCALENDAR\n\
+                    BEGIN:VEVENT\n\
+                    BEGIN:VALARM\n\
+                    ACTION:EMAIL\n\
+                    TRIGGER:-PT15M\n\
+                    END:VALARM\n\
+                    END:VEVENT\n\
+                    END:VCALENDAR";
+        let scan2 = g.analyze(ics2);
+        assert!(scan2
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::AlarmExternalReference { .. })));
+        // DISPLAY のみ・外部参照なしは対象外
+        let ics3 = "BEGIN:VCALENDAR\n\
+                    BEGIN:VEVENT\n\
+                    BEGIN:VALARM\n\
+                    ACTION:DISPLAY\n\
+                    TRIGGER:-PT15M\n\
+                    END:VALARM\n\
+                    END:VEVENT\n\
+                    END:VCALENDAR";
+        let scan3 = g.analyze(ics3);
+        assert!(!scan3
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::AlarmExternalReference { .. })));
     }
 }
