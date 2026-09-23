@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D468: `X-Airbnb-*`/`X-Booking-*`/`X-Uber-*`/`X-DoorDash-*`/`X-Grab-*`/`X-DiDi-*`/`X-Zomato-*` 等の旅行・運輸・フードデリバリー印自称が未検査
+
+- **問題**: `X-Uber-*` (Uber)、`X-DoorDash-*` (DoorDash)、`X-Grab-*` (Grab)、`X-Airbnb-*`/`X-Booking-*`/`X-Expedia-*`/`X-Agoda-*` (旅行)、`X-DiDi-*`/`X-Bolt-*`/`X-Gojek-*`/`X-Lyft-*`/`X-Ola-*` (配車)、`X-Deliveroo-*`/`X-JustEat-*`/`X-Zomato-*`/`X-Swiggy-*`/`X-Rappi-*`/`X-iFood-*`/`X-Coupang-*`/`X-Grubhub-*`/`X-Instacart-*`/`X-Postmates-*`/`X-Foodpanda-*`/`X-Hotels-*`/`X-Tripadvisor-*`/`X-Kayak-*`/`X-Skyscanner-*`/`X-Priceline-*`/`X-Hopper-*`/`X-FreeNow-*`/`X-Gett-*`/`X-Cabify-*` は旅行・配車・フード機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `travel_marks` + `has_travel_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 発信の記録は発信機が記す — 旅行印の自署を問え。
+
+### Security — D469: `X-Cloudflare-*`/`X-Fastly-*`/`X-Varnish:`/`X-Sucuri-*`/`X-WPEngine-*`/`X-Pantheon-*` 等の CDN・エッジ・マネージドホスティング印自称が未検査
+
+- **問題**: `X-Varnish:` (Varnish キャッシュ)、`X-Fastly-*` (Fastly)、`X-Sucuri-*` (Sucuri WAF)、`X-Cloudflare-*`/`X-CloudFront-*`/`X-StackPath-*`/`X-KeyCDN-*`/`X-CDN77-*`/`X-BunnyCDN-*`/`X-Limelight-*`/`X-Edgio-*`/`X-Incapsula-*`/`X-Imperva-*`/`X-WPEngine-*`/`X-Kinsta-*`/`X-Pantheon-*`/`X-Acquia-*`/`X-Flywheel-*`/`X-WPE-*` は CDN・ホスティング機の経路記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `cdn_marks` + `has_cdn_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 経路の記録は経路機が記す — CDN 印の自署を問え。
+
+### Security — D470: `X-Patreon-*`/`X-Substack-*`/`X-Beehiiv-*`/`X-Libsyn-*`/`X-Vimeo-*`/`X-Pixiv-*` 等のメディア・クリエイター・ニュースレター印自称が未検査
+
+- **問題**: `X-Patreon-*` (Patreon)、`X-Substack-*` (Substack)、`X-Libsyn-*` (Libsyn)、`X-Beehiiv-*`/`X-ConvertKit-*`/`X-Kit-*`/`X-Flodesk-*` (ニュースレター)、`X-Simplecast-*`/`X-Buzzsprout-*`/`X-Podbean-*`/`X-Spreaker-*` (ポッドキャスト)、`X-Vimeo-*`/`X-Flickr-*`/`X-Behance-*`/`X-Dribbble-*`/`X-ArtStation-*`/`X-VSCO-*` (メディア)、`X-Pixiv-*`/`X-Ameba-*`/`X-Seesaa-*`/`X-FC2-*` (日本系) はメディア機の発信記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `media_marks` + `has_media_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 発信の記録は発信機が記す — メディア印の自署を問え。
+
+
 ### Security — D465: `X-Rakuten-*`/`X-Mercari-*`/`X-PayPay-*`/`X-Livedoor-*`/`X-Doorkeeper-*`/`X-AtCoder-*` 等の日本系サービス印自称が未検査
 
 - **問題**: `X-Rakuten-*` (楽天)、`X-Mercari-*` (メルカリ)、`X-PayPay-*` (PayPay)、`X-DMM-*`/`X-Livedoor-*`/`X-Hatena-*`/`X-Cookpad-*`/`X-Recruit-*`/`X-BizReach-*`/`X-Wantedly-*`/`X-Findy-*`/`X-LAPRAS-*`/`X-Lancers-*`/`X-Coconala-*`/`X-Doorkeeper-*`/`X-Peatix-*`/`X-Kakaku-*`/`X-AtCoder-*`/`X-Paiza-*`/`X-Excite-*`/`X-Goo-*`/`X-Niconico-*`/`X-Dwango-*` は日本系サービス通知機の発信記録 — 送信側が書くことは自称。
