@@ -581,6 +581,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D327: abuse 報告先自称
+    if env.abuse_headers {
+        render_risks.push(
+            "Complaints-To/X-Report-Abuse 等 — 「監視あり」の体裁を自署する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D328: X-MS-Has-Attach 添付存在自称
+    if env.has_attach_claim {
+        render_risks.push(
+            "X-MS-Has-Attach/X-Has-Attach — 輸送系が付ける添付印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D329: Feedback-ID 自称
+    if env.feedback_id {
+        render_risks.push(
+            "Feedback-ID/X-Feedback-ID — ISP 苦情ループ登録の体裁を自署する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

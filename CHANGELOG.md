@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D327: `Complaints-To:`/`X-Report-Abuse:` 等の abuse 報告先自称が未検査
+
+- 本物の ESP/ISP は abuse 窓口を自社ドメインで運用し受信側が確認できる — 送信側が窓口を名乗るのは「監視されている体裁」の自署だが未検査だった
+- 対処: `has_abuse_headers` 新設 → `Envelope.abuse_headers` → `render_risks` 兆候報告
+- テスト +5 件
+
+### Security — D328: `X-MS-Has-Attach:`/`X-Has-Attach:` 添付存在自称が未検査
+
+- `X-MS-Has-Attach:` は Exchange 輸送パイプラインが MIME を走査して付ける内部印 — 送信側から届くのは「添付存在」を内容側が主張する自称 (第 2 の添付宣言、parser differential の素地) だが未検査だった
+- 対処: `has_attach_claim` 新設 → `Envelope.has_attach_claim` → `render_risks` 兆候報告
+- テスト +3 件
+
+### Security — D329: `Feedback-ID:`/`X-Feedback-ID:` FBL 識別子自称が未検査
+
+- `Feedback-ID:` は送信者が ISP の FBL (苦情フィードバックループ) に登録している印 — 「監視に応じる運用者」の体裁を自署する擬装だが未検査だった
+- 対処: `has_feedback_id` 新設 → `Envelope.feedback_id` → `render_risks` 兆候報告
+- テスト +3 件
+
 
 ### Security — D237: `href="tel:"` 電話番号リンク (コールバックフィッシング) が未検査
 
