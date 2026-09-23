@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D162: アンカーテキストとリンク先のドメイン不一致 (URL 偽装) を検出
+
+- `<a href="https://evil.example">https://paypal.com/login</a>` のように、**表示されるテキストが URL 形で、そのドメインが実リンク先と異なる**リンクを一切検査していなかった — メールクライアントは href 先をあまり目立たせないため、表示側の URL 形テキストを装うだけで誤認を誘える (フィッシングの基礎手口 — APWG 各報告・Unit 42/Avanan 等の観測で頻出)
+- 対処: `html_to_text` が可視 `<a>` のアンカーテキストを収集し (非表示サブツリーは除外済み)、`scheme://host`・`www.`・裸 `domain.tld[/path]` 形のドメインを抽出。`registrable_domain` (末尾 2 ラベル、co.jp/co.uk 等の 2 階層 TLD は 3 ラベル、IP リテラルは全体) 比較で不一致なら `link_mismatches` に記録 → `render_risks` に兆候を報告
+- 捕捉する偽装: `https://paypal.com@evil.com/` の userinfo 攻撃、表示 `www.paypal.com`・実リンク `evil.example`、表示 `paypal.com`・実リンク IP リテラル、クリックトラッカー経由で表示 URL と別ドメインへ飛ばす構成
+- 誤検出対策: 登録ドメインが同じ深いサブドメインは無視、mailto:/cid: 等の非 http スキームは比較外、非表示アンカー内の「表示 URL」は評価しない
+- テスト +15 件 (基本・同ドメイン・サブドメイン・userinfo・www/裸ドメイン・非 URL テキスト・非表示アンカー・co.jp・IP・未閉タグ・Cyrillic・打切り)
+
 ### Security — D160: HTML のみメールの本文解析欠落を修正し hidden text salting を遮断
 
 - `analyze_raw_email`/`mail_scan_folder` は解析対象を `Envelope::text_body` (text/plain パート) のみから取っていたため、**text/html のみのメールでは解析入力が空文字列になり**、BEC キーワード・Cialdini・金銭要求・DLP・OOBV・リンク評価・文体認証の全てが一切検査を通らなかった — HTML 単体メールは BEC/フィッシングで一般的であり、multipart/alternative で text/plain に無害デコイ・text/html に攻撃文を置く「パート不一致」回避も同じ穴を使っていた
