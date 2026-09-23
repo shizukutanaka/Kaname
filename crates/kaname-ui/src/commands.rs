@@ -1492,6 +1492,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D525: 食料品・日用品・コンビニ・家電・アパレル・百貨店印自称
+    if env.grocery_marks {
+        render_risks.push(
+            "X-Kroger-*/X-Tesco-*/X-AEON-*/X-Lawson-*/X-Uniqlo-*/X-Yodobashi-*/X-Macys-*/X-Coles-* 等 — 商機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D526: 家具・ホームセンター・インテリア印自称
+    if env.furniture_marks {
+        render_risks.push(
+            "X-IKEA-*/X-Wayfair-*/X-Nitori-*/X-Muji-*/X-HomeDepot-*/X-Bunnings-*/X-HermanMiller-*/X-Donki-* 等 — 具機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D527: ドラッグストア・調剤・化粧品印自称
+    if env.drugstore_marks {
+        render_risks.push(
+            "X-Boots-*/X-Matsukiyo-*/X-Welcia-*/X-Sephora-*/X-Tsuruha-*/X-iHerb-*/X-ChemistWarehouse-*/X-Ulta-* 等 — 薬機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

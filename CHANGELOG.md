@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D525: `X-Kroger-*`/`X-Tesco-*`/`X-AEON-*`/`X-Lawson-*`/`X-Uniqlo-*`/`X-Yodobashi-*` 等の食料品・日用品・コンビニ・家電・アパレル・百貨店印自称が未検査
+
+- **問題**: `X-Kroger-*` (Kroger)、`X-Tesco-*` (Tesco)、`X-AEON-*` (イオン)、`X-Sainsbury-*`/`X-ASDA-*`/`X-Morrisons-*`/`X-Aldi-*`/`X-Lidl-*`/`X-SevenI-*`/`X-FamilyMart-*`/`X-Lawson-*`/`X-Ministop-*`/`X-Woolworths-*`/`X-Coles-*`/`X-Safeway-*`/`X-Publix-*`/`X-Wegmans-*`/`X-TraderJoes-*`/`X-WholeFoods-*`/`X-Sprouts-*`/`X-Yamada-*`/`X-BicCamera-*`/`X-Yodobashi-*`/`X-Joshin-*`/`X-Kojima-*`/`X-Edion-*`/`X-MediaMarkt-*`/`X-Saturn-*`/`X-Elkjop-*`/`X-Gigantti-*`/`X-Uniqlo-*`/`X-GU-*`/`X-Shimamura-*`/`X-Workman-*`/`X-AOKI-*`/`X-Aoyama-*`/`X-Macys-*`/`X-Nordstrom-*`/`X-Bloomingdales-*`/`X-Kohls-*`/`X-JCPenney-*`/`X-Dillards-*` は商機の通知記録 — 送信側が書くことは自称。ポイント・クーポン詐欺の典型印。(`X-Walmart-*` は D494 で検出済み)
+- **修正**: `Envelope` に `grocery_marks` + `has_grocery_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 商印の自署を問え。
+
+### Security — D526: `X-IKEA-*`/`X-Wayfair-*`/`X-Nitori-*`/`X-Muji-*`/`X-HomeDepot-*`/`X-Bunnings-*` 等の家具・ホームセンター・インテリア印自称が未検査
+
+- **問題**: `X-IKEA-*` (IKEA)、`X-Wayfair-*` (Wayfair)、`X-Nitori-*` (ニトリ)、`X-Houzz-*`/`X-PotteryBarn-*`/`X-WestElm-*`/`X-CrateBarrel-*`/`X-CB2-*`/`X-RH-*`/`X-HermanMiller-*`/`X-Steelcase-*`/`X-Vitra-*`/`X-Muji-*`/`X-Francfranc-*`/`X-Loft-*`/`X-TokyuHands-*`/`X-Donki-*`/`X-MegaDonki-*`/`X-Cainz-*`/`X-Komeri-*`/`X-DCM-*`/`X-HomeDepot-*`/`X-Lowes-*`/`X-Menards-*`/`X-AceHardware-*`/`X-TractorSupply-*`/`X-FloorDecor-*`/`X-BuildDotCom-*`/`X-Rona-*`/`X-RenoDepot-*`/`X-HomeHardware-*`/`X-Bunnings-*`/`X-Mitre10-*`/`X-Masters-*` は具機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `furniture_marks` + `has_furniture_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 具印の自署を問え。
+
+### Security — D527: `X-Boots-*`/`X-Matsukiyo-*`/`X-Welcia-*`/`X-Sephora-*`/`X-Tsuruha-*`/`X-iHerb-*` 等のドラッグストア・調剤・化粧品印自称が未検査
+
+- **問題**: `X-Boots-*` (Boots)、`X-Matsukiyo-*` (マツキヨ)、`X-Sephora-*` (Sephora)、`X-Welcia-*`/`X-SugiDrug-*`/`X-Tsuruha-*`/`X-Cosmos-*`/`X-Cocokara-*`/`X-Shoppers-*`/`X-Rexall-*`/`X-ChemistWarehouse-*`/`X-DuaneReade-*`/`X-RiteAid-*`/`X-Mannings-*`/`X-Watsons-*`/`X-Guardian-*`/`X-Sundrug-*`/`X-DaikokuDrug-*`/`X-Kirindo-*`/`X-Tomods-*`/`X-Ulta-*`/`X-LOccitane-*`/`X-TheBodyShop-*`/`X-Lush-*`/`X-BathBodyWorks-*`/`X-VictoriasSecret-*`/`X-iHerb-*`/`X-GNC-*`/`X-VitaminShoppe-*`/`X-HollandBarrett-*` は薬機の通知記録 — 送信側が書くことは自称。(`X-CVS-*`/`X-Walgreens-*` は D481 で検出済み)
+- **修正**: `Envelope` に `drugstore_marks` + `has_drugstore_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 薬印の自署を問え。
+
+
 ### Security — D522: `X-JREast-*`/`X-Tokyu-*`/`X-Amtrak-*`/`X-DeutscheBahn-*`/`X-SNCF-*`/`X-Kintetsu-*` 等の鉄道・公共交通印自称が未検査
 
 - **問題**: `X-JREast-*` (JR東日本)、`X-Tokyu-*` (東急)、`X-Amtrak-*` (Amtrak)、`X-JRWest-*`/`X-JRCentral-*`/`X-JRKyushu-*`/`X-JRHokkaido-*`/`X-Odakyu-*`/`X-Keikyu-*`/`X-Keio-*`/`X-Seibu-*`/`X-Tobu-*`/`X-Hankyu-*`/`X-Hanshin-*`/`X-Kintetsu-*`/`X-Nankai-*`/`X-Nishitetsu-*`/`X-TokyoMetro-*`/`X-DeutscheBahn-*`/`X-SNCF-*`/`X-Trenitalia-*`/`X-Eurostar-*`/`X-Thalys-*`/`X-NSInternational-*`/`X-SBB-*`/`X-Renfe-*`/`X-IRCTC-*`/`X-ViaRail-*`/`X-KMB-*`/`X-MTR-*`/`X-TOEI-*`/`X-OsakaMetro-*`/`X-KyotoSubway-*`/`X-YokohamaSubway-*`/`X-SapporoSubway-*`/`X-SendaiSubway-*`/`X-NagoyaSubway-*` は軌機の通知記録 — 送信側が書くことは自称。乗車券・ポイント詐欺の典型印。
