@@ -2188,6 +2188,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D614: 鍵・錠前・防犯印自称
+    if env.locksmith_marks {
+        render_risks.push(
+            "X-KagiKey-*/X-Kyukyu110-*/X-MiwaLock-*/X-GoalLock-*/X-WestLock-*/X-BouhanCamera-*/X-SmartLockShop-*/X-DigitalLock-* 等 — 錠機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D615: パソコン修理・データ復旧印自称
+    if env.pcrepair_marks {
+        render_risks.push(
+            "X-Dospara-*/X-PcRepair-*/X-AosSos-*/X-Hdram-*/X-PcRescue-*/X-MacRepair-*/X-SsdRecovery-*/X-FileRecovery-* 等 — 修機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D616: キャンプ・登山・アウトドア印自称
+    if env.camp_marks {
+        render_risks.push(
+            "X-Nappu-*/X-SnowPeak-*/X-Coleman-*/X-Logos-*/X-DODCamp-*/X-Yamap-*/X-TentRental-*/X-OutdoorGear-* 等 — 野機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

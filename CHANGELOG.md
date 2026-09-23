@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D614: `X-KagiKey-*`/`X-MiwaLock-*`/`X-GoalLock-*` 等の鍵・錠前・防犯印自称が未検査
+
+- **問題**: `X-KagiKey-*`、`X-MiwaLock-*` (美和ロック)、`X-GoalLock-*` (GOAL)、`X-Kyukyu110-*`/`X-Kagino110-*`/`X-Kagi110ban-*`/`X-Lockman24-*`/`X-LockShowa-*`/`X-WestLock-*`/`X-AlphaLock-*`/`X-KagiRoyal-*`/`X-KagiWork-*`/`X-KagiShokunin-*`/`X-KagiRescue-*`/`X-Kagi911-*`/`X-KagiTokyo-*`/`X-KagiOsaka-*`/`X-KagiNagoya-*`/`X-KagiFukuoka-*`/`X-KagiCenter-*`/`X-KagiNavi-*`/`X-KagiPro-*`/`X-KagiDoctor-*`/`X-KagiClinic-*`/`X-KagiShop-*`/`X-KeyShop-*`/`X-DuplicateKey-*`/`X-SpareKey-*`/`X-KagiKoukan-*`/`X-KagiAke-*`/`X-DoorLock-*`/`X-DoorSecurity-*`/`X-HomeSecurity-*`/`X-BouhanLock-*`/`X-BouhanCamera-*`/`X-BouhanNavi-*`/`X-BouhanCenter-*`/`X-BouhanShop-*`/`X-AntiTheft-*`/`X-CrimePrevent-*`/`X-GuardLock-*`/`X-SafetyLock-*`/`X-SecureLock-*`/`X-KeyLess-*`/`X-SmartLockShop-*`/`X-DigitalLock-*` 等 は錠機の通知記録 — 送信側が書くことは自称。鍵開け料金・玄関修理・防犯設置の偽装は鍵業者詐欺の典型手口。(警備機は D548)
+- **修正**: `Envelope` に `locksmith_marks` + `has_locksmith_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 錠印の自署を問え。
+
+### Security — D615: `X-Dospara-*`/`X-PcRepair-*`/`X-AosSos-*` 等のパソコン修理・データ復旧印自称が未検査
+
+- **問題**: `X-Dospara-*` (ドスパラ)、`X-PcRepair-*`、`X-AosSos-*` (AOSデータ復旧)、`X-PcKobo-*`/`X-DataRaise-*`/`X-DigitalDataRecovery-*`/`X-Hdram-*`/`X-LogitecReco-*`/`X-RecoData-*`/`X-KaitoruPc-*`/`X-PcDepot-*`/`X-PcPal-*`/`X-PcSupport-*`/`X-PcDoctor-*`/`X-PcEngineer-*`/`X-PcMedic-*`/`X-PcWorks-*`/`X-PcRecovery-*`/`X-PcFamily-*`/`X-PcKaizen-*`/`X-PcSmart-*`/`X-PcKonkatsu-*`/`X-PcRescue-*`/`X-PcHokengoto-*`/`X-PcNavi-*`/`X-PcStation-*`/`X-PcMart-*`/`X-MacRepair-*`/`X-MacSupport-*`/`X-MacDoctor-*`/`X-IphoneRepairShop-*`/`X-SmartphoneRepair-*`/`X-TabletRepair-*`/`X-DataRecoveryPro-*`/`X-DataRescue-*`/`X-HddRecovery-*`/`X-SsdRecovery-*`/`X-RaidRecovery-*`/`X-NasRecovery-*`/`X-UsbRecovery-*`/`X-SdRecovery-*`/`X-PhotoRecovery-*`/`X-DataSalvage-*`/`X-DataDoctor-*`/`X-DataMedic-*`/`X-DataLab-*`/`X-DataClinic-*`/`X-DataHospital-*`/`X-HddClinic-*`/`X-DiskRescue-*`/`X-BackupService-*`/`X-DataRestore-*`/`X-FileRecovery-*`/`X-MemoryRecovery-*` 等 は修機の通知記録 — 送信側が書くことは自称。復旧料金・診断費・部品代の偽装はパソコン修理詐欺の典型手口。(Apple・Microsoft等メーカー機は既存族)
+- **修正**: `Envelope` に `pcrepair_marks` + `has_pcrepair_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 修印の自署を問え。
+
+### Security — D616: `X-Nappu-*`/`X-SnowPeak-*`/`X-Coleman-*` 等のキャンプ・登山・アウトドア印自称が未検査
+
+- **問題**: `X-Nappu-*` (なっぷ)、`X-SnowPeak-*` (スノーピーク)、`X-Coleman-*` (Coleman)、`X-Logos-*`/`X-CaptainStag-*`/`X-DODCamp-*`/`X-Ogawa-*`/`X-WeberCamp-*`/`X-Soto-*`/`X-Uniflame-*`/`X-Thermarest-*`/`X-MSRGear-*`/`X-NemoEquipment-*`/`X-ExpedGear-*`/`X-BigAgnes-*`/`X-KeltyGear-*`/`X-Yamap-*`/`X-Yamareco-*`/`X-Yamakei-*`/`X-Kokorogoto-*`/`X-Yamatomichi-*`/`X-PaagoWorks-*`/`X-Bonfire-*`/`X-HinataOutdoor-*`/`X-Fieldoor-*`/`X-CampNavi-*`/`X-CampInfo-*`/`X-CampSite-*`/`X-AutoCamp-*`/`X-BBQSite-*`/`X-TentRental-*`/`X-TentShop-*`/`X-OutdoorShop-*`/`X-OutdoorGear-*`/`X-MountainGear-*`/`X-ClimbingShop-*`/`X-HikingShop-*`/`X-TrailRun-*`/`X-TrekkingShop-*`/`X-BackpackShop-*`/`X-SleepingBag-*`/`X-CampChair-*`/`X-CampTable-*`/`X-LanternShop-*`/`X-FireStarter-*`/`X-KitchenCamp-*`/`X-CampCooker-*`/`X-CoolerBox-*`/`X-CampCar-*`/`X-RvRental-*`/`X-CamperShop-*`/`X-OutdoorLife-*`/`X-CampLife-*`/`X-Bushcraft-*`/`X-SurvivalGear-*`/`X-FishingCamp-*` 等 は野機の通知記録 — 送信側が書くことは自称。サイト予約・道具セール・登山届受理の偽装はキャンプ詐欺の典型手口。(モンベル・REI は既存族、釣具機は D600)
+- **修正**: `Envelope` に `camp_marks` + `has_camp_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 野印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)

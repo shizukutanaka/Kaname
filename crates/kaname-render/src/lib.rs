@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-KagiKey-*`/`X-Kyukyu110-*`/`X-Kagino110-*`/`X-MiwaLock-*`/`X-GoalLock-*`/`X-LockShowa-*`/`X-WestLock-*` 等の鍵・錠前・防犯通知記録印を送信側が自称している (D614)
+    pub locksmith_marks: bool,
+    /// `X-PcKobo-*`/`X-Dospara-*`/`X-PcRepair-*`/`X-DataRaise-*`/`X-AosSos-*`/`X-DigitalDataRecovery-*`/`X-Hdram-*` 等のパソコン修理・データ復旧通知記録印を送信側が自称している (D615)
+    pub pcrepair_marks: bool,
+    /// `X-Nappu-*`/`X-SnowPeak-*`/`X-Coleman-*`/`X-Logos-*`/`X-CaptainStag-*`/`X-DODCamp-*`/`X-Ogawa-*`/`X-WeberCamp-*` 等のキャンプ・登山・アウトドア通知記録印を送信側が自称している (D616)
+    pub camp_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        locksmith_marks: has_locksmith_marks(hdr),
+        pcrepair_marks: has_pcrepair_marks(hdr),
+        camp_marks: has_camp_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,219 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-KagiKey-*`/`X-Kyukyu110-*`/`X-Kagino110-*`/`X-Kagi110ban-*`/`X-Lockman24-*`/`X-MiwaLock-*`/`X-GoalLock-*`/`X-LockShowa-*`/`X-WestLock-*`/`X-AlphaLock-*`/`X-KagiRoyal-*`/`X-KagiWork-*`/`X-KagiDesign-*`/`X-KeyKitchen-*`/`X-KagiShokunin-*`/`X-KagiRescue-*`/`X-Kagi911-*`/`X-KagiTokyo-*`/`X-KagiOsaka-*`/`X-KagiNagoya-*`/`X-KagiFukuoka-*`/`X-KagiSapporo-*`/`X-KagiSendai-*`/`X-KagiHiroshima-*`/`X-KagiKyoto-*`/`X-KagiKobe-*`/`X-KagiCenter-*`/`X-KagiStation-*`/`X-KagiNavi-*`/`X-KagiPro-*`/`X-KagiMaster-*`/`X-KagiDoctor-*`/`X-KagiClinic-*`/`X-KagiShop-*`/`X-KagiStore-*`/`X-KeyShop-*`/`X-KeyCenter-*`/`X-KeyStore-*`/`X-DuplicateKey-*`/`X-SpareKey-*`/`X-KagiExchange-*`/`X-KagiKoukan-*`/`X-KagiAke-*`/`X-DoorLock-*`/`X-DoorSecurity-*`/`X-HomeSecurity-*`/`X-BouhanLock-*`/`X-BouhanCamera-*`/`X-BouhanNavi-*`/`X-BouhanCenter-*`/`X-BouhanShop-*`/`X-BouhanStore-*`/`X-AntiTheft-*`/`X-CrimePrevent-*`/`X-GuardLock-*`/`X-SafetyLock-*`/`X-SecureLock-*`/`X-KeyLess-*`/`X-SmartLockShop-*`/`X-DigitalLock-*` (鍵・錠前・防犯機器の通知記録) を送信側が自称しているかどうか。鍵開け料金・玄関修理・防犯設置の偽装は鍵業者詐欺の典型手口。(警備機は D548)
+fn has_locksmith_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kagikey-")
+            || l.starts_with("x-kyukyu110-")
+            || l.starts_with("x-kagino110-")
+            || l.starts_with("x-kagi110ban-")
+            || l.starts_with("x-lockman24-")
+            || l.starts_with("x-miwalock-")
+            || l.starts_with("x-goallock-")
+            || l.starts_with("x-lockshowa-")
+            || l.starts_with("x-westlock-")
+            || l.starts_with("x-alphalock-")
+            || l.starts_with("x-kagiroyal-")
+            || l.starts_with("x-kagiwork-")
+            || l.starts_with("x-kagidesign-")
+            || l.starts_with("x-keykitchen-")
+            || l.starts_with("x-kagishokunin-")
+            || l.starts_with("x-kagirescue-")
+            || l.starts_with("x-kagi911-")
+            || l.starts_with("x-kagitokyo-")
+            || l.starts_with("x-kagiosaka-")
+            || l.starts_with("x-kaginagoya-")
+            || l.starts_with("x-kagifukuoka-")
+            || l.starts_with("x-kagisapporo-")
+            || l.starts_with("x-kagisendai-")
+            || l.starts_with("x-kagihiroshima-")
+            || l.starts_with("x-kagikyoto-")
+            || l.starts_with("x-kagikobe-")
+            || l.starts_with("x-kagicenter-")
+            || l.starts_with("x-kagistation-")
+            || l.starts_with("x-kaginavi-")
+            || l.starts_with("x-kagipro-")
+            || l.starts_with("x-kagimaster-")
+            || l.starts_with("x-kagidoctor-")
+            || l.starts_with("x-kagiclinic-")
+            || l.starts_with("x-kagishop-")
+            || l.starts_with("x-kagistore-")
+            || l.starts_with("x-keyshop-")
+            || l.starts_with("x-keycenter-")
+            || l.starts_with("x-keystore-")
+            || l.starts_with("x-duplicatekey-")
+            || l.starts_with("x-sparekey-")
+            || l.starts_with("x-kagiexchange-")
+            || l.starts_with("x-kagikoukan-")
+            || l.starts_with("x-kagiake-")
+            || l.starts_with("x-doorlock-")
+            || l.starts_with("x-doorsecurity-")
+            || l.starts_with("x-homesecurity-")
+            || l.starts_with("x-bouhanlock-")
+            || l.starts_with("x-bouhancamera-")
+            || l.starts_with("x-bouhannavi-")
+            || l.starts_with("x-bouhancenter-")
+            || l.starts_with("x-bouhanshop-")
+            || l.starts_with("x-bouhanstore-")
+            || l.starts_with("x-antitheft-")
+            || l.starts_with("x-crimeprevent-")
+            || l.starts_with("x-guardlock-")
+            || l.starts_with("x-safetylock-")
+            || l.starts_with("x-securelock-")
+            || l.starts_with("x-keyless-")
+            || l.starts_with("x-smartlockshop-")
+            || l.starts_with("x-digitallock-")
+    })
+}
+
+/// `X-PcKobo-*`/`X-Dospara-*`/`X-PcRepair-*`/`X-DataRaise-*`/`X-AosSos-*`/`X-DigitalDataRecovery-*`/`X-Hdram-*`/`X-LogitecReco-*`/`X-RecoData-*`/`X-KaitoruPc-*`/`X-PcDepot-*`/`X-PcPal-*`/`X-PcSupport-*`/`X-PcDoctor-*`/`X-PcEngineer-*`/`X-PcMedic-*`/`X-PcWorks-*`/`X-PcRecovery-*`/`X-PcFamily-*`/`X-PcKaizen-*`/`X-PcSmart-*`/`X-PcKonkatsu-*`/`X-PcHome-*`/`X-PcDesk-*`/`X-PcQuick-*`/`X-PcRescue-*`/`X-PcHokengoto-*`/`X-PcNavi-*`/`X-PcStation-*`/`X-PcMart-*`/`X-PcPlus-*`/`X-MacRepair-*`/`X-MacSupport-*`/`X-MacDoctor-*`/`X-MacStore-*`/`X-IphoneRepairShop-*`/`X-SpRepair-*`/`X-SmartphoneRepair-*`/`X-TabletRepair-*`/`X-DataRecoveryPro-*`/`X-DataRescue-*`/`X-HddRecovery-*`/`X-SsdRecovery-*`/`X-RaidRecovery-*`/`X-NasRecovery-*`/`X-UsbRecovery-*`/`X-SdRecovery-*`/`X-PhotoRecovery-*`/`X-DataSalvage-*`/`X-DataDoctor-*`/`X-DataMedic-*`/`X-DataLab-*`/`X-DataClinic-*`/`X-DataHospital-*`/`X-HddClinic-*`/`X-DiskRescue-*`/`X-BackupService-*`/`X-DataRestore-*`/`X-FileRecovery-*`/`X-MemoryRecovery-*` (パソコン修理・データ復旧・スマホ修理の通知記録) を送信側が自称しているかどうか。復旧料金・診断費・部品代の偽装はパソコン修理詐欺の典型手口。(Apple・Microsoft等メーカー機は既存族/D510)
+fn has_pcrepair_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-pckobo-")
+            || l.starts_with("x-dospara-")
+            || l.starts_with("x-pcrepair-")
+            || l.starts_with("x-dataraise-")
+            || l.starts_with("x-aossos-")
+            || l.starts_with("x-digitaldatarecovery-")
+            || l.starts_with("x-hdram-")
+            || l.starts_with("x-logitecreco-")
+            || l.starts_with("x-recodata-")
+            || l.starts_with("x-kaitorupc-")
+            || l.starts_with("x-pcdepot-")
+            || l.starts_with("x-pcpal-")
+            || l.starts_with("x-pcsupport-")
+            || l.starts_with("x-pcdoctor-")
+            || l.starts_with("x-pcengineer-")
+            || l.starts_with("x-pcmedic-")
+            || l.starts_with("x-pcworks-")
+            || l.starts_with("x-pcrecovery-")
+            || l.starts_with("x-pcfamily-")
+            || l.starts_with("x-pckaizen-")
+            || l.starts_with("x-pcsmart-")
+            || l.starts_with("x-pckonkatsu-")
+            || l.starts_with("x-pchome-")
+            || l.starts_with("x-pcdesk-")
+            || l.starts_with("x-pcquick-")
+            || l.starts_with("x-pcrescue-")
+            || l.starts_with("x-pchokengoto-")
+            || l.starts_with("x-pcnavi-")
+            || l.starts_with("x-pcstation-")
+            || l.starts_with("x-pcmart-")
+            || l.starts_with("x-pcplus-")
+            || l.starts_with("x-macrepair-")
+            || l.starts_with("x-macsupport-")
+            || l.starts_with("x-macdoctor-")
+            || l.starts_with("x-macstore-")
+            || l.starts_with("x-iphonerepairshop-")
+            || l.starts_with("x-sprepair-")
+            || l.starts_with("x-smartphonerepair-")
+            || l.starts_with("x-tabletrepair-")
+            || l.starts_with("x-datarecoverypro-")
+            || l.starts_with("x-datarescue-")
+            || l.starts_with("x-hddrecovery-")
+            || l.starts_with("x-ssdrecovery-")
+            || l.starts_with("x-raidrecovery-")
+            || l.starts_with("x-nasrecovery-")
+            || l.starts_with("x-usbrecovery-")
+            || l.starts_with("x-sdrecovery-")
+            || l.starts_with("x-photorecovery-")
+            || l.starts_with("x-datasalvage-")
+            || l.starts_with("x-datadoctor-")
+            || l.starts_with("x-datamedic-")
+            || l.starts_with("x-datalab-")
+            || l.starts_with("x-dataclinic-")
+            || l.starts_with("x-datahospital-")
+            || l.starts_with("x-hddclinic-")
+            || l.starts_with("x-diskrescue-")
+            || l.starts_with("x-backupservice-")
+            || l.starts_with("x-datarestore-")
+            || l.starts_with("x-filerecovery-")
+            || l.starts_with("x-memoryrecovery-")
+    })
+}
+
+/// `X-Nappu-*`/`X-SnowPeak-*`/`X-Coleman-*`/`X-Logos-*`/`X-CaptainStag-*`/`X-DODCamp-*`/`X-Ogawa-*`/`X-WeberCamp-*`/`X-Soto-*`/`X-Uniflame-*`/`X-Thermarest-*`/`X-MSRGear-*`/`X-NemoEquipment-*`/`X-ExpedGear-*`/`X-BigAgnes-*`/`X-KeltyGear-*`/`X-Yamap-*`/`X-Yamareco-*`/`X-Yamakei-*`/`X-Kokorogoto-*`/`X-Yamatomichi-*`/`X-PaagoWorks-*`/`X-Bonfire-*`/`X-HinataOutdoor-*`/`X-Fieldoor-*`/`X-Sotoshuurai-*`/`X-Kobobusetsu-*`/`X-CampNavi-*`/`X-CampInfo-*`/`X-CampSite-*`/`X-AutoCamp-*`/`X-BBQSite-*`/`X-TentRental-*`/`X-TentShop-*`/`X-OutdoorShop-*`/`X-OutdoorGear-*`/`X-MountainGear-*`/`X-ClimbingShop-*`/`X-HikingShop-*`/`X-TrailRun-*`/`X-TrekkingShop-*`/`X-BackpackShop-*`/`X-RucksackShop-*`/`X-SleepingBag-*`/`X-MatShop-*`/`X-CampChair-*`/`X-CampTable-*`/`X-LanternShop-*`/`X-FireStarter-*`/`X-KitchenCamp-*`/`X-CampCooker-*`/`X-CoolerBox-*`/`X-CampCar-*`/`X-RvRental-*`/`X-CamperShop-*`/`X-OutdoorLife-*`/`X-CampLife-*`/`X-Bushcraft-*`/`X-SurvivalGear-*`/`X-FishingCamp-*` (キャンプ・登山・アウトドアの通知記録) を送信側が自称しているかどうか。サイト予約・道具セール・登山届受理の偽装はキャンプ詐欺の典型手口。(モンベル・REI は既存族、釣具機は D600)
+fn has_camp_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nappu-")
+            || l.starts_with("x-snowpeak-")
+            || l.starts_with("x-coleman-")
+            || l.starts_with("x-logos-")
+            || l.starts_with("x-captainstag-")
+            || l.starts_with("x-dodcamp-")
+            || l.starts_with("x-ogawa-")
+            || l.starts_with("x-webercamp-")
+            || l.starts_with("x-soto-")
+            || l.starts_with("x-uniflame-")
+            || l.starts_with("x-thermarest-")
+            || l.starts_with("x-msrgear-")
+            || l.starts_with("x-nemoequipment-")
+            || l.starts_with("x-expedgear-")
+            || l.starts_with("x-bigagnes-")
+            || l.starts_with("x-keltygear-")
+            || l.starts_with("x-yamap-")
+            || l.starts_with("x-yamareco-")
+            || l.starts_with("x-yamakei-")
+            || l.starts_with("x-kokorogoto-")
+            || l.starts_with("x-yamatomichi-")
+            || l.starts_with("x-paagoworks-")
+            || l.starts_with("x-bonfire-")
+            || l.starts_with("x-hinataoutdoor-")
+            || l.starts_with("x-fieldoor-")
+            || l.starts_with("x-sotoshuurai-")
+            || l.starts_with("x-kobobusetsu-")
+            || l.starts_with("x-campnavi-")
+            || l.starts_with("x-campinfo-")
+            || l.starts_with("x-campsite-")
+            || l.starts_with("x-autocamp-")
+            || l.starts_with("x-bbqsite-")
+            || l.starts_with("x-tentrental-")
+            || l.starts_with("x-tentshop-")
+            || l.starts_with("x-outdoorshop-")
+            || l.starts_with("x-outdoorgear-")
+            || l.starts_with("x-mountaingear-")
+            || l.starts_with("x-climbingshop-")
+            || l.starts_with("x-hikingshop-")
+            || l.starts_with("x-trailrun-")
+            || l.starts_with("x-trekkingshop-")
+            || l.starts_with("x-backpackshop-")
+            || l.starts_with("x-rucksackshop-")
+            || l.starts_with("x-sleepingbag-")
+            || l.starts_with("x-matshop-")
+            || l.starts_with("x-campchair-")
+            || l.starts_with("x-camptable-")
+            || l.starts_with("x-lanternshop-")
+            || l.starts_with("x-firestarter-")
+            || l.starts_with("x-kitchencamp-")
+            || l.starts_with("x-campcooker-")
+            || l.starts_with("x-coolerbox-")
+            || l.starts_with("x-campcar-")
+            || l.starts_with("x-rvrental-")
+            || l.starts_with("x-campershop-")
+            || l.starts_with("x-outdoorlife-")
+            || l.starts_with("x-camplife-")
+            || l.starts_with("x-bushcraft-")
+            || l.starts_with("x-survivalgear-")
+            || l.starts_with("x-fishingcamp-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20862,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は錠機印を検出する() {
+    let k1 = b"From: a@b
+X-KagiKey-Id: 1
+
+x";
+    let k2 = b"From: a@b
+X-Kyukyu110-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-MiwaLock-Notice: 1
+
+x";
+    let g1 = b"From: a@b
+X-GoalLock-Flag: 1
+
+x";
+    let w1 = b"From: a@b
+X-WestLock-Entry: 1
+
+x";
+    let b1 = b"From: a@b
+X-BouhanCamera-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-SmartLockShop-Trace: 1
+
+x";
+    let d1 = b"From: a@b
+X-DigitalLock-Stamp: 1
+
+x";
+    assert!(has_locksmith_marks(k1));
+    assert!(has_locksmith_marks(k2));
+    assert!(has_locksmith_marks(m1));
+    assert!(has_locksmith_marks(g1));
+    assert!(has_locksmith_marks(w1));
+    assert!(has_locksmith_marks(b1));
+    assert!(has_locksmith_marks(s1));
+    assert!(has_locksmith_marks(d1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_locksmith_marks(clean));
+}
+
+#[test]
+fn scan_は修機印を検出する() {
+    let d1 = b"From: a@b
+X-Dospara-Id: 1
+
+x";
+    let p1 = b"From: a@b
+X-PcRepair-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-AosSos-Notice: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hdram-Flag: 1
+
+x";
+    let r1 = b"From: a@b
+X-PcRescue-Entry: 1
+
+x";
+    let m1 = b"From: a@b
+X-MacRepair-Record: 1
+
+x";
+    let s1 = b"From: a@b
+X-SsdRecovery-Trace: 1
+
+x";
+    let f1 = b"From: a@b
+X-FileRecovery-Stamp: 1
+
+x";
+    assert!(has_pcrepair_marks(d1));
+    assert!(has_pcrepair_marks(p1));
+    assert!(has_pcrepair_marks(a1));
+    assert!(has_pcrepair_marks(h1));
+    assert!(has_pcrepair_marks(r1));
+    assert!(has_pcrepair_marks(m1));
+    assert!(has_pcrepair_marks(s1));
+    assert!(has_pcrepair_marks(f1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_pcrepair_marks(clean));
+}
+
+#[test]
+fn scan_は野機印を検出する() {
+    let n1 = b"From: a@b
+X-Nappu-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-SnowPeak-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-Coleman-Notice: 1
+
+x";
+    let l1 = b"From: a@b
+X-Logos-Flag: 1
+
+x";
+    let d1 = b"From: a@b
+X-DODCamp-Entry: 1
+
+x";
+    let y1 = b"From: a@b
+X-Yamap-Record: 1
+
+x";
+    let t1 = b"From: a@b
+X-TentRental-Trace: 1
+
+x";
+    let o1 = b"From: a@b
+X-OutdoorGear-Stamp: 1
+
+x";
+    assert!(has_camp_marks(n1));
+    assert!(has_camp_marks(s1));
+    assert!(has_camp_marks(c1));
+    assert!(has_camp_marks(l1));
+    assert!(has_camp_marks(d1));
+    assert!(has_camp_marks(y1));
+    assert!(has_camp_marks(t1));
+    assert!(has_camp_marks(o1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_camp_marks(clean));
 }
 }
