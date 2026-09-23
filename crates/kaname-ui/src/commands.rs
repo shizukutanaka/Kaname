@@ -295,6 +295,24 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // (HTML 本文は RawHtml のまま sanitize に渡すため別扱い)
     let body_text = env.text_body.clone().unwrap_or_default();
 
+    // D160: HTML しか持たないメールでは text_body が空になり本文解析が
+    // 全て素通りする — ユーザーが実際に見る側 (HTML) からもテキストを
+    // 抽出して解析対象に併合する。multipart/alternative で text/plain に
+    // デコイ・text/html に攻撃文を置くパート不一致回避も、両者を併合すれば
+    // HTML 側の攻撃文がヒットする。hidden text salting (Cisco Talos 2025)
+    // の非表示塩は html_to_text がサブツリーごと捨てる。
+    let html_extract = env
+        .html_body
+        .as_ref()
+        .map(|h| kaname_render::html_to_text(h.as_str()));
+    let analysis_body = match &html_extract {
+        Some(e) if !e.text.trim().is_empty() && !body_text.trim().is_empty() => {
+            format!("{body_text}\n{}", e.text)
+        }
+        Some(e) if !e.text.trim().is_empty() => e.text.clone(),
+        _ => body_text.clone(),
+    };
+
     // MLS エンベロープを解析の「前」に処理する — 暗号メールでは実件名・
     // 実本文がエンベロープ内の `subject\x00body` ペイロードにあり、外側は
     // 固定カバー文 (「このメールは Kaname MLS で E2E 暗号化されています…」)。
@@ -318,7 +336,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // 別枠の `mls_plaintexts` で表示)。
     let decrypted_body = mls_plaintexts.join("\n");
     let analysis_text: &str = if mls_payloads.is_empty() {
-        &body_text
+        &analysis_body
     } else {
         &decrypted_body
     };
@@ -476,6 +494,15 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // 構造体にムーブする前に、from/subject を使う評価を先に済ませる。
     // 本文の構造リスクに加え、リンク先の評判判定も併記する。
     let mut render_risks = analyze_body_risks(analysis_text);
+    // D160: 非表示テキスト混入 (hidden text salting) の兆候。
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.hidden_content)
+    {
+        render_risks.push(
+            "HTML 本文に非表示テキスト (display:none 等の隠し文字列) — 検出回避の兆候".to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -748,7 +775,23 @@ pub async fn mail_scan_folder(path: String) -> Result<FolderScanResult, String> 
             .map(|a| a.addr.domain.clone())
             .unwrap_or_default();
         let subject = env.subject.clone().unwrap_or_default();
-        let body_text = env.text_body.clone().unwrap_or_default();
+        let plain_text = env.text_body.clone().unwrap_or_default();
+        // D160: HTML のみのメールでは text_body が空になり本文解析が
+        // 全て素通りする — HTML 側の表示テキストも併合して解析する
+        // (analyze_raw_email と同じく、パート不一致回避に備え両方を対象とする)。
+        let body_text = match env.html_body.as_ref() {
+            Some(h) => {
+                let extracted = kaname_render::html_to_text(h.as_str());
+                if extracted.text.trim().is_empty() {
+                    plain_text
+                } else if plain_text.trim().is_empty() {
+                    extracted.text
+                } else {
+                    format!("{plain_text}\n{}", extracted.text)
+                }
+            }
+            None => plain_text,
+        };
 
         let auth = kaname_bec::AuthResults {
             spf: map_auth(env.auth_results.spf),
@@ -1270,6 +1313,102 @@ mod tests {
         assert!(
             r.oobv_message.contains("電話"),
             "推奨理由が人間可読でなければならない"
+        );
+        Ok(())
+    }
+
+    /// D160: HTML のみのメール (text/plain パートなし) は `text_body` が空で
+    /// あり、従来は本文解析が全て素通りしていた — BEC/キーワード/OOBV が
+    /// 機能するためには HTML 側の表示テキストを解析対象に含める必要がある。
+    /// ユーザーに実際に見える本文を採点することを固定する。
+    const HTML_ONLY_BEC_EML: &[u8] = b"From: \"CEO\" <ceo@arnazon-billing.com>\r\n\
+        To: you@example.com\r\n\
+        Subject: URGENT wire transfer needed today\r\n\
+        Date: Mon, 26 Apr 2026 10:15:00 +0900\r\n\
+        Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com\r\n\
+        Content-Type: text/html; charset=utf-8\r\n\
+        \r\n\
+        <html><body><p>I need you to process an <b>urgent wire transfer</b> immediately.</p>\r\n\
+        <p>Our bank account has changed. Please send the payment today.</p>\r\n\
+        <p>Do not discuss this with anyone.</p></body></html>\r\n";
+
+    #[tokio::test]
+    async fn analyze_raw_email_はhtmlのみメールの本文を解析する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let r = analyze_raw_email(HTML_ONLY_BEC_EML).await?;
+        assert_eq!(
+            r.oobv_level, "strong",
+            "HTML 本文中の送金要求+緊急性は OOBV を強く推奨すべき: {:?}",
+            r.bec_signals
+        );
+        assert!(
+            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            "HTML 本文の金融/緊急キーワードがシグナル化されるべき: {:?}",
+            r.bec_signals
+        );
+        Ok(())
+    }
+
+    /// D160: hidden text salting — 非表示 CSS で語を分断する塩を落とし、
+    /// 可視テキストを復元してキーワード検出に載せる。大量の隠し文字列は
+    /// 兆候として render_risks に報告されることも固定する。
+    #[tokio::test]
+    async fn analyze_raw_email_はhidden_text_saltingを落として検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let salt = "Q".repeat(64);
+        let eml = format!(
+            "From: ceo@arnazon-billing.com\r\n\
+             To: you@example.com\r\n\
+             Subject: payment\r\n\
+             Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com\r\n\
+             Content-Type: text/html; charset=utf-8\r\n\
+             \r\n\
+             <html><body><p>urgent wi<span style=\"display:none\">{salt}</span>re \
+             transfer</p></body></html>\r\n"
+        );
+        let r = analyze_raw_email(eml.as_bytes()).await?;
+        assert!(
+            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            "salt で分断されたキーワードを復元して検出すべき: {:?}",
+            r.bec_signals
+        );
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("非表示")),
+            "大量の非表示テキストは兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D160: multipart/alternative で text/plain に無害文・text/html に
+    /// 攻撃文を置く「パート不一致」回避 — 両パートを併合解析すれば
+    /// HTML 側の攻撃文がヒットする。
+    #[tokio::test]
+    async fn analyze_raw_email_はtext_html不一致もhtml側を解析する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@arnazon-billing.com\r\n\
+            To: you@example.com\r\n\
+            Subject: hello\r\n\
+            Authentication-Results: mx.example.com; spf=fail smtp.mailfrom=arnazon-billing.com; dkim=fail header.d=arnazon-billing.com; dmarc=fail header.from=arnazon-billing.com\r\n\
+            Content-Type: multipart/alternative; boundary=\"alt\"\r\n\
+            \r\n\
+            --alt\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Just checking in. Nothing to see here.\r\n\
+            --alt\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            \r\n\
+            <html><body><p>process an urgent wire transfer immediately</p></body></html>\r\n\
+            --alt--\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.bec_signals.iter().any(|s| s.contains("送金") || s.contains("緊急")),
+            "text/plain のデコイに関わらず HTML 側の攻撃文を検出すべき: {:?}",
+            r.bec_signals
         );
         Ok(())
     }
