@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-SBISec-*`/`X-RakutenSec-*`/`X-Monex-*`/`X-Schwab-*`/`X-Fidelity-*` 等の証券・投資口座通知記録印を送信側が自称している (D614)
+    pub securities_marks: bool,
+    /// `X-NEXCO-*`/`X-Shutoko-*`/`X-EZPass-*`/`X-FasTrak-*`/`X-Telepass-*` 等の高速道路・ETC・通行料通知記録印を送信側が自称している (D615)
+    pub tollroad_marks: bool,
+    /// `X-Macromill-*`/`X-ResearchPanel-*`/`X-Nielsen-*`/`X-Toluna-*`/`X-YouGov-*` 等の調査・モニター通知記録印を送信側が自称している (D616)
+    pub survey_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        securities_marks: has_securities_marks(hdr),
+        tollroad_marks: has_tollroad_marks(hdr),
+        survey_marks: has_survey_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,281 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-SBISec-*`/`X-RakutenSec-*`/`X-Monex-*`/`X-Matsui-*`/`X-GMOClick-*`/`X-Kabucom-*`/`X-AuKabucom-*`/`X-MUFG-eSmart-*`/`X-SMBCNikko-*`/`X-NomuraSec-*`/`X-DaiwaSec-*`/`X-DaiwaConnect-*`/`X-Okasan-*`/`X-LightSec-*`/`X-Tachibana-*`/`X-HimawariSec-*`/`X-Gaikae-*`/`X-GaikaeOnline-*`/`X-TradersSec-*`/`X-MinnaFX-*`/`X-Hirose-FX-*`/`X-JFX-*`/`X-SaxoBank-*`/`X-IGSec-*`/`X-OANDA-*`/`X-ForexCom-*`/`X-DMMSec-*`/`X-LineSec-*`/`X-PayPaySec-*`/`X-NeoMoba-*`/`X-JapanNext-*`/`X-Schwab-*`/`X-Fidelity-*`/`X-Vanguard-*`/`X-IBKR-*`/`X-InteractiveBrokers-*`/`X-TDAmeritrade-*`/`X-ETrade-*`/`X-Merrill-*`/`X-Webull-*`/`X-Moomoo-*`/`X-eToro-*`/`X-TradeStation-*`/`X-Tastytrade-*`/`X-Firstrade-*`/`X-Wealthsimple-*`/`X-Betterment-*`/`X-Wealthfront-*`/`X-Acorns-*`/`X-M1Finance-*`/`X-Questrade-*`/`X-DEGIRO-*`/`X-CommSec-*`/`X-Trading212-*`/`X-Freetrade-*`/`X-XTB-*`/`X-Pepperstone-*`/`X-FXCM-*`/`X-Exness-*`/`X-ICMarkets-*`/`X-FxPro-*`/`X-Swissquote-*`/`X-TradeRepublic-*`/`X-Nordnet-*`/`X-Zerodha-*`/`X-Groww-*`/`X-EasyEquities-*`/`X-Sharesies-*`/`X-Plus500-*`/`X-CMCMarkets-*`/`X-Hargreaves-*`/`X-AJBell-*`/`X-InteractiveInvestor-*`/`X-TigerBrokers-*` (証券会社・ネット証券・投資口座の通知記録) を送信側が自称しているかどうか。ログイン障害・口座凍結・取引確認・NISA 案内の偽装は証券口座乗っ取り詐欺の典型手口。(Robinhood/SoFi 等のネオバンク系は D471、暗号資産取引所は D472、銀行機は D538/D570)
+fn has_securities_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sbisec-")
+            || l.starts_with("x-rakutensec-")
+            || l.starts_with("x-monex-")
+            || l.starts_with("x-matsui-")
+            || l.starts_with("x-gmoclick-")
+            || l.starts_with("x-kabucom-")
+            || l.starts_with("x-aukabucom-")
+            || l.starts_with("x-mufg-esmart-")
+            || l.starts_with("x-smbcnikko-")
+            || l.starts_with("x-nomurasec-")
+            || l.starts_with("x-daiwasec-")
+            || l.starts_with("x-daiwaconnect-")
+            || l.starts_with("x-okasan-")
+            || l.starts_with("x-lightsec-")
+            || l.starts_with("x-tachibana-")
+            || l.starts_with("x-himawarisec-")
+            || l.starts_with("x-gaikae-")
+            || l.starts_with("x-gaikaeonline-")
+            || l.starts_with("x-traderssec-")
+            || l.starts_with("x-minnafx-")
+            || l.starts_with("x-hirose-fx-")
+            || l.starts_with("x-jfx-")
+            || l.starts_with("x-saxobank-")
+            || l.starts_with("x-igsec-")
+            || l.starts_with("x-oanda-")
+            || l.starts_with("x-forexcom-")
+            || l.starts_with("x-dmmsec-")
+            || l.starts_with("x-linesec-")
+            || l.starts_with("x-paypaysec-")
+            || l.starts_with("x-neomoba-")
+            || l.starts_with("x-japannext-")
+            || l.starts_with("x-schwab-")
+            || l.starts_with("x-fidelity-")
+            || l.starts_with("x-vanguard-")
+            || l.starts_with("x-ibkr-")
+            || l.starts_with("x-interactivebrokers-")
+            || l.starts_with("x-tdameritrade-")
+            || l.starts_with("x-etrade-")
+            || l.starts_with("x-merrill-")
+            || l.starts_with("x-webull-")
+            || l.starts_with("x-moomoo-")
+            || l.starts_with("x-etoro-")
+            || l.starts_with("x-tradestation-")
+            || l.starts_with("x-tastytrade-")
+            || l.starts_with("x-firstrade-")
+            || l.starts_with("x-wealthsimple-")
+            || l.starts_with("x-betterment-")
+            || l.starts_with("x-wealthfront-")
+            || l.starts_with("x-acorns-")
+            || l.starts_with("x-m1finance-")
+            || l.starts_with("x-questrade-")
+            || l.starts_with("x-degiro-")
+            || l.starts_with("x-commsec-")
+            || l.starts_with("x-trading212-")
+            || l.starts_with("x-freetrade-")
+            || l.starts_with("x-xtb-")
+            || l.starts_with("x-pepperstone-")
+            || l.starts_with("x-fxcm-")
+            || l.starts_with("x-exness-")
+            || l.starts_with("x-icmarkets-")
+            || l.starts_with("x-fxpro-")
+            || l.starts_with("x-swissquote-")
+            || l.starts_with("x-traderepublic-")
+            || l.starts_with("x-nordnet-")
+            || l.starts_with("x-zerodha-")
+            || l.starts_with("x-groww-")
+            || l.starts_with("x-easyequities-")
+            || l.starts_with("x-sharesies-")
+            || l.starts_with("x-plus500-")
+            || l.starts_with("x-cmcmarkets-")
+            || l.starts_with("x-hargreaves-")
+            || l.starts_with("x-ajbell-")
+            || l.starts_with("x-interactiveinvestor-")
+            || l.starts_with("x-tigerbrokers-")
+    })
+}
+
+/// `X-NEXCO-*`/`X-NEXCO-East-*`/`X-NEXCO-Central-*`/`X-NEXCO-West-*`/`X-Shutoko-*`/`X-Hanshin-Exp-*`/`X-Nagoya-Exp-*`/`X-Fukuoka-Exp-*`/`X-Hiroshima-Exp-*`/`X-JB-Honshi-*`/`X-Dorapura-*`/`X-E-NEXCO-*`/`X-ETC-Riyou-*`/`X-ETC-Meisai-*`/`X-ETC-Inquiry-*`/`X-ETCCard-*`/`X-ETC-Gate-*`/`X-ETC-Mileage-*`/`X-HighwayToll-*`/`X-TollGate-*`/`X-EZPass-*`/`X-FasTrak-*`/`X-SunPass-*`/`X-E-PASS-*`/`X-TollTag-*`/`X-TxTag-*`/`X-EZTAG-*`/`X-K-TAG-*`/`X-PIKEPASS-*`/`X-PeachPass-*`/`X-I-PASS-*`/`X-E-470-*`/`X-ExpressToll-*`/`X-NCQuickPass-*`/`X-RiverLink-*`/`X-GeauxPass-*`/`X-GoodToGo-*`/`X-TheTollRoads-*`/`X-PayByPlate-*`/`X-CFXWay-*`/`X-MDXWay-*`/`X-THEAWay-*`/`X-DullesGreenway-*`/`X-Chesapeake-Exp-*`/`X-ERToll-*`/`X-MaineTurnpike-*`/`X-NYSThruway-*`/`X-NJTurnpike-*`/`X-PATurnpike-*`/`X-OhioTurnpike-*`/`X-IndianaToll-*`/`X-WVParkways-*`/`X-AutoExpreso-*`/`X-Telepass-*`/`X-Autostrade-*`/`X-BipGo-*`/`X-APRR-*`/`X-Sanef-*`/`X-Vinci-Autoroutes-*`/`X-ViaVerde-*`/`X-Brisa-*`/`X-TollCollect-*`/`X-ASFINAG-*`/`X-eVignette-*`/`X-GoMaut-*`/`X-Salik-*`/`X-SANRAL-*`/`X-Linkt-*`/`X-EastLink-*`/`X-CityLink-*`/`X-NZToll-*`/`X-Televia-*`/`X-IAVE-*`/`X-TnG-RFID-*`/`X-HKeToll-*`/`X-M6Toll-*`/`X-DartCharge-*`/`X-Merseyflow-*`/`X-TyneTunnels-*` (高速道路・ETC・通行料金収受機の通知記録) を送信側が自称しているかどうか。未払い通行料・ETC カード無効・利用明細の偽装は通行料詐欺の典型手口。(鉄道・公共交通機は D522、タクシー・配車機は D469)
+fn has_tollroad_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nexco-")
+            || l.starts_with("x-nexco-east-")
+            || l.starts_with("x-nexco-central-")
+            || l.starts_with("x-nexco-west-")
+            || l.starts_with("x-shutoko-")
+            || l.starts_with("x-hanshin-exp-")
+            || l.starts_with("x-nagoya-exp-")
+            || l.starts_with("x-fukuoka-exp-")
+            || l.starts_with("x-hiroshima-exp-")
+            || l.starts_with("x-jb-honshi-")
+            || l.starts_with("x-dorapura-")
+            || l.starts_with("x-e-nexco-")
+            || l.starts_with("x-etc-riyou-")
+            || l.starts_with("x-etc-meisai-")
+            || l.starts_with("x-etc-inquiry-")
+            || l.starts_with("x-etccard-")
+            || l.starts_with("x-etc-gate-")
+            || l.starts_with("x-etc-mileage-")
+            || l.starts_with("x-highwaytoll-")
+            || l.starts_with("x-tollgate-")
+            || l.starts_with("x-ezpass-")
+            || l.starts_with("x-ez-pass-")
+            || l.starts_with("x-fastrak-")
+            || l.starts_with("x-sunpass-")
+            || l.starts_with("x-epass-")
+            || l.starts_with("x-e-pass-")
+            || l.starts_with("x-tolltag-")
+            || l.starts_with("x-txtag-")
+            || l.starts_with("x-eztag-")
+            || l.starts_with("x-ktag-")
+            || l.starts_with("x-k-tag-")
+            || l.starts_with("x-pikepass-")
+            || l.starts_with("x-peachpass-")
+            || l.starts_with("x-ipass-")
+            || l.starts_with("x-i-pass-")
+            || l.starts_with("x-e470-")
+            || l.starts_with("x-e-470-")
+            || l.starts_with("x-expresstoll-")
+            || l.starts_with("x-ncquickpass-")
+            || l.starts_with("x-riverlink-")
+            || l.starts_with("x-geauxpass-")
+            || l.starts_with("x-goodtogo-")
+            || l.starts_with("x-thetollroads-")
+            || l.starts_with("x-paybyplate-")
+            || l.starts_with("x-cfxway-")
+            || l.starts_with("x-mdxway-")
+            || l.starts_with("x-theaxway-")
+            || l.starts_with("x-dullesgreenway-")
+            || l.starts_with("x-chesapeake-exp-")
+            || l.starts_with("x-ertoll-")
+            || l.starts_with("x-maineturnpike-")
+            || l.starts_with("x-nysthruway-")
+            || l.starts_with("x-njturnpike-")
+            || l.starts_with("x-paturnpike-")
+            || l.starts_with("x-ohioturnpike-")
+            || l.starts_with("x-indianatoll-")
+            || l.starts_with("x-wvparkways-")
+            || l.starts_with("x-autoexpreso-")
+            || l.starts_with("x-telepass-")
+            || l.starts_with("x-autostrade-")
+            || l.starts_with("x-bipgo-")
+            || l.starts_with("x-aprr-")
+            || l.starts_with("x-sanef-")
+            || l.starts_with("x-vinci-autoroutes-")
+            || l.starts_with("x-viaverde-")
+            || l.starts_with("x-brisa-")
+            || l.starts_with("x-tollcollect-")
+            || l.starts_with("x-asfinag-")
+            || l.starts_with("x-evignette-")
+            || l.starts_with("x-gomaut-")
+            || l.starts_with("x-salik-")
+            || l.starts_with("x-sanral-")
+            || l.starts_with("x-linkt-")
+            || l.starts_with("x-eastlink-")
+            || l.starts_with("x-citylink-")
+            || l.starts_with("x-nztoll-")
+            || l.starts_with("x-televia-")
+            || l.starts_with("x-iave-")
+            || l.starts_with("x-tng-rfid-")
+            || l.starts_with("x-hketoll-")
+            || l.starts_with("x-m6toll-")
+            || l.starts_with("x-dartcharge-")
+            || l.starts_with("x-merseyflow-")
+            || l.starts_with("x-tynetunnels-")
+    })
+}
+
+/// `X-Macromill-*`/`X-ResearchPanel-*`/`X-InfoQ-*`/`X-INTAGE-*`/`X-CrossMarketing-*`/`X-RakutenInsight-*`/`X-MyVoice-*`/`X-Fastask-*`/`X-Asmarq-*`/`X-NeoMarketing-*`/`X-GMOResearch-*`/`X-DentsuResearch-*`/`X-VideoResearch-*`/`X-NikkeiResearch-*`/`X-JMARI-*`/`X-FujiKeizai-*`/`X-YanoResearch-*`/`X-MApps-*`/`X-M-Pack-*`/`X-iMonitor-*`/`X-QMonitor-*`/`X-DIPS-Panel-*`/`X-JapanMonitor-*`/`X-MRSResearch-*`/`X-TSR-Net-*`/`X-TDBResearch-*`/`X-Nielsen-*`/`X-Kantar-*`/`X-Ipsos-*`/`X-GfK-*`/`X-Dynata-*`/`X-Cint-*`/`X-Toluna-*`/`X-YouGov-*`/`X-Prolific-*`/`X-UserInterviews-*`/`X-Respondent-*`/`X-Dscout-*`/`X-ResearchNow-*`/`X-TapResearch-*`/`X-Pollfish-*`/`X-Swagbucks-*`/`X-SurveyJunkie-*`/`X-InboxDollars-*`/`X-MyPoints-*`/`X-PineconeResearch-*`/`X-BrandedSurveys-*`/`X-Attapoll-*`/`X-PollPay-*`/`X-Streetbees-*`/`X-FieldAgent-*`/`X-Gigwalk-*`/`X-ZapSurveys-*`/`X-LifePoints-*`/`X-ValuedOpinions-*`/`X-OpinionOutpost-*`/`X-HarrisPoll-*`/`X-Gallup-*`/`X-MorningConsult-*`/`X-AmeriSpeak-*`/`X-Forsta-*`/`X-QuestionPro-*`/`X-Voxco-*`/`X-Verint-*`/`X-Panelbase-*`/`X-PopulusLive-*`/`X-Opinium-*`/`X-OnePoll-*`/`X-Savanta-*`/`X-i-Say-*`/`X-Univox-*`/`X-TGMPanel-*`/`X-Mobrog-*`/`X-Meinungsplatz-*`/`X-Toloka-*`/`X-Appen-*`/`X-Remotasks-*`/`X-Clickworker-*`/`X-OneForma-*`/`X-MTurk-*`/`X-Microworkers-*`/`X-YSense-*` (市場調査・アンケートモニター・リサーチパネルの通知記録) を送信側が自称しているかどうか。高額謝礼アンケート・モニター当選・座談会依頼の偽装は謝礼詐欺の典型手口。(アンケート・CX SaaS 機は D491 で検出済み)
+fn has_survey_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-macromill-")
+            || l.starts_with("x-researchpanel-")
+            || l.starts_with("x-infoq-")
+            || l.starts_with("x-intage-")
+            || l.starts_with("x-crossmarketing-")
+            || l.starts_with("x-rakuteninsight-")
+            || l.starts_with("x-myvoice-")
+            || l.starts_with("x-fastask-")
+            || l.starts_with("x-asmarq-")
+            || l.starts_with("x-neomarketing-")
+            || l.starts_with("x-gmoresearch-")
+            || l.starts_with("x-dentsuresearch-")
+            || l.starts_with("x-videoresearch-")
+            || l.starts_with("x-nikkeiresearch-")
+            || l.starts_with("x-jmari-")
+            || l.starts_with("x-fujikeizai-")
+            || l.starts_with("x-yanoresearch-")
+            || l.starts_with("x-mapps-")
+            || l.starts_with("x-mpack-")
+            || l.starts_with("x-m-pack-")
+            || l.starts_with("x-imonitor-")
+            || l.starts_with("x-qmonitor-")
+            || l.starts_with("x-dips-panel-")
+            || l.starts_with("x-japanmonitor-")
+            || l.starts_with("x-mrsresearch-")
+            || l.starts_with("x-tsr-net-")
+            || l.starts_with("x-tdbresearch-")
+            || l.starts_with("x-nielsen-")
+            || l.starts_with("x-kantar-")
+            || l.starts_with("x-ipsos-")
+            || l.starts_with("x-gfk-")
+            || l.starts_with("x-dynata-")
+            || l.starts_with("x-cint-")
+            || l.starts_with("x-toluna-")
+            || l.starts_with("x-yougov-")
+            || l.starts_with("x-prolific-")
+            || l.starts_with("x-userinterviews-")
+            || l.starts_with("x-respondent-")
+            || l.starts_with("x-dscout-")
+            || l.starts_with("x-researchnow-")
+            || l.starts_with("x-tapresearch-")
+            || l.starts_with("x-pollfish-")
+            || l.starts_with("x-swagbucks-")
+            || l.starts_with("x-surveyjunkie-")
+            || l.starts_with("x-inboxdollars-")
+            || l.starts_with("x-mypoints-")
+            || l.starts_with("x-pineconeresearch-")
+            || l.starts_with("x-brandedsurveys-")
+            || l.starts_with("x-attapoll-")
+            || l.starts_with("x-pollpay-")
+            || l.starts_with("x-streetbees-")
+            || l.starts_with("x-fieldagent-")
+            || l.starts_with("x-gigwalk-")
+            || l.starts_with("x-zapsurveys-")
+            || l.starts_with("x-lifepoints-")
+            || l.starts_with("x-valuedopinions-")
+            || l.starts_with("x-opinionoutpost-")
+            || l.starts_with("x-harrispoll-")
+            || l.starts_with("x-gallup-")
+            || l.starts_with("x-morningconsult-")
+            || l.starts_with("x-amerspeak-")
+            || l.starts_with("x-forsta-")
+            || l.starts_with("x-questionpro-")
+            || l.starts_with("x-voxco-")
+            || l.starts_with("x-verint-")
+            || l.starts_with("x-panelbase-")
+            || l.starts_with("x-populuslive-")
+            || l.starts_with("x-opinium-")
+            || l.starts_with("x-onepoll-")
+            || l.starts_with("x-savanta-")
+            || l.starts_with("x-isay-")
+            || l.starts_with("x-i-say-")
+            || l.starts_with("x-univox-")
+            || l.starts_with("x-tgmpanel-")
+            || l.starts_with("x-mobrog-")
+            || l.starts_with("x-meinungsplatz-")
+            || l.starts_with("x-toloka-")
+            || l.starts_with("x-appen-")
+            || l.starts_with("x-remotasks-")
+            || l.starts_with("x-clickworker-")
+            || l.starts_with("x-oneforma-")
+            || l.starts_with("x-mturk-")
+            || l.starts_with("x-microworkers-")
+            || l.starts_with("x-ysense-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20924,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は証機印を検出する() {
+    let s1 = b"From: a@b
+X-SBISec-Id: 1
+
+x";
+    let r1 = b"From: a@b
+X-RakutenSec-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-Monex-Notice: 1
+
+x";
+    let g1 = b"From: a@b
+X-GMOClick-Flag: 1
+
+x";
+    let c1 = b"From: a@b
+X-Schwab-Entry: 1
+
+x";
+    let f1 = b"From: a@b
+X-Fidelity-Record: 1
+
+x";
+    let i1 = b"From: a@b
+X-IBKR-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-eToro-Stamp: 1
+
+x";
+    assert!(has_securities_marks(s1));
+    assert!(has_securities_marks(r1));
+    assert!(has_securities_marks(m1));
+    assert!(has_securities_marks(g1));
+    assert!(has_securities_marks(c1));
+    assert!(has_securities_marks(f1));
+    assert!(has_securities_marks(i1));
+    assert!(has_securities_marks(e1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_securities_marks(clean));
+}
+
+#[test]
+fn scan_は高機印を検出する() {
+    let n1 = b"From: a@b
+X-NEXCO-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-Shutoko-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-EZPass-Notice: 1
+
+x";
+    let f1 = b"From: a@b
+X-FasTrak-Flag: 1
+
+x";
+    let u1 = b"From: a@b
+X-SunPass-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-Telepass-Record: 1
+
+x";
+    let v1 = b"From: a@b
+X-ViaVerde-Trace: 1
+
+x";
+    let l1 = b"From: a@b
+X-Linkt-Stamp: 1
+
+x";
+    assert!(has_tollroad_marks(n1));
+    assert!(has_tollroad_marks(s1));
+    assert!(has_tollroad_marks(e1));
+    assert!(has_tollroad_marks(f1));
+    assert!(has_tollroad_marks(u1));
+    assert!(has_tollroad_marks(t1));
+    assert!(has_tollroad_marks(v1));
+    assert!(has_tollroad_marks(l1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_tollroad_marks(clean));
+}
+
+#[test]
+fn scan_は調機印を検出する() {
+    let m1 = b"From: a@b
+X-Macromill-Id: 1
+
+x";
+    let r1 = b"From: a@b
+X-ResearchPanel-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nielsen-Notice: 1
+
+x";
+    let t1 = b"From: a@b
+X-Toluna-Flag: 1
+
+x";
+    let y1 = b"From: a@b
+X-YouGov-Entry: 1
+
+x";
+    let s1 = b"From: a@b
+X-Swagbucks-Record: 1
+
+x";
+    let d1 = b"From: a@b
+X-Dynata-Trace: 1
+
+x";
+    let i1 = b"From: a@b
+X-Ipsos-Stamp: 1
+
+x";
+    assert!(has_survey_marks(m1));
+    assert!(has_survey_marks(r1));
+    assert!(has_survey_marks(n1));
+    assert!(has_survey_marks(t1));
+    assert!(has_survey_marks(y1));
+    assert!(has_survey_marks(s1));
+    assert!(has_survey_marks(d1));
+    assert!(has_survey_marks(i1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_survey_marks(clean));
 }
 }
