@@ -1756,6 +1756,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D558: 玩具・フィギュア・TCG 印自称
+    if env.toy_marks {
+        render_risks.push(
+            "X-LEGO-*/X-TakaraTomy-*/X-Bandai-*/X-GoodSmile-*/X-Kotobukiya-*/X-Tamiya-*/X-Tomica-*/X-Nendoroid-* 等 — 玩機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D559: ホビーショップ・同人・カードショップ・プライズ印自称
+    if env.hobby_marks {
+        render_risks.push(
+            "X-Amiami-*/X-Surugaya-*/X-Mandarake-*/X-YellowSubmarine-*/X-Toranoana-*/X-Clove-*/X-Hareruya-*/X-Banpresto-* 等 — 趣機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D560: 百貨店・アウトレット・商業施設印自称
+    if env.department_marks {
+        render_risks.push(
+            "X-Takashimaya-*/X-Mitsukoshi-*/X-Parco-*/X-Isetan-*/X-Daimaru-*/X-Lumine-*/X-Gotemba-*/X-RoppongiHills-* 等 — 商機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

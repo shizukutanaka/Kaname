@@ -1361,6 +1361,52 @@ pub struct Envelope {
     /// 漫画・電子書籍・書店・出版社印があるか — 書機の通知記録を
     /// 送信側が自称する兆候 (D557)。
     pub manga_marks: bool,
+    /// `X-LEGO-*`/`X-TakaraTomy-*`/`X-Bandai-*`/`X-GoodSmile-*`/
+    /// `X-Kotobukiya-*`/`X-MegaHouse-*`/`X-Alter-*`/`X-PhatCompany-*`/
+    /// `X-FREEing-*`/`X-QuesQ-*`/`X-Revolve-*`/`X-PopParade-*`/
+    /// `X-Prime1Studio-*`/`X-HotToys-*`/`X-Sideshow-*`/`X-Funko-*`/
+    /// `X-POPMART-*`/`X-Volks-*`/`X-Tamiya-*`/`X-Hasegawa-*`/`X-Aoshima-*`/
+    /// `X-Fujimi-*`/`X-Wave-*`/`X-Plarail-*`/`X-Tomica-*`/`X-Licca-*`/
+    /// `X-Sylvanian-*`/`X-Beyblade-*`/`X-DuelMasters-*`/`X-YuGiOh-*`/
+    /// `X-MTG-*`/`X-Wizards-*`/`X-PokemonTCG-*`/`X-Cardfight-*`/
+    /// `X-Bushiroad-*`/`X-WIXOSS-*`/`X-WeissSchwarz-*`/`X-OnePieceCard-*`/
+    /// `X-Hasbro-*`/`X-Mattel-*`/`X-FisherPrice-*`/`X-Nerf-*`/`X-Barbie-*`/
+    /// `X-HotWheels-*`/`X-Tamagotchi-*`/`X-Amiibo-*`/`X-ReBirth-*`/
+    /// `X-Vividz-*`/`X-Playmobil-*`/`X-LOLSurprise-*`/`X-Matchbox-*`/
+    /// `X-FunkoPop-*`/`X-Nendoroid-*`/`X-Figma-*`/`X-SHFiguarts-*`/
+    /// `X-RobotDamashii-*`/`X-MetalBuild-*`/`X-SOC-*`/`X-Chogokin-*`/
+    /// `X-HG-*`/`X-MG-*`/`X-PG-*`/`X-RG-*`/`X-EG-*`/`X-SD-*` 等の
+    /// 玩具・フィギュア・TCG 印があるか — 玩機の通知記録を送信側が
+    /// 自称する兆候 (D558)。(`X-BandaiNamco-*` 等のゲーム機は
+    /// D473 で検出済み)
+    pub toy_marks: bool,
+    /// `X-YellowSubmarine-*`/`X-CardLabo-*`/`X-RyuNoShippo-*`/
+    /// `X-FullComp-*`/`X-Canaveral-*`/`X-Clove-*`/`X-Magi-*`/
+    /// `X-Hareruya-*`/`X-Surugaya-*`/`X-Mandarake-*`/`X-Toranoana-*`/
+    /// `X-Melonbooks-*`/`X-GeeStore-*`/`X-Amiami-*`/`X-HobbySearch-*`/
+    /// `X-AsobiStore-*`/`X-PremiumBandai-*`/`X-HobbyJapan-*`/
+    /// `X-KotobukiyaShop-*`/`X-Daiki-*`/`X-OrchidSeed-*`/`X-AlphaMax-*`/
+    /// `X-WingScale-*`/`X-UnionCreative-*`/`X-Myethos-*`/`X-ApexToys-*`/
+    /// `X-GSAS-*`/`X-BellFine-*`/`X-Furyu-*`/`X-Taito-*`/`X-SegaPrize-*`/
+    /// `X-Banpresto-*`/`X-BPrize-*`/`X-IchibanKuji-*`/`X-CharaAni-*`/
+    /// `X-AniplexPlus-*`/`X-KadokawaStore-*`/`X-HobbyStock-*` 等の
+    /// ホビーショップ・同人・カードショップ・プライズ印があるか —
+    /// 趣機の通知記録を送信側が自称する兆候 (D559)。
+    pub hobby_marks: bool,
+    /// `X-Takashimaya-*`/`X-Mitsukoshi-*`/`X-Isetan-*`/`X-Daimaru-*`/
+    /// `X-Matsuzakaya-*`/`X-Sogo-*`/`X-Parco-*`/`X-Lumine-*`/`X-Marui-*`/
+    /// `X-Laforet-*`/`X-Atre-*`/`X-Kitte-*`/`X-GinzaSix-*`/`X-Midtown-*`/
+    /// `X-RoppongiHills-*`/`X-Solamachi-*`/`X-Lucua-*`/`X-GrandFront-*`/
+    /// `X-Umeda-*`/`X-NambaParks-*`/`X-CanalCity-*`/`X-MitsuiOutlet-*`/
+    /// `X-PremiumOutlets-*`/`X-Gotemba-*`/`X-Rinku-*`/`X-Sano-*`/
+    /// `X-Kisarazu-*`/`X-Iruma-*`/`X-Fukaya-*`/`X-Shisui-*`/`X-Toki-*`/
+    /// `X-JazzDream-*`/`X-SendaiPort-*`/`X-Tosu-*`/`X-KobeSanda-*`/
+    /// `X-Tarumi-*`/`X-Marinepia-*`/`X-MinamiOsawa-*`/`X-Oarai-*`/
+    /// `X-YokohamaBayside-*`/`X-Toua-*`/`X-OutletPark-*` 等の
+    /// 百貨店・アウトレット・商業施設印があるか — 商機の通知記録を
+    /// 送信側が自称する兆候 (D560)。(`X-AEON-*`/`X-Tokyu-*` 等の
+    /// 小売・鉄道系は D522/D525 で検出済み)
+    pub department_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1779,6 +1825,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mealkit_marks: has_mealkit_marks(raw),
         charity_marks: has_charity_marks(raw),
         manga_marks: has_manga_marks(raw),
+        toy_marks: has_toy_marks(raw),
+        hobby_marks: has_hobby_marks(raw),
+        department_marks: has_department_marks(raw),
     })
 }
 
@@ -8540,6 +8589,229 @@ fn has_manga_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-LEGO-*`/`X-TakaraTomy-*`/`X-Bandai-*`/`X-GoodSmile-*`/
+/// `X-Kotobukiya-*`/`X-MegaHouse-*`/`X-Alter-*`/`X-PhatCompany-*`/
+/// `X-FREEing-*`/`X-QuesQ-*`/`X-Revolve-*`/`X-PopParade-*`/
+/// `X-Prime1Studio-*`/`X-HotToys-*`/`X-Sideshow-*`/`X-Funko-*`/
+/// `X-POPMART-*`/`X-Volks-*`/`X-Tamiya-*`/`X-Hasegawa-*`/`X-Aoshima-*`/
+/// `X-Fujimi-*`/`X-Wave-*`/`X-Plarail-*`/`X-Tomica-*`/`X-Licca-*`/
+/// `X-Sylvanian-*`/`X-Beyblade-*`/`X-DuelMasters-*`/`X-YuGiOh-*`/
+/// `X-MTG-*`/`X-Wizards-*`/`X-PokemonTCG-*`/`X-Cardfight-*`/
+/// `X-Bushiroad-*`/`X-WIXOSS-*`/`X-WeissSchwarz-*`/`X-OnePieceCard-*`/
+/// `X-Hasbro-*`/`X-Mattel-*`/`X-FisherPrice-*`/`X-Nerf-*`/`X-Barbie-*`/
+/// `X-HotWheels-*`/`X-Tamagotchi-*`/`X-Amiibo-*`/`X-ReBirth-*`/
+/// `X-Vividz-*`/`X-Playmobil-*`/`X-LOLSurprise-*`/`X-Matchbox-*`/
+/// `X-FunkoPop-*`/`X-Nendoroid-*`/`X-Figma-*`/`X-SHFiguarts-*`/
+/// `X-RobotDamashii-*`/`X-MetalBuild-*`/`X-SOC-*`/`X-Chogokin-*`/
+/// `X-HG-*`/`X-MG-*`/`X-PG-*`/`X-RG-*`/`X-EG-*`/`X-SD-*` 等の
+/// 玩具・フィギュア・TCG 印があるか判定する (D558)。
+///
+/// `X-LEGO-*` (LEGO)、`X-TakaraTomy-*` (タカラトミー)、`X-Bandai-*`
+/// (バンダイ) は玩機の通知記録 — 送信側から届くこれは自称。
+/// 限定抽選・予約開始偽装は玩具詐欺の典型。
+fn has_toy_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-lego-")
+            || l.starts_with("x-takaratomy-")
+            || l.starts_with("x-bandai-")
+            || l.starts_with("x-goodsmile-")
+            || l.starts_with("x-kotobukiya-")
+            || l.starts_with("x-megahouse-")
+            || l.starts_with("x-alter-")
+            || l.starts_with("x-phatcompany-")
+            || l.starts_with("x-freeing-")
+            || l.starts_with("x-quesq-")
+            || l.starts_with("x-revolve-")
+            || l.starts_with("x-popparade-")
+            || l.starts_with("x-prime1studio-")
+            || l.starts_with("x-hottoys-")
+            || l.starts_with("x-sideshow-")
+            || l.starts_with("x-funko-")
+            || l.starts_with("x-popmart-")
+            || l.starts_with("x-volks-")
+            || l.starts_with("x-tamiya-")
+            || l.starts_with("x-hasegawa-")
+            || l.starts_with("x-aoshima-")
+            || l.starts_with("x-fujimi-")
+            || l.starts_with("x-wave-")
+            || l.starts_with("x-plarail-")
+            || l.starts_with("x-tomica-")
+            || l.starts_with("x-licca-")
+            || l.starts_with("x-sylvanian-")
+            || l.starts_with("x-beyblade-")
+            || l.starts_with("x-duelmasters-")
+            || l.starts_with("x-yugioh-")
+            || l.starts_with("x-mtg-")
+            || l.starts_with("x-wizards-")
+            || l.starts_with("x-pokemontcg-")
+            || l.starts_with("x-cardfight-")
+            || l.starts_with("x-bushiroad-")
+            || l.starts_with("x-wixoss-")
+            || l.starts_with("x-weissschwarz-")
+            || l.starts_with("x-onepiececard-")
+            || l.starts_with("x-hasbro-")
+            || l.starts_with("x-mattel-")
+            || l.starts_with("x-fisherprice-")
+            || l.starts_with("x-nerf-")
+            || l.starts_with("x-barbie-")
+            || l.starts_with("x-hotwheels-")
+            || l.starts_with("x-tamagotchi-")
+            || l.starts_with("x-amiibo-")
+            || l.starts_with("x-rebirth-")
+            || l.starts_with("x-vividz-")
+            || l.starts_with("x-playmobil-")
+            || l.starts_with("x-lolsurprise-")
+            || l.starts_with("x-matchbox-")
+            || l.starts_with("x-funkopop-")
+            || l.starts_with("x-nendoroid-")
+            || l.starts_with("x-figma-")
+            || l.starts_with("x-shfiguarts-")
+            || l.starts_with("x-robotdamashii-")
+            || l.starts_with("x-metalbuild-")
+            || l.starts_with("x-soc-")
+            || l.starts_with("x-chogokin-")
+            || l.starts_with("x-hg-")
+            || l.starts_with("x-mg-")
+            || l.starts_with("x-pg-")
+            || l.starts_with("x-rg-")
+            || l.starts_with("x-eg-")
+            || l.starts_with("x-sd-")
+    })
+}
+
+/// `X-YellowSubmarine-*`/`X-CardLabo-*`/`X-RyuNoShippo-*`/
+/// `X-FullComp-*`/`X-Canaveral-*`/`X-Clove-*`/`X-Magi-*`/`X-Hareruya-*`/
+/// `X-Surugaya-*`/`X-Mandarake-*`/`X-Toranoana-*`/`X-Melonbooks-*`/
+/// `X-GeeStore-*`/`X-Amiami-*`/`X-HobbySearch-*`/`X-AsobiStore-*`/
+/// `X-PremiumBandai-*`/`X-HobbyJapan-*`/`X-KotobukiyaShop-*`/`X-Daiki-*`/
+/// `X-OrchidSeed-*`/`X-AlphaMax-*`/`X-WingScale-*`/`X-UnionCreative-*`/
+/// `X-Myethos-*`/`X-ApexToys-*`/`X-GSAS-*`/`X-BellFine-*`/`X-Furyu-*`/
+/// `X-Taito-*`/`X-SegaPrize-*`/`X-Banpresto-*`/`X-BPrize-*`/
+/// `X-IchibanKuji-*`/`X-CharaAni-*`/`X-AniplexPlus-*`/`X-KadokawaStore-*`/
+/// `X-HobbyStock-*` 等のホビーショップ・同人・カードショップ・
+/// プライズ印があるか判定する (D559)。
+///
+/// `X-Amiami-*` (あみあみ)、`X-Surugaya-*` (駿河屋)、`X-Mandarake-*`
+/// (まんだらけ) は趣機の通知記録 — 送信側から届くこれは自称。
+/// 在庫復活・抽選当選偽装はホビー詐欺の典型。
+fn has_hobby_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-yellowsubmarine-")
+            || l.starts_with("x-cardlabo-")
+            || l.starts_with("x-ryunoshippo-")
+            || l.starts_with("x-fullcomp-")
+            || l.starts_with("x-canaveral-")
+            || l.starts_with("x-clove-")
+            || l.starts_with("x-magi-")
+            || l.starts_with("x-hareruya-")
+            || l.starts_with("x-surugaya-")
+            || l.starts_with("x-mandarake-")
+            || l.starts_with("x-toranoana-")
+            || l.starts_with("x-melonbooks-")
+            || l.starts_with("x-geestore-")
+            || l.starts_with("x-amiami-")
+            || l.starts_with("x-hobbysearch-")
+            || l.starts_with("x-asobistore-")
+            || l.starts_with("x-premiumbandai-")
+            || l.starts_with("x-hobbyjapan-")
+            || l.starts_with("x-kotobukiyashop-")
+            || l.starts_with("x-daiki-")
+            || l.starts_with("x-orchidseed-")
+            || l.starts_with("x-alphamax-")
+            || l.starts_with("x-wingscale-")
+            || l.starts_with("x-unioncreative-")
+            || l.starts_with("x-myethos-")
+            || l.starts_with("x-apextoys-")
+            || l.starts_with("x-gsas-")
+            || l.starts_with("x-bellfine-")
+            || l.starts_with("x-furyu-")
+            || l.starts_with("x-taito-")
+            || l.starts_with("x-segaprize-")
+            || l.starts_with("x-banpresto-")
+            || l.starts_with("x-bprize-")
+            || l.starts_with("x-ichibankuji-")
+            || l.starts_with("x-charaani-")
+            || l.starts_with("x-aniplexplus-")
+            || l.starts_with("x-kadokawastore-")
+            || l.starts_with("x-hobbystock-")
+    })
+}
+
+/// `X-Takashimaya-*`/`X-Mitsukoshi-*`/`X-Isetan-*`/`X-Daimaru-*`/
+/// `X-Matsuzakaya-*`/`X-Sogo-*`/`X-Parco-*`/`X-Lumine-*`/`X-Marui-*`/
+/// `X-Laforet-*`/`X-Atre-*`/`X-Kitte-*`/`X-GinzaSix-*`/`X-Midtown-*`/
+/// `X-RoppongiHills-*`/`X-Solamachi-*`/`X-Lucua-*`/`X-GrandFront-*`/
+/// `X-Umeda-*`/`X-NambaParks-*`/`X-CanalCity-*`/`X-MitsuiOutlet-*`/
+/// `X-PremiumOutlets-*`/`X-Gotemba-*`/`X-Rinku-*`/`X-Sano-*`/
+/// `X-Kisarazu-*`/`X-Iruma-*`/`X-Fukaya-*`/`X-Shisui-*`/`X-Toki-*`/
+/// `X-JazzDream-*`/`X-SendaiPort-*`/`X-Tosu-*`/`X-KobeSanda-*`/
+/// `X-Tarumi-*`/`X-Marinepia-*`/`X-MinamiOsawa-*`/`X-Oarai-*`/
+/// `X-YokohamaBayside-*`/`X-Toua-*`/`X-OutletPark-*` 等の百貨店・
+/// アウトレット・商業施設印があるか判定する (D560)。
+///
+/// `X-Takashimaya-*` (高島屋)、`X-Mitsukoshi-*` (三越)、`X-Parco-*`
+/// (PARCO) は商機の通知記録 — 送信側から届くこれは自称。
+/// 外商・ポイント失効偽装は百貨店詐欺の典型。`X-AEON-*`/
+/// `X-Tokyu-*` 等の小売・鉄道系は D522/D525 で検出済み。
+fn has_department_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-takashimaya-")
+            || l.starts_with("x-mitsukoshi-")
+            || l.starts_with("x-isetan-")
+            || l.starts_with("x-daimaru-")
+            || l.starts_with("x-matsuzakaya-")
+            || l.starts_with("x-sogo-")
+            || l.starts_with("x-parco-")
+            || l.starts_with("x-lumine-")
+            || l.starts_with("x-marui-")
+            || l.starts_with("x-laforet-")
+            || l.starts_with("x-atre-")
+            || l.starts_with("x-kitte-")
+            || l.starts_with("x-ginzasix-")
+            || l.starts_with("x-midtown-")
+            || l.starts_with("x-roppongihills-")
+            || l.starts_with("x-solamachi-")
+            || l.starts_with("x-lucua-")
+            || l.starts_with("x-grandfront-")
+            || l.starts_with("x-umeda-")
+            || l.starts_with("x-nambaparks-")
+            || l.starts_with("x-canalcity-")
+            || l.starts_with("x-mitsuioutlet-")
+            || l.starts_with("x-premiumoutlets-")
+            || l.starts_with("x-gotemba-")
+            || l.starts_with("x-rinku-")
+            || l.starts_with("x-sano-")
+            || l.starts_with("x-kisarazu-")
+            || l.starts_with("x-iruma-")
+            || l.starts_with("x-fukaya-")
+            || l.starts_with("x-shisui-")
+            || l.starts_with("x-toki-")
+            || l.starts_with("x-jazzdream-")
+            || l.starts_with("x-sendaiport-")
+            || l.starts_with("x-tosu-")
+            || l.starts_with("x-kobesanda-")
+            || l.starts_with("x-tarumi-")
+            || l.starts_with("x-marinepia-")
+            || l.starts_with("x-minamiosawa-")
+            || l.starts_with("x-oarai-")
+            || l.starts_with("x-yokohamabayside-")
+            || l.starts_with("x-toua-")
+            || l.starts_with("x-outletpark-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -13904,6 +14176,72 @@ mod tests {
         assert!(has_manga_marks(b1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_manga_marks(clean));
+    }
+
+    #[test]
+    fn scan_は玩機印を検出する() {
+        let l1 = b"X-LEGO-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(l1));
+        let t1 = b"X-TakaraTomy-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(t1));
+        let b1 = b"X-Bandai-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(b1));
+        let g1 = b"X-GoodSmile-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(g1));
+        let k1 = b"X-Kotobukiya-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(k1));
+        let t2 = b"X-Tamiya-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(t2));
+        let t3 = b"X-Tomica-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(t3));
+        let n1 = b"X-Nendoroid-Notify: x\r\n\r\nx";
+        assert!(has_toy_marks(n1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_toy_marks(clean));
+    }
+
+    #[test]
+    fn scan_は趣機印を検出する() {
+        let a1 = b"X-Amiami-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(a1));
+        let s1 = b"X-Surugaya-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(s1));
+        let m1 = b"X-Mandarake-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(m1));
+        let y1 = b"X-YellowSubmarine-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(y1));
+        let t1 = b"X-Toranoana-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(t1));
+        let c1 = b"X-Clove-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(c1));
+        let h1 = b"X-Hareruya-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(h1));
+        let b1 = b"X-Banpresto-Notify: x\r\n\r\nx";
+        assert!(has_hobby_marks(b1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_hobby_marks(clean));
+    }
+
+    #[test]
+    fn scan_は商機印を検出する() {
+        let t1 = b"X-Takashimaya-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(t1));
+        let m1 = b"X-Mitsukoshi-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(m1));
+        let p1 = b"X-Parco-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(p1));
+        let i1 = b"X-Isetan-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(i1));
+        let d1 = b"X-Daimaru-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(d1));
+        let l1 = b"X-Lumine-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(l1));
+        let g1 = b"X-Gotemba-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(g1));
+        let r1 = b"X-RoppongiHills-Notify: x\r\n\r\nx";
+        assert!(has_department_marks(r1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_department_marks(clean));
     }
 }
 

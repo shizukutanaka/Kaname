@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D558: `X-LEGO-*`/`X-TakaraTomy-*`/`X-Bandai-*` 等の玩具・フィギュア・TCG 印自称が未検査
+
+- **問題**: `X-LEGO-*` (LEGO)、`X-TakaraTomy-*` (タカラトミー)、`X-Bandai-*` (バンダイ)、`X-GoodSmile-*`/`X-Kotobukiya-*`/`X-MegaHouse-*`/`X-Alter-*`/`X-PhatCompany-*`/`X-FREEing-*`/`X-QuesQ-*`/`X-Revolve-*`/`X-PopParade-*`/`X-Prime1Studio-*`/`X-HotToys-*`/`X-Sideshow-*`/`X-Funko-*`/`X-POPMART-*`/`X-Volks-*`/`X-Tamiya-*`/`X-Hasegawa-*`/`X-Aoshima-*`/`X-Fujimi-*`/`X-Wave-*`/`X-Plarail-*`/`X-Tomica-*`/`X-Licca-*`/`X-Sylvanian-*`/`X-Beyblade-*`/`X-DuelMasters-*`/`X-YuGiOh-*`/`X-MTG-*`/`X-Wizards-*`/`X-PokemonTCG-*`/`X-Cardfight-*`/`X-Bushiroad-*`/`X-WIXOSS-*`/`X-WeissSchwarz-*`/`X-OnePieceCard-*`/`X-Hasbro-*`/`X-Mattel-*`/`X-FisherPrice-*`/`X-Nerf-*`/`X-Barbie-*`/`X-HotWheels-*`/`X-Tamagotchi-*`/`X-Amiibo-*`/`X-ReBirth-*`/`X-Vividz-*`/`X-Playmobil-*`/`X-LOLSurprise-*`/`X-Matchbox-*`/`X-FunkoPop-*`/`X-Nendoroid-*`/`X-Figma-*`/`X-SHFiguarts-*`/`X-RobotDamashii-*`/`X-MetalBuild-*`/`X-SOC-*`/`X-Chogokin-*`/`X-HG-*`/`X-MG-*`/`X-PG-*`/`X-RG-*`/`X-EG-*`/`X-SD-*` は玩機の通知記録 — 送信側が書くことは自称。限定抽選・予約開始偽装は玩具詐欺の典型。(`X-BandaiNamco-*` 等のゲーム機は D473 で検出済み)
+- **修正**: `Envelope` に `toy_marks` + `has_toy_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 玩印の自署を問え。
+
+### Security — D559: `X-Amiami-*`/`X-Surugaya-*`/`X-Mandarake-*` 等のホビーショップ・同人・カードショップ・プライズ印自称が未検査
+
+- **問題**: `X-Amiami-*` (あみあみ)、`X-Surugaya-*` (駿河屋)、`X-Mandarake-*` (まんだらけ)、`X-YellowSubmarine-*`/`X-CardLabo-*`/`X-RyuNoShippo-*`/`X-FullComp-*`/`X-Canaveral-*`/`X-Clove-*`/`X-Magi-*`/`X-Hareruya-*`/`X-Toranoana-*`/`X-Melonbooks-*`/`X-GeeStore-*`/`X-HobbySearch-*`/`X-AsobiStore-*`/`X-PremiumBandai-*`/`X-HobbyJapan-*`/`X-KotobukiyaShop-*`/`X-Daiki-*`/`X-OrchidSeed-*`/`X-AlphaMax-*`/`X-WingScale-*`/`X-UnionCreative-*`/`X-Myethos-*`/`X-ApexToys-*`/`X-GSAS-*`/`X-BellFine-*`/`X-Furyu-*`/`X-Taito-*`/`X-SegaPrize-*`/`X-Banpresto-*`/`X-BPrize-*`/`X-IchibanKuji-*`/`X-CharaAni-*`/`X-AniplexPlus-*`/`X-KadokawaStore-*`/`X-HobbyStock-*` は趣機の通知記録 — 送信側が書くことは自称。在庫復活・抽選当選偽装はホビー詐欺の典型。
+- **修正**: `Envelope` に `hobby_marks` + `has_hobby_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 趣印の自署を問え。
+
+### Security — D560: `X-Takashimaya-*`/`X-Mitsukoshi-*`/`X-Parco-*` 等の百貨店・アウトレット・商業施設印自称が未検査
+
+- **問題**: `X-Takashimaya-*` (高島屋)、`X-Mitsukoshi-*` (三越)、`X-Parco-*` (PARCO)、`X-Isetan-*`/`X-Daimaru-*`/`X-Matsuzakaya-*`/`X-Sogo-*`/`X-Lumine-*`/`X-Marui-*`/`X-Laforet-*`/`X-Atre-*`/`X-Kitte-*`/`X-GinzaSix-*`/`X-Midtown-*`/`X-RoppongiHills-*`/`X-Solamachi-*`/`X-Lucua-*`/`X-GrandFront-*`/`X-Umeda-*`/`X-NambaParks-*`/`X-CanalCity-*`/`X-MitsuiOutlet-*`/`X-PremiumOutlets-*`/`X-Gotemba-*`/`X-Rinku-*`/`X-Sano-*`/`X-Kisarazu-*`/`X-Iruma-*`/`X-Fukaya-*`/`X-Shisui-*`/`X-Toki-*`/`X-JazzDream-*`/`X-SendaiPort-*`/`X-Tosu-*`/`X-KobeSanda-*`/`X-Tarumi-*`/`X-Marinepia-*`/`X-MinamiOsawa-*`/`X-Oarai-*`/`X-YokohamaBayside-*`/`X-Toua-*`/`X-OutletPark-*` は商機の通知記録 — 送信側が書くことは自称。外商・ポイント失効偽装は百貨店詐欺の典型。(`X-AEON-*`/`X-Tokyu-*` 等の小売・鉄道系は D522/D525 で検出済み)
+- **修正**: `Envelope` に `department_marks` + `has_department_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 商印の自署を問え。
+
+
 ### Security — D555: `X-HelloFresh-*`/`X-Oisix-*`/`X-Tabelog-*` 等のミールキット・食材宅配・グルメメディア印自称が未検査
 
 - **問題**: `X-HelloFresh-*` (HelloFresh)、`X-Oisix-*` (オイシックス)、`X-Tabelog-*` (食べログ)、`X-BlueApron-*`/`X-Gousto-*`/`X-MarleySpoon-*`/`X-EveryPlate-*`/`X-Freshly-*`/`X-Factor75-*`/`X-HomeChef-*`/`X-PurpleCarrot-*`/`X-Sakara-*`/`X-DailyHarvest-*`/`X-Hungryroot-*`/`X-nosh-*`/`X-Watami-*`/`X-RadishBooya-*`/`X-CoopDeli-*`/`X-PalSystem-*`/`X-DaichiWoMamoru-*`/`X-Gurunavi-*`/`X-HotPepper-*`/`X-Retty-*`/`X-Favy-*`/`X-Funpay-*`/`X-Luckey-*`/`X-Futto-*` は膳機の通知記録 — 送信側が書くことは自称。定期購入・解約・クーポン偽装は食材宅配詐欺の典型。
