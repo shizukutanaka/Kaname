@@ -628,6 +628,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D378: ESP 印 (第二群) 自称
+    if env.esp2_stamps {
+        render_risks.push(
+            "X-SparkPost-*/X-MSYS-API/X-SMTP2GO-* 等 — 配信基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D379: abuse 情報印自称
+    if env.abuseinfo_marks {
+        render_risks.push(
+            "X-Abuse-Info/X-Antiabuse/X-Complaints-Info 等 — 「監視窓口あり」体裁を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D380: 通知・状態印自称
+    if env.notice_marks {
+        render_risks.push(
+            "X-Spam-Notice/X-Virus-Notice/X-Message-Status 等 — 判定機の通知・状態を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

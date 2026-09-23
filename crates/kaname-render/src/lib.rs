@@ -141,6 +141,19 @@ pub struct Envelope {
     /// 自動生成印があるか — 「自動応答である」表示を送信側が書く
     /// 兆候 (D365)。
     pub autogen_marks: bool,
+    /// `X-SparkPost-*`/`X-MSYS-API`/`X-MailChannels-*`/`X-SMTP2GO-*`/
+    /// `X-SendPulse-*` 等の ESP 印 (第二群) があるか — 配信基盤の
+    /// 印を送信側が自称する兆候 (D378)。
+    pub esp2_stamps: bool,
+    /// `X-Abuse-Info:`/`X-Antiabuse:`/`X-Abuse-Contact:`/
+    /// `X-Complaints-Info:`/`X-Abuse-Report:` 等の abuse 情報印があるか
+    /// — 「監視窓口あり」の体裁を送信側が自称する兆候 (D379)。
+    pub abuseinfo_marks: bool,
+    /// `X-Spam-Notice:`/`X-Virus-Notice:`/`X-Message-Status:`/
+    /// `X-Message-Flag:`/`X-Antispam-Result:`/`X-Bulk:` 等の
+    /// 通知・状態印があるか — 判定機の通知を送信側が自称する
+    /// 兆候 (D380)。
+    pub notice_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -418,6 +431,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spam_detail_marks: has_spam_detail_marks(raw),
         dcc_marks: has_dcc_marks(raw),
         autogen_marks: has_autogen_marks(raw),
+        esp2_stamps: has_esp2_stamps(raw),
+        abuseinfo_marks: has_abuseinfo_marks(raw),
+        notice_marks: has_notice_marks(raw),
     })
 }
 
@@ -624,6 +640,71 @@ fn has_autogen_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autoresponder:")
             || l.starts_with("x-autoresponse-from:")
             || l.starts_with("x-vacation:")
+    })
+}
+
+/// `X-SparkPost-*`/`X-MSYS-API`/`X-MailChannels-*`/`X-SMTP2GO-*`/
+/// `X-SendPulse-*`/`X-SMTPCom-*` 等の ESP 印があるか判定する (D378)。
+///
+/// SparkPost/MailChannels/SMTP2GO 等の配信基盤が配送時に記す印 —
+/// 送信側から届くこれは「この配信基盤から発送した」体裁を内容側が
+/// 主張する自称 (D345 ESP 印の第二群)。
+fn has_esp2_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sparkpost-")
+            || l.starts_with("x-msys-api")
+            || l.starts_with("x-mailchannels-")
+            || l.starts_with("x-smtp2go-")
+            || l.starts_with("x-sendpulse-")
+            || l.starts_with("x-smtpcom-")
+    })
+}
+
+/// `X-Abuse-Info:`/`X-Antiabuse:`/`X-Abuse-Contact:`/
+/// `X-Complaints-Info:`/`X-Abuse-Report:`/`X-Anti-Abuse:` 等の
+/// abuse 情報印があるか判定する (D379)。
+///
+/// 「監視窓口あり」の体裁 — abuse 連絡情報は受信側・送信ドメインが
+/// 正当な経路で公表するものであり、内容側が書くのは体裁だけの自称
+/// (D327 abuse 窓口の第二群)。
+fn has_abuseinfo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-abuse-info:")
+            || l.starts_with("x-antiabuse:")
+            || l.starts_with("x-anti-abuse:")
+            || l.starts_with("x-abuse-contact:")
+            || l.starts_with("x-complaints-info:")
+            || l.starts_with("x-abuse-report:")
+    })
+}
+
+/// `X-Spam-Notice:`/`X-Virus-Notice:`/`X-Message-Status:`/
+/// `X-Message-Flag:`/`X-Antispam-Result:`/`X-Bulk:`/`X-Notice:` 等の
+/// 通知・状態印があるか判定する (D380)。
+///
+/// 判定機・受信側が状態の記録として記す値 — 送信側から届くこれは
+/// 「状態まで判定済み」体裁を内容側が主張する自称。
+fn has_notice_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spam-notice:")
+            || l.starts_with("x-virus-notice:")
+            || l.starts_with("x-message-status:")
+            || l.starts_with("x-message-flag:")
+            || l.starts_with("x-antispam-result:")
+            || l.starts_with("x-bulk:")
+            || l.starts_with("x-notice:")
     })
 }
 
@@ -2952,6 +3033,50 @@ mod tests {
         assert!(has_autogen_marks(vc));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_autogen_marks(clean));
+    }
+
+    #[test]
+    fn scan_はESP印2を検出する() {
+        let sp = b"X-SparkPost-Subaccount: 1\r\n\r\nx";
+        assert!(has_esp2_stamps(sp));
+        let ms = b"X-MSYS-API: {options}\r\n\r\nx";
+        assert!(has_esp2_stamps(ms));
+        let mc = b"X-MailChannels-Auth: u\r\n\r\nx";
+        assert!(has_esp2_stamps(mc));
+        let s2 = b"X-SMTP2GO-Message-ID: m\r\n\r\nx";
+        assert!(has_esp2_stamps(s2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp2_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はabuse情報印を検出する() {
+        let ai = b"X-Abuse-Info: contact us\r\n\r\nx";
+        assert!(has_abuseinfo_marks(ai));
+        let aa = b"X-Antiabuse: spam\r\n\r\nx";
+        assert!(has_abuseinfo_marks(aa));
+        let ac = b"X-Abuse-Contact: abuse@x\r\n\r\nx";
+        assert!(has_abuseinfo_marks(ac));
+        let ci = b"X-Complaints-Info: c\r\n\r\nx";
+        assert!(has_abuseinfo_marks(ci));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_abuseinfo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は通知印を検出する() {
+        let sn = b"X-Spam-Notice: spam\r\n\r\nx";
+        assert!(has_notice_marks(sn));
+        let vn = b"X-Virus-Notice: virus\r\n\r\nx";
+        assert!(has_notice_marks(vn));
+        let ms = b"X-Message-Status: nB!\r\n\r\nx";
+        assert!(has_notice_marks(ms));
+        let mf = b"X-Message-Flag: 1\r\n\r\nx";
+        assert!(has_notice_marks(mf));
+        let bk = b"X-Bulk: yes\r\n\r\nx";
+        assert!(has_notice_marks(bk));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_notice_marks(clean));
     }
 }
 
