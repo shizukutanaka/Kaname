@@ -683,6 +683,17 @@ pub struct ExtractedBodyText {
     /// アンカーテキストが URL 形で、そのドメインが実際のリンク先と
     /// 異なるリンク (URL 偽装 — 表示は正規サイト・実リンクは別ドメイン)。
     pub link_mismatches: Vec<LinkMismatch>,
+    /// `<form>`/`<input>`/`<button>`/`<select>` 等の操作要素が
+    /// 存在する (資格情報収集フォームの兆候 — サニタイザは要素を除去するが
+    /// 「フォームがあった」という兆候自体が検査情報になる)。
+    pub interactive_form: bool,
+    /// `<meta http-equiv="refresh">` による自動リダイレクトが存在する
+    /// (正規メールは本文にリダイレクトを埋め込まない — フィッシングの
+    /// 誘導経路として用いられる)。
+    pub meta_refresh: bool,
+    /// `mailto:` リンクの宛先アドレス群 (返信経路ハイジャック検出に使用)。
+    /// `?subject=` 等のクエリ部分は除いたアドレス本体のみ。
+    pub mailto_recipients: Vec<String>,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -748,6 +759,9 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
     let mut hrefs: Vec<&str> = Vec::new();
     let mut hidden_chars = 0usize;
     let mut link_mismatches: Vec<LinkMismatch> = Vec::new();
+    let mut interactive_form = false;
+    let mut meta_refresh = false;
+    let mut mailto_recipients: Vec<String> = Vec::new();
     // 可視 <a> の中では、アンカーテキストを別途バッファに集め、
     // 閉タグ時に「表示 URL と実リンク先のドメイン一致」を評価する (D162)。
     let mut current_anchor: Option<(&str, String)> = None;
@@ -797,6 +811,19 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         let lower = name.to_ascii_lowercase();
         let name = lower.as_str();
 
+        // D182/D183: 要素の存在そのものが兆候になるものを抽出とは
+        // 独立に記録する (サニタイズで落ちる要素でも「あった」事実は残る)。
+        if !is_end {
+            if matches!(name, "form" | "input" | "button" | "select") {
+                interactive_form = true;
+            } else if name == "meta"
+                && attr_value(tag_inner, "http-equiv")
+                    .is_some_and(|v| v.trim().eq_ignore_ascii_case("refresh"))
+            {
+                meta_refresh = true;
+            }
+        }
+
         if is_end {
             if name == "a" {
                 if let Some((href, buf)) = current_anchor.take() {
@@ -827,6 +854,15 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         let hidden = has_hiding_marker(tag_inner);
         if DROP_TAGS.contains(&name) || hidden {
             let (skipped, end) = skip_subtree(html, tag_end, name);
+            // D183: <meta refresh> は <head> 内に置かれるのが典型 — 丸ごと
+            // 捨てる前に、捨てた範囲だけを走査して兆候だけは記録する。
+            if name == "head" {
+                let frag_end = end.min(bytes.len());
+                let frag_start = tag_end.min(frag_end);
+                if contains_meta_refresh(&html[frag_start..frag_end]) {
+                    meta_refresh = true;
+                }
+            }
             if hidden && !DROP_TAGS.contains(&name) {
                 hidden_chars += skipped;
             }
@@ -845,6 +881,16 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         if name == "a" {
             if let Some(h) = attr_value(tag_inner, "href") {
                 hrefs.push(h);
+                // D184: mailto: リンク — 返信を別アドレスへ誘導する経路。
+                if let Some(rest) = h
+                    .trim()
+                    .to_ascii_lowercase()
+                    .starts_with("mailto:")
+                    .then(|| h.trim()[7..].to_string())
+                {
+                    let addr = rest.split('?').next().unwrap_or(rest.as_str());
+                    mailto_recipients.push(addr.trim().to_string());
+                }
                 if current_anchor.is_none() {
                     current_anchor = Some((h, String::new()));
                 }
@@ -868,6 +914,9 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
+        interactive_form,
+        meta_refresh,
+        mailto_recipients,
     }
 }
 
@@ -888,6 +937,23 @@ fn read_tag_name(html: &str, start: usize) -> &str {
     } else {
         &html[start..end]
     }
+}
+
+/// 捨てられた `<head>` 断片内に `<meta http-equiv="refresh">` があるか
+/// (D183 — リダイレクト兆候の記録専用)。タグ単位の単純走査。
+fn contains_meta_refresh(fragment: &str) -> bool {
+    let lower = fragment.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find("<meta") {
+        let tag_region = &rest[i..];
+        let tag_end = tag_region.find('>').map_or(tag_region.len(), |e| e + 1);
+        let tag = &tag_region[..tag_end];
+        if tag.contains("http-equiv") && tag.contains("refresh") {
+            return true;
+        }
+        rest = &rest[i + 1..];
+    }
+    false
 }
 
 /// 開タグ/単独タグの終端 `>` の直後位置を返す。クォート内の `>` は無視。
@@ -2324,6 +2390,65 @@ mod tests {
     fn scan_attachment_safe_pdf_not_dangerous() {
         let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
         assert!(!scan.is_dangerous);
+    }
+
+    // ---------- D182: HTML 内のフォーム/入力要素 ----------
+
+    #[test]
+    fn html_form_elements_detected() {
+        let e = html_to_text("<html><body><form action=\"https://evil.example/collect\"><input type=\"password\" name=\"pw\"><button>Login</button></form></body></html>");
+        assert!(e.interactive_form);
+        assert!(e.text.contains("Login"));
+    }
+
+    #[test]
+    fn html_input_only_detected_as_form() {
+        let e = html_to_text("<p>Enter card: <input name=\"cc\"></p>");
+        assert!(e.interactive_form);
+    }
+
+    #[test]
+    fn normal_html_no_interactive_form() {
+        let e = html_to_text("<html><body><p>Hello <a href=\"https://example.com\">link</a></p><table><tr><td>x</td></tr></table></body></html>");
+        assert!(!e.interactive_form);
+    }
+
+    // ---------- D183: meta refresh リダイレクト ----------
+
+    #[test]
+    fn meta_refresh_detected() {
+        let e = html_to_text(
+            "<html><head><meta http-equiv=\"refresh\" content=\"0;url=https://evil.example\"></head><body>x</body></html>",
+        );
+        assert!(e.meta_refresh);
+    }
+
+    #[test]
+    fn meta_charset_not_refresh() {
+        let e = html_to_text(
+            "<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"w\"></head><body>x</body></html>",
+        );
+        assert!(!e.meta_refresh);
+    }
+
+    // ---------- D184: mailto リンクの宛先収集 ----------
+
+    #[test]
+    fn mailto_recipients_collected() {
+        let e = html_to_text(
+            "<p>Reply: <a href=\"mailto:attacker@evil.example?subject=Confirm\">confirm</a></p>",
+        );
+        assert_eq!(e.mailto_recipients, vec!["attacker@evil.example"]);
+    }
+
+    #[test]
+    fn mailto_multiple_and_http_links() {
+        let e = html_to_text(
+            "<a href=\"mailto:a@x.example\">a</a><a href=\"https://ok.example\">b</a><a href=\"mailto:b@y.example\">c</a>",
+        );
+        assert_eq!(e.mailto_recipients.len(), 2);
+        assert!(e.mailto_recipients.contains(&"a@x.example".to_string()));
+        assert!(e.mailto_recipients.contains(&"b@y.example".to_string()));
     }
 }
 

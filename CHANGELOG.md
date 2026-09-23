@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D181: 複数 Reply-To アドレスによる返信先の曖昧化 (parser differential) を検出
+
+- From ヘッダの複数アドレスは D164 で検出したが、同じ手口が Reply-To にも成立する: `Reply-To: ceo@corp.example, attacker@evil.example` は実装ごとに採用アドレスが異なり、ユーザーの返信を別アドレスへ誘導できる (BEC の返信経路ハイジャック)。検査経路は `env.reply_to.first()` のみを見ていた
+- 対処: `env.reply_to.len() > 1` で `render_risks` に兆候報告
+- テスト +1 件 (kaname-ui E2E)
+
+### Security — D182: HTML 本文内のフォーム/入力要素 (資格情報収集フォーム) を検出
+
+- `<form>`/`<input>`/`<button>`/`<select>` のような操作要素はサニタイザが表示から除去するが、「フォームが埋め込まれていた」という兆候自体は報告されなかった。HTML メール内フォームは正規配信ではほぼ使われず、資格情報収集型フィッシングの定形 (Cofense/Talos 報告の HTML form campaigns)
+- 対処: `html_to_text` で操作要素の存在を `interactive_form` に記録 → `render_risks` に兆候報告
+- テスト +4 件
+
+### Security — D183: `<meta http-equiv="refresh">` による本文内自動リダイレクトを検出
+
+- meta refresh で受信直後に別 URL へ自動遷移させる手口はフィッシング誘導の定形 (正規メールは本文にリダイレクトを埋め込まない)。`<meta>` は `<head>` 内に置かれるのが典型で、従来の抽出処理は `<head>` を丸ごと破棄するため兆候自体を見ていなかった
+- 対処: `head` サブツリー破棄時に捨てた断片だけを走査する `contains_meta_refresh` を新設 → `meta_refresh` に記録 → `render_risks` に兆候報告
+- テスト +2 件
+
+### Security — D184: mailto: リンクが差出人と別ドメインへ返信を誘導 (返信経路ハイジャック) を検出
+
+- リンク評価は http(s) URL のみ — `mailto:` リンクは URL 検査を素通りしていた。「Reply to approve」ボタンが `mailto:attacker@evil.example` で攻撃者アドレスへ返信を誘導する手口は BEC フィッシングで報告されている (Group-IB 系の mailto phishing 観測)
+- 対処: `html_to_text` で `mailto:` 宛先を `mailto_recipients` に収集 → 宛先ドメインが From ドメインと異なる場合に `render_risks` に兆候報告
+- テスト +4 件
+
 ### Security — D166: 添付の実行・コンテナ拡張子欠落と RTLO ファイル名偽装を検出
 
 - `is_dangerous_windows_attachment` のリストに `.exe`/`.com`/`.jar` という最も基本的な直接実行形式が含まれておらず、`.exe` 添付は拡張子チェックを素通りしていた。併せて `.iso`/`.img`/`.vhd`/`.vhdx` コンテナ形式が未収録だった — コンテナ内ファイルは Mark-of-the-Web を継承しないため警告が減る MOTW bypass として 2023 年以降の主要配送経路 (Mandiant/Sekoia の Qbot・Pikabot・AgentTesla 解析で報告)

