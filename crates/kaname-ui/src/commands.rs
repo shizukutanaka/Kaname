@@ -542,6 +542,36 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     }
     // D164: 複数 From アドレス / Sender ヘッダ不整合の兆候。
     render_risks.extend(from_header_anomalies(&env));
+
+    // D249: 件名・表示名に URL 形 — リンク評価を通らない
+    // 「クリック不要・見せるだけ」の擬装経路
+    if has_url_like_text(&subject) {
+        render_risks.push("件名に URL 形文字列 — リンク評価を通らない擬装経路です".to_string());
+    }
+    if env.from.iter().any(|a| {
+        a.display_name
+            .as_deref()
+            .map(has_url_like_text)
+            .unwrap_or(false)
+    }) {
+        render_risks.push("差出人の表示名に URL 形文字列 — 表示名を装った擬装経路です".to_string());
+    }
+
+    // D250: Message-ID の形が不正 (手作りの生成品)
+    if message_id_is_malformed(&env) {
+        render_risks.push(
+            "Message-ID が <x@y> 形ではない — 正当な MTA が付ける形でない生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D251: In-Reply-To/References の参照 ID が Message-ID 形ではない
+    if has_malformed_thread_ref(&env) {
+        render_risks.push(
+            "In-Reply-To/References の参照 ID が Message-ID 形ではない — 手作りのスレッド注入の兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
@@ -1037,6 +1067,38 @@ fn extract_urls_from_text(text: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// 件名・表示名に URL 形文字列があるか判定する (D249)。
+///
+/// 本文外の表示欄に URL を見せると「リンク評価を通らない擬装
+/// 経路」になる — クリック不要・見せるだけの誘導。
+fn has_url_like_text(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("http://") || lower.contains("https://") || lower.contains("www.")
+}
+
+/// Message-ID が `<x@y>` 形か判定する (D250)。
+///
+/// 正当な MTA は `<local@domain>` 形の Message-ID を付ける —
+/// `@` を含まない値は手作りの生成品の兆候。
+fn message_id_is_malformed(env: &kaname_render::Envelope) -> bool {
+    env.message_id
+        .as_deref()
+        .map(|m| m.trim().is_empty() || !m.contains('@'))
+        .unwrap_or(false)
+}
+
+/// In-Reply-To/References の参照 ID が Message-ID 形ではないか
+/// 判定する (D251)。
+///
+/// スレッド乗っ取りで「過去の会話があった」体裁を作る手口 —
+/// `@` を含まない参照値は手作り注入の兆候。
+fn has_malformed_thread_ref(env: &kaname_render::Envelope) -> bool {
+    env.in_reply_to
+        .iter()
+        .chain(env.references.iter())
+        .any(|r| r.trim().is_empty() || !r.contains('@'))
 }
 
 /// D164: From ヘッダの複数アドレス / Sender ヘッダ不整合の兆候を返す。

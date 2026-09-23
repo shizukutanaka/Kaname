@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D249: 件名・表示名の URL 形文字列がリンク評価を素通り
+
+- `Subject: 確認 https://paypal.com/login` や `From: "https://paypal.com" <attacker@evil>` のように本文外の表示欄に URL を置くと「クリック不要・見せるだけ」の擬装経路になる — 本文 URL 抽出を起点とする評判判定・ドメイン照合を通らない
+- 対処: `has_url_like_text` 新設で `http(s)://`/`www.` を検出 → 件名・From 表示名を `render_risks` に兆候報告
+- テスト +0 件 (UI 層の組み合わせ)
+
+### Security — D250: Message-ID が `<x@y>` 形ではない生成品が未検査
+
+- 正当な MTA は `<local@domain>` 形の Message-ID を付ける — `@` を含まない値は手作り生成品の兆候 (スパムツールが Message-ID を持たない/架空の ID を入れる)
+- 対処: `message_id_is_malformed` 新設で `@` 不在・空値を `render_risks` に兆候報告
+- テスト +0 件 (UI 層の組み合わせ)
+
+### Security — D251: In-Reply-To/References の参照 ID が Message-ID 形ではない (手作りスレッド注入) が未検査
+
+- スレッド乗っ取りで「過去の会話があった」体裁を作る手口 — `@` を含まない参照値は手作り注入の兆候
+- 対処: `has_malformed_thread_ref` 新設で `render_risks` に兆候報告
+- テスト +0 件 (UI 層の組み合わせ)
+
 ### Security — D173: URL スキーム難読化 (hxxp / バックスラッシュ / 見せかけスキーム) を検出
 
 - 本文 URL 抽出は `http://`/`https://` 始まりのみを拾うため、フィッシングキットが使う **defanged スキーム `hxxp://`** と、ブラウザが `\` を `/` として受理する **`http:\evil.example`**・**`https:/\evil.example`** 系バックスラッシュ区切り、さらに **`httр://` (Cyrillic р U+0440)** のような見せかけスキームの 3 系統が評判判定・不一致検査の両方を素通りしていた (PhishLabs/Kaspersky 系で観測されるフィルタ回避の定形)
