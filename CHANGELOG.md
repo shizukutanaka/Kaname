@@ -8,6 +8,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D537: `X-Intel-*`/`X-NVIDIA-*`/`X-TSMC-*` 等の半導体・ストレージ印自称が未検査
+
+- **問題**: `X-Intel-*` (Intel)、`X-NVIDIA-*` (NVIDIA)、`X-TSMC-*` (TSMC)、`X-AMD-*`/`X-Qualcomm-*`/`X-Broadcom-*`/`X-Micron-*`/`X-TI-*`/`X-ST-*`/`X-NXP-*`/`X-Infineon-*`/`X-Renesas-*`/`X-Analog-*`/`X-Marvell-*`/`X-ARM-*`/`X-GlobalFoundries-*`/`X-UMC-*`/`X-SMIC-*`/`X-MediaTek-*`/`X-Skyworks-*`/`X-Qorvo-*`/`X-Realtek-*`/`X-Winbond-*`/`X-Cypress-*`/`X-Microchip-*`/`X-onsemi-*`/`X-ROHM-*`/`X-Kioxia-*`/`X-WesternDigital-*`/`X-Seagate-*`/`X-SanDisk-*`/`X-Kingston-*`/`X-ADATA-*`/`X-Transcend-*`/`X-Crucial-*`/`X-SKHynix-*`/`X-Solidigm-*` は半導体機の通知記録 — 送信側が書くことは自称。
+- **修正**: `Envelope` に `semiconductor_marks` + `has_semiconductor_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 半導体印の自署を問え。
+
+### Security — D538: `X-Siemens-*`/`X-Fanuc-*`/`X-Komatsu-*` 等の産業機械・重工・建機印自称が未検査
+
+- **問題**: `X-Siemens-*` (Siemens)、`X-Fanuc-*` (FANUC)、`X-Komatsu-*` (コマツ)、`X-ABB-*`/`X-Schneider-*`/`X-Honeywell-*`/`X-Emerson-*`/`X-Rockwell-*`/`X-Yokogawa-*`/`X-Omron-*`/`X-Keyence-*`/`X-MitsubishiElectric-*`/`X-Okuma-*`/`X-Makino-*`/`X-DMGMori-*`/`X-Amada-*`/`X-Kubota-*`/`X-Caterpillar-*`/`X-JohnDeere-*`/`X-JCB-*`/`X-SANY-*`/`X-XCMG-*`/`X-Zoomlion-*`/`X-Doosan-*`/`X-Tadano-*`/`X-Kobelco-*`/`X-Sumitomo-*`/`X-IHI-*`/`X-Kawasaki-*`/`X-JFE-*`/`X-NipponSteel-*`/`X-POSCO-*` は産業機の通知記録 — 送信側が書くことは自称。部品発注・納期通知偽装は製造業 BEC の典型。(`X-Hitachi-*`/`X-Toshiba-*` は D496 で検出済み)
+- **修正**: `Envelope` に `industrial_marks` + `has_industrial_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 産業印の自署を問え。
+
+### Security — D539: `X-Dell-*`/`X-Xerox-*`/`X-KonicaMinolta-*` 等の PC・オフィス機器・印刷・計測印自称が未検査
+
+- **問題**: `X-Dell-*` (Dell)、`X-Xerox-*` (Xerox)、`X-KonicaMinolta-*` (コニカミノルタ)、`X-HP-*`/`X-Lenovo-*`/`X-Acer-*`/`X-ASUS-*`/`X-MSI-*`/`X-Gigabyte-*`/`X-AOC-*`/`X-BenQ-*`/`X-ViewSonic-*`/`X-LG-*`/`X-RicohImaging-*`/`X-Lexmark-*`/`X-OKI-*`/`X-UTAX-*`/`X-ToshibaTEC-*`/`X-Mutoh-*`/`X-RolandDG-*`/`X-Graphtec-*`/`X-Mimaki-*`/`X-Zebra-*`/`X-Cognex-*`/`X-FaroArm-*`/`X-HexagonMI-*`/`X-KeyenceMI-*` は事務機の通知記録 — 送信側が書くことは自称。トナー・保守契約詐欺の典型印。(`X-Ricoh-*`/`X-Sharp-*`/`X-Canon-*`/`X-EPSON-*`/`X-Brother-*`/`X-Kyocera-*`/`X-Fujitsu-*`/`X-NEC-*`/`X-Toshiba-*`/`X-Panasonic-*`/`X-Sony-*` は D496 で検出済み)
+- **修正**: `Envelope` に `office_marks` + `has_office_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 事務印の自署を問え。
+
+
 ### Security — D534: `X-Ticketmaster-*`/`X-Eplus-*`/`X-LawsonTicket-*` 等のチケット販売・プレイガイド印自称が未検査
 
 - **問題**: `X-Ticketmaster-*` (Ticketmaster)、`X-Eplus-*` (イープラス)、`X-LawsonTicket-*` (ローチケ)、`X-LiveNation-*`/`X-StubHub-*`/`X-Viagogo-*`/`X-SeatGeek-*`/`X-TicketWeb-*`/`X-CNPlayGuide-*`/`X-RakutenTicket-*`/`X-AXS-*`/`X-SeeTickets-*`/`X-TicketOne-*`/`X-Ticketek-*`/`X-Ticketcorner-*`/`X-Eventim-*`/`X-Dice-*`/`X-GigsAndTours-*`/`X-Skiddle-*`/`X-TicketSellers-*`/`X-Gigsberg-*`/`X-TickPick-*`/`X-VividSeats-*`/`X-TicketCity-*`/`X-TicketNetwork-*`/`X-HelloTickets-*`/`X-TicketSwap-*`/`X-Tixr-*`/`X-ShowClix-*`/`X-SeeTix-*`/`X-TicketFairy-*`/`X-CrowdTix-*` は券機の通知記録 — 送信側が書くことは自称。当選・リセール詐欺の典型印。(`X-Eventbrite-*`/`X-Meetup-*` は D459、`X-Pia-*` は先行で検出済み)

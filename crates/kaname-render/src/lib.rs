@@ -1108,6 +1108,39 @@ pub struct Envelope {
     /// テーマパーク・公営競技・映画館・カラオケ・温浴印があるか —
     /// 娯楽機の通知記録を送信側が自称する兆候 (D536)。
     pub leisure_marks: bool,
+    /// `X-Intel-*`/`X-AMD-*`/`X-NVIDIA-*`/`X-Qualcomm-*`/`X-Broadcom-*`/
+    /// `X-Micron-*`/`X-TI-*`/`X-ST-*`/`X-NXP-*`/`X-Infineon-*`/`X-Renesas-*`/
+    /// `X-Analog-*`/`X-Marvell-*`/`X-ARM-*`/`X-TSMC-*`/`X-GlobalFoundries-*`/
+    /// `X-UMC-*`/`X-SMIC-*`/`X-MediaTek-*`/`X-Skyworks-*`/`X-Qorvo-*`/
+    /// `X-Realtek-*`/`X-Winbond-*`/`X-Cypress-*`/`X-Microchip-*`/`X-onsemi-*`/
+    /// `X-ROHM-*`/`X-Kioxia-*`/`X-WesternDigital-*`/`X-Seagate-*`/
+    /// `X-SanDisk-*`/`X-Kingston-*`/`X-ADATA-*`/`X-Transcend-*`/
+    /// `X-Crucial-*`/`X-SKHynix-*`/`X-Solidigm-*` 等の
+    /// 半導体・ストレージ印があるか — 半導体機の通知記録を送信側が
+    /// 自称する兆候 (D537)。
+    pub semiconductor_marks: bool,
+    /// `X-Siemens-*`/`X-ABB-*`/`X-Schneider-*`/`X-Honeywell-*`/`X-Emerson-*`/
+    /// `X-Rockwell-*`/`X-Yokogawa-*`/`X-Omron-*`/`X-Fanuc-*`/`X-Keyence-*`/
+    /// `X-MitsubishiElectric-*`/`X-Okuma-*`/`X-Makino-*`/`X-DMGMori-*`/
+    /// `X-Amada-*`/`X-Komatsu-*`/`X-Kubota-*`/`X-Caterpillar-*`/
+    /// `X-JohnDeere-*`/`X-JCB-*`/`X-SANY-*`/`X-XCMG-*`/`X-Zoomlion-*`/
+    /// `X-Doosan-*`/`X-Tadano-*`/`X-Kobelco-*`/`X-Sumitomo-*`/`X-IHI-*`/
+    /// `X-Kawasaki-*`/`X-JFE-*`/`X-NipponSteel-*`/`X-POSCO-*` 等の
+    /// 産業機械・重工・建機印があるか — 産業機の通知記録を送信側が
+    /// 自称する兆候 (D538)。(`X-Hitachi-*`/`X-Toshiba-*` は D496 で
+    /// 検出済み)
+    pub industrial_marks: bool,
+    /// `X-Dell-*`/`X-HP-*`/`X-Lenovo-*`/`X-Acer-*`/`X-ASUS-*`/`X-MSI-*`/
+    /// `X-Gigabyte-*`/`X-AOC-*`/`X-BenQ-*`/`X-ViewSonic-*`/`X-LG-*`/
+    /// `X-KonicaMinolta-*`/`X-RicohImaging-*`/`X-Lexmark-*`/`X-Xerox-*`/
+    /// `X-OKI-*`/`X-UTAX-*`/`X-ToshibaTEC-*`/`X-Mutoh-*`/`X-RolandDG-*`/
+    /// `X-Graphtec-*`/`X-Mimaki-*`/`X-FaroArm-*`/
+    /// `X-HexagonMI-*`/`X-KeyenceMI-*`/`X-Zebra-*`/`X-Cognex-*` 等の
+    /// PC・オフィス機器・印刷・計測印があるか — 事務機の通知記録を
+    /// 送信側が自称する兆候 (D539)。(`X-Ricoh-*`/`X-Sharp-*`/`X-Canon-*`/
+    /// `X-EPSON-*`/`X-Brother-*`/`X-Kyocera-*`/`X-Fujitsu-*`/`X-NEC-*`/
+    /// `X-Toshiba-*`/`X-Panasonic-*`/`X-Sony-*` は D496 で検出済み)
+    pub office_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -1505,6 +1538,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ticket_marks: has_ticket_marks(raw),
         hotel_marks: has_hotel_marks(raw),
         leisure_marks: has_leisure_marks(raw),
+        semiconductor_marks: has_semiconductor_marks(raw),
+        industrial_marks: has_industrial_marks(raw),
+        office_marks: has_office_marks(raw),
     })
 }
 
@@ -7061,6 +7097,165 @@ fn has_leisure_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Intel-*`/`X-AMD-*`/`X-NVIDIA-*`/`X-Qualcomm-*`/`X-Broadcom-*`/
+/// `X-Micron-*`/`X-TI-*`/`X-ST-*`/`X-NXP-*`/`X-Infineon-*`/`X-Renesas-*`/
+/// `X-Analog-*`/`X-Marvell-*`/`X-ARM-*`/`X-TSMC-*`/`X-GlobalFoundries-*`/
+/// `X-UMC-*`/`X-SMIC-*`/`X-MediaTek-*`/`X-Skyworks-*`/`X-Qorvo-*`/
+/// `X-Realtek-*`/`X-Winbond-*`/`X-Cypress-*`/`X-Microchip-*`/`X-onsemi-*`/
+/// `X-ROHM-*`/`X-Kioxia-*`/`X-WesternDigital-*`/`X-Seagate-*`/`X-SanDisk-*`/
+/// `X-Kingston-*`/`X-ADATA-*`/`X-Transcend-*`/`X-Crucial-*`/`X-SKHynix-*`/
+/// `X-Solidigm-*` 等の半導体・ストレージ印があるか判定する (D537)。
+///
+/// `X-Intel-*` (Intel)、`X-NVIDIA-*` (NVIDIA)、`X-SKHynix-*` (SK hynix) は
+/// 半導体機の通知記録 — 送信側から届くこれは自称。
+fn has_semiconductor_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-intel-")
+            || l.starts_with("x-amd-")
+            || l.starts_with("x-nvidia-")
+            || l.starts_with("x-qualcomm-")
+            || l.starts_with("x-broadcom-")
+            || l.starts_with("x-micron-")
+            || l.starts_with("x-ti-")
+            || l.starts_with("x-st-")
+            || l.starts_with("x-nxp-")
+            || l.starts_with("x-infineon-")
+            || l.starts_with("x-renesas-")
+            || l.starts_with("x-analog-")
+            || l.starts_with("x-marvell-")
+            || l.starts_with("x-arm-")
+            || l.starts_with("x-tsmc-")
+            || l.starts_with("x-globalfoundries-")
+            || l.starts_with("x-umc-")
+            || l.starts_with("x-smic-")
+            || l.starts_with("x-mediatek-")
+            || l.starts_with("x-skyworks-")
+            || l.starts_with("x-qorvo-")
+            || l.starts_with("x-realtek-")
+            || l.starts_with("x-winbond-")
+            || l.starts_with("x-cypress-")
+            || l.starts_with("x-microchip-")
+            || l.starts_with("x-onsemi-")
+            || l.starts_with("x-rohm-")
+            || l.starts_with("x-kioxia-")
+            || l.starts_with("x-westerndigital-")
+            || l.starts_with("x-seagate-")
+            || l.starts_with("x-sandisk-")
+            || l.starts_with("x-kingston-")
+            || l.starts_with("x-adata-")
+            || l.starts_with("x-transcend-")
+            || l.starts_with("x-crucial-")
+            || l.starts_with("x-skhynix-")
+            || l.starts_with("x-solidigm-")
+    })
+}
+
+/// `X-Siemens-*`/`X-ABB-*`/`X-Schneider-*`/`X-Honeywell-*`/`X-Emerson-*`/
+/// `X-Rockwell-*`/`X-Yokogawa-*`/`X-Omron-*`/`X-Fanuc-*`/`X-Keyence-*`/
+/// `X-MitsubishiElectric-*`/`X-Okuma-*`/`X-Makino-*`/`X-DMGMori-*`/
+/// `X-Amada-*`/`X-Komatsu-*`/`X-Kubota-*`/`X-Caterpillar-*`/`X-JohnDeere-*`/
+/// `X-JCB-*`/`X-SANY-*`/`X-XCMG-*`/`X-Zoomlion-*`/`X-Doosan-*`/`X-Tadano-*`/
+/// `X-Kobelco-*`/`X-Sumitomo-*`/`X-IHI-*`/`X-Kawasaki-*`/`X-JFE-*`/
+/// `X-NipponSteel-*`/`X-POSCO-*` 等の産業機械・重工・建機印があるか
+/// 判定する (D538)。
+///
+/// `X-Siemens-*` (Siemens)、`X-Fanuc-*` (FANUC)、`X-Komatsu-*`
+/// (コマツ) は産業機の通知記録 — 送信側から届くこれは自称。
+/// `X-Hitachi-*`/`X-Toshiba-*` は D496 で検出済み。
+fn has_industrial_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-siemens-")
+            || l.starts_with("x-abb-")
+            || l.starts_with("x-schneider-")
+            || l.starts_with("x-honeywell-")
+            || l.starts_with("x-emerson-")
+            || l.starts_with("x-rockwell-")
+            || l.starts_with("x-yokogawa-")
+            || l.starts_with("x-omron-")
+            || l.starts_with("x-fanuc-")
+            || l.starts_with("x-keyence-")
+            || l.starts_with("x-mitsubishielectric-")
+            || l.starts_with("x-okuma-")
+            || l.starts_with("x-makino-")
+            || l.starts_with("x-dmgmori-")
+            || l.starts_with("x-amada-")
+            || l.starts_with("x-komatsu-")
+            || l.starts_with("x-kubota-")
+            || l.starts_with("x-caterpillar-")
+            || l.starts_with("x-johndeere-")
+            || l.starts_with("x-jcb-")
+            || l.starts_with("x-sany-")
+            || l.starts_with("x-xcmg-")
+            || l.starts_with("x-zoomlion-")
+            || l.starts_with("x-doosan-")
+            || l.starts_with("x-tadano-")
+            || l.starts_with("x-kobelco-")
+            || l.starts_with("x-sumitomo-")
+            || l.starts_with("x-ihi-")
+            || l.starts_with("x-kawasaki-")
+            || l.starts_with("x-jfe-")
+            || l.starts_with("x-nipponsteel-")
+            || l.starts_with("x-posco-")
+    })
+}
+
+/// `X-Dell-*`/`X-HP-*`/`X-Lenovo-*`/`X-Acer-*`/`X-ASUS-*`/`X-MSI-*`/
+/// `X-Gigabyte-*`/`X-AOC-*`/`X-BenQ-*`/`X-ViewSonic-*`/`X-LG-*`/
+/// `X-KonicaMinolta-*`/`X-RicohImaging-*`/`X-Lexmark-*`/`X-Xerox-*`/
+/// `X-OKI-*`/`X-UTAX-*`/`X-ToshibaTEC-*`/`X-Mutoh-*`/`X-RolandDG-*`/
+/// `X-Graphtec-*`/`X-Mimaki-*`/`X-Zebra-*`/`X-Cognex-*`/`X-FaroArm-*`/
+/// `X-HexagonMI-*`/`X-KeyenceMI-*` 等の PC・オフィス機器・印刷・計測印が
+/// あるか判定する (D539)。
+///
+/// `X-Dell-*` (Dell)、`X-Xerox-*` (Xerox)、`X-KonicaMinolta-*`
+/// (コニカミノルタ) は事務機の通知記録 — 送信側から届くこれは自称。
+/// `X-Ricoh-*`/`X-Sharp-*`/`X-Canon-*`/`X-EPSON-*`/`X-Brother-*`/
+/// `X-Kyocera-*`/`X-Fujitsu-*`/`X-NEC-*`/`X-Toshiba-*`/`X-Panasonic-*`/
+/// `X-Sony-*` は D496 で検出済み。
+fn has_office_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dell-")
+            || l.starts_with("x-hp-")
+            || l.starts_with("x-lenovo-")
+            || l.starts_with("x-acer-")
+            || l.starts_with("x-asus-")
+            || l.starts_with("x-msi-")
+            || l.starts_with("x-gigabyte-")
+            || l.starts_with("x-aoc-")
+            || l.starts_with("x-benq-")
+            || l.starts_with("x-viewsonic-")
+            || l.starts_with("x-lg-")
+            || l.starts_with("x-konicaminolta-")
+            || l.starts_with("x-ricohimaging-")
+            || l.starts_with("x-lexmark-")
+            || l.starts_with("x-xerox-")
+            || l.starts_with("x-oki-")
+            || l.starts_with("x-utax-")
+            || l.starts_with("x-toshibatec-")
+            || l.starts_with("x-mutoh-")
+            || l.starts_with("x-rolanddg-")
+            || l.starts_with("x-graphtec-")
+            || l.starts_with("x-mimaki-")
+            || l.starts_with("x-zebra-")
+            || l.starts_with("x-cognex-")
+            || l.starts_with("x-faroarm-")
+            || l.starts_with("x-hexagonmi-")
+            || l.starts_with("x-keyencemi-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -11963,6 +12158,72 @@ mod tests {
         assert!(has_leisure_marks(g1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_leisure_marks(clean));
+    }
+
+    #[test]
+    fn scan_は半導体印を検出する() {
+        let i1 = b"X-Intel-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(i1));
+        let n1 = b"X-NVIDIA-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(n1));
+        let a1 = b"X-AMD-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(a1));
+        let t1 = b"X-TSMC-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(t1));
+        let m1 = b"X-MediaTek-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(m1));
+        let r1 = b"X-Renesas-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(r1));
+        let s1 = b"X-SKHynix-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(s1));
+        let k1 = b"X-Kioxia-Notify: x\r\n\r\nx";
+        assert!(has_semiconductor_marks(k1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_semiconductor_marks(clean));
+    }
+
+    #[test]
+    fn scan_は産業機印を検出する() {
+        let s1 = b"X-Siemens-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(s1));
+        let f1 = b"X-Fanuc-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(f1));
+        let k1 = b"X-Komatsu-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(k1));
+        let a1 = b"X-ABB-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(a1));
+        let k2 = b"X-Keyence-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(k2));
+        let y1 = b"X-Yokogawa-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(y1));
+        let k3 = b"X-Kubota-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(k3));
+        let p1 = b"X-POSCO-Notify: x\r\n\r\nx";
+        assert!(has_industrial_marks(p1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_industrial_marks(clean));
+    }
+
+    #[test]
+    fn scan_は事務機印を検出する() {
+        let d1 = b"X-Dell-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(d1));
+        let x1 = b"X-Xerox-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(x1));
+        let k1 = b"X-KonicaMinolta-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(k1));
+        let h1 = b"X-HP-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(h1));
+        let l1 = b"X-Lenovo-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(l1));
+        let a1 = b"X-ASUS-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(a1));
+        let z1 = b"X-Zebra-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(z1));
+        let m1 = b"X-Mimaki-Notify: x\r\n\r\nx";
+        assert!(has_office_marks(m1));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_office_marks(clean));
     }
 }
 
