@@ -1847,6 +1847,12 @@ pub struct Envelope {
     pub izakaya_marks: bool,
     /// `X-Jaf-*`/`X-Jafnavi-*`/`X-Jafcenter-*` 等のロードサービス・レッカー印を送信側が自称する兆候 (D667)
     pub roadside_marks: bool,
+    /// `X-Pachinkonavi-*`/`X-Pachinkocenter-*`/`X-Pachinkoshop-*` 等のパチンコ・パチスロ・ホール印を送信側が自称する兆候 (D668)
+    pub pachinko_marks: bool,
+    /// `X-Gyokyou-*`/`X-Gyokyounavi-*`/`X-Gyokyoucenter-*` 等の漁協・水産・魚市場印を送信側が自称する兆候 (D669)
+    pub fishery_marks: bool,
+    /// `X-Eiga-*`/`X-Eiganavi-*`/`X-Eigacenter-*` 等の映画館・シネコン印を送信側が自称する兆候 (D670)
+    pub cinema_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2392,6 +2398,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         nail_marks: has_nail_marks(hdr),
         izakaya_marks: has_izakaya_marks(hdr),
         roadside_marks: has_roadside_marks(hdr),
+        pachinko_marks: has_pachinko_marks(hdr),
+        fishery_marks: has_fishery_marks(hdr),
+        cinema_marks: has_cinema_marks(hdr),
     })
 }
 
@@ -17048,6 +17057,241 @@ fn has_roadside_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-jaffamily-"))
 }
 
+/// `X-Pachinkonavi-*`/`X-Pachinkocenter-*`/`X-Pachinkoshop-*`/`X-Pachinkopro-*`/`X-Pachisuro-*`/`X-Pachisuronavi-*`/`X-Pachisurocenter-*`/`X-Pachisuroshop-*`/`X-Pachisuropro-*`/`X-Hall-*`/`X-Hallnavi-*`/`X-Hallcenter-*`/`X-Hallshop-*`/`X-Hallpro-*`/`X-Parlor-*`/`X-Parlornavi-*`/`X-Parlorcenter-*`/`X-Parlorshop-*`/`X-Parlorpro-*`/`X-Slot-*`/`X-Slotnavi-*`/`X-Slotcenter-*`/`X-Slotshop-*`/`X-Slotpro-*`/`X-Maruhan-*`/`X-Dainavi-*`/`X-Dainam-*`/`X-Pworld-*`/`X-Pworldnavi-*`/`X-Pworldcenter-*`/`X-Pworldshop-*`/`X-Pworldpro-*`/`X-Gurume-*`/`X-Gurumekougyou-*`/`X-Undoukai-*`/`X-Kyoutei-*`/`X-Kyoteinavi-*`/`X-Kyoteicenter-*`/`X-Kappa-*`/`X-Kappanavi-*`/`X-Kappacenter-*`/`X-Kappashop-*`/`X-Kappapro-*`/`X-Pachimart-*`/`X-Pachiplus-*`/`X-Pachismart-*`/`X-Pachifamily-*`/`X-Slotmart-*`/`X-Slotplus-*`/`X-Slotsmart-*`/`X-Slotfamily-*`/`X-Nijyuu-*`/`X-Nijyuunavi-*`/`X-Nijyuucenter-*`/`X-Nijyuushop-*`/`X-Nijyuupro-*`/`X-Tamaya-*`/`X-Tamayanavi-*`/`X-Tamayacenter-*`/`X-Tamayashop-*`/`X-Tamayapro-*`/`X-Tamatsukuri-*`/`X-Tamanavi-*`/`X-Tamacenter-*`/`X-Tamashop-*`/`X-Tamapro-*`/`X-Hallmart-*`/`X-Hallplus-*`/`X-Hallsmart-*`/`X-Hallfamily-*` 等のパチンコ・パチスロ・ホール印を送信側が自称する兆候を検出する
+fn has_pachinko_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-pachinkonavi-")
+            || l.starts_with("x-pachinkocenter-")
+            || l.starts_with("x-pachinkoshop-")
+            || l.starts_with("x-pachinkopro-")
+            || l.starts_with("x-pachisuro-")
+            || l.starts_with("x-pachisuronavi-")
+            || l.starts_with("x-pachisurocenter-")
+            || l.starts_with("x-pachisuroshop-")
+            || l.starts_with("x-pachisuropro-")
+            || l.starts_with("x-hall-")
+            || l.starts_with("x-hallnavi-")
+            || l.starts_with("x-hallcenter-")
+            || l.starts_with("x-hallshop-")
+            || l.starts_with("x-hallpro-")
+            || l.starts_with("x-parlor-")
+            || l.starts_with("x-parlornavi-")
+            || l.starts_with("x-parlorcenter-")
+            || l.starts_with("x-parlorshop-")
+            || l.starts_with("x-parlorpro-")
+            || l.starts_with("x-slot-")
+            || l.starts_with("x-slotnavi-")
+            || l.starts_with("x-slotcenter-")
+            || l.starts_with("x-slotshop-")
+            || l.starts_with("x-slotpro-")
+            || l.starts_with("x-maruhan-")
+            || l.starts_with("x-dainavi-")
+            || l.starts_with("x-dainam-")
+            || l.starts_with("x-pworld-")
+            || l.starts_with("x-pworldnavi-")
+            || l.starts_with("x-pworldcenter-")
+            || l.starts_with("x-pworldshop-")
+            || l.starts_with("x-pworldpro-")
+            || l.starts_with("x-gurume-")
+            || l.starts_with("x-gurumekougyou-")
+            || l.starts_with("x-undoukai-")
+            || l.starts_with("x-kyoutei-")
+            || l.starts_with("x-kyoteinavi-")
+            || l.starts_with("x-kyoteicenter-")
+            || l.starts_with("x-kappa-")
+            || l.starts_with("x-kappanavi-")
+            || l.starts_with("x-kappacenter-")
+            || l.starts_with("x-kappashop-")
+            || l.starts_with("x-kappapro-")
+            || l.starts_with("x-pachimart-")
+            || l.starts_with("x-pachiplus-")
+            || l.starts_with("x-pachismart-")
+            || l.starts_with("x-pachifamily-")
+            || l.starts_with("x-slotmart-")
+            || l.starts_with("x-slotplus-")
+            || l.starts_with("x-slotsmart-")
+            || l.starts_with("x-slotfamily-")
+            || l.starts_with("x-nijyuu-")
+            || l.starts_with("x-nijyuunavi-")
+            || l.starts_with("x-nijyuucenter-")
+            || l.starts_with("x-nijyuushop-")
+            || l.starts_with("x-nijyuupro-")
+            || l.starts_with("x-tamaya-")
+            || l.starts_with("x-tamayanavi-")
+            || l.starts_with("x-tamayacenter-")
+            || l.starts_with("x-tamayashop-")
+            || l.starts_with("x-tamayapro-")
+            || l.starts_with("x-tamatsukuri-")
+            || l.starts_with("x-tamanavi-")
+            || l.starts_with("x-tamacenter-")
+            || l.starts_with("x-tamashop-")
+            || l.starts_with("x-tamapro-")
+            || l.starts_with("x-hallmart-")
+            || l.starts_with("x-hallplus-")
+            || l.starts_with("x-hallsmart-")
+            || l.starts_with("x-hallfamily-"))
+}
+
+/// `X-Gyokyou-*`/`X-Gyokyounavi-*`/`X-Gyokyoucenter-*`/`X-Gyokyoushop-*`/`X-Gyokyoupro-*`/`X-Suisan-*`/`X-Suisannavi-*`/`X-Suisancenter-*`/`X-Suisanshop-*`/`X-Suisanpro-*`/`X-Uoichiba-*`/`X-Uoichibanavi-*`/`X-Uoichibacenter-*`/`X-Uoichibashop-*`/`X-Uoichibapro-*`/`X-Fishmarket-*`/`X-Fishmarketnavi-*`/`X-Fishmarketcenter-*`/`X-Fishmarketshop-*`/`X-Fishmarketpro-*`/`X-Kaisen-*`/`X-Kaisennavi-*`/`X-Kaisencenter-*`/`X-Kaisenshop-*`/`X-Kaisenpro-*`/`X-Maguro-*`/`X-Maguronavi-*`/`X-Magurocenter-*`/`X-Maguroshop-*`/`X-Maguropro-*`/`X-Kani-*`/`X-Kaninavi-*`/`X-Kanicenter-*`/`X-Kanishop-*`/`X-Kanipro-*`/`X-Seafoods-*`/`X-Seafoodsnavi-*`/`X-Seafoodscenter-*`/`X-Seafoodsshop-*`/`X-Seafoodspro-*`/`X-Gyoson-*`/`X-Gyosonnavi-*`/`X-Gyosoncenter-*`/`X-Gyosonshop-*`/`X-Gyosonpro-*`/`X-Kichibapro-*`/`X-Gyokyomart-*`/`X-Gyokyoplus-*`/`X-Gyokyosmart-*`/`X-Gyokyofamily-*`/`X-Suisanmart-*`/`X-Suisanplus-*`/`X-Suisansmart-*`/`X-Suisanfamily-*`/`X-Minato-*`/`X-Minatonavi-*`/`X-Minatocenter-*`/`X-Minatoshop-*`/`X-Minatopro-*`/`X-Fushimi-*`/`X-Fushiminavi-*`/`X-Fushimicenter-*`/`X-Fushimishop-*`/`X-Fushimipro-*`/`X-Uotoshi-*`/`X-Uotoshinavi-*`/`X-Uotoshicenter-*`/`X-Uotoshishop-*`/`X-Uotoshipro-*` 等の漁協・水産・魚市場印を送信側が自称する兆候を検出する
+fn has_fishery_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-gyokyou-")
+            || l.starts_with("x-gyokyounavi-")
+            || l.starts_with("x-gyokyoucenter-")
+            || l.starts_with("x-gyokyoushop-")
+            || l.starts_with("x-gyokyoupro-")
+            || l.starts_with("x-suisan-")
+            || l.starts_with("x-suisannavi-")
+            || l.starts_with("x-suisancenter-")
+            || l.starts_with("x-suisanshop-")
+            || l.starts_with("x-suisanpro-")
+            || l.starts_with("x-uoichiba-")
+            || l.starts_with("x-uoichibanavi-")
+            || l.starts_with("x-uoichibacenter-")
+            || l.starts_with("x-uoichibashop-")
+            || l.starts_with("x-uoichibapro-")
+            || l.starts_with("x-fishmarket-")
+            || l.starts_with("x-fishmarketnavi-")
+            || l.starts_with("x-fishmarketcenter-")
+            || l.starts_with("x-fishmarketshop-")
+            || l.starts_with("x-fishmarketpro-")
+            || l.starts_with("x-kaisen-")
+            || l.starts_with("x-kaisennavi-")
+            || l.starts_with("x-kaisencenter-")
+            || l.starts_with("x-kaisenshop-")
+            || l.starts_with("x-kaisenpro-")
+            || l.starts_with("x-maguro-")
+            || l.starts_with("x-maguronavi-")
+            || l.starts_with("x-magurocenter-")
+            || l.starts_with("x-maguroshop-")
+            || l.starts_with("x-maguropro-")
+            || l.starts_with("x-kani-")
+            || l.starts_with("x-kaninavi-")
+            || l.starts_with("x-kanicenter-")
+            || l.starts_with("x-kanishop-")
+            || l.starts_with("x-kanipro-")
+            || l.starts_with("x-seafoods-")
+            || l.starts_with("x-seafoodsnavi-")
+            || l.starts_with("x-seafoodscenter-")
+            || l.starts_with("x-seafoodsshop-")
+            || l.starts_with("x-seafoodspro-")
+            || l.starts_with("x-gyoson-")
+            || l.starts_with("x-gyosonnavi-")
+            || l.starts_with("x-gyosoncenter-")
+            || l.starts_with("x-gyosonshop-")
+            || l.starts_with("x-gyosonpro-")
+            || l.starts_with("x-kichibapro-")
+            || l.starts_with("x-gyokyomart-")
+            || l.starts_with("x-gyokyoplus-")
+            || l.starts_with("x-gyokyosmart-")
+            || l.starts_with("x-gyokyofamily-")
+            || l.starts_with("x-suisanmart-")
+            || l.starts_with("x-suisanplus-")
+            || l.starts_with("x-suisansmart-")
+            || l.starts_with("x-suisanfamily-")
+            || l.starts_with("x-minato-")
+            || l.starts_with("x-minatonavi-")
+            || l.starts_with("x-minatocenter-")
+            || l.starts_with("x-minatoshop-")
+            || l.starts_with("x-minatopro-")
+            || l.starts_with("x-fushimi-")
+            || l.starts_with("x-fushiminavi-")
+            || l.starts_with("x-fushimicenter-")
+            || l.starts_with("x-fushimishop-")
+            || l.starts_with("x-fushimipro-")
+            || l.starts_with("x-uotoshi-")
+            || l.starts_with("x-uotoshinavi-")
+            || l.starts_with("x-uotoshicenter-")
+            || l.starts_with("x-uotoshishop-")
+            || l.starts_with("x-uotoshipro-"))
+}
+
+/// `X-Eiga-*`/`X-Eiganavi-*`/`X-Eigacenter-*`/`X-Eigashop-*`/`X-Eigapro-*`/`X-Cinema-*`/`X-Cinemanavi-*`/`X-Cinemacenter-*`/`X-Cinemashop-*`/`X-Cinemapro-*`/`X-Cinecon-*`/`X-Cineconnavi-*`/`X-Cineconcenter-*`/`X-Cineconshop-*`/`X-Cineconpro-*`/`X-Tohonavi-*`/`X-Tohocenter-*`/`X-Tohoshop-*`/`X-Tohopro-*`/`X-Movixnavi-*`/`X-Movixcenter-*`/`X-Movixshop-*`/`X-Movixpro-*`/`X-Piccadilly-*`/`X-Piccadillynavi-*`/`X-Piccadillycenter-*`/`X-Piccadillyshop-*`/`X-Piccadillypro-*`/`X-Unitedcinema-*`/`X-Cinemart-*`/`X-Cinemaplus-*`/`X-Cinemasmart-*`/`X-Cinemafamily-*`/`X-Screening-*`/`X-Screeningnavi-*`/`X-Screeningcenter-*`/`X-Screeningshop-*`/`X-Screeningpro-*`/`X-Minitheater-*`/`X-Eizou-*`/`X-Eizounavi-*`/`X-Eizoucenter-*`/`X-Eizoushop-*`/`X-Eizoupro-*`/`X-Eigakan-*`/`X-Eigakannavi-*`/`X-Eigakancenter-*`/`X-Eigakanshop-*`/`X-Eigakanpro-*`/`X-Screent-*`/`X-Screentnavi-*`/`X-Screentcenter-*`/`X-Screentshop-*`/`X-Screentpro-*`/`X-Ioncinema-*`/`X-Ioncinemanavi-*`/`X-Ioncinemacenter-*`/`X-Ioncinemashop-*`/`X-Ioncinemapro-*`/`X-Cinemanew-*`/`X-Cinemanewnavi-*`/`X-Cinemanewcenter-*`/`X-Cinemanewshop-*`/`X-Cinemanewpro-*`/`X-Matinee-*`/`X-Matineenavi-*`/`X-Matineecenter-*`/`X-Matineeshop-*`/`X-Matineepro-*` 等の映画館・シネコン印を送信側が自称する兆候を検出する
+fn has_cinema_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-eiga-")
+            || l.starts_with("x-eiganavi-")
+            || l.starts_with("x-eigacenter-")
+            || l.starts_with("x-eigashop-")
+            || l.starts_with("x-eigapro-")
+            || l.starts_with("x-cinema-")
+            || l.starts_with("x-cinemanavi-")
+            || l.starts_with("x-cinemacenter-")
+            || l.starts_with("x-cinemashop-")
+            || l.starts_with("x-cinemapro-")
+            || l.starts_with("x-cinecon-")
+            || l.starts_with("x-cineconnavi-")
+            || l.starts_with("x-cineconcenter-")
+            || l.starts_with("x-cineconshop-")
+            || l.starts_with("x-cineconpro-")
+            || l.starts_with("x-tohonavi-")
+            || l.starts_with("x-tohocenter-")
+            || l.starts_with("x-tohoshop-")
+            || l.starts_with("x-tohopro-")
+            || l.starts_with("x-movixnavi-")
+            || l.starts_with("x-movixcenter-")
+            || l.starts_with("x-movixshop-")
+            || l.starts_with("x-movixpro-")
+            || l.starts_with("x-piccadilly-")
+            || l.starts_with("x-piccadillynavi-")
+            || l.starts_with("x-piccadillycenter-")
+            || l.starts_with("x-piccadillyshop-")
+            || l.starts_with("x-piccadillypro-")
+            || l.starts_with("x-unitedcinema-")
+            || l.starts_with("x-cinemart-")
+            || l.starts_with("x-cinemaplus-")
+            || l.starts_with("x-cinemasmart-")
+            || l.starts_with("x-cinemafamily-")
+            || l.starts_with("x-screening-")
+            || l.starts_with("x-screeningnavi-")
+            || l.starts_with("x-screeningcenter-")
+            || l.starts_with("x-screeningshop-")
+            || l.starts_with("x-screeningpro-")
+            || l.starts_with("x-minitheater-")
+            || l.starts_with("x-eizou-")
+            || l.starts_with("x-eizounavi-")
+            || l.starts_with("x-eizoucenter-")
+            || l.starts_with("x-eizoushop-")
+            || l.starts_with("x-eizoupro-")
+            || l.starts_with("x-eigakan-")
+            || l.starts_with("x-eigakannavi-")
+            || l.starts_with("x-eigakancenter-")
+            || l.starts_with("x-eigakanshop-")
+            || l.starts_with("x-eigakanpro-")
+            || l.starts_with("x-screent-")
+            || l.starts_with("x-screentnavi-")
+            || l.starts_with("x-screentcenter-")
+            || l.starts_with("x-screentshop-")
+            || l.starts_with("x-screentpro-")
+            || l.starts_with("x-ioncinema-")
+            || l.starts_with("x-ioncinemanavi-")
+            || l.starts_with("x-ioncinemacenter-")
+            || l.starts_with("x-ioncinemashop-")
+            || l.starts_with("x-ioncinemapro-")
+            || l.starts_with("x-cinemanew-")
+            || l.starts_with("x-cinemanewnavi-")
+            || l.starts_with("x-cinemanewcenter-")
+            || l.starts_with("x-cinemanewshop-")
+            || l.starts_with("x-cinemanewpro-")
+            || l.starts_with("x-matinee-")
+            || l.starts_with("x-matineenavi-")
+            || l.starts_with("x-matineecenter-")
+            || l.starts_with("x-matineeshop-")
+            || l.starts_with("x-matineepro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -26374,5 +26618,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_roadside_marks(clean));
+    }
+    #[test]
+    fn scan_は玉機印を検出する() {
+        for raw in [
+            br"X-PachinkoNavi-Alert: 1",
+            br"X-Pachisuro-Notice: 1",
+            br"X-PachisuroNavi-Info: 1",
+            br"X-Hall-Report: 1",
+            br"X-Parlor-Bulletin: 1",
+            br"X-Slot-News: 1",
+            br"X-Maruhan-Flash: 1",
+            br"X-Pworld-Release: 1",
+        ] {
+            assert!(has_pachinko_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_pachinko_marks(clean));
+    }
+
+    #[test]
+    fn scan_は漁機印を検出する() {
+        for raw in [
+            br"X-Gyokyou-Alert: 1",
+            br"X-GyokyouNavi-Notice: 1",
+            br"X-Suisan-Info: 1",
+            br"X-Uoichiba-Report: 1",
+            br"X-FishMarket-Bulletin: 1",
+            br"X-Kaisen-News: 1",
+            br"X-Maguro-Flash: 1",
+            br"X-Kani-Release: 1",
+        ] {
+            assert!(has_fishery_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fishery_marks(clean));
+    }
+
+    #[test]
+    fn scan_は映機印を検出する() {
+        for raw in [
+            br"X-Eiga-Alert: 1",
+            br"X-EigaNavi-Notice: 1",
+            br"X-Cinema-Info: 1",
+            br"X-CinemaNavi-Report: 1",
+            br"X-Cinecon-Bulletin: 1",
+            br"X-Piccadilly-News: 1",
+            br"X-UnitedCinema-Flash: 1",
+            br"X-Eigakan-Release: 1",
+        ] {
+            assert!(has_cinema_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_cinema_marks(clean));
     }
 }
