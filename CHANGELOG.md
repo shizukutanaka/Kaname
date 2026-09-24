@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D809: `X-Chuushajou-*`/`X-Tsukigime-*`/`X-Chuushakeiei-*`/`X-Monthlyparking-*`/`X-Parkingmanagement-*`/`X-Parkmanage-*` 等の駐車場経営・月極駐車印自称が未検査
+
+- **問題**: `X-Chuushajou-*`/`X-ChuushajouYasan-*`/`X-ChuushajouPro-*`/`X-ChuushajouTeam-*`/`X-ChuushajouJP-*`/`X-ChuushajouSenmon-*`/`X-Tsukigime-*`/`X-TsukigimeYasan-*`/`X-TsukigimePro-*`/`X-TsukigimeTeam-*`/`X-TsukigimeJP-*`/`X-TsukigimeSenmon-*`/`X-Chuushakeiei-*`/`X-ChuushakeieiYasan-*`/`X-ChuushakeieiPro-*`/`X-ChuushakeieiTeam-*`/`X-ChuushakeieiJP-*`/`X-ChuushakeieiSenmon-*`/`X-MonthlyparkingPros-*`/`X-MonthlyparkingTeam-*`/`X-MonthlyparkingWorks-*`/`X-MonthlyparkingExperts-*`/`X-MonthlyparkingSvc-*`/`X-MonthlyparkingHQ-*`/`X-ParkingmanagementPros-*`/`X-ParkingmanagementTeam-*`/`X-ParkingmanagementWorks-*`/`X-ParkingmanagementExperts-*`/`X-ParkingmanagementSvc-*`/`X-ParkingmanagementHQ-*`/`X-ParkmanagePros-*`/`X-ParkmanageTeam-*`/`X-ParkmanageWorks-*`/`X-ParkmanageExperts-*`/`X-ParkmanageSvc-*`/`X-ParkmanageHQ-*` 等 は駐機の通知記録 — 送信側が書くことは自称。駐車場経営・月極駐車業者の偽装は、駐車料金未払い請求・違法駐車撤去費・賃料催促を装ったなりすましの典型手口。(月極以外の駐車系 `x-parkinglot-` は parking 機所有のため別形のみ収録)
+- **修正**: `Envelope` に `chuushajou_marks` + `has_chuushajou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 駐印の自署を問え。
+
+### Security — D810: `X-Chintaihoshou-*`/`X-Yachinhoshou-*`/`X-Hoshougaisha-*`/`X-Rentguarantee-*`/`X-Rentguarantor-*`/`X-Guarantor-*` 等の家賃保証・保証会社印自称が未検査
+
+- **問題**: `X-Chintaihoshou-*`/`X-ChintaihoshouYasan-*`/`X-ChintaihoshouPro-*`/`X-ChintaihoshouTeam-*`/`X-ChintaihoshouJP-*`/`X-ChintaihoshouSenmon-*`/`X-Yachinhoshou-*`/`X-YachinhoshouYasan-*`/`X-YachinhoshouPro-*`/`X-YachinhoshouTeam-*`/`X-YachinhoshouJP-*`/`X-YachinhoshouSenmon-*`/`X-Hoshougaisha-*`/`X-HoshougaishaYasan-*`/`X-HoshougaishaPro-*`/`X-HoshougaishaTeam-*`/`X-HoshougaishaJP-*`/`X-HoshougaishaSenmon-*`/`X-RentguaranteePros-*`/`X-RentguaranteeTeam-*`/`X-RentguaranteeWorks-*`/`X-RentguaranteeExperts-*`/`X-RentguaranteeSvc-*`/`X-RentguaranteeHQ-*`/`X-RentguarantorPros-*`/`X-RentguarantorTeam-*`/`X-RentguarantorWorks-*`/`X-RentguarantorExperts-*`/`X-RentguarantorSvc-*`/`X-RentguarantorHQ-*`/`X-GuarantorPros-*`/`X-GuarantorTeam-*`/`X-GuarantorWorks-*`/`X-GuarantorExperts-*`/`X-GuarantorSvc-*`/`X-GuarantorHQ-*` 等 は賃機の通知記録 — 送信側が書くことは自称。家賃保証会社の偽装は、滞納家賃請求・保証料支払い・退去費用を装ったなりすましの典型手口。(不動産は realestate 機、債権回収は collection 機で検出済み)
+- **修正**: `Envelope` に `chintaihoshou_marks` + `has_chintaihoshou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 賃印の自署を問え。
+
+### Security — D811: `X-Tachinoki-*`/`X-Akewatashi-*`/`X-Akedashi-*`/`X-Eviction-*`/`X-Tenanteviction-*`/`X-Vacate-*` 等の立ち退き・明渡し印自称が未検査
+
+- **問題**: `X-Tachinoki-*`/`X-TachinokiYasan-*`/`X-TachinokiPro-*`/`X-TachinokiTeam-*`/`X-TachinokiJP-*`/`X-TachinokiSenmon-*`/`X-Akewatashi-*`/`X-AkewatashiYasan-*`/`X-AkewatashiPro-*`/`X-AkewatashiTeam-*`/`X-AkewatashiJP-*`/`X-AkewatashiSenmon-*`/`X-Akedashi-*`/`X-AkedashiYasan-*`/`X-AkedashiPro-*`/`X-AkedashiTeam-*`/`X-AkedashiJP-*`/`X-AkedashiSenmon-*`/`X-EvictionPros-*`/`X-EvictionTeam-*`/`X-EvictionWorks-*`/`X-EvictionExperts-*`/`X-EvictionSvc-*`/`X-EvictionHQ-*`/`X-TenantevictionPros-*`/`X-TenantevictionTeam-*`/`X-TenantevictionWorks-*`/`X-TenantevictionExperts-*`/`X-TenantevictionSvc-*`/`X-TenantevictionHQ-*`/`X-VacatePros-*`/`X-VacateTeam-*`/`X-VacateWorks-*`/`X-VacateExperts-*`/`X-VacateSvc-*`/`X-VacateHQ-*` 等 は立機の通知記録 — 送信側が書くことは自称。立ち退き・明渡し業者の偽装は、立退料交渉費・強制執行費用・残置物処分費を装ったなりすましの典型手口。(不動産は realestate 機、法律は legal 機、債権回収は collection 機で検出済み)
+- **修正**: `Envelope` に `tachinoki_marks` + `has_tachinoki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 立印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

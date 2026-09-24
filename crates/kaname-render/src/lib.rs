@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub chuushajou_marks: bool,
+    pub chintaihoshou_marks: bool,
+    pub tachinoki_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        chuushajou_marks: has_chuushajou_marks(hdr),
+        chintaihoshou_marks: has_chintaihoshou_marks(hdr),
+        tachinoki_marks: has_tachinoki_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_chuushajou_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-chuushajou-")
+            || l.starts_with("x-chuushajouyasan-")
+            || l.starts_with("x-chuushajoupro-")
+            || l.starts_with("x-chuushajouteam-")
+            || l.starts_with("x-chuushajoukensa-")
+            || l.starts_with("x-chuushajoumanten-")
+            || l.starts_with("x-chuushajounomi-")
+            || l.starts_with("x-chuushajoujp-")
+            || l.starts_with("x-chuushajousenmon-")
+            || l.starts_with("x-chuushajoumitsumori-")
+            || l.starts_with("x-chuushajouchousa-")
+            || l.starts_with("x-chuushajouteiki-")
+            || l.starts_with("x-chuushajoupros-")
+            || l.starts_with("x-chuushajoudoctors-")
+            || l.starts_with("x-chuushajourescue-")
+            || l.starts_with("x-tsukigime-")
+            || l.starts_with("x-tsukigimeyasan-")
+            || l.starts_with("x-tsukigimepro-")
+            || l.starts_with("x-tsukigimeteam-")
+            || l.starts_with("x-tsukigimejp-")
+            || l.starts_with("x-tsukigimesenmon-")
+            || l.starts_with("x-tsukigimepros-")
+            || l.starts_with("x-tsukigimedoctors-")
+            || l.starts_with("x-tsukigimerescue-")
+            || l.starts_with("x-chuushakeiei-")
+            || l.starts_with("x-chuushakeieiyasan-")
+            || l.starts_with("x-chuushakeieipro-")
+            || l.starts_with("x-chuushakeieiteam-")
+            || l.starts_with("x-chuushakeieijp-")
+            || l.starts_with("x-chuushakeieisenmon-")
+            || l.starts_with("x-chuushakeieipros-")
+            || l.starts_with("x-chuushakeieidoctors-")
+            || l.starts_with("x-chuushakeieirescue-")
+            || l.starts_with("x-monthlyparkingpros-")
+            || l.starts_with("x-monthlyparkingteam-")
+            || l.starts_with("x-monthlyparkingworks-")
+            || l.starts_with("x-monthlyparkingexperts-")
+            || l.starts_with("x-monthlyparkingsvc-")
+            || l.starts_with("x-monthlyparkinghq-")
+            || l.starts_with("x-parkingmanagementpros-")
+            || l.starts_with("x-parkingmanagementteam-")
+            || l.starts_with("x-parkingmanagementworks-")
+            || l.starts_with("x-parkingmanagementexperts-")
+            || l.starts_with("x-parkingmanagementsvc-")
+            || l.starts_with("x-parkingmanagementhq-")
+            || l.starts_with("x-parkmanagepros-")
+            || l.starts_with("x-parkmanageteam-")
+            || l.starts_with("x-parkmanageworks-")
+            || l.starts_with("x-parkmanageexperts-")
+            || l.starts_with("x-parkmanagesvc-")
+            || l.starts_with("x-parkmanagehq-")
+    })
+}
+
+fn has_chintaihoshou_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-chintaihoshou-")
+            || l.starts_with("x-chintaihoshouyasan-")
+            || l.starts_with("x-chintaihoshoupro-")
+            || l.starts_with("x-chintaihoshouteam-")
+            || l.starts_with("x-chintaihoshoukensa-")
+            || l.starts_with("x-chintaihoshoumanten-")
+            || l.starts_with("x-chintaihoshounomi-")
+            || l.starts_with("x-chintaihoshoujp-")
+            || l.starts_with("x-chintaihoshousenmon-")
+            || l.starts_with("x-chintaihoshoumitsumori-")
+            || l.starts_with("x-chintaihoshouchousa-")
+            || l.starts_with("x-chintaihoshouteiki-")
+            || l.starts_with("x-chintaihoshoupros-")
+            || l.starts_with("x-chintaihoshoudoctors-")
+            || l.starts_with("x-chintaihoshourescue-")
+            || l.starts_with("x-yachinhoshou-")
+            || l.starts_with("x-yachinhoshouyasan-")
+            || l.starts_with("x-yachinhoshoupro-")
+            || l.starts_with("x-yachinhoshouteam-")
+            || l.starts_with("x-yachinhoshoujp-")
+            || l.starts_with("x-yachinhoshousenmon-")
+            || l.starts_with("x-yachinhoshoupros-")
+            || l.starts_with("x-yachinhoshoudoctors-")
+            || l.starts_with("x-yachinhoshourescue-")
+            || l.starts_with("x-hoshougaisha-")
+            || l.starts_with("x-hoshougaishayasan-")
+            || l.starts_with("x-hoshougaishapro-")
+            || l.starts_with("x-hoshougaishateam-")
+            || l.starts_with("x-hoshougaishajp-")
+            || l.starts_with("x-hoshougaishasenmon-")
+            || l.starts_with("x-hoshougaishapros-")
+            || l.starts_with("x-hoshougaishadoctors-")
+            || l.starts_with("x-hoshougaisharescue-")
+            || l.starts_with("x-rentguaranteepros-")
+            || l.starts_with("x-rentguaranteeteam-")
+            || l.starts_with("x-rentguaranteeworks-")
+            || l.starts_with("x-rentguaranteeexperts-")
+            || l.starts_with("x-rentguaranteesvc-")
+            || l.starts_with("x-rentguaranteehq-")
+            || l.starts_with("x-rentguarantorpros-")
+            || l.starts_with("x-rentguarantorteam-")
+            || l.starts_with("x-rentguarantorworks-")
+            || l.starts_with("x-rentguarantorexperts-")
+            || l.starts_with("x-rentguarantorsvc-")
+            || l.starts_with("x-rentguarantorhq-")
+            || l.starts_with("x-guarantorpros-")
+            || l.starts_with("x-guarantorteam-")
+            || l.starts_with("x-guarantorworks-")
+            || l.starts_with("x-guarantorexperts-")
+            || l.starts_with("x-guarantorsvc-")
+            || l.starts_with("x-guarantorhq-")
+    })
+}
+
+fn has_tachinoki_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tachinoki-")
+            || l.starts_with("x-tachinokiyasan-")
+            || l.starts_with("x-tachinokipro-")
+            || l.starts_with("x-tachinokiteam-")
+            || l.starts_with("x-tachinokikensa-")
+            || l.starts_with("x-tachinokimanten-")
+            || l.starts_with("x-tachinokinomi-")
+            || l.starts_with("x-tachinokijp-")
+            || l.starts_with("x-tachinokisenmon-")
+            || l.starts_with("x-tachinokimitsumori-")
+            || l.starts_with("x-tachinokichousa-")
+            || l.starts_with("x-tachinokiteiki-")
+            || l.starts_with("x-tachinokipros-")
+            || l.starts_with("x-tachinokidoctors-")
+            || l.starts_with("x-tachinokirescue-")
+            || l.starts_with("x-akewatashi-")
+            || l.starts_with("x-akewatashiyasan-")
+            || l.starts_with("x-akewatashipro-")
+            || l.starts_with("x-akewatashiteam-")
+            || l.starts_with("x-akewatashijp-")
+            || l.starts_with("x-akewatashisenmon-")
+            || l.starts_with("x-akewatashipros-")
+            || l.starts_with("x-akewatashidoctors-")
+            || l.starts_with("x-akewatashirescue-")
+            || l.starts_with("x-akedashi-")
+            || l.starts_with("x-akedashiyasan-")
+            || l.starts_with("x-akedashipro-")
+            || l.starts_with("x-akedashiteam-")
+            || l.starts_with("x-akedashijp-")
+            || l.starts_with("x-akedashisenmon-")
+            || l.starts_with("x-akedashipros-")
+            || l.starts_with("x-akedashidoctors-")
+            || l.starts_with("x-akedashirescue-")
+            || l.starts_with("x-evictionpros-")
+            || l.starts_with("x-evictionteam-")
+            || l.starts_with("x-evictionworks-")
+            || l.starts_with("x-evictionexperts-")
+            || l.starts_with("x-evictionsvc-")
+            || l.starts_with("x-evictionhq-")
+            || l.starts_with("x-tenantevictionpros-")
+            || l.starts_with("x-tenantevictionteam-")
+            || l.starts_with("x-tenantevictionworks-")
+            || l.starts_with("x-tenantevictionexperts-")
+            || l.starts_with("x-tenantevictionsvc-")
+            || l.starts_with("x-tenantevictionhq-")
+            || l.starts_with("x-vacatepros-")
+            || l.starts_with("x-vacateteam-")
+            || l.starts_with("x-vacateworks-")
+            || l.starts_with("x-vacateexperts-")
+            || l.starts_with("x-vacatesvc-")
+            || l.starts_with("x-vacatehq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は駐機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Chuushajou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ChuushajouPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukigimeYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ChuushakeieiTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MonthlyparkingPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ParkingmanagementHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ChuushajouSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ParkmanageExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_chuushajou_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_chuushajou_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は賃機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Chintaihoshou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ChintaihoshouPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-YachinhoshouYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HoshougaishaTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-RentguaranteePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-RentguarantorHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ChintaihoshouSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GuarantorExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_chintaihoshou_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_chintaihoshou_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は立機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Tachinoki-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TachinokiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AkewatashiYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AkedashiTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-EvictionPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TenantevictionHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TachinokiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-VacateExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_tachinoki_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_tachinoki_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
