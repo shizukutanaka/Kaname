@@ -1913,6 +1913,12 @@ pub struct Envelope {
     pub fight_marks: bool,
     /// `X-Bouldering-*`/`X-Climbing-*`/`X-Skate-*` 等のクライミング・フットサル・室内スポーツ印を送信側が自称する兆候 (D700)
     pub climbing_marks: bool,
+    /// `X-Minpaku-*`/`X-Vacationrental-*`/`X-Villa-*` 等の民泊・旅館・グランピング印を送信側が自称する兆候 (D701)
+    pub minpaku_marks: bool,
+    /// `X-Maidcafe-*`/`X-Concafe-*`/`X-Cosplay-*` 等のメイドカフェ・コンカフェ・コスプレ印を送信側が自称する兆候 (D702)
+    pub maidcafe_marks: bool,
+    /// `X-Shinkyuu-*`/`X-Harikyuu-*`/`X-Kyuu-*` 等の鍼灸・漢方・東洋医学印を送信側が自称する兆候 (D703)
+    pub shinkyuu_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2491,6 +2497,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         netcafe_marks: has_netcafe_marks(hdr),
         fight_marks: has_fight_marks(hdr),
         climbing_marks: has_climbing_marks(hdr),
+        minpaku_marks: has_minpaku_marks(hdr),
+        maidcafe_marks: has_maidcafe_marks(hdr),
+        shinkyuu_marks: has_shinkyuu_marks(hdr),
     })
 }
 
@@ -19566,6 +19575,216 @@ fn has_climbing_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-rinkplus-"))
 }
 
+fn has_minpaku_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-minpaku-")
+            || l.starts_with("x-vacationrental-")
+            || l.starts_with("x-villa-")
+            || l.starts_with("x-cottage-")
+            || l.starts_with("x-glamping-")
+            || l.starts_with("x-ryokan-")
+            || l.starts_with("x-minshuku-")
+            || l.starts_with("x-auberge-")
+            || l.starts_with("x-besso-")
+            || l.starts_with("x-hatago-")
+            || l.starts_with("x-kominka-")
+            || l.starts_with("x-machiya-")
+            || l.starts_with("x-kokuminshukusha-")
+            || l.starts_with("x-minpakunavi-")
+            || l.starts_with("x-minpakucenter-")
+            || l.starts_with("x-minpakushop-")
+            || l.starts_with("x-minpakupro-")
+            || l.starts_with("x-minpakumart-")
+            || l.starts_with("x-minpakuplus-")
+            || l.starts_with("x-minpakusmart-")
+            || l.starts_with("x-minpakufamily-")
+            || l.starts_with("x-vacationrentalnavi-")
+            || l.starts_with("x-vacationrentalcenter-")
+            || l.starts_with("x-vacationrentalshop-")
+            || l.starts_with("x-vacationrentalpro-")
+            || l.starts_with("x-vacationrentalmart-")
+            || l.starts_with("x-vacationrentalplus-")
+            || l.starts_with("x-vacationrentalsmart-")
+            || l.starts_with("x-vacationrentalfamily-")
+            || l.starts_with("x-villanavi-")
+            || l.starts_with("x-villacenter-")
+            || l.starts_with("x-villashop-")
+            || l.starts_with("x-villapro-")
+            || l.starts_with("x-villamart-")
+            || l.starts_with("x-villaplus-")
+            || l.starts_with("x-villasmart-")
+            || l.starts_with("x-villafamily-")
+            || l.starts_with("x-cottagenavi-")
+            || l.starts_with("x-cottagecenter-")
+            || l.starts_with("x-cottageshop-")
+            || l.starts_with("x-cottagepro-")
+            || l.starts_with("x-cottagemart-")
+            || l.starts_with("x-cottageplus-")
+            || l.starts_with("x-cottagesmart-")
+            || l.starts_with("x-cottagefamily-")
+            || l.starts_with("x-glampingnavi-")
+            || l.starts_with("x-glampingcenter-")
+            || l.starts_with("x-glampingshop-")
+            || l.starts_with("x-glampingpro-")
+            || l.starts_with("x-glampingmart-")
+            || l.starts_with("x-glampingplus-")
+            || l.starts_with("x-glampingsmart-")
+            || l.starts_with("x-glampingfamily-")
+            || l.starts_with("x-ryokannavi-")
+            || l.starts_with("x-ryokancenter-")
+            || l.starts_with("x-ryokanshop-")
+            || l.starts_with("x-ryokanpro-")
+            || l.starts_with("x-ryokanmart-")
+            || l.starts_with("x-ryokanplus-")
+            || l.starts_with("x-ryokansmart-")
+            || l.starts_with("x-ryokanfamily-")
+            || l.starts_with("x-minshukunavi-"))
+}
+
+fn has_maidcafe_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-maidcafe-")
+            || l.starts_with("x-concafe-")
+            || l.starts_with("x-cosplay-")
+            || l.starts_with("x-maid-")
+            || l.starts_with("x-maidreamin-")
+            || l.starts_with("x-athomecafe-")
+            || l.starts_with("x-butler-")
+            || l.starts_with("x-shitsuji-")
+            || l.starts_with("x-akiba-")
+            || l.starts_with("x-cos-")
+            || l.starts_with("x-kosupure-")
+            || l.starts_with("x-coscafe-")
+            || l.starts_with("x-maidcafenavi-")
+            || l.starts_with("x-maidcafecenter-")
+            || l.starts_with("x-maidcafeshop-")
+            || l.starts_with("x-maidcafepro-")
+            || l.starts_with("x-maidcafemart-")
+            || l.starts_with("x-maidcafeplus-")
+            || l.starts_with("x-maidcafesmart-")
+            || l.starts_with("x-maidcafefamily-")
+            || l.starts_with("x-concafenavi-")
+            || l.starts_with("x-concafecenter-")
+            || l.starts_with("x-concafeshop-")
+            || l.starts_with("x-concafepro-")
+            || l.starts_with("x-concafemart-")
+            || l.starts_with("x-concafeplus-")
+            || l.starts_with("x-concafesmart-")
+            || l.starts_with("x-concafefamily-")
+            || l.starts_with("x-cosplaynavi-")
+            || l.starts_with("x-cosplaycenter-")
+            || l.starts_with("x-cosplayshop-")
+            || l.starts_with("x-cosplaypro-")
+            || l.starts_with("x-cosplaymart-")
+            || l.starts_with("x-cosplayplus-")
+            || l.starts_with("x-cosplaysmart-")
+            || l.starts_with("x-cosplayfamily-")
+            || l.starts_with("x-maidnavi-")
+            || l.starts_with("x-maidcenter-")
+            || l.starts_with("x-maidshop-")
+            || l.starts_with("x-maidpro-")
+            || l.starts_with("x-maidmart-")
+            || l.starts_with("x-maidplus-")
+            || l.starts_with("x-maidsmart-")
+            || l.starts_with("x-maidfamily-")
+            || l.starts_with("x-maidreaminnavi-")
+            || l.starts_with("x-maidreamincenter-")
+            || l.starts_with("x-maidreaminshop-")
+            || l.starts_with("x-maidreaminpro-")
+            || l.starts_with("x-maidreaminmart-")
+            || l.starts_with("x-maidreaminplus-")
+            || l.starts_with("x-maidreaminsmart-")
+            || l.starts_with("x-maidreaminfamily-")
+            || l.starts_with("x-athomecafenavi-")
+            || l.starts_with("x-athomecafecenter-")
+            || l.starts_with("x-athomecafeshop-")
+            || l.starts_with("x-athomecafepro-")
+            || l.starts_with("x-athomecafemart-")
+            || l.starts_with("x-athomecafeplus-")
+            || l.starts_with("x-athomecafesmart-")
+            || l.starts_with("x-athomecafefamily-")
+            || l.starts_with("x-butlernavi-")
+            || l.starts_with("x-butlercenter-"))
+}
+
+fn has_shinkyuu_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-shinkyuu-")
+            || l.starts_with("x-harikyuu-")
+            || l.starts_with("x-kyuu-")
+            || l.starts_with("x-toyou-")
+            || l.starts_with("x-touyaku-")
+            || l.starts_with("x-kampou-")
+            || l.starts_with("x-kampo-")
+            || l.starts_with("x-kanpo-")
+            || l.starts_with("x-acupuncture-")
+            || l.starts_with("x-moxibustion-")
+            || l.starts_with("x-acu-")
+            || l.starts_with("x-okyu-")
+            || l.starts_with("x-yakuzen-")
+            || l.starts_with("x-shinkyuunavi-")
+            || l.starts_with("x-shinkyuucenter-")
+            || l.starts_with("x-shinkyuushop-")
+            || l.starts_with("x-shinkyuupro-")
+            || l.starts_with("x-shinkyuumart-")
+            || l.starts_with("x-shinkyuuplus-")
+            || l.starts_with("x-shinkyuusmart-")
+            || l.starts_with("x-shinkyuufamily-")
+            || l.starts_with("x-harikyuunavi-")
+            || l.starts_with("x-harikyuucenter-")
+            || l.starts_with("x-harikyuushop-")
+            || l.starts_with("x-harikyuupro-")
+            || l.starts_with("x-harikyuumart-")
+            || l.starts_with("x-harikyuuplus-")
+            || l.starts_with("x-harikyuusmart-")
+            || l.starts_with("x-harikyuufamily-")
+            || l.starts_with("x-kyuunavi-")
+            || l.starts_with("x-kyuucenter-")
+            || l.starts_with("x-kyuushop-")
+            || l.starts_with("x-kyuupro-")
+            || l.starts_with("x-kyuumart-")
+            || l.starts_with("x-kyuuplus-")
+            || l.starts_with("x-kyuusmart-")
+            || l.starts_with("x-kyuufamily-")
+            || l.starts_with("x-toyounavi-")
+            || l.starts_with("x-toyoucenter-")
+            || l.starts_with("x-toyoushop-")
+            || l.starts_with("x-toyoupro-")
+            || l.starts_with("x-toyoumart-")
+            || l.starts_with("x-toyouplus-")
+            || l.starts_with("x-toyousmart-")
+            || l.starts_with("x-toyoufamily-")
+            || l.starts_with("x-touyakunavi-")
+            || l.starts_with("x-touyakucenter-")
+            || l.starts_with("x-touyakushop-")
+            || l.starts_with("x-touyakupro-")
+            || l.starts_with("x-touyakumart-")
+            || l.starts_with("x-touyakuplus-")
+            || l.starts_with("x-touyakusmart-")
+            || l.starts_with("x-touyakufamily-")
+            || l.starts_with("x-kampounavi-")
+            || l.starts_with("x-kampoucenter-")
+            || l.starts_with("x-kampoushop-")
+            || l.starts_with("x-kampoupro-")
+            || l.starts_with("x-kampoumart-")
+            || l.starts_with("x-kampouplus-")
+            || l.starts_with("x-kampousmart-")
+            || l.starts_with("x-kampoufamily-")
+            || l.starts_with("x-kamponavi-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -29481,6 +29700,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_climbing_marks(clean));
+    }
+
+    #[test]
+    fn scan_は民機印を検出する() {
+        for raw in [
+            br"X-Minpaku-Alert: 1",
+            br"X-Vacationrental-Notice: 1",
+            br"X-Villa-Info: 1",
+            br"X-Glamping-Report: 1",
+            br"X-Ryokan-Bulletin: 1",
+            br"X-Minshuku-News: 1",
+            br"X-Kominka-Flash: 1",
+            br"X-Machiya-Release: 1",
+        ] {
+            assert!(has_minpaku_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_minpaku_marks(clean));
+    }
+
+    #[test]
+    fn scan_は喫機印を検出する() {
+        for raw in [
+            br"X-Maidcafe-Alert: 1",
+            br"X-Concafe-Notice: 1",
+            br"X-Cosplay-Info: 1",
+            br"X-Maid-Report: 1",
+            br"X-Maidreamin-Bulletin: 1",
+            br"X-Butler-News: 1",
+            br"X-Shitsuji-Flash: 1",
+            br"X-Akiba-Release: 1",
+        ] {
+            assert!(has_maidcafe_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_maidcafe_marks(clean));
+    }
+
+    #[test]
+    fn scan_は鍼機印を検出する() {
+        for raw in [
+            br"X-Shinkyuu-Alert: 1",
+            br"X-Harikyuu-Notice: 1",
+            br"X-Kyuu-Info: 1",
+            br"X-Kampou-Report: 1",
+            br"X-Kampo-Bulletin: 1",
+            br"X-Acupuncture-News: 1",
+            br"X-Okyu-Flash: 1",
+            br"X-Yakuzen-Release: 1",
+        ] {
+            assert!(has_shinkyuu_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_shinkyuu_marks(clean));
     }
 
 }
