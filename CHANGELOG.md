@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D815: `X-Shikikin-*`/`X-Genjoukaifuku-*`/`X-Genhuku-*`/`X-Depositrefund-*`/`X-Securitydeposit-*`/`X-Moveoutclean-*` 等の敷金・原状回復精算印自称が未検査
+
+- **問題**: `X-Shikikin-*`/`X-ShikikinYasan-*`/`X-ShikikinPro-*`/`X-ShikikinTeam-*`/`X-ShikikinJP-*`/`X-ShikikinSenmon-*`/`X-Genjoukaifuku-*`/`X-GenjoukaifukuYasan-*`/`X-GenjoukaifukuPro-*`/`X-GenjoukaifukuTeam-*`/`X-GenjoukaifukuJP-*`/`X-GenjoukaifukuSenmon-*`/`X-Genhuku-*`/`X-GenhukuYasan-*`/`X-GenhukuPro-*`/`X-GenhukuTeam-*`/`X-GenhukuJP-*`/`X-GenhukuSenmon-*`/`X-DepositrefundPros-*`/`X-DepositrefundTeam-*`/`X-DepositrefundWorks-*`/`X-DepositrefundExperts-*`/`X-DepositrefundSvc-*`/`X-DepositrefundHQ-*`/`X-SecuritydepositPros-*`/`X-SecuritydepositTeam-*`/`X-SecuritydepositWorks-*`/`X-SecuritydepositExperts-*`/`X-SecuritydepositSvc-*`/`X-SecuritydepositHQ-*`/`X-MoveoutcleanPros-*`/`X-MoveoutcleanTeam-*`/`X-MoveoutcleanWorks-*`/`X-MoveoutcleanExperts-*`/`X-MoveoutcleanSvc-*`/`X-MoveoutcleanHQ-*` 等 は敷機の通知記録 — 送信側が書くことは自称。敷金・原状回復業者の偽装は、退去後の過剰精算請求・ハウスクリーニング代金を装ったなりすましの典型手口。(賃貸審査は screening 機、立ち退きは tachinoki 機で検出済み)
+- **修正**: `Envelope` に `shikikin_marks` + `has_shikikin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 敷印の自署を問え。
+
+### Security — D816: `X-Reikin-*`/`X-Koushinryou-*`/`X-Koushin-*`/`X-Renewalfee-*`/`X-Keymoney-*`/`X-Moveterms-*` 等の礼金・更新料印自称が未検査
+
+- **問題**: `X-Reikin-*`/`X-ReikinYasan-*`/`X-ReikinPro-*`/`X-ReikinTeam-*`/`X-ReikinJP-*`/`X-ReikinSenmon-*`/`X-Koushinryou-*`/`X-KoushinryouYasan-*`/`X-KoushinryouPro-*`/`X-KoushinryouTeam-*`/`X-KoushinryouJP-*`/`X-KoushinryouSenmon-*`/`X-Koushin-*`/`X-KoushinYasan-*`/`X-KoushinPro-*`/`X-KoushinTeam-*`/`X-KoushinJP-*`/`X-KoushinSenmon-*`/`X-RenewalfeePros-*`/`X-RenewalfeeTeam-*`/`X-RenewalfeeWorks-*`/`X-RenewalfeeExperts-*`/`X-RenewalfeeSvc-*`/`X-RenewalfeeHQ-*`/`X-KeymoneyPros-*`/`X-KeymoneyTeam-*`/`X-KeymoneyWorks-*`/`X-KeymoneyExperts-*`/`X-KeymoneySvc-*`/`X-KeymoneyHQ-*`/`X-MovetermsPros-*`/`X-MovetermsTeam-*`/`X-MovetermsWorks-*`/`X-MovetermsExperts-*`/`X-MovetermsSvc-*`/`X-MovetermsHQ-*` 等 は礼機の通知記録 — 送信側が書くことは自称。礼金・更新料業者の偽装は、契約更新手数料・礼金分割請求を装ったなりすましの典型手口。(家賃保証は chintaihoshou 機で検出済み)
+- **修正**: `Envelope` に `reikin_marks` + `has_reikin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 礼印の自署を問え。
+
+### Security — D817: `X-Kodokushi-*`/`X-Tokushusouji-*`/`X-Tokushuseisou-*`/`X-Biohazard-*`/`X-Hazardcleanup-*`/`X-Crimesceneclean-*` 等の孤独死・特殊清掃印自称が未検査
+
+- **問題**: `X-Kodokushi-*`/`X-KodokushiYasan-*`/`X-KodokushiPro-*`/`X-KodokushiTeam-*`/`X-KodokushiJP-*`/`X-KodokushiSenmon-*`/`X-Tokushusouji-*`/`X-TokushusoujiYasan-*`/`X-TokushusoujiPro-*`/`X-TokushusoujiTeam-*`/`X-TokushusoujiJP-*`/`X-TokushusoujiSenmon-*`/`X-Tokushuseisou-*`/`X-TokushuseisouYasan-*`/`X-TokushuseisouPro-*`/`X-TokushuseisouTeam-*`/`X-TokushuseisouJP-*`/`X-TokushuseisouSenmon-*`/`X-BiohazardPros-*`/`X-BiohazardTeam-*`/`X-BiohazardWorks-*`/`X-BiohazardExperts-*`/`X-BiohazardSvc-*`/`X-BiohazardHQ-*`/`X-HazardcleanupPros-*`/`X-HazardcleanupTeam-*`/`X-HazardcleanupWorks-*`/`X-HazardcleanupExperts-*`/`X-HazardcleanupSvc-*`/`X-HazardcleanupHQ-*`/`X-CrimescenecleanPros-*`/`X-CrimescenecleanTeam-*`/`X-CrimescenecleanWorks-*`/`X-CrimescenecleanExperts-*`/`X-CrimescenecleanSvc-*`/`X-CrimescenecleanHQ-*` 等 は孤機の通知記録 — 送信側が書くことは自称。孤独死・特殊清掃業者の偽装は、消毒・消臭費用・残置物処分料を装ったなりすましの典型手口。(遺品整理は ihinseiri 機、消臭は shoushuu 機で検出済み)
+- **修正**: `Envelope` に `kodokushi_marks` + `has_kodokushi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 孤印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
