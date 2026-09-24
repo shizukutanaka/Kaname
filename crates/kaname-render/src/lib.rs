@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub sensu_marks: bool,
+    pub wagasa_marks: bool,
+    pub tabi_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        sensu_marks: has_sensu_marks(hdr),
+        wagasa_marks: has_wagasa_marks(hdr),
+        tabi_marks: has_tabi_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_sensu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sensu-")
+            || l.starts_with("x-sensuyasan-")
+            || l.starts_with("x-sensupro-")
+            || l.starts_with("x-sensuteam-")
+            || l.starts_with("x-sensukensa-")
+            || l.starts_with("x-sensumanten-")
+            || l.starts_with("x-sensunomi-")
+            || l.starts_with("x-sensujp-")
+            || l.starts_with("x-sensusenmon-")
+            || l.starts_with("x-sensumitsumori-")
+            || l.starts_with("x-sensuchousa-")
+            || l.starts_with("x-sensuteiki-")
+            || l.starts_with("x-sensupros-")
+            || l.starts_with("x-sensudoctors-")
+            || l.starts_with("x-sensurescue-")
+            || l.starts_with("x-uchiwaya-")
+            || l.starts_with("x-uchiwayayasan-")
+            || l.starts_with("x-uchiwayapro-")
+            || l.starts_with("x-uchiwayateam-")
+            || l.starts_with("x-uchiwayajp-")
+            || l.starts_with("x-uchiwayasenmon-")
+            || l.starts_with("x-uchiwayapros-")
+            || l.starts_with("x-uchiwayadoctors-")
+            || l.starts_with("x-uchiwayarescue-")
+            || l.starts_with("x-sensuya-")
+            || l.starts_with("x-sensuyayasan-")
+            || l.starts_with("x-sensuyapro-")
+            || l.starts_with("x-sensuyateam-")
+            || l.starts_with("x-sensuyajp-")
+            || l.starts_with("x-sensuyasenmon-")
+            || l.starts_with("x-sensuyapros-")
+            || l.starts_with("x-sensuyadoctors-")
+            || l.starts_with("x-sensuyarescue-")
+            || l.starts_with("x-fanshoppros-")
+            || l.starts_with("x-fanshopteam-")
+            || l.starts_with("x-fanshopworks-")
+            || l.starts_with("x-fanshopexperts-")
+            || l.starts_with("x-fanshopsvc-")
+            || l.starts_with("x-fanshophq-")
+            || l.starts_with("x-japfanpros-")
+            || l.starts_with("x-japfanteam-")
+            || l.starts_with("x-japfanworks-")
+            || l.starts_with("x-japfanexperts-")
+            || l.starts_with("x-japfansvc-")
+            || l.starts_with("x-japfanhq-")
+            || l.starts_with("x-foldingfanpros-")
+            || l.starts_with("x-foldingfanteam-")
+            || l.starts_with("x-foldingfanworks-")
+            || l.starts_with("x-foldingfanexperts-")
+            || l.starts_with("x-foldingfansvc-")
+            || l.starts_with("x-foldingfanhq-")
+    })
+}
+
+fn has_wagasa_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-wagasa-")
+            || l.starts_with("x-wagasayasan-")
+            || l.starts_with("x-wagasapro-")
+            || l.starts_with("x-wagasateam-")
+            || l.starts_with("x-wagasakensa-")
+            || l.starts_with("x-wagasamanten-")
+            || l.starts_with("x-wagasanomi-")
+            || l.starts_with("x-wagasajp-")
+            || l.starts_with("x-wagasasenmon-")
+            || l.starts_with("x-wagasamitsumori-")
+            || l.starts_with("x-wagasachousa-")
+            || l.starts_with("x-wagasateiki-")
+            || l.starts_with("x-wagasapros-")
+            || l.starts_with("x-wagasadoctors-")
+            || l.starts_with("x-wagasarescue-")
+            || l.starts_with("x-kasaya-")
+            || l.starts_with("x-kasayayasan-")
+            || l.starts_with("x-kasayapro-")
+            || l.starts_with("x-kasayateam-")
+            || l.starts_with("x-kasayajp-")
+            || l.starts_with("x-kasayasenmon-")
+            || l.starts_with("x-kasayapros-")
+            || l.starts_with("x-kasayadoctors-")
+            || l.starts_with("x-kasayarescue-")
+            || l.starts_with("x-wagasaten-")
+            || l.starts_with("x-wagasatenyasan-")
+            || l.starts_with("x-wagasatenpro-")
+            || l.starts_with("x-wagasatenteam-")
+            || l.starts_with("x-wagasatenjp-")
+            || l.starts_with("x-wagasatensenmon-")
+            || l.starts_with("x-wagasatenpros-")
+            || l.starts_with("x-wagasatendoctors-")
+            || l.starts_with("x-wagasatenrescue-")
+            || l.starts_with("x-umbrellashoppros-")
+            || l.starts_with("x-umbrellashopteam-")
+            || l.starts_with("x-umbrellashopworks-")
+            || l.starts_with("x-umbrellashopexperts-")
+            || l.starts_with("x-umbrellashopsvc-")
+            || l.starts_with("x-umbrellashophq-")
+            || l.starts_with("x-japumbrellapros-")
+            || l.starts_with("x-japumbrellateam-")
+            || l.starts_with("x-japumbrellaworks-")
+            || l.starts_with("x-japumbrellaexperts-")
+            || l.starts_with("x-japumbrellasvc-")
+            || l.starts_with("x-japumbrellahq-")
+            || l.starts_with("x-paperumbrellapros-")
+            || l.starts_with("x-paperumbrellateam-")
+            || l.starts_with("x-paperumbrellaworks-")
+            || l.starts_with("x-paperumbrellaexperts-")
+            || l.starts_with("x-paperumbrellasvc-")
+            || l.starts_with("x-paperumbrellahq-")
+    })
+}
+
+fn has_tabi_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tabi-")
+            || l.starts_with("x-tabiyasan-")
+            || l.starts_with("x-tabipro-")
+            || l.starts_with("x-tabiteam-")
+            || l.starts_with("x-tabikensa-")
+            || l.starts_with("x-tabimanten-")
+            || l.starts_with("x-tabinomi-")
+            || l.starts_with("x-tabijp-")
+            || l.starts_with("x-tabisenmon-")
+            || l.starts_with("x-tabimitsumori-")
+            || l.starts_with("x-tabichousa-")
+            || l.starts_with("x-tabiteiki-")
+            || l.starts_with("x-tabipros-")
+            || l.starts_with("x-tabidoctors-")
+            || l.starts_with("x-tabirescue-")
+            || l.starts_with("x-jikatabi-")
+            || l.starts_with("x-jikatabiyasan-")
+            || l.starts_with("x-jikatabipro-")
+            || l.starts_with("x-jikatabiteam-")
+            || l.starts_with("x-jikatabijp-")
+            || l.starts_with("x-jikatabisenmon-")
+            || l.starts_with("x-jikatabipros-")
+            || l.starts_with("x-jikatabidoctors-")
+            || l.starts_with("x-jikatabirescue-")
+            || l.starts_with("x-tabiya-")
+            || l.starts_with("x-tabiyayasan-")
+            || l.starts_with("x-tabiyapro-")
+            || l.starts_with("x-tabiyateam-")
+            || l.starts_with("x-tabiyajp-")
+            || l.starts_with("x-tabiyasenmon-")
+            || l.starts_with("x-tabiyapros-")
+            || l.starts_with("x-tabiyadoctors-")
+            || l.starts_with("x-tabiyarescue-")
+            || l.starts_with("x-tabishoppros-")
+            || l.starts_with("x-tabishopteam-")
+            || l.starts_with("x-tabishopworks-")
+            || l.starts_with("x-tabishopexperts-")
+            || l.starts_with("x-tabishopsvc-")
+            || l.starts_with("x-tabishophq-")
+            || l.starts_with("x-jikatabishoppros-")
+            || l.starts_with("x-jikatabishopteam-")
+            || l.starts_with("x-jikatabishopworks-")
+            || l.starts_with("x-jikatabishopexperts-")
+            || l.starts_with("x-jikatabishopsvc-")
+            || l.starts_with("x-jikatabishophq-")
+            || l.starts_with("x-japsockspros-")
+            || l.starts_with("x-japsocksteam-")
+            || l.starts_with("x-japsocksworks-")
+            || l.starts_with("x-japsocksexperts-")
+            || l.starts_with("x-japsockssvc-")
+            || l.starts_with("x-japsockshq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は扇機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Sensu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SensuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UchiwayaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SensuyaTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FanshopPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapfanHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SensuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FoldingfanExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_sensu_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_sensu_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は傘機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Wagasa-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WagasaPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KasayaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WagasatenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UmbrellashopPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapumbrellaHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WagasaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PaperumbrellaExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_wagasa_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_wagasa_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は足機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Tabi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TabiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JikatabiYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TabiyaTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TabishopPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JikatabishopHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TabiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapsocksExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_tabi_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_tabi_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
