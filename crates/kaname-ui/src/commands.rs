@@ -2476,6 +2476,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D650: 福祉・児童相談所・生活保護印自称
+    if env.welfare_marks {
+        render_risks.push(
+            "X-FukushiNavi-*/X-JidoSoushodan-*/X-ShakaiFukushi-*/X-SeikatsuHogo-*/X-Kyougikai-*/X-Kodomo-*/X-KodomoNavi-*/X-KazokuNavi-* 等 — 福機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D651: 外壁塗装・屋根修理印自称
+    if env.roofing_marks {
+        render_risks.push(
+            "X-GaihekuNavi-*/X-YaneNavi-*/X-Amamori-*/X-Tosou-*/X-Shiringu-*/X-Roofing-*/X-RoofNavi-*/X-Waterproof-* 等 — 塗機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D652: エアコン・冷暖房工事印自称
+    if env.hvac_marks {
+        render_risks.push(
+            "X-Aircon-*/X-AirconNavi-*/X-Hvac-*/X-HvacNavi-*/X-Reidanbou-*/X-Kankisen-*/X-Eakon-*/X-EakonNavi-* 等 — 空機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

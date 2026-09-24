@@ -1811,6 +1811,12 @@ pub struct Envelope {
     pub securitycam_marks: bool,
     /// `X-Ferry-*`/`X-Ferries-*`/`X-Ferrynavi-*` 等のフェリー・クルーズ・船舶印を送信側が自称する兆候 (D649)
     pub ferry_marks: bool,
+    /// `X-Fukushinavi-*`/`X-Fukushicenter-*`/`X-Fukushishop-*` 等の福祉・児童相談所・生活保護印を送信側が自称する兆候 (D650)
+    pub welfare_marks: bool,
+    /// `X-Gaihekunavi-*`/`X-Gaihekucenter-*`/`X-Gaihekushop-*` 等の外壁塗装・屋根修理印を送信側が自称する兆候 (D651)
+    pub roofing_marks: bool,
+    /// `X-Aircon-*`/`X-Airconnavi-*`/`X-Airconcenter-*` 等のエアコン・冷暖房工事印を送信側が自称する兆候 (D652)
+    pub hvac_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2338,6 +2344,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         college_marks: has_college_marks(hdr),
         securitycam_marks: has_securitycam_marks(hdr),
         ferry_marks: has_ferry_marks(hdr),
+        welfare_marks: has_welfare_marks(hdr),
+        roofing_marks: has_roofing_marks(hdr),
+        hvac_marks: has_hvac_marks(hdr),
     })
 }
 
@@ -15570,6 +15579,259 @@ fn has_ferry_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-oceankourossopro-"))
 }
 
+/// `X-Fukushinavi-*`/`X-Fukushicenter-*`/`X-Fukushishop-*`/`X-Fukushipro-*`/`X-Fukushidoctor-*`/`X-Fukushirescue-*`/`X-Fukushi24-*`/`X-Jidosoushodan-*`/`X-Jikosou-*`/`X-Jikosounavi-*`/`X-Jikosoucenter-*`/`X-Jikosoushop-*`/`X-Jikosoupro-*`/`X-Shakaifukushi-*`/`X-Syakai-*`/`X-Shakainavi-*`/`X-Shakaicenter-*`/`X-Shakaishop-*`/`X-Shakaipro-*`/`X-Shakaidoctor-*`/`X-Shakairescue-*`/`X-Shakai24-*`/`X-Seikatsuhogo-*`/`X-Seikatsuhogonavi-*`/`X-Seikatsuhogocenter-*`/`X-Seikatsuhogoshop-*`/`X-Seikatsuhogopro-*`/`X-Seikatsuhogodoctor-*`/`X-Seikatsuhogorescue-*`/`X-Seikatsuhogo24-*`/`X-Caseworker-*`/`X-Kyougikai-*`/`X-Kyougikainavi-*`/`X-Kyougikaicenter-*`/`X-Kyougikaishop-*`/`X-Kyougikaipro-*`/`X-Hojin-*`/`X-Hojinnavi-*`/`X-Hojincenter-*`/`X-Hojinshop-*`/`X-Hojinpro-*`/`X-Koreikai-*`/`X-Koreikainavi-*`/`X-Koreikaicenter-*`/`X-Koreikaishop-*`/`X-Koreikaipro-*`/`X-Kodomo-*`/`X-Kodomonavi-*`/`X-Kodomocenter-*`/`X-Kodomoshop-*`/`X-Kodomopro-*`/`X-Kodomodoctor-*`/`X-Kodomorescue-*`/`X-Kodomo24-*`/`X-Kazokunavi-*`/`X-Kazokucenter-*`/`X-Kazokushop-*`/`X-Kazokupro-*`/`X-Kazokudoctor-*`/`X-Kazokurescue-*`/`X-Kazoku24-*`/`X-Fukushimart-*`/`X-Fukushiplus-*`/`X-Fukushismart-*`/`X-Fukushifamily-*`/`X-Kodomomart-*`/`X-Kodomoplus-*`/`X-Kodomosmart-*`/`X-Kodomofamily-*`/`X-Kyousannavi-*`/`X-Kyousancenter-*`/`X-Kyousanshop-*`/`X-Kyousanpro-*`/`X-Enjoinavi-*`/`X-Enjocenter-*`/`X-Enjoshop-*`/`X-Enjopro-*` 等の福祉・児童相談所・生活保護印を送信側が自称する兆候を検出する
+fn has_welfare_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-fukushinavi-")
+            || l.starts_with("x-fukushicenter-")
+            || l.starts_with("x-fukushishop-")
+            || l.starts_with("x-fukushipro-")
+            || l.starts_with("x-fukushidoctor-")
+            || l.starts_with("x-fukushirescue-")
+            || l.starts_with("x-fukushi24-")
+            || l.starts_with("x-jidosoushodan-")
+            || l.starts_with("x-jikosou-")
+            || l.starts_with("x-jikosounavi-")
+            || l.starts_with("x-jikosoucenter-")
+            || l.starts_with("x-jikosoushop-")
+            || l.starts_with("x-jikosoupro-")
+            || l.starts_with("x-shakaifukushi-")
+            || l.starts_with("x-syakai-")
+            || l.starts_with("x-shakainavi-")
+            || l.starts_with("x-shakaicenter-")
+            || l.starts_with("x-shakaishop-")
+            || l.starts_with("x-shakaipro-")
+            || l.starts_with("x-shakaidoctor-")
+            || l.starts_with("x-shakairescue-")
+            || l.starts_with("x-shakai24-")
+            || l.starts_with("x-seikatsuhogo-")
+            || l.starts_with("x-seikatsuhogonavi-")
+            || l.starts_with("x-seikatsuhogocenter-")
+            || l.starts_with("x-seikatsuhogoshop-")
+            || l.starts_with("x-seikatsuhogopro-")
+            || l.starts_with("x-seikatsuhogodoctor-")
+            || l.starts_with("x-seikatsuhogorescue-")
+            || l.starts_with("x-seikatsuhogo24-")
+            || l.starts_with("x-caseworker-")
+            || l.starts_with("x-kyougikai-")
+            || l.starts_with("x-kyougikainavi-")
+            || l.starts_with("x-kyougikaicenter-")
+            || l.starts_with("x-kyougikaishop-")
+            || l.starts_with("x-kyougikaipro-")
+            || l.starts_with("x-hojin-")
+            || l.starts_with("x-hojinnavi-")
+            || l.starts_with("x-hojincenter-")
+            || l.starts_with("x-hojinshop-")
+            || l.starts_with("x-hojinpro-")
+            || l.starts_with("x-koreikai-")
+            || l.starts_with("x-koreikainavi-")
+            || l.starts_with("x-koreikaicenter-")
+            || l.starts_with("x-koreikaishop-")
+            || l.starts_with("x-koreikaipro-")
+            || l.starts_with("x-kodomo-")
+            || l.starts_with("x-kodomonavi-")
+            || l.starts_with("x-kodomocenter-")
+            || l.starts_with("x-kodomoshop-")
+            || l.starts_with("x-kodomopro-")
+            || l.starts_with("x-kodomodoctor-")
+            || l.starts_with("x-kodomorescue-")
+            || l.starts_with("x-kodomo24-")
+            || l.starts_with("x-kazokunavi-")
+            || l.starts_with("x-kazokucenter-")
+            || l.starts_with("x-kazokushop-")
+            || l.starts_with("x-kazokupro-")
+            || l.starts_with("x-kazokudoctor-")
+            || l.starts_with("x-kazokurescue-")
+            || l.starts_with("x-kazoku24-")
+            || l.starts_with("x-fukushimart-")
+            || l.starts_with("x-fukushiplus-")
+            || l.starts_with("x-fukushismart-")
+            || l.starts_with("x-fukushifamily-")
+            || l.starts_with("x-kodomomart-")
+            || l.starts_with("x-kodomoplus-")
+            || l.starts_with("x-kodomosmart-")
+            || l.starts_with("x-kodomofamily-")
+            || l.starts_with("x-kyousannavi-")
+            || l.starts_with("x-kyousancenter-")
+            || l.starts_with("x-kyousanshop-")
+            || l.starts_with("x-kyousanpro-")
+            || l.starts_with("x-enjoinavi-")
+            || l.starts_with("x-enjocenter-")
+            || l.starts_with("x-enjoshop-")
+            || l.starts_with("x-enjopro-"))
+}
+
+/// `X-Gaihekunavi-*`/`X-Gaihekucenter-*`/`X-Gaihekushop-*`/`X-Gaihekupro-*`/`X-Gaihekudoctor-*`/`X-Gaihekurescue-*`/`X-Gaiheku24-*`/`X-Yanenavi-*`/`X-Yanecenter-*`/`X-Yaneshop-*`/`X-Yanepro-*`/`X-Yanedoctor-*`/`X-Yanerescue-*`/`X-Yane24-*`/`X-Amamori-*`/`X-Amamorinavi-*`/`X-Amamoricenter-*`/`X-Amamorishop-*`/`X-Amamoripro-*`/`X-Amamoridoctor-*`/`X-Amamorescue-*`/`X-Amamori24-*`/`X-Tosou-*`/`X-Tosounavi-*`/`X-Tosoucenter-*`/`X-Tosoushop-*`/`X-Tosoupro-*`/`X-Tosoudoctor-*`/`X-Tosourescue-*`/`X-Tosou24-*`/`X-Shiringu-*`/`X-Sealing-*`/`X-Waterproof-*`/`X-Roofing-*`/`X-Roofnavi-*`/`X-Roofcenter-*`/`X-Roofshop-*`/`X-Roofpro-*`/`X-Gaihekumart-*`/`X-Gaihekuplus-*`/`X-Gaihekusmart-*`/`X-Gaihekufamily-*`/`X-Yanemart-*`/`X-Yaneplus-*`/`X-Yanesmart-*`/`X-Yanefamily-*`/`X-Sotobonavi-*`/`X-Sotobocenter-*`/`X-Sotoboshop-*`/`X-Sotobopro-*`/`X-Sotobodoctor-*`/`X-Sotoborescue-*`/`X-Sotobo24-*`/`X-Houbainavi-*`/`X-Houbaicenter-*`/`X-Houbaishop-*`/`X-Houbaipro-*`/`X-Houbaidoctor-*`/`X-Houbairescue-*`/`X-Houbai24-*`/`X-Houbaisan-*`/`X-Houbaisannavi-*`/`X-Houbaisancenter-*`/`X-Houbaisanshop-*`/`X-Houbaisanpro-*`/`X-Okujounavi-*`/`X-Okujoucenter-*`/`X-Okujoushop-*`/`X-Okujoupro-*`/`X-Kouennavi-*`/`X-Kouencenter-*`/`X-Kouenshop-*`/`X-Kouenpro-*` 等の外壁塗装・屋根修理印を送信側が自称する兆候を検出する
+fn has_roofing_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-gaihekunavi-")
+            || l.starts_with("x-gaihekucenter-")
+            || l.starts_with("x-gaihekushop-")
+            || l.starts_with("x-gaihekupro-")
+            || l.starts_with("x-gaihekudoctor-")
+            || l.starts_with("x-gaihekurescue-")
+            || l.starts_with("x-gaiheku24-")
+            || l.starts_with("x-yanenavi-")
+            || l.starts_with("x-yanecenter-")
+            || l.starts_with("x-yaneshop-")
+            || l.starts_with("x-yanepro-")
+            || l.starts_with("x-yanedoctor-")
+            || l.starts_with("x-yanerescue-")
+            || l.starts_with("x-yane24-")
+            || l.starts_with("x-amamori-")
+            || l.starts_with("x-amamorinavi-")
+            || l.starts_with("x-amamoricenter-")
+            || l.starts_with("x-amamorishop-")
+            || l.starts_with("x-amamoripro-")
+            || l.starts_with("x-amamoridoctor-")
+            || l.starts_with("x-amamorescue-")
+            || l.starts_with("x-amamori24-")
+            || l.starts_with("x-tosou-")
+            || l.starts_with("x-tosounavi-")
+            || l.starts_with("x-tosoucenter-")
+            || l.starts_with("x-tosoushop-")
+            || l.starts_with("x-tosoupro-")
+            || l.starts_with("x-tosoudoctor-")
+            || l.starts_with("x-tosourescue-")
+            || l.starts_with("x-tosou24-")
+            || l.starts_with("x-shiringu-")
+            || l.starts_with("x-sealing-")
+            || l.starts_with("x-waterproof-")
+            || l.starts_with("x-roofing-")
+            || l.starts_with("x-roofnavi-")
+            || l.starts_with("x-roofcenter-")
+            || l.starts_with("x-roofshop-")
+            || l.starts_with("x-roofpro-")
+            || l.starts_with("x-gaihekumart-")
+            || l.starts_with("x-gaihekuplus-")
+            || l.starts_with("x-gaihekusmart-")
+            || l.starts_with("x-gaihekufamily-")
+            || l.starts_with("x-yanemart-")
+            || l.starts_with("x-yaneplus-")
+            || l.starts_with("x-yanesmart-")
+            || l.starts_with("x-yanefamily-")
+            || l.starts_with("x-sotobonavi-")
+            || l.starts_with("x-sotobocenter-")
+            || l.starts_with("x-sotoboshop-")
+            || l.starts_with("x-sotobopro-")
+            || l.starts_with("x-sotobodoctor-")
+            || l.starts_with("x-sotoborescue-")
+            || l.starts_with("x-sotobo24-")
+            || l.starts_with("x-houbainavi-")
+            || l.starts_with("x-houbaicenter-")
+            || l.starts_with("x-houbaishop-")
+            || l.starts_with("x-houbaipro-")
+            || l.starts_with("x-houbaidoctor-")
+            || l.starts_with("x-houbairescue-")
+            || l.starts_with("x-houbai24-")
+            || l.starts_with("x-houbaisan-")
+            || l.starts_with("x-houbaisannavi-")
+            || l.starts_with("x-houbaisancenter-")
+            || l.starts_with("x-houbaisanshop-")
+            || l.starts_with("x-houbaisanpro-")
+            || l.starts_with("x-okujounavi-")
+            || l.starts_with("x-okujoucenter-")
+            || l.starts_with("x-okujoushop-")
+            || l.starts_with("x-okujoupro-")
+            || l.starts_with("x-kouennavi-")
+            || l.starts_with("x-kouencenter-")
+            || l.starts_with("x-kouenshop-")
+            || l.starts_with("x-kouenpro-"))
+}
+
+/// `X-Aircon-*`/`X-Airconnavi-*`/`X-Airconcenter-*`/`X-Airconshop-*`/`X-Airconpro-*`/`X-Aircondoctor-*`/`X-Airconrescue-*`/`X-Aircon24-*`/`X-Hvac-*`/`X-Hvacnavi-*`/`X-Hvaccenter-*`/`X-Hvacshop-*`/`X-Hvacpro-*`/`X-Hvacdoctor-*`/`X-Hvacrescue-*`/`X-Hvac24-*`/`X-Reidanbou-*`/`X-Reidbounavi-*`/`X-Reidobucenter-*`/`X-Reidobushop-*`/`X-Reidobupro-*`/`X-Kankisen-*`/`X-Kankisennavi-*`/`X-Kankisencenter-*`/`X-Kankisenshop-*`/`X-Kankisenpro-*`/`X-Eakon-*`/`X-Eakonnavi-*`/`X-Eakoncenter-*`/`X-Eakonshop-*`/`X-Eakonpro-*`/`X-Eakondoctor-*`/`X-Eakonrescue-*`/`X-Eakon24-*`/`X-Daikinservers-*`/`X-Mitsubishidenki-*`/`X-Fujitsuozone-*`/`X-Panair-*`/`X-Hitachiair-*`/`X-Airconmart-*`/`X-Airconplus-*`/`X-Airconsmart-*`/`X-Airconfamily-*`/`X-Eakonmart-*`/`X-Eakonplus-*`/`X-Eakonsmart-*`/`X-Eakonfamily-*`/`X-Kukinavi-*`/`X-Kukicenter-*`/`X-Kukishop-*`/`X-Kukipro-*`/`X-Reibo-*`/`X-Chobo-*`/`X-Danbo-*`/`X-Danbounavi-*`/`X-Danboucenter-*`/`X-Danboushop-*`/`X-Danboupro-*`/`X-Danboudoctor-*`/`X-Danbourescue-*`/`X-Danbou24-*`/`X-Reibounavi-*`/`X-Reiboucenter-*`/`X-Reiboushop-*`/`X-Reiboupro-*`/`X-Reiboudoctor-*`/`X-Reibourescue-*`/`X-Reibou24-*`/`X-Jyoka-*`/`X-Jyokanavi-*`/`X-Jyokacenter-*`/`X-Jyokashop-*`/`X-Jyokapro-*`/`X-Jyokadoctor-*`/`X-Jyokarescue-*`/`X-Jyoka24-*` 等のエアコン・冷暖房工事印を送信側が自称する兆候を検出する
+fn has_hvac_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-aircon-")
+            || l.starts_with("x-airconnavi-")
+            || l.starts_with("x-airconcenter-")
+            || l.starts_with("x-airconshop-")
+            || l.starts_with("x-airconpro-")
+            || l.starts_with("x-aircondoctor-")
+            || l.starts_with("x-airconrescue-")
+            || l.starts_with("x-aircon24-")
+            || l.starts_with("x-hvac-")
+            || l.starts_with("x-hvacnavi-")
+            || l.starts_with("x-hvaccenter-")
+            || l.starts_with("x-hvacshop-")
+            || l.starts_with("x-hvacpro-")
+            || l.starts_with("x-hvacdoctor-")
+            || l.starts_with("x-hvacrescue-")
+            || l.starts_with("x-hvac24-")
+            || l.starts_with("x-reidanbou-")
+            || l.starts_with("x-reidbounavi-")
+            || l.starts_with("x-reidobucenter-")
+            || l.starts_with("x-reidobushop-")
+            || l.starts_with("x-reidobupro-")
+            || l.starts_with("x-kankisen-")
+            || l.starts_with("x-kankisennavi-")
+            || l.starts_with("x-kankisencenter-")
+            || l.starts_with("x-kankisenshop-")
+            || l.starts_with("x-kankisenpro-")
+            || l.starts_with("x-eakon-")
+            || l.starts_with("x-eakonnavi-")
+            || l.starts_with("x-eakoncenter-")
+            || l.starts_with("x-eakonshop-")
+            || l.starts_with("x-eakonpro-")
+            || l.starts_with("x-eakondoctor-")
+            || l.starts_with("x-eakonrescue-")
+            || l.starts_with("x-eakon24-")
+            || l.starts_with("x-daikinservers-")
+            || l.starts_with("x-mitsubishidenki-")
+            || l.starts_with("x-fujitsuozone-")
+            || l.starts_with("x-panair-")
+            || l.starts_with("x-hitachiair-")
+            || l.starts_with("x-airconmart-")
+            || l.starts_with("x-airconplus-")
+            || l.starts_with("x-airconsmart-")
+            || l.starts_with("x-airconfamily-")
+            || l.starts_with("x-eakonmart-")
+            || l.starts_with("x-eakonplus-")
+            || l.starts_with("x-eakonsmart-")
+            || l.starts_with("x-eakonfamily-")
+            || l.starts_with("x-kukinavi-")
+            || l.starts_with("x-kukicenter-")
+            || l.starts_with("x-kukishop-")
+            || l.starts_with("x-kukipro-")
+            || l.starts_with("x-reibo-")
+            || l.starts_with("x-chobo-")
+            || l.starts_with("x-danbo-")
+            || l.starts_with("x-danbounavi-")
+            || l.starts_with("x-danboucenter-")
+            || l.starts_with("x-danboushop-")
+            || l.starts_with("x-danboupro-")
+            || l.starts_with("x-danboudoctor-")
+            || l.starts_with("x-danbourescue-")
+            || l.starts_with("x-danbou24-")
+            || l.starts_with("x-reibounavi-")
+            || l.starts_with("x-reiboucenter-")
+            || l.starts_with("x-reiboushop-")
+            || l.starts_with("x-reiboupro-")
+            || l.starts_with("x-reiboudoctor-")
+            || l.starts_with("x-reibourescue-")
+            || l.starts_with("x-reibou24-")
+            || l.starts_with("x-jyoka-")
+            || l.starts_with("x-jyokanavi-")
+            || l.starts_with("x-jyokacenter-")
+            || l.starts_with("x-jyokashop-")
+            || l.starts_with("x-jyokapro-")
+            || l.starts_with("x-jyokadoctor-")
+            || l.starts_with("x-jyokarescue-")
+            || l.starts_with("x-jyoka24-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -24578,5 +24840,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_ferry_marks(clean));
+    }
+    #[test]
+    fn scan_は福機印を検出する() {
+        for raw in [
+            br"X-FukushiNavi-Alert: 1",
+            br"X-JidoSoushodan-Notice: 1",
+            br"X-ShakaiFukushi-Info: 1",
+            br"X-SeikatsuHogo-Report: 1",
+            br"X-Kyougikai-Bulletin: 1",
+            br"X-Kodomo-News: 1",
+            br"X-KodomoNavi-Flash: 1",
+            br"X-KazokuNavi-Release: 1",
+        ] {
+            assert!(has_welfare_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_welfare_marks(clean));
+    }
+
+    #[test]
+    fn scan_は塗機印を検出する() {
+        for raw in [
+            br"X-GaihekuNavi-Alert: 1",
+            br"X-YaneNavi-Notice: 1",
+            br"X-Amamori-Info: 1",
+            br"X-Tosou-Report: 1",
+            br"X-Shiringu-Bulletin: 1",
+            br"X-Roofing-News: 1",
+            br"X-RoofNavi-Flash: 1",
+            br"X-Waterproof-Release: 1",
+        ] {
+            assert!(has_roofing_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_roofing_marks(clean));
+    }
+
+    #[test]
+    fn scan_は空機印を検出する() {
+        for raw in [
+            br"X-Aircon-Alert: 1",
+            br"X-AirconNavi-Notice: 1",
+            br"X-Hvac-Info: 1",
+            br"X-HvacNavi-Report: 1",
+            br"X-Reidanbou-Bulletin: 1",
+            br"X-Kankisen-News: 1",
+            br"X-Eakon-Flash: 1",
+            br"X-EakonNavi-Release: 1",
+        ] {
+            assert!(has_hvac_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_hvac_marks(clean));
     }
 }
