@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub homeinspect_marks: bool,
+    pub welldrill_marks: bool,
+    pub sunroom_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        homeinspect_marks: has_homeinspect_marks(hdr),
+        welldrill_marks: has_welldrill_marks(hdr),
+        sunroom_marks: has_sunroom_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,193 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_homeinspect_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-internachi-")
+            || l.starts_with("x-ashiinspect-")
+            || l.starts_with("x-ahitinspect-")
+            || l.starts_with("x-amerispec-")
+            || l.starts_with("x-pillartopost-")
+            || l.starts_with("x-pillarpost-")
+            || l.starts_with("x-winhomeinsp-")
+            || l.starts_with("x-housemaster-")
+            || l.starts_with("x-natlproperty-")
+            || l.starts_with("x-usinspect-")
+            || l.starts_with("x-homegauge-")
+            || l.starts_with("x-spectora-")
+            || l.starts_with("x-homeinsppro-")
+            || l.starts_with("x-tapinspect-")
+            || l.starts_with("x-inspectpedia-")
+            || l.starts_with("x-homeinspect-")
+            || l.starts_with("x-homeinspector-")
+            || l.starts_with("x-homeinspectpros-")
+            || l.starts_with("x-inspectall-")
+            || l.starts_with("x-propertyinspect-")
+            || l.starts_with("x-homecheckup-")
+            || l.starts_with("x-inspectionpros-")
+            || l.starts_with("x-inspectforce-")
+            || l.starts_with("x-guardianinsp-")
+            || l.starts_with("x-buyersinsp-")
+            || l.starts_with("x-prepurchaseinsp-")
+            || l.starts_with("x-jutakushindan-")
+            || l.starts_with("x-jutakukensa-")
+            || l.starts_with("x-jutakuinspect-")
+            || l.starts_with("x-homeshindan-")
+            || l.starts_with("x-kizokushindan-")
+            || l.starts_with("x-jutakushindany-")
+            || l.starts_with("x-shindanyasan-")
+            || l.starts_with("x-ieshindan-")
+            || l.starts_with("x-iekensa-")
+            || l.starts_with("x-jutakudokuta-")
+            || l.starts_with("x-homedokuta-")
+            || l.starts_with("x-shindanpro-")
+            || l.starts_with("x-kensapro-")
+            || l.starts_with("x-jutakukensajp-")
+            || l.starts_with("x-homecheckjp-")
+            || l.starts_with("x-nijucheck-")
+            || l.starts_with("x-kenchikukensa-")
+            || l.starts_with("x-jutakusensei-")
+            || l.starts_with("x-jutakuteiki-")
+            || l.starts_with("x-jutakumanten-")
+            || l.starts_with("x-jutakunomi-")
+            || l.starts_with("x-jutakujp-")
+            || l.starts_with("x-jutakusenmon-")
+            || l.starts_with("x-jutakuteam-")
+            || l.starts_with("x-jutakudoctors-")
+            || l.starts_with("x-jutakugyosha-")
+            || l.starts_with("x-jutakushuri-")
+    })
+}
+
+fn has_welldrill_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-welldrill-")
+            || l.starts_with("x-welldrilling-")
+            || l.starts_with("x-wellpump-")
+            || l.starts_with("x-wellpumppros-")
+            || l.starts_with("x-waterwell-")
+            || l.starts_with("x-waterwellpros-")
+            || l.starts_with("x-aquiferwell-")
+            || l.starts_with("x-submersiblewell-")
+            || l.starts_with("x-wellservice-")
+            || l.starts_with("x-wellpro-")
+            || l.starts_with("x-welldoctor-")
+            || l.starts_with("x-pumpdoctor-")
+            || l.starts_with("x-wellmasters-")
+            || l.starts_with("x-wellworks-")
+            || l.starts_with("x-wellexperts-")
+            || l.starts_with("x-deepwell-")
+            || l.starts_with("x-shallowwell-")
+            || l.starts_with("x-wellrehab-")
+            || l.starts_with("x-wellclean-")
+            || l.starts_with("x-welltest-")
+            || l.starts_with("x-pumpservice-")
+            || l.starts_with("x-wellpumpservice-")
+            || l.starts_with("x-wellteam-")
+            || l.starts_with("x-wellforce-")
+            || l.starts_with("x-idohorisaku-")
+            || l.starts_with("x-idohoriku-")
+            || l.starts_with("x-idokouji-")
+            || l.starts_with("x-idoyasan-")
+            || l.starts_with("x-idoseibi-")
+            || l.starts_with("x-idokensa-")
+            || l.starts_with("x-idopro-")
+            || l.starts_with("x-idogyosha-")
+            || l.starts_with("x-pumpkoukan-")
+            || l.starts_with("x-pumpshuri-")
+            || l.starts_with("x-pumptenken-")
+            || l.starts_with("x-yusuikouji-")
+            || l.starts_with("x-yusuikensa-")
+            || l.starts_with("x-fukaidokouji-")
+            || l.starts_with("x-asaidokouji-")
+            || l.starts_with("x-idomanten-")
+            || l.starts_with("x-idosenmon-")
+            || l.starts_with("x-idoteam-")
+            || l.starts_with("x-idojp-")
+            || l.starts_with("x-idodoctors-")
+            || l.starts_with("x-idokirei-")
+            || l.starts_with("x-idoshuri-")
+            || l.starts_with("x-idonomi-")
+            || l.starts_with("x-idosagyou-")
+            || l.starts_with("x-idochousa-")
+            || l.starts_with("x-idoteiki-")
+            || l.starts_with("x-idoboring-")
+            || l.starts_with("x-idobori-")
+    })
+}
+
+fn has_sunroom_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sunroom-")
+            || l.starts_with("x-sunrooms-")
+            || l.starts_with("x-sunroompros-")
+            || l.starts_with("x-fourseasonssunroom-")
+            || l.starts_with("x-patioenclosure-")
+            || l.starts_with("x-patioenclosures-")
+            || l.starts_with("x-sunporch-")
+            || l.starts_with("x-sunspace-")
+            || l.starts_with("x-lanairoom-")
+            || l.starts_with("x-conservatorypro-")
+            || l.starts_with("x-conservatorypros-")
+            || l.starts_with("x-gardenroom-")
+            || l.starts_with("x-gardenrooms-")
+            || l.starts_with("x-solarium-")
+            || l.starts_with("x-solariumpros-")
+            || l.starts_with("x-enclosedpatio-")
+            || l.starts_with("x-threeseasonroom-")
+            || l.starts_with("x-allseasonsunroom-")
+            || l.starts_with("x-sunroomdoctor-")
+            || l.starts_with("x-sunroomexperts-")
+            || l.starts_with("x-sunroommasters-")
+            || l.starts_with("x-sunroomteam-")
+            || l.starts_with("x-sunroomworks-")
+            || l.starts_with("x-sunroomrepair-")
+            || l.starts_with("x-sanruumu-")
+            || l.starts_with("x-sanruumukouji-")
+            || l.starts_with("x-sanruumuyasan-")
+            || l.starts_with("x-sanruumupro-")
+            || l.starts_with("x-gadenruumu-")
+            || l.starts_with("x-gadenruumukouji-")
+            || l.starts_with("x-onshitsukouji-")
+            || l.starts_with("x-onshitsusekkei-")
+            || l.starts_with("x-terasuen-")
+            || l.starts_with("x-terasuyane-")
+            || l.starts_with("x-terasukouji-")
+            || l.starts_with("x-ekusuteriasun-")
+            || l.starts_with("x-ekusuteria-")
+            || l.starts_with("x-sanruumuseibi-")
+            || l.starts_with("x-sanruumukensa-")
+            || l.starts_with("x-sanruumumanten-")
+            || l.starts_with("x-sanruumuteam-")
+            || l.starts_with("x-sanruumudoctors-")
+            || l.starts_with("x-sanruumugyosha-")
+            || l.starts_with("x-sanruumunomi-")
+            || l.starts_with("x-sanruumujp-")
+            || l.starts_with("x-sanruumusenmon-")
+            || l.starts_with("x-garasusanruumu-")
+            || l.starts_with("x-garasuonshitsu-")
+            || l.starts_with("x-garasupatio-")
+            || l.starts_with("x-sanruumushuri-")
+            || l.starts_with("x-sanruumunawate-")
+            || l.starts_with("x-sanruumuteiki-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20834,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は査機印を検出する() {
+        let f0 = b"From: a@b\r\nX-InterNACHI-Member: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-AmeriSpec-Report: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-PillarToPost-Notice: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-JutakuShindan-Kekka: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-IeShindan-Nintei: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-HomeGauge-Report: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-Spectora-Trace: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-JutakuDokuta-Nintei: 1\r\n\r\nx";
+        assert!(has_homeinspect_marks(f0));
+        assert!(has_homeinspect_marks(f1));
+        assert!(has_homeinspect_marks(f2));
+        assert!(has_homeinspect_marks(f3));
+        assert!(has_homeinspect_marks(f4));
+        assert!(has_homeinspect_marks(f5));
+        assert!(has_homeinspect_marks(f6));
+        assert!(has_homeinspect_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_homeinspect_marks(clean));
+    }
+
+    #[test]
+    fn scan_は井機印を検出する() {
+        let f0 = b"From: a@b\r\nX-WellDrill-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-WaterWell-Report: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-IdoKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-PumpKoukan-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-WellPumpPros-Notice: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-YusuiKouji-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-IdoBoring-Record: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-AquiferWell-Stamp: 1\r\n\r\nx";
+        assert!(has_welldrill_marks(f0));
+        assert!(has_welldrill_marks(f1));
+        assert!(has_welldrill_marks(f2));
+        assert!(has_welldrill_marks(f3));
+        assert!(has_welldrill_marks(f4));
+        assert!(has_welldrill_marks(f5));
+        assert!(has_welldrill_marks(f6));
+        assert!(has_welldrill_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_welldrill_marks(clean));
+    }
+
+    #[test]
+    fn scan_は室機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Sunroom-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-PatioEnclosures-Record: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Sanruumu-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-TerasuEn-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-ConservatoryPro-Trace: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-GarasuPatio-Stamp: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-FourSeasonsSunroom-Notice: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-Solarium-Record: 1\r\n\r\nx";
+        assert!(has_sunroom_marks(f0));
+        assert!(has_sunroom_marks(f1));
+        assert!(has_sunroom_marks(f2));
+        assert!(has_sunroom_marks(f3));
+        assert!(has_sunroom_marks(f4));
+        assert!(has_sunroom_marks(f5));
+        assert!(has_sunroom_marks(f6));
+        assert!(has_sunroom_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_sunroom_marks(clean));
+    }
 }
