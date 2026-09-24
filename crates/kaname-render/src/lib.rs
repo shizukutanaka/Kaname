@@ -1961,6 +1961,12 @@ pub struct Envelope {
     pub callcenter_marks: bool,
     /// `X-Kashikaigi-*`/`X-Virtualoffice-*`/`X-Servicedoffice-*` 等の貸し会議室・レンタルスペース印を送信側が自称する兆候 (D724)
     pub rentalspace_marks: bool,
+    /// `X-Marathon-*`/`X-Tokyomarathon-*`/`X-Honolulumarathon-*` 等のマラソン・駅伝・ランニング印を送信側が自称する兆候 (D725)
+    pub marathon_marks: bool,
+    /// `X-Fukushiyogu-*`/`X-Kaigoyohin-*`/`X-Wheelchair-*` 等の福祉用具・介護用品印を送信側が自称する兆候 (D726)
+    pub fukushiyogu_marks: bool,
+    /// `X-Adventure-*`/`X-Rafting-*`/`X-Canyoning-*` 等のアウトドア・アドベンチャー印を送信側が自称する兆候 (D727)
+    pub adventure_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2563,6 +2569,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         fujirock_marks: has_fujirock_marks(hdr),
         callcenter_marks: has_callcenter_marks(hdr),
         rentalspace_marks: has_rentalspace_marks(hdr),
+        marathon_marks: has_marathon_marks(hdr),
+        fukushiyogu_marks: has_fukushiyogu_marks(hdr),
+        adventure_marks: has_adventure_marks(hdr),
     })
 }
 
@@ -21318,6 +21327,216 @@ fn has_rentalspace_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-tiwshop-"))
 }
 
+fn has_marathon_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-marathon-")
+            || l.starts_with("x-tokyomarathon-")
+            || l.starts_with("x-honolulumarathon-")
+            || l.starts_with("x-bostonmarathon-")
+            || l.starts_with("x-berlinmarathon-")
+            || l.starts_with("x-londonmarathon-")
+            || l.starts_with("x-chicagomarathon-")
+            || l.starts_with("x-nycmarathon-")
+            || l.starts_with("x-ekiden-")
+            || l.starts_with("x-hakone-")
+            || l.starts_with("x-running-")
+            || l.starts_with("x-jog-")
+            || l.starts_with("x-ultramarathon-")
+            || l.starts_with("x-relay-")
+            || l.starts_with("x-race-")
+            || l.starts_with("x-marathonnavi-")
+            || l.starts_with("x-marathoncenter-")
+            || l.starts_with("x-marathonshop-")
+            || l.starts_with("x-marathonpro-")
+            || l.starts_with("x-marathonmart-")
+            || l.starts_with("x-marathonplus-")
+            || l.starts_with("x-marathonsmart-")
+            || l.starts_with("x-marathonfamily-")
+            || l.starts_with("x-tokyomarathonnavi-")
+            || l.starts_with("x-tokyomarathoncenter-")
+            || l.starts_with("x-tokyomarathonshop-")
+            || l.starts_with("x-tokyomarathonpro-")
+            || l.starts_with("x-tokyomarathonmart-")
+            || l.starts_with("x-tokyomarathonplus-")
+            || l.starts_with("x-tokyomarathonsmart-")
+            || l.starts_with("x-tokyomarathonfamily-")
+            || l.starts_with("x-honolulumarathonnavi-")
+            || l.starts_with("x-honolulumarathoncenter-")
+            || l.starts_with("x-honolulumarathonshop-")
+            || l.starts_with("x-honolulumarathonpro-")
+            || l.starts_with("x-honolulumarathonmart-")
+            || l.starts_with("x-honolulumarathonplus-")
+            || l.starts_with("x-honolulumarathonsmart-")
+            || l.starts_with("x-honolulumarathonfamily-")
+            || l.starts_with("x-bostonmarathonnavi-")
+            || l.starts_with("x-bostonmarathoncenter-")
+            || l.starts_with("x-bostonmarathonshop-")
+            || l.starts_with("x-bostonmarathonpro-")
+            || l.starts_with("x-bostonmarathonmart-")
+            || l.starts_with("x-bostonmarathonplus-")
+            || l.starts_with("x-bostonmarathonsmart-")
+            || l.starts_with("x-bostonmarathonfamily-")
+            || l.starts_with("x-berlinmarathonnavi-")
+            || l.starts_with("x-berlinmarathoncenter-")
+            || l.starts_with("x-berlinmarathonshop-")
+            || l.starts_with("x-berlinmarathonpro-")
+            || l.starts_with("x-berlinmarathonmart-")
+            || l.starts_with("x-berlinmarathonplus-")
+            || l.starts_with("x-berlinmarathonsmart-")
+            || l.starts_with("x-berlinmarathonfamily-")
+            || l.starts_with("x-londonmarathonnavi-")
+            || l.starts_with("x-londonmarathoncenter-")
+            || l.starts_with("x-londonmarathonshop-")
+            || l.starts_with("x-londonmarathonpro-")
+            || l.starts_with("x-londonmarathonmart-")
+            || l.starts_with("x-londonmarathonplus-")
+            || l.starts_with("x-londonmarathonsmart-"))
+}
+
+fn has_fukushiyogu_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-fukushiyogu-")
+            || l.starts_with("x-kaigoyohin-")
+            || l.starts_with("x-wheelchair-")
+            || l.starts_with("x-hosogu-")
+            || l.starts_with("x-gishisogu-")
+            || l.starts_with("x-barrierfree-")
+            || l.starts_with("x-grouphome-")
+            || l.starts_with("x-portabletoilet-")
+            || l.starts_with("x-handrail-")
+            || l.starts_with("x-wheelchairlift-")
+            || l.starts_with("x-rehabgoods-")
+            || l.starts_with("x-caregoods-")
+            || l.starts_with("x-fukushiyogunavi-")
+            || l.starts_with("x-fukushiyogucenter-")
+            || l.starts_with("x-fukushiyogushop-")
+            || l.starts_with("x-fukushiyogupro-")
+            || l.starts_with("x-fukushiyogumart-")
+            || l.starts_with("x-fukushiyoguplus-")
+            || l.starts_with("x-fukushiyogusmart-")
+            || l.starts_with("x-fukushiyogufamily-")
+            || l.starts_with("x-kaigoyohinnavi-")
+            || l.starts_with("x-kaigoyohincenter-")
+            || l.starts_with("x-kaigoyohinshop-")
+            || l.starts_with("x-kaigoyohinpro-")
+            || l.starts_with("x-kaigoyohinmart-")
+            || l.starts_with("x-kaigoyohinplus-")
+            || l.starts_with("x-kaigoyohinsmart-")
+            || l.starts_with("x-kaigoyohinfamily-")
+            || l.starts_with("x-wheelchairnavi-")
+            || l.starts_with("x-wheelchaircenter-")
+            || l.starts_with("x-wheelchairshop-")
+            || l.starts_with("x-wheelchairpro-")
+            || l.starts_with("x-wheelchairmart-")
+            || l.starts_with("x-wheelchairplus-")
+            || l.starts_with("x-wheelchairsmart-")
+            || l.starts_with("x-wheelchairfamily-")
+            || l.starts_with("x-hosogunavi-")
+            || l.starts_with("x-hosogucenter-")
+            || l.starts_with("x-hosogushop-")
+            || l.starts_with("x-hosogupro-")
+            || l.starts_with("x-hosogumart-")
+            || l.starts_with("x-hosoguplus-")
+            || l.starts_with("x-hosogusmart-")
+            || l.starts_with("x-hosogufamily-")
+            || l.starts_with("x-gishisogunavi-")
+            || l.starts_with("x-gishisogucenter-")
+            || l.starts_with("x-gishisogushop-")
+            || l.starts_with("x-gishisogupro-")
+            || l.starts_with("x-gishisogumart-")
+            || l.starts_with("x-gishisoguplus-")
+            || l.starts_with("x-gishisogusmart-")
+            || l.starts_with("x-gishisogufamily-")
+            || l.starts_with("x-barrierfreenavi-")
+            || l.starts_with("x-barrierfreecenter-")
+            || l.starts_with("x-barrierfreeshop-")
+            || l.starts_with("x-barrierfreepro-")
+            || l.starts_with("x-barrierfreemart-")
+            || l.starts_with("x-barrierfreeplus-")
+            || l.starts_with("x-barrierfreesmart-")
+            || l.starts_with("x-barrierfreefamily-")
+            || l.starts_with("x-grouphomenavi-")
+            || l.starts_with("x-grouphomecenter-"))
+}
+
+fn has_adventure_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-adventure-")
+            || l.starts_with("x-rafting-")
+            || l.starts_with("x-canyoning-")
+            || l.starts_with("x-canoe-")
+            || l.starts_with("x-zipline-")
+            || l.starts_with("x-paraglider-")
+            || l.starts_with("x-skydiving-")
+            || l.starts_with("x-hotair-")
+            || l.starts_with("x-balloon-")
+            || l.starts_with("x-atv-")
+            || l.starts_with("x-buggy-")
+            || l.starts_with("x-mtb-")
+            || l.starts_with("x-caving-")
+            || l.starts_with("x-motocross-")
+            || l.starts_with("x-adventurenavi-")
+            || l.starts_with("x-adventurecenter-")
+            || l.starts_with("x-adventureshop-")
+            || l.starts_with("x-adventurepro-")
+            || l.starts_with("x-adventuremart-")
+            || l.starts_with("x-adventureplus-")
+            || l.starts_with("x-adventuresmart-")
+            || l.starts_with("x-adventurefamily-")
+            || l.starts_with("x-raftingnavi-")
+            || l.starts_with("x-raftingcenter-")
+            || l.starts_with("x-raftingshop-")
+            || l.starts_with("x-raftingpro-")
+            || l.starts_with("x-raftingmart-")
+            || l.starts_with("x-raftingplus-")
+            || l.starts_with("x-raftingsmart-")
+            || l.starts_with("x-raftingfamily-")
+            || l.starts_with("x-canyoningnavi-")
+            || l.starts_with("x-canyoningcenter-")
+            || l.starts_with("x-canyoningshop-")
+            || l.starts_with("x-canyoningpro-")
+            || l.starts_with("x-canyoningmart-")
+            || l.starts_with("x-canyoningplus-")
+            || l.starts_with("x-canyoningsmart-")
+            || l.starts_with("x-canyoningfamily-")
+            || l.starts_with("x-canoenavi-")
+            || l.starts_with("x-canoecenter-")
+            || l.starts_with("x-canoeshop-")
+            || l.starts_with("x-canoepro-")
+            || l.starts_with("x-canoemart-")
+            || l.starts_with("x-canoeplus-")
+            || l.starts_with("x-canoesmart-")
+            || l.starts_with("x-canoefamily-")
+            || l.starts_with("x-ziplinenavi-")
+            || l.starts_with("x-ziplinecenter-")
+            || l.starts_with("x-ziplineshop-")
+            || l.starts_with("x-ziplinepro-")
+            || l.starts_with("x-ziplinemart-")
+            || l.starts_with("x-ziplineplus-")
+            || l.starts_with("x-ziplinesmart-")
+            || l.starts_with("x-ziplinefamily-")
+            || l.starts_with("x-paraglidernavi-")
+            || l.starts_with("x-paraglidercenter-")
+            || l.starts_with("x-paraglidershop-")
+            || l.starts_with("x-paragliderpro-")
+            || l.starts_with("x-paraglidermart-")
+            || l.starts_with("x-paragliderplus-")
+            || l.starts_with("x-paraglidersmart-")
+            || l.starts_with("x-paragliderfamily-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -31665,6 +31884,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_rentalspace_marks(clean));
+    }
+
+    #[test]
+    fn scan_は奔機印を検出する() {
+        for raw in [
+            br"X-Marathon-Alert: 1",
+            br"X-Tokyomarathon-Notice: 1",
+            br"X-Bostonmarathon-Info: 1",
+            br"X-Berlinmarathon-Report: 1",
+            br"X-Ekiden-Bulletin: 1",
+            br"X-Hakone-News: 1",
+            br"X-Running-Flash: 1",
+            br"X-Ultramarathon-Release: 1",
+        ] {
+            assert!(has_marathon_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_marathon_marks(clean));
+    }
+
+    #[test]
+    fn scan_は椅機印を検出する() {
+        for raw in [
+            br"X-Fukushiyogu-Alert: 1",
+            br"X-Kaigoyohin-Notice: 1",
+            br"X-Wheelchair-Info: 1",
+            br"X-Hosogu-Report: 1",
+            br"X-Barrierfree-Bulletin: 1",
+            br"X-Grouphome-News: 1",
+            br"X-Handrail-Flash: 1",
+            br"X-Caregoods-Release: 1",
+        ] {
+            assert!(has_fukushiyogu_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fukushiyogu_marks(clean));
+    }
+
+    #[test]
+    fn scan_は険機印を検出する() {
+        for raw in [
+            br"X-Rafting-Alert: 1",
+            br"X-Canyoning-Notice: 1",
+            br"X-Canoe-Info: 1",
+            br"X-Zipline-Report: 1",
+            br"X-Paraglider-Bulletin: 1",
+            br"X-Skydiving-News: 1",
+            br"X-Atv-Flash: 1",
+            br"X-Caving-Release: 1",
+        ] {
+            assert!(has_adventure_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_adventure_marks(clean));
     }
 
 }
