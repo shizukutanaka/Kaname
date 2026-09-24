@@ -2045,6 +2045,12 @@ pub struct Envelope {
     pub orchestra_marks: bool,
     /// `X-Rccar-*`/`X-Rcplane-*`/`X-Traxxas-*` 等のラジコン・RC印を送信側が自称する兆候 (D766)
     pub radiocon_marks: bool,
+    /// `X-3dprinter-*`/`X-Bambulab-*`/`X-Voron-*` 等の3Dプリンタ・フィラメント印を送信側が自称する兆候 (D767)
+    pub printer3d_marks: bool,
+    /// `X-Vocaloid-*`/`X-Synthv-*`/`X-Cevio-*` 等の音声合成・歌声ライブラリ印を送信側が自称する兆候 (D768)
+    pub vocaloid_marks: bool,
+    /// `X-Monitor-*`/`X-Macromill-*`/`X-Intage-*` 等の覆面調査・アンケート印を送信側が自称する兆候 (D769)
+    pub survey_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2689,6 +2695,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         smarthome_marks: has_smarthome_marks(hdr),
         orchestra_marks: has_orchestra_marks(hdr),
         radiocon_marks: has_radiocon_marks(hdr),
+        printer3d_marks: has_3dprinter_marks(hdr),
+        vocaloid_marks: has_vocaloid_marks(hdr),
+        survey_marks: has_survey_marks(hdr),
     })
 }
 
@@ -24384,6 +24393,216 @@ fn has_radiocon_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-traxxaspro-"))
 }
 
+fn has_3dprinter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-3dprinter-")
+            || l.starts_with("x-bambulab-")
+            || l.starts_with("x-ender-")
+            || l.starts_with("x-voron-")
+            || l.starts_with("x-phrozen-")
+            || l.starts_with("x-filament-")
+            || l.starts_with("x-snapmaker-")
+            || l.starts_with("x-qidi-")
+            || l.starts_with("x-sovol-")
+            || l.starts_with("x-artillery-")
+            || l.starts_with("x-3dprinternavi-")
+            || l.starts_with("x-3dprintercenter-")
+            || l.starts_with("x-3dprintershop-")
+            || l.starts_with("x-3dprinterpro-")
+            || l.starts_with("x-3dprintermart-")
+            || l.starts_with("x-3dprinterplus-")
+            || l.starts_with("x-3dprintersmart-")
+            || l.starts_with("x-3dprinterfamily-")
+            || l.starts_with("x-bambulabnavi-")
+            || l.starts_with("x-bambulabcenter-")
+            || l.starts_with("x-bambulabshop-")
+            || l.starts_with("x-bambulabpro-")
+            || l.starts_with("x-bambulabmart-")
+            || l.starts_with("x-bambulabplus-")
+            || l.starts_with("x-bambulabsmart-")
+            || l.starts_with("x-bambulabfamily-")
+            || l.starts_with("x-endernavi-")
+            || l.starts_with("x-endercenter-")
+            || l.starts_with("x-endershop-")
+            || l.starts_with("x-enderpro-")
+            || l.starts_with("x-endermart-")
+            || l.starts_with("x-enderplus-")
+            || l.starts_with("x-endersmart-")
+            || l.starts_with("x-enderfamily-")
+            || l.starts_with("x-voronnavi-")
+            || l.starts_with("x-voroncenter-")
+            || l.starts_with("x-voronshop-")
+            || l.starts_with("x-voronpro-")
+            || l.starts_with("x-voronmart-")
+            || l.starts_with("x-voronplus-")
+            || l.starts_with("x-voronsmart-")
+            || l.starts_with("x-voronfamily-")
+            || l.starts_with("x-phrozennavi-")
+            || l.starts_with("x-phrozencenter-")
+            || l.starts_with("x-phrozenshop-")
+            || l.starts_with("x-phrozenpro-")
+            || l.starts_with("x-phrozenmart-")
+            || l.starts_with("x-phrozenplus-")
+            || l.starts_with("x-phrozensmart-")
+            || l.starts_with("x-phrozenfamily-")
+            || l.starts_with("x-filamentnavi-")
+            || l.starts_with("x-filamentcenter-")
+            || l.starts_with("x-filamentshop-")
+            || l.starts_with("x-filamentpro-")
+            || l.starts_with("x-filamentmart-")
+            || l.starts_with("x-filamentplus-")
+            || l.starts_with("x-filamentsmart-")
+            || l.starts_with("x-filamentfamily-")
+            || l.starts_with("x-snapmakernavi-")
+            || l.starts_with("x-snapmakercenter-")
+            || l.starts_with("x-snapmakershop-")
+            || l.starts_with("x-snapmakerpro-"))
+}
+
+fn has_vocaloid_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-vocaloid-")
+            || l.starts_with("x-synthv-")
+            || l.starts_with("x-cevio-")
+            || l.starts_with("x-voiceroid-")
+            || l.starts_with("x-utau-")
+            || l.starts_with("x-voisona-")
+            || l.starts_with("x-voidol-")
+            || l.starts_with("x-ahsoft-")
+            || l.starts_with("x-vocaloidnavi-")
+            || l.starts_with("x-vocaloidcenter-")
+            || l.starts_with("x-vocaloidshop-")
+            || l.starts_with("x-vocaloidpro-")
+            || l.starts_with("x-vocaloidmart-")
+            || l.starts_with("x-vocaloidplus-")
+            || l.starts_with("x-vocaloidsmart-")
+            || l.starts_with("x-vocaloidfamily-")
+            || l.starts_with("x-synthvnavi-")
+            || l.starts_with("x-synthvcenter-")
+            || l.starts_with("x-synthvshop-")
+            || l.starts_with("x-synthvpro-")
+            || l.starts_with("x-synthvmart-")
+            || l.starts_with("x-synthvplus-")
+            || l.starts_with("x-synthvsmart-")
+            || l.starts_with("x-synthvfamily-")
+            || l.starts_with("x-cevionavi-")
+            || l.starts_with("x-ceviocenter-")
+            || l.starts_with("x-cevioshop-")
+            || l.starts_with("x-ceviopro-")
+            || l.starts_with("x-ceviomart-")
+            || l.starts_with("x-cevioplus-")
+            || l.starts_with("x-ceviosmart-")
+            || l.starts_with("x-ceviofamily-")
+            || l.starts_with("x-voiceroidnavi-")
+            || l.starts_with("x-voiceroidcenter-")
+            || l.starts_with("x-voiceroidshop-")
+            || l.starts_with("x-voiceroidpro-")
+            || l.starts_with("x-voiceroidmart-")
+            || l.starts_with("x-voiceroidplus-")
+            || l.starts_with("x-voiceroidsmart-")
+            || l.starts_with("x-voiceroidfamily-")
+            || l.starts_with("x-utaunavi-")
+            || l.starts_with("x-utaucenter-")
+            || l.starts_with("x-utaushop-")
+            || l.starts_with("x-utaupro-")
+            || l.starts_with("x-utaumart-")
+            || l.starts_with("x-utauplus-")
+            || l.starts_with("x-utausmart-")
+            || l.starts_with("x-utaufamily-")
+            || l.starts_with("x-voisonanavi-")
+            || l.starts_with("x-voisonacenter-")
+            || l.starts_with("x-voisonashop-")
+            || l.starts_with("x-voisonapro-")
+            || l.starts_with("x-voisonamart-")
+            || l.starts_with("x-voisonaplus-")
+            || l.starts_with("x-voisonasmart-")
+            || l.starts_with("x-voisonafamily-")
+            || l.starts_with("x-voidolnavi-")
+            || l.starts_with("x-voidolcenter-")
+            || l.starts_with("x-voidolshop-")
+            || l.starts_with("x-voidolpro-")
+            || l.starts_with("x-voidolmart-")
+            || l.starts_with("x-voidolplus-"))
+}
+
+fn has_survey_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-monitor-")
+            || l.starts_with("x-macromill-")
+            || l.starts_with("x-intage-")
+            || l.starts_with("x-researchpanel-")
+            || l.starts_with("x-myvoice-")
+            || l.starts_with("x-asmarq-")
+            || l.starts_with("x-questant-")
+            || l.starts_with("x-crossmarketing-")
+            || l.starts_with("x-dstyle-")
+            || l.starts_with("x-monitornavi-")
+            || l.starts_with("x-monitorcenter-")
+            || l.starts_with("x-monitorshop-")
+            || l.starts_with("x-monitorpro-")
+            || l.starts_with("x-monitormart-")
+            || l.starts_with("x-monitorplus-")
+            || l.starts_with("x-monitorsmart-")
+            || l.starts_with("x-monitorfamily-")
+            || l.starts_with("x-macromillnavi-")
+            || l.starts_with("x-macromillcenter-")
+            || l.starts_with("x-macromillshop-")
+            || l.starts_with("x-macromillpro-")
+            || l.starts_with("x-macromillmart-")
+            || l.starts_with("x-macromillplus-")
+            || l.starts_with("x-macromillsmart-")
+            || l.starts_with("x-macromillfamily-")
+            || l.starts_with("x-intagenavi-")
+            || l.starts_with("x-intagecenter-")
+            || l.starts_with("x-intageshop-")
+            || l.starts_with("x-intagepro-")
+            || l.starts_with("x-intagemart-")
+            || l.starts_with("x-intageplus-")
+            || l.starts_with("x-intagesmart-")
+            || l.starts_with("x-intagefamily-")
+            || l.starts_with("x-researchpanelnavi-")
+            || l.starts_with("x-researchpanelcenter-")
+            || l.starts_with("x-researchpanelshop-")
+            || l.starts_with("x-researchpanelpro-")
+            || l.starts_with("x-researchpanelmart-")
+            || l.starts_with("x-researchpanelplus-")
+            || l.starts_with("x-researchpanelsmart-")
+            || l.starts_with("x-researchpanelfamily-")
+            || l.starts_with("x-myvoicenavi-")
+            || l.starts_with("x-myvoicecenter-")
+            || l.starts_with("x-myvoiceshop-")
+            || l.starts_with("x-myvoicepro-")
+            || l.starts_with("x-myvoicemart-")
+            || l.starts_with("x-myvoiceplus-")
+            || l.starts_with("x-myvoicesmart-")
+            || l.starts_with("x-myvoicefamily-")
+            || l.starts_with("x-asmarqnavi-")
+            || l.starts_with("x-asmarqcenter-")
+            || l.starts_with("x-asmarqshop-")
+            || l.starts_with("x-asmarqpro-")
+            || l.starts_with("x-asmarqmart-")
+            || l.starts_with("x-asmarqplus-")
+            || l.starts_with("x-asmarqsmart-")
+            || l.starts_with("x-asmarqfamily-")
+            || l.starts_with("x-questantnavi-")
+            || l.starts_with("x-questantcenter-")
+            || l.starts_with("x-questantshop-")
+            || l.starts_with("x-questantpro-")
+            || l.starts_with("x-questantmart-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -35485,6 +35704,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_radiocon_marks(clean));
+    }
+
+    #[test]
+    fn scan_は造機印を検出する() {
+        for raw in [
+            br"X-3dprinter-Alert: 1",
+            br"X-Bambulab-Notice: 1",
+            br"X-Ender-Info: 1",
+            br"X-Voron-Report: 1",
+            br"X-Phrozen-Bulletin: 1",
+            br"X-Filament-News: 1",
+            br"X-Snapmaker-Flash: 1",
+            br"X-Qidi-Release: 1",
+        ] {
+            assert!(has_3dprinter_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_3dprinter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は声機印を検出する() {
+        for raw in [
+            br"X-Vocaloid-Alert: 1",
+            br"X-Synthv-Notice: 1",
+            br"X-Cevio-Info: 1",
+            br"X-Voiceroid-Report: 1",
+            br"X-Utau-Bulletin: 1",
+            br"X-Voisona-News: 1",
+            br"X-Voidol-Flash: 1",
+            br"X-Ahsoft-Release: 1",
+        ] {
+            assert!(has_vocaloid_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_vocaloid_marks(clean));
+    }
+
+    #[test]
+    fn scan_は調機印を検出する() {
+        for raw in [
+            br"X-Monitor-Alert: 1",
+            br"X-Macromill-Notice: 1",
+            br"X-Intage-Info: 1",
+            br"X-Researchpanel-Report: 1",
+            br"X-Myvoice-Bulletin: 1",
+            br"X-Asmarq-News: 1",
+            br"X-Questant-Flash: 1",
+            br"X-Crossmarketing-Release: 1",
+        ] {
+            assert!(has_survey_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_survey_marks(clean));
     }
 
 }
