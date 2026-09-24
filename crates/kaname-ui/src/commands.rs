@@ -2188,6 +2188,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D632: 車検・整備・洗車印自称
+    if env.autoservice_marks {
+        render_risks.push(
+            "X-Kobac-*/X-DiscountTire-*/X-JiffyLube-*/X-MidasAuto-*/X-Firestone-*/X-KwikFit-*/X-MisterCarWash-*/X-Taiyakan-* 等 — 整機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D633: ガラス・窓修理印自称
+    if env.glass_marks {
+        render_risks.push(
+            "X-Safelite-*/X-GlassDoctor-*/X-Carglass-*/X-Belron-*/X-WindowWorld-*/X-RenewalByAndersen-*/X-AutoGlassNow-* 等 — 硝機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D634: 塗装・ペイント印自称
+    if env.painting_marks {
+        render_risks.push(
+            "X-CertaPro-*/X-FiveStarPainting-*/X-Wow1Day-*/X-Nurikae-*/X-GaihekiMadoguchi-*/X-Tosou-*/X-ProTimes-* 等 — 塗機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

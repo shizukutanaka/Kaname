@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-Kobac-*`/`X-Sokutaro-*`/`X-DiscountTire-*`/`X-JiffyLube-*`/`X-MidasAuto-*`/`X-KwikFit-*`/`X-MisterCarWash-*` 等 — 車検・整備・洗車機印自称
+    pub autoservice_marks: bool,
+    /// `X-Safelite-*`/`X-GlassDoctor-*`/`X-Carglass-*`/`X-Belron-*`/`X-WindowWorld-*`/`X-WindowGenie-*` 等 — ガラス・窓修理機印自称
+    pub glass_marks: bool,
+    /// `X-CertaPro-*`/`X-FiveStarPainting-*`/`X-Wow1Day-*`/`X-Nurikae-*`/`X-GaihekiMadoguchi-*`/`X-Tosou-*` 等 — 塗装・ペイント機印自称
+    pub painting_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        autoservice_marks: has_autoservice_marks(hdr),
+        glass_marks: has_glass_marks(hdr),
+        painting_marks: has_painting_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,250 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D632: 車検・整備・洗車機印の自称を検出する。
+///
+/// JP は `X-Kobac-*` (コバック)、`X-Sokutaro-*` (車検の速太郎)、`X-Taiyakan-*` (タイヤ館)、
+/// `X-Mr-Tireman-*`/`X-MrTireman-*` (ミスタータイヤマン)、`X-Autoway-*` (オートウェイ)、
+/// 海外は `X-DiscountTire-*`/`X-Discount-Tire-*`/`X-AmericasTire-*`/`X-LesSchwab-*`/
+/// `X-PepBoys-*`/`X-Meineke-*`/`X-MidasAuto-*`/`X-Midas-Auto-*`/`X-Monro-*`/`X-JiffyLube-*`/
+/// `X-Jiffy-Lube-*`/`X-Valvoline-*`/`X-VIOC-*`/`X-GreaseMonkey-*`/`X-Take5Oil-*`/`X-BigOTires-*`/
+/// `X-NTB-*`/`X-NTBAuto-*`/`X-TireKingdom-*`/`X-MerchantsTire-*`/`X-STSTire-*`/`X-Firestone-*`/
+/// `X-GoodyearService-*`/`X-AAMCO-*`/`X-Cottman-*`/`X-MrTransmission-*`/`X-PrecisionTune-*`/
+/// `X-Tuffy-*`/`X-ChristianBrothers-*`/`X-ExpressOil-*`/`X-KwikKar-*`/`X-BrakeMasters-*`/
+/// `X-JustBrakes-*`/`X-BrakesPlus-*`/`X-BrakeCheck-*`/`X-ServiceKing-*`/`X-CaliberCollision-*`/
+/// `X-GerberCollision-*`/`X-MAACO-*`/`X-FixAuto-*`/`X-KwikFit-*`/`X-HalfordsAutocentre-*`/
+/// `X-ATSEuromaster-*`/`X-NationalTyres-*`/`X-Protyre-*`/`X-F1Autocentres-*`/`X-JustTyres-*`/
+/// `X-MrTyre-*`/`X-Point-S-*`/`X-Norauto-*`、洗車は `X-MisterCarWash-*`/`X-ZipsCarWash-*`/
+/// `X-Take5Wash-*`/`X-CobblestoneWash-*`/`X-SuperStarCarWash-*`/`X-Autobell-*`/`X-CrewCarWash-*`/
+/// `X-GoCarWash-*`/`X-TerribleHerst-*`/`X-BrownBear-*`/`X-ShineWash-*`/`X-TommysCarWash-*`/
+/// `X-RocketCarWash-*` 等の車検・整備・洗車機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 車検時期通知・法定点検・タイヤ交換・洗車サブスク料金の偽装は整備業者なりすましの典型手口。
+/// 整備印の自署は兆候として数える。
+/// (車両メーカー・レンタルは automotive 機、中古車販売・用品は cartrade 機で検出済み)
+fn has_autoservice_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kobac-")
+            || l.starts_with("x-sokutaro-")
+            || l.starts_with("x-taiyakan-")
+            || l.starts_with("x-mr-tireman-")
+            || l.starts_with("x-mrtireman-")
+            || l.starts_with("x-autoway-")
+            || l.starts_with("x-discounttire-")
+            || l.starts_with("x-discount-tire-")
+            || l.starts_with("x-americastire-")
+            || l.starts_with("x-lesschwab-")
+            || l.starts_with("x-pepboys-")
+            || l.starts_with("x-meineke-")
+            || l.starts_with("x-midasauto-")
+            || l.starts_with("x-midas-auto-")
+            || l.starts_with("x-monro-")
+            || l.starts_with("x-jiffylube-")
+            || l.starts_with("x-jiffy-lube-")
+            || l.starts_with("x-valvoline-")
+            || l.starts_with("x-vioc-")
+            || l.starts_with("x-greasemonkey-")
+            || l.starts_with("x-grease-monkey-")
+            || l.starts_with("x-take5oil-")
+            || l.starts_with("x-take5oilchange-")
+            || l.starts_with("x-speedyoil-")
+            || l.starts_with("x-bigotires-")
+            || l.starts_with("x-ntb-")
+            || l.starts_with("x-ntbauto-")
+            || l.starts_with("x-tirekingdom-")
+            || l.starts_with("x-merchantstire-")
+            || l.starts_with("x-ststire-")
+            || l.starts_with("x-firestone-")
+            || l.starts_with("x-goodyearservice-")
+            || l.starts_with("x-aamco-")
+            || l.starts_with("x-cottman-")
+            || l.starts_with("x-mrtransmission-")
+            || l.starts_with("x-precisiontune-")
+            || l.starts_with("x-tuffy-")
+            || l.starts_with("x-christianbrothers-")
+            || l.starts_with("x-expressoil-")
+            || l.starts_with("x-kwikkar-")
+            || l.starts_with("x-brakemasters-")
+            || l.starts_with("x-justbrakes-")
+            || l.starts_with("x-brakesplus-")
+            || l.starts_with("x-brakecheck-")
+            || l.starts_with("x-serviceking-")
+            || l.starts_with("x-calibercollision-")
+            || l.starts_with("x-gerbercollision-")
+            || l.starts_with("x-maaco-")
+            || l.starts_with("x-abraauto-")
+            || l.starts_with("x-fixauto-")
+            || l.starts_with("x-kwikfit-")
+            || l.starts_with("x-halfordsautocentre-")
+            || l.starts_with("x-atseuromaster-")
+            || l.starts_with("x-nationaltyres-")
+            || l.starts_with("x-protyre-")
+            || l.starts_with("x-f1autocentres-")
+            || l.starts_with("x-justtyres-")
+            || l.starts_with("x-mrtyre-")
+            || l.starts_with("x-point-s-")
+            || l.starts_with("x-points-")
+            || l.starts_with("x-norauto-")
+            || l.starts_with("x-speedyautoservice-")
+            || l.starts_with("x-mistercarwash-")
+            || l.starts_with("x-zipscarwash-")
+            || l.starts_with("x-zips-carwash-")
+            || l.starts_with("x-take5wash-")
+            || l.starts_with("x-take5carwash-")
+            || l.starts_with("x-cobblestonewash-")
+            || l.starts_with("x-superstarcarwash-")
+            || l.starts_with("x-autobell-")
+            || l.starts_with("x-zappcarwash-")
+            || l.starts_with("x-crewcarwash-")
+            || l.starts_with("x-gocarwash-")
+            || l.starts_with("x-terribleherst-")
+            || l.starts_with("x-cleantouch-")
+            || l.starts_with("x-brownbear-")
+            || l.starts_with("x-shinewash-")
+            || l.starts_with("x-tommycarwash-")
+            || l.starts_with("x-rocketcarwash-")
+            || l.starts_with("x-washmen-")
+            || l.starts_with("x-formulaoneautocentres-")
+    })
+}
+
+/// D633: ガラス・窓修理機印の自称を検出する。
+///
+/// `X-Safelite-*`/`X-GlassDoctor-*`/`X-NovusGlass-*`/`X-SpeedyGlass-*`/`X-Belron-*`/
+/// `X-Carglass-*`/`X-Autoglass-*`/`X-OBrienGlass-*`/`X-SmithSmith-*`/`X-NationalWindscreens-*`/
+/// `X-GlassAmerica-*`/`X-AutoGlassNow-*`/`X-GlasWeld-*`/`X-WindshieldSurgeon-*`/
+/// `X-MobileGlassPros-*`/`X-Windscreen-*`、窓・サッシは `X-WindowWorld-*`/
+/// `X-RenewalByAndersen-*`/`X-RenewalByA-*`/`X-ChampionWindows-*`/`X-WindowNation-*`/
+/// `X-ThompsonCreek-*`/`X-ZenWindows-*`/`X-UniversalDirect-*`/`X-WindowGenie-*`/
+/// `X-FishWindowCleaning-*`/`X-MenInKilts-*`、JP は `X-GlassPro-*`/`X-Glassya-*`/
+/// `X-Garasuya-*`/`X-TokyoGlass-*`/`X-CityGlass-*`/`X-Glass-Repair-*`/`X-KFKGlass-*`/
+/// `X-SafeGlass-*`/`X-GlassExperts-*`/`X-AbaLoneGlass-*` 等のガラス・窓修理機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 飛び石修理・フロントガラス交換・窓ガラス修理の見積・保険手続き通知の偽装は
+/// ガラス業者なりすましの典型手口。硝子印の自署は兆候として数える。
+/// (住宅建材・サッシメーカーは housing 機、板金・整備は autoservice 機で検出済み)
+fn has_glass_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-safelite-")
+            || l.starts_with("x-glassdoctor-")
+            || l.starts_with("x-novusglass-")
+            || l.starts_with("x-speedyglass-")
+            || l.starts_with("x-belron-")
+            || l.starts_with("x-carglass-")
+            || l.starts_with("x-autoglass-")
+            || l.starts_with("x-obrienglass-")
+            || l.starts_with("x-smithsmith-")
+            || l.starts_with("x-nationalwindscreens-")
+            || l.starts_with("x-glassamerica-")
+            || l.starts_with("x-autoglassnow-")
+            || l.starts_with("x-glasweld-")
+            || l.starts_with("x-windshieldsurgeon-")
+            || l.starts_with("x-mobileglasspros-")
+            || l.starts_with("x-windscreen-")
+            || l.starts_with("x-windowworld-")
+            || l.starts_with("x-renewalbyandersen-")
+            || l.starts_with("x-renewalbya-")
+            || l.starts_with("x-championwindows-")
+            || l.starts_with("x-windownation-")
+            || l.starts_with("x-thompsoncreek-")
+            || l.starts_with("x-zenwindows-")
+            || l.starts_with("x-universaldirect-")
+            || l.starts_with("x-windowgenie-")
+            || l.starts_with("x-fishwindowcleaning-")
+            || l.starts_with("x-meninkilts-")
+            || l.starts_with("x-squeegee-")
+            || l.starts_with("x-glasspro-")
+            || l.starts_with("x-glassya-")
+            || l.starts_with("x-garasuya-")
+            || l.starts_with("x-tokyoglass-")
+            || l.starts_with("x-cityglass-")
+            || l.starts_with("x-glass-repair-")
+            || l.starts_with("x-glassrepair-")
+            || l.starts_with("x-kfkglass-")
+            || l.starts_with("x-safeglass-")
+            || l.starts_with("x-glassexperts-")
+            || l.starts_with("x-abaloneglass-")
+            || l.starts_with("x-glassworks-")
+            || l.starts_with("x-emergencyglass-")
+            || l.starts_with("x-allglass-")
+            || l.starts_with("x-primeglass-")
+            || l.starts_with("x-drglass-")
+            || l.starts_with("x-glassexpress-")
+            || l.starts_with("x-crystalglass-")
+    })
+}
+
+/// D634: 塗装・ペイント機印の自称を検出する。
+///
+/// `X-CertaPro-*`/`X-CertaProPainters-*`/`X-FiveStarPainting-*`/`X-FreshCoat-*`/
+/// `X-FreshCoatPainters-*`/`X-Wow1Day-*`/`X-Wow1DayPainting-*`/`X-360Painting-*`/
+/// `X-ProTectPainters-*`/`X-CollegePro-*`/`X-SharperImpressions-*`/`X-Paintzen-*`/
+/// `X-TextbookPainting-*`、JP は `X-Nurikae-*` (ヌリカエ)、`X-GaihekiMadoguchi-*`/
+/// `X-Gaiheki-Madoguchi-*` (外壁塗装の窓口)、`X-GaihekiConcierge-*`/`X-Gaiheki-Concierge-*`/
+/// `X-ProTimes-*`/`X-PaintHouse-*`/`X-Tosou-*`/`X-Penki-*`/`X-PenkiYasan-*`/
+/// `X-TosouGyosha-*`/`X-GaibuToso-*`/`X-Gaihekizou-*`/`X-Sotsuyasan-*`/
+/// `X-PaintingPros-*`/`X-SherwinService-*`/`X-BenjaminMooreService-*` 等の塗装・
+/// ペイント機印はいずれも「この機が通知した」という通知記録であり、送信側が書くことは
+/// 自称にすぎない。外壁塗装・屋根塗装・無料点検からの強引な契約の偽装は
+/// 塗装業者なりすましの典型手口。塗装印の自署は兆候として数える。
+/// (住宅メーカー・建材は housing 機、リフォーム一式は reform 機系で検出済み)
+fn has_painting_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-certapro-")
+            || l.starts_with("x-certapropainters-")
+            || l.starts_with("x-fivestarpainting-")
+            || l.starts_with("x-freshcoat-")
+            || l.starts_with("x-freshcoatpainters-")
+            || l.starts_with("x-wow1day-")
+            || l.starts_with("x-wow1daypainting-")
+            || l.starts_with("x-360painting-")
+            || l.starts_with("x-protectpainters-")
+            || l.starts_with("x-collegepro-")
+            || l.starts_with("x-sharperimpressions-")
+            || l.starts_with("x-paintzen-")
+            || l.starts_with("x-textbookpainting-")
+            || l.starts_with("x-nurikae-")
+            || l.starts_with("x-gaihekimadoguchi-")
+            || l.starts_with("x-gaiheki-madoguchi-")
+            || l.starts_with("x-gaihekiconcierge-")
+            || l.starts_with("x-gaiheki-concierge-")
+            || l.starts_with("x-protimes-")
+            || l.starts_with("x-painthouse-")
+            || l.starts_with("x-tosou-")
+            || l.starts_with("x-penki-")
+            || l.starts_with("x-penkiyasan-")
+            || l.starts_with("x-tosougyosha-")
+            || l.starts_with("x-gaibutoso-")
+            || l.starts_with("x-gaihekizou-")
+            || l.starts_with("x-sotsuyasan-")
+            || l.starts_with("x-paintingpros-")
+            || l.starts_with("x-sherwinservice-")
+            || l.starts_with("x-benjaminmooreservice-")
+            || l.starts_with("x-paintline-")
+            || l.starts_with("x-ecolors-")
+            || l.starts_with("x-roofpaint-")
+            || l.starts_with("x-wallpaint-")
+            || l.starts_with("x-exteriorpaint-")
+            || l.starts_with("x-paintworks-")
+            || l.starts_with("x-colorworks-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20893,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は整機印を検出する() {
+    let k1 = b"From: a@b
+X-Kobac-Id: 1
+
+x";
+    let d1 = b"From: a@b
+X-DiscountTire-Trace: 1
+
+x";
+    let j1 = b"From: a@b
+X-JiffyLube-Notice: 1
+
+x";
+    let m1 = b"From: a@b
+X-MidasAuto-Flag: 1
+
+x";
+    let f1 = b"From: a@b
+X-Firestone-Entry: 1
+
+x";
+    let w1 = b"From: a@b
+X-KwikFit-Record: 1
+
+x";
+    let c1 = b"From: a@b
+X-MisterCarWash-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-Taiyakan-Stamp: 1
+
+x";
+    assert!(has_autoservice_marks(k1));
+    assert!(has_autoservice_marks(d1));
+    assert!(has_autoservice_marks(j1));
+    assert!(has_autoservice_marks(m1));
+    assert!(has_autoservice_marks(f1));
+    assert!(has_autoservice_marks(w1));
+    assert!(has_autoservice_marks(c1));
+    assert!(has_autoservice_marks(t1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_autoservice_marks(clean));
+}
+
+#[test]
+fn scan_は硝機印を検出する() {
+    let s1 = b"From: a@b
+X-Safelite-Id: 1
+
+x";
+    let g1 = b"From: a@b
+X-GlassDoctor-Trace: 1
+
+x";
+    let c1 = b"From: a@b
+X-Carglass-Notice: 1
+
+x";
+    let b1 = b"From: a@b
+X-Belron-Flag: 1
+
+x";
+    let w1 = b"From: a@b
+X-WindowWorld-Entry: 1
+
+x";
+    let r1 = b"From: a@b
+X-RenewalByAndersen-Record: 1
+
+x";
+    let f1 = b"From: a@b
+X-FishWindowCleaning-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-AutoGlassNow-Stamp: 1
+
+x";
+    assert!(has_glass_marks(s1));
+    assert!(has_glass_marks(g1));
+    assert!(has_glass_marks(c1));
+    assert!(has_glass_marks(b1));
+    assert!(has_glass_marks(w1));
+    assert!(has_glass_marks(r1));
+    assert!(has_glass_marks(f1));
+    assert!(has_glass_marks(a1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_glass_marks(clean));
+}
+
+#[test]
+fn scan_は塗機印を検出する() {
+    let c1 = b"From: a@b
+X-CertaPro-Id: 1
+
+x";
+    let f1 = b"From: a@b
+X-FiveStarPainting-Trace: 1
+
+x";
+    let w1 = b"From: a@b
+X-Wow1Day-Notice: 1
+
+x";
+    let n1 = b"From: a@b
+X-Nurikae-Flag: 1
+
+x";
+    let g1 = b"From: a@b
+X-GaihekiMadoguchi-Entry: 1
+
+x";
+    let t1 = b"From: a@b
+X-Tosou-Record: 1
+
+x";
+    let p1 = b"From: a@b
+X-ProTimes-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sotsuyasan-Stamp: 1
+
+x";
+    assert!(has_painting_marks(c1));
+    assert!(has_painting_marks(f1));
+    assert!(has_painting_marks(w1));
+    assert!(has_painting_marks(n1));
+    assert!(has_painting_marks(g1));
+    assert!(has_painting_marks(t1));
+    assert!(has_painting_marks(p1));
+    assert!(has_painting_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_painting_marks(clean));
 }
 }

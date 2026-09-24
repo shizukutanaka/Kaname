@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D632: `X-Kobac-*`/`X-DiscountTire-*`/`X-JiffyLube-*` 等の車検・整備・洗車印自称が未検査
+
+- **問題**: JP は `X-Kobac-*` (コバック)、`X-Sokutaro-*` (車検の速太郎)、`X-Taiyakan-*`/`X-Mr-Tireman-*`/`X-MrTireman-*`/`X-Autoway-*`、海外は `X-DiscountTire-*`/`X-AmericasTire-*`/`X-LesSchwab-*`/`X-PepBoys-*`/`X-Meineke-*`/`X-MidasAuto-*`/`X-Monro-*`/`X-JiffyLube-*`/`X-Valvoline-*`/`X-VIOC-*`/`X-GreaseMonkey-*`/`X-Take5Oil-*`/`X-BigOTires-*`/`X-NTB-*`/`X-TireKingdom-*`/`X-Firestone-*`/`X-GoodyearService-*`/`X-AAMCO-*`/`X-MrTransmission-*`/`X-PrecisionTune-*`/`X-Tuffy-*`/`X-ChristianBrothers-*`/`X-ExpressOil-*`/`X-KwikKar-*`/`X-BrakeMasters-*`/`X-BrakesPlus-*`/`X-ServiceKing-*`/`X-CaliberCollision-*`/`X-GerberCollision-*`/`X-MAACO-*`/`X-FixAuto-*`/`X-KwikFit-*`/`X-HalfordsAutocentre-*`/`X-ATSEuromaster-*`/`X-NationalTyres-*`/`X-Protyre-*`/`X-Point-S-*`/`X-Norauto-*`、洗車は `X-MisterCarWash-*`/`X-ZipsCarWash-*`/`X-Take5Wash-*`/`X-CobblestoneWash-*`/`X-SuperStarCarWash-*`/`X-Autobell-*`/`X-CrewCarWash-*`/`X-GoCarWash-*`/`X-TerribleHerst-*`/`X-TommysCarWash-*` 等 は整機の通知記録 — 送信側が書くことは自称。車検時期通知・法定点検・タイヤ交換・洗車サブスク料金の偽装は整備業者なりすましの典型手口。(車両メーカー・レンタルは automotive 機、中古車販売・用品は cartrade 機で検出済み)
+- **修正**: `Envelope` に `autoservice_marks` + `has_autoservice_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 整印の自署を問え。
+
+### Security — D633: `X-Safelite-*`/`X-GlassDoctor-*`/`X-Carglass-*` 等のガラス・窓修理印自称が未検査
+
+- **問題**: `X-Safelite-*`/`X-GlassDoctor-*`/`X-NovusGlass-*`/`X-SpeedyGlass-*`/`X-Belron-*`/`X-Carglass-*`/`X-Autoglass-*`/`X-OBrienGlass-*`/`X-NationalWindscreens-*`/`X-GlassAmerica-*`/`X-AutoGlassNow-*`/`X-GlasWeld-*`/`X-WindshieldSurgeon-*`/`X-MobileGlassPros-*`/`X-Windscreen-*`、窓・サッシは `X-WindowWorld-*`/`X-RenewalByAndersen-*`/`X-ChampionWindows-*`/`X-WindowNation-*`/`X-ThompsonCreek-*`/`X-ZenWindows-*`/`X-WindowGenie-*`/`X-FishWindowCleaning-*`/`X-MenInKilts-*`、JP は `X-GlassPro-*`/`X-Glassya-*`/`X-Garasuya-*`/`X-TokyoGlass-*`/`X-CityGlass-*`/`X-GlassRepair-*`/`X-DrGlass-*`/`X-CrystalGlass-*`/`X-GlassExpress-*` 等 は硝機の通知記録 — 送信側が書くことは自称。飛び石修理・フロントガラス交換・窓ガラス修理見積・保険手続き通知の偽装はガラス業者なりすましの典型手口。(住宅建材・サッシメーカーは housing 機、板金・整備は autoservice 機で検出済み)
+- **修正**: `Envelope` に `glass_marks` + `has_glass_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 硝印の自署を問え。
+
+### Security — D634: `X-CertaPro-*`/`X-Nurikae-*`/`X-GaihekiMadoguchi-*` 等の塗装・ペイント印自称が未検査
+
+- **問題**: `X-CertaPro-*`/`X-FiveStarPainting-*`/`X-FreshCoat-*`/`X-Wow1Day-*`/`X-360Painting-*`/`X-ProTectPainters-*`/`X-CollegePro-*`/`X-SharperImpressions-*`/`X-Paintzen-*`/`X-TextbookPainting-*`、JP は `X-Nurikae-*` (ヌリカエ)、`X-GaihekiMadoguchi-*` (外壁塗装の窓口)、`X-GaihekiConcierge-*`/`X-ProTimes-*`/`X-PaintHouse-*`/`X-Tosou-*`/`X-Penki-*`/`X-PenkiYasan-*`/`X-TosouGyosha-*`/`X-GaibuToso-*`/`X-Gaihekizou-*`/`X-Sotsuyasan-*`/`X-PaintingPros-*`/`X-Paintline-*`/`X-RoofPaint-*`/`X-ExteriorPaint-*`/`X-ColorWorks-*` 等 は塗機の通知記録 — 送信側が書くことは自称。外壁塗装・屋根塗装・無料点検からの強引な契約の偽装は塗装業者なりすましの典型手口。(住宅メーカー・建材は housing 機で検出済み)
+- **修正**: `Envelope` に `painting_marks` + `has_painting_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 塗印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
