@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D908: `X-Engimono-*`/`X-Darumaya-*`/`X-Darumaten-*`/`X-Darumastore-*`/`X-Japdaruma-*`/`X-Luckycharm-*` 等の縁起物・だるま印自称が未検査
+
+- **問題**: `X-Engimono-*`/`X-EngimonoYasan-*`/`X-EngimonoPro-*`/`X-EngimonoTeam-*`/`X-EngimonoJP-*`/`X-EngimonoSenmon-*`/`X-Darumaya-*`/`X-DarumayaYasan-*`/`X-DarumayaPro-*`/`X-DarumayaTeam-*`/`X-DarumayaJP-*`/`X-DarumayaSenmon-*`/`X-Darumaten-*`/`X-DarumatenYasan-*`/`X-DarumatenPro-*`/`X-DarumatenTeam-*`/`X-DarumatenJP-*`/`X-DarumatenSenmon-*`/`X-DarumastorePros-*`/`X-DarumastoreTeam-*`/`X-DarumastoreWorks-*`/`X-DarumastoreExperts-*`/`X-DarumastoreSvc-*`/`X-DarumastoreHQ-*`/`X-JapdarumaPros-*`/`X-JapdarumaTeam-*`/`X-JapdarumaWorks-*`/`X-JapdarumaExperts-*`/`X-JapdarumaSvc-*`/`X-JapdarumaHQ-*`/`X-LuckycharmPros-*`/`X-LuckycharmTeam-*`/`X-LuckycharmWorks-*`/`X-LuckycharmExperts-*`/`X-LuckycharmSvc-*`/`X-LuckycharmHQ-*` 等 は縁機の通知記録 — 送信側が書くことは自称。縁起物・だるま業者の偽装は、高崎だるま・招き猫の産地直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `engimono_marks` + `has_engimono_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 縁印の自署を問え。
+
+### Security — D909: `X-Tako-*`/`X-Takoya-*`/`X-Komaten-*`/`X-Kitestore-*`/`X-Japkite-*`/`X-Topspinning-*` 等の凧・独楽印自称が未検査
+
+- **問題**: `X-Tako-*`/`X-TakoYasan-*`/`X-TakoPro-*`/`X-TakoTeam-*`/`X-TakoJP-*`/`X-TakoSenmon-*`/`X-Takoya-*`/`X-TakoyaYasan-*`/`X-TakoyaPro-*`/`X-TakoyaTeam-*`/`X-TakoyaJP-*`/`X-TakoyaSenmon-*`/`X-Komaten-*`/`X-KomatenYasan-*`/`X-KomatenPro-*`/`X-KomatenTeam-*`/`X-KomatenJP-*`/`X-KomatenSenmon-*`/`X-KitestorePros-*`/`X-KitestoreTeam-*`/`X-KitestoreWorks-*`/`X-KitestoreExperts-*`/`X-KitestoreSvc-*`/`X-KitestoreHQ-*`/`X-JapkitePros-*`/`X-JapkiteTeam-*`/`X-JapkiteWorks-*`/`X-JapkiteExperts-*`/`X-JapkiteSvc-*`/`X-JapkiteHQ-*`/`X-TopspinningPros-*`/`X-TopspinningTeam-*`/`X-TopspinningWorks-*`/`X-TopspinningExperts-*`/`X-TopspinningSvc-*`/`X-TopspinningHQ-*` 等 は凧機の通知記録 — 送信側が書くことは自称。凧・独楽業者の偽装は、江戸凧・博多独楽の職人直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `tako_marks` + `has_tako_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 凧印の自署を問え。
+
+### Security — D910: `X-Fuurinya-*`/`X-Furinten-*`/`X-Furinya-*`/`X-Windchime-*`/`X-Japchime-*`/`X-Windbell-*` 等の風鈴印自称が未検査
+
+- **問題**: `X-Fuurinya-*`/`X-FuurinyaYasan-*`/`X-FuurinyaPro-*`/`X-FuurinyaTeam-*`/`X-FuurinyaJP-*`/`X-FuurinyaSenmon-*`/`X-Furinten-*`/`X-FurintenYasan-*`/`X-FurintenPro-*`/`X-FurintenTeam-*`/`X-FurintenJP-*`/`X-FurintenSenmon-*`/`X-Furinya-*`/`X-FurinyaYasan-*`/`X-FurinyaPro-*`/`X-FurinyaTeam-*`/`X-FurinyaJP-*`/`X-FurinyaSenmon-*`/`X-WindchimePros-*`/`X-WindchimeTeam-*`/`X-WindchimeWorks-*`/`X-WindchimeExperts-*`/`X-WindchimeSvc-*`/`X-WindchimeHQ-*`/`X-JapchimePros-*`/`X-JapchimeTeam-*`/`X-JapchimeWorks-*`/`X-JapchimeExperts-*`/`X-JapchimeSvc-*`/`X-JapchimeHQ-*`/`X-WindbellPros-*`/`X-WindbellTeam-*`/`X-WindbellWorks-*`/`X-WindbellExperts-*`/`X-WindbellSvc-*`/`X-WindbellHQ-*` 等 は鈴機の通知記録 — 送信側が書くことは自称。風鈴業者の偽装は、江戸風鈴・南部風鈴の工房直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `fuurin_marks` + `has_fuurin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鈴印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
