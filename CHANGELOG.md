@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D893: `X-Imabaritowel-*`/`X-Towelshop-*`/`X-Senshutowelen-*`/`X-Towelstore-*`/`X-Japtowel-*`/`X-Japanesetowel-*` 等の今治タオル印自称が未検査
+
+- **問題**: `X-Imabaritowel-*`/`X-ImabaritowelYasan-*`/`X-ImabaritowelPro-*`/`X-ImabaritowelTeam-*`/`X-ImabaritowelJP-*`/`X-ImabaritowelSenmon-*`/`X-Towelshop-*`/`X-TowelshopYasan-*`/`X-TowelshopPro-*`/`X-TowelshopTeam-*`/`X-TowelshopJP-*`/`X-TowelshopSenmon-*`/`X-Senshutowelen-*`/`X-SenshutowelenYasan-*`/`X-SenshutowelenPro-*`/`X-SenshutowelenTeam-*`/`X-SenshutowelenJP-*`/`X-SenshutowelenSenmon-*`/`X-TowelstorePros-*`/`X-TowelstoreTeam-*`/`X-TowelstoreWorks-*`/`X-TowelstoreExperts-*`/`X-TowelstoreSvc-*`/`X-TowelstoreHQ-*`/`X-JaptowelPros-*`/`X-JaptowelTeam-*`/`X-JaptowelWorks-*`/`X-JaptowelExperts-*`/`X-JaptowelSvc-*`/`X-JaptowelHQ-*`/`X-JapanesetowelPros-*`/`X-JapanesetowelTeam-*`/`X-JapanesetowelWorks-*`/`X-JapanesetowelExperts-*`/`X-JapanesetowelSvc-*`/`X-JapanesetowelHQ-*` 等 は巾機の通知記録 — 送信側が書くことは自称。今治タオル業者の偽装は、今治タオル認定・泉州タオルの産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `imabaritowel_marks` + `has_imabaritowel_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 巾印の自署を問え。
+
+### Security — D894: `X-Kinpaku-*`/`X-Hakuya-*`/`X-Kinpakuten-*`/`X-Goldleaf-*`/`X-Japgoldleaf-*`/`X-Goldleafstore-*` 等の金箔印自称が未検査
+
+- **問題**: `X-Kinpaku-*`/`X-KinpakuYasan-*`/`X-KinpakuPro-*`/`X-KinpakuTeam-*`/`X-KinpakuJP-*`/`X-KinpakuSenmon-*`/`X-Hakuya-*`/`X-HakuyaYasan-*`/`X-HakuyaPro-*`/`X-HakuyaTeam-*`/`X-HakuyaJP-*`/`X-HakuyaSenmon-*`/`X-Kinpakuten-*`/`X-KinpakutenYasan-*`/`X-KinpakutenPro-*`/`X-KinpakutenTeam-*`/`X-KinpakutenJP-*`/`X-KinpakutenSenmon-*`/`X-GoldleafPros-*`/`X-GoldleafTeam-*`/`X-GoldleafWorks-*`/`X-GoldleafExperts-*`/`X-GoldleafSvc-*`/`X-GoldleafHQ-*`/`X-JapgoldleafPros-*`/`X-JapgoldleafTeam-*`/`X-JapgoldleafWorks-*`/`X-JapgoldleafExperts-*`/`X-JapgoldleafSvc-*`/`X-JapgoldleafHQ-*`/`X-GoldleafstorePros-*`/`X-GoldleafstoreTeam-*`/`X-GoldleafstoreWorks-*`/`X-GoldleafstoreExperts-*`/`X-GoldleafstoreSvc-*`/`X-GoldleafstoreHQ-*` 等 は箔機の通知記録 — 送信側が書くことは自称。金箔業者の偽装は、金沢箔・縁付金箔の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kinpaku_marks` + `has_kinpaku_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 箔印の自署を問え。
+
+### Security — D895: `X-Kumihimo-*`/`X-Obishimeten-*`/`X-Kumihimoya-*`/`X-Kumihimostore-*`/`X-Japkumihimo-*`/`X-Braidstore-*` 等の組紐・帯締め印自称が未検査
+
+- **問題**: `X-Kumihimo-*`/`X-KumihimoYasan-*`/`X-KumihimoPro-*`/`X-KumihimoTeam-*`/`X-KumihimoJP-*`/`X-KumihimoSenmon-*`/`X-Obishimeten-*`/`X-ObishimetenYasan-*`/`X-ObishimetenPro-*`/`X-ObishimetenTeam-*`/`X-ObishimetenJP-*`/`X-ObishimetenSenmon-*`/`X-Kumihimoya-*`/`X-KumihimoyaYasan-*`/`X-KumihimoyaPro-*`/`X-KumihimoyaTeam-*`/`X-KumihimoyaJP-*`/`X-KumihimoyaSenmon-*`/`X-KumihimostorePros-*`/`X-KumihimostoreTeam-*`/`X-KumihimostoreWorks-*`/`X-KumihimostoreExperts-*`/`X-KumihimostoreSvc-*`/`X-KumihimostoreHQ-*`/`X-JapkumihimoPros-*`/`X-JapkumihimoTeam-*`/`X-JapkumihimoWorks-*`/`X-JapkumihimoExperts-*`/`X-JapkumihimoSvc-*`/`X-JapkumihimoHQ-*`/`X-BraidstorePros-*`/`X-BraidstoreTeam-*`/`X-BraidstoreWorks-*`/`X-BraidstoreExperts-*`/`X-BraidstoreSvc-*`/`X-BraidstoreHQ-*` 等 は組機の通知記録 — 送信側が書くことは自称。組紐・帯締め業者の偽装は、京都組紐・帯締め手組の工房直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kumihimo_marks` + `has_kumihimo_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 組印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
