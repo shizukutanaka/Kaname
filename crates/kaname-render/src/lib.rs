@@ -2021,6 +2021,12 @@ pub struct Envelope {
     pub insect_marks: bool,
     /// `X-Poker-*`/`X-Wsop-*`/`X-Ggpoker-*` 等のポーカー印を送信側が自称する兆候 (D754)
     pub poker_marks: bool,
+    /// `X-Fertility-*`/`X-Ivf-*`/`X-Ivfclinic-*` 等の不妊治療・妊活印を送信側が自称する兆候 (D755)
+    pub fertility_marks: bool,
+    /// `X-Mahjong-*`/`X-Janisou-*`/`X-Jantama-*` 等の麻雀・雀荘印を送信側が自称する兆候 (D756)
+    pub mahjong_marks: bool,
+    /// `X-Hikkoshi-*`/`X-Artmoving-*`/`X-Akabou-*` 等の引越・引越見積印を送信側が自称する兆候 (D757)
+    pub hikkoshi_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2653,6 +2659,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         keiba_marks: has_keiba_marks(hdr),
         insect_marks: has_insect_marks(hdr),
         poker_marks: has_poker_marks(hdr),
+        fertility_marks: has_fertility_marks(hdr),
+        mahjong_marks: has_mahjong_marks(hdr),
+        hikkoshi_marks: has_hikkoshi_marks(hdr),
     })
 }
 
@@ -23508,6 +23517,216 @@ fn has_poker_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-wptcenter-"))
 }
 
+fn has_fertility_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-fertility-")
+            || l.starts_with("x-ivf-")
+            || l.starts_with("x-infertility-")
+            || l.starts_with("x-pgt-")
+            || l.starts_with("x-eggfreeze-")
+            || l.starts_with("x-ivfclinic-")
+            || l.starts_with("x-hanabusa-")
+            || l.starts_with("x-oakkai-")
+            || l.starts_with("x-ninkatsu-")
+            || l.starts_with("x-fertilitynavi-")
+            || l.starts_with("x-fertilitycenter-")
+            || l.starts_with("x-fertilityshop-")
+            || l.starts_with("x-fertilitypro-")
+            || l.starts_with("x-fertilitymart-")
+            || l.starts_with("x-fertilityplus-")
+            || l.starts_with("x-fertilitysmart-")
+            || l.starts_with("x-fertilityfamily-")
+            || l.starts_with("x-ivfnavi-")
+            || l.starts_with("x-ivfcenter-")
+            || l.starts_with("x-ivfshop-")
+            || l.starts_with("x-ivfpro-")
+            || l.starts_with("x-ivfmart-")
+            || l.starts_with("x-ivfplus-")
+            || l.starts_with("x-ivfsmart-")
+            || l.starts_with("x-ivffamily-")
+            || l.starts_with("x-infertilitynavi-")
+            || l.starts_with("x-infertilitycenter-")
+            || l.starts_with("x-infertilityshop-")
+            || l.starts_with("x-infertilitypro-")
+            || l.starts_with("x-infertilitymart-")
+            || l.starts_with("x-infertilityplus-")
+            || l.starts_with("x-infertilitysmart-")
+            || l.starts_with("x-infertilityfamily-")
+            || l.starts_with("x-pgtnavi-")
+            || l.starts_with("x-pgtcenter-")
+            || l.starts_with("x-pgtshop-")
+            || l.starts_with("x-pgtpro-")
+            || l.starts_with("x-pgtmart-")
+            || l.starts_with("x-pgtplus-")
+            || l.starts_with("x-pgtsmart-")
+            || l.starts_with("x-pgtfamily-")
+            || l.starts_with("x-eggfreezenavi-")
+            || l.starts_with("x-eggfreezecenter-")
+            || l.starts_with("x-eggfreezeshop-")
+            || l.starts_with("x-eggfreezepro-")
+            || l.starts_with("x-eggfreezemart-")
+            || l.starts_with("x-eggfreezeplus-")
+            || l.starts_with("x-eggfreezesmart-")
+            || l.starts_with("x-eggfreezefamily-")
+            || l.starts_with("x-ivfclinicnavi-")
+            || l.starts_with("x-ivfcliniccenter-")
+            || l.starts_with("x-ivfclinicshop-")
+            || l.starts_with("x-ivfclinicpro-")
+            || l.starts_with("x-ivfclinicmart-")
+            || l.starts_with("x-ivfclinicplus-")
+            || l.starts_with("x-ivfclinicsmart-")
+            || l.starts_with("x-ivfclinicfamily-")
+            || l.starts_with("x-hanabusanavi-")
+            || l.starts_with("x-hanabusacenter-")
+            || l.starts_with("x-hanabusashop-")
+            || l.starts_with("x-hanabusapro-")
+            || l.starts_with("x-hanabusamart-"))
+}
+
+fn has_mahjong_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-mahjong-")
+            || l.starts_with("x-janisou-")
+            || l.starts_with("x-jantama-")
+            || l.starts_with("x-mahjongsoul-")
+            || l.starts_with("x-tenhou-")
+            || l.starts_with("x-jantaku-")
+            || l.starts_with("x-riichi-")
+            || l.starts_with("x-mahjongnavi-")
+            || l.starts_with("x-mahjongcenter-")
+            || l.starts_with("x-mahjongshop-")
+            || l.starts_with("x-mahjongpro-")
+            || l.starts_with("x-mahjongmart-")
+            || l.starts_with("x-mahjongplus-")
+            || l.starts_with("x-mahjongsmart-")
+            || l.starts_with("x-mahjongfamily-")
+            || l.starts_with("x-janisounavi-")
+            || l.starts_with("x-janisoucenter-")
+            || l.starts_with("x-janisoushop-")
+            || l.starts_with("x-janisoupro-")
+            || l.starts_with("x-janisoumart-")
+            || l.starts_with("x-janisouplus-")
+            || l.starts_with("x-janisousmart-")
+            || l.starts_with("x-janisoufamily-")
+            || l.starts_with("x-jantamanavi-")
+            || l.starts_with("x-jantamacenter-")
+            || l.starts_with("x-jantamashop-")
+            || l.starts_with("x-jantamapro-")
+            || l.starts_with("x-jantamamart-")
+            || l.starts_with("x-jantamaplus-")
+            || l.starts_with("x-jantamasmart-")
+            || l.starts_with("x-jantamafamily-")
+            || l.starts_with("x-mahjongsoulnavi-")
+            || l.starts_with("x-mahjongsoulcenter-")
+            || l.starts_with("x-mahjongsoulshop-")
+            || l.starts_with("x-mahjongsoulpro-")
+            || l.starts_with("x-mahjongsoulmart-")
+            || l.starts_with("x-mahjongsoulplus-")
+            || l.starts_with("x-mahjongsoulsmart-")
+            || l.starts_with("x-mahjongsoulfamily-")
+            || l.starts_with("x-tenhounavi-")
+            || l.starts_with("x-tenhoucenter-")
+            || l.starts_with("x-tenhoushop-")
+            || l.starts_with("x-tenhoupro-")
+            || l.starts_with("x-tenhoumart-")
+            || l.starts_with("x-tenhouplus-")
+            || l.starts_with("x-tenhousmart-")
+            || l.starts_with("x-tenhoufamily-")
+            || l.starts_with("x-jantakunavi-")
+            || l.starts_with("x-jantakucenter-")
+            || l.starts_with("x-jantakushop-")
+            || l.starts_with("x-jantakupro-")
+            || l.starts_with("x-jantakumart-")
+            || l.starts_with("x-jantakuplus-")
+            || l.starts_with("x-jantakusmart-")
+            || l.starts_with("x-jantakufamily-")
+            || l.starts_with("x-riichinavi-")
+            || l.starts_with("x-riichicenter-")
+            || l.starts_with("x-riichishop-")
+            || l.starts_with("x-riichipro-")
+            || l.starts_with("x-riichimart-")
+            || l.starts_with("x-riichiplus-")
+            || l.starts_with("x-riichismart-"))
+}
+
+fn has_hikkoshi_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hikkoshi-")
+            || l.starts_with("x-moving-")
+            || l.starts_with("x-artmoving-")
+            || l.starts_with("x-heartmoving-")
+            || l.starts_with("x-akabou-")
+            || l.starts_with("x-movingcenter-")
+            || l.starts_with("x-kurogane-")
+            || l.starts_with("x-panda-express-")
+            || l.starts_with("x-hikkoshinavi-")
+            || l.starts_with("x-hikkoshicenter-")
+            || l.starts_with("x-hikkoshishop-")
+            || l.starts_with("x-hikkoshipro-")
+            || l.starts_with("x-hikkoshimart-")
+            || l.starts_with("x-hikkoshiplus-")
+            || l.starts_with("x-hikkoshismart-")
+            || l.starts_with("x-hikkoshifamily-")
+            || l.starts_with("x-movingnavi-")
+            || l.starts_with("x-movingcenter-")
+            || l.starts_with("x-movingshop-")
+            || l.starts_with("x-movingpro-")
+            || l.starts_with("x-movingmart-")
+            || l.starts_with("x-movingplus-")
+            || l.starts_with("x-movingsmart-")
+            || l.starts_with("x-movingfamily-")
+            || l.starts_with("x-artmovingnavi-")
+            || l.starts_with("x-artmovingcenter-")
+            || l.starts_with("x-artmovingshop-")
+            || l.starts_with("x-artmovingpro-")
+            || l.starts_with("x-artmovingmart-")
+            || l.starts_with("x-artmovingplus-")
+            || l.starts_with("x-artmovingsmart-")
+            || l.starts_with("x-artmovingfamily-")
+            || l.starts_with("x-heartmovingnavi-")
+            || l.starts_with("x-heartmovingcenter-")
+            || l.starts_with("x-heartmovingshop-")
+            || l.starts_with("x-heartmovingpro-")
+            || l.starts_with("x-heartmovingmart-")
+            || l.starts_with("x-heartmovingplus-")
+            || l.starts_with("x-heartmovingsmart-")
+            || l.starts_with("x-heartmovingfamily-")
+            || l.starts_with("x-akabounavi-")
+            || l.starts_with("x-akaboucenter-")
+            || l.starts_with("x-akaboushop-")
+            || l.starts_with("x-akaboupro-")
+            || l.starts_with("x-akaboumart-")
+            || l.starts_with("x-akabouplus-")
+            || l.starts_with("x-akabousmart-")
+            || l.starts_with("x-akaboufamily-")
+            || l.starts_with("x-movingcenternavi-")
+            || l.starts_with("x-movingcentercenter-")
+            || l.starts_with("x-movingcentershop-")
+            || l.starts_with("x-movingcenterpro-")
+            || l.starts_with("x-movingcentermart-")
+            || l.starts_with("x-movingcenterplus-")
+            || l.starts_with("x-movingcentersmart-")
+            || l.starts_with("x-movingcenterfamily-")
+            || l.starts_with("x-kuroganenavi-")
+            || l.starts_with("x-kuroganecenter-")
+            || l.starts_with("x-kuroganeshop-")
+            || l.starts_with("x-kuroganepro-")
+            || l.starts_with("x-kuroganemart-")
+            || l.starts_with("x-kuroganeplus-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -34395,6 +34614,59 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_poker_marks(clean));
+    }
+
+    #[test]
+    fn scan_は妊機印を検出する() {
+        for raw in [
+            br"X-Fertility-Alert: 1",
+            br"X-Ivf-Notice: 1",
+            br"X-Infertility-Info: 1",
+            br"X-Pgt-Report: 1",
+            br"X-Eggfreeze-Bulletin: 1",
+            br"X-Ivfclinic-News: 1",
+            br"X-Hanabusa-Flash: 1",
+            br"X-Oakkai-Release: 1",
+        ] {
+            assert!(has_fertility_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fertility_marks(clean));
+    }
+
+    #[test]
+    fn scan_は雀機印を検出する() {
+        for raw in [
+            br"X-Mahjong-Alert: 1",
+            br"X-Janisou-Notice: 1",
+            br"X-Jantama-Info: 1",
+            br"X-Mahjongsoul-Report: 1",
+            br"X-Tenhou-Bulletin: 1",
+            br"X-Jantaku-News: 1",
+            br"X-Riichi-Flash: 1",
+        ] {
+            assert!(has_mahjong_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_mahjong_marks(clean));
+    }
+
+    #[test]
+    fn scan_は引機印を検出する() {
+        for raw in [
+            br"X-Hikkoshi-Alert: 1",
+            br"X-Moving-Notice: 1",
+            br"X-Artmoving-Info: 1",
+            br"X-Heartmoving-Report: 1",
+            br"X-Akabou-Bulletin: 1",
+            br"X-Movingcenter-News: 1",
+            br"X-Kurogane-Flash: 1",
+            br"X-Panda-express-Release: 1",
+        ] {
+            assert!(has_hikkoshi_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_hikkoshi_marks(clean));
     }
 
 }
