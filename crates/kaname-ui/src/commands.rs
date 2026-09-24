@@ -3262,6 +3262,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D758: ラブホテル・休憩ホテル印自称
+    if env.lovehotel_marks {
+        render_risks.push(
+            "X-Lovehotel-*/X-Coupleshotel-*/X-Resthotel-*/X-Balian-*/X-Sala-*/X-Grandbali-*/X-Hoteljumu-*/X-Hotelfine-* 等 — 恋機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D759: 高速バス・夜行バス印自称
+    if env.kosokubus_marks {
+        render_risks.push(
+            "X-Kosokubus-*/X-Yakoubus-*/X-Highwaybus-*/X-Nightbus-*/X-Willerbus-*/X-Jamjam-*/X-Vipliner-*/X-Orionbus-* 等 — 迅機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D760: 睡眠・いびき治療印自称
+    if env.sleepclinic_marks {
+        render_risks.push(
+            "X-Sleepclinic-*/X-Cpap-*/X-Sleepapnea-*/X-Snoring-*/X-Sleeptech-*/X-Zquiet-*/X-Snorerx-*/X-Vitalsleep-* 等 — 眠機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
