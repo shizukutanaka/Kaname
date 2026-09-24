@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D905: `X-Sadougu-*`/`X-Chadougu-*`/`X-Chakiten-*`/`X-Teaceremony-*`/`X-Japteaceremony-*`/`X-Teatools-*` 等の茶道具印自称が未検査
+
+- **問題**: `X-Sadougu-*`/`X-SadouguYasan-*`/`X-SadouguPro-*`/`X-SadouguTeam-*`/`X-SadouguJP-*`/`X-SadouguSenmon-*`/`X-Chadougu-*`/`X-ChadouguYasan-*`/`X-ChadouguPro-*`/`X-ChadouguTeam-*`/`X-ChadouguJP-*`/`X-ChadouguSenmon-*`/`X-Chakiten-*`/`X-ChakitenYasan-*`/`X-ChakitenPro-*`/`X-ChakitenTeam-*`/`X-ChakitenJP-*`/`X-ChakitenSenmon-*`/`X-TeaceremonyPros-*`/`X-TeaceremonyTeam-*`/`X-TeaceremonyWorks-*`/`X-TeaceremonyExperts-*`/`X-TeaceremonySvc-*`/`X-TeaceremonyHQ-*`/`X-JapteaceremonyPros-*`/`X-JapteaceremonyTeam-*`/`X-JapteaceremonyWorks-*`/`X-JapteaceremonyExperts-*`/`X-JapteaceremonySvc-*`/`X-JapteaceremonyHQ-*`/`X-TeatoolsPros-*`/`X-TeatoolsTeam-*`/`X-TeatoolsWorks-*`/`X-TeatoolsExperts-*`/`X-TeatoolsSvc-*`/`X-TeatoolsHQ-*` 等 は抹機の通知記録 — 送信側が書くことは自称。茶道具業者の偽装は、千家茶道道具・茶碗茶杓の工房直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `sadougu_marks` + `has_sadougu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 抹印の自署を問え。
+
+### Security — D906: `X-Obidome-*`/`X-Obiya-*`/`X-Wasoukomono-*`/`X-Obistore-*`/`X-Japobi-*`/`X-Obiaccessory-*` 等の帯留め・和装小物印自称が未検査
+
+- **問題**: `X-Obidome-*`/`X-ObidomeYasan-*`/`X-ObidomePro-*`/`X-ObidomeTeam-*`/`X-ObidomeJP-*`/`X-ObidomeSenmon-*`/`X-Obiya-*`/`X-ObiyaYasan-*`/`X-ObiyaPro-*`/`X-ObiyaTeam-*`/`X-ObiyaJP-*`/`X-ObiyaSenmon-*`/`X-Wasoukomono-*`/`X-WasoukomonoYasan-*`/`X-WasoukomonoPro-*`/`X-WasoukomonoTeam-*`/`X-WasoukomonoJP-*`/`X-WasoukomonoSenmon-*`/`X-ObistorePros-*`/`X-ObistoreTeam-*`/`X-ObistoreWorks-*`/`X-ObistoreExperts-*`/`X-ObistoreSvc-*`/`X-ObistoreHQ-*`/`X-JapobiPros-*`/`X-JapobiTeam-*`/`X-JapobiWorks-*`/`X-JapobiExperts-*`/`X-JapobiSvc-*`/`X-JapobiHQ-*`/`X-ObiaccessoryPros-*`/`X-ObiaccessoryTeam-*`/`X-ObiaccessoryWorks-*`/`X-ObiaccessoryExperts-*`/`X-ObiaccessorySvc-*`/`X-ObiaccessoryHQ-*` 等 は帯機の通知記録 — 送信側が書くことは自称。帯留め・和装小物業者の偽装は、帯留め・根付細工の工房直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `obidome_marks` + `has_obidome_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 帯印の自署を問え。
+
+### Security — D907: `X-Hanabi-*`/`X-Hanabiya-*`/`X-Hanabishiten-*`/`X-Fireworksstore-*`/`X-Japfireworks-*`/`X-Hanabiteam-*` 等の花火印自称が未検査
+
+- **問題**: `X-Hanabi-*`/`X-HanabiYasan-*`/`X-HanabiPro-*`/`X-HanabiTeam-*`/`X-HanabiJP-*`/`X-HanabiSenmon-*`/`X-Hanabiya-*`/`X-HanabiyaYasan-*`/`X-HanabiyaPro-*`/`X-HanabiyaTeam-*`/`X-HanabiyaJP-*`/`X-HanabiyaSenmon-*`/`X-Hanabishiten-*`/`X-HanabishitenYasan-*`/`X-HanabishitenPro-*`/`X-HanabishitenTeam-*`/`X-HanabishitenJP-*`/`X-HanabishitenSenmon-*`/`X-FireworksstorePros-*`/`X-FireworksstoreTeam-*`/`X-FireworksstoreWorks-*`/`X-FireworksstoreExperts-*`/`X-FireworksstoreSvc-*`/`X-FireworksstoreHQ-*`/`X-JapfireworksPros-*`/`X-JapfireworksTeam-*`/`X-JapfireworksWorks-*`/`X-JapfireworksExperts-*`/`X-JapfireworksSvc-*`/`X-JapfireworksHQ-*`/`X-HanabiteamPros-*`/`X-HanabiteamTeam-*`/`X-HanabiteamWorks-*`/`X-HanabiteamExperts-*`/`X-HanabiteamSvc-*`/`X-HanabiteamHQ-*` 等 は花機の通知記録 — 送信側が書くことは自称。花火業者の偽装は、打ち上げ花火・手持ち花火の製造元直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `hanabi_marks` + `has_hanabi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 花印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
