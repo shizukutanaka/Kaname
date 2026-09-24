@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D806: `X-Keikamotsu-*`/`X-Keibinhaiso-*`/`X-Kogutihaiso-*`/`X-Lastmile-*`/`X-Lightfreight-*`/`X-Courierexpress-*` 等の軽貨物・ラストマイル配送印自称が未検査
+
+- **問題**: `X-Keikamotsu-*`/`X-KeikamotsuYasan-*`/`X-KeikamotsuPro-*`/`X-KeikamotsuTeam-*`/`X-KeikamotsuJP-*`/`X-KeikamotsuSenmon-*`/`X-Keibinhaiso-*`/`X-KeibinhaisoYasan-*`/`X-KeibinhaisoPro-*`/`X-KeibinhaisoTeam-*`/`X-KeibinhaisoJP-*`/`X-KeibinhaisoSenmon-*`/`X-Kogutihaiso-*`/`X-KogutihaisoYasan-*`/`X-KogutihaisoPro-*`/`X-KogutihaisoTeam-*`/`X-KogutihaisoJP-*`/`X-KogutihaisoSenmon-*`/`X-LastmilePros-*`/`X-LastmileTeam-*`/`X-LastmileWorks-*`/`X-LastmileExperts-*`/`X-LastmileSvc-*`/`X-LastmileHQ-*`/`X-LightfreightPros-*`/`X-LightfreightTeam-*`/`X-LightfreightWorks-*`/`X-LightfreightExperts-*`/`X-LightfreightSvc-*`/`X-LightfreightHQ-*`/`X-CourierexpressPros-*`/`X-CourierexpressTeam-*`/`X-CourierexpressWorks-*`/`X-CourierexpressExperts-*`/`X-CourierexpressSvc-*`/`X-CourierexpressHQ-*` 等 は軽機の通知記録 — 送信側が書くことは自称。軽貨物・ラストマイル配送業者の偽装は、配送料未払い請求・委託契約費・車両リース費を装ったなりすましの典型手口。(宅配は shipping 機、バイク便は courier 機、貨物は freight 機で検出済み)
+- **修正**: `Envelope` に `keikamotsu_marks` + `has_keikamotsu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 軽印の自署を問え。
+
+### Security — D807: `X-Reitou-*`/`X-Reizou-*`/`X-Reitoukouji-*`/`X-Refrigeration-*`/`X-Walkincooler-*`/`X-Coldstorage-*` 等の冷凍・冷蔵設備印自称が未検査
+
+- **問題**: `X-Reitou-*`/`X-ReitouYasan-*`/`X-ReitouPro-*`/`X-ReitouTeam-*`/`X-ReitouJP-*`/`X-ReitouSenmon-*`/`X-Reizou-*`/`X-ReizouYasan-*`/`X-ReizouPro-*`/`X-ReizouTeam-*`/`X-ReizouJP-*`/`X-ReizouSenmon-*`/`X-Reitoukouji-*`/`X-ReitoukoujiYasan-*`/`X-ReitoukoujiPro-*`/`X-ReitoukoujiTeam-*`/`X-ReitoukoujiJP-*`/`X-ReitoukoujiSenmon-*`/`X-RefrigerationPros-*`/`X-RefrigerationTeam-*`/`X-RefrigerationWorks-*`/`X-RefrigerationExperts-*`/`X-RefrigerationSvc-*`/`X-RefrigerationHQ-*`/`X-WalkincoolerPros-*`/`X-WalkincoolerTeam-*`/`X-WalkincoolerWorks-*`/`X-WalkincoolerExperts-*`/`X-WalkincoolerSvc-*`/`X-WalkincoolerHQ-*`/`X-ColdstoragePros-*`/`X-ColdstorageTeam-*`/`X-ColdstorageWorks-*`/`X-ColdstorageExperts-*`/`X-ColdstorageSvc-*`/`X-ColdstorageHQ-*` 等 は冷機の通知記録 — 送信側が書くことは自称。冷凍・冷蔵設備業者の偽装は、コンプレッサー交換費・冷媒漏洩修理費を装ったなりすましの典型手口。(空調は hvac 機、家電修理は appliance 機で検出済み)
+- **修正**: `Envelope` に `reitou_marks` + `has_reitou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 冷印の自署を問え。
+
+### Security — D808: `X-Sakan-*`/`X-Shikkui-*`/`X-Morutaru-*`/`X-Plasterer-*`/`X-Stuccopro-*`/`X-Mortar-*` 等の左官・モルタル・漆喰工事印自称が未検査
+
+- **問題**: `X-Sakan-*`/`X-SakanYasan-*`/`X-SakanPro-*`/`X-SakanTeam-*`/`X-SakanJP-*`/`X-SakanSenmon-*`/`X-Shikkui-*`/`X-ShikkuiYasan-*`/`X-ShikkuiPro-*`/`X-ShikkuiTeam-*`/`X-ShikkuiJP-*`/`X-ShikkuiSenmon-*`/`X-Morutaru-*`/`X-MorutaruYasan-*`/`X-MorutaruPro-*`/`X-MorutaruTeam-*`/`X-MorutaruJP-*`/`X-MorutaruSenmon-*`/`X-PlastererPros-*`/`X-PlastererTeam-*`/`X-PlastererWorks-*`/`X-PlastererExperts-*`/`X-PlastererSvc-*`/`X-PlastererHQ-*`/`X-StuccoproPros-*`/`X-StuccoproTeam-*`/`X-StuccoproWorks-*`/`X-StuccoproExperts-*`/`X-StuccoproSvc-*`/`X-StuccoproHQ-*`/`X-MortarPros-*`/`X-MortarTeam-*`/`X-MortarWorks-*`/`X-MortarExperts-*`/`X-MortarSvc-*`/`X-MortarHQ-*` 等 は左機の通知記録 — 送信側が書くことは自称。左官・モルタル塗り・漆喰工事業者の偽装は、外壁塗り直し費・塗装下地費を装ったなりすましの典型手口。(塗装は painting 機、タイル目地は tile 機、石積みは masonry 機で検出済み)
+- **修正**: `Envelope` に `sakan_marks` + `has_sakan_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 左印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
