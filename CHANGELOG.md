@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D776: `X-Shoushuu-*`/`X-Dasshuu-*`/`X-Deodo-*`/`X-Deodorize-*` 等の消臭・脱臭印自称が未検査
+
+- **問題**: `X-Shoushuu-*`/`X-ShoushuuYasan-*`/`X-ShoushuuPro-*`/`X-ShoushuuTeam-*`/`X-ShoushuuJP-*`/`X-ShoushuuSenmon-*`/`X-Dasshuu-*`/`X-DasshuuYasan-*`/`X-DasshuuPro-*`/`X-DasshuuTeam-*`/`X-DasshuuJP-*`/`X-DasshuuSenmon-*`/`X-Deodo-*`/`X-DeodoYasan-*`/`X-DeodoPro-*`/`X-DeodoTeam-*`/`X-DeodoJP-*`/`X-DeodoSenmon-*`/`X-DeodorizePros-*`/`X-DeodorizeTeam-*`/`X-DeodorizeWorks-*`/`X-DeodorizeExperts-*`/`X-DeodorizeSvc-*`/`X-DeodorizeHQ-*` 等 は臭機の通知記録 — 送信側が書くことは自称。消臭・脱臭サービスの偽装は、点検商法・消臭工事費を装ったなりすましの典型手口。(騒音調査は survey 機、内装リフォームは renovation 機で検出済み)
+- **修正**: `Envelope` に `shoushuu_marks` + `has_shoushuu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 臭印の自署を問え。
+
+### Security — D777: `X-Chousuisou-*`/`X-Tanksouji-*`/`X-Watertank-*`/`X-Guristrap-*` 等の貯水槽清掃印自称が未検査
+
+- **問題**: `X-Chousuisou-*`/`X-ChousuisouYasan-*`/`X-ChousuisouPro-*`/`X-ChousuisouTeam-*`/`X-ChousuisouJP-*`/`X-ChousuisouSenmon-*`/`X-Tanksouji-*`/`X-TanksoujiYasan-*`/`X-TanksoujiPro-*`/`X-TanksoujiTeam-*`/`X-TanksoujiJP-*`/`X-TanksoujiSenmon-*`/`X-WatertankPros-*`/`X-WatertankTeam-*`/`X-WatertankWorks-*`/`X-WatertankExperts-*`/`X-WatertankSvc-*`/`X-WatertankHQ-*`/`X-GuristrapPros-*`/`X-GuristrapTeam-*`/`X-GuristrapWorks-*`/`X-GuristrapExperts-*`/`X-GuristrapSvc-*`/`X-GuristrapHQ-*` 等 は槽機の通知記録 — 送信側が書くことは自称。貯水槽・グリストラップ清掃の偽装は、点検商法・清掃費用を装ったなりすましの典型手口。(浄化槽は jokaso 機、水道修理は plumbing 機で検出済み)
+- **修正**: `Envelope` に `chousuisou_marks` + `has_chousuisou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 槽印の自署を問え。
+
+### Security — D778: `X-Ninibaikyaku-*`/`X-Ninbai-*`/`X-Keibai-*`/`X-Foreclosure-*` 等の任意売却・競売印自称が未検査
+
+- **問題**: `X-Ninibaikyaku-*`/`X-NinibaikyakuYasan-*`/`X-NinibaikyakuPro-*`/`X-NinibaikyakuTeam-*`/`X-NinibaikyakuJP-*`/`X-NinibaikyakuSenmon-*`/`X-Ninbai-*`/`X-NinbaiYasan-*`/`X-NinbaiPro-*`/`X-NinbaiTeam-*`/`X-NinbaiJP-*`/`X-NinbaiSenmon-*`/`X-Keibai-*`/`X-KeibaiYasan-*`/`X-KeibaiPro-*`/`X-KeibaiTeam-*`/`X-KeibaiJP-*`/`X-KeibaiSenmon-*`/`X-ForeclosurePros-*`/`X-ForeclosureTeam-*`/`X-ForeclosureWorks-*`/`X-ForeclosureExperts-*`/`X-ForeclosureSvc-*`/`X-ForeclosureHQ-*` 等 は競機の通知記録 — 送信側が書くことは自称。任意売却・競売の偽装は、住宅ローン救済・手数料を装ったなりすましの典型手口。(不動産仲介は realestate 機、債務整理は debtrelief 機、消費者金融は consumerloan 機で検出済み)
+- **修正**: `Envelope` に `ninibaikyaku_marks` + `has_ninibaikyaku_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 競印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
