@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub carport_marks: bool,
+    pub shed_marks: bool,
+    pub radon_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        carport_marks: has_carport_marks(hdr),
+        shed_marks: has_shed_marks(hdr),
+        radon_marks: has_radon_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,187 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_carport_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-carport-")
+            || l.starts_with("x-carports-")
+            || l.starts_with("x-carportpros-")
+            || l.starts_with("x-carportcentral-")
+            || l.starts_with("x-carportdirect-")
+            || l.starts_with("x-carportking-")
+            || l.starts_with("x-carportdoctor-")
+            || l.starts_with("x-metalcarport-")
+            || l.starts_with("x-steelcarport-")
+            || l.starts_with("x-aluminumcarport-")
+            || l.starts_with("x-carportusa-")
+            || l.starts_with("x-carportempire-")
+            || l.starts_with("x-carportsupply-")
+            || l.starts_with("x-carportgarage-")
+            || l.starts_with("x-carportexpress-")
+            || l.starts_with("x-eaglecarport-")
+            || l.starts_with("x-versatube-")
+            || l.starts_with("x-metalcarports-")
+            || l.starts_with("x-carportrepair-")
+            || l.starts_with("x-carportinstall-")
+            || l.starts_with("x-rvcarport-")
+            || l.starts_with("x-carportkit-")
+            || l.starts_with("x-carportkits-")
+            || l.starts_with("x-carportoutlet-")
+            || l.starts_with("x-carportkouji-")
+            || l.starts_with("x-carportyasan-")
+            || l.starts_with("x-carportpro-")
+            || l.starts_with("x-carportteam-")
+            || l.starts_with("x-carportgyosha-")
+            || l.starts_with("x-carportseibi-")
+            || l.starts_with("x-carportkensa-")
+            || l.starts_with("x-carportmanten-")
+            || l.starts_with("x-carportnomi-")
+            || l.starts_with("x-carportjp-")
+            || l.starts_with("x-carportsenmon-")
+            || l.starts_with("x-carportshuri-")
+            || l.starts_with("x-carportdoctors-")
+            || l.starts_with("x-shakokouji-")
+            || l.starts_with("x-shakonomi-")
+            || l.starts_with("x-shakotate-")
+            || l.starts_with("x-garagekenchiku-")
+            || l.starts_with("x-garagekouji-")
+            || l.starts_with("x-garageyasan-")
+            || l.starts_with("x-garagepro-")
+            || l.starts_with("x-kasayane-")
+            || l.starts_with("x-carportteiki-")
+            || l.starts_with("x-carporttenken-")
+            || l.starts_with("x-carportmitsumori-")
+            || l.starts_with("x-carportotoiawase-")
+            || l.starts_with("x-carportsagyou-")
+            || l.starts_with("x-carportkaitei-")
+            || l.starts_with("x-carportshinchiku-")
+    })
+}
+
+fn has_shed_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tuffshed-")
+            || l.starts_with("x-shedsusa-")
+            || l.starts_with("x-shedpros-")
+            || l.starts_with("x-sheddepot-")
+            || l.starts_with("x-shedking-")
+            || l.starts_with("x-sheddoctor-")
+            || l.starts_with("x-shedworks-")
+            || l.starts_with("x-shedsupply-")
+            || l.starts_with("x-shedstore-")
+            || l.starts_with("x-shedshop-")
+            || l.starts_with("x-shedusa-")
+            || l.starts_with("x-backyardshed-")
+            || l.starts_with("x-storageshed-")
+            || l.starts_with("x-gardenshed-")
+            || l.starts_with("x-toolshed-")
+            || l.starts_with("x-shedbuilder-")
+            || l.starts_with("x-shedbuilders-")
+            || l.starts_with("x-shedinstall-")
+            || l.starts_with("x-shedrepair-")
+            || l.starts_with("x-shednation-")
+            || l.starts_with("x-shedline-")
+            || l.starts_with("x-shedforce-")
+            || l.starts_with("x-shedteam-")
+            || l.starts_with("x-shedmasters-")
+            || l.starts_with("x-monooki-")
+            || l.starts_with("x-monookikouji-")
+            || l.starts_with("x-monookiyasan-")
+            || l.starts_with("x-monookipro-")
+            || l.starts_with("x-monookiseibi-")
+            || l.starts_with("x-monookikensa-")
+            || l.starts_with("x-monookimanten-")
+            || l.starts_with("x-monookinomi-")
+            || l.starts_with("x-monookijp-")
+            || l.starts_with("x-monookisenmon-")
+            || l.starts_with("x-monookishuri-")
+            || l.starts_with("x-monookidoctors-")
+            || l.starts_with("x-monookiteam-")
+            || l.starts_with("x-monookigyosha-")
+            || l.starts_with("x-inabamono-")
+            || l.starts_with("x-yodomono-")
+            || l.starts_with("x-takubomono-")
+            || l.starts_with("x-okigura-")
+            || l.starts_with("x-soukoya-")
+            || l.starts_with("x-soukoyasan-")
+            || l.starts_with("x-purehabukoya-")
+            || l.starts_with("x-koyayasan-")
+            || l.starts_with("x-monookikura-")
+            || l.starts_with("x-monookitenken-")
+            || l.starts_with("x-monookiteiki-")
+            || l.starts_with("x-monookisekou-")
+            || l.starts_with("x-monookihaiki-")
+    })
+}
+
+fn has_radon_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-radonova-")
+            || l.starts_with("x-accustar-")
+            || l.starts_with("x-airthings-")
+            || l.starts_with("x-airchek-")
+            || l.starts_with("x-radonaway-")
+            || l.starts_with("x-festradon-")
+            || l.starts_with("x-radonpro-")
+            || l.starts_with("x-radonpros-")
+            || l.starts_with("x-radonmitigation-")
+            || l.starts_with("x-radonmitig-")
+            || l.starts_with("x-radoncontrol-")
+            || l.starts_with("x-radonsys-")
+            || l.starts_with("x-radonremoval-")
+            || l.starts_with("x-radonabate-")
+            || l.starts_with("x-radonreduce-")
+            || l.starts_with("x-radonfree-")
+            || l.starts_with("x-radontest-")
+            || l.starts_with("x-radoninspect-")
+            || l.starts_with("x-radoncheck-")
+            || l.starts_with("x-radonlab-")
+            || l.starts_with("x-radonworks-")
+            || l.starts_with("x-radonteam-")
+            || l.starts_with("x-radondoctor-")
+            || l.starts_with("x-radonexperts-")
+            || l.starts_with("x-radonmasters-")
+            || l.starts_with("x-radonsafe-")
+            || l.starts_with("x-prolab-")
+            || l.starts_with("x-sunradon-")
+            || l.starts_with("x-corentium-")
+            || l.starts_with("x-sprucelabs-")
+            || l.starts_with("x-radonkensa-")
+            || l.starts_with("x-radontaisaku-")
+            || l.starts_with("x-radonsokutei-")
+            || l.starts_with("x-radonyasan-")
+            || l.starts_with("x-radonprojp-")
+            || l.starts_with("x-radonteamjp-")
+            || l.starts_with("x-radongyosha-")
+            || l.starts_with("x-radonsenmon-")
+            || l.starts_with("x-radonshinsa-")
+            || l.starts_with("x-radonkaizen-")
+            || l.starts_with("x-radonboshi-")
+            || l.starts_with("x-radonkeigen-")
+            || l.starts_with("x-radonjp-")
+            || l.starts_with("x-radonservicejp-")
+            || l.starts_with("x-radonchousa-")
+            || l.starts_with("x-radonkanki-")
+            || l.starts_with("x-radonteiki-")
+            || l.starts_with("x-radonnomi-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20828,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は泊機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Carport-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-MetalCarport-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-CarportKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-ShakoKouji-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-VersaTube-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-GarageKenchiku-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-CarportDirect-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-Kasayane-Record: 1\r\n\r\nx";
+        assert!(has_carport_marks(f0));
+        assert!(has_carport_marks(f1));
+        assert!(has_carport_marks(f2));
+        assert!(has_carport_marks(f3));
+        assert!(has_carport_marks(f4));
+        assert!(has_carport_marks(f5));
+        assert!(has_carport_marks(f6));
+        assert!(has_carport_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_carport_marks(clean));
+    }
+
+    #[test]
+    fn scan_は蔵機印を検出する() {
+        let f0 = b"From: a@b\r\nX-TuffShed-Quote: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-ShedDepot-Notice: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Monooki-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-InabaMono-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-ShedBuilder-Trace: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-PurehabuKoya-Record: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-StorageShed-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-YodoMono-Notice: 1\r\n\r\nx";
+        assert!(has_shed_marks(f0));
+        assert!(has_shed_marks(f1));
+        assert!(has_shed_marks(f2));
+        assert!(has_shed_marks(f3));
+        assert!(has_shed_marks(f4));
+        assert!(has_shed_marks(f5));
+        assert!(has_shed_marks(f6));
+        assert!(has_shed_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_shed_marks(clean));
+    }
+
+    #[test]
+    fn scan_は測機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Radonova-Report: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Airthings-Notice: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-RadonKensa-Kekka: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-RadonTaisaku-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-AccuStar-Result: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-RadonSokutei-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-ProLab-Report: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-RadonChousa-Record: 1\r\n\r\nx";
+        assert!(has_radon_marks(f0));
+        assert!(has_radon_marks(f1));
+        assert!(has_radon_marks(f2));
+        assert!(has_radon_marks(f3));
+        assert!(has_radon_marks(f4));
+        assert!(has_radon_marks(f5));
+        assert!(has_radon_marks(f6));
+        assert!(has_radon_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_radon_marks(clean));
+    }
 }
