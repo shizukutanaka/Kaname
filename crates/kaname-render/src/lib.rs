@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub untendaikou_marks: bool,
+    pub furusatozei_marks: bool,
+    pub minpaku_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        untendaikou_marks: has_untendaikou_marks(hdr),
+        furusatozei_marks: has_furusatozei_marks(hdr),
+        minpaku_marks: has_minpaku_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,150 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_untendaikou_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-untendaikou-")
+            || l.starts_with("x-untendaikouyasan-")
+            || l.starts_with("x-untendaikoupro-")
+            || l.starts_with("x-untendaikouteam-")
+            || l.starts_with("x-untendaikoukensa-")
+            || l.starts_with("x-untendaikoumanten-")
+            || l.starts_with("x-untendaikounomi-")
+            || l.starts_with("x-untendaikoujp-")
+            || l.starts_with("x-untendaikousenmon-")
+            || l.starts_with("x-untendaikoumitsumori-")
+            || l.starts_with("x-untendaikouchousa-")
+            || l.starts_with("x-untendaikouteiki-")
+            || l.starts_with("x-untendaikoupros-")
+            || l.starts_with("x-untendaikoudoctors-")
+            || l.starts_with("x-untendaikourescue-")
+            || l.starts_with("x-drivedaiko-")
+            || l.starts_with("x-drivedaikoyasan-")
+            || l.starts_with("x-drivedaikopro-")
+            || l.starts_with("x-drivedaikoteam-")
+            || l.starts_with("x-drivedaikojp-")
+            || l.starts_with("x-drivedaikosenmon-")
+            || l.starts_with("x-drivedaikopros-")
+            || l.starts_with("x-drivedaikodoctors-")
+            || l.starts_with("x-drivedaikorescue-")
+            || l.starts_with("x-designateddriverpros-")
+            || l.starts_with("x-designateddriverteam-")
+            || l.starts_with("x-designateddriverworks-")
+            || l.starts_with("x-designateddriverexperts-")
+            || l.starts_with("x-designateddriversvc-")
+            || l.starts_with("x-designateddriverhq-")
+            || l.starts_with("x-soberdrivepros-")
+            || l.starts_with("x-soberdriveteam-")
+            || l.starts_with("x-soberdriveworks-")
+            || l.starts_with("x-soberdriveexperts-")
+            || l.starts_with("x-soberdrivesvc-")
+            || l.starts_with("x-soberdrivehq-")
+    })
+}
+
+fn has_furusatozei_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-furusatozei-")
+            || l.starts_with("x-furusatozeiyasan-")
+            || l.starts_with("x-furusatozeipro-")
+            || l.starts_with("x-furusatozeiteam-")
+            || l.starts_with("x-furusatozeikensa-")
+            || l.starts_with("x-furusatozeimanten-")
+            || l.starts_with("x-furusatozeinomi-")
+            || l.starts_with("x-furusatozeijp-")
+            || l.starts_with("x-furusatozeisenmon-")
+            || l.starts_with("x-furusatozeimitsumori-")
+            || l.starts_with("x-furusatozeichousa-")
+            || l.starts_with("x-furusatozeiteiki-")
+            || l.starts_with("x-furusatozeipros-")
+            || l.starts_with("x-furusatozeidoctors-")
+            || l.starts_with("x-furusatozeirescue-")
+            || l.starts_with("x-furusatotaxpros-")
+            || l.starts_with("x-furusatotaxteam-")
+            || l.starts_with("x-furusatotaxworks-")
+            || l.starts_with("x-furusatotaxexperts-")
+            || l.starts_with("x-furusatotaxsvc-")
+            || l.starts_with("x-furusatotaxhq-")
+            || l.starts_with("x-hometowntaxpros-")
+            || l.starts_with("x-hometowntaxteam-")
+            || l.starts_with("x-hometowntaxworks-")
+            || l.starts_with("x-hometowntaxexperts-")
+            || l.starts_with("x-hometowntaxsvc-")
+            || l.starts_with("x-hometowntaxhq-")
+            || l.starts_with("x-furusatotehai-")
+            || l.starts_with("x-furusatotehaiyasan-")
+            || l.starts_with("x-furusatotehaipro-")
+            || l.starts_with("x-furusatotehaiteam-")
+            || l.starts_with("x-furusatotehaijp-")
+            || l.starts_with("x-furusatotehaisenmon-")
+            || l.starts_with("x-furusatotehaipros-")
+            || l.starts_with("x-furusatotehaidoctors-")
+            || l.starts_with("x-furusatotehairescue-")
+    })
+}
+
+fn has_minpaku_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-minpaku-")
+            || l.starts_with("x-minpakuyasan-")
+            || l.starts_with("x-minpakupro-")
+            || l.starts_with("x-minpakuteam-")
+            || l.starts_with("x-minpakukensa-")
+            || l.starts_with("x-minpakumanten-")
+            || l.starts_with("x-minpakunomi-")
+            || l.starts_with("x-minpakujp-")
+            || l.starts_with("x-minpakusenmon-")
+            || l.starts_with("x-minpakumitsumori-")
+            || l.starts_with("x-minpakuchousa-")
+            || l.starts_with("x-minpakuteiki-")
+            || l.starts_with("x-minpakupros-")
+            || l.starts_with("x-minpakudoctors-")
+            || l.starts_with("x-minpakurescue-")
+            || l.starts_with("x-minshuku-")
+            || l.starts_with("x-minshukuyasan-")
+            || l.starts_with("x-minshukupro-")
+            || l.starts_with("x-minshukuteam-")
+            || l.starts_with("x-minshukujp-")
+            || l.starts_with("x-minshukusenmon-")
+            || l.starts_with("x-minshukupros-")
+            || l.starts_with("x-minshukudoctors-")
+            || l.starts_with("x-minshukurescue-")
+            || l.starts_with("x-vacationrentalpros-")
+            || l.starts_with("x-vacationrentalteam-")
+            || l.starts_with("x-vacationrentalworks-")
+            || l.starts_with("x-vacationrentalexperts-")
+            || l.starts_with("x-vacationrentalsvc-")
+            || l.starts_with("x-vacationrentalhq-")
+            || l.starts_with("x-vacationstaypros-")
+            || l.starts_with("x-vacationstayteam-")
+            || l.starts_with("x-vacationstayworks-")
+            || l.starts_with("x-vacationstayexperts-")
+            || l.starts_with("x-vacationstaysvc-")
+            || l.starts_with("x-vacationstayhq-")
+            || l.starts_with("x-guesthousepros-")
+            || l.starts_with("x-guesthouseteam-")
+            || l.starts_with("x-guesthouseworks-")
+            || l.starts_with("x-guesthouseexperts-")
+            || l.starts_with("x-guesthousesvc-")
+            || l.starts_with("x-guesthousehq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21042,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は代機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Untendaikou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UntendaikouPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DrivedaikoYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DrivedaikoTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DesignateddriverPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoberdriveHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UntendaikouSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoberdriveWorks-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_untendaikou_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_untendaikou_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は郷機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Furusatozei-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FurusatozeiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FurusatotaxPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FurusatotaxTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HometowntaxHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FurusatotehaiYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FurusatozeiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HometowntaxWorks-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_furusatozei_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_furusatozei_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は民機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Minpaku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MinpakuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MinshukuYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MinshukuTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-VacationrentalPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-VacationstayHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GuesthouseWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MinpakuSenmon-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_minpaku_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_minpaku_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
