@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub sekihi_marks: bool,
+    pub shashin_marks: bool,
+    pub pawn_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        sekihi_marks: has_sekihi_marks(hdr),
+        shashin_marks: has_shashin_marks(hdr),
+        pawn_marks: has_pawn_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,184 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_sekihi_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sekihi-")
+            || l.starts_with("x-sekihiyasan-")
+            || l.starts_with("x-sekihipro-")
+            || l.starts_with("x-sekihiteam-")
+            || l.starts_with("x-sekihikensa-")
+            || l.starts_with("x-sekihimanten-")
+            || l.starts_with("x-sekihinomi-")
+            || l.starts_with("x-sekihijp-")
+            || l.starts_with("x-sekihisenmon-")
+            || l.starts_with("x-sekihimitsumori-")
+            || l.starts_with("x-sekihichousa-")
+            || l.starts_with("x-sekihiteiki-")
+            || l.starts_with("x-sekihishuri-")
+            || l.starts_with("x-sekihisho-")
+            || l.starts_with("x-sekihiten-")
+            || l.starts_with("x-sekihikoubou-")
+            || l.starts_with("x-sekihimart-")
+            || l.starts_with("x-sekihibank-")
+            || l.starts_with("x-boseki-")
+            || l.starts_with("x-bosekiyasan-")
+            || l.starts_with("x-bosekipro-")
+            || l.starts_with("x-bosekiteam-")
+            || l.starts_with("x-bosekikensa-")
+            || l.starts_with("x-bosekimanten-")
+            || l.starts_with("x-bosekinomi-")
+            || l.starts_with("x-bosekijp-")
+            || l.starts_with("x-bosekisenmon-")
+            || l.starts_with("x-bosekimitsumori-")
+            || l.starts_with("x-bosekichousa-")
+            || l.starts_with("x-bosekiteiki-")
+            || l.starts_with("x-bosekishuri-")
+            || l.starts_with("x-bosekisho-")
+            || l.starts_with("x-bosekiten-")
+            || l.starts_with("x-bosekikoubou-")
+            || l.starts_with("x-bosekimart-")
+            || l.starts_with("x-bosekibank-")
+            || l.starts_with("x-tombstonepros-")
+            || l.starts_with("x-tombstoneteam-")
+            || l.starts_with("x-tombstoneworks-")
+            || l.starts_with("x-tombstoneexperts-")
+            || l.starts_with("x-tombstonesvc-")
+            || l.starts_with("x-tombstonehq-")
+            || l.starts_with("x-monumentpros-")
+            || l.starts_with("x-monumentteam-")
+            || l.starts_with("x-monumentworks-")
+            || l.starts_with("x-monumentexperts-")
+            || l.starts_with("x-monumentsvc-")
+            || l.starts_with("x-monumenthq-")
+            || l.starts_with("x-gravestonepros-")
+            || l.starts_with("x-gravestoneteam-")
+            || l.starts_with("x-sekihisagyou-")
+            || l.starts_with("x-sekihirescue-")
+    })
+}
+
+fn has_shashin_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shashin-")
+            || l.starts_with("x-shashinyasan-")
+            || l.starts_with("x-shashinpro-")
+            || l.starts_with("x-shashinteam-")
+            || l.starts_with("x-shashinkensa-")
+            || l.starts_with("x-shashinmanten-")
+            || l.starts_with("x-shashinnomi-")
+            || l.starts_with("x-shashinjp-")
+            || l.starts_with("x-shashinsenmon-")
+            || l.starts_with("x-shashinmitsumori-")
+            || l.starts_with("x-shashinchousa-")
+            || l.starts_with("x-shashinteiki-")
+            || l.starts_with("x-shashinshuri-")
+            || l.starts_with("x-shashinsho-")
+            || l.starts_with("x-shashinten-")
+            || l.starts_with("x-shashinkan-")
+            || l.starts_with("x-shashinkoubou-")
+            || l.starts_with("x-shashinmart-")
+            || l.starts_with("x-shashinbank-")
+            || l.starts_with("x-photostudio-")
+            || l.starts_with("x-photostudiopros-")
+            || l.starts_with("x-photostudioteam-")
+            || l.starts_with("x-photostudioworks-")
+            || l.starts_with("x-photostudioexperts-")
+            || l.starts_with("x-photostudiosvc-")
+            || l.starts_with("x-photostudiohq-")
+            || l.starts_with("x-portraitstudiopros-")
+            || l.starts_with("x-portraitstudioteam-")
+            || l.starts_with("x-portraitstudioworks-")
+            || l.starts_with("x-dpepros-")
+            || l.starts_with("x-dpeteam-")
+            || l.starts_with("x-dpeworks-")
+            || l.starts_with("x-dpesvc-")
+            || l.starts_with("x-dpehq-")
+            || l.starts_with("x-photofinishpros-")
+            || l.starts_with("x-photofinishteam-")
+            || l.starts_with("x-shashinsagyou-")
+            || l.starts_with("x-shashinrescue-")
+            || l.starts_with("x-shashindoctors-")
+            || l.starts_with("x-photostudiomart-")
+            || l.starts_with("x-photostudiobank-")
+            || l.starts_with("x-shashinschool-")
+            || l.starts_with("x-portraitpros-")
+            || l.starts_with("x-portraitteam-")
+            || l.starts_with("x-portraitworks-")
+            || l.starts_with("x-portraitexperts-")
+            || l.starts_with("x-portraitsvc-")
+            || l.starts_with("x-portraithq-")
+    })
+}
+
+fn has_pawn_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shichiya-")
+            || l.starts_with("x-shichiyasan-")
+            || l.starts_with("x-shichiyapro-")
+            || l.starts_with("x-shichiyateam-")
+            || l.starts_with("x-shichiyakensa-")
+            || l.starts_with("x-shichiyamanten-")
+            || l.starts_with("x-shichiyanomi-")
+            || l.starts_with("x-shichiyajp-")
+            || l.starts_with("x-shichiyasenmon-")
+            || l.starts_with("x-shichiyamitsumori-")
+            || l.starts_with("x-shichiyachousa-")
+            || l.starts_with("x-shichiyateiki-")
+            || l.starts_with("x-shichiyashuri-")
+            || l.starts_with("x-shichiyasho-")
+            || l.starts_with("x-shichiyaten-")
+            || l.starts_with("x-shichiyakoubou-")
+            || l.starts_with("x-shichiyamart-")
+            || l.starts_with("x-shichiyabank-")
+            || l.starts_with("x-pawnpros-")
+            || l.starts_with("x-pawnteam-")
+            || l.starts_with("x-pawnworks-")
+            || l.starts_with("x-pawnexperts-")
+            || l.starts_with("x-pawnsvc-")
+            || l.starts_with("x-pawnhq-")
+            || l.starts_with("x-pawnshoppros-")
+            || l.starts_with("x-pawnshopteam-")
+            || l.starts_with("x-pawnshopworks-")
+            || l.starts_with("x-pawnshopexperts-")
+            || l.starts_with("x-pawnshopsvc-")
+            || l.starts_with("x-pawnshophq-")
+            || l.starts_with("x-pawnbrokerpros-")
+            || l.starts_with("x-pawnbrokerteam-")
+            || l.starts_with("x-pawnbrokerworks-")
+            || l.starts_with("x-pawnbrokerexperts-")
+            || l.starts_with("x-pawnbrokersvc-")
+            || l.starts_with("x-pawnbrokerhq-")
+            || l.starts_with("x-shichiyashinsa-")
+            || l.starts_with("x-shichiyabuyback-")
+            || l.starts_with("x-shichiyadoctors-")
+            || l.starts_with("x-shichiyarescue-")
+            || l.starts_with("x-pawnmart-")
+            || l.starts_with("x-pawnbank-")
+            || l.starts_with("x-pawndepot-")
+            || l.starts_with("x-pawnexpress-")
+            || l.starts_with("x-pawnplaza-")
+            || l.starts_with("x-pawncity-")
+            || l.starts_with("x-pawndoctors-")
+            || l.starts_with("x-pawnrescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20825,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は墓機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Sekihi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Boseki-Yasan: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TombstonePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MonumentWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SekihiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BosekiKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GravestoneTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MonumentHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_sekihi_marks(h));
+        }
+        assert!(!has_sekihi_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は写機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Shashin-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Shashinkan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PhotoStudio-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DpePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShashinKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PortraitWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PhotoStudioHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShashinSenmon-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_shashin_marks(h));
+        }
+        assert!(!has_shashin_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は質機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Shichiya-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShichiyaTen-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PawnPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PawnShopWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShichiyaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PawnBrokerTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PawnDepot-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PawnExpress-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_pawn_marks(h));
+        }
+        assert!(!has_pawn_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
