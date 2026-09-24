@@ -1967,6 +1967,12 @@ pub struct Envelope {
     pub fukushiyogu_marks: bool,
     /// `X-Adventure-*`/`X-Rafting-*`/`X-Canyoning-*` 等のアウトドア・アドベンチャー印を送信側が自称する兆候 (D727)
     pub adventure_marks: bool,
+    /// `X-Kitchencar-*`/`X-Foodtruck-*`/`X-Catering-*` 等のキッチンカー・移動販売印を送信側が自称する兆候 (D731)
+    pub foodtruck_marks: bool,
+    /// `X-Bonsai-*`/`X-Orchid-*`/`X-Succulent-*` 等の盆栽・観葉植物印を送信側が自称する兆候 (D732)
+    pub bonsai_marks: bool,
+    /// `X-Naturopathy-*`/`X-Homeopathy-*`/`X-Remedy-*` 等の代替療法・自然療法印を送信側が自称する兆候 (D733)
+    pub naturopathy_marks: bool,
     /// `X-Tomytec-*`/`X-Greenmax-*`/`X-Modeltrain-*` 等の鉄道模型・ドール印を送信側が自称する兆候 (D728)
     pub modeltrain_marks: bool,
     /// `X-Protein-*`/`X-Myprotein-*`/`X-Valx-*` 等のプロテイン・筋トレサプリ印を送信側が自称する兆候 (D729)
@@ -2578,6 +2584,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         marathon_marks: has_marathon_marks(hdr),
         fukushiyogu_marks: has_fukushiyogu_marks(hdr),
         adventure_marks: has_adventure_marks(hdr),
+        foodtruck_marks: has_foodtruck_marks(hdr),
+        bonsai_marks: has_bonsai_marks(hdr),
+        naturopathy_marks: has_naturopathy_marks(hdr),
         modeltrain_marks: has_modeltrain_marks(hdr),
         protein_marks: has_protein_marks(hdr),
         handmade_marks: has_handmade_marks(hdr),
@@ -21756,6 +21765,216 @@ fn has_handmade_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-commaucenter-"))
 }
 
+fn has_foodtruck_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kitchencar-")
+            || l.starts_with("x-foodtruck-")
+            || l.starts_with("x-catering-")
+            || l.starts_with("x-michinoeki-")
+            || l.starts_with("x-lunchcar-")
+            || l.starts_with("x-wagon-")
+            || l.starts_with("x-mobileshop-")
+            || l.starts_with("x-takeout-")
+            || l.starts_with("x-bento-")
+            || l.starts_with("x-stall-")
+            || l.starts_with("x-popupshop-")
+            || l.starts_with("x-farmstand-")
+            || l.starts_with("x-kitchencarnavi-")
+            || l.starts_with("x-kitchencarcenter-")
+            || l.starts_with("x-kitchencarshop-")
+            || l.starts_with("x-kitchencarpro-")
+            || l.starts_with("x-kitchencarmart-")
+            || l.starts_with("x-kitchencarplus-")
+            || l.starts_with("x-kitchencarsmart-")
+            || l.starts_with("x-kitchencarfamily-")
+            || l.starts_with("x-foodtrucknavi-")
+            || l.starts_with("x-foodtruckcenter-")
+            || l.starts_with("x-foodtruckshop-")
+            || l.starts_with("x-foodtruckpro-")
+            || l.starts_with("x-foodtruckmart-")
+            || l.starts_with("x-foodtruckplus-")
+            || l.starts_with("x-foodtrucksmart-")
+            || l.starts_with("x-foodtruckfamily-")
+            || l.starts_with("x-cateringnavi-")
+            || l.starts_with("x-cateringcenter-")
+            || l.starts_with("x-cateringshop-")
+            || l.starts_with("x-cateringpro-")
+            || l.starts_with("x-cateringmart-")
+            || l.starts_with("x-cateringplus-")
+            || l.starts_with("x-cateringsmart-")
+            || l.starts_with("x-cateringfamily-")
+            || l.starts_with("x-michinoekinavi-")
+            || l.starts_with("x-michinoekicenter-")
+            || l.starts_with("x-michinoekishop-")
+            || l.starts_with("x-michinoekipro-")
+            || l.starts_with("x-michinoekimart-")
+            || l.starts_with("x-michinoekiplus-")
+            || l.starts_with("x-michinoekismart-")
+            || l.starts_with("x-michinoekifamily-")
+            || l.starts_with("x-lunchcarnavi-")
+            || l.starts_with("x-lunchcarcenter-")
+            || l.starts_with("x-lunchcarshop-")
+            || l.starts_with("x-lunchcarpro-")
+            || l.starts_with("x-lunchcarmart-")
+            || l.starts_with("x-lunchcarplus-")
+            || l.starts_with("x-lunchcarsmart-")
+            || l.starts_with("x-lunchcarfamily-")
+            || l.starts_with("x-wagonnavi-")
+            || l.starts_with("x-wagoncenter-")
+            || l.starts_with("x-wagonshop-")
+            || l.starts_with("x-wagonpro-")
+            || l.starts_with("x-wagonmart-")
+            || l.starts_with("x-wagonplus-")
+            || l.starts_with("x-wagonsmart-")
+            || l.starts_with("x-wagonfamily-")
+            || l.starts_with("x-mobileshopnavi-")
+            || l.starts_with("x-mobileshopcenter-"))
+}
+
+fn has_bonsai_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-bonsai-")
+            || l.starts_with("x-orchid-")
+            || l.starts_with("x-succulent-")
+            || l.starts_with("x-tanniku-")
+            || l.starts_with("x-sansevieria-")
+            || l.starts_with("x-foliage-")
+            || l.starts_with("x-kokedama-")
+            || l.starts_with("x-terrarium-")
+            || l.starts_with("x-cactus-")
+            || l.starts_with("x-agave-")
+            || l.starts_with("x-carnivorous-")
+            || l.starts_with("x-airplant-")
+            || l.starts_with("x-bonsainavi-")
+            || l.starts_with("x-bonsaicenter-")
+            || l.starts_with("x-bonsaishop-")
+            || l.starts_with("x-bonsaipro-")
+            || l.starts_with("x-bonsaimart-")
+            || l.starts_with("x-bonsaiplus-")
+            || l.starts_with("x-bonsaismart-")
+            || l.starts_with("x-bonsaifamily-")
+            || l.starts_with("x-orchidnavi-")
+            || l.starts_with("x-orchidcenter-")
+            || l.starts_with("x-orchidshop-")
+            || l.starts_with("x-orchidpro-")
+            || l.starts_with("x-orchidmart-")
+            || l.starts_with("x-orchidplus-")
+            || l.starts_with("x-orchidsmart-")
+            || l.starts_with("x-orchidfamily-")
+            || l.starts_with("x-succulentnavi-")
+            || l.starts_with("x-succulentcenter-")
+            || l.starts_with("x-succulentshop-")
+            || l.starts_with("x-succulentpro-")
+            || l.starts_with("x-succulentmart-")
+            || l.starts_with("x-succulentplus-")
+            || l.starts_with("x-succulentsmart-")
+            || l.starts_with("x-succulentfamily-")
+            || l.starts_with("x-tannikunavi-")
+            || l.starts_with("x-tannikucenter-")
+            || l.starts_with("x-tannikushop-")
+            || l.starts_with("x-tannikupro-")
+            || l.starts_with("x-tannikumart-")
+            || l.starts_with("x-tannikuplus-")
+            || l.starts_with("x-tannikusmart-")
+            || l.starts_with("x-tannikufamily-")
+            || l.starts_with("x-sansevierianavi-")
+            || l.starts_with("x-sansevieriacenter-")
+            || l.starts_with("x-sansevieriashop-")
+            || l.starts_with("x-sansevieriapro-")
+            || l.starts_with("x-sansevieriamart-")
+            || l.starts_with("x-sansevieriaplus-")
+            || l.starts_with("x-sansevieriasmart-")
+            || l.starts_with("x-sansevieriafamily-")
+            || l.starts_with("x-foliagenavi-")
+            || l.starts_with("x-foliagecenter-")
+            || l.starts_with("x-foliageshop-")
+            || l.starts_with("x-foliagepro-")
+            || l.starts_with("x-foliagemart-")
+            || l.starts_with("x-foliageplus-")
+            || l.starts_with("x-foliagesmart-")
+            || l.starts_with("x-foliagefamily-")
+            || l.starts_with("x-kokedamanavi-")
+            || l.starts_with("x-kokedamacenter-"))
+}
+
+fn has_naturopathy_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-naturopathy-")
+            || l.starts_with("x-homeopathy-")
+            || l.starts_with("x-remedy-")
+            || l.starts_with("x-ayurveda-")
+            || l.starts_with("x-aromatherapy-")
+            || l.starts_with("x-reflexology-")
+            || l.starts_with("x-tcm-")
+            || l.starts_with("x-herbal-")
+            || l.starts_with("x-bach-")
+            || l.starts_with("x-cryotherapy-")
+            || l.starts_with("x-hydrotherapy-")
+            || l.starts_with("x-chiropractic-")
+            || l.starts_with("x-naturopathynavi-")
+            || l.starts_with("x-naturopathycenter-")
+            || l.starts_with("x-naturopathyshop-")
+            || l.starts_with("x-naturopathypro-")
+            || l.starts_with("x-naturopathymart-")
+            || l.starts_with("x-naturopathyplus-")
+            || l.starts_with("x-naturopathysmart-")
+            || l.starts_with("x-naturopathyfamily-")
+            || l.starts_with("x-homeopathynavi-")
+            || l.starts_with("x-homeopathycenter-")
+            || l.starts_with("x-homeopathyshop-")
+            || l.starts_with("x-homeopathypro-")
+            || l.starts_with("x-homeopathymart-")
+            || l.starts_with("x-homeopathyplus-")
+            || l.starts_with("x-homeopathysmart-")
+            || l.starts_with("x-homeopathyfamily-")
+            || l.starts_with("x-remedynavi-")
+            || l.starts_with("x-remedycenter-")
+            || l.starts_with("x-remedyshop-")
+            || l.starts_with("x-remedypro-")
+            || l.starts_with("x-remedymart-")
+            || l.starts_with("x-remedyplus-")
+            || l.starts_with("x-remedysmart-")
+            || l.starts_with("x-remedyfamily-")
+            || l.starts_with("x-ayurvedanavi-")
+            || l.starts_with("x-ayurvedacenter-")
+            || l.starts_with("x-ayurvedashop-")
+            || l.starts_with("x-ayurvedapro-")
+            || l.starts_with("x-ayurvedamart-")
+            || l.starts_with("x-ayurvedaplus-")
+            || l.starts_with("x-ayurvedasmart-")
+            || l.starts_with("x-ayurvedafamily-")
+            || l.starts_with("x-aromatherapynavi-")
+            || l.starts_with("x-aromatherapycenter-")
+            || l.starts_with("x-aromatherapyshop-")
+            || l.starts_with("x-aromatherapypro-")
+            || l.starts_with("x-aromatherapymart-")
+            || l.starts_with("x-aromatherapyplus-")
+            || l.starts_with("x-aromatherapysmart-")
+            || l.starts_with("x-aromatherapyfamily-")
+            || l.starts_with("x-reflexologynavi-")
+            || l.starts_with("x-reflexologycenter-")
+            || l.starts_with("x-reflexologyshop-")
+            || l.starts_with("x-reflexologypro-")
+            || l.starts_with("x-reflexologymart-")
+            || l.starts_with("x-reflexologyplus-")
+            || l.starts_with("x-reflexologysmart-")
+            || l.starts_with("x-reflexologyfamily-")
+            || l.starts_with("x-tcmnavi-")
+            || l.starts_with("x-tcmcenter-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -32211,6 +32430,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_handmade_marks(clean));
+    }
+
+    #[test]
+    fn scan_は移機印を検出する() {
+        for raw in [
+            br"X-Kitchencar-Alert: 1",
+            br"X-Foodtruck-Notice: 1",
+            br"X-Catering-Info: 1",
+            br"X-Michinoeki-Report: 1",
+            br"X-Lunchcar-Bulletin: 1",
+            br"X-Wagon-News: 1",
+            br"X-Takeout-Flash: 1",
+            br"X-Popupshop-Release: 1",
+        ] {
+            assert!(has_foodtruck_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_foodtruck_marks(clean));
+    }
+
+    #[test]
+    fn scan_は栽機印を検出する() {
+        for raw in [
+            br"X-Bonsai-Alert: 1",
+            br"X-Orchid-Notice: 1",
+            br"X-Succulent-Info: 1",
+            br"X-Tanniku-Report: 1",
+            br"X-Foliage-Bulletin: 1",
+            br"X-Kokedama-News: 1",
+            br"X-Cactus-Flash: 1",
+            br"X-Airplant-Release: 1",
+        ] {
+            assert!(has_bonsai_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_bonsai_marks(clean));
+    }
+
+    #[test]
+    fn scan_は然機印を検出する() {
+        for raw in [
+            br"X-Naturopathy-Alert: 1",
+            br"X-Homeopathy-Notice: 1",
+            br"X-Remedy-Info: 1",
+            br"X-Ayurveda-Report: 1",
+            br"X-Aromatherapy-Bulletin: 1",
+            br"X-Tcm-News: 1",
+            br"X-Herbal-Flash: 1",
+            br"X-Chiropractic-Release: 1",
+        ] {
+            assert!(has_naturopathy_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_naturopathy_marks(clean));
     }
 
 }
