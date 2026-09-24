@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub msp_marks: bool,
+    pub wastehauling_marks: bool,
+    pub subsidy_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        msp_marks: has_msp_marks(hdr),
+        wastehauling_marks: has_wastehauling_marks(hdr),
+        subsidy_marks: has_subsidy_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,187 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_msp_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-mspservice-")
+            || l.starts_with("x-msppros-")
+            || l.starts_with("x-mspteam-")
+            || l.starts_with("x-mspworks-")
+            || l.starts_with("x-mspforce-")
+            || l.starts_with("x-mspnation-")
+            || l.starts_with("x-mspexperts-")
+            || l.starts_with("x-mspdoctors-")
+            || l.starts_with("x-mspmasters-")
+            || l.starts_with("x-mspsvc-")
+            || l.starts_with("x-msphq-")
+            || l.starts_with("x-connectwise-")
+            || l.starts_with("x-kaseya-")
+            || l.starts_with("x-datto-")
+            || l.starts_with("x-ninjaone-")
+            || l.starts_with("x-atera-")
+            || l.starts_with("x-syncro-")
+            || l.starts_with("x-halopsa-")
+            || l.starts_with("x-nable-")
+            || l.starts_with("x-liongard-")
+            || l.starts_with("x-auvik-")
+            || l.starts_with("x-barracudamsp-")
+            || l.starts_with("x-pulserobot-")
+            || l.starts_with("x-itmsvc-")
+            || l.starts_with("x-itservicegyo-")
+            || l.starts_with("x-itkanri-")
+            || l.starts_with("x-itsupportpros-")
+            || l.starts_with("x-itmainte-")
+            || l.starts_with("x-syskanri-")
+            || l.starts_with("x-systemkanri-")
+            || l.starts_with("x-kanrimainte-")
+            || l.starts_with("x-infotechsvc-")
+            || l.starts_with("x-itsoumu-")
+            || l.starts_with("x-itsolu-")
+            || l.starts_with("x-techsup-")
+            || l.starts_with("x-nmspros-")
+            || l.starts_with("x-opspros-")
+            || l.starts_with("x-itunei-")
+            || l.starts_with("x-systemunei-")
+            || l.starts_with("x-infraunei-")
+            || l.starts_with("x-uneiit-")
+            || l.starts_with("x-mspjapan-")
+            || l.starts_with("x-itmsjp-")
+            || l.starts_with("x-johoops-")
+            || l.starts_with("x-sysunei-")
+            || l.starts_with("x-uneikoutsuu-")
+            || l.starts_with("x-ituneiops-")
+            || l.starts_with("x-itkanriservice-")
+            || l.starts_with("x-msprosjp-")
+    })
+}
+
+fn has_wastehauling_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-wastehauling-")
+            || l.starts_with("x-wastecollection-")
+            || l.starts_with("x-wastehauler-")
+            || l.starts_with("x-wasteteam-")
+            || l.starts_with("x-wastepros-")
+            || l.starts_with("x-wasteworks-")
+            || l.starts_with("x-wastecity-")
+            || l.starts_with("x-wasteforce-")
+            || l.starts_with("x-wastenation-")
+            || l.starts_with("x-wasteservice-")
+            || l.starts_with("x-wastesvc-")
+            || l.starts_with("x-wasteexperts-")
+            || l.starts_with("x-wastedoctors-")
+            || l.starts_with("x-wastemasters-")
+            || l.starts_with("x-wasteco-")
+            || l.starts_with("x-republicsvc-")
+            || l.starts_with("x-gflenv-")
+            || l.starts_with("x-wasteconn-")
+            || l.starts_with("x-rumpke-")
+            || l.starts_with("x-casella-")
+            || l.starts_with("x-recology-")
+            || l.starts_with("x-marborg-")
+            || l.starts_with("x-bfiwaste-")
+            || l.starts_with("x-servicesanitation-")
+            || l.starts_with("x-trashteam-")
+            || l.starts_with("x-haulpros-")
+            || l.starts_with("x-haulit-")
+            || l.starts_with("x-haulingpros-")
+            || l.starts_with("x-junkhaulerdump-")
+            || l.starts_with("x-sangyouhaikibutsu-")
+            || l.starts_with("x-haikibutsu-")
+            || l.starts_with("x-haikibutsuyasan-")
+            || l.starts_with("x-haikibutsupro-")
+            || l.starts_with("x-haikibutsuteam-")
+            || l.starts_with("x-haikibutsugyo-")
+            || l.starts_with("x-haikibutsukensa-")
+            || l.starts_with("x-haikibutsumanten-")
+            || l.starts_with("x-haikibutsunomi-")
+            || l.starts_with("x-haikibutsujp-")
+            || l.starts_with("x-haikibutsusenmon-")
+            || l.starts_with("x-haikibutsuchousa-")
+            || l.starts_with("x-haikibutsuteiki-")
+            || l.starts_with("x-haikibutsushuri-")
+            || l.starts_with("x-gomishuushuu-")
+            || l.starts_with("x-gomiyasan-")
+            || l.starts_with("x-gomihiki-")
+            || l.starts_with("x-haikibutsurescue-")
+            || l.starts_with("x-haikibutsudoctors-")
+            || l.starts_with("x-haikibutsusagyou-")
+            || l.starts_with("x-haikibutsuteikyu-")
+            || l.starts_with("x-haikibutsuorder-")
+            || l.starts_with("x-sangyouhaiki-")
+    })
+}
+
+fn has_subsidy_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-joseikin-")
+            || l.starts_with("x-hojokin-")
+            || l.starts_with("x-subsidypros-")
+            || l.starts_with("x-subsidyteam-")
+            || l.starts_with("x-subsidyworks-")
+            || l.starts_with("x-subsidyexperts-")
+            || l.starts_with("x-subsidydoctors-")
+            || l.starts_with("x-subsidyhq-")
+            || l.starts_with("x-subsidysvc-")
+            || l.starts_with("x-subsidyconsult-")
+            || l.starts_with("x-grantpros-")
+            || l.starts_with("x-grantteam-")
+            || l.starts_with("x-grantworks-")
+            || l.starts_with("x-grantexperts-")
+            || l.starts_with("x-grantdoctors-")
+            || l.starts_with("x-grantmasters-")
+            || l.starts_with("x-grantnation-")
+            || l.starts_with("x-grantforce-")
+            || l.starts_with("x-granthq-")
+            || l.starts_with("x-grantsvc-")
+            || l.starts_with("x-grantwriting-")
+            || l.starts_with("x-grantwriter-")
+            || l.starts_with("x-grantconsulting-")
+            || l.starts_with("x-jgrants-")
+            || l.starts_with("x-hojokinnavi-")
+            || l.starts_with("x-joseikinnavi-")
+            || l.starts_with("x-seidokensa-")
+            || l.starts_with("x-hojokinpro-")
+            || l.starts_with("x-hojokinteam-")
+            || l.starts_with("x-hojokingyo-")
+            || l.starts_with("x-hojokinkensa-")
+            || l.starts_with("x-hojokinmanten-")
+            || l.starts_with("x-hojokinjp-")
+            || l.starts_with("x-hojokinsenmon-")
+            || l.starts_with("x-hojokinmitsumori-")
+            || l.starts_with("x-hojokinchousa-")
+            || l.starts_with("x-hojokinteiki-")
+            || l.starts_with("x-hojokinshuri-")
+            || l.starts_with("x-hojokindoctors-")
+            || l.starts_with("x-hojokinsagyou-")
+            || l.starts_with("x-hojokinrescue-")
+            || l.starts_with("x-hojokinteikyu-")
+            || l.starts_with("x-hojokinorder-")
+            || l.starts_with("x-hojokinshinsei-")
+            || l.starts_with("x-joseikinpro-")
+            || l.starts_with("x-joseikinteam-")
+            || l.starts_with("x-joseikingyo-")
+            || l.starts_with("x-joseikinjp-")
+            || l.starts_with("x-joseikinsenmon-")
+            || l.starts_with("x-joseikinmitsumori-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20828,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は運機印を検出する() {
+        let f0 = b"From: a@b\r\nX-MspService-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-ConnectWise-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Kaseya-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-NinjaOne-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-ItMainte-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-SysKanri-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-MspPros-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-OpsPros-Record: 1\r\n\r\nx";
+        assert!(has_msp_marks(f0));
+        assert!(has_msp_marks(f1));
+        assert!(has_msp_marks(f2));
+        assert!(has_msp_marks(f3));
+        assert!(has_msp_marks(f4));
+        assert!(has_msp_marks(f5));
+        assert!(has_msp_marks(f6));
+        assert!(has_msp_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_msp_marks(clean));
+    }
+
+    #[test]
+    fn scan_は廃機印を検出する() {
+        let f0 = b"From: a@b\r\nX-WasteHauling-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-RepublicSvc-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Haikibutsu-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-WastePros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-GflEnv-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-HaulPros-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-HaikibutsuPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-WasteSvc-Record: 1\r\n\r\nx";
+        assert!(has_wastehauling_marks(f0));
+        assert!(has_wastehauling_marks(f1));
+        assert!(has_wastehauling_marks(f2));
+        assert!(has_wastehauling_marks(f3));
+        assert!(has_wastehauling_marks(f4));
+        assert!(has_wastehauling_marks(f5));
+        assert!(has_wastehauling_marks(f6));
+        assert!(has_wastehauling_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_wastehauling_marks(clean));
+    }
+
+    #[test]
+    fn scan_は助機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Joseikin-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-GrantPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Hojokin-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-SubsidyPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-GrantConsulting-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-HojokinPro-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SubsidyTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-GrantWriter-Record: 1\r\n\r\nx";
+        assert!(has_subsidy_marks(f0));
+        assert!(has_subsidy_marks(f1));
+        assert!(has_subsidy_marks(f2));
+        assert!(has_subsidy_marks(f3));
+        assert!(has_subsidy_marks(f4));
+        assert!(has_subsidy_marks(f5));
+        assert!(has_subsidy_marks(f6));
+        assert!(has_subsidy_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_subsidy_marks(clean));
+    }
 }
