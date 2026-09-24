@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-GotJunk-*`/`X-JunkKing-*`/`X-CollegeHunks-*`/`X-JunkLuggers-*`/`X-Fuyouhin-*`/`X-Sodaigomi-*`/`X-GomiYashiki-*` 等 — 不用品回収・ジャンク除去機印自称
+    pub junkremoval_marks: bool,
+    /// `X-MrAppliance-*`/`X-SearsHomeServices-*`/`X-ApplianceFactory-*`/`X-ApplianceDoctor-*`/`X-KadenShuuri-*`/`X-DenkiShuuri-*` 等 — 家電修理機印自称
+    pub appliance_marks: bool,
+    /// `X-MoldPros-*`/`X-MoldDoctor-*`/`X-EliteMold-*`/`X-ActionMold-*`/`X-Kabibusters-*`/`X-KabiTori-*`/`X-KabiYa-*` 等 — カビ・黴処理機印自称
+    pub mold_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        junkremoval_marks: has_junkremoval_marks(hdr),
+        appliance_marks: has_appliance_marks(hdr),
+        mold_marks: has_mold_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,222 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D650: 不用品回収・ジャンク除去機印の自称を検出する。
+///
+/// `X-GotJunk-*`/`X-JunkKing-*`/`X-CollegeHunks-*`/`X-JunkLuggers-*`/`X-LoadUp-*`/
+/// `X-JDog-*`/`X-BinThereDumpThat-*`/`X-JunkBuddy-*`/`X-JunkRemoval-*`/
+/// `X-JunkRemovalPros-*`/`X-JunkHaul-*`/`X-JunkHaulPros-*`/`X-TrashRemoval-*`/
+/// `X-DebrisRemoval-*`/`X-CleanoutPros-*`/`X-EstateCleanout-*`/`X-HoarderCleanout-*`/
+/// `X-GarageCleanout-*`/`X-AtticCleanout-*`/`X-BasementCleanout-*`/`X-JunkDump-*`/
+/// `X-HaulingPros-*`/`X-DumpsterRental-*`/`X-RollOff-*`/`X-JunkForce-*`/
+/// `X-TrashJunk-*`、JP は `X-Fuyouhin-*`/`X-FuyouhinKaishu-*`/`X-FuyouhinYasan-*`/
+/// `X-Sodaigomi-*`/`X-SodaigomiShori-*`/`X-GomiYashiki-*`/`X-GomiYashikiTaiji-*`/
+/// `X-HaihinKaishu-*`/`X-Haikibutsu-*`/`X-IhinSeiri-*`/`X-KadennokiKaishu-*`/
+/// `X-DansuSeiri-*`/`X-NukiHaki-*`/`X-KatazukeShori-*`/`X-Hido*Kaishu-*`/
+/// `X-JunkSeiri-*`/`X-FuyouhinSeiri-*`/`X-Daihaku-*`/`X-Katazukeya-*`/
+/// `X-NarukiSouji-*`/`X-GaichuKaishu-*`/`X-JunkRemovalJP-*` 等の
+/// 不用品回収・ジャンク除去機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。無料回収勧誘・積載量詐欺・廃品高額請求・
+/// 遺品整理乗じた便乗商法・ゴミ屋敷片付けの偽装は不用品回収業者なりすましの典型手口
+/// (高齢者狙いの粗大ゴミ詐欺・トラック便乗請求で有名)。
+/// 回印の自署は兆候として数える。
+/// (買取・リユースは reuse 機、遺品整理は funeral 機、清掃は cleaning 機で検出済み)
+fn has_junkremoval_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-gotjunk-")
+            || l.starts_with("x-junkking-")
+            || l.starts_with("x-collegehunks-")
+            || l.starts_with("x-junkluggers-")
+            || l.starts_with("x-loadup-")
+            || l.starts_with("x-jdog-")
+            || l.starts_with("x-bintheredumpthat-")
+            || l.starts_with("x-junkbuddy-")
+            || l.starts_with("x-junkremoval-")
+            || l.starts_with("x-junkremovalpros-")
+            || l.starts_with("x-junkhaul-")
+            || l.starts_with("x-junkhaulpros-")
+            || l.starts_with("x-trashremoval-")
+            || l.starts_with("x-debrisremoval-")
+            || l.starts_with("x-cleanoutpros-")
+            || l.starts_with("x-estatecleanout-")
+            || l.starts_with("x-hoardercleanout-")
+            || l.starts_with("x-garagecleanout-")
+            || l.starts_with("x-atticcleanout-")
+            || l.starts_with("x-basementcleanout-")
+            || l.starts_with("x-junkdump-")
+            || l.starts_with("x-haulingpros-")
+            || l.starts_with("x-dumpsterrental-")
+            || l.starts_with("x-rolloff-")
+            || l.starts_with("x-junkforce-")
+            || l.starts_with("x-trashjunk-")
+            || l.starts_with("x-fuyouhin-")
+            || l.starts_with("x-fuyouhinkaishu-")
+            || l.starts_with("x-fuyouhinyasan-")
+            || l.starts_with("x-sodaigomi-")
+            || l.starts_with("x-sodaigomishori-")
+            || l.starts_with("x-gomiyashiki-")
+            || l.starts_with("x-gomiyashikitaiji-")
+            || l.starts_with("x-haihinkaishu-")
+            || l.starts_with("x-haikibutsu-")
+            || l.starts_with("x-ihinseiri-")
+            || l.starts_with("x-kadennokikaishu-")
+            || l.starts_with("x-dansuseiri-")
+            || l.starts_with("x-nukihaki-")
+            || l.starts_with("x-katazukeshiori-")
+            || l.starts_with("x-junkseiri-")
+            || l.starts_with("x-fuyouhinseiri-")
+            || l.starts_with("x-daihaku-")
+            || l.starts_with("x-katazukeya-")
+            || l.starts_with("x-narukisouji-")
+            || l.starts_with("x-gaichukaishu-")
+            || l.starts_with("x-junkremovaljp-")
+            || l.starts_with("x-hidokaishu-")
+    })
+}
+
+/// D651: 家電修理機印の自称を検出する。
+///
+/// `X-MrAppliance-*`/`X-SearsHomeServices-*`/`X-ApplianceFactory-*`/
+/// `X-ApplianceDoctor-*`/`X-FredSappliance-*`/`X-Accufix-*`/`X-ApplianceRepair-*`/
+/// `X-ApplianceRepairPros-*`/`X-HomeAppliance-*`/`X-ApplianceService-*`/
+/// `X-AppliancePros-*`/`X-FixAppliance-*`/`X-ApplianceForce-*`/`X-DishwasherRepair-*`/
+/// `X-WasherRepair-*`/`X-DryerRepair-*`/`X-FridgeRepair-*`/`X-RefrigeratorRepair-*`/
+/// `X-OvenRepair-*`/`X-RangeRepair-*`/`X-MicrowaveRepair-*`/`X-FreezerRepair-*`/
+/// `X-HDTVRepair-*`/`X-TelevisionRepair-*`、JP は `X-KadenShuuri-*`/`X-DenkiShuuri-*`/
+/// `X-DenkiYashuuri-*`/`X-KadenDoctor-*`/`X-SensoukiShuuri-*`/`X-ReizoukoShuuri-*`/
+/// `X-SentakkiShuuri-*`/`X-SentakukiShuuri-*`/`X-EakonShuuri-*`/`X-Dishshuuri-*`/
+/// `X-ShuuriYa-*`/`X-Kadenrepaia-*`/`X-OshareShuuri-*`/`X-KadenSupotto-*`/
+/// `X-DensetsuShuuri-*`/`X-TeresaShuuri-*`/`X-EletroShuuri-*` 等の
+/// 家電修理機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。洗濯機・冷蔵庫・エアコン・食洗機修理・
+/// 延長保証・訪問修理予約の偽装は家電修理業者なりすましの典型手口。
+/// 家印の自署は兆候として数える。
+/// (家電量販店・メーカーは retail 機、携帯修理は recovery 機、整備は autoservice 機で検出済み)
+fn has_appliance_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-mrappliance-")
+            || l.starts_with("x-searshomeservices-")
+            || l.starts_with("x-appliancefactory-")
+            || l.starts_with("x-appliancedoctor-")
+            || l.starts_with("x-fredsappliance-")
+            || l.starts_with("x-accufix-")
+            || l.starts_with("x-appliancerepair-")
+            || l.starts_with("x-appliancerepairpros-")
+            || l.starts_with("x-homeappliance-")
+            || l.starts_with("x-applianceservice-")
+            || l.starts_with("x-appliancepros-")
+            || l.starts_with("x-fixappliance-")
+            || l.starts_with("x-applianceforce-")
+            || l.starts_with("x-dishwasherrepair-")
+            || l.starts_with("x-washerrepair-")
+            || l.starts_with("x-dryerrepair-")
+            || l.starts_with("x-fridgerepair-")
+            || l.starts_with("x-refrigeratorrepair-")
+            || l.starts_with("x-ovenrepair-")
+            || l.starts_with("x-rangerepair-")
+            || l.starts_with("x-microwaverepair-")
+            || l.starts_with("x-freezerrepair-")
+            || l.starts_with("x-hdtvrepair-")
+            || l.starts_with("x-televisionrepair-")
+            || l.starts_with("x-kadenshuuri-")
+            || l.starts_with("x-denkishuuri-")
+            || l.starts_with("x-denkiyashuuri-")
+            || l.starts_with("x-kadendoctor-")
+            || l.starts_with("x-sensoukishuuri-")
+            || l.starts_with("x-reizoukoshuuri-")
+            || l.starts_with("x-sentakkishuuri-")
+            || l.starts_with("x-sentakukishuuri-")
+            || l.starts_with("x-eakonshuuri-")
+            || l.starts_with("x-dishshuuri-")
+            || l.starts_with("x-shuuriya-")
+            || l.starts_with("x-kadenrepaia-")
+            || l.starts_with("x-oshareshuuri-")
+            || l.starts_with("x-kadensupotto-")
+            || l.starts_with("x-densetsushuuri-")
+            || l.starts_with("x-teresashuuri-")
+            || l.starts_with("x-eletroshuuri-")
+            || l.starts_with("x-appliancetech-")
+            || l.starts_with("x-kadenkanri-")
+            || l.starts_with("x-syuuripro-")
+    })
+}
+
+/// D652: カビ・黴処理機印の自称を検出する。
+///
+/// `X-MoldPros-*`/`X-MoldDoctor-*`/`X-EliteMold-*`/`X-ActionMold-*`/
+/// `X-MoldInspection-*`/`X-MoldInspectionPros-*`/`X-MoldRemediation-*`/
+/// `X-MoldRemoval-*`/`X-MoldRemovalPros-*`/`X-MoldFree-*`/`X-MoldMaster-*`/
+/// `X-MoldTech-*`/`X-Aseptair-*`/`X-MoldExperts-*`/`X-MoldLab-*`/`X-MoldCheck-*`/
+/// `X-MoldBusters-*`/`X-BlackMold-*`/`X-MoldRemover-*`/`X-MoldSense-*`、
+/// JP は `X-Kabibusters-*`/`X-KabiTori-*`/`X-KabiYa-*`/`X-KabiToriYasan-*`/
+/// `X-KabiKujo-*`/`X-KabiSenmon-*`/`X-KabiDoctor-*`/`X-KabiSeiri-*`/`X-KabiSekkai-*`/
+/// `X-KabiSupport-*`/`X-KabiNeko-*`/`X-KabinekoBusters-*`/`X-KabiTaisaku-*`/
+/// `X-BlackMoldJP-*`/`X-MoldProtection-*`/`X-KabiHakken-*`/`X-KabiMansion-*` 等の
+/// カビ・黴処理機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。カビ発見・黴検査・浴室カビ取り・天井カビ・
+/// 結露カビ対策・除湿工事の偽装はカビ処理業者なりすましの典型手口
+/// (健康不安を煽る訪販で有名)。黴印の自署は兆候として数える。
+/// (災害復旧は restoration 機、清掃は cleaning 機、防水は waterproof 機で検出済み)
+fn has_mold_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-moldpros-")
+            || l.starts_with("x-molddoctor-")
+            || l.starts_with("x-elitemold-")
+            || l.starts_with("x-actionmold-")
+            || l.starts_with("x-moldinspection-")
+            || l.starts_with("x-moldinspectionpros-")
+            || l.starts_with("x-moldremediation-")
+            || l.starts_with("x-moldremoval-")
+            || l.starts_with("x-moldremovalpros-")
+            || l.starts_with("x-moldfree-")
+            || l.starts_with("x-moldmaster-")
+            || l.starts_with("x-moldtech-")
+            || l.starts_with("x-aseptair-")
+            || l.starts_with("x-moldexperts-")
+            || l.starts_with("x-moldlab-")
+            || l.starts_with("x-moldcheck-")
+            || l.starts_with("x-moldbusters-")
+            || l.starts_with("x-blackmold-")
+            || l.starts_with("x-moldremover-")
+            || l.starts_with("x-moldsense-")
+            || l.starts_with("x-kabibusters-")
+            || l.starts_with("x-kabitori-")
+            || l.starts_with("x-kabiya-")
+            || l.starts_with("x-kabitoriyasan-")
+            || l.starts_with("x-kabikujo-")
+            || l.starts_with("x-kabisenmon-")
+            || l.starts_with("x-kabidoctor-")
+            || l.starts_with("x-kabiseiri-")
+            || l.starts_with("x-kabisekkai-")
+            || l.starts_with("x-kabisupport-")
+            || l.starts_with("x-kabineko-")
+            || l.starts_with("x-kabinekobusters-")
+            || l.starts_with("x-kabitaisaku-")
+            || l.starts_with("x-blackmoldjp-")
+            || l.starts_with("x-moldprotection-")
+            || l.starts_with("x-kabihakken-")
+            || l.starts_with("x-kabimansion-")
+            || l.starts_with("x-kaabikujo-")
+            || l.starts_with("x-moldsolutions-")
+            || l.starts_with("x-moldsafe-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20866,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は回機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-GotJunk-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JunkKing-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Fuyouhin-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Sodaigomi-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-CollegeHunks-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GomiYashiki-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HaihinKaishu-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JunkRemoval-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_junkremoval_marks(raw));
+        }
+        assert!(!has_junkremoval_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は家機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-MrAppliance-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SearsHomeServices-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KadenShuuri-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ReizoukoShuuri-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ApplianceDoctor-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SentakkiShuuri-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DenkiShuuri-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AppliancePros-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_appliance_marks(raw));
+        }
+        assert!(!has_appliance_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は黴機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-MoldPros-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MoldDoctor-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Kabibusters-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KabiTori-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-EliteMold-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KabiKujo-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KabiDoctor-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MoldLab-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_mold_marks(raw));
+        }
+        assert!(!has_mold_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
