@@ -2620,6 +2620,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D668: パチンコ・パチスロ・ホール印自称
+    if env.pachinko_marks {
+        render_risks.push(
+            "X-PachinkoNavi-*/X-Pachisuro-*/X-PachisuroNavi-*/X-Hall-*/X-Parlor-*/X-Slot-*/X-Maruhan-*/X-Pworld-* 等 — 玉機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D669: 漁協・水産・魚市場印自称
+    if env.fishery_marks {
+        render_risks.push(
+            "X-Gyokyou-*/X-GyokyouNavi-*/X-Suisan-*/X-Uoichiba-*/X-FishMarket-*/X-Kaisen-*/X-Maguro-*/X-Kani-* 等 — 漁機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D670: 映画館・シネコン印自称
+    if env.cinema_marks {
+        render_risks.push(
+            "X-Eiga-*/X-EigaNavi-*/X-Cinema-*/X-CinemaNavi-*/X-Cinecon-*/X-Piccadilly-*/X-UnitedCinema-*/X-Eigakan-* 等 — 映機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
