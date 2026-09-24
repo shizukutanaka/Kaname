@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D791: `X-Kyuutouki-*`/`X-Yuwakashi-*`/`X-Ecocute-*`/`X-Boiler-*`/`X-Waterheater-*`/`X-Hotwatersystem-*` 等の給湯器・ボイラー交換印自称が未検査
+
+- **問題**: `X-Kyuutouki-*`/`X-KyuutoukiYasan-*`/`X-KyuutoukiPro-*`/`X-KyuutoukiTeam-*`/`X-KyuutoukiJP-*`/`X-KyuutoukiSenmon-*`/`X-Yuwakashi-*`/`X-YuwakashiYasan-*`/`X-YuwakashiPro-*`/`X-YuwakashiTeam-*`/`X-YuwakashiJP-*`/`X-YuwakashiSenmon-*`/`X-Ecocute-*`/`X-EcocuteYasan-*`/`X-EcocutePro-*`/`X-EcocuteTeam-*`/`X-EcocuteJP-*`/`X-EcocuteSenmon-*`/`X-BoilerPros-*`/`X-BoilerTeam-*`/`X-BoilerWorks-*`/`X-BoilerExperts-*`/`X-BoilerSvc-*`/`X-BoilerHQ-*`/`X-WaterheaterPros-*`/`X-WaterheaterTeam-*`/`X-WaterheaterWorks-*`/`X-WaterheaterExperts-*`/`X-WaterheaterSvc-*`/`X-WaterheaterHQ-*`/`X-HotwatersystemPros-*`/`X-HotwatersystemTeam-*`/`X-HotwatersystemWorks-*`/`X-HotwatersystemExperts-*`/`X-HotwatersystemSvc-*`/`X-HotwatersystemHQ-*` 等 は湯機の通知記録 — 送信側が書くことは自称。給湯器・ボイラー交換業者の偽装は、緊急交換費・部品代を装ったなりすましの典型手口。(水道修理は plumbing 機、空調は hvac 機、LPガスは lpgas 機で検出済み)
+- **修正**: `Envelope` に `kyuutouki_marks` + `has_kyuutouki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 湯印の自署を問え。
+
+### Security — D792: `X-Taishin-*`/`X-Taishinhosou-*`/`X-Menshin-*`/`X-Seismic-*`/`X-Seismicretrofit-*`/`X-Earthquakeproof-*` 等の耐震・免震補強印自称が未検査
+
+- **問題**: `X-Taishin-*`/`X-TaishinYasan-*`/`X-TaishinPro-*`/`X-TaishinTeam-*`/`X-TaishinJP-*`/`X-TaishinSenmon-*`/`X-Taishinhosou-*`/`X-TaishinhosouYasan-*`/`X-TaishinhosouPro-*`/`X-TaishinhosouTeam-*`/`X-TaishinhosouJP-*`/`X-TaishinhosouSenmon-*`/`X-Menshin-*`/`X-MenshinYasan-*`/`X-MenshinPro-*`/`X-MenshinTeam-*`/`X-MenshinJP-*`/`X-MenshinSenmon-*`/`X-SeismicPros-*`/`X-SeismicTeam-*`/`X-SeismicWorks-*`/`X-SeismicExperts-*`/`X-SeismicSvc-*`/`X-SeismicHQ-*`/`X-SeismicretrofitPros-*`/`X-SeismicretrofitTeam-*`/`X-SeismicretrofitWorks-*`/`X-SeismicretrofitExperts-*`/`X-SeismicretrofitSvc-*`/`X-SeismicretrofitHQ-*`/`X-EarthquakeproofPros-*`/`X-EarthquakeproofTeam-*`/`X-EarthquakeproofWorks-*`/`X-EarthquakeproofExperts-*`/`X-EarthquakeproofSvc-*`/`X-EarthquakeproofHQ-*` 等 は耐機の通知記録 — 送信側が書くことは自称。耐震診断・免震補強業者の偽装は、診断料・補強工事費を装ったなりすましの典型手口。(基礎は foundation 機、住宅は housing 機で検出済み)
+- **修正**: `Envelope` に `taishin_marks` + `has_taishin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 耐印の自署を問え。
+
+### Security — D793: `X-Koutsuujiko-*`/`X-Isharyou-*`/`X-Jidan-*`/`X-Caraccident-*`/`X-Accidentclaim-*`/`X-Trafficaccident-*` 等の交通事故・慰謝料相談印自称が未検査
+
+- **問題**: `X-Koutsuujiko-*`/`X-KoutsuujikoYasan-*`/`X-KoutsuujikoPro-*`/`X-KoutsuujikoTeam-*`/`X-KoutsuujikoJP-*`/`X-KoutsuujikoSenmon-*`/`X-Isharyou-*`/`X-IsharyouYasan-*`/`X-IsharyouPro-*`/`X-IsharyouTeam-*`/`X-IsharyouJP-*`/`X-IsharyouSenmon-*`/`X-Jidan-*`/`X-JidanYasan-*`/`X-JidanPro-*`/`X-JidanTeam-*`/`X-JidanJP-*`/`X-JidanSenmon-*`/`X-CaraccidentPros-*`/`X-CaraccidentTeam-*`/`X-CaraccidentWorks-*`/`X-CaraccidentExperts-*`/`X-CaraccidentSvc-*`/`X-CaraccidentHQ-*`/`X-AccidentclaimPros-*`/`X-AccidentclaimTeam-*`/`X-AccidentclaimWorks-*`/`X-AccidentclaimExperts-*`/`X-AccidentclaimSvc-*`/`X-AccidentclaimHQ-*`/`X-TrafficaccidentPros-*`/`X-TrafficaccidentTeam-*`/`X-TrafficaccidentWorks-*`/`X-TrafficaccidentExperts-*`/`X-TrafficaccidentSvc-*`/`X-TrafficaccidentHQ-*` 等 は故機の通知記録 — 送信側が書くことは自称。交通事故・慰謝料・示談代行業者の偽装は、相談料・示談交渉費を装ったなりすましの典型手口。(弁護士は legal 機、保険は insurance 機、傷害調査は investigation 機で検出済み)
+- **修正**: `Envelope` に `jiko_marks` + `has_jiko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 故印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
