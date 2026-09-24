@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub somemono_marks: bool,
+    pub penji_marks: bool,
+    pub bakery_marks: bool,
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
@@ -2233,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        somemono_marks: has_somemono_marks(hdr),
+        penji_marks: has_penji_marks(hdr),
+        bakery_marks: has_bakery_marks(hdr),
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
@@ -12830,6 +12836,181 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_somemono_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-somemono-")
+            || l.starts_with("x-somemonoyasan-")
+            || l.starts_with("x-somemonopro-")
+            || l.starts_with("x-somemonoteam-")
+            || l.starts_with("x-somemonokensa-")
+            || l.starts_with("x-somemonomanten-")
+            || l.starts_with("x-somemononomi-")
+            || l.starts_with("x-somemonojp-")
+            || l.starts_with("x-somemonosenmon-")
+            || l.starts_with("x-somemonomitsumori-")
+            || l.starts_with("x-somemonochousa-")
+            || l.starts_with("x-somemonoteiki-")
+            || l.starts_with("x-somemonoshuri-")
+            || l.starts_with("x-somemonoschool-")
+            || l.starts_with("x-somemonokoubou-")
+            || l.starts_with("x-somemonomart-")
+            || l.starts_with("x-somemonobank-")
+            || l.starts_with("x-shibori-")
+            || l.starts_with("x-shiboriyasan-")
+            || l.starts_with("x-shiboripro-")
+            || l.starts_with("x-shiboriteam-")
+            || l.starts_with("x-shiborikoubou-")
+            || l.starts_with("x-shiborisenmon-")
+            || l.starts_with("x-shiborischool-")
+            || l.starts_with("x-katazome-")
+            || l.starts_with("x-katazomepro-")
+            || l.starts_with("x-katazomekoubou-")
+            || l.starts_with("x-katazomesenmon-")
+            || l.starts_with("x-yuzen-")
+            || l.starts_with("x-yuzenpro-")
+            || l.starts_with("x-yuzenkoubou-")
+            || l.starts_with("x-dyeing-")
+            || l.starts_with("x-dyeingpros-")
+            || l.starts_with("x-dyeingteam-")
+            || l.starts_with("x-dyeingworks-")
+            || l.starts_with("x-dyeingexperts-")
+            || l.starts_with("x-dyeingsvc-")
+            || l.starts_with("x-dyeinghq-")
+            || l.starts_with("x-dyeingstudio-")
+            || l.starts_with("x-dyeingstudiopros-")
+            || l.starts_with("x-somemonopros-")
+            || l.starts_with("x-somemonoworks-")
+            || l.starts_with("x-somemonoexperts-")
+            || l.starts_with("x-somemonosvc-")
+            || l.starts_with("x-somemonohq-")
+            || l.starts_with("x-somemonodoctors-")
+            || l.starts_with("x-somemonorescue-")
+            || l.starts_with("x-shiboripros-")
+            || l.starts_with("x-shiboridoctors-")
+            || l.starts_with("x-shiborirescue-")
+    })
+}
+
+fn has_penji_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-penji-")
+            || l.starts_with("x-penjiyasan-")
+            || l.starts_with("x-penjipro-")
+            || l.starts_with("x-penjiteam-")
+            || l.starts_with("x-penjikensa-")
+            || l.starts_with("x-penjimanten-")
+            || l.starts_with("x-penjinomi-")
+            || l.starts_with("x-penjijp-")
+            || l.starts_with("x-penjisenmon-")
+            || l.starts_with("x-penjimitsumori-")
+            || l.starts_with("x-penjichousa-")
+            || l.starts_with("x-penjiteiki-")
+            || l.starts_with("x-penjishuri-")
+            || l.starts_with("x-penjischool-")
+            || l.starts_with("x-penjikoubou-")
+            || l.starts_with("x-penjimart-")
+            || l.starts_with("x-penjibank-")
+            || l.starts_with("x-ballpenji-")
+            || l.starts_with("x-ballpenjiyasan-")
+            || l.starts_with("x-ballpenjipro-")
+            || l.starts_with("x-ballpenjiteam-")
+            || l.starts_with("x-ballpenjikoubou-")
+            || l.starts_with("x-ballpenjisenmon-")
+            || l.starts_with("x-ballpenjischool-")
+            || l.starts_with("x-penmanshippros-")
+            || l.starts_with("x-penmanshipteam-")
+            || l.starts_with("x-penmanshipworks-")
+            || l.starts_with("x-penmanshipexperts-")
+            || l.starts_with("x-penmanshipsvc-")
+            || l.starts_with("x-penmanshiphq-")
+            || l.starts_with("x-penmanshipschool-")
+            || l.starts_with("x-penmanshiplesson-")
+            || l.starts_with("x-penjipros-")
+            || l.starts_with("x-penjiworks-")
+            || l.starts_with("x-penjiexperts-")
+            || l.starts_with("x-penjisvc-")
+            || l.starts_with("x-penjihq-")
+            || l.starts_with("x-penjidoctors-")
+            || l.starts_with("x-penjirescue-")
+            || l.starts_with("x-ballpenjipros-")
+            || l.starts_with("x-ballpenjidoctors-")
+            || l.starts_with("x-ballpenjirescue-")
+            || l.starts_with("x-kouhitsu-")
+            || l.starts_with("x-kouhitsuyasan-")
+            || l.starts_with("x-kouhitsupro-")
+            || l.starts_with("x-kouhitsusenmon-")
+            || l.starts_with("x-kouhitsuschool-")
+    })
+}
+
+fn has_bakery_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-panya-")
+            || l.starts_with("x-panyasan-")
+            || l.starts_with("x-panyapro-")
+            || l.starts_with("x-panyateam-")
+            || l.starts_with("x-panyakensa-")
+            || l.starts_with("x-panyamanten-")
+            || l.starts_with("x-panyanomi-")
+            || l.starts_with("x-panyajp-")
+            || l.starts_with("x-panyasenmon-")
+            || l.starts_with("x-panyamitsumori-")
+            || l.starts_with("x-panyachousa-")
+            || l.starts_with("x-panyateiki-")
+            || l.starts_with("x-panyashuri-")
+            || l.starts_with("x-panyaschool-")
+            || l.starts_with("x-panyakoubou-")
+            || l.starts_with("x-panyamart-")
+            || l.starts_with("x-panyabank-")
+            || l.starts_with("x-bakery-")
+            || l.starts_with("x-bakerypro-")
+            || l.starts_with("x-bakeryteam-")
+            || l.starts_with("x-bakerykoubou-")
+            || l.starts_with("x-bakerysenmon-")
+            || l.starts_with("x-bakeryschool-")
+            || l.starts_with("x-bakerylesson-")
+            || l.starts_with("x-bakerylessonpros-")
+            || l.starts_with("x-bakerylessonteam-")
+            || l.starts_with("x-breadmakingpros-")
+            || l.starts_with("x-breadmakingteam-")
+            || l.starts_with("x-breadmakingworks-")
+            || l.starts_with("x-breadmakingexperts-")
+            || l.starts_with("x-breadmakingsvc-")
+            || l.starts_with("x-breadmakinghq-")
+            || l.starts_with("x-breadmakingschool-")
+            || l.starts_with("x-pankou-")
+            || l.starts_with("x-pankoupro-")
+            || l.starts_with("x-pankoukoubou-")
+            || l.starts_with("x-pankousenmon-")
+            || l.starts_with("x-pankouschool-")
+            || l.starts_with("x-panyapros-")
+            || l.starts_with("x-panyaworks-")
+            || l.starts_with("x-panyaexperts-")
+            || l.starts_with("x-panyasvc-")
+            || l.starts_with("x-panyahq-")
+            || l.starts_with("x-panyadoctors-")
+            || l.starts_with("x-panyarescue-")
+            || l.starts_with("x-bakerypros-")
+            || l.starts_with("x-bakerydoctors-")
+            || l.starts_with("x-bakeryrescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21073,55 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+    #[test]
+    fn scan_は染機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Somemono-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Shibori-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Katazome-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Dyeing-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SomemonoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DyeingWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShiboriSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Yuzen-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_somemono_marks(h));
+        }
+        assert!(!has_somemono_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は硬機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Penji-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Ballpenji-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PenmanshipPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kouhitsu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PenjiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PenmanshipWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PenjiSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BallpenjiSchool-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_penji_marks(h));
+        }
+        assert!(!has_penji_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は麦機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Panya-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Bakery-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BreadmakingPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Pankou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PanyaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BreadmakingWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PanyaSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BakeryLesson-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_bakery_marks(h));
+        }
+        assert!(!has_bakery_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
