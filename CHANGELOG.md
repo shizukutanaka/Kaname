@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D797: `X-Chougai-*`/`X-Torigai-*`/`X-Hatotaisaku-*`/`X-Birdcontrol-*`/`X-Birdproof-*`/`X-Pigeonproof-*` 等の鳥害・鳩対策印自称が未検査
+
+- **問題**: `X-Chougai-*`/`X-ChougaiYasan-*`/`X-ChougaiPro-*`/`X-ChougaiTeam-*`/`X-ChougaiJP-*`/`X-ChougaiSenmon-*`/`X-Torigai-*`/`X-TorigaiYasan-*`/`X-TorigaiPro-*`/`X-TorigaiTeam-*`/`X-TorigaiJP-*`/`X-TorigaiSenmon-*`/`X-Hatotaisaku-*`/`X-HatotaisakuYasan-*`/`X-HatotaisakuPro-*`/`X-HatotaisakuTeam-*`/`X-HatotaisakuJP-*`/`X-HatotaisakuSenmon-*`/`X-BirdcontrolPros-*`/`X-BirdcontrolTeam-*`/`X-BirdcontrolWorks-*`/`X-BirdcontrolExperts-*`/`X-BirdcontrolSvc-*`/`X-BirdcontrolHQ-*`/`X-BirdproofPros-*`/`X-BirdproofTeam-*`/`X-BirdproofWorks-*`/`X-BirdproofExperts-*`/`X-BirdproofSvc-*`/`X-BirdproofHQ-*`/`X-PigeonproofPros-*`/`X-PigeonproofTeam-*`/`X-PigeonproofWorks-*`/`X-PigeonproofExperts-*`/`X-PigeonproofSvc-*`/`X-PigeonproofHQ-*` 等 は鳥機の通知記録 — 送信側が書くことは自称。鳩・カラス等の鳥害対策業者の偽装は、防鳥ネット設置費・清掃消毒費を装ったなりすましの典型手口。(害獣は feralpest 機、害虫は hachinosu 機で検出済み)
+- **修正**: `Envelope` に `chougai_marks` + `has_chougai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鳥印の自署を問え。
+
+### Security — D798: `X-Bariafuri-*`/`X-Kaigoriform-*`/`X-Bariafurikouji-*`/`X-Barrierfree-*`/`X-Accessiblereno-*`/`X-Aginginplace-*` 等のバリアフリー・介護リフォーム印自称が未検査
+
+- **問題**: `X-Bariafuri-*`/`X-BariafuriYasan-*`/`X-BariafuriPro-*`/`X-BariafuriTeam-*`/`X-BariafuriJP-*`/`X-BariafuriSenmon-*`/`X-Kaigoriform-*`/`X-KaigoriformYasan-*`/`X-KaigoriformPro-*`/`X-KaigoriformTeam-*`/`X-KaigoriformJP-*`/`X-KaigoriformSenmon-*`/`X-Bariafurikouji-*`/`X-BariafurikoujiYasan-*`/`X-BariafurikoujiPro-*`/`X-BariafurikoujiTeam-*`/`X-BariafurikoujiJP-*`/`X-BariafurikoujiSenmon-*`/`X-BarrierfreePros-*`/`X-BarrierfreeTeam-*`/`X-BarrierfreeWorks-*`/`X-BarrierfreeExperts-*`/`X-BarrierfreeSvc-*`/`X-BarrierfreeHQ-*`/`X-AccessiblerenoPros-*`/`X-AccessiblerenoTeam-*`/`X-AccessiblerenoWorks-*`/`X-AccessiblerenoExperts-*`/`X-AccessiblerenoSvc-*`/`X-AccessiblerenoHQ-*`/`X-AginginplacePros-*`/`X-AginginplaceTeam-*`/`X-AginginplaceWorks-*`/`X-AginginplaceExperts-*`/`X-AginginplaceSvc-*`/`X-AginginplaceHQ-*` 等 は障機の通知記録 — 送信側が書くことは自称。バリアフリー・介護リフォーム業者の偽装は、手すり設置・段差解消工事費を装ったなりすましの典型手口。(介護は eldercare 機、福祉用具は fukushiyougu 機、住宅は housing 機で検出済み)
+- **修正**: `Envelope` に `bariafuri_marks` + `has_bariafuri_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 障印の自署を問え。
+
+### Security — D799: `X-Kusakari-*`/`X-Zassou-*`/`X-Kusahaki-*`/`X-Grasscutting-*`/`X-Weedremoval-*`/`X-Lawncare-*` 等の草刈り・雑草処理印自称が未検査
+
+- **問題**: `X-Kusakari-*`/`X-KusakariYasan-*`/`X-KusakariPro-*`/`X-KusakariTeam-*`/`X-KusakariJP-*`/`X-KusakariSenmon-*`/`X-Zassou-*`/`X-ZassouYasan-*`/`X-ZassouPro-*`/`X-ZassouTeam-*`/`X-ZassouJP-*`/`X-ZassouSenmon-*`/`X-Kusahaki-*`/`X-KusahakiYasan-*`/`X-KusahakiPro-*`/`X-KusahakiTeam-*`/`X-KusahakiJP-*`/`X-KusahakiSenmon-*`/`X-GrasscuttingPros-*`/`X-GrasscuttingTeam-*`/`X-GrasscuttingWorks-*`/`X-GrasscuttingExperts-*`/`X-GrasscuttingSvc-*`/`X-GrasscuttingHQ-*`/`X-WeedremovalPros-*`/`X-WeedremovalTeam-*`/`X-WeedremovalWorks-*`/`X-WeedremovalExperts-*`/`X-WeedremovalSvc-*`/`X-WeedremovalHQ-*`/`X-LawncarePros-*`/`X-LawncareTeam-*`/`X-LawncareWorks-*`/`X-LawncareExperts-*`/`X-LawncareSvc-*`/`X-LawncareHQ-*` 等 は草機の通知記録 — 送信側が書くことは自称。草刈り・雑草処理業者の偽装は、定期除草費・駆除剤散布費を装ったなりすましの典型手口。(造園は garden 機、樹木伐採は bassai 機、人工芝は jinkoushiba 機で検出済み)
+- **修正**: `Envelope` に `kusakari_marks` + `has_kusakari_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 草印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
