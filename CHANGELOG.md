@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D884: `X-Nikuman-*`/`X-Nikumanya-*`/`X-Chuukamanten-*`/`X-Nikumanstore-*`/`X-Japnikuman-*`/`X-Steamedmeatbun-*` 等の肉まん・中華まん印自称が未検査
+
+- **問題**: `X-Nikuman-*`/`X-NikumanYasan-*`/`X-NikumanPro-*`/`X-NikumanTeam-*`/`X-NikumanJP-*`/`X-NikumanSenmon-*`/`X-Nikumanya-*`/`X-NikumanyaYasan-*`/`X-NikumanyaPro-*`/`X-NikumanyaTeam-*`/`X-NikumanyaJP-*`/`X-NikumanyaSenmon-*`/`X-Chuukamanten-*`/`X-ChuukamantenYasan-*`/`X-ChuukamantenPro-*`/`X-ChuukamantenTeam-*`/`X-ChuukamantenJP-*`/`X-ChuukamantenSenmon-*`/`X-NikumanstorePros-*`/`X-NikumanstoreTeam-*`/`X-NikumanstoreWorks-*`/`X-NikumanstoreExperts-*`/`X-NikumanstoreSvc-*`/`X-NikumanstoreHQ-*`/`X-JapnikumanPros-*`/`X-JapnikumanTeam-*`/`X-JapnikumanWorks-*`/`X-JapnikumanExperts-*`/`X-JapnikumanSvc-*`/`X-JapnikumanHQ-*`/`X-SteamedmeatbunPros-*`/`X-SteamedmeatbunTeam-*`/`X-SteamedmeatbunWorks-*`/`X-SteamedmeatbunExperts-*`/`X-SteamedmeatbunSvc-*`/`X-SteamedmeatbunHQ-*` 等 は肉機の通知記録 — 送信側が書くことは自称。肉まん・中華まん業者の偽装は、神戸中華街肉まん・本格中華まんの直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `nikuman_marks` + `has_nikuman_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 肉印の自署を問え。
+
+### Security — D885: `X-Oden-*`/`X-Odenya-*`/`X-Odenshuten-*`/`X-Odenstore-*`/`X-Japoden-*`/`X-Odenshop-*` 等のおでん種印自称が未検査
+
+- **問題**: `X-Oden-*`/`X-OdenYasan-*`/`X-OdenPro-*`/`X-OdenTeam-*`/`X-OdenJP-*`/`X-OdenSenmon-*`/`X-Odenya-*`/`X-OdenyaYasan-*`/`X-OdenyaPro-*`/`X-OdenyaTeam-*`/`X-OdenyaJP-*`/`X-OdenyaSenmon-*`/`X-Odenshuten-*`/`X-OdenshutenYasan-*`/`X-OdenshutenPro-*`/`X-OdenshutenTeam-*`/`X-OdenshutenJP-*`/`X-OdenshutenSenmon-*`/`X-OdenstorePros-*`/`X-OdenstoreTeam-*`/`X-OdenstoreWorks-*`/`X-OdenstoreExperts-*`/`X-OdenstoreSvc-*`/`X-OdenstoreHQ-*`/`X-JapodenPros-*`/`X-JapodenTeam-*`/`X-JapodenWorks-*`/`X-JapodenExperts-*`/`X-JapodenSvc-*`/`X-JapodenHQ-*`/`X-OdenshopPros-*`/`X-OdenshopTeam-*`/`X-OdenshopWorks-*`/`X-OdenshopExperts-*`/`X-OdenshopSvc-*`/`X-OdenshopHQ-*` 等 は煮機の通知記録 — 送信側が書くことは自称。おでん種業者の偽装は、金沢おでん種・老舗おでん屋の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `oden_marks` + `has_oden_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 煮印の自署を問え。
+
+### Security — D886: `X-Taiyaki-*`/`X-Taiyakiya-*`/`X-Imagawayakiten-*`/`X-Taiyakistore-*`/`X-Japtaiyaki-*`/`X-Taiyakishop-*` 等のたい焼き・今川焼き印自称が未検査
+
+- **問題**: `X-Taiyaki-*`/`X-TaiyakiYasan-*`/`X-TaiyakiPro-*`/`X-TaiyakiTeam-*`/`X-TaiyakiJP-*`/`X-TaiyakiSenmon-*`/`X-Taiyakiya-*`/`X-TaiyakiyaYasan-*`/`X-TaiyakiyaPro-*`/`X-TaiyakiyaTeam-*`/`X-TaiyakiyaJP-*`/`X-TaiyakiyaSenmon-*`/`X-Imagawayakiten-*`/`X-ImagawayakitenYasan-*`/`X-ImagawayakitenPro-*`/`X-ImagawayakitenTeam-*`/`X-ImagawayakitenJP-*`/`X-ImagawayakitenSenmon-*`/`X-TaiyakistorePros-*`/`X-TaiyakistoreTeam-*`/`X-TaiyakistoreWorks-*`/`X-TaiyakistoreExperts-*`/`X-TaiyakistoreSvc-*`/`X-TaiyakistoreHQ-*`/`X-JaptaiyakiPros-*`/`X-JaptaiyakiTeam-*`/`X-JaptaiyakiWorks-*`/`X-JaptaiyakiExperts-*`/`X-JaptaiyakiSvc-*`/`X-JaptaiyakiHQ-*`/`X-TaiyakishopPros-*`/`X-TaiyakishopTeam-*`/`X-TaiyakishopWorks-*`/`X-TaiyakishopExperts-*`/`X-TaiyakishopSvc-*`/`X-TaiyakishopHQ-*` 等 は鯛機の通知記録 — 送信側が書くことは自称。たい焼き・今川焼き業者の偽装は、浅草たい焼き・今川焼き老舗の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `taiyaki_marks` + `has_taiyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鯛印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
