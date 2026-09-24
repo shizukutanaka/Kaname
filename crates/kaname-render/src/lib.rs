@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub jizake_marks: bool,
+    pub shouchuu_marks: bool,
+    pub craftbeer_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        jizake_marks: has_jizake_marks(hdr),
+        shouchuu_marks: has_shouchuu_marks(hdr),
+        craftbeer_marks: has_craftbeer_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_jizake_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-jizake-")
+            || l.starts_with("x-jizakeyasan-")
+            || l.starts_with("x-jizakepro-")
+            || l.starts_with("x-jizaketeam-")
+            || l.starts_with("x-jizakekensa-")
+            || l.starts_with("x-jizakemanten-")
+            || l.starts_with("x-jizakenomi-")
+            || l.starts_with("x-jizakejp-")
+            || l.starts_with("x-jizakesenmon-")
+            || l.starts_with("x-jizakemitsumori-")
+            || l.starts_with("x-jizakechousa-")
+            || l.starts_with("x-jizaketeiki-")
+            || l.starts_with("x-jizakepros-")
+            || l.starts_with("x-jizakedoctors-")
+            || l.starts_with("x-jizakerescue-")
+            || l.starts_with("x-nihonshu-")
+            || l.starts_with("x-nihonshuyasan-")
+            || l.starts_with("x-nihonshupro-")
+            || l.starts_with("x-nihonshuteam-")
+            || l.starts_with("x-nihonshujp-")
+            || l.starts_with("x-nihonshusenmon-")
+            || l.starts_with("x-nihonshupros-")
+            || l.starts_with("x-nihonshudoctors-")
+            || l.starts_with("x-nihonshurescue-")
+            || l.starts_with("x-kuramoto-")
+            || l.starts_with("x-kuramotoyasan-")
+            || l.starts_with("x-kuramotopro-")
+            || l.starts_with("x-kuramototeam-")
+            || l.starts_with("x-kuramotojp-")
+            || l.starts_with("x-kuramotosenmon-")
+            || l.starts_with("x-kuramotopros-")
+            || l.starts_with("x-kuramotodoctors-")
+            || l.starts_with("x-kuramotorescue-")
+            || l.starts_with("x-sakebasepros-")
+            || l.starts_with("x-sakebaseteam-")
+            || l.starts_with("x-sakebaseworks-")
+            || l.starts_with("x-sakebaseexperts-")
+            || l.starts_with("x-sakebasesvc-")
+            || l.starts_with("x-sakebasehq-")
+            || l.starts_with("x-sakedirectpros-")
+            || l.starts_with("x-sakedirectteam-")
+            || l.starts_with("x-sakedirectworks-")
+            || l.starts_with("x-sakedirectexperts-")
+            || l.starts_with("x-sakedirectsvc-")
+            || l.starts_with("x-sakedirecthq-")
+            || l.starts_with("x-brewerydirectpros-")
+            || l.starts_with("x-brewerydirectteam-")
+            || l.starts_with("x-brewerydirectworks-")
+            || l.starts_with("x-brewerydirectexperts-")
+            || l.starts_with("x-brewerydirectsvc-")
+            || l.starts_with("x-brewerydirecthq-")
+    })
+}
+
+fn has_shouchuu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shouchuu-")
+            || l.starts_with("x-shouchuuyasan-")
+            || l.starts_with("x-shouchuupro-")
+            || l.starts_with("x-shouchuuteam-")
+            || l.starts_with("x-shouchuukensa-")
+            || l.starts_with("x-shouchuumanten-")
+            || l.starts_with("x-shouchuunomi-")
+            || l.starts_with("x-shouchuujp-")
+            || l.starts_with("x-shouchuusenmon-")
+            || l.starts_with("x-shouchuumitsumori-")
+            || l.starts_with("x-shouchuuchousa-")
+            || l.starts_with("x-shouchuuteiki-")
+            || l.starts_with("x-shouchuupros-")
+            || l.starts_with("x-shouchuudoctors-")
+            || l.starts_with("x-shouchuurescue-")
+            || l.starts_with("x-imojou-")
+            || l.starts_with("x-imojouyasan-")
+            || l.starts_with("x-imojoupro-")
+            || l.starts_with("x-imojouteam-")
+            || l.starts_with("x-imojoujp-")
+            || l.starts_with("x-imojousenmon-")
+            || l.starts_with("x-imojoupros-")
+            || l.starts_with("x-imojoudoctors-")
+            || l.starts_with("x-imojourescue-")
+            || l.starts_with("x-mugijou-")
+            || l.starts_with("x-mugijouyasan-")
+            || l.starts_with("x-mugijoupro-")
+            || l.starts_with("x-mugijouteam-")
+            || l.starts_with("x-mugijoujp-")
+            || l.starts_with("x-mugijousenmon-")
+            || l.starts_with("x-mugijoupros-")
+            || l.starts_with("x-mugijoudoctors-")
+            || l.starts_with("x-mugijourescue-")
+            || l.starts_with("x-shochustorepros-")
+            || l.starts_with("x-shochustoreteam-")
+            || l.starts_with("x-shochustoreworks-")
+            || l.starts_with("x-shochustoreexperts-")
+            || l.starts_with("x-shochustoresvc-")
+            || l.starts_with("x-shochustorehq-")
+            || l.starts_with("x-authenticshochupros-")
+            || l.starts_with("x-authenticshochuteam-")
+            || l.starts_with("x-authenticshochuworks-")
+            || l.starts_with("x-authenticshochuexperts-")
+            || l.starts_with("x-authenticshochusvc-")
+            || l.starts_with("x-authenticshochuhq-")
+            || l.starts_with("x-shochudirectpros-")
+            || l.starts_with("x-shochudirectteam-")
+            || l.starts_with("x-shochudirectworks-")
+            || l.starts_with("x-shochudirectexperts-")
+            || l.starts_with("x-shochudirectsvc-")
+            || l.starts_with("x-shochudirecthq-")
+    })
+}
+
+fn has_craftbeer_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-craftbeer-")
+            || l.starts_with("x-craftbeeryasan-")
+            || l.starts_with("x-craftbeerpro-")
+            || l.starts_with("x-craftbeerteam-")
+            || l.starts_with("x-craftbeerkensa-")
+            || l.starts_with("x-craftbeermanten-")
+            || l.starts_with("x-craftbeernomi-")
+            || l.starts_with("x-craftbeerjp-")
+            || l.starts_with("x-craftbeersenmon-")
+            || l.starts_with("x-craftbeermitsumori-")
+            || l.starts_with("x-craftbeerchousa-")
+            || l.starts_with("x-craftbeerteiki-")
+            || l.starts_with("x-craftbeerpros-")
+            || l.starts_with("x-craftbeerdoctors-")
+            || l.starts_with("x-craftbeerrescue-")
+            || l.starts_with("x-jibiiru-")
+            || l.starts_with("x-jibiiruyasan-")
+            || l.starts_with("x-jibiirupro-")
+            || l.starts_with("x-jibiiruteam-")
+            || l.starts_with("x-jibiirujp-")
+            || l.starts_with("x-jibiirusenmon-")
+            || l.starts_with("x-jibiirupros-")
+            || l.starts_with("x-jibiirudoctors-")
+            || l.starts_with("x-jibiirurescue-")
+            || l.starts_with("x-localbeer-")
+            || l.starts_with("x-localbeeryasan-")
+            || l.starts_with("x-localbeerpro-")
+            || l.starts_with("x-localbeerteam-")
+            || l.starts_with("x-localbeerjp-")
+            || l.starts_with("x-localbeersenmon-")
+            || l.starts_with("x-localbeerpros-")
+            || l.starts_with("x-localbeerdoctors-")
+            || l.starts_with("x-localbeerrescue-")
+            || l.starts_with("x-craftbrewerypros-")
+            || l.starts_with("x-craftbreweryteam-")
+            || l.starts_with("x-craftbreweryworks-")
+            || l.starts_with("x-craftbreweryexperts-")
+            || l.starts_with("x-craftbrewerysvc-")
+            || l.starts_with("x-craftbreweryhq-")
+            || l.starts_with("x-beerdepotpros-")
+            || l.starts_with("x-beerdepotteam-")
+            || l.starts_with("x-beerdepotworks-")
+            || l.starts_with("x-beerdepotexperts-")
+            || l.starts_with("x-beerdepotsvc-")
+            || l.starts_with("x-beerdepothq-")
+            || l.starts_with("x-beerstorepros-")
+            || l.starts_with("x-beerstoreteam-")
+            || l.starts_with("x-beerstoreworks-")
+            || l.starts_with("x-beerstoreexperts-")
+            || l.starts_with("x-beerstoresvc-")
+            || l.starts_with("x-beerstorehq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は蔵機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Jizake-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JizakePro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NihonshuYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KuramotoTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SakebasePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SakedirectHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JizakeSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BrewerydirectExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_jizake_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_jizake_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は酎機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Shouchuu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShouchuuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ImojouYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MugijouTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShochustorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AuthenticshochuHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShouchuuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShochudirectExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_shouchuu_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_shouchuu_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は麦機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Craftbeer-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CraftbeerPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JibiiruYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-LocalbeerTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CraftbreweryPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BeerdepotHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CraftbeerSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BeerstoreExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_craftbeer_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_craftbeer_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }

@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D836: `X-Jizake-*`/`X-Nihonshu-*`/`X-Kuramoto-*`/`X-Sakebase-*`/`X-Sakedirect-*`/`X-Brewerydirect-*` 等の日本酒・地酒印自称が未検査
+
+- **問題**: `X-Jizake-*`/`X-JizakeYasan-*`/`X-JizakePro-*`/`X-JizakeTeam-*`/`X-JizakeJP-*`/`X-JizakeSenmon-*`/`X-Nihonshu-*`/`X-NihonshuYasan-*`/`X-NihonshuPro-*`/`X-NihonshuTeam-*`/`X-NihonshuJP-*`/`X-NihonshuSenmon-*`/`X-Kuramoto-*`/`X-KuramotoYasan-*`/`X-KuramotoPro-*`/`X-KuramotoTeam-*`/`X-KuramotoJP-*`/`X-KuramotoSenmon-*`/`X-SakebasePros-*`/`X-SakebaseTeam-*`/`X-SakebaseWorks-*`/`X-SakebaseExperts-*`/`X-SakebaseSvc-*`/`X-SakebaseHQ-*`/`X-SakedirectPros-*`/`X-SakedirectTeam-*`/`X-SakedirectWorks-*`/`X-SakedirectExperts-*`/`X-SakedirectSvc-*`/`X-SakedirectHQ-*`/`X-BrewerydirectPros-*`/`X-BrewerydirectTeam-*`/`X-BrewerydirectWorks-*`/`X-BrewerydirectExperts-*`/`X-BrewerydirectSvc-*`/`X-BrewerydirectHQ-*` 等 は蔵機の通知記録 — 送信側が書くことは自称。日本酒・地酒業者の偽装は、プレミアム酒・蔵元直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `jizake_marks` + `has_jizake_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 蔵印の自署を問え。
+
+### Security — D837: `X-Shouchuu-*`/`X-Imojou-*`/`X-Mugijou-*`/`X-Shochustore-*`/`X-Authenticshochu-*`/`X-Shochudirect-*` 等の焼酎印自称が未検査
+
+- **問題**: `X-Shouchuu-*`/`X-ShouchuuYasan-*`/`X-ShouchuuPro-*`/`X-ShouchuuTeam-*`/`X-ShouchuuJP-*`/`X-ShouchuuSenmon-*`/`X-Imojou-*`/`X-ImojouYasan-*`/`X-ImojouPro-*`/`X-ImojouTeam-*`/`X-ImojouJP-*`/`X-ImojouSenmon-*`/`X-Mugijou-*`/`X-MugijouYasan-*`/`X-MugijouPro-*`/`X-MugijouTeam-*`/`X-MugijouJP-*`/`X-MugijouSenmon-*`/`X-ShochustorePros-*`/`X-ShochustoreTeam-*`/`X-ShochustoreWorks-*`/`X-ShochustoreExperts-*`/`X-ShochustoreSvc-*`/`X-ShochustoreHQ-*`/`X-AuthenticshochuPros-*`/`X-AuthenticshochuTeam-*`/`X-AuthenticshochuWorks-*`/`X-AuthenticshochuExperts-*`/`X-AuthenticshochuSvc-*`/`X-AuthenticshochuHQ-*`/`X-ShochudirectPros-*`/`X-ShochudirectTeam-*`/`X-ShochudirectWorks-*`/`X-ShochudirectExperts-*`/`X-ShochudirectSvc-*`/`X-ShochudirectHQ-*` 等 は酎機の通知記録 — 送信側が書くことは自称。焼酎業者の偽装は、プレミア焼酎・限定芋焼酎の格安販売を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shouchuu_marks` + `has_shouchuu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 酎印の自署を問え。
+
+### Security — D838: `X-Craftbeer-*`/`X-Jibiiru-*`/`X-Localbeer-*`/`X-Craftbrewery-*`/`X-Beerdepot-*`/`X-Beerstore-*` 等のクラフトビール・地ビール印自称が未検査
+
+- **問題**: `X-Craftbeer-*`/`X-CraftbeerYasan-*`/`X-CraftbeerPro-*`/`X-CraftbeerTeam-*`/`X-CraftbeerJP-*`/`X-CraftbeerSenmon-*`/`X-Jibiiru-*`/`X-JibiiruYasan-*`/`X-JibiiruPro-*`/`X-JibiiruTeam-*`/`X-JibiiruJP-*`/`X-JibiiruSenmon-*`/`X-Localbeer-*`/`X-LocalbeerYasan-*`/`X-LocalbeerPro-*`/`X-LocalbeerTeam-*`/`X-LocalbeerJP-*`/`X-LocalbeerSenmon-*`/`X-CraftbreweryPros-*`/`X-CraftbreweryTeam-*`/`X-CraftbreweryWorks-*`/`X-CraftbreweryExperts-*`/`X-CraftbrewerySvc-*`/`X-CraftbreweryHQ-*`/`X-BeerdepotPros-*`/`X-BeerdepotTeam-*`/`X-BeerdepotWorks-*`/`X-BeerdepotExperts-*`/`X-BeerdepotSvc-*`/`X-BeerdepotHQ-*`/`X-BeerstorePros-*`/`X-BeerstoreTeam-*`/`X-BeerstoreWorks-*`/`X-BeerstoreExperts-*`/`X-BeerstoreSvc-*`/`X-BeerstoreHQ-*` 等 は麦機の通知記録 — 送信側が書くことは自称。クラフトビール・地ビール業者の偽装は、醸造所直送・限定飲み比べセットを装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `craftbeer_marks` + `has_craftbeer_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 麦印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
