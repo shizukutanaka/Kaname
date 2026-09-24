@@ -1907,6 +1907,12 @@ pub struct Envelope {
     pub menseste_marks: bool,
     /// `X-Dutyfree-*`/`X-Menzei-*`/`X-Laox-*` 等の免税店・旅行土産印を送信側が自称する兆候 (D697)
     pub dutyfree_marks: bool,
+    /// `X-Netcafe-*`/`X-Mangakissa-*`/`X-Kissa-*` 等のネットカフェ・漫画喫茶印を送信側が自称する兆候 (D698)
+    pub netcafe_marks: bool,
+    /// `X-Boxing-*`/`X-Mma-*`/`X-Ufc-*` 等の格闘技・プロレス・相撲印を送信側が自称する兆候 (D699)
+    pub fight_marks: bool,
+    /// `X-Bouldering-*`/`X-Climbing-*`/`X-Skate-*` 等のクライミング・フットサル・室内スポーツ印を送信側が自称する兆候 (D700)
+    pub climbing_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2482,6 +2488,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         diving_marks: has_diving_marks(hdr),
         menseste_marks: has_menseste_marks(hdr),
         dutyfree_marks: has_dutyfree_marks(hdr),
+        netcafe_marks: has_netcafe_marks(hdr),
+        fight_marks: has_fight_marks(hdr),
+        climbing_marks: has_climbing_marks(hdr),
     })
 }
 
@@ -19347,6 +19356,216 @@ fn has_dutyfree_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-kingpowershop-"))
 }
 
+fn has_netcafe_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-netcafe-")
+            || l.starts_with("x-mangakissa-")
+            || l.starts_with("x-kissa-")
+            || l.starts_with("x-jiyu-")
+            || l.starts_with("x-bagus-")
+            || l.starts_with("x-manboo-")
+            || l.starts_with("x-geragera-")
+            || l.starts_with("x-customa-")
+            || l.starts_with("x-cybercafe-")
+            || l.starts_with("x-mangacafe-")
+            || l.starts_with("x-comicbuster-")
+            || l.starts_with("x-popai-")
+            || l.starts_with("x-netcafenavi-")
+            || l.starts_with("x-netcafecenter-")
+            || l.starts_with("x-netcafeshop-")
+            || l.starts_with("x-netcafepro-")
+            || l.starts_with("x-netcafemart-")
+            || l.starts_with("x-netcafeplus-")
+            || l.starts_with("x-netcafesmart-")
+            || l.starts_with("x-netcafefamily-")
+            || l.starts_with("x-mangakissanavi-")
+            || l.starts_with("x-mangakissacenter-")
+            || l.starts_with("x-mangakissashop-")
+            || l.starts_with("x-mangakissapro-")
+            || l.starts_with("x-mangakissamart-")
+            || l.starts_with("x-mangakissaplus-")
+            || l.starts_with("x-mangakissasmart-")
+            || l.starts_with("x-mangakissafamily-")
+            || l.starts_with("x-kissanavi-")
+            || l.starts_with("x-kissacenter-")
+            || l.starts_with("x-kissashop-")
+            || l.starts_with("x-kissapro-")
+            || l.starts_with("x-kissamart-")
+            || l.starts_with("x-kissaplus-")
+            || l.starts_with("x-kissasmart-")
+            || l.starts_with("x-kissafamily-")
+            || l.starts_with("x-jiyunavi-")
+            || l.starts_with("x-jiyucenter-")
+            || l.starts_with("x-jiyushop-")
+            || l.starts_with("x-jiyupro-")
+            || l.starts_with("x-jiyumart-")
+            || l.starts_with("x-jiyuplus-")
+            || l.starts_with("x-jiyusmart-")
+            || l.starts_with("x-jiyufamily-")
+            || l.starts_with("x-bagusnavi-")
+            || l.starts_with("x-baguscenter-")
+            || l.starts_with("x-bagusshop-")
+            || l.starts_with("x-baguspro-")
+            || l.starts_with("x-bagusmart-")
+            || l.starts_with("x-bagusplus-")
+            || l.starts_with("x-bagussmart-")
+            || l.starts_with("x-bagusfamily-")
+            || l.starts_with("x-manboonavi-")
+            || l.starts_with("x-manboocenter-")
+            || l.starts_with("x-manbooshop-")
+            || l.starts_with("x-manboopro-")
+            || l.starts_with("x-manboomart-")
+            || l.starts_with("x-manbooplus-")
+            || l.starts_with("x-manboosmart-")
+            || l.starts_with("x-manboofamily-")
+            || l.starts_with("x-gerageranavi-")
+            || l.starts_with("x-gerageracenter-"))
+}
+
+fn has_fight_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-boxing-")
+            || l.starts_with("x-mma-")
+            || l.starts_with("x-ufc-")
+            || l.starts_with("x-rizin-")
+            || l.starts_with("x-k1-")
+            || l.starts_with("x-bellator-")
+            || l.starts_with("x-onefc-")
+            || l.starts_with("x-puroresu-")
+            || l.starts_with("x-njpw-")
+            || l.starts_with("x-wwe-")
+            || l.starts_with("x-ajpw-")
+            || l.starts_with("x-sumo-")
+            || l.starts_with("x-ozumo-")
+            || l.starts_with("x-kakutougi-")
+            || l.starts_with("x-shooto-")
+            || l.starts_with("x-pancrase-")
+            || l.starts_with("x-deep-")
+            || l.starts_with("x-krush-")
+            || l.starts_with("x-glory-")
+            || l.starts_with("x-boxingnavi-")
+            || l.starts_with("x-boxingcenter-")
+            || l.starts_with("x-boxingshop-")
+            || l.starts_with("x-boxingpro-")
+            || l.starts_with("x-boxingmart-")
+            || l.starts_with("x-boxingplus-")
+            || l.starts_with("x-boxingsmart-")
+            || l.starts_with("x-boxingfamily-")
+            || l.starts_with("x-mmanavi-")
+            || l.starts_with("x-mmacenter-")
+            || l.starts_with("x-mmashop-")
+            || l.starts_with("x-mmapro-")
+            || l.starts_with("x-mmamart-")
+            || l.starts_with("x-mmaplus-")
+            || l.starts_with("x-mmasmart-")
+            || l.starts_with("x-mmafamily-")
+            || l.starts_with("x-ufcnavi-")
+            || l.starts_with("x-ufccenter-")
+            || l.starts_with("x-ufcshop-")
+            || l.starts_with("x-ufcpro-")
+            || l.starts_with("x-ufcmart-")
+            || l.starts_with("x-ufcplus-")
+            || l.starts_with("x-ufcsmart-")
+            || l.starts_with("x-ufcfamily-")
+            || l.starts_with("x-rizinnavi-")
+            || l.starts_with("x-rizincenter-")
+            || l.starts_with("x-rizinshop-")
+            || l.starts_with("x-rizinpro-")
+            || l.starts_with("x-rizinmart-")
+            || l.starts_with("x-rizinplus-")
+            || l.starts_with("x-rizinsmart-")
+            || l.starts_with("x-rizinfamily-")
+            || l.starts_with("x-k1navi-")
+            || l.starts_with("x-k1center-")
+            || l.starts_with("x-k1shop-")
+            || l.starts_with("x-k1pro-")
+            || l.starts_with("x-k1mart-")
+            || l.starts_with("x-k1plus-")
+            || l.starts_with("x-k1smart-")
+            || l.starts_with("x-k1family-")
+            || l.starts_with("x-bellatornavi-")
+            || l.starts_with("x-bellatorcenter-")
+            || l.starts_with("x-bellatorshop-"))
+}
+
+fn has_climbing_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-bouldering-")
+            || l.starts_with("x-climbing-")
+            || l.starts_with("x-skate-")
+            || l.starts_with("x-skateboard-")
+            || l.starts_with("x-iceskate-")
+            || l.starts_with("x-rink-")
+            || l.starts_with("x-badminton-")
+            || l.starts_with("x-takkyu-")
+            || l.starts_with("x-tabletennis-")
+            || l.starts_with("x-pingpong-")
+            || l.starts_with("x-squash-")
+            || l.starts_with("x-trampoline-")
+            || l.starts_with("x-athletic-")
+            || l.starts_with("x-parkour-")
+            || l.starts_with("x-futsal-")
+            || l.starts_with("x-footsal-")
+            || l.starts_with("x-boulderingnavi-")
+            || l.starts_with("x-boulderingcenter-")
+            || l.starts_with("x-boulderingshop-")
+            || l.starts_with("x-boulderingpro-")
+            || l.starts_with("x-boulderingmart-")
+            || l.starts_with("x-boulderingplus-")
+            || l.starts_with("x-boulderingsmart-")
+            || l.starts_with("x-boulderingfamily-")
+            || l.starts_with("x-climbingnavi-")
+            || l.starts_with("x-climbingcenter-")
+            || l.starts_with("x-climbingshop-")
+            || l.starts_with("x-climbingpro-")
+            || l.starts_with("x-climbingmart-")
+            || l.starts_with("x-climbingplus-")
+            || l.starts_with("x-climbingsmart-")
+            || l.starts_with("x-climbingfamily-")
+            || l.starts_with("x-skatenavi-")
+            || l.starts_with("x-skatecenter-")
+            || l.starts_with("x-skateshop-")
+            || l.starts_with("x-skatepro-")
+            || l.starts_with("x-skatemart-")
+            || l.starts_with("x-skateplus-")
+            || l.starts_with("x-skatesmart-")
+            || l.starts_with("x-skatefamily-")
+            || l.starts_with("x-skateboardnavi-")
+            || l.starts_with("x-skateboardcenter-")
+            || l.starts_with("x-skateboardshop-")
+            || l.starts_with("x-skateboardpro-")
+            || l.starts_with("x-skateboardmart-")
+            || l.starts_with("x-skateboardplus-")
+            || l.starts_with("x-skateboardsmart-")
+            || l.starts_with("x-skateboardfamily-")
+            || l.starts_with("x-iceskatenavi-")
+            || l.starts_with("x-iceskatecenter-")
+            || l.starts_with("x-iceskateshop-")
+            || l.starts_with("x-iceskatepro-")
+            || l.starts_with("x-iceskatemart-")
+            || l.starts_with("x-iceskateplus-")
+            || l.starts_with("x-iceskatesmart-")
+            || l.starts_with("x-iceskatefamily-")
+            || l.starts_with("x-rinknavi-")
+            || l.starts_with("x-rinkcenter-")
+            || l.starts_with("x-rinkshop-")
+            || l.starts_with("x-rinkpro-")
+            || l.starts_with("x-rinkmart-")
+            || l.starts_with("x-rinkplus-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -29208,6 +29427,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_dutyfree_marks(clean));
+    }
+
+    #[test]
+    fn scan_は漫機印を検出する() {
+        for raw in [
+            br"X-Netcafe-Alert: 1",
+            br"X-Mangakissa-Notice: 1",
+            br"X-Kissa-Info: 1",
+            br"X-Jiyu-Report: 1",
+            br"X-Bagus-Bulletin: 1",
+            br"X-Manboo-News: 1",
+            br"X-Cybercafe-Flash: 1",
+            br"X-Mangacafe-Release: 1",
+        ] {
+            assert!(has_netcafe_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_netcafe_marks(clean));
+    }
+
+    #[test]
+    fn scan_は闘機印を検出する() {
+        for raw in [
+            br"X-Boxing-Alert: 1",
+            br"X-Mma-Notice: 1",
+            br"X-Ufc-Info: 1",
+            br"X-Rizin-Report: 1",
+            br"X-Puroresu-Bulletin: 1",
+            br"X-Njpw-News: 1",
+            br"X-Wwe-Flash: 1",
+            br"X-Sumo-Release: 1",
+        ] {
+            assert!(has_fight_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fight_marks(clean));
+    }
+
+    #[test]
+    fn scan_は登機印を検出する() {
+        for raw in [
+            br"X-Bouldering-Alert: 1",
+            br"X-Climbing-Notice: 1",
+            br"X-Skateboard-Info: 1",
+            br"X-Badminton-Report: 1",
+            br"X-Takkyu-Bulletin: 1",
+            br"X-Squash-News: 1",
+            br"X-Parkour-Flash: 1",
+            br"X-Futsal-Release: 1",
+        ] {
+            assert!(has_climbing_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_climbing_marks(clean));
     }
 
 }
