@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub securitysys_marks: bool,
+    pub debtcollection_marks: bool,
+    pub screening_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        securitysys_marks: has_securitysys_marks(hdr),
+        debtcollection_marks: has_debtcollection_marks(hdr),
+        screening_marks: has_screening_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,187 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_securitysys_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-securitysys-")
+            || l.starts_with("x-alarmpros-")
+            || l.starts_with("x-alarmworks-")
+            || l.starts_with("x-alarmteam-")
+            || l.starts_with("x-alarmservice-")
+            || l.starts_with("x-alarmforce-")
+            || l.starts_with("x-alarmnation-")
+            || l.starts_with("x-alarmexperts-")
+            || l.starts_with("x-alarmdoctors-")
+            || l.starts_with("x-alarmmasters-")
+            || l.starts_with("x-alarminstall-")
+            || l.starts_with("x-alarmtech-")
+            || l.starts_with("x-alarmsvc-")
+            || l.starts_with("x-adtpulse-")
+            || l.starts_with("x-vivintsmart-")
+            || l.starts_with("x-simplisafesec-")
+            || l.starts_with("x-frontpointse-")
+            || l.starts_with("x-linkinteractive-")
+            || l.starts_with("x-monitronic-")
+            || l.starts_with("x-protectionone-")
+            || l.starts_with("x-brinkshome-")
+            || l.starts_with("x-homesecurity-")
+            || l.starts_with("x-homesecpros-")
+            || l.starts_with("x-homeseccity-")
+            || l.starts_with("x-burglaralarm-")
+            || l.starts_with("x-intrusion-")
+            || l.starts_with("x-cctvcamera-")
+            || l.starts_with("x-camerasetsubi-")
+            || l.starts_with("x-securityalarm-")
+            || l.starts_with("x-keihou-")
+            || l.starts_with("x-keihouyasan-")
+            || l.starts_with("x-keihoukouji-")
+            || l.starts_with("x-keihoupro-")
+            || l.starts_with("x-keihouteam-")
+            || l.starts_with("x-keihougyosha-")
+            || l.starts_with("x-keihouseibi-")
+            || l.starts_with("x-keihoukensa-")
+            || l.starts_with("x-keihoumanten-")
+            || l.starts_with("x-keihounomi-")
+            || l.starts_with("x-keihoujp-")
+            || l.starts_with("x-keihousenmon-")
+            || l.starts_with("x-keihoumitsumori-")
+            || l.starts_with("x-keihouchousa-")
+            || l.starts_with("x-keihouteiki-")
+            || l.starts_with("x-keihoushuri-")
+            || l.starts_with("x-bohan-")
+            || l.starts_with("x-bohanyasan-")
+            || l.starts_with("x-bohankouji-")
+            || l.starts_with("x-bohanpro-")
+            || l.starts_with("x-bohanteam-")
+            || l.starts_with("x-bohangyosha-")
+            || l.starts_with("x-bohanseibi-")
+            || l.starts_with("x-bohankensa-")
+            || l.starts_with("x-bohanmanten-")
+    })
+}
+
+fn has_debtcollection_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-debtcollection-")
+            || l.starts_with("x-collectionagency-")
+            || l.starts_with("x-collectionpros-")
+            || l.starts_with("x-collectionservice-")
+            || l.starts_with("x-collectionteam-")
+            || l.starts_with("x-collectionworks-")
+            || l.starts_with("x-collectionexperts-")
+            || l.starts_with("x-collectiondoctors-")
+            || l.starts_with("x-collectionmasters-")
+            || l.starts_with("x-collectionforce-")
+            || l.starts_with("x-collectionnation-")
+            || l.starts_with("x-collectionhq-")
+            || l.starts_with("x-creditcollect-")
+            || l.starts_with("x-collectionsvc-")
+            || l.starts_with("x-debtcollect-")
+            || l.starts_with("x-debtsvc-")
+            || l.starts_with("x-debtrecoverypros-")
+            || l.starts_with("x-receivablespros-")
+            || l.starts_with("x-receivableservice-")
+            || l.starts_with("x-arpros-")
+            || l.starts_with("x-skiptpros-")
+            || l.starts_with("x-skiptracing-")
+            || l.starts_with("x-debtorservice-")
+            || l.starts_with("x-debtsolutionsvc-")
+            || l.starts_with("x-collectorpros-")
+            || l.starts_with("x-saiken-")
+            || l.starts_with("x-saikenkaishuu-")
+            || l.starts_with("x-saikenyasan-")
+            || l.starts_with("x-saikenpro-")
+            || l.starts_with("x-saikenteam-")
+            || l.starts_with("x-saikengyosha-")
+            || l.starts_with("x-saikenseibi-")
+            || l.starts_with("x-saikenkensa-")
+            || l.starts_with("x-saikenmanten-")
+            || l.starts_with("x-saikennomi-")
+            || l.starts_with("x-saikenjp-")
+            || l.starts_with("x-saikensenmon-")
+            || l.starts_with("x-saikenmitsumori-")
+            || l.starts_with("x-saikenchousa-")
+            || l.starts_with("x-saikenteiki-")
+            || l.starts_with("x-saikenshuri-")
+            || l.starts_with("x-saikendoctors-")
+            || l.starts_with("x-saikensagyou-")
+            || l.starts_with("x-saikenrescue-")
+            || l.starts_with("x-saikenteikyu-")
+            || l.starts_with("x-saikenorder-")
+            || l.starts_with("x-saikenjuu-")
+            || l.starts_with("x-saikenbosyuu-")
+    })
+}
+
+fn has_screening_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-checkr-")
+            || l.starts_with("x-sterling-")
+            || l.starts_with("x-hireright-")
+            || l.starts_with("x-goodhire-")
+            || l.starts_with("x-accuratebg-")
+            || l.starts_with("x-certn-")
+            || l.starts_with("x-sterlingcheck-")
+            || l.starts_with("x-transunionscreen-")
+            || l.starts_with("x-tenantsmart-")
+            || l.starts_with("x-rentspree-")
+            || l.starts_with("x-backgroundscreen-")
+            || l.starts_with("x-employmentscreen-")
+            || l.starts_with("x-tenantscreen-")
+            || l.starts_with("x-screeningpros-")
+            || l.starts_with("x-screeningservice-")
+            || l.starts_with("x-screeningteam-")
+            || l.starts_with("x-screeningworks-")
+            || l.starts_with("x-screeningexperts-")
+            || l.starts_with("x-screeningdoctors-")
+            || l.starts_with("x-screeningmasters-")
+            || l.starts_with("x-screeningforce-")
+            || l.starts_with("x-screeningnation-")
+            || l.starts_with("x-screeninghq-")
+            || l.starts_with("x-bgvpros-")
+            || l.starts_with("x-bgcheckpros-")
+            || l.starts_with("x-backcheckpros-")
+            || l.starts_with("x-saiyouchousa-")
+            || l.starts_with("x-saiyou-")
+            || l.starts_with("x-mimotochousa-")
+            || l.starts_with("x-mimoto-")
+            || l.starts_with("x-mimotoyasan-")
+            || l.starts_with("x-mimotopro-")
+            || l.starts_with("x-mimototeam-")
+            || l.starts_with("x-mimotogyo-")
+            || l.starts_with("x-mimotokensa-")
+            || l.starts_with("x-mimotomanten-")
+            || l.starts_with("x-mimotonmi-")
+            || l.starts_with("x-mimotojp-")
+            || l.starts_with("x-mimotosenmon-")
+            || l.starts_with("x-mimotomitsumori-")
+            || l.starts_with("x-mimototeiki-")
+            || l.starts_with("x-mimotoshuri-")
+            || l.starts_with("x-mimotodoctors-")
+            || l.starts_with("x-mimotosagyou-")
+            || l.starts_with("x-mimotorescue-")
+            || l.starts_with("x-mimototeikyu-")
+            || l.starts_with("x-mimotoorder-")
+            || l.starts_with("x-nyuukyoshinsa-")
+            || l.starts_with("x-saiyoukensa-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20828,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は警機印を検出する() {
+        let f0 = b"From: a@b\r\nX-SecuritySys-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-AdtPulse-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Keihou-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-AlarmPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-Bohan-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-VivintSmart-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-KeihouPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-HomeSecurity-Record: 1\r\n\r\nx";
+        assert!(has_securitysys_marks(f0));
+        assert!(has_securitysys_marks(f1));
+        assert!(has_securitysys_marks(f2));
+        assert!(has_securitysys_marks(f3));
+        assert!(has_securitysys_marks(f4));
+        assert!(has_securitysys_marks(f5));
+        assert!(has_securitysys_marks(f6));
+        assert!(has_securitysys_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_securitysys_marks(clean));
+    }
+
+    #[test]
+    fn scan_は収機印を検出する() {
+        let f0 = b"From: a@b\r\nX-DebtCollection-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-CollectionAgency-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Saiken-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-SkipTracing-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-CreditCollect-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-CollectionPros-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SaikenPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-DebtSvc-Record: 1\r\n\r\nx";
+        assert!(has_debtcollection_marks(f0));
+        assert!(has_debtcollection_marks(f1));
+        assert!(has_debtcollection_marks(f2));
+        assert!(has_debtcollection_marks(f3));
+        assert!(has_debtcollection_marks(f4));
+        assert!(has_debtcollection_marks(f5));
+        assert!(has_debtcollection_marks(f6));
+        assert!(has_debtcollection_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_debtcollection_marks(clean));
+    }
+
+    #[test]
+    fn scan_は身機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Checkr-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Sterling-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-MimotoChousa-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-HireRight-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-TenantScreen-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-BackgroundScreen-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-MimotoPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-SaiyouKensa-Record: 1\r\n\r\nx";
+        assert!(has_screening_marks(f0));
+        assert!(has_screening_marks(f1));
+        assert!(has_screening_marks(f2));
+        assert!(has_screening_marks(f3));
+        assert!(has_screening_marks(f4));
+        assert!(has_screening_marks(f5));
+        assert!(has_screening_marks(f6));
+        assert!(has_screening_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_screening_marks(clean));
+    }
 }
