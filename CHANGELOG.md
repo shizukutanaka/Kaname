@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D872: `X-Yasai-*`/`X-Yasaisanchoku-*`/`X-Yasaidirect-*`/`X-Vegdirect-*`/`X-Farmveggie-*`/`X-Jyasai-*` 等の野菜・産直印自称が未検査
+
+- **問題**: `X-Yasai-*`/`X-YasaiYasan-*`/`X-YasaiPro-*`/`X-YasaiTeam-*`/`X-YasaiJP-*`/`X-YasaiSenmon-*`/`X-Yasaisanchoku-*`/`X-YasaisanchokuYasan-*`/`X-YasaisanchokuPro-*`/`X-YasaisanchokuTeam-*`/`X-YasaisanchokuJP-*`/`X-YasaisanchokuSenmon-*`/`X-Yasaidirect-*`/`X-YasaidirectYasan-*`/`X-YasaidirectPro-*`/`X-YasaidirectTeam-*`/`X-YasaidirectJP-*`/`X-YasaidirectSenmon-*`/`X-VegdirectPros-*`/`X-VegdirectTeam-*`/`X-VegdirectWorks-*`/`X-VegdirectExperts-*`/`X-VegdirectSvc-*`/`X-VegdirectHQ-*`/`X-FarmveggiePros-*`/`X-FarmveggieTeam-*`/`X-FarmveggieWorks-*`/`X-FarmveggieExperts-*`/`X-FarmveggieSvc-*`/`X-FarmveggieHQ-*`/`X-JyasaiPros-*`/`X-JyasaiTeam-*`/`X-JyasaiWorks-*`/`X-JyasaiExperts-*`/`X-JyasaiSvc-*`/`X-JyasaiHQ-*` 等 は菜機の通知記録 — 送信側が書くことは自称。野菜・産直業者の偽装は、朝採り野菜・産地直送ボックスの直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `yasai_marks` + `has_yasai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 菜印の自署を問え。
+
+### Security — D873: `X-Kudamono-*`/`X-Kudamonoya-*`/`X-Kajitsuen-*`/`X-Fruitdirect-*`/`X-Orchardstore-*`/`X-Japfruit-*` 等の果物・果樹園印自称が未検査
+
+- **問題**: `X-Kudamono-*`/`X-KudamonoYasan-*`/`X-KudamonoPro-*`/`X-KudamonoTeam-*`/`X-KudamonoJP-*`/`X-KudamonoSenmon-*`/`X-Kudamonoya-*`/`X-KudamonoyaYasan-*`/`X-KudamonoyaPro-*`/`X-KudamonoyaTeam-*`/`X-KudamonoyaJP-*`/`X-KudamonoyaSenmon-*`/`X-Kajitsuen-*`/`X-KajitsuenYasan-*`/`X-KajitsuenPro-*`/`X-KajitsuenTeam-*`/`X-KajitsuenJP-*`/`X-KajitsuenSenmon-*`/`X-FruitdirectPros-*`/`X-FruitdirectTeam-*`/`X-FruitdirectWorks-*`/`X-FruitdirectExperts-*`/`X-FruitdirectSvc-*`/`X-FruitdirectHQ-*`/`X-OrchardstorePros-*`/`X-OrchardstoreTeam-*`/`X-OrchardstoreWorks-*`/`X-OrchardstoreExperts-*`/`X-OrchardstoreSvc-*`/`X-OrchardstoreHQ-*`/`X-JapfruitPros-*`/`X-JapfruitTeam-*`/`X-JapfruitWorks-*`/`X-JapfruitExperts-*`/`X-JapfruitSvc-*`/`X-JapfruitHQ-*` 等 は果機の通知記録 — 送信側が書くことは自称。果物・果樹園の偽装は、マンゴー・りんご果樹園の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kudamono_marks` + `has_kudamono_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 果印の自署を問え。
+
+### Security — D874: `X-Kome-*`/`X-Komedokoro-*`/`X-Komeya-*`/`X-Ricedirect-*`/`X-Japrice-*`/`X-Ricestore-*` 等の米・新米印自称が未検査
+
+- **問題**: `X-Kome-*`/`X-KomeYasan-*`/`X-KomePro-*`/`X-KomeTeam-*`/`X-KomeJP-*`/`X-KomeSenmon-*`/`X-Komedokoro-*`/`X-KomedokoroYasan-*`/`X-KomedokoroPro-*`/`X-KomedokoroTeam-*`/`X-KomedokoroJP-*`/`X-KomedokoroSenmon-*`/`X-Komeya-*`/`X-KomeyaYasan-*`/`X-KomeyaPro-*`/`X-KomeyaTeam-*`/`X-KomeyaJP-*`/`X-KomeyaSenmon-*`/`X-RicedirectPros-*`/`X-RicedirectTeam-*`/`X-RicedirectWorks-*`/`X-RicedirectExperts-*`/`X-RicedirectSvc-*`/`X-RicedirectHQ-*`/`X-JapricePros-*`/`X-JapriceTeam-*`/`X-JapriceWorks-*`/`X-JapriceExperts-*`/`X-JapriceSvc-*`/`X-JapriceHQ-*`/`X-RicestorePros-*`/`X-RicestoreTeam-*`/`X-RicestoreWorks-*`/`X-RicestoreExperts-*`/`X-RicestoreSvc-*`/`X-RicestoreHQ-*` 等 は米機の通知記録 — 送信側が書くことは自称。米・新米業者の偽装は、コシヒカリ・新米予約の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kome_marks` + `has_kome_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 米印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
