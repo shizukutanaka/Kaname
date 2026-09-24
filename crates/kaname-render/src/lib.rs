@@ -1757,6 +1757,12 @@ pub struct Envelope {
     pub cemetery_marks: bool,
     /// `X-Taiyoukou-*`/`X-Chikuden-*`/`X-Enefarm-*`/`X-Hems-*`/`X-Uriden-*`/`X-SolarPro-*`/`X-PvPower-*` 等の太陽光・蓄電池・エネルギー設備通知記録印を送信側が自称している (D622)
     pub solar_marks: bool,
+    /// `X-Kottou-*`/`X-Bijutsu-*`/`X-Antique-*`/`X-ArtDealer-*`/`X-ArtAuction-*`/`X-ArtShop-*`/`X-ArtNavi-*` 等の骨董・美術品通知記録印を送信側が自称している (D623)
+    pub antique_marks: bool,
+    /// `X-Kimono-*`/`X-Furisode-*`/`X-Hakama-*`/`X-Wasou-*`/`X-Gofuku-*`/`X-Gofukuya-*`/`X-Kitsuke-*` 等の着物・和装通知記録印を送信側が自称している (D624)
+    pub kimono_marks: bool,
+    /// `X-Shodo-*`/`X-Sadou-*`/`X-Kadou-*`/`X-Shodou-*`/`X-AbcCooking-*`/`X-BetterHome-*`/`X-CultureNavi-*` 等のカルチャー教室通知記録印を送信側が自称している (D625)
+    pub cultureschool_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2257,6 +2263,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pest_marks: has_pest_marks(hdr),
         cemetery_marks: has_cemetery_marks(hdr),
         solar_marks: has_solar_marks(hdr),
+        antique_marks: has_antique_marks(hdr),
+        kimono_marks: has_kimono_marks(hdr),
+        cultureschool_marks: has_cultureschool_marks(hdr),
     })
 }
 
@@ -13349,6 +13358,232 @@ fn has_solar_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Kottou-*`/`X-Bijutsu-*`/`X-Antique-*`/`X-ArtDealer-*`/`X-ArtAuction-*`/`X-ArtShop-*`/`X-ArtNavi-*`/`X-ArtCenter-*`/`X-ArtPro-*`/`X-ArtDoctor-*`/`X-ArtRescue-*`/`X-Art24-*`/`X-Komentou-*`/`X-Kobijutsu-*`/`X-Chadougu-*`/`X-Touken-*`/`X-BijutsuSou-*`/`X-ArtGallery-*`/`X-ArtMart-*`/`X-ArtPlus-*`/`X-ArtSmart-*`/`X-Kanteisho-*`/`X-KanteiPro-*`/`X-KanteiDoctor-*`/`X-KanteiNavi-*`/`X-KanteiCenter-*`/`X-KanteiShop-*`/`X-KanteiRescue-*`/`X-Kantei24-*`/`X-KottouPro-*`/`X-KottouDoctor-*`/`X-KottouNavi-*`/`X-KottouCenter-*`/`X-KottouShop-*`/`X-KottouRescue-*`/`X-Kottou24-*`/`X-AntiquePro-*`/`X-AntiqueDoctor-*`/`X-AntiqueNavi-*`/`X-AntiqueCenter-*`/`X-AntiqueShop-*`/`X-AntiqueRescue-*`/`X-Antique24-*`/`X-BijutsuPro-*`/`X-BijutsuDoctor-*`/`X-BijutsuNavi-*`/`X-BijutsuCenter-*`/`X-BijutsuShop-*`/`X-BijutsuRescue-*`/`X-Bijutsu24-*`/`X-UkiyoeShop-*`/`X-PrintShop-*`/`X-ScrollShop-*`/`X-CalligraphyShop-*`/`X-PotteryShop-*`/`X-PorcelainShop-*`/`X-LacquerShop-*`/`X-BronzeShop-*`/`X-SwordShop-*`/`X-KatanaShop-*`/`X-ArmorShop-*`/`X-NetsukeShop-*`/`X-KakejikuShop-*` (骨董・美術品・鑑定の通知記録) を送信側が自称しているかどうか。無料鑑定・買取査定・展示会案内の偽装は骨董詐欺の典型手口。(買取機は D576、宝石機は D552)
+fn has_antique_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kottou-")
+            || l.starts_with("x-bijutsu-")
+            || l.starts_with("x-antique-")
+            || l.starts_with("x-artdealer-")
+            || l.starts_with("x-artauction-")
+            || l.starts_with("x-artshop-")
+            || l.starts_with("x-artnavi-")
+            || l.starts_with("x-artcenter-")
+            || l.starts_with("x-artpro-")
+            || l.starts_with("x-artdoctor-")
+            || l.starts_with("x-artrescue-")
+            || l.starts_with("x-art24-")
+            || l.starts_with("x-komentou-")
+            || l.starts_with("x-kobijutsu-")
+            || l.starts_with("x-chadougu-")
+            || l.starts_with("x-touken-")
+            || l.starts_with("x-bijutsusou-")
+            || l.starts_with("x-artgallery-")
+            || l.starts_with("x-artmart-")
+            || l.starts_with("x-artplus-")
+            || l.starts_with("x-artsmart-")
+            || l.starts_with("x-kanteisho-")
+            || l.starts_with("x-kanteipro-")
+            || l.starts_with("x-kanteidoctor-")
+            || l.starts_with("x-kanteinavi-")
+            || l.starts_with("x-kanteicenter-")
+            || l.starts_with("x-kanteishop-")
+            || l.starts_with("x-kanteirescue-")
+            || l.starts_with("x-kantei24-")
+            || l.starts_with("x-kottoupro-")
+            || l.starts_with("x-kottoudoctor-")
+            || l.starts_with("x-kottounavi-")
+            || l.starts_with("x-kottoucenter-")
+            || l.starts_with("x-kottoushop-")
+            || l.starts_with("x-kottourescue-")
+            || l.starts_with("x-kottou24-")
+            || l.starts_with("x-antiquepro-")
+            || l.starts_with("x-antiquedoctor-")
+            || l.starts_with("x-antiquenavi-")
+            || l.starts_with("x-antiquecenter-")
+            || l.starts_with("x-antiqueshop-")
+            || l.starts_with("x-antiquerescue-")
+            || l.starts_with("x-antique24-")
+            || l.starts_with("x-bijutsupro-")
+            || l.starts_with("x-bijutsudoctor-")
+            || l.starts_with("x-bijutsunavi-")
+            || l.starts_with("x-bijutsucenter-")
+            || l.starts_with("x-bijutsushop-")
+            || l.starts_with("x-bijutsurescue-")
+            || l.starts_with("x-bijutsu24-")
+            || l.starts_with("x-ukiyoeshop-")
+            || l.starts_with("x-printshop-")
+            || l.starts_with("x-scrollshop-")
+            || l.starts_with("x-calligraphyshop-")
+            || l.starts_with("x-potteryshop-")
+            || l.starts_with("x-porcelainshop-")
+            || l.starts_with("x-lacquershop-")
+            || l.starts_with("x-bronzeshop-")
+            || l.starts_with("x-swordshop-")
+            || l.starts_with("x-katanashop-")
+            || l.starts_with("x-armorshop-")
+            || l.starts_with("x-netsukeshop-")
+            || l.starts_with("x-kakejikushop-")
+    })
+}
+
+/// `X-Kimono-*`/`X-Furisode-*`/`X-Hakama-*`/`X-Wasou-*`/`X-KimonoGa-*`/`X-KimonoShop-*`/`X-KimonoNavi-*`/`X-KimonoCenter-*`/`X-KimonoPro-*`/`X-KimonoDoctor-*`/`X-KimonoRescue-*`/`X-Kimono24-*`/`X-KimonoMart-*`/`X-KimonoPlus-*`/`X-KimonoSmart-*`/`X-KimonoFamily-*`/`X-Gofuku-*`/`X-Gofukuya-*`/`X-Wagara-*`/`X-Kitsuke-*`/`X-KitsukeKouza-*`/`X-KitsukeNavi-*`/`X-KitsukePro-*`/`X-KitsukeDoctor-*`/`X-KitsukeCenter-*`/`X-KitsukeShop-*`/`X-Kitsuke24-*`/`X-KitsukeRescue-*`/`X-FurisodePro-*`/`X-Furisode24-*`/`X-HakamaPro-*`/`X-HakamaNavi-*`/`X-HakamaCenter-*`/`X-HakamaShop-*`/`X-HakamaRescue-*`/`X-Hakama24-*`/`X-WasouPro-*`/`X-WasouNavi-*`/`X-WasouCenter-*`/`X-WasouShop-*`/`X-WasouRescue-*`/`X-Wasou24-*`/`X-YukataShop-*`/`X-YukataNavi-*`/`X-YukataCenter-*`/`X-YukataPro-*`/`X-ObiShop-*`/`X-ObiNavi-*`/`X-ObiCenter-*`/`X-ObiPro-*`/`X-TomesodeShop-*`/`X-HoumongiShop-*`/`X-TsukesageShop-*`/`X-KomonShop-*`/`X-TsumugiShop-*`/`X-OshimaShop-*`/`X-YuzenShop-*`/`X-ShiboriShop-*` (着物・和装・着付け教室の通知記録) を送信側が自称しているかどうか。成人式・卒業式の着付け予約・振袖販売・箪笥買取の偽装は着物詐欺の典型手口。(エステ機は D608、呉服買取は骨董機 D623)
+fn has_kimono_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kimono-")
+            || l.starts_with("x-furisode-")
+            || l.starts_with("x-hakama-")
+            || l.starts_with("x-wasou-")
+            || l.starts_with("x-kimonoga-")
+            || l.starts_with("x-kimonoshop-")
+            || l.starts_with("x-kimononavi-")
+            || l.starts_with("x-kimonocenter-")
+            || l.starts_with("x-kimonopro-")
+            || l.starts_with("x-kimonodoctor-")
+            || l.starts_with("x-kimonorescue-")
+            || l.starts_with("x-kimono24-")
+            || l.starts_with("x-kimonomart-")
+            || l.starts_with("x-kimonoplus-")
+            || l.starts_with("x-kimonosmart-")
+            || l.starts_with("x-kimonofamily-")
+            || l.starts_with("x-gofuku-")
+            || l.starts_with("x-gofukuya-")
+            || l.starts_with("x-wagara-")
+            || l.starts_with("x-kitsuke-")
+            || l.starts_with("x-kitsukekouza-")
+            || l.starts_with("x-kitsukenavi-")
+            || l.starts_with("x-kitsukepro-")
+            || l.starts_with("x-kitsukedoctor-")
+            || l.starts_with("x-kitsukecenter-")
+            || l.starts_with("x-kitsukeshop-")
+            || l.starts_with("x-kitsuke24-")
+            || l.starts_with("x-kitsukerescue-")
+            || l.starts_with("x-furisodepro-")
+            || l.starts_with("x-furisode24-")
+            || l.starts_with("x-hakamapro-")
+            || l.starts_with("x-hakamanavi-")
+            || l.starts_with("x-hakamacenter-")
+            || l.starts_with("x-hakamashop-")
+            || l.starts_with("x-hakamarescue-")
+            || l.starts_with("x-hakama24-")
+            || l.starts_with("x-wasoupro-")
+            || l.starts_with("x-wasounavi-")
+            || l.starts_with("x-wasoucenter-")
+            || l.starts_with("x-wasoushop-")
+            || l.starts_with("x-wasourescue-")
+            || l.starts_with("x-wasou24-")
+            || l.starts_with("x-yukatashop-")
+            || l.starts_with("x-yukatanavi-")
+            || l.starts_with("x-yukatacenter-")
+            || l.starts_with("x-yukatapro-")
+            || l.starts_with("x-obishop-")
+            || l.starts_with("x-obinavi-")
+            || l.starts_with("x-obicenter-")
+            || l.starts_with("x-obipro-")
+            || l.starts_with("x-tomesodeshop-")
+            || l.starts_with("x-houmongishop-")
+            || l.starts_with("x-tsukesageshop-")
+            || l.starts_with("x-komonshop-")
+            || l.starts_with("x-tsumugishop-")
+            || l.starts_with("x-oshimashop-")
+            || l.starts_with("x-yuzenshop-")
+            || l.starts_with("x-shiborishop-")
+    })
+}
+
+/// `X-Shodo-*`/`X-Sadou-*`/`X-Kadou-*`/`X-Shodou-*`/`X-ShodouKyoshitsu-*`/`X-SadouKouza-*`/`X-KadouKouza-*`/`X-ShodouNavi-*`/`X-ShodouCenter-*`/`X-ShodouShop-*`/`X-ShodouPro-*`/`X-ShodouDoctor-*`/`X-ShodouRescue-*`/`X-Shodou24-*`/`X-AbcCooking-*`/`X-BetterHome-*`/`X-CookpadKyoshitsu-*`/`X-CookingNavi-*`/`X-CookingCenter-*`/`X-CookingShop-*`/`X-CookingPro-*`/`X-CookingDoctor-*`/`X-CookingRescue-*`/`X-Cooking24-*`/`X-CultureNavi-*`/`X-CultureCenter-*`/`X-CultureShop-*`/`X-CulturePro-*`/`X-CultureCenter24-*`/`X-CultureSalon-*`/`X-CulturAcademy-*`/`X-CultureSchool-*`/`X-CultureClass-*`/`X-CultureGakuin-*`/`X-CultureDojo-*`/`X-SadouPro-*`/`X-SadouNavi-*`/`X-SadouCenter-*`/`X-SadouShop-*`/`X-SadouRescue-*`/`X-Sadou24-*`/`X-KadouPro-*`/`X-KadouNavi-*`/`X-KadouCenter-*`/`X-KadouShop-*`/`X-KadouRescue-*`/`X-Kadou24-*`/`X-KotoSchool-*`/`X-ShamisenSchool-*`/`X-KotoClass-*`/`X-ShamisenClass-*`/`X-WagakkiClass-*`/`X-NihonOngaku-*`/`X-KotoNavi-*`/`X-ShamisenNavi-*`/`X-FlowerClass-*`/`X-FlowerSchool-*`/`X-IkebanaSchool-*`/`X-IkebanaClass-*`/`X-IkebanaNavi-*`/`X-ChaClass-*`/`X-TeaClass-*`/`X-CalligraphyClass-*`/`X-SchoolCulture-*`/`X-OkeikoClass-*`/`X-KarutaClass-*`/`X-GoClass-*`/`X-ShogiClass-*`/`X-PianoOkeiko-*`/`X-ViolinClass-*`/`X-BalletClass-*`/`X-DanceSchool-*` (書道・茶道・華道・料理・和楽器・カルチャー教室の通知記録) を送信側が自称しているかどうか。入会金・月謝・教材費の偽装はカルチャースクール詐欺の典型手口。(塾機は D605、資格機は D611、IT機は D618)
+fn has_cultureschool_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shodo-")
+            || l.starts_with("x-sadou-")
+            || l.starts_with("x-kadou-")
+            || l.starts_with("x-shodou-")
+            || l.starts_with("x-shodoukyoshitsu-")
+            || l.starts_with("x-sadoukouza-")
+            || l.starts_with("x-kadoukouza-")
+            || l.starts_with("x-shodounavi-")
+            || l.starts_with("x-shodoucenter-")
+            || l.starts_with("x-shodoushop-")
+            || l.starts_with("x-shodoupro-")
+            || l.starts_with("x-shodoudoctor-")
+            || l.starts_with("x-shodourescue-")
+            || l.starts_with("x-shodou24-")
+            || l.starts_with("x-abccooking-")
+            || l.starts_with("x-betterhome-")
+            || l.starts_with("x-cookpadkyoshitsu-")
+            || l.starts_with("x-cookingnavi-")
+            || l.starts_with("x-cookingcenter-")
+            || l.starts_with("x-cookingshop-")
+            || l.starts_with("x-cookingpro-")
+            || l.starts_with("x-cookingdoctor-")
+            || l.starts_with("x-cookingrescue-")
+            || l.starts_with("x-cooking24-")
+            || l.starts_with("x-culturenavi-")
+            || l.starts_with("x-culturecenter-")
+            || l.starts_with("x-cultureshop-")
+            || l.starts_with("x-culturepro-")
+            || l.starts_with("x-culturecenter24-")
+            || l.starts_with("x-culturesalon-")
+            || l.starts_with("x-culturacademy-")
+            || l.starts_with("x-cultureschool-")
+            || l.starts_with("x-cultureclass-")
+            || l.starts_with("x-culturegakuin-")
+            || l.starts_with("x-culturedojo-")
+            || l.starts_with("x-sadoupro-")
+            || l.starts_with("x-sadounavi-")
+            || l.starts_with("x-sadoucenter-")
+            || l.starts_with("x-sadoushop-")
+            || l.starts_with("x-sadourescue-")
+            || l.starts_with("x-sadou24-")
+            || l.starts_with("x-kadoupro-")
+            || l.starts_with("x-kadounavi-")
+            || l.starts_with("x-kadoucenter-")
+            || l.starts_with("x-kadoushop-")
+            || l.starts_with("x-kadourescue-")
+            || l.starts_with("x-kadou24-")
+            || l.starts_with("x-kotoschool-")
+            || l.starts_with("x-shamisenschool-")
+            || l.starts_with("x-kotoclass-")
+            || l.starts_with("x-shamisenclass-")
+            || l.starts_with("x-wagakkiclass-")
+            || l.starts_with("x-nihonongaku-")
+            || l.starts_with("x-kotonavi-")
+            || l.starts_with("x-shamisennavi-")
+            || l.starts_with("x-flowerclass-")
+            || l.starts_with("x-flowerschool-")
+            || l.starts_with("x-ikebanaschool-")
+            || l.starts_with("x-ikebanaclass-")
+            || l.starts_with("x-ikebananavi-")
+            || l.starts_with("x-chaclass-")
+            || l.starts_with("x-teaclass-")
+            || l.starts_with("x-calligraphyclass-")
+            || l.starts_with("x-schoolculture-")
+            || l.starts_with("x-okeikoclass-")
+            || l.starts_with("x-karutaclass-")
+            || l.starts_with("x-goclass-")
+            || l.starts_with("x-shogiclass-")
+            || l.starts_with("x-pianookeiko-")
+            || l.starts_with("x-violinclass-")
+            || l.starts_with("x-balletclass-")
+            || l.starts_with("x-danceschool-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -21786,5 +22021,152 @@ X-Other: 1
 
 body";
     assert!(!has_solar_marks(clean));
+}
+
+#[test]
+fn scan_は骨機印を検出する() {
+    let k1 = b"From: a@b
+X-Kottou-Id: 1
+
+x";
+    let b1 = b"From: a@b
+X-Bijutsu-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-Antique-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-ArtDealer-Flag: 1
+
+x";
+    let g1 = b"From: a@b
+X-ArtAuction-Entry: 1
+
+x";
+    let k2 = b"From: a@b
+X-Kanteisho-Record: 1
+
+x";
+    let u1 = b"From: a@b
+X-UkiyoeShop-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SwordShop-Stamp: 1
+
+x";
+    assert!(has_antique_marks(k1));
+    assert!(has_antique_marks(b1));
+    assert!(has_antique_marks(a1));
+    assert!(has_antique_marks(d1));
+    assert!(has_antique_marks(g1));
+    assert!(has_antique_marks(k2));
+    assert!(has_antique_marks(u1));
+    assert!(has_antique_marks(s1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_antique_marks(clean));
+}
+
+#[test]
+fn scan_は装機印を検出する() {
+    let k1 = b"From: a@b
+X-Kimono-Id: 1
+
+x";
+    let f1 = b"From: a@b
+X-Furisode-Trace: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hakama-Notice: 1
+
+x";
+    let w1 = b"From: a@b
+X-Wasou-Flag: 1
+
+x";
+    let g1 = b"From: a@b
+X-Gofuku-Entry: 1
+
+x";
+    let k2 = b"From: a@b
+X-Kitsuke-Record: 1
+
+x";
+    let y1 = b"From: a@b
+X-YukataShop-Trace: 1
+
+x";
+    let o1 = b"From: a@b
+X-ObiShop-Stamp: 1
+
+x";
+    assert!(has_kimono_marks(k1));
+    assert!(has_kimono_marks(f1));
+    assert!(has_kimono_marks(h1));
+    assert!(has_kimono_marks(w1));
+    assert!(has_kimono_marks(g1));
+    assert!(has_kimono_marks(k2));
+    assert!(has_kimono_marks(y1));
+    assert!(has_kimono_marks(o1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_kimono_marks(clean));
+}
+
+#[test]
+fn scan_は箏機印を検出する() {
+    let s1 = b"From: a@b
+X-Shodou-Id: 1
+
+x";
+    let a1 = b"From: a@b
+X-AbcCooking-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-BetterHome-Notice: 1
+
+x";
+    let c1 = b"From: a@b
+X-CultureNavi-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-KotoSchool-Entry: 1
+
+x";
+    let i1 = b"From: a@b
+X-IkebanaSchool-Record: 1
+
+x";
+    let t1 = b"From: a@b
+X-TeaClass-Trace: 1
+
+x";
+    let d1 = b"From: a@b
+X-DanceSchool-Stamp: 1
+
+x";
+    assert!(has_cultureschool_marks(s1));
+    assert!(has_cultureschool_marks(a1));
+    assert!(has_cultureschool_marks(b1));
+    assert!(has_cultureschool_marks(c1));
+    assert!(has_cultureschool_marks(k1));
+    assert!(has_cultureschool_marks(i1));
+    assert!(has_cultureschool_marks(t1));
+    assert!(has_cultureschool_marks(d1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_cultureschool_marks(clean));
 }
 }
