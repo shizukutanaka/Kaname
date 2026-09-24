@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D779: `X-Taishokudaikou-*`/`X-Taishoku-*`/`X-Quitjob-*`/`X-Resignation-*`/`X-Quitagency-*` 等の退職代行印自称が未検査
+
+- **問題**: `X-Taishokudaikou-*`/`X-TaishokudaikouYasan-*`/`X-TaishokudaikouPro-*`/`X-TaishokudaikouTeam-*`/`X-TaishokudaikouJP-*`/`X-TaishokudaikouSenmon-*`/`X-Taishoku-*`/`X-TaishokuYasan-*`/`X-TaishokuPro-*`/`X-TaishokuTeam-*`/`X-TaishokuJP-*`/`X-TaishokuSenmon-*`/`X-QuitjobPros-*`/`X-QuitjobTeam-*`/`X-QuitjobWorks-*`/`X-QuitjobExperts-*`/`X-QuitjobSvc-*`/`X-QuitjobHQ-*`/`X-ResignationPros-*`/`X-ResignationTeam-*`/`X-ResignationWorks-*`/`X-ResignationExperts-*`/`X-ResignationSvc-*`/`X-ResignationHQ-*`/`X-QuitagencyPros-*`/`X-QuitagencyTeam-*`/`X-QuitagencyWorks-*`/`X-QuitagencyExperts-*`/`X-QuitagencySvc-*`/`X-QuitagencyHQ-*` 等 は退機の通知記録 — 送信側が書くことは自称。退職代行サービスの偽装は、着手金・成功報酬を装ったなりすましの典型手口。(社労士は sharoshi 機、法律相談は legal 機、求人は jobs 機で検出済み)
+- **修正**: `Envelope` に `taishokudaikou_marks` + `has_taishokudaikou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 退印の自署を問え。
+
+### Security — D780: `X-Jorei-*`/`X-Jourei-*`/`X-Oharai-*`/`X-Exorcism-*` 等の除霊・お祓い印自称が未検査
+
+- **問題**: `X-Jorei-*`/`X-JoreiYasan-*`/`X-JoreiPro-*`/`X-JoreiTeam-*`/`X-JoreiJP-*`/`X-JoreiSenmon-*`/`X-Jourei-*`/`X-JoureiYasan-*`/`X-JoureiPro-*`/`X-JoureiTeam-*`/`X-JoureiJP-*`/`X-JoureiSenmon-*`/`X-Oharai-*`/`X-OharaiYasan-*`/`X-OharaiPro-*`/`X-OharaiTeam-*`/`X-OharaiJP-*`/`X-OharaiSenmon-*`/`X-ExorcismPros-*`/`X-ExorcismTeam-*`/`X-ExorcismWorks-*`/`X-ExorcismExperts-*`/`X-ExorcismSvc-*`/`X-ExorcismHQ-*` 等 は除機の通知記録 — 送信側が書くことは自称。除霊・お祓い業者の偽装は、霊感商法・供養料金を装ったなりすましの典型手口。(占いは fortune 機、神社は shrine 機、葬儀は funeral 機で検出済み)
+- **修正**: `Envelope` に `jorei_marks` + `has_jorei_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 除印の自署を問え。
+
+### Security — D781: `X-Keichou-*`/`X-Denwasoudan-*`/`X-Listeningline-*`/`X-Telecounsel-*` 等の傾聴・電話相談印自称が未検査
+
+- **問題**: `X-Keichou-*`/`X-KeichouYasan-*`/`X-KeichouPro-*`/`X-KeichouTeam-*`/`X-KeichouJP-*`/`X-KeichouSenmon-*`/`X-Denwasoudan-*`/`X-DenwasoudanYasan-*`/`X-DenwasoudanPro-*`/`X-DenwasoudanTeam-*`/`X-DenwasoudanJP-*`/`X-DenwasoudanSenmon-*`/`X-ListeninglinePros-*`/`X-ListeninglineTeam-*`/`X-ListeninglineWorks-*`/`X-ListeninglineExperts-*`/`X-ListeninglineSvc-*`/`X-ListeninglineHQ-*`/`X-TelecounselPros-*`/`X-TelecounselTeam-*`/`X-TelecounselWorks-*`/`X-TelecounselExperts-*`/`X-TelecounselSvc-*`/`X-TelecounselHQ-*` 等 は傾機の通知記録 — 送信側が書くことは自称。傾聴・電話相談サービスの偽装は、通話料・相談料を装ったなりすましの典型手口。(コールセンターは callcenter 機、保険相談は hokensoudan 機で検出済み)
+- **修正**: `Envelope` に `keichou_marks` + `has_keichou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 傾印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
