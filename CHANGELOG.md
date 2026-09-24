@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D818: `X-Hamono-*`/`X-Togiya-*`/`X-Hamonotogi-*`/`X-Bladesharpen-*`/`X-Knifesharp-*`/`X-Sharpening-*` 等の刃物研ぎ・出張研ぎ印自称が未検査
+
+- **問題**: `X-Hamono-*`/`X-HamonoYasan-*`/`X-HamonoPro-*`/`X-HamonoTeam-*`/`X-HamonoJP-*`/`X-HamonoSenmon-*`/`X-Togiya-*`/`X-TogiyaYasan-*`/`X-TogiyaPro-*`/`X-TogiyaTeam-*`/`X-TogiyaJP-*`/`X-TogiyaSenmon-*`/`X-Hamonotogi-*`/`X-HamonotogiYasan-*`/`X-HamonotogiPro-*`/`X-HamonotogiTeam-*`/`X-HamonotogiJP-*`/`X-HamonotogiSenmon-*`/`X-BladesharpenPros-*`/`X-BladesharpenTeam-*`/`X-BladesharpenWorks-*`/`X-BladesharpenExperts-*`/`X-BladesharpenSvc-*`/`X-BladesharpenHQ-*`/`X-KnifesharpPros-*`/`X-KnifesharpTeam-*`/`X-KnifesharpWorks-*`/`X-KnifesharpExperts-*`/`X-KnifesharpSvc-*`/`X-KnifesharpHQ-*`/`X-SharpeningPros-*`/`X-SharpeningTeam-*`/`X-SharpeningWorks-*`/`X-SharpeningExperts-*`/`X-SharpeningSvc-*`/`X-SharpeningHQ-*` 等 は刃機の通知記録 — 送信側が書くことは自称。刃物研ぎ業者の偽装は、出張包丁研ぎの高額請求・研磨剤セット販売を装ったなりすましの典型手口。(訪問販売は houmonhanbai 機で検出済み)
+- **修正**: `Envelope` に `hamono_marks` + `has_hamono_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 刃印の自署を問え。
+
+### Security — D819: `X-Kosen-*`/`X-Furugane-*`/`X-Furukitte-*`/`X-Coincollect-*`/`X-Stampcollect-*`/`X-Oldcoins-*` 等の古銭・切手買取印自称が未検査
+
+- **問題**: `X-Kosen-*`/`X-KosenYasan-*`/`X-KosenPro-*`/`X-KosenTeam-*`/`X-KosenJP-*`/`X-KosenSenmon-*`/`X-Furugane-*`/`X-FuruganeYasan-*`/`X-FuruganePro-*`/`X-FuruganeTeam-*`/`X-FuruganeJP-*`/`X-FuruganeSenmon-*`/`X-Furukitte-*`/`X-FurukitteYasan-*`/`X-FurukittePro-*`/`X-FurukitteTeam-*`/`X-FurukitteJP-*`/`X-FurukitteSenmon-*`/`X-CoincollectPros-*`/`X-CoincollectTeam-*`/`X-CoincollectWorks-*`/`X-CoincollectExperts-*`/`X-CoincollectSvc-*`/`X-CoincollectHQ-*`/`X-StampcollectPros-*`/`X-StampcollectTeam-*`/`X-StampcollectWorks-*`/`X-StampcollectExperts-*`/`X-StampcollectSvc-*`/`X-StampcollectHQ-*`/`X-OldcoinsPros-*`/`X-OldcoinsTeam-*`/`X-OldcoinsWorks-*`/`X-OldcoinsExperts-*`/`X-OldcoinsSvc-*`/`X-OldcoinsHQ-*` 等 は古機の通知記録 — 送信側が書くことは自称。古銭・切手買取業者の偽装は、無料査定を装った押し買い・鑑定料請求のなりすましの典型手口。(金券買取は kinken 機、質屋は pawn 機、リサイクルは reuse 機で検出済み; `x-kitte-` は department 機所有のため別形のみ)
+- **修正**: `Envelope` に `kosen_marks` + `has_kosen_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 古印の自署を問え。
+
+### Security — D820: `X-Bonsai-*`/`X-Ueki-*`/`X-Bonki-*`/`X-Bonsaitree-*`/`X-Bonsaistore-*`/`X-Bonsaishop-*` 等の盆栽・植木販売印自称が未検査
+
+- **問題**: `X-Bonsai-*`/`X-BonsaiYasan-*`/`X-BonsaiPro-*`/`X-BonsaiTeam-*`/`X-BonsaiJP-*`/`X-BonsaiSenmon-*`/`X-Ueki-*`/`X-UekiYasan-*`/`X-UekiPro-*`/`X-UekiTeam-*`/`X-UekiJP-*`/`X-UekiSenmon-*`/`X-Bonki-*`/`X-BonkiYasan-*`/`X-BonkiPro-*`/`X-BonkiTeam-*`/`X-BonkiJP-*`/`X-BonkiSenmon-*`/`X-BonsaitreePros-*`/`X-BonsaitreeTeam-*`/`X-BonsaitreeWorks-*`/`X-BonsaitreeExperts-*`/`X-BonsaitreeSvc-*`/`X-BonsaitreeHQ-*`/`X-BonsaistorePros-*`/`X-BonsaistoreTeam-*`/`X-BonsaistoreWorks-*`/`X-BonsaistoreExperts-*`/`X-BonsaistoreSvc-*`/`X-BonsaistoreHQ-*`/`X-BonsaishopPros-*`/`X-BonsaishopTeam-*`/`X-BonsaishopWorks-*`/`X-BonsaishopExperts-*`/`X-BonsaishopSvc-*`/`X-BonsaishopHQ-*` 等 は盆機の通知記録 — 送信側が書くことは自称。盆栽・植木業者の偽装は、高価盆栽の訪問販売・植木定期手入れ契約を装ったなりすましの典型手口。(造園は garden 機、剪定は sentei 機で検出済み)
+- **修正**: `Envelope` に `bonsai_marks` + `has_bonsai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 盆印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
