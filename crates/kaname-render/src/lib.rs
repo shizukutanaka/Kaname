@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub docshredding_marks: bool,
+    pub signshop_marks: bool,
+    pub answering_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        docshredding_marks: has_docshredding_marks(hdr),
+        signshop_marks: has_signshop_marks(hdr),
+        answering_marks: has_answering_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,184 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_docshredding_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shredit-")
+            || l.starts_with("x-ironmountain-")
+            || l.starts_with("x-shrednations-")
+            || l.starts_with("x-proshred-")
+            || l.starts_with("x-ushred-")
+            || l.starts_with("x-cintasshred-")
+            || l.starts_with("x-accesscorp-")
+            || l.starts_with("x-shredding-")
+            || l.starts_with("x-docshredding-")
+            || l.starts_with("x-papershredding-")
+            || l.starts_with("x-shredpros-")
+            || l.starts_with("x-shredservice-")
+            || l.starts_with("x-shredteam-")
+            || l.starts_with("x-shredworks-")
+            || l.starts_with("x-shredexperts-")
+            || l.starts_with("x-shreddoctors-")
+            || l.starts_with("x-shredmasters-")
+            || l.starts_with("x-shredforce-")
+            || l.starts_with("x-shrednation-")
+            || l.starts_with("x-secureshredding-")
+            || l.starts_with("x-datadestruction-")
+            || l.starts_with("x-destructionpros-")
+            || l.starts_with("x-mediadestruction-")
+            || l.starts_with("x-harddrivedestruction-")
+            || l.starts_with("x-documentshredding-")
+            || l.starts_with("x-kimitsubunsho-")
+            || l.starts_with("x-bunshoshori-")
+            || l.starts_with("x-shuredda-")
+            || l.starts_with("x-youkaishori-")
+            || l.starts_with("x-kimitsushori-")
+            || l.starts_with("x-bunshoshredder-")
+            || l.starts_with("x-bunshoshorigyo-")
+            || l.starts_with("x-kimitsuyasan-")
+            || l.starts_with("x-shredderyasan-")
+            || l.starts_with("x-kimitsupro-")
+            || l.starts_with("x-kimitsuteam-")
+            || l.starts_with("x-kimitsugyosha-")
+            || l.starts_with("x-kimitsuseibi-")
+            || l.starts_with("x-kimitsukensa-")
+            || l.starts_with("x-kimitsumanten-")
+            || l.starts_with("x-kimitsunomi-")
+            || l.starts_with("x-kimitsujp-")
+            || l.starts_with("x-kimitsusenmon-")
+            || l.starts_with("x-kimitsumitsumori-")
+            || l.starts_with("x-kimitsuchousa-")
+            || l.starts_with("x-kimitsuteiki-")
+            || l.starts_with("x-kimitsushuri-")
+    })
+}
+
+fn has_signshop_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-fastsigns-")
+            || l.starts_with("x-signarama-")
+            || l.starts_with("x-signshop-")
+            || l.starts_with("x-signpros-")
+            || l.starts_with("x-signservice-")
+            || l.starts_with("x-signteam-")
+            || l.starts_with("x-signworks-")
+            || l.starts_with("x-signexperts-")
+            || l.starts_with("x-signdoctors-")
+            || l.starts_with("x-signmasters-")
+            || l.starts_with("x-signforce-")
+            || l.starts_with("x-signnation-")
+            || l.starts_with("x-signdept-")
+            || l.starts_with("x-signgraphics-")
+            || l.starts_with("x-signcompany-")
+            || l.starts_with("x-signcraft-")
+            || l.starts_with("x-signmakers-")
+            || l.starts_with("x-signbuilder-")
+            || l.starts_with("x-signinstall-")
+            || l.starts_with("x-signrepair-")
+            || l.starts_with("x-signfactory-")
+            || l.starts_with("x-signstudio-")
+            || l.starts_with("x-signhub-")
+            || l.starts_with("x-neonsign-")
+            || l.starts_with("x-ledsign-")
+            || l.starts_with("x-channelletter-")
+            || l.starts_with("x-monumentsign-")
+            || l.starts_with("x-pylonsign-")
+            || l.starts_with("x-bannershop-")
+            || l.starts_with("x-vehiclewrap-")
+            || l.starts_with("x-wrapservice-")
+            || l.starts_with("x-speedysigns-")
+            || l.starts_with("x-kanban-")
+            || l.starts_with("x-kanbanyasan-")
+            || l.starts_with("x-kanbankouji-")
+            || l.starts_with("x-kanbanpro-")
+            || l.starts_with("x-kanbanteam-")
+            || l.starts_with("x-kanbangyosha-")
+            || l.starts_with("x-kanbanseibi-")
+            || l.starts_with("x-kanbankensa-")
+            || l.starts_with("x-kanbanmanten-")
+            || l.starts_with("x-kanbannomi-")
+            || l.starts_with("x-kanbanjp-")
+            || l.starts_with("x-kanbansenmon-")
+            || l.starts_with("x-kanbanmitsumori-")
+            || l.starts_with("x-kanbanchousa-")
+            || l.starts_with("x-kanbanteiki-")
+            || l.starts_with("x-kanbanshuri-")
+            || l.starts_with("x-kanbanseisaku-")
+            || l.starts_with("x-kanbansetsubi-")
+            || l.starts_with("x-signkouji-")
+            || l.starts_with("x-sainkouji-")
+    })
+}
+
+fn has_answering_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-answerconnect-")
+            || l.starts_with("x-rubyreception-")
+            || l.starts_with("x-patlive-")
+            || l.starts_with("x-abbyconnect-")
+            || l.starts_with("x-moneypenny-")
+            || l.starts_with("x-conversational-")
+            || l.starts_with("x-smithai-")
+            || l.starts_with("x-answering-")
+            || l.starts_with("x-answeringservice-")
+            || l.starts_with("x-answerpros-")
+            || l.starts_with("x-answerteam-")
+            || l.starts_with("x-answerworks-")
+            || l.starts_with("x-answerexperts-")
+            || l.starts_with("x-answernation-")
+            || l.starts_with("x-answerdoctors-")
+            || l.starts_with("x-answermasters-")
+            || l.starts_with("x-answerforce-")
+            || l.starts_with("x-receptionistpros-")
+            || l.starts_with("x-virtualreception-")
+            || l.starts_with("x-poshvirtual-")
+            || l.starts_with("x-answerus-")
+            || l.starts_with("x-voiceplus-")
+            || l.starts_with("x-callanswer-")
+            || l.starts_with("x-callprosteam-")
+            || l.starts_with("x-denwadaikou-")
+            || l.starts_with("x-denwadaiko-")
+            || l.starts_with("x-denwayasan-")
+            || l.starts_with("x-denwapro-")
+            || l.starts_with("x-denwateam-")
+            || l.starts_with("x-denwagyosha-")
+            || l.starts_with("x-denwaseibi-")
+            || l.starts_with("x-denwakensa-")
+            || l.starts_with("x-denwamanten-")
+            || l.starts_with("x-denwanomi-")
+            || l.starts_with("x-denwajp-")
+            || l.starts_with("x-denwasenmon-")
+            || l.starts_with("x-denwamitsumori-")
+            || l.starts_with("x-denwachousa-")
+            || l.starts_with("x-denwateiki-")
+            || l.starts_with("x-denwashuri-")
+            || l.starts_with("x-denwadoctors-")
+            || l.starts_with("x-denwasagyou-")
+            || l.starts_with("x-denwarescue-")
+            || l.starts_with("x-denwateikyu-")
+            || l.starts_with("x-denwaorder-")
+            || l.starts_with("x-denwajuu-")
+            || l.starts_with("x-denwabosyuu-")
+            || l.starts_with("x-hishodaikou-")
+            || l.starts_with("x-hishoyasan-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20825,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は紙機印を検出する() {
+        let f0 = b"From: a@b\r\nX-ShredIt-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-ProShred-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Kimitsubunsho-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Shuredda-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-IronMountain-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-ShredPros-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-KimitsuTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-SecureShredding-Record: 1\r\n\r\nx";
+        assert!(has_docshredding_marks(f0));
+        assert!(has_docshredding_marks(f1));
+        assert!(has_docshredding_marks(f2));
+        assert!(has_docshredding_marks(f3));
+        assert!(has_docshredding_marks(f4));
+        assert!(has_docshredding_marks(f5));
+        assert!(has_docshredding_marks(f6));
+        assert!(has_docshredding_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_docshredding_marks(clean));
+    }
+
+    #[test]
+    fn scan_は看機印を検出する() {
+        let f0 = b"From: a@b\r\nX-FastSigns-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Signarama-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Kanban-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-SignPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-NeonSign-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-ChannelLetter-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-KanbanPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-VehicleWrap-Record: 1\r\n\r\nx";
+        assert!(has_signshop_marks(f0));
+        assert!(has_signshop_marks(f1));
+        assert!(has_signshop_marks(f2));
+        assert!(has_signshop_marks(f3));
+        assert!(has_signshop_marks(f4));
+        assert!(has_signshop_marks(f5));
+        assert!(has_signshop_marks(f6));
+        assert!(has_signshop_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_signshop_marks(clean));
+    }
+
+    #[test]
+    fn scan_は話機印を検出する() {
+        let f0 = b"From: a@b\r\nX-AnswerConnect-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-PatLive-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Denwadaikou-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Hishodaikou-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-VirtualReception-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-AnswerPros-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-DenwaPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-AbbyConnect-Record: 1\r\n\r\nx";
+        assert!(has_answering_marks(f0));
+        assert!(has_answering_marks(f1));
+        assert!(has_answering_marks(f2));
+        assert!(has_answering_marks(f3));
+        assert!(has_answering_marks(f4));
+        assert!(has_answering_marks(f5));
+        assert!(has_answering_marks(f6));
+        assert!(has_answering_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_answering_marks(clean));
+    }
 }
