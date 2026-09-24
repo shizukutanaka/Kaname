@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D929: `X-Mangekyou-*`/`X-Mangekyouya-*`/`X-Mangekyouten-*`/`X-Kaleidoshop-*`/`X-Japkaleido-*`/`X-Kaleidoscope-*` 等の万華鏡印自称が未検査
+
+- **問題**: `X-Mangekyou-*`/`X-MangekyouYasan-*`/`X-MangekyouPro-*`/`X-MangekyouTeam-*`/`X-MangekyouJP-*`/`X-MangekyouSenmon-*`/`X-Mangekyouya-*`/`X-MangekyouyaYasan-*`/`X-MangekyouyaPro-*`/`X-MangekyouyaTeam-*`/`X-MangekyouyaJP-*`/`X-MangekyouyaSenmon-*`/`X-Mangekyouten-*`/`X-MangekyoutenYasan-*`/`X-MangekyoutenPro-*`/`X-MangekyoutenTeam-*`/`X-MangekyoutenJP-*`/`X-MangekyoutenSenmon-*`/`X-KaleidoshopPros-*`/`X-KaleidoshopTeam-*`/`X-KaleidoshopWorks-*`/`X-KaleidoshopExperts-*`/`X-KaleidoshopSvc-*`/`X-KaleidoshopHQ-*`/`X-JapkaleidoPros-*`/`X-JapkaleidoTeam-*`/`X-JapkaleidoWorks-*`/`X-JapkaleidoExperts-*`/`X-JapkaleidoSvc-*`/`X-JapkaleidoHQ-*`/`X-KaleidoscopePros-*`/`X-KaleidoscopeTeam-*`/`X-KaleidoscopeWorks-*`/`X-KaleidoscopeExperts-*`/`X-KaleidoscopeSvc-*`/`X-KaleidoscopeHQ-*` 等 は万機の通知記録 — 送信側が書くことは自称。万華鏡業者の偽装は、ガラス工房・万華鏡作家の直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `mangekyou_marks` + `has_mangekyou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 万印の自署を問え。
+
+### Security — D930: `X-Hariko-*`/`X-Harikoya-*`/`X-Harikoten-*`/`X-Harikostore-*`/`X-Japhariko-*`/`X-Papermache-*` 等の張子印自称が未検査
+
+- **問題**: `X-Hariko-*`/`X-HarikoYasan-*`/`X-HarikoPro-*`/`X-HarikoTeam-*`/`X-HarikoJP-*`/`X-HarikoSenmon-*`/`X-Harikoya-*`/`X-HarikoyaYasan-*`/`X-HarikoyaPro-*`/`X-HarikoyaTeam-*`/`X-HarikoyaJP-*`/`X-HarikoyaSenmon-*`/`X-Harikoten-*`/`X-HarikotenYasan-*`/`X-HarikotenPro-*`/`X-HarikotenTeam-*`/`X-HarikotenJP-*`/`X-HarikotenSenmon-*`/`X-HarikostorePros-*`/`X-HarikostoreTeam-*`/`X-HarikostoreWorks-*`/`X-HarikostoreExperts-*`/`X-HarikostoreSvc-*`/`X-HarikostoreHQ-*`/`X-JapharikoPros-*`/`X-JapharikoTeam-*`/`X-JapharikoWorks-*`/`X-JapharikoExperts-*`/`X-JapharikoSvc-*`/`X-JapharikoHQ-*`/`X-PapermachePros-*`/`X-PapermacheTeam-*`/`X-PapermacheWorks-*`/`X-PapermacheExperts-*`/`X-PapermacheSvc-*`/`X-PapermacheHQ-*` 等 は張機の通知記録 — 送信側が書くことは自称。張子業者の偽装は、だるま張子・郷土張子の職人直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `hariko_marks` + `has_hariko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 張印の自署を問え。
+
+### Security — D931: `X-Shippouyaki-*`/`X-Shippouya-*`/`X-Shippouten-*`/`X-Cloisonnestore-*`/`X-Japcloisonne-*`/`X-Cloisonneart-*` 等の七宝焼印自称が未検査
+
+- **問題**: `X-Shippouyaki-*`/`X-ShippouyakiYasan-*`/`X-ShippouyakiPro-*`/`X-ShippouyakiTeam-*`/`X-ShippouyakiJP-*`/`X-ShippouyakiSenmon-*`/`X-Shippouya-*`/`X-ShippouyaYasan-*`/`X-ShippouyaPro-*`/`X-ShippouyaTeam-*`/`X-ShippouyaJP-*`/`X-ShippouyaSenmon-*`/`X-Shippouten-*`/`X-ShippoutenYasan-*`/`X-ShippoutenPro-*`/`X-ShippoutenTeam-*`/`X-ShippoutenJP-*`/`X-ShippoutenSenmon-*`/`X-CloisonnestorePros-*`/`X-CloisonnestoreTeam-*`/`X-CloisonnestoreWorks-*`/`X-CloisonnestoreExperts-*`/`X-CloisonnestoreSvc-*`/`X-CloisonnestoreHQ-*`/`X-JapcloisonnePros-*`/`X-JapcloisonneTeam-*`/`X-JapcloisonneWorks-*`/`X-JapcloisonneExperts-*`/`X-JapcloisonneSvc-*`/`X-JapcloisonneHQ-*`/`X-CloisonneartPros-*`/`X-CloisonneartTeam-*`/`X-CloisonneartWorks-*`/`X-CloisonneartExperts-*`/`X-CloisonneartSvc-*`/`X-CloisonneartHQ-*` 等 は瑯機の通知記録 — 送信側が書くことは自称。七宝焼業者の偽装は、尾張七宝・有線七宝の工房直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shippou_marks` + `has_shippou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 瑯印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

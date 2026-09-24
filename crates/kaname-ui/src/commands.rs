@@ -1904,7 +1904,7 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     // D578: 宝くじ・ロト・懸賞当選印自称
     if env.lottery_marks {
         render_risks.push(
-            "X-Takarakuji-*/X-Loto6-*/X-Loto7-*/X-Powerball-*/X-MegaMillions-*/X-EuroMillions-*/X-DreamJumbo-*/X-Lottery-* 等 — 宝機の通知記録を送信側が自称する兆候です"
+            "X-Takarakuji-*/X-Loto6-*/X-Loto7-*/X-Powerball-*/X-MegaMillions-*/X-EuroMillions-*/X-DreamJumbo-*/X-Lottery-* 等 — 瑠機の通知記録を送信側が自称する兆候です"
                 .to_string(),
         );
     }
@@ -2211,6 +2211,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "X-Courier-*/X-BikeCourier-*/X-Tatuhai-*/X-SameDayCourier-*/X-MedicalCourier-*/X-RushCourier-* 等 — 配機の通知記録を送信側が自称する兆候です"
                 .to_string(),
         );
+    }
+    // D929: 万華鏡印自称
+    if env.mangekyou_marks {
+        render_risks.push("X-Mangekyou-*/X-Mangekyouya-*/X-Mangekyouten-*/X-Kaleidoshop-*/X-Japkaleido-*/X-Kaleidoscope-* 等 — 万機の通知記録を送信側が自称する兆候です".to_string());
+    }
+    // D930: 張子印自称
+    if env.hariko_marks {
+        render_risks.push("X-Hariko-*/X-Harikoya-*/X-Harikoten-*/X-Harikostore-*/X-Japhariko-*/X-Papermache-* 等 — 張機の通知記録を送信側が自称する兆候です".to_string());
+    }
+    // D931: 七宝焼印自称
+    if env.shippou_marks {
+        render_risks.push("X-Shippouyaki-*/X-Shippouya-*/X-Shippouten-*/X-Cloisonnestore-*/X-Japcloisonne-*/X-Cloisonneart-* 等 — 瑯機の通知記録を送信側が自称する兆候です".to_string());
     }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
