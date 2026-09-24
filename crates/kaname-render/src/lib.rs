@@ -12644,6 +12644,237 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D653: フェンス・デッキ・塀工事機印の自称を検出する。
+///
+/// `X-SuperiorFence-*`/`X-SuperiorFenceRail-*`/`X-FenceTrac-*`/`X-FenceTracFence-*`/
+/// `X-FencePros-*`/`X-FenceCompany-*`/`X-FenceBuilders-*`/`X-FenceInstallers-*`/
+/// `X-FenceWorks-*`/`X-LongFence-*`/`X-FenceSupply-*`/`X-FenceDoctors-*`/
+/// `X-FenceTech-*`/`X-FenceMasters-*`/`X-FenceSolutions-*`/`X-DeckBuilders-*`/
+/// `X-DeckPros-*`/`X-DeckWorks-*`/`X-DeckMasters-*`/`X-Deckorators-*`/`X-TimberTech-*`/
+/// `X-DeckDoctors-*`/`X-PatioBuilders-*`/`X-RailingPros-*`/`X-PergolaPros-*`、
+/// JP は `X-FensuKouji-*`/`X-FensuYasan-*`/`X-FenceYasan-*`/`X-HeiKouji-*`/
+/// `X-WoodDeck-*`/`X-WoodDeckKouji-*`/`X-DeckKouji-*`/`X-Fenchikouji-*`/`X-Mekakushi-*`/
+/// `X-MekakushiFensu-*`/`X-ShikiriKouji-*`/`X-KakouKouji-*`/`X-NukigakiKouji-*`/
+/// `X-BeiKouji-*`/`X-FensuRepair-*`/`X-FensuSeibi-*`/`X-FenceKoujiya-*`/
+/// `X-KirituKouji-*`/`X-SakuKouji-*`/`X-RailingKouji-*`/`X-TeiranKouji-*`/
+/// `X-DaiToDai-*`/`X-FensuPro-*`/`X-SoukakuKouji-*`/`X-SageKouji-*`/
+/// `X-OtogakiKouji-*`/`X-FensuRepairJP-*` 等のフェンス・デッキ・塀工事機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// フェンス見積・ウッドデッキ設置・塀修繕・目隠しフェンスの偽装は
+/// 外構工事業者なりすましの典型手口。塀印の自署は兆候として数える。
+/// (外構全般は landscape 機、建材は housing 機、門扉は locksmith 機で検出済み)
+fn has_fence_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-superiorfence-")
+            || l.starts_with("x-superiorfencerail-")
+            || l.starts_with("x-fencetrac-")
+            || l.starts_with("x-fencetracfence-")
+            || l.starts_with("x-fencepros-")
+            || l.starts_with("x-fencecompany-")
+            || l.starts_with("x-fencebuilders-")
+            || l.starts_with("x-fenceinstallers-")
+            || l.starts_with("x-fenceworks-")
+            || l.starts_with("x-longfence-")
+            || l.starts_with("x-fencesupply-")
+            || l.starts_with("x-fencedoctors-")
+            || l.starts_with("x-fencetech-")
+            || l.starts_with("x-fencemasters-")
+            || l.starts_with("x-fencesolutions-")
+            || l.starts_with("x-deckbuilders-")
+            || l.starts_with("x-deckpros-")
+            || l.starts_with("x-deckworks-")
+            || l.starts_with("x-deckmasters-")
+            || l.starts_with("x-deckorators-")
+            || l.starts_with("x-timbertech-")
+            || l.starts_with("x-deckdoctors-")
+            || l.starts_with("x-patiobuilders-")
+            || l.starts_with("x-railingpros-")
+            || l.starts_with("x-pergolapros-")
+            || l.starts_with("x-fensukouji-")
+            || l.starts_with("x-fensuyasan-")
+            || l.starts_with("x-fenceyasan-")
+            || l.starts_with("x-heikouji-")
+            || l.starts_with("x-wooddeck-")
+            || l.starts_with("x-wooddeckkouji-")
+            || l.starts_with("x-deckkouji-")
+            || l.starts_with("x-fenchikouji-")
+            || l.starts_with("x-mekakushi-")
+            || l.starts_with("x-mekakushifensu-")
+            || l.starts_with("x-shikirikouji-")
+            || l.starts_with("x-kakoukouji-")
+            || l.starts_with("x-nukigakikouji-")
+            || l.starts_with("x-beikouji-")
+            || l.starts_with("x-fensurepair-")
+            || l.starts_with("x-fensuseibi-")
+            || l.starts_with("x-fencekoujiya-")
+            || l.starts_with("x-kiritukouji-")
+            || l.starts_with("x-sakukouji-")
+            || l.starts_with("x-railingkouji-")
+            || l.starts_with("x-teirankouji-")
+            || l.starts_with("x-daitodai-")
+            || l.starts_with("x-fensupro-")
+            || l.starts_with("x-soukakukouji-")
+            || l.starts_with("x-sagekouji-")
+            || l.starts_with("x-otogakikouji-")
+            || l.starts_with("x-fensurepairjp-")
+    })
+}
+
+/// D654: 高圧洗浄機印の自称を検出する。
+///
+/// `X-RollingSuds-*`/`X-MenInKilts-*`/`X-WickedPressure-*`/`X-PressureWash-*`/
+/// `X-PressureWashing-*`/`X-PressureWashPros-*`/`X-PowerWash-*`/`X-PowerWashPros-*`/
+/// `X-PowerWashing-*`/`X-SoftWash-*`/`X-SoftWashPros-*`/`X-WashCo-*`/`X-WashPro-*`/
+/// `X-ClearChoice-*`/`X-CrystalWash-*`/`X-ShineWash-*`/`X-BlastWash-*`/`X-Hotsy-*`/
+/// `X-WaterBlast-*`/`X-StreamWash-*`/`X-ExteriorWash-*`/`X-SidewalkWash-*`/
+/// `X-DrivewayWash-*`/`X-RoofWash-*`/`X-DeckWash-*`、JP は `X-KouatsuSenjou-*`/
+/// `X-KouatsuSenjouGyosha-*`/`X-KouatsuSenjouYasan-*`/`X-GaiheiSenjou-*`/
+/// `X-YaneSenjou-*`/`X-WashiSenjou-*`/`X-SenjouYasan-*`/`X-SenjouKouji-*`/
+/// `X-DeiSenjou-*`/`X-ExteriorSenjou-*`/`X-SeawallSenjou-*`/`X-WashTer-*`/
+/// `X-KouatsuClean-*`/`X-SenjouPro-*`/`X-KireiSenjou-*`/`X-PowerWashJP-*`/
+/// `X-GekisenYasan-*`/`X-OgataSenjou-*`/`X-KabuShimano-*`/`X-KireiMigaki-*`/
+/// `X-KirameiSenjou-*`/`X-MigakiYasan-*`/`X-SennetsuSenjou-*` 等の高圧洗浄機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 外壁洗浄・屋根洗浄・駐車場洗浄・デッキ洗浄・苔落としの偽装は
+/// 高圧洗浄業者なりすましの典型手口。圧印の自署は兆候として数える。
+/// (清掃全般は cleaning 機、外壁塗装は painting 機、屋根修理は roofing 機で検出済み)
+fn has_pressurewash_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-rollingsuds-")
+            || l.starts_with("x-meninkilts-")
+            || l.starts_with("x-wickedpressure-")
+            || l.starts_with("x-pressurewash-")
+            || l.starts_with("x-pressurewashing-")
+            || l.starts_with("x-pressurewashpros-")
+            || l.starts_with("x-powerwash-")
+            || l.starts_with("x-powerwashpros-")
+            || l.starts_with("x-powerwashing-")
+            || l.starts_with("x-softwash-")
+            || l.starts_with("x-softwashpros-")
+            || l.starts_with("x-washco-")
+            || l.starts_with("x-washpro-")
+            || l.starts_with("x-clearchoicewash-")
+            || l.starts_with("x-crystalwash-")
+            || l.starts_with("x-shinewash-")
+            || l.starts_with("x-blastwash-")
+            || l.starts_with("x-hotsy-")
+            || l.starts_with("x-waterblast-")
+            || l.starts_with("x-streamwash-")
+            || l.starts_with("x-exteriorwash-")
+            || l.starts_with("x-sidewalkwash-")
+            || l.starts_with("x-drivewaywash-")
+            || l.starts_with("x-roofwash-")
+            || l.starts_with("x-deckwash-")
+            || l.starts_with("x-kouatsusenjou-")
+            || l.starts_with("x-kouatsusenjougyosha-")
+            || l.starts_with("x-kouatsusenjouyasan-")
+            || l.starts_with("x-gaiheisenjou-")
+            || l.starts_with("x-yanesenjou-")
+            || l.starts_with("x-washisenjou-")
+            || l.starts_with("x-senjouyasan-")
+            || l.starts_with("x-senjoukouji-")
+            || l.starts_with("x-deisenjou-")
+            || l.starts_with("x-exteriorsenjou-")
+            || l.starts_with("x-seawallsenjou-")
+            || l.starts_with("x-washter-")
+            || l.starts_with("x-kouatsuclean-")
+            || l.starts_with("x-senjoupro-")
+            || l.starts_with("x-kireisenjou-")
+            || l.starts_with("x-powerwashjp-")
+            || l.starts_with("x-gekisenyasan-")
+            || l.starts_with("x-ogatasenjou-")
+            || l.starts_with("x-kabushimano-")
+            || l.starts_with("x-kireimigaki-")
+            || l.starts_with("x-kirameisenjou-")
+            || l.starts_with("x-migakiyasan-")
+            || l.starts_with("x-sennetsusenjou-")
+    })
+}
+
+/// D655: LPガス・プロパン機印の自称を検出する。
+///
+/// `X-AmeriGas-*`/`X-Ferrellgas-*`/`X-SuburbanPropane-*`/`X-ThompsonGas-*`/
+/// `X-ParacoGas-*`/`X-Paraco-*`/`X-BlossmanGas-*`/`X-DCCPropane-*`/`X-DomasGas-*`/
+/// `X-PropanePros-*`/`X-PropaneService-*`/`X-PropaneDelivery-*`/`X-PropaneExperts-*`/
+/// `X-PropaneCentral-*`/`X-ValleyPropane-*`/`X-CoastalPropane-*`/`X-NorthStarPropane-*`/
+/// `X-TrianglePropane-*`/`X-PinnaclePropane-*`/`X-Pinnacle-*`、JP は `X-LPGas-*`/
+/// `X-ElPeeGas-*`/`X-Nichigas-*`/`X-Iwatani-*`/`X-PropaneYa-*`/`X-PropanYa-*`/
+/// `X-GasMeter-*`/`X-GasAnzen-*`/`X-GasKenshin-*`/`X-GasAnzenYasan-*`/`X-GassuSeihi-*`/
+/// `X-SaihakuGas-*`/`X-GasYa-*`/`X-GasProsJP-*`/`X-LPPropane-*`/`X-TosaiGas-*`/
+/// `X-TobuGas-*`/`X-ShowaGas-*`/`X-ShinGas-*`/`X-GasSeihi-*`/`X-PropaneCo-*`/
+/// `X-HokuzanGas-*`/`X-MaruGas-*`/`X-KazuyoGas-*`/`X-MichiGas-*`/`X-PropaneTank-*`/
+/// `X-GasSupply-*`/`X-PropaneFill-*` 等のLPガス・プロパン機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// LPガス検針・安全点検・配達・切替勧誘・ガス漏れ連絡の偽装は
+/// ガス業者なりすましの典型手口 (検針員便乗商法で有名)。燃印の自署は兆候として数える。
+/// (都市ガス・電気は utility 機、警備は facility 機、NGL 連盟団体は excluded)
+fn has_propane_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-amerigas-")
+            || l.starts_with("x-ferrellgas-")
+            || l.starts_with("x-suburbanpropane-")
+            || l.starts_with("x-thompsongas-")
+            || l.starts_with("x-paracogas-")
+            || l.starts_with("x-paraco-")
+            || l.starts_with("x-blossmangas-")
+            || l.starts_with("x-dccpropane-")
+            || l.starts_with("x-domasgas-")
+            || l.starts_with("x-propanepros-")
+            || l.starts_with("x-propaneservice-")
+            || l.starts_with("x-propanedelivery-")
+            || l.starts_with("x-propaneexperts-")
+            || l.starts_with("x-propanecentral-")
+            || l.starts_with("x-valleypropane-")
+            || l.starts_with("x-coastalpropane-")
+            || l.starts_with("x-northstarpropane-")
+            || l.starts_with("x-trianglepropane-")
+            || l.starts_with("x-pinnaclepropane-")
+            || l.starts_with("x-lpgas-")
+            || l.starts_with("x-elpeegas-")
+            || l.starts_with("x-nichigas-")
+            || l.starts_with("x-iwatani-")
+            || l.starts_with("x-propaneya-")
+            || l.starts_with("x-propanya-")
+            || l.starts_with("x-gasmeter-")
+            || l.starts_with("x-gasanzen-")
+            || l.starts_with("x-gaskenshin-")
+            || l.starts_with("x-gasanzenvasan-")
+            || l.starts_with("x-gassuseihi-")
+            || l.starts_with("x-saihakugas-")
+            || l.starts_with("x-gasya-")
+            || l.starts_with("x-gasprosjp-")
+            || l.starts_with("x-lppropane-")
+            || l.starts_with("x-tosaigas-")
+            || l.starts_with("x-tobugas-")
+            || l.starts_with("x-showagas-")
+            || l.starts_with("x-shingas-")
+            || l.starts_with("x-gasseihi-")
+            || l.starts_with("x-propaneco-")
+            || l.starts_with("x-hokuzangas-")
+            || l.starts_with("x-marugas-")
+            || l.starts_with("x-kazuyogas-")
+            || l.starts_with("x-michigas-")
+            || l.starts_with("x-propanetank-")
+            || l.starts_with("x-gassupply-")
+            || l.starts_with("x-propanefill-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20872,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は塀機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-SuperiorFence-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FenceTrac-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FensuKouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WoodDeckKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DeckBuilders-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HeiKouji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FencePros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MekakushiFensu-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_fence_marks(raw));
+        }
+        assert!(!has_fence_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は圧機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-RollingSuds-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PressureWash-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KouatsuSenjou-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GaiheiSenjou-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PowerWashPros-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SenjouYasan-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SoftWash-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Hotsy-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_pressurewash_marks(raw));
+        }
+        assert!(!has_pressurewash_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は燃機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-AmeriGas-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Ferrellgas-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LPGas-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Nichigas-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SuburbanPropane-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GasAnzen-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Iwatani-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PropaneYa-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_propane_marks(raw));
+        }
+        assert!(!has_propane_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
