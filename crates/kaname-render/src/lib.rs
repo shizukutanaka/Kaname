@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub bailbonds_marks: bool,
+    pub processserver_marks: bool,
+    pub courtreporter_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        bailbonds_marks: has_bailbonds_marks(hdr),
+        processserver_marks: has_processserver_marks(hdr),
+        courtreporter_marks: has_courtreporter_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,183 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_bailbonds_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-bailbonds-")
+            || l.starts_with("x-bailbond-")
+            || l.starts_with("x-bailpros-")
+            || l.starts_with("x-bailservice-")
+            || l.starts_with("x-bailteam-")
+            || l.starts_with("x-bailworks-")
+            || l.starts_with("x-bailexperts-")
+            || l.starts_with("x-baildoctors-")
+            || l.starts_with("x-bailmasters-")
+            || l.starts_with("x-bailforce-")
+            || l.starts_with("x-bailnation-")
+            || l.starts_with("x-aaffordablebail-")
+            || l.starts_with("x-aladdinbail-")
+            || l.starts_with("x-allcitybail-")
+            || l.starts_with("x-acebonds-")
+            || l.starts_with("x-bailnetwork-")
+            || l.starts_with("x-bailhotline-")
+            || l.starts_with("x-bailagent-")
+            || l.starts_with("x-bailagents-")
+            || l.starts_with("x-fastbail-")
+            || l.starts_with("x-quickbail-")
+            || l.starts_with("x-freebail-")
+            || l.starts_with("x-bailoutpros-")
+            || l.starts_with("x-bailbondsmen-")
+            || l.starts_with("x-bailsmen-")
+            || l.starts_with("x-suretybonds-")
+            || l.starts_with("x-hoshaku-")
+            || l.starts_with("x-hoshakukin-")
+            || l.starts_with("x-hoshakuyasan-")
+            || l.starts_with("x-hoshakupro-")
+            || l.starts_with("x-hoshakuteam-")
+            || l.starts_with("x-hoshakugyosha-")
+            || l.starts_with("x-hoshakuseibi-")
+            || l.starts_with("x-hoshakukensa-")
+            || l.starts_with("x-hoshakumanten-")
+            || l.starts_with("x-hoshakunomi-")
+            || l.starts_with("x-hoshakujp-")
+            || l.starts_with("x-hoshakusenmon-")
+            || l.starts_with("x-hoshakumitsumori-")
+            || l.starts_with("x-hoshakuchousa-")
+            || l.starts_with("x-hoshakuteiki-")
+            || l.starts_with("x-hoshakushuri-")
+            || l.starts_with("x-hoshakudoctors-")
+            || l.starts_with("x-hoshakusagyou-")
+            || l.starts_with("x-hoshakurescue-")
+            || l.starts_with("x-hoshakuteikyu-")
+            || l.starts_with("x-hoshakuorder-")
+            || l.starts_with("x-hoshakujuu-")
+            || l.starts_with("x-hoshakubosyuu-")
+    })
+}
+
+fn has_processserver_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-processserver-")
+            || l.starts_with("x-servedpros-")
+            || l.starts_with("x-servenow-")
+            || l.starts_with("x-servepros-")
+            || l.starts_with("x-serveservice-")
+            || l.starts_with("x-serveteam-")
+            || l.starts_with("x-serveworks-")
+            || l.starts_with("x-serveexperts-")
+            || l.starts_with("x-servedoctors-")
+            || l.starts_with("x-servemasters-")
+            || l.starts_with("x-serveforce-")
+            || l.starts_with("x-servenation-")
+            || l.starts_with("x-rapidserve-")
+            || l.starts_with("x-expressserve-")
+            || l.starts_with("x-legalserviceserve-")
+            || l.starts_with("x-processservice-")
+            || l.starts_with("x-summonsservice-")
+            || l.starts_with("x-subpoenaservice-")
+            || l.starts_with("x-processsvc-")
+            || l.starts_with("x-servingpros-")
+            || l.starts_with("x-servedocs-")
+            || l.starts_with("x-docservicepros-")
+            || l.starts_with("x-servedteam-")
+            || l.starts_with("x-servehq-")
+            || l.starts_with("x-soutatsu-")
+            || l.starts_with("x-soutatsudaikou-")
+            || l.starts_with("x-soutatsuyasan-")
+            || l.starts_with("x-soutatsupro-")
+            || l.starts_with("x-soutatsuteam-")
+            || l.starts_with("x-soutatsugyosha-")
+            || l.starts_with("x-soutatsuseibi-")
+            || l.starts_with("x-soutatsukensa-")
+            || l.starts_with("x-soutatsumanten-")
+            || l.starts_with("x-soutatsunomi-")
+            || l.starts_with("x-soutatsujp-")
+            || l.starts_with("x-soutatsusenmon-")
+            || l.starts_with("x-soutatsumitsumori-")
+            || l.starts_with("x-soutatsuchousa-")
+            || l.starts_with("x-soutatsuteiki-")
+            || l.starts_with("x-soutatsushuri-")
+            || l.starts_with("x-soutatsudoctors-")
+            || l.starts_with("x-soutatsusagyou-")
+            || l.starts_with("x-soutatsurescue-")
+            || l.starts_with("x-soutatsuteikyu-")
+            || l.starts_with("x-soutatsuorder-")
+            || l.starts_with("x-soutatsujuu-")
+            || l.starts_with("x-soutatsubosyuu-")
+            || l.starts_with("x-soukansdaikou-")
+            || l.starts_with("x-soukanseibi-")
+    })
+}
+
+fn has_courtreporter_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-courtreporter-")
+            || l.starts_with("x-courtreport-")
+            || l.starts_with("x-veritext-")
+            || l.starts_with("x-uslegalsupport-")
+            || l.starts_with("x-depositionservice-")
+            || l.starts_with("x-deposchedule-")
+            || l.starts_with("x-deposervice-")
+            || l.starts_with("x-deposepros-")
+            || l.starts_with("x-deposepro-")
+            || l.starts_with("x-reporterpros-")
+            || l.starts_with("x-reporterteam-")
+            || l.starts_with("x-reporterworks-")
+            || l.starts_with("x-reporterexperts-")
+            || l.starts_with("x-reporterdoctors-")
+            || l.starts_with("x-reportermasters-")
+            || l.starts_with("x-reporterforce-")
+            || l.starts_with("x-reporternation-")
+            || l.starts_with("x-courtscribe-")
+            || l.starts_with("x-scribeservice-")
+            || l.starts_with("x-transcriptpros-")
+            || l.starts_with("x-transcriptservice-")
+            || l.starts_with("x-legaltranscript-")
+            || l.starts_with("x-deponation-")
+            || l.starts_with("x-deposeworks-")
+            || l.starts_with("x-sokki-")
+            || l.starts_with("x-sokkisha-")
+            || l.starts_with("x-sokkiyasan-")
+            || l.starts_with("x-sokkipro-")
+            || l.starts_with("x-sokkiteam-")
+            || l.starts_with("x-sokkigyosha-")
+            || l.starts_with("x-sokkiseibi-")
+            || l.starts_with("x-sokkikensa-")
+            || l.starts_with("x-sokkimanten-")
+            || l.starts_with("x-sokkinomi-")
+            || l.starts_with("x-sokkijp-")
+            || l.starts_with("x-sokkisenmon-")
+            || l.starts_with("x-sokkimitsumori-")
+            || l.starts_with("x-sokkichousa-")
+            || l.starts_with("x-sokkiteiki-")
+            || l.starts_with("x-sokkishuri-")
+            || l.starts_with("x-sokkidoctors-")
+            || l.starts_with("x-sokkisagyou-")
+            || l.starts_with("x-sokkirescue-")
+            || l.starts_with("x-sokkiteikyu-")
+            || l.starts_with("x-sokkiorder-")
+            || l.starts_with("x-sokkijuu-")
+            || l.starts_with("x-sokkibosyuu-")
+            || l.starts_with("x-gijiroku-")
+            || l.starts_with("x-gijirokuyasan-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20824,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は釈機印を検出する() {
+        let f0 = b"From: a@b\r\nX-BailBonds-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-AladdinBail-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Hoshaku-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-BailPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-SuretyBonds-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-BailHotline-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-HoshakuPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-FastBail-Record: 1\r\n\r\nx";
+        assert!(has_bailbonds_marks(f0));
+        assert!(has_bailbonds_marks(f1));
+        assert!(has_bailbonds_marks(f2));
+        assert!(has_bailbonds_marks(f3));
+        assert!(has_bailbonds_marks(f4));
+        assert!(has_bailbonds_marks(f5));
+        assert!(has_bailbonds_marks(f6));
+        assert!(has_bailbonds_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_bailbonds_marks(clean));
+    }
+
+    #[test]
+    fn scan_は達機印を検出する() {
+        let f0 = b"From: a@b\r\nX-ProcessServer-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-ServeNow-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Soutatsu-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-ServePros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-SubpoenaService-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-ServeDocs-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SoutatsuPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-RapidServe-Record: 1\r\n\r\nx";
+        assert!(has_processserver_marks(f0));
+        assert!(has_processserver_marks(f1));
+        assert!(has_processserver_marks(f2));
+        assert!(has_processserver_marks(f3));
+        assert!(has_processserver_marks(f4));
+        assert!(has_processserver_marks(f5));
+        assert!(has_processserver_marks(f6));
+        assert!(has_processserver_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_processserver_marks(clean));
+    }
+
+    #[test]
+    fn scan_は記機印を検出する() {
+        let f0 = b"From: a@b\r\nX-CourtReporter-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Veritext-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Sokki-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-DepositionService-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-TranscriptPros-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-CourtScribe-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SokkiPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-Gijiroku-Record: 1\r\n\r\nx";
+        assert!(has_courtreporter_marks(f0));
+        assert!(has_courtreporter_marks(f1));
+        assert!(has_courtreporter_marks(f2));
+        assert!(has_courtreporter_marks(f3));
+        assert!(has_courtreporter_marks(f4));
+        assert!(has_courtreporter_marks(f5));
+        assert!(has_courtreporter_marks(f6));
+        assert!(has_courtreporter_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_courtreporter_marks(clean));
+    }
 }
