@@ -1769,6 +1769,12 @@ pub struct Envelope {
     pub babysitter_marks: bool,
     /// `X-Gengo-*`/`X-HonyakuPro-*`/`X-TuuyakuPro-*` 等の翻訳・通訳印を送信側が自称する兆候 (D628)
     pub translation_marks: bool,
+    /// `X-Sekkotsuin-*`/`X-Seitai-*`/`X-Shinkyu-*` 等の接骨院・鍼灸・整体印を送信側が自称する兆候 (D629)
+    pub bonesetter_marks: bool,
+    /// `X-Animalhospital-*`/`X-Vetnavi-*`/`X-Vetcenter-*` 等の動物病院・ペット医療印を送信側が自称する兆候 (D630)
+    pub animalhospital_marks: bool,
+    /// `X-Fuyohin-*`/`X-Ihin-*`/`X-Sodaya-*` 等の不用品回収・遺品整理・粗大ゴミ印を送信側が自称する兆候 (D631)
+    pub bulkwaste_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2275,6 +2281,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         appliancerepair_marks: has_appliancerepair_marks(hdr),
         babysitter_marks: has_babysitter_marks(hdr),
         translation_marks: has_translation_marks(hdr),
+        bonesetter_marks: has_bonesetter_marks(hdr),
+        animalhospital_marks: has_animalhospital_marks(hdr),
+        bulkwaste_marks: has_bulkwaste_marks(hdr),
     })
 }
 
@@ -13830,6 +13839,258 @@ fn has_translation_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-yokohamahonyaku-"))
 }
 
+/// `X-Sekkotsuin-*`/`X-Seitai-*`/`X-Shinkyu-*`/`X-Bonesetter-*`/`X-Chirorin-*`/`X-Karada-*`/`X-Perfectbody-*`/`X-Genin-*`/`X-Sekkotsuinnavi-*`/`X-Sekkotsuincenter-*`/`X-Sekkotsuinshop-*`/`X-Sekkotsuinpro-*`/`X-Sekkotsuindoctor-*`/`X-Sekkotsuinrescue-*`/`X-Sekkotsuin24-*`/`X-Seitaiinnavi-*`/`X-Seitaiincenter-*`/`X-Seitaiinshop-*`/`X-Seitaiinpro-*`/`X-Seitaiindoctor-*`/`X-Seitaiinrescue-*`/`X-Seitaiin24-*`/`X-Shinkyunavi-*`/`X-Shinkyucenter-*`/`X-Shinkyushop-*`/`X-Shinkyupro-*`/`X-Shinkyudoctor-*`/`X-Shinkyurescue-*`/`X-Shinkyu24-*`/`X-Hari-*`/`X-Harist-*`/`X-Kyuto-*`/`X-Moxa-*`/`X-Anma-*`/`X-Massagepro-*`/`X-Massagenavi-*`/`X-Massagecenter-*`/`X-Massageshop-*`/`X-Massagerescue-*`/`X-Massage24-*`/`X-Kaifukunavi-*`/`X-Kaifukucenter-*`/`X-Kaifukushop-*`/`X-Kaifukupro-*`/`X-Kaifukudoctor-*`/`X-Kaifukurescue-*`/`X-Kaifuku24-*`/`X-Geninnavi-*`/`X-Genincenter-*`/`X-Geninshop-*`/`X-Geninpro-*`/`X-Genindoctor-*`/`X-Geninrescue-*`/`X-Genin24-*`/`X-Chirorinnavi-*`/`X-Chirorincenter-*`/`X-Chirorinshop-*`/`X-Chirorinpro-*`/`X-Chirorindoctor-*`/`X-Chirorinrescue-*`/`X-Chirorin24-*`/`X-Karadanavi-*`/`X-Karadacenter-*`/`X-Karadashop-*`/`X-Karadapro-*`/`X-Karadadoctor-*`/`X-Karadarescue-*`/`X-Karada24-*`/`X-Ryoujinnavi-*`/`X-Ryoujincenter-*`/`X-Ryoujinshop-*`/`X-Ryoujinpro-*` 等の接骨院・鍼灸・整体印を送信側が自称する兆候を検出する
+fn has_bonesetter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sekkotsuin-")
+            || l.starts_with("x-seitai-")
+            || l.starts_with("x-shinkyu-")
+            || l.starts_with("x-bonesetter-")
+            || l.starts_with("x-chirorin-")
+            || l.starts_with("x-karada-")
+            || l.starts_with("x-perfectbody-")
+            || l.starts_with("x-genin-")
+            || l.starts_with("x-sekkotsuinnavi-")
+            || l.starts_with("x-sekkotsuincenter-")
+            || l.starts_with("x-sekkotsuinshop-")
+            || l.starts_with("x-sekkotsuinpro-")
+            || l.starts_with("x-sekkotsuindoctor-")
+            || l.starts_with("x-sekkotsuinrescue-")
+            || l.starts_with("x-sekkotsuin24-")
+            || l.starts_with("x-seitaiinnavi-")
+            || l.starts_with("x-seitaiincenter-")
+            || l.starts_with("x-seitaiinshop-")
+            || l.starts_with("x-seitaiinpro-")
+            || l.starts_with("x-seitaiindoctor-")
+            || l.starts_with("x-seitaiinrescue-")
+            || l.starts_with("x-seitaiin24-")
+            || l.starts_with("x-shinkyunavi-")
+            || l.starts_with("x-shinkyucenter-")
+            || l.starts_with("x-shinkyushop-")
+            || l.starts_with("x-shinkyupro-")
+            || l.starts_with("x-shinkyudoctor-")
+            || l.starts_with("x-shinkyurescue-")
+            || l.starts_with("x-shinkyu24-")
+            || l.starts_with("x-hari-")
+            || l.starts_with("x-harist-")
+            || l.starts_with("x-kyuto-")
+            || l.starts_with("x-moxa-")
+            || l.starts_with("x-anma-")
+            || l.starts_with("x-massagepro-")
+            || l.starts_with("x-massagenavi-")
+            || l.starts_with("x-massagecenter-")
+            || l.starts_with("x-massageshop-")
+            || l.starts_with("x-massagerescue-")
+            || l.starts_with("x-massage24-")
+            || l.starts_with("x-kaifukunavi-")
+            || l.starts_with("x-kaifukucenter-")
+            || l.starts_with("x-kaifukushop-")
+            || l.starts_with("x-kaifukupro-")
+            || l.starts_with("x-kaifukudoctor-")
+            || l.starts_with("x-kaifukurescue-")
+            || l.starts_with("x-kaifuku24-")
+            || l.starts_with("x-geninnavi-")
+            || l.starts_with("x-genincenter-")
+            || l.starts_with("x-geninshop-")
+            || l.starts_with("x-geninpro-")
+            || l.starts_with("x-genindoctor-")
+            || l.starts_with("x-geninrescue-")
+            || l.starts_with("x-genin24-")
+            || l.starts_with("x-chirorinnavi-")
+            || l.starts_with("x-chirorincenter-")
+            || l.starts_with("x-chirorinshop-")
+            || l.starts_with("x-chirorinpro-")
+            || l.starts_with("x-chirorindoctor-")
+            || l.starts_with("x-chirorinrescue-")
+            || l.starts_with("x-chirorin24-")
+            || l.starts_with("x-karadanavi-")
+            || l.starts_with("x-karadacenter-")
+            || l.starts_with("x-karadashop-")
+            || l.starts_with("x-karadapro-")
+            || l.starts_with("x-karadadoctor-")
+            || l.starts_with("x-karadarescue-")
+            || l.starts_with("x-karada24-")
+            || l.starts_with("x-ryoujinnavi-")
+            || l.starts_with("x-ryoujincenter-")
+            || l.starts_with("x-ryoujinshop-")
+            || l.starts_with("x-ryoujinpro-"))
+}
+
+/// `X-Animalhospital-*`/`X-Vetnavi-*`/`X-Vetcenter-*`/`X-Vetshop-*`/`X-Vetpro-*`/`X-Vetdoctor-*`/`X-Vetrescue-*`/`X-Vet24-*`/`X-Animaldoctor-*`/`X-Animalclinic-*`/`X-Animalnavi-*`/`X-Animalcenter-*`/`X-Animalshop-*`/`X-Animalrescue-*`/`X-Animal24-*`/`X-Petvet-*`/`X-Petclinic-*`/`X-Petdoctor-*`/`X-Petshospital-*`/`X-Petmedical-*`/`X-Jui-*`/`X-Dobutsu-*`/`X-Byouin-*`/`X-Ahb-*`/`X-Juinavi-*`/`X-Juicenter-*`/`X-Juishop-*`/`X-Juipro-*`/`X-Juidoctor-*`/`X-Juirescue-*`/`X-Jui24-*`/`X-Dobutsunavi-*`/`X-Dobutsucenter-*`/`X-Dobutsushop-*`/`X-Dobutsupro-*`/`X-Dobutsudoctor-*`/`X-Dobutsurescue-*`/`X-Dobutsu24-*`/`X-Petmedicalnavi-*`/`X-Petmedicalcenter-*`/`X-Petmedicalshop-*`/`X-Petmedicalpro-*`/`X-Petmedicaldoctor-*`/`X-Petmedicalrescue-*`/`X-Petmedical24-*`/`X-Ahbnavi-*`/`X-Ahbcenter-*`/`X-Ahbshop-*`/`X-Ahbpro-*`/`X-Ahbdoctor-*`/`X-Ahbrescue-*`/`X-Ahb24-*`/`X-Wanwannavi-*`/`X-Wanwancenter-*`/`X-Wanwanshop-*`/`X-Wanwanpro-*`/`X-Nyannyannavi-*`/`X-Nyannyancenter-*`/`X-Nyannyanshop-*`/`X-Nyannyanpro-*`/`X-Petcarenavi-*`/`X-Petcarecenter-*`/`X-Petcareshop-*`/`X-Petcarepro-*`/`X-Petcaredoctor-*`/`X-Petcarerescue-*`/`X-Petcare24-*`/`X-Vetcarenavi-*`/`X-Vetcarecenter-*`/`X-Vetcareshop-*`/`X-Vetcarepro-*` 等の動物病院・ペット医療印を送信側が自称する兆候を検出する
+fn has_animalhospital_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-animalhospital-")
+            || l.starts_with("x-vetnavi-")
+            || l.starts_with("x-vetcenter-")
+            || l.starts_with("x-vetshop-")
+            || l.starts_with("x-vetpro-")
+            || l.starts_with("x-vetdoctor-")
+            || l.starts_with("x-vetrescue-")
+            || l.starts_with("x-vet24-")
+            || l.starts_with("x-animaldoctor-")
+            || l.starts_with("x-animalclinic-")
+            || l.starts_with("x-animalnavi-")
+            || l.starts_with("x-animalcenter-")
+            || l.starts_with("x-animalshop-")
+            || l.starts_with("x-animalrescue-")
+            || l.starts_with("x-animal24-")
+            || l.starts_with("x-petvet-")
+            || l.starts_with("x-petclinic-")
+            || l.starts_with("x-petdoctor-")
+            || l.starts_with("x-petshospital-")
+            || l.starts_with("x-petmedical-")
+            || l.starts_with("x-jui-")
+            || l.starts_with("x-dobutsu-")
+            || l.starts_with("x-byouin-")
+            || l.starts_with("x-ahb-")
+            || l.starts_with("x-juinavi-")
+            || l.starts_with("x-juicenter-")
+            || l.starts_with("x-juishop-")
+            || l.starts_with("x-juipro-")
+            || l.starts_with("x-juidoctor-")
+            || l.starts_with("x-juirescue-")
+            || l.starts_with("x-jui24-")
+            || l.starts_with("x-dobutsunavi-")
+            || l.starts_with("x-dobutsucenter-")
+            || l.starts_with("x-dobutsushop-")
+            || l.starts_with("x-dobutsupro-")
+            || l.starts_with("x-dobutsudoctor-")
+            || l.starts_with("x-dobutsurescue-")
+            || l.starts_with("x-dobutsu24-")
+            || l.starts_with("x-petmedicalnavi-")
+            || l.starts_with("x-petmedicalcenter-")
+            || l.starts_with("x-petmedicalshop-")
+            || l.starts_with("x-petmedicalpro-")
+            || l.starts_with("x-petmedicaldoctor-")
+            || l.starts_with("x-petmedicalrescue-")
+            || l.starts_with("x-petmedical24-")
+            || l.starts_with("x-ahbnavi-")
+            || l.starts_with("x-ahbcenter-")
+            || l.starts_with("x-ahbshop-")
+            || l.starts_with("x-ahbpro-")
+            || l.starts_with("x-ahbdoctor-")
+            || l.starts_with("x-ahbrescue-")
+            || l.starts_with("x-ahb24-")
+            || l.starts_with("x-wanwannavi-")
+            || l.starts_with("x-wanwancenter-")
+            || l.starts_with("x-wanwanshop-")
+            || l.starts_with("x-wanwanpro-")
+            || l.starts_with("x-nyannyannavi-")
+            || l.starts_with("x-nyannyancenter-")
+            || l.starts_with("x-nyannyanshop-")
+            || l.starts_with("x-nyannyanpro-")
+            || l.starts_with("x-petcarenavi-")
+            || l.starts_with("x-petcarecenter-")
+            || l.starts_with("x-petcareshop-")
+            || l.starts_with("x-petcarepro-")
+            || l.starts_with("x-petcaredoctor-")
+            || l.starts_with("x-petcarerescue-")
+            || l.starts_with("x-petcare24-")
+            || l.starts_with("x-vetcarenavi-")
+            || l.starts_with("x-vetcarecenter-")
+            || l.starts_with("x-vetcareshop-")
+            || l.starts_with("x-vetcarepro-"))
+}
+
+/// `X-Fuyohin-*`/`X-Ihin-*`/`X-Sodaya-*`/`X-Soudai-*`/`X-Kaishuun-*`/`X-Hasten-*`/`X-Wastepro-*`/`X-Junkpro-*`/`X-Gomigo-*`/`X-Fuyohinnavi-*`/`X-Fuyohincenter-*`/`X-Fuyohinshop-*`/`X-Fuyohinpro-*`/`X-Fuyohindoctor-*`/`X-Fuyohinrescue-*`/`X-Fuyohin24-*`/`X-Ihinnavi-*`/`X-Ihincenter-*`/`X-Ihinshop-*`/`X-Ihinpro-*`/`X-Ihindoctor-*`/`X-Ihinrescue-*`/`X-Ihin24-*`/`X-Soudainavi-*`/`X-Soudaicenter-*`/`X-Soudaishop-*`/`X-Soudaipro-*`/`X-Soudaidoctor-*`/`X-Soudairescue-*`/`X-Soudai24-*`/`X-Kaishuunnavi-*`/`X-Kaishuuncenter-*`/`X-Kaishuunshop-*`/`X-Kaishuunpro-*`/`X-Kaishuundoctor-*`/`X-Kaishuunrescue-*`/`X-Kaishuun24-*`/`X-Wastenavi-*`/`X-Wastecenter-*`/`X-Wasteshop-*`/`X-Wasterescue-*`/`X-Waste24-*`/`X-Junknavi-*`/`X-Junkcenter-*`/`X-Junkshop-*`/`X-Junkrescue-*`/`X-Junk24-*`/`X-Gomigonavi-*`/`X-Gomigocenter-*`/`X-Gomigoshop-*`/`X-Gomigopro-*`/`X-Gomigodoctor-*`/`X-Gomigorescue-*`/`X-Gomigo24-*`/`X-Seirinnavi-*`/`X-Seirincenter-*`/`X-Seirinshop-*`/`X-Seirinpro-*`/`X-Seirindoctor-*`/`X-Seirinrescue-*`/`X-Seirin24-*`/`X-Katadukenavi-*`/`X-Katadukecenter-*`/`X-Katadukeshop-*`/`X-Katadukepro-*`/`X-Katadukedoctor-*`/`X-Katadukerescue-*`/`X-Kataduke24-*`/`X-Hikiagerescue-*`/`X-Hikiagenavi-*`/`X-Hikiagecenter-*`/`X-Hikiageshop-*`/`X-Hikiagepro-*`/`X-Hikiage24-*`/`X-Migimawari-*`/`X-Migawari-*`/`X-Maichodo-*`/`X-Benriya-*`/`X-Benriyanavi-*`/`X-Benriyacenter-*`/`X-Benriyashop-*`/`X-Benriyapro-*` 等の不用品回収・遺品整理・粗大ゴミ印を送信側が自称する兆候を検出する
+fn has_bulkwaste_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-fuyohin-")
+            || l.starts_with("x-ihin-")
+            || l.starts_with("x-sodaya-")
+            || l.starts_with("x-soudai-")
+            || l.starts_with("x-kaishuun-")
+            || l.starts_with("x-hasten-")
+            || l.starts_with("x-wastepro-")
+            || l.starts_with("x-junkpro-")
+            || l.starts_with("x-gomigo-")
+            || l.starts_with("x-fuyohinnavi-")
+            || l.starts_with("x-fuyohincenter-")
+            || l.starts_with("x-fuyohinshop-")
+            || l.starts_with("x-fuyohinpro-")
+            || l.starts_with("x-fuyohindoctor-")
+            || l.starts_with("x-fuyohinrescue-")
+            || l.starts_with("x-fuyohin24-")
+            || l.starts_with("x-ihinnavi-")
+            || l.starts_with("x-ihincenter-")
+            || l.starts_with("x-ihinshop-")
+            || l.starts_with("x-ihinpro-")
+            || l.starts_with("x-ihindoctor-")
+            || l.starts_with("x-ihinrescue-")
+            || l.starts_with("x-ihin24-")
+            || l.starts_with("x-soudainavi-")
+            || l.starts_with("x-soudaicenter-")
+            || l.starts_with("x-soudaishop-")
+            || l.starts_with("x-soudaipro-")
+            || l.starts_with("x-soudaidoctor-")
+            || l.starts_with("x-soudairescue-")
+            || l.starts_with("x-soudai24-")
+            || l.starts_with("x-kaishuunnavi-")
+            || l.starts_with("x-kaishuuncenter-")
+            || l.starts_with("x-kaishuunshop-")
+            || l.starts_with("x-kaishuunpro-")
+            || l.starts_with("x-kaishuundoctor-")
+            || l.starts_with("x-kaishuunrescue-")
+            || l.starts_with("x-kaishuun24-")
+            || l.starts_with("x-wastenavi-")
+            || l.starts_with("x-wastecenter-")
+            || l.starts_with("x-wasteshop-")
+            || l.starts_with("x-wasterescue-")
+            || l.starts_with("x-waste24-")
+            || l.starts_with("x-junknavi-")
+            || l.starts_with("x-junkcenter-")
+            || l.starts_with("x-junkshop-")
+            || l.starts_with("x-junkrescue-")
+            || l.starts_with("x-junk24-")
+            || l.starts_with("x-gomigonavi-")
+            || l.starts_with("x-gomigocenter-")
+            || l.starts_with("x-gomigoshop-")
+            || l.starts_with("x-gomigopro-")
+            || l.starts_with("x-gomigodoctor-")
+            || l.starts_with("x-gomigorescue-")
+            || l.starts_with("x-gomigo24-")
+            || l.starts_with("x-seirinnavi-")
+            || l.starts_with("x-seirincenter-")
+            || l.starts_with("x-seirinshop-")
+            || l.starts_with("x-seirinpro-")
+            || l.starts_with("x-seirindoctor-")
+            || l.starts_with("x-seirinrescue-")
+            || l.starts_with("x-seirin24-")
+            || l.starts_with("x-katadukenavi-")
+            || l.starts_with("x-katadukecenter-")
+            || l.starts_with("x-katadukeshop-")
+            || l.starts_with("x-katadukepro-")
+            || l.starts_with("x-katadukedoctor-")
+            || l.starts_with("x-katadukerescue-")
+            || l.starts_with("x-kataduke24-")
+            || l.starts_with("x-hikiagerescue-")
+            || l.starts_with("x-hikiagenavi-")
+            || l.starts_with("x-hikiagecenter-")
+            || l.starts_with("x-hikiageshop-")
+            || l.starts_with("x-hikiagepro-")
+            || l.starts_with("x-hikiage24-")
+            || l.starts_with("x-migimawari-")
+            || l.starts_with("x-migawari-")
+            || l.starts_with("x-maichodo-")
+            || l.starts_with("x-benriya-")
+            || l.starts_with("x-benriyanavi-")
+            || l.starts_with("x-benriyacenter-")
+            || l.starts_with("x-benriyashop-")
+            || l.starts_with("x-benriyapro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -22467,5 +22728,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_translation_marks(clean));
+    }
+    #[test]
+    fn scan_は整機印を検出する() {
+        for raw in [
+            br"X-Sekkotsuin-Alert: 1",
+            br"X-Seitai-Notice: 1",
+            br"X-Shinkyu-Info: 1",
+            br"X-Bonesetter-Report: 1",
+            br"X-Chirorin-Bulletin: 1",
+            br"X-Hari-News: 1",
+            br"X-KaradaNavi-Flash: 1",
+            br"X-Moxa-Release: 1",
+        ] {
+            assert!(has_bonesetter_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_bonesetter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は獣機印を検出する() {
+        for raw in [
+            br"X-AnimalHospital-Alert: 1",
+            br"X-VetNavi-Notice: 1",
+            br"X-PetVet-Info: 1",
+            br"X-JuiNavi-Report: 1",
+            br"X-DobutsuNavi-Bulletin: 1",
+            br"X-AhbNavi-News: 1",
+            br"X-WanwanNavi-Flash: 1",
+            br"X-PetCareNavi-Release: 1",
+        ] {
+            assert!(has_animalhospital_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_animalhospital_marks(clean));
+    }
+
+    #[test]
+    fn scan_は廃機印を検出する() {
+        for raw in [
+            br"X-Fuyohin-Alert: 1",
+            br"X-IhinNavi-Notice: 1",
+            br"X-SoudaiNavi-Info: 1",
+            br"X-KaishuunNavi-Report: 1",
+            br"X-WasteNavi-Bulletin: 1",
+            br"X-JunkNavi-News: 1",
+            br"X-GomigoNavi-Flash: 1",
+            br"X-BenriyaNavi-Release: 1",
+        ] {
+            assert!(has_bulkwaste_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_bulkwaste_marks(clean));
     }
 }
