@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D803: `X-Yuigon-*`/`X-Yuigonsho-*`/`X-Isho-*`/`X-Willwriting-*`/`X-Testament-*`/`X-Lastwill-*` 等の遺言書作成代行印自称が未検査
+
+- **問題**: `X-Yuigon-*`/`X-YuigonYasan-*`/`X-YuigonPro-*`/`X-YuigonTeam-*`/`X-YuigonJP-*`/`X-YuigonSenmon-*`/`X-Yuigonsho-*`/`X-YuigonshoYasan-*`/`X-YuigonshoPro-*`/`X-YuigonshoTeam-*`/`X-YuigonshoJP-*`/`X-YuigonshoSenmon-*`/`X-Isho-*`/`X-IshoYasan-*`/`X-IshoPro-*`/`X-IshoTeam-*`/`X-IshoJP-*`/`X-IshoSenmon-*`/`X-WillwritingPros-*`/`X-WillwritingTeam-*`/`X-WillwritingWorks-*`/`X-WillwritingExperts-*`/`X-WillwritingSvc-*`/`X-WillwritingHQ-*`/`X-TestamentPros-*`/`X-TestamentTeam-*`/`X-TestamentWorks-*`/`X-TestamentExperts-*`/`X-TestamentSvc-*`/`X-TestamentHQ-*`/`X-LastwillPros-*`/`X-LastwillTeam-*`/`X-LastwillWorks-*`/`X-LastwillExperts-*`/`X-LastwillSvc-*`/`X-LastwillHQ-*` 等 は言機の通知記録 — 送信側が書くことは自称。遺言書作成代行業者の偽装は、自筆証書代筆費・公正証書手数料・遺言執行報酬を装ったなりすましの典型手口。(相続・終活は ihinseiri 機、成年後見は seinenkouken 機、公証は notary 機で検出済み)
+- **修正**: `Envelope` に `yuigon_marks` + `has_yuigon_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 言印の自署を問え。
+
+### Security — D804: `X-Kyousai-*`/`X-Kyousaikin-*`/`X-Shougakutanki-*`/`X-Mutualins-*`/`X-Mutualaid-*`/`X-Coopins-*` 等の共済・少額短期保険印自称が未検査
+
+- **問題**: `X-Kyousai-*`/`X-KyousaiYasan-*`/`X-KyousaiPro-*`/`X-KyousaiTeam-*`/`X-KyousaiJP-*`/`X-KyousaiSenmon-*`/`X-Kyousaikin-*`/`X-KyousaikinYasan-*`/`X-KyousaikinPro-*`/`X-KyousaikinTeam-*`/`X-KyousaikinJP-*`/`X-KyousaikinSenmon-*`/`X-Shougakutanki-*`/`X-ShougakutankiYasan-*`/`X-ShougakutankiPro-*`/`X-ShougakutankiTeam-*`/`X-ShougakutankiJP-*`/`X-ShougakutankiSenmon-*`/`X-MutualinsPros-*`/`X-MutualinsTeam-*`/`X-MutualinsWorks-*`/`X-MutualinsExperts-*`/`X-MutualinsSvc-*`/`X-MutualinsHQ-*`/`X-MutualaidPros-*`/`X-MutualaidTeam-*`/`X-MutualaidWorks-*`/`X-MutualaidExperts-*`/`X-MutualaidSvc-*`/`X-MutualaidHQ-*`/`X-CoopinsPros-*`/`X-CoopinsTeam-*`/`X-CoopinsWorks-*`/`X-CoopinsExperts-*`/`X-CoopinsSvc-*`/`X-CoopinsHQ-*` 等 は済機の通知記録 — 送信側が書くことは自称。共済・少額短期保険業者の偽装は、掛金請求・給付金支払いを装ったなりすましの典型手口。(生命保険は insurance 機、FP は fp 機で検出済み)
+- **修正**: `Envelope` に `kyousai_marks` + `has_kyousai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 済印の自署を問え。
+
+### Security — D805: `X-Chikudenchi-*`/`X-Jutakudenchi-*`/`X-Chikuden-*`/`X-Homebattery-*`/`X-Batterystorage-*`/`X-Energywall-*` 等の蓄電池・住宅用バッテリー印自称が未検査
+
+- **問題**: `X-Chikudenchi-*`/`X-ChikudenchiYasan-*`/`X-ChikudenchiPro-*`/`X-ChikudenchiTeam-*`/`X-ChikudenchiJP-*`/`X-ChikudenchiSenmon-*`/`X-Jutakudenchi-*`/`X-JutakudenchiYasan-*`/`X-JutakudenchiPro-*`/`X-JutakudenchiTeam-*`/`X-JutakudenchiJP-*`/`X-JutakudenchiSenmon-*`/`X-Chikuden-*`/`X-ChikudenYasan-*`/`X-ChikudenPro-*`/`X-ChikudenTeam-*`/`X-ChikudenJP-*`/`X-ChikudenSenmon-*`/`X-HomebatteryPros-*`/`X-HomebatteryTeam-*`/`X-HomebatteryWorks-*`/`X-HomebatteryExperts-*`/`X-HomebatterySvc-*`/`X-HomebatteryHQ-*`/`X-BatterystoragePros-*`/`X-BatterystorageTeam-*`/`X-BatterystorageWorks-*`/`X-BatterystorageExperts-*`/`X-BatterystorageSvc-*`/`X-BatterystorageHQ-*`/`X-EnergywallPros-*`/`X-EnergywallTeam-*`/`X-EnergywallWorks-*`/`X-EnergywallExperts-*`/`X-EnergywallSvc-*`/`X-EnergywallHQ-*` 等 は蓄機の通知記録 — 送信側が書くことは自称。住宅用蓄電池業者の偽装は、補助金併用設置費・容量偽装を装ったなりすましの典型手口。(太陽光は solar 機、電気工事は electrical 機、助成金は subsidy 機で検出済み)
+- **修正**: `Envelope` に `chikudenchi_marks` + `has_chikudenchi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 蓄印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
