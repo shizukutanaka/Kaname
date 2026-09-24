@@ -1823,6 +1823,12 @@ pub struct Envelope {
     pub kitchen_marks: bool,
     /// `X-Hanko-*`/`X-Hankonavi-*`/`X-Hankocenter-*` 等の印鑑・ハンコ・名札印を送信側が自称する兆候 (D655)
     pub hanko_marks: bool,
+    /// `X-Taxi-*`/`X-Taxinavi-*`/`X-Taxicenter-*` 等のバス・タクシー・ハイヤー印を送信側が自称する兆候 (D656)
+    pub bus_marks: bool,
+    /// `X-Mado-*`/`X-Madonavi-*`/`X-Madocenter-*` 等の窓・サッシ・ガラス印を送信側が自称する兆候 (D657)
+    pub window_marks: bool,
+    /// `X-Sukii-*`/`X-Sukiinavi-*`/`X-Sukiicenter-*` 等のスキー・ゲレンデ・スノボ印を送信側が自称する兆候 (D658)
+    pub ski_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2356,6 +2362,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         boiler_marks: has_boiler_marks(hdr),
         kitchen_marks: has_kitchen_marks(hdr),
         hanko_marks: has_hanko_marks(hdr),
+        bus_marks: has_bus_marks(hdr),
+        window_marks: has_window_marks(hdr),
+        ski_marks: has_ski_marks(hdr),
     })
 }
 
@@ -16088,6 +16097,264 @@ fn has_hanko_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-meisaipro-"))
 }
 
+/// `X-Taxi-*`/`X-Taxinavi-*`/`X-Taxicenter-*`/`X-Taxishop-*`/`X-Taxipro-*`/`X-Taxidoctor-*`/`X-Taxirescue-*`/`X-Taxi24-*`/`X-Haiya-*`/`X-Haiyanavi-*`/`X-Haiyacenter-*`/`X-Haiyashop-*`/`X-Haiyapro-*`/`X-Haiyadoctor-*`/`X-Haiyarescue-*`/`X-Haiya24-*`/`X-Kousokubasu-*`/`X-Kousokubasunavi-*`/`X-Kousokubasucenter-*`/`X-Kousokubasushop-*`/`X-Kousokubasupro-*`/`X-Kankoubasu-*`/`X-Kankoubasunavi-*`/`X-Kankoubasucenter-*`/`X-Kankoubasushop-*`/`X-Kankoubasupro-*`/`X-Rosenbasu-*`/`X-Rosenbasunavi-*`/`X-Rosenbasucenter-*`/`X-Rosenbasushop-*`/`X-Rosenbasupro-*`/`X-Japantaxi-*`/`X-Tohaiya-*`/`X-Tohaiyanavi-*`/`X-Tohaiyacenter-*`/`X-Tohaiyashop-*`/`X-Tohaiyapro-*`/`X-Meitetsutaxi-*`/`X-Nihonkotsu-*`/`X-Checkercab-*`/`X-Iketaxi-*`/`X-Daiichikoutsuu-*`/`X-Koubanbus-*`/`X-Koubannavi-*`/`X-Koubancenter-*`/`X-Koubanshop-*`/`X-Koubanpro-*`/`X-Taximart-*`/`X-Taxiplus-*`/`X-Taxismart-*`/`X-Taxifamily-*`/`X-Haiyamart-*`/`X-Haiyaplus-*`/`X-Haiyasmart-*`/`X-Haiyafamily-*`/`X-Noritunavi-*`/`X-Noritcenter-*`/`X-Noritshop-*`/`X-Noritpro-*`/`X-Notime-*`/`X-Hayarinavi-*`/`X-Hayaricenter-*`/`X-Hayarishop-*`/`X-Hayaripro-*`/`X-Yosoukinavi-*`/`X-Yosoukicenter-*`/`X-Yosoukishop-*`/`X-Yosoukipro-*`/`X-Yosoukidoctor-*`/`X-Yosoukirescue-*`/`X-Yosouki24-*` 等のバス・タクシー・ハイヤー印を送信側が自称する兆候を検出する
+fn has_bus_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-taxi-")
+            || l.starts_with("x-taxinavi-")
+            || l.starts_with("x-taxicenter-")
+            || l.starts_with("x-taxishop-")
+            || l.starts_with("x-taxipro-")
+            || l.starts_with("x-taxidoctor-")
+            || l.starts_with("x-taxirescue-")
+            || l.starts_with("x-taxi24-")
+            || l.starts_with("x-haiya-")
+            || l.starts_with("x-haiyanavi-")
+            || l.starts_with("x-haiyacenter-")
+            || l.starts_with("x-haiyashop-")
+            || l.starts_with("x-haiyapro-")
+            || l.starts_with("x-haiyadoctor-")
+            || l.starts_with("x-haiyarescue-")
+            || l.starts_with("x-haiya24-")
+            || l.starts_with("x-kousokubasu-")
+            || l.starts_with("x-kousokubasunavi-")
+            || l.starts_with("x-kousokubasucenter-")
+            || l.starts_with("x-kousokubasushop-")
+            || l.starts_with("x-kousokubasupro-")
+            || l.starts_with("x-kankoubasu-")
+            || l.starts_with("x-kankoubasunavi-")
+            || l.starts_with("x-kankoubasucenter-")
+            || l.starts_with("x-kankoubasushop-")
+            || l.starts_with("x-kankoubasupro-")
+            || l.starts_with("x-rosenbasu-")
+            || l.starts_with("x-rosenbasunavi-")
+            || l.starts_with("x-rosenbasucenter-")
+            || l.starts_with("x-rosenbasushop-")
+            || l.starts_with("x-rosenbasupro-")
+            || l.starts_with("x-japantaxi-")
+            || l.starts_with("x-tohaiya-")
+            || l.starts_with("x-tohaiyanavi-")
+            || l.starts_with("x-tohaiyacenter-")
+            || l.starts_with("x-tohaiyashop-")
+            || l.starts_with("x-tohaiyapro-")
+            || l.starts_with("x-meitetsutaxi-")
+            || l.starts_with("x-nihonkotsu-")
+            || l.starts_with("x-checkercab-")
+            || l.starts_with("x-iketaxi-")
+            || l.starts_with("x-daiichikoutsuu-")
+            || l.starts_with("x-koubanbus-")
+            || l.starts_with("x-koubannavi-")
+            || l.starts_with("x-koubancenter-")
+            || l.starts_with("x-koubanshop-")
+            || l.starts_with("x-koubanpro-")
+            || l.starts_with("x-taximart-")
+            || l.starts_with("x-taxiplus-")
+            || l.starts_with("x-taxismart-")
+            || l.starts_with("x-taxifamily-")
+            || l.starts_with("x-haiyamart-")
+            || l.starts_with("x-haiyaplus-")
+            || l.starts_with("x-haiyasmart-")
+            || l.starts_with("x-haiyafamily-")
+            || l.starts_with("x-noritunavi-")
+            || l.starts_with("x-noritcenter-")
+            || l.starts_with("x-noritshop-")
+            || l.starts_with("x-noritpro-")
+            || l.starts_with("x-notime-")
+            || l.starts_with("x-hayarinavi-")
+            || l.starts_with("x-hayaricenter-")
+            || l.starts_with("x-hayarishop-")
+            || l.starts_with("x-hayaripro-")
+            || l.starts_with("x-yosoukinavi-")
+            || l.starts_with("x-yosoukicenter-")
+            || l.starts_with("x-yosoukishop-")
+            || l.starts_with("x-yosoukipro-")
+            || l.starts_with("x-yosoukidoctor-")
+            || l.starts_with("x-yosoukirescue-")
+            || l.starts_with("x-yosouki24-"))
+}
+
+/// `X-Mado-*`/`X-Madonavi-*`/`X-Madocenter-*`/`X-Madoshop-*`/`X-Madopro-*`/`X-Madodoctor-*`/`X-Madorescue-*`/`X-Mado24-*`/`X-Sashim-*`/`X-Sashinavi-*`/`X-Sashicenter-*`/`X-Sashishop-*`/`X-Sashipro-*`/`X-Sashidoctor-*`/`X-Sashirescue-*`/`X-Sashi24-*`/`X-Glassnavi-*`/`X-Glasscenter-*`/`X-Glassshop-*`/`X-Glasspro-*`/`X-Glassdoctor-*`/`X-Glassrescue-*`/`X-Glass24-*`/`X-Doornavi-*`/`X-Doorcenter-*`/`X-Doorshop-*`/`X-Doorpro-*`/`X-Doordoctor-*`/`X-Doorrescue-*`/`X-Door24-*`/`X-Amido-*`/`X-Amidonavi-*`/`X-Amidocenter-*`/`X-Amidoshop-*`/`X-Amidopro-*`/`X-Amidodoctor-*`/`X-Amidorescue-*`/`X-Amido24-*`/`X-Garasu-*`/`X-Garasunavi-*`/`X-Garasucenter-*`/`X-Garasushop-*`/`X-Garasupro-*`/`X-Garasudoctor-*`/`X-Garasurescue-*`/`X-Garasu24-*`/`X-Itado-*`/`X-Itadonavi-*`/`X-Itadocenter-*`/`X-Itadoshop-*`/`X-Itadopro-*`/`X-Madomart-*`/`X-Madoplus-*`/`X-Madosmart-*`/`X-Madofamily-*`/`X-Sashimart-*`/`X-Sashiplus-*`/`X-Sashismart-*`/`X-Sashifamily-*`/`X-Shamen-*`/`X-Shamennavi-*`/`X-Shamencenter-*`/`X-Shamenshop-*`/`X-Shamenpro-*`/`X-Shamendoctor-*`/`X-Shamenrescue-*`/`X-Shamen24-*`/`X-Toorinavi-*`/`X-Tooricenter-*`/`X-Toorishop-*`/`X-Tooripro-*`/`X-Tooridoctor-*`/`X-Toorirescue-*`/`X-Toori24-*`/`X-Kaikonavikaiko-*`/`X-Kaikonavi-*`/`X-Kaikocenter-*`/`X-Kaikoshop-*`/`X-Kaikopro-*` 等の窓・サッシ・ガラス印を送信側が自称する兆候を検出する
+fn has_window_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-mado-")
+            || l.starts_with("x-madonavi-")
+            || l.starts_with("x-madocenter-")
+            || l.starts_with("x-madoshop-")
+            || l.starts_with("x-madopro-")
+            || l.starts_with("x-madodoctor-")
+            || l.starts_with("x-madorescue-")
+            || l.starts_with("x-mado24-")
+            || l.starts_with("x-sashim-")
+            || l.starts_with("x-sashinavi-")
+            || l.starts_with("x-sashicenter-")
+            || l.starts_with("x-sashishop-")
+            || l.starts_with("x-sashipro-")
+            || l.starts_with("x-sashidoctor-")
+            || l.starts_with("x-sashirescue-")
+            || l.starts_with("x-sashi24-")
+            || l.starts_with("x-glassnavi-")
+            || l.starts_with("x-glasscenter-")
+            || l.starts_with("x-glassshop-")
+            || l.starts_with("x-glasspro-")
+            || l.starts_with("x-glassdoctor-")
+            || l.starts_with("x-glassrescue-")
+            || l.starts_with("x-glass24-")
+            || l.starts_with("x-doornavi-")
+            || l.starts_with("x-doorcenter-")
+            || l.starts_with("x-doorshop-")
+            || l.starts_with("x-doorpro-")
+            || l.starts_with("x-doordoctor-")
+            || l.starts_with("x-doorrescue-")
+            || l.starts_with("x-door24-")
+            || l.starts_with("x-amido-")
+            || l.starts_with("x-amidonavi-")
+            || l.starts_with("x-amidocenter-")
+            || l.starts_with("x-amidoshop-")
+            || l.starts_with("x-amidopro-")
+            || l.starts_with("x-amidodoctor-")
+            || l.starts_with("x-amidorescue-")
+            || l.starts_with("x-amido24-")
+            || l.starts_with("x-garasu-")
+            || l.starts_with("x-garasunavi-")
+            || l.starts_with("x-garasucenter-")
+            || l.starts_with("x-garasushop-")
+            || l.starts_with("x-garasupro-")
+            || l.starts_with("x-garasudoctor-")
+            || l.starts_with("x-garasurescue-")
+            || l.starts_with("x-garasu24-")
+            || l.starts_with("x-itado-")
+            || l.starts_with("x-itadonavi-")
+            || l.starts_with("x-itadocenter-")
+            || l.starts_with("x-itadoshop-")
+            || l.starts_with("x-itadopro-")
+            || l.starts_with("x-madomart-")
+            || l.starts_with("x-madoplus-")
+            || l.starts_with("x-madosmart-")
+            || l.starts_with("x-madofamily-")
+            || l.starts_with("x-sashimart-")
+            || l.starts_with("x-sashiplus-")
+            || l.starts_with("x-sashismart-")
+            || l.starts_with("x-sashifamily-")
+            || l.starts_with("x-shamen-")
+            || l.starts_with("x-shamennavi-")
+            || l.starts_with("x-shamencenter-")
+            || l.starts_with("x-shamenshop-")
+            || l.starts_with("x-shamenpro-")
+            || l.starts_with("x-shamendoctor-")
+            || l.starts_with("x-shamenrescue-")
+            || l.starts_with("x-shamen24-")
+            || l.starts_with("x-toorinavi-")
+            || l.starts_with("x-tooricenter-")
+            || l.starts_with("x-toorishop-")
+            || l.starts_with("x-tooripro-")
+            || l.starts_with("x-tooridoctor-")
+            || l.starts_with("x-toorirescue-")
+            || l.starts_with("x-toori24-")
+            || l.starts_with("x-kaikonavikaiko-")
+            || l.starts_with("x-kaikonavi-")
+            || l.starts_with("x-kaikocenter-")
+            || l.starts_with("x-kaikoshop-")
+            || l.starts_with("x-kaikopro-"))
+}
+
+/// `X-Sukii-*`/`X-Sukiinavi-*`/`X-Sukiicenter-*`/`X-Sukiishop-*`/`X-Sukiipro-*`/`X-Sukiidoctor-*`/`X-Sukiirescue-*`/`X-Sukii24-*`/`X-Gerende-*`/`X-Gerendenavi-*`/`X-Gerendecenter-*`/`X-Gerendeshop-*`/`X-Gerendepro-*`/`X-Gerendedoctor-*`/`X-Gerenderescue-*`/`X-Gerende24-*`/`X-Sunobo-*`/`X-Sunobonavi-*`/`X-Sunobocenter-*`/`X-Sunoboshop-*`/`X-Sunobopro-*`/`X-Sunobodoctor-*`/`X-Sunoborescue-*`/`X-Sunobo24-*`/`X-Rifutonavi-*`/`X-Rifutocenter-*`/`X-Rifutoshop-*`/`X-Rifutopro-*`/`X-Rifutodoctor-*`/`X-Rifutorescue-*`/`X-Rifuto24-*`/`X-Ski-*`/`X-Skinavi-*`/`X-Skicenter-*`/`X-Skishop-*`/`X-Skipro-*`/`X-Skidoctor-*`/`X-Skirescue-*`/`X-Ski24-*`/`X-Snowboard-*`/`X-Snowmountain-*`/`X-Hakuba-*`/`X-Niseko-*`/`X-Nozawa-*`/`X-Zao-*`/`X-Naeba-*`/`X-Shiga-*`/`X-Myoko-*`/`X-Gala-*`/`X-Rusutsu-*`/`X-Furano-*`/`X-Appi-*`/`X-Happo-*`/`X-Skijo-*`/`X-Skijonavi-*`/`X-Skijocenter-*`/`X-Skijoshop-*`/`X-Skijopro-*`/`X-Skijodoctor-*`/`X-Skijorescue-*`/`X-Skijo24-*`/`X-Sukiimart-*`/`X-Sukiiplus-*`/`X-Sukiismart-*`/`X-Sukiifamily-*`/`X-Gerendemart-*`/`X-Gerendeplus-*`/`X-Gerendesmart-*`/`X-Gerendefamily-*`/`X-Yukiyamanavi-*`/`X-Yukiyamacenter-*`/`X-Yukiyamashop-*`/`X-Yukiyamapro-*`/`X-Yukiyamadoctor-*`/`X-Yukiyamarescue-*`/`X-Yukiyama24-*`/`X-Bakukantori-*`/`X-Bakukantorinavi-*`/`X-Bakukantoricenter-*`/`X-Bakukantorishop-*`/`X-Bakukantoripro-*` 等のスキー・ゲレンデ・スノボ印を送信側が自称する兆候を検出する
+fn has_ski_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sukii-")
+            || l.starts_with("x-sukiinavi-")
+            || l.starts_with("x-sukiicenter-")
+            || l.starts_with("x-sukiishop-")
+            || l.starts_with("x-sukiipro-")
+            || l.starts_with("x-sukiidoctor-")
+            || l.starts_with("x-sukiirescue-")
+            || l.starts_with("x-sukii24-")
+            || l.starts_with("x-gerende-")
+            || l.starts_with("x-gerendenavi-")
+            || l.starts_with("x-gerendecenter-")
+            || l.starts_with("x-gerendeshop-")
+            || l.starts_with("x-gerendepro-")
+            || l.starts_with("x-gerendedoctor-")
+            || l.starts_with("x-gerenderescue-")
+            || l.starts_with("x-gerende24-")
+            || l.starts_with("x-sunobo-")
+            || l.starts_with("x-sunobonavi-")
+            || l.starts_with("x-sunobocenter-")
+            || l.starts_with("x-sunoboshop-")
+            || l.starts_with("x-sunobopro-")
+            || l.starts_with("x-sunobodoctor-")
+            || l.starts_with("x-sunoborescue-")
+            || l.starts_with("x-sunobo24-")
+            || l.starts_with("x-rifutonavi-")
+            || l.starts_with("x-rifutocenter-")
+            || l.starts_with("x-rifutoshop-")
+            || l.starts_with("x-rifutopro-")
+            || l.starts_with("x-rifutodoctor-")
+            || l.starts_with("x-rifutorescue-")
+            || l.starts_with("x-rifuto24-")
+            || l.starts_with("x-ski-")
+            || l.starts_with("x-skinavi-")
+            || l.starts_with("x-skicenter-")
+            || l.starts_with("x-skishop-")
+            || l.starts_with("x-skipro-")
+            || l.starts_with("x-skidoctor-")
+            || l.starts_with("x-skirescue-")
+            || l.starts_with("x-ski24-")
+            || l.starts_with("x-snowboard-")
+            || l.starts_with("x-snowmountain-")
+            || l.starts_with("x-hakuba-")
+            || l.starts_with("x-niseko-")
+            || l.starts_with("x-nozawa-")
+            || l.starts_with("x-zao-")
+            || l.starts_with("x-naeba-")
+            || l.starts_with("x-shiga-")
+            || l.starts_with("x-myoko-")
+            || l.starts_with("x-gala-")
+            || l.starts_with("x-rusutsu-")
+            || l.starts_with("x-furano-")
+            || l.starts_with("x-appi-")
+            || l.starts_with("x-happo-")
+            || l.starts_with("x-skijo-")
+            || l.starts_with("x-skijonavi-")
+            || l.starts_with("x-skijocenter-")
+            || l.starts_with("x-skijoshop-")
+            || l.starts_with("x-skijopro-")
+            || l.starts_with("x-skijodoctor-")
+            || l.starts_with("x-skijorescue-")
+            || l.starts_with("x-skijo24-")
+            || l.starts_with("x-sukiimart-")
+            || l.starts_with("x-sukiiplus-")
+            || l.starts_with("x-sukiismart-")
+            || l.starts_with("x-sukiifamily-")
+            || l.starts_with("x-gerendemart-")
+            || l.starts_with("x-gerendeplus-")
+            || l.starts_with("x-gerendesmart-")
+            || l.starts_with("x-gerendefamily-")
+            || l.starts_with("x-yukiyamanavi-")
+            || l.starts_with("x-yukiyamacenter-")
+            || l.starts_with("x-yukiyamashop-")
+            || l.starts_with("x-yukiyamapro-")
+            || l.starts_with("x-yukiyamadoctor-")
+            || l.starts_with("x-yukiyamarescue-")
+            || l.starts_with("x-yukiyama24-")
+            || l.starts_with("x-bakukantori-")
+            || l.starts_with("x-bakukantorinavi-")
+            || l.starts_with("x-bakukantoricenter-")
+            || l.starts_with("x-bakukantorishop-")
+            || l.starts_with("x-bakukantoripro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -25202,5 +25469,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_hanko_marks(clean));
+    }
+    #[test]
+    fn scan_は乗機印を検出する() {
+        for raw in [
+            br"X-Taxi-Alert: 1",
+            br"X-TaxiNavi-Notice: 1",
+            br"X-Haiya-Info: 1",
+            br"X-HaiyaNavi-Report: 1",
+            br"X-KousokuBasu-Bulletin: 1",
+            br"X-KankouBasu-News: 1",
+            br"X-JapanTaxi-Flash: 1",
+            br"X-MeitetsuTaxi-Release: 1",
+        ] {
+            assert!(has_bus_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_bus_marks(clean));
+    }
+
+    #[test]
+    fn scan_は窓機印を検出する() {
+        for raw in [
+            br"X-Mado-Alert: 1",
+            br"X-MadoNavi-Notice: 1",
+            br"X-Sashim-Info: 1",
+            br"X-GlassNavi-Report: 1",
+            br"X-DoorNavi-Bulletin: 1",
+            br"X-Amido-News: 1",
+            br"X-Garasu-Flash: 1",
+            br"X-GarasuNavi-Release: 1",
+        ] {
+            assert!(has_window_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_window_marks(clean));
+    }
+
+    #[test]
+    fn scan_は滑機印を検出する() {
+        for raw in [
+            br"X-Sukii-Alert: 1",
+            br"X-Gerende-Notice: 1",
+            br"X-GerendeNavi-Info: 1",
+            br"X-Sunobo-Report: 1",
+            br"X-SunoboNavi-Bulletin: 1",
+            br"X-RifutoNavi-News: 1",
+            br"X-Ski-Flash: 1",
+            br"X-SkiNavi-Release: 1",
+        ] {
+            assert!(has_ski_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_ski_marks(clean));
     }
 }
