@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub vending_marks: bool,
+    pub copierlease_marks: bool,
+    pub janitorial_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        vending_marks: has_vending_marks(hdr),
+        copierlease_marks: has_copierlease_marks(hdr),
+        janitorial_marks: has_janitorial_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,180 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_vending_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-vending-")
+            || l.starts_with("x-vendingmachine-")
+            || l.starts_with("x-vendingpros-")
+            || l.starts_with("x-vendingservice-")
+            || l.starts_with("x-vendingworks-")
+            || l.starts_with("x-vendingteam-")
+            || l.starts_with("x-myvending-")
+            || l.starts_with("x-officevending-")
+            || l.starts_with("x-healthyvending-")
+            || l.starts_with("x-healthyyou-")
+            || l.starts_with("x-naturals2go-")
+            || l.starts_with("x-vendinggroup-")
+            || l.starts_with("x-selectavend-")
+            || l.starts_with("x-expressvending-")
+            || l.starts_with("x-azkoyen-")
+            || l.starts_with("x-vendingexperts-")
+            || l.starts_with("x-vendingdoctors-")
+            || l.starts_with("x-vendingmasters-")
+            || l.starts_with("x-vendingforce-")
+            || l.starts_with("x-vendingnation-")
+            || l.starts_with("x-vendpros-")
+            || l.starts_with("x-vendservice-")
+            || l.starts_with("x-vendteam-")
+            || l.starts_with("x-vendworks-")
+            || l.starts_with("x-vendexperts-")
+            || l.starts_with("x-canteenvending-")
+            || l.starts_with("x-vendingroute-")
+            || l.starts_with("x-vendinglocator-")
+            || l.starts_with("x-jihanki-")
+            || l.starts_with("x-jidouhanbaiki-")
+            || l.starts_with("x-jidouhan-")
+            || l.starts_with("x-vendya-")
+            || l.starts_with("x-vendpro-")
+            || l.starts_with("x-vendsenmon-")
+            || l.starts_with("x-vendmitsumori-")
+            || l.starts_with("x-vendchousa-")
+            || l.starts_with("x-vendteiki-")
+            || l.starts_with("x-vendshuri-")
+            || l.starts_with("x-jihankikouji-")
+            || l.starts_with("x-jihankiyasan-")
+            || l.starts_with("x-jihankipro-")
+            || l.starts_with("x-jihankiteam-")
+            || l.starts_with("x-jihankigyosha-")
+            || l.starts_with("x-jihankiseibi-")
+            || l.starts_with("x-jihankikensa-")
+            || l.starts_with("x-jihankimanten-")
+            || l.starts_with("x-jihankijp-")
+            || l.starts_with("x-jihankisenmon-")
+    })
+}
+
+fn has_copierlease_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-copierlease-")
+            || l.starts_with("x-copierservice-")
+            || l.starts_with("x-copierpros-")
+            || l.starts_with("x-copierteam-")
+            || l.starts_with("x-copierworks-")
+            || l.starts_with("x-copierexperts-")
+            || l.starts_with("x-copierdoctors-")
+            || l.starts_with("x-copiermasters-")
+            || l.starts_with("x-copierforce-")
+            || l.starts_with("x-copytech-")
+            || l.starts_with("x-copyservice-")
+            || l.starts_with("x-printfleet-")
+            || l.starts_with("x-mfpservice-")
+            || l.starts_with("x-mfpnavi-")
+            || l.starts_with("x-mfprental-")
+            || l.starts_with("x-printerlease-")
+            || l.starts_with("x-leaseprinter-")
+            || l.starts_with("x-copierrental-")
+            || l.starts_with("x-copierdoctor-")
+            || l.starts_with("x-copiernation-")
+            || l.starts_with("x-copynation-")
+            || l.starts_with("x-mpspartner-")
+            || l.starts_with("x-managedprint-")
+            || l.starts_with("x-printaudit-")
+            || l.starts_with("x-printcare-")
+            || l.starts_with("x-fukugouki-")
+            || l.starts_with("x-fukugoukiyasan-")
+            || l.starts_with("x-fukugoukipro-")
+            || l.starts_with("x-fukugoukiteam-")
+            || l.starts_with("x-fukugoukigyosha-")
+            || l.starts_with("x-fukugoukiseibi-")
+            || l.starts_with("x-fukugoukikensa-")
+            || l.starts_with("x-fukugoukimanten-")
+            || l.starts_with("x-fukugoukinomi-")
+            || l.starts_with("x-fukugoukijp-")
+            || l.starts_with("x-fukugoukisenmon-")
+            || l.starts_with("x-fukugoukimitsumori-")
+            || l.starts_with("x-fukugoukichousa-")
+            || l.starts_with("x-fukugoukiteiki-")
+            || l.starts_with("x-fukugoukishuri-")
+            || l.starts_with("x-fukugoukidoctors-")
+            || l.starts_with("x-fukugoukisagyou-")
+            || l.starts_with("x-fukugoukirescue-")
+            || l.starts_with("x-fukugoukiteikyu-")
+            || l.starts_with("x-fukugoukiorder-")
+            || l.starts_with("x-koppiki-")
+            || l.starts_with("x-koppikiyasan-")
+            || l.starts_with("x-koppikikouji-")
+    })
+}
+
+fn has_janitorial_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-janitorial-")
+            || l.starts_with("x-janitorpros-")
+            || l.starts_with("x-janpro-")
+            || l.starts_with("x-abmindustries-")
+            || l.starts_with("x-coverall-")
+            || l.starts_with("x-janiking-")
+            || l.starts_with("x-vanguardclean-")
+            || l.starts_with("x-janitorservice-")
+            || l.starts_with("x-janitorworks-")
+            || l.starts_with("x-janitorteam-")
+            || l.starts_with("x-janitorexperts-")
+            || l.starts_with("x-janitordoctors-")
+            || l.starts_with("x-janitormasters-")
+            || l.starts_with("x-janitorforce-")
+            || l.starts_with("x-janitornation-")
+            || l.starts_with("x-kleenpros-")
+            || l.starts_with("x-kleenteam-")
+            || l.starts_with("x-kleenservice-")
+            || l.starts_with("x-bmsclean-")
+            || l.starts_with("x-commercialclean-")
+            || l.starts_with("x-buildingclean-")
+            || l.starts_with("x-officecleanpros-")
+            || l.starts_with("x-dayporter-")
+            || l.starts_with("x-porterpros-")
+            || l.starts_with("x-birumen-")
+            || l.starts_with("x-birumenpro-")
+            || l.starts_with("x-birumenteam-")
+            || l.starts_with("x-birumengyosha-")
+            || l.starts_with("x-birumenseibi-")
+            || l.starts_with("x-birumenkensa-")
+            || l.starts_with("x-birumenmanten-")
+            || l.starts_with("x-birumennomi-")
+            || l.starts_with("x-birumenjp-")
+            || l.starts_with("x-birumensenmon-")
+            || l.starts_with("x-birumenmitsumori-")
+            || l.starts_with("x-birumenchousa-")
+            || l.starts_with("x-birumenteiki-")
+            || l.starts_with("x-birumenshuri-")
+            || l.starts_with("x-birumendoctors-")
+            || l.starts_with("x-birumensagyou-")
+            || l.starts_with("x-birumenrescue-")
+            || l.starts_with("x-birumenteikyu-")
+            || l.starts_with("x-birumenorder-")
+            || l.starts_with("x-soujiyasan-")
+            || l.starts_with("x-soujikouji-")
+            || l.starts_with("x-seisougyousha-")
+            || l.starts_with("x-seisoupuro-")
+            || l.starts_with("x-soujipuro-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20821,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は販機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Vending-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-VendingPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Jihanki-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Jidouhan-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-MyVending-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-VendTeam-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-JihankiPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-VendingGroup-Record: 1\r\n\r\nx";
+        assert!(has_vending_marks(f0));
+        assert!(has_vending_marks(f1));
+        assert!(has_vending_marks(f2));
+        assert!(has_vending_marks(f3));
+        assert!(has_vending_marks(f4));
+        assert!(has_vending_marks(f5));
+        assert!(has_vending_marks(f6));
+        assert!(has_vending_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_vending_marks(clean));
+    }
+
+    #[test]
+    fn scan_は複機印を検出する() {
+        let f0 = b"From: a@b\r\nX-CopierLease-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-CopyTech-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Fukugouki-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Koppiki-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-MfpService-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-PrinterLease-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-FukugoukiPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-ManagedPrint-Record: 1\r\n\r\nx";
+        assert!(has_copierlease_marks(f0));
+        assert!(has_copierlease_marks(f1));
+        assert!(has_copierlease_marks(f2));
+        assert!(has_copierlease_marks(f3));
+        assert!(has_copierlease_marks(f4));
+        assert!(has_copierlease_marks(f5));
+        assert!(has_copierlease_marks(f6));
+        assert!(has_copierlease_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_copierlease_marks(clean));
+    }
+
+    #[test]
+    fn scan_は清機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Janitorial-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-JanPro-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Birumen-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Soujikouji-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-Coverall-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-JaniKing-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-BirumenPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-BuildingClean-Record: 1\r\n\r\nx";
+        assert!(has_janitorial_marks(f0));
+        assert!(has_janitorial_marks(f1));
+        assert!(has_janitorial_marks(f2));
+        assert!(has_janitorial_marks(f3));
+        assert!(has_janitorial_marks(f4));
+        assert!(has_janitorial_marks(f5));
+        assert!(has_janitorial_marks(f6));
+        assert!(has_janitorial_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_janitorial_marks(clean));
+    }
 }
