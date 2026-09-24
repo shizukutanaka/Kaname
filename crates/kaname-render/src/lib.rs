@@ -2039,6 +2039,12 @@ pub struct Envelope {
     pub lasik_marks: bool,
     /// `X-Tattoo-*`/`X-Irezumi-*`/`X-Piercing-*` 等のタトゥー・ボディアート印を送信側が自称する兆候 (D763)
     pub tattoo_marks: bool,
+    /// `X-Smarthome-*`/`X-Tuya-*`/`X-Switchbot-*` 等のスマートホーム・IoT家電印を送信側が自称する兆候 (D764)
+    pub smarthome_marks: bool,
+    /// `X-Orchestra-*`/`X-Brassband-*`/`X-Symphony-*` 等の吹奏楽・オーケストラ印を送信側が自称する兆候 (D765)
+    pub orchestra_marks: bool,
+    /// `X-Rccar-*`/`X-Rcplane-*`/`X-Traxxas-*` 等のラジコン・RC印を送信側が自称する兆候 (D766)
+    pub radiocon_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2680,6 +2686,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         rentguarantee_marks: has_rentguarantee_marks(hdr),
         lasik_marks: has_lasik_marks(hdr),
         tattoo_marks: has_tattoo_marks(hdr),
+        smarthome_marks: has_smarthome_marks(hdr),
+        orchestra_marks: has_orchestra_marks(hdr),
+        radiocon_marks: has_radiocon_marks(hdr),
     })
 }
 
@@ -24165,6 +24174,216 @@ fn has_tattoo_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-tattoostudioplus-"))
 }
 
+fn has_smarthome_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-smarthome-")
+            || l.starts_with("x-tuya-")
+            || l.starts_with("x-smartthings-")
+            || l.starts_with("x-hue-")
+            || l.starts_with("x-lifx-")
+            || l.starts_with("x-wyze-")
+            || l.starts_with("x-eufy-")
+            || l.starts_with("x-aqara-")
+            || l.starts_with("x-switchbot-")
+            || l.starts_with("x-natureremo-")
+            || l.starts_with("x-smarthomenavi-")
+            || l.starts_with("x-smarthomecenter-")
+            || l.starts_with("x-smarthomeshop-")
+            || l.starts_with("x-smarthomepro-")
+            || l.starts_with("x-smarthomemart-")
+            || l.starts_with("x-smarthomeplus-")
+            || l.starts_with("x-smarthomesmart-")
+            || l.starts_with("x-smarthomefamily-")
+            || l.starts_with("x-tuyanavi-")
+            || l.starts_with("x-tuyacenter-")
+            || l.starts_with("x-tuyashop-")
+            || l.starts_with("x-tuyapro-")
+            || l.starts_with("x-tuyamart-")
+            || l.starts_with("x-tuyaplus-")
+            || l.starts_with("x-tuyasmart-")
+            || l.starts_with("x-tuyafamily-")
+            || l.starts_with("x-smartthingsnavi-")
+            || l.starts_with("x-smartthingscenter-")
+            || l.starts_with("x-smartthingsshop-")
+            || l.starts_with("x-smartthingspro-")
+            || l.starts_with("x-smartthingsmart-")
+            || l.starts_with("x-smartthingsplus-")
+            || l.starts_with("x-smartthingssmart-")
+            || l.starts_with("x-smartthingsfamily-")
+            || l.starts_with("x-huenavi-")
+            || l.starts_with("x-huecenter-")
+            || l.starts_with("x-hueshop-")
+            || l.starts_with("x-huepro-")
+            || l.starts_with("x-huemart-")
+            || l.starts_with("x-hueplus-")
+            || l.starts_with("x-huesmart-")
+            || l.starts_with("x-huefamily-")
+            || l.starts_with("x-lifxnavi-")
+            || l.starts_with("x-lifxcenter-")
+            || l.starts_with("x-lifxshop-")
+            || l.starts_with("x-lifxpro-")
+            || l.starts_with("x-lifxmart-")
+            || l.starts_with("x-lifxplus-")
+            || l.starts_with("x-lifxsmart-")
+            || l.starts_with("x-lifxfamily-")
+            || l.starts_with("x-wyzenavi-")
+            || l.starts_with("x-wyzecenter-")
+            || l.starts_with("x-wyzeshop-")
+            || l.starts_with("x-wyzepro-")
+            || l.starts_with("x-wyzemart-")
+            || l.starts_with("x-wyzeplus-")
+            || l.starts_with("x-wyzesmart-")
+            || l.starts_with("x-wyzefamily-")
+            || l.starts_with("x-eufynavi-")
+            || l.starts_with("x-eufycenter-")
+            || l.starts_with("x-eufyshop-")
+            || l.starts_with("x-eufypro-"))
+}
+
+fn has_orchestra_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-orchestra-")
+            || l.starts_with("x-suisougaku-")
+            || l.starts_with("x-brassband-")
+            || l.starts_with("x-philharmonic-")
+            || l.starts_with("x-symphony-")
+            || l.starts_with("x-winds-")
+            || l.starts_with("x-concertband-")
+            || l.starts_with("x-marching-")
+            || l.starts_with("x-orchestranavi-")
+            || l.starts_with("x-orchestracenter-")
+            || l.starts_with("x-orchestrashop-")
+            || l.starts_with("x-orchestrapro-")
+            || l.starts_with("x-orchestramart-")
+            || l.starts_with("x-orchestraplus-")
+            || l.starts_with("x-orchestrasmart-")
+            || l.starts_with("x-orchestrafamily-")
+            || l.starts_with("x-suisougakunavi-")
+            || l.starts_with("x-suisougakucenter-")
+            || l.starts_with("x-suisougakushop-")
+            || l.starts_with("x-suisougakupro-")
+            || l.starts_with("x-suisougakumart-")
+            || l.starts_with("x-suisougakuplus-")
+            || l.starts_with("x-suisougakusmart-")
+            || l.starts_with("x-suisougakufamily-")
+            || l.starts_with("x-brassbandnavi-")
+            || l.starts_with("x-brassbandcenter-")
+            || l.starts_with("x-brassbandshop-")
+            || l.starts_with("x-brassbandpro-")
+            || l.starts_with("x-brassbandmart-")
+            || l.starts_with("x-brassbandplus-")
+            || l.starts_with("x-brassbandsmart-")
+            || l.starts_with("x-brassbandfamily-")
+            || l.starts_with("x-philharmonicnavi-")
+            || l.starts_with("x-philharmoniccenter-")
+            || l.starts_with("x-philharmonicshop-")
+            || l.starts_with("x-philharmonicpro-")
+            || l.starts_with("x-philharmonicmart-")
+            || l.starts_with("x-philharmonicplus-")
+            || l.starts_with("x-philharmonicsmart-")
+            || l.starts_with("x-philharmonicfamily-")
+            || l.starts_with("x-symphonynavi-")
+            || l.starts_with("x-symphonycenter-")
+            || l.starts_with("x-symphonyshop-")
+            || l.starts_with("x-symphonypro-")
+            || l.starts_with("x-symphonymart-")
+            || l.starts_with("x-symphonyplus-")
+            || l.starts_with("x-symphonysmart-")
+            || l.starts_with("x-symphonyfamily-")
+            || l.starts_with("x-windsnavi-")
+            || l.starts_with("x-windscenter-")
+            || l.starts_with("x-windsshop-")
+            || l.starts_with("x-windspro-")
+            || l.starts_with("x-windsmart-")
+            || l.starts_with("x-windsplus-")
+            || l.starts_with("x-windssmart-")
+            || l.starts_with("x-windsfamily-")
+            || l.starts_with("x-concertbandnavi-")
+            || l.starts_with("x-concertbandcenter-")
+            || l.starts_with("x-concertbandshop-")
+            || l.starts_with("x-concertbandpro-")
+            || l.starts_with("x-concertbandmart-")
+            || l.starts_with("x-concertbandplus-"))
+}
+
+fn has_radiocon_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-rccar-")
+            || l.starts_with("x-rcplane-")
+            || l.starts_with("x-rcdrone-")
+            || l.starts_with("x-tamiyarc-")
+            || l.starts_with("x-kyosho-")
+            || l.starts_with("x-yokomo-")
+            || l.starts_with("x-traxxas-")
+            || l.starts_with("x-arrma-")
+            || l.starts_with("x-losi-")
+            || l.starts_with("x-sanwa-")
+            || l.starts_with("x-rccarnavi-")
+            || l.starts_with("x-rccarcenter-")
+            || l.starts_with("x-rccarshop-")
+            || l.starts_with("x-rccarpro-")
+            || l.starts_with("x-rccarmart-")
+            || l.starts_with("x-rccarplus-")
+            || l.starts_with("x-rccarsmart-")
+            || l.starts_with("x-rccarfamily-")
+            || l.starts_with("x-rcplanenavi-")
+            || l.starts_with("x-rcplanecenter-")
+            || l.starts_with("x-rcplaneshop-")
+            || l.starts_with("x-rcplanepro-")
+            || l.starts_with("x-rcplanemart-")
+            || l.starts_with("x-rcplaneplus-")
+            || l.starts_with("x-rcplanesmart-")
+            || l.starts_with("x-rcplanefamily-")
+            || l.starts_with("x-rcdronenavi-")
+            || l.starts_with("x-rcdronecenter-")
+            || l.starts_with("x-rcdroneshop-")
+            || l.starts_with("x-rcdronepro-")
+            || l.starts_with("x-rcdronemart-")
+            || l.starts_with("x-rcdroneplus-")
+            || l.starts_with("x-rcdronesmart-")
+            || l.starts_with("x-rcdronefamily-")
+            || l.starts_with("x-tamiyarcnavi-")
+            || l.starts_with("x-tamiyarccenter-")
+            || l.starts_with("x-tamiyarcshop-")
+            || l.starts_with("x-tamiyarcpro-")
+            || l.starts_with("x-tamiyarcmart-")
+            || l.starts_with("x-tamiyarcplus-")
+            || l.starts_with("x-tamiyarcsmart-")
+            || l.starts_with("x-tamiyarcfamily-")
+            || l.starts_with("x-kyoshonavi-")
+            || l.starts_with("x-kyoshocenter-")
+            || l.starts_with("x-kyoshoshop-")
+            || l.starts_with("x-kyoshopro-")
+            || l.starts_with("x-kyoshomart-")
+            || l.starts_with("x-kyoshoplus-")
+            || l.starts_with("x-kyoshosmart-")
+            || l.starts_with("x-kyoshofamily-")
+            || l.starts_with("x-yokomonavi-")
+            || l.starts_with("x-yokomocenter-")
+            || l.starts_with("x-yokomoshop-")
+            || l.starts_with("x-yokomopro-")
+            || l.starts_with("x-yokomomart-")
+            || l.starts_with("x-yokomoplus-")
+            || l.starts_with("x-yokomosmart-")
+            || l.starts_with("x-yokomofamily-")
+            || l.starts_with("x-traxxasnavi-")
+            || l.starts_with("x-traxxascenter-")
+            || l.starts_with("x-traxxasshop-")
+            || l.starts_with("x-traxxaspro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -35212,6 +35431,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_tattoo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は智機印を検出する() {
+        for raw in [
+            br"X-Smarthome-Alert: 1",
+            br"X-Tuya-Notice: 1",
+            br"X-Smartthings-Info: 1",
+            br"X-Hue-Report: 1",
+            br"X-Lifx-Bulletin: 1",
+            br"X-Wyze-News: 1",
+            br"X-Eufy-Flash: 1",
+            br"X-Aqara-Release: 1",
+        ] {
+            assert!(has_smarthome_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_smarthome_marks(clean));
+    }
+
+    #[test]
+    fn scan_は吹機印を検出する() {
+        for raw in [
+            br"X-Orchestra-Alert: 1",
+            br"X-Suisougaku-Notice: 1",
+            br"X-Brassband-Info: 1",
+            br"X-Philharmonic-Report: 1",
+            br"X-Symphony-Bulletin: 1",
+            br"X-Winds-News: 1",
+            br"X-Concertband-Flash: 1",
+            br"X-Marching-Release: 1",
+        ] {
+            assert!(has_orchestra_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_orchestra_marks(clean));
+    }
+
+    #[test]
+    fn scan_は操機印を検出する() {
+        for raw in [
+            br"X-Rccar-Alert: 1",
+            br"X-Rcplane-Notice: 1",
+            br"X-Rcdrone-Info: 1",
+            br"X-Tamiyarc-Report: 1",
+            br"X-Kyosho-Bulletin: 1",
+            br"X-Yokomo-News: 1",
+            br"X-Traxxas-Flash: 1",
+            br"X-Arrma-Release: 1",
+        ] {
+            assert!(has_radiocon_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_radiocon_marks(clean));
     }
 
 }
