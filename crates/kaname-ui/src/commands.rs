@@ -3073,6 +3073,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D731: キッチンカー・移動販売印自称
+    if env.foodtruck_marks {
+        render_risks.push(
+            "X-Kitchencar-*/X-Foodtruck-*/X-Catering-*/X-Michinoeki-*/X-Lunchcar-*/X-Wagon-*/X-Takeout-*/X-Popupshop-* 等 — 移機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D732: 盆栽・観葉植物印自称
+    if env.bonsai_marks {
+        render_risks.push(
+            "X-Bonsai-*/X-Orchid-*/X-Succulent-*/X-Tanniku-*/X-Foliage-*/X-Kokedama-*/X-Cactus-*/X-Airplant-* 等 — 栽機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D733: 代替療法・自然療法印自称
+    if env.naturopathy_marks {
+        render_risks.push(
+            "X-Naturopathy-*/X-Homeopathy-*/X-Remedy-*/X-Ayurveda-*/X-Aromatherapy-*/X-Tcm-*/X-Herbal-*/X-Chiropractic-* 等 — 然機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
