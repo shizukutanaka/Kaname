@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-RenewalByAndersen-*`/`X-WindowNation-*`/`X-Pella-*`/`X-ChampionWindow-*`/`X-Sash-*`/`X-MadoKouji-*`/`X-Madogami-*` 等 — 窓・サッシ交換機印自称
+    pub window_marks: bool,
+    /// `X-SnowPlow-*`/`X-SnowRemoval-*`/`X-SnowPros-*`/`X-AriensSnow-*`/`X-Josetsu-*`/`X-JosetsuKouji-*`/`X-JosetsuGyosha-*` 等 — 除雪・スノープロー機印自称
+    pub snow_marks: bool,
+    /// `X-AsbestosPros-*`/`X-AsbestosRemoval-*`/`X-AsbestosInspection-*`/`X-AsbestosSurvey-*`/`X-Asubestos-*`/`X-AsbestosDoctor-*`/`X-Ishiwata-*` 等 — アスベスト除去機印自称
+    pub asbestos_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        window_marks: has_window_marks(hdr),
+        snow_marks: has_snow_marks(hdr),
+        asbestos_marks: has_asbestos_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,250 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D662: 窓・サッシ交換機印の自称を検出する。
+///
+/// `X-RenewalByAndersen-*`/`X-Renewal-*`/`X-WindowNation-*`/`X-Pella-*`/
+/// `X-PellaWindow-*`/`X-MarvinWindow-*`/`X-Marvin-*`/`X-ChampionWindow-*`/
+/// `X-ChampionWindows-*`/`X-WindowWorld-*`/`X-WindowPros-*`/`X-WindowExperts-*`/
+/// `X-WindowDoctors-*`/`X-WindowMasters-*`/`X-WindowWorks-*`/`X-WindowSolutions-*`/
+/// `X-WindowTeam-*`/`X-WindowForce-*`/`X-WindowUSA-*`/`X-WindowSource-*`/
+/// `X-VinylWindow-*`/`X-ReplacementWindow-*`/`X-EnergyWindow-*`/`X-ImpactWindow-*`/
+/// `X-StormWindow-*`/`X-WindowCompany-*`、JP は `X-Sash-*`/`X-SashKouji-*`/
+/// `X-SashYasan-*`/`X-MadoKouji-*`/`X-Madogami-*`/`X-MadoYasan-*`/`X-Madoglass-*`/
+/// `X-MadoGlass-*`/`X-SashRepair-*`/`X-MadoRepair-*`/`X-SashSeibi-*`/`X-MadoSeibi-*`/
+/// `X-KoujiSash-*`/`X-SashDoctors-*`/`X-MadoDoctors-*`/`X-SashTeam-*`/`X-MadoTeam-*`/
+/// `X-EcoMado-*`/`X-MadoPro-*`/`X-SashPro-*`/`X-WindSash-*`/`X-MadoKougyou-*`/
+/// `X-UchiMado-*`/`X-InnerMado-*`/`X-MadoTakumi-*`/`X-SashGyosha-*`/
+/// `X-MadoRifo-*`/`X-SashRifo-*`/`X-MadoJP-*` 等の窓・サッシ交換機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 窓交換・二重窓・サッシ修理・インナーサッシ・省エネ窓の偽装は
+/// 窓業者なりすましの典型手口。窓印の自署は兆候として数える。
+/// (ガラス修理は glass 機、建具は housing 機、断熱は insulation 機で検出済み)
+fn has_window_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-renewalbyandersen-")
+            || l.starts_with("x-renewal-")
+            || l.starts_with("x-windownation-")
+            || l.starts_with("x-pella-")
+            || l.starts_with("x-pellawindow-")
+            || l.starts_with("x-marvinwindow-")
+            || l.starts_with("x-marvin-")
+            || l.starts_with("x-championwindow-")
+            || l.starts_with("x-championwindows-")
+            || l.starts_with("x-windowworld-")
+            || l.starts_with("x-windowpros-")
+            || l.starts_with("x-windowexperts-")
+            || l.starts_with("x-windowdoctors-")
+            || l.starts_with("x-windowmasters-")
+            || l.starts_with("x-windowworks-")
+            || l.starts_with("x-windowsolutions-")
+            || l.starts_with("x-windowteam-")
+            || l.starts_with("x-windowforce-")
+            || l.starts_with("x-windowusa-")
+            || l.starts_with("x-windowsource-")
+            || l.starts_with("x-vinylwindow-")
+            || l.starts_with("x-replacementwindow-")
+            || l.starts_with("x-energywindow-")
+            || l.starts_with("x-impactwindow-")
+            || l.starts_with("x-stormwindow-")
+            || l.starts_with("x-windowcompany-")
+            || l.starts_with("x-sash-")
+            || l.starts_with("x-sashkouji-")
+            || l.starts_with("x-sashyasan-")
+            || l.starts_with("x-madokouji-")
+            || l.starts_with("x-madogami-")
+            || l.starts_with("x-madoyasan-")
+            || l.starts_with("x-madoglass-")
+            || l.starts_with("x-sashrepair-")
+            || l.starts_with("x-madorepair-")
+            || l.starts_with("x-sashseibi-")
+            || l.starts_with("x-madoseibi-")
+            || l.starts_with("x-koujisash-")
+            || l.starts_with("x-sashdoctors-")
+            || l.starts_with("x-madodoctors-")
+            || l.starts_with("x-sashteam-")
+            || l.starts_with("x-madoteam-")
+            || l.starts_with("x-ecomado-")
+            || l.starts_with("x-madopro-")
+            || l.starts_with("x-sashpro-")
+            || l.starts_with("x-windsash-")
+            || l.starts_with("x-madokougyou-")
+            || l.starts_with("x-uchimado-")
+            || l.starts_with("x-innermado-")
+            || l.starts_with("x-madotakumi-")
+            || l.starts_with("x-sashgyosha-")
+            || l.starts_with("x-madorifo-")
+            || l.starts_with("x-sashrifo-")
+            || l.starts_with("x-madojp-")
+    })
+}
+
+/// D663: 除雪・スノープロー機印の自称を検出する。
+///
+/// `X-SnowPlow-*`/`X-SnowPlowPros-*`/`X-SnowRemoval-*`/`X-SnowRemovalPros-*`/
+/// `X-SnowPros-*`/`X-SnowDoctors-*`/`X-SnowMasters-*`/`X-SnowWorks-*`/`X-SnowExperts-*`/
+/// `X-SnowTeam-*`/`X-SnowForce-*`/`X-SnowTech-*`/`X-SnowSolutions-*`/`X-SnowCare-*`/
+/// `X-AriensSnow-*`/`X-Ariens-*`/`X-SnowBlow-*`/`X-SnowBlowPros-*`/`X-RoofRake-*`/
+/// `X-IceRemoval-*`/`X-DeIcingPros-*`/`X-SaltSpreading-*`/`X-PlowGuys-*`/
+/// `X-PlowTeam-*`/`X-WinterService-*`、JP は `X-Josetsu-*`/`X-JosetsuKouji-*`/
+/// `X-JosetsuGyosha-*`/`X-JosetsuYasan-*`/`X-JosetsuDoctors-*`/`X-JosetsuTeam-*`/
+/// `X-JosetsuPro-*`/`X-JosetsuSeibi-*`/`X-YukiKaki-*`/`X-YukikakiYasan-*`/
+/// `X-YukikakiKouji-*`/`X-SnowScraper-*`/`X-JosetsuKi-*`/`X-JosetsuKiKouji-*`/
+/// `X-RasshaYuki-*`/`X-SnowDump-*`/`X-YukiHaki-*`/`X-YukiNage-*`/`X-DasshutsuYuki-*`/
+/// `X-JosetsuKirei-*`/`X-JosetsuGyoshaYuki-*`/`X-YukiKujo-*`/`X-JosetsuNomi-*`/
+/// `X-SnowPlowJP-*`/`X-JosetsuRental-*`/`X-JosetsuJP-*` 等の除雪・スノープロー機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 除雪・雪下ろし・雪掻き・凍結防止・ロードヒーティング・除雪機レンタルの偽装は
+/// 除雪業者なりすましの典型手口 (豪雪地域の便乗商法で有名)。雪印の自署は兆候として数える。
+/// (造園は landscape 機、屋根は roofing 機、冠水は waterproof 機で検出済み)
+fn has_snow_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-snowplow-")
+            || l.starts_with("x-snowplowpros-")
+            || l.starts_with("x-snowremoval-")
+            || l.starts_with("x-snowremovalpros-")
+            || l.starts_with("x-snowpros-")
+            || l.starts_with("x-snowdoctors-")
+            || l.starts_with("x-snowmasters-")
+            || l.starts_with("x-snowworks-")
+            || l.starts_with("x-snowexperts-")
+            || l.starts_with("x-snowteam-")
+            || l.starts_with("x-snowforce-")
+            || l.starts_with("x-snowtech-")
+            || l.starts_with("x-snowsolutions-")
+            || l.starts_with("x-snowcare-")
+            || l.starts_with("x-arienssnow-")
+            || l.starts_with("x-ariens-")
+            || l.starts_with("x-snowblow-")
+            || l.starts_with("x-snowblowpros-")
+            || l.starts_with("x-roofrake-")
+            || l.starts_with("x-iceremoval-")
+            || l.starts_with("x-deicingpros-")
+            || l.starts_with("x-saltspreading-")
+            || l.starts_with("x-plowguys-")
+            || l.starts_with("x-plowteam-")
+            || l.starts_with("x-winterservice-")
+            || l.starts_with("x-josetsu-")
+            || l.starts_with("x-josetsukouji-")
+            || l.starts_with("x-josetsugyosha-")
+            || l.starts_with("x-josetsuyasan-")
+            || l.starts_with("x-josetsudoctors-")
+            || l.starts_with("x-josetsuteam-")
+            || l.starts_with("x-josetsupro-")
+            || l.starts_with("x-josetsuseibi-")
+            || l.starts_with("x-yukikaki-")
+            || l.starts_with("x-yukikakiyasan-")
+            || l.starts_with("x-yukikakikouji-")
+            || l.starts_with("x-snowscraper-")
+            || l.starts_with("x-josetsuki-")
+            || l.starts_with("x-josetsukikouji-")
+            || l.starts_with("x-rasshayuki-")
+            || l.starts_with("x-snowdump-")
+            || l.starts_with("x-yukihaki-")
+            || l.starts_with("x-yukinage-")
+            || l.starts_with("x-dasshutsuyuki-")
+            || l.starts_with("x-josetsukirei-")
+            || l.starts_with("x-yukikujo-")
+            || l.starts_with("x-josetsunomi-")
+            || l.starts_with("x-snowplowjp-")
+            || l.starts_with("x-josetsurental-")
+            || l.starts_with("x-josetsujp-")
+    })
+}
+
+/// D664: アスベスト除去機印の自称を検出する。
+///
+/// `X-AsbestosPros-*`/`X-AsbestosRemoval-*`/`X-AsbestosRemovalPros-*`/
+/// `X-AsbestosInspection-*`/`X-AsbestosSurvey-*`/`X-AsbestosAbatement-*`/
+/// `X-AsbestosDoctors-*`/`X-AsbestosExperts-*`/`X-AsbestosMasters-*`/`X-AsbestosTech-*`/
+/// `X-AsbestosSolutions-*`/`X-AsbestosTeam-*`/`X-AsbestosForce-*`/`X-AsbestosFree-*`/
+/// `X-AsbestosWatch-*`/`X-AsbestosCheck-*`/`X-AsbestosLab-*`/`X-AsbestosSafe-*`/
+/// `X-AsbestosReport-*`/`X-AsbestosWorld-*`/`X-AsbestosUSA-*`/`X-AsbestosNow-*`/
+/// `X-AsbestosGroup-*`/`X-AsbestosConsulting-*`/`X-AsbestosTesting-*`、
+/// JP は `X-Asubestos-*`/`X-AsubestosKujo-*`/`X-AsubestosKensa-*`/`X-AsubestosYasan-*`/
+/// `X-AsbestosYasan-*`/`X-AsbestosKensa-*`/`X-AsbestosKujo-*`/`X-Ishiwata-*`/
+/// `X-IshiwataKujo-*`/`X-IshiwataKensa-*`/`X-SekimenKujo-*`/`X-AsbestoKujo-*`/
+/// `X-AsubestosDoctors-*`/`X-AsubestosTeam-*`/`X-AsubestosPro-*`/`X-SekimenKensa-*`/
+/// `X-AsubestosSenmon-*`/`X-AsubestosGyosha-*`/`X-AsbestosJP-*`/`X-IshiwataDoctors-*`/
+/// `X-AsubestosKouji-*`/`X-AsubestosSagyou-*`/`X-SekimenYasan-*`/`X-AsubestosHantei-*`/
+/// `X-AsubestosShindan-*`/`X-KaitaiAsbestos-*`/`X-AsubestosJP-*` 等の
+/// アスベスト除去機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。アスベスト検査・石綿判定・除去工事・
+/// 解体前調査・建材検査の偽装はアスベスト除去業者なりすましの典型手口
+/// (不安を煽る検査勧誘で有名)。綿印の自署は兆候として数える。
+/// (解体は demolition 機、災害復旧は restoration 機、建材は housing 機で検出済み)
+fn has_asbestos_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-asbestospros-")
+            || l.starts_with("x-asbestosremoval-")
+            || l.starts_with("x-asbestosremovalpros-")
+            || l.starts_with("x-asbestosinspection-")
+            || l.starts_with("x-asbestossurvey-")
+            || l.starts_with("x-asbestosabatement-")
+            || l.starts_with("x-asbestosdoctors-")
+            || l.starts_with("x-asbestosexperts-")
+            || l.starts_with("x-asbestosmasters-")
+            || l.starts_with("x-asbestostech-")
+            || l.starts_with("x-asbestossolutions-")
+            || l.starts_with("x-asbestosteam-")
+            || l.starts_with("x-asbestosforce-")
+            || l.starts_with("x-asbestosfree-")
+            || l.starts_with("x-asbestoswatch-")
+            || l.starts_with("x-asbestoscheck-")
+            || l.starts_with("x-asbestoslab-")
+            || l.starts_with("x-asbestossafe-")
+            || l.starts_with("x-asbestosreport-")
+            || l.starts_with("x-asbestosworld-")
+            || l.starts_with("x-asbestosusa-")
+            || l.starts_with("x-asbestosnow-")
+            || l.starts_with("x-asbestosgroup-")
+            || l.starts_with("x-asbestosconsulting-")
+            || l.starts_with("x-asbestostesting-")
+            || l.starts_with("x-asubestos-")
+            || l.starts_with("x-asubestoskujo-")
+            || l.starts_with("x-asubestoskensa-")
+            || l.starts_with("x-asubestosyasan-")
+            || l.starts_with("x-asbestosyasan-")
+            || l.starts_with("x-asbestoskensa-")
+            || l.starts_with("x-asbestoskujo-")
+            || l.starts_with("x-ishiwata-")
+            || l.starts_with("x-ishiwatakujo-")
+            || l.starts_with("x-ishiwaitakensa-")
+            || l.starts_with("x-sekimenkujo-")
+            || l.starts_with("x-asbestokujo-")
+            || l.starts_with("x-asubestosdoctors-")
+            || l.starts_with("x-asubestosteam-")
+            || l.starts_with("x-asubestospro-")
+            || l.starts_with("x-sekimenkensa-")
+            || l.starts_with("x-asubestossenmon-")
+            || l.starts_with("x-asubestosgyosha-")
+            || l.starts_with("x-asbestosjp-")
+            || l.starts_with("x-ishiwatadoctors-")
+            || l.starts_with("x-asubestoskouji-")
+            || l.starts_with("x-asubestossagyou-")
+            || l.starts_with("x-sekimenyasan-")
+            || l.starts_with("x-asubestoshantei-")
+            || l.starts_with("x-asubestosshindan-")
+            || l.starts_with("x-kaitaiasbestos-")
+            || l.starts_with("x-asubestosjp-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20894,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は窓機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-RenewalByAndersen-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Pella-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SashKouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MadoKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WindowNation-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MadoYasan-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChampionWindow-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SashYasan-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_window_marks(raw));
+        }
+        assert!(!has_window_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は雪機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-SnowPlow-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SnowRemoval-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Josetsu-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JosetsuKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SnowPros-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-YukiKaki-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AriensSnow-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JosetsuGyosha-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_snow_marks(raw));
+        }
+        assert!(!has_snow_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は綿機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-AsbestosPros-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AsbestosRemoval-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Asubestos-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AsbestosInspection-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Ishiwata-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AsubestosKensa-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AsbestosAbatement-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SekimenKujo-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_asbestos_marks(raw));
+        }
+        assert!(!has_asbestos_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
