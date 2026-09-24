@@ -1835,6 +1835,12 @@ pub struct Envelope {
     pub karaoke_marks: bool,
     /// `X-Bowling-*`/`X-Bowlingnavi-*`/`X-Bowlingcenter-*` 等のボウリング・ダーツ・ビリヤード印を送信側が自称する兆候 (D661)
     pub bowling_marks: bool,
+    /// `X-Petshop-*`/`X-Petshopnavi-*`/`X-Petshopcenter-*` 等のペットショップ・トリミング印を送信側が自称する兆候 (D662)
+    pub petshop_marks: bool,
+    /// `X-Dental-*`/`X-Dentalnavi-*`/`X-Dentalcenter-*` 等の歯科・矯正歯科印を送信側が自称する兆候 (D663)
+    pub dental_marks: bool,
+    /// `X-Shaken-*`/`X-Shakennavi-*`/`X-Shakencenter-*` 等の車検・板金・タイヤ印を送信側が自称する兆候 (D664)
+    pub shaken_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2374,6 +2380,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         sauna_marks: has_sauna_marks(hdr),
         karaoke_marks: has_karaoke_marks(hdr),
         bowling_marks: has_bowling_marks(hdr),
+        petshop_marks: has_petshop_marks(hdr),
+        dental_marks: has_dental_marks(hdr),
+        shaken_marks: has_shaken_marks(hdr),
     })
 }
 
@@ -16603,6 +16612,222 @@ fn has_bowling_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-raundowan24-"))
 }
 
+/// `X-Petshop-*`/`X-Petshopnavi-*`/`X-Petshopcenter-*`/`X-Petshopshop-*`/`X-Petshoppro-*`/`X-Trimming-*`/`X-Trimmingnavi-*`/`X-Trimmingcenter-*`/`X-Trimmingshop-*`/`X-Trimmingpro-*`/`X-Pethotel-*`/`X-Pethotelnavi-*`/`X-Pethotelcenter-*`/`X-Pethotelshop-*`/`X-Pethotelpro-*`/`X-Breeder-*`/`X-Breedernavi-*`/`X-Breedercenter-*`/`X-Breedershop-*`/`X-Breederpro-*`/`X-Onechan-*`/`X-Onechannavi-*`/`X-Onechancenter-*`/`X-Onechanshop-*`/`X-Onechanpro-*`/`X-Wanchan-*`/`X-Wanchannavi-*`/`X-Wanchancenter-*`/`X-Wanchanshop-*`/`X-Wanchanpro-*`/`X-Nyanchan-*`/`X-Nyanchannavi-*`/`X-Nyanchancenter-*`/`X-Nyanchanshop-*`/`X-Nyanchanpro-*`/`X-Petnavi-*`/`X-Petcenter-*`/`X-Petpro-*`/`X-Petrescue-*`/`X-Pet24-*`/`X-Petmart-*`/`X-Petplus-*`/`X-Wanmarch-*`/`X-Nyanmaru-*`/`X-Petclinicnavi-*`/`X-Petcliniccenter-*`/`X-Petclinicshop-*`/`X-Petclinicpro-*`/`X-Petshopmart-*`/`X-Petshopplus-*`/`X-Petshopsmart-*`/`X-Petshopfamily-*`/`X-Trimmingmart-*`/`X-Trimmingplus-*`/`X-Trimmingsmart-*`/`X-Trimmingfamily-*`/`X-Wannavi-*`/`X-Wancenter-*`/`X-Wanshop-*`/`X-Wanpro-*`/`X-Nyannavi-*`/`X-Nyancenter-*`/`X-Nyanshop-*`/`X-Nyanpro-*` 等のペットショップ・トリミング印を送信側が自称する兆候を検出する
+fn has_petshop_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-petshop-")
+            || l.starts_with("x-petshopnavi-")
+            || l.starts_with("x-petshopcenter-")
+            || l.starts_with("x-petshopshop-")
+            || l.starts_with("x-petshoppro-")
+            || l.starts_with("x-trimming-")
+            || l.starts_with("x-trimmingnavi-")
+            || l.starts_with("x-trimmingcenter-")
+            || l.starts_with("x-trimmingshop-")
+            || l.starts_with("x-trimmingpro-")
+            || l.starts_with("x-pethotel-")
+            || l.starts_with("x-pethotelnavi-")
+            || l.starts_with("x-pethotelcenter-")
+            || l.starts_with("x-pethotelshop-")
+            || l.starts_with("x-pethotelpro-")
+            || l.starts_with("x-breeder-")
+            || l.starts_with("x-breedernavi-")
+            || l.starts_with("x-breedercenter-")
+            || l.starts_with("x-breedershop-")
+            || l.starts_with("x-breederpro-")
+            || l.starts_with("x-onechan-")
+            || l.starts_with("x-onechannavi-")
+            || l.starts_with("x-onechancenter-")
+            || l.starts_with("x-onechanshop-")
+            || l.starts_with("x-onechanpro-")
+            || l.starts_with("x-wanchan-")
+            || l.starts_with("x-wanchannavi-")
+            || l.starts_with("x-wanchancenter-")
+            || l.starts_with("x-wanchanshop-")
+            || l.starts_with("x-wanchanpro-")
+            || l.starts_with("x-nyanchan-")
+            || l.starts_with("x-nyanchannavi-")
+            || l.starts_with("x-nyanchancenter-")
+            || l.starts_with("x-nyanchanshop-")
+            || l.starts_with("x-nyanchanpro-")
+            || l.starts_with("x-petnavi-")
+            || l.starts_with("x-petcenter-")
+            || l.starts_with("x-petpro-")
+            || l.starts_with("x-petrescue-")
+            || l.starts_with("x-pet24-")
+            || l.starts_with("x-petmart-")
+            || l.starts_with("x-petplus-")
+            || l.starts_with("x-wanmarch-")
+            || l.starts_with("x-nyanmaru-")
+            || l.starts_with("x-petclinicnavi-")
+            || l.starts_with("x-petcliniccenter-")
+            || l.starts_with("x-petclinicshop-")
+            || l.starts_with("x-petclinicpro-")
+            || l.starts_with("x-petshopmart-")
+            || l.starts_with("x-petshopplus-")
+            || l.starts_with("x-petshopsmart-")
+            || l.starts_with("x-petshopfamily-")
+            || l.starts_with("x-trimmingmart-")
+            || l.starts_with("x-trimmingplus-")
+            || l.starts_with("x-trimmingsmart-")
+            || l.starts_with("x-trimmingfamily-")
+            || l.starts_with("x-wannavi-")
+            || l.starts_with("x-wancenter-")
+            || l.starts_with("x-wanshop-")
+            || l.starts_with("x-wanpro-")
+            || l.starts_with("x-nyannavi-")
+            || l.starts_with("x-nyancenter-")
+            || l.starts_with("x-nyanshop-")
+            || l.starts_with("x-nyanpro-"))
+}
+
+/// `X-Dental-*`/`X-Dentalnavi-*`/`X-Dentalcenter-*`/`X-Dentalshop-*`/`X-Dentalpro-*`/`X-Dentaldoctor-*`/`X-Dentalrescue-*`/`X-Dental24-*`/`X-Shika-*`/`X-Shikanavi-*`/`X-Shikacenter-*`/`X-Shikashop-*`/`X-Shikapro-*`/`X-Shikadoctor-*`/`X-Shikarescue-*`/`X-Shika24-*`/`X-Kyousei-*`/`X-Kyouseinavi-*`/`X-Kyouseicenter-*`/`X-Kyouseishop-*`/`X-Kyouseipro-*`/`X-Whitening-*`/`X-Whiteningnavi-*`/`X-Whiteningcenter-*`/`X-Whiteningshop-*`/`X-Whiteningpro-*`/`X-Implant-*`/`X-Implantnavi-*`/`X-Implantcenter-*`/`X-Implantshop-*`/`X-Implantpro-*`/`X-Haisha-*`/`X-Haishanavi-*`/`X-Haishacenter-*`/`X-Haishashop-*`/`X-Haishapro-*`/`X-Dentist-*`/`X-Dentistnavi-*`/`X-Dentistcenter-*`/`X-Dentistshop-*`/`X-Dentistpro-*`/`X-Dentmart-*`/`X-Dentplus-*`/`X-Dentsmart-*`/`X-Dentfamily-*`/`X-Dentalmart-*`/`X-Dentalplus-*`/`X-Dentalsmart-*`/`X-Dentalfamily-*`/`X-Hamigaki-*`/`X-Hamigakinavi-*`/`X-Hamigakicenter-*`/`X-Hamigakishop-*`/`X-Hamigakipro-*`/`X-Koukuu-*`/`X-Koukuunavi-*`/`X-Koukuucenter-*`/`X-Koukuushop-*`/`X-Koukuupro-*`/`X-Koushinetsu-*`/`X-Koushinetsunavi-*`/`X-Koushinetsucenter-*`/`X-Koushinetsushop-*`/`X-Koushinetsupro-*` 等の歯科・矯正歯科印を送信側が自称する兆候を検出する
+fn has_dental_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-dental-")
+            || l.starts_with("x-dentalnavi-")
+            || l.starts_with("x-dentalcenter-")
+            || l.starts_with("x-dentalshop-")
+            || l.starts_with("x-dentalpro-")
+            || l.starts_with("x-dentaldoctor-")
+            || l.starts_with("x-dentalrescue-")
+            || l.starts_with("x-dental24-")
+            || l.starts_with("x-shika-")
+            || l.starts_with("x-shikanavi-")
+            || l.starts_with("x-shikacenter-")
+            || l.starts_with("x-shikashop-")
+            || l.starts_with("x-shikapro-")
+            || l.starts_with("x-shikadoctor-")
+            || l.starts_with("x-shikarescue-")
+            || l.starts_with("x-shika24-")
+            || l.starts_with("x-kyousei-")
+            || l.starts_with("x-kyouseinavi-")
+            || l.starts_with("x-kyouseicenter-")
+            || l.starts_with("x-kyouseishop-")
+            || l.starts_with("x-kyouseipro-")
+            || l.starts_with("x-whitening-")
+            || l.starts_with("x-whiteningnavi-")
+            || l.starts_with("x-whiteningcenter-")
+            || l.starts_with("x-whiteningshop-")
+            || l.starts_with("x-whiteningpro-")
+            || l.starts_with("x-implant-")
+            || l.starts_with("x-implantnavi-")
+            || l.starts_with("x-implantcenter-")
+            || l.starts_with("x-implantshop-")
+            || l.starts_with("x-implantpro-")
+            || l.starts_with("x-haisha-")
+            || l.starts_with("x-haishanavi-")
+            || l.starts_with("x-haishacenter-")
+            || l.starts_with("x-haishashop-")
+            || l.starts_with("x-haishapro-")
+            || l.starts_with("x-dentist-")
+            || l.starts_with("x-dentistnavi-")
+            || l.starts_with("x-dentistcenter-")
+            || l.starts_with("x-dentistshop-")
+            || l.starts_with("x-dentistpro-")
+            || l.starts_with("x-dentmart-")
+            || l.starts_with("x-dentplus-")
+            || l.starts_with("x-dentsmart-")
+            || l.starts_with("x-dentfamily-")
+            || l.starts_with("x-dentalmart-")
+            || l.starts_with("x-dentalplus-")
+            || l.starts_with("x-dentalsmart-")
+            || l.starts_with("x-dentalfamily-")
+            || l.starts_with("x-hamigaki-")
+            || l.starts_with("x-hamigakinavi-")
+            || l.starts_with("x-hamigakicenter-")
+            || l.starts_with("x-hamigakishop-")
+            || l.starts_with("x-hamigakipro-")
+            || l.starts_with("x-koukuu-")
+            || l.starts_with("x-koukuunavi-")
+            || l.starts_with("x-koukuucenter-")
+            || l.starts_with("x-koukuushop-")
+            || l.starts_with("x-koukuupro-")
+            || l.starts_with("x-koushinetsu-")
+            || l.starts_with("x-koushinetsunavi-")
+            || l.starts_with("x-koushinetsucenter-")
+            || l.starts_with("x-koushinetsushop-")
+            || l.starts_with("x-koushinetsupro-"))
+}
+
+/// `X-Shaken-*`/`X-Shakennavi-*`/`X-Shakencenter-*`/`X-Shakenshop-*`/`X-Shakenpro-*`/`X-Carinspection-*`/`X-Bankin-*`/`X-Bankinnavi-*`/`X-Bankincenter-*`/`X-Bankinshop-*`/`X-Bankinpro-*`/`X-Tire-*`/`X-Tirenavi-*`/`X-Tirecenter-*`/`X-Tireshop-*`/`X-Tirepro-*`/`X-Oil-*`/`X-Oilnavi-*`/`X-Oilcenter-*`/`X-Oilshop-*`/`X-Oilpro-*`/`X-Carcheck-*`/`X-Carchecknavi-*`/`X-Carcheckcenter-*`/`X-Carcheckshop-*`/`X-Carcheckpro-*`/`X-Kakena-*`/`X-Kakenanavi-*`/`X-Kakenacenter-*`/`X-Kakenashop-*`/`X-Kakenapro-*`/`X-Shakek-*`/`X-Shakenger-*`/`X-Tiremart-*`/`X-Tireplus-*`/`X-Tiresmart-*`/`X-Tirefamily-*`/`X-Bankinmart-*`/`X-Bankinplus-*`/`X-Bankinsmart-*`/`X-Bankinfamily-*`/`X-Carfix-*`/`X-Carfixnavi-*`/`X-Carfixcenter-*`/`X-Carfixshop-*`/`X-Carfixpro-*`/`X-Itabankin-*`/`X-Itabankinnavi-*`/`X-Itabankincenter-*`/`X-Itabankinshop-*`/`X-Itabankinpro-*`/`X-Bikeshaken-*`/`X-Bikeshakennavi-*`/`X-Bikeshakencenter-*`/`X-Bikeshakenshop-*`/`X-Bikeshakenpro-*`/`X-Hokena-*`/`X-Hokenanavi-*`/`X-Hokenacenter-*`/`X-Hokenashop-*`/`X-Hokenapro-*` 等の車検・板金・タイヤ印を送信側が自称する兆候を検出する
+fn has_shaken_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-shaken-")
+            || l.starts_with("x-shakennavi-")
+            || l.starts_with("x-shakencenter-")
+            || l.starts_with("x-shakenshop-")
+            || l.starts_with("x-shakenpro-")
+            || l.starts_with("x-carinspection-")
+            || l.starts_with("x-bankin-")
+            || l.starts_with("x-bankinnavi-")
+            || l.starts_with("x-bankincenter-")
+            || l.starts_with("x-bankinshop-")
+            || l.starts_with("x-bankinpro-")
+            || l.starts_with("x-tire-")
+            || l.starts_with("x-tirenavi-")
+            || l.starts_with("x-tirecenter-")
+            || l.starts_with("x-tireshop-")
+            || l.starts_with("x-tirepro-")
+            || l.starts_with("x-oil-")
+            || l.starts_with("x-oilnavi-")
+            || l.starts_with("x-oilcenter-")
+            || l.starts_with("x-oilshop-")
+            || l.starts_with("x-oilpro-")
+            || l.starts_with("x-carcheck-")
+            || l.starts_with("x-carchecknavi-")
+            || l.starts_with("x-carcheckcenter-")
+            || l.starts_with("x-carcheckshop-")
+            || l.starts_with("x-carcheckpro-")
+            || l.starts_with("x-kakena-")
+            || l.starts_with("x-kakenanavi-")
+            || l.starts_with("x-kakenacenter-")
+            || l.starts_with("x-kakenashop-")
+            || l.starts_with("x-kakenapro-")
+            || l.starts_with("x-shakek-")
+            || l.starts_with("x-shakenger-")
+            || l.starts_with("x-tiremart-")
+            || l.starts_with("x-tireplus-")
+            || l.starts_with("x-tiresmart-")
+            || l.starts_with("x-tirefamily-")
+            || l.starts_with("x-bankinmart-")
+            || l.starts_with("x-bankinplus-")
+            || l.starts_with("x-bankinsmart-")
+            || l.starts_with("x-bankinfamily-")
+            || l.starts_with("x-carfix-")
+            || l.starts_with("x-carfixnavi-")
+            || l.starts_with("x-carfixcenter-")
+            || l.starts_with("x-carfixshop-")
+            || l.starts_with("x-carfixpro-")
+            || l.starts_with("x-itabankin-")
+            || l.starts_with("x-itabankinnavi-")
+            || l.starts_with("x-itabankincenter-")
+            || l.starts_with("x-itabankinshop-")
+            || l.starts_with("x-itabankinpro-")
+            || l.starts_with("x-bikeshaken-")
+            || l.starts_with("x-bikeshakennavi-")
+            || l.starts_with("x-bikeshakencenter-")
+            || l.starts_with("x-bikeshakenshop-")
+            || l.starts_with("x-bikeshakenpro-")
+            || l.starts_with("x-hokena-")
+            || l.starts_with("x-hokenanavi-")
+            || l.starts_with("x-hokenacenter-")
+            || l.starts_with("x-hokenashop-")
+            || l.starts_with("x-hokenapro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -25823,5 +26048,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_bowling_marks(clean));
+    }
+    #[test]
+    fn scan_は毛機印を検出する() {
+        for raw in [
+            br"X-Petshop-Alert: 1",
+            br"X-PetshopNavi-Notice: 1",
+            br"X-Trimming-Info: 1",
+            br"X-Pethotel-Report: 1",
+            br"X-Breeder-Bulletin: 1",
+            br"X-Onechan-News: 1",
+            br"X-Wanchan-Flash: 1",
+            br"X-Nyanchan-Release: 1",
+        ] {
+            assert!(has_petshop_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_petshop_marks(clean));
+    }
+
+    #[test]
+    fn scan_は歯機印を検出する() {
+        for raw in [
+            br"X-Dental-Alert: 1",
+            br"X-DentalNavi-Notice: 1",
+            br"X-Shika-Info: 1",
+            br"X-ShikaNavi-Report: 1",
+            br"X-Kyousei-Bulletin: 1",
+            br"X-Whitening-News: 1",
+            br"X-Implant-Flash: 1",
+            br"X-Haisha-Release: 1",
+        ] {
+            assert!(has_dental_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_dental_marks(clean));
+    }
+
+    #[test]
+    fn scan_は車機印を検出する() {
+        for raw in [
+            br"X-Shaken-Alert: 1",
+            br"X-ShakenNavi-Notice: 1",
+            br"X-CarInspection-Info: 1",
+            br"X-Bankin-Report: 1",
+            br"X-BankinNavi-Bulletin: 1",
+            br"X-Tire-News: 1",
+            br"X-TireNavi-Flash: 1",
+            br"X-CarCheck-Release: 1",
+        ] {
+            assert!(has_shaken_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_shaken_marks(clean));
     }
 }
