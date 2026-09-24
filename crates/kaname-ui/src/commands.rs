@@ -2863,6 +2863,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D701: 民泊・旅館・グランピング印自称
+    if env.minpaku_marks {
+        render_risks.push(
+            "X-Minpaku-*/X-Vacationrental-*/X-Villa-*/X-Glamping-*/X-Ryokan-*/X-Minshuku-*/X-Kominka-*/X-Machiya-* 等 — 宿機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D702: メイドカフェ・コンカフェ・コスプレ印自称
+    if env.maidcafe_marks {
+        render_risks.push(
+            "X-Maidcafe-*/X-Concafe-*/X-Cosplay-*/X-Maid-*/X-Maidreamin-*/X-Butler-*/X-Shitsuji-*/X-Akiba-* 等 — 喫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D703: 鍼灸・漢方・東洋医学印自称
+    if env.shinkyuu_marks {
+        render_risks.push(
+            "X-Shinkyuu-*/X-Harikyuu-*/X-Kyuu-*/X-Kampou-*/X-Kampo-*/X-Acupuncture-*/X-Okyu-*/X-Yakuzen-* 等 — 鍼機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
