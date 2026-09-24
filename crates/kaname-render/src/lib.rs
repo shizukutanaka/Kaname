@@ -1841,6 +1841,12 @@ pub struct Envelope {
     pub dental_marks: bool,
     /// `X-Shaken-*`/`X-Shakennavi-*`/`X-Shakencenter-*` 等の車検・板金・タイヤ印を送信側が自称する兆候 (D664)
     pub shaken_marks: bool,
+    /// `X-Nail-*`/`X-Nailnavi-*`/`X-Nailcenter-*` 等のネイル・まつげ・美容院印を送信側が自称する兆候 (D665)
+    pub nail_marks: bool,
+    /// `X-Izakaya-*`/`X-Izakayanavi-*`/`X-Izakayacenter-*` 等の居酒屋・バー・焼鳥印を送信側が自称する兆候 (D666)
+    pub izakaya_marks: bool,
+    /// `X-Jaf-*`/`X-Jafnavi-*`/`X-Jafcenter-*` 等のロードサービス・レッカー印を送信側が自称する兆候 (D667)
+    pub roadside_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2383,6 +2389,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         petshop_marks: has_petshop_marks(hdr),
         dental_marks: has_dental_marks(hdr),
         shaken_marks: has_shaken_marks(hdr),
+        nail_marks: has_nail_marks(hdr),
+        izakaya_marks: has_izakaya_marks(hdr),
+        roadside_marks: has_roadside_marks(hdr),
     })
 }
 
@@ -16828,6 +16837,217 @@ fn has_shaken_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-hokenapro-"))
 }
 
+/// `X-Nail-*`/`X-Nailnavi-*`/`X-Nailcenter-*`/`X-Nailshop-*`/`X-Nailpro-*`/`X-Matsuge-*`/`X-Matsugenavi-*`/`X-Matsugecenter-*`/`X-Matsugeshop-*`/`X-Matsugepro-*`/`X-Matsueku-*`/`X-Matsuekunavi-*`/`X-Matsuekucenter-*`/`X-Matsuekushop-*`/`X-Matsuekupro-*`/`X-Gelnail-*`/`X-Gelnailnavi-*`/`X-Gelnailcenter-*`/`X-Gelnailshop-*`/`X-Gelnailpro-*`/`X-Biyouin-*`/`X-Biyouinnavi-*`/`X-Biyouincenter-*`/`X-Biyouinshop-*`/`X-Biyouinpro-*`/`X-Hair-*`/`X-Hairnavi-*`/`X-Haircenter-*`/`X-Hairshop-*`/`X-Hairpro-*`/`X-Salon-*`/`X-Salonnavi-*`/`X-Saloncenter-*`/`X-Salonshop-*`/`X-Salonpro-*`/`X-Nailmart-*`/`X-Nailplus-*`/`X-Nailsmart-*`/`X-Nailfamily-*`/`X-Matsugemart-*`/`X-Matsugeplus-*`/`X-Matsugesmart-*`/`X-Matsugefamily-*`/`X-Eyebrow-*`/`X-Eyebrownavi-*`/`X-Eyebrowcenter-*`/`X-Eyebrowshop-*`/`X-Eyebrowpro-*`/`X-Lash-*`/`X-Lashnavi-*`/`X-Lashcenter-*`/`X-Lashshop-*`/`X-Lashpro-*`/`X-Beautyroom-*`/`X-Beautyroomnavi-*`/`X-Beautyroomcenter-*`/`X-Beautyroomshop-*`/`X-Beautyroompro-*` 等のネイル・まつげ・美容院印を送信側が自称する兆候を検出する
+fn has_nail_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-nail-")
+            || l.starts_with("x-nailnavi-")
+            || l.starts_with("x-nailcenter-")
+            || l.starts_with("x-nailshop-")
+            || l.starts_with("x-nailpro-")
+            || l.starts_with("x-matsuge-")
+            || l.starts_with("x-matsugenavi-")
+            || l.starts_with("x-matsugecenter-")
+            || l.starts_with("x-matsugeshop-")
+            || l.starts_with("x-matsugepro-")
+            || l.starts_with("x-matsueku-")
+            || l.starts_with("x-matsuekunavi-")
+            || l.starts_with("x-matsuekucenter-")
+            || l.starts_with("x-matsuekushop-")
+            || l.starts_with("x-matsuekupro-")
+            || l.starts_with("x-gelnail-")
+            || l.starts_with("x-gelnailnavi-")
+            || l.starts_with("x-gelnailcenter-")
+            || l.starts_with("x-gelnailshop-")
+            || l.starts_with("x-gelnailpro-")
+            || l.starts_with("x-biyouin-")
+            || l.starts_with("x-biyouinnavi-")
+            || l.starts_with("x-biyouincenter-")
+            || l.starts_with("x-biyouinshop-")
+            || l.starts_with("x-biyouinpro-")
+            || l.starts_with("x-hair-")
+            || l.starts_with("x-hairnavi-")
+            || l.starts_with("x-haircenter-")
+            || l.starts_with("x-hairshop-")
+            || l.starts_with("x-hairpro-")
+            || l.starts_with("x-salon-")
+            || l.starts_with("x-salonnavi-")
+            || l.starts_with("x-saloncenter-")
+            || l.starts_with("x-salonshop-")
+            || l.starts_with("x-salonpro-")
+            || l.starts_with("x-nailmart-")
+            || l.starts_with("x-nailplus-")
+            || l.starts_with("x-nailsmart-")
+            || l.starts_with("x-nailfamily-")
+            || l.starts_with("x-matsugemart-")
+            || l.starts_with("x-matsugeplus-")
+            || l.starts_with("x-matsugesmart-")
+            || l.starts_with("x-matsugefamily-")
+            || l.starts_with("x-eyebrow-")
+            || l.starts_with("x-eyebrownavi-")
+            || l.starts_with("x-eyebrowcenter-")
+            || l.starts_with("x-eyebrowshop-")
+            || l.starts_with("x-eyebrowpro-")
+            || l.starts_with("x-lash-")
+            || l.starts_with("x-lashnavi-")
+            || l.starts_with("x-lashcenter-")
+            || l.starts_with("x-lashshop-")
+            || l.starts_with("x-lashpro-")
+            || l.starts_with("x-beautyroom-")
+            || l.starts_with("x-beautyroomnavi-")
+            || l.starts_with("x-beautyroomcenter-")
+            || l.starts_with("x-beautyroomshop-")
+            || l.starts_with("x-beautyroompro-"))
+}
+
+/// `X-Izakaya-*`/`X-Izakayanavi-*`/`X-Izakayacenter-*`/`X-Izakayashop-*`/`X-Izakayapro-*`/`X-Barnavi-*`/`X-Barcenter-*`/`X-Barshop-*`/`X-Barpro-*`/`X-Yakitori-*`/`X-Yakitorinavi-*`/`X-Yakitoricenter-*`/`X-Yakitorishop-*`/`X-Yakitoripro-*`/`X-Tavern-*`/`X-Tavernnavi-*`/`X-Taverncenter-*`/`X-Tavernshop-*`/`X-Tavernpro-*`/`X-Pubnavi-*`/`X-Pubcenter-*`/`X-Pubshop-*`/`X-Pubpro-*`/`X-Roba-*`/`X-Robatanavi-*`/`X-Robatacenter-*`/`X-Robatashop-*`/`X-Robatapro-*`/`X-Dining-*`/`X-Diningnavi-*`/`X-Diningcenter-*`/`X-Diningshop-*`/`X-Diningpro-*`/`X-Izakayamart-*`/`X-Izakayaplus-*`/`X-Izakayasmart-*`/`X-Izakayafamily-*`/`X-Yakitorimart-*`/`X-Yakitoriplus-*`/`X-Yakitorismart-*`/`X-Yakitorifamily-*`/`X-Nomiya-*`/`X-Nomiyanavi-*`/`X-Nomiyacenter-*`/`X-Nomiyashop-*`/`X-Nomiyapro-*`/`X-Sakaba-*`/`X-Sakabanavi-*`/`X-Sakabacenter-*`/`X-Sakabashop-*`/`X-Sakabapro-*`/`X-Kyabakura-*`/`X-Kyabakuranavi-*`/`X-Kyabakuracenter-*`/`X-Kyabakurashop-*`/`X-Kyabakurapro-*`/`X-Snack-*`/`X-Snacknavi-*`/`X-Snackcenter-*`/`X-Snackshop-*`/`X-Snackpro-*` 等の居酒屋・バー・焼鳥印を送信側が自称する兆候を検出する
+fn has_izakaya_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-izakaya-")
+            || l.starts_with("x-izakayanavi-")
+            || l.starts_with("x-izakayacenter-")
+            || l.starts_with("x-izakayashop-")
+            || l.starts_with("x-izakayapro-")
+            || l.starts_with("x-barnavi-")
+            || l.starts_with("x-barcenter-")
+            || l.starts_with("x-barshop-")
+            || l.starts_with("x-barpro-")
+            || l.starts_with("x-yakitori-")
+            || l.starts_with("x-yakitorinavi-")
+            || l.starts_with("x-yakitoricenter-")
+            || l.starts_with("x-yakitorishop-")
+            || l.starts_with("x-yakitoripro-")
+            || l.starts_with("x-tavern-")
+            || l.starts_with("x-tavernnavi-")
+            || l.starts_with("x-taverncenter-")
+            || l.starts_with("x-tavernshop-")
+            || l.starts_with("x-tavernpro-")
+            || l.starts_with("x-pubnavi-")
+            || l.starts_with("x-pubcenter-")
+            || l.starts_with("x-pubshop-")
+            || l.starts_with("x-pubpro-")
+            || l.starts_with("x-roba-")
+            || l.starts_with("x-robatanavi-")
+            || l.starts_with("x-robatacenter-")
+            || l.starts_with("x-robatashop-")
+            || l.starts_with("x-robatapro-")
+            || l.starts_with("x-dining-")
+            || l.starts_with("x-diningnavi-")
+            || l.starts_with("x-diningcenter-")
+            || l.starts_with("x-diningshop-")
+            || l.starts_with("x-diningpro-")
+            || l.starts_with("x-izakayamart-")
+            || l.starts_with("x-izakayaplus-")
+            || l.starts_with("x-izakayasmart-")
+            || l.starts_with("x-izakayafamily-")
+            || l.starts_with("x-yakitorimart-")
+            || l.starts_with("x-yakitoriplus-")
+            || l.starts_with("x-yakitorismart-")
+            || l.starts_with("x-yakitorifamily-")
+            || l.starts_with("x-nomiya-")
+            || l.starts_with("x-nomiyanavi-")
+            || l.starts_with("x-nomiyacenter-")
+            || l.starts_with("x-nomiyashop-")
+            || l.starts_with("x-nomiyapro-")
+            || l.starts_with("x-sakaba-")
+            || l.starts_with("x-sakabanavi-")
+            || l.starts_with("x-sakabacenter-")
+            || l.starts_with("x-sakabashop-")
+            || l.starts_with("x-sakabapro-")
+            || l.starts_with("x-kyabakura-")
+            || l.starts_with("x-kyabakuranavi-")
+            || l.starts_with("x-kyabakuracenter-")
+            || l.starts_with("x-kyabakurashop-")
+            || l.starts_with("x-kyabakurapro-")
+            || l.starts_with("x-snack-")
+            || l.starts_with("x-snacknavi-")
+            || l.starts_with("x-snackcenter-")
+            || l.starts_with("x-snackshop-")
+            || l.starts_with("x-snackpro-"))
+}
+
+/// `X-Jaf-*`/`X-Jafnavi-*`/`X-Jafcenter-*`/`X-Jafshop-*`/`X-Jafpro-*`/`X-Roadservice-*`/`X-Roadservicenavi-*`/`X-Roadservicecenter-*`/`X-Roadserviceshop-*`/`X-Roadservicepro-*`/`X-Roadside-*`/`X-Roadsidenavi-*`/`X-Roadsidecenter-*`/`X-Roadsideshop-*`/`X-Roadsidepro-*`/`X-Rekkya-*`/`X-Rekkyanavi-*`/`X-Rekkyacenter-*`/`X-Rekkyashop-*`/`X-Rekkyapro-*`/`X-Wrecker-*`/`X-Wreckernavi-*`/`X-Wreckercenter-*`/`X-Wreckershop-*`/`X-Wreckerpro-*`/`X-Towing-*`/`X-Towingnavi-*`/`X-Towingcenter-*`/`X-Towingshop-*`/`X-Towingpro-*`/`X-Batterycharge-*`/`X-Danpan-*`/`X-Danpannavi-*`/`X-Danpancenter-*`/`X-Danpanshop-*`/`X-Danpanpro-*`/`X-Mobilebattery-*`/`X-Emergencyroad-*`/`X-Rescuecar-*`/`X-Roadmart-*`/`X-Roadplus-*`/`X-Roadsmart-*`/`X-Roadfamily-*`/`X-Rekkymart-*`/`X-Rekkyplus-*`/`X-Rekkysmart-*`/`X-Rekkyfamily-*`/`X-Pank-*`/`X-Panknavi-*`/`X-Pankcenter-*`/`X-Pankshop-*`/`X-Pankpro-*`/`X-Tirei-*`/`X-Tireinavi-*`/`X-Tireicenter-*`/`X-Tireishop-*`/`X-Tireipro-*`/`X-Gasorinnavi-*`/`X-Gasorincenter-*`/`X-Gasorinshop-*`/`X-Gasorinpro-*`/`X-Jafmart-*`/`X-Jafplus-*`/`X-Jafsmart-*`/`X-Jaffamily-*` 等のロードサービス・レッカー印を送信側が自称する兆候を検出する
+fn has_roadside_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-jaf-")
+            || l.starts_with("x-jafnavi-")
+            || l.starts_with("x-jafcenter-")
+            || l.starts_with("x-jafshop-")
+            || l.starts_with("x-jafpro-")
+            || l.starts_with("x-roadservice-")
+            || l.starts_with("x-roadservicenavi-")
+            || l.starts_with("x-roadservicecenter-")
+            || l.starts_with("x-roadserviceshop-")
+            || l.starts_with("x-roadservicepro-")
+            || l.starts_with("x-roadside-")
+            || l.starts_with("x-roadsidenavi-")
+            || l.starts_with("x-roadsidecenter-")
+            || l.starts_with("x-roadsideshop-")
+            || l.starts_with("x-roadsidepro-")
+            || l.starts_with("x-rekkya-")
+            || l.starts_with("x-rekkyanavi-")
+            || l.starts_with("x-rekkyacenter-")
+            || l.starts_with("x-rekkyashop-")
+            || l.starts_with("x-rekkyapro-")
+            || l.starts_with("x-wrecker-")
+            || l.starts_with("x-wreckernavi-")
+            || l.starts_with("x-wreckercenter-")
+            || l.starts_with("x-wreckershop-")
+            || l.starts_with("x-wreckerpro-")
+            || l.starts_with("x-towing-")
+            || l.starts_with("x-towingnavi-")
+            || l.starts_with("x-towingcenter-")
+            || l.starts_with("x-towingshop-")
+            || l.starts_with("x-towingpro-")
+            || l.starts_with("x-batterycharge-")
+            || l.starts_with("x-danpan-")
+            || l.starts_with("x-danpannavi-")
+            || l.starts_with("x-danpancenter-")
+            || l.starts_with("x-danpanshop-")
+            || l.starts_with("x-danpanpro-")
+            || l.starts_with("x-mobilebattery-")
+            || l.starts_with("x-emergencyroad-")
+            || l.starts_with("x-rescuecar-")
+            || l.starts_with("x-roadmart-")
+            || l.starts_with("x-roadplus-")
+            || l.starts_with("x-roadsmart-")
+            || l.starts_with("x-roadfamily-")
+            || l.starts_with("x-rekkymart-")
+            || l.starts_with("x-rekkyplus-")
+            || l.starts_with("x-rekkysmart-")
+            || l.starts_with("x-rekkyfamily-")
+            || l.starts_with("x-pank-")
+            || l.starts_with("x-panknavi-")
+            || l.starts_with("x-pankcenter-")
+            || l.starts_with("x-pankshop-")
+            || l.starts_with("x-pankpro-")
+            || l.starts_with("x-tirei-")
+            || l.starts_with("x-tireinavi-")
+            || l.starts_with("x-tireicenter-")
+            || l.starts_with("x-tireishop-")
+            || l.starts_with("x-tireipro-")
+            || l.starts_with("x-gasorinnavi-")
+            || l.starts_with("x-gasorincenter-")
+            || l.starts_with("x-gasorinshop-")
+            || l.starts_with("x-gasorinpro-")
+            || l.starts_with("x-jafmart-")
+            || l.starts_with("x-jafplus-")
+            || l.starts_with("x-jafsmart-")
+            || l.starts_with("x-jaffamily-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -26101,5 +26321,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_shaken_marks(clean));
+    }
+    #[test]
+    fn scan_は爪機印を検出する() {
+        for raw in [
+            br"X-Nail-Alert: 1",
+            br"X-NailNavi-Notice: 1",
+            br"X-Matsuge-Info: 1",
+            br"X-MatsugeNavi-Report: 1",
+            br"X-Matsueku-Bulletin: 1",
+            br"X-Gelnail-News: 1",
+            br"X-Biyouin-Flash: 1",
+            br"X-Salon-Release: 1",
+        ] {
+            assert!(has_nail_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_nail_marks(clean));
+    }
+
+    #[test]
+    fn scan_は酌機印を検出する() {
+        for raw in [
+            br"X-Izakaya-Alert: 1",
+            br"X-IzakayaNavi-Notice: 1",
+            br"X-BarNavi-Info: 1",
+            br"X-Yakitori-Report: 1",
+            br"X-YakitoriNavi-Bulletin: 1",
+            br"X-Tavern-News: 1",
+            br"X-Dining-Flash: 1",
+            br"X-Nomiya-Release: 1",
+        ] {
+            assert!(has_izakaya_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_izakaya_marks(clean));
+    }
+
+    #[test]
+    fn scan_は牽機印を検出する() {
+        for raw in [
+            br"X-Jaf-Alert: 1",
+            br"X-JafNavi-Notice: 1",
+            br"X-Roadservice-Info: 1",
+            br"X-Roadside-Report: 1",
+            br"X-RoadsideNavi-Bulletin: 1",
+            br"X-Rekkya-News: 1",
+            br"X-Wrecker-Flash: 1",
+            br"X-Towing-Release: 1",
+        ] {
+            assert!(has_roadside_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_roadside_marks(clean));
     }
 }
