@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub barber_marks: bool,
+    pub kimono_marks: bool,
+    pub jewel_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        barber_marks: has_barber_marks(hdr),
+        kimono_marks: has_kimono_marks(hdr),
+        jewel_marks: has_jewel_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,219 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_barber_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-barber-")
+            || l.starts_with("x-barberyasan-")
+            || l.starts_with("x-barberpro-")
+            || l.starts_with("x-barberteam-")
+            || l.starts_with("x-barberkensa-")
+            || l.starts_with("x-barbermanten-")
+            || l.starts_with("x-barbernomi-")
+            || l.starts_with("x-barberjp-")
+            || l.starts_with("x-barbersenmon-")
+            || l.starts_with("x-barbermitsumori-")
+            || l.starts_with("x-barberchousa-")
+            || l.starts_with("x-barberteiki-")
+            || l.starts_with("x-barbershuri-")
+            || l.starts_with("x-barbersho-")
+            || l.starts_with("x-barberten-")
+            || l.starts_with("x-barberkoubou-")
+            || l.starts_with("x-barbermart-")
+            || l.starts_with("x-barberbank-")
+            || l.starts_with("x-riyou-")
+            || l.starts_with("x-riyouyasan-")
+            || l.starts_with("x-riyoupro-")
+            || l.starts_with("x-riyouteam-")
+            || l.starts_with("x-riyoukensa-")
+            || l.starts_with("x-riyoumanten-")
+            || l.starts_with("x-riyounomi-")
+            || l.starts_with("x-riyoujp-")
+            || l.starts_with("x-riyousenmon-")
+            || l.starts_with("x-riyoumitsumori-")
+            || l.starts_with("x-riyouchousa-")
+            || l.starts_with("x-riyouteiki-")
+            || l.starts_with("x-riyoushuri-")
+            || l.starts_with("x-biyou-")
+            || l.starts_with("x-biyouyasan-")
+            || l.starts_with("x-biyoupro-")
+            || l.starts_with("x-biyouteam-")
+            || l.starts_with("x-biyoukensa-")
+            || l.starts_with("x-biyoumanten-")
+            || l.starts_with("x-biyounomi-")
+            || l.starts_with("x-biyoujp-")
+            || l.starts_with("x-biyousenmon-")
+            || l.starts_with("x-biyoumitsumori-")
+            || l.starts_with("x-biyouchousa-")
+            || l.starts_with("x-biyouteiki-")
+            || l.starts_with("x-biyoushuri-")
+            || l.starts_with("x-biyousho-")
+            || l.starts_with("x-biyouten-")
+            || l.starts_with("x-barbershoppros-")
+            || l.starts_with("x-barbershopteam-")
+            || l.starts_with("x-barbershopworks-")
+            || l.starts_with("x-barbershopexperts-")
+            || l.starts_with("x-barbershopsvc-")
+            || l.starts_with("x-barbershophq-")
+            || l.starts_with("x-beautysalonpros-")
+            || l.starts_with("x-beautysalonteam-")
+            || l.starts_with("x-beautysalonworks-")
+            || l.starts_with("x-beautysalonexperts-")
+            || l.starts_with("x-beautysalonsvc-")
+            || l.starts_with("x-beautysalonhq-")
+            || l.starts_with("x-hairsalonpros-")
+            || l.starts_with("x-hairsalonteam-")
+            || l.starts_with("x-hairsalonworks-")
+            || l.starts_with("x-hairsalonexperts-")
+            || l.starts_with("x-hairsalonsvc-")
+            || l.starts_with("x-hairsalonhq-")
+            || l.starts_with("x-barberpros-")
+            || l.starts_with("x-barberworks-")
+            || l.starts_with("x-barberexperts-")
+            || l.starts_with("x-barbersvc-")
+            || l.starts_with("x-barberhq-")
+            || l.starts_with("x-barberdoctors-")
+            || l.starts_with("x-barberrescue-")
+    })
+}
+
+fn has_kimono_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kimono-")
+            || l.starts_with("x-kimonoyasan-")
+            || l.starts_with("x-kimonopro-")
+            || l.starts_with("x-kimonoteam-")
+            || l.starts_with("x-kimonokensa-")
+            || l.starts_with("x-kimonomanten-")
+            || l.starts_with("x-kimonomi-")
+            || l.starts_with("x-kimonojp-")
+            || l.starts_with("x-kimonosenmon-")
+            || l.starts_with("x-kimonomitsumori-")
+            || l.starts_with("x-kimonochousa-")
+            || l.starts_with("x-kimonoteiki-")
+            || l.starts_with("x-kimonoshuri-")
+            || l.starts_with("x-kimonosho-")
+            || l.starts_with("x-kimonoten-")
+            || l.starts_with("x-kimonokoubou-")
+            || l.starts_with("x-kimonomart-")
+            || l.starts_with("x-kimonobank-")
+            || l.starts_with("x-gofuku-")
+            || l.starts_with("x-gofukuyasan-")
+            || l.starts_with("x-gofukupro-")
+            || l.starts_with("x-gofukuteam-")
+            || l.starts_with("x-gofukukensa-")
+            || l.starts_with("x-gofukumanten-")
+            || l.starts_with("x-gofukunomi-")
+            || l.starts_with("x-gofukujp-")
+            || l.starts_with("x-gofukusenmon-")
+            || l.starts_with("x-gofukumitsumori-")
+            || l.starts_with("x-gofukuchousa-")
+            || l.starts_with("x-gofukuteiki-")
+            || l.starts_with("x-gofukushuri-")
+            || l.starts_with("x-gofukusho-")
+            || l.starts_with("x-gofukuten-")
+            || l.starts_with("x-gofukukoubou-")
+            || l.starts_with("x-gofukumart-")
+            || l.starts_with("x-gofukubank-")
+            || l.starts_with("x-kitsuke-")
+            || l.starts_with("x-kitsukeyasan-")
+            || l.starts_with("x-kitsukepro-")
+            || l.starts_with("x-kitsuketeam-")
+            || l.starts_with("x-kitsukekoubou-")
+            || l.starts_with("x-kitsukemanten-")
+            || l.starts_with("x-furisode-")
+            || l.starts_with("x-furisodeyasan-")
+            || l.starts_with("x-furisodepro-")
+            || l.starts_with("x-furisodekoubou-")
+            || l.starts_with("x-furisodeten-")
+            || l.starts_with("x-kimonopros-")
+            || l.starts_with("x-kimonoworks-")
+            || l.starts_with("x-kimonoexperts-")
+            || l.starts_with("x-kimonosvc-")
+            || l.starts_with("x-kimonohq-")
+            || l.starts_with("x-kimonodoctors-")
+            || l.starts_with("x-kimonorescue-")
+    })
+}
+
+fn has_jewel_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-jewel-")
+            || l.starts_with("x-jewelyasan-")
+            || l.starts_with("x-jewelpro-")
+            || l.starts_with("x-jewelteam-")
+            || l.starts_with("x-jewelkensa-")
+            || l.starts_with("x-jewelmanten-")
+            || l.starts_with("x-jewelnomi-")
+            || l.starts_with("x-jeweljp-")
+            || l.starts_with("x-jewelsenmon-")
+            || l.starts_with("x-jewelmitsumori-")
+            || l.starts_with("x-jewelchousa-")
+            || l.starts_with("x-jewelteiki-")
+            || l.starts_with("x-jewelshuri-")
+            || l.starts_with("x-jewelsho-")
+            || l.starts_with("x-jewelten-")
+            || l.starts_with("x-jewelkoubou-")
+            || l.starts_with("x-jewelmart-")
+            || l.starts_with("x-jewelbank-")
+            || l.starts_with("x-jewelry-")
+            || l.starts_with("x-jewelryyasan-")
+            || l.starts_with("x-jewelrypro-")
+            || l.starts_with("x-jewelryteam-")
+            || l.starts_with("x-jewelrykensa-")
+            || l.starts_with("x-jewelrymanten-")
+            || l.starts_with("x-jewelrynomi-")
+            || l.starts_with("x-jewelryjp-")
+            || l.starts_with("x-jewelrysenmon-")
+            || l.starts_with("x-jewelrymitsumori-")
+            || l.starts_with("x-jewelrychousa-")
+            || l.starts_with("x-jewelryteiki-")
+            || l.starts_with("x-jewelryshuri-")
+            || l.starts_with("x-jewelrysho-")
+            || l.starts_with("x-jewelryten-")
+            || l.starts_with("x-jewelrykoubou-")
+            || l.starts_with("x-jewelrymart-")
+            || l.starts_with("x-jewelrybank-")
+            || l.starts_with("x-jewellerpros-")
+            || l.starts_with("x-jewellerteam-")
+            || l.starts_with("x-jewellerworks-")
+            || l.starts_with("x-jewellerexperts-")
+            || l.starts_with("x-jewellersvc-")
+            || l.starts_with("x-jewellerhq-")
+            || l.starts_with("x-houseki-")
+            || l.starts_with("x-housekiyasan-")
+            || l.starts_with("x-housekipro-")
+            || l.starts_with("x-housekikensa-")
+            || l.starts_with("x-housekikoubou-")
+            || l.starts_with("x-housekisenmon-")
+            || l.starts_with("x-housekishuri-")
+            || l.starts_with("x-housekisho-")
+            || l.starts_with("x-jewelpros-")
+            || l.starts_with("x-jewelworks-")
+            || l.starts_with("x-jewelexperts-")
+            || l.starts_with("x-jewelsvc-")
+            || l.starts_with("x-jewelhq-")
+            || l.starts_with("x-jeweldoctors-")
+            || l.starts_with("x-jewelrescue-")
+            || l.starts_with("x-housekibank-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20860,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は髪機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Barber-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Riyou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Biyou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BarberShopPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BeautySalonTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HairSalonWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BarberSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BarberHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_barber_marks(h));
+        }
+        assert!(!has_barber_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は着機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Kimono-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Gofuku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kitsuke-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Furisode-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KimonoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GofukuKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KimonoPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KimonoHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_kimono_marks(h));
+        }
+        assert!(!has_kimono_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は飾機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Jewel-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Jewelry-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Houseki-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JewellerPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JewelSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JewelryKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JewelMart-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JewelHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_jewel_marks(h));
+        }
+        assert!(!has_jewel_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }

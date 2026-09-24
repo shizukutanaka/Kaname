@@ -2188,6 +2188,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D737: 理容・美容室印自称
+    if env.barber_marks {
+        render_risks.push(
+            "X-Barber-*/X-Riyou-*/X-Biyou-*/X-BeautySalon-* 等 — 髪機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D738: 着物・呉服印自称
+    if env.kimono_marks {
+        render_risks.push(
+            "X-Kimono-*/X-Gofuku-*/X-Kitsuke-*/X-Furisode-* 等 — 着機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D739: 宝飾・宝石店印自称
+    if env.jewel_marks {
+        render_risks.push(
+            "X-Jewel-*/X-Jewelry-*/X-Jeweller-*/X-Houseki-* 等 — 飾機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
