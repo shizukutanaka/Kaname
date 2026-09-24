@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D785: `X-Daikiboshuushu-*`/`X-Kanrikumiai-*`/`X-Manshonshuzen-*`/`X-Majorrepair-*` 等の大規模修繕・管理組合印自称が未検査
+
+- **問題**: `X-Daikiboshuushu-*`/`X-DaikiboshuushuYasan-*`/`X-DaikiboshuushuPro-*`/`X-DaikiboshuushuTeam-*`/`X-DaikiboshuushuJP-*`/`X-DaikiboshuushuSenmon-*`/`X-Kanrikumiai-*`/`X-KanrikumiaiYasan-*`/`X-KanrikumiaiPro-*`/`X-KanrikumiaiTeam-*`/`X-KanrikumiaiJP-*`/`X-KanrikumiaiSenmon-*`/`X-Manshonshuzen-*`/`X-ManshonshuzenYasan-*`/`X-ManshonshuzenPro-*`/`X-ManshonshuzenTeam-*`/`X-ManshonshuzenJP-*`/`X-ManshonshuzenSenmon-*`/`X-MajorrepairPros-*`/`X-MajorrepairTeam-*`/`X-MajorrepairWorks-*`/`X-MajorrepairExperts-*`/`X-MajorrepairSvc-*`/`X-MajorrepairHQ-*` 等 は繕機の通知記録 — 送信側が書くことは自称。大規模修繕・管理組合コンサルの偽装は、修繕積立金・コンサル料を装ったなりすましの典型手口。(防水は waterproof 機、外壁塗装は painting 機、不動産は realestate 機で検出済み)
+- **修正**: `Envelope` に `daikiboshuushu_marks` + `has_daikiboshuushu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 繕印の自署を問え。
+
+### Security — D786: `X-Kaigaisoukin-*`/`X-Remittance-*`/`X-Overseasremit-*`/`X-Sendmoney-*` 等の海外送金印自称が未検査
+
+- **問題**: `X-Kaigaisoukin-*`/`X-KaigaisoukinYasan-*`/`X-KaigaisoukinPro-*`/`X-KaigaisoukinTeam-*`/`X-KaigaisoukinJP-*`/`X-KaigaisoukinSenmon-*`/`X-RemittancePros-*`/`X-RemittanceTeam-*`/`X-RemittanceWorks-*`/`X-RemittanceExperts-*`/`X-RemittanceSvc-*`/`X-RemittanceHQ-*`/`X-OverseasremitPros-*`/`X-OverseasremitTeam-*`/`X-OverseasremitWorks-*`/`X-OverseasremitExperts-*`/`X-OverseasremitSvc-*`/`X-OverseasremitHQ-*`/`X-SendmoneyPros-*`/`X-SendmoneyTeam-*`/`X-SendmoneyWorks-*`/`X-SendmoneyExperts-*`/`X-SendmoneySvc-*`/`X-SendmoneyHQ-*` 等 は送機の通知記録 — 送信側が書くことは自称。海外送金サービスの偽装は、送金手数料・為替マージン・口座確認料を装ったなりすましの典型手口。(送金ブランド `x-remitly-` は fintech 機、証券は securities 機、仮想通貨は crypto 機で検出済み)
+- **修正**: `Envelope` に `kaigaisoukin_marks` + `has_kaigaisoukin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 送印の自署を問え。
+
+### Security — D787: `X-Enjou-*`/`X-Sakujodaikou-*`/`X-Reputation-*`/`X-Cyberdefame-*`/`X-Onlinedefame-*` 等のネット炎上・削除代行印自称が未検査
+
+- **問題**: `X-Enjou-*`/`X-EnjouYasan-*`/`X-EnjouPro-*`/`X-EnjouTeam-*`/`X-EnjouJP-*`/`X-EnjouSenmon-*`/`X-Sakujodaikou-*`/`X-SakujodaikouYasan-*`/`X-SakujodaikouPro-*`/`X-SakujodaikouTeam-*`/`X-SakujodaikouJP-*`/`X-SakujodaikouSenmon-*`/`X-ReputationPros-*`/`X-ReputationTeam-*`/`X-ReputationWorks-*`/`X-ReputationExperts-*`/`X-ReputationSvc-*`/`X-ReputationHQ-*`/`X-CyberdefamePros-*`/`X-CyberdefameTeam-*`/`X-CyberdefameWorks-*`/`X-CyberdefameExperts-*`/`X-CyberdefameSvc-*`/`X-CyberdefameHQ-*`/`X-OnlinedefamePros-*`/`X-OnlinedefameTeam-*`/`X-OnlinedefameWorks-*`/`X-OnlinedefameExperts-*`/`X-OnlinedefameSvc-*`/`X-OnlinedefameHQ-*` 等 は炎機の通知記録 — 送信側が書くことは自称。ネット炎上対策・削除代行業者の偽装は、削除着手金・成功報酬を装ったなりすましの典型手口。(弁護士は legal 機、SNS 運用は sns_platform 機で検出済み)
+- **修正**: `Envelope` に `enjou_marks` + `has_enjou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 炎印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
