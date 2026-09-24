@@ -2779,6 +2779,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D689: ETC・高速道路印自称
+    if env.etc_marks {
+        render_risks.push(
+            "X-Etc-*/X-Nexco-*/X-Shutoko-*/X-Expway-*/X-Highway-*/X-Toll-*/X-Kousoku-*/X-Smartic-* 等 — 路機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D690: 復縁・別れさせ屋・国際結婚印自称
+    if env.wakaresase_marks {
+        render_risks.push(
+            "X-Wakaresase-*/X-Fukuen-*/X-Kokusaikekkon-*/X-Intlmarriage-*/X-Filipina-*/X-Romance-*/X-Reunion-*/X-Mailbride-* 等 — 縁機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D691: ハローワーク・職業訓練印自称
+    if env.hellowork_marks {
+        render_risks.push(
+            "X-Hellowork-*/X-Shokugyoukunren-*/X-Kunren-*/X-Shokuan-*/X-Jobcard-*/X-Koyo-*/X-Polytech-*/X-Shuushoku-* 等 — 職機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

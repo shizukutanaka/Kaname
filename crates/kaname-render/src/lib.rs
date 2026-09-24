@@ -1889,6 +1889,12 @@ pub struct Envelope {
     pub fukugyou_marks: bool,
     /// `X-Mlm-*`/`X-Networkbusiness-*`/`X-Networkbiz-*` 等のMLM・ネットワークビジネス印を送信側が自称する兆候 (D688)
     pub mlm_marks: bool,
+    /// `X-Etc-*`/`X-Nexco-*`/`X-Nexcoeast-*` 等のETC・高速道路印を送信側が自称する兆候 (D689)
+    pub etc_marks: bool,
+    /// `X-Wakaresase-*`/`X-Fukuen-*`/`X-Fukuenya-*` 等の復縁・別れさせ屋・国際結婚印を送信側が自称する兆候 (D690)
+    pub wakaresase_marks: bool,
+    /// `X-Hellowork-*`/`X-Shokugyoukunren-*`/`X-Kunren-*` 等のハローワーク・職業訓練印を送信側が自称する兆候 (D691)
+    pub hellowork_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2455,6 +2461,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         shogaku_marks: has_shogaku_marks(hdr),
         fukugyou_marks: has_fukugyou_marks(hdr),
         mlm_marks: has_mlm_marks(hdr),
+        etc_marks: has_etc_marks(hdr),
+        wakaresase_marks: has_wakaresase_marks(hdr),
+        hellowork_marks: has_hellowork_marks(hdr),
     })
 }
 
@@ -18690,6 +18699,216 @@ fn has_mlm_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-pyramidcenter-"))
 }
 
+fn has_etc_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-etc-")
+            || l.starts_with("x-nexco-")
+            || l.starts_with("x-nexcoeast-")
+            || l.starts_with("x-nexcocentral-")
+            || l.starts_with("x-nexcowest-")
+            || l.starts_with("x-shutoko-")
+            || l.starts_with("x-expway-")
+            || l.starts_with("x-highway-")
+            || l.starts_with("x-etccard-")
+            || l.starts_with("x-toll-")
+            || l.starts_with("x-wangan-")
+            || l.starts_with("x-sanyo-")
+            || l.starts_with("x-tohoku-")
+            || l.starts_with("x-kyushu-")
+            || l.starts_with("x-honjushiko-")
+            || l.starts_with("x-douro-")
+            || l.starts_with("x-kousoku-")
+            || l.starts_with("x-kousokudouro-")
+            || l.starts_with("x-ryokin-")
+            || l.starts_with("x-smartic-")
+            || l.starts_with("x-etcnavi-")
+            || l.starts_with("x-etccenter-")
+            || l.starts_with("x-etcshop-")
+            || l.starts_with("x-etcpro-")
+            || l.starts_with("x-etcmart-")
+            || l.starts_with("x-etcplus-")
+            || l.starts_with("x-etcsmart-")
+            || l.starts_with("x-etcfamily-")
+            || l.starts_with("x-nexconavi-")
+            || l.starts_with("x-nexcocenter-")
+            || l.starts_with("x-nexcoshop-")
+            || l.starts_with("x-nexcopro-")
+            || l.starts_with("x-nexcomart-")
+            || l.starts_with("x-nexcoplus-")
+            || l.starts_with("x-nexcosmart-")
+            || l.starts_with("x-nexcofamily-")
+            || l.starts_with("x-nexcoeastnavi-")
+            || l.starts_with("x-nexcoeastcenter-")
+            || l.starts_with("x-nexcoeastshop-")
+            || l.starts_with("x-nexcoeastpro-")
+            || l.starts_with("x-nexcoeastmart-")
+            || l.starts_with("x-nexcoeastplus-")
+            || l.starts_with("x-nexcoeastsmart-")
+            || l.starts_with("x-nexcoeastfamily-")
+            || l.starts_with("x-nexcocentralnavi-")
+            || l.starts_with("x-nexcocentralcenter-")
+            || l.starts_with("x-nexcocentralshop-")
+            || l.starts_with("x-nexcocentralpro-")
+            || l.starts_with("x-nexcocentralmart-")
+            || l.starts_with("x-nexcocentralplus-")
+            || l.starts_with("x-nexcocentralsmart-")
+            || l.starts_with("x-nexcocentralfamily-")
+            || l.starts_with("x-nexcowestnavi-")
+            || l.starts_with("x-nexcowestcenter-")
+            || l.starts_with("x-nexcowestshop-")
+            || l.starts_with("x-nexcowestpro-")
+            || l.starts_with("x-nexcowestmart-")
+            || l.starts_with("x-nexcowestplus-")
+            || l.starts_with("x-nexcowestsmart-")
+            || l.starts_with("x-nexcowestfamily-")
+            || l.starts_with("x-shutokonavi-")
+            || l.starts_with("x-shutokocenter-"))
+}
+
+fn has_wakaresase_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-wakaresase-")
+            || l.starts_with("x-fukuen-")
+            || l.starts_with("x-fukuenya-")
+            || l.starts_with("x-kokusaikekkon-")
+            || l.starts_with("x-intlmarriage-")
+            || l.starts_with("x-filipina-")
+            || l.starts_with("x-romance-")
+            || l.starts_with("x-matchmaker-")
+            || l.starts_with("x-kokusaikonkatsu-")
+            || l.starts_with("x-reunion-")
+            || l.starts_with("x-loveback-")
+            || l.starts_with("x-mailbride-")
+            || l.starts_with("x-bride-")
+            || l.starts_with("x-wakaresasenavi-")
+            || l.starts_with("x-wakaresasecenter-")
+            || l.starts_with("x-wakaresaseshop-")
+            || l.starts_with("x-wakaresasepro-")
+            || l.starts_with("x-wakaresasemart-")
+            || l.starts_with("x-wakaresaseplus-")
+            || l.starts_with("x-wakaresasesmart-")
+            || l.starts_with("x-wakaresasefamily-")
+            || l.starts_with("x-fukuennavi-")
+            || l.starts_with("x-fukuencenter-")
+            || l.starts_with("x-fukuenshop-")
+            || l.starts_with("x-fukuenpro-")
+            || l.starts_with("x-fukuenmart-")
+            || l.starts_with("x-fukuenplus-")
+            || l.starts_with("x-fukuensmart-")
+            || l.starts_with("x-fukuenfamily-")
+            || l.starts_with("x-fukuenyanavi-")
+            || l.starts_with("x-fukuenyacenter-")
+            || l.starts_with("x-fukuenyashop-")
+            || l.starts_with("x-fukuenyapro-")
+            || l.starts_with("x-fukuenyamart-")
+            || l.starts_with("x-fukuenyaplus-")
+            || l.starts_with("x-fukuenyasmart-")
+            || l.starts_with("x-fukuenyafamily-")
+            || l.starts_with("x-kokusaikekkonnavi-")
+            || l.starts_with("x-kokusaikekkoncenter-")
+            || l.starts_with("x-kokusaikekkonshop-")
+            || l.starts_with("x-kokusaikekkonpro-")
+            || l.starts_with("x-kokusaikekkonmart-")
+            || l.starts_with("x-kokusaikekkonplus-")
+            || l.starts_with("x-kokusaikekkonsmart-")
+            || l.starts_with("x-kokusaikekkonfamily-")
+            || l.starts_with("x-intlmarriagenavi-")
+            || l.starts_with("x-intlmarriagecenter-")
+            || l.starts_with("x-intlmarriageshop-")
+            || l.starts_with("x-intlmarriagepro-")
+            || l.starts_with("x-intlmarriagemart-")
+            || l.starts_with("x-intlmarriageplus-")
+            || l.starts_with("x-intlmarriagesmart-")
+            || l.starts_with("x-intlmarriagefamily-")
+            || l.starts_with("x-filipinanavi-")
+            || l.starts_with("x-filipinacenter-")
+            || l.starts_with("x-filipinashop-")
+            || l.starts_with("x-filipinapro-")
+            || l.starts_with("x-filipinamart-")
+            || l.starts_with("x-filipinaplus-")
+            || l.starts_with("x-filipinasmart-")
+            || l.starts_with("x-filipinafamily-")
+            || l.starts_with("x-romancenavi-"))
+}
+
+fn has_hellowork_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hellowork-")
+            || l.starts_with("x-shokugyoukunren-")
+            || l.starts_with("x-kunren-")
+            || l.starts_with("x-shokuan-")
+            || l.starts_with("x-jobcard-")
+            || l.starts_with("x-worknavi-")
+            || l.starts_with("x-koyo-")
+            || l.starts_with("x-shokureba-")
+            || l.starts_with("x-polytech-")
+            || l.starts_with("x-jinzai-")
+            || l.starts_with("x-shuushoku-")
+            || l.starts_with("x-tenshoku-")
+            || l.starts_with("x-ginou-")
+            || l.starts_with("x-jukuren-")
+            || l.starts_with("x-syokuren-")
+            || l.starts_with("x-helloworknavi-")
+            || l.starts_with("x-helloworkcenter-")
+            || l.starts_with("x-helloworkshop-")
+            || l.starts_with("x-helloworkpro-")
+            || l.starts_with("x-helloworkmart-")
+            || l.starts_with("x-helloworkplus-")
+            || l.starts_with("x-helloworksmart-")
+            || l.starts_with("x-helloworkfamily-")
+            || l.starts_with("x-shokugyoukunrennavi-")
+            || l.starts_with("x-shokugyoukunrencenter-")
+            || l.starts_with("x-shokugyoukunrenshop-")
+            || l.starts_with("x-shokugyoukunrenpro-")
+            || l.starts_with("x-shokugyoukunrenmart-")
+            || l.starts_with("x-shokugyoukunrenplus-")
+            || l.starts_with("x-shokugyoukunrensmart-")
+            || l.starts_with("x-shokugyoukunrenfamily-")
+            || l.starts_with("x-kunrennavi-")
+            || l.starts_with("x-kunrencenter-")
+            || l.starts_with("x-kunrenshop-")
+            || l.starts_with("x-kunrenpro-")
+            || l.starts_with("x-kunrenmart-")
+            || l.starts_with("x-kunrenplus-")
+            || l.starts_with("x-kunrensmart-")
+            || l.starts_with("x-kunrenfamily-")
+            || l.starts_with("x-shokuannavi-")
+            || l.starts_with("x-shokuancenter-")
+            || l.starts_with("x-shokuanshop-")
+            || l.starts_with("x-shokuanpro-")
+            || l.starts_with("x-shokuanmart-")
+            || l.starts_with("x-shokuanplus-")
+            || l.starts_with("x-shokuansmart-")
+            || l.starts_with("x-shokuanfamily-")
+            || l.starts_with("x-jobcardnavi-")
+            || l.starts_with("x-jobcardcenter-")
+            || l.starts_with("x-jobcardshop-")
+            || l.starts_with("x-jobcardpro-")
+            || l.starts_with("x-jobcardmart-")
+            || l.starts_with("x-jobcardplus-")
+            || l.starts_with("x-jobcardsmart-")
+            || l.starts_with("x-jobcardfamily-")
+            || l.starts_with("x-worknavinavi-")
+            || l.starts_with("x-worknavicenter-")
+            || l.starts_with("x-worknavishop-")
+            || l.starts_with("x-worknavipro-")
+            || l.starts_with("x-worknavimart-")
+            || l.starts_with("x-worknaviplus-")
+            || l.starts_with("x-worknavismart-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -28389,6 +28608,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_mlm_marks(clean));
+    }
+
+    #[test]
+    fn scan_は路機印を検出する() {
+        for raw in [
+            br"X-Etc-Alert: 1",
+            br"X-Nexco-Notice: 1",
+            br"X-Shutoko-Info: 1",
+            br"X-Expway-Report: 1",
+            br"X-Highway-Bulletin: 1",
+            br"X-Toll-News: 1",
+            br"X-Kousoku-Flash: 1",
+            br"X-Smartic-Release: 1",
+        ] {
+            assert!(has_etc_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_etc_marks(clean));
+    }
+
+    #[test]
+    fn scan_は縁機印を検出する() {
+        for raw in [
+            br"X-Wakaresase-Alert: 1",
+            br"X-Fukuen-Notice: 1",
+            br"X-Kokusaikekkon-Info: 1",
+            br"X-Intlmarriage-Report: 1",
+            br"X-Filipina-Bulletin: 1",
+            br"X-Romance-News: 1",
+            br"X-Reunion-Flash: 1",
+            br"X-Mailbride-Release: 1",
+        ] {
+            assert!(has_wakaresase_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_wakaresase_marks(clean));
+    }
+
+    #[test]
+    fn scan_は職機印を検出する() {
+        for raw in [
+            br"X-Hellowork-Alert: 1",
+            br"X-Shokugyoukunren-Notice: 1",
+            br"X-Kunren-Info: 1",
+            br"X-Shokuan-Report: 1",
+            br"X-Jobcard-Bulletin: 1",
+            br"X-Koyo-News: 1",
+            br"X-Polytech-Flash: 1",
+            br"X-Shuushoku-Release: 1",
+        ] {
+            assert!(has_hellowork_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_hellowork_marks(clean));
     }
 
 }
