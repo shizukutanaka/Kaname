@@ -762,11 +762,12 @@ if bad:
 print(f"  OK: corpus {len(corpora)} 件 / target {len(targets)} 件 / bin {len(bins)} 件の対応が一致")
 PY
 
-echo "== 11. kaname-render parse() が has_*_marks にヘッダ部のみを渡すこと =="
-# D570: has_*_marks はヘッダしか見ないのに parse() が raw 全体を渡していたため、
-# 各関数が最大 100 MB の本文ごと複製・小文字化していた (155 関数 × 2 コピー)。
-# parse() 内では header_section() で切り出した hdr を渡すこと。
-python3 - <<'PY' || fail=1
+echo "== 11. kaname-render parse() がヘッダ専用の検出器にヘッダ部のみを渡すこと =="
+# D570: has_*_marks 等のヘッダ専用検出器は、全文を lossy 変換・小文字化してから
+# 空行までを切り出す共通の前置きを持つ。parse() が raw 全体を渡すと各関数が
+# 最大 100 MB の本文ごと複製し、LF 改行の .eml では本文までヘッダとして走査する。
+# この前置きで始まる関数には header_section() で切り出した hdr を渡すこと。
+python3 - <<'PY11' || fail=1
 import re, sys
 s = open('crates/kaname-render/src/lib.rs', encoding='utf-8').read()
 start = s.find('pub fn parse(raw: &[u8])')
@@ -774,14 +775,72 @@ if start < 0:
     print("  NG parse() が見つからない"); sys.exit(1)
 end = s.find('\n}\n', start)
 body = s[start:end]
-bad = re.findall(r'(has_[a-z0-9_]+_marks)\(raw\)', body)
+pre = ('    let text = String::from_utf8_lossy(raw);\n'
+       '    let lower = text.to_ascii_lowercase();\n'
+       '    let header_end = lower.find("\\r\\n\\r\\n").unwrap_or(lower.len());\n'
+       '    let header = &lower[..header_end];')
+bad = []
+for name in sorted(set(re.findall(r'\b([a-z0-9_]+)\(raw\)', body)) - {'parse', 'header_section'}):
+    m = re.search(r'\nfn ' + name + r'\(raw: &\[u8\]\) -> bool \{\n(.*?)\n\}\n', s, re.S)
+    if m and m.group(1).startswith(pre):
+        bad.append(name)
 for name in bad:
-    print(f"  NG parse() が {name}(raw) を呼んでいる — header_section() の hdr を渡すこと (D570)")
+    print(f"  NG parse() がヘッダ専用の {name}(raw) を呼んでいる — header_section() の hdr を渡すこと (D570)")
 if bad:
     sys.exit(1)
-n = len(re.findall(r'has_[a-z0-9_]+_marks\(hdr\)', body))
-print(f"  OK: has_*_marks {n} 件すべてにヘッダ部のみを渡している")
-PY
+n = len(re.findall(r'\b[a-z0-9_]+\(hdr\)', body))
+print(f"  OK: ヘッダ専用の検出器 {n} 件すべてにヘッダ部のみを渡している")
+PY11
+
+echo "== 12. 「送信側が自称」警告の文言契約と DMARC ゲート (D571) =="
+# D571: 送信側が書き込んだヘッダの存在だけを根拠とする警告 (`if env.*_marks` 等) は
+# SELF_CLAIM_SUFFIXES のいずれかで終わり、analyze_raw_email の最後の変更の後にある
+# DMARC ゲートで一括除去される。文言がずれた検出器はゲートをすり抜けて
+# 認証済みの正規メールに誤警報を出すため、末尾・ゲートの存在・ゲート位置を検査する。
+python3 - <<'PY2' || fail=1
+import re, sys
+s = open('crates/kaname-ui/src/commands.rs', encoding='utf-8').read()
+bad = 0
+m = re.search(r'const SELF_CLAIM_SUFFIXES: \[&str; \d+\] = \[(.*?)\];', s, re.S)
+suffixes = re.findall(r'"([^"]*)"', m.group(1)) if m else []
+if "を送信側が自称する兆候です" not in suffixes:
+    print("  NG SELF_CLAIM_SUFFIXES 定数が無い、または「を送信側が自称する兆候です」を含まない"); bad += 1
+start = s.find('pub async fn analyze_raw_email(')
+end = s.find('Ok(ImportedEmail {', start)
+if start < 0 or end < 0:
+    print("  NG analyze_raw_email / Ok(ImportedEmail { が見つからない"); sys.exit(1)
+body = s[start:end]
+opens = re.findall(r'if env\.([a-z0-9_]+_marks) \{', body)
+lits = re.findall(r'if env\.([a-z0-9_]+_marks) \{\s*render_risks\.push\(\s*"([^"]*)"', body)
+if len(opens) != len(lits):
+    got = {f for f, _ in lits}
+    for f in opens:
+        if f not in got:
+            print(f"  NG env.{f}: 警告が文字列リテラルの push でない (文言契約を検査できない)"); bad += 1
+for f, t in lits:
+    if not any(t.endswith(x) for x in suffixes):
+        print(f"  NG env.{f}: 警告文が SELF_CLAIM_SUFFIXES のいずれでも終わらない — DMARC ゲートをすり抜ける"); bad += 1
+gate = body.rfind('render_risks.retain(|r| !is_self_claim_warning(r))')
+if gate < 0:
+    print("  NG DMARC ゲート (render_risks.retain(|r| !is_self_claim_warning(r))) が無い"); bad += 1
+else:
+    marks_pos = [mm.start() for mm in re.finditer(r'if env\.[a-z0-9_]+ \{\s*render_risks\.push\(', body)]
+    last = max([body.rfind('render_risks.push('), body.rfind('render_risks.extend(')] + marks_pos)
+    if last > gate:
+        print("  NG DMARC ゲートより後に render_risks への追加がある — 後続の警告がゲートを通らない"); bad += 1
+# 参考: 1 つのヘッダ接頭辞が複数の検出器に属すると、1 ヘッダで警告が重複する (失敗にはしない)。
+r = open('crates/kaname-render/src/lib.rs', encoding='utf-8').read()
+owner = {}
+for name, fbody in re.findall(r"\nfn (has_[a-z0-9_]+_marks)\(raw: &\[u8\]\) -> bool \{\n(.*?)\n\}\n", r, re.S):
+    for pfx in re.findall(r'starts_with\("([^"]+)"\)', fbody):
+        owner.setdefault(pfx, set()).add(name)
+dups = sorted(p for p, o in owner.items() if len(o) > 1)
+if dups:
+    print(f"  WARN 複数の検出器に属するヘッダ接頭辞 {len(dups)} 件 (1 ヘッダで警告が重複): {', '.join(dups)}")
+if bad:
+    sys.exit(1)
+print(f"  OK: *_marks 警告 {len(lits)} 件が SELF_CLAIM_SUFFIXES で終わり、DMARC ゲートは全追加の後にある")
+PY2
 
 echo ""
 if [ "$fail" -eq 0 ]; then

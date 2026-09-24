@@ -932,7 +932,7 @@ pub struct Envelope {
     pub utility_marks: bool,
     /// `X-Hertz-*`/`X-Avis-*`/`X-Enterprise-*`/`X-Turo-*`/`X-Getaround-*`/
     /// `X-TimesCar-*`/`X-OrixRental-*`/`X-ToyotaRental-*`/`X-NissanRental-*`/
-    /// `X-Toyota-*`/`X-Honda-*`/`X-Nissan-*`/`X-Ford-*`/`X-GM-*`/
+    /// `X-Toyota-*`/`X-Honda-*`/`X-Nissan-*`/`X-Ford-*`/
     /// `X-Volkswagen-*`/`X-BMW-*`/`X-Mercedes-*`/`X-Audi-*`/`X-Porsche-*`/
     /// `X-Hyundai-*`/`X-Kia-*`/`X-Volvo-*`/`X-Tesla-*`/`X-Subaru-*`/
     /// `X-Mazda-*`/`X-MitsubishiMotors-*`/`X-Suzuki-*`/`X-Daihatsu-*`/
@@ -2035,13 +2035,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
-        abuse_headers: has_abuse_headers(raw),
-        has_attach_claim: has_attach_claim(raw),
-        feedback_id: has_feedback_id(raw),
+        abuse_headers: has_abuse_headers(hdr),
+        has_attach_claim: has_attach_claim(hdr),
+        feedback_id: has_feedback_id(hdr),
         spam_detail_marks: has_spam_detail_marks(hdr),
         dcc_marks: has_dcc_marks(hdr),
         autogen_marks: has_autogen_marks(hdr),
-        esp2_stamps: has_esp2_stamps(raw),
+        esp2_stamps: has_esp2_stamps(hdr),
         appliance3_marks: has_appliance3_marks(hdr),
         finalrcpt_marks: has_finalrcpt_marks(hdr),
         hash_marks: has_hash_marks(hdr),
@@ -6905,7 +6905,7 @@ fn has_utility_marks(raw: &[u8]) -> bool {
 
 /// `X-Hertz-*`/`X-Avis-*`/`X-Enterprise-*`/`X-Turo-*`/`X-Getaround-*`/
 /// `X-TimesCar-*`/`X-OrixRental-*`/`X-ToyotaRental-*`/`X-NissanRental-*`/
-/// `X-Toyota-*`/`X-Honda-*`/`X-Nissan-*`/`X-Ford-*`/`X-GM-*`/`X-Volkswagen-*`/
+/// `X-Toyota-*`/`X-Honda-*`/`X-Nissan-*`/`X-Ford-*`/`X-Volkswagen-*`/
 /// `X-BMW-*`/`X-Mercedes-*`/`X-Audi-*`/`X-Porsche-*`/`X-Hyundai-*`/`X-Kia-*`/
 /// `X-Volvo-*`/`X-Tesla-*`/`X-Subaru-*`/`X-Mazda-*`/`X-MitsubishiMotors-*`/
 /// `X-Suzuki-*`/`X-Daihatsu-*`/`X-Lexus-*`/`X-Rivian-*`/`X-BYD-*`/
@@ -6915,6 +6915,11 @@ fn has_utility_marks(raw: &[u8]) -> bool {
 ///
 /// `X-Toyota-*` (Toyota)、`X-Honda-*` (Honda)、`X-Hertz-*` (Hertz) は
 /// 車機の通知記録 — 送信側から届くこれは自称。リコール・車検詐欺の典型印。
+///
+/// `X-GM-*` (General Motors) は含めない — 大文字小文字を無視した照合では
+/// Gmail の `X-Gm-Message-State`/`X-Gm-Features` と同一の接頭辞になり、
+/// Gmail から届く全メールを「自動車ブランドの自称」と誤判定していた (D571)。
+/// `X-Gm-*` は `has_webmail_internal_marks` (D438) の担当。
 fn has_automotive_marks(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let lower = text.to_ascii_lowercase();
@@ -6934,7 +6939,6 @@ fn has_automotive_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-honda-")
             || l.starts_with("x-nissan-")
             || l.starts_with("x-ford-")
-            || l.starts_with("x-gm-")
             || l.starts_with("x-volkswagen-")
             || l.starts_with("x-bmw-")
             || l.starts_with("x-mercedes-")
@@ -14239,6 +14243,20 @@ mod tests {
         assert!(!env.creditcard_marks, "本文行はヘッダ印ではない");
     }
 
+    /// D570/D571: `*_marks` 以外のヘッダ専用検出器 (Feedback-ID・abuse 報告先・
+    /// X-MS-Has-Attach) も LF のみのメッセージで本文行を拾わない。
+    #[test]
+    fn parse_は_lf_のみのメッセージで本文のヘッダ風の行を拾わない() {
+        let raw = b"From: a@example.com\nTo: b@example.com\nSubject: hi\n\n\
+                    Feedback-ID: in body\nX-Report-Abuse: in body\nX-MS-Has-Attach: yes\n";
+        let env = parse(raw).expect("parse");
+        assert!(!env.feedback_id, "本文行の Feedback-ID はヘッダではない");
+        assert!(
+            !env.abuse_headers,
+            "本文行の X-Report-Abuse はヘッダではない"
+        );
+    }
+
     #[test]
     fn parse_は_crlf_ヘッダの印を従来どおり検出する() {
         let raw = b"From: a@example.com\r\nTo: b@example.com\r\nSubject: hi\r\nX-VISA-Notify: x\r\n\r\nbody\r\n";
@@ -17575,6 +17593,23 @@ mod tests {
         assert!(has_automotive_marks(s1));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_automotive_marks(clean));
+    }
+
+    /// D571: Gmail の内部ヘッダ `X-Gm-*` は自動車印 (旧 `x-gm-` = General Motors) と
+    /// 同じ接頭辞になっており、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
+    #[test]
+    fn scan_自動車印は_gmail_の_x_gm_ヘッダに反応しない() {
+        let gmail = b"X-Gm-Message-State: AOJu0Y\r\nX-Gm-Features: x\r\n\r\nx";
+        assert!(
+            !has_automotive_marks(gmail),
+            "X-Gm-* は Gmail の印であり自動車印ではない"
+        );
+        assert!(
+            has_webmail_internal_marks(gmail),
+            "X-Gm-* は従来どおり webmail 内部印として検出"
+        );
+        let ford = b"X-Ford-Notify: x\r\n\r\nx";
+        assert!(has_automotive_marks(ford));
     }
 
     #[test]
