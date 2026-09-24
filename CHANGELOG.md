@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D842: `X-Miso-*`/`X-Misoya-*`/`X-Misoten-*`/`X-Misostore-*`/`X-Misodirect-*`/`X-Misobrewery-*` 等の味噌印自称が未検査
+
+- **問題**: `X-Miso-*`/`X-MisoYasan-*`/`X-MisoPro-*`/`X-MisoTeam-*`/`X-MisoJP-*`/`X-MisoSenmon-*`/`X-Misoya-*`/`X-MisoyaYasan-*`/`X-MisoyaPro-*`/`X-MisoyaTeam-*`/`X-MisoyaJP-*`/`X-MisoyaSenmon-*`/`X-Misoten-*`/`X-MisotenYasan-*`/`X-MisotenPro-*`/`X-MisotenTeam-*`/`X-MisotenJP-*`/`X-MisotenSenmon-*`/`X-MisostorePros-*`/`X-MisostoreTeam-*`/`X-MisostoreWorks-*`/`X-MisostoreExperts-*`/`X-MisostoreSvc-*`/`X-MisostoreHQ-*`/`X-MisodirectPros-*`/`X-MisodirectTeam-*`/`X-MisodirectWorks-*`/`X-MisodirectExperts-*`/`X-MisodirectSvc-*`/`X-MisodirectHQ-*`/`X-MisobreweryPros-*`/`X-MisobreweryTeam-*`/`X-MisobreweryWorks-*`/`X-MisobreweryExperts-*`/`X-MisobrewerySvc-*`/`X-MisobreweryHQ-*` 等 は噌機の通知記録 — 送信側が書くことは自称。味噌業者の偽装は、蔵元直送・無添加手作り味噌の格安販売を装った通販詐欺の典型手口。(`x-misoca-` は既存所有のため別形のみ)
+- **修正**: `Envelope` に `miso_marks` + `has_miso_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 噌印の自署を問え。
+
+### Security — D843: `X-Shoyu-*`/`X-Shoyuya-*`/`X-Shoyuten-*`/`X-Shoyustore-*`/`X-Shoyudirect-*`/`X-Shoyubrewery-*` 等の醤油印自称が未検査
+
+- **問題**: `X-Shoyu-*`/`X-ShoyuYasan-*`/`X-ShoyuPro-*`/`X-ShoyuTeam-*`/`X-ShoyuJP-*`/`X-ShoyuSenmon-*`/`X-Shoyuya-*`/`X-ShoyuyaYasan-*`/`X-ShoyuyaPro-*`/`X-ShoyuyaTeam-*`/`X-ShoyuyaJP-*`/`X-ShoyuyaSenmon-*`/`X-Shoyuten-*`/`X-ShoyutenYasan-*`/`X-ShoyutenPro-*`/`X-ShoyutenTeam-*`/`X-ShoyutenJP-*`/`X-ShoyutenSenmon-*`/`X-ShoyustorePros-*`/`X-ShoyustoreTeam-*`/`X-ShoyustoreWorks-*`/`X-ShoyustoreExperts-*`/`X-ShoyustoreSvc-*`/`X-ShoyustoreHQ-*`/`X-ShoyudirectPros-*`/`X-ShoyudirectTeam-*`/`X-ShoyudirectWorks-*`/`X-ShoyudirectExperts-*`/`X-ShoyudirectSvc-*`/`X-ShoyudirectHQ-*`/`X-ShoyubreweryPros-*`/`X-ShoyubreweryTeam-*`/`X-ShoyubreweryWorks-*`/`X-ShoyubreweryExperts-*`/`X-ShoyubrewerySvc-*`/`X-ShoyubreweryHQ-*` 等 は醤機の通知記録 — 送信側が書くことは自称。醤油業者の偽装は、木桶仕込み・天然醸造醤油の蔵出し直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shoyu_marks` + `has_shoyu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 醤印の自署を問え。
+
+### Security — D844: `X-Kurozu-*`/`X-Suya-*`/`X-Sunoten-*`/`X-Vinegarstore-*`/`X-Ricevinegar-*`/`X-Vinegardirect-*` 等の黒酢・酢印自称が未検査
+
+- **問題**: `X-Kurozu-*`/`X-KurozuYasan-*`/`X-KurozuPro-*`/`X-KurozuTeam-*`/`X-KurozuJP-*`/`X-KurozuSenmon-*`/`X-Suya-*`/`X-SuyaYasan-*`/`X-SuyaPro-*`/`X-SuyaTeam-*`/`X-SuyaJP-*`/`X-SuyaSenmon-*`/`X-Sunoten-*`/`X-SunotenYasan-*`/`X-SunotenPro-*`/`X-SunotenTeam-*`/`X-SunotenJP-*`/`X-SunotenSenmon-*`/`X-VinegarstorePros-*`/`X-VinegarstoreTeam-*`/`X-VinegarstoreWorks-*`/`X-VinegarstoreExperts-*`/`X-VinegarstoreSvc-*`/`X-VinegarstoreHQ-*`/`X-RicevinegarPros-*`/`X-RicevinegarTeam-*`/`X-RicevinegarWorks-*`/`X-RicevinegarExperts-*`/`X-RicevinegarSvc-*`/`X-RicevinegarHQ-*`/`X-VinegardirectPros-*`/`X-VinegardirectTeam-*`/`X-VinegardirectWorks-*`/`X-VinegardirectExperts-*`/`X-VinegardirectSvc-*`/`X-VinegardirectHQ-*` 等 は酢機の通知記録 — 送信側が書くことは自称。黒酢・酢業者の偽装は、壺仕込み黒酢・玄米酢の蔵元直送を装った通販詐欺の典型手口。(`x-tsuyaku-` 系は translation 機所有のため別形のみ)
+- **修正**: `Envelope` に `kurozu_marks` + `has_kurozu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 酢印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
