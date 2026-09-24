@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D854: `X-Monaka-*`/`X-Monakaya-*`/`X-Monakaten-*`/`X-Monakashop-*`/`X-Wagashimonaka-*`/`X-Thinwafer-*` 等の最中印自称が未検査
+
+- **問題**: `X-Monaka-*`/`X-MonakaYasan-*`/`X-MonakaPro-*`/`X-MonakaTeam-*`/`X-MonakaJP-*`/`X-MonakaSenmon-*`/`X-Monakaya-*`/`X-MonakayaYasan-*`/`X-MonakayaPro-*`/`X-MonakayaTeam-*`/`X-MonakayaJP-*`/`X-MonakayaSenmon-*`/`X-Monakaten-*`/`X-MonakatenYasan-*`/`X-MonakatenPro-*`/`X-MonakatenTeam-*`/`X-MonakatenJP-*`/`X-MonakatenSenmon-*`/`X-MonakashopPros-*`/`X-MonakashopTeam-*`/`X-MonakashopWorks-*`/`X-MonakashopExperts-*`/`X-MonakashopSvc-*`/`X-MonakashopHQ-*`/`X-WagashimonakaPros-*`/`X-WagashimonakaTeam-*`/`X-WagashimonakaWorks-*`/`X-WagashimonakaExperts-*`/`X-WagashimonakaSvc-*`/`X-WagashimonakaHQ-*`/`X-ThinwaferPros-*`/`X-ThinwaferTeam-*`/`X-ThinwaferWorks-*`/`X-ThinwaferExperts-*`/`X-ThinwaferSvc-*`/`X-ThinwaferHQ-*` 等 は最機の通知記録 — 送信側が書くことは自称。最中店の偽装は、老舗銘菓・手焼き最中の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `monaka_marks` + `has_monaka_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 最印の自署を問え。
+
+### Security — D855: `X-Dorayaki-*`/`X-Dorayakiya-*`/`X-Dorayakiten-*`/`X-Dorayakishop-*`/`X-Redbeanpancake-*`/`X-Jappancake-*` 等のどら焼き印自称が未検査
+
+- **問題**: `X-Dorayaki-*`/`X-DorayakiYasan-*`/`X-DorayakiPro-*`/`X-DorayakiTeam-*`/`X-DorayakiJP-*`/`X-DorayakiSenmon-*`/`X-Dorayakiya-*`/`X-DorayakiyaYasan-*`/`X-DorayakiyaPro-*`/`X-DorayakiyaTeam-*`/`X-DorayakiyaJP-*`/`X-DorayakiyaSenmon-*`/`X-Dorayakiten-*`/`X-DorayakitenYasan-*`/`X-DorayakitenPro-*`/`X-DorayakitenTeam-*`/`X-DorayakitenJP-*`/`X-DorayakitenSenmon-*`/`X-DorayakishopPros-*`/`X-DorayakishopTeam-*`/`X-DorayakishopWorks-*`/`X-DorayakishopExperts-*`/`X-DorayakishopSvc-*`/`X-DorayakishopHQ-*`/`X-RedbeanpancakePros-*`/`X-RedbeanpancakeTeam-*`/`X-RedbeanpancakeWorks-*`/`X-RedbeanpancakeExperts-*`/`X-RedbeanpancakeSvc-*`/`X-RedbeanpancakeHQ-*`/`X-JappancakePros-*`/`X-JappancakeTeam-*`/`X-JappancakeWorks-*`/`X-JappancakeExperts-*`/`X-JappancakeSvc-*`/`X-JappancakeHQ-*` 等 は銅機の通知記録 — 送信側が書くことは自称。どら焼き店の偽装は、老舗和菓子・つぶあんどら焼き直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `dorayaki_marks` + `has_dorayaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 銅印の自署を問え。
+
+### Security — D856: `X-Anko-*`/`X-Ankoya-*`/`X-Ankoten-*`/`X-Ankostore-*`/`X-Azukipaste-*`/`X-Sweetbeanpaste-*` 等のあんこ印自称が未検査
+
+- **問題**: `X-Anko-*`/`X-AnkoYasan-*`/`X-AnkoPro-*`/`X-AnkoTeam-*`/`X-AnkoJP-*`/`X-AnkoSenmon-*`/`X-Ankoya-*`/`X-AnkoyaYasan-*`/`X-AnkoyaPro-*`/`X-AnkoyaTeam-*`/`X-AnkoyaJP-*`/`X-AnkoyaSenmon-*`/`X-Ankoten-*`/`X-AnkotenYasan-*`/`X-AnkotenPro-*`/`X-AnkotenTeam-*`/`X-AnkotenJP-*`/`X-AnkotenSenmon-*`/`X-AnkostorePros-*`/`X-AnkostoreTeam-*`/`X-AnkostoreWorks-*`/`X-AnkostoreExperts-*`/`X-AnkostoreSvc-*`/`X-AnkostoreHQ-*`/`X-AzukipastePros-*`/`X-AzukipasteTeam-*`/`X-AzukipasteWorks-*`/`X-AzukipasteExperts-*`/`X-AzukipasteSvc-*`/`X-AzukipasteHQ-*`/`X-SweetbeanpastePros-*`/`X-SweetbeanpasteTeam-*`/`X-SweetbeanpasteWorks-*`/`X-SweetbeanpasteExperts-*`/`X-SweetbeanpasteSvc-*`/`X-SweetbeanpasteHQ-*` 等 は餡機の通知記録 — 送信側が書くことは自称。あんこ業者の偽装は、自家製餡・小倉あん直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `anko_marks` + `has_anko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 餡印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
