@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D782: `X-Gaikou-*`/`X-Ekusuteria-*`/`X-Exteriorworks-*`/`X-Exteriordesign-*` 等の外構・エクステリア印自称が未検査
+
+- **問題**: `X-Gaikou-*`/`X-GaikouYasan-*`/`X-GaikouPro-*`/`X-GaikouTeam-*`/`X-GaikouJP-*`/`X-GaikouSenmon-*`/`X-Ekusuteria-*`/`X-EkusuteriaYasan-*`/`X-EkusuteriaPro-*`/`X-EkusuteriaTeam-*`/`X-EkusuteriaJP-*`/`X-EkusuteriaSenmon-*`/`X-ExteriorworksPros-*`/`X-ExteriorworksTeam-*`/`X-ExteriorworksWorks-*`/`X-ExteriorworksExperts-*`/`X-ExteriorworksSvc-*`/`X-ExteriorworksHQ-*`/`X-ExteriordesignPros-*`/`X-ExteriordesignTeam-*`/`X-ExteriordesignWorks-*`/`X-ExteriordesignExperts-*`/`X-ExteriordesignSvc-*`/`X-ExteriordesignHQ-*` 等 は構機の通知記録 — 送信側が書くことは自称。外構・エクステリア工事の偽装は、見積料・追加費用を装ったなりすましの典型手口。(造園は garden 機、フェンスは fence 機、カーポートは carport 機で検出済み)
+- **修正**: `Envelope` に `gaikou_marks` + `has_gaikou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 構印の自署を問え。
+
+### Security — D783: `X-Jumokusou-*`/`X-Sankotsu-*`/`X-Naturalburial-*`/`X-Seaburial-*`/`X-Treeburial-*` 等の樹木葬・散骨印自称が未検査
+
+- **問題**: `X-Jumokusou-*`/`X-JumokusouYasan-*`/`X-JumokusouPro-*`/`X-JumokusouTeam-*`/`X-JumokusouJP-*`/`X-JumokusouSenmon-*`/`X-Sankotsu-*`/`X-SankotsuYasan-*`/`X-SankotsuPro-*`/`X-SankotsuTeam-*`/`X-SankotsuJP-*`/`X-SankotsuSenmon-*`/`X-NaturalburialPros-*`/`X-NaturalburialTeam-*`/`X-NaturalburialWorks-*`/`X-NaturalburialExperts-*`/`X-NaturalburialSvc-*`/`X-NaturalburialHQ-*`/`X-SeaburialPros-*`/`X-SeaburialTeam-*`/`X-SeaburialWorks-*`/`X-SeaburialExperts-*`/`X-SeaburialSvc-*`/`X-SeaburialHQ-*`/`X-TreeburialPros-*`/`X-TreeburialTeam-*`/`X-TreeburialWorks-*`/`X-TreeburialExperts-*`/`X-TreeburialSvc-*`/`X-TreeburialHQ-*` 等 は散機の通知記録 — 送信側が書くことは自称。樹木葬・散骨の偽装は、永代供養料・管理費を装ったなりすましの典型手口。(霊園は reien 機、墓石は sekihi 機、葬儀は funeral 機で検出済み)
+- **修正**: `Envelope` に `jumokusou_marks` + `has_jumokusou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 散印の自署を問え。
+
+### Security — D784: `X-Jinkoushiba-*`/`X-Shibahari-*`/`X-Artificialturf-*`/`X-Turfinstallation-*` 等の人工芝・芝張り印自称が未検査
+
+- **問題**: `X-Jinkoushiba-*`/`X-JinkoushibaYasan-*`/`X-JinkoushibaPro-*`/`X-JinkoushibaTeam-*`/`X-JinkoushibaJP-*`/`X-JinkoushibaSenmon-*`/`X-Shibahari-*`/`X-ShibahariYasan-*`/`X-ShibahariPro-*`/`X-ShibahariTeam-*`/`X-ShibahariJP-*`/`X-ShibahariSenmon-*`/`X-ArtificialturfPros-*`/`X-ArtificialturfTeam-*`/`X-ArtificialturfWorks-*`/`X-ArtificialturfExperts-*`/`X-ArtificialturfSvc-*`/`X-ArtificialturfHQ-*`/`X-TurfinstallationPros-*`/`X-TurfinstallationTeam-*`/`X-TurfinstallationWorks-*`/`X-TurfinstallationExperts-*`/`X-TurfinstallationSvc-*`/`X-TurfinstallationHQ-*` 等 は芝機の通知記録 — 送信側が書くことは自称。人工芝・芝張り業者の偽装は、材料費・施工費を装ったなりすましの典型手口。(造園は garden 機、芝刈りは lawncare 機で検出済み)
+- **修正**: `Envelope` に `jinkoushiba_marks` + `has_jinkoushiba_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 芝印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
