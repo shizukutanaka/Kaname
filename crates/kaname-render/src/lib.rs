@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-Generac-*`/`X-Cummins-*`/`X-Kohler-*`/`X-BriggsStratton-*`/`X-HigyouHatsuden-*`/`X-JikaHatsuden-*`/`X-HatsudenKi-*` 等 — 非常用発電機機印自称
+    pub generator_marks: bool,
+    /// `X-Otis-*`/`X-Kone-*`/`X-Schindler-*`/`X-ThyssenKrupp-*`/`X-ElevatorPros-*`/`X-ErebetaHoshu-*`/`X-ErebetaSeibi-*` 等 — エレベーター・昇降機保守機印自称
+    pub elevator_marks: bool,
+    /// `X-LeafFilter-*`/`X-GutterShutter-*`/`X-GutterHelmet-*`/`X-GutterGlove-*`/`X-GutterPros-*`/`X-Amadoi-*`/`X-ToiKouji-*` 等 — 雨樋・ガター機印自称
+    pub gutter_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        generator_marks: has_generator_marks(hdr),
+        elevator_marks: has_elevator_marks(hdr),
+        gutter_marks: has_gutter_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,252 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D665: 非常用発電機機印の自称を検出する。
+///
+/// `X-Generac-*`/`X-GeneracPower-*`/`X-Cummins-*`/`X-CumminsGenerator-*`/
+/// `X-Kohler-*`/`X-KohlerGenerator-*`/`X-BriggsStratton-*`/`X-Briggs-*`/`X-HondaGenerator-*`/
+/// `X-StandbyGenerator-*`/`X-GeneratorPros-*`/`X-GeneratorService-*`/`X-GeneratorExperts-*`/
+/// `X-GeneratorDoctors-*`/`X-GeneratorMasters-*`/`X-GeneratorTech-*`/`X-GeneratorWorks-*`/
+/// `X-GeneratorTeam-*`/`X-GeneratorForce-*`/`X-GeneratorUSA-*`/`X-GeneratorSolutions-*`/
+/// `X-GeneratorInstall-*`/`X-GeneratorRepair-*`/`X-BackupGenerator-*`/`X-HomeGenerator-*`/
+/// `X-WholeHouseGenerator-*`、JP は `X-HigyouHatsuden-*`/`X-HigyouHatsudenki-*`/
+/// `X-JikaHatsuden-*`/`X-JikaHatsudenki-*`/`X-HatsudenKi-*`/`X-HatsudenkiYasan-*`/
+/// `X-HatsudenkiKouji-*`/`X-HatsudenkiSeibi-*`/`X-HatsudenkiDoctors-*`/
+/// `X-HatsudenkiTeam-*`/`X-HatsudenkiPro-*`/`X-KoyuuHatsuden-*`/`X-HijouHatsuden-*`/
+/// `X-BachuHatsuden-*`/`X-HatsudenYasan-*`/`X-HatsudenGyosha-*`/`X-HatsudenSenmon-*`/
+/// `X-DenkiHatsuden-*`/`X-HatsudenShiage-*`/`X-StandbyJP-*`/`X-GeneratorJP-*`/
+/// `X-HatsudenkiGijutsu-*`/`X-HatsudenManten-*`/`X-HatsudenkiKensa-*`/
+/// `X-KenetsuHatsuden-*`/`X-OkujoHatsuden-*` 等の非常用発電機機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 非常用発電機・自家発電設備・スタンバイ発電機・停電対策・定期点検の偽装は
+/// 発電機業者なりすましの典型手口 (災害時の便乗販売で有名)。発印の自署は兆候として数える。
+/// (太陽光・蓄電池は solar 機、電気工事は electrician 機、電力小売は utility 機で検出済み)
+fn has_generator_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-generac-")
+            || l.starts_with("x-generacpower-")
+            || l.starts_with("x-cummins-")
+            || l.starts_with("x-cumminsgenerator-")
+            || l.starts_with("x-kohler-")
+            || l.starts_with("x-kohlergenerator-")
+            || l.starts_with("x-briggsstratton-")
+            || l.starts_with("x-briggs-")
+            || l.starts_with("x-hondagenerator-")
+            || l.starts_with("x-standbygenerator-")
+            || l.starts_with("x-generatorpros-")
+            || l.starts_with("x-generatorservice-")
+            || l.starts_with("x-generatorexperts-")
+            || l.starts_with("x-generatordoctors-")
+            || l.starts_with("x-generatormasters-")
+            || l.starts_with("x-generatortech-")
+            || l.starts_with("x-generatorworks-")
+            || l.starts_with("x-generatorteam-")
+            || l.starts_with("x-generatorforce-")
+            || l.starts_with("x-generatorusa-")
+            || l.starts_with("x-generatorsolutions-")
+            || l.starts_with("x-generatorinstall-")
+            || l.starts_with("x-generatorrepair-")
+            || l.starts_with("x-backupgenerator-")
+            || l.starts_with("x-homegenerator-")
+            || l.starts_with("x-wholehousegenerator-")
+            || l.starts_with("x-higyouhatsuden-")
+            || l.starts_with("x-higyouhatsudenki-")
+            || l.starts_with("x-jikahatsuden-")
+            || l.starts_with("x-jikahatsudenki-")
+            || l.starts_with("x-hatsudenki-")
+            || l.starts_with("x-hatsudenkiyasan-")
+            || l.starts_with("x-hatsudenkikouji-")
+            || l.starts_with("x-hatsudenkiseibi-")
+            || l.starts_with("x-hatsudenkipro-")
+            || l.starts_with("x-hatsudenkidoctors-")
+            || l.starts_with("x-hatsudenkiteam-")
+            || l.starts_with("x-koyuuhatsuden-")
+            || l.starts_with("x-hijouhatsuden-")
+            || l.starts_with("x-bachuhatsuden-")
+            || l.starts_with("x-hatsudenyasan-")
+            || l.starts_with("x-hatsudengyosha-")
+            || l.starts_with("x-hatsudensenmon-")
+            || l.starts_with("x-denkihatsuden-")
+            || l.starts_with("x-hatsudenshiage-")
+            || l.starts_with("x-standbyjp-")
+            || l.starts_with("x-generatorjp-")
+            || l.starts_with("x-hatsudenkigijutsu-")
+            || l.starts_with("x-hatsudenmanten-")
+            || l.starts_with("x-hatsudenkikensa-")
+            || l.starts_with("x-kenetsuhatsuden-")
+            || l.starts_with("x-okujohatsuden-")
+    })
+}
+
+/// D666: エレベーター・昇降機保守機印の自称を検出する。
+///
+/// `X-Otis-*`/`X-OtisElevator-*`/`X-Kone-*`/`X-KoneElevator-*`/`X-Schindler-*`/
+/// `X-SchindlerElevator-*`/`X-ThyssenKrupp-*`/`X-ThyssenKruppElevator-*`/
+/// `X-TK Elevator-*`/`X-Fujitec-*`/`X-FujitecElevator-*`/`X-MitsubishiElevator-*`/
+/// `X-ElevatorPros-*`/`X-ElevatorService-*`/`X-ElevatorWorks-*`/`X-ElevatorTech-*`/
+/// `X-ElevatorExperts-*`/`X-ElevatorDoctors-*`/`X-ElevatorTeam-*`/`X-ElevatorMasters-*`/
+/// `X-ElevatorInspection-*`/`X-ElevatorRepair-*`/`X-ElevatorMaintenance-*`/
+/// `X-ElevatorSolutions-*`/`X-LiftService-*`/`X-LiftPros-*`、JP は `X-ErebetaHoshu-*`/
+/// `X-ErebetaSeibi-*`/`X-ErebetaYasan-*`/`X-ErebetaKenshin-*`/`X-Erebeta-*`/
+/// `X-Shoukouki-*`/`X-ShoukoukiSeibi-*`/`X-ErebetaDoctors-*`/`X-ErebetaTeam-*`/
+/// `X-ErebetaPro-*`/`X-ErebetaSenmon-*`/`X-ErebetaGyosha-*`/`X-ErebetaGijutsu-*`/
+/// `X-ErebetaTenken-*`/`X-ErebetaShindan-*`/`X-ErebetaRepair-*`/`X-ErebetaManten-*`/
+/// `X-EscalatorSeibi-*`/`X-ShoukoukiKenshin-*`/`X-ErebetaKouji-*`/`X-ErebetaJP-*`/
+/// `X-HomeElevator-*`/`X-ErebetaShiage-*`/`X-ErebetaKensa-*`/`X-ErebetaHokatsu-*`/
+/// `X-ErebetaKirikae-*`/`X-ShoukoukiGyosha-*` 等のエレベーター・昇降機保守機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// エレベーター保守点検・法定点検・昇降機検査・リニューアル・閉じ込め対応の偽装は
+/// エレベーター保守業者なりすましの典型手口。昇印の自署は兆候として数える。
+/// (建物設備は facility 機、マンション管理は housing 機、機械は industrial 機で検出済み)
+fn has_elevator_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-otis-")
+            || l.starts_with("x-otiselevator-")
+            || l.starts_with("x-kone-")
+            || l.starts_with("x-koneelevator-")
+            || l.starts_with("x-schindler-")
+            || l.starts_with("x-schindlerelevator-")
+            || l.starts_with("x-thyssenkrupp-")
+            || l.starts_with("x-thyssenkruppelevator-")
+            || l.starts_with("x-tkelevator-")
+            || l.starts_with("x-fujitec-")
+            || l.starts_with("x-fujitecelevator-")
+            || l.starts_with("x-mitsubishielevator-")
+            || l.starts_with("x-elevatorpros-")
+            || l.starts_with("x-elevatorservice-")
+            || l.starts_with("x-elevatorworks-")
+            || l.starts_with("x-elevatortech-")
+            || l.starts_with("x-elevatorexperts-")
+            || l.starts_with("x-elevatordoctors-")
+            || l.starts_with("x-elevatorteam-")
+            || l.starts_with("x-elevatormasters-")
+            || l.starts_with("x-elevatorinspection-")
+            || l.starts_with("x-elevatorrepair-")
+            || l.starts_with("x-elevatormaintenance-")
+            || l.starts_with("x-elevatorsolutions-")
+            || l.starts_with("x-liftservice-")
+            || l.starts_with("x-liftpros-")
+            || l.starts_with("x-erebetahoshu-")
+            || l.starts_with("x-erebetaseibi-")
+            || l.starts_with("x-erebetayasan-")
+            || l.starts_with("x-erebetakenshin-")
+            || l.starts_with("x-erebeta-")
+            || l.starts_with("x-shoukouki-")
+            || l.starts_with("x-shoukoukiseibi-")
+            || l.starts_with("x-erebetadoctors-")
+            || l.starts_with("x-erebetateam-")
+            || l.starts_with("x-erebetapro-")
+            || l.starts_with("x-erebetasenmon-")
+            || l.starts_with("x-erebetagyosha-")
+            || l.starts_with("x-erebetagijutsu-")
+            || l.starts_with("x-erebetatenken-")
+            || l.starts_with("x-erebetashindan-")
+            || l.starts_with("x-erebetarepair-")
+            || l.starts_with("x-erebetamanten-")
+            || l.starts_with("x-escalatorseibi-")
+            || l.starts_with("x-shoukoukikenshin-")
+            || l.starts_with("x-erebetakouji-")
+            || l.starts_with("x-erebetajp-")
+            || l.starts_with("x-homeelevator-")
+            || l.starts_with("x-erebetashiage-")
+            || l.starts_with("x-erebetakensa-")
+            || l.starts_with("x-erebetahokatsu-")
+            || l.starts_with("x-erebetakirikae-")
+            || l.starts_with("x-shoukoukigyosha-")
+    })
+}
+
+/// D667: 雨樋・ガター機印の自称を検出する。
+///
+/// `X-LeafFilter-*`/`X-LeafFilterGutter-*`/`X-GutterShutter-*`/`X-GutterHelmet-*`/
+/// `X-GutterGlove-*`/`X-GutterPros-*`/`X-GutterGuards-*`/`X-GutterDoctors-*`/
+/// `X-GutterExperts-*`/`X-GutterMasters-*`/`X-GutterWorks-*`/`X-GutterTech-*`/
+/// `X-GutterTeam-*`/`X-GutterForce-*`/`X-GutterSolutions-*`/`X-GutterUSA-*`/
+/// `X-GutterCleaning-*`/`X-GutterRepair-*`/`X-GutterInstall-*`/`X-SeamlessGutter-*`/
+/// `X-LeafGuard-*`/`X-GutterGuard-*`/`X-GutterTopper-*`/`X-AllWeatherGutter-*`/
+/// `X-GutterCleaningPros-*`、JP は `X-Amadoi-*`/`X-AmadoiKouji-*`/`X-AmadoiYasan-*`/
+/// `X-ToiKouji-*`/`X-ToiYasan-*`/`X-ToiKoujiPro-*`/`X-AmadoiSeibi-*`/`X-AmadoiRepair-*`/
+/// `X-AmadoiDoctors-*`/`X-AmadoiTeam-*`/`X-AmadoiPro-*`/`X-Darakake-*`/`X-RainToi-*`/
+/// `X-TateToi-*`/`X-ToiSeibi-*`/`X-AmadoiGijutsu-*`/`X-AmadoiGyosha-*`/`X-ToiDoctors-*`/
+/// `X-AmadoiKensa-*`/`X-YokoToi-*`/`X-AmadoiShiage-*`/`X-AmadoiKirei-*`/`X-ToiManten-*`/
+/// `X-GutterJP-*`/`X-AmadoiJP-*`/`X-ToiRepair-*`/`X-AmadoiSenmon-*` 等の
+/// 雨樋・ガター機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。雨樋修理・ガター清掃・樋交換・
+/// 落ち葉詰まり・ガターガード設置の偽装は雨樋業者なりすましの典型手口。
+/// 樋印の自署は兆候として数える。
+/// (屋根修理は roofing 機、外壁は painting 機、造園は landscape 機で検出済み)
+fn has_gutter_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-leaffilter-")
+            || l.starts_with("x-leaffiltergutter-")
+            || l.starts_with("x-guttershutter-")
+            || l.starts_with("x-gutterhelmet-")
+            || l.starts_with("x-gutterglove-")
+            || l.starts_with("x-gutterpros-")
+            || l.starts_with("x-gutterguards-")
+            || l.starts_with("x-gutterdoctors-")
+            || l.starts_with("x-gutterexperts-")
+            || l.starts_with("x-guttermasters-")
+            || l.starts_with("x-gutterworks-")
+            || l.starts_with("x-guttertech-")
+            || l.starts_with("x-gutterteam-")
+            || l.starts_with("x-gutterforce-")
+            || l.starts_with("x-guttersolutions-")
+            || l.starts_with("x-gutterusa-")
+            || l.starts_with("x-guttercleaning-")
+            || l.starts_with("x-gutterrepair-")
+            || l.starts_with("x-gutterinstall-")
+            || l.starts_with("x-seamlessgutter-")
+            || l.starts_with("x-leafguard-")
+            || l.starts_with("x-gutterguard-")
+            || l.starts_with("x-guttertopper-")
+            || l.starts_with("x-allweathergutter-")
+            || l.starts_with("x-guttercleaningpros-")
+            || l.starts_with("x-amadoi-")
+            || l.starts_with("x-amadoikouji-")
+            || l.starts_with("x-amadoiyasan-")
+            || l.starts_with("x-toikouji-")
+            || l.starts_with("x-toiyasan-")
+            || l.starts_with("x-toikoujipro-")
+            || l.starts_with("x-amadoiseibi-")
+            || l.starts_with("x-amadoirepair-")
+            || l.starts_with("x-amadoidoctors-")
+            || l.starts_with("x-amadoiteam-")
+            || l.starts_with("x-amadoipro-")
+            || l.starts_with("x-darakake-")
+            || l.starts_with("x-raintoi-")
+            || l.starts_with("x-tatetoi-")
+            || l.starts_with("x-toiseibi-")
+            || l.starts_with("x-amadoigijutsu-")
+            || l.starts_with("x-amadoigyosha-")
+            || l.starts_with("x-toidoctors-")
+            || l.starts_with("x-amadoikensa-")
+            || l.starts_with("x-yokotoi-")
+            || l.starts_with("x-amadoishiage-")
+            || l.starts_with("x-amadoikirei-")
+            || l.starts_with("x-toimanten-")
+            || l.starts_with("x-gutterjp-")
+            || l.starts_with("x-amadoijp-")
+            || l.starts_with("x-toirepair-")
+            || l.starts_with("x-amadoisenmon-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20896,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は発機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-Generac-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Cummins-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HigyouHatsuden-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JikaHatsuden-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Kohler-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HatsudenKi-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BriggsStratton-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-StandbyGenerator-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_generator_marks(raw));
+        }
+        assert!(!has_generator_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は昇機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-Otis-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Kone-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ErebetaHoshu-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ErebetaSeibi-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Schindler-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Shoukouki-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ElevatorPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Fujitec-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_elevator_marks(raw));
+        }
+        assert!(!has_elevator_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は樋機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-LeafFilter-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GutterShutter-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Amadoi-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ToiKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GutterHelmet-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AmadoiKouji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GutterPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ToiYasan-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_gutter_marks(raw));
+        }
+        assert!(!has_gutter_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
