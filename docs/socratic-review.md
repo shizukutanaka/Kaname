@@ -1816,3 +1816,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この乗機が通知した」「この窓機が通知した」「この滑機が通知した」は誰が記すか?
 
 答: **X-TaxiNavi-*/X-HaiyaNavi-*/X-KousokuBasu-* は「この乗機が通知した」を名乗り、X-MadoNavi-*/X-GarasuNavi-*/X-Amido-* は「この窓機が通知した」を名乗り、X-GerendeNavi-*/X-SunoboNavi-*/X-SkiNavi-* は「この滑機が通知した」を名乗る — いずれも乗機・窓機・滑機が記す値を送信側が書いた自称**。乗印・窓印・滑印はすべて兆候として数えよ。
+
+## ラウンド 239
+
+問: 「この浴機が通知した」「この歌機が通知した」「この投機が通知した」は誰が記すか?
+
+答: **X-OnyokuNavi-*/X-SupaNavi-*/X-Totonoi-* は「この浴機が通知した」を名乗り、X-KaraokeNavi-*/X-NekafeeNavi-*/X-MediaCafe-* は「この歌機が通知した」を名乗り、X-BowlingNavi-*/X-DartsNavi-*/X-Billiard-* は「この投機が通知した」を名乗る — いずれも浴機・歌機・投機が記す値を送信側が書いた自称**。浴印・歌印・投印はすべて兆候として数えよ。
