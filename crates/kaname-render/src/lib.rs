@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub tougei_marks: bool,
+    pub ikebana_marks: bool,
+    pub cooking_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        tougei_marks: has_tougei_marks(hdr),
+        ikebana_marks: has_ikebana_marks(hdr),
+        cooking_marks: has_cooking_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,192 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_tougei_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tougei-")
+            || l.starts_with("x-tougeiyasan-")
+            || l.starts_with("x-tougeipro-")
+            || l.starts_with("x-tougeiteam-")
+            || l.starts_with("x-tougeikensa-")
+            || l.starts_with("x-tougeimanten-")
+            || l.starts_with("x-tougeinomi-")
+            || l.starts_with("x-tougeijp-")
+            || l.starts_with("x-tougeisenmon-")
+            || l.starts_with("x-tougeimitsumori-")
+            || l.starts_with("x-tougeichousa-")
+            || l.starts_with("x-tougeiteiki-")
+            || l.starts_with("x-tougeishuri-")
+            || l.starts_with("x-tougeischool-")
+            || l.starts_with("x-tougeikoubou-")
+            || l.starts_with("x-tougeimart-")
+            || l.starts_with("x-tougeibank-")
+            || l.starts_with("x-yakimono-")
+            || l.starts_with("x-yakimonoyasan-")
+            || l.starts_with("x-yakimonopro-")
+            || l.starts_with("x-yakimonoteam-")
+            || l.starts_with("x-yakimonokensa-")
+            || l.starts_with("x-yakimonomanten-")
+            || l.starts_with("x-yakimonomi-")
+            || l.starts_with("x-yakimonojp-")
+            || l.starts_with("x-yakimonosenmon-")
+            || l.starts_with("x-yakimonomitsumori-")
+            || l.starts_with("x-yakimonokoubou-")
+            || l.starts_with("x-yakimonomart-")
+            || l.starts_with("x-ceramic-")
+            || l.starts_with("x-ceramicpros-")
+            || l.starts_with("x-ceramicteam-")
+            || l.starts_with("x-ceramicworks-")
+            || l.starts_with("x-ceramicexperts-")
+            || l.starts_with("x-ceramicsvc-")
+            || l.starts_with("x-ceramichq-")
+            || l.starts_with("x-ceramicstudio-")
+            || l.starts_with("x-ceramicstudiopros-")
+            || l.starts_with("x-ceramicstudioteam-")
+            || l.starts_with("x-potterypros-")
+            || l.starts_with("x-potteryteam-")
+            || l.starts_with("x-potteryworks-")
+            || l.starts_with("x-potteryexperts-")
+            || l.starts_with("x-potterysvc-")
+            || l.starts_with("x-potteryhq-")
+            || l.starts_with("x-potterystudio-")
+            || l.starts_with("x-potterystudiopros-")
+            || l.starts_with("x-tougeipros-")
+            || l.starts_with("x-tougeidoctors-")
+            || l.starts_with("x-tougeirescue-")
+            || l.starts_with("x-yakimonopros-")
+            || l.starts_with("x-yakimonodoctors-")
+            || l.starts_with("x-yakimonorescue-")
+    })
+}
+
+fn has_ikebana_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ikebana-")
+            || l.starts_with("x-ikebanayasan-")
+            || l.starts_with("x-ikebanapro-")
+            || l.starts_with("x-ikebanateam-")
+            || l.starts_with("x-ikebanakensa-")
+            || l.starts_with("x-ikebanamanten-")
+            || l.starts_with("x-ikebananomi-")
+            || l.starts_with("x-ikebanajp-")
+            || l.starts_with("x-ikebanasenmon-")
+            || l.starts_with("x-ikebanamitsumori-")
+            || l.starts_with("x-ikebanachousa-")
+            || l.starts_with("x-ikebanateiki-")
+            || l.starts_with("x-ikebanashuri-")
+            || l.starts_with("x-ikebanaschool-")
+            || l.starts_with("x-ikebanakoubou-")
+            || l.starts_with("x-ikebanamart-")
+            || l.starts_with("x-ikebanabank-")
+            || l.starts_with("x-kado-")
+            || l.starts_with("x-kadoyasan-")
+            || l.starts_with("x-kadopro-")
+            || l.starts_with("x-kadoteam-")
+            || l.starts_with("x-kadokoubou-")
+            || l.starts_with("x-kadosenmon-")
+            || l.starts_with("x-sado-")
+            || l.starts_with("x-sadoyasan-")
+            || l.starts_with("x-sadopro-")
+            || l.starts_with("x-sadoteam-")
+            || l.starts_with("x-sadokoubou-")
+            || l.starts_with("x-sadosenmon-")
+            || l.starts_with("x-sadoschool-")
+            || l.starts_with("x-teaceremonypros-")
+            || l.starts_with("x-teaceremonyteam-")
+            || l.starts_with("x-teaceremonyworks-")
+            || l.starts_with("x-teaceremonyexperts-")
+            || l.starts_with("x-teaceremonysvc-")
+            || l.starts_with("x-teaceremonyhq-")
+            || l.starts_with("x-teaceremonyschool-")
+            || l.starts_with("x-flowerarrangementpros-")
+            || l.starts_with("x-flowerarrangementteam-")
+            || l.starts_with("x-flowerarrangementworks-")
+            || l.starts_with("x-flowerarrangementexperts-")
+            || l.starts_with("x-ikebanapros-")
+            || l.starts_with("x-ikebanaworks-")
+            || l.starts_with("x-ikebanaexperts-")
+            || l.starts_with("x-ikebanasvc-")
+            || l.starts_with("x-ikebanahq-")
+            || l.starts_with("x-ikebanadoctors-")
+            || l.starts_with("x-ikebanarescue-")
+            || l.starts_with("x-sadopros-")
+            || l.starts_with("x-sadodoctors-")
+            || l.starts_with("x-sadorescue-")
+    })
+}
+
+fn has_cooking_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ryouri-")
+            || l.starts_with("x-ryouriyasan-")
+            || l.starts_with("x-ryouripro-")
+            || l.starts_with("x-ryouriteam-")
+            || l.starts_with("x-ryourikensa-")
+            || l.starts_with("x-ryourimanten-")
+            || l.starts_with("x-ryourinomi-")
+            || l.starts_with("x-ryourijp-")
+            || l.starts_with("x-ryourisenmon-")
+            || l.starts_with("x-ryourimitsumori-")
+            || l.starts_with("x-ryourichousa-")
+            || l.starts_with("x-ryouriteiki-")
+            || l.starts_with("x-ryourishuri-")
+            || l.starts_with("x-ryourischool-")
+            || l.starts_with("x-ryourikoubou-")
+            || l.starts_with("x-ryourimart-")
+            || l.starts_with("x-ryouribank-")
+            || l.starts_with("x-cooking-")
+            || l.starts_with("x-cookingschool-")
+            || l.starts_with("x-cookingpro-")
+            || l.starts_with("x-cookingteam-")
+            || l.starts_with("x-cookingkoubou-")
+            || l.starts_with("x-cookingsenmon-")
+            || l.starts_with("x-cookinglesson-")
+            || l.starts_with("x-cookinglessonpros-")
+            || l.starts_with("x-cookinglessonteam-")
+            || l.starts_with("x-cookingclass-")
+            || l.starts_with("x-cookingclasspros-")
+            || l.starts_with("x-cookingclassteam-")
+            || l.starts_with("x-cookingclassworks-")
+            || l.starts_with("x-cookingclassexperts-")
+            || l.starts_with("x-cookingclasssvc-")
+            || l.starts_with("x-cookingclasshq-")
+            || l.starts_with("x-kitchenstudio-")
+            || l.starts_with("x-kitchenstudiopros-")
+            || l.starts_with("x-kitchenstudioteam-")
+            || l.starts_with("x-kitchenstudioworks-")
+            || l.starts_with("x-kitchenstudioexperts-")
+            || l.starts_with("x-kitchenstudiosvc-")
+            || l.starts_with("x-kitchenstudiohq-")
+            || l.starts_with("x-ryouripros-")
+            || l.starts_with("x-ryouriworks-")
+            || l.starts_with("x-ryouriexperts-")
+            || l.starts_with("x-ryourisvc-")
+            || l.starts_with("x-ryourihq-")
+            || l.starts_with("x-ryouridoctors-")
+            || l.starts_with("x-ryourirescue-")
+            || l.starts_with("x-cookingpros-")
+            || l.starts_with("x-cookingexperts-")
+            || l.starts_with("x-cookinghq-")
+            || l.starts_with("x-cookingdoctors-")
+            || l.starts_with("x-cookingrescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20833,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は陶機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Tougei-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Yakimono-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Ceramic-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PotteryStudio-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TougeiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CeramicStudioPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-YakimonoKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PotteryHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_tougei_marks(h));
+        }
+        assert!(!has_tougei_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は華機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Ikebana-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Sado-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kado-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TeaCeremonyPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-IkebanaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FlowerArrangementWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SadoSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-IkebanaHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_ikebana_marks(h));
+        }
+        assert!(!has_ikebana_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は料機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Ryouri-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Cooking-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CookingClass-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KitchenStudio-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-RyouriSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CookingClassWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-RyouriSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KitchenStudioHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_cooking_marks(h));
+        }
+        assert!(!has_cooking_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
