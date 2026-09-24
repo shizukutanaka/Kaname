@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D830: `X-Matcha-*`/`X-Gyokuro-*`/`X-Chagyou-*`/`X-Matchastore-*`/`X-Premiumtea-*`/`X-Japanesetea-*` 等の抹茶・高級茶印自称が未検査
+
+- **問題**: `X-Matcha-*`/`X-MatchaYasan-*`/`X-MatchaPro-*`/`X-MatchaTeam-*`/`X-MatchaJP-*`/`X-MatchaSenmon-*`/`X-Gyokuro-*`/`X-GyokuroYasan-*`/`X-GyokuroPro-*`/`X-GyokuroTeam-*`/`X-GyokuroJP-*`/`X-GyokuroSenmon-*`/`X-Chagyou-*`/`X-ChagyouYasan-*`/`X-ChagyouPro-*`/`X-ChagyouTeam-*`/`X-ChagyouJP-*`/`X-ChagyouSenmon-*`/`X-MatchastorePros-*`/`X-MatchastoreTeam-*`/`X-MatchastoreWorks-*`/`X-MatchastoreExperts-*`/`X-MatchastoreSvc-*`/`X-MatchastoreHQ-*`/`X-PremiumteaPros-*`/`X-PremiumteaTeam-*`/`X-PremiumteaWorks-*`/`X-PremiumteaExperts-*`/`X-PremiumteaSvc-*`/`X-PremiumteaHQ-*`/`X-JapaneseteaPros-*`/`X-JapaneseteaTeam-*`/`X-JapaneseteaWorks-*`/`X-JapaneseteaExperts-*`/`X-JapaneseteaSvc-*`/`X-JapaneseteaHQ-*` 等 は茶機の通知記録 — 送信側が書くことは自称。抹茶・高級茶業者の偽装は、宇治抹茶の格安セット・茶園直送を装った通販詐欺の典型手口。(茶道教室は sado 機で検出済み)
+- **修正**: `Envelope` に `matcha_marks` + `has_matcha_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 茶印の自署を問え。
+
+### Security — D831: `X-Matsutake-*`/`X-Kinoko-*`/`X-Kinokoya-*`/`X-Mushroomshop-*`/`X-Mushroomdirect-*`/`X-Premiumfungi-*` 等の松茸・高級キノコ印自称が未検査
+
+- **問題**: `X-Matsutake-*`/`X-MatsutakeYasan-*`/`X-MatsutakePro-*`/`X-MatsutakeTeam-*`/`X-MatsutakeJP-*`/`X-MatsutakeSenmon-*`/`X-Kinoko-*`/`X-KinokoYasan-*`/`X-KinokoPro-*`/`X-KinokoTeam-*`/`X-KinokoJP-*`/`X-KinokoSenmon-*`/`X-Kinokoya-*`/`X-KinokoyaYasan-*`/`X-KinokoyaPro-*`/`X-KinokoyaTeam-*`/`X-KinokoyaJP-*`/`X-KinokoyaSenmon-*`/`X-MushroomshopPros-*`/`X-MushroomshopTeam-*`/`X-MushroomshopWorks-*`/`X-MushroomshopExperts-*`/`X-MushroomshopSvc-*`/`X-MushroomshopHQ-*`/`X-MushroomdirectPros-*`/`X-MushroomdirectTeam-*`/`X-MushroomdirectWorks-*`/`X-MushroomdirectExperts-*`/`X-MushroomdirectSvc-*`/`X-MushroomdirectHQ-*`/`X-PremiumfungiPros-*`/`X-PremiumfungiTeam-*`/`X-PremiumfungiWorks-*`/`X-PremiumfungiExperts-*`/`X-PremiumfungiSvc-*`/`X-PremiumfungiHQ-*` 等 は茸機の通知記録 — 送信側が書くことは自称。松茸・高級キノコ業者の偽装は、国産松茸の格安訳あり品・山直送を装った通販詐欺の典型手口。(`x-shiitake-` は fortune 機所有のため別形のみ)
+- **修正**: `Envelope` に `matsutake_marks` + `has_matsutake_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 茸印の自署を問え。
+
+### Security — D832: `X-Awabi-*`/`X-Kaigara-*`/`X-Uniikura-*`/`X-Seaurchin-*`/`X-Abalone-*`/`X-Premiumshell-*` 等の雲丹・あわび高級貝印自称が未検査
+
+- **問題**: `X-Awabi-*`/`X-AwabiYasan-*`/`X-AwabiPro-*`/`X-AwabiTeam-*`/`X-AwabiJP-*`/`X-AwabiSenmon-*`/`X-Kaigara-*`/`X-KaigaraYasan-*`/`X-KaigaraPro-*`/`X-KaigaraTeam-*`/`X-KaigaraJP-*`/`X-KaigaraSenmon-*`/`X-Uniikura-*`/`X-UniikuraYasan-*`/`X-UniikuraPro-*`/`X-UniikuraTeam-*`/`X-UniikuraJP-*`/`X-UniikuraSenmon-*`/`X-SeaurchinPros-*`/`X-SeaurchinTeam-*`/`X-SeaurchinWorks-*`/`X-SeaurchinExperts-*`/`X-SeaurchinSvc-*`/`X-SeaurchinHQ-*`/`X-AbalonePros-*`/`X-AbaloneTeam-*`/`X-AbaloneWorks-*`/`X-AbaloneExperts-*`/`X-AbaloneSvc-*`/`X-AbaloneHQ-*`/`X-PremiumshellPros-*`/`X-PremiumshellTeam-*`/`X-PremiumshellWorks-*`/`X-PremiumshellExperts-*`/`X-PremiumshellSvc-*`/`X-PremiumshellHQ-*` 等 は鮑機の通知記録 — 送信側が書くことは自称。雲丹・あわび業者の偽装は、うにいくらセット・活あわび直送を装った通販詐欺の典型手口。(蟹は kani 機、明太子は mentaiko 機で検出済み)
+- **修正**: `Envelope` に `awabi_marks` + `has_awabi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鮑印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
