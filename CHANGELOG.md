@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D866: `X-Geta-*`/`X-Getaya-*`/`X-Zouriya-*`/`X-Getastore-*`/`X-Woodenclogs-*`/`X-Japclogs-*` 等の下駄・草履印自称が未検査
+
+- **問題**: `X-Geta-*`/`X-GetaYasan-*`/`X-GetaPro-*`/`X-GetaTeam-*`/`X-GetaJP-*`/`X-GetaSenmon-*`/`X-Getaya-*`/`X-GetayaYasan-*`/`X-GetayaPro-*`/`X-GetayaTeam-*`/`X-GetayaJP-*`/`X-GetayaSenmon-*`/`X-Zouriya-*`/`X-ZouriyaYasan-*`/`X-ZouriyaPro-*`/`X-ZouriyaTeam-*`/`X-ZouriyaJP-*`/`X-ZouriyaSenmon-*`/`X-GetastorePros-*`/`X-GetastoreTeam-*`/`X-GetastoreWorks-*`/`X-GetastoreExperts-*`/`X-GetastoreSvc-*`/`X-GetastoreHQ-*`/`X-WoodenclogsPros-*`/`X-WoodenclogsTeam-*`/`X-WoodenclogsWorks-*`/`X-WoodenclogsExperts-*`/`X-WoodenclogsSvc-*`/`X-WoodenclogsHQ-*`/`X-JapclogsPros-*`/`X-JapclogsTeam-*`/`X-JapclogsWorks-*`/`X-JapclogsExperts-*`/`X-JapclogsSvc-*`/`X-JapclogsHQ-*` 等 は履機の通知記録 — 送信側が書くことは自称。下駄・草履店の偽装は、桐下駄・雪駄の職人直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `geta_marks` + `has_geta_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 履印の自署を問え。
+
+### Security — D867: `X-Fude-*`/`X-Fudeya-*`/`X-Kumanofude-*`/`X-Brushstore-*`/`X-Calligraphybrush-*`/`X-Japbrush-*` 等の筆・熊野筆印自称が未検査
+
+- **問題**: `X-Fude-*`/`X-FudeYasan-*`/`X-FudePro-*`/`X-FudeTeam-*`/`X-FudeJP-*`/`X-FudeSenmon-*`/`X-Fudeya-*`/`X-FudeyaYasan-*`/`X-FudeyaPro-*`/`X-FudeyaTeam-*`/`X-FudeyaJP-*`/`X-FudeyaSenmon-*`/`X-Kumanofude-*`/`X-KumanofudeYasan-*`/`X-KumanofudePro-*`/`X-KumanofudeTeam-*`/`X-KumanofudeJP-*`/`X-KumanofudeSenmon-*`/`X-BrushstorePros-*`/`X-BrushstoreTeam-*`/`X-BrushstoreWorks-*`/`X-BrushstoreExperts-*`/`X-BrushstoreSvc-*`/`X-BrushstoreHQ-*`/`X-CalligraphybrushPros-*`/`X-CalligraphybrushTeam-*`/`X-CalligraphybrushWorks-*`/`X-CalligraphybrushExperts-*`/`X-CalligraphybrushSvc-*`/`X-CalligraphybrushHQ-*`/`X-JapbrushPros-*`/`X-JapbrushTeam-*`/`X-JapbrushWorks-*`/`X-JapbrushExperts-*`/`X-JapbrushSvc-*`/`X-JapbrushHQ-*` 等 は筆機の通知記録 — 送信側が書くことは自称。筆店の偽装は、熊野筆・奈良筆の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `fude_marks` + `has_fude_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 筆印の自署を問え。
+
+### Security — D868: `X-Sumi-*`/`X-Sumiya-*`/`X-Suzuriya-*`/`X-Inkstore-*`/`X-Inkstick-*`/`X-Japink-*` 等の墨・硯印自称が未検査
+
+- **問題**: `X-Sumi-*`/`X-SumiYasan-*`/`X-SumiPro-*`/`X-SumiTeam-*`/`X-SumiJP-*`/`X-SumiSenmon-*`/`X-Sumiya-*`/`X-SumiyaYasan-*`/`X-SumiyaPro-*`/`X-SumiyaTeam-*`/`X-SumiyaJP-*`/`X-SumiyaSenmon-*`/`X-Suzuriya-*`/`X-SuzuriyaYasan-*`/`X-SuzuriyaPro-*`/`X-SuzuriyaTeam-*`/`X-SuzuriyaJP-*`/`X-SuzuriyaSenmon-*`/`X-InkstorePros-*`/`X-InkstoreTeam-*`/`X-InkstoreWorks-*`/`X-InkstoreExperts-*`/`X-InkstoreSvc-*`/`X-InkstoreHQ-*`/`X-InkstickPros-*`/`X-InkstickTeam-*`/`X-InkstickWorks-*`/`X-InkstickExperts-*`/`X-InkstickSvc-*`/`X-InkstickHQ-*`/`X-JapinkPros-*`/`X-JapinkTeam-*`/`X-JapinkWorks-*`/`X-JapinkExperts-*`/`X-JapinkSvc-*`/`X-JapinkHQ-*` 等 は墨機の通知記録 — 送信側が書くことは自称。墨・硯店の偽装は、奈良墨・端渓硯の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `sumi_marks` + `has_sumi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 墨印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
