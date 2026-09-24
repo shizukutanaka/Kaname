@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D875: `X-Soba-*`/`X-Sobaya-*`/`X-Sobakiri-*`/`X-Sobastore-*`/`X-Japsoba-*`/`X-Buckwheatnoodle-*` 等の蕎麦印自称が未検査
+
+- **問題**: `X-Soba-*`/`X-SobaYasan-*`/`X-SobaPro-*`/`X-SobaTeam-*`/`X-SobaJP-*`/`X-SobaSenmon-*`/`X-Sobaya-*`/`X-SobayaYasan-*`/`X-SobayaPro-*`/`X-SobayaTeam-*`/`X-SobayaJP-*`/`X-SobayaSenmon-*`/`X-Sobakiri-*`/`X-SobakiriYasan-*`/`X-SobakiriPro-*`/`X-SobakiriTeam-*`/`X-SobakiriJP-*`/`X-SobakiriSenmon-*`/`X-SobastorePros-*`/`X-SobastoreTeam-*`/`X-SobastoreWorks-*`/`X-SobastoreExperts-*`/`X-SobastoreSvc-*`/`X-SobastoreHQ-*`/`X-JapsobaPros-*`/`X-JapsobaTeam-*`/`X-JapsobaWorks-*`/`X-JapsobaExperts-*`/`X-JapsobaSvc-*`/`X-JapsobaHQ-*`/`X-BuckwheatnoodlePros-*`/`X-BuckwheatnoodleTeam-*`/`X-BuckwheatnoodleWorks-*`/`X-BuckwheatnoodleExperts-*`/`X-BuckwheatnoodleSvc-*`/`X-BuckwheatnoodleHQ-*` 等 は蕎機の通知記録 — 送信側が書くことは自称。蕎麦屋の偽装は、信州蕎麦・蕎麦切り名人監修の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `soba_marks` + `has_soba_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 蕎印の自署を問え。
+
+### Security — D876: `X-Udon-*`/`X-Udonya-*`/`X-Sanukiudon-*`/`X-Udonstore-*`/`X-Japudon-*`/`X-Wheatnoodle-*` 等の讃岐うどん印自称が未検査
+
+- **問題**: `X-Udon-*`/`X-UdonYasan-*`/`X-UdonPro-*`/`X-UdonTeam-*`/`X-UdonJP-*`/`X-UdonSenmon-*`/`X-Udonya-*`/`X-UdonyaYasan-*`/`X-UdonyaPro-*`/`X-UdonyaTeam-*`/`X-UdonyaJP-*`/`X-UdonyaSenmon-*`/`X-Sanukiudon-*`/`X-SanukiudonYasan-*`/`X-SanukiudonPro-*`/`X-SanukiudonTeam-*`/`X-SanukiudonJP-*`/`X-SanukiudonSenmon-*`/`X-UdonstorePros-*`/`X-UdonstoreTeam-*`/`X-UdonstoreWorks-*`/`X-UdonstoreExperts-*`/`X-UdonstoreSvc-*`/`X-UdonstoreHQ-*`/`X-JapudonPros-*`/`X-JapudonTeam-*`/`X-JapudonWorks-*`/`X-JapudonExperts-*`/`X-JapudonSvc-*`/`X-JapudonHQ-*`/`X-WheatnoodlePros-*`/`X-WheatnoodleTeam-*`/`X-WheatnoodleWorks-*`/`X-WheatnoodleExperts-*`/`X-WheatnoodleSvc-*`/`X-WheatnoodleHQ-*` 等 は讃機の通知記録 — 送信側が書くことは自称。讃岐うどん業者の偽装は、讃岐直送・讃岐製麺所の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `udon_marks` + `has_udon_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 讃印の自署を問え。
+
+### Security — D877: `X-Toufu-*`/`X-Toufuya-*`/`X-Yubaten-*`/`X-Tofustore-*`/`X-Japtofu-*`/`X-Soycurd-*` 等の豆腐・湯葉印自称が未検査
+
+- **問題**: `X-Toufu-*`/`X-ToufuYasan-*`/`X-ToufuPro-*`/`X-ToufuTeam-*`/`X-ToufuJP-*`/`X-ToufuSenmon-*`/`X-Toufuya-*`/`X-ToufuyaYasan-*`/`X-ToufuyaPro-*`/`X-ToufuyaTeam-*`/`X-ToufuyaJP-*`/`X-ToufuyaSenmon-*`/`X-Yubaten-*`/`X-YubatenYasan-*`/`X-YubatenPro-*`/`X-YubatenTeam-*`/`X-YubatenJP-*`/`X-YubatenSenmon-*`/`X-TofustorePros-*`/`X-TofustoreTeam-*`/`X-TofustoreWorks-*`/`X-TofustoreExperts-*`/`X-TofustoreSvc-*`/`X-TofustoreHQ-*`/`X-JaptofuPros-*`/`X-JaptofuTeam-*`/`X-JaptofuWorks-*`/`X-JaptofuExperts-*`/`X-JaptofuSvc-*`/`X-JaptofuHQ-*`/`X-SoycurdPros-*`/`X-SoycurdTeam-*`/`X-SoycurdWorks-*`/`X-SoycurdExperts-*`/`X-SoycurdSvc-*`/`X-SoycurdHQ-*` 等 は豆機の通知記録 — 送信側が書くことは自称。豆腐・湯葉業者の偽装は、嵯峨豆腐・日光湯葉の朝採り直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `toufu_marks` + `has_toufu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 豆印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

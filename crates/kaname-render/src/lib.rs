@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub soba_marks: bool,
+    pub udon_marks: bool,
+    pub toufu_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        soba_marks: has_soba_marks(hdr),
+        udon_marks: has_udon_marks(hdr),
+        toufu_marks: has_toufu_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_soba_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-soba-")
+            || l.starts_with("x-sobayasan-")
+            || l.starts_with("x-sobapro-")
+            || l.starts_with("x-sobateam-")
+            || l.starts_with("x-sobakensa-")
+            || l.starts_with("x-sobamanten-")
+            || l.starts_with("x-sobanomi-")
+            || l.starts_with("x-sobajp-")
+            || l.starts_with("x-sobasenmon-")
+            || l.starts_with("x-sobamitsumori-")
+            || l.starts_with("x-sobachousa-")
+            || l.starts_with("x-sobateiki-")
+            || l.starts_with("x-sobapros-")
+            || l.starts_with("x-sobadoctors-")
+            || l.starts_with("x-sobarescue-")
+            || l.starts_with("x-sobaya-")
+            || l.starts_with("x-sobayayasan-")
+            || l.starts_with("x-sobayapro-")
+            || l.starts_with("x-sobayateam-")
+            || l.starts_with("x-sobayajp-")
+            || l.starts_with("x-sobayasenmon-")
+            || l.starts_with("x-sobayapros-")
+            || l.starts_with("x-sobayadoctors-")
+            || l.starts_with("x-sobayarescue-")
+            || l.starts_with("x-sobakiri-")
+            || l.starts_with("x-sobakiriyasan-")
+            || l.starts_with("x-sobakiripro-")
+            || l.starts_with("x-sobakiriteam-")
+            || l.starts_with("x-sobakirijp-")
+            || l.starts_with("x-sobakirisenmon-")
+            || l.starts_with("x-sobakiripros-")
+            || l.starts_with("x-sobakiridoctors-")
+            || l.starts_with("x-sobakirirescue-")
+            || l.starts_with("x-sobastorepros-")
+            || l.starts_with("x-sobastoreteam-")
+            || l.starts_with("x-sobastoreworks-")
+            || l.starts_with("x-sobastoreexperts-")
+            || l.starts_with("x-sobastoresvc-")
+            || l.starts_with("x-sobastorehq-")
+            || l.starts_with("x-japsobapros-")
+            || l.starts_with("x-japsobateam-")
+            || l.starts_with("x-japsobaworks-")
+            || l.starts_with("x-japsobaexperts-")
+            || l.starts_with("x-japsobasvc-")
+            || l.starts_with("x-japsobahq-")
+            || l.starts_with("x-buckwheatnoodlepros-")
+            || l.starts_with("x-buckwheatnoodleteam-")
+            || l.starts_with("x-buckwheatnoodleworks-")
+            || l.starts_with("x-buckwheatnoodleexperts-")
+            || l.starts_with("x-buckwheatnoodlesvc-")
+            || l.starts_with("x-buckwheatnoodlehq-")
+    })
+}
+
+fn has_udon_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-udon-")
+            || l.starts_with("x-udonyasan-")
+            || l.starts_with("x-udonpro-")
+            || l.starts_with("x-udonteam-")
+            || l.starts_with("x-udonkensa-")
+            || l.starts_with("x-udonmanten-")
+            || l.starts_with("x-udonnomi-")
+            || l.starts_with("x-udonjp-")
+            || l.starts_with("x-udonsenmon-")
+            || l.starts_with("x-udonmitsumori-")
+            || l.starts_with("x-udonchousa-")
+            || l.starts_with("x-udonteiki-")
+            || l.starts_with("x-udonpros-")
+            || l.starts_with("x-udondoctors-")
+            || l.starts_with("x-udonrescue-")
+            || l.starts_with("x-udonya-")
+            || l.starts_with("x-udonyayasan-")
+            || l.starts_with("x-udonyapro-")
+            || l.starts_with("x-udonyateam-")
+            || l.starts_with("x-udonyajp-")
+            || l.starts_with("x-udonyasenmon-")
+            || l.starts_with("x-udonyapros-")
+            || l.starts_with("x-udonyadoctors-")
+            || l.starts_with("x-udonyarescue-")
+            || l.starts_with("x-sanukiudon-")
+            || l.starts_with("x-sanukiudonyasan-")
+            || l.starts_with("x-sanukiudonpro-")
+            || l.starts_with("x-sanukiudonteam-")
+            || l.starts_with("x-sanukiudonjp-")
+            || l.starts_with("x-sanukiudonsenmon-")
+            || l.starts_with("x-sanukiudonpros-")
+            || l.starts_with("x-sanukiudondoctors-")
+            || l.starts_with("x-sanukiudonrescue-")
+            || l.starts_with("x-udonstorepros-")
+            || l.starts_with("x-udonstoreteam-")
+            || l.starts_with("x-udonstoreworks-")
+            || l.starts_with("x-udonstoreexperts-")
+            || l.starts_with("x-udonstoresvc-")
+            || l.starts_with("x-udonstorehq-")
+            || l.starts_with("x-japudonpros-")
+            || l.starts_with("x-japudonteam-")
+            || l.starts_with("x-japudonworks-")
+            || l.starts_with("x-japudonexperts-")
+            || l.starts_with("x-japudonsvc-")
+            || l.starts_with("x-japudonhq-")
+            || l.starts_with("x-wheatnoodlepros-")
+            || l.starts_with("x-wheatnoodleteam-")
+            || l.starts_with("x-wheatnoodleworks-")
+            || l.starts_with("x-wheatnoodleexperts-")
+            || l.starts_with("x-wheatnoodlesvc-")
+            || l.starts_with("x-wheatnoodlehq-")
+    })
+}
+
+fn has_toufu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-toufu-")
+            || l.starts_with("x-toufuyasan-")
+            || l.starts_with("x-toufupro-")
+            || l.starts_with("x-toufuteam-")
+            || l.starts_with("x-toufukensa-")
+            || l.starts_with("x-toufumanten-")
+            || l.starts_with("x-toufunomi-")
+            || l.starts_with("x-toufujp-")
+            || l.starts_with("x-toufusenmon-")
+            || l.starts_with("x-toufumitsumori-")
+            || l.starts_with("x-toufuchousa-")
+            || l.starts_with("x-toufuteiki-")
+            || l.starts_with("x-toufupros-")
+            || l.starts_with("x-toufudoctors-")
+            || l.starts_with("x-toufurescue-")
+            || l.starts_with("x-toufuya-")
+            || l.starts_with("x-toufuyayasan-")
+            || l.starts_with("x-toufuyapro-")
+            || l.starts_with("x-toufuyateam-")
+            || l.starts_with("x-toufuyajp-")
+            || l.starts_with("x-toufuyasenmon-")
+            || l.starts_with("x-toufuyapros-")
+            || l.starts_with("x-toufuyadoctors-")
+            || l.starts_with("x-toufuyarescue-")
+            || l.starts_with("x-yubaten-")
+            || l.starts_with("x-yubatenyasan-")
+            || l.starts_with("x-yubatenpro-")
+            || l.starts_with("x-yubatenteam-")
+            || l.starts_with("x-yubatenjp-")
+            || l.starts_with("x-yubatensenmon-")
+            || l.starts_with("x-yubatenpros-")
+            || l.starts_with("x-yubatendoctors-")
+            || l.starts_with("x-yubatenrescue-")
+            || l.starts_with("x-tofustorepros-")
+            || l.starts_with("x-tofustoreteam-")
+            || l.starts_with("x-tofustoreworks-")
+            || l.starts_with("x-tofustoreexperts-")
+            || l.starts_with("x-tofustoresvc-")
+            || l.starts_with("x-tofustorehq-")
+            || l.starts_with("x-japtofupros-")
+            || l.starts_with("x-japtofuteam-")
+            || l.starts_with("x-japtofuworks-")
+            || l.starts_with("x-japtofuexperts-")
+            || l.starts_with("x-japtofusvc-")
+            || l.starts_with("x-japtofuhq-")
+            || l.starts_with("x-soycurdpros-")
+            || l.starts_with("x-soycurdteam-")
+            || l.starts_with("x-soycurdworks-")
+            || l.starts_with("x-soycurdexperts-")
+            || l.starts_with("x-soycurdsvc-")
+            || l.starts_with("x-soycurdhq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は蕎機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Soba-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SobaPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SobayaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SobakiriTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SobastorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapsobaHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SobaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BuckwheatnoodleExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_soba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_soba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は讃機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Udon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UdonPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UdonyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SanukiudonTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UdonstorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapudonHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UdonSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WheatnoodleExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_udon_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_udon_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は豆機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Toufu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ToufuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ToufuyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-YubatenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TofustorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JaptofuHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ToufuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoycurdExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_toufu_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_toufu_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
