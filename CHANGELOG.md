@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D833: `X-Shikki-*`/`X-Urushi-*`/`X-Makie-*`/`X-Lacquerware-*`/`X-Japanlacquer-*`/`X-Lacquershop-*` 等の漆器・蒔絵印自称が未検査
+
+- **問題**: `X-Shikki-*`/`X-ShikkiYasan-*`/`X-ShikkiPro-*`/`X-ShikkiTeam-*`/`X-ShikkiJP-*`/`X-ShikkiSenmon-*`/`X-Urushi-*`/`X-UrushiYasan-*`/`X-UrushiPro-*`/`X-UrushiTeam-*`/`X-UrushiJP-*`/`X-UrushiSenmon-*`/`X-Makie-*`/`X-MakieYasan-*`/`X-MakiePro-*`/`X-MakieTeam-*`/`X-MakieJP-*`/`X-MakieSenmon-*`/`X-LacquerwarePros-*`/`X-LacquerwareTeam-*`/`X-LacquerwareWorks-*`/`X-LacquerwareExperts-*`/`X-LacquerwareSvc-*`/`X-LacquerwareHQ-*`/`X-JapanlacquerPros-*`/`X-JapanlacquerTeam-*`/`X-JapanlacquerWorks-*`/`X-JapanlacquerExperts-*`/`X-JapanlacquerSvc-*`/`X-JapanlacquerHQ-*`/`X-LacquershopPros-*`/`X-LacquershopTeam-*`/`X-LacquershopWorks-*`/`X-LacquershopExperts-*`/`X-LacquershopSvc-*`/`X-LacquershopHQ-*` 等 は漆機の通知記録 — 送信側が書くことは自称。漆器・蒔絵業者の偽装は、高級漆器の格安セット・産地直売を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shikki_marks` + `has_shikki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 漆印の自署を問え。
+
+### Security — D834: `X-Washi-*`/`X-Tesukiwashi-*`/`X-Tesuki-*`/`X-Japanesepaper-*`/`X-Washipaper-*`/`X-Handmadepaper-*` 等の和紙・手漉き紙印自称が未検査
+
+- **問題**: `X-Washi-*`/`X-WashiYasan-*`/`X-WashiPro-*`/`X-WashiTeam-*`/`X-WashiJP-*`/`X-WashiSenmon-*`/`X-Tesukiwashi-*`/`X-TesukiwashiYasan-*`/`X-TesukiwashiPro-*`/`X-TesukiwashiTeam-*`/`X-TesukiwashiJP-*`/`X-TesukiwashiSenmon-*`/`X-Tesuki-*`/`X-TesukiYasan-*`/`X-TesukiPro-*`/`X-TesukiTeam-*`/`X-TesukiJP-*`/`X-TesukiSenmon-*`/`X-JapanesepaperPros-*`/`X-JapanesepaperTeam-*`/`X-JapanesepaperWorks-*`/`X-JapanesepaperExperts-*`/`X-JapanesepaperSvc-*`/`X-JapanesepaperHQ-*`/`X-WashipaperPros-*`/`X-WashipaperTeam-*`/`X-WashipaperWorks-*`/`X-WashipaperExperts-*`/`X-WashipaperSvc-*`/`X-WashipaperHQ-*`/`X-HandmadepaperPros-*`/`X-HandmadepaperTeam-*`/`X-HandmadepaperWorks-*`/`X-HandmadepaperExperts-*`/`X-HandmadepaperSvc-*`/`X-HandmadepaperHQ-*` 等 は紙機の通知記録 — 送信側が書くことは自称。和紙・手漉き紙業者の偽装は、手漉き和紙の格安品・工房直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `washi_marks` + `has_washi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 紙印の自署を問え。
+
+### Security — D835: `X-Chouchin-*`/`X-Andon-*`/`X-Chouchinya-*`/`X-Lanternshop-*`/`X-Paperlantern-*`/`X-Festivallantern-*` 等の提灯・行灯印自称が未検査
+
+- **問題**: `X-Chouchin-*`/`X-ChouchinYasan-*`/`X-ChouchinPro-*`/`X-ChouchinTeam-*`/`X-ChouchinJP-*`/`X-ChouchinSenmon-*`/`X-Andon-*`/`X-AndonYasan-*`/`X-AndonPro-*`/`X-AndonTeam-*`/`X-AndonJP-*`/`X-AndonSenmon-*`/`X-Chouchinya-*`/`X-ChouchinyaYasan-*`/`X-ChouchinyaPro-*`/`X-ChouchinyaTeam-*`/`X-ChouchinyaJP-*`/`X-ChouchinyaSenmon-*`/`X-LanternshopPros-*`/`X-LanternshopTeam-*`/`X-LanternshopWorks-*`/`X-LanternshopExperts-*`/`X-LanternshopSvc-*`/`X-LanternshopHQ-*`/`X-PaperlanternPros-*`/`X-PaperlanternTeam-*`/`X-PaperlanternWorks-*`/`X-PaperlanternExperts-*`/`X-PaperlanternSvc-*`/`X-PaperlanternHQ-*`/`X-FestivallanternPros-*`/`X-FestivallanternTeam-*`/`X-FestivallanternWorks-*`/`X-FestivallanternExperts-*`/`X-FestivallanternSvc-*`/`X-FestivallanternHQ-*` 等 は提機の通知記録 — 送信側が書くことは自称。提灯・行灯業者の偽装は、祭り提灯・盆提灯の格安販売を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `chouchin_marks` + `has_chouchin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 提印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
