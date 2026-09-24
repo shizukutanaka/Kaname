@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub konkatsu_marks: bool,
+    pub reien_marks: bool,
+    pub nouki_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        konkatsu_marks: has_konkatsu_marks(hdr),
+        reien_marks: has_reien_marks(hdr),
+        nouki_marks: has_nouki_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,202 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_konkatsu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-konkatsu-")
+            || l.starts_with("x-konkatsuyasan-")
+            || l.starts_with("x-konkatsupro-")
+            || l.starts_with("x-konkatsuteam-")
+            || l.starts_with("x-konkatsukensa-")
+            || l.starts_with("x-konkatsumanten-")
+            || l.starts_with("x-konkatsunomi-")
+            || l.starts_with("x-konkatsujp-")
+            || l.starts_with("x-konkatsusenmon-")
+            || l.starts_with("x-konkatsumitsumori-")
+            || l.starts_with("x-konkatsuchousa-")
+            || l.starts_with("x-konkatsuteiki-")
+            || l.starts_with("x-konkatsushuri-")
+            || l.starts_with("x-konkatsusho-")
+            || l.starts_with("x-konkatsuten-")
+            || l.starts_with("x-konkatsukoubou-")
+            || l.starts_with("x-konkatsumart-")
+            || l.starts_with("x-konkatsubank-")
+            || l.starts_with("x-kekkonshoudan-")
+            || l.starts_with("x-kekkonshoudanpro-")
+            || l.starts_with("x-kekkonshoudanteam-")
+            || l.starts_with("x-kekkonshoudankensa-")
+            || l.starts_with("x-kekkonshoudankoubou-")
+            || l.starts_with("x-kekkonshoudansenmon-")
+            || l.starts_with("x-kekkonshoudansho-")
+            || l.starts_with("x-kekkonshoudanten-")
+            || l.starts_with("x-kekkonsoudan-")
+            || l.starts_with("x-kekkonsoudanpro-")
+            || l.starts_with("x-kekkonsoudansho-")
+            || l.starts_with("x-matchmakerpros-")
+            || l.starts_with("x-matchmakerteam-")
+            || l.starts_with("x-matchmakerworks-")
+            || l.starts_with("x-matchmakerexperts-")
+            || l.starts_with("x-matchmakersvc-")
+            || l.starts_with("x-matchmakerhq-")
+            || l.starts_with("x-matchmakingpros-")
+            || l.starts_with("x-matchmakingteam-")
+            || l.starts_with("x-matchmakingworks-")
+            || l.starts_with("x-matchmakingexperts-")
+            || l.starts_with("x-matchmakingsvc-")
+            || l.starts_with("x-matchmakinghq-")
+            || l.starts_with("x-marriageagencypros-")
+            || l.starts_with("x-marriageagencyteam-")
+            || l.starts_with("x-marriageagencyworks-")
+            || l.starts_with("x-marriageagencyexperts-")
+            || l.starts_with("x-marriageagencysvc-")
+            || l.starts_with("x-marriageagencyhq-")
+            || l.starts_with("x-konkatsupros-")
+            || l.starts_with("x-konkatsuworks-")
+            || l.starts_with("x-konkatsuexperts-")
+            || l.starts_with("x-konkatsusvc-")
+            || l.starts_with("x-konkatsuhq-")
+            || l.starts_with("x-konkatsudoctors-")
+            || l.starts_with("x-konkatsurescue-")
+    })
+}
+
+fn has_reien_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-reien-")
+            || l.starts_with("x-reienyasan-")
+            || l.starts_with("x-reienpro-")
+            || l.starts_with("x-reienteam-")
+            || l.starts_with("x-reienkensa-")
+            || l.starts_with("x-reienmanten-")
+            || l.starts_with("x-reiennomi-")
+            || l.starts_with("x-reienjp-")
+            || l.starts_with("x-reiensenmon-")
+            || l.starts_with("x-reienmitsumori-")
+            || l.starts_with("x-reienchousa-")
+            || l.starts_with("x-reienteiki-")
+            || l.starts_with("x-reienshuri-")
+            || l.starts_with("x-reiensho-")
+            || l.starts_with("x-reienten-")
+            || l.starts_with("x-reienkoubou-")
+            || l.starts_with("x-reienmart-")
+            || l.starts_with("x-reienbank-")
+            || l.starts_with("x-bochi-")
+            || l.starts_with("x-bochiyasan-")
+            || l.starts_with("x-bochipro-")
+            || l.starts_with("x-bochiteam-")
+            || l.starts_with("x-bochikensa-")
+            || l.starts_with("x-bochimanten-")
+            || l.starts_with("x-bochinomi-")
+            || l.starts_with("x-bochijp-")
+            || l.starts_with("x-bochisenmon-")
+            || l.starts_with("x-bochimitsumori-")
+            || l.starts_with("x-bochichousa-")
+            || l.starts_with("x-bochiteiki-")
+            || l.starts_with("x-bochishuri-")
+            || l.starts_with("x-bochisho-")
+            || l.starts_with("x-bochiten-")
+            || l.starts_with("x-bochikoubou-")
+            || l.starts_with("x-bochimart-")
+            || l.starts_with("x-bochibank-")
+            || l.starts_with("x-cemeterypros-")
+            || l.starts_with("x-cemeteryteam-")
+            || l.starts_with("x-cemeteryworks-")
+            || l.starts_with("x-cemeteryexperts-")
+            || l.starts_with("x-cemeterysvc-")
+            || l.starts_with("x-cemeteryhq-")
+            || l.starts_with("x-memorialparkpros-")
+            || l.starts_with("x-memorialparkteam-")
+            || l.starts_with("x-memorialparkworks-")
+            || l.starts_with("x-memorialparkexperts-")
+            || l.starts_with("x-memorialparksvc-")
+            || l.starts_with("x-memorialparkhq-")
+            || l.starts_with("x-reienpros-")
+            || l.starts_with("x-reienworks-")
+            || l.starts_with("x-reienexperts-")
+            || l.starts_with("x-reiensvc-")
+            || l.starts_with("x-reienhq-")
+            || l.starts_with("x-reiendoctors-")
+            || l.starts_with("x-reienrescue-")
+    })
+}
+
+fn has_nouki_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nouki-")
+            || l.starts_with("x-noukiyasan-")
+            || l.starts_with("x-noukipro-")
+            || l.starts_with("x-noukiteam-")
+            || l.starts_with("x-noukikensa-")
+            || l.starts_with("x-noukimanten-")
+            || l.starts_with("x-noukinomi-")
+            || l.starts_with("x-noukijp-")
+            || l.starts_with("x-noukisenmon-")
+            || l.starts_with("x-noukimart-")
+            || l.starts_with("x-noukimitsumori-")
+            || l.starts_with("x-noukichousa-")
+            || l.starts_with("x-noukiteiki-")
+            || l.starts_with("x-noukishuri-")
+            || l.starts_with("x-noukisho-")
+            || l.starts_with("x-noukiten-")
+            || l.starts_with("x-noukikoubou-")
+            || l.starts_with("x-noukibank-")
+            || l.starts_with("x-nougyou-")
+            || l.starts_with("x-nougyouyasan-")
+            || l.starts_with("x-nougyoupro-")
+            || l.starts_with("x-nougyouteam-")
+            || l.starts_with("x-nougyoukensa-")
+            || l.starts_with("x-nougyoumanten-")
+            || l.starts_with("x-nougyounomi-")
+            || l.starts_with("x-nougyoujp-")
+            || l.starts_with("x-nougyousenmon-")
+            || l.starts_with("x-nougyoumitsumori-")
+            || l.starts_with("x-nougyouchousa-")
+            || l.starts_with("x-nougyouteiki-")
+            || l.starts_with("x-nougyoushuri-")
+            || l.starts_with("x-farmmachinerypros-")
+            || l.starts_with("x-farmmachineryteam-")
+            || l.starts_with("x-farmmachineryworks-")
+            || l.starts_with("x-farmmachineryexperts-")
+            || l.starts_with("x-farmmachinerysvc-")
+            || l.starts_with("x-farmmachineryhq-")
+            || l.starts_with("x-farmequipmentpros-")
+            || l.starts_with("x-farmequipmentteam-")
+            || l.starts_with("x-farmequipmentworks-")
+            || l.starts_with("x-farmequipmentexperts-")
+            || l.starts_with("x-farmequipmentsvc-")
+            || l.starts_with("x-farmequipmenthq-")
+            || l.starts_with("x-agriequipmentpros-")
+            || l.starts_with("x-agriequipmentteam-")
+            || l.starts_with("x-agriequipmentworks-")
+            || l.starts_with("x-agriequipmentexperts-")
+            || l.starts_with("x-agriequipmentsvc-")
+            || l.starts_with("x-agriequipmenthq-")
+            || l.starts_with("x-tractorrepairpros-")
+            || l.starts_with("x-tractorrepairteam-")
+            || l.starts_with("x-tractorrepairworks-")
+            || l.starts_with("x-tractorrepairsvc-")
+            || l.starts_with("x-tractorrepairhq-")
+            || l.starts_with("x-noukipros-")
+            || l.starts_with("x-noukidoctors-")
+            || l.starts_with("x-noukirescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20843,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は縁機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Konkatsu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KekkonShoudan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MatchmakerPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MatchmakingTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KonkatsuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MarriageAgencyWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KonkatsuHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KekkonSoudan-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_konkatsu_marks(h));
+        }
+        assert!(!has_konkatsu_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は霊機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Reien-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Bochi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CemeteryPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MemorialParkTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ReienSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BochiKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CemeteryHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MemorialParkWorks-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_reien_marks(h));
+        }
+        assert!(!has_reien_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は農機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Nouki-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Nougyou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FarmMachineryPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FarmEquipmentTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NoukiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AgriEquipmentWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TractorRepairHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NoukiMart-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_nouki_marks(h));
+        }
+        assert!(!has_nouki_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
