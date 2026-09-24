@@ -2188,6 +2188,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D707: コールセンター・テレアポ代行印自称
+    if env.callcenter_marks {
+        render_risks.push(
+            "X-CallCenterPros-*/X-Teleperformance-*/X-Kourusenta-*/X-Concentrix-*/X-InboundPros-*/X-DenwaKouru-* 等 — 呼機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D708: 除菌・消毒・ウイルス除去印自称
+    if env.disinfection_marks {
+        render_risks.push(
+            "X-DisinfectionPros-*/X-SterilizePros-*/X-Jokin-*/X-GermPros-*/X-VirusClean-*/X-Shoudoku-* 等 — 菌機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D709: 盗聴器発見・TSCM印自称
+    if env.tscm_marks {
+        render_risks.push(
+            "X-TscmPros-*/X-BugSweepPros-*/X-Tochouki-*/X-SpySweep-*/X-BugDetector-*/X-ProSweep-* 等 — 聴機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

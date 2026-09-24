@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub callcenter_marks: bool,
+    pub disinfection_marks: bool,
+    pub tscm_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        callcenter_marks: has_callcenter_marks(hdr),
+        disinfection_marks: has_disinfection_marks(hdr),
+        tscm_marks: has_tscm_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,200 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_callcenter_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-callcenterpros-")
+            || l.starts_with("x-callcenterteam-")
+            || l.starts_with("x-callcenterworks-")
+            || l.starts_with("x-callcenterforce-")
+            || l.starts_with("x-callcenternation-")
+            || l.starts_with("x-callcenterexperts-")
+            || l.starts_with("x-callcenterdoctors-")
+            || l.starts_with("x-callcentermasters-")
+            || l.starts_with("x-callcentersvc-")
+            || l.starts_with("x-callcenterhq-")
+            || l.starts_with("x-callcenteryasan-")
+            || l.starts_with("x-callcentermarket-")
+            || l.starts_with("x-callcenterpro-")
+            || l.starts_with("x-callcenterservice-")
+            || l.starts_with("x-callcenterwins-")
+            || l.starts_with("x-callcentertech-")
+            || l.starts_with("x-teleperformance-")
+            || l.starts_with("x-concentrix-")
+            || l.starts_with("x-alorica-")
+            || l.starts_with("x-sitel-")
+            || l.starts_with("x-tdcx-")
+            || l.starts_with("x-taskus-")
+            || l.starts_with("x-transcom-")
+            || l.starts_with("x-bellsystem24-")
+            || l.starts_with("x-riraiya-")
+            || l.starts_with("x-kourusenta-")
+            || l.starts_with("x-denwaoutsourcing-")
+            || l.starts_with("x-inboundpros-")
+            || l.starts_with("x-outboundpros-")
+            || l.starts_with("x-teleagent-")
+            || l.starts_with("x-telesupportpros-")
+            || l.starts_with("x-contactcenterteam-")
+            || l.starts_with("x-contactcenterpros-")
+            || l.starts_with("x-contactpros-")
+            || l.starts_with("x-contactteam-")
+            || l.starts_with("x-contactsupport-")
+            || l.starts_with("x-ccpros-")
+            || l.starts_with("x-ccworks-")
+            || l.starts_with("x-ccnation-")
+            || l.starts_with("x-ccexp-")
+            || l.starts_with("x-ccjp-")
+            || l.starts_with("x-kouruworks-")
+            || l.starts_with("x-kouruteam-")
+            || l.starts_with("x-kourupro-")
+            || l.starts_with("x-kourugyo-")
+            || l.starts_with("x-kourukensa-")
+            || l.starts_with("x-kourumanten-")
+            || l.starts_with("x-kourujp-")
+            || l.starts_with("x-kourusenmon-")
+            || l.starts_with("x-kourumitsumori-")
+            || l.starts_with("x-kouruchousa-")
+            || l.starts_with("x-kouruteiki-")
+            || l.starts_with("x-kourushuri-")
+            || l.starts_with("x-denwakouru-")
+            || l.starts_with("x-telecenterteam-")
+            || l.starts_with("x-supportteampros-")
+            || l.starts_with("x-cntpros-")
+    })
+}
+
+fn has_disinfection_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-disinfectionpros-")
+            || l.starts_with("x-disinfectteam-")
+            || l.starts_with("x-disinfectworks-")
+            || l.starts_with("x-disinfectforce-")
+            || l.starts_with("x-disinfectnation-")
+            || l.starts_with("x-disinfectexperts-")
+            || l.starts_with("x-disinfectdoctors-")
+            || l.starts_with("x-disinfectmasters-")
+            || l.starts_with("x-disinfectsvc-")
+            || l.starts_with("x-disinfectionhq-")
+            || l.starts_with("x-sterilizepros-")
+            || l.starts_with("x-sterilizeteam-")
+            || l.starts_with("x-sterilizeworks-")
+            || l.starts_with("x-sterilizeexperts-")
+            || l.starts_with("x-sterilizedoctors-")
+            || l.starts_with("x-sanitizeteam-")
+            || l.starts_with("x-sanitizepros-")
+            || l.starts_with("x-germpros-")
+            || l.starts_with("x-germteam-")
+            || l.starts_with("x-germworks-")
+            || l.starts_with("x-germsvc-")
+            || l.starts_with("x-virusclean-")
+            || l.starts_with("x-virusteams-")
+            || l.starts_with("x-viruscare-")
+            || l.starts_with("x-germydoctors-")
+            || l.starts_with("x-joukinpro-")
+            || l.starts_with("x-jokin-")
+            || l.starts_with("x-jokinyasan-")
+            || l.starts_with("x-jokinpro-")
+            || l.starts_with("x-jokinteam-")
+            || l.starts_with("x-jokingyo-")
+            || l.starts_with("x-jokinkensa-")
+            || l.starts_with("x-jokinmanten-")
+            || l.starts_with("x-jokinnomi-")
+            || l.starts_with("x-jokinjp-")
+            || l.starts_with("x-jokinsenmon-")
+            || l.starts_with("x-jokinmitsumori-")
+            || l.starts_with("x-jokinchousa-")
+            || l.starts_with("x-jokinteiki-")
+            || l.starts_with("x-jokinshuri-")
+            || l.starts_with("x-shoudoku-")
+            || l.starts_with("x-shoudokuyasan-")
+            || l.starts_with("x-shoudokupro-")
+            || l.starts_with("x-shoudokuteam-")
+            || l.starts_with("x-shoudokukensa-")
+            || l.starts_with("x-shoudokumanten-")
+            || l.starts_with("x-shoudokunomi-")
+            || l.starts_with("x-shoudokujp-")
+            || l.starts_with("x-shoudokusenmon-")
+    })
+}
+
+fn has_tscm_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tscmpros-")
+            || l.starts_with("x-tscmteam-")
+            || l.starts_with("x-tscmworks-")
+            || l.starts_with("x-tscmexperts-")
+            || l.starts_with("x-tscmsvc-")
+            || l.starts_with("x-tscmhq-")
+            || l.starts_with("x-bugsweeppros-")
+            || l.starts_with("x-bugsweepteam-")
+            || l.starts_with("x-bugsweepworks-")
+            || l.starts_with("x-bugdoctors-")
+            || l.starts_with("x-spysweep-")
+            || l.starts_with("x-spyteam-")
+            || l.starts_with("x-spyworks-")
+            || l.starts_with("x-spyexperts-")
+            || l.starts_with("x-spydoctors-")
+            || l.starts_with("x-tochoukihakken-")
+            || l.starts_with("x-tochouki-")
+            || l.starts_with("x-tochoukiyasan-")
+            || l.starts_with("x-tochoukipro-")
+            || l.starts_with("x-tochoukiteam-")
+            || l.starts_with("x-tochoukikensa-")
+            || l.starts_with("x-tochoukimanten-")
+            || l.starts_with("x-tochoukinomi-")
+            || l.starts_with("x-tochoukijp-")
+            || l.starts_with("x-tochoukisenmon-")
+            || l.starts_with("x-toushouki-")
+            || l.starts_with("x-toubouki-")
+            || l.starts_with("x-bugdetector-")
+            || l.starts_with("x-prosweep-")
+            || l.starts_with("x-espypros-")
+            || l.starts_with("x-bugsweepcity-")
+            || l.starts_with("x-bugteam-")
+            || l.starts_with("x-bugworks-")
+            || l.starts_with("x-bugforce-")
+            || l.starts_with("x-bugnation-")
+            || l.starts_with("x-bugexperts-")
+            || l.starts_with("x-bugmasters-")
+            || l.starts_with("x-bugsvc-")
+            || l.starts_with("x-bughq-")
+            || l.starts_with("x-bugpro-")
+            || l.starts_with("x-sweeppros-")
+            || l.starts_with("x-sweepteam-")
+            || l.starts_with("x-sweepworks-")
+            || l.starts_with("x-sweepexperts-")
+            || l.starts_with("x-sweepdoctors-")
+            || l.starts_with("x-sweepmasters-")
+            || l.starts_with("x-tochoukidoctors-")
+            || l.starts_with("x-tochoukisagyou-")
+            || l.starts_with("x-tochoukirescue-")
+            || l.starts_with("x-tochoukiteikyu-")
+            || l.starts_with("x-tochoukiorder-")
+            || l.starts_with("x-toushoukipro-")
+            || l.starts_with("x-toushoukiteam-")
+            || l.starts_with("x-toushoukikensa-")
+            || l.starts_with("x-toushoukijp-")
+            || l.starts_with("x-countersurv-")
+            || l.starts_with("x-antisurveil-")
+            || l.starts_with("x-esurveilsweep-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20841,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は呼機印を検出する() {
+        let f0 = b"From: a@b\r\nX-CallCenterPros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Teleperformance-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Kourusenta-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Concentrix-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-InboundPros-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-CcWorks-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-DenwaKouru-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-ContactPros-Record: 1\r\n\r\nx";
+        assert!(has_callcenter_marks(f0));
+        assert!(has_callcenter_marks(f1));
+        assert!(has_callcenter_marks(f2));
+        assert!(has_callcenter_marks(f3));
+        assert!(has_callcenter_marks(f4));
+        assert!(has_callcenter_marks(f5));
+        assert!(has_callcenter_marks(f6));
+        assert!(has_callcenter_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_callcenter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は菌機印を検出する() {
+        let f0 = b"From: a@b\r\nX-DisinfectionPros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-SterilizePros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Jokin-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-GermPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-VirusClean-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-Shoudoku-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-DisinfectWorks-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-JokinPro-Record: 1\r\n\r\nx";
+        assert!(has_disinfection_marks(f0));
+        assert!(has_disinfection_marks(f1));
+        assert!(has_disinfection_marks(f2));
+        assert!(has_disinfection_marks(f3));
+        assert!(has_disinfection_marks(f4));
+        assert!(has_disinfection_marks(f5));
+        assert!(has_disinfection_marks(f6));
+        assert!(has_disinfection_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_disinfection_marks(clean));
+    }
+
+    #[test]
+    fn scan_は聴機印を検出する() {
+        let f0 = b"From: a@b\r\nX-TscmPros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-BugSweepPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Tochouki-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-SpySweep-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-BugDetector-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-ProSweep-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-TochoukiPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-BugExperts-Record: 1\r\n\r\nx";
+        assert!(has_tscm_marks(f0));
+        assert!(has_tscm_marks(f1));
+        assert!(has_tscm_marks(f2));
+        assert!(has_tscm_marks(f3));
+        assert!(has_tscm_marks(f4));
+        assert!(has_tscm_marks(f5));
+        assert!(has_tscm_marks(f6));
+        assert!(has_tscm_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_tscm_marks(clean));
+    }
 }
