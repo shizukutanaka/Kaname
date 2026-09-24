@@ -1733,3 +1733,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この証機が通知した」「この訳機が通知した」「この配機が通知した」は誰が記すか?
 
 答: **X-Notary-*/X-Koushou-*/X-Apostille-* は「この証機が通知した」を名乗り、X-TransPerfect-*/X-Honyaku-*/X-InterpreterService-* は「この訳機が通知した」を名乗り、X-Courier-*/X-Tatuhai-*/X-SameDayCourier-* は「この配機が通知した」を名乗る — いずれも証機・訳機・配機が記す値を送信側が書いた自称**。証印・訳印・配印はすべて兆候として数えよ。
+
+## ラウンド 318
+
+問: 「この陶機が通知した」「この備機が通知した」「この有機が通知した」は誰が記すか?
+
+答: **X-Bankoyaki-*/X-Bankoya-*/X-Bankoware-* は「この陶機が通知した」を名乗り、X-Bizenyaki-*/X-Bizenten-*/X-Bizenware-* は「この備機が通知した」を名乗り、X-Aritayaki-*/X-Imariyaki-*/X-Aritaware-* は「この有機が通知した」を名乗る — いずれも陶機・備機・有機が記す値を送信側が書いた自称**。陶印・備印・有印はすべて兆候として数えよ。

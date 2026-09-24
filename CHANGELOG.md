@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D896: `X-Bankoyaki-*`/`X-Bankoya-*`/`X-Bankoten-*`/`X-Bankostore-*`/`X-Japbanko-*`/`X-Bankoware-*` 等の萬古焼印自称が未検査
+
+- **問題**: `X-Bankoyaki-*`/`X-BankoyakiYasan-*`/`X-BankoyakiPro-*`/`X-BankoyakiTeam-*`/`X-BankoyakiJP-*`/`X-BankoyakiSenmon-*`/`X-Bankoya-*`/`X-BankoyaYasan-*`/`X-BankoyaPro-*`/`X-BankoyaTeam-*`/`X-BankoyaJP-*`/`X-BankoyaSenmon-*`/`X-Bankoten-*`/`X-BankotenYasan-*`/`X-BankotenPro-*`/`X-BankotenTeam-*`/`X-BankotenJP-*`/`X-BankotenSenmon-*`/`X-BankostorePros-*`/`X-BankostoreTeam-*`/`X-BankostoreWorks-*`/`X-BankostoreExperts-*`/`X-BankostoreSvc-*`/`X-BankostoreHQ-*`/`X-JapbankoPros-*`/`X-JapbankoTeam-*`/`X-JapbankoWorks-*`/`X-JapbankoExperts-*`/`X-JapbankoSvc-*`/`X-JapbankoHQ-*`/`X-BankowarePros-*`/`X-BankowareTeam-*`/`X-BankowareWorks-*`/`X-BankowareExperts-*`/`X-BankowareSvc-*`/`X-BankowareHQ-*` 等 は陶機の通知記録 — 送信側が書くことは自称。萬古焼業者の偽装は、四日市萬古焼・耐熱土鍋の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `bankoyaki_marks` + `has_bankoyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 陶印の自署を問え。
+
+### Security — D897: `X-Bizenyaki-*`/`X-Bizenya-*`/`X-Bizenten-*`/`X-Bizenstore-*`/`X-Japbizen-*`/`X-Bizenware-*` 等の備前焼印自称が未検査
+
+- **問題**: `X-Bizenyaki-*`/`X-BizenyakiYasan-*`/`X-BizenyakiPro-*`/`X-BizenyakiTeam-*`/`X-BizenyakiJP-*`/`X-BizenyakiSenmon-*`/`X-Bizenya-*`/`X-BizenyaYasan-*`/`X-BizenyaPro-*`/`X-BizenyaTeam-*`/`X-BizenyaJP-*`/`X-BizenyaSenmon-*`/`X-Bizenten-*`/`X-BizentenYasan-*`/`X-BizentenPro-*`/`X-BizentenTeam-*`/`X-BizentenJP-*`/`X-BizentenSenmon-*`/`X-BizenstorePros-*`/`X-BizenstoreTeam-*`/`X-BizenstoreWorks-*`/`X-BizenstoreExperts-*`/`X-BizenstoreSvc-*`/`X-BizenstoreHQ-*`/`X-JapbizenPros-*`/`X-JapbizenTeam-*`/`X-JapbizenWorks-*`/`X-JapbizenExperts-*`/`X-JapbizenSvc-*`/`X-JapbizenHQ-*`/`X-BizenwarePros-*`/`X-BizenwareTeam-*`/`X-BizenwareWorks-*`/`X-BizenwareExperts-*`/`X-BizenwareSvc-*`/`X-BizenwareHQ-*` 等 は備機の通知記録 — 送信側が書くことは自称。備前焼業者の偽装は、岡山備前焼・窯元直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `bizenyaki_marks` + `has_bizenyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 備印の自署を問え。
+
+### Security — D898: `X-Aritayaki-*`/`X-Aritaya-*`/`X-Imariyaki-*`/`X-Aritastore-*`/`X-Japanarita-*`/`X-Aritaware-*` 等の有田焼・伊万里焼印自称が未検査
+
+- **問題**: `X-Aritayaki-*`/`X-AritayakiYasan-*`/`X-AritayakiPro-*`/`X-AritayakiTeam-*`/`X-AritayakiJP-*`/`X-AritayakiSenmon-*`/`X-Aritaya-*`/`X-AritayaYasan-*`/`X-AritayaPro-*`/`X-AritayaTeam-*`/`X-AritayaJP-*`/`X-AritayaSenmon-*`/`X-Imariyaki-*`/`X-ImariyakiYasan-*`/`X-ImariyakiPro-*`/`X-ImariyakiTeam-*`/`X-ImariyakiJP-*`/`X-ImariyakiSenmon-*`/`X-AritastorePros-*`/`X-AritastoreTeam-*`/`X-AritastoreWorks-*`/`X-AritastoreExperts-*`/`X-AritastoreSvc-*`/`X-AritastoreHQ-*`/`X-JapanaritaPros-*`/`X-JapanaritaTeam-*`/`X-JapanaritaWorks-*`/`X-JapanaritaExperts-*`/`X-JapanaritaSvc-*`/`X-JapanaritaHQ-*`/`X-AritawarePros-*`/`X-AritawareTeam-*`/`X-AritawareWorks-*`/`X-AritawareExperts-*`/`X-AritawareSvc-*`/`X-AritawareHQ-*` 等 は有機の通知記録 — 送信側が書くことは自称。有田焼・伊万里焼業者の偽装は、佐賀有田焼・窯元直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `aritayaki_marks` + `has_aritayaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 有印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
