@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-StanleySteemer-*`/`X-ChemDry-*`/`X-OxiFresh-*`/`X-CarpetCleaning-*`/`X-RugDoctor-*`/`X-CarpetKirei-*`/`X-JuutanClean-*` 等 — カーペット・絨毯清掃機印自称
+    pub carpet_marks: bool,
+    /// `X-BrandSafway-*`/`X-Layher-*`/`X-SunstateScaffold-*`/`X-ScaffoldPros-*`/`X-Ashiba-*`/`X-AshibaKouji-*`/`X-Kasetsu-*` 等 — 足場・仮設工事機印自称
+    pub scaffold_marks: bool,
+    /// `X-FireProtection-*`/`X-FireAlarm-*`/`X-FireExtinguisher-*`/`X-FireShield-*`/`X-ShoubouSetsubi-*`/`X-Boukaki-*`/`X-FireKenshin-*` 等 — 消防設備・消火機印自称
+    pub fireprotect_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        carpet_marks: has_carpet_marks(hdr),
+        scaffold_marks: has_scaffold_marks(hdr),
+        fireprotect_marks: has_fireprotect_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,245 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D656: カーペット・絨毯清掃機印の自称を検出する。
+///
+/// `X-StanleySteemer-*`/`X-ChemDry-*`/`X-OxiFresh-*`/`X-CarpetCleaning-*`/
+/// `X-CarpetCleaningPros-*`/`X-CarpetTech-*`/`X-CarpetDoctors-*`/`X-RugDoctor-*`/
+/// `X-RugCleaning-*`/`X-RugPros-*`/`X-CarpetPros-*`/`X-CarpetShine-*`/`X-CarpetSteam-*`/
+/// `X-SteamCarpet-*`/`X-CarpetSteamers-*`/`X-CleanCarpet-*`/`X-CarpetRefresh-*`/
+/// `X-CarpetExperts-*`/`X-CarpetMasters-*`/`X-CarpetGuru-*`/`X-UpholsteryClean-*`/
+/// `X-TileGroutClean-*`/`X-OrientalRug-*`/`X-PersianRug-*`/`X-AreaRugClean-*`、
+/// JP は `X-CarpetKirei-*`/`X-JuutanClean-*`/`X-JuutanSenjou-*`/`X-CarpetSenjou-*`/
+/// `X-JuutanYasan-*`/`X-RagGu-*`/`X-RugYasan-*`/`X-CarpetDansu-*`/`X-JuutanDansu-*`/
+/// `X-CarpetYasan-*`/`X-FloorClean-*`/`X-YukaClean-*`/`X-CarpetMigaki-*`/
+/// `X-JuutanMigaki-*`/`X-CarpetKouji-*`/`X-CarpetPro-*`/`X-JuutanPro-*`/
+/// `X-JuutanShiage-*`/`X-Tappisuto-*`/`X-CarpetShukuzu-*`/`X-CarpetKore-*`/
+/// `X-JuutanKouji-*`/`X-RugCleanJP-*`/`X-CarpetShiage-*`/`X-YukajouClean-*`/
+/// `X-CarpetGyosha-*` 等のカーペット・絨毯清掃機印はいずれも
+/// 「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 絨毯クリーニング・椅子張替・消臭除菌・出張洗浄の偽装は
+/// 絨毯清掃業者なりすましの典型手口。絨印の自署は兆候として数える。
+/// (室内清掃は cleaning 機、洗車は autoservice 機、フローリングは flooring 機で検出済み)
+fn has_carpet_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-stanleysteemer-")
+            || l.starts_with("x-chemdry-")
+            || l.starts_with("x-oxifresh-")
+            || l.starts_with("x-carpetcleaning-")
+            || l.starts_with("x-carpetcleaningpros-")
+            || l.starts_with("x-carpettech-")
+            || l.starts_with("x-carpetdoctors-")
+            || l.starts_with("x-rugdoctor-")
+            || l.starts_with("x-rugcleaning-")
+            || l.starts_with("x-rugpros-")
+            || l.starts_with("x-carpetpros-")
+            || l.starts_with("x-carpetshine-")
+            || l.starts_with("x-carpetsteam-")
+            || l.starts_with("x-steamcarpet-")
+            || l.starts_with("x-carpetsteamers-")
+            || l.starts_with("x-cleancarpet-")
+            || l.starts_with("x-carpetrefresh-")
+            || l.starts_with("x-carpetexperts-")
+            || l.starts_with("x-carpetmasters-")
+            || l.starts_with("x-carpetguru-")
+            || l.starts_with("x-upholsteryclean-")
+            || l.starts_with("x-tilegroutclean-")
+            || l.starts_with("x-orientalrug-")
+            || l.starts_with("x-persianrug-")
+            || l.starts_with("x-arearugclean-")
+            || l.starts_with("x-carpetkirei-")
+            || l.starts_with("x-juutanclean-")
+            || l.starts_with("x-juutansenjou-")
+            || l.starts_with("x-carpetsenjou-")
+            || l.starts_with("x-juutanyasan-")
+            || l.starts_with("x-raggu-")
+            || l.starts_with("x-rugyasan-")
+            || l.starts_with("x-carpetdansu-")
+            || l.starts_with("x-juutandansu-")
+            || l.starts_with("x-carpetyasan-")
+            || l.starts_with("x-floorclean-")
+            || l.starts_with("x-yukaclean-")
+            || l.starts_with("x-carpetmigaki-")
+            || l.starts_with("x-juutanmigaki-")
+            || l.starts_with("x-carpetkouji-")
+            || l.starts_with("x-carpetpro-")
+            || l.starts_with("x-juutanpro-")
+            || l.starts_with("x-juutanshiage-")
+            || l.starts_with("x-tappisuto-")
+            || l.starts_with("x-carpetshukuzu-")
+            || l.starts_with("x-carpetkore-")
+            || l.starts_with("x-juutankouji-")
+            || l.starts_with("x-rugcleanjp-")
+            || l.starts_with("x-carpetshiage-")
+            || l.starts_with("x-yukajouclean-")
+            || l.starts_with("x-carpetgyosha-")
+    })
+}
+
+/// D657: 足場・仮設工事機印の自称を検出する。
+///
+/// `X-BrandSafway-*`/`X-Layher-*`/`X-SunstateScaffold-*`/`X-ScaffoldPros-*`/
+/// `X-ScaffoldingPros-*`/`X-ScaffoldWorks-*`/`X-ScaffoldTech-*`/`X-ScaffoldExperts-*`/
+/// `X-ScaffoldMasters-*`/`X-ScaffoldRental-*`/`X-ScaffoldSupply-*`/`X-ScaffoldInstall-*`/
+/// `X-ScaffoldDoctors-*`/`X-ScaffoldForce-*`/`X-AerialScaffold-*`/`X-ScaffoldUSA-*`/
+/// `X-ScaffoldNow-*`/`X-ScaffoldTeam-*`/`X-ScaffoldDirect-*`/`X-ScaffoldWorld-*`/
+/// `X-SwingScaffold-*`/`X-SuspendedScaffold-*`/`X-ShoringPros-*`、
+/// JP は `X-Ashiba-*`/`X-AshibaKouji-*`/`X-AshibaYasan-*`/`X-Kasetsu-*`/`X-KasetsuKouji-*`/
+/// `X-KasetsuYasan-*`/`X-AshibaSeibi-*`/`X-AshibaKirikae-*`/`X-AshibaGyosha-*`/
+/// `X-Kakegake-*`/`X-AshibaRepair-*`/`X-AshibaPro-*`/`X-KoukaiAshiba-*`/`X-TobiAshiba-*`/
+/// `X-KasetsuSeibi-*`/`X-AshibaTetsu-*`/`X-AshibaTobu-*`/`X-AshibaSenmon-*`/
+/// `X-AshibaJurin-*`/`X-AshibaKougyou-*`/`X-AshibaTeam-*`/`X-KasetsuTobu-*`/
+/// `X-AshibaDoctors-*`/`X-AshibaGumi-*`/`X-GaneAshiba-*`/`X-ShikakeAshiba-*`/
+/// `X-SokkouAshiba-*`/`X-AshibaKensetsu-*`/`X-AshibaJP-*` 等の足場・仮設工事機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 足場設置・仮設工事・鳶職・高所作業・工事用足場の偽装は
+/// 足場工事業者なりすましの典型手口 (足場の飛び込み営業詐欺で有名)。
+/// 架印の自署は兆候として数える。
+/// (建築工事は construction 機、外壁は painting 機、屋根は roofing 機で検出済み)
+fn has_scaffold_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-brandsafway-")
+            || l.starts_with("x-layher-")
+            || l.starts_with("x-sunstatescaffold-")
+            || l.starts_with("x-scaffoldpros-")
+            || l.starts_with("x-scaffoldingpros-")
+            || l.starts_with("x-scaffoldworks-")
+            || l.starts_with("x-scaffoldtech-")
+            || l.starts_with("x-scaffoldexperts-")
+            || l.starts_with("x-scaffoldmasters-")
+            || l.starts_with("x-scaffoldrental-")
+            || l.starts_with("x-scaffoldsupply-")
+            || l.starts_with("x-scaffoldinstall-")
+            || l.starts_with("x-scaffolddoctors-")
+            || l.starts_with("x-scaffoldforce-")
+            || l.starts_with("x-aerialscaffold-")
+            || l.starts_with("x-scaffoldusa-")
+            || l.starts_with("x-scaffoldnow-")
+            || l.starts_with("x-scaffoldteam-")
+            || l.starts_with("x-scaffolddirect-")
+            || l.starts_with("x-scaffoldworld-")
+            || l.starts_with("x-swingscaffold-")
+            || l.starts_with("x-suspendedscaffold-")
+            || l.starts_with("x-shoringpros-")
+            || l.starts_with("x-ashiba-")
+            || l.starts_with("x-ashibakouji-")
+            || l.starts_with("x-ashibayasan-")
+            || l.starts_with("x-kasetsu-")
+            || l.starts_with("x-kasetsukouji-")
+            || l.starts_with("x-kasetsuyasan-")
+            || l.starts_with("x-ashibaseibi-")
+            || l.starts_with("x-ashibakirikae-")
+            || l.starts_with("x-ashibagyosha-")
+            || l.starts_with("x-kakegake-")
+            || l.starts_with("x-ashibarepair-")
+            || l.starts_with("x-ashibapro-")
+            || l.starts_with("x-koukaiashiba-")
+            || l.starts_with("x-tobiashiba-")
+            || l.starts_with("x-kasetsuseibi-")
+            || l.starts_with("x-ashibatetsu-")
+            || l.starts_with("x-ashibatobu-")
+            || l.starts_with("x-ashibasenmon-")
+            || l.starts_with("x-ashibajurin-")
+            || l.starts_with("x-ashibakougyou-")
+            || l.starts_with("x-ashibateam-")
+            || l.starts_with("x-kasetsutobu-")
+            || l.starts_with("x-ashibadoctors-")
+            || l.starts_with("x-ashibagumi-")
+            || l.starts_with("x-ganeashiba-")
+            || l.starts_with("x-shikakeashiba-")
+            || l.starts_with("x-sokkouashiba-")
+            || l.starts_with("x-ashibakensetsu-")
+            || l.starts_with("x-ashibajp-")
+    })
+}
+
+/// D658: 消防設備・消火機印の自称を検出する。
+///
+/// `X-FireProtection-*`/`X-FireProtectionPros-*`/`X-FireAlarm-*`/`X-FireAlarmPros-*`/
+/// `X-FireExtinguisher-*`/`X-FireShield-*`/`X-FireTech-*`/`X-FireSafe-*`/`X-FireSafety-*`/
+/// `X-FireInspectors-*`/`X-FireKenshin-*`/`X-SprinklerFire-*`/`X-FireSprinkler-*`/
+/// `X-FireSuppression-*`/`X-FireSystems-*`/`X-FireEngineering-*`/`X-FireWatch-*`/
+/// `X-FireGuards-*`/`X-FireDoctors-*`/`X-FirePrevent-*`/`X-FireDepot-*`/`X-FireLine-*`/
+/// `X-FireMarshal-*`/`X-FireCode-*`/`X-FireAlarmTech-*`/`X-FireCompliance-*`、
+/// JP は `X-ShoubouSetsubi-*`/`X-ShoubouKenshin-*`/`X-Boukaki-*`/`X-ShoubouSeibi-*`/
+/// `X-ShoubouYasan-*`/`X-ShoukaSetsubi-*`/`X-ShoubouHouki-*`/`X-ShoubouTaisaku-*`/
+/// `X-BoukaSetsubi-*`/`X-BoukaKenshin-*`/`X-ShoubouAnzen-*`/`X-KashouSetsubi-*`/
+/// `X-ShoubouPro-*`/`X-FireKenshinJP-*`/`X-ShoubouDoctors-*`/`X-ShoukaYasan-*`/
+/// `X-ShoubouGyosha-*`/`X-BoukaDansu-*`/`X-ShoubouGijutsu-*`/`X-FireProtectJP-*`/
+/// `X-ShoubouShindan-*`/`X-ShoubouTenken-*` 等の消防設備・消火機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 消防点検・消火器交換・防火設備・スプリンクラー点検・消防署連絡の偽装は
+/// 消防設備業者なりすましの典型手口 (架空の消防点検勧誘で有名)。
+/// 消印の自署は兆候として数える。
+/// (消防団体・自治体は government 機、保険は insurance 機、設備点検は facility 機で検出済み)
+fn has_fireprotect_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-fireprotection-")
+            || l.starts_with("x-fireprotectionpros-")
+            || l.starts_with("x-firealarm-")
+            || l.starts_with("x-firealarmpros-")
+            || l.starts_with("x-fireextinguisher-")
+            || l.starts_with("x-fireshield-")
+            || l.starts_with("x-firetech-")
+            || l.starts_with("x-firesafe-")
+            || l.starts_with("x-firesafety-")
+            || l.starts_with("x-fireinspectors-")
+            || l.starts_with("x-firekenshin-")
+            || l.starts_with("x-sprinklerfire-")
+            || l.starts_with("x-firesprinkler-")
+            || l.starts_with("x-firesuppression-")
+            || l.starts_with("x-firesystems-")
+            || l.starts_with("x-fireengineering-")
+            || l.starts_with("x-firewatch-")
+            || l.starts_with("x-fireguards-")
+            || l.starts_with("x-firedoctors-")
+            || l.starts_with("x-fireprevent-")
+            || l.starts_with("x-firedepot-")
+            || l.starts_with("x-fireline-")
+            || l.starts_with("x-firemarshal-")
+            || l.starts_with("x-firecode-")
+            || l.starts_with("x-firealarmtech-")
+            || l.starts_with("x-firecompliance-")
+            || l.starts_with("x-shoubousetsubi-")
+            || l.starts_with("x-shouboukenshin-")
+            || l.starts_with("x-boukaki-")
+            || l.starts_with("x-shoubouseibi-")
+            || l.starts_with("x-shoubouyasan-")
+            || l.starts_with("x-shoukasetsubi-")
+            || l.starts_with("x-shoubouhouki-")
+            || l.starts_with("x-shouboutaisaku-")
+            || l.starts_with("x-boukasetsubi-")
+            || l.starts_with("x-boukakenshin-")
+            || l.starts_with("x-shoubouanzen-")
+            || l.starts_with("x-kashousetsubi-")
+            || l.starts_with("x-shouboupro-")
+            || l.starts_with("x-firekenshinjp-")
+            || l.starts_with("x-shouboudoctors-")
+            || l.starts_with("x-shoukayasan-")
+            || l.starts_with("x-shoubougyosha-")
+            || l.starts_with("x-boukadansu-")
+            || l.starts_with("x-shoubougijutsu-")
+            || l.starts_with("x-fireprotectjp-")
+            || l.starts_with("x-shouboushindan-")
+            || l.starts_with("x-shouboutenken-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20889,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は絨機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-StanleySteemer-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChemDry-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-CarpetKirei-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JuutanClean-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-OxiFresh-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RugDoctor-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JuutanSenjou-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-CarpetPros-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_carpet_marks(raw));
+        }
+        assert!(!has_carpet_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は架機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-BrandSafway-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Layher-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Ashiba-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AshibaKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ScaffoldPros-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Kasetsu-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SunstateScaffold-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KasetsuKouji-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_scaffold_marks(raw));
+        }
+        assert!(!has_scaffold_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は消機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-FireProtection-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FireAlarm-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ShoubouSetsubi-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Boukaki-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FireExtinguisher-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ShoubouKenshin-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FireSprinkler-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FireTech-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_fireprotect_marks(raw));
+        }
+        assert!(!has_fireprotect_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
