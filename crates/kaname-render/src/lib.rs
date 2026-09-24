@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-DryerVentWizard-*`/`X-VentWizard-*`/`X-VentPros-*`/`X-KansoukiHaiki-*`/`X-HaikiDansu-*`/`X-DryerVent-*` 等 — 乾燥機排気管清掃機印自称
+    pub dryervent_marks: bool,
+    /// `X-BathFitter-*`/`X-ReBath-*`/`X-BathtubPros-*`/`X-BathPlanet-*`/`X-FuroRifo-*`/`X-FuroKouji-*`/`X-Basurifu-*` 等 — 浴室・風呂リフォーム機印自称
+    pub bathroom_marks: bool,
+    /// `X-BudgetBlinds-*`/`X-HunterDouglas-*`/`X-BlindsGalore-*`/`X-BlindsPros-*`/`X-BlindKouji-*`/`X-Buraindo-*`/`X-KatenReru-*` 等 — ブラインド・窓装飾機印自称
+    pub blinds_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        dryervent_marks: has_dryervent_marks(hdr),
+        bathroom_marks: has_bathroom_marks(hdr),
+        blinds_marks: has_blinds_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,263 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D668: 乾燥機排気管清掃機印の自称を検出する。
+///
+/// `X-DryerVentWizard-*`/`X-VentWizard-*`/`X-VentPros-*`/`X-DryerVent-*`/
+/// `X-DryerVentPros-*`/`X-DryerVentExperts-*`/`X-DryerVentDoctors-*`/`X-DryerVentTech-*`/
+/// `X-DryerVentMasters-*`/`X-DryerVentTeam-*`/`X-DryerVentForce-*`/`X-DryerVentUSA-*`/
+/// `X-VentCleaning-*`/`X-VentCleaningPros-*`/`X-DryerDuct-*`/`X-DryerDuctPros-*`/
+/// `X-DuctPros-*`/`X-DryerLint-*`/`X-LintTrap-*`/`X-VentSafety-*`/`X-VentInspectors-*`/
+/// `X-DryerSafety-*`/`X-VentForce-*`/`X-VentTeam-*`/`X-VentMasters-*`、
+/// JP は `X-KansoukiHaiki-*`/`X-KansoukiDansu-*`/`X-HaikiDansu-*`/`X-HaikiKouji-*`/
+/// `X-KansoukiSeibi-*`/`X-HaikiSeibi-*`/`X-KansoukiYasan-*`/`X-HaikiYasan-*`/
+/// `X-KansoukiDoctors-*`/`X-KansoukiTeam-*`/`X-KansoukiPro-*`/`X-HaikiDoctors-*`/
+/// `X-KansoukiGyosha-*`/`X-HaikiGyosha-*`/`X-HaikiKensa-*`/`X-HaikiKirei-*`/
+/// `X-KansoukiKirei-*`/`X-HaikiManten-*`/`X-KansoukiManten-*`/`X-DansuHaiki-*`/
+/// `X-KansoukiNomi-*`/`X-DansuSeibi-*`/`X-DansuKouji-*`/`X-DansuYasan-*`/
+/// `X-DansuDoctors-*`/`X-DansuTeam-*`/`X-DansuPro-*`/`X-DansuGyosha-*`/
+/// `X-DansuKensa-*`/`X-DansuKirei-*`/`X-DansuManten-*`/`X-DansuNomi-*`/
+/// `X-DansuJP-*`/`X-DansuSenmon-*` 等の乾燥機排気管清掃機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 乾燥機排気管・ランドリーダクト・リント除去・火災防止清掃の偽装は
+/// 排気管清掃業者なりすましの典型手口 (火災リスクを煽る訪販で有名)。
+/// 排印の自署は兆候として数える。
+/// (空調ダクトは duct 機、家電修理は appliance 機、消防は fireprotect 機で検出済み)
+fn has_dryervent_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-dryerventwizard-")
+            || l.starts_with("x-ventwizard-")
+            || l.starts_with("x-ventpros-")
+            || l.starts_with("x-dryervent-")
+            || l.starts_with("x-dryerventpros-")
+            || l.starts_with("x-dryerventexperts-")
+            || l.starts_with("x-dryerventdoctors-")
+            || l.starts_with("x-dryerventtech-")
+            || l.starts_with("x-dryerventmasters-")
+            || l.starts_with("x-dryerventteam-")
+            || l.starts_with("x-dryerventforce-")
+            || l.starts_with("x-dryerventusa-")
+            || l.starts_with("x-ventcleaning-")
+            || l.starts_with("x-ventcleaningpros-")
+            || l.starts_with("x-dryerduct-")
+            || l.starts_with("x-dryerductpros-")
+            || l.starts_with("x-ductpros-")
+            || l.starts_with("x-dryerlint-")
+            || l.starts_with("x-linttrap-")
+            || l.starts_with("x-ventsafety-")
+            || l.starts_with("x-ventinspectors-")
+            || l.starts_with("x-dryersafety-")
+            || l.starts_with("x-ventforce-")
+            || l.starts_with("x-ventteam-")
+            || l.starts_with("x-ventmasters-")
+            || l.starts_with("x-kansoukihaiki-")
+            || l.starts_with("x-kansoukidansu-")
+            || l.starts_with("x-haikidansu-")
+            || l.starts_with("x-haikikouji-")
+            || l.starts_with("x-kansoukiseibi-")
+            || l.starts_with("x-haikiseibi-")
+            || l.starts_with("x-kansoukiyasan-")
+            || l.starts_with("x-haikiyasan-")
+            || l.starts_with("x-kansoukidoctors-")
+            || l.starts_with("x-kansoukiteam-")
+            || l.starts_with("x-kansoukipro-")
+            || l.starts_with("x-haikidoctors-")
+            || l.starts_with("x-kansoukigyosha-")
+            || l.starts_with("x-haikigyosha-")
+            || l.starts_with("x-haikikensa-")
+            || l.starts_with("x-haikikirei-")
+            || l.starts_with("x-kansoukikirei-")
+            || l.starts_with("x-haikimanten-")
+            || l.starts_with("x-kansoukimanten-")
+            || l.starts_with("x-dansuhaiki-")
+            || l.starts_with("x-kansoukinomi-")
+            || l.starts_with("x-dansuseibi-")
+            || l.starts_with("x-dansukouji-")
+            || l.starts_with("x-dansuyasan-")
+            || l.starts_with("x-dansudoctors-")
+            || l.starts_with("x-dansuteam-")
+            || l.starts_with("x-dansupro-")
+            || l.starts_with("x-dansugyosha-")
+            || l.starts_with("x-dansukensa-")
+            || l.starts_with("x-dansukirei-")
+            || l.starts_with("x-dansumanten-")
+            || l.starts_with("x-dansunomi-")
+            || l.starts_with("x-dansujp-")
+            || l.starts_with("x-dansusenmon-")
+    })
+}
+
+/// D669: 浴室・風呂リフォーム機印の自称を検出する。
+///
+/// `X-BathFitter-*`/`X-Bathfitter-*`/`X-ReBath-*`/`X-BathtubPros-*`/`X-BathPlanet-*`/
+/// `X-BathPlanetUSA-*`/`X-BathroomPros-*`/`X-BathWraps-*`/`X-BathExperts-*`/
+/// `X-BathDoctors-*`/`X-BathMasters-*`/`X-BathWorks-*`/`X-BathTeam-*`/`X-BathForce-*`/
+/// `X-BathSolutions-*`/`X-BathUSA-*`/`X-ShowerPros-*`/`X-TubPros-*`/`X-TubToShower-*`/
+/// `X-WalkInTub-*`/`X-WalkInShower-*`/`X-SafeStepTub-*`/`X-BathSafety-*`/`X-TileBath-*`、
+/// JP は `X-FuroRifo-*`/`X-FuroKouji-*`/`X-FuroYasan-*`/`X-Basurifu-*`/`X-YokusouRifo-*`/
+/// `X-FuroSeibi-*`/`X-FuroRepair-*`/`X-FuroDoctors-*`/`X-FuroTeam-*`/`X-FuroPro-*`/
+/// `X-FuroGyosha-*`/`X-FuroKensa-*`/`X-FuroKirei-*`/`X-FuroManten-*`/`X-YokusouKouji-*`/
+/// `X-YokusouYasan-*`/`X-YokusouSeibi-*`/`X-YokusouPro-*`/`X-ShowerKouji-*`/`X-ShowerRifo-*`/
+/// `X-UnitBath-*`/`X-UnitBathKouji-*`/`X-YokusouGyosha-*`/`X-OfuroRifo-*`/`X-OfuroKouji-*`/
+/// `X-OfuroYasan-*`/`X-BathRifu-*`/`X-FuroNomi-*`/`X-YokusouNomi-*`/`X-FuroJP-*`/
+/// `X-YokusouJP-*`/`X-FuroSenmon-*`/`X-YokusouSenmon-*` 等の浴室・風呂リフォーム機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 風呂リフォーム・ユニットバス・バリアフリー浴室・給湯器交換の偽装は
+/// 浴室リフォーム業者なりすましの典型手口 (高額浴室工事の飛び込み営業で有名)。
+/// 浴印の自署は兆候として数える。
+/// (リフォーム全般は renovation 機、水道は plumbing 機、タイルは tile 機で検出済み)
+fn has_bathroom_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-bathfitter-")
+            || l.starts_with("x-rebath-")
+            || l.starts_with("x-bathtubpros-")
+            || l.starts_with("x-bathplanet-")
+            || l.starts_with("x-bathplanetusa-")
+            || l.starts_with("x-bathroompros-")
+            || l.starts_with("x-bathwraps-")
+            || l.starts_with("x-bathexperts-")
+            || l.starts_with("x-bathdoctors-")
+            || l.starts_with("x-bathmasters-")
+            || l.starts_with("x-bathworks-")
+            || l.starts_with("x-bathteam-")
+            || l.starts_with("x-bathforce-")
+            || l.starts_with("x-bathsolutions-")
+            || l.starts_with("x-bathusa-")
+            || l.starts_with("x-showerpros-")
+            || l.starts_with("x-tubpros-")
+            || l.starts_with("x-tubtoshower-")
+            || l.starts_with("x-walkintub-")
+            || l.starts_with("x-walkinshower-")
+            || l.starts_with("x-safesteptub-")
+            || l.starts_with("x-bathsafety-")
+            || l.starts_with("x-tilebath-")
+            || l.starts_with("x-furorifo-")
+            || l.starts_with("x-furokouji-")
+            || l.starts_with("x-furoyasan-")
+            || l.starts_with("x-basurifu-")
+            || l.starts_with("x-yokusourifo-")
+            || l.starts_with("x-furoseibi-")
+            || l.starts_with("x-furorepair-")
+            || l.starts_with("x-furodoctors-")
+            || l.starts_with("x-furoteam-")
+            || l.starts_with("x-furopro-")
+            || l.starts_with("x-furogyosha-")
+            || l.starts_with("x-furokensa-")
+            || l.starts_with("x-furokirei-")
+            || l.starts_with("x-furomanten-")
+            || l.starts_with("x-yokusoukouji-")
+            || l.starts_with("x-yokusouyasan-")
+            || l.starts_with("x-yokusouseibi-")
+            || l.starts_with("x-yokusoupro-")
+            || l.starts_with("x-showerkouji-")
+            || l.starts_with("x-showerrifo-")
+            || l.starts_with("x-unitbath-")
+            || l.starts_with("x-unitbathkouji-")
+            || l.starts_with("x-yokusougyosha-")
+            || l.starts_with("x-ofurorifo-")
+            || l.starts_with("x-ofurokouji-")
+            || l.starts_with("x-ofuroyasan-")
+            || l.starts_with("x-bathrifu-")
+            || l.starts_with("x-furonomi-")
+            || l.starts_with("x-yokusounomi-")
+            || l.starts_with("x-furojp-")
+            || l.starts_with("x-yokusoujp-")
+            || l.starts_with("x-furosenmon-")
+            || l.starts_with("x-yokusousenmon-")
+    })
+}
+
+/// D670: ブラインド・窓装飾機印の自称を検出する。
+///
+/// `X-BudgetBlinds-*`/`X-HunterDouglas-*`/`X-BlindsGalore-*`/`X-BlindsPros-*`/
+/// `X-BlindsUSA-*`/`X-BlindsExperts-*`/`X-BlindsDoctors-*`/`X-BlindsMasters-*`/
+/// `X-BlindsWorks-*`/`X-BlindsTeam-*`/`X-BlindsForce-*`/`X-BlindsSolutions-*`/
+/// `X-BlindsInstall-*`/`X-BlindsRepair-*`/`X-ShadePros-*`/`X-ShadeStore-*`/`X-ShadeExperts-*`/
+/// `X-ShutterPros-*`/`X-PlantationShutter-*`/`X-WindowTreatment-*`/`X-CustomBlinds-*`/
+/// `X-MotorBlinds-*`/`X-SmartBlinds-*`/`X-VerticalBlinds-*`、JP は `X-Buraindo-*`/
+/// `X-BuraindoKouji-*`/`X-BuraindoYasan-*`/`X-BlindKouji-*`/`X-BlindYasan-*`/
+/// `X-BuraindoSeibi-*`/`X-BuraindoRepair-*`/`X-BuraindoPro-*`/`X-BuraindoTeam-*`/
+/// `X-BuraindoDoctors-*`/`X-KatenReru-*`/`X-KatenReruKouji-*`/`X-CurtainRail-*`/
+/// `X-CurtainRailKouji-*`/`X-BuraindoGyosha-*`/`X-BuraindoKensa-*`/`X-BuraindoManten-*`/
+/// `X-RollScreen-*`/`X-RollScreenKouji-*`/`X-RomanShade-*`/`X-ShadeKouji-*`/
+/// `X-ShutterKouji-*`/`X-ShutterYasan-*`/`X-BuraindoNomi-*`/`X-BuraindoJP-*`/
+/// `X-BlindJP-*`/`X-BuraindoSenmon-*` 等のブラインド・窓装飾機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// ブラインド交換・カーテンレール取付・シャッター・ロールスクリーン・
+/// 電動ブラインドの偽装は窓装飾業者なりすましの典型手口。
+/// 帳印の自署は兆候として数える。
+/// (窓サッシは window 機、シャッターは garagedoor 機、建材は housing 機で検出済み)
+fn has_blinds_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-budgetblinds-")
+            || l.starts_with("x-hunterdouglas-")
+            || l.starts_with("x-blindsgalore-")
+            || l.starts_with("x-blindspros-")
+            || l.starts_with("x-blindsusa-")
+            || l.starts_with("x-blindsexperts-")
+            || l.starts_with("x-blindsdoctors-")
+            || l.starts_with("x-blindsmasters-")
+            || l.starts_with("x-blindsworks-")
+            || l.starts_with("x-blindsteam-")
+            || l.starts_with("x-blindsforce-")
+            || l.starts_with("x-blindssolutions-")
+            || l.starts_with("x-blindsinstall-")
+            || l.starts_with("x-blindsrepair-")
+            || l.starts_with("x-shadepros-")
+            || l.starts_with("x-shadestore-")
+            || l.starts_with("x-shadeexperts-")
+            || l.starts_with("x-shutterpros-")
+            || l.starts_with("x-plantationshutter-")
+            || l.starts_with("x-windowtreatment-")
+            || l.starts_with("x-customblinds-")
+            || l.starts_with("x-motorblinds-")
+            || l.starts_with("x-smartblinds-")
+            || l.starts_with("x-verticalblinds-")
+            || l.starts_with("x-buraindo-")
+            || l.starts_with("x-buraindokouji-")
+            || l.starts_with("x-buraindoyasan-")
+            || l.starts_with("x-blindkouji-")
+            || l.starts_with("x-blindyasan-")
+            || l.starts_with("x-buraindoseibi-")
+            || l.starts_with("x-buraindorepair-")
+            || l.starts_with("x-buraindopro-")
+            || l.starts_with("x-buraindoteam-")
+            || l.starts_with("x-buraindodoctors-")
+            || l.starts_with("x-katenreru-")
+            || l.starts_with("x-katenrerukouji-")
+            || l.starts_with("x-curtainrail-")
+            || l.starts_with("x-curtainrailkouji-")
+            || l.starts_with("x-buraindogyosha-")
+            || l.starts_with("x-buraindokensa-")
+            || l.starts_with("x-buraindomanten-")
+            || l.starts_with("x-rollscreen-")
+            || l.starts_with("x-rollscreenkouji-")
+            || l.starts_with("x-romanshade-")
+            || l.starts_with("x-shadekouji-")
+            || l.starts_with("x-shutterkouji-")
+            || l.starts_with("x-shutteryasan-")
+            || l.starts_with("x-buraindonomi-")
+            || l.starts_with("x-buraindojp-")
+            || l.starts_with("x-blindjp-")
+            || l.starts_with("x-buraindosenmon-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20907,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は排機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-DryerVentWizard-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-VentWizard-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KansoukiHaiki-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HaikiDansu-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DryerVent-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KansoukiSeibi-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DryerVentPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-VentPros-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_dryervent_marks(raw));
+        }
+        assert!(!has_dryervent_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は浴機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-BathFitter-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ReBath-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FuroRifo-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-FuroKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BathPlanet-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-YokusouKouji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-UnitBath-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-OfuroRifo-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_bathroom_marks(raw));
+        }
+        assert!(!has_bathroom_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は帳機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-BudgetBlinds-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HunterDouglas-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Buraindo-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BuraindoKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BlindsGalore-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BlindKouji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BlindsPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KatenReru-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_blinds_marks(raw));
+        }
+        assert!(!has_blinds_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
