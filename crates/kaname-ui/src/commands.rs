@@ -3178,6 +3178,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D746: オリンピック・国際スポーツ大会印自称
+    if env.olympic_marks {
+        render_risks.push(
+            "X-Olympic-*/X-Paralympic-*/X-Ioc-*/X-Tokyo2020-*/X-Paris2024-*/X-La2028-*/X-Fifa-*/X-Worldcup-* 等 — 五機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D747: LCC・格安航空印自称
+    if env.lcc_marks {
+        render_risks.push(
+            "X-Lcc-*/X-Airdo-*/X-Solaseed-*/X-Starflyer-*/X-Zipair-*/X-Airasia-*/X-Scoot-*/X-Vietjet-* 等 — 翼機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D748: ドローン・FPV印自称
+    if env.drone_marks {
+        render_risks.push(
+            "X-Dji-*/X-Uav-*/X-Fpv-*/X-Quadcopter-*/X-Autel-*/X-Skydio-*/X-Betafpv-*/X-Walkera-* 等 — 翔機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
