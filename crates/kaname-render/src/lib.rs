@@ -1967,6 +1967,12 @@ pub struct Envelope {
     pub fukushiyogu_marks: bool,
     /// `X-Adventure-*`/`X-Rafting-*`/`X-Canyoning-*` 等のアウトドア・アドベンチャー印を送信側が自称する兆候 (D727)
     pub adventure_marks: bool,
+    /// `X-Sociallending-*`/`X-Crowdlending-*`/`X-P2plending-*` 等のソーシャルレンディング・先物取引印を送信側が自称する兆候 (D737)
+    pub sociallending_marks: bool,
+    /// `X-Danjiki-*`/`X-Touji-*`/`X-Fasting-*` 等のファスティング・断食・湯治印を送信側が自称する兆候 (D738)
+    pub fasting_marks: bool,
+    /// `X-Cricket-*`/`X-Ipl-*`/`X-Bbl-*` 等の海外スポーツリーグ印を送信側が自称する兆候 (D739)
+    pub cricket_marks: bool,
     /// `X-Photostudio-*`/`X-Shashinkan-*`/`X-Idphoto-*` 等の写真館・証明写真印を送信側が自称する兆候 (D734)
     pub photostudio_marks: bool,
     /// `X-Chiiki-*`/`X-Jimoto-*`/`X-Machiokoshi-*` 等の地域コミュニティ・商店街印を送信側が自称する兆候 (D735)
@@ -2590,6 +2596,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         marathon_marks: has_marathon_marks(hdr),
         fukushiyogu_marks: has_fukushiyogu_marks(hdr),
         adventure_marks: has_adventure_marks(hdr),
+        sociallending_marks: has_sociallending_marks(hdr),
+        fasting_marks: has_fasting_marks(hdr),
+        cricket_marks: has_cricket_marks(hdr),
         photostudio_marks: has_photostudio_marks(hdr),
         chiiki_marks: has_chiiki_marks(hdr),
         geocache_marks: has_geocache_marks(hdr),
@@ -22194,6 +22203,216 @@ fn has_geocache_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-discgolfmart-"))
 }
 
+fn has_sociallending_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sociallending-")
+            || l.starts_with("x-crowdlending-")
+            || l.starts_with("x-p2plending-")
+            || l.starts_with("x-commodity-")
+            || l.starts_with("x-futures-")
+            || l.starts_with("x-options-")
+            || l.starts_with("x-cfd-")
+            || l.starts_with("x-margin-")
+            || l.starts_with("x-bullion-")
+            || l.starts_with("x-binary-")
+            || l.starts_with("x-sociallendingnavi-")
+            || l.starts_with("x-sociallendingcenter-")
+            || l.starts_with("x-sociallendingshop-")
+            || l.starts_with("x-sociallendingpro-")
+            || l.starts_with("x-sociallendingmart-")
+            || l.starts_with("x-sociallendingplus-")
+            || l.starts_with("x-sociallendingsmart-")
+            || l.starts_with("x-sociallendingfamily-")
+            || l.starts_with("x-crowdlendingnavi-")
+            || l.starts_with("x-crowdlendingcenter-")
+            || l.starts_with("x-crowdlendingshop-")
+            || l.starts_with("x-crowdlendingpro-")
+            || l.starts_with("x-crowdlendingmart-")
+            || l.starts_with("x-crowdlendingplus-")
+            || l.starts_with("x-crowdlendingsmart-")
+            || l.starts_with("x-crowdlendingfamily-")
+            || l.starts_with("x-p2plendingnavi-")
+            || l.starts_with("x-p2plendingcenter-")
+            || l.starts_with("x-p2plendingshop-")
+            || l.starts_with("x-p2plendingpro-")
+            || l.starts_with("x-p2plendingmart-")
+            || l.starts_with("x-p2plendingplus-")
+            || l.starts_with("x-p2plendingsmart-")
+            || l.starts_with("x-p2plendingfamily-")
+            || l.starts_with("x-commoditynavi-")
+            || l.starts_with("x-commoditycenter-")
+            || l.starts_with("x-commodityshop-")
+            || l.starts_with("x-commoditypro-")
+            || l.starts_with("x-commoditymart-")
+            || l.starts_with("x-commodityplus-")
+            || l.starts_with("x-commoditysmart-")
+            || l.starts_with("x-commodityfamily-")
+            || l.starts_with("x-futuresnavi-")
+            || l.starts_with("x-futurescenter-")
+            || l.starts_with("x-futuresshop-")
+            || l.starts_with("x-futurespro-")
+            || l.starts_with("x-futuresmart-")
+            || l.starts_with("x-futuresplus-")
+            || l.starts_with("x-futuressmart-")
+            || l.starts_with("x-futuresfamily-")
+            || l.starts_with("x-optionsnavi-")
+            || l.starts_with("x-optionscenter-")
+            || l.starts_with("x-optionsshop-")
+            || l.starts_with("x-optionspro-")
+            || l.starts_with("x-optionsmart-")
+            || l.starts_with("x-optionsplus-")
+            || l.starts_with("x-optionssmart-")
+            || l.starts_with("x-optionsfamily-")
+            || l.starts_with("x-cfdnavi-")
+            || l.starts_with("x-cfdcenter-")
+            || l.starts_with("x-cfdshop-")
+            || l.starts_with("x-cfdpro-"))
+}
+
+fn has_fasting_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-danjiki-")
+            || l.starts_with("x-touji-")
+            || l.starts_with("x-fasting-")
+            || l.starts_with("x-detox-")
+            || l.starts_with("x-juicefast-")
+            || l.starts_with("x-waterfast-")
+            || l.starts_with("x-intermittent-")
+            || l.starts_with("x-cleansing-")
+            || l.starts_with("x-juicecleanse-")
+            || l.starts_with("x-macrobiotic-")
+            || l.starts_with("x-danjikinavi-")
+            || l.starts_with("x-danjikicenter-")
+            || l.starts_with("x-danjikishop-")
+            || l.starts_with("x-danjikipro-")
+            || l.starts_with("x-danjikimart-")
+            || l.starts_with("x-danjikiplus-")
+            || l.starts_with("x-danjikismart-")
+            || l.starts_with("x-danjikifamily-")
+            || l.starts_with("x-toujinavi-")
+            || l.starts_with("x-toujicenter-")
+            || l.starts_with("x-toujishop-")
+            || l.starts_with("x-toujipro-")
+            || l.starts_with("x-toujimart-")
+            || l.starts_with("x-toujiplus-")
+            || l.starts_with("x-toujismart-")
+            || l.starts_with("x-toujifamily-")
+            || l.starts_with("x-fastingnavi-")
+            || l.starts_with("x-fastingcenter-")
+            || l.starts_with("x-fastingshop-")
+            || l.starts_with("x-fastingpro-")
+            || l.starts_with("x-fastingmart-")
+            || l.starts_with("x-fastingplus-")
+            || l.starts_with("x-fastingsmart-")
+            || l.starts_with("x-fastingfamily-")
+            || l.starts_with("x-detoxnavi-")
+            || l.starts_with("x-detoxcenter-")
+            || l.starts_with("x-detoxshop-")
+            || l.starts_with("x-detoxpro-")
+            || l.starts_with("x-detoxmart-")
+            || l.starts_with("x-detoxplus-")
+            || l.starts_with("x-detoxsmart-")
+            || l.starts_with("x-detoxfamily-")
+            || l.starts_with("x-juicefastnavi-")
+            || l.starts_with("x-juicefastcenter-")
+            || l.starts_with("x-juicefastshop-")
+            || l.starts_with("x-juicefastpro-")
+            || l.starts_with("x-juicefastmart-")
+            || l.starts_with("x-juicefastplus-")
+            || l.starts_with("x-juicefastsmart-")
+            || l.starts_with("x-juicefastfamily-")
+            || l.starts_with("x-waterfastnavi-")
+            || l.starts_with("x-waterfastcenter-")
+            || l.starts_with("x-waterfastshop-")
+            || l.starts_with("x-waterfastpro-")
+            || l.starts_with("x-waterfastmart-")
+            || l.starts_with("x-waterfastplus-")
+            || l.starts_with("x-waterfastsmart-")
+            || l.starts_with("x-waterfastfamily-")
+            || l.starts_with("x-intermittentnavi-")
+            || l.starts_with("x-intermittentcenter-")
+            || l.starts_with("x-intermittentshop-")
+            || l.starts_with("x-intermittentpro-"))
+}
+
+fn has_cricket_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-cricket-")
+            || l.starts_with("x-ipl-")
+            || l.starts_with("x-bbl-")
+            || l.starts_with("x-psl-")
+            || l.starts_with("x-cpl-")
+            || l.starts_with("x-nfl-")
+            || l.starts_with("x-xleague-")
+            || l.starts_with("x-cfl-")
+            || l.starts_with("x-afl-")
+            || l.starts_with("x-t20-")
+            || l.starts_with("x-superbowl-")
+            || l.starts_with("x-stanleycup-")
+            || l.starts_with("x-cricketnavi-")
+            || l.starts_with("x-cricketcenter-")
+            || l.starts_with("x-cricketshop-")
+            || l.starts_with("x-cricketpro-")
+            || l.starts_with("x-cricketmart-")
+            || l.starts_with("x-cricketplus-")
+            || l.starts_with("x-cricketsmart-")
+            || l.starts_with("x-cricketfamily-")
+            || l.starts_with("x-iplnavi-")
+            || l.starts_with("x-iplcenter-")
+            || l.starts_with("x-iplshop-")
+            || l.starts_with("x-iplpro-")
+            || l.starts_with("x-iplmart-")
+            || l.starts_with("x-iplplus-")
+            || l.starts_with("x-iplsmart-")
+            || l.starts_with("x-iplfamily-")
+            || l.starts_with("x-bblnavi-")
+            || l.starts_with("x-bblcenter-")
+            || l.starts_with("x-bblshop-")
+            || l.starts_with("x-bblpro-")
+            || l.starts_with("x-bblmart-")
+            || l.starts_with("x-bblplus-")
+            || l.starts_with("x-bblsmart-")
+            || l.starts_with("x-bblfamily-")
+            || l.starts_with("x-pslnavi-")
+            || l.starts_with("x-pslcenter-")
+            || l.starts_with("x-pslshop-")
+            || l.starts_with("x-pslpro-")
+            || l.starts_with("x-pslmart-")
+            || l.starts_with("x-pslplus-")
+            || l.starts_with("x-pslsmart-")
+            || l.starts_with("x-pslfamily-")
+            || l.starts_with("x-cplnavi-")
+            || l.starts_with("x-cplcenter-")
+            || l.starts_with("x-cplshop-")
+            || l.starts_with("x-cplpro-")
+            || l.starts_with("x-cplmart-")
+            || l.starts_with("x-cplplus-")
+            || l.starts_with("x-cplsmart-")
+            || l.starts_with("x-cplfamily-")
+            || l.starts_with("x-nflnavi-")
+            || l.starts_with("x-nflcenter-")
+            || l.starts_with("x-nflshop-")
+            || l.starts_with("x-nflpro-")
+            || l.starts_with("x-nflmart-")
+            || l.starts_with("x-nflplus-")
+            || l.starts_with("x-nflsmart-")
+            || l.starts_with("x-nflfamily-")
+            || l.starts_with("x-xleaguenavi-")
+            || l.starts_with("x-xleaguecenter-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -32757,6 +32976,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_geocache_marks(clean));
+    }
+
+    #[test]
+    fn scan_は融機印を検出する() {
+        for raw in [
+            br"X-Sociallending-Alert: 1",
+            br"X-P2plending-Notice: 1",
+            br"X-Commodity-Info: 1",
+            br"X-Futures-Report: 1",
+            br"X-Options-Bulletin: 1",
+            br"X-Cfd-News: 1",
+            br"X-Margin-Flash: 1",
+            br"X-Bullion-Release: 1",
+        ] {
+            assert!(has_sociallending_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_sociallending_marks(clean));
+    }
+
+    #[test]
+    fn scan_は断機印を検出する() {
+        for raw in [
+            br"X-Danjiki-Alert: 1",
+            br"X-Touji-Notice: 1",
+            br"X-Fasting-Info: 1",
+            br"X-Detox-Report: 1",
+            br"X-Juicefast-Bulletin: 1",
+            br"X-Intermittent-News: 1",
+            br"X-Cleansing-Flash: 1",
+            br"X-Macrobiotic-Release: 1",
+        ] {
+            assert!(has_fasting_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fasting_marks(clean));
+    }
+
+    #[test]
+    fn scan_は競機印を検出する() {
+        for raw in [
+            br"X-Cricket-Alert: 1",
+            br"X-Ipl-Notice: 1",
+            br"X-Nfl-Info: 1",
+            br"X-Xleague-Report: 1",
+            br"X-Cfl-Bulletin: 1",
+            br"X-Afl-News: 1",
+            br"X-T20-Flash: 1",
+            br"X-Superbowl-Release: 1",
+        ] {
+            assert!(has_cricket_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_cricket_marks(clean));
     }
 
 }
