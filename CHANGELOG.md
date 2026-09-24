@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D851: `X-Manjuu-*`/`X-Manjuuya-*`/`X-Manjuuten-*`/`X-Manjushop-*`/`X-Wagashimanju-*`/`X-Steamedbun-*` 等の饅頭印自称が未検査
+
+- **問題**: `X-Manjuu-*`/`X-ManjuuYasan-*`/`X-ManjuuPro-*`/`X-ManjuuTeam-*`/`X-ManjuuJP-*`/`X-ManjuuSenmon-*`/`X-Manjuuya-*`/`X-ManjuuyaYasan-*`/`X-ManjuuyaPro-*`/`X-ManjuuyaTeam-*`/`X-ManjuuyaJP-*`/`X-ManjuuyaSenmon-*`/`X-Manjuuten-*`/`X-ManjuutenYasan-*`/`X-ManjuutenPro-*`/`X-ManjuutenTeam-*`/`X-ManjuutenJP-*`/`X-ManjuutenSenmon-*`/`X-ManjushopPros-*`/`X-ManjushopTeam-*`/`X-ManjushopWorks-*`/`X-ManjushopExperts-*`/`X-ManjushopSvc-*`/`X-ManjushopHQ-*`/`X-WagashimanjuPros-*`/`X-WagashimanjuTeam-*`/`X-WagashimanjuWorks-*`/`X-WagashimanjuExperts-*`/`X-WagashimanjuSvc-*`/`X-WagashimanjuHQ-*`/`X-SteamedbunPros-*`/`X-SteamedbunTeam-*`/`X-SteamedbunWorks-*`/`X-SteamedbunExperts-*`/`X-SteamedbunSvc-*`/`X-SteamedbunHQ-*` 等 は饅機の通知記録 — 送信側が書くことは自称。饅頭・和菓子店の偽装は、老舗温泉饅頭・月まんじゅう直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `manjuu_marks` + `has_manjuu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 饅印の自署を問え。
+
+### Security — D852: `X-Youkan-*`/`X-Youkanya-*`/`X-Youkanten-*`/`X-Youkanshop-*`/`X-Jelliedsweet-*`/`X-Sweetbeanjelly-*` 等の羊羹印自称が未検査
+
+- **問題**: `X-Youkan-*`/`X-YoukanYasan-*`/`X-YoukanPro-*`/`X-YoukanTeam-*`/`X-YoukanJP-*`/`X-YoukanSenmon-*`/`X-Youkanya-*`/`X-YoukanyaYasan-*`/`X-YoukanyaPro-*`/`X-YoukanyaTeam-*`/`X-YoukanyaJP-*`/`X-YoukanyaSenmon-*`/`X-Youkanten-*`/`X-YoukantenYasan-*`/`X-YoukantenPro-*`/`X-YoukantenTeam-*`/`X-YoukantenJP-*`/`X-YoukantenSenmon-*`/`X-YoukanshopPros-*`/`X-YoukanshopTeam-*`/`X-YoukanshopWorks-*`/`X-YoukanshopExperts-*`/`X-YoukanshopSvc-*`/`X-YoukanshopHQ-*`/`X-JelliedsweetPros-*`/`X-JelliedsweetTeam-*`/`X-JelliedsweetWorks-*`/`X-JelliedsweetExperts-*`/`X-JelliedsweetSvc-*`/`X-JelliedsweetHQ-*`/`X-SweetbeanjellyPros-*`/`X-SweetbeanjellyTeam-*`/`X-SweetbeanjellyWorks-*`/`X-SweetbeanjellyExperts-*`/`X-SweetbeanjellySvc-*`/`X-SweetbeanjellyHQ-*` 等 は羊機の通知記録 — 送信側が書くことは自称。羊羹店の偽装は、老舗銘菓・煉羊羹の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `youkan_marks` + `has_youkan_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 羊印の自署を問え。
+
+### Security — D853: `X-Senbei-*`/`X-Senbeiya-*`/`X-Senbeiten-*`/`X-Senbeishop-*`/`X-Ricecracker-*`/`X-Japsenbei-*` 等の煎餅印自称が未検査
+
+- **問題**: `X-Senbei-*`/`X-SenbeiYasan-*`/`X-SenbeiPro-*`/`X-SenbeiTeam-*`/`X-SenbeiJP-*`/`X-SenbeiSenmon-*`/`X-Senbeiya-*`/`X-SenbeiyaYasan-*`/`X-SenbeiyaPro-*`/`X-SenbeiyaTeam-*`/`X-SenbeiyaJP-*`/`X-SenbeiyaSenmon-*`/`X-Senbeiten-*`/`X-SenbeitenYasan-*`/`X-SenbeitenPro-*`/`X-SenbeitenTeam-*`/`X-SenbeitenJP-*`/`X-SenbeitenSenmon-*`/`X-SenbeishopPros-*`/`X-SenbeishopTeam-*`/`X-SenbeishopWorks-*`/`X-SenbeishopExperts-*`/`X-SenbeishopSvc-*`/`X-SenbeishopHQ-*`/`X-RicecrackerPros-*`/`X-RicecrackerTeam-*`/`X-RicecrackerWorks-*`/`X-RicecrackerExperts-*`/`X-RicecrackerSvc-*`/`X-RicecrackerHQ-*`/`X-JapsenbeiPros-*`/`X-JapsenbeiTeam-*`/`X-JapsenbeiWorks-*`/`X-JapsenbeiExperts-*`/`X-JapsenbeiSvc-*`/`X-JapsenbeiHQ-*` 等 は煎機の通知記録 — 送信側が書くことは自称。煎餅店の偽装は、草加せんべい・手焼き煎餅の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `senbei_marks` + `has_senbei_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 煎印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
