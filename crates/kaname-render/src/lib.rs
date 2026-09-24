@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-SepticService-*`/`X-WindRiverEnv-*`/`X-MrSeptic-*`/`X-Joukaso-*`/`X-JoukasoKensa-*`/`X-SepticTank-*` 等 — 浄化槽・セプティック機印自称
+    pub septic_marks: bool,
+    /// `X-Ductz-*`/`X-AdvantaClean-*`/`X-DustDoctors-*`/`X-AirDucts-*`/`X-DuctCleaning-*`/`X-DryerVent-*` 等 — ダクト・換気清掃機印自称
+    pub duct_marks: bool,
+    /// `X-PoolTroopers-*`/`X-AnthonySylvan-*`/`X-LesliesPool-*`/`X-PoolDoctor-*`/`X-PoolCleaner-*`/`X-Piscina-*` 等 — プール清掃・修理機印自称
+    pub pool_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        septic_marks: has_septic_marks(hdr),
+        duct_marks: has_duct_marks(hdr),
+        pool_marks: has_pool_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,205 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D644: 浄化槽・セプティック機印の自称を検出する。
+///
+/// `X-SepticService-*`/`X-WindRiverEnv-*`/`X-MrSeptic-*`/`X-SepticTank-*`/
+/// `X-SepticTankPros-*`/`X-SepticSolutions-*`/`X-SepticPros-*`/`X-SepticPumping-*`/
+/// `X-SepticDoc-*`/`X-AeroStream-*`/`X-SepticPlus-*`/`X-AllClearSeptic-*`/
+/// `X-SepticWorks-*`/`X-DrainField-*`/`X-SepticTankDoctors-*`/`X-LakesideSeptic-*`/
+/// `X-SepticSystemPro-*`/`X-CesspoolService-*`/`X-TanksRUs-*`、JP は `X-Joukaso-*`/
+/// `X-JoukasoKensa-*`/`X-JoukasoKanri-*`/`X-JoukasoSeibi-*`/`X-JoukasoSouji-*`/
+/// `X-JoukasoKouji-*`/`X-Joukasa-*`/`X-JokaSouji-*`/`X-ShoriTaru-*`/`X-HitoJouKaso-*`/
+/// `X-GappeiJoukaso-*`/`X-TandokuJoukaso-*`/`X-KurisuJokaso-*`/`X-Jokasokensa-*`/
+/// `X-Jokaso-*`/`X-OkinoShori-*`/`X-OsuiSouji-*`/`X-MurasameJokaso-*` 等の
+/// 浄化槽・セプティック機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。法定検査・汲み取り清掃・保守点検・
+/// 汚水漏出修理・浄化槽補修見積の偽装は浄化槽業者なりすましの典型手口
+/// (法定検査名乗る過剰請求詐欺で有名)。浄印の自署は兆候として数える。
+/// (水道修理は plumbing 機、一般清掃は cleaning 機、災害復旧は restoration 機で検出済み)
+fn has_septic_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-septicservice-")
+            || l.starts_with("x-windriverenv-")
+            || l.starts_with("x-mrseptic-")
+            || l.starts_with("x-septictank-")
+            || l.starts_with("x-septictankpros-")
+            || l.starts_with("x-septicsolutions-")
+            || l.starts_with("x-septicpros-")
+            || l.starts_with("x-septicpumping-")
+            || l.starts_with("x-septicdoc-")
+            || l.starts_with("x-aerostream-")
+            || l.starts_with("x-septicplus-")
+            || l.starts_with("x-allclearseptic-")
+            || l.starts_with("x-septicworks-")
+            || l.starts_with("x-drainfield-")
+            || l.starts_with("x-septictankdoctors-")
+            || l.starts_with("x-lakesideseptic-")
+            || l.starts_with("x-septicsystempro-")
+            || l.starts_with("x-cesspoolservice-")
+            || l.starts_with("x-tanksrus-")
+            || l.starts_with("x-joukaso-")
+            || l.starts_with("x-joukasokensa-")
+            || l.starts_with("x-joukasokanri-")
+            || l.starts_with("x-joukasoseibi-")
+            || l.starts_with("x-joukasosouji-")
+            || l.starts_with("x-joukasokouji-")
+            || l.starts_with("x-joukasa-")
+            || l.starts_with("x-jokasouji-")
+            || l.starts_with("x-shoritaru-")
+            || l.starts_with("x-hitojoukaso-")
+            || l.starts_with("x-gappeijoukaso-")
+            || l.starts_with("x-tandokujoukaso-")
+            || l.starts_with("x-kurisujokaso-")
+            || l.starts_with("x-jokasokensa-")
+            || l.starts_with("x-jokaso-")
+            || l.starts_with("x-okinoshori-")
+            || l.starts_with("x-osuisouji-")
+            || l.starts_with("x-murasamejokaso-")
+            || l.starts_with("x-doukasou-")
+            || l.starts_with("x-tarukamijokaso-")
+            || l.starts_with("x-septicsystems-")
+    })
+}
+
+/// D645: ダクト・換気清掃機印の自称を検出する。
+///
+/// `X-Ductz-*`/`X-AdvantaClean-*`/`X-DustDoctors-*`/`X-AirDucts-*`/
+/// `X-DuctCleaning-*`/`X-DuctCleaningPros-*`/`X-DryerVent-*`/`X-DryerVentPros-*`/
+/// `X-VentCleaning-*`/`X-AirQualityPros-*`/`X-DuctDoctor-*`/`X-FreshAirDucts-*`/
+/// `X-NADCA-*`/`X-DuctMasters-*`/`X-Modernistic-*`/`X-CleanAirDucts-*`/
+/// `X-AirDuctsCleaning-*`/`X-DuctTech-*`/`X-VentPro-*`/`X-ExhaustCleaning-*`、
+/// JP は `X-DuctCleaningJP-*`/`X-DuctSouji-*`/`X-DuctKensa-*`/`X-KankiSouji-*`/
+/// `X-DuctKanki-*`/`X-AirDuctsJP-*`/`X-DuctMaster-*`/`X-EakonDuct-*`/
+/// `X-DuctPro-*`/`X-DuctWorks-*`/`X-KankiDuct-*`/`X-DuctKenbi-*` 等の
+/// ダクト・換気清掃機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。エアダクト・乾燥機ベント清掃・室内空気品質・
+/// カビ除去・排気ダクト洗浄の偽装はダクト清掃業者なりすましの典型手口
+/// (米国で最も悪質な訪販詐欺の一つとして FTC 摘発多数)。管印の自署は兆候として数える。
+/// (エアコン整備は hvac 機、一般清掃は cleaning 機、災害復旧は restoration 機で検出済み)
+fn has_duct_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ductz-")
+            || l.starts_with("x-advantaclean-")
+            || l.starts_with("x-dustdoctors-")
+            || l.starts_with("x-airducts-")
+            || l.starts_with("x-ductcleaning-")
+            || l.starts_with("x-ductcleaningpros-")
+            || l.starts_with("x-dryervent-")
+            || l.starts_with("x-dryerventpros-")
+            || l.starts_with("x-ventcleaning-")
+            || l.starts_with("x-airqualitypros-")
+            || l.starts_with("x-ductdoctor-")
+            || l.starts_with("x-freshairducts-")
+            || l.starts_with("x-nadca-")
+            || l.starts_with("x-ductmasters-")
+            || l.starts_with("x-modernistic-")
+            || l.starts_with("x-cleanairducts-")
+            || l.starts_with("x-airductscleaning-")
+            || l.starts_with("x-ducttech-")
+            || l.starts_with("x-ventpro-")
+            || l.starts_with("x-exhaustcleaning-")
+            || l.starts_with("x-ductcleaningjp-")
+            || l.starts_with("x-ductsouji-")
+            || l.starts_with("x-ductkensa-")
+            || l.starts_with("x-kankisouji-")
+            || l.starts_with("x-ductkanki-")
+            || l.starts_with("x-airductsjp-")
+            || l.starts_with("x-ductmaster-")
+            || l.starts_with("x-eakonduct-")
+            || l.starts_with("x-ductpro-")
+            || l.starts_with("x-ductworks-")
+            || l.starts_with("x-kankiduct-")
+            || l.starts_with("x-ductkenbi-")
+            || l.starts_with("x-ductrepair-")
+            || l.starts_with("x-air-ducts-")
+            || l.starts_with("x-ductez-")
+            || l.starts_with("x-ventmasters-")
+    })
+}
+
+/// D646: プール清掃・修理機印の自称を検出する。
+///
+/// `X-PoolTroopers-*`/`X-AnthonySylvan-*`/`X-LesliesPool-*`/`X-Leslies-*`/
+/// `X-AmericasSwimmingPool-*`/`X-GuardianPool-*`/`X-PoolDoctor-*`/
+/// `X-PoolCleaner-*`/`X-PoolCleaning-*`/`X-PoolPros-*`/`X-PoolWorks-*`/
+/// `X-PoolService-*`/`X-PoolServicePros-*`/`X-PinchaPenny-*`/`X-PremierPools-*`/
+/// `X-BlueHaven-*`/`X-PoolScout-*`/`X-Poolwerx-*`/`X-PoolBiz-*`/`X-AquaDuck-*`/
+/// `X-SwimmingPoolService-*`/`X-Poolservice-*`/`X-PoolTech-*`/`X-CrystalClearPools-*`/
+/// `X-WeeklyPool-*`/`X-BayPool-*`/`X-PoolRepair-*`/`X-PoolTec-*`、JP は `X-Piscina-*`/
+/// `X-PoolYasan-*`/`X-PoolSouji-*`/`X-PoolKanri-*`/`X-PoolKouji-*`/`X-PoolSeibi-*`/
+/// `X-GakuenPool-*`/`X-Puriru-*`/`X-ShinsuiPool-*`/`X-NangokuPool-*`/
+/// `X-PoolTosou-*`/`X-PoolBousui-*`/`X-PoolKensyu-*` 等の
+/// プール清掃・修理機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。定期清掃・薬剤バランス・ポンプ交換・
+/// リライニング・漏水修理・安全点検の偽装はプール業者なりすましの典型手口。
+/// 池印の自署は兆候として数える。
+/// (一般清掃は cleaning 機、造園・芝生は garden 機、水道修理は plumbing 機で検出済み)
+fn has_pool_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-pooltroopers-")
+            || l.starts_with("x-anthonysylvan-")
+            || l.starts_with("x-lesliespool-")
+            || l.starts_with("x-leslies-pool-")
+            || l.starts_with("x-leslies-")
+            || l.starts_with("x-americaswimmingpool-")
+            || l.starts_with("x-guardianpool-")
+            || l.starts_with("x-pooldoctor-")
+            || l.starts_with("x-poolcleaner-")
+            || l.starts_with("x-poolcleaning-")
+            || l.starts_with("x-poolpros-")
+            || l.starts_with("x-poolworks-")
+            || l.starts_with("x-poolservice-")
+            || l.starts_with("x-poolservicepros-")
+            || l.starts_with("x-pinchapenny-")
+            || l.starts_with("x-premierpools-")
+            || l.starts_with("x-bluehaven-")
+            || l.starts_with("x-poolscout-")
+            || l.starts_with("x-poolwerx-")
+            || l.starts_with("x-poolbiz-")
+            || l.starts_with("x-aquaduck-")
+            || l.starts_with("x-swimmingpoolservice-")
+            || l.starts_with("x-pooltech-")
+            || l.starts_with("x-crystalclearpools-")
+            || l.starts_with("x-weeklypool-")
+            || l.starts_with("x-baypool-")
+            || l.starts_with("x-poolrepair-")
+            || l.starts_with("x-pooltec-")
+            || l.starts_with("x-piscina-")
+            || l.starts_with("x-poolyasan-")
+            || l.starts_with("x-poolsouji-")
+            || l.starts_with("x-poolkanri-")
+            || l.starts_with("x-poolkouji-")
+            || l.starts_with("x-poolseibi-")
+            || l.starts_with("x-gakuenpool-")
+            || l.starts_with("x-puriru-")
+            || l.starts_with("x-shinsuipool-")
+            || l.starts_with("x-nangokupool-")
+            || l.starts_with("x-pooltosou-")
+            || l.starts_with("x-poolbousui-")
+            || l.starts_with("x-poolkensyu-")
+            || l.starts_with("x-swimpool-")
+            || l.starts_with("x-azpools-")
+            || l.starts_with("x-poolcare-")
+            || l.starts_with("x-bluemarine-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20849,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は浄機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-SepticService-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WindRiverEnv-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Joukaso-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JoukasoKensa-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SepticTank-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Joukasosouji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MurasameJokaso-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SepticPros-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_septic_marks(raw));
+        }
+        assert!(!has_septic_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は管機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-Ductz-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AdvantaClean-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DuctSouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KankiSouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AirDucts-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DryerVent-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-NADCA-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DuctPro-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_duct_marks(raw));
+        }
+        assert!(!has_duct_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は池機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-PoolTroopers-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AnthonySylvan-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Piscina-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PoolYasan-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LesliesPool-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PoolSouji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PoolKanri-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Poolwerx-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_pool_marks(raw));
+        }
+        assert!(!has_pool_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }

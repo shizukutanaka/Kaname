@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D644: `X-SepticService-*`/`X-WindRiverEnv-*`/`X-Joukaso-*`/`X-JoukasoKensa-*` 等の浄化槽・セプティック印自称が未検査
+
+- **問題**: `X-SepticService-*`/`X-WindRiverEnv-*`/`X-MrSeptic-*`/`X-SepticTank-*`/`X-SepticTankPros-*`/`X-SepticSolutions-*`/`X-SepticPros-*`/`X-SepticPumping-*`/`X-SepticDoc-*`/`X-AeroStream-*`/`X-SepticPlus-*`/`X-AllClearSeptic-*`/`X-SepticWorks-*`/`X-DrainField-*`/`X-SepticTankDoctors-*`/`X-LakesideSeptic-*`/`X-SepticSystemPro-*`/`X-CesspoolService-*`/`X-TanksRUs-*`/`X-SepticSystems-*`、JP は `X-Joukaso-*`/`X-JoukasoKensa-*`/`X-JoukasoKanri-*`/`X-JoukasoSeibi-*`/`X-JoukasoSouji-*`/`X-JoukasoKouji-*`/`X-Joukasa-*`/`X-JokaSouji-*`/`X-ShoriTaru-*`/`X-HitoJouKaso-*`/`X-GappeiJoukaso-*`/`X-TandokuJoukaso-*`/`X-KurisuJokaso-*`/`X-Jokasokensa-*`/`X-Jokaso-*`/`X-OkinoShori-*`/`X-OsuiSouji-*`/`X-MurasameJokaso-*`/`X-DoukaSou-*`/`X-TarukamiJokaso-*` 等 は浄機の通知記録 — 送信側が書くことは自称。法定検査・汲み取り清掃・保守点検・汚水漏出修理・浄化槽補修見積の偽装は浄化槽業者なりすましの典型手口 (法定検査名乗る過剰請求詐欺で有名)。(水道修理は plumbing 機、一般清掃は cleaning 機、災害復旧は restoration 機で検出済み)
+- **修正**: `Envelope` に `septic_marks` + `has_septic_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 浄印の自署を問え。
+
+### Security — D645: `X-Ductz-*`/`X-AdvantaClean-*`/`X-AirDucts-*`/`X-DuctSouji-*`/`X-KankiSouji-*` 等のダクト・換気清掃印自称が未検査
+
+- **問題**: `X-Ductz-*`/`X-AdvantaClean-*`/`X-DustDoctors-*`/`X-AirDucts-*`/`X-DuctCleaning-*`/`X-DuctCleaningPros-*`/`X-DryerVent-*`/`X-DryerVentPros-*`/`X-VentCleaning-*`/`X-AirQualityPros-*`/`X-DuctDoctor-*`/`X-FreshAirDucts-*`/`X-NADCA-*`/`X-DuctMasters-*`/`X-Modernistic-*`/`X-CleanAirDucts-*`/`X-AirDuctsCleaning-*`/`X-DuctTech-*`/`X-VentPro-*`/`X-ExhaustCleaning-*`/`X-Air-Ducts-*`/`X-DuctEZ-*`/`X-VentMasters-*`、JP は `X-DuctCleaningJP-*`/`X-DuctSouji-*`/`X-DuctKensa-*`/`X-KankiSouji-*`/`X-DuctKanki-*`/`X-AirDuctsJP-*`/`X-DuctMaster-*`/`X-EakonDuct-*`/`X-DuctPro-*`/`X-DuctWorks-*`/`X-KankiDuct-*`/`X-DuctKenbi-*`/`X-DuctRepair-*` 等 は管機の通知記録 — 送信側が書くことは自称。エアダクト・乾燥機ベント清掃・室内空気品質・カビ除去・排気ダクト洗浄の偽装はダクト清掃業者なりすましの典型手口 (FTC 摘発多数の悪質訪販)。(エアコン整備は hvac 機、一般清掃は cleaning 機で検出済み)
+- **修正**: `Envelope` に `duct_marks` + `has_duct_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 管印の自署を問え。
+
+### Security — D646: `X-PoolTroopers-*`/`X-AnthonySylvan-*`/`X-LesliesPool-*`/`X-Piscina-*` 等のプール清掃・修理印自称が未検査
+
+- **問題**: `X-PoolTroopers-*`/`X-AnthonySylvan-*`/`X-LesliesPool-*`/`X-Leslies-Pool-*`/`X-AmericasSwimmingPool-*`/`X-GuardianPool-*`/`X-PoolDoctor-*`/`X-PoolCleaner-*`/`X-PoolCleaning-*`/`X-PoolPros-*`/`X-PoolWorks-*`/`X-PoolService-*`/`X-PoolServicePros-*`/`X-PinchAPenny-*`/`X-PremierPools-*`/`X-BlueHaven-*`/`X-PoolScout-*`/`X-Poolwerx-*`/`X-PoolBiz-*`/`X-AquaDuck-*`/`X-SwimmingPoolService-*`/`X-PoolTech-*`/`X-CrystalClearPools-*`/`X-WeeklyPool-*`/`X-BayPool-*`/`X-PoolRepair-*`/`X-PoolTec-*`/`X-SwimPool-*`/`X-AZPools-*`/`X-PoolCare-*`/`X-BlueMarine-*`、JP は `X-Piscina-*`/`X-PoolYasan-*`/`X-PoolSouji-*`/`X-PoolKanri-*`/`X-PoolKouji-*`/`X-PoolSeibi-*`/`X-GakuenPool-*`/`X-Puriru-*`/`X-ShinsuiPool-*`/`X-NangokuPool-*`/`X-PoolTosou-*`/`X-PoolBousui-*`/`X-PoolKensyu-*` 等 は池機の通知記録 — 送信側が書くことは自称。定期清掃・薬剤バランス・ポンプ交換・リライニング・漏水修理の偽装はプール業者なりすましの典型手口。(一般清掃は cleaning 機、造園は garden 機、水道修理は plumbing 機で検出済み)
+- **修正**: `Envelope` に `pool_marks` + `has_pool_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 池印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
