@@ -1967,6 +1967,12 @@ pub struct Envelope {
     pub fukushiyogu_marks: bool,
     /// `X-Adventure-*`/`X-Rafting-*`/`X-Canyoning-*` 等のアウトドア・アドベンチャー印を送信側が自称する兆候 (D727)
     pub adventure_marks: bool,
+    /// `X-Photostudio-*`/`X-Shashinkan-*`/`X-Idphoto-*` 等の写真館・証明写真印を送信側が自称する兆候 (D734)
+    pub photostudio_marks: bool,
+    /// `X-Chiiki-*`/`X-Jimoto-*`/`X-Machiokoshi-*` 等の地域コミュニティ・商店街印を送信側が自称する兆候 (D735)
+    pub chiiki_marks: bool,
+    /// `X-Geocache-*`/`X-Stamprally-*`/`X-Orienteering-*` 等のジオキャッシング・宝探し印を送信側が自称する兆候 (D736)
+    pub geocache_marks: bool,
     /// `X-Kitchencar-*`/`X-Foodtruck-*`/`X-Catering-*` 等のキッチンカー・移動販売印を送信側が自称する兆候 (D731)
     pub foodtruck_marks: bool,
     /// `X-Bonsai-*`/`X-Orchid-*`/`X-Succulent-*` 等の盆栽・観葉植物印を送信側が自称する兆候 (D732)
@@ -2584,6 +2590,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         marathon_marks: has_marathon_marks(hdr),
         fukushiyogu_marks: has_fukushiyogu_marks(hdr),
         adventure_marks: has_adventure_marks(hdr),
+        photostudio_marks: has_photostudio_marks(hdr),
+        chiiki_marks: has_chiiki_marks(hdr),
+        geocache_marks: has_geocache_marks(hdr),
         foodtruck_marks: has_foodtruck_marks(hdr),
         bonsai_marks: has_bonsai_marks(hdr),
         naturopathy_marks: has_naturopathy_marks(hdr),
@@ -21975,6 +21984,216 @@ fn has_naturopathy_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-tcmcenter-"))
 }
 
+fn has_photostudio_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-photostudio-")
+            || l.starts_with("x-shashinkan-")
+            || l.starts_with("x-idphoto-")
+            || l.starts_with("x-passportphoto-")
+            || l.starts_with("x-sealphoto-")
+            || l.starts_with("x-boxphoto-")
+            || l.starts_with("x-shichigosan-")
+            || l.starts_with("x-graduation-")
+            || l.starts_with("x-yearbook-")
+            || l.starts_with("x-commencement-")
+            || l.starts_with("x-photostudionavi-")
+            || l.starts_with("x-photostudiocenter-")
+            || l.starts_with("x-photostudioshop-")
+            || l.starts_with("x-photostudiopro-")
+            || l.starts_with("x-photostudiomart-")
+            || l.starts_with("x-photostudioplus-")
+            || l.starts_with("x-photostudiosmart-")
+            || l.starts_with("x-photostudiofamily-")
+            || l.starts_with("x-shashinkannavi-")
+            || l.starts_with("x-shashinkancenter-")
+            || l.starts_with("x-shashinkanshop-")
+            || l.starts_with("x-shashinkanpro-")
+            || l.starts_with("x-shashinkanmart-")
+            || l.starts_with("x-shashinkanplus-")
+            || l.starts_with("x-shashinkansmart-")
+            || l.starts_with("x-shashinkanfamily-")
+            || l.starts_with("x-idphotonavi-")
+            || l.starts_with("x-idphotocenter-")
+            || l.starts_with("x-idphotoshop-")
+            || l.starts_with("x-idphotopro-")
+            || l.starts_with("x-idphotomart-")
+            || l.starts_with("x-idphotoplus-")
+            || l.starts_with("x-idphotosmart-")
+            || l.starts_with("x-idphotofamily-")
+            || l.starts_with("x-passportphotonavi-")
+            || l.starts_with("x-passportphotocenter-")
+            || l.starts_with("x-passportphotoshop-")
+            || l.starts_with("x-passportphotopro-")
+            || l.starts_with("x-passportphotomart-")
+            || l.starts_with("x-passportphotoplus-")
+            || l.starts_with("x-passportphotosmart-")
+            || l.starts_with("x-passportphotofamily-")
+            || l.starts_with("x-sealphotonavi-")
+            || l.starts_with("x-sealphotocenter-")
+            || l.starts_with("x-sealphotoshop-")
+            || l.starts_with("x-sealphotopro-")
+            || l.starts_with("x-sealphotomart-")
+            || l.starts_with("x-sealphotoplus-")
+            || l.starts_with("x-sealphotosmart-")
+            || l.starts_with("x-sealphotofamily-")
+            || l.starts_with("x-boxphotonavi-")
+            || l.starts_with("x-boxphotocenter-")
+            || l.starts_with("x-boxphotoshop-")
+            || l.starts_with("x-boxphotopro-")
+            || l.starts_with("x-boxphotomart-")
+            || l.starts_with("x-boxphotoplus-")
+            || l.starts_with("x-boxphotosmart-")
+            || l.starts_with("x-boxphotofamily-")
+            || l.starts_with("x-shichigosannavi-")
+            || l.starts_with("x-shichigosancenter-")
+            || l.starts_with("x-shichigosanshop-")
+            || l.starts_with("x-shichigosanpro-"))
+}
+
+fn has_chiiki_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-chiiki-")
+            || l.starts_with("x-jimoto-")
+            || l.starts_with("x-machiokoshi-")
+            || l.starts_with("x-freepaper-")
+            || l.starts_with("x-minikomi-")
+            || l.starts_with("x-chonaikai-")
+            || l.starts_with("x-jichikai-")
+            || l.starts_with("x-shotengai-")
+            || l.starts_with("x-townmagazine-")
+            || l.starts_with("x-chiikinavi-")
+            || l.starts_with("x-chiikicenter-")
+            || l.starts_with("x-chiikishop-")
+            || l.starts_with("x-chiikipro-")
+            || l.starts_with("x-chiikimart-")
+            || l.starts_with("x-chiikiplus-")
+            || l.starts_with("x-chiikismart-")
+            || l.starts_with("x-chiikifamily-")
+            || l.starts_with("x-jimotonavi-")
+            || l.starts_with("x-jimotocenter-")
+            || l.starts_with("x-jimotoshop-")
+            || l.starts_with("x-jimotopro-")
+            || l.starts_with("x-jimotomart-")
+            || l.starts_with("x-jimotoplus-")
+            || l.starts_with("x-jimotosmart-")
+            || l.starts_with("x-jimotofamily-")
+            || l.starts_with("x-machiokoshinavi-")
+            || l.starts_with("x-machiokoshicenter-")
+            || l.starts_with("x-machiokoshishop-")
+            || l.starts_with("x-machiokoshipro-")
+            || l.starts_with("x-machiokoshimart-")
+            || l.starts_with("x-machiokoshiplus-")
+            || l.starts_with("x-machiokoshismart-")
+            || l.starts_with("x-machiokoshifamily-")
+            || l.starts_with("x-freepapernavi-")
+            || l.starts_with("x-freepapercenter-")
+            || l.starts_with("x-freepapershop-")
+            || l.starts_with("x-freepaperpro-")
+            || l.starts_with("x-freepapermart-")
+            || l.starts_with("x-freepaperplus-")
+            || l.starts_with("x-freepapersmart-")
+            || l.starts_with("x-freepaperfamily-")
+            || l.starts_with("x-minikominavi-")
+            || l.starts_with("x-minikomicenter-")
+            || l.starts_with("x-minikomishop-")
+            || l.starts_with("x-minikomipro-")
+            || l.starts_with("x-minikomimart-")
+            || l.starts_with("x-minikomiplus-")
+            || l.starts_with("x-minikomismart-")
+            || l.starts_with("x-minikomifamily-")
+            || l.starts_with("x-chonaikainavi-")
+            || l.starts_with("x-chonaikaicenter-")
+            || l.starts_with("x-chonaikaishop-")
+            || l.starts_with("x-chonaikaipro-")
+            || l.starts_with("x-chonaikaimart-")
+            || l.starts_with("x-chonaikaiplus-")
+            || l.starts_with("x-chonaikaismart-")
+            || l.starts_with("x-chonaikaifamily-")
+            || l.starts_with("x-jichikainavi-")
+            || l.starts_with("x-jichikaicenter-")
+            || l.starts_with("x-jichikaishop-")
+            || l.starts_with("x-jichikaipro-")
+            || l.starts_with("x-jichikaimart-"))
+}
+
+fn has_geocache_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-geocache-")
+            || l.starts_with("x-stamprally-")
+            || l.starts_with("x-orienteering-")
+            || l.starts_with("x-rogaining-")
+            || l.starts_with("x-locationgame-")
+            || l.starts_with("x-checkpoint-")
+            || l.starts_with("x-discgolf-")
+            || l.starts_with("x-scavenger-")
+            || l.starts_with("x-geohunt-")
+            || l.starts_with("x-geocachenavi-")
+            || l.starts_with("x-geocachecenter-")
+            || l.starts_with("x-geocacheshop-")
+            || l.starts_with("x-geocachepro-")
+            || l.starts_with("x-geocachemart-")
+            || l.starts_with("x-geocacheplus-")
+            || l.starts_with("x-geocachesmart-")
+            || l.starts_with("x-geocachefamily-")
+            || l.starts_with("x-stamprallynavi-")
+            || l.starts_with("x-stamprallycenter-")
+            || l.starts_with("x-stamprallyshop-")
+            || l.starts_with("x-stamprallypro-")
+            || l.starts_with("x-stamprallymart-")
+            || l.starts_with("x-stamprallyplus-")
+            || l.starts_with("x-stamprallysmart-")
+            || l.starts_with("x-stamprallyfamily-")
+            || l.starts_with("x-orienteeringnavi-")
+            || l.starts_with("x-orienteeringcenter-")
+            || l.starts_with("x-orienteeringshop-")
+            || l.starts_with("x-orienteeringpro-")
+            || l.starts_with("x-orienteeringmart-")
+            || l.starts_with("x-orienteeringplus-")
+            || l.starts_with("x-orienteeringsmart-")
+            || l.starts_with("x-orienteeringfamily-")
+            || l.starts_with("x-rogainingnavi-")
+            || l.starts_with("x-rogainingcenter-")
+            || l.starts_with("x-rogainingshop-")
+            || l.starts_with("x-rogainingpro-")
+            || l.starts_with("x-rogainingmart-")
+            || l.starts_with("x-rogainingplus-")
+            || l.starts_with("x-rogainingsmart-")
+            || l.starts_with("x-rogainingfamily-")
+            || l.starts_with("x-locationgamenavi-")
+            || l.starts_with("x-locationgamecenter-")
+            || l.starts_with("x-locationgameshop-")
+            || l.starts_with("x-locationgamepro-")
+            || l.starts_with("x-locationgamemart-")
+            || l.starts_with("x-locationgameplus-")
+            || l.starts_with("x-locationgamesmart-")
+            || l.starts_with("x-locationgamefamily-")
+            || l.starts_with("x-checkpointnavi-")
+            || l.starts_with("x-checkpointcenter-")
+            || l.starts_with("x-checkpointshop-")
+            || l.starts_with("x-checkpointpro-")
+            || l.starts_with("x-checkpointmart-")
+            || l.starts_with("x-checkpointplus-")
+            || l.starts_with("x-checkpointsmart-")
+            || l.starts_with("x-checkpointfamily-")
+            || l.starts_with("x-discgolfnavi-")
+            || l.starts_with("x-discgolfcenter-")
+            || l.starts_with("x-discgolfshop-")
+            || l.starts_with("x-discgolfpro-")
+            || l.starts_with("x-discgolfmart-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -32484,6 +32703,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_naturopathy_marks(clean));
+    }
+
+    #[test]
+    fn scan_は写機印を検出する() {
+        for raw in [
+            br"X-Photostudio-Alert: 1",
+            br"X-Shashinkan-Notice: 1",
+            br"X-Idphoto-Info: 1",
+            br"X-Passportphoto-Report: 1",
+            br"X-Sealphoto-Bulletin: 1",
+            br"X-Shichigosan-News: 1",
+            br"X-Graduation-Flash: 1",
+            br"X-Yearbook-Release: 1",
+        ] {
+            assert!(has_photostudio_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_photostudio_marks(clean));
+    }
+
+    #[test]
+    fn scan_は街機印を検出する() {
+        for raw in [
+            br"X-Chiiki-Alert: 1",
+            br"X-Jimoto-Notice: 1",
+            br"X-Machiokoshi-Info: 1",
+            br"X-Freepaper-Report: 1",
+            br"X-Minikomi-Bulletin: 1",
+            br"X-Chonaikai-News: 1",
+            br"X-Jichikai-Flash: 1",
+            br"X-Shotengai-Release: 1",
+        ] {
+            assert!(has_chiiki_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_chiiki_marks(clean));
+    }
+
+    #[test]
+    fn scan_は隠機印を検出する() {
+        for raw in [
+            br"X-Geocache-Alert: 1",
+            br"X-Stamprally-Notice: 1",
+            br"X-Orienteering-Info: 1",
+            br"X-Rogaining-Report: 1",
+            br"X-Locationgame-Bulletin: 1",
+            br"X-Checkpoint-News: 1",
+            br"X-Discgolf-Flash: 1",
+            br"X-Geohunt-Release: 1",
+        ] {
+            assert!(has_geocache_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_geocache_marks(clean));
     }
 
 }
