@@ -2009,6 +2009,12 @@ pub struct Envelope {
     pub lcc_marks: bool,
     /// `X-Dji-*`/`X-Uav-*`/`X-Fpv-*` 等のドローン・FPV印を送信側が自称する兆候 (D748)
     pub drone_marks: bool,
+    /// `X-Wintersport-*`/`X-Skating-*`/`X-Curling-*` 等のウインタースポーツ印を送信側が自称する兆候 (D749)
+    pub wintersport_marks: bool,
+    /// `X-Hunting-*`/`X-Rifle-*`/`X-Shotgun-*` 等の猟銃・射撃・ハンティング印を送信側が自称する兆候 (D750)
+    pub hunting_marks: bool,
+    /// `X-Weightlifting-*`/`X-Powerlifting-*`/`X-Strongman-*` 等の重量挙・パワーリフティング印を送信側が自称する兆候 (D751)
+    pub powerlifting_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2635,6 +2641,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         olympic_marks: has_olympic_marks(hdr),
         lcc_marks: has_lcc_marks(hdr),
         drone_marks: has_drone_marks(hdr),
+        wintersport_marks: has_wintersport_marks(hdr),
+        hunting_marks: has_hunting_marks(hdr),
+        powerlifting_marks: has_powerlifting_marks(hdr),
     })
 }
 
@@ -23070,6 +23079,216 @@ fn has_drone_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-autelfamily-"))
 }
 
+fn has_wintersport_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-wintersport-")
+            || l.starts_with("x-skating-")
+            || l.starts_with("x-curling-")
+            || l.starts_with("x-biathlon-")
+            || l.starts_with("x-bobsleigh-")
+            || l.starts_with("x-skijump-")
+            || l.starts_with("x-speedskate-")
+            || l.starts_with("x-figureskate-")
+            || l.starts_with("x-hockey-")
+            || l.starts_with("x-wintersportnavi-")
+            || l.starts_with("x-wintersportcenter-")
+            || l.starts_with("x-wintersportshop-")
+            || l.starts_with("x-wintersportpro-")
+            || l.starts_with("x-wintersportmart-")
+            || l.starts_with("x-wintersportplus-")
+            || l.starts_with("x-wintersportsmart-")
+            || l.starts_with("x-wintersportfamily-")
+            || l.starts_with("x-skatingnavi-")
+            || l.starts_with("x-skatingcenter-")
+            || l.starts_with("x-skatingshop-")
+            || l.starts_with("x-skatingpro-")
+            || l.starts_with("x-skatingmart-")
+            || l.starts_with("x-skatingplus-")
+            || l.starts_with("x-skatingsmart-")
+            || l.starts_with("x-skatingfamily-")
+            || l.starts_with("x-curlingnavi-")
+            || l.starts_with("x-curlingcenter-")
+            || l.starts_with("x-curlingshop-")
+            || l.starts_with("x-curlingpro-")
+            || l.starts_with("x-curlingmart-")
+            || l.starts_with("x-curlingplus-")
+            || l.starts_with("x-curlingsmart-")
+            || l.starts_with("x-curlingfamily-")
+            || l.starts_with("x-biathlonnavi-")
+            || l.starts_with("x-biathloncenter-")
+            || l.starts_with("x-biathlonshop-")
+            || l.starts_with("x-biathlonpro-")
+            || l.starts_with("x-biathlonmart-")
+            || l.starts_with("x-biathlonplus-")
+            || l.starts_with("x-biathlonsmart-")
+            || l.starts_with("x-biathlonfamily-")
+            || l.starts_with("x-bobsleighnavi-")
+            || l.starts_with("x-bobsleighcenter-")
+            || l.starts_with("x-bobsleighshop-")
+            || l.starts_with("x-bobsleighpro-")
+            || l.starts_with("x-bobsleighmart-")
+            || l.starts_with("x-bobsleighplus-")
+            || l.starts_with("x-bobsleighsmart-")
+            || l.starts_with("x-bobsleighfamily-")
+            || l.starts_with("x-skijumpnavi-")
+            || l.starts_with("x-skijumpcenter-")
+            || l.starts_with("x-skijumpshop-")
+            || l.starts_with("x-skijumppro-")
+            || l.starts_with("x-skijumpmart-")
+            || l.starts_with("x-skijumpplus-")
+            || l.starts_with("x-skijumpsmart-")
+            || l.starts_with("x-skijumpfamily-")
+            || l.starts_with("x-speedskatenavi-")
+            || l.starts_with("x-speedskatecenter-")
+            || l.starts_with("x-speedskateshop-")
+            || l.starts_with("x-speedskatepro-")
+            || l.starts_with("x-speedskatemart-"))
+}
+
+fn has_hunting_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hunting-")
+            || l.starts_with("x-rifle-")
+            || l.starts_with("x-shotgun-")
+            || l.starts_with("x-ammo-")
+            || l.starts_with("x-remington-")
+            || l.starts_with("x-winchester-")
+            || l.starts_with("x-beretta-")
+            || l.starts_with("x-browning-")
+            || l.starts_with("x-mossberg-")
+            || l.starts_with("x-ruger-")
+            || l.starts_with("x-glock-")
+            || l.starts_with("x-smithwesson-")
+            || l.starts_with("x-huntingnavi-")
+            || l.starts_with("x-huntingcenter-")
+            || l.starts_with("x-huntingshop-")
+            || l.starts_with("x-huntingpro-")
+            || l.starts_with("x-huntingmart-")
+            || l.starts_with("x-huntingplus-")
+            || l.starts_with("x-huntingsmart-")
+            || l.starts_with("x-huntingfamily-")
+            || l.starts_with("x-riflenavi-")
+            || l.starts_with("x-riflecenter-")
+            || l.starts_with("x-rifleshop-")
+            || l.starts_with("x-riflepro-")
+            || l.starts_with("x-riflemart-")
+            || l.starts_with("x-rifleplus-")
+            || l.starts_with("x-riflesmart-")
+            || l.starts_with("x-riflefamily-")
+            || l.starts_with("x-shotgunnavi-")
+            || l.starts_with("x-shotguncenter-")
+            || l.starts_with("x-shotgunshop-")
+            || l.starts_with("x-shotgunpro-")
+            || l.starts_with("x-shotgunmart-")
+            || l.starts_with("x-shotgunplus-")
+            || l.starts_with("x-shotgunsmart-")
+            || l.starts_with("x-shotgunfamily-")
+            || l.starts_with("x-ammonavi-")
+            || l.starts_with("x-ammocenter-")
+            || l.starts_with("x-ammoshop-")
+            || l.starts_with("x-ammopro-")
+            || l.starts_with("x-ammomart-")
+            || l.starts_with("x-ammoplus-")
+            || l.starts_with("x-ammosmart-")
+            || l.starts_with("x-ammofamily-")
+            || l.starts_with("x-remingtonnavi-")
+            || l.starts_with("x-remingtoncenter-")
+            || l.starts_with("x-remingtonshop-")
+            || l.starts_with("x-remingtonpro-")
+            || l.starts_with("x-remingtonmart-")
+            || l.starts_with("x-remingtonplus-")
+            || l.starts_with("x-remingtonsmart-")
+            || l.starts_with("x-remingtonfamily-")
+            || l.starts_with("x-winchesternavi-")
+            || l.starts_with("x-winchestercenter-")
+            || l.starts_with("x-winchestershop-")
+            || l.starts_with("x-winchesterpro-")
+            || l.starts_with("x-winchestermart-")
+            || l.starts_with("x-winchesterplus-")
+            || l.starts_with("x-winchestersmart-")
+            || l.starts_with("x-winchesterfamily-")
+            || l.starts_with("x-berettanavi-")
+            || l.starts_with("x-berettacenter-"))
+}
+
+fn has_powerlifting_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-weightlifting-")
+            || l.starts_with("x-powerlifting-")
+            || l.starts_with("x-strongman-")
+            || l.starts_with("x-crossfit-")
+            || l.starts_with("x-ipf-")
+            || l.starts_with("x-usapl-")
+            || l.starts_with("x-wpc-")
+            || l.starts_with("x-gpc-")
+            || l.starts_with("x-benchpress-")
+            || l.starts_with("x-deadlift-")
+            || l.starts_with("x-weightliftingnavi-")
+            || l.starts_with("x-weightliftingcenter-")
+            || l.starts_with("x-weightliftingshop-")
+            || l.starts_with("x-weightliftingpro-")
+            || l.starts_with("x-weightliftingmart-")
+            || l.starts_with("x-weightliftingplus-")
+            || l.starts_with("x-weightliftingsmart-")
+            || l.starts_with("x-weightliftingfamily-")
+            || l.starts_with("x-powerliftingnavi-")
+            || l.starts_with("x-powerliftingcenter-")
+            || l.starts_with("x-powerliftingshop-")
+            || l.starts_with("x-powerliftingpro-")
+            || l.starts_with("x-powerliftingmart-")
+            || l.starts_with("x-powerliftingplus-")
+            || l.starts_with("x-powerliftingsmart-")
+            || l.starts_with("x-powerliftingfamily-")
+            || l.starts_with("x-strongmannavi-")
+            || l.starts_with("x-strongmancenter-")
+            || l.starts_with("x-strongmanshop-")
+            || l.starts_with("x-strongmanpro-")
+            || l.starts_with("x-strongmanmart-")
+            || l.starts_with("x-strongmanplus-")
+            || l.starts_with("x-strongmansmart-")
+            || l.starts_with("x-strongmanfamily-")
+            || l.starts_with("x-crossfitnavi-")
+            || l.starts_with("x-crossfitcenter-")
+            || l.starts_with("x-crossfitshop-")
+            || l.starts_with("x-crossfitpro-")
+            || l.starts_with("x-crossfitmart-")
+            || l.starts_with("x-crossfitplus-")
+            || l.starts_with("x-crossfitsmart-")
+            || l.starts_with("x-crossfitfamily-")
+            || l.starts_with("x-ipfnavi-")
+            || l.starts_with("x-ipfcenter-")
+            || l.starts_with("x-ipfshop-")
+            || l.starts_with("x-ipfpro-")
+            || l.starts_with("x-ipfmart-")
+            || l.starts_with("x-ipfplus-")
+            || l.starts_with("x-ipfsmart-")
+            || l.starts_with("x-ipffamily-")
+            || l.starts_with("x-usaplnavi-")
+            || l.starts_with("x-usaplcenter-")
+            || l.starts_with("x-usaplshop-")
+            || l.starts_with("x-usaplpro-")
+            || l.starts_with("x-usaplmart-")
+            || l.starts_with("x-usaplplus-")
+            || l.starts_with("x-usaplsmart-")
+            || l.starts_with("x-usaplfamily-")
+            || l.starts_with("x-wpcnavi-")
+            || l.starts_with("x-wpccenter-")
+            || l.starts_with("x-wpcshop-")
+            || l.starts_with("x-wpcpro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -33849,6 +34068,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_drone_marks(clean));
+    }
+
+    #[test]
+    fn scan_は冬機印を検出する() {
+        for raw in [
+            br"X-Wintersport-Alert: 1",
+            br"X-Skating-Notice: 1",
+            br"X-Curling-Info: 1",
+            br"X-Biathlon-Report: 1",
+            br"X-Bobsleigh-Bulletin: 1",
+            br"X-Skijump-News: 1",
+            br"X-Speedskate-Flash: 1",
+            br"X-Hockey-Release: 1",
+        ] {
+            assert!(has_wintersport_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_wintersport_marks(clean));
+    }
+
+    #[test]
+    fn scan_は猟機印を検出する() {
+        for raw in [
+            br"X-Hunting-Alert: 1",
+            br"X-Rifle-Notice: 1",
+            br"X-Shotgun-Info: 1",
+            br"X-Ammo-Report: 1",
+            br"X-Remington-Bulletin: 1",
+            br"X-Winchester-News: 1",
+            br"X-Beretta-Flash: 1",
+            br"X-Glock-Release: 1",
+        ] {
+            assert!(has_hunting_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_hunting_marks(clean));
+    }
+
+    #[test]
+    fn scan_は挙機印を検出する() {
+        for raw in [
+            br"X-Weightlifting-Alert: 1",
+            br"X-Powerlifting-Notice: 1",
+            br"X-Strongman-Info: 1",
+            br"X-Crossfit-Report: 1",
+            br"X-Ipf-Bulletin: 1",
+            br"X-Usapl-News: 1",
+            br"X-Benchpress-Flash: 1",
+            br"X-Deadlift-Release: 1",
+        ] {
+            assert!(has_powerlifting_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_powerlifting_marks(clean));
     }
 
 }
