@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub shodo_marks: bool,
+    pub dance_marks: bool,
+    pub nenkin_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        shodo_marks: has_shodo_marks(hdr),
+        dance_marks: has_dance_marks(hdr),
+        nenkin_marks: has_nenkin_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,208 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_shodo_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shodo-")
+            || l.starts_with("x-shodoyasan-")
+            || l.starts_with("x-shodopro-")
+            || l.starts_with("x-shodoteam-")
+            || l.starts_with("x-shodokensa-")
+            || l.starts_with("x-shodomanten-")
+            || l.starts_with("x-shodonomi-")
+            || l.starts_with("x-shodojp-")
+            || l.starts_with("x-shodosenmon-")
+            || l.starts_with("x-shodomitsumori-")
+            || l.starts_with("x-shodochousa-")
+            || l.starts_with("x-shodoteiki-")
+            || l.starts_with("x-shodoshuri-")
+            || l.starts_with("x-shodoschool-")
+            || l.starts_with("x-shodokoubou-")
+            || l.starts_with("x-shodomart-")
+            || l.starts_with("x-shodobank-")
+            || l.starts_with("x-shuuji-")
+            || l.starts_with("x-shuujiyasan-")
+            || l.starts_with("x-shuujipro-")
+            || l.starts_with("x-shuujiteam-")
+            || l.starts_with("x-shuujikensa-")
+            || l.starts_with("x-shuujimanten-")
+            || l.starts_with("x-shuujinomi-")
+            || l.starts_with("x-shuujijp-")
+            || l.starts_with("x-shuujisenmon-")
+            || l.starts_with("x-shuujimitsumori-")
+            || l.starts_with("x-shuujichousa-")
+            || l.starts_with("x-shuujiteiki-")
+            || l.starts_with("x-shuujishuri-")
+            || l.starts_with("x-shuujischool-")
+            || l.starts_with("x-shuujikoubou-")
+            || l.starts_with("x-shuujimart-")
+            || l.starts_with("x-shuujibank-")
+            || l.starts_with("x-calligraphypros-")
+            || l.starts_with("x-calligraphyteam-")
+            || l.starts_with("x-calligraphyworks-")
+            || l.starts_with("x-calligraphyexperts-")
+            || l.starts_with("x-calligraphysvc-")
+            || l.starts_with("x-calligraphyhq-")
+            || l.starts_with("x-calligraphylesson-")
+            || l.starts_with("x-calligraphylessonpros-")
+            || l.starts_with("x-calligraphylessonteam-")
+            || l.starts_with("x-shodopros-")
+            || l.starts_with("x-shodoworks-")
+            || l.starts_with("x-shodoexperts-")
+            || l.starts_with("x-shodosvc-")
+            || l.starts_with("x-shodohq-")
+            || l.starts_with("x-shododoctors-")
+            || l.starts_with("x-shodorescue-")
+            || l.starts_with("x-shuujipros-")
+            || l.starts_with("x-shuujidoctors-")
+            || l.starts_with("x-shuujirescue-")
+    })
+}
+
+fn has_dance_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-dansu-")
+            || l.starts_with("x-dansuyasan-")
+            || l.starts_with("x-dansupro-")
+            || l.starts_with("x-dansuteam-")
+            || l.starts_with("x-dansukensa-")
+            || l.starts_with("x-dansumanten-")
+            || l.starts_with("x-dansunomi-")
+            || l.starts_with("x-dansujp-")
+            || l.starts_with("x-dansusenmon-")
+            || l.starts_with("x-dansumitsumori-")
+            || l.starts_with("x-dansuchousa-")
+            || l.starts_with("x-dansuteiki-")
+            || l.starts_with("x-dansushuri-")
+            || l.starts_with("x-dansuschool-")
+            || l.starts_with("x-dansukoubou-")
+            || l.starts_with("x-dansumart-")
+            || l.starts_with("x-dansubank-")
+            || l.starts_with("x-dance-")
+            || l.starts_with("x-danceyasan-")
+            || l.starts_with("x-dancepro-")
+            || l.starts_with("x-danceteam-")
+            || l.starts_with("x-dancekoubou-")
+            || l.starts_with("x-dancesenmon-")
+            || l.starts_with("x-danceschool-")
+            || l.starts_with("x-danceacademy-")
+            || l.starts_with("x-dancestudio-")
+            || l.starts_with("x-dancestudiopros-")
+            || l.starts_with("x-dancestudioteam-")
+            || l.starts_with("x-dancestudioworks-")
+            || l.starts_with("x-dancestudioexperts-")
+            || l.starts_with("x-dancestudiosvc-")
+            || l.starts_with("x-dancestudiohq-")
+            || l.starts_with("x-dancelesson-")
+            || l.starts_with("x-dancelessonpros-")
+            || l.starts_with("x-dancelessonteam-")
+            || l.starts_with("x-dancelessonworks-")
+            || l.starts_with("x-ballet-")
+            || l.starts_with("x-balletpro-")
+            || l.starts_with("x-balletteam-")
+            || l.starts_with("x-balletkoubou-")
+            || l.starts_with("x-balletsenmon-")
+            || l.starts_with("x-balletstudio-")
+            || l.starts_with("x-balletacademy-")
+            || l.starts_with("x-hiphop-")
+            || l.starts_with("x-hiphopdance-")
+            || l.starts_with("x-hiphopschool-")
+            || l.starts_with("x-jazzdance-")
+            || l.starts_with("x-jazzdanceschool-")
+            || l.starts_with("x-dancepros-")
+            || l.starts_with("x-danceworks-")
+            || l.starts_with("x-danceexperts-")
+            || l.starts_with("x-dancesvc-")
+            || l.starts_with("x-dancehq-")
+            || l.starts_with("x-dancedoctors-")
+            || l.starts_with("x-dancerescue-")
+            || l.starts_with("x-dansupros-")
+            || l.starts_with("x-dansudoctors-")
+            || l.starts_with("x-dansurescue-")
+    })
+}
+
+fn has_nenkin_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nenkin-")
+            || l.starts_with("x-nenkinpro-")
+            || l.starts_with("x-nenkinteam-")
+            || l.starts_with("x-nenkinkensa-")
+            || l.starts_with("x-nenkinmanten-")
+            || l.starts_with("x-nenkinnomi-")
+            || l.starts_with("x-nenkinjp-")
+            || l.starts_with("x-nenkinsenmon-")
+            || l.starts_with("x-nenkinmitsumori-")
+            || l.starts_with("x-nenkinchousa-")
+            || l.starts_with("x-nenkinteiki-")
+            || l.starts_with("x-nenkinshuri-")
+            || l.starts_with("x-nenkinsho-")
+            || l.starts_with("x-nenkinkoubou-")
+            || l.starts_with("x-nenkinmart-")
+            || l.starts_with("x-nenkinbank-")
+            || l.starts_with("x-fpkoubou-")
+            || l.starts_with("x-fppro-")
+            || l.starts_with("x-fpteam-")
+            || l.starts_with("x-fpkensa-")
+            || l.starts_with("x-fpmanten-")
+            || l.starts_with("x-fpnomi-")
+            || l.starts_with("x-fpjp-")
+            || l.starts_with("x-fpsenmon-")
+            || l.starts_with("x-fpmitsumori-")
+            || l.starts_with("x-fpchousa-")
+            || l.starts_with("x-fpteiki-")
+            || l.starts_with("x-fpshuri-")
+            || l.starts_with("x-fpsho-")
+            || l.starts_with("x-fpmart-")
+            || l.starts_with("x-fpbank-")
+            || l.starts_with("x-financialplannerpros-")
+            || l.starts_with("x-financialplannerteam-")
+            || l.starts_with("x-financialplannerworks-")
+            || l.starts_with("x-financialplannerexperts-")
+            || l.starts_with("x-financialplannersvc-")
+            || l.starts_with("x-financialplannerhq-")
+            || l.starts_with("x-financialplanningpros-")
+            || l.starts_with("x-financialplanningteam-")
+            || l.starts_with("x-financialplanningworks-")
+            || l.starts_with("x-financialplanningexperts-")
+            || l.starts_with("x-financialplanningsvc-")
+            || l.starts_with("x-financialplanninghq-")
+            || l.starts_with("x-estateplanpros-")
+            || l.starts_with("x-estateplanteam-")
+            || l.starts_with("x-estateplanworks-")
+            || l.starts_with("x-estateplanexperts-")
+            || l.starts_with("x-estateplansvc-")
+            || l.starts_with("x-estateplanhq-")
+            || l.starts_with("x-pensionpros-")
+            || l.starts_with("x-pensionteam-")
+            || l.starts_with("x-pensionworks-")
+            || l.starts_with("x-pensionexperts-")
+            || l.starts_with("x-pensionsvc-")
+            || l.starts_with("x-pensionhq-")
+            || l.starts_with("x-nenkinpros-")
+            || l.starts_with("x-nenkindoctors-")
+            || l.starts_with("x-nenkinrescue-")
+            || l.starts_with("x-fppros-")
+            || l.starts_with("x-fpdoctors-")
+            || l.starts_with("x-fprescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20849,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は字機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Shodo-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Shuuji-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CalligraphyPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CalligraphyLesson-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShodoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShuujiKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShodoHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShuujiSchool-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_shodo_marks(h));
+        }
+        assert!(!has_shodo_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は舞機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Dansu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Dance-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Ballet-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DanceStudio-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DansuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DanceLessonTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BalletAcademy-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DanceHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_dance_marks(h));
+        }
+        assert!(!has_dance_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は年機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Nenkin-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FpPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FinancialPlannerPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-EstatePlanTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PensionWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NenkinSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FinancialPlanningHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FpBank-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_nenkin_marks(h));
+        }
+        assert!(!has_nenkin_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
