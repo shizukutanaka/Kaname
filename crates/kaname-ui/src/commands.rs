@@ -2404,6 +2404,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D641: 選挙・政党印自称
+    if env.election_marks {
+        render_risks.push(
+            "X-Senkyo-*/X-ElectionNavi-*/X-Jimintou-*/X-Rikken-*/X-Koumei-*/X-Ishin-*/X-SeijiNavi-*/X-TouhyouNavi-* 等 — 選機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D642: 士業・職業団体・労働組合印自称
+    if env.union_marks {
+        render_risks.push(
+            "X-Rengou-*/X-Zenroren-*/X-Ishikai-*/X-Bengoshi-*/X-UnionNavi-*/X-RodoKumiai-*/X-Zeirishikai-*/X-KyouShokai-* 等 — 士機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D643: 自動車教習所・免許印自称
+    if env.drivingschool_marks {
+        render_risks.push(
+            "X-DrivingNavi-*/X-KyousyuujoNavi-*/X-GasshukuNavi-*/X-MenkyoNavi-*/X-JidoushaGakkouNavi-*/X-UntenshuuryoujoNavi-*/X-Kyourikimajo-*/X-Alcc-* 等 — 習機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
