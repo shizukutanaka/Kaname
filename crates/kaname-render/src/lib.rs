@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-DemoPros-*`/`X-DemolitionPros-*`/`X-AdvancedDemolition-*`/`X-KaitaiKouji-*`/`X-KaitaiYasan-*`/`X-BiruKaitai-*`/`X-JyuubutsuKaitai-*` 等 — 解体・建物取り壊し機印自称
+    pub demolition_marks: bool,
+    /// `X-BartlettTree-*`/`X-Asplundh-*`/`X-DaveyTree-*`/`X-MonsterTree-*`/`X-TreeDoctor-*`/`X-Bassai-*`/`X-JyumokuBassai-*`/`X-TokushuBassai-*` 等 — 樹木伐採・剪定機印自称
+    pub tree_marks: bool,
+    /// `X-ChimneyCricket-*`/`X-MidtownChimney-*`/`X-A1Chimney-*`/`X-ChimneySweep-*`/`X-EntotsuSouji-*`/`X-MakiStove-*`/`X-Dantou-*` 等 — 煙突・暖炉清掃機印自称
+    pub chimney_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        demolition_marks: has_demolition_marks(hdr),
+        tree_marks: has_tree_marks(hdr),
+        chimney_marks: has_chimney_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,245 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D659: 解体・建物取り壊し機印の自称を検出する。
+///
+/// `X-DemoPros-*`/`X-DemolitionPros-*`/`X-AdvancedDemolition-*`/`X-DemolitionWorks-*`/
+/// `X-DemoWorks-*`/`X-DemolitionExperts-*`/`X-DemolitionTeam-*`/`X-DemoDoctors-*`/
+/// `X-DemolitionForce-*`/`X-SafeDemo-*`/`X-DemoTech-*`/`X-Implosion-*`/`X-WreckingBall-*`/
+/// `X-WreckingPros-*`/`X-BuildingDemolition-*`/`X-HouseDemolition-*`/`X-InteriorDemo-*`/
+/// `X-SelectiveDemo-*`/`X-ConcreteDemo-*`/`X-PoolDemo-*`/`X-BarnDemo-*`/`X-GarageDemo-*`/
+/// `X-AsbestosDemo-*`/`X-DemolitionProsUSA-*`/`X-DemoMasters-*`、
+/// JP は `X-KaitaiKouji-*`/`X-KaitaiYasan-*`/`X-Kaitai-*`/`X-BiruKaitai-*`/`X-JyutakuKaitai-*`/
+/// `X-KaitaiGyosha-*`/`X-KaitaiSeibi-*`/`X-TatemonoKaitai-*`/`X-JyuubutsuKaitai-*`/
+/// `X-NaiyakuKaitai-*`/`X-KaitaiDoctors-*`/`X-KaitaiPro-*`/`X-KaitaiTeam-*`/
+/// `X-HakaiKouji-*`/`X-KaitaiSagyou-*`/`X-AkiyaKaitai-*`/`X-KouzoKaitai-*`/`X-Gankai-*`/
+/// `X-KaitaiSenmon-*`/`X-TaimanKaitai-*`/`X-KaitaiEsti-*`/`X-KaitaiHoken-*`/
+/// `X-KaitaiCompany-*`/`X-NukigakiKaitai-*`/`X-HaikyoKaitai-*` 等の
+/// 解体・建物取り壊し機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。空き家解体・ビル解体・内装解体・
+/// 解体費用半額勧誘・近隣工事便乗の偽装は解体業者なりすましの典型手口。
+/// 解印の自署は兆候として数える。
+/// (建築は construction 機、産廃は junkremoval 機、改修は renovation 機で検出済み)
+fn has_demolition_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-demopros-")
+            || l.starts_with("x-demolitionpros-")
+            || l.starts_with("x-advanceddemolition-")
+            || l.starts_with("x-demolitionworks-")
+            || l.starts_with("x-demoworks-")
+            || l.starts_with("x-demolitionexperts-")
+            || l.starts_with("x-demolitionteam-")
+            || l.starts_with("x-demodoctors-")
+            || l.starts_with("x-demolitionforce-")
+            || l.starts_with("x-safedemo-")
+            || l.starts_with("x-demotech-")
+            || l.starts_with("x-implosion-")
+            || l.starts_with("x-wreckingball-")
+            || l.starts_with("x-wreckingpros-")
+            || l.starts_with("x-buildingdemolition-")
+            || l.starts_with("x-housedemolition-")
+            || l.starts_with("x-interiordemo-")
+            || l.starts_with("x-selectivedemo-")
+            || l.starts_with("x-concretedemo-")
+            || l.starts_with("x-pooldemo-")
+            || l.starts_with("x-barndemo-")
+            || l.starts_with("x-garagedemo-")
+            || l.starts_with("x-asbestosdemo-")
+            || l.starts_with("x-demolitionprosusa-")
+            || l.starts_with("x-demomasters-")
+            || l.starts_with("x-kaitaikouji-")
+            || l.starts_with("x-kaitaiyasan-")
+            || l.starts_with("x-kaitai-")
+            || l.starts_with("x-birukaitai-")
+            || l.starts_with("x-jyutakukaitai-")
+            || l.starts_with("x-kaitaigyosha-")
+            || l.starts_with("x-kaitaiseibi-")
+            || l.starts_with("x-tatemonokaitai-")
+            || l.starts_with("x-jyuubutsukaitai-")
+            || l.starts_with("x-naiyakukaitai-")
+            || l.starts_with("x-kaitaidoctors-")
+            || l.starts_with("x-kaitaipro-")
+            || l.starts_with("x-kaitaiteam-")
+            || l.starts_with("x-hakaikouji-")
+            || l.starts_with("x-kaitaisagyou-")
+            || l.starts_with("x-akiyakaitai-")
+            || l.starts_with("x-kouzokaitai-")
+            || l.starts_with("x-gankai-")
+            || l.starts_with("x-kaitaisenmon-")
+            || l.starts_with("x-taimankaitai-")
+            || l.starts_with("x-kaitaiesti-")
+            || l.starts_with("x-kaitaihoken-")
+            || l.starts_with("x-kaitaicompany-")
+            || l.starts_with("x-nukigakikaitai-")
+            || l.starts_with("x-haikyokaitai-")
+    })
+}
+
+/// D660: 樹木伐採・剪定機印の自称を検出する。
+///
+/// `X-BartlettTree-*`/`X-Bartlett-*`/`X-Asplundh-*`/`X-DaveyTree-*`/`X-MonsterTree-*`/
+/// `X-MonsterTreeService-*`/`X-TreeDoctor-*`/`X-TreeService-*`/`X-TreeServicePros-*`/
+/// `X-TreeWorks-*`/`X-Arborist-*`/`X-ArboristPros-*`/`X-TreeExperts-*`/`X-TreeMasters-*`/
+/// `X-TreeRemoval-*`/`X-TreeRemovalPros-*`/`X-StumpRemoval-*`/`X-StumpGrinding-*`/
+/// `X-TreeTrimming-*`/`X-TreePruning-*`/`X-EmeraldAsh-*`/`X-TreeTech-*`/`X-TreeForce-*`/
+/// `X-TreeSolutions-*`/`X-UrbanForestry-*`、JP は `X-Bassai-*`/`X-JyumokuBassai-*`/
+/// `X-TokushuBassai-*`/`X-BassaiKouji-*`/`X-BassaiYasan-*`/`X-JyubokuBassai-*`/
+/// `X-JyubokuKanri-*`/`X-Senboku-*`/`X-SenteiYasan-*`/`X-JyumokuKanri-*`/`X-Koboku-*`/
+/// `X-BassaiSenmon-*`/`X-BassaiTeam-*`/`X-JyumokuYasan-*`/`X-BassaiGyosha-*`/
+/// `X-NakanoBassai-*`/`X-JyumokuPro-*`/`X-Daijyuboku-*`/`X-TreeBassai-*`/`X-BassaiDoctors-*`/
+/// `X-JyubokuGijutsu-*`/`X-KyoshuBassai-*`/`X-MoriBassai-*`/`X-KiriKabu-*`/
+/// `X-BassaiHajime-*`/`X-JyumokuHoken-*`/`X-BassaiJP-*` 等の樹木伐採・剪定機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 樹木伐採・特殊伐採・剪定・切株除去・危険木処分・太陽光パネル遮樹の偽装は
+/// 伐採業者なりすましの典型手口。樹印の自署は兆候として数える。
+/// (植栽・芝生は garden 機、造園は landscape 機、害虫は pest 機で検出済み)
+fn has_tree_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-bartletttree-")
+            || l.starts_with("x-bartlett-")
+            || l.starts_with("x-asplundh-")
+            || l.starts_with("x-daveytree-")
+            || l.starts_with("x-monstertree-")
+            || l.starts_with("x-monstertreeservice-")
+            || l.starts_with("x-treedoctor-")
+            || l.starts_with("x-treeservice-")
+            || l.starts_with("x-treeservicepros-")
+            || l.starts_with("x-treeworks-")
+            || l.starts_with("x-arborist-")
+            || l.starts_with("x-arboristpros-")
+            || l.starts_with("x-treeexperts-")
+            || l.starts_with("x-treemasters-")
+            || l.starts_with("x-treeremoval-")
+            || l.starts_with("x-treeremovalpros-")
+            || l.starts_with("x-stumpremoval-")
+            || l.starts_with("x-stumpgrinding-")
+            || l.starts_with("x-treetrimming-")
+            || l.starts_with("x-treepruning-")
+            || l.starts_with("x-emeraldash-")
+            || l.starts_with("x-treetech-")
+            || l.starts_with("x-treeforce-")
+            || l.starts_with("x-treesolutions-")
+            || l.starts_with("x-urbanforestry-")
+            || l.starts_with("x-bassai-")
+            || l.starts_with("x-jyumokubassai-")
+            || l.starts_with("x-tokushubassai-")
+            || l.starts_with("x-bassaikouji-")
+            || l.starts_with("x-bassaiyasan-")
+            || l.starts_with("x-jyubokubassai-")
+            || l.starts_with("x-jyubokukanri-")
+            || l.starts_with("x-senboku-")
+            || l.starts_with("x-senteiyasan-")
+            || l.starts_with("x-jyumokukanri-")
+            || l.starts_with("x-koboku-")
+            || l.starts_with("x-bassaisenmon-")
+            || l.starts_with("x-bassaiteam-")
+            || l.starts_with("x-jyumokuyasan-")
+            || l.starts_with("x-bassaigyosha-")
+            || l.starts_with("x-nakanobassai-")
+            || l.starts_with("x-jyumokupro-")
+            || l.starts_with("x-daijyuboku-")
+            || l.starts_with("x-treebassai-")
+            || l.starts_with("x-bassaidoctors-")
+            || l.starts_with("x-jyubokugijutsu-")
+            || l.starts_with("x-kyoshubassai-")
+            || l.starts_with("x-moribassai-")
+            || l.starts_with("x-kirikabu-")
+            || l.starts_with("x-bassaihajime-")
+            || l.starts_with("x-jyumokuhoken-")
+            || l.starts_with("x-bassaijp-")
+    })
+}
+
+/// D661: 煙突・暖炉清掃機印の自称を検出する。
+///
+/// `X-ChimneyCricket-*`/`X-MidtownChimney-*`/`X-A1Chimney-*`/`X-ChimneySweep-*`/
+/// `X-ChimneySweepPros-*`/`X-ChimneyPros-*`/`X-ChimneyDoctors-*`/`X-ChimneyWorks-*`/
+/// `X-ChimneyExperts-*`/`X-ChimneyTech-*`/`X-ChimneyMasters-*`/`X-ChimneySolutions-*`/
+/// `X-ChimneyRepair-*`/`X-ChimneyInspectors-*`/`X-ChimneySafety-*`/`X-FireplacePros-*`/
+/// `X-FireplaceDoctors-*`/`X-WoodStove-*`/`X-WoodStovePros-*`/`X-FireboxRepair-*`/
+/// `X-FlueLiners-*`/`X-ChimneyCaps-*`/`X-ChimneyLiner-*`/`X-ChimneyTeam-*`/
+/// `X-ChimneyForce-*`、JP は `X-EntotsuSouji-*`/`X-Entotsu-*`/`X-EntotsuYasan-*`/
+/// `X-MakiStove-*`/`X-MakiStoveSouji-*`/`X-Dantou-*`/`X-DantouSouji-*`/`X-Danro-*`/
+/// `X-DanroSouji-*`/`X-EntotsuSeibi-*`/`X-EntotsuKouji-*`/`X-EntotsuPro-*`/
+/// `X-EntotsuDoctors-*`/`X-EntotsuTeam-*`/`X-DanroKouji-*`/`X-PelletStove-*`/
+/// `X-EntotsuClean-*`/`X-EntotsuManten-*`/`X-DantouKouji-*`/`X-SuitoEntotsu-*`/
+/// `X-EntotsuGijutsu-*`/`X-KirokuEntotsu-*`/`X-EntotsuShiage-*`/`X-DanroKougyou-*`/
+/// `X-EntotsuGyosha-*`/`X-EntotsuJP-*` 等の煙突・暖炉清掃機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 煙突掃除・薪ストーブ点検・暖炉修理・煙道ライナー・煤落としの偽装は
+/// 煙突清掃業者なりすましの典型手口。煙印の自署は兆候として数える。
+/// (暖房設備は hvac 機、屋根修理は roofing 機、消防は fireprotect 機で検出済み)
+fn has_chimney_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-chimneycricket-")
+            || l.starts_with("x-midtownchimney-")
+            || l.starts_with("x-a1chimney-")
+            || l.starts_with("x-chimneysweep-")
+            || l.starts_with("x-chimneysweeppros-")
+            || l.starts_with("x-chimneypros-")
+            || l.starts_with("x-chimneydoctors-")
+            || l.starts_with("x-chimneyworks-")
+            || l.starts_with("x-chimneyexperts-")
+            || l.starts_with("x-chimneytech-")
+            || l.starts_with("x-chimneymasters-")
+            || l.starts_with("x-chimneysolutions-")
+            || l.starts_with("x-chimneyrepair-")
+            || l.starts_with("x-chimneyinspectors-")
+            || l.starts_with("x-chimneysafety-")
+            || l.starts_with("x-fireplacepros-")
+            || l.starts_with("x-fireplacedoctors-")
+            || l.starts_with("x-woodstove-")
+            || l.starts_with("x-woodstovepros-")
+            || l.starts_with("x-fireboxrepair-")
+            || l.starts_with("x-flueliners-")
+            || l.starts_with("x-chimneycaps-")
+            || l.starts_with("x-chimneyliner-")
+            || l.starts_with("x-chimneyteam-")
+            || l.starts_with("x-chimneyforce-")
+            || l.starts_with("x-entotsusouji-")
+            || l.starts_with("x-entotsu-")
+            || l.starts_with("x-entotsuyasan-")
+            || l.starts_with("x-makistove-")
+            || l.starts_with("x-makistovesouji-")
+            || l.starts_with("x-dantou-")
+            || l.starts_with("x-dantousouji-")
+            || l.starts_with("x-danro-")
+            || l.starts_with("x-danrosouji-")
+            || l.starts_with("x-entotsuseibi-")
+            || l.starts_with("x-entotsukouji-")
+            || l.starts_with("x-entotsupro-")
+            || l.starts_with("x-entotsudoctors-")
+            || l.starts_with("x-entotsuteam-")
+            || l.starts_with("x-danrokouji-")
+            || l.starts_with("x-pelletstove-")
+            || l.starts_with("x-entotsuclean-")
+            || l.starts_with("x-entotsumanten-")
+            || l.starts_with("x-dantoukouji-")
+            || l.starts_with("x-suitoentotsu-")
+            || l.starts_with("x-entotsugijutsu-")
+            || l.starts_with("x-kirokuentotsu-")
+            || l.starts_with("x-entotsushiage-")
+            || l.starts_with("x-danrokougyou-")
+            || l.starts_with("x-entotsugyosha-")
+            || l.starts_with("x-entotsujp-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20889,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は解機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-DemoPros-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AdvancedDemolition-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KaitaiKouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BiruKaitai-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DemolitionPros-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JyutakuKaitai-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WreckingPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KaitaiGyosha-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_demolition_marks(raw));
+        }
+        assert!(!has_demolition_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は樹機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-BartlettTree-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Asplundh-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Bassai-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TokushuBassai-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MonsterTree-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JyumokuBassai-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TreeDoctor-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Senboku-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_tree_marks(raw));
+        }
+        assert!(!has_tree_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は煙機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-ChimneyCricket-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChimneySweep-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-EntotsuSouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MakiStove-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MidtownChimney-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Dantou-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChimneyPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Danro-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_chimney_marks(raw));
+        }
+        assert!(!has_chimney_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
