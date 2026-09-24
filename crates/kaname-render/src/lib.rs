@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub saihou_marks: bool,
+    pub koto_marks: bool,
+    pub aroma_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        saihou_marks: has_saihou_marks(hdr),
+        koto_marks: has_koto_marks(hdr),
+        aroma_marks: has_aroma_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,182 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_saihou_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-saihou-")
+            || l.starts_with("x-saihouyasan-")
+            || l.starts_with("x-saihoupro-")
+            || l.starts_with("x-saihouteam-")
+            || l.starts_with("x-saihoukensa-")
+            || l.starts_with("x-saihoumanten-")
+            || l.starts_with("x-saihounomi-")
+            || l.starts_with("x-saihoujp-")
+            || l.starts_with("x-saihousenmon-")
+            || l.starts_with("x-saihoumitsumori-")
+            || l.starts_with("x-saihouchousa-")
+            || l.starts_with("x-saihouteiki-")
+            || l.starts_with("x-saihoushuri-")
+            || l.starts_with("x-saihouschool-")
+            || l.starts_with("x-saihoukoubou-")
+            || l.starts_with("x-saihoumart-")
+            || l.starts_with("x-saihoubank-")
+            || l.starts_with("x-souyou-")
+            || l.starts_with("x-souyouyasan-")
+            || l.starts_with("x-souyoupro-")
+            || l.starts_with("x-souyoukoubou-")
+            || l.starts_with("x-souyousenmon-")
+            || l.starts_with("x-souyouschool-")
+            || l.starts_with("x-sewing-")
+            || l.starts_with("x-sewingpro-")
+            || l.starts_with("x-sewingteam-")
+            || l.starts_with("x-sewingkoubou-")
+            || l.starts_with("x-sewingsenmon-")
+            || l.starts_with("x-sewingschool-")
+            || l.starts_with("x-sewinglesson-")
+            || l.starts_with("x-sewinglessonpros-")
+            || l.starts_with("x-sewinglessonteam-")
+            || l.starts_with("x-sewingclass-")
+            || l.starts_with("x-sewingclasspros-")
+            || l.starts_with("x-sewingclassteam-")
+            || l.starts_with("x-sewingclassworks-")
+            || l.starts_with("x-sewingclassexperts-")
+            || l.starts_with("x-sewingclasssvc-")
+            || l.starts_with("x-sewingclasshq-")
+            || l.starts_with("x-dressmakingpros-")
+            || l.starts_with("x-dressmakingteam-")
+            || l.starts_with("x-dressmakingworks-")
+            || l.starts_with("x-dressmakingexperts-")
+            || l.starts_with("x-saihoupros-")
+            || l.starts_with("x-saihouworks-")
+            || l.starts_with("x-saihouexperts-")
+            || l.starts_with("x-saihousvc-")
+            || l.starts_with("x-saihouhq-")
+            || l.starts_with("x-saihoudoctors-")
+            || l.starts_with("x-saihourescue-")
+            || l.starts_with("x-souyoupros-")
+            || l.starts_with("x-souyoudoctors-")
+            || l.starts_with("x-souyourescue-")
+    })
+}
+
+fn has_koto_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-koto-")
+            || l.starts_with("x-kotoyasan-")
+            || l.starts_with("x-kotopro-")
+            || l.starts_with("x-kototeam-")
+            || l.starts_with("x-kotokensa-")
+            || l.starts_with("x-kotomanten-")
+            || l.starts_with("x-kotonomi-")
+            || l.starts_with("x-kotojp-")
+            || l.starts_with("x-kotosenmon-")
+            || l.starts_with("x-kotomitsumori-")
+            || l.starts_with("x-kotochousa-")
+            || l.starts_with("x-kototeiki-")
+            || l.starts_with("x-kotoshuri-")
+            || l.starts_with("x-kotoschool-")
+            || l.starts_with("x-kotokoubou-")
+            || l.starts_with("x-kotomart-")
+            || l.starts_with("x-kotobank-")
+            || l.starts_with("x-shamisen-")
+            || l.starts_with("x-shamisenyasan-")
+            || l.starts_with("x-shamisenpro-")
+            || l.starts_with("x-shamisenteam-")
+            || l.starts_with("x-shamisenkensa-")
+            || l.starts_with("x-shamisenmanten-")
+            || l.starts_with("x-shamisennomi-")
+            || l.starts_with("x-shamisenjp-")
+            || l.starts_with("x-shamisensenmon-")
+            || l.starts_with("x-shamisenmitsumori-")
+            || l.starts_with("x-shamisenkoubou-")
+            || l.starts_with("x-shamisenschool-")
+            || l.starts_with("x-shamisenmart-")
+            || l.starts_with("x-soukyoku-")
+            || l.starts_with("x-soukyokuyasan-")
+            || l.starts_with("x-soukyokupro-")
+            || l.starts_with("x-soukyokukoubou-")
+            || l.starts_with("x-soukyokusenmon-")
+            || l.starts_with("x-nihongakki-")
+            || l.starts_with("x-nihongakkisenmon-")
+            || l.starts_with("x-nihongakkikoubou-")
+            || l.starts_with("x-kotopros-")
+            || l.starts_with("x-kotoworks-")
+            || l.starts_with("x-kotoexperts-")
+            || l.starts_with("x-kotosvc-")
+            || l.starts_with("x-kotohq-")
+            || l.starts_with("x-kotodoctors-")
+            || l.starts_with("x-kotorescue-")
+            || l.starts_with("x-shamisenpros-")
+            || l.starts_with("x-shamisenexperts-")
+            || l.starts_with("x-shamisendoctors-")
+            || l.starts_with("x-shamisenrescue-")
+    })
+}
+
+fn has_aroma_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-aroma-")
+            || l.starts_with("x-aromayasan-")
+            || l.starts_with("x-aromapro-")
+            || l.starts_with("x-aromateam-")
+            || l.starts_with("x-aromakensa-")
+            || l.starts_with("x-aromamanten-")
+            || l.starts_with("x-aromanomi-")
+            || l.starts_with("x-aromajp-")
+            || l.starts_with("x-aromasenmon-")
+            || l.starts_with("x-aromamitsumori-")
+            || l.starts_with("x-aromachousa-")
+            || l.starts_with("x-aromateiki-")
+            || l.starts_with("x-aromashuri-")
+            || l.starts_with("x-aromaschool-")
+            || l.starts_with("x-aromakoubou-")
+            || l.starts_with("x-aromamart-")
+            || l.starts_with("x-aromabank-")
+            || l.starts_with("x-aromatherapy-")
+            || l.starts_with("x-aromatherapypros-")
+            || l.starts_with("x-aromatherapyteam-")
+            || l.starts_with("x-aromatherapyworks-")
+            || l.starts_with("x-aromatherapyexperts-")
+            || l.starts_with("x-aromatherapysvc-")
+            || l.starts_with("x-aromatherapyhq-")
+            || l.starts_with("x-aromatherapyschool-")
+            || l.starts_with("x-aromatherapylesson-")
+            || l.starts_with("x-aromakentei-")
+            || l.starts_with("x-aromakenteipro-")
+            || l.starts_with("x-aromakenteiteam-")
+            || l.starts_with("x-medicalaroma-")
+            || l.starts_with("x-medicalaromapros-")
+            || l.starts_with("x-medicalaromateam-")
+            || l.starts_with("x-medicalaromaworks-")
+            || l.starts_with("x-medicalaromaexperts-")
+            || l.starts_with("x-aromapros-")
+            || l.starts_with("x-aromaworks-")
+            || l.starts_with("x-aromaexperts-")
+            || l.starts_with("x-aromasvc-")
+            || l.starts_with("x-aromahq-")
+            || l.starts_with("x-aromadoctors-")
+            || l.starts_with("x-aromarescue-")
+            || l.starts_with("x-aromatherapypro-")
+            || l.starts_with("x-aromatherapydoctors-")
+            || l.starts_with("x-aromatherapyrescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20823,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は裁機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Saihou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Souyou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Sewing-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SewingClass-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SaihouSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SewingClassWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SaihouSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DressmakingPros-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_saihou_marks(h));
+        }
+        assert!(!has_saihou_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は琴機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Koto-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Shamisen-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Soukyoku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Nihongakki-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KotoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KotoSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenMart-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_koto_marks(h));
+        }
+        assert!(!has_koto_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は香機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Aroma-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Aromatherapy-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AromaKentei-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MedicalAroma-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AromaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AromatherapyWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AromaSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MedicalAromaPros-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_aroma_marks(h));
+        }
+        assert!(!has_aroma_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
