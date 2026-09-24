@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D773: `X-Bouon-*`/`X-Bouonkouji-*`/`X-Shatsuon-*`/`X-Soundproof-*` 等の防音・防音室工事印自称が未検査
+
+- **問題**: `X-Bouon-*`/`X-BouonYasan-*`/`X-BouonPro-*`/`X-BouonTeam-*`/`X-BouonKensa-*`/`X-BouonManten-*`/`X-BouonNomi-*`/`X-BouonJP-*`/`X-BouonSenmon-*`/`X-BouonMitsumori-*`/`X-BouonChousa-*`/`X-BouonTeiki-*`/`X-BouonPros-*`/`X-BouonDoctors-*`/`X-BouonRescue-*`/`X-Shatsuon-*`/`X-ShatsuonYasan-*`/`X-ShatsuonPro-*`/`X-ShatsuonTeam-*`/`X-ShatsuonJP-*`/`X-ShatsuonSenmon-*`/`X-ShatsuonPros-*`/`X-ShatsuonDoctors-*`/`X-ShatsuonRescue-*`/`X-Bouonkouji-*`/`X-BouonkoujiYasan-*`/`X-BouonkoujiPro-*`/`X-BouonkoujiTeam-*`/`X-BouonkoujiJP-*`/`X-BouonkoujiSenmon-*`/`X-SoundproofPros-*`/`X-SoundproofTeam-*`/`X-SoundproofWorks-*`/`X-SoundproofExperts-*`/`X-SoundproofSvc-*`/`X-SoundproofHQ-*`/`X-SoundproofroomPros-*` 等 は遮機の通知記録 — 送信側が書くことは自称。防音室・防音工事業者の偽装は、防音性能保証・見積料・遮音等級審査を装ったなりすましの典型手口。(騒音調査は survey 機、内装リフォームは renovation 機で検出済み)
+- **修正**: `Envelope` に `bouon_marks` + `has_bouon_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 遮印の自署を問え。
+
+### Security — D774: `X-Kinken-*`/`X-Kinkenshop-*`/`X-Ticketshop-*`/`X-Giftvoucher-*` 等の金券・ギフト券買取印自称が未検査
+
+- **問題**: `X-Kinken-*`/`X-KinkenYasan-*`/`X-KinkenPro-*`/`X-KinkenTeam-*`/`X-KinkenKensa-*`/`X-KinkenManten-*`/`X-KinkenNomi-*`/`X-KinkenJP-*`/`X-KinkenSenmon-*`/`X-KinkenMitsumori-*`/`X-KinkenChousa-*`/`X-KinkenTeiki-*`/`X-KinkenPros-*`/`X-KinkenDoctors-*`/`X-KinkenRescue-*`/`X-Kinkenshop-*`/`X-KinkenshopYasan-*`/`X-KinkenshopPro-*`/`X-KinkenshopTeam-*`/`X-KinkenshopJP-*`/`X-KinkenshopSenmon-*`/`X-KinkenshopPros-*`/`X-TicketshopPros-*`/`X-TicketshopTeam-*`/`X-TicketshopWorks-*`/`X-TicketshopExperts-*`/`X-TicketshopSvc-*`/`X-TicketshopHQ-*`/`X-GiftvoucherPros-*`/`X-GiftvoucherTeam-*`/`X-GiftvoucherWorks-*`/`X-GiftvoucherExperts-*`/`X-GiftvoucherSvc-*`/`X-GiftvoucherHQ-*` 等 は換機の通知記録 — 送信側が書くことは自称。金券ショップ・ギフト券買取の偽装は、高率換金・郵送買取保証・手数料を装ったなりすましの典型手口。(質屋は pawn 機、消費者金融は consumerloan 機、ポイ活は pointkatsu 機で検出済み)
+- **修正**: `Envelope` に `kinken_marks` + `has_kinken_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 換印の自署を問え。
+
+### Security — D775: `X-Geinou-*`/`X-Audition-*`/`X-Talentscout-*`/`X-Youseijo-*`/`X-Seiyuu-*` 等のオーディション・芸能養成所印自称が未検査
+
+- **問題**: `X-Geinou-*`/`X-GeinouYasan-*`/`X-GeinouPro-*`/`X-GeinouTeam-*`/`X-GeinouKensa-*`/`X-GeinouManten-*`/`X-GeinouNomi-*`/`X-GeinouJP-*`/`X-GeinouSenmon-*`/`X-GeinouMitsumori-*`/`X-GeinouChousa-*`/`X-GeinouTeiki-*`/`X-GeinouPros-*`/`X-GeinouDoctors-*`/`X-GeinouRescue-*`/`X-Audition-*`/`X-AuditionPros-*`/`X-AuditionTeam-*`/`X-AuditionWorks-*`/`X-AuditionExperts-*`/`X-AuditionSvc-*`/`X-AuditionHQ-*`/`X-TalentscoutPros-*`/`X-TalentscoutTeam-*`/`X-TalentscoutWorks-*`/`X-TalentscoutExperts-*`/`X-TalentscoutSvc-*`/`X-TalentscoutHQ-*`/`X-Youseijo-*`/`X-YouseijoYasan-*`/`X-YouseijoPro-*`/`X-YouseijoTeam-*`/`X-YouseijoJP-*`/`X-YouseijoSenmon-*`/`X-Seiyuu-*`/`X-SeiyuuYasan-*`/`X-SeiyuuPro-*`/`X-SeiyuuTeam-*`/`X-SeiyuuJP-*`/`X-SeiyuuSenmon-*` 等 は声機の通知記録 — 送信側が書くことは自称。芸能事務所・養成所・声優オーディションの偽装は、合格保証・レッスン料・所属登録料を装ったなりすましの典型手口。(音楽教室は musiclesson 機、写真撮影は photostudio 機で検出済み)
+- **修正**: `Envelope` に `geinou_marks` + `has_geinou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 声印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
