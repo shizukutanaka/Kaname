@@ -1817,6 +1817,12 @@ pub struct Envelope {
     pub roofing_marks: bool,
     /// `X-Aircon-*`/`X-Airconnavi-*`/`X-Airconcenter-*` 等のエアコン・冷暖房工事印を送信側が自称する兆候 (D652)
     pub hvac_marks: bool,
+    /// `X-Kyutou-*`/`X-Kyutounavi-*`/`X-Kyutoucenter-*` 等の給湯・ボイラー・キッチン設備印を送信側が自称する兆候 (D653)
+    pub boiler_marks: bool,
+    /// `X-Hoshizaki-*`/`X-Fukushimakougyou-*`/`X-Tanikou-*` 等の厨房・食品工場設備印を送信側が自称する兆候 (D654)
+    pub kitchen_marks: bool,
+    /// `X-Hanko-*`/`X-Hankonavi-*`/`X-Hankocenter-*` 等の印鑑・ハンコ・名札印を送信側が自称する兆候 (D655)
+    pub hanko_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2347,6 +2353,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         welfare_marks: has_welfare_marks(hdr),
         roofing_marks: has_roofing_marks(hdr),
         hvac_marks: has_hvac_marks(hdr),
+        boiler_marks: has_boiler_marks(hdr),
+        kitchen_marks: has_kitchen_marks(hdr),
+        hanko_marks: has_hanko_marks(hdr),
     })
 }
 
@@ -15832,6 +15841,253 @@ fn has_hvac_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-jyoka24-"))
 }
 
+/// `X-Kyutou-*`/`X-Kyutounavi-*`/`X-Kyutoucenter-*`/`X-Kyutoushop-*`/`X-Kyutoupro-*`/`X-Kyutoudoctor-*`/`X-Kyutourescue-*`/`X-Kyutou24-*`/`X-Boiler-*`/`X-Boilernavi-*`/`X-Boilercenter-*`/`X-Boilershop-*`/`X-Boilerpro-*`/`X-Boilerdoctor-*`/`X-Boilerrescue-*`/`X-Boiler24-*`/`X-Noritsu-*`/`X-Rinnai-*`/`X-Kitchennavi-*`/`X-Kitchencenter-*`/`X-Kitchenshop-*`/`X-Kitchenpro-*`/`X-Kitchendoctor-*`/`X-Kitchenrescue-*`/`X-Kitchen24-*`/`X-Renji-*`/`X-Renjinavi-*`/`X-Renjicenter-*`/`X-Renjishop-*`/`X-Renjipro-*`/`X-Basu-*`/`X-Basunavi-*`/`X-Basucenter-*`/`X-Basushop-*`/`X-Basupro-*`/`X-Kyutoumart-*`/`X-Kyutouplus-*`/`X-Kyutousmart-*`/`X-Kyutoufamily-*`/`X-Boilermart-*`/`X-Boilerplus-*`/`X-Boilersmart-*`/`X-Boilerfamily-*`/`X-Yuwakashi-*`/`X-Yuwakashinavi-*`/`X-Yuwakashicenter-*`/`X-Yuwakashishop-*`/`X-Yuwakashipro-*`/`X-Yuwakadoctor-*`/`X-Yuwakarescue-*`/`X-Yuwaka24-*`/`X-Yuwakanavi-*`/`X-Yuwakacenter-*`/`X-Yuwakashop-*`/`X-Yuwakapro-*`/`X-Ofuronavim-*`/`X-Ofurodoctor-*`/`X-Ofurorescue-*`/`X-Ofuro24-*`/`X-Gasunavi-*`/`X-Gasucenter-*`/`X-Gasushop-*`/`X-Gasupro-*`/`X-Gasudoctor-*`/`X-Gasurescue-*`/`X-Gasu24-*`/`X-Econavi-*`/`X-Ecocenter-*`/`X-Ecoshop-*`/`X-Ecopro-*`/`X-Ecocute-*`/`X-Echone-*` 等の給湯・ボイラー・キッチン設備印を送信側が自称する兆候を検出する
+fn has_boiler_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kyutou-")
+            || l.starts_with("x-kyutounavi-")
+            || l.starts_with("x-kyutoucenter-")
+            || l.starts_with("x-kyutoushop-")
+            || l.starts_with("x-kyutoupro-")
+            || l.starts_with("x-kyutoudoctor-")
+            || l.starts_with("x-kyutourescue-")
+            || l.starts_with("x-kyutou24-")
+            || l.starts_with("x-boiler-")
+            || l.starts_with("x-boilernavi-")
+            || l.starts_with("x-boilercenter-")
+            || l.starts_with("x-boilershop-")
+            || l.starts_with("x-boilerpro-")
+            || l.starts_with("x-boilerdoctor-")
+            || l.starts_with("x-boilerrescue-")
+            || l.starts_with("x-boiler24-")
+            || l.starts_with("x-noritsu-")
+            || l.starts_with("x-rinnai-")
+            || l.starts_with("x-kitchennavi-")
+            || l.starts_with("x-kitchencenter-")
+            || l.starts_with("x-kitchenshop-")
+            || l.starts_with("x-kitchenpro-")
+            || l.starts_with("x-kitchendoctor-")
+            || l.starts_with("x-kitchenrescue-")
+            || l.starts_with("x-kitchen24-")
+            || l.starts_with("x-renji-")
+            || l.starts_with("x-renjinavi-")
+            || l.starts_with("x-renjicenter-")
+            || l.starts_with("x-renjishop-")
+            || l.starts_with("x-renjipro-")
+            || l.starts_with("x-basu-")
+            || l.starts_with("x-basunavi-")
+            || l.starts_with("x-basucenter-")
+            || l.starts_with("x-basushop-")
+            || l.starts_with("x-basupro-")
+            || l.starts_with("x-kyutoumart-")
+            || l.starts_with("x-kyutouplus-")
+            || l.starts_with("x-kyutousmart-")
+            || l.starts_with("x-kyutoufamily-")
+            || l.starts_with("x-boilermart-")
+            || l.starts_with("x-boilerplus-")
+            || l.starts_with("x-boilersmart-")
+            || l.starts_with("x-boilerfamily-")
+            || l.starts_with("x-yuwakashi-")
+            || l.starts_with("x-yuwakashinavi-")
+            || l.starts_with("x-yuwakashicenter-")
+            || l.starts_with("x-yuwakashishop-")
+            || l.starts_with("x-yuwakashipro-")
+            || l.starts_with("x-yuwakadoctor-")
+            || l.starts_with("x-yuwakarescue-")
+            || l.starts_with("x-yuwaka24-")
+            || l.starts_with("x-yuwakanavi-")
+            || l.starts_with("x-yuwakacenter-")
+            || l.starts_with("x-yuwakashop-")
+            || l.starts_with("x-yuwakapro-")
+            || l.starts_with("x-ofuronavim-")
+            || l.starts_with("x-ofurodoctor-")
+            || l.starts_with("x-ofurorescue-")
+            || l.starts_with("x-ofuro24-")
+            || l.starts_with("x-gasunavi-")
+            || l.starts_with("x-gasucenter-")
+            || l.starts_with("x-gasushop-")
+            || l.starts_with("x-gasupro-")
+            || l.starts_with("x-gasudoctor-")
+            || l.starts_with("x-gasurescue-")
+            || l.starts_with("x-gasu24-")
+            || l.starts_with("x-econavi-")
+            || l.starts_with("x-ecocenter-")
+            || l.starts_with("x-ecoshop-")
+            || l.starts_with("x-ecopro-")
+            || l.starts_with("x-ecocute-")
+            || l.starts_with("x-echone-"))
+}
+
+/// `X-Hoshizaki-*`/`X-Fukushimakougyou-*`/`X-Tanikou-*`/`X-Maruzenmaruzen-*`/`X-Chubounavi-*`/`X-Chuboucenter-*`/`X-Chuboushop-*`/`X-Chuboupro-*`/`X-Chuboudoctor-*`/`X-Chubourescue-*`/`X-Chubou24-*`/`X-Shokukoujou-*`/`X-Shokukoujounavi-*`/`X-Shokukoujoucenter-*`/`X-Shokukoujoushop-*`/`X-Shokukoujoupro-*`/`X-Shokukoujoudoctor-*`/`X-Shokukoujourescue-*`/`X-Shokukoujou24-*`/`X-Sangyoureitou-*`/`X-Reitounavi-*`/`X-Reitoucenter-*`/`X-Reitoushop-*`/`X-Reitoupro-*`/`X-Reitoudoctor-*`/`X-Reitourescue-*`/`X-Reitou24-*`/`X-Gyokin-*`/`X-Gyoukinnavi-*`/`X-Gyoukincenter-*`/`X-Gyoukinshop-*`/`X-Gyoukinpro-*`/`X-Kitchenmart-*`/`X-Kitchenplus-*`/`X-Kitchensmart-*`/`X-Kitchenfamily-*`/`X-Chuboumart-*`/`X-Chubouplus-*`/`X-Chubousmart-*`/`X-Chuboufamily-*`/`X-Chuubounavi-*`/`X-Chuuboucenter-*`/`X-Chuuboushop-*`/`X-Chuuboupro-*`/`X-Chuuboudoctor-*`/`X-Chuubourescue-*`/`X-Chuubou24-*`/`X-Gyoshanavi-*`/`X-Gyoshacenter-*`/`X-Gyoshashop-*`/`X-Gyoshapro-*`/`X-Gyoshadoctor-*`/`X-Gyosharescue-*`/`X-Gyosha24-*`/`X-Reizoukoreizouko-*`/`X-Reizoukonavi-*`/`X-Reizoukocenter-*`/`X-Reizoukoshop-*`/`X-Reizoukopro-*`/`X-Koorinokoori-*`/`X-Koorinavi-*`/`X-Kooricenter-*`/`X-Koorishop-*`/`X-Kooripro-*`/`X-Suishounavi-*`/`X-Suishoucenter-*`/`X-Suishoushop-*`/`X-Suishoupro-*`/`X-Suidounavi-*`/`X-Suidoucenter-*`/`X-Suidoushop-*`/`X-Suidoupro-*` 等の厨房・食品工場設備印を送信側が自称する兆候を検出する
+fn has_kitchen_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hoshizaki-")
+            || l.starts_with("x-fukushimakougyou-")
+            || l.starts_with("x-tanikou-")
+            || l.starts_with("x-maruzenmaruzen-")
+            || l.starts_with("x-chubounavi-")
+            || l.starts_with("x-chuboucenter-")
+            || l.starts_with("x-chuboushop-")
+            || l.starts_with("x-chuboupro-")
+            || l.starts_with("x-chuboudoctor-")
+            || l.starts_with("x-chubourescue-")
+            || l.starts_with("x-chubou24-")
+            || l.starts_with("x-shokukoujou-")
+            || l.starts_with("x-shokukoujounavi-")
+            || l.starts_with("x-shokukoujoucenter-")
+            || l.starts_with("x-shokukoujoushop-")
+            || l.starts_with("x-shokukoujoupro-")
+            || l.starts_with("x-shokukoujoudoctor-")
+            || l.starts_with("x-shokukoujourescue-")
+            || l.starts_with("x-shokukoujou24-")
+            || l.starts_with("x-sangyoureitou-")
+            || l.starts_with("x-reitounavi-")
+            || l.starts_with("x-reitoucenter-")
+            || l.starts_with("x-reitoushop-")
+            || l.starts_with("x-reitoupro-")
+            || l.starts_with("x-reitoudoctor-")
+            || l.starts_with("x-reitourescue-")
+            || l.starts_with("x-reitou24-")
+            || l.starts_with("x-gyokin-")
+            || l.starts_with("x-gyoukinnavi-")
+            || l.starts_with("x-gyoukincenter-")
+            || l.starts_with("x-gyoukinshop-")
+            || l.starts_with("x-gyoukinpro-")
+            || l.starts_with("x-kitchenmart-")
+            || l.starts_with("x-kitchenplus-")
+            || l.starts_with("x-kitchensmart-")
+            || l.starts_with("x-kitchenfamily-")
+            || l.starts_with("x-chuboumart-")
+            || l.starts_with("x-chubouplus-")
+            || l.starts_with("x-chubousmart-")
+            || l.starts_with("x-chuboufamily-")
+            || l.starts_with("x-chuubounavi-")
+            || l.starts_with("x-chuuboucenter-")
+            || l.starts_with("x-chuuboushop-")
+            || l.starts_with("x-chuuboupro-")
+            || l.starts_with("x-chuuboudoctor-")
+            || l.starts_with("x-chuubourescue-")
+            || l.starts_with("x-chuubou24-")
+            || l.starts_with("x-gyoshanavi-")
+            || l.starts_with("x-gyoshacenter-")
+            || l.starts_with("x-gyoshashop-")
+            || l.starts_with("x-gyoshapro-")
+            || l.starts_with("x-gyoshadoctor-")
+            || l.starts_with("x-gyosharescue-")
+            || l.starts_with("x-gyosha24-")
+            || l.starts_with("x-reizoukoreizouko-")
+            || l.starts_with("x-reizoukonavi-")
+            || l.starts_with("x-reizoukocenter-")
+            || l.starts_with("x-reizoukoshop-")
+            || l.starts_with("x-reizoukopro-")
+            || l.starts_with("x-koorinokoori-")
+            || l.starts_with("x-koorinavi-")
+            || l.starts_with("x-kooricenter-")
+            || l.starts_with("x-koorishop-")
+            || l.starts_with("x-kooripro-")
+            || l.starts_with("x-suishounavi-")
+            || l.starts_with("x-suishoucenter-")
+            || l.starts_with("x-suishoushop-")
+            || l.starts_with("x-suishoupro-")
+            || l.starts_with("x-suidounavi-")
+            || l.starts_with("x-suidoucenter-")
+            || l.starts_with("x-suidoushop-")
+            || l.starts_with("x-suidoupro-"))
+}
+
+/// `X-Hanko-*`/`X-Hankonavi-*`/`X-Hankocenter-*`/`X-Hankoshop-*`/`X-Hankopro-*`/`X-Hankodoctor-*`/`X-Hankorescue-*`/`X-Hanko24-*`/`X-Inkan-*`/`X-Inkannavi-*`/`X-Inkancenter-*`/`X-Inkanshop-*`/`X-Inkanpro-*`/`X-Inkandoctor-*`/`X-Inkanrescue-*`/`X-Inkan24-*`/`X-Gomuin-*`/`X-Gomuinnavi-*`/`X-Gomuincenter-*`/`X-Gomuinshop-*`/`X-Gomuinpro-*`/`X-Jitsuin-*`/`X-Jitsuinnavi-*`/`X-Jitsuincenter-*`/`X-Jitsuinshop-*`/`X-Jitsuinpro-*`/`X-Ginkoin-*`/`X-Ginkoinnavi-*`/`X-Ginkoincenter-*`/`X-Ginkoinshop-*`/`X-Ginkoinpro-*`/`X-Mitomein-*`/`X-Mitomeinnavi-*`/`X-Mitomeincenter-*`/`X-Mitomeinshop-*`/`X-Mitomeinpro-*`/`X-Nafuda-*`/`X-Nafudanavi-*`/`X-Nafudacenter-*`/`X-Nafudashop-*`/`X-Nafudapro-*`/`X-Nafudadoctor-*`/`X-Nafudarescue-*`/`X-Nafuda24-*`/`X-Neimpureito-*`/`X-Neimpureitonavi-*`/`X-Neimpureitocenter-*`/`X-Neimpureitoshop-*`/`X-Neimpureitopro-*`/`X-Hankomart-*`/`X-Hankoplus-*`/`X-Hankosmart-*`/`X-Hankofamily-*`/`X-Inkanmart-*`/`X-Inkanplus-*`/`X-Inkansmart-*`/`X-Inkanfamily-*`/`X-Inshou-*`/`X-Inshounavi-*`/`X-Inshoucenter-*`/`X-Inshoushop-*`/`X-Inshoupro-*`/`X-Inshoudoctor-*`/`X-Inshourescue-*`/`X-Inshou24-*`/`X-Hankoctr-*`/`X-Domein-*`/`X-Domeinnavi-*`/`X-Domeincenter-*`/`X-Domeinshop-*`/`X-Domeinpro-*`/`X-Meisaimama-*`/`X-Meisainavi-*`/`X-Meisaicenter-*`/`X-Meisaishop-*`/`X-Meisaipro-*` 等の印鑑・ハンコ・名札印を送信側が自称する兆候を検出する
+fn has_hanko_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hanko-")
+            || l.starts_with("x-hankonavi-")
+            || l.starts_with("x-hankocenter-")
+            || l.starts_with("x-hankoshop-")
+            || l.starts_with("x-hankopro-")
+            || l.starts_with("x-hankodoctor-")
+            || l.starts_with("x-hankorescue-")
+            || l.starts_with("x-hanko24-")
+            || l.starts_with("x-inkan-")
+            || l.starts_with("x-inkannavi-")
+            || l.starts_with("x-inkancenter-")
+            || l.starts_with("x-inkanshop-")
+            || l.starts_with("x-inkanpro-")
+            || l.starts_with("x-inkandoctor-")
+            || l.starts_with("x-inkanrescue-")
+            || l.starts_with("x-inkan24-")
+            || l.starts_with("x-gomuin-")
+            || l.starts_with("x-gomuinnavi-")
+            || l.starts_with("x-gomuincenter-")
+            || l.starts_with("x-gomuinshop-")
+            || l.starts_with("x-gomuinpro-")
+            || l.starts_with("x-jitsuin-")
+            || l.starts_with("x-jitsuinnavi-")
+            || l.starts_with("x-jitsuincenter-")
+            || l.starts_with("x-jitsuinshop-")
+            || l.starts_with("x-jitsuinpro-")
+            || l.starts_with("x-ginkoin-")
+            || l.starts_with("x-ginkoinnavi-")
+            || l.starts_with("x-ginkoincenter-")
+            || l.starts_with("x-ginkoinshop-")
+            || l.starts_with("x-ginkoinpro-")
+            || l.starts_with("x-mitomein-")
+            || l.starts_with("x-mitomeinnavi-")
+            || l.starts_with("x-mitomeincenter-")
+            || l.starts_with("x-mitomeinshop-")
+            || l.starts_with("x-mitomeinpro-")
+            || l.starts_with("x-nafuda-")
+            || l.starts_with("x-nafudanavi-")
+            || l.starts_with("x-nafudacenter-")
+            || l.starts_with("x-nafudashop-")
+            || l.starts_with("x-nafudapro-")
+            || l.starts_with("x-nafudadoctor-")
+            || l.starts_with("x-nafudarescue-")
+            || l.starts_with("x-nafuda24-")
+            || l.starts_with("x-neimpureito-")
+            || l.starts_with("x-neimpureitonavi-")
+            || l.starts_with("x-neimpureitocenter-")
+            || l.starts_with("x-neimpureitoshop-")
+            || l.starts_with("x-neimpureitopro-")
+            || l.starts_with("x-hankomart-")
+            || l.starts_with("x-hankoplus-")
+            || l.starts_with("x-hankosmart-")
+            || l.starts_with("x-hankofamily-")
+            || l.starts_with("x-inkanmart-")
+            || l.starts_with("x-inkanplus-")
+            || l.starts_with("x-inkansmart-")
+            || l.starts_with("x-inkanfamily-")
+            || l.starts_with("x-inshou-")
+            || l.starts_with("x-inshounavi-")
+            || l.starts_with("x-inshoucenter-")
+            || l.starts_with("x-inshoushop-")
+            || l.starts_with("x-inshoupro-")
+            || l.starts_with("x-inshoudoctor-")
+            || l.starts_with("x-inshourescue-")
+            || l.starts_with("x-inshou24-")
+            || l.starts_with("x-hankoctr-")
+            || l.starts_with("x-domein-")
+            || l.starts_with("x-domeinnavi-")
+            || l.starts_with("x-domeincenter-")
+            || l.starts_with("x-domeinshop-")
+            || l.starts_with("x-domeinpro-")
+            || l.starts_with("x-meisaimama-")
+            || l.starts_with("x-meisainavi-")
+            || l.starts_with("x-meisaicenter-")
+            || l.starts_with("x-meisaishop-")
+            || l.starts_with("x-meisaipro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -24893,5 +25149,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_hvac_marks(clean));
+    }
+    #[test]
+    fn scan_は釜機印を検出する() {
+        for raw in [
+            br"X-Kyutou-Alert: 1",
+            br"X-KyutouNavi-Notice: 1",
+            br"X-Boiler-Info: 1",
+            br"X-BoilerNavi-Report: 1",
+            br"X-Noritsu-Bulletin: 1",
+            br"X-Rinnai-News: 1",
+            br"X-KitchenNavi-Flash: 1",
+            br"X-Renji-Release: 1",
+        ] {
+            assert!(has_boiler_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_boiler_marks(clean));
+    }
+
+    #[test]
+    fn scan_は厨機印を検出する() {
+        for raw in [
+            br"X-Hoshizaki-Alert: 1",
+            br"X-FukushimaKougyou-Notice: 1",
+            br"X-Tanikou-Info: 1",
+            br"X-MaruzenMaruzen-Report: 1",
+            br"X-ChubouNavi-Bulletin: 1",
+            br"X-Shokukoujou-News: 1",
+            br"X-SangyouReitou-Flash: 1",
+            br"X-ReitouNavi-Release: 1",
+        ] {
+            assert!(has_kitchen_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_kitchen_marks(clean));
+    }
+
+    #[test]
+    fn scan_は印機印を検出する() {
+        for raw in [
+            br"X-Hanko-Alert: 1",
+            br"X-HankoNavi-Notice: 1",
+            br"X-Inkan-Info: 1",
+            br"X-InkanNavi-Report: 1",
+            br"X-Gomuin-Bulletin: 1",
+            br"X-Jitsuin-News: 1",
+            br"X-Mitomein-Flash: 1",
+            br"X-Nafuda-Release: 1",
+        ] {
+            assert!(has_hanko_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_hanko_marks(clean));
     }
 }
