@@ -3304,6 +3304,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D764: スマートホーム・IoT家電印自称
+    if env.smarthome_marks {
+        render_risks.push(
+            "X-Smarthome-*/X-Tuya-*/X-Smartthings-*/X-Hue-*/X-Lifx-*/X-Wyze-*/X-Eufy-*/X-Aqara-* 等 — 智機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D765: 吹奏楽・オーケストラ印自称
+    if env.orchestra_marks {
+        render_risks.push(
+            "X-Orchestra-*/X-Suisougaku-*/X-Brassband-*/X-Philharmonic-*/X-Symphony-*/X-Winds-*/X-Concertband-*/X-Marching-* 等 — 吹機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D766: ラジコン・RC印自称
+    if env.radiocon_marks {
+        render_risks.push(
+            "X-Rccar-*/X-Rcplane-*/X-Rcdrone-*/X-Tamiyarc-*/X-Kyosho-*/X-Yokomo-*/X-Traxxas-*/X-Arrma-* 等 — 操機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
