@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D641: `X-Olshan-*`/`X-RamJack-*`/`X-Jiban-*`/`X-Shitakiso-*` 等の基礎補修・地盤改良印自称が未検査
+
+- **問題**: `X-Olshan-*`/`X-RamJack-*`/`X-Groundworks-*`/`X-Helitech-*`/`X-ECPCivil-*`/`X-ChanceCivil-*`/`X-FoundationWorks-*`/`X-FoundationPros-*`/`X-FoundationRepair-*`/`X-FoundationExperts-*`/`X-BaseMech-*`/`X-SlabRepair-*`/`X-PierPros-*`/`X-Underpinning-*`/`X-CrawlSpace-*`/`X-BasementPros-*`/`X-ConcreteRaising-*`/`X-MudJack-*`/`X-LevelConcrete-*`/`X-StructurePro-*`/`X-GrandFoundations-*`/`X-StructureWorks-*`、JP は `X-Jiban-*`/`X-Jibanmen-*`/`X-JibanKouzou-*`/`X-Shitakiso-*`/`X-ShitakisoKouji-*`/`X-Dojimura-*`/`X-Dofuya-*`/`X-Tozaika-*`/`X-JibanChuukaku-*`/`X-JibanHosaku-*`/`X-Shitaiku-*`/`X-YukaShita-*`/`X-Kisohosyu-*`/`X-JibanChosa-*`/`X-JibanYakudoshi-*`/`X-TeibanShuuri-*`/`X-KouKaShiten-*`/`X-Ashinabe-*`/`X-FoundationPro-*` 等 は基機の通知記録 — 送信側が書くことは自称。無料床下診断・地盤沈下対策・構造補強見積の偽装は基礎業者なりすましの典型手口 (床下営業・地盤改良便乗商法で有名)。(住宅メーカーは housing 機、リフォームは renovation 機で検出済み)
+- **修正**: `Envelope` に `foundation_marks` + `has_foundation_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 基印の自署を問え。
+
+### Security — D642: `X-BasementSystems-*`/`X-BDry-*`/`X-BousuiKouji-*`/`X-RousuiShuuri-*` 等の防水・漏水修繕印自称が未検査
+
+- **問題**: `X-BasementSystems-*`/`X-BDry-*`/`X-AquaGuard-*`/`X-AmeriDry-*`/`X-StandardWater-*`/`X-MidAtlanticWaterproofing-*`/`X-PermaSeal-*`/`X-USWaterproofing-*`/`X-OhioBasement-*`/`X-WaterGuard-*`/`X-DryZone-*`/`X-EverDry-*`/`X-WaterproofPros-*`/`X-DrainagePros-*`/`X-FrenchDrain-*`/`X-SumpPump-*`/`X-BasementSealing-*`/`X-ExteriorWaterproofing-*`/`X-InteriorDrain-*`/`X-WaterTight-*`/`X-WaterTightBasement-*`/`X-AquaSafe-*`、JP は `X-BousuiKouji-*`/`X-RousuiShin-*`/`X-RousuiShuuri-*`/`X-ShimizuTech-*`/`X-AmamizuBousui-*`/`X-DaikimBousui-*`/`X-Bousui-*`/`X-Rousui-*`/`X-AmamizuRepair-*`/`X-MoshimoBousui-*`/`X-SuiBou-*`/`X-MizuMawariKouji-*`/`X-LeakRepair-*`/`X-WaterSealing-*`/`X-RousuiTetsuduki-*`/`X-JosuiRousui-*`/`X-BousuiGiken-*` 等 は防機の通知記録 — 送信側が書くことは自称。外壁ひび割れ・浴室水漏れ・地下室浸水・漏水診断の偽装は防水業者なりすましの典型手口。(水道修理は plumbing 機、災害復旧は restoration 機、屋根は roofing 機で検出済み)
+- **修正**: `Envelope` に `waterproof_marks` + `has_waterproof_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 防印の自署を問え。
+
+### Security — D643: `X-TheJoint-*`/`X-ChiroOne-*`/`X-Sekotsuin-*`/`X-Seikotsu-*` 等の接骨院・カイロ印自称が未検査
+
+- **問題**: `X-TheJoint-*`/`X-ChiroOne-*`/`X-Airrosti-*`/`X-100PercentChiropractic-*`/`X-MaxLiving-*`/`X-TheJointChiro-*`/`X-ChiroTouch-*`/`X-AtlasChiro-*`/`X-NeuroscienceChiro-*`/`X-ChiroHealth-*`/`X-BackToHealth-*`/`X-ChiroSource-*`/`X-SpineAlign-*`/`X-WellnessChiro-*`/`X-AdvancedChiro-*`/`X-EliteChiro-*`/`X-PremierChiro-*`/`X-AlignChiro-*`/`X-FamilyChiro-*`/`X-AccidentChiro-*`/`X-ChiroRx-*`/`X-ChiroWellness-*`、JP は `X-Sekotsuin-*`/`X-Seikotsu-*`/`X-Seikotsuin-*`/`X-Jikosekotsuin-*`/`X-Osteopath-*`/`X-KenbiKyou-*`/`X-SportSekotsuin-*`/`X-MiraiEart-*`/`X-SekkotsuInChuou-*`/`X-Seikotu-*`/`X-SeikotuIn-*`/`X-ShinkeiSeikotsuin-*`/`X-KyouseiRyou-*`/`X-JikoSeikotsu-*`/`X-SportsSeikotsu-*`/`X-ChuukanseiIn-*`/`X-HarikyuuIn-*`/`X-SportOsteopath-*`/`X-MugenNoNaai-*`/`X-NakamioSekkotsu-*`/`X-HairKyuu-*`/`X-JikouIn-*`/`X-SekkotuIn-*` 等 は骨機の通知記録 — 送信側が書くことは自称。交通事故施術・健康保険適用・労災請求・長期施術契約の偽装は接骨院なりすましの典型手口 (不正請求詐欺で有名)。(歯科は dental 機、医療クリニックは medical 機で検出済み)
+- **修正**: `Envelope` に `chiro_marks` + `has_chiro_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 骨印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)

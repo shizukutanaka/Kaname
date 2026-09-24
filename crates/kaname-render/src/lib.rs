@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-Olshan-*`/`X-RamJack-*`/`X-Groundworks-*`/`X-Helitech-*`/`X-Jiban-*`/`X-Shitakiso-*` 等 — 基礎補修・地盤改良機印自称
+    pub foundation_marks: bool,
+    /// `X-BasementSystems-*`/`X-BDry-*`/`X-AquaGuard-*`/`X-AmeriDry-*`/`X-BousuiKouji-*`/`X-RousuiShin-*` 等 — 防水・漏水修繕機印自称
+    pub waterproof_marks: bool,
+    /// `X-TheJoint-*`/`X-ChiroOne-*`/`X-Airrosti-*`/`X-Sekotsuin-*`/`X-Seikotsu-*`/`X-Osteopath-*` 等 — 接骨院・カイロ機印自称
+    pub chiro_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        foundation_marks: has_foundation_marks(hdr),
+        waterproof_marks: has_waterproof_marks(hdr),
+        chiro_marks: has_chiro_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,213 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D641: 基礎補修・地盤改良機印の自称を検出する。
+///
+/// `X-Olshan-*`/`X-RamJack-*`/`X-Groundworks-*`/`X-Helitech-*`/`X-ECP-*`/
+/// `X-ChanceCivil-*`/`X-FoundationWorks-*`/`X-FoundationPros-*`/`X-FoundationRepair-*`/
+/// `X-FoundationExperts-*`/`X-BaseMech-*`/`X-SlabRepair-*`/`X-PierPros-*`/
+/// `X-Underpinning-*`/`X-CrawlSpace-*`/`X-BasementPros-*`/`X-ConcreteRaising-*`/
+/// `X-MudJack-*`/`X-LevelConcrete-*`/`X-StructurePro-*`/`X-Jibannai-Global-*`/
+/// `X-JibanSupport-*`、JP は `X-Jiban-*`/`X-Jibanmen-*`/`X-JibanKouzou-*`/
+/// `X-Shitakiso-*`/`X-ShitakisoKouji-*`/`X-Dojimura-*`/`X-Dofuya-*`/`X-Tozaika-*`/
+/// `X-JibanChuukaku-*`/`X-JibanHosaku-*`/`X-Shitaiku-*`/`X-YukaShita-*`/
+/// `X-Kisohosyu-*`/`X-Jibanchosa-*`/`X-JibanYakudoshi-*`/`X-TeibanShuuri-*`/
+/// `X-KouKaShiten-*`/`X-Ashinabe-*` 等の基礎補修・地盤改良機印はいずれも
+/// 「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 無料床下診断・地盤沈下対策・シロアリ保証・構造補強見積の偽装は
+/// 基礎業者なりすましの典型手口 (床下営業・地盤改良便乗商法で有名)。
+/// 基印の自署は兆候として数える。
+/// (住宅メーカーは housing 機、リフォームは renovation 機、防虫駆除は pest/facility 機で検出済み)
+fn has_foundation_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-olshan-")
+            || l.starts_with("x-ramjack-")
+            || l.starts_with("x-groundworks-")
+            || l.starts_with("x-helitech-")
+            || l.starts_with("x-ecp-civil-")
+            || l.starts_with("x-ecpcivil-")
+            || l.starts_with("x-chancecivil-")
+            || l.starts_with("x-foundationworks-")
+            || l.starts_with("x-foundationpros-")
+            || l.starts_with("x-foundationrepair-")
+            || l.starts_with("x-foundationexperts-")
+            || l.starts_with("x-basemech-")
+            || l.starts_with("x-slabrepair-")
+            || l.starts_with("x-pierpros-")
+            || l.starts_with("x-underpinning-")
+            || l.starts_with("x-crawlspace-")
+            || l.starts_with("x-basementpros-")
+            || l.starts_with("x-concreteraising-")
+            || l.starts_with("x-mudjack-")
+            || l.starts_with("x-levelconcrete-")
+            || l.starts_with("x-structurepro-")
+            || l.starts_with("x-jibannai-")
+            || l.starts_with("x-jibansupport-")
+            || l.starts_with("x-jiban-")
+            || l.starts_with("x-jibanmen-")
+            || l.starts_with("x-jibankouzou-")
+            || l.starts_with("x-shitakiso-")
+            || l.starts_with("x-shitakisokouji-")
+            || l.starts_with("x-dojimura-")
+            || l.starts_with("x-dofuya-")
+            || l.starts_with("x-tozaika-")
+            || l.starts_with("x-jibanchuukaku-")
+            || l.starts_with("x-jibanhosaku-")
+            || l.starts_with("x-shitaiku-")
+            || l.starts_with("x-yukashita-")
+            || l.starts_with("x-kisohosyu-")
+            || l.starts_with("x-jibanchosa-")
+            || l.starts_with("x-jibanyakudoshi-")
+            || l.starts_with("x-teibanshuuri-")
+            || l.starts_with("x-koukashiten-")
+            || l.starts_with("x-ashinabe-")
+            || l.starts_with("x-foundationpro-")
+            || l.starts_with("x-grandfoundations-")
+            || l.starts_with("x-structureworks-")
+    })
+}
+
+/// D642: 防水・漏水修繕機印の自称を検出する。
+///
+/// `X-BasementSystems-*`/`X-BDry-*`/`X-AquaGuard-*`/`X-AmeriDry-*`/
+/// `X-StandardWater-*`/`X-MidAtlanticWaterproofing-*`/`X-PermaSeal-*`/
+/// `X-USWaterproofing-*`/`X-OhioBasement-*`/`X-WaterGuard-*`/`X-DryZone-*`/
+/// `X-EverDry-*`/`X-WaterproofPros-*`/`X-DrainagePros-*`/`X-FrenchDrain-*`/
+/// `X-SumpPump-*`/`X-BasementSealing-*`/`X-ExteriorWaterproofing-*`/
+/// `X-InteriorDrain-*`/`X-WaterTight-*`、JP は `X-BousuiKouji-*`/`X-RousuiShin-*`/
+/// `X-RousuiShuuri-*`/`X-ShimizuTech-*`/`X-AmamizuBousui-*`/`X-DaikimBousui-*`/
+/// `X-Bousui-*`/`X-Rousui-*`/`X-AmamizuRepair-*`/`X-MoshimoBousui-*`/
+/// `X-SuiBou-*`/`X-MizuMawariKouji-*`/`X-LeakRepair-*`/`X-WaterSealing-*`/
+/// `X-RousuiTetsuduki-*`/`X-JosuiRousui-*`/`X-BousuiGiken-*` 等の
+/// 防水・漏水修繕機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。外壁ひび割れ・浴室水漏れ・地下室浸水・
+/// 雨漏り・漏水診断の偽装は防水業者なりすましの典型手口。
+/// 防印の自署は兆候として数える。
+/// (水道修理は plumbing 機、災害復旧は restoration 機、屋根は roofing 機で検出済み)
+fn has_waterproof_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-basementsystems-")
+            || l.starts_with("x-bdry-")
+            || l.starts_with("x-aquaguard-")
+            || l.starts_with("x-ameridry-")
+            || l.starts_with("x-standardwater-")
+            || l.starts_with("x-midatlanticwaterproofing-")
+            || l.starts_with("x-permaseal-")
+            || l.starts_with("x-uswaterproofing-")
+            || l.starts_with("x-ohiobasement-")
+            || l.starts_with("x-waterguard-")
+            || l.starts_with("x-dryzone-")
+            || l.starts_with("x-everdry-")
+            || l.starts_with("x-waterproofpros-")
+            || l.starts_with("x-drainagepros-")
+            || l.starts_with("x-frenchdrain-")
+            || l.starts_with("x-sumppump-")
+            || l.starts_with("x-basementsealing-")
+            || l.starts_with("x-exteriorwaterproofing-")
+            || l.starts_with("x-interiordrain-")
+            || l.starts_with("x-watertight-")
+            || l.starts_with("x-bousuikouji-")
+            || l.starts_with("x-rousuishin-")
+            || l.starts_with("x-rousuishuuri-")
+            || l.starts_with("x-shimizutech-")
+            || l.starts_with("x-amamizubousui-")
+            || l.starts_with("x-daikimbousui-")
+            || l.starts_with("x-bousui-")
+            || l.starts_with("x-rousui-")
+            || l.starts_with("x-amamizurepair-")
+            || l.starts_with("x-moshimobousui-")
+            || l.starts_with("x-suibou-")
+            || l.starts_with("x-mizumawarikouji-")
+            || l.starts_with("x-leakrepair-")
+            || l.starts_with("x-watersealing-")
+            || l.starts_with("x-rousuitetsuduki-")
+            || l.starts_with("x-josuirousui-")
+            || l.starts_with("x-bousuigiken-")
+            || l.starts_with("x-aquasafe-")
+            || l.starts_with("x-watertightbasement-")
+    })
+}
+
+/// D643: 接骨院・カイロプラクティック機印の自称を検出する。
+///
+/// `X-TheJoint-*`/`X-ChiroOne-*`/`X-Airrosti-*`/`X-100PercentChiropractic-*`/
+/// `X-MaxLiving-*`/`X-TheJointChiro-*`/`X-ChiroTouch-*`/`X-AtlasChiro-*`/
+/// `X-NeuroscienceChiro-*`/`X-ChiroHealth-*`/`X-BackToHealth-*`/`X-ChiroSource-*`/
+/// `X-SpineAlign-*`/`X-WellnessChiro-*`/`X-AdvancedChiro-*`/`X-EliteChiro-*`/
+/// `X-PremierChiro-*`/`X-AlignChiro-*`/`X-FamilyChiro-*`、JP は `X-Sekotsuin-*`/
+/// `X-Seikotsu-*`/`X-Seikotsuin-*`/`X-Jikosekotsuin-*`/`X-Osteopath-*`/
+/// `X-KenbiKyou-*`/`X-SportSekotsuin-*`/`X-MiraiEart-*`/`X-SekkotsuInChuou-*`/
+/// `X-Seikotu-*`/`X-SeikotuIn-*`/`X-ShinkeiSeikotsuin-*`/`X-Kyouseiryou-*`/
+/// `X-Jikoseikotsu-*`/`X-SportsSeikotsu-*`/`X-ChuukanseiIn-*`/`X-HarikyuuIn-*` 等の
+/// 接骨院・カイロプラクティック機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。交通事故施術・健康保険適用・労災請求・
+/// 交通事故訴訟サポート・長期施術契約の偽装は接骨院なりすましの典型手口
+/// (交通事故・労災の不正請求詐欺で有名)。骨印の自署は兆候として数える。
+/// (歯科は dental 機、医療クリニックは medical 機、整骨院は hukkyoushi 機で検出済み)
+fn has_chiro_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-thejoint-")
+            || l.starts_with("x-chiroone-")
+            || l.starts_with("x-airrosti-")
+            || l.starts_with("x-100percentchiropractic-")
+            || l.starts_with("x-maxliving-")
+            || l.starts_with("x-thejointchiro-")
+            || l.starts_with("x-chirotouch-")
+            || l.starts_with("x-atlaschiro-")
+            || l.starts_with("x-neurosciencechiro-")
+            || l.starts_with("x-chirohealth-")
+            || l.starts_with("x-backtohealth-")
+            || l.starts_with("x-chirosource-")
+            || l.starts_with("x-spinealign-")
+            || l.starts_with("x-wellnesschiro-")
+            || l.starts_with("x-advancedchiro-")
+            || l.starts_with("x-elitechiro-")
+            || l.starts_with("x-premierchiro-")
+            || l.starts_with("x-alignchiro-")
+            || l.starts_with("x-familychiro-")
+            || l.starts_with("x-sekotsuin-")
+            || l.starts_with("x-seikotsu-")
+            || l.starts_with("x-seikotsuin-")
+            || l.starts_with("x-jikosekotsuin-")
+            || l.starts_with("x-osteopath-")
+            || l.starts_with("x-kenbikyou-")
+            || l.starts_with("x-sportsekotsuin-")
+            || l.starts_with("x-miraieart-")
+            || l.starts_with("x-sekkotsuinchuou-")
+            || l.starts_with("x-seikotu-")
+            || l.starts_with("x-shinkeiseikotsuin-")
+            || l.starts_with("x-kyouseiryou-")
+            || l.starts_with("x-jikoseikotsu-")
+            || l.starts_with("x-sportsseikotsu-")
+            || l.starts_with("x-chuukansejin-")
+            || l.starts_with("x-harikyuuin-")
+            || l.starts_with("x-sportosteopath-")
+            || l.starts_with("x-mugennonaai-")
+            || l.starts_with("x-nakamiosekkotsu-")
+            || l.starts_with("x-chirorx-")
+            || l.starts_with("x-accidentchiro-")
+            || l.starts_with("x-chirowellness-")
+            || l.starts_with("x-hairkyuu-")
+            || l.starts_with("x-jikouin-")
+            || l.starts_with("x-sekkotuin-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20857,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は基機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-Olshan-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RamJack-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Shitakiso-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Jiban-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Groundworks-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-CrawlSpace-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Dofuya-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PierPros-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_foundation_marks(raw));
+        }
+        assert!(!has_foundation_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は防機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-BasementSystems-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BDry-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BousuiKouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RousuiShuuri-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-EverDry-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WaterproofPros-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Bousui-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LeakRepair-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_waterproof_marks(raw));
+        }
+        assert!(!has_waterproof_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は骨機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-TheJoint-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChiroOne-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Sekotsuin-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Seikotsu-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Airrosti-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Jikosekotsuin-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Osteopath-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChiroWellness-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_chiro_marks(raw));
+        }
+        assert!(!has_chiro_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
