@@ -1937,6 +1937,12 @@ pub struct Envelope {
     pub shichiya_marks: bool,
     /// `X-Escape-*`/`X-Escaperoom-*`/`X-Nazotoki-*` 等の脱出ゲーム・謎解き・ボードゲーム印を送信側が自称する兆候 (D712)
     pub nazotoki_marks: bool,
+    /// `X-Rugby-*`/`X-Jrfu-*`/`X-Top14-*` 等のラグビー印を送信側が自称する兆候 (D713)
+    pub rugby_marks: bool,
+    /// `X-Motorsport-*`/`X-Motogp-*`/`X-Nascar-*` 等のモータースポーツ印を送信側が自称する兆候 (D714)
+    pub motorsport_marks: bool,
+    /// `X-Trekking-*`/`X-Hiking-*`/`X-Mountaineering-*` 等の山岳・トレッキング印を送信側が自称する兆候 (D715)
+    pub trekking_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2527,6 +2533,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         nekocafe_marks: has_nekocafe_marks(hdr),
         shichiya_marks: has_shichiya_marks(hdr),
         nazotoki_marks: has_nazotoki_marks(hdr),
+        rugby_marks: has_rugby_marks(hdr),
+        motorsport_marks: has_motorsport_marks(hdr),
+        trekking_marks: has_trekking_marks(hdr),
     })
 }
 
@@ -20442,6 +20451,216 @@ fn has_nazotoki_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-jinrosmart-"))
 }
 
+fn has_rugby_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-rugby-")
+            || l.starts_with("x-jrfu-")
+            || l.starts_with("x-top14-")
+            || l.starts_with("x-premrugby-")
+            || l.starts_with("x-urc-")
+            || l.starts_with("x-sixnations-")
+            || l.starts_with("x-allblacks-")
+            || l.starts_with("x-springboks-")
+            || l.starts_with("x-wallabies-")
+            || l.starts_with("x-sungoliath-")
+            || l.starts_with("x-wildknights-")
+            || l.starts_with("x-harlequins-")
+            || l.starts_with("x-crusaders-")
+            || l.starts_with("x-chiefs-")
+            || l.starts_with("x-rugbyworld-")
+            || l.starts_with("x-rugbynavi-")
+            || l.starts_with("x-rugbycenter-")
+            || l.starts_with("x-rugbyshop-")
+            || l.starts_with("x-rugbypro-")
+            || l.starts_with("x-rugbymart-")
+            || l.starts_with("x-rugbyplus-")
+            || l.starts_with("x-rugbysmart-")
+            || l.starts_with("x-rugbyfamily-")
+            || l.starts_with("x-jrfunavi-")
+            || l.starts_with("x-jrfucenter-")
+            || l.starts_with("x-jrfushop-")
+            || l.starts_with("x-jrfupro-")
+            || l.starts_with("x-jrfumart-")
+            || l.starts_with("x-jrfuplus-")
+            || l.starts_with("x-jrfusmart-")
+            || l.starts_with("x-jrfufamily-")
+            || l.starts_with("x-top14navi-")
+            || l.starts_with("x-top14center-")
+            || l.starts_with("x-top14shop-")
+            || l.starts_with("x-top14pro-")
+            || l.starts_with("x-top14mart-")
+            || l.starts_with("x-top14plus-")
+            || l.starts_with("x-top14smart-")
+            || l.starts_with("x-top14family-")
+            || l.starts_with("x-premrugbynavi-")
+            || l.starts_with("x-premrugbycenter-")
+            || l.starts_with("x-premrugbyshop-")
+            || l.starts_with("x-premrugbypro-")
+            || l.starts_with("x-premrugbymart-")
+            || l.starts_with("x-premrugbyplus-")
+            || l.starts_with("x-premrugbysmart-")
+            || l.starts_with("x-premrugbyfamily-")
+            || l.starts_with("x-urcnavi-")
+            || l.starts_with("x-urccenter-")
+            || l.starts_with("x-urcshop-")
+            || l.starts_with("x-urcpro-")
+            || l.starts_with("x-urcmart-")
+            || l.starts_with("x-urcplus-")
+            || l.starts_with("x-urcsmart-")
+            || l.starts_with("x-urcfamily-")
+            || l.starts_with("x-sixnationsnavi-")
+            || l.starts_with("x-sixnationscenter-")
+            || l.starts_with("x-sixnationsshop-")
+            || l.starts_with("x-sixnationspro-")
+            || l.starts_with("x-sixnationsmart-")
+            || l.starts_with("x-sixnationsplus-")
+            || l.starts_with("x-sixnationssmart-"))
+}
+
+fn has_motorsport_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-motorsport-")
+            || l.starts_with("x-motogp-")
+            || l.starts_with("x-nascar-")
+            || l.starts_with("x-supergt-")
+            || l.starts_with("x-formula1-")
+            || l.starts_with("x-wrc-")
+            || l.starts_with("x-imsa-")
+            || l.starts_with("x-wec-")
+            || l.starts_with("x-lemans-")
+            || l.starts_with("x-dakar-")
+            || l.starts_with("x-kart-")
+            || l.starts_with("x-indycar-")
+            || l.starts_with("x-superformula-")
+            || l.starts_with("x-btcc-")
+            || l.starts_with("x-fim-")
+            || l.starts_with("x-motorsportnavi-")
+            || l.starts_with("x-motorsportcenter-")
+            || l.starts_with("x-motorsportshop-")
+            || l.starts_with("x-motorsportpro-")
+            || l.starts_with("x-motorsportmart-")
+            || l.starts_with("x-motorsportplus-")
+            || l.starts_with("x-motorsportsmart-")
+            || l.starts_with("x-motorsportfamily-")
+            || l.starts_with("x-motogpnavi-")
+            || l.starts_with("x-motogpcenter-")
+            || l.starts_with("x-motogpshop-")
+            || l.starts_with("x-motogppro-")
+            || l.starts_with("x-motogpmart-")
+            || l.starts_with("x-motogpplus-")
+            || l.starts_with("x-motogpsmart-")
+            || l.starts_with("x-motogpfamily-")
+            || l.starts_with("x-nascarnavi-")
+            || l.starts_with("x-nascarcenter-")
+            || l.starts_with("x-nascarshop-")
+            || l.starts_with("x-nascarpro-")
+            || l.starts_with("x-nascarmart-")
+            || l.starts_with("x-nascarplus-")
+            || l.starts_with("x-nascarsmart-")
+            || l.starts_with("x-nascarfamily-")
+            || l.starts_with("x-supergtnavi-")
+            || l.starts_with("x-supergtcenter-")
+            || l.starts_with("x-supergtshop-")
+            || l.starts_with("x-supergtpro-")
+            || l.starts_with("x-supergtmart-")
+            || l.starts_with("x-supergtplus-")
+            || l.starts_with("x-supergtsmart-")
+            || l.starts_with("x-supergtfamily-")
+            || l.starts_with("x-formula1navi-")
+            || l.starts_with("x-formula1center-")
+            || l.starts_with("x-formula1shop-")
+            || l.starts_with("x-formula1pro-")
+            || l.starts_with("x-formula1mart-")
+            || l.starts_with("x-formula1plus-")
+            || l.starts_with("x-formula1smart-")
+            || l.starts_with("x-formula1family-")
+            || l.starts_with("x-wrcnavi-")
+            || l.starts_with("x-wrccenter-")
+            || l.starts_with("x-wrcshop-")
+            || l.starts_with("x-wrcpro-")
+            || l.starts_with("x-wrcmart-")
+            || l.starts_with("x-wrcplus-")
+            || l.starts_with("x-wrcsmart-"))
+}
+
+fn has_trekking_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-trekking-")
+            || l.starts_with("x-hiking-")
+            || l.starts_with("x-mountaineering-")
+            || l.starts_with("x-tozan-")
+            || l.starts_with("x-sangaku-")
+            || l.starts_with("x-yama-")
+            || l.starts_with("x-expedition-")
+            || l.starts_with("x-crampon-")
+            || l.starts_with("x-mountain-")
+            || l.starts_with("x-sawanobori-")
+            || l.starts_with("x-keiryu-")
+            || l.starts_with("x-snowshoe-")
+            || l.starts_with("x-trekkingnavi-")
+            || l.starts_with("x-trekkingcenter-")
+            || l.starts_with("x-trekkingshop-")
+            || l.starts_with("x-trekkingpro-")
+            || l.starts_with("x-trekkingmart-")
+            || l.starts_with("x-trekkingplus-")
+            || l.starts_with("x-trekkingsmart-")
+            || l.starts_with("x-trekkingfamily-")
+            || l.starts_with("x-hikingnavi-")
+            || l.starts_with("x-hikingcenter-")
+            || l.starts_with("x-hikingshop-")
+            || l.starts_with("x-hikingpro-")
+            || l.starts_with("x-hikingmart-")
+            || l.starts_with("x-hikingplus-")
+            || l.starts_with("x-hikingsmart-")
+            || l.starts_with("x-hikingfamily-")
+            || l.starts_with("x-mountaineeringnavi-")
+            || l.starts_with("x-mountaineeringcenter-")
+            || l.starts_with("x-mountaineeringshop-")
+            || l.starts_with("x-mountaineeringpro-")
+            || l.starts_with("x-mountaineeringmart-")
+            || l.starts_with("x-mountaineeringplus-")
+            || l.starts_with("x-mountaineeringsmart-")
+            || l.starts_with("x-mountaineeringfamily-")
+            || l.starts_with("x-tozannavi-")
+            || l.starts_with("x-tozancenter-")
+            || l.starts_with("x-tozanshop-")
+            || l.starts_with("x-tozanpro-")
+            || l.starts_with("x-tozanmart-")
+            || l.starts_with("x-tozanplus-")
+            || l.starts_with("x-tozansmart-")
+            || l.starts_with("x-tozanfamily-")
+            || l.starts_with("x-sangakunavi-")
+            || l.starts_with("x-sangakucenter-")
+            || l.starts_with("x-sangakushop-")
+            || l.starts_with("x-sangakupro-")
+            || l.starts_with("x-sangakumart-")
+            || l.starts_with("x-sangakuplus-")
+            || l.starts_with("x-sangakusmart-")
+            || l.starts_with("x-sangakufamily-")
+            || l.starts_with("x-yamanavi-")
+            || l.starts_with("x-yamacenter-")
+            || l.starts_with("x-yamashop-")
+            || l.starts_with("x-yamapro-")
+            || l.starts_with("x-yamamart-")
+            || l.starts_with("x-yamaplus-")
+            || l.starts_with("x-yamasmart-")
+            || l.starts_with("x-yamafamily-")
+            || l.starts_with("x-expeditionnavi-")
+            || l.starts_with("x-expeditioncenter-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -30573,6 +30792,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_nazotoki_marks(clean));
+    }
+
+    #[test]
+    fn scan_は蹴機印を検出する() {
+        for raw in [
+            br"X-Rugby-Alert: 1",
+            br"X-Jrfu-Notice: 1",
+            br"X-Top14-Info: 1",
+            br"X-Premrugby-Report: 1",
+            br"X-Allblacks-Bulletin: 1",
+            br"X-Springboks-News: 1",
+            br"X-Sungoliath-Flash: 1",
+            br"X-Crusaders-Release: 1",
+        ] {
+            assert!(has_rugby_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_rugby_marks(clean));
+    }
+
+    #[test]
+    fn scan_は走機印を検出する() {
+        for raw in [
+            br"X-Motorsport-Alert: 1",
+            br"X-Motogp-Notice: 1",
+            br"X-Nascar-Info: 1",
+            br"X-Supergt-Report: 1",
+            br"X-Formula1-Bulletin: 1",
+            br"X-Wrc-News: 1",
+            br"X-Imsa-Flash: 1",
+            br"X-Indycar-Release: 1",
+        ] {
+            assert!(has_motorsport_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_motorsport_marks(clean));
+    }
+
+    #[test]
+    fn scan_は山機印を検出する() {
+        for raw in [
+            br"X-Trekking-Alert: 1",
+            br"X-Hiking-Notice: 1",
+            br"X-Mountaineering-Info: 1",
+            br"X-Tozan-Report: 1",
+            br"X-Sangaku-Bulletin: 1",
+            br"X-Yama-News: 1",
+            br"X-Expedition-Flash: 1",
+            br"X-Sawanobori-Release: 1",
+        ] {
+            assert!(has_trekking_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_trekking_marks(clean));
     }
 
 }
