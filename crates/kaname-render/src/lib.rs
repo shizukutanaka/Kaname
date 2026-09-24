@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub cosmeticsurgery_marks: bool,
+    pub childcare_marks: bool,
+    pub phonerepair_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        cosmeticsurgery_marks: has_cosmeticsurgery_marks(hdr),
+        childcare_marks: has_childcare_marks(hdr),
+        phonerepair_marks: has_phonerepair_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,186 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_cosmeticsurgery_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-cosmeticpros-")
+            || l.starts_with("x-cosmeticteam-")
+            || l.starts_with("x-cosmeticworks-")
+            || l.starts_with("x-cosmeticforce-")
+            || l.starts_with("x-cosmeticnation-")
+            || l.starts_with("x-cosmeticexperts-")
+            || l.starts_with("x-cosmeticdoctors-")
+            || l.starts_with("x-cosmeticmasters-")
+            || l.starts_with("x-cosmeticsvc-")
+            || l.starts_with("x-cosmetichq-")
+            || l.starts_with("x-plasticsurgerypros-")
+            || l.starts_with("x-plasticsurgeryteam-")
+            || l.starts_with("x-plasticsurgeryworks-")
+            || l.starts_with("x-plasticsurgeryexperts-")
+            || l.starts_with("x-plasticsurgerydoctors-")
+            || l.starts_with("x-plasticsurgerymasters-")
+            || l.starts_with("x-sbcseikei-")
+            || l.starts_with("x-takasuclinic-")
+            || l.starts_with("x-jiyuugaokaclinic-")
+            || l.starts_with("x-seikeiclinic-")
+            || l.starts_with("x-biyouclinic-")
+            || l.starts_with("x-biyougeka-")
+            || l.starts_with("x-biyouseikei-")
+            || l.starts_with("x-seikeigeka-")
+            || l.starts_with("x-seikeiyasan-")
+            || l.starts_with("x-seikeipro-")
+            || l.starts_with("x-seikeiteam-")
+            || l.starts_with("x-seikeigyo-")
+            || l.starts_with("x-seikeikensa-")
+            || l.starts_with("x-seikeimanten-")
+            || l.starts_with("x-seikeinomi-")
+            || l.starts_with("x-seikeijp-")
+            || l.starts_with("x-seikeisenmon-")
+            || l.starts_with("x-seikeimitsumori-")
+            || l.starts_with("x-seikeichousa-")
+            || l.starts_with("x-seikeiteiki-")
+            || l.starts_with("x-seikeishuri-")
+            || l.starts_with("x-biyouteam-")
+            || l.starts_with("x-biyouworks-")
+            || l.starts_with("x-biyouforce-")
+            || l.starts_with("x-biyounation-")
+            || l.starts_with("x-biyouexperts-")
+            || l.starts_with("x-biyoudoctors-")
+            || l.starts_with("x-biyoumasters-")
+            || l.starts_with("x-biyousvc-")
+            || l.starts_with("x-biyouhq-")
+            || l.starts_with("x-seikeirescue-")
+            || l.starts_with("x-seikeidoctors-")
+    })
+}
+
+fn has_childcare_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-carecom-")
+            || l.starts_with("x-sittercity-")
+            || l.starts_with("x-urbansitter-")
+            || l.starts_with("x-bambino-")
+            || l.starts_with("x-babysitterpros-")
+            || l.starts_with("x-babysitterteam-")
+            || l.starts_with("x-babysitterworks-")
+            || l.starts_with("x-babysitterforce-")
+            || l.starts_with("x-babysitternation-")
+            || l.starts_with("x-babysitterexperts-")
+            || l.starts_with("x-babysitterdoctors-")
+            || l.starts_with("x-babysittersvc-")
+            || l.starts_with("x-babysitterhq-")
+            || l.starts_with("x-nannypros-")
+            || l.starts_with("x-nannyteam-")
+            || l.starts_with("x-nannyworks-")
+            || l.starts_with("x-nannyforce-")
+            || l.starts_with("x-nannynation-")
+            || l.starts_with("x-nannyexperts-")
+            || l.starts_with("x-nannydoctors-")
+            || l.starts_with("x-nannymasters-")
+            || l.starts_with("x-nannysvc-")
+            || l.starts_with("x-nannyhq-")
+            || l.starts_with("x-childcarepros-")
+            || l.starts_with("x-childcareteam-")
+            || l.starts_with("x-childcareworks-")
+            || l.starts_with("x-childcareforce-")
+            || l.starts_with("x-childcarenation-")
+            || l.starts_with("x-childcareexperts-")
+            || l.starts_with("x-childcaresvc-")
+            || l.starts_with("x-childcarehq-")
+            || l.starts_with("x-hoikupros-")
+            || l.starts_with("x-hoikuteam-")
+            || l.starts_with("x-hoikuworks-")
+            || l.starts_with("x-hoikuforce-")
+            || l.starts_with("x-hoikuexperts-")
+            || l.starts_with("x-hoikudoctors-")
+            || l.starts_with("x-hoikujp-")
+            || l.starts_with("x-babysitteryasan-")
+            || l.starts_with("x-bebishi-")
+            || l.starts_with("x-bebishipro-")
+            || l.starts_with("x-bebishiteam-")
+            || l.starts_with("x-bebishikensa-")
+            || l.starts_with("x-bebishimanten-")
+            || l.starts_with("x-bebishinomi-")
+            || l.starts_with("x-bebishijp-")
+            || l.starts_with("x-bebisisenmon-")
+            || l.starts_with("x-kodomopro-")
+            || l.starts_with("x-kosodate-")
+            || l.starts_with("x-kosodatepro-")
+            || l.starts_with("x-kosodateteam-")
+            || l.starts_with("x-hoikuhoiku-")
+            || l.starts_with("x-kosodatesvc-")
+    })
+}
+
+fn has_phonerepair_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-icracked-")
+            || l.starts_with("x-ubreakifix-")
+            || l.starts_with("x-asuriontech-")
+            || l.starts_with("x-phonerepairpros-")
+            || l.starts_with("x-phonerepairteam-")
+            || l.starts_with("x-phonerepairworks-")
+            || l.starts_with("x-phonerepairforce-")
+            || l.starts_with("x-phonerepairnation-")
+            || l.starts_with("x-phonerepairexperts-")
+            || l.starts_with("x-phonerepairdoctors-")
+            || l.starts_with("x-phonerepairmasters-")
+            || l.starts_with("x-phonerepairsvc-")
+            || l.starts_with("x-phonerepairhq-")
+            || l.starts_with("x-sumahoshuri-")
+            || l.starts_with("x-sumaho-")
+            || l.starts_with("x-sumahoyasan-")
+            || l.starts_with("x-sumahopro-")
+            || l.starts_with("x-sumahoteam-")
+            || l.starts_with("x-sumahokensa-")
+            || l.starts_with("x-sumahomanten-")
+            || l.starts_with("x-sumahonmi-")
+            || l.starts_with("x-sumahojp-")
+            || l.starts_with("x-sumahosenmon-")
+            || l.starts_with("x-sumahomitsumori-")
+            || l.starts_with("x-sumahochousa-")
+            || l.starts_with("x-sumahoteiki-")
+            || l.starts_with("x-sumahoshuriya-")
+            || l.starts_with("x-sumahorescue-")
+            || l.starts_with("x-sumahodoctors-")
+            || l.starts_with("x-sumahosagyou-")
+            || l.starts_with("x-sumahoteikyu-")
+            || l.starts_with("x-sumahoorder-")
+            || l.starts_with("x-keitaishuri-")
+            || l.starts_with("x-keitai-")
+            || l.starts_with("x-keitaiyasan-")
+            || l.starts_with("x-keitaipro-")
+            || l.starts_with("x-keitaiteam-")
+            || l.starts_with("x-keitaikensa-")
+            || l.starts_with("x-keitaimanten-")
+            || l.starts_with("x-keitainomi-")
+            || l.starts_with("x-keitaijp-")
+            || l.starts_with("x-keitaisenmon-")
+            || l.starts_with("x-keitaimitsumori-")
+            || l.starts_with("x-keitaichousa-")
+            || l.starts_with("x-keitaiteiki-")
+            || l.starts_with("x-ifonrepair-")
+            || l.starts_with("x-ifonpros-")
+            || l.starts_with("x-ifonteam-")
+            || l.starts_with("x-ifonworks-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20827,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は容機印を検出する() {
+        let f0 = b"From: a@b\r\nX-CosmeticPros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-PlasticSurgeryPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-BiyouClinic-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Biyougeka-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-SbcSeikei-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-CosmeticWorks-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SeikeiPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-BiyouTeam-Record: 1\r\n\r\nx";
+        assert!(has_cosmeticsurgery_marks(f0));
+        assert!(has_cosmeticsurgery_marks(f1));
+        assert!(has_cosmeticsurgery_marks(f2));
+        assert!(has_cosmeticsurgery_marks(f3));
+        assert!(has_cosmeticsurgery_marks(f4));
+        assert!(has_cosmeticsurgery_marks(f5));
+        assert!(has_cosmeticsurgery_marks(f6));
+        assert!(has_cosmeticsurgery_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_cosmeticsurgery_marks(clean));
+    }
+
+    #[test]
+    fn scan_は育機印を検出する() {
+        let f0 = b"From: a@b\r\nX-CareCom-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-SitterCity-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-HoikuPros-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-NannyPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-BabysitterPros-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-Kosodate-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-Bebishi-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-ChildcarePros-Record: 1\r\n\r\nx";
+        assert!(has_childcare_marks(f0));
+        assert!(has_childcare_marks(f1));
+        assert!(has_childcare_marks(f2));
+        assert!(has_childcare_marks(f3));
+        assert!(has_childcare_marks(f4));
+        assert!(has_childcare_marks(f5));
+        assert!(has_childcare_marks(f6));
+        assert!(has_childcare_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_childcare_marks(clean));
+    }
+
+    #[test]
+    fn scan_は携機印を検出する() {
+        let f0 = b"From: a@b\r\nX-iCracked-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-uBreakiFix-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Sumaho-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-PhoneRepairPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-AsurionTech-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-Keitai-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SumahoPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-IfonWorks-Record: 1\r\n\r\nx";
+        assert!(has_phonerepair_marks(f0));
+        assert!(has_phonerepair_marks(f1));
+        assert!(has_phonerepair_marks(f2));
+        assert!(has_phonerepair_marks(f3));
+        assert!(has_phonerepair_marks(f4));
+        assert!(has_phonerepair_marks(f5));
+        assert!(has_phonerepair_marks(f6));
+        assert!(has_phonerepair_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_phonerepair_marks(clean));
+    }
 }
