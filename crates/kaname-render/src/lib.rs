@@ -2003,6 +2003,12 @@ pub struct Envelope {
     pub datsumo_marks: bool,
     /// `X-Kidzania-*`/`X-Kandu-*`/`X-Jobexperience-*` 等の職業体験・キッザニア印を送信側が自称する兆候 (D745)
     pub kidzania_marks: bool,
+    /// `X-Olympic-*`/`X-Paralympic-*`/`X-Ioc-*` 等のオリンピック・国際スポーツ大会印を送信側が自称する兆候 (D746)
+    pub olympic_marks: bool,
+    /// `X-Lcc-*`/`X-Airdo-*`/`X-Solaseed-*` 等のLCC・格安航空印を送信側が自称する兆候 (D747)
+    pub lcc_marks: bool,
+    /// `X-Dji-*`/`X-Uav-*`/`X-Fpv-*` 等のドローン・FPV印を送信側が自称する兆候 (D748)
+    pub drone_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2626,6 +2632,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         carwash_marks: has_carwash_marks(hdr),
         datsumo_marks: has_datsumo_marks(hdr),
         kidzania_marks: has_kidzania_marks(hdr),
+        olympic_marks: has_olympic_marks(hdr),
+        lcc_marks: has_lcc_marks(hdr),
+        drone_marks: has_drone_marks(hdr),
     })
 }
 
@@ -22851,6 +22860,216 @@ fn has_kidzania_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-kidscareerplus-"))
 }
 
+fn has_olympic_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-olympic-")
+            || l.starts_with("x-paralympic-")
+            || l.starts_with("x-ioc-")
+            || l.starts_with("x-tokyo2020-")
+            || l.starts_with("x-paris2024-")
+            || l.starts_with("x-la2028-")
+            || l.starts_with("x-olympics-")
+            || l.starts_with("x-joc-")
+            || l.starts_with("x-ipc-")
+            || l.starts_with("x-fifa-")
+            || l.starts_with("x-uefa-")
+            || l.starts_with("x-worldcup-")
+            || l.starts_with("x-olympicnavi-")
+            || l.starts_with("x-olympiccenter-")
+            || l.starts_with("x-olympicshop-")
+            || l.starts_with("x-olympicpro-")
+            || l.starts_with("x-olympicmart-")
+            || l.starts_with("x-olympicplus-")
+            || l.starts_with("x-olympicsmart-")
+            || l.starts_with("x-olympicfamily-")
+            || l.starts_with("x-paralympicnavi-")
+            || l.starts_with("x-paralympiccenter-")
+            || l.starts_with("x-paralympicshop-")
+            || l.starts_with("x-paralympicpro-")
+            || l.starts_with("x-paralympicmart-")
+            || l.starts_with("x-paralympicplus-")
+            || l.starts_with("x-paralympicsmart-")
+            || l.starts_with("x-paralympicfamily-")
+            || l.starts_with("x-iocnavi-")
+            || l.starts_with("x-ioccenter-")
+            || l.starts_with("x-iocshop-")
+            || l.starts_with("x-iocpro-")
+            || l.starts_with("x-iocmart-")
+            || l.starts_with("x-iocplus-")
+            || l.starts_with("x-iocsmart-")
+            || l.starts_with("x-iocfamily-")
+            || l.starts_with("x-tokyo2020navi-")
+            || l.starts_with("x-tokyo2020center-")
+            || l.starts_with("x-tokyo2020shop-")
+            || l.starts_with("x-tokyo2020pro-")
+            || l.starts_with("x-tokyo2020mart-")
+            || l.starts_with("x-tokyo2020plus-")
+            || l.starts_with("x-tokyo2020smart-")
+            || l.starts_with("x-tokyo2020family-")
+            || l.starts_with("x-paris2024navi-")
+            || l.starts_with("x-paris2024center-")
+            || l.starts_with("x-paris2024shop-")
+            || l.starts_with("x-paris2024pro-")
+            || l.starts_with("x-paris2024mart-")
+            || l.starts_with("x-paris2024plus-")
+            || l.starts_with("x-paris2024smart-")
+            || l.starts_with("x-paris2024family-")
+            || l.starts_with("x-la2028navi-")
+            || l.starts_with("x-la2028center-")
+            || l.starts_with("x-la2028shop-")
+            || l.starts_with("x-la2028pro-")
+            || l.starts_with("x-la2028mart-")
+            || l.starts_with("x-la2028plus-")
+            || l.starts_with("x-la2028smart-")
+            || l.starts_with("x-la2028family-")
+            || l.starts_with("x-olympicsnavi-")
+            || l.starts_with("x-olympicscenter-"))
+}
+
+fn has_lcc_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-lcc-")
+            || l.starts_with("x-airdo-")
+            || l.starts_with("x-solaseed-")
+            || l.starts_with("x-starflyer-")
+            || l.starts_with("x-zipair-")
+            || l.starts_with("x-springjapan-")
+            || l.starts_with("x-fda-")
+            || l.starts_with("x-airasia-")
+            || l.starts_with("x-scoot-")
+            || l.starts_with("x-tigerair-")
+            || l.starts_with("x-cebu-")
+            || l.starts_with("x-vietjet-")
+            || l.starts_with("x-lccnavi-")
+            || l.starts_with("x-lcccenter-")
+            || l.starts_with("x-lccshop-")
+            || l.starts_with("x-lccpro-")
+            || l.starts_with("x-lccmart-")
+            || l.starts_with("x-lccplus-")
+            || l.starts_with("x-lccsmart-")
+            || l.starts_with("x-lccfamily-")
+            || l.starts_with("x-airdonavi-")
+            || l.starts_with("x-airdocenter-")
+            || l.starts_with("x-airdoshop-")
+            || l.starts_with("x-airdopro-")
+            || l.starts_with("x-airdomart-")
+            || l.starts_with("x-airdoplus-")
+            || l.starts_with("x-airdosmart-")
+            || l.starts_with("x-airdofamily-")
+            || l.starts_with("x-solaseednavi-")
+            || l.starts_with("x-solaseedcenter-")
+            || l.starts_with("x-solaseedshop-")
+            || l.starts_with("x-solaseedpro-")
+            || l.starts_with("x-solaseedmart-")
+            || l.starts_with("x-solaseedplus-")
+            || l.starts_with("x-solaseedsmart-")
+            || l.starts_with("x-solaseedfamily-")
+            || l.starts_with("x-starflyernavi-")
+            || l.starts_with("x-starflyercenter-")
+            || l.starts_with("x-starflyershop-")
+            || l.starts_with("x-starflyerpro-")
+            || l.starts_with("x-starflyermart-")
+            || l.starts_with("x-starflyerplus-")
+            || l.starts_with("x-starflyersmart-")
+            || l.starts_with("x-starflyerfamily-")
+            || l.starts_with("x-zipairnavi-")
+            || l.starts_with("x-zipaircenter-")
+            || l.starts_with("x-zipairshop-")
+            || l.starts_with("x-zipairpro-")
+            || l.starts_with("x-zipairmart-")
+            || l.starts_with("x-zipairplus-")
+            || l.starts_with("x-zipairsmart-")
+            || l.starts_with("x-zipairfamily-")
+            || l.starts_with("x-springjapannavi-")
+            || l.starts_with("x-springjapancenter-")
+            || l.starts_with("x-springjapanshop-")
+            || l.starts_with("x-springjapanpro-")
+            || l.starts_with("x-springjapanmart-")
+            || l.starts_with("x-springjapanplus-")
+            || l.starts_with("x-springjapansmart-")
+            || l.starts_with("x-springjapanfamily-")
+            || l.starts_with("x-fdanavi-")
+            || l.starts_with("x-fdacenter-"))
+}
+
+fn has_drone_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-dji-")
+            || l.starts_with("x-uav-")
+            || l.starts_with("x-fpv-")
+            || l.starts_with("x-quadcopter-")
+            || l.starts_with("x-multicopter-")
+            || l.starts_with("x-autel-")
+            || l.starts_with("x-skydio-")
+            || l.starts_with("x-betafpv-")
+            || l.starts_with("x-emax-")
+            || l.starts_with("x-hglrc-")
+            || l.starts_with("x-geprc-")
+            || l.starts_with("x-walkera-")
+            || l.starts_with("x-hubsan-")
+            || l.starts_with("x-potensic-")
+            || l.starts_with("x-djinavi-")
+            || l.starts_with("x-djicenter-")
+            || l.starts_with("x-djishop-")
+            || l.starts_with("x-djipro-")
+            || l.starts_with("x-djimart-")
+            || l.starts_with("x-djiplus-")
+            || l.starts_with("x-djismart-")
+            || l.starts_with("x-djifamily-")
+            || l.starts_with("x-uavnavi-")
+            || l.starts_with("x-uavcenter-")
+            || l.starts_with("x-uavshop-")
+            || l.starts_with("x-uavpro-")
+            || l.starts_with("x-uavmart-")
+            || l.starts_with("x-uavplus-")
+            || l.starts_with("x-uavsmart-")
+            || l.starts_with("x-uavfamily-")
+            || l.starts_with("x-fpvnavi-")
+            || l.starts_with("x-fpvcenter-")
+            || l.starts_with("x-fpvshop-")
+            || l.starts_with("x-fpvpro-")
+            || l.starts_with("x-fpvmart-")
+            || l.starts_with("x-fpvplus-")
+            || l.starts_with("x-fpvsmart-")
+            || l.starts_with("x-fpvfamily-")
+            || l.starts_with("x-quadcopternavi-")
+            || l.starts_with("x-quadcoptercenter-")
+            || l.starts_with("x-quadcoptershop-")
+            || l.starts_with("x-quadcopterpro-")
+            || l.starts_with("x-quadcoptermart-")
+            || l.starts_with("x-quadcopterplus-")
+            || l.starts_with("x-quadcoptersmart-")
+            || l.starts_with("x-quadcopterfamily-")
+            || l.starts_with("x-multicopternavi-")
+            || l.starts_with("x-multicoptercenter-")
+            || l.starts_with("x-multicoptershop-")
+            || l.starts_with("x-multicopterpro-")
+            || l.starts_with("x-multicoptermart-")
+            || l.starts_with("x-multicopterplus-")
+            || l.starts_with("x-multicoptersmart-")
+            || l.starts_with("x-multicopterfamily-")
+            || l.starts_with("x-autelnavi-")
+            || l.starts_with("x-autelcenter-")
+            || l.starts_with("x-autelshop-")
+            || l.starts_with("x-autelpro-")
+            || l.starts_with("x-autelmart-")
+            || l.starts_with("x-autelplus-")
+            || l.starts_with("x-autelsmart-")
+            || l.starts_with("x-autelfamily-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -33576,6 +33795,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_kidzania_marks(clean));
+    }
+
+    #[test]
+    fn scan_は五機印を検出する() {
+        for raw in [
+            br"X-Olympic-Alert: 1",
+            br"X-Paralympic-Notice: 1",
+            br"X-Ioc-Info: 1",
+            br"X-Tokyo2020-Report: 1",
+            br"X-Paris2024-Bulletin: 1",
+            br"X-La2028-News: 1",
+            br"X-Fifa-Flash: 1",
+            br"X-Worldcup-Release: 1",
+        ] {
+            assert!(has_olympic_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_olympic_marks(clean));
+    }
+
+    #[test]
+    fn scan_は翼機印を検出する() {
+        for raw in [
+            br"X-Lcc-Alert: 1",
+            br"X-Airdo-Notice: 1",
+            br"X-Solaseed-Info: 1",
+            br"X-Starflyer-Report: 1",
+            br"X-Zipair-Bulletin: 1",
+            br"X-Airasia-News: 1",
+            br"X-Scoot-Flash: 1",
+            br"X-Vietjet-Release: 1",
+        ] {
+            assert!(has_lcc_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_lcc_marks(clean));
+    }
+
+    #[test]
+    fn scan_は翔機印を検出する() {
+        for raw in [
+            br"X-Dji-Alert: 1",
+            br"X-Uav-Notice: 1",
+            br"X-Fpv-Info: 1",
+            br"X-Quadcopter-Report: 1",
+            br"X-Autel-Bulletin: 1",
+            br"X-Skydio-News: 1",
+            br"X-Betafpv-Flash: 1",
+            br"X-Walkera-Release: 1",
+        ] {
+            assert!(has_drone_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_drone_marks(clean));
     }
 
 }
