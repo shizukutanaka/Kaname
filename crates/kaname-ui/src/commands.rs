@@ -2737,6 +2737,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D683: 補助金・助成金・給付金印自称
+    if env.hojokin_marks {
+        render_risks.push(
+            "X-Jgrants-*/X-Hojokin-*/X-Joseikin-*/X-Kyufukin-*/X-Monodukuri-*/X-Subsidy-*/X-Grant-*/X-Benefit-* 等 — 補機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D684: 一括見積・比較印自称
+    if env.hikaku_marks {
+        render_risks.push(
+            "X-Hikaku-*/X-Mitsumori-*/X-Ikkatsu-*/X-Kakakucom-*/X-Quote-*/X-Estimate-*/X-Compare-*/X-Price-* 等 — 比機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D685: 年金・社会保険印自称
+    if env.nenkin_marks {
+        render_risks.push(
+            "X-Nenkin-*/X-Pension-*/X-Kenpo-*/X-Kokuho-*/X-Koseinenkin-*/X-Shakaihoken-*/X-Kyousai-*/X-Jps-* 等 — 年機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
