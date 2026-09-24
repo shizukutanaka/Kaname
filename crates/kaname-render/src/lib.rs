@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-KuraMara-*`/`X-TaskRabbit-*`/`X-Thumbtack-*`/`X-Angi-*`/`X-Benly-*`/`X-Checkatrade-*` 等 — 便利屋・暮らしサービスマーケット機印自称
+    pub handyman_marks: bool,
+    /// `X-Kurashian-*`/`X-MizunoKyujotai-*`/`X-RotoRooter-*`/`X-MrRooter-*`/`X-Dyno-Rod-*`/`X-HomeServe-*` 等 — 水道・水回り修理機印自称
+    pub plumbing_marks: bool,
+    /// `X-TruGreen-*`/`X-LawnStarter-*`/`X-BrightView-*`/`X-Davey-*`/`X-OniwaBan-*`/`X-WeedMan-*` 等 — 造園・芝生手入れ機印自称
+    pub garden_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        handyman_marks: has_handyman_marks(hdr),
+        plumbing_marks: has_plumbing_marks(hdr),
+        garden_marks: has_garden_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,219 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D626: 便利屋・暮らしサービスマーケット印の自称を検出する。
+///
+/// `X-KuraMara-*`/`X-KurashinoMarket-*` (くらしのマーケット)、`X-Mitsumor-*` (ミツモア)、
+/// `X-SharingTech-*` (シェアリングテクノロジー)、`X-Benly-*`/`X-Benry-*` (ベンリー)、
+/// `X-OtasukeHonpo-*`/`X-Nandemoya-*`、海外は `X-TaskRabbit-*`/`X-Airtasker-*`/
+/// `X-Thumbtack-*`/`X-Angi-*`/`X-AngiesList-*`/`X-HomeAdvisor-*`/`X-HandyBook-*`/
+/// `X-Porch-*`/`X-Checkatrade-*`/`X-MyBuilder-*`/`X-RatedPeople-*`/`X-Hipages-*`/
+/// `X-UrbanCompany-*`/`X-UrbanClap-*`/`X-MrHandyman-*`/`X-AceHandyman-*`/
+/// `X-HandymanConnection-*`/`X-HouseDoctors-*`/`X-TruBlue-*`/`X-Shiply-*`/`X-AnyVan-*`/
+/// `X-Dolly-*`/`X-Lugg-*`/`X-Phlatbed-*`/`X-Bungii-*` 等の便利屋・暮らしサービスマーケット機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 出張費・見積外請求・当日追加料金の偽装は便利屋なりすましの典型手口。
+/// 便印の自署は兆候として数える。
+/// (家事代行・ハウスクリーニングは housekeeping 機、Zehitomo/引越し見積は housekeeping/moving 機で検出済み)
+fn has_handyman_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kuramara-")
+            || l.starts_with("x-kurashinomarket-")
+            || l.starts_with("x-mitsumor-")
+            || l.starts_with("x-mitsumoa-")
+            || l.starts_with("x-sharingtech-")
+            || l.starts_with("x-benly-")
+            || l.starts_with("x-benry-")
+            || l.starts_with("x-otasukehonpo-")
+            || l.starts_with("x-otasuke-")
+            || l.starts_with("x-nandemoya-")
+            || l.starts_with("x-benriyasan-")
+            || l.starts_with("x-handymanjp-")
+            || l.starts_with("x-taskrabbit-")
+            || l.starts_with("x-airtasker-")
+            || l.starts_with("x-thumbtack-")
+            || l.starts_with("x-angi-")
+            || l.starts_with("x-angieslist-")
+            || l.starts_with("x-homeadvisor-")
+            || l.starts_with("x-handybook-")
+            || l.starts_with("x-porch-")
+            || l.starts_with("x-fixerapp-")
+            || l.starts_with("x-zaarly-")
+            || l.starts_with("x-taskeasy-")
+            || l.starts_with("x-jiffy-")
+            || l.starts_with("x-plentific-")
+            || l.starts_with("x-checkatrade-")
+            || l.starts_with("x-mybuilder-")
+            || l.starts_with("x-ratedpeople-")
+            || l.starts_with("x-trustatrader-")
+            || l.starts_with("x-myjobquote-")
+            || l.starts_with("x-barkpros-")
+            || l.starts_with("x-hipages-")
+            || l.starts_with("x-serviceseeking-")
+            || l.starts_with("x-oneflare-")
+            || l.starts_with("x-urbancompany-")
+            || l.starts_with("x-urbanclap-")
+            || l.starts_with("x-housejoy-")
+            || l.starts_with("x-sulekha-")
+            || l.starts_with("x-kaodim-")
+            || l.starts_with("x-handypro-")
+            || l.starts_with("x-mrhandyman-")
+            || l.starts_with("x-acehandyman-")
+            || l.starts_with("x-handymanconnection-")
+            || l.starts_with("x-housedoctors-")
+            || l.starts_with("x-trublue-")
+            || l.starts_with("x-shiply-")
+            || l.starts_with("x-anyvan-")
+            || l.starts_with("x-dolly-")
+            || l.starts_with("x-lugg-")
+            || l.starts_with("x-phlatbed-")
+            || l.starts_with("x-bungii-")
+    })
+}
+
+/// D627: 水道・水回り修理印の自称を検出する。
+///
+/// `X-Kurashian-*` (クラシアン)、`X-MizunoKyujotai-*`/`X-MizunoKyujyo-*` (水の救急隊)、
+/// `X-SuidouyaHonpo-*`/`X-Suidouya-*` (水道屋本舗)、`X-Aqualine-*`/`X-HouseLabo-*`/
+/// `X-SeikatsuSuidou-*`/`X-HomeRescue-*`、海外は `X-Roto-Rooter-*`/`X-RotoRooter-*`/
+/// `X-MrRooter-*`/`X-BenjaminFranklinPlumbing-*`/`X-BenPlumbing-*`/`X-OneHourPlumbing-*`/
+/// `X-ZoomDrain-*`/`X-RescueRooter-*`/`X-ARSRescue-*`/`X-ServiceExperts-*`/`X-Plumbline-*`/
+/// `X-DynoRod-*`/`X-Dyno-Rod-*`/`X-PimlicoPlumbers-*`/`X-HomeServe-*`/`X-DrainDoctor-*`/
+/// `X-MetroRod-*`/`X-LanesForDrains-*`/`X-Dalrod-*` 等の水道・水回り修理機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 高額な出張費・緊急修理料金・部品交換請求の偽装は水道業者なりすましの典型手口。
+/// 水機印の自署は兆候として数える。
+/// (住宅メーカー・設備建材は housing 機、フィールドサービス管理ソフトは fieldservice 機で検出済み)
+fn has_plumbing_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kurashian-")
+            || l.starts_with("x-mizunokyujotai-")
+            || l.starts_with("x-mizunokyujyo-")
+            || l.starts_with("x-suidouyahonpo-")
+            || l.starts_with("x-suidouya-")
+            || l.starts_with("x-mizumawari-")
+            || l.starts_with("x-suidoukouji-")
+            || l.starts_with("x-aqualine24-")
+            || l.starts_with("x-aqualine-")
+            || l.starts_with("x-houselabo-")
+            || l.starts_with("x-seikatsusuidou-")
+            || l.starts_with("x-homerescue-")
+            || l.starts_with("x-suidoukyukyu-")
+            || l.starts_with("x-mizukyu-")
+            || l.starts_with("x-mizutrouble-")
+            || l.starts_with("x-suigei-")
+            || l.starts_with("x-roto-rooter-")
+            || l.starts_with("x-rotorooter-")
+            || l.starts_with("x-mrrooter-")
+            || l.starts_with("x-benjaminfranklinplumbing-")
+            || l.starts_with("x-benplumbing-")
+            || l.starts_with("x-onehourplumbing-")
+            || l.starts_with("x-zoomdrain-")
+            || l.starts_with("x-rescuerooter-")
+            || l.starts_with("x-arsrescue-")
+            || l.starts_with("x-serviceexperts-")
+            || l.starts_with("x-plumbline-")
+            || l.starts_with("x-plumbingpros-")
+            || l.starts_with("x-ferguson-")
+            || l.starts_with("x-winsupply-")
+            || l.starts_with("x-dynorod-")
+            || l.starts_with("x-dyno-rod-")
+            || l.starts_with("x-pimlicoplumbers-")
+            || l.starts_with("x-homeserve-")
+            || l.starts_with("x-draindoctor-")
+            || l.starts_with("x-metrorod-")
+            || l.starts_with("x-lanesfordrains-")
+            || l.starts_with("x-dalrod-")
+            || l.starts_with("x-drainme-")
+            || l.starts_with("x-blueroot-")
+            || l.starts_with("x-suidoucenter-")
+            || l.starts_with("x-mizunoseibi-")
+            || l.starts_with("x-marinesuidou-")
+    })
+}
+
+/// D628: 造園・芝生手入れ機印の自称を検出する。
+///
+/// `X-TruGreen-*`/`X-LawnStarter-*`/`X-LawnLove-*`/`X-SundayLawn-*`/`X-BrightView-*`/
+/// `X-DaveyTree-*`/`X-Davey-*`/`X-BartlettTree-*`/`X-Bartlett-*`/`X-SavATree-*`/
+/// `X-WeedMan-*`/`X-LawnDoctor-*`/`X-SpringGreen-*`/`X-USLawns-*`/
+/// `X-YellowstoneLandscape-*`/`X-FairwayLawns-*`/`X-LawnSquad-*`/`X-NaturalLawn-*`/
+/// `X-ScottsLawn-*`/`X-TopLawn-*`/`X-Greensleeves-*`/`X-LawnMaster-*`/`X-MonsterTree-*`、
+/// JP は `X-Uekiya-*`/`X-UekiyaSan-*`/`X-Niwashi-*`/`X-Zouen-*`/`X-OniwaBan-*`/
+/// `X-Teien-*`/`X-Niwate-*`/`X-GreenKeeping-*`/`X-ExteriorWorks-*`/`X-GardenSmith-*`/
+/// `X-LandArchitect-*` 等の造園・芝生手入れ機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 季節の剪定・施肥・除草・外構工事見積の偽装は造園業者なりすましの典型手口。
+/// 庭機印の自署は兆候として数える。
+/// (害虫駆除は facility 機、ホームセンター・工具は diytool 機で検出済み)
+fn has_garden_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-trugreen-")
+            || l.starts_with("x-lawnstarter-")
+            || l.starts_with("x-lawnlove-")
+            || l.starts_with("x-sundaylawn-")
+            || l.starts_with("x-brightview-")
+            || l.starts_with("x-daveytree-")
+            || l.starts_with("x-davey-")
+            || l.starts_with("x-bartletttree-")
+            || l.starts_with("x-bartlett-")
+            || l.starts_with("x-savatree-")
+            || l.starts_with("x-weedman-")
+            || l.starts_with("x-lawndoctor-")
+            || l.starts_with("x-springgreen-")
+            || l.starts_with("x-uslawns-")
+            || l.starts_with("x-yellowstonelandscape-")
+            || l.starts_with("x-fairwaylawns-")
+            || l.starts_with("x-lawnsquad-")
+            || l.starts_with("x-naturallawn-")
+            || l.starts_with("x-scottslawn-")
+            || l.starts_with("x-toplawn-")
+            || l.starts_with("x-greensleeves-")
+            || l.starts_with("x-lawnmaster-")
+            || l.starts_with("x-monstertree-")
+            || l.starts_with("x-uekiya-")
+            || l.starts_with("x-uekiyasan-")
+            || l.starts_with("x-niwashi-")
+            || l.starts_with("x-zouen-")
+            || l.starts_with("x-oniwaban-")
+            || l.starts_with("x-teien-")
+            || l.starts_with("x-niwate-")
+            || l.starts_with("x-greenkeeping-")
+            || l.starts_with("x-exteriorworks-")
+            || l.starts_with("x-gardensmith-")
+            || l.starts_with("x-landarchitect-")
+            || l.starts_with("x-greenpal-")
+            || l.starts_with("x-edenapp-")
+            || l.starts_with("x-yourgreenpal-")
+            || l.starts_with("x-lawnpro-")
+            || l.starts_with("x-turf-guardian-")
+            || l.starts_with("x-turfguardian-")
+            || l.starts_with("x-groundsguys-")
+            || l.starts_with("x-thegroundsguys-")
+            || l.starts_with("x-mowerexpress-")
+            || l.starts_with("x-mowzilla-")
+            || l.starts_with("x-lawncarepros-")
+            || l.starts_with("x-yardzen-")
+            || l.starts_with("x-terralandscaping-")
+            || l.starts_with("x-treelogy-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20862,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は便機印を検出する() {
+    let k1 = b"From: a@b
+X-KuraMara-Id: 1
+
+x";
+    let t1 = b"From: a@b
+X-TaskRabbit-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-Angi-Notice: 1
+
+x";
+    let b1 = b"From: a@b
+X-Benly-Flag: 1
+
+x";
+    let m1 = b"From: a@b
+X-Mitsumor-Entry: 1
+
+x";
+    let h1 = b"From: a@b
+X-HomeAdvisor-Record: 1
+
+x";
+    let c1 = b"From: a@b
+X-Checkatrade-Trace: 1
+
+x";
+    let u1 = b"From: a@b
+X-UrbanCompany-Stamp: 1
+
+x";
+    assert!(has_handyman_marks(k1));
+    assert!(has_handyman_marks(t1));
+    assert!(has_handyman_marks(a1));
+    assert!(has_handyman_marks(b1));
+    assert!(has_handyman_marks(m1));
+    assert!(has_handyman_marks(h1));
+    assert!(has_handyman_marks(c1));
+    assert!(has_handyman_marks(u1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_handyman_marks(clean));
+}
+
+#[test]
+fn scan_は水機印を検出する() {
+    let k1 = b"From: a@b
+X-Kurashian-Id: 1
+
+x";
+    let m1 = b"From: a@b
+X-MizunoKyujotai-Trace: 1
+
+x";
+    let s1 = b"From: a@b
+X-SuidouyaHonpo-Notice: 1
+
+x";
+    let r1 = b"From: a@b
+X-RotoRooter-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-BenPlumbing-Entry: 1
+
+x";
+    let z1 = b"From: a@b
+X-ZoomDrain-Record: 1
+
+x";
+    let d1 = b"From: a@b
+X-Dyno-Rod-Trace: 1
+
+x";
+    let h1 = b"From: a@b
+X-HomeServe-Stamp: 1
+
+x";
+    assert!(has_plumbing_marks(k1));
+    assert!(has_plumbing_marks(m1));
+    assert!(has_plumbing_marks(s1));
+    assert!(has_plumbing_marks(r1));
+    assert!(has_plumbing_marks(b1));
+    assert!(has_plumbing_marks(z1));
+    assert!(has_plumbing_marks(d1));
+    assert!(has_plumbing_marks(h1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_plumbing_marks(clean));
+}
+
+#[test]
+fn scan_は庭機印を検出する() {
+    let t1 = b"From: a@b
+X-TruGreen-Id: 1
+
+x";
+    let l1 = b"From: a@b
+X-LawnStarter-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-BrightView-Notice: 1
+
+x";
+    let d1 = b"From: a@b
+X-Davey-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-SavATree-Entry: 1
+
+x";
+    let w1 = b"From: a@b
+X-WeedMan-Record: 1
+
+x";
+    let u1 = b"From: a@b
+X-Uekiya-Trace: 1
+
+x";
+    let o1 = b"From: a@b
+X-OniwaBan-Stamp: 1
+
+x";
+    assert!(has_garden_marks(t1));
+    assert!(has_garden_marks(l1));
+    assert!(has_garden_marks(b1));
+    assert!(has_garden_marks(d1));
+    assert!(has_garden_marks(s1));
+    assert!(has_garden_marks(w1));
+    assert!(has_garden_marks(u1));
+    assert!(has_garden_marks(o1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_garden_marks(clean));
 }
 }

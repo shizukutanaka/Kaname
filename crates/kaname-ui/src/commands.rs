@@ -2188,6 +2188,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D626: 便利屋・暮らしサービスマーケット印自称
+    if env.handyman_marks {
+        render_risks.push(
+            "X-KuraMara-*/X-TaskRabbit-*/X-Angi-*/X-Benly-*/X-Mitsumor-*/X-HomeAdvisor-*/X-Checkatrade-*/X-UrbanCompany-* 等 — 便機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D627: 水道・水回り修理印自称
+    if env.plumbing_marks {
+        render_risks.push(
+            "X-Kurashian-*/X-MizunoKyujotai-*/X-SuidouyaHonpo-*/X-RotoRooter-*/X-BenPlumbing-*/X-ZoomDrain-*/X-Dyno-Rod-*/X-HomeServe-* 等 — 水機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D628: 造園・芝生手入れ印自称
+    if env.garden_marks {
+        render_risks.push(
+            "X-TruGreen-*/X-LawnStarter-*/X-BrightView-*/X-Davey-*/X-SavATree-*/X-WeedMan-*/X-Uekiya-*/X-OniwaBan-* 等 — 庭機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

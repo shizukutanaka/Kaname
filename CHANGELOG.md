@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D626: `X-KuraMara-*`/`X-TaskRabbit-*`/`X-Angi-*` 等の便利屋・暮らしサービスマーケット印自称が未検査
+
+- **問題**: `X-KuraMara-*`/`X-KurashinoMarket-*` (くらしのマーケット)、`X-Mitsumor-*`/`X-Mitsumoa-*` (ミツモア)、`X-SharingTech-*` (シェアリングテクノロジー)、`X-Benly-*`/`X-Benry-*` (ベンリー)、`X-OtasukeHonpo-*`/`X-Otasuke-*`/`X-Nandemoya-*`/`X-BenriyaSan-*`/`X-HandymanJP-*`、海外は `X-TaskRabbit-*`/`X-Airtasker-*`/`X-Thumbtack-*`/`X-Angi-*`/`X-AngiesList-*`/`X-HomeAdvisor-*`/`X-HandyBook-*`/`X-Porch-*`/`X-FixerApp-*`/`X-Zaarly-*`/`X-TaskEasy-*`/`X-Jiffy-*`/`X-Plentific-*`/`X-Checkatrade-*`/`X-MyBuilder-*`/`X-RatedPeople-*`/`X-TrustATrader-*`/`X-MyJobQuote-*`/`X-BarkPros-*`/`X-Hipages-*`/`X-ServiceSeeking-*`/`X-OneFlare-*`/`X-UrbanCompany-*`/`X-UrbanClap-*`/`X-HouseJoy-*`/`X-Sulekha-*`/`X-Kaodim-*`/`X-HandyPro-*`/`X-MrHandyman-*`/`X-AceHandyman-*`/`X-HandymanConnection-*`/`X-HouseDoctors-*`/`X-TruBlue-*`/`X-Shiply-*`/`X-AnyVan-*`/`X-Dolly-*`/`X-Lugg-*`/`X-Phlatbed-*`/`X-Bungii-*` 等 は便機の通知記録 — 送信側が書くことは自称。出張費・見積外請求・当日追加料金の偽装は便利屋なりすましの典型手口。(家事代行・ハウスクリーニングは housekeeping 機、Zehitomo は housekeeping 機で検出済み)
+- **修正**: `Envelope` に `handyman_marks` + `has_handyman_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 便印の自署を問え。
+
+### Security — D627: `X-Kurashian-*`/`X-RotoRooter-*`/`X-MrRooter-*` 等の水道・水回り修理印自称が未検査
+
+- **問題**: `X-Kurashian-*` (クラシアン)、`X-MizunoKyujotai-*`/`X-MizunoKyujyo-*` (水の救急隊)、`X-SuidouyaHonpo-*`/`X-Suidouya-*` (水道屋本舗)、`X-Mizumawari-*`/`X-SuidouKouji-*`/`X-Aqualine24-*`/`X-Aqualine-*`/`X-HouseLabo-*`/`X-SeikatsuSuidou-*`/`X-HomeRescue-*`/`X-SuidouKyukyu-*`/`X-Mizukyu-*`/`X-MizuTrouble-*`/`X-Suigei-*`/`X-SuidouCenter-*`/`X-MizunoSeibi-*`/`X-MarineSuidou-*`、海外は `X-Roto-Rooter-*`/`X-RotoRooter-*`/`X-MrRooter-*`/`X-BenjaminFranklinPlumbing-*`/`X-BenPlumbing-*`/`X-OneHourPlumbing-*`/`X-ZoomDrain-*`/`X-RescueRooter-*`/`X-ARSRescue-*`/`X-ServiceExperts-*`/`X-Plumbline-*`/`X-PlumbingPros-*`/`X-Ferguson-*`/`X-WinSupply-*`/`X-DynoRod-*`/`X-Dyno-Rod-*`/`X-PimlicoPlumbers-*`/`X-HomeServe-*`/`X-DrainDoctor-*`/`X-MetroRod-*`/`X-LanesForDrains-*`/`X-Dalrod-*`/`X-DrainMe-*`/`X-BlueRoot-*` 等 は水機の通知記録 — 送信側が書くことは自称。高額出張費・緊急修理料金・部品交換請求の偽装は水道業者なりすましの典型手口。(住宅メーカー・設備建材は housing 機、フィールドサービス管理ソフトは fieldservice 機で検出済み)
+- **修正**: `Envelope` に `plumbing_marks` + `has_plumbing_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 水機印の自署を問え。
+
+### Security — D628: `X-TruGreen-*`/`X-LawnStarter-*`/`X-BrightView-*` 等の造園・芝生手入れ印自称が未検査
+
+- **問題**: `X-TruGreen-*`/`X-LawnStarter-*`/`X-LawnLove-*`/`X-SundayLawn-*`/`X-BrightView-*`/`X-DaveyTree-*`/`X-Davey-*`/`X-BartlettTree-*`/`X-Bartlett-*`/`X-SavATree-*`/`X-WeedMan-*`/`X-LawnDoctor-*`/`X-SpringGreen-*`/`X-USLawns-*`/`X-YellowstoneLandscape-*`/`X-FairwayLawns-*`/`X-LawnSquad-*`/`X-NaturalLawn-*`/`X-ScottsLawn-*`/`X-TopLawn-*`/`X-Greensleeves-*`/`X-LawnMaster-*`/`X-MonsterTree-*`/`X-GreenPal-*`/`X-EdenApp-*`/`X-YourGreenPal-*`/`X-LawnPro-*`/`X-Turf-Guardian-*`/`X-TurfGuardian-*`/`X-GroundsGuys-*`/`X-TheGroundsGuys-*`/`X-MowerExpress-*`/`X-MowZilla-*`/`X-LawnCarePros-*`/`X-Yardzen-*`/`X-TerraLandscaping-*`/`X-Treelogy-*`、JP は `X-Uekiya-*`/`X-UekiyaSan-*`/`X-Niwashi-*`/`X-Zouen-*`/`X-OniwaBan-*`/`X-Teien-*`/`X-Niwate-*`/`X-GreenKeeping-*`/`X-ExteriorWorks-*`/`X-GardenSmith-*`/`X-LandArchitect-*` 等 は庭機の通知記録 — 送信側が書くことは自称。季節の剪定・施肥・除草・外構工事見積の偽装は造園業者なりすましの典型手口。(害虫駆除は facility 機、ホームセンター・工具は diytool 機で検出済み)
+- **修正**: `Envelope` に `garden_marks` + `has_garden_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 庭印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
