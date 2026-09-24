@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub equiprental_marks: bool,
+    pub portabletoilet_marks: bool,
+    pub partyrental_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        equiprental_marks: has_equiprental_marks(hdr),
+        portabletoilet_marks: has_portabletoilet_marks(hdr),
+        partyrental_marks: has_partyrental_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,182 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_equiprental_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-unitedrentals-")
+            || l.starts_with("x-sunbeltrentals-")
+            || l.starts_with("x-hercrentals-")
+            || l.starts_with("x-bigrentz-")
+            || l.starts_with("x-equipmentshare-")
+            || l.starts_with("x-rentequip-")
+            || l.starts_with("x-equipmentrental-")
+            || l.starts_with("x-equiprental-")
+            || l.starts_with("x-heavyrental-")
+            || l.starts_with("x-machineryrental-")
+            || l.starts_with("x-rentalworks-")
+            || l.starts_with("x-rentalpros-")
+            || l.starts_with("x-rentalteam-")
+            || l.starts_with("x-equipmentpros-")
+            || l.starts_with("x-heavyequiprental-")
+            || l.starts_with("x-constructionrental-")
+            || l.starts_with("x-rentalforce-")
+            || l.starts_with("x-rentalexperts-")
+            || l.starts_with("x-rentaldoctors-")
+            || l.starts_with("x-rentalmasters-")
+            || l.starts_with("x-equipmentdoctors-")
+            || l.starts_with("x-kenkirental-")
+            || l.starts_with("x-kenkiyasan-")
+            || l.starts_with("x-kenkipro-")
+            || l.starts_with("x-kenkiteam-")
+            || l.starts_with("x-kenkigyosha-")
+            || l.starts_with("x-kenkiseibi-")
+            || l.starts_with("x-kenkikensa-")
+            || l.starts_with("x-kenkimanten-")
+            || l.starts_with("x-kenkinomi-")
+            || l.starts_with("x-kenkijp-")
+            || l.starts_with("x-kenkisenmon-")
+            || l.starts_with("x-aktio-")
+            || l.starts_with("x-aktiorental-")
+            || l.starts_with("x-nishiorental-")
+            || l.starts_with("x-kanamotorental-")
+            || l.starts_with("x-akiseirental-")
+            || l.starts_with("x-nikkenrental-")
+            || l.starts_with("x-koukenrental-")
+            || l.starts_with("x-kenkimitsumori-")
+            || l.starts_with("x-kenkichousa-")
+            || l.starts_with("x-kenkiteiki-")
+            || l.starts_with("x-kenkishuri-")
+            || l.starts_with("x-kenkidoctors-")
+            || l.starts_with("x-kenkisagyou-")
+            || l.starts_with("x-kenkirescue-")
+            || l.starts_with("x-kenkiteikyu-")
+            || l.starts_with("x-kenkiorder-")
+            || l.starts_with("x-kenkijuu-")
+            || l.starts_with("x-kenkibosyuu-")
+    })
+}
+
+fn has_portabletoilet_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-portapotty-")
+            || l.starts_with("x-portabletoilet-")
+            || l.starts_with("x-portablejohn-")
+            || l.starts_with("x-polyjohn-")
+            || l.starts_with("x-satelliteind-")
+            || l.starts_with("x-satellitesuite-")
+            || l.starts_with("x-unitedsiteservices-")
+            || l.starts_with("x-ussrestrooms-")
+            || l.starts_with("x-zters-")
+            || l.starts_with("x-nationalrental-")
+            || l.starts_with("x-portajohn-")
+            || l.starts_with("x-honeybucket-")
+            || l.starts_with("x-honeypotrestroom-")
+            || l.starts_with("x-portosan-")
+            || l.starts_with("x-arisal-")
+            || l.starts_with("x-portalet-")
+            || l.starts_with("x-restroomrental-")
+            || l.starts_with("x-restroompros-")
+            || l.starts_with("x-restroomtrailer-")
+            || l.starts_with("x-sanitationpros-")
+            || l.starts_with("x-handwashstation-")
+            || l.starts_with("x-portablelava-")
+            || l.starts_with("x-restroomteam-")
+            || l.starts_with("x-restroomworks-")
+            || l.starts_with("x-kasetsutoire-")
+            || l.starts_with("x-toiresagyou-")
+            || l.starts_with("x-kasetsuyasan-")
+            || l.starts_with("x-toirekouji-")
+            || l.starts_with("x-toirepro-")
+            || l.starts_with("x-toireteam-")
+            || l.starts_with("x-toiregyosha-")
+            || l.starts_with("x-toireseibi-")
+            || l.starts_with("x-toirekensa-")
+            || l.starts_with("x-toiremanten-")
+            || l.starts_with("x-toirenomi-")
+            || l.starts_with("x-toirejp-")
+            || l.starts_with("x-toiresenmon-")
+            || l.starts_with("x-toiresouji-")
+            || l.starts_with("x-toiremitsumori-")
+            || l.starts_with("x-toireteiki-")
+            || l.starts_with("x-kasetsukouji-")
+            || l.starts_with("x-kasetsuseibi-")
+            || l.starts_with("x-potaburutoire-")
+            || l.starts_with("x-toirechousa-")
+            || l.starts_with("x-toireshuri-")
+            || l.starts_with("x-toireteikyu-")
+    })
+}
+
+fn has_partyrental_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-partyrental-")
+            || l.starts_with("x-eventrental-")
+            || l.starts_with("x-partyrentals-")
+            || l.starts_with("x-eventrentals-")
+            || l.starts_with("x-tentrental-")
+            || l.starts_with("x-tentrentals-")
+            || l.starts_with("x-bouncehouse-")
+            || l.starts_with("x-bouncerental-")
+            || l.starts_with("x-inflatablerental-")
+            || l.starts_with("x-funrental-")
+            || l.starts_with("x-partyworks-")
+            || l.starts_with("x-eventpros-")
+            || l.starts_with("x-partypros-")
+            || l.starts_with("x-partyexperts-")
+            || l.starts_with("x-tentpros-")
+            || l.starts_with("x-bigtentevents-")
+            || l.starts_with("x-classicparty-")
+            || l.starts_with("x-partytime-")
+            || l.starts_with("x-partytimerental-")
+            || l.starts_with("x-abbeyrents-")
+            || l.starts_with("x-weddingrental-")
+            || l.starts_with("x-marqueerental-")
+            || l.starts_with("x-stagerental-")
+            || l.starts_with("x-tablerental-")
+            || l.starts_with("x-chairrental-")
+            || l.starts_with("x-linenpartyrental-")
+            || l.starts_with("x-partyforce-")
+            || l.starts_with("x-eventdoctors-")
+            || l.starts_with("x-eventworks-")
+            || l.starts_with("x-eventteam-")
+            || l.starts_with("x-ibentoyougu-")
+            || l.starts_with("x-ibentosagyou-")
+            || l.starts_with("x-ibentoyasan-")
+            || l.starts_with("x-ibentopro-")
+            || l.starts_with("x-ibentoteam-")
+            || l.starts_with("x-ibentogyosha-")
+            || l.starts_with("x-ibentoseibi-")
+            || l.starts_with("x-ibentokensa-")
+            || l.starts_with("x-ibentomanten-")
+            || l.starts_with("x-ibentojp-")
+            || l.starts_with("x-ibentosenmon-")
+            || l.starts_with("x-ibentomitsumori-")
+            || l.starts_with("x-patirental-")
+            || l.starts_with("x-patiyasan-")
+            || l.starts_with("x-kashidashiya-")
+            || l.starts_with("x-kashiyasan-")
+            || l.starts_with("x-tentoyasan-")
+            || l.starts_with("x-tentokouji-")
+            || l.starts_with("x-tentoseibi-")
+            || l.starts_with("x-tentomanten-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20823,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は械機印を検出する() {
+        let f0 = b"From: a@b\r\nX-UnitedRentals-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-SunbeltRentals-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-KenkiRental-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Aktio-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-HercRentals-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-KanamotoRental-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-EquipRental-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-KenkiTeam-Record: 1\r\n\r\nx";
+        assert!(has_equiprental_marks(f0));
+        assert!(has_equiprental_marks(f1));
+        assert!(has_equiprental_marks(f2));
+        assert!(has_equiprental_marks(f3));
+        assert!(has_equiprental_marks(f4));
+        assert!(has_equiprental_marks(f5));
+        assert!(has_equiprental_marks(f6));
+        assert!(has_equiprental_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_equiprental_marks(clean));
+    }
+
+    #[test]
+    fn scan_は便機印を検出する() {
+        let f0 = b"From: a@b\r\nX-PortaPotty-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-PolyJohn-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-KasetsuToire-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-ToireKouji-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-UnitedSiteServices-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-Zters-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-ToireTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-HoneyBucket-Record: 1\r\n\r\nx";
+        assert!(has_portabletoilet_marks(f0));
+        assert!(has_portabletoilet_marks(f1));
+        assert!(has_portabletoilet_marks(f2));
+        assert!(has_portabletoilet_marks(f3));
+        assert!(has_portabletoilet_marks(f4));
+        assert!(has_portabletoilet_marks(f5));
+        assert!(has_portabletoilet_marks(f6));
+        assert!(has_portabletoilet_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_portabletoilet_marks(clean));
+    }
+
+    #[test]
+    fn scan_は宴機印を検出する() {
+        let f0 = b"From: a@b\r\nX-PartyRental-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-TentRental-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-IbentoYougu-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-PatiRental-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-BounceHouse-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-WeddingRental-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-Kashidashiya-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-EventPros-Record: 1\r\n\r\nx";
+        assert!(has_partyrental_marks(f0));
+        assert!(has_partyrental_marks(f1));
+        assert!(has_partyrental_marks(f2));
+        assert!(has_partyrental_marks(f3));
+        assert!(has_partyrental_marks(f4));
+        assert!(has_partyrental_marks(f5));
+        assert!(has_partyrental_marks(f6));
+        assert!(has_partyrental_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_partyrental_marks(clean));
+    }
 }
