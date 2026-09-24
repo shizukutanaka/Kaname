@@ -2015,6 +2015,12 @@ pub struct Envelope {
     pub hunting_marks: bool,
     /// `X-Weightlifting-*`/`X-Powerlifting-*`/`X-Strongman-*` 等の重量挙・パワーリフティング印を送信側が自称する兆候 (D751)
     pub powerlifting_marks: bool,
+    /// `X-Keiba-*`/`X-Nar-*`/`X-Netkeiba-*` 等の競馬・公営競技印を送信側が自称する兆候 (D752)
+    pub keiba_marks: bool,
+    /// `X-Kabutomushi-*`/`X-Kuwagata-*`/`X-Insect-*` 等の昆虫・爬虫類・熱帯魚印を送信側が自称する兆候 (D753)
+    pub insect_marks: bool,
+    /// `X-Poker-*`/`X-Wsop-*`/`X-Ggpoker-*` 等のポーカー印を送信側が自称する兆候 (D754)
+    pub poker_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2644,6 +2650,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         wintersport_marks: has_wintersport_marks(hdr),
         hunting_marks: has_hunting_marks(hdr),
         powerlifting_marks: has_powerlifting_marks(hdr),
+        keiba_marks: has_keiba_marks(hdr),
+        insect_marks: has_insect_marks(hdr),
+        poker_marks: has_poker_marks(hdr),
     })
 }
 
@@ -23289,6 +23298,216 @@ fn has_powerlifting_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-wpcpro-"))
 }
 
+fn has_keiba_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-keiba-")
+            || l.starts_with("x-nar-")
+            || l.starts_with("x-netkeiba-")
+            || l.starts_with("x-ipat-")
+            || l.starts_with("x-spat4-")
+            || l.starts_with("x-racecourse-")
+            || l.starts_with("x-win5-")
+            || l.starts_with("x-kyotei-")
+            || l.starts_with("x-keibanavi-")
+            || l.starts_with("x-keibacenter-")
+            || l.starts_with("x-keibashop-")
+            || l.starts_with("x-keibapro-")
+            || l.starts_with("x-keibamart-")
+            || l.starts_with("x-keibaplus-")
+            || l.starts_with("x-keibasmart-")
+            || l.starts_with("x-keibafamily-")
+            || l.starts_with("x-narnavi-")
+            || l.starts_with("x-narcenter-")
+            || l.starts_with("x-narshop-")
+            || l.starts_with("x-narpro-")
+            || l.starts_with("x-narmart-")
+            || l.starts_with("x-narplus-")
+            || l.starts_with("x-narsmart-")
+            || l.starts_with("x-narfamily-")
+            || l.starts_with("x-netkeibanavi-")
+            || l.starts_with("x-netkeibacenter-")
+            || l.starts_with("x-netkeibashop-")
+            || l.starts_with("x-netkeibapro-")
+            || l.starts_with("x-netkeibamart-")
+            || l.starts_with("x-netkeibaplus-")
+            || l.starts_with("x-netkeibasmart-")
+            || l.starts_with("x-netkeibafamily-")
+            || l.starts_with("x-ipatnavi-")
+            || l.starts_with("x-ipatcenter-")
+            || l.starts_with("x-ipatshop-")
+            || l.starts_with("x-ipatpro-")
+            || l.starts_with("x-ipatmart-")
+            || l.starts_with("x-ipatplus-")
+            || l.starts_with("x-ipatsmart-")
+            || l.starts_with("x-ipatfamily-")
+            || l.starts_with("x-spat4navi-")
+            || l.starts_with("x-spat4center-")
+            || l.starts_with("x-spat4shop-")
+            || l.starts_with("x-spat4pro-")
+            || l.starts_with("x-spat4mart-")
+            || l.starts_with("x-spat4plus-")
+            || l.starts_with("x-spat4smart-")
+            || l.starts_with("x-spat4family-")
+            || l.starts_with("x-racecoursenavi-")
+            || l.starts_with("x-racecoursecenter-")
+            || l.starts_with("x-racecourseshop-")
+            || l.starts_with("x-racecoursepro-")
+            || l.starts_with("x-racecoursemart-")
+            || l.starts_with("x-racecourseplus-")
+            || l.starts_with("x-racecoursesmart-")
+            || l.starts_with("x-racecoursefamily-")
+            || l.starts_with("x-win5navi-")
+            || l.starts_with("x-win5center-")
+            || l.starts_with("x-win5shop-")
+            || l.starts_with("x-win5pro-")
+            || l.starts_with("x-win5mart-")
+            || l.starts_with("x-win5plus-"))
+}
+
+fn has_insect_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kabutomushi-")
+            || l.starts_with("x-kuwagata-")
+            || l.starts_with("x-insect-")
+            || l.starts_with("x-reptile-")
+            || l.starts_with("x-tarantula-")
+            || l.starts_with("x-gecko-")
+            || l.starts_with("x-ballpython-")
+            || l.starts_with("x-tropicalfish-")
+            || l.starts_with("x-aquariumfish-")
+            || l.starts_with("x-beardeddragon-")
+            || l.starts_with("x-kabutomushinavi-")
+            || l.starts_with("x-kabutomushicenter-")
+            || l.starts_with("x-kabutomushishop-")
+            || l.starts_with("x-kabutomushipro-")
+            || l.starts_with("x-kabutomushimart-")
+            || l.starts_with("x-kabutomushiplus-")
+            || l.starts_with("x-kabutomushismart-")
+            || l.starts_with("x-kabutomushifamily-")
+            || l.starts_with("x-kuwagatanavi-")
+            || l.starts_with("x-kuwagatacenter-")
+            || l.starts_with("x-kuwagatashop-")
+            || l.starts_with("x-kuwagatapro-")
+            || l.starts_with("x-kuwagatamart-")
+            || l.starts_with("x-kuwagataplus-")
+            || l.starts_with("x-kuwagatasmart-")
+            || l.starts_with("x-kuwagatafamily-")
+            || l.starts_with("x-insectnavi-")
+            || l.starts_with("x-insectcenter-")
+            || l.starts_with("x-insectshop-")
+            || l.starts_with("x-insectpro-")
+            || l.starts_with("x-insectmart-")
+            || l.starts_with("x-insectplus-")
+            || l.starts_with("x-insectsmart-")
+            || l.starts_with("x-insectfamily-")
+            || l.starts_with("x-reptilenavi-")
+            || l.starts_with("x-reptilecenter-")
+            || l.starts_with("x-reptileshop-")
+            || l.starts_with("x-reptilepro-")
+            || l.starts_with("x-reptilemart-")
+            || l.starts_with("x-reptileplus-")
+            || l.starts_with("x-reptilesmart-")
+            || l.starts_with("x-reptilefamily-")
+            || l.starts_with("x-tarantulanavi-")
+            || l.starts_with("x-tarantulacenter-")
+            || l.starts_with("x-tarantulashop-")
+            || l.starts_with("x-tarantulapro-")
+            || l.starts_with("x-tarantulamart-")
+            || l.starts_with("x-tarantulaplus-")
+            || l.starts_with("x-tarantulasmart-")
+            || l.starts_with("x-tarantulafamily-")
+            || l.starts_with("x-geckonavi-")
+            || l.starts_with("x-geckocenter-")
+            || l.starts_with("x-geckoshop-")
+            || l.starts_with("x-geckopro-")
+            || l.starts_with("x-geckomart-")
+            || l.starts_with("x-geckoplus-")
+            || l.starts_with("x-geckosmart-")
+            || l.starts_with("x-geckofamily-")
+            || l.starts_with("x-ballpythonnavi-")
+            || l.starts_with("x-ballpythoncenter-")
+            || l.starts_with("x-ballpythonshop-")
+            || l.starts_with("x-ballpythonpro-"))
+}
+
+fn has_poker_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-poker-")
+            || l.starts_with("x-wsop-")
+            || l.starts_with("x-ggpoker-")
+            || l.starts_with("x-partypoker-")
+            || l.starts_with("x-natural8-")
+            || l.starts_with("x-jopt-")
+            || l.starts_with("x-wpt-")
+            || l.starts_with("x-pppoker-")
+            || l.starts_with("x-clubgg-")
+            || l.starts_with("x-upoker-")
+            || l.starts_with("x-kkpoker-")
+            || l.starts_with("x-livepoker-")
+            || l.starts_with("x-pokernavi-")
+            || l.starts_with("x-pokercenter-")
+            || l.starts_with("x-pokershop-")
+            || l.starts_with("x-pokerpro-")
+            || l.starts_with("x-pokermart-")
+            || l.starts_with("x-pokerplus-")
+            || l.starts_with("x-pokersmart-")
+            || l.starts_with("x-pokerfamily-")
+            || l.starts_with("x-wsopnavi-")
+            || l.starts_with("x-wsopcenter-")
+            || l.starts_with("x-wsopshop-")
+            || l.starts_with("x-wsoppro-")
+            || l.starts_with("x-wsopmart-")
+            || l.starts_with("x-wsopplus-")
+            || l.starts_with("x-wsopsmart-")
+            || l.starts_with("x-wsopfamily-")
+            || l.starts_with("x-ggpokernavi-")
+            || l.starts_with("x-ggpokercenter-")
+            || l.starts_with("x-ggpokershop-")
+            || l.starts_with("x-ggpokerpro-")
+            || l.starts_with("x-ggpokermart-")
+            || l.starts_with("x-ggpokerplus-")
+            || l.starts_with("x-ggpokersmart-")
+            || l.starts_with("x-ggpokerfamily-")
+            || l.starts_with("x-partypokernavi-")
+            || l.starts_with("x-partypokercenter-")
+            || l.starts_with("x-partypokershop-")
+            || l.starts_with("x-partypokerpro-")
+            || l.starts_with("x-partypokermart-")
+            || l.starts_with("x-partypokerplus-")
+            || l.starts_with("x-partypokersmart-")
+            || l.starts_with("x-partypokerfamily-")
+            || l.starts_with("x-natural8navi-")
+            || l.starts_with("x-natural8center-")
+            || l.starts_with("x-natural8shop-")
+            || l.starts_with("x-natural8pro-")
+            || l.starts_with("x-natural8mart-")
+            || l.starts_with("x-natural8plus-")
+            || l.starts_with("x-natural8smart-")
+            || l.starts_with("x-natural8family-")
+            || l.starts_with("x-joptnavi-")
+            || l.starts_with("x-joptcenter-")
+            || l.starts_with("x-joptshop-")
+            || l.starts_with("x-joptpro-")
+            || l.starts_with("x-joptmart-")
+            || l.starts_with("x-joptplus-")
+            || l.starts_with("x-joptsmart-")
+            || l.starts_with("x-joptfamily-")
+            || l.starts_with("x-wptnavi-")
+            || l.starts_with("x-wptcenter-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -34122,6 +34341,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_powerlifting_marks(clean));
+    }
+
+    #[test]
+    fn scan_は駒機印を検出する() {
+        for raw in [
+            br"X-Keiba-Alert: 1",
+            br"X-Nar-Notice: 1",
+            br"X-Netkeiba-Info: 1",
+            br"X-Ipat-Report: 1",
+            br"X-Spat4-Bulletin: 1",
+            br"X-Racecourse-News: 1",
+            br"X-Win5-Flash: 1",
+            br"X-Kyotei-Release: 1",
+        ] {
+            assert!(has_keiba_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_keiba_marks(clean));
+    }
+
+    #[test]
+    fn scan_は虫機印を検出する() {
+        for raw in [
+            br"X-Kabutomushi-Alert: 1",
+            br"X-Kuwagata-Notice: 1",
+            br"X-Insect-Info: 1",
+            br"X-Reptile-Report: 1",
+            br"X-Tarantula-Bulletin: 1",
+            br"X-Gecko-News: 1",
+            br"X-Tropicalfish-Flash: 1",
+            br"X-Beardeddragon-Release: 1",
+        ] {
+            assert!(has_insect_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_insect_marks(clean));
+    }
+
+    #[test]
+    fn scan_は牌機印を検出する() {
+        for raw in [
+            br"X-Poker-Alert: 1",
+            br"X-Wsop-Notice: 1",
+            br"X-Ggpoker-Info: 1",
+            br"X-Partypoker-Report: 1",
+            br"X-Natural8-Bulletin: 1",
+            br"X-Jopt-News: 1",
+            br"X-Pppoker-Flash: 1",
+            br"X-Clubgg-Release: 1",
+        ] {
+            assert!(has_poker_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_poker_marks(clean));
     }
 
 }

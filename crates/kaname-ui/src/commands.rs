@@ -3220,6 +3220,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D752: 競馬・公営競技印自称
+    if env.keiba_marks {
+        render_risks.push(
+            "X-Keiba-*/X-Nar-*/X-Netkeiba-*/X-Ipat-*/X-Spat4-*/X-Racecourse-*/X-Win5-*/X-Kyotei-* 等 — 駒機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D753: 昆虫・爬虫類・熱帯魚印自称
+    if env.insect_marks {
+        render_risks.push(
+            "X-Kabutomushi-*/X-Kuwagata-*/X-Insect-*/X-Reptile-*/X-Tarantula-*/X-Gecko-*/X-Tropicalfish-*/X-Beardeddragon-* 等 — 虫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D754: ポーカー印自称
+    if env.poker_marks {
+        render_risks.push(
+            "X-Poker-*/X-Wsop-*/X-Ggpoker-*/X-Partypoker-*/X-Natural8-*/X-Jopt-*/X-Pppoker-*/X-Clubgg-* 等 — 牌機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
