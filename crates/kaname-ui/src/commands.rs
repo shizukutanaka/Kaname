@@ -2800,6 +2800,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D692: VTuber・ライバー印自称
+    if env.vtuber_marks {
+        render_risks.push(
+            "X-Vtuber-*/X-Vliver-*/X-Nijisanji-*/X-Hololive-*/X-Vspo-*/X-Vshojo-*/X-Holostars-*/X-Bravegroup-* 等 — 播機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D693: ナイトライフ・パパ活印自称
+    if env.nightlife_marks {
+        render_risks.push(
+            "X-Hostclub-*/X-Kyaba-*/X-Girlsbar-*/X-Cabaret-*/X-Soapland-*/X-Fuuzoku-*/X-Papakatsu-*/X-Sugardaddy-* 等 — 夜機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D694: 特殊清掃・遺品整理・除霊印自称
+    if env.tokushu_marks {
+        render_risks.push(
+            "X-Tokushu-*/X-Gomiyashiki-*/X-Ihinseiri-*/X-Kodokushi-*/X-Seisou-*/X-Jorei-*/X-Reikan-*/X-Spiritual-* 等 — 清機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
