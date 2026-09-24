@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub futon_marks: bool,
+    pub frame_marks: bool,
+    pub uranai_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        futon_marks: has_futon_marks(hdr),
+        frame_marks: has_frame_marks(hdr),
+        uranai_marks: has_uranai_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,184 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_futon_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-futon-")
+            || l.starts_with("x-futonyasan-")
+            || l.starts_with("x-futonpro-")
+            || l.starts_with("x-futonteam-")
+            || l.starts_with("x-futonkensa-")
+            || l.starts_with("x-futonmanten-")
+            || l.starts_with("x-futonnomi-")
+            || l.starts_with("x-futonjp-")
+            || l.starts_with("x-futonsenmon-")
+            || l.starts_with("x-futonmitsumori-")
+            || l.starts_with("x-futonchousa-")
+            || l.starts_with("x-futonteiki-")
+            || l.starts_with("x-futonshuri-")
+            || l.starts_with("x-futonsho-")
+            || l.starts_with("x-futonten-")
+            || l.starts_with("x-futonkoubou-")
+            || l.starts_with("x-futonmart-")
+            || l.starts_with("x-futonbank-")
+            || l.starts_with("x-shingu-")
+            || l.starts_with("x-shinguyasan-")
+            || l.starts_with("x-shingupro-")
+            || l.starts_with("x-shinguteam-")
+            || l.starts_with("x-shingukensa-")
+            || l.starts_with("x-shingumanten-")
+            || l.starts_with("x-shingunomi-")
+            || l.starts_with("x-shingujp-")
+            || l.starts_with("x-shingusenmon-")
+            || l.starts_with("x-shingumitsumori-")
+            || l.starts_with("x-shinguchousa-")
+            || l.starts_with("x-shinguteiki-")
+            || l.starts_with("x-shingushuri-")
+            || l.starts_with("x-mattresspros-")
+            || l.starts_with("x-mattressteam-")
+            || l.starts_with("x-mattressworks-")
+            || l.starts_with("x-mattressforce-")
+            || l.starts_with("x-mattressnation-")
+            || l.starts_with("x-mattressexperts-")
+            || l.starts_with("x-mattressdoctors-")
+            || l.starts_with("x-mattressmasters-")
+            || l.starts_with("x-mattresssvc-")
+            || l.starts_with("x-mattresshq-")
+            || l.starts_with("x-mattressfirm-")
+            || l.starts_with("x-beddingpros-")
+            || l.starts_with("x-beddingteam-")
+            || l.starts_with("x-beddingworks-")
+            || l.starts_with("x-beddingexperts-")
+            || l.starts_with("x-beddingsvc-")
+            || l.starts_with("x-beddinghq-")
+            || l.starts_with("x-beddingmart-")
+            || l.starts_with("x-beddingbank-")
+            || l.starts_with("x-sleeppros-")
+    })
+}
+
+fn has_frame_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-gakubuchi-")
+            || l.starts_with("x-gakubuchiyasan-")
+            || l.starts_with("x-gakubuchipro-")
+            || l.starts_with("x-gakubuchiteam-")
+            || l.starts_with("x-gakubuchikensa-")
+            || l.starts_with("x-gakubuchimanten-")
+            || l.starts_with("x-gakubuchinomi-")
+            || l.starts_with("x-gakubuchijp-")
+            || l.starts_with("x-gakubuchisenmon-")
+            || l.starts_with("x-gakubuchimitsumori-")
+            || l.starts_with("x-gakubuchichousa-")
+            || l.starts_with("x-gakubuchiteiki-")
+            || l.starts_with("x-gakubuchishuri-")
+            || l.starts_with("x-gakubuchisho-")
+            || l.starts_with("x-gakubuchiten-")
+            || l.starts_with("x-gakubuchikoubou-")
+            || l.starts_with("x-gakubuchimart-")
+            || l.starts_with("x-gakubuchibank-")
+            || l.starts_with("x-gakusou-")
+            || l.starts_with("x-gakusouyasan-")
+            || l.starts_with("x-gakusoupro-")
+            || l.starts_with("x-gakusouteam-")
+            || l.starts_with("x-gakusoukensa-")
+            || l.starts_with("x-gakusoumanten-")
+            || l.starts_with("x-gakusounomi-")
+            || l.starts_with("x-gakusoujp-")
+            || l.starts_with("x-gakusousenmon-")
+            || l.starts_with("x-gakusoumitsumori-")
+            || l.starts_with("x-gakusouchousa-")
+            || l.starts_with("x-gakusouteiki-")
+            || l.starts_with("x-gakusoushuri-")
+            || l.starts_with("x-framepros-")
+            || l.starts_with("x-frameteam-")
+            || l.starts_with("x-frameworksexperts-")
+            || l.starts_with("x-frameshoppros-")
+            || l.starts_with("x-frameshopteam-")
+            || l.starts_with("x-frameshopworks-")
+            || l.starts_with("x-frameshopexperts-")
+            || l.starts_with("x-frameshopsvc-")
+            || l.starts_with("x-frameshophq-")
+            || l.starts_with("x-pictureframepros-")
+            || l.starts_with("x-pictureframeteam-")
+            || l.starts_with("x-pictureframeworks-")
+            || l.starts_with("x-pictureframeexperts-")
+            || l.starts_with("x-pictureframesvc-")
+            || l.starts_with("x-pictureframehq-")
+            || l.starts_with("x-gakubuchidoctors-")
+            || l.starts_with("x-gakubuchisagyou-")
+            || l.starts_with("x-gakubuchirescue-")
+    })
+}
+
+fn has_uranai_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-uranai-")
+            || l.starts_with("x-uranaiyasan-")
+            || l.starts_with("x-uranaipro-")
+            || l.starts_with("x-uranaiteam-")
+            || l.starts_with("x-uranaikensa-")
+            || l.starts_with("x-uranimanten-")
+            || l.starts_with("x-uranainomi-")
+            || l.starts_with("x-uranaijp-")
+            || l.starts_with("x-uranaisenmon-")
+            || l.starts_with("x-uranaimitsumori-")
+            || l.starts_with("x-uranaichousa-")
+            || l.starts_with("x-uranaiteiki-")
+            || l.starts_with("x-uranaishuri-")
+            || l.starts_with("x-uranaisho-")
+            || l.starts_with("x-uranaiten-")
+            || l.starts_with("x-uranaikoubou-")
+            || l.starts_with("x-uranimart-")
+            || l.starts_with("x-uranaibank-")
+            || l.starts_with("x-fortunepros-")
+            || l.starts_with("x-fortuneteam-")
+            || l.starts_with("x-fortuneworks-")
+            || l.starts_with("x-fortuneexperts-")
+            || l.starts_with("x-fortunedoctors-")
+            || l.starts_with("x-fortunesvc-")
+            || l.starts_with("x-fortunehq-")
+            || l.starts_with("x-psychicpros-")
+            || l.starts_with("x-psychicteam-")
+            || l.starts_with("x-psychicworks-")
+            || l.starts_with("x-psychicexperts-")
+            || l.starts_with("x-psychicdoctors-")
+            || l.starts_with("x-psychicsvc-")
+            || l.starts_with("x-psychichq-")
+            || l.starts_with("x-psychicmart-")
+            || l.starts_with("x-psychicbank-")
+            || l.starts_with("x-tarotpros-")
+            || l.starts_with("x-tarotteam-")
+            || l.starts_with("x-tarotworks-")
+            || l.starts_with("x-tarotexperts-")
+            || l.starts_with("x-tarotsvc-")
+            || l.starts_with("x-tarothq-")
+            || l.starts_with("x-uranaikantei-")
+            || l.starts_with("x-uranaidoctors-")
+            || l.starts_with("x-uranaisagyou-")
+            || l.starts_with("x-uranairescue-")
+            || l.starts_with("x-fortunemart-")
+            || l.starts_with("x-fortunebank-")
+            || l.starts_with("x-psychicsho-")
+            || l.starts_with("x-psychicten-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20825,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は寝機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Futon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FutonKoubou-Order: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Shingu-Yasan: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MattressPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MattressFirm-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BeddingWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FutonSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SleepPros-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_futon_marks(h));
+        }
+        assert!(!has_futon_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は額機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Gakubuchi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Gakusou-Order: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FrameShopPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PictureFrameWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GakubuchiKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FramePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GakusouPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PictureFrameHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_frame_marks(h));
+        }
+        assert!(!has_frame_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は占機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Uranai-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FortunePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PsychicWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TarotExperts-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UranaiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FortuneHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PsychicMart-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UranaiPro-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_uranai_marks(h));
+        }
+        assert!(!has_uranai_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
