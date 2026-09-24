@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub notary_marks: bool,
+    pub translation_marks: bool,
+    pub courier_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        notary_marks: has_notary_marks(hdr),
+        translation_marks: has_translation_marks(hdr),
+        courier_marks: has_courier_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,186 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_notary_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-notary-")
+            || l.starts_with("x-notarize-")
+            || l.starts_with("x-notarycam-")
+            || l.starts_with("x-mobilenotary-")
+            || l.starts_with("x-notarypros-")
+            || l.starts_with("x-notaryservice-")
+            || l.starts_with("x-notaryteam-")
+            || l.starts_with("x-notaryworks-")
+            || l.starts_with("x-notaryexperts-")
+            || l.starts_with("x-notarydoctors-")
+            || l.starts_with("x-notarymasters-")
+            || l.starts_with("x-notaryforce-")
+            || l.starts_with("x-notarynation-")
+            || l.starts_with("x-notarypublic-")
+            || l.starts_with("x-notaryagent-")
+            || l.starts_with("x-notarysigning-")
+            || l.starts_with("x-loansigning-")
+            || l.starts_with("x-signingagent-")
+            || l.starts_with("x-notarynow-")
+            || l.starts_with("x-notaryhq-")
+            || l.starts_with("x-notarizepros-")
+            || l.starts_with("x-apostille-")
+            || l.starts_with("x-apostillepros-")
+            || l.starts_with("x-apostilleservice-")
+            || l.starts_with("x-koushou-")
+            || l.starts_with("x-koushouyasan-")
+            || l.starts_with("x-koushoupro-")
+            || l.starts_with("x-koushouteam-")
+            || l.starts_with("x-koushougyosha-")
+            || l.starts_with("x-koushouseibi-")
+            || l.starts_with("x-koushoukensa-")
+            || l.starts_with("x-koushoumanten-")
+            || l.starts_with("x-koushounomi-")
+            || l.starts_with("x-koushoujp-")
+            || l.starts_with("x-koushousenmon-")
+            || l.starts_with("x-koushoumitsumori-")
+            || l.starts_with("x-koushouchousa-")
+            || l.starts_with("x-koushouteiki-")
+            || l.starts_with("x-koushoushuri-")
+            || l.starts_with("x-koushoudoctors-")
+            || l.starts_with("x-koushousagyou-")
+            || l.starts_with("x-koushourescue-")
+            || l.starts_with("x-koushouteikyu-")
+            || l.starts_with("x-koushouorder-")
+            || l.starts_with("x-koushoujuu-")
+            || l.starts_with("x-koushoubosyuu-")
+            || l.starts_with("x-notarykentei-")
+            || l.starts_with("x-apostilleyasan-")
+            || l.starts_with("x-koushoukyoku-")
+    })
+}
+
+fn has_translation_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-transperfect-")
+            || l.starts_with("x-lionbridge-")
+            || l.starts_with("x-gengo-")
+            || l.starts_with("x-smartcat-")
+            || l.starts_with("x-translation-")
+            || l.starts_with("x-translationservice-")
+            || l.starts_with("x-translationpros-")
+            || l.starts_with("x-translationteam-")
+            || l.starts_with("x-translationworks-")
+            || l.starts_with("x-translationexperts-")
+            || l.starts_with("x-translationdoctors-")
+            || l.starts_with("x-translationmasters-")
+            || l.starts_with("x-translationforce-")
+            || l.starts_with("x-translationnation-")
+            || l.starts_with("x-translatepros-")
+            || l.starts_with("x-translateservice-")
+            || l.starts_with("x-languagepros-")
+            || l.starts_with("x-languageservice-")
+            || l.starts_with("x-languageteam-")
+            || l.starts_with("x-interpreterpros-")
+            || l.starts_with("x-interpreterservice-")
+            || l.starts_with("x-interpretingpros-")
+            || l.starts_with("x-translationshq-")
+            || l.starts_with("x-localizepros-")
+            || l.starts_with("x-locizepros-")
+            || l.starts_with("x-honyaku-")
+            || l.starts_with("x-honyakusha-")
+            || l.starts_with("x-honyakuyasan-")
+            || l.starts_with("x-honyakupro-")
+            || l.starts_with("x-honyakuteam-")
+            || l.starts_with("x-honyakugyosha-")
+            || l.starts_with("x-honyakuseibi-")
+            || l.starts_with("x-honyakukensa-")
+            || l.starts_with("x-honyakumanten-")
+            || l.starts_with("x-honyakunomi-")
+            || l.starts_with("x-honyakujp-")
+            || l.starts_with("x-honyakusenmon-")
+            || l.starts_with("x-honyakumitsumori-")
+            || l.starts_with("x-honyakuchousa-")
+            || l.starts_with("x-honyakuteiki-")
+            || l.starts_with("x-honyakushuri-")
+            || l.starts_with("x-honyakudoctors-")
+            || l.starts_with("x-honyakusagyou-")
+            || l.starts_with("x-honyakurescue-")
+            || l.starts_with("x-honyakuteikyu-")
+            || l.starts_with("x-honyakuorder-")
+            || l.starts_with("x-honyakujuu-")
+            || l.starts_with("x-honyakubosyuu-")
+            || l.starts_with("x-tsuyaku-")
+            || l.starts_with("x-tsuyakuyasan-")
+            || l.starts_with("x-tsuyakudaikou-")
+            || l.starts_with("x-tsuyakupro-")
+    })
+}
+
+fn has_courier_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-courier-")
+            || l.starts_with("x-courierpros-")
+            || l.starts_with("x-courierservice-")
+            || l.starts_with("x-courierteam-")
+            || l.starts_with("x-courierworks-")
+            || l.starts_with("x-courierexperts-")
+            || l.starts_with("x-courierdoctors-")
+            || l.starts_with("x-couriermasters-")
+            || l.starts_with("x-courierforce-")
+            || l.starts_with("x-couriernation-")
+            || l.starts_with("x-bikecourier-")
+            || l.starts_with("x-bikebin-")
+            || l.starts_with("x-bikemessenger-")
+            || l.starts_with("x-messengerpros-")
+            || l.starts_with("x-messengerservice-")
+            || l.starts_with("x-messengerteam-")
+            || l.starts_with("x-samedaycourier-")
+            || l.starts_with("x-medicalcourier-")
+            || l.starts_with("x-legalcourier-")
+            || l.starts_with("x-rushcourier-")
+            || l.starts_with("x-expresscourier-")
+            || l.starts_with("x-localcourier-")
+            || l.starts_with("x-courierhq-")
+            || l.starts_with("x-deliveryprosteam-")
+            || l.starts_with("x-tatuhai-")
+            || l.starts_with("x-tatuhaiyasan-")
+            || l.starts_with("x-tatuhaipro-")
+            || l.starts_with("x-tatuhaiteam-")
+            || l.starts_with("x-tatuhaigyosha-")
+            || l.starts_with("x-tatuhaiseibi-")
+            || l.starts_with("x-tatuhaikensa-")
+            || l.starts_with("x-tatuahimanten-")
+            || l.starts_with("x-tatuhanomi-")
+            || l.starts_with("x-tatuhaijp-")
+            || l.starts_with("x-tatuhaisenmon-")
+            || l.starts_with("x-tatuhaimitsumori-")
+            || l.starts_with("x-tatuhaichousa-")
+            || l.starts_with("x-tatuhaiteiki-")
+            || l.starts_with("x-tatuhaishuri-")
+            || l.starts_with("x-tatuhaidoctors-")
+            || l.starts_with("x-tatuhaisagyou-")
+            || l.starts_with("x-tatuhairescue-")
+            || l.starts_with("x-tatuhaiteikyu-")
+            || l.starts_with("x-tatuhaiorder-")
+            || l.starts_with("x-tatuhaijuu-")
+            || l.starts_with("x-tatuhaibosyuu-")
+            || l.starts_with("x-bikebinyasan-")
+            || l.starts_with("x-sokuhai-")
+            || l.starts_with("x-sokuhaiyasan-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20827,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は証機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Notary-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Notarize-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Koushou-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-MobileNotary-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-Apostille-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-LoanSigning-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-KoushouPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-NotaryCam-Record: 1\r\n\r\nx";
+        assert!(has_notary_marks(f0));
+        assert!(has_notary_marks(f1));
+        assert!(has_notary_marks(f2));
+        assert!(has_notary_marks(f3));
+        assert!(has_notary_marks(f4));
+        assert!(has_notary_marks(f5));
+        assert!(has_notary_marks(f6));
+        assert!(has_notary_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_notary_marks(clean));
+    }
+
+    #[test]
+    fn scan_は訳機印を検出する() {
+        let f0 = b"From: a@b\r\nX-TransPerfect-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Gengo-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Honyaku-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-TranslationPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-InterpreterService-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-LanguageTeam-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-HonyakuPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-Tsuyaku-Record: 1\r\n\r\nx";
+        assert!(has_translation_marks(f0));
+        assert!(has_translation_marks(f1));
+        assert!(has_translation_marks(f2));
+        assert!(has_translation_marks(f3));
+        assert!(has_translation_marks(f4));
+        assert!(has_translation_marks(f5));
+        assert!(has_translation_marks(f6));
+        assert!(has_translation_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_translation_marks(clean));
+    }
+
+    #[test]
+    fn scan_は配機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Courier-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-BikeCourier-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Tatuhai-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-SameDayCourier-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-MedicalCourier-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-RushCourier-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-TatuhaiPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-BikeBin-Record: 1\r\n\r\nx";
+        assert!(has_courier_marks(f0));
+        assert!(has_courier_marks(f1));
+        assert!(has_courier_marks(f2));
+        assert!(has_courier_marks(f3));
+        assert!(has_courier_marks(f4));
+        assert!(has_courier_marks(f5));
+        assert!(has_courier_marks(f6));
+        assert!(has_courier_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_courier_marks(clean));
+    }
 }
