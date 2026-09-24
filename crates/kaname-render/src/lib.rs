@@ -1895,6 +1895,12 @@ pub struct Envelope {
     pub wakaresase_marks: bool,
     /// `X-Hellowork-*`/`X-Shokugyoukunren-*`/`X-Kunren-*` 等のハローワーク・職業訓練印を送信側が自称する兆候 (D691)
     pub hellowork_marks: bool,
+    /// `X-Vtuber-*`/`X-Vliver-*`/`X-Liver-*` 等のVTuber・ライバー印を送信側が自称する兆候 (D692)
+    pub vtuber_marks: bool,
+    /// `X-Host-*`/`X-Hostclub-*`/`X-Kyaba-*` 等のナイトライフ・パパ活印を送信側が自称する兆候 (D693)
+    pub nightlife_marks: bool,
+    /// `X-Tokushu-*`/`X-Tokushuseisou-*`/`X-Gomiyashiki-*` 等の特殊清掃・遺品整理・除霊印を送信側が自称する兆候 (D694)
+    pub tokushu_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2464,6 +2470,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         etc_marks: has_etc_marks(hdr),
         wakaresase_marks: has_wakaresase_marks(hdr),
         hellowork_marks: has_hellowork_marks(hdr),
+        vtuber_marks: has_vtuber_marks(hdr),
+        nightlife_marks: has_nightlife_marks(hdr),
+        tokushu_marks: has_tokushu_marks(hdr),
     })
 }
 
@@ -18909,6 +18918,216 @@ fn has_hellowork_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-worknavismart-"))
 }
 
+fn has_vtuber_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-vtuber-")
+            || l.starts_with("x-vliver-")
+            || l.starts_with("x-liver-")
+            || l.starts_with("x-nijisanji-")
+            || l.starts_with("x-nijien-")
+            || l.starts_with("x-hololive-")
+            || l.starts_with("x-holoen-")
+            || l.starts_with("x-holoid-")
+            || l.starts_with("x-holostars-")
+            || l.starts_with("x-vspo-")
+            || l.starts_with("x-voms-")
+            || l.starts_with("x-anycolor-")
+            || l.starts_with("x-cover-")
+            || l.starts_with("x-nanashinku-")
+            || l.starts_with("x-vshojo-")
+            || l.starts_with("x-phaseconnect-")
+            || l.starts_with("x-prism-")
+            || l.starts_with("x-kawaii-")
+            || l.starts_with("x-bravegroup-")
+            || l.starts_with("x-regloss-")
+            || l.starts_with("x-obsydia-")
+            || l.starts_with("x-luxiem-")
+            || l.starts_with("x-noctyx-")
+            || l.starts_with("x-iluna-")
+            || l.starts_with("x-xsoleil-")
+            || l.starts_with("x-krisis-")
+            || l.starts_with("x-lazulight-")
+            || l.starts_with("x-vtubernavi-")
+            || l.starts_with("x-vtubercenter-")
+            || l.starts_with("x-vtubershop-")
+            || l.starts_with("x-vtuberpro-")
+            || l.starts_with("x-vtubermart-")
+            || l.starts_with("x-vtuberplus-")
+            || l.starts_with("x-vtubersmart-")
+            || l.starts_with("x-vtuberfamily-")
+            || l.starts_with("x-vlivernavi-")
+            || l.starts_with("x-vlivercenter-")
+            || l.starts_with("x-vlivershop-")
+            || l.starts_with("x-vliverpro-")
+            || l.starts_with("x-vlivermart-")
+            || l.starts_with("x-vliverplus-")
+            || l.starts_with("x-vliversmart-")
+            || l.starts_with("x-vliverfamily-")
+            || l.starts_with("x-livernavi-")
+            || l.starts_with("x-livercenter-")
+            || l.starts_with("x-livershop-")
+            || l.starts_with("x-liverpro-")
+            || l.starts_with("x-livermart-")
+            || l.starts_with("x-liverplus-")
+            || l.starts_with("x-liversmart-")
+            || l.starts_with("x-liverfamily-")
+            || l.starts_with("x-nijisanjinavi-")
+            || l.starts_with("x-nijisanjicenter-")
+            || l.starts_with("x-nijisanjishop-")
+            || l.starts_with("x-nijisanjipro-")
+            || l.starts_with("x-nijisanjimart-")
+            || l.starts_with("x-nijisanjiplus-")
+            || l.starts_with("x-nijisanjismart-")
+            || l.starts_with("x-nijisanjifamily-")
+            || l.starts_with("x-nijiennavi-")
+            || l.starts_with("x-nijiencenter-")
+            || l.starts_with("x-nijienshop-"))
+}
+
+fn has_nightlife_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-host-")
+            || l.starts_with("x-hostclub-")
+            || l.starts_with("x-kyaba-")
+            || l.starts_with("x-girlsbar-")
+            || l.starts_with("x-cabaret-")
+            || l.starts_with("x-lounge-")
+            || l.starts_with("x-soapland-")
+            || l.starts_with("x-fuuzoku-")
+            || l.starts_with("x-night-")
+            || l.starts_with("x-nightlife-")
+            || l.starts_with("x-papakatsu-")
+            || l.starts_with("x-sugar-")
+            || l.starts_with("x-sugardaddy-")
+            || l.starts_with("x-seeking-")
+            || l.starts_with("x-paddy-")
+            || l.starts_with("x-lovean-")
+            || l.starts_with("x-hostnavi-")
+            || l.starts_with("x-hostcenter-")
+            || l.starts_with("x-hostshop-")
+            || l.starts_with("x-hostpro-")
+            || l.starts_with("x-hostmart-")
+            || l.starts_with("x-hostplus-")
+            || l.starts_with("x-hostsmart-")
+            || l.starts_with("x-hostfamily-")
+            || l.starts_with("x-hostclubnavi-")
+            || l.starts_with("x-hostclubcenter-")
+            || l.starts_with("x-hostclubshop-")
+            || l.starts_with("x-hostclubpro-")
+            || l.starts_with("x-hostclubmart-")
+            || l.starts_with("x-hostclubplus-")
+            || l.starts_with("x-hostclubsmart-")
+            || l.starts_with("x-hostclubfamily-")
+            || l.starts_with("x-kyabanavi-")
+            || l.starts_with("x-kyabacenter-")
+            || l.starts_with("x-kyabashop-")
+            || l.starts_with("x-kyabapro-")
+            || l.starts_with("x-kyabamart-")
+            || l.starts_with("x-kyabaplus-")
+            || l.starts_with("x-kyabasmart-")
+            || l.starts_with("x-kyabafamily-")
+            || l.starts_with("x-girlsbarnavi-")
+            || l.starts_with("x-girlsbarcenter-")
+            || l.starts_with("x-girlsbarshop-")
+            || l.starts_with("x-girlsbarpro-")
+            || l.starts_with("x-girlsbarmart-")
+            || l.starts_with("x-girlsbarplus-")
+            || l.starts_with("x-girlsbarsmart-")
+            || l.starts_with("x-girlsbarfamily-")
+            || l.starts_with("x-cabaretnavi-")
+            || l.starts_with("x-cabaretcenter-")
+            || l.starts_with("x-cabaretshop-")
+            || l.starts_with("x-cabaretpro-")
+            || l.starts_with("x-cabaretmart-")
+            || l.starts_with("x-cabaretplus-")
+            || l.starts_with("x-cabaretsmart-")
+            || l.starts_with("x-cabaretfamily-")
+            || l.starts_with("x-loungenavi-")
+            || l.starts_with("x-loungecenter-")
+            || l.starts_with("x-loungeshop-")
+            || l.starts_with("x-loungepro-")
+            || l.starts_with("x-loungemart-")
+            || l.starts_with("x-loungeplus-"))
+}
+
+fn has_tokushu_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-tokushu-")
+            || l.starts_with("x-tokushuseisou-")
+            || l.starts_with("x-gomiyashiki-")
+            || l.starts_with("x-ihinseiri-")
+            || l.starts_with("x-kodokushi-")
+            || l.starts_with("x-seisou-")
+            || l.starts_with("x-seisougyo-")
+            || l.starts_with("x-souji-")
+            || l.starts_with("x-yuibutsu-")
+            || l.starts_with("x-kataduke-")
+            || l.starts_with("x-jorei-")
+            || l.starts_with("x-reikan-")
+            || l.starts_with("x-kokkuri-")
+            || l.starts_with("x-spiritual-")
+            || l.starts_with("x-oharai-")
+            || l.starts_with("x-omikuji-")
+            || l.starts_with("x-tokushunavi-")
+            || l.starts_with("x-tokushucenter-")
+            || l.starts_with("x-tokushushop-")
+            || l.starts_with("x-tokushupro-")
+            || l.starts_with("x-tokushumart-")
+            || l.starts_with("x-tokushuplus-")
+            || l.starts_with("x-tokushusmart-")
+            || l.starts_with("x-tokushufamily-")
+            || l.starts_with("x-tokushuseisounavi-")
+            || l.starts_with("x-tokushuseisoucenter-")
+            || l.starts_with("x-tokushuseisoushop-")
+            || l.starts_with("x-tokushuseisoupro-")
+            || l.starts_with("x-tokushuseisoumart-")
+            || l.starts_with("x-tokushuseisouplus-")
+            || l.starts_with("x-tokushuseisousmart-")
+            || l.starts_with("x-tokushuseisoufamily-")
+            || l.starts_with("x-gomiyashikinavi-")
+            || l.starts_with("x-gomiyashikicenter-")
+            || l.starts_with("x-gomiyashikishop-")
+            || l.starts_with("x-gomiyashikipro-")
+            || l.starts_with("x-gomiyashikimart-")
+            || l.starts_with("x-gomiyashikiplus-")
+            || l.starts_with("x-gomiyashikismart-")
+            || l.starts_with("x-gomiyashikifamily-")
+            || l.starts_with("x-ihinseirinavi-")
+            || l.starts_with("x-ihinseiricenter-")
+            || l.starts_with("x-ihinseirishop-")
+            || l.starts_with("x-ihinseiripro-")
+            || l.starts_with("x-ihinseirimart-")
+            || l.starts_with("x-ihinseiriplus-")
+            || l.starts_with("x-ihinseirismart-")
+            || l.starts_with("x-ihinseirifamily-")
+            || l.starts_with("x-kodokushinavi-")
+            || l.starts_with("x-kodokushicenter-")
+            || l.starts_with("x-kodokushishop-")
+            || l.starts_with("x-kodokushipro-")
+            || l.starts_with("x-kodokushimart-")
+            || l.starts_with("x-kodokushiplus-")
+            || l.starts_with("x-kodokushismart-")
+            || l.starts_with("x-kodokushifamily-")
+            || l.starts_with("x-seisounavi-")
+            || l.starts_with("x-seisoucenter-")
+            || l.starts_with("x-seisoushop-")
+            || l.starts_with("x-seisoupro-")
+            || l.starts_with("x-seisoumart-")
+            || l.starts_with("x-seisouplus-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -28662,6 +28881,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_hellowork_marks(clean));
+    }
+
+    #[test]
+    fn scan_は播機印を検出する() {
+        for raw in [
+            br"X-Vtuber-Alert: 1",
+            br"X-Vliver-Notice: 1",
+            br"X-Nijisanji-Info: 1",
+            br"X-Hololive-Report: 1",
+            br"X-Vspo-Bulletin: 1",
+            br"X-Vshojo-News: 1",
+            br"X-Holostars-Flash: 1",
+            br"X-Bravegroup-Release: 1",
+        ] {
+            assert!(has_vtuber_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_vtuber_marks(clean));
+    }
+
+    #[test]
+    fn scan_は夜機印を検出する() {
+        for raw in [
+            br"X-Hostclub-Alert: 1",
+            br"X-Kyaba-Notice: 1",
+            br"X-Girlsbar-Info: 1",
+            br"X-Cabaret-Report: 1",
+            br"X-Soapland-Bulletin: 1",
+            br"X-Fuuzoku-News: 1",
+            br"X-Papakatsu-Flash: 1",
+            br"X-Sugardaddy-Release: 1",
+        ] {
+            assert!(has_nightlife_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_nightlife_marks(clean));
+    }
+
+    #[test]
+    fn scan_は清機印を検出する() {
+        for raw in [
+            br"X-Tokushu-Alert: 1",
+            br"X-Gomiyashiki-Notice: 1",
+            br"X-Ihinseiri-Info: 1",
+            br"X-Kodokushi-Report: 1",
+            br"X-Seisou-Bulletin: 1",
+            br"X-Jorei-News: 1",
+            br"X-Reikan-Flash: 1",
+            br"X-Spiritual-Release: 1",
+        ] {
+            assert!(has_tokushu_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_tokushu_marks(clean));
     }
 
 }
