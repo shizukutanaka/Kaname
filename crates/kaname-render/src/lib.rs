@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub patent_marks: bool,
+    pub laborattorney_marks: bool,
+    pub acupuncture_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        patent_marks: has_patent_marks(hdr),
+        laborattorney_marks: has_laborattorney_marks(hdr),
+        acupuncture_marks: has_acupuncture_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,199 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_patent_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-patentpros-")
+            || l.starts_with("x-patentteam-")
+            || l.starts_with("x-patentworks-")
+            || l.starts_with("x-patentforce-")
+            || l.starts_with("x-patentnation-")
+            || l.starts_with("x-patentexperts-")
+            || l.starts_with("x-patentdoctors-")
+            || l.starts_with("x-patentmasters-")
+            || l.starts_with("x-patentsvc-")
+            || l.starts_with("x-patenthq-")
+            || l.starts_with("x-trademarkpros-")
+            || l.starts_with("x-trademarkteam-")
+            || l.starts_with("x-trademarkworks-")
+            || l.starts_with("x-trademarkexperts-")
+            || l.starts_with("x-trademarkdoctors-")
+            || l.starts_with("x-ippros-")
+            || l.starts_with("x-ipteam-")
+            || l.starts_with("x-ipworks-")
+            || l.starts_with("x-ipexperts-")
+            || l.starts_with("x-ipdoctors-")
+            || l.starts_with("x-ipmasters-")
+            || l.starts_with("x-ipsvc-")
+            || l.starts_with("x-iphq-")
+            || l.starts_with("x-tokkyo-")
+            || l.starts_with("x-tokkyoyasan-")
+            || l.starts_with("x-tokkyopro-")
+            || l.starts_with("x-tokkyoteam-")
+            || l.starts_with("x-tokkyogyo-")
+            || l.starts_with("x-tokkyokensa-")
+            || l.starts_with("x-tokkyomanten-")
+            || l.starts_with("x-tokkyonomi-")
+            || l.starts_with("x-tokkyojp-")
+            || l.starts_with("x-tokkyosenmon-")
+            || l.starts_with("x-tokkyomitsumori-")
+            || l.starts_with("x-tokkyochousa-")
+            || l.starts_with("x-tokkyoteiki-")
+            || l.starts_with("x-tokkyoshuri-")
+            || l.starts_with("x-tokkyodoctors-")
+            || l.starts_with("x-tokkyojimusyo-")
+            || l.starts_with("x-chizai-")
+            || l.starts_with("x-chizaiyasan-")
+            || l.starts_with("x-chizaipro-")
+            || l.starts_with("x-chizaiteam-")
+            || l.starts_with("x-chizaikensa-")
+            || l.starts_with("x-chizaimanten-")
+            || l.starts_with("x-chizainomi-")
+            || l.starts_with("x-chizaijp-")
+            || l.starts_with("x-chizaisenmon-")
+            || l.starts_with("x-chizaimitsumori-")
+            || l.starts_with("x-chizaichousa-")
+            || l.starts_with("x-chizaiteiki-")
+            || l.starts_with("x-chizaishuri-")
+            || l.starts_with("x-benrishi-")
+            || l.starts_with("x-benrishipro-")
+            || l.starts_with("x-benrishiteam-")
+            || l.starts_with("x-benrishikensa-")
+            || l.starts_with("x-benrishimanten-")
+            || l.starts_with("x-benrishijp-")
+            || l.starts_with("x-shouhyou-")
+            || l.starts_with("x-shouhyoupro-")
+            || l.starts_with("x-shouhyouteam-")
+            || l.starts_with("x-shouhyoukensa-")
+    })
+}
+
+fn has_laborattorney_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shakaihokenroumushi-")
+            || l.starts_with("x-shakaihokenroumu-")
+            || l.starts_with("x-shakaihoken-")
+            || l.starts_with("x-roumushi-")
+            || l.starts_with("x-roumupro-")
+            || l.starts_with("x-roumuteam-")
+            || l.starts_with("x-roumukensa-")
+            || l.starts_with("x-roumumanten-")
+            || l.starts_with("x-roumunomi-")
+            || l.starts_with("x-roumujp-")
+            || l.starts_with("x-roumusenmon-")
+            || l.starts_with("x-roumumitsumori-")
+            || l.starts_with("x-roumuchousa-")
+            || l.starts_with("x-roumuteiki-")
+            || l.starts_with("x-roumushuri-")
+            || l.starts_with("x-roumudoctors-")
+            || l.starts_with("x-roumusagyou-")
+            || l.starts_with("x-roumurescue-")
+            || l.starts_with("x-roumuteikyu-")
+            || l.starts_with("x-roumuorder-")
+            || l.starts_with("x-jinjiromu-")
+            || l.starts_with("x-jinjiyasan-")
+            || l.starts_with("x-jinjipro-")
+            || l.starts_with("x-jinjiteam-")
+            || l.starts_with("x-jinjikensa-")
+            || l.starts_with("x-jinjimanten-")
+            || l.starts_with("x-jinjinomi-")
+            || l.starts_with("x-jinjijp-")
+            || l.starts_with("x-jinjisenmon-")
+            || l.starts_with("x-jinjimitsumori-")
+            || l.starts_with("x-jinjichousa-")
+            || l.starts_with("x-jinjiteiki-")
+            || l.starts_with("x-jinjishuri-")
+            || l.starts_with("x-laborpros-")
+            || l.starts_with("x-laborteam-")
+            || l.starts_with("x-laborworks-")
+            || l.starts_with("x-laborforce-")
+            || l.starts_with("x-labornation-")
+            || l.starts_with("x-laborexperts-")
+            || l.starts_with("x-labordoctors-")
+            || l.starts_with("x-labormasters-")
+            || l.starts_with("x-laborsvc-")
+            || l.starts_with("x-laborhq-")
+            || l.starts_with("x-laborstandard-")
+            || l.starts_with("x-laborattorney-")
+            || l.starts_with("x-employmentlawyer-")
+            || l.starts_with("x-employmentpros-")
+            || l.starts_with("x-employmentteam-")
+            || l.starts_with("x-employmentworks-")
+            || l.starts_with("x-employmentexperts-")
+            || l.starts_with("x-rodourodai-")
+            || l.starts_with("x-rodokanri-")
+            || l.starts_with("x-rodo-")
+    })
+}
+
+fn has_acupuncture_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-acupuncturepros-")
+            || l.starts_with("x-acupunctureteam-")
+            || l.starts_with("x-acupunctureworks-")
+            || l.starts_with("x-acupunctureforce-")
+            || l.starts_with("x-acupuncturenation-")
+            || l.starts_with("x-acupunctureexperts-")
+            || l.starts_with("x-acupuncturedoctors-")
+            || l.starts_with("x-acupuncturemasters-")
+            || l.starts_with("x-acupuncturesvc-")
+            || l.starts_with("x-acupuncturehq-")
+            || l.starts_with("x-acupros-")
+            || l.starts_with("x-acupressteam-")
+            || l.starts_with("x-acupressure-")
+            || l.starts_with("x-tcmpros-")
+            || l.starts_with("x-harikyuu-")
+            || l.starts_with("x-harikyuuyasan-")
+            || l.starts_with("x-harikyuupro-")
+            || l.starts_with("x-harikyuuteam-")
+            || l.starts_with("x-harikyuukensa-")
+            || l.starts_with("x-harikyuumanten-")
+            || l.starts_with("x-harikyuunomi-")
+            || l.starts_with("x-harikyuujp-")
+            || l.starts_with("x-harikyuusenmon-")
+            || l.starts_with("x-harikyuumitsumori-")
+            || l.starts_with("x-harikyuuchousa-")
+            || l.starts_with("x-harikyuuteiki-")
+            || l.starts_with("x-harikyuushuri-")
+            || l.starts_with("x-harikyuudoctors-")
+            || l.starts_with("x-shinkyu-")
+            || l.starts_with("x-shinkyuyasan-")
+            || l.starts_with("x-shinkyupro-")
+            || l.starts_with("x-shinkyuteam-")
+            || l.starts_with("x-shinkyukensa-")
+            || l.starts_with("x-shinkyumanten-")
+            || l.starts_with("x-shinkyunomi-")
+            || l.starts_with("x-shinkyujp-")
+            || l.starts_with("x-shinkyusenmon-")
+            || l.starts_with("x-shinkyumitsumori-")
+            || l.starts_with("x-shinkyuchousa-")
+            || l.starts_with("x-shinkyuteiki-")
+            || l.starts_with("x-shinkyushuri-")
+            || l.starts_with("x-hariry-")
+            || l.starts_with("x-haridoctors-")
+            || l.starts_with("x-shinkyudoctors-")
+            || l.starts_with("x-shinkyusagyou-")
+            || l.starts_with("x-shinkyurescue-")
+            || l.starts_with("x-shinkyuteikyu-")
+            || l.starts_with("x-shinkyuorder-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20840,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は特機印を検出する() {
+        let f0 = b"From: a@b\r\nX-PatentPros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-TrademarkPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Tokkyo-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-IpPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-Chizai-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-Benrishi-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-PatentWorks-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-Shouhyou-Record: 1\r\n\r\nx";
+        assert!(has_patent_marks(f0));
+        assert!(has_patent_marks(f1));
+        assert!(has_patent_marks(f2));
+        assert!(has_patent_marks(f3));
+        assert!(has_patent_marks(f4));
+        assert!(has_patent_marks(f5));
+        assert!(has_patent_marks(f6));
+        assert!(has_patent_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_patent_marks(clean));
+    }
+
+    #[test]
+    fn scan_は労機印を検出する() {
+        let f0 = b"From: a@b\r\nX-ShakaiHoken-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Roumushi-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-JinjiRomu-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-LaborPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-EmploymentLawyer-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-RoumuPro-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-LaborTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-Rodo-Record: 1\r\n\r\nx";
+        assert!(has_laborattorney_marks(f0));
+        assert!(has_laborattorney_marks(f1));
+        assert!(has_laborattorney_marks(f2));
+        assert!(has_laborattorney_marks(f3));
+        assert!(has_laborattorney_marks(f4));
+        assert!(has_laborattorney_marks(f5));
+        assert!(has_laborattorney_marks(f6));
+        assert!(has_laborattorney_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_laborattorney_marks(clean));
+    }
+
+    #[test]
+    fn scan_は鍼機印を検出する() {
+        let f0 = b"From: a@b\r\nX-AcupuncturePros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-AcuPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Harikyuu-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Shinkyu-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-Acupressure-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-TcmPros-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-ShinkyuPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-HarikyuuTeam-Record: 1\r\n\r\nx";
+        assert!(has_acupuncture_marks(f0));
+        assert!(has_acupuncture_marks(f1));
+        assert!(has_acupuncture_marks(f2));
+        assert!(has_acupuncture_marks(f3));
+        assert!(has_acupuncture_marks(f4));
+        assert!(has_acupuncture_marks(f5));
+        assert!(has_acupuncture_marks(f6));
+        assert!(has_acupuncture_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_acupuncture_marks(clean));
+    }
 }
