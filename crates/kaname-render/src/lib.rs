@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub shugei_marks: bool,
+    pub mokkou_marks: bool,
+    pub leathercraft_marks: bool,
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
@@ -2233,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        shugei_marks: has_shugei_marks(hdr),
+        mokkou_marks: has_mokkou_marks(hdr),
+        leathercraft_marks: has_leathercraft_marks(hdr),
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
@@ -12830,6 +12836,187 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_shugei_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shugei-")
+            || l.starts_with("x-shugeiyasan-")
+            || l.starts_with("x-shugeipro-")
+            || l.starts_with("x-shugeiteam-")
+            || l.starts_with("x-shugeikensa-")
+            || l.starts_with("x-shugeimanten-")
+            || l.starts_with("x-shugeinomi-")
+            || l.starts_with("x-shugeijp-")
+            || l.starts_with("x-shugeisenmon-")
+            || l.starts_with("x-shugeimitsumori-")
+            || l.starts_with("x-shugeichousa-")
+            || l.starts_with("x-shugeiteiki-")
+            || l.starts_with("x-shugeishuri-")
+            || l.starts_with("x-shugeischool-")
+            || l.starts_with("x-shugeikoubou-")
+            || l.starts_with("x-shugeimart-")
+            || l.starts_with("x-shugeibank-")
+            || l.starts_with("x-handmade-")
+            || l.starts_with("x-handmadepro-")
+            || l.starts_with("x-handmadeteam-")
+            || l.starts_with("x-handmadekoubou-")
+            || l.starts_with("x-handmadesenmon-")
+            || l.starts_with("x-handmadeschool-")
+            || l.starts_with("x-handmadelesson-")
+            || l.starts_with("x-handmadelessonpros-")
+            || l.starts_with("x-handmadelessonteam-")
+            || l.starts_with("x-beads-")
+            || l.starts_with("x-beadsyasan-")
+            || l.starts_with("x-beadspro-")
+            || l.starts_with("x-beadsteam-")
+            || l.starts_with("x-beadskoubou-")
+            || l.starts_with("x-beadssenmon-")
+            || l.starts_with("x-beadsschool-")
+            || l.starts_with("x-beadsmarche-")
+            || l.starts_with("x-craftclasspros-")
+            || l.starts_with("x-craftclassteam-")
+            || l.starts_with("x-craftclassworks-")
+            || l.starts_with("x-craftclassexperts-")
+            || l.starts_with("x-craftclasssvc-")
+            || l.starts_with("x-craftclasshq-")
+            || l.starts_with("x-craftclassschool-")
+            || l.starts_with("x-shugeipros-")
+            || l.starts_with("x-shugeiworks-")
+            || l.starts_with("x-shugeiexperts-")
+            || l.starts_with("x-shugeisvc-")
+            || l.starts_with("x-shugeihq-")
+            || l.starts_with("x-shugeidoctors-")
+            || l.starts_with("x-shugeirescue-")
+            || l.starts_with("x-handmadepros-")
+            || l.starts_with("x-handmadedoctors-")
+            || l.starts_with("x-handmaderescue-")
+            || l.starts_with("x-beadspros-")
+            || l.starts_with("x-beadsdoctors-")
+            || l.starts_with("x-beadsrescue-")
+    })
+}
+
+fn has_mokkou_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-mokkou-")
+            || l.starts_with("x-mokkouyasan-")
+            || l.starts_with("x-mokkoupro-")
+            || l.starts_with("x-mokkouteam-")
+            || l.starts_with("x-mokkoukensa-")
+            || l.starts_with("x-mokkoumanten-")
+            || l.starts_with("x-mokkounomi-")
+            || l.starts_with("x-mokkoujp-")
+            || l.starts_with("x-mokkousenmon-")
+            || l.starts_with("x-mokkoumitsumori-")
+            || l.starts_with("x-mokkouchousa-")
+            || l.starts_with("x-mokkouteiki-")
+            || l.starts_with("x-mokkoushuri-")
+            || l.starts_with("x-mokkouschool-")
+            || l.starts_with("x-mokkoukoubou-")
+            || l.starts_with("x-mokkoumart-")
+            || l.starts_with("x-mokkoubank-")
+            || l.starts_with("x-woodworking-")
+            || l.starts_with("x-woodworkingpro-")
+            || l.starts_with("x-woodworkingteam-")
+            || l.starts_with("x-woodworkingkoubou-")
+            || l.starts_with("x-woodworkingsenmon-")
+            || l.starts_with("x-woodworkingschool-")
+            || l.starts_with("x-woodworklesson-")
+            || l.starts_with("x-woodworklessonpros-")
+            || l.starts_with("x-woodworklessonteam-")
+            || l.starts_with("x-kigumi-")
+            || l.starts_with("x-kigumiyasan-")
+            || l.starts_with("x-kigumipro-")
+            || l.starts_with("x-kigumikoubou-")
+            || l.starts_with("x-kigumisenmon-")
+            || l.starts_with("x-kigumischool-")
+            || l.starts_with("x-nichiyoumokkou-")
+            || l.starts_with("x-nichiyoumokkoupro-")
+            || l.starts_with("x-nichiyoumokkoukoubou-")
+            || l.starts_with("x-mokkoupros-")
+            || l.starts_with("x-mokkouworks-")
+            || l.starts_with("x-mokkouexperts-")
+            || l.starts_with("x-mokkousvc-")
+            || l.starts_with("x-mokkouhq-")
+            || l.starts_with("x-mokkoudoctors-")
+            || l.starts_with("x-mokkourescue-")
+            || l.starts_with("x-woodworkingpros-")
+            || l.starts_with("x-woodworkingworks-")
+            || l.starts_with("x-woodworkingexperts-")
+            || l.starts_with("x-woodworkingsvc-")
+            || l.starts_with("x-woodworkinghq-")
+            || l.starts_with("x-woodworkingdoctors-")
+            || l.starts_with("x-woodworkingrescue-")
+    })
+}
+
+fn has_leathercraft_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-leathercraft-")
+            || l.starts_with("x-leathercraftyasan-")
+            || l.starts_with("x-leathercraftpro-")
+            || l.starts_with("x-leathercraftteam-")
+            || l.starts_with("x-leathercraftkensa-")
+            || l.starts_with("x-leathercraftmanten-")
+            || l.starts_with("x-leathercraftnomi-")
+            || l.starts_with("x-leathercraftjp-")
+            || l.starts_with("x-leathercraftsenmon-")
+            || l.starts_with("x-leathercraftmitsumori-")
+            || l.starts_with("x-leathercraftchousa-")
+            || l.starts_with("x-leathercraftteiki-")
+            || l.starts_with("x-leathercraftshuri-")
+            || l.starts_with("x-leathercraftschool-")
+            || l.starts_with("x-leathercraftkoubou-")
+            || l.starts_with("x-leathercraftmart-")
+            || l.starts_with("x-leathercraftbank-")
+            || l.starts_with("x-leatherwork-")
+            || l.starts_with("x-leatherworkpro-")
+            || l.starts_with("x-leatherworkteam-")
+            || l.starts_with("x-leatherworkkoubou-")
+            || l.starts_with("x-leatherworksenmon-")
+            || l.starts_with("x-leatherworkschool-")
+            || l.starts_with("x-leatherworklesson-")
+            || l.starts_with("x-leatherworklessonpros-")
+            || l.starts_with("x-leatherworklessonteam-")
+            || l.starts_with("x-kawazaiku-")
+            || l.starts_with("x-kawazaikuyasan-")
+            || l.starts_with("x-kawazaikupro-")
+            || l.starts_with("x-kawazaikukoubou-")
+            || l.starts_with("x-kawazaikusenmon-")
+            || l.starts_with("x-kawazaikuschool-")
+            || l.starts_with("x-hikakuzaiku-")
+            || l.starts_with("x-hikakuzaikupro-")
+            || l.starts_with("x-hikakuzaikukoubou-")
+            || l.starts_with("x-leathercraftpros-")
+            || l.starts_with("x-leathercraftworks-")
+            || l.starts_with("x-leathercraftexperts-")
+            || l.starts_with("x-leathercraftsvc-")
+            || l.starts_with("x-leathercrafthq-")
+            || l.starts_with("x-leathercraftdoctors-")
+            || l.starts_with("x-leathercraftrescue-")
+            || l.starts_with("x-leatherworkpros-")
+            || l.starts_with("x-leatherworkdoctors-")
+            || l.starts_with("x-leatherworkrescue-")
+            || l.starts_with("x-kawazaikupros-")
+            || l.starts_with("x-kawazaikudoctors-")
+            || l.starts_with("x-kawazaikurescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21079,55 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+    #[test]
+    fn scan_は芸機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Shugei-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Handmade-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Beads-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CraftClassPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShugeiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HandmadeLesson-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BeadsSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CraftClassHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_shugei_marks(h));
+        }
+        assert!(!has_shugei_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は工機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Mokkou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Woodworking-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kigumi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Nichiyoumokkou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MokkouSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WoodworkingWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MokkouSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WoodworkingHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_mokkou_marks(h));
+        }
+        assert!(!has_mokkou_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は革機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Leathercraft-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Leatherwork-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kawazaiku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Hikakuzaiku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-LeathercraftSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-LeatherworkLesson-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-LeathercraftSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-LeathercraftHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_leathercraft_marks(h));
+        }
+        assert!(!has_leathercraft_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
