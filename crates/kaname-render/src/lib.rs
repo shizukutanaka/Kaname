@@ -12884,7 +12884,7 @@ fn has_hachinosu_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-pestcontrolhq-")
             || l.starts_with("x-beenestpros-")
             || l.starts_with("x-beenestteam-")
-            || l.starts_with("x-beenetworks-")
+            || l.starts_with("x-beenestworks-")
             || l.starts_with("x-beenestexperts-")
             || l.starts_with("x-beenestsvc-")
             || l.starts_with("x-beenesthq-")
