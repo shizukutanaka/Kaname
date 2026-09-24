@@ -1991,6 +1991,12 @@ pub struct Envelope {
     pub protein_marks: bool,
     /// `X-Creema-*`/`X-Minne-*`/`X-Handmade-*` 等のハンドメイド作家・クラフトマーケット印を送信側が自称する兆候 (D730)
     pub handmade_marks: bool,
+    /// `X-Senior-*`/`X-Seniorliving-*`/`X-Retirementhome-*` 等のシニア・高齢者向けサービス印を送信側が自称する兆候 (D740)
+    pub senior_marks: bool,
+    /// `X-Aerobics-*`/`X-Cheerleading-*`/`X-Dancesport-*` 等のダンス・バレエ印を送信側が自称する兆候 (D741)
+    pub dancestudio_marks: bool,
+    /// `X-Antiaging-*`/`X-Longevity-*`/`X-Healthspan-*` 等のアンチエイジング・ウェルネス印を送信側が自称する兆候 (D742)
+    pub antiaging_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2608,6 +2614,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         modeltrain_marks: has_modeltrain_marks(hdr),
         protein_marks: has_protein_marks(hdr),
         handmade_marks: has_handmade_marks(hdr),
+        senior_marks: has_senior_marks(hdr),
+        dancestudio_marks: has_dancestudio_marks(hdr),
+        antiaging_marks: has_antiaging_marks(hdr),
     })
 }
 
@@ -22413,6 +22422,216 @@ fn has_cricket_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-xleaguecenter-"))
 }
 
+fn has_senior_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-senior-")
+            || l.starts_with("x-seniorliving-")
+            || l.starts_with("x-retirementhome-")
+            || l.starts_with("x-ccrc-")
+            || l.starts_with("x-silver-")
+            || l.starts_with("x-elderly-")
+            || l.starts_with("x-petanque-")
+            || l.starts_with("x-gateball-")
+            || l.starts_with("x-groundgolf-")
+            || l.starts_with("x-nordicwalking-")
+            || l.starts_with("x-seniorsports-")
+            || l.starts_with("x-seniornavi-")
+            || l.starts_with("x-seniorcenter-")
+            || l.starts_with("x-seniorshop-")
+            || l.starts_with("x-seniorpro-")
+            || l.starts_with("x-seniormart-")
+            || l.starts_with("x-seniorplus-")
+            || l.starts_with("x-seniorsmart-")
+            || l.starts_with("x-seniorfamily-")
+            || l.starts_with("x-seniorlivingnavi-")
+            || l.starts_with("x-seniorlivingcenter-")
+            || l.starts_with("x-seniorlivingshop-")
+            || l.starts_with("x-seniorlivingpro-")
+            || l.starts_with("x-seniorlivingmart-")
+            || l.starts_with("x-seniorlivingplus-")
+            || l.starts_with("x-seniorlivingsmart-")
+            || l.starts_with("x-seniorlivingfamily-")
+            || l.starts_with("x-retirementhomenavi-")
+            || l.starts_with("x-retirementhomecenter-")
+            || l.starts_with("x-retirementhomeshop-")
+            || l.starts_with("x-retirementhomepro-")
+            || l.starts_with("x-retirementhomemart-")
+            || l.starts_with("x-retirementhomeplus-")
+            || l.starts_with("x-retirementhomesmart-")
+            || l.starts_with("x-retirementhomefamily-")
+            || l.starts_with("x-ccrcnavi-")
+            || l.starts_with("x-ccrccenter-")
+            || l.starts_with("x-ccrcshop-")
+            || l.starts_with("x-ccrcpro-")
+            || l.starts_with("x-ccrcmart-")
+            || l.starts_with("x-ccrcplus-")
+            || l.starts_with("x-ccrcsmart-")
+            || l.starts_with("x-ccrcfamily-")
+            || l.starts_with("x-silvernavi-")
+            || l.starts_with("x-silvercenter-")
+            || l.starts_with("x-silvershop-")
+            || l.starts_with("x-silverpro-")
+            || l.starts_with("x-silvermart-")
+            || l.starts_with("x-silverplus-")
+            || l.starts_with("x-silversmart-")
+            || l.starts_with("x-silverfamily-")
+            || l.starts_with("x-elderlynavi-")
+            || l.starts_with("x-elderlycenter-")
+            || l.starts_with("x-elderlyshop-")
+            || l.starts_with("x-elderlypro-")
+            || l.starts_with("x-elderlymart-")
+            || l.starts_with("x-elderlyplus-")
+            || l.starts_with("x-elderlysmart-")
+            || l.starts_with("x-elderlyfamily-")
+            || l.starts_with("x-petanquenavi-")
+            || l.starts_with("x-petanquecenter-")
+            || l.starts_with("x-petanqueshop-"))
+}
+
+fn has_dancestudio_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-aerobics-")
+            || l.starts_with("x-cheerleading-")
+            || l.starts_with("x-dancesport-")
+            || l.starts_with("x-ballroom-")
+            || l.starts_with("x-zumba-")
+            || l.starts_with("x-polefitness-")
+            || l.starts_with("x-barre-")
+            || l.starts_with("x-ballet-")
+            || l.starts_with("x-jazzdance-")
+            || l.starts_with("x-bellydance-")
+            || l.starts_with("x-flamenco-")
+            || l.starts_with("x-tapdance-")
+            || l.starts_with("x-dancestudio-")
+            || l.starts_with("x-aerobicsnavi-")
+            || l.starts_with("x-aerobicscenter-")
+            || l.starts_with("x-aerobicsshop-")
+            || l.starts_with("x-aerobicspro-")
+            || l.starts_with("x-aerobicsmart-")
+            || l.starts_with("x-aerobicsplus-")
+            || l.starts_with("x-aerobicssmart-")
+            || l.starts_with("x-aerobicsfamily-")
+            || l.starts_with("x-cheerleadingnavi-")
+            || l.starts_with("x-cheerleadingcenter-")
+            || l.starts_with("x-cheerleadingshop-")
+            || l.starts_with("x-cheerleadingpro-")
+            || l.starts_with("x-cheerleadingmart-")
+            || l.starts_with("x-cheerleadingplus-")
+            || l.starts_with("x-cheerleadingsmart-")
+            || l.starts_with("x-cheerleadingfamily-")
+            || l.starts_with("x-dancesportnavi-")
+            || l.starts_with("x-dancesportcenter-")
+            || l.starts_with("x-dancesportshop-")
+            || l.starts_with("x-dancesportpro-")
+            || l.starts_with("x-dancesportmart-")
+            || l.starts_with("x-dancesportplus-")
+            || l.starts_with("x-dancesportsmart-")
+            || l.starts_with("x-dancesportfamily-")
+            || l.starts_with("x-ballroomnavi-")
+            || l.starts_with("x-ballroomcenter-")
+            || l.starts_with("x-ballroomshop-")
+            || l.starts_with("x-ballroompro-")
+            || l.starts_with("x-ballroommart-")
+            || l.starts_with("x-ballroomplus-")
+            || l.starts_with("x-ballroomsmart-")
+            || l.starts_with("x-ballroomfamily-")
+            || l.starts_with("x-zumbanavi-")
+            || l.starts_with("x-zumbacenter-")
+            || l.starts_with("x-zumbashop-")
+            || l.starts_with("x-zumbapro-")
+            || l.starts_with("x-zumbamart-")
+            || l.starts_with("x-zumbaplus-")
+            || l.starts_with("x-zumbasmart-")
+            || l.starts_with("x-zumbafamily-")
+            || l.starts_with("x-polefitnessnavi-")
+            || l.starts_with("x-polefitnesscenter-")
+            || l.starts_with("x-polefitnessshop-")
+            || l.starts_with("x-polefitnesspro-")
+            || l.starts_with("x-polefitnessmart-")
+            || l.starts_with("x-polefitnessplus-")
+            || l.starts_with("x-polefitnesssmart-")
+            || l.starts_with("x-polefitnessfamily-")
+            || l.starts_with("x-barrenavi-"))
+}
+
+fn has_antiaging_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-antiaging-")
+            || l.starts_with("x-longevity-")
+            || l.starts_with("x-healthspan-")
+            || l.starts_with("x-wellness-")
+            || l.starts_with("x-bioidentical-")
+            || l.starts_with("x-hormone-")
+            || l.starts_with("x-peptide-")
+            || l.starts_with("x-nad-")
+            || l.starts_with("x-ivdrip-")
+            || l.starts_with("x-medspa-")
+            || l.starts_with("x-regenerative-")
+            || l.starts_with("x-stemcell-")
+            || l.starts_with("x-antiagingnavi-")
+            || l.starts_with("x-antiagingcenter-")
+            || l.starts_with("x-antiagingshop-")
+            || l.starts_with("x-antiagingpro-")
+            || l.starts_with("x-antiagingmart-")
+            || l.starts_with("x-antiagingplus-")
+            || l.starts_with("x-antiagingsmart-")
+            || l.starts_with("x-antiagingfamily-")
+            || l.starts_with("x-longevitynavi-")
+            || l.starts_with("x-longevitycenter-")
+            || l.starts_with("x-longevityshop-")
+            || l.starts_with("x-longevitypro-")
+            || l.starts_with("x-longevitymart-")
+            || l.starts_with("x-longevityplus-")
+            || l.starts_with("x-longevitysmart-")
+            || l.starts_with("x-longevityfamily-")
+            || l.starts_with("x-healthspannavi-")
+            || l.starts_with("x-healthspancenter-")
+            || l.starts_with("x-healthspanshop-")
+            || l.starts_with("x-healthspanpro-")
+            || l.starts_with("x-healthspanmart-")
+            || l.starts_with("x-healthspanplus-")
+            || l.starts_with("x-healthspansmart-")
+            || l.starts_with("x-healthspanfamily-")
+            || l.starts_with("x-wellnessnavi-")
+            || l.starts_with("x-wellnesscenter-")
+            || l.starts_with("x-wellnessshop-")
+            || l.starts_with("x-wellnesspro-")
+            || l.starts_with("x-wellnessmart-")
+            || l.starts_with("x-wellnessplus-")
+            || l.starts_with("x-wellnesssmart-")
+            || l.starts_with("x-wellnessfamily-")
+            || l.starts_with("x-bioidenticalnavi-")
+            || l.starts_with("x-bioidenticalcenter-")
+            || l.starts_with("x-bioidenticalshop-")
+            || l.starts_with("x-bioidenticalpro-")
+            || l.starts_with("x-bioidenticalmart-")
+            || l.starts_with("x-bioidenticalplus-")
+            || l.starts_with("x-bioidenticalsmart-")
+            || l.starts_with("x-bioidenticalfamily-")
+            || l.starts_with("x-hormonenavi-")
+            || l.starts_with("x-hormonecenter-")
+            || l.starts_with("x-hormoneshop-")
+            || l.starts_with("x-hormonepro-")
+            || l.starts_with("x-hormonemart-")
+            || l.starts_with("x-hormoneplus-")
+            || l.starts_with("x-hormonesmart-")
+            || l.starts_with("x-hormonefamily-")
+            || l.starts_with("x-peptidenavi-")
+            || l.starts_with("x-peptidecenter-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -33030,6 +33249,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_cricket_marks(clean));
+    }
+
+    #[test]
+    fn scan_は寿機印を検出する() {
+        for raw in [
+            br"X-Senior-Alert: 1",
+            br"X-Seniorliving-Notice: 1",
+            br"X-Retirementhome-Info: 1",
+            br"X-Silver-Report: 1",
+            br"X-Petanque-Bulletin: 1",
+            br"X-Gateball-News: 1",
+            br"X-Nordicwalking-Flash: 1",
+            br"X-Elderly-Release: 1",
+        ] {
+            assert!(has_senior_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_senior_marks(clean));
+    }
+
+    #[test]
+    fn scan_は舞機印を検出する() {
+        for raw in [
+            br"X-Aerobics-Alert: 1",
+            br"X-Cheerleading-Notice: 1",
+            br"X-Dancesport-Info: 1",
+            br"X-Zumba-Report: 1",
+            br"X-Barre-Bulletin: 1",
+            br"X-Ballet-News: 1",
+            br"X-Flamenco-Flash: 1",
+            br"X-Dancestudio-Release: 1",
+        ] {
+            assert!(has_dancestudio_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_dancestudio_marks(clean));
+    }
+
+    #[test]
+    fn scan_は若機印を検出する() {
+        for raw in [
+            br"X-Antiaging-Alert: 1",
+            br"X-Longevity-Notice: 1",
+            br"X-Healthspan-Info: 1",
+            br"X-Wellness-Report: 1",
+            br"X-Hormone-Bulletin: 1",
+            br"X-Peptide-News: 1",
+            br"X-Ivdrip-Flash: 1",
+            br"X-Medspa-Release: 1",
+        ] {
+            assert!(has_antiaging_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_antiaging_marks(clean));
     }
 
 }
