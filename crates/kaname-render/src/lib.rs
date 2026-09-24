@@ -1751,6 +1751,12 @@ pub struct Envelope {
     pub codingschool_marks: bool,
     /// `X-Zouen-*`/`X-Sakutei-*`/`X-Bassai-*`/`X-Niwashi-*`/`X-Uekiya-*`/`X-Gaikou-*`/`X-TreeCare-*` 等の造園・剪定・伐採通知記録印を送信側が自称している (D619)
     pub garden_marks: bool,
+    /// `X-Hachikujo-*`/`X-Shiroari-*`/`X-NezumiKujo-*`/`X-GaijuuKujo-*`/`X-PestControl24-*`/`X-KujoPro-*`/`X-KujoDoctor-*` 等の害虫・害獣駆除通知記録印を送信側が自称している (D620)
+    pub pest_marks: bool,
+    /// `X-Reien-*`/`X-Hakaishi-*`/`X-Butsudan-*`/`X-Butsugu-*`/`X-Kaimyou-*`/`X-Noukotsudou-*`/`X-EidaiKuyou-*` 等の霊園・墓石・仏壇通知記録印を送信側が自称している (D621)
+    pub cemetery_marks: bool,
+    /// `X-Taiyoukou-*`/`X-Chikuden-*`/`X-Enefarm-*`/`X-Hems-*`/`X-Uriden-*`/`X-SolarPro-*`/`X-PvPower-*` 等の太陽光・蓄電池・エネルギー設備通知記録印を送信側が自称している (D622)
+    pub solar_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2248,6 +2254,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         emergency_marks: has_emergency_marks(hdr),
         codingschool_marks: has_codingschool_marks(hdr),
         garden_marks: has_garden_marks(hdr),
+        pest_marks: has_pest_marks(hdr),
+        cemetery_marks: has_cemetery_marks(hdr),
+        solar_marks: has_solar_marks(hdr),
     })
 }
 
@@ -13097,6 +13106,249 @@ fn has_garden_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-Hachikujo-*`/`X-Shiroari-*`/`X-NezumiKujo-*`/`X-GaijuuKujo-*`/`X-MukadeKujo-*`/`X-GokiKujo-*`/`X-PestControl24-*`/`X-KujoPro-*`/`X-KujoDoctor-*`/`X-KujoNavi-*`/`X-KujoCenter-*`/`X-KujoShop-*`/`X-Hachisu-*`/`X-Nezumi110-*`/`X-Kujo110-*`/`X-KujoRescue-*`/`X-Kujo24-*`/`X-KujoStation-*`/`X-KujoHome-*`/`X-KujoSmart-*`/`X-KujoFamily-*`/`X-KujoMart-*`/`X-KujoPlus-*`/`X-HachiRescue-*`/`X-HachiDoctor-*`/`X-HachiPro-*`/`X-HachiNavi-*`/`X-HachiCenter-*`/`X-HachiShop-*`/`X-Hachi110-*`/`X-Suzumebachi-*`/`X-Ashinagabachi-*`/`X-MitsubachiCare-*`/`X-Hachi24-*`/`X-ShiroariPro-*`/`X-ShiroariDoctor-*`/`X-ShiroariNavi-*`/`X-ShiroariCenter-*`/`X-ShiroariShop-*`/`X-ShiroariRescue-*`/`X-Shiroari24-*`/`X-Shiroari110-*`/`X-TermitePro-*`/`X-TermiteDoctor-*`/`X-TermiteRescue-*`/`X-NezumiPro-*`/`X-NezumiDoctor-*`/`X-NezumiNavi-*`/`X-NezumiCenter-*`/`X-NezumiShop-*`/`X-NezumiRescue-*`/`X-Nezumi24-*`/`X-RodentPro-*`/`X-RodentRescue-*`/`X-GaijuuPro-*`/`X-GaijuuDoctor-*`/`X-GaijuuNavi-*`/`X-GaijuuCenter-*`/`X-GaijuuShop-*`/`X-GaijuuRescue-*`/`X-Gaijuu24-*`/`X-Gaijuu110-*`/`X-Hakubishin-*`/`X-anagumaKujo-*`/`X-InoshishiKujo-*`/`X-SaruKujo-*`/`X-KarasuKujo-*`/`X-MukadePro-*`/`X-GokiPro-*`/`X-Nomitori-*`/`X-DaniKujo-*` (害虫・害獣駆除の通知記録) を送信側が自称しているかどうか。蜂の巣・シロアリ・ねずみ・害獣駆除費用の偽装は駆除業者詐欺の典型手口。(警備機は D548、清掃機は D601)
+fn has_pest_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hachikujo-")
+            || l.starts_with("x-shiroari-")
+            || l.starts_with("x-nezumikujo-")
+            || l.starts_with("x-gaijuukujo-")
+            || l.starts_with("x-mukadekujo-")
+            || l.starts_with("x-gokikujo-")
+            || l.starts_with("x-pestcontrol24-")
+            || l.starts_with("x-kujopro-")
+            || l.starts_with("x-kujodoctor-")
+            || l.starts_with("x-kujonavi-")
+            || l.starts_with("x-kujocenter-")
+            || l.starts_with("x-kujoshop-")
+            || l.starts_with("x-hachisu-")
+            || l.starts_with("x-nezumi110-")
+            || l.starts_with("x-kujo110-")
+            || l.starts_with("x-kujorescue-")
+            || l.starts_with("x-kujo24-")
+            || l.starts_with("x-kujostation-")
+            || l.starts_with("x-kujohome-")
+            || l.starts_with("x-kujosmart-")
+            || l.starts_with("x-kujofamily-")
+            || l.starts_with("x-kujomart-")
+            || l.starts_with("x-kujoplus-")
+            || l.starts_with("x-hachirescue-")
+            || l.starts_with("x-hachidoctor-")
+            || l.starts_with("x-hachipro-")
+            || l.starts_with("x-hachinavi-")
+            || l.starts_with("x-hachicenter-")
+            || l.starts_with("x-hachishop-")
+            || l.starts_with("x-hachi110-")
+            || l.starts_with("x-suzumebachi-")
+            || l.starts_with("x-ashinagabachi-")
+            || l.starts_with("x-mitsubachicare-")
+            || l.starts_with("x-hachi24-")
+            || l.starts_with("x-shiroaripro-")
+            || l.starts_with("x-shiroaridoctor-")
+            || l.starts_with("x-shiroarinavi-")
+            || l.starts_with("x-shiroaricenter-")
+            || l.starts_with("x-shiroarishop-")
+            || l.starts_with("x-shiroarirescue-")
+            || l.starts_with("x-shiroari24-")
+            || l.starts_with("x-shiroari110-")
+            || l.starts_with("x-termitepro-")
+            || l.starts_with("x-termitedoctor-")
+            || l.starts_with("x-termitedoctor-")
+            || l.starts_with("x-termiterescue-")
+            || l.starts_with("x-nezumipro-")
+            || l.starts_with("x-nezumidoctor-")
+            || l.starts_with("x-nezuminavi-")
+            || l.starts_with("x-nezumicenter-")
+            || l.starts_with("x-nezumishop-")
+            || l.starts_with("x-nezumirescue-")
+            || l.starts_with("x-nezumi24-")
+            || l.starts_with("x-rodentpro-")
+            || l.starts_with("x-rodentrescue-")
+            || l.starts_with("x-gaijuupro-")
+            || l.starts_with("x-gaijuudoctor-")
+            || l.starts_with("x-gaijuunavi-")
+            || l.starts_with("x-gaijuucenter-")
+            || l.starts_with("x-gaijuushop-")
+            || l.starts_with("x-gaijuurescue-")
+            || l.starts_with("x-gaijuu24-")
+            || l.starts_with("x-gaijuu110-")
+            || l.starts_with("x-hakubishin-")
+            || l.starts_with("x-anagumakujo-")
+            || l.starts_with("x-inoshishikujo-")
+            || l.starts_with("x-sarukujo-")
+            || l.starts_with("x-karasukujo-")
+            || l.starts_with("x-mukadepro-")
+            || l.starts_with("x-gokipro-")
+            || l.starts_with("x-nomitori-")
+            || l.starts_with("x-danikujo-")
+    })
+}
+
+/// `X-Reien-*`/`X-Hakaishi-*`/`X-Butsudan-*`/`X-Butsugu-*`/`X-Kaimyou-*`/`X-Noukotsudou-*`/`X-EidaiKuyou-*`/`X-Houchi-*`/`X-Haji-*`/`X-Sougishiki-*`/`X-Ohakamairi-*`/`X-OhakaCare-*`/`X-HakaDoctor-*`/`X-HakaNavi-*`/`X-HakaCenter-*`/`X-HakaShop-*`/`X-HakaPro-*`/`X-HakaRescue-*`/`X-Haka24-*`/`X-HakaMart-*`/`X-HakaPlus-*`/`X-HakaSmart-*`/`X-HakaFamily-*`/`X-ButsudanPro-*`/`X-ButsudanDoctor-*`/`X-ButsudanNavi-*`/`X-ButsudanCenter-*`/`X-ButsudanShop-*`/`X-ButsudanStore-*`/`X-ButsuguPro-*`/`X-ButsuguShop-*`/`X-ButsuguStore-*`/`X-ButsuguNavi-*`/`X-KaimyouPro-*`/`X-KaimyouNavi-*`/`X-KaimyouCenter-*`/`X-KaimyouShop-*`/`X-NoukotsuPro-*`/`X-NoukotsuNavi-*`/`X-NoukotsuCenter-*`/`X-NoukotsuShop-*`/`X-EidaiPro-*`/`X-EidaiNavi-*`/`X-EidaiCenter-*`/`X-EidaiShop-*`/`X-ReienPro-*`/`X-ReienDoctor-*`/`X-ReienNavi-*`/`X-ReienCenter-*`/`X-ReienShop-*`/`X-ReienRescue-*`/`X-Reien24-*`/`X-MemorialPark-*`/`X-MemorialHall-*`/`X-MemorialStone-*`/`X-MemorialShop-*`/`X-MemorialPro-*`/`X-MemorialNavi-*`/`X-GraveStone-*`/`X-GraveShop-*`/`X-GraveNavi-*`/`X-TombStone-*`/`X-CemeteryPro-*`/`X-CemeteryNavi-*`/`X-OsoujiHaka-*`/`X-HakaSouji-*`/`X-OhakaSouji-*`/`X-HakaClean-*` (霊園・墓石・仏壇・納骨堂の通知記録) を送信側が自称しているかどうか。墓石建立・改葬・仏壇購入・永代供養費の偽装は墓地仏壇詐欺の典型手口。(葬儀機は D580、社寺機は D596)
+fn has_cemetery_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-reien-")
+            || l.starts_with("x-hakaishi-")
+            || l.starts_with("x-butsudan-")
+            || l.starts_with("x-butsugu-")
+            || l.starts_with("x-kaimyou-")
+            || l.starts_with("x-noukotsudou-")
+            || l.starts_with("x-eidaikuyou-")
+            || l.starts_with("x-houchi-")
+            || l.starts_with("x-haji-")
+            || l.starts_with("x-sougishiki-")
+            || l.starts_with("x-ohakamairi-")
+            || l.starts_with("x-ohakacare-")
+            || l.starts_with("x-hakadoctor-")
+            || l.starts_with("x-hakanavi-")
+            || l.starts_with("x-hakacenter-")
+            || l.starts_with("x-hakashop-")
+            || l.starts_with("x-hakapro-")
+            || l.starts_with("x-hakarescue-")
+            || l.starts_with("x-haka24-")
+            || l.starts_with("x-hakamart-")
+            || l.starts_with("x-hakaplus-")
+            || l.starts_with("x-hakasmart-")
+            || l.starts_with("x-hakafamily-")
+            || l.starts_with("x-butsudanpro-")
+            || l.starts_with("x-butsudandoctor-")
+            || l.starts_with("x-butsudannavi-")
+            || l.starts_with("x-butsudancenter-")
+            || l.starts_with("x-butsudanshop-")
+            || l.starts_with("x-butsudanstore-")
+            || l.starts_with("x-butsugupro-")
+            || l.starts_with("x-butsugushop-")
+            || l.starts_with("x-butsugustore-")
+            || l.starts_with("x-butsugunavi-")
+            || l.starts_with("x-kaimyoupro-")
+            || l.starts_with("x-kaimyounavi-")
+            || l.starts_with("x-kaimyoucenter-")
+            || l.starts_with("x-kaimyoushop-")
+            || l.starts_with("x-noukotsupro-")
+            || l.starts_with("x-noukotsunavi-")
+            || l.starts_with("x-noukotsucenter-")
+            || l.starts_with("x-noukotsushop-")
+            || l.starts_with("x-eidaipro-")
+            || l.starts_with("x-eidainavi-")
+            || l.starts_with("x-eidaicenter-")
+            || l.starts_with("x-eidaishop-")
+            || l.starts_with("x-reienpro-")
+            || l.starts_with("x-reiendoctor-")
+            || l.starts_with("x-reiennavi-")
+            || l.starts_with("x-reiencenter-")
+            || l.starts_with("x-reienshop-")
+            || l.starts_with("x-reienrescue-")
+            || l.starts_with("x-reien24-")
+            || l.starts_with("x-memorialpark-")
+            || l.starts_with("x-memorialhall-")
+            || l.starts_with("x-memorialstone-")
+            || l.starts_with("x-memorialshop-")
+            || l.starts_with("x-memorialpro-")
+            || l.starts_with("x-memorialnavi-")
+            || l.starts_with("x-gravestone-")
+            || l.starts_with("x-graveshop-")
+            || l.starts_with("x-gravenavi-")
+            || l.starts_with("x-tombstone-")
+            || l.starts_with("x-cemeterypro-")
+            || l.starts_with("x-cemeterynavi-")
+            || l.starts_with("x-osoujihaka-")
+            || l.starts_with("x-hakasouji-")
+            || l.starts_with("x-ohakasouji-")
+            || l.starts_with("x-hakaclean-")
+    })
+}
+
+/// `X-Taiyoukou-*`/`X-Chikuden-*`/`X-Enefarm-*`/`X-Hems-*`/`X-Uriden-*`/`X-SolarPro-*`/`X-PvPower-*`/`X-SmartHems-*`/`X-TyoriKiden-*`/`X-TaiyoukouPro-*`/`X-TaiyoukouDoctor-*`/`X-TaiyoukouNavi-*`/`X-TaiyoukouCenter-*`/`X-TaiyoukouShop-*`/`X-TaiyoukouRescue-*`/`X-Taiyoukou24-*`/`X-TaiyoukouMart-*`/`X-TaiyoukouPlus-*`/`X-SolarDoctor-*`/`X-SolarNavi-*`/`X-SolarCenter-*`/`X-SolarShop-*`/`X-SolarRescue-*`/`X-Solar24-*`/`X-SolarMart-*`/`X-SolarPlus-*`/`X-SolarSmart-*`/`X-ChikudenPro-*`/`X-ChikudenDoctor-*`/`X-ChikudenNavi-*`/`X-ChikudenCenter-*`/`X-ChikudenShop-*`/`X-ChikudenRescue-*`/`X-Chikuden24-*`/`X-BatteryPro-*`/`X-BatteryShop-*`/`X-BatteryNavi-*`/`X-BatteryCenter-*`/`X-PvShop-*`/`X-PvNavi-*`/`X-PvCenter-*`/`X-PvPro-*`/`X-PvDoctor-*`/`X-PvRescue-*`/`X-Pv24-*`/`X-GreenPowerShop-*`/`X-GreenEnergy-*`/`X-RenewEnergy-*`/`X-RenewableShop-*`/`X-EcoPower-*`/`X-EcoSolar-*`/`X-EcoEnergy-*`/`X-EnergyPro-*`/`X-EnergyShop-*`/`X-EnergyNavi-*`/`X-EnergyCenter-*`/`X-EnergyDoctor-*`/`X-EnergyRescue-*`/`X-Energy24-*`/`X-UridenPro-*`/`X-UridenNavi-*`/`X-UridenCenter-*`/`X-UridenShop-*`/`X-FitNavi-*`/`X-FitCenter-*`/`X-V2HShop-*`/`X-V2HNavi-*`/`X-EvChargerShop-*`/`X-EvChargerNavi-*`/`X-WallBattery-*` (太陽光発電・蓄電池・エネルギー設備の通知記録) を送信側が自称しているかどうか。無料点検・補助金申請・パネル販売の偽装は太陽光詐欺の典型手口。(電気・ガス料金機は D520、建機は D538)
+fn has_solar_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-taiyoukou-")
+            || l.starts_with("x-chikuden-")
+            || l.starts_with("x-enefarm-")
+            || l.starts_with("x-hems-")
+            || l.starts_with("x-uriden-")
+            || l.starts_with("x-solarpro-")
+            || l.starts_with("x-pvpower-")
+            || l.starts_with("x-smarthems-")
+            || l.starts_with("x-tyorikiden-")
+            || l.starts_with("x-taiyoukoupro-")
+            || l.starts_with("x-taiyoukoudoctor-")
+            || l.starts_with("x-taiyoukounavi-")
+            || l.starts_with("x-taiyoukoucenter-")
+            || l.starts_with("x-taiyoukoushop-")
+            || l.starts_with("x-taiyoukourescue-")
+            || l.starts_with("x-taiyoukou24-")
+            || l.starts_with("x-taiyoukoumart-")
+            || l.starts_with("x-taiyoukouplus-")
+            || l.starts_with("x-solardoctor-")
+            || l.starts_with("x-solarnavi-")
+            || l.starts_with("x-solarcenter-")
+            || l.starts_with("x-solarshop-")
+            || l.starts_with("x-solarrescue-")
+            || l.starts_with("x-solar24-")
+            || l.starts_with("x-solarmart-")
+            || l.starts_with("x-solarplus-")
+            || l.starts_with("x-solarsmart-")
+            || l.starts_with("x-chikudenpro-")
+            || l.starts_with("x-chikudendoctor-")
+            || l.starts_with("x-chikudennavi-")
+            || l.starts_with("x-chikudencenter-")
+            || l.starts_with("x-chikudenshop-")
+            || l.starts_with("x-chikudenrescue-")
+            || l.starts_with("x-chikuden24-")
+            || l.starts_with("x-batterypro-")
+            || l.starts_with("x-batteryshop-")
+            || l.starts_with("x-batterynavi-")
+            || l.starts_with("x-batterycenter-")
+            || l.starts_with("x-pvshop-")
+            || l.starts_with("x-pvnavi-")
+            || l.starts_with("x-pvcenter-")
+            || l.starts_with("x-pvpro-")
+            || l.starts_with("x-pvdoctor-")
+            || l.starts_with("x-pvrescue-")
+            || l.starts_with("x-pv24-")
+            || l.starts_with("x-greenpowershop-")
+            || l.starts_with("x-greenenergy-")
+            || l.starts_with("x-renewenergy-")
+            || l.starts_with("x-renewableshop-")
+            || l.starts_with("x-ecopower-")
+            || l.starts_with("x-ecosolar-")
+            || l.starts_with("x-ecoenergy-")
+            || l.starts_with("x-energypro-")
+            || l.starts_with("x-energyshop-")
+            || l.starts_with("x-energynavi-")
+            || l.starts_with("x-energycenter-")
+            || l.starts_with("x-energydoctor-")
+            || l.starts_with("x-energyrescue-")
+            || l.starts_with("x-energy24-")
+            || l.starts_with("x-uridenpro-")
+            || l.starts_with("x-uridennavi-")
+            || l.starts_with("x-uridencenter-")
+            || l.starts_with("x-uridenshop-")
+            || l.starts_with("x-fitnavi-")
+            || l.starts_with("x-fitcenter-")
+            || l.starts_with("x-v2hshop-")
+            || l.starts_with("x-v2hnavi-")
+            || l.starts_with("x-evchargershop-")
+            || l.starts_with("x-evchargernavi-")
+            || l.starts_with("x-wallbattery-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -21387,5 +21639,152 @@ X-Other: 1
 
 body";
     assert!(!has_garden_marks(clean));
+}
+
+#[test]
+fn scan_は駆機印を検出する() {
+    let h1 = b"From: a@b
+X-Hachikujo-Id: 1
+
+x";
+    let s1 = b"From: a@b
+X-Shiroari-Trace: 1
+
+x";
+    let n1 = b"From: a@b
+X-NezumiKujo-Notice: 1
+
+x";
+    let g1 = b"From: a@b
+X-GaijuuKujo-Flag: 1
+
+x";
+    let p1 = b"From: a@b
+X-PestControl24-Entry: 1
+
+x";
+    let k1 = b"From: a@b
+X-KujoRescue-Record: 1
+
+x";
+    let t1 = b"From: a@b
+X-TermitePro-Trace: 1
+
+x";
+    let h2 = b"From: a@b
+X-Hakubishin-Stamp: 1
+
+x";
+    assert!(has_pest_marks(h1));
+    assert!(has_pest_marks(s1));
+    assert!(has_pest_marks(n1));
+    assert!(has_pest_marks(g1));
+    assert!(has_pest_marks(p1));
+    assert!(has_pest_marks(k1));
+    assert!(has_pest_marks(t1));
+    assert!(has_pest_marks(h2));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_pest_marks(clean));
+}
+
+#[test]
+fn scan_は墓機印を検出する() {
+    let r1 = b"From: a@b
+X-Reien-Id: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hakaishi-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-Butsudan-Notice: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kaimyou-Flag: 1
+
+x";
+    let n1 = b"From: a@b
+X-Noukotsudou-Entry: 1
+
+x";
+    let e1 = b"From: a@b
+X-EidaiKuyou-Record: 1
+
+x";
+    let m1 = b"From: a@b
+X-MemorialPark-Trace: 1
+
+x";
+    let g1 = b"From: a@b
+X-GraveStone-Stamp: 1
+
+x";
+    assert!(has_cemetery_marks(r1));
+    assert!(has_cemetery_marks(h1));
+    assert!(has_cemetery_marks(b1));
+    assert!(has_cemetery_marks(k1));
+    assert!(has_cemetery_marks(n1));
+    assert!(has_cemetery_marks(e1));
+    assert!(has_cemetery_marks(m1));
+    assert!(has_cemetery_marks(g1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_cemetery_marks(clean));
+}
+
+#[test]
+fn scan_は蓄機印を検出する() {
+    let t1 = b"From: a@b
+X-Taiyoukou-Id: 1
+
+x";
+    let c1 = b"From: a@b
+X-Chikuden-Trace: 1
+
+x";
+    let e1 = b"From: a@b
+X-Enefarm-Notice: 1
+
+x";
+    let h1 = b"From: a@b
+X-Hems-Flag: 1
+
+x";
+    let s1 = b"From: a@b
+X-SolarPro-Entry: 1
+
+x";
+    let p1 = b"From: a@b
+X-PvPower-Record: 1
+
+x";
+    let u1 = b"From: a@b
+X-Uriden-Trace: 1
+
+x";
+    let e2 = b"From: a@b
+X-EcoSolar-Stamp: 1
+
+x";
+    assert!(has_solar_marks(t1));
+    assert!(has_solar_marks(c1));
+    assert!(has_solar_marks(e1));
+    assert!(has_solar_marks(h1));
+    assert!(has_solar_marks(s1));
+    assert!(has_solar_marks(p1));
+    assert!(has_solar_marks(u1));
+    assert!(has_solar_marks(e2));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_solar_marks(clean));
 }
 }
