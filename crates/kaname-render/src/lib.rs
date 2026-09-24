@@ -1853,6 +1853,12 @@ pub struct Envelope {
     pub fishery_marks: bool,
     /// `X-Eiga-*`/`X-Eiganavi-*`/`X-Eigacenter-*` 等の映画館・シネコン印を送信側が自称する兆候 (D670)
     pub cinema_marks: bool,
+    /// `X-Kinken-*`/`X-Kinkennavi-*`/`X-Kinkencenter-*` 等の金券・チケットショップ印を送信側が自称する兆候 (D671)
+    pub ticketshop_marks: bool,
+    /// `X-Livehouse-*`/`X-Livehousenavi-*`/`X-Livehousecenter-*` 等のライブハウス・クラブ印を送信側が自称する兆候 (D672)
+    pub livehouse_marks: bool,
+    /// `X-Barber-*`/`X-Barbernavi-*`/`X-Barbercenter-*` 等の床屋・理容・QB印を送信側が自称する兆候 (D673)
+    pub barber_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2401,6 +2407,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         pachinko_marks: has_pachinko_marks(hdr),
         fishery_marks: has_fishery_marks(hdr),
         cinema_marks: has_cinema_marks(hdr),
+        ticketshop_marks: has_ticketshop_marks(hdr),
+        livehouse_marks: has_livehouse_marks(hdr),
+        barber_marks: has_barber_marks(hdr),
     })
 }
 
@@ -17292,6 +17301,231 @@ fn has_cinema_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-matineepro-"))
 }
 
+/// `X-Kinken-*`/`X-Kinkennavi-*`/`X-Kinkencenter-*`/`X-Kinkenshop-*`/`X-Kinkenpro-*`/`X-Ticketshop-*`/`X-Ticketshopnavi-*`/`X-Ticketshopcenter-*`/`X-Ticketshopshop-*`/`X-Ticketshoppro-*`/`X-Kittenavi-*`/`X-Kittecenter-*`/`X-Kitteshop-*`/`X-Kittepro-*`/`X-Shouken-*`/`X-Shoukennavi-*`/`X-Shoukencenter-*`/`X-Shoukenshop-*`/`X-Shoukenpro-*`/`X-Voucher-*`/`X-Vouchernavi-*`/`X-Vouchercenter-*`/`X-Vouchershop-*`/`X-Voucherpro-*`/`X-Giftcard-*`/`X-Giftcardnavi-*`/`X-Giftcardcenter-*`/`X-Giftcardshop-*`/`X-Giftcardpro-*`/`X-Daikenshops-*`/`X-Daikenshop-*`/`X-Naviken-*`/`X-Navikennavi-*`/`X-Navikencenter-*`/`X-Navikenshop-*`/`X-Navikenpro-*`/`X-Joshaken-*`/`X-Joshakennavi-*`/`X-Joshakencenter-*`/`X-Joshakenshop-*`/`X-Joshakenpro-*`/`X-Ticketmart-*`/`X-Ticketplus-*`/`X-Ticketsmart-*`/`X-Ticketfamily-*`/`X-Kinkenmart-*`/`X-Kinkenplus-*`/`X-Kinkensmart-*`/`X-Kinkenfamily-*`/`X-Tekkenshop-*`/`X-Tekkennavi-*`/`X-Tekkencenter-*`/`X-Tekkenpro-*`/`X-Kennavi-*`/`X-Kencenter-*`/`X-Kenshop-*`/`X-Kenpro-*`/`X-Ticketnavi-*`/`X-Ticketcenter-*`/`X-Ticketpro-*`/`X-Ticketdoctor-*`/`X-Ticketrescue-*`/`X-Ticket24-*` 等の金券・チケットショップ印を送信側が自称する兆候を検出する
+fn has_ticketshop_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kinken-")
+            || l.starts_with("x-kinkennavi-")
+            || l.starts_with("x-kinkencenter-")
+            || l.starts_with("x-kinkenshop-")
+            || l.starts_with("x-kinkenpro-")
+            || l.starts_with("x-ticketshop-")
+            || l.starts_with("x-ticketshopnavi-")
+            || l.starts_with("x-ticketshopcenter-")
+            || l.starts_with("x-ticketshopshop-")
+            || l.starts_with("x-ticketshoppro-")
+            || l.starts_with("x-kittenavi-")
+            || l.starts_with("x-kittecenter-")
+            || l.starts_with("x-kitteshop-")
+            || l.starts_with("x-kittepro-")
+            || l.starts_with("x-shouken-")
+            || l.starts_with("x-shoukennavi-")
+            || l.starts_with("x-shoukencenter-")
+            || l.starts_with("x-shoukenshop-")
+            || l.starts_with("x-shoukenpro-")
+            || l.starts_with("x-voucher-")
+            || l.starts_with("x-vouchernavi-")
+            || l.starts_with("x-vouchercenter-")
+            || l.starts_with("x-vouchershop-")
+            || l.starts_with("x-voucherpro-")
+            || l.starts_with("x-giftcard-")
+            || l.starts_with("x-giftcardnavi-")
+            || l.starts_with("x-giftcardcenter-")
+            || l.starts_with("x-giftcardshop-")
+            || l.starts_with("x-giftcardpro-")
+            || l.starts_with("x-daikenshops-")
+            || l.starts_with("x-daikenshop-")
+            || l.starts_with("x-naviken-")
+            || l.starts_with("x-navikennavi-")
+            || l.starts_with("x-navikencenter-")
+            || l.starts_with("x-navikenshop-")
+            || l.starts_with("x-navikenpro-")
+            || l.starts_with("x-joshaken-")
+            || l.starts_with("x-joshakennavi-")
+            || l.starts_with("x-joshakencenter-")
+            || l.starts_with("x-joshakenshop-")
+            || l.starts_with("x-joshakenpro-")
+            || l.starts_with("x-ticketmart-")
+            || l.starts_with("x-ticketplus-")
+            || l.starts_with("x-ticketsmart-")
+            || l.starts_with("x-ticketfamily-")
+            || l.starts_with("x-kinkenmart-")
+            || l.starts_with("x-kinkenplus-")
+            || l.starts_with("x-kinkensmart-")
+            || l.starts_with("x-kinkenfamily-")
+            || l.starts_with("x-tekkenshop-")
+            || l.starts_with("x-tekkennavi-")
+            || l.starts_with("x-tekkencenter-")
+            || l.starts_with("x-tekkenpro-")
+            || l.starts_with("x-kennavi-")
+            || l.starts_with("x-kencenter-")
+            || l.starts_with("x-kenshop-")
+            || l.starts_with("x-kenpro-")
+            || l.starts_with("x-ticketnavi-")
+            || l.starts_with("x-ticketcenter-")
+            || l.starts_with("x-ticketpro-")
+            || l.starts_with("x-ticketdoctor-")
+            || l.starts_with("x-ticketrescue-")
+            || l.starts_with("x-ticket24-"))
+}
+
+/// `X-Livehouse-*`/`X-Livehousenavi-*`/`X-Livehousecenter-*`/`X-Livehouseshop-*`/`X-Livehousepro-*`/`X-Live-*`/`X-Livenavi-*`/`X-Livecenter-*`/`X-Liveshop-*`/`X-Livepro-*`/`X-Zepp-*`/`X-Zeppnavi-*`/`X-Zeppcenter-*`/`X-Zeppshop-*`/`X-Zepppro-*`/`X-Club-*`/`X-Clubnavi-*`/`X-Clubcenter-*`/`X-Clubshop-*`/`X-Clubpro-*`/`X-Ondoku-*`/`X-Ondokunavi-*`/`X-Ondokucenter-*`/`X-Ondokushop-*`/`X-Ondokupro-*`/`X-Livehousemart-*`/`X-Livehouseplus-*`/`X-Livehousesmart-*`/`X-Livehousefamily-*`/`X-Livemart-*`/`X-Liveplus-*`/`X-Livesmart-*`/`X-Livefamily-*`/`X-Clubmart-*`/`X-Clubplus-*`/`X-Clubsmart-*`/`X-Clubfamily-*`/`X-Daikounavi-*`/`X-Daikoucenter-*`/`X-Daikoushop-*`/`X-Daikoupro-*`/`X-Livehall-*`/`X-Livehallnavi-*`/`X-Livehallcenter-*`/`X-Livehallshop-*`/`X-Livehallpro-*`/`X-Musicbox-*`/`X-Musicboxnavi-*`/`X-Musicboxcenter-*`/`X-Musicboxshop-*`/`X-Musicboxpro-*`/`X-Onband-*`/`X-Onbandnavi-*`/`X-Onbandcenter-*`/`X-Onbandshop-*`/`X-Onbandpro-*`/`X-Staging-*`/`X-Stagingnavi-*`/`X-Stagingcenter-*`/`X-Stagingshop-*`/`X-Stagingpro-*`/`X-Rockhouse-*`/`X-Rockhousenavi-*`/`X-Rockhousecenter-*`/`X-Rockhouseshop-*`/`X-Rockhousepro-*` 等のライブハウス・クラブ印を送信側が自称する兆候を検出する
+fn has_livehouse_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-livehouse-")
+            || l.starts_with("x-livehousenavi-")
+            || l.starts_with("x-livehousecenter-")
+            || l.starts_with("x-livehouseshop-")
+            || l.starts_with("x-livehousepro-")
+            || l.starts_with("x-live-")
+            || l.starts_with("x-livenavi-")
+            || l.starts_with("x-livecenter-")
+            || l.starts_with("x-liveshop-")
+            || l.starts_with("x-livepro-")
+            || l.starts_with("x-zepp-")
+            || l.starts_with("x-zeppnavi-")
+            || l.starts_with("x-zeppcenter-")
+            || l.starts_with("x-zeppshop-")
+            || l.starts_with("x-zepppro-")
+            || l.starts_with("x-club-")
+            || l.starts_with("x-clubnavi-")
+            || l.starts_with("x-clubcenter-")
+            || l.starts_with("x-clubshop-")
+            || l.starts_with("x-clubpro-")
+            || l.starts_with("x-ondoku-")
+            || l.starts_with("x-ondokunavi-")
+            || l.starts_with("x-ondokucenter-")
+            || l.starts_with("x-ondokushop-")
+            || l.starts_with("x-ondokupro-")
+            || l.starts_with("x-livehousemart-")
+            || l.starts_with("x-livehouseplus-")
+            || l.starts_with("x-livehousesmart-")
+            || l.starts_with("x-livehousefamily-")
+            || l.starts_with("x-livemart-")
+            || l.starts_with("x-liveplus-")
+            || l.starts_with("x-livesmart-")
+            || l.starts_with("x-livefamily-")
+            || l.starts_with("x-clubmart-")
+            || l.starts_with("x-clubplus-")
+            || l.starts_with("x-clubsmart-")
+            || l.starts_with("x-clubfamily-")
+            || l.starts_with("x-daikounavi-")
+            || l.starts_with("x-daikoucenter-")
+            || l.starts_with("x-daikoushop-")
+            || l.starts_with("x-daikoupro-")
+            || l.starts_with("x-livehall-")
+            || l.starts_with("x-livehallnavi-")
+            || l.starts_with("x-livehallcenter-")
+            || l.starts_with("x-livehallshop-")
+            || l.starts_with("x-livehallpro-")
+            || l.starts_with("x-musicbox-")
+            || l.starts_with("x-musicboxnavi-")
+            || l.starts_with("x-musicboxcenter-")
+            || l.starts_with("x-musicboxshop-")
+            || l.starts_with("x-musicboxpro-")
+            || l.starts_with("x-onband-")
+            || l.starts_with("x-onbandnavi-")
+            || l.starts_with("x-onbandcenter-")
+            || l.starts_with("x-onbandshop-")
+            || l.starts_with("x-onbandpro-")
+            || l.starts_with("x-staging-")
+            || l.starts_with("x-stagingnavi-")
+            || l.starts_with("x-stagingcenter-")
+            || l.starts_with("x-stagingshop-")
+            || l.starts_with("x-stagingpro-")
+            || l.starts_with("x-rockhouse-")
+            || l.starts_with("x-rockhousenavi-")
+            || l.starts_with("x-rockhousecenter-")
+            || l.starts_with("x-rockhouseshop-")
+            || l.starts_with("x-rockhousepro-"))
+}
+
+/// `X-Barber-*`/`X-Barbernavi-*`/`X-Barbercenter-*`/`X-Barbershop-*`/`X-Barberpro-*`/`X-Riyou-*`/`X-Riyounavi-*`/`X-Riyoucenter-*`/`X-Riyoushop-*`/`X-Riyoupro-*`/`X-Tokoya-*`/`X-Tokoyanavi-*`/`X-Tokoyacenter-*`/`X-Tokoyashop-*`/`X-Tokoyapro-*`/`X-Qbhouse-*`/`X-Qb-*`/`X-Qbnavi-*`/`X-Qbcenter-*`/`X-Qbshop-*`/`X-Qbpro-*`/`X-Plaisir-*`/`X-Plaisirnavi-*`/`X-Plaisircenter-*`/`X-Plaisirshop-*`/`X-Plaisirpro-*`/`X-Sanpatsu-*`/`X-Sanpatsunavi-*`/`X-Sanpatsucenter-*`/`X-Sanpatsushop-*`/`X-Sanpatsupro-*`/`X-Haircut-*`/`X-Haircutnavi-*`/`X-Haircutcenter-*`/`X-Haircutshop-*`/`X-Haircutpro-*`/`X-Barbermart-*`/`X-Barberplus-*`/`X-Barbersmart-*`/`X-Barberfamily-*`/`X-Mens-*`/`X-Mensnavi-*`/`X-Menscenter-*`/`X-Mensshop-*`/`X-Menspro-*`/`X-Salondenavi-*`/`X-Salondencenter-*`/`X-Salondenshop-*`/`X-Salondenpro-*`/`X-Barberia-*`/`X-Barberianavi-*`/`X-Barberiacenter-*`/`X-Barberiashop-*`/`X-Barberiapro-*`/`X-Riyouin-*`/`X-Riyouinnavi-*`/`X-Riyouincenter-*`/`X-Riyouinshop-*`/`X-Riyouinpro-*`/`X-Kamikire-*`/`X-Kamikirenavi-*`/`X-Kamikirecenter-*`/`X-Kamikireshop-*`/`X-Kamikirepro-*`/`X-Danseigan-*`/`X-Danseigannavi-*`/`X-Danseigancenter-*`/`X-Danseiganshop-*`/`X-Danseiganpro-*` 等の床屋・理容・QB印を送信側が自称する兆候を検出する
+fn has_barber_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-barber-")
+            || l.starts_with("x-barbernavi-")
+            || l.starts_with("x-barbercenter-")
+            || l.starts_with("x-barbershop-")
+            || l.starts_with("x-barberpro-")
+            || l.starts_with("x-riyou-")
+            || l.starts_with("x-riyounavi-")
+            || l.starts_with("x-riyoucenter-")
+            || l.starts_with("x-riyoushop-")
+            || l.starts_with("x-riyoupro-")
+            || l.starts_with("x-tokoya-")
+            || l.starts_with("x-tokoyanavi-")
+            || l.starts_with("x-tokoyacenter-")
+            || l.starts_with("x-tokoyashop-")
+            || l.starts_with("x-tokoyapro-")
+            || l.starts_with("x-qbhouse-")
+            || l.starts_with("x-qb-")
+            || l.starts_with("x-qbnavi-")
+            || l.starts_with("x-qbcenter-")
+            || l.starts_with("x-qbshop-")
+            || l.starts_with("x-qbpro-")
+            || l.starts_with("x-plaisir-")
+            || l.starts_with("x-plaisirnavi-")
+            || l.starts_with("x-plaisircenter-")
+            || l.starts_with("x-plaisirshop-")
+            || l.starts_with("x-plaisirpro-")
+            || l.starts_with("x-sanpatsu-")
+            || l.starts_with("x-sanpatsunavi-")
+            || l.starts_with("x-sanpatsucenter-")
+            || l.starts_with("x-sanpatsushop-")
+            || l.starts_with("x-sanpatsupro-")
+            || l.starts_with("x-haircut-")
+            || l.starts_with("x-haircutnavi-")
+            || l.starts_with("x-haircutcenter-")
+            || l.starts_with("x-haircutshop-")
+            || l.starts_with("x-haircutpro-")
+            || l.starts_with("x-barbermart-")
+            || l.starts_with("x-barberplus-")
+            || l.starts_with("x-barbersmart-")
+            || l.starts_with("x-barberfamily-")
+            || l.starts_with("x-mens-")
+            || l.starts_with("x-mensnavi-")
+            || l.starts_with("x-menscenter-")
+            || l.starts_with("x-mensshop-")
+            || l.starts_with("x-menspro-")
+            || l.starts_with("x-salondenavi-")
+            || l.starts_with("x-salondencenter-")
+            || l.starts_with("x-salondenshop-")
+            || l.starts_with("x-salondenpro-")
+            || l.starts_with("x-barberia-")
+            || l.starts_with("x-barberianavi-")
+            || l.starts_with("x-barberiacenter-")
+            || l.starts_with("x-barberiashop-")
+            || l.starts_with("x-barberiapro-")
+            || l.starts_with("x-riyouin-")
+            || l.starts_with("x-riyouinnavi-")
+            || l.starts_with("x-riyouincenter-")
+            || l.starts_with("x-riyouinshop-")
+            || l.starts_with("x-riyouinpro-")
+            || l.starts_with("x-kamikire-")
+            || l.starts_with("x-kamikirenavi-")
+            || l.starts_with("x-kamikirecenter-")
+            || l.starts_with("x-kamikireshop-")
+            || l.starts_with("x-kamikirepro-")
+            || l.starts_with("x-danseigan-")
+            || l.starts_with("x-danseigannavi-")
+            || l.starts_with("x-danseigancenter-")
+            || l.starts_with("x-danseiganshop-")
+            || l.starts_with("x-danseiganpro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -26671,5 +26905,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_cinema_marks(clean));
+    }
+    #[test]
+    fn scan_は紙機印を検出する() {
+        for raw in [
+            br"X-Kinken-Alert: 1",
+            br"X-KinkenNavi-Notice: 1",
+            br"X-Ticketshop-Info: 1",
+            br"X-Shouken-Report: 1",
+            br"X-Voucher-Bulletin: 1",
+            br"X-Giftcard-News: 1",
+            br"X-Joshaken-Flash: 1",
+            br"X-TicketNavi-Release: 1",
+        ] {
+            assert!(has_ticketshop_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_ticketshop_marks(clean));
+    }
+
+    #[test]
+    fn scan_は奏機印を検出する() {
+        for raw in [
+            br"X-Livehouse-Alert: 1",
+            br"X-LivehouseNavi-Notice: 1",
+            br"X-Live-Info: 1",
+            br"X-Zepp-Report: 1",
+            br"X-Club-Bulletin: 1",
+            br"X-Ondoku-News: 1",
+            br"X-Livehall-Flash: 1",
+            br"X-Musicbox-Release: 1",
+        ] {
+            assert!(has_livehouse_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_livehouse_marks(clean));
+    }
+
+    #[test]
+    fn scan_は髭機印を検出する() {
+        for raw in [
+            br"X-Barber-Alert: 1",
+            br"X-BarberNavi-Notice: 1",
+            br"X-Riyou-Info: 1",
+            br"X-Tokoya-Report: 1",
+            br"X-Qbhouse-Bulletin: 1",
+            br"X-Plaisir-News: 1",
+            br"X-Sanpatsu-Flash: 1",
+            br"X-Haircut-Release: 1",
+        ] {
+            assert!(has_barber_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_barber_marks(clean));
     }
 }
