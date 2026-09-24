@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D635: `X-MrSparky-*`/`X-MrElectric-*`/`X-Denkiya-*`/`X-NICEIC-*` 等の電気工事・電気屋印自称が未検査
+
+- **問題**: `X-MrSparky-*`/`X-MisterSparky-*`/`X-MrElectric-*`/`X-MisterElectric-*`/`X-MrElectrician-*`/`X-ElectricalPros-*`/`X-SafeElectric-*`/`X-ElectricianOnCall-*`/`X-AllCircuit-*`/`X-AmpedElectric-*`/`X-CurrentFlow-*`/`X-VoltagePros-*`/`X-PowerSurge-*`/`X-FuseBox-*`/`X-BreakerPros-*`/`X-RewiresNow-*`/`X-CircuitDocs-*`、認証機関は `X-NICEIC-*`/`X-NAPIT-*`/`X-Elecsa-*`/`X-ECAElectric-*`/`X-TrustMarkElectric-*`、JP は `X-Denkiya-*`/`X-DenkiYasan-*`/`X-Denkikouji-*`/`X-Denkouji-*`/`X-DenkiDaiku-*`/`X-HikariDenki-*`/`X-Denkyu-*`/`X-DenkiTrouble-*`/`X-SetubiKouji-*`/`X-TeidenSupport-*`/`X-ElecSupport-*`/`X-KanetsuDenki-*`/`X-Denkiseibii-*` 等 は電機の通知記録 — 送信側が書くことは自称。コンセント増設・ブレーカー交換・漏電調査・LED化工事見積の偽装は電気工事業者なりすましの典型手口。(電力会社・小売電気は utility/energy 機、家電量販店は retail 機で検出済み)
+- **修正**: `Envelope` に `electrician_marks` + `has_electrician_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 電印の自署を問え。
+
+### Security — D636: `X-OneHourAir-*`/`X-AireServ-*`/`X-EakonClean-*` 等の空調・エアコン機印自称が未検査
+
+- **問題**: `X-OneHourAir-*`/`X-OneHourHeating-*`/`X-AireServ-*`/`X-Coolray-*`/`X-HorizonServices-*`/`X-ServiceChampions-*`/`X-BellBrothers-*`/`X-PrecisionAir-*`/`X-ACSolutions-*`/`X-AirRight-*`/`X-FreedomHVAC-*`/`X-ComfortSystems-*`/`X-AirMasters-*`/`X-HVACPros-*`/`X-HVACExperts-*`/`X-TotalAir-*`/`X-ClimateCare-*`/`X-RelianceHome-*`/`X-AbsoluteAir-*`/`X-FourSeasonsHVAC-*`/`X-CoolingGuys-*`/`X-HeatingGuys-*`、JP は `X-EakonClean-*`/`X-AirconClean-*`/`X-EakonYasan-*`/`X-EakonSeibi-*`/`X-Reibou-*`/`X-Danbou-*`/`X-KuukiSeibi-*`/`X-EakonTrouble-*`/`X-AirconHospital-*`/`X-TokyoEakon-*`/`X-CleanAirPro-*`/`X-AirconPros-*` 等 は調機の通知記録 — 送信側が書くことは自称。エアコンクリーニング・故障修理・ガスチャージ・急ぎ交換見積の偽装は空調業者なりすましの典型手口。(FSM ソフトは fieldservice 機、ハウスクリーニング一式は housekeeping/cleaning 機で検出済み)
+- **修正**: `Envelope` に `hvac_marks` + `has_hvac_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 調印の自署を問え。
+
+### Security — D637: `X-Sunrun-*`/`X-SunPower-*`/`X-TaiNavi-*`/`X-Enphase-*` 等の太陽光・蓄電池機印自称が未検査
+
+- **問題**: `X-Sunrun-*`/`X-SunPower-*`/`X-Sunnova-*`/`X-VivintSolar-*`/`X-TeslaEnergy-*`/`X-TeslaSolar-*`/`X-SolarCity-*`/`X-FreedomSolar-*`/`X-BlueRavenSolar-*`/`X-TrinitySolar-*`/`X-MomentumSolar-*`/`X-PosiGen-*`/`X-PalmettoSolar-*`/`X-RenovaEnergy-*`/`X-SunlightFinancial-*`/`X-MosaicSolar-*`/`X-GoodLeap-*`/`X-Sungage-*`/`X-FreedomForever-*`/`X-CompleteSolaria-*`/`X-ProjectSolar-*`/`X-Enpal-*`/`X-BrighteEnergy-*`/`X-SolarHub-*`、蓄電池は `X-Enphase-*`/`X-Generac-*`/`X-Sonnen-*`/`X-Fronius-*`/`X-FranklinWH-*`、JP は `X-TaiNavi-*` (タイナビ)/`X-GreenEnergyNavi-*` (グリーンエネルギーナビ)/`X-SolarPartners-*`/`X-EcoHatsuden-*`/`X-Taiyoukou-*`/`X-SolarQuote-*`/`X-SolarMitsumori-*`/`X-Chikudenchi-*`/`X-ChikudenNavi-*`/`X-SolarMall-*`/`X-Hatsuden-*`/`X-Zenernet-*` 等 は太機の通知記録 — 送信側が書くことは自称。無料訪販見積・補助金申請代行・余剰電力買取・蓄電池セット割引の偽装は太陽光訪販なりすましの典型手口。(電力小売は utility/energy 機、住宅メーカーは housing 機で検出済み)
+- **修正**: `Envelope` に `solar_marks` + `has_solar_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 太印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)

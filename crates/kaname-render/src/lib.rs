@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-MrSparky-*`/`X-MisterSparky-*`/`X-MrElectric-*`/`X-Denkiya-*`/`X-Denkikouji-*`/`X-NICEIC-*` 等 — 電気工事・電気屋機印自称
+    pub electrician_marks: bool,
+    /// `X-OneHourAir-*`/`X-AireServ-*`/`X-Coolray-*`/`X-HorizonServices-*`/`X-EakonClean-*`/`X-HVACPros-*` 等 — 空調・エアコン機印自称
+    pub hvac_marks: bool,
+    /// `X-Sunrun-*`/`X-SunPower-*`/`X-VivintSolar-*`/`X-BlueRavenSolar-*`/`X-TaiNavi-*`/`X-Enphase-*` 等 — 太陽光・蓄電池機印自称
+    pub solar_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        electrician_marks: has_electrician_marks(hdr),
+        hvac_marks: has_hvac_marks(hdr),
+        solar_marks: has_solar_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,225 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D635: 電気工事・電気屋機印の自称を検出する。
+///
+/// `X-MrSparky-*`/`X-MisterSparky-*`/`X-MrElectric-*`/`X-MisterElectric-*`/
+/// `X-MrElectrician-*`/`X-ElectricalPros-*`/`X-SafeElectric-*`/`X-ElectricianOnCall-*`/
+/// `X-AllCircuit-*`/`X-AmpedElectric-*`/`X-CurrentFlow-*`/`X-VoltagePros-*`/
+/// `X-PowerSurge-*`/`X-MikeElectric-*`/`X-FuseBox-*`/`X-BreakerPros-*`/
+/// `X-RewiresNow-*`/`X-CircuitDocs-*`/`X-NICEIC-*`/`X-NAPIT-*`/`X-Elecsa-*`/
+/// `X-ECA-*`/`X-TrustMarkElectric-*`、JP は `X-Denkiya-*`/`X-DenkiYasan-*`/
+/// `X-Denkikouji-*`/`X-Denkouji-*`/`X-DenkiDaiku-*`/`X-HikariDenki-*`/`X-Denki-Ya-*`/
+/// `X-Denkyu-*`/`X-DenkiTrouble-*`/`X-SetubiKouji-*`/`X-TeidenSupport-*`/
+/// `X-Erekkyu-*`/`X-ElecSupport-*`/`X-KanetsuDenki-*`/`X-SakuraDenki-*` 等の
+/// 電気工事・電気屋機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。コンセント増設・ブレーカー交換・
+/// 漏電調査・LED化工事見積の偽装は電気工事業者なりすましの典型手口。
+/// 電機印の自署は兆候として数える。
+/// (電力会社・小売電気は utility/energy 機、家電量販店は retail 機で検出済み)
+fn has_electrician_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-mrsparky-")
+            || l.starts_with("x-mistersparky-")
+            || l.starts_with("x-mrelectric-")
+            || l.starts_with("x-misterelectric-")
+            || l.starts_with("x-mrelectrician-")
+            || l.starts_with("x-electricalpros-")
+            || l.starts_with("x-safeelectric-")
+            || l.starts_with("x-electricianoncall-")
+            || l.starts_with("x-allcircuit-")
+            || l.starts_with("x-ampedelectric-")
+            || l.starts_with("x-currentflow-")
+            || l.starts_with("x-voltagepros-")
+            || l.starts_with("x-powersurge-")
+            || l.starts_with("x-mikeelectric-")
+            || l.starts_with("x-fusebox-")
+            || l.starts_with("x-breakerpros-")
+            || l.starts_with("x-rewiresnow-")
+            || l.starts_with("x-circuitdocs-")
+            || l.starts_with("x-niceic-")
+            || l.starts_with("x-napit-")
+            || l.starts_with("x-elecsa-")
+            || l.starts_with("x-eca-electric-")
+            || l.starts_with("x-ecaelectric-")
+            || l.starts_with("x-trustmarkelectric-")
+            || l.starts_with("x-denkiya-")
+            || l.starts_with("x-denkiyasan-")
+            || l.starts_with("x-denkikouji-")
+            || l.starts_with("x-denkouji-")
+            || l.starts_with("x-denkidaiku-")
+            || l.starts_with("x-hikaridenki-")
+            || l.starts_with("x-denki-ya-")
+            || l.starts_with("x-denkyu-")
+            || l.starts_with("x-denkitrouble-")
+            || l.starts_with("x-setubikouji-")
+            || l.starts_with("x-teidensupport-")
+            || l.starts_with("x-erekkyu-")
+            || l.starts_with("x-elecsupport-")
+            || l.starts_with("x-kanetsudenki-")
+            || l.starts_with("x-sakuradenki-")
+            || l.starts_with("x-denkyusha-")
+            || l.starts_with("x-electricians-")
+            || l.starts_with("x-electricworks-")
+            || l.starts_with("x-denkiseibii-")
+    })
+}
+
+/// D636: 空調・エアコン機印の自称を検出する。
+///
+/// `X-OneHourAir-*`/`X-OneHourHeating-*`/`X-AireServ-*`/`X-Coolray-*`/
+/// `X-HorizonServices-*`/`X-ServiceChampions-*`/`X-BellBrothers-*`/`X-PrecisionAir-*`/
+/// `X-ACSolutions-*`/`X-AirRight-*`/`X-FreedomHVAC-*`/`X-ComfortSystems-*`/
+/// `X-AirMasters-*`/`X-HVACPros-*`/`X-HVACExperts-*`/`X-TotalAir-*`/`X-ClimateCare-*`/
+/// `X-RelianceHome-*`/`X-AbsoluteAir-*`/`X-FourSeasonsHVAC-*`/`X-CoolingGuys-*`/
+/// `X-HeatingGuys-*`、JP は `X-EakonClean-*`/`X-AirconClean-*`/`X-EakonYasan-*`/
+/// `X-EakonSeibi-*`/`X-Reibou-*`/`X-Danbou-*`/`X-KuukiSeibi-*`/`X-EakonTrouble-*`/
+/// `X-AirconHospital-*`/`X-SumiyoshiEakon-*`/`X-TokyoEakon-*`/`X-CleanAirPro-*`
+/// 等の空調・エアコン機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。エアコンクリーニング・故障修理・
+/// ガスチャージ・急ぎ交換見積の偽装は空調業者なりすましの典型手口。
+/// 調機印の自署は兆候として数える。
+/// (フィールドサービス管理ソフトは fieldservice 機、ハウスクリーニング一式は
+/// housekeeping/cleaning 機で検出済み)
+fn has_hvac_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-onehourair-")
+            || l.starts_with("x-onehourheating-")
+            || l.starts_with("x-aireserv-")
+            || l.starts_with("x-coolray-")
+            || l.starts_with("x-horizonservices-")
+            || l.starts_with("x-servicechampions-")
+            || l.starts_with("x-bellbrothers-")
+            || l.starts_with("x-precisionair-")
+            || l.starts_with("x-acsolutions-")
+            || l.starts_with("x-airright-")
+            || l.starts_with("x-freedomhvac-")
+            || l.starts_with("x-comfortsystems-")
+            || l.starts_with("x-airmasters-")
+            || l.starts_with("x-hvacpros-")
+            || l.starts_with("x-hvacexperts-")
+            || l.starts_with("x-totalair-")
+            || l.starts_with("x-climatecare-")
+            || l.starts_with("x-reliancehome-")
+            || l.starts_with("x-absoluteair-")
+            || l.starts_with("x-fourseasonshvac-")
+            || l.starts_with("x-coolingguys-")
+            || l.starts_with("x-heatingguys-")
+            || l.starts_with("x-eakonclean-")
+            || l.starts_with("x-airconclean-")
+            || l.starts_with("x-eakonyasan-")
+            || l.starts_with("x-eakonseibi-")
+            || l.starts_with("x-reibou-")
+            || l.starts_with("x-danbou-")
+            || l.starts_with("x-kuukiseibi-")
+            || l.starts_with("x-eakontrouble-")
+            || l.starts_with("x-airconhospital-")
+            || l.starts_with("x-sumiyoshieakon-")
+            || l.starts_with("x-tokyoeakon-")
+            || l.starts_with("x-cleanairpro-")
+            || l.starts_with("x-airconpros-")
+            || l.starts_with("x-coolbreezehvac-")
+            || l.starts_with("x-airsolutionshvac-")
+            || l.starts_with("x-acehvac-")
+            || l.starts_with("x-airtechhvac-")
+            || l.starts_with("x-hvaconcall-")
+    })
+}
+
+/// D637: 太陽光・蓄電池機印の自称を検出する。
+///
+/// `X-Sunrun-*`/`X-SunPower-*`/`X-Sunnova-*`/`X-VivintSolar-*`/`X-TeslaEnergy-*`/
+/// `X-TeslaSolar-*`/`X-SolarCity-*`/`X-FreedomSolar-*`/`X-BlueRavenSolar-*`/
+/// `X-TrinitySolar-*`/`X-MomentumSolar-*`/`X-PosiGen-*`/`X-PalmettoSolar-*`/
+/// `X-IconPower-*`/`X-RenovaEnergy-*`/`X-SunlightFinancial-*`/`X-MosaicSolar-*`/
+/// `X-GoodLeap-*`/`X-Sungage-*`/`X-BakerElectric-*`/`X-FreedomForever-*`/
+/// `X-CompleteSolaria-*`/`X-RenuEnergy-*`/`X-ProjectSolar-*`/`X-Enpal-*`/
+/// `X-BrighteEnergy-*`/`X-SolarHub-*`、蓄電池は `X-Enphase-*`/`X-Generac-*`/
+/// `X-Sonnen-*`/`X-Fronius-*`/`X-FranklinWH-*`、JP は `X-TaiNavi-*` (タイナビ)、
+/// `X-GreenEnergyNavi-*`/`X-GreenNavi-*` (グリーンエネルギーナビ)、
+/// `X-SolarPartners-*`/`X-Solar-Partners-*`/`X-EcoHatsuden-*`/`X-Taiyoukou-*`/
+/// `X-Taiyoko-*`/`X-SolarQuote-*`/`X-SolarMitsumori-*`/`X-Chikudenchi-*`/
+/// `X-ChikudenNavi-*`/`X-OmaeSolar-*`/`X-SolarMall-*` 等の太陽光・蓄電池機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 無料訪販見積・補助金申請代行・余剰電力買取・蓄電池セット割引の偽装は
+/// 太陽光訪販なりすましの典型手口。太印の自署は兆候として数える。
+/// (電力小売は utility/energy 機、住宅メーカーは housing 機で検出済み)
+fn has_solar_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sunrun-")
+            || l.starts_with("x-sunpower-")
+            || l.starts_with("x-sunnova-")
+            || l.starts_with("x-vivintsolar-")
+            || l.starts_with("x-teslaenergy-")
+            || l.starts_with("x-teslasolar-")
+            || l.starts_with("x-solarcity-")
+            || l.starts_with("x-freedomsolar-")
+            || l.starts_with("x-blueravensolar-")
+            || l.starts_with("x-trinitysolar-")
+            || l.starts_with("x-momentumsolar-")
+            || l.starts_with("x-posigen-")
+            || l.starts_with("x-palmettosolar-")
+            || l.starts_with("x-iconpower-")
+            || l.starts_with("x-renovaenergy-")
+            || l.starts_with("x-sunlightfinancial-")
+            || l.starts_with("x-mosaicsolar-")
+            || l.starts_with("x-goodleap-")
+            || l.starts_with("x-sungage-")
+            || l.starts_with("x-bakerelectric-")
+            || l.starts_with("x-freedomforever-")
+            || l.starts_with("x-completesolaria-")
+            || l.starts_with("x-renuenergy-")
+            || l.starts_with("x-projectsolar-")
+            || l.starts_with("x-enpal-")
+            || l.starts_with("x-brighteenergy-")
+            || l.starts_with("x-solarhub-")
+            || l.starts_with("x-enphase-")
+            || l.starts_with("x-generac-")
+            || l.starts_with("x-sonnen-")
+            || l.starts_with("x-fronius-")
+            || l.starts_with("x-franklinwh-")
+            || l.starts_with("x-tainavi-")
+            || l.starts_with("x-greenenergynavi-")
+            || l.starts_with("x-greennavi-")
+            || l.starts_with("x-solarpartners-")
+            || l.starts_with("x-solar-partners-")
+            || l.starts_with("x-ecohatsuden-")
+            || l.starts_with("x-taiyoukou-")
+            || l.starts_with("x-taiyoko-")
+            || l.starts_with("x-solarquote-")
+            || l.starts_with("x-solarmitsumori-")
+            || l.starts_with("x-chikudenchi-")
+            || l.starts_with("x-chikudennavi-")
+            || l.starts_with("x-omaesolar-")
+            || l.starts_with("x-solarmall-")
+            || l.starts_with("x-econowa-")
+            || l.starts_with("x-hatsuden-")
+            || l.starts_with("x-solarworks-")
+            || l.starts_with("x-purelightpower-")
+            || l.starts_with("x-solgenpower-")
+            || l.starts_with("x-greenspark-")
+            || l.starts_with("x-empower-solar-")
+            || l.starts_with("x-empowersolar-")
+            || l.starts_with("x-8msolar-")
+            || l.starts_with("x-zenernet-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20869,56 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は電機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-MrSparky-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MisterElectric-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Denkikouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Denkiya-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Electricians-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-NICEIC-Cert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Denkyu-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ElecSupport-Notice: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_electrician_marks(raw));
+        }
+        assert!(!has_electrician_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は調機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-OneHourAir-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AireServ-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-EakonClean-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AirconClean-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HVACPros-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-EakonYasan-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TokyoEakon-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AirconPros-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_hvac_marks(raw));
+        }
+        assert!(!has_hvac_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は太機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-Sunrun-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SunPower-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TaiNavi-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-BlueRavenSolar-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Enphase-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SolarPartners-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Chikudenchi-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Empower-Solar-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_solar_marks(raw));
+        }
+        assert!(!has_solar_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
 }
