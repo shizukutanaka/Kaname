@@ -1997,6 +1997,12 @@ pub struct Envelope {
     pub dancestudio_marks: bool,
     /// `X-Antiaging-*`/`X-Longevity-*`/`X-Healthspan-*` 等のアンチエイジング・ウェルネス印を送信側が自称する兆候 (D742)
     pub antiaging_marks: bool,
+    /// `X-Gasstation-*`/`X-Carwash-*`/`X-Apollostation-*` 等のガソリンスタンド・洗車・コーティング印を送信側が自称する兆候 (D743)
+    pub carwash_marks: bool,
+    /// `X-Datsumo-*`/`X-Hairremoval-*`/`X-Epilation-*` 等の脱毛・メンズ脱毛印を送信側が自称する兆候 (D744)
+    pub datsumo_marks: bool,
+    /// `X-Kidzania-*`/`X-Kandu-*`/`X-Jobexperience-*` 等の職業体験・キッザニア印を送信側が自称する兆候 (D745)
+    pub kidzania_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2617,6 +2623,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         senior_marks: has_senior_marks(hdr),
         dancestudio_marks: has_dancestudio_marks(hdr),
         antiaging_marks: has_antiaging_marks(hdr),
+        carwash_marks: has_carwash_marks(hdr),
+        datsumo_marks: has_datsumo_marks(hdr),
+        kidzania_marks: has_kidzania_marks(hdr),
     })
 }
 
@@ -22632,6 +22641,216 @@ fn has_antiaging_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-peptidecenter-"))
 }
 
+fn has_carwash_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-gasstation-")
+            || l.starts_with("x-carwash-")
+            || l.starts_with("x-apollostation-")
+            || l.starts_with("x-detailing-")
+            || l.starts_with("x-coating-")
+            || l.starts_with("x-selfcarwash-")
+            || l.starts_with("x-washstation-")
+            || l.starts_with("x-cleancar-")
+            || l.starts_with("x-gasstationnavi-")
+            || l.starts_with("x-gasstationcenter-")
+            || l.starts_with("x-gasstationshop-")
+            || l.starts_with("x-gasstationpro-")
+            || l.starts_with("x-gasstationmart-")
+            || l.starts_with("x-gasstationplus-")
+            || l.starts_with("x-gasstationsmart-")
+            || l.starts_with("x-gasstationfamily-")
+            || l.starts_with("x-carwashnavi-")
+            || l.starts_with("x-carwashcenter-")
+            || l.starts_with("x-carwashshop-")
+            || l.starts_with("x-carwashpro-")
+            || l.starts_with("x-carwashmart-")
+            || l.starts_with("x-carwashplus-")
+            || l.starts_with("x-carwashsmart-")
+            || l.starts_with("x-carwashfamily-")
+            || l.starts_with("x-apollostationnavi-")
+            || l.starts_with("x-apollostationcenter-")
+            || l.starts_with("x-apollostationshop-")
+            || l.starts_with("x-apollostationpro-")
+            || l.starts_with("x-apollostationmart-")
+            || l.starts_with("x-apollostationplus-")
+            || l.starts_with("x-apollostationsmart-")
+            || l.starts_with("x-apollostationfamily-")
+            || l.starts_with("x-detailingnavi-")
+            || l.starts_with("x-detailingcenter-")
+            || l.starts_with("x-detailingshop-")
+            || l.starts_with("x-detailingpro-")
+            || l.starts_with("x-detailingmart-")
+            || l.starts_with("x-detailingplus-")
+            || l.starts_with("x-detailingsmart-")
+            || l.starts_with("x-detailingfamily-")
+            || l.starts_with("x-coatingnavi-")
+            || l.starts_with("x-coatingcenter-")
+            || l.starts_with("x-coatingshop-")
+            || l.starts_with("x-coatingpro-")
+            || l.starts_with("x-coatingmart-")
+            || l.starts_with("x-coatingplus-")
+            || l.starts_with("x-coatingsmart-")
+            || l.starts_with("x-coatingfamily-")
+            || l.starts_with("x-selfcarwashnavi-")
+            || l.starts_with("x-selfcarwashcenter-")
+            || l.starts_with("x-selfcarwashshop-")
+            || l.starts_with("x-selfcarwashpro-")
+            || l.starts_with("x-selfcarwashmart-")
+            || l.starts_with("x-selfcarwashplus-")
+            || l.starts_with("x-selfcarwashsmart-")
+            || l.starts_with("x-selfcarwashfamily-")
+            || l.starts_with("x-washstationnavi-")
+            || l.starts_with("x-washstationcenter-")
+            || l.starts_with("x-washstationshop-")
+            || l.starts_with("x-washstationpro-")
+            || l.starts_with("x-washstationmart-")
+            || l.starts_with("x-washstationplus-"))
+}
+
+fn has_datsumo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-datsumo-")
+            || l.starts_with("x-hairremoval-")
+            || l.starts_with("x-epilation-")
+            || l.starts_with("x-waxing-")
+            || l.starts_with("x-ginzacallerie-")
+            || l.starts_with("x-stlacchie-")
+            || l.starts_with("x-regina-")
+            || l.starts_with("x-mensclear-")
+            || l.starts_with("x-depilation-")
+            || l.starts_with("x-datsumonavi-")
+            || l.starts_with("x-datsumocenter-")
+            || l.starts_with("x-datsumoshop-")
+            || l.starts_with("x-datsumopro-")
+            || l.starts_with("x-datsumomart-")
+            || l.starts_with("x-datsumoplus-")
+            || l.starts_with("x-datsumosmart-")
+            || l.starts_with("x-datsumofamily-")
+            || l.starts_with("x-hairremovalnavi-")
+            || l.starts_with("x-hairremovalcenter-")
+            || l.starts_with("x-hairremovalshop-")
+            || l.starts_with("x-hairremovalpro-")
+            || l.starts_with("x-hairremovalmart-")
+            || l.starts_with("x-hairremovalplus-")
+            || l.starts_with("x-hairremovalsmart-")
+            || l.starts_with("x-hairremovalfamily-")
+            || l.starts_with("x-epilationnavi-")
+            || l.starts_with("x-epilationcenter-")
+            || l.starts_with("x-epilationshop-")
+            || l.starts_with("x-epilationpro-")
+            || l.starts_with("x-epilationmart-")
+            || l.starts_with("x-epilationplus-")
+            || l.starts_with("x-epilationsmart-")
+            || l.starts_with("x-epilationfamily-")
+            || l.starts_with("x-waxingnavi-")
+            || l.starts_with("x-waxingcenter-")
+            || l.starts_with("x-waxingshop-")
+            || l.starts_with("x-waxingpro-")
+            || l.starts_with("x-waxingmart-")
+            || l.starts_with("x-waxingplus-")
+            || l.starts_with("x-waxingsmart-")
+            || l.starts_with("x-waxingfamily-")
+            || l.starts_with("x-ginzacallerienavi-")
+            || l.starts_with("x-ginzacalleriecenter-")
+            || l.starts_with("x-ginzacallerieshop-")
+            || l.starts_with("x-ginzacalleriepro-")
+            || l.starts_with("x-ginzacalleriemart-")
+            || l.starts_with("x-ginzacallerieplus-")
+            || l.starts_with("x-ginzacalleriesmart-")
+            || l.starts_with("x-ginzacalleriefamily-")
+            || l.starts_with("x-stlacchienavi-")
+            || l.starts_with("x-stlacchiecenter-")
+            || l.starts_with("x-stlacchieshop-")
+            || l.starts_with("x-stlacchiepro-")
+            || l.starts_with("x-stlacchiemart-")
+            || l.starts_with("x-stlacchieplus-")
+            || l.starts_with("x-stlacchiesmart-")
+            || l.starts_with("x-stlacchiefamily-")
+            || l.starts_with("x-reginanavi-")
+            || l.starts_with("x-reginacenter-")
+            || l.starts_with("x-reginashop-")
+            || l.starts_with("x-reginapro-")
+            || l.starts_with("x-reginamart-"))
+}
+
+fn has_kidzania_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kidzania-")
+            || l.starts_with("x-kandu-")
+            || l.starts_with("x-jobexperience-")
+            || l.starts_with("x-careerpark-")
+            || l.starts_with("x-kidswork-")
+            || l.starts_with("x-pretendcity-")
+            || l.starts_with("x-kidscareer-")
+            || l.starts_with("x-workexperience-")
+            || l.starts_with("x-kidzanianavi-")
+            || l.starts_with("x-kidzaniacenter-")
+            || l.starts_with("x-kidzaniashop-")
+            || l.starts_with("x-kidzaniapro-")
+            || l.starts_with("x-kidzaniamart-")
+            || l.starts_with("x-kidzaniaplus-")
+            || l.starts_with("x-kidzaniasmart-")
+            || l.starts_with("x-kidzaniafamily-")
+            || l.starts_with("x-kandunavi-")
+            || l.starts_with("x-kanducenter-")
+            || l.starts_with("x-kandushop-")
+            || l.starts_with("x-kandupro-")
+            || l.starts_with("x-kandumart-")
+            || l.starts_with("x-kanduplus-")
+            || l.starts_with("x-kandusmart-")
+            || l.starts_with("x-kandufamily-")
+            || l.starts_with("x-jobexperiencenavi-")
+            || l.starts_with("x-jobexperiencecenter-")
+            || l.starts_with("x-jobexperienceshop-")
+            || l.starts_with("x-jobexperiencepro-")
+            || l.starts_with("x-jobexperiencemart-")
+            || l.starts_with("x-jobexperienceplus-")
+            || l.starts_with("x-jobexperiencesmart-")
+            || l.starts_with("x-jobexperiencefamily-")
+            || l.starts_with("x-careerparknavi-")
+            || l.starts_with("x-careerparkcenter-")
+            || l.starts_with("x-careerparkshop-")
+            || l.starts_with("x-careerparkpro-")
+            || l.starts_with("x-careerparkmart-")
+            || l.starts_with("x-careerparkplus-")
+            || l.starts_with("x-careerparksmart-")
+            || l.starts_with("x-careerparkfamily-")
+            || l.starts_with("x-kidsworknavi-")
+            || l.starts_with("x-kidsworkcenter-")
+            || l.starts_with("x-kidsworkshop-")
+            || l.starts_with("x-kidsworkpro-")
+            || l.starts_with("x-kidsworkmart-")
+            || l.starts_with("x-kidsworkplus-")
+            || l.starts_with("x-kidsworksmart-")
+            || l.starts_with("x-kidsworkfamily-")
+            || l.starts_with("x-pretendcitynavi-")
+            || l.starts_with("x-pretendcitycenter-")
+            || l.starts_with("x-pretendcityshop-")
+            || l.starts_with("x-pretendcitypro-")
+            || l.starts_with("x-pretendcitymart-")
+            || l.starts_with("x-pretendcityplus-")
+            || l.starts_with("x-pretendcitysmart-")
+            || l.starts_with("x-pretendcityfamily-")
+            || l.starts_with("x-kidscareernavi-")
+            || l.starts_with("x-kidscareercenter-")
+            || l.starts_with("x-kidscareershop-")
+            || l.starts_with("x-kidscareerpro-")
+            || l.starts_with("x-kidscareermart-")
+            || l.starts_with("x-kidscareerplus-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -33303,6 +33522,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_antiaging_marks(clean));
+    }
+
+    #[test]
+    fn scan_は泡機印を検出する() {
+        for raw in [
+            br"X-Gasstation-Alert: 1",
+            br"X-Carwash-Notice: 1",
+            br"X-Apollostation-Info: 1",
+            br"X-Detailing-Report: 1",
+            br"X-Coating-Bulletin: 1",
+            br"X-Selfcarwash-News: 1",
+            br"X-Washstation-Flash: 1",
+            br"X-Cleancar-Release: 1",
+        ] {
+            assert!(has_carwash_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_carwash_marks(clean));
+    }
+
+    #[test]
+    fn scan_は脱機印を検出する() {
+        for raw in [
+            br"X-Datsumo-Alert: 1",
+            br"X-Hairremoval-Notice: 1",
+            br"X-Epilation-Info: 1",
+            br"X-Waxing-Report: 1",
+            br"X-Ginzacallerie-Bulletin: 1",
+            br"X-Stlacchie-News: 1",
+            br"X-Regina-Flash: 1",
+            br"X-Mensclear-Release: 1",
+        ] {
+            assert!(has_datsumo_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_datsumo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は体機印を検出する() {
+        for raw in [
+            br"X-Kidzania-Alert: 1",
+            br"X-Kandu-Notice: 1",
+            br"X-Jobexperience-Info: 1",
+            br"X-Careerpark-Report: 1",
+            br"X-Kidswork-Bulletin: 1",
+            br"X-Pretendcity-News: 1",
+            br"X-Kidscareer-Flash: 1",
+            br"X-Workexperience-Release: 1",
+        ] {
+            assert!(has_kidzania_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_kidzania_marks(clean));
     }
 
 }

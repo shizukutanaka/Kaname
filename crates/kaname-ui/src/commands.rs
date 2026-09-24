@@ -3157,6 +3157,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D743: ガソリンスタンド・洗車・コーティング印自称
+    if env.carwash_marks {
+        render_risks.push(
+            "X-Gasstation-*/X-Carwash-*/X-Apollostation-*/X-Detailing-*/X-Coating-*/X-Selfcarwash-*/X-Washstation-*/X-Cleancar-* 等 — 泡機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D744: 脱毛・メンズ脱毛印自称
+    if env.datsumo_marks {
+        render_risks.push(
+            "X-Datsumo-*/X-Hairremoval-*/X-Epilation-*/X-Waxing-*/X-Ginzacallerie-*/X-Stlacchie-*/X-Regina-*/X-Mensclear-* 等 — 脱機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D745: 職業体験・キッザニア印自称
+    if env.kidzania_marks {
+        render_risks.push(
+            "X-Kidzania-*/X-Kandu-*/X-Jobexperience-*/X-Careerpark-*/X-Kidswork-*/X-Pretendcity-*/X-Kidscareer-*/X-Workexperience-* 等 — 体機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
