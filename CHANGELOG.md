@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D887: `X-Daifuku-*`/`X-Daifukuya-*`/`X-Daifukuten-*`/`X-Daifukustore-*`/`X-Japdaifuku-*`/`X-Daifukushop-*` 等の大福印自称が未検査
+
+- **問題**: `X-Daifuku-*`/`X-DaifukuYasan-*`/`X-DaifukuPro-*`/`X-DaifukuTeam-*`/`X-DaifukuJP-*`/`X-DaifukuSenmon-*`/`X-Daifukuya-*`/`X-DaifukuyaYasan-*`/`X-DaifukuyaPro-*`/`X-DaifukuyaTeam-*`/`X-DaifukuyaJP-*`/`X-DaifukuyaSenmon-*`/`X-Daifukuten-*`/`X-DaifukutenYasan-*`/`X-DaifukutenPro-*`/`X-DaifukutenTeam-*`/`X-DaifukutenJP-*`/`X-DaifukutenSenmon-*`/`X-DaifukustorePros-*`/`X-DaifukustoreTeam-*`/`X-DaifukustoreWorks-*`/`X-DaifukustoreExperts-*`/`X-DaifukustoreSvc-*`/`X-DaifukustoreHQ-*`/`X-JapdaifukuPros-*`/`X-JapdaifukuTeam-*`/`X-JapdaifukuWorks-*`/`X-JapdaifukuExperts-*`/`X-JapdaifukuSvc-*`/`X-JapdaifukuHQ-*`/`X-DaifukushopPros-*`/`X-DaifukushopTeam-*`/`X-DaifukushopWorks-*`/`X-DaifukushopExperts-*`/`X-DaifukushopSvc-*`/`X-DaifukushopHQ-*` 等 は福機の通知記録 — 送信側が書くことは自称。大福業者の偽装は、いちご大福・豆大福の老舗直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `daifuku_marks` + `has_daifuku_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 福印の自署を問え。
+
+### Security — D888: `X-Dango-*`/`X-Dangoya-*`/`X-Dangoten-*`/`X-Dangostore-*`/`X-Japdango-*`/`X-Dangoshop-*` 等の団子印自称が未検査
+
+- **問題**: `X-Dango-*`/`X-DangoYasan-*`/`X-DangoPro-*`/`X-DangoTeam-*`/`X-DangoJP-*`/`X-DangoSenmon-*`/`X-Dangoya-*`/`X-DangoyaYasan-*`/`X-DangoyaPro-*`/`X-DangoyaTeam-*`/`X-DangoyaJP-*`/`X-DangoyaSenmon-*`/`X-Dangoten-*`/`X-DangotenYasan-*`/`X-DangotenPro-*`/`X-DangotenTeam-*`/`X-DangotenJP-*`/`X-DangotenSenmon-*`/`X-DangostorePros-*`/`X-DangostoreTeam-*`/`X-DangostoreWorks-*`/`X-DangostoreExperts-*`/`X-DangostoreSvc-*`/`X-DangostoreHQ-*`/`X-JapdangoPros-*`/`X-JapdangoTeam-*`/`X-JapdangoWorks-*`/`X-JapdangoExperts-*`/`X-JapdangoSvc-*`/`X-JapdangoHQ-*`/`X-DangoshopPros-*`/`X-DangoshopTeam-*`/`X-DangoshopWorks-*`/`X-DangoshopExperts-*`/`X-DangoshopSvc-*`/`X-DangoshopHQ-*` 等 は団機の通知記録 — 送信側が書くことは自称。団子業者の偽装は、みたらし団子・草団子の老舗直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `dango_marks` + `has_dango_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 団印の自署を問え。
+
+### Security — D889: `X-Kakigouri-*`/`X-Kakigouriya-*`/`X-Kooriten-*`/`X-Kakigoristore-*`/`X-Shavedice-*`/`X-Japshavedice-*` 等のかき氷印自称が未検査
+
+- **問題**: `X-Kakigouri-*`/`X-KakigouriYasan-*`/`X-KakigouriPro-*`/`X-KakigouriTeam-*`/`X-KakigouriJP-*`/`X-KakigouriSenmon-*`/`X-Kakigouriya-*`/`X-KakigouriyaYasan-*`/`X-KakigouriyaPro-*`/`X-KakigouriyaTeam-*`/`X-KakigouriyaJP-*`/`X-KakigouriyaSenmon-*`/`X-Kooriten-*`/`X-KooritenYasan-*`/`X-KooritenPro-*`/`X-KooritenTeam-*`/`X-KooritenJP-*`/`X-KooritenSenmon-*`/`X-KakigoristorePros-*`/`X-KakigoristoreTeam-*`/`X-KakigoristoreWorks-*`/`X-KakigoristoreExperts-*`/`X-KakigoristoreSvc-*`/`X-KakigoristoreHQ-*`/`X-ShavedicePros-*`/`X-ShavediceTeam-*`/`X-ShavediceWorks-*`/`X-ShavediceExperts-*`/`X-ShavediceSvc-*`/`X-ShavediceHQ-*`/`X-JapshavedicePros-*`/`X-JapshavediceTeam-*`/`X-JapshavediceWorks-*`/`X-JapshavediceExperts-*`/`X-JapshavediceSvc-*`/`X-JapshavediceHQ-*` 等 は氷機の通知記録 — 送信側が書くことは自称。かき氷業者の偽装は、日光天然氷・宇治抹茶蜜のかき氷を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kakigouri_marks` + `has_kakigouri_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 氷印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
