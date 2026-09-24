@@ -3010,6 +3010,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D722: 音楽フェス印自称
+    if env.fujirock_marks {
+        render_risks.push(
+            "X-Fujirock-*/X-Summersonic-*/X-Rockin-*/X-Risingsun-*/X-Umf-*/X-Edc-*/X-Coachella-*/X-Lollapalooza-* 等 — 演機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D723: コールセンター・電話代行印自称
+    if env.callcenter_marks {
+        render_risks.push(
+            "X-Callcenter-*/X-Telemarketing-*/X-Bell24-*/X-Transcosmos-*/X-Teleperformance-*/X-Taskus-*/X-Sitel-*/X-Denwa-* 等 — 電機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D724: 貸し会議室・レンタルスペース印自称
+    if env.rentalspace_marks {
+        render_risks.push(
+            "X-Kashikaigi-*/X-Virtualoffice-*/X-Servicedoffice-*/X-Rentalspace-*/X-Crosscoop-*/X-Fabbit-*/X-Meetingroom-*/X-Eventspace-* 等 — 室機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

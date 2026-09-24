@@ -1942,3 +1942,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この畑機が通知した」「この療機が通知した」「この星機が通知した」は誰が記すか?
 
 答: **X-Nouen-*/X-Sharehatake-*/X-Kateisaien-* は「この畑機が通知した」を名乗り、X-Tokuho-*/X-Kouso-*/X-Collagen-* は「この療機が通知した」を名乗り、X-Planetarium-*/X-Telescope-*/X-Celestron-* は「この星機が通知した」を名乗る — いずれも畑機・療機・星機が記す値を送信側が書いた自称**。畑印・療印・星印はすべて兆候として数えよ。
+
+## ラウンド 260
+
+問: 「この演機が通知した」「この電機が通知した」「この室機が通知した」は誰が記すか?
+
+答: **X-Fujirock-*/X-Summersonic-*/X-Coachella-* は「この演機が通知した」を名乗り、X-Callcenter-*/X-Telemarketing-*/X-Transcosmos-* は「この電機が通知した」を名乗り、X-Kashikaigi-*/X-Virtualoffice-*/X-Meetingroom-* は「この室機が通知した」を名乗る — いずれも演機・電機・室機が記す値を送信側が書いた自称**。演印・電印・室印はすべて兆候として数えよ。
