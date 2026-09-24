@@ -1967,6 +1967,12 @@ pub struct Envelope {
     pub fukushiyogu_marks: bool,
     /// `X-Adventure-*`/`X-Rafting-*`/`X-Canyoning-*` 等のアウトドア・アドベンチャー印を送信側が自称する兆候 (D727)
     pub adventure_marks: bool,
+    /// `X-Tomytec-*`/`X-Greenmax-*`/`X-Modeltrain-*` 等の鉄道模型・ドール印を送信側が自称する兆候 (D728)
+    pub modeltrain_marks: bool,
+    /// `X-Protein-*`/`X-Myprotein-*`/`X-Valx-*` 等のプロテイン・筋トレサプリ印を送信側が自称する兆候 (D729)
+    pub protein_marks: bool,
+    /// `X-Creema-*`/`X-Minne-*`/`X-Handmade-*` 等のハンドメイド作家・クラフトマーケット印を送信側が自称する兆候 (D730)
+    pub handmade_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2572,6 +2578,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         marathon_marks: has_marathon_marks(hdr),
         fukushiyogu_marks: has_fukushiyogu_marks(hdr),
         adventure_marks: has_adventure_marks(hdr),
+        modeltrain_marks: has_modeltrain_marks(hdr),
+        protein_marks: has_protein_marks(hdr),
+        handmade_marks: has_handmade_marks(hdr),
     })
 }
 
@@ -21537,6 +21546,216 @@ fn has_adventure_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-paragliderfamily-"))
 }
 
+fn has_modeltrain_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-tomytec-")
+            || l.starts_with("x-greenmax-")
+            || l.starts_with("x-modeltrain-")
+            || l.starts_with("x-kato-")
+            || l.starts_with("x-tomix-")
+            || l.starts_with("x-microace-")
+            || l.starts_with("x-doll-")
+            || l.starts_with("x-bjd-")
+            || l.starts_with("x-pullip-")
+            || l.starts_with("x-azone-")
+            || l.starts_with("x-obitsu-")
+            || l.starts_with("x-momoko-")
+            || l.starts_with("x-mini4wd-")
+            || l.starts_with("x-dollhouse-")
+            || l.starts_with("x-miniature-")
+            || l.starts_with("x-tomytecnavi-")
+            || l.starts_with("x-tomyteccenter-")
+            || l.starts_with("x-tomytecshop-")
+            || l.starts_with("x-tomytecpro-")
+            || l.starts_with("x-tomytecmart-")
+            || l.starts_with("x-tomytecplus-")
+            || l.starts_with("x-tomytecsmart-")
+            || l.starts_with("x-tomytecfamily-")
+            || l.starts_with("x-greenmaxnavi-")
+            || l.starts_with("x-greenmaxcenter-")
+            || l.starts_with("x-greenmaxshop-")
+            || l.starts_with("x-greenmaxpro-")
+            || l.starts_with("x-greenmaxmart-")
+            || l.starts_with("x-greenmaxplus-")
+            || l.starts_with("x-greenmaxsmart-")
+            || l.starts_with("x-greenmaxfamily-")
+            || l.starts_with("x-modeltrainnavi-")
+            || l.starts_with("x-modeltraincenter-")
+            || l.starts_with("x-modeltrainshop-")
+            || l.starts_with("x-modeltrainpro-")
+            || l.starts_with("x-modeltrainmart-")
+            || l.starts_with("x-modeltrainplus-")
+            || l.starts_with("x-modeltrainsmart-")
+            || l.starts_with("x-modeltrainfamily-")
+            || l.starts_with("x-katonavi-")
+            || l.starts_with("x-katocenter-")
+            || l.starts_with("x-katoshop-")
+            || l.starts_with("x-katopro-")
+            || l.starts_with("x-katomart-")
+            || l.starts_with("x-katoplus-")
+            || l.starts_with("x-katosmart-")
+            || l.starts_with("x-katofamily-")
+            || l.starts_with("x-tomixnavi-")
+            || l.starts_with("x-tomixcenter-")
+            || l.starts_with("x-tomixshop-")
+            || l.starts_with("x-tomixpro-")
+            || l.starts_with("x-tomixmart-")
+            || l.starts_with("x-tomixplus-")
+            || l.starts_with("x-tomixsmart-")
+            || l.starts_with("x-tomixfamily-")
+            || l.starts_with("x-microacenavi-")
+            || l.starts_with("x-microacecenter-")
+            || l.starts_with("x-microaceshop-")
+            || l.starts_with("x-microacepro-")
+            || l.starts_with("x-microacemart-")
+            || l.starts_with("x-microaceplus-")
+            || l.starts_with("x-microacesmart-"))
+}
+
+fn has_protein_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-protein-")
+            || l.starts_with("x-myprotein-")
+            || l.starts_with("x-valx-")
+            || l.starts_with("x-belegend-")
+            || l.starts_with("x-xtend-")
+            || l.starts_with("x-dns-")
+            || l.starts_with("x-zavas-")
+            || l.starts_with("x-ultora-")
+            || l.starts_with("x-eaa-")
+            || l.starts_with("x-bcaa-")
+            || l.starts_with("x-creatine-")
+            || l.starts_with("x-whey-")
+            || l.starts_with("x-hmb-")
+            || l.starts_with("x-glutamine-")
+            || l.starts_with("x-citrulline-")
+            || l.starts_with("x-proteinnavi-")
+            || l.starts_with("x-proteincenter-")
+            || l.starts_with("x-proteinshop-")
+            || l.starts_with("x-proteinpro-")
+            || l.starts_with("x-proteinmart-")
+            || l.starts_with("x-proteinplus-")
+            || l.starts_with("x-proteinsmart-")
+            || l.starts_with("x-proteinfamily-")
+            || l.starts_with("x-myproteinnavi-")
+            || l.starts_with("x-myproteincenter-")
+            || l.starts_with("x-myproteinshop-")
+            || l.starts_with("x-myproteinpro-")
+            || l.starts_with("x-myproteinmart-")
+            || l.starts_with("x-myproteinplus-")
+            || l.starts_with("x-myproteinsmart-")
+            || l.starts_with("x-myproteinfamily-")
+            || l.starts_with("x-valxnavi-")
+            || l.starts_with("x-valxcenter-")
+            || l.starts_with("x-valxshop-")
+            || l.starts_with("x-valxpro-")
+            || l.starts_with("x-valxmart-")
+            || l.starts_with("x-valxplus-")
+            || l.starts_with("x-valxsmart-")
+            || l.starts_with("x-valxfamily-")
+            || l.starts_with("x-belegendnavi-")
+            || l.starts_with("x-belegendcenter-")
+            || l.starts_with("x-belegendshop-")
+            || l.starts_with("x-belegendpro-")
+            || l.starts_with("x-belegendmart-")
+            || l.starts_with("x-belegendplus-")
+            || l.starts_with("x-belegendsmart-")
+            || l.starts_with("x-belegendfamily-")
+            || l.starts_with("x-xtendnavi-")
+            || l.starts_with("x-xtendcenter-")
+            || l.starts_with("x-xtendshop-")
+            || l.starts_with("x-xtendpro-")
+            || l.starts_with("x-xtendmart-")
+            || l.starts_with("x-xtendplus-")
+            || l.starts_with("x-xtendsmart-")
+            || l.starts_with("x-xtendfamily-")
+            || l.starts_with("x-dnsnavi-")
+            || l.starts_with("x-dnscenter-")
+            || l.starts_with("x-dnsshop-")
+            || l.starts_with("x-dnspro-")
+            || l.starts_with("x-dnsmart-")
+            || l.starts_with("x-dnsplus-")
+            || l.starts_with("x-dnssmart-"))
+}
+
+fn has_handmade_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-creema-")
+            || l.starts_with("x-minne-")
+            || l.starts_with("x-handmade-")
+            || l.starts_with("x-iichi-")
+            || l.starts_with("x-tetote-")
+            || l.starts_with("x-craftie-")
+            || l.starts_with("x-commau-")
+            || l.starts_with("x-pinkoi-")
+            || l.starts_with("x-artfire-")
+            || l.starts_with("x-folksy-")
+            || l.starts_with("x-dawanda-")
+            || l.starts_with("x-bigcartel-")
+            || l.starts_with("x-creemanavi-")
+            || l.starts_with("x-creemacenter-")
+            || l.starts_with("x-creemashop-")
+            || l.starts_with("x-creemapro-")
+            || l.starts_with("x-creemamart-")
+            || l.starts_with("x-creemaplus-")
+            || l.starts_with("x-creemasmart-")
+            || l.starts_with("x-creemafamily-")
+            || l.starts_with("x-minnenavi-")
+            || l.starts_with("x-minnecenter-")
+            || l.starts_with("x-minneshop-")
+            || l.starts_with("x-minnepro-")
+            || l.starts_with("x-minnemart-")
+            || l.starts_with("x-minneplus-")
+            || l.starts_with("x-minnesmart-")
+            || l.starts_with("x-minnefamily-")
+            || l.starts_with("x-handmadenavi-")
+            || l.starts_with("x-handmadecenter-")
+            || l.starts_with("x-handmadeshop-")
+            || l.starts_with("x-handmadepro-")
+            || l.starts_with("x-handmademart-")
+            || l.starts_with("x-handmadeplus-")
+            || l.starts_with("x-handmadesmart-")
+            || l.starts_with("x-handmadefamily-")
+            || l.starts_with("x-iichinavi-")
+            || l.starts_with("x-iichicenter-")
+            || l.starts_with("x-iichishop-")
+            || l.starts_with("x-iichipro-")
+            || l.starts_with("x-iichimart-")
+            || l.starts_with("x-iichiplus-")
+            || l.starts_with("x-iichismart-")
+            || l.starts_with("x-iichifamily-")
+            || l.starts_with("x-tetotenavi-")
+            || l.starts_with("x-tetotecenter-")
+            || l.starts_with("x-tetoteshop-")
+            || l.starts_with("x-tetotepro-")
+            || l.starts_with("x-tetotemart-")
+            || l.starts_with("x-tetoteplus-")
+            || l.starts_with("x-tetotesmart-")
+            || l.starts_with("x-tetotefamily-")
+            || l.starts_with("x-craftienavi-")
+            || l.starts_with("x-craftiecenter-")
+            || l.starts_with("x-craftieshop-")
+            || l.starts_with("x-craftiepro-")
+            || l.starts_with("x-craftiemart-")
+            || l.starts_with("x-craftieplus-")
+            || l.starts_with("x-craftiesmart-")
+            || l.starts_with("x-craftiefamily-")
+            || l.starts_with("x-commaunavi-")
+            || l.starts_with("x-commaucenter-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -31938,6 +32157,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_adventure_marks(clean));
+    }
+
+    #[test]
+    fn scan_は形機印を検出する() {
+        for raw in [
+            br"X-Tomytec-Alert: 1",
+            br"X-Greenmax-Notice: 1",
+            br"X-Modeltrain-Info: 1",
+            br"X-Kato-Report: 1",
+            br"X-Tomix-Bulletin: 1",
+            br"X-Doll-News: 1",
+            br"X-Bjd-Flash: 1",
+            br"X-Mini4wd-Release: 1",
+        ] {
+            assert!(has_modeltrain_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_modeltrain_marks(clean));
+    }
+
+    #[test]
+    fn scan_は筋機印を検出する() {
+        for raw in [
+            br"X-Protein-Alert: 1",
+            br"X-Myprotein-Notice: 1",
+            br"X-Valx-Info: 1",
+            br"X-Belegend-Report: 1",
+            br"X-Xtend-Bulletin: 1",
+            br"X-Dns-News: 1",
+            br"X-Creatine-Flash: 1",
+            br"X-Whey-Release: 1",
+        ] {
+            assert!(has_protein_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_protein_marks(clean));
+    }
+
+    #[test]
+    fn scan_は作機印を検出する() {
+        for raw in [
+            br"X-Creema-Alert: 1",
+            br"X-Minne-Notice: 1",
+            br"X-Handmade-Info: 1",
+            br"X-Iichi-Report: 1",
+            br"X-Tetote-Bulletin: 1",
+            br"X-Craftie-News: 1",
+            br"X-Pinkoi-Flash: 1",
+            br"X-Bigcartel-Release: 1",
+        ] {
+            assert!(has_handmade_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_handmade_marks(clean));
     }
 
 }
