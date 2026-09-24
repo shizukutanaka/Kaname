@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-USAInsulation-*`/`X-KoalaInsulation-*`/`X-AtticDams-*`/`X-DannetsuKouji-*`/`X-DannetsuRifo-*`/`X-KimitsuDan-*` 等 — 断熱・気密機印自称
+    pub insulation_marks: bool,
+    /// `X-ConservaIrrigation-*`/`X-IrrigationPros-*`/`X-WetLawn-*`/`X-LawnIrrigation-*`/`X-SprinklerPros-*`/`X-MizumakeSprinkler-*` 等 — 灌漑・スプリンクラー機印自称
+    pub irrigation_marks: bool,
+    /// `X-CritterControl-*`/`X-TruTech-*`/`X-AAACWildlife-*`/`X-WildlifeRemoval-*`/`X-AnimalPros-*`/`X-Nusujima-*`/`X-GaichuKujo-*` 等 — 害獣・野生動物駆除機印自称
+    pub wildlife_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        insulation_marks: has_insulation_marks(hdr),
+        irrigation_marks: has_irrigation_marks(hdr),
+        wildlife_marks: has_wildlife_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,220 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D647: 断熱・気密機印の自称を検出する。
+///
+/// `X-USAInsulation-*`/`X-KoalaInsulation-*`/`X-AtticDams-*`/`X-AtticDamsPro-*`/
+/// `X-InjectionFoam-*`/`X-RetroFoam-*`/`X-DrEnergySaver-*`/`X-DuctWorksInsulation-*`/
+/// `X-InsulationPros-*`/`X-InsulationExperts-*`/`X-AtticInsulation-*`/
+/// `X-BlowInInsulation-*`/`X-SprayFoamPros-*`/`X-SprayFoamExperts-*`/
+/// `X-ThermaSeal-*`/`X-RaFactor-*`/`X-BlanketInsulation-*`/`X-CoastalInsulation-*`/
+/// `X-InsulationInstallers-*`/`X-SealTech-*`、JP は `X-DannetsuKouji-*`/`X-DannetsuRifo-*`/
+/// `X-KimitsuDan-*`/`X-DannetsuSekkei-*`/`X-DannetsuZai-*`/`X-DannetsuShizai-*`/
+/// `X-AtticDan-*`/`X-YaneDannetsu-*`/`X-KabeDannetsu-*`/`X-YukaDanbo-*`/`X-Yukadanbo-*`/
+/// `X-NekkoDan-*`/`X-DanetsuKouji-*`/`X-AtticKanki-*`/`X-SoukoDan-*`/`X-DannetsuYasan-*`/
+/// `X-KimitsuSoukou-*`/`X-DanNetsuPro-*`/`X-HighDan-*`/`X-EcoDan-*`/`X-NoDan-*` 等の
+/// 断熱・気密機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。屋根裏断熱・吹き付け発泡・気密リフォーム・
+/// 省エネ診断・結露対策見積の偽装は断熱業者なりすましの典型手口。
+/// 断印の自署は兆候として数える。
+/// (住宅メーカーは housing 機、リフォームは renovation 機、空調は hvac 機で検出済み)
+fn has_insulation_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-usainsulation-")
+            || l.starts_with("x-koalainsulation-")
+            || l.starts_with("x-atticdams-")
+            || l.starts_with("x-atticdamspro-")
+            || l.starts_with("x-injectionfoam-")
+            || l.starts_with("x-retrofoam-")
+            || l.starts_with("x-drenergysaver-")
+            || l.starts_with("x-ductworksinsulation-")
+            || l.starts_with("x-insulationpros-")
+            || l.starts_with("x-insulationexperts-")
+            || l.starts_with("x-atticinsulation-")
+            || l.starts_with("x-blowininsulation-")
+            || l.starts_with("x-sprayfoampros-")
+            || l.starts_with("x-sprayfoamexperts-")
+            || l.starts_with("x-thermaseal-")
+            || l.starts_with("x-rafactor-")
+            || l.starts_with("x-blanketinsulation-")
+            || l.starts_with("x-coastalinsulation-")
+            || l.starts_with("x-insulationinstallers-")
+            || l.starts_with("x-sealtech-")
+            || l.starts_with("x-dannetsukouji-")
+            || l.starts_with("x-dannetsurifo-")
+            || l.starts_with("x-kimitsudan-")
+            || l.starts_with("x-dannetsusekkei-")
+            || l.starts_with("x-dannetsuzai-")
+            || l.starts_with("x-dannetsushizai-")
+            || l.starts_with("x-atticdan-")
+            || l.starts_with("x-yanedannetsu-")
+            || l.starts_with("x-kabedannetsu-")
+            || l.starts_with("x-yukadanbo-")
+            || l.starts_with("x-yukadanbou-")
+            || l.starts_with("x-nekkodan-")
+            || l.starts_with("x-danetsukouji-")
+            || l.starts_with("x-attickanki-")
+            || l.starts_with("x-soukodan-")
+            || l.starts_with("x-dannetsuyasan-")
+            || l.starts_with("x-kimitsusoukou-")
+            || l.starts_with("x-dannetsupro-")
+            || l.starts_with("x-highdan-")
+            || l.starts_with("x-ecodan-")
+            || l.starts_with("x-nodan-")
+            || l.starts_with("x-dannetsuen-")
+            || l.starts_with("x-foamroofs-")
+            || l.starts_with("x-greenfiber-")
+            || l.starts_with("x-urbandannetsu-")
+    })
+}
+
+/// D648: 灌漑・スプリンクラー機印の自称を検出する。
+///
+/// `X-ConservaIrrigation-*`/`X-IrrigationPros-*`/`X-WetLawn-*`/`X-LawnIrrigation-*`/
+/// `X-SprinklerPros-*`/`X-SprinklerMedics-*`/`X-RainBirdService-*`/`X-RainBirdPro-*`/
+/// `X-HunterIrrigation-*`/`X-IrrigationWorks-*`/`X-IrriClean-*`/`X-SprinklerSOS-*`/
+/// `X-IrrigationExperts-*`/`X-DripIrrigation-*`/`X-SprinklerRepair-*`/
+/// `X-IrrigationDoctors-*`/`X-SmartIrrigation-*`/`X-TurfIrrigation-*`/
+/// `X-BluegrassIrrigation-*`/`X-IrrigationWorld-*`、JP は `X-MizumakeSprinkler-*`/
+/// `X-SprinklerYasan-*`/`X-SprinklerKouji-*`/`X-SprinklerSeibi-*`/`X-KandenchiMizu-*`/
+/// `X-KanSuiKouji-*`/`X-HosuiKouji-*`/`X-AutomaticWater-*`/`X-Irigeshon-*`/
+/// `X-SprinklerNomi-*`/`X-Mizumake-*`/`X-Mizumakekan-*`/`X-SprinklerDoctors-*`/
+/// `X-Suprinka-*`/`X-MizumakePros-*`/`X-RainMaker-*`/`X-IrrigationYasan-*` 等の
+/// 灌漑・スプリンクラー機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。スプリンクラー修理・冬凍結対策・水漏れ・
+/// 灌漑設計・定期点検の偽装は灌漑業者なりすましの典型手口。
+/// 灌印の自署は兆候として数える。
+/// (造園・芝生は garden 機、水道修理は plumbing 機で検出済み)
+fn has_irrigation_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-conservairrigation-")
+            || l.starts_with("x-irrigationpros-")
+            || l.starts_with("x-wetlawn-")
+            || l.starts_with("x-lawnirrigation-")
+            || l.starts_with("x-sprinklerpros-")
+            || l.starts_with("x-sprinklermedics-")
+            || l.starts_with("x-rainbirdservice-")
+            || l.starts_with("x-rainbirdpro-")
+            || l.starts_with("x-hunterirrigation-")
+            || l.starts_with("x-irrigationworks-")
+            || l.starts_with("x-irriclean-")
+            || l.starts_with("x-sprinklersos-")
+            || l.starts_with("x-irrigationexperts-")
+            || l.starts_with("x-dripirrigation-")
+            || l.starts_with("x-sprinklerrepair-")
+            || l.starts_with("x-irrigationdoctors-")
+            || l.starts_with("x-smartirrigation-")
+            || l.starts_with("x-turfirrigation-")
+            || l.starts_with("x-bluegrassirrigation-")
+            || l.starts_with("x-irrigationworld-")
+            || l.starts_with("x-mizumakesprinkler-")
+            || l.starts_with("x-sprinkleryasan-")
+            || l.starts_with("x-sprinklerkouji-")
+            || l.starts_with("x-sprinklerseibi-")
+            || l.starts_with("x-kandenchimizu-")
+            || l.starts_with("x-kansuikouji-")
+            || l.starts_with("x-hosuikouji-")
+            || l.starts_with("x-automaticwater-")
+            || l.starts_with("x-irigeshon-")
+            || l.starts_with("x-sprinklernomi-")
+            || l.starts_with("x-mizumake-")
+            || l.starts_with("x-mizumakekan-")
+            || l.starts_with("x-sprinklerdoctors-")
+            || l.starts_with("x-suprinka-")
+            || l.starts_with("x-mizumakepros-")
+            || l.starts_with("x-rainmaker-")
+            || l.starts_with("x-irrigationyasan-")
+            || l.starts_with("x-sprinklertech-")
+            || l.starts_with("x-waterwizards-")
+            || l.starts_with("x-greensprinkler-")
+            || l.starts_with("x-irrigationteam-")
+    })
+}
+
+/// D649: 害獣・野生動物駆除機印の自称を検出する。
+///
+/// `X-CritterControl-*`/`X-TruTech-*`/`X-AAACWildlife-*`/`X-AAAC-Wildlife-*`/
+/// `X-WildlifeRemoval-*`/`X-WildlifeRemovalPros-*`/`X-AnimalPros-*`/
+/// `X-AnimalControlPros-*`/`X-Nusujima-*`/`X-WildlifePros-*`/`X-CritterPro-*`/
+/// `X-CritterDetective-*`/`X-AnimalTrapper-*`/`X-WildlifeSolution-*`/
+/// `X-UrbanWildlife-*`/`X-NaturePest-*`/`X-BatRemoval-*`/`X-RaccoonRemoval-*`/
+/// `X-SquirrelRemoval-*`/`X-SkunkRemoval-*`/`X-BirdRemoval-*`/`X-WildlifeDoctors-*`/
+/// `X-AnimalAttic-*`/`X-WildlifeInspectors-*`/`X-CritterRid-*`、JP は `X-GaichuKujo-*`/
+/// `X-GaichuTaisaku-*`/`X-GaichuDansu-*`/`X-GaichuSenmon-*`/`X-NusujimaKujo-*`/
+/// `X-YaseiDoubutsu-*`/`X-GaichuHunter-*`/`X-MoriDansu-*`/`X-HebiKujo-*`/
+/// `X-HachisuKujo-*`/`X-TanukiKujo-*`/`X-AraigumaKujo-*`/`X-GaichuTech-*`/
+/// `X-GaichuDoctor-*`/`X-NekoTaisaku-*`/`X-GaichuMuseum-*`/`X-KabaneKujo-*`/
+/// `X-GaichuShiage-*`/`X-KachikuKujo-*` 等の害獣・野生動物駆除機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 屋根裏侵入・ハクビシン・アライグマ・コウモリ・ハチの巣駆除・糞尿清掃の偽装は
+/// 害獣駆除業者なりすましの典型手口。害印の自署は兆候として数える。
+/// (シロアリ・ゴキブリ等の害虫駆除は pest/facility 機で検出済み)
+fn has_wildlife_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-crittercontrol-")
+            || l.starts_with("x-trutech-")
+            || l.starts_with("x-aaacwildlife-")
+            || l.starts_with("x-aaac-wildlife-")
+            || l.starts_with("x-wildliferemoval-")
+            || l.starts_with("x-wildliferemovalpros-")
+            || l.starts_with("x-animalpros-")
+            || l.starts_with("x-animalcontrolpros-")
+            || l.starts_with("x-nusujima-")
+            || l.starts_with("x-wildlifepros-")
+            || l.starts_with("x-critterpro-")
+            || l.starts_with("x-critterdetective-")
+            || l.starts_with("x-animaltrapper-")
+            || l.starts_with("x-wildlifesolution-")
+            || l.starts_with("x-urbanwildlife-")
+            || l.starts_with("x-naturepest-")
+            || l.starts_with("x-batremoval-")
+            || l.starts_with("x-raccoonremoval-")
+            || l.starts_with("x-squirrelremoval-")
+            || l.starts_with("x-skunkremoval-")
+            || l.starts_with("x-birdremoval-")
+            || l.starts_with("x-wildlifedoctors-")
+            || l.starts_with("x-animalattic-")
+            || l.starts_with("x-wildlifeinspectors-")
+            || l.starts_with("x-critterrid-")
+            || l.starts_with("x-gaichukujo-")
+            || l.starts_with("x-gaichutaisaku-")
+            || l.starts_with("x-gaichudansu-")
+            || l.starts_with("x-gaichusenmon-")
+            || l.starts_with("x-nusujimakujo-")
+            || l.starts_with("x-yaseidoubutsu-")
+            || l.starts_with("x-gaichuhunter-")
+            || l.starts_with("x-moridansu-")
+            || l.starts_with("x-hebikujo-")
+            || l.starts_with("x-hachisukujo-")
+            || l.starts_with("x-tanukikujo-")
+            || l.starts_with("x-araigumakujo-")
+            || l.starts_with("x-gaichutech-")
+            || l.starts_with("x-gaichudoctor-")
+            || l.starts_with("x-nekotaisaku-")
+            || l.starts_with("x-gaichumuseum-")
+            || l.starts_with("x-kabanekujo-")
+            || l.starts_with("x-gaichushiage-")
+            || l.starts_with("x-kachikukujo-")
+            || l.starts_with("x-wildlifeco-")
+            || l.starts_with("x-urbanwildpros-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20864,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は断機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-USAInsulation-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KoalaInsulation-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DannetsuKouji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DannetsuRifo-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AtticInsulation-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SprayFoamPros-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Yukadanbo-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DannetsuYasan-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_insulation_marks(raw));
+        }
+        assert!(!has_insulation_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は灌機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-ConservaIrrigation-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-IrrigationPros-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SprinklerYasan-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SprinklerKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WetLawn-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Mizumake-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KansuiKouji-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-SprinklerDoctors-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_irrigation_marks(raw));
+        }
+        assert!(!has_irrigation_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は害機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-CritterControl-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TruTech-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GaichuKujo-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-WildlifeRemoval-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Nusujima-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TanukiKujo-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-HachisuKujo-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AAACWildlife-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_wildlife_marks(raw));
+        }
+        assert!(!has_wildlife_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
