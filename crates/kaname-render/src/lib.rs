@@ -1871,6 +1871,12 @@ pub struct Envelope {
     pub gamecenter_marks: bool,
     /// `X-Sharehouse-*`/`X-Sharenavi-*`/`X-Sharehousecenter-*` 等のシェアハウス・ゲストハウス印を送信側が自称する兆候 (D679)
     pub sharehouse_marks: bool,
+    /// `X-Sbisec-*`/`X-Rakutensec-*`/`X-Monex-*` 等の証券・投資信託印を送信側が自称する兆候 (D680)
+    pub shoken_marks: bool,
+    /// `X-Tantei-*`/`X-Tanteisha-*`/`X-Koushinjo-*` 等の探偵・興信所・信用調査印を送信側が自称する兆候 (D681)
+    pub tantei_marks: bool,
+    /// `X-Swimming-*`/`X-Swim-*`/`X-Suiei-*` 等のスイミング・スポーツ教室印を送信側が自称する兆候 (D682)
+    pub suiei_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2428,6 +2434,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         laundry_marks: has_laundry_marks(hdr),
         gamecenter_marks: has_gamecenter_marks(hdr),
         sharehouse_marks: has_sharehouse_marks(hdr),
+        shoken_marks: has_shoken_marks(hdr),
+        tantei_marks: has_tantei_marks(hdr),
+        suiei_marks: has_suiei_marks(hdr),
     })
 }
 
@@ -18033,6 +18042,216 @@ fn has_sharehouse_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-sharekanpro-"))
 }
 
+fn has_shoken_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sbisec-")
+            || l.starts_with("x-rakutensec-")
+            || l.starts_with("x-monex-")
+            || l.starts_with("x-matsui-")
+            || l.starts_with("x-kabu-")
+            || l.starts_with("x-aukabu-")
+            || l.starts_with("x-smbcnikko-")
+            || l.starts_with("x-nikko-")
+            || l.starts_with("x-daiwasec-")
+            || l.starts_with("x-nomura-")
+            || l.starts_with("x-mizuhosc-")
+            || l.starts_with("x-okasan-")
+            || l.starts_with("x-iwasec-")
+            || l.starts_with("x-naito-")
+            || l.starts_with("x-shoken-")
+            || l.starts_with("x-sec-")
+            || l.starts_with("x-securities-")
+            || l.starts_with("x-invest-")
+            || l.starts_with("x-toushi-")
+            || l.starts_with("x-toushin-")
+            || l.starts_with("x-shintaku-")
+            || l.starts_with("x-fund-")
+            || l.starts_with("x-asset-")
+            || l.starts_with("x-wealth-")
+            || l.starts_with("x-neomoba-")
+            || l.starts_with("x-linesec-")
+            || l.starts_with("x-jpx-")
+            || l.starts_with("x-sbisecnavi-")
+            || l.starts_with("x-sbiseccenter-")
+            || l.starts_with("x-sbisecshop-")
+            || l.starts_with("x-sbisecpro-")
+            || l.starts_with("x-sbisecmart-")
+            || l.starts_with("x-sbisecplus-")
+            || l.starts_with("x-sbisecsmart-")
+            || l.starts_with("x-sbisecfamily-")
+            || l.starts_with("x-rakutensecnavi-")
+            || l.starts_with("x-rakutenseccenter-")
+            || l.starts_with("x-rakutensecshop-")
+            || l.starts_with("x-rakutensecpro-")
+            || l.starts_with("x-rakutensecmart-")
+            || l.starts_with("x-rakutensecplus-")
+            || l.starts_with("x-rakutensecsmart-")
+            || l.starts_with("x-rakutensecfamily-")
+            || l.starts_with("x-monexnavi-")
+            || l.starts_with("x-monexcenter-")
+            || l.starts_with("x-monexshop-")
+            || l.starts_with("x-monexpro-")
+            || l.starts_with("x-monexmart-")
+            || l.starts_with("x-monexplus-")
+            || l.starts_with("x-monexsmart-")
+            || l.starts_with("x-monexfamily-")
+            || l.starts_with("x-matsuinavi-")
+            || l.starts_with("x-matsuicenter-")
+            || l.starts_with("x-matsuishop-")
+            || l.starts_with("x-matsuipro-")
+            || l.starts_with("x-matsuimart-")
+            || l.starts_with("x-matsuiplus-")
+            || l.starts_with("x-matsuismart-")
+            || l.starts_with("x-matsuifamily-")
+            || l.starts_with("x-kabunavi-")
+            || l.starts_with("x-kabucenter-")
+            || l.starts_with("x-kabushop-"))
+}
+
+fn has_tantei_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-tantei-")
+            || l.starts_with("x-tanteisha-")
+            || l.starts_with("x-koushinjo-")
+            || l.starts_with("x-chousajo-")
+            || l.starts_with("x-chousa-")
+            || l.starts_with("x-shinyochosa-")
+            || l.starts_with("x-shinyo-")
+            || l.starts_with("x-teikoku-")
+            || l.starts_with("x-teikokudata-")
+            || l.starts_with("x-tdb-")
+            || l.starts_with("x-tsr-")
+            || l.starts_with("x-nichishin-")
+            || l.starts_with("x-haraichi-")
+            || l.starts_with("x-galu-")
+            || l.starts_with("x-mrtan-")
+            || l.starts_with("x-haltan-")
+            || l.starts_with("x-ism-")
+            || l.starts_with("x-uwaki-")
+            || l.starts_with("x-torishirabe-")
+            || l.starts_with("x-mikudari-")
+            || l.starts_with("x-tanteinavi-")
+            || l.starts_with("x-tanteicenter-")
+            || l.starts_with("x-tanteishop-")
+            || l.starts_with("x-tanteipro-")
+            || l.starts_with("x-tanteimart-")
+            || l.starts_with("x-tanteiplus-")
+            || l.starts_with("x-tanteismart-")
+            || l.starts_with("x-tanteifamily-")
+            || l.starts_with("x-tanteishanavi-")
+            || l.starts_with("x-tanteishacenter-")
+            || l.starts_with("x-tanteishashop-")
+            || l.starts_with("x-tanteishapro-")
+            || l.starts_with("x-tanteishamart-")
+            || l.starts_with("x-tanteishaplus-")
+            || l.starts_with("x-tanteishasmart-")
+            || l.starts_with("x-tanteishafamily-")
+            || l.starts_with("x-koushinjonavi-")
+            || l.starts_with("x-koushinjocenter-")
+            || l.starts_with("x-koushinjoshop-")
+            || l.starts_with("x-koushinjopro-")
+            || l.starts_with("x-koushinjomart-")
+            || l.starts_with("x-koushinjoplus-")
+            || l.starts_with("x-koushinjosmart-")
+            || l.starts_with("x-koushinjofamily-")
+            || l.starts_with("x-chousajonavi-")
+            || l.starts_with("x-chousajocenter-")
+            || l.starts_with("x-chousajoshop-")
+            || l.starts_with("x-chousajopro-")
+            || l.starts_with("x-chousajomart-")
+            || l.starts_with("x-chousajoplus-")
+            || l.starts_with("x-chousajosmart-")
+            || l.starts_with("x-chousajofamily-")
+            || l.starts_with("x-chousanavi-")
+            || l.starts_with("x-chousacenter-")
+            || l.starts_with("x-chousashop-")
+            || l.starts_with("x-chousapro-")
+            || l.starts_with("x-chousamart-")
+            || l.starts_with("x-chousaplus-")
+            || l.starts_with("x-chousasmart-")
+            || l.starts_with("x-chousafamily-")
+            || l.starts_with("x-shinyochosanavi-")
+            || l.starts_with("x-shinyochosacenter-"))
+}
+
+fn has_suiei_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-swimming-")
+            || l.starts_with("x-swim-")
+            || l.starts_with("x-suiei-")
+            || l.starts_with("x-pool-")
+            || l.starts_with("x-jss-")
+            || l.starts_with("x-itoman-")
+            || l.starts_with("x-swimclub-")
+            || l.starts_with("x-swimmy-")
+            || l.starts_with("x-tennis-")
+            || l.starts_with("x-soccer-")
+            || l.starts_with("x-baseball-")
+            || l.starts_with("x-basketball-")
+            || l.starts_with("x-volleyball-")
+            || l.starts_with("x-budo-")
+            || l.starts_with("x-karate-")
+            || l.starts_with("x-judo-")
+            || l.starts_with("x-kendo-")
+            || l.starts_with("x-gymnastics-")
+            || l.starts_with("x-taiso-")
+            || l.starts_with("x-undou-")
+            || l.starts_with("x-sportsclub-")
+            || l.starts_with("x-sportsschool-")
+            || l.starts_with("x-kidsport-")
+            || l.starts_with("x-swimmingnavi-")
+            || l.starts_with("x-swimmingcenter-")
+            || l.starts_with("x-swimmingshop-")
+            || l.starts_with("x-swimmingpro-")
+            || l.starts_with("x-swimmingmart-")
+            || l.starts_with("x-swimmingplus-")
+            || l.starts_with("x-swimmingsmart-")
+            || l.starts_with("x-swimmingfamily-")
+            || l.starts_with("x-swimnavi-")
+            || l.starts_with("x-swimcenter-")
+            || l.starts_with("x-swimshop-")
+            || l.starts_with("x-swimpro-")
+            || l.starts_with("x-swimmart-")
+            || l.starts_with("x-swimplus-")
+            || l.starts_with("x-swimsmart-")
+            || l.starts_with("x-swimfamily-")
+            || l.starts_with("x-suieinavi-")
+            || l.starts_with("x-suieicenter-")
+            || l.starts_with("x-suieishop-")
+            || l.starts_with("x-suieipro-")
+            || l.starts_with("x-suieimart-")
+            || l.starts_with("x-suieiplus-")
+            || l.starts_with("x-suieismart-")
+            || l.starts_with("x-suieifamily-")
+            || l.starts_with("x-poolnavi-")
+            || l.starts_with("x-poolcenter-")
+            || l.starts_with("x-poolshop-")
+            || l.starts_with("x-poolpro-")
+            || l.starts_with("x-poolmart-")
+            || l.starts_with("x-poolplus-")
+            || l.starts_with("x-poolsmart-")
+            || l.starts_with("x-poolfamily-")
+            || l.starts_with("x-jssnavi-")
+            || l.starts_with("x-jsscenter-")
+            || l.starts_with("x-jssshop-")
+            || l.starts_with("x-jsspro-")
+            || l.starts_with("x-jssmart-")
+            || l.starts_with("x-jssplus-")
+            || l.starts_with("x-jsssmart-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -27572,4 +27791,58 @@ body";
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_sharehouse_marks(clean));
     }
+    #[test]
+    fn scan_は証機印を検出する() {
+        for raw in [
+            br"X-Sbisec-Alert: 1",
+            br"X-Rakutensec-Notice: 1",
+            br"X-Monex-Info: 1",
+            br"X-Shoken-Report: 1",
+            br"X-Sec-Bulletin: 1",
+            br"X-Invest-News: 1",
+            br"X-Fund-Flash: 1",
+            br"X-Jpx-Release: 1",
+        ] {
+            assert!(has_shoken_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_shoken_marks(clean));
+    }
+
+    #[test]
+    fn scan_は探機印を検出する() {
+        for raw in [
+            br"X-Tantei-Alert: 1",
+            br"X-Koushinjo-Notice: 1",
+            br"X-Teikoku-Info: 1",
+            br"X-Tsr-Report: 1",
+            br"X-Haraichi-Bulletin: 1",
+            br"X-Galu-News: 1",
+            br"X-Uwaki-Flash: 1",
+            br"X-Mikudari-Release: 1",
+        ] {
+            assert!(has_tantei_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_tantei_marks(clean));
+    }
+
+    #[test]
+    fn scan_は泳機印を検出する() {
+        for raw in [
+            br"X-Swimming-Alert: 1",
+            br"X-Suiei-Notice: 1",
+            br"X-Pool-Info: 1",
+            br"X-Itoman-Report: 1",
+            br"X-Tennis-Bulletin: 1",
+            br"X-Soccer-News: 1",
+            br"X-Karate-Flash: 1",
+            br"X-Kidsport-Release: 1",
+        ] {
+            assert!(has_suiei_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_suiei_marks(clean));
+    }
+
 }
