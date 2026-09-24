@@ -1859,6 +1859,12 @@ pub struct Envelope {
     pub livehouse_marks: bool,
     /// `X-Barber-*`/`X-Barbernavi-*`/`X-Barbercenter-*` 等の床屋・理容・QB印を送信側が自称する兆候 (D673)
     pub barber_marks: bool,
+    /// `X-Danchi-*`/`X-Danchinavi-*`/`X-Danchicenter-*` 等の団地・マンション管理組合印を送信側が自称する兆候 (D674)
+    pub danchi_marks: bool,
+    /// `X-Houseclean-*`/`X-Housecleannavi-*`/`X-Housecleancenter-*` 等のハウスクリーニング・お掃除印を送信側が自称する兆候 (D675)
+    pub houseclean_marks: bool,
+    /// `X-Petfuneral-*`/`X-Petfuneralnavi-*`/`X-Petfuneralcenter-*` 等のペット葬儀・ペット霊園印を送信側が自称する兆候 (D676)
+    pub petfuneral_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2410,6 +2416,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ticketshop_marks: has_ticketshop_marks(hdr),
         livehouse_marks: has_livehouse_marks(hdr),
         barber_marks: has_barber_marks(hdr),
+        danchi_marks: has_danchi_marks(hdr),
+        houseclean_marks: has_houseclean_marks(hdr),
+        petfuneral_marks: has_petfuneral_marks(hdr),
     })
 }
 
@@ -17526,6 +17535,245 @@ fn has_barber_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-danseiganpro-"))
 }
 
+/// `X-Danchi-*`/`X-Danchinavi-*`/`X-Danchicenter-*`/`X-Danchishop-*`/`X-Danchipro-*`/`X-Mansionkanri-*`/`X-Mansionkanrinavi-*`/`X-Mansionkanricenter-*`/`X-Mansionkanrishop-*`/`X-Mansionkanripro-*`/`X-Kumiainavi-*`/`X-Kumiaicenter-*`/`X-Kumiaishop-*`/`X-Kumiaipro-*`/`X-Kanrikan-*`/`X-Kanrikannavi-*`/`X-Kanrikancenter-*`/`X-Kanrikanshop-*`/`X-Kanrikanpro-*`/`X-UrRental-*`/`X-Urnavi-*`/`X-Urcenter-*`/`X-Urshop-*`/`X-Urpro-*`/`X-Kanrinet-*`/`X-Kanrinetnavi-*`/`X-Kanrinetcenter-*`/`X-Kanrinetshop-*`/`X-Kanrinetpro-*`/`X-Jkyo-*`/`X-Jkyonavi-*`/`X-Jkyocenter-*`/`X-Jkyoshop-*`/`X-Jkyopro-*`/`X-Mansion-*`/`X-Mansionnavi-*`/`X-Mansioncenter-*`/`X-Mansionshop-*`/`X-Mansionpro-*`/`X-Residence-*`/`X-Residencenavi-*`/`X-Residencecenter-*`/`X-Residenceshop-*`/`X-Residencepro-*`/`X-Danchimart-*`/`X-Danchiplus-*`/`X-Danchismart-*`/`X-Danchifamily-*`/`X-Mansionmart-*`/`X-Mansionplus-*`/`X-Mansionsmart-*`/`X-Mansionfamily-*`/`X-Kanrimart-*`/`X-Kanriplus-*`/`X-Kanrismart-*`/`X-Kanrifamily-*`/`X-Jyutaku-*`/`X-Jyutakunavi-*`/`X-Jyutakucenter-*`/`X-Jyutakushop-*`/`X-Jyutakupro-*`/`X-Syuzen-*`/`X-Syuzennavi-*`/`X-Syuzencenter-*`/`X-Syuzenshop-*`/`X-Syuzenpro-*`/`X-Daikann-*`/`X-Daikannavi-*`/`X-Daikanncenter-*`/`X-Daikannshop-*`/`X-Daikannpro-*` 等の団地・マンション管理組合印を送信側が自称する兆候を検出する
+fn has_danchi_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-danchi-")
+            || l.starts_with("x-danchinavi-")
+            || l.starts_with("x-danchicenter-")
+            || l.starts_with("x-danchishop-")
+            || l.starts_with("x-danchipro-")
+            || l.starts_with("x-mansionkanri-")
+            || l.starts_with("x-mansionkanrinavi-")
+            || l.starts_with("x-mansionkanricenter-")
+            || l.starts_with("x-mansionkanrishop-")
+            || l.starts_with("x-mansionkanripro-")
+            || l.starts_with("x-kumiainavi-")
+            || l.starts_with("x-kumiaicenter-")
+            || l.starts_with("x-kumiaishop-")
+            || l.starts_with("x-kumiaipro-")
+            || l.starts_with("x-kanrikan-")
+            || l.starts_with("x-kanrikannavi-")
+            || l.starts_with("x-kanrikancenter-")
+            || l.starts_with("x-kanrikanshop-")
+            || l.starts_with("x-kanrikanpro-")
+            || l.starts_with("x-urrental-")
+            || l.starts_with("x-urnavi-")
+            || l.starts_with("x-urcenter-")
+            || l.starts_with("x-urshop-")
+            || l.starts_with("x-urpro-")
+            || l.starts_with("x-kanrinet-")
+            || l.starts_with("x-kanrinetnavi-")
+            || l.starts_with("x-kanrinetcenter-")
+            || l.starts_with("x-kanrinetshop-")
+            || l.starts_with("x-kanrinetpro-")
+            || l.starts_with("x-jkyo-")
+            || l.starts_with("x-jkyonavi-")
+            || l.starts_with("x-jkyocenter-")
+            || l.starts_with("x-jkyoshop-")
+            || l.starts_with("x-jkyopro-")
+            || l.starts_with("x-mansion-")
+            || l.starts_with("x-mansionnavi-")
+            || l.starts_with("x-mansioncenter-")
+            || l.starts_with("x-mansionshop-")
+            || l.starts_with("x-mansionpro-")
+            || l.starts_with("x-residence-")
+            || l.starts_with("x-residencenavi-")
+            || l.starts_with("x-residencecenter-")
+            || l.starts_with("x-residenceshop-")
+            || l.starts_with("x-residencepro-")
+            || l.starts_with("x-danchimart-")
+            || l.starts_with("x-danchiplus-")
+            || l.starts_with("x-danchismart-")
+            || l.starts_with("x-danchifamily-")
+            || l.starts_with("x-mansionmart-")
+            || l.starts_with("x-mansionplus-")
+            || l.starts_with("x-mansionsmart-")
+            || l.starts_with("x-mansionfamily-")
+            || l.starts_with("x-kanrimart-")
+            || l.starts_with("x-kanriplus-")
+            || l.starts_with("x-kanrismart-")
+            || l.starts_with("x-kanrifamily-")
+            || l.starts_with("x-jyutaku-")
+            || l.starts_with("x-jyutakunavi-")
+            || l.starts_with("x-jyutakucenter-")
+            || l.starts_with("x-jyutakushop-")
+            || l.starts_with("x-jyutakupro-")
+            || l.starts_with("x-syuzen-")
+            || l.starts_with("x-syuzennavi-")
+            || l.starts_with("x-syuzencenter-")
+            || l.starts_with("x-syuzenshop-")
+            || l.starts_with("x-syuzenpro-")
+            || l.starts_with("x-daikann-")
+            || l.starts_with("x-daikannavi-")
+            || l.starts_with("x-daikanncenter-")
+            || l.starts_with("x-daikannshop-")
+            || l.starts_with("x-daikannpro-"))
+}
+
+/// `X-Houseclean-*`/`X-Housecleannavi-*`/`X-Housecleancenter-*`/`X-Housecleanshop-*`/`X-Housecleanpro-*`/`X-Osouji-*`/`X-Osoujinavi-*`/`X-Osoujicenter-*`/`X-Osoujishop-*`/`X-Osoujipro-*`/`X-Cleanning-*`/`X-Cleanningnavi-*`/`X-Cleanningcenter-*`/`X-Cleaningshop-*`/`X-Airconclean-*`/`X-Airconcleannavi-*`/`X-Airconcleancenter-*`/`X-Airconcleanshop-*`/`X-Airconcleanpro-*`/`X-Kirei-*`/`X-Kireinavi-*`/`X-Kireicenter-*`/`X-Kireishop-*`/`X-Kireipro-*`/`X-Onamae-*`/`X-Onamaenavi-*`/`X-Onamaecenter-*`/`X-Onamaeshop-*`/`X-Onamaepro-*`/`X-Cleanmart-*`/`X-Cleanplus-*`/`X-Cleansmart-*`/`X-Cleanfamily-*`/`X-Osoujimart-*`/`X-Osoujiplus-*`/`X-Osoujismart-*`/`X-Osoujifamily-*`/`X-Cleannavi-*`/`X-Cleancenter-*`/`X-Cleanshop-*`/`X-Cleanrescue-*`/`X-Clean24-*`/`X-Cleandoctor-*`/`X-Soujiki-*`/`X-Soujikinavi-*`/`X-Soujikicenter-*`/`X-Soujikishop-*`/`X-Soujikipro-*`/`X-Oatsu-*`/`X-Oatsunavi-*`/`X-Oatsucenter-*`/`X-Oatsushop-*`/`X-Oatsupro-*`/`X-Rinsu-*`/`X-Rinsunavi-*`/`X-Rinsucenter-*`/`X-Rinsushop-*`/`X-Rinsupro-*`/`X-Econs-*`/`X-Econsnavi-*`/`X-Econscenter-*`/`X-Econsshop-*`/`X-Econspro-*`/`X-Kanzukai-*`/`X-Kanzukainavi-*`/`X-Kanzukaicenter-*`/`X-Kanzukaishop-*`/`X-Kanzukaipro-*` 等のハウスクリーニング・お掃除印を送信側が自称する兆候を検出する
+fn has_houseclean_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-houseclean-")
+            || l.starts_with("x-housecleannavi-")
+            || l.starts_with("x-housecleancenter-")
+            || l.starts_with("x-housecleanshop-")
+            || l.starts_with("x-housecleanpro-")
+            || l.starts_with("x-osouji-")
+            || l.starts_with("x-osoujinavi-")
+            || l.starts_with("x-osoujicenter-")
+            || l.starts_with("x-osoujishop-")
+            || l.starts_with("x-osoujipro-")
+            || l.starts_with("x-cleanning-")
+            || l.starts_with("x-cleanningnavi-")
+            || l.starts_with("x-cleanningcenter-")
+            || l.starts_with("x-cleaningshop-")
+            || l.starts_with("x-airconclean-")
+            || l.starts_with("x-airconcleannavi-")
+            || l.starts_with("x-airconcleancenter-")
+            || l.starts_with("x-airconcleanshop-")
+            || l.starts_with("x-airconcleanpro-")
+            || l.starts_with("x-kirei-")
+            || l.starts_with("x-kireinavi-")
+            || l.starts_with("x-kireicenter-")
+            || l.starts_with("x-kireishop-")
+            || l.starts_with("x-kireipro-")
+            || l.starts_with("x-onamae-")
+            || l.starts_with("x-onamaenavi-")
+            || l.starts_with("x-onamaecenter-")
+            || l.starts_with("x-onamaeshop-")
+            || l.starts_with("x-onamaepro-")
+            || l.starts_with("x-cleanmart-")
+            || l.starts_with("x-cleanplus-")
+            || l.starts_with("x-cleansmart-")
+            || l.starts_with("x-cleanfamily-")
+            || l.starts_with("x-osoujimart-")
+            || l.starts_with("x-osoujiplus-")
+            || l.starts_with("x-osoujismart-")
+            || l.starts_with("x-osoujifamily-")
+            || l.starts_with("x-cleannavi-")
+            || l.starts_with("x-cleancenter-")
+            || l.starts_with("x-cleanshop-")
+            || l.starts_with("x-cleanrescue-")
+            || l.starts_with("x-clean24-")
+            || l.starts_with("x-cleandoctor-")
+            || l.starts_with("x-soujiki-")
+            || l.starts_with("x-soujikinavi-")
+            || l.starts_with("x-soujikicenter-")
+            || l.starts_with("x-soujikishop-")
+            || l.starts_with("x-soujikipro-")
+            || l.starts_with("x-oatsu-")
+            || l.starts_with("x-oatsunavi-")
+            || l.starts_with("x-oatsucenter-")
+            || l.starts_with("x-oatsushop-")
+            || l.starts_with("x-oatsupro-")
+            || l.starts_with("x-rinsu-")
+            || l.starts_with("x-rinsunavi-")
+            || l.starts_with("x-rinsucenter-")
+            || l.starts_with("x-rinsushop-")
+            || l.starts_with("x-rinsupro-")
+            || l.starts_with("x-econs-")
+            || l.starts_with("x-econsnavi-")
+            || l.starts_with("x-econscenter-")
+            || l.starts_with("x-econsshop-")
+            || l.starts_with("x-econspro-")
+            || l.starts_with("x-kanzukai-")
+            || l.starts_with("x-kanzukainavi-")
+            || l.starts_with("x-kanzukaicenter-")
+            || l.starts_with("x-kanzukaishop-")
+            || l.starts_with("x-kanzukaipro-"))
+}
+
+/// `X-Petfuneral-*`/`X-Petfuneralnavi-*`/`X-Petfuneralcenter-*`/`X-Petfuneralshop-*`/`X-Petfuneralpro-*`/`X-Petsougi-*`/`X-Petsouginavi-*`/`X-Petsougicenter-*`/`X-Petsougishop-*`/`X-Petsougipro-*`/`X-Petreien-*`/`X-Petreiennavi-*`/`X-Petreiencenter-*`/`X-Petreienshop-*`/`X-Petreienpro-*`/`X-Petmemorial-*`/`X-Petmemorialnavi-*`/`X-Petmemorialcenter-*`/`X-Petmemorialshop-*`/`X-Petmemorialpro-*`/`X-Kuyou-*`/`X-Kuyounavi-*`/`X-Kuyoucenter-*`/`X-Kuyoushop-*`/`X-Kuyoupro-*`/`X-Petgarden-*`/`X-Petgardennavi-*`/`X-Petgardencenter-*`/`X-Petgardenshop-*`/`X-Petgardenpro-*`/`X-Aisou-*`/`X-Aisounavi-*`/`X-Aisoucenter-*`/`X-Aisoushop-*`/`X-Aisoupro-*`/`X-Petheaven-*`/`X-Petheavennavi-*`/`X-Petheavencenter-*`/`X-Petheavenshop-*`/`X-Petheavenpro-*`/`X-Rainbridge-*`/`X-Rainbowbridge-*`/`X-Rainbowbridgenavi-*`/`X-Rainbowbridgecenter-*`/`X-Rainbowbridgeshop-*`/`X-Rainbowbridgepro-*`/`X-Funeralmart-*`/`X-Funeralplus-*`/`X-Funeralsmart-*`/`X-Funeralfamily-*`/`X-Sougimart-*`/`X-Sougiplus-*`/`X-Sougismart-*`/`X-Sougifamily-*`/`X-Memorialmart-*`/`X-Memorialplus-*`/`X-Memorialsmart-*`/`X-Memorialfamily-*`/`X-Enmusubi-*`/`X-Enmusubinavi-*`/`X-Enmusubicenter-*`/`X-Enmusubishop-*`/`X-Enmusubipro-*`/`X-Tokubetsu-*`/`X-Tokubetsunavi-*`/`X-Tokubetsucenter-*`/`X-Tokubetsushop-*`/`X-Tokubetsupro-*`/`X-Otera-*`/`X-Oteranavi-*`/`X-Oteracenter-*`/`X-Oterashop-*`/`X-Oterapro-*` 等のペット葬儀・ペット霊園印を送信側が自称する兆候を検出する
+fn has_petfuneral_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-petfuneral-")
+            || l.starts_with("x-petfuneralnavi-")
+            || l.starts_with("x-petfuneralcenter-")
+            || l.starts_with("x-petfuneralshop-")
+            || l.starts_with("x-petfuneralpro-")
+            || l.starts_with("x-petsougi-")
+            || l.starts_with("x-petsouginavi-")
+            || l.starts_with("x-petsougicenter-")
+            || l.starts_with("x-petsougishop-")
+            || l.starts_with("x-petsougipro-")
+            || l.starts_with("x-petreien-")
+            || l.starts_with("x-petreiennavi-")
+            || l.starts_with("x-petreiencenter-")
+            || l.starts_with("x-petreienshop-")
+            || l.starts_with("x-petreienpro-")
+            || l.starts_with("x-petmemorial-")
+            || l.starts_with("x-petmemorialnavi-")
+            || l.starts_with("x-petmemorialcenter-")
+            || l.starts_with("x-petmemorialshop-")
+            || l.starts_with("x-petmemorialpro-")
+            || l.starts_with("x-kuyou-")
+            || l.starts_with("x-kuyounavi-")
+            || l.starts_with("x-kuyoucenter-")
+            || l.starts_with("x-kuyoushop-")
+            || l.starts_with("x-kuyoupro-")
+            || l.starts_with("x-petgarden-")
+            || l.starts_with("x-petgardennavi-")
+            || l.starts_with("x-petgardencenter-")
+            || l.starts_with("x-petgardenshop-")
+            || l.starts_with("x-petgardenpro-")
+            || l.starts_with("x-aisou-")
+            || l.starts_with("x-aisounavi-")
+            || l.starts_with("x-aisoucenter-")
+            || l.starts_with("x-aisoushop-")
+            || l.starts_with("x-aisoupro-")
+            || l.starts_with("x-petheaven-")
+            || l.starts_with("x-petheavennavi-")
+            || l.starts_with("x-petheavencenter-")
+            || l.starts_with("x-petheavenshop-")
+            || l.starts_with("x-petheavenpro-")
+            || l.starts_with("x-rainbridge-")
+            || l.starts_with("x-rainbowbridge-")
+            || l.starts_with("x-rainbowbridgenavi-")
+            || l.starts_with("x-rainbowbridgecenter-")
+            || l.starts_with("x-rainbowbridgeshop-")
+            || l.starts_with("x-rainbowbridgepro-")
+            || l.starts_with("x-funeralmart-")
+            || l.starts_with("x-funeralplus-")
+            || l.starts_with("x-funeralsmart-")
+            || l.starts_with("x-funeralfamily-")
+            || l.starts_with("x-sougimart-")
+            || l.starts_with("x-sougiplus-")
+            || l.starts_with("x-sougismart-")
+            || l.starts_with("x-sougifamily-")
+            || l.starts_with("x-memorialmart-")
+            || l.starts_with("x-memorialplus-")
+            || l.starts_with("x-memorialsmart-")
+            || l.starts_with("x-memorialfamily-")
+            || l.starts_with("x-enmusubi-")
+            || l.starts_with("x-enmusubinavi-")
+            || l.starts_with("x-enmusubicenter-")
+            || l.starts_with("x-enmusubishop-")
+            || l.starts_with("x-enmusubipro-")
+            || l.starts_with("x-tokubetsu-")
+            || l.starts_with("x-tokubetsunavi-")
+            || l.starts_with("x-tokubetsucenter-")
+            || l.starts_with("x-tokubetsushop-")
+            || l.starts_with("x-tokubetsupro-")
+            || l.starts_with("x-otera-")
+            || l.starts_with("x-oteranavi-")
+            || l.starts_with("x-oteracenter-")
+            || l.starts_with("x-oterashop-")
+            || l.starts_with("x-oterapro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -26958,5 +27206,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_barber_marks(clean));
+    }
+    #[test]
+    fn scan_は団機印を検出する() {
+        for raw in [
+            br"X-Danchi-Alert: 1",
+            br"X-DanchiNavi-Notice: 1",
+            br"X-Mansionkanri-Info: 1",
+            br"X-Kanrikan-Report: 1",
+            br"X-UrRental-Bulletin: 1",
+            br"X-Kanrinet-News: 1",
+            br"X-Jkyo-Flash: 1",
+            br"X-Mansion-Release: 1",
+        ] {
+            assert!(has_danchi_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_danchi_marks(clean));
+    }
+
+    #[test]
+    fn scan_は掃機印を検出する() {
+        for raw in [
+            br"X-Houseclean-Alert: 1",
+            br"X-HousecleanNavi-Notice: 1",
+            br"X-Osouji-Info: 1",
+            br"X-OsoujiNavi-Report: 1",
+            br"X-Airconclean-Bulletin: 1",
+            br"X-Kirei-News: 1",
+            br"X-Onamae-Flash: 1",
+            br"X-Soujiki-Release: 1",
+        ] {
+            assert!(has_houseclean_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_houseclean_marks(clean));
+    }
+
+    #[test]
+    fn scan_は弔機印を検出する() {
+        for raw in [
+            br"X-Petfuneral-Alert: 1",
+            br"X-PetfuneralNavi-Notice: 1",
+            br"X-Petsougi-Info: 1",
+            br"X-Petreien-Report: 1",
+            br"X-Petmemorial-Bulletin: 1",
+            br"X-Kuyou-News: 1",
+            br"X-Petgarden-Flash: 1",
+            br"X-Petheaven-Release: 1",
+        ] {
+            assert!(has_petfuneral_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_petfuneral_marks(clean));
     }
 }
