@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D827: `X-Nakaoroshi-*`/`X-Toyosu-*`/`X-Tsukijidirect-*`/`X-Fishmarket-*`/`X-Marketdirect-*`/`X-Seafoodbroker-*` 等の豊洲・築地仲卸印自称が未検査
+
+- **問題**: `X-Nakaoroshi-*`/`X-NakaoroshiYasan-*`/`X-NakaoroshiPro-*`/`X-NakaoroshiTeam-*`/`X-NakaoroshiJP-*`/`X-NakaoroshiSenmon-*`/`X-Toyosu-*`/`X-ToyosuYasan-*`/`X-ToyosuPro-*`/`X-ToyosuTeam-*`/`X-ToyosuJP-*`/`X-ToyosuSenmon-*`/`X-Tsukijidirect-*`/`X-TsukijidirectYasan-*`/`X-TsukijidirectPro-*`/`X-TsukijidirectTeam-*`/`X-TsukijidirectJP-*`/`X-TsukijidirectSenmon-*`/`X-FishmarketPros-*`/`X-FishmarketTeam-*`/`X-FishmarketWorks-*`/`X-FishmarketExperts-*`/`X-FishmarketSvc-*`/`X-FishmarketHQ-*`/`X-MarketdirectPros-*`/`X-MarketdirectTeam-*`/`X-MarketdirectWorks-*`/`X-MarketdirectExperts-*`/`X-MarketdirectSvc-*`/`X-MarketdirectHQ-*`/`X-SeafoodbrokerPros-*`/`X-SeafoodbrokerTeam-*`/`X-SeafoodbrokerWorks-*`/`X-SeafoodbrokerExperts-*`/`X-SeafoodbrokerSvc-*`/`X-SeafoodbrokerHQ-*` 等 は卸機の通知記録 — 送信側が書くことは自称。豊洲・築地仲卸の偽装は、「市場直送」「仲卸特価」を装った高級魚介通販詐欺の典型手口。(鮮魚全般は sengyo 機、蟹は kani 機で検出済み; `x-toyosuisan-`/`x-tsukijihongwanji-` は food/shrine 機所有のため別形のみ)
+- **修正**: `Envelope` に `nakaoroshi_marks` + `has_nakaoroshi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 卸印の自署を問え。
+
+### Security — D828: `X-Mentaiko-*`/`X-Chinmi-*`/`X-Kazunoko-*`/`X-Delicacyfood-*`/`X-Gourmetsea-*`/`X-Ikuramentai-*` 等の明太子・珍味印自称が未検査
+
+- **問題**: `X-Mentaiko-*`/`X-MentaikoYasan-*`/`X-MentaikoPro-*`/`X-MentaikoTeam-*`/`X-MentaikoJP-*`/`X-MentaikoSenmon-*`/`X-Chinmi-*`/`X-ChinmiYasan-*`/`X-ChinmiPro-*`/`X-ChinmiTeam-*`/`X-ChinmiJP-*`/`X-ChinmiSenmon-*`/`X-Kazunoko-*`/`X-KazunokoYasan-*`/`X-KazunokoPro-*`/`X-KazunokoTeam-*`/`X-KazunokoJP-*`/`X-KazunokoSenmon-*`/`X-DelicacyfoodPros-*`/`X-DelicacyfoodTeam-*`/`X-DelicacyfoodWorks-*`/`X-DelicacyfoodExperts-*`/`X-DelicacyfoodSvc-*`/`X-DelicacyfoodHQ-*`/`X-GourmetseaPros-*`/`X-GourmetseaTeam-*`/`X-GourmetseaWorks-*`/`X-GourmetseaExperts-*`/`X-GourmetseaSvc-*`/`X-GourmetseaHQ-*`/`X-IkuramentaiPros-*`/`X-IkuramentaiTeam-*`/`X-IkuramentaiWorks-*`/`X-IkuramentaiExperts-*`/`X-IkuramentaiSvc-*`/`X-IkuramentaiHQ-*` 等 は珍機の通知記録 — 送信側が書くことは自称。明太子・珍味業者の偽装は、博多明太子の格安セット・うにいくら詰合せを装った通販詐欺の典型手口。(海苔は nori 機で検出済み; `x-hatarako-` は housekeeping 機所有のため `X-Tarako-*` 形は未収録)
+- **修正**: `Envelope` に `mentaiko_marks` + `has_mentaiko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 珍印の自署を問え。
+
+### Security — D829: `X-Fugu-*`/`X-Suppon-*`/`X-Torafugu-*`/`X-Pufferfish-*`/`X-Blowfish-*`/`X-Softshellturtle-*` 等のふぐ・すっぽん印自称が未検査
+
+- **問題**: `X-Fugu-*`/`X-FuguYasan-*`/`X-FuguPro-*`/`X-FuguTeam-*`/`X-FuguJP-*`/`X-FuguSenmon-*`/`X-Suppon-*`/`X-SupponYasan-*`/`X-SupponPro-*`/`X-SupponTeam-*`/`X-SupponJP-*`/`X-SupponSenmon-*`/`X-Torafugu-*`/`X-TorafuguYasan-*`/`X-TorafuguPro-*`/`X-TorafuguTeam-*`/`X-TorafuguJP-*`/`X-TorafuguSenmon-*`/`X-PufferfishPros-*`/`X-PufferfishTeam-*`/`X-PufferfishWorks-*`/`X-PufferfishExperts-*`/`X-PufferfishSvc-*`/`X-PufferfishHQ-*`/`X-BlowfishPros-*`/`X-BlowfishTeam-*`/`X-BlowfishWorks-*`/`X-BlowfishExperts-*`/`X-BlowfishSvc-*`/`X-BlowfishHQ-*`/`X-SoftshellturtlePros-*`/`X-SoftshellturtleTeam-*`/`X-SoftshellturtleWorks-*`/`X-SoftshellturtleExperts-*`/`X-SoftshellturtleSvc-*`/`X-SoftshellturtleHQ-*` 等 は河機の通知記録 — 送信側が書くことは自称。ふぐ・すっぽん業者の偽装は、とらふぐ刺しセット・養殖すっぽんの通販を装ったなりすましの典型手口。
+- **修正**: `Envelope` に `fugu_marks` + `has_fugu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 河印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
