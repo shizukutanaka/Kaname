@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D839: `X-Nori-*`/`X-Noriya-*`/`X-Noriten-*`/`X-Noristore-*`/`X-Seaweed-*`/`X-Marinefoods-*` 等の海苔印自称が未検査
+
+- **問題**: `X-Nori-*`/`X-NoriYasan-*`/`X-NoriPro-*`/`X-NoriTeam-*`/`X-NoriJP-*`/`X-NoriSenmon-*`/`X-Noriya-*`/`X-NoriyaYasan-*`/`X-NoriyaPro-*`/`X-NoriyaTeam-*`/`X-NoriyaJP-*`/`X-NoriyaSenmon-*`/`X-Noriten-*`/`X-NoritenYasan-*`/`X-NoritenPro-*`/`X-NoritenTeam-*`/`X-NoritenJP-*`/`X-NoritenSenmon-*`/`X-NoristorePros-*`/`X-NoristoreTeam-*`/`X-NoristoreWorks-*`/`X-NoristoreExperts-*`/`X-NoristoreSvc-*`/`X-NoristoreHQ-*`/`X-SeaweedPros-*`/`X-SeaweedTeam-*`/`X-SeaweedWorks-*`/`X-SeaweedExperts-*`/`X-SeaweedSvc-*`/`X-SeaweedHQ-*`/`X-MarinefoodsPros-*`/`X-MarinefoodsTeam-*`/`X-MarinefoodsWorks-*`/`X-MarinefoodsExperts-*`/`X-MarinefoodsSvc-*`/`X-MarinefoodsHQ-*` 等 は苔機の通知記録 — 送信側が書くことは自称。海苔業者の偽装は、有明海産初摘み海苔の格安販売を装った通販詐欺の典型手口。(`x-norino-`/`x-norinchukin-` は既存所有のため別形のみ)
+- **修正**: `Envelope` に `nori_marks` + `has_nori_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 苔印の自署を問え。
+
+### Security — D840: `X-Konbu-*`/`X-Konbuya-*`/`X-Kombuten-*`/`X-Kombustore-*`/`X-Kelpstore-*`/`X-Kelpdirect-*` 等の昆布印自称が未検査
+
+- **問題**: `X-Konbu-*`/`X-KonbuYasan-*`/`X-KonbuPro-*`/`X-KonbuTeam-*`/`X-KonbuJP-*`/`X-KonbuSenmon-*`/`X-Konbuya-*`/`X-KonbuyaYasan-*`/`X-KonbuyaPro-*`/`X-KonbuyaTeam-*`/`X-KonbuyaJP-*`/`X-KonbuyaSenmon-*`/`X-Kombuten-*`/`X-KombutenYasan-*`/`X-KombutenPro-*`/`X-KombutenTeam-*`/`X-KombutenJP-*`/`X-KombutenSenmon-*`/`X-KombustorePros-*`/`X-KombustoreTeam-*`/`X-KombustoreWorks-*`/`X-KombustoreExperts-*`/`X-KombustoreSvc-*`/`X-KombustoreHQ-*`/`X-KelpstorePros-*`/`X-KelpstoreTeam-*`/`X-KelpstoreWorks-*`/`X-KelpstoreExperts-*`/`X-KelpstoreSvc-*`/`X-KelpstoreHQ-*`/`X-KelpdirectPros-*`/`X-KelpdirectTeam-*`/`X-KelpdirectWorks-*`/`X-KelpdirectExperts-*`/`X-KelpdirectSvc-*`/`X-KelpdirectHQ-*` 等 は昆機の通知記録 — 送信側が書くことは自称。昆布業者の偽装は、利尻・羅臼昆布の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `konbu_marks` + `has_konbu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 昆印の自署を問え。
+
+### Security — D841: `X-Katsuobushi-*`/`X-Katsuoya-*`/`X-Katsuoten-*`/`X-Bonitostore-*`/`X-Bonitoflake-*`/`X-Dashistore-*` 等の鰹節・出素材印自称が未検査
+
+- **問題**: `X-Katsuobushi-*`/`X-KatsuobushiYasan-*`/`X-KatsuobushiPro-*`/`X-KatsuobushiTeam-*`/`X-KatsuobushiJP-*`/`X-KatsuobushiSenmon-*`/`X-Katsuoya-*`/`X-KatsuoyaYasan-*`/`X-KatsuoyaPro-*`/`X-KatsuoyaTeam-*`/`X-KatsuoyaJP-*`/`X-KatsuoyaSenmon-*`/`X-Katsuoten-*`/`X-KatsuotenYasan-*`/`X-KatsuotenPro-*`/`X-KatsuotenTeam-*`/`X-KatsuotenJP-*`/`X-KatsuotenSenmon-*`/`X-BonitostorePros-*`/`X-BonitostoreTeam-*`/`X-BonitostoreWorks-*`/`X-BonitostoreExperts-*`/`X-BonitostoreSvc-*`/`X-BonitostoreHQ-*`/`X-BonitoflakePros-*`/`X-BonitoflakeTeam-*`/`X-BonitoflakeWorks-*`/`X-BonitoflakeExperts-*`/`X-BonitoflakeSvc-*`/`X-BonitoflakeHQ-*`/`X-DashistorePros-*`/`X-DashistoreTeam-*`/`X-DashistoreWorks-*`/`X-DashistoreExperts-*`/`X-DashistoreSvc-*`/`X-DashistoreHQ-*` 等 は節機の通知記録 — 送信側が書くことは自称。鰹節・出素材業者の偽装は、本枯節・枕崎直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `katsuobushi_marks` + `has_katsuobushi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 節印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

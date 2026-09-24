@@ -2212,6 +2212,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D839: 海苔印自称
+    if env.nori_marks {
+        render_risks.push("X-Nori-*/X-Noriya-*/X-Noriten-*/X-Noristore-*/X-Seaweed-*/X-Marinefoods-* 等 — 苔機の通知記録を送信側が自称する兆候です".to_string());
+    }
+    // D840: 昆布印自称
+    if env.konbu_marks {
+        render_risks.push("X-Konbu-*/X-Konbuya-*/X-Kombuten-*/X-Kombustore-*/X-Kelpstore-*/X-Kelpdirect-* 等 — 昆機の通知記録を送信側が自称する兆候です".to_string());
+    }
+    // D841: 鰹節・出素材印自称
+    if env.katsuobushi_marks {
+        render_risks.push("X-Katsuobushi-*/X-Katsuoya-*/X-Katsuoten-*/X-Bonitostore-*/X-Bonitoflake-*/X-Dashistore-* 等 — 節機の通知記録を送信側が自称する兆候です".to_string());
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
