@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D926: `X-Soroban-*`/`X-Sorobanya-*`/`X-Sorobanten-*`/`X-Abacusstore-*`/`X-Japsoroban-*`/`X-Abacustool-*` 等の算盤印自称が未検査
+
+- **問題**: `X-Soroban-*`/`X-SorobanYasan-*`/`X-SorobanPro-*`/`X-SorobanTeam-*`/`X-SorobanJP-*`/`X-SorobanSenmon-*`/`X-Sorobanya-*`/`X-SorobanyaYasan-*`/`X-SorobanyaPro-*`/`X-SorobanyaTeam-*`/`X-SorobanyaJP-*`/`X-SorobanyaSenmon-*`/`X-Sorobanten-*`/`X-SorobantenYasan-*`/`X-SorobantenPro-*`/`X-SorobantenTeam-*`/`X-SorobantenJP-*`/`X-SorobantenSenmon-*`/`X-AbacusstorePros-*`/`X-AbacusstoreTeam-*`/`X-AbacusstoreWorks-*`/`X-AbacusstoreExperts-*`/`X-AbacusstoreSvc-*`/`X-AbacusstoreHQ-*`/`X-JapsorobanPros-*`/`X-JapsorobanTeam-*`/`X-JapsorobanWorks-*`/`X-JapsorobanExperts-*`/`X-JapsorobanSvc-*`/`X-JapsorobanHQ-*`/`X-AbacustoolPros-*`/`X-AbacustoolTeam-*`/`X-AbacustoolWorks-*`/`X-AbacustoolExperts-*`/`X-AbacustoolSvc-*`/`X-AbacustoolHQ-*` 等 は算機の通知記録 — 送信側が書くことは自称。算盤業者の偽装は、そろばん製作工房・教材直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `soroban_marks` + `has_soroban_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 算印の自署を問え。
+
+### Security — D927: `X-Shougiban-*`/`X-Shougiya-*`/`X-Igobanten-*`/`X-Shogistore-*`/`X-Japshogi-*`/`X-Boardgamepiece-*` 等の将棋盤・囲碁盤印自称が未検査
+
+- **問題**: `X-Shougiban-*`/`X-ShougibanYasan-*`/`X-ShougibanPro-*`/`X-ShougibanTeam-*`/`X-ShougibanJP-*`/`X-ShougibanSenmon-*`/`X-Shougiya-*`/`X-ShougiyaYasan-*`/`X-ShougiyaPro-*`/`X-ShougiyaTeam-*`/`X-ShougiyaJP-*`/`X-ShougiyaSenmon-*`/`X-Igobanten-*`/`X-IgobantenYasan-*`/`X-IgobantenPro-*`/`X-IgobantenTeam-*`/`X-IgobantenJP-*`/`X-IgobantenSenmon-*`/`X-ShogistorePros-*`/`X-ShogistoreTeam-*`/`X-ShogistoreWorks-*`/`X-ShogistoreExperts-*`/`X-ShogistoreSvc-*`/`X-ShogistoreHQ-*`/`X-JapshogiPros-*`/`X-JapshogiTeam-*`/`X-JapshogiWorks-*`/`X-JapshogiExperts-*`/`X-JapshogiSvc-*`/`X-JapshogiHQ-*`/`X-BoardgamepiecePros-*`/`X-BoardgamepieceTeam-*`/`X-BoardgamepieceWorks-*`/`X-BoardgamepieceExperts-*`/`X-BoardgamepieceSvc-*`/`X-BoardgamepieceHQ-*` 等 は棋機の通知記録 — 送信側が書くことは自称。将棋盤・囲碁盤業者の偽装は、本榧盤・碁盤店の直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shougi_marks` + `has_shougi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 棋印の自署を問え。
+
+### Security — D928: `X-Temari-*`/`X-Temariya-*`/`X-Hagoitaten-*`/`X-Temaristore-*`/`X-Japtemari-*`/`X-Battledore-*` 等の手毬・羽子板印自称が未検査
+
+- **問題**: `X-Temari-*`/`X-TemariYasan-*`/`X-TemariPro-*`/`X-TemariTeam-*`/`X-TemariJP-*`/`X-TemariSenmon-*`/`X-Temariya-*`/`X-TemariyaYasan-*`/`X-TemariyaPro-*`/`X-TemariyaTeam-*`/`X-TemariyaJP-*`/`X-TemariyaSenmon-*`/`X-Hagoitaten-*`/`X-HagoitatenYasan-*`/`X-HagoitatenPro-*`/`X-HagoitatenTeam-*`/`X-HagoitatenJP-*`/`X-HagoitatenSenmon-*`/`X-TemaristorePros-*`/`X-TemaristoreTeam-*`/`X-TemaristoreWorks-*`/`X-TemaristoreExperts-*`/`X-TemaristoreSvc-*`/`X-TemaristoreHQ-*`/`X-JaptemariPros-*`/`X-JaptemariTeam-*`/`X-JaptemariWorks-*`/`X-JaptemariExperts-*`/`X-JaptemariSvc-*`/`X-JaptemariHQ-*`/`X-BattledorePros-*`/`X-BattledoreTeam-*`/`X-BattledoreWorks-*`/`X-BattledoreExperts-*`/`X-BattledoreSvc-*`/`X-BattledoreHQ-*` 等 は毬機の通知記録 — 送信側が書くことは自称。手毬・羽子板業者の偽装は、讃岐手毬・押絵羽子板の職人直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `temari_marks` + `has_temari_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 毬印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
