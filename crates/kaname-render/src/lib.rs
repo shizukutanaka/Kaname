@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub kiriko_marks: bool,
+    pub takezaiku_marks: bool,
+    pub hinaningyo_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        kiriko_marks: has_kiriko_marks(hdr),
+        takezaiku_marks: has_takezaiku_marks(hdr),
+        hinaningyo_marks: has_hinaningyo_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_kiriko_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kiriko-")
+            || l.starts_with("x-kirikoyasan-")
+            || l.starts_with("x-kirikopro-")
+            || l.starts_with("x-kirikoteam-")
+            || l.starts_with("x-kirikokensa-")
+            || l.starts_with("x-kirikomanten-")
+            || l.starts_with("x-kirikonomi-")
+            || l.starts_with("x-kirikojp-")
+            || l.starts_with("x-kirikosenmon-")
+            || l.starts_with("x-kirikomitsumori-")
+            || l.starts_with("x-kirikochousa-")
+            || l.starts_with("x-kirikoteiki-")
+            || l.starts_with("x-kirikopros-")
+            || l.starts_with("x-kirikodoctors-")
+            || l.starts_with("x-kirikorescue-")
+            || l.starts_with("x-edokiriko-")
+            || l.starts_with("x-edokirikoyasan-")
+            || l.starts_with("x-edokirikopro-")
+            || l.starts_with("x-edokirikoteam-")
+            || l.starts_with("x-edokirikojp-")
+            || l.starts_with("x-edokirikosenmon-")
+            || l.starts_with("x-edokirikopros-")
+            || l.starts_with("x-edokirikodoctors-")
+            || l.starts_with("x-edokirikorescue-")
+            || l.starts_with("x-kirikokou-")
+            || l.starts_with("x-kirikokouyasan-")
+            || l.starts_with("x-kirikokoupro-")
+            || l.starts_with("x-kirikokouteam-")
+            || l.starts_with("x-kirikokoujp-")
+            || l.starts_with("x-kirikokousenmon-")
+            || l.starts_with("x-kirikokoupros-")
+            || l.starts_with("x-kirikokoudoctors-")
+            || l.starts_with("x-kirikokourescue-")
+            || l.starts_with("x-cutglassworkpros-")
+            || l.starts_with("x-cutglassworkteam-")
+            || l.starts_with("x-cutglassworkworks-")
+            || l.starts_with("x-cutglassworkexperts-")
+            || l.starts_with("x-cutglassworksvc-")
+            || l.starts_with("x-cutglassworkhq-")
+            || l.starts_with("x-kirikoglasspros-")
+            || l.starts_with("x-kirikoglassteam-")
+            || l.starts_with("x-kirikoglassworks-")
+            || l.starts_with("x-kirikoglassexperts-")
+            || l.starts_with("x-kirikoglasssvc-")
+            || l.starts_with("x-kirikoglasshq-")
+            || l.starts_with("x-jpcutglasspros-")
+            || l.starts_with("x-jpcutglassteam-")
+            || l.starts_with("x-jpcutglassworks-")
+            || l.starts_with("x-jpcutglassexperts-")
+            || l.starts_with("x-jpcutglasssvc-")
+            || l.starts_with("x-jpcutglasshq-")
+    })
+}
+
+fn has_takezaiku_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-takezaiku-")
+            || l.starts_with("x-takezaikuyasan-")
+            || l.starts_with("x-takezaikupro-")
+            || l.starts_with("x-takezaikuteam-")
+            || l.starts_with("x-takezaikukensa-")
+            || l.starts_with("x-takezaikumanten-")
+            || l.starts_with("x-takezaikunomi-")
+            || l.starts_with("x-takezaikujp-")
+            || l.starts_with("x-takezaikusenmon-")
+            || l.starts_with("x-takezaikumitsumori-")
+            || l.starts_with("x-takezaikuchousa-")
+            || l.starts_with("x-takezaikuteiki-")
+            || l.starts_with("x-takezaikupros-")
+            || l.starts_with("x-takezaikudoctors-")
+            || l.starts_with("x-takezaikurescue-")
+            || l.starts_with("x-takezaikuya-")
+            || l.starts_with("x-takezaikuyayasan-")
+            || l.starts_with("x-takezaikuyapro-")
+            || l.starts_with("x-takezaikuyateam-")
+            || l.starts_with("x-takezaikuyajp-")
+            || l.starts_with("x-takezaikuyasenmon-")
+            || l.starts_with("x-takezaikuyapros-")
+            || l.starts_with("x-takezaikuyadoctors-")
+            || l.starts_with("x-takezaikuyarescue-")
+            || l.starts_with("x-taketen-")
+            || l.starts_with("x-taketenyasan-")
+            || l.starts_with("x-taketenpro-")
+            || l.starts_with("x-taketenteam-")
+            || l.starts_with("x-taketenjp-")
+            || l.starts_with("x-taketensenmon-")
+            || l.starts_with("x-taketenpros-")
+            || l.starts_with("x-taketendoctors-")
+            || l.starts_with("x-taketenrescue-")
+            || l.starts_with("x-bamboocraftpros-")
+            || l.starts_with("x-bamboocraftteam-")
+            || l.starts_with("x-bamboocraftworks-")
+            || l.starts_with("x-bamboocraftexperts-")
+            || l.starts_with("x-bamboocraftsvc-")
+            || l.starts_with("x-bamboocrafthq-")
+            || l.starts_with("x-japbamboopros-")
+            || l.starts_with("x-japbambooteam-")
+            || l.starts_with("x-japbambooworks-")
+            || l.starts_with("x-japbambooexperts-")
+            || l.starts_with("x-japbamboosvc-")
+            || l.starts_with("x-japbamboohq-")
+            || l.starts_with("x-bambooworkpros-")
+            || l.starts_with("x-bambooworkteam-")
+            || l.starts_with("x-bambooworkworks-")
+            || l.starts_with("x-bambooworkexperts-")
+            || l.starts_with("x-bambooworksvc-")
+            || l.starts_with("x-bambooworkhq-")
+    })
+}
+
+fn has_hinaningyo_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hinaningyo-")
+            || l.starts_with("x-hinaningyoyasan-")
+            || l.starts_with("x-hinaningyopro-")
+            || l.starts_with("x-hinaningyoteam-")
+            || l.starts_with("x-hinaningyokensa-")
+            || l.starts_with("x-hinaningyomanten-")
+            || l.starts_with("x-hinaningyonomi-")
+            || l.starts_with("x-hinaningyojp-")
+            || l.starts_with("x-hinaningyosenmon-")
+            || l.starts_with("x-hinaningyomitsumori-")
+            || l.starts_with("x-hinaningyochousa-")
+            || l.starts_with("x-hinaningyoteiki-")
+            || l.starts_with("x-hinaningyopros-")
+            || l.starts_with("x-hinaningyodoctors-")
+            || l.starts_with("x-hinaningyorescue-")
+            || l.starts_with("x-ningyoya-")
+            || l.starts_with("x-ningyoyayasan-")
+            || l.starts_with("x-ningyoyapro-")
+            || l.starts_with("x-ningyoyateam-")
+            || l.starts_with("x-ningyoyajp-")
+            || l.starts_with("x-ningyoyasenmon-")
+            || l.starts_with("x-ningyoyapros-")
+            || l.starts_with("x-ningyoyadoctors-")
+            || l.starts_with("x-ningyoyarescue-")
+            || l.starts_with("x-kokeshiya-")
+            || l.starts_with("x-kokeshiyayasan-")
+            || l.starts_with("x-kokeshiyapro-")
+            || l.starts_with("x-kokeshiyateam-")
+            || l.starts_with("x-kokeshiyajp-")
+            || l.starts_with("x-kokeshiyasenmon-")
+            || l.starts_with("x-kokeshiyapros-")
+            || l.starts_with("x-kokeshiyadoctors-")
+            || l.starts_with("x-kokeshiyarescue-")
+            || l.starts_with("x-dollshoppros-")
+            || l.starts_with("x-dollshopteam-")
+            || l.starts_with("x-dollshopworks-")
+            || l.starts_with("x-dollshopexperts-")
+            || l.starts_with("x-dollshopsvc-")
+            || l.starts_with("x-dollshophq-")
+            || l.starts_with("x-japdollpros-")
+            || l.starts_with("x-japdollteam-")
+            || l.starts_with("x-japdollworks-")
+            || l.starts_with("x-japdollexperts-")
+            || l.starts_with("x-japdollsvc-")
+            || l.starts_with("x-japdollhq-")
+            || l.starts_with("x-kokeshidollpros-")
+            || l.starts_with("x-kokeshidollteam-")
+            || l.starts_with("x-kokeshidollworks-")
+            || l.starts_with("x-kokeshidollexperts-")
+            || l.starts_with("x-kokeshidollsvc-")
+            || l.starts_with("x-kokeshidollhq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は切機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Kiriko-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KirikoPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-EdokirikoYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KirikokouTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-CutglassworkPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KirikoglassHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KirikoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JpcutglassExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_kiriko_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_kiriko_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は竹機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Takezaiku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TakezaikuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TakezaikuyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TaketenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BamboocraftPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapbambooHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TakezaikuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BambooworkExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_takezaiku_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_takezaiku_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は雛機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Hinaningyo-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HinaningyoPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NingyoyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KokeshiyaTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DollshopPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapdollHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HinaningyoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KokeshidollExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_hinaningyo_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_hinaningyo_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }

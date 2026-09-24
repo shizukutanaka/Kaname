@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D860: `X-Kiriko-*`/`X-Edokiriko-*`/`X-Kirikokou-*`/`X-Cutglasswork-*`/`X-Kirikoglass-*`/`X-Jpcutglass-*` 等の江戸切子印自称が未検査
+
+- **問題**: `X-Kiriko-*`/`X-KirikoYasan-*`/`X-KirikoPro-*`/`X-KirikoTeam-*`/`X-KirikoJP-*`/`X-KirikoSenmon-*`/`X-Edokiriko-*`/`X-EdokirikoYasan-*`/`X-EdokirikoPro-*`/`X-EdokirikoTeam-*`/`X-EdokirikoJP-*`/`X-EdokirikoSenmon-*`/`X-Kirikokou-*`/`X-KirikokouYasan-*`/`X-KirikokouPro-*`/`X-KirikokouTeam-*`/`X-KirikokouJP-*`/`X-KirikokouSenmon-*`/`X-CutglassworkPros-*`/`X-CutglassworkTeam-*`/`X-CutglassworkWorks-*`/`X-CutglassworkExperts-*`/`X-CutglassworkSvc-*`/`X-CutglassworkHQ-*`/`X-KirikoglassPros-*`/`X-KirikoglassTeam-*`/`X-KirikoglassWorks-*`/`X-KirikoglassExperts-*`/`X-KirikoglassSvc-*`/`X-KirikoglassHQ-*`/`X-JpcutglassPros-*`/`X-JpcutglassTeam-*`/`X-JpcutglassWorks-*`/`X-JpcutglassExperts-*`/`X-JpcutglassSvc-*`/`X-JpcutglassHQ-*` 等 は切機の通知記録 — 送信側が書くことは自称。江戸切子工房の偽装は、職人手切り・カットグラスの工房直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kiriko_marks` + `has_kiriko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 切印の自署を問え。
+
+### Security — D861: `X-Takezaiku-*`/`X-Takezaikuya-*`/`X-Taketen-*`/`X-Bamboocraft-*`/`X-Japbamboo-*`/`X-Bamboowork-*` 等の竹細工印自称が未検査
+
+- **問題**: `X-Takezaiku-*`/`X-TakezaikuYasan-*`/`X-TakezaikuPro-*`/`X-TakezaikuTeam-*`/`X-TakezaikuJP-*`/`X-TakezaikuSenmon-*`/`X-Takezaikuya-*`/`X-TakezaikuyaYasan-*`/`X-TakezaikuyaPro-*`/`X-TakezaikuyaTeam-*`/`X-TakezaikuyaJP-*`/`X-TakezaikuyaSenmon-*`/`X-Taketen-*`/`X-TaketenYasan-*`/`X-TaketenPro-*`/`X-TaketenTeam-*`/`X-TaketenJP-*`/`X-TaketenSenmon-*`/`X-BamboocraftPros-*`/`X-BamboocraftTeam-*`/`X-BamboocraftWorks-*`/`X-BamboocraftExperts-*`/`X-BamboocraftSvc-*`/`X-BamboocraftHQ-*`/`X-JapbambooPros-*`/`X-JapbambooTeam-*`/`X-JapbambooWorks-*`/`X-JapbambooExperts-*`/`X-JapbambooSvc-*`/`X-JapbambooHQ-*`/`X-BambooworkPros-*`/`X-BambooworkTeam-*`/`X-BambooworkWorks-*`/`X-BambooworkExperts-*`/`X-BambooworkSvc-*`/`X-BambooworkHQ-*` 等 は竹機の通知記録 — 送信側が書くことは自称。竹細工店の偽装は、竹職人・竹バスケットの直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `takezaiku_marks` + `has_takezaiku_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 竹印の自署を問え。
+
+### Security — D862: `X-Hinaningyo-*`/`X-Ningyoya-*`/`X-Kokeshiya-*`/`X-Dollshop-*`/`X-Japdoll-*`/`X-Kokeshidoll-*` 等の雛人形・こけし印自称が未検査
+
+- **問題**: `X-Hinaningyo-*`/`X-HinaningyoYasan-*`/`X-HinaningyoPro-*`/`X-HinaningyoTeam-*`/`X-HinaningyoJP-*`/`X-HinaningyoSenmon-*`/`X-Ningyoya-*`/`X-NingyoyaYasan-*`/`X-NingyoyaPro-*`/`X-NingyoyaTeam-*`/`X-NingyoyaJP-*`/`X-NingyoyaSenmon-*`/`X-Kokeshiya-*`/`X-KokeshiyaYasan-*`/`X-KokeshiyaPro-*`/`X-KokeshiyaTeam-*`/`X-KokeshiyaJP-*`/`X-KokeshiyaSenmon-*`/`X-DollshopPros-*`/`X-DollshopTeam-*`/`X-DollshopWorks-*`/`X-DollshopExperts-*`/`X-DollshopSvc-*`/`X-DollshopHQ-*`/`X-JapdollPros-*`/`X-JapdollTeam-*`/`X-JapdollWorks-*`/`X-JapdollExperts-*`/`X-JapdollSvc-*`/`X-JapdollHQ-*`/`X-KokeshidollPros-*`/`X-KokeshidollTeam-*`/`X-KokeshidollWorks-*`/`X-KokeshidollExperts-*`/`X-KokeshidollSvc-*`/`X-KokeshidollHQ-*` 等 は雛機の通知記録 — 送信側が書くことは自称。雛人形・こけし店の偽装は、京人形・伝統こけしの工房直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `hinaningyo_marks` + `has_hinaningyo_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 雛印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
