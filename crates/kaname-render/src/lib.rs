@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-Servpro-*`/`X-ServiceMaster-*`/`X-BELFOR-*`/`X-PaulDavis-*`/`X-PuroClean-*`/`X-RainbowIntl-*` 等 — 災害復旧・水害火災修復機印自称
+    pub restoration_marks: bool,
+    /// `X-ezCater-*`/`X-ZeroCater-*`/`X-Fooda-*`/`X-Kurumeshi-*`/`X-Gochikuru-*`/`X-Shashoku-*` 等 — ケータリング・出張料理機印自称
+    pub catering_marks: bool,
+    /// `X-ChargePoint-*`/`X-EVgo-*`/`X-ElectrifyAmerica-*`/`X-BlinkCharging-*`/`X-Ionity-*`/`X-ENECHANGE-*` 等 — EV充電機印自称
+    pub evcharge_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        restoration_marks: has_restoration_marks(hdr),
+        catering_marks: has_catering_marks(hdr),
+        evcharge_marks: has_evcharge_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,200 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D629: 災害復旧・水害火災修復機印の自称を検出する。
+///
+/// `X-Servpro-*`/`X-ServiceMaster-*`/`X-BELFOR-*`/`X-PaulDavis-*`/`X-PaulDavisRestoration-*`/
+/// `X-PuroClean-*`/`X-RainbowIntl-*`/`X-RainbowInternational-*`/`X-ATIRestoration-*`/
+/// `X-Restoration1-*`/`X-FirstOnsite-*`/`X-DKIServices-*`/`X-BluSkyRestoration-*`/
+/// `X-InterstateRestoration-*`/`X-CottonGDS-*`/`X-AmericanTechnologies-*`/`X-PolygonGroup-*`/
+/// `X-IdealResponse-*`/`X-COIT-*`/`X-StanleySteemer-*`/`X-ChemDry-*`/`X-Restorex-*`/
+/// `X-MoldPro-*`/`X-MoldBusters-*`、JP は `X-SaigaiFukkyu-*`/`X-FukkyuYasan-*`/`X-KasaiFukkyu-*`/
+/// `X-SuigaiFukkyu-*`/`X-KabaiFukkyu-*`/`X-FukkyuSupport-*` 等の災害復旧・水害火災修復機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 火災保険を使った過大請求・緊急浸水対応費用・カビ除去工事の偽装は災害復旧業者
+/// なりすましの典型手口。復旧印の自署は兆候として数える。
+/// (火災保険代理は insurance 機、ハウスクリーニングは cleaning/housekeeping 機で検出済み)
+fn has_restoration_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-servpro-")
+            || l.starts_with("x-servicemaster-")
+            || l.starts_with("x-belfor-")
+            || l.starts_with("x-pauldavis-")
+            || l.starts_with("x-pauldavisrestoration-")
+            || l.starts_with("x-puroclean-")
+            || l.starts_with("x-rainbowintl-")
+            || l.starts_with("x-rainbowinternational-")
+            || l.starts_with("x-atirestoration-")
+            || l.starts_with("x-restoration1-")
+            || l.starts_with("x-firstonsite-")
+            || l.starts_with("x-dkiservices-")
+            || l.starts_with("x-bluskyrestoration-")
+            || l.starts_with("x-interstaterestoration-")
+            || l.starts_with("x-cottongds-")
+            || l.starts_with("x-americantechnologies-")
+            || l.starts_with("x-polygongroup-")
+            || l.starts_with("x-idealresponse-")
+            || l.starts_with("x-coit-")
+            || l.starts_with("x-stanleysteemer-")
+            || l.starts_with("x-chemdry-")
+            || l.starts_with("x-restorex-")
+            || l.starts_with("x-restorepro-")
+            || l.starts_with("x-stopec-")
+            || l.starts_with("x-stoprestoration-")
+            || l.starts_with("x-watertightrestoration-")
+            || l.starts_with("x-rapidrestoration-")
+            || l.starts_with("x-restorationright-")
+            || l.starts_with("x-moldpro-")
+            || l.starts_with("x-moldbusters-")
+            || l.starts_with("x-saigaifukkyu-")
+            || l.starts_with("x-fukkyuyasan-")
+            || l.starts_with("x-kasaifukkyu-")
+            || l.starts_with("x-suigaifukkyu-")
+            || l.starts_with("x-kabaifukkyu-")
+            || l.starts_with("x-fukkyusupport-")
+            || l.starts_with("x-fukkyu-")
+            || l.starts_with("x-hisaijofukkyu-")
+            || l.starts_with("x-restamaster-")
+            || l.starts_with("x-waterdamagerestoration-")
+            || l.starts_with("x-firerestoration-")
+            || l.starts_with("x-smokerestoration-")
+            || l.starts_with("x-mitigationpros-")
+            || l.starts_with("x-dryout-")
+            || l.starts_with("x-dryingpros-")
+    })
+}
+
+/// D630: ケータリング・出張料理機印の自称を検出する。
+///
+/// `X-ezCater-*`/`X-ZeroCater-*`/`X-Fooda-*`/`X-Cater2Me-*`/`X-CaterCow-*`/
+/// `X-Sharebite-*`/`X-HungryMarket-*`/`X-Feedr-*`/`X-CityPantry-*`/`X-JustEatForBiz-*`/
+/// `X-CaterTrax-*`/`X-Platterz-*`/`X-Foodee-*`/`X-HubPlates-*`、JP は
+/// `X-Kurumeshi-*`/`X-Gochikuru-*`/`X-Shashoku-*`/`X-Rokuben-*`/`X-Catering-*`/
+/// `X-Benmashi-*`/`X-KaigiBento-*`/`X-TokyoCatering-*`/`X-Shikisai-*`/`X-Odoburu-*`
+/// 等のケータリング・出張料理機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。法人ランチ・会議弁当・イベント配膳の請求・
+/// キャンセル料通知の偽装はケータリング業者なりすましの典型手口。
+/// 配膳印の自署は兆候として数える。
+/// (飲食店予約は restaurant 機、フードデリバリーは food/mealkit 機で検出済み)
+fn has_catering_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ezcater-")
+            || l.starts_with("x-zerocater-")
+            || l.starts_with("x-fooda-")
+            || l.starts_with("x-cater2me-")
+            || l.starts_with("x-catercow-")
+            || l.starts_with("x-sharebite-")
+            || l.starts_with("x-hungrymarket-")
+            || l.starts_with("x-feedr-")
+            || l.starts_with("x-citypantry-")
+            || l.starts_with("x-justeatforbiz-")
+            || l.starts_with("x-catertrax-")
+            || l.starts_with("x-platterz-")
+            || l.starts_with("x-foodee-")
+            || l.starts_with("x-hubplates-")
+            || l.starts_with("x-kurumeshi-")
+            || l.starts_with("x-gochikuru-")
+            || l.starts_with("x-shashoku-")
+            || l.starts_with("x-rokuben-")
+            || l.starts_with("x-catering-")
+            || l.starts_with("x-benmashi-")
+            || l.starts_with("x-kaigibento-")
+            || l.starts_with("x-tokyocatering-")
+            || l.starts_with("x-shikisai-")
+            || l.starts_with("x-odoburu-")
+            || l.starts_with("x-ezcatergroup-")
+            || l.starts_with("x-cateredge-")
+            || l.starts_with("x-thrivecatering-")
+            || l.starts_with("x-morocatering-")
+            || l.starts_with("x-officemeals-")
+            || l.starts_with("x-corporatecatering-")
+            || l.starts_with("x-lunchdrop-")
+            || l.starts_with("x-caterease-")
+            || l.starts_with("x-totalpartyplanner-")
+            || l.starts_with("x-cateringinsights-")
+            || l.starts_with("x-bentoworks-")
+    })
+}
+
+/// D631: EV充電機印の自称を検出する。
+///
+/// `X-ChargePoint-*`/`X-EVgo-*`/`X-ElectrifyAmerica-*`/`X-ElectrifyHome-*`/
+/// `X-BlinkCharging-*`/`X-Wallbox-*`/`X-EnelXWay-*`/`X-Ionity-*`/`X-ShellRecharge-*`/
+/// `X-BPPulse-*`/`X-OspreyCharging-*`/`X-Gridserve-*`/`X-Chargefox-*`/`X-EvieNetworks-*`/
+/// `X-Fastned-*`/`X-Allego-*`/`X-EVBox-*`/`X-FloEV-*`/`X-VoltaEV-*`/`X-EVConnect-*`/
+/// `X-ChargeLab-*`/`X-SWTCH-*`/`X-AmpUp-*`/`X-EVPassport-*`/`X-Plugsurfing-*`/
+/// `X-Chargemap-*`/`X-Freshmile-*`/`X-ChargeHub-*`/`X-TerraWatts-*`、JP は
+/// `X-ENECHANGE-*`/`X-EMobilityPower-*`/`X-EmpCharge-*`/`X-TerraCharge-*`/`X-PowerX-EV-*`/
+/// `X-Denchu-*`/`X-Juuden-*`/`X-EVCharge-*`/`X-CHAdeMO-*`/`X-MyPlast-*` 等のEV充電機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 充電料金・超過料金・会員プラン・充電カード再発行の偽装はEV充電網なりすましの典型手口。
+/// 充電印の自署は兆候として数える。
+/// (車両本体は automotive 機、ガソリンスタンド・電力は energy/utility 機で検出済み)
+fn has_evcharge_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-chargepoint-")
+            || l.starts_with("x-evgo-")
+            || l.starts_with("x-electrifyamerica-")
+            || l.starts_with("x-electrifyhome-")
+            || l.starts_with("x-blinkcharging-")
+            || l.starts_with("x-wallbox-")
+            || l.starts_with("x-enelxway-")
+            || l.starts_with("x-ionity-")
+            || l.starts_with("x-shellrecharge-")
+            || l.starts_with("x-bppulse-")
+            || l.starts_with("x-ospreycharging-")
+            || l.starts_with("x-gridserve-")
+            || l.starts_with("x-chargefox-")
+            || l.starts_with("x-evienetworks-")
+            || l.starts_with("x-fastned-")
+            || l.starts_with("x-allego-")
+            || l.starts_with("x-evbox-")
+            || l.starts_with("x-flo-ev-")
+            || l.starts_with("x-floev-")
+            || l.starts_with("x-evconnect-")
+            || l.starts_with("x-chargelab-")
+            || l.starts_with("x-swtch-")
+            || l.starts_with("x-ampup-")
+            || l.starts_with("x-evpassport-")
+            || l.starts_with("x-volta-ev-")
+            || l.starts_with("x-voltaev-")
+            || l.starts_with("x-plugsurfing-")
+            || l.starts_with("x-chargemap-")
+            || l.starts_with("x-freshmile-")
+            || l.starts_with("x-chargehub-")
+            || l.starts_with("x-terrawatts-")
+            || l.starts_with("x-enechange-")
+            || l.starts_with("x-emobilitypower-")
+            || l.starts_with("x-empcharge-")
+            || l.starts_with("x-terracharge-")
+            || l.starts_with("x-powerx-ev-")
+            || l.starts_with("x-powerxev-")
+            || l.starts_with("x-denchu-")
+            || l.starts_with("x-juuden-")
+            || l.starts_with("x-evcharge-")
+            || l.starts_with("x-chademo-")
+            || l.starts_with("x-myplast-")
+            || l.starts_with("x-ampcontrol-")
+            || l.starts_with("x-noodoe-")
+            || l.starts_with("x-chargetrip-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20640,5 +20843,152 @@ X-Other: 1
 
 body";
     assert!(!has_diytool_marks(clean));
+}
+
+#[test]
+fn scan_は旧機印を検出する() {
+    let s1 = b"From: a@b
+X-Servpro-Id: 1
+
+x";
+    let b1 = b"From: a@b
+X-BELFOR-Trace: 1
+
+x";
+    let p1 = b"From: a@b
+X-PaulDavis-Notice: 1
+
+x";
+    let r1 = b"From: a@b
+X-RainbowIntl-Flag: 1
+
+x";
+    let f1 = b"From: a@b
+X-FirstOnsite-Entry: 1
+
+x";
+    let c1 = b"From: a@b
+X-COIT-Record: 1
+
+x";
+    let a1 = b"From: a@b
+X-SaigaiFukkyu-Trace: 1
+
+x";
+    let m1 = b"From: a@b
+X-MoldBusters-Stamp: 1
+
+x";
+    assert!(has_restoration_marks(s1));
+    assert!(has_restoration_marks(b1));
+    assert!(has_restoration_marks(p1));
+    assert!(has_restoration_marks(r1));
+    assert!(has_restoration_marks(f1));
+    assert!(has_restoration_marks(c1));
+    assert!(has_restoration_marks(a1));
+    assert!(has_restoration_marks(m1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_restoration_marks(clean));
+}
+
+#[test]
+fn scan_は膳機印を検出する() {
+    let e1 = b"From: a@b
+X-ezCater-Id: 1
+
+x";
+    let z1 = b"From: a@b
+X-ZeroCater-Trace: 1
+
+x";
+    let f1 = b"From: a@b
+X-Fooda-Notice: 1
+
+x";
+    let s1 = b"From: a@b
+X-Sharebite-Flag: 1
+
+x";
+    let k1 = b"From: a@b
+X-Kurumeshi-Entry: 1
+
+x";
+    let g1 = b"From: a@b
+X-Gochikuru-Record: 1
+
+x";
+    let c1 = b"From: a@b
+X-CaterTrax-Trace: 1
+
+x";
+    let b1 = b"From: a@b
+X-Benmashi-Stamp: 1
+
+x";
+    assert!(has_catering_marks(e1));
+    assert!(has_catering_marks(z1));
+    assert!(has_catering_marks(f1));
+    assert!(has_catering_marks(s1));
+    assert!(has_catering_marks(k1));
+    assert!(has_catering_marks(g1));
+    assert!(has_catering_marks(c1));
+    assert!(has_catering_marks(b1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_catering_marks(clean));
+}
+
+#[test]
+fn scan_は充機印を検出する() {
+    let c1 = b"From: a@b
+X-ChargePoint-Id: 1
+
+x";
+    let e1 = b"From: a@b
+X-EVgo-Trace: 1
+
+x";
+    let a1 = b"From: a@b
+X-ElectrifyAmerica-Notice: 1
+
+x";
+    let i1 = b"From: a@b
+X-Ionity-Flag: 1
+
+x";
+    let b1 = b"From: a@b
+X-BlinkCharging-Entry: 1
+
+x";
+    let f1 = b"From: a@b
+X-Fastned-Record: 1
+
+x";
+    let n1 = b"From: a@b
+X-ENECHANGE-Trace: 1
+
+x";
+    let t1 = b"From: a@b
+X-TerraCharge-Stamp: 1
+
+x";
+    assert!(has_evcharge_marks(c1));
+    assert!(has_evcharge_marks(e1));
+    assert!(has_evcharge_marks(a1));
+    assert!(has_evcharge_marks(i1));
+    assert!(has_evcharge_marks(b1));
+    assert!(has_evcharge_marks(f1));
+    assert!(has_evcharge_marks(n1));
+    assert!(has_evcharge_marks(t1));
+    let clean = b"From: a@b
+X-Other: 1
+
+body";
+    assert!(!has_evcharge_marks(clean));
 }
 }

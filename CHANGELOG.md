@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D629: `X-Servpro-*`/`X-ServiceMaster-*`/`X-BELFOR-*` 等の災害復旧・水害火災修復印自称が未検査
+
+- **問題**: `X-Servpro-*`/`X-ServiceMaster-*`/`X-BELFOR-*`/`X-PaulDavis-*`/`X-PaulDavisRestoration-*`/`X-PuroClean-*`/`X-RainbowIntl-*`/`X-RainbowInternational-*`/`X-ATIRestoration-*`/`X-Restoration1-*`/`X-FirstOnsite-*`/`X-DKIServices-*`/`X-BluSkyRestoration-*`/`X-InterstateRestoration-*`/`X-CottonGDS-*`/`X-AmericanTechnologies-*`/`X-PolygonGroup-*`/`X-IdealResponse-*`/`X-COIT-*`/`X-StanleySteemer-*`/`X-ChemDry-*`/`X-Restorex-*`/`X-RestorePro-*`/`X-STOPRestoration-*`/`X-Stopec-*`/`X-WatertightRestoration-*`/`X-RapidRestoration-*`/`X-RestorationRight-*`/`X-MoldPro-*`/`X-MoldBusters-*`/`X-RestaMaster-*`/`X-WaterDamageRestoration-*`/`X-FireRestoration-*`/`X-SmokeRestoration-*`/`X-MitigationPros-*`/`X-DryOut-*`/`X-DryingPros-*`、JP は `X-SaigaiFukkyu-*`/`X-FukkyuYasan-*`/`X-KasaiFukkyu-*`/`X-SuigaiFukkyu-*`/`X-KabaiFukkyu-*`/`X-FukkyuSupport-*`/`X-Fukkyu-*`/`X-HisaijoFukkyu-*` 等 は旧機の通知記録 — 送信側が書くことは自称。火災保険を使った過大請求・緊急浸水対応費用・カビ除去工事の偽装は災害復旧業者なりすましの典型手口。(火災保険代理は insurance 機、ハウスクリーニングは cleaning/housekeeping 機で検出済み)
+- **修正**: `Envelope` に `restoration_marks` + `has_restoration_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 旧印の自署を問え。
+
+### Security — D630: `X-ezCater-*`/`X-ZeroCater-*`/`X-Kurumeshi-*` 等のケータリング・出張料理印自称が未検査
+
+- **問題**: `X-ezCater-*`/`X-ezCaterGroup-*`/`X-ZeroCater-*`/`X-Fooda-*`/`X-Cater2Me-*`/`X-CaterCow-*`/`X-Sharebite-*`/`X-HungryMarket-*`/`X-Feedr-*`/`X-CityPantry-*`/`X-JustEatForBiz-*`/`X-CaterTrax-*`/`X-Platterz-*`/`X-Foodee-*`/`X-HubPlates-*`/`X-CaterEdge-*`/`X-ThriveCatering-*`/`X-MoroCatering-*`/`X-OfficeMeals-*`/`X-CorporateCatering-*`/`X-LunchDrop-*`/`X-CaterEase-*`/`X-TotalPartyPlanner-*`/`X-CateringInsights-*`/`X-BentoWorks-*`、JP は `X-Kurumeshi-*`/`X-Gochikuru-*`/`X-Shashoku-*`/`X-Rokuben-*`/`X-Catering-*`/`X-Benmashi-*`/`X-KaigiBento-*`/`X-TokyoCatering-*`/`X-Shikisai-*`/`X-Odoburu-*` 等 は配機の通知記録 — 送信側が書くことは自称。法人ランチ・会議弁当・イベント配膳の請求・キャンセル料通知の偽装はケータリング業者なりすましの典型手口。(飲食店予約は restaurant 機、フードデリバリーは food/mealkit 機で検出済み)
+- **修正**: `Envelope` に `catering_marks` + `has_catering_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 配印の自署を問え。
+
+### Security — D631: `X-ChargePoint-*`/`X-EVgo-*`/`X-Ionity-*` 等のEV充電印自称が未検査
+
+- **問題**: `X-ChargePoint-*`/`X-EVgo-*`/`X-ElectrifyAmerica-*`/`X-ElectrifyHome-*`/`X-BlinkCharging-*`/`X-Wallbox-*`/`X-EnelXWay-*`/`X-Ionity-*`/`X-ShellRecharge-*`/`X-BPPulse-*`/`X-OspreyCharging-*`/`X-Gridserve-*`/`X-Chargefox-*`/`X-EvieNetworks-*`/`X-Fastned-*`/`X-Allego-*`/`X-EVBox-*`/`X-Flo-EV-*`/`X-FloEV-*`/`X-EVConnect-*`/`X-ChargeLab-*`/`X-SWTCH-*`/`X-AmpUp-*`/`X-EVPassport-*`/`X-Volta-EV-*`/`X-VoltaEV-*`/`X-Plugsurfing-*`/`X-Chargemap-*`/`X-Freshmile-*`/`X-ChargeHub-*`/`X-TerraWatts-*`/`X-Ampcontrol-*`/`X-Noodoe-*`/`X-Chargetrip-*`、JP は `X-ENECHANGE-*`/`X-EMobilityPower-*`/`X-EmpCharge-*`/`X-TerraCharge-*`/`X-PowerX-EV-*`/`X-PowerXEV-*`/`X-Denchu-*`/`X-Juuden-*`/`X-EVCharge-*`/`X-CHAdeMO-*`/`X-MyPlast-*` 等 は充機の通知記録 — 送信側が書くことは自称。充電料金・超過料金・会員プラン・充電カード再発行の偽装はEV充電網なりすましの典型手口。(車両本体は automotive 機、ガソリンスタンド・電力は energy/utility 機で検出済み)
+- **修正**: `Envelope` に `evcharge_marks` + `has_evcharge_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 充印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
