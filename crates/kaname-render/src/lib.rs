@@ -1901,6 +1901,12 @@ pub struct Envelope {
     pub nightlife_marks: bool,
     /// `X-Tokushu-*`/`X-Tokushuseisou-*`/`X-Gomiyashiki-*` 等の特殊清掃・遺品整理・除霊印を送信側が自称する兆候 (D694)
     pub tokushu_marks: bool,
+    /// `X-Diving-*`/`X-Dive-*`/`X-Surf-*` 等のダイビング・マリンスポーツ印を送信側が自称する兆候 (D695)
+    pub diving_marks: bool,
+    /// `X-Menseste-*`/`X-Menzueste-*`/`X-Refre-*` 等のメンズエステ・リフレ・JKビジネス印を送信側が自称する兆候 (D696)
+    pub menseste_marks: bool,
+    /// `X-Dutyfree-*`/`X-Menzei-*`/`X-Laox-*` 等の免税店・旅行土産印を送信側が自称する兆候 (D697)
+    pub dutyfree_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2473,6 +2479,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         vtuber_marks: has_vtuber_marks(hdr),
         nightlife_marks: has_nightlife_marks(hdr),
         tokushu_marks: has_tokushu_marks(hdr),
+        diving_marks: has_diving_marks(hdr),
+        menseste_marks: has_menseste_marks(hdr),
+        dutyfree_marks: has_dutyfree_marks(hdr),
     })
 }
 
@@ -19128,6 +19137,216 @@ fn has_tokushu_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-seisouplus-"))
 }
 
+fn has_diving_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-diving-")
+            || l.starts_with("x-dive-")
+            || l.starts_with("x-surf-")
+            || l.starts_with("x-surfing-")
+            || l.starts_with("x-marine-")
+            || l.starts_with("x-marinesport-")
+            || l.starts_with("x-sup-")
+            || l.starts_with("x-wakeboard-")
+            || l.starts_with("x-jetski-")
+            || l.starts_with("x-snorkeling-")
+            || l.starts_with("x-seasport-")
+            || l.starts_with("x-beach-")
+            || l.starts_with("x-ocean-")
+            || l.starts_with("x-padi-")
+            || l.starts_with("x-ssi-")
+            || l.starts_with("x-naui-")
+            || l.starts_with("x-bsac-")
+            || l.starts_with("x-cmas-")
+            || l.starts_with("x-divingnavi-")
+            || l.starts_with("x-divingcenter-")
+            || l.starts_with("x-divingshop-")
+            || l.starts_with("x-divingpro-")
+            || l.starts_with("x-divingmart-")
+            || l.starts_with("x-divingplus-")
+            || l.starts_with("x-divingsmart-")
+            || l.starts_with("x-divingfamily-")
+            || l.starts_with("x-divenavi-")
+            || l.starts_with("x-divecenter-")
+            || l.starts_with("x-diveshop-")
+            || l.starts_with("x-divepro-")
+            || l.starts_with("x-divemart-")
+            || l.starts_with("x-diveplus-")
+            || l.starts_with("x-divesmart-")
+            || l.starts_with("x-divefamily-")
+            || l.starts_with("x-surfnavi-")
+            || l.starts_with("x-surfcenter-")
+            || l.starts_with("x-surfshop-")
+            || l.starts_with("x-surfpro-")
+            || l.starts_with("x-surfmart-")
+            || l.starts_with("x-surfplus-")
+            || l.starts_with("x-surfsmart-")
+            || l.starts_with("x-surffamily-")
+            || l.starts_with("x-surfingnavi-")
+            || l.starts_with("x-surfingcenter-")
+            || l.starts_with("x-surfingshop-")
+            || l.starts_with("x-surfingpro-")
+            || l.starts_with("x-surfingmart-")
+            || l.starts_with("x-surfingplus-")
+            || l.starts_with("x-surfingsmart-")
+            || l.starts_with("x-surfingfamily-")
+            || l.starts_with("x-marinenavi-")
+            || l.starts_with("x-marinecenter-")
+            || l.starts_with("x-marineshop-")
+            || l.starts_with("x-marinepro-")
+            || l.starts_with("x-marinemart-")
+            || l.starts_with("x-marineplus-")
+            || l.starts_with("x-marinesmart-")
+            || l.starts_with("x-marinefamily-")
+            || l.starts_with("x-marinesportnavi-")
+            || l.starts_with("x-marinesportcenter-")
+            || l.starts_with("x-marinesportshop-")
+            || l.starts_with("x-marinesportpro-"))
+}
+
+fn has_menseste_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-menseste-")
+            || l.starts_with("x-menzueste-")
+            || l.starts_with("x-refre-")
+            || l.starts_with("x-jk-")
+            || l.starts_with("x-jkrefre-")
+            || l.starts_with("x-jkbusiness-")
+            || l.starts_with("x-massage-")
+            || l.starts_with("x-mensmassage-")
+            || l.starts_with("x-aroma-")
+            || l.starts_with("x-aromamass-")
+            || l.starts_with("x-oilmassage-")
+            || l.starts_with("x-kaishun-")
+            || l.starts_with("x-seikan-")
+            || l.starts_with("x-mensestenavi-")
+            || l.starts_with("x-mensestecenter-")
+            || l.starts_with("x-mensesteshop-")
+            || l.starts_with("x-mensestepro-")
+            || l.starts_with("x-mensestemart-")
+            || l.starts_with("x-mensesteplus-")
+            || l.starts_with("x-mensestesmart-")
+            || l.starts_with("x-mensestefamily-")
+            || l.starts_with("x-menzuestenavi-")
+            || l.starts_with("x-menzuestecenter-")
+            || l.starts_with("x-menzuesteshop-")
+            || l.starts_with("x-menzuestepro-")
+            || l.starts_with("x-menzuestemart-")
+            || l.starts_with("x-menzuesteplus-")
+            || l.starts_with("x-menzuestesmart-")
+            || l.starts_with("x-menzuestefamily-")
+            || l.starts_with("x-refrenavi-")
+            || l.starts_with("x-refrecenter-")
+            || l.starts_with("x-refreshop-")
+            || l.starts_with("x-refrepro-")
+            || l.starts_with("x-refremart-")
+            || l.starts_with("x-refreplus-")
+            || l.starts_with("x-refresmart-")
+            || l.starts_with("x-refrefamily-")
+            || l.starts_with("x-jknavi-")
+            || l.starts_with("x-jkcenter-")
+            || l.starts_with("x-jkshop-")
+            || l.starts_with("x-jkpro-")
+            || l.starts_with("x-jkmart-")
+            || l.starts_with("x-jkplus-")
+            || l.starts_with("x-jksmart-")
+            || l.starts_with("x-jkfamily-")
+            || l.starts_with("x-jkrefrenavi-")
+            || l.starts_with("x-jkrefrecenter-")
+            || l.starts_with("x-jkrefreshop-")
+            || l.starts_with("x-jkrefrepro-")
+            || l.starts_with("x-jkrefremart-")
+            || l.starts_with("x-jkrefreplus-")
+            || l.starts_with("x-jkrefresmart-")
+            || l.starts_with("x-jkrefrefamily-")
+            || l.starts_with("x-jkbusinessnavi-")
+            || l.starts_with("x-jkbusinesscenter-")
+            || l.starts_with("x-jkbusinessshop-")
+            || l.starts_with("x-jkbusinesspro-")
+            || l.starts_with("x-jkbusinessmart-")
+            || l.starts_with("x-jkbusinessplus-")
+            || l.starts_with("x-jkbusinesssmart-")
+            || l.starts_with("x-jkbusinessfamily-")
+            || l.starts_with("x-massagenavi-"))
+}
+
+fn has_dutyfree_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-dutyfree-")
+            || l.starts_with("x-menzei-")
+            || l.starts_with("x-laox-")
+            || l.starts_with("x-dfs-")
+            || l.starts_with("x-shilla-")
+            || l.starts_with("x-kingpower-")
+            || l.starts_with("x-omiyage-")
+            || l.starts_with("x-miyage-")
+            || l.starts_with("x-souvenir-")
+            || l.starts_with("x-taxfree-")
+            || l.starts_with("x-travelretail-")
+            || l.starts_with("x-dufry-")
+            || l.starts_with("x-lagardere-")
+            || l.starts_with("x-heinemann-")
+            || l.starts_with("x-everrich-")
+            || l.starts_with("x-anaduty-")
+            || l.starts_with("x-jalduty-")
+            || l.starts_with("x-worldduty-")
+            || l.starts_with("x-gebr-")
+            || l.starts_with("x-dutyfreenavi-")
+            || l.starts_with("x-dutyfreecenter-")
+            || l.starts_with("x-dutyfreeshop-")
+            || l.starts_with("x-dutyfreepro-")
+            || l.starts_with("x-dutyfreemart-")
+            || l.starts_with("x-dutyfreeplus-")
+            || l.starts_with("x-dutyfreesmart-")
+            || l.starts_with("x-dutyfreefamily-")
+            || l.starts_with("x-menzeinavi-")
+            || l.starts_with("x-menzeicenter-")
+            || l.starts_with("x-menzeishop-")
+            || l.starts_with("x-menzeipro-")
+            || l.starts_with("x-menzeimart-")
+            || l.starts_with("x-menzeiplus-")
+            || l.starts_with("x-menzeismart-")
+            || l.starts_with("x-menzeifamily-")
+            || l.starts_with("x-laoxnavi-")
+            || l.starts_with("x-laoxcenter-")
+            || l.starts_with("x-laoxshop-")
+            || l.starts_with("x-laoxpro-")
+            || l.starts_with("x-laoxmart-")
+            || l.starts_with("x-laoxplus-")
+            || l.starts_with("x-laoxsmart-")
+            || l.starts_with("x-laoxfamily-")
+            || l.starts_with("x-dfsnavi-")
+            || l.starts_with("x-dfscenter-")
+            || l.starts_with("x-dfsshop-")
+            || l.starts_with("x-dfspro-")
+            || l.starts_with("x-dfsmart-")
+            || l.starts_with("x-dfsplus-")
+            || l.starts_with("x-dfssmart-")
+            || l.starts_with("x-dfsfamily-")
+            || l.starts_with("x-shillanavi-")
+            || l.starts_with("x-shillacenter-")
+            || l.starts_with("x-shillashop-")
+            || l.starts_with("x-shillapro-")
+            || l.starts_with("x-shillamart-")
+            || l.starts_with("x-shillaplus-")
+            || l.starts_with("x-shillasmart-")
+            || l.starts_with("x-shillafamily-")
+            || l.starts_with("x-kingpowernavi-")
+            || l.starts_with("x-kingpowercenter-")
+            || l.starts_with("x-kingpowershop-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -28935,6 +29154,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_tokushu_marks(clean));
+    }
+
+    #[test]
+    fn scan_は潜機印を検出する() {
+        for raw in [
+            br"X-Diving-Alert: 1",
+            br"X-Dive-Notice: 1",
+            br"X-Surf-Info: 1",
+            br"X-Marine-Report: 1",
+            br"X-Sup-Bulletin: 1",
+            br"X-Padi-News: 1",
+            br"X-Snorkeling-Flash: 1",
+            br"X-Wakeboard-Release: 1",
+        ] {
+            assert!(has_diving_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_diving_marks(clean));
+    }
+
+    #[test]
+    fn scan_は摩機印を検出する() {
+        for raw in [
+            br"X-Menseste-Alert: 1",
+            br"X-Refre-Notice: 1",
+            br"X-Jkrefre-Info: 1",
+            br"X-Massage-Report: 1",
+            br"X-Mensmassage-Bulletin: 1",
+            br"X-Aroma-News: 1",
+            br"X-Kaishun-Flash: 1",
+            br"X-Seikan-Release: 1",
+        ] {
+            assert!(has_menseste_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_menseste_marks(clean));
+    }
+
+    #[test]
+    fn scan_は免機印を検出する() {
+        for raw in [
+            br"X-Dutyfree-Alert: 1",
+            br"X-Menzei-Notice: 1",
+            br"X-Laox-Info: 1",
+            br"X-Dfs-Report: 1",
+            br"X-Kingpower-Bulletin: 1",
+            br"X-Omiyage-News: 1",
+            br"X-Souvenir-Flash: 1",
+            br"X-Taxfree-Release: 1",
+        ] {
+            assert!(has_dutyfree_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_dutyfree_marks(clean));
     }
 
 }
