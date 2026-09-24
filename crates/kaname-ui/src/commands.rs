@@ -3283,6 +3283,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D761: 家賃保証・賃貸保証印自称
+    if env.rentguarantee_marks {
+        render_risks.push(
+            "X-Yachinhosho-*/X-Rentguarantee-*/X-Hoshocompany-*/X-Casa-*/X-Jleave-*/X-Garanty-*/X-Epis-*/X-Roomca-* 等 — 賃機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D762: 眼科手術・視力矯正印自称
+    if env.lasik_marks {
+        render_risks.push(
+            "X-Lasik-*/X-Icl-*/X-Orthok-*/X-Relex-*/X-Presbyond-*/X-Lasikclinic-*/X-Intralasik-*/X-Lasiknavi-* 等 — 視機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D763: タトゥー・ボディアート印自称
+    if env.tattoo_marks {
+        render_risks.push(
+            "X-Tattoo-*/X-Irezumi-*/X-Piercing-*/X-Bodyart-*/X-Tattooshop-*/X-Bodypierce-*/X-Tattoostudio-*/X-Tattooland-* 等 — 彫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
