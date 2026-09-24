@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D899: `X-Kutaniyaki-*`/`X-Kutaniya-*`/`X-Kutaniten-*`/`X-Kutanistore-*`/`X-Japkutani-*`/`X-Kutaniware-*` 等の九谷焼印自称が未検査
+
+- **問題**: `X-Kutaniyaki-*`/`X-KutaniyakiYasan-*`/`X-KutaniyakiPro-*`/`X-KutaniyakiTeam-*`/`X-KutaniyakiJP-*`/`X-KutaniyakiSenmon-*`/`X-Kutaniya-*`/`X-KutaniyaYasan-*`/`X-KutaniyaPro-*`/`X-KutaniyaTeam-*`/`X-KutaniyaJP-*`/`X-KutaniyaSenmon-*`/`X-Kutaniten-*`/`X-KutanitenYasan-*`/`X-KutanitenPro-*`/`X-KutanitenTeam-*`/`X-KutanitenJP-*`/`X-KutanitenSenmon-*`/`X-KutanistorePros-*`/`X-KutanistoreTeam-*`/`X-KutanistoreWorks-*`/`X-KutanistoreExperts-*`/`X-KutanistoreSvc-*`/`X-KutanistoreHQ-*`/`X-JapkutaniPros-*`/`X-JapkutaniTeam-*`/`X-JapkutaniWorks-*`/`X-JapkutaniExperts-*`/`X-JapkutaniSvc-*`/`X-JapkutaniHQ-*`/`X-KutaniwarePros-*`/`X-KutaniwareTeam-*`/`X-KutaniwareWorks-*`/`X-KutaniwareExperts-*`/`X-KutaniwareSvc-*`/`X-KutaniwareHQ-*` 等 は谷機の通知記録 — 送信側が書くことは自称。九谷焼業者の偽装は、石川九谷焼・窯元直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kutaniyaki_marks` + `has_kutaniyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 谷印の自署を問え。
+
+### Security — D900: `X-Mashikoyaki-*`/`X-Mashikoya-*`/`X-Kasamayaki-*`/`X-Mashikostore-*`/`X-Japmashiko-*`/`X-Mashikoware-*` 等の益子焼・笠間焼印自称が未検査
+
+- **問題**: `X-Mashikoyaki-*`/`X-MashikoyakiYasan-*`/`X-MashikoyakiPro-*`/`X-MashikoyakiTeam-*`/`X-MashikoyakiJP-*`/`X-MashikoyakiSenmon-*`/`X-Mashikoya-*`/`X-MashikoyaYasan-*`/`X-MashikoyaPro-*`/`X-MashikoyaTeam-*`/`X-MashikoyaJP-*`/`X-MashikoyaSenmon-*`/`X-Kasamayaki-*`/`X-KasamayakiYasan-*`/`X-KasamayakiPro-*`/`X-KasamayakiTeam-*`/`X-KasamayakiJP-*`/`X-KasamayakiSenmon-*`/`X-MashikostorePros-*`/`X-MashikostoreTeam-*`/`X-MashikostoreWorks-*`/`X-MashikostoreExperts-*`/`X-MashikostoreSvc-*`/`X-MashikostoreHQ-*`/`X-JapmashikoPros-*`/`X-JapmashikoTeam-*`/`X-JapmashikoWorks-*`/`X-JapmashikoExperts-*`/`X-JapmashikoSvc-*`/`X-JapmashikoHQ-*`/`X-MashikowarePros-*`/`X-MashikowareTeam-*`/`X-MashikowareWorks-*`/`X-MashikowareExperts-*`/`X-MashikowareSvc-*`/`X-MashikowareHQ-*` 等 は益機の通知記録 — 送信側が書くことは自称。益子焼・笠間焼業者の偽装は、栃木益子焼・茨城笠間焼の窯元直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `mashikoyaki_marks` + `has_mashikoyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 益印の自署を問え。
+
+### Security — D901: `X-Minoyaki-*`/`X-Minoya-*`/`X-Shigarakiyaki-*`/`X-Minostore-*`/`X-Japmino-*`/`X-Minoware-*` 等の美濃焼・信楽焼印自称が未検査
+
+- **問題**: `X-Minoyaki-*`/`X-MinoyakiYasan-*`/`X-MinoyakiPro-*`/`X-MinoyakiTeam-*`/`X-MinoyakiJP-*`/`X-MinoyakiSenmon-*`/`X-Minoya-*`/`X-MinoyaYasan-*`/`X-MinoyaPro-*`/`X-MinoyaTeam-*`/`X-MinoyaJP-*`/`X-MinoyaSenmon-*`/`X-Shigarakiyaki-*`/`X-ShigarakiyakiYasan-*`/`X-ShigarakiyakiPro-*`/`X-ShigarakiyakiTeam-*`/`X-ShigarakiyakiJP-*`/`X-ShigarakiyakiSenmon-*`/`X-MinostorePros-*`/`X-MinostoreTeam-*`/`X-MinostoreWorks-*`/`X-MinostoreExperts-*`/`X-MinostoreSvc-*`/`X-MinostoreHQ-*`/`X-JapminoPros-*`/`X-JapminoTeam-*`/`X-JapminoWorks-*`/`X-JapminoExperts-*`/`X-JapminoSvc-*`/`X-JapminoHQ-*`/`X-MinowarePros-*`/`X-MinowareTeam-*`/`X-MinowareWorks-*`/`X-MinowareExperts-*`/`X-MinowareSvc-*`/`X-MinowareHQ-*` 等 は濃機の通知記録 — 送信側が書くことは自称。美濃焼・信楽焼業者の偽装は、岐阜美濃焼・滋賀信楽焼の窯元直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `minoyaki_marks` + `has_minoyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 濃印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
