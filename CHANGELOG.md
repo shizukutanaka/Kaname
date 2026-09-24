@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D824: `X-Seisuiki-*`/`X-Kangensui-*`/`X-Kassuiki-*`/`X-Waterionizer-*`/`X-Alkalinewater-*`/`X-Ionizersales-*` 等の整水器・還元水印自称が未検査
+
+- **問題**: `X-Seisuiki-*`/`X-SeisuikiYasan-*`/`X-SeisuikiPro-*`/`X-SeisuikiTeam-*`/`X-SeisuikiJP-*`/`X-SeisuikiSenmon-*`/`X-Kangensui-*`/`X-KangensuiYasan-*`/`X-KangensuiPro-*`/`X-KangensuiTeam-*`/`X-KangensuiJP-*`/`X-KangensuiSenmon-*`/`X-Kassuiki-*`/`X-KassuikiYasan-*`/`X-KassuikiPro-*`/`X-KassuikiTeam-*`/`X-KassuikiJP-*`/`X-KassuikiSenmon-*`/`X-WaterionizerPros-*`/`X-WaterionizerTeam-*`/`X-WaterionizerWorks-*`/`X-WaterionizerExperts-*`/`X-WaterionizerSvc-*`/`X-WaterionizerHQ-*`/`X-AlkalinewaterPros-*`/`X-AlkalinewaterTeam-*`/`X-AlkalinewaterWorks-*`/`X-AlkalinewaterExperts-*`/`X-AlkalinewaterSvc-*`/`X-AlkalinewaterHQ-*`/`X-IonizersalesPros-*`/`X-IonizersalesTeam-*`/`X-IonizersalesWorks-*`/`X-IonizersalesExperts-*`/`X-IonizersalesSvc-*`/`X-IonizersalesHQ-*` 等 は整機の通知記録 — 送信側が書くことは自称。整水器・還元水業者の偽装は、医療効果を謳った高額販売・カートリッジ定期契約を装ったなりすましの典型手口。(浄水器は jousuiki 機で検出済み)
+- **修正**: `Envelope` に `seisuiki_marks` + `has_seisuiki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 整印の自署を問え。
+
+### Security — D825: `X-Suisosui-*`/`X-Suisomizu-*`/`X-Kassui-*`/`X-Hydrogenwater-*`/`X-H2water-*`/`X-Hydrogenizer-*` 等の水素水・活水印自称が未検査
+
+- **問題**: `X-Suisosui-*`/`X-SuisosuiYasan-*`/`X-SuisosuiPro-*`/`X-SuisosuiTeam-*`/`X-SuisosuiJP-*`/`X-SuisosuiSenmon-*`/`X-Suisomizu-*`/`X-SuisomizuYasan-*`/`X-SuisomizuPro-*`/`X-SuisomizuTeam-*`/`X-SuisomizuJP-*`/`X-SuisomizuSenmon-*`/`X-Kassui-*`/`X-KassuiYasan-*`/`X-KassuiPro-*`/`X-KassuiTeam-*`/`X-KassuiJP-*`/`X-KassuiSenmon-*`/`X-HydrogenwaterPros-*`/`X-HydrogenwaterTeam-*`/`X-HydrogenwaterWorks-*`/`X-HydrogenwaterExperts-*`/`X-HydrogenwaterSvc-*`/`X-HydrogenwaterHQ-*`/`X-H2waterPros-*`/`X-H2waterTeam-*`/`X-H2waterWorks-*`/`X-H2waterExperts-*`/`X-H2waterSvc-*`/`X-H2waterHQ-*`/`X-HydrogenizerPros-*`/`X-HydrogenizerTeam-*`/`X-HydrogenizerWorks-*`/`X-HydrogenizerExperts-*`/`X-HydrogenizerSvc-*`/`X-HydrogenizerHQ-*` 等 は素機の通知記録 — 送信側が書くことは自称。水素水・活水業者の偽装は、健康効果を謳った水素水定期購入・活水器の訪問販売を装ったなりすましの典型手口。
+- **修正**: `Envelope` に `suisosui_marks` + `has_suisosui_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 素印の自署を問え。
+
+### Security — D826: `X-Kouso-*`/`X-Hakkou-*`/`X-Kouzoyaku-*`/`X-Enzymesupp-*`/`X-Enzymesales-*`/`X-Fermentedsupp-*` 等の酵素・発酵健康食品印自称が未検査
+
+- **問題**: `X-Kouso-*`/`X-KousoYasan-*`/`X-KousoPro-*`/`X-KousoTeam-*`/`X-KousoJP-*`/`X-KousoSenmon-*`/`X-Hakkou-*`/`X-HakkouYasan-*`/`X-HakkouPro-*`/`X-HakkouTeam-*`/`X-HakkouJP-*`/`X-HakkouSenmon-*`/`X-Kouzoyaku-*`/`X-KouzoyakuYasan-*`/`X-KouzoyakuPro-*`/`X-KouzoyakuTeam-*`/`X-KouzoyakuJP-*`/`X-KouzoyakuSenmon-*`/`X-EnzymesuppPros-*`/`X-EnzymesuppTeam-*`/`X-EnzymesuppWorks-*`/`X-EnzymesuppExperts-*`/`X-EnzymesuppSvc-*`/`X-EnzymesuppHQ-*`/`X-EnzymesalesPros-*`/`X-EnzymesalesTeam-*`/`X-EnzymesalesWorks-*`/`X-EnzymesalesExperts-*`/`X-EnzymesalesSvc-*`/`X-EnzymesalesHQ-*`/`X-FermentedsuppPros-*`/`X-FermentedsuppTeam-*`/`X-FermentedsuppWorks-*`/`X-FermentedsuppExperts-*`/`X-FermentedsuppSvc-*`/`X-FermentedsuppHQ-*` 等 は酵機の通知記録 — 送信側が書くことは自称。酵素・発酵食品業者の偽装は、ダイエット効果を謳った定期購入・初回無料を装った定期縛りのなりすましの典型手口。(漢方は kampo 機、健康食品全般は health 機で検出済み)
+- **修正**: `Envelope` に `kouso_marks` + `has_kouso_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 酵印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

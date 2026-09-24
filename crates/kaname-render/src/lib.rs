@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub seisuiki_marks: bool,
+    pub suisosui_marks: bool,
+    pub kouso_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        seisuiki_marks: has_seisuiki_marks(hdr),
+        suisosui_marks: has_suisosui_marks(hdr),
+        kouso_marks: has_kouso_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_seisuiki_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-seisuiki-")
+            || l.starts_with("x-seisuikiyasan-")
+            || l.starts_with("x-seisuikipro-")
+            || l.starts_with("x-seisuikiteam-")
+            || l.starts_with("x-seisuikikensa-")
+            || l.starts_with("x-seisuikimanten-")
+            || l.starts_with("x-seisuikinomi-")
+            || l.starts_with("x-seisuikijp-")
+            || l.starts_with("x-seisuikisenmon-")
+            || l.starts_with("x-seisuikimitsumori-")
+            || l.starts_with("x-seisuikichousa-")
+            || l.starts_with("x-seisuikiteiki-")
+            || l.starts_with("x-seisuikipros-")
+            || l.starts_with("x-seisuikidoctors-")
+            || l.starts_with("x-seisuikirescue-")
+            || l.starts_with("x-kangensui-")
+            || l.starts_with("x-kangensuiyasan-")
+            || l.starts_with("x-kangensuipro-")
+            || l.starts_with("x-kangensuiteam-")
+            || l.starts_with("x-kangensuijp-")
+            || l.starts_with("x-kangensuisenmon-")
+            || l.starts_with("x-kangensuipros-")
+            || l.starts_with("x-kangensuidoctors-")
+            || l.starts_with("x-kangensuirescue-")
+            || l.starts_with("x-kassuiki-")
+            || l.starts_with("x-kassuikiyasan-")
+            || l.starts_with("x-kassuikipro-")
+            || l.starts_with("x-kassuikiteam-")
+            || l.starts_with("x-kassuikijp-")
+            || l.starts_with("x-kassuikisenmon-")
+            || l.starts_with("x-kassuikipros-")
+            || l.starts_with("x-kassuikidoctors-")
+            || l.starts_with("x-kassuikirescue-")
+            || l.starts_with("x-waterionizerpros-")
+            || l.starts_with("x-waterionizerteam-")
+            || l.starts_with("x-waterionizerworks-")
+            || l.starts_with("x-waterionizerexperts-")
+            || l.starts_with("x-waterionizersvc-")
+            || l.starts_with("x-waterionizerhq-")
+            || l.starts_with("x-alkalinewaterpros-")
+            || l.starts_with("x-alkalinewaterteam-")
+            || l.starts_with("x-alkalinewaterworks-")
+            || l.starts_with("x-alkalinewaterexperts-")
+            || l.starts_with("x-alkalinewatersvc-")
+            || l.starts_with("x-alkalinewaterhq-")
+            || l.starts_with("x-ionizersalespros-")
+            || l.starts_with("x-ionizersalesteam-")
+            || l.starts_with("x-ionizersalesworks-")
+            || l.starts_with("x-ionizersalesexperts-")
+            || l.starts_with("x-ionizersalessvc-")
+            || l.starts_with("x-ionizersaleshq-")
+    })
+}
+
+fn has_suisosui_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-suisosui-")
+            || l.starts_with("x-suisosuiyasan-")
+            || l.starts_with("x-suisosuipro-")
+            || l.starts_with("x-suisosuiteam-")
+            || l.starts_with("x-suisosuikensa-")
+            || l.starts_with("x-suisosuimanten-")
+            || l.starts_with("x-suisosuinomi-")
+            || l.starts_with("x-suisosuijp-")
+            || l.starts_with("x-suisosuisenmon-")
+            || l.starts_with("x-suisosuimitsumori-")
+            || l.starts_with("x-suisosuichousa-")
+            || l.starts_with("x-suisosuiteiki-")
+            || l.starts_with("x-suisosuipros-")
+            || l.starts_with("x-suisosuidoctors-")
+            || l.starts_with("x-suisosuirescue-")
+            || l.starts_with("x-suisomizu-")
+            || l.starts_with("x-suisomizuyasan-")
+            || l.starts_with("x-suisomizupro-")
+            || l.starts_with("x-suisomizuteam-")
+            || l.starts_with("x-suisomizujp-")
+            || l.starts_with("x-suisomizusenmon-")
+            || l.starts_with("x-suisomizupros-")
+            || l.starts_with("x-suisomizudoctors-")
+            || l.starts_with("x-suisomizurescue-")
+            || l.starts_with("x-kassui-")
+            || l.starts_with("x-kassuiyasan-")
+            || l.starts_with("x-kassuipro-")
+            || l.starts_with("x-kassuiteam-")
+            || l.starts_with("x-kassuijp-")
+            || l.starts_with("x-kassuisenmon-")
+            || l.starts_with("x-kassuipros-")
+            || l.starts_with("x-kassuidoctors-")
+            || l.starts_with("x-kassuirescue-")
+            || l.starts_with("x-hydrogenwaterpros-")
+            || l.starts_with("x-hydrogenwaterteam-")
+            || l.starts_with("x-hydrogenwaterworks-")
+            || l.starts_with("x-hydrogenwaterexperts-")
+            || l.starts_with("x-hydrogenwatersvc-")
+            || l.starts_with("x-hydrogenwaterhq-")
+            || l.starts_with("x-h2waterpros-")
+            || l.starts_with("x-h2waterteam-")
+            || l.starts_with("x-h2waterworks-")
+            || l.starts_with("x-h2waterexperts-")
+            || l.starts_with("x-h2watersvc-")
+            || l.starts_with("x-h2waterhq-")
+            || l.starts_with("x-hydrogenizerpros-")
+            || l.starts_with("x-hydrogenizerteam-")
+            || l.starts_with("x-hydrogenizerworks-")
+            || l.starts_with("x-hydrogenizerexperts-")
+            || l.starts_with("x-hydrogenizersvc-")
+            || l.starts_with("x-hydrogenizerhq-")
+    })
+}
+
+fn has_kouso_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-kouso-")
+            || l.starts_with("x-kousoyasan-")
+            || l.starts_with("x-kousopro-")
+            || l.starts_with("x-kousoteam-")
+            || l.starts_with("x-kousokensa-")
+            || l.starts_with("x-kousomanten-")
+            || l.starts_with("x-kousonomi-")
+            || l.starts_with("x-kousojp-")
+            || l.starts_with("x-kousosenmon-")
+            || l.starts_with("x-kousomitsumori-")
+            || l.starts_with("x-kousochousa-")
+            || l.starts_with("x-kousoteiki-")
+            || l.starts_with("x-kousopros-")
+            || l.starts_with("x-kousodoctors-")
+            || l.starts_with("x-kousorescue-")
+            || l.starts_with("x-hakkou-")
+            || l.starts_with("x-hakkouyasan-")
+            || l.starts_with("x-hakkoupro-")
+            || l.starts_with("x-hakkouteam-")
+            || l.starts_with("x-hakkoujp-")
+            || l.starts_with("x-hakkousenmon-")
+            || l.starts_with("x-hakkoupros-")
+            || l.starts_with("x-hakkoudoctors-")
+            || l.starts_with("x-hakkourescue-")
+            || l.starts_with("x-kouzoyaku-")
+            || l.starts_with("x-kouzoyakuyasan-")
+            || l.starts_with("x-kouzoyakupro-")
+            || l.starts_with("x-kouzoyakuteam-")
+            || l.starts_with("x-kouzoyakujp-")
+            || l.starts_with("x-kouzoyakusenmon-")
+            || l.starts_with("x-kouzoyakupros-")
+            || l.starts_with("x-kouzoyakudoctors-")
+            || l.starts_with("x-kouzoyakurescue-")
+            || l.starts_with("x-enzymesupppros-")
+            || l.starts_with("x-enzymesuppteam-")
+            || l.starts_with("x-enzymesuppworks-")
+            || l.starts_with("x-enzymesuppexperts-")
+            || l.starts_with("x-enzymesuppsvc-")
+            || l.starts_with("x-enzymesupphq-")
+            || l.starts_with("x-enzymesalespros-")
+            || l.starts_with("x-enzymesalesteam-")
+            || l.starts_with("x-enzymesalesworks-")
+            || l.starts_with("x-enzymesalesexperts-")
+            || l.starts_with("x-enzymesalessvc-")
+            || l.starts_with("x-enzymesaleshq-")
+            || l.starts_with("x-fermentedsupppros-")
+            || l.starts_with("x-fermentedsuppteam-")
+            || l.starts_with("x-fermentedsuppworks-")
+            || l.starts_with("x-fermentedsuppexperts-")
+            || l.starts_with("x-fermentedsuppsvc-")
+            || l.starts_with("x-fermentedsupphq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は整機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Seisuiki-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SeisuikiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KangensuiYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KassuikiTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WaterionizerPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AlkalinewaterHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SeisuikiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-IonizersalesExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_seisuiki_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_seisuiki_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は素機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Suisosui-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SuisosuiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SuisomizuYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KassuiTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HydrogenwaterPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-H2waterHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SuisosuiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HydrogenizerExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_suisosui_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_suisosui_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は酵機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Kouso-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KousoPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HakkouYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KouzoyakuTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-EnzymesuppPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-EnzymesalesHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KousoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FermentedsuppExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_kouso_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_kouso_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
