@@ -1763,6 +1763,12 @@ pub struct Envelope {
     pub kimono_marks: bool,
     /// `X-Shodo-*`/`X-Sadou-*`/`X-Kadou-*`/`X-Shodou-*`/`X-AbcCooking-*`/`X-BetterHome-*`/`X-CultureNavi-*` 等のカルチャー教室通知記録印を送信側が自称している (D625)
     pub cultureschool_marks: bool,
+    /// `X-AirConRepair-*`/`X-FridgeFix-*`/`X-KadenShuuri-*` 等の家電・住宅設備修理印を送信側が自称する兆候 (D626)
+    pub appliancerepair_marks: bool,
+    /// `X-KidsLine-*`/`X-BabysitterPro-*`/`X-HoikuenNavi-*` 等のベビーシッター・保育・学童印を送信側が自称する兆候 (D627)
+    pub babysitter_marks: bool,
+    /// `X-Gengo-*`/`X-HonyakuPro-*`/`X-TuuyakuPro-*` 等の翻訳・通訳印を送信側が自称する兆候 (D628)
+    pub translation_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2266,6 +2272,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         antique_marks: has_antique_marks(hdr),
         kimono_marks: has_kimono_marks(hdr),
         cultureschool_marks: has_cultureschool_marks(hdr),
+        appliancerepair_marks: has_appliancerepair_marks(hdr),
+        babysitter_marks: has_babysitter_marks(hdr),
+        translation_marks: has_translation_marks(hdr),
     })
 }
 
@@ -13584,6 +13593,243 @@ fn has_cultureschool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// `X-AirConRepair-*`/`X-FridgeFix-*`/`X-WasherRepair-*`/`X-TvRepair-*`/`X-KadenShuuri-*`/`X-KadenRepair-*`/`X-ApplianceFix-*`/`X-HomeAppliance-*`/`X-AppliancePro-*`/`X-ApplianceDoctor-*`/`X-ApplianceNavi-*`/`X-ApplianceCenter-*`/`X-ApplianceShop-*`/`X-ApplianceRescue-*`/`X-Appliance24-*`/`X-KadenDoctor-*`/`X-KadenPro-*`/`X-KadenNavi-*`/`X-KadenCenter-*`/`X-KadenShop-*`/`X-KadenRescue-*`/`X-Kaden24-*`/`X-KadenMart-*`/`X-KadenPlus-*`/`X-KadenSmart-*`/`X-KadenFamily-*`/`X-HitachiApp-*`/`X-PanasonicApp-*`/`X-ToshibaApp-*`/`X-SharpApp-*`/`X-MitsubishiApp-*`/`X-ElectroluxApp-*`/`X-KadenMart-*`/`X-TotoApp-*`/`X-DaikinApp-*`/`X-RinnaiApp-*`/`X-NoritzApp-*`/`X-InaxApp-*`/`X-ZojirushiApp-*`/`X-TigerApp-*`/`X-BalmudaApp-*`/`X-PalomaApp-*`/`X-HisenseApp-*`/`X-GreeApp-*`/`X-MideaApp-*`/`X-SanyoApp-*`/`X-VictorApp-*`/`X-JvcApp-*`/`X-JanomeApp-*`/`X-SingerApp-*`/`X-BerninaApp-*`/`X-HusqvarnaApp-*`/`X-TajimaApp-*`/`X-ElnaApp-*`/`X-JukiApp-*`/ 等の家電・住宅設備修理印を送信側が自称する兆候を検出する
+fn has_appliancerepair_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-airconrepair-")
+            || l.starts_with("x-fridgefix-")
+            || l.starts_with("x-washerrepair-")
+            || l.starts_with("x-tvrepair-")
+            || l.starts_with("x-kadenshuuri-")
+            || l.starts_with("x-kadenrepair-")
+            || l.starts_with("x-appliancefix-")
+            || l.starts_with("x-homeappliance-")
+            || l.starts_with("x-appliancepro-")
+            || l.starts_with("x-appliancedoctor-")
+            || l.starts_with("x-appliancenavi-")
+            || l.starts_with("x-appliancecenter-")
+            || l.starts_with("x-applianceshop-")
+            || l.starts_with("x-appliancerescue-")
+            || l.starts_with("x-appliance24-")
+            || l.starts_with("x-kadendoctor-")
+            || l.starts_with("x-kadenpro-")
+            || l.starts_with("x-kadennavi-")
+            || l.starts_with("x-kadencenter-")
+            || l.starts_with("x-kadenshop-")
+            || l.starts_with("x-kadenrescue-")
+            || l.starts_with("x-kaden24-")
+            || l.starts_with("x-kadenmart-")
+            || l.starts_with("x-kadenplus-")
+            || l.starts_with("x-kadensmart-")
+            || l.starts_with("x-kadenfamily-")
+            || l.starts_with("x-hitachiapp-")
+            || l.starts_with("x-panasonicapp-")
+            || l.starts_with("x-toshibaapp-")
+            || l.starts_with("x-sharpapp-")
+            || l.starts_with("x-mitsubishiapp-")
+            || l.starts_with("x-electroluxapp-")
+            || l.starts_with("x-totoapp-")
+            || l.starts_with("x-daikinapp-")
+            || l.starts_with("x-rinnaiapp-")
+            || l.starts_with("x-noritzapp-")
+            || l.starts_with("x-inaxapp-")
+            || l.starts_with("x-zojirushiapp-")
+            || l.starts_with("x-tigerapp-")
+            || l.starts_with("x-balmudaapp-")
+            || l.starts_with("x-palomaapp-")
+            || l.starts_with("x-hisenseapp-")
+            || l.starts_with("x-greeapp-")
+            || l.starts_with("x-mideaapp-")
+            || l.starts_with("x-sanyoapp-")
+            || l.starts_with("x-victorapp-")
+            || l.starts_with("x-jvcapp-")
+            || l.starts_with("x-janomeapp-")
+            || l.starts_with("x-singerapp-")
+            || l.starts_with("x-berninaapp-")
+            || l.starts_with("x-husqvarnaapp-")
+            || l.starts_with("x-tajimaapp-")
+            || l.starts_with("x-elnaapp-")
+            || l.starts_with("x-jukiapp-"))
+}
+
+/// `X-KidsLine-*`/`X-SmartSitter-*`/`X-PigeonSitter-*`/`X-PoppinsSitter-*`/`X-BabysitterPro-*`/`X-BabysitterNavi-*`/`X-BabysitterCenter-*`/`X-BabysitterShop-*`/`X-BabysitterRescue-*`/`X-Babysitter24-*`/`X-BabysitterSmart-*`/`X-BabysitterFamily-*`/`X-BabysitterPlus-*`/`X-BabysitterMart-*`/`X-HoikuenNavi-*`/`X-HoikuenCenter-*`/`X-HoikuenShop-*`/`X-HoikuPro-*`/`X-HoikuDoctor-*`/`X-HoikuRescue-*`/`X-Hoiku24-*`/`X-HoikuMart-*`/`X-HoikuPlus-*`/`X-HoikuSmart-*`/`X-HoikuFamily-*`/`X-GakudouNavi-*`/`X-GakudouCenter-*`/`X-GakudouShop-*`/`X-GakudoPro-*`/`X-GakudoDoctor-*`/`X-GakudoRescue-*`/`X-Gakudo24-*`/`X-FamiSapo-*`/`X-Kodomoen-*`/`X-Hoikugo-*`/`X-Sodate-*`/`X-Honya-*`/`X-Honyaba-*`/`X-SitterNavi-*`/`X-SitterCenter-*`/`X-SitterShop-*`/`X-SitterPro-*`/`X-SitterDoctor-*`/`X-SitterRescue-*`/`X-Sitter24-*`/`X-NannyNavi-*`/`X-NannyCenter-*`/`X-NannyShop-*`/`X-NannyPro-*`/`X-NannyDoctor-*`/`X-NannyRescue-*`/`X-Nanny24-*`/`X-Kidsclub-*`/`X-KidsNavi-*`/`X-KidsCenter-*`/`X-KidsShop-*`/`X-KidsPro-*`/`X-KidsDoctor-*`/`X-KidsRescue-*`/`X-Kids24-*`/`X-NurseryNavi-*`/`X-NurseryCenter-*`/`X-NurseryShop-*`/`X-NurseryPro-*`/`X-NurseryDoctor-*`/`X-NurseryRescue-*`/`X-Nursery24-*`/`X-YochienNavi-*`/`X-YochienCenter-*`/`X-YochienShop-*`/`X-YochienPro-*`/`X-ChildcareNavi-*`/`X-ChildcareCenter-*`/`X-ChildcareShop-*`/`X-ChildcarePro-*` 等のベビーシッター・保育・学童印を送信側が自称する兆候を検出する
+fn has_babysitter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kidsline-")
+            || l.starts_with("x-smartsitter-")
+            || l.starts_with("x-pigeonsitter-")
+            || l.starts_with("x-poppinssitter-")
+            || l.starts_with("x-babysitterpro-")
+            || l.starts_with("x-babysitternavi-")
+            || l.starts_with("x-babysittercenter-")
+            || l.starts_with("x-babysittershop-")
+            || l.starts_with("x-babysitterrescue-")
+            || l.starts_with("x-babysitter24-")
+            || l.starts_with("x-babysittersmart-")
+            || l.starts_with("x-babysitterfamily-")
+            || l.starts_with("x-babysitterplus-")
+            || l.starts_with("x-babysittermart-")
+            || l.starts_with("x-hoikuennavi-")
+            || l.starts_with("x-hoikuencenter-")
+            || l.starts_with("x-hoikuenshop-")
+            || l.starts_with("x-hoikupro-")
+            || l.starts_with("x-hoikudoctor-")
+            || l.starts_with("x-hoikurescue-")
+            || l.starts_with("x-hoiku24-")
+            || l.starts_with("x-hoikumart-")
+            || l.starts_with("x-hoikuplus-")
+            || l.starts_with("x-hoikusmart-")
+            || l.starts_with("x-hoikufamily-")
+            || l.starts_with("x-gakudounavi-")
+            || l.starts_with("x-gakudoucenter-")
+            || l.starts_with("x-gakudoushop-")
+            || l.starts_with("x-gakudopro-")
+            || l.starts_with("x-gakudodoctor-")
+            || l.starts_with("x-gakudorescue-")
+            || l.starts_with("x-gakudo24-")
+            || l.starts_with("x-famisapo-")
+            || l.starts_with("x-kodomoen-")
+            || l.starts_with("x-hoikugo-")
+            || l.starts_with("x-sodate-")
+            || l.starts_with("x-honya-")
+            || l.starts_with("x-honyaba-")
+            || l.starts_with("x-sitternavi-")
+            || l.starts_with("x-sittercenter-")
+            || l.starts_with("x-sittershop-")
+            || l.starts_with("x-sitterpro-")
+            || l.starts_with("x-sitterdoctor-")
+            || l.starts_with("x-sitterrescue-")
+            || l.starts_with("x-sitter24-")
+            || l.starts_with("x-nannynavi-")
+            || l.starts_with("x-nannycenter-")
+            || l.starts_with("x-nannyshop-")
+            || l.starts_with("x-nannypro-")
+            || l.starts_with("x-nannydoctor-")
+            || l.starts_with("x-nannyrescue-")
+            || l.starts_with("x-nanny24-")
+            || l.starts_with("x-kidsclub-")
+            || l.starts_with("x-kidsnavi-")
+            || l.starts_with("x-kidscenter-")
+            || l.starts_with("x-kidsshop-")
+            || l.starts_with("x-kidspro-")
+            || l.starts_with("x-kidsdoctor-")
+            || l.starts_with("x-kidsrescue-")
+            || l.starts_with("x-kids24-")
+            || l.starts_with("x-nurserynavi-")
+            || l.starts_with("x-nurserycenter-")
+            || l.starts_with("x-nurseryshop-")
+            || l.starts_with("x-nurserypro-")
+            || l.starts_with("x-nurserydoctor-")
+            || l.starts_with("x-nurseryrescue-")
+            || l.starts_with("x-nursery24-")
+            || l.starts_with("x-yochiennavi-")
+            || l.starts_with("x-yochiencenter-")
+            || l.starts_with("x-yochienshop-")
+            || l.starts_with("x-yochienpro-")
+            || l.starts_with("x-childcarenavi-")
+            || l.starts_with("x-childcarecenter-")
+            || l.starts_with("x-childcareshop-")
+            || l.starts_with("x-childcarepro-"))
+}
+
+/// `X-Gengo-*`/`X-Wip-*`/`X-HonyakuGaisha-*`/`X-HonyakuPro-*`/`X-HonyakuNavi-*`/`X-HonyakuCenter-*`/`X-HonyakuShop-*`/`X-HonyakuRescue-*`/`X-Honyaku24-*`/`X-HonyakuMart-*`/`X-HonyakuPlus-*`/`X-HonyakuSmart-*`/`X-HonyakuFamily-*`/`X-TuuyakuPro-*`/`X-TuuyakuNavi-*`/`X-TuuyakuCenter-*`/`X-TuuyakuShop-*`/`X-TuuyakuRescue-*`/`X-Tuuyaku24-*`/`X-Tsuyaku-*`/`X-TranslatePro-*`/`X-TranslateDoctor-*`/`X-TranslateNavi-*`/`X-TranslateCenter-*`/`X-TranslateShop-*`/`X-TranslateRescue-*`/`X-Translate24-*`/`X-Jyuuinsai-*`/`X-Gengo24-*`/`X-LocalizationPro-*`/`X-LocalizeShop-*`/`X-LocalizationNavi-*`/`X-InterpreterNavi-*`/`X-InterpreterCenter-*`/`X-InterpreterShop-*`/`X-InterpreterPro-*`/`X-InterpreterDoctor-*`/`X-InterpreterRescue-*`/`X-Interpreter24-*`/`X-TranslatorNavi-*`/`X-TranslatorCenter-*`/`X-TranslatorShop-*`/`X-TranslatorPro-*`/`X-TranslatorDoctor-*`/`X-TranslatorRescue-*`/`X-Translator24-*`/`X-Unbabel-*`/`X-Smartcat-*`/`X-Lionbridge-*`/`X-Transperfect-*`/`X-SdlTranslate-*`/`X-KeywordsStudios-*`/`X-RwsGroup-*`/`X-Alconost-*`/`X-BestEnglish-*`/`X-Togoal-*`/`X-Intergroup-*`/`X-TranslationMall-*`/`X-Osimira-*`/`X-FeloStaff-*`/`X-Juuroku-*`/`X-TenPrint-*`/`X-Koboweb-*`/`X-HonyakuPlan-*`/`X-Sunflare-*`/`X-Sanki-*`/`X-Daikaigo-*`/`X-Multipath-*`/`X-Occam-*`/`X-CascadeTranslations-*`/`X-HonyakuMart-*`/`X-TokyoHonyaku-*`/`X-OsakaHonyaku-*`/`X-NagoyaHonyaku-*`/`X-FukuokaHonyaku-*`/`X-HokkaidoHonyaku-*`/`X-SendaiHonyaku-*`/`X-HiroshimaHonyaku-*`/`X-KobeHonyaku-*`/`X-KyotoHonyaku-*`/`X-YokohamaHonyaku-*` 等の翻訳・通訳印を送信側が自称する兆候を検出する
+fn has_translation_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-gengo-")
+            || l.starts_with("x-wip-")
+            || l.starts_with("x-honyakugaisha-")
+            || l.starts_with("x-honyakupro-")
+            || l.starts_with("x-honyakunavi-")
+            || l.starts_with("x-honyakucenter-")
+            || l.starts_with("x-honyakushop-")
+            || l.starts_with("x-honyakurescue-")
+            || l.starts_with("x-honyaku24-")
+            || l.starts_with("x-honyakumart-")
+            || l.starts_with("x-honyakuplus-")
+            || l.starts_with("x-honyakusmart-")
+            || l.starts_with("x-honyakufamily-")
+            || l.starts_with("x-tuuyakupro-")
+            || l.starts_with("x-tuuyakunavi-")
+            || l.starts_with("x-tuuyakucenter-")
+            || l.starts_with("x-tuuyakushop-")
+            || l.starts_with("x-tuuyakurescue-")
+            || l.starts_with("x-tuuyaku24-")
+            || l.starts_with("x-tsuyaku-")
+            || l.starts_with("x-translatepro-")
+            || l.starts_with("x-translatedoctor-")
+            || l.starts_with("x-translatenavi-")
+            || l.starts_with("x-translatecenter-")
+            || l.starts_with("x-translateshop-")
+            || l.starts_with("x-translaterescue-")
+            || l.starts_with("x-translate24-")
+            || l.starts_with("x-jyuuinsai-")
+            || l.starts_with("x-gengo24-")
+            || l.starts_with("x-localizationpro-")
+            || l.starts_with("x-localizeshop-")
+            || l.starts_with("x-localizationnavi-")
+            || l.starts_with("x-interpreternavi-")
+            || l.starts_with("x-interpretercenter-")
+            || l.starts_with("x-interpretershop-")
+            || l.starts_with("x-interpreterpro-")
+            || l.starts_with("x-interpreterdoctor-")
+            || l.starts_with("x-interpreterrescue-")
+            || l.starts_with("x-interpreter24-")
+            || l.starts_with("x-translatornavi-")
+            || l.starts_with("x-translatorcenter-")
+            || l.starts_with("x-translatorshop-")
+            || l.starts_with("x-translatorpro-")
+            || l.starts_with("x-translatordoctor-")
+            || l.starts_with("x-translatorrescue-")
+            || l.starts_with("x-translator24-")
+            || l.starts_with("x-unbabel-")
+            || l.starts_with("x-smartcat-")
+            || l.starts_with("x-lionbridge-")
+            || l.starts_with("x-transperfect-")
+            || l.starts_with("x-sdltranslate-")
+            || l.starts_with("x-keywordsstudios-")
+            || l.starts_with("x-rwsgroup-")
+            || l.starts_with("x-alconost-")
+            || l.starts_with("x-bestenglish-")
+            || l.starts_with("x-togoal-")
+            || l.starts_with("x-intergroup-")
+            || l.starts_with("x-translationmall-")
+            || l.starts_with("x-osimira-")
+            || l.starts_with("x-felostaff-")
+            || l.starts_with("x-juuroku-")
+            || l.starts_with("x-tenprint-")
+            || l.starts_with("x-koboweb-")
+            || l.starts_with("x-honyakuplan-")
+            || l.starts_with("x-sunflare-")
+            || l.starts_with("x-sanki-")
+            || l.starts_with("x-daikaigo-")
+            || l.starts_with("x-multipath-")
+            || l.starts_with("x-occam-")
+            || l.starts_with("x-cascadetranslations-")
+            || l.starts_with("x-honyakumart-")
+            || l.starts_with("x-tokyohonyaku-")
+            || l.starts_with("x-osakahonyaku-")
+            || l.starts_with("x-nagoyahonyaku-")
+            || l.starts_with("x-fukuokahonyaku-")
+            || l.starts_with("x-hokkaidohonyaku-")
+            || l.starts_with("x-sendaihonyaku-")
+            || l.starts_with("x-hiroshimahonyaku-")
+            || l.starts_with("x-kobehonyaku-")
+            || l.starts_with("x-kyotohonyaku-")
+            || l.starts_with("x-yokohamahonyaku-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -22169,4 +22415,57 @@ X-Other: 1
 body";
     assert!(!has_cultureschool_marks(clean));
 }
+    #[test]
+    fn scan_は家機印を検出する() {
+        for raw in [
+            br"X-AirConRepair-Alert: 1",
+            br"X-FridgeFix-Notice: 1",
+            br"X-WasherRepair-Info: 1",
+            br"X-KadenShuuri-Report: 1",
+            br"X-ApplianceFix-Bulletin: 1",
+            br"X-AppliancePro-News: 1",
+            br"X-DaikinApp-Flash: 1",
+            br"X-MideaApp-Release: 1",
+        ] {
+            assert!(has_appliancerepair_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_appliancerepair_marks(clean));
+    }
+
+    #[test]
+    fn scan_は育機印を検出する() {
+        for raw in [
+            br"X-KidsLine-Alert: 1",
+            br"X-SmartSitter-Notice: 1",
+            br"X-PigeonSitter-Info: 1",
+            br"X-PoppinsSitter-Report: 1",
+            br"X-BabysitterPro-Bulletin: 1",
+            br"X-HoikuenNavi-News: 1",
+            br"X-GakudoNavi-Flash: 1",
+            br"X-FamiSapo-Release: 1",
+        ] {
+            assert!(has_babysitter_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_babysitter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は訳機印を検出する() {
+        for raw in [
+            br"X-Gengo-Alert: 1",
+            br"X-Wip-Notice: 1",
+            br"X-HonyakuPro-Info: 1",
+            br"X-TuuyakuPro-Report: 1",
+            br"X-TranslatePro-Bulletin: 1",
+            br"X-InterpreterNavi-News: 1",
+            br"X-TranslatorPro-Flash: 1",
+            br"X-Unbabel-Release: 1",
+        ] {
+            assert!(has_translation_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_translation_marks(clean));
+    }
 }
