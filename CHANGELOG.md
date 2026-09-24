@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D794: `X-Hakajimai-*`/`X-Kaisou-*`/`X-Hakasouji-*`/`X-Graveremoval-*`/`X-Graveclosure-*`/`X-Gravesite-*` 等の墓じまい・改葬印自称が未検査
+
+- **問題**: `X-Hakajimai-*`/`X-HakajimaiYasan-*`/`X-HakajimaiPro-*`/`X-HakajimaiTeam-*`/`X-HakajimaiJP-*`/`X-HakajimaiSenmon-*`/`X-Kaisou-*`/`X-KaisouYasan-*`/`X-KaisouPro-*`/`X-KaisouTeam-*`/`X-KaisouJP-*`/`X-KaisouSenmon-*`/`X-Hakasouji-*`/`X-HakasoujiYasan-*`/`X-HakasoujiPro-*`/`X-HakasoujiTeam-*`/`X-HakasoujiJP-*`/`X-HakasoujiSenmon-*`/`X-GraveremovalPros-*`/`X-GraveremovalTeam-*`/`X-GraveremovalWorks-*`/`X-GraveremovalExperts-*`/`X-GraveremovalSvc-*`/`X-GraveremovalHQ-*`/`X-GraveclosurePros-*`/`X-GraveclosureTeam-*`/`X-GraveclosureWorks-*`/`X-GraveclosureExperts-*`/`X-GraveclosureSvc-*`/`X-GraveclosureHQ-*`/`X-GravesitePros-*`/`X-GravesiteTeam-*`/`X-GravesiteWorks-*`/`X-GravesiteExperts-*`/`X-GravesiteSvc-*`/`X-GravesiteHQ-*` 等 は改機の通知記録 — 送信側が書くことは自称。墓じまい・改葬・墓掃除業者の偽装は、撤去費・改葬許可申請費を装ったなりすましの典型手口。(葬儀は funeral 機、墓石は sekihi 機、霊園は reien 機、散骨は sankotsu 機で検出済み)
+- **修正**: `Envelope` に `hakajimai_marks` + `has_hakajimai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 改印の自署を問え。
+
+### Security — D795: `X-Seinenkouken-*`/`X-Kouken-*`/`X-Kazokushintaku-*`/`X-Guardianship-*`/`X-Adultguardian-*`/`X-Conservatorship-*` 等の成年後見・家族信託印自称が未検査
+
+- **問題**: `X-Seinenkouken-*`/`X-SeinenkoukenYasan-*`/`X-SeinenkoukenPro-*`/`X-SeinenkoukenTeam-*`/`X-SeinenkoukenJP-*`/`X-SeinenkoukenSenmon-*`/`X-Kouken-*`/`X-KoukenYasan-*`/`X-KoukenPro-*`/`X-KoukenTeam-*`/`X-KoukenJP-*`/`X-KoukenSenmon-*`/`X-Kazokushintaku-*`/`X-KazokushintakuYasan-*`/`X-KazokushintakuPro-*`/`X-KazokushintakuTeam-*`/`X-KazokushintakuJP-*`/`X-KazokushintakuSenmon-*`/`X-GuardianshipPros-*`/`X-GuardianshipTeam-*`/`X-GuardianshipWorks-*`/`X-GuardianshipExperts-*`/`X-GuardianshipSvc-*`/`X-GuardianshipHQ-*`/`X-AdultguardianPros-*`/`X-AdultguardianTeam-*`/`X-AdultguardianWorks-*`/`X-AdultguardianExperts-*`/`X-AdultguardianSvc-*`/`X-AdultguardianHQ-*`/`X-ConservatorshipPros-*`/`X-ConservatorshipTeam-*`/`X-ConservatorshipWorks-*`/`X-ConservatorshipExperts-*`/`X-ConservatorshipSvc-*`/`X-ConservatorshipHQ-*` 等 は後機の通知記録 — 送信側が書くことは自称。成年後見申立・家族信託組成の代行業者の偽装は、申立費用・信託報酬を装ったなりすましの典型手口。(司法書士は shihoshoshi 機、弁護士は legal 機、遺品整理は ihinseiri 機で検出済み)
+- **修正**: `Envelope` に `kouken_marks` + `has_kouken_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 後印の自署を問え。
+
+### Security — D796: `X-Rikon-*`/`X-Rikonsoudan-*`/`X-Shinkensoudan-*`/`X-Divorce-*`/`X-Divorceattorney-*`/`X-Familylaw-*` 等の離婚・親権相談印自称が未検査
+
+- **問題**: `X-Rikon-*`/`X-RikonYasan-*`/`X-RikonPro-*`/`X-RikonTeam-*`/`X-RikonJP-*`/`X-RikonSenmon-*`/`X-Rikonsoudan-*`/`X-RikonsoudanYasan-*`/`X-RikonsoudanPro-*`/`X-RikonsoudanTeam-*`/`X-RikonsoudanJP-*`/`X-RikonsoudanSenmon-*`/`X-Shinkensoudan-*`/`X-ShinkensoudanYasan-*`/`X-ShinkensoudanPro-*`/`X-ShinkensoudanTeam-*`/`X-ShinkensoudanJP-*`/`X-ShinkensoudanSenmon-*`/`X-DivorcePros-*`/`X-DivorceTeam-*`/`X-DivorceWorks-*`/`X-DivorceExperts-*`/`X-DivorceSvc-*`/`X-DivorceHQ-*`/`X-DivorceattorneyPros-*`/`X-DivorceattorneyTeam-*`/`X-DivorceattorneyWorks-*`/`X-DivorceattorneyExperts-*`/`X-DivorceattorneySvc-*`/`X-DivorceattorneyHQ-*`/`X-FamilylawPros-*`/`X-FamilylawTeam-*`/`X-FamilylawWorks-*`/`X-FamilylawExperts-*`/`X-FamilylawSvc-*`/`X-FamilylawHQ-*` 等 は離機の通知記録 — 送信側が書くことは自称。離婚・親権・養育費相談業者の偽装は、相談料・調停申立費を装ったなりすましの典型手口。(弁護士は legal 機、探偵は detective 機、婚活は konkatsu 機で検出済み)
+- **修正**: `Envelope` に `rikon_marks` + `has_rikon_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 離印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
