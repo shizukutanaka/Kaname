@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-RoofMaxx-*`/`X-OwensCorning-*`/`X-DaBella-*`/`X-ErieHome-*`/`X-Amamori-*`/`X-YaneShuuri-*` 等 — 屋根修理・雨漏り機印自称
+    pub roofing_marks: bool,
+    /// `X-OverheadDoor-*`/`X-PrecisionDoor-*`/`X-A1Garage-*`/`X-LiftMaster-*`/`X-ShutterShuuri-*`/`X-GarageDoorGuy-*` 等 — ガレージドア・シャッター機印自称
+    pub garagedoor_marks: bool,
+    /// `X-AAATowing-*`/`X-Agero-*`/`X-Urgently-*`/`X-Honk-*`/`X-JAF-*`/`X-TowTruck-*`/`X-HookAndBook-*` 等 — レッカー・ロードサービス機印自称
+    pub towing_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        roofing_marks: has_roofing_marks(hdr),
+        garagedoor_marks: has_garagedoor_marks(hdr),
+        towing_marks: has_towing_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,213 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D638: 屋根修理・雨漏り機印の自称を検出する。
+///
+/// `X-RoofMaxx-*`/`X-OwensCorning-*`/`X-GAFCertified-*`/`X-DaBella-*`/
+/// `X-ErieHome-*`/`X-PowerHome-*`/`X-JasperContracting-*`/`X-AspenContracting-*`/
+/// `X-CMRConstruction-*`/`X-AmericanHomeContractors-*`/`X-RoofClaim-*`/
+/// `X-RoofClaimPros-*`/`X-NationsRoof-*`/`X-SimonRoofing-*`/`X-TectaAmerica-*`/
+/// `X-Centimark-*`/`X-AdvancedRoofing-*`/`X-EliteRoofing-*`/`X-RoofingPros-*`/
+/// `X-AceRoofing-*`/`X-SkylineRoofing-*`/`X-PinnacleRoofing-*`/`X-AsphaltRoofing-*`/
+/// `X-TileRoofing-*`/`X-MetalRoofing-*`/`X-StormDamage-*`/`X-HailDamage-*`/
+/// `X-RoofInspection-*`/`X-Amamori-*`/`X-AmamoriShuuri-*`/`X-YaneShuuri-*`/
+/// `X-YaneKouji-*`/`X-YaneYasan-*`/`X-YaneKozo-*`/`X-YaneHonpo-*`/`X-Ukiya-*`/
+/// `X-Kayaba-*`/`X-YaneKen-*`/`X-YaneSupport-*`/`X-RoofDrs-*`/`X-RoofWorks-*`
+/// 等の屋根修理・雨漏り機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。無料点検・火災保険適用勧誘・雨漏り急ぎ修理・
+/// 台風被害見積の偽装は屋根業者なりすましの典型手口 (火災保険悪用詐欺の温床)。
+/// 屋印の自署は兆候として数える。
+/// (住宅メーカー・建材は housing 機、災害復旧一式は restoration 機で検出済み)
+fn has_roofing_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-roofmaxx-")
+            || l.starts_with("x-owenscorning-")
+            || l.starts_with("x-gafcertified-")
+            || l.starts_with("x-gaf-certified-")
+            || l.starts_with("x-dabella-")
+            || l.starts_with("x-eriehome-")
+            || l.starts_with("x-powerhome-")
+            || l.starts_with("x-jaspercontracting-")
+            || l.starts_with("x-aspencontracting-")
+            || l.starts_with("x-cmrconstruction-")
+            || l.starts_with("x-americanhomecontractors-")
+            || l.starts_with("x-roofclaim-")
+            || l.starts_with("x-roofclaimpros-")
+            || l.starts_with("x-nationsroof-")
+            || l.starts_with("x-simonroofing-")
+            || l.starts_with("x-tectaamerica-")
+            || l.starts_with("x-centimark-")
+            || l.starts_with("x-advancedroofing-")
+            || l.starts_with("x-eliteroofing-")
+            || l.starts_with("x-roofingpros-")
+            || l.starts_with("x-aceroofing-")
+            || l.starts_with("x-skylineroofing-")
+            || l.starts_with("x-pinnacleroofing-")
+            || l.starts_with("x-asphaltroofing-")
+            || l.starts_with("x-tileroofing-")
+            || l.starts_with("x-metalroofing-")
+            || l.starts_with("x-stormdamage-")
+            || l.starts_with("x-haildamage-")
+            || l.starts_with("x-roofinspection-")
+            || l.starts_with("x-amamori-")
+            || l.starts_with("x-amamorishuuri-")
+            || l.starts_with("x-yaneshuuri-")
+            || l.starts_with("x-yanekouji-")
+            || l.starts_with("x-yaneyasan-")
+            || l.starts_with("x-yanekozo-")
+            || l.starts_with("x-yanehonpo-")
+            || l.starts_with("x-ukiya-")
+            || l.starts_with("x-kayaba-")
+            || l.starts_with("x-yaneken-")
+            || l.starts_with("x-yanesupport-")
+            || l.starts_with("x-roofdrs-")
+            || l.starts_with("x-roofworks-")
+            || l.starts_with("x-yanegumi-")
+            || l.starts_with("x-itaneyane-")
+    })
+}
+
+/// D639: ガレージドア・シャッター機印の自称を検出する。
+///
+/// `X-OverheadDoor-*`/`X-PrecisionDoor-*`/`X-A1Garage-*`/`X-A1GarageDoor-*`/
+/// `X-GarageDoors-*`/`X-GarageDoorPros-*`/`X-GarageDoorGuy-*`/`X-ProDoor-*`/
+/// `X-ProDoorServices-*`/`X-LiftMaster-*`/`X-Amarr-*`/`X-Clopay-*`/`X-WayneDalton-*`/
+/// `X-CHIDoor-*`/`X-GarageExperts-*`/`X-SameDayDoor-*`/`X-ExpressDoor-*`/
+/// `X-ABCDoor-*`/`X-AllProDoor-*`/`X-AnytimeDoors-*`/
+/// `X-DoorMasters-*`/`X-DoorDoctor-*`/`X-SpringRepair-*`/`X-GarageSpring-*`/
+/// `X-RollUpDoor-*`、JP は `X-ShutterShuuri-*`/`X-ShutterKouji-*`/`X-ShutterYasan-*`/
+/// `X-GarageDoor-*`/`X-ShatterShuuri-*`/`X-JidoshaDoor-*`/`X-GarageKouji-*`/
+/// `X-DoorShuuri-*`/`X-ShutterSupport-*`/`X-JiDoor-*`/`X-Carport-*` 等の
+/// ガレージドア・シャッター機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。スプリング交換・緊急開錠・リモコン故障・
+/// 無料点検勧誘の偽装はガレージドア業者なりすましの典型手口 (深夜割増請求詐欺で有名)。
+/// 扉印の自署は兆候として数える。
+/// (鍵屋・錠前は locksmith 機、住宅建材は housing 機で検出済み)
+fn has_garagedoor_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-overheaddoor-")
+            || l.starts_with("x-precisiondoor-")
+            || l.starts_with("x-a1garage-")
+            || l.starts_with("x-a1garagedoor-")
+            || l.starts_with("x-garagedoors-")
+            || l.starts_with("x-garagedoorpros-")
+            || l.starts_with("x-garagedoorguy-")
+            || l.starts_with("x-prodoor-")
+            || l.starts_with("x-prodoorservices-")
+            || l.starts_with("x-liftmaster-")
+            || l.starts_with("x-amarr-")
+            || l.starts_with("x-clopay-")
+            || l.starts_with("x-waynedalton-")
+            || l.starts_with("x-chidoor-")
+            || l.starts_with("x-garageexperts-")
+            || l.starts_with("x-samedaydoor-")
+            || l.starts_with("x-expressdoor-")
+            || l.starts_with("x-abcdoor-")
+            || l.starts_with("x-allprodoor-")
+            || l.starts_with("x-anytimdoors-")
+            || l.starts_with("x-anytimedoors-")
+            || l.starts_with("x-doormasters-")
+            || l.starts_with("x-doordoctor-")
+            || l.starts_with("x-springrepair-")
+            || l.starts_with("x-garagespring-")
+            || l.starts_with("x-rollupdoor-")
+            || l.starts_with("x-shuttershuuri-")
+            || l.starts_with("x-shutterkouji-")
+            || l.starts_with("x-shutteryasan-")
+            || l.starts_with("x-garagedoor-")
+            || l.starts_with("x-shattershuuri-")
+            || l.starts_with("x-jidoshadoor-")
+            || l.starts_with("x-garagekouji-")
+            || l.starts_with("x-doorshuuri-")
+            || l.starts_with("x-shuttersupport-")
+            || l.starts_with("x-jidoor-")
+            || l.starts_with("x-carport-")
+            || l.starts_with("x-garagedoorexperts-")
+    })
+}
+
+/// D640: レッカー・ロードサービス機印の自称を検出する。
+///
+/// `X-AAATowing-*`/`X-AAARoadService-*`/`X-AAATow-*`/`X-Agero-*`/`X-Urgently-*`/
+/// `X-Honk-*`/`X-TowTruck-*`/`X-TowTruckPros-*`/`X-TowingPros-*`/`X-TowDispatch-*`/
+/// `X-CitywideTowing-*`/`X-HookAndBook-*`/`X-SpeedsG-*`/`X-Juntos-*`/`X-TowPro-*`/
+/// `X-24HourTowing-*`/`X-QuickTowing-*`/`X-FastTowing-*`/`X-EmergencyTow-*`/
+/// `X-FlatbedTow-*`/`X-WinchOut-*`/`X-LockoutService-*`/`X-JumpStart-*`/
+/// `X-TireChange-*`/`X-FuelDelivery-*`/`X-RoadSide-*`/`X-RoadsideAssist-*`/
+/// `X-RoadsideHelp-*`、JP は `X-JAF-*`/`X-RoadService-*`/`X-RoadService24-*`/
+/// `X-Rekka-*`/`X-Lekka-*`/`X-TowService-*`/`X-JikoShien-*`/`X-BatteryKoukan-*`/
+/// `X-TirePuncture-*`/`X-PankuShien-*`/`X-KagiTomari-*`/`X-Funanori-*` 等の
+/// レッカー・ロードサービス機印はいずれも「この機が通知した」という通知記録であり、
+/// 送信側が書くことは自称にすぎない。バッテリー上がり・タイヤパンク・キー閉じ込み・
+/// 事故車両撤去費用・偽ロードサービス代行料の偽装はレッカー業者なりすましの典型手口
+/// (駐車場偽レッカー・過剰請求の典型)。牽印の自署は兆候として数える。
+/// (自動車保険は insurance 機、整備・車検は autoservice 機、レンタカーは automotive 機で検出済み)
+fn has_towing_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-aaatowing-")
+            || l.starts_with("x-aaaroadservice-")
+            || l.starts_with("x-aaatow-")
+            || l.starts_with("x-agero-")
+            || l.starts_with("x-urgently-")
+            || l.starts_with("x-honk-")
+            || l.starts_with("x-towtruck-")
+            || l.starts_with("x-towtruckpros-")
+            || l.starts_with("x-towingpros-")
+            || l.starts_with("x-towdispatch-")
+            || l.starts_with("x-citywidetowing-")
+            || l.starts_with("x-hookandbook-")
+            || l.starts_with("x-speedsg-")
+            || l.starts_with("x-juntos-")
+            || l.starts_with("x-towpro-")
+            || l.starts_with("x-24hourtowing-")
+            || l.starts_with("x-quicktowing-")
+            || l.starts_with("x-fasttowing-")
+            || l.starts_with("x-emergencytow-")
+            || l.starts_with("x-flatbedtow-")
+            || l.starts_with("x-winchout-")
+            || l.starts_with("x-lockoutservice-")
+            || l.starts_with("x-jumpstart-")
+            || l.starts_with("x-tirechange-")
+            || l.starts_with("x-fueldelivery-")
+            || l.starts_with("x-roadside-")
+            || l.starts_with("x-roadsideassist-")
+            || l.starts_with("x-roadsidehelp-")
+            || l.starts_with("x-jaf-")
+            || l.starts_with("x-roadservice-")
+            || l.starts_with("x-roadservice24-")
+            || l.starts_with("x-rekka-")
+            || l.starts_with("x-lekka-")
+            || l.starts_with("x-towservice-")
+            || l.starts_with("x-jikoshien-")
+            || l.starts_with("x-batterykoukan-")
+            || l.starts_with("x-tirepuncture-")
+            || l.starts_with("x-pankushien-")
+            || l.starts_with("x-kagitomari-")
+            || l.starts_with("x-funanori-")
+            || l.starts_with("x-towing-")
+            || l.starts_with("x-tow24-")
+            || l.starts_with("x-pitstop-")
+            || l.starts_with("x-rescuetow-")
+            || l.starts_with("x-ace-towing-")
+            || l.starts_with("x-acetowing-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20857,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は屋機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-RoofMaxx-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-OwensCorning-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Amamori-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-YaneShuuri-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Centimark-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RoofingPros-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-YaneHonpo-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-StormDamage-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_roofing_marks(raw));
+        }
+        assert!(!has_roofing_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は扉機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-OverheadDoor-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PrecisionDoor-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ShutterShuuri-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-A1Garage-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LiftMaster-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GarageDoors-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-DoorShuuri-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RollUpDoor-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_garagedoor_marks(raw));
+        }
+        assert!(!has_garagedoor_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は牽機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-AAATowing-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-JAF-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Rekka-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Urgently-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TowTruck-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RoadService-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-PankuShien-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-EmergencyTow-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_towing_marks(raw));
+        }
+        assert!(!has_towing_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }

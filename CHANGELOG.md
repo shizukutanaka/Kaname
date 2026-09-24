@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D638: `X-RoofMaxx-*`/`X-OwensCorning-*`/`X-Amamori-*`/`X-YaneShuuri-*` 等の屋根修理・雨漏り印自称が未検査
+
+- **問題**: `X-RoofMaxx-*`/`X-OwensCorning-*`/`X-GAFCertified-*`/`X-DaBella-*`/`X-ErieHome-*`/`X-PowerHome-*`/`X-JasperContracting-*`/`X-AspenContracting-*`/`X-CMRConstruction-*`/`X-RoofClaim-*`/`X-NationsRoof-*`/`X-SimonRoofing-*`/`X-TectaAmerica-*`/`X-Centimark-*`/`X-AdvancedRoofing-*`/`X-EliteRoofing-*`/`X-RoofingPros-*`/`X-AceRoofing-*`/`X-SkylineRoofing-*`/`X-PinnacleRoofing-*`/`X-AsphaltRoofing-*`/`X-TileRoofing-*`/`X-MetalRoofing-*`/`X-StormDamage-*`/`X-HailDamage-*`/`X-RoofInspection-*`、JP は `X-Amamori-*`/`X-AmamoriShuuri-*`/`X-YaneShuuri-*`/`X-YaneKouji-*`/`X-YaneYasan-*`/`X-YaneKozo-*`/`X-YaneHonpo-*`/`X-Ukiya-*`/`X-YaneKen-*`/`X-YaneSupport-*`/`X-YaneGumi-*`/`X-RoofDrs-*`/`X-RoofWorks-*` 等 は屋機の通知記録 — 送信側が書くことは自称。無料点検・火災保険適用勧誘・雨漏り急ぎ修理・台風被害見積の偽装は屋根業者なりすましの典型手口 (火災保険悪用詐欺の温床)。(住宅メーカーは housing 機、災害復旧一式は restoration 機で検出済み)
+- **修正**: `Envelope` に `roofing_marks` + `has_roofing_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 屋印の自署を問え。
+
+### Security — D639: `X-OverheadDoor-*`/`X-PrecisionDoor-*`/`X-A1Garage-*`/`X-ShutterShuuri-*` 等のガレージドア・シャッター印自称が未検査
+
+- **問題**: `X-OverheadDoor-*`/`X-PrecisionDoor-*`/`X-A1Garage-*`/`X-GarageDoors-*`/`X-GarageDoorPros-*`/`X-GarageDoorGuy-*`/`X-ProDoor-*`/`X-LiftMaster-*`/`X-Amarr-*`/`X-Clopay-*`/`X-WayneDalton-*`/`X-CHIDoor-*`/`X-GarageExperts-*`/`X-SameDayDoor-*`/`X-ExpressDoor-*`/`X-ABCDoor-*`/`X-AllProDoor-*`/`X-AnytimeDoors-*`/`X-DoorMasters-*`/`X-DoorDoctor-*`/`X-SpringRepair-*`/`X-GarageSpring-*`/`X-RollUpDoor-*`、JP は `X-ShutterShuuri-*`/`X-ShutterKouji-*`/`X-ShutterYasan-*`/`X-GarageDoor-*`/`X-ShatterShuuri-*`/`X-GarageKouji-*`/`X-DoorShuuri-*`/`X-ShutterSupport-*`/`X-JiDoor-*`/`X-Carport-*` 等 は扉機の通知記録 — 送信側が書くことは自称。スプリング交換・緊急開錠・リモコン故障・深夜割増請求の偽装はガレージドア業者なりすましの典型手口。(鍵屋は locksmith 機、住宅建材は housing 機で検出済み)
+- **修正**: `Envelope` に `garagedoor_marks` + `has_garagedoor_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 扉印の自署を問え。
+
+### Security — D640: `X-AAATowing-*`/`X-JAF-*`/`X-Rekka-*`/`X-Urgently-*` 等のレッカー・ロードサービス印自称が未検査
+
+- **問題**: `X-AAATowing-*`/`X-AAARoadService-*`/`X-AAATow-*`/`X-Agero-*`/`X-Urgently-*`/`X-Honk-*`/`X-TowTruck-*`/`X-TowTruckPros-*`/`X-TowingPros-*`/`X-TowDispatch-*`/`X-CitywideTowing-*`/`X-HookAndBook-*`/`X-SpeedsG-*`/`X-Juntos-*`/`X-TowPro-*`/`X-24HourTowing-*`/`X-QuickTowing-*`/`X-EmergencyTow-*`/`X-FlatbedTow-*`/`X-WinchOut-*`/`X-LockoutService-*`/`X-JumpStart-*`/`X-TireChange-*`/`X-FuelDelivery-*`/`X-RoadsideAssist-*`/`X-RoadsideHelp-*`、JP は `X-JAF-*`/`X-RoadService-*`/`X-RoadService24-*`/`X-Rekka-*`/`X-Lekka-*`/`X-TowService-*`/`X-JikoShien-*`/`X-BatteryKoukan-*`/`X-TirePuncture-*`/`X-PankuShien-*`/`X-KagiTomari-*`/`X-Funanori-*`/`X-Towing-*`/`X-Tow24-*`/`X-RescueTow-*`/`X-AceTowing-*` 等 は牽機の通知記録 — 送信側が書くことは自称。バッテリー上がり・パンク・キー閉じ込み・事故車両撤去費用・偽代行料の偽装はレッカー業者なりすましの典型手口。(自動車保険は insurance 機、整備は autoservice 機、レンタカーは automotive 機で検出済み)
+- **修正**: `Envelope` に `towing_marks` + `has_towing_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 牽印の自署を問え。
+
 ### Security — D611: `X-UCan-*`/`X-TACShool-*`/`X-OharaSchool-*` 等の資格スクール・通信講座印自称が未検査
 
 - **問題**: `X-UCan-*` (ユーキャン)、`X-TACShool-*` (TAC)、`X-OharaSchool-*` (大原)、`X-LECShikaku-*`/`X-Creair-*`/`X-Foresight-*`/`X-Studing-*`/`X-Agaroot-*`/`X-HumanAcademy-*`/`X-ShikakuGetto-*`/`X-BokiSchool-*`/`X-TakkenSchool-*`/`X-SharoshiSchool-*`/`X-GyoseiSchool-*`/`X-ShihoshoshiSchool-*`/`X-FPSchool-*`/`X-ItPassport-*`/`X-ShikakuTaizen-*`/`X-ShikakuDaigaku-*`/`X-ShikakuChannel-*`/`X-ShikakuKing-*`/`X-ShikakuNavi-*`/`X-ManseiShikaku-*`/`X-ShikakuMaster-*`/`X-SomuKentei-*`/`X-BusinessKentei-*`/`X-MosKentei-*`/`X-ToeicSchool-*`/`X-EikenKentei-*`/`X-Kanken-*`/`X-Suuken-*`/`X-ZenkenKentei-*`/`X-HokenKentei-*`/`X-OfficeKentei-*`/`X-WebDesignKentei-*`/`X-ColorKentei-*`/`X-FashionKentei-*`/`X-FoodKentei-*`/`X-SakeKentei-*`/`X-WineKentei-*`/`X-CoffeeKentei-*`/`X-TeaKentei-*`/`X-FortuneKentei-*`/`X-PetKentei-*`/`X-NailKentei-*`/`X-CleaningKentei-*`/`X-StorageKentei-*`/`X-HealthKentei-*`/`X-MentalKentei-*`/`X-WordKentei-*`/`X-EnglishKentei-*`/`X-ItKentei-*`/`X-StatKentei-*`/`X-GyoumuKentei-*`/`X-LegalKentei-*`/`X-KaigoKentei-*`/`X-IryoKentei-*`/`X-KangoKentei-*` 等 は検機の通知記録 — 送信側が書くことは自称。合格発表・教材費・受講料の偽装は資格取得詐欺の典型手口。(塾・予備校機は D605、学習教材機は D532)
