@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub akiya_marks: bool,
+    pub franchise_marks: bool,
+    pub mlm_marks: bool,
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
@@ -2233,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        akiya_marks: has_akiya_marks(hdr),
+        franchise_marks: has_franchise_marks(hdr),
+        mlm_marks: has_mlm_marks(hdr),
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
@@ -12830,6 +12836,179 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_akiya_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-akiya-")
+            || l.starts_with("x-akiyayasan-")
+            || l.starts_with("x-akiyapro-")
+            || l.starts_with("x-akiyateam-")
+            || l.starts_with("x-akiyakensa-")
+            || l.starts_with("x-akiyamanten-")
+            || l.starts_with("x-akiyanomi-")
+            || l.starts_with("x-akiyajp-")
+            || l.starts_with("x-akiyasenmon-")
+            || l.starts_with("x-akiyamitsumori-")
+            || l.starts_with("x-akiyachousa-")
+            || l.starts_with("x-akiyateiki-")
+            || l.starts_with("x-akiyashuri-")
+            || l.starts_with("x-akiyakanri-")
+            || l.starts_with("x-akiyakanriyasan-")
+            || l.starts_with("x-akiyakanripro-")
+            || l.starts_with("x-akiyakanriteam-")
+            || l.starts_with("x-akiyakanrikensa-")
+            || l.starts_with("x-akiyakanrimanten-")
+            || l.starts_with("x-akiyakanrinomi-")
+            || l.starts_with("x-akiyakanrijp-")
+            || l.starts_with("x-akiyakanrisenmon-")
+            || l.starts_with("x-akiyakanrimitsumori-")
+            || l.starts_with("x-akiyakanrichousa-")
+            || l.starts_with("x-akiyabank-")
+            || l.starts_with("x-akiyabankyasan-")
+            || l.starts_with("x-akiyabankpro-")
+            || l.starts_with("x-akiyabankteam-")
+            || l.starts_with("x-akiyabankjp-")
+            || l.starts_with("x-akiyabanksenmon-")
+            || l.starts_with("x-vacanthomepros-")
+            || l.starts_with("x-vacanthometeam-")
+            || l.starts_with("x-vacanthomeworks-")
+            || l.starts_with("x-vacanthomeexperts-")
+            || l.starts_with("x-vacanthomesvc-")
+            || l.starts_with("x-vacanthomehq-")
+            || l.starts_with("x-vacantpropertypros-")
+            || l.starts_with("x-vacantpropertyteam-")
+            || l.starts_with("x-vacantpropertyworks-")
+            || l.starts_with("x-vacantpropertyexperts-")
+            || l.starts_with("x-akiyapros-")
+            || l.starts_with("x-akiyaworks-")
+            || l.starts_with("x-akiyaexperts-")
+            || l.starts_with("x-akiyasvc-")
+            || l.starts_with("x-akiyahq-")
+            || l.starts_with("x-akiyadoctors-")
+            || l.starts_with("x-akiyarescue-")
+            || l.starts_with("x-akiyakanripros-")
+            || l.starts_with("x-akiyakanridoctors-")
+            || l.starts_with("x-akiyakanrirescue-")
+    })
+}
+
+fn has_franchise_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-franchise-")
+            || l.starts_with("x-franchiseyasan-")
+            || l.starts_with("x-franchisepro-")
+            || l.starts_with("x-franchiseteam-")
+            || l.starts_with("x-franchisekensa-")
+            || l.starts_with("x-franchisemanten-")
+            || l.starts_with("x-franchisenomi-")
+            || l.starts_with("x-franchisejp-")
+            || l.starts_with("x-franchisesenmon-")
+            || l.starts_with("x-franchisemitsumori-")
+            || l.starts_with("x-franchisechousa-")
+            || l.starts_with("x-franchiseteiki-")
+            || l.starts_with("x-franchiseshuri-")
+            || l.starts_with("x-franchisemart-")
+            || l.starts_with("x-franchisebank-")
+            || l.starts_with("x-kameiten-")
+            || l.starts_with("x-kameitenyasan-")
+            || l.starts_with("x-kameitenpro-")
+            || l.starts_with("x-kameitenteam-")
+            || l.starts_with("x-kameitenkensa-")
+            || l.starts_with("x-kameitenmanten-")
+            || l.starts_with("x-kameitennomi-")
+            || l.starts_with("x-kameitenjp-")
+            || l.starts_with("x-kameitensenmon-")
+            || l.starts_with("x-kameitenmitsumori-")
+            || l.starts_with("x-kameitenshuri-")
+            || l.starts_with("x-fcbosyu-")
+            || l.starts_with("x-fcbosyuyasan-")
+            || l.starts_with("x-fcbosyupro-")
+            || l.starts_with("x-fcbosyuteam-")
+            || l.starts_with("x-fcbosyujp-")
+            || l.starts_with("x-fcbosyusenmon-")
+            || l.starts_with("x-kameibosyu-")
+            || l.starts_with("x-kameibosyupro-")
+            || l.starts_with("x-kameibosyujp-")
+            || l.starts_with("x-franchisepros-")
+            || l.starts_with("x-franchiseworks-")
+            || l.starts_with("x-franchiseexperts-")
+            || l.starts_with("x-franchisesvc-")
+            || l.starts_with("x-franchisehq-")
+            || l.starts_with("x-franchisedoctors-")
+            || l.starts_with("x-franchiserescue-")
+            || l.starts_with("x-kameitenpros-")
+            || l.starts_with("x-kameitendoctors-")
+            || l.starts_with("x-kameitenrescue-")
+            || l.starts_with("x-fcbosyupros-")
+            || l.starts_with("x-fcbosyudoctors-")
+            || l.starts_with("x-fcbosyurescue-")
+    })
+}
+
+fn has_mlm_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-mlm-")
+            || l.starts_with("x-mlmyasan-")
+            || l.starts_with("x-mlmpro-")
+            || l.starts_with("x-mlmteam-")
+            || l.starts_with("x-mlmkensa-")
+            || l.starts_with("x-mlmmanten-")
+            || l.starts_with("x-mlmnomi-")
+            || l.starts_with("x-mlmjp-")
+            || l.starts_with("x-mlmsenmon-")
+            || l.starts_with("x-mlmmitsumori-")
+            || l.starts_with("x-mlmchousa-")
+            || l.starts_with("x-mlmteiki-")
+            || l.starts_with("x-mlmshuri-")
+            || l.starts_with("x-mlmmart-")
+            || l.starts_with("x-mlmbank-")
+            || l.starts_with("x-networkmarketing-")
+            || l.starts_with("x-networkmarketingpros-")
+            || l.starts_with("x-networkmarketingteam-")
+            || l.starts_with("x-networkmarketingworks-")
+            || l.starts_with("x-networkmarketingexperts-")
+            || l.starts_with("x-networkmarketingsvc-")
+            || l.starts_with("x-networkmarketinghq-")
+            || l.starts_with("x-networkmarketingpro-")
+            || l.starts_with("x-networkmarketingschool-")
+            || l.starts_with("x-multilevel-")
+            || l.starts_with("x-multilevelpros-")
+            || l.starts_with("x-multilevelteam-")
+            || l.starts_with("x-multilevelworks-")
+            || l.starts_with("x-multilevelexperts-")
+            || l.starts_with("x-houmonhanbai-")
+            || l.starts_with("x-houmonhanbaiyasan-")
+            || l.starts_with("x-houmonhanbaipro-")
+            || l.starts_with("x-houmonhanbaiteam-")
+            || l.starts_with("x-houmonhanbaijp-")
+            || l.starts_with("x-houmonhanbaisenmon-")
+            || l.starts_with("x-mlmpros-")
+            || l.starts_with("x-mlmworks-")
+            || l.starts_with("x-mlmexperts-")
+            || l.starts_with("x-mlmsvc-")
+            || l.starts_with("x-mlmhq-")
+            || l.starts_with("x-mlmdoctors-")
+            || l.starts_with("x-mlmrescue-")
+            || l.starts_with("x-houmonhanbaipros-")
+            || l.starts_with("x-houmonhanbaidoctors-")
+            || l.starts_with("x-houmonhanbairescue-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21071,55 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+    #[test]
+    fn scan_は邸機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Akiya-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AkiyaKanri-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AkiyaBank-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-VacantHomePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AkiyaSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-VacantPropertyWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AkiyaKanriSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-VacantHomeHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_akiya_marks(h));
+        }
+        assert!(!has_akiya_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は加機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Franchise-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kameiten-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FcBosyu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kameibosyu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FranchiseSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FranchiseWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KameitenSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-FranchiseHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_franchise_marks(h));
+        }
+        assert!(!has_franchise_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は連機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Mlm-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NetworkMarketing-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Multilevel-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Houmonhanbai-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MlmSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NetworkMarketingWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MlmBank-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HoumonhanbaiJP-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_mlm_marks(h));
+        }
+        assert!(!has_mlm_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
