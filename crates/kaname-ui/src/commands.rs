@@ -3220,6 +3220,132 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D752: 競馬・公営競技印自称
+    if env.keiba_marks {
+        render_risks.push(
+            "X-Keiba-*/X-Nar-*/X-Netkeiba-*/X-Ipat-*/X-Spat4-*/X-Racecourse-*/X-Win5-*/X-Kyotei-* 等 — 駒機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D753: 昆虫・爬虫類・熱帯魚印自称
+    if env.insect_marks {
+        render_risks.push(
+            "X-Kabutomushi-*/X-Kuwagata-*/X-Insect-*/X-Reptile-*/X-Tarantula-*/X-Gecko-*/X-Tropicalfish-*/X-Beardeddragon-* 等 — 虫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D754: ポーカー印自称
+    if env.poker_marks {
+        render_risks.push(
+            "X-Poker-*/X-Wsop-*/X-Ggpoker-*/X-Partypoker-*/X-Natural8-*/X-Jopt-*/X-Pppoker-*/X-Clubgg-* 等 — 牌機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D755: 不妊治療・妊活印自称
+    if env.fertility_marks {
+        render_risks.push(
+            "X-Fertility-*/X-Ivf-*/X-Infertility-*/X-Pgt-*/X-Eggfreeze-*/X-Ivfclinic-*/X-Hanabusa-*/X-Oakkai-* 等 — 妊機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D756: 麻雀・雀荘印自称
+    if env.mahjong_marks {
+        render_risks.push(
+            "X-Mahjong-*/X-Janisou-*/X-Jantama-*/X-Mahjongsoul-*/X-Tenhou-*/X-Jantaku-*/X-Riichi-*/X-Mahjongnavi-* 等 — 雀機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D757: 引越・引越見積印自称
+    if env.hikkoshi_marks {
+        render_risks.push(
+            "X-Hikkoshi-*/X-Moving-*/X-Artmoving-*/X-Heartmoving-*/X-Akabou-*/X-Movingcenter-*/X-Kurogane-*/X-Panda-Express-* 等 — 引機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D758: ラブホテル・休憩ホテル印自称
+    if env.lovehotel_marks {
+        render_risks.push(
+            "X-Lovehotel-*/X-Coupleshotel-*/X-Resthotel-*/X-Balian-*/X-Sala-*/X-Grandbali-*/X-Hoteljumu-*/X-Hotelfine-* 等 — 恋機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D759: 高速バス・夜行バス印自称
+    if env.kosokubus_marks {
+        render_risks.push(
+            "X-Kosokubus-*/X-Yakoubus-*/X-Highwaybus-*/X-Nightbus-*/X-Willerbus-*/X-Jamjam-*/X-Vipliner-*/X-Orionbus-* 等 — 迅機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D760: 睡眠・いびき治療印自称
+    if env.sleepclinic_marks {
+        render_risks.push(
+            "X-Sleepclinic-*/X-Cpap-*/X-Sleepapnea-*/X-Snoring-*/X-Sleeptech-*/X-Zquiet-*/X-Snorerx-*/X-Vitalsleep-* 等 — 眠機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D761: 家賃保証・賃貸保証印自称
+    if env.rentguarantee_marks {
+        render_risks.push(
+            "X-Yachinhosho-*/X-Rentguarantee-*/X-Hoshocompany-*/X-Casa-*/X-Jleave-*/X-Garanty-*/X-Epis-*/X-Roomca-* 等 — 賃機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D762: 眼科手術・視力矯正印自称
+    if env.lasik_marks {
+        render_risks.push(
+            "X-Lasik-*/X-Icl-*/X-Orthok-*/X-Relex-*/X-Presbyond-*/X-Lasikclinic-*/X-Intralasik-*/X-Lasiknavi-* 等 — 視機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D763: タトゥー・ボディアート印自称
+    if env.tattoo_marks {
+        render_risks.push(
+            "X-Tattoo-*/X-Irezumi-*/X-Piercing-*/X-Bodyart-*/X-Tattooshop-*/X-Bodypierce-*/X-Tattoostudio-*/X-Tattooland-* 等 — 彫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D764: スマートホーム・IoT家電印自称
+    if env.smarthome_marks {
+        render_risks.push(
+            "X-Smarthome-*/X-Tuya-*/X-Smartthings-*/X-Hue-*/X-Lifx-*/X-Wyze-*/X-Eufy-*/X-Aqara-* 等 — 智機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D765: 吹奏楽・オーケストラ印自称
+    if env.orchestra_marks {
+        render_risks.push(
+            "X-Orchestra-*/X-Suisougaku-*/X-Brassband-*/X-Philharmonic-*/X-Symphony-*/X-Winds-*/X-Concertband-*/X-Marching-* 等 — 吹機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D766: ラジコン・RC印自称
+    if env.radiocon_marks {
+        render_risks.push(
+            "X-Rccar-*/X-Rcplane-*/X-Rcdrone-*/X-Tamiyarc-*/X-Kyosho-*/X-Yokomo-*/X-Traxxas-*/X-Arrma-* 等 — 操機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D767: 3Dプリンタ・フィラメント印自称
+    if env.printer3d_marks {
+        render_risks.push(
+            "X-3dprinter-*/X-Bambulab-*/X-Ender-*/X-Voron-*/X-Phrozen-*/X-Filament-*/X-Snapmaker-*/X-Qidi-* 等 — 造機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D768: 音声合成・歌声ライブラリ印自称
+    if env.vocaloid_marks {
+        render_risks.push(
+            "X-Vocaloid-*/X-Synthv-*/X-Cevio-*/X-Voiceroid-*/X-Utau-*/X-Voisona-*/X-Voidol-*/X-Ahsoft-* 等 — 声機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D769: 覆面調査・アンケート印自称
+    if env.survey_marks {
+        render_risks.push(
+            "X-Monitor-*/X-Macromill-*/X-Intage-*/X-Researchpanel-*/X-Myvoice-*/X-Asmarq-*/X-Questant-*/X-Crossmarketing-* 等 — 調機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

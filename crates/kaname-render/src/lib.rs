@@ -2015,6 +2015,42 @@ pub struct Envelope {
     pub hunting_marks: bool,
     /// `X-Weightlifting-*`/`X-Powerlifting-*`/`X-Strongman-*` 等の重量挙・パワーリフティング印を送信側が自称する兆候 (D751)
     pub powerlifting_marks: bool,
+    /// `X-Keiba-*`/`X-Nar-*`/`X-Netkeiba-*` 等の競馬・公営競技印を送信側が自称する兆候 (D752)
+    pub keiba_marks: bool,
+    /// `X-Kabutomushi-*`/`X-Kuwagata-*`/`X-Insect-*` 等の昆虫・爬虫類・熱帯魚印を送信側が自称する兆候 (D753)
+    pub insect_marks: bool,
+    /// `X-Poker-*`/`X-Wsop-*`/`X-Ggpoker-*` 等のポーカー印を送信側が自称する兆候 (D754)
+    pub poker_marks: bool,
+    /// `X-Fertility-*`/`X-Ivf-*`/`X-Ivfclinic-*` 等の不妊治療・妊活印を送信側が自称する兆候 (D755)
+    pub fertility_marks: bool,
+    /// `X-Mahjong-*`/`X-Janisou-*`/`X-Jantama-*` 等の麻雀・雀荘印を送信側が自称する兆候 (D756)
+    pub mahjong_marks: bool,
+    /// `X-Hikkoshi-*`/`X-Artmoving-*`/`X-Akabou-*` 等の引越・引越見積印を送信側が自称する兆候 (D757)
+    pub hikkoshi_marks: bool,
+    /// `X-Lovehotel-*`/`X-Balian-*`/`X-Sala-*` 等のラブホテル・休憩ホテル印を送信側が自称する兆候 (D758)
+    pub lovehotel_marks: bool,
+    /// `X-Kosokubus-*`/`X-Yakoubus-*`/`X-Nightbus-*` 等の高速バス・夜行バス印を送信側が自称する兆候 (D759)
+    pub kosokubus_marks: bool,
+    /// `X-Sleepclinic-*`/`X-Cpap-*`/`X-Snoring-*` 等の睡眠・いびき治療印を送信側が自称する兆候 (D760)
+    pub sleepclinic_marks: bool,
+    /// `X-Yachinhosho-*`/`X-Rentguarantee-*`/`X-Hoshocompany-*` 等の家賃保証・賃貸保証印を送信側が自称する兆候 (D761)
+    pub rentguarantee_marks: bool,
+    /// `X-Lasik-*`/`X-Icl-*`/`X-Orthok-*` 等の眼科手術・視力矯正印を送信側が自称する兆候 (D762)
+    pub lasik_marks: bool,
+    /// `X-Tattoo-*`/`X-Irezumi-*`/`X-Piercing-*` 等のタトゥー・ボディアート印を送信側が自称する兆候 (D763)
+    pub tattoo_marks: bool,
+    /// `X-Smarthome-*`/`X-Tuya-*`/`X-Switchbot-*` 等のスマートホーム・IoT家電印を送信側が自称する兆候 (D764)
+    pub smarthome_marks: bool,
+    /// `X-Orchestra-*`/`X-Brassband-*`/`X-Symphony-*` 等の吹奏楽・オーケストラ印を送信側が自称する兆候 (D765)
+    pub orchestra_marks: bool,
+    /// `X-Rccar-*`/`X-Rcplane-*`/`X-Traxxas-*` 等のラジコン・RC印を送信側が自称する兆候 (D766)
+    pub radiocon_marks: bool,
+    /// `X-3dprinter-*`/`X-Bambulab-*`/`X-Voron-*` 等の3Dプリンタ・フィラメント印を送信側が自称する兆候 (D767)
+    pub printer3d_marks: bool,
+    /// `X-Vocaloid-*`/`X-Synthv-*`/`X-Cevio-*` 等の音声合成・歌声ライブラリ印を送信側が自称する兆候 (D768)
+    pub vocaloid_marks: bool,
+    /// `X-Monitor-*`/`X-Macromill-*`/`X-Intage-*` 等の覆面調査・アンケート印を送信側が自称する兆候 (D769)
+    pub survey_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2275,13 +2311,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2644,6 +2680,24 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         wintersport_marks: has_wintersport_marks(hdr),
         hunting_marks: has_hunting_marks(hdr),
         powerlifting_marks: has_powerlifting_marks(hdr),
+        keiba_marks: has_keiba_marks(hdr),
+        insect_marks: has_insect_marks(hdr),
+        poker_marks: has_poker_marks(hdr),
+        fertility_marks: has_fertility_marks(hdr),
+        mahjong_marks: has_mahjong_marks(hdr),
+        hikkoshi_marks: has_hikkoshi_marks(hdr),
+        lovehotel_marks: has_lovehotel_marks(hdr),
+        kosokubus_marks: has_kosokubus_marks(hdr),
+        sleepclinic_marks: has_sleepclinic_marks(hdr),
+        rentguarantee_marks: has_rentguarantee_marks(hdr),
+        lasik_marks: has_lasik_marks(hdr),
+        tattoo_marks: has_tattoo_marks(hdr),
+        smarthome_marks: has_smarthome_marks(hdr),
+        orchestra_marks: has_orchestra_marks(hdr),
+        radiocon_marks: has_radiocon_marks(hdr),
+        printer3d_marks: has_3dprinter_marks(hdr),
+        vocaloid_marks: has_vocaloid_marks(hdr),
+        survey_marks: has_survey_marks(hdr),
     })
 }
 
@@ -23289,6 +23343,1266 @@ fn has_powerlifting_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-wpcpro-"))
 }
 
+fn has_keiba_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-keiba-")
+            || l.starts_with("x-nar-")
+            || l.starts_with("x-netkeiba-")
+            || l.starts_with("x-ipat-")
+            || l.starts_with("x-spat4-")
+            || l.starts_with("x-racecourse-")
+            || l.starts_with("x-win5-")
+            || l.starts_with("x-kyotei-")
+            || l.starts_with("x-keibanavi-")
+            || l.starts_with("x-keibacenter-")
+            || l.starts_with("x-keibashop-")
+            || l.starts_with("x-keibapro-")
+            || l.starts_with("x-keibamart-")
+            || l.starts_with("x-keibaplus-")
+            || l.starts_with("x-keibasmart-")
+            || l.starts_with("x-keibafamily-")
+            || l.starts_with("x-narnavi-")
+            || l.starts_with("x-narcenter-")
+            || l.starts_with("x-narshop-")
+            || l.starts_with("x-narpro-")
+            || l.starts_with("x-narmart-")
+            || l.starts_with("x-narplus-")
+            || l.starts_with("x-narsmart-")
+            || l.starts_with("x-narfamily-")
+            || l.starts_with("x-netkeibanavi-")
+            || l.starts_with("x-netkeibacenter-")
+            || l.starts_with("x-netkeibashop-")
+            || l.starts_with("x-netkeibapro-")
+            || l.starts_with("x-netkeibamart-")
+            || l.starts_with("x-netkeibaplus-")
+            || l.starts_with("x-netkeibasmart-")
+            || l.starts_with("x-netkeibafamily-")
+            || l.starts_with("x-ipatnavi-")
+            || l.starts_with("x-ipatcenter-")
+            || l.starts_with("x-ipatshop-")
+            || l.starts_with("x-ipatpro-")
+            || l.starts_with("x-ipatmart-")
+            || l.starts_with("x-ipatplus-")
+            || l.starts_with("x-ipatsmart-")
+            || l.starts_with("x-ipatfamily-")
+            || l.starts_with("x-spat4navi-")
+            || l.starts_with("x-spat4center-")
+            || l.starts_with("x-spat4shop-")
+            || l.starts_with("x-spat4pro-")
+            || l.starts_with("x-spat4mart-")
+            || l.starts_with("x-spat4plus-")
+            || l.starts_with("x-spat4smart-")
+            || l.starts_with("x-spat4family-")
+            || l.starts_with("x-racecoursenavi-")
+            || l.starts_with("x-racecoursecenter-")
+            || l.starts_with("x-racecourseshop-")
+            || l.starts_with("x-racecoursepro-")
+            || l.starts_with("x-racecoursemart-")
+            || l.starts_with("x-racecourseplus-")
+            || l.starts_with("x-racecoursesmart-")
+            || l.starts_with("x-racecoursefamily-")
+            || l.starts_with("x-win5navi-")
+            || l.starts_with("x-win5center-")
+            || l.starts_with("x-win5shop-")
+            || l.starts_with("x-win5pro-")
+            || l.starts_with("x-win5mart-")
+            || l.starts_with("x-win5plus-"))
+}
+
+fn has_insect_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kabutomushi-")
+            || l.starts_with("x-kuwagata-")
+            || l.starts_with("x-insect-")
+            || l.starts_with("x-reptile-")
+            || l.starts_with("x-tarantula-")
+            || l.starts_with("x-gecko-")
+            || l.starts_with("x-ballpython-")
+            || l.starts_with("x-tropicalfish-")
+            || l.starts_with("x-aquariumfish-")
+            || l.starts_with("x-beardeddragon-")
+            || l.starts_with("x-kabutomushinavi-")
+            || l.starts_with("x-kabutomushicenter-")
+            || l.starts_with("x-kabutomushishop-")
+            || l.starts_with("x-kabutomushipro-")
+            || l.starts_with("x-kabutomushimart-")
+            || l.starts_with("x-kabutomushiplus-")
+            || l.starts_with("x-kabutomushismart-")
+            || l.starts_with("x-kabutomushifamily-")
+            || l.starts_with("x-kuwagatanavi-")
+            || l.starts_with("x-kuwagatacenter-")
+            || l.starts_with("x-kuwagatashop-")
+            || l.starts_with("x-kuwagatapro-")
+            || l.starts_with("x-kuwagatamart-")
+            || l.starts_with("x-kuwagataplus-")
+            || l.starts_with("x-kuwagatasmart-")
+            || l.starts_with("x-kuwagatafamily-")
+            || l.starts_with("x-insectnavi-")
+            || l.starts_with("x-insectcenter-")
+            || l.starts_with("x-insectshop-")
+            || l.starts_with("x-insectpro-")
+            || l.starts_with("x-insectmart-")
+            || l.starts_with("x-insectplus-")
+            || l.starts_with("x-insectsmart-")
+            || l.starts_with("x-insectfamily-")
+            || l.starts_with("x-reptilenavi-")
+            || l.starts_with("x-reptilecenter-")
+            || l.starts_with("x-reptileshop-")
+            || l.starts_with("x-reptilepro-")
+            || l.starts_with("x-reptilemart-")
+            || l.starts_with("x-reptileplus-")
+            || l.starts_with("x-reptilesmart-")
+            || l.starts_with("x-reptilefamily-")
+            || l.starts_with("x-tarantulanavi-")
+            || l.starts_with("x-tarantulacenter-")
+            || l.starts_with("x-tarantulashop-")
+            || l.starts_with("x-tarantulapro-")
+            || l.starts_with("x-tarantulamart-")
+            || l.starts_with("x-tarantulaplus-")
+            || l.starts_with("x-tarantulasmart-")
+            || l.starts_with("x-tarantulafamily-")
+            || l.starts_with("x-geckonavi-")
+            || l.starts_with("x-geckocenter-")
+            || l.starts_with("x-geckoshop-")
+            || l.starts_with("x-geckopro-")
+            || l.starts_with("x-geckomart-")
+            || l.starts_with("x-geckoplus-")
+            || l.starts_with("x-geckosmart-")
+            || l.starts_with("x-geckofamily-")
+            || l.starts_with("x-ballpythonnavi-")
+            || l.starts_with("x-ballpythoncenter-")
+            || l.starts_with("x-ballpythonshop-")
+            || l.starts_with("x-ballpythonpro-"))
+}
+
+fn has_poker_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-poker-")
+            || l.starts_with("x-wsop-")
+            || l.starts_with("x-ggpoker-")
+            || l.starts_with("x-partypoker-")
+            || l.starts_with("x-natural8-")
+            || l.starts_with("x-jopt-")
+            || l.starts_with("x-wpt-")
+            || l.starts_with("x-pppoker-")
+            || l.starts_with("x-clubgg-")
+            || l.starts_with("x-upoker-")
+            || l.starts_with("x-kkpoker-")
+            || l.starts_with("x-livepoker-")
+            || l.starts_with("x-pokernavi-")
+            || l.starts_with("x-pokercenter-")
+            || l.starts_with("x-pokershop-")
+            || l.starts_with("x-pokerpro-")
+            || l.starts_with("x-pokermart-")
+            || l.starts_with("x-pokerplus-")
+            || l.starts_with("x-pokersmart-")
+            || l.starts_with("x-pokerfamily-")
+            || l.starts_with("x-wsopnavi-")
+            || l.starts_with("x-wsopcenter-")
+            || l.starts_with("x-wsopshop-")
+            || l.starts_with("x-wsoppro-")
+            || l.starts_with("x-wsopmart-")
+            || l.starts_with("x-wsopplus-")
+            || l.starts_with("x-wsopsmart-")
+            || l.starts_with("x-wsopfamily-")
+            || l.starts_with("x-ggpokernavi-")
+            || l.starts_with("x-ggpokercenter-")
+            || l.starts_with("x-ggpokershop-")
+            || l.starts_with("x-ggpokerpro-")
+            || l.starts_with("x-ggpokermart-")
+            || l.starts_with("x-ggpokerplus-")
+            || l.starts_with("x-ggpokersmart-")
+            || l.starts_with("x-ggpokerfamily-")
+            || l.starts_with("x-partypokernavi-")
+            || l.starts_with("x-partypokercenter-")
+            || l.starts_with("x-partypokershop-")
+            || l.starts_with("x-partypokerpro-")
+            || l.starts_with("x-partypokermart-")
+            || l.starts_with("x-partypokerplus-")
+            || l.starts_with("x-partypokersmart-")
+            || l.starts_with("x-partypokerfamily-")
+            || l.starts_with("x-natural8navi-")
+            || l.starts_with("x-natural8center-")
+            || l.starts_with("x-natural8shop-")
+            || l.starts_with("x-natural8pro-")
+            || l.starts_with("x-natural8mart-")
+            || l.starts_with("x-natural8plus-")
+            || l.starts_with("x-natural8smart-")
+            || l.starts_with("x-natural8family-")
+            || l.starts_with("x-joptnavi-")
+            || l.starts_with("x-joptcenter-")
+            || l.starts_with("x-joptshop-")
+            || l.starts_with("x-joptpro-")
+            || l.starts_with("x-joptmart-")
+            || l.starts_with("x-joptplus-")
+            || l.starts_with("x-joptsmart-")
+            || l.starts_with("x-joptfamily-")
+            || l.starts_with("x-wptnavi-")
+            || l.starts_with("x-wptcenter-"))
+}
+
+fn has_fertility_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-fertility-")
+            || l.starts_with("x-ivf-")
+            || l.starts_with("x-infertility-")
+            || l.starts_with("x-pgt-")
+            || l.starts_with("x-eggfreeze-")
+            || l.starts_with("x-ivfclinic-")
+            || l.starts_with("x-hanabusa-")
+            || l.starts_with("x-oakkai-")
+            || l.starts_with("x-ninkatsu-")
+            || l.starts_with("x-fertilitynavi-")
+            || l.starts_with("x-fertilitycenter-")
+            || l.starts_with("x-fertilityshop-")
+            || l.starts_with("x-fertilitypro-")
+            || l.starts_with("x-fertilitymart-")
+            || l.starts_with("x-fertilityplus-")
+            || l.starts_with("x-fertilitysmart-")
+            || l.starts_with("x-fertilityfamily-")
+            || l.starts_with("x-ivfnavi-")
+            || l.starts_with("x-ivfcenter-")
+            || l.starts_with("x-ivfshop-")
+            || l.starts_with("x-ivfpro-")
+            || l.starts_with("x-ivfmart-")
+            || l.starts_with("x-ivfplus-")
+            || l.starts_with("x-ivfsmart-")
+            || l.starts_with("x-ivffamily-")
+            || l.starts_with("x-infertilitynavi-")
+            || l.starts_with("x-infertilitycenter-")
+            || l.starts_with("x-infertilityshop-")
+            || l.starts_with("x-infertilitypro-")
+            || l.starts_with("x-infertilitymart-")
+            || l.starts_with("x-infertilityplus-")
+            || l.starts_with("x-infertilitysmart-")
+            || l.starts_with("x-infertilityfamily-")
+            || l.starts_with("x-pgtnavi-")
+            || l.starts_with("x-pgtcenter-")
+            || l.starts_with("x-pgtshop-")
+            || l.starts_with("x-pgtpro-")
+            || l.starts_with("x-pgtmart-")
+            || l.starts_with("x-pgtplus-")
+            || l.starts_with("x-pgtsmart-")
+            || l.starts_with("x-pgtfamily-")
+            || l.starts_with("x-eggfreezenavi-")
+            || l.starts_with("x-eggfreezecenter-")
+            || l.starts_with("x-eggfreezeshop-")
+            || l.starts_with("x-eggfreezepro-")
+            || l.starts_with("x-eggfreezemart-")
+            || l.starts_with("x-eggfreezeplus-")
+            || l.starts_with("x-eggfreezesmart-")
+            || l.starts_with("x-eggfreezefamily-")
+            || l.starts_with("x-ivfclinicnavi-")
+            || l.starts_with("x-ivfcliniccenter-")
+            || l.starts_with("x-ivfclinicshop-")
+            || l.starts_with("x-ivfclinicpro-")
+            || l.starts_with("x-ivfclinicmart-")
+            || l.starts_with("x-ivfclinicplus-")
+            || l.starts_with("x-ivfclinicsmart-")
+            || l.starts_with("x-ivfclinicfamily-")
+            || l.starts_with("x-hanabusanavi-")
+            || l.starts_with("x-hanabusacenter-")
+            || l.starts_with("x-hanabusashop-")
+            || l.starts_with("x-hanabusapro-")
+            || l.starts_with("x-hanabusamart-"))
+}
+
+fn has_mahjong_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-mahjong-")
+            || l.starts_with("x-janisou-")
+            || l.starts_with("x-jantama-")
+            || l.starts_with("x-mahjongsoul-")
+            || l.starts_with("x-tenhou-")
+            || l.starts_with("x-jantaku-")
+            || l.starts_with("x-riichi-")
+            || l.starts_with("x-mahjongnavi-")
+            || l.starts_with("x-mahjongcenter-")
+            || l.starts_with("x-mahjongshop-")
+            || l.starts_with("x-mahjongpro-")
+            || l.starts_with("x-mahjongmart-")
+            || l.starts_with("x-mahjongplus-")
+            || l.starts_with("x-mahjongsmart-")
+            || l.starts_with("x-mahjongfamily-")
+            || l.starts_with("x-janisounavi-")
+            || l.starts_with("x-janisoucenter-")
+            || l.starts_with("x-janisoushop-")
+            || l.starts_with("x-janisoupro-")
+            || l.starts_with("x-janisoumart-")
+            || l.starts_with("x-janisouplus-")
+            || l.starts_with("x-janisousmart-")
+            || l.starts_with("x-janisoufamily-")
+            || l.starts_with("x-jantamanavi-")
+            || l.starts_with("x-jantamacenter-")
+            || l.starts_with("x-jantamashop-")
+            || l.starts_with("x-jantamapro-")
+            || l.starts_with("x-jantamamart-")
+            || l.starts_with("x-jantamaplus-")
+            || l.starts_with("x-jantamasmart-")
+            || l.starts_with("x-jantamafamily-")
+            || l.starts_with("x-mahjongsoulnavi-")
+            || l.starts_with("x-mahjongsoulcenter-")
+            || l.starts_with("x-mahjongsoulshop-")
+            || l.starts_with("x-mahjongsoulpro-")
+            || l.starts_with("x-mahjongsoulmart-")
+            || l.starts_with("x-mahjongsoulplus-")
+            || l.starts_with("x-mahjongsoulsmart-")
+            || l.starts_with("x-mahjongsoulfamily-")
+            || l.starts_with("x-tenhounavi-")
+            || l.starts_with("x-tenhoucenter-")
+            || l.starts_with("x-tenhoushop-")
+            || l.starts_with("x-tenhoupro-")
+            || l.starts_with("x-tenhoumart-")
+            || l.starts_with("x-tenhouplus-")
+            || l.starts_with("x-tenhousmart-")
+            || l.starts_with("x-tenhoufamily-")
+            || l.starts_with("x-jantakunavi-")
+            || l.starts_with("x-jantakucenter-")
+            || l.starts_with("x-jantakushop-")
+            || l.starts_with("x-jantakupro-")
+            || l.starts_with("x-jantakumart-")
+            || l.starts_with("x-jantakuplus-")
+            || l.starts_with("x-jantakusmart-")
+            || l.starts_with("x-jantakufamily-")
+            || l.starts_with("x-riichinavi-")
+            || l.starts_with("x-riichicenter-")
+            || l.starts_with("x-riichishop-")
+            || l.starts_with("x-riichipro-")
+            || l.starts_with("x-riichimart-")
+            || l.starts_with("x-riichiplus-")
+            || l.starts_with("x-riichismart-"))
+}
+
+fn has_hikkoshi_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hikkoshi-")
+            || l.starts_with("x-moving-")
+            || l.starts_with("x-artmoving-")
+            || l.starts_with("x-heartmoving-")
+            || l.starts_with("x-akabou-")
+            || l.starts_with("x-movingcenter-")
+            || l.starts_with("x-kurogane-")
+            || l.starts_with("x-panda-express-")
+            || l.starts_with("x-hikkoshinavi-")
+            || l.starts_with("x-hikkoshicenter-")
+            || l.starts_with("x-hikkoshishop-")
+            || l.starts_with("x-hikkoshipro-")
+            || l.starts_with("x-hikkoshimart-")
+            || l.starts_with("x-hikkoshiplus-")
+            || l.starts_with("x-hikkoshismart-")
+            || l.starts_with("x-hikkoshifamily-")
+            || l.starts_with("x-movingnavi-")
+            || l.starts_with("x-movingcenter-")
+            || l.starts_with("x-movingshop-")
+            || l.starts_with("x-movingpro-")
+            || l.starts_with("x-movingmart-")
+            || l.starts_with("x-movingplus-")
+            || l.starts_with("x-movingsmart-")
+            || l.starts_with("x-movingfamily-")
+            || l.starts_with("x-artmovingnavi-")
+            || l.starts_with("x-artmovingcenter-")
+            || l.starts_with("x-artmovingshop-")
+            || l.starts_with("x-artmovingpro-")
+            || l.starts_with("x-artmovingmart-")
+            || l.starts_with("x-artmovingplus-")
+            || l.starts_with("x-artmovingsmart-")
+            || l.starts_with("x-artmovingfamily-")
+            || l.starts_with("x-heartmovingnavi-")
+            || l.starts_with("x-heartmovingcenter-")
+            || l.starts_with("x-heartmovingshop-")
+            || l.starts_with("x-heartmovingpro-")
+            || l.starts_with("x-heartmovingmart-")
+            || l.starts_with("x-heartmovingplus-")
+            || l.starts_with("x-heartmovingsmart-")
+            || l.starts_with("x-heartmovingfamily-")
+            || l.starts_with("x-akabounavi-")
+            || l.starts_with("x-akaboucenter-")
+            || l.starts_with("x-akaboushop-")
+            || l.starts_with("x-akaboupro-")
+            || l.starts_with("x-akaboumart-")
+            || l.starts_with("x-akabouplus-")
+            || l.starts_with("x-akabousmart-")
+            || l.starts_with("x-akaboufamily-")
+            || l.starts_with("x-movingcenternavi-")
+            || l.starts_with("x-movingcentercenter-")
+            || l.starts_with("x-movingcentershop-")
+            || l.starts_with("x-movingcenterpro-")
+            || l.starts_with("x-movingcentermart-")
+            || l.starts_with("x-movingcenterplus-")
+            || l.starts_with("x-movingcentersmart-")
+            || l.starts_with("x-movingcenterfamily-")
+            || l.starts_with("x-kuroganenavi-")
+            || l.starts_with("x-kuroganecenter-")
+            || l.starts_with("x-kuroganeshop-")
+            || l.starts_with("x-kuroganepro-")
+            || l.starts_with("x-kuroganemart-")
+            || l.starts_with("x-kuroganeplus-"))
+}
+
+fn has_lovehotel_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-lovehotel-")
+            || l.starts_with("x-coupleshotel-")
+            || l.starts_with("x-resthotel-")
+            || l.starts_with("x-balian-")
+            || l.starts_with("x-sala-")
+            || l.starts_with("x-grandbali-")
+            || l.starts_with("x-hoteljumu-")
+            || l.starts_with("x-hotelfine-")
+            || l.starts_with("x-lovehotelnavi-")
+            || l.starts_with("x-lovehotelcenter-")
+            || l.starts_with("x-lovehotelshop-")
+            || l.starts_with("x-lovehotelpro-")
+            || l.starts_with("x-lovehotelmart-")
+            || l.starts_with("x-lovehotelplus-")
+            || l.starts_with("x-lovehotelsmart-")
+            || l.starts_with("x-lovehotelfamily-")
+            || l.starts_with("x-coupleshotelnavi-")
+            || l.starts_with("x-coupleshotelcenter-")
+            || l.starts_with("x-coupleshotelshop-")
+            || l.starts_with("x-coupleshotelpro-")
+            || l.starts_with("x-coupleshotelmart-")
+            || l.starts_with("x-coupleshotelplus-")
+            || l.starts_with("x-coupleshotelsmart-")
+            || l.starts_with("x-coupleshotelfamily-")
+            || l.starts_with("x-resthotelnavi-")
+            || l.starts_with("x-resthotelcenter-")
+            || l.starts_with("x-resthotelshop-")
+            || l.starts_with("x-resthotelpro-")
+            || l.starts_with("x-resthotelmart-")
+            || l.starts_with("x-resthotelplus-")
+            || l.starts_with("x-resthotelsmart-")
+            || l.starts_with("x-resthotelfamily-")
+            || l.starts_with("x-baliannavi-")
+            || l.starts_with("x-baliancenter-")
+            || l.starts_with("x-balianshop-")
+            || l.starts_with("x-balianpro-")
+            || l.starts_with("x-balianmart-")
+            || l.starts_with("x-balianplus-")
+            || l.starts_with("x-baliansmart-")
+            || l.starts_with("x-balianfamily-")
+            || l.starts_with("x-salanavi-")
+            || l.starts_with("x-salacenter-")
+            || l.starts_with("x-salashop-")
+            || l.starts_with("x-salapro-")
+            || l.starts_with("x-salamart-")
+            || l.starts_with("x-salaplus-")
+            || l.starts_with("x-salasmart-")
+            || l.starts_with("x-salafamily-")
+            || l.starts_with("x-grandbalinavi-")
+            || l.starts_with("x-grandbalicenter-")
+            || l.starts_with("x-grandbalishop-")
+            || l.starts_with("x-grandbalipro-")
+            || l.starts_with("x-grandbalimart-")
+            || l.starts_with("x-grandbaliplus-")
+            || l.starts_with("x-grandbalismart-")
+            || l.starts_with("x-grandbalifamily-")
+            || l.starts_with("x-hoteljumunavi-")
+            || l.starts_with("x-hoteljumucenter-")
+            || l.starts_with("x-hoteljumushop-")
+            || l.starts_with("x-hoteljumupro-")
+            || l.starts_with("x-hoteljumumart-")
+            || l.starts_with("x-hoteljumuplus-"))
+}
+
+fn has_kosokubus_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kosokubus-")
+            || l.starts_with("x-yakoubus-")
+            || l.starts_with("x-highwaybus-")
+            || l.starts_with("x-nightbus-")
+            || l.starts_with("x-willerbus-")
+            || l.starts_with("x-jamjam-")
+            || l.starts_with("x-vipliner-")
+            || l.starts_with("x-orionbus-")
+            || l.starts_with("x-atliner-")
+            || l.starts_with("x-kosokubusnavi-")
+            || l.starts_with("x-kosokubuscenter-")
+            || l.starts_with("x-kosokubusshop-")
+            || l.starts_with("x-kosokubuspro-")
+            || l.starts_with("x-kosokubusmart-")
+            || l.starts_with("x-kosokubusplus-")
+            || l.starts_with("x-kosokubussmart-")
+            || l.starts_with("x-kosokubusfamily-")
+            || l.starts_with("x-yakoubusnavi-")
+            || l.starts_with("x-yakoubuscenter-")
+            || l.starts_with("x-yakoubusshop-")
+            || l.starts_with("x-yakoubuspro-")
+            || l.starts_with("x-yakoubusmart-")
+            || l.starts_with("x-yakoubusplus-")
+            || l.starts_with("x-yakoubussmart-")
+            || l.starts_with("x-yakoubusfamily-")
+            || l.starts_with("x-highwaybusnavi-")
+            || l.starts_with("x-highwaybuscenter-")
+            || l.starts_with("x-highwaybusshop-")
+            || l.starts_with("x-highwaybuspro-")
+            || l.starts_with("x-highwaybusmart-")
+            || l.starts_with("x-highwaybusplus-")
+            || l.starts_with("x-highwaybussmart-")
+            || l.starts_with("x-highwaybusfamily-")
+            || l.starts_with("x-nightbusnavi-")
+            || l.starts_with("x-nightbuscenter-")
+            || l.starts_with("x-nightbusshop-")
+            || l.starts_with("x-nightbuspro-")
+            || l.starts_with("x-nightbusmart-")
+            || l.starts_with("x-nightbusplus-")
+            || l.starts_with("x-nightbussmart-")
+            || l.starts_with("x-nightbusfamily-")
+            || l.starts_with("x-willerbusnavi-")
+            || l.starts_with("x-willerbuscenter-")
+            || l.starts_with("x-willerbusshop-")
+            || l.starts_with("x-willerbuspro-")
+            || l.starts_with("x-willerbusmart-")
+            || l.starts_with("x-willerbusplus-")
+            || l.starts_with("x-willerbussmart-")
+            || l.starts_with("x-willerbusfamily-")
+            || l.starts_with("x-jamjamnavi-")
+            || l.starts_with("x-jamjamcenter-")
+            || l.starts_with("x-jamjamshop-")
+            || l.starts_with("x-jamjampro-")
+            || l.starts_with("x-jamjammart-")
+            || l.starts_with("x-jamjamplus-")
+            || l.starts_with("x-jamjamsmart-")
+            || l.starts_with("x-jamjamfamily-")
+            || l.starts_with("x-viplinernavi-")
+            || l.starts_with("x-viplinercenter-")
+            || l.starts_with("x-viplinershop-")
+            || l.starts_with("x-viplinerpro-")
+            || l.starts_with("x-viplinermart-"))
+}
+
+fn has_sleepclinic_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sleepclinic-")
+            || l.starts_with("x-cpap-")
+            || l.starts_with("x-sleepapnea-")
+            || l.starts_with("x-snoring-")
+            || l.starts_with("x-sleeptech-")
+            || l.starts_with("x-zquiet-")
+            || l.starts_with("x-snorerx-")
+            || l.starts_with("x-vitalsleep-")
+            || l.starts_with("x-zyppah-")
+            || l.starts_with("x-somnomed-")
+            || l.starts_with("x-sleepclinicnavi-")
+            || l.starts_with("x-sleepcliniccenter-")
+            || l.starts_with("x-sleepclinicshop-")
+            || l.starts_with("x-sleepclinicpro-")
+            || l.starts_with("x-sleepclinicmart-")
+            || l.starts_with("x-sleepclinicplus-")
+            || l.starts_with("x-sleepclinicsmart-")
+            || l.starts_with("x-sleepclinicfamily-")
+            || l.starts_with("x-cpapnavi-")
+            || l.starts_with("x-cpapcenter-")
+            || l.starts_with("x-cpapshop-")
+            || l.starts_with("x-cpappro-")
+            || l.starts_with("x-cpapmart-")
+            || l.starts_with("x-cpapplus-")
+            || l.starts_with("x-cpapsmart-")
+            || l.starts_with("x-cpapfamily-")
+            || l.starts_with("x-sleepapneanavi-")
+            || l.starts_with("x-sleepapneacenter-")
+            || l.starts_with("x-sleepapneashop-")
+            || l.starts_with("x-sleepapneapro-")
+            || l.starts_with("x-sleepapneamart-")
+            || l.starts_with("x-sleepapneaplus-")
+            || l.starts_with("x-sleepapneasmart-")
+            || l.starts_with("x-sleepapneafamily-")
+            || l.starts_with("x-snoringnavi-")
+            || l.starts_with("x-snoringcenter-")
+            || l.starts_with("x-snoringshop-")
+            || l.starts_with("x-snoringpro-")
+            || l.starts_with("x-snoringmart-")
+            || l.starts_with("x-snoringplus-")
+            || l.starts_with("x-snoringsmart-")
+            || l.starts_with("x-snoringfamily-")
+            || l.starts_with("x-sleeptechnavi-")
+            || l.starts_with("x-sleeptechcenter-")
+            || l.starts_with("x-sleeptechshop-")
+            || l.starts_with("x-sleeptechpro-")
+            || l.starts_with("x-sleeptechmart-")
+            || l.starts_with("x-sleeptechplus-")
+            || l.starts_with("x-sleeptechsmart-")
+            || l.starts_with("x-sleeptechfamily-")
+            || l.starts_with("x-zquietnavi-")
+            || l.starts_with("x-zquietcenter-")
+            || l.starts_with("x-zquietshop-")
+            || l.starts_with("x-zquietpro-")
+            || l.starts_with("x-zquietmart-")
+            || l.starts_with("x-zquietplus-")
+            || l.starts_with("x-zquietsmart-")
+            || l.starts_with("x-zquietfamily-")
+            || l.starts_with("x-snorerxnavi-")
+            || l.starts_with("x-snorerxcenter-")
+            || l.starts_with("x-snorerxshop-")
+            || l.starts_with("x-snorerxpro-"))
+}
+
+fn has_rentguarantee_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-yachinhosho-")
+            || l.starts_with("x-rentguarantee-")
+            || l.starts_with("x-hoshocompany-")
+            || l.starts_with("x-casa-")
+            || l.starts_with("x-jleave-")
+            || l.starts_with("x-garanty-")
+            || l.starts_with("x-epis-")
+            || l.starts_with("x-roomca-")
+            || l.starts_with("x-zenkyoren-")
+            || l.starts_with("x-yachinhoshonavi-")
+            || l.starts_with("x-yachinhoshocenter-")
+            || l.starts_with("x-yachinhoshoshop-")
+            || l.starts_with("x-yachinhoshopro-")
+            || l.starts_with("x-yachinhoshomart-")
+            || l.starts_with("x-yachinhoshoplus-")
+            || l.starts_with("x-yachinhoshosmart-")
+            || l.starts_with("x-yachinhoshofamily-")
+            || l.starts_with("x-rentguaranteenavi-")
+            || l.starts_with("x-rentguaranteecenter-")
+            || l.starts_with("x-rentguaranteeshop-")
+            || l.starts_with("x-rentguaranteepro-")
+            || l.starts_with("x-rentguaranteemart-")
+            || l.starts_with("x-rentguaranteeplus-")
+            || l.starts_with("x-rentguaranteesmart-")
+            || l.starts_with("x-rentguaranteefamily-")
+            || l.starts_with("x-hoshocompanynavi-")
+            || l.starts_with("x-hoshocompanycenter-")
+            || l.starts_with("x-hoshocompanyshop-")
+            || l.starts_with("x-hoshocompanypro-")
+            || l.starts_with("x-hoshocompanymart-")
+            || l.starts_with("x-hoshocompanyplus-")
+            || l.starts_with("x-hoshocompanysmart-")
+            || l.starts_with("x-hoshocompanyfamily-")
+            || l.starts_with("x-casanavi-")
+            || l.starts_with("x-casacenter-")
+            || l.starts_with("x-casashop-")
+            || l.starts_with("x-casapro-")
+            || l.starts_with("x-casamart-")
+            || l.starts_with("x-casaplus-")
+            || l.starts_with("x-casasmart-")
+            || l.starts_with("x-casafamily-")
+            || l.starts_with("x-jleavenavi-")
+            || l.starts_with("x-jleavecenter-")
+            || l.starts_with("x-jleaveshop-")
+            || l.starts_with("x-jleavepro-")
+            || l.starts_with("x-jleavemart-")
+            || l.starts_with("x-jleaveplus-")
+            || l.starts_with("x-jleavesmart-")
+            || l.starts_with("x-jleavefamily-")
+            || l.starts_with("x-garantynavi-")
+            || l.starts_with("x-garantycenter-")
+            || l.starts_with("x-garantyshop-")
+            || l.starts_with("x-garantypro-")
+            || l.starts_with("x-garantymart-")
+            || l.starts_with("x-garantyplus-")
+            || l.starts_with("x-garantysmart-")
+            || l.starts_with("x-garantyfamily-")
+            || l.starts_with("x-episnavi-")
+            || l.starts_with("x-episcenter-")
+            || l.starts_with("x-episshop-")
+            || l.starts_with("x-epispro-")
+            || l.starts_with("x-epismart-"))
+}
+
+fn has_lasik_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-lasik-")
+            || l.starts_with("x-icl-")
+            || l.starts_with("x-orthok-")
+            || l.starts_with("x-relex-")
+            || l.starts_with("x-presbyond-")
+            || l.starts_with("x-lasikclinic-")
+            || l.starts_with("x-intralasik-")
+            || l.starts_with("x-lasiknavi-")
+            || l.starts_with("x-lasikcenter-")
+            || l.starts_with("x-lasikshop-")
+            || l.starts_with("x-lasikpro-")
+            || l.starts_with("x-lasikmart-")
+            || l.starts_with("x-lasikplus-")
+            || l.starts_with("x-lasiksmart-")
+            || l.starts_with("x-lasikfamily-")
+            || l.starts_with("x-iclnavi-")
+            || l.starts_with("x-iclcenter-")
+            || l.starts_with("x-iclshop-")
+            || l.starts_with("x-iclpro-")
+            || l.starts_with("x-iclmart-")
+            || l.starts_with("x-iclplus-")
+            || l.starts_with("x-iclsmart-")
+            || l.starts_with("x-iclfamily-")
+            || l.starts_with("x-orthoknavi-")
+            || l.starts_with("x-orthokcenter-")
+            || l.starts_with("x-orthokshop-")
+            || l.starts_with("x-orthokpro-")
+            || l.starts_with("x-orthokmart-")
+            || l.starts_with("x-orthokplus-")
+            || l.starts_with("x-orthoksmart-")
+            || l.starts_with("x-orthokfamily-")
+            || l.starts_with("x-relexnavi-")
+            || l.starts_with("x-relexcenter-")
+            || l.starts_with("x-relexshop-")
+            || l.starts_with("x-relexpro-")
+            || l.starts_with("x-relexmart-")
+            || l.starts_with("x-relexplus-")
+            || l.starts_with("x-relexsmart-")
+            || l.starts_with("x-relexfamily-")
+            || l.starts_with("x-presbyondnavi-")
+            || l.starts_with("x-presbyondcenter-")
+            || l.starts_with("x-presbyondshop-")
+            || l.starts_with("x-presbyondpro-")
+            || l.starts_with("x-presbyondmart-")
+            || l.starts_with("x-presbyondplus-")
+            || l.starts_with("x-presbyondsmart-")
+            || l.starts_with("x-presbyondfamily-")
+            || l.starts_with("x-lasikclinicnavi-")
+            || l.starts_with("x-lasikcliniccenter-")
+            || l.starts_with("x-lasikclinicshop-")
+            || l.starts_with("x-lasikclinicpro-")
+            || l.starts_with("x-lasikclinicmart-")
+            || l.starts_with("x-lasikclinicplus-")
+            || l.starts_with("x-lasikclinicsmart-")
+            || l.starts_with("x-lasikclinicfamily-")
+            || l.starts_with("x-intralasiknavi-")
+            || l.starts_with("x-intralasikcenter-")
+            || l.starts_with("x-intralasikshop-")
+            || l.starts_with("x-intralasikpro-")
+            || l.starts_with("x-intralasikmart-")
+            || l.starts_with("x-intralasikplus-")
+            || l.starts_with("x-intralasiksmart-"))
+}
+
+fn has_tattoo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-tattoo-")
+            || l.starts_with("x-irezumi-")
+            || l.starts_with("x-piercing-")
+            || l.starts_with("x-bodyart-")
+            || l.starts_with("x-tattooshop-")
+            || l.starts_with("x-bodypierce-")
+            || l.starts_with("x-tattoostudio-")
+            || l.starts_with("x-tattooland-")
+            || l.starts_with("x-tattoonavi-")
+            || l.starts_with("x-tattoocenter-")
+            || l.starts_with("x-tattooshop-")
+            || l.starts_with("x-tattoopro-")
+            || l.starts_with("x-tattoomart-")
+            || l.starts_with("x-tattooplus-")
+            || l.starts_with("x-tattoosmart-")
+            || l.starts_with("x-tattoofamily-")
+            || l.starts_with("x-irezuminavi-")
+            || l.starts_with("x-irezumicenter-")
+            || l.starts_with("x-irezumishop-")
+            || l.starts_with("x-irezumipro-")
+            || l.starts_with("x-irezumimart-")
+            || l.starts_with("x-irezumiplus-")
+            || l.starts_with("x-irezumismart-")
+            || l.starts_with("x-irezumifamily-")
+            || l.starts_with("x-piercingnavi-")
+            || l.starts_with("x-piercingcenter-")
+            || l.starts_with("x-piercingshop-")
+            || l.starts_with("x-piercingpro-")
+            || l.starts_with("x-piercingmart-")
+            || l.starts_with("x-piercingplus-")
+            || l.starts_with("x-piercingsmart-")
+            || l.starts_with("x-piercingfamily-")
+            || l.starts_with("x-bodyartnavi-")
+            || l.starts_with("x-bodyartcenter-")
+            || l.starts_with("x-bodyartshop-")
+            || l.starts_with("x-bodyartpro-")
+            || l.starts_with("x-bodyartmart-")
+            || l.starts_with("x-bodyartplus-")
+            || l.starts_with("x-bodyartsmart-")
+            || l.starts_with("x-bodyartfamily-")
+            || l.starts_with("x-tattooshopnavi-")
+            || l.starts_with("x-tattooshopcenter-")
+            || l.starts_with("x-tattooshopshop-")
+            || l.starts_with("x-tattooshoppro-")
+            || l.starts_with("x-tattooshopmart-")
+            || l.starts_with("x-tattooshopplus-")
+            || l.starts_with("x-tattooshopsmart-")
+            || l.starts_with("x-tattooshopfamily-")
+            || l.starts_with("x-bodypiercenavi-")
+            || l.starts_with("x-bodypiercecenter-")
+            || l.starts_with("x-bodypierceshop-")
+            || l.starts_with("x-bodypiercepro-")
+            || l.starts_with("x-bodypiercemart-")
+            || l.starts_with("x-bodypierceplus-")
+            || l.starts_with("x-bodypiercesmart-")
+            || l.starts_with("x-bodypiercefamily-")
+            || l.starts_with("x-tattoostudionavi-")
+            || l.starts_with("x-tattoostudiocenter-")
+            || l.starts_with("x-tattoostudioshop-")
+            || l.starts_with("x-tattoostudiopro-")
+            || l.starts_with("x-tattoostudiomart-")
+            || l.starts_with("x-tattoostudioplus-"))
+}
+
+fn has_smarthome_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-smarthome-")
+            || l.starts_with("x-tuya-")
+            || l.starts_with("x-smartthings-")
+            || l.starts_with("x-hue-")
+            || l.starts_with("x-lifx-")
+            || l.starts_with("x-wyze-")
+            || l.starts_with("x-eufy-")
+            || l.starts_with("x-aqara-")
+            || l.starts_with("x-switchbot-")
+            || l.starts_with("x-natureremo-")
+            || l.starts_with("x-smarthomenavi-")
+            || l.starts_with("x-smarthomecenter-")
+            || l.starts_with("x-smarthomeshop-")
+            || l.starts_with("x-smarthomepro-")
+            || l.starts_with("x-smarthomemart-")
+            || l.starts_with("x-smarthomeplus-")
+            || l.starts_with("x-smarthomesmart-")
+            || l.starts_with("x-smarthomefamily-")
+            || l.starts_with("x-tuyanavi-")
+            || l.starts_with("x-tuyacenter-")
+            || l.starts_with("x-tuyashop-")
+            || l.starts_with("x-tuyapro-")
+            || l.starts_with("x-tuyamart-")
+            || l.starts_with("x-tuyaplus-")
+            || l.starts_with("x-tuyasmart-")
+            || l.starts_with("x-tuyafamily-")
+            || l.starts_with("x-smartthingsnavi-")
+            || l.starts_with("x-smartthingscenter-")
+            || l.starts_with("x-smartthingsshop-")
+            || l.starts_with("x-smartthingspro-")
+            || l.starts_with("x-smartthingsmart-")
+            || l.starts_with("x-smartthingsplus-")
+            || l.starts_with("x-smartthingssmart-")
+            || l.starts_with("x-smartthingsfamily-")
+            || l.starts_with("x-huenavi-")
+            || l.starts_with("x-huecenter-")
+            || l.starts_with("x-hueshop-")
+            || l.starts_with("x-huepro-")
+            || l.starts_with("x-huemart-")
+            || l.starts_with("x-hueplus-")
+            || l.starts_with("x-huesmart-")
+            || l.starts_with("x-huefamily-")
+            || l.starts_with("x-lifxnavi-")
+            || l.starts_with("x-lifxcenter-")
+            || l.starts_with("x-lifxshop-")
+            || l.starts_with("x-lifxpro-")
+            || l.starts_with("x-lifxmart-")
+            || l.starts_with("x-lifxplus-")
+            || l.starts_with("x-lifxsmart-")
+            || l.starts_with("x-lifxfamily-")
+            || l.starts_with("x-wyzenavi-")
+            || l.starts_with("x-wyzecenter-")
+            || l.starts_with("x-wyzeshop-")
+            || l.starts_with("x-wyzepro-")
+            || l.starts_with("x-wyzemart-")
+            || l.starts_with("x-wyzeplus-")
+            || l.starts_with("x-wyzesmart-")
+            || l.starts_with("x-wyzefamily-")
+            || l.starts_with("x-eufynavi-")
+            || l.starts_with("x-eufycenter-")
+            || l.starts_with("x-eufyshop-")
+            || l.starts_with("x-eufypro-"))
+}
+
+fn has_orchestra_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-orchestra-")
+            || l.starts_with("x-suisougaku-")
+            || l.starts_with("x-brassband-")
+            || l.starts_with("x-philharmonic-")
+            || l.starts_with("x-symphony-")
+            || l.starts_with("x-winds-")
+            || l.starts_with("x-concertband-")
+            || l.starts_with("x-marching-")
+            || l.starts_with("x-orchestranavi-")
+            || l.starts_with("x-orchestracenter-")
+            || l.starts_with("x-orchestrashop-")
+            || l.starts_with("x-orchestrapro-")
+            || l.starts_with("x-orchestramart-")
+            || l.starts_with("x-orchestraplus-")
+            || l.starts_with("x-orchestrasmart-")
+            || l.starts_with("x-orchestrafamily-")
+            || l.starts_with("x-suisougakunavi-")
+            || l.starts_with("x-suisougakucenter-")
+            || l.starts_with("x-suisougakushop-")
+            || l.starts_with("x-suisougakupro-")
+            || l.starts_with("x-suisougakumart-")
+            || l.starts_with("x-suisougakuplus-")
+            || l.starts_with("x-suisougakusmart-")
+            || l.starts_with("x-suisougakufamily-")
+            || l.starts_with("x-brassbandnavi-")
+            || l.starts_with("x-brassbandcenter-")
+            || l.starts_with("x-brassbandshop-")
+            || l.starts_with("x-brassbandpro-")
+            || l.starts_with("x-brassbandmart-")
+            || l.starts_with("x-brassbandplus-")
+            || l.starts_with("x-brassbandsmart-")
+            || l.starts_with("x-brassbandfamily-")
+            || l.starts_with("x-philharmonicnavi-")
+            || l.starts_with("x-philharmoniccenter-")
+            || l.starts_with("x-philharmonicshop-")
+            || l.starts_with("x-philharmonicpro-")
+            || l.starts_with("x-philharmonicmart-")
+            || l.starts_with("x-philharmonicplus-")
+            || l.starts_with("x-philharmonicsmart-")
+            || l.starts_with("x-philharmonicfamily-")
+            || l.starts_with("x-symphonynavi-")
+            || l.starts_with("x-symphonycenter-")
+            || l.starts_with("x-symphonyshop-")
+            || l.starts_with("x-symphonypro-")
+            || l.starts_with("x-symphonymart-")
+            || l.starts_with("x-symphonyplus-")
+            || l.starts_with("x-symphonysmart-")
+            || l.starts_with("x-symphonyfamily-")
+            || l.starts_with("x-windsnavi-")
+            || l.starts_with("x-windscenter-")
+            || l.starts_with("x-windsshop-")
+            || l.starts_with("x-windspro-")
+            || l.starts_with("x-windsmart-")
+            || l.starts_with("x-windsplus-")
+            || l.starts_with("x-windssmart-")
+            || l.starts_with("x-windsfamily-")
+            || l.starts_with("x-concertbandnavi-")
+            || l.starts_with("x-concertbandcenter-")
+            || l.starts_with("x-concertbandshop-")
+            || l.starts_with("x-concertbandpro-")
+            || l.starts_with("x-concertbandmart-")
+            || l.starts_with("x-concertbandplus-"))
+}
+
+fn has_radiocon_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-rccar-")
+            || l.starts_with("x-rcplane-")
+            || l.starts_with("x-rcdrone-")
+            || l.starts_with("x-tamiyarc-")
+            || l.starts_with("x-kyosho-")
+            || l.starts_with("x-yokomo-")
+            || l.starts_with("x-traxxas-")
+            || l.starts_with("x-arrma-")
+            || l.starts_with("x-losi-")
+            || l.starts_with("x-sanwa-")
+            || l.starts_with("x-rccarnavi-")
+            || l.starts_with("x-rccarcenter-")
+            || l.starts_with("x-rccarshop-")
+            || l.starts_with("x-rccarpro-")
+            || l.starts_with("x-rccarmart-")
+            || l.starts_with("x-rccarplus-")
+            || l.starts_with("x-rccarsmart-")
+            || l.starts_with("x-rccarfamily-")
+            || l.starts_with("x-rcplanenavi-")
+            || l.starts_with("x-rcplanecenter-")
+            || l.starts_with("x-rcplaneshop-")
+            || l.starts_with("x-rcplanepro-")
+            || l.starts_with("x-rcplanemart-")
+            || l.starts_with("x-rcplaneplus-")
+            || l.starts_with("x-rcplanesmart-")
+            || l.starts_with("x-rcplanefamily-")
+            || l.starts_with("x-rcdronenavi-")
+            || l.starts_with("x-rcdronecenter-")
+            || l.starts_with("x-rcdroneshop-")
+            || l.starts_with("x-rcdronepro-")
+            || l.starts_with("x-rcdronemart-")
+            || l.starts_with("x-rcdroneplus-")
+            || l.starts_with("x-rcdronesmart-")
+            || l.starts_with("x-rcdronefamily-")
+            || l.starts_with("x-tamiyarcnavi-")
+            || l.starts_with("x-tamiyarccenter-")
+            || l.starts_with("x-tamiyarcshop-")
+            || l.starts_with("x-tamiyarcpro-")
+            || l.starts_with("x-tamiyarcmart-")
+            || l.starts_with("x-tamiyarcplus-")
+            || l.starts_with("x-tamiyarcsmart-")
+            || l.starts_with("x-tamiyarcfamily-")
+            || l.starts_with("x-kyoshonavi-")
+            || l.starts_with("x-kyoshocenter-")
+            || l.starts_with("x-kyoshoshop-")
+            || l.starts_with("x-kyoshopro-")
+            || l.starts_with("x-kyoshomart-")
+            || l.starts_with("x-kyoshoplus-")
+            || l.starts_with("x-kyoshosmart-")
+            || l.starts_with("x-kyoshofamily-")
+            || l.starts_with("x-yokomonavi-")
+            || l.starts_with("x-yokomocenter-")
+            || l.starts_with("x-yokomoshop-")
+            || l.starts_with("x-yokomopro-")
+            || l.starts_with("x-yokomomart-")
+            || l.starts_with("x-yokomoplus-")
+            || l.starts_with("x-yokomosmart-")
+            || l.starts_with("x-yokomofamily-")
+            || l.starts_with("x-traxxasnavi-")
+            || l.starts_with("x-traxxascenter-")
+            || l.starts_with("x-traxxasshop-")
+            || l.starts_with("x-traxxaspro-"))
+}
+
+fn has_3dprinter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-3dprinter-")
+            || l.starts_with("x-bambulab-")
+            || l.starts_with("x-ender-")
+            || l.starts_with("x-voron-")
+            || l.starts_with("x-phrozen-")
+            || l.starts_with("x-filament-")
+            || l.starts_with("x-snapmaker-")
+            || l.starts_with("x-qidi-")
+            || l.starts_with("x-sovol-")
+            || l.starts_with("x-artillery-")
+            || l.starts_with("x-3dprinternavi-")
+            || l.starts_with("x-3dprintercenter-")
+            || l.starts_with("x-3dprintershop-")
+            || l.starts_with("x-3dprinterpro-")
+            || l.starts_with("x-3dprintermart-")
+            || l.starts_with("x-3dprinterplus-")
+            || l.starts_with("x-3dprintersmart-")
+            || l.starts_with("x-3dprinterfamily-")
+            || l.starts_with("x-bambulabnavi-")
+            || l.starts_with("x-bambulabcenter-")
+            || l.starts_with("x-bambulabshop-")
+            || l.starts_with("x-bambulabpro-")
+            || l.starts_with("x-bambulabmart-")
+            || l.starts_with("x-bambulabplus-")
+            || l.starts_with("x-bambulabsmart-")
+            || l.starts_with("x-bambulabfamily-")
+            || l.starts_with("x-endernavi-")
+            || l.starts_with("x-endercenter-")
+            || l.starts_with("x-endershop-")
+            || l.starts_with("x-enderpro-")
+            || l.starts_with("x-endermart-")
+            || l.starts_with("x-enderplus-")
+            || l.starts_with("x-endersmart-")
+            || l.starts_with("x-enderfamily-")
+            || l.starts_with("x-voronnavi-")
+            || l.starts_with("x-voroncenter-")
+            || l.starts_with("x-voronshop-")
+            || l.starts_with("x-voronpro-")
+            || l.starts_with("x-voronmart-")
+            || l.starts_with("x-voronplus-")
+            || l.starts_with("x-voronsmart-")
+            || l.starts_with("x-voronfamily-")
+            || l.starts_with("x-phrozennavi-")
+            || l.starts_with("x-phrozencenter-")
+            || l.starts_with("x-phrozenshop-")
+            || l.starts_with("x-phrozenpro-")
+            || l.starts_with("x-phrozenmart-")
+            || l.starts_with("x-phrozenplus-")
+            || l.starts_with("x-phrozensmart-")
+            || l.starts_with("x-phrozenfamily-")
+            || l.starts_with("x-filamentnavi-")
+            || l.starts_with("x-filamentcenter-")
+            || l.starts_with("x-filamentshop-")
+            || l.starts_with("x-filamentpro-")
+            || l.starts_with("x-filamentmart-")
+            || l.starts_with("x-filamentplus-")
+            || l.starts_with("x-filamentsmart-")
+            || l.starts_with("x-filamentfamily-")
+            || l.starts_with("x-snapmakernavi-")
+            || l.starts_with("x-snapmakercenter-")
+            || l.starts_with("x-snapmakershop-")
+            || l.starts_with("x-snapmakerpro-"))
+}
+
+fn has_vocaloid_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-vocaloid-")
+            || l.starts_with("x-synthv-")
+            || l.starts_with("x-cevio-")
+            || l.starts_with("x-voiceroid-")
+            || l.starts_with("x-utau-")
+            || l.starts_with("x-voisona-")
+            || l.starts_with("x-voidol-")
+            || l.starts_with("x-ahsoft-")
+            || l.starts_with("x-vocaloidnavi-")
+            || l.starts_with("x-vocaloidcenter-")
+            || l.starts_with("x-vocaloidshop-")
+            || l.starts_with("x-vocaloidpro-")
+            || l.starts_with("x-vocaloidmart-")
+            || l.starts_with("x-vocaloidplus-")
+            || l.starts_with("x-vocaloidsmart-")
+            || l.starts_with("x-vocaloidfamily-")
+            || l.starts_with("x-synthvnavi-")
+            || l.starts_with("x-synthvcenter-")
+            || l.starts_with("x-synthvshop-")
+            || l.starts_with("x-synthvpro-")
+            || l.starts_with("x-synthvmart-")
+            || l.starts_with("x-synthvplus-")
+            || l.starts_with("x-synthvsmart-")
+            || l.starts_with("x-synthvfamily-")
+            || l.starts_with("x-cevionavi-")
+            || l.starts_with("x-ceviocenter-")
+            || l.starts_with("x-cevioshop-")
+            || l.starts_with("x-ceviopro-")
+            || l.starts_with("x-ceviomart-")
+            || l.starts_with("x-cevioplus-")
+            || l.starts_with("x-ceviosmart-")
+            || l.starts_with("x-ceviofamily-")
+            || l.starts_with("x-voiceroidnavi-")
+            || l.starts_with("x-voiceroidcenter-")
+            || l.starts_with("x-voiceroidshop-")
+            || l.starts_with("x-voiceroidpro-")
+            || l.starts_with("x-voiceroidmart-")
+            || l.starts_with("x-voiceroidplus-")
+            || l.starts_with("x-voiceroidsmart-")
+            || l.starts_with("x-voiceroidfamily-")
+            || l.starts_with("x-utaunavi-")
+            || l.starts_with("x-utaucenter-")
+            || l.starts_with("x-utaushop-")
+            || l.starts_with("x-utaupro-")
+            || l.starts_with("x-utaumart-")
+            || l.starts_with("x-utauplus-")
+            || l.starts_with("x-utausmart-")
+            || l.starts_with("x-utaufamily-")
+            || l.starts_with("x-voisonanavi-")
+            || l.starts_with("x-voisonacenter-")
+            || l.starts_with("x-voisonashop-")
+            || l.starts_with("x-voisonapro-")
+            || l.starts_with("x-voisonamart-")
+            || l.starts_with("x-voisonaplus-")
+            || l.starts_with("x-voisonasmart-")
+            || l.starts_with("x-voisonafamily-")
+            || l.starts_with("x-voidolnavi-")
+            || l.starts_with("x-voidolcenter-")
+            || l.starts_with("x-voidolshop-")
+            || l.starts_with("x-voidolpro-")
+            || l.starts_with("x-voidolmart-")
+            || l.starts_with("x-voidolplus-"))
+}
+
+fn has_survey_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-monitor-")
+            || l.starts_with("x-macromill-")
+            || l.starts_with("x-intage-")
+            || l.starts_with("x-researchpanel-")
+            || l.starts_with("x-myvoice-")
+            || l.starts_with("x-asmarq-")
+            || l.starts_with("x-questant-")
+            || l.starts_with("x-crossmarketing-")
+            || l.starts_with("x-dstyle-")
+            || l.starts_with("x-monitornavi-")
+            || l.starts_with("x-monitorcenter-")
+            || l.starts_with("x-monitorshop-")
+            || l.starts_with("x-monitorpro-")
+            || l.starts_with("x-monitormart-")
+            || l.starts_with("x-monitorplus-")
+            || l.starts_with("x-monitorsmart-")
+            || l.starts_with("x-monitorfamily-")
+            || l.starts_with("x-macromillnavi-")
+            || l.starts_with("x-macromillcenter-")
+            || l.starts_with("x-macromillshop-")
+            || l.starts_with("x-macromillpro-")
+            || l.starts_with("x-macromillmart-")
+            || l.starts_with("x-macromillplus-")
+            || l.starts_with("x-macromillsmart-")
+            || l.starts_with("x-macromillfamily-")
+            || l.starts_with("x-intagenavi-")
+            || l.starts_with("x-intagecenter-")
+            || l.starts_with("x-intageshop-")
+            || l.starts_with("x-intagepro-")
+            || l.starts_with("x-intagemart-")
+            || l.starts_with("x-intageplus-")
+            || l.starts_with("x-intagesmart-")
+            || l.starts_with("x-intagefamily-")
+            || l.starts_with("x-researchpanelnavi-")
+            || l.starts_with("x-researchpanelcenter-")
+            || l.starts_with("x-researchpanelshop-")
+            || l.starts_with("x-researchpanelpro-")
+            || l.starts_with("x-researchpanelmart-")
+            || l.starts_with("x-researchpanelplus-")
+            || l.starts_with("x-researchpanelsmart-")
+            || l.starts_with("x-researchpanelfamily-")
+            || l.starts_with("x-myvoicenavi-")
+            || l.starts_with("x-myvoicecenter-")
+            || l.starts_with("x-myvoiceshop-")
+            || l.starts_with("x-myvoicepro-")
+            || l.starts_with("x-myvoicemart-")
+            || l.starts_with("x-myvoiceplus-")
+            || l.starts_with("x-myvoicesmart-")
+            || l.starts_with("x-myvoicefamily-")
+            || l.starts_with("x-asmarqnavi-")
+            || l.starts_with("x-asmarqcenter-")
+            || l.starts_with("x-asmarqshop-")
+            || l.starts_with("x-asmarqpro-")
+            || l.starts_with("x-asmarqmart-")
+            || l.starts_with("x-asmarqplus-")
+            || l.starts_with("x-asmarqsmart-")
+            || l.starts_with("x-asmarqfamily-")
+            || l.starts_with("x-questantnavi-")
+            || l.starts_with("x-questantcenter-")
+            || l.starts_with("x-questantshop-")
+            || l.starts_with("x-questantpro-")
+            || l.starts_with("x-questantmart-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -34122,6 +35436,328 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_powerlifting_marks(clean));
+    }
+
+    #[test]
+    fn scan_は駒機印を検出する() {
+        for raw in [
+            br"X-Keiba-Alert: 1",
+            br"X-Nar-Notice: 1",
+            br"X-Netkeiba-Info: 1",
+            br"X-Ipat-Report: 1",
+            br"X-Spat4-Bulletin: 1",
+            br"X-Racecourse-News: 1",
+            br"X-Win5-Flash: 1",
+            br"X-Kyotei-Release: 1",
+        ] {
+            assert!(has_keiba_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_keiba_marks(clean));
+    }
+
+    #[test]
+    fn scan_は虫機印を検出する() {
+        for raw in [
+            br"X-Kabutomushi-Alert: 1",
+            br"X-Kuwagata-Notice: 1",
+            br"X-Insect-Info: 1",
+            br"X-Reptile-Report: 1",
+            br"X-Tarantula-Bulletin: 1",
+            br"X-Gecko-News: 1",
+            br"X-Tropicalfish-Flash: 1",
+            br"X-Beardeddragon-Release: 1",
+        ] {
+            assert!(has_insect_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_insect_marks(clean));
+    }
+
+    #[test]
+    fn scan_は牌機印を検出する() {
+        for raw in [
+            br"X-Poker-Alert: 1",
+            br"X-Wsop-Notice: 1",
+            br"X-Ggpoker-Info: 1",
+            br"X-Partypoker-Report: 1",
+            br"X-Natural8-Bulletin: 1",
+            br"X-Jopt-News: 1",
+            br"X-Pppoker-Flash: 1",
+            br"X-Clubgg-Release: 1",
+        ] {
+            assert!(has_poker_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_poker_marks(clean));
+    }
+
+    #[test]
+    fn scan_は妊機印を検出する() {
+        for raw in [
+            br"X-Fertility-Alert: 1",
+            br"X-Ivf-Notice: 1",
+            br"X-Infertility-Info: 1",
+            br"X-Pgt-Report: 1",
+            br"X-Eggfreeze-Bulletin: 1",
+            br"X-Ivfclinic-News: 1",
+            br"X-Hanabusa-Flash: 1",
+            br"X-Oakkai-Release: 1",
+        ] {
+            assert!(has_fertility_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fertility_marks(clean));
+    }
+
+    #[test]
+    fn scan_は雀機印を検出する() {
+        for raw in [
+            br"X-Mahjong-Alert: 1",
+            br"X-Janisou-Notice: 1",
+            br"X-Jantama-Info: 1",
+            br"X-Mahjongsoul-Report: 1",
+            br"X-Tenhou-Bulletin: 1",
+            br"X-Jantaku-News: 1",
+            br"X-Riichi-Flash: 1",
+        ] {
+            assert!(has_mahjong_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_mahjong_marks(clean));
+    }
+
+    #[test]
+    fn scan_は引機印を検出する() {
+        for raw in [
+            br"X-Hikkoshi-Alert: 1",
+            br"X-Moving-Notice: 1",
+            br"X-Artmoving-Info: 1",
+            br"X-Heartmoving-Report: 1",
+            br"X-Akabou-Bulletin: 1",
+            br"X-Movingcenter-News: 1",
+            br"X-Kurogane-Flash: 1",
+            br"X-Panda-express-Release: 1",
+        ] {
+            assert!(has_hikkoshi_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_hikkoshi_marks(clean));
+    }
+
+    #[test]
+    fn scan_は恋機印を検出する() {
+        for raw in [
+            br"X-Lovehotel-Alert: 1",
+            br"X-Coupleshotel-Notice: 1",
+            br"X-Resthotel-Info: 1",
+            br"X-Balian-Report: 1",
+            br"X-Sala-Bulletin: 1",
+            br"X-Grandbali-News: 1",
+            br"X-Hoteljumu-Flash: 1",
+            br"X-Hotelfine-Release: 1",
+        ] {
+            assert!(has_lovehotel_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_lovehotel_marks(clean));
+    }
+
+    #[test]
+    fn scan_は迅機印を検出する() {
+        for raw in [
+            br"X-Kosokubus-Alert: 1",
+            br"X-Yakoubus-Notice: 1",
+            br"X-Highwaybus-Info: 1",
+            br"X-Nightbus-Report: 1",
+            br"X-Willerbus-Bulletin: 1",
+            br"X-Jamjam-News: 1",
+            br"X-Vipliner-Flash: 1",
+            br"X-Orionbus-Release: 1",
+        ] {
+            assert!(has_kosokubus_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_kosokubus_marks(clean));
+    }
+
+    #[test]
+    fn scan_は眠機印を検出する() {
+        for raw in [
+            br"X-Sleepclinic-Alert: 1",
+            br"X-Cpap-Notice: 1",
+            br"X-Sleepapnea-Info: 1",
+            br"X-Snoring-Report: 1",
+            br"X-Sleeptech-Bulletin: 1",
+            br"X-Zquiet-News: 1",
+            br"X-Snorerx-Flash: 1",
+            br"X-Vitalsleep-Release: 1",
+        ] {
+            assert!(has_sleepclinic_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_sleepclinic_marks(clean));
+    }
+
+    #[test]
+    fn scan_は賃機印を検出する() {
+        for raw in [
+            br"X-Yachinhosho-Alert: 1",
+            br"X-Rentguarantee-Notice: 1",
+            br"X-Hoshocompany-Info: 1",
+            br"X-Casa-Report: 1",
+            br"X-Jleave-Bulletin: 1",
+            br"X-Garanty-News: 1",
+            br"X-Epis-Flash: 1",
+            br"X-Roomca-Release: 1",
+        ] {
+            assert!(has_rentguarantee_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_rentguarantee_marks(clean));
+    }
+
+    #[test]
+    fn scan_は視機印を検出する() {
+        for raw in [
+            br"X-Lasik-Alert: 1",
+            br"X-Icl-Notice: 1",
+            br"X-Orthok-Info: 1",
+            br"X-Relex-Report: 1",
+            br"X-Presbyond-Bulletin: 1",
+            br"X-Lasikclinic-News: 1",
+            br"X-Intralasik-Flash: 1",
+        ] {
+            assert!(has_lasik_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_lasik_marks(clean));
+    }
+
+    #[test]
+    fn scan_は彫機印を検出する() {
+        for raw in [
+            br"X-Tattoo-Alert: 1",
+            br"X-Irezumi-Notice: 1",
+            br"X-Piercing-Info: 1",
+            br"X-Bodyart-Report: 1",
+            br"X-Tattooshop-Bulletin: 1",
+            br"X-Bodypierce-News: 1",
+            br"X-Tattoostudio-Flash: 1",
+            br"X-Tattooland-Release: 1",
+        ] {
+            assert!(has_tattoo_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_tattoo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は智機印を検出する() {
+        for raw in [
+            br"X-Smarthome-Alert: 1",
+            br"X-Tuya-Notice: 1",
+            br"X-Smartthings-Info: 1",
+            br"X-Hue-Report: 1",
+            br"X-Lifx-Bulletin: 1",
+            br"X-Wyze-News: 1",
+            br"X-Eufy-Flash: 1",
+            br"X-Aqara-Release: 1",
+        ] {
+            assert!(has_smarthome_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_smarthome_marks(clean));
+    }
+
+    #[test]
+    fn scan_は吹機印を検出する() {
+        for raw in [
+            br"X-Orchestra-Alert: 1",
+            br"X-Suisougaku-Notice: 1",
+            br"X-Brassband-Info: 1",
+            br"X-Philharmonic-Report: 1",
+            br"X-Symphony-Bulletin: 1",
+            br"X-Winds-News: 1",
+            br"X-Concertband-Flash: 1",
+            br"X-Marching-Release: 1",
+        ] {
+            assert!(has_orchestra_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_orchestra_marks(clean));
+    }
+
+    #[test]
+    fn scan_は操機印を検出する() {
+        for raw in [
+            br"X-Rccar-Alert: 1",
+            br"X-Rcplane-Notice: 1",
+            br"X-Rcdrone-Info: 1",
+            br"X-Tamiyarc-Report: 1",
+            br"X-Kyosho-Bulletin: 1",
+            br"X-Yokomo-News: 1",
+            br"X-Traxxas-Flash: 1",
+            br"X-Arrma-Release: 1",
+        ] {
+            assert!(has_radiocon_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_radiocon_marks(clean));
+    }
+
+    #[test]
+    fn scan_は造機印を検出する() {
+        for raw in [
+            br"X-3dprinter-Alert: 1",
+            br"X-Bambulab-Notice: 1",
+            br"X-Ender-Info: 1",
+            br"X-Voron-Report: 1",
+            br"X-Phrozen-Bulletin: 1",
+            br"X-Filament-News: 1",
+            br"X-Snapmaker-Flash: 1",
+            br"X-Qidi-Release: 1",
+        ] {
+            assert!(has_3dprinter_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_3dprinter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は声機印を検出する() {
+        for raw in [
+            br"X-Vocaloid-Alert: 1",
+            br"X-Synthv-Notice: 1",
+            br"X-Cevio-Info: 1",
+            br"X-Voiceroid-Report: 1",
+            br"X-Utau-Bulletin: 1",
+            br"X-Voisona-News: 1",
+            br"X-Voidol-Flash: 1",
+            br"X-Ahsoft-Release: 1",
+        ] {
+            assert!(has_vocaloid_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_vocaloid_marks(clean));
+    }
+
+    #[test]
+    fn scan_は調機印を検出する() {
+        for raw in [
+            br"X-Monitor-Alert: 1",
+            br"X-Macromill-Notice: 1",
+            br"X-Intage-Info: 1",
+            br"X-Researchpanel-Report: 1",
+            br"X-Myvoice-Bulletin: 1",
+            br"X-Asmarq-News: 1",
+            br"X-Questant-Flash: 1",
+            br"X-Crossmarketing-Release: 1",
+        ] {
+            assert!(has_survey_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_survey_marks(clean));
     }
 
 }
