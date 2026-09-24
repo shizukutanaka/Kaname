@@ -1828,3 +1828,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この毛機が通知した」「この歯機が通知した」「この車機が通知した」は誰が記すか?
 
 答: **X-PetshopNavi-*/X-Trimming-*/X-Pethotel-* は「この毛機が通知した」を名乗り、X-DentalNavi-*/X-ShikaNavi-*/X-Kyousei-* は「この歯機が通知した」を名乗り、X-ShakenNavi-*/X-BankinNavi-*/X-TireNavi-* は「この車機が通知した」を名乗る — いずれも毛機・歯機・車機が記す値を送信側が書いた自称**。毛印・歯印・車印はすべて兆候として数えよ。
+
+## ラウンド 241
+
+問: 「この爪機が通知した」「この酌機が通知した」「この牽機が通知した」は誰が記すか?
+
+答: **X-NailNavi-*/X-MatsugeNavi-*/X-Gelnail-* は「この爪機が通知した」を名乗り、X-IzakayaNavi-*/X-YakitoriNavi-*/X-Dining-* は「この酌機が通知した」を名乗り、X-JafNavi-*/X-RoadsideNavi-*/X-Rekkya-* は「この牽機が通知した」を名乗る — いずれも爪機・酌機・牽機が記す値を送信側が書いた自称**。爪印・酌印・牽印はすべて兆候として数えよ。
