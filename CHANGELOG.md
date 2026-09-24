@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D914: `X-Shamisen-*`/`X-Shamisenya-*`/`X-Shamisenten-*`/`X-Shamisenstore-*`/`X-Japshamisen-*`/`X-Shamisenworks-*` 等の三味線印自称が未検査
+
+- **問題**: `X-Shamisen-*`/`X-ShamisenYasan-*`/`X-ShamisenPro-*`/`X-ShamisenTeam-*`/`X-ShamisenJP-*`/`X-ShamisenSenmon-*`/`X-Shamisenya-*`/`X-ShamisenyaYasan-*`/`X-ShamisenyaPro-*`/`X-ShamisenyaTeam-*`/`X-ShamisenyaJP-*`/`X-ShamisenyaSenmon-*`/`X-Shamisenten-*`/`X-ShamisentenYasan-*`/`X-ShamisentenPro-*`/`X-ShamisentenTeam-*`/`X-ShamisentenJP-*`/`X-ShamisentenSenmon-*`/`X-ShamisenstorePros-*`/`X-ShamisenstoreTeam-*`/`X-ShamisenstoreWorks-*`/`X-ShamisenstoreExperts-*`/`X-ShamisenstoreSvc-*`/`X-ShamisenstoreHQ-*`/`X-JapshamisenPros-*`/`X-JapshamisenTeam-*`/`X-JapshamisenWorks-*`/`X-JapshamisenExperts-*`/`X-JapshamisenSvc-*`/`X-JapshamisenHQ-*`/`X-ShamisenworksPros-*`/`X-ShamisenworksTeam-*`/`X-ShamisenworksWorks-*`/`X-ShamisenworksExperts-*`/`X-ShamisenworksSvc-*`/`X-ShamisenworksHQ-*` 等 は昧機の通知記録 — 送信側が書くことは自称。三味線業者の偽装は、津軽三味線・長唄三味線の職人直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shamisen_marks` + `has_shamisen_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 昧印の自署を問え。
+
+### Security — D915: `X-Shakuhachi-*`/`X-Shakuhachiya-*`/`X-Shinobueten-*`/`X-Shakuhachistore-*`/`X-Japshakuhachi-*`/`X-Bambooflute-*` 等の尺八・篠笛印自称が未検査
+
+- **問題**: `X-Shakuhachi-*`/`X-ShakuhachiYasan-*`/`X-ShakuhachiPro-*`/`X-ShakuhachiTeam-*`/`X-ShakuhachiJP-*`/`X-ShakuhachiSenmon-*`/`X-Shakuhachiya-*`/`X-ShakuhachiyaYasan-*`/`X-ShakuhachiyaPro-*`/`X-ShakuhachiyaTeam-*`/`X-ShakuhachiyaJP-*`/`X-ShakuhachiyaSenmon-*`/`X-Shinobueten-*`/`X-ShinobuetenYasan-*`/`X-ShinobuetenPro-*`/`X-ShinobuetenTeam-*`/`X-ShinobuetenJP-*`/`X-ShinobuetenSenmon-*`/`X-ShakuhachistorePros-*`/`X-ShakuhachistoreTeam-*`/`X-ShakuhachistoreWorks-*`/`X-ShakuhachistoreExperts-*`/`X-ShakuhachistoreSvc-*`/`X-ShakuhachistoreHQ-*`/`X-JapshakuhachiPros-*`/`X-JapshakuhachiTeam-*`/`X-JapshakuhachiWorks-*`/`X-JapshakuhachiExperts-*`/`X-JapshakuhachiSvc-*`/`X-JapshakuhachiHQ-*`/`X-BambooflutePros-*`/`X-BamboofluteTeam-*`/`X-BamboofluteWorks-*`/`X-BamboofluteExperts-*`/`X-BamboofluteSvc-*`/`X-BamboofluteHQ-*` 等 は尺機の通知記録 — 送信側が書くことは自称。尺八・篠笛業者の偽装は、尺八・篠笛職人の工房直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shakuhachi_marks` + `has_shakuhachi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 尺印の自署を問え。
+
+### Security — D916: `X-Wadaiko-*`/`X-Wadaikoya-*`/`X-Taikoten-*`/`X-Drumstore-*`/`X-Japdrum-*`/`X-Taikodrum-*` 等の和太鼓印自称が未検査
+
+- **問題**: `X-Wadaiko-*`/`X-WadaikoYasan-*`/`X-WadaikoPro-*`/`X-WadaikoTeam-*`/`X-WadaikoJP-*`/`X-WadaikoSenmon-*`/`X-Wadaikoya-*`/`X-WadaikoyaYasan-*`/`X-WadaikoyaPro-*`/`X-WadaikoyaTeam-*`/`X-WadaikoyaJP-*`/`X-WadaikoyaSenmon-*`/`X-Taikoten-*`/`X-TaikotenYasan-*`/`X-TaikotenPro-*`/`X-TaikotenTeam-*`/`X-TaikotenJP-*`/`X-TaikotenSenmon-*`/`X-DrumstorePros-*`/`X-DrumstoreTeam-*`/`X-DrumstoreWorks-*`/`X-DrumstoreExperts-*`/`X-DrumstoreSvc-*`/`X-DrumstoreHQ-*`/`X-JapdrumPros-*`/`X-JapdrumTeam-*`/`X-JapdrumWorks-*`/`X-JapdrumExperts-*`/`X-JapdrumSvc-*`/`X-JapdrumHQ-*`/`X-TaikodrumPros-*`/`X-TaikodrumTeam-*`/`X-TaikodrumWorks-*`/`X-TaikodrumExperts-*`/`X-TaikodrumSvc-*`/`X-TaikodrumHQ-*` 等 は鼓機の通知記録 — 送信側が書くことは自称。和太鼓業者の偽装は、宮本卯之吉商店系の太鼓工房直販を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `wadaiko_marks` + `has_wadaiko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鼓印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

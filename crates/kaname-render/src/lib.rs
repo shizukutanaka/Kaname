@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub shamisen_marks: bool,
+    pub shakuhachi_marks: bool,
+    pub wadaiko_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        shamisen_marks: has_shamisen_marks(hdr),
+        shakuhachi_marks: has_shakuhachi_marks(hdr),
+        wadaiko_marks: has_wadaiko_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_shamisen_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shamisen-")
+            || l.starts_with("x-shamisenyasan-")
+            || l.starts_with("x-shamisenpro-")
+            || l.starts_with("x-shamisenteam-")
+            || l.starts_with("x-shamisenkensa-")
+            || l.starts_with("x-shamisenmanten-")
+            || l.starts_with("x-shamisennomi-")
+            || l.starts_with("x-shamisenjp-")
+            || l.starts_with("x-shamisensenmon-")
+            || l.starts_with("x-shamisenmitsumori-")
+            || l.starts_with("x-shamisenchousa-")
+            || l.starts_with("x-shamisenteiki-")
+            || l.starts_with("x-shamisenpros-")
+            || l.starts_with("x-shamisendoctors-")
+            || l.starts_with("x-shamisenrescue-")
+            || l.starts_with("x-shamisenya-")
+            || l.starts_with("x-shamisenyayasan-")
+            || l.starts_with("x-shamisenyapro-")
+            || l.starts_with("x-shamisenyateam-")
+            || l.starts_with("x-shamisenyajp-")
+            || l.starts_with("x-shamisenyasenmon-")
+            || l.starts_with("x-shamisenyapros-")
+            || l.starts_with("x-shamisenyadoctors-")
+            || l.starts_with("x-shamisenyarescue-")
+            || l.starts_with("x-shamisenten-")
+            || l.starts_with("x-shamisentenyasan-")
+            || l.starts_with("x-shamisentenpro-")
+            || l.starts_with("x-shamisententeam-")
+            || l.starts_with("x-shamisentenjp-")
+            || l.starts_with("x-shamisentensenmon-")
+            || l.starts_with("x-shamisentenpros-")
+            || l.starts_with("x-shamisentendoctors-")
+            || l.starts_with("x-shamisentenrescue-")
+            || l.starts_with("x-shamisenstorepros-")
+            || l.starts_with("x-shamisenstoreteam-")
+            || l.starts_with("x-shamisenstoreworks-")
+            || l.starts_with("x-shamisenstoreexperts-")
+            || l.starts_with("x-shamisenstoresvc-")
+            || l.starts_with("x-shamisenstorehq-")
+            || l.starts_with("x-japshamisenpros-")
+            || l.starts_with("x-japshamisenteam-")
+            || l.starts_with("x-japshamisenworks-")
+            || l.starts_with("x-japshamisenexperts-")
+            || l.starts_with("x-japshamisensvc-")
+            || l.starts_with("x-japshamisenhq-")
+            || l.starts_with("x-shamisenworkspros-")
+            || l.starts_with("x-shamisenworksteam-")
+            || l.starts_with("x-shamisenworksworks-")
+            || l.starts_with("x-shamisenworksexperts-")
+            || l.starts_with("x-shamisenworkssvc-")
+            || l.starts_with("x-shamisenworkshq-")
+    })
+}
+
+fn has_shakuhachi_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-shakuhachi-")
+            || l.starts_with("x-shakuhachiyasan-")
+            || l.starts_with("x-shakuhachipro-")
+            || l.starts_with("x-shakuhachiteam-")
+            || l.starts_with("x-shakuhachikensa-")
+            || l.starts_with("x-shakuhachimanten-")
+            || l.starts_with("x-shakuhachinomi-")
+            || l.starts_with("x-shakuhachijp-")
+            || l.starts_with("x-shakuhachisenmon-")
+            || l.starts_with("x-shakuhachimitsumori-")
+            || l.starts_with("x-shakuhachichousa-")
+            || l.starts_with("x-shakuhachiteiki-")
+            || l.starts_with("x-shakuhachipros-")
+            || l.starts_with("x-shakuhachidoctors-")
+            || l.starts_with("x-shakuhachirescue-")
+            || l.starts_with("x-shakuhachiya-")
+            || l.starts_with("x-shakuhachiyayasan-")
+            || l.starts_with("x-shakuhachiyapro-")
+            || l.starts_with("x-shakuhachiyateam-")
+            || l.starts_with("x-shakuhachiyajp-")
+            || l.starts_with("x-shakuhachiyasenmon-")
+            || l.starts_with("x-shakuhachiyapros-")
+            || l.starts_with("x-shakuhachiyadoctors-")
+            || l.starts_with("x-shakuhachiyarescue-")
+            || l.starts_with("x-shinobueten-")
+            || l.starts_with("x-shinobuetenyasan-")
+            || l.starts_with("x-shinobuetenpro-")
+            || l.starts_with("x-shinobuetenteam-")
+            || l.starts_with("x-shinobuetenjp-")
+            || l.starts_with("x-shinobuetensenmon-")
+            || l.starts_with("x-shinobuetenpros-")
+            || l.starts_with("x-shinobuetendoctors-")
+            || l.starts_with("x-shinobuetenrescue-")
+            || l.starts_with("x-shakuhachistorepros-")
+            || l.starts_with("x-shakuhachistoreteam-")
+            || l.starts_with("x-shakuhachistoreworks-")
+            || l.starts_with("x-shakuhachistoreexperts-")
+            || l.starts_with("x-shakuhachistoresvc-")
+            || l.starts_with("x-shakuhachistorehq-")
+            || l.starts_with("x-japshakuhachipros-")
+            || l.starts_with("x-japshakuhachiteam-")
+            || l.starts_with("x-japshakuhachiworks-")
+            || l.starts_with("x-japshakuhachiexperts-")
+            || l.starts_with("x-japshakuhachisvc-")
+            || l.starts_with("x-japshakuhachihq-")
+            || l.starts_with("x-bambooflutepros-")
+            || l.starts_with("x-bamboofluteteam-")
+            || l.starts_with("x-bamboofluteworks-")
+            || l.starts_with("x-bamboofluteexperts-")
+            || l.starts_with("x-bambooflutesvc-")
+            || l.starts_with("x-bambooflutehq-")
+    })
+}
+
+fn has_wadaiko_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-wadaiko-")
+            || l.starts_with("x-wadaikoyasan-")
+            || l.starts_with("x-wadaikopro-")
+            || l.starts_with("x-wadaikoteam-")
+            || l.starts_with("x-wadaikokensa-")
+            || l.starts_with("x-wadaikomanten-")
+            || l.starts_with("x-wadaikonomi-")
+            || l.starts_with("x-wadaikojp-")
+            || l.starts_with("x-wadaikosenmon-")
+            || l.starts_with("x-wadaikomitsumori-")
+            || l.starts_with("x-wadaikochousa-")
+            || l.starts_with("x-wadaikoteiki-")
+            || l.starts_with("x-wadaikopros-")
+            || l.starts_with("x-wadaikodoctors-")
+            || l.starts_with("x-wadaikorescue-")
+            || l.starts_with("x-wadaikoya-")
+            || l.starts_with("x-wadaikoyayasan-")
+            || l.starts_with("x-wadaikoyapro-")
+            || l.starts_with("x-wadaikoyateam-")
+            || l.starts_with("x-wadaikoyajp-")
+            || l.starts_with("x-wadaikoyasenmon-")
+            || l.starts_with("x-wadaikoyapros-")
+            || l.starts_with("x-wadaikoyadoctors-")
+            || l.starts_with("x-wadaikoyarescue-")
+            || l.starts_with("x-taikoten-")
+            || l.starts_with("x-taikotenyasan-")
+            || l.starts_with("x-taikotenpro-")
+            || l.starts_with("x-taikotenteam-")
+            || l.starts_with("x-taikotenjp-")
+            || l.starts_with("x-taikotensenmon-")
+            || l.starts_with("x-taikotenpros-")
+            || l.starts_with("x-taikotendoctors-")
+            || l.starts_with("x-taikotenrescue-")
+            || l.starts_with("x-drumstorepros-")
+            || l.starts_with("x-drumstoreteam-")
+            || l.starts_with("x-drumstoreworks-")
+            || l.starts_with("x-drumstoreexperts-")
+            || l.starts_with("x-drumstoresvc-")
+            || l.starts_with("x-drumstorehq-")
+            || l.starts_with("x-japdrumpros-")
+            || l.starts_with("x-japdrumteam-")
+            || l.starts_with("x-japdrumworks-")
+            || l.starts_with("x-japdrumexperts-")
+            || l.starts_with("x-japdrumsvc-")
+            || l.starts_with("x-japdrumhq-")
+            || l.starts_with("x-taikodrumpros-")
+            || l.starts_with("x-taikodrumteam-")
+            || l.starts_with("x-taikodrumworks-")
+            || l.starts_with("x-taikodrumexperts-")
+            || l.starts_with("x-taikodrumsvc-")
+            || l.starts_with("x-taikodrumhq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は昧機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Shamisen-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisentenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenstorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapshamisenHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShamisenworksExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_shamisen_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_shamisen_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は尺機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Shakuhachi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShakuhachiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShakuhachiyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShinobuetenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShakuhachistorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapshakuhachiHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShakuhachiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BamboofluteExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_shakuhachi_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_shakuhachi_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は鼓機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Wadaiko-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WadaikoPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WadaikoyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TaikotenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DrumstorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapdrumHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WadaikoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TaikodrumExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_wadaiko_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_wadaiko_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
