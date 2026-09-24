@@ -1949,6 +1949,12 @@ pub struct Envelope {
     pub craftbeer_marks: bool,
     /// `X-Expo-*`/`X-Exhibition-*`/`X-Messe-*` 等の展示会・見本市・学会印を送信側が自称する兆候 (D718)
     pub expo_marks: bool,
+    /// `X-Shiminnouen-*`/`X-Nouen-*`/`X-Farm-*` 等の市民農園・家庭菜園印を送信側が自称する兆候 (D719)
+    pub nouen_marks: bool,
+    /// `X-Tokuho-*`/`X-Foshu-*`/`X-Kinousei-*` 等のトクホ・機能性食品・健康食品印を送信側が自称する兆候 (D720)
+    pub tokuho_marks: bool,
+    /// `X-Planetarium-*`/`X-Astronomy-*`/`X-Observatory-*` 等の天文・プラネタリウム印を送信側が自称する兆候 (D721)
+    pub planetarium_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2545,6 +2551,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mvno_marks: has_mvno_marks(hdr),
         craftbeer_marks: has_craftbeer_marks(hdr),
         expo_marks: has_expo_marks(hdr),
+        nouen_marks: has_nouen_marks(hdr),
+        tokuho_marks: has_tokuho_marks(hdr),
+        planetarium_marks: has_planetarium_marks(hdr),
     })
 }
 
@@ -20880,6 +20889,216 @@ fn has_expo_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-gakkaifamily-"))
 }
 
+fn has_nouen_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-shiminnouen-")
+            || l.starts_with("x-nouen-")
+            || l.starts_with("x-farm-")
+            || l.starts_with("x-sharehatake-")
+            || l.starts_with("x-myfarm-")
+            || l.starts_with("x-kateisaien-")
+            || l.starts_with("x-plantfactory-")
+            || l.starts_with("x-hatake-")
+            || l.starts_with("x-hata-")
+            || l.starts_with("x-garden-")
+            || l.starts_with("x-allotment-")
+            || l.starts_with("x-communitygarden-")
+            || l.starts_with("x-shiminnouennavi-")
+            || l.starts_with("x-shiminnouencenter-")
+            || l.starts_with("x-shiminnouenshop-")
+            || l.starts_with("x-shiminnouenpro-")
+            || l.starts_with("x-shiminnouenmart-")
+            || l.starts_with("x-shiminnouenplus-")
+            || l.starts_with("x-shiminnouensmart-")
+            || l.starts_with("x-shiminnouenfamily-")
+            || l.starts_with("x-nouennavi-")
+            || l.starts_with("x-nouencenter-")
+            || l.starts_with("x-nouenshop-")
+            || l.starts_with("x-nouenpro-")
+            || l.starts_with("x-nouenmart-")
+            || l.starts_with("x-nouenplus-")
+            || l.starts_with("x-nouensmart-")
+            || l.starts_with("x-nouenfamily-")
+            || l.starts_with("x-farmnavi-")
+            || l.starts_with("x-farmcenter-")
+            || l.starts_with("x-farmshop-")
+            || l.starts_with("x-farmpro-")
+            || l.starts_with("x-farmmart-")
+            || l.starts_with("x-farmplus-")
+            || l.starts_with("x-farmsmart-")
+            || l.starts_with("x-farmfamily-")
+            || l.starts_with("x-sharehatakenavi-")
+            || l.starts_with("x-sharehatakecenter-")
+            || l.starts_with("x-sharehatakeshop-")
+            || l.starts_with("x-sharehatakepro-")
+            || l.starts_with("x-sharehatakemart-")
+            || l.starts_with("x-sharehatakeplus-")
+            || l.starts_with("x-sharehatakesmart-")
+            || l.starts_with("x-sharehatakefamily-")
+            || l.starts_with("x-myfarmnavi-")
+            || l.starts_with("x-myfarmcenter-")
+            || l.starts_with("x-myfarmshop-")
+            || l.starts_with("x-myfarmpro-")
+            || l.starts_with("x-myfarmmart-")
+            || l.starts_with("x-myfarmplus-")
+            || l.starts_with("x-myfarmsmart-")
+            || l.starts_with("x-myfarmfamily-")
+            || l.starts_with("x-kateisaiennavi-")
+            || l.starts_with("x-kateisaiencenter-")
+            || l.starts_with("x-kateisaienshop-")
+            || l.starts_with("x-kateisaienpro-")
+            || l.starts_with("x-kateisaienmart-")
+            || l.starts_with("x-kateisaienplus-")
+            || l.starts_with("x-kateisaiensmart-")
+            || l.starts_with("x-kateisaienfamily-")
+            || l.starts_with("x-plantfactorynavi-")
+            || l.starts_with("x-plantfactorycenter-"))
+}
+
+fn has_tokuho_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-tokuho-")
+            || l.starts_with("x-foshu-")
+            || l.starts_with("x-kinousei-")
+            || l.starts_with("x-eiyou-")
+            || l.starts_with("x-kouso-")
+            || l.starts_with("x-enzyme-")
+            || l.starts_with("x-collagen-")
+            || l.starts_with("x-placenta-")
+            || l.starts_with("x-ceramide-")
+            || l.starts_with("x-isoflavone-")
+            || l.starts_with("x-nyusankin-")
+            || l.starts_with("x-bifidus-")
+            || l.starts_with("x-glucosamine-")
+            || l.starts_with("x-chondroitin-")
+            || l.starts_with("x-coq10-")
+            || l.starts_with("x-astaxanthin-")
+            || l.starts_with("x-dha-")
+            || l.starts_with("x-epa-")
+            || l.starts_with("x-fucoidan-")
+            || l.starts_with("x-agaricus-")
+            || l.starts_with("x-propolis-")
+            || l.starts_with("x-royaljelly-")
+            || l.starts_with("x-noni-")
+            || l.starts_with("x-aojiru-")
+            || l.starts_with("x-maca-")
+            || l.starts_with("x-turmeric-")
+            || l.starts_with("x-ukon-")
+            || l.starts_with("x-tokuhonavi-")
+            || l.starts_with("x-tokuhocenter-")
+            || l.starts_with("x-tokuhoshop-")
+            || l.starts_with("x-tokuhopro-")
+            || l.starts_with("x-tokuhomart-")
+            || l.starts_with("x-tokuhoplus-")
+            || l.starts_with("x-tokuhosmart-")
+            || l.starts_with("x-tokuhofamily-")
+            || l.starts_with("x-foshunavi-")
+            || l.starts_with("x-foshucenter-")
+            || l.starts_with("x-foshushop-")
+            || l.starts_with("x-foshupro-")
+            || l.starts_with("x-foshumart-")
+            || l.starts_with("x-foshuplus-")
+            || l.starts_with("x-foshusmart-")
+            || l.starts_with("x-foshufamily-")
+            || l.starts_with("x-kinouseinavi-")
+            || l.starts_with("x-kinouseicenter-")
+            || l.starts_with("x-kinouseishop-")
+            || l.starts_with("x-kinouseipro-")
+            || l.starts_with("x-kinouseimart-")
+            || l.starts_with("x-kinouseiplus-")
+            || l.starts_with("x-kinouseismart-")
+            || l.starts_with("x-kinouseifamily-")
+            || l.starts_with("x-eiyounavi-")
+            || l.starts_with("x-eiyoucenter-")
+            || l.starts_with("x-eiyoushop-")
+            || l.starts_with("x-eiyoupro-")
+            || l.starts_with("x-eiyoumart-")
+            || l.starts_with("x-eiyouplus-")
+            || l.starts_with("x-eiyousmart-")
+            || l.starts_with("x-eiyoufamily-")
+            || l.starts_with("x-kousonavi-")
+            || l.starts_with("x-kousocenter-")
+            || l.starts_with("x-kousoshop-"))
+}
+
+fn has_planetarium_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-planetarium-")
+            || l.starts_with("x-astronomy-")
+            || l.starts_with("x-observatory-")
+            || l.starts_with("x-telescope-")
+            || l.starts_with("x-tenmon-")
+            || l.starts_with("x-hoshizora-")
+            || l.starts_with("x-celestron-")
+            || l.starts_with("x-vixen-")
+            || l.starts_with("x-meade-")
+            || l.starts_with("x-astro-")
+            || l.starts_with("x-hoshi-")
+            || l.starts_with("x-zodiac-")
+            || l.starts_with("x-meteor-")
+            || l.starts_with("x-planetariumnavi-")
+            || l.starts_with("x-planetariumcenter-")
+            || l.starts_with("x-planetariumshop-")
+            || l.starts_with("x-planetariumpro-")
+            || l.starts_with("x-planetariummart-")
+            || l.starts_with("x-planetariumplus-")
+            || l.starts_with("x-planetariumsmart-")
+            || l.starts_with("x-planetariumfamily-")
+            || l.starts_with("x-astronomynavi-")
+            || l.starts_with("x-astronomycenter-")
+            || l.starts_with("x-astronomyshop-")
+            || l.starts_with("x-astronomypro-")
+            || l.starts_with("x-astronomymart-")
+            || l.starts_with("x-astronomyplus-")
+            || l.starts_with("x-astronomysmart-")
+            || l.starts_with("x-astronomyfamily-")
+            || l.starts_with("x-observatorynavi-")
+            || l.starts_with("x-observatorycenter-")
+            || l.starts_with("x-observatoryshop-")
+            || l.starts_with("x-observatorypro-")
+            || l.starts_with("x-observatorymart-")
+            || l.starts_with("x-observatoryplus-")
+            || l.starts_with("x-observatorysmart-")
+            || l.starts_with("x-observatoryfamily-")
+            || l.starts_with("x-telescopenavi-")
+            || l.starts_with("x-telescopecenter-")
+            || l.starts_with("x-telescopeshop-")
+            || l.starts_with("x-telescopepro-")
+            || l.starts_with("x-telescopemart-")
+            || l.starts_with("x-telescopeplus-")
+            || l.starts_with("x-telescopesmart-")
+            || l.starts_with("x-telescopefamily-")
+            || l.starts_with("x-tenmonnavi-")
+            || l.starts_with("x-tenmoncenter-")
+            || l.starts_with("x-tenmonshop-")
+            || l.starts_with("x-tenmonpro-")
+            || l.starts_with("x-tenmonmart-")
+            || l.starts_with("x-tenmonplus-")
+            || l.starts_with("x-tenmonsmart-")
+            || l.starts_with("x-tenmonfamily-")
+            || l.starts_with("x-hoshizoranavi-")
+            || l.starts_with("x-hoshizoracenter-")
+            || l.starts_with("x-hoshizorashop-")
+            || l.starts_with("x-hoshizorapro-")
+            || l.starts_with("x-hoshizoramart-")
+            || l.starts_with("x-hoshizoraplus-")
+            || l.starts_with("x-hoshizorasmart-")
+            || l.starts_with("x-hoshizorafamily-")
+            || l.starts_with("x-celestronnavi-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -31119,6 +31338,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_expo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は畑機印を検出する() {
+        for raw in [
+            br"X-Shiminnouen-Alert: 1",
+            br"X-Nouen-Notice: 1",
+            br"X-Farm-Info: 1",
+            br"X-Sharehatake-Report: 1",
+            br"X-Myfarm-Bulletin: 1",
+            br"X-Kateisaien-News: 1",
+            br"X-Hatake-Flash: 1",
+            br"X-Allotment-Release: 1",
+        ] {
+            assert!(has_nouen_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_nouen_marks(clean));
+    }
+
+    #[test]
+    fn scan_は療機印を検出する() {
+        for raw in [
+            br"X-Tokuho-Alert: 1",
+            br"X-Foshu-Notice: 1",
+            br"X-Kinousei-Info: 1",
+            br"X-Kouso-Report: 1",
+            br"X-Enzyme-Bulletin: 1",
+            br"X-Collagen-News: 1",
+            br"X-Glucosamine-Flash: 1",
+            br"X-Aojiru-Release: 1",
+        ] {
+            assert!(has_tokuho_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_tokuho_marks(clean));
+    }
+
+    #[test]
+    fn scan_は星機印を検出する() {
+        for raw in [
+            br"X-Planetarium-Alert: 1",
+            br"X-Astronomy-Notice: 1",
+            br"X-Observatory-Info: 1",
+            br"X-Telescope-Report: 1",
+            br"X-Tenmon-Bulletin: 1",
+            br"X-Hoshizora-News: 1",
+            br"X-Celestron-Flash: 1",
+            br"X-Vixen-Release: 1",
+        ] {
+            assert!(has_planetarium_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_planetarium_marks(clean));
     }
 
 }
