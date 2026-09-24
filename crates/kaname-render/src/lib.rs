@@ -1955,6 +1955,12 @@ pub struct Envelope {
     pub tokuho_marks: bool,
     /// `X-Planetarium-*`/`X-Astronomy-*`/`X-Observatory-*` 等の天文・プラネタリウム印を送信側が自称する兆候 (D721)
     pub planetarium_marks: bool,
+    /// `X-Fujirock-*`/`X-Summersonic-*`/`X-Rockin-*` 等の音楽フェス印を送信側が自称する兆候 (D722)
+    pub fujirock_marks: bool,
+    /// `X-Callcenter-*`/`X-Telemarketing-*`/`X-Bell24-*` 等のコールセンター・電話代行印を送信側が自称する兆候 (D723)
+    pub callcenter_marks: bool,
+    /// `X-Kashikaigi-*`/`X-Virtualoffice-*`/`X-Servicedoffice-*` 等の貸し会議室・レンタルスペース印を送信側が自称する兆候 (D724)
+    pub rentalspace_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2554,6 +2560,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         nouen_marks: has_nouen_marks(hdr),
         tokuho_marks: has_tokuho_marks(hdr),
         planetarium_marks: has_planetarium_marks(hdr),
+        fujirock_marks: has_fujirock_marks(hdr),
+        callcenter_marks: has_callcenter_marks(hdr),
+        rentalspace_marks: has_rentalspace_marks(hdr),
     })
 }
 
@@ -21099,6 +21108,216 @@ fn has_planetarium_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-celestronnavi-"))
 }
 
+fn has_fujirock_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-fujirock-")
+            || l.starts_with("x-summersonic-")
+            || l.starts_with("x-rockin-")
+            || l.starts_with("x-risingsun-")
+            || l.starts_with("x-sstv-")
+            || l.starts_with("x-sweetloveshower-")
+            || l.starts_with("x-viva-")
+            || l.starts_with("x-metrock-")
+            || l.starts_with("x-rushball-")
+            || l.starts_with("x-apbank-")
+            || l.starts_with("x-itadaki-")
+            || l.starts_with("x-wildbunch-")
+            || l.starts_with("x-umf-")
+            || l.starts_with("x-edc-")
+            || l.starts_with("x-tomorrowland-")
+            || l.starts_with("x-coachella-")
+            || l.starts_with("x-glastonbury-")
+            || l.starts_with("x-lollapalooza-")
+            || l.starts_with("x-fujirocknavi-")
+            || l.starts_with("x-fujirockcenter-")
+            || l.starts_with("x-fujirockshop-")
+            || l.starts_with("x-fujirockpro-")
+            || l.starts_with("x-fujirockmart-")
+            || l.starts_with("x-fujirockplus-")
+            || l.starts_with("x-fujirocksmart-")
+            || l.starts_with("x-fujirockfamily-")
+            || l.starts_with("x-summersonicnavi-")
+            || l.starts_with("x-summersoniccenter-")
+            || l.starts_with("x-summersonicshop-")
+            || l.starts_with("x-summersonicpro-")
+            || l.starts_with("x-summersonicmart-")
+            || l.starts_with("x-summersonicplus-")
+            || l.starts_with("x-summersonicsmart-")
+            || l.starts_with("x-summersonicfamily-")
+            || l.starts_with("x-rockinnavi-")
+            || l.starts_with("x-rockincenter-")
+            || l.starts_with("x-rockinshop-")
+            || l.starts_with("x-rockinpro-")
+            || l.starts_with("x-rockinmart-")
+            || l.starts_with("x-rockinplus-")
+            || l.starts_with("x-rockinsmart-")
+            || l.starts_with("x-rockinfamily-")
+            || l.starts_with("x-risingsunnavi-")
+            || l.starts_with("x-risingsuncenter-")
+            || l.starts_with("x-risingsunshop-")
+            || l.starts_with("x-risingsunpro-")
+            || l.starts_with("x-risingsunmart-")
+            || l.starts_with("x-risingsunplus-")
+            || l.starts_with("x-risingsunsmart-")
+            || l.starts_with("x-risingsunfamily-")
+            || l.starts_with("x-sstvnavi-")
+            || l.starts_with("x-sstvcenter-")
+            || l.starts_with("x-sstvshop-")
+            || l.starts_with("x-sstvpro-")
+            || l.starts_with("x-sstvmart-")
+            || l.starts_with("x-sstvplus-")
+            || l.starts_with("x-sstvsmart-")
+            || l.starts_with("x-sstvfamily-")
+            || l.starts_with("x-sweetloveshowernavi-")
+            || l.starts_with("x-sweetloveshowercenter-")
+            || l.starts_with("x-sweetloveshowershop-")
+            || l.starts_with("x-sweetloveshowerpro-"))
+}
+
+fn has_callcenter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-callcenter-")
+            || l.starts_with("x-telemarketing-")
+            || l.starts_with("x-bell24-")
+            || l.starts_with("x-transcosmos-")
+            || l.starts_with("x-teleperformance-")
+            || l.starts_with("x-taskus-")
+            || l.starts_with("x-alorica-")
+            || l.starts_with("x-convergys-")
+            || l.starts_with("x-sitel-")
+            || l.starts_with("x-sykes-")
+            || l.starts_with("x-icmi-")
+            || l.starts_with("x-iquest-")
+            || l.starts_with("x-denwa-")
+            || l.starts_with("x-reservationcenter-")
+            || l.starts_with("x-callcenternavi-")
+            || l.starts_with("x-callcentercenter-")
+            || l.starts_with("x-callcentershop-")
+            || l.starts_with("x-callcenterpro-")
+            || l.starts_with("x-callcentermart-")
+            || l.starts_with("x-callcenterplus-")
+            || l.starts_with("x-callcentersmart-")
+            || l.starts_with("x-callcenterfamily-")
+            || l.starts_with("x-telemarketingnavi-")
+            || l.starts_with("x-telemarketingcenter-")
+            || l.starts_with("x-telemarketingshop-")
+            || l.starts_with("x-telemarketingpro-")
+            || l.starts_with("x-telemarketingmart-")
+            || l.starts_with("x-telemarketingplus-")
+            || l.starts_with("x-telemarketingsmart-")
+            || l.starts_with("x-telemarketingfamily-")
+            || l.starts_with("x-bell24navi-")
+            || l.starts_with("x-bell24center-")
+            || l.starts_with("x-bell24shop-")
+            || l.starts_with("x-bell24pro-")
+            || l.starts_with("x-bell24mart-")
+            || l.starts_with("x-bell24plus-")
+            || l.starts_with("x-bell24smart-")
+            || l.starts_with("x-bell24family-")
+            || l.starts_with("x-transcosmosnavi-")
+            || l.starts_with("x-transcosmoscenter-")
+            || l.starts_with("x-transcosmosshop-")
+            || l.starts_with("x-transcosmospro-")
+            || l.starts_with("x-transcosmosmart-")
+            || l.starts_with("x-transcosmosplus-")
+            || l.starts_with("x-transcosmossmart-")
+            || l.starts_with("x-transcosmosfamily-")
+            || l.starts_with("x-teleperformancenavi-")
+            || l.starts_with("x-teleperformancecenter-")
+            || l.starts_with("x-teleperformanceshop-")
+            || l.starts_with("x-teleperformancepro-")
+            || l.starts_with("x-teleperformancemart-")
+            || l.starts_with("x-teleperformanceplus-")
+            || l.starts_with("x-teleperformancesmart-")
+            || l.starts_with("x-teleperformancefamily-")
+            || l.starts_with("x-taskusnavi-")
+            || l.starts_with("x-taskuscenter-")
+            || l.starts_with("x-taskusshop-")
+            || l.starts_with("x-taskuspro-")
+            || l.starts_with("x-taskusmart-")
+            || l.starts_with("x-taskusplus-")
+            || l.starts_with("x-taskussmart-")
+            || l.starts_with("x-taskusfamily-"))
+}
+
+fn has_rentalspace_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kashikaigi-")
+            || l.starts_with("x-virtualoffice-")
+            || l.starts_with("x-servicedoffice-")
+            || l.starts_with("x-rentalspace-")
+            || l.starts_with("x-crosscoop-")
+            || l.starts_with("x-fabbit-")
+            || l.starts_with("x-tiw-")
+            || l.starts_with("x-conference-")
+            || l.starts_with("x-meetingroom-")
+            || l.starts_with("x-eventspace-")
+            || l.starts_with("x-rentalhall-")
+            || l.starts_with("x-kashikaiginavi-")
+            || l.starts_with("x-kashikaigicenter-")
+            || l.starts_with("x-kashikaigishop-")
+            || l.starts_with("x-kashikaigipro-")
+            || l.starts_with("x-kashikaigimart-")
+            || l.starts_with("x-kashikaigiplus-")
+            || l.starts_with("x-kashikaigismart-")
+            || l.starts_with("x-kashikaigifamily-")
+            || l.starts_with("x-virtualofficenavi-")
+            || l.starts_with("x-virtualofficecenter-")
+            || l.starts_with("x-virtualofficeshop-")
+            || l.starts_with("x-virtualofficepro-")
+            || l.starts_with("x-virtualofficemart-")
+            || l.starts_with("x-virtualofficeplus-")
+            || l.starts_with("x-virtualofficesmart-")
+            || l.starts_with("x-virtualofficefamily-")
+            || l.starts_with("x-servicedofficenavi-")
+            || l.starts_with("x-servicedofficecenter-")
+            || l.starts_with("x-servicedofficeshop-")
+            || l.starts_with("x-servicedofficepro-")
+            || l.starts_with("x-servicedofficemart-")
+            || l.starts_with("x-servicedofficeplus-")
+            || l.starts_with("x-servicedofficesmart-")
+            || l.starts_with("x-servicedofficefamily-")
+            || l.starts_with("x-rentalspacenavi-")
+            || l.starts_with("x-rentalspacecenter-")
+            || l.starts_with("x-rentalspaceshop-")
+            || l.starts_with("x-rentalspacepro-")
+            || l.starts_with("x-rentalspacemart-")
+            || l.starts_with("x-rentalspaceplus-")
+            || l.starts_with("x-rentalspacesmart-")
+            || l.starts_with("x-rentalspacefamily-")
+            || l.starts_with("x-crosscoopnavi-")
+            || l.starts_with("x-crosscoopcenter-")
+            || l.starts_with("x-crosscoopshop-")
+            || l.starts_with("x-crosscooppro-")
+            || l.starts_with("x-crosscoopmart-")
+            || l.starts_with("x-crosscoopplus-")
+            || l.starts_with("x-crosscoopsmart-")
+            || l.starts_with("x-crosscoopfamily-")
+            || l.starts_with("x-fabbitnavi-")
+            || l.starts_with("x-fabbitcenter-")
+            || l.starts_with("x-fabbitshop-")
+            || l.starts_with("x-fabbitpro-")
+            || l.starts_with("x-fabbitmart-")
+            || l.starts_with("x-fabbitplus-")
+            || l.starts_with("x-fabbitsmart-")
+            || l.starts_with("x-fabbitfamily-")
+            || l.starts_with("x-tiwnavi-")
+            || l.starts_with("x-tiwcenter-")
+            || l.starts_with("x-tiwshop-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -31392,6 +31611,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_planetarium_marks(clean));
+    }
+
+    #[test]
+    fn scan_は演機印を検出する() {
+        for raw in [
+            br"X-Fujirock-Alert: 1",
+            br"X-Summersonic-Notice: 1",
+            br"X-Rockin-Info: 1",
+            br"X-Risingsun-Report: 1",
+            br"X-Umf-Bulletin: 1",
+            br"X-Edc-News: 1",
+            br"X-Coachella-Flash: 1",
+            br"X-Lollapalooza-Release: 1",
+        ] {
+            assert!(has_fujirock_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_fujirock_marks(clean));
+    }
+
+    #[test]
+    fn scan_は電機印を検出する() {
+        for raw in [
+            br"X-Callcenter-Alert: 1",
+            br"X-Telemarketing-Notice: 1",
+            br"X-Bell24-Info: 1",
+            br"X-Transcosmos-Report: 1",
+            br"X-Teleperformance-Bulletin: 1",
+            br"X-Taskus-News: 1",
+            br"X-Sitel-Flash: 1",
+            br"X-Denwa-Release: 1",
+        ] {
+            assert!(has_callcenter_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_callcenter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は室機印を検出する() {
+        for raw in [
+            br"X-Kashikaigi-Alert: 1",
+            br"X-Virtualoffice-Notice: 1",
+            br"X-Servicedoffice-Info: 1",
+            br"X-Rentalspace-Report: 1",
+            br"X-Crosscoop-Bulletin: 1",
+            br"X-Fabbit-News: 1",
+            br"X-Meetingroom-Flash: 1",
+            br"X-Eventspace-Release: 1",
+        ] {
+            assert!(has_rentalspace_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_rentalspace_marks(clean));
     }
 
 }
