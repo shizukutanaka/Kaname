@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub concrete_marks: bool,
+    pub masonry_marks: bool,
+    pub linenrental_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        concrete_marks: has_concrete_marks(hdr),
+        masonry_marks: has_masonry_marks(hdr),
+        linenrental_marks: has_linenrental_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,186 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_concrete_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-concrete-")
+            || l.starts_with("x-concretepros-")
+            || l.starts_with("x-concreteworks-")
+            || l.starts_with("x-concretedoc-")
+            || l.starts_with("x-concreteteam-")
+            || l.starts_with("x-concreteexperts-")
+            || l.starts_with("x-concretemasters-")
+            || l.starts_with("x-concreteforce-")
+            || l.starts_with("x-readymix-")
+            || l.starts_with("x-readymixpro-")
+            || l.starts_with("x-readymixusa-")
+            || l.starts_with("x-cementworks-")
+            || l.starts_with("x-cementpros-")
+            || l.starts_with("x-concreteflatwork-")
+            || l.starts_with("x-flatworkpros-")
+            || l.starts_with("x-concretepouring-")
+            || l.starts_with("x-concretedelivery-")
+            || l.starts_with("x-concretepump-")
+            || l.starts_with("x-concretepumping-")
+            || l.starts_with("x-concretecontractor-")
+            || l.starts_with("x-concretecompany-")
+            || l.starts_with("x-drivewayconcrete-")
+            || l.starts_with("x-patioconcrete-")
+            || l.starts_with("x-slabconcrete-")
+            || l.starts_with("x-stampedconcrete-")
+            || l.starts_with("x-concreterepair-")
+            || l.starts_with("x-concretelevel-")
+            || l.starts_with("x-concretecoat-")
+            || l.starts_with("x-konkurito-")
+            || l.starts_with("x-namakon-")
+            || l.starts_with("x-konkureto-")
+            || l.starts_with("x-concretesagyou-")
+            || l.starts_with("x-concretekouji-")
+            || l.starts_with("x-concreteyasan-")
+            || l.starts_with("x-concretepro-")
+            || l.starts_with("x-konkuritokouji-")
+            || l.starts_with("x-namakonyasan-")
+            || l.starts_with("x-namakondeliver-")
+            || l.starts_with("x-semento--")
+            || l.starts_with("x-sementokouji-")
+            || l.starts_with("x-sementoyasan-")
+            || l.starts_with("x-konkukouji-")
+            || l.starts_with("x-dassei--")
+            || l.starts_with("x-dasseikon-")
+            || l.starts_with("x-concretejp-")
+            || l.starts_with("x-concretesenmon-")
+            || l.starts_with("x-concretemanten-")
+            || l.starts_with("x-concretetenken-")
+            || l.starts_with("x-concretemitsumori-")
+            || l.starts_with("x-concretechousa-")
+            || l.starts_with("x-concreteteiki-")
+    })
+}
+
+fn has_masonry_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-masonry-")
+            || l.starts_with("x-masonpros-")
+            || l.starts_with("x-masonrypros-")
+            || l.starts_with("x-masonryworks-")
+            || l.starts_with("x-masonryteam-")
+            || l.starts_with("x-masonryexperts-")
+            || l.starts_with("x-masonrymasters-")
+            || l.starts_with("x-masoncontractor-")
+            || l.starts_with("x-brickwork-")
+            || l.starts_with("x-brickworkpros-")
+            || l.starts_with("x-brickmasonry-")
+            || l.starts_with("x-stonework-")
+            || l.starts_with("x-stoneworkpros-")
+            || l.starts_with("x-stonemasonry-")
+            || l.starts_with("x-tuckpoint-")
+            || l.starts_with("x-tuckpointing-")
+            || l.starts_with("x-tuckpointpros-")
+            || l.starts_with("x-mortarrepair-")
+            || l.starts_with("x-brickrepair-")
+            || l.starts_with("x-stoneveneer-")
+            || l.starts_with("x-brickveneer-")
+            || l.starts_with("x-chimneymasonry-")
+            || l.starts_with("x-masonryrepair-")
+            || l.starts_with("x-masonryrestore-")
+            || l.starts_with("x-brickdoctor-")
+            || l.starts_with("x-stonedoctor-")
+            || l.starts_with("x-sekkii-")
+            || l.starts_with("x-sekizai-")
+            || l.starts_with("x-ishikouji-")
+            || l.starts_with("x-sekkou-")
+            || l.starts_with("x-renga-")
+            || l.starts_with("x-rengakouji-")
+            || l.starts_with("x-rengayasan-")
+            || l.starts_with("x-brickkouji-")
+            || l.starts_with("x-ishizumi-")
+            || l.starts_with("x-ishigar-")
+            || l.starts_with("x-ishiyasan-")
+            || l.starts_with("x-sekizaikouji-")
+            || l.starts_with("x-sekizaiyasan-")
+            || l.starts_with("x-masonkouji-")
+            || l.starts_with("x-meisonkouji-")
+            || l.starts_with("x-burikkuyasan-")
+            || l.starts_with("x-rengashuri-")
+            || l.starts_with("x-ishikouzou-")
+            || l.starts_with("x-ishigaki-")
+            || l.starts_with("x-ishigakikouji-")
+            || l.starts_with("x-sekkiimitsumori-")
+            || l.starts_with("x-rengamitsumori-")
+            || l.starts_with("x-ishimitsumori-")
+            || l.starts_with("x-sekkiiteiki-")
+    })
+}
+
+fn has_linenrental_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-unifirst-")
+            || l.starts_with("x-alsco-")
+            || l.starts_with("x-vestis-")
+            || l.starts_with("x-missionlinen-")
+            || l.starts_with("x-ameriprideuni-")
+            || l.starts_with("x-cintasuni-")
+            || l.starts_with("x-aramarkuni-")
+            || l.starts_with("x-linensupply-")
+            || l.starts_with("x-linenrental-")
+            || l.starts_with("x-linenpros-")
+            || l.starts_with("x-linenservice-")
+            || l.starts_with("x-linenteam-")
+            || l.starts_with("x-linenworks-")
+            || l.starts_with("x-linenexpress-")
+            || l.starts_with("x-uniformrental-")
+            || l.starts_with("x-uniformservice-")
+            || l.starts_with("x-uniformpros-")
+            || l.starts_with("x-uniformteam-")
+            || l.starts_with("x-workwearrental-")
+            || l.starts_with("x-workwearpros-")
+            || l.starts_with("x-garmentrental-")
+            || l.starts_with("x-towelservice-")
+            || l.starts_with("x-matservice-")
+            || l.starts_with("x-moprental-")
+            || l.starts_with("x-shopragrental-")
+            || l.starts_with("x-linenking-")
+            || l.starts_with("x-uniformking-")
+            || l.starts_with("x-totallinen-")
+            || l.starts_with("x-linenmaster-")
+            || l.starts_with("x-rinensapurai-")
+            || l.starts_with("x-rinensa-")
+            || l.starts_with("x-yunifomurentaru-")
+            || l.starts_with("x-yunifomupro-")
+            || l.starts_with("x-yunifomukouji-")
+            || l.starts_with("x-yunifomuyasan-")
+            || l.starts_with("x-seifukurentaru-")
+            || l.starts_with("x-seifuku-")
+            || l.starts_with("x-sagyofuku-")
+            || l.starts_with("x-rinenkensa-")
+            || l.starts_with("x-rinenpro-")
+            || l.starts_with("x-rinentenken-")
+            || l.starts_with("x-rinenmitsumori-")
+            || l.starts_with("x-rinenjp-")
+            || l.starts_with("x-rinenteam-")
+            || l.starts_with("x-rinensenmon-")
+            || l.starts_with("x-rinenchousa-")
+            || l.starts_with("x-rinenteiki-")
+            || l.starts_with("x-rinentaisaku-")
+            || l.starts_with("x-rinensagyou-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20827,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は混機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Concrete-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-ReadyMix-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-KonkuritoKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-NamakoN-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-StampedConcrete-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-ConcretePump-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SementoKouji-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-ConcretePros-Record: 1\r\n\r\nx";
+        assert!(has_concrete_marks(f0));
+        assert!(has_concrete_marks(f1));
+        assert!(has_concrete_marks(f2));
+        assert!(has_concrete_marks(f3));
+        assert!(has_concrete_marks(f4));
+        assert!(has_concrete_marks(f5));
+        assert!(has_concrete_marks(f6));
+        assert!(has_concrete_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_concrete_marks(clean));
+    }
+
+    #[test]
+    fn scan_は石機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Masonry-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Tuckpoint-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-IshiKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-RengaKouji-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-StoneVeneer-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-BrickRepair-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-Ishigaki-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-MasonPros-Record: 1\r\n\r\nx";
+        assert!(has_masonry_marks(f0));
+        assert!(has_masonry_marks(f1));
+        assert!(has_masonry_marks(f2));
+        assert!(has_masonry_marks(f3));
+        assert!(has_masonry_marks(f4));
+        assert!(has_masonry_marks(f5));
+        assert!(has_masonry_marks(f6));
+        assert!(has_masonry_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_masonry_marks(clean));
+    }
+
+    #[test]
+    fn scan_は衣機印を検出する() {
+        let f0 = b"From: a@b\r\nX-UniFirst-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Alsco-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-RinenSapurai-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-YunifomuRentaru-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-LinenSupply-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-WorkwearRental-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-Seifuku-Nintei: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-MissionLinen-Record: 1\r\n\r\nx";
+        assert!(has_linenrental_marks(f0));
+        assert!(has_linenrental_marks(f1));
+        assert!(has_linenrental_marks(f2));
+        assert!(has_linenrental_marks(f3));
+        assert!(has_linenrental_marks(f4));
+        assert!(has_linenrental_marks(f5));
+        assert!(has_linenrental_marks(f6));
+        assert!(has_linenrental_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_linenrental_marks(clean));
+    }
 }
