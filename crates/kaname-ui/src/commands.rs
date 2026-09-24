@@ -3136,6 +3136,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D740: シニア・高齢者向けサービス印自称
+    if env.senior_marks {
+        render_risks.push(
+            "X-Senior-*/X-Seniorliving-*/X-Retirementhome-*/X-Silver-*/X-Petanque-*/X-Gateball-*/X-Nordicwalking-*/X-Elderly-* 等 — 寿機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D741: ダンス・バレエ印自称
+    if env.dancestudio_marks {
+        render_risks.push(
+            "X-Aerobics-*/X-Cheerleading-*/X-Dancesport-*/X-Zumba-*/X-Barre-*/X-Ballet-*/X-Flamenco-*/X-Dancestudio-* 等 — 舞機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D742: アンチエイジング・ウェルネス印自称
+    if env.antiaging_marks {
+        render_risks.push(
+            "X-Antiaging-*/X-Longevity-*/X-Healthspan-*/X-Wellness-*/X-Hormone-*/X-Peptide-*/X-Ivdrip-*/X-Medspa-* 等 — 若機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
