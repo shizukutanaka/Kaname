@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D821: `X-Noukyou-*`/`X-Seikyou-*`/`X-Jakumiai-*`/`X-Coopservice-*`/`X-Agriculturalcoop-*`/`X-Farmerscoop-*` 等の農協・生協印自称が未検査
+
+- **問題**: `X-Noukyou-*`/`X-NoukyouYasan-*`/`X-NoukyouPro-*`/`X-NoukyouTeam-*`/`X-NoukyouJP-*`/`X-NoukyouSenmon-*`/`X-Seikyou-*`/`X-SeikyouYasan-*`/`X-SeikyouPro-*`/`X-SeikyouTeam-*`/`X-SeikyouJP-*`/`X-SeikyouSenmon-*`/`X-Jakumiai-*`/`X-JakumiaiYasan-*`/`X-JakumiaiPro-*`/`X-JakumiaiTeam-*`/`X-JakumiaiJP-*`/`X-JakumiaiSenmon-*`/`X-CoopservicePros-*`/`X-CoopserviceTeam-*`/`X-CoopserviceWorks-*`/`X-CoopserviceExperts-*`/`X-CoopserviceSvc-*`/`X-CoopserviceHQ-*`/`X-AgriculturalcoopPros-*`/`X-AgriculturalcoopTeam-*`/`X-AgriculturalcoopWorks-*`/`X-AgriculturalcoopExperts-*`/`X-AgriculturalcoopSvc-*`/`X-AgriculturalcoopHQ-*`/`X-FarmerscoopPros-*`/`X-FarmerscoopTeam-*`/`X-FarmerscoopWorks-*`/`X-FarmerscoopExperts-*`/`X-FarmerscoopSvc-*`/`X-FarmerscoopHQ-*` 等 は農機の通知記録 — 送信側が書くことは自称。農協・生協のなりすましは、JA 共済請求・生協宅配の契約更新・組合員向け特産品販売を装った詐欺の典型手口。(共済保険は kyousai 機、ふるさと納税は furusatozei 機で検出済み)
+- **修正**: `Envelope` に `noukyou_marks` + `has_noukyou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 農印の自署を問え。
+
+### Security — D822: `X-Kani-*`/`X-Koukai-*`/`X-Ebikani-*`/`X-Crabdelivery-*`/`X-Crabonline-*`/`X-Seafoodcrab-*` 等の蟹・高級魚介印自称が未検査
+
+- **問題**: `X-Kani-*`/`X-KaniYasan-*`/`X-KaniPro-*`/`X-KaniTeam-*`/`X-KaniJP-*`/`X-KaniSenmon-*`/`X-Koukai-*`/`X-KoukaiYasan-*`/`X-KoukaiPro-*`/`X-KoukaiTeam-*`/`X-KoukaiJP-*`/`X-KoukaiSenmon-*`/`X-Ebikani-*`/`X-EbikaniYasan-*`/`X-EbikaniPro-*`/`X-EbikaniTeam-*`/`X-EbikaniJP-*`/`X-EbikaniSenmon-*`/`X-CrabdeliveryPros-*`/`X-CrabdeliveryTeam-*`/`X-CrabdeliveryWorks-*`/`X-CrabdeliveryExperts-*`/`X-CrabdeliverySvc-*`/`X-CrabdeliveryHQ-*`/`X-CrabonlinePros-*`/`X-CrabonlineTeam-*`/`X-CrabonlineWorks-*`/`X-CrabonlineExperts-*`/`X-CrabonlineSvc-*`/`X-CrabonlineHQ-*`/`X-SeafoodcrabPros-*`/`X-SeafoodcrabTeam-*`/`X-SeafoodcrabWorks-*`/`X-SeafoodcrabExperts-*`/`X-SeafoodcrabSvc-*`/`X-SeafoodcrabHQ-*` 等 は蟹機の通知記録 — 送信側が書くことは自称。蟹・高級魚介業者の偽装は、「訳あり蟹」の激安販売・カニ漁船直送を装った通販詐欺の典型手口。(鮮魚全般は sengyo 機で検出済み)
+- **修正**: `Envelope` に `kani_marks` + `has_kani_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 蟹印の自署を問え。
+
+### Security — D823: `X-Wagyu-*`/`X-Koukyuniku-*`/`X-Wagyuniku-*`/`X-Wagyubeef-*`/`X-Wagyustore-*`/`X-Premiumbeef-*` 等の和牛・高級肉印自称が未検査
+
+- **問題**: `X-Wagyu-*`/`X-WagyuYasan-*`/`X-WagyuPro-*`/`X-WagyuTeam-*`/`X-WagyuJP-*`/`X-WagyuSenmon-*`/`X-Koukyuniku-*`/`X-KoukyunikuYasan-*`/`X-KoukyunikuPro-*`/`X-KoukyunikuTeam-*`/`X-KoukyunikuJP-*`/`X-KoukyunikuSenmon-*`/`X-Wagyuniku-*`/`X-WagyunikuYasan-*`/`X-WagyunikuPro-*`/`X-WagyunikuTeam-*`/`X-WagyunikuJP-*`/`X-WagyunikuSenmon-*`/`X-WagyubeefPros-*`/`X-WagyubeefTeam-*`/`X-WagyubeefWorks-*`/`X-WagyubeefExperts-*`/`X-WagyubeefSvc-*`/`X-WagyubeefHQ-*`/`X-WagyustorePros-*`/`X-WagyustoreTeam-*`/`X-WagyustoreWorks-*`/`X-WagyustoreExperts-*`/`X-WagyustoreSvc-*`/`X-WagyustoreHQ-*`/`X-PremiumbeefPros-*`/`X-PremiumbeefTeam-*`/`X-PremiumbeefWorks-*`/`X-PremiumbeefExperts-*`/`X-PremiumbeefSvc-*`/`X-PremiumbeefHQ-*` 等 は牛機の通知記録 — 送信側が書くことは自称。和牛・高級肉業者の偽装は、ブランド牛の格安セット・半額セール・訳あり肉を装った通販詐欺の典型手口。(精肉店全般は nikuya 機で検出済み)
+- **修正**: `Envelope` に `wagyu_marks` + `has_wagyu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 牛印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
