@@ -1919,6 +1919,12 @@ pub struct Envelope {
     pub maidcafe_marks: bool,
     /// `X-Shinkyuu-*`/`X-Harikyuu-*`/`X-Kyuu-*` 等の鍼灸・漢方・東洋医学印を送信側が自称する兆候 (D703)
     pub shinkyuu_marks: bool,
+    /// `X-Jouba-*`/`X-Riding-*`/`X-Equestrian-*` 等の乗馬・馬術印を送信側が自称する兆候 (D704)
+    pub jouba_marks: bool,
+    /// `X-Aikido-*`/`X-Kyudo-*`/`X-Iaido-*` 等の武道・弓道・フェンシング印を送信側が自称する兆候 (D705)
+    pub budo_marks: bool,
+    /// `X-Radio-*`/`X-Jwave-*`/`X-Tokyofm-*` 等のラジオ・コミュニティFM印を送信側が自称する兆候 (D706)
+    pub radio_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2500,6 +2506,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         minpaku_marks: has_minpaku_marks(hdr),
         maidcafe_marks: has_maidcafe_marks(hdr),
         shinkyuu_marks: has_shinkyuu_marks(hdr),
+        jouba_marks: has_jouba_marks(hdr),
+        budo_marks: has_budo_marks(hdr),
+        radio_marks: has_radio_marks(hdr),
     })
 }
 
@@ -19785,6 +19794,216 @@ fn has_shinkyuu_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-kamponavi-"))
 }
 
+fn has_jouba_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-jouba-")
+            || l.starts_with("x-riding-")
+            || l.starts_with("x-equestrian-")
+            || l.starts_with("x-horse-")
+            || l.starts_with("x-horseriding-")
+            || l.starts_with("x-uma-")
+            || l.starts_with("x-bajou-")
+            || l.starts_with("x-pony-")
+            || l.starts_with("x-stable-")
+            || l.starts_with("x-kiba-")
+            || l.starts_with("x-dressage-")
+            || l.starts_with("x-horseshow-")
+            || l.starts_with("x-equine-")
+            || l.starts_with("x-joubanavi-")
+            || l.starts_with("x-joubacenter-")
+            || l.starts_with("x-joubashop-")
+            || l.starts_with("x-joubapro-")
+            || l.starts_with("x-joubamart-")
+            || l.starts_with("x-joubaplus-")
+            || l.starts_with("x-joubasmart-")
+            || l.starts_with("x-joubafamily-")
+            || l.starts_with("x-ridingnavi-")
+            || l.starts_with("x-ridingcenter-")
+            || l.starts_with("x-ridingshop-")
+            || l.starts_with("x-ridingpro-")
+            || l.starts_with("x-ridingmart-")
+            || l.starts_with("x-ridingplus-")
+            || l.starts_with("x-ridingsmart-")
+            || l.starts_with("x-ridingfamily-")
+            || l.starts_with("x-equestriannavi-")
+            || l.starts_with("x-equestriancenter-")
+            || l.starts_with("x-equestrianshop-")
+            || l.starts_with("x-equestrianpro-")
+            || l.starts_with("x-equestrianmart-")
+            || l.starts_with("x-equestrianplus-")
+            || l.starts_with("x-equestriansmart-")
+            || l.starts_with("x-equestrianfamily-")
+            || l.starts_with("x-horsenavi-")
+            || l.starts_with("x-horsecenter-")
+            || l.starts_with("x-horseshop-")
+            || l.starts_with("x-horsepro-")
+            || l.starts_with("x-horsemart-")
+            || l.starts_with("x-horseplus-")
+            || l.starts_with("x-horsesmart-")
+            || l.starts_with("x-horsefamily-")
+            || l.starts_with("x-horseridingnavi-")
+            || l.starts_with("x-horseridingcenter-")
+            || l.starts_with("x-horseridingshop-")
+            || l.starts_with("x-horseridingpro-")
+            || l.starts_with("x-horseridingmart-")
+            || l.starts_with("x-horseridingplus-")
+            || l.starts_with("x-horseridingsmart-")
+            || l.starts_with("x-horseridingfamily-")
+            || l.starts_with("x-umanavi-")
+            || l.starts_with("x-umacenter-")
+            || l.starts_with("x-umashop-")
+            || l.starts_with("x-umapro-")
+            || l.starts_with("x-umamart-")
+            || l.starts_with("x-umaplus-")
+            || l.starts_with("x-umasmart-")
+            || l.starts_with("x-umafamily-")
+            || l.starts_with("x-bajounavi-"))
+}
+
+fn has_budo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-aikido-")
+            || l.starts_with("x-kyudo-")
+            || l.starts_with("x-iaido-")
+            || l.starts_with("x-kobudo-")
+            || l.starts_with("x-kenjutsu-")
+            || l.starts_with("x-budokan-")
+            || l.starts_with("x-shorinji-")
+            || l.starts_with("x-taekwondo-")
+            || l.starts_with("x-jiujitsu-")
+            || l.starts_with("x-bjj-")
+            || l.starts_with("x-archery-")
+            || l.starts_with("x-fencing-")
+            || l.starts_with("x-shooting-")
+            || l.starts_with("x-aikidonavi-")
+            || l.starts_with("x-aikidocenter-")
+            || l.starts_with("x-aikidoshop-")
+            || l.starts_with("x-aikidopro-")
+            || l.starts_with("x-aikidomart-")
+            || l.starts_with("x-aikidoplus-")
+            || l.starts_with("x-aikidosmart-")
+            || l.starts_with("x-aikidofamily-")
+            || l.starts_with("x-kyudonavi-")
+            || l.starts_with("x-kyudocenter-")
+            || l.starts_with("x-kyudoshop-")
+            || l.starts_with("x-kyudopro-")
+            || l.starts_with("x-kyudomart-")
+            || l.starts_with("x-kyudoplus-")
+            || l.starts_with("x-kyudosmart-")
+            || l.starts_with("x-kyudofamily-")
+            || l.starts_with("x-iaidonavi-")
+            || l.starts_with("x-iaidocenter-")
+            || l.starts_with("x-iaidoshop-")
+            || l.starts_with("x-iaidopro-")
+            || l.starts_with("x-iaidomart-")
+            || l.starts_with("x-iaidoplus-")
+            || l.starts_with("x-iaidosmart-")
+            || l.starts_with("x-iaidofamily-")
+            || l.starts_with("x-kobudonavi-")
+            || l.starts_with("x-kobudocenter-")
+            || l.starts_with("x-kobudoshop-")
+            || l.starts_with("x-kobudopro-")
+            || l.starts_with("x-kobudomart-")
+            || l.starts_with("x-kobudoplus-")
+            || l.starts_with("x-kobudosmart-")
+            || l.starts_with("x-kobudofamily-")
+            || l.starts_with("x-kenjutsunavi-")
+            || l.starts_with("x-kenjutsucenter-")
+            || l.starts_with("x-kenjutsushop-")
+            || l.starts_with("x-kenjutsupro-")
+            || l.starts_with("x-kenjutsumart-")
+            || l.starts_with("x-kenjutsuplus-")
+            || l.starts_with("x-kenjutsusmart-")
+            || l.starts_with("x-kenjutsufamily-")
+            || l.starts_with("x-budokannavi-")
+            || l.starts_with("x-budokancenter-")
+            || l.starts_with("x-budokanshop-")
+            || l.starts_with("x-budokanpro-")
+            || l.starts_with("x-budokanmart-")
+            || l.starts_with("x-budokanplus-")
+            || l.starts_with("x-budokansmart-")
+            || l.starts_with("x-budokanfamily-")
+            || l.starts_with("x-shorinjinavi-"))
+}
+
+fn has_radio_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-radio-")
+            || l.starts_with("x-jwave-")
+            || l.starts_with("x-tokyofm-")
+            || l.starts_with("x-bayfm-")
+            || l.starts_with("x-nack5-")
+            || l.starts_with("x-fmyokohama-")
+            || l.starts_with("x-zipfm-")
+            || l.starts_with("x-lovefm-")
+            || l.starts_with("x-fm802-")
+            || l.starts_with("x-northwave-")
+            || l.starts_with("x-aircfm-")
+            || l.starts_with("x-datefm-")
+            || l.starts_with("x-tbsradio-")
+            || l.starts_with("x-bunkahoso-")
+            || l.starts_with("x-mbsradio-")
+            || l.starts_with("x-abcradio-")
+            || l.starts_with("x-rkb-")
+            || l.starts_with("x-communityfm-")
+            || l.starts_with("x-interfm-")
+            || l.starts_with("x-radiko-")
+            || l.starts_with("x-radiru-")
+            || l.starts_with("x-radionavi-")
+            || l.starts_with("x-radiocenter-")
+            || l.starts_with("x-radioshop-")
+            || l.starts_with("x-radiopro-")
+            || l.starts_with("x-radiomart-")
+            || l.starts_with("x-radioplus-")
+            || l.starts_with("x-radiosmart-")
+            || l.starts_with("x-radiofamily-")
+            || l.starts_with("x-jwavenavi-")
+            || l.starts_with("x-jwavecenter-")
+            || l.starts_with("x-jwaveshop-")
+            || l.starts_with("x-jwavepro-")
+            || l.starts_with("x-jwavemart-")
+            || l.starts_with("x-jwaveplus-")
+            || l.starts_with("x-jwavesmart-")
+            || l.starts_with("x-jwavefamily-")
+            || l.starts_with("x-tokyofmnavi-")
+            || l.starts_with("x-tokyofmcenter-")
+            || l.starts_with("x-tokyofmshop-")
+            || l.starts_with("x-tokyofmpro-")
+            || l.starts_with("x-tokyofmmart-")
+            || l.starts_with("x-tokyofmplus-")
+            || l.starts_with("x-tokyofmsmart-")
+            || l.starts_with("x-tokyofmfamily-")
+            || l.starts_with("x-bayfmnavi-")
+            || l.starts_with("x-bayfmcenter-")
+            || l.starts_with("x-bayfmshop-")
+            || l.starts_with("x-bayfmpro-")
+            || l.starts_with("x-bayfmmart-")
+            || l.starts_with("x-bayfmplus-")
+            || l.starts_with("x-bayfmsmart-")
+            || l.starts_with("x-bayfmfamily-")
+            || l.starts_with("x-nack5navi-")
+            || l.starts_with("x-nack5center-")
+            || l.starts_with("x-nack5shop-")
+            || l.starts_with("x-nack5pro-")
+            || l.starts_with("x-nack5mart-")
+            || l.starts_with("x-nack5plus-")
+            || l.starts_with("x-nack5smart-")
+            || l.starts_with("x-nack5family-")
+            || l.starts_with("x-fmyokohamanavi-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -29754,6 +29973,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_shinkyuu_marks(clean));
+    }
+
+    #[test]
+    fn scan_は馬機印を検出する() {
+        for raw in [
+            br"X-Jouba-Alert: 1",
+            br"X-Riding-Notice: 1",
+            br"X-Equestrian-Info: 1",
+            br"X-Horse-Report: 1",
+            br"X-Bajou-Bulletin: 1",
+            br"X-Pony-News: 1",
+            br"X-Stable-Flash: 1",
+            br"X-Kiba-Release: 1",
+        ] {
+            assert!(has_jouba_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_jouba_marks(clean));
+    }
+
+    #[test]
+    fn scan_は武機印を検出する() {
+        for raw in [
+            br"X-Aikido-Alert: 1",
+            br"X-Kyudo-Notice: 1",
+            br"X-Iaido-Info: 1",
+            br"X-Kobudo-Report: 1",
+            br"X-Kenjutsu-Bulletin: 1",
+            br"X-Budokan-News: 1",
+            br"X-Shorinji-Flash: 1",
+            br"X-Taekwondo-Release: 1",
+        ] {
+            assert!(has_budo_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_budo_marks(clean));
+    }
+
+    #[test]
+    fn scan_は波機印を検出する() {
+        for raw in [
+            br"X-Radio-Alert: 1",
+            br"X-Jwave-Notice: 1",
+            br"X-Tokyofm-Info: 1",
+            br"X-Bayfm-Report: 1",
+            br"X-Nack5-Bulletin: 1",
+            br"X-Fmyokohama-News: 1",
+            br"X-Zipfm-Flash: 1",
+            br"X-Lovefm-Release: 1",
+        ] {
+            assert!(has_radio_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_radio_marks(clean));
     }
 
 }

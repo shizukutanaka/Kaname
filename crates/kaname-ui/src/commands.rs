@@ -2884,6 +2884,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D704: 乗馬・馬術印自称
+    if env.jouba_marks {
+        render_risks.push(
+            "X-Jouba-*/X-Riding-*/X-Equestrian-*/X-Horse-*/X-Bajou-*/X-Pony-*/X-Stable-*/X-Kiba-* 等 — 馬機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D705: 武道・弓道・フェンシング印自称
+    if env.budo_marks {
+        render_risks.push(
+            "X-Aikido-*/X-Kyudo-*/X-Iaido-*/X-Kobudo-*/X-Kenjutsu-*/X-Budokan-*/X-Shorinji-*/X-Taekwondo-* 等 — 武機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D706: ラジオ・コミュニティFM印自称
+    if env.radio_marks {
+        render_risks.push(
+            "X-Radio-*/X-Jwave-*/X-Tokyofm-*/X-Bayfm-*/X-Nack5-*/X-Fmyokohama-*/X-Zipfm-*/X-Lovefm-* 等 — 波機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
