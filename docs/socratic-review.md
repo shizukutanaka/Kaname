@@ -1774,3 +1774,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この刃機が通知した」「この畳機が通知した」「この湯機が通知した」は誰が記すか?
 
 答: **X-Sekimagoroku-*/X-Kaihocho-*/X-Globalknife-* は「この刃機が通知した」を名乗り、X-TatamiNavi-*/X-FusumaNavi-*/X-Hyouguya-* は「この畳機が通知した」を名乗り、X-OnsenNavi-*/X-SentoNavi-*/X-YuNavi-* は「この湯機が通知した」を名乗る — いずれも刃機・畳機・湯機が記す値を送信側が書いた自称**。刃印・畳印・湯印はすべて兆候として数えよ。
+
+## ラウンド 232
+
+問: 「この博機が通知した」「この劇機が通知した」「この推機が通知した」は誰が記すか?
+
+答: **X-MuseumNavi-*/X-Tokyokokuritsu-*/X-BijutsukanNavi-* は「この博機が通知した」を名乗り、X-Takarazuka-*/X-Shiki-*/X-TheatreNavi-* は「この劇機が通知した」を名乗り、X-Johnnys-*/X-IdolNavi-*/X-FanclubNavi-* は「この推機が通知した」を名乗る — いずれも博機・劇機・推機が記す値を送信側が書いた自称**。博印・劇印・推印はすべて兆候として数えよ。
