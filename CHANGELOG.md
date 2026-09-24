@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D788: `X-Hachinosu-*`/`X-Gaityuu-*`/`X-Shiroari-*`/`X-Pestcontrol-*`/`X-BeeNest-*`/`X-Waspnest-*` 等の蜂の巣・害虫駆除印自称が未検査
+
+- **問題**: `X-Hachinosu-*`/`X-HachinosuYasan-*`/`X-HachinosuPro-*`/`X-HachinosuTeam-*`/`X-HachinosuJP-*`/`X-HachinosuSenmon-*`/`X-Gaityuu-*`/`X-GaityuuYasan-*`/`X-GaityuuPro-*`/`X-GaityuuTeam-*`/`X-GaityuuJP-*`/`X-GaityuuSenmon-*`/`X-Shiroari-*`/`X-ShiroariYasan-*`/`X-ShiroariPro-*`/`X-ShiroariTeam-*`/`X-ShiroariJP-*`/`X-ShiroariSenmon-*`/`X-PestcontrolPros-*`/`X-PestcontrolTeam-*`/`X-PestcontrolWorks-*`/`X-PestcontrolExperts-*`/`X-PestcontrolSvc-*`/`X-PestcontrolHQ-*`/`X-BeeNestPros-*`/`X-BeeNestTeam-*`/`X-BeeNestWorks-*`/`X-BeeNestExperts-*`/`X-BeeNestSvc-*`/`X-BeeNestHQ-*`/`X-WaspnestPros-*`/`X-WaspnestTeam-*`/`X-WaspnestWorks-*`/`X-WaspnestExperts-*`/`X-WaspnestSvc-*`/`X-WaspnestHQ-*` 等 は蜂機の通知記録 — 送信側が書くことは自称。蜂の巣駆除・シロアリ駆除業者の偽装は、緊急出動費・予防工事費を装ったなりすましの典型手口。(害獣は feralpest 機で検出済み)
+- **修正**: `Envelope` に `hachinosu_marks` + `has_hachinosu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 蜂印の自署を問え。
+
+### Security — D789: `X-Dojouosen-*`/`X-Osenchousa-*`/`X-Soil-*`/`X-Soilsurvey-*`/`X-Soilcontam-*` 等の土壌汚染調査印自称が未検査
+
+- **問題**: `X-Dojouosen-*`/`X-DojouosenYasan-*`/`X-DojouosenPro-*`/`X-DojouosenTeam-*`/`X-DojouosenJP-*`/`X-DojouosenSenmon-*`/`X-Osenchousa-*`/`X-OsenchousaYasan-*`/`X-OsenchousaPro-*`/`X-OsenchousaTeam-*`/`X-OsenchousaJP-*`/`X-OsenchousaSenmon-*`/`X-SoilPros-*`/`X-SoilTeam-*`/`X-SoilWorks-*`/`X-SoilExperts-*`/`X-SoilSvc-*`/`X-SoilHQ-*`/`X-SoilsurveyPros-*`/`X-SoilsurveyTeam-*`/`X-SoilsurveyWorks-*`/`X-SoilsurveyExperts-*`/`X-SoilsurveySvc-*`/`X-SoilsurveyHQ-*`/`X-SoilcontamPros-*`/`X-SoilcontamTeam-*`/`X-SoilcontamWorks-*`/`X-SoilcontamExperts-*`/`X-SoilcontamSvc-*`/`X-SoilcontamHQ-*` 等 は土機の通知記録 — 送信側が書くことは自称。土壌汚染調査・浄化業者の偽装は、ボーリング調査費・浄化措置費を装ったなりすましの典型手口。(地質調査は survey 機、アスベストは asbestos 機で検出済み)
+- **修正**: `Envelope` に `dojouosen_marks` + `has_dojouosen_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 土印の自署を問え。
+
+### Security — D790: `X-Zairyuu-*`/`X-Nyuukoku-*`/`X-Biza-*`/`X-Immigration-*`/`X-Residence-*` 等のビザ・在留資格申請代行印自称が未検査
+
+- **問題**: `X-Zairyuu-*`/`X-ZairyuuYasan-*`/`X-ZairyuuPro-*`/`X-ZairyuuTeam-*`/`X-ZairyuuJP-*`/`X-ZairyuuSenmon-*`/`X-Nyuukoku-*`/`X-NyuukokuYasan-*`/`X-NyuukokuPro-*`/`X-NyuukokuTeam-*`/`X-NyuukokuJP-*`/`X-NyuukokuSenmon-*`/`X-Biza-*`/`X-BizaYasan-*`/`X-BizaPro-*`/`X-BizaTeam-*`/`X-BizaJP-*`/`X-BizaSenmon-*`/`X-ImmigrationPros-*`/`X-ImmigrationTeam-*`/`X-ImmigrationWorks-*`/`X-ImmigrationExperts-*`/`X-ImmigrationSvc-*`/`X-ImmigrationHQ-*`/`X-ResidencePros-*`/`X-ResidenceTeam-*`/`X-ResidenceWorks-*`/`X-ResidenceExperts-*`/`X-ResidenceSvc-*`/`X-ResidenceHQ-*` 等 は在機の通知記録 — 送信側が書くことは自称。ビザ申請・在留資格代行業者の偽装は、申請取次料・不許可時返金保証料を装ったなりすましの典型手口。(留学は abroad 機、行政書士は license 機、クレカの `x-visa-` は creditcard 機で検出済み)
+- **修正**: `Envelope` に `zairyuu_marks` + `has_zairyuu_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 在印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

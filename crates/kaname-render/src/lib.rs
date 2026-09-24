@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub hachinosu_marks: bool,
+    pub dojouosen_marks: bool,
+    pub zairyuu_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        hachinosu_marks: has_hachinosu_marks(hdr),
+        dojouosen_marks: has_dojouosen_marks(hdr),
+        zairyuu_marks: has_zairyuu_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,174 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_hachinosu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-hachinosu-")
+            || l.starts_with("x-hachinosuyasan-")
+            || l.starts_with("x-hachinosupro-")
+            || l.starts_with("x-hachinosuteam-")
+            || l.starts_with("x-hachinosukensa-")
+            || l.starts_with("x-hachinosumanten-")
+            || l.starts_with("x-hachinosunomi-")
+            || l.starts_with("x-hachinosujp-")
+            || l.starts_with("x-hachinosusenmon-")
+            || l.starts_with("x-hachinosumitsumori-")
+            || l.starts_with("x-hachinosuchousa-")
+            || l.starts_with("x-hachinosuteiki-")
+            || l.starts_with("x-hachinosupros-")
+            || l.starts_with("x-hachinosudoctors-")
+            || l.starts_with("x-hachinosurescue-")
+            || l.starts_with("x-gaityuu-")
+            || l.starts_with("x-gaityuuyasan-")
+            || l.starts_with("x-gaityuupro-")
+            || l.starts_with("x-gaityuuteam-")
+            || l.starts_with("x-gaityuujp-")
+            || l.starts_with("x-gaityuusenmon-")
+            || l.starts_with("x-gaityuupros-")
+            || l.starts_with("x-gaityuudoctors-")
+            || l.starts_with("x-gaityuurescue-")
+            || l.starts_with("x-shiroari-")
+            || l.starts_with("x-shiroariyasan-")
+            || l.starts_with("x-shiroaripro-")
+            || l.starts_with("x-shiroariteam-")
+            || l.starts_with("x-shiroarijp-")
+            || l.starts_with("x-shiroarisenmon-")
+            || l.starts_with("x-shiroaripros-")
+            || l.starts_with("x-shiroaridoctors-")
+            || l.starts_with("x-shiroarirescue-")
+            || l.starts_with("x-pestcontrolpros-")
+            || l.starts_with("x-pestcontrolteam-")
+            || l.starts_with("x-pestcontrolworks-")
+            || l.starts_with("x-pestcontrolexperts-")
+            || l.starts_with("x-pestcontrolsvc-")
+            || l.starts_with("x-pestcontrolhq-")
+            || l.starts_with("x-beenestpros-")
+            || l.starts_with("x-beenestteam-")
+            || l.starts_with("x-beenetworks-")
+            || l.starts_with("x-beenestexperts-")
+            || l.starts_with("x-beenestsvc-")
+            || l.starts_with("x-beenesthq-")
+            || l.starts_with("x-waspnestpros-")
+            || l.starts_with("x-waspnestteam-")
+            || l.starts_with("x-waspnestworks-")
+            || l.starts_with("x-waspnestexperts-")
+            || l.starts_with("x-waspnestsvc-")
+            || l.starts_with("x-waspnesthq-")
+    })
+}
+
+fn has_dojouosen_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-dojouosen-")
+            || l.starts_with("x-dojouosenyasan-")
+            || l.starts_with("x-dojouosenpro-")
+            || l.starts_with("x-dojouosenteam-")
+            || l.starts_with("x-dojouosenkensa-")
+            || l.starts_with("x-dojouosenmanten-")
+            || l.starts_with("x-dojouosennomi-")
+            || l.starts_with("x-dojouosenjp-")
+            || l.starts_with("x-dojouosensenmon-")
+            || l.starts_with("x-dojouosenmitsumori-")
+            || l.starts_with("x-dojouosenchousa-")
+            || l.starts_with("x-dojouosenteiki-")
+            || l.starts_with("x-dojouosenpros-")
+            || l.starts_with("x-dojouosendoctors-")
+            || l.starts_with("x-dojouosenrescue-")
+            || l.starts_with("x-osenchousa-")
+            || l.starts_with("x-osenchousayasan-")
+            || l.starts_with("x-osenchousapro-")
+            || l.starts_with("x-osenchousateam-")
+            || l.starts_with("x-osenchousajp-")
+            || l.starts_with("x-osenchousasenmon-")
+            || l.starts_with("x-osenchousapros-")
+            || l.starts_with("x-osenchousadoctors-")
+            || l.starts_with("x-osenchousarescue-")
+            || l.starts_with("x-soilpros-")
+            || l.starts_with("x-soilteam-")
+            || l.starts_with("x-soilworks-")
+            || l.starts_with("x-soilexperts-")
+            || l.starts_with("x-soilsvc-")
+            || l.starts_with("x-soilhq-")
+            || l.starts_with("x-soilsurveypros-")
+            || l.starts_with("x-soilsurveyteam-")
+            || l.starts_with("x-soilsurveyworks-")
+            || l.starts_with("x-soilsurveyexperts-")
+            || l.starts_with("x-soilsurveysvc-")
+            || l.starts_with("x-soilsurveyhq-")
+            || l.starts_with("x-soilcontampros-")
+            || l.starts_with("x-soilcontamteam-")
+            || l.starts_with("x-soilcontamworks-")
+            || l.starts_with("x-soilcontamexperts-")
+            || l.starts_with("x-soilcontamsvc-")
+            || l.starts_with("x-soilcontamhq-")
+    })
+}
+
+fn has_zairyuu_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-zairyuu-")
+            || l.starts_with("x-zairyuuyasan-")
+            || l.starts_with("x-zairyuupro-")
+            || l.starts_with("x-zairyuuteam-")
+            || l.starts_with("x-zairyuukensa-")
+            || l.starts_with("x-zairyuumanten-")
+            || l.starts_with("x-zairyuunomi-")
+            || l.starts_with("x-zairyuujp-")
+            || l.starts_with("x-zairyuusenmon-")
+            || l.starts_with("x-zairyuumitsumori-")
+            || l.starts_with("x-zairyuuchousa-")
+            || l.starts_with("x-zairyuuteiki-")
+            || l.starts_with("x-zairyuupros-")
+            || l.starts_with("x-zairyuudoctors-")
+            || l.starts_with("x-zairyuurescue-")
+            || l.starts_with("x-nyuukoku-")
+            || l.starts_with("x-nyuukokuyasan-")
+            || l.starts_with("x-nyuukokupro-")
+            || l.starts_with("x-nyuukokuteam-")
+            || l.starts_with("x-nyuukokujp-")
+            || l.starts_with("x-nyuukokusenmon-")
+            || l.starts_with("x-nyuukokupros-")
+            || l.starts_with("x-nyuukokudoctors-")
+            || l.starts_with("x-nyuukokurescue-")
+            || l.starts_with("x-biza-")
+            || l.starts_with("x-bizayasan-")
+            || l.starts_with("x-bizapro-")
+            || l.starts_with("x-bizateam-")
+            || l.starts_with("x-bizajp-")
+            || l.starts_with("x-bizasenmon-")
+            || l.starts_with("x-bizapros-")
+            || l.starts_with("x-bizadoctors-")
+            || l.starts_with("x-bizarescue-")
+            || l.starts_with("x-immigrationpros-")
+            || l.starts_with("x-immigrationteam-")
+            || l.starts_with("x-immigrationworks-")
+            || l.starts_with("x-immigrationexperts-")
+            || l.starts_with("x-immigrationsvc-")
+            || l.starts_with("x-immigrationhq-")
+            || l.starts_with("x-residencepros-")
+            || l.starts_with("x-residenceteam-")
+            || l.starts_with("x-residenceworks-")
+            || l.starts_with("x-residenceexperts-")
+            || l.starts_with("x-residencesvc-")
+            || l.starts_with("x-residencehq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21066,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は蜂機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Hachinosu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HachinosuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GaityuuYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ShiroariTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PestcontrolPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BeeNestHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-HachinosuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-WaspnestExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_hachinosu_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_hachinosu_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は土機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Dojouosen-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DojouosenPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-OsenchousaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoilTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoilsurveyPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoilcontamHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-DojouosenSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-SoilExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_dojouosen_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_dojouosen_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は在機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Zairyuu-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ZairyuuPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NyuukokuYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BizaTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ImmigrationPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ResidenceHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ZairyuuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-BizaDoctors-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_zairyuu_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_zairyuu_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
