@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D812: `X-Sentei-*`/`X-Uekiteire-*`/`X-Niwaki-*`/`X-Treepruning-*`/`X-Pruning-*`/`X-Hedgetrim-*` 等の剪定・植木手入れ印自称が未検査
+
+- **問題**: `X-Sentei-*`/`X-SenteiYasan-*`/`X-SenteiPro-*`/`X-SenteiTeam-*`/`X-SenteiJP-*`/`X-SenteiSenmon-*`/`X-Uekiteire-*`/`X-UekiteireYasan-*`/`X-UekiteirePro-*`/`X-UekiteireTeam-*`/`X-UekiteireJP-*`/`X-UekiteireSenmon-*`/`X-Niwaki-*`/`X-NiwakiYasan-*`/`X-NiwakiPro-*`/`X-NiwakiTeam-*`/`X-NiwakiJP-*`/`X-NiwakiSenmon-*`/`X-TreepruningPros-*`/`X-TreepruningTeam-*`/`X-TreepruningWorks-*`/`X-TreepruningExperts-*`/`X-TreepruningSvc-*`/`X-TreepruningHQ-*`/`X-PruningPros-*`/`X-PruningTeam-*`/`X-PruningWorks-*`/`X-PruningExperts-*`/`X-PruningSvc-*`/`X-PruningHQ-*`/`X-HedgetrimPros-*`/`X-HedgetrimTeam-*`/`X-HedgetrimWorks-*`/`X-HedgetrimExperts-*`/`X-HedgetrimSvc-*`/`X-HedgetrimHQ-*` 等 は剪機の通知記録 — 送信側が書くことは自称。剪定・植木手入れ業者の偽装は、見積もり後の高額伐採請求・定期手入れ契約を装ったなりすましの典型手口。(造園は garden 機、伐採は bassai 機、草刈りは kusakari 機で検出済み)
+- **修正**: `Envelope` に `sentei_marks` + `has_sentei_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 剪印の自署を問え。
+
+### Security — D813: `X-Souryou-*`/`X-Obousan-*`/`X-Houtou-*`/`X-Buddhistpriest-*`/`X-Priestdispatch-*`/`X-Monkdispatch-*` 等の僧侶派遣・僧侶手配印自称が未検査
+
+- **問題**: `X-Souryou-*`/`X-SouryouYasan-*`/`X-SouryouPro-*`/`X-SouryouTeam-*`/`X-SouryouJP-*`/`X-SouryouSenmon-*`/`X-Obousan-*`/`X-ObousanYasan-*`/`X-ObousanPro-*`/`X-ObousanTeam-*`/`X-ObousanJP-*`/`X-ObousanSenmon-*`/`X-Houtou-*`/`X-HoutouYasan-*`/`X-HoutouPro-*`/`X-HoutouTeam-*`/`X-HoutouJP-*`/`X-HoutouSenmon-*`/`X-BuddhistpriestPros-*`/`X-BuddhistpriestTeam-*`/`X-BuddhistpriestWorks-*`/`X-BuddhistpriestExperts-*`/`X-BuddhistpriestSvc-*`/`X-BuddhistpriestHQ-*`/`X-PriestdispatchPros-*`/`X-PriestdispatchTeam-*`/`X-PriestdispatchWorks-*`/`X-PriestdispatchExperts-*`/`X-PriestdispatchSvc-*`/`X-PriestdispatchHQ-*`/`X-MonkdispatchPros-*`/`X-MonkdispatchTeam-*`/`X-MonkdispatchWorks-*`/`X-MonkdispatchExperts-*`/`X-MonkdispatchSvc-*`/`X-MonkdispatchHQ-*` 等 は僧機の通知記録 — 送信側が書くことは自称。僧侶派遣業者の偽装は、法要・お布施請求・戒名授与費を装ったなりすましの典型手口。(葬儀は funeral 機、仏壇は butsudan 機、墓じまいは hakajimai 機で検出済み)
+- **修正**: `Envelope` に `souryou_marks` + `has_souryou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 僧印の自署を問え。
+
+### Security — D814: `X-Goshuin-*`/`X-Juyohin-*`/`X-Omamori-*`/`X-Shrinegoods-*`/`X-Shrineitem-*`/`X-Goshuinchou-*` 等の御朱印・授与品印自称が未検査
+
+- **問題**: `X-Goshuin-*`/`X-GoshuinYasan-*`/`X-GoshuinPro-*`/`X-GoshuinTeam-*`/`X-GoshuinJP-*`/`X-GoshuinSenmon-*`/`X-Juyohin-*`/`X-JuyohinYasan-*`/`X-JuyohinPro-*`/`X-JuyohinTeam-*`/`X-JuyohinJP-*`/`X-JuyohinSenmon-*`/`X-Omamori-*`/`X-OmamoriYasan-*`/`X-OmamoriPro-*`/`X-OmamoriTeam-*`/`X-OmamoriJP-*`/`X-OmamoriSenmon-*`/`X-ShrinegoodsPros-*`/`X-ShrinegoodsTeam-*`/`X-ShrinegoodsWorks-*`/`X-ShrinegoodsExperts-*`/`X-ShrinegoodsSvc-*`/`X-ShrinegoodsHQ-*`/`X-ShrineitemPros-*`/`X-ShrineitemTeam-*`/`X-ShrineitemWorks-*`/`X-ShrineitemExperts-*`/`X-ShrineitemSvc-*`/`X-ShrineitemHQ-*`/`X-GoshuinchouPros-*`/`X-GoshuinchouTeam-*`/`X-GoshuinchouWorks-*`/`X-GoshuinchouExperts-*`/`X-GoshuinchouSvc-*`/`X-GoshuinchouHQ-*` 等 は朱機の通知記録 — 送信側が書くことは自称。御朱印・授与品業者の偽装は、限定御朱印帳の予約販売・開運お守り代行費を装ったなりすましの典型手口。(開運商法は uranai 機、販促品は promo 機で検出済み)
+- **修正**: `Envelope` に `goshuin_marks` + `has_goshuin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 朱印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
