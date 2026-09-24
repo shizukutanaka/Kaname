@@ -2033,6 +2033,12 @@ pub struct Envelope {
     pub kosokubus_marks: bool,
     /// `X-Sleepclinic-*`/`X-Cpap-*`/`X-Snoring-*` 等の睡眠・いびき治療印を送信側が自称する兆候 (D760)
     pub sleepclinic_marks: bool,
+    /// `X-Yachinhosho-*`/`X-Rentguarantee-*`/`X-Hoshocompany-*` 等の家賃保証・賃貸保証印を送信側が自称する兆候 (D761)
+    pub rentguarantee_marks: bool,
+    /// `X-Lasik-*`/`X-Icl-*`/`X-Orthok-*` 等の眼科手術・視力矯正印を送信側が自称する兆候 (D762)
+    pub lasik_marks: bool,
+    /// `X-Tattoo-*`/`X-Irezumi-*`/`X-Piercing-*` 等のタトゥー・ボディアート印を送信側が自称する兆候 (D763)
+    pub tattoo_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2671,6 +2677,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         lovehotel_marks: has_lovehotel_marks(hdr),
         kosokubus_marks: has_kosokubus_marks(hdr),
         sleepclinic_marks: has_sleepclinic_marks(hdr),
+        rentguarantee_marks: has_rentguarantee_marks(hdr),
+        lasik_marks: has_lasik_marks(hdr),
+        tattoo_marks: has_tattoo_marks(hdr),
     })
 }
 
@@ -23946,6 +23955,216 @@ fn has_sleepclinic_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-snorerxpro-"))
 }
 
+fn has_rentguarantee_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-yachinhosho-")
+            || l.starts_with("x-rentguarantee-")
+            || l.starts_with("x-hoshocompany-")
+            || l.starts_with("x-casa-")
+            || l.starts_with("x-jleave-")
+            || l.starts_with("x-garanty-")
+            || l.starts_with("x-epis-")
+            || l.starts_with("x-roomca-")
+            || l.starts_with("x-zenkyoren-")
+            || l.starts_with("x-yachinhoshonavi-")
+            || l.starts_with("x-yachinhoshocenter-")
+            || l.starts_with("x-yachinhoshoshop-")
+            || l.starts_with("x-yachinhoshopro-")
+            || l.starts_with("x-yachinhoshomart-")
+            || l.starts_with("x-yachinhoshoplus-")
+            || l.starts_with("x-yachinhoshosmart-")
+            || l.starts_with("x-yachinhoshofamily-")
+            || l.starts_with("x-rentguaranteenavi-")
+            || l.starts_with("x-rentguaranteecenter-")
+            || l.starts_with("x-rentguaranteeshop-")
+            || l.starts_with("x-rentguaranteepro-")
+            || l.starts_with("x-rentguaranteemart-")
+            || l.starts_with("x-rentguaranteeplus-")
+            || l.starts_with("x-rentguaranteesmart-")
+            || l.starts_with("x-rentguaranteefamily-")
+            || l.starts_with("x-hoshocompanynavi-")
+            || l.starts_with("x-hoshocompanycenter-")
+            || l.starts_with("x-hoshocompanyshop-")
+            || l.starts_with("x-hoshocompanypro-")
+            || l.starts_with("x-hoshocompanymart-")
+            || l.starts_with("x-hoshocompanyplus-")
+            || l.starts_with("x-hoshocompanysmart-")
+            || l.starts_with("x-hoshocompanyfamily-")
+            || l.starts_with("x-casanavi-")
+            || l.starts_with("x-casacenter-")
+            || l.starts_with("x-casashop-")
+            || l.starts_with("x-casapro-")
+            || l.starts_with("x-casamart-")
+            || l.starts_with("x-casaplus-")
+            || l.starts_with("x-casasmart-")
+            || l.starts_with("x-casafamily-")
+            || l.starts_with("x-jleavenavi-")
+            || l.starts_with("x-jleavecenter-")
+            || l.starts_with("x-jleaveshop-")
+            || l.starts_with("x-jleavepro-")
+            || l.starts_with("x-jleavemart-")
+            || l.starts_with("x-jleaveplus-")
+            || l.starts_with("x-jleavesmart-")
+            || l.starts_with("x-jleavefamily-")
+            || l.starts_with("x-garantynavi-")
+            || l.starts_with("x-garantycenter-")
+            || l.starts_with("x-garantyshop-")
+            || l.starts_with("x-garantypro-")
+            || l.starts_with("x-garantymart-")
+            || l.starts_with("x-garantyplus-")
+            || l.starts_with("x-garantysmart-")
+            || l.starts_with("x-garantyfamily-")
+            || l.starts_with("x-episnavi-")
+            || l.starts_with("x-episcenter-")
+            || l.starts_with("x-episshop-")
+            || l.starts_with("x-epispro-")
+            || l.starts_with("x-epismart-"))
+}
+
+fn has_lasik_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-lasik-")
+            || l.starts_with("x-icl-")
+            || l.starts_with("x-orthok-")
+            || l.starts_with("x-relex-")
+            || l.starts_with("x-presbyond-")
+            || l.starts_with("x-lasikclinic-")
+            || l.starts_with("x-intralasik-")
+            || l.starts_with("x-lasiknavi-")
+            || l.starts_with("x-lasikcenter-")
+            || l.starts_with("x-lasikshop-")
+            || l.starts_with("x-lasikpro-")
+            || l.starts_with("x-lasikmart-")
+            || l.starts_with("x-lasikplus-")
+            || l.starts_with("x-lasiksmart-")
+            || l.starts_with("x-lasikfamily-")
+            || l.starts_with("x-iclnavi-")
+            || l.starts_with("x-iclcenter-")
+            || l.starts_with("x-iclshop-")
+            || l.starts_with("x-iclpro-")
+            || l.starts_with("x-iclmart-")
+            || l.starts_with("x-iclplus-")
+            || l.starts_with("x-iclsmart-")
+            || l.starts_with("x-iclfamily-")
+            || l.starts_with("x-orthoknavi-")
+            || l.starts_with("x-orthokcenter-")
+            || l.starts_with("x-orthokshop-")
+            || l.starts_with("x-orthokpro-")
+            || l.starts_with("x-orthokmart-")
+            || l.starts_with("x-orthokplus-")
+            || l.starts_with("x-orthoksmart-")
+            || l.starts_with("x-orthokfamily-")
+            || l.starts_with("x-relexnavi-")
+            || l.starts_with("x-relexcenter-")
+            || l.starts_with("x-relexshop-")
+            || l.starts_with("x-relexpro-")
+            || l.starts_with("x-relexmart-")
+            || l.starts_with("x-relexplus-")
+            || l.starts_with("x-relexsmart-")
+            || l.starts_with("x-relexfamily-")
+            || l.starts_with("x-presbyondnavi-")
+            || l.starts_with("x-presbyondcenter-")
+            || l.starts_with("x-presbyondshop-")
+            || l.starts_with("x-presbyondpro-")
+            || l.starts_with("x-presbyondmart-")
+            || l.starts_with("x-presbyondplus-")
+            || l.starts_with("x-presbyondsmart-")
+            || l.starts_with("x-presbyondfamily-")
+            || l.starts_with("x-lasikclinicnavi-")
+            || l.starts_with("x-lasikcliniccenter-")
+            || l.starts_with("x-lasikclinicshop-")
+            || l.starts_with("x-lasikclinicpro-")
+            || l.starts_with("x-lasikclinicmart-")
+            || l.starts_with("x-lasikclinicplus-")
+            || l.starts_with("x-lasikclinicsmart-")
+            || l.starts_with("x-lasikclinicfamily-")
+            || l.starts_with("x-intralasiknavi-")
+            || l.starts_with("x-intralasikcenter-")
+            || l.starts_with("x-intralasikshop-")
+            || l.starts_with("x-intralasikpro-")
+            || l.starts_with("x-intralasikmart-")
+            || l.starts_with("x-intralasikplus-")
+            || l.starts_with("x-intralasiksmart-"))
+}
+
+fn has_tattoo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-tattoo-")
+            || l.starts_with("x-irezumi-")
+            || l.starts_with("x-piercing-")
+            || l.starts_with("x-bodyart-")
+            || l.starts_with("x-tattooshop-")
+            || l.starts_with("x-bodypierce-")
+            || l.starts_with("x-tattoostudio-")
+            || l.starts_with("x-tattooland-")
+            || l.starts_with("x-tattoonavi-")
+            || l.starts_with("x-tattoocenter-")
+            || l.starts_with("x-tattooshop-")
+            || l.starts_with("x-tattoopro-")
+            || l.starts_with("x-tattoomart-")
+            || l.starts_with("x-tattooplus-")
+            || l.starts_with("x-tattoosmart-")
+            || l.starts_with("x-tattoofamily-")
+            || l.starts_with("x-irezuminavi-")
+            || l.starts_with("x-irezumicenter-")
+            || l.starts_with("x-irezumishop-")
+            || l.starts_with("x-irezumipro-")
+            || l.starts_with("x-irezumimart-")
+            || l.starts_with("x-irezumiplus-")
+            || l.starts_with("x-irezumismart-")
+            || l.starts_with("x-irezumifamily-")
+            || l.starts_with("x-piercingnavi-")
+            || l.starts_with("x-piercingcenter-")
+            || l.starts_with("x-piercingshop-")
+            || l.starts_with("x-piercingpro-")
+            || l.starts_with("x-piercingmart-")
+            || l.starts_with("x-piercingplus-")
+            || l.starts_with("x-piercingsmart-")
+            || l.starts_with("x-piercingfamily-")
+            || l.starts_with("x-bodyartnavi-")
+            || l.starts_with("x-bodyartcenter-")
+            || l.starts_with("x-bodyartshop-")
+            || l.starts_with("x-bodyartpro-")
+            || l.starts_with("x-bodyartmart-")
+            || l.starts_with("x-bodyartplus-")
+            || l.starts_with("x-bodyartsmart-")
+            || l.starts_with("x-bodyartfamily-")
+            || l.starts_with("x-tattooshopnavi-")
+            || l.starts_with("x-tattooshopcenter-")
+            || l.starts_with("x-tattooshopshop-")
+            || l.starts_with("x-tattooshoppro-")
+            || l.starts_with("x-tattooshopmart-")
+            || l.starts_with("x-tattooshopplus-")
+            || l.starts_with("x-tattooshopsmart-")
+            || l.starts_with("x-tattooshopfamily-")
+            || l.starts_with("x-bodypiercenavi-")
+            || l.starts_with("x-bodypiercecenter-")
+            || l.starts_with("x-bodypierceshop-")
+            || l.starts_with("x-bodypiercepro-")
+            || l.starts_with("x-bodypiercemart-")
+            || l.starts_with("x-bodypierceplus-")
+            || l.starts_with("x-bodypiercesmart-")
+            || l.starts_with("x-bodypiercefamily-")
+            || l.starts_with("x-tattoostudionavi-")
+            || l.starts_with("x-tattoostudiocenter-")
+            || l.starts_with("x-tattoostudioshop-")
+            || l.starts_with("x-tattoostudiopro-")
+            || l.starts_with("x-tattoostudiomart-")
+            || l.starts_with("x-tattoostudioplus-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -34940,6 +35159,59 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_sleepclinic_marks(clean));
+    }
+
+    #[test]
+    fn scan_は賃機印を検出する() {
+        for raw in [
+            br"X-Yachinhosho-Alert: 1",
+            br"X-Rentguarantee-Notice: 1",
+            br"X-Hoshocompany-Info: 1",
+            br"X-Casa-Report: 1",
+            br"X-Jleave-Bulletin: 1",
+            br"X-Garanty-News: 1",
+            br"X-Epis-Flash: 1",
+            br"X-Roomca-Release: 1",
+        ] {
+            assert!(has_rentguarantee_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_rentguarantee_marks(clean));
+    }
+
+    #[test]
+    fn scan_は視機印を検出する() {
+        for raw in [
+            br"X-Lasik-Alert: 1",
+            br"X-Icl-Notice: 1",
+            br"X-Orthok-Info: 1",
+            br"X-Relex-Report: 1",
+            br"X-Presbyond-Bulletin: 1",
+            br"X-Lasikclinic-News: 1",
+            br"X-Intralasik-Flash: 1",
+        ] {
+            assert!(has_lasik_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_lasik_marks(clean));
+    }
+
+    #[test]
+    fn scan_は彫機印を検出する() {
+        for raw in [
+            br"X-Tattoo-Alert: 1",
+            br"X-Irezumi-Notice: 1",
+            br"X-Piercing-Info: 1",
+            br"X-Bodyart-Report: 1",
+            br"X-Tattooshop-Bulletin: 1",
+            br"X-Bodypierce-News: 1",
+            br"X-Tattoostudio-Flash: 1",
+            br"X-Tattooland-Release: 1",
+        ] {
+            assert!(has_tattoo_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_tattoo_marks(clean));
     }
 
 }
