@@ -1966,3 +1966,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この移機が通知した」「この栽機が通知した」「この然機が通知した」は誰が記すか?
 
 答: **X-Foodtruck-*/X-Kitchencar-*/X-Michinoeki-* は「この移機が通知した」を名乗り、X-Bonsai-*/X-Orchid-*/X-Cactus-* は「この栽機が通知した」を名乗り、X-Naturopathy-*/X-Ayurveda-*/X-Homeopathy-* は「この然機が通知した」を名乗る — いずれも移機・栽機・然機が記す値を送信側が書いた自称**。移印・栽印・然印はすべて兆候として数えよ。
+
+## ラウンド 264
+
+問: 「この写機が通知した」「この街機が通知した」「この隠機が通知した」は誰が記すか?
+
+答: **X-Photostudio-*/X-Shashinkan-*/X-Idphoto-* は「この写機が通知した」を名乗り、X-Chiiki-*/X-Shotengai-*/X-Freepaper-* は「この街機が通知した」を名乗り、X-Geocache-*/X-Orienteering-*/X-Scavenger-* は「この隠機が通知した」を名乗る — いずれも写機・街機・隠機が記す値を送信側が書いた自称**。写印・街印・隠印はすべて兆候として数えよ。
