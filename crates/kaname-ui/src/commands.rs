@@ -2968,6 +2968,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D716: 格安SIM・MVNO印自称
+    if env.mvno_marks {
+        render_risks.push(
+            "X-Mvno-*/X-Mineo-*/X-Uqmobile-*/X-Ymobile-*/X-Linemo-*/X-Povo-*/X-Ahamo-*/X-Ocnmobile-* 等 — 格機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D717: クラフトビール・酒蔵・ワイナリー印自称
+    if env.craftbeer_marks {
+        render_risks.push(
+            "X-Craftbeer-*/X-Brewery-*/X-Winery-*/X-Sakagura-*/X-Kuramoto-*/X-Jizake-*/X-Shochu-*/X-Awamori-* 等 — 醸機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D718: 展示会・見本市・学会印自称
+    if env.expo_marks {
+        render_risks.push(
+            "X-Expo-*/X-Exhibition-*/X-Messe-*/X-Tradeshow-*/X-Booth-*/X-Gakkai-*/X-Convention-*/X-Fair-* 等 — 展機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

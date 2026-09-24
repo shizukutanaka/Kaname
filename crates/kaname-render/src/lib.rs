@@ -1943,6 +1943,12 @@ pub struct Envelope {
     pub motorsport_marks: bool,
     /// `X-Trekking-*`/`X-Hiking-*`/`X-Mountaineering-*` 等の山岳・トレッキング印を送信側が自称する兆候 (D715)
     pub trekking_marks: bool,
+    /// `X-Mvno-*`/`X-Mineo-*`/`X-Uqmobile-*` 等の格安SIM・MVNO印を送信側が自称する兆候 (D716)
+    pub mvno_marks: bool,
+    /// `X-Craftbeer-*`/`X-Brewery-*`/`X-Winery-*` 等のクラフトビール・酒蔵・ワイナリー印を送信側が自称する兆候 (D717)
+    pub craftbeer_marks: bool,
+    /// `X-Expo-*`/`X-Exhibition-*`/`X-Messe-*` 等の展示会・見本市・学会印を送信側が自称する兆候 (D718)
+    pub expo_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2536,6 +2542,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         rugby_marks: has_rugby_marks(hdr),
         motorsport_marks: has_motorsport_marks(hdr),
         trekking_marks: has_trekking_marks(hdr),
+        mvno_marks: has_mvno_marks(hdr),
+        craftbeer_marks: has_craftbeer_marks(hdr),
+        expo_marks: has_expo_marks(hdr),
     })
 }
 
@@ -20661,6 +20670,216 @@ fn has_trekking_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-expeditioncenter-"))
 }
 
+fn has_mvno_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-mvno-")
+            || l.starts_with("x-mineo-")
+            || l.starts_with("x-uqmobile-")
+            || l.starts_with("x-ymobile-")
+            || l.starts_with("x-linemo-")
+            || l.starts_with("x-povo-")
+            || l.starts_with("x-ahamo-")
+            || l.starts_with("x-ocnmobile-")
+            || l.starts_with("x-nifmo-")
+            || l.starts_with("x-freetel-")
+            || l.starts_with("x-dtone-")
+            || l.starts_with("x-roketmobile-")
+            || l.starts_with("x-libmo-")
+            || l.starts_with("x-jcommobile-")
+            || l.starts_with("x-hismobile-")
+            || l.starts_with("x-xmobile-")
+            || l.starts_with("x-younet-")
+            || l.starts_with("x-aeonmobile-")
+            || l.starts_with("x-uq-")
+            || l.starts_with("x-mvnonavi-")
+            || l.starts_with("x-mvnocenter-")
+            || l.starts_with("x-mvnoshop-")
+            || l.starts_with("x-mvnopro-")
+            || l.starts_with("x-mvnomart-")
+            || l.starts_with("x-mvnoplus-")
+            || l.starts_with("x-mvnosmart-")
+            || l.starts_with("x-mvnofamily-")
+            || l.starts_with("x-mineonavi-")
+            || l.starts_with("x-mineocenter-")
+            || l.starts_with("x-mineoshop-")
+            || l.starts_with("x-mineopro-")
+            || l.starts_with("x-mineomart-")
+            || l.starts_with("x-mineoplus-")
+            || l.starts_with("x-mineosmart-")
+            || l.starts_with("x-mineofamily-")
+            || l.starts_with("x-uqmobilenavi-")
+            || l.starts_with("x-uqmobilecenter-")
+            || l.starts_with("x-uqmobileshop-")
+            || l.starts_with("x-uqmobilepro-")
+            || l.starts_with("x-uqmobilemart-")
+            || l.starts_with("x-uqmobileplus-")
+            || l.starts_with("x-uqmobilesmart-")
+            || l.starts_with("x-uqmobilefamily-")
+            || l.starts_with("x-ymobilenavi-")
+            || l.starts_with("x-ymobilecenter-")
+            || l.starts_with("x-ymobileshop-")
+            || l.starts_with("x-ymobilepro-")
+            || l.starts_with("x-ymobilemart-")
+            || l.starts_with("x-ymobileplus-")
+            || l.starts_with("x-ymobilesmart-")
+            || l.starts_with("x-ymobilefamily-")
+            || l.starts_with("x-linemonavi-")
+            || l.starts_with("x-linemocenter-")
+            || l.starts_with("x-linemoshop-")
+            || l.starts_with("x-linemopro-")
+            || l.starts_with("x-linemomart-")
+            || l.starts_with("x-linemoplus-")
+            || l.starts_with("x-linemosmart-")
+            || l.starts_with("x-linemofamily-")
+            || l.starts_with("x-povonavi-")
+            || l.starts_with("x-povocenter-")
+            || l.starts_with("x-povoshop-"))
+}
+
+fn has_craftbeer_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-craftbeer-")
+            || l.starts_with("x-brewery-")
+            || l.starts_with("x-winery-")
+            || l.starts_with("x-sakebrewery-")
+            || l.starts_with("x-sakagura-")
+            || l.starts_with("x-kuramoto-")
+            || l.starts_with("x-jizake-")
+            || l.starts_with("x-shochu-")
+            || l.starts_with("x-awamori-")
+            || l.starts_with("x-wine-")
+            || l.starts_with("x-gin-")
+            || l.starts_with("x-craftgin-")
+            || l.starts_with("x-mead-")
+            || l.starts_with("x-cider-")
+            || l.starts_with("x-distillery-")
+            || l.starts_with("x-craftbeernavi-")
+            || l.starts_with("x-craftbeercenter-")
+            || l.starts_with("x-craftbeershop-")
+            || l.starts_with("x-craftbeerpro-")
+            || l.starts_with("x-craftbeermart-")
+            || l.starts_with("x-craftbeerplus-")
+            || l.starts_with("x-craftbeersmart-")
+            || l.starts_with("x-craftbeerfamily-")
+            || l.starts_with("x-brewerynavi-")
+            || l.starts_with("x-brewerycenter-")
+            || l.starts_with("x-breweryshop-")
+            || l.starts_with("x-brewerypro-")
+            || l.starts_with("x-brewerymart-")
+            || l.starts_with("x-breweryplus-")
+            || l.starts_with("x-brewerysmart-")
+            || l.starts_with("x-breweryfamily-")
+            || l.starts_with("x-winerynavi-")
+            || l.starts_with("x-winerycenter-")
+            || l.starts_with("x-wineryshop-")
+            || l.starts_with("x-winerypro-")
+            || l.starts_with("x-winerymart-")
+            || l.starts_with("x-wineryplus-")
+            || l.starts_with("x-winerysmart-")
+            || l.starts_with("x-wineryfamily-")
+            || l.starts_with("x-sakebrewerynavi-")
+            || l.starts_with("x-sakebrewerycenter-")
+            || l.starts_with("x-sakebreweryshop-")
+            || l.starts_with("x-sakebrewerypro-")
+            || l.starts_with("x-sakebrewerymart-")
+            || l.starts_with("x-sakebreweryplus-")
+            || l.starts_with("x-sakebrewerysmart-")
+            || l.starts_with("x-sakebreweryfamily-")
+            || l.starts_with("x-sakaguranavi-")
+            || l.starts_with("x-sakaguracenter-")
+            || l.starts_with("x-sakagurashop-")
+            || l.starts_with("x-sakagurapro-")
+            || l.starts_with("x-sakaguramart-")
+            || l.starts_with("x-sakaguraplus-")
+            || l.starts_with("x-sakagurasmart-")
+            || l.starts_with("x-sakagurafamily-")
+            || l.starts_with("x-kuramotonavi-")
+            || l.starts_with("x-kuramotocenter-")
+            || l.starts_with("x-kuramotoshop-")
+            || l.starts_with("x-kuramotopro-")
+            || l.starts_with("x-kuramotomart-")
+            || l.starts_with("x-kuramotoplus-")
+            || l.starts_with("x-kuramotosmart-"))
+}
+
+fn has_expo_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-expo-")
+            || l.starts_with("x-exhibition-")
+            || l.starts_with("x-messe-")
+            || l.starts_with("x-tradeshow-")
+            || l.starts_with("x-booth-")
+            || l.starts_with("x-gakkai-")
+            || l.starts_with("x-convention-")
+            || l.starts_with("x-fair-")
+            || l.starts_with("x-exhibit-")
+            || l.starts_with("x-sxsw-")
+            || l.starts_with("x-ces-")
+            || l.starts_with("x-tgs-")
+            || l.starts_with("x-comicmarket-")
+            || l.starts_with("x-fairs-")
+            || l.starts_with("x-exponavi-")
+            || l.starts_with("x-expocenter-")
+            || l.starts_with("x-exposhop-")
+            || l.starts_with("x-expopro-")
+            || l.starts_with("x-expomart-")
+            || l.starts_with("x-expoplus-")
+            || l.starts_with("x-exposmart-")
+            || l.starts_with("x-expofamily-")
+            || l.starts_with("x-exhibitionnavi-")
+            || l.starts_with("x-exhibitioncenter-")
+            || l.starts_with("x-exhibitionshop-")
+            || l.starts_with("x-exhibitionpro-")
+            || l.starts_with("x-exhibitionmart-")
+            || l.starts_with("x-exhibitionplus-")
+            || l.starts_with("x-exhibitionsmart-")
+            || l.starts_with("x-exhibitionfamily-")
+            || l.starts_with("x-messenavi-")
+            || l.starts_with("x-messecenter-")
+            || l.starts_with("x-messeshop-")
+            || l.starts_with("x-messepro-")
+            || l.starts_with("x-messemart-")
+            || l.starts_with("x-messeplus-")
+            || l.starts_with("x-messesmart-")
+            || l.starts_with("x-messefamily-")
+            || l.starts_with("x-tradeshownavi-")
+            || l.starts_with("x-tradeshowcenter-")
+            || l.starts_with("x-tradeshowshop-")
+            || l.starts_with("x-tradeshowpro-")
+            || l.starts_with("x-tradeshowmart-")
+            || l.starts_with("x-tradeshowplus-")
+            || l.starts_with("x-tradeshowsmart-")
+            || l.starts_with("x-tradeshowfamily-")
+            || l.starts_with("x-boothnavi-")
+            || l.starts_with("x-boothcenter-")
+            || l.starts_with("x-boothshop-")
+            || l.starts_with("x-boothpro-")
+            || l.starts_with("x-boothmart-")
+            || l.starts_with("x-boothplus-")
+            || l.starts_with("x-boothsmart-")
+            || l.starts_with("x-boothfamily-")
+            || l.starts_with("x-gakkainavi-")
+            || l.starts_with("x-gakkaicenter-")
+            || l.starts_with("x-gakkaishop-")
+            || l.starts_with("x-gakkaipro-")
+            || l.starts_with("x-gakkaimart-")
+            || l.starts_with("x-gakkaiplus-")
+            || l.starts_with("x-gakkaismart-")
+            || l.starts_with("x-gakkaifamily-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -30846,6 +31065,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_trekking_marks(clean));
+    }
+
+    #[test]
+    fn scan_は格機印を検出する() {
+        for raw in [
+            br"X-Mvno-Alert: 1",
+            br"X-Mineo-Notice: 1",
+            br"X-Uqmobile-Info: 1",
+            br"X-Ymobile-Report: 1",
+            br"X-Linemo-Bulletin: 1",
+            br"X-Povo-News: 1",
+            br"X-Ahamo-Flash: 1",
+            br"X-Ocnmobile-Release: 1",
+        ] {
+            assert!(has_mvno_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_mvno_marks(clean));
+    }
+
+    #[test]
+    fn scan_は醸機印を検出する() {
+        for raw in [
+            br"X-Craftbeer-Alert: 1",
+            br"X-Brewery-Notice: 1",
+            br"X-Winery-Info: 1",
+            br"X-Sakagura-Report: 1",
+            br"X-Kuramoto-Bulletin: 1",
+            br"X-Jizake-News: 1",
+            br"X-Shochu-Flash: 1",
+            br"X-Awamori-Release: 1",
+        ] {
+            assert!(has_craftbeer_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_craftbeer_marks(clean));
+    }
+
+    #[test]
+    fn scan_は展機印を検出する() {
+        for raw in [
+            br"X-Expo-Alert: 1",
+            br"X-Exhibition-Notice: 1",
+            br"X-Messe-Info: 1",
+            br"X-Tradeshow-Report: 1",
+            br"X-Booth-Bulletin: 1",
+            br"X-Gakkai-News: 1",
+            br"X-Convention-Flash: 1",
+            br"X-Fair-Release: 1",
+        ] {
+            assert!(has_expo_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_expo_marks(clean));
     }
 
 }
