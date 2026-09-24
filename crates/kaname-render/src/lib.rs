@@ -1739,6 +1739,12 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    /// `X-SirGrout-*`/`X-GroutMedic-*`/`X-GroutDoctor-*`/`X-TileGrout-*`/`X-GroutPros-*`/`X-MejiHoji-*`/`X-MejiKouji-*` 等 — タイル・目地補修機印自称
+    pub tilegrout_marks: bool,
+    /// `X-AmerLeakDet-*`/`X-LeakDetect-*`/`X-LeakDetection-*`/`X-LeakPros-*`/`X-RosuiChousa-*`/`X-RosuiKensa-*`/`X-LeakDoctor-*` 等 — 漏水調査機印自称
+    pub leakdetect_marks: bool,
+    /// `X-Stairlift-*`/`X-Bruno-*`/`X-Stannah-*`/`X-AcornStairlift-*`/`X-KaidanShou-*`/`X-IsuShiki-*`/`X-ChairLift-*` 等 — 階段昇降機印自称
+    pub stairlift_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2236,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        tilegrout_marks: has_tilegrout_marks(hdr),
+        leakdetect_marks: has_leakdetect_marks(hdr),
+        stairlift_marks: has_stairlift_marks(hdr),
     })
 }
 
@@ -12644,6 +12653,255 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+/// D671: タイル・目地補修機印の自称を検出する。
+///
+/// `X-SirGrout-*`/`X-GroutMedic-*`/`X-GroutDoctor-*`/`X-GroutPros-*`/`X-TileGrout-*`/
+/// `X-TileGroutPros-*`/`X-TilePros-*`/`X-TileDoctors-*`/`X-TileMasters-*`/`X-TileWorks-*`/
+/// `X-TileTeam-*`/`X-GroutSmith-*`/`X-GroutExperts-*`/`X-GroutWorks-*`/`X-GroutTeam-*`/
+/// `X-GroutForce-*`/`X-GroutMasters-*`/`X-GroutRepair-*`/`X-TileRepair-*`/`X-TileRestore-*`/
+/// `X-GroutRestore-*`/`X-CaulkPros-*`/`X-GroutSeal-*`/`X-TileSeal-*`、JP は `X-MejiHoji-*`/
+/// `X-MejiKouji-*`/`X-MejiYasan-*`/`X-MejiSeibi-*`/`X-MejiRepair-*`/`X-TairuHoji-*`/
+/// `X-TairuKouji-*`/`X-TairuYasan-*`/`X-TairuSeibi-*`/`X-TairuRepair-*`/`X-TairuPro-*`/
+/// `X-MejiPro-*`/`X-MejiTeam-*`/`X-MejiDoctors-*`/`X-TairuDoctors-*`/`X-MejiGyosha-*`/
+/// `X-TairuGyosha-*`/`X-MejiKensa-*`/`X-MejiKirei-*`/`X-TairuKirei-*`/`X-MejiManten-*`/
+/// `X-TairuManten-*`/`X-MejiNomi-*`/`X-TairuNomi-*`/`X-MejiJP-*`/`X-TairuJP-*`/
+/// `X-MejiSenmon-*`/`X-TairuSenmon-*`/`X-MejiShuri-*`/`X-TairuShuri-*`/`X-MejiZairyou-*`/
+/// `X-TairuBathroom-*` 等のタイル・目地補修機印はいずれも「この機が通知した」という
+/// 通知記録であり、送信側が書くことは自称にすぎない。タイル張替え・目地補修・
+/// コーキング打替え・浴室タイル再生の偽装はタイル工事業者なりすましの典型手口。
+/// 溝印の自署は兆候として数える。
+/// (浴室リフォームは bathroom 機、水道は plumbing 機、塗装は painting 機で検出済み)
+fn has_tilegrout_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sirgrout-")
+            || l.starts_with("x-groutmedic-")
+            || l.starts_with("x-groutdoctor-")
+            || l.starts_with("x-groutpros-")
+            || l.starts_with("x-tilegrout-")
+            || l.starts_with("x-tilegroutpros-")
+            || l.starts_with("x-tilepros-")
+            || l.starts_with("x-tiledoctors-")
+            || l.starts_with("x-tilemasters-")
+            || l.starts_with("x-tileworks-")
+            || l.starts_with("x-tileteam-")
+            || l.starts_with("x-groutsmith-")
+            || l.starts_with("x-groutexperts-")
+            || l.starts_with("x-groutworks-")
+            || l.starts_with("x-groutteam-")
+            || l.starts_with("x-groutforce-")
+            || l.starts_with("x-groutmasters-")
+            || l.starts_with("x-groutrepair-")
+            || l.starts_with("x-tilerepair-")
+            || l.starts_with("x-tilerestore-")
+            || l.starts_with("x-groutrestore-")
+            || l.starts_with("x-caulkpros-")
+            || l.starts_with("x-groutseal-")
+            || l.starts_with("x-tileseal-")
+            || l.starts_with("x-mejihoji-")
+            || l.starts_with("x-mejikouji-")
+            || l.starts_with("x-mejiyasan-")
+            || l.starts_with("x-mejiseibi-")
+            || l.starts_with("x-mejirepair-")
+            || l.starts_with("x-tairuhoji-")
+            || l.starts_with("x-tairukouji-")
+            || l.starts_with("x-tairuyasan-")
+            || l.starts_with("x-tairuseibi-")
+            || l.starts_with("x-tairurepair-")
+            || l.starts_with("x-tairupro-")
+            || l.starts_with("x-mejipro-")
+            || l.starts_with("x-mejiteam-")
+            || l.starts_with("x-mejidoctors-")
+            || l.starts_with("x-tairudoctors-")
+            || l.starts_with("x-mejigyosha-")
+            || l.starts_with("x-tairugyosha-")
+            || l.starts_with("x-mejikensa-")
+            || l.starts_with("x-mejikirei-")
+            || l.starts_with("x-tairukirei-")
+            || l.starts_with("x-mejimanten-")
+            || l.starts_with("x-tairumanten-")
+            || l.starts_with("x-mejinomi-")
+            || l.starts_with("x-tairunomi-")
+            || l.starts_with("x-mejijp-")
+            || l.starts_with("x-tairujp-")
+            || l.starts_with("x-mejisenmon-")
+            || l.starts_with("x-tairusenmon-")
+            || l.starts_with("x-mejishuri-")
+            || l.starts_with("x-tairushuri-")
+            || l.starts_with("x-mejizairyou-")
+            || l.starts_with("x-tairubathroom-")
+    })
+}
+
+/// D672: 漏水調査機印の自称を検出する。
+///
+/// `X-AmerLeakDet-*`/`X-AmerLeakDetection-*`/`X-LeakDetect-*`/`X-LeakDetection-*`/
+/// `X-LeakPros-*`/`X-LeakDoctor-*`/`X-LeakExperts-*`/`X-LeakMasters-*`/`X-LeakTeam-*`/
+/// `X-LeakForce-*`/`X-LeakWorks-*`/`X-LeakSmith-*`/`X-WaterLeak-*`/`X-WaterLeakPros-*`/
+/// `X-WaterLeakDoctor-*`/`X-PlumbingLeak-*`/`X-LeakFinder-*`/`X-LeakSearch-*`/
+/// `X-LeakLocate-*`/`X-TraceAndAccess-*`/`X-TraceAccess-*`/`X-SlabLeak-*`/`X-SlabLeakPros-*`/
+/// `X-PoolLeakDet-*`、JP は `X-RosuiChousa-*`/`X-RosuiKensa-*`/`X-RosuiTanchi-*`/
+/// `X-RosuiTanken-*`/`X-RosuiTansaku-*`/`X-RosuiYasan-*`/`X-RosuiPro-*`/`X-RosuiTeam-*`/
+/// `X-RosuiDoctors-*`/`X-RosuiGyosha-*`/`X-RosuiShuri-*`/`X-RosuiKirei-*`/`X-RosuiManten-*`/
+/// `X-RosuiNomi-*`/`X-RosuiJP-*`/`X-RosuiSenmon-*`/`X-RosuiShinsa-*`/`X-RosuiKaiketsu-*`/
+/// `X-MizumoreChousa-*`/`X-MizumoreKensa-*`/`X-MizumoreTanken-*`/`X-MizumoreTanchi-*`/
+/// `X-MizumoreYasan-*`/`X-SuidenRosui-*`/`X-KaidanRosui-*`/`X-GeninRosui-*`/
+/// `X-RosuiTeitai-*`/`X-RosuiTeiki-*`/`X-RosuiProbe-*`/`X-RosuiChikaduke-*` 等の漏水調査機印は
+/// いずれも「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 漏水調査・水道管破裂・給湯管漏れ・音響探知・スラブリークの偽装は
+/// 漏水調査業者なりすましの典型手口 (高額調査費を請求する手口が有名)。
+/// 漏印の自署は兆候として数える。
+/// (防水修繕は waterproof 機、水道は plumbing 機、基礎は foundation 機で検出済み)
+fn has_leakdetect_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-amerleakdet-")
+            || l.starts_with("x-amerleakdetection-")
+            || l.starts_with("x-leakdetect-")
+            || l.starts_with("x-leakdetection-")
+            || l.starts_with("x-leakpros-")
+            || l.starts_with("x-leakdoctor-")
+            || l.starts_with("x-leakexperts-")
+            || l.starts_with("x-leakmasters-")
+            || l.starts_with("x-leakteam-")
+            || l.starts_with("x-leakforce-")
+            || l.starts_with("x-leakworks-")
+            || l.starts_with("x-leaksmith-")
+            || l.starts_with("x-waterleak-")
+            || l.starts_with("x-waterleakpros-")
+            || l.starts_with("x-waterleakdoctor-")
+            || l.starts_with("x-plumbingleak-")
+            || l.starts_with("x-leakfinder-")
+            || l.starts_with("x-leaksearch-")
+            || l.starts_with("x-leaklocate-")
+            || l.starts_with("x-traceandaccess-")
+            || l.starts_with("x-traceaccess-")
+            || l.starts_with("x-slableak-")
+            || l.starts_with("x-slableakpros-")
+            || l.starts_with("x-poolleakdet-")
+            || l.starts_with("x-rosuichousa-")
+            || l.starts_with("x-rosuikensa-")
+            || l.starts_with("x-rosuitanchi-")
+            || l.starts_with("x-rosuitanken-")
+            || l.starts_with("x-rosuitansaku-")
+            || l.starts_with("x-rosuiyasan-")
+            || l.starts_with("x-rosuipro-")
+            || l.starts_with("x-rosuiteam-")
+            || l.starts_with("x-rosuidoctors-")
+            || l.starts_with("x-rosuigyosha-")
+            || l.starts_with("x-rosuishuri-")
+            || l.starts_with("x-rosuikirei-")
+            || l.starts_with("x-rosuimanten-")
+            || l.starts_with("x-rosuinomi-")
+            || l.starts_with("x-rosuijp-")
+            || l.starts_with("x-rosuisenmon-")
+            || l.starts_with("x-rosuishinsa-")
+            || l.starts_with("x-rosuikaiketsu-")
+            || l.starts_with("x-mizumorechousa-")
+            || l.starts_with("x-mizumorekensa-")
+            || l.starts_with("x-mizumoretanken-")
+            || l.starts_with("x-mizumoretanchi-")
+            || l.starts_with("x-mizumoreyasan-")
+            || l.starts_with("x-suidenrosui-")
+            || l.starts_with("x-kaidanrosui-")
+            || l.starts_with("x-geninrosui-")
+            || l.starts_with("x-rosuiteitai-")
+            || l.starts_with("x-rosuiteiki-")
+            || l.starts_with("x-rosuiprobe-")
+            || l.starts_with("x-rosuichikaduke-")
+    })
+}
+
+/// D673: 階段昇降機印の自称を検出する。
+///
+/// `X-Stairlift-*`/`X-Stairlifts-*`/`X-Bruno-*`/`X-BrunoStairlift-*`/`X-Stannah-*`/
+/// `X-StannahStairlift-*`/`X-AcornStairlift-*`/`X-AcornStairlifts-*`/`X-HandicareStair-*`/
+/// `X-HarmarStair-*`/`X-StairliftPros-*`/`X-StairliftExperts-*`/`X-StairliftDoctors-*`/
+/// `X-ChairLift-*`/`X-ChairliftPros-*`/`X-StairChair-*`/`X-StairGlide-*`/`X-StairWay-*`/
+/// `X-StairRider-*`/`X-LiftChair-*`/`X-StairLiftRepair-*`/`X-StairliftInstall-*`/
+/// `X-StairliftRental-*`/`X-CurvedStair-*`、JP は `X-KaidanShou-*`/`X-KaidanShoukou-*`/
+/// `X-KaidanLift-*`/`X-KaidanLiftKouji-*`/`X-IsuShiki-*`/`X-IsuShikiShoukou-*`/
+/// `X-IsuShikiKouji-*`/`X-Shoukanki-*`/`X-ShoukankiKouji-*`/`X-ShoukankiYasan-*`/
+/// `X-ShoukankiSeibi-*`/`X-ShoukankiPro-*`/`X-ShoukankiTeam-*`/`X-ShoukankiDoctors-*`/
+/// `X-ShoukankiGyosha-*`/`X-ShoukankiKensa-*`/`X-ShoukankiManten-*`/`X-ShoukankiNomi-*`/
+/// `X-ShoukankiJP-*`/`X-ShoukankiSenmon-*`/`X-KaidanNomi-*`/`X-KaidanSenmon-*`/
+/// `X-KaidanJP-*`/`X-IsuShikiYasan-*`/`X-IsuShikiSeibi-*`/`X-IsuShikiPro-*`/
+/// `X-IsuShikiTeam-*`/`X-IsuShikiJP-*` 等の階段昇降機印はいずれも
+/// 「この機が通知した」という通知記録であり、送信側が書くことは自称にすぎない。
+/// 階段昇降機・いす式階段昇降機・階段リフト・在宅介護昇降機の偽装は
+/// 昇降機業者なりすましの典型手口 (高齢者向け高額機器の訪販・ローン商法で有名)。
+/// 椅印の自署は兆候として数える。
+/// (エレベーターは elevator 機、介護は seniorcare 機、バリアフリーは bathroom 機で検出済み)
+fn has_stairlift_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-stairlift-")
+            || l.starts_with("x-stairlifts-")
+            || l.starts_with("x-bruno-")
+            || l.starts_with("x-brunostairlift-")
+            || l.starts_with("x-stannah-")
+            || l.starts_with("x-stannahstairlift-")
+            || l.starts_with("x-acornstairlift-")
+            || l.starts_with("x-acornstairlifts-")
+            || l.starts_with("x-handicarestair-")
+            || l.starts_with("x-harmarstair-")
+            || l.starts_with("x-stairliftpros-")
+            || l.starts_with("x-stairliftexperts-")
+            || l.starts_with("x-stairliftdoctors-")
+            || l.starts_with("x-chairlift-")
+            || l.starts_with("x-chairliftpros-")
+            || l.starts_with("x-stairchair-")
+            || l.starts_with("x-stairglide-")
+            || l.starts_with("x-stairway-")
+            || l.starts_with("x-stairrider-")
+            || l.starts_with("x-liftchair-")
+            || l.starts_with("x-stairliftrepair-")
+            || l.starts_with("x-stairliftinstall-")
+            || l.starts_with("x-stairliftrental-")
+            || l.starts_with("x-curvedstair-")
+            || l.starts_with("x-kaidanshou-")
+            || l.starts_with("x-kaidanshoukou-")
+            || l.starts_with("x-kaidanlift-")
+            || l.starts_with("x-kaidanliftkouji-")
+            || l.starts_with("x-isushiki-")
+            || l.starts_with("x-isushikishoukou-")
+            || l.starts_with("x-isushikikouji-")
+            || l.starts_with("x-shoukanki-")
+            || l.starts_with("x-shoukankikouji-")
+            || l.starts_with("x-shoukankiyasan-")
+            || l.starts_with("x-shoukankiseibi-")
+            || l.starts_with("x-shoukankipro-")
+            || l.starts_with("x-shoukankiteam-")
+            || l.starts_with("x-shoukankidoctors-")
+            || l.starts_with("x-shoukankigyosha-")
+            || l.starts_with("x-shoukankikensa-")
+            || l.starts_with("x-shoukankimanten-")
+            || l.starts_with("x-shoukankinomi-")
+            || l.starts_with("x-shoukankijp-")
+            || l.starts_with("x-shoukankisenmon-")
+            || l.starts_with("x-kaidannomi-")
+            || l.starts_with("x-kaidansenmon-")
+            || l.starts_with("x-kaidanjp-")
+            || l.starts_with("x-isushikiyasan-")
+            || l.starts_with("x-isushikiseibi-")
+            || l.starts_with("x-isushikipro-")
+            || l.starts_with("x-isushikiteam-")
+            || l.starts_with("x-isushikijp-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20899,55 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は溝機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-SirGrout-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GroutMedic-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MejiHoji-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MejiKouji-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GroutDoctor-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TairuHoji-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-GroutPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-TileGrout-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_tilegrout_marks(raw));
+        }
+        assert!(!has_tilegrout_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は漏機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-AmerLeakDet-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LeakDetect-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RosuiChousa-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-RosuiKensa-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LeakDetection-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-MizumoreChousa-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LeakPros-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-LeakDoctor-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_leakdetect_marks(raw));
+        }
+        assert!(!has_leakdetect_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は椅機印を検出する() {
+        for raw in [
+            &b"From: a@b\r\nX-Stairlift-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Bruno-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-KaidanShou-Est: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-IsuShiki-Alert: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Stannah-Info: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-Shoukanki-Notice: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-AcornStairlift-Update: 1\r\n\r\nx"[..],
+            &b"From: a@b\r\nX-ChairLift-Info: 1\r\n\r\nx"[..],
+        ] {
+            assert!(has_stairlift_marks(raw));
+        }
+        assert!(!has_stairlift_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }

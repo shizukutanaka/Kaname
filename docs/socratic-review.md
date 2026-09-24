@@ -1726,3 +1726,10 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この検機が通知した」「この留機が通知した」「この具機が通知した」は誰が記すか?
 
 答: **X-UCan-*/X-TACShool-*/X-OharaSchool-* は「この検機が通知した」を名乗り、X-RyugakuJournal-*/X-SeikoRyugaku-*/X-Smaryu-* は「この留機が通知した」を名乗り、X-Makita-*/X-HiKOKI-*/X-TruscoNakayama-* は「この具機が通知した」を名乗る — いずれも検機・留機・具機が記す値を送信側が書いた自称**。検印・留印・具印はすべて兆候として数えよ。
+
+
+## ラウンド 243
+
+問: 「この溝機が通知した」「この漏機が通知した」「この椅機が通知した」は誰が記すか?
+
+答: **X-SirGrout-*/X-GroutMedic-*/X-MejiHoji-* は「この溝機が通知した」を名乗り、X-AmerLeakDet-*/X-LeakDetect-*/X-RosuiChousa-* は「この漏機が通知した」を名乗り、X-Stairlift-*/X-Bruno-*/X-KaidanShou-* は「この椅機が通知した」を名乗る — いずれも溝機・漏機・椅機が記す値を送信側が書いた自称**。溝印・漏印・椅印はすべて兆候として数えよ。
