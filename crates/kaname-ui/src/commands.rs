@@ -2905,6 +2905,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D707: サバゲー・エアガン印自称
+    if env.sabage_marks {
+        render_risks.push(
+            "X-Sabage-*/X-Airgun-*/X-Paintball-*/X-Airsoft-*/X-Tokyomarui-*/X-Survival-*/X-Camo-*/X-Ghillie-* 等 — 撃機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D708: 瞑想・スピリチュアル・レイキ印自称
+    if env.spiritual_marks {
+        render_risks.push(
+            "X-Reiki-*/X-Qigong-*/X-Meditation-*/X-Meiso-*/X-Hikiyose-*/X-Kaiun-*/X-Fengshui-*/X-Chakra-* 等 — 霊機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D709: 祭り・花火大会・縁日印自称
+    if env.matsuri_marks {
+        render_risks.push(
+            "X-Matsuri-*/X-Hanabi-*/X-Ennichi-*/X-Yatai-*/X-Mikoshi-*/X-Nebuta-*/X-Awaodori-*/X-Yosakoi-* 等 — 祭機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

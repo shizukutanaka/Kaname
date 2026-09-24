@@ -1925,6 +1925,12 @@ pub struct Envelope {
     pub budo_marks: bool,
     /// `X-Radio-*`/`X-Jwave-*`/`X-Tokyofm-*` 等のラジオ・コミュニティFM印を送信側が自称する兆候 (D706)
     pub radio_marks: bool,
+    /// `X-Sabage-*`/`X-Airgun-*`/`X-Paintball-*` 等のサバゲー・エアガン印を送信側が自称する兆候 (D707)
+    pub sabage_marks: bool,
+    /// `X-Reiki-*`/`X-Qigong-*`/`X-Meditation-*` 等の瞑想・スピリチュアル・レイキ印を送信側が自称する兆候 (D708)
+    pub spiritual_marks: bool,
+    /// `X-Matsuri-*`/`X-Hanabi-*`/`X-Bonodori-*` 等の祭り・花火大会・縁日印を送信側が自称する兆候 (D709)
+    pub matsuri_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2509,6 +2515,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         jouba_marks: has_jouba_marks(hdr),
         budo_marks: has_budo_marks(hdr),
         radio_marks: has_radio_marks(hdr),
+        sabage_marks: has_sabage_marks(hdr),
+        spiritual_marks: has_spiritual_marks(hdr),
+        matsuri_marks: has_matsuri_marks(hdr),
     })
 }
 
@@ -20004,6 +20013,216 @@ fn has_radio_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-fmyokohamanavi-"))
 }
 
+fn has_sabage_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sabage-")
+            || l.starts_with("x-airgun-")
+            || l.starts_with("x-paintball-")
+            || l.starts_with("x-airsoft-")
+            || l.starts_with("x-tokyomarui-")
+            || l.starts_with("x-survival-")
+            || l.starts_with("x-sabbage-")
+            || l.starts_with("x-field-")
+            || l.starts_with("x-camo-")
+            || l.starts_with("x-tacticool-")
+            || l.starts_with("x-ghillie-")
+            || l.starts_with("x-aresguns-")
+            || l.starts_with("x-vfc-")
+            || l.starts_with("x-sabagenavi-")
+            || l.starts_with("x-sabagecenter-")
+            || l.starts_with("x-sabageshop-")
+            || l.starts_with("x-sabagepro-")
+            || l.starts_with("x-sabagemart-")
+            || l.starts_with("x-sabageplus-")
+            || l.starts_with("x-sabagesmart-")
+            || l.starts_with("x-sabagefamily-")
+            || l.starts_with("x-airgunnavi-")
+            || l.starts_with("x-airguncenter-")
+            || l.starts_with("x-airgunshop-")
+            || l.starts_with("x-airgunpro-")
+            || l.starts_with("x-airgunmart-")
+            || l.starts_with("x-airgunplus-")
+            || l.starts_with("x-airgunsmart-")
+            || l.starts_with("x-airgunfamily-")
+            || l.starts_with("x-paintballnavi-")
+            || l.starts_with("x-paintballcenter-")
+            || l.starts_with("x-paintballshop-")
+            || l.starts_with("x-paintballpro-")
+            || l.starts_with("x-paintballmart-")
+            || l.starts_with("x-paintballplus-")
+            || l.starts_with("x-paintballsmart-")
+            || l.starts_with("x-paintballfamily-")
+            || l.starts_with("x-airsoftnavi-")
+            || l.starts_with("x-airsoftcenter-")
+            || l.starts_with("x-airsoftshop-")
+            || l.starts_with("x-airsoftpro-")
+            || l.starts_with("x-airsoftmart-")
+            || l.starts_with("x-airsoftplus-")
+            || l.starts_with("x-airsoftsmart-")
+            || l.starts_with("x-airsoftfamily-")
+            || l.starts_with("x-tokyomaruinavi-")
+            || l.starts_with("x-tokyomaruicenter-")
+            || l.starts_with("x-tokyomaruishop-")
+            || l.starts_with("x-tokyomaruipro-")
+            || l.starts_with("x-tokyomaruimart-")
+            || l.starts_with("x-tokyomaruiplus-")
+            || l.starts_with("x-tokyomaruismart-")
+            || l.starts_with("x-tokyomaruifamily-")
+            || l.starts_with("x-survivalnavi-")
+            || l.starts_with("x-survivalcenter-")
+            || l.starts_with("x-survivalshop-")
+            || l.starts_with("x-survivalpro-")
+            || l.starts_with("x-survivalmart-")
+            || l.starts_with("x-survivalplus-")
+            || l.starts_with("x-survivalsmart-")
+            || l.starts_with("x-survivalfamily-")
+            || l.starts_with("x-sabbagenavi-"))
+}
+
+fn has_spiritual_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-reiki-")
+            || l.starts_with("x-qigong-")
+            || l.starts_with("x-meditation-")
+            || l.starts_with("x-meiso-")
+            || l.starts_with("x-hikiyose-")
+            || l.starts_with("x-kaiun-")
+            || l.starts_with("x-fengshui-")
+            || l.starts_with("x-kiko-")
+            || l.starts_with("x-hypno-")
+            || l.starts_with("x-mindfulness-")
+            || l.starts_with("x-zen-")
+            || l.starts_with("x-vipassana-")
+            || l.starts_with("x-chakra-")
+            || l.starts_with("x-reikinavi-")
+            || l.starts_with("x-reikicenter-")
+            || l.starts_with("x-reikishop-")
+            || l.starts_with("x-reikipro-")
+            || l.starts_with("x-reikimart-")
+            || l.starts_with("x-reikiplus-")
+            || l.starts_with("x-reikismart-")
+            || l.starts_with("x-reikifamily-")
+            || l.starts_with("x-qigongnavi-")
+            || l.starts_with("x-qigongcenter-")
+            || l.starts_with("x-qigongshop-")
+            || l.starts_with("x-qigongpro-")
+            || l.starts_with("x-qigongmart-")
+            || l.starts_with("x-qigongplus-")
+            || l.starts_with("x-qigongsmart-")
+            || l.starts_with("x-qigongfamily-")
+            || l.starts_with("x-meditationnavi-")
+            || l.starts_with("x-meditationcenter-")
+            || l.starts_with("x-meditationshop-")
+            || l.starts_with("x-meditationpro-")
+            || l.starts_with("x-meditationmart-")
+            || l.starts_with("x-meditationplus-")
+            || l.starts_with("x-meditationsmart-")
+            || l.starts_with("x-meditationfamily-")
+            || l.starts_with("x-meisonavi-")
+            || l.starts_with("x-meisocenter-")
+            || l.starts_with("x-meisoshop-")
+            || l.starts_with("x-meisopro-")
+            || l.starts_with("x-meisomart-")
+            || l.starts_with("x-meisoplus-")
+            || l.starts_with("x-meisosmart-")
+            || l.starts_with("x-meisofamily-")
+            || l.starts_with("x-hikiyosenavi-")
+            || l.starts_with("x-hikiyosecenter-")
+            || l.starts_with("x-hikiyoseshop-")
+            || l.starts_with("x-hikiyosepro-")
+            || l.starts_with("x-hikiyosemart-")
+            || l.starts_with("x-hikiyoseplus-")
+            || l.starts_with("x-hikiyosesmart-")
+            || l.starts_with("x-hikiyosefamily-")
+            || l.starts_with("x-kaiunnavi-")
+            || l.starts_with("x-kaiuncenter-")
+            || l.starts_with("x-kaiunshop-")
+            || l.starts_with("x-kaiunpro-")
+            || l.starts_with("x-kaiunmart-")
+            || l.starts_with("x-kaiunplus-")
+            || l.starts_with("x-kaiunsmart-")
+            || l.starts_with("x-kaiunfamily-")
+            || l.starts_with("x-fengshuinavi-"))
+}
+
+fn has_matsuri_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-matsuri-")
+            || l.starts_with("x-hanabi-")
+            || l.starts_with("x-bonodori-")
+            || l.starts_with("x-ennichi-")
+            || l.starts_with("x-yomise-")
+            || l.starts_with("x-shutten-")
+            || l.starts_with("x-yatai-")
+            || l.starts_with("x-omatsuri-")
+            || l.starts_with("x-mikoshi-")
+            || l.starts_with("x-nebuta-")
+            || l.starts_with("x-awaodori-")
+            || l.starts_with("x-yosakoi-")
+            || l.starts_with("x-kanda-")
+            || l.starts_with("x-gion-")
+            || l.starts_with("x-tenjin-")
+            || l.starts_with("x-festival-")
+            || l.starts_with("x-matsurinavi-")
+            || l.starts_with("x-matsuricenter-")
+            || l.starts_with("x-matsurishop-")
+            || l.starts_with("x-matsuripro-")
+            || l.starts_with("x-matsurimart-")
+            || l.starts_with("x-matsuriplus-")
+            || l.starts_with("x-matsurismart-")
+            || l.starts_with("x-matsurifamily-")
+            || l.starts_with("x-hanabinavi-")
+            || l.starts_with("x-hanabicenter-")
+            || l.starts_with("x-hanabishop-")
+            || l.starts_with("x-hanabipro-")
+            || l.starts_with("x-hanabimart-")
+            || l.starts_with("x-hanabiplus-")
+            || l.starts_with("x-hanabismart-")
+            || l.starts_with("x-hanabifamily-")
+            || l.starts_with("x-bonodorinavi-")
+            || l.starts_with("x-bonodoricenter-")
+            || l.starts_with("x-bonodorishop-")
+            || l.starts_with("x-bonodoripro-")
+            || l.starts_with("x-bonodorimart-")
+            || l.starts_with("x-bonodoriplus-")
+            || l.starts_with("x-bonodorismart-")
+            || l.starts_with("x-bonodorifamily-")
+            || l.starts_with("x-ennichinavi-")
+            || l.starts_with("x-ennichicenter-")
+            || l.starts_with("x-ennichishop-")
+            || l.starts_with("x-ennichipro-")
+            || l.starts_with("x-ennichimart-")
+            || l.starts_with("x-ennichiplus-")
+            || l.starts_with("x-ennichismart-")
+            || l.starts_with("x-ennichifamily-")
+            || l.starts_with("x-yomisenavi-")
+            || l.starts_with("x-yomisecenter-")
+            || l.starts_with("x-yomiseshop-")
+            || l.starts_with("x-yomisepro-")
+            || l.starts_with("x-yomisemart-")
+            || l.starts_with("x-yomiseplus-")
+            || l.starts_with("x-yomisesmart-")
+            || l.starts_with("x-yomisefamily-")
+            || l.starts_with("x-shuttennavi-")
+            || l.starts_with("x-shuttencenter-")
+            || l.starts_with("x-shuttenshop-")
+            || l.starts_with("x-shuttenpro-")
+            || l.starts_with("x-shuttenmart-")
+            || l.starts_with("x-shuttenplus-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -30027,6 +30246,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_radio_marks(clean));
+    }
+
+    #[test]
+    fn scan_は撃機印を検出する() {
+        for raw in [
+            br"X-Sabage-Alert: 1",
+            br"X-Airgun-Notice: 1",
+            br"X-Paintball-Info: 1",
+            br"X-Airsoft-Report: 1",
+            br"X-Tokyomarui-Bulletin: 1",
+            br"X-Survival-News: 1",
+            br"X-Camo-Flash: 1",
+            br"X-Ghillie-Release: 1",
+        ] {
+            assert!(has_sabage_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_sabage_marks(clean));
+    }
+
+    #[test]
+    fn scan_は霊機印を検出する() {
+        for raw in [
+            br"X-Reiki-Alert: 1",
+            br"X-Qigong-Notice: 1",
+            br"X-Meditation-Info: 1",
+            br"X-Meiso-Report: 1",
+            br"X-Hikiyose-Bulletin: 1",
+            br"X-Kaiun-News: 1",
+            br"X-Fengshui-Flash: 1",
+            br"X-Chakra-Release: 1",
+        ] {
+            assert!(has_spiritual_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_spiritual_marks(clean));
+    }
+
+    #[test]
+    fn scan_は祭機印を検出する() {
+        for raw in [
+            br"X-Matsuri-Alert: 1",
+            br"X-Hanabi-Notice: 1",
+            br"X-Ennichi-Info: 1",
+            br"X-Yatai-Report: 1",
+            br"X-Mikoshi-Bulletin: 1",
+            br"X-Nebuta-News: 1",
+            br"X-Awaodori-Flash: 1",
+            br"X-Yosakoi-Release: 1",
+        ] {
+            assert!(has_matsuri_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_matsuri_marks(clean));
     }
 
 }
