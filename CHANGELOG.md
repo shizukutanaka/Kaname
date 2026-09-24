@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D848: `X-Shichimi-*`/`X-Tougarashi-*`/`X-Shichimiya-*`/`X-Spicebox-*`/`X-Japanesespice-*`/`X-Sevenpepper-*` 等の七味・唐辛子印自称が未検査
+
+- **問題**: `X-Shichimi-*`/`X-ShichimiYasan-*`/`X-ShichimiPro-*`/`X-ShichimiTeam-*`/`X-ShichimiJP-*`/`X-ShichimiSenmon-*`/`X-Tougarashi-*`/`X-TougarashiYasan-*`/`X-TougarashiPro-*`/`X-TougarashiTeam-*`/`X-TougarashiJP-*`/`X-TougarashiSenmon-*`/`X-Shichimiya-*`/`X-ShichimiyaYasan-*`/`X-ShichimiyaPro-*`/`X-ShichimiyaTeam-*`/`X-ShichimiyaJP-*`/`X-ShichimiyaSenmon-*`/`X-SpiceboxPros-*`/`X-SpiceboxTeam-*`/`X-SpiceboxWorks-*`/`X-SpiceboxExperts-*`/`X-SpiceboxSvc-*`/`X-SpiceboxHQ-*`/`X-JapanesespicePros-*`/`X-JapanesespiceTeam-*`/`X-JapanesespiceWorks-*`/`X-JapanesespiceExperts-*`/`X-JapanesespiceSvc-*`/`X-JapanesespiceHQ-*`/`X-SevenpepperPros-*`/`X-SevenpepperTeam-*`/`X-SevenpepperWorks-*`/`X-SevenpepperExperts-*`/`X-SevenpepperSvc-*`/`X-SevenpepperHQ-*` 等 は七機の通知記録 — 送信側が書くことは自称。七味・唐辛子業者の偽装は、善光寺門前・老舗七味の直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `shichimi_marks` + `has_shichimi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 七印の自署を問え。
+
+### Security — D849: `X-Sanshou-*`/`X-Sanshouya-*`/`X-Sanshoten-*`/`X-Sanshopowder-*`/`X-Japanpepper-*`/`X-Sanshoshop-*` 等の山椒印自称が未検査
+
+- **問題**: `X-Sanshou-*`/`X-SanshouYasan-*`/`X-SanshouPro-*`/`X-SanshouTeam-*`/`X-SanshouJP-*`/`X-SanshouSenmon-*`/`X-Sanshouya-*`/`X-SanshouyaYasan-*`/`X-SanshouyaPro-*`/`X-SanshouyaTeam-*`/`X-SanshouyaJP-*`/`X-SanshouyaSenmon-*`/`X-Sanshoten-*`/`X-SanshotenYasan-*`/`X-SanshotenPro-*`/`X-SanshotenTeam-*`/`X-SanshotenJP-*`/`X-SanshotenSenmon-*`/`X-SanshopowderPros-*`/`X-SanshopowderTeam-*`/`X-SanshopowderWorks-*`/`X-SanshopowderExperts-*`/`X-SanshopowderSvc-*`/`X-SanshopowderHQ-*`/`X-JapanpepperPros-*`/`X-JapanpepperTeam-*`/`X-JapanpepperWorks-*`/`X-JapanpepperExperts-*`/`X-JapanpepperSvc-*`/`X-JapanpepperHQ-*`/`X-SanshoshopPros-*`/`X-SanshoshopTeam-*`/`X-SanshoshopWorks-*`/`X-SanshoshopExperts-*`/`X-SanshoshopSvc-*`/`X-SanshoshopHQ-*` 等 は椒機の通知記録 — 送信側が書くことは自称。山椒業者の偽装は、和歌山ぶどう山椒・粉山椒の産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `sanshou_marks` + `has_sanshou_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 椒印の自署を問え。
+
+### Security — D850: `X-Wasabi-*`/`X-Wasabiya-*`/`X-Wasabien-*`/`X-Wasabistore-*`/`X-Wasabifarm-*`/`X-Japanwasabi-*` 等のわさび印自称が未検査
+
+- **問題**: `X-Wasabi-*`/`X-WasabiYasan-*`/`X-WasabiPro-*`/`X-WasabiTeam-*`/`X-WasabiJP-*`/`X-WasabiSenmon-*`/`X-Wasabiya-*`/`X-WasabiyaYasan-*`/`X-WasabiyaPro-*`/`X-WasabiyaTeam-*`/`X-WasabiyaJP-*`/`X-WasabiyaSenmon-*`/`X-Wasabien-*`/`X-WasabienYasan-*`/`X-WasabienPro-*`/`X-WasabienTeam-*`/`X-WasabienJP-*`/`X-WasabienSenmon-*`/`X-WasabistorePros-*`/`X-WasabistoreTeam-*`/`X-WasabistoreWorks-*`/`X-WasabistoreExperts-*`/`X-WasabistoreSvc-*`/`X-WasabistoreHQ-*`/`X-WasabifarmPros-*`/`X-WasabifarmTeam-*`/`X-WasabifarmWorks-*`/`X-WasabifarmExperts-*`/`X-WasabifarmSvc-*`/`X-WasabifarmHQ-*`/`X-JapanwasabiPros-*`/`X-JapanwasabiTeam-*`/`X-JapanwasabiWorks-*`/`X-JapanwasabiExperts-*`/`X-JapanwasabiSvc-*`/`X-JapanwasabiHQ-*` 等 は葵機の通知記録 — 送信側が書くことは自称。わさび業者の偽装は、本山葵・わさび園直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `wasabi_marks` + `has_wasabi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 葵印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
