@@ -2332,6 +2332,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+
+    // D632: 寝具・マットレス印自称
+    if env.bedding_marks {
+        render_risks.push(
+            "X-Nishikawa-*/X-Francebed-*/X-Airweave-*/X-BeddingPro-*/X-FutonNavi-*/X-MattressNavi-*/X-MakuraNavi-*/X-SleepNavi-* 等 — 寝機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D633: 手芸・毛糸・ミシン印自称
+    if env.craft_marks {
+        render_risks.push(
+            "X-Hamanaka-*/X-Clovercraft-*/X-Yuzawaya-*/X-Okadaya-*/X-CraftNavi-*/X-KeitoNavi-*/X-ShugeiNavi-*/X-QuiltNavi-* 等 — 裁機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D634: 農業資材・種苗・肥料印自称
+    if env.farm_marks {
+        render_risks.push(
+            "X-Kumiai-*/X-Takii-*/X-Sakata-*/X-FarmNavi-*/X-Noukasonavi-*/X-Syubyou-*/X-NougyouNavi-*/X-Zenno-* 等 — 農機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);

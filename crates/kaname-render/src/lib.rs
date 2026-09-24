@@ -1775,6 +1775,12 @@ pub struct Envelope {
     pub animalhospital_marks: bool,
     /// `X-Fuyohin-*`/`X-Ihin-*`/`X-Sodaya-*` 等の不用品回収・遺品整理・粗大ゴミ印を送信側が自称する兆候 (D631)
     pub bulkwaste_marks: bool,
+    /// `X-Nishikawa-*`/`X-Francebed-*`/`X-Simmonsbed-*` 等の寝具・マットレス印を送信側が自称する兆候 (D632)
+    pub bedding_marks: bool,
+    /// `X-Hamanaka-*`/`X-Clovercraft-*`/`X-Yuzawaya-*` 等の手芸・毛糸・ミシン印を送信側が自称する兆候 (D633)
+    pub craft_marks: bool,
+    /// `X-Kumiai-*`/`X-Takii-*`/`X-Sakata-*` 等の農業資材・種苗・肥料印を送信側が自称する兆候 (D634)
+    pub farm_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2284,6 +2290,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bonesetter_marks: has_bonesetter_marks(hdr),
         animalhospital_marks: has_animalhospital_marks(hdr),
         bulkwaste_marks: has_bulkwaste_marks(hdr),
+        bedding_marks: has_bedding_marks(hdr),
+        craft_marks: has_craft_marks(hdr),
+        farm_marks: has_farm_marks(hdr),
     })
 }
 
@@ -14091,6 +14100,258 @@ fn has_bulkwaste_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-benriyapro-"))
 }
 
+/// `X-Nishikawa-*`/`X-Francebed-*`/`X-Simmonsbed-*`/`X-Airweave-*`/`X-Iwatabed-*`/`X-Romancebed-*`/`X-Beddingpro-*`/`X-Beddingnavi-*`/`X-Beddingcenter-*`/`X-Beddingshop-*`/`X-Beddingrescue-*`/`X-Bedding24-*`/`X-Futonnavi-*`/`X-Futoncenter-*`/`X-Futonshop-*`/`X-Futonpro-*`/`X-Futondoctor-*`/`X-Futonrescue-*`/`X-Futon24-*`/`X-Mattressnavi-*`/`X-Mattresscenter-*`/`X-Mattressshop-*`/`X-Mattresspro-*`/`X-Mattressdoctor-*`/`X-Mattressrescue-*`/`X-Mattress24-*`/`X-Makuranavi-*`/`X-Makuracenter-*`/`X-Makurashop-*`/`X-Makurapro-*`/`X-Sleepnavi-*`/`X-Sleepcenter-*`/`X-Sleepshop-*`/`X-Sleeppro-*`/`X-Sleepdoctor-*`/`X-Sleeprescue-*`/`X-Sleep24-*`/`X-Tempurpillow-*`/`X-Tempurshop-*`/`X-Cozyblanket-*`/`X-Nishikawaliving-*`/`X-Showanishikawa-*`/`X-Suidnavi-*`/`X-Suidcenter-*`/`X-Suidshop-*`/`X-Suidpro-*`/`X-Suiddoctor-*`/`X-Suidrescue-*`/`X-Suid24-*`/`X-Bedmart-*`/`X-Bedplus-*`/`X-Bedsmart-*`/`X-Bedfamily-*`/`X-Bedcenter-*`/`X-Bedshop-*`/`X-Bedpro-*`/`X-Beddoctor-*`/`X-Bedrescue-*`/`X-Bed24-*`/`X-Bednavi-*`/`X-Futonmart-*`/`X-Futonplus-*`/`X-Futonsmart-*`/`X-Futonfamily-*`/`X-Mattressmart-*`/`X-Mattressplus-*`/`X-Mattresssmart-*`/`X-Mattressfamily-*` 等の寝具・マットレス印を送信側が自称する兆候を検出する
+fn has_bedding_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-nishikawa-")
+            || l.starts_with("x-francebed-")
+            || l.starts_with("x-simmonsbed-")
+            || l.starts_with("x-airweave-")
+            || l.starts_with("x-iwatabed-")
+            || l.starts_with("x-romancebed-")
+            || l.starts_with("x-beddingpro-")
+            || l.starts_with("x-beddingnavi-")
+            || l.starts_with("x-beddingcenter-")
+            || l.starts_with("x-beddingshop-")
+            || l.starts_with("x-beddingrescue-")
+            || l.starts_with("x-bedding24-")
+            || l.starts_with("x-futonnavi-")
+            || l.starts_with("x-futoncenter-")
+            || l.starts_with("x-futonshop-")
+            || l.starts_with("x-futonpro-")
+            || l.starts_with("x-futondoctor-")
+            || l.starts_with("x-futonrescue-")
+            || l.starts_with("x-futon24-")
+            || l.starts_with("x-mattressnavi-")
+            || l.starts_with("x-mattresscenter-")
+            || l.starts_with("x-mattressshop-")
+            || l.starts_with("x-mattresspro-")
+            || l.starts_with("x-mattressdoctor-")
+            || l.starts_with("x-mattressrescue-")
+            || l.starts_with("x-mattress24-")
+            || l.starts_with("x-makuranavi-")
+            || l.starts_with("x-makuracenter-")
+            || l.starts_with("x-makurashop-")
+            || l.starts_with("x-makurapro-")
+            || l.starts_with("x-sleepnavi-")
+            || l.starts_with("x-sleepcenter-")
+            || l.starts_with("x-sleepshop-")
+            || l.starts_with("x-sleeppro-")
+            || l.starts_with("x-sleepdoctor-")
+            || l.starts_with("x-sleeprescue-")
+            || l.starts_with("x-sleep24-")
+            || l.starts_with("x-tempurpillow-")
+            || l.starts_with("x-tempurshop-")
+            || l.starts_with("x-cozyblanket-")
+            || l.starts_with("x-nishikawaliving-")
+            || l.starts_with("x-showanishikawa-")
+            || l.starts_with("x-suidnavi-")
+            || l.starts_with("x-suidcenter-")
+            || l.starts_with("x-suidshop-")
+            || l.starts_with("x-suidpro-")
+            || l.starts_with("x-suiddoctor-")
+            || l.starts_with("x-suidrescue-")
+            || l.starts_with("x-suid24-")
+            || l.starts_with("x-bedmart-")
+            || l.starts_with("x-bedplus-")
+            || l.starts_with("x-bedsmart-")
+            || l.starts_with("x-bedfamily-")
+            || l.starts_with("x-bedcenter-")
+            || l.starts_with("x-bedshop-")
+            || l.starts_with("x-bedpro-")
+            || l.starts_with("x-beddoctor-")
+            || l.starts_with("x-bedrescue-")
+            || l.starts_with("x-bed24-")
+            || l.starts_with("x-bednavi-")
+            || l.starts_with("x-futonmart-")
+            || l.starts_with("x-futonplus-")
+            || l.starts_with("x-futonsmart-")
+            || l.starts_with("x-futonfamily-")
+            || l.starts_with("x-mattressmart-")
+            || l.starts_with("x-mattressplus-")
+            || l.starts_with("x-mattresssmart-")
+            || l.starts_with("x-mattressfamily-"))
+}
+
+/// `X-Hamanaka-*`/`X-Clovercraft-*`/`X-Yuzawaya-*`/`X-Okadaya-*`/`X-Craftnavi-*`/`X-Craftcenter-*`/`X-Craftshop-*`/`X-Craftpro-*`/`X-Craftdoctor-*`/`X-Craftrescue-*`/`X-Craft24-*`/`X-Handicraftnavi-*`/`X-Handicraftcenter-*`/`X-Handicraftshop-*`/`X-Handicraftpro-*`/`X-Handicraftdoctor-*`/`X-Handicraftrescue-*`/`X-Handicraft24-*`/`X-Keitonavi-*`/`X-Keitocenter-*`/`X-Keitoshop-*`/`X-Keitopro-*`/`X-Sewinavi-*`/`X-Sewicenter-*`/`X-Sewishop-*`/`X-Sewipro-*`/`X-Sewingnavi-*`/`X-Sewingcenter-*`/`X-Sewingshop-*`/`X-Sewingpro-*`/`X-Sewingdoctor-*`/`X-Sewingrescue-*`/`X-Sewing24-*`/`X-Shugeinavi-*`/`X-Shugeicenter-*`/`X-Shugeishop-*`/`X-Shugeipro-*`/`X-Shugeidoctor-*`/`X-Shugeirescue-*`/`X-Shugei24-*`/`X-Quiltnavi-*`/`X-Quiltcenter-*`/`X-Quiltshop-*`/`X-Quiltpro-*`/`X-Yarncenter-*`/`X-Yarnshop-*`/`X-Yarnpro-*`/`X-Patchworknavi-*`/`X-Leathercraftnavi-*`/`X-Beadworknavi-*`/`X-Crossstitchnavi-*`/`X-Embroiderynavi-*`/`X-Sewingmachinenavi-*`/`X-Janomecenter-*`/`X-Craftmart-*`/`X-Craftplus-*`/`X-Craftsmart-*`/`X-Craftfamily-*`/`X-Shugeimart-*`/`X-Shugeiplus-*`/`X-Shugeismart-*`/`X-Shugeifamily-*`/`X-Sashikonavi-*`/`X-Sashikocenter-*`/`X-Sashikoshop-*`/`X-Sashikopro-*`/`X-Amiurunavi-*`/`X-Amiurucenter-*`/`X-Amiurushop-*`/`X-Amiurupro-*`/`X-Knitnavi-*`/`X-Knitcenter-*`/`X-Knitshop-*`/`X-Knitpro-*`/`X-Amimononavi-*`/`X-Amimonocenter-*`/`X-Amimonoshop-*`/`X-Amimonopro-*` 等の手芸・毛糸・ミシン印を送信側が自称する兆候を検出する
+fn has_craft_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-hamanaka-")
+            || l.starts_with("x-clovercraft-")
+            || l.starts_with("x-yuzawaya-")
+            || l.starts_with("x-okadaya-")
+            || l.starts_with("x-craftnavi-")
+            || l.starts_with("x-craftcenter-")
+            || l.starts_with("x-craftshop-")
+            || l.starts_with("x-craftpro-")
+            || l.starts_with("x-craftdoctor-")
+            || l.starts_with("x-craftrescue-")
+            || l.starts_with("x-craft24-")
+            || l.starts_with("x-handicraftnavi-")
+            || l.starts_with("x-handicraftcenter-")
+            || l.starts_with("x-handicraftshop-")
+            || l.starts_with("x-handicraftpro-")
+            || l.starts_with("x-handicraftdoctor-")
+            || l.starts_with("x-handicraftrescue-")
+            || l.starts_with("x-handicraft24-")
+            || l.starts_with("x-keitonavi-")
+            || l.starts_with("x-keitocenter-")
+            || l.starts_with("x-keitoshop-")
+            || l.starts_with("x-keitopro-")
+            || l.starts_with("x-sewinavi-")
+            || l.starts_with("x-sewicenter-")
+            || l.starts_with("x-sewishop-")
+            || l.starts_with("x-sewipro-")
+            || l.starts_with("x-sewingnavi-")
+            || l.starts_with("x-sewingcenter-")
+            || l.starts_with("x-sewingshop-")
+            || l.starts_with("x-sewingpro-")
+            || l.starts_with("x-sewingdoctor-")
+            || l.starts_with("x-sewingrescue-")
+            || l.starts_with("x-sewing24-")
+            || l.starts_with("x-shugeinavi-")
+            || l.starts_with("x-shugeicenter-")
+            || l.starts_with("x-shugeishop-")
+            || l.starts_with("x-shugeipro-")
+            || l.starts_with("x-shugeidoctor-")
+            || l.starts_with("x-shugeirescue-")
+            || l.starts_with("x-shugei24-")
+            || l.starts_with("x-quiltnavi-")
+            || l.starts_with("x-quiltcenter-")
+            || l.starts_with("x-quiltshop-")
+            || l.starts_with("x-quiltpro-")
+            || l.starts_with("x-yarncenter-")
+            || l.starts_with("x-yarnshop-")
+            || l.starts_with("x-yarnpro-")
+            || l.starts_with("x-patchworknavi-")
+            || l.starts_with("x-leathercraftnavi-")
+            || l.starts_with("x-beadworknavi-")
+            || l.starts_with("x-crossstitchnavi-")
+            || l.starts_with("x-embroiderynavi-")
+            || l.starts_with("x-sewingmachinenavi-")
+            || l.starts_with("x-janomecenter-")
+            || l.starts_with("x-craftmart-")
+            || l.starts_with("x-craftplus-")
+            || l.starts_with("x-craftsmart-")
+            || l.starts_with("x-craftfamily-")
+            || l.starts_with("x-shugeimart-")
+            || l.starts_with("x-shugeiplus-")
+            || l.starts_with("x-shugeismart-")
+            || l.starts_with("x-shugeifamily-")
+            || l.starts_with("x-sashikonavi-")
+            || l.starts_with("x-sashikocenter-")
+            || l.starts_with("x-sashikoshop-")
+            || l.starts_with("x-sashikopro-")
+            || l.starts_with("x-amiurunavi-")
+            || l.starts_with("x-amiurucenter-")
+            || l.starts_with("x-amiurushop-")
+            || l.starts_with("x-amiurupro-")
+            || l.starts_with("x-knitnavi-")
+            || l.starts_with("x-knitcenter-")
+            || l.starts_with("x-knitshop-")
+            || l.starts_with("x-knitpro-")
+            || l.starts_with("x-amimononavi-")
+            || l.starts_with("x-amimonocenter-")
+            || l.starts_with("x-amimonoshop-")
+            || l.starts_with("x-amimonopro-"))
+}
+
+/// `X-Kumiai-*`/`X-Takii-*`/`X-Sakata-*`/`X-Nanto-*`/`X-Farmnavi-*`/`X-Farmcenter-*`/`X-Farmshop-*`/`X-Farmpro-*`/`X-Farmdoctor-*`/`X-Farmrescue-*`/`X-Farm24-*`/`X-Noukasonavi-*`/`X-Noukacenter-*`/`X-Noukashop-*`/`X-Noukapro-*`/`X-Noukadoctor-*`/`X-Noukarescue-*`/`X-Nouka24-*`/`X-Nouzinavi-*`/`X-Nouzincenter-*`/`X-Nouzinshop-*`/`X-Nouzipro-*`/`X-Nouzidoctor-*`/`X-Nouzirescue-*`/`X-Nouzi24-*`/`X-Syubyou-*`/`X-Syubyounavi-*`/`X-Syubyoucenter-*`/`X-Syubyoushop-*`/`X-Syubyoupro-*`/`X-Hiryou-*`/`X-Hiryoucenter-*`/`X-Hiroushop-*`/`X-Hiroupro-*`/`X-Nouyakunavi-*`/`X-Nouyakucenter-*`/`X-Nouyakushop-*`/`X-Nouyakupro-*`/`X-Nouyakudoctor-*`/`X-Nouyakurescue-*`/`X-Nouyaku24-*`/`X-Agricenter-*`/`X-Agrishop-*`/`X-Agripro-*`/`X-Agrinavi-*`/`X-Agrirescue-*`/`X-Agri24-*`/`X-Farmmart-*`/`X-Farmplus-*`/`X-Farmsmart-*`/`X-Farmfamily-*`/`X-Zarainavi-*`/`X-Zenno-*`/`X-Jccu-*`/`X-Farmotec-*`/`X-Nevon-*`/`X-Nougyou-*`/`X-Nougyounavi-*`/`X-Nougyoucenter-*`/`X-Nougyoushop-*`/`X-Nougyoupro-*`/`X-Nougyoudoctor-*`/`X-Nougyourescue-*`/`X-Nougyou24-*`/`X-Saibainavi-*`/`X-Saibaicenter-*`/`X-Saibaishop-*`/`X-Saibaipro-*`/`X-Kajuennavi-*`/`X-Kajuencenter-*`/`X-Kajuenshop-*`/`X-Kajuenpro-*`/`X-Engeinavi-*`/`X-Engeicenter-*`/`X-Engeishop-*`/`X-Engeipro-*`/`X-Engeidoctor-*`/`X-Engeirescue-*`/`X-Engei24-*` 等の農業資材・種苗・肥料印を送信側が自称する兆候を検出する
+fn has_farm_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kumiai-")
+            || l.starts_with("x-takii-")
+            || l.starts_with("x-sakata-")
+            || l.starts_with("x-nanto-")
+            || l.starts_with("x-farmnavi-")
+            || l.starts_with("x-farmcenter-")
+            || l.starts_with("x-farmshop-")
+            || l.starts_with("x-farmpro-")
+            || l.starts_with("x-farmdoctor-")
+            || l.starts_with("x-farmrescue-")
+            || l.starts_with("x-farm24-")
+            || l.starts_with("x-noukasonavi-")
+            || l.starts_with("x-noukacenter-")
+            || l.starts_with("x-noukashop-")
+            || l.starts_with("x-noukapro-")
+            || l.starts_with("x-noukadoctor-")
+            || l.starts_with("x-noukarescue-")
+            || l.starts_with("x-nouka24-")
+            || l.starts_with("x-nouzinavi-")
+            || l.starts_with("x-nouzincenter-")
+            || l.starts_with("x-nouzinshop-")
+            || l.starts_with("x-nouzipro-")
+            || l.starts_with("x-nouzidoctor-")
+            || l.starts_with("x-nouzirescue-")
+            || l.starts_with("x-nouzi24-")
+            || l.starts_with("x-syubyou-")
+            || l.starts_with("x-syubyounavi-")
+            || l.starts_with("x-syubyoucenter-")
+            || l.starts_with("x-syubyoushop-")
+            || l.starts_with("x-syubyoupro-")
+            || l.starts_with("x-hiryou-")
+            || l.starts_with("x-hiryoucenter-")
+            || l.starts_with("x-hiroushop-")
+            || l.starts_with("x-hiroupro-")
+            || l.starts_with("x-nouyakunavi-")
+            || l.starts_with("x-nouyakucenter-")
+            || l.starts_with("x-nouyakushop-")
+            || l.starts_with("x-nouyakupro-")
+            || l.starts_with("x-nouyakudoctor-")
+            || l.starts_with("x-nouyakurescue-")
+            || l.starts_with("x-nouyaku24-")
+            || l.starts_with("x-agricenter-")
+            || l.starts_with("x-agrishop-")
+            || l.starts_with("x-agripro-")
+            || l.starts_with("x-agrinavi-")
+            || l.starts_with("x-agrirescue-")
+            || l.starts_with("x-agri24-")
+            || l.starts_with("x-farmmart-")
+            || l.starts_with("x-farmplus-")
+            || l.starts_with("x-farmsmart-")
+            || l.starts_with("x-farmfamily-")
+            || l.starts_with("x-zarainavi-")
+            || l.starts_with("x-zenno-")
+            || l.starts_with("x-jccu-")
+            || l.starts_with("x-farmotec-")
+            || l.starts_with("x-nevon-")
+            || l.starts_with("x-nougyou-")
+            || l.starts_with("x-nougyounavi-")
+            || l.starts_with("x-nougyoucenter-")
+            || l.starts_with("x-nougyoushop-")
+            || l.starts_with("x-nougyoupro-")
+            || l.starts_with("x-nougyoudoctor-")
+            || l.starts_with("x-nougyourescue-")
+            || l.starts_with("x-nougyou24-")
+            || l.starts_with("x-saibainavi-")
+            || l.starts_with("x-saibaicenter-")
+            || l.starts_with("x-saibaishop-")
+            || l.starts_with("x-saibaipro-")
+            || l.starts_with("x-kajuennavi-")
+            || l.starts_with("x-kajuencenter-")
+            || l.starts_with("x-kajuenshop-")
+            || l.starts_with("x-kajuenpro-")
+            || l.starts_with("x-engeinavi-")
+            || l.starts_with("x-engeicenter-")
+            || l.starts_with("x-engeishop-")
+            || l.starts_with("x-engeipro-")
+            || l.starts_with("x-engeidoctor-")
+            || l.starts_with("x-engeirescue-")
+            || l.starts_with("x-engei24-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -22781,5 +23042,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_bulkwaste_marks(clean));
+    }
+    #[test]
+    fn scan_は寝機印を検出する() {
+        for raw in [
+            br"X-Nishikawa-Alert: 1",
+            br"X-Francebed-Notice: 1",
+            br"X-Simmonsbed-Info: 1",
+            br"X-Airweave-Report: 1",
+            br"X-BeddingPro-Bulletin: 1",
+            br"X-FutonNavi-News: 1",
+            br"X-MattressNavi-Flash: 1",
+            br"X-MakuraNavi-Release: 1",
+        ] {
+            assert!(has_bedding_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_bedding_marks(clean));
+    }
+
+    #[test]
+    fn scan_は裁機印を検出する() {
+        for raw in [
+            br"X-Hamanaka-Alert: 1",
+            br"X-Clovercraft-Notice: 1",
+            br"X-Yuzawaya-Info: 1",
+            br"X-Okadaya-Report: 1",
+            br"X-CraftNavi-Bulletin: 1",
+            br"X-KeitoNavi-News: 1",
+            br"X-ShugeiNavi-Flash: 1",
+            br"X-QuiltNavi-Release: 1",
+        ] {
+            assert!(has_craft_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_craft_marks(clean));
+    }
+
+    #[test]
+    fn scan_は農機印を検出する() {
+        for raw in [
+            br"X-Kumiai-Alert: 1",
+            br"X-Takii-Notice: 1",
+            br"X-Sakata-Info: 1",
+            br"X-Nanto-Report: 1",
+            br"X-FarmNavi-Bulletin: 1",
+            br"X-Noukasonavi-News: 1",
+            br"X-Syubyou-Flash: 1",
+            br"X-NougyouNavi-Release: 1",
+        ] {
+            assert!(has_farm_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_farm_marks(clean));
     }
 }
