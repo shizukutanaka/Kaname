@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D845: `X-Tsukemono-*`/`X-Tsukemonoya-*`/`X-Tsukemonoten-*`/`X-Tsukemonostore-*`/`X-Picklestore-*`/`X-Japanesepickle-*` 等の漬物印自称が未検査
+
+- **問題**: `X-Tsukemono-*`/`X-TsukemonoYasan-*`/`X-TsukemonoPro-*`/`X-TsukemonoTeam-*`/`X-TsukemonoJP-*`/`X-TsukemonoSenmon-*`/`X-Tsukemonoya-*`/`X-TsukemonoyaYasan-*`/`X-TsukemonoyaPro-*`/`X-TsukemonoyaTeam-*`/`X-TsukemonoyaJP-*`/`X-TsukemonoyaSenmon-*`/`X-Tsukemonoten-*`/`X-TsukemonotenYasan-*`/`X-TsukemonotenPro-*`/`X-TsukemonotenTeam-*`/`X-TsukemonotenJP-*`/`X-TsukemonotenSenmon-*`/`X-TsukemonostorePros-*`/`X-TsukemonostoreTeam-*`/`X-TsukemonostoreWorks-*`/`X-TsukemonostoreExperts-*`/`X-TsukemonostoreSvc-*`/`X-TsukemonostoreHQ-*`/`X-PicklestorePros-*`/`X-PicklestoreTeam-*`/`X-PicklestoreWorks-*`/`X-PicklestoreExperts-*`/`X-PicklestoreSvc-*`/`X-PicklestoreHQ-*`/`X-JapanesepicklePros-*`/`X-JapanesepickleTeam-*`/`X-JapanesepickleWorks-*`/`X-JapanesepickleExperts-*`/`X-JapanesepickleSvc-*`/`X-JapanesepickleHQ-*` 等 は漬機の通知記録 — 送信側が書くことは自称。漬物業者の偽装は、京漬物・ぬか漬けの老舗直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `tsukemono_marks` + `has_tsukemono_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 漬印の自署を問え。
+
+### Security — D846: `X-Umeboshi-*`/`X-Umebashi-*`/`X-Umezukuri-*`/`X-Plumstore-*`/`X-Umeboshishop-*`/`X-Japaneseplum-*` 等の梅干し印自称が未検査
+
+- **問題**: `X-Umeboshi-*`/`X-UmeboshiYasan-*`/`X-UmeboshiPro-*`/`X-UmeboshiTeam-*`/`X-UmeboshiJP-*`/`X-UmeboshiSenmon-*`/`X-Umebashi-*`/`X-UmebashiYasan-*`/`X-UmebashiPro-*`/`X-UmebashiTeam-*`/`X-UmebashiJP-*`/`X-UmebashiSenmon-*`/`X-Umezukuri-*`/`X-UmezukuriYasan-*`/`X-UmezukuriPro-*`/`X-UmezukuriTeam-*`/`X-UmezukuriJP-*`/`X-UmezukuriSenmon-*`/`X-PlumstorePros-*`/`X-PlumstoreTeam-*`/`X-PlumstoreWorks-*`/`X-PlumstoreExperts-*`/`X-PlumstoreSvc-*`/`X-PlumstoreHQ-*`/`X-UmeboshishopPros-*`/`X-UmeboshishopTeam-*`/`X-UmeboshishopWorks-*`/`X-UmeboshishopExperts-*`/`X-UmeboshishopSvc-*`/`X-UmeboshishopHQ-*`/`X-JapaneseplumPros-*`/`X-JapaneseplumTeam-*`/`X-JapaneseplumWorks-*`/`X-JapaneseplumExperts-*`/`X-JapaneseplumSvc-*`/`X-JapaneseplumHQ-*` 等 は梅機の通知記録 — 送信側が書くことは自称。梅干し業者の偽装は、紀州南高梅・無添加梅干しの産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `umeboshi_marks` + `has_umeboshi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 梅印の自署を問え。
+
+### Security — D847: `X-Tsukudani-*`/`X-Tsukudaniya-*`/`X-Tsukudaniten-*`/`X-Tsukudanistore-*`/`X-Tsukudanishop-*`/`X-Japantsukudani-*` 等の佃煮印自称が未検査
+
+- **問題**: `X-Tsukudani-*`/`X-TsukudaniYasan-*`/`X-TsukudaniPro-*`/`X-TsukudaniTeam-*`/`X-TsukudaniJP-*`/`X-TsukudaniSenmon-*`/`X-Tsukudaniya-*`/`X-TsukudaniyaYasan-*`/`X-TsukudaniyaPro-*`/`X-TsukudaniyaTeam-*`/`X-TsukudaniyaJP-*`/`X-TsukudaniyaSenmon-*`/`X-Tsukudaniten-*`/`X-TsukudanitenYasan-*`/`X-TsukudanitenPro-*`/`X-TsukudanitenTeam-*`/`X-TsukudanitenJP-*`/`X-TsukudanitenSenmon-*`/`X-TsukudanistorePros-*`/`X-TsukudanistoreTeam-*`/`X-TsukudanistoreWorks-*`/`X-TsukudanistoreExperts-*`/`X-TsukudanistoreSvc-*`/`X-TsukudanistoreHQ-*`/`X-TsukudanishopPros-*`/`X-TsukudanishopTeam-*`/`X-TsukudanishopWorks-*`/`X-TsukudanishopExperts-*`/`X-TsukudanishopSvc-*`/`X-TsukudanishopHQ-*`/`X-JapantsukudaniPros-*`/`X-JapantsukudaniTeam-*`/`X-JapantsukudaniWorks-*`/`X-JapantsukudaniExperts-*`/`X-JapantsukudaniSvc-*`/`X-JapantsukudaniHQ-*` 等 は佃機の通知記録 — 送信側が書くことは自称。佃煮業者の偽装は、佃島老舗・秘伝の佃煮詰め合わせを装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `tsukudani_marks` + `has_tsukudani_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 佃印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)

@@ -1742,6 +1742,9 @@ pub struct Envelope {
     pub notary_marks: bool,
     pub translation_marks: bool,
     pub courier_marks: bool,
+    pub tsukemono_marks: bool,
+    pub umeboshi_marks: bool,
+    pub tsukudani_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2236,6 +2239,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         notary_marks: has_notary_marks(hdr),
         translation_marks: has_translation_marks(hdr),
         courier_marks: has_courier_marks(hdr),
+        tsukemono_marks: has_tsukemono_marks(hdr),
+        umeboshi_marks: has_umeboshi_marks(hdr),
+        tsukudani_marks: has_tsukudani_marks(hdr),
     })
 }
 
@@ -12830,6 +12836,189 @@ fn has_courier_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_tsukemono_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tsukemono-")
+            || l.starts_with("x-tsukemonoyasan-")
+            || l.starts_with("x-tsukemonopro-")
+            || l.starts_with("x-tsukemonoteam-")
+            || l.starts_with("x-tsukemonokensa-")
+            || l.starts_with("x-tsukemonomanten-")
+            || l.starts_with("x-tsukemononomi-")
+            || l.starts_with("x-tsukemonojp-")
+            || l.starts_with("x-tsukemonosenmon-")
+            || l.starts_with("x-tsukemonomitsumori-")
+            || l.starts_with("x-tsukemonochousa-")
+            || l.starts_with("x-tsukemonoteiki-")
+            || l.starts_with("x-tsukemonopros-")
+            || l.starts_with("x-tsukemonodoctors-")
+            || l.starts_with("x-tsukemonorescue-")
+            || l.starts_with("x-tsukemonoya-")
+            || l.starts_with("x-tsukemonoyayasan-")
+            || l.starts_with("x-tsukemonoyapro-")
+            || l.starts_with("x-tsukemonoyateam-")
+            || l.starts_with("x-tsukemonoyajp-")
+            || l.starts_with("x-tsukemonoyasenmon-")
+            || l.starts_with("x-tsukemonoyapros-")
+            || l.starts_with("x-tsukemonoyadoctors-")
+            || l.starts_with("x-tsukemonoyarescue-")
+            || l.starts_with("x-tsukemonoten-")
+            || l.starts_with("x-tsukemonotenyasan-")
+            || l.starts_with("x-tsukemonotenpro-")
+            || l.starts_with("x-tsukemonotenteam-")
+            || l.starts_with("x-tsukemonotenjp-")
+            || l.starts_with("x-tsukemonotensenmon-")
+            || l.starts_with("x-tsukemonotenpros-")
+            || l.starts_with("x-tsukemonotendoctors-")
+            || l.starts_with("x-tsukemonotenrescue-")
+            || l.starts_with("x-tsukemonostorepros-")
+            || l.starts_with("x-tsukemonostoreteam-")
+            || l.starts_with("x-tsukemonostoreworks-")
+            || l.starts_with("x-tsukemonostoreexperts-")
+            || l.starts_with("x-tsukemonostoresvc-")
+            || l.starts_with("x-tsukemonostorehq-")
+            || l.starts_with("x-picklestorepros-")
+            || l.starts_with("x-picklestoreteam-")
+            || l.starts_with("x-picklestoreworks-")
+            || l.starts_with("x-picklestoreexperts-")
+            || l.starts_with("x-picklestoresvc-")
+            || l.starts_with("x-picklestorehq-")
+            || l.starts_with("x-japanesepicklepros-")
+            || l.starts_with("x-japanesepickleteam-")
+            || l.starts_with("x-japanesepickleworks-")
+            || l.starts_with("x-japanesepickleexperts-")
+            || l.starts_with("x-japanesepicklesvc-")
+            || l.starts_with("x-japanesepicklehq-")
+    })
+}
+
+fn has_umeboshi_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-umeboshi-")
+            || l.starts_with("x-umeboshiyasan-")
+            || l.starts_with("x-umeboshipro-")
+            || l.starts_with("x-umeboshiteam-")
+            || l.starts_with("x-umeboshikensa-")
+            || l.starts_with("x-umeboshimanten-")
+            || l.starts_with("x-umeboshinomi-")
+            || l.starts_with("x-umeboshijp-")
+            || l.starts_with("x-umeboshisenmon-")
+            || l.starts_with("x-umeboshimitsumori-")
+            || l.starts_with("x-umeboshichousa-")
+            || l.starts_with("x-umeboshiteiki-")
+            || l.starts_with("x-umeboshipros-")
+            || l.starts_with("x-umeboshidoctors-")
+            || l.starts_with("x-umeboshirescue-")
+            || l.starts_with("x-umebashi-")
+            || l.starts_with("x-umebashiyasan-")
+            || l.starts_with("x-umebashipro-")
+            || l.starts_with("x-umebashiteam-")
+            || l.starts_with("x-umebashijp-")
+            || l.starts_with("x-umebashisenmon-")
+            || l.starts_with("x-umebashipros-")
+            || l.starts_with("x-umebashidoctors-")
+            || l.starts_with("x-umebashirescue-")
+            || l.starts_with("x-umezukuri-")
+            || l.starts_with("x-umezukuriyasan-")
+            || l.starts_with("x-umezukuripro-")
+            || l.starts_with("x-umezukuriteam-")
+            || l.starts_with("x-umezukurijp-")
+            || l.starts_with("x-umezukurisenmon-")
+            || l.starts_with("x-umezukuripros-")
+            || l.starts_with("x-umezukuridoctors-")
+            || l.starts_with("x-umezukurirescue-")
+            || l.starts_with("x-plumstorepros-")
+            || l.starts_with("x-plumstoreteam-")
+            || l.starts_with("x-plumstoreworks-")
+            || l.starts_with("x-plumstoreexperts-")
+            || l.starts_with("x-plumstoresvc-")
+            || l.starts_with("x-plumstorehq-")
+            || l.starts_with("x-umeboshishoppros-")
+            || l.starts_with("x-umeboshishopteam-")
+            || l.starts_with("x-umeboshishopworks-")
+            || l.starts_with("x-umeboshishopexperts-")
+            || l.starts_with("x-umeboshishopsvc-")
+            || l.starts_with("x-umeboshishophq-")
+            || l.starts_with("x-japaneseplumpros-")
+            || l.starts_with("x-japaneseplumteam-")
+            || l.starts_with("x-japaneseplumworks-")
+            || l.starts_with("x-japaneseplumexperts-")
+            || l.starts_with("x-japaneseplumsvc-")
+            || l.starts_with("x-japaneseplumhq-")
+    })
+}
+
+fn has_tsukudani_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tsukudani-")
+            || l.starts_with("x-tsukudaniyasan-")
+            || l.starts_with("x-tsukudanipro-")
+            || l.starts_with("x-tsukudaniteam-")
+            || l.starts_with("x-tsukudanikensa-")
+            || l.starts_with("x-tsukudanimanten-")
+            || l.starts_with("x-tsukudaninomi-")
+            || l.starts_with("x-tsukudanijp-")
+            || l.starts_with("x-tsukudanisenmon-")
+            || l.starts_with("x-tsukudanimitsumori-")
+            || l.starts_with("x-tsukudanichousa-")
+            || l.starts_with("x-tsukudaniteiki-")
+            || l.starts_with("x-tsukudanipros-")
+            || l.starts_with("x-tsukudanidoctors-")
+            || l.starts_with("x-tsukudanirescue-")
+            || l.starts_with("x-tsukudaniya-")
+            || l.starts_with("x-tsukudaniyayasan-")
+            || l.starts_with("x-tsukudaniyapro-")
+            || l.starts_with("x-tsukudaniyateam-")
+            || l.starts_with("x-tsukudaniyajp-")
+            || l.starts_with("x-tsukudaniyasenmon-")
+            || l.starts_with("x-tsukudaniyapros-")
+            || l.starts_with("x-tsukudaniyadoctors-")
+            || l.starts_with("x-tsukudaniyarescue-")
+            || l.starts_with("x-tsukudaniten-")
+            || l.starts_with("x-tsukudanitenyasan-")
+            || l.starts_with("x-tsukudanitenpro-")
+            || l.starts_with("x-tsukudanitenteam-")
+            || l.starts_with("x-tsukudanitenjp-")
+            || l.starts_with("x-tsukudanitensenmon-")
+            || l.starts_with("x-tsukudanitenpros-")
+            || l.starts_with("x-tsukudanitendoctors-")
+            || l.starts_with("x-tsukudanitenrescue-")
+            || l.starts_with("x-tsukudanistorepros-")
+            || l.starts_with("x-tsukudanistoreteam-")
+            || l.starts_with("x-tsukudanistoreworks-")
+            || l.starts_with("x-tsukudanistoreexperts-")
+            || l.starts_with("x-tsukudanistoresvc-")
+            || l.starts_with("x-tsukudanistorehq-")
+            || l.starts_with("x-tsukudanishoppros-")
+            || l.starts_with("x-tsukudanishopteam-")
+            || l.starts_with("x-tsukudanishopworks-")
+            || l.starts_with("x-tsukudanishopexperts-")
+            || l.starts_with("x-tsukudanishopsvc-")
+            || l.starts_with("x-tsukudanishophq-")
+            || l.starts_with("x-japantsukudanipros-")
+            || l.starts_with("x-japantsukudaniteam-")
+            || l.starts_with("x-japantsukudaniworks-")
+            || l.starts_with("x-japantsukudaniexperts-")
+            || l.starts_with("x-japantsukudanisvc-")
+            || l.starts_with("x-japantsukudanihq-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20892,5 +21081,56 @@ body";
         assert!(has_courier_marks(f7));
         let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
         assert!(!has_courier_marks(clean));
+    }
+
+    #[test]
+    fn scan_は漬機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Tsukemono-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukemonoPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukemonoyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukemonotenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukemonostorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PicklestoreHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukemonoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapanesepickleExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_tsukemono_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_tsukemono_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は梅機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Umeboshi-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UmeboshiPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UmebashiYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UmezukuriTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PlumstorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UmeboshishopHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-UmeboshiSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapaneseplumExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_umeboshi_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_umeboshi_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は佃機印を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Tsukudani-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukudaniPro-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukudaniyaYasan-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukudanitenTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukudanistorePros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukudanishopHQ-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-TsukudaniSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JapantsukudaniExperts-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_tsukudani_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_tsukudani_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
