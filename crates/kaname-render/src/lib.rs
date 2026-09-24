@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub tatami_marks: bool,
+    pub watchrepair_marks: bool,
+    pub butsudan_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        tatami_marks: has_tatami_marks(hdr),
+        watchrepair_marks: has_watchrepair_marks(hdr),
+        butsudan_marks: has_butsudan_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,179 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_tatami_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-tatami-")
+            || l.starts_with("x-tatamiyasan-")
+            || l.starts_with("x-tatamipro-")
+            || l.starts_with("x-tatamiteam-")
+            || l.starts_with("x-tatamikensa-")
+            || l.starts_with("x-tatamimanten-")
+            || l.starts_with("x-tataminomi-")
+            || l.starts_with("x-tatamijp-")
+            || l.starts_with("x-tatamisenmon-")
+            || l.starts_with("x-tatamimitsumori-")
+            || l.starts_with("x-tatamichousa-")
+            || l.starts_with("x-tatamiteiki-")
+            || l.starts_with("x-tatamishuri-")
+            || l.starts_with("x-tatamidoctors-")
+            || l.starts_with("x-tatamisagyou-")
+            || l.starts_with("x-tatamirescue-")
+            || l.starts_with("x-tatamiteikyu-")
+            || l.starts_with("x-tatamiorder-")
+            || l.starts_with("x-igusa-")
+            || l.starts_with("x-igusayasan-")
+            || l.starts_with("x-igusapro-")
+            || l.starts_with("x-igusateam-")
+            || l.starts_with("x-igusakensa-")
+            || l.starts_with("x-igusamanten-")
+            || l.starts_with("x-igusanomi-")
+            || l.starts_with("x-igusajp-")
+            || l.starts_with("x-igusasenmon-")
+            || l.starts_with("x-igusamitsumori-")
+            || l.starts_with("x-igusachousa-")
+            || l.starts_with("x-igusateiki-")
+            || l.starts_with("x-igusashuri-")
+            || l.starts_with("x-washitsu-")
+            || l.starts_with("x-washitsuyasan-")
+            || l.starts_with("x-washitsupro-")
+            || l.starts_with("x-washitsuteam-")
+            || l.starts_with("x-washitsukensa-")
+            || l.starts_with("x-tatamisho-")
+            || l.starts_with("x-tatamiten-")
+            || l.starts_with("x-igusasho-")
+            || l.starts_with("x-igusaten-")
+            || l.starts_with("x-tatamiseisaku-")
+            || l.starts_with("x-tatamikoubou-")
+            || l.starts_with("x-tatamikougyou-")
+            || l.starts_with("x-washitsukoubou-")
+            || l.starts_with("x-tatamiurikae-")
+            || l.starts_with("x-tatamigae-")
+            || l.starts_with("x-tatamibank-")
+    })
+}
+
+fn has_watchrepair_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-watchrepairpros-")
+            || l.starts_with("x-watchrepairteam-")
+            || l.starts_with("x-watchrepairworks-")
+            || l.starts_with("x-watchrepairforce-")
+            || l.starts_with("x-watchrepairnation-")
+            || l.starts_with("x-watchrepairexperts-")
+            || l.starts_with("x-watchrepairdoctors-")
+            || l.starts_with("x-watchrepairmasters-")
+            || l.starts_with("x-watchrepairsvc-")
+            || l.starts_with("x-watchrepairhq-")
+            || l.starts_with("x-watchpros-")
+            || l.starts_with("x-watchteam-")
+            || l.starts_with("x-watchworks-")
+            || l.starts_with("x-watchforce-")
+            || l.starts_with("x-watchnation-")
+            || l.starts_with("x-watchexperts-")
+            || l.starts_with("x-watchdoctors-")
+            || l.starts_with("x-watchmasters-")
+            || l.starts_with("x-watchsvc-")
+            || l.starts_with("x-watchhq-")
+            || l.starts_with("x-overhaulpros-")
+            || l.starts_with("x-overhaulteam-")
+            || l.starts_with("x-overhaulworks-")
+            || l.starts_with("x-tokeishuri-")
+            || l.starts_with("x-tokei-")
+            || l.starts_with("x-tokeiyasan-")
+            || l.starts_with("x-tokeipro-")
+            || l.starts_with("x-tokeiteam-")
+            || l.starts_with("x-tokeikensa-")
+            || l.starts_with("x-tokeimanten-")
+            || l.starts_with("x-tokeinomi-")
+            || l.starts_with("x-tokeijp-")
+            || l.starts_with("x-tokeisenmon-")
+            || l.starts_with("x-tokeimitsumori-")
+            || l.starts_with("x-tokeichousa-")
+            || l.starts_with("x-tokeiteiki-")
+            || l.starts_with("x-tokeishuriw-")
+            || l.starts_with("x-tokeirescue-")
+            || l.starts_with("x-tokeidoctors-")
+            || l.starts_with("x-tokeisagyou-")
+            || l.starts_with("x-tokeiteikyu-")
+            || l.starts_with("x-tokeiorder-")
+            || l.starts_with("x-udokei-")
+            || l.starts_with("x-udokeiyasan-")
+            || l.starts_with("x-tokeisho-")
+            || l.starts_with("x-tokeiten-")
+            || l.starts_with("x-tokeikoubou-")
+            || l.starts_with("x-tokeioroshi-")
+            || l.starts_with("x-tokeibank-")
+    })
+}
+
+fn has_butsudan_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-butsudan-")
+            || l.starts_with("x-butsudanyasan-")
+            || l.starts_with("x-butsudanpro-")
+            || l.starts_with("x-butsudanteam-")
+            || l.starts_with("x-butsudankensa-")
+            || l.starts_with("x-butsudanmanten-")
+            || l.starts_with("x-butsudannomi-")
+            || l.starts_with("x-butsudanjp-")
+            || l.starts_with("x-butsudansenmon-")
+            || l.starts_with("x-butsudanmitsumori-")
+            || l.starts_with("x-butsudanchousa-")
+            || l.starts_with("x-butsudanteiki-")
+            || l.starts_with("x-butsudanshuri-")
+            || l.starts_with("x-butsudandoctors-")
+            || l.starts_with("x-butsudansagyou-")
+            || l.starts_with("x-butsudanrescue-")
+            || l.starts_with("x-butsudanteikyu-")
+            || l.starts_with("x-butsudanorder-")
+            || l.starts_with("x-butsugu-")
+            || l.starts_with("x-butsuguyasan-")
+            || l.starts_with("x-butsugupro-")
+            || l.starts_with("x-butsuguteam-")
+            || l.starts_with("x-butsugukensa-")
+            || l.starts_with("x-butsugumanten-")
+            || l.starts_with("x-butsugunomi-")
+            || l.starts_with("x-butsugujp-")
+            || l.starts_with("x-butsugusenmon-")
+            || l.starts_with("x-butsugumitsumori-")
+            || l.starts_with("x-butsuguchousa-")
+            || l.starts_with("x-butsuguteiki-")
+            || l.starts_with("x-butsugushuri-")
+            || l.starts_with("x-altar-")
+            || l.starts_with("x-altarpros-")
+            || l.starts_with("x-butsudansho-")
+            || l.starts_with("x-butsudanten-")
+            || l.starts_with("x-butsugusho-")
+            || l.starts_with("x-butsuguten-")
+            || l.starts_with("x-butsudankoubou-")
+            || l.starts_with("x-butsudanurikae-")
+            || l.starts_with("x-butsudankaitori-")
+            || l.starts_with("x-butsugukoubou-")
+            || l.starts_with("x-butsudanbank-")
+            || l.starts_with("x-butsudanmart-")
+            || l.starts_with("x-butsugumart-")
+            || l.starts_with("x-butsudantenchi-")
+            || l.starts_with("x-butsudanpros-")
+            || l.starts_with("x-butsudanworks-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20820,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は畳機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Tatami-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Igusa-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-TatamiPro-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Washitsu-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-TatamiSho-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-IgusaPro-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-TatamiTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-TatamiBank-Record: 1\r\n\r\nx";
+        assert!(has_tatami_marks(f0));
+        assert!(has_tatami_marks(f1));
+        assert!(has_tatami_marks(f2));
+        assert!(has_tatami_marks(f3));
+        assert!(has_tatami_marks(f4));
+        assert!(has_tatami_marks(f5));
+        assert!(has_tatami_marks(f6));
+        assert!(has_tatami_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_tatami_marks(clean));
+    }
+
+    #[test]
+    fn scan_は時機印を検出する() {
+        let f0 = b"From: a@b\r\nX-WatchRepairPros-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-OverhaulPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-Tokei-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-WatchPros-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-Udokei-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-TokeiPro-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-WatchWorks-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-TokeiTen-Record: 1\r\n\r\nx";
+        assert!(has_watchrepair_marks(f0));
+        assert!(has_watchrepair_marks(f1));
+        assert!(has_watchrepair_marks(f2));
+        assert!(has_watchrepair_marks(f3));
+        assert!(has_watchrepair_marks(f4));
+        assert!(has_watchrepair_marks(f5));
+        assert!(has_watchrepair_marks(f6));
+        assert!(has_watchrepair_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_watchrepair_marks(clean));
+    }
+
+    #[test]
+    fn scan_は仏機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Butsudan-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-Butsugu-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-ButsudanPro-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-Altar-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-ButsuguPro-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-ButsudanSho-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-ButsudanTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-ButsuguMart-Record: 1\r\n\r\nx";
+        assert!(has_butsudan_marks(f0));
+        assert!(has_butsudan_marks(f1));
+        assert!(has_butsudan_marks(f2));
+        assert!(has_butsudan_marks(f3));
+        assert!(has_butsudan_marks(f4));
+        assert!(has_butsudan_marks(f5));
+        assert!(has_butsudan_marks(f6));
+        assert!(has_butsudan_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_butsudan_marks(clean));
+    }
 }
