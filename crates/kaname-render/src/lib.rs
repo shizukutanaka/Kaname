@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub sealcoat_marks: bool,
+    pub siding_marks: bool,
+    pub screendoor_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        sealcoat_marks: has_sealcoat_marks(hdr),
+        siding_marks: has_siding_marks(hdr),
+        screendoor_marks: has_screendoor_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,186 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_sealcoat_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-sealcoat-")
+            || l.starts_with("x-sealcoating-")
+            || l.starts_with("x-sealcoatpros-")
+            || l.starts_with("x-sealcoatmaster-")
+            || l.starts_with("x-asphalt-")
+            || l.starts_with("x-asphaltpros-")
+            || l.starts_with("x-asphaltking-")
+            || l.starts_with("x-asphaltworks-")
+            || l.starts_with("x-asphaltexperts-")
+            || l.starts_with("x-asphaltteam-")
+            || l.starts_with("x-blacktop-")
+            || l.starts_with("x-blacktoppros-")
+            || l.starts_with("x-paving-")
+            || l.starts_with("x-pavingpros-")
+            || l.starts_with("x-pavingexperts-")
+            || l.starts_with("x-pavingteam-")
+            || l.starts_with("x-pavingworks-")
+            || l.starts_with("x-drivewaypaving-")
+            || l.starts_with("x-drivewayseal-")
+            || l.starts_with("x-drivewaypros-")
+            || l.starts_with("x-sealmaster-")
+            || l.starts_with("x-sealrite-")
+            || l.starts_with("x-pavetech-")
+            || l.starts_with("x-pavepro-")
+            || l.starts_with("x-asphaltpaving-")
+            || l.starts_with("x-asphaltpavement-")
+            || l.starts_with("x-sureseal-")
+            || l.starts_with("x-topseal-")
+            || l.starts_with("x-josokouji-")
+            || l.starts_with("x-josoyasan-")
+            || l.starts_with("x-josopro-")
+            || l.starts_with("x-jososeibi-")
+            || l.starts_with("x-josokensa-")
+            || l.starts_with("x-dorokouji-")
+            || l.starts_with("x-doroyasan-")
+            || l.starts_with("x-asufarutokouji-")
+            || l.starts_with("x-asufarutoyasan-")
+            || l.starts_with("x-pavingyasan-")
+            || l.starts_with("x-sealcoatjp-")
+            || l.starts_with("x-josojp-")
+            || l.starts_with("x-josoteam-")
+            || l.starts_with("x-josogyosha-")
+            || l.starts_with("x-josomanten-")
+            || l.starts_with("x-josonomi-")
+            || l.starts_with("x-jososhuri-")
+            || l.starts_with("x-jososenmon-")
+            || l.starts_with("x-josoteiki-")
+            || l.starts_with("x-josochousa-")
+            || l.starts_with("x-josomitsumori-")
+            || l.starts_with("x-jososagyou-")
+            || l.starts_with("x-josoteikyu-")
+    })
+}
+
+fn has_siding_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-siding-")
+            || l.starts_with("x-sidings-")
+            || l.starts_with("x-sidingpros-")
+            || l.starts_with("x-sidingexperts-")
+            || l.starts_with("x-sidingmasters-")
+            || l.starts_with("x-sidingteam-")
+            || l.starts_with("x-sidingworks-")
+            || l.starts_with("x-sidingdoctor-")
+            || l.starts_with("x-sidingforce-")
+            || l.starts_with("x-jameshardie-")
+            || l.starts_with("x-hardieplank-")
+            || l.starts_with("x-hardieboard-")
+            || l.starts_with("x-certainteedsiding-")
+            || l.starts_with("x-lpsmartside-")
+            || l.starts_with("x-vinylsiding-")
+            || l.starts_with("x-alsidesiding-")
+            || l.starts_with("x-masticsiding-")
+            || l.starts_with("x-plygemsiding-")
+            || l.starts_with("x-kaycansiding-")
+            || l.starts_with("x-genteksiding-")
+            || l.starts_with("x-sidingrepair-")
+            || l.starts_with("x-sidinginstall-")
+            || l.starts_with("x-sidingreplacement-")
+            || l.starts_with("x-sidingcontractor-")
+            || l.starts_with("x-sidingoutlet-")
+            || l.starts_with("x-sidingexpress-")
+            || l.starts_with("x-saidingu-")
+            || l.starts_with("x-saidingukouji-")
+            || l.starts_with("x-saidinguyasan-")
+            || l.starts_with("x-saidingupro-")
+            || l.starts_with("x-gahekibarikae-")
+            || l.starts_with("x-gahekikouji-")
+            || l.starts_with("x-gahekisaidingu-")
+            || l.starts_with("x-saidinguseibi-")
+            || l.starts_with("x-saidingukensa-")
+            || l.starts_with("x-saidingumanten-")
+            || l.starts_with("x-saidingunomi-")
+            || l.starts_with("x-saidingujp-")
+            || l.starts_with("x-saidingusenmon-")
+            || l.starts_with("x-saidingushuri-")
+            || l.starts_with("x-saidingudoctors-")
+            || l.starts_with("x-saidinguteam-")
+            || l.starts_with("x-saidingugyosha-")
+            || l.starts_with("x-gahekiyasan-")
+            || l.starts_with("x-gahekipro-")
+            || l.starts_with("x-gahekiteam-")
+            || l.starts_with("x-gahekisagyou-")
+            || l.starts_with("x-gahekimitsumori-")
+            || l.starts_with("x-saidingumitsumori-")
+            || l.starts_with("x-saidinguteiki-")
+            || l.starts_with("x-saidinguchousa-")
+            || l.starts_with("x-saidingukouka-")
+    })
+}
+
+fn has_screendoor_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-stormdoor-")
+            || l.starts_with("x-stormdoors-")
+            || l.starts_with("x-screendoor-")
+            || l.starts_with("x-screendoors-")
+            || l.starts_with("x-screenmesh-")
+            || l.starts_with("x-screenmobile-")
+            || l.starts_with("x-larsondoors-")
+            || l.starts_with("x-provia-")
+            || l.starts_with("x-emcodoor-")
+            || l.starts_with("x-phantomscreens-")
+            || l.starts_with("x-miragescreen-")
+            || l.starts_with("x-clearviewscreen-")
+            || l.starts_with("x-screenpros-")
+            || l.starts_with("x-screendoctor-")
+            || l.starts_with("x-screenrepair-")
+            || l.starts_with("x-screeninstall-")
+            || l.starts_with("x-screenteam-")
+            || l.starts_with("x-screenworks-")
+            || l.starts_with("x-screenmasters-")
+            || l.starts_with("x-screenexperts-")
+            || l.starts_with("x-screenguard-")
+            || l.starts_with("x-securityscreen-")
+            || l.starts_with("x-crimsafe-")
+            || l.starts_with("x-meshscreen-")
+            || l.starts_with("x-amido-")
+            || l.starts_with("x-amidou-")
+            || l.starts_with("x-amidokouji-")
+            || l.starts_with("x-amidoyasan-")
+            || l.starts_with("x-amidoseibi-")
+            || l.starts_with("x-amidokoukan-")
+            || l.starts_with("x-amidoharikae-")
+            || l.starts_with("x-amidoshuri-")
+            || l.starts_with("x-amidopro-")
+            || l.starts_with("x-amidoteam-")
+            || l.starts_with("x-amidogyosha-")
+            || l.starts_with("x-amidojp-")
+            || l.starts_with("x-amidosenmon-")
+            || l.starts_with("x-amidokensa-")
+            || l.starts_with("x-amidomanten-")
+            || l.starts_with("x-amidonomi-")
+            || l.starts_with("x-amidomitsumori-")
+            || l.starts_with("x-amidotenken-")
+            || l.starts_with("x-amidosagyou-")
+            || l.starts_with("x-amidodokuta-")
+            || l.starts_with("x-amidogyoukai-")
+            || l.starts_with("x-amidochousa-")
+            || l.starts_with("x-amidoteiki-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20827,70 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+
+    #[test]
+    fn scan_は舗機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Sealcoat-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-AsphaltPros-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-JosoKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-DoroKouji-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-SealMaster-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-BlacktopPros-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-JosoTeam-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-PavingWorks-Record: 1\r\n\r\nx";
+        assert!(has_sealcoat_marks(f0));
+        assert!(has_sealcoat_marks(f1));
+        assert!(has_sealcoat_marks(f2));
+        assert!(has_sealcoat_marks(f3));
+        assert!(has_sealcoat_marks(f4));
+        assert!(has_sealcoat_marks(f5));
+        assert!(has_sealcoat_marks(f6));
+        assert!(has_sealcoat_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_sealcoat_marks(clean));
+    }
+
+    #[test]
+    fn scan_は壁機印を検出する() {
+        let f0 = b"From: a@b\r\nX-Siding-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-JamesHardie-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-SaidinguKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-GahekiKouji-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-LPSmartSide-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-VinylSiding-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-SaidinguPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-SidingRepair-Record: 1\r\n\r\nx";
+        assert!(has_siding_marks(f0));
+        assert!(has_siding_marks(f1));
+        assert!(has_siding_marks(f2));
+        assert!(has_siding_marks(f3));
+        assert!(has_siding_marks(f4));
+        assert!(has_siding_marks(f5));
+        assert!(has_siding_marks(f6));
+        assert!(has_siding_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_siding_marks(clean));
+    }
+
+    #[test]
+    fn scan_は網機印を検出する() {
+        let f0 = b"From: a@b\r\nX-StormDoor-Notice: 1\r\n\r\nx";
+        let f1 = b"From: a@b\r\nX-LarsonDoors-Quote: 1\r\n\r\nx";
+        let f2 = b"From: a@b\r\nX-AmidoKouji-Kakunin: 1\r\n\r\nx";
+        let f3 = b"From: a@b\r\nX-AmidoHarikae-Nintei: 1\r\n\r\nx";
+        let f4 = b"From: a@b\r\nX-ScreenMobile-Order: 1\r\n\r\nx";
+        let f5 = b"From: a@b\r\nX-Crimsafe-Trace: 1\r\n\r\nx";
+        let f6 = b"From: a@b\r\nX-AmidoPro-Stamp: 1\r\n\r\nx";
+        let f7 = b"From: a@b\r\nX-PhantomScreens-Record: 1\r\n\r\nx";
+        assert!(has_screendoor_marks(f0));
+        assert!(has_screendoor_marks(f1));
+        assert!(has_screendoor_marks(f2));
+        assert!(has_screendoor_marks(f3));
+        assert!(has_screendoor_marks(f4));
+        assert!(has_screendoor_marks(f5));
+        assert!(has_screendoor_marks(f6));
+        assert!(has_screendoor_marks(f7));
+        let clean = b"From: a@b\r\nX-Other: 1\r\n\r\nbody";
+        assert!(!has_screendoor_marks(clean));
+    }
 }
