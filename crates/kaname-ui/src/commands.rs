@@ -3031,6 +3031,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D725: マラソン・駅伝・ランニング印自称
+    if env.marathon_marks {
+        render_risks.push(
+            "X-Marathon-*/X-Tokyomarathon-*/X-Bostonmarathon-*/X-Berlinmarathon-*/X-Ekiden-*/X-Hakone-*/X-Running-*/X-Ultramarathon-* 等 — 奔機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D726: 福祉用具・介護用品印自称
+    if env.fukushiyogu_marks {
+        render_risks.push(
+            "X-Fukushiyogu-*/X-Kaigoyohin-*/X-Wheelchair-*/X-Hosogu-*/X-Barrierfree-*/X-Grouphome-*/X-Handrail-*/X-Caregoods-* 等 — 椅機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D727: アウトドア・アドベンチャー印自称
+    if env.adventure_marks {
+        render_risks.push(
+            "X-Rafting-*/X-Canyoning-*/X-Canoe-*/X-Zipline-*/X-Paraglider-*/X-Skydiving-*/X-Atv-*/X-Caving-* 等 — 険機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
