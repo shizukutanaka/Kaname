@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D878: `X-Kamaboko-*`/`X-Kamabokoya-*`/`X-Nerimonoten-*`/`X-Kamabokostore-*`/`X-Japkamaboko-*`/`X-Fishcake-*` 等の蒲鉾・練り物印自称が未検査
+
+- **問題**: `X-Kamaboko-*`/`X-KamabokoYasan-*`/`X-KamabokoPro-*`/`X-KamabokoTeam-*`/`X-KamabokoJP-*`/`X-KamabokoSenmon-*`/`X-Kamabokoya-*`/`X-KamabokoyaYasan-*`/`X-KamabokoyaPro-*`/`X-KamabokoyaTeam-*`/`X-KamabokoyaJP-*`/`X-KamabokoyaSenmon-*`/`X-Nerimonoten-*`/`X-NerimonotenYasan-*`/`X-NerimonotenPro-*`/`X-NerimonotenTeam-*`/`X-NerimonotenJP-*`/`X-NerimonotenSenmon-*`/`X-KamabokostorePros-*`/`X-KamabokostoreTeam-*`/`X-KamabokostoreWorks-*`/`X-KamabokostoreExperts-*`/`X-KamabokostoreSvc-*`/`X-KamabokostoreHQ-*`/`X-JapkamabokoPros-*`/`X-JapkamabokoTeam-*`/`X-JapkamabokoWorks-*`/`X-JapkamabokoExperts-*`/`X-JapkamabokoSvc-*`/`X-JapkamabokoHQ-*`/`X-FishcakePros-*`/`X-FishcakeTeam-*`/`X-FishcakeWorks-*`/`X-FishcakeExperts-*`/`X-FishcakeSvc-*`/`X-FishcakeHQ-*` 等 は練機の通知記録 — 送信側が書くことは自称。蒲鉾・練り物業者の偽装は、小田原蒲鉾・練り物詰め合わせの産地直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `kamaboko_marks` + `has_kamaboko_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 練印の自署を問え。
+
+### Security — D879: `X-Okonomiyaki-*`/`X-Okonomiyakiya-*`/`X-Takoyakiten-*`/`X-Okonomishop-*`/`X-Japokonomi-*`/`X-Takoyakishop-*` 等のお好み焼き・たこ焼き印自称が未検査
+
+- **問題**: `X-Okonomiyaki-*`/`X-OkonomiyakiYasan-*`/`X-OkonomiyakiPro-*`/`X-OkonomiyakiTeam-*`/`X-OkonomiyakiJP-*`/`X-OkonomiyakiSenmon-*`/`X-Okonomiyakiya-*`/`X-OkonomiyakiyaYasan-*`/`X-OkonomiyakiyaPro-*`/`X-OkonomiyakiyaTeam-*`/`X-OkonomiyakiyaJP-*`/`X-OkonomiyakiyaSenmon-*`/`X-Takoyakiten-*`/`X-TakoyakitenYasan-*`/`X-TakoyakitenPro-*`/`X-TakoyakitenTeam-*`/`X-TakoyakitenJP-*`/`X-TakoyakitenSenmon-*`/`X-OkonomishopPros-*`/`X-OkonomishopTeam-*`/`X-OkonomishopWorks-*`/`X-OkonomishopExperts-*`/`X-OkonomishopSvc-*`/`X-OkonomishopHQ-*`/`X-JapokonomiPros-*`/`X-JapokonomiTeam-*`/`X-JapokonomiWorks-*`/`X-JapokonomiExperts-*`/`X-JapokonomiSvc-*`/`X-JapokonomiHQ-*`/`X-TakoyakishopPros-*`/`X-TakoyakishopTeam-*`/`X-TakoyakishopWorks-*`/`X-TakoyakishopExperts-*`/`X-TakoyakishopSvc-*`/`X-TakoyakishopHQ-*` 等 は焼機の通知記録 — 送信側が書くことは自称。お好み焼き・たこ焼き業者の偽装は、広島風お好み焼き・たこ焼き粉セットの直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `okonomiyaki_marks` + `has_okonomiyaki_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 焼印の自署を問え。
+
+### Security — D880: `X-Unagi-*`/`X-Unagiya-*`/`X-Unagiten-*`/`X-Eelstore-*`/`X-Japeel-*`/`X-Unagishop-*` 等の鰻印自称が未検査
+
+- **問題**: `X-Unagi-*`/`X-UnagiYasan-*`/`X-UnagiPro-*`/`X-UnagiTeam-*`/`X-UnagiJP-*`/`X-UnagiSenmon-*`/`X-Unagiya-*`/`X-UnagiyaYasan-*`/`X-UnagiyaPro-*`/`X-UnagiyaTeam-*`/`X-UnagiyaJP-*`/`X-UnagiyaSenmon-*`/`X-Unagiten-*`/`X-UnagitenYasan-*`/`X-UnagitenPro-*`/`X-UnagitenTeam-*`/`X-UnagitenJP-*`/`X-UnagitenSenmon-*`/`X-EelstorePros-*`/`X-EelstoreTeam-*`/`X-EelstoreWorks-*`/`X-EelstoreExperts-*`/`X-EelstoreSvc-*`/`X-EelstoreHQ-*`/`X-JapeelPros-*`/`X-JapeelTeam-*`/`X-JapeelWorks-*`/`X-JapeelExperts-*`/`X-JapeelSvc-*`/`X-JapeelHQ-*`/`X-UnagishopPros-*`/`X-UnagishopTeam-*`/`X-UnagishopWorks-*`/`X-UnagishopExperts-*`/`X-UnagishopSvc-*`/`X-UnagishopHQ-*` 等 は鰻機の通知記録 — 送信側が書くことは自称。鰻業者の偽装は、浜名湖鰻・鰻重ギフトの直送を装った通販詐欺の典型手口。
+- **修正**: `Envelope` に `unagi_marks` + `has_unagi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 鰻印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
