@@ -2027,6 +2027,12 @@ pub struct Envelope {
     pub mahjong_marks: bool,
     /// `X-Hikkoshi-*`/`X-Artmoving-*`/`X-Akabou-*` 等の引越・引越見積印を送信側が自称する兆候 (D757)
     pub hikkoshi_marks: bool,
+    /// `X-Lovehotel-*`/`X-Balian-*`/`X-Sala-*` 等のラブホテル・休憩ホテル印を送信側が自称する兆候 (D758)
+    pub lovehotel_marks: bool,
+    /// `X-Kosokubus-*`/`X-Yakoubus-*`/`X-Nightbus-*` 等の高速バス・夜行バス印を送信側が自称する兆候 (D759)
+    pub kosokubus_marks: bool,
+    /// `X-Sleepclinic-*`/`X-Cpap-*`/`X-Snoring-*` 等の睡眠・いびき治療印を送信側が自称する兆候 (D760)
+    pub sleepclinic_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2287,13 +2293,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2662,6 +2668,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         fertility_marks: has_fertility_marks(hdr),
         mahjong_marks: has_mahjong_marks(hdr),
         hikkoshi_marks: has_hikkoshi_marks(hdr),
+        lovehotel_marks: has_lovehotel_marks(hdr),
+        kosokubus_marks: has_kosokubus_marks(hdr),
+        sleepclinic_marks: has_sleepclinic_marks(hdr),
     })
 }
 
@@ -23727,6 +23736,216 @@ fn has_hikkoshi_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-kuroganeplus-"))
 }
 
+fn has_lovehotel_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-lovehotel-")
+            || l.starts_with("x-coupleshotel-")
+            || l.starts_with("x-resthotel-")
+            || l.starts_with("x-balian-")
+            || l.starts_with("x-sala-")
+            || l.starts_with("x-grandbali-")
+            || l.starts_with("x-hoteljumu-")
+            || l.starts_with("x-hotelfine-")
+            || l.starts_with("x-lovehotelnavi-")
+            || l.starts_with("x-lovehotelcenter-")
+            || l.starts_with("x-lovehotelshop-")
+            || l.starts_with("x-lovehotelpro-")
+            || l.starts_with("x-lovehotelmart-")
+            || l.starts_with("x-lovehotelplus-")
+            || l.starts_with("x-lovehotelsmart-")
+            || l.starts_with("x-lovehotelfamily-")
+            || l.starts_with("x-coupleshotelnavi-")
+            || l.starts_with("x-coupleshotelcenter-")
+            || l.starts_with("x-coupleshotelshop-")
+            || l.starts_with("x-coupleshotelpro-")
+            || l.starts_with("x-coupleshotelmart-")
+            || l.starts_with("x-coupleshotelplus-")
+            || l.starts_with("x-coupleshotelsmart-")
+            || l.starts_with("x-coupleshotelfamily-")
+            || l.starts_with("x-resthotelnavi-")
+            || l.starts_with("x-resthotelcenter-")
+            || l.starts_with("x-resthotelshop-")
+            || l.starts_with("x-resthotelpro-")
+            || l.starts_with("x-resthotelmart-")
+            || l.starts_with("x-resthotelplus-")
+            || l.starts_with("x-resthotelsmart-")
+            || l.starts_with("x-resthotelfamily-")
+            || l.starts_with("x-baliannavi-")
+            || l.starts_with("x-baliancenter-")
+            || l.starts_with("x-balianshop-")
+            || l.starts_with("x-balianpro-")
+            || l.starts_with("x-balianmart-")
+            || l.starts_with("x-balianplus-")
+            || l.starts_with("x-baliansmart-")
+            || l.starts_with("x-balianfamily-")
+            || l.starts_with("x-salanavi-")
+            || l.starts_with("x-salacenter-")
+            || l.starts_with("x-salashop-")
+            || l.starts_with("x-salapro-")
+            || l.starts_with("x-salamart-")
+            || l.starts_with("x-salaplus-")
+            || l.starts_with("x-salasmart-")
+            || l.starts_with("x-salafamily-")
+            || l.starts_with("x-grandbalinavi-")
+            || l.starts_with("x-grandbalicenter-")
+            || l.starts_with("x-grandbalishop-")
+            || l.starts_with("x-grandbalipro-")
+            || l.starts_with("x-grandbalimart-")
+            || l.starts_with("x-grandbaliplus-")
+            || l.starts_with("x-grandbalismart-")
+            || l.starts_with("x-grandbalifamily-")
+            || l.starts_with("x-hoteljumunavi-")
+            || l.starts_with("x-hoteljumucenter-")
+            || l.starts_with("x-hoteljumushop-")
+            || l.starts_with("x-hoteljumupro-")
+            || l.starts_with("x-hoteljumumart-")
+            || l.starts_with("x-hoteljumuplus-"))
+}
+
+fn has_kosokubus_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-kosokubus-")
+            || l.starts_with("x-yakoubus-")
+            || l.starts_with("x-highwaybus-")
+            || l.starts_with("x-nightbus-")
+            || l.starts_with("x-willerbus-")
+            || l.starts_with("x-jamjam-")
+            || l.starts_with("x-vipliner-")
+            || l.starts_with("x-orionbus-")
+            || l.starts_with("x-atliner-")
+            || l.starts_with("x-kosokubusnavi-")
+            || l.starts_with("x-kosokubuscenter-")
+            || l.starts_with("x-kosokubusshop-")
+            || l.starts_with("x-kosokubuspro-")
+            || l.starts_with("x-kosokubusmart-")
+            || l.starts_with("x-kosokubusplus-")
+            || l.starts_with("x-kosokubussmart-")
+            || l.starts_with("x-kosokubusfamily-")
+            || l.starts_with("x-yakoubusnavi-")
+            || l.starts_with("x-yakoubuscenter-")
+            || l.starts_with("x-yakoubusshop-")
+            || l.starts_with("x-yakoubuspro-")
+            || l.starts_with("x-yakoubusmart-")
+            || l.starts_with("x-yakoubusplus-")
+            || l.starts_with("x-yakoubussmart-")
+            || l.starts_with("x-yakoubusfamily-")
+            || l.starts_with("x-highwaybusnavi-")
+            || l.starts_with("x-highwaybuscenter-")
+            || l.starts_with("x-highwaybusshop-")
+            || l.starts_with("x-highwaybuspro-")
+            || l.starts_with("x-highwaybusmart-")
+            || l.starts_with("x-highwaybusplus-")
+            || l.starts_with("x-highwaybussmart-")
+            || l.starts_with("x-highwaybusfamily-")
+            || l.starts_with("x-nightbusnavi-")
+            || l.starts_with("x-nightbuscenter-")
+            || l.starts_with("x-nightbusshop-")
+            || l.starts_with("x-nightbuspro-")
+            || l.starts_with("x-nightbusmart-")
+            || l.starts_with("x-nightbusplus-")
+            || l.starts_with("x-nightbussmart-")
+            || l.starts_with("x-nightbusfamily-")
+            || l.starts_with("x-willerbusnavi-")
+            || l.starts_with("x-willerbuscenter-")
+            || l.starts_with("x-willerbusshop-")
+            || l.starts_with("x-willerbuspro-")
+            || l.starts_with("x-willerbusmart-")
+            || l.starts_with("x-willerbusplus-")
+            || l.starts_with("x-willerbussmart-")
+            || l.starts_with("x-willerbusfamily-")
+            || l.starts_with("x-jamjamnavi-")
+            || l.starts_with("x-jamjamcenter-")
+            || l.starts_with("x-jamjamshop-")
+            || l.starts_with("x-jamjampro-")
+            || l.starts_with("x-jamjammart-")
+            || l.starts_with("x-jamjamplus-")
+            || l.starts_with("x-jamjamsmart-")
+            || l.starts_with("x-jamjamfamily-")
+            || l.starts_with("x-viplinernavi-")
+            || l.starts_with("x-viplinercenter-")
+            || l.starts_with("x-viplinershop-")
+            || l.starts_with("x-viplinerpro-")
+            || l.starts_with("x-viplinermart-"))
+}
+
+fn has_sleepclinic_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sleepclinic-")
+            || l.starts_with("x-cpap-")
+            || l.starts_with("x-sleepapnea-")
+            || l.starts_with("x-snoring-")
+            || l.starts_with("x-sleeptech-")
+            || l.starts_with("x-zquiet-")
+            || l.starts_with("x-snorerx-")
+            || l.starts_with("x-vitalsleep-")
+            || l.starts_with("x-zyppah-")
+            || l.starts_with("x-somnomed-")
+            || l.starts_with("x-sleepclinicnavi-")
+            || l.starts_with("x-sleepcliniccenter-")
+            || l.starts_with("x-sleepclinicshop-")
+            || l.starts_with("x-sleepclinicpro-")
+            || l.starts_with("x-sleepclinicmart-")
+            || l.starts_with("x-sleepclinicplus-")
+            || l.starts_with("x-sleepclinicsmart-")
+            || l.starts_with("x-sleepclinicfamily-")
+            || l.starts_with("x-cpapnavi-")
+            || l.starts_with("x-cpapcenter-")
+            || l.starts_with("x-cpapshop-")
+            || l.starts_with("x-cpappro-")
+            || l.starts_with("x-cpapmart-")
+            || l.starts_with("x-cpapplus-")
+            || l.starts_with("x-cpapsmart-")
+            || l.starts_with("x-cpapfamily-")
+            || l.starts_with("x-sleepapneanavi-")
+            || l.starts_with("x-sleepapneacenter-")
+            || l.starts_with("x-sleepapneashop-")
+            || l.starts_with("x-sleepapneapro-")
+            || l.starts_with("x-sleepapneamart-")
+            || l.starts_with("x-sleepapneaplus-")
+            || l.starts_with("x-sleepapneasmart-")
+            || l.starts_with("x-sleepapneafamily-")
+            || l.starts_with("x-snoringnavi-")
+            || l.starts_with("x-snoringcenter-")
+            || l.starts_with("x-snoringshop-")
+            || l.starts_with("x-snoringpro-")
+            || l.starts_with("x-snoringmart-")
+            || l.starts_with("x-snoringplus-")
+            || l.starts_with("x-snoringsmart-")
+            || l.starts_with("x-snoringfamily-")
+            || l.starts_with("x-sleeptechnavi-")
+            || l.starts_with("x-sleeptechcenter-")
+            || l.starts_with("x-sleeptechshop-")
+            || l.starts_with("x-sleeptechpro-")
+            || l.starts_with("x-sleeptechmart-")
+            || l.starts_with("x-sleeptechplus-")
+            || l.starts_with("x-sleeptechsmart-")
+            || l.starts_with("x-sleeptechfamily-")
+            || l.starts_with("x-zquietnavi-")
+            || l.starts_with("x-zquietcenter-")
+            || l.starts_with("x-zquietshop-")
+            || l.starts_with("x-zquietpro-")
+            || l.starts_with("x-zquietmart-")
+            || l.starts_with("x-zquietplus-")
+            || l.starts_with("x-zquietsmart-")
+            || l.starts_with("x-zquietfamily-")
+            || l.starts_with("x-snorerxnavi-")
+            || l.starts_with("x-snorerxcenter-")
+            || l.starts_with("x-snorerxshop-")
+            || l.starts_with("x-snorerxpro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -34667,6 +34886,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_hikkoshi_marks(clean));
+    }
+
+    #[test]
+    fn scan_は恋機印を検出する() {
+        for raw in [
+            br"X-Lovehotel-Alert: 1",
+            br"X-Coupleshotel-Notice: 1",
+            br"X-Resthotel-Info: 1",
+            br"X-Balian-Report: 1",
+            br"X-Sala-Bulletin: 1",
+            br"X-Grandbali-News: 1",
+            br"X-Hoteljumu-Flash: 1",
+            br"X-Hotelfine-Release: 1",
+        ] {
+            assert!(has_lovehotel_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_lovehotel_marks(clean));
+    }
+
+    #[test]
+    fn scan_は迅機印を検出する() {
+        for raw in [
+            br"X-Kosokubus-Alert: 1",
+            br"X-Yakoubus-Notice: 1",
+            br"X-Highwaybus-Info: 1",
+            br"X-Nightbus-Report: 1",
+            br"X-Willerbus-Bulletin: 1",
+            br"X-Jamjam-News: 1",
+            br"X-Vipliner-Flash: 1",
+            br"X-Orionbus-Release: 1",
+        ] {
+            assert!(has_kosokubus_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_kosokubus_marks(clean));
+    }
+
+    #[test]
+    fn scan_は眠機印を検出する() {
+        for raw in [
+            br"X-Sleepclinic-Alert: 1",
+            br"X-Cpap-Notice: 1",
+            br"X-Sleepapnea-Info: 1",
+            br"X-Snoring-Report: 1",
+            br"X-Sleeptech-Bulletin: 1",
+            br"X-Zquiet-News: 1",
+            br"X-Snorerx-Flash: 1",
+            br"X-Vitalsleep-Release: 1",
+        ] {
+            assert!(has_sleepclinic_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_sleepclinic_marks(clean));
     }
 
 }
