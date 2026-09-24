@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D800: `X-Houjinseturitsu-*`/`X-Seturitsu-*`/`X-Kigyou-*`/`X-Incorporation-*`/`X-Companyformation-*`/`X-Businessformation-*` 等の法人設立・起業支援印自称が未検査
+
+- **問題**: `X-Houjinseturitsu-*`/`X-HoujinseturitsuYasan-*`/`X-HoujinseturitsuPro-*`/`X-HoujinseturitsuTeam-*`/`X-HoujinseturitsuJP-*`/`X-HoujinseturitsuSenmon-*`/`X-Seturitsu-*`/`X-SeturitsuYasan-*`/`X-SeturitsuPro-*`/`X-SeturitsuTeam-*`/`X-SeturitsuJP-*`/`X-SeturitsuSenmon-*`/`X-Kigyou-*`/`X-KigyouYasan-*`/`X-KigyouPro-*`/`X-KigyouTeam-*`/`X-KigyouJP-*`/`X-KigyouSenmon-*`/`X-IncorporationPros-*`/`X-IncorporationTeam-*`/`X-IncorporationWorks-*`/`X-IncorporationExperts-*`/`X-IncorporationSvc-*`/`X-IncorporationHQ-*`/`X-CompanyformationPros-*`/`X-CompanyformationTeam-*`/`X-CompanyformationWorks-*`/`X-CompanyformationExperts-*`/`X-CompanyformationSvc-*`/`X-CompanyformationHQ-*`/`X-BusinessformationPros-*`/`X-BusinessformationTeam-*`/`X-BusinessformationWorks-*`/`X-BusinessformationExperts-*`/`X-BusinessformationSvc-*`/`X-BusinessformationHQ-*` 等 は設機の通知記録 — 送信側が書くことは自称。法人設立・起業支援業者の偽装は、登記代行費・定款作成費・許認可申請費を装ったなりすましの典型手口。(司法書士は shihoshoshi 機、行政書士語幹は license 機、社労士は sharoshi 機で検出済み)
+- **修正**: `Envelope` に `houjin_marks` + `has_houjin_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 設印の自署を問え。
+
+### Security — D801: `X-Kyoukai-*`/`X-Kyoukaikakutei-*`/`X-Tochikyoukai-*`/`X-Boundary-*`/`X-Landboundary-*`/`X-Boundaryline-*` 等の境界確定・土地境界印自称が未検査
+
+- **問題**: `X-Kyoukai-*`/`X-KyoukaiYasan-*`/`X-KyoukaiPro-*`/`X-KyoukaiTeam-*`/`X-KyoukaiJP-*`/`X-KyoukaiSenmon-*`/`X-Kyoukaikakutei-*`/`X-KyoukaikakuteiYasan-*`/`X-KyoukaikakuteiPro-*`/`X-KyoukaikakuteiTeam-*`/`X-KyoukaikakuteiJP-*`/`X-KyoukaikakuteiSenmon-*`/`X-Tochikyoukai-*`/`X-TochikyoukaiYasan-*`/`X-TochikyoukaiPro-*`/`X-TochikyoukaiTeam-*`/`X-TochikyoukaiJP-*`/`X-TochikyoukaiSenmon-*`/`X-BoundaryPros-*`/`X-BoundaryTeam-*`/`X-BoundaryWorks-*`/`X-BoundaryExperts-*`/`X-BoundarySvc-*`/`X-BoundaryHQ-*`/`X-LandboundaryPros-*`/`X-LandboundaryTeam-*`/`X-LandboundaryWorks-*`/`X-LandboundaryExperts-*`/`X-LandboundarySvc-*`/`X-LandboundaryHQ-*`/`X-BoundarylinePros-*`/`X-BoundarylineTeam-*`/`X-BoundarylineWorks-*`/`X-BoundarylineExperts-*`/`X-BoundarylineSvc-*`/`X-BoundarylineHQ-*` 等 は境機の通知記録 — 送信側が書くことは自称。境界確定・土地境界調査業者の偽装は、境界標設置費・隣地同意費を装ったなりすましの典型手口。(測量は survey 機、不動産鑑定は realestateappraisal 機で検出済み)
+- **修正**: `Envelope` に `kyoukai_marks` + `has_kyoukai_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 境印の自署を問え。
+
+### Security — D802: `X-Hakamairi-*`/`X-Ohakamairi-*`/`X-Hakamori-*`/`X-Gravevisit-*`/`X-Gravetending-*`/`X-Tombvisit-*` 等の墓参・墓守代行印自称が未検査
+
+- **問題**: `X-Hakamairi-*`/`X-HakamairiYasan-*`/`X-HakamairiPro-*`/`X-HakamairiTeam-*`/`X-HakamairiJP-*`/`X-HakamairiSenmon-*`/`X-Ohakamairi-*`/`X-OhakamairiYasan-*`/`X-OhakamairiPro-*`/`X-OhakamairiTeam-*`/`X-OhakamairiJP-*`/`X-OhakamairiSenmon-*`/`X-Hakamori-*`/`X-HakamoriYasan-*`/`X-HakamoriPro-*`/`X-HakamoriTeam-*`/`X-HakamoriJP-*`/`X-HakamoriSenmon-*`/`X-GravevisitPros-*`/`X-GravevisitTeam-*`/`X-GravevisitWorks-*`/`X-GravevisitExperts-*`/`X-GravevisitSvc-*`/`X-GravevisitHQ-*`/`X-GravetendingPros-*`/`X-GravetendingTeam-*`/`X-GravetendingWorks-*`/`X-GravetendingExperts-*`/`X-GravetendingSvc-*`/`X-GravetendingHQ-*`/`X-TombvisitPros-*`/`X-TombvisitTeam-*`/`X-TombvisitWorks-*`/`X-TombvisitExperts-*`/`X-TombvisitSvc-*`/`X-TombvisitHQ-*` 等 は参機の通知記録 — 送信側が書くことは自称。墓参・墓守代行業者の偽装は、清掃供花費・供養祈祷費を装ったなりすましの典型手口。(葬儀は funeral 機、墓石は sekihi 機、墓じまいは hakajimai 機、霊園は reien 機で検出済み)
+- **修正**: `Envelope` に `hakamairi_marks` + `has_hakamairi_marks` 追加; `commands.rs` で render_risks 兆候報告。
+- **教訓**: 通知の記録は通知機が記す — 参印の自署を問え。
+
 ### Security — D698: `X-Notary-*`/`X-Notarize-*`/`X-Koushou-*`/`X-Apostille-*`/`X-MobileNotary-*` 等の公証印自称が未検査
 
 - **問題**: `X-Notary-*`/`X-Notarize-*`/`X-NotaryCam-*`/`X-MobileNotary-*`/`X-NotaryPros-*`/`X-NotaryService-*`/`X-NotaryTeam-*`/`X-NotaryWorks-*`/`X-NotaryExperts-*`/`X-NotaryDoctors-*`/`X-NotaryMasters-*`/`X-NotaryForce-*`/`X-NotaryNation-*`/`X-NotaryPublic-*`/`X-NotaryAgent-*`/`X-NotarySigning-*`/`X-LoanSigning-*`/`X-SigningAgent-*`/`X-NotaryNow-*`/`X-NotaryHQ-*`/`X-NotarizePros-*`/`X-Apostille-*`/`X-ApostillePros-*`/`X-ApostilleService-*`、JP は `X-Koushou-*`/`X-KoushouYasan-*`/`X-KoushouPro-*`/`X-KoushouTeam-*`/`X-KoushouGyosha-*`/`X-KoushouSeibi-*`/`X-KoushouKensa-*`/`X-KoushouManten-*`/`X-KoushouNomi-*`/`X-KoushouJP-*`/`X-KoushouSenmon-*`/`X-KoushouMitsumori-*`/`X-KoushouChousa-*`/`X-KoushouTeiki-*`/`X-KoushouShuri-*`/`X-KoushouDoctors-*`/`X-KoushouSagyou-*`/`X-KoushouRescue-*`/`X-KoushouTeikyu-*`/`X-KoushouOrder-*`/`X-KoushouJuu-*`/`X-KoushouBosyuu-*`/`X-NotaryKentei-*`/`X-ApostilleYasan-*`/`X-KoushouKyoku-*` 等 は証機の通知記録 — 送信側が書くことは自称。公証・アポスティーユ・ローン署名代行の偽装は、公証手数料・認証費を装ったなりすましの典型手口。(法律事務所は legal 機、電子署名は esign 機で検出済み)
