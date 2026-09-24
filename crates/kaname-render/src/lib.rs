@@ -1739,6 +1739,9 @@ pub struct Envelope {
     pub abroad_marks: bool,
     /// `X-Makita-*`/`X-HiKOKI-*`/`X-BoschTools-*`/`X-DeWalt-*`/`X-MilwaukeeTool-*`/`X-RyobiTools-*`/`X-Earthman-*`/`X-Einhell-*` 等の電動工具・DIY通知記録印を送信側が自称している (D613)
     pub diytool_marks: bool,
+    pub musiclesson_marks: bool,
+    pub dojo_marks: bool,
+    pub nailsalon_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2230,6 +2233,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         license_marks: has_license_marks(hdr),
         abroad_marks: has_abroad_marks(hdr),
         diytool_marks: has_diytool_marks(hdr),
+        musiclesson_marks: has_musiclesson_marks(hdr),
+        dojo_marks: has_dojo_marks(hdr),
+        nailsalon_marks: has_nailsalon_marks(hdr),
     })
 }
 
@@ -12644,6 +12650,206 @@ fn has_diytool_marks(raw: &[u8]) -> bool {
     })
 }
 
+fn has_musiclesson_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-ongaku-")
+            || l.starts_with("x-ongakuyasan-")
+            || l.starts_with("x-ongakupro-")
+            || l.starts_with("x-ongakuteam-")
+            || l.starts_with("x-ongakukensa-")
+            || l.starts_with("x-ongakumanten-")
+            || l.starts_with("x-ongakunomi-")
+            || l.starts_with("x-ongakujp-")
+            || l.starts_with("x-ongakusenmon-")
+            || l.starts_with("x-ongakumitsumori-")
+            || l.starts_with("x-ongakuchousa-")
+            || l.starts_with("x-ongakuteiki-")
+            || l.starts_with("x-ongakushuri-")
+            || l.starts_with("x-ongakuschool-")
+            || l.starts_with("x-ongakukoubou-")
+            || l.starts_with("x-ongakumart-")
+            || l.starts_with("x-ongakubank-")
+            || l.starts_with("x-musiclesson-")
+            || l.starts_with("x-musiclessonpros-")
+            || l.starts_with("x-musiclessonteam-")
+            || l.starts_with("x-musiclessonworks-")
+            || l.starts_with("x-musiclessonexperts-")
+            || l.starts_with("x-musiclessonsvc-")
+            || l.starts_with("x-musiclessonhq-")
+            || l.starts_with("x-musicschool-")
+            || l.starts_with("x-musicschoolpros-")
+            || l.starts_with("x-musicschoolteam-")
+            || l.starts_with("x-musicschoolworks-")
+            || l.starts_with("x-musicschoolexperts-")
+            || l.starts_with("x-musicschoolsvc-")
+            || l.starts_with("x-musicschoolhq-")
+            || l.starts_with("x-pianolesson-")
+            || l.starts_with("x-pianolessonpros-")
+            || l.starts_with("x-pianolessonteam-")
+            || l.starts_with("x-pianolessonworks-")
+            || l.starts_with("x-violinlesson-")
+            || l.starts_with("x-violinlessonpros-")
+            || l.starts_with("x-violinlessonteam-")
+            || l.starts_with("x-violinlessonworks-")
+            || l.starts_with("x-guitarlesson-")
+            || l.starts_with("x-guitarlessonpros-")
+            || l.starts_with("x-guitarlessonteam-")
+            || l.starts_with("x-guitarlessonworks-")
+            || l.starts_with("x-music-")
+            || l.starts_with("x-musictutor-")
+            || l.starts_with("x-musicteacher-")
+            || l.starts_with("x-musicpro-")
+            || l.starts_with("x-musicyasan-")
+            || l.starts_with("x-musicdoctors-")
+            || l.starts_with("x-musicrescue-")
+            || l.starts_with("x-ongakupros-")
+            || l.starts_with("x-ongakudoctors-")
+            || l.starts_with("x-ongakurescue-")
+            || l.starts_with("x-ongakuworks-")
+    })
+}
+
+fn has_dojo_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-doujou-")
+            || l.starts_with("x-doujouyasan-")
+            || l.starts_with("x-doujoupro-")
+            || l.starts_with("x-doujouteam-")
+            || l.starts_with("x-doujoukensa-")
+            || l.starts_with("x-doujoumanten-")
+            || l.starts_with("x-doujounomi-")
+            || l.starts_with("x-doujoujp-")
+            || l.starts_with("x-doujousenmon-")
+            || l.starts_with("x-doujoumitsumori-")
+            || l.starts_with("x-doujouchousa-")
+            || l.starts_with("x-doujouteiki-")
+            || l.starts_with("x-doujoushuri-")
+            || l.starts_with("x-doujousho-")
+            || l.starts_with("x-doujouten-")
+            || l.starts_with("x-doujoukoubou-")
+            || l.starts_with("x-doujoumart-")
+            || l.starts_with("x-doujoubank-")
+            || l.starts_with("x-dojo-")
+            || l.starts_with("x-dojopros-")
+            || l.starts_with("x-dojoteam-")
+            || l.starts_with("x-dojoworks-")
+            || l.starts_with("x-dojoexperts-")
+            || l.starts_with("x-dojosvc-")
+            || l.starts_with("x-dojohq-")
+            || l.starts_with("x-karate-")
+            || l.starts_with("x-karateyasan-")
+            || l.starts_with("x-karatepro-")
+            || l.starts_with("x-karateteam-")
+            || l.starts_with("x-karatekoubou-")
+            || l.starts_with("x-karatesenmon-")
+            || l.starts_with("x-karateschool-")
+            || l.starts_with("x-karatedojo-")
+            || l.starts_with("x-judo-")
+            || l.starts_with("x-judoyasan-")
+            || l.starts_with("x-judopro-")
+            || l.starts_with("x-judoteam-")
+            || l.starts_with("x-judokoubou-")
+            || l.starts_with("x-judosenmon-")
+            || l.starts_with("x-judoschool-")
+            || l.starts_with("x-judodojo-")
+            || l.starts_with("x-kendo-")
+            || l.starts_with("x-kendoyasan-")
+            || l.starts_with("x-kendopro-")
+            || l.starts_with("x-kendoteam-")
+            || l.starts_with("x-kendokoubou-")
+            || l.starts_with("x-kendosenmon-")
+            || l.starts_with("x-kendoschool-")
+            || l.starts_with("x-kendodojo-")
+            || l.starts_with("x-aikido-")
+            || l.starts_with("x-aikidopro-")
+            || l.starts_with("x-aikidodojo-")
+            || l.starts_with("x-martialartspros-")
+            || l.starts_with("x-martialartsteam-")
+            || l.starts_with("x-martialartsworks-")
+            || l.starts_with("x-martialartsexperts-")
+            || l.starts_with("x-martialartssvc-")
+            || l.starts_with("x-martialartshq-")
+            || l.starts_with("x-doujoupros-")
+            || l.starts_with("x-doujoudoctors-")
+            || l.starts_with("x-doujourescue-")
+    })
+}
+
+fn has_nailsalon_marks(raw: &[u8]) -> bool {
+    let lower = String::from_utf8_lossy(raw).to_ascii_lowercase();
+    let header = match lower.split("\r\n\r\n").next() {
+        Some(h) => h,
+        None => return false,
+    };
+    header.lines().any(|l| {
+        l.starts_with("x-nailsalon-")
+            || l.starts_with("x-nailsalonyasan-")
+            || l.starts_with("x-nailsalonpro-")
+            || l.starts_with("x-nailsalonteam-")
+            || l.starts_with("x-nailsalonkensa-")
+            || l.starts_with("x-nailsalonmanten-")
+            || l.starts_with("x-nailsalonnomi-")
+            || l.starts_with("x-nailsalonjp-")
+            || l.starts_with("x-nailsalonsenmon-")
+            || l.starts_with("x-nailsalonmitsumori-")
+            || l.starts_with("x-nailsalonchousa-")
+            || l.starts_with("x-nailsalonteiki-")
+            || l.starts_with("x-nailsalonshuri-")
+            || l.starts_with("x-nailsalonsho-")
+            || l.starts_with("x-nailsalonten-")
+            || l.starts_with("x-nailsalonkoubou-")
+            || l.starts_with("x-nailsalonmart-")
+            || l.starts_with("x-nailsalonbank-")
+            || l.starts_with("x-nail-")
+            || l.starts_with("x-nailyasan-")
+            || l.starts_with("x-nailpro-")
+            || l.starts_with("x-nailteam-")
+            || l.starts_with("x-nailkoubou-")
+            || l.starts_with("x-nailsenmon-")
+            || l.starts_with("x-nailsho-")
+            || l.starts_with("x-nailten-")
+            || l.starts_with("x-nailmart-")
+            || l.starts_with("x-eyelashsalon-")
+            || l.starts_with("x-eyelashsalonpro-")
+            || l.starts_with("x-eyelashsalonteam-")
+            || l.starts_with("x-eyelashsalonkoubou-")
+            || l.starts_with("x-eyelashsalonsenmon-")
+            || l.starts_with("x-matsuge-")
+            || l.starts_with("x-matsugeyasan-")
+            || l.starts_with("x-matsugepro-")
+            || l.starts_with("x-matsugeteam-")
+            || l.starts_with("x-matsugekoubou-")
+            || l.starts_with("x-matsugesenmon-")
+            || l.starts_with("x-matsugesho-")
+            || l.starts_with("x-matsugeten-")
+            || l.starts_with("x-nailstudio-")
+            || l.starts_with("x-nailstudiopros-")
+            || l.starts_with("x-nailstudioteam-")
+            || l.starts_with("x-nailstudioworks-")
+            || l.starts_with("x-nailstudioexperts-")
+            || l.starts_with("x-nailstudiosvc-")
+            || l.starts_with("x-nailstudiohq-")
+            || l.starts_with("x-nailsalonpros-")
+            || l.starts_with("x-nailsalonworks-")
+            || l.starts_with("x-nailsalonexperts-")
+            || l.starts_with("x-nailsalonsvc-")
+            || l.starts_with("x-nailsalonhq-")
+            || l.starts_with("x-naildoctors-")
+            || l.starts_with("x-nailrescue-")
+            || l.starts_with("x-matsugebank-")
+    })
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -20641,4 +20847,54 @@ X-Other: 1
 body";
     assert!(!has_diytool_marks(clean));
 }
+    #[test]
+    fn scan_は音機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Ongaku-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MusicLesson-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MusicSchool-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-PianoLessonPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-OngakuSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-GuitarLessonTeam-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-ViolinLessonWorks-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MusicTutor-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_musiclesson_marks(h));
+        }
+        assert!(!has_musiclesson_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は道機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-Doujou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Karate-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Judo-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Kendo-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MartialArtsPros-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-KarateDojo-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-JudoSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-AikidoDojo-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_dojo_marks(h));
+        }
+        assert!(!has_dojo_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は爪機印を検出する() {
+        for h in [
+            b"From: a@b\r\nX-NailSalon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Nail-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Matsuge-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-EyelashSalon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NailStudio-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NailSalonSenmon-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MatsugeKoubou-Info: 1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-NailStudioHQ-Info: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_nailsalon_marks(h));
+        }
+        assert!(!has_nailsalon_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
 }
