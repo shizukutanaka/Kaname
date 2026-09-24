@@ -8,6 +8,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
+
+- **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
+- **修正**: From ドメインが DMARC pass のときは、送信側が書いたヘッダの存在だけを根拠とする警告 (`SELF_CLAIM_SUFFIXES` の3文言) を出さない (未認証メールでは従来どおり警告)。自動車印から `x-gm-` を除去。`*_marks` 以外のヘッダ専用検出器4件もヘッダ部のみを受け取るよう変更 (D570 の取りこぼし)。static-check 検査11を一般化、検査12で文言契約・ゲートの存在と位置を強制。回帰テスト5件。
+- **付随修正**: `kaname-ui` のテスト 14 箇所が存在しない `r.render_risks` を読んでおり、D160 以降テストビルドがコンパイル不能だったのを `r.body.render_risks` に修正。
+- **残課題**: 認証済みの無関係ドメインによる他ブランドヘッダの詰め込みは警告しない、D18 (認証結果ヘッダの信頼) を継承、検出器間の接頭辞重複 30 件、`main` の rustfmt 未適用差分 (詳細: `docs/gap-analysis.md` D571)。
+
 ### Security — D782: `X-Gaikou-*`/`X-Ekusuteria-*`/`X-Exteriorworks-*`/`X-Exteriordesign-*` 等の外構・エクステリア印自称が未検査
 
 - **問題**: `X-Gaikou-*`/`X-GaikouYasan-*`/`X-GaikouPro-*`/`X-GaikouTeam-*`/`X-GaikouJP-*`/`X-GaikouSenmon-*`/`X-Ekusuteria-*`/`X-EkusuteriaYasan-*`/`X-EkusuteriaPro-*`/`X-EkusuteriaTeam-*`/`X-EkusuteriaJP-*`/`X-EkusuteriaSenmon-*`/`X-ExteriorworksPros-*`/`X-ExteriorworksTeam-*`/`X-ExteriorworksWorks-*`/`X-ExteriorworksExperts-*`/`X-ExteriorworksSvc-*`/`X-ExteriorworksHQ-*`/`X-ExteriordesignPros-*`/`X-ExteriordesignTeam-*`/`X-ExteriordesignWorks-*`/`X-ExteriordesignExperts-*`/`X-ExteriordesignSvc-*`/`X-ExteriordesignHQ-*` 等 は構機の通知記録 — 送信側が書くことは自称。外構・エクステリア工事の偽装は、見積料・追加費用を装ったなりすましの典型手口。(造園は garden 機、フェンスは fence 機、カーポートは carport 機で検出済み)
