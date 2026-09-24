@@ -1865,6 +1865,12 @@ pub struct Envelope {
     pub houseclean_marks: bool,
     /// `X-Petfuneral-*`/`X-Petfuneralnavi-*`/`X-Petfuneralcenter-*` 等のペット葬儀・ペット霊園印を送信側が自称する兆候 (D676)
     pub petfuneral_marks: bool,
+    /// `X-Coinlaundry-*`/`X-Coinlaundrynavi-*`/`X-Coinlaundrycenter-*` 等のコインランドリー・洗濯印を送信側が自称する兆候 (D677)
+    pub laundry_marks: bool,
+    /// `X-Gamecenter-*`/`X-Gamecenternavi-*`/`X-Gamecentercenter-*` 等のゲームセンター・eスポーツ印を送信側が自称する兆候 (D678)
+    pub gamecenter_marks: bool,
+    /// `X-Sharehouse-*`/`X-Sharenavi-*`/`X-Sharehousecenter-*` 等のシェアハウス・ゲストハウス印を送信側が自称する兆候 (D679)
+    pub sharehouse_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2419,6 +2425,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         danchi_marks: has_danchi_marks(hdr),
         houseclean_marks: has_houseclean_marks(hdr),
         petfuneral_marks: has_petfuneral_marks(hdr),
+        laundry_marks: has_laundry_marks(hdr),
+        gamecenter_marks: has_gamecenter_marks(hdr),
+        sharehouse_marks: has_sharehouse_marks(hdr),
     })
 }
 
@@ -17774,6 +17783,256 @@ fn has_petfuneral_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-oterapro-"))
 }
 
+/// `X-Coinlaundry-*`/`X-Coinlaundrynavi-*`/`X-Coinlaundrycenter-*`/`X-Coinlaundryshop-*`/`X-Coinlaundrypro-*`/`X-Laundry-*`/`X-Laundrynavi-*`/`X-Laundrycenter-*`/`X-Laundryshop-*`/`X-Laundrypro-*`/`X-Sentaku-*`/`X-Sentakunavi-*`/`X-Sentakucenter-*`/`X-Sentakushop-*`/`X-Sentakupro-*`/`X-Washing-*`/`X-Washingnavi-*`/`X-Washingcenter-*`/`X-Washingshop-*`/`X-Washingpro-*`/`X-Landrie-*`/`X-Landrienavi-*`/`X-Landriecenter-*`/`X-Landrieshop-*`/`X-Landriepro-*`/`X-Hakuchou-*`/`X-Hakuchounavi-*`/`X-Hakuchoucenter-*`/`X-Hakuchoushop-*`/`X-Hakuchoupro-*`/`X-Fuwafuwa-*`/`X-Fuwafuwanavi-*`/`X-Fuwafuwa-center-*`/`X-Laundrymart-*`/`X-Laundryplus-*`/`X-Laundrysmart-*`/`X-Laundryfamily-*`/`X-Coinmart-*`/`X-Coinplus-*`/`X-Coinsmart-*`/`X-Coinfamily-*`/`X-Arainavi-*`/`X-Araicenter-*`/`X-Araishop-*`/`X-Araipro-*`/`X-Sentakuya-*`/`X-Sentakuyanavi-*`/`X-Sentakuyacenter-*`/`X-Sentakuyashop-*`/`X-Sentakuyapro-*`/`X-Washnavi-*`/`X-Washcenter-*`/`X-Washshop-*`/`X-Washpro-*`/`X-Cleanlaundry-*`/`X-Cleanlaundrynavi-*`/`X-Cleanlaundrycenter-*`/`X-Cleanlaundryshop-*`/`X-Cleanlaundrypro-*`/`X-Laundromat-*`/`X-Laundromatnavi-*`/`X-Laundromatcenter-*`/`X-Laundromatshop-*`/`X-Laundromatpro-*`/`X-Draimart-*`/`X-Draiplus-*`/`X-Draismart-*`/`X-Draifamily-*` 等のコインランドリー・洗濯印を送信側が自称する兆候を検出する
+fn has_laundry_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-coinlaundry-")
+            || l.starts_with("x-coinlaundrynavi-")
+            || l.starts_with("x-coinlaundrycenter-")
+            || l.starts_with("x-coinlaundryshop-")
+            || l.starts_with("x-coinlaundrypro-")
+            || l.starts_with("x-laundry-")
+            || l.starts_with("x-laundrynavi-")
+            || l.starts_with("x-laundrycenter-")
+            || l.starts_with("x-laundryshop-")
+            || l.starts_with("x-laundrypro-")
+            || l.starts_with("x-sentaku-")
+            || l.starts_with("x-sentakunavi-")
+            || l.starts_with("x-sentakucenter-")
+            || l.starts_with("x-sentakushop-")
+            || l.starts_with("x-sentakupro-")
+            || l.starts_with("x-washing-")
+            || l.starts_with("x-washingnavi-")
+            || l.starts_with("x-washingcenter-")
+            || l.starts_with("x-washingshop-")
+            || l.starts_with("x-washingpro-")
+            || l.starts_with("x-landrie-")
+            || l.starts_with("x-landrienavi-")
+            || l.starts_with("x-landriecenter-")
+            || l.starts_with("x-landrieshop-")
+            || l.starts_with("x-landriepro-")
+            || l.starts_with("x-hakuchou-")
+            || l.starts_with("x-hakuchounavi-")
+            || l.starts_with("x-hakuchoucenter-")
+            || l.starts_with("x-hakuchoushop-")
+            || l.starts_with("x-hakuchoupro-")
+            || l.starts_with("x-fuwafuwa-")
+            || l.starts_with("x-fuwafuwanavi-")
+            || l.starts_with("x-fuwafuwa-center-")
+            || l.starts_with("x-laundrymart-")
+            || l.starts_with("x-laundryplus-")
+            || l.starts_with("x-laundrysmart-")
+            || l.starts_with("x-laundryfamily-")
+            || l.starts_with("x-coinmart-")
+            || l.starts_with("x-coinplus-")
+            || l.starts_with("x-coinsmart-")
+            || l.starts_with("x-coinfamily-")
+            || l.starts_with("x-arainavi-")
+            || l.starts_with("x-araicenter-")
+            || l.starts_with("x-araishop-")
+            || l.starts_with("x-araipro-")
+            || l.starts_with("x-sentakuya-")
+            || l.starts_with("x-sentakuyanavi-")
+            || l.starts_with("x-sentakuyacenter-")
+            || l.starts_with("x-sentakuyashop-")
+            || l.starts_with("x-sentakuyapro-")
+            || l.starts_with("x-washnavi-")
+            || l.starts_with("x-washcenter-")
+            || l.starts_with("x-washshop-")
+            || l.starts_with("x-washpro-")
+            || l.starts_with("x-cleanlaundry-")
+            || l.starts_with("x-cleanlaundrynavi-")
+            || l.starts_with("x-cleanlaundrycenter-")
+            || l.starts_with("x-cleanlaundryshop-")
+            || l.starts_with("x-cleanlaundrypro-")
+            || l.starts_with("x-laundromat-")
+            || l.starts_with("x-laundromatnavi-")
+            || l.starts_with("x-laundromatcenter-")
+            || l.starts_with("x-laundromatshop-")
+            || l.starts_with("x-laundromatpro-")
+            || l.starts_with("x-draimart-")
+            || l.starts_with("x-draiplus-")
+            || l.starts_with("x-draismart-")
+            || l.starts_with("x-draifamily-"))
+}
+
+/// `X-Gamecenter-*`/`X-Gamecenternavi-*`/`X-Gamecentercenter-*`/`X-Gamecentershop-*`/`X-Gamecenterpro-*`/`X-Geesen-*`/`X-Geesennavi-*`/`X-Geesencenter-*`/`X-Geesenshop-*`/`X-Geesenpro-*`/`X-Gameworks-*`/`X-Gameworksnavi-*`/`X-Gameworkscenter-*`/`X-Gameworksshop-*`/`X-Gameworkspro-*`/`X-Esports-*`/`X-Esportsnavi-*`/`X-Esportscenter-*`/`X-Esportsshop-*`/`X-Esportspro-*`/`X-Purikura-*`/`X-Purikuranavi-*`/`X-Purikuracenter-*`/`X-Purikurashop-*`/`X-Purikurapro-*`/`X-Ufocatcher-*`/`X-Ufonavi-*`/`X-Ufocenter-*`/`X-Ufoshop-*`/`X-Ufopro-*`/`X-Crane-*`/`X-Cranenavi-*`/`X-Cranecenter-*`/`X-Craneshop-*`/`X-Cranepro-*`/`X-Medal-*`/`X-Medalnavi-*`/`X-Medalcenter-*`/`X-Medalshop-*`/`X-Medalpro-*`/`X-Taitostation-*`/`X-Taitostationnavi-*`/`X-Taitostationcenter-*`/`X-Namco-*`/`X-Namconavi-*`/`X-Namcocenter-*`/`X-Namcoshop-*`/`X-Namcopro-*`/`X-Adores-*`/`X-Adoresnavi-*`/`X-Adorescenter-*`/`X-Adoresshop-*`/`X-Adorespro-*`/`X-Gamecentermart-*`/`X-Gamecenterplus-*`/`X-Gamecentersmart-*`/`X-Gamecenterfamily-*`/`X-Geesenmart-*`/`X-Geesenplus-*`/`X-Geesensmart-*`/`X-Geesenfamily-*`/`X-Esportsmart-*`/`X-Esportsplus-*`/`X-Esportssmart-*`/`X-Esportsfamily-*`/`X-Kiyosumi-*`/`X-Kiyosuminavi-*`/`X-Kiyosumicenter-*`/`X-Kiyosumishop-*`/`X-Kiyosumipro-*`/`X-Arcade-*`/`X-Arcadenavi-*`/`X-Arcadecenter-*`/`X-Arcadeshop-*`/`X-Arcadepro-*`/`X-Gameparlor-*`/`X-Gameparlornavi-*`/`X-Gameparlorcenter-*`/`X-Gameparlorshop-*`/`X-Gameparlorpro-*` 等のゲームセンター・eスポーツ印を送信側が自称する兆候を検出する
+fn has_gamecenter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-gamecenter-")
+            || l.starts_with("x-gamecenternavi-")
+            || l.starts_with("x-gamecentercenter-")
+            || l.starts_with("x-gamecentershop-")
+            || l.starts_with("x-gamecenterpro-")
+            || l.starts_with("x-geesen-")
+            || l.starts_with("x-geesennavi-")
+            || l.starts_with("x-geesencenter-")
+            || l.starts_with("x-geesenshop-")
+            || l.starts_with("x-geesenpro-")
+            || l.starts_with("x-gameworks-")
+            || l.starts_with("x-gameworksnavi-")
+            || l.starts_with("x-gameworkscenter-")
+            || l.starts_with("x-gameworksshop-")
+            || l.starts_with("x-gameworkspro-")
+            || l.starts_with("x-esports-")
+            || l.starts_with("x-esportsnavi-")
+            || l.starts_with("x-esportscenter-")
+            || l.starts_with("x-esportsshop-")
+            || l.starts_with("x-esportspro-")
+            || l.starts_with("x-purikura-")
+            || l.starts_with("x-purikuranavi-")
+            || l.starts_with("x-purikuracenter-")
+            || l.starts_with("x-purikurashop-")
+            || l.starts_with("x-purikurapro-")
+            || l.starts_with("x-ufocatcher-")
+            || l.starts_with("x-ufonavi-")
+            || l.starts_with("x-ufocenter-")
+            || l.starts_with("x-ufoshop-")
+            || l.starts_with("x-ufopro-")
+            || l.starts_with("x-crane-")
+            || l.starts_with("x-cranenavi-")
+            || l.starts_with("x-cranecenter-")
+            || l.starts_with("x-craneshop-")
+            || l.starts_with("x-cranepro-")
+            || l.starts_with("x-medal-")
+            || l.starts_with("x-medalnavi-")
+            || l.starts_with("x-medalcenter-")
+            || l.starts_with("x-medalshop-")
+            || l.starts_with("x-medalpro-")
+            || l.starts_with("x-taitostation-")
+            || l.starts_with("x-taitostationnavi-")
+            || l.starts_with("x-taitostationcenter-")
+            || l.starts_with("x-namco-")
+            || l.starts_with("x-namconavi-")
+            || l.starts_with("x-namcocenter-")
+            || l.starts_with("x-namcoshop-")
+            || l.starts_with("x-namcopro-")
+            || l.starts_with("x-adores-")
+            || l.starts_with("x-adoresnavi-")
+            || l.starts_with("x-adorescenter-")
+            || l.starts_with("x-adoresshop-")
+            || l.starts_with("x-adorespro-")
+            || l.starts_with("x-gamecentermart-")
+            || l.starts_with("x-gamecenterplus-")
+            || l.starts_with("x-gamecentersmart-")
+            || l.starts_with("x-gamecenterfamily-")
+            || l.starts_with("x-geesenmart-")
+            || l.starts_with("x-geesenplus-")
+            || l.starts_with("x-geesensmart-")
+            || l.starts_with("x-geesenfamily-")
+            || l.starts_with("x-esportsmart-")
+            || l.starts_with("x-esportsplus-")
+            || l.starts_with("x-esportssmart-")
+            || l.starts_with("x-esportsfamily-")
+            || l.starts_with("x-kiyosumi-")
+            || l.starts_with("x-kiyosuminavi-")
+            || l.starts_with("x-kiyosumicenter-")
+            || l.starts_with("x-kiyosumishop-")
+            || l.starts_with("x-kiyosumipro-")
+            || l.starts_with("x-arcade-")
+            || l.starts_with("x-arcadenavi-")
+            || l.starts_with("x-arcadecenter-")
+            || l.starts_with("x-arcadeshop-")
+            || l.starts_with("x-arcadepro-")
+            || l.starts_with("x-gameparlor-")
+            || l.starts_with("x-gameparlornavi-")
+            || l.starts_with("x-gameparlorcenter-")
+            || l.starts_with("x-gameparlorshop-")
+            || l.starts_with("x-gameparlorpro-"))
+}
+
+/// `X-Sharehouse-*`/`X-Sharenavi-*`/`X-Sharehousecenter-*`/`X-Shareshop-*`/`X-Sharehousepro-*`/`X-Guesthouse-*`/`X-Guesthousenavi-*`/`X-Guesthousecenter-*`/`X-Guesthouseshop-*`/`X-Guesthousepro-*`/`X-Socialapartment-*`/`X-Socialapartmentnavi-*`/`X-Socialapartmentcenter-*`/`X-Oakhouse-*`/`X-Oakhousenavi-*`/`X-Oakhousecenter-*`/`X-Oakhouseshop-*`/`X-Oakhousepro-*`/`X-Hituji-*`/`X-Hitujinavi-*`/`X-Hitujicenter-*`/`X-Hitujishop-*`/`X-Hitujipro-*`/`X-Kyoudou-*`/`X-Kyoudounavi-*`/`X-Kyoudoucenter-*`/`X-Kyoudoushop-*`/`X-Kyoudoupro-*`/`X-Borderless-*`/`X-Borderlessnavi-*`/`X-Borderlesscenter-*`/`X-Borderlessshop-*`/`X-Borderlesspro-*`/`X-Sharemart-*`/`X-Shareplus-*`/`X-Sharesmart-*`/`X-Sharefamily-*`/`X-Monthlynavi-*`/`X-Monthlycenter-*`/`X-Monthlyshop-*`/`X-Monthlypro-*`/`X-Weekly-*`/`X-Weeklynavi-*`/`X-Weeklycenter-*`/`X-Weeklyshop-*`/`X-Weeklypro-*`/`X-Monthlymansion-*`/`X-Monthlymansionnavi-*`/`X-Monthlymansioncenter-*`/`X-Monthlymansionshop-*`/`X-Monthlymansionpro-*`/`X-Sharehousemart-*`/`X-Sharehouseplus-*`/`X-Sharehousesmart-*`/`X-Sharehousefamily-*`/`X-Guestmart-*`/`X-Guestplus-*`/`X-Guestsmart-*`/`X-Guestfamily-*`/`X-Roomshare-*`/`X-Roomsharenavi-*`/`X-Roomsharecenter-*`/`X-Roomshareshop-*`/`X-Roomsharepro-*`/`X-Kyousei-*`/`X-Kyouseitaku-*`/`X-Kyouseitakunavi-*`/`X-Kyouseitakucenter-*`/`X-Kyouseitakushop-*`/`X-Kyouseitakupro-*`/`X-Sharekan-*`/`X-Sharekannavi-*`/`X-Sharekancenter-*`/`X-Sharekanshop-*`/`X-Sharekanpro-*` 等のシェアハウス・ゲストハウス印を送信側が自称する兆候を検出する
+fn has_sharehouse_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-sharehouse-")
+            || l.starts_with("x-sharenavi-")
+            || l.starts_with("x-sharehousecenter-")
+            || l.starts_with("x-shareshop-")
+            || l.starts_with("x-sharehousepro-")
+            || l.starts_with("x-guesthouse-")
+            || l.starts_with("x-guesthousenavi-")
+            || l.starts_with("x-guesthousecenter-")
+            || l.starts_with("x-guesthouseshop-")
+            || l.starts_with("x-guesthousepro-")
+            || l.starts_with("x-socialapartment-")
+            || l.starts_with("x-socialapartmentnavi-")
+            || l.starts_with("x-socialapartmentcenter-")
+            || l.starts_with("x-oakhouse-")
+            || l.starts_with("x-oakhousenavi-")
+            || l.starts_with("x-oakhousecenter-")
+            || l.starts_with("x-oakhouseshop-")
+            || l.starts_with("x-oakhousepro-")
+            || l.starts_with("x-hituji-")
+            || l.starts_with("x-hitujinavi-")
+            || l.starts_with("x-hitujicenter-")
+            || l.starts_with("x-hitujishop-")
+            || l.starts_with("x-hitujipro-")
+            || l.starts_with("x-kyoudou-")
+            || l.starts_with("x-kyoudounavi-")
+            || l.starts_with("x-kyoudoucenter-")
+            || l.starts_with("x-kyoudoushop-")
+            || l.starts_with("x-kyoudoupro-")
+            || l.starts_with("x-borderless-")
+            || l.starts_with("x-borderlessnavi-")
+            || l.starts_with("x-borderlesscenter-")
+            || l.starts_with("x-borderlessshop-")
+            || l.starts_with("x-borderlesspro-")
+            || l.starts_with("x-sharemart-")
+            || l.starts_with("x-shareplus-")
+            || l.starts_with("x-sharesmart-")
+            || l.starts_with("x-sharefamily-")
+            || l.starts_with("x-monthlynavi-")
+            || l.starts_with("x-monthlycenter-")
+            || l.starts_with("x-monthlyshop-")
+            || l.starts_with("x-monthlypro-")
+            || l.starts_with("x-weekly-")
+            || l.starts_with("x-weeklynavi-")
+            || l.starts_with("x-weeklycenter-")
+            || l.starts_with("x-weeklyshop-")
+            || l.starts_with("x-weeklypro-")
+            || l.starts_with("x-monthlymansion-")
+            || l.starts_with("x-monthlymansionnavi-")
+            || l.starts_with("x-monthlymansioncenter-")
+            || l.starts_with("x-monthlymansionshop-")
+            || l.starts_with("x-monthlymansionpro-")
+            || l.starts_with("x-sharehousemart-")
+            || l.starts_with("x-sharehouseplus-")
+            || l.starts_with("x-sharehousesmart-")
+            || l.starts_with("x-sharehousefamily-")
+            || l.starts_with("x-guestmart-")
+            || l.starts_with("x-guestplus-")
+            || l.starts_with("x-guestsmart-")
+            || l.starts_with("x-guestfamily-")
+            || l.starts_with("x-roomshare-")
+            || l.starts_with("x-roomsharenavi-")
+            || l.starts_with("x-roomsharecenter-")
+            || l.starts_with("x-roomshareshop-")
+            || l.starts_with("x-roomsharepro-")
+            || l.starts_with("x-kyousei-")
+            || l.starts_with("x-kyouseitaku-")
+            || l.starts_with("x-kyouseitakunavi-")
+            || l.starts_with("x-kyouseitakucenter-")
+            || l.starts_with("x-kyouseitakushop-")
+            || l.starts_with("x-kyouseitakupro-")
+            || l.starts_with("x-sharekan-")
+            || l.starts_with("x-sharekannavi-")
+            || l.starts_with("x-sharekancenter-")
+            || l.starts_with("x-sharekanshop-")
+            || l.starts_with("x-sharekanpro-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -27259,5 +27518,58 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_petfuneral_marks(clean));
+    }
+    #[test]
+    fn scan_は洗機印を検出する() {
+        for raw in [
+            br"X-Coinlaundry-Alert: 1",
+            br"X-Laundry-Notice: 1",
+            br"X-LaundryNavi-Info: 1",
+            br"X-Sentaku-Report: 1",
+            br"X-Washing-Bulletin: 1",
+            br"X-Hakuchou-News: 1",
+            br"X-Fuwafuwa-Flash: 1",
+            br"X-Laundromat-Release: 1",
+        ] {
+            assert!(has_laundry_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_laundry_marks(clean));
+    }
+
+    #[test]
+    fn scan_は遊機印を検出する() {
+        for raw in [
+            br"X-Gamecenter-Alert: 1",
+            br"X-GamecenterNavi-Notice: 1",
+            br"X-Geesen-Info: 1",
+            br"X-Gameworks-Report: 1",
+            br"X-Esports-Bulletin: 1",
+            br"X-Purikura-News: 1",
+            br"X-Ufocatcher-Flash: 1",
+            br"X-Namco-Release: 1",
+        ] {
+            assert!(has_gamecenter_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_gamecenter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は舎機印を検出する() {
+        for raw in [
+            br"X-Sharehouse-Alert: 1",
+            br"X-Guesthouse-Notice: 1",
+            br"X-GuesthouseNavi-Info: 1",
+            br"X-Oakhouse-Report: 1",
+            br"X-Borderless-Bulletin: 1",
+            br"X-Weekly-News: 1",
+            br"X-Monthlymansion-Flash: 1",
+            br"X-Roomshare-Release: 1",
+        ] {
+            assert!(has_sharehouse_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_sharehouse_marks(clean));
     }
 }
