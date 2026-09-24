@@ -2212,6 +2212,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D764: ファクタリング・給与前払い印自称
+    if env.factoring_marks {
+        render_risks.push(
+            "X-Factoring-*/X-Kyuuyomae-*/X-Saikenjoto-*/X-InvoiceFinance-* 等 — 譲機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D765: 公認会計士・CPA印自称
+    if env.cpa_marks {
+        render_risks.push(
+            "X-Cpa-*/X-Kouninkaikeishi-*/X-Kaikeishi-* 等 — 会機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D766: 副業・内職斡旋印自称
+    if env.fukugyou_marks {
+        render_risks.push(
+            "X-Fukugyou-*/X-Naishoku-*/X-Sidejob-*/X-Sidehustle-* 等 — 副機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
