@@ -1931,6 +1931,12 @@ pub struct Envelope {
     pub spiritual_marks: bool,
     /// `X-Matsuri-*`/`X-Hanabi-*`/`X-Bonodori-*` 等の祭り・花火大会・縁日印を送信側が自称する兆候 (D709)
     pub matsuri_marks: bool,
+    /// `X-Nekocafe-*`/`X-Dogcafe-*`/`X-Owlcafe-*` 等の猫カフェ・動物カフェ印を送信側が自称する兆候 (D710)
+    pub nekocafe_marks: bool,
+    /// `X-Shichiya-*`/`X-Pawn-*`/`X-Pawnshop-*` 等の質屋・古物商・蚤の市印を送信側が自称する兆候 (D711)
+    pub shichiya_marks: bool,
+    /// `X-Escape-*`/`X-Escaperoom-*`/`X-Nazotoki-*` 等の脱出ゲーム・謎解き・ボードゲーム印を送信側が自称する兆候 (D712)
+    pub nazotoki_marks: bool,
 }
 
 /// An RFC 5322 address.
@@ -2518,6 +2524,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         sabage_marks: has_sabage_marks(hdr),
         spiritual_marks: has_spiritual_marks(hdr),
         matsuri_marks: has_matsuri_marks(hdr),
+        nekocafe_marks: has_nekocafe_marks(hdr),
+        shichiya_marks: has_shichiya_marks(hdr),
+        nazotoki_marks: has_nazotoki_marks(hdr),
     })
 }
 
@@ -20223,6 +20232,216 @@ fn has_matsuri_marks(raw: &[u8]) -> bool {
             || l.starts_with("x-shuttenplus-"))
 }
 
+fn has_nekocafe_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-nekocafe-")
+            || l.starts_with("x-dogcafe-")
+            || l.starts_with("x-owlcafe-")
+            || l.starts_with("x-catcafe-")
+            || l.starts_with("x-mameshiba-")
+            || l.starts_with("x-hedgehogcafe-")
+            || l.starts_with("x-harinezumi-")
+            || l.starts_with("x-kotsumate-")
+            || l.starts_with("x-birdscafe-")
+            || l.starts_with("x-owlvillage-")
+            || l.starts_with("x-capycafe-")
+            || l.starts_with("x-kotori-")
+            || l.starts_with("x-nekocafenavi-")
+            || l.starts_with("x-nekocafecenter-")
+            || l.starts_with("x-nekocafeshop-")
+            || l.starts_with("x-nekocafepro-")
+            || l.starts_with("x-nekocafemart-")
+            || l.starts_with("x-nekocafeplus-")
+            || l.starts_with("x-nekocafesmart-")
+            || l.starts_with("x-nekocafefamily-")
+            || l.starts_with("x-dogcafenavi-")
+            || l.starts_with("x-dogcafecenter-")
+            || l.starts_with("x-dogcafeshop-")
+            || l.starts_with("x-dogcafepro-")
+            || l.starts_with("x-dogcafemart-")
+            || l.starts_with("x-dogcafeplus-")
+            || l.starts_with("x-dogcafesmart-")
+            || l.starts_with("x-dogcafefamily-")
+            || l.starts_with("x-owlcafenavi-")
+            || l.starts_with("x-owlcafecenter-")
+            || l.starts_with("x-owlcafeshop-")
+            || l.starts_with("x-owlcafepro-")
+            || l.starts_with("x-owlcafemart-")
+            || l.starts_with("x-owlcafeplus-")
+            || l.starts_with("x-owlcafesmart-")
+            || l.starts_with("x-owlcafefamily-")
+            || l.starts_with("x-catcafenavi-")
+            || l.starts_with("x-catcafecenter-")
+            || l.starts_with("x-catcafeshop-")
+            || l.starts_with("x-catcafepro-")
+            || l.starts_with("x-catcafemart-")
+            || l.starts_with("x-catcafeplus-")
+            || l.starts_with("x-catcafesmart-")
+            || l.starts_with("x-catcafefamily-")
+            || l.starts_with("x-mameshibanavi-")
+            || l.starts_with("x-mameshibacenter-")
+            || l.starts_with("x-mameshibashop-")
+            || l.starts_with("x-mameshibapro-")
+            || l.starts_with("x-mameshibamart-")
+            || l.starts_with("x-mameshibaplus-")
+            || l.starts_with("x-mameshibasmart-")
+            || l.starts_with("x-mameshibafamily-")
+            || l.starts_with("x-hedgehogcafenavi-")
+            || l.starts_with("x-hedgehogcafecenter-")
+            || l.starts_with("x-hedgehogcafeshop-")
+            || l.starts_with("x-hedgehogcafepro-")
+            || l.starts_with("x-hedgehogcafemart-")
+            || l.starts_with("x-hedgehogcafeplus-")
+            || l.starts_with("x-hedgehogcafesmart-")
+            || l.starts_with("x-hedgehogcafefamily-")
+            || l.starts_with("x-harinezuminavi-")
+            || l.starts_with("x-harinezumicenter-"))
+}
+
+fn has_shichiya_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-shichiya-")
+            || l.starts_with("x-pawn-")
+            || l.starts_with("x-pawnshop-")
+            || l.starts_with("x-kobutsu-")
+            || l.starts_with("x-fleamarket-")
+            || l.starts_with("x-nominoichi-")
+            || l.starts_with("x-secondhand-")
+            || l.starts_with("x-reuse-")
+            || l.starts_with("x-recycle-")
+            || l.starts_with("x-furugi-")
+            || l.starts_with("x-vintage-")
+            || l.starts_with("x-kotto-")
+            || l.starts_with("x-flea-")
+            || l.starts_with("x-swapmeet-")
+            || l.starts_with("x-antiquemarket-")
+            || l.starts_with("x-shichiyanavi-")
+            || l.starts_with("x-shichiyacenter-")
+            || l.starts_with("x-shichiyashop-")
+            || l.starts_with("x-shichiyapro-")
+            || l.starts_with("x-shichiyamart-")
+            || l.starts_with("x-shichiyaplus-")
+            || l.starts_with("x-shichiyasmart-")
+            || l.starts_with("x-shichiyafamily-")
+            || l.starts_with("x-pawnnavi-")
+            || l.starts_with("x-pawncenter-")
+            || l.starts_with("x-pawnshop-")
+            || l.starts_with("x-pawnpro-")
+            || l.starts_with("x-pawnmart-")
+            || l.starts_with("x-pawnplus-")
+            || l.starts_with("x-pawnsmart-")
+            || l.starts_with("x-pawnfamily-")
+            || l.starts_with("x-pawnshopnavi-")
+            || l.starts_with("x-pawnshopcenter-")
+            || l.starts_with("x-pawnshopshop-")
+            || l.starts_with("x-pawnshoppro-")
+            || l.starts_with("x-pawnshopmart-")
+            || l.starts_with("x-pawnshopplus-")
+            || l.starts_with("x-pawnshopsmart-")
+            || l.starts_with("x-pawnshopfamily-")
+            || l.starts_with("x-kobutsunavi-")
+            || l.starts_with("x-kobutsucenter-")
+            || l.starts_with("x-kobutsushop-")
+            || l.starts_with("x-kobutsupro-")
+            || l.starts_with("x-kobutsumart-")
+            || l.starts_with("x-kobutsuplus-")
+            || l.starts_with("x-kobutsusmart-")
+            || l.starts_with("x-kobutsufamily-")
+            || l.starts_with("x-fleamarketnavi-")
+            || l.starts_with("x-fleamarketcenter-")
+            || l.starts_with("x-fleamarketshop-")
+            || l.starts_with("x-fleamarketpro-")
+            || l.starts_with("x-fleamarketmart-")
+            || l.starts_with("x-fleamarketplus-")
+            || l.starts_with("x-fleamarketsmart-")
+            || l.starts_with("x-fleamarketfamily-")
+            || l.starts_with("x-nominoichinavi-")
+            || l.starts_with("x-nominoichicenter-")
+            || l.starts_with("x-nominoichishop-")
+            || l.starts_with("x-nominoichipro-")
+            || l.starts_with("x-nominoichimart-")
+            || l.starts_with("x-nominoichiplus-")
+            || l.starts_with("x-nominoichismart-"))
+}
+
+fn has_nazotoki_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.to_ascii_lowercase();
+    let header = head.split("\r\n\r\n").next().unwrap_or("");
+    header
+        .lines()
+        .any(|l| l.starts_with("x-escape-")
+            || l.starts_with("x-escaperoom-")
+            || l.starts_with("x-nazotoki-")
+            || l.starts_with("x-nazo-")
+            || l.starts_with("x-realdasshutsu-")
+            || l.starts_with("x-jinro-")
+            || l.starts_with("x-werewolf-")
+            || l.starts_with("x-boardgame-")
+            || l.starts_with("x-dicecafe-")
+            || l.starts_with("x-mystery-")
+            || l.starts_with("x-puzzle-")
+            || l.starts_with("x-treasurehunt-")
+            || l.starts_with("x-riddle-")
+            || l.starts_with("x-scav-")
+            || l.starts_with("x-spygame-")
+            || l.starts_with("x-escapenavi-")
+            || l.starts_with("x-escapecenter-")
+            || l.starts_with("x-escapeshop-")
+            || l.starts_with("x-escapepro-")
+            || l.starts_with("x-escapemart-")
+            || l.starts_with("x-escapeplus-")
+            || l.starts_with("x-escapesmart-")
+            || l.starts_with("x-escapefamily-")
+            || l.starts_with("x-escaperoomnavi-")
+            || l.starts_with("x-escaperoomcenter-")
+            || l.starts_with("x-escaperoomshop-")
+            || l.starts_with("x-escaperoompro-")
+            || l.starts_with("x-escaperoommart-")
+            || l.starts_with("x-escaperoomplus-")
+            || l.starts_with("x-escaperoomsmart-")
+            || l.starts_with("x-escaperoomfamily-")
+            || l.starts_with("x-nazotokinavi-")
+            || l.starts_with("x-nazotokicenter-")
+            || l.starts_with("x-nazotokishop-")
+            || l.starts_with("x-nazotokipro-")
+            || l.starts_with("x-nazotokimart-")
+            || l.starts_with("x-nazotokiplus-")
+            || l.starts_with("x-nazotokismart-")
+            || l.starts_with("x-nazotokifamily-")
+            || l.starts_with("x-nazonavi-")
+            || l.starts_with("x-nazocenter-")
+            || l.starts_with("x-nazoshop-")
+            || l.starts_with("x-nazopro-")
+            || l.starts_with("x-nazomart-")
+            || l.starts_with("x-nazoplus-")
+            || l.starts_with("x-nazosmart-")
+            || l.starts_with("x-nazofamily-")
+            || l.starts_with("x-realdasshutsunavi-")
+            || l.starts_with("x-realdasshutsucenter-")
+            || l.starts_with("x-realdasshutsushop-")
+            || l.starts_with("x-realdasshutsupro-")
+            || l.starts_with("x-realdasshutsumart-")
+            || l.starts_with("x-realdasshutsuplus-")
+            || l.starts_with("x-realdasshutsusmart-")
+            || l.starts_with("x-realdasshutsufamily-")
+            || l.starts_with("x-jinronavi-")
+            || l.starts_with("x-jinrocenter-")
+            || l.starts_with("x-jinroshop-")
+            || l.starts_with("x-jinropro-")
+            || l.starts_with("x-jinromart-")
+            || l.starts_with("x-jinroplus-")
+            || l.starts_with("x-jinrosmart-"))
+}
+
 fn addr_to_address(addr: &mail_parser::Addr<'_>) -> Option<Address> {
     let email = addr.address.as_deref()?;
     // RFC 5321: quoted local parts can contain '@' (e.g. "ceo@corp"@attacker.com).
@@ -30300,6 +30519,60 @@ body";
         }
         let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
         assert!(!has_matsuri_marks(clean));
+    }
+
+    #[test]
+    fn scan_は猫機印を検出する() {
+        for raw in [
+            br"X-Nekocafe-Alert: 1",
+            br"X-Dogcafe-Notice: 1",
+            br"X-Owlcafe-Info: 1",
+            br"X-Catcafe-Report: 1",
+            br"X-Mameshiba-Bulletin: 1",
+            br"X-Hedgehogcafe-News: 1",
+            br"X-Harinezumi-Flash: 1",
+            br"X-Kotori-Release: 1",
+        ] {
+            assert!(has_nekocafe_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_nekocafe_marks(clean));
+    }
+
+    #[test]
+    fn scan_は質機印を検出する() {
+        for raw in [
+            br"X-Shichiya-Alert: 1",
+            br"X-Pawn-Notice: 1",
+            br"X-Pawnshop-Info: 1",
+            br"X-Kobutsu-Report: 1",
+            br"X-Fleamarket-Bulletin: 1",
+            br"X-Secondhand-News: 1",
+            br"X-Vintage-Flash: 1",
+            br"X-Flea-Release: 1",
+        ] {
+            assert!(has_shichiya_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_shichiya_marks(clean));
+    }
+
+    #[test]
+    fn scan_は謎機印を検出する() {
+        for raw in [
+            br"X-Escape-Alert: 1",
+            br"X-Escaperoom-Notice: 1",
+            br"X-Nazotoki-Info: 1",
+            br"X-Jinro-Report: 1",
+            br"X-Werewolf-Bulletin: 1",
+            br"X-Boardgame-News: 1",
+            br"X-Mystery-Flash: 1",
+            br"X-Puzzle-Release: 1",
+        ] {
+            assert!(has_nazotoki_marks(raw));
+        }
+        let clean = b"From: noreply@example.com\r\nX-Generic-Header: 1\r\n\r\nbody";
+        assert!(!has_nazotoki_marks(clean));
     }
 
 }

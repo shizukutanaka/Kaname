@@ -2926,6 +2926,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    // D710: 猫カフェ・動物カフェ印自称
+    if env.nekocafe_marks {
+        render_risks.push(
+            "X-Nekocafe-*/X-Dogcafe-*/X-Owlcafe-*/X-Catcafe-*/X-Mameshiba-*/X-Hedgehogcafe-*/X-Harinezumi-*/X-Kotori-* 等 — 猫機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D711: 質屋・古物商・蚤の市印自称
+    if env.shichiya_marks {
+        render_risks.push(
+            "X-Shichiya-*/X-Pawn-*/X-Pawnshop-*/X-Kobutsu-*/X-Fleamarket-*/X-Secondhand-*/X-Vintage-*/X-Flea-* 等 — 質機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+    // D712: 脱出ゲーム・謎解き・ボードゲーム印自称
+    if env.nazotoki_marks {
+        render_risks.push(
+            "X-Escape-*/X-Escaperoom-*/X-Nazotoki-*/X-Jinro-*/X-Werewolf-*/X-Boardgame-*/X-Mystery-*/X-Puzzle-* 等 — 謎機の通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
     render_risks.extend(evaluate_link_risks(&urls));
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
