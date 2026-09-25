@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,77 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1016: 不正 base64 — base64 宣言の本文にアルファベット外文字
+    //   (厳格/寛容パーサで解釈が分かれる parser differential)
+    if env.malformed_base64 {
+        render_risks.push(
+            "base64 宣言の本文に base64 文字以外が含まれています — 宣言と内容が食い違う手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1017: 不正 quoted-printable — `=` の後に 16進2桁も改行も続かない
+    if env.malformed_qp {
+        render_risks.push(
+            "quoted-printable 宣言の本文に不正な `=` エスケープが複数あります — QP 規則を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1018: CR 単独行末 — 旧 Mac 形式か手作り生成品 (Internet mail は CRLF)
+    if env.bare_cr_lines {
+        render_risks.push(
+            "行末が CR 単独 (\\r のみ) の箇所が複数あります — CRLF を欠く旧形式・手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1019: BOM と charset の不整合 — utf-16/32 BOM があるのに
+    //   宣言 charset が utf-16/32 でない (charset confusion)
+    if env.charset_bom_mismatch {
+        render_risks.push(
+            "本文が UTF-16/UTF-32 BOM で始まりますが、宣言 charset が異なります — エンコーディングを読み替える charset confusion の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1020: 受領通知リダイレクト — Return-Receipt-To/X-Confirm-Reading-To
+    //   で通知の送り先を書換え (Reply-To リダイレクトと同型)
+    if env.receipt_redirect {
+        render_risks.push(
+            "Return-Receipt-To/X-Confirm-Reading-To — 受領通知の送り先を別アドレスに振り向ける宣言の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1022: mbox 形式の混入 — 先頭行が `From ` (コロンなし) の
+    //   mbox ストア区切り行 (RFC 5322 メールではない別形式)
+    if env.mbox_from_line {
+        render_risks.push(
+            "先頭行が mbox 形式の `From ` 行です — メールではなく mbox ストア形式の混入・手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1021: 件名中の URL — 件名に http(s) を含むのは通常の対話では
+    //   稀で、リンク誘導目的のキャンペーン型メールの兆候
+    if subject.to_lowercase().contains("http://")
+        || subject.to_lowercase().contains("https://")
+    {
+        render_risks.push(
+            "件名に URL が含まれています — 開封させるためのリンク誘導型メールの兆候です".to_string(),
+        );
+    }
+
+    // D1015: スキャン判定印の自称 — 「クリーンと検査済み」の判定結果を
+    //   送信側が自称 (DMARC 認証済みでは外される自称系)
+    if env.spamverdict_marks {
+        render_risks.push(
+            "X-Spam-Status/X-Spam-Flag/X-Spam-Score/X-Spam-Bar/X-AV-Status/X-Sophos-/X-Kaspersky- 等 — スキャン判定機の検証結果を送信側が自称する兆候です"
                 .to_string(),
         );
     }

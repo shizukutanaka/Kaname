@@ -119,6 +119,39 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Content-Transfer-Encoding: base64` 宣言の単一パート本文に
+    /// base64 アルファベット外の文字がある (D1016)。
+    ///
+    /// 宣言と内容の不整合 — 厳格パーサと寛容パーサで解釈が
+    /// 分かれる parser differential の兆候。
+    pub malformed_base64: bool,
+    /// `Content-Transfer-Encoding: quoted-printable` 宣言の本文に
+    /// `=` の後に 16 進 2 桁も改行も続かない箇所が複数ある (D1017)。
+    ///
+    /// QP の `=` は `=HH` か soft break `=\r\n` 以外あり得ない —
+    /// 手作り生成品の兆候。
+    pub malformed_qp: bool,
+    /// CR (`\r`) 単独の行末が複数ある (D1018)。
+    ///
+    /// Internet mail は CRLF か LF — 旧 Mac 形式の CR 単独行は
+    /// 手作り生成品・別形式ファイル混入の兆候。
+    pub bare_cr_lines: bool,
+    /// 本文先頭に UTF-16/UTF-32 BOM があり、宣言 charset が
+    /// utf-16/utf-32 でない (D1019)。
+    ///
+    /// 宣言 charset と実体の不一致 — 受信側が別エンコーディングで
+    /// 解釈して中身が読み替えられる charset confusion の兆候。
+    pub charset_bom_mismatch: bool,
+    /// `Return-Receipt-To:`/`X-Confirm-Reading-To:` がある (D1020)。
+    ///
+    /// 受領通知を送信元と別アドレスへ振り向ける宣言 — Reply-To
+    /// リダイレクトと同型の経路書換え兆候。
+    pub receipt_redirect: bool,
+    /// 先頭行が mbox 形式の `From ` 行 (D1022)。
+    ///
+    /// メール本体ではなく mbox ストア形式 — 別形式ファイルの
+    /// 混入・手作り生成品の兆候。
+    pub mbox_from_line: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -134,6 +167,12 @@ pub struct Envelope {
     /// `X-Spam-Probability:`/`X-Spam-Rating:` 等の SA 詳細判定値があるか —
     /// 判定機の内訳値を送信側が自称する兆候 (D363)。
     pub spam_detail_marks: bool,
+    /// `X-Spam-Status:`/`X-Spam-Flag:`/`X-Spam-Score:`/`X-Spam-Bar:`/
+    /// `X-Spam-Level:`/`X-Virus-Scanned:`/`X-AV-Status:`/`X-AV-Warning:`/
+    /// `X-Sophos-*`/`X-Kaspersky-*` 等のスキャン判定印があるか —
+    /// 「クリーンと検査済み」の判定結果を送信側が自称する兆候 (D1015)。
+    /// (AV ベンダー印の多くは既存の virus_scan/av3/appliance4 系が担う)
+    pub spamverdict_marks: bool,
     /// `X-DCC-*` 等の DCC チェックサム印があるか — 分散検査基盤の
     /// 印を送信側が自称する兆候 (D364)。
     pub dcc_marks: bool,
@@ -2035,10 +2074,18 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        // D1016-D1019・D1022 は本文側の byte 列が必要なため raw を受け取る
+        malformed_base64: has_malformed_base64(raw),
+        malformed_qp: has_malformed_qp(raw),
+        bare_cr_lines: has_bare_cr_lines(raw),
+        charset_bom_mismatch: has_charset_bom_mismatch(raw),
+        mbox_from_line: has_mbox_from_line(raw),
+        receipt_redirect: has_receipt_redirect(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
         spam_detail_marks: has_spam_detail_marks(hdr),
+        spamverdict_marks: has_spamverdict_marks(hdr),
         dcc_marks: has_dcc_marks(hdr),
         autogen_marks: has_autogen_marks(hdr),
         esp2_stamps: has_esp2_stamps(hdr),
@@ -2401,6 +2448,205 @@ fn has_feedback_id(raw: &[u8]) -> bool {
 /// SpamAssassin が判定の内訳として記す値 — 送信側から届くこれは
 /// 「内訳まで判定済み」の体裁を内容側が主張する自称
 /// (D342 SA 印の詳細版)。
+/// `X-Spam-Status:`/`X-Spam-Flag:`/`X-Spam-Score:`/`X-Spam-Bar:`/
+/// `X-Spam-Level:`/`X-Virus-Scanned:`/`X-AV-Status:`/`X-AV-Warning:`/
+/// `X-Sophos-*`/`X-Kaspersky-*` 等のスキャン判定印があるか (D1015)。
+///
+/// 「クリーンと検査済み」の判定結果を送信側が自称する兆候。
+/// `X-Spam-Report:` 等の内訳値は D363 (spam_detail_marks)、
+/// `X-Spam-Notice:` は通知印、AV ベンダー印は virus_scan/av3/
+/// appliance4 系 — こちらはそれらが拾わない判定印の残りを担う
+/// (既存系との重複 prefix は意図的に除く)。
+fn has_spamverdict_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spam-status:")
+            || l.starts_with("x-spam-flag:")
+            || l.starts_with("x-spam-score:")
+            || l.starts_with("x-spam-bar:")
+            || l.starts_with("x-spam-level:")
+            || l.starts_with("x-virus-scanned:")
+            || l.starts_with("x-av-status:")
+            || l.starts_with("x-av-warning:")
+            || l.starts_with("x-sophos-")
+            || l.starts_with("x-kaspersky-")
+    })
+}
+
+/// `Return-Receipt-To:`/`X-Confirm-Reading-To:` があるか (D1020)。
+///
+/// 受領通知を送信元と別アドレスへ振り向ける宣言 — Reply-To
+/// リダイレクトと同型の経路書換え兆候。
+/// (`Disposition-Notification-To`/`Return-Receipt-Requested` 系の
+/// MDN 要求とは別 — こちらは通知の「送り先」書換え)
+fn has_receipt_redirect(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("return-receipt-to:") || l.starts_with("x-confirm-reading-to:"))
+}
+
+/// `Content-Transfer-Encoding: base64` 宣言の単一パート本文に
+/// base64 アルファベット外の文字があるか (D1016)。
+///
+/// 宣言と内容の不整合 — 厳格パーサはエラー、寛容パーサは文字を
+/// 捨てて読み進めるため、受信側実装によって中身が変わる
+/// parser differential の兆候。multipart は各パートが別 CTE を
+/// 持つため単一パート (multipart 宣言無し) のみ判定する。
+pub fn has_malformed_base64(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    // multipart 宣言・CTE base64 宣言の有無
+    let mut declared = false;
+    let mut is_multipart = false;
+    for l in header.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart") {
+            is_multipart = true;
+        }
+        if l.starts_with("content-transfer-encoding:") && l.contains("base64") {
+            declared = true;
+        }
+    }
+    if !declared || is_multipart {
+        return false;
+    }
+    // 本文 (ヘッダ部直後) — 各行が base64 アルファベット+空白+
+    // `=` パディングのみで構成されるか
+    lower[header_end..]
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .any(|l| {
+            l.chars().any(|c| {
+                !c.is_ascii_alphanumeric()
+                    && c != '+'
+                    && c != '/'
+                    && c != '='
+                    && !c.is_whitespace()
+            })
+        })
+}
+
+/// `Content-Transfer-Encoding: quoted-printable` 宣言の本文に、
+/// `=` の後に 16 進 2 桁も改行も続かない箇所が複数あるか (D1017)。
+///
+/// QP の `=` は `=HH` か soft break `=\r\n` 以外あり得ない — 裸の
+/// `=` が複数あるのは手作り生成品の兆候 (誤検を避けるため
+/// 3 箇所以上で判定)。
+pub fn has_malformed_qp(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let declared = header.lines().any(|l| {
+        l.starts_with("content-transfer-encoding:")
+            && l.contains("quoted-printable")
+    });
+    let is_multipart = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart")
+    });
+    if !declared || is_multipart {
+        return false;
+    }
+    let body = &text[header_end..];
+    let bytes = body.as_bytes();
+    let mut bad = 0usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'=' {
+            let ok_pair = i + 2 < bytes.len()
+                && bytes[i + 1].is_ascii_hexdigit()
+                && bytes[i + 2].is_ascii_hexdigit();
+            let ok_break = (i + 1 < bytes.len() && bytes[i + 1] == b'\n')
+                || (i + 2 < bytes.len() && bytes[i + 1] == b'\r' && bytes[i + 2] == b'\n')
+                || i + 1 == bytes.len();
+            if !ok_pair && !ok_break {
+                bad += 1;
+            }
+        }
+        i += 1;
+    }
+    bad >= 3
+}
+
+/// CR (`\r`) 単独の行末が複数あるか (D1018)。
+///
+/// Internet mail の行末は CRLF — LF 単独も一部の Unix 生成物で
+/// 見られるが、CR 単独は旧 Mac (OS 9 以前) 形式か手作り生成品の
+/// 兆候 (誤検を避けるため 3 箇所以上で判定)。
+pub fn has_bare_cr_lines(raw: &[u8]) -> bool {
+    let mut count = 0usize;
+    for (i, &b) in raw.iter().enumerate() {
+        if b == b'\r' && raw.get(i + 1) != Some(&b'\n') {
+            count += 1;
+        }
+    }
+    count >= 3
+}
+
+/// 本文先頭に UTF-16/UTF-32 BOM があり、宣言 charset が
+/// utf-16/utf-32 でないか (D1019)。
+///
+/// 宣言 charset と実体の不一致 — 受信側が宣言側で解釈すると
+/// 中身が文字化けするが、BOM から別解釈すると読める、という
+/// charset confusion の兆候。
+pub fn has_charset_bom_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    // utf-16/utf-32 宣言があれば BOM は正当
+    let utf16_declared = header.contains("utf-16") || header.contains("utf-32");
+    if utf16_declared {
+        return false;
+    }
+    let body = &raw[header_end..];
+    // 先頭の空白行を飛ばして最初のバイトを見る
+    let mut start = 0usize;
+    while start < body.len()
+        && matches!(body[start], b'\r' | b'\n' | b' ' | b'\t')
+    {
+        start += 1;
+    }
+    let b = &body[start..];
+    b.starts_with(b"\xFF\xFE")
+        || b.starts_with(b"\xFE\xFF")
+        || b.starts_with(b"\xFF\xFE\x00\x00")
+        || b.starts_with(b"\x00\x00\xFE\xFF")
+}
+
+/// 先頭行が mbox 形式の `From ` 行か (D1022)。
+///
+/// mbox ストアは各メッセージを `From sender@example.com <date>` で
+/// 始める — メール本体 (RFC 5322) の先頭に来るのは `From:` ヘッダ
+/// だけなので、`From ` (コロン無し) で始まるのは mbox ファイルの
+/// 混入・手作り生成品の兆候。
+pub fn has_mbox_from_line(raw: &[u8]) -> bool {
+    raw.starts_with(b"From ")
+}
+
 fn has_spam_detail_marks(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let lower = text.to_ascii_lowercase();
@@ -15306,6 +15552,123 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    // ---- D1015: スキャン判定印の自称 ----
+    #[test]
+    fn scan_はスキャン判定印を検出する() {
+        let v1 = b"X-Spam-Status: No\r\n\r\nx";
+        assert!(has_spamverdict_marks(v1));
+        let v2 = b"X-Spam-Flag: NO\r\n\r\nx";
+        assert!(has_spamverdict_marks(v2));
+        let v3 = b"X-Spam-Bar: +++\r\n\r\nx";
+        assert!(has_spamverdict_marks(v3));
+        let v4 = b"X-AV-Status: clean\r\n\r\nx";
+        assert!(has_spamverdict_marks(v4));
+        let v5 = b"X-Sophos-AV-Version: 5.0\r\n\r\nx";
+        assert!(has_spamverdict_marks(v5));
+        // AV ベンダー印・状態印は既存の virus_scan/av3/appliance4 系が
+        // 担う — 重複 prefix は本判定の対象外
+        let dup = b"X-Virus-Status: Clean\r\n\r\nx";
+        assert!(!has_spamverdict_marks(dup));
+        // 内訳値 (D363 — x-spam-score-details は x-spam-score: とは別 prefix)
+        let det = b"X-Spam-Report: tests=x\r\n\r\nx";
+        assert!(!has_spamverdict_marks(det));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_spamverdict_marks(clean));
+    }
+
+    // ---- D1016: 不正 base64 ----
+    #[test]
+    fn scan_は不正base64を検出する() {
+        // base64 宣言の本文にアルファベット外文字 → 宣言と内容の不整合
+        let bad = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nSGVsbG8=<script>alert(1)</script>\r\n";
+        assert!(has_malformed_base64(bad));
+        // 正規 base64
+        let ok = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nSGVsbG8gd29ybGQ=\r\n";
+        assert!(!has_malformed_base64(ok));
+        // multipart はパート毎 CTE のため対象外
+        let mp = b"Content-Type: multipart/mixed; boundary=\"B\"\r\nContent-Transfer-Encoding: base64\r\n\r\nSGVsbG8=@@@\r\n";
+        assert!(!has_malformed_base64(mp));
+        // base64 宣言なし
+        let none = b"Content-Type: text/plain\r\n\r\nplain text <>\r\n";
+        assert!(!has_malformed_base64(none));
+    }
+
+    // ---- D1017: 不正 quoted-printable ----
+    #[test]
+    fn scan_は不正qpを検出する() {
+        // `=` の後に 16進2桁も改行も続かない箇所が複数 → 手作り生成
+        let bad = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\na=Gb=Hc=I\r\n";
+        assert!(has_malformed_qp(bad));
+        // =HH と soft break は正当
+        let ok = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\na=20b=0Ac=\r\nd\r\n";
+        assert!(!has_malformed_qp(ok));
+        // QP 宣言なし
+        let none = b"Content-Type: text/plain\r\n\r\na=b=c=d=e=f\r\n";
+        assert!(!has_malformed_qp(none));
+        // multipart はパート毎 CTE のため対象外
+        let mp = b"Content-Type: multipart/mixed; boundary=\"B\"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\na=Gb=Hc=I\r\n";
+        assert!(!has_malformed_qp(mp));
+    }
+
+    // ---- D1018: CR 単独行末 ----
+    #[test]
+    fn scan_はCR単独行を検出する() {
+        // 旧 Mac 形式 — \r のみの行末が複数
+        let mac = b"Subject: x\rBody line\rAnother\rLast";
+        assert!(has_bare_cr_lines(mac));
+        // CRLF は正当
+        let crlf = b"Subject: x\r\n\r\nbody\r\n";
+        assert!(!has_bare_cr_lines(crlf));
+        // LF 単独も対象外
+        let lf = b"Subject: x\n\nbody\n";
+        assert!(!has_bare_cr_lines(lf));
+        // 偶発的な 1-2 個は閾値未満
+        let few = b"Subject: x\r\r\ny\r\n";
+        assert!(!has_bare_cr_lines(few));
+    }
+
+    // ---- D1019: BOM / charset 不整合 ----
+    #[test]
+    fn scan_はBOM矛盾を検出する() {
+        // utf-8 宣言だが本文が UTF-16LE BOM で始まる
+        let m = b"Content-Type: text/plain; charset=utf-8\r\n\r\n\xFF\xFEh\x00i\x00";
+        assert!(has_charset_bom_mismatch(m));
+        // utf-16 宣言があれば BOM は正当
+        let ok = b"Content-Type: text/plain; charset=utf-16\r\n\r\n\xFF\xFEh\x00i\x00";
+        assert!(!has_charset_bom_mismatch(ok));
+        // BOM なし
+        let none = b"Content-Type: text/plain\r\n\r\nhello";
+        assert!(!has_charset_bom_mismatch(none));
+        // UTF-16BE BOM も検出
+        let be = b"Content-Type: text/plain\r\n\r\n\xFE\xFF\x00h\x00i";
+        assert!(has_charset_bom_mismatch(be));
+    }
+
+    // ---- D1020: 受領通知リダイレクト ----
+    #[test]
+    fn scan_は受領先変更を検出する() {
+        let r1 = b"Return-Receipt-To: attacker@evil.example\r\n\r\nx";
+        assert!(has_receipt_redirect(r1));
+        let r2 = b"X-Confirm-Reading-To: attacker@evil.example\r\n\r\nx";
+        assert!(has_receipt_redirect(r2));
+        // 通知「要求」ヘッダ (送り先ではなく要請) は対象外
+        let req = b"Disposition-Notification-To: a@b\r\n\r\nx";
+        assert!(!has_receipt_redirect(req));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_receipt_redirect(clean));
+    }
+
+    // ---- D1022: mbox From 行 ----
+    #[test]
+    fn scan_はmbox形式を検出する() {
+        // mbox 区切り行で始まる (コロンなしの `From `)
+        let mbox = b"From sender@example.com Fri Sep 25 00:00:00 2026\r\nFrom: a@b\r\n\r\nx";
+        assert!(has_mbox_from_line(mbox));
+        // RFC 5322 の From: ヘッダは対象外
+        let normal = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mbox_from_line(normal));
     }
 
     #[test]

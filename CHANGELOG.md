@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1015–D1022: エンコーディング不正・形式混入・判定結果自称の未検査兆候 8 件
+
+- **問題**: 「クリーンと検査済み」のスキャン判定印 (`X-Spam-Status`/`X-Spam-Flag`/`X-Virus-Status`/`X-AV-*` 等) ・base64/quoted-printable 宣言と実体の不整合 (アルファベット外文字・不正 `=` エスケープ)・CR 単独行末 (旧 Mac 形式)・UTF-16/32 BOM と宣言 charset の不一致・受領通知を別アドレスへ振り向ける `Return-Receipt-To`/`X-Confirm-Reading-To`・件名中の URL・mbox 形式 `From ` 行の混入のいずれも兆候として報告されなかった。(参考: MIME parser differential 系・mbox/RFC 5322 形式混入・スキャン判定ヘッダ偽装・Receipt リダイレクト)
+- **修正**: `has_spamverdict_marks` (判定印 prefix 群 — `x-spam-status:`/`x-spam-flag:`/`x-spam-score:`/`x-spam-bar:`/`x-spam-level:`/`x-virus-scanned:`/`x-av-status:`/`x-av-warning:`/`x-sophos-`/`x-kaspersky-` 10 系 — AV ベンダー印は既存の virus_scan/av3/appliance4 系との重複を除く)・`has_malformed_base64`・`has_malformed_qp` (裸 `=` 3 箇所以上)・`has_bare_cr_lines` (CR 単独 3 箇所以上)・`has_charset_bom_mismatch`・`has_receipt_redirect`・`has_mbox_from_line` を `kaname-render` に追加。`Envelope` に 7 フィールド (spamverdict_marks は self-claim 系 — DMARC ゲート適用、残り 6 は構造異常) 追加。`commands.rs` で 8 件を render_risks 兆候報告 (multipart は各パートが別 CTE を持つため単一パートのみ判定し誤検を抑止)。D237 の `html_text` 参照バグも修正 (D960 と同一修復)。
+- **教訓**: 宣言と実体の食い違いは「どちらが本物か」を問え — base64 宣言に平文を・utf-8 宣言に UTF-16 BOM を・メール形式に mbox を紛れ込ませるのは解釈をずらす定形。スキャン結果はスキャナが書く — 送信側が書く判定印は自称。「返す先」を変える宣言は Reply-To と同型の経路書換えと見なせ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
