@@ -295,6 +295,87 @@ pub fn zip_has_encrypted_entries(bytes: &[u8]) -> bool {
     false
 }
 
+/// バイト列が PDF ファイルか判定する (拡張子または `%PDF-` マジック)。
+///
+/// Securelist (2025-10) が報告する通り、PDF 添付は量産・標的型の両方で
+/// 急増しており、QR コード埋め込みやパスワード保護での検査回避が
+/// 確認されている。中身の検査を入口にするため判定自体は別関数に分ける。
+#[must_use]
+pub fn is_pdf_file(filename: &str, bytes: &[u8]) -> bool {
+    filename.to_ascii_lowercase().ends_with(".pdf") || bytes.starts_with(b"%PDF-")
+}
+
+/// PDF の名前トークン (`/Name`) をバイト列内で検索する。
+///
+/// PDF の間接オブジェクトは圧縮されていなければ平文で現れるため
+/// 単純走査で検出できる (オブジェクトストリーム圧縮された PDF では
+/// 検出できない — ベストエフォートの静的検査)。
+///
+/// 後続バイトが ASCII 英字なら別トークンの接頭辞とみなして除外する
+/// (`/JS` が `/JScript` 系の別名と衝突しないため)。なお `/Encrypt` の
+/// 直後は数字 (`/Encrypt 12 0 R`)・空白・`[` が続くためこの条件で
+/// 正しく拾える。
+fn contains_pdf_token(bytes: &[u8], token: &[u8]) -> bool {
+    let mut start = 0usize;
+    while let Some(off) = bytes[start..].windows(token.len()).position(|w| w == token) {
+        let pos = start + off;
+        let next_ok = bytes
+            .get(pos + token.len())
+            .is_none_or(|&b| !b.is_ascii_alphabetic());
+        if next_ok {
+            return true;
+        }
+        start = pos + 1;
+    }
+    false
+}
+
+/// PDF が暗号化されているか (`/Encrypt` 辞書エントリ — パスワード保護)。
+///
+/// パスワード付き PDF は内容物のスキャンが不能になるため、本文に
+/// パスワードを書く配布の定石と同じ構造 (Securelist 2025-10 の
+/// 「PDF を暗号化して本文にパスワード」キャンペーンと同型)。
+#[must_use]
+pub fn pdf_is_encrypted(bytes: &[u8]) -> bool {
+    contains_pdf_token(bytes, b"/Encrypt")
+}
+
+/// PDF の実行・自動起動系要素を検出する。
+///
+/// 開いた時点・対象オブジェクトの描画時点で動作する要素のみを拾う:
+/// - `/JavaScript`, `/JS` — JavaScript アクション
+/// - `/OpenAction` — 文書を開いた時点で発火
+/// - `/AA` — 追加アクション (ページ描画・フォーカス等のイベント)
+/// - `/Launch` — 外部プログラム起動アクション
+#[must_use]
+pub fn pdf_active_markers(bytes: &[u8]) -> Vec<&'static str> {
+    let mut found = Vec::new();
+    for marker in ["/JavaScript", "/JS", "/OpenAction", "/AA", "/Launch"] {
+        if contains_pdf_token(bytes, marker.as_bytes()) {
+            found.push(marker);
+        }
+    }
+    found
+}
+
+/// PDF のペイロード運搬・外部送信系要素を検出する (注意喚起どまり)。
+///
+/// - `/EmbeddedFile` — 別ファイルを内蔵 (二重梱包)
+/// - `/RichMedia` — Flash/動的コンテンツ
+/// - `/XFA` — 動的フォーム (フィッシング用入力欄)
+/// - `/SubmitForm` — 入力内容の外部送信
+/// - `/ImportData` — 外部データ取り込み
+#[must_use]
+pub fn pdf_embedded_markers(bytes: &[u8]) -> Vec<&'static str> {
+    let mut found = Vec::new();
+    for marker in ["/EmbeddedFile", "/RichMedia", "/XFA", "/SubmitForm", "/ImportData"] {
+        if contains_pdf_token(bytes, marker.as_bytes()) {
+            found.push(marker);
+        }
+    }
+    found
+}
+
 /// ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれるか判定する。
 ///
 /// U+202E (RIGHT-TO-LEFT OVERRIDE) や U+2066..U+2069 (LRI/RLI/PDI 系) を
@@ -877,5 +958,59 @@ mod tests {
         assert!(!zip_has_encrypted_entries(&zip));
         assert!(!zip_has_encrypted_entries(b"not a zip at all"));
         assert!(!zip_has_encrypted_entries(b"PK\x03\x04")); // 途中切り
+    }
+
+    // ── D790: PDF 静的検査 ───────────────────────────────────────────────
+
+    #[test]
+    fn pdf_detected_by_ext_and_magic() {
+        assert!(is_pdf_file("invoice.pdf", b""));
+        assert!(is_pdf_file("noext.bin", b"%PDF-1.7 rest"));
+        assert!(!is_pdf_file("doc.txt", b"plain text"));
+        assert!(!is_pdf_file("report.docx", b"PK\x03\x04"));
+    }
+
+    #[test]
+    fn encrypted_pdf_detected() {
+        let pdf = b"%PDF-1.7\n1 0 obj << /Filter /Standard >> endobj\ntrailer << /Encrypt 2 0 R >>\n%%EOF";
+        assert!(pdf_is_encrypted(pdf));
+        // /EncryptMetadata 等の別名トークンは誤検しない
+        let other = b"%PDF-1.7\ntrailer << /EncryptMetadata true >>\n%%EOF";
+        assert!(!pdf_is_encrypted(other));
+        let plain = b"%PDF-1.7\n1 0 obj << /Type /Page >> endobj\n%%EOF";
+        assert!(!pdf_is_encrypted(plain));
+    }
+
+    #[test]
+    fn pdf_active_markers_detected() {
+        let pdf = b"%PDF-1.7\n1 0 obj << /S /JavaScript /JS (app.alert(1)) >> endobj\n%%EOF";
+        let m = pdf_active_markers(pdf);
+        assert!(m.contains(&"/JavaScript"));
+        assert!(m.contains(&"/JS"));
+        // /JS の接頭辞誤爆をしない: /JScript は別トークン
+        let clean = b"%PDF-1.7\n<< /JScript none >>\n%%EOF";
+        assert!(pdf_active_markers(clean).is_empty());
+    }
+
+    #[test]
+    fn pdf_openaction_and_launch_detected() {
+        let pdf = b"%PDF-1.7\ncatalog << /OpenAction 3 0 R /AA << /O 4 0 R >> /Launch (cmd.exe) >>\n%%EOF";
+        let m = pdf_active_markers(pdf);
+        assert!(m.contains(&"/OpenAction"));
+        assert!(m.contains(&"/AA"));
+        assert!(m.contains(&"/Launch"));
+    }
+
+    #[test]
+    fn pdf_embedded_markers_detected() {
+        let pdf = b"%PDF-1.7\n<< /EmbeddedFile 5 0 R /SubmitForm (https://evil.example) /XFA data >>\n%%EOF";
+        let m = pdf_embedded_markers(pdf);
+        assert!(m.contains(&"/EmbeddedFile"));
+        assert!(m.contains(&"/SubmitForm"));
+        assert!(m.contains(&"/XFA"));
+        // 無害な PDF では発火しない
+        let plain = b"%PDF-1.7\n1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj\n%%EOF";
+        assert!(pdf_embedded_markers(plain).is_empty());
+        assert!(pdf_active_markers(plain).is_empty());
     }
 }

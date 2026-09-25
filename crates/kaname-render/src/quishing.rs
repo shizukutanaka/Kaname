@@ -367,6 +367,19 @@ impl QuishingDefense {
             return UrlReputation::Trusted;
         }
 
+        // 2.5 IDN / Punycode ドメイン (D792 — ホモグラフ攻撃)
+        //    `xn--` ラベルはブラウザが Unicode 化して表示するため、
+        //    ASCII 文字列として読む利用者・スキャナには別ドメインに見える
+        //    (paypal → pаypal のキリル а 等、UTS#39 の紛らわしい文字)。
+        //    また Unicode を直接含むホストも同型のホモグラフ経路。
+        //    正規 IDN (日本語ドメイン等) も存在するが、未検査では絞り込め
+        //    ないため Suspicious (審査してから開け、という水準) に倒す。
+        if domain.split('.').any(|l| l.starts_with("xn--"))
+            || domain.chars().any(|c| !c.is_ascii())
+        {
+            return UrlReputation::Suspicious;
+        }
+
         // 3. 短縮 URL / リダイレクタ (動的 QR の実現手段)
         //    スキャン時点の宛先が無害でも、後から差し替えられるため検証不能。
         //    QR という「人間が中身を読めない」文脈では特にリスクが高い。
@@ -1571,6 +1584,42 @@ mod tests {
         // ラッパでない URL は従来どおりの評価
         assert_eq!(
             d.evaluate_url("https://example.org/page"),
+            UrlReputation::Neutral
+        );
+    }
+
+    // ── D792: IDN / Punycode ホモグラフ ─────────────────────────────────
+
+    #[test]
+    fn punycode_domain_is_suspicious() {
+        let d = QuishingDefense::new();
+        // xn-- ラベルは表示側で Unicode 化され、ASCII のままでは別ドメインに見える
+        assert_eq!(
+            d.evaluate_url("https://xn--nxasmq6b.example.com/"),
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_url("https://sub.xn--p1ai/"),
+            UrlReputation::Suspicious
+        );
+    }
+
+    #[test]
+    fn unicode_homoglyph_domain_is_suspicious() {
+        let d = QuishingDefense::new();
+        // キリル文字 а (U+0430) を含む — 見た目は example.com でも別ドメイン
+        assert_eq!(
+            d.evaluate_url("https://еxample.com/"),
+            UrlReputation::Suspicious,
+            "非 ASCII を直接含むホストはホモグラフ経路として Suspicious であるべき"
+        );
+    }
+
+    #[test]
+    fn ascii_domain_not_flagged_as_idn() {
+        let d = QuishingDefense::new();
+        assert_eq!(
+            d.evaluate_url("https://example.org/x"),
             UrlReputation::Neutral
         );
     }

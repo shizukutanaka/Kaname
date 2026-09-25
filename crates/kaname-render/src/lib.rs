@@ -15225,6 +15225,46 @@ mod tests {
         assert!(!scan.risks.iter().any(|r| r.contains("暗号化")));
     }
 
+    // ---------- D790: PDF 静的検査 ----------
+
+    #[test]
+    fn scan_attachment_pdf_with_javascript_is_dangerous() {
+        let pdf = b"%PDF-1.7\n1 0 obj << /S /JavaScript /JS (app.alert(1)) >> endobj\n%%EOF";
+        let scan = scan_attachment_bytes("invoice.pdf", "application/pdf", pdf);
+        assert!(scan.is_dangerous);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("JavaScript")),
+            "JavaScript 要素が報告されるべき: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn scan_attachment_encrypted_pdf_flagged_not_dangerous() {
+        let pdf = b"%PDF-1.7\ntrailer << /Encrypt 2 0 R >>\n%%EOF";
+        let scan = scan_attachment_bytes("請求書.pdf", "application/pdf", pdf);
+        assert!(scan.is_encrypted);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("暗号化")),
+            "暗号化 PDF は検査不能として通知されるべき: {:?}",
+            scan.risks
+        );
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_pdf_embedded_file_is_caution() {
+        let pdf = b"%PDF-1.7\n<< /EmbeddedFile 5 0 R >>\n%%EOF";
+        let scan = scan_attachment_bytes("doc.pdf", "application/pdf", pdf);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("EmbeddedFile")),
+            "内蔵ファイルは注意喚起されるべき: {:?}",
+            scan.risks
+        );
+        assert!(!scan.is_dangerous);
+        assert!(!scan.is_encrypted);
+    }
+
     // ---------- D173: URL スキーム難読化 ----------
 
     #[test]
@@ -19002,10 +19042,13 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     if let Ok(text) = std::str::from_utf8(bytes) {
         if svg_guard::looks_like_svg(text) {
             let scan = svg_guard::scan_svg(text);
+            // 実行リスク以外の注意喚起 (外部参照・非表示要素) も risks に
+            // 載せる — 実行リスクだけの条件で丸ごと捨てると、回避の兆候
+            // が利用者に見えないままだった (D793)。
+            for r in &scan.risks {
+                risks.push(format!("SVG のリスク: {r:?}"));
+            }
             if !scan.safe_as_attachment {
-                for r in &scan.risks {
-                    risks.push(format!("SVG のリスク: {r:?}"));
-                }
                 is_dangerous = true;
             }
         }
@@ -19105,6 +19148,31 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
              内容物をスキャンできません。本文にパスワードが書かれている場合は特に注意してください"
                 .to_string(),
         );
+    }
+
+    // 7.7 PDF の静的検査 (D790 — PDF 添付急増への対応)
+    //     実行・自動起動系 (/JavaScript・/OpenAction・/AA・/Launch) は
+    //     実行リスク。/EmbeddedFile 等の運搬要素は注意喚起どまり。
+    //     /Encrypt は ZIP と同じく「中身を検査できない」経路 —
+    //     is_encrypted に設定して本文パスワードとの相関 (D788) に乗せる。
+    if magic_bytes::is_pdf_file(filename, bytes) {
+        if magic_bytes::pdf_is_encrypted(bytes) {
+            is_encrypted = true;
+            risks.push(
+                "PDF が暗号化されています (パスワード保護) — \
+                 内容物をスキャンできません。本文にパスワードが書かれている場合は特に注意してください"
+                    .to_string(),
+            );
+        }
+        for marker in magic_bytes::pdf_active_markers(bytes) {
+            risks.push(format!("PDF に実行・自動起動系の要素があります ({marker})"));
+            is_dangerous = true;
+        }
+        for marker in magic_bytes::pdf_embedded_markers(bytes) {
+            risks.push(format!(
+                "PDF に外部連携・内蔵ペイロード系の要素があります ({marker})"
+            ));
+        }
     }
 
     AttachmentScan {

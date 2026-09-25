@@ -39,6 +39,36 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **修正**: `zip_has_encrypted_entries` (ローカルファイルヘッダの汎用フラグビット 0 を走査、壊れた構造では次の `PK\x03\x04` へ再同期) と `is_zip_file` を `magic_bytes` に追加。`AttachmentScan.is_encrypted` を新設し `scan_attachment_bytes` で設定 + 検査不能の通知を risks に積む (暗号化単体では `is_dangerous` にしない — 正規の機密送付がある)。本文側は `body_mentions_password` (パスワード系 × 解凍・添付系キーワードの共起) で「変更してください」型の通知誤検出を避けつつ、`analyze_raw_email` で暗号化添付 × 本文パスワードの組み合わせを警告する。
 - **教訓**: 単体では無害な要素同士でも、組み合わせが攻撃の様式美と一致するなら警告価値がある。相関検出は「添付」と「本文」の両方が見える場所 (analyze_raw_email) に置け。
 
+### Security — D789: URL を含まず電話番号へのコールバックのみを促すメール (TOAD) が未検査だった + tel: チェックのコンパイル不能バグ
+
+- **問題**: TOAD (Telephone-Oriented Attack Delivery / コールバックフィッシング) は「ご請求の確認はお電話で」と番号への電話だけを促し、悪意リンクを一切含まない — KnowBe4 の観測では番号のみペイロードが前年比 +449%。URL 抽出 → リンク評価の検査経路は URL が無いメールを完全に素通りする。また D237 で導入した tel: リンク検査が未定義変数 `html_text` を参照しており、**そもそもコンパイル不能だった** (コミット eab348d で混入 — 当該コミットのパース検査が commands.rs を通していなかった)。
+- **修正**: `analyze_raw_email` に TOAD 検出を追加 — `urls.is_empty()` (URL 不在) × `contains_phone_number` (10 桁以上の数字列、全角・区切り記号対応) × `has_callback_lure` (お電話/サポート/解約/請求/call/helpline/refund 等の誘導文脈) の 3 条件で警告。URL があるメールや誘導文脈の無い番号表記 (署名等) では発火しない設計。D237 のバグは `html_extract.as_ref().is_some_and(|e| e.tel_link)` に修正。
+- **教訓**: 「リンクをクリックさせない」は検査回避として有効 — ペイロードがリンクでない手口は専用の条件で捕まえる。存在するはずの検査がコンパイル不能で死んでいた点は、パース検査が commands.rs まで届いていなかったサイン。
+
+### Security — D790: PDF 添付の静的検査がゼロだった (急増する PDF キャンペーンへの未対応)
+
+- **問題**: Securelist (2025-10) が報告する通り、PDF 添付は量産・標的型の両方で急増 — QR コード埋め込みで URL を画像に逃がす型と、パスワード保護でゲートウェイ検査を不通にする型が代表的だが、`scan_attachment_bytes` は PDF を中身で一切見ていなかった (危険拡張子にも `.pdf` は当然含まれない)。
+- **修正**: `magic_bytes` に PDF 判定 (`is_pdf_file` — 拡張子または `%PDF-` マジック) と非圧縮オブジェクトの名前トークン走査 (`contains_pdf_token` — 後続が ASCII 英字なら別トークンとみなし `/JS` が `/JScript` に誤爆しない) を追加。`/Encrypt` は `is_encrypted` に接続して D788 の本文パスワード相関に乗せ、`/JavaScript`・`/JS`・`/OpenAction`・`/AA`・`/Launch` は実行リスク (`is_dangerous`)、`/EmbeddedFile`・`/RichMedia`・`/XFA`・`/SubmitForm`・`/ImportData` は注意喚起。オブジェクトストリーム圧縮された PDF では検出できない — ベストエフォートの静的検査。
+- **教訓**: 「文書」は安全とみなす拡張子リストの盲点になる。各形式の「実行要素」は形式ごとの台帳で管理せよ。
+
+### Security — D791: 差出人 == 宛先 (self-addressed) の未検査
+
+- **問題**: Microsoft Security Blog (2025-09) の AI 難読化 SVG フィッシング解析で、From = To とし実標的を BCC に入れる「自己宛て」パターンが観測された。受信者本人の名を騙る形になり内側の本文も自社風に偽装できるが、`Envelope` の `from`/`to` の一致は見ていなかった。
+- **修正**: `analyze_raw_email` で `env.to` のいずれかと `env.from` のいずれかが (ASCII 大小無視で) 一致する場合に注意喚起。「自分宛て控え」の正当用途があるため実行リスクではなく警告どまり。
+- **教訓**: ヘッダ間の「同じであること」自体が兆候になる — 各ヘッダの単独の正当性だけでなく関係性を見よ。
+
+### Security — D792: Punycode/Unicode (IDN) ホストが評価されていなかった
+
+- **問題**: `evaluate_url` はドメインの TLD・短縮サービス・既知悪性の判定をしていたが、`xn--` ラベル (Punycode) や非 ASCII を直接含むホストを見ていなかった。ブラウザは `xn--` を Unicode 化して表示するため、ASCII 文字列として読む利用者・スキャナには `paypal.com` ではなく `pаypal.com` 類の別ドメインに見える (UTS#39 の紛らわしい文字 — キリル文字ホモグラフ等)。
+- **修正**: 信頼ドメイン判定の直後・短縮 URL 判定の前に、ドメインが `xn--` ラベルを含むか ASCII 外文字を含む場合に `Suspicious` を返す。正規 IDN (日本語ドメイン等) も存在するため Malicious ではなく Suspicious — 「審査してから開け」の水準。
+- **教訓**: 表示用にエンコードされた識別子は、エンコード後の形ではなく解釈後の形で評価せよ — Punycode のままでは「人間が読める名」にならない。
+
+### Security — D793: SVG の非表示要素 (難読化) 未検査 + 注意系リスクが添付結果に現れなかった
+
+- **問題**: Microsoft 脅威情報 (2025-09) の AI 生成難読化 SVG 解析で、`display="none"`/`visibility:hidden`/`opacity:0`/`font-size:0` による invisible elements が名指しされた難読化手段だった — 人間には見えない構造をスキャナにだけ見せる (あるいはその逆)。また `scan_attachment_bytes` の SVG 判定は `!scan.safe_as_attachment` 時のみ risks を積んでおり、実行リスクの無い注意系リスク (ExternalReference 等) は警告なしに捨てられていた。
+- **修正**: `SvgRisk::HiddenContent { method }` を追加し 16 パターンの非表示化を検査 (実行リスクではなく回避の兆候として記録 — `has_execution_risk` には入れない)。`scan_attachment_bytes` 側は実行リスクの有無に関わらず `scan.risks` を全て報告に積み、`is_dangerous` の決定は従来どおり `safe_as_attachment` に従う。
+- **教訓**: 「危ない要素」だけを拾う設計は「回避の兆候」を落とす — 報告の経路は全リスクを通し、危険度の昇格だけを層別に分けよ。
+
 ### Security — D782: `X-Gaikou-*`/`X-Ekusuteria-*`/`X-Exteriorworks-*`/`X-Exteriordesign-*` 等の外構・エクステリア印自称が未検査
 
 - **問題**: `X-Gaikou-*`/`X-GaikouYasan-*`/`X-GaikouPro-*`/`X-GaikouTeam-*`/`X-GaikouJP-*`/`X-GaikouSenmon-*`/`X-Ekusuteria-*`/`X-EkusuteriaYasan-*`/`X-EkusuteriaPro-*`/`X-EkusuteriaTeam-*`/`X-EkusuteriaJP-*`/`X-EkusuteriaSenmon-*`/`X-ExteriorworksPros-*`/`X-ExteriorworksTeam-*`/`X-ExteriorworksWorks-*`/`X-ExteriorworksExperts-*`/`X-ExteriorworksSvc-*`/`X-ExteriorworksHQ-*`/`X-ExteriordesignPros-*`/`X-ExteriordesignTeam-*`/`X-ExteriordesignWorks-*`/`X-ExteriordesignExperts-*`/`X-ExteriordesignSvc-*`/`X-ExteriordesignHQ-*` 等 は構機の通知記録 — 送信側が書くことは自称。外構・エクステリア工事の偽装は、見積料・追加費用を装ったなりすましの典型手口。(造園は garden 機、フェンスは fence 機、カーポートは carport 機で検出済み)

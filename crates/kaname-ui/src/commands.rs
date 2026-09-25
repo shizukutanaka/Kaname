@@ -562,9 +562,43 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    //       修正: 以前は未定義変数 `html_text` を参照しており、
+    //       このチェック自体がコンパイル不能だった (D237 で導入)。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D789: 電話番号のみのペイロード (TOAD / コールバックフィッシング)
+    //    URL が一切無いメールはリンク解析を完全に素通りする — 番号への
+    //    電話自体が唯一のペイロード。KnowBe4 観測で前年比 +449%。
+    //    「番号がある」だけでは誤検出が多いため、「お電話で」系の誘導
+    //    文脈と URL 不在の両方を条件にする。
+    if urls.is_empty()
+        && contains_phone_number(analysis_text)
+        && has_callback_lure(analysis_text)
+    {
+        render_risks.push(
+            "URL を含まず電話番号への連絡のみを促しています (コールバック詐欺 / TOAD の兆候) — \
+             番号に電話をかける前に、請求・解約等の件が本物か発信元へ別経路で確認してください"
+                .to_string(),
+        );
+    }
+
+    // D791: 差出人 == 宛先 (self-addressed / 標的を BCC に隠す手口)
+    //    Microsoft Security Blog (2025-09) で SVG フィッシングが From=To
+    //    とし実標的を BCC に入れるパターンが観測された。正規の
+    //    「自分宛て控え」用途もあるため注意喚起に留める。
+    if env.to.iter().any(|t| {
+        env.from
+            .iter()
+            .any(|f| t.addr.as_string().eq_ignore_ascii_case(&f.addr.as_string()))
+    }) {
+        render_risks.push(
+            "差出人と宛先が同一アドレスです (self-addressed) — \
+             自分宛て控えの正当用途もありますが、標的を BCC に隠すフィッシング手口として観測されています"
                 .to_string(),
         );
     }
@@ -2919,6 +2953,67 @@ fn body_mentions_password(text: &str) -> bool {
     pw.iter().any(|k| lower.contains(k)) && attach.iter().any(|k| lower.contains(k))
 }
 
+/// 本文に電話番号らしき数字列があるか (D789 — TOAD 検出の補助)。
+///
+/// 連続する数字・区切り (ハイフン・空白・全角) を含み、数字のみで
+/// 10 桁以上のトークンを電話番号とみなす。日本の市外局番形や
+/// 海外番号形をゆるく拾い、郵便番号 (7 桁) 程度では発火しない。
+fn contains_phone_number(text: &str) -> bool {
+    let mut digits = 0usize;
+    let mut in_run = false;
+    let mut found = false;
+    for c in text.chars() {
+        let is_num = c.is_ascii_digit() || ('０'..='９').contains(&c);
+        let is_sep = matches!(c, '-' | '‐' | 'ー' | '−' | ' ' | '　' | '(' | ')' | '（' | '）');
+        if is_num {
+            digits += 1;
+            in_run = true;
+        } else if in_run && is_sep {
+            // 区切りは数字の途中として継続
+        } else {
+            if in_run && digits >= 10 {
+                found = true;
+                break;
+            }
+            digits = 0;
+            in_run = false;
+        }
+    }
+    found || (in_run && digits >= 10)
+}
+
+/// 本文に「電話をかけさせる」誘導文脈があるか (D789)。
+///
+/// TOAD メールは「ご請求の確認はお電話で」「解約はコールセンターへ」の
+/// ように電話連絡だけを促す。単に電話番号が置かれている署名や
+/// 問い合わせ先表記だけでは発火しないよう、誘導キーワードを要求する。
+fn has_callback_lure(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const LURE: &[&str] = &[
+        "お電話",
+        "電話番号",
+        "お問い合わせ",
+        "お問合せ",
+        "サポート",
+        "コールセンター",
+        "ヘルプデスク",
+        "解約",
+        "返金",
+        "請求",
+        "明細",
+        "call",
+        "support",
+        "helpline",
+        "billing",
+        "refund",
+        "cancel",
+        "toll-free",
+        "toll free",
+        "hotline",
+    ];
+    LURE.iter().any(|k| lower.contains(k))
+}
+
 /// 本文リンクの SaaS 安全性を判定する。
 ///
 /// `kaname-saas-guard` は偽 SaaS ドメイン (`notdocusign.com` 等)・
@@ -4254,6 +4349,116 @@ mod tests {
         assert!(
             r.emails.iter().any(|e| e.file == "nested.eml"),
             "ネストしたファイルが結果に含まれるべき"
+        );
+        Ok(())
+    }
+
+    // ── D789: TOAD (電話のみ誘導) / D791: self-addressed ────────────────
+
+    /// D789: URL を含まず電話番号へのコールバックのみを促すメールは
+    /// TOAD 警告が出る (KnowBe4 観測: 番号のみペイロード前年比 +449%)。
+    #[tokio::test]
+    async fn analyze_raw_email_はurlなし電話誘導をtoadとして警告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "From: billing@vendor.example\r\n\
+            To: you@example.com\r\n\
+            Subject: ご請求内容の確認\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            ご請求金額に関する確認はサポート窓口 0120-123-4567 までお電話ください。\r\n\
+            解約のお手続きもお電話のみで承っております。\r\n"
+            .into_bytes();
+        let r = analyze_raw_email(&eml).await?;
+        assert!(
+            r.body.render_risks.iter().any(|s| s.contains("TOAD")),
+            "TOAD 警告が出るべき: {:?}",
+            r.body.render_risks
+        );
+        Ok(())
+    }
+
+    /// D789: URL がある通常の連絡先記載 (誘導文脈なし) では発火しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は通常連絡先記載ではtoad警告しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "From: alice@example.com\r\n\
+            To: bob@example.com\r\n\
+            Subject: Meeting notes\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Agenda is here: https://example.org/agenda\r\n\
+            連絡先: 03-1234-5678\r\n"
+            .into_bytes();
+        let r = analyze_raw_email(&eml).await?;
+        assert!(
+            !r.body.render_risks.iter().any(|s| s.contains("TOAD")),
+            "URL あり・誘導なしの連絡先表記では発火しないべき: {:?}",
+            r.body.render_risks
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn contains_phone_number_は10桁以上の数字列を検出する() {
+        assert!(contains_phone_number("窓口 0120-123-4567 まで"));
+        assert!(contains_phone_number("TEL (03) 1234-5678"));
+        assert!(contains_phone_number("TEL ０３−１２３４−５６７８"));
+        assert!(!contains_phone_number("郵便番号 123-4567"));
+        assert!(!contains_phone_number("参照番号: 12345"));
+        assert!(!contains_phone_number("日付 2026-04-26"));
+    }
+
+    #[test]
+    fn has_callback_lure_は電話誘導文脈を検出する() {
+        assert!(has_callback_lure("詳しくはサポートまでお電話ください"));
+        assert!(has_callback_lure("Please call our helpline for a refund"));
+        assert!(has_callback_lure("解約はお電話でのみ受付"));
+        assert!(!has_callback_lure("資料を添付しました"));
+        assert!(!has_callback_lure("明日の昼食について"));
+    }
+
+    /// D791: From == To の self-addressed メールは注意喚起が出る。
+    #[tokio::test]
+    async fn analyze_raw_email_は差出人と宛先同一を警告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "From: victim@example.com\r\n\
+            To: victim@example.com\r\n\
+            Subject: Invoice attached\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            See the attached document.\r\n"
+            .into_bytes();
+        let r = analyze_raw_email(&eml).await?;
+        assert!(
+            r.body
+                .render_risks
+                .iter()
+                .any(|s| s.contains("self-addressed")),
+            "self-addressed 警告が出るべき: {:?}",
+            r.body.render_risks
+        );
+        Ok(())
+    }
+
+    /// D791: 通常の From != To では発火しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は差出人と宛先が別なら警告しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let r = analyze_raw_email(SAFE_EML).await?;
+        assert!(
+            !r.body
+                .render_risks
+                .iter()
+                .any(|s| s.contains("self-addressed")),
+            "From != To では発火しないべき: {:?}",
+            r.body.render_risks
         );
         Ok(())
     }
