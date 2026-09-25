@@ -8,6 +8,78 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1248: HTML 添付が `HtmlSmugglingDetector` を通っていなかった + ClickFix/FileFix 型のシグナル欠落
+
+- **問題**: `HtmlSmugglingDetector` は `parse()` の **本文** HTML にしか適用されておらず、添付ファイルとして届く `.html`/`.htm` は一切検査されなかった。「添付の HTML をブラウザで開かせる」経路は ClickFix キャンペーン (Microsoft Threat Intelligence, 2025-08) の主要ベクタ — 偽 CAPTCHA 画面が `navigator.clipboard.writeText` でコマンドをクリップボードに書き込み、「Win+R → Ctrl+V → Enter」や「アドレスバーに貼り付け (FileFix, Check Point 2025-07)」と利用者自身に実行させる手口であり、本文をいくら検査しても添付は素通りだった。また検出器自体にも clipboard 書き込み・実行誘導のシグナルが無かった。
+- **修正**: `scan_attachment_bytes` に HTML 添付判定を追加 — 拡張子 (`.html`/`.htm`)・宣言 MIME (`text/html`)・中身 (`<html`/`<!doctype html`/`<script`) のいずれかで `HtmlSmugglingDetector.analyze` を走らせ、High/Critical を `is_dangerous` に格上げ。検出器には `SmugglingSignal::ClipboardWrite` (`navigator.clipboard.write*`/`execCommand("copy")` 等) と `SmugglingSignal::RunDialogLure` (Win+R/ファイル名を指定して実行/アドレスバー貼り付け/to verify 等の誘導句) を追加し、**クリップボード書込 × 実行誘導**、または **偽 CAPTCHA × 実行誘導** の組み合わせを Critical とする (単独シグナルは Caution どまりで誤検出を抑止)。Critical 時は ClickFix 型を明示した警告文を返す。
+- **教訓**: 脅威情報の収集経路 (本文) と実行経路 (添付→ブラウザ) が違えば、同じ検出器でも片方は素通りする。新しい手口は「どの入口でコードが走るか」で入口を洗い直せ。
+
+### Security — D1249: URL 評価がメールセキュリティゲートウェイの書き換え URL の外側しか見ていなかった
+
+- **問題**: SafeLinks (`*.safelinks.protection.outlook.com/?url=…`)・Proofpoint URLDefense・Mimecast・Barracuda・Cisco Secure Email・Trend Micro ClickTime・Sophos・Websense/Forcepoint 等は宛先 URL を自社ドメインで包む。`quishing::evaluate_url` は外側のドメインを評価するため、(a) 悪意の宛先が「Microsoft のドメイン」に見えて素通りし、(b) 逆に宛先が無害なのに書き換えホストが短縮・不審ドメイン扱いされる — どちらに倒れても宛先が評価されていなかった。
+- **修正**: `evaluate_url` はまず `unwrap_protected_url` で包みを剥がしてから内側を再帰評価する (深度上限 2 — SafeLinks が URLDefense を包む二重ラッパに対応、無限再帰は防ぐ)。剥がせる形式: SafeLinks `url=`、URLDefense v1/v2/v3 (公式 `urldecoder.py` のアルゴリズム — v3 の `*`/`**X` トークン置換・単一スラッシュ修復・`-`→`%`,`_`→`/` 変換を含む)、Google `/url?q=`・`/imgres?imgurl=`、Slack `slack-redir.net?url=`、Bing `/ck/a` の `u=a1<base64url>`、Mimecast の `?domain=` (宛先ドメインのみ復元)。復元不能な書き換えホスト (宛先をサーバ側でしか持たないもの: Barracuda/Cisco/Trend Micro/Sophos/Websense/wsed.org/mimecastprotect/avanan 等) は `Suspicious` — 「検証不能な間接参照」として報告。パーセントデコード・urlsafe base64・最小限の HTML アンエスケープは外部クレートを増やさず自前実装。
+- **教訓**: 評価対象は「表示されたホスト」ではなく「最終宛先」。間接参照は常に中身を見てから判定し、見えないなら見えないと言え。
+
+### Security — D1250: マクロ有効 Office 形式・代替配送形式・ネストしたメール添付が危険拡張子リストに無かった
+
+- **問題**: 危険拡張子は `.exe`/`.scr`/`.docm` 等を押さえていたが、(a) マクロ有効テンプレート/アドイン系 — `.dotm`/`.xltm`/`.potm`/`.ppsm`/`.sldm`/`.ppam`/`.xlam`/`.xla`/`.xll`/`.xlm`/`.xlsb`/`.docb`/`.vsdm`/`.mpa`/`.accde`、(b) 近年キャンペーンで多用される代替配送形式 — `.one`/`.onepkg` (Qakbot/IcedID 2023)、`.chm`、`.reg`、`.sct`、`.wsc`、`.slk`、`.iqy`、`.website`、`.library-ms`、`.search-ms`、`.settingcontent-ms`、`.theme`、`.mht`/`.mhtml` (CVE-2021-40444)、`.cpl`、`.msc`、`.inf`、`.diagcab` (Follina)、`.xbap`/`.appref-ms` — が抜けていた。また内側の件名・差出人・本文を外側と無関係に偽装できる `.eml`/`.msg` 添付も未検査だった。
+- **修正**: `is_dangerous_windows_attachment` に上記拡張子を追加 (`.vhd`/`.vhdx` 系のコンテナ列に続く同じ matches! ディスパッチ)。`.eml`/`.msg`/`message/rfc822`/`application/vnd.ms-outlook` は `is_nested_email_attachment` で識別し、`scan_attachment_bytes` で注意喚起 (実行リスクにはしない — 転送メールの正当利用が多いため)。
+- **教訓**: 拡張子リストは Microsoft のマクロブロック対象・観測済みキャンペーンの配送形式を定期輸入する台帳 — 一度作って終わりではない。
+
+### Security — D1251: 「暗号化 ZIP 添付 × 本文のパスワード記載」の相関が未検査だった
+
+- **問題**: Emotet/Qakbot 型の添付回避は、解凍・スキャンできないよう ZIP を暗号化した上でパスワードを本文に書く (Sublime Security の `body_encrypted_zip_password_attachment` 検知ルールと同型)。`AttachmentScan` は ZIP の中身を全く見ていなかったため、暗号化エントリの存在も、本文側の「解凍パスワードは〇〇です」との相関も検出できなかった。
+- **修正**: `zip_has_encrypted_entries` (ローカルファイルヘッダの汎用フラグビット 0 を走査、壊れた構造では次の `PK\x03\x04` へ再同期) と `is_zip_file` を `magic_bytes` に追加。`AttachmentScan.is_encrypted` を新設し `scan_attachment_bytes` で設定 + 検査不能の通知を risks に積む (暗号化単体では `is_dangerous` にしない — 正規の機密送付がある)。本文側は `body_mentions_password` (パスワード系 × 解凍・添付系キーワードの共起) で「変更してください」型の通知誤検出を避けつつ、`analyze_raw_email` で暗号化添付 × 本文パスワードの組み合わせを警告する。
+- **教訓**: 単体では無害な要素同士でも、組み合わせが攻撃の様式美と一致するなら警告価値がある。相関検出は「添付」と「本文」の両方が見える場所 (analyze_raw_email) に置け。
+
+### Security — D1252: URL を含まず電話番号へのコールバックのみを促すメール (TOAD) が未検査だった
+
+- **問題**: TOAD (Telephone-Oriented Attack Delivery / コールバックフィッシング) は「ご請求の確認はお電話で」と番号への電話だけを促し、悪意リンクを一切含まない — KnowBe4 の観測では番号のみペイロードが前年比 +449%。URL 抽出 → リンク評価の検査経路は URL が無いメールを完全に素通りする。
+- **修正**: `analyze_raw_email` に TOAD 検出を追加 — `urls.is_empty()` (URL 不在) × `contains_phone_number` (10 桁以上の数字列、全角・区切り記号対応) × `has_callback_lure` (お電話/サポート/解約/請求/call/helpline/refund 等の誘導文脈) の 3 条件で警告。URL があるメールや誘導文脈の無い番号表記 (署名等) では発火しない設計。
+- **教訓**: 「リンクをクリックさせない」は検査回避として有効 — ペイロードがリンクでない手口は専用の条件で捕まえる。
+
+### Security — D1253: PDF 添付の静的検査がゼロだった (急増する PDF キャンペーンへの未対応)
+
+- **問題**: Securelist (2025-10) が報告する通り、PDF 添付は量産・標的型の両方で急増 — QR コード埋め込みで URL を画像に逃がす型と、パスワード保護でゲートウェイ検査を不通にする型が代表的だが、`scan_attachment_bytes` は PDF を中身で一切見ていなかった (危険拡張子にも `.pdf` は当然含まれない)。
+- **修正**: `magic_bytes` に PDF 判定 (`is_pdf_file` — 拡張子または `%PDF-` マジック) と非圧縮オブジェクトの名前トークン走査 (`contains_pdf_token` — 後続が ASCII 英字なら別トークンとみなし `/JS` が `/JScript` に誤爆しない) を追加。`/Encrypt` は `is_encrypted` に接続して D1251 の本文パスワード相関に乗せ、`/JavaScript`・`/JS`・`/OpenAction`・`/AA`・`/Launch` は実行リスク (`is_dangerous`)、`/EmbeddedFile`・`/RichMedia`・`/XFA`・`/SubmitForm`・`/ImportData` は注意喚起。オブジェクトストリーム圧縮された PDF では検出できない — ベストエフォートの静的検査。
+- **教訓**: 「文書」は安全とみなす拡張子リストの盲点になる。各形式の「実行要素」は形式ごとの台帳で管理せよ。
+
+### Security — D1254: 差出人 == 宛先 (self-addressed) の未検査
+
+- **問題**: Microsoft Security Blog (2025-09) の AI 難読化 SVG フィッシング解析で、From = To とし実標的を BCC に入れる「自己宛て」パターンが観測された。受信者本人の名を騙る形になり内側の本文も自社風に偽装できるが、`Envelope` の `from`/`to` の一致は見ていなかった。
+- **修正**: `analyze_raw_email` で `env.to` のいずれかと `env.from` のいずれかが (ASCII 大小無視で) 一致する場合に注意喚起。「自分宛て控え」の正当用途があるため実行リスクではなく警告どまり。
+- **教訓**: ヘッダ間の「同じであること」自体が兆候になる — 各ヘッダの単独の正当性だけでなく関係性を見よ。
+
+### Security — D1255: Punycode/Unicode (IDN) ホストが評価されていなかった
+
+- **問題**: `evaluate_url` はドメインの TLD・短縮サービス・既知悪性の判定をしていたが、`xn--` ラベル (Punycode) や非 ASCII を直接含むホストを見ていなかった。ブラウザは `xn--` を Unicode 化して表示するため、ASCII 文字列として読む利用者・スキャナには `paypal.com` ではなく `pаypal.com` 類の別ドメインに見える (UTS#39 の紛らわしい文字 — キリル文字ホモグラフ等)。
+- **修正**: 信頼ドメイン判定の直後・短縮 URL 判定の前に、ドメインが `xn--` ラベルを含むか ASCII 外文字を含む場合に `Suspicious` を返す。正規 IDN (日本語ドメイン等) も存在するため Malicious ではなく Suspicious — 「審査してから開け」の水準。
+- **教訓**: 表示用にエンコードされた識別子は、エンコード後の形ではなく解釈後の形で評価せよ — Punycode のままでは「人間が読める名」にならない。
+
+### Security — D1256: SVG の非表示要素 (難読化) 未検査 + 注意系リスクが添付結果に現れなかった
+
+- **問題**: Microsoft 脅威情報 (2025-09) の AI 生成難読化 SVG 解析で、`display="none"`/`visibility:hidden`/`opacity:0`/`font-size:0` による invisible elements が名指しされた難読化手段だった — 人間には見えない構造をスキャナにだけ見せる (あるいはその逆)。また `scan_attachment_bytes` の SVG 判定は `!scan.safe_as_attachment` 時のみ risks を積んでおり、実行リスクの無い注意系リスク (ExternalReference 等) は警告なしに捨てられていた。
+- **修正**: `SvgRisk::HiddenContent { method }` を追加し 16 パターンの非表示化を検査 (実行リスクではなく回避の兆候として記録 — `has_execution_risk` には入れない)。`scan_attachment_bytes` 側は実行リスクの有無に関わらず `scan.risks` を全て報告に積み、`is_dangerous` の決定は従来どおり `safe_as_attachment` に従う。
+- **教訓**: 「危ない要素」だけを拾う設計は「回避の兆候」を落とす — 報告の経路は全リスクを通し、危険度の昇格だけを層別に分けよ。
+
+### Security — D1257: Unicode タグ文字 (ASCII スマグリング) とホモグリフ混在が未検査
+
+- **問題**: Microsoft Security Blog (2026-09-03) が観測した高量キャンペーンで、U+E0000–E007F の不可視タグ文字で `funding` 等の金融ルアー語を分割しキーワードフィルタの語結合を破壊する手法 — AI プロンプト注入由来の ASCII スマグリングがメール回避に転用された。KnowBe4 (2026-06) も不可視ノイズ文字と系統的ホモグリフ置換 (キリル а→a 等) の併用を AI 生成フィッシングの指紋として報告。サニタイザはゼロ幅文字 (U+200B 等) を除去するが、タグ文字は除去も報告もされなかった。
+- **修正**: `ExtractedBodyText` に `unicode_tag_chars` (タグブロック含有) と `confusable_script_mix` (1 単語内のラテン×キリル/ギリシャ混在) を追加し `html_to_text` で検出、`render_risks` 兆候報告。キリル/ギリシャのみの単語 (正当な露語・希語文) や CJK×ラテン混在は対象外。
+- **教訓**: 除去して終わりでは記録が残らない — 不可視文字は「存在したこと」自体が兆候。語の結合を物理文字で切る手口は、文字の役割 (タグ=注記/書式) を逸脱した使用で捕まえられる。
+
+### Security — D1258: デバイスコード・フローへの誘導 (devicelogin) が未検査
+
+- **問題**: Microsoft (2026-09-22) の EvilTokens 解析 — PhaaS が配布する AiTM フィッシングは受信者を `devicelogin` ページへ誘導しデバイスコードを入力させて OAuth トークンを詐取する。正規のデバイスログインは利用者がデバイス側から開始するものであり、メールで誘導されることはないが、本文中の `devicelogin` 誘導は見ていなかった。
+- **修正**: `has_devicelogin_lure` で本文 (抽出 URL 含む) の `devicelogin` 言及を検出し `render_risks` に警告。URL 評価ではドメイン正当 (microsoft.com) でも誘導自体が兆候となる型。
+- **教訓**: 正当ドメインへのリンクでも「そのフローがメール経由で始まること自体」が兆候になる — 宛先の評判だけでなく到達手段の意味を見よ。
+
+### Security — D1259: LLM 生成前文の残存 (AI 生成メールのアーティファクト) が未検査
+
+- **問題**: KnowBe4 Threat Lab (2026-06) — AI で量産されたフィッシングの 86% に LLM 由来のアーティファクトが残り、特にモデルが出力冒頭に書く構造案内文 ("Here is the message formatted and divided into sections:") が削除されずに届く実例を観測。人間が書くメール本文の冒頭にこうした前置きは出ないが未検査だった。
+- **修正**: `has_llm_preamble` で本文冒頭 400 文字の生成前文パターン (英語 11 種・日本語 3 種) を検出し `render_risks` 兆候報告。冒頭限定で転送・引用での文中出現による誤検出を抑止。
+- **教訓**: 生成パイプラインの痕跡は内容の品質と無関係に残る — 「人が書くはずの場所に機械の前置きがある」不整合を数えよ。
+
 ### Security — D973: href 値の実体参照・%エンコード・制御空白によるスキャン回避
 
 - **問題**: D961–D972 のスキャンは href 属性値の**生文字列**に対する prefix/ホスト比較だったため、`javascript&colon;x`・`&#106;avascript:x` (実体参照)、`%6aavascript:x` (%エンコード)、`java<TAB>script:x` (タブ/改行/復帰の差し込み — ブラウザは URL 中のこれらを除去して解釈する) の 3 系統の難読化で危険スキーム・IP リテラル・IDN・link_mismatch の各検査をすべてすり抜けられた。実体参照デコーダ自体は存在したが `colon`/`tab`/`newline` の名前実体は未定義だった。

@@ -733,6 +733,91 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1257: Unicode タグ文字 (ASCII スマグリング) / ホモグリフ混在
+    //    Microsoft Security Blog (2026-09) — AI プロンプト注入由来の
+    //    不可視タグ文字で 'funding' 等の金融ルアー語を分割しフィルタを
+    //    回避する大量キャンペーンが観測された。KnowBe4 (2026-06) も
+    //    不可視ノイズ文字 + 系統的ホモグリフ置換の併用を報告。
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.unicode_tag_chars)
+    {
+        render_risks.push(
+            "本文に不可視の Unicode タグ文字 (U+E0000–E007F) が含まれています — \
+             語を分割してフィルタを回避する ASCII スマグリングの兆候です"
+                .to_string(),
+        );
+    }
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.confusable_script_mix)
+    {
+        render_risks.push(
+            "単語内にラテン文字とキリル/ギリシャ文字が混在しています — \
+             見た目が同一の文字への置換でキーワード照合を回避するホモグリフ置換の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1258: デバイスコード・フローへの誘導 (devicelogin / EvilTokens 型 AiTM)
+    //    Microsoft (2026-09) の EvilTokens 解析 — PhaaS が配布する
+    //    デバイスコード詐取フローでは、受信者を devicelogin ページへ
+    //    誘導してコードを入力させる。正規のデバイスログインは利用者が
+    //    デバイス側から開始するもので、メールで誘導されることはない。
+    if has_devicelogin_lure(analysis_text) {
+        render_risks.push(
+            "デバイスコード入力ページ (devicelogin) への誘導が含まれています — \
+             正規のデバイスログインはメールで誘導されません。デバイスコード詐取 \
+             (AiTM フィッシング) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1259: LLM 生成前文の残存 (AI 生成メールのアーティファクト)
+    //    KnowBe4 (2026-06) — AI で量産されたメールは、モデルが出力の
+    //    冒頭に書く構造案内文 ("Here is the message formatted ...") を
+    //    削除しないまま送られてくることがある。人間が書く本文の冒頭に
+    //    こうした前置きは出ない。
+    if has_llm_preamble(analysis_text) {
+        render_risks.push(
+            "本文冒頭に AI 生成物の構造案内らしき文が残っています — \
+             LLM で量産されたメールの生成アーティファクトの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1252: 電話番号のみのペイロード (TOAD / コールバックフィッシング)
+    //    URL が一切無いメールはリンク解析を完全に素通りする — 番号への
+    //    電話自体が唯一のペイロード。KnowBe4 観測で前年比 +449%。
+    //    「番号がある」だけでは誤検出が多いため、「お電話で」系の誘導
+    //    文脈と URL 不在の両方を条件にする。
+    if urls.is_empty()
+        && contains_phone_number(analysis_text)
+        && has_callback_lure(analysis_text)
+    {
+        render_risks.push(
+            "URL を含まず電話番号への連絡のみを促しています (コールバック詐欺 / TOAD の兆候) — \
+             番号に電話をかける前に、請求・解約等の件が本物か発信元へ別経路で確認してください"
+                .to_string(),
+        );
+    }
+
+    // D1254: 差出人 == 宛先 (self-addressed / 標的を BCC に隠す手口)
+    //    Microsoft Security Blog (2025-09) で SVG フィッシングが From=To
+    //    とし実標的を BCC に入れるパターンが観測された。正規の
+    //    「自分宛て控え」用途もあるため注意喚起に留める。
+    if env.to.iter().any(|t| {
+        env.from
+            .iter()
+            .any(|f| t.addr.as_string().eq_ignore_ascii_case(&f.addr.as_string()))
+    }) {
+        render_risks.push(
+            "差出人と宛先が同一アドレスです (self-addressed) — \
+             自分宛て控えの正当用途もありますが、標的を BCC に隠すフィッシング手口として観測されています"
+                .to_string(),
+        );
+    }
+
     // D238: Content-Disposition: inline で危険拡張子
     if env.inline_dangerous_attachment {
         render_risks.push(
@@ -2410,6 +2495,21 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
 
+    // D1251: 暗号化 ZIP 添付 + 本文でパスワード案内 (Emotet/Qakbot 型)。
+    // パスワード付き ZIP 自体は正規の用途もあるため単体では警告しないが、
+    // 「中身を検査できない添付」と「解凍方法を本文で教える」の組み合わせは
+    // ゲートウェイ回避の典型手口 (Sublime Security 検知ルール
+    // `body_encrypted_zip_password_attachment` と同型)。
+    if attachment_scans.iter().any(|a| a.is_encrypted)
+        && body_mentions_password(analysis_text)
+    {
+        render_risks.push(
+            "パスワード付き ZIP 添付に加え、本文にパスワードらしき記載があります — \
+             内容物を検査できないまま開封させるマルウェア配布の典型手口です"
+                .to_string(),
+        );
+    }
+
     // D571: 「送信側が自称/自署/書く」系の警告は、ヘッダの存在だけで出る。
     // だが `X-Gm-*`/`X-Google-*` (Gmail)・`X-MS-Exchange-*`/`X-Microsoft-Antispam`
     // (Microsoft 365)・`X-GitHub-*`・`X-LinkedIn-*`・`X-MC-*` (Mailchimp)・
@@ -3036,6 +3136,137 @@ fn analyze_body_risks(body: &str) -> Vec<String> {
     risks
 }
 
+/// 本文に「添付のパスワードを教える」文脈があるか判定する (D1251)。
+///
+/// Emotet/Qakbot 型の添付回避では、ゲートウェイが解凍・検査できないよう
+/// ZIP を暗号化した上で、パスワードを本文に書く (Sublime Security の
+/// `body_encrypted_zip_password_attachment` 検知ルールと同型)。
+/// パスワード系と解凍・添付系の両キーワードの共起を見て、
+/// 「パスワードを変更してください」だけの通知誤検出を避ける。
+fn body_mentions_password(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let pw = [
+        "パスワード",
+        "password",
+        "pass:",
+        "pass ",
+        "pw:",
+        "解凍パス",
+        "暗号",
+    ];
+    let attach = [
+        "添付",
+        "解凍",
+        "展開",
+        "zip",
+        "attachment",
+        "attached",
+        "unzip",
+        "extract",
+        "archive",
+    ];
+    pw.iter().any(|k| lower.contains(k)) && attach.iter().any(|k| lower.contains(k))
+}
+
+/// 本文に電話番号らしき数字列があるか (D1252 — TOAD 検出の補助)。
+///
+/// 連続する数字・区切り (ハイフン・空白・全角) を含み、数字のみで
+/// 10 桁以上のトークンを電話番号とみなす。日本の市外局番形や
+/// 海外番号形をゆるく拾い、郵便番号 (7 桁) 程度では発火しない。
+fn contains_phone_number(text: &str) -> bool {
+    let mut digits = 0usize;
+    let mut in_run = false;
+    let mut found = false;
+    for c in text.chars() {
+        let is_num = c.is_ascii_digit() || ('０'..='９').contains(&c);
+        let is_sep = matches!(c, '-' | '‐' | 'ー' | '−' | ' ' | '　' | '(' | ')' | '（' | '）');
+        if is_num {
+            digits += 1;
+            in_run = true;
+        } else if in_run && is_sep {
+            // 区切りは数字の途中として継続
+        } else {
+            if in_run && digits >= 10 {
+                found = true;
+                break;
+            }
+            digits = 0;
+            in_run = false;
+        }
+    }
+    found || (in_run && digits >= 10)
+}
+
+/// 本文に「電話をかけさせる」誘導文脈があるか (D1252)。
+///
+/// TOAD メールは「ご請求の確認はお電話で」「解約はコールセンターへ」の
+/// ように電話連絡だけを促す。単に電話番号が置かれている署名や
+/// 問い合わせ先表記だけでは発火しないよう、誘導キーワードを要求する。
+fn has_callback_lure(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    const LURE: &[&str] = &[
+        "お電話",
+        "電話番号",
+        "お問い合わせ",
+        "お問合せ",
+        "サポート",
+        "コールセンター",
+        "ヘルプデスク",
+        "解約",
+        "返金",
+        "請求",
+        "明細",
+        "call",
+        "support",
+        "helpline",
+        "billing",
+        "refund",
+        "cancel",
+        "toll-free",
+        "toll free",
+        "hotline",
+    ];
+    LURE.iter().any(|k| lower.contains(k))
+}
+
+/// デバイスコード入力ページへの誘導があるか (D1258)。
+///
+/// Microsoft (2026-09) の EvilTokens 解析: PhaaS が配るデバイスコード
+/// 詐取フローは受信者を `devicelogin` 系ページへ誘導しコードを入力させる。
+/// 正規のデバイスログインは利用者がデバイス側から開始するものであり、
+/// メール本文にこの誘導が書かれることはない。
+fn has_devicelogin_lure(text: &str) -> bool {
+    text.to_lowercase().contains("devicelogin")
+}
+
+/// 本文冒頭に LLM 生成物の前文が残っているか (D1259)。
+///
+/// KnowBe4 (2026-06) の AI 生成フィッシング解析: モデルが出力冒頭に
+/// 書く構造案内 ("Here is the message formatted and divided into
+/// sections:") を削除せず送信した実例が観測された。冒頭 400 文字に
+/// 限定して誤検出を抑える — 引用や転送で文中に同系統の文が出ることは
+/// あり得るが、メール本文の先頭にこれが来ることは人為的には稀。
+fn has_llm_preamble(text: &str) -> bool {
+    let head = text.chars().take(400).collect::<String>().to_lowercase();
+    const PREAMBLE: &[&str] = &[
+        "here is the message",
+        "here is the email",
+        "here's the email",
+        "here is a draft",
+        "here's a draft",
+        "here is the requested",
+        "here is a professional",
+        "i have formatted",
+        "below is the requested",
+        "certainly! here",
+        "sure! here",
+        "以下の形式で作成",
+        "ご依頼のメール本文",
+        "メール本文を作成しました",
+    ];
+    PREAMBLE.iter().any(|p| head.contains(p))
+}
+
 /// 本文リンクの SaaS 安全性を判定する。
 ///
 /// `kaname-saas-guard` は偽 SaaS ドメイン (`notdocusign.com` 等)・
@@ -3087,7 +3318,7 @@ fn evaluate_link_risks(urls: &[String]) -> Vec<String> {
             }
             kaname_render::quishing::UrlReputation::Suspicious => {
                 risks.push(format!(
-                    "リンク先が疑わしいドメインです (短縮URL/自由TLD/タイポスクワット等): {url}"
+                    "リンク先が疑わしいドメインです (短縮URL/自由TLD/タイポスクワット/検証不能なURL書き換え等): {url}"
                 ));
             }
             kaname_render::quishing::UrlReputation::Trusted
@@ -4371,6 +4602,144 @@ mod tests {
         assert!(
             r.emails.iter().any(|e| e.file == "nested.eml"),
             "ネストしたファイルが結果に含まれるべき"
+        );
+        Ok(())
+    }
+
+    // ── D1252: TOAD (電話のみ誘導) / D1254: self-addressed ────────────────
+
+    /// D1252: URL を含まず電話番号へのコールバックのみを促すメールは
+    /// TOAD 警告が出る (KnowBe4 観測: 番号のみペイロード前年比 +449%)。
+    #[tokio::test]
+    async fn analyze_raw_email_はurlなし電話誘導をtoadとして警告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "From: billing@vendor.example\r\n\
+            To: you@example.com\r\n\
+            Subject: ご請求内容の確認\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            ご請求金額に関する確認はサポート窓口 0120-123-4567 までお電話ください。\r\n\
+            解約のお手続きもお電話のみで承っております。\r\n"
+            .into_bytes();
+        let r = analyze_raw_email(&eml).await?;
+        assert!(
+            r.body.render_risks.iter().any(|s| s.contains("TOAD")),
+            "TOAD 警告が出るべき: {:?}",
+            r.body.render_risks
+        );
+        Ok(())
+    }
+
+    /// D1252: URL がある通常の連絡先記載 (誘導文脈なし) では発火しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は通常連絡先記載ではtoad警告しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "From: alice@example.com\r\n\
+            To: bob@example.com\r\n\
+            Subject: Meeting notes\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            Agenda is here: https://example.org/agenda\r\n\
+            連絡先: 03-1234-5678\r\n"
+            .into_bytes();
+        let r = analyze_raw_email(&eml).await?;
+        assert!(
+            !r.body.render_risks.iter().any(|s| s.contains("TOAD")),
+            "URL あり・誘導なしの連絡先表記では発火しないべき: {:?}",
+            r.body.render_risks
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn contains_phone_number_は10桁以上の数字列を検出する() {
+        assert!(contains_phone_number("窓口 0120-123-4567 まで"));
+        assert!(contains_phone_number("TEL (03) 1234-5678"));
+        assert!(contains_phone_number("TEL ０３−１２３４−５６７８"));
+        assert!(!contains_phone_number("郵便番号 123-4567"));
+        assert!(!contains_phone_number("参照番号: 12345"));
+        assert!(!contains_phone_number("日付 2026-04-26"));
+    }
+
+    #[test]
+    fn has_callback_lure_は電話誘導文脈を検出する() {
+        assert!(has_callback_lure("詳しくはサポートまでお電話ください"));
+        assert!(has_callback_lure("Please call our helpline for a refund"));
+        assert!(has_callback_lure("解約はお電話でのみ受付"));
+        assert!(!has_callback_lure("資料を添付しました"));
+        assert!(!has_callback_lure("明日の昼食について"));
+    }
+
+    #[test]
+    fn has_devicelogin_lure_はデバイスコード誘導を検出する() {
+        // EvilTokens 型: devicelogin ページへの誘導 (URL・本文いずれの形でも)
+        assert!(has_devicelogin_lure(
+            "認証するには https://microsoft.com/devicelogin を開きコードを入力してください"
+        ));
+        assert!(has_devicelogin_lure("visit devicelogin and enter code"));
+        // 正規の連絡文・別の login ページ誘導は対象外
+        assert!(!has_devicelogin_lure("ログインは https://portal.example.com/login から"));
+        assert!(!has_devicelogin_lure("資料を添付しました"));
+    }
+
+    #[test]
+    fn has_llm_preamble_は生成前文を検出する() {
+        // KnowBe4 観測例 — モデルの構造案内が冒頭に残ったまま
+        assert!(has_llm_preamble(
+            "Here is the message formatted and divided into sections:\n\nSubject: ..."
+        ));
+        assert!(has_llm_preamble("Here is a professional email for your request:\n..."));
+        assert!(has_llm_preamble("ご依頼のメール本文を作成しました。\n\n件名: ..."));
+        // 冒頭 400 文字以降の出現は対象外 (転送・引用に含まれうる)
+        let far = format!("{}{}", "x".repeat(500), "Here is the message");
+        assert!(!has_llm_preamble(&far));
+        // 人間の書き出しは対象外
+        assert!(!has_llm_preamble("お世話になっております。資料を添付します"));
+        assert!(!has_llm_preamble("Meeting notes attached."));
+    }
+
+    /// D1254: From == To の self-addressed メールは注意喚起が出る。
+    #[tokio::test]
+    async fn analyze_raw_email_は差出人と宛先同一を警告する() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let eml = "From: victim@example.com\r\n\
+            To: victim@example.com\r\n\
+            Subject: Invoice attached\r\n\
+            Date: Mon, 26 Apr 2026 10:00:00 +0900\r\n\
+            Content-Type: text/plain; charset=utf-8\r\n\
+            \r\n\
+            See the attached document.\r\n"
+            .into_bytes();
+        let r = analyze_raw_email(&eml).await?;
+        assert!(
+            r.body
+                .render_risks
+                .iter()
+                .any(|s| s.contains("self-addressed")),
+            "self-addressed 警告が出るべき: {:?}",
+            r.body.render_risks
+        );
+        Ok(())
+    }
+
+    /// D1254: 通常の From != To では発火しない。
+    #[tokio::test]
+    async fn analyze_raw_email_は差出人と宛先が別なら警告しない() -> Result<(), String> {
+        let _serial = test_serial().await;
+        reset_globals().await;
+        let r = analyze_raw_email(SAFE_EML).await?;
+        assert!(
+            !r.body
+                .render_risks
+                .iter()
+                .any(|s| s.contains("self-addressed")),
+            "From != To では発火しないべき: {:?}",
+            r.body.render_risks
         );
         Ok(())
     }

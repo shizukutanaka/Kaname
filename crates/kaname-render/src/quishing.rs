@@ -96,6 +96,8 @@ pub struct QuishingDefense {
     free_tlds: HashSet<&'static str>,
     /// URL 短縮・リダイレクトサービス (動的 QR の実現手段)。
     url_shorteners: HashSet<&'static str>,
+    /// 剥がせないメールセキュリティ URL 書き換えサービス (検証不能の間接参照)。
+    url_rewriters: HashSet<&'static str>,
 }
 
 impl QuishingDefense {
@@ -167,11 +169,34 @@ impl QuishingDefense {
         .into_iter()
         .collect();
 
+        // メールセキュリティゲートウェイの URL 書き換えホスト (D1249)。
+        // `unwrap_protected_url` で剥がせたものは内側を評価するためここに
+        // 来ない。ここに残るのは「復元にサーバ側情報が要る」系で、宛先を
+        // 一切検証できない間接参照 — 短縮 URL と同じく Suspicious 扱い。
+        let url_rewriters: HashSet<&'static str> = [
+            // 剥がしに失敗した場合のフォールバック (本則は unwrap で復元)
+            "safelinks.protection.outlook.com", // Microsoft SafeLinks
+            "urldefense.com",                  // Proofpoint URL Defense
+            "urldefense.proofpoint.com",
+            // 宛先をサーバ側でしか復元できない書き換えサービス
+            "linkprotect.cudasvc.com",   // Barracuda Link Protection
+            "secure-web.cisco.com",      // Cisco Secure Email
+            "clicktime.trendmicro.com",  // Trend Micro ClickTime
+            "protection.sophos.com",     // Sophos Email
+            "websense.com",              // Forcepoint/Websense
+            "wsed.org",                  // Websense Email Security
+            "mimecastprotect.com",       // Mimecast URL Protection
+            "avanan.net",                // Check Point Avanan
+        ]
+        .into_iter()
+        .collect();
+
         Self {
             trusted_domains,
             known_malicious: HashSet::new(),
             free_tlds,
             url_shorteners,
+            url_rewriters,
         }
     }
 
@@ -296,10 +321,41 @@ impl QuishingDefense {
     }
 
     /// URL の信頼性を評価する。
+    ///
+    /// メールセキュリティゲートウェイ (SafeLinks/URLDefense/Mimecast 等) が
+    /// リンクを自社ドメインで書き換える「保護 URL」は、**外側のドメインで
+    /// 評価すると「信頼済みベンダーのドメインだから安全」と誤判定する**。
+    /// 攻撃者はこの「信頼ドメインの外套」を使い、既知の悪意ドメインや
+    /// ラッパ経由でしか辿れない宛先を隠蔽する (2025 年の URLDefense/
+    /// SafeLinks 悪用 — ラッパ経由で URL スキャンを迂回する手法として
+    /// Cofense/Trustwave 等が報告)。復元できるラッパは剥がして最終宛先を
+    /// 評価し、復元できない書き換えホストは「検証不能の間接参照」として
+    /// Suspicious にする (D1249)。
     #[must_use]
     pub fn evaluate_url(&self, url: &str) -> UrlReputation {
+        self.evaluate_url_inner(url, 0)
+    }
+
+    /// `depth` はラッパ剥がしの再帰上限管理用。メールが複数の
+    /// ゲートウェイを通ると URL が二重に包まれることがあるため
+    /// 2 段まで許容し、それ以上は評価不能として打ち切る。
+    fn evaluate_url_inner(&self, url: &str, depth: u8) -> UrlReputation {
+        const MAX_UNWRAP_DEPTH: u8 = 2;
+
+        // 0. 保護/書き換えラッパの剥がし — 内側の最終宛先を評価する (D1249)
+        if depth < MAX_UNWRAP_DEPTH {
+            if let Some(inner) = unwrap_protected_url(url) {
+                return self.evaluate_url_inner(&inner, depth + 1);
+            }
+        }
+
         // ドメイン抽出 (簡易、本番は url クレートを使う)
         let domain = extract_domain(url).unwrap_or_default();
+
+        // 0.5 剥がせない書き換えサービス — 宛先を検証できない間接参照
+        if self.is_unverifiable_rewriter(&domain) {
+            return UrlReputation::Suspicious;
+        }
 
         // 1. 既知の悪意あるドメイン
         if self.known_malicious.contains(&domain) {
@@ -309,6 +365,19 @@ impl QuishingDefense {
         // 2. 信頼できるドメイン
         if self.is_trusted(&domain) {
             return UrlReputation::Trusted;
+        }
+
+        // 2.5 IDN / Punycode ドメイン (D1255 — ホモグラフ攻撃)
+        //    `xn--` ラベルはブラウザが Unicode 化して表示するため、
+        //    ASCII 文字列として読む利用者・スキャナには別ドメインに見える
+        //    (paypal → pаypal のキリル а 等、UTS#39 の紛らわしい文字)。
+        //    また Unicode を直接含むホストも同型のホモグラフ経路。
+        //    正規 IDN (日本語ドメイン等) も存在するが、未検査では絞り込め
+        //    ないため Suspicious (審査してから開け、という水準) に倒す。
+        if domain.split('.').any(|l| l.starts_with("xn--"))
+            || domain.chars().any(|c| !c.is_ascii())
+        {
+            return UrlReputation::Suspicious;
         }
 
         // 3. 短縮 URL / リダイレクタ (動的 QR の実現手段)
@@ -359,6 +428,19 @@ impl QuishingDefense {
         self.url_shorteners
             .iter()
             .any(|s| domain == *s || domain.ends_with(&format!(".{s}")))
+    }
+
+    /// 宛先を復元できないメールセキュリティ URL 書き換えホストか判定する (D1249)。
+    ///
+    /// Mimecast は `protect-<region>.mimecast.com` 系のホスト名を使うため
+    /// サフィックス一致に加えて接頭辞条件を個別に判定する。
+    fn is_unverifiable_rewriter(&self, domain: &str) -> bool {
+        if domain.starts_with("protect-") && domain.ends_with(".mimecast.com") {
+            return true;
+        }
+        self.url_rewriters
+            .iter()
+            .any(|h| domain == *h || domain.ends_with(&format!(".{h}")))
     }
 
     /// 信頼ドメインがサブドメインのプレフィックスまたは中間ラベルとして悪用されているか判定する。
@@ -509,6 +591,312 @@ fn levenshtein(a: &str, b: &str) -> usize {
         }
     }
     dp[m][n]
+}
+
+// ============================================================================
+// URL 書き換えラッパの剥がし (D1249)
+// ============================================================================
+
+/// メールセキュリティゲートウェイやリダイレクタが URL を包む
+/// 「保護 URL」を剥がして内側の最終宛先を返す。
+///
+/// 対応形式:
+/// - Microsoft SafeLinks: `*.safelinks.protection.outlook.com/?url=<percent>`
+/// - Proofpoint URLDefense v1/v2/v3 (公式 `urldecoder.py` 準拠)
+/// - Google リダイレクタ: `google.*/url?q=` `/imgres?imgurl=`
+/// - Slack リダイレクタ: `slack-redir.net/?url=`
+/// - Bing リダイレクタ: `bing.com/ck/a?...&u=a1<urlsafe-b64>`
+/// - Mimecast: `protect-*.mimecast.com/...?domain=<宛先ドメイン>`
+///
+/// 返り値: 剥がせた内側 URL。ラッパでない、または復元不能なら `None`。
+fn unwrap_protected_url(url: &str) -> Option<String> {
+    let domain = extract_domain(url)?;
+
+    // --- Microsoft SafeLinks ---
+    if domain == "safelinks.protection.outlook.com"
+        || domain.ends_with(".safelinks.protection.outlook.com")
+    {
+        return query_param(url, "url")
+            .map(|v| html_unescape(&percent_decode(&v)))
+            .filter(|u| u.starts_with("http://") || u.starts_with("https://"));
+    }
+
+    // --- Proofpoint URLDefense (v1/v2/v3) ---
+    if domain == "urldefense.com" || domain == "urldefense.proofpoint.com" {
+        return decode_urldefense(url);
+    }
+
+    // --- Mimecast URL Protection ---
+    // protect-<region>.mimecast.com / *.mimecastprotect.com
+    // 宛先ドメインは `?domain=` クエリに書かれる (パス全体は復元不能)。
+    if (domain.starts_with("protect-") && domain.ends_with(".mimecast.com"))
+        || domain.ends_with(".mimecastprotect.com")
+        || domain == "mimecastprotect.com"
+    {
+        let dest = query_param(url, "domain").map(|v| percent_decode(&v))?;
+        // ドメインとして妥当な形だけを受け付ける (クエリ混入を防ぐ)
+        if !dest.is_empty()
+            && !dest.contains(['/', '?', '&', '#', '@', ' '])
+            && dest.contains('.')
+        {
+            return Some(format!("https://{dest}"));
+        }
+        return None;
+    }
+
+    // --- Google リダイレクタ ---
+    // google.com/url?q= / /imgres?imgurl= (国別ドメイン含む)
+    if is_google_host(&domain) && (url.contains("/url?") || url.contains("/imgres?")) {
+        for name in ["q", "url", "imgurl"] {
+            if let Some(v) = query_param(url, name) {
+                let inner = html_unescape(&percent_decode(&v));
+                if inner.starts_with("http://") || inner.starts_with("https://") {
+                    return Some(inner);
+                }
+            }
+        }
+        return None;
+    }
+
+    // --- Slack リダイレクタ ---
+    if domain == "slack-redir.net" || domain.ends_with(".slack-redir.net") {
+        return query_param(url, "url")
+            .map(|v| html_unescape(&percent_decode(&v)))
+            .filter(|u| u.starts_with("http://") || u.starts_with("https://"));
+    }
+
+    // --- Bing リダイレクタ ---
+    // bing.com/ck/a?...&u=a1<urlsafe-base64> — `a1` 接頭辞 + base64url の宛先
+    if domain == "bing.com" || domain.ends_with(".bing.com") {
+        let u = query_param(url, "u")?;
+        let b64 = u.strip_prefix("a1")?;
+        let inner = String::from_utf8_lossy(&urlsafe_b64_decode(b64)).into_owned();
+        if inner.starts_with("http://") || inner.starts_with("https://") {
+            return Some(inner);
+        }
+        return None;
+    }
+
+    None
+}
+
+/// `google.com`・`google.co.jp` 等の国別ドメインを含む Google ホストか判定する。
+fn is_google_host(domain: &str) -> bool {
+    domain == "google.com"
+        || domain.ends_with(".google.com")
+        || domain.starts_with("google.")
+        || domain.contains(".google.")
+}
+
+/// Proofpoint URLDefense の書き換え URL を復元する。
+/// 公式 `urldecoder.py` (Proofpoint, GPL v3) の v1/v2/v3 アルゴリズムに準拠。
+///
+/// - v1: `u=<percent-encoded>&k=` → percent-decode → html-unescape
+/// - v2: `u=<translated>&[dc]=` → `-`→`%`, `_`→`/` 置換 → percent-decode → html-unescape
+/// - v3: `/v3/__<マングル URL>__;<urlsafe-b64>!` → 単一スラッシュ修復 →
+///       percent-decode → `*` (1 文字) / `**X` (run 長マッピング) トークンを
+///       base64 デコード済みバイト列で置換
+fn decode_urldefense(url: &str) -> Option<String> {
+    // v3: /v3/__(マングル URL)__;(urlsafe-b64)!
+    if let Some(v3_pos) = url.find("/v3/") {
+        let rest = url[v3_pos + 4..].strip_prefix("__")?;
+        // `(?P<url>.+?)__;` — 最初に `__;` が現れる位置までが宛先
+        let mangled_end = rest.find("__;")?;
+        let mangled = &rest[..mangled_end];
+        let enc_b64 = rest[mangled_end + 2..]
+            .strip_prefix(';')?
+            .split('!')
+            .next()
+            .unwrap_or("");
+        let fixed = fix_v3_single_slash(mangled);
+        let decoded_url = percent_decode(&fixed);
+        let enc_bytes = urlsafe_b64_decode(enc_b64);
+        let dec: Vec<char> = String::from_utf8_lossy(&enc_bytes).chars().collect();
+        let inner = substitute_v3_tokens(&decoded_url, &dec)?;
+        if inner.starts_with("http://") || inner.starts_with("https://") {
+            return Some(inner);
+        }
+        return None;
+    }
+    let is_v2 = url.contains("/v2/");
+    // v1/v2 ともに宛先は u= パラメータ
+    let u = query_param(url, "u")?;
+    // v2 は `-`→`%`、`_`→`/` の独自変換 (公式 urldecoder の maketrans)
+    let translated: String = if is_v2 {
+        u.chars()
+            .map(|c| match c {
+                '-' => '%',
+                '_' => '/',
+                _ => c,
+            })
+            .collect()
+    } else {
+        u
+    };
+    let inner = html_unescape(&percent_decode(&translated));
+    if inner.starts_with("http://") || inner.starts_with("https://") {
+        Some(inner)
+    } else {
+        None
+    }
+}
+
+/// URLDefense v3 が `https:/example.com` のように単一スラッシュへ潰す
+/// スキーム区切りを `://` に復元する (公式 v3_single_slash 相当):
+/// `^([a-z0-9+.-]+:/)([^/].+)` → `\1/\2`。
+fn fix_v3_single_slash(url: &str) -> String {
+    if let Some(colon) = url.find(':') {
+        let scheme = &url[..colon];
+        let valid = !scheme.is_empty()
+            && scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'));
+        let rest = &url[colon + 1..];
+        if valid && rest.starts_with('/') && !rest.starts_with("//") && rest.len() > 1 {
+            return format!("{scheme}:/{rest}");
+        }
+    }
+    url.to_string()
+}
+
+/// URLDefense v3 の `*` 系トークンを、base64 復元したバイト列 (文字)
+/// で置換する。`*` = 1 文字、`**X` = run_mapping (A-Z=2..27, a-z=28..53,
+/// 0-9=54..63, '-'=64, '_'=65) 個の連続文字。
+///
+/// トークンが解決できない (マッピング外・バイト不足) 場合は `None` を
+/// 返す — 部分復元した URL を評価すると宛先を誤認するため。
+fn substitute_v3_tokens(text: &str, dec_bytes: &[char]) -> Option<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut marker = 0usize;
+    let mut i = 0usize;
+    while i < chars.len() {
+        if chars[i] == '*' {
+            if i + 2 < chars.len() && chars[i + 1] == '*' {
+                // `**X` — X は run 長マッピング
+                let run = v3_run_value(chars[i + 2])?;
+                if marker + run > dec_bytes.len() {
+                    return None;
+                }
+                for &b in &dec_bytes[marker..marker + run] {
+                    out.push(b);
+                }
+                marker += run;
+                i += 3;
+            } else {
+                // 単一 `*` — 1 文字
+                if marker >= dec_bytes.len() {
+                    return None;
+                }
+                out.push(dec_bytes[marker]);
+                marker += 1;
+                i += 1;
+            }
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    Some(out)
+}
+
+/// 公式 urldecoder の v3_run_mapping: A-Z=2..=27, a-z=28..=53,
+/// 0-9=54..=63, '-'=64, '_'=65。
+fn v3_run_value(c: char) -> Option<usize> {
+    match c {
+        'A'..='Z' => Some(c as usize - 'A' as usize + 2),
+        'a'..='z' => Some(c as usize - 'a' as usize + 28),
+        '0'..='9' => Some(c as usize - '0' as usize + 54),
+        '-' => Some(64),
+        '_' => Some(65),
+        _ => None,
+    }
+}
+
+/// `?`/`&` 区切りのクエリから `name=` の値を取り出す。
+/// 値は `&` または `#` まで。パラメータ名の前方一致だけを見るため
+/// `imgurl=` の中の `url=` 等の誤検出は起きない。
+fn query_param(url: &str, name: &str) -> Option<String> {
+    let q = url.find('?')?;
+    let query = &url[q + 1..];
+    let query = query.split('#').next().unwrap_or(query);
+    for pair in query.split('&') {
+        if let Some(v) = pair.strip_prefix(&format!("{name}=")) {
+            return Some(v.to_string());
+        }
+    }
+    None
+}
+
+/// パーセントデコード (`%XX` → バイト、`+` → 空白)。
+/// URL 解析用の外部クレートを追加しない方針のため自前で実装する。
+fn percent_decode(s: &str) -> String {
+    fn hex_val(b: u8) -> Option<u8> {
+        match b {
+            b'0'..=b'9' => Some(b - b'0'),
+            b'a'..=b'f' => Some(b - b'a' + 10),
+            b'A'..=b'F' => Some(b - b'A' + 10),
+            _ => None,
+        }
+    }
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 3 <= bytes.len() {
+            if let (Some(h), Some(l)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push(h << 4 | l);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(if bytes[i] == b'+' { b' ' } else { bytes[i] });
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// URL 書き換えで使われる最小限の HTML エスケープだけを戻す。
+/// (`&amp;` → `&` が本筋 — SafeLinks/urldefense の u= 値で頻出)
+fn html_unescape(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&#38;", "&")
+        .replace("&#x26;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+}
+
+/// RFC 4648 の URL-safe base64 をデコードする (`-`/`_` 版、`=` パディング可)。
+/// アルファベット外の文字は読み飛ばす (末尾 `=` や混入の空白を許容)。
+fn urlsafe_b64_decode(s: &str) -> Vec<u8> {
+    fn val(b: u8) -> Option<u8> {
+        match b {
+            b'A'..=b'Z' => Some(b - b'A'),
+            b'a'..=b'z' => Some(b - b'a' + 26),
+            b'0'..=b'9' => Some(b - b'0' + 52),
+            b'-' => Some(62),
+            b'_' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut acc: u32 = 0;
+    let mut nbits: u32 = 0;
+    for &b in s.as_bytes() {
+        let Some(v) = val(b) else {
+            continue;
+        };
+        acc = (acc << 6) | u32::from(v);
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            out.push((acc >> nbits) as u8);
+        }
+    }
+    out
 }
 
 // ============================================================================
@@ -1052,6 +1440,188 @@ mod tests {
             rep,
             UrlReputation::Neutral,
             "巨大ホストは typosquat ではなく Neutral であるべき: {rep:?}"
+        );
+    }
+
+    // ── D1249: 保護 URL ラッパの剥がし ─────────────────────────────────────
+
+    #[test]
+    fn safelinks_wrapper_unwraps_to_inner() {
+        let d = QuishingDefense::new();
+        // SafeLinks で包まれた悪意ドメイン — 外側は Microsoft 系ドメイン
+        let wrapped = "https://nam04.safelinks.protection.outlook.com/?url=https%3A%2F%2Famazon-secure.tk%2Flogin&data=05";
+        assert_eq!(
+            d.evaluate_url(wrapped),
+            UrlReputation::Suspicious,
+            "SafeLinks 内側の自由 TLD を評価すべき"
+        );
+    }
+
+    #[test]
+    fn safelinks_wrapper_unwraps_to_trusted() {
+        let d = QuishingDefense::new();
+        let wrapped = "https://nam04.safelinks.protection.outlook.com/?url=https%3A%2F%2Fgithub.com%2Forg%2Frepo&data=05";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Trusted);
+    }
+
+    #[test]
+    fn urldefense_v2_unwraps_to_inner() {
+        let d = QuishingDefense::new();
+        // v2 形式: - → %, _ → /  (ドメイン内の . はそのまま残る)
+        let wrapped = "https://urldefense.com/v2/url?u=https-3a__evil-2dcorp.tk_login&d=DwMFAg&c=xyz";
+        // 復元後 https://evil-corp.tk/login → .tk 自由 TLD で Suspicious
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn urldefense_v3_single_token_unwraps() {
+        let d = QuishingDefense::new();
+        // v3 形式: 単一 `*` トークンを enc_bytes (base64 復元) の 1 文字で置換。
+        // "dg" → urlsafe b64 of 'v' — `e*il` → `evil`
+        let wrapped = "https://urldefense.com/v3/__https://e*il.tk/login__;dg!x";
+        assert_eq!(
+            d.evaluate_url(wrapped),
+            UrlReputation::Suspicious,
+            "v3 の単一トークン置換で evil.tk に復元されるべき"
+        );
+    }
+
+    #[test]
+    fn urldefense_v3_run_token_unwraps() {
+        let d = QuishingDefense::new();
+        // `**B` (run=3) トークンを enc_bytes の 3 文字で置換。
+        // "bXBs" → urlsafe b64 of "mpl" — `exa**Ble` → `example`
+        let wrapped = "https://urldefense.com/v3/__https://exa**Ble.com/__;bXBs!x";
+        assert_eq!(
+            d.evaluate_url(wrapped),
+            UrlReputation::Neutral,
+            "v3 の run トークン置換で example.com に復元されるべき"
+        );
+    }
+
+    #[test]
+    fn urldefense_v3_single_slash_scheme_restored() {
+        let d = QuishingDefense::new();
+        // v3 は `https:/` を単一スラッシュに潰す — 修復して評価する
+        let wrapped = "https://urldefense.com/v3/__https:/evil.tk/x__;!!x";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn google_redirect_unwraps_q_param() {
+        let d = QuishingDefense::new();
+        let wrapped = "https://www.google.co.jp/url?q=https%3A%2F%2Fevil.tk%2F";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn google_search_is_not_a_redirect() {
+        let d = QuishingDefense::new();
+        // /search?q= はリダイレクタでなく検索 — 従来どおり Trusted
+        assert_eq!(
+            d.evaluate_url("https://www.google.com/search?q=rust"),
+            UrlReputation::Trusted
+        );
+    }
+
+    #[test]
+    fn bing_cka_unwraps_u_param() {
+        let d = QuishingDefense::new();
+        // u=a1<base64url("https://evil.tk/x")>
+        let b64 = "aHR0cHM6Ly9ldmlsLnRrL3g";
+        let wrapped = format!("https://www.bing.com/ck/a?u=a1{b64}&p=1");
+        assert_eq!(d.evaluate_url(&wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn slack_redir_unwraps_url_param() {
+        let d = QuishingDefense::new();
+        let wrapped = "https://slack-redir.net/link?url=https%3A%2F%2Fevil.tk%2F";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn mimecast_domain_param_unwraps() {
+        let d = QuishingDefense::new();
+        let wrapped = "https://protect-eu.mimecast.com/s/AbCd/xYz?domain=evil.tk";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn unverifiable_rewriter_is_suspicious() {
+        let d = QuishingDefense::new();
+        // 宛先をサーバ側でしか復元できない書き換えホスト
+        for u in [
+            "https://linkprotect.cudasvc.com/url?a=https%3a%2f%2fexample.com",
+            "https://secure-web.cisco.com/abc/click",
+            "https://clicktime.trendmicro.com/abc",
+            "https://x.wsed.org/y",
+            "https://data.protection.sophos.com/z",
+            "https://xxx.mimecastprotect.com/y",
+            "https://protect-us.mimecast.com/s/XyZ/noDomainParam",
+        ] {
+            assert_eq!(
+                d.evaluate_url(u),
+                UrlReputation::Suspicious,
+                "{u} は検証不能の間接参照として Suspicious であるべき"
+            );
+        }
+    }
+
+    #[test]
+    fn double_wrapped_url_still_evaluates_inner() {
+        let d = QuishingDefense::new();
+        // SafeLinks が urldefense を包む二重ラッパ (複数ゲートウェイ通過)
+        let inner_defense = "https%3A%2F%2Furldefense.com%2Fv2%2Furl%3Fu%3Dhttps-3a__evil-2dcorp.tk%26d%3D1";
+        let wrapped = format!(
+            "https://nam04.safelinks.protection.outlook.com/?url={inner_defense}"
+        );
+        assert_eq!(d.evaluate_url(&wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn plain_unwrapped_url_unchanged() {
+        let d = QuishingDefense::new();
+        // ラッパでない URL は従来どおりの評価
+        assert_eq!(
+            d.evaluate_url("https://example.org/page"),
+            UrlReputation::Neutral
+        );
+    }
+
+    // ── D1255: IDN / Punycode ホモグラフ ─────────────────────────────────
+
+    #[test]
+    fn punycode_domain_is_suspicious() {
+        let d = QuishingDefense::new();
+        // xn-- ラベルは表示側で Unicode 化され、ASCII のままでは別ドメインに見える
+        assert_eq!(
+            d.evaluate_url("https://xn--nxasmq6b.example.com/"),
+            UrlReputation::Suspicious
+        );
+        assert_eq!(
+            d.evaluate_url("https://sub.xn--p1ai/"),
+            UrlReputation::Suspicious
+        );
+    }
+
+    #[test]
+    fn unicode_homoglyph_domain_is_suspicious() {
+        let d = QuishingDefense::new();
+        // キリル文字 а (U+0430) を含む — 見た目は example.com でも別ドメイン
+        assert_eq!(
+            d.evaluate_url("https://еxample.com/"),
+            UrlReputation::Suspicious,
+            "非 ASCII を直接含むホストはホモグラフ経路として Suspicious であるべき"
+        );
+    }
+
+    #[test]
+    fn ascii_domain_not_flagged_as_idn() {
+        let d = QuishingDefense::new();
+        assert_eq!(
+            d.evaluate_url("https://example.org/x"),
+            UrlReputation::Neutral
         );
     }
 }

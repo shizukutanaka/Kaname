@@ -88,6 +88,16 @@ pub enum SvgRisk {
     /// XXE 形式のペイロードによるローカルファイル読み出しや、
     /// 入れ子実体による billion laughs 型 DoS の入口になる。
     XmlExternalEntity,
+    /// 非表示要素 (`display="none"` / `visibility:hidden` / `opacity:0` /
+    /// `font-size:0` 等) を含む。
+    ///
+    /// Microsoft 脅威情報が報告した AI 生成難読化 SVG (2025-09) のように、
+    /// 実体を見せずスキャナだけに構造を見せる (あるいはその逆) 難読化で
+    /// 使われる。単体では実行リスクではないが回避の兆候として記録する。
+    HiddenContent {
+        /// 検出された非表示化の手法。
+        method: String,
+    },
 }
 
 /// SVG 解析結果。
@@ -207,6 +217,37 @@ pub fn scan_svg(content: &str) -> SvgScan {
     // 7. XML 外部実体宣言 (XXE 形式ペイロード / billion laughs 型 DoS)
     if lower.contains("<!doctype") || lower.contains("<!entity") {
         risks.push(SvgRisk::XmlExternalEntity);
+    }
+
+    // 7.5 非表示要素 (D1256 — AI 生成難読化 SVG の典型手口)
+    //     `display="none"`/`visibility:hidden`/`opacity:0`/`font-size:0` で
+    //     人間には見えない構造 (本物のペイロードや囮図形) を持つ。
+    //     Microsoft 脅威情報 (2025-09) の解析で invisible elements が名指し
+    //     された難読化手段。実行リスクではないが回避の兆候として記録する。
+    for method in [
+        "display=\"none\"",
+        "display='none'",
+        "display: none",
+        "display:none",
+        "visibility=\"hidden\"",
+        "visibility='hidden'",
+        "visibility: hidden",
+        "visibility:hidden",
+        "opacity=\"0\"",
+        "opacity='0'",
+        "opacity:0",
+        "opacity: 0",
+        "font-size=\"0\"",
+        "font-size='0'",
+        "font-size:0",
+        "font-size: 0",
+    ] {
+        if lower.contains(method) {
+            risks.push(SvgRisk::HiddenContent {
+                method: method.to_string(),
+            });
+            break;
+        }
     }
 
     // 8. AI へのプロンプト注入検査 (マルチモーダル注入)
@@ -591,6 +632,53 @@ mod tests {
     fn looks_like_svg_rejects_non_svg() {
         assert!(!looks_like_svg("<html><body>hello</body></html>"));
         assert!(!looks_like_svg(""));
+    }
+
+    // ── D1256: 非表示要素による難読化 ──────────────────────────────────
+
+    #[test]
+    fn display_none_detected_as_hidden_content() {
+        // Microsoft AI 難読化 SVG で使われた invisible elements
+        let svg = r#"<svg><g display="none"><rect/></g><circle r="3"/></svg>"#;
+        let scan = scan_svg(svg);
+        assert!(
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
+            "display=\"none\" が検出されなかった: {:?}",
+            scan.risks
+        );
+        // 非表示要素単独は実行リスクではない (回避の兆候として記録)
+        assert!(scan.safe_as_attachment);
+    }
+
+    #[test]
+    fn opacity_and_font_size_zero_detected() {
+        for svg in [
+            r#"<svg><text style="opacity:0">x</text></svg>"#,
+            r#"<svg><text font-size="0">x</text></svg>"#,
+            r#"<svg><g style="visibility:hidden">x</g></svg>"#,
+        ] {
+            let scan = scan_svg(svg);
+            assert!(
+                scan.risks
+                    .iter()
+                    .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
+                "非表示要素が検出されなかった: {svg}"
+            );
+        }
+    }
+
+    #[test]
+    fn visible_svg_not_flagged_hidden() {
+        let svg = r#"<svg><circle cx="5" cy="5" r="4" fill="red"/></svg>"#;
+        let scan = scan_svg(svg);
+        assert!(
+            !scan.risks
+                .iter()
+                .any(|r| matches!(r, SvgRisk::HiddenContent { .. })),
+            "通常の SVG を非表示要素と誤検出した"
+        );
     }
 
     #[test]
