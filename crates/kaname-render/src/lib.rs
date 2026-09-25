@@ -114,6 +114,33 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `application/ms-tnef`/`winmail.dat`/`X-MS-TNEF-Correlator:` の
+    /// TNEF 不透明コンテナがあるか — 添付を包み隠す Microsoft 専用
+    /// 形式 (D1088)。
+    pub tnef_container: bool,
+    /// `Registered:`/`Registered-Mail:`/`Return-Receipt-Requested:`/
+    /// `X-Registered-*` があるか — 書留配信の体裁を送信側が自称する
+    /// 兆候 (D1089)。
+    pub registered_marks: bool,
+    /// `X-MimeOLE:`/`X-Mime-Version:` があるか — 生成器版の記録を
+    /// 送信側が自称する兆候 (D1090)。
+    pub mimeole_marks: bool,
+    /// `X-Cloudmark-*`/`X-CMAE-*`/`X-UCI-*`/`X-Cisco-*`/`X-IronPort-*`
+    /// があるか — フィルタ基盤の記録を送信側が自称する兆候 (D1091)。
+    pub cloudmark_marks: bool,
+    /// `X-Read:`/`X-Confirm:`/`X-Readed:`/`X-Read-Receipt:` があるか —
+    /// 既読・確認の状態を送信側が自称する兆候 (D1092)。
+    pub read_confirm_marks: bool,
+    /// `X-Original-Message-Id:`/`X-Old-Message-Id:`/`X-Parent:`/
+    /// `X-Original-Thread:` があるか — 既出の鎖の記録を名乗る
+    /// 既知経路の体裁 (D1093)。
+    pub id_chain: bool,
+    /// `X-Forwarded-For:`/`X-Forwarded-Message`/`X-Forward:` があるか —
+    /// 転送経路の記録を送信側が自称する兆候 (D1094)。
+    pub forward_marks: bool,
+    /// `X-Spam-Score:`/`X-SpamResult:`/`X-ScanScore:` があるか —
+    /// 判定スコア値を送信側が自称する兆候 (D1095)。
+    pub x_score_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2032,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2062,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        tnef_container: has_tnef_container(raw),
+        registered_marks: has_registered_marks(hdr),
+        mimeole_marks: has_mimeole_marks(hdr),
+        cloudmark_marks: has_cloudmark_marks(hdr),
+        read_confirm_marks: has_read_confirm_marks(hdr),
+        id_chain: has_id_chain(hdr),
+        forward_marks: has_forward_marks(hdr),
+        x_score_marks: has_x_score_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2427,137 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `application/ms-tnef`/`winmail.dat`/`X-MS-TNEF-Correlator:` の
+/// TNEF 不透明コンテナがあるか判定する (D1088)。
+///
+/// MS-TNEF (Transport-Neutral Encapsulation Format) は Exchange 専用の
+/// 不透明コンテナ — 真の添付は winmail.dat の内部に包まれ、解析側では
+/// 見えない添付を隠せる。ヘッダ・本文全体を走査する (内側パートの
+/// Content-Type 宣言や添付名に出る)。
+fn has_tnef_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("ms-tnef") || lower.contains("winmail.dat")
+}
+
+/// `Registered:`/`Registered-Mail:`/`Return-Receipt-Requested:`/
+/// `X-Registered-*` があるか判定する (D1089)。
+///
+/// 書留・受取記録要求の体裁 — 正規配信機構が残す受領記録を送信側が
+/// 自称する値。
+fn has_registered_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("registered:")
+            || l.starts_with("registered-mail:")
+            || l.starts_with("return-receipt-requested:")
+            || l.starts_with("x-registered-")
+    })
+}
+
+/// `X-MimeOLE:`/`X-Mime-Version:` があるか判定する (D1090)。
+///
+/// `X-MimeOLE:` は Outlook Express の生成器印、`X-Mime-Version:` は
+/// MIME 版記録の自称 — 生成側が残す版情報を送信側が書く値。
+fn has_mimeole_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("x-mimeole:") || l.starts_with("x-mime-version:"))
+}
+
+/// `X-Cloudmark-*`/`X-CMAE-*`/`X-UCI-*`/`X-Cisco-*`/`X-IronPort-*`
+/// があるか判定する (D1091)。
+///
+/// Cloudmark/CMAE/UCI/Cisco/IronPort 等のフィルタ・ゲートウェイ印は
+/// 基盤側が記す値 — 送信側が書くのは「検査を通った」体裁の自称。
+fn has_cloudmark_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-cloudmark-")
+            || l.starts_with("x-cmae-")
+            || l.starts_with("x-uci-")
+            || l.starts_with("x-cisco-")
+            || l.starts_with("x-ironport-")
+    })
+}
+
+/// `X-Read:`/`X-Confirm:`/`X-Readed:`/`X-Read-Receipt:` があるか
+/// 判定する (D1092)。
+///
+/// 既読・確認の状態印 — 「読まれた」記録を送信側が自称する値。
+fn has_read_confirm_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-read:")
+            || l.starts_with("x-confirm:")
+            || l.starts_with("x-readed:")
+            || l.starts_with("x-read-receipt:")
+    })
+}
+
+/// `X-Original-Message-Id:`/`X-Old-Message-Id:`/`X-Parent:`/
+/// `X-Original-Thread:` があるか判定する (D1093)。
+///
+/// 既出の鎖の Message-ID 記録を名乗る印 — 「既知の流れの続き」の体裁。
+fn has_id_chain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-original-message-id:")
+            || l.starts_with("x-old-message-id:")
+            || l.starts_with("x-parent:")
+            || l.starts_with("x-original-thread:")
+    })
+}
+
+/// `X-Forwarded-For:`/`X-Forwarded-Message`/`X-Forward:` があるか
+/// 判定する (D1094)。
+///
+/// 転送経路の記録を名乗る印 — 「中継を通った」体裁を送信側が自称する。
+fn has_forward_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-forwarded-for:")
+            || l.starts_with("x-forwarded-message")
+            || l.starts_with("x-forward:")
+    })
+}
+
+/// `X-Spam-Score:`/`X-SpamResult:`/`X-ScanScore:` があるか判定する
+/// (D1095)。
+///
+/// 判定スコア値は判定機が記す数値 — 送信側が書くのは「採点済み」の
+/// 体裁の自称。
+fn has_x_score_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spam-score:")
+            || l.starts_with("x-spamresult:")
+            || l.starts_with("x-scanscore:")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21294,111 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_はTNEF容器を検出する() {
+        let t1 = b"Content-Type: application/ms-tnef\r\n\r\nx";
+        assert!(has_tnef_container(t1));
+        let t2 = b"Content-Disposition: attachment; filename=winmail.dat\r\n\r\nx";
+        assert!(has_tnef_container(t2));
+        let t3 = b"X-MS-TNEF-Correlator: x\r\n\r\nx";
+        assert!(has_tnef_container(t3));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_tnef_container(clean));
+    }
+
+    #[test]
+    fn scan_は書留印を検出する() {
+        let rg = b"Registered: yes\r\n\r\nx";
+        assert!(has_registered_marks(rg));
+        let rm = b"Registered-Mail: 1\r\n\r\nx";
+        assert!(has_registered_marks(rm));
+        let rr = b"Return-Receipt-Requested: 1\r\n\r\nx";
+        assert!(has_registered_marks(rr));
+        let xr = b"X-Registered-ID: a\r\n\r\nx";
+        assert!(has_registered_marks(xr));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_registered_marks(clean));
+    }
+
+    #[test]
+    fn scan_はMimeOLE印を検出する() {
+        let mo = b"X-MimeOLE: Produced By Microsoft\r\n\r\nx";
+        assert!(has_mimeole_marks(mo));
+        let mv = b"X-Mime-Version: 1.0\r\n\r\nx";
+        assert!(has_mimeole_marks(mv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mimeole_marks(clean));
+    }
+
+    #[test]
+    fn scan_はCloudmark印を検出する() {
+        let cm = b"X-Cloudmark-Score: 5\r\n\r\nx";
+        assert!(has_cloudmark_marks(cm));
+        let ca = b"X-CMAE-Score: 1\r\n\r\nx";
+        assert!(has_cloudmark_marks(ca));
+        let uc = b"X-UCI-Score: 2\r\n\r\nx";
+        assert!(has_cloudmark_marks(uc));
+        let cs = b"X-Cisco-AVS: 1\r\n\r\nx";
+        assert!(has_cloudmark_marks(cs));
+        let ip = b"X-IronPort-AV: 1\r\n\r\nx";
+        assert!(has_cloudmark_marks(ip));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cloudmark_marks(clean));
+    }
+
+    #[test]
+    fn scan_は既読印を検出する() {
+        let rd = b"X-Read: 1\r\n\r\nx";
+        assert!(has_read_confirm_marks(rd));
+        let cf = b"X-Confirm: 1\r\n\r\nx";
+        assert!(has_read_confirm_marks(cf));
+        let rd2 = b"X-Readed: 1\r\n\r\nx";
+        assert!(has_read_confirm_marks(rd2));
+        let rrr = b"X-Read-Receipt: 1\r\n\r\nx";
+        assert!(has_read_confirm_marks(rrr));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_read_confirm_marks(clean));
+    }
+
+    #[test]
+    fn scan_は鎖記録を検出する() {
+        let om = b"X-Original-Message-Id: <a>\r\n\r\nx";
+        assert!(has_id_chain(om));
+        let ol = b"X-Old-Message-Id: <b>\r\n\r\nx";
+        assert!(has_id_chain(ol));
+        let pr = b"X-Parent: <c>\r\n\r\nx";
+        assert!(has_id_chain(pr));
+        let ot = b"X-Original-Thread: x\r\n\r\nx";
+        assert!(has_id_chain(ot));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_id_chain(clean));
+    }
+
+    #[test]
+    fn scan_は転送記録を検出する() {
+        let ff = b"X-Forwarded-For: a@b\r\n\r\nx";
+        assert!(has_forward_marks(ff));
+        let fm = b"X-Forwarded-Message: 1\r\n\r\nx";
+        assert!(has_forward_marks(fm));
+        let mi = b"X-Forwarded-Message-Id: <x>\r\n\r\nx";
+        assert!(has_forward_marks(mi));
+        let fw = b"X-Forward: a\r\n\r\nx";
+        assert!(has_forward_marks(fw));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_forward_marks(clean));
+    }
+
+    #[test]
+    fn scan_はスコア印を検出する() {
+        let ss = b"X-Spam-Score: 9.9\r\n\r\nx";
+        assert!(has_x_score_marks(ss));
+        let sr = b"X-SpamResult: spam\r\n\r\nx";
+        assert!(has_x_score_marks(sr));
+        let sc = b"X-ScanScore: 3\r\n\r\nx";
+        assert!(has_x_score_marks(sc));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_x_score_marks(clean));
     }
 }

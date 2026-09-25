@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1088–D1095: 不透明コンテナ・書留・生成版・基盤印・鎖・転送・スコアの未検査兆候 8 件
+
+- **問題**: 「添付は見えるか」「書留か」「何が作ったか」「どの基盤か」「読まれたか」「どの鎖か」「どの経路か」「何点か」に関する兆候が未検査だった — `application/ms-tnef`/`winmail.dat`/`X-MS-TNEF-Correlator:` の TNEF 不透明コンテナ、`Registered:`/`Return-Receipt-Requested:`/`X-Registered-*` の書留体裁、`X-MimeOLE:`/`X-Mime-Version:` の生成器版、`X-Cloudmark-*`/`X-CMAE-*`/`X-Cisco-*`/`X-IronPort-*` のフィルタ基盤印、`X-Read:`/`X-Confirm:`/`X-Read-Receipt:` の既読確認、`X-Original-Message-Id:`/`X-Parent:`/`X-Original-Thread:` の鎖記録、`X-Forwarded-For:`/`X-Forwarded-Message:`/`X-Forward:` の転送記録、`X-Spam-Score:`/`X-SpamResult:`/`X-ScanScore:` のスコア印。
+- **修正**: `has_tnef_container`/`has_registered_marks`/`has_mimeole_marks`/`has_cloudmark_marks`/`has_read_confirm_marks`/`has_id_chain`/`has_forward_marks`/`has_x_score_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。6 件は自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。TNEF はヘッダ・本文全体を走査 (内側パートの Content-Type・添付名も捕捉)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「見せる・書留・作る・基盤・既読・鎖・経路・点数」を送信側が書くのはいずれも属しない印 — 不透明な器と点数の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

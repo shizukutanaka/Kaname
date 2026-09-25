@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1088: TNEF 不透明コンテナ
+    if env.tnef_container {
+        render_risks.push(
+            "application/ms-tnef/winmail.dat/X-MS-TNEF-Correlator — 添付を包み隠す Microsoft 専用コンテナの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1089: 書留印自署
+    if env.registered_marks {
+        render_risks.push(
+            "Registered/Registered-Mail/Return-Receipt-Requested — 書留・受領記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1090: 生成器版印自署
+    if env.mimeole_marks {
+        render_risks.push(
+            "X-MimeOLE/X-Mime-Version — 生成器版の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1091: Cloudmark/Cisco/IronPort 基盤印自署
+    if env.cloudmark_marks {
+        render_risks.push(
+            "X-Cloudmark/X-CMAE/X-UCI/X-Cisco/X-IronPort — フィルタ基盤の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1092: 既読確認印自署
+    if env.read_confirm_marks {
+        render_risks.push(
+            "X-Read/X-Confirm/X-Readed/X-Read-Receipt — 既読・確認状態を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1093: 鎖記録名乗り
+    if env.id_chain {
+        render_risks.push(
+            "X-Original-Message-Id/X-Old-Message-Id/X-Parent/X-Original-Thread — 既出の鎖の記録を名乗る体裁の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1094: 転送経路記録自署
+    if env.forward_marks {
+        render_risks.push(
+            "X-Forwarded-For/X-Forwarded-Message/X-Forward — 転送経路の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1095: スコア印自署
+    if env.x_score_marks {
+        render_risks.push(
+            "X-Spam-Score/X-SpamResult/X-ScanScore — 判定スコア値を送信側が自称する兆候です"
                 .to_string(),
         );
     }
