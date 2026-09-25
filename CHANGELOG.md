@@ -8,6 +8,23 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D980–D986: リンク先・本文文字の未検査兆候 (7 件)
+
+**問題**: href 属性値のスキーム・ホスト評価が生文字列への prefix 比較に留まり、(a) URL 偽装の最古典手口 (userinfo `https://name@host`)、(b) リンク経由の実行ファイル配送、(c) OS/Office プロトコルハンドラへの直接ジャンプが未検査だった。また本文文字の不可視 Unicode (ASCII スマグリング) と `<link>` 要素・`sms:` 系スキーム・`mailto:` パラメータの兆候報告がなかった。
+
+**修正**:
+
+- **D980** (kaname-render): `userinfo_href` — http(s) href のオーソリティ部に `@` があるかを検出 (`https://paypal.com@evil.example/` 型)。
+- **D981** (kaname-render): `exec_href` — href 先のパス末端が `is_dangerous_windows_attachment` と同じ実行・危険拡張子 (.exe/.msi/.ps1/.iso/.vhd 等) かを検出 (リンク経由マルウェア配送)。
+- **D982** (kaname-render): `helper_scheme_link` — `search-ms:`/`ms-msdt:`/`ms-appinstaller:`/`ms-word:`/`onenote:`/`smb:`/`itms-services:` 等、ブラウザ外のプロトコルハンドラへジャンプするスキームを検出。
+- **D983** (kaname-render): `invisible_unicode` — 抽出テキストの Unicode タグ文字 U+E0000–E007F・行間注釈 U+FFF9–FFFB を検出 (ASCII スマグリング = 人間に見えない隠し指示・ペイロード混入)。text/plain 本文も `body_text` 側で同判定。
+- **D984** (kaname-render): `link_tag_present` — `<link>` 要素 (外部スタイルシート/preload/dns-prefetch) の存在を検出 (描画時フェッチの追跡経路)。
+- **D985** (kaname-render): `messaging_scheme_link` — `sms:`/`smsto:`/`callto:`/`skype:`/`wtai:`/`facetime:` 等の電話・SMS 誘導スキームを検出 (tel: D237 の同系統)。
+- **D986** (kaname-render): `mailto_params` — `mailto:` href の `subject=`/`body=` 自動入力パラメータを検出 (返信誘導型フィッシング)。
+- 共通基盤: `decoded_url_token` (実体参照→%HH 復号→制御空白除去→小文字化) で href 値をブラウザ解釈後の形に正規化し、`decode_entities_into` に `colon`/`tab`/`newline` を追加。kaname-ui の `analyze_raw_email` で各兆候を警告へ変換。
+
+**教訓**: URL の評価は「書かれた形」ではなく「ブラウザが解釈する形」で行え — 実体参照・%エンコード・制御空白は書き換えの材料であり、host/ext/スキームの比較は正規化後の値に対して行うこと。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

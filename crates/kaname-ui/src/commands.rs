@@ -562,9 +562,80 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D980: http(s) URL の userinfo (name@host 偽装)
+    if html_extract.as_ref().is_some_and(|e| e.userinfo_href) {
+        render_risks.push(
+            "リンク先 URL に userinfo (https://見た目のドメイン@実接続先) — URL 偽装の最古典手口の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D981: href 先が実行・危険拡張子ファイル
+    if html_extract.as_ref().is_some_and(|e| e.exec_href) {
+        render_risks.push(
+            "リンク先が実行・危険拡張子ファイル (.exe/.msi/.ps1/.iso 等) — 添付ではなくリンクで届けるマルウェア配送の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D982: ヘルパー起動スキーム (search-ms/ms-msdt/Office 等)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.helper_scheme_link)
+    {
+        render_risks.push(
+            "search-ms/ms-msdt/ms-word 等のヘルパー起動スキーム — ブラウザ経由でなく OS・Office のプロトコルハンドラへ直接ジャンプする兆候です"
+                .to_string(),
+        );
+    }
+
+    // D983: 不可視 Unicode (ASCII スマグリング — タグ文字等)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.invisible_unicode)
+        || body_text
+            .chars()
+            .any(|c| matches!(c, '\u{E0000}'..='\u{E007F}' | '\u{FFF9}'..='\u{FFFB}'))
+    {
+        render_risks.push(
+            "不可視 Unicode タグ文字 (U+E0000 系) — 人間には見えないが機械が読む隠し指示・ペイロード (ASCII スマグリング) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D984: <link> 要素 (外部フェッチ/追跡経路)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.link_tag_present)
+    {
+        render_risks.push(
+            "link 要素 — 外部スタイルシート/preload 等、描画時に外部へフェッチする追跡経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D985: sms:/callto:/wtai:/facetime: 等の通話・SMS 誘導スキーム
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.messaging_scheme_link)
+    {
+        render_risks.push(
+            "sms:/callto: 等のメッセージング系スキーム — 電話・SMS アプリへの誘導 (スミッシング等) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D986: mailto: の subject=/body= 自動入力パラメータ
+    if html_extract.as_ref().is_some_and(|e| e.mailto_params) {
+        render_risks.push(
+            "mailto: に subject/body パラメータ — 返信文面を攻撃者が事前入力する返信誘導型フィッシングの兆候です"
                 .to_string(),
         );
     }

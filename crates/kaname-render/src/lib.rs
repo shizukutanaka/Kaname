@@ -13321,6 +13321,41 @@ pub struct ExtractedBodyText {
     /// コールバックフィッシング (BazaCall 型) で「クリック不要・
     /// 電話をかけさせる」誘導経路の兆候 (D237)。
     pub tel_link: bool,
+    /// http(s) リンクのオーソリティ部に `@` (userinfo) が含まれるか —
+    /// `https://paypal.com@evil.example/` 型の最古典的な URL 偽装
+    /// (D980)。`@` より前は視覚的に「本物のドメイン」のように読めるが
+    /// 実際の接続先は後ろのホスト。正規メールのリンクに userinfo は
+    /// ほぼ使われない。
+    pub userinfo_href: bool,
+    /// href 先が実行・危険拡張子ファイルか — `https://x/setup.exe` の
+    /// ような「添付ではなくリンクで届けるマルウェア」配送経路の兆候
+    /// (D981)。拡張子判定は `is_dangerous_windows_attachment` と同じ
+    /// 一覧 (.exe/.msi/.ps1/.iso/.vhd 等) を再利用。
+    pub exec_href: bool,
+    /// href がヘルパー起動スキームか — `search-ms:` (Explorer 経由の
+    /// リモートファイル提示)、`ms-msdt:` (Follina)、`ms-appinstaller:`、
+    /// `ms-word:`/`onenote:` 等 Office URI スキーム、`smb:` の兆候
+    /// (D982)。ブラウザ内で完結せず OS/Office のプロトコルハンドラへ
+    /// 直接ジャンプするため URL フィルタをすり抜ける。
+    pub helper_scheme_link: bool,
+    /// 抽出テキストに不可視の Unicode タグ文字 (U+E0000–E007F) や
+    /// 非推奨の行間注釈制御文字 (U+FFF9–FFFB) が含まれるか —
+    /// 「ASCII スマグリング」(人間には見えないが LLM/スキャナが読む
+    /// 隠し指示・隠しペイロード) の兆候 (D983)。
+    pub invisible_unicode: bool,
+    /// `<link>` 要素があるか — 外部スタイルシート/`rel="preload"`/
+    /// `rel="dns-prefetch"` 等、描画時に外部へフェッチする追跡・
+    /// 外部読み込み経路の兆候 (D984)。正規の配信メールはインライン
+    /// スタイルを使い `<link>` を出さない (ESP も生成しない)。
+    pub link_tag_present: bool,
+    /// href が `sms:`/`smsto:`/`callto:`/`skype:`/`wtai:`/`facetime:`
+    /// 系か — tel: (D237) と同系の「電話/SMS へ誘導」スキームの兆候
+    /// (D985)。スミッシング・コールバックフィッシングの誘導経路。
+    pub messaging_scheme_link: bool,
+    /// `mailto:` href に `subject=`/`body=` パラメータがあるか —
+    /// 返信文面を攻撃者が事前入力する「返信誘導型」フィッシングの
+    /// 兆候 (D986)。
+    pub mailto_params: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13501,13 +13536,201 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         text.push_str(h);
     }
 
+    let out_text = collapse_whitespace(&text);
+    // href 値は実体参照・%エンコード・制御空白を復号してから評価する
+    // (D980–D986) — 生文字列の prefix/属性比較は難読で回避される。
+    let decoded_hrefs: Vec<String> = hrefs.iter().map(|h| decoded_url_token(h)).collect();
     ExtractedBodyText {
-        text: collapse_whitespace(&text),
+        invisible_unicode: text_has_invisible_unicode(&out_text),
+        text: out_text,
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
         tel_link: has_tel_link(html),
+        userinfo_href: decoded_hrefs.iter().any(|h| href_has_userinfo(h)),
+        exec_href: decoded_hrefs.iter().any(|h| href_has_exec_ext(h)),
+        helper_scheme_link: decoded_hrefs
+            .iter()
+            .any(|h| href_has_helper_scheme(h)),
+        link_tag_present: has_open_tag(html, "link"),
+        messaging_scheme_link: decoded_hrefs
+            .iter()
+            .any(|h| href_has_messaging_scheme(h)),
+        mailto_params: decoded_hrefs
+            .iter()
+            .any(|h| href_has_mailto_params(h)),
     }
+}
+
+/// href 属性値の復号 — 実体参照・%エンコード・制御空白の難読を
+/// ブラウザと同じ順序で正規化する。
+///
+/// ブラウザは href 値の HTML 実体参照 (`javascript&colon;` →
+/// `javascript:`、`&#106;avascript:` → 同上) および `%HH`
+/// パーセントエンコードを復号し、URL 中のタブ/改行/復帰を
+/// 除去してから解釈する — 生文字列の prefix/ホスト比較はこれら
+/// 3 系統の難読で回避される (`href="javascript&colon;x"` は
+/// `"javascript:"` を文字列として含まない)。
+fn decoded_url_token(v: &str) -> String {
+    let mut s = String::with_capacity(v.len());
+    decode_entities_into(v, &mut s);
+    // %HH パーセントエンコードの復号 — ブラウザはホスト名解決の
+    // 前に行う。ASCII 範囲外のバイトは UTF-8 境界を壊さないよう
+    // そのまま残す。
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && b[i + 1].is_ascii_hexdigit()
+            && b[i + 2].is_ascii_hexdigit()
+        {
+            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                if byte.is_ascii() {
+                    out.push(byte as char);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        let ch_len = s[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        out.push_str(&s[i..i + ch_len]);
+        i += ch_len;
+    }
+    out.chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+/// 復号済み http(s) URL のオーソリティ部に `@` (userinfo) があるか
+/// (D980)。`https://paypal.com@evil.example/` — `@` の前の見た目の
+/// ドメインで誤認させ、実接続先は後ろのホスト。
+fn href_has_userinfo(url: &str) -> bool {
+    let rest = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"));
+    let Some(rest) = rest else { return false };
+    let authority_end = rest.find('/').unwrap_or(rest.len());
+    rest[..authority_end].contains('@')
+}
+
+/// 復号済み URL のパス末端が実行・危険拡張子か (D981)。
+/// `is_dangerous_windows_attachment` (添付の拡張子一覧) を再利用 —
+/// リンク経由で届く配送にも同じ判定を適用する。
+fn href_has_exec_ext(url: &str) -> bool {
+    let path = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .or_else(|| url.strip_prefix("ftp://"));
+    let Some(rest) = path else { return false };
+    // パスが無い (`https://evil.example` だけの) リンクでは
+    // ホスト名を拡張子判定に誤って渡さない — `evil.com` の
+    // "com" が実行拡張子と一致して全リンクが誤検するため、
+    // 必ず `/` の後ろのセグメントのみを見る。
+    let Some(slash) = rest.find('/') else {
+        return false;
+    };
+    let path = &rest[slash..];
+    let end = path.find(['?', '#']).unwrap_or(path.len());
+    let tail = path[..end].rsplit('/').next().unwrap_or("");
+    !tail.is_empty() && magic_bytes::is_dangerous_windows_attachment(tail)
+}
+
+/// 復号済み URL が OS/アプリのプロトコルハンドラを直接起動する
+/// スキームか (D982)。ブラウザ内の URL フィルタをすり抜けて
+/// ヘルパーアプリへジャンプする。
+fn href_has_helper_scheme(url: &str) -> bool {
+    const SCHEMES: &[&str] = &[
+        // Explorer 経由でリモート (UNC/WebDAV) ファイル一覧を表示 —
+        // 2024 年以降のフィッシングキャンペーンで観測 (search-ms:)。
+        "search-ms:",
+        // ms-msdt: — Follina (CVE-2022-30190) で実証された
+        // Support Diagnostic Tool 経由のコマンド実行。
+        "ms-msdt:",
+        // ms-appinstaller: — App Installer 経由の偽インストール
+        // (CVE-2021-43890 系の悪用報告)。
+        "ms-appinstaller:",
+        // ms-officecmd: / Office URI スキーム — Office アプリを直接
+        // 起動する公式スキーム (ms-word:/ms-excel:/onenote: 等)。
+        "ms-officecmd:",
+        "ms-word:",
+        "ms-excel:",
+        "ms-powerpoint:",
+        "ms-visio:",
+        "ms-access:",
+        "ms-infopath:",
+        "ms-publisher:",
+        "onenote:",
+        // smb: — SMB 共有へ直接接続 (NTLM 認証要求の強制送信)。
+        "smb:",
+        // itms-services: — iOS のアプリ/プロファイルインストール誘導。
+        "itms-services:",
+    ];
+    SCHEMES.iter().any(|s| url.starts_with(s))
+}
+
+/// 復号済み URL が電話・SMS 系の誘導スキームか (D985)。
+/// `tel:` (D237) と同系 — クリックすると電話/SMS アプリへ誘導する。
+fn href_has_messaging_scheme(url: &str) -> bool {
+    const SCHEMES: &[&str] = &[
+        "sms:",      // SMS 起動 (スミッシング)
+        "smsto:",    // SMS 起動 (派生形)
+        "callto:",   // Skype/電話系ハンドラ
+        "skype:",    // Skype 直接起動
+        "wtai:",     // 携帯電話の WTA インタフェース (古い実装で有効)
+        "facetime:", // FaceTime 発信
+        "facetime-audio:", // FaceTime 音声発信
+    ];
+    SCHEMES.iter().any(|s| url.starts_with(s))
+}
+
+/// `mailto:` href に subject/body の自動入力パラメータがあるか
+/// (D986)。`mailto:help@x?subject=…&body=…` は返信文面を攻撃者が
+/// 事前入力でき、「指示どおり返信させる」誘導に使われる。
+fn href_has_mailto_params(url: &str) -> bool {
+    let Some(q) = url.strip_prefix("mailto:").and_then(|r| r.find('?')) else {
+        return false;
+    };
+    // strip_prefix の結果に対する find('?') の位置は元 URL で
+    // "mailto:" の直後からのオフセット — パラメータ部を取り出す。
+    let params = &url["mailto:".len() + q + 1..];
+    params.contains("subject=") || params.contains("body=")
+}
+
+/// テキスト中に不可視の Unicode タグ文字 (U+E0000–E007F) または
+/// 非推奨の行間注釈制御文字 (U+FFF9–FFFB) が含まれるか (D983)。
+///
+/// 「ASCII スマグリング」— タグブロックの各文字は ASCII 1 文字に
+/// 対応し、表示は空白/不可視だが LLM・パーサはバイト列として読む。
+/// 人間には見えないプロンプト指示や隠しペイロードを本文に混入
+/// させる手段として報告されている。HTML 正規テキストには出ない。
+#[must_use]
+pub fn text_has_invisible_unicode(text: &str) -> bool {
+    text.chars()
+        .any(|c| matches!(c, '\u{E0000}'..='\u{E007F}' | '\u{FFF9}'..='\u{FFFB}'))
+}
+
+/// `<name` 形式の開始タグの存在を検出する (大小区別なし、
+/// タグ名の後は空白/`>`/`/` のいずれかを要求 — `<links>` のような
+/// 前方一致は誤検しない)。
+fn has_open_tag(html: &str, name: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let needle = format!("<{name}");
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find(&needle) {
+        let after = &rest[i + needle.len()..];
+        if after
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || c == '>' || c == '/')
+        {
+            return true;
+        }
+        rest = after;
+    }
+    false
 }
 
 /// `<a href="tel:...">` 形式の電話番号リンクを検出する (D237)。
@@ -13816,6 +14039,11 @@ fn decode_entities_into(src: &str, out: &mut String) {
             "quot" => Some('"'),
             "apos" => Some('\''),
             "nbsp" => Some(' '),
+            // href 値の難読で使われる実体参照 — `javascript&colon;`
+            // → `javascript:`、`java&Tab;script:` → tab (後段で除去)。
+            "colon" => Some(':'),
+            "tab" => Some('\t'),
+            "newline" => Some('\n'),
             _ => {
                 if let Some(num) = entity.strip_prefix('#') {
                     let cp = if let Some(hex) = num.strip_prefix(['x', 'X']) {
@@ -15248,6 +15476,116 @@ mod tests {
         assert!(html_to_text(html4).tel_link);
         let html5 = "<a href='tel:+123'>x</a>";
         assert!(html_to_text(html5).tel_link);
+    }
+
+    // ── D980: http(s) URL の userinfo (name@host 偽装) ──────────
+    #[test]
+    fn html_to_text_はuserinfoを検出する() {
+        assert!(html_to_text(r#"<a href="https://paypal.com@evil.example/">x</a>"#).userinfo_href);
+        assert!(html_to_text(r#"<a href="https://user:pass@evil.example/x">x</a>"#).userinfo_href);
+        // パス中の @ は userinfo ではない — オーソリティ部のみを見る
+        assert!(!html_to_text(r#"<a href="https://x.example/a@b">x</a>"#).userinfo_href);
+        // mailto: 等のスキームは userinfo 概念がない
+        assert!(!html_to_text(r#"<a href="mailto:a@b.example">x</a>"#).userinfo_href);
+        assert!(!html_to_text(r#"<a href="https://x.example/">x</a>"#).userinfo_href);
+        assert!(!html_to_text("<p>clean</p>").userinfo_href);
+    }
+
+    // ── D981: href 先が実行・危険拡張子ファイル ──────────────────
+    #[test]
+    fn html_to_text_はexec拡張子リンクを検出する() {
+        assert!(html_to_text(r#"<a href="https://x.example/setup.exe">x</a>"#).exec_href);
+        assert!(html_to_text(r#"<a href="https://x.example/d/invoice.iso">x</a>"#).exec_href);
+        assert!(html_to_text(r#"<a href="https://x.example/run.PS1">x</a>"#).exec_href);
+        // クエリ・フラグメントを含む URL でも末端拡張子を見る
+        assert!(html_to_text(r#"<a href="https://x.example/a.msi?x=1">x</a>"#).exec_href);
+        // 回帰: パスのない裸ドメインは拡張子判定に回さない
+        // (`evil.com` の "com" が実行拡張子と一致して誤検する)
+        assert!(!html_to_text(r#"<a href="https://evil.com">x</a>"#).exec_href);
+        assert!(!html_to_text(r#"<a href="https://x.example/page.html">x</a>"#).exec_href);
+        assert!(!html_to_text(r#"<a href="https://x.example/dir/">x</a>"#).exec_href);
+        assert!(!html_to_text(r#"<a href="mailto:a@b.example">x</a>"#).exec_href);
+        assert!(!html_to_text("<p>clean</p>").exec_href);
+    }
+
+    // ── D982: ヘルパー起動スキーム ──────────────────────────────
+    #[test]
+    fn html_to_text_はhelperスキームを検出する() {
+        assert!(html_to_text(r#"<a href="search-ms:query=x&crumb=location:\\evil">x</a>"#)
+            .helper_scheme_link);
+        assert!(html_to_text(r#"<a href="ms-msdt:/id x">x</a>"#).helper_scheme_link);
+        assert!(html_to_text(r#"<a href="ms-appinstaller:?source=x">x</a>"#).helper_scheme_link);
+        assert!(html_to_text(r#"<a href="ms-word:ofv|u|x">x</a>"#).helper_scheme_link);
+        assert!(html_to_text(r#"<a href="onenote:///x">x</a>"#).helper_scheme_link);
+        assert!(html_to_text(r#"<a href="smb://evil.example/share">x</a>"#).helper_scheme_link);
+        assert!(html_to_text(r#"<a href="itms-services://x">x</a>"#).helper_scheme_link);
+        // 難読化: 実体参照 + 大文字
+        assert!(html_to_text(r#"<a href="MS-MSDT&colon;/id x">x</a>"#).helper_scheme_link);
+        // 正規スキームは対象外
+        assert!(!html_to_text(r#"<a href="https://x.example">x</a>"#).helper_scheme_link);
+        assert!(!html_to_text(r#"<a href="mailto:a@b.example">x</a>"#).helper_scheme_link);
+        assert!(!html_to_text("<p>clean</p>").helper_scheme_link);
+    }
+
+    // ── D983: 不可視 Unicode (ASCII スマグリング) ────────────────
+    #[test]
+    fn html_to_text_は不可視unicodeを検出する() {
+        // タグ文字 U+E0000-E007F (E0041='A' 等の不可視グリフ)
+        let tagged = format!("visit\u{E0041}\u{E006E}text");
+        assert!(text_has_invisible_unicode(&tagged));
+        // 行間注釈制御文字 U+FFF9-FFFB
+        assert!(text_has_invisible_unicode("a\u{FFF9}b"));
+        assert!(text_has_invisible_unicode("plain text"));
+        // html_to_text 経由でも残る (タグ文字は sanitize の除去対象外)
+        let html = format!("<p>x\u{E0041}y</p>");
+        assert!(html_to_text(&html).invisible_unicode);
+        assert!(!html_to_text("<p>clean</p>").invisible_unicode);
+    }
+
+    // ── D984: <link> 要素 ───────────────────────────────────────
+    #[test]
+    fn html_to_text_はlink要素を検出する() {
+        assert!(html_to_text(r#"<link rel="stylesheet" href="https://e.example/x.css">"#)
+            .link_tag_present);
+        assert!(html_to_text(r#"<link rel="preload" href="https://e.example/x">"#)
+            .link_tag_present);
+        assert!(html_to_text("<LINK REL=dns-prefetch HREF=//e.example>").link_tag_present);
+        // <links>・<linked> のような前方一致は誤検しない
+        assert!(!html_to_text("<links>x</links>").link_tag_present);
+        assert!(!html_to_text("<p>clean</p>").link_tag_present);
+    }
+
+    // ── D985: sms:/callto: 等のメッセージング系スキーム ──────────
+    #[test]
+    fn html_to_text_はmessagingスキームを検出する() {
+        assert!(html_to_text(r#"<a href="sms:+1234">x</a>"#).messaging_scheme_link);
+        assert!(html_to_text(r#"<a href="callto:+1234">x</a>"#).messaging_scheme_link);
+        assert!(html_to_text(r#"<a href="skype:user?call">x</a>"#).messaging_scheme_link);
+        assert!(html_to_text(r#"<a href="facetime:+1234">x</a>"#).messaging_scheme_link);
+        assert!(html_to_text(r#"<a href="wtai://wp/mc;+1234">x</a>"#).messaging_scheme_link);
+        // tel: は D237 の別系統で対象外
+        assert!(!html_to_text(r#"<a href="tel:+1234">x</a>"#).messaging_scheme_link);
+        assert!(!html_to_text(r#"<a href="https://x.example">x</a>"#).messaging_scheme_link);
+        assert!(!html_to_text("<p>clean</p>").messaging_scheme_link);
+    }
+
+    // ── D986: mailto: の subject/body パラメータ ────────────────
+    #[test]
+    fn html_to_text_はmailtoパラメータを検出する() {
+        assert!(html_to_text(
+            r#"<a href="mailto:a@b.example?subject=Re:%20support">x</a>"#,
+        )
+        .mailto_params);
+        assert!(html_to_text(r#"<a href="mailto:a@b.example?body=please">x</a>"#).mailto_params);
+        assert!(html_to_text(
+            r#"<a href="mailto:a@b.example?subject=x&body=y">x</a>"#,
+        )
+        .mailto_params);
+        // 素の mailto: (パラメータなし) は対象外
+        assert!(!html_to_text(r#"<a href="mailto:a@b.example">x</a>"#).mailto_params);
+        assert!(!html_to_text(r#"<a href="mailto:a@b.example?cc=c@d">x</a>"#).mailto_params);
+        assert!(!html_to_text(r#"<a href="https://x.example">x</a>"#).mailto_params);
+        assert!(!html_to_text("<p>clean</p>").mailto_params);
     }
 
     #[test]
