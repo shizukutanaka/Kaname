@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1104: ARF・苦情記録自署
+    if env.arf_marks {
+        render_risks.push(
+            "ARF/X-ARF-*/Abuse/X-Complaint — abuse 報告書式の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1105: バックスキャッター印自署
+    if env.backscatter_marks {
+        render_risks.push(
+            "X-Backscatter/X-Backscattered/X-GoBack/X-Bounce-De — バックスキャッターの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1106: 受理機本体記録自署
+    if env.server_marks {
+        render_risks.push(
+            "X-Server/X-Hostname/X-IP-*/X-Host — 受理機の本体記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1107: CDN・エッジ記録自署
+    if env.cache_marks {
+        render_risks.push(
+            "X-Cache/X-Cache-Hits/X-FD-*/X-Azure-Ref/X-CDN-* — CDN・エッジの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1108: Exchange・MS 内部記録自署
+    if env.mso_marks {
+        render_risks.push(
+            "X-MSO-*/X-MSExch-*/X-Exch-*/X-MS-Exchange-* — Exchange・MS 内部記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1109: Vade・セッション記録自署
+    if env.vade_marks {
+        render_risks.push(
+            "X-VAS-*/X-Vade-*/X-SMC-*/X-SID/X-SEMS-* — Vade・セッション記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1110: 署名系記録自署
+    if env.dkim_family_marks {
+        render_risks.push(
+            "X-ODKIM/X-ADKIM/X-SDM/X-Signature/X-Sig/X-DKIM — 署名系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1111: 経路・到達記録自署
+    if env.tracert_marks {
+        render_risks.push(
+            "X-TT/X-Tracert/X-Traversal/X-Route/X-Received-From — 経路・到達記録を送信側が自称する兆候です"
                 .to_string(),
         );
     }

@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1104–D1111: ARF・backscatter・受理機・CDN・MS輸送・Vade・署名系・経路の未検査兆候 8 件
+
+- **問題**: 「誰が報告したか」「誰が返したか」「誰が受けたか」「誰が届けたか」「誰が署名したか」「どの経路か」に関する兆候が未検査だった — `ARF:`/`X-ARF-*`/`Abuse:`/`X-Complaint:` の報告書式、`X-Backscatter:`/`X-Backscattered:`/`X-GoBack:`/`X-Bounce-De:` のバックスキャッター記録、`X-Server:`/`X-Hostname:`/`X-IP-*`/`X-Host:` の受理機本体、`X-Cache:`/`X-Cache-Hits:`/`X-FD-*`/`X-Azure-Ref:`/`X-CDN-*` の CDN・エッジ記録、`X-MSO-*`/`X-MSExch-*`/`X-Exch-*`/`X-MS-Exchange-Administrator`/`X-MS-Exchange-BulkMail`/`X-MS-Exchange-Crosstenant` の Exchange・MS 内部記録、`X-VAS-*`/`X-Vade-*`/`X-SMC-*`/`X-SID:`/`X-SEMS-*` の Vade・セッション記録、`X-ODKIM:`/`X-ADKIM:`/`X-SDM:`/`X-Signature:`/`X-Sig:`/`X-DKIM:` の署名系記録、`X-TT:`/`X-Tracert:`/`X-Traversal:`/`X-Route:`/`X-Received-From:` の経路・到達記録。
+- **修正**: `has_arf_marks`/`has_backscatter_marks`/`has_server_marks`/`has_cache_marks`/`has_mso_marks`/`has_vade_marks`/`has_dkim_family_marks`/`has_tracert_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。すべて自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「報告・返し・受理・届け・署名・経路」の記録を送信側が書くのはいずれも属しない印 — 記録の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

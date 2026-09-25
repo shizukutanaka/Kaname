@@ -114,6 +114,33 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `ARF:`/`X-ARF-*`/`Abuse:`/`X-Complaint:` があるか — abuse 報告
+    /// 書式の記録を送信側が自称する兆候 (D1104)。
+    pub arf_marks: bool,
+    /// `X-Backscatter:`/`X-Backscattered:`/`X-GoBack:`/`X-Bounce-De:`
+    /// があるか — バックスキャッターの記録を送信側が自称する兆候
+    /// (D1105)。
+    pub backscatter_marks: bool,
+    /// `X-Server:`/`X-Hostname:`/`X-IP-*`/`X-Host:` があるか — 受理機の
+    /// 本体記録を送信側が自称する兆候 (D1106)。
+    pub server_marks: bool,
+    /// `X-Cache:`/`X-Cache-Hits:`/`X-FD-*`/`X-Azure-Ref:`/`X-CDN-*`
+    /// があるか — CDN・エッジの記録を送信側が自称する兆候 (D1107)。
+    pub cache_marks: bool,
+    /// `X-MSO-*`/`X-MSExch-*`/`X-Exch-*`/`X-MS-Exchange-Administrator`/
+    /// `X-MS-Exchange-Crosstenant` があるか — Exchange・MS 内部記録を
+    /// 送信側が自称する兆候 (D1108)。
+    pub mso_marks: bool,
+    /// `X-VAS-*`/`X-Vade-*`/`X-SMC-*`/`X-SID:`/`X-SEMS-*` があるか —
+    /// Vade・セッション記録を送信側が自称する兆候 (D1109)。
+    pub vade_marks: bool,
+    /// `X-ODKIM:`/`X-ADKIM:`/`X-SDM:`/`X-Signature:`/`X-Sig:`/
+    /// `X-DKIM:` があるか — 署名系の記録を送信側が自称する兆候
+    /// (D1110)。
+    pub dkim_family_marks: bool,
+    /// `X-TT:`/`X-Tracert:`/`X-Traversal:`/`X-Route:`/`X-Received-From:`
+    /// があるか — 経路・到達記録を送信側が自称する兆候 (D1111)。
+    pub tracert_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2032,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2062,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        arf_marks: has_arf_marks(hdr),
+        backscatter_marks: has_backscatter_marks(hdr),
+        server_marks: has_server_marks(hdr),
+        cache_marks: has_cache_marks(hdr),
+        mso_marks: has_mso_marks(hdr),
+        vade_marks: has_vade_marks(hdr),
+        dkim_family_marks: has_dkim_family_marks(hdr),
+        tracert_marks: has_tracert_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2427,157 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `ARF:`/`X-ARF-*`/`Abuse:`/`X-Complaint:` があるか判定する (D1104)。
+///
+/// Abuse Reporting Format 系の記録 — 苦情・報告書式の体裁を送信側が
+/// 自称する値。
+fn has_arf_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("arf:")
+            || l.starts_with("x-arf")
+            || l.starts_with("abuse:")
+            || l.starts_with("x-complaint:")
+    })
+}
+
+/// `X-Backscatter:`/`X-Backscattered:`/`X-GoBack:`/`X-Bounce-De:`
+/// があるか判定する (D1105)。
+///
+/// バックスキャッターの記録は返送系が残す値 — 送信側が書くのは
+/// 「返ってきた・跳ねられた」体裁。
+fn has_backscatter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-backscatter")
+            || l.starts_with("x-backscattered")
+            || l.starts_with("x-goback:")
+            || l.starts_with("x-bounce-de:")
+    })
+}
+
+/// `X-Server:`/`X-Hostname:`/`X-IP-*`/`X-Host:` があるか判定する
+/// (D1106)。
+///
+/// 受理機の本体記録は受け皿が残す値 — 送信側が書くのは
+/// 「この機が受けた」体裁。
+fn has_server_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-server:")
+            || l.starts_with("x-hostname:")
+            || l.starts_with("x-ip-")
+            || l.starts_with("x-host:")
+    })
+}
+
+/// `X-Cache:`/`X-Cache-Hits:`/`X-FD-*`/`X-Azure-Ref:`/`X-CDN-*`
+/// があるか判定する (D1107)。
+///
+/// CDN・Front Door・エッジの記録は配信網が残す値 — 送信側が書くのは
+/// 「網を通った」体裁。
+fn has_cache_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-cache:")
+            || l.starts_with("x-cache-hits:")
+            || l.starts_with("x-fd-")
+            || l.starts_with("x-azure-ref:")
+            || l.starts_with("x-cdn-")
+    })
+}
+
+/// `X-MSO-*`/`X-MSExch-*`/`X-Exch-*`/`X-MS-Exchange-Administrator`/
+/// `X-MS-Exchange-BulkMail`/`X-MS-Exchange-Crosstenant` があるか判定
+/// する (D1108)。
+///
+/// Exchange・MS 内部記録は輸送機が残す値 — 送信側が書くのは
+/// 「社内輸送の記録」体裁。
+fn has_mso_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-mso-")
+            || l.starts_with("x-msexch")
+            || l.starts_with("x-exch-")
+            || l.starts_with("x-ms-exchange-administrator")
+            || l.starts_with("x-ms-exchange-bulkmail")
+            || l.starts_with("x-ms-exchange-crosstenant")
+    })
+}
+
+/// `X-VAS-*`/`X-Vade-*`/`X-SMC-*`/`X-SID:`/`X-SEMS-*` があるか判定する
+/// (D1109)。
+///
+/// Vade/セッション系の記録はフィルタ・配信機が残す値 — 送信側が書くのは
+/// 「基盤を通った」体裁。
+fn has_vade_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-vas-")
+            || l.starts_with("x-vade-")
+            || l.starts_with("x-smc-")
+            || l.starts_with("x-sid:")
+            || l.starts_with("x-sems-")
+    })
+}
+
+/// `X-ODKIM:`/`X-ADKIM:`/`X-SDM:`/`X-Signature:`/`X-Sig:`/`X-DKIM:`
+/// があるか判定する (D1110)。
+///
+/// DKIM 派生・署名系の記録は署名・検証機が残す値 — 送信側が書くのは
+/// 「署名済み・検証済み」の体裁。
+fn has_dkim_family_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-odkim:")
+            || l.starts_with("x-adkim:")
+            || l.starts_with("x-sdm:")
+            || l.starts_with("x-signature:")
+            || l.starts_with("x-sig:")
+            || l.starts_with("x-dkim:")
+    })
+}
+
+/// `X-TT:`/`X-Tracert:`/`X-Traversal:`/`X-Route:`/`X-Received-From:`
+/// があるか判定する (D1111)。
+///
+/// 経路・到達の記録は配送・輸送機が残す値 — 送信側が書くのは
+/// 「この経路を通った」体裁。
+fn has_tracert_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-tt:")
+            || l.starts_with("x-tracert:")
+            || l.starts_with("x-traversal:")
+            || l.starts_with("x-route:")
+            || l.starts_with("x-received-from:")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21314,129 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_はARF印を検出する() {
+        let a1 = b"ARF: report\r\n\r\nx";
+        assert!(has_arf_marks(a1));
+        let a2 = b"X-ARF-Report: 1\r\n\r\nx";
+        assert!(has_arf_marks(a2));
+        let a3 = b"Abuse: 1\r\n\r\nx";
+        assert!(has_arf_marks(a3));
+        let a4 = b"X-Complaint: 1\r\n\r\nx";
+        assert!(has_arf_marks(a4));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_arf_marks(clean));
+    }
+
+    #[test]
+    fn scan_はbackscatter印を検出する() {
+        let b1 = b"X-Backscatter: 1\r\n\r\nx";
+        assert!(has_backscatter_marks(b1));
+        let b2 = b"X-Backscattered: yes\r\n\r\nx";
+        assert!(has_backscatter_marks(b2));
+        let b3 = b"X-GoBack: 1\r\n\r\nx";
+        assert!(has_backscatter_marks(b3));
+        let b4 = b"X-Bounce-De: 1\r\n\r\nx";
+        assert!(has_backscatter_marks(b4));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_backscatter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は受理機印を検出する() {
+        let s1 = b"X-Server: mx\r\n\r\nx";
+        assert!(has_server_marks(s1));
+        let s2 = b"X-Hostname: h\r\n\r\nx";
+        assert!(has_server_marks(s2));
+        let s3 = b"X-IP-Info: 1\r\n\r\nx";
+        assert!(has_server_marks(s3));
+        let s4 = b"X-Host: h\r\n\r\nx";
+        assert!(has_server_marks(s4));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_server_marks(clean));
+    }
+
+    #[test]
+    fn scan_はCDN印を検出する() {
+        let c1 = b"X-Cache: HIT\r\n\r\nx";
+        assert!(has_cache_marks(c1));
+        let c2 = b"X-Cache-Hits: 3\r\n\r\nx";
+        assert!(has_cache_marks(c2));
+        let c3 = b"X-FD-Info: 1\r\n\r\nx";
+        assert!(has_cache_marks(c3));
+        let c4 = b"X-Azure-Ref: 1\r\n\r\nx";
+        assert!(has_cache_marks(c4));
+        let c5 = b"X-CDN-Info: 1\r\n\r\nx";
+        assert!(has_cache_marks(c5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cache_marks(clean));
+    }
+
+    #[test]
+    fn scan_はMS輸送印を検出する() {
+        let m1 = b"X-MSO-Info: 1\r\n\r\nx";
+        assert!(has_mso_marks(m1));
+        let m2 = b"X-MSExch-Info: 1\r\n\r\nx";
+        assert!(has_mso_marks(m2));
+        let m3 = b"X-Exch-Info: 1\r\n\r\nx";
+        assert!(has_mso_marks(m3));
+        let m4 = b"X-MS-Exchange-Administrator: 1\r\n\r\nx";
+        assert!(has_mso_marks(m4));
+        let m5 = b"X-MS-Exchange-Crosstenant: 1\r\n\r\nx";
+        assert!(has_mso_marks(m5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mso_marks(clean));
+    }
+
+    #[test]
+    fn scan_はVade印を検出する() {
+        let v1 = b"X-VAS-Info: 1\r\n\r\nx";
+        assert!(has_vade_marks(v1));
+        let v2 = b"X-Vade-Score: 1\r\n\r\nx";
+        assert!(has_vade_marks(v2));
+        let v3 = b"X-SMC-Info: 1\r\n\r\nx";
+        assert!(has_vade_marks(v3));
+        let v4 = b"X-SID: 1\r\n\r\nx";
+        assert!(has_vade_marks(v4));
+        let v5 = b"X-SEMS-Info: 1\r\n\r\nx";
+        assert!(has_vade_marks(v5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_vade_marks(clean));
+    }
+
+    #[test]
+    fn scan_は署名系印を検出する() {
+        let d1 = b"X-ODKIM: 1\r\n\r\nx";
+        assert!(has_dkim_family_marks(d1));
+        let d2 = b"X-ADKIM: 1\r\n\r\nx";
+        assert!(has_dkim_family_marks(d2));
+        let d3 = b"X-SDM: 1\r\n\r\nx";
+        assert!(has_dkim_family_marks(d3));
+        let d4 = b"X-Signature: 1\r\n\r\nx";
+        assert!(has_dkim_family_marks(d4));
+        let d5 = b"X-Sig: 1\r\n\r\nx";
+        assert!(has_dkim_family_marks(d5));
+        let d6 = b"X-DKIM: 1\r\n\r\nx";
+        assert!(has_dkim_family_marks(d6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dkim_family_marks(clean));
+    }
+
+    #[test]
+    fn scan_は経路印を検出する() {
+        let t1 = b"X-TT: 1\r\n\r\nx";
+        assert!(has_tracert_marks(t1));
+        let t2 = b"X-Tracert: 1\r\n\r\nx";
+        assert!(has_tracert_marks(t2));
+        let t3 = b"X-Traversal: 1\r\n\r\nx";
+        assert!(has_tracert_marks(t3));
+        let t4 = b"X-Route: 1\r\n\r\nx";
+        assert!(has_tracert_marks(t4));
+        let t5 = b"X-Received-From: 1\r\n\r\nx";
+        assert!(has_tracert_marks(t5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_tracert_marks(clean));
     }
 }
