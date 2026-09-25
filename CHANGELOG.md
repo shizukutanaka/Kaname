@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1128–D1135: 配送結果・返信フロー・法務・依頼・チャット・ボット・受取・ツールの未検査兆候 8 件
+
+- **問題**: 「届いたか」「返したか」「権利か」「依頼か」「どのチャットか」「どのボットか」「受け取ったか」「どのツールか」に関する兆候が未検査だった — `X-Delivery-*`/`X-Delivered-*`/`X-Received-*`/`X-Return-*`/`X-Failed-*`/`X-Error-*`/`X-Warning-*`/`X-Notification-*` (配送・結果)、`X-Reply-*`/`X-Forward-*`/`X-Resent-*`/`X-Remail*`/`X-Reforward*`/`X-Followup-*`/`X-Auto-Submitted` (返信・転送フロー)、`X-Legal-*`/`X-Disclaimer*`/`X-Copyright-*`/`X-Trademark*`/`X-Patent*`/`X-License-*`/`X-Proprietary*` (法務・権利)、`X-Ask-*`/`X-Demand-*`/`X-Action-*`/`X-Task-*`/`X-Job-*`/`X-Mission-*`/`X-Quest-*` (依頼・タスク)、`X-Skype*`/`X-AIM-*`/`X-ICQ*`/`X-IRC-*`/`X-BIP-*`/`X-IMO-*`/`X-Guilded*`/`X-Rocket*`/`X-Mattermost*`/`X-Matrix-*`/`X-Element-*` (チャット基盤)、`X-Bot-*`/`X-Robot*`/`X-Crawler*`/`X-Spider*`/`X-HTTPClient*`/`X-Library*`/`X-SDK*` (エージェント・ボット)、`X-Receipt*`/`X-Ack-*`/`X-Ans-*`/`X-Confirm-*`/`X-Copied-*`/`X-CC-*` (受取・複写)、`X-User-Agent*`/`X-MUA*`/`X-Client-*`/`X-App-*`/`X-Appl*`/`X-Program*`/`X-Utility*`/`X-Tool-*` (送信ツール)。
+- **修正**: `has_outcome_marks`/`has_replyflow_marks`/`has_legal_marks`/`has_request_marks`/`has_chatplat_marks`/`has_agent_marks`/`has_confirm_marks`/`has_uaclient_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。すべて自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「届け・返し・権利・依頼・基盤・ボット・受取・ツール」の記録を送信側が書くのはいずれも属しない印 — 記録の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

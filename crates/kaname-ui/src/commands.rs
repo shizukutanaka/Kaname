@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1128: 配送・結果記録自署
+    if env.outcome_marks {
+        render_risks.push(
+            "X-Delivery-*/X-Delivered-*/X-Received-*/X-Return-*/X-Failed-*/X-Error-*/X-Warning-*/X-Notification-* — 配送・結果の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1129: 返信・転送フロー記録自署
+    if env.replyflow_marks {
+        render_risks.push(
+            "X-Reply-*/X-Forward-*/X-Resent-*/X-Remail*/X-Reforward*/X-Followup-*/X-Auto-Submitted — 返信・転送フローの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1130: 法務・権利体裁自署
+    if env.legal_marks {
+        render_risks.push(
+            "X-Legal-*/X-Disclaimer*/X-Copyright-*/X-Trademark*/X-Patent*/X-License-*/X-Proprietary* — 法務・権利の体裁を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1131: 依頼・タスク記録自署
+    if env.request_marks {
+        render_risks.push(
+            "X-Ask-*/X-Demand-*/X-Action-*/X-Task-*/X-Job-*/X-Mission-*/X-Quest-* — 依頼・タスクの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1132: チャット基盤記録自署
+    if env.chatplat_marks {
+        render_risks.push(
+            "X-Skype*/X-AIM-*/X-ICQ*/X-IRC-*/X-BIP-*/X-IMO-*/X-Guilded*/X-Rocket*/X-Mattermost*/X-Matrix-*/X-Element-* — チャット基盤の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1133: エージェント・ボット記録自署
+    if env.agent_marks {
+        render_risks.push(
+            "X-Bot-*/X-Robot*/X-Crawler*/X-Spider*/X-HTTPClient*/X-Library*/X-SDK* — エージェント・ボット系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1134: 受取・複写記録自署
+    if env.confirm_marks {
+        render_risks.push(
+            "X-Receipt*/X-Ack-*/X-Ans-*/X-Confirm-*/X-Copied-*/X-CC-* — 受取・複写の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1135: 送信ツール記録自署
+    if env.uaclient_marks {
+        render_risks.push(
+            "X-User-Agent*/X-MUA*/X-Client-*/X-App-*/X-Appl*/X-Program*/X-Utility*/X-Tool-* — 送信ツールの記録を送信側が自称する兆候です"
                 .to_string(),
         );
     }

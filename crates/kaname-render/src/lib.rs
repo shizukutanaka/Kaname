@@ -114,6 +114,39 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `X-Delivery-*`/`X-Delivered-*`/`X-Received-*`/`X-Return-*`/
+    /// `X-Failed-*`/`X-Error-*`/`X-Warning-*`/`X-Notification-*` が
+    /// あるか — 配送・結果の記録を送信側が自称する兆候 (D1128)。
+    pub outcome_marks: bool,
+    /// `X-Reply-*`/`X-Forward-*`/`X-Resent-*`/`X-Remail*`/`X-Reforward*`/
+    /// `X-Followup-*`/`X-Auto-Submitted` があるか — 返信・転送フローの
+    /// 記録を送信側が自称する兆候 (D1129)。
+    pub replyflow_marks: bool,
+    /// `X-Legal-*`/`X-Disclaimer*`/`X-Copyright-*`/`X-Trademark*`/
+    /// `X-Patent*`/`X-License-*`/`X-Proprietary*` があるか — 法務・権利
+    /// の体裁を送信側が自称する兆候 (D1130)。
+    pub legal_marks: bool,
+    /// `X-Ask-*`/`X-Demand-*`/`X-Action-*`/`X-Task-*`/`X-Job-*`/
+    /// `X-Mission-*`/`X-Quest-*` があるか — 依頼・タスクの記録を送信側が
+    /// 自称する兆候 (D1131)。
+    pub request_marks: bool,
+    /// `X-Skype*`/`X-AIM-*`/`X-ICQ*`/`X-IRC-*`/`X-BIP-*`/`X-IMO-*`/
+    /// `X-Guilded*`/`X-Rocket*`/`X-Mattermost*`/`X-Matrix-*`/
+    /// `X-Element-*` があるか — チャット基盤の記録を送信側が自称する
+    /// 兆候 (D1132)。
+    pub chatplat_marks: bool,
+    /// `X-Bot-*`/`X-Robot*`/`X-Crawler*`/`X-Spider*`/`X-HTTPClient*`/
+    /// `X-Library*`/`X-SDK*` があるか — エージェント・ボット系の記録を
+    /// 送信側が自称する兆候 (D1133)。
+    pub agent_marks: bool,
+    /// `X-Receipt*`/`X-Ack-*`/`X-Ans-*`/`X-Confirm-*`/`X-Copied-*`/
+    /// `X-CC-*` があるか — 受取・複写の記録を送信側が自称する兆候
+    /// (D1134)。
+    pub confirm_marks: bool,
+    /// `X-User-Agent*`/`X-MUA*`/`X-Client-*`/`X-App-*`/`X-Appl*`/
+    /// `X-Program*`/`X-Utility*`/`X-Tool-*` があるか — 送信ツールの記録を
+    /// 送信側が自称する兆候 (D1135)。
+    pub uaclient_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2038,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2068,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        outcome_marks: has_outcome_marks(hdr),
+        replyflow_marks: has_replyflow_marks(hdr),
+        legal_marks: has_legal_marks(hdr),
+        request_marks: has_request_marks(hdr),
+        chatplat_marks: has_chatplat_marks(hdr),
+        agent_marks: has_agent_marks(hdr),
+        confirm_marks: has_confirm_marks(hdr),
+        uaclient_marks: has_uaclient_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2433,157 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-Delivery-*`/`X-Delivered-*`/`X-Received-*`/`X-Return-*`/
+/// `X-Failed-*`/`X-Error-*`/`X-Warning-*`/`X-Notification-*` があるか
+/// 判定する (D1128)。
+fn has_outcome_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-delivery-")
+            || l.starts_with("x-delivered-")
+            || l.starts_with("x-received-")
+            || l.starts_with("x-return-")
+            || l.starts_with("x-failed-")
+            || l.starts_with("x-error-")
+            || l.starts_with("x-warning-")
+            || l.starts_with("x-notification-")
+    })
+}
+
+/// `X-Reply-*`/`X-Forward-*`/`X-Resent-*`/`X-Remail*`/`X-Reforward*`/
+/// `X-Followup-*`/`X-Auto-Submitted` があるか判定する (D1129)。
+fn has_replyflow_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-reply-")
+            || l.starts_with("x-forward-")
+            || l.starts_with("x-resent-")
+            || l.starts_with("x-remail")
+            || l.starts_with("x-reforward")
+            || l.starts_with("x-followup-")
+            || l.starts_with("x-auto-submitted")
+    })
+}
+
+/// `X-Legal-*`/`X-Disclaimer*`/`X-Copyright-*`/`X-Trademark*`/`X-Patent*`/
+/// `X-License-*`/`X-Proprietary*` があるか判定する (D1130)。
+fn has_legal_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-legal-")
+            || l.starts_with("x-disclaimer")
+            || l.starts_with("x-copyright-")
+            || l.starts_with("x-trademark")
+            || l.starts_with("x-patent")
+            || l.starts_with("x-license-")
+            || l.starts_with("x-proprietary")
+    })
+}
+
+/// `X-Ask-*`/`X-Demand-*`/`X-Action-*`/`X-Task-*`/`X-Job-*`/`X-Mission-*`/
+/// `X-Quest-*` があるか判定する (D1131)。
+fn has_request_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-ask-")
+            || l.starts_with("x-demand-")
+            || l.starts_with("x-action-")
+            || l.starts_with("x-task-")
+            || l.starts_with("x-job-")
+            || l.starts_with("x-mission-")
+            || l.starts_with("x-quest-")
+    })
+}
+
+/// `X-Skype*`/`X-AIM-*`/`X-ICQ*`/`X-IRC-*`/`X-BIP-*`/`X-IMO-*`/
+/// `X-Guilded*`/`X-Rocket*`/`X-Mattermost*`/`X-Matrix-*`/`X-Element-*`
+/// があるか判定する (D1132)。
+fn has_chatplat_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-skype")
+            || l.starts_with("x-aim-")
+            || l.starts_with("x-icq")
+            || l.starts_with("x-irc-")
+            || l.starts_with("x-bip-")
+            || l.starts_with("x-imo-")
+            || l.starts_with("x-guilded")
+            || l.starts_with("x-rocket")
+            || l.starts_with("x-mattermost")
+            || l.starts_with("x-matrix-")
+            || l.starts_with("x-element-")
+    })
+}
+
+/// `X-Bot-*`/`X-Robot*`/`X-Crawler*`/`X-Spider*`/`X-HTTPClient*`/
+/// `X-Library*`/`X-SDK*` があるか判定する (D1133)。
+fn has_agent_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-bot-")
+            || l.starts_with("x-robot")
+            || l.starts_with("x-crawler")
+            || l.starts_with("x-spider")
+            || l.starts_with("x-httpclient")
+            || l.starts_with("x-library")
+            || l.starts_with("x-sdk")
+    })
+}
+
+/// `X-Receipt*`/`X-Ack-*`/`X-Ans-*`/`X-Confirm-*`/`X-Copied-*`/`X-CC-*`
+/// があるか判定する (D1134)。
+fn has_confirm_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-receipt")
+            || l.starts_with("x-ack-")
+            || l.starts_with("x-ans-")
+            || l.starts_with("x-confirm-")
+            || l.starts_with("x-copied-")
+            || l.starts_with("x-cc-")
+    })
+}
+
+/// `X-User-Agent*`/`X-MUA*`/`X-Client-*`/`X-App-*`/`X-Appl*`/`X-Program*`/
+/// `X-Utility*`/`X-Tool-*` があるか判定する (D1135)。
+fn has_uaclient_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-user-agent")
+            || l.starts_with("x-mua")
+            || l.starts_with("x-client-")
+            || l.starts_with("x-app-")
+            || l.starts_with("x-appl")
+            || l.starts_with("x-program")
+            || l.starts_with("x-utility")
+            || l.starts_with("x-tool-")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21320,163 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は結果印を検出する() {
+        let o1 = b"X-Delivery-Info: 1\r\n\r\nx";
+        assert!(has_outcome_marks(o1));
+        let o2 = b"X-Delivered-Info: 1\r\n\r\nx";
+        assert!(has_outcome_marks(o2));
+        let o3 = b"X-Failed-Info: 1\r\n\r\nx";
+        assert!(has_outcome_marks(o3));
+        let o4 = b"X-Error-Info: 1\r\n\r\nx";
+        assert!(has_outcome_marks(o4));
+        let o5 = b"X-Warning-Info: 1\r\n\r\nx";
+        assert!(has_outcome_marks(o5));
+        let o6 = b"X-Notification-Info: 1\r\n\r\nx";
+        assert!(has_outcome_marks(o6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_outcome_marks(clean));
+    }
+
+    #[test]
+    fn scan_は返信フロー印を検出する() {
+        let r1 = b"X-Reply-Info: 1\r\n\r\nx";
+        assert!(has_replyflow_marks(r1));
+        let r2 = b"X-Forward-Info: 1\r\n\r\nx";
+        assert!(has_replyflow_marks(r2));
+        let r3 = b"X-Resent-Info: 1\r\n\r\nx";
+        assert!(has_replyflow_marks(r3));
+        let r4 = b"X-Remail-Info: 1\r\n\r\nx";
+        assert!(has_replyflow_marks(r4));
+        let r5 = b"X-Reforward-Info: 1\r\n\r\nx";
+        assert!(has_replyflow_marks(r5));
+        let r6 = b"X-Auto-Submitted: 1\r\n\r\nx";
+        assert!(has_replyflow_marks(r6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_replyflow_marks(clean));
+    }
+
+    #[test]
+    fn scan_は法務印を検出する() {
+        let l1 = b"X-Legal-Info: 1\r\n\r\nx";
+        assert!(has_legal_marks(l1));
+        let l2 = b"X-Disclaimer: 1\r\n\r\nx";
+        assert!(has_legal_marks(l2));
+        let l3 = b"X-Copyright-Info: 1\r\n\r\nx";
+        assert!(has_legal_marks(l3));
+        let l4 = b"X-Trademark: 1\r\n\r\nx";
+        assert!(has_legal_marks(l4));
+        let l5 = b"X-Patent: 1\r\n\r\nx";
+        assert!(has_legal_marks(l5));
+        let l6 = b"X-License-Info: 1\r\n\r\nx";
+        assert!(has_legal_marks(l6));
+        let l7 = b"X-Proprietary: 1\r\n\r\nx";
+        assert!(has_legal_marks(l7));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_legal_marks(clean));
+    }
+
+    #[test]
+    fn scan_は依頼印を検出する() {
+        let r1 = b"X-Ask-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r1));
+        let r2 = b"X-Demand-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r2));
+        let r3 = b"X-Action-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r3));
+        let r4 = b"X-Task-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r4));
+        let r5 = b"X-Job-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r5));
+        let r6 = b"X-Mission-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r6));
+        let r7 = b"X-Quest-Info: 1\r\n\r\nx";
+        assert!(has_request_marks(r7));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_request_marks(clean));
+    }
+
+    #[test]
+    fn scan_はチャット基盤印を検出する() {
+        let c1 = b"X-Skype-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c1));
+        let c2 = b"X-AIM-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c2));
+        let c3 = b"X-ICQ-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c3));
+        let c4 = b"X-IRC-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c4));
+        let c5 = b"X-Rocket-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c5));
+        let c6 = b"X-Mattermost-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c6));
+        let c7 = b"X-Matrix-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c7));
+        let c8 = b"X-Element-Info: 1\r\n\r\nx";
+        assert!(has_chatplat_marks(c8));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_chatplat_marks(clean));
+    }
+
+    #[test]
+    fn scan_はボット印を検出する() {
+        let a1 = b"X-Bot-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a1));
+        let a2 = b"X-Robot-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a2));
+        let a3 = b"X-Crawler-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a3));
+        let a4 = b"X-Spider-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a4));
+        let a5 = b"X-HTTPClient-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a5));
+        let a6 = b"X-Library-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a6));
+        let a7 = b"X-SDK-Info: 1\r\n\r\nx";
+        assert!(has_agent_marks(a7));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_agent_marks(clean));
+    }
+
+    #[test]
+    fn scan_は受取印を検出する() {
+        let c1 = b"X-Receipt-Info: 1\r\n\r\nx";
+        assert!(has_confirm_marks(c1));
+        let c2 = b"X-Ack-Info: 1\r\n\r\nx";
+        assert!(has_confirm_marks(c2));
+        let c3 = b"X-Ans-Info: 1\r\n\r\nx";
+        assert!(has_confirm_marks(c3));
+        let c4 = b"X-Confirm-Info: 1\r\n\r\nx";
+        assert!(has_confirm_marks(c4));
+        let c5 = b"X-Copied-Info: 1\r\n\r\nx";
+        assert!(has_confirm_marks(c5));
+        let c6 = b"X-CC-Info: 1\r\n\r\nx";
+        assert!(has_confirm_marks(c6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_confirm_marks(clean));
+    }
+
+    #[test]
+    fn scan_はツール印を検出する() {
+        let u1 = b"X-User-Agent: m\r\n\r\nx";
+        assert!(has_uaclient_marks(u1));
+        let u2 = b"X-MUA: m\r\n\r\nx";
+        assert!(has_uaclient_marks(u2));
+        let u3 = b"X-Client-Info: 1\r\n\r\nx";
+        assert!(has_uaclient_marks(u3));
+        let u4 = b"X-App-Info: 1\r\n\r\nx";
+        assert!(has_uaclient_marks(u4));
+        let u5 = b"X-Appl-Info: 1\r\n\r\nx";
+        assert!(has_uaclient_marks(u5));
+        let u6 = b"X-Program-Info: 1\r\n\r\nx";
+        assert!(has_uaclient_marks(u6));
+        let u7 = b"X-Utility-Info: 1\r\n\r\nx";
+        assert!(has_uaclient_marks(u7));
+        let u8 = b"X-Tool-Info: 1\r\n\r\nx";
+        assert!(has_uaclient_marks(u8));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_uaclient_marks(clean));
     }
 }
