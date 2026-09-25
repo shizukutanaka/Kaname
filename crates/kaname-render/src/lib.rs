@@ -119,6 +119,31 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// 配送されたメールに `Bcc:` ヘッダが残っている (D992)。
+    ///
+    /// Bcc は「他の受信者に見せない」ための送信側フィールドで、
+    /// 正規の配送経路では到達メールから必ず取り除かれる —
+    /// 届いたまま残る Bcc は手作り生成品の兆候。
+    pub bcc_header: bool,
+    /// 開封確認要求 (`Return-Receipt-To:`/`Disposition-Notification-To:`/
+    /// `X-Confirm-Reading-To:`) があるか (D993)。
+    ///
+    /// 「読んだら通知して」は有効なアドレスかの生存確認に使われ、
+    /// 標的選定・リスト検証に悪用される。
+    pub receipt_request: bool,
+    /// 緊急度ヘッダ (`X-Priority: 1|0`、`Importance: high`、
+    /// `Priority: urgent`、`X-MSMail-Priority: high`) があるか (D994)。
+    ///
+    /// 「今すぐ読ませたい」演出 — 正規メールでは稀で、催促・恐怖を
+    /// 煽る手口の兆候。
+    pub urgency_header: bool,
+    /// `charset=us-ascii` 宣言なのに本文に非 ASCII バイトがある
+    /// エンコーディング混乱 (D995)。
+    ///
+    /// 宣言と実体が食い違うと、検査側 (us-ascii として読む) と
+    /// 表示側 (別コードとして解釈する実装) で見える文字列が別物に
+    /// なる — 走査回避の一形態。
+    pub charset_confusion: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2035,6 +2060,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        bcc_header: has_bcc_header(hdr),
+        receipt_request: has_receipt_request(hdr),
+        urgency_header: has_urgency_header(hdr),
+        charset_confusion: has_charset_confusion(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2359,6 +2388,90 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
     })
+}
+
+/// 配送メールに `Bcc:` ヘッダが残っているか (D992)。
+///
+/// Bcc は受信者に見せないための送信側フィールド — 正規配送経路では
+/// 到達メールから必ず除去される。届いたまま残る Bcc は手作り
+/// 生成品 (攻撃者が隠し受信者を装う等) の兆候。
+fn has_bcc_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("bcc:"))
+}
+
+/// 開封確認要求ヘッダがあるか (D993)。
+///
+/// `Return-Receipt-To:`/`Disposition-Notification-To:`/
+/// `X-Confirm-Reading-To:`/`Read-Receipt-To:` — 「読んだら通知して」は
+/// 有効アドレスの生存確認・標的選定に使われる。正規の配信メールが
+/// 一括送信で付けることは稀。
+fn has_receipt_request(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("return-receipt-to:")
+            || l.starts_with("disposition-notification-to:")
+            || l.starts_with("x-confirm-reading-to:")
+            || l.starts_with("read-receipt-to:")
+    })
+}
+
+/// 緊急度ヘッダがあるか (D994)。
+///
+/// `X-Priority: 0|1` (最高・最高位)、`Importance: high`、
+/// `Priority: urgent`、`X-MSMail-Priority: high` — 「今すぐ読ませたい」
+/// 演出。催促・恐怖を煽る手口で使われるが、正規の一括配信メールで
+/// 最高位が付くことは稀 (通常 Importance: normal)。
+fn has_urgency_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        if let Some((name, v)) = l.split_once(':') {
+            let v = v.trim();
+            match name.trim() {
+                // "1" / "0" / "1 (highest)" 等の最高位を捉える
+                "x-priority" => v == "0" || v == "1" || v.starts_with("1 ") || v.starts_with("0 "),
+                "importance" => v == "high",
+                "priority" => v == "urgent",
+                "x-msmail-priority" => v.contains("high"),
+                _ => false,
+            }
+        } else {
+            false
+        }
+    })
+}
+
+/// `charset=us-ascii` 宣言なのに本文に非 ASCII バイトがあるか (D995)。
+///
+/// 宣言と実体が食い違うと、検査側 (us-ascii として読む) と表示側
+/// (別コードとして解釈する実装) で見える文字列が別物になる —
+/// 走査回避の一形態。ヘッダ部の宣言を走査し、空行以降の生バイトに
+/// 0x80 以上があるかを見る (生バイトで見るのは、lossy 復号後では
+/// 元の非 ASCII バイトが U+FFFD に化けて区別がつかないため)。
+fn has_charset_confusion(raw: &[u8]) -> bool {
+    let hdr_end = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .or_else(|| raw.windows(2).position(|w| w == b"\n\n"))
+        .unwrap_or(raw.len());
+    let header = String::from_utf8_lossy(&raw[..hdr_end]).to_ascii_lowercase();
+    let declares_ascii = header.lines().any(|l| {
+        (l.starts_with("content-type:") || l.starts_with("charset") || l.contains("charset"))
+            && l.contains("us-ascii")
+    });
+    if !declares_ascii {
+        return false;
+    }
+    raw[hdr_end..].iter().any(|b| !b.is_ascii())
 }
 
 /// `X-MS-Has-Attach:`/`X-Has-Attach:` 等の「添付あり」宣言があるか
@@ -15308,6 +15421,112 @@ mod tests {
         assert!(!has_feedback_id(clean));
     }
 
+    // ---- D992: 配送メールに残った Bcc ヘッダ ----
+    #[test]
+    fn scan_は残存Bccを検出する() {
+        let bcc = b"From: a@b\r\nBcc: hidden@x\r\n\r\nx";
+        assert!(has_bcc_header(bcc));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bcc_header(clean));
+        // 本文中の bcc: はヘッダ走査対象外
+        let body_only = b"From: a@b\r\n\r\nbcc: hidden@x";
+        assert!(!has_bcc_header(body_only));
+        // resent-bcc は別印 (resent_marks) — 通常 Bcc とは独立
+        let resent = b"Resent-Bcc: a@x\r\n\r\nx";
+        assert!(!has_bcc_header(resent));
+    }
+
+    // ---- D993: 開封確認要求 ----
+    #[test]
+    fn scan_は開封確認要求を検出する() {
+        let rrt = b"Return-Receipt-To: a@b\r\n\r\nx";
+        assert!(has_receipt_request(rrt));
+        let dnt = b"Disposition-Notification-To: a@b\r\n\r\nx";
+        assert!(has_receipt_request(dnt));
+        let xcr = b"X-Confirm-Reading-To: a@b\r\n\r\nx";
+        assert!(has_receipt_request(xcr));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_receipt_request(clean));
+        let body_only = b"From: a@b\r\n\r\nDisposition-Notification-To: a@b";
+        assert!(!has_receipt_request(body_only));
+    }
+
+    // ---- D994: 緊急度ヘッダ ----
+    #[test]
+    fn scan_は緊急度ヘッダを検出する() {
+        let xp1 = b"X-Priority: 1\r\n\r\nx";
+        assert!(has_urgency_header(xp1));
+        let xp0 = b"X-Priority: 0\r\n\r\nx";
+        assert!(has_urgency_header(xp0));
+        let xph = b"X-Priority: 1 (highest)\r\n\r\nx";
+        assert!(has_urgency_header(xph));
+        let imp = b"Importance: high\r\n\r\nx";
+        assert!(has_urgency_header(imp));
+        let pri = b"Priority: urgent\r\n\r\nx";
+        assert!(has_urgency_header(pri));
+        let msmail = b"X-MSMail-Priority: High\r\n\r\nx";
+        assert!(has_urgency_header(msmail));
+        // 通常優先度・中位・本文のみは非対象
+        let normal = b"Importance: normal\r\n\r\nx";
+        assert!(!has_urgency_header(normal));
+        let xp3 = b"X-Priority: 3\r\n\r\nx";
+        assert!(!has_urgency_header(xp3));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_urgency_header(clean));
+        let body_only = b"From: a@b\r\n\r\nX-Priority: 1";
+        assert!(!has_urgency_header(body_only));
+    }
+
+    // ---- D995: charset 宣言と実体の混乱 ----
+    #[test]
+    fn scan_はcharset混乱を検出する() {
+        // us-ascii 宣言 + 本文に非 ASCII バイト
+        let mut bad: Vec<u8> = b"Content-Type: text/plain; charset=us-ascii\r\n\r\n".to_vec();
+        bad.extend_from_slice(b"plain \xE3\x81\x82");
+        assert!(has_charset_confusion(&bad));
+        // us-ascii 宣言 + 本文がすべて ASCII → 混乱なし
+        let ok = b"Content-Type: text/plain; charset=us-ascii\r\n\r\nplain ascii";
+        assert!(!has_charset_confusion(ok));
+        // utf-8 宣言 + 非 ASCII バイト → 宣言と一致、混乱なし
+        let mut utf8: Vec<u8> =
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n".to_vec();
+        utf8.extend_from_slice(b"\xE3\x81\x82");
+        assert!(!has_charset_confusion(&utf8));
+        // us-ascii 宣言がない → 非対象
+        let mut no_decl: Vec<u8> = b"Content-Type: text/plain\r\n\r\n".to_vec();
+        no_decl.push(0x80);
+        assert!(!has_charset_confusion(&no_decl));
+    }
+
+    // ---- D996: HTML 添付のスマグリング検査 ----
+    #[test]
+    fn scan_はhtml添付をスキャンする() {
+        // クリーンな HTML → 存在そのものが兆候として報告される
+        let clean = scan_attachment_bytes(
+            "invoice.html",
+            "text/html",
+            b"<html><body>report</body></html>",
+        );
+        assert!(clean.risks.iter().any(|x| x.contains("HTML 添付")));
+        // スマグリング痕跡 (atob 大量デコード等) → detector の兆候が加わる
+        let b64 = "A".repeat(4000);
+        let smuggle = scan_attachment_bytes(
+            "ticket.htm",
+            "text/html",
+            format!("<script>atob('{}')</script>", b64).as_bytes(),
+        );
+        assert!(
+            smuggle.risks.iter().any(|x| x.contains("HTML 添付"))
+                || smuggle.risks.iter().any(|x| x.contains("スマグリング"))
+        );
+        // .xhtml / declared text/html でも同経路
+        let xh = scan_attachment_bytes("page.xhtml", "application/xhtml+xml", b"<html>x</html>");
+        assert!(xh.risks.iter().any(|x| x.contains("HTML 添付")));
+        // 非 HTML 添付は対象外
+        let other = scan_attachment_bytes("doc.txt", "text/plain", b"hello");
+        assert!(!other.risks.iter().any(|x| x.contains("HTML 添付")));
+    }
+
     #[test]
     fn scan_はSA詳細印を検出する() {
         let sr = b"X-Spam-Report: tests=AWL,BAYES_00\r\n\r\nx";
@@ -18905,6 +19124,41 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
                     risks.push(format!("SVG のリスク: {r:?}"));
                 }
                 is_dangerous = true;
+            }
+        }
+    }
+
+    // 4.5 HTML 添付 (.html/.htm/.shtml/.xhtml) — HTML スマグリングの
+    //     本体。開くとローカルでページを表示し、認証フォーム・
+    //     blob: ペイロード構築・atob() 難読等を行う (D996)。
+    //     添付ファイルに対しては本文用検査が届かなかったため、
+    //     HtmlSmugglingDetector をここで走査する。
+    {
+        let ext = filename
+            .to_ascii_lowercase()
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let is_html_attach = matches!(ext.as_str(), "html" | "htm" | "shtml" | "xhtml")
+            || declared_mime.eq_ignore_ascii_case("text/html");
+        if is_html_attach {
+            risks.push(
+                "HTML 添付 — 開くとローカルでページを表示し、認証フォームやペイロード構築の配送経路になり得ます (HTML スマグリングの定形)"
+                    .to_string(),
+            );
+            if let Ok(text) = std::str::from_utf8(bytes) {
+                let scan = html_smuggling::HtmlSmugglingDetector.analyze(text);
+                if !matches!(scan.risk, html_smuggling::SmugglingRisk::Clean) {
+                    risks.push(format!("HTML スマグリングの疑い: {}", scan.message));
+                    if matches!(
+                        scan.risk,
+                        html_smuggling::SmugglingRisk::High
+                            | html_smuggling::SmugglingRisk::Critical
+                    ) {
+                        is_dangerous = true;
+                    }
+                }
             }
         }
     }

@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D987–D996: エンベロープ・ヘッダ系の未検査兆候 10 件
+
+- **問題**: 本文解析は充実している一方、配送層 (ヘッダ/エンベロープ) の構造的な異常はほぼ未検査だった。From==To の自己送信詐称・Reply-To 別ドメイン・Re:/Fwd: 件名なのに In-Reply-To/References 不在の偽装スレッド・Date/Message-ID 欠落・未来日付・配送メールに残った Bcc:・開封確認要求・緊急度ヘッダ・charset=us-ascii 宣言と非 ASCII 本文の混乱のいずれも兆候として報告されなかった。また `.html`/`.htm`/`.xhtml` 添付は危険拡張子リストに無く、HTML スマグリング検出器が本文専用だったため添付経路を素通りしていた。(参考: self-send spoofing・reply-to redirect BEC・fake-thread/urgency 手口・us-ascii/UTF-8 パーサ差分・HTML 添付スマグリング)
+- **修正**: `Envelope` に `bcc_header`/`receipt_request`/`urgency_header`/`charset_confusion` の 4 フィールドと `has_bcc_header`/`has_receipt_request`/`has_urgency_header`/`has_charset_confusion` を追加 (D992–D995)。`commands.rs` で From==To (D987)・Reply-To≠From ドメイン (D988)・Re:/Fwd: 件名+参照ヘッダ不在 (D989)・Date 欠落/未来日付 (D990)・Message-ID 欠落 (D991)・Bcc (D992)・開封確認 (D993)・緊急度 (D994)・charset 混乱 (D995) を render_risks 兆候報告。`scan_attachment_bytes` が `.html`/`.htm`/`.shtml`/`.xhtml`/`text/html` 添付の存在を兆候として報告し、内容を `HtmlSmugglingDetector` で検査して High/Critical を危険添付とする (D996)。D237 の `html_text` 参照バグも修正 (D960 と同一修復)。
+- **教訓**: 検査が届いていない経路 (添付経路・配送層ヘッダ) に攻撃は寄る。「開く・読む・返す」の動作経路ごとに「どの構造が正規か」の基準を持ち、外れる構造は兆候として数えよ。ヘッダは送信側の自由度が最も高い面 — 存在・欠落・自己矛盾の3観点で問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

@@ -641,3 +641,13 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D782 | ~~**`X-Gaikou-*`/`X-Ekusuteria-*`/`X-Exteriorworks-*`/`X-Exteriordesign-*` 等の外構・エクステリア印自称が未検査**~~ **(解消済み)** | P2 | 外構・エクステリア工事業者 等の通知記録を送信側が自称する兆候だが未検査だった。修正: `has_gaikou_marks` で検出、`gaikou_marks` → `render_risks` 兆候報告 | 通知の記録は通知機が記す — 構印の自署を問え |
 | D783 | ~~**`X-Jumokusou-*`/`X-Sankotsu-*`/`X-Naturalburial-*`/`X-Seaburial-*`/`X-Treeburial-*` 等の樹木葬・散骨印自称が未検査**~~ **(解消済み)** | P2 | 樹木葬・散骨業者 等の通知記録を送信側が自称する兆候だが未検査だった。修正: `has_jumokusou_marks` で検出、`jumokusou_marks` → `render_risks` 兆候報告 | 通知の記録は通知機が記す — 散印の自署を問え |
 | D784 | ~~**`X-Jinkoushiba-*`/`X-Shibahari-*`/`X-Artificialturf-*`/`X-Turfinstallation-*` 等の人工芝・芝張り印自称が未検査**~~ **(解消済み)** | P2 | 人工芝・芝張り業者 等の通知記録を送信側が自称する兆候だが未検査だった。修正: `has_jinkoushiba_marks` で検出、`jinkoushiba_marks` → `render_risks` 兆候報告 | 通知の記録は通知機が記す — 芝印の自署を問え |
+| D987 | ~~**From == To の自己送信詐称が未検査**~~ **(解消済み)** | P2 | 「あなた自身から届いた＝アカウントが乗っ取られた」暗示を作る自己送信詐称の定形だが未検査だった。修正: commands.rs で From アドレスと To の一致を兆候報告 | 差出人と宛先が同一なら、発信者の主張を問え |
+| D988 | ~~**Reply-To が From と別ドメインでも未検査**~~ **(解消済み)** | P2 | 返信を別経路へ誘導する BEC の定形だが未検査だった。修正: commands.rs で Reply-To ドメインと From ドメインの不一致を兆候報告 | 返信先は差出人の身元を問う第二の面 |
+| D989 | ~~**Re:/Fwd: 件名なのに参照ヘッダ不在の偽装スレッドが未検査**~~ **(解消済み)** | P2 | 既存スレッドを装う手口だが未検査だった。修正: 件名が返信/転送を名乗るのに In-Reply-To/References が空なら兆候報告 | 会話の途中を名乗るなら、会話の系譜を問え |
+| D990 | ~~**Date 欠落・未来日付が未検査**~~ **(解消済み)** | P2 | RFC 必須ヘッダの欠落と受信箱最上段に留まる日付偽装の両方が未検査だった。修正: Date 欠落または 24h 以上先の未来日付を兆候報告 | 時刻は送信側が書く — 必須の欠落と未来の両方を問え |
+| D991 | ~~**Message-ID 欠落が未検査**~~ **(解消済み)** | P2 | 正規 MUA/MTA が必ず付ける識別子の欠落は手作り生成品の兆候だが未検査だった。修正: Message-ID 欠落を兆候報告 | 識別子を名乗らないメッセージは生成経路を問え |
+| D992 | ~~**配送メールに残った Bcc: が未検査**~~ **(解消済み)** | P2 | Bcc は正規配送で必ず除去される送信側フィールド — 残存は手作り生成品の兆候だが未検査だった。修正: `has_bcc_header` で検出、`bcc_header` → render_risks 兆候報告 | 届いてはならないフィールドが届いたら生成経路を問え |
+| D993 | ~~**開封確認要求ヘッダが未検査**~~ **(解消済み)** | P2 | Return-Receipt-To/Disposition-Notification-To/X-Confirm-Reading-To は有効アドレスの生存確認・標的選定経路だが未検査だった。修正: `has_receipt_request` で検出、`receipt_request` → render_risks 兆候報告 | 「読んだら知らせて」は確認経路 — 送信側が読者の生存を求めるなら問え |
+| D994 | ~~**緊急度ヘッダ (X-Priority 最高位/Importance: high 等) が未検査**~~ **(解消済み)** | P2 | 「今すぐ読ませたい」演出の催促・恐怖を煽る手口だが未検査だった。修正: `has_urgency_header` で検出、`urgency_header` → render_risks 兆候報告 | 急げと言う側の意図を問え |
+| D995 | ~~**charset=us-ascii 宣言と非 ASCII 本文の混乱が未検査**~~ **(解消済み)** | P2 | 宣言と実体の食い違いで検査と表示で見える文字列が分かれる走査回避だが未検査だった。修正: `has_charset_confusion` で検出、`charset_confusion` → render_risks 兆候報告 | 宣言と実体が違うなら、どちらの読みを信じるか問え |
+| D996 | ~~**.html/.htm/.xhtml 添付が HTML スマグリング検査を素通り**~~ **(解消済み)** | P1 | HTML 添付は危険拡張子リストに無く、スマグリング検出器は本文専用だったため配送本体を素通りしていた。修正: `scan_attachment_bytes` が HTML 添付の存在を兆候として報告し `HtmlSmugglingDetector` で内容を検査 (High/Critical は危険添付) | ページを開く添付は、ページの中身を検査せよ |

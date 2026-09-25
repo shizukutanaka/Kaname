@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,111 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D987: 自己宛てなりすまし — From == To。「あなた自身から届いた
+    //   (=アカウントが乗っ取られた)」暗示を作る詐欺の定形。
+    if let Some(f) = env.from.first() {
+        let f_addr = f.addr.as_string().to_ascii_lowercase();
+        if env
+            .to
+            .iter()
+            .any(|a| a.addr.as_string().to_ascii_lowercase() == f_addr)
+        {
+            render_risks.push(
+                "From と To が同一アドレスです — 「あなた自身から届いた」暗示を作るなりすまし (自己送信詐称) の定形です"
+                    .to_string(),
+            );
+        }
+    }
+
+    // D988: Reply-To が From と別ドメイン — 返信を別経路へ誘導する
+    //   BEC の定形 (reply-to redirect)。
+    if let (Some(f), Some(r)) = (env.from.first(), env.reply_to.first()) {
+        let dom = |s: &str| s.rsplit('@').next().unwrap_or("").to_ascii_lowercase();
+        let f_dom = dom(&f.addr.as_string());
+        let r_dom = dom(&r.addr.as_string());
+        if !f_dom.is_empty() && !r_dom.is_empty() && f_dom != r_dom {
+            render_risks.push(format!(
+                "Reply-To のドメイン ({r_dom}) が From ({f_dom}) と異なります — 返信を別ドメインへ誘導する手口の兆候です"
+            ));
+        }
+    }
+
+    // D989: 件名の偽装スレッド — Re:/Fwd: 系だが In-Reply-To/References
+    //   が無い = 既存スレッドを装う手口。
+    {
+        let trimmed = subject.trim_start().to_ascii_lowercase();
+        let claims_thread = ["re:", "fw:", "fwd:", "返信:", "転送:", "wg:", "aw:", "sv:"]
+            .iter()
+            .any(|p| trimmed.starts_with(p));
+        if claims_thread && env.in_reply_to.is_empty() && env.references.is_empty() {
+            render_risks.push(
+                "件名が返信/転送を名乗りますが In-Reply-To/References ヘッダがありません — 既存スレッドを装う手口の兆候です"
+                    .to_string(),
+            );
+        }
+    }
+
+    // D990: Date ヘッダ欠落 / 未来日付 — RFC 必須ヘッダの欠落、または
+    //   受信箱最上段に留まるための日付偽装。
+    match env.date {
+        None => render_risks.push(
+            "Date: ヘッダがありません — 正規 MUA が必ず付ける必須ヘッダの欠落。手作り生成品の兆候です"
+                .to_string(),
+        ),
+        Some(ts) => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            if ts > now + 86_400 {
+                render_risks.push(
+                    "Date: が 24 時間以上先の未来日付です — 受信箱の最上段に留まるための日付偽装の兆候です"
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    // D991: Message-ID 欠落 — 正規 MUA/MTA が必ず付ける識別子の欠落。
+    if env.message_id.is_none() {
+        render_risks.push(
+            "Message-ID: ヘッダがありません — 正規 MUA が必ず付ける識別子の欠落。手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D992: 配送メールに残った Bcc:
+    if env.bcc_header {
+        render_risks.push(
+            "Bcc: ヘッダが届いたメールに残っています — 正規配送では除去される送信側フィールド。手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D993: 開封確認要求
+    if env.receipt_request {
+        render_risks.push(
+            "開封確認要求 (Return-Receipt-To/Disposition-Notification-To/X-Confirm-Reading-To) があります — 有効アドレスの生存確認・標的選定に使われる経路です"
+                .to_string(),
+        );
+    }
+
+    // D994: 緊急度ヘッダ
+    if env.urgency_header {
+        render_risks.push(
+            "緊急度ヘッダ (X-Priority 最高位/Importance: high/Priority: urgent) — 「今すぐ読ませたい」演出。催促・恐怖を煽る手口の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D995: charset 宣言と実体の混乱
+    if env.charset_confusion {
+        render_risks.push(
+            "charset=us-ascii 宣言なのに本文に非 ASCII バイトがあります — 検査と表示で見える文字列が分かれるエンコーディング混乱の兆候です"
                 .to_string(),
         );
     }
