@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1056: Approved 上書き印
+    if env.approved_claim {
+        render_risks.push(
+            "Approved: ヘッダーがあります — モデレーション承認を送信側が名乗る上書き印の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1057: 期限圧力
+    if env.expiry_pressure {
+        render_risks.push(
+            "Expires/Expiry-Date/Reply-By ヘッダーがあります — 期限の切迫を演出する圧力フレームの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1058: Return-Path ドメイン不一致
+    if env.return_path_domain_mismatch {
+        render_risks.push(
+            "Return-Path のドメインが From と違います — バウンス経路を別ドメインへ向ける兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1059: 稀な charset
+    if env.exotic_charset {
+        render_risks.push(
+            "稀な charset (utf-16/koi8/cp850 等) が宣言されています — 本文をバイト検査から隠すエンコーディングの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1060: 無名添付
+    if env.unnamed_attachment {
+        render_risks.push(
+            "Content-Disposition: attachment なのに filename/name がありません — 名を名乗らない添付の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1061: related 無 start
+    if env.related_no_start {
+        render_risks.push(
+            "multipart/related なのに start= パラメーターがありません — 起点を読めない曖昧構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1062: 入れ子 alternative
+    if env.nested_alternative {
+        render_risks.push(
+            "multipart/alternative の内側にさらに alternative があります — 表示選択がパーサーで分かれる再帰容器の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1063: ローカル Message-ID
+    if env.msgid_localhost {
+        render_risks.push(
+            "Message-ID が localhost/IP リテラルドメインです — 配送不能ドメインを使う生成品の指紋の兆候です"
                 .to_string(),
         );
     }

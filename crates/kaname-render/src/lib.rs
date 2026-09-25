@@ -119,6 +119,30 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Approved:` ヘッダがある — モデレーション承認を送信側が
+    /// 名乗る上書き印 (D1056)。
+    pub approved_claim: bool,
+    /// `Expires:`/`Expiry-Date:`/`Reply-By:` がある — 期限の
+    /// 切迫を演出する圧力フレーム (D1057)。
+    pub expiry_pressure: bool,
+    /// Return-Path のドメインが From と違う — バウンス経路を
+    /// 別ドメインへ向ける形跡 (D1058)。
+    pub return_path_domain_mismatch: bool,
+    /// charset が utf-16/utf-32/utf-7/cp850/koi8 等の稀な値 —
+    /// 本文をバイト検査から隠すエンコーディング (D1059)。
+    pub exotic_charset: bool,
+    /// `Content-Disposition: attachment` なのに filename=/name=
+    /// が無い — 名を名乗らない添付 (D1060)。
+    pub unnamed_attachment: bool,
+    /// `multipart/related` なのに start= パラメータが無い —
+    /// 起点を読めない関連パートの曖昧構造 (D1061)。
+    pub related_no_start: bool,
+    /// multipart/alternative の内側にさらに alternative —
+    /// 再帰する代替容器で表示選択がパーサ差分になる (D1062)。
+    pub nested_alternative: bool,
+    /// Message-ID に localhost/IP リテラルドメイン — 生成品の
+    /// 指紋 (D1063)。
+    pub msgid_localhost: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2005,13 +2029,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2059,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        approved_claim: has_approved_claim(hdr),
+        expiry_pressure: has_expiry_pressure(hdr),
+        return_path_domain_mismatch: has_return_path_domain_mismatch(hdr),
+        exotic_charset: has_exotic_charset(hdr),
+        unnamed_attachment: has_unnamed_attachment(raw),
+        related_no_start: has_related_no_start(hdr),
+        nested_alternative: has_nested_alternative(raw),
+        msgid_localhost: has_msgid_localhost(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2358,6 +2390,188 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-report-abuse:")
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
+    })
+}
+
+/// `Approved:` ヘッダがあるか判定する (D1056)。
+///
+/// `Approved:` は netnews/リスト管理のモデレーション上書き印 —
+/// モデレータが書くべき値を送信側が名乗る「承認済み」の体裁。
+fn has_approved_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("approved:") || l.starts_with("x-approved:"))
+}
+
+/// `Expires:`/`Expiry-Date:`/`Reply-By:` があるか判定する (D1057)。
+///
+/// 期限を設定するヘッダは「今すぐ応答」の切迫を演出する圧力
+/// フレーム — 期限駆動型 BEC/フィッシングの定形。
+fn has_expiry_pressure(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("expires:")
+            || l.starts_with("expiry-date:")
+            || l.starts_with("reply-by:")
+            || l.starts_with("x-expiry-")
+            || l.starts_with("x-expires")
+    })
+}
+
+/// Return-Path のドメインが From と違うか判定する (D1058)。
+///
+/// バウンス経路を別ドメインへ向けるのは返信の受け皿をずらす形跡 —
+/// ESP の正当 VERP もあるが、差異自体は経路設計の兆候として記録。
+fn has_return_path_domain_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut from_dom: Option<&str> = None;
+    let mut rp_dom: Option<&str> = None;
+    for l in header.lines() {
+        if let Some(v) = l.strip_prefix("from:") {
+            if let Some(dom) = v.rsplit('@').next() {
+                let d = dom.trim_matches(|c| c == '>' || c == '<' || c == ' ' || c == '"');
+                if !d.is_empty() {
+                    from_dom = Some(d);
+                }
+            }
+        }
+        if let Some(v) = l.strip_prefix("return-path:") {
+            let v = v.trim();
+            if v == "<>" || v.is_empty() {
+                continue;
+            }
+            if let Some(dom) = v.rsplit('@').next() {
+                let d = dom.trim_matches(|c| c == '>' || c == '<' || c == ' ' || c == '"');
+                if !d.is_empty() {
+                    rp_dom = Some(d);
+                }
+            }
+        }
+    }
+    match (from_dom, rp_dom) {
+        (Some(f), Some(r)) => f != r,
+        _ => false,
+    }
+}
+
+/// charset が稀なエンコーディングを名乗るか判定する (D1059)。
+///
+/// utf-16/utf-32 はバイト毎に NUL を挟み ASCII 検査を無効化、
+/// utf-7/x-user-defined/cp850/ibm/koi8/ebcdic/x-mac/viscii は
+/// 非 UTF-8 の文字割当で本文を読めない形式にする — 本文を
+/// バイト検査から隠すエンコーディング選択の形跡。
+/// (shift_jis/iso-2022-jp/euc-jp/big5/gb* は正当な国際化用途の
+/// ため対象外。)
+fn has_exotic_charset(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = &text[..header_end];
+    header.lines().any(|l| {
+        if !l.starts_with("content-type:") {
+            return false;
+        }
+        l.contains("charset=utf-16")
+            || l.contains("charset=utf-32")
+            || l.contains("charset=utf-7")
+            || l.contains("charset=x-user-defined")
+            || l.contains("charset=cp850")
+            || l.contains("charset=cp437")
+            || l.contains("charset=ibm")
+            || l.contains("charset=koi8")
+            || l.contains("charset=ebcdic")
+            || l.contains("charset=x-mac-")
+            || l.contains("charset=viscii")
+    })
+}
+
+/// `Content-Disposition: attachment` なのに filename=/name= が
+/// 無いか判定する (D1060)。
+///
+/// 添付を名乗るのに名前を名乗らない添付 — 保存名を利用側の
+/// 既定に任せる形跡 (型のみから推測される名で開かせる)。
+fn has_unnamed_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines().any(|l| {
+        l.starts_with("content-disposition:")
+            && l.contains("attachment")
+            && !l.contains("filename=")
+            && !l.contains("filename*=")
+    })
+}
+
+/// `multipart/related` なのに start= パラメータが無いか判定する
+/// (D1061)。
+///
+/// related は start= で起点パートを指す規格 — 欠落は「どれが
+/// 表示根か」を解析器の既定に委ねる曖昧構造。
+fn has_related_no_start(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = &text[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("content-type:")
+            && l.contains("multipart/related")
+            && !l.contains("start=")
+    })
+}
+
+/// multipart/alternative の内側にさらに alternative があるか
+/// 判定する (D1062)。
+///
+/// 代替は選択肢の平坦な対 — alternative を alternative に入れ子
+/// にするのは「どれを表示するか」がパーサで分かれる再帰容器。
+fn has_nested_alternative(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines()
+        .filter(|l| l.starts_with("content-type:") && l.contains("multipart/alternative"))
+        .count()
+        >= 2
+}
+
+/// Message-ID に localhost/IP リテラルドメインがあるか判定する
+/// (D1063)。
+///
+/// `@localhost`/`@127.0.0.1`/`@[ip]` の Message-ID は配送可能
+/// ドメインを欠く生成品の指紋。
+fn has_msgid_localhost(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("message-id:")
+            && (l.contains("@localhost")
+                || l.contains("@127.")
+                || l.contains("@[")
+                || l.contains("@local>"))
     })
 }
 
@@ -15306,6 +15520,106 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はApproved上書きを検出する() {
+        let ap = b"Approved: mod@x\r\n\r\nx";
+        assert!(has_approved_claim(ap));
+        let xa = b"X-Approved: y\r\n\r\nx";
+        assert!(has_approved_claim(xa));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_approved_claim(clean));
+    }
+
+    #[test]
+    fn scan_は期限圧力を検出する() {
+        let ex = b"Expires: Fri, 1 Jan 2038\r\n\r\nx";
+        assert!(has_expiry_pressure(ex));
+        let rb = b"Reply-By: today\r\n\r\nx";
+        assert!(has_expiry_pressure(rb));
+        let ed = b"Expiry-Date: soon\r\n\r\nx";
+        assert!(has_expiry_pressure(ed));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_expiry_pressure(clean));
+    }
+
+    #[test]
+    fn scan_はReturnPathドメイン不一致を検出する() {
+        let mm = b"From: a@brand.com\r\nReturn-Path: <b@other.com>\r\n\r\nx";
+        assert!(has_return_path_domain_mismatch(mm));
+        let same = b"From: a@x.com\r\nReturn-Path: <a@x.com>\r\n\r\nx";
+        assert!(!has_return_path_domain_mismatch(same));
+        let empty = b"From: a@x.com\r\nReturn-Path: <>\r\n\r\nx";
+        assert!(!has_return_path_domain_mismatch(empty));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_return_path_domain_mismatch(clean));
+    }
+
+    #[test]
+    fn scan_は稀なcharsetを検出する() {
+        let u16 = b"Content-Type: text/plain; charset=utf-16\r\n\r\nx";
+        assert!(has_exotic_charset(u16));
+        let u7 = b"Content-Type: text/plain; charset=utf-7\r\n\r\nx";
+        assert!(has_exotic_charset(u7));
+        let cp = b"Content-Type: text/plain; charset=cp850\r\n\r\nx";
+        assert!(has_exotic_charset(cp));
+        let koi = b"Content-Type: text/plain; charset=koi8-r\r\n\r\nx";
+        assert!(has_exotic_charset(koi));
+        let u8c = b"Content-Type: text/plain; charset=utf-8\r\n\r\nx";
+        assert!(!has_exotic_charset(u8c));
+        let sjis = b"Content-Type: text/plain; charset=shift_jis\r\n\r\nx";
+        assert!(!has_exotic_charset(sjis));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_exotic_charset(clean));
+    }
+
+    #[test]
+    fn scan_は無名添付を検出する() {
+        let un = b"Content-Disposition: attachment\r\n\r\nx";
+        assert!(has_unnamed_attachment(un));
+        let at = b"Content-Disposition: attachment; filename=\"a.exe\"\r\n\r\nx";
+        assert!(!has_unnamed_attachment(at));
+        let inl = b"Content-Disposition: inline\r\n\r\nx";
+        assert!(!has_unnamed_attachment(inl));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_unnamed_attachment(clean));
+    }
+
+    #[test]
+    fn scan_はrelated無startを検出する() {
+        let ns = b"Content-Type: multipart/related; boundary=\"B\"\r\n\r\nx";
+        assert!(has_related_no_start(ns));
+        let ok = b"Content-Type: multipart/related; start=\"<a@b>\"\r\n\r\nx";
+        assert!(!has_related_no_start(ok));
+        let mx = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\nx";
+        assert!(!has_related_no_start(mx));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_related_no_start(clean));
+    }
+
+    #[test]
+    fn scan_は入れ子alternativeを検出する() {
+        let na = b"Content-Type: multipart/alternative; boundary=\"A\"\r\n\r\n--A\r\nContent-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nx\r\n--B--\r\n--A--";
+        assert!(has_nested_alternative(na));
+        let single = b"Content-Type: multipart/alternative; boundary=\"A\"\r\n\r\n--A\r\nContent-Type: text/plain\r\n\r\nx\r\n--A--";
+        assert!(!has_nested_alternative(single));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_nested_alternative(clean));
+    }
+
+    #[test]
+    fn scan_はローカルMessageIDを検出する() {
+        let lh = b"Message-ID: <a@localhost>\r\n\r\nx";
+        assert!(has_msgid_localhost(lh));
+        let ip = b"Message-ID: <a@127.0.0.1>\r\n\r\nx";
+        assert!(has_msgid_localhost(ip));
+        let lit = b"Message-ID: <a@[10.0.0.1]>\r\n\r\nx";
+        assert!(has_msgid_localhost(lit));
+        let ok = b"Message-ID: <a@mail.example.com>\r\n\r\nx";
+        assert!(!has_msgid_localhost(ok));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_msgid_localhost(clean));
     }
 
     #[test]

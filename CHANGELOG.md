@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1056–D1063: 権限上書き・圧力フレーム・曖昧構造の未検査兆候 8 件
+
+- **問題**: 「誰が書くべき値か」「どれを表示するか」が不明な構造に関する兆候が未検査だった — `Approved:` (モデレーション承認を送信側が名乗る上書き印)、`Expires:`/`Expiry-Date:`/`Reply-By:` の期限圧力フレーム、Return-Path ドメイン ≠ From ドメイン (バウンス経路ずらし)、utf-16/koi8/cp850 等の稀な charset (バイト検査無効化)、`Content-Disposition: attachment` なのに filename/name 無し、`multipart/related` なのに `start=` 無し、alternative の入れ子 (表示選択がパーサ差分になる再帰)、Message-ID の localhost/IP ドメイン (生成品の指紋)。
+- **修正**: `has_approved_claim`/`has_expiry_pressure`/`has_return_path_domain_mismatch`/`has_exotic_charset`/`has_unnamed_attachment`/`has_related_no_start`/`has_nested_alternative`/`has_msgid_localhost` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。shift_jis/euc-jp/big5 等の正当国際化・inline 添付・start 有り related は対象外として誤検回避。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 権限の名乗り・期限の切迫・選択の曖昧は「誰が書くべきか」「何を表示するか」をずらす兆候 — 決め手を欠く構造を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
