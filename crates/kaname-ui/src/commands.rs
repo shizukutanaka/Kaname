@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // html_extract は Option<HtmlExtract> — as_ref().is_some_and で照会する。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -600,6 +601,62 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1176: 未来日付 — まだ来ない時刻を名乗る日付詐称の兆候
+    if env.future_date {
+        render_risks.push(
+            "Date: が現在年を超える未来値です — まだ来ない時刻を名乗る日付詐称の兆候です"
+                .to_string(),
+        );
+    }
+    // D1177: 破損日付 — 各パーサで読み方が違う解析差分の兆候
+    if env.malformed_date {
+        render_risks.push(
+            "Date: の値が破損しています — 月名・年が見えず、各パーサで読み方が違う解析差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1178: 返信印欠落 — Re:/Fw: の体裁でスレッドを捏造する形の兆候
+    if env.missing_references_reply {
+        render_risks.push(
+            "Re:/Fw: 始まりなのに References:/In-Reply-To: がありません — 「返信」の体裁でスレッドを捏造する形の兆候です"
+                .to_string(),
+        );
+    }
+    // D1179: Message-ID 不正形 — 表示側と検査側で読み方が違う差分の兆候
+    if env.bad_msgid_format {
+        render_risks.push(
+            "Message-ID: が <...> 形でありません — RFC 5322 の msg-id 型を欠く解析差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1180: 空添付名 — 拡張子検査・名前表示が不能な差分の兆候
+    if env.empty_attachment_name {
+        render_risks.push(
+            "filename=\"\"/name=\"\" の空値があります — 名が原理的になく、拡張子検査・名前表示ができない差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1181: 長添付名 — 末尾の拡張子が見切れる偽装の兆候
+    if env.long_filename {
+        render_risks.push(
+            "filename=/name= が 100 文字を超えています — 表示領域で拡張子が見切れる偽装の兆候です"
+                .to_string(),
+        );
+    }
+    // D1182: RFC 2231 エンコード添付名 — 名乗る字が解釈で違う差分の兆候
+    if env.rfc2231_filename {
+        render_risks.push(
+            "filename*=/name*= のエンコード名があります — 名乗る字が charset 解釈で読み手ごとに違う差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1183: Message-ID 欠落 — スレッド復元ができない手作り生成品の兆候
+    if env.missing_message_id {
+        render_risks.push(
+            "Message-ID: ヘッダがありません — スレッド復元と重複検査ができない手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(

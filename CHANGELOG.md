@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1176–D1183: 日付・スレッド・添付名の解析差分 8 件
+
+- **問題**: 「いつ・誰への返信か・何という名か」の値が壊れていたり欠けたりする形が未検査だった — `Date:` が現在年超の未来値 (日付詐称・生成時刻偽装)、`Date:` に月名も年も見えない破損値 (各パーサで読み方が違う)、Subject が `Re:`/`Fw:` 始まりなのに `References:`/`In-Reply-To:` が無い (「返信」の体裁でスレッドを捏造)、`Message-ID:` が `<...>` 形でない (msg-id 型を欠く値)、`filename=""`/`name=""` の空値 (拡張子検査不能)、filename 100 文字超 (表示領域で拡張子が見切れる)、`filename*=`/`name*=` の RFC 2231 エンコード名 (charset 解釈で読み手ごとに違う)、`Message-ID:` 欠落 (スレッド復元・重複検査が不能)。
+- **修正**: `has_future_date`/`has_malformed_date`/`has_missing_references_reply`/`has_bad_msgid_format`/`has_empty_attachment_name`/`has_long_filename`/`has_rfc2231_filename`/`has_missing_message_id` で検出し、`first_header_value`/`first_year` 補助でヘッダ値と年を抽出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 時・返・名を欠いた文は、書かれたままに読めない — 形の破損を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

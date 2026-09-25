@@ -114,6 +114,42 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Date:` の年が現在年を超える未来値 (D1176)。
+    ///
+    /// まだ来ない時刻を名乗る文 — 日付詐称の兆候。
+    pub future_date: bool,
+    /// `Date:` 値に月名も 4 桁年も見えない破損値 (D1177)。
+    ///
+    /// 各パーサで読み方が違う日付 — 解析差分の兆候。
+    pub malformed_date: bool,
+    /// Subject が `Re:` 始まりなのに `References:`/`In-Reply-To:` が
+    /// 無い (D1178)。
+    ///
+    /// 「返信」の体裁でスレッドを捏造する形の兆候。
+    pub missing_references_reply: bool,
+    /// `Message-ID:` が `<...>` 形でない (D1179)。
+    ///
+    /// RFC 5322 が定める msg-id 型を欠く値 — 表示側と検査側で
+    /// 読み方が違う差分の兆候。
+    pub bad_msgid_format: bool,
+    /// `filename=""`/`name=""` の空値がある (D1180)。
+    ///
+    /// 名が原理的にない荷物 — 拡張子検査・名前表示が不能な
+    /// 差分の兆候。
+    pub empty_attachment_name: bool,
+    /// `filename=`/`name=` の値が 100 文字を超える (D1181)。
+    ///
+    /// 表示領域で拡張子が見切れる長名 — 末尾を隠す偽装の兆候。
+    pub long_filename: bool,
+    /// `filename*=`/`name*=` の RFC 2231 エンコード名がある (D1182)。
+    ///
+    /// 名乗る字が charset 解釈で読み手ごとに違う差分の兆候。
+    pub rfc2231_filename: bool,
+    /// `Message-ID:` ヘッダの欠落 (D1183)。
+    ///
+    /// RFC 5322 SHOULD の一意識別子を欠く文 — スレッド復元と
+    /// 重複検査ができない手作り生成品の兆候。
+    pub missing_message_id: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2041,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2071,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        future_date: has_future_date(raw),
+        malformed_date: has_malformed_date(raw),
+        missing_references_reply: has_missing_references_reply(raw),
+        bad_msgid_format: has_bad_msgid_format(raw),
+        empty_attachment_name: has_empty_attachment_name(raw),
+        long_filename: has_long_filename(raw),
+        rfc2231_filename: has_rfc2231_filename(raw),
+        missing_message_id: has_missing_message_id(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2436,133 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// ヘッダ節 (小文字化済み) で `field:` の最初の行の値を取る
+/// 補助 (D1176-D1183 系)。
+fn first_header_value<'a>(header: &'a str, field: &str) -> Option<&'a str> {
+    header.lines().find_map(|l| l.strip_prefix(field).map(|v| v.trim()))
+}
+
+/// 値中の最初の 4 連数字を年として返す補助 (D1176/D1177)。
+/// 見つからなければ None。
+fn first_year(value: &str) -> Option<u32> {
+    let b = value.as_bytes();
+    (0..b.len().saturating_sub(3)).find_map(|i| {
+        if b[i..i + 4].iter().all(|c| c.is_ascii_digit()) {
+            value[i..i + 4].parse::<u32>().ok()
+        } else {
+            None
+        }
+    })
+}
+
+/// `Date:` の年が現在年を超える未来値か判定する (D1176)。
+/// 現在年は 2026 (コードの時代の上限)。値中の最初の 4 連数字を
+/// 年とみなす。
+fn has_future_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    first_header_value(header, "date:")
+        .is_some_and(|d| first_year(d).is_some_and(|y| y > 2026))
+}
+
+/// `Date:` 値に月名 (jan-dec) も 4 桁年も見えない破損値か判定する
+/// (D1177)。
+fn has_malformed_date(raw: &[u8]) -> bool {
+    const MONTHS: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    first_header_value(header, "date:").is_some_and(|d| {
+        !MONTHS.iter().any(|m| d.contains(m)) && first_year(d).is_none()
+    })
+}
+
+/// Subject が `Re:`/`Fw:`/`Fwd:` 始まりなのに `References:`/
+/// `In-Reply-To:` が無いか判定する (D1178)。
+fn has_missing_references_reply(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let replyish = first_header_value(header, "subject:").is_some_and(|s| {
+        s.starts_with("re:") || s.starts_with("fw:") || s.starts_with("fwd:")
+    });
+    replyish
+        && !header
+            .lines()
+            .any(|l| l.starts_with("references:") || l.starts_with("in-reply-to:"))
+}
+
+/// `Message-ID:` が `<...>` 形でないか判定する (D1179)。
+fn has_bad_msgid_format(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    first_header_value(header, "message-id:").is_some_and(|v| !(v.starts_with('<') && v.ends_with('>')))
+}
+
+/// `filename=""`/`name=""` の空値があるか判定する (D1180)。
+fn has_empty_attachment_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.contains("filename=\"") || l.contains("filename='") || l.contains("name=\"") || l.contains("name='")) &&
+    header.lines().any(|l| {
+        l.contains("filename=\"\"") || l.contains("filename=''") || l.contains("name=\"\"") || l.contains("name=''")
+    })
+}
+
+/// `filename=`/`name=` の値が 100 文字を超えるか判定する (D1181)。
+fn has_long_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        for key in ["filename=", "name="] {
+            if let Some(pos) = l.find(key) {
+                let v = &l[pos + key.len()..];
+                let end = v
+                    .find(|c: char| c == ';' || c.is_whitespace())
+                    .unwrap_or(v.len());
+                let name = v[..end].trim_matches(|c: char| c == '"' || c == '\'');
+                if name.len() > 100 {
+                    return true;
+                }
+            }
+        }
+        false
+    })
+}
+
+/// `filename*=`/`name*=` の RFC 2231 エンコード名があるか判定する
+/// (D1182)。
+fn has_rfc2231_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.contains("filename*=") || l.contains("name*=") || l.contains("filename*0") || l.contains("filename*1"))
+}
+
+/// `Message-ID:` ヘッダの欠落か判定する (D1183)。
+fn has_missing_message_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("message-id:"))
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21130,3 +21301,77 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
+    #[test]
+    fn scan_は未来日付を検出する() {
+        assert!(has_future_date(b"Date: Fri, 25 Sep 2030 00:00:00 +0900\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_future_date(b"Date: 1 Jan 2099\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_future_date(b"Date: Fri, 25 Sep 2026 00:00:00 +0900\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_future_date(b"Date: Fri, 25 Sep 2025 00:00:00 +0900\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は破損日付を検出する() {
+        assert!(has_malformed_date(b"Date: not a date\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_malformed_date(b"Date: ???\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_malformed_date(b"Date: Fri, 25 Sep 2026 00:00:00 +0900\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_malformed_date(b"Date: 25 Sep 2026\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_malformed_date(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は返信印欠落を検出する() {
+        assert!(has_missing_references_reply(
+            b"Subject: Re: hello\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_missing_references_reply(
+            b"Subject: Fwd: notice\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_missing_references_reply(
+            b"Subject: Re: hello\r\nReferences: <m@b>\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_missing_references_reply(
+            b"Subject: hello\r\nFrom: a@b\r\n\r\nx"
+        ));
+    }
+    #[test]
+    fn scan_はMessageID不正形を検出する() {
+        assert!(has_bad_msgid_format(b"Message-ID: abc123\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_bad_msgid_format(b"Message-ID: <abc@b.com>\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_bad_msgid_format(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は空添付名を検出する() {
+        assert!(has_empty_attachment_name(
+            b"Content-Disposition: attachment; filename=\"\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_empty_attachment_name(
+            b"Content-Type: application/octet-stream; name=\"\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_empty_attachment_name(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_empty_attachment_name(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は長添付名を検出する() {
+        let long = format!("Content-Disposition: attachment; filename=\"{}.pdf\"\r\nFrom: a@b\r\n\r\nx", "a".repeat(120));
+        assert!(has_long_filename(long.as_bytes()));
+        assert!(!has_long_filename(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_long_filename(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はエンコード添付名を検出する() {
+        assert!(has_rfc2231_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''%E6%96%87.pdf\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_rfc2231_filename(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_rfc2231_filename(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はMessageID欠落を検出する() {
+        assert!(has_missing_message_id(b"From: a@b\r\nSubject: x\r\n\r\nhi"));
+        assert!(!has_missing_message_id(b"Message-ID: <m@b>\r\nFrom: a@b\r\n\r\nhi"));
+        assert!(has_missing_message_id(b"To: a@b\nFrom: c@d\n\nhi"));
+    }
