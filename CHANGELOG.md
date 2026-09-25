@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1064–D1071: 経路ずらし・プロトコル混同・権限名乗りの未検査兆候 8 件
+
+- **問題**: 「誰が出したか」「どこへ返すか」「どのプロトコルの体裁か」に関する兆候が未検査だった — `Sender:` ドメイン ≠ From ドメイン (委任発信の経路ずらし)、`X-Spam-Level:`/`X-Spam-Stars:` 等の判定レベル自称、件名の `***spam***`/`[spam]` タグ体裁、`Delivered-To:` の最終配送印自称、SendGrid/SES/Mailgun/Mandrill/SMTPAPI の ESP 配送印自称、`Path:`/`Newsgroups:`/`NNTP-Posting-Host:`/`X-No-Archive:` の netnews ヘッダ混入、`Errors-To:` のエラー返送先ずらし、`Cancel-Lock:`/`Cancel-Key:`/`Supersedes:`/`Control:` の取消・上書き権限印。
+- **修正**: `has_sender_domain_mismatch`/`has_spamlevel_marks`/`has_subject_spam_tag`/`has_delivered_to_marks`/`has_esp3_marks`/`has_netnews_headers`/`has_errors_to_redirect`/`has_cancel_claim` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。`spamlevel_marks`/`delivered_to_marks`/`esp3_marks` は自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) に準拠。Sender 無し・Return-Path 空 `<>` 等は対象外として誤検回避。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「出した者」「返す先」「属するプロトコル」をずらす・名乗る形は経路設計の兆候 — 属しない印の存在を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

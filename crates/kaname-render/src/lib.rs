@@ -119,6 +119,32 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Sender:` のドメインが From と違う — 委任発信を名乗る
+    /// 経路ずらし (D1064)。
+    pub sender_domain_mismatch: bool,
+    /// `X-Spam-Level:`/`X-Spam-Stars:`/`X-Spam-Percentage:`/
+    /// `X-Spam-Rating:` 等の判定レベル・星数を送信側が自称する
+    /// 兆候 (D1065)。
+    pub spamlevel_marks: bool,
+    /// 件名の先頭が `***spam***`/`[spam]`/`spam:` 系 — 受信側が
+    /// 付ける迷惑タグの体裁を名乗る兆候 (D1066)。
+    pub subject_spam_tag: bool,
+    /// `Delivered-To:`/`X-Delivered-To:` 等の最終配送印を送信側が
+    /// 自称する兆候 (D1067)。
+    pub delivered_to_marks: bool,
+    /// `X-SG-*`/`X-SES-*`/`X-Mailgun-*`/`X-Mandrill-*`/`X-Sendinblue-*`/
+    /// `X-Restmail-*`/`X-SMTPAPI:*` 等の ESP 配送印を送信側が自称する
+    /// 兆候 (D1068)。
+    pub esp3_marks: bool,
+    /// `Path:`/`Newsgroups:`/`Followup-To:`/`NNTP-Posting-Host:`/
+    /// `X-No-Archive:` 等の netnews プロトコルの混入 (D1069)。
+    pub netnews_headers: bool,
+    /// `Errors-To:`/`X-Errors-To:` — エラー返送先をずらす
+    /// バウンス経路 (D1070)。
+    pub errors_to_redirect: bool,
+    /// `Cancel-Lock:`/`Cancel-Key:`/`Supersedes:`/`Control:` —
+    /// 記事の取消・上書きを名乗る権限印 (D1071)。
+    pub cancel_claim: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2005,13 +2031,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2061,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        sender_domain_mismatch: has_sender_domain_mismatch(hdr),
+        spamlevel_marks: has_spamlevel_marks(hdr),
+        subject_spam_tag: has_subject_spam_tag(hdr),
+        delivered_to_marks: has_delivered_to_marks(hdr),
+        esp3_marks: has_esp3_marks(hdr),
+        netnews_headers: has_netnews_headers(hdr),
+        errors_to_redirect: has_errors_to_redirect(hdr),
+        cancel_claim: has_cancel_claim(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2358,6 +2392,201 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-report-abuse:")
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
+    })
+}
+
+/// `Sender:` のドメインが From と違うか判定する (D1064)。
+///
+/// Sender: は代行者発信を示すヘッダ — From と別ドメインの Sender は
+/// 「本人ではない者が出した」体裁を名乗る経路ずらし (代行業務の
+/// 正当用途もあるが、差異自体は経路設計の兆候として記録)。
+fn has_sender_domain_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut from_dom: Option<&str> = None;
+    let mut sender_dom: Option<&str> = None;
+    for l in header.lines() {
+        if let Some(v) = l.strip_prefix("from:") {
+            if let Some(dom) = v.rsplit('@').next() {
+                let d = dom.trim_matches(|c| c == '>' || c == '<' || c == ' ' || c == '"');
+                if !d.is_empty() {
+                    from_dom = Some(d);
+                }
+            }
+        }
+        if let Some(v) = l.strip_prefix("sender:") {
+            if let Some(dom) = v.rsplit('@').next() {
+                let d = dom.trim_matches(|c| c == '>' || c == '<' || c == ' ' || c == '"');
+                if !d.is_empty() {
+                    sender_dom = Some(d);
+                }
+            }
+        }
+    }
+    match (from_dom, sender_dom) {
+        (Some(f), Some(s)) => f != s,
+        _ => false,
+    }
+}
+
+/// `X-Spam-Level:`/`X-Spam-Stars:`/`X-Spam-Percentage:`/`X-Spam-Rating:`
+/// 等の判定レベル印があるか判定する (D1065)。
+///
+/// フィルタのレベル・星数は判定機が書く値 — 送信側が書くのは
+/// 「スコアを得た」体裁の自署。
+fn has_spamlevel_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spam-level:")
+            || l.starts_with("x-spam-stars:")
+            || l.starts_with("x-spam-percentage:")
+            || l.starts_with("x-spam-rating:")
+            || l.starts_with("x-spamstars:")
+            || l.starts_with("x-spamlevel:")
+    })
+}
+
+/// 件名の先頭が `***spam***`/`[spam]`/`spam:` 系か判定する (D1066)。
+///
+/// 迷惑タグは受信側フィルタが件名へ付ける値 — 送信側が書くのは
+/// 「既に分類済み」の体裁を名乗る形跡 (逆に「spam ではない」と
+/// 見せる工作にも使われる)。
+fn has_subject_spam_tag(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("subject:")
+            .map(|v| {
+                let v = v.trim_start();
+                v.starts_with("***spam***")
+                    || v.starts_with("[spam]")
+                    || v.starts_with("{spam")
+                    || v.starts_with("spam:")
+                    || v.starts_with("**spam**")
+            })
+            .unwrap_or(false)
+    })
+}
+
+/// `Delivered-To:`/`X-Delivered-To:` 等の最終配送印があるか
+/// 判定する (D1067)。
+///
+/// Delivered-To は最終配送を記す MTA の印 — 送信側が書くのは
+/// 「既に届いた」体裁を名乗る形跡。
+fn has_delivered_to_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("delivered-to:") || l.starts_with("x-delivered-to:"))
+}
+
+/// `X-SG-*`/`X-SES-*`/`X-Mailgun-*`/`X-Mandrill-*`/`X-Sendinblue-*`/
+/// `X-Restmail-*`/`X-SMTPAPI:*` 等の ESP 配送印があるか判定する
+/// (D1068)。
+///
+/// SendGrid・SES・Mailgun・Mandrill・Sendinblue・Restmail の
+/// 配送基盤印は基盤側が付ける値 — 送信側が書くのは「大量配信
+/// 基盤を通った」体裁の自署。
+fn has_esp3_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sg-")
+            || l.starts_with("x-ses-")
+            || l.starts_with("x-mailgun-")
+            || l.starts_with("x-mandrill-")
+            || l.starts_with("x-sendinblue-")
+            || l.starts_with("x-restmail-")
+            || l.starts_with("x-smtpapi:")
+    })
+}
+
+/// `Path:`/`Newsgroups:`/`Followup-To:`/`NNTP-Posting-Host:`/
+/// `X-No-Archive:` 等の netnews ヘッダがあるか判定する (D1069)。
+///
+/// netnews 専用のヘッダがメールに混入するのはプロトコル混同の
+/// 形跡 — 経路記録 (Path)・所属グループ (Newsgroups)・アーカイブ
+/// 不可 (X-No-Archive) を名乗る別体系の体裁。
+fn has_netnews_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("path:")
+            || l.starts_with("newsgroups:")
+            || l.starts_with("followup-to:")
+            || l.starts_with("nntp-posting-host:")
+            || l.starts_with("x-no-archive:")
+            || l.starts_with("nntp-")
+    })
+}
+
+/// `Errors-To:`/`X-Errors-To:` があるか判定する (D1070)。
+///
+/// エラー返送先をずらすヘッダ — バウンスの受け皿を別アドレスへ
+/// 向ける経路ずらし。
+fn has_errors_to_redirect(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("errors-to:") || l.starts_with("x-errors-to:"))
+}
+
+/// `Cancel-Lock:`/`Cancel-Key:`/`Supersedes:`/`Control:` があるか
+/// 判定する (D1071)。
+///
+/// 記事を取消・上書きできる権限印 — netnews 由来の取消機構を
+/// 名乗り、既出の記録を差し替える体裁。
+fn has_cancel_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("cancel-lock:")
+            || l.starts_with("cancel-key:")
+            || l.starts_with("supersedes:")
+            || l.starts_with("control:")
     })
 }
 
@@ -15306,6 +15535,110 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はSenderドメイン不一致を検出する() {
+        let mm = b"From: a@brand.com\r\nSender: b@other.com\r\n\r\nx";
+        assert!(has_sender_domain_mismatch(mm));
+        let same = b"From: a@x.com\r\nSender: a@x.com\r\n\r\nx";
+        assert!(!has_sender_domain_mismatch(same));
+        let nosender = b"From: a@x.com\r\n\r\nx";
+        assert!(!has_sender_domain_mismatch(nosender));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_sender_domain_mismatch(clean));
+    }
+
+    #[test]
+    fn scan_はスパムレベル印を検出する() {
+        let lv = b"X-Spam-Level: *****\r\n\r\nx";
+        assert!(has_spamlevel_marks(lv));
+        let st = b"X-Spam-Stars: ***\r\n\r\nx";
+        assert!(has_spamlevel_marks(st));
+        let pc = b"X-Spam-Percentage: 5\r\n\r\nx";
+        assert!(has_spamlevel_marks(pc));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_spamlevel_marks(clean));
+    }
+
+    #[test]
+    fn scan_は件名スパムタグを検出する() {
+        let t1 = b"Subject: ***SPAM*** hi\r\n\r\nx";
+        assert!(has_subject_spam_tag(t1));
+        let t2 = b"Subject: [spam] deal\r\n\r\nx";
+        assert!(has_subject_spam_tag(t2));
+        let t3 = b"Subject: spam: urgent\r\n\r\nx";
+        assert!(has_subject_spam_tag(t3));
+        let t4 = b"Subject: {Spam?} call\r\n\r\nx";
+        assert!(has_subject_spam_tag(t4));
+        let ok = b"Subject: sale\r\n\r\nx";
+        assert!(!has_subject_spam_tag(ok));
+        let mid = b"Subject: spam contest\r\n\r\nx";
+        assert!(!has_subject_spam_tag(mid));
+    }
+
+    #[test]
+    fn scan_は最終配送印を検出する() {
+        let dt = b"Delivered-To: u@h\r\n\r\nx";
+        assert!(has_delivered_to_marks(dt));
+        let xd = b"X-Delivered-To: u@h\r\n\r\nx";
+        assert!(has_delivered_to_marks(xd));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_delivered_to_marks(clean));
+    }
+
+    #[test]
+    fn scan_はESP3印を検出する() {
+        let sg = b"X-SG-EID: abc\r\n\r\nx";
+        assert!(has_esp3_marks(sg));
+        let ses = b"X-SES-Outgoing: 1\r\n\r\nx";
+        assert!(has_esp3_marks(ses));
+        let mg = b"X-Mailgun-Sid: x\r\n\r\nx";
+        assert!(has_esp3_marks(mg));
+        let md = b"X-Mandrill-User: u\r\n\r\nx";
+        assert!(has_esp3_marks(md));
+        let sa = b"X-SMTPAPI: {}\r\n\r\nx";
+        assert!(has_esp3_marks(sa));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp3_marks(clean));
+    }
+
+    #[test]
+    fn scan_はnetnews混入を検出する() {
+        let ng = b"Newsgroups: misc.test\r\n\r\nx";
+        assert!(has_netnews_headers(ng));
+        let na = b"X-No-Archive: yes\r\n\r\nx";
+        assert!(has_netnews_headers(na));
+        let nn = b"NNTP-Posting-Host: h\r\n\r\nx";
+        assert!(has_netnews_headers(nn));
+        let pf = b"Path: news.example\r\n\r\nx";
+        assert!(has_netnews_headers(pf));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_netnews_headers(clean));
+    }
+
+    #[test]
+    fn scan_はErrorsToを検出する() {
+        let et = b"Errors-To: b@x\r\n\r\nx";
+        assert!(has_errors_to_redirect(et));
+        let xe = b"X-Errors-To: b@x\r\n\r\nx";
+        assert!(has_errors_to_redirect(xe));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_errors_to_redirect(clean));
+    }
+
+    #[test]
+    fn scan_は取消権限を検出する() {
+        let cl = b"Cancel-Lock: sha1:x\r\n\r\nx";
+        assert!(has_cancel_claim(cl));
+        let ck = b"Cancel-Key: sha1:y\r\n\r\nx";
+        assert!(has_cancel_claim(ck));
+        let sp = b"Supersedes: <m@x>\r\n\r\nx";
+        assert!(has_cancel_claim(sp));
+        let ct = b"Control: cancel <m@x>\r\n\r\nx";
+        assert!(has_cancel_claim(ct));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cancel_claim(clean));
     }
 
     #[test]

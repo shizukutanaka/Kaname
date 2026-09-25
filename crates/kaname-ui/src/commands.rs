@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,69 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1064: Sender ドメイン不一致
+    if env.sender_domain_mismatch {
+        render_risks.push(
+            "Sender: のドメインが From と違います — 委任発信を名乗る経路ずらしの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1065: スパムレベル印自称
+    if env.spamlevel_marks {
+        render_risks.push(
+            "X-Spam-Level/X-Spam-Stars 等 — 判定レベル・星数を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1066: 件名スパムタグ
+    if env.subject_spam_tag {
+        render_risks.push(
+            "件名の先頭が ***spam***/[spam] 系です — 受信側の迷惑タグの体裁を名乗る兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1067: 最終配送印自称
+    if env.delivered_to_marks {
+        render_risks.push(
+            "Delivered-To/X-Delivered-To — 最終配送印を送信側が自称する兆候です".to_string(),
+        );
+    }
+
+    // D1068: ESP 配送印自称 (第三群)
+    if env.esp3_marks {
+        render_risks.push(
+            "X-SG-*/X-SES-*/X-Mailgun-*/X-Mandrill-*/X-SMTPAPI 等 — 大量配信基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1069: netnews ヘッダ混入
+    if env.netnews_headers {
+        render_risks.push(
+            "Path:/Newsgroups:/NNTP-Posting-Host:/X-No-Archive 等の netnews ヘッダーが混入しています — 別プロトコルの体裁を名乗る兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1070: Errors-To 経路ずらし
+    if env.errors_to_redirect {
+        render_risks.push(
+            "Errors-To: ヘッダーがあります — エラー返送先をずらすバウンス経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1071: 取消権限の名乗り
+    if env.cancel_claim {
+        render_risks.push(
+            "Cancel-Lock/Cancel-Key/Supersedes/Control があります — 記事の取消・上書きを名乗る権限印の兆候です"
                 .to_string(),
         );
     }
