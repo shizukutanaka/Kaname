@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1120–D1127: メッセンジャー・決済・EC・エンタープライズ・電子署名・調査・予約・PM系の未検査兆候 8 件
+
+- **問題**: 「どのメッセンジャーか」「どの決済系か」「どの EC 系か」「どのエンタープライズか」「どの署名系か」「どの調査系か」「どの予約系か」「どの管理系か」に関する兆候が未検査だった — `X-Viber*`/`X-Signal*`/`X-WeChat*`/`X-KakaoTalk*`/`X-Messenger*` (メッセンジャー)、`X-Braintree*`/`X-Adyen*`/`X-Worldpay*`/`X-Checkout-*`/`X-Mollie*`/`X-Klarna*`/`X-Paddle*`/`X-Fastspring*` (決済)、`X-Shopify*`/`X-BigCommerce*`/`X-Magento*`/`X-WooCommerce*`/`X-Etsy*`/`X-PrestaShop*`/`X-OpenCart*`/`X-Wix*` (EC・店舗)、`X-Workday*`/`X-Oracle-*`/`X-SAP-*`/`X-NetApp*`/`X-SN-*`/`X-IBM-*`/`X-Cisco-*`/`X-VMware*` (エンタープライズ基盤)、`X-SignNow*`/`X-RightSignature*`/`X-PandaDoc*`/`X-SignTemplate*`/`X-EverSign*`/`X-SignRequest*` (電子署名)、`X-Qualtrics*`/`X-GoogleForm*`/`X-SurveyGizmo*`/`X-FormSite*`/`X-Wufoo*`/`X-SogoSurvey*`/`X-QuestionPro*` (調査)、`X-Acuity*`/`X-YouCanBook*`/`X-Calend-*`/`X-ScheduleOnce*`/`X-Appointlet*`/`X-TimeTrade*` (予約調整)、`X-Smartsheet*`/`X-Wrike*`/`X-Basecamp*`/`X-Teamwork*`/`X-LiquidPlanner*`/`X-Podio*`/`X-Insightly*` (プロジェクト管理)。
+- **修正**: `has_messenger_stamps`/`has_payment_stamps`/`has_ecommerce_stamps`/`has_enterprise_stamps`/`has_esign_stamps`/`has_survey_stamps`/`has_booking_stamps`/`has_pm_stamps` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。すべて自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「メッセンジャー・決済・EC・基盤・署名・調査・予約・管理」の記録を送信側が書くのはいずれも属しない印 — 記録の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

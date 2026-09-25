@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1120: メッセンジャー系印自署
+    if env.messenger_stamps {
+        render_risks.push(
+            "X-Viber*/X-Signal*/X-WeChat*/X-KakaoTalk*/X-Messenger* — メッセンジャー系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1121: 決済系印自署
+    if env.payment_stamps {
+        render_risks.push(
+            "X-Braintree*/X-Adyen*/X-Worldpay*/X-Checkout-*/X-Mollie*/X-Klarna*/X-Paddle*/X-Fastspring* — 決済系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1122: EC・店舗系印自署
+    if env.ecommerce_stamps {
+        render_risks.push(
+            "X-Shopify*/X-BigCommerce*/X-Magento*/X-WooCommerce*/X-Etsy*/X-PrestaShop*/X-OpenCart*/X-Wix* — EC・店舗系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1123: エンタープライズ基盤印自署
+    if env.enterprise_stamps {
+        render_risks.push(
+            "X-Workday*/X-Oracle-*/X-SAP-*/X-NetApp*/X-SN-*/X-IBM-*/X-Cisco-*/X-VMware* — エンタープライズ基盤の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1124: 電子署名系印自署
+    if env.esign_stamps {
+        render_risks.push(
+            "X-SignNow*/X-RightSignature*/X-PandaDoc*/X-SignTemplate*/X-EverSign*/X-SignRequest* — 電子署名系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1125: 調査系印自署
+    if env.survey_stamps {
+        render_risks.push(
+            "X-Qualtrics*/X-GoogleForm*/X-SurveyGizmo*/X-FormSite*/X-Wufoo*/X-SogoSurvey*/X-QuestionPro* — 調査系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1126: 予約調整系印自署
+    if env.booking_stamps {
+        render_risks.push(
+            "X-Acuity*/X-YouCanBook*/X-Calend-*/X-ScheduleOnce*/X-Appointlet*/X-TimeTrade* — 予約調整系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1127: プロジェクト管理系印自署
+    if env.pm_stamps {
+        render_risks.push(
+            "X-Smartsheet*/X-Wrike*/X-Basecamp*/X-Teamwork*/X-LiquidPlanner*/X-Podio*/X-Insightly* — プロジェクト管理系の記録を送信側が自称する兆候です"
                 .to_string(),
         );
     }

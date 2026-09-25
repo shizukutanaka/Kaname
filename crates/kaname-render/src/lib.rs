@@ -114,6 +114,38 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `X-Viber*`/`X-Signal*`/`X-WeChat*`/`X-KakaoTalk*`/`X-Messenger*`
+    /// があるか — メッセンジャー系の記録を送信側が自称する兆候
+    /// (D1120)。
+    pub messenger_stamps: bool,
+    /// `X-Braintree*`/`X-Adyen*`/`X-Worldpay*`/`X-Checkout-*`/`X-Mollie*`/
+    /// `X-Klarna*`/`X-Paddle*`/`X-Fastspring*` があるか — 決済系の記録を
+    /// 送信側が自称する兆候 (D1121)。
+    pub payment_stamps: bool,
+    /// `X-Shopify*`/`X-BigCommerce*`/`X-Magento*`/`X-WooCommerce*`/
+    /// `X-Etsy*`/`X-PrestaShop*`/`X-OpenCart*`/`X-Wix*` があるか —
+    /// EC・店舗系の記録を送信側が自称する兆候 (D1122)。
+    pub ecommerce_stamps: bool,
+    /// `X-Workday*`/`X-Oracle-*`/`X-SAP-*`/`X-NetApp*`/`X-SN-*`/`X-IBM-*`/
+    /// `X-Cisco-*`/`X-VMware*` があるか — エンタープライズ基盤の記録を
+    /// 送信側が自称する兆候 (D1123)。
+    pub enterprise_stamps: bool,
+    /// `X-SignNow*`/`X-RightSignature*`/`X-PandaDoc*`/`X-SignTemplate*`/
+    /// `X-EverSign*`/`X-SignRequest*` があるか — 電子署名系の記録を
+    /// 送信側が自称する兆候 (D1124)。
+    pub esign_stamps: bool,
+    /// `X-Qualtrics*`/`X-GoogleForm*`/`X-SurveyGizmo*`/`X-FormSite*`/
+    /// `X-Wufoo*`/`X-SogoSurvey*`/`X-QuestionPro*` があるか — 調査系の
+    /// 記録を送信側が自称する兆候 (D1125)。
+    pub survey_stamps: bool,
+    /// `X-Acuity*`/`X-YouCanBook*`/`X-Calend-*`/`X-ScheduleOnce*`/
+    /// `X-Appointlet*`/`X-TimeTrade*` があるか — 予約調整系の記録を
+    /// 送信側が自称する兆候 (D1126)。
+    pub booking_stamps: bool,
+    /// `X-Smartsheet*`/`X-Wrike*`/`X-Basecamp*`/`X-Teamwork*`/
+    /// `X-LiquidPlanner*`/`X-Podio*`/`X-Insightly*` があるか —
+    /// プロジェクト管理系の記録を送信側が自称する兆候 (D1127)。
+    pub pm_stamps: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2037,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2067,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        messenger_stamps: has_messenger_stamps(hdr),
+        payment_stamps: has_payment_stamps(hdr),
+        ecommerce_stamps: has_ecommerce_stamps(hdr),
+        enterprise_stamps: has_enterprise_stamps(hdr),
+        esign_stamps: has_esign_stamps(hdr),
+        survey_stamps: has_survey_stamps(hdr),
+        booking_stamps: has_booking_stamps(hdr),
+        pm_stamps: has_pm_stamps(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2432,151 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-Viber*`/`X-Signal*`/`X-WeChat*`/`X-KakaoTalk*`/`X-Messenger*`
+/// があるか判定する (D1120)。
+fn has_messenger_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-viber")
+            || l.starts_with("x-signal")
+            || l.starts_with("x-wechat")
+            || l.starts_with("x-kakaotalk")
+            || l.starts_with("x-messenger")
+    })
+}
+
+/// `X-Braintree*`/`X-Adyen*`/`X-Worldpay*`/`X-Checkout-*`/`X-Mollie*`/
+/// `X-Klarna*`/`X-Paddle*`/`X-Fastspring*` があるか判定する (D1121)。
+fn has_payment_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-braintree")
+            || l.starts_with("x-adyen")
+            || l.starts_with("x-worldpay")
+            || l.starts_with("x-checkout-")
+            || l.starts_with("x-mollie")
+            || l.starts_with("x-klarna")
+            || l.starts_with("x-paddle")
+            || l.starts_with("x-fastspring")
+    })
+}
+
+/// `X-Shopify*`/`X-BigCommerce*`/`X-Magento*`/`X-WooCommerce*`/`X-Etsy*`/
+/// `X-PrestaShop*`/`X-OpenCart*`/`X-Wix*` があるか判定する (D1122)。
+fn has_ecommerce_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-shopify")
+            || l.starts_with("x-bigcommerce")
+            || l.starts_with("x-magento")
+            || l.starts_with("x-woocommerce")
+            || l.starts_with("x-etsy")
+            || l.starts_with("x-prestashop")
+            || l.starts_with("x-opencart")
+            || l.starts_with("x-wix")
+    })
+}
+
+/// `X-Workday*`/`X-Oracle-*`/`X-SAP-*`/`X-NetApp*`/`X-SN-*`/`X-IBM-*`/
+/// `X-Cisco-*`/`X-VMware*` があるか判定する (D1123)。
+fn has_enterprise_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-workday")
+            || l.starts_with("x-oracle-")
+            || l.starts_with("x-sap-")
+            || l.starts_with("x-netapp")
+            || l.starts_with("x-sn-")
+            || l.starts_with("x-ibm-")
+            || l.starts_with("x-cisco-")
+            || l.starts_with("x-vmware")
+    })
+}
+
+/// `X-SignNow*`/`X-RightSignature*`/`X-PandaDoc*`/`X-SignTemplate*`/
+/// `X-EverSign*`/`X-SignRequest*` があるか判定する (D1124)。
+fn has_esign_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-signnow")
+            || l.starts_with("x-rightsignature")
+            || l.starts_with("x-pandadoc")
+            || l.starts_with("x-signtemplate")
+            || l.starts_with("x-eversign")
+            || l.starts_with("x-signrequest")
+    })
+}
+
+/// `X-Qualtrics*`/`X-GoogleForm*`/`X-SurveyGizmo*`/`X-FormSite*`/
+/// `X-Wufoo*`/`X-SogoSurvey*`/`X-QuestionPro*` があるか判定する
+/// (D1125)。
+fn has_survey_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-qualtrics")
+            || l.starts_with("x-googleform")
+            || l.starts_with("x-surveygizmo")
+            || l.starts_with("x-formsite")
+            || l.starts_with("x-wufoo")
+            || l.starts_with("x-sogosurvey")
+            || l.starts_with("x-questionpro")
+    })
+}
+
+/// `X-Acuity*`/`X-YouCanBook*`/`X-Calend-*`/`X-ScheduleOnce*`/
+/// `X-Appointlet*`/`X-TimeTrade*` があるか判定する (D1126)。
+fn has_booking_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-acuity")
+            || l.starts_with("x-youcanbook")
+            || l.starts_with("x-calend-")
+            || l.starts_with("x-scheduleonce")
+            || l.starts_with("x-appointlet")
+            || l.starts_with("x-timetrade")
+    })
+}
+
+/// `X-Smartsheet*`/`X-Wrike*`/`X-Basecamp*`/`X-Teamwork*`/
+/// `X-LiquidPlanner*`/`X-Podio*`/`X-Insightly*` があるか判定する
+/// (D1127)。
+fn has_pm_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-smartsheet")
+            || l.starts_with("x-wrike")
+            || l.starts_with("x-basecamp")
+            || l.starts_with("x-teamwork")
+            || l.starts_with("x-liquidplanner")
+            || l.starts_with("x-podio")
+            || l.starts_with("x-insightly")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21313,147 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_はメッセンジャー印を検出する() {
+        let m1 = b"X-Viber-Info: 1\r\n\r\nx";
+        assert!(has_messenger_stamps(m1));
+        let m2 = b"X-Signal-Info: 1\r\n\r\nx";
+        assert!(has_messenger_stamps(m2));
+        let m3 = b"X-WeChat-Info: 1\r\n\r\nx";
+        assert!(has_messenger_stamps(m3));
+        let m4 = b"X-KakaoTalk-Info: 1\r\n\r\nx";
+        assert!(has_messenger_stamps(m4));
+        let m5 = b"X-Messenger-Info: 1\r\n\r\nx";
+        assert!(has_messenger_stamps(m5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_messenger_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は決済系印を検出する() {
+        let p1 = b"X-Braintree-Info: 1\r\n\r\nx";
+        assert!(has_payment_stamps(p1));
+        let p2 = b"X-Adyen-Info: 1\r\n\r\nx";
+        assert!(has_payment_stamps(p2));
+        let p3 = b"X-Worldpay-Info: 1\r\n\r\nx";
+        assert!(has_payment_stamps(p3));
+        let p4 = b"X-Mollie-Info: 1\r\n\r\nx";
+        assert!(has_payment_stamps(p4));
+        let p5 = b"X-Klarna-Info: 1\r\n\r\nx";
+        assert!(has_payment_stamps(p5));
+        let p6 = b"X-Paddle-Info: 1\r\n\r\nx";
+        assert!(has_payment_stamps(p6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_payment_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はEC系印を検出する() {
+        let e1 = b"X-Shopify-Info: 1\r\n\r\nx";
+        assert!(has_ecommerce_stamps(e1));
+        let e2 = b"X-BigCommerce-Info: 1\r\n\r\nx";
+        assert!(has_ecommerce_stamps(e2));
+        let e3 = b"X-Magento-Info: 1\r\n\r\nx";
+        assert!(has_ecommerce_stamps(e3));
+        let e4 = b"X-WooCommerce-Info: 1\r\n\r\nx";
+        assert!(has_ecommerce_stamps(e4));
+        let e5 = b"X-Etsy-Info: 1\r\n\r\nx";
+        assert!(has_ecommerce_stamps(e5));
+        let e6 = b"X-Wix-Info: 1\r\n\r\nx";
+        assert!(has_ecommerce_stamps(e6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ecommerce_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はエンタープライズ印を検出する() {
+        let e1 = b"X-Workday-Info: 1\r\n\r\nx";
+        assert!(has_enterprise_stamps(e1));
+        let e2 = b"X-Oracle-Info: 1\r\n\r\nx";
+        assert!(has_enterprise_stamps(e2));
+        let e3 = b"X-SAP-Info: 1\r\n\r\nx";
+        assert!(has_enterprise_stamps(e3));
+        let e4 = b"X-IBM-Info: 1\r\n\r\nx";
+        assert!(has_enterprise_stamps(e4));
+        let e5 = b"X-Cisco-Info: 1\r\n\r\nx";
+        assert!(has_enterprise_stamps(e5));
+        let e6 = b"X-VMware-Info: 1\r\n\r\nx";
+        assert!(has_enterprise_stamps(e6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_enterprise_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は電子署名印を検出する() {
+        let s1 = b"X-SignNow-Info: 1\r\n\r\nx";
+        assert!(has_esign_stamps(s1));
+        let s2 = b"X-RightSignature-Info: 1\r\n\r\nx";
+        assert!(has_esign_stamps(s2));
+        let s3 = b"X-PandaDoc-Info: 1\r\n\r\nx";
+        assert!(has_esign_stamps(s3));
+        let s4 = b"X-SignTemplate-Info: 1\r\n\r\nx";
+        assert!(has_esign_stamps(s4));
+        let s5 = b"X-EverSign-Info: 1\r\n\r\nx";
+        assert!(has_esign_stamps(s5));
+        let s6 = b"X-SignRequest-Info: 1\r\n\r\nx";
+        assert!(has_esign_stamps(s6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esign_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は調査系印を検出する() {
+        let s1 = b"X-Qualtrics-Info: 1\r\n\r\nx";
+        assert!(has_survey_stamps(s1));
+        let s2 = b"X-GoogleForm-Info: 1\r\n\r\nx";
+        assert!(has_survey_stamps(s2));
+        let s3 = b"X-SurveyGizmo-Info: 1\r\n\r\nx";
+        assert!(has_survey_stamps(s3));
+        let s4 = b"X-FormSite-Info: 1\r\n\r\nx";
+        assert!(has_survey_stamps(s4));
+        let s5 = b"X-Wufoo-Info: 1\r\n\r\nx";
+        assert!(has_survey_stamps(s5));
+        let s6 = b"X-QuestionPro-Info: 1\r\n\r\nx";
+        assert!(has_survey_stamps(s6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_survey_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は予約調整印を検出する() {
+        let b1 = b"X-Acuity-Info: 1\r\n\r\nx";
+        assert!(has_booking_stamps(b1));
+        let b2 = b"X-YouCanBook-Info: 1\r\n\r\nx";
+        assert!(has_booking_stamps(b2));
+        let b3 = b"X-Calend-Info: 1\r\n\r\nx";
+        assert!(has_booking_stamps(b3));
+        let b4 = b"X-ScheduleOnce-Info: 1\r\n\r\nx";
+        assert!(has_booking_stamps(b4));
+        let b5 = b"X-Appointlet-Info: 1\r\n\r\nx";
+        assert!(has_booking_stamps(b5));
+        let b6 = b"X-TimeTrade-Info: 1\r\n\r\nx";
+        assert!(has_booking_stamps(b6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_booking_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はPM系印を検出する() {
+        let p1 = b"X-Smartsheet-Info: 1\r\n\r\nx";
+        assert!(has_pm_stamps(p1));
+        let p2 = b"X-Wrike-Info: 1\r\n\r\nx";
+        assert!(has_pm_stamps(p2));
+        let p3 = b"X-Basecamp-Info: 1\r\n\r\nx";
+        assert!(has_pm_stamps(p3));
+        let p4 = b"X-Teamwork-Info: 1\r\n\r\nx";
+        assert!(has_pm_stamps(p4));
+        let p5 = b"X-LiquidPlanner-Info: 1\r\n\r\nx";
+        assert!(has_pm_stamps(p5));
+        let p6 = b"X-Insightly-Info: 1\r\n\r\nx";
+        assert!(has_pm_stamps(p6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_pm_stamps(clean));
     }
 }
