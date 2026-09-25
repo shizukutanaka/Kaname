@@ -13337,6 +13337,32 @@ pub struct ExtractedBodyText {
     /// スクリプト実行、`file://` UNC 参照による SMB 強制認証
     /// (NTLM ハッシュ送信) の誘導経路の兆候 (D964)。
     pub dangerous_scheme_link: bool,
+    /// `<iframe>` 要素があるか — メール内に外部コンテンツ枠を
+    /// 埋め込むクリックジャッキング・認証情報収集の兆候 (D965)。
+    pub iframe_present: bool,
+    /// `<svg>`/`<math>` 要素があるか — スクリプト実行可能な
+    /// マークアップの埋め込み (SVG スマグリング・MathML の
+    /// xlink ベクター) の兆候 (D966)。
+    pub svg_math_present: bool,
+    /// `<object>`/`<embed>` 要素があるか — プラグイン・外部
+    /// オブジェクト経由のペイロード埋め込みの兆候 (D967)。
+    pub object_embed_present: bool,
+    /// `on*` イベントハンドラ属性 (onload/onerror/onclick 等) が
+    /// あるか — スクリプト実行意図を持つマークアップの兆候 (D968)。
+    pub event_handler_attr: bool,
+    /// `href` 先のホストが IP リテラル・数値形式 (dotted IPv4 /
+    /// dword / hex / octal / IPv6) であるか — ドメイン評判を回避
+    /// する誘導経路の兆候 (D969)。
+    pub ip_literal_href: bool,
+    /// `href` 先のホストが `xn--` パニコードまたは非 ASCII 文字を
+    /// 含むか — IDN ホモグリフ偽装ドメインの兆候 (D970)。
+    pub idn_href: bool,
+    /// `href` 先のホストが `.onion` であるか — Tor/dark-web への
+    /// 誘導経路の兆候 (D971)。
+    pub onion_href: bool,
+    /// `<a ping="...">` 属性があるか — クリック時に外部へ通知を
+    /// 送るハイパーリンク監査 (トラッキング/ビーコン) の兆候 (D972)。
+    pub ping_attr: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13527,6 +13553,20 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         meta_refresh: has_meta_refresh(html),
         base_tag: has_base_tag(html),
         dangerous_scheme_link: has_dangerous_scheme_link(html),
+        iframe_present: has_open_tag(&html.to_ascii_lowercase(), "iframe"),
+        svg_math_present: {
+            let lower = html.to_ascii_lowercase();
+            has_open_tag(&lower, "svg") || has_open_tag(&lower, "math")
+        },
+        object_embed_present: {
+            let lower = html.to_ascii_lowercase();
+            has_open_tag(&lower, "object") || has_open_tag(&lower, "embed")
+        },
+        event_handler_attr: has_event_handler_attr(html),
+        ip_literal_href: has_host_flag(html, |h| is_ip_literal_host(&h)),
+        idn_href: has_host_flag(html, |h| is_idn_host(&h)),
+        onion_href: has_host_flag(html, |h| h == "onion" || h.ends_with(".onion")),
+        ping_attr: has_ping_attr(html),
     }
 }
 
@@ -13641,6 +13681,201 @@ fn has_dangerous_scheme_link(html: &str) -> bool {
             return true;
         }
         rest = after;
+    }
+    false
+}
+
+/// 本文中の各 `href` 属性値に対してクロージャを呼ぶ (D969–D971)。
+///
+/// `href=` の属性値を引用符・空白区切りを考慮して取り出す。
+/// コメント内の href も通るが、実害のないヒューリスティックとして
+/// 既存の `has_tel_link`/`has_dangerous_scheme_link` と揃える。
+fn for_each_href_value(html: &str, mut f: impl FnMut(&str)) {
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find("href") {
+        let after = &rest[i + 4..];
+        let t = after.trim_start();
+        if !t.starts_with('=') {
+            rest = after;
+            continue;
+        }
+        let v = t[1..].trim_start();
+        let (val, adv) = match v.chars().next() {
+            Some(q @ ('"' | '\'')) => {
+                let body = &v[1..];
+                match body.find(q) {
+                    Some(e) => (&body[..e], e + 2),
+                    None => (body, v.len()),
+                }
+            }
+            _ => {
+                let e = v
+                    .find(|c: char| c.is_whitespace() || c == '>')
+                    .unwrap_or(v.len());
+                (&v[..e], e)
+            }
+        };
+        f(val);
+        rest = &v[adv.min(v.len())..];
+    }
+}
+
+/// `href` 先のホストに対して述語が真になる値があるか (D969–D971)。
+/// http(s) 以外のスキームはホストを持たないため `url_host` が
+/// 取れない値は対象外。
+fn has_host_flag(html: &str, mut pred: impl FnMut(&str) -> bool) -> bool {
+    let mut hit = false;
+    for_each_href_value(html, |v| {
+        if !hit {
+            if let Some(h) = url_host(v) {
+                if pred(&h) {
+                    hit = true;
+                }
+            }
+        }
+    });
+    hit
+}
+
+/// ホスト名が IP リテラル・数値形式かどうか (D969)。
+///
+/// ブラウザはドット区切り IPv4 だけでなく、1 つの十進整数
+/// (dword — `http://2130706433/` = 127.0.0.1)、16 進
+/// (`http://0x7f000001/`)、8 進 (`http://0177.0.0.1/`)、
+/// 短縮形 (`http://127.1/`) をすべて IP として解決する。
+/// ドメイン評判・ドメイン系検査をすり抜ける定形の回避策。
+fn is_ip_literal_host(host: &str) -> bool {
+    // url_host は IPv6 の [] を外して返す (例: "::1")
+    if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        return true;
+    }
+    if host.parse::<std::net::Ipv4Addr>().is_ok() {
+        return true;
+    }
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.len() > 4 {
+        return false;
+    }
+    !parts.is_empty()
+        && parts.iter().all(|p| {
+            if p.is_empty() {
+                return false;
+            }
+            if let Some(h) = p.strip_prefix("0x") {
+                !h.is_empty() && h.chars().all(|c| c.is_ascii_hexdigit())
+            } else {
+                p.chars().all(|c| c.is_ascii_digit())
+            }
+        })
+}
+
+/// ホスト名が IDN (国際化ドメイン) かどうか (D970)。
+///
+/// `xn--` パニコードラベルまたは非 ASCII 文字を含むホスト —
+/// IDN ホモグリフ (見た目が紛らわしい別文字のドメイン) 偽装の
+/// 定形手段。
+fn is_idn_host(host: &str) -> bool {
+    host.split('.').any(|l| l.starts_with("xn--"))
+        || host.chars().any(|c| !c.is_ascii())
+}
+
+/// `<` の直後のタグ名が `name` と一致するか (区切り確認付き)。
+/// `inner` は `<` を除いたタグ内部文字列。
+fn tag_is(inner: &str, name: &str) -> bool {
+    inner.starts_with(name)
+        && inner[name.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || c == '/' || c == '>')
+}
+
+/// タグ内部に `name=` 形式の属性があるか。
+/// `ping = "..."` のような名前と `=` の間の空白にも対応する。
+fn tag_has_named_attr(inner: &str, name: &str) -> bool {
+    let toks: Vec<&str> = inner.split_whitespace().collect();
+    for (i, t) in toks.iter().enumerate() {
+        if let Some(r) = t.strip_prefix(name) {
+            if r.trim_start().starts_with('=') {
+                return true;
+            }
+            // `ping =` のように属性名だけで終わるトークン
+            if r.is_empty() && toks.get(i + 1).is_some_and(|n| n.starts_with('=')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// タグ内部に `on*` イベントハンドラ属性があるか (D968 用)。
+fn tag_has_event_attr(inner: &str) -> bool {
+    let toks: Vec<&str> = inner.split_whitespace().collect();
+    for (i, t) in toks.iter().enumerate() {
+        let Some(rest_tok) = t.strip_prefix("on") else {
+            continue;
+        };
+        // 属性名は ASCII 英字の連続 — `on`+英字+`=` (または `=` が次トークン)
+        let name_len = rest_tok
+            .find(|c: char| !c.is_ascii_alphabetic())
+            .unwrap_or(rest_tok.len());
+        if name_len == 0 {
+            continue;
+        }
+        let rest_tok = &rest_tok[name_len..];
+        if rest_tok.trim_start().starts_with('=') {
+            return true;
+        }
+        if rest_tok.is_empty() && toks.get(i + 1).is_some_and(|n| n.starts_with('=')) {
+            return true;
+        }
+    }
+    false
+}
+
+/// HTML 中に `on*` イベントハンドラ属性があるかを検出する (D968)。
+///
+/// `onload`/`onerror`/`onclick` 等はスクリプト実行の意図を持つ
+/// 属性 — 配信メールの HTML を生成する正規の ESP は出力しない
+/// (生成されても全クライアントが除去するため、本番メールの
+/// マークアップに含まれない)。コメント・DOCTYPE・閉じタグ・
+/// 処理命令は対象外とする。
+fn has_event_handler_attr(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find('<') {
+        let after = &rest[i + 1..];
+        let end = after.find('>').unwrap_or(after.len());
+        match after.chars().next() {
+            Some('!') | Some('?') | Some('/') | None => {}
+            Some(_) if tag_has_event_attr(&after[..end]) => return true,
+            _ => {}
+        }
+        rest = &after[end..];
+    }
+    false
+}
+
+/// `<a ping="...">` ハイパーリンク監査属性を検出する (D972)。
+///
+/// `ping` はクリック時に指定 URL へ POST 通知を送る属性 —
+/// リンク先とは別のトラッキング/ビーコン経路を仕込める。
+/// 正規のメール生成系は出力しない。
+fn has_ping_attr(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find('<') {
+        let after = &rest[i + 1..];
+        let end = after.find('>').unwrap_or(after.len());
+        let inner = &after[..end];
+        match after.chars().next() {
+            Some('!') | Some('?') | Some('/') | None => {}
+            Some(_) if tag_is(inner, "a") && tag_has_named_attr(inner, "ping") => {
+                return true;
+            }
+            _ => {}
+        }
+        rest = &after[end..];
     }
     false
 }
@@ -15447,6 +15682,112 @@ mod tests {
         assert!(!html_to_text(r#"<a href="mailto:a@b">x</a>"#).dangerous_scheme_link);
         // テキスト中の素の "data:" は href 属性でないため対象外
         assert!(!html_to_text("<p>data:text/html</p>").dangerous_scheme_link);
+    }
+
+    // ── D965: iframe ────────────────────────────────────────────
+    #[test]
+    fn html_to_text_はiframeを検出する() {
+        assert!(html_to_text(r#"<iframe src="https://evil.example"></iframe>"#).iframe_present);
+        assert!(html_to_text("<IFRAME src=x>").iframe_present);
+        assert!(html_to_text("<iframe\n  src=x>").iframe_present);
+        // <iframefoo> のような前方一致は誤検しない
+        assert!(!html_to_text("<iframefoo>x</iframefoo>").iframe_present);
+        assert!(!html_to_text("<p>clean</p>").iframe_present);
+    }
+
+    // ── D966: svg/math ──────────────────────────────────────────
+    #[test]
+    fn html_to_text_はsvg_mathを検出する() {
+        assert!(html_to_text("<svg><script>alert(1)</script></svg>").svg_math_present);
+        assert!(html_to_text(r#"<svg><a xlink:href="x"/></svg>"#).svg_math_present);
+        assert!(html_to_text("<math><mtext>x</mtext></math>").svg_math_present);
+        // <svgs> / <mathematics> のような前方一致は誤検しない
+        assert!(!html_to_text("<mathematics>x</mathematics>").svg_math_present);
+        assert!(!html_to_text("<p>clean</p>").svg_math_present);
+    }
+
+    // ── D967: object/embed ──────────────────────────────────────
+    #[test]
+    fn html_to_text_はobject_embedを検出する() {
+        assert!(html_to_text(r#"<object data="https://evil.example/x.swf"></object>"#).object_embed_present);
+        assert!(html_to_text(r#"<embed src="https://evil.example/x.pdf">"#).object_embed_present);
+        assert!(html_to_text("<EMBED src=x>").object_embed_present);
+        // <objection> のような前方一致は誤検しない
+        assert!(!html_to_text("<objection>x</objection>").object_embed_present);
+        assert!(!html_to_text("<p>clean</p>").object_embed_present);
+    }
+
+    // ── D968: on* イベントハンドラ属性 ──────────────────────────
+    #[test]
+    fn html_to_text_はonイベントハンドラを検出する() {
+        assert!(html_to_text(r#"<img src="x" onerror="alert(1)">"#).event_handler_attr);
+        assert!(html_to_text(r#"<body onload="go()">"#).event_handler_attr);
+        assert!(html_to_text(r#"<a href="x" onclick='go()'>x</a>"#).event_handler_attr);
+        // 大文字・= の手前の空白
+        assert!(html_to_text("<b ONMOUSEOVER=go()>x</b>").event_handler_attr);
+        assert!(html_to_text("<b onclick = go()>x</b>").event_handler_attr);
+        // コメント内・属性名に "on" を含まないものは対象外
+        assert!(!html_to_text("<!-- <img onerror=x> -->").event_handler_attr);
+        assert!(!html_to_text(r#"<img src="x" alt="on click">"#).event_handler_attr);
+        assert!(!html_to_text("<p>clean</p>").event_handler_attr);
+    }
+
+    // ── D969: IP リテラル・数値ホスト ───────────────────────────
+    #[test]
+    fn html_to_text_はipリテラルホストを検出する() {
+        assert!(html_to_text(r#"<a href="http://203.0.113.9/x">x</a>"#).ip_literal_href);
+        assert!(html_to_text(r#"<a href="http://2130706433/">x</a>"#).ip_literal_href);
+        assert!(html_to_text(r#"<a href="http://0x7f000001/">x</a>"#).ip_literal_href);
+        assert!(html_to_text(r#"<a href="http://0177.0.0.1/">x</a>"#).ip_literal_href);
+        assert!(html_to_text(r#"<a href="http://127.1/">x</a>"#).ip_literal_href);
+        assert!(html_to_text(r#"<a href="http://[::1]/">x</a>"#).ip_literal_href);
+        // ポート・userinfo 付き
+        assert!(html_to_text(r#"<a href="http://u:p@10.0.0.1:8080/">x</a>"#).ip_literal_href);
+        // 通常ドメインは対象外
+        assert!(!html_to_text(r#"<a href="https://example.com">x</a>"#).ip_literal_href);
+        assert!(!html_to_text(r#"<a href="https://3com.example.com">x</a>"#).ip_literal_href);
+        assert!(!html_to_text(r#"<a href="https://192.168.1.1.5.x">x</a>"#).ip_literal_href);
+        assert!(!html_to_text("<p>clean</p>").ip_literal_href);
+    }
+
+    // ── D970: IDN ホスト ────────────────────────────────────────
+    #[test]
+    fn html_to_text_はidnホストを検出する() {
+        assert!(html_to_text(r#"<a href="https://xn--pple-43d.com/">x</a>"#).idn_href);
+        assert!(html_to_text(r#"<a href="https://evil.xn--wgv71a119e.jp/">x</a>"#).idn_href);
+        // 非 ASCII ホスト
+        assert!(html_to_text("<a href=\"https://раураl.com/\">x</a>").idn_href);
+        // 通常の ASCII ドメインは対象外
+        assert!(!html_to_text(r#"<a href="https://example.com">x</a>"#).idn_href);
+        assert!(!html_to_text(r#"<a href="https://xn.example.com">x</a>"#).idn_href);
+        assert!(!html_to_text("<p>clean</p>").idn_href);
+    }
+
+    // ── D971: .onion ホスト ─────────────────────────────────────
+    #[test]
+    fn html_to_text_はonionホストを検出する() {
+        assert!(html_to_text(r#"<a href="http://abc123xyz.onion/pay">x</a>"#).onion_href);
+        assert!(html_to_text(r#"<a href="https://x.ONION/">x</a>"#).onion_href);
+        // サフィックス一致しないドメインは対象外
+        assert!(!html_to_text(r#"<a href="https://onion.example.com">x</a>"#).onion_href);
+        assert!(!html_to_text(r#"<a href="https://notonion.com">x</a>"#).onion_href);
+        assert!(!html_to_text("<p>clean</p>").onion_href);
+    }
+
+    // ── D972: <a ping> ──────────────────────────────────────────
+    #[test]
+    fn html_to_text_はping属性を検出する() {
+        assert!(html_to_text(
+            r#"<a href="https://x" ping="https://evil.example/beacon">x</a>"#,
+        )
+        .ping_attr);
+        assert!(html_to_text("<a ping=https://e href=x>x</a>").ping_attr);
+        assert!(html_to_text("<A HREF=x PING =https://e>x</A>").ping_attr);
+        // ping を持たない <a>、および <a> 以外の ping は対象外
+        assert!(!html_to_text(r#"<a href="x">x</a>"#).ping_attr);
+        assert!(!html_to_text(r#"<div ping="x">x</div>"#).ping_attr);
+        assert!(!html_to_text(r#"<a href="x" data-pinger="1">x</a>"#).ping_attr);
+        assert!(!html_to_text("<p>clean</p>").ping_attr);
     }
 
     #[test]

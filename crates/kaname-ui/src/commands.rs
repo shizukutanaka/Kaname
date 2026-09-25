@@ -605,6 +605,78 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D965: iframe (外部コンテンツ枠の埋め込み)
+    if html_extract.as_ref().is_some_and(|e| e.iframe_present) {
+        render_risks.push(
+            "iframe 要素 — メール内に外部コンテンツ枠を埋め込むクリックジャッキング・認証情報収集の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D966: svg/math (スクリプト実行可能なマークアップ)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.svg_math_present)
+    {
+        render_risks.push(
+            "svg/math 要素 — スクリプト実行可能なマークアップの埋め込み (SVG スマグリング等) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D967: object/embed (プラグイン・外部オブジェクト埋め込み)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.object_embed_present)
+    {
+        render_risks.push(
+            "object/embed 要素 — プラグイン・外部オブジェクト経由のペイロード埋め込みの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D968: on* イベントハンドラ属性 (onerror/onload/onclick 等)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.event_handler_attr)
+    {
+        render_risks.push(
+            "on* イベントハンドラ属性 (onerror/onload 等) — スクリプト実行の意図を持つマークアップの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D969: IP リテラル・数値形式ホストのリンク
+    if html_extract.as_ref().is_some_and(|e| e.ip_literal_href) {
+        render_risks.push(
+            "IP アドレス直指定・数値形式ホストへのリンク — ドメイン評判を回避する誘導経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D970: IDN ホスト (xn-- パニコード/非 ASCII) のリンク
+    if html_extract.as_ref().is_some_and(|e| e.idn_href) {
+        render_risks.push(
+            "xn-- パニコード/非 ASCII 文字を含むホストへのリンク — IDN ホモグリフ偽装ドメインの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D971: .onion ドメインへのリンク
+    if html_extract.as_ref().is_some_and(|e| e.onion_href) {
+        render_risks.push(
+            ".onion ドメインへのリンク — Tor 経由の外部誘導の兆候です".to_string(),
+        );
+    }
+
+    // D972: <a ping="..."> ハイパーリンク監査
+    if html_extract.as_ref().is_some_and(|e| e.ping_attr) {
+        render_risks.push(
+            "a ping 属性 — クリック時に外部へ通知を送るトラッキング・ビーコン経路の兆候です"
+                .to_string(),
+        );
+    }
+
     // D238: Content-Disposition: inline で危険拡張子
     if env.inline_dangerous_attachment {
         render_risks.push(

@@ -8,6 +8,54 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D965: HTML 本文の `<iframe>` 要素が未検査
+
+- **問題**: sanitizer は `<iframe>` を黙って除去するため、メール内に外部コンテンツ枠を埋め込むフィッシング (クリックジャッキング・リモートの認証フォーム表示) は表示側で無害化される一方、「含まれていたこと」自体が誰にも報告されていなかった。正規の配信メールは iframe を使わない (全クライアントが除去するため ESP が生成しない)。
+- **修正**: `has_open_tag` で `<iframe` を検出、`ExtractedBodyText.iframe_present` → `render_risks` 兆候報告。
+- **教訓**: 見えない枠は罠 — 外部を内側に置く構造を問え。
+
+### Security — D966: HTML 本文の `<svg>`/`<math>` 要素が未検査
+
+- **問題**: svg_guard は添付ファイルの SVG を走査するが、**本文中のインライン `<svg>`/`<math>`** は sanitizer の黙示除去で兆候として残らなかった。`<svg>` は `<script>`/`xlink:href` を内包できる実行可能マークアップ (SVG スマグリングは SVG Guard の対象技術そのもの)、`<math>` も MathML の xlink ベクターを持つ。正規メールはインライン SVG を使わず画像で表す。
+- **修正**: `svg_math_present` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 絵に見えて動くものは絵ではない — 実行可能な図形を問え。
+
+### Security — D967: HTML 本文の `<object>`/`<embed>` 要素が未検査
+
+- **問題**: `<object data="...">`/`<embed src="...">` はプラグイン・外部オブジェクト経由でペイロードを埋め込む旧来の定形だが、sanitizer の除去リストに入るだけで兆候として残らなかった。
+- **修正**: `object_embed_present` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 外のものを中に置く口は、使われなくても口 — 存在を数えろ。
+
+### Security — D968: `on*` イベントハンドラ属性 (`onload`/`onerror`/`onclick` 等) が未検査
+
+- **問題**: sanitizer は `on*` 属性を除去するが、「スクリプト実行の意図を持つ属性が送られてきた」ことの報告がなかった。`<img src=x onerror=...>` は画像読み込み失敗をフックにする XSS 系フィッシングの定形。
+- **修正**: `has_event_handler_attr` を新設 (全開始タグの内部を走査し `on`+英字+`=` を検出 — コメント・DOCTYPE・閉じタグは対象外、`onclick =` の空白にも対応)、`event_handler_attr` → `render_risks` 兆候報告。
+- **教訓**: 「何かが起きたら動け」という予約は意図の表明 — トリガーを数えろ。
+
+### Security — D969: `href` 先の IP リテラル・数値形式ホストが未検査
+
+- **問題**: リンク先が `http://203.0.113.9/` のような IP 直指定の場合、ドメイン評判・ドメイン一致系の検査をすべてすり抜ける。さらにブラウザは dword 十進整数 (`http://2130706433/` = 127.0.0.1)、16 進 (`0x7f000001`)、8 進 (`0177.0.0.1`)、短縮形 (`127.1`) をすべて IP として解決するが、これら数値形式も未検査だった (link_mismatches は「表示テキストが URL 形」の場合のみで、素の IP リンクは通過していた)。IP アドレス含有は古典的フィッシング特徴量のひとつ。
+- **修正**: `for_each_href_value` (href 属性値の列挙) + `has_host_flag` + `is_ip_literal_host` を新設 — ドット IPv4・IPv6・dword・hex・octal・短縮形をすべて検出、`ip_literal_href` → `render_risks` 兆候報告。
+- **教訓**: 名前を持たない場所は名前の評価を受けない — 数字の住所を問え。
+
+### Security — D970: `href` 先の IDN ホスト (xn-- パニコード/非 ASCII) が未検査
+
+- **問題**: `xn--pple-43d.com` のようなパニコードドメインは IDN ホモグリフ (見た目が紛らわしい別文字のドメイン — Unicode 正規化で apple.com 等に酷似) の定形手段だが、href のホストが `xn--` ラベルまたは非 ASCII 文字を含む場合の兆候報告がなかった。
+- **修正**: `is_idn_host` を新設、`idn_href` → `render_risks` 兆候報告。
+- **教訓**: 似ているものは同じものではない — 文字の出自を問え。
+
+### Security — D971: `href` 先の `.onion` ドメインが未検査
+
+- **問題**: Tor ネットワーク上の `.onion` ホストへのリンクは匿名化された外部誘導 (資格情報収集・ダークウェブポータル) の経路だが、ホスト接尾辞の検査がなかった。
+- **修正**: `onion_href` → `render_risks` 兆候報告。
+- **教訓**: 足跡を残さない道は選ぶ理由を問え — 匿名経路を数えろ。
+
+### Security — D972: `<a ping="...">` ハイパーリンク監査属性が未検査
+
+- **問題**: `ping` 属性はクリック時にリンク先とは**別の** URL へ POST 通知を送る — トラッキング・ビーコン経路を仕込めるが、`<a>` タグ内の属性として未検査だった (正規のメール生成系は出力しない)。
+- **修正**: `tag_is`/`tag_has_named_attr`/`has_ping_attr` を新設、`ping_attr` → `render_risks` 兆候報告。
+- **教訓**: 見えない報告は見えるリンクの陰に置く — 影の通知を問え。
+
 ### Fixed — D960: tel: リンク検査が未定義変数 `html_text` を参照し kaname-ui がコンパイル不能
 
 - **問題**: D237 で追加した `if html_text.tel_link` が `analyze_raw_email` に存在しない変数 `html_text` を参照していた — `html_to_text` の抽出結果は `Option<ExtractedBodyText>` の `html_extract` に束縛されているため、kaname-ui はコンパイル不能で tel: 兆候は一度も発火していなかった。依存取得不可環境 (D20) で `cargo check` が走らず、static-check は関数呼出しか検査しない (変数参照は対象外) という二重の穴。
