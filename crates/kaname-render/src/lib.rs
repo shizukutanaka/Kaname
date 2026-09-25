@@ -114,6 +114,46 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Subject:` が 2 行以上ある (D1144)。
+    ///
+    /// RFC 5322 は Subject を最大 1 個と規定 — 表示パーサと検査
+    /// パーサが別行を読む parser differential の兆候。
+    pub dup_subject: bool,
+    /// ヘッダ節に継続行 (先頭 WSP) でないのに `:` を含まない行がある
+    /// (D1145)。field-name なき行はパーサにより「本文開始」と誤認され、
+    /// 後続ヘッダが検査を逃れる差分の兆候。
+    pub headless_line: bool,
+    /// `From:` ヘッダが一切ない (D1146)。
+    ///
+    /// RFC 5322 の必須差出人ヘッダの欠落 — 表示名のみで出所を
+    /// 誤認させる手作り生成品の兆候。
+    pub missing_from: bool,
+    /// ヘッダ節に LF 単独 (CR を伴わない `\n`) がある (D1147)。
+    ///
+    /// SMTP 上の正規区切りは CRLF — LF 単独のパイプライン経由は
+    /// 検査器と MTA で行境界がずれる parser differential の兆候。
+    pub bare_lf_headers: bool,
+    /// ヘッダ節に NUL (0x00) バイトがある (D1148)。
+    ///
+    /// C 文字列前提のフィルタでは NUL 以降が切断され、人が見る値と
+    /// 機械が読む値が分かれる差分の兆候。
+    pub nul_byte_header: bool,
+    /// ヘッダ行が 998 バイトを超える (D1149)。
+    ///
+    /// RFC 5322 の行長上限超過 — 固定バッファ検査器が途中で
+    /// 読み捨て、末尾の語が未検査になる兆候。
+    pub long_header_line: bool,
+    /// `Content-Transfer-Encoding:` が 7bit/8bit/binary/base64/
+    /// quoted-printable 以外の未知値 (D1150)。
+    ///
+    /// 未知エンコーディングは本文を復号不能にし、内容検査を
+    /// 原理的に素通りさせる兆候。
+    pub invalid_cte: bool,
+    /// ヘッダ field-name (`:` の前) に非 ASCII バイトがある (D1151)。
+    ///
+    /// field-name は printable ASCII に限られる — UTF-8 類似字形の
+    /// 混入は「別の名前を別の名前に見せる」擬態の兆候。
+    pub nonascii_field_name: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2045,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2075,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        dup_subject: has_dup_subject(raw),
+        headless_line: has_headless_line(raw),
+        missing_from: has_missing_from(raw),
+        bare_lf_headers: has_bare_lf_headers(raw),
+        nul_byte_header: has_nul_byte_header(raw),
+        long_header_line: has_long_header_line(raw),
+        invalid_cte: has_invalid_cte(raw),
+        nonascii_field_name: has_nonascii_field_name(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2440,158 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `Subject:` が 2 行以上あるか判定する (D1144)。
+fn has_dup_subject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().filter(|l| l.starts_with("subject:")).count() >= 2
+}
+
+/// ヘッダ節に継続行でないのに `:` を含まない行があるか判定する (D1145)。
+/// 空行 (ヘッダ終端) ・`\r` のみの行は対象外。
+fn has_headless_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        let t = l.trim_end_matches('\r');
+        !t.is_empty()
+            && !t.starts_with(|c: char| c == ' ' || c == '\t')
+            && !t.contains(':')
+    })
+}
+
+/// `From:` ヘッダが一切ないか判定する (D1146)。
+fn has_missing_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("from:"))
+}
+
+/// ヘッダ節に LF 単独 (CR を伴わない `\n`) があるか判定する (D1147)。
+fn has_bare_lf_headers(raw: &[u8]) -> bool {
+    // ヘッダ節の終端: 最初の空行。\r\n\r\n 優先、無ければ \n\n。
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+        i += 1;
+    }
+    let header = &raw[..header_end];
+    // CR を伴わない \n が 1 つでもあれば bare LF。
+    header.iter().enumerate().any(|(idx, &b)| {
+        b == b'\n' && (idx == 0 || header[idx - 1] != b'\r')
+    })
+}
+
+/// ヘッダ節に NUL (0x00) バイトがあるか判定する (D1148)。
+fn has_nul_byte_header(raw: &[u8]) -> bool {
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+        i += 1;
+    }
+    raw[..header_end].contains(&0x00)
+}
+
+/// ヘッダ行が 998 バイトを超えるか判定する (D1149)。
+fn has_long_header_line(raw: &[u8]) -> bool {
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+        i += 1;
+    }
+    raw[..header_end].split(|&b| b == b'\n').any(|l| l.len() > 998)
+}
+
+/// `Content-Transfer-Encoding:` が既知 5 値以外か判定する (D1150)。
+fn has_invalid_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("content-transfer-encoding:").is_some_and(|rest| {
+            let v = rest.trim();
+            !v.is_empty()
+                && !["7bit", "8bit", "binary", "base64", "quoted-printable"].contains(&v)
+        })
+    })
+}
+
+/// ヘッダ field-name に非 ASCII バイトがあるか判定する (D1151)。
+fn has_nonascii_field_name(raw: &[u8]) -> bool {
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+        i += 1;
+    }
+    raw[..header_end].split(|&b| b == b'\n').any(|l| {
+        // 継続行 (WSP 開始) は対象外 — field-name は行頭にある。
+        if l.first().is_some_and(|&c| c == b' ' || c == b'\t') {
+            return false;
+        }
+        let colon = l.iter().position(|&b| b == b':').unwrap_or(0);
+        l[..colon].iter().any(|&b| b > 0x7f)
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21328,96 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は重複件名を検出する() {
+        let dup = b"From: a@b\r\nSubject: one\r\nSubject: two\r\n\r\nx";
+        assert!(has_dup_subject(dup));
+        let clean = b"From: a@b\r\nSubject: one\r\n\r\nx";
+        assert!(!has_dup_subject(clean));
+        let none = b"From: a@b\r\nX-Other: 1\r\n\r\nx";
+        assert!(!has_dup_subject(none));
+        let lc = b"subject: a\r\nSUBJECT: b\r\n\r\nx";
+        assert!(has_dup_subject(lc));
+    }
+
+    #[test]
+    fn scan_は名無し行を検出する() {
+        let bad = b"From: a@b\r\nNO COLON LINE\r\nSubject: x\r\n\r\nx";
+        assert!(has_headless_line(bad));
+        let cont = b"From: a@b\r\nSubject: x\r\n folded continuation\r\n\r\nx";
+        assert!(!has_headless_line(cont));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_headless_line(clean));
+    }
+
+    #[test]
+    fn scan_は差出人欠落を検出する() {
+        let none = b"To: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_from(none));
+        let ok = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_missing_from(ok));
+        let lc = b"from: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_missing_from(lc));
+    }
+
+    #[test]
+    fn scan_は裸LFを検出する() {
+        let bare = b"From: a@b\nSubject: x\n\nx";
+        assert!(has_bare_lf_headers(bare));
+        let mixed = b"From: a@b\nSubject: x\r\n\r\nx";
+        assert!(has_bare_lf_headers(mixed));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bare_lf_headers(clean));
+        let body = b"From: a@b\r\nSubject: x\r\n\r\nline1\nline2";
+        assert!(!has_bare_lf_headers(body));
+    }
+
+    #[test]
+    fn scan_はNUL混入を検出する() {
+        let bad = b"From: a@b\x00evil\r\nSubject: x\r\n\r\nx";
+        assert!(has_nul_byte_header(bad));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_nul_byte_header(clean));
+        let body = b"From: a@b\r\nSubject: x\r\n\r\nx\x00y";
+        assert!(!has_nul_byte_header(body));
+    }
+
+    #[test]
+    fn scan_は長行ヘッダを検出する() {
+        let mut long = b"From: a@b\r\nX-Long: ".to_vec();
+        long.extend_from_slice(&vec![b'v'; 1000]);
+        long.extend_from_slice(b"\r\n\r\nx");
+        assert!(has_long_header_line(&long));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_long_header_line(clean));
+        let mut body = b"From: a@b\r\nSubject: x\r\n\r\n".to_vec();
+        body.extend_from_slice(&vec![b'v'; 2000]);
+        assert!(!has_long_header_line(&body));
+    }
+
+    #[test]
+    fn scan_は未知転送符号を検出する() {
+        let bad = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: x-weird\r\n\r\nx";
+        assert!(has_invalid_cte(bad));
+        let ok = b"Content-Transfer-Encoding: base64\r\n\r\nx";
+        assert!(!has_invalid_cte(ok));
+        let ok2 = b"Content-Transfer-Encoding: Quoted-Printable\r\n\r\nx";
+        assert!(!has_invalid_cte(ok2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_invalid_cte(clean));
+    }
+
+    #[test]
+    fn scan_は非ASCII名を検出する() {
+        let bad = "X-N\xc3\xa4me: 1\r\nFrom: a@b\r\n\r\nx".as_bytes();
+        assert!(has_nonascii_field_name(bad));
+        let clean = b"X-Name: 1\r\nFrom: a@b\r\n\r\nx";
+        assert!(!has_nonascii_field_name(clean));
+        let val = "From: \xc3\xa4@b\r\nSubject: x\r\n\r\nx".as_bytes();
+        assert!(!has_nonascii_field_name(val));
+        let cont = "From: a@b\r\n \xc3\xa4cont\r\nSubject: x\r\n\r\nx".as_bytes();
+        assert!(!has_nonascii_field_name(cont));
     }
 }

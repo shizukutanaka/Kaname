@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1144–D1151: 構造上の RFC 違反による解析差分の未検査兆候 8 件
+
+- **問題**: 「人が見る値」と「検査パーサが読む値」が分かれる構造上の RFC 5322/5321 違反が未検査だった — `Subject:` の重複 (表示パーサと検査パーサが別行を読む)、ヘッダ節のコロンなき行 (以降のヘッダが「本文開始」と誤認され検査を逃れる)、`From:` 欠落 (必須差出人フィールドなし)、ヘッダの LF 単独区切り (行境界が MTA と検査器でずれる)、ヘッダの NUL バイト混入 (C 文字列前提フィルタで値が切断される)、998 バイト超ヘッダ行 (固定バッファ検査器が途中で読み捨て末尾が未検査)、未知の `Content-Transfer-Encoding` (本文を復号不能にし内容検査を原理的に素通り)、field-name の非 ASCII バイト混入 (UTF-8 類似字形で別名に見せる擬態)。
+- **修正**: `has_dup_subject`/`has_headless_line`/`has_missing_from`/`has_bare_lf_headers`/`has_nul_byte_header`/`has_long_header_line`/`has_invalid_cte`/`has_nonascii_field_name` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 同じバイト列でも「どう切るか」はパーサごとに違う — 規格違反の構造こそが差分を産む。切り方のずれを数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

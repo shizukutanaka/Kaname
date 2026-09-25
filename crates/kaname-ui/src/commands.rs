@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1144: Subject 重複 (parser differential)
+    if env.dup_subject {
+        render_risks.push(
+            "Subject: ヘッダが 2 行以上あります — 表示と検査で別の行が読まれる差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1145: コロンなきヘッダ行
+    if env.headless_line {
+        render_risks.push(
+            "ヘッダ節にコロンを含まない行があります — 以降のヘッダが検査を逃れる差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1146: From 欠落
+    if env.missing_from {
+        render_risks.push(
+            "From: ヘッダがありません — 必須差出人フィールドを欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1147: LF 単独行境界
+    if env.bare_lf_headers {
+        render_risks.push(
+            "ヘッダが CRLF でなく LF 単独で区切られています — 行境界が検査器とずれる差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1148: NUL バイト混入
+    if env.nul_byte_header {
+        render_risks.push(
+            "ヘッダに NUL バイトが混入しています — 表示値と解析値が分かれる差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1149: 998 バイト超ヘッダ行
+    if env.long_header_line {
+        render_risks.push(
+            "998 バイトを超えるヘッダ行があります — 検査器が途中で読み捨て末尾が未検査になる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1150: 未知 Content-Transfer-Encoding
+    if env.invalid_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding: が未知の値です — 本文を復号できず内容検査を素通りする兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1151: field-name の非 ASCII 混入
+    if env.nonascii_field_name {
+        render_risks.push(
+            "ヘッダ名に非 ASCII バイトが混入しています — 別の名前を別の名前に見せる擬態の兆候です"
                 .to_string(),
         );
     }
