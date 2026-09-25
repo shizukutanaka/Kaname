@@ -114,6 +114,31 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Confirm-Reading-To:`/`Return-Receipt-To:`/`Disposition-Notification-To:`
+    /// のドメインが From: と違うか — 開封確認を別ドメインへ振り向ける
+    /// 経路ずらし (D1009 の Reply-To 同系、D1080)。
+    pub receipt_redirect: bool,
+    /// `Expires:`/`Expiry-Date:`/`Reply-By:`/`Deadline:` があるか —
+    /// 期限を送信側が自称する圧力印 (D1081)。
+    pub deadline_marks: bool,
+    /// `Encrypted:` ヘッダがあるか — RFC 1423 PEM 暗号の体裁を送信側が
+    /// 自称する兆候 (D1082)。
+    pub pem_marks: bool,
+    /// `Content-MD5:`/`Content-Identifier:` があるか — 完全性・同一性の
+    /// 記録を送信側が自称する兆候 (D1083)。
+    pub integrity_marks: bool,
+    /// `Message-Context:`/`Message-Type:`/`X400-*` 等の X.400 系
+    /// ヘッダがあるか — 別プロトコル体系の体裁を名乗る兆候 (D1084)。
+    pub x400_context: bool,
+    /// `Solicitation:` ヘッダがあるか — RFC 3865 の「依頼された一括
+    /// メール」宣言を送信側が自称する兆候 (D1085)。
+    pub solicitation_marks: bool,
+    /// `Apparently-To:` があるか — 宛先に含まれない受信者へ見せる
+    /// sendmail 時代の擬装宛先 (D1086)。
+    pub apparently_to: bool,
+    /// `X-Spam-Status:`/`X-Spam-State:`/`X-Sieve:` があるか — 判定
+    /// ステータス・フィルタ処理印を送信側が自称する兆候 (D1087)。
+    pub verdict_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2030,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2060,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        receipt_redirect: has_receipt_redirect(hdr),
+        deadline_marks: has_deadline_marks(hdr),
+        pem_marks: has_pem_marks(hdr),
+        integrity_marks: has_integrity_marks(hdr),
+        x400_context: has_x400_context(hdr),
+        solicitation_marks: has_solicitation_marks(hdr),
+        apparently_to: has_apparently_to(hdr),
+        verdict_marks: has_verdict_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2425,159 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `Confirm-Reading-To:`/`Return-Receipt-To:`/`Disposition-Notification-To:`
+/// のドメインが From: と違うか判定する (D1080)。
+///
+/// 開封確認の送付先を別ドメインへ振り向けるヘッダ群 — D1009 の Reply-To
+/// 同系で、返信ではなく「読んだ」記録の経路をずらす。
+fn has_receipt_redirect(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let domain = |v: &str| -> Option<String> {
+        v.rsplit('@')
+            .next()
+            .map(|d| {
+                d.split(|c: char| c == '>' || c.is_whitespace() || c == ';')
+                    .next()
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .filter(|d| !d.is_empty())
+    };
+    let mut from_domain = None;
+    let mut receipt_domain = None;
+    for l in header.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("from:") {
+            from_domain = domain(v);
+        }
+        if l.starts_with("confirm-reading-to:")
+            || l.starts_with("return-receipt-to:")
+            || l.starts_with("disposition-notification-to:")
+        {
+            if let Some((_, v)) = l.split_once(':') {
+                receipt_domain = domain(v);
+            }
+        }
+    }
+    match (from_domain, receipt_domain) {
+        (Some(f), Some(r)) => f != r,
+        _ => false,
+    }
+}
+
+/// `Expires:`/`Expiry-Date:`/`Reply-By:`/`Deadline:` があるか判定する
+/// (D1081)。
+///
+/// 期限印は「いつまでに応答せよ」の自署 — 正当なリマインダ運用もあるが、
+/// 緊急性を演出する圧力印として名乗られる。
+fn has_deadline_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("expires:")
+            || l.starts_with("expiry-date:")
+            || l.starts_with("reply-by:")
+            || l.starts_with("deadline:")
+    })
+}
+
+/// `Encrypted:` ヘッダがあるか判定する (D1082)。
+///
+/// RFC 1423 Privacy Enhanced Mail の暗号宣言ヘッダ — 現行の S/MIME・PGP は
+/// 使わない過去の PEM 体系の体裁を名乗る値で、「暗号済み」の体裁を自称する。
+fn has_pem_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("encrypted:"))
+}
+
+/// `Content-MD5:`/`Content-Identifier:` があるか判定する (D1083)。
+///
+/// `Content-MD5:` は RFC 1864 の完全性チェック値、`Content-Identifier:`
+/// は同一性識別子 — 検査側で照合しない限り単なる自称の完全性・同一性記録。
+fn has_integrity_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("content-md5:") || l.starts_with("content-identifier:"))
+}
+
+/// `Message-Context:`/`Message-Type:`/`Content-Return:`/
+/// `DL-Expansion-History:`/`Alternate-Recipient:`/`Disclose-Recipients:`/
+/// `X400-*` 等の X.400 系ヘッダがあるか判定する (D1084)。
+///
+/// X.400 相互接続のマッピング印 — netnews (D1069) 同系で、別プロトコル
+/// 体系の体裁を名乗る混入。
+fn has_x400_context(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("message-context:")
+            || l.starts_with("message-type:")
+            || l.starts_with("content-return:")
+            || l.starts_with("dl-expansion-history:")
+            || l.starts_with("alternate-recipient:")
+            || l.starts_with("disclose-recipients:")
+            || l.starts_with("x400-")
+            || l.starts_with("x-400-")
+    })
+}
+
+/// `Solicitation:` ヘッダがあるか判定する (D1085)。
+///
+/// RFC 3865 の「依頼された一括メール」宣言ヘッダ — 購読同意の体裁を
+/// 送信側が自称する値 (正当な配信基盤の利用もあるが自称として数える)。
+fn has_solicitation_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("solicitation:"))
+}
+
+/// `Apparently-To:` があるか判定する (D1086)。
+///
+/// sendmail 時代の擬装宛先ヘッダ — 宛先に含まれない受信者を「届いた先」の
+/// 体裁で見せる値で、現行の正規 MUA は使わない。
+fn has_apparently_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("apparently-to:"))
+}
+
+/// `X-Spam-Status:`/`X-Spam-State:`/`X-Sieve:` があるか判定する (D1087)。
+///
+/// `X-Spam-Status:` は SpamAssassin の完全ステータス行 (Yes/No, score=)、
+/// `X-Spam-State:` は状態印、`X-Sieve:` はフィルタ処理印 — いずれも
+/// 判定・処理機が記す値を送信側が自称する。
+fn has_verdict_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spam-status:")
+            || l.starts_with("x-spam-state:")
+            || l.starts_with("x-sieve:")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21314,93 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は開封確認ずらしを検出する() {
+        let rr = b"From: a@brand.com\r\nConfirm-Reading-To: b@evil.com\r\n\r\nx";
+        assert!(has_receipt_redirect(rr));
+        let rt = b"From: a@x.com\r\nReturn-Receipt-To: r@y.com\r\n\r\nx";
+        assert!(has_receipt_redirect(rt));
+        let dn = b"From: a@x.com\r\nDisposition-Notification-To: r@y.com\r\n\r\nx";
+        assert!(has_receipt_redirect(dn));
+        let same = b"From: a@x.com\r\nReturn-Receipt-To: a@x.com\r\n\r\nx";
+        assert!(!has_receipt_redirect(same));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_receipt_redirect(clean));
+    }
+
+    #[test]
+    fn scan_は期限自署を検出する() {
+        let ex = b"Expires: Wed, 01 Jan 2026 00:00:00 +0000\r\n\r\nx";
+        assert!(has_deadline_marks(ex));
+        let xd = b"Expiry-Date: x\r\n\r\nx";
+        assert!(has_deadline_marks(xd));
+        let rb = b"Reply-By: Fri\r\n\r\nx";
+        assert!(has_deadline_marks(rb));
+        let dl = b"Deadline: soon\r\n\r\nx";
+        assert!(has_deadline_marks(dl));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_deadline_marks(clean));
+    }
+
+    #[test]
+    fn scan_はPEM暗号自署を検出する() {
+        let pe = b"Encrypted: RSA\r\n\r\nx";
+        assert!(has_pem_marks(pe));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_pem_marks(clean));
+    }
+
+    #[test]
+    fn scan_は完全性印を検出する() {
+        let md = b"Content-MD5: abc==\r\n\r\nx";
+        assert!(has_integrity_marks(md));
+        let ci = b"Content-Identifier: id123\r\n\r\nx";
+        assert!(has_integrity_marks(ci));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_integrity_marks(clean));
+    }
+
+    #[test]
+    fn scan_はX400混入を検出する() {
+        let mc = b"Message-Context: delivery-report\r\n\r\nx";
+        assert!(has_x400_context(mc));
+        let mt = b"Message-Type: Delivery Report\r\n\r\nx";
+        assert!(has_x400_context(mt));
+        let cr = b"Content-Return: allowed\r\n\r\nx";
+        assert!(has_x400_context(cr));
+        let x4 = b"X400-Received: x\r\n\r\nx";
+        assert!(has_x400_context(x4));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_x400_context(clean));
+    }
+
+    #[test]
+    fn scan_は依頼済み宣言を検出する() {
+        let so = b"Solicitation: keyword=value\r\n\r\nx";
+        assert!(has_solicitation_marks(so));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_solicitation_marks(clean));
+    }
+
+    #[test]
+    fn scan_はApparentlyToを検出する() {
+        let at = b"Apparently-To: victim@x\r\n\r\nx";
+        assert!(has_apparently_to(at));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_apparently_to(clean));
+    }
+
+    #[test]
+    fn scan_は判定ステータス印を検出する() {
+        let ss = b"X-Spam-Status: Yes, score=10.0\r\n\r\nx";
+        assert!(has_verdict_marks(ss));
+        let st = b"X-Spam-State: spam\r\n\r\nx";
+        assert!(has_verdict_marks(st));
+        let sv = b"X-Sieve: CMU Sieve 2.2\r\n\r\nx";
+        assert!(has_verdict_marks(sv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_verdict_marks(clean));
     }
 }

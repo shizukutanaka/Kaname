@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1080: 開封確認ずらし
+    if env.receipt_redirect {
+        render_risks.push(
+            "Confirm-Reading-To/Return-Receipt-To/Disposition-Notification-To のドメインが From と違います — 開封確認を別ドメインへ振り向ける経路ずらしの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1081: 期限自署
+    if env.deadline_marks {
+        render_risks.push(
+            "Expires/Expiry-Date/Reply-By/Deadline — 期限を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1082: PEM 暗号自署
+    if env.pem_marks {
+        render_risks.push(
+            "Encrypted: — RFC 1423 PEM 暗号の体裁を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1083: 完全性・同一性印自署
+    if env.integrity_marks {
+        render_risks.push(
+            "Content-MD5/Content-Identifier — 完全性・同一性の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1084: X.400 混入
+    if env.x400_context {
+        render_risks.push(
+            "Message-Context/Message-Type/X400-* 等 — X.400 系の体裁を名乗る混入の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1085: 依頼済み宣言自署
+    if env.solicitation_marks {
+        render_risks.push(
+            "Solicitation: — 「依頼された一括メール」の宣言を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1086: Apparently-To 擬装宛先
+    if env.apparently_to {
+        render_risks.push(
+            "Apparently-To: — 宛先に含まれない受信者へ見せる擬装宛先の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1087: 判定ステータス印自署
+    if env.verdict_marks {
+        render_risks.push(
+            "X-Spam-Status/X-Spam-State/X-Sieve — 判定ステータス・フィルタ処理印を送信側が自称する兆候です"
                 .to_string(),
         );
     }

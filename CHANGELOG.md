@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1080–D1087: 開封確認ずらし・期限自署・過去体系・判定ステータスの未検査兆候 8 件
+
+- **問題**: 「読んだ記録はどこへ行くか」「いつまでか」「どの体系か」「判定済みか」に関する兆候が未検査だった — `Confirm-Reading-To:`/`Return-Receipt-To:`/`Disposition-Notification-To:` のドメイン ≠ From ドメイン (D1009 の Reply-To 同系の開封確認ずらし)、`Expires:`/`Expiry-Date:`/`Reply-By:`/`Deadline:` の期限自署、`Encrypted:` の RFC 1423 PEM 暗号体裁、`Content-MD5:`/`Content-Identifier:` の完全性・同一性印、`Message-Context:`/`Message-Type:`/`X400-*` の X.400 混入、`Solicitation:` の「依頼された一括メール」宣言、`Apparently-To:` の擬装宛先、`X-Spam-Status:`/`X-Spam-State:`/`X-Sieve:` の判定ステータス印。
+- **修正**: `has_receipt_redirect`/`has_deadline_marks`/`has_pem_marks`/`has_integrity_marks`/`has_x400_context`/`has_solicitation_marks`/`has_apparently_to`/`has_verdict_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。`deadline_marks`/`pem_marks`/`integrity_marks`/`solicitation_marks`/`verdict_marks` は自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。開封確認・返信先が From と同一ドメイン・開封確認ヘッダ無しは対象外として誤検回避。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「読んだ記録の行き先・期限・体系・判定済み」を送信側が書くのはいずれも属しない印 — 記録の行き先と期限の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
