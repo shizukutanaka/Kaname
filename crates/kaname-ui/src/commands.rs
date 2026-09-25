@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // NOTE: html_extract は Option — tel_link フラグは extract 内部。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +597,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1240: CTE 引数混入
+    if env.cte_with_params {
+        render_risks.push(
+            "Content-Transfer-Encoding: に引数が混入しています — 引数を取らない欄に余分な形の宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1241: Content-Type 型欠落
+    if env.ct_bad_toptype {
+        render_risks.push(
+            "Content-Type: の先頭が type/subtype の形ではありません — 型を名乗る欄が型を欠く宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1242: boundary 不正文字・過長
+    if env.boundary_bad_chars {
+        render_risks.push(
+            "boundary= の値が不正文字・70字超・末尾空白です — 切れる範囲が読み手ごとに違う宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1243: charset 空・不正名
+    if env.charset_bad_label {
+        render_risks.push(
+            "charset= の値が空または不正な名です — 代替文字集合への落とし所が実装依存の宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1244: Content-Disposition つづり違い
+    if env.disposition_misspelled {
+        render_risks.push(
+            "Content-Disposition: の名が attachment/inline のつづりを崩しています — 未知処分名の読み方が実装依存の宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1245: CTE 欠落で高位バイト
+    if env.undeclared_8bit {
+        render_risks.push(
+            "Content-Transfer-Encoding: が無いのに本文に高位バイトがあります — 符号なし高位の読み方が実装依存の宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1246: ヘッダ内境界行
+    if env.boundary_in_header {
+        render_risks.push(
+            "ヘッダ部に -- 始まりの行があります — 部品開始を読み違える宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1247: 名位置コメント
+    if env.paren_before_colon {
+        render_risks.push(
+            "ヘッダ行で ( が : より前にあります — 名の位置にコメントを挟む宣言差分の兆候です"
                 .to_string(),
         );
     }

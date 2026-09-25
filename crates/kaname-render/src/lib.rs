@@ -114,6 +114,33 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Content-Transfer-Encoding:` に `;` 引数が混入 — CTE は引数を
+    /// 取らない欄で、引数の有無で受理/拒否が分かれる宣言差分の兆候
+    /// (D1240)。
+    pub cte_with_params: bool,
+    /// `Content-Type:` の先頭トークンが `type/subtype` の形を欠く —
+    /// 型を名乗る欄が型を欠く宣言差分の兆候 (D1241)。
+    pub ct_bad_toptype: bool,
+    /// `boundary=` の値が不正文字を含む・70 字超・末尾空白 — 境界字が
+    /// 読み手ごとに受理範囲の違う宣言差分の兆候 (D1242)。
+    pub boundary_bad_chars: bool,
+    /// `charset=` の値が空・または charset 名に使えない文字を含む —
+    /// 代替文字集合への落とし所が実装依存の宣言差分の兆候 (D1243)。
+    pub charset_bad_label: bool,
+    /// `Content-Disposition:` の先頭トークンが `attachment`/`inline`
+    /// ではなく、そのつづりを崩した形 — 未知処分名を inline と読む
+    /// 実装依存の宣言差分の兆候 (D1244)。
+    pub disposition_misspelled: bool,
+    /// `Content-Transfer-Encoding:` が皆無なのに本文に 0x80 超のバイト
+    /// がある — 符号なし高位バイトの読み方が実装依存の宣言差分の兆候
+    /// (D1245)。
+    pub undeclared_8bit: bool,
+    /// ヘッダ部に `--` 始まりの行がある — 境界行がヘッダ領域に紛れた
+    /// 構造で、部品開始を読み違える宣言差分の兆候 (D1246)。
+    pub boundary_in_header: bool,
+    /// ヘッダ行で `(` が `:` より前にある — 名の位置にコメントを挟む
+    /// 形で、行を見るか見ないか実装が分かれる宣言差分の兆候 (D1247)。
+    pub paren_before_colon: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2032,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2062,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        cte_with_params: has_cte_with_params(raw),
+        ct_bad_toptype: has_ct_bad_toptype(raw),
+        boundary_bad_chars: has_boundary_bad_chars(raw),
+        charset_bad_label: has_charset_bad_label(raw),
+        disposition_misspelled: has_disposition_misspelled(raw),
+        undeclared_8bit: has_undeclared_8bit(raw),
+        boundary_in_header: has_boundary_in_header(raw),
+        paren_before_colon: has_paren_before_colon(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2427,208 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// 空行以降を本文部として返す。
+fn body_section(raw: &[u8]) -> &str {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let start = lower
+        .find("\r\n\r\n")
+        .map(|i| i + 4)
+        .or_else(|| lower.find("\n\n").map(|i| i + 2))
+        .unwrap_or(text.len());
+    &text[start..]
+}
+
+/// 行内の `key=`/`key="..."` パラメータの値を最初の 1 件だけ取り出す。
+/// `filename=` の中に `name=` が現れても境界文字で区切られたトークンの
+/// みを見るため、部分文字列として誤マッチしない。
+fn param_first_value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let mut rest = line;
+    while let Some(pos) = rest.find(key) {
+        let before_ok = pos == 0
+            || matches!(rest.as_bytes()[pos - 1], b';' | b' ' | b'\t' | b'"' | b'\'');
+        let after = &rest[pos + key.len()..];
+        if before_ok {
+            let v = after.trim_start();
+            let v = v.strip_prefix('"').unwrap_or(v);
+            let end = v
+                .find(|c| c == '"' || c == ';' || c == ' ' || c == '\t')
+                .unwrap_or(v.len());
+            return Some(&v[..end]);
+        }
+        rest = &rest[pos + key.len()..];
+    }
+    None
+}
+
+/// `Content-Transfer-Encoding:` 行に `;` 引数が混入しているか判定する
+/// (D1240)。
+///
+/// RFC 2045 で CTE は引数を取らない単独値の欄 — `base64; x=1` の形は
+/// 厳格系では拒否・寛容系では無視で受理が分かれる宣言差分。
+fn has_cte_with_params(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("content-transfer-encoding:") && l.contains(';'))
+}
+
+/// `Content-Type:` の先頭トークンが `type/subtype` の形を欠くか判定する
+/// (D1241)。
+///
+/// `Content-Type: ; charset=utf-8` や `Content-Type: /plain` のように
+/// 型欄が型を欠くと、フォールバック型が実装ごとに違う宣言差分となる。
+fn has_ct_bad_toptype(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower
+        .lines()
+        .filter(|l| l.contains("content-type:"))
+        .any(|l| {
+            let v = l.split(':').nth(1).unwrap_or("");
+            let tok = v
+                .split(|c| c == ';' || c == ' ' || c == '\t')
+                .next()
+                .unwrap_or("");
+            let segs: Vec<&str> = tok.split('/').collect();
+            !(segs.len() == 2
+                && segs.iter().all(|s| {
+                    !s.is_empty()
+                        && s.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&b))
+                }))
+        })
+}
+
+/// `boundary=` の値が RFC 2046 の許容文字・長さを逸脱するか判定する
+/// (D1242)。
+///
+/// bchars は英数と `'()+_,-./:=?` と途中の空白のみ — `"` `;` `@` `%`
+/// 等を含む・70 字超・末尾空白の境界字は、切れる範囲が読み手ごとに
+/// 違う宣言差分となる。
+fn has_boundary_bad_chars(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.lines().any(|line| {
+        param_first_value(line, "boundary=").is_some_and(|v| {
+            v.is_empty()
+                || v.len() > 70
+                || v.ends_with(' ')
+                || v.ends_with('\t')
+                || v.bytes()
+                    .any(|b| !(b.is_ascii_alphanumeric() || b" '()+_,-./:=?".contains(&b)))
+        })
+    })
+}
+
+/// `charset=` の値が空・または charset 名に使えない文字を含むか判定する
+/// (D1243)。
+///
+/// charset 名は RFC 2978 の英数と一部記号のみ — 空値・空白・`,` `/`
+/// 等を含む名は代替文字集合への落とし所が実装依存の宣言差分となる。
+fn has_charset_bad_label(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.lines().any(|line| {
+        param_first_value(line, "charset=").is_some_and(|v| {
+            v.is_empty()
+                || v.bytes()
+                    .any(|b| !(b.is_ascii_alphanumeric() || b"!#$%&'*+-^_`{}~.:".contains(&b)))
+        })
+    })
+}
+
+/// `Content-Disposition:` の先頭トークンが `attachment`/`inline` でも
+/// なく、そのつづりを崩した形か判定する (D1244)。
+///
+/// `attachement`/`in line` のような近似つづりは、未知処分名を無視して
+/// inline 扱いする実装と、拒否する実装で読み方が分かれる宣言差分。
+fn has_disposition_misspelled(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower
+        .lines()
+        .filter(|l| l.contains("content-disposition:"))
+        .any(|l| {
+            let v = l.split(':').nth(1).unwrap_or("").trim();
+            let tok = v
+                .split(|c| c == ';' || c == ' ' || c == '\t')
+                .next()
+                .unwrap_or("");
+            if tok.is_empty() {
+                return true;
+            }
+            if tok == "attachment" || tok == "inline" {
+                return false;
+            }
+            tok.contains("attac") || tok.contains("inlin")
+        })
+}
+
+/// `Content-Transfer-Encoding:` が皆無なのに本文に 0x80 超のバイトが
+/// あるか判定する (D1245)。
+///
+/// 符号欄がなければ高位バイトは 7bit 前提で読まれる — us-ascii への
+/// 丸め・そのまま通し・拒否が実装で分かれる宣言差分。
+fn has_undeclared_8bit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if header
+        .lines()
+        .any(|l| l.starts_with("content-transfer-encoding:"))
+    {
+        return false;
+    }
+    body_section(raw).bytes().any(|b| b >= 0x80)
+}
+
+/// ヘッダ部に `--` 始まりの行があるか判定する (D1246)。
+///
+/// 境界行に見える行がヘッダ領域に紛れると、部品開始を早く読む実装と
+/// ヘッダ続行として読む実装で構造が分かれる宣言差分となる。
+fn has_boundary_in_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("--"))
+}
+
+/// ヘッダ行で `(` が `:` より前にあるか判定する (D1247)。
+///
+/// `Name (comment): value` の形はフィールド名の位置にコメントを挟む —
+/// 行をヘッダとして読むか壊れた行として捨てるか実装が分かれる宣言
+/// 差分となる。
+fn has_paren_before_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        !l.starts_with(' ') && !l.starts_with('\t') && match (l.find('('), l.find(':')) {
+            (Some(p), Some(c)) => p < c,
+            _ => false,
+        }
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21365,131 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+}
+
+#[cfg(test)]
+mod delimiter_form_anomaly_tests {
+    use super::*;
+
+    #[test]
+    fn scan_はCTE引数混入を検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Transfer-Encoding: base64; foo=1\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Transfer-Encoding: 7bit; charset=x\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_cte_with_params(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_cte_with_params(
+            b"From: a@b\r\nContent-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        assert!(!has_cte_with_params(b"From: a@b\r\nSubject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は型欠落を検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Type: ; charset=utf-8\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: /plain\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: textonly\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type:\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_ct_bad_toptype(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_ct_bad_toptype(
+            b"From: a@b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(!has_ct_bad_toptype(
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は境界字逸脱を検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=\"a;b\"\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=abc@def\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_boundary_bad_chars(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_boundary_bad_chars(
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=abc_def-1.0\r\n\r\nx"
+        ));
+        assert!(!has_boundary_bad_chars(
+            b"From: a@b\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は文字集合名逸脱を検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Type: text/plain; charset=\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: text/plain; charset=\"utf 8\"\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: text/plain; charset=utf/8\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_charset_bad_label(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_charset_bad_label(
+            b"From: a@b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(!has_charset_bad_label(
+            b"From: a@b\r\nContent-Type: text/plain; charset=iso-2022-jp\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は処分名崩れを検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Disposition: attachement; filename=x\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Disposition: atachment\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Disposition: inlined\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Disposition:\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_disposition_misspelled(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_disposition_misspelled(
+            b"From: a@b\r\nContent-Disposition: attachment; filename=x\r\n\r\nx"
+        ));
+        assert!(!has_disposition_misspelled(
+            b"From: a@b\r\nContent-Disposition: inline\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は未宣言高位を検出する() {
+        assert!(has_undeclared_8bit("From: a@b\r\nSubject: x\r\n\r\nこんにちは".as_bytes()));
+        assert!(!has_undeclared_8bit(
+            "From: a@b\r\nContent-Transfer-Encoding: base64\r\n\r\nこんにちは".as_bytes()
+        ));
+        assert!(!has_undeclared_8bit(b"From: a@b\r\nSubject: x\r\n\r\nplain ascii"));
+    }
+
+    #[test]
+    fn scan_は内境界行を検出する() {
+        for fx in [
+            b"From: a@b\r\n--boundary\r\nSubject: x\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nSubject: x\r\n----\r\nX-A: 1\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_boundary_in_header(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_boundary_in_header(
+            b"From: a@b\r\nSubject: x\r\n\r\n--boundary\r\npart"
+        ));
+        assert!(!has_boundary_in_header(b"From: a@b\r\nSubject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は名位置注釈を検出する() {
+        for fx in [
+            b"From (x): a@b\r\nSubject: y\r\n\r\nx".as_slice(),
+            b"X-Foo (comment): v\r\nSubject: y\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_paren_before_colon(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_paren_before_colon(
+            b"From: a@b (Taro)\r\nSubject: y\r\n\r\nx"
+        ));
+        assert!(!has_paren_before_colon(b"From: a@b\r\nSubject: y\r\n\r\nx"));
     }
 }
