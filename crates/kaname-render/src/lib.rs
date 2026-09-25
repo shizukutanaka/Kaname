@@ -13363,6 +13363,30 @@ pub struct ExtractedBodyText {
     /// `<a ping="...">` 属性があるか — クリック時に外部へ通知を
     /// 送るハイパーリンク監査 (トラッキング/ビーコン) の兆候 (D972)。
     pub ping_attr: bool,
+    /// `<script>` 要素があるか — メール本文中のスクリプト実行
+    /// 意図の兆候 (D974)。正規の配信メールは script を含まない
+    /// (全クライアントが除去するため ESP が生成しない)。
+    pub script_present: bool,
+    /// `<frame>`/`<frameset>` 要素があるか — 外部コンテンツ枠の
+    /// 埋め込み (クリックジャッキング・リモート認証フォーム) の
+    /// 兆候 (D975)。
+    pub frame_present: bool,
+    /// `<template>` 要素があるか — 描画されない不活性 DOM に
+    /// ペイロードを格納するデータ島 (HTML スマグリングの定形) の
+    /// 兆候 (D976)。
+    pub template_present: bool,
+    /// `<a download>` 属性があるか — クリック時にファイル保存を
+    /// 強制する誘導の兆候 (D977)。
+    pub download_attr: bool,
+    /// `<meta charset>` で危険な文字コード (utf-7/x-user-defined)
+    /// が指定されているか — UTF-7 XSS・エンコーディングスマグリング
+    /// 等のエンコーディング偽装の兆候 (D978)。
+    pub meta_charset_danger: bool,
+    /// `src`/`action`/`formaction`/`background`/`poster`/`dynsrc`/
+    /// `lowsrc`/`xlink:href`/`data` 属性の値が `data:`/`javascript:`/
+    /// `vbscript:`/`file:`/`blob:` スキームか — href 以外の属性経由の
+    /// ペイロード内包・スクリプト実行の兆候 (D979)。
+    pub dangerous_scheme_attr: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13567,6 +13591,15 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         idn_href: has_host_flag(html, |h| is_idn_host(&h)),
         onion_href: has_host_flag(html, |h| h == "onion" || h.ends_with(".onion")),
         ping_attr: has_ping_attr(html),
+        script_present: has_open_tag(&html.to_ascii_lowercase(), "script"),
+        frame_present: {
+            let lower = html.to_ascii_lowercase();
+            has_open_tag(&lower, "frame") || has_open_tag(&lower, "frameset")
+        },
+        template_present: has_open_tag(&html.to_ascii_lowercase(), "template"),
+        download_attr: has_tag_attr(html, "a", "download"),
+        meta_charset_danger: has_meta_dangerous_charset(html),
+        dangerous_scheme_attr: has_dangerous_scheme_attr(html),
     }
 }
 
@@ -13663,33 +13696,70 @@ fn has_base_tag(html: &str) -> bool {
 /// いずれも正規メールのリンク先には使われない。
 fn has_dangerous_scheme_link(html: &str) -> bool {
     const SCHEMES: &[&str] = &["data:", "javascript:", "vbscript:", "file:", "blob:"];
-    let lower = html.to_ascii_lowercase();
-    let mut rest = lower.as_str();
-    while let Some(i) = rest.find("href") {
-        let after = &rest[i + 4..];
-        let t = after.trim_start();
-        if !t.starts_with('=') {
-            rest = after;
-            continue;
+    let mut hit = false;
+    for_each_href_value(html, |v| {
+        if !hit && SCHEMES.iter().any(|s| v.starts_with(s)) {
+            hit = true;
         }
-        let v = t[1..].trim_start();
-        let v = v
-            .strip_prefix('"')
-            .or_else(|| v.strip_prefix('\''))
-            .unwrap_or(v);
-        if SCHEMES.iter().any(|s| v.starts_with(s)) {
-            return true;
-        }
-        rest = after;
-    }
-    false
+    });
+    hit
 }
 
-/// 本文中の各 `href` 属性値に対してクロージャを呼ぶ (D969–D971)。
+/// href 属性値の復号 — 実体参照・%エンコード・制御空白の難読を
+/// ブラウザと同じ順序で正規化する (D973)。
 ///
-/// `href=` の属性値を引用符・空白区切りを考慮して取り出す。
+/// ブラウザは href 値の HTML 実体参照 (`javascript&colon;` →
+/// `javascript:`、`&#106;avascript:` → 同上) および `%HH`
+/// パーセントエンコードを復号し、URL 中のタブ/改行/復帰を
+/// 除去してから解釈する — 生文字列の prefix/ホスト比較はこれら
+/// 3 系統の難読で回避される (`href="javascript&colon;x"` は
+/// `"javascript:"` を文字列として含まない)。
+fn decoded_url_token(v: &str) -> String {
+    let mut s = String::with_capacity(v.len());
+    decode_entities_into(v, &mut s);
+    // %HH パーセントエンコードの復号 — ブラウザはホスト名解決の
+    // 前に行う。ASCII 範囲外のバイトは UTF-8 境界を壊さないよう
+    // そのまま残す。
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && b[i + 1].is_ascii_hexdigit()
+            && b[i + 2].is_ascii_hexdigit()
+        {
+            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                if byte.is_ascii() {
+                    out.push(byte as char);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        let ch_len = s[i..]
+            .chars()
+            .next()
+            .map(|c| c.len_utf8())
+            .unwrap_or(1);
+        out.push_str(&s[i..i + ch_len]);
+        i += ch_len;
+    }
+    out.chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+/// 本文中の各 `href` 属性値を復号・正規化してクロージャへ渡す
+/// (D969–D971, D973)。
+///
+/// `href=` の属性値を引用符・空白区切りを考慮して取り出し、
+/// `decoded_url_token` (実体参照・%エンコード・制御空白の除去 +
+/// 小文字化) を適用してから渡す — 難読されたスキーム/ホストも
+/// ブラウザ解釈後の形で評価できる。
 /// コメント内の href も通るが、実害のないヒューリスティックとして
-/// 既存の `has_tel_link`/`has_dangerous_scheme_link` と揃える。
+/// 既存の `has_tel_link` と揃える。
 fn for_each_href_value(html: &str, mut f: impl FnMut(&str)) {
     let lower = html.to_ascii_lowercase();
     let mut rest = lower.as_str();
@@ -13716,7 +13786,8 @@ fn for_each_href_value(html: &str, mut f: impl FnMut(&str)) {
                 (&v[..e], e)
             }
         };
-        f(val);
+        let decoded = decoded_url_token(val);
+        f(&decoded);
         rest = &v[adv.min(v.len())..];
     }
 }
@@ -13856,12 +13927,9 @@ fn has_event_handler_attr(html: &str) -> bool {
     false
 }
 
-/// `<a ping="...">` ハイパーリンク監査属性を検出する (D972)。
-///
-/// `ping` はクリック時に指定 URL へ POST 通知を送る属性 —
-/// リンク先とは別のトラッキング/ビーコン経路を仕込める。
-/// 正規のメール生成系は出力しない。
-fn has_ping_attr(html: &str) -> bool {
+/// `<tag attr=...>` の組み合わせを検出する汎用スキャナ (D972, D977)。
+/// コメント・DOCTYPE・閉じタグ・処理命令は対象外。
+fn has_tag_attr(html: &str, tag: &str, attr: &str) -> bool {
     let lower = html.to_ascii_lowercase();
     let mut rest = lower.as_str();
     while let Some(i) = rest.find('<') {
@@ -13870,10 +13938,134 @@ fn has_ping_attr(html: &str) -> bool {
         let inner = &after[..end];
         match after.chars().next() {
             Some('!') | Some('?') | Some('/') | None => {}
-            Some(_) if tag_is(inner, "a") && tag_has_named_attr(inner, "ping") => {
+            Some(_) if tag_is(inner, tag) && tag_has_named_attr(inner, attr) => {
                 return true;
             }
             _ => {}
+        }
+        rest = &after[end..];
+    }
+    false
+}
+
+/// `<a ping="...">` ハイパーリンク監査属性を検出する (D972)。
+///
+/// `ping` はクリック時に指定 URL へ POST 通知を送る属性 —
+/// リンク先とは別のトラッキング/ビーコン経路を仕込める。
+/// 正規のメール生成系は出力しない。
+fn has_ping_attr(html: &str) -> bool {
+    has_tag_attr(html, "a", "ping")
+}
+
+/// タグ内部の `name` 属性の値を取り出す。
+/// `name="v"`/`name='v'`/`name=v`/`name = "v"` 各形式に対応。
+fn tag_attr_value(inner: &str, name: &str) -> Option<String> {
+    let toks: Vec<&str> = inner.split_whitespace().collect();
+    for (i, t) in toks.iter().enumerate() {
+        let Some(r) = t.strip_prefix(name) else {
+            continue;
+        };
+        let r2 = r.trim_start();
+        let eq = if r2.starts_with('=') {
+            Some(r2)
+        } else if r.is_empty() {
+            toks.get(i + 1).copied().filter(|n| n.starts_with('='))
+        } else {
+            None
+        };
+        let Some(eq) = eq else { continue };
+        let v = eq[1..].trim_start();
+        // `attr = v` — `=` 単独トークンの場合は次のトークンが値
+        let v = if v.is_empty() {
+            toks.get(i + 2).copied().unwrap_or("")
+        } else {
+            v
+        };
+        let v = v
+            .strip_prefix('"')
+            .or_else(|| v.strip_prefix('\''))
+            .unwrap_or(v);
+        let end = v
+            .find(|c: char| c == '"' || c == '\'' || c.is_whitespace() || c == '>')
+            .unwrap_or(v.len());
+        return Some(v[..end].to_string());
+    }
+    None
+}
+
+/// `<meta charset="utf-7">` 等、危険な文字コード指定を検出する (D978)。
+///
+/// UTF-7 は IE 時代の XSS ベクター (文字コード違いによる
+/// スクリプト解釈のすり抜け)、x-user-defined は HTML スマグリング
+/// でバイナリ難読に使われるエンコーディング。正規メールの
+/// charset は MIME ヘッダで決まるため meta での指定自体が稀で、
+/// この 2 種は正当な用途を持たない。
+fn has_meta_dangerous_charset(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find("<meta") {
+        let after = &rest[i + 5..];
+        if !after
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || c == '>' || c == '/')
+        {
+            rest = after;
+            continue;
+        }
+        let end = after.find('>').unwrap_or(after.len());
+        let inner = &after[..end];
+        if let Some(pos) = inner.find("charset") {
+            let tail = &inner[pos..];
+            if tail.contains("utf-7")
+                || tail.contains("utf7")
+                || tail.contains("x-user-defined")
+            {
+                return true;
+            }
+        }
+        rest = &after[end..];
+    }
+    false
+}
+
+/// href 以外の属性値に実行・外部取得スキームが使われているかを
+/// 検出する (D979)。
+///
+/// `src`/`action`/`formaction`/`background`/`poster`/`dynsrc`/
+/// `lowsrc`/`xlink:href`/`data` (object の data 属性) — href と
+/// 同じく URL を指すが、D964 のスキャンは href のみが対象だった。
+fn has_dangerous_scheme_attr(html: &str) -> bool {
+    const ATTRS: &[&str] = &[
+        "src",
+        "action",
+        "formaction",
+        "background",
+        "poster",
+        "dynsrc",
+        "lowsrc",
+        "xlink:href",
+        "data",
+    ];
+    const SCHEMES: &[&str] = &["data:", "javascript:", "vbscript:", "file:", "blob:"];
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find('<') {
+        let after = &rest[i + 1..];
+        let end = after.find('>').unwrap_or(after.len());
+        match after.chars().next() {
+            Some('!') | Some('?') | Some('/') | None => {}
+            Some(_) => {
+                let inner = &after[..end];
+                for a in ATTRS {
+                    if let Some(v) = tag_attr_value(inner, a) {
+                        let tok = decoded_url_token(&v);
+                        if SCHEMES.iter().any(|s| tok.starts_with(s)) {
+                            return true;
+                        }
+                    }
+                }
+            }
         }
         rest = &after[end..];
     }
@@ -14176,6 +14368,11 @@ fn decode_entities_into(src: &str, out: &mut String) {
             "quot" => Some('"'),
             "apos" => Some('\''),
             "nbsp" => Some(' '),
+            // D973: href 値の難読で使われる実体参照 — `javascript&colon;`
+            // → `javascript:`、`java&Tab;script:` → tab (後段で除去)。
+            "colon" => Some(':'),
+            "tab" => Some('\t'),
+            "newline" => Some('\n'),
             _ => {
                 if let Some(num) = entity.strip_prefix('#') {
                     let cp = if let Some(hex) = num.strip_prefix(['x', 'X']) {
@@ -14248,7 +14445,11 @@ fn record_link_mismatch(anchor_text: &str, href: &str, out: &mut Vec<LinkMismatc
     if out.len() >= 20 {
         return;
     }
-    let Some(href_host) = url_host(href) else {
+    // D973: href 値は実体参照・%エンコード・制御空白を復号してから
+    // 評価する — `https://evil&#46;com` のような難読ホストは
+    // 生文字列のままでは登録ドメイン比較をすり抜ける。
+    let decoded_href = decoded_url_token(href);
+    let Some(href_host) = url_host(&decoded_href) else {
         return;
     };
     let href_base = registrable_domain(&href_host);
@@ -15788,6 +15989,109 @@ mod tests {
         assert!(!html_to_text(r#"<div ping="x">x</div>"#).ping_attr);
         assert!(!html_to_text(r#"<a href="x" data-pinger="1">x</a>"#).ping_attr);
         assert!(!html_to_text("<p>clean</p>").ping_attr);
+    }
+
+    // ── D973: href 値の実体参照・%エンコード・制御空白難読 ────────
+    #[test]
+    fn html_to_text_は難読化されたスキームとホストを検出する() {
+        // 実体参照によるスキーム難読 — ブラウザは復号して解釈する
+        assert!(html_to_text(r#"<a href="javascript&colon;alert(1)">x</a>"#).dangerous_scheme_link);
+        assert!(html_to_text(r#"<a href="&#106;avascript:alert(1)">x</a>"#).dangerous_scheme_link);
+        assert!(html_to_text(r#"<a href="&#x6a;avascript:x">x</a>"#).dangerous_scheme_link);
+        // %エンコードによるスキーム難読 (%6a = 'j')
+        assert!(html_to_text(r#"<a href="%6aavascript:alert(1)">x</a>"#).dangerous_scheme_link);
+        // 制御空白差し込み (ブラウザは URL 中の tab/LF/CR を除去する)
+        assert!(html_to_text("<a href=\"java\tscript:x\">x</a>").dangerous_scheme_link);
+        assert!(html_to_text("<a href=\"java\nscript:x\">x</a>").dangerous_scheme_link);
+        // 実体参照でホストを難読した IP リテラル (&#52; = '4')
+        assert!(html_to_text(r#"<a href="http://10.0.0.&#52;/">x</a>"#).ip_literal_href);
+        // %エンコードのホスト (%65vil = 'evil')
+        assert!(html_to_text(r#"<a href="http://abc.onion%2f">x</a>"#).onion_href == false);
+        // 表示と href の実体参照難読による link_mismatch 捕捉
+        let e = html_to_text(
+            r#"<a href="https://evil&#46;example">https://paypal.com</a>"#,
+        );
+        assert_eq!(e.link_mismatches.len(), 1);
+    }
+
+    // ── D974: script タグ ───────────────────────────────────────
+    #[test]
+    fn html_to_text_はscriptを検出する() {
+        assert!(html_to_text("<script>alert(1)</script>").script_present);
+        assert!(html_to_text(r#"<script src="https://evil.example/x.js"></script>"#).script_present);
+        assert!(html_to_text("<SCRIPT type=text/javascript>x</SCRIPT>").script_present);
+        // <scripture> のような前方一致は誤検しない
+        assert!(!html_to_text("<scripture>x</scripture>").script_present);
+        assert!(!html_to_text("<p>clean</p>").script_present);
+    }
+
+    // ── D975: frame/frameset ────────────────────────────────────
+    #[test]
+    fn html_to_text_はframeを検出する() {
+        assert!(html_to_text(r#"<frame src="https://evil.example">"#).frame_present);
+        assert!(html_to_text(r#"<frameset cols="*,0"><frame src=x></frameset>"#).frame_present);
+        assert!(html_to_text("<FRAME src=x>").frame_present);
+        // <framework> のような前方一致は誤検しない
+        assert!(!html_to_text("<framework>x</framework>").frame_present);
+        assert!(!html_to_text("<p>clean</p>").frame_present);
+    }
+
+    // ── D976: template ─────────────────────────────────────────
+    #[test]
+    fn html_to_text_はtemplateを検出する() {
+        assert!(html_to_text("<template><p>hidden payload</p></template>").template_present);
+        assert!(html_to_text("<TEMPLATE>x</TEMPLATE>").template_present);
+        assert!(!html_to_text("<templates>x</templates>").template_present);
+        assert!(!html_to_text("<p>clean</p>").template_present);
+    }
+
+    // ── D977: <a download> ──────────────────────────────────────
+    #[test]
+    fn html_to_text_はdownload属性を検出する() {
+        assert!(html_to_text(
+            r#"<a href="https://x/invoice.pdf" download="invoice.pdf">x</a>"#,
+        )
+        .download_attr);
+        assert!(html_to_text("<a href=x download>x</a>").download_attr);
+        assert!(html_to_text("<A HREF=x DOWNLOAD =f.exe>x</A>").download_attr);
+        // download を持たない <a>、<a> 以外の download は対象外
+        assert!(!html_to_text(r#"<a href="x">x</a>"#).download_attr);
+        assert!(!html_to_text(r#"<div download="x">x</div>"#).download_attr);
+        assert!(!html_to_text("<p>clean</p>").download_attr);
+    }
+
+    // ── D978: meta charset 危険指定 ─────────────────────────────
+    #[test]
+    fn html_to_text_は危険charsetを検出する() {
+        assert!(html_to_text(r#"<meta charset="utf-7">"#).meta_charset_danger);
+        assert!(html_to_text(r#"<META CHARSET="UTF-7">"#).meta_charset_danger);
+        assert!(html_to_text(r#"<meta charset="x-user-defined">"#).meta_charset_danger);
+        // 通常の charset 指定は対象外
+        assert!(!html_to_text(r#"<meta charset="utf-8">"#).meta_charset_danger);
+        assert!(!html_to_text(
+            r#"<meta http-equiv="Content-Type" content="text/html; charset=shift_jis">"#,
+        )
+        .meta_charset_danger);
+        assert!(!html_to_text("<p>clean</p>").meta_charset_danger);
+    }
+
+    // ── D979: href 以外の属性の危険スキーム ─────────────────────
+    #[test]
+    fn html_to_text_は属性の危険スキームを検出する() {
+        assert!(html_to_text(r#"<form action="javascript:x">"#).dangerous_scheme_attr);
+        assert!(html_to_text(r#"<img src="data:text/html,x">"#).dangerous_scheme_attr);
+        assert!(html_to_text(r#"<button formaction="javascript:x">x</button>"#).dangerous_scheme_attr);
+        assert!(html_to_text(r#"<object data="javascript:x"></object>"#).dangerous_scheme_attr);
+        assert!(html_to_text(r#"<video poster="file:///x">x</video>"#).dangerous_scheme_attr);
+        // 無引用符・大文字・= の両側空白
+        assert!(html_to_text("<IMG SRC=JAVASCRIPT:x>").dangerous_scheme_attr);
+        assert!(html_to_text("<form action = 'data:x'>").dangerous_scheme_attr);
+        // 正規の値は対象外
+        assert!(!html_to_text(r#"<img src="https://example.com/x.png">"#).dangerous_scheme_attr);
+        assert!(!html_to_text(r#"<form action="https://x/submit">"#).dangerous_scheme_attr);
+        // srcset は src の前方一致ではない (属性名の区切り確認)
+        assert!(!html_to_text(r#"<img srcset="a 1x, b 2x">"#).dangerous_scheme_attr);
+        assert!(!html_to_text("<p>clean</p>").dangerous_scheme_attr);
     }
 
     #[test]

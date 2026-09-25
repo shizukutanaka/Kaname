@@ -677,6 +677,62 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D974: script タグ (スクリプト実行意図)
+    if html_extract.as_ref().is_some_and(|e| e.script_present) {
+        render_risks.push(
+            "script タグ — メール本文中のスクリプト実行意図の兆候です".to_string(),
+        );
+    }
+
+    // D975: frame/frameset (外部コンテンツ枠)
+    if html_extract.as_ref().is_some_and(|e| e.frame_present) {
+        render_risks.push(
+            "frame/frameset 要素 — 外部コンテンツ枠の埋め込み (クリックジャッキング等) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D976: template (不活性ペイロード格納)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.template_present)
+    {
+        render_risks.push(
+            "template 要素 — 描画されない DOM へのペイロード格納 (HTML スマグリングのデータ島) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D977: <a download> (ファイル保存強制)
+    if html_extract.as_ref().is_some_and(|e| e.download_attr) {
+        render_risks.push(
+            "a download 属性 — クリック時にファイル保存を強制する誘導の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D978: meta charset 危険指定 (utf-7 等)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.meta_charset_danger)
+    {
+        render_risks.push(
+            "meta charset による危険な文字コード指定 (utf-7 等) — エンコーディング偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D979: href 以外の属性の危険スキーム (src/action 等)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.dangerous_scheme_attr)
+    {
+        render_risks.push(
+            "src/action 等の属性に data:/javascript: 等のスキーム — ペイロード内包・実行経路の兆候です"
+                .to_string(),
+        );
+    }
+
     // D238: Content-Disposition: inline で危険拡張子
     if env.inline_dangerous_attachment {
         render_risks.push(
