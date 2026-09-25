@@ -114,6 +114,31 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Bcc:`/`X-Bcc:` が受信側ヘッダに残るか — 送信時に除去されるべき
+    /// 暗黙宛先の残留 (宛先リスト漏洩・手作り挿入、D1096)。
+    pub bcc_leak: bool,
+    /// `X-Filter:`/`X-Filtered:`/`X-SpamChecker:` があるか — フィルタ
+    /// 処理機の記録を送信側が自称する兆候 (D1097)。
+    pub filter_marks: bool,
+    /// `X-Rcpt-To:`/`X-Real-To:`/`X-RR:`/`X-Original-Rcpt-To:` があるか
+    /// — 配送対象の記録を送信側が自称する兆候 (D1098)。
+    pub rcpt_marks: bool,
+    /// `X-DMARC:`/`X-DMARC-Result:`/`X-Notify:`/`X-Notify-Administrator:`
+    /// があるか — DMARC・通知記録を送信側が自称する兆候 (D1099)。
+    pub dmarc_marks: bool,
+    /// `X-PMD*`/`X-CHZL*`/`X-GWIA*`/`X-EGGF*` があるか — PMDF・
+    /// GWIA・EGGF 等の旧式配送機の記録を送信側が自称する兆候 (D1100)。
+    pub pmd_marks: bool,
+    /// `X-SpamRelayed:`/`X-Originating-SMTP:`/`X-Src-IP:`/`X-PTR:`/
+    /// `X-Src-Name:` があるか — 中継・発信経路の記録を送信側が
+    /// 自称する兆候 (D1101)。
+    pub routing_marks: bool,
+    /// `X-Returned*`/`X-Bounce*`/`X-Bounced*` があるか — 返送・
+    /// バウンスの記録を送信側が自称する兆候 (D1102)。
+    pub bounce_marks: bool,
+    /// `X-Security:`/`X-Confidential:`/`Private:`/`Sensitivity:` が
+    /// あるか — 機密度の体裁を送信側が自称する兆候 (D1103)。
+    pub confidential_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2030,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2060,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        bcc_leak: has_bcc_leak(hdr),
+        filter_marks: has_filter_marks(hdr),
+        rcpt_marks: has_rcpt_marks(hdr),
+        dmarc_marks: has_dmarc_marks(hdr),
+        pmd_marks: has_pmd_marks(hdr),
+        routing_marks: has_routing_marks(hdr),
+        bounce_marks: has_bounce_marks(hdr),
+        confidential_marks: has_confidential_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2425,142 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `Bcc:`/`X-Bcc:` が受信側ヘッダに残るか判定する (D1096)。
+///
+/// `Bcc:` は送信時に MTA が除去すべき暗黙宛先ヘッダ — 届いたメールに
+/// 残るのは宛先リストの漏洩または手作りの挿入 (「あなたは BCC で届いた」
+/// 体裁を名乗る形)。
+fn has_bcc_leak(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("bcc:") || l.starts_with("x-bcc:"))
+}
+
+/// `X-Filter:`/`X-Filtered:`/`X-SpamChecker:` があるか判定する
+/// (D1097)。
+///
+/// フィルタ処理機の記録 — 「フィルタ済み」の体裁を送信側が自称する値。
+fn has_filter_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-filter:")
+            || l.starts_with("x-filtered:")
+            || l.starts_with("x-spamchecker:")
+    })
+}
+
+/// `X-Rcpt-To:`/`X-Real-To:`/`X-RR:`/`X-Original-Rcpt-To:` があるか
+/// 判定する (D1098)。
+///
+/// 実配送対象の記録は配送機が残す値 — 送信側が書くのは「届けた」の体裁。
+fn has_rcpt_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rcpt-to:")
+            || l.starts_with("x-real-to:")
+            || l.starts_with("x-rr:")
+            || l.starts_with("x-original-rcpt-to:")
+    })
+}
+
+/// `X-DMARC:`/`X-DMARC-Result:`/`X-Notify:`/`X-Notify-Administrator:`
+/// があるか判定する (D1099)。
+///
+/// DMARC 判定・通知の記録は検査・運用機が残す値 — 送信側が書くのは
+/// 「認証済み・通知済み」の体裁。
+fn has_dmarc_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-dmarc:")
+            || l.starts_with("x-dmarc-result:")
+            || l.starts_with("x-notify:")
+            || l.starts_with("x-notify-administrator:")
+    })
+}
+
+/// `X-PMD*`/`X-CHZL*`/`X-GWIA*`/`X-EGGF*` があるか判定する (D1100)。
+///
+/// PMDF/GroupWise GWIA/EGGF 等の旧式配送機の記録 — 送信側が書くのは
+/// 配送機の体裁。
+fn has_pmd_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-pmd")
+            || l.starts_with("x-chzl")
+            || l.starts_with("x-gwia")
+            || l.starts_with("x-eggf")
+    })
+}
+
+/// `X-SpamRelayed:`/`X-Originating-SMTP:`/`X-Src-IP:`/`X-PTR:`/
+/// `X-Src-Name:` があるか判定する (D1101)。
+///
+/// 中継・発信元の経路記録は配送機が残す値 — 送信側が書くのは
+/// 「この経路を通った」体裁。
+fn has_routing_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-spamrelayed:")
+            || l.starts_with("x-originating-smtp:")
+            || l.starts_with("x-src-ip:")
+            || l.starts_with("x-ptr:")
+            || l.starts_with("x-src-name:")
+    })
+}
+
+/// `X-Returned*`/`X-Bounce*`/`X-Bounced*` があるか判定する (D1102)。
+///
+/// 返送・バウンスの記録は配送機が残す値 — 送信側が書くのは
+/// 「返ってきた」体裁。
+fn has_bounce_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-returned")
+            || l.starts_with("x-bounce")
+            || l.starts_with("x-bounced")
+    })
+}
+
+/// `X-Security:`/`X-Confidential:`/`Private:`/`Sensitivity:` があるか
+/// 判定する (D1103)。
+///
+/// 機密度の体裁は送信側の宣言 — 「社内秘・機密扱い」の体裁を名乗る値
+/// (警告の体裁・緊急性の演出に使われる)。
+fn has_confidential_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-security:")
+            || l.starts_with("x-confidential:")
+            || l.starts_with("private:")
+            || l.starts_with("sensitivity:")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21297,111 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_はBcc残留を検出する() {
+        let bc = b"Bcc: u@h\r\n\r\nx";
+        assert!(has_bcc_leak(bc));
+        let xb = b"X-Bcc: u@h\r\n\r\nx";
+        assert!(has_bcc_leak(xb));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bcc_leak(clean));
+    }
+
+    #[test]
+    fn scan_はフィルタ印を検出する() {
+        let f1 = b"X-Filter: 1\r\n\r\nx";
+        assert!(has_filter_marks(f1));
+        let f2 = b"X-Filtered: yes\r\n\r\nx";
+        assert!(has_filter_marks(f2));
+        let f3 = b"X-SpamChecker: v1\r\n\r\nx";
+        assert!(has_filter_marks(f3));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_filter_marks(clean));
+    }
+
+    #[test]
+    fn scan_は配送対象印を検出する() {
+        let rt = b"X-Rcpt-To: u@h\r\n\r\nx";
+        assert!(has_rcpt_marks(rt));
+        let rl = b"X-Real-To: u@h\r\n\r\nx";
+        assert!(has_rcpt_marks(rl));
+        let rr = b"X-RR: u@h\r\n\r\nx";
+        assert!(has_rcpt_marks(rr));
+        let or = b"X-Original-Rcpt-To: u@h\r\n\r\nx";
+        assert!(has_rcpt_marks(or));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_rcpt_marks(clean));
+    }
+
+    #[test]
+    fn scan_はDMARC印を検出する() {
+        let dm = b"X-DMARC: pass\r\n\r\nx";
+        assert!(has_dmarc_marks(dm));
+        let dr = b"X-DMARC-Result: pass\r\n\r\nx";
+        assert!(has_dmarc_marks(dr));
+        let nt = b"X-Notify: 1\r\n\r\nx";
+        assert!(has_dmarc_marks(nt));
+        let na = b"X-Notify-Administrator: 1\r\n\r\nx";
+        assert!(has_dmarc_marks(na));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dmarc_marks(clean));
+    }
+
+    #[test]
+    fn scan_は旧式配送機印を検出する() {
+        let pd = b"X-PMD-Info: 1\r\n\r\nx";
+        assert!(has_pmd_marks(pd));
+        let ch = b"X-CHZL-Info: 1\r\n\r\nx";
+        assert!(has_pmd_marks(ch));
+        let gw = b"X-GWIA-Info: 1\r\n\r\nx";
+        assert!(has_pmd_marks(gw));
+        let eg = b"X-EGGF-Info: 1\r\n\r\nx";
+        assert!(has_pmd_marks(eg));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_pmd_marks(clean));
+    }
+
+    #[test]
+    fn scan_は中継記録を検出する() {
+        let sr = b"X-SpamRelayed: yes\r\n\r\nx";
+        assert!(has_routing_marks(sr));
+        let os = b"X-Originating-SMTP: 1.2.3.4\r\n\r\nx";
+        assert!(has_routing_marks(os));
+        let si = b"X-Src-IP: 1.2.3.4\r\n\r\nx";
+        assert!(has_routing_marks(si));
+        let pt = b"X-PTR: ptr\r\n\r\nx";
+        assert!(has_routing_marks(pt));
+        let sn = b"X-Src-Name: h\r\n\r\nx";
+        assert!(has_routing_marks(sn));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_routing_marks(clean));
+    }
+
+    #[test]
+    fn scan_は返送印を検出する() {
+        let rt = b"X-Returned-To: u@h\r\n\r\nx";
+        assert!(has_bounce_marks(rt));
+        let rb = b"X-Bounce-Info: 1\r\n\r\nx";
+        assert!(has_bounce_marks(rb));
+        let bd = b"X-Bounced-Recipient: u@h\r\n\r\nx";
+        assert!(has_bounce_marks(bd));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_bounce_marks(clean));
+    }
+
+    #[test]
+    fn scan_は機密印を検出する() {
+        let sc = b"X-Security: high\r\n\r\nx";
+        assert!(has_confidential_marks(sc));
+        let cf = b"X-Confidential: 1\r\n\r\nx";
+        assert!(has_confidential_marks(cf));
+        let pv = b"Private: yes\r\n\r\nx";
+        assert!(has_confidential_marks(pv));
+        let sn = b"Sensitivity: company-confidential\r\n\r\nx";
+        assert!(has_confidential_marks(sn));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_confidential_marks(clean));
     }
 }

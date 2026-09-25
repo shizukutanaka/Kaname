@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1096–D1103: Bcc 残留・配送記録・旧式機・中継・返送・機密の未検査兆候 8 件
+
+- **問題**: 「誰宛てか」「誰が見たか」「誰が届けたか」「誰が中継したか」「誰が返したか」「誰が機密としたか」に関する兆候が未検査だった — `Bcc:`/`X-Bcc:` の暗黙宛先残留 (送信時に除去されるべき宛先リスト漏洩・手作り挿入)、`X-Filter:`/`X-Filtered:`/`X-SpamChecker:` のフィルタ処理印、`X-Rcpt-To:`/`X-Real-To:`/`X-RR:`/`X-Original-Rcpt-To:` の配送対象記録、`X-DMARC:`/`X-DMARC-Result:`/`X-Notify:`/`X-Notify-Administrator:` の認証・通知記録、`X-PMD*`/`X-CHZL*`/`X-GWIA*`/`X-EGGF*` の旧式配送機印、`X-SpamRelayed:`/`X-Originating-SMTP:`/`X-Src-IP:`/`X-PTR:`/`X-Src-Name:` の中継記録、`X-Returned*`/`X-Bounce*`/`X-Bounced*` の返送印、`X-Security:`/`X-Confidential:`/`Private:`/`Sensitivity:` の機密体裁。
+- **修正**: `has_bcc_leak`/`has_filter_marks`/`has_rcpt_marks`/`has_dmarc_marks`/`has_pmd_marks`/`has_routing_marks`/`has_bounce_marks`/`has_confidential_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。7 件は自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「宛て・見た・届けた・中継・返した・機密」の記録を送信側が書くのはいずれも属しない印 — 宛先の漏洩と記録の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1096: Bcc 残留
+    if env.bcc_leak {
+        render_risks.push(
+            "Bcc:/X-Bcc: が受信側ヘッダに残っています — 除去されるべき暗黙宛先の残留 (宛先リスト漏洩) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1097: フィルタ印自署
+    if env.filter_marks {
+        render_risks.push(
+            "X-Filter/X-Filtered/X-SpamChecker — フィルタ処理機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1098: 配送対象印自署
+    if env.rcpt_marks {
+        render_risks.push(
+            "X-Rcpt-To/X-Real-To/X-RR/X-Original-Rcpt-To — 配送対象の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1099: DMARC・通知印自署
+    if env.dmarc_marks {
+        render_risks.push(
+            "X-DMARC/X-DMARC-Result/X-Notify/X-Notify-Administrator — DMARC・通知記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1100: 旧式配送機印自署
+    if env.pmd_marks {
+        render_risks.push(
+            "X-PMD*/X-CHZL*/X-GWIA*/X-EGGF* — 旧式配送機の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1101: 中継記録自署
+    if env.routing_marks {
+        render_risks.push(
+            "X-SpamRelayed/X-Originating-SMTP/X-Src-IP/X-PTR/X-Src-Name — 中継・発信経路の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1102: 返送印自署
+    if env.bounce_marks {
+        render_risks.push(
+            "X-Returned*/X-Bounce*/X-Bounced* — 返送・バウンスの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1103: 機密印自署
+    if env.confidential_marks {
+        render_risks.push(
+            "X-Security/X-Confidential/Private/Sensitivity — 機密度の体裁を送信側が自称する兆候です"
                 .to_string(),
         );
     }
