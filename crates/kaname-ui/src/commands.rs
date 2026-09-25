@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -598,6 +600,52 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
                 .to_string(),
         );
+    }
+
+    // D1009: Reply-To リダイレクト — 返信先が送信元と別ドメイン
+    //   (返信すると攻撃者ドメインへ届く BEC 定形)
+    if kaname_render::reply_to_domain_differs(&env.from, &env.reply_to) {
+        render_risks.push(
+            "Reply-To のドメインが From と異なります — 返信先を別ドメインへ振り向ける BEC リダイレクトの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1010: 非 ASCII 空白の単語分断 — NBSP/和文間隔等で英字を
+    //   分断しキーワード検査を回避する定形
+    if kaname_render::has_nonascii_word_splice(&analysis_body) {
+        render_risks.push(
+            "本文の英単語中に非 ASCII 空白 (NBSP・和文間隔等) が挟まれています — キーワード検査を分断する難読化の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1013: 偽造 Received — 配送チェーンに localhost/プライベート IP
+    //   のホップが混じる (受信前に手作りで挿入された偽の配送痕跡)
+    if env.forged_received_hop {
+        render_risks.push(
+            "Received: ヘッダに localhost / プライベート IP のホップがあります — 手作りの偽の配送痕跡 (forged Received) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1014: 表示名の文字体系混在 — ラテン + Cyrillic/Greek の混在は
+    //   正規名をなぞったホモグリフなりすましの定形
+    {
+        let mut spoof_name = false;
+        for a in env.from.iter().chain(env.reply_to.iter()) {
+            if let Some(n) = &a.display_name {
+                if kaname_render::has_confusable_script_name(n) {
+                    spoof_name = true;
+                }
+            }
+        }
+        if spoof_name {
+            render_risks.push(
+                "表示名にラテン文字と Cyrillic/Greek 文字が混在しています — 正規名をなぞったホモグリフなりすましの兆候です"
+                    .to_string(),
+            );
+        }
     }
 
     // D327: abuse 報告先自称

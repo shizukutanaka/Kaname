@@ -119,6 +119,13 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Received:` チェーンに localhost/プライベート IP/未定義アドレス
+    /// を含むホップがある (D1013)。
+    ///
+    /// 公開メールの配送チェーンに `from [127.0.0.1]`・`from localhost`
+    /// 等のローカル起源ホップが混じるのは、受信前に挿入された偽の
+    /// 配送痕跡 (forged Received) の兆候。
+    pub forged_received_hop: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2035,6 +2042,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        forged_received_hop: has_forged_received_hop(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -13637,6 +13645,124 @@ pub fn find_obfuscated_url_tokens(text: &str) -> Vec<ObfuscatedUrl> {
     out
 }
 
+/// Reply-To のドメインが From のどのドメインとも一致しないか (D1009)。
+///
+/// 返信先を別ドメインへ振り向ける Reply-To リダイレクトは BEC の
+/// 定形 — 被害者が返信すると送信元ドメインではなく攻撃者の
+/// ドメインへ届く。登録ドメイン近似 (registrable_domain) で
+/// サブドメイン差も同じ組織として扱う。
+/// From 無し・Reply-To 無しは判定不可なので false。
+#[must_use]
+pub fn reply_to_domain_differs(from: &[Address], reply_to: &[Address]) -> bool {
+    if from.is_empty() || reply_to.is_empty() {
+        return false;
+    }
+    let from_domains: Vec<String> = from
+        .iter()
+        .map(|a| registrable_domain(&a.addr.domain.to_lowercase()))
+        .collect();
+    reply_to.iter().all(|r| {
+        let d = registrable_domain(&r.addr.domain.to_lowercase());
+        !from_domains.iter().any(|f| f == &d)
+    })
+}
+
+/// 本文中で ASCII 英字に挟まれた非 ASCII 空白 (NBSP・和文間隔・
+/// NNBSP 等) があるか (D1010)。
+///
+/// 「password」を「pass\u{00A0}word」と書くとキーワード検査を
+/// 分断できる。ラテン文字同士の間に非 ASCII 空白が入る正当な
+/// 組版はほぼ無い (フランス語 NNBSP は句読点前・数値桁区切りで、
+/// 英字と英字の間には来ない) — 数字は対象外とし誤検を避ける。
+#[must_use]
+pub fn has_nonascii_word_splice(text: &str) -> bool {
+    const SPACES: &[char] = &[
+        '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}',
+        '\u{2004}', '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}',
+        '\u{200A}', '\u{202F}', '\u{205F}', '\u{3000}',
+    ];
+    let chars: Vec<char> = text.chars().collect();
+    (1..chars.len().saturating_sub(1)).any(|i| {
+        SPACES.contains(&chars[i])
+            && chars[i - 1].is_ascii_alphabetic()
+            && chars[i + 1].is_ascii_alphabetic()
+    })
+}
+
+/// `Received:` ヘッダに localhost / プライベート IP / 未定義アドレスを
+/// 含むホップがあるか (D1013)。
+///
+/// 配送チェーンは受信側 MTA が上位に追記していく — 公開メールの
+/// チェーン中に `from [127.0.0.1]`・`from localhost`・`from [192.168...]`
+/// 等のローカル起源ホップが混じるのは、受信前に手作りで挿入された
+/// 偽の配送痕跡 (forged Received) の兆候。
+/// 正当な例もある (中継フィルタが自ホストを記す場合) ため、
+/// この兆候は「存在を数える」だけで断定しない。
+pub fn has_forged_received_hop(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = lower[..header_end]
+        .replace("\r\n ", " ")
+        .replace("\r\n\t", " ");
+    /// ローカル/プライベート発信元の指標 (大文字小文字無関係)。
+    /// 172.16.0.0/12 は 172.16〜172.31 のみプライベートのため後段で
+    /// 数値判定する (172.2.x.x のような公開 IP を誤検しない)。
+    const LOCAL_TOKENS: &[&str] = &[
+        "from localhost",
+        "from [127.",
+        "from [::1]",
+        "from [0.0.0.0]",
+        "from [10.",
+        "from [169.254.",
+        "from [192.168.",
+        "by localhost",
+    ];
+    header.lines().any(|l| {
+        if !l.starts_with("received:") {
+            return false;
+        }
+        if LOCAL_TOKENS.iter().any(|t| l.contains(t)) {
+            return true;
+        }
+        // `from [172.x` の x が 16-31 のみプライベート (172.2.0.1 等は公開)
+        if let Some(p) = l.find("from [172.") {
+            let rest = &l[p + "from [172.".len()..];
+            let octet: String = rest
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if let Ok(n) = octet.parse::<u8>() {
+                return (16..=31).contains(&n);
+            }
+        }
+        false
+    })
+}
+
+/// 表示名にラテン文字と Cyrillic/Greek 文字が混在するか (D1014)。
+///
+/// 「Bank оf America」のように、正規ブランド名の一部を Cyrillic о
+/// や Greek Α にすり替えた表示名は、一見正規に見えて別文字列 —
+/// ホモグリフなりすましの定形。日本語 + ラテンの混在は正当なので
+/// 対象外とし、ラテンと Cyrillic/Greek の混在のみ検出する。
+#[must_use]
+pub fn has_confusable_script_name(name: &str) -> bool {
+    let has_latin = name.chars().any(|c| c.is_ascii_alphabetic());
+    let has_spoof_script = name.chars().any(|c| {
+        matches!(c,
+            '\u{0400}'..='\u{04FF}'   // Cyrillic
+            | '\u{0500}'..='\u{052F}' // Cyrillic Supplement
+            | '\u{0370}'..='\u{03FF}' // Greek
+            | '\u{1F00}'..='\u{1FFF}' // Greek Extended
+        )
+    });
+    has_latin && has_spoof_script
+}
+
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
 fn read_tag_name(html: &str, start: usize) -> &str {
     let bytes = html.as_bytes();
@@ -15306,6 +15432,118 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    // ---- D1009: Reply-To リダイレクト ----
+    #[test]
+    fn scan_はReplyTo別ドメインを検出する() {
+        let addr = |d: &str| Address {
+            display_name: None,
+            addr: EmailAddr { local: "u".to_string(), domain: d.to_string() },
+        };
+        // Reply-To が別ドメイン → リダイレクトの兆候
+        assert!(reply_to_domain_differs(&[addr("corp.com")], &[addr("evil.net")]));
+        // 同ドメイン → 対象外
+        assert!(!reply_to_domain_differs(&[addr("corp.com")], &[addr("corp.com")]));
+        // サブドメイン差は登録ドメイン近似で同一組織扱い
+        assert!(!reply_to_domain_differs(&[addr("corp.com")], &[addr("mail.corp.com")]));
+        // From 無し・Reply-To 無しは判定不可
+        assert!(!reply_to_domain_differs(&[], &[addr("evil.net")]));
+        assert!(!reply_to_domain_differs(&[addr("corp.com")], &[]));
+    }
+
+    // ---- D1010: 非 ASCII 空白の単語分断 ----
+    #[test]
+    fn scan_は非ASCII空白分断を検出する() {
+        // NBSP で ASCII 英字を分断 → キーワード回避の兆候
+        assert!(has_nonascii_word_splice("the pass\u{00A0}word is x"));
+        // 和文間隔 (U+3000) でも同様
+        assert!(has_nonascii_word_splice("a\u{3000}b"));
+        // 数字同士の NBSP はフランス語の桁区切りとして正当 → 対象外
+        assert!(!has_nonascii_word_splice("1\u{00A0}000 yen"));
+        // 英字 + 空白 + 非英字 (句読点) も対象外
+        assert!(!has_nonascii_word_splice("mot\u{00A0}: x"));
+        // 通常本文
+        assert!(!has_nonascii_word_splice("the password is x"));
+        // 日本語の和文間隔は両側が非 ASCII なので対象外
+        assert!(!has_nonascii_word_splice("第一\u{3000}第二"));
+    }
+
+    // ---- D1013: 偽造 Received ホップ ----
+    #[test]
+    fn scan_は偽造Receivedを検出する() {
+        // localhost / loopback / プライベート IP のホップ
+        let l = b"Received: from localhost by mx.example\r\n\r\nx";
+        assert!(has_forged_received_hop(l));
+        let ip = b"Received: from [127.0.0.1] by mx.example\r\n\r\nx";
+        assert!(has_forged_received_hop(ip));
+        let priv_ip = b"Received: from [192.168.1.5] by mx\r\n\r\nx";
+        assert!(has_forged_received_hop(priv_ip));
+        // 172.16-31 はプライベート
+        let rfc1918 = b"Received: from [172.16.0.1] by mx\r\n\r\nx";
+        assert!(has_forged_received_hop(rfc1918));
+        // 172.2.x は公開 IP → 対象外
+        let pub172 = b"Received: from [172.2.0.1] by mx\r\n\r\nx";
+        assert!(!has_forged_received_hop(pub172));
+        // 通常の Received チェーン
+        let normal = b"Received: from mail.example.com by mx.example\r\n\r\nx";
+        assert!(!has_forged_received_hop(normal));
+        // X-Received (ベンダー印) は対象外
+        let xr = b"X-Received: from [127.0.0.1] by x\r\n\r\nx";
+        assert!(!has_forged_received_hop(xr));
+        // 本文中の Received: 形はヘッダ走査対象外
+        let body_only = b"Subject: x\r\n\r\nReceived: from localhost by x";
+        assert!(!has_forged_received_hop(body_only));
+    }
+
+    // ---- D1014: 表示名の文字体系混在 ----
+    #[test]
+    fn scan_は表示名の混在文字を検出する() {
+        // ラテン + Cyrillic → ホモグリフ偽装の兆候
+        assert!(has_confusable_script_name("Bank \u{043E}f America"));
+        // ラテン + Greek
+        assert!(has_confusable_script_name("Pay\u{0391}al"));
+        // 純ラテン・日本語混在・純 Cyrillic は対象外
+        assert!(!has_confusable_script_name("Alice Smith"));
+        assert!(!has_confusable_script_name("田中 Taro"));
+        assert!(!has_confusable_script_name("Иван"));
+        assert!(!has_confusable_script_name(""));
+    }
+
+    // ---- D1011/D1012: ファイル名偽装・設定系拡張子 ----
+    #[test]
+    fn scan_attachment_deceptive_filename_is_dangerous() {
+        // U+2024 ONE DOT LEADER — `.` に見えるが拡張子区切りでない
+        let scan = scan_attachment_bytes("invoice\u{2024}pdf", "application/pdf", b"%PDF");
+        assert!(scan.is_dangerous);
+        // 先頭空白 — 表示名と保存名がずれる
+        let scan2 = scan_attachment_bytes(" report.pdf", "application/pdf", b"%PDF");
+        assert!(scan2.is_dangerous);
+        // 制御文字
+        let scan3 = scan_attachment_bytes("a\tb.pdf", "application/pdf", b"%PDF");
+        assert!(scan3.is_dangerous);
+        // 末尾ドット — Windows は保存時に除去
+        let scan4 = scan_attachment_bytes("invoice.pdf.", "application/pdf", b"%PDF");
+        assert!(scan4.is_dangerous);
+        // 正常名
+        let clean = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5 data");
+        assert!(!clean.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_config_exts_are_dangerous() {
+        // 実行ファイルでないがコード実行/NTLM 漏洩に使われる形式 (D1012)
+        for name in [
+            "merge.reg", "setup.inf", "help.chm", "x.sct", "x.diagcab",
+            "dark.themepack", "docs.library-ms", "s.search-ms",
+            "x.settingcontent-ms", "run.cpl", "t.mst", "a.appref-ms",
+        ] {
+            let scan = scan_attachment_bytes(name, "application/octet-stream", b"data");
+            assert!(scan.is_dangerous, "{name} should be dangerous");
+        }
+        // 無害形式は対象外
+        let safe = scan_attachment_bytes("note.txt", "text/plain", b"hello");
+        assert!(!safe.is_dangerous);
     }
 
     #[test]
@@ -18874,6 +19112,16 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     if magic_bytes::has_bidi_override_filename(filename) {
         risks.push(
             "ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれており、拡張子の表示が反転して実際の形式を隠している可能性があります"
+                .to_string(),
+        );
+        is_dangerous = true;
+    }
+    // 1.5. ファイル名の偽装区切り・制御文字 (D1011) — U+2024/全角
+    //    ドット等のドット類似文字、制御文字、先端/末端の空白や
+    //    末尾ドットは「見える名前」と「保存される名前」をずらす
+    if magic_bytes::has_deceptive_filename_chars(filename) {
+        risks.push(
+            "ファイル名に拡張子区切りの類似文字・制御文字・先端/末端の空白や末尾ドットが含まれており、表示と実体がずれる偽装の可能性があります"
                 .to_string(),
         );
         is_dangerous = true;

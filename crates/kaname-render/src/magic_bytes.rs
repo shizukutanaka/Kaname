@@ -160,7 +160,56 @@ pub fn is_dangerous_windows_attachment(filename: &str) -> bool {
         | "img"   // ディスクイメージ — 同上
         | "vhd"   // 仮想ハードディスク — 同上
         | "vhdx" // 仮想ハードディスク — 同上
+        // 設定・ライブラリ・ヘルプ系 — コード実行や NTLM ハッシュ
+        // 漏洩に使われる「実行ファイルではないが有害な」形式 (D1012)
+        | "reg"   // Registry Merge — レジストリ直接改変
+        | "inf"   // Setup Information — INF ハイジャックで実行
+        | "chm"   // Compiled HTML Help — HH.exe 経由のペイロード
+        | "sct"   // Windows Script Component — 実行可能
+        | "wsc"   // Windows Script Component — 同上
+        | "diagcab" // Support Cabinet — msdt 経由で悪用 (Follina 系)
+        | "themepack" // テーマパック — リモート参照で NTLM 漏洩
+        | "theme" // テーマファイル — 同上
+        | "library-ms" // Windows Library — UNC 参照で NTLM 漏洩
+        | "search-ms" // Saved Search — search-ms ハンドラ悪用
+        | "desklink" // DeskLink — UNC 参照
+        | "settingcontent-ms" // Settings — 制御パネル経由の実行
+        | "cpl"   // Control Panel — 実行可能
+        | "mst"   // MST transform — msiexec 経由で実行
+        | "appref-ms" // ClickOnce — アプリ起動
     )
+}
+
+/// ファイル名に拡張子区切りの類似文字や先端/末端の空白・ドット、
+/// 制御文字が含まれるか (D1011)。
+///
+/// U+2024 ONE DOT LEADER や U+FF0E 全角ドットは表示上 `.` と見分けが
+/// つかないが OS の拡張子解釈では区切りにならない — `file․pdf` の
+/// ように見せかけて実体は別拡張子にする表示偽装。先端/末端の空白
+/// や末尾ドットは Windows が除去するため「見える名前」と
+/// 「保存される名前」がずれる。C0/C1 制御文字はファイル名では
+/// 異常値。どれも正当なファイル名には現れない形状。
+#[must_use]
+pub fn has_deceptive_filename_chars(filename: &str) -> bool {
+    /// ドット類似の区切り文字 — 表示は `.` だが拡張子区切りではない。
+    const DOT_LIKE: &[char] = &[
+        '\u{2024}', // ONE DOT LEADER
+        '\u{FF0E}', // FULLWIDTH FULL STOP
+        '\u{3002}', // IDEOGRAPHIC FULL STOP
+        '\u{FE52}', // SMALL FULL STOP
+        '\u{FF61}', // HALFWIDTH IDEOGRAPHIC FULL STOP
+    ];
+    if filename.chars().any(|c| DOT_LIKE.contains(&c)) {
+        return true;
+    }
+    // 制御文字 (C0/C1) — ファイル名には異常値
+    if filename.chars().any(|c| c.is_control()) {
+        return true;
+    }
+    // 先端/末端の空白・ドット — Windows は末端の空白/ドットを除去
+    // するため表示名と保存名がずれる (trailing dot/space trick)
+    filename != filename.trim_end_matches(|c| c == ' ' || c == '.')
+        || filename.starts_with(' ')
 }
 
 /// ファイル名に双方向テキスト制御文字 (RTLO 等) が含まれるか判定する。

@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1009–D1014: 名前・文字体系・配送痕跡の未検査兆候 6 件
+
+- **問題**: 返信先を別ドメインへ振り向ける Reply-To リダイレクト (BEC 定形)・本文中の非 ASCII 空白による英単語分断 (`pass␣word` — キーワード検査回避)・ファイル名のドット類似文字/制御文字/先端末端空白 (表示名と保存名がずれる trailing dot/space trick)・`.reg`/`.chm`/`.library-ms` 等の「実行ファイルでないが有害な」Windows 拡張子・Received チェーンへの localhost/プライベート IP ホップ混入 (手作りの偽配送痕跡)・ラテン+Cyrillic/Greek 混在の表示名 (ホモグリフなりすまし) のいずれも兆候として報告されなかった。(参考: Reply-To リダイレクト BEC・NFKC 無しの空白スプライス・Windows trailing-dot/space・theft-zip の .library-ms/.search-ms 系 NTLM 漏洩・ forged Received・Unicode confusable impersonation)
+- **修正**: `reply_to_domain_differs` (登録ドメイン近似で Reply-To ≠ From)・`has_nonascii_word_splice` (ASCII 英字に挟まれた NBSP/和文間隔等)・`has_forged_received_hop` (Received 内 localhost/[127./10./169.254/192.168/172.16-31 — 172.2.x 等の公開 IP は除外)・`has_confusable_script_name` (ラテン+Cyrillic/Greek 混在) を `kaname-render` に追加。`Envelope` に `forged_received_hop` フィールド追加。`is_dangerous_windows_attachment` に `reg/inf/chm/sct/wsc/diagcab/themepack/theme/library-ms/search-ms/desklink/settingcontent-ms/cpl/mst/appref-ms` を追加 (D1012)。`has_deceptive_filename_chars` を `magic_bytes` に追加し `scan_attachment_bytes` に接続 (D1011)。`commands.rs` で Reply-To リダイレクト (D1009)・空白分断 (D1010)・偽造 Received (D1013)・混在表示名 (D1014) を render_risks 兆候報告。D237 の `html_text` 参照バグも修正 (D960 と同一修復)。
+- **教訓**: 「見える文字」と「機械が解釈する文字」の差を問え — ドット類似文字・体系混在・空白スプライスはどれも人間にだけ読める形。返信経路は差出人ではなく返信先を問え。配送痕跡は「誰が書いたか」を問え — 受信後にしか書けない情報を受信前に書いた者は偽装者。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
