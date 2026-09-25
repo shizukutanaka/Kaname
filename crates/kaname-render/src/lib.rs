@@ -114,6 +114,47 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Received:` ヘッダが一切ない (D1168)。
+    ///
+    /// 配送機の痕跡が皆無 — 公開網を経ずに差し込まれた手作り
+    /// 生成品の兆候。
+    pub no_received: bool,
+    /// `Received:` 鎖に localhost/プライベート IP のホップがある
+    /// (D1169)。
+    ///
+    /// 公開網を通らない hop は受信前に差し込まれた偽の配送痕跡の
+    /// 兆候。
+    pub private_hop: bool,
+    /// `Sender:` のドメインが `From:` のドメインと異なる (D1170)。
+    ///
+    /// 「代理・転送の体裁」を形にした正規系だが、検査なしには
+    /// 「同じ人から」に見える差分の兆候。
+    pub sender_domain_mismatch: bool,
+    /// `Reply-To:` のドメインが `From:` のドメインと異なる (D1171)。
+    ///
+    /// 返信先だけを別ドメインに振り向ける BEC リダイレクトの形。
+    pub replyto_domain_mismatch: bool,
+    /// `Resent-From:`/`Resent-Date:`/`Resent-To:` 等の Resent-* が
+    /// ある (D1172)。
+    ///
+    /// 「再送された」体裁 — 元の配送痕跡とは別系の転送品の兆候。
+    pub resent_headers: bool,
+    /// `Delivered-To:` のアドレスが `To:`/`Cc:` に現れない (D1173)。
+    ///
+    /// Bcc 配送か alias 経路 — 宛先と配送先がずれる差分の兆候。
+    pub delivered_to_not_in_to: bool,
+    /// `Return-Path:` のドメインが `From:` のドメインと異なる
+    /// (D1174)。
+    ///
+    /// 配送エラー経路と表示差出人のずれ — 見える差出人と実際の
+    /// 返送先が別の差分の兆候。
+    pub return_path_domain_mismatch: bool,
+    /// `From:` の表示名に含まれるメールアドレスのドメインが
+    /// addr-spec ドメインと異なる (D1175)。
+    ///
+    /// モバイル表示で「表示名のメールアドレスが差出人」に見える
+    /// 擬態の兆候。
+    pub display_name_addr_mismatch: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2046,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2076,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        no_received: has_no_received(raw),
+        private_hop: has_private_hop(raw),
+        sender_domain_mismatch: has_sender_domain_mismatch(raw),
+        replyto_domain_mismatch: has_replyto_domain_mismatch(raw),
+        resent_headers: has_resent_headers(raw),
+        delivered_to_not_in_to: has_delivered_to_not_in_to(raw),
+        return_path_domain_mismatch: has_return_path_domain_mismatch(raw),
+        display_name_addr_mismatch: has_display_name_addr_mismatch(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2441,162 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// ヘッダ節 (小文字化済み) で `field:` の最初の行の値を取る
+/// 補助 (D1168-D1175 系)。
+fn first_header_value<'a>(header: &'a str, field: &str) -> Option<&'a str> {
+    header.lines().find_map(|l| l.strip_prefix(field).map(|v| v.trim()))
+}
+
+/// 値から `@domain` 部を取る補助 — 最後の `@` の後、`>`/`,`/`;`/
+/// 空白までをドメインとして小文字化して返す。`@` がなければ None。
+fn domain_of(value: &str) -> Option<String> {
+    let at = value.rfind('@')?;
+    let tail = &value[at + 1..];
+    let end = tail
+        .find(|c: char| c == '>' || c == ',' || c == ';' || c.is_whitespace())
+        .unwrap_or(tail.len());
+    let d = &tail[..end];
+    (!d.is_empty()).then(|| d.to_ascii_lowercase())
+}
+
+/// `Received:` ヘッダが一切ないか判定する (D1168)。
+fn has_no_received(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("received:"))
+}
+
+/// `Received:` 鎖に localhost/プライベート IP のホップがあるか判定する
+/// (D1169)。127.x、10.x、192.168.x、172.16-31.x、169.254.x、localhost を
+/// Received: 行にのみ検査 (本文・他ヘッダは対象外)。
+fn has_private_hop(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().filter(|l| l.starts_with("received:")).any(|l| {
+        l.contains("localhost")
+            || l.contains("127.")
+            || l.contains("[127")
+            || l.contains("10.")
+            || l.contains("[10.")
+            || l.contains("192.168.")
+            || l.contains("169.254.")
+            || (1..=31).any(|m| l.contains(&format!("172.{m}.")))
+    })
+}
+
+/// `Sender:` ドメインが `From:` ドメインと異なるか判定する (D1170)。
+fn has_sender_domain_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    match (first_header_value(header, "from:"), first_header_value(header, "sender:")) {
+        (Some(f), Some(s)) => match (domain_of(f), domain_of(s)) {
+            (Some(fd), Some(sd)) => fd != sd,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// `Reply-To:` ドメインが `From:` ドメインと異なるか判定する (D1171)。
+fn has_replyto_domain_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    match (first_header_value(header, "from:"), first_header_value(header, "reply-to:")) {
+        (Some(f), Some(r)) => match (domain_of(f), domain_of(r)) {
+            (Some(fd), Some(rd)) => fd != rd,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// `Resent-*` ヘッダがあるか判定する (D1172)。
+fn has_resent_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("resent-"))
+}
+
+/// `Delivered-To:` のアドレスが `To:`/`Cc:` に現れないか判定する
+/// (D1173)。
+fn has_delivered_to_not_in_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let Some(d) = first_header_value(header, "delivered-to:") else {
+        return false;
+    };
+    // delivered-to のアドレス本体 (`x@y` を `x@y` として抽出)。
+    let at = match d.rfind('@') {
+        Some(p) => p,
+        None => return false,
+    };
+    let start = d[..at].rfind(|c: char| c == '<' || c == ',' || c.is_whitespace()).map(|p| p + 1).unwrap_or(0);
+    let end_rel = d[at..].find(|c: char| c == '>' || c == ',' || c.is_whitespace()).unwrap_or(d.len() - at);
+    let addr = &d[start..at + end_rel];
+    if addr.len() < 3 {
+        return false;
+    }
+    let to_val = header
+        .lines()
+        .filter(|l| l.starts_with("to:") || l.starts_with("cc:"))
+        .map(|l| l.splitn(2, ':').nth(1).unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join(" ");
+    !to_val.contains(addr)
+}
+
+/// `Return-Path:` ドメインが `From:` ドメインと異なるか判定する
+/// (D1174)。`Return-Path: <>` (空) は対象外。
+fn has_return_path_domain_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    match (first_header_value(header, "from:"), first_header_value(header, "return-path:")) {
+        (Some(f), Some(r)) => match (domain_of(f), domain_of(r)) {
+            (Some(fd), Some(rd)) => fd != rd,
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// `From:` の表示名に含まれるメールアドレスのドメインが addr-spec
+/// ドメインと異なるか判定する (D1175)。
+///
+/// 例: `From: "support@paypal.com" <evil@x.example>` — 表示名の
+/// アドレスが実アドレスと違う擬態。
+fn has_display_name_addr_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let Some(f) = first_header_value(header, "from:") else {
+        return false;
+    };
+    // `<...>` の外側が表示名。両方に @ を含み、ドメインが違えば真。
+    let Some(lt) = f.find('<') else { return false; };
+    let Some(gt) = f[lt..].find('>').map(|p| lt + p) else { return false; };
+    let addr = &f[lt + 1..gt];
+    let disp = f[..lt].trim_matches(|c: char| c == '"' || c.is_whitespace());
+    match (domain_of(addr), domain_of(disp)) {
+        (Some(ad), Some(dd)) => ad != dd,
+        _ => false,
+    }
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21130,3 +21335,77 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
+    #[test]
+    fn scan_は配送痕跡皆無を検出する() {
+        assert!(has_no_received(b"From: a@b.com\r\nSubject: x\r\n\r\nhi"));
+        assert!(!has_no_received(b"Received: from a by b\r\nFrom: a@b.com\r\n\r\nhi"));
+        assert!(has_no_received(b"To: a@b.com\nFrom: c@d.com\n\nhi"));
+    }
+    #[test]
+    fn scan_は私網ホップを検出する() {
+        assert!(has_private_hop(b"Received: from [127.0.0.1] by mx\r\nFrom: a@b.com\r\n\r\nx"));
+        assert!(has_private_hop(b"Received: from host (10.0.0.5) by mx\r\nFrom: a@b.com\r\n\r\nx"));
+        assert!(has_private_hop(b"Received: from [192.168.1.1] by mx\r\nFrom: a@b.com\r\n\r\nx"));
+        assert!(!has_private_hop(b"Received: from [203.0.113.5] by mx\r\nFrom: a@b.com\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はSender域差を検出する() {
+        assert!(has_sender_domain_mismatch(
+            b"From: boss@corp.example\r\nSender: asst@other.example\r\n\r\nx"
+        ));
+        assert!(!has_sender_domain_mismatch(
+            b"From: boss@corp.example\r\nSender: asst@corp.example\r\n\r\nx"
+        ));
+        assert!(!has_sender_domain_mismatch(b"From: boss@corp.example\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は返信先域差を検出する() {
+        assert!(has_replyto_domain_mismatch(
+            b"From: ceo@corp.example\r\nReply-To: ceo@free.example\r\n\r\nx"
+        ));
+        assert!(!has_replyto_domain_mismatch(
+            b"From: ceo@corp.example\r\nReply-To: ceo@corp.example\r\n\r\nx"
+        ));
+        assert!(!has_replyto_domain_mismatch(b"From: ceo@corp.example\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は再送印を検出する() {
+        assert!(has_resent_headers(b"Resent-From: a@b.com\r\nResent-Date: x\r\nFrom: c@d.com\r\n\r\nx"));
+        assert!(has_resent_headers(b"Resent-To: a@b.com\r\nFrom: c@d.com\r\n\r\nx"));
+        assert!(!has_resent_headers(b"From: c@d.com\r\nX-Resent: 1\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は配送先ずれを検出する() {
+        assert!(has_delivered_to_not_in_to(
+            b"Delivered-To: real@corp.example\r\nTo: other@corp.example\r\nFrom: a@b.com\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_not_in_to(
+            b"Delivered-To: real@corp.example\r\nTo: real@corp.example\r\nFrom: a@b.com\r\n\r\nx"
+        ));
+        assert!(!has_delivered_to_not_in_to(b"To: a@b.com\r\nFrom: c@d.com\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は返送域差を検出する() {
+        assert!(has_return_path_domain_mismatch(
+            b"From: ceo@corp.example\r\nReturn-Path: <bounce@free.example>\r\n\r\nx"
+        ));
+        assert!(!has_return_path_domain_mismatch(
+            b"From: ceo@corp.example\r\nReturn-Path: <ceo@corp.example>\r\n\r\nx"
+        ));
+        assert!(!has_return_path_domain_mismatch(
+            b"From: ceo@corp.example\r\nReturn-Path: <>\r\n\r\nx"
+        ));
+    }
+    #[test]
+    fn scan_は表示名詐称を検出する() {
+        assert!(has_display_name_addr_mismatch(
+            b"From: \"support@paypal.com\" <evil@x.example>\r\n\r\nx"
+        ));
+        assert!(!has_display_name_addr_mismatch(
+            b"From: \"support@paypal.com\" <support@paypal.com>\r\n\r\nx"
+        ));
+        assert!(!has_display_name_addr_mismatch(
+            b"From: \"Support Desk\" <support@paypal.com>\r\n\r\nx"
+        ));
+        assert!(!has_display_name_addr_mismatch(b"From: a@b.com\r\n\r\nx"));
+    }

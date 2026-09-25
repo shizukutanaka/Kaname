@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // html_extract は Option<HtmlExtract> — as_ref().is_some_and で照会する。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -600,6 +601,62 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1168: Received: ヘッダ皆無 — 配送機の痕跡が一切ない手作り生成品の兆候
+    if env.no_received {
+        render_risks.push(
+            "配送痕跡 (Received:) が一切ありません — 公開網を経ずに差し込まれた手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+    // D1169: 私網ホップ — localhost/プライベート IP を含む受信痕跡の兆候
+    if env.private_hop {
+        render_risks.push(
+            "配送痕跡 (Received:) に localhost/プライベート IP のホップがあります — 受信前に差し込まれた偽の配送痕跡の兆候です"
+                .to_string(),
+        );
+    }
+    // D1170: Sender/From ドメイン差 — 「代理」体裁で別ドメインから送られる兆候
+    if env.sender_domain_mismatch {
+        render_risks.push(
+            "Sender: のドメインが From: のドメインと異なります — 「同じ人から」に見える代理・転送の差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1171: Reply-To/From ドメイン差 — BEC 返信リダイレクトの兆候
+    if env.replyto_domain_mismatch {
+        render_risks.push(
+            "Reply-To: のドメインが From: のドメインと異なります — 返信先を別ドメインへ振り向けるリダイレクトの兆候です"
+                .to_string(),
+        );
+    }
+    // D1172: Resent-* ヘッダ — 再送体裁の転送品の兆候
+    if env.resent_headers {
+        render_risks.push(
+            "Resent-* ヘッダがあります — 「再送された」体裁の転送品の兆候です"
+                .to_string(),
+        );
+    }
+    // D1173: Delivered-To が To/Cc に現れない — Bcc・alias 経路の差分の兆候
+    if env.delivered_to_not_in_to {
+        render_risks.push(
+            "Delivered-To: のアドレスが To:/Cc: に現れません — 宛先と配送先がずれる Bcc・alias 経路の差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1174: Return-Path/From ドメイン差 — 返送先と見える差出人が別の兆候
+    if env.return_path_domain_mismatch {
+        render_risks.push(
+            "Return-Path: のドメインが From: のドメインと異なります — 返送経路と表示差出人がずれる差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1175: 表示名メールアドレスと実アドレスのドメイン差 — 擬態の兆候
+    if env.display_name_addr_mismatch {
+        render_risks.push(
+            "表示名のメールアドレスが実際の差出人アドレスのドメインと異なります — モバイル表示で別アドレスに見せかける擬態の兆候です"
+                .to_string(),
+        );
+    }
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(

@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1168–D1175: 配送痕跡・返送経路・表示名詐称の解析差分 8 件
+
+- **問題**: 「どこを経て届き、どこへ返るか」の整合性が未検査だった — `Received:` ヘッダ皆無 (配送機の痕跡がない手作り品)、Received 鎖に localhost/プライベート IP ホップ (公開網を経ずに差し込まれた偽の配送痕跡)、`Sender:` ≠ `From:` ドメイン (代理・転送の体裁で別ドメインから)、`Reply-To:` ≠ `From:` ドメイン (返信先だけを別ドメインに振り向ける BEC リダイレクト)、`Resent-*` ヘッダ (「再送された」体裁の転送品)、`Delivered-To:` が `To:`/`Cc:` に現れない (Bcc・alias 経路のずれ)、`Return-Path:` ≠ `From:` ドメイン (返送先と見える差出人が別)、From: 表示名のメールアドレスが実アドレスと別ドメイン (モバイル表示で別アドレスに見せる擬態)。
+- **修正**: `has_no_received`/`has_private_hop`/`has_sender_domain_mismatch`/`has_replyto_domain_mismatch`/`has_resent_headers`/`has_delivered_to_not_in_to`/`has_return_path_domain_mismatch`/`has_display_name_addr_mismatch` で検出し、`first_header_value`/`domain_of` 補助でヘッダ値とドメインを抽出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 届いた痕跡と返る経路が語る差出人は、名乗った差出人と違ってよい — 経路の整合を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
