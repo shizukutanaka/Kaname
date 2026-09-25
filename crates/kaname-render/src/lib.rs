@@ -114,6 +114,39 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `X-SG-*`/`X-SendGrid-*`/`X-PM-*`/`X-Postmark*`/`X-SES-*` があるか
+    /// — SendGrid/Postmark/SES の配信基盤印を送信側が自称する兆候
+    /// (D1112)。
+    pub esp3_stamps: bool,
+    /// `X-Klaviyo-*`/`X-KL-*`/`X-Omnisend-*`/`X-Iterable-*`/`X-Braze-*`/
+    /// `X-Epsilon-*`/`X-Responsys-*`/`X-SFDC-*` があるか — マーケティング
+    /// オートメーション系の基盤印を送信側が自称する兆候 (D1113)。
+    pub ma_stamps: bool,
+    /// `X-HubSpot-*`/`X-HS-*`/`X-ActiveC*`/`X-AC-*`/`X-GetResponse*`/
+    /// `X-GR-*`/`X-AWeber*`/`X-Constant*`/`X-CTCT*`/`X-Mailchimp*`/
+    /// `X-MC-*`/`X-Infusionsoft*`/`X-Keap*` があるか — SMB 系 ESP の
+    /// 基盤印を送信側が自称する兆候 (D1114)。
+    pub smb_esp_stamps: bool,
+    /// `X-Teams-*`/`X-Webex-*`/`X-GoTo*`/`X-Ring*`/`X-Plivo*`/
+    /// `X-MessageBird*`/`X-Sinch*` があるか — UCaaS・通信系の
+    /// 記録を送信側が自称する兆候 (D1115)。
+    pub comms_stamps: bool,
+    /// `X-HelpScout*`/`X-Kayako*`/`X-Drift*`/`X-Crisp*`/`X-Tidio*`/
+    /// `X-LiveChat*`/`X-Tawk*`/`X-JivoSite*`/`X-Olark*`/`X-Smartsupp*`/
+    /// `X-UserVoice*` があるか — チャットデスク系の記録を送信側が
+    /// 自称する兆候 (D1116)。
+    pub chatdesk_stamps: bool,
+    /// `X-Instagram*`/`X-YouTube*`/`X-Discord*`/`X-Telegram*`/
+    /// `X-WhatsApp*`/`X-Reddit*`/`X-TikTok*` があるか — ソーシャル系
+    /// (第二群) の記録を送信側が自称する兆候 (D1117)。
+    pub social2_stamps: bool,
+    /// `X-GitLab*`/`X-Notion*`/`X-Asana*`/`X-Trello*` があるか —
+    /// 開発・業務ツール系の記録を送信側が自称する兆候 (D1118)。
+    pub devtool_stamps: bool,
+    /// `X-List-Unsub*`/`X-FBL*`/`X-ListOwner*`/`X-ListHelp*`/
+    /// `X-ListSubscribe*`/`X-Unsubscribe-Post*` があるか — リスト管理の
+    /// 体裁を送信側が自称する兆候 (D1119)。
+    pub listmgmt_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2038,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2068,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        esp3_stamps: has_esp3_stamps(hdr),
+        ma_stamps: has_ma_stamps(hdr),
+        smb_esp_stamps: has_smb_esp_stamps(hdr),
+        comms_stamps: has_comms_stamps(hdr),
+        chatdesk_stamps: has_chatdesk_stamps(hdr),
+        social2_stamps: has_social2_stamps(hdr),
+        devtool_stamps: has_devtool_stamps(hdr),
+        listmgmt_marks: has_listmgmt_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2433,157 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-SG-*`/`X-SendGrid-*`/`X-PM-*`/`X-Postmark*`/`X-SES-*` があるか
+/// 判定する (D1112)。
+fn has_esp3_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-sg-")
+            || l.starts_with("x-sendgrid")
+            || l.starts_with("x-pm-")
+            || l.starts_with("x-postmark")
+            || l.starts_with("x-ses-")
+    })
+}
+
+/// `X-Klaviyo*`/`X-KL-*`/`X-Omnisend*`/`X-Iterable*`/`X-Braze*`/
+/// `X-Epsilon*`/`X-Responsys*`/`X-SFDC*` があるか判定する (D1113)。
+fn has_ma_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-klaviyo")
+            || l.starts_with("x-kl-")
+            || l.starts_with("x-omnisend")
+            || l.starts_with("x-iterable")
+            || l.starts_with("x-braze")
+            || l.starts_with("x-epsilon")
+            || l.starts_with("x-responsys")
+            || l.starts_with("x-sfdc")
+    })
+}
+
+/// `X-HubSpot*`/`X-HS-*`/`X-ActiveC*`/`X-AC-*`/`X-GetResponse*`/`X-GR-*`/
+/// `X-AWeber*`/`X-Constant*`/`X-CTCT*`/`X-Mailchimp*`/`X-MC-*`/
+/// `X-Infusionsoft*`/`X-Keap*` があるか判定する (D1114)。
+fn has_smb_esp_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-hubspot")
+            || l.starts_with("x-hs-")
+            || l.starts_with("x-activec")
+            || l.starts_with("x-ac-")
+            || l.starts_with("x-getresponse")
+            || l.starts_with("x-gr-")
+            || l.starts_with("x-aweber")
+            || l.starts_with("x-constant")
+            || l.starts_with("x-ctct")
+            || l.starts_with("x-mailchimp")
+            || l.starts_with("x-mc-")
+            || l.starts_with("x-infusionsoft")
+            || l.starts_with("x-keap")
+    })
+}
+
+/// `X-Teams*`/`X-Webex*`/`X-GoTo*`/`X-Ring*`/`X-Plivo*`/`X-MessageBird*`/
+/// `X-Sinch*` があるか判定する (D1115)。
+fn has_comms_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-teams")
+            || l.starts_with("x-webex")
+            || l.starts_with("x-goto")
+            || l.starts_with("x-ring")
+            || l.starts_with("x-plivo")
+            || l.starts_with("x-messagebird")
+            || l.starts_with("x-sinch")
+    })
+}
+
+/// `X-HelpScout*`/`X-Kayako*`/`X-Drift*`/`X-Crisp*`/`X-Tidio*`/
+/// `X-LiveChat*`/`X-Tawk*`/`X-JivoSite*`/`X-Olark*`/`X-Smartsupp*`/
+/// `X-UserVoice*` があるか判定する (D1116)。
+fn has_chatdesk_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-helpscout")
+            || l.starts_with("x-kayako")
+            || l.starts_with("x-drift")
+            || l.starts_with("x-crisp")
+            || l.starts_with("x-tidio")
+            || l.starts_with("x-livechat")
+            || l.starts_with("x-tawk")
+            || l.starts_with("x-jivosite")
+            || l.starts_with("x-olark")
+            || l.starts_with("x-smartsupp")
+            || l.starts_with("x-uservoice")
+    })
+}
+
+/// `X-Instagram*`/`X-YouTube*`/`X-Discord*`/`X-Telegram*`/`X-WhatsApp*`/
+/// `X-Reddit*`/`X-TikTok*` があるか判定する (D1117)。
+fn has_social2_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-instagram")
+            || l.starts_with("x-youtube")
+            || l.starts_with("x-discord")
+            || l.starts_with("x-telegram")
+            || l.starts_with("x-whatsapp")
+            || l.starts_with("x-reddit")
+            || l.starts_with("x-tiktok")
+    })
+}
+
+/// `X-GitLab*`/`X-Notion*`/`X-Asana*`/`X-Trello*` があるか判定する
+/// (D1118)。
+fn has_devtool_stamps(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-gitlab")
+            || l.starts_with("x-notion")
+            || l.starts_with("x-asana")
+            || l.starts_with("x-trello")
+    })
+}
+
+/// `X-List-Unsub*`/`X-FBL*`/`X-ListOwner*`/`X-ListHelp*`/
+/// `X-ListSubscribe*`/`X-Unsubscribe-Post*` があるか判定する (D1119)。
+fn has_listmgmt_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-list-unsub")
+            || l.starts_with("x-fbl")
+            || l.starts_with("x-listowner")
+            || l.starts_with("x-listhelp")
+            || l.starts_with("x-listsubscribe")
+            || l.starts_with("x-unsubscribe-post")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21320,143 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は第三群ESP印を検出する() {
+        let s1 = b"X-SG-ID: 1\r\n\r\nx";
+        assert!(has_esp3_stamps(s1));
+        let s2 = b"X-SendGrid-Info: 1\r\n\r\nx";
+        assert!(has_esp3_stamps(s2));
+        let s3 = b"X-PM-Tag: t\r\n\r\nx";
+        assert!(has_esp3_stamps(s3));
+        let s4 = b"X-Postmark-Tag: t\r\n\r\nx";
+        assert!(has_esp3_stamps(s4));
+        let s5 = b"X-SES-Outgoing: 1\r\n\r\nx";
+        assert!(has_esp3_stamps(s5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_esp3_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はMA印を検出する() {
+        let m1 = b"X-Klaviyo-Info: 1\r\n\r\nx";
+        assert!(has_ma_stamps(m1));
+        let m2 = b"X-KL-Info: 1\r\n\r\nx";
+        assert!(has_ma_stamps(m2));
+        let m3 = b"X-Omnisend-Info: 1\r\n\r\nx";
+        assert!(has_ma_stamps(m3));
+        let m4 = b"X-Iterable-Info: 1\r\n\r\nx";
+        assert!(has_ma_stamps(m4));
+        let m5 = b"X-Braze-Info: 1\r\n\r\nx";
+        assert!(has_ma_stamps(m5));
+        let m6 = b"X-SFDC-Info: 1\r\n\r\nx";
+        assert!(has_ma_stamps(m6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_ma_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はSMB系ESP印を検出する() {
+        let e1 = b"X-HubSpot-Info: 1\r\n\r\nx";
+        assert!(has_smb_esp_stamps(e1));
+        let e2 = b"X-HS-Info: 1\r\n\r\nx";
+        assert!(has_smb_esp_stamps(e2));
+        let e3 = b"X-Mailchimp-Info: 1\r\n\r\nx";
+        assert!(has_smb_esp_stamps(e3));
+        let e4 = b"X-GetResponse-Info: 1\r\n\r\nx";
+        assert!(has_smb_esp_stamps(e4));
+        let e5 = b"X-CTCT-Info: 1\r\n\r\nx";
+        assert!(has_smb_esp_stamps(e5));
+        let e6 = b"X-Keap-Info: 1\r\n\r\nx";
+        assert!(has_smb_esp_stamps(e6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_smb_esp_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は通信系印を検出する() {
+        let c1 = b"X-Teams-Info: 1\r\n\r\nx";
+        assert!(has_comms_stamps(c1));
+        let c2 = b"X-Webex-Info: 1\r\n\r\nx";
+        assert!(has_comms_stamps(c2));
+        let c3 = b"X-GoTo-Info: 1\r\n\r\nx";
+        assert!(has_comms_stamps(c3));
+        let c4 = b"X-Ring-Info: 1\r\n\r\nx";
+        assert!(has_comms_stamps(c4));
+        let c5 = b"X-Plivo-Info: 1\r\n\r\nx";
+        assert!(has_comms_stamps(c5));
+        let c6 = b"X-Sinch-Info: 1\r\n\r\nx";
+        assert!(has_comms_stamps(c6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_comms_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はチャットデスク印を検出する() {
+        let d1 = b"X-HelpScout-Info: 1\r\n\r\nx";
+        assert!(has_chatdesk_stamps(d1));
+        let d2 = b"X-Kayako-Info: 1\r\n\r\nx";
+        assert!(has_chatdesk_stamps(d2));
+        let d3 = b"X-Drift-Info: 1\r\n\r\nx";
+        assert!(has_chatdesk_stamps(d3));
+        let d4 = b"X-Tidio-Info: 1\r\n\r\nx";
+        assert!(has_chatdesk_stamps(d4));
+        let d5 = b"X-Tawk-Info: 1\r\n\r\nx";
+        assert!(has_chatdesk_stamps(d5));
+        let d6 = b"X-UserVoice-Info: 1\r\n\r\nx";
+        assert!(has_chatdesk_stamps(d6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_chatdesk_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はソーシャル第二群印を検出する() {
+        let s1 = b"X-Instagram-Info: 1\r\n\r\nx";
+        assert!(has_social2_stamps(s1));
+        let s2 = b"X-YouTube-Info: 1\r\n\r\nx";
+        assert!(has_social2_stamps(s2));
+        let s3 = b"X-Discord-Info: 1\r\n\r\nx";
+        assert!(has_social2_stamps(s3));
+        let s4 = b"X-Telegram-Info: 1\r\n\r\nx";
+        assert!(has_social2_stamps(s4));
+        let s5 = b"X-WhatsApp-Info: 1\r\n\r\nx";
+        assert!(has_social2_stamps(s5));
+        let s6 = b"X-TikTok-Info: 1\r\n\r\nx";
+        assert!(has_social2_stamps(s6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_social2_stamps(clean));
+    }
+
+    #[test]
+    fn scan_は開発ツール印を検出する() {
+        let d1 = b"X-GitLab-Info: 1\r\n\r\nx";
+        assert!(has_devtool_stamps(d1));
+        let d2 = b"X-Notion-Info: 1\r\n\r\nx";
+        assert!(has_devtool_stamps(d2));
+        let d3 = b"X-Asana-Info: 1\r\n\r\nx";
+        assert!(has_devtool_stamps(d3));
+        let d4 = b"X-Trello-Info: 1\r\n\r\nx";
+        assert!(has_devtool_stamps(d4));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_devtool_stamps(clean));
+    }
+
+    #[test]
+    fn scan_はリスト管理印を検出する() {
+        let l1 = b"X-List-Unsubscribe-Post: 1\r\n\r\nx";
+        assert!(has_listmgmt_marks(l1));
+        let l2 = b"X-FBL-Info: 1\r\n\r\nx";
+        assert!(has_listmgmt_marks(l2));
+        let l3 = b"X-ListOwner-Info: 1\r\n\r\nx";
+        assert!(has_listmgmt_marks(l3));
+        let l4 = b"X-ListHelp-Info: 1\r\n\r\nx";
+        assert!(has_listmgmt_marks(l4));
+        let l5 = b"X-ListSubscribe-Info: 1\r\n\r\nx";
+        assert!(has_listmgmt_marks(l5));
+        let l6 = b"X-Unsubscribe-Post: 1\r\n\r\nx";
+        assert!(has_listmgmt_marks(l6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_listmgmt_marks(clean));
     }
 }

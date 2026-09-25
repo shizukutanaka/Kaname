@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1112: 第三群 ESP 印自署
+    if env.esp3_stamps {
+        render_risks.push(
+            "X-SG-*/X-SendGrid-*/X-PM-*/X-Postmark*/X-SES-* — 配信基盤 (第三群) の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1113: MA・マーケティング印自署
+    if env.ma_stamps {
+        render_risks.push(
+            "X-Klaviyo*/X-KL-*/X-Omnisend*/X-Iterable*/X-Braze*/X-Epsilon*/X-Responsys*/X-SFDC* — MA 基盤の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1114: SMB 系 ESP 印自署
+    if env.smb_esp_stamps {
+        render_risks.push(
+            "X-HubSpot*/X-HS-*/X-Mailchimp*/X-GetResponse*/X-CTCT*/X-Keap* 等 — SMB 系 ESP の印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1115: UCaaS・通信系印自署
+    if env.comms_stamps {
+        render_risks.push(
+            "X-Teams*/X-Webex*/X-GoTo*/X-Ring*/X-Plivo*/X-MessageBird*/X-Sinch* — 通信系の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1116: チャットデスク印自署
+    if env.chatdesk_stamps {
+        render_risks.push(
+            "X-HelpScout*/X-Kayako*/X-Drift*/X-Crisp*/X-Tidio*/X-LiveChat*/X-Tawk*/X-JivoSite*/X-Olark*/X-Smartsupp*/X-UserVoice* — チャットデスクの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1117: ソーシャル第二群印自署
+    if env.social2_stamps {
+        render_risks.push(
+            "X-Instagram*/X-YouTube*/X-Discord*/X-Telegram*/X-WhatsApp*/X-Reddit*/X-TikTok* — ソーシャル系 (第二群) の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1118: 開発・業務ツール印自署
+    if env.devtool_stamps {
+        render_risks.push(
+            "X-GitLab*/X-Notion*/X-Asana*/X-Trello* — 開発・業務ツールの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1119: リスト管理印自署
+    if env.listmgmt_marks {
+        render_risks.push(
+            "X-List-Unsub*/X-FBL*/X-ListOwner*/X-ListHelp*/X-ListSubscribe*/X-Unsubscribe-Post* — リスト管理の体裁を送信側が自称する兆候です"
                 .to_string(),
         );
     }

@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1112–D1119: ESP第三群・MA・SMB系・通信・チャットデスク・ソーシャル第二群・開発ツール・リスト管理の未検査兆候 8 件
+
+- **問題**: 「どの配信基盤か」「どの MA 系か」「どの SMB 系か」「どの通信系か」「どのデスク系か」「どのソーシャルか」「どのツールか」「どのリスト管理か」に関する兆候が未検査だった — `X-SG-*`/`X-SendGrid-*`/`X-PM-*`/`X-Postmark*`/`X-SES-*` (SendGrid/Postmark/SES)、`X-Klaviyo*`/`X-KL-*`/`X-Omnisend*`/`X-Iterable*`/`X-Braze*`/`X-Epsilon*`/`X-Responsys*`/`X-SFDC*` (MA 系)、`X-HubSpot*`/`X-HS-*`/`X-ActiveC*`/`X-AC-*`/`X-GetResponse*`/`X-GR-*`/`X-AWeber*`/`X-Constant*`/`X-CTCT*`/`X-Mailchimp*`/`X-MC-*`/`X-Infusionsoft*`/`X-Keap*` (SMB 系 ESP)、`X-Teams*`/`X-Webex*`/`X-GoTo*`/`X-Ring*`/`X-Plivo*`/`X-MessageBird*`/`X-Sinch*` (UCaaS・通信)、`X-HelpScout*`/`X-Kayako*`/`X-Drift*`/`X-Crisp*`/`X-Tidio*`/`X-LiveChat*`/`X-Tawk*`/`X-JivoSite*`/`X-Olark*`/`X-Smartsupp*`/`X-UserVoice*` (チャットデスク)、`X-Instagram*`/`X-YouTube*`/`X-Discord*`/`X-Telegram*`/`X-WhatsApp*`/`X-Reddit*`/`X-TikTok*` (ソーシャル第二群)、`X-GitLab*`/`X-Notion*`/`X-Asana*`/`X-Trello*` (開発・業務ツール)、`X-List-Unsub*`/`X-FBL*`/`X-ListOwner*`/`X-ListHelp*`/`X-ListSubscribe*`/`X-Unsubscribe-Post*` (リスト管理)。
+- **修正**: `has_esp3_stamps`/`has_ma_stamps`/`has_smb_esp_stamps`/`has_comms_stamps`/`has_chatdesk_stamps`/`has_social2_stamps`/`has_devtool_stamps`/`has_listmgmt_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。すべて自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「基盤・MA・通信・デスク・ソーシャル・ツール・リスト管理」の記録を送信側が書くのはいずれも属しない印 — 基盤印の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
