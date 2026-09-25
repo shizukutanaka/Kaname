@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D997–D1002: MIME パート構造の parser differential 系未検査兆候 6 件
+
+- **問題**: メッセージの「宣言と実体」の食い違いはほぼ未検査だった。`text/plain` 宣言パートが HTML を含む・multipart の `boundary=` 宣言区切りが本文に無い phantom boundary・`.eml`/`.msg`/`message/rfc822` ネストメール添付・ソフトハイフン U+00AD の不可視文字・`name=`/`filename=` 二系統ファイル名の食い違い・未知の Content-Transfer-Encoding 値のいずれも兆候として報告されなかった。(参考: parser differential 系の宣言型偽装・text/plain→HTML 切替・phantom boundary 分割揺れ・nested .eml によるフィルタ回避・U+00AD キーワード照合分断・name=/filename= 偽装)
+- **修正**: `Envelope` に `text_plain_html`/`phantom_boundary`/`unknown_cte`/`attachment_name_mismatch` の 4 フィールドと `has_text_plain_html`/`has_phantom_boundary`/`has_unknown_cte`/`has_attachment_name_mismatch` を追加 (D997/D998/D1001/D1002 — 本文・パート構造を見るため `raw` 全体を走査、ヘッダ専用走査とは別系)。`ExtractedBodyText` に `soft_hyphen` 追加 (D1000 — sanitize では既に除去されるが兆候として未報告だった)。`scan_attachment_bytes` で `.eml`/`.msg`/`message/rfc822`/`application/vnd.ms-outlook` 添付を兆候報告 (D999)。`commands.rs` で D997–D1002 を render_risks 兆候報告 (D997 は生パート走査に加え復号済み `text_body` も併査 — base64 化した HTML は復号側でのみ見える)。D237 の `html_text` 参照バグも修正 (D960 と同一修復)。
+- **教訓**: parser differential は「宣言」と「実体」の2点で必ず立つ — 宣言を見ず実体だけ・実体を見ず宣言だけを検査してもすり抜ける。宣言型・区切り・ファイル名・符号化の4点は「宣言 → 実体」の対応が仕様で定まるため、食い違いを照合せよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

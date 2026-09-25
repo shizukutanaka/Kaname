@@ -1739,3 +1739,9 @@ RFC 5322 §3.6.2 は From に複数メールボックスを許しており
 問: 「この構機が通知した」「この散機が通知した」「この芝機が通知した」は誰が記すか?
 
 答: **X-Gaikou-*/X-Ekusuteria-*/X-Exteriorworks-* は「この構機が通知した」を名乗り、X-Jumokusou-*/X-Sankotsu-*/X-Naturalburial-* は「この散機が通知した」を名乗り、X-Jinkoushiba-*/X-Shibahari-*/X-Artificialturf-* は「この芝機が通知した」を名乗る — いずれも構機・散機・芝機が記す値を送信側が書いた自称**。構印・散印・芝印はすべて兆候として数えよ。
+
+## ラウンド 283
+
+問: 「宣言」と「実体」はどちらを信じるべきか?
+
+答: **どちらでもなく、両者の一致を問え**。`text/plain` と名乗るなら本文がテキストであるか、`boundary=` を宣言するなら区切りが本文に現れるか、`name=`/`filename=` の2系統は同じ名を指すか、`Content-Transfer-Encoding:` は規定の値か、`charset=us-ascii` なら本文が ASCII のみか — 宣言と実体の対応が仕様で定まる点はすべて照合対象で、食い違いは parser differential の兆候として数えよ。

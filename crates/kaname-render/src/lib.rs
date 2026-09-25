@@ -119,6 +119,33 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `text/plain` 宣言のパートが HTML 構造 (`<html`/`</html`/`<script`/
+    /// `<form`) を含む (D997)。
+    ///
+    /// 宣言型と実内容の不一致 — スキャナはテキストとして読むのに対し、
+    /// 受信側実装によっては HTML として解釈される parser differential
+    /// の兆候。
+    pub text_plain_html: bool,
+    /// multipart の `boundary=` で宣言された区切り文字列が本文に
+    /// `--<boundary>` として一度も現れない (D998)。
+    ///
+    /// 宣言した区切りが存在しないと、各パーサが別の方法で分割を
+    /// 推測する (parser differential) — 手作り生成品・分割偽装の兆候。
+    /// `missing_boundary_param` (boundary= パラメータ自体の欠落) とは
+    /// 別系: こちらは「宣言はあるが実体がない」。
+    pub phantom_boundary: bool,
+    /// `Content-Transfer-Encoding:` が規定値 (7bit/8bit/binary/base64/
+    /// quoted-printable) 以外の値を持つ (D1002)。
+    ///
+    /// uuencode 系の陳腐値や未知値は実装ごとに解釈が揺れる —
+    /// エンコーディング偽装の兆候。
+    pub unknown_cte: bool,
+    /// 同一パートの `Content-Type: name=` と `Content-Disposition:
+    /// filename=` が異なる (D1001)。
+    ///
+    /// 2 系統のファイル名宣言が食い違うと、読み手実装により採用される
+    /// 名前が変わる — ファイル名偽装 (見せかけ拡張子) の兆候。
+    pub attachment_name_mismatch: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2035,6 +2062,11 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        // D997/D998/D1001/D1002 は本文・パート構造を見るため raw 全体を渡す
+        text_plain_html: has_text_plain_html(raw),
+        phantom_boundary: has_phantom_boundary(raw),
+        unknown_cte: has_unknown_cte(raw),
+        attachment_name_mismatch: has_attachment_name_mismatch(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2359,6 +2391,152 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
     })
+}
+
+/// `text/plain` 宣言のパートが HTML 構造を含むか (D997)。
+///
+/// 宣言型と実内容の不一致 — スキャナはテキストとして読むのに対し、
+/// 受信側実装によっては HTML として解釈される parser differential。
+/// `content-type:` 宣言ごとに、次の宣言までの区間を走査して
+/// `<html`/`</html`/`<script`/`<form` の出現を見る。
+/// (Base64 で符号化された HTML はこの生バイト走査では見えない —
+/// その場合は復号済み `text_body` 側を呼出側が併せて検査する)
+pub fn has_text_plain_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let mut search = 0usize;
+    while let Some(rel) = text[search..].find("content-type:") {
+        let pos = search + rel;
+        let line_end = text[pos..]
+            .find('\n')
+            .map(|e| pos + e)
+            .unwrap_or(text.len());
+        let line = &text[pos..line_end];
+        if line.contains("text/plain") {
+            let next = text[line_end..]
+                .find("content-type:")
+                .map(|p| line_end + p)
+                .unwrap_or(text.len());
+            let seg = &text[line_end..next.min(line_end + 65536)];
+            if seg.contains("<html")
+                || seg.contains("</html")
+                || seg.contains("<script")
+                || seg.contains("<form")
+            {
+                return true;
+            }
+        }
+        search = line_end.max(pos + 1);
+    }
+    false
+}
+
+/// MIME ヘッダ行 (または畳み込み行を含む行) から `key=value` パラメータの
+/// 値を取る。`key*=` (RFC 2231) も同じ宣言として扱う (値の復号はしない —
+/// 同一宣言同士の一致比較専用)。
+fn mime_param(l: &str, key: &str) -> Option<String> {
+    for seg in l.split(';') {
+        let seg = seg.trim();
+        let Some(eq) = seg.find('=') else { continue };
+        let name = seg[..eq].trim();
+        if name == key || name == format!("{key}*") {
+            let v = seg[eq + 1..].trim().trim_matches('"');
+            if !v.is_empty() {
+                return Some(v.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// multipart の `boundary=` で宣言された区切り文字列が本文に
+/// `--<boundary>` として一度も現れないか (D998)。
+///
+/// 宣言した区切りが存在しないと、各パーサが別の方法で分割を推測する
+/// (parser differential) — 手作り生成品・分割偽装の兆候。
+/// `missing_boundary_param` (boundary= パラメータ自体の欠落) とは別系。
+pub fn has_phantom_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let hdr_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    // 畳み込みヘッダを展開して 1 行化する
+    let header = text[..hdr_end]
+        .replace("\r\n ", " ")
+        .replace("\r\n\t", " ");
+    let body = &text[hdr_end..];
+    header.lines().any(|l| {
+        if !l.starts_with("content-type:") || !l.contains("multipart/") {
+            return false;
+        }
+        match mime_param(l, "boundary") {
+            Some(b) => !body.contains(&format!("--{b}")),
+            None => false,
+        }
+    })
+}
+
+/// `Content-Transfer-Encoding:` が規定値以外の値を持つか (D1002)。
+///
+/// 規定値: 7bit / 8bit / binary / base64 / quoted-printable。
+/// uuencode 系の陳腐値や未知値は実装ごとに解釈が揺れる
+/// エンコーディング偽装の兆候。パート内宣言も走査対象にするため、
+/// メッセージ全体の行を見る (CTE ヘッダは畳み込まれない運用が
+/// 一般的で行頭一致で十分)。
+pub fn has_unknown_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines().any(|l| {
+        if !l.starts_with("content-transfer-encoding:") {
+            return false;
+        }
+        let v = l.split_once(':').map(|(_, v)| v.trim()).unwrap_or("");
+        !matches!(
+            v,
+            "7bit" | "8bit" | "binary" | "base64" | "quoted-printable"
+        )
+    })
+}
+
+/// 同一パートの `name=` と `filename=` が異なるか (D1001)。
+///
+/// Content-Type の `name=` と Content-Disposition の `filename=` の
+/// 2 系統でファイル名を宣言できる。食い違うと読み手実装により採用
+/// される名前が変わる — ファイル名偽装 (見せかけ拡張子) の兆候。
+/// 空行で区切られたヘッダブロック単位で比較する。
+pub fn has_attachment_name_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let mut name_v: Option<String> = None;
+    let mut file_v: Option<String> = None;
+    let mut block_is_part = false;
+    let check = |name_v: &Option<String>,
+                     file_v: &Option<String>,
+                     is_part: bool|
+     -> bool {
+        is_part && name_v.is_some() && file_v.is_some() && name_v != file_v
+    };
+    for l in text.lines() {
+        if l.trim().is_empty() {
+            if check(&name_v, &file_v, block_is_part) {
+                return true;
+            }
+            name_v = None;
+            file_v = None;
+            block_is_part = false;
+            continue;
+        }
+        if l.starts_with("content-type:") || l.starts_with("content-disposition:") {
+            block_is_part = true;
+        }
+        if block_is_part {
+            if let Some(v) = mime_param(l, "name") {
+                name_v = Some(v);
+            }
+            if let Some(v) = mime_param(l, "filename") {
+                file_v = Some(v);
+            }
+        }
+    }
+    check(&name_v, &file_v, block_is_part)
 }
 
 /// `X-MS-Has-Attach:`/`X-Has-Attach:` 等の「添付あり」宣言があるか
@@ -13321,6 +13499,11 @@ pub struct ExtractedBodyText {
     /// コールバックフィッシング (BazaCall 型) で「クリック不要・
     /// 電話をかけさせる」誘導経路の兆候 (D237)。
     pub tel_link: bool,
+    /// 本文にソフトハイフン U+00AD が含まれるか (D1000)。
+    ///
+    /// 表示されない (行末の改行候補位置でのみ顕れる) のに文字列照合を
+    /// 分断する — キーワード検査回避に使われる不可視文字。
+    pub soft_hyphen: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13501,8 +13684,10 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         text.push_str(h);
     }
 
+    let out_text = collapse_whitespace(&text);
     ExtractedBodyText {
-        text: collapse_whitespace(&text),
+        soft_hyphen: out_text.contains('\u{00AD}'),
+        text: out_text,
         // ごく短い隠し要素 (装飾・スペース等) では兆候を立てない。
         hidden_content: hidden_chars >= 32,
         link_mismatches,
@@ -15306,6 +15491,104 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    // ---- D997: text/plain 宣言なのに HTML を含有 ----
+    #[test]
+    fn scan_はtextplain内のHTMLを検出する() {
+        // 単一パート text/plain + HTML
+        let single = b"Content-Type: text/plain\r\n\r\n<html><body>x</body></html>";
+        assert!(has_text_plain_html(single));
+        // multipart 内の text/plain パートに HTML
+        let mp = b"Content-Type: multipart/mixed; boundary=BB\r\n\r\n--BB\r\nContent-Type: text/plain\r\n\r\n<form action=x>\r\n--BB\r\nContent-Type: text/html\r\n\r\n<b>ok</b>";
+        assert!(has_text_plain_html(mp));
+        // text/plain + 普通のテキスト → 非対象
+        let clean = b"Content-Type: text/plain\r\n\r\nhello world";
+        assert!(!has_text_plain_html(clean));
+        // text/html 宣言 → 宣言と一致、非対象
+        let html = b"Content-Type: text/html\r\n\r\n<html>x</html>";
+        assert!(!has_text_plain_html(html));
+    }
+
+    // ---- D998: phantom boundary (宣言区切りが本文に無い) ----
+    #[test]
+    fn scan_はphantom_boundaryを検出する() {
+        // boundary=BB 宣言だが本文に --BB がない
+        let phantom = b"Content-Type: multipart/mixed; boundary=BB\r\n\r\nno boundary here";
+        assert!(has_phantom_boundary(phantom));
+        // 宣言と実体が一致 → 非対象
+        let ok = b"Content-Type: multipart/mixed; boundary=BB\r\n\r\n--BB\r\nContent-Type: text/plain\r\n\r\nx\r\n--BB--";
+        assert!(!has_phantom_boundary(ok));
+        // 引用符付き boundary も展開して検査
+        let quoted = b"Content-Type: multipart/mixed; boundary=\"QQ\"\r\n\r\nx";
+        assert!(has_phantom_boundary(quoted));
+        // 畳み込みで boundary が次行にあっても捉える
+        let folded = b"Content-Type: multipart/mixed;\r\n boundary=FF\r\n\r\nx";
+        assert!(has_phantom_boundary(folded));
+        // multipart 以外 → 非対象
+        let single = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(!has_phantom_boundary(single));
+    }
+
+    // ---- D999: ネストメール添付 (.eml/.msg/message/rfc822) ----
+    #[test]
+    fn scan_はネストメール添付を検出する() {
+        let eml = scan_attachment_bytes("fw.eml", "application/octet-stream", b"From: a@b\r\n\r\nx");
+        assert!(eml.risks.iter().any(|x| x.contains("メール形式")));
+        let msg = scan_attachment_bytes("note.msg", "application/vnd.ms-outlook", b"\xD0\xCF\x11\xE0");
+        assert!(msg.risks.iter().any(|x| x.contains("メール形式")));
+        let rfc822 = scan_attachment_bytes("part", "message/rfc822", b"From: a@b\r\n\r\nx");
+        assert!(rfc822.risks.iter().any(|x| x.contains("メール形式")));
+        let other = scan_attachment_bytes("doc.txt", "text/plain", b"hi");
+        assert!(!other.risks.iter().any(|x| x.contains("メール形式")));
+    }
+
+    // ---- D1000: ソフトハイフン U+00AD ----
+    #[test]
+    fn scan_はソフトハイフンを検出する() {
+        let e = html_to_text("<p>sec\u{00AD}ret</p>");
+        assert!(e.soft_hyphen);
+        let clean = html_to_text("<p>secret</p>");
+        assert!(!clean.soft_hyphen);
+    }
+
+    // ---- D1001: name= vs filename= の不一致 ----
+    #[test]
+    fn scan_は添付名不一致を検出する() {
+        // 同一ブロックで name= と filename= が食い違う
+        let mm = b"Content-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"b.exe\"\r\n\r\nx";
+        assert!(has_attachment_name_mismatch(mm));
+        // 一致 → 非対象
+        let same = b"Content-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nx";
+        assert!(!has_attachment_name_mismatch(same));
+        // filename= のみ → 非対象
+        let only = b"Content-Disposition: attachment; filename=\"b.exe\"\r\n\r\nx";
+        assert!(!has_attachment_name_mismatch(only));
+        // 別ブロック (別パート) の name= は隣の filename= と混同しない
+        let parts = b"Content-Type: text/plain; name=\"n1.txt\"\r\n\r\nContent-Disposition: attachment; filename=\"f2.exe\"\r\n\r\nx";
+        assert!(!has_attachment_name_mismatch(parts));
+        // filename= の中の "name=" 部分列を誤検出しない
+        let trap = b"Content-Disposition: attachment; filename=\"named.png\"\r\n\r\nx";
+        assert!(!has_attachment_name_mismatch(trap));
+    }
+
+    // ---- D1002: 未知の Content-Transfer-Encoding ----
+    #[test]
+    fn scan_は未知CTEを検出する() {
+        let uu = b"Content-Transfer-Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_unknown_cte(uu));
+        let bogus = b"Content-Transfer-Encoding: weird-enc\r\n\r\nx";
+        assert!(has_unknown_cte(bogus));
+        // パート内宣言も対象
+        let part = b"Content-Type: multipart/mixed; boundary=BB\r\n\r\n--BB\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: uuencode\r\n\r\nx\r\n--BB--";
+        assert!(has_unknown_cte(part));
+        // 規定値は非対象
+        for v in ["7bit", "8bit", "binary", "base64", "quoted-printable"] {
+            let ok = format!("Content-Transfer-Encoding: {v}\r\n\r\nx");
+            assert!(!has_unknown_cte(ok.as_bytes()), "{v} must be allowed");
+        }
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_unknown_cte(clean));
     }
 
     #[test]
@@ -18906,6 +19189,29 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
                 }
                 is_dangerous = true;
             }
+        }
+    }
+
+    // 4.5 ネストメール添付 (.eml/.msg/message/rfc822) — 別の完全な
+    //     メールが中に入っている (D999)。フィルタ回避・転送詐称・
+    //     「原本として渡す」体裁の定形。中身自体はパーサが message/
+    //     rfc822 パートとして再帰解析するが、application/octet-stream
+    //     として届く .eml/.msg は宣言型を見てここで兆候として報告する。
+    {
+        let ext = filename
+            .to_ascii_lowercase()
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let is_nested_mail = matches!(ext.as_str(), "eml" | "msg")
+            || declared_mime.eq_ignore_ascii_case("message/rfc822")
+            || declared_mime.eq_ignore_ascii_case("application/vnd.ms-outlook");
+        if is_nested_mail {
+            risks.push(
+                "メール形式の添付 (.eml/.msg/message/rfc822) — 中に別の完全なメールが入っており、転送詐称・フィルタ回避の経路になり得ます"
+                    .to_string(),
+            );
         }
     }
 

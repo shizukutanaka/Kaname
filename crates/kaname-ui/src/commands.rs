@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,61 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D997: text/plain 宣言なのに HTML 構造を含む (生パート走査 +
+    //   復号済み本文の併合確認 — base64 化した HTML は復号側でのみ見える)
+    let decoded_plain_has_html = env
+        .text_body
+        .as_deref()
+        .map(|b| {
+            let l = b.to_lowercase();
+            l.contains("<html")
+                || l.contains("</html")
+                || l.contains("<script")
+                || l.contains("<form")
+        })
+        .unwrap_or(false);
+    if env.text_plain_html || decoded_plain_has_html {
+        render_risks.push(
+            "text/plain 宣言なのに HTML 構造 (<html/<script/<form) を含みます — 宣言型と実内容が食い違う parser differential の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D998: phantom boundary — 宣言した区切りが本文に一度も現れない
+    if env.phantom_boundary {
+        render_risks.push(
+            "multipart の boundary= で宣言された区切り文字列が本文に現れません — パーサごとに分割方法が変わる分割偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1000: ソフトハイフン U+00AD (不可視・照合分断) — HTML 抽出側または
+    //   プレーン本文側のいずれかに含まれる場合
+    if html_extract.as_ref().is_some_and(|e| e.soft_hyphen)
+        || body_text.contains('\u{00AD}')
+    {
+        render_risks.push(
+            "本文にソフトハイフン (U+00AD) があります — 表示されないのに文字列照合を分断する不可視文字で、キーワード検査回避の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1001: name= と filename= の不一致
+    if env.attachment_name_mismatch {
+        render_risks.push(
+            "添付の Content-Type name= と Content-Disposition filename= が食い違います — 読み手により採用名が変わるファイル名偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1002: 未知の Content-Transfer-Encoding
+    if env.unknown_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding: が規定値 (7bit/8bit/binary/base64/quoted-printable) 以外の値を持ちます — 実装ごとに解釈が揺れるエンコーディング偽装の兆候です"
                 .to_string(),
         );
     }
