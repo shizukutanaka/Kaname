@@ -119,6 +119,13 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// Subject/From/To 等のヘッダに、ASCII のみの内容をわざわざ
+    /// encoded-word (`=?UTF-8?B?...?=`) で包んだ箇所がある (D1004)。
+    ///
+    /// 復号すると全部 ASCII になる encoded-word は「包む必要が
+    /// 無かった」— キーワードフィルタを分断する難読化の兆候。
+    /// (非 ASCII 文字を送るためにエンコードする正規用法は対象外)
+    pub encoded_word_abuse: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2035,6 +2042,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        encoded_word_abuse: has_encoded_word_abuse(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -13637,6 +13645,235 @@ pub fn find_obfuscated_url_tokens(text: &str) -> Vec<ObfuscatedUrl> {
     out
 }
 
+/// 本文中の URL 短縮サービスのドメインを抽出する (D1003)。
+///
+/// bit.ly/t.co/tinyurl.com 等の短縮 URL は実リンク先を見せない —
+/// 「表示と実リンク先の一致」を原理的に問えないため、短縮の存在
+/// 自体を兆候として報告する。`hxxp` 系 (別経路) と違い正規の
+/// http(s) URL なので、ホスト名の一致で拾う。
+#[must_use]
+pub fn find_url_shortener_hosts(text: &str) -> Vec<String> {
+    /// 知られた短縮ドメイン群 (suffix match — サブドメイン込みで捉える)。
+    const SHORTENERS: &[&str] = &[
+        "bit.ly", "t.co", "tinyurl.com", "goo.gl", "is.gd", "buff.ly",
+        "ow.ly", "cutt.ly", "rb.gy", "rebrand.ly", "shorturl.at",
+        "lnkd.in", "tiny.cc", "v.gd", "clck.ru", "j.mp", "t.ly",
+        "adf.ly", "bc.vc", "soo.gd", "s.id", "qr.ae", "u.to",
+    ];
+    const MAX: usize = 8;
+    let mut out: Vec<String> = Vec::new();
+    for token in
+        text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'')
+    {
+        let lower = token.to_ascii_lowercase();
+        let scheme = lower
+            .strip_prefix("https://")
+            .or_else(|| lower.strip_prefix("http://"));
+        let Some(rest) = scheme else { continue };
+        // ホスト部 (userinfo・パス・クエリを除去)
+        let host = rest
+            .rsplit('@')
+            .next()
+            .unwrap_or(rest)
+            .split(['/', '?', '#', ':'])
+            .next()
+            .unwrap_or("");
+        if host.is_empty() {
+            continue;
+        }
+        for s in SHORTENERS {
+            if host == *s || host.ends_with(&format!(".{s}")) {
+                if !out.iter().any(|x| x == s) {
+                    out.push(s.to_string());
+                }
+                break;
+            }
+        }
+        if out.len() >= MAX {
+            break;
+        }
+    }
+    out
+}
+
+/// 本文中の http(s) URL でホスト名に非 ASCII 文字を含むものを抽出する
+/// (D1008)。
+///
+/// ホスト名の Cyrillic/Greek 等の類似字 (а/e/о/р/с 等) は正規ドメインと
+/// 見分けがつかないホモグリフ偽装の定形 — IDN (xn--) 化されていない
+/// 生 Unicode がホストに書かれていること自体が兆候。
+/// `httр://` 系 (スキーム側の類似字) は `find_obfuscated_url_tokens`
+/// の LookalikeScheme が担う — こちらはスキームが正当でホスト側が
+/// 非 ASCII のケース。
+#[must_use]
+pub fn find_nonascii_url_hosts(text: &str) -> Vec<String> {
+    const MAX: usize = 8;
+    let mut out: Vec<String> = Vec::new();
+    for token in
+        text.split(|c: char| c.is_whitespace() || c == '<' || c == '>' || c == '"' || c == '\'')
+    {
+        let rest = token
+            .strip_prefix("https://")
+            .or_else(|| token.strip_prefix("http://"));
+        let Some(rest) = rest else { continue };
+        let host = rest
+            .rsplit('@')
+            .next()
+            .unwrap_or(rest)
+            .split(['/', '?', '#', ':'])
+            .next()
+            .unwrap_or("");
+        if !host.is_empty() && !host.is_ascii() && host.chars().any(|c| c.is_alphabetic()) {
+            let h = host.to_string();
+            if !out.contains(&h) {
+                out.push(h);
+            }
+        }
+        if out.len() >= MAX {
+            break;
+        }
+    }
+    out
+}
+
+/// `=?charset?B?...?=` / `=?charset?Q?...?=` の encoded-word を復号し、
+/// 中身がすべて印字可能 ASCII (改行候補の空白を含む 0x20-0x7E) かつ
+/// 英字を含むか判定する — エンコードが不要な ASCII テキストを
+/// わざわざ encoded-word で包むのは、キーワードフィルタを分断する
+/// 難読化の定形 (D1004)。
+fn encoded_word_is_gratuitous(word: &str) -> bool {
+    // =?<charset>?<enc>?<payload>?= の形を分解
+    let inner = word
+        .strip_prefix("=?")
+        .and_then(|w| w.strip_suffix("?="));
+    let Some(inner) = inner else { return false };
+    let mut parts = inner.splitn(3, '?');
+    let Some(_charset) = parts.next() else { return false };
+    let Some(enc) = parts.next() else { return false };
+    let Some(payload) = parts.next() else { return false };
+    if payload.is_empty() {
+        return false;
+    }
+    let decoded: Vec<u8> = match enc.to_ascii_lowercase().as_str() {
+        "b" => match decode_base64(payload) {
+            Some(d) => d,
+            None => return false,
+        },
+        "q" => decode_q_encoding(payload),
+        _ => return false,
+    };
+    // 復号結果がすべて印字可能 ASCII で、意味のある英字を含むか
+    decoded.len() >= 4
+        && decoded.iter().all(|b| (0x20..=0x7E).contains(b))
+        && decoded.iter().any(|b| b.is_ascii_alphabetic())
+}
+
+/// RFC 4648 base64 の簡易復号 (パディング有無・空白無視)。
+fn decode_base64(s: &str) -> Option<Vec<u8>> {
+    let mut table = [0xFFu8; 256];
+    for (i, c) in (b'A'..=b'Z')
+        .chain(b'a'..=b'z')
+        .chain(b'0'..=b'9')
+        .enumerate()
+    {
+        table[c as usize] = i as u8;
+    }
+    table[b'+' as usize] = 62;
+    table[b'/' as usize] = 63;
+    let mut out = Vec::new();
+    let mut acc: u32 = 0;
+    let mut nbits = 0;
+    for &b in s.as_bytes() {
+        if b == b'=' || b.is_ascii_whitespace() {
+            continue;
+        }
+        let v = table[b as usize];
+        if v == 0xFF {
+            return None;
+        }
+        acc = (acc << 6) | u32::from(v);
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            out.push((acc >> nbits) as u8);
+        }
+    }
+    Some(out)
+}
+
+/// Q encoding (=HH 16進・_ は空白)。
+fn decode_q_encoding(s: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'=' if i + 2 < bytes.len() => {
+                let h = (bytes[i + 1] as char).to_digit(16);
+                let l = (bytes[i + 2] as char).to_digit(16);
+                match (h, l) {
+                    (Some(h), Some(l)) => {
+                        out.push((h * 16 + l) as u8);
+                        i += 3;
+                    }
+                    _ => {
+                        out.push(bytes[i]);
+                        i += 1;
+                    }
+                }
+            }
+            b'_' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b => {
+                out.push(b);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
+/// Subject/From/To/Cc/Reply-To 等のヘッダに、ASCII のみの内容を
+/// わざわざ encoded-word で包んだ箇所があるか (D1004)。
+///
+/// 非 ASCII 文字を送るための RFC 2047 エンコードが正規の用法だが、
+/// 復号すると全部 ASCII になる encoded-word は「包む必要が無かった」=
+/// キーワードフィルタ分断の難読化の兆候。
+/// (正当な例: 「=?UTF-8?B?...?=」の中身が日本語 → ASCII でないため非対象)
+pub fn has_encoded_word_abuse(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let hdr_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    // 畳み込みを展開 — encoded-word は行を跨がないが、ヘッダが
+    // 折り返されていると行頭判定が漏れるため展開しておく
+    let header = lower[..hdr_end]
+        .replace("\r\n ", " ")
+        .replace("\r\n\t", " ");
+    let targets = ["subject:", "from:", "to:", "cc:", "reply-to:"];
+    header.lines().any(|l| {
+        if !targets.iter().any(|t| l.starts_with(t)) {
+            return false;
+        }
+        // 行内の =? ... ?= を列挙
+        let mut rest = l;
+        while let Some(start) = rest.find("=?") {
+            let after = &rest[start..];
+            let Some(end) = after.find("?=") else { break };
+            let word = &after[..end + 2];
+            if encoded_word_is_gratuitous(word) {
+                return true;
+            }
+            rest = &after[end + 2..];
+        }
+        false
+    })
+}
+
 /// タグ名を読む (`<`/`</` の直後から。ASCII 英字で始まらなければ空)。
 fn read_tag_name(html: &str, start: usize) -> &str {
     let bytes = html.as_bytes();
@@ -15306,6 +15543,63 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    // ---- D1003: URL 短縮ドメイン ----
+    #[test]
+    fn scan_はURL短縮を検出する() {
+        let got = find_url_shortener_hosts("click https://bit.ly/abc now");
+        assert!(got.contains(&"bit.ly".to_string()));
+        // サブドメインも suffix match で捉える
+        let sub = find_url_shortener_hosts("see https://x.tinyurl.com/1");
+        assert!(sub.contains(&"tinyurl.com".to_string()));
+        // 異なる短縮サービスはそれぞれ列挙
+        let multi = find_url_shortener_hosts("https://t.co/a https://is.gd/b");
+        assert!(multi.contains(&"t.co".to_string()) && multi.contains(&"is.gd".to_string()));
+        // 正規ドメイン・類似綴りは対象外
+        assert!(find_url_shortener_hosts("https://bitly.example.com/").is_empty());
+        assert!(find_url_shortener_hosts("https://bit.lyx.org/").is_empty());
+        // スキーム無しの裸文字列は対象外
+        assert!(find_url_shortener_hosts("bit.ly/abc").is_empty());
+    }
+
+    // ---- D1004: encoded-word の乱用 ----
+    #[test]
+    fn scan_はencoded_word乱用を検出する() {
+        // ASCII 内容をわざわざ B エンコード → 難読化の兆候
+        let b_enc = b"Subject: =?UTF-8?B?SGVsbG8gd29ybGQ=?=\r\n\r\nx";
+        assert!(has_encoded_word_abuse(b_enc));
+        // Q エンコードでも同様 (_ は空白)
+        let q_enc = b"Subject: =?UTF-8?Q?Hello_world?=\r\n\r\nx";
+        assert!(has_encoded_word_abuse(q_enc));
+        // From/To ヘッダでも対象
+        let from_enc = b"From: =?UTF-8?B?Tm90aWNl?= <a@b>\r\n\r\nx";
+        assert!(has_encoded_word_abuse(from_enc));
+        // 非 ASCII 内容の正規 encoded-word は対象外
+        // 「こんにちは」(UTF-8) の base64
+        let jp = b"Subject: =?UTF-8?B?44GT44KT44Gr44Gh44Gv?=\r\n\r\nx";
+        assert!(!has_encoded_word_abuse(jp));
+        // encoded-word がない通常件名
+        let plain = b"Subject: hello\r\n\r\nx";
+        assert!(!has_encoded_word_abuse(plain));
+        // 本文中の encoded-word 形はヘッダ走査対象外
+        let body_only = b"Subject: x\r\n\r\n=?UTF-8?B?SGVsbG8gd29ybGQ=?=";
+        assert!(!has_encoded_word_abuse(body_only));
+    }
+
+    // ---- D1008: 非 ASCII ホストの URL ----
+    #[test]
+    fn scan_は非ASCIIホストを検出する() {
+        // Cyrillic を含むホスト (раураl に Cyrillic а/р が混入)
+        let cyr = find_nonascii_url_hosts("pay https://\u{0440}\u{0430}ypal.com/ now");
+        assert!(!cyr.is_empty());
+        // 日本語ホストも非 ASCII
+        let jp = find_nonascii_url_hosts("https://例え.jp/x");
+        assert!(!jp.is_empty());
+        // 正規 ASCII ホストは対象外
+        assert!(find_nonascii_url_hosts("https://paypal.com/x").is_empty());
+        // スキームなしの非 ASCII トークンは対象外 (URL でない)
+        assert!(find_nonascii_url_hosts("例え.com").is_empty());
     }
 
     #[test]

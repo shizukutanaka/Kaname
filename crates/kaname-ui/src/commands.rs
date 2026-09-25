@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -598,6 +600,93 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
                 .to_string(),
         );
+    }
+
+    // D1003: URL 短縮ドメイン — 実リンク先を見せないため「表示と
+    //   実リンク先の一致」を原理的に問えない経路
+    {
+        let shorteners = kaname_render::find_url_shortener_hosts(&analysis_body);
+        if !shorteners.is_empty() {
+            render_risks.push(format!(
+                "URL 短縮サービス ({}) — 実リンク先が見えない転送経路の兆候です",
+                shorteners.join(", ")
+            ));
+        }
+    }
+
+    // D1004: encoded-word の乱用 — 復号すると全部 ASCII になる
+    //   encoded-word は「包む必要が無かった」= キーワード分断の難読化
+    if env.encoded_word_abuse {
+        render_risks.push(
+            "Subject/From 等のヘッダで、ASCII のみの内容をわざわざ encoded-word (=?UTF-8?B?..?=) で包んでいます — キーワードフィルタを分断する難読化の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1005: 件名欠落 — 正規 MUA は件名入力を促すため、無件名は
+    //   手作り生成品・一括送信の兆候
+    if subject.trim().is_empty() {
+        render_risks.push(
+            "件名がありません — 無件名は手作り生成品・一括送信メールの兆候です".to_string(),
+        );
+    }
+
+    // D1006: 表示名がメールアドレス形 — From の表示名に @ を含むと、
+    //   アドレスを隠すモバイル UI では「表示名 = メールアドレス」に見え
+    //   別人になりすませる (address-shaped display name 詐称)
+    if env.from.iter().any(|a| {
+        a.display_name
+            .as_deref()
+            .map(|n| n.contains('@'))
+            .unwrap_or(false)
+    }) {
+        render_risks.push(
+            "From の表示名がメールアドレス形 (@ を含む) です — 表示名だけを見せる UI では別アドレスに見せかける偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1007: アーカイブ添付 + 本文/件名のパスワード言及 — 「パスワード
+    //   付き ZIP」はスキャナを通すための定形 (PPAP 問題・Emotet 型)
+    {
+        const ARCHIVE_EXTS: &[&str] = &[
+            "zip", "rar", "7z", "ace", "cab", "arj", "tar", "tgz",
+            "gz", "bz2", "xz", "alz", "lzh", "lha",
+        ];
+        let has_archive = env.attachments.iter().any(|a| {
+            let ext = a
+                .filename
+                .to_ascii_lowercase()
+                .rsplit('.')
+                .next()
+                .unwrap_or("");
+            ARCHIVE_EXTS.contains(&ext)
+        });
+        let hay = format!("{}\n{}", subject.to_lowercase(), analysis_body.to_lowercase());
+        let mentions_password = hay.contains("password")
+            || hay.contains("パスワード")
+            || hay.contains("解凍パス")
+            || hay.contains("開封パス")
+            || hay.contains("pass:")
+            || hay.contains("pw:");
+        if has_archive && mentions_password {
+            render_risks.push(
+                "アーカイブ添付 + 本文/件名でのパスワード言及 — スキャナ回避を狙う「パスワード付きアーカイブ」配布の定形です"
+                    .to_string(),
+            );
+        }
+    }
+
+    // D1008: ホスト名に非 ASCII 文字を含む URL — Cyrillic/Greek 等の
+    //   類似字ホモグリフ偽装の定形
+    {
+        let hosts = kaname_render::find_nonascii_url_hosts(&analysis_body);
+        if !hosts.is_empty() {
+            render_risks.push(format!(
+                "ホスト名に非 ASCII 文字を含む URL ({}) — 正規ドメインと見分けがつかないホモグリフ偽装の兆候です",
+                hosts.join(", ")
+            ));
+        }
     }
 
     // D327: abuse 報告先自称

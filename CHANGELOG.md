@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1003–D1008: URL・ヘッダ値・添付併記の未検査兆候 6 件
+
+- **問題**: URL 短縮ドメイン (実リンク先を原理的に見せない転送経路)・ASCII のみの内容をわざわざ encoded-word で包む難読化・無件名・@ を含む表示名 (モバイル UI で別アドレスに見せかける)・アーカイブ添付+パスワード言及 (PPAP 問題の定形)・ホスト名の非 ASCII 文字 (ホモグリフ) のいずれも兆候として報告されなかった。(参考: shortener 経由のリンク先隠蔽・RFC 2047 encoded-word のキーワード分断悪用・address-shaped display name 詐称・Emotet 型パスワード付き ZIP・ホモグリフドメイン)
+- **修正**: `find_url_shortener_hosts` (短縮ドメイン群 suffix match)・`find_nonascii_url_hosts` (ホスト部に非 ASCII 文字を含む http(s) URL)・`has_encoded_word_abuse` (B/Q 復号後が全 ASCII の encoded-word) を `kaname-render` に追加。`Envelope` に `encoded_word_abuse` フィールド追加。`commands.rs` で短縮 URL (D1003)・encoded-word 乱用 (D1004)・無件名 (D1005)・@ を含む表示名 (D1006)・アーカイブ+パスワード言及 (D1007)・非 ASCII ホスト (D1008) を render_risks 兆候報告。D237 の `html_text` 参照バグも修正 (D960 と同一修復)。
+- **教訓**: 「見せない」こと自体が兆候になる — 短縮は宛先を・encoded-word は中身を・表示名偽装は送信者を隠す。検査に必要な情報を原理的に欠く構造は、存在そのものを数えよ。エンコードは「必要か」で問え — 不要なエンコードは分断目的。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
