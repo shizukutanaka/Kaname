@@ -114,6 +114,30 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// アドレスのローカル部またはドメイン部が空、あるいは `@` が複数
+    /// ある形 — RFC 5322 addr-spec の形を欠く手作り生成品の兆候 (D1216)。
+    pub addr_empty_part: bool,
+    /// From/To/Cc のアドレスに `a@[127.0.0.1]` 型のドメインリテラルがある —
+    /// ドメイン名を名乗らず IP で届ける形の兆候 (D1217)。
+    pub domain_literal_addr: bool,
+    /// ローカル部が `.` で始まる・終わる・`..` を含む形 — dot-atom の
+    /// 形を欠く不正アドレスの兆候 (D1218)。
+    pub bad_dot_local: bool,
+    /// `From:` に `@` を含むアドレスが一つもない — 名前だけで届く
+    /// 手作り生成品の兆候 (D1219)。
+    pub from_no_addr: bool,
+    /// `From:` と `To:` の先頭アドレスが一致する — 「自分宛てに自分が
+    /// 送った」体裁を作る差出人偽装の定形の兆候 (D1220)。
+    pub from_eq_to: bool,
+    /// `filename=`/`name=` が `..`・`/`・`\` を含む — 保存先を
+    /// 指定ディレクトリ外へ向けるパス混入の兆候 (D1221)。
+    pub path_in_filename: bool,
+    /// `.` だけの行がメッセージ中にある — SMTP DATA 終端と混同され、
+    /// 以降を別メッセージ・不可視として読むパーサ差分の兆候 (D1222)。
+    pub lone_dot_line: bool,
+    /// LF を伴わない単独 CR バイトが含まれる — CRLF でも LF でもない
+    /// 行終端でパーサごとに行の切れ目が違う兆候 (D1223)。
+    pub bare_cr: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2029,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2059,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        addr_empty_part: has_addr_empty_part(raw),
+        domain_literal_addr: has_domain_literal_addr(raw),
+        bad_dot_local: has_bad_dot_local(raw),
+        from_no_addr: has_from_no_addr(raw),
+        from_eq_to: has_from_eq_to(raw),
+        path_in_filename: has_path_in_filename(raw),
+        lone_dot_line: has_lone_dot_line(raw),
+        bare_cr: has_bare_cr(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2424,187 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// ヘッダ部から `name:` フィールドの値 (コロン以降) を取り出す補助。
+fn header_values_named<'a>(lower: &'a str, name: &str) -> Vec<&'a str> {
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    lower[..header_end]
+        .lines()
+        .filter_map(|l| {
+            let l = l.trim_end();
+            l.strip_prefix(name)
+                .and_then(|r| r.strip_prefix(':'))
+                .map(str::trim)
+        })
+        .collect()
+}
+
+/// アドレスヘッダ値から addr-spec 候補 (`<...>` の内側と、山括弧を含まない
+/// トークン中 `@` を持つもの) を集める補助。
+fn addr_locals<'a>(v: &'a str) -> Vec<&'a str> {
+    let mut out = Vec::new();
+    let mut rest = v;
+    while let Some(l) = rest.find('<') {
+        if let Some(r) = rest[l..].find('>') {
+            out.push(&rest[l + 1..l + r]);
+            rest = &rest[l + r + 1..];
+        } else {
+            break;
+        }
+    }
+    for grp in v.split(',') {
+        if !grp.contains('<') {
+            for tok in grp.split_whitespace() {
+                if tok.contains('@') {
+                    out.push(tok.trim_matches(|c| c == '<' || c == '>' || c == ';' || c == '"'));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// アドレスヘッダ値の先頭 addr-spec を返す補助。
+fn first_addr<'a>(v: &'a str) -> Option<&'a str> {
+    addr_locals(v).into_iter().next()
+}
+
+/// 宛先系フィールド名 (From/To/Cc/Reply-To/Bcc) の値を集める補助。
+fn addr_header_values<'a>(lower: &'a str) -> Vec<&'a str> {
+    let mut out = header_values_named(lower, "from");
+    out.extend(header_values_named(lower, "to"));
+    out.extend(header_values_named(lower, "cc"));
+    out.extend(header_values_named(lower, "reply-to"));
+    out.extend(header_values_named(lower, "bcc"));
+    out
+}
+
+/// ローカル部・ドメイン部の空や `@` 重複を持つアドレスがあるか
+/// 判定する (D1216)。
+///
+/// `<@dom>` (ローカル空)・`a@>` (ドメイン空)・`a@b@c` (@ 重複) —
+/// addr-spec の形を欠く値はパーサごとに受理・拒否・別解釈が分かれる。
+fn has_addr_empty_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    addr_header_values(&lower).iter().any(|v| {
+        addr_locals(v).iter().any(|a| {
+            a.starts_with('@')
+                || a.ends_with('@')
+                || a.matches('@').count() > 1
+                || !a.contains('@')
+        })
+    })
+}
+
+/// ドメインリテラル (`a@[127.0.0.1]` 型) のアドレスがあるか判定する (D1217)。
+///
+/// ドメイン名ではなく IP で届ける形は、ドメイン評判・ドメイン照合を
+/// 素通しする届け方。
+fn has_domain_literal_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    addr_header_values(&lower)
+        .iter()
+        .any(|v| v.contains("@["))
+}
+
+/// ローカル部が `.` 始まり・`.` 終わり・`..` を含むアドレスがあるか
+/// 判定する (D1218)。
+///
+/// dot-atom の形を欠くローカル部は、正規表現ごとに受理範囲が違う
+/// 不正形。
+fn has_bad_dot_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    addr_header_values(&lower).iter().any(|v| {
+        addr_locals(v).iter().any(|a| {
+            let local = a.split('@').next().unwrap_or("");
+            local.starts_with('.') || local.ends_with('.') || local.contains("..")
+        })
+    })
+}
+
+/// `From:` に `@` を含むアドレスが一つもないか判定する (D1219)。
+///
+/// 名前や文だけで届く From は addr-spec を持たない手作り生成品。
+fn has_from_no_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let vs = header_values_named(&lower, "from");
+    !vs.is_empty() && vs.iter().all(|v| !v.contains('@'))
+}
+
+/// `From:` と `To:` の先頭アドレスが一致するか判定する (D1220)。
+///
+/// 「自分宛てに自分が送った」体裁は差出人を被害者自身に見せかける
+/// 偽装の定形 — 差出人欄のなりすましを気づかせにくくする。
+fn has_from_eq_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    match (
+        header_values_named(&lower, "from").first().and_then(|v| first_addr(v)),
+        header_values_named(&lower, "to").first().and_then(|v| first_addr(v)),
+    ) {
+        (Some(f), Some(t)) => !f.is_empty() && f == t,
+        _ => false,
+    }
+}
+
+/// `filename=`/`name=` が `..`・`/`・`\\` を含むか判定する (D1221)。
+///
+/// 保存名にパス要素を混ぜると、保存先を指定外へ向ける・見えない階層を
+/// 作る・表示名と実パスがずれる — 名の中の経路は危険な宣言。
+fn has_path_in_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    ["filename=", "name="].iter().any(|k| {
+        let mut rest = lower.as_str();
+        while let Some(i) = rest.find(k) {
+            let ok = if i == 0 {
+                true
+            } else {
+                matches!(rest.as_bytes()[i - 1], b' ' | b';' | b'\t' | b'"' | b'\'')
+            };
+            if ok {
+                let v = &rest[i + k.len()..];
+                let v = v.strip_prefix('"').unwrap_or(v);
+                let end = v
+                    .find(|c: char| c == ';' || c == '"' || c == '\'' || c.is_whitespace())
+                    .unwrap_or(v.len());
+                let v = &v[..end.min(256)];
+                if v.contains("..") || v.contains('/') || v.contains('\\') {
+                    return true;
+                }
+            }
+            rest = &rest[i + 1..];
+        }
+        false
+    })
+}
+
+/// `.` だけの行がメッセージ中にあるか判定する (D1222)。
+///
+/// SMTP DATA の終端は「`.<CRLF>`」— 本文中の孤立ドット行を終端と読む
+/// パーサは以降を別メッセージ・不可視として扱うパーサ差分。
+fn has_lone_dot_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.lines().any(|l| l.trim_end() == ".")
+}
+
+/// LF を伴わない単独 CR バイトが含まれるか判定する (D1223)。
+///
+/// CRLF でも LF でもない行終端は、パーサごとに行の切れ目が違い —
+/// ヘッダを継続と読むか区切りと読むかが分かれる差分。
+fn has_bare_cr(raw: &[u8]) -> bool {
+    raw.iter()
+        .enumerate()
+        .any(|(i, &b)| b == b'\r' && raw.get(i + 1) != Some(&b'\n'))
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21341,95 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は片側空アドレスを検出する() {
+        assert!(has_addr_empty_part(b"From: <@b.co>\r\n\r\nx".as_slice()));
+        assert!(has_addr_empty_part(b"From: <a@>\r\n\r\nx".as_slice()));
+        assert!(has_addr_empty_part(b"To: a@b@c\r\n\r\nx".as_slice()));
+        assert!(!has_addr_empty_part(
+            b"From: \"A\" <a@b.co>\r\nTo: c@d.co\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_はリテラル宛を検出する() {
+        assert!(has_domain_literal_addr(
+            b"From: <a@[127.0.0.1]>\r\n\r\nx".as_slice()
+        ));
+        assert!(has_domain_literal_addr(
+            b"To: <b@[IPv6:::1]>\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_domain_literal_addr(
+            b"From: <a@b.co>\r\nTo: <c@d.co>\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は点不正字を検出する() {
+        assert!(has_bad_dot_local(b"From: <.a@b.co>\r\n\r\nx".as_slice()));
+        assert!(has_bad_dot_local(b"From: <a.@b.co>\r\n\r\nx".as_slice()));
+        assert!(has_bad_dot_local(b"To: <a..b@c.co>\r\n\r\nx".as_slice()));
+        assert!(!has_bad_dot_local(
+            b"From: \"Mr. A\" <a.b@c.co>\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は名だけ発信を検出する() {
+        assert!(has_from_no_addr(
+            b"From: Security Team\r\nTo: <a@b.co>\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_from_no_addr(
+            b"From: \"Sec\" <sec@b.co>\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は自己宛てを検出する() {
+        assert!(has_from_eq_to(
+            b"From: <victim@co.jp>\r\nTo: <victim@co.jp>\r\n\r\nx".as_slice()
+        ));
+        assert!(has_from_eq_to(
+            b"From: victim@co.jp\r\nTo: \"V\" <victim@co.jp>\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_from_eq_to(
+            b"From: <a@b.co>\r\nTo: <c@d.co>\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は名に経路を検出する() {
+        assert!(has_path_in_filename(
+            b"Content-Disposition: attachment; filename=\"../../evil.exe\"\r\n\r\nx".as_slice()
+        ));
+        assert!(has_path_in_filename(
+            b"Content-Disposition: attachment; filename=\"dir\\\\x.pdf\"\r\n\r\nx".as_slice()
+        ));
+        assert!(has_path_in_filename(
+            b"Content-Type: application/pdf; name=\"sub/f.pdf\"\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_path_in_filename(
+            b"Content-Disposition: attachment; filename=\"x.pdf\"\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は孤立点行を検出する() {
+        assert!(has_lone_dot_line(
+            b"From: a@b\r\n\r\nhello\r\n.\r\nhidden text".as_slice()
+        ));
+        assert!(!has_lone_dot_line(
+            b"From: a@b\r\n\r\nhello.\r\nworld".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は裸改行を検出する() {
+        assert!(has_bare_cr(b"From: a@b\rTo: c@d\r\n\r\nx".as_slice()));
+        assert!(!has_bare_cr(
+            b"From: a@b\r\nTo: c@d\r\n\r\nx\r\ny".as_slice()
+        ));
     }
 }

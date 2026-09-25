@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1216–D1223: アドレス形・添付名パス・行終端の逸脱 8 件
+
+- **問題**: アドレスの形・添付名の経路・行の終わり方が逸脱した構造が未検査だった — ローカル部/ドメイン部の空や `@` 重複 (addr-spec の形を欠く)、`a@[127.0.0.1]` 型ドメインリテラル (ドメイン名を名乗らず IP で届ける)、ローカル部の `.` 始まり・`.` 終わり・`..` (dot-atom 違反)、`From:` にアドレス皆無 (名前だけの発信)、`From:` と `To:` の先頭アドレス一致 (「自分宛てに自分が送った」差出人偽装の定形)、`filename=`/`name=` の `..`・`/`・`\` (保存先を指定外へ向けるパス混入)、`.` だけの行 (SMTP DATA 終端と混同するパーサ差分)、LF を伴わない単独 CR (行の切れ目がパーサごとに違う)。
+- **修正**: `header_values_named`/`addr_locals`/`first_addr`/`addr_header_values` 補助で宛先系フィールドとアドレス候補を抽出し、`has_addr_empty_part`/`has_domain_literal_addr`/`has_bad_dot_local`/`has_from_no_addr`/`has_from_eq_to`/`has_path_in_filename`/`has_lone_dot_line`/`has_bare_cr` で検出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (形・経路の逸脱系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 形が逸脱すれば読み手ごとに受理も解釈も違う — 形のずれを数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

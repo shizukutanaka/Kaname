@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // NOTE: html_extract は Option — tel_link フラグは extract 内部。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +597,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1216: 片側空・@ 重複のアドレス
+    if env.addr_empty_part {
+        render_risks.push(
+            "アドレスのローカル部またはドメイン部が空、あるいは @ が重複しています — addr-spec の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1217: ドメインリテラル宛先
+    if env.domain_literal_addr {
+        render_risks.push(
+            "アドレスに a@[127.0.0.1] 型のドメインリテラルがあります — ドメイン名を名乗らず IP で届ける形の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1218: ローカル部の不正なドット
+    if env.bad_dot_local {
+        render_risks.push(
+            "アドレスのローカル部が . で始まる・終わる・.. を含みます — dot-atom の形を欠く不正形の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1219: From にアドレス無し
+    if env.from_no_addr {
+        render_risks.push(
+            "From: に @ を含むアドレスがありません — 名前だけで届く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1220: From と To の先頭アドレス一致
+    if env.from_eq_to {
+        render_risks.push(
+            "From: と To: の先頭アドレスが一致しています — 「自分宛てに自分が送った」体裁を作る差出人偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1221: filename/name にパス混入
+    if env.path_in_filename {
+        render_risks.push(
+            "添付名に .. ・ / ・ \\ が含まれています — 保存先を指定外へ向けるパス混入の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1222: 孤立ドット行
+    if env.lone_dot_line {
+        render_risks.push(
+            ". だけの行がメッセージ中にあります — SMTP DATA 終端と混同され以降を別メッセージとして読むパーサ差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1223: LF を伴わない単独 CR
+    if env.bare_cr {
+        render_risks.push(
+            "LF を伴わない単独 CR バイトが含まれています — CRLF でも LF でもない行終端でパーサごとに行の切れ目が違う兆候です"
                 .to_string(),
         );
     }
