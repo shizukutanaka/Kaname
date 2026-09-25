@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1031–D1038: alternative 構造悪用・宛先隠蔽・charset 不整合の未検査兆候 8 件
+
+- **問題**: multipart/alternative に text/plain が無い・順序逆転・text/html 重複の 3 構造悪用、`To:` 欠落・空・undisclosed-recipients の宛先隠蔽、charset=us-ascii 宣言に非 ASCII バイトの不整合、`Content-Location:`/`Content-Base:` の基準 URI 差替え、X-Priority/Importance=最高の緊急度誇張、References/In-Reply-To が自身の Message-ID を参照する偽返信鎖のいずれも兆候として報告されなかった。(参考: RFC 2046 alternative 順序・undisclosed-recipients BCC 形跡・MHTML Content-Base 偽装・スレッド詐称)
+- **修正**: `has_alt_missing_plain`/`has_alt_inverted_order`/`has_alt_duplicate_html` (alternative 構造 3 系)・`has_missing_or_hidden_to`・`has_charset_ascii_mismatch` (単一パートのみ)・`has_content_location_base`・`has_urgent_priority`・`has_self_referenced_threading` を `kaname-render` に追加。`Envelope` に 8 フィールド追加し `commands.rs` で兆候報告。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「代替」構造は対でなければ意味を成さない — plain 欠落・順序逆転・同型重複は代替を壊す形跡。宛先を隠す形は経路設計された配送の印。charset の宣言は実体と合わせて初めて意味を持つ。返信鎖は「返す先が実在するか」を問え — 自分への返信は体裁工作。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

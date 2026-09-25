@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1031: multipart/alternative に text/plain が無い — HTML 表示だけを狙った生成
+    if env.alt_missing_plain {
+        render_risks.push(
+            "multipart/alternative に text/plain パートがありません — HTML 表示だけを狙った生成メールの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1032: alternative の順序逆転 — 「簡素→豊か」順を守っていない
+    if env.alt_inverted_order {
+        render_risks.push(
+            "multipart/alternative で text/html が text/plain より先にあります — 代替順序を逆転させた構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1033: alternative に text/html が 2 つ以上
+    if env.alt_duplicate_html {
+        render_risks.push(
+            "multipart/alternative に text/html パートが複数あります — どれを表示するかがパーサで分かれる差分構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1034: To 欠落・空・undisclosed-recipients — 宛先隠蔽の一括送信
+    if env.missing_or_hidden_to {
+        render_risks.push(
+            "To: ヘッダが無い・空・undisclosed-recipients です — 宛先を隠す BCC/一括送信の形跡です"
+                .to_string(),
+        );
+    }
+
+    // D1035: us-ascii 宣言なのに非 ASCII バイト
+    if env.charset_ascii_mismatch {
+        render_risks.push(
+            "charset=us-ascii 宣言ですが本文に非 ASCII バイトがあります — 宣言と実体が食い違う charset 不整合の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1036: Content-Location/Content-Base — 相対 URI の基準差替え
+    if env.content_location_base {
+        render_risks.push(
+            "Content-Location:/Content-Base: — 相対 URI の基準を差し替える URI 解決偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1037: X-Priority/Importance = 最高/緊急
+    if env.urgent_priority {
+        render_risks.push(
+            "X-Priority/Importance が最高・緊急に設定されています — 開かせるための緊急度の誇張の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1038: References/In-Reply-To が自分の Message-ID を参照
+    if env.self_referenced_threading {
+        render_risks.push(
+            "References/In-Reply-To が自分の Message-ID を参照しています — 存在しないスレッドへの返信の体裁を作る偽装の兆候です"
                 .to_string(),
         );
     }

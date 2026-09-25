@@ -119,6 +119,30 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// multipart/alternative なのに text/plain パートが無い —
+    /// HTML 表示だけを狙った生成メールの兆候 (D1031)。
+    pub alt_missing_plain: bool,
+    /// multipart/alternative で text/html が text/plain より先 —
+    /// 代替表示の「徐々に豊かに」順序を逆転させた構造の兆候 (D1032)。
+    pub alt_inverted_order: bool,
+    /// multipart/alternative に text/html パートが 2 つ以上 —
+    /// 代替の意義がない重複ペイロードの兆候 (D1033)。
+    pub alt_duplicate_html: bool,
+    /// `To:` 欠落・空値・undisclosed-recipients — 宛先を隠す
+    /// BCC/一括送信形状の兆候 (D1034)。
+    pub missing_or_hidden_to: bool,
+    /// charset=us-ascii 宣言なのに本文に非 ASCII バイト —
+    /// 宣言 charset と実体の不整合 (D1035)。
+    pub charset_ascii_mismatch: bool,
+    /// `Content-Location:`/`Content-Base:` がある —
+    /// 相対 URI の基準を差し替える URI 解決偽装の兆候 (D1036)。
+    pub content_location_base: bool,
+    /// `X-Priority:`/`X-MSMail-Priority:`/`Importance:` 等が
+    /// 最高/緊急 — 受信者への見せ方を送信側が誇張する兆候 (D1037)。
+    pub urgent_priority: bool,
+    /// `References:`/`In-Reply-To:` が自身の Message-ID を参照 —
+    /// 存在しないスレッドへの返信の体裁を作る偽装の兆候 (D1038)。
+    pub self_referenced_threading: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2005,13 +2029,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2059,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        alt_missing_plain: has_alt_missing_plain(raw),
+        alt_inverted_order: has_alt_inverted_order(raw),
+        alt_duplicate_html: has_alt_duplicate_html(raw),
+        missing_or_hidden_to: has_missing_or_hidden_to(hdr),
+        charset_ascii_mismatch: has_charset_ascii_mismatch(raw),
+        content_location_base: has_content_location_base(hdr),
+        urgent_priority: has_urgent_priority(hdr),
+        self_referenced_threading: has_self_referenced_threading(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2358,6 +2390,207 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-report-abuse:")
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
+    })
+}
+
+/// multipart/alternative なのに text/plain パートが無いか (D1031)。
+///
+/// alternative は同一内容の複数表現 — text/plain 抜きで HTML のみ
+/// 送るのは、プレーン返信を想定しない生成・配信メールの形跡。
+/// パートの `Content-Type:` 行を本文側で走査する。
+pub fn has_alt_missing_plain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let is_alt = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart/alternative")
+    });
+    if !is_alt {
+        return false;
+    }
+    !lower[header_end..]
+        .lines()
+        .any(|l| l.trim_start().starts_with("content-type:") && l.contains("text/plain"))
+}
+
+/// multipart/alternative で text/html が text/plain より先に
+/// 来るか (D1032)。
+///
+/// RFC 2046: alternative のパートは「簡素→豊か」の順 — 先に
+/// text/html を置く逆転は順序を読むパーサでの差分を狙う構造。
+pub fn has_alt_inverted_order(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let is_alt = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart/alternative")
+    });
+    if !is_alt {
+        return false;
+    }
+    let body = &lower[header_end..];
+    let html_pos = body
+        .lines()
+        .position(|l| l.trim_start().starts_with("content-type:") && l.contains("text/html"));
+    let plain_pos = body
+        .lines()
+        .position(|l| l.trim_start().starts_with("content-type:") && l.contains("text/plain"));
+    match (html_pos, plain_pos) {
+        (Some(h), Some(p)) => h < p,
+        _ => false,
+    }
+}
+
+/// multipart/alternative に text/html パートが 2 つ以上あるか
+/// (D1033)。
+///
+/// alternative は 1 内容 = 1 表現の対で構成する — text/html が
+/// 複数あるのは「どれを表示するか」がパーサで分かれる差分構造。
+pub fn has_alt_duplicate_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let is_alt = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart/alternative")
+    });
+    if !is_alt {
+        return false;
+    }
+    lower[header_end..]
+        .lines()
+        .filter(|l| l.trim_start().starts_with("content-type:") && l.contains("text/html"))
+        .count()
+        >= 2
+}
+
+/// `To:` が欠落・空値・undisclosed-recipients のみか (D1034)。
+///
+/// 宛先を書かないのは BCC 宛の一括送信か生成メールの形跡 —
+/// `undisclosed-recipients:;` は宛先隠蔽の定型。
+pub fn has_missing_or_hidden_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    match header.lines().find(|l| l.starts_with("to:")) {
+        None => true,
+        Some(l) => {
+            let v = l[3..].trim();
+            v.is_empty()
+                || v.starts_with("undisclosed-recipients")
+                || v.starts_with("undisclosed recipients")
+                || v == ":;"
+        }
+    }
+}
+
+/// charset=us-ascii 宣言なのに本文に非 ASCII バイトがあるか
+/// (D1035)。
+///
+/// us-ascii は 7bit のみを許す — 宣言側で 7bit クリーンと読む
+/// パーサと、生バイトをそのまま処理するパーサで中身が分かれる
+/// charset 不整合 (単一パートのみ判定 — multipart はパート毎)。
+pub fn has_charset_ascii_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let declared_ascii = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("us-ascii")
+    });
+    let is_multipart = header.lines().any(|l| {
+        l.starts_with("content-type:") && l.contains("multipart")
+    });
+    if !declared_ascii || is_multipart {
+        return false;
+    }
+    raw[header_end..].iter().any(|&b| b > 127)
+}
+
+/// `Content-Location:`/`Content-Base:` があるか (D1036)。
+///
+/// 相対 URI の基準を差し替える解決ベース偽装 — メールでは稀で、
+/// cid/相対参照の向き先を変えるために攻撃者が差し込む。
+pub fn has_content_location_base(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("content-location:") || l.starts_with("content-base:"))
+}
+
+/// `X-Priority:`/`X-MSMail-Priority:`/`Priority:`/`Importance:` が
+/// 最高/緊急か (D1037)。
+///
+/// 1=最高/High/Urgent の緊急表示 — 読者への見せ方を送信側が
+/// 誇張する定型 (正常値 3=通常/Normal は対象外)。
+pub fn has_urgent_priority(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        let v = l.split_once(':').map(|(_, v)| v.trim()).unwrap_or("");
+        if l.starts_with("x-priority:") || l.starts_with("x-msmail-priority:") {
+            v == "1" || v.starts_with("1 ") || v == "high" || v == "urgent"
+        } else if l.starts_with("importance:") || l.starts_with("priority:") {
+            v == "high" || v == "urgent" || v == "1"
+        } else {
+            false
+        }
+    })
+}
+
+/// `References:`/`In-Reply-To:` が自身の Message-ID を参照するか
+/// (D1038)。
+///
+/// 自分の ID を「返信元」として書くのは、存在しないスレッドに
+/// 続く返信の体裁を作る偽装 (実際は新規メール)。
+pub fn has_self_referenced_threading(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let own_id = header.lines().find_map(|l| {
+        if !l.starts_with("message-id:") {
+            return None;
+        }
+        let v = l[11..].trim().to_string();
+        if v.is_empty() { None } else { Some(v) }
+    });
+    let Some(id) = own_id else { return false };
+    header.lines().any(|l| {
+        (l.starts_with("references:") || l.starts_with("in-reply-to:"))
+            && l.contains(&id)
     })
 }
 
@@ -15306,6 +15539,117 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    // ---- D1031: alternative に plain が無い ----
+    #[test]
+    fn scan_は代替のplain欠落を検出する() {
+        let no_plain = b"Content-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--B--\r\n";
+        assert!(has_alt_missing_plain(no_plain));
+        // plain + html の対 (正当)
+        let ok = b"Content-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nx\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--B--\r\n";
+        assert!(!has_alt_missing_plain(ok));
+        // alternative でない
+        let none = b"Content-Type: text/html\r\n\r\n<b>x</b>";
+        assert!(!has_alt_missing_plain(none));
+    }
+
+    // ---- D1032: alternative 順序逆転 ----
+    #[test]
+    fn scan_は代替順序逆転を検出する() {
+        // html が plain より先 — 「簡素→豊か」の逆転
+        let inv = b"Content-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--B\r\nContent-Type: text/plain\r\n\r\nx\r\n--B--\r\n";
+        assert!(has_alt_inverted_order(inv));
+        // 正当な順序
+        let ok = b"Content-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nx\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--B--\r\n";
+        assert!(!has_alt_inverted_order(ok));
+    }
+
+    // ---- D1033: alternative に html が 2 つ ----
+    #[test]
+    fn scan_は代替重複htmlを検出する() {
+        let dup = b"Content-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>1</b>\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>2</b>\r\n--B--\r\n";
+        assert!(has_alt_duplicate_html(dup));
+        let ok = b"Content-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\nx\r\n--B\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--B--\r\n";
+        assert!(!has_alt_duplicate_html(ok));
+    }
+
+    // ---- D1034: To 欠落・隠蔽 ----
+    #[test]
+    fn scan_は宛先欠落を検出する() {
+        // To ヘッダなし
+        let absent = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_or_hidden_to(absent));
+        // 空の To
+        let empty = b"To:\r\nFrom: a@b\r\n\r\nx";
+        assert!(has_missing_or_hidden_to(empty));
+        // undisclosed-recipients
+        let hidden = b"To: undisclosed-recipients:;\r\nFrom: a@b\r\n\r\nx";
+        assert!(has_missing_or_hidden_to(hidden));
+        // 正当な宛先
+        let ok = b"To: user@example.com\r\nFrom: a@b\r\n\r\nx";
+        assert!(!has_missing_or_hidden_to(ok));
+    }
+
+    // ---- D1035: us-ascii 宣言に非 ASCII ----
+    #[test]
+    fn scan_はascii不整合を検出する() {
+        // us-ascii 宣言だが本文に非 ASCII
+        let bad = b"Content-Type: text/plain; charset=us-ascii\r\n\r\nplain\xFFtext";
+        assert!(has_charset_ascii_mismatch(bad));
+        // 宣言と一致 (ASCII のみ)
+        let ok = b"Content-Type: text/plain; charset=us-ascii\r\n\r\nplaintext";
+        assert!(!has_charset_ascii_mismatch(ok));
+        // 宣言なし
+        let none = b"Content-Type: text/plain\r\n\r\nplain\xFFtext";
+        assert!(!has_charset_ascii_mismatch(none));
+        // multipart はパート毎 charset のため対象外
+        let mp = b"Content-Type: multipart/mixed; charset=us-ascii; boundary=\"B\"\r\n\r\n\xFF\xFF";
+        assert!(!has_charset_ascii_mismatch(mp));
+    }
+
+    // ---- D1036: Content-Location/Base ----
+    #[test]
+    fn scan_は基準URI偽装を検出する() {
+        let loc = b"Content-Location: https://evil.example/base/\r\n\r\nx";
+        assert!(has_content_location_base(loc));
+        let base = b"Content-Base: https://evil.example/\r\n\r\nx";
+        assert!(has_content_location_base(base));
+        let clean = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(!has_content_location_base(clean));
+    }
+
+    // ---- D1037: 緊急度自称 ----
+    #[test]
+    fn scan_は緊急度自称を検出する() {
+        let p1 = b"X-Priority: 1\r\n\r\nx";
+        assert!(has_urgent_priority(p1));
+        let p2 = b"Importance: high\r\n\r\nx";
+        assert!(has_urgent_priority(p2));
+        let p3 = b"X-MSMail-Priority: High\r\n\r\nx";
+        assert!(has_urgent_priority(p3));
+        // 正常値 3=通常
+        let normal = b"X-Priority: 3\r\n\r\nx";
+        assert!(!has_urgent_priority(normal));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_urgent_priority(clean));
+    }
+
+    // ---- D1038: 自己参照スレッド ----
+    #[test]
+    fn scan_は自己参照threadを検出する() {
+        // References が自分の Message-ID を指す — 偽の返信鎖
+        let fake = b"Message-ID: <abc@x>\r\nReferences: <abc@x>\r\n\r\nx";
+        assert!(has_self_referenced_threading(fake));
+        // 正当な返信鎖 (別 ID を参照)
+        let real = b"Message-ID: <new@x>\r\nReferences: <old@x> <older@x>\r\n\r\nx";
+        assert!(!has_self_referenced_threading(real));
+        // References なし
+        let none = b"Message-ID: <abc@x>\r\n\r\nx";
+        assert!(!has_self_referenced_threading(none));
+        // Message-ID なし → 自己参照不可能
+        let noid = b"References: <abc@x>\r\n\r\nx";
+        assert!(!has_self_referenced_threading(noid));
     }
 
     #[test]
