@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1224–D1231: エンコード語・配送跡・多段構造・条件内容の逸脱 8 件
+
+- **問題**: エンコード語の形・配送跡の数と記録・構造の深さ・描画機限定の内容が未検査だった — `=?utf-7?`/`=?utf-16?`/`=?x-user-defined?` 等の異例 charset エンコード語 (二重符号化でキーワード検査を抜ける)、エンコード字が B/Q 以外 (形式を欠く宣言)、`=?` が `?=` で閉じない未終端 (以降を飲み込む差分)、`Received:` 10 以上 (配送跡の嵩増し)、`for <>` 空節 (宛先記録の隠蔽)、`with` が通常系でない値 (配送手段を盛る形)、`multipart` 宣言 6 以上の多段 (検査を薄める構造爆弾)、`<!--[if …]>` 条件コメント (IE/旧 Outlook のみで実行される内容)。
+- **修正**: `has_ew_exotic_charset`/`has_ew_bad_encoding`/`has_ew_unterminated`/`has_received_many`/`has_received_for_empty`/`has_received_with_odd`/`has_multipart_deep`/`has_conditional_comment` で検出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (形・深さの逸脱系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 符号化と包みと記録が逸脱すれば、読み手ごとに届く文が違う — 形と深さを数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

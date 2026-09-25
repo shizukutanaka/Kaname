@@ -114,6 +114,30 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// エンコード語 (`=?charset?enc?text?=`) が UTF-7・UTF-16・
+    /// x-user-defined 等の異例 charset で書かれる — 二重符号化で
+    /// キーワード検査を抜ける差分の兆候 (D1224)。
+    pub ew_exotic_charset: bool,
+    /// エンコード語のエンコード字が B/Q 以外 — 形式を欠く宣言差分の
+    /// 兆候 (D1225)。
+    pub ew_bad_encoding: bool,
+    /// `=?` で始まるエンコード語が `?=` で閉じられない — 未終端で
+    /// 以降を飲み込む宣言差分の兆候 (D1226)。
+    pub ew_unterminated: bool,
+    /// `Received:` ヘッダが多数 (10 以上) 並ぶ — 配送跡を嵩増しする
+    /// 加工痕の兆候 (D1227)。
+    pub received_many: bool,
+    /// `Received:` の `for <>` 節が空 — 宛先記録を隠す形の兆候 (D1228)。
+    pub received_for_empty: bool,
+    /// `Received:` の `with` 値が SMTP/LMTP/HTTP 等の通常系でない —
+    /// 配送手段を盛る形の兆候 (D1229)。
+    pub received_with_odd: bool,
+    /// `Content-Type: multipart` 宣言が 6 以上重なる — 部品を多段に
+    /// 包んで検査を薄める深い構造の兆候 (D1230)。
+    pub multipart_deep: bool,
+    /// `<!--[if …]>` 条件コメントがある — 特定の描画機 (IE/旧 Outlook)
+    /// でのみ実行される内容を隠す差分の兆候 (D1231)。
+    pub conditional_comment: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2029,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2059,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        ew_exotic_charset: has_ew_exotic_charset(raw),
+        ew_bad_encoding: has_ew_bad_encoding(raw),
+        ew_unterminated: has_ew_unterminated(raw),
+        received_many: has_received_many(raw),
+        received_for_empty: has_received_for_empty(raw),
+        received_with_odd: has_received_with_odd(raw),
+        multipart_deep: has_multipart_deep(raw),
+        conditional_comment: has_conditional_comment(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2424,153 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// エンコード語が異例 charset (UTF-7/UTF-16/UTF-32/x-user-defined) で
+/// 書かれるか判定する (D1224)。
+///
+/// これらの charset は Q/B の後にさらにデコードが要る二重符号化 —
+/// 表示側だけ読める形でキーワード検査を抜ける。
+fn has_ew_exotic_charset(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.contains("=?utf-7")
+        || header.contains("=?utf-16")
+        || header.contains("=?utf-32")
+        || header.contains("=?x-user-defined")
+        || header.contains("=?unicode")
+}
+
+/// エンコード語のエンコード字が B/Q 以外か判定する (D1225)。
+///
+/// `=?charset?enc?text?=` の enc は `B`/`Q` の 1 文字のみ — それ以外や
+/// 複数文字・空は形式を欠く宣言で、パーサごとに読み方が違う。
+fn has_ew_bad_encoding(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut rest = header;
+    while let Some(i) = rest.find("=?") {
+        let after = &rest[i + 2..];
+        if let Some(j) = after.find('?') {
+            let enc = &after[j + 1..];
+            if let Some(k) = enc.find('?') {
+                let e = &enc[..k];
+                if !(e.len() == 1 && matches!(e.as_bytes()[0], b'b' | b'q')) {
+                    return true;
+                }
+            }
+        }
+        rest = &rest[i + 2..];
+    }
+    false
+}
+
+/// `=?` で始まるエンコード語が `?=` で閉じられないか判定する (D1226)。
+///
+/// 未終端のエンコード語は行末までを内容として読む実装と読まない実装で
+/// 分かれる宣言差分。
+fn has_ew_unterminated(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.matches("=?").count() > header.matches("?=").count()
+}
+
+/// `Received:` ヘッダが多数 (10 以上) 並ぶか判定する (D1227)。
+///
+/// 正規配送は数ホップ — 二桁の配送跡は追跡を撹乱する加工痕。
+fn has_received_many(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    lower[..header_end]
+        .lines()
+        .filter(|l| l.starts_with("received:"))
+        .count()
+        >= 10
+}
+
+/// `Received:` の `for <>` 節が空か判定する (D1228)。
+///
+/// 宛先記録を消した配送跡は、「誰へ届けたか」を読めなくする形。
+fn has_received_for_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    lower[..header_end]
+        .lines()
+        .any(|l| l.starts_with("received:") && l.contains("for <>"))
+}
+
+/// `Received:` の `with` 値が通常系でないか判定する (D1229)。
+///
+/// `with` は配送手段 (SMTP/ESMTP/LMTP/HTTP 等) を記す欄 — 未知の手段名は
+/// 配送跡を盛る形。
+fn has_received_with_odd(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &[
+        "smtp", "esmtp", "esmtps", "esmtpa", "esmtpsa", "lmtp", "local", "http", "https", "msa",
+        "sieve", "utf8smtp", "utf8smtps", "utf8lmtp", "utf8lmpt",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    lower[..header_end].lines().any(|l| {
+        if !l.starts_with("received:") {
+            return false;
+        }
+        if let Some(i) = l.find(" with ") {
+            let tok: String = l[i + 6..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                .collect();
+            !tok.is_empty() && !KNOWN.contains(&tok.as_str())
+        } else {
+            false
+        }
+    })
+}
+
+/// `Content-Type: multipart` 宣言が深く (6 以上) 重なるか判定する (D1230)。
+///
+/// 実用上の構造は 2-4 段 — それを大きく超える多段の包みは部品ごとの
+/// 検査を薄める構造爆弾。
+fn has_multipart_deep(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.matches("content-type: multipart").count() >= 6
+}
+
+/// `<!--[if …]>` 条件コメントがあるか判定する (D1231)。
+///
+/// IE/旧 Outlook の描画機でのみ実行される条件内容 — 検査側と表示側で
+/// 別の文が読まれる差分。
+fn has_conditional_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("<!--[if")
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21307,102 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は異例符号語を検出する() {
+        assert!(has_ew_exotic_charset(
+            b"Subject: =?utf-7?q?+AKI-?=\r\n\r\nx".as_slice()
+        ));
+        assert!(has_ew_exotic_charset(
+            b"Subject: =?x-user-defined?q?zz?=\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_exotic_charset(
+            b"Subject: =?utf-8?q?hello?=\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_exotic_charset(
+            b"Subject: =?iso-2022-jp?b?GyRC?=\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は不正符号字を検出する() {
+        assert!(has_ew_bad_encoding(
+            b"Subject: =?utf-8?z?abc?=\r\n\r\nx".as_slice()
+        ));
+        assert!(has_ew_bad_encoding(
+            b"Subject: =?utf-8?qq?abc?=\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_bad_encoding(
+            b"Subject: =?utf-8?b?YWJj?=\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_bad_encoding(
+            b"Subject: =?utf-8?q?abc?=\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_bad_encoding(b"Subject: plain\r\n\r\nx".as_slice()));
+    }
+
+    #[test]
+    fn scan_は未終端符号語を検出する() {
+        assert!(has_ew_unterminated(
+            b"Subject: =?utf-8?q?broken word\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_unterminated(
+            b"Subject: =?utf-8?q?ok?=\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_ew_unterminated(b"Subject: plain\r\n\r\nx".as_slice()));
+    }
+
+    #[test]
+    fn scan_は多段配送跡を検出する() {
+        assert!(has_received_many(
+            b"Received: a\r\nReceived: b\r\nReceived: c\r\nReceived: d\r\nReceived: e\r\nReceived: f\r\nReceived: g\r\nReceived: h\r\nReceived: i\r\nReceived: j\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_received_many(
+            b"Received: a\r\nReceived: b\r\nReceived: c\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は空配送先を検出する() {
+        assert!(has_received_for_empty(
+            b"Received: from a by b for <>; x\r\n\r\ny".as_slice()
+        ));
+        assert!(!has_received_for_empty(
+            b"Received: from a by b for <u@x.co>; x\r\n\r\ny".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は異例手段を検出する() {
+        assert!(has_received_with_odd(
+            b"Received: from a by b with carrier-pigeon; x\r\n\r\ny".as_slice()
+        ));
+        assert!(!has_received_with_odd(
+            b"Received: from a by b with esmtps; x\r\n\r\ny".as_slice()
+        ));
+        assert!(!has_received_with_odd(
+            b"Received: from a by b; x\r\n\r\ny".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は深い束を検出する() {
+        assert!(has_multipart_deep(
+            b"Content-Type: multipart/mixed; boundary=a\r\n\r\n--a\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: multipart/mixed; boundary=c\r\n\r\n--c\r\nContent-Type: multipart/mixed; boundary=d\r\n\r\n--d\r\nContent-Type: multipart/mixed; boundary=e\r\n\r\n--e\r\nContent-Type: multipart/mixed; boundary=f\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_multipart_deep(
+            b"Content-Type: multipart/mixed; boundary=a\r\n\r\n--a\r\nContent-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は条件注釈を検出する() {
+        assert!(has_conditional_comment(
+            b"Content-Type: text/html\r\n\r\n<!--[if IE]>x<![endif]-->".as_slice()
+        ));
+        assert!(!has_conditional_comment(
+            b"Content-Type: text/html\r\n\r\n<!-- hello -->".as_slice()
+        ));
     }
 }

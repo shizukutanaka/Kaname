@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // NOTE: html_extract は Option — tel_link フラグは extract 内部。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +597,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1224: エンコード語の異例 charset
+    if env.ew_exotic_charset {
+        render_risks.push(
+            "エンコード語 (=?…?=) が UTF-7・UTF-16 等の異例 charset で書かれています — 二重符号化でキーワード検査を抜ける差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1225: エンコード字が B/Q 以外
+    if env.ew_bad_encoding {
+        render_risks.push(
+            "エンコード語のエンコード字が B/Q 以外です — 形式を欠く宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1226: 未終端エンコード語
+    if env.ew_unterminated {
+        render_risks.push(
+            "エンコード語 (=?…?=) が閉じられていません — 未終端で以降を飲み込む宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1227: Received ヘッダ多数
+    if env.received_many {
+        render_risks.push(
+            "Received: ヘッダが多数並んでいます — 配送跡を嵩増しする加工痕の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1228: Received の for <> が空
+    if env.received_for_empty {
+        render_risks.push(
+            "Received: の for <> が空です — 宛先記録を隠す形の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1229: Received の with が通常系でない
+    if env.received_with_odd {
+        render_risks.push(
+            "Received: の with が通常でない値です — 配送手段を盛る形の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1230: multipart 宣言が深い
+    if env.multipart_deep {
+        render_risks.push(
+            "multipart 宣言が深く重なっています — 部品を多段に包んで検査を薄める構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1231: 条件コメント
+    if env.conditional_comment {
+        render_risks.push(
+            "HTML 条件コメント (<!--[if …]>) があります — 特定の描画機でのみ実行される内容の兆候です"
                 .to_string(),
         );
     }

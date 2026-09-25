@@ -641,3 +641,11 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D782 | ~~**`X-Gaikou-*`/`X-Ekusuteria-*`/`X-Exteriorworks-*`/`X-Exteriordesign-*` 等の外構・エクステリア印自称が未検査**~~ **(解消済み)** | P2 | 外構・エクステリア工事業者 等の通知記録を送信側が自称する兆候だが未検査だった。修正: `has_gaikou_marks` で検出、`gaikou_marks` → `render_risks` 兆候報告 | 通知の記録は通知機が記す — 構印の自署を問え |
 | D783 | ~~**`X-Jumokusou-*`/`X-Sankotsu-*`/`X-Naturalburial-*`/`X-Seaburial-*`/`X-Treeburial-*` 等の樹木葬・散骨印自称が未検査**~~ **(解消済み)** | P2 | 樹木葬・散骨業者 等の通知記録を送信側が自称する兆候だが未検査だった。修正: `has_jumokusou_marks` で検出、`jumokusou_marks` → `render_risks` 兆候報告 | 通知の記録は通知機が記す — 散印の自署を問え |
 | D784 | ~~**`X-Jinkoushiba-*`/`X-Shibahari-*`/`X-Artificialturf-*`/`X-Turfinstallation-*` 等の人工芝・芝張り印自称が未検査**~~ **(解消済み)** | P2 | 人工芝・芝張り業者 等の通知記録を送信側が自称する兆候だが未検査だった。修正: `has_jinkoushiba_marks` で検出、`jinkoushiba_marks` → `render_risks` 兆候報告 | 通知の記録は通知機が記す — 芝印の自署を問え |
+| D1224 | ~~**異例 charset エンコード語が未検査**~~ **(解消済み)** | P1 | UTF-7・UTF-16 等は Q/B の後にさらにデコードが要る二重符号化で検査を抜ける形だが未検査だった。修正: `has_ew_exotic_charset` → `ew_exotic_charset` → 「差分の兆候です」警告 | 符号の表が異例なら読めるのは片側だけ — 表を数えよ |
+| D1225 | ~~**エンコード字が B/Q 以外が未検査**~~ **(解消済み)** | P2 | enc 字は B/Q の 1 文字のみ — 形式を欠く宣言は読み方が実装依存だが未検査だった。修正: `has_ew_bad_encoding` → `ew_bad_encoding` → 「宣言差分の兆候です」警告 | 字が違えば読み方も違う — 形を数えよ |
+| D1226 | ~~**未終端エンコード語が未検査**~~ **(解消済み)** | P2 | `=?` が `?=` で閉じない形は行末までを内容として読むかどうか分かれる差分だが未検査だった。修正: `has_ew_unterminated` → `ew_unterminated` → 「宣言差分の兆候です」警告 | 閉じない語は後まで読む — 切れ目を数えよ |
+| D1227 | ~~**Received ヘッダ多数が未検査**~~ **(解消済み)** | P2 | 正規配送は数ホップ — 二桁の配送跡は追跡を撹乱する加工痕だが未検査だった。修正: `has_received_many` → `received_many` → 「加工痕の兆候です」警告 | 跡が多すぎるのは盛られた跡 — 数を数えよ |
+| D1228 | ~~**Received の空 for 節が未検査**~~ **(解消済み)** | P3 | `for <>` 空は宛先記録を消した形だが未検査だった。修正: `has_received_for_empty` → `received_for_empty` → 「形の兆候です」警告 | 誰へを消した跡は跡でない — 空を数えよ |
+| D1229 | ~~**Received の異例 with 値が未検査**~~ **(解消済み)** | P3 | `with` は配送手段を記す欄 — 未知の手段名は跡を盛る形だが未検査だった。修正: `has_received_with_odd` → `received_with_odd` → 「形の兆候です」警告 | 手段名がなければ届け方も見せかけ — 名を数えよ |
+| D1230 | ~~**多段 multipart が未検査**~~ **(解消済み)** | P2 | 実用上の構造は 2-4 段 — 6 以上の包みは部品ごとの検査を薄める構造爆弾だが未検査だった。修正: `has_multipart_deep` → `multipart_deep` → 「構造の兆候です」警告 | 包みが深ければ底まで届かない — 深さを数えよ |
+| D1231 | ~~**条件コメントが未検査**~~ **(解消済み)** | P2 | `<!--[if …]>` は IE/旧 Outlook のみで実行される内容 — 検査側と表示側で別の文が読まれる差分だが未検査だった。修正: `has_conditional_comment` → `conditional_comment` → 「差分の兆候です」警告 | 注釈と見せる文が実行されるならそれは注釈でない — 条件を数えよ |
