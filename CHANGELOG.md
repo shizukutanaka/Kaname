@@ -8,6 +8,36 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — D960: tel: リンク検査が未定義変数 `html_text` を参照し kaname-ui がコンパイル不能
+
+- **問題**: D237 で追加した `if html_text.tel_link` が `analyze_raw_email` に存在しない変数 `html_text` を参照していた — `html_to_text` の抽出結果は `Option<ExtractedBodyText>` の `html_extract` に束縛されているため、kaname-ui はコンパイル不能で tel: 兆候は一度も発火していなかった。依存取得不可環境 (D20) で `cargo check` が走らず、static-check は関数呼出しか検査しない (変数参照は対象外) という二重の穴。
+- **修正**: `html_extract.as_ref().is_some_and(|e| e.tel_link)` に修正 — Option 経由で tel: 兆候が実際に発火する経路を復元。
+- **教訓**: 束縛を疑え — 「あるはずの名前」は grep 1 回で存在確認できる。
+
+### Security — D961: HTML 本文のフォーム要素 (`<form>`/`<input>` 等) が未検査
+
+- **問題**: sanitizer は `<form>`/`<input>`/`<button>`/`<select>`/`<textarea>` を黙って落とすため、資格情報収集フォームを本文に埋め込むフィッシング (外部サイトへ誘導しない分 URL 評判判定を素通り — 資格情報を求めるフォームの存在は PhishKey (arXiv 2506.21106) 等でもコア特徴) は表示側で無害化される一方、「含まれていたこと」自体を誰も報告していなかった。正規の配信メールはフォームを埋め込まずリンクで Web フォームへ遷移させる。
+- **修正**: `has_form_elements` + `has_open_tag` (タグ名の後方区切り確認で `<formula>` 等の前方一致誤検を防止) を新設、`ExtractedBodyText.form_present` → `render_risks` 兆候報告。
+- **教訓**: 表示で落とすものは解析で数えろ — 無害化は記録の代替ではない。
+
+### Security — D962: `<meta http-equiv="refresh">` による開封時自動転送が未検査
+
+- **問題**: `content="0;url=..."` の meta refresh は HTML メール・添付 HTML に 0 秒リダイレクトを仕込む定形だが、sanitizer が meta を落とすため解析入力からも消え、自動転送の存在自体が未報告だった。
+- **修正**: `has_meta_refresh` を新設 (meta タグ内の `http-equiv`+`refresh` を検査 — `<metadata>` 等の前方一致は除く)、`ExtractedBodyText.meta_refresh` → `render_risks` 兆候報告。
+- **教訓**: ユーザーの行為を要しない遷移は自動遷移 — 勝手に動く仕組みを問え。
+
+### Security — D963: `<base>` タグによる相対 URL 解決基準の書き換えが未検査
+
+- **問題**: `<base href>` は相対リンク・相対参照の解決基準 URI を送信側が指定する — `<a href="/login">` をタグを解釈する描画環境では別ドメインへ向かわせる基準 URI 偽装の手段。Kaname の描画は base を除去し相対 URL を解決しないため表示影響はないが、含有自体は兆候として報告されていなかった。
+- **修正**: `has_base_tag` を新設、`ExtractedBodyText.base_tag` → `render_risks` 兆候報告。
+- **教訓**: 解釈の起点は送り主が決めるものではない — 起点を書くタグを問え。
+
+### Security — D964: `data:`/`javascript:`/`vbscript:`/`file:`/`blob:` スキームのリンクが未検査
+
+- **問題**: 本文中の `href` は http(s) のみを URL 抽出の対象とし、表示側は実行スキームを落とすが、「危険スキームのリンクが送られてきた」ことの報告がなかった。`data:text/html` のペイロード内包 (data: URI フィッシング — Unit 42 等が報告)、`javascript:`/`vbscript:`/`blob:` のスクリプト・生成物実行、`file://\\host\share` UNC 参照による SMB 強制認証 (NTLM ハッシュ送信の定形) がすべて兆候として残らなかった。
+- **修正**: `has_dangerous_scheme_link` を新設 (`href=` の属性値先頭でスキーム判定 — 無引用符・大文字・`=` 両側の空白に対応)、`ExtractedBodyText.dangerous_scheme_link` → `render_risks` 兆候報告。
+- **教訓**: 値の危険度はプレフィックスで決まる — スキーム名を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

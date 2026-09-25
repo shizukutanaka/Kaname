@@ -562,9 +562,45 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960: 抽出結果は Option<ExtractedBodyText> の html_extract で保持する
+    // (未定義変数 html_text を参照しており、この検査自体がコンパイル不能だった)。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
+                .to_string(),
+        );
+    }
+
+    // D961: メール内フォーム要素 (資格情報収集フォーム)
+    if html_extract.as_ref().is_some_and(|e| e.form_present) {
+        render_risks.push(
+            "HTML 本文にフォーム要素 (<form>/<input> 等) — メール内完結の情報収集フォームの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D962: meta refresh による自動転送
+    if html_extract.as_ref().is_some_and(|e| e.meta_refresh) {
+        render_risks.push(
+            "meta refresh — 開封と同時に外部サイトへ転送される可能性があります".to_string(),
+        );
+    }
+
+    // D963: base タグによる相対 URL 解決基準の書き換え
+    if html_extract.as_ref().is_some_and(|e| e.base_tag) {
+        render_risks.push(
+            "base タグ — 相対 URL の解決基準を送信者が書き換える基準 URI 偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D964: 実行・外部取得スキームのリンク (data:/javascript:/file: 等)
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.dangerous_scheme_link)
+    {
+        render_risks.push(
+            "data:/javascript:/file: 等のスキームのリンク — ペイロード内包・強制認証の誘導経路の兆候です"
                 .to_string(),
         );
     }
