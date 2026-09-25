@@ -114,6 +114,50 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Content-Type:` があるのに `MIME-Version:` がない (D1160)。
+    ///
+    /// MIME 系フィールドを持つのに版宣言がない — MTA が「MIME では
+    /// ない」と解釈し検査が素通りする差分の兆候。
+    pub missing_mimever: bool,
+    /// `MIME-Version:` が `1.0` 以外の値 (D1161)。
+    ///
+    /// RFC 2045 の唯一の正当値以外を名乗る — 版解釈が読み手ごとに
+    /// 違う差分の兆候。
+    pub bad_mimever: bool,
+    /// `Content-Transfer-Encoding: base64` 宣言だが本文に base64
+    /// 無効文字がある (D1162)。
+    ///
+    /// デコード不能の本文 — 検査器が復号を諦め内容を読めない
+    /// 差分の兆候。
+    pub invalid_base64_body: bool,
+    /// `Content-Transfer-Encoding: quoted-printable` 宣言だが
+    /// 本文に `=XY` 非 hex の破損列がある (D1163)。
+    ///
+    /// QP デコーダごとに結果が違う — 表示値と検査値が分かれる
+    /// 差分の兆候。
+    pub invalid_qp_body: bool,
+    /// `Content-Type: text/*` なのに `charset=` パラメータがない
+    /// (D1164)。
+    ///
+    /// 文字解釈が読み手ごとに違う — 片方は ASCII、他方は UTF-8 や
+    /// Shift_JIS を読む差分の兆候。
+    pub missing_charset: bool,
+    /// `Content-Disposition: attachment` なのに `filename=`/
+    /// `name=` パラメータがない (D1165)。
+    ///
+    /// 添付に名がない — 拡張子検査・名前表示が原理的にできない
+    /// 差分の兆候。
+    pub disposition_no_name: bool,
+    /// multipart 宣言で `boundary=` が空値 (D1166)。
+    ///
+    /// 空境界は部品分割が不能 — 検査器ごとに分割点が違う差分の
+    /// 兆候。
+    pub empty_boundary: bool,
+    /// 本文先頭が `begin 644 ` 等の uuencode 形式 (D1167)。
+    ///
+    /// MIME ではない不透明コンテナ — メール検査の外に荷物を
+    /// 忍ばせる定形の兆候。
+    pub uuencode_body: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2049,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2079,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        missing_mimever: has_missing_mimever(raw),
+        bad_mimever: has_bad_mimever(raw),
+        invalid_base64_body: has_invalid_base64_body(raw),
+        invalid_qp_body: has_invalid_qp_body(raw),
+        missing_charset: has_missing_charset(raw),
+        disposition_no_name: has_disposition_no_name(raw),
+        empty_boundary: has_empty_boundary(raw),
+        uuencode_body: has_uuencode_body(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2444,212 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `Content-Type:` があるのに `MIME-Version:` がないか判定する
+/// (D1160)。MIME 文脈 (Content-Type または CTE) があって版宣言だけ
+/// 欠く場合のみ真。
+fn has_missing_mimever(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let has_mime_ctx = header.lines().any(|l| {
+        l.starts_with("content-type:") || l.starts_with("content-transfer-encoding:")
+    });
+    has_mime_ctx && !header.lines().any(|l| l.starts_with("mime-version:"))
+}
+
+/// `MIME-Version:` が `1.0` 以外か判定する (D1161)。
+fn has_bad_mimever(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("mime-version:").is_some_and(|v| v.trim() != "1.0")
+    })
+}
+
+/// `Content-Transfer-Encoding: base64` 宣言だが本文に無効文字があるか
+/// 判定する (D1162)。最初に見つかった CTE=base64 パートの本文を検査。
+fn has_invalid_base64_body(raw: &[u8]) -> bool {
+    // ヘッダ/本文の分割。
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+        i += 1;
+    }
+    let text = String::from_utf8_lossy(&raw[..header_end]);
+    let lower = text.to_ascii_lowercase();
+    if !lower.lines().any(|l| {
+        l.strip_prefix("content-transfer-encoding:")
+            .is_some_and(|v| v.trim() == "base64")
+    }) {
+        return false;
+    }
+    let body = &raw[header_end..];
+    // 無効文字: base64 集合外 (空白・CRLF は許容)。先頭 2KB のみ検査。
+    body.iter().take(2048).any(|&b| {
+        !matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' | b'=' | b'\r' | b'\n' | b' ' | b'\t')
+    })
+}
+
+/// `Content-Transfer-Encoding: quoted-printable` 宣言だが `=XY` が
+/// 非 hex か判定する (D1163)。
+fn has_invalid_qp_body(raw: &[u8]) -> bool {
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+        i += 1;
+    }
+    let text = String::from_utf8_lossy(&raw[..header_end]);
+    let lower = text.to_ascii_lowercase();
+    if !lower.lines().any(|l| {
+        l.strip_prefix("content-transfer-encoding:")
+            .is_some_and(|v| v.trim() == "quoted-printable")
+    }) {
+        return false;
+    }
+    let body = &raw[header_end..];
+    let hex = |b: u8| b.is_ascii_hexdigit();
+    let mut j = 0;
+    let limit = body.len().min(4096);
+    while j < limit {
+        if body[j] == b'=' {
+            // `=` 行末 (soft line break) は合法。
+            if j + 1 >= limit || body[j + 1] == b'\n' {
+                j += 1;
+                continue;
+            }
+            if body[j + 1] == b'\r' {
+                j += 1;
+                continue;
+            }
+            if j + 2 < limit && !(hex(body[j + 1]) && hex(body[j + 2])) {
+                return true;
+            }
+            j += 3;
+        } else {
+            j += 1;
+        }
+    }
+    false
+}
+
+/// `Content-Type: text/*` で `charset=` パラメータがないか判定する
+/// (D1164)。
+fn has_missing_charset(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("content-type:").is_some_and(|v| {
+            let v = v.trim();
+            v.starts_with("text/") && !v.contains("charset=")
+        })
+    })
+}
+
+/// `Content-Disposition: attachment` で `filename=`/`name=` がないか
+/// 判定する (D1165)。添付名の材料が原理的にない形。
+fn has_disposition_no_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let has_attach = header.lines().any(|l| {
+        l.strip_prefix("content-disposition:")
+            .is_some_and(|v| v.trim().starts_with("attachment"))
+    });
+    has_attach && !header.contains("filename=") && !header.contains("name=")
+}
+
+/// multipart 宣言で `boundary=` が空値か判定する (D1166)。
+fn has_empty_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if !header.contains("multipart/") {
+        return false;
+    }
+    header.contains("boundary=\"") || {
+        // boundary= の直後が行末か区切り (値なし)。
+        let mut found = false;
+        for pos in header.match_indices("boundary=") {
+            let rest = &header[pos.0 + 9..];
+            let t = rest.trim_start_matches([' ', '\t']);
+            if t.is_empty() || t.starts_with([';', '\r', '\n']) {
+                found = true;
+            }
+        }
+        found
+    }
+}
+
+/// 本文先頭が uuencode 形式か判定する (D1167)。
+/// `begin 644 name` / `begin-base64 644 name` 等のマーカーを
+/// 本文先頭 512 バイトで検査。
+fn has_uuencode_body(raw: &[u8]) -> bool {
+    let mut body_start = raw.len();
+    let mut i = 0;
+    while i + 1 < raw.len() {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            body_start = i + 2;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            body_start = i + 4;
+            break;
+        }
+        i += 1;
+    }
+    if body_start >= raw.len() {
+        return false;
+    }
+    let probe = &raw[body_start..raw.len().min(body_start + 512)];
+    let text = String::from_utf8_lossy(probe);
+    text.lines().any(|l| {
+        let t = l.trim();
+        // `begin <octal> <name>` または `begin-base64 <octal> <name>`。
+        t.starts_with("begin 6")
+            || t.starts_with("begin 7")
+            || t.starts_with("begin-base64 ")
+            || t.starts_with("begin--")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21386,94 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_はMIME版欠落を検出する() {
+        let bad = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(has_missing_mimever(bad));
+        let ok = b"MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nx";
+        assert!(!has_missing_mimever(ok));
+        let nomime = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_missing_mimever(nomime));
+    }
+
+    #[test]
+    fn scan_はMIME版異値を検出する() {
+        let bad = b"MIME-Version: 2.0\r\n\r\nx";
+        assert!(has_bad_mimever(bad));
+        let ok = b"MIME-Version: 1.0\r\n\r\nx";
+        assert!(!has_bad_mimever(ok));
+        let none = b"From: a@b\r\n\r\nx";
+        assert!(!has_bad_mimever(none));
+    }
+
+    #[test]
+    fn scan_は不正base64を検出する() {
+        let bad = b"Content-Transfer-Encoding: base64\r\n\r\n!!!###";
+        assert!(has_invalid_base64_body(bad));
+        let ok = b"Content-Transfer-Encoding: base64\r\n\r\naGVsbG8=";
+        assert!(!has_invalid_base64_body(ok));
+        // base64 宣言がなければ対象外
+        let plain = b"Content-Transfer-Encoding: 7bit\r\n\r\n!!!###";
+        assert!(!has_invalid_base64_body(plain));
+    }
+
+    #[test]
+    fn scan_は不正QPを検出する() {
+        let bad = b"Content-Transfer-Encoding: quoted-printable\r\n\r\nx=zz";
+        assert!(has_invalid_qp_body(bad));
+        let ok = b"Content-Transfer-Encoding: quoted-printable\r\n\r\nx=41";
+        assert!(!has_invalid_qp_body(ok));
+        let soft = b"Content-Transfer-Encoding: quoted-printable\r\n\r\nx=\r\ny";
+        assert!(!has_invalid_qp_body(soft));
+        let plain = b"Content-Transfer-Encoding: 7bit\r\n\r\nx=zz";
+        assert!(!has_invalid_qp_body(plain));
+    }
+
+    #[test]
+    fn scan_は文字型欠落を検出する() {
+        let bad = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(has_missing_charset(bad));
+        let ok = b"Content-Type: text/plain; charset=utf-8\r\n\r\nx";
+        assert!(!has_missing_charset(ok));
+        let nontext = b"Content-Type: application/octet-stream\r\n\r\nx";
+        assert!(!has_missing_charset(nontext));
+    }
+
+    #[test]
+    fn scan_は無名添付を検出する() {
+        let bad = b"Content-Disposition: attachment\r\n\r\nx";
+        assert!(has_disposition_no_name(bad));
+        let ok = b"Content-Disposition: attachment; filename=\"f.bin\"\r\n\r\nx";
+        assert!(!has_disposition_no_name(ok));
+        let ok2 = b"Content-Type: application/x; name=\"f.bin\"\r\nContent-Disposition: attachment\r\n\r\nx";
+        assert!(!has_disposition_no_name(ok2));
+        let noattach = b"Content-Disposition: inline\r\n\r\nx";
+        assert!(!has_disposition_no_name(noattach));
+    }
+
+    #[test]
+    fn scan_は空境界を検出する() {
+        let bad = b"Content-Type: multipart/mixed; boundary=\"\"\r\n\r\nx";
+        assert!(has_empty_boundary(bad));
+        let bad2 = b"Content-Type: multipart/mixed; boundary=\r\n\r\nx";
+        assert!(has_empty_boundary(bad2));
+        let ok = b"Content-Type: multipart/mixed; boundary=\"B1\"\r\n\r\nx";
+        assert!(!has_empty_boundary(ok));
+        let nomp = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(!has_empty_boundary(nomp));
+    }
+
+    #[test]
+    fn scan_はuuencodeを検出する() {
+        let bad = b"From: a@b\r\n\r\nbegin 644 secret.exe\r\nM0VM&``\r\nend";
+        assert!(has_uuencode_body(bad));
+        let bad2 = b"From: a@b\r\n\r\nbegin-base64 644 x\r\nAAAA";
+        assert!(has_uuencode_body(bad2));
+        let clean = b"From: a@b\r\n\r\nbegin here, normal text";
+        assert!(!has_uuencode_body(clean));
+        let none = b"From: a@b\r\n\r\n";
+        assert!(!has_uuencode_body(none));
     }
 }

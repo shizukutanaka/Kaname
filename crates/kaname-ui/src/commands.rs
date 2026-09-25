@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1160: MIME-Version 欠落
+    if env.missing_mimever {
+        render_risks.push(
+            "Content-Type があるのに MIME-Version がありません — 「MIME ではない」と解釈される差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1161: MIME-Version 異値
+    if env.bad_mimever {
+        render_risks.push(
+            "MIME-Version: が 1.0 以外です — 版解釈が読み手ごとに違う差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1162: base64 デコード不能
+    if env.invalid_base64_body {
+        render_risks.push(
+            "base64 宣言なのに本文に無効文字があります — 復号できず検査器が内容を読めない差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1163: QP 破損列
+    if env.invalid_qp_body {
+        render_risks.push(
+            "quoted-printable 宣言なのに =XY が非 hex です — 表示値と検査値が分かれる差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1164: charset 欠落
+    if env.missing_charset {
+        render_risks.push(
+            "text/* なのに charset= がありません — 文字解釈が読み手ごとに違う差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1165: 無名添付
+    if env.disposition_no_name {
+        render_risks.push(
+            "attachment なのに filename=/name= がありません — 拡張子検査・名前表示ができない差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1166: 空 boundary
+    if env.empty_boundary {
+        render_risks.push(
+            "multipart なのに boundary= が空です — 部品分割が不能で分割点が読み手ごとに違う差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1167: uuencode 本文
+    if env.uuencode_body {
+        render_risks.push(
+            "本文が begin 644 等の uuencode 形式です — メール検査の外に荷物を忍ばせる不透明コンテナの兆候です"
                 .to_string(),
         );
     }

@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1160–D1167: MIME 版宣言・デコード不能・パラメータ欠落の未検査兆候 8 件
+
+- **問題**: 「本文をどう復号・分割・解釈するか」の情報が欠けたり破損した形が未検査だった — MIME 系フィールドがあるのに `MIME-Version:` 欠落 (MTA が「MIME ではない」と解釈し検査が素通り)、`MIME-Version:` が 1.0 以外 (版解釈の差分)、base64 宣言なのに本文に無効文字 (復号不能で内容検査不可)、quoted-printable 宣言なのに `=XY` が非 hex (デコーダごとに結果が違う)、`text/*` で `charset=` なし (文字解釈の差分)、`attachment` で `filename=`/`name=` なし (拡張子検査・名前表示が不能)、multipart で `boundary=` が空値 (部品分割点が読み手ごとに違う)、本文先頭の uuencode `begin 644` 形 (メール検査の外に荷物を忍ばせる不透明コンテナ)。
+- **修正**: `has_missing_mimever`/`has_bad_mimever`/`has_invalid_base64_body`/`has_invalid_qp_body`/`has_missing_charset`/`has_disposition_no_name`/`has_empty_boundary`/`has_uuencode_body` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 復号の仕方が書かれていなければ、読み手ごとに中身が違う — 版・符号・名・境界の欠落と破損を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
