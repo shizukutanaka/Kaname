@@ -114,6 +114,46 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Content-Type: text/plain` 宣言なのに本文に `<html`/
+    /// `<!doctype`/`<head`/`<body` 構造がある (D1200)。
+    ///
+    /// 「表示しない型」を名乗って中身に構造を忍ばせる定形の
+    /// 差分 — 読み手ごとに中身が違う形。
+    pub plain_body_html: bool,
+    /// `charset=utf-7` 宣言がある (D1201)。
+    ///
+    /// ASCII を特殊符号で包む UTF-7 — エンコーディング・
+    /// スマグリングの定形で、キーワード検査を抜ける形。
+    pub charset_utf7: bool,
+    /// `charset=utf-16`/`utf-32` 宣言がある (D1202)。
+    ///
+    /// バイト解釈で別文になるワイド文字 — NUL 混じりで検査を
+    /// 抜ける形。
+    pub charset_utf16: bool,
+    /// multipart 宣言なのに `--boundary` 部品行が一切無い
+    /// (D1203)。
+    ///
+    /// 開端さえない束 — 部品構造が皆無の差分。
+    pub multipart_no_open: bool,
+    /// `multipart/alternative` 宣言なのに本文に text/plain 部が
+    /// 無い (D1204)。
+    ///
+    /// 「代替」の体裁で実は HTML のみ — 平文側を読む検査を
+    /// 抜ける形。
+    pub alt_missing_plain: bool,
+    /// 最上位 `Content-Type: message/rfc822` (D1205)。
+    ///
+    /// メール全体が転送メール — 中身は別メールで検査対象外の
+    /// 不透明コンテナの形。
+    pub top_message_rfc822: bool,
+    /// `Content-Type: multipart/report` (D1206)。
+    ///
+    /// DSN/開封報告の体裁 — 判定結果を自称する構造の形。
+    pub multipart_report: bool,
+    /// `Content-Type: multipart/digest` (D1207)。
+    ///
+    /// まとめ形式 — 内側のメールを検査対象外にする構造の形。
+    pub multipart_digest: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2045,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2075,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        plain_body_html: has_plain_body_html(raw),
+        charset_utf7: has_charset_utf7(raw),
+        charset_utf16: has_charset_utf16(raw),
+        multipart_no_open: has_multipart_no_open(raw),
+        alt_missing_plain: has_alt_missing_plain(raw),
+        top_message_rfc822: has_top_message_rfc822(raw),
+        multipart_report: has_multipart_report(raw),
+        multipart_digest: has_multipart_digest(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2440,127 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// ヘッダ節 (小文字化済み) から `boundary=` 値をすべて集める補助
+/// (D1203/D1204 系)。`boundary="..."`/`boundary=token` の両形を読む。
+fn boundary_values(header: &str) -> Vec<String> {
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-type:"))
+        .flat_map(|l| {
+            l.split(';').skip(1).filter_map(|p| {
+                let p = p.trim();
+                p.strip_prefix("boundary=").map(|v| {
+                    let end = v.find(|c: char| c == ';' || c.is_whitespace()).unwrap_or(v.len());
+                    v[..end].trim_matches(|c: char| c == '"' || c == '\'').to_string()
+                })
+            })
+        })
+        .filter(|v| !v.is_empty())
+        .collect()
+}
+
+/// 本文節 (小文字化済み) を返す補助 (D1200/D1203/D1204 系)。
+fn body_section<'a>(lower: &'a str, header_end: usize) -> &'a str {
+    &lower[header_end..]
+}
+
+/// `text/plain` 宣言なのに本文に HTML 構造があるか判定する
+/// (D1200)。
+fn has_plain_body_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if !header.contains("content-type: text/plain") {
+        return false;
+    }
+    let body = body_section(&lower, header_end);
+    ["<html", "<!doctype", "<head", "<body", "<table", "<div", "<a href", "<img"]
+        .iter()
+        .any(|t| body.contains(t))
+}
+
+/// `charset=utf-7` 宣言があるか判定する (D1201)。
+fn has_charset_utf7(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.contains("charset=utf-7") || header.contains("charset=\"utf-7\"")
+}
+
+/// `charset=utf-16`/`utf-32` 宣言があるか判定する (D1202)。
+fn has_charset_utf16(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    ["charset=utf-16", "charset=utf-32"].iter().any(|c| header.contains(c))
+}
+
+/// multipart 宣言なのに `--boundary` 部品行が一切無いか判定する
+/// (D1203)。
+fn has_multipart_no_open(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if !header.contains("content-type: multipart/") {
+        return false;
+    }
+    let b = boundary_values(header);
+    if b.is_empty() {
+        return false;
+    }
+    let body = body_section(&lower, header_end);
+    !b.iter().any(|bv| body.contains(&format!("--{bv}")))
+}
+
+/// `multipart/alternative` 宣言なのに本文に text/plain 部が無いか
+/// 判定する (D1204)。
+fn has_alt_missing_plain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if !header.contains("content-type: multipart/alternative") {
+        return false;
+    }
+    let body = body_section(&lower, header_end);
+    !body.contains("content-type: text/plain")
+}
+
+/// 最上位 `Content-Type: message/rfc822` か判定する (D1205)。
+/// 最初の content-type 行がその値。
+fn has_top_message_rfc822(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .find(|l| l.starts_with("content-type:"))
+        .is_some_and(|l| l.contains("message/rfc822"))
+}
+
+/// `Content-Type: multipart/report` か判定する (D1206)。
+fn has_multipart_report(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.contains("content-type: multipart/report")
+}
+
+/// `Content-Type: multipart/digest` か判定する (D1207)。
+fn has_multipart_digest(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.contains("content-type: multipart/digest")
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21130,3 +21299,82 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
+    #[test]
+    fn scan_は宣言平文でHTML本文を検出する() {
+        assert!(has_plain_body_html(
+            b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\n<html><body>x</body></html>"
+        ));
+        assert!(!has_plain_body_html(
+            b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nplain text only"
+        ));
+        assert!(!has_plain_body_html(
+            b"Content-Type: text/html\r\nFrom: a@b\r\n\r\n<html>x</html>"
+        ));
+        assert!(!has_plain_body_html(b"From: a@b\r\n\r\n<html>x</html>"));
+    }
+    #[test]
+    fn scan_はUTF7宣言を検出する() {
+        assert!(has_charset_utf7(
+            b"Content-Type: text/plain; charset=utf-7\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_charset_utf7(
+            b"Content-Type: text/plain; charset=utf-8\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_charset_utf7(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はUTF16宣言を検出する() {
+        assert!(has_charset_utf16(
+            b"Content-Type: text/plain; charset=utf-16\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_charset_utf16(
+            b"Content-Type: text/plain; charset=utf-32\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_charset_utf16(
+            b"Content-Type: text/plain; charset=utf-8\r\nFrom: a@b\r\n\r\nx"
+        ));
+    }
+    #[test]
+    fn scan_は開端欠落を検出する() {
+        assert!(has_multipart_no_open(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nFrom: a@b\r\n\r\nno parts here"
+        ));
+        assert!(!has_multipart_no_open(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nhi\r\n--ab--\r\n"
+        ));
+        assert!(!has_multipart_no_open(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は代替欠平文を検出する() {
+        assert!(has_alt_missing_plain(
+            b"Content-Type: multipart/alternative; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--ab--\r\n"
+        ));
+        assert!(!has_alt_missing_plain(
+            b"Content-Type: multipart/alternative; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nContent-Type: text/plain\r\n\r\nx\r\n--ab--\r\n"
+        ));
+        assert!(!has_alt_missing_plain(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は最上位RFC822を検出する() {
+        assert!(has_top_message_rfc822(
+            b"Content-Type: message/rfc822\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_top_message_rfc822(
+            b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_top_message_rfc822(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は報告体裁を検出する() {
+        assert!(has_multipart_report(
+            b"Content-Type: multipart/report; boundary=\"ab\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_multipart_report(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はまとめ体裁を検出する() {
+        assert!(has_multipart_digest(
+            b"Content-Type: multipart/digest; boundary=\"ab\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_multipart_digest(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }

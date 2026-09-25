@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // html_extract は Option<HtmlExtract> — as_ref().is_some_and で照会する。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -600,6 +601,62 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1200: 平文宣言で HTML 本文 — 「表示しない型」で構造を忍ばせる差分の兆候
+    if env.plain_body_html {
+        render_risks.push(
+            "text/plain 宣言なのに本文に HTML 構造があります — 「表示しない型」を名乗って構造を忍ばせる差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1201: charset=utf-7 — エンコーディング・スマグリングの定形の兆候
+    if env.charset_utf7 {
+        render_risks.push(
+            "charset=utf-7 — ASCII を特殊符号で包むエンコーディング・スマグリングの定形の兆候です"
+                .to_string(),
+        );
+    }
+    // D1202: charset=utf-16/utf-32 — バイト解釈で別文になる形の兆候
+    if env.charset_utf16 {
+        render_risks.push(
+            "charset=utf-16/utf-32 — バイト解釈で別文になるワイド文字の兆候です"
+                .to_string(),
+        );
+    }
+    // D1203: 開端欠落 — 部品構造が皆無の差分の兆候
+    if env.multipart_no_open {
+        render_risks.push(
+            "multipart なのに --boundary 部品行が一切ありません — 部品構造が皆無の解析差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1204: 代替欠平文 — HTML のみで平文側検査を抜ける形の兆候
+    if env.alt_missing_plain {
+        render_risks.push(
+            "multipart/alternative なのに text/plain 部がありません — 「代替」の体裁で実は HTML のみの兆候です"
+                .to_string(),
+        );
+    }
+    // D1205: 最上位 message/rfc822 — 中身は別メールの不透明コンテナの兆候
+    if env.top_message_rfc822 {
+        render_risks.push(
+            "最上位 Content-Type: message/rfc822 — メール全体が転送メールで中身は別メールの不透明コンテナの兆候です"
+                .to_string(),
+        );
+    }
+    // D1206: multipart/report — 判定結果を自称する構造の兆候
+    if env.multipart_report {
+        render_risks.push(
+            "Content-Type: multipart/report — DSN/開封報告の体裁で判定結果を自称する構造の兆候です"
+                .to_string(),
+        );
+    }
+    // D1207: multipart/digest — 内側メールを検査対象外にする構造の兆候
+    if env.multipart_digest {
+        render_risks.push(
+            "Content-Type: multipart/digest — まとめ形式で内側のメールを検査対象外にする構造の兆候です"
+                .to_string(),
+        );
+    }
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(
