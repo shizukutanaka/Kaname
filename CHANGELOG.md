@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1023–D1030: 時間異常・構造欠落・境界外内容の未検査兆候 8 件
+
+- **問題**: Date の 48h 超未来日付 (受信箱上部常駐化)・Message-ID 欠落・MIME 構造使用なのに MIME-Version 宣言なし・boundary 外 (preamble/epilogue) の実質本文・obs-fold 継続行内の独立ヘッダ形・998 バイト超ヘッダ行・From が mailer-daemon 系でない multipart/report 偽装 DSN・encoded-word 入れ子や utf-7 等の混乱 charset のいずれも兆候として報告されなかった。(参考: spam の先送り日付手法・RFC 5322 obs-fold・RFC 2047 encoded-word 入れ子禁止・DSN spoofing)
+- **修正**: `has_future_date` (RFC 2822 Date を days-from-civil で分に換算、48h 閾値)・`has_missing_message_id`・`has_missing_mime_version` (multipart/CTE 使用で宣言欠落)・`has_boundary_outside_content` (boundary 外 40 文字超)・`has_folded_header_inject` (継続行の `Name:` 形)・`has_overlong_header_line` (>998B)・`has_dsn_structure` (report 構造だが From が非 daemon 系)・`has_nested_encoded_word` (入れ子 `=?` または utf-7/x-user-defined/空 charset) を `kaname-render` に追加。`Envelope` に 8 フィールド追加し `commands.rs` で兆候報告。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 時刻も構造も「そこにあるはずのもの」が欠けるのは手作りの印 — Message-ID・MIME-Version の欠落を問え。規格が禁ずる形 (obs-fold 内ヘッダ・encword 入れ子) は「違う解釈をする受信者」への鍵。体裁を借りた構造 (mailer-daemon でない DSN) は中身ではなく形式を読め。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

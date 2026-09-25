@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // D960 修正: `html_text` は定義されていない — 正しくは
+    // `html_extract` (Option<ExtractedBodyText>) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1023: 未来日付 — 受信箱最上部に留まるための投稿日時先送り
+    if env.future_date {
+        render_risks.push(
+            "Date: が 48 時間以上未来の日付です — 投稿日時を先送りして受信箱上部に留まる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1024: Message-ID 欠落
+    if env.missing_message_id {
+        render_risks.push(
+            "Message-ID: ヘッダがありません — 送信側生成時に ID を欠く手作りメールの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1025: MIME 構造使用だが MIME-Version 欠落
+    if env.missing_mime_version {
+        render_risks.push(
+            "MIME 構造 (multipart/転送エンコーディング) を使いますが MIME-Version: 宣言がありません — 解釈を分岐させる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1026: boundary 外の実質本文 (preamble/epilogue)
+    if env.boundary_outside_content {
+        render_risks.push(
+            "boundary の外側 (先頭/末尾) に実質的な本文があります — パーサによって表示・無視が分かれる隠し内容の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1027: 折返し継続行の独立ヘッダ形
+    if env.folded_header_inject {
+        render_risks.push(
+            "継続行が独立したヘッダ形を含みます — obs-fold でヘッダを紛れ込ませる構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1028: 998 バイト超ヘッダ行
+    if env.overlong_header_line {
+        render_risks.push(
+            "998 バイトを超えるヘッダ行があります — RFC 5321 の行長制限を超える解析差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1029: DSN 構造の偽装 — report 構造だが From が mailer-daemon 系でない
+    if env.dsn_structure {
+        render_risks.push(
+            "multipart/report のバウンス構造ですが From が mailer-daemon 系ではありません — バウンスの体裁を借りた兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1030: encoded-word 入れ子・混乱 charset
+    if env.nested_encoded_word {
+        render_risks.push(
+            "encoded-word に入れ子または utf-7/x-user-defined 等の混乱 charset 宣言があります — RFC 禁止の構造の兆候です"
                 .to_string(),
         );
     }

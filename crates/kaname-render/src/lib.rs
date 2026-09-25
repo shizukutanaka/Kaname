@@ -119,6 +119,31 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// Date: が 48 時間以上未来 — 受信箱最上部に留まるための
+    /// 投稿日時先送りの兆候 (D1023)。
+    pub future_date: bool,
+    /// `Message-ID:` 欠落 — 生成系・手作りメールの兆候
+    /// (MTA が付与する前の送信側生成時に既に無い) (D1024)。
+    pub missing_message_id: bool,
+    /// MIME 構造 (multipart/CTE) を使うのに `MIME-Version:` 宣言が
+    /// 無い — MIME 処理を分岐させる parser differential の兆候 (D1025)。
+    pub missing_mime_version: bool,
+    /// 宣言 boundary の外側 (preamble/epilogue) に実質的な本文 —
+    /// パーサによって表示・無視が分かれる隠し内容の兆候 (D1026)。
+    pub boundary_outside_content: bool,
+    /// 折り返し継続行が独立ヘッダ形 (`Name:`) を含む — obs-fold
+    /// でヘッダを紛れ込ませる構造の兆候 (D1027)。
+    pub folded_header_inject: bool,
+    /// 998 バイト超のヘッダ行 — RFC 5321 の行長制限を超える
+    /// パーサ負荷・解析差分の兆候 (D1028)。
+    pub overlong_header_line: bool,
+    /// `multipart/report` (delivery-status 構造) だが From が
+    /// mailer-daemon 系でない — バウンスの体裁を借りたフィッシング
+    /// の兆候 (D1029)。
+    pub dsn_structure: bool,
+    /// encoded-word の内部に更に `=?` — RFC 禁止の入れ子または
+    /// utf-7/x-user-defined 等の混乱 charset 宣言の兆候 (D1030)。
+    pub nested_encoded_word: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2005,13 +2030,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2060,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        future_date: has_future_date(hdr),
+        missing_message_id: has_missing_message_id(hdr),
+        missing_mime_version: has_missing_mime_version(hdr),
+        boundary_outside_content: has_boundary_outside_content(raw),
+        folded_header_inject: has_folded_header_inject(hdr),
+        overlong_header_line: has_overlong_header_line(hdr),
+        dsn_structure: has_dsn_structure(hdr),
+        nested_encoded_word: has_nested_encoded_word(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2359,6 +2392,308 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
     })
+}
+
+/// 年月日 → 1970-01-01 からの日数 (days-from-civil)。
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe - 719468
+}
+
+/// RFC 2822 風の Date: 値から分オフセット (UTC ベース) を取り出す。
+/// `[曜日,] DD Mon YYYY HH:MM:SS ±ZZZZ` をトークン走査 — 月名を
+/// 見つけて前に日・後ろに年・時刻・TZ を拾う。失敗時は None。
+fn date_header_minutes(value: &str) -> Option<i64> {
+    const MONTHS: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let toks: Vec<&str> = value.split(|c: char| c.is_whitespace() || c == ',').filter(|t| !t.is_empty()).collect();
+    let mpos = toks
+        .iter()
+        .position(|t| MONTHS.contains(&t[..3].to_ascii_lowercase().as_str()) && t.len() >= 3 && t.chars().all(|c| c.is_ascii_alphabetic()))?;
+    if mpos == 0 || mpos + 1 >= toks.len() {
+        return None;
+    }
+    let day: i64 = toks[mpos - 1].trim().parse().ok()?;
+    let year: i64 = toks[mpos + 1].trim().parse().ok()?;
+    let month = MONTHS
+        .iter()
+        .position(|m| *m == toks[mpos][..3].to_ascii_lowercase())? as i64
+        + 1;
+    // 年の次のトークン = 時刻 HH:MM[:SS]
+    let time_tok = toks.get(mpos + 2)?;
+    let mut tparts = time_tok.split(':');
+    let hh: i64 = tparts.next()?.parse().ok()?;
+    let mm: i64 = tparts.next()?.parse().ok()?;
+    // TZ (+HHMM / -HHMM) — なければ UTC 扱い
+    let tz = toks.get(mpos + 3).and_then(|t| {
+        let t = t.trim();
+        if t.len() == 5 && (t.starts_with('+') || t.starts_with('-')) {
+            let h: i64 = t[1..3].parse().ok()?;
+            let m: i64 = t[3..5].parse().ok()?;
+            let v = h * 60 + m;
+            Some(if t.starts_with('-') { -v } else { v })
+        } else {
+            None
+        }
+    }).unwrap_or(0);
+    Some(days_from_civil(year, month, day) * 1440 + hh * 60 + mm - tz)
+}
+
+/// Date: が現在より 48 時間以上未来か (D1023)。
+///
+/// 受信箱最上部に留まるため投稿日時を先に送る spam 手法 —
+/// 正当な時計ずれ (分〜時間程度) を除外するため閾値は 48h。
+pub fn has_future_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let date_val = header
+        .lines()
+        .find(|l| l.starts_with("date:"))
+        .and_then(|l| l.split_once(':').map(|(_, v)| v.trim().to_string()));
+    let Some(dv) = date_val else { return false };
+    let Some(mail_min) = date_header_minutes(&dv) else {
+        return false;
+    };
+    let now_min = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() / 60)
+        .unwrap_or(0) as i64;
+    mail_min - now_min > 48 * 60
+}
+
+/// `Message-ID:` が無いか (D1024)。
+///
+/// 正当な MUA は必ず付けるが、手作り・生成系メールは欠く —
+/// MTA 到達前の送信側で欠落している形状の兆候。
+pub fn has_missing_message_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("message-id:"))
+}
+
+/// MIME 構造 (multipart/CTE) を使うのに `MIME-Version:` 宣言が
+/// 無いか (D1025)。
+///
+/// MIME-Version の有無で MIME 処理が分岐するパーサがあるため、
+/// 構造を使いながら宣言を欠くのは parser differential の兆候。
+pub fn has_missing_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let has_mime_ver = header.lines().any(|l| l.starts_with("mime-version:"));
+    if has_mime_ver {
+        return false;
+    }
+    let uses_mime = header.lines().any(|l| {
+        (l.starts_with("content-type:") && l.contains("multipart"))
+            || l.starts_with("content-transfer-encoding:")
+    });
+    uses_mime
+}
+
+/// 宣言 boundary の外側 (preamble/epilogue) に実質的な本文が
+/// あるか (D1026)。
+///
+/// multipart の先頭 `--B` 以前・末尾 `--B--` 以降の領域は
+/// パーサによって表示するものと無視するものがある — 閾値を超える
+/// 内容が潜むのは隠し内容の兆候 (誤検を避けるため 40 文字以上)。
+pub fn has_boundary_outside_content(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    // Content-Type の boundary= を取り出す
+    let boundary = header.lines().find_map(|l| {
+        if !(l.starts_with("content-type:") && l.contains("boundary=")) {
+            return None;
+        }
+        let bpos = l.find("boundary=")? + 9;
+        let rest = &l[bpos..];
+        let rest = rest.trim_matches(|c: char| c == '"' || c == '\'');
+        let end = rest
+            .find(|c: char| c == '"' || c == '\'' || c == ';' || c.is_whitespace())
+            .unwrap_or(rest.len());
+        let b = &rest[..end];
+        if b.is_empty() { None } else { Some(b.to_string()) }
+    });
+    let Some(b) = boundary else { return false };
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    let body = &lower[header_end..];
+    let mut before = String::new();
+    let mut after = String::new();
+    let mut phase = 0; // 0=preamble, 1=inside parts, 2=epilogue
+    for line in body.lines() {
+        match phase {
+            0 => {
+                if line.trim() == open || line.trim().starts_with(&format!("{} ", open)) {
+                    phase = 1;
+                } else {
+                    before.push_str(line);
+                }
+            }
+            1 => {
+                if line.trim() == close || line.trim().starts_with(&close) {
+                    phase = 2;
+                }
+            }
+            _ => after.push_str(line),
+        }
+    }
+    let outside = format!("{}{}", before, after);
+    outside.chars().filter(|c| !c.is_whitespace()).count() > 40
+}
+
+/// 折り返し継続行が独立ヘッダ形を含むか (D1027)。
+///
+/// RFC 5322 の obs-fold: 行頭が空白/タブの行は前行の継続 —
+/// その継続行が `X-Foo:` 形の新ヘッダに見えるのは、継続として
+/// 読むパーサと新ヘッダとして読むパーサで意味が分かれる挿入兆候。
+pub fn has_folded_header_inject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        if !(l.starts_with(' ') || l.starts_with('\t')) {
+            return false;
+        }
+        let t = l.trim_start();
+        // `Name:` 形 — 英字で始まり `-`/`英数字` 続き、3-30 字内に `:`
+        let cpos = t.find(':');
+        match cpos {
+            Some(p) if (2..=40).contains(&p) => {
+                let name = &t[..p];
+                name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+                    && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            }
+            _ => false,
+        }
+    })
+}
+
+/// 998 バイト超のヘッダ行があるか (D1028)。
+///
+/// RFC 5321 は行長 1000 octet (CRLF 含む) を上限とする — それを
+/// 超える長いヘッダ行はパーサのバッファ境界で差分を起こす負荷・
+/// 解析差分の兆候。
+pub fn has_overlong_header_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.len() > 998)
+}
+
+/// `multipart/report` (delivery-status 構造) だが From が
+/// mailer-daemon 系でないか (D1029)。
+///
+/// DSN (配送状態通知) は mailer-daemon/postmaster/bounce 系から
+/// 届く — ユーザ名の From で report 構造を持つのは、バウンスの
+/// 体裁でフィルタをすり抜けるフィッシングの兆候。
+pub fn has_dsn_structure(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let is_report = header.lines().any(|l| {
+        l.starts_with("content-type:")
+            && (l.contains("multipart/report")
+                || l.contains("message/delivery-status")
+                || l.contains("text/rfc822-headers"))
+    });
+    if !is_report {
+        return false;
+    }
+    let daemon_like = header.lines().any(|l| {
+        l.starts_with("from:")
+            && (l.contains("mailer-daemon")
+                || l.contains("postmaster")
+                || l.contains("bounce")
+                || l.contains("noreply")
+                || l.contains("no-reply")
+                || l.contains("daemon@")
+                || l.contains("double-bounce"))
+    });
+    !daemon_like
+}
+
+/// encoded-word の内部に更に `=?` (入れ子) があるか、または
+/// charset 名が utf-7/x-user-defined/空か (D1030)。
+///
+/// RFC 2047 は encoded-word の入れ子を禁ず — 内側の `=?` を
+/// 字句として読むパーサと二重エンコードとして読むパーサで差分
+/// が出る。`utf-7`/`x-user-defined` は charset 混乱の定形。
+pub fn has_nested_encoded_word(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut rest = header;
+    while let Some(pos) = rest.find("=?") {
+        let after = &rest[pos + 2..];
+        // `=?charset?enc?text?=` の終端 ?= を探す
+        let Some(end) = after.find("?=") else { break };
+        let inner = &after[..end];
+        // charset (最初の ? まで) — utf-7/x-user-defined/空は偽装
+        let charset = inner.split('?').next().unwrap_or("");
+        if charset.is_empty()
+            || charset.contains("utf-7")
+            || charset.contains("x-user-defined")
+            || charset.contains("unicode-1-1-utf-7")
+        {
+            return true;
+        }
+        // inner の text 部分に更に =? → 入れ子
+        if inner.matches("=?").count() >= 1 && inner.split('?').count() > 2 {
+            // encoded-word 内に =? があればネスト (charset?enc? の後の text)
+            let mut parts = inner.splitn(3, '?');
+            let _cs = parts.next();
+            let _enc = parts.next();
+            if let Some(text_part) = parts.next() {
+                if text_part.contains("=?") {
+                    return true;
+                }
+            }
+        }
+        rest = &after[end + 2..];
+    }
+    false
 }
 
 /// `X-MS-Has-Attach:`/`X-Has-Attach:` 等の「添付あり」宣言があるか
@@ -15306,6 +15641,126 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    // ---- D1023: 未来日付 ----
+    #[test]
+    fn scan_は未来日付を検出する() {
+        // 2030 年の未来日付
+        let future = b"Date: Fri, 25 Sep 2030 00:00:00 +0000\r\n\r\nx";
+        assert!(has_future_date(future));
+        // 現在より過去の正当な日付
+        let past = b"Date: Fri, 25 Sep 2020 00:00:00 +0000\r\n\r\nx";
+        assert!(!has_future_date(past));
+        // Date なし
+        let none = b"From: a@b\r\n\r\nx";
+        assert!(!has_future_date(none));
+        // パース不能の不正 Date は対象外 (別系が担う)
+        let broken = b"Date: not a date\r\n\r\nx";
+        assert!(!has_future_date(broken));
+    }
+
+    // ---- D1024: Message-ID 欠落 ----
+    #[test]
+    fn scan_はMessageID欠落を検出する() {
+        let absent = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_message_id(absent));
+        let present = b"From: a@b\r\nMessage-ID: <x@b>\r\n\r\nx";
+        assert!(!has_missing_message_id(present));
+        // 本文側の Message-ID 言及は対象外
+        let body_only = b"From: a@b\r\n\r\nsee Message-ID: <x@b>";
+        assert!(has_missing_message_id(body_only));
+    }
+
+    // ---- D1025: MIME-Version 欠落 ----
+    #[test]
+    fn scan_はMIMEVersion欠落を検出する() {
+        // multipart 構造 + CTE だが MIME-Version なし
+        let no_ver = b"Content-Type: multipart/mixed; boundary=\"B\"\r\nContent-Transfer-Encoding: base64\r\n\r\nx";
+        assert!(has_missing_mime_version(no_ver));
+        // 宣言あり
+        let has_ver = b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"B\"\r\n\r\nx";
+        assert!(!has_missing_mime_version(has_ver));
+        // MIME 構造を使わない plain text — 欠落ではない
+        let plain = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(!has_missing_mime_version(plain));
+    }
+
+    // ---- D1026: boundary 外の内容 ----
+    #[test]
+    fn scan_は境界外本文を検出する() {
+        // preamble に実質内容
+        let pre = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\nPreamble content that is long enough to matter here\r\n--B\r\n\r\npart\r\n--B--\r\n";
+        assert!(has_boundary_outside_content(pre));
+        // epilogue に実質内容
+        let epi = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\n\r\npart\r\n--B--\r\nEpilogue content that is long enough to matter here\r\n";
+        assert!(has_boundary_outside_content(epi));
+        // 内容が全てパート内
+        let clean = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\n\r\npart\r\n--B--\r\n";
+        assert!(!has_boundary_outside_content(clean));
+        // boundary なし (単一パート)
+        let single = b"Content-Type: text/plain\r\n\r\nplain body content\r\n";
+        assert!(!has_boundary_outside_content(single));
+        // 40 字未満の preamble は閾値未満 (誤検回避)
+        let small = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\nshort\r\n--B\r\n\r\npart\r\n--B--\r\n";
+        assert!(!has_boundary_outside_content(small));
+    }
+
+    // ---- D1027: obs-fold ヘッダ挿入 ----
+    #[test]
+    fn scan_は折返しヘッダを検出する() {
+        // 継続行が独立ヘッダ形 — 前行の値の続きに見せかけた第2ヘッダ
+        let inj = b"Subject: hi\r\n X-Injected: yes\r\n\r\nx";
+        assert!(has_folded_header_inject(inj));
+        // 正当な継続行 (ヘッダ名形でない)
+        let fold = b"Subject: very long\r\n  continuation text\r\n\r\nx";
+        assert!(!has_folded_header_inject(fold));
+        // 通常ヘッダ (行頭空白なし)
+        let normal = b"X-Normal: v\r\n\r\nx";
+        assert!(!has_folded_header_inject(normal));
+    }
+
+    // ---- D1028: 998 バイト超ヘッダ行 ----
+    #[test]
+    fn scan_は長いヘッダ行を検出する() {
+        let long_name = format!("X-Pad: {}\r\n\r\nx", "a".repeat(1200));
+        assert!(has_overlong_header_line(long_name.as_bytes()));
+        let short = b"X-Pad: short\r\n\r\nx";
+        assert!(!has_overlong_header_line(short));
+        // 本文側の長行は対象外 (ヘッダ部のみ)
+        let body_long = format!("Subject: x\r\n\r\n{}", "b".repeat(2000));
+        assert!(!has_overlong_header_line(body_long.as_bytes()));
+    }
+
+    // ---- D1029: DSN 構造の偽装 ----
+    #[test]
+    fn scan_はDSN偽装を検出する() {
+        // バウンス構造だが From が mailer-daemon でない
+        let fake = b"From: alice@evil.example\r\nContent-Type: multipart/report; report-type=delivery-status\r\n\r\nx";
+        assert!(has_dsn_structure(fake));
+        // 正規の DSN (mailer-daemon から)
+        let legit = b"From: MAILER-DAEMON@mx.example\r\nContent-Type: multipart/report; report-type=delivery-status\r\n\r\nx";
+        assert!(!has_dsn_structure(legit));
+        // report 構造でない
+        let normal = b"From: a@b\r\nContent-Type: text/plain\r\n\r\nx";
+        assert!(!has_dsn_structure(normal));
+    }
+
+    // ---- D1030: encoded-word 入れ子 ----
+    #[test]
+    fn scan_は入れ子encwordを検出する() {
+        // text 部に更に =? — RFC 禁止の入れ子
+        let nested = b"Subject: =?utf-8?q?outer_=?utf-8?q?inner?=?=\r\n\r\nx";
+        assert!(has_nested_encoded_word(nested));
+        // utf-7 charset 宣言 — charset 混乱
+        let utf7 = b"Subject: =?utf-7?q?+AGk-donya\r\n\r\nx";
+        assert!(has_nested_encoded_word(utf7));
+        // 正当な encoded-word
+        let ok = b"Subject: =?utf-8?q?hello?=\r\n\r\nx";
+        assert!(!has_nested_encoded_word(ok));
+        // encoded-word なし
+        let none = b"Subject: plain\r\n\r\nx";
+        assert!(!has_nested_encoded_word(none));
     }
 
     #[test]
