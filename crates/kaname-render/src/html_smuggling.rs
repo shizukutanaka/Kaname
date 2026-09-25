@@ -43,6 +43,10 @@ pub enum SmugglingSignal {
     MultiLayerObfuscation,
     /// データ URI に実行ファイルを埋め込み
     DataUriExecutable,
+    /// クリップボードへの書き込み — ClickFix/FileFix でコマンドをコピーさせる (D785)
+    ClipboardWrite,
+    /// 「Win+R」「貼り付け」「エクスプローラのアドレスバー」等の実行誘導文言 (D785)
+    RunDialogLure,
 }
 
 /// HTML スマグリングスキャン結果。
@@ -174,6 +178,48 @@ impl HtmlSmugglingDetector {
             signals.push(SmugglingSignal::DataUriExecutable);
         }
 
+        // 8. クリップボードへの書き込み (D785 — ClickFix/FileFix)
+        // 2025 年の ClickFix キャンペーン (Microsoft Threat Intelligence 2025-08,
+        // Storm-1607/DarkGate 等) と FileFix (Check Point 2025-07) は、
+        // navigator.clipboard.writeText / execCommand('copy') で被害者の
+        // クリップボードにコマンドを書き込み、偽の検証画面を通して
+        // Win+R 実行や Explorer アドレスバーへの貼り付けを誘導する。
+        // 本文ではなく添付 .html が主経路のため、scan_attachment_bytes 側にも
+        // 同じ検出器を配線する。
+        let clipboard_patterns = [
+            "navigator.clipboard.write", // writeText も部分一致で捕捉
+            "clipboarddata.setdata",     // IE 系 clipboardData オブジェクト
+            "execcommand(\"copy\")",
+            "execcommand('copy')",
+            "execcommand(`copy`)",
+        ];
+        if clipboard_patterns.iter().any(|p| lower.contains(p)) {
+            signals.push(SmugglingSignal::ClipboardWrite);
+        }
+
+        // 9. 実行ダイアログ/貼り付け誘導の文言 (D785 — ClickFix/FileFix)
+        // コマンド文字列 (powershell 等) を書かず、被害者に「検証・修復」を
+        // 装って実行手順を踏ませるのが ClickFix の本質。単独ヒットは正規の
+        // 操作説明ページでもあり得るため Caution どまりだが、ClipboardWrite
+        // や FakeCaptcha との複合で Critical になる (calculate_risk 参照)。
+        let run_lure_phrases = [
+            // Windows 実行ダイアログ誘導 (ClickFix 定番)
+            "win+r", "win + r", "windows+r", "windows + r",
+            "windows key", "press the windows", "run dialog", "open run",
+            "ファイル名を指定して実行", "コマンドプロンプトを開", "ターミナルを開",
+            // Explorer アドレスバーへの貼り付け誘導 (FileFix 定番)
+            "address bar", "アドレスバー", "エクスプローラー",
+            // コピー→貼り付けの実行手順
+            "ctrl+v", "ctrl + v", "press ctrl", "paste into", "paste it in",
+            "paste the copied", "copy-paste", "貼り付け",
+            // 「検証・修復」を装う定型フレーズ
+            "to verify", "verify yourself", "prove you are human",
+            "fix this problem", "complete the verification",
+        ];
+        if run_lure_phrases.iter().any(|p| lower.contains(p)) {
+            signals.push(SmugglingSignal::RunDialogLure);
+        }
+
         let risk = Self::calculate_risk(&signals);
         let message = Self::build_message(&signals, risk);
 
@@ -194,8 +240,21 @@ impl HtmlSmugglingDetector {
         let has_download = signals.contains(&SmugglingSignal::AutoDownload);
         let has_shell = signals.contains(&SmugglingSignal::ShellReference);
         let has_exe_uri = signals.contains(&SmugglingSignal::DataUriExecutable);
+        let has_clip = signals.contains(&SmugglingSignal::ClipboardWrite);
+        let has_lure = signals.contains(&SmugglingSignal::RunDialogLure);
+        let has_captcha = signals.contains(&SmugglingSignal::FakeCaptcha);
 
         if (has_blob && has_download) || has_shell || has_exe_uri {
+            return SmugglingRisk::Critical;
+        }
+
+        // ClickFix/FileFix の鎖 (D785):
+        //   コマンドをクリップボードに書き込む + 実行手順を指示する
+        //   (powershell 等の ShellReference を書かず Shell 検出を避ける型) か、
+        //   偽 CAPTCHA + 実行手順の組み合わせは人を介してコマンド実行させる
+        //   本体なので Critical。ClipboardWrite や誘導文言の単独ヒットは
+        //   正規の「コードをコピー」UI でもあり得るため Caution に留める。
+        if (has_clip && has_lure) || (has_lure && has_captcha) {
             return SmugglingRisk::Critical;
         }
 
@@ -221,6 +280,15 @@ impl HtmlSmugglingDetector {
                 "HTML スマグリングの疑い ({} シグナル検出)。ブラウザで直接開かないでください。",
                 signals.len()
             ),
+            SmugglingRisk::Critical
+                if signals.contains(&SmugglingSignal::ClipboardWrite)
+                    && signals.contains(&SmugglingSignal::RunDialogLure) =>
+            {
+                format!(
+                    "ClickFix 型のソーシャルエンジニアリングを検出 ({} シグナル)。偽の検証・修復手順でクリップボードにコマンドを書き込み、実行ダイアログ等への貼り付けを誘導します。指示に従わないでください。",
+                    signals.len()
+                )
+            }
             SmugglingRisk::Critical => format!(
                 "HTML スマグリング攻撃を検出 ({} シグナル)。この添付は悪意ある実行ファイルを配布しようとしています。ブロック推奨。",
                 signals.len()
@@ -483,5 +551,90 @@ mod tests {
             s.signals.contains(&SmugglingSignal::AutoDownload),
             "タブ入り .click() は検出されなければならない"
         );
+    }
+
+    // ── D785: ClickFix / FileFix (クリップボード書込み + 実行誘導) ─────────
+
+    #[test]
+    fn detects_clipboard_write() {
+        let d = detector();
+        let html = r#"<script>navigator.clipboard.writeText("cmd /c calc");</script>"#;
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::ClipboardWrite));
+    }
+
+    #[test]
+    fn detects_legacy_execcommand_copy() {
+        let d = detector();
+        // 偽 CAPTCHA 系 ClickFix で使われるレガシー API
+        let html = "<script>document.execCommand('copy');</script>";
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::ClipboardWrite));
+    }
+
+    #[test]
+    fn detects_run_dialog_lure() {
+        let d = detector();
+        let html = "<div>Press Win+R, paste the text and hit Enter</div>";
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::RunDialogLure));
+    }
+
+    #[test]
+    fn detects_filefix_explorer_lure() {
+        let d = detector();
+        // FileFix (Check Point 2025-07): Explorer のアドレスバーへの貼り付け誘導
+        let html = "<div>エクスプローラーのアドレスバーに貼り付けてください</div>";
+        let s = d.analyze(html);
+        assert!(s.signals.contains(&SmugglingSignal::RunDialogLure));
+    }
+
+    #[test]
+    fn clickfix_full_chain_is_critical() {
+        let d = detector();
+        // ShellReference を書かず検出を避ける実際の ClickFix ページの構造:
+        // 偽 CAPTCHA → clipboard.writeText(cmd) → Win+R 貼り付け指示
+        let html = r#"<html><body>
+            <div>Verify you are human</div>
+            <script>
+                navigator.clipboard.writeText("cmd /c start payload");
+            </script>
+            <p>1. Press Win+R</p>
+            <p>2. Press Ctrl+V</p>
+            <p>3. Press Enter</p>
+        </body></html>"#;
+        let s = d.analyze(html);
+        assert_eq!(s.risk, SmugglingRisk::Critical);
+        assert!(s.signals.contains(&SmugglingSignal::ClipboardWrite));
+        assert!(s.signals.contains(&SmugglingSignal::RunDialogLure));
+        assert!(s.message.contains("ClickFix"));
+    }
+
+    #[test]
+    fn captcha_plus_lure_is_critical_without_clipboard_api() {
+        let d = detector();
+        // クリップボード API を使わず「選択してコピーしてください」だけの亜種:
+        // 偽 CAPTCHA と実行誘導の組み合わせは同じく人を介して実行させる本体
+        let html = "<div>I am not a robot</div><p>Press Win+R and paste into the box</p>";
+        let s = d.analyze(html);
+        assert_eq!(s.risk, SmugglingRisk::Critical);
+    }
+
+    #[test]
+    fn lone_clipboard_write_is_caution() {
+        let d = detector();
+        // 「クーポンコードをコピー」系の正規 UI — 実行誘導がなければ警告どまり
+        let html = r#"<script>navigator.clipboard.writeText(code);</script>"#;
+        let s = d.analyze(html);
+        assert_eq!(s.risk, SmugglingRisk::Caution);
+    }
+
+    #[test]
+    fn lone_run_lure_is_caution() {
+        let d = detector();
+        // 単なる手順説明 (クリップボード API なし・偽検証なし) は警告どまり
+        let html = "<p>詳細はファイル名を指定して実行から確認してください</p>";
+        let s = d.analyze(html);
+        assert_eq!(s.risk, SmugglingRisk::Caution);
     }
 }

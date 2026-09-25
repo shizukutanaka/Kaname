@@ -15,6 +15,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **付随修正**: `kaname-ui` のテスト 14 箇所が存在しない `r.render_risks` を読んでおり、D160 以降テストビルドがコンパイル不能だったのを `r.body.render_risks` に修正。
 - **残課題**: 認証済みの無関係ドメインによる他ブランドヘッダの詰め込みは警告しない、D18 (認証結果ヘッダの信頼) を継承、検出器間の接頭辞重複 30 件、`main` の rustfmt 未適用差分 (詳細: `docs/gap-analysis.md` D571)。
 
+### Security — D785: HTML 添付が `HtmlSmugglingDetector` を通っていなかった + ClickFix/FileFix 型のシグナル欠落
+
+- **問題**: `HtmlSmugglingDetector` は `parse()` の **本文** HTML にしか適用されておらず、添付ファイルとして届く `.html`/`.htm` は一切検査されなかった。「添付の HTML をブラウザで開かせる」経路は ClickFix キャンペーン (Microsoft Threat Intelligence, 2025-08) の主要ベクタ — 偽 CAPTCHA 画面が `navigator.clipboard.writeText` でコマンドをクリップボードに書き込み、「Win+R → Ctrl+V → Enter」や「アドレスバーに貼り付け (FileFix, Check Point 2025-07)」と利用者自身に実行させる手口であり、本文をいくら検査しても添付は素通りだった。また検出器自体にも clipboard 書き込み・実行誘導のシグナルが無かった。
+- **修正**: `scan_attachment_bytes` に HTML 添付判定を追加 — 拡張子 (`.html`/`.htm`)・宣言 MIME (`text/html`)・中身 (`<html`/`<!doctype html`/`<script`) のいずれかで `HtmlSmugglingDetector.analyze` を走らせ、High/Critical を `is_dangerous` に格上げ。検出器には `SmugglingSignal::ClipboardWrite` (`navigator.clipboard.write*`/`execCommand("copy")` 等) と `SmugglingSignal::RunDialogLure` (Win+R/ファイル名を指定して実行/アドレスバー貼り付け/to verify 等の誘導句) を追加し、**クリップボード書込 × 実行誘導**、または **偽 CAPTCHA × 実行誘導** の組み合わせを Critical とする (単独シグナルは Caution どまりで誤検出を抑止)。Critical 時は ClickFix 型を明示した警告文を返す。
+- **教訓**: 脅威情報の収集経路 (本文) と実行経路 (添付→ブラウザ) が違えば、同じ検出器でも片方は素通りする。新しい手口は「どの入口でコードが走るか」で入口を洗い直せ。
+
+### Security — D786: URL 評価がメールセキュリティゲートウェイの書き換え URL の外側しか見ていなかった
+
+- **問題**: SafeLinks (`*.safelinks.protection.outlook.com/?url=…`)・Proofpoint URLDefense・Mimecast・Barracuda・Cisco Secure Email・Trend Micro ClickTime・Sophos・Websense/Forcepoint 等は宛先 URL を自社ドメインで包む。`quishing::evaluate_url` は外側のドメインを評価するため、(a) 悪意の宛先が「Microsoft のドメイン」に見えて素通りし、(b) 逆に宛先が無害なのに書き換えホストが短縮・不審ドメイン扱いされる — どちらに倒れても宛先が評価されていなかった。
+- **修正**: `evaluate_url` はまず `unwrap_protected_url` で包みを剥がしてから内側を再帰評価する (深度上限 2 — SafeLinks が URLDefense を包む二重ラッパに対応、無限再帰は防ぐ)。剥がせる形式: SafeLinks `url=`、URLDefense v1/v2/v3 (公式 `urldecoder.py` のアルゴリズム — v3 の `*`/`**X` トークン置換・単一スラッシュ修復・`-`→`%`,`_`→`/` 変換を含む)、Google `/url?q=`・`/imgres?imgurl=`、Slack `slack-redir.net?url=`、Bing `/ck/a` の `u=a1<base64url>`、Mimecast の `?domain=` (宛先ドメインのみ復元)。復元不能な書き換えホスト (宛先をサーバ側でしか持たないもの: Barracuda/Cisco/Trend Micro/Sophos/Websense/wsed.org/mimecastprotect/avanan 等) は `Suspicious` — 「検証不能な間接参照」として報告。パーセントデコード・urlsafe base64・最小限の HTML アンエスケープは外部クレートを増やさず自前実装。
+- **教訓**: 評価対象は「表示されたホスト」ではなく「最終宛先」。間接参照は常に中身を見てから判定し、見えないなら見えないと言え。
+
+### Security — D787: マクロ有効 Office 形式・代替配送形式・ネストしたメール添付が危険拡張子リストに無かった
+
+- **問題**: 危険拡張子は `.exe`/`.scr`/`.docm` 等を押さえていたが、(a) マクロ有効テンプレート/アドイン系 — `.dotm`/`.xltm`/`.potm`/`.ppsm`/`.sldm`/`.ppam`/`.xlam`/`.xla`/`.xll`/`.xlm`/`.xlsb`/`.docb`/`.vsdm`/`.mpa`/`.accde`、(b) 近年キャンペーンで多用される代替配送形式 — `.one`/`.onepkg` (Qakbot/IcedID 2023)、`.chm`、`.reg`、`.sct`、`.wsc`、`.slk`、`.iqy`、`.website`、`.library-ms`、`.search-ms`、`.settingcontent-ms`、`.theme`、`.mht`/`.mhtml` (CVE-2021-40444)、`.cpl`、`.msc`、`.inf`、`.diagcab` (Follina)、`.xbap`/`.appref-ms` — が抜けていた。また内側の件名・差出人・本文を外側と無関係に偽装できる `.eml`/`.msg` 添付も未検査だった。
+- **修正**: `is_dangerous_windows_attachment` に上記拡張子を追加 (`.vhd`/`.vhdx` 系のコンテナ列に続く同じ matches! ディスパッチ)。`.eml`/`.msg`/`message/rfc822`/`application/vnd.ms-outlook` は `is_nested_email_attachment` で識別し、`scan_attachment_bytes` で注意喚起 (実行リスクにはしない — 転送メールの正当利用が多いため)。
+- **教訓**: 拡張子リストは Microsoft のマクロブロック対象・観測済みキャンペーンの配送形式を定期輸入する台帳 — 一度作って終わりではない。
+
+### Security — D788: 「暗号化 ZIP 添付 × 本文のパスワード記載」の相関が未検査だった
+
+- **問題**: Emotet/Qakbot 型の添付回避は、解凍・スキャンできないよう ZIP を暗号化した上でパスワードを本文に書く (Sublime Security の `body_encrypted_zip_password_attachment` 検知ルールと同型)。`AttachmentScan` は ZIP の中身を全く見ていなかったため、暗号化エントリの存在も、本文側の「解凍パスワードは〇〇です」との相関も検出できなかった。
+- **修正**: `zip_has_encrypted_entries` (ローカルファイルヘッダの汎用フラグビット 0 を走査、壊れた構造では次の `PK\x03\x04` へ再同期) と `is_zip_file` を `magic_bytes` に追加。`AttachmentScan.is_encrypted` を新設し `scan_attachment_bytes` で設定 + 検査不能の通知を risks に積む (暗号化単体では `is_dangerous` にしない — 正規の機密送付がある)。本文側は `body_mentions_password` (パスワード系 × 解凍・添付系キーワードの共起) で「変更してください」型の通知誤検出を避けつつ、`analyze_raw_email` で暗号化添付 × 本文パスワードの組み合わせを警告する。
+- **教訓**: 単体では無害な要素同士でも、組み合わせが攻撃の様式美と一致するなら警告価値がある。相関検出は「添付」と「本文」の両方が見える場所 (analyze_raw_email) に置け。
+
 ### Security — D782: `X-Gaikou-*`/`X-Ekusuteria-*`/`X-Exteriorworks-*`/`X-Exteriordesign-*` 等の外構・エクステリア印自称が未検査
 
 - **問題**: `X-Gaikou-*`/`X-GaikouYasan-*`/`X-GaikouPro-*`/`X-GaikouTeam-*`/`X-GaikouJP-*`/`X-GaikouSenmon-*`/`X-Ekusuteria-*`/`X-EkusuteriaYasan-*`/`X-EkusuteriaPro-*`/`X-EkusuteriaTeam-*`/`X-EkusuteriaJP-*`/`X-EkusuteriaSenmon-*`/`X-ExteriorworksPros-*`/`X-ExteriorworksTeam-*`/`X-ExteriorworksWorks-*`/`X-ExteriorworksExperts-*`/`X-ExteriorworksSvc-*`/`X-ExteriorworksHQ-*`/`X-ExteriordesignPros-*`/`X-ExteriordesignTeam-*`/`X-ExteriordesignWorks-*`/`X-ExteriordesignExperts-*`/`X-ExteriordesignSvc-*`/`X-ExteriordesignHQ-*` 等 は構機の通知記録 — 送信側が書くことは自称。外構・エクステリア工事の偽装は、見積料・追加費用を装ったなりすましの典型手口。(造園は garden 機、フェンスは fence 機、カーポートは carport 機で検出済み)

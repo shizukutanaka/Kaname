@@ -15129,6 +15129,102 @@ mod tests {
         assert!(!scan.is_dangerous);
     }
 
+    // ---- D785/D787/D788: HTML 添付・ネストメール・暗号化 ZIP ----
+
+    /// ZIP ローカルファイルヘッダを組み立てるヘルパ (magic_bytes 側と同じ構造)。
+    fn make_zip_entry(name: &[u8], flags: u16, comp: &[u8]) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(b"PK\x03\x04");
+        v.extend_from_slice(&20u16.to_le_bytes());
+        v.extend_from_slice(&flags.to_le_bytes());
+        v.extend_from_slice(&8u16.to_le_bytes());
+        v.extend_from_slice(&0u32.to_le_bytes());
+        v.extend_from_slice(&0u32.to_le_bytes());
+        v.extend_from_slice(&(comp.len() as u32).to_le_bytes());
+        v.extend_from_slice(&(comp.len() as u32).to_le_bytes());
+        v.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(name);
+        v.extend_from_slice(comp);
+        v
+    }
+
+    #[test]
+    fn scan_attachment_html_clickfix_is_dangerous() {
+        // ClickFix 型: 偽 CAPTCHA + clipboard.writeText + Win+R 誘導 (D785)
+        let html = br#"<html><body>
+            <div>Verify you are human</div>
+            <script>navigator.clipboard.writeText("cmd /c start p");</script>
+            <p>Press Win+R, Ctrl+V, Enter</p>
+        </body></html>"#;
+        let scan = scan_attachment_bytes("verify.html", "text/html", html);
+        assert!(
+            scan.is_dangerous,
+            "ClickFix 型 HTML 添付は危険判定されるべき: {:?}",
+            scan.risks
+        );
+        assert!(scan.risks.iter().any(|r| r.contains("ClickFix")));
+    }
+
+    #[test]
+    fn scan_attachment_html_disguised_mime_still_scanned() {
+        // text/plain と偽装した .html 添付 — 中身の HTML 判定で捕捉 (D785)
+        let html = br#"<html><script>navigator.clipboard.writeText("x")</script>
+            <p>Press Win+R</p><div>I am not a robot</div></html>"#;
+        let scan = scan_attachment_bytes("readme.txt", "text/plain", html);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("HTML 添付")),
+            "拡張子偽装でも中身で検査すべき: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn scan_attachment_inert_html_not_flagged() {
+        let html = b"<html><body><p>just a page</p></body></html>";
+        let scan = scan_attachment_bytes("note.html", "text/html", html);
+        assert!(
+            !scan.risks.iter().any(|r| r.contains("HTML 添付")),
+            "無害な HTML は警告しない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn scan_attachment_nested_email_flagged() {
+        // .eml/.msg — 内側の偽装とゲートウェイ回避の注意喚起 (D787)
+        let scan = scan_attachment_bytes("forwarded.eml", "message/rfc822", b"From: x\n\ny");
+        assert!(
+            scan.risks.iter().any(|r| r.contains(".eml")),
+            "ネストメール添付は注意喚起されるべき: {:?}",
+            scan.risks
+        );
+        // 注意喚起のみ — 実行リスクにはしない
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_encrypted_zip_flagged() {
+        // 暗号化フラグ付き ZIP — is_encrypted=true + 検査不能の通知 (D788)
+        let zip = make_zip_entry(b"evil.exe", 0x0001, b"\x01\x02\x03");
+        let scan = scan_attachment_bytes("invoice.zip", "application/zip", &zip);
+        assert!(scan.is_encrypted);
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| r.contains("暗号化") || r.contains("パスワード")));
+        // 暗号化だけでは実行リスクにはしない
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_plain_zip_not_encrypted() {
+        let zip = make_zip_entry(b"readme.txt", 0x0000, b"hello world");
+        let scan = scan_attachment_bytes("docs.zip", "application/zip", &zip);
+        assert!(!scan.is_encrypted);
+        assert!(!scan.risks.iter().any(|r| r.contains("暗号化")));
+    }
+
     // ---------- D173: URL スキーム難読化 ----------
 
     #[test]
@@ -18703,6 +18799,12 @@ pub struct AttachmentScan {
     /// **メタデータ検出のみの場合は false** — 作成者情報や GPS はプライバシー
     /// 上の通知であって、開いた瞬間にコードが走るわけではないため。
     pub is_dangerous: bool,
+    /// 暗号化フラグ付きエントリを含む ZIP ベースファイルか (D788)。
+    ///
+    /// 「パスワード付き ZIP + 本文でパスワード案内」は解凍・検査を
+    /// 回避する定番の手口 (Sublime Security の検知ルールと同型)。
+    /// 単体では警告どまりだが、本文側の文言との相関で警告を上げる。
+    pub is_encrypted: bool,
 }
 
 /// メール全体から添付を取り出し、実装済みの各検出器にかける。
@@ -18928,6 +19030,53 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         }
     }
 
+    // 5.5 HTML 添付のスマグリング検査 (D785 — ClickFix/FileFix)
+    //     「.html を開かせる」は本文側の HTML スマグリングと別経路 —
+    //     ブラウザで開いた時点で実行されるため、本文だけを検査していても
+    //     添付は素通りだった。中身が HTML なら拡張子を問わず走査する
+    //     (text/plain 等への偽装はあり得る)。
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        let mut boundary = text.len().min(4096);
+        while boundary > 0 && !text.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        let head = text[..boundary].to_ascii_lowercase();
+        let lower_name = filename.to_ascii_lowercase();
+        let is_html_attachment = lower_name.ends_with(".html")
+            || lower_name.ends_with(".htm")
+            || declared_mime.to_ascii_lowercase().contains("text/html")
+            || head.contains("<html")
+            || head.contains("<!doctype html")
+            || head.contains("<script");
+        if is_html_attachment {
+            let scan = html_smuggling::HtmlSmugglingDetector.analyze(text);
+            if !matches!(scan.risk, html_smuggling::SmugglingRisk::Clean) {
+                risks.push(format!("HTML 添付のリスク: {}", scan.message));
+                for s in &scan.signals {
+                    risks.push(format!("  検出シグナル: {s:?}"));
+                }
+                // High/Critical は実行リスク扱い。Caution は注意喚起に留める。
+                if matches!(
+                    scan.risk,
+                    html_smuggling::SmugglingRisk::High | html_smuggling::SmugglingRisk::Critical
+                ) {
+                    is_dangerous = true;
+                }
+            }
+        }
+    }
+
+    // 5.7 ネストしたメール添付 (.eml/.msg) — 注意喚起 (D787)。
+    //     内側の件名・差出人は外側と無関係に偽装できる。
+    if magic_bytes::is_nested_email_attachment(filename, declared_mime) {
+        risks.push(
+            "メール形式の添付です (.eml/.msg) — 内側の件名・差出人は外側と無関係に偽装でき、\
+             ゲートウェイ検査を回避する代表的な手口として観測されています。\
+             開封後の内容が外側の文脈と一致するか確認してください"
+                .to_string(),
+        );
+    }
+
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
     for r in metadata_check::detect_metadata_risks(filename, bytes) {
         risks.push(format!("メタデータが含まれます: {r:?}"));
@@ -18944,12 +19093,27 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         );
     }
 
+    // 7.5 暗号化フラグ付き ZIP エントリ (D788)。
+    //      パスワード保護は中身の検査を不可能にする — 添付自体は危険と
+    //      断定せず risks に通知し、本文のパスワード記載との相関は
+    //      kaname-ui 側 (`analyze_raw_email`) で警告する。
+    let mut is_encrypted = false;
+    if magic_bytes::is_zip_file(filename, bytes) && magic_bytes::zip_has_encrypted_entries(bytes) {
+        is_encrypted = true;
+        risks.push(
+            "ZIP に暗号化フラグ付きエントリがあります (パスワード保護) — \
+             内容物をスキャンできません。本文にパスワードが書かれている場合は特に注意してください"
+                .to_string(),
+        );
+    }
+
     AttachmentScan {
         filename: filename.to_string(),
         declared_mime: declared_mime.to_string(),
         size_bytes,
         risks,
         is_dangerous,
+        is_encrypted,
     }
 }
 

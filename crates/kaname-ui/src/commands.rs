@@ -2246,6 +2246,21 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(evaluate_saas_links(&urls, &from));
     render_risks.extend(style_risks);
 
+    // D788: 暗号化 ZIP 添付 + 本文でパスワード案内 (Emotet/Qakbot 型)。
+    // パスワード付き ZIP 自体は正規の用途もあるため単体では警告しないが、
+    // 「中身を検査できない添付」と「解凍方法を本文で教える」の組み合わせは
+    // ゲートウェイ回避の典型手口 (Sublime Security 検知ルール
+    // `body_encrypted_zip_password_attachment` と同型)。
+    if attachment_scans.iter().any(|a| a.is_encrypted)
+        && body_mentions_password(analysis_text)
+    {
+        render_risks.push(
+            "パスワード付き ZIP 添付に加え、本文にパスワードらしき記載があります — \
+             内容物を検査できないまま開封させるマルウェア配布の典型手口です"
+                .to_string(),
+        );
+    }
+
     // D571: 「送信側が自称/自署/書く」系の警告は、ヘッダの存在だけで出る。
     // だが `X-Gm-*`/`X-Google-*` (Gmail)・`X-MS-Exchange-*`/`X-Microsoft-Antispam`
     // (Microsoft 365)・`X-GitHub-*`・`X-LinkedIn-*`・`X-MC-*` (Mailchimp)・
@@ -2872,6 +2887,38 @@ fn analyze_body_risks(body: &str) -> Vec<String> {
     risks
 }
 
+/// 本文に「添付のパスワードを教える」文脈があるか判定する (D788)。
+///
+/// Emotet/Qakbot 型の添付回避では、ゲートウェイが解凍・検査できないよう
+/// ZIP を暗号化した上で、パスワードを本文に書く (Sublime Security の
+/// `body_encrypted_zip_password_attachment` 検知ルールと同型)。
+/// パスワード系と解凍・添付系の両キーワードの共起を見て、
+/// 「パスワードを変更してください」だけの通知誤検出を避ける。
+fn body_mentions_password(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let pw = [
+        "パスワード",
+        "password",
+        "pass:",
+        "pass ",
+        "pw:",
+        "解凍パス",
+        "暗号",
+    ];
+    let attach = [
+        "添付",
+        "解凍",
+        "展開",
+        "zip",
+        "attachment",
+        "attached",
+        "unzip",
+        "extract",
+        "archive",
+    ];
+    pw.iter().any(|k| lower.contains(k)) && attach.iter().any(|k| lower.contains(k))
+}
+
 /// 本文リンクの SaaS 安全性を判定する。
 ///
 /// `kaname-saas-guard` は偽 SaaS ドメイン (`notdocusign.com` 等)・
@@ -2923,7 +2970,7 @@ fn evaluate_link_risks(urls: &[String]) -> Vec<String> {
             }
             kaname_render::quishing::UrlReputation::Suspicious => {
                 risks.push(format!(
-                    "リンク先が疑わしいドメインです (短縮URL/自由TLD/タイポスクワット等): {url}"
+                    "リンク先が疑わしいドメインです (短縮URL/自由TLD/タイポスクワット/検証不能なURL書き換え等): {url}"
                 ));
             }
             kaname_render::quishing::UrlReputation::Trusted
