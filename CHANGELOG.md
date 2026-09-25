@@ -8,6 +8,48 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D973: href 値の実体参照・%エンコード・制御空白によるスキャン回避
+
+- **問題**: D961–D972 のスキャンは href 属性値の**生文字列**に対する prefix/ホスト比較だったため、`javascript&colon;x`・`&#106;avascript:x` (実体参照)、`%6aavascript:x` (%エンコード)、`java<TAB>script:x` (タブ/改行/復帰の差し込み — ブラウザは URL 中のこれらを除去して解釈する) の 3 系統の難読化で危険スキーム・IP リテラル・IDN・link_mismatch の各検査をすべてすり抜けられた。実体参照デコーダ自体は存在したが `colon`/`tab`/`newline` の名前実体は未定義だった。
+- **修正**: `decoded_url_token` を新設 (実体参照 → %HH 復号 → 制御空白除去 → 小文字化、ブラウザと同順序)。`decode_entities_into` に `colon`/`tab`/`newline` を追加。`for_each_href_value` (D964/969-971 全検査) と `record_link_mismatch` (D162) の評価値を復号後のものに変更。`has_dangerous_scheme_link` を `for_each_href_value` 委譲に単純化。
+- **教訓**: 生文字列は見た目の写し — ブラウザが解釈する形で評価せよ。
+
+### Security — D974: HTML 本文の `<script>` 要素が未検査
+
+- **問題**: sanitizer は `<script>` を除去するが、「スクリプト実行意図を含む本文」が送られてきたことの報告がなかった。HTML スマグリングの第 1 段として script ブロック (Blob 構築等) を含める攻撃が多い。正規の配信メールは script を含まない (全クライアントが除去するため ESP が生成しない)。
+- **修正**: `script_present` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 実行の意図は実行の前に書かれている — 書き込みを数えろ。
+
+### Security — D975: HTML 本文の `<frame>`/`<frameset>` 要素が未検査
+
+- **問題**: D965 は `<iframe>` のみを対象としており、旧来の `<frame>`/`<frameset>` (クリックジャッキング・リモート認証フォーム表示に同用途) は未検査のままだった。
+- **修正**: `frame_present` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 古い枠も枠である — 系譜の残りを数えろ。
+
+### Security — D976: HTML 本文の `<template>` 要素が未検査
+
+- **問題**: `<template>` は描画されない不活性 DOM — HTML スマグリングでペイロード断片 (エンコード済みスクリプト等) を格納する「データ島」の定形だが、除去されても兆候として報告されなかった。
+- **修正**: `template_present` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 見えない場所に置かれたものは使うために置かれた — 隠し棚を問え。
+
+### Security — D977: `<a download>` 属性が未検査
+
+- **問題**: `<a href="..." download="name.pdf">` はクリック時に「ファイルを開く」ではなく「ファイルを保存させる」強制誘導 — 誤請求書・マクロ付き文書等のダウンロード実行誘導の定形だが、属性の存在が未報告だった。
+- **修正**: `has_tag_attr` 汎用スキャナを新設し `has_ping_attr` を委譲、`download_attr` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 「保存させる」と「見せる」は違う — 着地点を問え。
+
+### Security — D978: `<meta charset>` の危険文字コード指定が未検査
+
+- **問題**: `utf-7` は IE 時代の XSS ベクター (文字コード違いによるスクリプト解釈のすり抜け)、`x-user-defined` は HTML スマグリングでバイナリ難読に使われるエンコーディング。正規メールの charset は MIME ヘッダで決まるため meta での指定自体が稀で、この 2 種は正当な用途を持たないが未検査だった。
+- **修正**: `has_meta_dangerous_charset` を新設、`meta_charset_danger` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 文字の解釈自体を仕掛ける手は読み替えの罠 — 解読法を問え。
+
+### Security — D979: href 以外の属性値の危険スキームが未検査
+
+- **問題**: D964 は `href` のみを対象としていたが、`src`/`action`/`formaction`/`background`/`poster`/`dynsrc`/`lowsrc`/`xlink:href`/`data` (object) も URL を指す属性 — `<form action="javascript:...">` や `<img src="data:text/html,...">` のような別経路のペイロード内包・スクリプト実行が生きたままだった。
+- **修正**: `tag_attr_value` (属性値の正規抽出: `attr=v`/`attr =v`/`attr = v` 各形式) + `has_dangerous_scheme_attr` を新設、`dangerous_scheme_attr` フィールドを追加、`render_risks` 兆候報告。
+- **教訓**: 同じ役割の属性を片方だけ守ればもう片方が使われる — 経路を全て数えろ。
+
 ### Security — D965: HTML 本文の `<iframe>` 要素が未検査
 
 - **問題**: sanitizer は `<iframe>` を黙って除去するため、メール内に外部コンテンツ枠を埋め込むフィッシング (クリックジャッキング・リモートの認証フォーム表示) は表示側で無害化される一方、「含まれていたこと」自体が誰にも報告されていなかった。正規の配信メールは iframe を使わない (全クライアントが除去するため ESP が生成しない)。
