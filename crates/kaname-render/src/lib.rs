@@ -114,6 +114,45 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Content-Transfer-Encoding: 7bit` 宣言なのに本文に 0x80
+    /// 以上のバイトがある (D1192)。
+    ///
+    /// 宣言と中身が違う差分 — 読み手ごとに解釈が違う形。
+    pub cte_7bit_8bit_body: bool,
+    /// `Content-Transfer-Encoding: binary` (D1193)。
+    ///
+    /// CRLF 正規化を抜ける非推奨の輸送形式 — 中身の構造が読み手
+    /// ごとに違う形。
+    pub cte_binary: bool,
+    /// multipart 宣言なのに `--boundary--` 閉端行が無い (D1194)。
+    ///
+    /// 部品の終わりが読み手ごとに違う差分 — 切れ端なしの形。
+    pub multipart_no_close: bool,
+    /// 複数の `boundary=` 宣言で同じ値が重複する (D1195)。
+    ///
+    /// 親子の multipart で同じ境界名 — 内と外の境が読み手ごとに
+    /// 違う定形差分。
+    pub nested_same_boundary: bool,
+    /// `--boundary--` 閉端行の後に本文がある (D1196)。
+    ///
+    /// 部品の外のポストアンブル — パート検査を抜ける隠し本文の
+    /// 形。
+    pub body_after_close: bool,
+    /// `Content-Type: message/partial` (D1197)。
+    ///
+    /// 分割継続 — 一部だけ見せて全体を検査させない形。
+    pub message_partial: bool,
+    /// `Content-Type: message/external-body` (D1198)。
+    ///
+    /// 内容を URL 参照で置く不透明コンテナ — メール検査の外に
+    /// 中身を置く形。
+    pub message_external_body: bool,
+    /// `Disposition-Notification-To:`/`Return-Receipt-To:` がある
+    /// (D1199)。
+    ///
+    /// 開封通知を要求する形 — 受信者行動を送信者に報告させる
+    /// 仕組みの兆候。
+    pub disposition_notification: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2044,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2074,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        cte_7bit_8bit_body: has_cte_7bit_8bit_body(raw),
+        cte_binary: has_cte_binary(raw),
+        multipart_no_close: has_multipart_no_close(raw),
+        nested_same_boundary: has_nested_same_boundary(raw),
+        body_after_close: has_body_after_close(raw),
+        message_partial: has_message_partial(raw),
+        message_external_body: has_message_external_body(raw),
+        disposition_notification: has_disposition_notification(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2439,141 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// ヘッダ節 (小文字化済み) から `boundary=` 値をすべて集める補助
+/// (D1194/D1195/D1196 系)。`boundary="..."`/`boundary=token` の
+/// 両形を読む。
+fn boundary_values(header: &str) -> Vec<String> {
+    header
+        .lines()
+        .filter(|l| l.starts_with("content-type:"))
+        .flat_map(|l| {
+            l.split(';').skip(1).filter_map(|p| {
+                let p = p.trim();
+                p.strip_prefix("boundary=").map(|v| {
+                    let end = v.find(|c: char| c == ';' || c.is_whitespace()).unwrap_or(v.len());
+                    v[..end].trim_matches(|c: char| c == '"' || c == '\'').to_string()
+                })
+            })
+        })
+        .filter(|v| !v.is_empty())
+        .collect()
+}
+
+/// ヘッダ節 (小文字化済み) で `content-transfer-encoding:` の値を
+/// 返す補助。
+fn cte_value(header: &str) -> Option<String> {
+    header
+        .lines()
+        .find(|l| l.starts_with("content-transfer-encoding:"))
+        .and_then(|l| l.splitn(2, ':').nth(1).map(|v| v.trim().to_string()))
+}
+
+/// `CTE: 7bit` 宣言なのに本文に 0x80 以上のバイトがあるか判定する
+/// (D1192)。
+fn has_cte_7bit_8bit_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .map(|p| p + 4)
+        .or_else(|| lower.find("\n\n").map(|p| p + 2))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end.min(lower.len())];
+    if !cte_value(header).is_some_and(|v| v == "7bit") {
+        return false;
+    }
+    raw[header_end..].iter().any(|b| *b >= 0x80)
+}
+
+/// `CTE: binary` か判定する (D1193)。
+fn has_cte_binary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    cte_value(header).is_some_and(|v| v == "binary")
+}
+
+/// multipart 宣言なのに `--boundary--` 閉端行が無いか判定する
+/// (D1194)。
+fn has_multipart_no_close(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    if !header.contains("content-type: multipart/") {
+        return false;
+    }
+    let b = boundary_values(header);
+    if b.is_empty() {
+        return false;
+    }
+    let body = &lower[header_end..];
+    !b.iter().any(|bv| body.contains(&format!("--{bv}--")))
+}
+
+/// 複数の `boundary=` 宣言で同じ値が重複するか判定する (D1195)。
+/// 親子 multipart で同じ境界名。
+fn has_nested_same_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let b = boundary_values(header);
+    b.iter().any(|x| b.iter().filter(|y| *y == x).count() >= 2)
+}
+
+/// `--boundary--` 閉端行の後に本文があるか判定する (D1196)。
+/// 部品の外のポストアンブル。
+fn has_body_after_close(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let b = boundary_values(header);
+    if b.is_empty() {
+        return false;
+    }
+    let body = &lower[header_end..];
+    b.iter().any(|bv| {
+        let pat = format!("--{bv}--");
+        body.rfind(&pat).is_some_and(|p| {
+            let after = &body[p + pat.len()..];
+            !after.trim_matches(|c: char| c.is_whitespace()).is_empty()
+        })
+    })
+}
+
+/// `Content-Type: message/partial` か判定する (D1197)。
+fn has_message_partial(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.contains("content-type: message/partial")
+}
+
+/// `Content-Type: message/external-body` か判定する (D1198)。
+fn has_message_external_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.contains("content-type: message/external-body")
+}
+
+/// `Disposition-Notification-To:`/`Return-Receipt-To:` があるか判定
+/// する (D1199)。
+fn has_disposition_notification(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("disposition-notification-to:") || l.starts_with("return-receipt-to:") || l.starts_with("x-confirm-reading-to:") || l.starts_with("x-pmrqc:")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21130,3 +21312,80 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
+    #[test]
+    fn scan_は7bit中身8bitを検出する() {
+        assert!(has_cte_7bit_8bit_body(
+            b"Content-Transfer-Encoding: 7bit\r\nFrom: a@b\r\n\r\nhi \xe6\x96\x87"
+        ));
+        assert!(!has_cte_7bit_8bit_body(
+            b"Content-Transfer-Encoding: 7bit\r\nFrom: a@b\r\n\r\nhi plain"
+        ));
+        assert!(!has_cte_7bit_8bit_body(
+            b"Content-Transfer-Encoding: base64\r\nFrom: a@b\r\n\r\nhi \xe6\x96\x87"
+        ));
+        assert!(!has_cte_7bit_8bit_body(b"From: a@b\r\n\r\nhi"));
+    }
+    #[test]
+    fn scan_はCTEバイナリを検出する() {
+        assert!(has_cte_binary(
+            b"Content-Transfer-Encoding: binary\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_cte_binary(
+            b"Content-Transfer-Encoding: 8bit\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_cte_binary(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は閉端欠落を検出する() {
+        assert!(has_multipart_no_close(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nhi"
+        ));
+        assert!(!has_multipart_no_close(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nhi\r\n--ab--\r\n"
+        ));
+        assert!(!has_multipart_no_close(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は同境界重複を検出する() {
+        assert!(has_nested_same_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nContent-Type: multipart/related; boundary=\"ab\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_nested_same_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nContent-Type: multipart/related; boundary=\"cd\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_nested_same_boundary(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は閉端後本文を検出する() {
+        assert!(has_body_after_close(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nhi\r\n--ab--\r\nhidden text"
+        ));
+        assert!(!has_body_after_close(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\nFrom: a@b\r\n\r\n--ab\r\nhi\r\n--ab--\r\n"
+        ));
+        assert!(!has_body_after_close(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は分割継続を検出する() {
+        assert!(has_message_partial(
+            b"Content-Type: message/partial; id=\"a@b\"; number=1\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_message_partial(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は外部参照本体を検出する() {
+        assert!(has_message_external_body(
+            b"Content-Type: message/external-body; name=\"a.bin\"; site=\"x\"\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_message_external_body(b"Content-Type: text/plain\r\nFrom: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は開封通知要求を検出する() {
+        assert!(has_disposition_notification(
+            b"Disposition-Notification-To: spy@x\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_disposition_notification(
+            b"Return-Receipt-To: spy@x\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_disposition_notification(b"From: a@b\r\n\r\nx"));
+    }

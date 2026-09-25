@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // html_extract は Option<HtmlExtract> — as_ref().is_some_and で照会する。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -600,6 +601,62 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1192: 7bit 宣言で本文 8bit — 宣言と中身が違う差分の兆候
+    if env.cte_7bit_8bit_body {
+        render_risks.push(
+            "7bit 宣言なのに本文に非 ASCII バイトがあります — 宣言と中身が違う解析差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1193: CTE binary — CRLF 正規化を抜ける輸送形式の兆候
+    if env.cte_binary {
+        render_risks.push(
+            "Content-Transfer-Encoding: binary — CRLF 正規化を抜ける非推奨の輸送形式の兆候です"
+                .to_string(),
+        );
+    }
+    // D1194: 閉端欠落 — 部品の終わりが読み手ごとに違う差分の兆候
+    if env.multipart_no_close {
+        render_risks.push(
+            "multipart なのに --boundary-- 閉端行がありません — 部品の終わりが読み手ごとに違う解析差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1195: 同境界重複 — 親子で同じ界を名乗る定形差分の兆候
+    if env.nested_same_boundary {
+        render_risks.push(
+            "複数の boundary= 宣言で同じ値が重複しています — 内と外の境が読み手ごとに違う定形差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1196: 閉端後本文 — パート検査を抜ける隠し本文の兆候
+    if env.body_after_close {
+        render_risks.push(
+            "--boundary-- 閉端行の後に本文があります — パート検査を抜ける隠し本文の兆候です"
+                .to_string(),
+        );
+    }
+    // D1197: message/partial — 一部だけ見せて全体を検査させない形の兆候
+    if env.message_partial {
+        render_risks.push(
+            "Content-Type: message/partial — 分割継続で一部だけ見せて全体を検査させない形の兆候です"
+                .to_string(),
+        );
+    }
+    // D1198: message/external-body — メール外に中身を置く不透明参照の兆候
+    if env.message_external_body {
+        render_risks.push(
+            "Content-Type: message/external-body — 内容を URL 参照で置く不透明コンテナの兆候です"
+                .to_string(),
+        );
+    }
+    // D1199: 開封通知要求 — 受信者行動を送信者に報告させる形の兆候
+    if env.disposition_notification {
+        render_risks.push(
+            "Disposition-Notification-To:/Return-Receipt-To: — 開封を送信者に報告させる仕組みの兆候です"
+                .to_string(),
+        );
+    }
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(

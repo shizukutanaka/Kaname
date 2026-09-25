@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1192–D1199: 復号宣言と中身・境界・型の解析差分 8 件
+
+- **問題**: 宣言した復号・分割・型と実際の中身が違う構造が未検査だった — `CTE: 7bit` 宣言で本文に 0x80+ バイト (宣言と中身が違う差分)、`CTE: binary` (CRLF 正規化を抜ける非推奨輸送)、multipart で `--boundary--` 閉端行無し (部品の終わりが読み手ごとに違う)、複数 `boundary=` で同じ値重複 (親子で同じ界 — 内と外の境が違う)、閉端行の後に本文 (パート検査を抜けるポストアンブルの隠し本文)、`Content-Type: message/partial` (一部だけ見せて全体を検査させない)、`Content-Type: message/external-body` (内容を URL 参照 — メール検査の外の不透明コンテナ)、`Disposition-Notification-To:`/`Return-Receipt-To:` (開封通知要求 — 受信者行動を送信者に報告させる)。
+- **修正**: `has_cte_7bit_8bit_body`/`has_cte_binary`/`has_multipart_no_close`/`has_nested_same_boundary`/`has_body_after_close`/`has_message_partial`/`has_message_external_body`/`has_disposition_notification` で検出し、`boundary_values`/`cte_value` 補助で境界と符号を抽出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 名乗った復号と実際の中身が違えば読み手ごとに形が違う — 宣言と中身のずれを数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
