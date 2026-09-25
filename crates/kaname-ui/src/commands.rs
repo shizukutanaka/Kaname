@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,69 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1039: Content-Length 混入 (HTTP プロトコル形状)
+    if env.content_length_header {
+        render_risks.push(
+            "Content-Length: ヘッダーが含まれます — メールでは使われない HTTP 形式の混入の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1040: 非標準 MIME-Version
+    if env.nonstandard_mime_version {
+        render_risks.push(
+            "MIME-Version: が 1.0 以外の値を宣言します — 未対応バージョンを名乗る兆候です".to_string(),
+        );
+    }
+
+    // D1041: 未知の Content-Transfer-Encoding
+    if env.unknown_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding: が規定 5 値以外です — 解析不能な不透明エンコーディングの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1042: 開封確認要求
+    if env.receipt_request {
+        render_risks.push(
+            "開封確認の要求ヘッダー (Return-Receipt/Disposition-Notification 等) があります — 開封を送信側へ返す経路の要求の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1043: 偽の返信・転送件名
+    if env.fake_reply_subject {
+        render_risks.push(
+            "件名が Re:/Fwd: 系なのに References/In-Reply-To がありません — 存在しないやり取りの体裁を作る兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1044: TNEF カプセル
+    if env.tnef_attachment {
+        render_risks.push(
+            "application/ms-tnef / winmail.dat 形式が含まれます — 中身を解析できない不透明コンテナの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1045: ヘッダ部の制御バイト混入
+    if env.header_control_bytes {
+        render_risks.push(
+            "ヘッダー部に制御文字・バイナリバイトが混入しています — テキストプロトコル内の解析差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1046: field-name 違反のヘッダ行
+    if env.malformed_header_line {
+        render_risks.push(
+            "継続行でもないのに Name: 形を欠くか名前部が不正なヘッダー行があります — field-name 規則違反の兆候です"
                 .to_string(),
         );
     }

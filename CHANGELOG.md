@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1039–D1046: プロトコル混同・不透明エンコーディング・ヘッダ規則違反の未検査兆候 8 件
+
+- **問題**: メール規格と他プロトコル・旧形式の混在に関する兆候が未検査だった — メールに持ち込まれた `Content-Length:` (HTTP 形状)、`1.0` 以外を名乗る `MIME-Version:`、規定 5 値を外れる `Content-Transfer-Encoding:` (uuencode/binhex 等で本文を解析不能にする)、開封確認の「要求」ヘッダ (返送先とは別の要求自体)、`Re:`/`Fwd:` 系なのに threading ヘッダを持たない偽返信件名、`application/ms-tnef`/`winmail.dat` の TNEF カプセル、ヘッダ部の制御バイト混入、`Name:` 形を欠く field-name 規則違反。
+- **修正**: `has_content_length_header`/`has_nonstandard_mime_version`/`has_unknown_cte`/`has_receipt_request`/`has_fake_reply_subject`/`has_tnef_attachment`/`has_header_control_bytes`/`has_malformed_header_line` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。UTF-8 生バイト (SMTPUTF8 で正当) と 7bit/8bit/binary/QP/base64 の正当値・正常 threading は対象外として誤検回避。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 規格が要求する形を外れる宣言・他プロトコルの形状・中身を読めない形式はいずれも「解析器が正しく見えない」を示す兆候 — 見えない理由を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

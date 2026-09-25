@@ -119,6 +119,32 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Content-Length:` がある — HTTP 形式の混入でメールには
+    /// 使われないヘッダ (protocol confusion) (D1039)。
+    pub content_length_header: bool,
+    /// `MIME-Version:` の値が `1.0` でない — 未対応バージョンを
+    /// 名乗る宣言の兆候 (D1040)。
+    pub nonstandard_mime_version: bool,
+    /// `Content-Transfer-Encoding:` が 7bit/8bit/binary/
+    /// quoted-printable/base64 以外 — uuencode/binhex 等の未知
+    /// エンコーディングで本文を解析不能にする兆候 (D1041)。
+    pub unknown_cte: bool,
+    /// `Return-Receipt-Requested:`/`Disposition-Notification-To:`/
+    /// `Read-Receipt-To:` 等の開封確認要求 — 開いたかを送信側へ
+    /// 返す仕組みを要求する兆候 (D1042)。
+    pub receipt_request: bool,
+    /// Subject が Re:/Fwd: 系だが References/In-Reply-To が無い —
+    /// 存在しないやり取りの体裁を作る偽返信件名の兆候 (D1043)。
+    pub fake_reply_subject: bool,
+    /// `application/ms-tnef` / `winmail.dat` — TNEF カプセルの
+    /// 不透明コンテナで中身を検査できない兆候 (D1044)。
+    pub tnef_attachment: bool,
+    /// ヘッダ部に NUL/C0 制御文字・DEL — テキストプロトコル内の
+    /// バイナリ混入 (D1045)。
+    pub header_control_bytes: bool,
+    /// 継続行でないのに `Name:` 形を欠くか名前部が空白/制御/
+    /// 非 ASCII を含む行 — field-name 違反の兆候 (D1046)。
+    pub malformed_header_line: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2005,13 +2031,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2061,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        content_length_header: has_content_length_header(hdr),
+        nonstandard_mime_version: has_nonstandard_mime_version(hdr),
+        unknown_cte: has_unknown_cte(hdr),
+        receipt_request: has_receipt_request(hdr),
+        fake_reply_subject: has_fake_reply_subject(hdr),
+        tnef_attachment: has_tnef_attachment(raw),
+        header_control_bytes: has_header_control_bytes(raw),
+        malformed_header_line: has_malformed_header_line(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2358,6 +2392,190 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-report-abuse:")
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
+    })
+}
+
+/// `Content-Length:` があるか判定する (D1039)。
+///
+/// Content-Length は HTTP のヘッダ — メールの RFC 5322 では
+/// 使用されない。混入は HTTP 経路の形状をメールに持ち込んだ
+/// 手作り生成品・プロトコル取り違えの形跡 (protocol confusion)。
+fn has_content_length_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("content-length:"))
+}
+
+/// `MIME-Version:` の値が `1.0` でないか判定する (D1040)。
+///
+/// MIME は `MIME-Version: 1.0` のみ定義 — 別値を名乗るのは
+/// 未対応バージョンを自称する宣言、または手作り生成品の形跡。
+/// MIME-Version ヘッダ自体が無い場合は対象外 (欠落は別兆候)。
+fn has_nonstandard_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("mime-version:")
+            .map(|v| v.trim() != "1.0")
+            .unwrap_or(false)
+    })
+}
+
+/// `Content-Transfer-Encoding:` が規定 5 値以外か判定する (D1041)。
+///
+/// 規定は 7bit/8bit/binary/quoted-printable/base64 — uuencode・
+/// x-uue・binhex・x-token 等の未知値は本文の復号方法が規格で
+/// 定まらず、解析器が中身を読めない不透明エンコーディング。
+/// 複数行あればどれかひとつでも未知なら該当。
+fn has_unknown_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("content-transfer-encoding:")
+            .map(|v| {
+                let v = v.trim();
+                !matches!(
+                    v,
+                    "7bit" | "8bit" | "binary" | "quoted-printable" | "base64"
+                )
+            })
+            .unwrap_or(false)
+    })
+}
+
+/// 開封確認の「要求」ヘッダがあるか判定する (D1042)。
+///
+/// `Return-Receipt-Requested:`/`Disposition-Notification-To:`/
+/// `Read-Receipt-To:`/`X-Read-Receipt:` は開封を送信側へ返す
+/// 仕組みの要求 — 開いたかを相手に伝える経路を仕掛ける
+/// 確認・追跡の形跡 (D1020 の「返送先」とは別、要求自体を検出)。
+fn has_receipt_request(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("return-receipt-requested:")
+            || l.starts_with("disposition-notification-to:")
+            || l.starts_with("read-receipt-to:")
+            || l.starts_with("x-read-receipt:")
+    })
+}
+
+/// Subject が Re:/Fwd: 系なのに References/In-Reply-To が無いか
+/// 判定する (D1043)。
+///
+/// `Re:`/`Fwd:`/`Fw:`/`Aw:`(独 Antwort)/`Sv:`(北欧) の件名は返信・
+/// 転送を装うが、threading ヘッダが一切無いのは実在しないやり取り
+/// の体裁を借りた新規メール — BEC/フィッシングの定形。
+fn has_fake_reply_subject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut reply_subject = false;
+    let mut has_threading = false;
+    for l in header.lines() {
+        if l.starts_with("references:") || l.starts_with("in-reply-to:") {
+            has_threading = true;
+        }
+        if let Some(v) = l.strip_prefix("subject:") {
+            let v = v.trim();
+            if v.starts_with("re:")
+                || v.starts_with("re[")
+                || v.starts_with("fwd:")
+                || v.starts_with("fw:")
+                || v.starts_with("aw:")
+                || v.starts_with("sv:")
+            {
+                reply_subject = true;
+            }
+        }
+    }
+    reply_subject && !has_threading
+}
+
+/// `application/ms-tnef` / `winmail.dat` があるか判定する (D1044)。
+///
+/// TNEF (Transport Neutral Encapsulation Format) は Microsoft
+/// 専有のカプセル形式 — 添付を不透明コンテナに包み、中身を
+/// 通常の MIME 解析では見れない隠し経路にする。
+fn has_tnef_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines().any(|l| {
+        (l.starts_with("content-type:") || l.starts_with("content-disposition:"))
+            && (l.contains("application/ms-tnef") || l.contains("winmail.dat"))
+    }) || text.lines().any(|l| {
+        (l.starts_with("name=") || l.starts_with("filename=")) && l.contains("winmail.dat")
+    })
+}
+
+/// ヘッダ部に NUL/C0 制御文字・DEL が混入しているか判定する (D1045)。
+///
+/// ヘッダは可視 ASCII + 継続行の TAB のみ許容 — NUL・0x01-0x08・
+/// 0x0B-0x1F・0x7F の混入はテキストプロトコル内のバイナリ差し込み
+/// で、行分割・文字列切り詰め・解析差分の素地になる。
+/// (UTF-8 の生 8bit バイトは SMTPUTF8 で正当のため対象外。)
+fn has_header_control_bytes(raw: &[u8]) -> bool {
+    let header_end = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
+        .or_else(|| raw.windows(2).position(|w| w == b"\n\n"))
+        .unwrap_or(raw.len());
+    raw[..header_end].iter().any(|&b| {
+        (b < 0x09) || (0x0b..=0x1f).contains(&b) || b == 0x7f
+    })
+}
+
+/// 継続行でないのに `Name:` 形を欠くか、名前部に空白・制御・
+/// 非 ASCII を含む行があるか判定する (D1046)。
+///
+/// field-name は非空白の可視 ASCII のみ — 継続行でもないのに
+/// `:` を持たない行・名前部に空白/制御/8bit を含む行は
+/// field-name 規則違反で、正規ヘッダとして受理しない解析器との
+/// 差分を生む malformed ヘッダ。
+fn has_malformed_header_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = &text[..header_end];
+    header.lines().any(|l| {
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        match l.find(':') {
+            Some(pos) => {
+                let name = &l[..pos];
+                name.is_empty()
+                    || !name
+                        .chars()
+                        .all(|c| c.is_ascii() && !c.is_control() && c != ' ' && c != ':')
+            }
+            None => true,
+        }
     })
 }
 
@@ -15306,6 +15524,112 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はContentLength混入を検出する() {
+        let cl = b"From: a@b\r\nContent-Length: 1234\r\n\r\nx";
+        assert!(has_content_length_header(cl));
+        let lclf = b"Content-Length: 5\n\nx";
+        assert!(has_content_length_header(lclf));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_content_length_header(clean));
+    }
+
+    #[test]
+    fn scan_は非標準MIMEバージョンを検出する() {
+        let v2 = b"From: a@b\r\nMIME-Version: 2.0\r\n\r\nx";
+        assert!(has_nonstandard_mime_version(v2));
+        let v9 = b"MIME-Version: 0.9\r\n\r\nx";
+        assert!(has_nonstandard_mime_version(v9));
+        let v1 = b"MIME-Version: 1.0\r\n\r\nx";
+        assert!(!has_nonstandard_mime_version(v1));
+        let missing = b"From: a@b\r\n\r\nx";
+        assert!(!has_nonstandard_mime_version(missing));
+    }
+
+    #[test]
+    fn scan_は未知CTEを検出する() {
+        let uu = b"From: a@b\r\nContent-Transfer-Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_unknown_cte(uu));
+        let bh = b"Content-Transfer-Encoding: binhex40\r\n\r\nx";
+        assert!(has_unknown_cte(bh));
+        let xt = b"Content-Transfer-Encoding: x-token\r\n\r\nx";
+        assert!(has_unknown_cte(xt));
+        let b64 = b"Content-Transfer-Encoding: base64\r\n\r\nx";
+        assert!(!has_unknown_cte(b64));
+        let qp = b"Content-Transfer-Encoding: Quoted-Printable\r\n\r\nx";
+        assert!(!has_unknown_cte(qp));
+        let missing = b"From: a@b\r\n\r\nx";
+        assert!(!has_unknown_cte(missing));
+    }
+
+    #[test]
+    fn scan_は開封確認要求を検出する() {
+        let rrr = b"From: a@b\r\nReturn-Receipt-Requested: yes\r\n\r\nx";
+        assert!(has_receipt_request(rrr));
+        let dnt = b"Disposition-Notification-To: s@e.com\r\n\r\nx";
+        assert!(has_receipt_request(dnt));
+        let rrt = b"Read-Receipt-To: s@e.com\r\n\r\nx";
+        assert!(has_receipt_request(rrt));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_receipt_request(clean));
+    }
+
+    #[test]
+    fn scan_は偽返信件名を検出する() {
+        let fake = "From: a@b\r\nSubject: Re: 請求書\r\n\r\nx".as_bytes();
+        assert!(has_fake_reply_subject(fake));
+        let fwd = b"Subject: Fwd: data\r\n\r\nx";
+        assert!(has_fake_reply_subject(fwd));
+        let real = b"From: a@b\r\nSubject: Re: hello\r\nReferences: <m@x>\r\n\r\nx";
+        assert!(!has_fake_reply_subject(real));
+        let irt = b"Subject: Aw: no\r\nIn-Reply-To: <m@x>\r\n\r\nx";
+        assert!(!has_fake_reply_subject(irt));
+        let normal = b"From: a@b\r\nSubject: hello\r\n\r\nx";
+        assert!(!has_fake_reply_subject(normal));
+    }
+
+    #[test]
+    fn scan_はTNEF添付を検出する() {
+        let tnef = b"Content-Type: application/ms-tnef\r\n\r\nx";
+        assert!(has_tnef_attachment(tnef));
+        let wnd = b"Content-Disposition: attachment; filename=\"winmail.dat\"\r\n\r\nx";
+        assert!(has_tnef_attachment(wnd));
+        let fnn = b"filename=winmail.dat\r\n\r\nx";
+        assert!(has_tnef_attachment(fnn));
+        let clean = b"Content-Type: application/pdf\r\n\r\nx";
+        assert!(!has_tnef_attachment(clean));
+    }
+
+    #[test]
+    fn scan_はヘッダ制御バイトを検出する() {
+        let nul = b"From: a\x00b\r\n\r\nx";
+        assert!(has_header_control_bytes(nul));
+        let bel = b"Subject: x\x07y\r\n\r\nx";
+        assert!(has_header_control_bytes(bel));
+        let tab_ok = b"Subject: x\r\n\tcontinued\r\n\r\nx";
+        assert!(!has_header_control_bytes(tab_ok));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_header_control_bytes(clean));
+        let utf8 = "Subject: 日本語\r\n\r\nx".as_bytes();
+        assert!(!has_header_control_bytes(utf8));
+    }
+
+    #[test]
+    fn scan_は不正ヘッダ行を検出する() {
+        let noc = b"From: a@b\r\nnocontentshere\r\n\r\nx";
+        assert!(has_malformed_header_line(noc));
+        let spc = b"X Foo: v\r\n\r\nx";
+        assert!(has_malformed_header_line(spc));
+        let empty = b": v\r\n\r\nx";
+        assert!(has_malformed_header_line(empty));
+        let ok = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_malformed_header_line(ok));
+        let folded = b"Subject: x\r\n continued\r\n\r\nx";
+        assert!(!has_malformed_header_line(folded));
+        let custom = b"X_Custom-1: v\r\n\r\nx";
+        assert!(!has_malformed_header_line(custom));
     }
 
     #[test]
