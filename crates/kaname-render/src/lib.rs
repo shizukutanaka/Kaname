@@ -114,6 +114,38 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `X-Added*`/`X-Injected*`/`X-Inserted*`/`X-Appended*`/
+    /// `X-Prepended*` があるか — 挿入処理の記録を送信側が自称する兆候
+    /// (D1136)。
+    pub insert_marks: bool,
+    /// `X-Stripped*`/`X-Removed*`/`X-Dropped*`/`X-Purged*`/`X-Scrubbed*`/
+    /// `X-Cleaned*` があるか — 除去処理の記録を送信側が自称する兆候
+    /// (D1137)。
+    pub remove_marks: bool,
+    /// `X-Rewritten*`/`X-Modified*`/`X-Altered*`/`X-Mangled*`/`X-Munged*`/
+    /// `X-Canonical*`/`X-Normalized*` があるか — 書換処理の記録を送信側が
+    /// 自称する兆候 (D1138)。
+    pub rewrite_marks: bool,
+    /// `X-Verified*`/`X-Validated*`/`X-Checked*`/`X-Tested*`/`X-Passed*`/
+    /// `X-Approved*`/`X-Certified*` があるか — 検証処理の記録を送信側が
+    /// 自称する兆候 (D1139)。
+    pub verify_marks: bool,
+    /// `X-Rejected*`/`X-Refused*`/`X-Blocked*`/`X-Denied*`/
+    /// `X-Quarantined*`/`X-Isolated*` があるか — 拒否・隔離処理の記録を
+    /// 送信側が自称する兆候 (D1140)。
+    pub reject_marks: bool,
+    /// `X-Tagged*`/`X-Labeled*`/`X-Marked*`/`X-Classified*`/
+    /// `X-Categorized*`/`X-Rated*` があるか — 分類・タグ処理の記録を
+    /// 送信側が自称する兆候 (D1141)。
+    pub tag_marks: bool,
+    /// `X-Forwarded-*`/`X-Bounced-*`/`X-Redirected*`/`X-Relayed*`/
+    /// `X-Proxied*`/`X-Tunneled*`/`X-Bridged*` があるか — 中継・転送処理の
+    /// 記録を送信側が自称する兆候 (D1142)。
+    pub transit_marks: bool,
+    /// `X-Encrypted*`/`X-Decrypted*`/`X-Signed*`/`X-Unsigned*`/
+    /// `X-Sealed*`/`X-Cipher*` があるか — 暗号処理の記録を送信側が
+    /// 自称する兆候 (D1143)。
+    pub crypto_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2037,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2067,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        insert_marks: has_insert_marks(hdr),
+        remove_marks: has_remove_marks(hdr),
+        rewrite_marks: has_rewrite_marks(hdr),
+        verify_marks: has_verify_marks(hdr),
+        reject_marks: has_reject_marks(hdr),
+        tag_marks: has_tag_marks(hdr),
+        transit_marks: has_transit_marks(hdr),
+        crypto_marks: has_crypto_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2432,144 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-Added*`/`X-Injected*`/`X-Inserted*`/`X-Appended*`/`X-Prepended*`
+/// があるか判定する (D1136)。
+fn has_insert_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-added")
+            || l.starts_with("x-injected")
+            || l.starts_with("x-inserted")
+            || l.starts_with("x-appended")
+            || l.starts_with("x-prepended")
+    })
+}
+
+/// `X-Stripped*`/`X-Removed*`/`X-Dropped*`/`X-Purged*`/`X-Scrubbed*`/
+/// `X-Cleaned*` があるか判定する (D1137)。
+fn has_remove_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-stripped")
+            || l.starts_with("x-removed")
+            || l.starts_with("x-dropped")
+            || l.starts_with("x-purged")
+            || l.starts_with("x-scrubbed")
+            || l.starts_with("x-cleaned")
+    })
+}
+
+/// `X-Rewritten*`/`X-Modified*`/`X-Altered*`/`X-Mangled*`/`X-Munged*`/
+/// `X-Canonical*`/`X-Normalized*` があるか判定する (D1138)。
+fn has_rewrite_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rewritten")
+            || l.starts_with("x-modified")
+            || l.starts_with("x-altered")
+            || l.starts_with("x-mangled")
+            || l.starts_with("x-munged")
+            || l.starts_with("x-canonical")
+            || l.starts_with("x-normalized")
+    })
+}
+
+/// `X-Verified*`/`X-Validated*`/`X-Checked*`/`X-Tested*`/`X-Passed*`/
+/// `X-Approved*`/`X-Certified*` があるか判定する (D1139)。
+fn has_verify_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-verified")
+            || l.starts_with("x-validated")
+            || l.starts_with("x-checked")
+            || l.starts_with("x-tested")
+            || l.starts_with("x-passed")
+            || l.starts_with("x-approved")
+            || l.starts_with("x-certified")
+    })
+}
+
+/// `X-Rejected*`/`X-Refused*`/`X-Blocked*`/`X-Denied*`/`X-Quarantined*`/
+/// `X-Isolated*` があるか判定する (D1140)。
+fn has_reject_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-rejected")
+            || l.starts_with("x-refused")
+            || l.starts_with("x-blocked")
+            || l.starts_with("x-denied")
+            || l.starts_with("x-quarantined")
+            || l.starts_with("x-isolated")
+    })
+}
+
+/// `X-Tagged*`/`X-Labeled*`/`X-Marked*`/`X-Classified*`/`X-Categorized*`/
+/// `X-Rated*` があるか判定する (D1141)。
+fn has_tag_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-tagged")
+            || l.starts_with("x-labeled")
+            || l.starts_with("x-marked")
+            || l.starts_with("x-classified")
+            || l.starts_with("x-categorized")
+            || l.starts_with("x-rated")
+    })
+}
+
+/// `X-Forwarded-*`/`X-Bounced-*`/`X-Redirected*`/`X-Relayed*`/
+/// `X-Proxied*`/`X-Tunneled*`/`X-Bridged*` があるか判定する (D1142)。
+fn has_transit_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-forwarded-")
+            || l.starts_with("x-bounced-")
+            || l.starts_with("x-redirected")
+            || l.starts_with("x-relayed")
+            || l.starts_with("x-proxied")
+            || l.starts_with("x-tunneled")
+            || l.starts_with("x-bridged")
+    })
+}
+
+/// `X-Encrypted*`/`X-Decrypted*`/`X-Signed*`/`X-Unsigned*`/`X-Sealed*`/
+/// `X-Cipher*` があるか判定する (D1143)。
+fn has_crypto_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-encrypted")
+            || l.starts_with("x-decrypted")
+            || l.starts_with("x-signed")
+            || l.starts_with("x-unsigned")
+            || l.starts_with("x-sealed")
+            || l.starts_with("x-cipher")
+    })
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21306,153 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は挿入印を検出する() {
+        let i1 = b"X-Added-Info: 1\r\n\r\nx";
+        assert!(has_insert_marks(i1));
+        let i2 = b"X-Injected-Info: 1\r\n\r\nx";
+        assert!(has_insert_marks(i2));
+        let i3 = b"X-Inserted-Info: 1\r\n\r\nx";
+        assert!(has_insert_marks(i3));
+        let i4 = b"X-Appended-Info: 1\r\n\r\nx";
+        assert!(has_insert_marks(i4));
+        let i5 = b"X-Prepended-Info: 1\r\n\r\nx";
+        assert!(has_insert_marks(i5));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_insert_marks(clean));
+    }
+
+    #[test]
+    fn scan_は除去印を検出する() {
+        let r1 = b"X-Stripped-Info: 1\r\n\r\nx";
+        assert!(has_remove_marks(r1));
+        let r2 = b"X-Removed-Info: 1\r\n\r\nx";
+        assert!(has_remove_marks(r2));
+        let r3 = b"X-Dropped-Info: 1\r\n\r\nx";
+        assert!(has_remove_marks(r3));
+        let r4 = b"X-Purged-Info: 1\r\n\r\nx";
+        assert!(has_remove_marks(r4));
+        let r5 = b"X-Scrubbed-Info: 1\r\n\r\nx";
+        assert!(has_remove_marks(r5));
+        let r6 = b"X-Cleaned-Info: 1\r\n\r\nx";
+        assert!(has_remove_marks(r6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_remove_marks(clean));
+    }
+
+    #[test]
+    fn scan_は書換印を検出する() {
+        let r1 = b"X-Rewritten-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r1));
+        let r2 = b"X-Modified-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r2));
+        let r3 = b"X-Altered-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r3));
+        let r4 = b"X-Mangled-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r4));
+        let r5 = b"X-Munged-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r5));
+        let r6 = b"X-Canonical-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r6));
+        let r7 = b"X-Normalized-Info: 1\r\n\r\nx";
+        assert!(has_rewrite_marks(r7));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_rewrite_marks(clean));
+    }
+
+    #[test]
+    fn scan_は検証印を検出する() {
+        let v1 = b"X-Verified-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v1));
+        let v2 = b"X-Validated-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v2));
+        let v3 = b"X-Checked-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v3));
+        let v4 = b"X-Tested-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v4));
+        let v5 = b"X-Passed-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v5));
+        let v6 = b"X-Approved-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v6));
+        let v7 = b"X-Certified-Info: 1\r\n\r\nx";
+        assert!(has_verify_marks(v7));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_verify_marks(clean));
+    }
+
+    #[test]
+    fn scan_は拒否印を検出する() {
+        let r1 = b"X-Rejected-Info: 1\r\n\r\nx";
+        assert!(has_reject_marks(r1));
+        let r2 = b"X-Refused-Info: 1\r\n\r\nx";
+        assert!(has_reject_marks(r2));
+        let r3 = b"X-Blocked-Info: 1\r\n\r\nx";
+        assert!(has_reject_marks(r3));
+        let r4 = b"X-Denied-Info: 1\r\n\r\nx";
+        assert!(has_reject_marks(r4));
+        let r5 = b"X-Quarantined-Info: 1\r\n\r\nx";
+        assert!(has_reject_marks(r5));
+        let r6 = b"X-Isolated-Info: 1\r\n\r\nx";
+        assert!(has_reject_marks(r6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_reject_marks(clean));
+    }
+
+    #[test]
+    fn scan_はタグ印を検出する() {
+        let t1 = b"X-Tagged-Info: 1\r\n\r\nx";
+        assert!(has_tag_marks(t1));
+        let t2 = b"X-Labeled-Info: 1\r\n\r\nx";
+        assert!(has_tag_marks(t2));
+        let t3 = b"X-Marked-Info: 1\r\n\r\nx";
+        assert!(has_tag_marks(t3));
+        let t4 = b"X-Classified-Info: 1\r\n\r\nx";
+        assert!(has_tag_marks(t4));
+        let t5 = b"X-Categorized-Info: 1\r\n\r\nx";
+        assert!(has_tag_marks(t5));
+        let t6 = b"X-Rated-Info: 1\r\n\r\nx";
+        assert!(has_tag_marks(t6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_tag_marks(clean));
+    }
+
+    #[test]
+    fn scan_は中継印を検出する() {
+        let t1 = b"X-Forwarded-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t1));
+        let t2 = b"X-Bounced-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t2));
+        let t3 = b"X-Redirected-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t3));
+        let t4 = b"X-Relayed-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t4));
+        let t5 = b"X-Proxied-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t5));
+        let t6 = b"X-Tunneled-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t6));
+        let t7 = b"X-Bridged-Info: 1\r\n\r\nx";
+        assert!(has_transit_marks(t7));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_transit_marks(clean));
+    }
+
+    #[test]
+    fn scan_は暗号印を検出する() {
+        let c1 = b"X-Encrypted-Info: 1\r\n\r\nx";
+        assert!(has_crypto_marks(c1));
+        let c2 = b"X-Decrypted-Info: 1\r\n\r\nx";
+        assert!(has_crypto_marks(c2));
+        let c3 = b"X-Signed-Info: 1\r\n\r\nx";
+        assert!(has_crypto_marks(c3));
+        let c4 = b"X-Unsigned-Info: 1\r\n\r\nx";
+        assert!(has_crypto_marks(c4));
+        let c5 = b"X-Sealed-Info: 1\r\n\r\nx";
+        assert!(has_crypto_marks(c5));
+        let c6 = b"X-Cipher-Info: 1\r\n\r\nx";
+        assert!(has_crypto_marks(c6));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_crypto_marks(clean));
     }
 }

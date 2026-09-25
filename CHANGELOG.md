@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1136–D1143: 挿入・除去・書換・検証・拒否・分類・中継・暗号処理の未検査兆候 8 件
+
+- **問題**: 「挿したか」「除いたか」「書き換えたか」「検証したか」「拒否したか」「分類したか」「中継したか」「暗号処理したか」に関する兆候が未検査だった — `X-Added*`/`X-Injected*`/`X-Inserted*`/`X-Appended*`/`X-Prepended*` (挿入処理)、`X-Stripped*`/`X-Removed*`/`X-Dropped*`/`X-Purged*`/`X-Scrubbed*`/`X-Cleaned*` (除去処理)、`X-Rewritten*`/`X-Modified*`/`X-Altered*`/`X-Mangled*`/`X-Munged*`/`X-Canonical*`/`X-Normalized*` (書換処理)、`X-Verified*`/`X-Validated*`/`X-Checked*`/`X-Tested*`/`X-Passed*`/`X-Approved*`/`X-Certified*` (検証処理)、`X-Rejected*`/`X-Refused*`/`X-Blocked*`/`X-Denied*`/`X-Quarantined*`/`X-Isolated*` (拒否・隔離処理)、`X-Tagged*`/`X-Labeled*`/`X-Marked*`/`X-Classified*`/`X-Categorized*`/`X-Rated*` (分類・タグ処理)、`X-Forwarded-*`/`X-Bounced-*`/`X-Redirected*`/`X-Relayed*`/`X-Proxied*`/`X-Tunneled*`/`X-Bridged*` (中継・転送処理)、`X-Encrypted*`/`X-Decrypted*`/`X-Signed*`/`X-Unsigned*`/`X-Sealed*`/`X-Cipher*` (暗号処理)。
+- **修正**: `has_insert_marks`/`has_remove_marks`/`has_rewrite_marks`/`has_verify_marks`/`has_reject_marks`/`has_tag_marks`/`has_transit_marks`/`has_crypto_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。すべて自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「挿し・除き・換え・検め・拒み・分け・継ぎ・秘した」記録を送信側が書くのはいずれも属しない印 — 処理の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

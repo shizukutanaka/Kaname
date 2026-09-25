@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1136: 挿入処理記録自署
+    if env.insert_marks {
+        render_risks.push(
+            "X-Added*/X-Injected*/X-Inserted*/X-Appended*/X-Prepended* — 挿入処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1137: 除去処理記録自署
+    if env.remove_marks {
+        render_risks.push(
+            "X-Stripped*/X-Removed*/X-Dropped*/X-Purged*/X-Scrubbed*/X-Cleaned* — 除去処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1138: 書換処理記録自署
+    if env.rewrite_marks {
+        render_risks.push(
+            "X-Rewritten*/X-Modified*/X-Altered*/X-Mangled*/X-Munged*/X-Canonical*/X-Normalized* — 書換処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1139: 検証処理記録自署
+    if env.verify_marks {
+        render_risks.push(
+            "X-Verified*/X-Validated*/X-Checked*/X-Tested*/X-Passed*/X-Approved*/X-Certified* — 検証処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1140: 拒否・隔離処理記録自署
+    if env.reject_marks {
+        render_risks.push(
+            "X-Rejected*/X-Refused*/X-Blocked*/X-Denied*/X-Quarantined*/X-Isolated* — 拒否・隔離処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1141: 分類・タグ処理記録自署
+    if env.tag_marks {
+        render_risks.push(
+            "X-Tagged*/X-Labeled*/X-Marked*/X-Classified*/X-Categorized*/X-Rated* — 分類・タグ処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1142: 中継・転送処理記録自署
+    if env.transit_marks {
+        render_risks.push(
+            "X-Forwarded-*/X-Bounced-*/X-Redirected*/X-Relayed*/X-Proxied*/X-Tunneled*/X-Bridged* — 中継・転送処理の記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1143: 暗号処理記録自署
+    if env.crypto_marks {
+        render_risks.push(
+            "X-Encrypted*/X-Decrypted*/X-Signed*/X-Unsigned*/X-Sealed*/X-Cipher* — 暗号処理の記録を送信側が自称する兆候です"
                 .to_string(),
         );
     }
