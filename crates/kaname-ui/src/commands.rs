@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // html_extract は Option<HtmlExtract> — as_ref().is_some_and で照会する。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -600,6 +601,62 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1184: 多数 To 宛先 — 一括ばら撒きの形の兆候
+    if env.many_to_recipients {
+        render_risks.push(
+            "To: にアドレスが 5 件以上あります — 個別送付の形を逸脱した一括ばら撒きの兆候です"
+                .to_string(),
+        );
+    }
+    // D1185: 多数 Cc — 宛先偽装・一括ばら撒きの形の兆候
+    if env.many_cc {
+        render_risks.push(
+            "Cc: にアドレスが 5 件以上あります — 宛先偽装・一括ばら撒きの形の兆候です"
+                .to_string(),
+        );
+    }
+    // D1186: 空 To — 宛先を名乗らない手作り生成品の兆候
+    if env.empty_to {
+        render_risks.push(
+            "To: ヘッダがあるのに値が空です — 宛先を名乗らない手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+    // D1187: 複数 From・Sender 無し — 差出人が曖昧な構造差分の兆候
+    if env.many_from_no_sender {
+        render_risks.push(
+            "From: に複数アドレスがあるのに Sender: がありません — RFC 5322 の必須条件を欠く構造差分の兆候です"
+                .to_string(),
+        );
+    }
+    // D1188: 空 From — 差出人を名乗らない手作り生成品の兆候
+    if env.empty_from {
+        render_risks.push(
+            "From: ヘッダがあるのに値が空です — 差出人を名乗らない手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+    // D1189: Organization ヘッダ — 送信組織を名乗る古い体裁印の兆候
+    if env.organization_header {
+        render_risks.push(
+            "Organization: ヘッダがあります — 送信組織を名乗る古い体裁印の兆候です"
+                .to_string(),
+        );
+    }
+    // D1190: undisclosed-recipients — ばら撒きの宛先隠しの形の兆候
+    if env.undisclosed_recipients {
+        render_risks.push(
+            "To: に undisclosed-recipients があります — 宛先を隠すばら撒きの定型句の兆候です"
+                .to_string(),
+        );
+    }
+    // D1191: To 重複 — 一意フィールドの重複による解析差分の兆候
+    if env.dup_to {
+        render_risks.push(
+            "To: 行が複数あります — 表示側と検査側で別の宛先を読む解析差分の兆候です"
+                .to_string(),
+        );
+    }
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(

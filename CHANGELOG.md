@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1184–D1191: 宛先・発信者の体裁系解析差分 8 件
+
+- **問題**: 「誰に・誰から」の数と形が逸脱した構造が未検査だった — `To:` にアドレス 5 件超 (個別送付の形を逸脱した一括ばら撒き)、`Cc:` にアドレス 5 件超 (宛先偽装・ばら撒き)、`To:`/`From:` の空値 (宛先・差出人を名乗らない手作り品)、`From:` 複数アドレスで `Sender:` 無し (RFC 5322 の必須条件違反 — 差出人が曖昧な差分)、`Organization:` ヘッダ (送信組織を名乗る古い体裁印)、`To:` の `undisclosed-recipients` (ばら撒きの宛先隠し定型句)、`To:` 行重複 (表示側と検査側で別の宛先を読む一意フィールド差分)。
+- **修正**: `has_many_to_recipients`/`has_many_cc`/`has_empty_to`/`has_many_from_no_sender`/`has_empty_from`/`has_organization_header`/`has_undisclosed_recipients`/`has_dup_to` で検出し、`header_values`/`count_addrs` 補助で複数行とアドレス概算を抽出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 誰に・誰からの数と形が逸脱すれば体裁は名乗りを裏切る — 逸脱を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

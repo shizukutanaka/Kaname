@@ -114,6 +114,43 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `To:` にアドレスが 5 件以上ある (D1184)。
+    ///
+    /// 個別送付なら宛先は少数 — 多数並べる形は一括ばら撒きの
+    /// 兆候。
+    pub many_to_recipients: bool,
+    /// `Cc:` にアドレスが 5 件以上ある (D1185)。
+    ///
+    /// 返信先を偽装する際に cc で人を並べる形 — 一括ばら撒き・
+    /// 宛先偽装の兆候。
+    pub many_cc: bool,
+    /// `To:` ヘッダがあるのに値が空 (D1186)。
+    ///
+    /// 宛先を名乗らない形 — 手作り生成品の兆候。
+    pub empty_to: bool,
+    /// `From:` に複数アドレスがあるのに `Sender:` が無い (D1187)。
+    ///
+    /// RFC 5322 は複数 From には Sender: 必須 — 差出人が曖昧な
+    /// 構造差分の兆候。
+    pub many_from_no_sender: bool,
+    /// `From:` ヘッダがあるのに値が空 (D1188)。
+    ///
+    /// 差出人を名乗らない形 — 手作り生成品の兆候。
+    pub empty_from: bool,
+    /// `Organization:` ヘッダがある (D1189)。
+    ///
+    /// 送信組織を名乗る古い体裁印 — 現在では標準フィールドで
+    /// はない自称の兆候。
+    pub organization_header: bool,
+    /// `To:` に `undisclosed-recipients` を含む (D1190)。
+    ///
+    /// 「非公開宛先」を名乗る定型句 — ばら撒きの宛先隠しの形。
+    pub undisclosed_recipients: bool,
+    /// `To:` 行が複数ある (D1191)。
+    ///
+    /// RFC 5322 の一意フィールドの重複 — 表示側と検査側で別の
+    /// 宛先を読む解析差分の兆候。
+    pub dup_to: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2042,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2072,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        many_to_recipients: has_many_to_recipients(raw),
+        many_cc: has_many_cc(raw),
+        empty_to: has_empty_to(raw),
+        many_from_no_sender: has_many_from_no_sender(raw),
+        empty_from: has_empty_from(raw),
+        organization_header: has_organization_header(raw),
+        undisclosed_recipients: has_undisclosed_recipients(raw),
+        dup_to: has_dup_to(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2437,95 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// ヘッダ節 (小文字化済み) で `field:` の行をすべて返す補助
+/// (D1184-D1191 系)。
+fn header_values<'a>(header: &'a str, field: &str) -> impl Iterator<Item = &'a str> {
+    header.lines().filter_map(move |l| l.strip_prefix(field).map(|v| v.trim()))
+}
+
+/// 値中のアドレス数を `,`/`;` 区切りで概算する補助。`@` を含む
+/// 断片を 1 アドレスと数える。
+fn count_addrs(value: &str) -> usize {
+    value
+        .split([',', ';'])
+        .filter(|s| s.contains('@'))
+        .count()
+}
+
+/// `To:` にアドレスが 5 件以上あるか判定する (D1184)。
+fn has_many_to_recipients(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header_values(header, "to:").any(|v| count_addrs(v) >= 5)
+}
+
+/// `Cc:` にアドレスが 5 件以上あるか判定する (D1185)。
+fn has_many_cc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header_values(header, "cc:").any(|v| count_addrs(v) >= 5)
+}
+
+/// `To:` ヘッダがあるのに値が空か判定する (D1186)。
+fn has_empty_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header_values(header, "to:").any(|v| v.is_empty())
+}
+
+/// `From:` に複数アドレスがあるのに `Sender:` が無いか判定する
+/// (D1187)。
+fn has_many_from_no_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let multi = header_values(header, "from:").any(|v| count_addrs(v) >= 2);
+    multi && !header.lines().any(|l| l.starts_with("sender:"))
+}
+
+/// `From:` ヘッダがあるのに値が空か判定する (D1188)。
+fn has_empty_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header_values(header, "from:").any(|v| v.is_empty())
+}
+
+/// `Organization:` ヘッダがあるか判定する (D1189)。
+fn has_organization_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("organization:"))
+}
+
+/// `To:` に `undisclosed-recipients` を含むか判定する (D1190)。
+fn has_undisclosed_recipients(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header_values(header, "to:").any(|v| v.contains("undisclosed-recipients") || v.contains("undisclosed recipients"))
+}
+
+/// `To:` 行が複数あるか判定する (D1191)。
+fn has_dup_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header_values(header, "to:").count() >= 2
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21130,3 +21264,60 @@ body";
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
     }
 }
+    #[test]
+    fn scan_は多数To宛先を検出する() {
+        assert!(has_many_to_recipients(
+            b"To: a@b,c@d,e@f,g@h,i@j,k@l\r\nFrom: x@y\r\n\r\nx"
+        ));
+        assert!(!has_many_to_recipients(b"To: a@b,c@d\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_many_to_recipients(b"From: x@y\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は多数Ccを検出する() {
+        assert!(has_many_cc(b"Cc: a@b,c@d,e@f,g@h,i@j\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_many_cc(b"Cc: a@b\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_many_cc(b"From: x@y\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は空Toを検出する() {
+        assert!(has_empty_to(b"To:\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_empty_to(b"To: a@b\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_empty_to(b"From: x@y\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は複数From無Senderを検出する() {
+        assert!(has_many_from_no_sender(
+            b"From: a@b, c@d\r\nSubject: x\r\n\r\nhi"
+        ));
+        assert!(!has_many_from_no_sender(
+            b"From: a@b, c@d\r\nSender: s@t\r\n\r\nhi"
+        ));
+        assert!(!has_many_from_no_sender(b"From: a@b\r\n\r\nhi"));
+    }
+    #[test]
+    fn scan_は空Fromを検出する() {
+        assert!(has_empty_from(b"From:\r\nTo: a@b\r\n\r\nx"));
+        assert!(!has_empty_from(b"From: a@b\r\n\r\nx"));
+        assert!(!has_empty_from(b"To: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は組織印を検出する() {
+        assert!(has_organization_header(
+            b"Organization: Example Corp\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_organization_header(b"From: a@b\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_は非公開宛先を検出する() {
+        assert!(has_undisclosed_recipients(
+            b"To: undisclosed-recipients:;\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(!has_undisclosed_recipients(b"To: a@b\r\nFrom: c@d\r\n\r\nx"));
+        assert!(!has_undisclosed_recipients(b"From: c@d\r\n\r\nx"));
+    }
+    #[test]
+    fn scan_はTo重複を検出する() {
+        assert!(has_dup_to(b"To: a@b\r\nTo: c@d\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_dup_to(b"To: a@b\r\nFrom: x@y\r\n\r\nx"));
+        assert!(!has_dup_to(b"From: x@y\r\n\r\nx"));
+    }
