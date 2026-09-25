@@ -114,6 +114,30 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `X-Mimecast-*` 系のセキュアゲートウェイ印があるか — ゲートウェイが
+    /// 記す記録を送信側が自称する兆候 (D1072)。
+    pub mimecast_marks: bool,
+    /// `X-Postmaster*` 系の運用者印があるか — postmaster が記す値を
+    /// 送信側が自称する兆候 (D1073)。
+    pub postmaster_marks: bool,
+    /// `X-Cron-Env:` があるか — cron が付ける自動ジョブ環境印を送信側が
+    /// 自称する兆候 (D1074)。
+    pub cron_env_marks: bool,
+    /// `X-Spam-Flag:`/`X-Spam-Checker-Version:` があるか — 判定可否と
+    /// 判定機バージョンを送信側が自称する兆候 (D1075)。
+    pub x_spam_flag_marks: bool,
+    /// `X-Face:`/`Face:`/`X-Image-URL:` 等の顔画像印があるか — 送信者の
+    /// 顔・ロゴを差出人欄に描く別経路の体裁 (D1076)。
+    pub face_headers: bool,
+    /// `Content-Location:`/`Content-Base:` があるか — MHTML の相対 URL
+    /// 基準をずらす `<base>` タグ同系の基準書き換え (D1077)。
+    pub content_location_base: bool,
+    /// `X-Priority:`/`Importance:`/`X-MSMail-Priority:`/`Priority:` が
+    /// urgent/high/1 級の値か — 緊急性を送信側が自称する兆候 (D1078)。
+    pub x_priority_marks: bool,
+    /// `X-OriginalArrivalTime` 系があるか — Exchange が記す到着時刻印を
+    /// 送信側が自称する兆候 (D1079)。
+    pub x_arrival_time_marks: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2029,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2059,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        mimecast_marks: has_mimecast_marks(hdr),
+        postmaster_marks: has_postmaster_marks(hdr),
+        cron_env_marks: has_cron_env_marks(hdr),
+        x_spam_flag_marks: has_x_spam_flag_marks(hdr),
+        face_headers: has_face_headers(hdr),
+        content_location_base: has_content_location_base(hdr),
+        x_priority_marks: has_x_priority_marks(hdr),
+        x_arrival_time_marks: has_x_arrival_time_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2424,127 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `X-Mimecast-*` 系のセキュアゲートウェイ印があるか判定する (D1072)。
+///
+/// `X-Mimecast-Spam-Score`/`X-Mimecast-Impersonation-Protection` 等は
+/// Mimecast ゲートウェイが配送判定時に記す値 — 送信側が書くのは
+/// 「検査を通った」体裁の自称。
+fn has_mimecast_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("x-mimecast-"))
+}
+
+/// `X-Postmaster*` 系の運用者印があるか判定する (D1073)。
+///
+/// postmaster 宛自動通知・運用者記録は配送側が付ける値 — 送信側が書くのは
+/// 「運用者が記録した」体裁の自称。
+fn has_postmaster_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("x-postmaster"))
+}
+
+/// `X-Cron-Env:` があるか判定する (D1074)。
+///
+/// cron デーモンが自動ジョブのメール通知に付ける環境変数印 (SHELL=/bin/sh
+/// 等) — 送信側が書くのは「自動化システム由来」の体裁の自称。
+fn has_cron_env_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| l.starts_with("x-cron-env:"))
+}
+
+/// `X-Spam-Flag:`/`X-Spam-Checker-Version:` があるか判定する (D1075)。
+///
+/// `X-Spam-Flag: YES` は判定可否の二元値、`X-Spam-Checker-Version:` は
+/// 判定機のバージョン記録 — いずれも判定機が書く値を送信側が自称する。
+fn has_x_spam_flag_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("x-spam-flag:") || l.starts_with("x-spam-checker-version:"))
+}
+
+/// `X-Face:`/`Face:`/`X-Image-URL:`/`X-Face-Image:` 等の顔画像印があるか
+/// 判定する (D1076)。
+///
+/// X-Face/Face は X-Face 表示対応クライアントが差出人欄に描く 48x48 の
+/// 顔画像、X-Image-URL はプロフィール画像参照 — 送信者が選んだ顔・ロゴを
+/// 差出人の体裁として見せる別経路 (正規 From の顔を偽装するのに使われる)。
+fn has_face_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("x-face:")
+            || l.starts_with("x-face-")
+            || l.starts_with("face:")
+            || l.starts_with("x-image-url:")
+            || l.starts_with("x-face-image:")
+    })
+}
+
+/// `Content-Location:`/`Content-Base:` があるか判定する (D1077)。
+///
+/// MHTML の相対リソースを解決する基準 URI を宣言するヘッダ — `<base>` タグ
+/// (D963) と同系で、相対リンクの解決先を送信側がずらせる。multipart/
+/// related の正規利用 (cid: 参照) は base を省略する形が多く、絶対 URI の
+/// 値を持つ場合を対象とする。
+fn has_content_location_base(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        (l.starts_with("content-location:") || l.starts_with("content-base:"))
+            && l.contains("://")
+    })
+}
+
+/// `X-Priority:`/`Importance:`/`X-MSMail-Priority:`/`Priority:` が
+/// urgent/high/1 級の値か判定する (D1078)。
+///
+/// 優先度印は「急ぎ」の自署 — normal/low の通常値は対象外とし、1 級・
+/// urgent・high の緊急値のみを数える (正常な通常値で誤検しない)。
+fn has_x_priority_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        let v = l.split_once(':').map(|(_, v)| v.trim()).unwrap_or("");
+        (l.starts_with("x-priority:") || l.starts_with("x-msmail-priority:"))
+            && (v.starts_with('1') || v.contains("high") || v.contains("urgent"))
+            || (l.starts_with("importance:") || l.starts_with("priority:"))
+                && (v.contains("high") || v.contains("urgent"))
+    })
+}
+
+/// `X-OriginalArrivalTime` 系があるか判定する (D1079)。
+///
+/// Exchange サーバが受信時に記す到着時刻印 — 送信側が書くのは
+/// 「受信済み・時刻記録あり」の体裁を自称する値。
+fn has_x_arrival_time_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("x-originalarrivaltime"))
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21281,97 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_はMimecast印を検出する() {
+        let mc = b"X-Mimecast-Spam-Score: 1\r\n\r\nx";
+        assert!(has_mimecast_marks(mc));
+        let ip = b"X-Mimecast-Impersonation-Protection: on\r\n\r\nx";
+        assert!(has_mimecast_marks(ip));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_mimecast_marks(clean));
+    }
+
+    #[test]
+    fn scan_はpostmaster印を検出する() {
+        let pm = b"X-Postmaster-Info: deferral\r\n\r\nx";
+        assert!(has_postmaster_marks(pm));
+        let pm2 = b"X-Postmaster: notice\r\n\r\nx";
+        assert!(has_postmaster_marks(pm2));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_postmaster_marks(clean));
+    }
+
+    #[test]
+    fn scan_はCron環境印を検出する() {
+        let ce = b"X-Cron-Env: <SHELL=/bin/sh>\r\n\r\nx";
+        assert!(has_cron_env_marks(ce));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_cron_env_marks(clean));
+    }
+
+    #[test]
+    fn scan_はスパム可否印を検出する() {
+        let sf = b"X-Spam-Flag: YES\r\n\r\nx";
+        assert!(has_x_spam_flag_marks(sf));
+        let cv = b"X-Spam-Checker-Version: SpamAssassin 4.0.0\r\n\r\nx";
+        assert!(has_x_spam_flag_marks(cv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_x_spam_flag_marks(clean));
+    }
+
+    #[test]
+    fn scan_は顔画像印を検出する() {
+        let xf = b"X-Face: ABC123==\r\n\r\nx";
+        assert!(has_face_headers(xf));
+        let f = b"Face: XYZ\r\n\r\nx";
+        assert!(has_face_headers(f));
+        let iu = b"X-Image-URL: https://h/f.png\r\n\r\nx";
+        assert!(has_face_headers(iu));
+        let fi = b"X-Face-Image: data\r\n\r\nx";
+        assert!(has_face_headers(fi));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_face_headers(clean));
+    }
+
+    #[test]
+    fn scan_はContentLocation基準を検出する() {
+        let cl = b"Content-Location: https://evil.example/x.html\r\n\r\nx";
+        assert!(has_content_location_base(cl));
+        let cb = b"Content-Base: https://evil.example/\r\n\r\nx";
+        assert!(has_content_location_base(cb));
+        let cid = b"Content-Location: cid:part1\r\n\r\nx";
+        assert!(!has_content_location_base(cid));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_content_location_base(clean));
+    }
+
+    #[test]
+    fn scan_は緊急度自署を検出する() {
+        let xp = b"X-Priority: 1\r\n\r\nx";
+        assert!(has_x_priority_marks(xp));
+        let mp = b"X-MSMail-Priority: High\r\n\r\nx";
+        assert!(has_x_priority_marks(mp));
+        let im = b"Importance: high\r\n\r\nx";
+        assert!(has_x_priority_marks(im));
+        let pu = b"Priority: urgent\r\n\r\nx";
+        assert!(has_x_priority_marks(pu));
+        let normal = b"X-Priority: 3\r\n\r\nx";
+        assert!(!has_x_priority_marks(normal));
+        let low = b"Importance: low\r\n\r\nx";
+        assert!(!has_x_priority_marks(low));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_x_priority_marks(clean));
+    }
+
+    #[test]
+    fn scan_は到着時刻印を検出する() {
+        let at = b"X-OriginalArrivalTime: 01 Jan 2026 00:00:00.0000 (UTC)\r\n\r\nx";
+        assert!(has_x_arrival_time_marks(at));
+        let atl = b"X-OriginalArrivalTimeWithLocale: x\r\n\r\nx";
+        assert!(has_x_arrival_time_marks(atl));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_x_arrival_time_marks(clean));
     }
 }

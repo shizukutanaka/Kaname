@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1072–D1079: 機器印・自動化印・緊急度・顔画像・基準書き換えの未検査兆候 8 件
+
+- **問題**: 「どの機器・機構が記したか」「どれだけ急ぎか」「どんな顔を見せるか」「相対基準はどこか」に関する兆候が未検査だった — `X-Mimecast-*` のセキュアゲートウェイ印、`X-Postmaster*` の運用者記録、`X-Cron-Env:` の自動ジョブ環境印、`X-Spam-Flag:`/`X-Spam-Checker-Version:` の判定可否と判定機、`X-Face:`/`Face:`/`X-Image-URL:` の差出人顔画像、`Content-Location:`/`Content-Base:` の MHTML 相対基準 (`<base>` タグ同系)、`X-Priority:`/`Importance:`/`Priority:` の urgent/high/1 級緊急度自署、`X-OriginalArrivalTime` の到着時刻印。
+- **修正**: `has_mimecast_marks`/`has_postmaster_marks`/`has_cron_env_marks`/`has_x_spam_flag_marks`/`has_face_headers`/`has_content_location_base`/`has_x_priority_marks`/`has_x_arrival_time_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加。6 件は自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) 準拠。`Content-Location:` は絶対 URI (`://` 含有) のみ対象として `cid:` の正規参照を除外、`X-Priority:`/`Importance:` は urgent/high/1 級のみ対象として normal/low の通常値を除外し誤検回避。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 「誰が記したか・どれだけ急ぎか・どんな顔か・基準はどこか」を送信側が書くのはいずれも属しない印 — 機器・自動化・緊急性・顔・基準の自署を問え。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

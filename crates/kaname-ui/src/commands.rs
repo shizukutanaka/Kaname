@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,69 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1072: Mimecast ゲートウェイ印自称
+    if env.mimecast_marks {
+        render_risks.push(
+            "X-Mimecast-* — セキュアゲートウェイの記録を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1073: postmaster 運用者印自称
+    if env.postmaster_marks {
+        render_risks.push(
+            "X-Postmaster* — 運用者の記録を送信側が自称する兆候です".to_string(),
+        );
+    }
+
+    // D1074: cron 自動ジョブ印自称
+    if env.cron_env_marks {
+        render_risks.push(
+            "X-Cron-Env: — cron の自動ジョブ環境印を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1075: スパム可否・判定機印自称
+    if env.x_spam_flag_marks {
+        render_risks.push(
+            "X-Spam-Flag/X-Spam-Checker-Version — 判定可否と判定機を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1076: 顔画像印
+    if env.face_headers {
+        render_risks.push(
+            "X-Face/Face/X-Image-URL — 差出人欄に顔・ロゴを描く別経路の体裁の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1077: Content-Location/Content-Base 基準書き換え
+    if env.content_location_base {
+        render_risks.push(
+            "Content-Location/Content-Base — MHTML の相対基準をずらす base タグ同系の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1078: 緊急度自署
+    if env.x_priority_marks {
+        render_risks.push(
+            "X-Priority/Importance が urgent/high/1 級 — 緊急性を送信側が自称する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1079: 到着時刻印自称
+    if env.x_arrival_time_marks {
+        render_risks.push(
+            "X-OriginalArrivalTime — Exchange の到着時刻記録を送信側が自称する兆候です"
                 .to_string(),
         );
     }
