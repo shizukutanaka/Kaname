@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1208–D1215: 添付・部品の宣言差分と不透明コンテナ 8 件
+
+- **問題**: 添付パートの宣言と実際の読まれ方がずれる形と、中身を包んで読めない構造が未検査だった — `name=` のみの添付名 (`filename=` 欠落でパーサ差分)、`filename=` と `name=` の拡張子食い違い (表示 .pdf で実体 .exe を読ませる定形)、`filename*0*=`/`filename*=` の RFC 2231 分割・エンコード形式 (未実装検査を素通し)、`application/ms-tnef` winmail.dat (TNEF は中身をバイナリに包む不透明コンテナ)、`inline` 宣言に `filename=` 付き (画面内表示を名乗りつつ保存名で誘導)、`multipart/signed`/PKCS#7 署名構造 (検証なしに中身を読めない)、`Content-Location:` の絶対 URL (MHTML 式の外部取得経路)、`text/calendar` 部品 (会議招待を装う誘導)。
+- **修正**: `param_first_value`/`ext_of`/`body_section` 補助でパラメータ・拡張子・本文部を抽出し、`has_named_only_attachment`/`has_name_filename_ext_mismatch`/`has_filename_continued`/`has_tnef_container`/`has_inline_with_filename`/`has_signed_wrapper`/`has_content_location_url`/`has_calendar_part` で検出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (宣言差分・不透明構造系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 名と型が二つ書かれていれば、読み手ごとに別のものが読まれる — 差分と包みを数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // NOTE: html_extract は Option — tel_link フラグは extract 内部。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +597,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1208: name= のみで名を持つ添付パート
+    if env.named_only_attachment {
+        render_risks.push(
+            "添付名が name= パラメータのみで宣言されています — filename= を欠き読み手ごとに扱いが違う宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1209: filename= と name= の拡張子不一致
+    if env.name_filename_ext_mismatch {
+        render_risks.push(
+            "filename= と name= で拡張子が食い違います — パーサごとに別の拡張子を読む宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1210: filename* 分割・エンコード形式のみの添付名
+    if env.filename_continued {
+        render_risks.push(
+            "添付名が filename* の分割・エンコード形式のみで書かれています — RFC 2231 を実装しない検査を抜ける差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1211: TNEF/winmail.dat コンテナ
+    if env.tnef_container {
+        render_risks.push(
+            "application/ms-tnef (winmail.dat) 部品があります — 中身を展開しない検査を素通しする不透明コンテナの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1212: inline + filename の宣言差分
+    if env.inline_with_filename {
+        render_risks.push(
+            "Content-Disposition: inline に filename= が付いています — 画面内表示を名乗りつつ保存名を持つ宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1213: 署名コンテナ (multipart/signed / PKCS#7)
+    if env.signed_wrapper {
+        render_risks.push(
+            "multipart/signed・PKCS#7 署名構造があります — 署名検証なしに中身を読めない不透明構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1214: Content-Location の絶対 URL
+    if env.content_location_url {
+        render_risks.push(
+            "Content-Location: が外部 URL を指しています — 描画時に外部取得する MHTML 式経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1215: text/calendar 部品
+    if env.calendar_part {
+        render_risks.push(
+            "text/calendar 部品 (会議招待) があります — 招待の体裁で誘導する経路の兆候です"
                 .to_string(),
         );
     }

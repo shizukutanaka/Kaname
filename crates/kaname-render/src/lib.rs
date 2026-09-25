@@ -114,6 +114,31 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// 添付パートが `Content-Type` の `name=` パラメータのみで名を持ち、
+    /// `Content-Disposition` の `filename=` を欠く — 表示側と検査側で
+    /// 別名として読まれる宣言差分の兆候 (D1208)。
+    pub named_only_attachment: bool,
+    /// `filename=` と `name=` が共存し拡張子が食い違う — パーサごとに
+    /// 別の拡張子を読む宣言差分の兆候 (D1209)。
+    pub name_filename_ext_mismatch: bool,
+    /// `filename*0*=`/`filename*=` 等の RFC 2231 分割・エンコード形式のみで
+    /// 添付名が書かれる — 形式を実装しない検査を抜ける宣言差分の兆候 (D1210)。
+    pub filename_continued: bool,
+    /// `application/ms-tnef` (winmail.dat) 部品がある — TNEF 形式は中身を
+    /// バイナリに包む不透明コンテナの兆候 (D1211)。
+    pub tnef_container: bool,
+    /// `Content-Disposition: inline` に `filename=` が付く — 画面内表示を
+    /// 名乗りつつ保存名を持つ宣言差分の兆候 (D1212)。
+    pub inline_with_filename: bool,
+    /// `multipart/signed`/`application/pkcs7-mime` 等の署名構造で中身が
+    /// 包まれる — 署名検証なしに内容を読めない不透明構造の兆候 (D1213)。
+    pub signed_wrapper: bool,
+    /// `Content-Location:` が `http://`/`https://` の絶対 URL を指す —
+    /// 描画時に外部取得する MHTML 式経路の兆候 (D1214)。
+    pub content_location_url: bool,
+    /// `text/calendar` 部品 (iCalendar 招待) がある — 会議招待を装う
+    /// 誘導経路の兆候 (D1215)。
+    pub calendar_part: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2030,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2060,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        named_only_attachment: has_named_only_attachment(raw),
+        name_filename_ext_mismatch: has_name_filename_ext_mismatch(raw),
+        filename_continued: has_filename_continued(raw),
+        tnef_container: has_tnef_container(raw),
+        inline_with_filename: has_inline_with_filename(raw),
+        signed_wrapper: has_signed_wrapper(raw),
+        content_location_url: has_content_location_url(raw),
+        calendar_part: has_calendar_part(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2425,160 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// メッセージ本文部 (ヘッダ終端以降) を小文字化して返す補助。
+///
+/// 部品ヘッダ行 (`Content-Type:`/`Content-Disposition:` 等) は本文部に
+/// 現れるため、パート構造の宣言を読む検査はここを走査する。
+fn body_section(raw: &[u8]) -> String {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    lower[header_end..].to_string()
+}
+
+/// `key=` 形式のパラメータ値を先頭一致で 1 つ取り出す補助。
+///
+/// `name=` の探索では直前文字を区切り (` `;`"`\t`'`) に限定し、
+/// `filename=` の `name=` 部分を誤読しない。値は引用符を除き
+/// `;`・引用符・空白で終わるトークンを最大 128 文字で返す。
+fn param_first_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+    let mut rest = text;
+    while let Some(i) = rest.find(key) {
+        let ok = if i == 0 {
+            true
+        } else {
+            matches!(rest.as_bytes()[i - 1], b' ' | b';' | b'\t' | b'"' | b'\'')
+        };
+        if ok {
+            let v = &rest[i + key.len()..];
+            let v = v.strip_prefix('"').unwrap_or(v);
+            let end = v
+                .find(|c: char| c == ';' || c == '"' || c == '\'' || c.is_whitespace())
+                .unwrap_or(v.len());
+            return Some(&v[..end.min(128)]);
+        }
+        rest = &rest[i + 1..];
+    }
+    None
+}
+
+/// 値の末尾拡張子 (`.` 以降の ASCII 英数字 1-8 字) を返す補助。
+fn ext_of(v: &str) -> Option<&str> {
+    let ext = v.rsplit('.').next()?;
+    if v.contains('.')
+        && (1..=8).contains(&ext.len())
+        && ext.bytes().all(|b| b.is_ascii_alphanumeric())
+    {
+        Some(ext)
+    } else {
+        None
+    }
+}
+
+/// `name=` でのみ名を持つ添付パートがあるか判定する (D1208)。
+///
+/// `Content-Type: application/pdf; name="x.pdf"` のように `filename=` を
+/// 欠く宣言は、パーサによって name を読む・無視するが分かれ — 表示される
+/// 拡張子と検査される拡張子が違い得る宣言差分。
+fn has_named_only_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    param_first_value(&lower, "name=").is_some()
+        && param_first_value(&lower, "filename=").is_none()
+}
+
+/// `filename=` と `name=` の拡張子が食い違うか判定する (D1209)。
+///
+/// 二つの宣言が共存する場合、パーサがどちらを優先するかは実装依存 —
+/// `.pdf` と表示し `.exe` を読ませる拡張子偽装の定形。
+fn has_name_filename_ext_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    match (
+        param_first_value(&lower, "name=").and_then(ext_of),
+        param_first_value(&lower, "filename=").and_then(ext_of),
+    ) {
+        (Some(a), Some(b)) => a != b,
+        _ => false,
+    }
+}
+
+/// `filename*0*=`/`filename*=` 等の RFC 2231 分割・エンコード形式のみで
+/// 添付名が書かれるか判定する (D1210)。
+///
+/// 連番パラメータと言語・charset 付き形式を実装しない検査器は添付名を
+/// 読めず、拡張子判定をすり抜ける。
+fn has_filename_continued(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("filename*")
+}
+
+/// `application/ms-tnef` (winmail.dat) 部品があるか判定する (D1211)。
+///
+/// Outlook/Exchange の TNEF は本文・添付をバイナリ内に包むため、
+/// TNEF を展開しない検査は中身を一切読めない不透明コンテナ。
+fn has_tnef_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("application/ms-tnef") || lower.contains("winmail.dat")
+}
+
+/// `Content-Disposition: inline` に `filename=` が付くか判定する (D1212)。
+///
+/// 画面内表示を名乗る inline が保存名を持つのは、受信者に「表示される
+/// だけ」と思わせつつファイル名で誘導する宣言差分。
+fn has_inline_with_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        let l = l.trim_start();
+        l.starts_with("content-disposition:")
+            && l.contains("inline")
+            && l.contains("filename")
+    })
+}
+
+/// `multipart/signed`/PKCS#7 署名構造で中身が包まれるか判定する (D1213)。
+///
+/// 署名で包まれた本文は署名を検証・剥がさない限り読めず、内容検査を
+/// 素通しする不透明構造。
+fn has_signed_wrapper(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("multipart/signed")
+        || lower.contains("application/pkcs7-mime")
+        || lower.contains("application/x-pkcs7-mime")
+        || lower.contains("application/pkcs7-signature")
+}
+
+/// `Content-Location:` が絶対 URL を指すか判定する (D1214)。
+///
+/// RFC 2557 の MHTML 関連部品は Content-Location で外部 URL を基点に
+/// できる — 描画時に外部取得する経路を持つ宣言。
+fn has_content_location_url(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        let l = l.trim_start();
+        l.starts_with("content-location:")
+            && (l.contains("http://") || l.contains("https://"))
+    })
+}
+
+/// `text/calendar` 部品 (iCalendar 招待) があるか判定する (D1215)。
+///
+/// 会議招待 (.ics) を装う誘導経路は実被害報告のある形 — 招待の体裁で
+/// 支払い・電話・リンクへ誘う。
+fn has_calendar_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.contains("text/calendar")
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21315,102 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は名前のみ宣言を検出する() {
+        assert!(has_named_only_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name=\"doc.pdf\"\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_named_only_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name=\"doc.pdf\"\r\nContent-Disposition: attachment; filename=\"doc.pdf\"\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_named_only_attachment(
+            b"From: a@b\r\nContent-Type: text/plain\r\n\r\nhello".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は名と添付名の拡張子差を検出する() {
+        assert!(has_name_filename_ext_mismatch(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/octet-stream; name=\"invoice.pdf\"\r\nContent-Disposition: attachment; filename=\"invoice.exe\"\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_name_filename_ext_mismatch(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment; filename=\"b.pdf\"\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_name_filename_ext_mismatch(b"From: a@b\r\n\r\nx".as_slice()));
+    }
+
+    #[test]
+    fn scan_は分割添付名を検出する() {
+        assert!(has_filename_continued(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment; filename*0*=utf-8''long; filename*1*=.exe\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(has_filename_continued(
+            b"Content-Disposition: attachment; filename*=utf-8''x.zip\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_filename_continued(
+            b"Content-Disposition: attachment; filename=\"x.zip\"\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_はTNEF包みを検出する() {
+        assert!(has_tnef_container(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/ms-tnef; name=\"winmail.dat\"\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(has_tnef_container(
+            b"Content-Type: application/ms-tnef\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_tnef_container(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は画面内添付名を検出する() {
+        assert!(has_inline_with_filename(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: inline; filename=\"logo.png\"\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_inline_with_filename(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nx".as_slice()
+        ));
+        assert!(!has_inline_with_filename(
+            b"Content-Disposition: inline\r\n\r\nx".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は署名包みを検出する() {
+        assert!(has_signed_wrapper(
+            b"Content-Type: multipart/signed; protocol=\"application/pkcs7-signature\"\r\n\r\nx".as_slice()
+        ));
+        assert!(has_signed_wrapper(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pkcs7-mime\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_signed_wrapper(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+    }
+
+    #[test]
+    fn scan_は外部基点を検出する() {
+        assert!(has_content_location_url(
+            b"Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: text/html\r\nContent-Location: https://evil.example/x.html\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_content_location_url(
+            b"Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: image/png\r\nContent-Location: logo.png\r\n\r\nx\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_content_location_url(b"From: a@b\r\n\r\nx".as_slice()));
+    }
+
+    #[test]
+    fn scan_は会議招待部品を検出する() {
+        assert!(has_calendar_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/calendar; method=REQUEST\r\n\r\nBEGIN:VCALENDAR\r\n--b--\r\n".as_slice()
+        ));
+        assert!(!has_calendar_part(
+            b"Content-Type: text/plain\r\n\r\nx".as_slice()
+        ));
     }
 }
