@@ -562,7 +562,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // NOTE: html_extract は Option — tel_link フラグは extract 内部。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +597,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1232: 添付名の拡張子と Content-Type の矛盾
+    if env.ext_type_mismatch {
+        render_risks.push(
+            "添付名は実行形式なのに Content-Type が無害系を名乗っています — 名と型をずらした宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1233: HTML 添付
+    if env.html_attachment {
+        render_risks.push(
+            "HTML 文書を運ぶ添付があります — ブラウザで開かせて情報を奪う HTML 添付フィッシングの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1234: 部品レベル message/rfc822
+    if env.nested_eml {
+        render_risks.push(
+            "添付メール (.eml/message/rfc822 の部品) があります — 内側が検査を受けない入れ子構造の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1235: List-* ヘッダの危険 URI
+    if env.list_danger_uri {
+        render_risks.push(
+            "List-* ヘッダに javascript:/data:/file: 等の URI があります — 配送管理ヘッダ経由の実行経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1236: 優先度宣言の矛盾
+    if env.priority_conflict {
+        render_risks.push(
+            "X-Priority/Importance の緊急度が矛盾しています — 数値と語で逆を名乗る宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1237: 時刻の値域逸脱
+    if env.date_bad_time {
+        render_risks.push(
+            "Date/Expires の時刻が 24 時超・分秒 60 超です — 値域を逸脱した日時の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1238: パラメータ名の重複
+    if env.dup_param {
+        render_risks.push(
+            "Content-Type/Content-Disposition に同名パラメータが重複しています — どちらを読むか実装依存の宣言差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1239: コメント括弧の不釣り合い
+    if env.unbalanced_comment {
+        render_risks.push(
+            "ヘッダ部の ( ) が不釣り合いです — 閉じないコメントが以降を飲み込む宣言差分の兆候です"
                 .to_string(),
         );
     }

@@ -8,6 +8,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1232–D1239: 名と型の混同・危険スキーム・矛盾宣言・括弧逸脱 8 件
+
+- **問題**: 名と型をずらす宣言・配送管理ヘッダの危険 URI・緊急度の矛盾・時刻の値域逸脱・同名引数の重複・括弧の不釣り合いが未検査だった — 実行形式の名を持ちながら text/image を名乗る部品 (型を見る検査と名を見る検査で別のものが読まれる)、`.html` 添付 (ブラウザで開かせる HTML 添付フィッシング)、部品レベルの message/rfc822 (.eml 入れ子で内側は検査対象外)、`List-*` の `javascript:`/`data:`/`file:` URI、`X-Priority: 1` と `Importance: Low` の矛盾 (表示と検査で別の優先度)、24 時超・分秒 60 超の時刻 (どの暦にも存在しない値)、`charset=a; charset=b` の同名引数重複 (先勝ち/後勝ちが実装依存)、`(` の不釣り合い (閉じないコメントが以降を飲み込む)。
+- **修正**: `has_ext_type_mismatch`/`has_html_attachment`/`has_nested_eml`/`has_list_danger_uri`/`has_priority_conflict`/`has_date_bad_time`/`has_dup_param`/`has_unbalanced_comment` で検出。Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (宣言差分系 — `*_marks` 自称契約ではなく「兆候です」系)。拡張子-型照合・既知緊急度語の対比・日時トークンの値域検証・引数名重複検出を実装。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損も同時修復。
+- **教訓**: 名と型・数と語・開きと閉じがずれれば、読み手ごとに届く文が違う — ずれを数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。

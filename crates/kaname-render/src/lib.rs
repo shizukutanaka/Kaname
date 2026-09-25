@@ -114,6 +114,30 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// 添付名の拡張子が実行形式なのに `Content-Type` が text/image 等の
+    /// 無害系を名乗る — 名と型をずらした宣言差分の兆候 (D1232)。
+    pub ext_type_mismatch: bool,
+    /// `.htm`/`.html`/`.shtml` の名を持つ添付、あるいは `text/html` の
+    /// 添付部品がある — HTML 添付フィッシングの運搬形式の兆候 (D1233)。
+    pub html_attachment: bool,
+    /// 部品レベルの `Content-Type: message/rfc822` がある — 添付メール
+    /// (.eml) の入れ子で内側を検査対象外にする構造の兆候 (D1234)。
+    pub nested_eml: bool,
+    /// `List-*` ヘッダの URI が `javascript:`/`data:`/`file:` 等の危険
+    /// スキーム — 配送管理ヘッダ経由の実行経路の兆候 (D1235)。
+    pub list_danger_uri: bool,
+    /// `X-Priority`/`X-MSMail-Priority`/`Importance` の緊急度が矛盾 —
+    /// 数値と語で逆を名乗る宣言差分の兆候 (D1236)。
+    pub priority_conflict: bool,
+    /// `Date:`/`Expires:` 等の時刻が 24 時超・分秒 60 超 — 値域を逸脱
+    /// した日時の兆候 (D1237)。
+    pub date_bad_time: bool,
+    /// `Content-Type:`/`Content-Disposition:` 行に同名パラメータが
+    /// 重複 — どちらを読むか実装依存の宣言差分の兆候 (D1238)。
+    pub dup_param: bool,
+    /// ヘッダ部で `(` と `)` が不釣り合い — 閉じないコメントが以降を
+    /// 飲み込む宣言差分の兆候 (D1239)。
+    pub unbalanced_comment: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2029,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2059,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        ext_type_mismatch: has_ext_type_mismatch(raw),
+        html_attachment: has_html_attachment(raw),
+        nested_eml: has_nested_eml(raw),
+        list_danger_uri: has_list_danger_uri(raw),
+        priority_conflict: has_priority_conflict(raw),
+        date_bad_time: has_date_bad_time(raw),
+        dup_param: has_dup_param(raw),
+        unbalanced_comment: has_unbalanced_comment(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2424,291 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// 空行以降を本文部として返す。
+fn body_section(raw: &[u8]) -> &str {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let start = lower
+        .find("\r\n\r\n")
+        .map(|i| i + 4)
+        .or_else(|| lower.find("\n\n").map(|i| i + 2))
+        .unwrap_or(text.len());
+    &text[start..]
+}
+
+/// 行内の `key=`/`key="..."` パラメータの値を最初の 1 件だけ取り出す。
+/// `filename=` の中に `name=` が現れても境界文字で区切られたトークンの
+/// みを見るため、部分文字列として誤マッチしない。
+fn param_first_value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let mut rest = line;
+    while let Some(pos) = rest.find(key) {
+        let before_ok = pos == 0
+            || matches!(rest.as_bytes()[pos - 1], b';' | b' ' | b'\t' | b'"' | b'\'');
+        let after = &rest[pos + key.len()..];
+        if before_ok {
+            let v = after.trim_start();
+            let v = v.strip_prefix('"').unwrap_or(v);
+            let end = v
+                .find(|c| c == '"' || c == ';' || c == ' ' || c == '\t')
+                .unwrap_or(v.len());
+            return Some(&v[..end]);
+        }
+        rest = &rest[pos + key.len()..];
+    }
+    None
+}
+
+/// 値の末尾 `.ext` 部分を取り出す。
+fn ext_of(name: &str) -> Option<&str> {
+    let t = name.trim_end_matches(['"', '\'', ';']);
+    let base = t.rsplit(['/', '\\']).next().unwrap_or(t);
+    base.rsplit('.').next().filter(|e| *e != base && e.len() <= 12)
+}
+
+/// `Content-Type`/`Content-Disposition` の名乗る型と添付名の拡張子が
+/// 矛盾するか判定する (D1232)。
+///
+/// `.exe`/`.scr`/`.ps1` 等の実行形式の名を持ちながら `text/plain`・
+/// `image/`・`audio/` 等の無害系の型を名乗る部品 — 名と型をずらすと
+/// 型を見る検査と名を見る検査で別のものが読まれる宣言差分となる。
+fn has_ext_type_mismatch(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    const DANGER_EXT: &[&str] = &[
+        "exe", "scr", "bat", "cmd", "com", "pif", "ps1", "vbs", "vbe", "js", "jse", "wsf", "wsh",
+        "hta", "jar", "msi", "dll", "reg", "iso", "img", "lnk", "cpl", "msc", "chm", "msp", "msix",
+    ];
+    const BENIGN_TYPE: &[&str] = &[
+        "text/plain",
+        "text/html",
+        "text/rtf",
+        "image/",
+        "audio/",
+        "video/",
+        "application/pdf",
+    ];
+    let mut last_ct = "";
+    for line in lower.lines() {
+        if line.contains("content-type:") {
+            last_ct = line;
+        }
+        for key in ["filename=", "name="] {
+            if let Some(v) = param_first_value(line, key) {
+                if let Some(e) = ext_of(v) {
+                    if DANGER_EXT.contains(&e)
+                        && BENIGN_TYPE.iter().any(|t| last_ct.contains(t))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// HTML 文書を運ぶ添付があるか判定する (D1233)。
+///
+/// `.htm`/`.html`/`.shtml` の名を持つ部品、または `Content-Disposition:
+/// attachment` と `text/html` の組み合わせ — ブラウザで開かせて資格
+/// 情報を奪う「HTML 添付フィッシング」の運搬形式。
+fn has_html_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let mut last_ct = "";
+    let mut last_cd_attachment = false;
+    for line in lower.lines() {
+        if line.contains("content-type:") {
+            last_ct = line;
+        }
+        if line.contains("content-disposition:") {
+            last_cd_attachment = line.contains("attachment");
+            if last_cd_attachment && last_ct.contains("text/html") {
+                return true;
+            }
+        }
+        for key in ["filename=", "name="] {
+            if let Some(v) = param_first_value(line, key) {
+                if matches!(ext_of(v), Some("htm" | "html" | "shtml" | "xhtml")) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// 部品レベルの `Content-Type: message/rfc822` があるか判定する (D1234)。
+///
+/// 本文領域 (最初の空行以降) に現れる message/rfc822 は「添付された
+/// メール」(.eml) — 内側のメッセージは外側の検査を受けない入れ子構造。
+/// `name=`/`filename=` の `.eml` 拡張子でも検出する。
+fn has_nested_eml(raw: &[u8]) -> bool {
+    let body = body_section(raw);
+    let lower = body.to_ascii_lowercase();
+    for line in lower.lines() {
+        if line.contains("content-type:") && line.contains("message/rfc822") {
+            return true;
+        }
+        for key in ["filename=", "name="] {
+            if let Some(v) = param_first_value(line, key) {
+                if matches!(ext_of(v), Some("eml")) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `List-*` ヘッダが危険スキームの URI を含むか判定する (D1235)。
+///
+/// `List-Unsubscribe:`/`List-Post:`/`List-Help:`/`List-Subscribe:`/
+/// `List-Archive:`/`List-Owner:` は `<mailto:…>`/`<https:…>` の URI 欄 —
+/// `javascript:`/`data:`/`file:`/`vbscript:` が混ざると配送管理ヘッダ
+/// 経由の実行経路になる。
+fn has_list_danger_uri(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("list-")
+            && (l.contains("javascript:")
+                || l.contains("vbscript:")
+                || l.contains("data:")
+                || l.contains("file:"))
+    })
+}
+
+/// `X-Priority`/`X-MSMail-Priority`/`Importance` の緊急度が矛盾するか
+/// 判定する (D1236)。
+///
+/// `X-Priority` は数値 (1,2=緊急 / 4,5=低)、`Importance` と
+/// `X-MSMail-Priority` は語 (high/low) — 一方が緊急・他方が低を名乗る
+/// 組み合わせは表示と検査で別の優先度が読まれる宣言差分。
+fn has_priority_conflict(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    let mut urgent = false;
+    let mut low = false;
+    for line in header.lines() {
+        if line.starts_with("x-priority:") {
+            if let Some(d) = line
+                .split(':')
+                .nth(1)
+                .and_then(|v| v.trim().chars().next())
+                .and_then(|c| c.to_digit(10))
+            {
+                if d <= 2 {
+                    urgent = true;
+                }
+                if d >= 4 {
+                    low = true;
+                }
+            }
+        }
+        if line.starts_with("x-msmail-priority:") || line.starts_with("importance:") {
+            if line.contains("high") {
+                urgent = true;
+            }
+            if line.contains("low") {
+                low = true;
+            }
+        }
+    }
+    urgent && low
+}
+
+/// 日時ヘッダの時刻成分が値域を逸脱しているか判定する (D1237)。
+///
+/// `Date:`/`Resent-Date:`/`Expires:` 内の `HH:MM:SS` 形で、時が 23 超・
+/// 分秒が 59 超の値はどの暦にも存在しない — 時刻欄に別情報を埋めた
+/// 形で、表示と検査で日時がずれる宣言差分。
+fn has_date_bad_time(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        if !(l.starts_with("date:")
+            || l.starts_with("resent-date:")
+            || l.starts_with("expires:"))
+        {
+            return false;
+        }
+        l.split(|c| c == ' ' || c == '\t' || c == ',' || c == ';')
+            .filter(|t| t.matches(':').count() >= 2)
+            .any(|tok| {
+                let mut it = tok.split(':');
+                match (it.next(), it.next(), it.next()) {
+                    (Some(h), Some(m), Some(s)) => {
+                        match (h.parse::<u32>(), m.parse::<u32>(), s.parse::<u32>()) {
+                            (Ok(h), Ok(m), Ok(s)) => h > 23 || m > 59 || s > 59,
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                }
+            })
+    })
+}
+
+/// `Content-Type:`/`Content-Disposition:` 行に同名パラメータが重複するか
+/// 判定する (D1238)。
+///
+/// `charset=a; charset=b` のように同じ名が 2 度現れると先勝ち・後勝ち
+/// が実装で分かれ、人と検査で別の値が読まれる宣言差分となる。
+fn has_dup_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    lower.lines().any(|line| {
+        if !(line.contains("content-type:") || line.contains("content-disposition:")) {
+            return false;
+        }
+        let mut names = Vec::new();
+        for seg in line.split(';').skip(1) {
+            if let Some(name) = seg.split('=').next() {
+                let name = name.trim().trim_matches('"');
+                if !name.is_empty() {
+                    if names.contains(&name) {
+                        return true;
+                    }
+                    names.push(name);
+                }
+            }
+        }
+        false
+    })
+}
+
+/// ヘッダ部で `(` と `)` が不釣り合いか判定する (D1239)。
+///
+/// コメントは `(...)` の対 — 開きっぱなしの `(` は以降の字列すべてを
+/// コメントとして飲み込み、閉じ側だけの `)` は孤立トークンとして
+/// 読み手ごとに解釈が分かれる宣言差分となる。
+fn has_unbalanced_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.matches('(').count() != header.matches(')').count()
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21445,138 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+}
+
+#[cfg(test)]
+mod anomaly_decl_structure_tests {
+    use super::*;
+
+    #[test]
+    fn scan_は名型のずれを検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Type: image/png; name=\"x.exe\"\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: text/plain; name=\"y.scr\"\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=\"z.ps1\"\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_ext_type_mismatch(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_ext_type_mismatch(
+            b"From: a@b\r\nContent-Type: application/octet-stream; name=\"x.exe\"\r\n\r\nx"
+        ));
+        assert!(!has_ext_type_mismatch(
+            b"From: a@b\r\nContent-Type: image/png; name=\"x.png\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_はHTML添付を検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Type: text/html; name=\"login.html\"\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=\"page.htm\"\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: text/html\r\nContent-Disposition: attachment\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_html_attachment(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_html_attachment(
+            b"From: a@b\r\nContent-Type: image/png; name=\"x.png\"\r\n\r\nx"
+        ));
+        assert!(!has_html_attachment(
+            b"From: a@b\r\nContent-Type: text/html\r\nContent-Disposition: inline\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は添付メールを検出する() {
+        for fx in [
+            b"From: a@b\r\n\r\nContent-Type: message/rfc822\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: message/rfc822\r\n\r\ninner\r\n--b--".as_slice(),
+            b"From: a@b\r\n\r\nContent-Disposition: attachment; filename=\"fwd.eml\"\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_nested_eml(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_nested_eml(
+            b"From: a@b\r\nContent-Type: text/plain\r\n\r\nplain body"
+        ));
+        assert!(!has_nested_eml(
+            b"From: a@b\r\nContent-Type: message/rfc822\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は配信管理の危険URIを検出する() {
+        for fx in [
+            b"From: a@b\r\nList-Unsubscribe: <javascript:alert(1)>\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nList-Post: <data:text/html,x>\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nList-Help: <file:///etc/passwd>\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_list_danger_uri(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_list_danger_uri(
+            b"From: a@b\r\nList-Unsubscribe: <mailto:u@x>, <https://x/u>\r\n\r\nx"
+        ));
+        assert!(!has_list_danger_uri(b"From: a@b\r\nSubject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は優先度の矛盾を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Priority: 1\r\nImportance: Low\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-Priority: 5\r\nImportance: High\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-MSMail-Priority: High\r\nImportance: Low\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_priority_conflict(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_priority_conflict(
+            b"From: a@b\r\nX-Priority: 1\r\nImportance: High\r\n\r\nx"
+        ));
+        assert!(!has_priority_conflict(
+            b"From: a@b\r\nX-Priority: 3\r\nImportance: Normal\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn scan_は逸脱時刻を検出する() {
+        for fx in [
+            b"From: a@b\r\nDate: Mon, 1 Jan 2024 25:00:00 +0900\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nDate: Mon, 1 Jan 2024 10:61:00 +0900\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nExpires: Tue, 2 Jan 2024 10:00:99 +0900\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_date_bad_time(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_date_bad_time(
+            b"From: a@b\r\nDate: Mon, 1 Jan 2024 10:30:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_date_bad_time(b"From: a@b\r\nSubject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は重複引数を検出する() {
+        for fx in [
+            b"From: a@b\r\nContent-Type: text/plain; charset=us-ascii; charset=utf-8\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Type: multipart/mixed; boundary=a; boundary=b\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nContent-Disposition: attachment; filename=a.txt; filename=b.txt\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_dup_param(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_dup_param(
+            b"From: a@b\r\nContent-Type: text/plain; charset=utf-8; format=flowed\r\n\r\nx"
+        ));
+        assert!(!has_dup_param(b"From: a@b\r\nSubject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は不釣合注釈を検出する() {
+        for fx in [
+            b"From: a@b\r\nX-Foo: (unclosed comment\r\nSubject: x\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nSubject: hello :)\r\n\r\nx".as_slice(),
+            b"From: a@b\r\nX-A: x (one) (two\r\nX-B: y\r\n\r\nx".as_slice(),
+        ] {
+            assert!(has_unbalanced_comment(fx), "miss: {:?}", String::from_utf8_lossy(fx));
+        }
+        assert!(!has_unbalanced_comment(
+            b"From: a@b (Taro)\r\nSubject: x\r\n\r\nx"
+        ));
+        assert!(!has_unbalanced_comment(b"From: a@b\r\nSubject: x\r\n\r\nx"));
     }
 }
