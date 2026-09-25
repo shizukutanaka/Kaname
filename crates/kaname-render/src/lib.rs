@@ -114,6 +114,44 @@ pub struct Envelope {
     /// 型を名乗らないメッセージ — 正規 MUA は必ず付ける必須系
     /// ヘッダの欠落で、手作り生成品の兆候。
     pub missing_content_type: bool,
+    /// `Date:` ヘッダが一切ない (D1152)。
+    ///
+    /// RFC 5322 の必須 origination-date — 発信時刻を名乗らない
+    /// 手作り生成品の兆候。
+    pub missing_date: bool,
+    /// `Message-ID:` ヘッダが一切ない (D1153)。
+    ///
+    /// 正規 MUA/MTA が必ず付ける一意識別子の欠落 — 追跡不能な
+    /// 手作り生成品の兆候。
+    pub missing_msgid: bool,
+    /// `To:`/`Cc:`/`Bcc:` のいずれもない (D1154)。
+    ///
+    /// 宛先フィールド皆無 — 「宛先不明」を形にした一括送付品の
+    /// 兆候。
+    pub missing_rcpt: bool,
+    /// `Subject:` があるが値が空 (D1155)。
+    ///
+    /// 件名フィールドはあるが値を持たない — 表示の体裁だけ整えた
+    /// 生成品の兆候。
+    pub empty_subject: bool,
+    /// `From:` ヘッダ行が 2 行以上ある (D1156)。
+    ///
+    /// 1 行中の複数アドレス (D164) とは別系 — 行そのものの重複は
+    /// 表示と検査で別値を読む parser differential の兆候。
+    pub dup_from: bool,
+    /// `Date:` ヘッダ行が 2 行以上ある (D1157)。
+    ///
+    /// 表示時刻と検査時刻が別値を読む差分の兆候。
+    pub dup_date: bool,
+    /// `Message-ID:` ヘッダ行が 2 行以上ある (D1158)。
+    ///
+    /// スレッド復元と検査で別 ID を読む差分の兆候。
+    pub dup_msgid: bool,
+    /// `Content-Type:` ヘッダ行が 2 行以上ある (D1159)。
+    ///
+    /// 型解釈がパーサごとに異なる — 一方は text/plain、他方は
+    /// text/html を読む差分の兆候。
+    pub dup_content_type: bool,
     /// `Return-Path:` が `<` を含まない不正値 (D281)。
     ///
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
@@ -2005,13 +2043,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2073,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        missing_date: has_missing_date(raw),
+        missing_msgid: has_missing_msgid(raw),
+        missing_rcpt: has_missing_rcpt(raw),
+        empty_subject: has_empty_subject(raw),
+        dup_from: has_dup_from(raw),
+        dup_date: has_dup_date(raw),
+        dup_msgid: has_dup_msgid(raw),
+        dup_content_type: has_dup_content_type(raw),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2392,6 +2438,84 @@ fn has_feedback_id(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("feedback-id:") || l.starts_with("x-feedback-id:"))
+}
+
+/// `Date:` ヘッダが一切ないか判定する (D1152)。
+fn has_missing_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("date:"))
+}
+
+/// `Message-ID:` ヘッダが一切ないか判定する (D1153)。
+fn has_missing_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("message-id:"))
+}
+
+/// `To:`/`Cc:`/`Bcc:` のいずれもないか判定する (D1154)。
+fn has_missing_rcpt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| {
+        l.starts_with("to:") || l.starts_with("cc:") || l.starts_with("bcc:")
+    })
+}
+
+/// `Subject:` があるが値が空か判定する (D1155)。
+/// `Subject:` 単独行、または値が継続行にのみ続く場合を空とみなす
+/// (継続行は次行の検査で拾うため厳密には行頭値のみ評価)。
+fn has_empty_subject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.strip_prefix("subject:").is_some_and(|rest| rest.trim().is_empty())
+    })
+}
+
+/// `From:` ヘッダ行が 2 行以上あるか判定する (D1156)。
+fn has_dup_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().filter(|l| l.starts_with("from:")).count() >= 2
+}
+
+/// `Date:` ヘッダ行が 2 行以上あるか判定する (D1157)。
+fn has_dup_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().filter(|l| l.starts_with("date:")).count() >= 2
+}
+
+/// `Message-ID:` ヘッダ行が 2 行以上あるか判定する (D1158)。
+fn has_dup_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().filter(|l| l.starts_with("message-id:")).count() >= 2
+}
+
+/// `Content-Type:` ヘッダ行が 2 行以上あるか判定する (D1159)。
+fn has_dup_content_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\r\n\r\n").or_else(|| lower.find("\n\n")).unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().filter(|l| l.starts_with("content-type:")).count() >= 2
 }
 
 /// `X-Spam-Report:`/`X-Spam-Details:`/`X-Spam-Hits:`/`X-Spam-Tests:`/
@@ -21128,5 +21252,81 @@ body";
             assert!(has_jinkoushiba_marks(fx), "miss: {:?}", String::from_utf8_lossy(fx));
         }
         assert!(!has_jinkoushiba_marks(b"From: a@b\r\nX-Other: 1\r\n\r\nx"));
+    }
+
+    #[test]
+    fn scan_は日付欠落を検出する() {
+        let none = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_date(none));
+        let ok = b"From: a@b\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\n\r\nx";
+        assert!(!has_missing_date(ok));
+        let lc = b"date: Mon, 1 Jan 2024\r\n\r\nx";
+        assert!(!has_missing_date(lc));
+    }
+
+    #[test]
+    fn scan_は識別子欠落を検出する() {
+        let none = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_msgid(none));
+        let ok = b"From: a@b\r\nMessage-ID: <a@b>\r\n\r\nx";
+        assert!(!has_missing_msgid(ok));
+    }
+
+    #[test]
+    fn scan_は宛先欠落を検出する() {
+        let none = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_rcpt(none));
+        let to = b"From: a@b\r\nTo: u@h\r\n\r\nx";
+        assert!(!has_missing_rcpt(to));
+        let cc = b"From: a@b\r\nCc: u@h\r\n\r\nx";
+        assert!(!has_missing_rcpt(cc));
+        let bcc = b"From: a@b\r\nBcc: u@h\r\n\r\nx";
+        assert!(!has_missing_rcpt(bcc));
+    }
+
+    #[test]
+    fn scan_は空件名を検出する() {
+        let empty = b"From: a@b\r\nSubject:\r\n\r\nx";
+        assert!(has_empty_subject(empty));
+        let sp = b"From: a@b\r\nSubject:   \r\n\r\nx";
+        assert!(has_empty_subject(sp));
+        let ok = b"From: a@b\r\nSubject: hello\r\n\r\nx";
+        assert!(!has_empty_subject(ok));
+        let none = b"From: a@b\r\nX-Other: 1\r\n\r\nx";
+        assert!(!has_empty_subject(none));
+    }
+
+    #[test]
+    fn scan_は差出人重複を検出する() {
+        let dup = b"From: a@b\r\nFrom: c@d\r\nSubject: x\r\n\r\nx";
+        assert!(has_dup_from(dup));
+        let one = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_dup_from(one));
+        let lc = b"from: a@b\r\nFROM: c@d\r\n\r\nx";
+        assert!(has_dup_from(lc));
+    }
+
+    #[test]
+    fn scan_は日付重複を検出する() {
+        let dup = b"Date: a\r\nDate: b\r\n\r\nx";
+        assert!(has_dup_date(dup));
+        let one = b"Date: a\r\n\r\nx";
+        assert!(!has_dup_date(one));
+    }
+
+    #[test]
+    fn scan_は識別子重複を検出する() {
+        let dup = b"Message-ID: <a>\r\nMessage-ID: <b>\r\n\r\nx";
+        assert!(has_dup_msgid(dup));
+        let one = b"Message-ID: <a>\r\n\r\nx";
+        assert!(!has_dup_msgid(one));
+    }
+
+    #[test]
+    fn scan_は型重複を検出する() {
+        let dup = b"Content-Type: text/plain\r\nContent-Type: text/html\r\n\r\nx";
+        assert!(has_dup_content_type(dup));
+        let one = b"Content-Type: text/plain\r\n\r\nx";
+        assert!(!has_dup_content_type(one));
     }
 }

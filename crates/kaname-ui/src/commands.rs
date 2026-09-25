@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -596,6 +598,70 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.malformed_return_path {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1152: Date 欠落
+    if env.missing_date {
+        render_risks.push(
+            "Date: ヘッダがありません — 発信時刻を名乗らない手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1153: Message-ID 欠落
+    if env.missing_msgid {
+        render_risks.push(
+            "Message-ID: ヘッダがありません — 追跡不能な手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1154: 宛先フィールド皆無
+    if env.missing_rcpt {
+        render_risks.push(
+            "To:/Cc:/Bcc: のいずれもありません — 「宛先不明」の一括送付品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1155: 空の Subject 値
+    if env.empty_subject {
+        render_risks.push(
+            "Subject: はありますが値が空です — 体裁だけ整えた生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1156: From 行重複
+    if env.dup_from {
+        render_risks.push(
+            "From: ヘッダ行が 2 行以上あります — 表示と検査で別値を読む差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1157: Date 行重複
+    if env.dup_date {
+        render_risks.push(
+            "Date: ヘッダ行が 2 行以上あります — 表示時刻と検査時刻が分かれる差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1158: Message-ID 行重複
+    if env.dup_msgid {
+        render_risks.push(
+            "Message-ID: ヘッダ行が 2 行以上あります — スレッド復元と検査で別 ID を読む差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1159: Content-Type 行重複
+    if env.dup_content_type {
+        render_risks.push(
+            "Content-Type: ヘッダ行が 2 行以上あります — 一方は text/plain、他方は text/html を読む差分の兆候です"
                 .to_string(),
         );
     }

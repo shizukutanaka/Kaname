@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1152–D1159: 必須フィールドの欠落・重複による解析差分の未検査兆候 8 件
+
+- **問題**: RFC 5322 の必須・一意フィールドの欠落と重複が未検査だった — `Date:` 欠落 (発信時刻を名乗らない)、`Message-ID:` 欠落 (追跡不能)、`To:`/`Cc:`/`Bcc:` 皆無 (「宛先不明」の一括送付)、`Subject:` の空値 (体裁だけの生成品)、`From:`/`Date:`/`Message-ID:`/`Content-Type:` の行重複 (表示パーサと検査パーサが別値を読む parser differential — Content-Type 重複は一方を text/plain、他方を text/html と読ませる)。
+- **修正**: `has_missing_date`/`has_missing_msgid`/`has_missing_rcpt`/`has_empty_subject`/`has_dup_from`/`has_dup_date`/`has_dup_msgid`/`has_dup_content_type` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 8 件追加 (構造異常系 — `*_marks` 自称契約ではなく「兆候です」系)。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 必須の名がなければ出自を問えず、同じ名が重なれば値が割れる — 欠落と重複を数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
