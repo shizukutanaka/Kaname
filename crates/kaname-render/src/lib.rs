@@ -119,6 +119,34 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Date:` ヘッダがない — RFC 5322 が必須とする orig_date の
+    /// 欠落で生成メールの形跡 (D1047)。
+    pub missing_date: bool,
+    /// `Received:` に "from unknown"/"unknown [ip]"/"helo=unknown"
+    /// 等の逆引き不能ホップがある — 配送経路の一部が名前解決
+    /// できない形跡 (D1048)。
+    pub unresolved_helo: bool,
+    /// `Content-Type: multipart/digest` — 収束要約容器の稀有な
+    /// 構造で解析差分の素地 (D1049)。
+    pub digest_container: bool,
+    /// `filename*0=`/`name*0=` 等の RFC 2231 分割継続パラメータ —
+    /// 拡張子を複数セグメントに分断して隠す形跡 (D1050)。
+    pub rfc2231_filename_split: bool,
+    /// `text/plain` 宣言の単一パートなのに本文に HTML マークアップ —
+    /// 宣言型と実体が違う型偽装 (D1051)。
+    pub plaintext_with_html: bool,
+    /// `Content-Type: message/rfc822` パート — 入れ子メールの
+    /// 不透明容器 (D1052)。
+    pub nested_rfc822: bool,
+    /// `-----BEGIN PGP` アーマーが本文にある — 暗号化され
+    /// 中身を検査できないブロック (D1053)。
+    pub armored_blob: bool,
+    /// `application/(x-)pkcs7-mime` / `smime-type=enveloped-data`
+    /// — S/MIME 暗号化で中身を検査できないパート (D1054)。
+    pub smime_opaque: bool,
+    /// `VBR-Info:`/`X-VBR-*` 等の Vouch By Reference 印 — 認証
+    /// サービスの保証を送信側が自称する兆候 (D1055)。
+    pub vbr_marks: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2005,13 +2033,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let auth_results = parse_auth_results(&msg);
 
     // D279: boundary= パラメータ欠落
-    let missing_boundary_param = has_missing_boundary_param(bytes);
+    let missing_boundary_param = has_missing_boundary_param(raw);
 
     // D280: Content-Type 欠落
-    let missing_content_type = has_missing_content_type(bytes);
+    let missing_content_type = has_missing_content_type(raw);
 
     // D281: Return-Path の不正値
-    let malformed_return_path = has_malformed_return_path(bytes);
+    let malformed_return_path = has_malformed_return_path(raw);
 
     Ok(Envelope {
         message_id,
@@ -2035,6 +2063,15 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        missing_date: has_missing_date(hdr),
+        unresolved_helo: has_unresolved_helo(hdr),
+        digest_container: has_digest_container(hdr),
+        rfc2231_filename_split: has_rfc2231_filename_split(raw),
+        plaintext_with_html: has_plaintext_with_html(raw),
+        nested_rfc822: has_nested_rfc822(raw),
+        armored_blob: has_armored_blob(raw),
+        smime_opaque: has_smime_opaque(raw),
+        vbr_marks: has_vbr_marks(hdr),
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2359,6 +2396,159 @@ fn has_abuse_headers(raw: &[u8]) -> bool {
             || l.starts_with("x-abuse-reports-to:")
             || l.starts_with("x-abuse:")
     })
+}
+
+/// `Date:` ヘッダがないか判定する (D1047)。
+///
+/// RFC 5322 は orig_date (Date:) を必須とする — 欠落は手作り
+/// 生成品・最小ヘッダの生成メールの形跡。
+fn has_missing_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    !header.lines().any(|l| l.starts_with("date:"))
+}
+
+/// `Received:` チェーンに逆引き不能ホップがあるか判定する (D1048)。
+///
+/// `from unknown`/`unknown [ip]`/`helo=unknown`/`(unknown` は送信側
+/// が名乗ったホストを受信側が解決できなかった痕跡 — 匿名化された
+/// 配送経路の形跡。
+fn has_unresolved_helo(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("received:")
+            && (l.contains("from unknown")
+                || l.contains("unknown [")
+                || l.contains("helo=unknown")
+                || l.contains("(unknown "))
+    })
+}
+
+/// `Content-Type: multipart/digest` があるか判定する (D1049)。
+///
+/// digest は収束要約の容器 — メールでは稀有な構造で、mixed/
+/// alternative と挙動が違う解析器との差分の素地。
+fn has_digest_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("content-type:") && l.contains("multipart/digest"))
+}
+
+/// `filename*0=`/`name*0=` 等の RFC 2231 分割継続があるか判定する
+/// (D1050)。
+///
+/// `filename*0="doc."` + `filename*1="exe"` のように値を複数
+/// セグメントに分断する継続形式 — 拡張子をばらけさせて拡張子
+/// 検査をすり抜ける形跡。
+fn has_rfc2231_filename_split(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines().any(|l| {
+        (l.starts_with("content-type:")
+            || l.starts_with("content-disposition:")
+            || l.starts_with("filename*")
+            || l.starts_with("name*"))
+            && (l.contains("filename*0=")
+                || l.contains("filename*0*=")
+                || l.contains("name*0=")
+                || l.contains("name*0*="))
+    })
+}
+
+/// `text/plain` 宣言の単一パートなのに本文に HTML マークアップが
+/// あるか判定する (D1051)。
+///
+/// `text/plain` と名乗りながら `<html`/`<script`/`<a href` の
+/// マークアップを含むのは宣言型と実体が違う型偽装 — text 表示と
+/// ブラウザ解釈が分かれる parser differential。
+/// (multipart はパートごとの宣言型のため対象外。)
+fn has_plaintext_with_html(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = &text[..header_end];
+    let declares_plain = header
+        .lines()
+        .any(|l| l.starts_with("content-type:") && l.contains("text/plain"))
+        && !header
+            .lines()
+            .any(|l| l.starts_with("content-type:") && l.contains("multipart/"));
+    if !declares_plain {
+        return false;
+    }
+    text[header_end..].lines().any(|l| {
+        l.contains("<html") || l.contains("<script") || l.contains("<a href")
+    })
+}
+
+/// `Content-Type: message/rfc822` パートがあるか判定する (D1052)。
+///
+/// 添付された丸ごとのメール — 入れ子のエンベロープ・ヘッダ・本文を
+/// ひとつの容器に包む不透明パート (転送形跡を偽るためにも使われる)。
+fn has_nested_rfc822(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines()
+        .any(|l| l.starts_with("content-type:") && l.contains("message/rfc822"))
+}
+
+/// `-----BEGIN PGP` アーマーが本文にあるか判定する (D1053)。
+///
+/// OpenPGP アーマーは暗号化・署名された不透明ブロック — 中身を
+/// スキャナが読めない隠れ経路 (フィッシング誘導を暗号化内に置く)。
+fn has_armored_blob(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.contains("-----begin pgp")
+}
+
+/// `application/(x-)pkcs7-mime` / `smime-type=enveloped-data` が
+/// あるか判定する (D1054)。
+///
+/// S/MIME の enveloped-data は暗号化コンテナ — 中身を通常の
+/// MIME 解析で読めない不透明パート。
+fn has_smime_opaque(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    text.lines().any(|l| {
+        l.starts_with("content-type:")
+            && (l.contains("pkcs7-mime") || l.contains("enveloped-data"))
+            || l.contains("smime-type=enveloped")
+    })
+}
+
+/// `VBR-Info:`/`X-VBR-*` 等の Vouch By Reference 印があるか
+/// 判定する (D1055)。
+///
+/// VBR は第三者認証サービスによる保証の印 — 送信側が書くのは
+/// 「認証されている」体裁の自署で、受信側の検証を名乗る自称。
+fn has_vbr_marks(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower
+        .find("\r\n\r\n")
+        .or_else(|| lower.find("\n\n"))
+        .unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header
+        .lines()
+        .any(|l| l.starts_with("vbr-info:") || l.starts_with("x-vbr-"))
 }
 
 /// `X-MS-Has-Attach:`/`X-Has-Attach:` 等の「添付あり」宣言があるか
@@ -15306,6 +15496,102 @@ mod tests {
         assert!(has_feedback_id(xf));
         let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
         assert!(!has_feedback_id(clean));
+    }
+
+    #[test]
+    fn scan_はDate欠落を検出する() {
+        let nodate = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(has_missing_date(nodate));
+        let dated = b"From: a@b\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\n\r\nx";
+        assert!(!has_missing_date(dated));
+    }
+
+    #[test]
+    fn scan_は逆引き不能ホップを検出する() {
+        let unk = b"Received: from unknown (HELO x) by m\r\n\r\nx";
+        assert!(has_unresolved_helo(unk));
+        let uip = b"Received: from [10.0.0.1] (unknown [1.2.3.4])\r\n\r\nx";
+        assert!(has_unresolved_helo(uip));
+        let helo = b"Received: from a (helo=unknown)\r\n\r\nx";
+        assert!(has_unresolved_helo(helo));
+        let ok = b"Received: from mail.example.com by m\r\n\r\nx";
+        assert!(!has_unresolved_helo(ok));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_unresolved_helo(clean));
+    }
+
+    #[test]
+    fn scan_はdigest容器を検出する() {
+        let dg = b"Content-Type: multipart/digest; boundary=\"B\"\r\n\r\nx";
+        assert!(has_digest_container(dg));
+        let mx = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\nx";
+        assert!(!has_digest_container(mx));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_digest_container(clean));
+    }
+
+    #[test]
+    fn scan_はRFC2231分割を検出する() {
+        let sp = b"Content-Disposition: attachment; filename*0=\"doc.\"; filename*1=\"exe\"\r\n\r\nx";
+        assert!(has_rfc2231_filename_split(sp));
+        let enc = b"Content-Type: application/octet-stream; name*0*='utf-8''a'\r\n\r\nx";
+        assert!(has_rfc2231_filename_split(enc));
+        let plain = b"Content-Disposition: attachment; filename=\"doc.pdf\"\r\n\r\nx";
+        assert!(!has_rfc2231_filename_split(plain));
+        let clean = b"From: a@b\r\n\r\nx";
+        assert!(!has_rfc2231_filename_split(clean));
+    }
+
+    #[test]
+    fn scan_はtextPlain内HTMLを検出する() {
+        let lie = b"Content-Type: text/plain\r\n\r\n<html><body>click</body></html>";
+        assert!(has_plaintext_with_html(lie));
+        let ah = b"Content-Type: text/plain\r\n\r\n<a href=\"http://e\">x</a>";
+        assert!(has_plaintext_with_html(ah));
+        let mp = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: text/plain\r\n\r\n<html>\r\n--B--";
+        assert!(!has_plaintext_with_html(mp));
+        let plain = b"Content-Type: text/plain\r\n\r\nhello <world>";
+        assert!(!has_plaintext_with_html(plain));
+    }
+
+    #[test]
+    fn scan_は入れ子メールを検出する() {
+        let nest = b"Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n--B\r\nContent-Type: message/rfc822\r\n\r\nFrom: x@y\r\n\r\nhi\r\n--B--";
+        assert!(has_nested_rfc822(nest));
+        let clean = b"Content-Type: text/plain\r\n\r\nhi";
+        assert!(!has_nested_rfc822(clean));
+    }
+
+    #[test]
+    fn scan_はPGPアーマーを検出する() {
+        let pgp = b"Content-Type: text/plain\r\n\r\n-----BEGIN PGP MESSAGE-----\r\nabc\r\n-----END PGP MESSAGE-----";
+        assert!(has_armored_blob(pgp));
+        let sig = b"From: a@b\r\n\r\n-----BEGIN PGP SIGNED MESSAGE-----\r\nx";
+        assert!(has_armored_blob(sig));
+        let clean = b"Content-Type: text/plain\r\n\r\nhello";
+        assert!(!has_armored_blob(clean));
+    }
+
+    #[test]
+    fn scan_はSMIME不透明を検出する() {
+        let sm = b"Content-Type: application/pkcs7-mime; smime-type=enveloped-data\r\n\r\nx";
+        assert!(has_smime_opaque(sm));
+        let x7 = b"Content-Type: application/x-pkcs7-mime\r\n\r\nx";
+        assert!(has_smime_opaque(x7));
+        let sig = b"Content-Type: application/pkcs7-signature\r\n\r\nx";
+        assert!(has_smime_opaque(sig));
+        let clean = b"Content-Type: text/plain\r\n\r\nhi";
+        assert!(!has_smime_opaque(clean));
+    }
+
+    #[test]
+    fn scan_はVBR印を検出する() {
+        let vbr = b"VBR-Info: md=example.com; mv=vouch.example\r\n\r\nx";
+        assert!(has_vbr_marks(vbr));
+        let xv = b"X-VBR-Cert: ok\r\n\r\nx";
+        assert!(has_vbr_marks(xv));
+        let clean = b"From: a@b\r\nSubject: x\r\n\r\nx";
+        assert!(!has_vbr_marks(clean));
     }
 
     #[test]

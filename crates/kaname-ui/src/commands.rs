@@ -562,7 +562,9 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     render_risks.extend(from_header_anomalies(&env));
 
     // D237: tel: リンク (BazaCall 型コールバックフィッシング)
-    if html_text.tel_link {
+    // `tel:` リンク兆候 (D237)。`html_text` 変数は存在しない (D960 で修復 —
+    // 未定義参照による潜伏コンパイル破損)。値は `html_extract` (Option) 経由。
+    if html_extract.as_ref().is_some_and(|e| e.tel_link) {
         render_risks.push(
             "電話番号リンク (tel:) — 「クリック不要・電話をかけさせる」誘導経路の可能性があります"
                 .to_string(),
@@ -597,6 +599,77 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         render_risks.push(
             "Return-Path: が <> 形でない不正値です — RFC 5321 の形を欠く手作り生成品の兆候です"
                 .to_string(),
+        );
+    }
+
+    // D1047: Date ヘッダ欠落
+    if env.missing_date {
+        render_risks.push(
+            "Date: ヘッダーがありません — RFC 5322 必須の発信日時を欠く生成メールの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1048: 逆引き不能ホップ
+    if env.unresolved_helo {
+        render_risks.push(
+            "Received: チェーンに逆引き不能ホップ (from unknown 等) があります — 匿名化された配送経路の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1049: multipart/digest 容器
+    if env.digest_container {
+        render_risks.push(
+            "Content-Type: multipart/digest があります — 収束要約容器の稀有な構造で解析差分の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1050: RFC 2231 分割継続
+    if env.rfc2231_filename_split {
+        render_risks.push(
+            "filename*0=/name*0= の分割継続パラメーターがあります — 拡張子をばらけさせて隠す兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1051: text/plain の中に HTML
+    if env.plaintext_with_html {
+        render_risks.push(
+            "text/plain を宣言する本文に HTML マークアップが含まれます — 宣言型と実体が違う型偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1052: 入れ子メール容器
+    if env.nested_rfc822 {
+        render_risks.push(
+            "message/rfc822 の添付があります — 丸ごとのメールを包む不透明コンテナの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1053: PGP アーマー
+    if env.armored_blob {
+        render_risks.push(
+            "-----BEGIN PGP の暗号化ブロックが含まれます — 中身を検査できない不透明ブロックの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1054: S/MIME 暗号化パート
+    if env.smime_opaque {
+        render_risks.push(
+            "application/pkcs7-mime / smime-type=enveloped-data があります — 暗号化で中身を検査できないパートの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1055: VBR (Vouch By Reference) 印自称
+    if env.vbr_marks {
+        render_risks.push(
+            "VBR-Info/X-VBR-* — 認証サービスの保証を送信側が自称する兆候です".to_string(),
         );
     }
 

@@ -8,6 +8,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Security — D1047–D1055: 必須ヘッダ欠落・不透明コンテナ・分割継続の未検査兆候 9 件
+
+- **問題**: 必須要素の欠落・解析器が中身を読めない容器・値を分断する継続形式に関する兆候が未検査だった — `Date:` 欠落 (RFC 5322 必須の orig_date)、Received の逆引き不能ホップ (from unknown/helo=unknown)、`multipart/digest` の稀有な収束容器、`filename*0=`/`name*0=` の RFC 2231 分割継続 (拡張子を分断して隠す)、`text/plain` 宣言なのに HTML マークアップを含む型偽装、`message/rfc822` の入れ子メール容器、`-----BEGIN PGP` アーマー、`application/pkcs7-mime`/`smime-type=enveloped-data` の S/MIME 暗号化パート、`VBR-Info`/`X-VBR-*` の認証保証自称。
+- **修正**: `has_missing_date`/`has_unresolved_helo`/`has_digest_container`/`has_rfc2231_filename_split`/`has_plaintext_with_html`/`has_nested_rfc822`/`has_armored_blob`/`has_smime_opaque`/`has_vbr_marks` で検出し、Envelope の対応 bool フィールド経由で `render_risks` に 9 件追加。`vbr_marks` は送信側自称契約 (SELF_CLAIM_SUFFIXES + DMARC ゲート) に準拠。multipart 構造・pkcs7-signature・utf-8 生バイトは対象外として誤検回避。D237 の `html_text` 参照バグと、D279/D280/D281 で未定義変数 `bytes` を参照していた main の潜伏コンパイル破損 (引数は `raw`) も同時修復。
+- **教訓**: 読めない理由は欠落・容器・分断・暗号化の四系 — 「中身を見れない」を構造単位で数えよ。
+
 ### Fixed — D571: 「送信側が自称」系の警告が DMARC 認証済みの普通のメールにも出ていた
 
 - **問題**: 「…を送信側が自称する兆候です」等の警告 (207 件) はヘッダの存在だけで出るため、Gmail (`X-Gm-*`/`X-Google-*`)・Microsoft 365 (`X-Microsoft-Antispam`/`X-Forefront-*`)・GitHub・LinkedIn・Mailchimp・配信サービス共通の `Feedback-ID`/`X-Report-Abuse` 等、送信元の基盤が正規に付けるヘッダでほぼ全ての普通のメールに警告枠が出ていた。自動車印の `x-gm-` (General Motors) は Gmail の `X-Gm-Message-State` と衝突し、Gmail 発の全メールを自動車ブランドの自称と誤判定していた。
