@@ -419,8 +419,10 @@ mod tests {
     #[test]
     fn risk_calculation_caution_single_signal() {
         let d = detector();
-        // 偽 CAPTCHA のみ
-        let html = "<p>Click the box to verify you are human</p>";
+        // 偽 CAPTCHA のみ — "to verify" を含むと D785 の
+        // RunDialogLure にも引っかかり captcha+lure → Critical になるため、
+        // 誘導句を含まない文言で単一シグナルであることを固定する。
+        let html = "<p>verify you are human</p>";
         let s = d.analyze(html);
         assert_eq!(s.risk, SmugglingRisk::Caution);
     }

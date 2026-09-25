@@ -1467,8 +1467,9 @@ mod tests {
     #[test]
     fn urldefense_v2_unwraps_to_inner() {
         let d = QuishingDefense::new();
-        // v2 形式: - → %, _ → /
-        let wrapped = "https://urldefense.com/v2/url?u=https-3a__evil-2dcorp_tk_login&d=DwMFAg&c=xyz";
+        // v2 形式: - → %, _ → /  (ドメイン内の . はそのまま残る)
+        let wrapped = "https://urldefense.com/v2/url?u=https-3a__evil-2dcorp.tk_login&d=DwMFAg&c=xyz";
+        // 復元後 https://evil-corp.tk/login → .tk 自由 TLD で Suspicious
         assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
     }
 
@@ -1571,7 +1572,7 @@ mod tests {
     fn double_wrapped_url_still_evaluates_inner() {
         let d = QuishingDefense::new();
         // SafeLinks が urldefense を包む二重ラッパ (複数ゲートウェイ通過)
-        let inner_defense = "https%3A%2F%2Furldefense.com%2Fv2%2Furl%3Fu%3Dhttps-3a__evil-2dcorp_tk%26d%3D1";
+        let inner_defense = "https%3A%2F%2Furldefense.com%2Fv2%2Furl%3Fu%3Dhttps-3a__evil-2dcorp.tk%26d%3D1";
         let wrapped = format!(
             "https://nam04.safelinks.protection.outlook.com/?url={inner_defense}"
         );
