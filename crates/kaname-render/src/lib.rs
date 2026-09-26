@@ -13387,6 +13387,17 @@ pub struct ExtractedBodyText {
     /// `vbscript:`/`file:`/`blob:` スキームか — href 以外の属性経由の
     /// ペイロード内包・スクリプト実行の兆候 (D979)。
     pub dangerous_scheme_attr: bool,
+    /// Unicode タグ文字 (U+E0000–E007F) が本文中にあるか —
+    /// 不可視文字で語を分割しキーワードフィルタの語結合を破壊する
+    /// ASCII スマグリング (Microsoft Security Blog 2026-09 観測、
+    /// AI プロンプト注入由来の技法がフィッシング回避へ転用) の兆候 (D1257)。
+    /// 正規のメール本文でこのブロックの文字が使われることはない。
+    pub unicode_tag_chars: bool,
+    /// 1 単語内にラテン文字とキリル文字/ギリシャ文字が混在するか —
+    /// 見た目が同一の文字への置換 (キリル а→a 等) でキーワード照合を
+    /// 回避するホモグリフ置換の兆候 (D1257)。単語単位で見るため
+    /// 「本文に非ラテン文字が混じる」だけの正当文では発火しない。
+    pub confusable_script_mix: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13600,7 +13611,29 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         download_attr: has_tag_attr(html, "a", "download"),
         meta_charset_danger: has_meta_dangerous_charset(html),
         dangerous_scheme_attr: has_dangerous_scheme_attr(html),
+        unicode_tag_chars: text.chars().any(|c| ('\u{E0000}'..='\u{E007F}').contains(&c)),
+        confusable_script_mix: has_confusable_script_mix(&text),
     }
+}
+
+/// 1 単語内にラテン文字とキリル文字/ギリシャ文字が混在するか (D1257)。
+///
+/// KnowBe4 (2026-06) の AI 生成フィッシング解析で報告された「系統的な
+/// Unicode ホモグリフ置換」— ラテン文字と見た目が同じキリル (а е о р с)
+/// やギリシャ (ο ν) への差し替えで、キーワードの部分文字列照合を破壊する。
+/// 単語を ASCII 英数字以外で区切り、ラテンとキリル/ギリシャを両方含む
+/// 単語があれば混在と判定する (キリル・ギリシャのみの正当な単語は
+/// 混在ではない)。
+fn has_confusable_script_mix(text: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric())
+        .any(|word| {
+            let has_latin = word.chars().any(|c| c.is_ascii_alphabetic());
+            let has_confusable = word.chars().any(|c| {
+                ('\u{0400}'..='\u{04FF}').contains(&c)   // キリル
+                    || ('\u{0370}'..='\u{03FF}').contains(&c) // ギリシャ
+            });
+            has_latin && has_confusable
+        })
 }
 
 /// `<a href="tel:...">` 形式の電話番号リンクを検出する (D237)。
@@ -15690,6 +15723,142 @@ mod tests {
         assert!(!scan.is_dangerous);
     }
 
+    // ---- D1248/D1250/D1251: HTML 添付・ネストメール・暗号化 ZIP ----
+
+    /// ZIP ローカルファイルヘッダを組み立てるヘルパ (magic_bytes 側と同じ構造)。
+    fn make_zip_entry(name: &[u8], flags: u16, comp: &[u8]) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.extend_from_slice(b"PK\x03\x04");
+        v.extend_from_slice(&20u16.to_le_bytes());
+        v.extend_from_slice(&flags.to_le_bytes());
+        v.extend_from_slice(&8u16.to_le_bytes());
+        v.extend_from_slice(&0u32.to_le_bytes());
+        v.extend_from_slice(&0u32.to_le_bytes());
+        v.extend_from_slice(&(comp.len() as u32).to_le_bytes());
+        v.extend_from_slice(&(comp.len() as u32).to_le_bytes());
+        v.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(name);
+        v.extend_from_slice(comp);
+        v
+    }
+
+    #[test]
+    fn scan_attachment_html_clickfix_is_dangerous() {
+        // ClickFix 型: 偽 CAPTCHA + clipboard.writeText + Win+R 誘導 (D1248)
+        let html = br#"<html><body>
+            <div>Verify you are human</div>
+            <script>navigator.clipboard.writeText("cmd /c start p");</script>
+            <p>Press Win+R, Ctrl+V, Enter</p>
+        </body></html>"#;
+        let scan = scan_attachment_bytes("verify.html", "text/html", html);
+        assert!(
+            scan.is_dangerous,
+            "ClickFix 型 HTML 添付は危険判定されるべき: {:?}",
+            scan.risks
+        );
+        assert!(scan.risks.iter().any(|r| r.contains("ClickFix")));
+    }
+
+    #[test]
+    fn scan_attachment_html_disguised_mime_still_scanned() {
+        // text/plain と偽装した .html 添付 — 中身の HTML 判定で捕捉 (D1248)
+        let html = br#"<html><script>navigator.clipboard.writeText("x")</script>
+            <p>Press Win+R</p><div>I am not a robot</div></html>"#;
+        let scan = scan_attachment_bytes("readme.txt", "text/plain", html);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("HTML 添付")),
+            "拡張子偽装でも中身で検査すべき: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn scan_attachment_inert_html_not_flagged() {
+        let html = b"<html><body><p>just a page</p></body></html>";
+        let scan = scan_attachment_bytes("note.html", "text/html", html);
+        assert!(
+            !scan.risks.iter().any(|r| r.contains("HTML 添付")),
+            "無害な HTML は警告しない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn scan_attachment_nested_email_flagged() {
+        // .eml/.msg — 内側の偽装とゲートウェイ回避の注意喚起 (D1250)
+        let scan = scan_attachment_bytes("forwarded.eml", "message/rfc822", b"From: x\n\ny");
+        assert!(
+            scan.risks.iter().any(|r| r.contains(".eml")),
+            "ネストメール添付は注意喚起されるべき: {:?}",
+            scan.risks
+        );
+        // 注意喚起のみ — 実行リスクにはしない
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_encrypted_zip_flagged() {
+        // 暗号化フラグ付き ZIP — is_encrypted=true + 検査不能の通知 (D1251)
+        let zip = make_zip_entry(b"evil.exe", 0x0001, b"\x01\x02\x03");
+        let scan = scan_attachment_bytes("invoice.zip", "application/zip", &zip);
+        assert!(scan.is_encrypted);
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| r.contains("暗号化") || r.contains("パスワード")));
+        // 暗号化だけでは実行リスクにはしない
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_plain_zip_not_encrypted() {
+        let zip = make_zip_entry(b"readme.txt", 0x0000, b"hello world");
+        let scan = scan_attachment_bytes("docs.zip", "application/zip", &zip);
+        assert!(!scan.is_encrypted);
+        assert!(!scan.risks.iter().any(|r| r.contains("暗号化")));
+    }
+
+    // ---------- D1253: PDF 静的検査 ----------
+
+    #[test]
+    fn scan_attachment_pdf_with_javascript_is_dangerous() {
+        let pdf = b"%PDF-1.7\n1 0 obj << /S /JavaScript /JS (app.alert(1)) >> endobj\n%%EOF";
+        let scan = scan_attachment_bytes("invoice.pdf", "application/pdf", pdf);
+        assert!(scan.is_dangerous);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("JavaScript")),
+            "JavaScript 要素が報告されるべき: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn scan_attachment_encrypted_pdf_flagged_not_dangerous() {
+        let pdf = b"%PDF-1.7\ntrailer << /Encrypt 2 0 R >>\n%%EOF";
+        let scan = scan_attachment_bytes("請求書.pdf", "application/pdf", pdf);
+        assert!(scan.is_encrypted);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("暗号化")),
+            "暗号化 PDF は検査不能として通知されるべき: {:?}",
+            scan.risks
+        );
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
+    fn scan_attachment_pdf_embedded_file_is_caution() {
+        let pdf = b"%PDF-1.7\n<< /EmbeddedFile 5 0 R >>\n%%EOF";
+        let scan = scan_attachment_bytes("doc.pdf", "application/pdf", pdf);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("EmbeddedFile")),
+            "内蔵ファイルは注意喚起されるべき: {:?}",
+            scan.risks
+        );
+        assert!(!scan.is_dangerous);
+        assert!(!scan.is_encrypted);
+    }
+
     // ---------- D173: URL スキーム難読化 ----------
 
     #[test]
@@ -16092,6 +16261,38 @@ mod tests {
         // srcset は src の前方一致ではない (属性名の区切り確認)
         assert!(!html_to_text(r#"<img srcset="a 1x, b 2x">"#).dangerous_scheme_attr);
         assert!(!html_to_text("<p>clean</p>").dangerous_scheme_attr);
+    }
+
+    // ── D1257: Unicode タグ文字 / ホモグリフ混在 ────────────────
+    #[test]
+    fn html_to_text_はunicodeタグ文字を検出する() {
+        // ASCII スマグリング — 'funding' をタグ文字で分割 (Microsoft 2026-09)
+        let smuggled = "<p>fun\u{E0064}ding available</p>";
+        assert!(html_to_text(smuggled).unicode_tag_chars);
+        // タグブロック全域 (E0000 / E007F 境界含む)
+        assert!(html_to_text("<p>a\u{E0000}b</p>").unicode_tag_chars);
+        assert!(html_to_text("<p>a\u{E007F}b</p>").unicode_tag_chars);
+        // 通常の不可視文字・通常テキストは対象外
+        assert!(!html_to_text("<p>a\u{200B}b</p>").unicode_tag_chars);
+        assert!(!html_to_text("<p>funding available</p>").unicode_tag_chars);
+        assert!(!html_to_text("<p>clean</p>").unicode_tag_chars);
+    }
+
+    #[test]
+    fn html_to_text_はホモグリフ混在を検出する() {
+        // キリル а (U+0430) を含む "bаnk" — 見た目は bank
+        let homoglyph = "<p>confirm your b\u{0430}nk login</p>";
+        assert!(html_to_text(homoglyph).confusable_script_mix);
+        // ギリシャ ο (U+03BF) を含む "login" 系
+        let greek = "<p>l\u{03BF}gin required</p>";
+        assert!(html_to_text(greek).confusable_script_mix);
+        // キリル/ギリシャのみの単語 (正当なロシア語・ギリシャ語文) は混在でない
+        assert!(!html_to_text("<p>Спасибо за письмо</p>").confusable_script_mix);
+        // ラテンのみの単語は対象外
+        assert!(!html_to_text("<p>bank login required</p>").confusable_script_mix);
+        // 日本語 + ラテンの混在はホモグリフ置換ではない (CJK と Latin は見た目が違う)
+        assert!(!html_to_text("<p>銀行の login を確認</p>").confusable_script_mix);
+        assert!(!html_to_text("<p>clean</p>").confusable_script_mix);
     }
 
     #[test]
@@ -19547,6 +19748,12 @@ pub struct AttachmentScan {
     /// **メタデータ検出のみの場合は false** — 作成者情報や GPS はプライバシー
     /// 上の通知であって、開いた瞬間にコードが走るわけではないため。
     pub is_dangerous: bool,
+    /// 暗号化フラグ付きエントリを含む ZIP ベースファイルか (D1251)。
+    ///
+    /// 「パスワード付き ZIP + 本文でパスワード案内」は解凍・検査を
+    /// 回避する定番の手口 (Sublime Security の検知ルールと同型)。
+    /// 単体では警告どまりだが、本文側の文言との相関で警告を上げる。
+    pub is_encrypted: bool,
 }
 
 /// メール全体から添付を取り出し、実装済みの各検出器にかける。
@@ -19744,10 +19951,13 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
     if let Ok(text) = std::str::from_utf8(bytes) {
         if svg_guard::looks_like_svg(text) {
             let scan = svg_guard::scan_svg(text);
+            // 実行リスク以外の注意喚起 (外部参照・非表示要素) も risks に
+            // 載せる — 実行リスクだけの条件で丸ごと捨てると、回避の兆候
+            // が利用者に見えないままだった (D1256)。
+            for r in &scan.risks {
+                risks.push(format!("SVG のリスク: {r:?}"));
+            }
             if !scan.safe_as_attachment {
-                for r in &scan.risks {
-                    risks.push(format!("SVG のリスク: {r:?}"));
-                }
                 is_dangerous = true;
             }
         }
@@ -19772,6 +19982,53 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         }
     }
 
+    // 5.5 HTML 添付のスマグリング検査 (D1248 — ClickFix/FileFix)
+    //     「.html を開かせる」は本文側の HTML スマグリングと別経路 —
+    //     ブラウザで開いた時点で実行されるため、本文だけを検査していても
+    //     添付は素通りだった。中身が HTML なら拡張子を問わず走査する
+    //     (text/plain 等への偽装はあり得る)。
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        let mut boundary = text.len().min(4096);
+        while boundary > 0 && !text.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        let head = text[..boundary].to_ascii_lowercase();
+        let lower_name = filename.to_ascii_lowercase();
+        let is_html_attachment = lower_name.ends_with(".html")
+            || lower_name.ends_with(".htm")
+            || declared_mime.to_ascii_lowercase().contains("text/html")
+            || head.contains("<html")
+            || head.contains("<!doctype html")
+            || head.contains("<script");
+        if is_html_attachment {
+            let scan = html_smuggling::HtmlSmugglingDetector.analyze(text);
+            if !matches!(scan.risk, html_smuggling::SmugglingRisk::Clean) {
+                risks.push(format!("HTML 添付のリスク: {}", scan.message));
+                for s in &scan.signals {
+                    risks.push(format!("  検出シグナル: {s:?}"));
+                }
+                // High/Critical は実行リスク扱い。Caution は注意喚起に留める。
+                if matches!(
+                    scan.risk,
+                    html_smuggling::SmugglingRisk::High | html_smuggling::SmugglingRisk::Critical
+                ) {
+                    is_dangerous = true;
+                }
+            }
+        }
+    }
+
+    // 5.7 ネストしたメール添付 (.eml/.msg) — 注意喚起 (D1250)。
+    //     内側の件名・差出人は外側と無関係に偽装できる。
+    if magic_bytes::is_nested_email_attachment(filename, declared_mime) {
+        risks.push(
+            "メール形式の添付です (.eml/.msg) — 内側の件名・差出人は外側と無関係に偽装でき、\
+             ゲートウェイ検査を回避する代表的な手口として観測されています。\
+             開封後の内容が外側の文脈と一致するか確認してください"
+                .to_string(),
+        );
+    }
+
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。
     for r in metadata_check::detect_metadata_risks(filename, bytes) {
         risks.push(format!("メタデータが含まれます: {r:?}"));
@@ -19788,12 +20045,52 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         );
     }
 
+    // 7.5 暗号化フラグ付き ZIP エントリ (D1251)。
+    //      パスワード保護は中身の検査を不可能にする — 添付自体は危険と
+    //      断定せず risks に通知し、本文のパスワード記載との相関は
+    //      kaname-ui 側 (`analyze_raw_email`) で警告する。
+    let mut is_encrypted = false;
+    if magic_bytes::is_zip_file(filename, bytes) && magic_bytes::zip_has_encrypted_entries(bytes) {
+        is_encrypted = true;
+        risks.push(
+            "ZIP に暗号化フラグ付きエントリがあります (パスワード保護) — \
+             内容物をスキャンできません。本文にパスワードが書かれている場合は特に注意してください"
+                .to_string(),
+        );
+    }
+
+    // 7.7 PDF の静的検査 (D1253 — PDF 添付急増への対応)
+    //     実行・自動起動系 (/JavaScript・/OpenAction・/AA・/Launch) は
+    //     実行リスク。/EmbeddedFile 等の運搬要素は注意喚起どまり。
+    //     /Encrypt は ZIP と同じく「中身を検査できない」経路 —
+    //     is_encrypted に設定して本文パスワードとの相関 (D1251) に乗せる。
+    if magic_bytes::is_pdf_file(filename, bytes) {
+        if magic_bytes::pdf_is_encrypted(bytes) {
+            is_encrypted = true;
+            risks.push(
+                "PDF が暗号化されています (パスワード保護) — \
+                 内容物をスキャンできません。本文にパスワードが書かれている場合は特に注意してください"
+                    .to_string(),
+            );
+        }
+        for marker in magic_bytes::pdf_active_markers(bytes) {
+            risks.push(format!("PDF に実行・自動起動系の要素があります ({marker})"));
+            is_dangerous = true;
+        }
+        for marker in magic_bytes::pdf_embedded_markers(bytes) {
+            risks.push(format!(
+                "PDF に外部連携・内蔵ペイロード系の要素があります ({marker})"
+            ));
+        }
+    }
+
     AttachmentScan {
         filename: filename.to_string(),
         declared_mime: declared_mime.to_string(),
         size_bytes,
         risks,
         is_dangerous,
+        is_encrypted,
     }
 }
 
