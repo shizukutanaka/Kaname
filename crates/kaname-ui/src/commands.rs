@@ -809,6 +809,30 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1269: 送信者ローカル部の異常 — ゼロ幅/書式制御文字やキリル・
+    //    ギリシャ文字の混入は、表示上は同一でも文字列照合を破る
+    //    (IRONSCALES 2026-05 の "contracts" + Cyrillic + ZWJ 擬態)。
+    if has_suspicious_local_part(&from_addr_only) {
+        render_risks.push(
+            "送信者アドレスにゼロ幅文字またはキリル/ギリシャ文字の混入があります — \
+             見た目では既知の名前に見える文字列照合回避の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1270: HTML 本文のリモートリソース参照 — 描画時には除去されるが、
+    //    参照の存在自体が開封確認トラッキング (生存確認の偵察) の兆候。
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.remote_resource)
+    {
+        render_risks.push(
+            "HTML 本文に外部リソースへの参照 (リモート画像等) が含まれています — \
+             描画時には除去されますが、開封確認トラッキングの兆候の可能性があります"
+                .to_string(),
+        );
+    }
+
     // D1252: 電話番号のみのペイロード (TOAD / コールバックフィッシング)
     //    URL が一切無いメールはリンク解析を完全に素通りする — 番号への
     //    電話自体が唯一のペイロード。KnowBe4 観測で前年比 +449%。
@@ -3292,6 +3316,36 @@ fn has_subscription_uri(text: &str) -> bool {
     SCHEMES.iter().any(|s| lower.contains(s))
 }
 
+/// D1269: 送信者アドレスのローカル部異常 — IRONSCALES (2026-05) 観測の
+/// 「contracts」擬態は、ローカル部にキリル文字と U+200D (ZWJ) を混ぜて
+/// 表示上は同一・文字列照合は不適合にする。ゼロ幅/書式制御文字は正当な
+/// アドレスに存在理由がなく、ラテン系ローカル部へのキリル・ギリシャ混入は
+/// ブロックリスト回避のホモグリフ置換。
+fn has_suspicious_local_part(addr: &str) -> bool {
+    let Some((local, _)) = addr.rsplit_once('@') else {
+        return false;
+    };
+    let local = local.trim_matches('"');
+    if local.is_empty() {
+        return false;
+    }
+    let has_latin = local.chars().any(|c| c.is_ascii_alphabetic());
+    local.chars().any(|c| {
+        ('\u{200B}'..='\u{200F}').contains(&c) // ZWSP/ZWNJ/ZWJ/LRM/RLM
+            || ('\u{2028}'..='\u{202E}').contains(&c) // 区切り・双方向制御
+            || ('\u{2060}'..='\u{2064}').contains(&c) // WORD JOINER 等
+            || c == '\u{FEFF}' // BOM/ZWNBSP
+            || c == '\u{00AD}' // SOFT HYPHEN
+            || ('\u{E0000}'..='\u{E007F}').contains(&c) // Unicode タグ文字
+            || (has_latin
+                && matches!(c,
+                    '\u{0370}'..='\u{03FF}' // ギリシャ
+                    | '\u{0400}'..='\u{04FF}' // キリル
+                    | '\u{0500}'..='\u{052F}'
+                    | '\u{1C80}'..='\u{1C8F}'))
+    })
+}
+
 /// 本文冒頭に LLM 生成物の前文が残っているか (D1259)。
 ///
 /// KnowBe4 (2026-06) の AI 生成フィッシング解析: モデルが出力冒頭に
@@ -4779,6 +4833,23 @@ mod tests {
         // 正規文では不発火
         assert!(!has_subscription_uri("https://example.com/feed を開いてください"));
         assert!(!has_subscription_uri("資料を添付しました"));
+    }
+
+    #[test]
+    fn has_suspicious_local_part_は送信者ローカル部異常を検出する() {
+        // D1269 — IRONSCALES 2026-05 の "contracts" 擬態
+        assert!(has_suspicious_local_part("contr\u{0430}cts@yesmax.fr")); // キリル а
+        assert!(has_suspicious_local_part("a\u{200D}b@example.jp")); // ZWJ
+        assert!(has_suspicious_local_part("sup\u{FEFF}port@example.com")); // ZWNBSP
+        assert!(has_suspicious_local_part("sa\u{E0061}les@example.com")); // タグ文字
+        // 正規アドレスは不発火
+        assert!(!has_suspicious_local_part("alice@example.com"));
+        assert!(!has_suspicious_local_part("j.taro@example.co.jp"));
+        // 全キリルローカル部 (ラテン混在なし) は対象外
+        assert!(!has_suspicious_local_part("отчёт@example.ru"));
+        // @ なし/空ローカル部は対象外
+        assert!(!has_suspicious_local_part("no-at-sign"));
+        assert!(!has_suspicious_local_part(""));
     }
 
     /// D1254: From == To の self-addressed メールは注意喚起が出る。

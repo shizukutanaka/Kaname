@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1269: 送信者ローカル部のゼロ幅/ホモグリフ混入が未検査
+
+- **問題**: IRONSCALES (2026-05) が観測した契約メール偽装は、From ローカル部にキリル文字と U+200D (ZWJ) を混ぜ「contracts」に見えるが文字列照合には一致しないアドレスを使い、SPF/DKIM/DMARC を通過した。Kaname は表示名・ドメインの偽装は見ていたが、ローカル部の文字構成は未検査だった。
+- **修正**: `has_suspicious_local_part` を追加 — ローカル部のゼロ幅/書式制御文字 (ZWSP/ZWJ/ZWNBSP/SOFT HYPHEN/タグ文字等) とラテン混在のキリル・ギリシャ文字を検出 → render_risks 警告。全キリル名・日本語名は対象外。
+- **教訓**: 名前はラベルではなく文字列そのものを疑え — 見た目が同じでも bytes が違えば照合は破れる。
+
+### Security — D1270: HTML 本文のリモートリソース参照 (トラッキングピクセル) が非報告
+
+- **問題**: 描画層のサニタイズは `<img src="http…">` 等のリモート参照を除去するため実行リスクはないが、「参照が存在したこと」自体は利用者に見えないままだった。開封確認ピクセルはメールボックス生存確認の偵察として観測されている (IRONSCALES 2026-05)。
+- **修正**: `ExtractedBodyText.remote_resource` を追加 — `<img src>`/`srcset`/`background`/`poster`/`lowsrc`/`dynsrc`/`<link href>` の http(s) 値と style の `url(http…)` を検出 (`<a href>` 通常リンク・cid:/data: は対象外) → render_risks に注意喚起。
+- **教訓**: 中和したものも「あったこと」は報告せよ — 除去と記録は別の責務。
+
 ### Security — D1267: 購読型 URI (webcal:/feed:) がリンク評価を素通り
 
 - **問題**: `webcal:`/`feed:`/`feeds:` URI は「開く」ではなく「購読する」— 悪意あるカレンダー購読 (calendar spam キャンペーン) は以後イベント・通知の形でメール検査の外から届き続ける。`extract_urls_from_text` は http(s) のみ抽出するためこの誘導経路は未検査だった。

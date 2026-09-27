@@ -13398,6 +13398,11 @@ pub struct ExtractedBodyText {
     /// 回避するホモグリフ置換の兆候 (D1257)。単語単位で見るため
     /// 「本文に非ラテン文字が混じる」だけの正当文では発火しない。
     pub confusable_script_mix: bool,
+    /// `<img>`/`srcset`/`<link>`/style `url()` 等のリモート (http/https)
+    /// リソース参照があるか (D1270)。描画層では除去されるため実行リスク
+    /// ではないが、参照の存在自体が開封確認トラッキング (生存確認の
+    /// 偵察) の兆候として報告する価値がある。
+    pub remote_resource: bool,
 }
 
 /// 表示テキストと実リンク先が一致しないリンク (D162)。
@@ -13613,7 +13618,45 @@ pub fn html_to_text(html: &str) -> ExtractedBodyText {
         dangerous_scheme_attr: has_dangerous_scheme_attr(html),
         unicode_tag_chars: text.chars().any(|c| ('\u{E0000}'..='\u{E007F}').contains(&c)),
         confusable_script_mix: has_confusable_script_mix(&text),
+        remote_resource: has_remote_resource(html),
     }
+}
+
+/// HTML 本文に外部 (http/https) リソース参照があるか (D1270)。
+///
+/// `<img src>`・`srcset`・`background`・`poster`・`lowsrc`/`dynsrc`・
+/// `<link href>`・style の `url(http…)` を対象とする。`<a href>` は
+/// メールリンクとして通常のため除外する (`a` タグの属性は見ない)。
+/// `cid:`/`data:` 等のインライン参照はリモートフェッチではない。
+fn has_remote_resource(html: &str) -> bool {
+    const ATTRS: &[&str] =
+        &["src", "srcset", "background", "poster", "lowsrc", "dynsrc", "href"];
+    let lower = html.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(i) = rest.find('<') {
+        let after = &rest[i + 1..];
+        let end = after.find('>').unwrap_or(after.len());
+        match after.chars().next() {
+            Some('!') | Some('?') | Some('/') | None => {}
+            Some(_) => {
+                let inner = &after[..end];
+                let is_anchor = inner.starts_with('a')
+                    && inner[1..].starts_with(|c: char| c == ' ' || c == '\t' || c == '/' || c == '>');
+                if !is_anchor {
+                    for a in ATTRS {
+                        if let Some(v) = tag_attr_value(inner, a) {
+                            let tok = decoded_url_token(&v);
+                            if tok.starts_with("http") || (a == &"srcset" && tok.contains("http")) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        rest = &after[end..];
+    }
+    lower.contains("url(http") || lower.contains("url('http") || lower.contains("url(\"http")
 }
 
 /// 1 単語内にラテン文字とキリル文字/ギリシャ文字が混在するか (D1257)。
@@ -15394,6 +15437,22 @@ mod tests {
     }
 
     // ── D160: html_to_text (HTML のみメールの解析対象化 + hidden text salting) ──
+
+    #[test]
+    fn html_to_text_flags_remote_resources() {
+        // D1270 — リモート画像 (開封確認トラッキング)
+        assert!(html_to_text(r#"<p>x</p><img src="https://tracker.evil.com/px.gif">"#).remote_resource);
+        // srcset / background / style url() / <link>
+        assert!(html_to_text(r#"<img srcset="https://t.evil/1x.png 1x">"#).remote_resource);
+        assert!(html_to_text(r#"<td background="https://t.evil/bg.png">x</td>"#).remote_resource);
+        assert!(html_to_text(r#"<p style="background:url(http://t.evil/x)">y</p>"#).remote_resource);
+        assert!(html_to_text(r#"<link href="https://t.evil/track.css" rel="stylesheet">"#).remote_resource);
+        // cid: 埋め込み・data:・ローカル参照・通常リンクは対象外
+        assert!(!html_to_text(r#"<img src="cid:part1@msg.id">"#).remote_resource);
+        assert!(!html_to_text(r#"<img src="data:image/png;base64,iVBOR">"#).remote_resource);
+        assert!(!html_to_text(r#"<a href="https://example.com">link</a>"#).remote_resource);
+        assert!(!html_to_text("<p>plain text</p>").remote_resource);
+    }
 
     #[test]
     fn html_to_text_strips_basic_tags() {
