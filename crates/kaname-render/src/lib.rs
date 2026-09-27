@@ -192,6 +192,10 @@ pub struct Envelope {
     pub bare_cr: bool,
     /// mbox 形式の `From ` 行で始まるか (D1308 — 形式混在差異)。
     pub mbox_from_line: bool,
+    /// Content-Type/Disposition のパラメータキーが重複するか (D1309 — 採用差異)。
+    pub duplicate_mime_params: bool,
+    /// CT の `name=` があるのに Content-Disposition が無いか (D1310 — 添付判定差異)。
+    pub ct_name_no_disposition: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2143,6 +2147,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1308: mbox 形式の From 行混入
     let mbox_from_line = has_mbox_from_line(bytes);
 
+    // D1309: CT/CD パラメータキーの重複
+    let duplicate_mime_params = has_duplicate_mime_params(bytes);
+
+    // D1310: name= ありで Content-Disposition 無し
+    let ct_name_no_disposition = has_ct_name_no_disposition(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2211,6 +2221,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         spaced_header_name,
         bare_cr,
         mbox_from_line,
+        duplicate_mime_params,
+        ct_name_no_disposition,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3616,6 +3628,105 @@ pub fn has_bare_cr(raw: &[u8]) -> bool {
 #[must_use]
 pub fn has_mbox_from_line(raw: &[u8]) -> bool {
     raw.starts_with(b"From ")
+}
+
+/// Content-Type/Content-Disposition の同じパラメータキーが重複しているか
+/// 判定する (D1309)。
+///
+/// `filename="a.txt"; filename="b.exe"` のように同じキーを2回書くと、
+/// 先頭を採る実装と末尾を採る実装で別の値を見る (D1281 の boundary=
+/// 検査を全パラメータに一般化)。`name*0=`/`name*1=` のような RFC 2231
+/// 分割継続はキー全体 (`*` 込み) が異なるため重複に数えない
+/// (連番分割自体は D1295 が別途検出する)。
+#[must_use]
+pub fn has_duplicate_mime_params(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !(l.starts_with("content-type:") || l.starts_with("content-disposition:")) {
+            continue;
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for part in l.split(';').skip(1) {
+            let part = part.trim();
+            let Some(eq) = part.find('=') else {
+                continue;
+            };
+            let key = part[..eq].trim();
+            if key.is_empty() {
+                continue;
+            }
+            if seen.contains(&key) {
+                return true;
+            }
+            seen.push(key);
+        }
+    }
+    false
+}
+
+/// `Content-Type` の `name=` パラメータがあるのに同じパートに
+/// Content-Disposition が無いか判定する (D1310)。
+///
+/// 旧来の書法では CT の `name=` が添付ファイル名になるが、添付判定を
+/// Content-Disposition のみで行うスキャナは `name=` を見ず拡張子検査を
+/// 素通りする (表示側は添付として扱う)。RFC 2183 では非推奨だが実装
+/// 差異として残る経路。パートのヘッダ run 単位で判定する。
+#[must_use]
+pub fn has_ct_name_no_disposition(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    // run 単位: 空行・`--` で切れる。run 内で CT に name= があり、
+    // かつ CD 行が無ければ検出。
+    let mut ct_has_name = false;
+    let mut saw_cd = false;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() || l.starts_with("--") {
+            if ct_has_name && !saw_cd {
+                return true;
+            }
+            ct_has_name = false;
+            saw_cd = false;
+            continue;
+        }
+        if l.starts_with("content-type:") {
+            // `name=` パラメータ (name*= は D1295 が別途検出)
+            let v = l.trim_start_matches("content-type:").trim_start();
+            for seg in v.split(';').skip(1) {
+                let seg = seg.trim();
+                if let Some(rest) = seg.strip_prefix("name") {
+                    if rest.trim_start().starts_with('=') {
+                        ct_has_name = true;
+                    }
+                }
+            }
+        } else if l.starts_with("content-disposition:") {
+            saw_cd = true;
+        }
+    }
+    ct_has_name && !saw_cd
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -17340,6 +17451,51 @@ mod tests {
         // 本文中の From 行・>From エスケープは対象外
         assert!(!has_mbox_from_line(
             b"From: a@b\r\n\r\nFrom someone quoted\n>From escaped"
+        ));
+    }
+
+    #[test]
+    fn duplicate_mime_params_はパラメータ重複を検出する() {
+        // D1309 — filename= 重複・charset= 重複
+        assert!(has_duplicate_mime_params(
+            b"Content-Disposition: attachment; filename=\"a.txt\"; filename=\"b.exe\"\r\n\r\nb"
+        ));
+        assert!(has_duplicate_mime_params(
+            b"Content-Type: text/plain; charset=utf-8; charset=iso-8859-1\r\n\r\nb"
+        ));
+        // RFC 2231 連番は重複ではない
+        assert!(!has_duplicate_mime_params(
+            b"Content-Type: text/plain; name*0=\"a\"; name*1=\"b\"\r\n\r\nb"
+        ));
+        // 別名パラメータは不発火
+        assert!(!has_duplicate_mime_params(
+            b"Content-Type: text/plain; charset=utf-8; format=flowed\r\n\r\nb"
+        ));
+        // パラメータ無しは不発火
+        assert!(!has_duplicate_mime_params(b"Content-Type: text/plain\r\n\r\nb"));
+    }
+
+    #[test]
+    fn ct_name_no_disposition_は添付判定素通りを検出する() {
+        // D1310 — name= あり・CD 無し
+        assert!(has_ct_name_no_disposition(
+            b"Content-Type: application/octet-stream; name=\"evil.exe\"\r\n\r\nAAAA"
+        ));
+        // CD がある場合は不発火
+        assert!(!has_ct_name_no_disposition(
+            b"Content-Type: application/octet-stream; name=\"evil.exe\"\r\nContent-Disposition: attachment; filename=\"evil.exe\"\r\n\r\nAAAA"
+        ));
+        // name= 無しは不発火
+        assert!(!has_ct_name_no_disposition(
+            b"Content-Type: text/plain\r\n\r\nb"
+        ));
+        // パート内の run でも検出
+        assert!(has_ct_name_no_disposition(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name=\"doc.pdf\"\r\n\r\nx\r\n--b--"
+        ));
+        // 別パートに CD があっても対象パートで評価する
+        assert!(has_ct_name_no_disposition(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Disposition: inline\r\n\r\nt\r\n--b\r\nContent-Type: application/pdf; name=\"doc.pdf\"\r\n\r\nx\r\n--b--"
         ));
     }
 

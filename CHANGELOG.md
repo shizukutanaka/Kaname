@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1309: CT/CD パラメータキー重複が未検査
+
+- **問題**: `filename="a.txt"; filename="b.exe"` や `charset=` 重複で先頭/末尾採用が実装間でずれる。D1281 は boundary= のみ対象で他のキーは未カバー。
+- **修正**: `has_duplicate_mime_params` — Content-Type/Content-Disposition のパラメータキーを `*` 込みの全体で比較し重複を検出 (RFC 2231 連番 `name*0`/`name*1` は別キーのため誤検出しない) → `Envelope.duplicate_mime_params` → render_risks 警告。
+- **教訓**: 特定キーの重複検査は残りのキー全般に一般化する価値がある — 同じ差異の形はどのキーにも現れる。
+
+### Security — D1310: CT の name= ありで Content-Disposition 無しが未検査
+
+- **問題**: 旧来の書法では CT の `name=` が添付ファイル名になるが、添付判定を Content-Disposition のみで行うスキャナは `name=` を見ず拡張子検査を素通りする (表示側は添付として扱う)。
+- **修正**: `has_ct_name_no_disposition` — パートのヘッダ run 単位で CT に `name=` があり CD 行が無ければ検出 → `Envelope.ct_name_no_disposition` → render_risks 警告。
+- **教訓**: 「判定に使う欄」と「実際に効く欄」が違う旧来の書法は常に差異の温床 — 両方の欄の有無を突き合わせる。
+
 ### Security — D1307: ヘッダ部の裸 CR (\r 単独) が未検査
 
 - **問題**: D1298 は CRLF/裸LF の混在のみ検査し、Mac クラシック形式の `\r` 単独行終端は未カバー。`\r\n` と `\n` のみを区切りと見る実装はその行を次行と結合して読み、`\r` を区切る実装は分割する行分割差異。

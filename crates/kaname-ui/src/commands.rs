@@ -2955,6 +2955,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1309: CT/CD パラメータキー重複 — `filename="a"; filename="b"` で
+    //    先頭/末尾採用が実装で分かれる (D1281 boundary= の一般化)。
+    if env.duplicate_mime_params {
+        render_risks.push(
+            "Content-Type/Disposition に同じパラメータキーが重複しています — \
+             どちらの値を採用するか実装間でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1310: CT の name= ありで Content-Disposition 無し — CD のみで
+    //    添付判定するスキャナは name= を見ず拡張子検査を素通りする。
+    if env.ct_name_no_disposition {
+        render_risks.push(
+            "Content-Type の name= にファイル名がありますが Content-Disposition がありません — \
+             添付判定経路をすり抜ける旧来の書法の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
