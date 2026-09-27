@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1301: MIME charset= の危険文字コードが未検査
+
+- **問題**: `Content-Type: ...; charset=utf-7` で書かれた本文は ASCII のまま (`+AGQ-` 等) キーワード照合をすり抜け、utf-7 を解釈する表示側でのみ攻撃文字列になる。D978 は `<meta charset>` のみ対象で MIME ヘッダ側は未検査だった。
+- **修正**: `has_dangerous_charset` — charset= 値が utf-7/utf7/x-user-defined/utf-16 系等の既知の危険・異常名と一致すると検出 → `Envelope.dangerous_charset` → render_risks 警告。
+- **教訓**: 同じ「文字コード指定」の穴が書ける場所は2箇所以上ある (meta と MIME ヘッダ) — 一方を塞いでも他方は別経路として残る。
+
+### Security — D1302: 件名の bidi override/isolate が未検査
+
+- **問題**: 件名の文字種変換検査 (D1276/D1282) に bidi 制御文字 (U+202A–U+202E override、U+2066–U+2069 isolate) が無かった。件名中の RLO で表示順を反転させる trojan-source 系の偽装 (件名列での見せ方改竄)。
+- **修正**: `has_suspicious_subject_chars` に `'\u{202A}'..='\u{202E}'` と `'\u{2066}'..='\u{2069}'` を追加。
+- **教訓**: 「見え方をずらす文字」は不可視だけでなく表示順を変える系も含む — カテゴリの定義で抜けを防ぐ。
+
 ### Security — D1299: アドレスドメインの FQDN 末尾ドットが未検査
 
 - **問題**: `user@example.com.` の末尾ドットは DNS 的に `example.com` と同じホストを指すが、文字列比較でドメイン照合する実装は別ドメインと見る — 送信側が自社ドメイン許可リスト等をすり抜けつつ配送は成立する形。

@@ -180,6 +180,8 @@ pub struct Envelope {
     pub fqdn_trailing_dot: bool,
     /// アドレスヘッダのコメント内にアドレス/URL があるか (D1300 — 表示差異)。
     pub address_comment: bool,
+    /// MIME `charset=` に危険文字コード (utf-7/x-user-defined 等) があるか (D1301)。
+    pub dangerous_charset: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2113,6 +2115,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1300: アドレスヘッダの CFWS コメント混入
     let address_comment = has_address_comment(bytes);
 
+    // D1301: MIME charset= の危険文字コード
+    let dangerous_charset = has_dangerous_charset(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2175,6 +2180,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mixed_line_endings,
         fqdn_trailing_dot,
         address_comment,
+        dangerous_charset,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3368,6 +3374,62 @@ pub fn has_address_comment(raw: &[u8]) -> bool {
                 }
             }
         }
+    }
+    false
+}
+
+/// Content-Type の `charset=` に危険な文字コードが指定されているか判定する
+/// (D1301)。
+///
+/// D978 は HTML 内の `<meta charset="utf-7">` を検査するが、MIME ヘッダの
+/// `Content-Type: ...; charset=utf-7` は未検査だった。utf-7 で書かれた本文は
+/// ASCII 文字列のまま (`+AGQ-` 等) スキャナのキーワード照合をすり抜け、
+/// utf-7 を解釈する表示側でのみ攻撃文字列になる。x-user-defined や
+/// utf-16 のような本文用途で異常な指定も同様に扱う (テキストを別の
+/// バイト表現として読ませる)。charset 値をクオート/区切りまで取り、
+/// 既知の危険・異常な名前を検出する。
+#[must_use]
+pub fn has_dangerous_charset(raw: &[u8]) -> bool {
+    const DANGEROUS: &[&str] = &[
+        "utf-7",
+        "utf7",
+        "unicode-1-1-utf-7",
+        "x-user-defined",
+        "utf-16",
+        "utf-16le",
+        "utf-16be",
+        "utf-32",
+    ];
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    // FWS 展開して論理行化
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let mut rest = logical.as_str();
+    while let Some(pos) = rest.find("charset") {
+        let mut after = rest[pos + 7..].trim_start();
+        if let Some(stripped) = after.strip_prefix('=') {
+            after = stripped.trim_start();
+        } else {
+            rest = &rest[pos + 7..];
+            continue;
+        }
+        let after = after.trim_start_matches('"').trim_start_matches('\'');
+        let end = after
+            .find(|c: char| c == '"' || c == '\'' || c == ';' || c.is_whitespace())
+            .unwrap_or(after.len());
+        let val = after[..end].trim_end_matches('*');
+        if DANGEROUS.iter().any(|d| val == *d) {
+            return true;
+        }
+        rest = &rest[pos + 7..];
     }
     false
 }
@@ -16958,6 +17020,36 @@ mod tests {
         // 本文中の括弧は対象外
         assert!(!has_address_comment(
             b"From: a@b\r\n\r\n(note with x@y inside)"
+        ));
+    }
+
+    #[test]
+    fn dangerous_charset_はcharsetの危険値を検出する() {
+        // D1301 — charset=utf-7 / x-user-defined / utf-16
+        assert!(has_dangerous_charset(
+            b"Content-Type: text/plain; charset=utf-7\r\n\r\n+AGQ-"
+        ));
+        assert!(has_dangerous_charset(
+            b"Content-Type: text/html; charset=\"UTF-7\"\r\n\r\nb"
+        ));
+        assert!(has_dangerous_charset(
+            b"Content-Type: text/plain; charset=x-user-defined\r\n\r\nb"
+        ));
+        assert!(has_dangerous_charset(
+            b"Content-Type: text/plain; charset=utf-16le\r\n\r\nb"
+        ));
+        // 通常 charset は不発火
+        assert!(!has_dangerous_charset(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+        assert!(!has_dangerous_charset(
+            b"Content-Type: text/plain; charset=iso-2022-jp\r\n\r\nb"
+        ));
+        // charset 指定なしは不発火
+        assert!(!has_dangerous_charset(b"Content-Type: text/plain\r\n\r\nb"));
+        // FWS 折り畳みでも検出
+        assert!(has_dangerous_charset(
+            b"Content-Type: text/plain;\r\n\tcharset=utf-7\r\n\r\nb"
         ));
     }
 

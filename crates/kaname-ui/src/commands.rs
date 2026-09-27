@@ -2892,6 +2892,17 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1301: MIME charset= の危険文字コード — utf-7 等で書かれた
+    //    本文は ASCII のままキーワード照合をすり抜け、解釈する側でのみ
+    //    攻撃文字列になる (D978 は <meta charset> のみ対象だった)。
+    if env.dangerous_charset {
+        render_risks.push(
+            "Content-Type の charset に utf-7 等の危険・異常な文字コードが指定されています — \
+             本文を別のバイト表現として読ませて検査を回避する兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
@@ -3719,6 +3730,11 @@ fn has_suspicious_subject_chars(subject: &str) -> bool {
             || c == '\u{180E}' // Mongolian Vowel Separator
             || c == '\u{2060}' // Word Joiner
             || matches!(c, '\u{115F}' | '\u{1160}' | '\u{FFA0}') // Hangul filler
+            // D1302: bidi override/isolate — 表示順を反転させて件名の
+            //   見た目を偽装 (trojan-source 系; 本文側は既に別経路で
+            //   扱われるが件名は未対象だった)
+            || ('\u{202A}'..='\u{202E}').contains(&c)
+            || ('\u{2066}'..='\u{2069}').contains(&c)
             || (has_latin
                 && matches!(c, '\u{0400}'..='\u{04FF}' | '\u{0370}'..='\u{03FF}'))
     })
@@ -5242,6 +5258,9 @@ mod tests {
         assert!(has_suspicious_subject_chars("\u{00AD}important notice"));
         assert!(has_suspicious_subject_chars("your\u{2060}account"));
         assert!(has_suspicious_subject_chars("p\u{115F}assword")); // Hangul filler
+        // D1302: bidi override/isolate
+        assert!(has_suspicious_subject_chars("Re: \u{202E}ecivres 請求"));
+        assert!(has_suspicious_subject_chars("accou\u{2067}nt")); // isolate
         // 正規件名・全角・日本語は不発火
         assert!(!has_suspicious_subject_chars("【請求書】2026年9月分"));
         assert!(!has_suspicious_subject_chars("Re: ＡＢＣプロジェクト"));

@@ -714,3 +714,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1298 | ~~**ヘッダ部の CRLF/裸 LF 混在が未検査**~~ **(解消済み)** | P1 | 裸 LF を認めない実装はヘッダ行を結合 → ヘッダ差異工作。修正: `has_mixed_line_endings` → render_risks | 区切りの一貫性も攻撃面 |
 | D1299 | ~~**アドレスドメインの FQDN 末尾ドットが未検査**~~ **(解消済み)** | P1 | `user@example.com.` — DNS 的に同一ホストだが文字列照合は別ドメイン。修正: `has_fqdn_trailing_dot` → render_risks | 同一を指す別表記は照合をすり抜ける |
 | D1300 | ~~**アドレスヘッダのコメント内アドレス/URL が未検査**~~ **(解消済み)** | P1 | `From: a@x (billing@y)` — コメント表示実装で見える差出人がずれる。修正: `has_address_comment` → render_risks | 稀な構文の中身まで読む |
+| D1301 | ~~**MIME charset= の危険文字コードが未検査**~~ **(解消済み)** | P1 | `charset=utf-7` 本文は ASCII のまま照合をすり抜ける (D978 は meta のみ)。修正: `has_dangerous_charset` → render_risks | 同じ穴は別の書ける場所に残る |
+| D1302 | ~~**件名の bidi override/isolate が未検査**~~ **(解消済み)** | P1 | 件名中の RLO/isolate で表示順反転 (trojan-source 系)。修正: has_suspicious_subject_chars に U+202A–202E・U+2066–2069 追加 | 「見え方をずらす」は不可視だけでなく順序改変も含む |
