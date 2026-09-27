@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1281: Content-Type の boundary= 重複 (MIME パーサ差異) が未検査
+
+- **問題**: `boundary=safe; boundary=evil` のように `Content-Type:` に複数の `boundary=` があると、先を読む実装と後を読む実装でパート構造が食い違う — ゲートウェイが検査した部分とクライアントが表示する部分が別物になる parser differential (Radboud 大学 MIME 差分ファジング論文 2025、Rack GHSA-vgpv-f759-9wx3 と同型)。既存の `missing_boundary_param` は「無い」場合のみで「重複」は未検査だった。
+- **修正**: `has_ambiguous_boundary` (FWS 継続行を展開して論理行単位で boundary= を2個以上カウント) → `Envelope.ambiguous_boundary` → render_risks 警告。
+- **教訓**: パラメータ重複は最も安い差異工作 — 「同じ名前が2回」だけで parser differential の兆候になる。
+
+### Security — D1282: 件名の不可視文字検査に soft hyphen 系が抜けていた
+
+- **問題**: SANS ISC 32428 — encoded-word でエンコードされた件名に U+00AD soft hyphen を散りばめ、一覧表示では崩れた見た目・開封時には正規文字として表示・照合は破られる手法。D1276 はタグ文字/ZWJ/装飾字を網羅したが U+00AD・U+2060・U+034F 等の「見えないが制御文字でもない」文字が抜けていた。
+- **修正**: `has_suspicious_subject_chars` に SOFT HYPHEN・WORD JOINER・CGJ・ALM・Mongolian Vowel Separator・Hangul filler を追加。
+- **教訓**: 不可視文字は範囲ではなく列挙で捉える — 新しい不可視文字が観測されるたびに追加できる網羅リストとして維持せよ。
+
 ### Security — D1279: 入れ子メール添付の内側差出人偽装が未可視化
 
 - **問題**: IRONSCALES (2026-01) — 外側メールが空・認証通過・`.eml` 添付の内側 `From:` が受信者の自社経理部門を騙る攻撃。D1250 は「内側は偽装できる」と一般注意喚起するだけで、内側の差出人・件名の値自体は提示されず、受信側ドメインとの一致も未検査だった。

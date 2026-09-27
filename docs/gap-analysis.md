@@ -694,3 +694,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1278 | ~~**Date ヘッダの欠落/不正値が未検査**~~ **(解消済み)** | P2 | RFC 5322 必須の orig date 欠落は手作り生成品の兆候 (同 SANS 事例 "Date: None")。修正: `env.date.is_none()` → render_risks | パーサが Option で返す未使用フィールドを点検せよ |
 | D1279 | ~~**入れ子メール添付の内側差出人偽装が未可視化**~~ **(解消済み)** | P1 | IRONSCALES 2026-01 — 空本文+認証通過+.eml の内側 From が受信者ドメインを騙る。D1250 は一般注意のみ。修正: `extract_nested_email_identity` → inner_sender/inner_subject 提示 + 宛先/自組織ドメイン一致で警告 | 認証の届かない層の自称値は提示するまでが検出 |
 | D1280 | ~~**空本文 + メール添付のみの相関が未検査**~~ **(解消済み)** | P2 | 「外側は無害・内側に集中」の形状。修正: 空本文 × 入れ子メール添付 → render_risks | 「何も書かない」も形状として数える |
+| D1281 | ~~**Content-Type の boundary= 重複 (MIME パーサ差異) が未検査**~~ **(解消済み)** | P1 | `boundary=safe; boundary=evil` — 先/後で読む実装で構造差異。修正: `has_ambiguous_boundary` (FWS 展開) → `ambiguous_boundary` → render_risks | パラメータ重複は parser differential の最も安い兆候 |
+| D1282 | ~~**件名の不可視文字検査に soft hyphen 系が抜けていた**~~ **(解消済み)** | P2 | SANS ISC 32428 — encoded-word 件名に U+00AD soft hyphen。修正: `has_suspicious_subject_chars` に SOFT HYPHEN/WORD JOINER/CGJ/ALM/Mongolian VS/Hangul filler 追加 | 不可視文字は網羅リストで維持せよ |

@@ -2689,6 +2689,17 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         }
     }
 
+    // D1281: Content-Type の boundary= 重複 — 先を読むスキャナと
+    //    後を読むクライアントでパート構造が食い違う parser
+    //    differential (MIME smuggling)。
+    if env.ambiguous_boundary {
+        render_risks.push(
+            "Content-Type に boundary= パラメータが重複しています — \
+             検査側と表示側が別のパート構造を読むパーサ差異工作の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
@@ -3507,6 +3518,15 @@ fn has_suspicious_subject_chars(subject: &str) -> bool {
             || ('\u{1F130}'..='\u{1F189}').contains(&c) // 二乗/反転ラテン
             || ('\u{200B}'..='\u{200F}').contains(&c) // ZWSP/ZWJ 等
             || c == '\u{FEFF}'
+            // D1282: ソフトハイフン等の「見えないが C0/C1 でもない」
+            //   不可視文字 — SANS ISC 32428: encoded-word 件名中の
+            //   U+00AD soft hyphen で表示と照合をずらす手法
+            || c == '\u{00AD}' // SOFT HYPHEN
+            || c == '\u{034F}' // Combining Grapheme Joiner
+            || c == '\u{061C}' // Arabic Letter Mark
+            || c == '\u{180E}' // Mongolian Vowel Separator
+            || c == '\u{2060}' // Word Joiner
+            || matches!(c, '\u{115F}' | '\u{1160}' | '\u{FFA0}') // Hangul filler
             || (has_latin
                 && matches!(c, '\u{0400}'..='\u{04FF}' | '\u{0370}'..='\u{03FF}'))
     })
@@ -5026,6 +5046,10 @@ mod tests {
         assert!(has_suspicious_subject_chars("\u{24B6}mazon からのお知らせ"));
         assert!(has_suspicious_subject_chars("inv\u{200D}oice")); // ZWJ
         assert!(has_suspicious_subject_chars("inv\u{043E}ice")); // キリル о
+        // D1282 — soft hyphen/word joiner 系 (SANS 32428)
+        assert!(has_suspicious_subject_chars("\u{00AD}important notice"));
+        assert!(has_suspicious_subject_chars("your\u{2060}account"));
+        assert!(has_suspicious_subject_chars("p\u{115F}assword")); // Hangul filler
         // 正規件名・全角・日本語は不発火
         assert!(!has_suspicious_subject_chars("【請求書】2026年9月分"));
         assert!(!has_suspicious_subject_chars("Re: ＡＢＣプロジェクト"));

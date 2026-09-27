@@ -131,6 +131,13 @@ pub struct Envelope {
     /// スキャナが片方、保存処理がもう片方を見る実装差を突く
     /// パーサ差異工作。
     pub filename_name_mismatch: bool,
+    /// `Content-Type:` に `boundary=` パラメータが 2 個以上あるか (D1281)。
+    ///
+    /// 先の boundary で区切る実装と後の boundary で区切る実装で
+    /// パート構造が食い違い、スキャナとメールクライアントが別の
+    /// 内容を見るパーサ差異 (MIME smuggling — Radboud 大学の
+    /// differential fuzzing 論文 2025 / Rack GHSA-vgpv-f759-9wx3)。
+    pub ambiguous_boundary: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2031,6 +2038,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1272: name= vs filename= 不一致
     let filename_name_mismatch = has_filename_name_mismatch(bytes);
 
+    // D1281: Content-Type の boundary= 重複 (パーサ差異)
+    let ambiguous_boundary = has_ambiguous_boundary(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2055,6 +2065,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         malformed_return_path,
         empty_return_path,
         filename_name_mismatch,
+        ambiguous_boundary,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2353,6 +2364,39 @@ pub fn extract_nested_email_identity(full: &[u8]) -> (Option<String>, Option<Str
         }
     }
     (from, subject)
+}
+
+/// `Content-Type:` ヘッダに `boundary=` パラメータが 2 個以上あるか判定する (D1281)。
+///
+/// `boundary=safe; boundary=malicious` のような重複パラメータは、先を
+/// 読む実装と後を読む実装でパート境界が食い違う — ゲートウェイ側が
+/// 検査したパートとクライアント側が表示するパートが別物になる
+/// parser differential (Radboud 大学の MIME 差分ファジング論文 2025、
+/// Rack GHSA-vgpv-f759-9wx3 の multipart 版と同型)。折り畳み
+/// (FWS 継続行) は展開してから論理行単位で数える。
+#[must_use]
+pub fn has_ambiguous_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = text[..header_end].replace("\r\n", "\n");
+    // FWS 継続行を展開して論理行に戻す
+    let mut logical: Vec<String> = Vec::new();
+    for l in header.split('\n') {
+        if l.starts_with([' ', '\t']) {
+            if let Some(last) = logical.last_mut() {
+                last.push_str(l.trim_start());
+            }
+        } else {
+            logical.push(l.to_string());
+        }
+    }
+    logical.iter().any(|l| {
+        let l = l.to_ascii_lowercase();
+        l.starts_with("content-type:") && l.matches("boundary=").count() > 1
+    })
 }
 
 /// 同一 MIME パートで `Content-Type:` の `name=` と `Content-Disposition:` の
@@ -15598,6 +15642,20 @@ mod tests {
         assert!(!has_filename_name_mismatch(only_name));
         // 添付セクション自体がない場合
         assert!(!has_filename_name_mismatch(b"Content-Type: text/plain\r\n\r\nhello"));
+    }
+
+    #[test]
+    fn ambiguous_boundary_は重複boundaryを検出する() {
+        // D1281 — boundary= の重複は parser differential
+        let dup = b"Content-Type: multipart/mixed; boundary=safe; boundary=evil\r\n\r\nx";
+        assert!(has_ambiguous_boundary(dup));
+        // FWS 折り畳みで 2 行に分かれた重複
+        let dup_folded = b"Content-Type: multipart/mixed;\r\n\tboundary=safe;\r\n\tboundary=evil\r\n\r\nx";
+        assert!(has_ambiguous_boundary(dup_folded));
+        // 単一 boundary・他ヘッダに boundary= が含まれるのみは不発火
+        let ok = b"Content-Type: multipart/mixed; boundary=abc\r\nX-Note: boundary=x\r\n\r\nx";
+        assert!(!has_ambiguous_boundary(ok));
+        assert!(!has_ambiguous_boundary(b"Content-Type: text/plain\r\n\r\nx"));
     }
 
     #[test]
