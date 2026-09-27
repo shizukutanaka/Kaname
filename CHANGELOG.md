@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
+
+- **問題**: Mimecast (2026-06) が観測した 4 千件超の quishing キャンペーンは、.ics 招待を RFC 5545 に違反する形で意図的に壊し、QR 抽出ツールをパース段階で失敗させていた: (a) `BEGIN:VCALENDAR` の前に大量の X- ジャンク行、(b) `X-GENERATION; FUTURE:` 型 — `;` 後のパラメータが `name=value` 形を取らない — の無意味な X- プロパティ行。正当な ICS 生成器はどちらも出力しないが、kaname-render の CalendarGuard は構造異常を一切見ていなかった。
+- **修正**: `CalendarRisk::MalformedStructure { leading_lines, malformed_x_props }` を追加し `analyze` で検査 (継続行・正規 X- プロパティは対象外)。Caution 扱いで兆候として報告。
+- **教訓**: 「読めないはずの形で届く」こと自体が兆候 — パースに失敗させるための壊れ方は、パースの成否ではなく形の逸脱として数えよ。
+
+### Security — D1264: ICS の ATTACH 外部 URI 参照 (QR 画像配送経路) が未検査
+
+- **問題**: 同キャンペーンは QR 画像を `ATTACH;VALUE=URI:` で外部参照し、カレンダーアプリが招待を表示した時点でリモートからフェッチさせた — スキャン時点で中身を持たないため URL 評価 (SuspiciousUrl) は宛先ドメインが正当なら素通りし、`ENCODING=BASE64` 埋め込み検査 (EmbeddedBinaryAttachment) の対象にもならない。
+- **修正**: `CalendarRisk::ExternalAttachUri` を追加し、`VALUE=URI` パラメータまたは値部が http で始まる ATTACH 行を検出 (CID: 埋め込み参照は対象外)。
+- **教訓**: 「表示時にフェッチされる参照」はスキャンの外で動く — 中身の評価ができなくても「外部を引きにいく形」自体を数えよ。
+
 ### Security — D1260: URL の `@` 混乱・不正ハイフンラベル・ハイフン折りたたみブランドが未検査
 
 - **問題**: SANS ISC (2026-09-24) が観測した URL は 3 つの罠を重ねていた: (a) authority の `YKZjqa7A@` userinfo — ブラウザは黙って捨てるがブロックリストを URL ごとに個別化し、メールアドレスにも見せかける; (b) `gynd--.koncar-hr.com` 型の `-` で終わるラベル — RFC 952/1123 上は不正だが DNS は解決するため、厳密な URL 抽出器・リンクリライタが「不正」と判断してスキャン対象から落とす; (c) パスの `/@victim.example.com` — 最後の `@` で分割する不正パーサには受信者の自社ドメインがホストに見える。`extract_domain` は userinfo を正しく除去するが「含まれていたこと」は報告されず、ラベル形状の検査もなかった。
