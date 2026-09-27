@@ -300,6 +300,15 @@ pub struct Envelope {
     /// 構造を書き換えるため、転送形と復号形で差出人がずれる (D1324 の
     /// 制御文字以外への拡張)。
     pub structural_encoded_word: bool,
+    /// D1342 — メッセージ先頭の BOM (UTF-8 `EF BB BF` / UTF-16 `FF FE`/
+    /// `FE FF`)。BOM を剥がす実装とそのまま第1ヘッダ行に載せる実装で
+    /// 全ヘッダ解釈がずれる — RFC 5322 メッセージに BOM は存在しない。
+    pub leading_bom: bool,
+    /// D1343 — `multipart/alternative` のメンバーが添付形 (attachment /
+    /// filename= / name=) を持つ。alternative は同一本文の代替表現の場で
+    /// あり、添付メンバーは「代替の一つとして隠す/無視する」実装差異の
+    /// 材料になる。
+    pub alternative_attachment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2306,6 +2315,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let no_recipient_headers = has_no_recipient_headers(bytes);
     let urgency_claim = has_urgency_claim(bytes);
     let structural_encoded_word = has_structural_encoded_word(bytes);
+    let leading_bom = has_leading_bom(bytes);
+    let alternative_attachment = has_alternative_attachment(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2407,6 +2418,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         no_recipient_headers,
         urgency_claim,
         structural_encoded_word,
+        leading_bom,
+        alternative_attachment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5609,6 +5622,86 @@ pub fn has_structural_encoded_word(raw: &[u8]) -> bool {
                 return true;
             }
             rest = &after[first_end + 2..];
+        }
+    }
+    false
+}
+
+/// メッセージの先頭が BOM で始まるか判定する (D1342)。
+///
+/// RFC 5322 のメッセージに BOM (Byte Order Mark) は存在しない。
+/// `EF BB BF` (UTF-8)・`FF FE`/`FE FF` (UTF-16) を剥がす実装と
+/// そのまま第1行に載せる実装では以降の全ヘッダ解釈がずれる。
+/// UTF-16LE メッセージは ASCII 系パーサで一切読めず、全体が死角に
+/// なる (添付符号化を経ない 16bit 世界)。
+#[must_use]
+pub fn has_leading_bom(raw: &[u8]) -> bool {
+    raw.starts_with(&[0xEF, 0xBB, 0xBF])
+        || raw.starts_with(&[0xFF, 0xFE])
+        || raw.starts_with(&[0xFE, 0xFF])
+}
+
+/// `multipart/alternative` のメンバーが添付形を持つか判定する (D1343)。
+///
+/// alternative は「同一本文の代替表現」を束ねる場で、添付メンバーは
+/// 構造の誤用。attachment/inline を厳密に区別する実装は隠し、
+/// alternative の全メンバーを本文扱いする実装は添付を本文として
+/// 描く — 読み手で見え方がずれる。
+#[must_use]
+pub fn has_alternative_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    // 外側 Content-Type が multipart/alternative でなければ対象外
+    let mut outer_is_alt = false;
+    let mut past_outer = false;
+    for l in logical.lines() {
+        if l.is_empty() {
+            past_outer = true;
+            break;
+        }
+        let low = l.to_ascii_lowercase();
+        if low.starts_with("content-type:") && low.contains("multipart/alternative") {
+            outer_is_alt = true;
+        }
+    }
+    if !outer_is_alt || !past_outer {
+        return false;
+    }
+    // メンバーのヘッダ run を走査 — attachment/filename=/name= があれば発火
+    let mut in_headers = false;
+    for l in logical.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-disposition:") {
+            if v.contains("attachment") || v.contains("filename=") {
+                return true;
+            }
+        } else if low.starts_with("content-type:") && low.contains("name=") {
+            return true;
         }
     }
     false
@@ -19995,6 +20088,38 @@ mod tests {
         ));
         // encoded-word 無し → 不発火
         assert!(!has_structural_encoded_word(b"Subject: hi\r\n\r\nx"));
+    }
+
+    #[test]
+    fn leading_bom_は先頭BOMを検出する() {
+        assert!(has_leading_bom(b"\xEF\xBB\xBFFrom: a@x\r\n\r\nx"));
+        assert!(has_leading_bom(b"\xFF\xFEF\x00r\x00o\x00m\x00"));
+        assert!(has_leading_bom(b"\xFE\xFF\x00F\x00r\x00o\x00m\x00"));
+        assert!(!has_leading_bom(b"From: a@x\r\n\r\nx"));
+        // 本文中の BOM は対象外
+        assert!(!has_leading_bom(b"Subject: x\r\n\r\n\xEF\xBB\xBF"));
+    }
+
+    #[test]
+    fn alternative_attachment_は代替内添付を検出する() {
+        // alternative メンバーに attachment disposition
+        assert!(has_alternative_attachment(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Disposition: attachment; filename=\"e.exe\"\r\n\r\nx\r\n--b--"
+        ));
+        // メンバー CT の name= でも発火
+        assert!(has_alternative_attachment(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name=\"d.pdf\"\r\n\r\nx\r\n--b--"
+        ));
+        // text/plain + text/html の正常 alternative は不発火
+        assert!(!has_alternative_attachment(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\n<p>x</p>\r\n--b--"
+        ));
+        // multipart/mixed の添付は対象外 (alternative のみ検査)
+        assert!(!has_alternative_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment; filename=\"d.pdf\"\r\n\r\nx\r\n--b--"
+        ));
+        // 非 multipart は不発火
+        assert!(!has_alternative_attachment(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]

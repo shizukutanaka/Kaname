@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1342: メッセージ先頭の BOM が未検査
+
+- **問題**: RFC 5322 メッセージに BOM は存在しない。`EF BB BF` (UTF-8)・`FF FE`/`FE FF` (UTF-16) で始まるメッセージは、BOM を剥がす実装とそのまま第1ヘッダ行に載せる実装で以降の全ヘッダ解釈がずれる。UTF-16 のメッセージは ASCII 系パーサで全体が死角になる。
+- **修正**: `has_leading_bom` — 先頭バイトが BOM なら検出 → `Envelope.leading_bom` → render_risks 警告。
+- **教訓**: ストリームの先頭1バイト目は全ヘッダの原点 — 原点がずれれば全てがずれる。
+
+### Security — D1343: multipart/alternative 内の添付メンバーが未検査
+
+- **問題**: `multipart/alternative` は同一本文の代替表現の場。attachment 形 (CD attachment・filename=・CT name=) のメンバーは構造の誤用で、メンバー扱いが実装間でずれる — 「代替の一つとして隠す」検査系から添付が見えない。
+- **修正**: `has_alternative_attachment` — 外側 CT が alternative で、メンバー run に attachment/filename=/name= があれば検出 → `Envelope.alternative_attachment` → render_risks 警告。
+- **教訓**: 「代替表現の場」はパート種別を限定する — 場違いのパートは構造の誤用。
+
 ### Security — D1340: 緊急性の自称ヘッダが未検査
 
 - **問題**: `X-Priority: 1`/`2`・`Importance: high`/`urgent`・`Priority: urgent`・`X-MSMail-Priority: high` は送信側が書き込む「急げ」の体裁 — BEC で判断を急かせる定番の社会的圧力だが未検査だった。

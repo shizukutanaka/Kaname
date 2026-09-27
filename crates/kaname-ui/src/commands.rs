@@ -3282,6 +3282,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1342: メッセージ先頭の BOM — 剥がす実装と第1行に載せる実装で
+    //    全ヘッダ解釈がずれる (UTF-16 世界は ASCII パーサに読めない)。
+    if env.leading_bom {
+        render_risks.push(
+            "メッセージ先頭に BOM (バイトオーダーマーク) があります —\
+             ヘッダ解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1343: multipart/alternative 内の添付メンバー — 代替表現の場に
+    //    添付を置く構造の誤用で、メンバー扱いが実装でずれる。
+    if env.alternative_attachment {
+        render_risks.push(
+            "multipart/alternative 内に添付形のパートがあります —\
+             代替本文の場に添付を隠す構造の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
