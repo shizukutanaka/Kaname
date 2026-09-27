@@ -346,6 +346,14 @@ pub struct Envelope {
     /// `message/rfc822` になるコンテナ (RFC 2046 §5.1.5) — 既定値を
     /// 知らない検査は入れ子メールを見逃す。
     pub digest_container: bool,
+    /// D1353 — アドレス欄の addr-spec が dot-atom 違反 (local/domain の
+    /// 先頭・末尾ドット・連続ドット・ドット無しドメイン)。厳格な実装は
+    /// 拒否し、寛容な実装は受理・正規化して照合がずれる。
+    pub malformed_addr_spec: bool,
+    /// D1354 — アドレス欄の `<` `>` の対応が崩れている (unbalanced)。
+    /// route-addr の読み取りが実装間でずれ、表示される差出人が違う
+    /// 形になる。
+    pub unbalanced_route: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2363,6 +2371,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let missing_part_content_type = has_missing_part_content_type(bytes);
     let param_encoded_word = has_param_encoded_word(bytes);
     let digest_container = has_digest_container(bytes);
+    let malformed_addr_spec = has_malformed_addr_spec(bytes);
+    let unbalanced_route = has_unbalanced_route(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2475,6 +2485,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_part_content_type,
         param_encoded_word,
         digest_container,
+        malformed_addr_spec,
+        unbalanced_route,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6078,6 +6090,159 @@ pub fn has_digest_container(raw: &[u8]) -> bool {
             if v.trim_start().starts_with("multipart/digest") {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// アドレス系ヘッダ名かどうか。
+fn is_addr_header_name(name: &str) -> bool {
+    matches!(
+        name,
+        "from" | "to" | "cc" | "bcc" | "reply-to" | "sender"
+            | "resent-from" | "resent-sender" | "resent-to" | "resent-cc" | "resent-bcc"
+    )
+}
+
+/// アドレス欄の addr-spec が dot-atom 違反か判定する (D1353)。
+///
+/// `a..b@x`・`.a@x`・`a.@x`・`user@singlelabel` 等 — 厳格実装は拒否、
+/// 寛容実装は受理・正規化し、照合・表示がずれる。domain literal
+/// `[127.0.0.1]` と FQDN 末尾ドット (D1299) は対象外。
+#[must_use]
+pub fn has_malformed_addr_spec(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let header_end = logical.find("\n\n").unwrap_or(logical.len());
+    for l in logical[..header_end].to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(&l[..colon]) {
+            continue;
+        }
+        let value = &l[colon + 1..];
+        // クオート・コメントの内部を除いた走査文字列
+        let mut scan = String::with_capacity(value.len());
+        let mut in_q = false;
+        let mut in_c = 0usize;
+        let mut prev = '\0';
+        for c in value.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if c == '"' && prev != '\\' {
+                    in_q = false;
+                }
+            } else if c == '"' {
+                in_q = true;
+            } else if c == '(' {
+                in_c = 1;
+            } else {
+                scan.push(c);
+            }
+            prev = c;
+        }
+        for tok in scan.split([',', ' ', '\t', '<', '>']) {
+            let Some(at) = tok.find('@') else { continue };
+            let local = &tok[..at];
+            let domain = &tok[at + 1..];
+            if local.is_empty() || domain.is_empty() {
+                return true;
+            }
+            if domain.starts_with('[') {
+                continue; // domain literal
+            }
+            if local.starts_with('.') || local.ends_with('.') || local.contains("..")
+                || domain.starts_with('.') || domain.contains("..")
+            {
+                return true;
+            }
+            // 末尾ドットの FQDN は D1299 — ここでは「ドット無し」のみ
+            let d = domain.trim_end_matches('.');
+            if !d.contains('.') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<` `>` が対応していないか判定する (D1354)。
+///
+/// route-addr の開閉がずれると、アドレス抽出が実装間で分かれて
+/// 表示される差出人が違う形になる。クオート・コメント内の括弧は
+/// 構文要素でないため対象外。
+#[must_use]
+pub fn has_unbalanced_route(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let header_end = logical.find("\n\n").unwrap_or(logical.len());
+    for l in logical[..header_end].to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(&l[..colon]) {
+            continue;
+        }
+        let mut open = 0i64;
+        let mut close = 0i64;
+        let mut in_q = false;
+        let mut in_c = 0usize;
+        let mut prev = '\0';
+        for c in l[colon + 1..].chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if c == '"' && prev != '\\' {
+                    in_q = false;
+                }
+            } else if c == '"' {
+                in_q = true;
+            } else if c == '(' {
+                in_c = 1;
+            } else if c == '<' {
+                open += 1;
+            } else if c == '>' {
+                close += 1;
+            }
+            prev = c;
+        }
+        if open != close {
+            return true;
         }
     }
     false
@@ -20641,6 +20806,29 @@ mod tests {
             b"Content-Type: multipart/mixed; boundary=b\r\n\r\nx"
         ));
         assert!(!has_digest_container(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn malformed_addr_spec_はドット違反アドレスを検出する() {
+        assert!(has_malformed_addr_spec(b"From: a..b@example.com\r\n\r\nx"));
+        assert!(has_malformed_addr_spec(b"From: .a@example.com\r\n\r\nx"));
+        assert!(has_malformed_addr_spec(b"To: user@internal\r\n\r\nx"));
+        assert!(has_malformed_addr_spec(b"From: u@example..com\r\n\r\nx"));
+        // domain literal は正規
+        assert!(!has_malformed_addr_spec(b"From: u@[127.0.0.1]\r\n\r\nx"));
+        assert!(!has_malformed_addr_spec(b"From: a@example.com\r\n\r\nx"));
+        // FQDN 末尾ドットは D1299 — ここでは不発火
+        assert!(!has_malformed_addr_spec(b"From: a@example.com.\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unbalanced_route_は不等号の不対応を検出する() {
+        assert!(has_unbalanced_route(b"From: CEO <ceo@x.com\r\n\r\nx"));
+        assert!(has_unbalanced_route(b"From: ceo@x.com>\r\n\r\nx"));
+        assert!(!has_unbalanced_route(b"From: \"CEO\" <ceo@x.com>\r\n\r\nx"));
+        // クオート内の < は対象外
+        assert!(!has_unbalanced_route(b"From: \"<not-addr>\" <ceo@x.com>\r\n\r\nx"));
+        assert!(!has_unbalanced_route(b"Subject: <x\r\n\r\nx"));
     }
 
     #[test]

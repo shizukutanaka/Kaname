@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1353: アドレスの dot-atom 違反が未検査
+
+- **問題**: `a..b@x`・`.a@x`・`user@internal` 等の addr-spec 違反は、厳格実装が拒否し寛容実装が受理・正規化する — 照合・表示が読み手でずれる。
+- **修正**: `has_malformed_addr_spec` — アドレス欄の各 `local@domain` を dot-atom で検査 → `Envelope.malformed_addr_spec` → render_risks 警告。domain literal・FQDN 末尾ドット (D1299) は対象外。
+- **教訓**: 形の崩れた宛名は「誰が読むか」で受取人が変わる。
+
+### Security — D1354: アドレス欄の `<` `>` 不対応が未検査
+
+- **問題**: `From: CEO <ceo@x` のように route-addr の開閉がずれると、アドレス抽出が実装間で分かれて差出人欄が違う顔になる。
+- **修正**: `has_unbalanced_route` — アドレス欄のクオート・コメント外 `<` `>` を計数、不一致なら検出 → `Envelope.unbalanced_route` → render_risks 警告。
+- **教訓**: 括弧の対応は構造の約束 — 崩れれば囲まれたものが読み手で変わる。
+
 ### Security — D1350: Content-Type 無宣言パートが未検査
 
 - **問題**: boundary 行で始まるが `Content-Type:` を持たないパートは、RFC 2046 の既定 `text/plain` を適用する実装とスニッフィングに頼る実装で読み手がずれる。

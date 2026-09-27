@@ -3392,6 +3392,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1353: アドレスの dot-atom 違反 (連続・先頭/末尾ドット・
+    //    ドット無しドメイン) — 厳格/寛容で受理がずれる。
+    if env.malformed_addr_spec {
+        render_risks.push(
+            "アドレスの形式が不正です (連続ドット・ドット無しドメイン等) —\
+             受理・正規化が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1354: アドレス欄の < > 不対応 — route-addr の読み取りがずれ、
+    //    差出人欄の表示が実装で違う形になる。
+    if env.unbalanced_route {
+        render_risks.push(
+            "アドレス欄の < > の対応が崩れています —\
+             差出人の読み取りが実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
