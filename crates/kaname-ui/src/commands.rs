@@ -3467,6 +3467,20 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.empty_group_syntax {
+        render_risks.push(
+            "宛先欄が空のグループ構文です (宛先を見せない一斉送信形)\
+             —宛先欄の見え方が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+    if env.usenet_control_header {
+        render_risks.push(
+            "Usenet 制御用のヘッダが混在しています\
+             —手作り生成・制度混在の兆候です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

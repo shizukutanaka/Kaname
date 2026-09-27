@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1363: 空・未終端グループ構文が未検査
+
+- **問題**: `To: undisclosed-recipients:;` は宛先欄を満たしながら宛先を一切見せない一斉送信の書式 — D1339 (宛先全欠落) の回避経路。`:` 後に `;` が無い未終端グループも実装間で解釈がずれる。
+- **修正**: `has_empty_group_syntax` — アドレス欄のクオート・コメント外の `:` を検査、空または未終端なら検出 → `Envelope.empty_group_syntax` → render_risks 警告。
+- **教訓**: 宛先欄の名札が空なら、誰にも読めない宛先。
+
+### Security — D1364: Usenet 制御ヘッダ混入が未検査
+
+- **問題**: `Control:`/`Supersedes:`/`Cancel-Lock:`/`Cancel-Key:`/`Approved:` 等はメールでは意味を持たない — 存在自体が制度混在・手作り生成の兆候 (news 制御メッセージの流用)。
+- **修正**: `has_usenet_control_header` — 外側ヘッダに制御系ヘッダを検出 → `Envelope.usenet_control_header` → render_risks 警告。`Approved:` はメールでも用いられるため `@` 必須。
+- **教訓**: 別の郵便制度の消印が貼られた封筒。
+
 ### Security — D1361: 偽返信 (Re:/Fwd: だが threading 参照無し) が未検査
 
 - **問題**: `Subject: Re: …` を名乗りながら `In-Reply-To:`/`References:` が無いメッセージは、実 MUA では作れない「続きの体裁」の偽装 (BEC の既存スレッド演出)。

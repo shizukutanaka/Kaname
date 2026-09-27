@@ -776,3 +776,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1360 | ~~**filename / filename* 不一致が未検査**~~ **(解消済み)** | P2 | * 優先と無視で添付名がずれる。修正: `has_conflicting_filename` → render_risks | 二枚の名札は読む係で別名になる |
 | D1361 | ~~**偽返信 (Re: だが threading 無し) が未検査**~~ **(解消済み)** | P2 | 続きの体裁を偽装する手作り品。修正: `has_fake_reply_claim` → render_risks | 綴じ紐の無い「続き」は別物 |
 | D1362 | ~~**非宣言 base64 本文ブロックが未検査**~~ **(解消済み)** | P2 | 宣言だけ復号する検査にペイロードが見えない。修正: `has_undeclared_base64_block` → render_risks | 「平文です」の箱に暗号の束 |
+| D1363 | ~~**空・未終端グループ構文が未検査**~~ **(解消済み)** | P2 | `To: label:;` は宛先を見せない一斉送信形 (D1339 回避)。修正: `has_empty_group_syntax` → render_risks | 宛先の名札が空なら誰にも読めない |
+| D1364 | ~~**Usenet 制御ヘッダ混入が未検査**~~ **(解消済み)** | P3 | Control:/Supersedes: 等はメールで意味を持たず制度混在の兆候。修正: `has_usenet_control_header` → render_risks | 別制度の消印が貼られた封筒 |

@@ -387,6 +387,14 @@ pub struct Envelope {
     /// 単パートで CTE が base64 でないのに本文が base64 形の行で
     /// 埋まると、宣言だけを復号する検査にペイロードが見えない。
     pub undeclared_base64_block: bool,
+    /// D1363 — 宛先欄のグループ構文 `label:;` が空または未終端。
+    /// `To: undisclosed-recipients:;` は宛先欄を満たしながら宛先を
+    /// 見せない一斉送信の形 (D1339 の回避経路)。
+    pub empty_group_syntax: bool,
+    /// D1364 — `Control:`/`Supersedes:`/`Cancel-Lock:`/`Cancel-Key:` 等の
+    /// Usenet 制御ヘッダがメールに混入。メールでは意味を持たず
+    /// 存在自体が手作り生成・制度混在の兆候。
+    pub usenet_control_header: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2414,6 +2422,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let conflicting_filename = has_conflicting_filename(bytes);
     let fake_reply_claim = has_fake_reply_claim(bytes);
     let undeclared_base64_block = has_undeclared_base64_block(bytes);
+    let empty_group_syntax = has_empty_group_syntax(bytes);
+    let usenet_control_header = has_usenet_control_header(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2536,6 +2546,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         conflicting_filename,
         fake_reply_claim,
         undeclared_base64_block,
+        empty_group_syntax,
+        usenet_control_header,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6752,6 +6764,97 @@ pub fn has_undeclared_base64_block(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// 宛先欄のグループ構文 `label: members;` が空または未終端か判定する
+/// (D1363)。`To: undisclosed-recipients:;` は宛先欄を満たしながら
+/// 宛先を一切見せない一斉送信の書式 — D1339 (宛先全欠落) の回避経路。
+/// `:` の後に `;` が無い未終端グループも実装間で解釈がずれる。
+#[must_use]
+pub fn has_empty_group_syntax(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        // クオート・コメントを除いた残りで `:` を探す
+        let val = &l[colon + 1..];
+        let mut cleaned = String::with_capacity(val.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = '\0';
+        for c in val.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if c == '"' && prev != '\\' {
+                in_q = !in_q;
+            } else if c == '(' && !in_q && prev != '\\' {
+                in_c = 1;
+            } else if !in_q {
+                cleaned.push(c);
+            }
+            prev = c;
+        }
+        let mut rest = cleaned.as_str();
+        while let Some(p) = rest.find(':') {
+            let after = &rest[p + 1..];
+            match after.find(';') {
+                // 空グループ `label:;` / `label: ;`
+                Some(s) => {
+                    if after[..s].trim().is_empty() {
+                        return true;
+                    }
+                    rest = &after[s + 1..];
+                }
+                // 未終端グループ — `;` が無い
+                None => return true,
+            }
+        }
+    }
+    false
+}
+
+/// `Control:`/`Supersedes:`/`Also-Control:`/`Cancel-Lock:`/`Cancel-Key:`/
+/// `Approved:` 等の Usenet 制御ヘッダがあるか判定する (D1364)。
+/// メールでは意味を持たず、存在自体が制度混在・手作り生成の兆候
+/// (news 制御メッセージをメール形に流用する工作)。
+#[must_use]
+pub fn has_usenet_control_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        !l.starts_with(' ')
+            && !l.starts_with('\t')
+            && (l.starts_with("control:")
+                || l.starts_with("supersedes:")
+                || l.starts_with("also-control:")
+                || l.starts_with("cancel-lock:")
+                || l.starts_with("cancel-key:")
+                || l.starts_with("approved:") && l[9..].contains('@'))
+    })
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -21499,6 +21602,44 @@ mod tests {
         // b64 形 1 行 (短い) は不発火
         assert!(!has_undeclared_base64_block(
             b"Subject: x\r\n\r\naGVsbG8gd29ybGQ="
+        ));
+    }
+
+    #[test]
+    fn empty_group_syntax_は空グループを検出する() {
+        assert!(has_empty_group_syntax(
+            b"To: undisclosed-recipients:;\r\nSubject: x\r\n\r\nx"
+        ));
+        assert!(has_empty_group_syntax(b"To: team: ;\r\nSubject: x\r\n\r\nx"));
+        // 未終端グループ
+        assert!(has_empty_group_syntax(b"To: team: a@x.com\r\nSubject: x\r\n\r\nx"));
+        // メンバーありの正規グループ構文は不発火
+        assert!(!has_empty_group_syntax(
+            b"To: team: a@x.com, b@y.com;\r\nSubject: x\r\n\r\nx"
+        ));
+        // クオート内・コメント内の :; は対象外 / 素のアドレスは不発火
+        assert!(!has_empty_group_syntax(
+            b"To: \"a:b;\" <x@y.com>\r\nSubject: x\r\n\r\nx"
+        ));
+        assert!(!has_empty_group_syntax(b"To: a@x.com\r\nSubject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn usenet_control_header_は制度混在ヘッダを検出する() {
+        assert!(has_usenet_control_header(
+            b"Control: cancel <x@y>\r\nSubject: x\r\n\r\nx"
+        ));
+        assert!(has_usenet_control_header(b"Supersedes: <a@b>\r\n\r\nx"));
+        assert!(has_usenet_control_header(b"Cancel-Lock: sha1:x\r\n\r\nx"));
+        // Approved: はメールでも使われるため @ 必須 (ニュース承認印)
+        assert!(has_usenet_control_header(
+            b"Approved: moderator@grp.example\r\n\r\nx"
+        ));
+        assert!(!has_usenet_control_header(b"Approved: yes\r\n\r\nx"));
+        assert!(!has_usenet_control_header(b"Subject: x\r\n\r\nx"));
+        // 継続行・本文中は対象外
+        assert!(!has_usenet_control_header(
+            b"X-Note: a\r\n Control: x\r\n\r\nControl: y"
         ));
     }
 
