@@ -103,6 +103,33 @@ pub enum CalendarRisk {
         /// 併存したフィッシング兆候の説明
         reason: String,
     },
+    /// RFC 5545 を意図的に逸脱した構造 (D1263 — Mimecast 2026-06 観測)。
+    ///
+    /// 攻撃者は QR 抽出ツールをパース段階で破壊するため、
+    /// (a) `BEGIN:VCALENDAR` より前に大量の X- 行を置き (パーサの
+    ///     「カレンダーか」判定とスキャン深度を狂わせる)、
+    /// (b) `X-GENERATION; FUTURE:` のように `;` 後のパラメータが
+    ///     `name=value` 形を取らない無意味な X- プロパティ行を撒く。
+    /// どちらも正当な ICS 生成器は出力しない形状であり、それ自体が
+    /// 回避の兆候となる。
+    MalformedStructure {
+        /// BEGIN:VCALENDAR より前にあった非空行の数
+        leading_lines: usize,
+        /// パラメータ部が `name=value` 形を取らない X- プロパティ行の数
+        malformed_x_props: usize,
+    },
+    /// ATTACH プロパティが外部 URI を参照している (D1264)。
+    ///
+    /// Mimecast (2026-06) 観測の malformed-ICS quishing キャンペーンでは
+    /// QR 画像を `ATTACH;VALUE=URI:` で外部参照し、カレンダーアプリが
+    /// 招待を表示した時点でリモート画像を取得させる。URI 参照は
+    /// `ENCODING=BASE64` のバイナリ埋め込み (EmbeddedBinaryAttachment) と
+    /// 別経路 — 中身を持たず「表示時フェッチ」のためスキャンを完全に
+    /// 回避し、取得先の変更でキャンペーンを差し替えられる。
+    ExternalAttachUri {
+        /// 参照先 URI
+        uri: String,
+    },
 }
 
 /// カレンダー招待スキャン結果。
@@ -248,6 +275,18 @@ impl CalendarGuard {
         if let Some(auto_reg) = detect_auto_registration_abuse(ics_content, &risks) {
             risks.push(auto_reg);
         }
+
+        // 10. 構造の意図的破壊 (D1263 — Mimecast 2026-06)。
+        //     BEGIN:VCALENDAR より前の非空行と、`name=value` 形を取らない
+        //     パラメータを持つ X- プロパティ行は、正当な ICS 生成器が
+        //     出力しない形状 — QR 抽出ツールをパース段階で破壊するための
+        //     回避工作として兆候を記録する。
+        risks.extend(detect_malformed_structure(ics_content));
+
+        // 11. 外部 URI 参照の ATTACH (D1264)。
+        //     `ATTACH;VALUE=URI:` は招待の表示時にリモートから内容を
+        //     フェッチさせる — QR 画像・次段ペイロードの配送経路。
+        risks.extend(detect_external_attach_uri(ics_content));
 
         let risk_level = Self::calculate_level(&risks);
         CalendarScan { risks, risk_level }
@@ -616,6 +655,100 @@ fn detect_auto_registration_abuse(
             companion.join(", ")
         ),
     })
+}
+
+/// RFC 5545 を意図的に逸脱した構造を検出する (D1263 — Mimecast 2026-06 観測)。
+///
+/// - `BEGIN:VCALENDAR` より前の非空行: パーサの「これはカレンダーか」判定と
+///   先頭限定スキャンを狂わせる先頭ジャンク。
+/// - `X-GENERATION; FUTURE:` 型の X- プロパティ行: `;` 後のパラメータが
+///   `name=value` 形を取らない (RFC 5545 §3.1 違反)。正規の X- プロパティは
+///   `X-NAME:value` または `X-NAME;PARAM=value:value` のみ。
+fn detect_malformed_structure(content: &str) -> Vec<CalendarRisk> {
+    let mut leading_lines = 0usize;
+    for raw in content.lines() {
+        let line = raw.trim_end_matches('\r');
+        if line.starts_with("BEGIN:VCALENDAR") {
+            break;
+        }
+        // 継続行 (space/tab 始まり) は先行行の一部 — 単独で数えない
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        if !line.is_empty() {
+            leading_lines += 1;
+        }
+    }
+
+    let mut malformed_x_props = 0usize;
+    for raw in content.lines() {
+        let line = raw.trim_end_matches('\r');
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        if !line.to_ascii_uppercase().starts_with("X-") {
+            continue;
+        }
+        match line.find(':') {
+            Some(colon) => {
+                let params = &line[..colon];
+                if let Some((_, rest)) = params.split_once(';') {
+                    if rest
+                        .split(';')
+                        .any(|p| !p.trim().is_empty() && !p.contains('='))
+                    {
+                        malformed_x_props += 1;
+                    }
+                }
+            }
+            // コロン自体が無い X- 行はプロパティとして成立しない
+            None => malformed_x_props += 1,
+        }
+    }
+
+    if leading_lines > 0 || malformed_x_props > 0 {
+        vec![CalendarRisk::MalformedStructure {
+            leading_lines,
+            malformed_x_props,
+        }]
+    } else {
+        Vec::new()
+    }
+}
+
+/// `ATTACH` プロパティの外部 URI 参照を検出する (D1264)。
+///
+/// `ATTACH;VALUE=URI:https://...` / `ATTACH:https://...` — 招待の表示時に
+/// リモートから内容をフェッチさせる形式。RFC 5545 の正規機能だが、
+/// メール経由の招待では QR 画像や次段ペイロードの配送に悪用される
+/// (Mimecast 2026-06)。CID: 埋め込み参照は対象外。
+fn detect_external_attach_uri(content: &str) -> Vec<CalendarRisk> {
+    let mut risks = Vec::new();
+    for raw in content.lines() {
+        let line = raw.trim();
+        let upper = line.to_ascii_uppercase();
+        if !upper.starts_with("ATTACH") {
+            continue;
+        }
+        // VALUE=URI パラメータ、または値部が直接 http で始まる参照
+        let uri_attach = upper.contains("VALUE=URI")
+            || line
+                .split_once(':')
+                .map(|(_, v)| v.trim_start().starts_with("http"))
+                .unwrap_or(false);
+        if !uri_attach {
+            continue;
+        }
+        if let Some((_, value)) = line.split_once(':') {
+            let uri = value.trim();
+            if !uri.is_empty() && !uri.to_ascii_uppercase().starts_with("CID:") {
+                risks.push(CalendarRisk::ExternalAttachUri {
+                    uri: uri.to_string(),
+                });
+            }
+        }
+    }
+    risks
 }
 
 fn extract_ics_urls(content: &str) -> Vec<String> {
@@ -1293,6 +1426,123 @@ END:VCALENDAR"#;
                 .iter()
                 .any(|r| matches!(r, CalendarRisk::EmbeddedBinaryAttachment { .. })),
             "未知バイナリも検出されるべき"
+        );
+    }
+
+    // ── D1263: 構造の意図的破壊 (Mimecast malformed-ICS quishing) ────────────
+
+    #[test]
+    fn content_before_begin_vcalendar_is_flagged() {
+        let g = guard();
+        // BEGIN:VCALENDAR 前のジャンク X- 行 — パーサ破壊の兆候
+        let ics = "X-JUNK-DATA;FOO:aAbBcC\n\
+                   X-RANDOM;BAR:dDdEeF\n\
+                   BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Meeting\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(
+                r,
+                CalendarRisk::MalformedStructure {
+                    leading_lines: 2,
+                    ..
+                }
+            )),
+            "先頭ジャンクが検出されない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn malformed_x_prop_without_param_value_is_flagged() {
+        let g = guard();
+        // `X-ADULT; CUSTOMER:` — `;` 後が `name=value` 形でない RFC 違反
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   X-GENERATION; FUTURE:junk\n\
+                   X-ADULT; CUSTOMER:junk\n\
+                   SUMMARY:Meeting\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks.iter().any(|r| matches!(
+                r,
+                CalendarRisk::MalformedStructure {
+                    malformed_x_props: 2,
+                    ..
+                }
+            )),
+            "malformed X- 行が検出されない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn wellformed_x_props_do_not_flag() {
+        let g = guard();
+        // 正当な X- プロパティ (Outlook/Google が出力する形) は対象外
+        let ics = "BEGIN:VCALENDAR\n\
+                   X-WR-CALNAME:Team Calendar\n\
+                   X-MS-OLK-WKHRSTART;TZID=Tokyo Standard Time:080000\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Weekly sync\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::MalformedStructure { .. })),
+            "正規 ICS で誤検出: {:?}",
+            scan.risks
+        );
+    }
+
+    // ── D1264: ATTACH の外部 URI 参照 ────────────────────────────────────────
+
+    #[test]
+    fn attach_value_uri_is_flagged() {
+        let g = guard();
+        // QR 画像を外部参照する ATTACH (Mimecast 2026-06 キャンペーンの型)
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   SUMMARY:Review document\n\
+                   ATTACH;FMTTYPE=image/png;VALUE=URI:https://evil.example/qr.png\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            scan.risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::ExternalAttachUri { .. })),
+            "外部 URI ATTACH が検出されない: {:?}",
+            scan.risks
+        );
+    }
+
+    #[test]
+    fn attach_cid_and_binary_do_not_flag_external_uri() {
+        let g = guard();
+        // CID 埋め込み参照と BASE64 バイナリ埋め込みは外部フェッチでない
+        let ics = "BEGIN:VCALENDAR\n\
+                   BEGIN:VEVENT\n\
+                   ATTACH;VALUE=URI:CID:logo@inline\n\
+                   ATTACH;ENCODING=BASE64;VALUE=BINARY:AAAA\n\
+                   END:VEVENT\n\
+                   END:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(
+            !scan
+                .risks
+                .iter()
+                .any(|r| matches!(r, CalendarRisk::ExternalAttachUri { .. })),
+            "CID/BINARY ATTACH で誤検出: {:?}",
+            scan.risks
         );
     }
 }
