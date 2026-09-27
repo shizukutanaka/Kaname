@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1321: boundary 区切りの前方一致曖昧行が未検査
+
+- **問題**: `--b` の直後に空白でも `--`+空白でもない内容が続く行 (`--bJUNK`/`--b--x`) は、厳密一致の実装では区切りでないが prefix 一致で区切る実装ではそこで分割される — mailsplit 系のパーサ差異。入れ子 boundary が外側の延長文字列のとき自然に発生する形でもある。
+- **修正**: `has_ambiguous_boundary_line` — 宣言 boundary 値を収集し、全物理行で `--{b}` 直後の残部が空白のみ/`--`+空白のみ以外の行を検出 → `Envelope.ambiguous_boundary_line` → render_risks 警告。
+- **教訓**: 区切りの一致は「行全体が合うか」が契約 — 前方一致だけで区切る実装とずれる。
+
+### Security — D1322: TNEF (winmail.dat) 添付の検査死角が未検査
+
+- **問題**: `application/ms-tnef`/`application/vnd.ms-tnef` (`winmail.dat`) は本文・添付を独自バイナリ内に内包し、TNEF を展開しない MIME 検査には内容が一切見えない — message/partial・未終了 multipart と同族のカプセル化死角。
+- **修正**: `has_tnef_attachment` — CT メディア型または filename/name が `winmail.dat` のパートを検出 → `Envelope.tnef_attachment` → render_risks 警告。
+- **教訓**: 独自カプセル化形式は「中身を見る器」を持たない検査に対し構造的な盲点を作る。
+
 ### Security — D1319: 退化添付名が未検査
 
 - **問題**: `filename=""`・`filename="   "`・`filename=".."` 等の実質無名添付は、自動命名するメーラーと空欄のまま表示するメーラーで見え方がずれる (D1311 空 boundary・D1313 パス成分と同族の退化形)。

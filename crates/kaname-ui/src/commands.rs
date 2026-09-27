@@ -3079,6 +3079,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1321: 区切り行の残部が空白/`--`+空白以外 — 厳密一致と
+    //    prefix 一致でパート境界がずれる (mailsplit 系差異)。
+    if env.ambiguous_boundary_line {
+        render_risks.push(
+            "boundary 区切り行に余計な内容が続いています — 厳密に一致を見る実装と\
+             前方一致で区切る実装でパート境界がずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1322: TNEF 添付 (winmail.dat) — 本体が独自バイナリ内にあり、
+    //    TNEF を展開しない検査には内容が見えない。
+    if env.tnef_attachment {
+        render_risks.push(
+            "TNEF 形式 (winmail.dat) の添付があります — 本文・添付が独自形式の\
+             内部に内包され、内容の検査が届きません"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

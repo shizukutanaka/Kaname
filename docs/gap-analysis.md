@@ -734,3 +734,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1318 | ~~**Windows 予約デバイス名の添付名が未検査**~~ **(解消済み)** | P2 | `NUL.exe` 等は Windows で保存不能 → 環境間で保存挙動がずれる。修正: `has_device_filename` → render_risks | 名が何を指すかは OS 依存 |
 | D1319 | ~~**退化添付名が未検査**~~ **(解消済み)** | P2 | `filename=""` 等で自動命名/空欄表示がずれる。修正: `has_degenerate_filename` → render_risks | 実質無名は採番・表示・保存でずれを生む |
 | D1320 | ~~**Content-Type の subtype 欠落が未検査**~~ **(解消済み)** | P2 | `Content-Type: text` で既定値適用/非受理が分かれる。修正: `has_typeless_content_type` → render_risks | 「型/種別」は両方必須 — 主値だけはずれる |
+| D1321 | ~~**boundary 区切りの前方一致曖昧行が未検査**~~ **(解消済み)** | P2 | `--b`+junk で厳密/prefix 一致がずれる。修正: `has_ambiguous_boundary_line` → render_risks | 区切り一致は行全体の契約 |
+| D1322 | ~~**TNEF (winmail.dat) 添付の検査死角**~~ **(解消済み)** | P2 | 本体が独自バイナリ内にあり MIME 検査が届かない。修正: `has_tnef_attachment` → render_risks | 独自カプセル化は検査器に構造的盲点を作る |

@@ -214,8 +214,17 @@ pub struct Envelope {
     pub device_filename: bool,
     /// 添付名が退化形 (空/空白のみ/ドットのみ) か (D1319)。
     pub degenerate_filename: bool,
+    /// D1321 — 宣言 boundary の前方一致を崩す行がある (`--b` に
+    /// 続いて空白でも `--`+空白でもない内容が続く行)。厳格な実装は
+    /// 区切りと認めないが、prefix 一致で区切る実装はそこで分割し、
+    /// 以降を別パートとして読む (パーサ差異)。
+    pub ambiguous_boundary_line: bool,
     /// Content-Type 値に `/` が無いか (D1320 — 既定値差異)。
     pub typeless_content_type: bool,
+    /// D1322 — `application/ms-tnef` / `winmail.dat` の TNEF 添付。
+    /// 本体・添付が TNEF 独自バイナリの中に内包され、TNEF を展開しない
+    /// MIME 検査には内容が一切見えない。
+    pub tnef_attachment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2199,9 +2208,11 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
 
     // D1319: 退化添付名 (空/空白のみ/ドットのみ)
     let degenerate_filename = has_degenerate_filename(bytes);
+    let ambiguous_boundary_line = has_ambiguous_boundary_line(bytes);
 
     // D1320: Content-Type に subtype 無し
     let typeless_content_type = has_typeless_content_type(bytes);
+    let tnef_attachment = has_tnef_attachment(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2282,7 +2293,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         invalid_boundary_chars,
         device_filename,
         degenerate_filename,
+        ambiguous_boundary_line,
         typeless_content_type,
+        tnef_attachment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4231,6 +4244,131 @@ pub fn has_typeless_content_type(raw: &[u8]) -> bool {
             // メディア型本体 (パラメータ前) に `/` が無ければ違反
             let mt = v.split(';').next().unwrap_or(v).trim();
             if !mt.is_empty() && !mt.contains('/') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 宣言された boundary の前方一致を崩す行があるか判定する (D1321)。
+///
+/// RFC 2046 の区切り行は `--boundary` の後に空白系パディングのみ
+/// (開始) か `--`+空白系パディングのみ (終了) を許す。ここに別の
+/// 内容が続く行 (`--bJUNK`, `--b--x`) は、厳密一致の実装では区切り
+/// でないが、prefix 一致で区切る実装ではそこで分割され以降が別
+/// パートとして読まれる — boundary 周辺のパーサ差異 (mailsplit
+/// 系) の1形態。入れ子 boundary が外側の延長 (`outer` vs
+/// `outer--inner`) の場合に自然に発生する形でもある。
+///
+/// D1297 は boundary 値の完全一致による使い回しを、D1317 は値の
+/// 字句違反を検査するが、「値自体は妥当・行の形だけが壊れている」
+/// 形は未カバーだった。
+#[must_use]
+pub fn has_ambiguous_boundary_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開して boundary= 値を収集 (値は case-sensitive のため
+    // 原文から取る — lower 化した行は位置合わせにのみ使う)
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut bounds: Vec<String> = Vec::new();
+    for (orig, low) in logical.lines().zip(lower.lines()) {
+        if !low.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = low.find("boundary=") else { continue };
+        let rest = &orig[pos + 9..];
+        let v = if let Some(q) = rest.strip_prefix('"') {
+            let end = q.find('"').unwrap_or(q.len());
+            &q[..end]
+        } else {
+            rest.split(';').next().unwrap_or("").trim()
+        };
+        if !v.is_empty() {
+            bounds.push(v.to_string());
+        }
+    }
+    if bounds.is_empty() {
+        return false;
+    }
+    // 物理行 (展開前) を走査 — `--b` 直後の残部が (a) 空白のみ
+    // (開始区切り) (b) `--`+空白のみ (終了区切り) 以外なら曖昧行
+    for l in text.lines() {
+        for b in &bounds {
+            if !l.starts_with(&format!("--{b}")) {
+                continue;
+            }
+            let rem = &l[2 + b.len()..];
+            if rem.trim().is_empty() {
+                continue; // 開始区切り
+            }
+            if let Some(tail) = rem.strip_prefix("--") {
+                if tail.trim().is_empty() {
+                    continue; // 終了区切り
+                }
+            }
+            return true;
+        }
+    }
+    false
+}
+
+/// TNEF (Transport Neutral Encapsulation Format) 添付の有無を
+/// 判定する (D1322)。
+///
+/// `application/ms-tnef` (`winmail.dat`) は Exchange/Outlook が
+/// リッチテキストメールを丸ごと内包する独自バイナリ形式 — 本文と
+/// 添付が TNEF ストリームの内部にあり、TNEF を展開しない MIME 検査
+/// では内容が一切見えない (中身が見えない点で message/partial や
+/// multipart/* 未終了と同族の死角)。CT のメディア型、または
+/// `filename=`/`name=` が `winmail.dat` のパートで検出する。
+#[must_use]
+pub fn has_tnef_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        if is_ct {
+            let v = l.split(':').nth(1).unwrap_or("");
+            let mt = v.split(';').next().unwrap_or("").trim();
+            if mt == "application/ms-tnef" || mt == "application/vnd.ms-tnef" {
+                return true;
+            }
+        }
+        // filename=/name= が winmail.dat
+        for p in l.split(';').skip(1) {
+            let mut kv = p.splitn(2, '=');
+            let k = kv.next().unwrap_or("").trim();
+            if k != "filename" && k != "name" {
+                continue;
+            }
+            let v = kv.next().unwrap_or("").trim().trim_matches('"').trim();
+            if v == "winmail.dat" {
                 return true;
             }
         }
@@ -18202,6 +18340,46 @@ mod tests {
         assert!(!has_typeless_content_type(
             b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b--"
         ));
+    }
+
+    #[test]
+    fn ambiguous_boundary_line_は区切り前方一致行を検出する() {
+        // `--b` の後に非空白が続く行 → 曖昧
+        assert!(has_ambiguous_boundary_line(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--bJUNK\r\ntext\r\n--b--"
+        ));
+        // 終了区切りの後に junk (`--b--x` — 内側延長 boundary の形)
+        assert!(has_ambiguous_boundary_line(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\ntext\r\n--b--x\r\n"
+        ));
+        // 正規の開始・終了区切りと transport padding は不発火
+        assert!(!has_ambiguous_boundary_line(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\ntext\r\n--b \r\n--b--\r\n"
+        ));
+        // boundary 宣言が無ければ不発火
+        assert!(!has_ambiguous_boundary_line(b"Subject: x\r\n\r\n--bJUNK"));
+        // 本文が boundary と無関係の `--` 行を含んでも不発火
+        assert!(!has_ambiguous_boundary_line(
+            b"Content-Type: multipart/mixed; boundary=xyz\r\n\r\n--xyz\r\n\r\nsig -- end\r\n--xyz--"
+        ));
+    }
+
+    #[test]
+    fn tnef_attachment_はTNEF形式を検出する() {
+        assert!(has_tnef_attachment(
+            b"Content-Type: application/ms-tnef; name=\"winmail.dat\"\r\n\r\nX"
+        ));
+        assert!(has_tnef_attachment(
+            b"Content-Type: application/vnd.ms-tnef\r\n\r\nX"
+        ));
+        assert!(has_tnef_attachment(
+            b"Content-Disposition: attachment; filename=\"winmail.dat\"\r\n\r\nX"
+        ));
+        // 通常添付・通常本文は不発火
+        assert!(!has_tnef_attachment(
+            b"Content-Type: application/octet-stream; name=\"a.bin\"\r\n\r\nX"
+        ));
+        assert!(!has_tnef_attachment(b"Content-Type: text/plain\r\n\r\nx"));
     }
 
     #[test]
