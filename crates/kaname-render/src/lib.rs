@@ -204,6 +204,10 @@ pub struct Envelope {
     pub traversal_filename: bool,
     /// 998 バイト超のヘッダ行があるか (D1314 — 切断差異)。
     pub overlong_header: bool,
+    /// quoted-printable パートに不正な `=` エスケープがあるか (D1315)。
+    pub invalid_qp_escapes: bool,
+    /// base64 パートにアルファベット外の文字があるか (D1316)。
+    pub invalid_base64_body: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2173,6 +2177,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1314: 998 バイト超のヘッダ行
     let overlong_header = has_overlong_header(bytes);
 
+    // D1315: QP 本文の不正エスケープ
+    let invalid_qp_escapes = has_invalid_qp_escapes(bytes);
+
+    // D1316: base64 本文の不正文字
+    let invalid_base64_body = has_invalid_base64_body(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2247,6 +2257,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         odd_mime_version,
         traversal_filename,
         overlong_header,
+        invalid_qp_escapes,
+        invalid_base64_body,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3885,6 +3897,128 @@ pub fn has_overlong_header(raw: &[u8]) -> bool {
         }
         if in_header_run && l.len() > 998 {
             return true;
+        }
+    }
+    false
+}
+
+/// quoted-printable パートの本文に不正な `=` エスケープがあるか
+/// 判定する (D1315)。
+///
+/// QP では `=` は行末のソフトブレークか `=XX` (2 桁 16 進) のみ合法
+/// (RFC 2045 §6.7)。不正エスケープを「そのまま残す」デコーダと
+/// 「除去する」デコーダで本文がずれ、検査器と表示側で別の内容になる。
+#[must_use]
+pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut qp = false;
+    for l in text.lines() {
+        if l.is_empty() {
+            if in_headers {
+                in_headers = false;
+            }
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            qp = false;
+            continue;
+        }
+        if in_headers {
+            if l.starts_with(' ') || l.starts_with('\t') {
+                continue;
+            }
+            let low = l.to_ascii_lowercase();
+            if let Some(v) = low.strip_prefix("content-transfer-encoding:") {
+                qp = v.trim().starts_with("quoted-printable");
+            }
+            continue;
+        }
+        if !qp {
+            continue;
+        }
+        // 本文行 — `=` の後は 2 桁の hex か行末のみ合法
+        let b = l.as_bytes();
+        let mut i = 0;
+        while i < b.len() {
+            if b[i] == b'=' {
+                if i + 1 >= b.len() {
+                    break; // ソフトブレーク
+                }
+                let ok = i + 2 < b.len()
+                    && b[i + 1].is_ascii_hexdigit()
+                    && b[i + 2].is_ascii_hexdigit();
+                if !ok {
+                    return true;
+                }
+                i += 3;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    false
+}
+
+/// base64 パートの本文にアルファベット外の文字があるか判定する (D1316)。
+///
+/// base64 本文は `[A-Za-z0-9+/]` と行末のパディング `=` のみ合法
+/// (RFC 2045 §6.8、空白は無視)。不正文字を「読み飛ばす」デコーダと
+/// 「そこで止める/エラーにする」デコーダで復号結果がずれる —
+/// 検査器と表示側で別の添付内容になる差異工作。
+#[must_use]
+pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut b64 = false;
+    for l in text.lines() {
+        if l.is_empty() {
+            if in_headers {
+                in_headers = false;
+            }
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            b64 = false;
+            continue;
+        }
+        if in_headers {
+            if l.starts_with(' ') || l.starts_with('\t') {
+                continue;
+            }
+            let low = l.to_ascii_lowercase();
+            if let Some(v) = low.strip_prefix("content-transfer-encoding:") {
+                b64 = v.trim().starts_with("base64");
+            }
+            continue;
+        }
+        if !b64 {
+            continue;
+        }
+        // 本文行 — パディング `=` は行末側のみ、他はアルファベットのみ
+        let trimmed = l.trim_end();
+        let bytes = trimmed.as_bytes();
+        for (i, &c) in bytes.iter().enumerate() {
+            if c == b' ' || c == b'\t' {
+                continue; // 空白は復号時に無視される
+            }
+            if c == b'=' {
+                // `=` の後に非空白・非 `=` が続けば不正
+                if bytes[i + 1..]
+                    .iter()
+                    .any(|&x| x != b'=' && x != b' ' && x != b'\t')
+                {
+                    return true;
+                }
+                break;
+            }
+            if !(c.is_ascii_alphanumeric() || c == b'+' || c == b'/') {
+                return true;
+            }
         }
     }
     false
@@ -17737,6 +17871,46 @@ mod tests {
         // 本文の長い行は対象外
         let body = format!("Subject: x\r\n\r\n{}", "a".repeat(2000));
         assert!(!has_overlong_header(body.as_bytes()));
+    }
+
+    #[test]
+    fn invalid_qp_escapes_は不正エスケープを検出する() {
+        assert!(has_invalid_qp_escapes(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nabc=xy\r\n"
+        ));
+        assert!(has_invalid_qp_escapes(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nabc=4\r\n"
+        ));
+        // 正規の =XX とソフトブレークは不発火
+        assert!(!has_invalid_qp_escapes(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nabc=3Ddef=\r\nrest\r\n"
+        ));
+        // QP でないパートの `=` は対象外
+        assert!(!has_invalid_qp_escapes(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\na=b=c\r\n"
+        ));
+        // パート単位: QP パートのみ評価
+        assert!(has_invalid_qp_escapes(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nzz=QQ\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn invalid_base64_body_はアルファベット外文字を検出する() {
+        assert!(has_invalid_base64_body(
+            b"Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD#REVGRw==\r\n"
+        ));
+        assert!(has_invalid_base64_body(
+            b"Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD=REVGRw==\r\n"
+        ));
+        // 正常 base64 + 行末パディングは不発火
+        assert!(!has_invalid_base64_body(
+            b"Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJDREVGRw==\r\n"
+        ));
+        // base64 でないパートの記号は対象外
+        assert!(!has_invalid_base64_body(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\na#b$=c\r\n"
+        ));
     }
 
     #[test]

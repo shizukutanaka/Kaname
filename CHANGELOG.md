@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1315: QP 本文の不正エスケープが未検査
+
+- **問題**: quoted-printable 本文で `=` は行末ソフトブレークか `=XX` のみ合法 (RFC 2045 §6.7)。`=xy` 等の不正エスケープは「残す」デコーダと「除去する」デコーダで本文がずれ、検査器と表示側で別の内容になる。
+- **修正**: `has_invalid_qp_escapes` — `content-transfer-encoding: quoted-printable` のパート本文のみを対象に `=` 直後が 2 桁 hex でも行末でもない箇所を検出 → `Envelope.invalid_qp_escapes` → render_risks 警告。
+- **教訓**: 転送符号の字句違反は復号差異の直撃点 — 宣言された符号化方式の本文だけを検査すれば本文中の `=` を誤爆しない。
+
+### Security — D1316: base64 本文のアルファベット外文字が未検査
+
+- **問題**: base64 本文に `#` 等のアルファベット外文字や行中 `=` が混じると、「読み飛ばす」デコーダと「止める/エラーの」デコーダで復号結果がずれ、検査器と表示側で別の添付内容になる。
+- **修正**: `has_invalid_base64_body` — `content-transfer-encoding: base64` のパート本文のみを対象にアルファベット外文字・行中 `=` を検出 (空白と行末パディングは合法) → `Envelope.invalid_base64_body` → render_risks 警告。
+- **教訓**: 符号化本文の検査は宣言 CTE に追随する — 全本文を一括で見ると平文パートの記号を誤検出する。
+
 ### Security — D1313: 添付名のパストラバーサル成分が未検査
 
 - **問題**: `filename="../../evil.exe"`・`name="C:\x.exe"` 等のディレクトリ成分を含む添付名は、成分を除去するメーラーとそのまま保存するメーラーで保存先がずれる書込み意図の兆候。D1265 は CR/LF・末尾ドット・ホモグリフのみ対象。

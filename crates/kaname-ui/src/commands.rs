@@ -3018,6 +3018,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1315: QP 本文の不正 `=` エスケープ — そのまま残すデコーダと
+    //    除去するデコーダで本文がずれる。
+    if env.invalid_qp_escapes {
+        render_risks.push(
+            "quoted-printable 本文に不正な = エスケープがあります — エラーを\
+             残す実装と捨てる実装で本文がずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1316: base64 本文のアルファベット外文字 — 読み飛ばすデコーダと
+    //    止めるデコーダで復号結果がずれ、別の添付内容になる。
+    if env.invalid_base64_body {
+        render_risks.push(
+            "base64 本文にアルファベット外の文字があります — 読み飛ばす実装と\
+             止める実装で復号結果がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
