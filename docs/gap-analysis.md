@@ -782,3 +782,11 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1366 | ~~**非クオート boundary 値内の `;` 混入が未検査**~~ **(解消済み)** | P2 | `boundary=a;b` で区切り解釈がずれる。修正: `has_boundary_semicolon` → render_risks | 途中に切れ目のある区切り札 |
 | D1367 | ~~**本文の ANSI/ターミナル制御列が未検査**~~ **(解消済み)** | P2 | ESC 制御列で表示器の内容改竄・OSC52 クリップボード。修正: `has_ansi_escape_body` → render_risks | 見せられた文字が消える手紙 |
 | D1368 | ~~**本文の bidi 上書き制御文字が未検査**~~ **(解消済み)** | P2 | 本文中 U+202A-E で表示順を反転 (件名 D1302 の本文版)。修正: `has_bidi_override_body` → render_risks | 文字順を裏返す墨 |
+| D1369 | ~~**Content-ID/Content-Location 重複が未検査**~~ **(解消済み)** | P2 | cid 衝突で参照解決が実装間でずれ別内容を差し込める。修正: `has_duplicate_content_id` → render_risks | 同じ札番号の二つの荷物 |
+| D1370 | ~~**差出人欄のドメインリテラルが未検査**~~ **(解消済み)** | P2 | `@[ip]` はドメイン評判の対象外の自称。修正: `has_literal_domain_sender` → render_risks | 座標で住処を名乗る差出人 |
+| D1371 | ~~**宣言 base64 の 76 字超行が未検査**~~ **(解消済み)** | P2 | 行長超過で復号結果が実装間でずれる。修正: `has_overlong_base64_line` → render_risks | 規格外の長い帯 |
+| D1372 | ~~**同一欄の encoded-word charset 混在が未検査**~~ **(解消済み)** | P2 | 欄内で文字コード混在は復号結果がずれる。修正: `has_mixed_encoded_charset` → render_risks | 二つの文字体系の名札 |
+| D1373 | ~~**深すぎる multipart 入れ子が未検査**~~ **(解消済み)** | P2 | 4 階層以上は再帰パーサへのリソース消費工作。修正: `has_deep_multipart_nesting` → render_risks | 箱を開けるたび箱が出る梱包 |
+| D1374 | ~~**パートヘッダ内の MIME-Version が未検査**~~ **(解消済み)** | P2 | 外側専用の欄の混入で MIME 判定がずれる。修正: `has_part_mime_version` → render_risks | 荷物の札に便の規格番号 |
+| D1375 | ~~**カレンダー非招待系 METHOD (CANCEL 等) が未検査**~~ **(解消済み)** | P2 | 偽 CANCEL で実在会議を削除、偽 REPLY で応答捏造。修正: `detect_method_spoof` → CalendarRisk::MethodSpoof | 「無かったことにせよ」の口上 |
+| D1376 | ~~**text/enriched/richtext が未検査**~~ **(解消済み)** | P3 | 廃止済み簡易マークアップで表示器間の見え方がずれる。修正: `has_enriched_text_type` → render_risks | 誰も使わない書式の書類 |

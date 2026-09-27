@@ -407,6 +407,27 @@ pub struct Envelope {
     /// 件名の D1302 と同型の表示反転偽装を本文側でも検出する。
     /// (U+2066–U+2069 isolate は RTL 言語の正当利用があるため対象外)
     pub bidi_override_body: bool,
+    /// D1369 — 複数パートが同じ Content-ID/Content-Location を名乗る
+    /// cid 衝突 (参照解決が実装間でずれ別内容を差し込める)。
+    pub duplicate_content_id: bool,
+    /// D1370 — 差出人欄 (From/Sender/Reply-To) が `[ip]`/`[IPv6:..]`
+    /// ドメインリテラルを名乗る (ドメイン評判系の対象外の自称)。
+    pub literal_domain_sender: bool,
+    /// D1371 — 宣言 base64 パート本文に 76 バイト超の行 (RFC 2045
+    /// 上限超過でデコーダ間の復号結果がずれる)。
+    pub overlong_base64_line: bool,
+    /// D1372 — 同一ヘッダ行内で encoded-word の charset が混在
+    /// (`=?utf-8?…?= =?iso-2022-jp?…?=` 等)。正規 MUA は1欄1 charset。
+    pub mixed_encoded_charset: bool,
+    /// D1373 — multipart の入れ子が4階層以上 (再帰パーサへの
+    /// リソース消費を狙った matryoshka 構造の兆候)。
+    pub deep_multipart_nesting: bool,
+    /// D1374 — パートヘッダ内に MIME-Version: (外側専用の欄が
+    /// パート側に混入 — 実装間で MIME 判定がずれる)。
+    pub part_mime_version: bool,
+    /// D1376 — `text/enriched`/`text/richtext` の廃止済み簡易マーク
+    /// アップ形式宣言 (表示側と平文側で本文の見え方がずれる)。
+    pub enriched_text_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2439,6 +2460,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let boundary_semicolon = has_boundary_semicolon(bytes);
     let ansi_escape_body = has_ansi_escape_body(bytes);
     let bidi_override_body = has_bidi_override_body(bytes);
+    let duplicate_content_id = has_duplicate_content_id(bytes);
+    let literal_domain_sender = has_literal_domain_sender(bytes);
+    let overlong_base64_line = has_overlong_base64_line(bytes);
+    let mixed_encoded_charset = has_mixed_encoded_charset(bytes);
+    let deep_multipart_nesting = has_deep_multipart_nesting(bytes);
+    let part_mime_version = has_part_mime_version(bytes);
+    let enriched_text_type = has_enriched_text_type(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2566,6 +2594,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         boundary_semicolon,
         ansi_escape_body,
         bidi_override_body,
+        duplicate_content_id,
+        literal_domain_sender,
+        overlong_base64_line,
+        mixed_encoded_charset,
+        deep_multipart_nesting,
+        part_mime_version,
+        enriched_text_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6093,8 +6128,25 @@ pub fn has_missing_part_content_type(raw: &[u8]) -> bool {
     let text = text.replace("\r\n", "\n");
     let mut in_run = false;
     let mut saw_ct = false;
+    // 宣言済み boundary に一致しない `--` 始まりの行は区切りにしない —
+    // 平文メール本文中の `-- ` 署名区切り等が擬似パート run を開始し
+    // 「CT 無しパート」と誤検出されるのを防ぐ (宣言が無ければパートは無い)
+    let declared = declared_boundaries(&text);
     for l in text.to_ascii_lowercase().lines() {
         if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.trim_end_matches('-').starts_with(d.as_str())
+                                || d.starts_with(b.trim_end_matches('-')))
+                });
+            if !is_delim {
+                continue;
+            }
             if in_run && !saw_ct {
                 return true;
             }
@@ -6807,30 +6859,65 @@ pub fn has_undeclared_base64_block(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    // 論理行化した上で multipart / 宣言済み base64 は対象外
+    // 論理行化した上で外側 CTE を取得 — 宣言済み符号化は D1316 管轄
     let lower_head = text[..header_end]
         .to_ascii_lowercase()
         .replace("\n ", " ")
         .replace("\n\t", " ");
-    let mut declared_b64 = false;
-    let mut is_multipart = false;
+    let mut outer_cte = "";
     for l in lower_head.lines().map(|l| l.trim_start()) {
         if let Some(v) = l.strip_prefix("content-transfer-encoding:") {
-            if v.trim().split(';').next().unwrap_or("").trim() == "base64" {
-                declared_b64 = true;
-            }
-        }
-        if let Some(v) = l.strip_prefix("content-type:") {
-            if v.trim_start().starts_with("multipart/") {
-                is_multipart = true;
-            }
+            outer_cte = v.trim().split(';').next().unwrap_or("").trim();
         }
     }
-    if is_multipart || declared_b64 {
+    if outer_cte == "base64" || outer_cte == "quoted-printable" {
         return false;
     }
+    // multipart でもパート単位で評価する — 本文パートに混じった
+    // 非宣言 base64 はパート構造の奥で検査を素通りしていた (Review 指摘)
+    let declared = declared_boundaries(&text);
+    let mut cur_cte = String::new();
+    let mut in_part_headers = false;
     let mut run = 0u32;
     for l in text[header_end..].lines().map(|l| l.trim_end()) {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                run = 0;
+                if l.ends_with("--") && l.len() > 4 {
+                    // 終端境界 — 以降はエピローグ (外側本文扱い)
+                    cur_cte.clear();
+                    in_part_headers = false;
+                } else {
+                    in_part_headers = true;
+                    cur_cte.clear();
+                }
+                continue;
+            }
+        }
+        if in_part_headers {
+            if l.is_empty() {
+                in_part_headers = false;
+                continue;
+            }
+            let low = l.to_ascii_lowercase();
+            if let Some(v) = low.strip_prefix("content-transfer-encoding:") {
+                cur_cte = v.trim().split(';').next().unwrap_or("").trim().to_string();
+            }
+            continue;
+        }
+        if cur_cte == "base64" || cur_cte == "quoted-printable" {
+            run = 0;
+            continue;
+        }
         if is_b64_line(l) {
             run += 1;
             if run >= 2 || l.len() >= 48 {
@@ -6842,7 +6929,6 @@ pub fn has_undeclared_base64_block(raw: &[u8]) -> bool {
     }
     false
 }
-
 /// 宛先欄のグループ構文 `label: members;` が空または未終端か判定する
 /// (D1363)。`To: undisclosed-recipients:;` は宛先欄を満たしながら
 /// 宛先を一切見せない一斉送信の書式 — D1339 (宛先全欠落) の回避経路。
@@ -6877,6 +6963,7 @@ pub fn has_empty_group_syntax(raw: &[u8]) -> bool {
         let mut cleaned = String::with_capacity(val.len());
         let mut in_q = false;
         let mut in_c = 0u32;
+        let mut in_lit = false;
         let mut prev = '\0';
         for c in val.chars() {
             if in_c > 0 {
@@ -6889,7 +6976,14 @@ pub fn has_empty_group_syntax(raw: &[u8]) -> bool {
                 in_q = !in_q;
             } else if c == '(' && !in_q && prev != '\\' {
                 in_c = 1;
-            } else if !in_q {
+            } else if !in_q && c == '[' {
+                // ドメインリテラル `[IPv6:2001:db8::1]` 内の `:` は
+                // グループ区切りでない — 括弧内はそのまま残し走査しない
+                in_lit = true;
+            } else if in_lit && c == ']' {
+                in_lit = false;
+                cleaned.push(c);
+            } else if !in_lit {
                 cleaned.push(c);
             }
             prev = c;
@@ -7012,27 +7106,80 @@ fn declared_boundaries(text: &str) -> Vec<String> {
     out
 }
 
+/// `content-transfer-encoding` 宣言済みパートの本文を部分デコードする
+/// 内部ヘルパ (Review 対応: 符号化の下の ESC/bidi 潜伏を検査するため)。
+/// 判定目的に部分デコードで足りるため、不正断片は読み飛ばす。
+fn decode_transfer_body(cte: &str, body: &str) -> Vec<u8> {
+    if cte == "base64" {
+        decode_b64_simple(body)
+    } else if cte == "quoted-printable" {
+        decode_qp_body(body)
+    } else {
+        body.as_bytes().to_vec()
+    }
+}
+
+/// quoted-printable 本文の最小デコーダ — `=XX` 16進と行末 `=` の
+/// ソフトブレークのみ処理する (判定用の部分デコード)。
+fn decode_qp_body(s: &str) -> Vec<u8> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'=' {
+            match b.get(i + 1) {
+                Some(b'\n') => {
+                    i += 2;
+                    continue;
+                }
+                Some(b'\r') if b.get(i + 2) == Some(&b'\n') => {
+                    i += 3;
+                    continue;
+                }
+                _ => {
+                    let h = b.get(i + 1).and_then(|c| (*c as char).to_digit(16));
+                    let l = b.get(i + 2).and_then(|c| (*c as char).to_digit(16));
+                    if let (Some(h), Some(l)) = (h, l) {
+                        out.push((h * 16 + l) as u8);
+                        i += 3;
+                        continue;
+                    }
+                }
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    out
+}
+
 /// 本文に ANSI/ターミナル制御列があるか判定する (D1367)。
 ///
 /// ESC (0x1B) に続く `[` (CSI: カーソル・消去)・`]` (OSC: ウィンドウ
 /// タイトル・OSC 52 クリップボード書き換え)・`P` (DCS)・`X`/`^`/`_`
 /// (SOS/PM/APC) は、本文をターミナル系表示器・ログビューアで開いた
 /// 際に表示内容を改竄する。メール本文で正当な用途は無い。base64/QP
-/// 宣言パートの符号化行は内容の判定材料でないため対象外とし、
-/// 7bit/8bit/binary/無宣言パートの本文領域のみ走査する。
+/// 宣言パートは部分デコードしてから同じ走査を行う (符号化の下の
+/// 制御列潜伏を見逃さないため)。
 #[must_use]
 pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let mut in_headers = true;
-    let mut cte_encoded = false;
+    let mut cte = String::new();
+    let mut enc_body = String::new();
     let declared = declared_boundaries(&text);
     for l in text.lines() {
         if in_headers {
             let low = l.to_ascii_lowercase();
             if let Some(tail) = low.strip_prefix("content-transfer-encoding:") {
-                let v = tail.trim().split(';').next().unwrap_or("").trim();
-                cte_encoded = matches!(v, "base64" | "quoted-printable");
+                cte = tail
+                    .trim()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
             }
             if l.is_empty() {
                 in_headers = false;
@@ -7053,13 +7200,27 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
                             .iter()
                             .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
                 });
-            if is_delim && !(l.len() > 4 && l.ends_with("--")) {
-                in_headers = true;
-                cte_encoded = false;
+            if is_delim {
+                // パート境界 — 溜めた符号化本文を復号して走査する
+                if !enc_body.is_empty()
+                    && decode_transfer_body(&cte, &enc_body)
+                        .windows(2)
+                        .any(|w| w[0] == 0x1B
+                            && matches!(w[1], b'[' | b']' | b'P' | b'X' | b'^' | b'_'))
+                {
+                    return true;
+                }
+                enc_body.clear();
+                if !(l.len() > 4 && l.ends_with("--")) {
+                    in_headers = true;
+                    cte.clear();
+                }
             }
             continue;
         }
-        if cte_encoded {
+        if matches!(cte.as_str(), "base64" | "quoted-printable") {
+            enc_body.push_str(l);
+            enc_body.push('\n');
             continue;
         }
         let b = l.as_bytes();
@@ -7069,6 +7230,13 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
             }
         }
     }
+    if !enc_body.is_empty()
+        && decode_transfer_body(&cte, &enc_body)
+            .windows(2)
+            .any(|w| w[0] == 0x1B && matches!(w[1], b'[' | b']' | b'P' | b'X' | b'^' | b'_'))
+    {
+        return true;
+    }
     false
 }
 
@@ -7077,20 +7245,32 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
 /// 件名の D1302 と同型の表示反転偽装を本文側でも検出する。override
 /// 系は現代の Unicode で正当な用途を持たず、本文中にあれば表示順を
 /// 書き換える偽装 (trojan-source 型)。isolate 系 (U+2066–U+2069) は
-/// RTL 言語の正当利用があるため対象外。符号化パートは対象外。
+/// RTL 言語の正当利用があるため対象外。base64/QP 宣言パートは
+/// 部分デコードしてから走査する。
 #[must_use]
 pub fn has_bidi_override_body(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let mut in_headers = true;
-    let mut cte_encoded = false;
+    let mut cte = String::new();
+    let mut enc_body = String::new();
     let declared = declared_boundaries(&text);
+    // 復号後の UTF-8 中の U+202A–E は E2 80 AA–AE の3バイト列
+    fn has_bidi_seq(d: &[u8]) -> bool {
+        d.windows(3)
+            .any(|w| w[0] == 0xE2 && w[1] == 0x80 && (0xAA..=0xAE).contains(&w[2]))
+    }
     for l in text.lines() {
         if in_headers {
             let low = l.to_ascii_lowercase();
             if let Some(tail) = low.strip_prefix("content-transfer-encoding:") {
-                let v = tail.trim().split(';').next().unwrap_or("").trim();
-                cte_encoded = matches!(v, "base64" | "quoted-printable");
+                cte = tail
+                    .trim()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
             }
             if l.is_empty() {
                 in_headers = false;
@@ -7108,13 +7288,21 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
                             .iter()
                             .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
                 });
-            if is_delim && !(l.len() > 4 && l.ends_with("--")) {
-                in_headers = true;
-                cte_encoded = false;
+            if is_delim {
+                if !enc_body.is_empty() && has_bidi_seq(&decode_transfer_body(&cte, &enc_body)) {
+                    return true;
+                }
+                enc_body.clear();
+                if !(l.len() > 4 && l.ends_with("--")) {
+                    in_headers = true;
+                    cte.clear();
+                }
             }
             continue;
         }
-        if cte_encoded {
+        if matches!(cte.as_str(), "base64" | "quoted-printable") {
+            enc_body.push_str(l);
+            enc_body.push('\n');
             continue;
         }
         if l.contains('\u{202A}')
@@ -7125,6 +7313,9 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
         {
             return true;
         }
+    }
+    if !enc_body.is_empty() && has_bidi_seq(&decode_transfer_body(&cte, &enc_body)) {
+        return true;
     }
     false
 }
@@ -7141,7 +7332,23 @@ pub fn has_odd_mime_version(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    for l in text[..header_end].to_ascii_lowercase().lines() {
+    // FWS 折りたたみを論理行化してから評価 — `MIME-Version:` の値が
+    // 継続行に出る正規形を空値と誤判定しない
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
         if let Some(v) = l.strip_prefix("mime-version:") {
             let v = v.trim();
             // 末尾コメント (…) を除去
@@ -7151,6 +7358,379 @@ pub fn has_odd_mime_version(raw: &[u8]) -> bool {
     }
     false
 }
+/// 複数パートで `Content-ID:` / `Content-Location:` が重複するか判定する
+/// (D1369 — MHTML cid 衝突)。
+///
+/// `cid:`/`Content-Location` 参照は「この識別子を持つパート」を指す —
+/// 2つのパートが同じ識別子を名乗ると、参照解決が先勝ち/後勝ちで
+/// 実装間で分かれ、画像やリソースを別内容に差し替えられる (MHTML の
+/// cid 衝突スプーフィング)。重複は一意性の前提違反として検出する。
+#[must_use]
+pub fn has_duplicate_content_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let declared = declared_boundaries(&text);
+    let mut seen: Vec<String> = Vec::new();
+    // 外側ヘッダはスキップ — パートヘッダ run 内の content-id/location のみ
+    let mut in_part_headers = false;
+    for l in text[header_end..].to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                in_part_headers = !(l.ends_with("--") && l.len() > 4);
+            }
+            continue;
+        }
+        if !in_part_headers {
+            continue;
+        }
+        if l.is_empty() {
+            in_part_headers = false;
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let v = l
+            .strip_prefix("content-id:")
+            .or_else(|| l.strip_prefix("content-location:"));
+        if let Some(v) = v {
+            let v = v.trim().to_string();
+            if seen.contains(&v) {
+                return true;
+            }
+            seen.push(v);
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメインがドメインリテラル `[x.x.x.x]`/`[IPv6:...]` か
+/// 判定する (D1370)。
+///
+/// `From: user@[192.168.0.1]` や `user@[IPv6:::1]` は RFC 5322 上は合法だが、
+/// 通常の送信ドメインは MX を引ける登録ドメインであり、ドメインリテラルの
+/// 名乗りは手作り生成・内部経路偽装の兆候。どのドメイン評判系にも
+/// 掛からないため別途検出する。From/Sender/Reply-To のみ対象 (宛先欄の
+/// リテラルは配送内部情報であり偽装性が薄い)。
+#[must_use]
+pub fn has_literal_domain_sender(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let v = l
+            .strip_prefix("from:")
+            .or_else(|| l.strip_prefix("sender:"))
+            .or_else(|| l.strip_prefix("reply-to:"));
+        let Some(v) = v else { continue };
+        // クオート・コメントを除いた残りで `@[` を探す
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = '\0';
+        let mut cleaned = String::with_capacity(v.len());
+        for c in v.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if c == '"' && prev != '\\' {
+                in_q = !in_q;
+            } else if c == '(' && !in_q && prev != '\\' {
+                in_c = 1;
+            } else if !in_q {
+                cleaned.push(c);
+            }
+            prev = c;
+        }
+        if cleaned.contains("@[") {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宣言済み base64 パートの本文に 76 バイト超の行があるか判定する
+/// (D1371)。
+///
+/// RFC 2045 §6.8 は base64 の行長を 76 文字に制限する。超過行を
+/// 「全行連結して復号」するデコーダと「76 文字で切り捨て/拒否」する
+/// デコーダで復号結果がずれる — D1316 (アルファベット外文字) の
+/// 姉妹として「形は正しいが長さが規格外」の行を検出する。
+#[must_use]
+pub fn has_overlong_base64_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut cte_b64 = false;
+    let declared = declared_boundaries(&text);
+    for l in text.lines() {
+        if in_headers {
+            let low = l.to_ascii_lowercase();
+            if let Some(tail) = low.strip_prefix("content-transfer-encoding:") {
+                cte_b64 = tail.trim().split(';').next().unwrap_or("").trim() == "base64";
+            }
+            if l.is_empty() {
+                in_headers = false;
+            }
+            continue;
+        }
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                if !(l.len() > 4 && l.ends_with("--")) {
+                    in_headers = true;
+                    cte_b64 = false;
+                }
+            }
+            continue;
+        }
+        if !cte_b64 {
+            continue;
+        }
+        // base64 文字のみで構成される行が 76 超 — 行内に空白等を含む
+        // 行はアルファベット外として D1316 側の役割 (ここでは対象外)
+        let l = l.trim_end();
+        if l.len() > 76
+            && l.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// 同一ヘッダ行内で encoded-word の charset が混在するか判定する
+/// (D1372)。
+///
+/// `Subject: =?utf-8?B?..?= =?iso-2022-jp?Q?..?=` — 1つの欄に異なる
+/// charset の encoded-word が混ざると、統一デコーダは片方を誤読し、
+/// 混在自体は手作り生成の兆候 (正当な MUA は1欄1 charset で生成する)。
+/// charset 名の大小文字は同一視する。
+#[must_use]
+pub fn has_mixed_encoded_charset(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    // FWS 論理行化 — 折りたたみ内の encoded-word も同一行として評価
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let mut charsets: Vec<String> = Vec::new();
+        let mut rest = l;
+        while let Some(p) = rest.find("=?") {
+            rest = &rest[p + 2..];
+            // `=?charset?enc?` の charset 部
+            if let Some(q) = rest.find('?') {
+                let cs = rest[..q].to_ascii_lowercase();
+                if !cs.is_empty()
+                    && cs.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                {
+                    if !charsets.contains(&cs) {
+                        charsets.push(cs);
+                        if charsets.len() > 1 {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// multipart の入れ子が深すぎるか判定する (D1373)。
+///
+/// `multipart/mixed → related → alternative → …` の4階層超の入れ子は
+/// 正当なメールではほぼ現れず、再帰パーサのスタック/メモリ消費を
+/// 狙った matryoshka 構造の兆候。宣言済み boundary 列をスタックで
+/// 追跡し最大同時深度が4以上になれば発火する。
+#[must_use]
+pub fn has_deep_multipart_nesting(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let declared = declared_boundaries(&text);
+    let mut stack: Vec<&str> = Vec::new();
+    let mut max_depth = 0usize;
+    for l in text.to_ascii_lowercase().lines() {
+        if !l.starts_with("--") {
+            continue;
+        }
+        let tok = l[2..]
+            .split(|c: char| c.is_whitespace())
+            .next()
+            .unwrap_or("");
+        if tok.is_empty() {
+            continue;
+        }
+        let tok = tok.trim_end_matches('-');
+        let Some(b) = declared.iter().find(|d| {
+            tok.starts_with(d.as_str()) || d.starts_with(tok)
+        }) else {
+            continue;
+        };
+        let closer = l.ends_with("--") && l.len() > 4;
+        if closer {
+            // `--b--` — b がスタック内にあればそこまで unwind
+            if let Some(pos) = stack.iter().rposition(|s| *s == b.as_str()) {
+                stack.truncate(pos);
+            }
+            continue;
+        }
+        // 開放区切り: 現在の最深 boundary と同じなら兄弟パート
+        if stack.last().is_some_and(|s| *s == b.as_str()) {
+            continue;
+        }
+        stack.push(b.as_str());
+        if stack.len() > max_depth {
+            max_depth = stack.len();
+        }
+    }
+    max_depth >= 4
+}
+
+/// パートヘッダ部に `MIME-Version:` が現れるか判定する (D1374)。
+///
+/// MIME-Version は RFC 2045 でメッセージ外側ヘッダ専用 —
+/// パートヘッダ内に書いても意味を持たず、外側専用と見る実装と
+/// パート側でも拾う実装で MIME 扱い判定がずれる。混入は手作り
+/// 生成・構造攪乱の兆候として検出する。
+#[must_use]
+pub fn has_part_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let declared = declared_boundaries(&text);
+    let mut in_part_headers = false;
+    for l in text[header_end..].to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                in_part_headers = !(l.ends_with("--") && l.len() > 4);
+            }
+            continue;
+        }
+        if !in_part_headers {
+            continue;
+        }
+        if l.is_empty() {
+            in_part_headers = false;
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("mime-version:") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type: text/enriched` / `text/richtext` 宣言があるか
+/// 判定する (D1376)。
+///
+/// enriched/richtext は RFC 1896 の廃止済みリッチテキスト形 —
+/// `<bold>` 等の簡易マークアップを含み、レンダリングする表示側と
+/// 平文表示する側で内容の見え方がずれる。現行 HTML メールの主流に
+/// 属さない形式宣言は異常形状として検出する。
+#[must_use]
+pub fn has_enriched_text_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let declared = declared_boundaries(&text);
+    for l in text.to_ascii_lowercase().lines() {
+        if in_headers && l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if !in_headers && l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim && !(l.len() > 4 && l.ends_with("--")) {
+                in_headers = true;
+            }
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            let v = v.trim_start();
+            if v.starts_with("text/enriched") || v.starts_with("text/richtext") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 
@@ -21864,9 +22444,17 @@ mod tests {
         assert!(!has_undeclared_base64_block(
             b"Content-Transfer-Encoding: base64\r\n\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ="
         ));
-        // multipart はパート単位で評価 — 不発火
-        assert!(!has_undeclared_base64_block(
+        // multipart でもパート単位で評価 — 非宣言パートの b64 は発火
+        assert!(has_undeclared_base64_block(
             b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\n--b--"
+        ));
+        // パートが宣言済み base64 なら不発火 (D1316 管轄)
+        assert!(!has_undeclared_base64_block(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\n--b--"
+        ));
+        // 宣言済み QP の本文 (日本語 =XX 連続) は b64 形でも不発火
+        assert!(!has_undeclared_base64_block(
+            b"Content-Transfer-Encoding: quoted-printable\r\n\r\n=E3=81=82=E3=81=84=E3=81=86=E3=81=88=E3=81=8A=E3=81=8B=E3=81=8D=E3=81=8F=E3=81=91=E3=81=93"
         ));
         // 通常の散文は不発火
         assert!(!has_undeclared_base64_block(
@@ -22035,6 +22623,195 @@ mod tests {
         ));
         assert!(has_ansi_escape_body(
             b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\x1b[31mr\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn duplicate_content_id_はcid重複を検出する() {
+        // D1369 — 2パートが同じ cid を名乗る
+        assert!(has_duplicate_content_id(
+            b"Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: text/html\r\nContent-ID: <a1@x>\r\n\r\nh\r\n--b\r\nContent-Type: image/png\r\nContent-ID: <a1@x>\r\n\r\nAAAA\r\n--b--"
+        ));
+        // 異なる cid は不発火
+        assert!(!has_duplicate_content_id(
+            b"Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: text/html\r\nContent-ID: <a1@x>\r\n\r\nh\r\n--b\r\nContent-Type: image/png\r\nContent-ID: <b2@x>\r\n\r\nAAAA\r\n--b--"
+        ));
+        // Content-Location の重複も検出
+        assert!(has_duplicate_content_id(
+            b"Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Location: the.htm\r\n\r\nh\r\n--b\r\nContent-Location: the.htm\r\n\r\nAAAA\r\n--b--"
+        ));
+        // cid 無しは不発火
+        assert!(!has_duplicate_content_id(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn literal_domain_sender_はipドメイン差出人を検出する() {
+        // D1370 — From がドメインリテラル
+        assert!(has_literal_domain_sender(
+            b"From: admin@[192.168.0.1]\r\n\r\nx"
+        ));
+        assert!(has_literal_domain_sender(
+            b"From: root@[IPv6:2001:db8::1]\r\n\r\nx"
+        ));
+        // Sender / Reply-To でも検出
+        assert!(has_literal_domain_sender(
+            b"From: a@x.example\r\nSender: b@[10.0.0.9]\r\n\r\nx"
+        ));
+        // 通常ドメインは不発火
+        assert!(!has_literal_domain_sender(
+            b"From: admin@example.com\r\nReply-To: help@example.jp\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn overlong_base64_line_は76文字超行を検出する() {
+        // D1371 — 宣言 b64 パートの長行
+        let long = [b"AAA".repeat(30), b"BBBBBBBBBBBB".to_vec()].concat();
+        let mut msg = b"Content-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\n\r\n".to_vec();
+        msg.extend_from_slice(&long);
+        assert!(has_overlong_base64_line(&msg));
+        // 76 文字以下は不発火
+        let mut ok = b"Content-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\n\r\n".to_vec();
+        ok.extend_from_slice(&b"A".repeat(76));
+        assert!(!has_overlong_base64_line(&ok));
+        // CTE 非 base64 は不発火 (プレーンテキストの長行を咎めない)
+        assert!(!has_overlong_base64_line(
+            b"Content-Type: text/plain\r\n\r\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        ));
+    }
+
+    #[test]
+    fn mixed_encoded_charset_は異charset混在を検出する() {
+        // D1372 — 同一論理行に別 charset の encoded-word
+        assert!(has_mixed_encoded_charset(
+            b"Subject: =?UTF-8?Q?a?= =?ISO-2022-JP?B?GyRC?=\r\n\r\nx"
+        ));
+        // 同じ charset の連続 word は不発火
+        assert!(!has_mixed_encoded_charset(
+            b"Subject: =?UTF-8?Q?a?= =?UTF-8?B?Yg==?=\r\n\r\nx"
+        ));
+        // encoded-word 無しは不発火
+        assert!(!has_mixed_encoded_charset(b"Subject: plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn deep_multipart_nesting_は深い入れ子を検出する() {
+        // D1373 — 4 階層以上
+        let deep: &[u8] = b"Content-Type: multipart/mixed; boundary=a\r\n\r\n--a\r\nContent-Type: multipart/related; boundary=b\r\n\r\n--b\r\nContent-Type: multipart/alternative; boundary=c\r\n\r\n--c\r\nContent-Type: multipart/mixed; boundary=d\r\n\r\n--d\r\nContent-Type: text/plain\r\n\r\nx\r\n--d--\r\n--c--\r\n--b--\r\n--a--";
+        assert!(has_deep_multipart_nesting(deep));
+        // 3 階層は不発火
+        let ok: &[u8] = b"Content-Type: multipart/mixed; boundary=a\r\n\r\n--a\r\nContent-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--\r\n--a--";
+        assert!(!has_deep_multipart_nesting(ok));
+        // 単パートは不発火
+        assert!(!has_deep_multipart_nesting(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn part_mime_version_はパート側の混入を検出する() {
+        // D1374 — パートヘッダ内の MIME-Version:
+        assert!(has_part_mime_version(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nMIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        // 外側の MIME-Version: のみは不発火
+        assert!(!has_part_mime_version(
+            b"MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        // 単パートは不発火
+        assert!(!has_part_mime_version(
+            b"MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn enriched_text_type_は廃止形式を検出する() {
+        // D1376 — text/enriched / text/richtext
+        assert!(has_enriched_text_type(
+            b"Content-Type: text/enriched\r\n\r\n<bold>x</bold>"
+        ));
+        assert!(has_enriched_text_type(
+            b"Content-Type: text/richtext; charset=us-ascii\r\n\r\nx"
+        ));
+        // multipart パート宣言でも検出
+        assert!(has_enriched_text_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/enriched\r\n\r\nx\r\n--b--"
+        ));
+        // text/plain / html は不発火
+        assert!(!has_enriched_text_type(
+            b"Content-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn missing_part_ct_は署名区切り行で偽パートを開始しない() {
+        // Review BUG_0002 — 本文の `-- ` 署名区切りは宣言 boundary に
+        // 一致しないためパート境界と見なさず、CT 欠落偽パートを起こさない
+        assert!(!has_missing_part_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--\r\ntrailing\r\n-- \r\nSignature text\r\nwithout headers"
+        ));
+        // 実際の宣言 boundary のパートで CT 欠落は従来通り検出
+        assert!(has_missing_part_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn odd_mime_version_はFWS折りたたみでも値を読む() {
+        // Review BUG_0003 — 値が折りたたまれても論理行で比較
+        assert!(has_odd_mime_version(
+            b"MIME-Version:\r\n 2.0\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+        assert!(has_odd_mime_version(b"MIME-Version: 2.0\r\n\r\nx"));
+        assert!(!has_odd_mime_version(b"MIME-Version: 1.0\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_group_syntax_はipv6リテラルで誤爆しない() {
+        // Review BUG_0004 — @[IPv6:..] の `:` をグループ区切りと誤認しない
+        assert!(!has_empty_group_syntax(
+            b"To: user@[IPv6:2001:db8::1]\r\n\r\nx"
+        ));
+        // 空グループは従来通り検出
+        assert!(has_empty_group_syntax(b"To: undisclosed-recipients:;\r\n\r\nx"));
+    }
+
+    #[test]
+    fn ansi_bidi_は符号化本文を復号して検査する() {
+        // Review SEC_0002 — QP 符号化された ESC 列も検出
+        assert!(has_ansi_escape_body(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx=1B[31mred"
+        ));
+        // base64 符号化された bidi override も検出 (U+202E = E2 80 AE)
+        assert!(has_bidi_override_body(
+            "Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8g4oCuIHdvcmxk".as_bytes()
+        ));
+        // 7bit 平文は従来通り
+        assert!(has_ansi_escape_body(b"Content-Type: text/plain\r\n\r\nx\x1b[31m"));
+        assert!(!has_ansi_escape_body(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn undeclared_b64_はパート単位で評価する() {
+        // Review SEC_0003 — multipart の個別パート本文も走査:
+        // 外側が 7bit でも内側に非宣言 b64 ブロックがあれば検出
+        let body_b64 = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog\r\n".repeat(4);
+        let msg = format!(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\n{}\r\n--b--",
+            body_b64
+        );
+        assert!(has_undeclared_base64_block(msg.as_bytes()));
+        // 外側 CTE が base64 のときは不発火 (宣言どおりの本文)
+        assert!(!has_undeclared_base64_block(
+            "Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog\r\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog\r\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog\r\nQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVog".as_bytes()
+        ));
+        // QP 宣言パート内は不発火 (= が混じる自然文のため判定材料外)
+        let qp_msg = format!(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n{}\r\n--b--",
+            body_b64
+        );
+        assert!(!has_undeclared_base64_block(qp_msg.as_bytes()));
+        // 単パート非 b64・普通の本文は不発火
+        assert!(!has_undeclared_base64_block(
+            b"Content-Type: text/plain\r\n\r\nHello, world. This is a normal message body.\r\n"
         ));
     }
 

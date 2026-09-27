@@ -3505,6 +3505,58 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    if env.duplicate_content_id {
+        render_risks.push(
+            "複数の添付・リソースが同じ Content-ID/Content-Location を\
+             名乗っています —参照先の取り違えで別内容に差し替えられる\
+             可能性があります"
+                .to_string(),
+        );
+    }
+    if env.literal_domain_sender {
+        render_risks.push(
+            "差出人欄のドメインが IP リテラル ([x.x.x.x] 等) です\
+             —通常の送信ドメイン名ではなく、手作り生成・内部偽装の\
+             可能性があります"
+                .to_string(),
+        );
+    }
+    if env.overlong_base64_line {
+        render_risks.push(
+            "base64 符号化パートに規格上限 (76文字) を超える行が\
+             あります —復号の仕方が実装間でずれる可能性があります"
+                .to_string(),
+        );
+    }
+    if env.mixed_encoded_charset {
+        render_risks.push(
+            "1つのヘッダ欄に異なる文字コードの encoded-word が混在\
+             しています —復号の仕方で内容がずれる可能性があります"
+                .to_string(),
+        );
+    }
+    if env.deep_multipart_nesting {
+        render_risks.push(
+            "multipart の入れ子が異常に深い構造です —再帰処理への\
+             負荷を狙った構造の可能性があります"
+                .to_string(),
+        );
+    }
+    if env.part_mime_version {
+        render_risks.push(
+            "パートのヘッダ部に MIME-Version が混入しています\
+             —外側メッセージ専用の欄で、処理系によって解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.enriched_text_type {
+        render_risks.push(
+            "廃止済みの簡易マークアップ形式 (text/enriched/richtext) が\
+             宣言されています —表示器によって本文の見え方がずれます"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -8,6 +8,64 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1375: カレンダー招待の非招待系 METHOD (CANCEL 等) が未検査
+
+- **問題**: `METHOD:CANCEL` は UID 一致の既存イベントをカレンダーから**消す**指示、`REPLY`/`DECLINE`/`COUNTER` 系は出席応答の記録、`REFRESH`/`ADD` は照会・追記 — 送信側の自称だけで状態を書き換える。第三者が UID を盗んで偽 CANCEL を送れば実在の会議が消える (calendar spoofing)。`detect_auto_registration_abuse` は REQUEST/PUBLISH のみ対象だった。
+- **修正**: `detect_method_spoof` + `CalendarRisk::MethodSpoof` — 非招待系 METHOD を検出し Caution 級で通知 (正当な取り消しも同形のため Danger にはしない)。
+- **教訓**: 「その会合は無かったことにせよ」という口上は、誰が言ったかを見ない係に本物と同じ効き目を持つ。
+
+### Security — D1376: text/enriched / text/richtext の廃止済み形式が未検査
+
+- **問題**: `text/enriched` (RFC 1896) と `text/richtext` (RFC 1341) は廃止済みの簡易マークアップ — `<bold>` 等のタグを解釈する表示器と平文表示する表示器で本文の見え方がずれ、検査の目が平文として通す死角になる。
+- **修正**: `has_enriched_text_type` — CT 宣言のメディア型が enriched/richtext を検出 → `Envelope.enriched_text_type` → render_risks 警告。
+- **教訓**: もう誰も使わない書式の書類は、読み手ごとに別の文になる。
+
+### Security — D1373: 異常に深い multipart 入れ子が未検査
+
+- **問題**: 4 階層以上の multipart は正当用途がほぼ無く、再帰パーサへのリソース消費を狙った matryoshka 構造 — 各層で全文を再走査する実装は CPU/メモリを消費される。
+- **修正**: `has_deep_multipart_nesting` — 宣言 boundary スタックで実効深さを計測、4 以上で検出 → `Envelope.deep_multipart_nesting` → render_risks 警告。
+- **教訓**: 箱を開けるたび箱が出る梱包は、開ける係を疲弊させる荷物。
+
+### Security — D1374: パートヘッダ内の MIME-Version が未検査
+
+- **問題**: `MIME-Version:` はメッセージ外側専用の欄 — パート側に混入すると「MIME ではない」と解釈する実装と無視する実装で以降の構造解釈がずれる。
+- **修正**: `has_part_mime_version` — 宣言 boundary で区切られたパートのヘッダ run に `mime-version:` を検出 → `Envelope.part_mime_version` → render_risks 警告。
+- **教訓**: 荷物一つひとつの札に便の規格番号が書いてある梱包は、仕分け係を迷わせる。
+
+### Security — D1371: 宣言 base64 パートの規格超過行が未検査
+
+- **問題**: RFC 2045 は base64 行を 76 字に制限 — 超過行は折り返す/切る/そのまま読むで復号バイトがずれ、添付内容が受取側で別物になる。D1316 は文字種の異常、D1362 は未宣言 — 行長は未検査だった。
+- **修正**: `has_overlong_base64_line` — 宣言 base64 パート本文の 76 字超行を検出 → `Envelope.overlong_base64_line` → render_risks 警告。
+- **教訓**: 規格より長い帯で巻かれた荷物は、係ごとに違う所で帯を切る。
+
+### Security — D1372: 同一ヘッダ欄の encoded-word charset 混在が未検査
+
+- **問題**: `=?UTF-8?…?= =?ISO-2022-JP?…?=` のように一欄で文字コードが混ざると、部分ごとに復号して繋ぐ実装と一括解釈する実装で表示名・件名がずれる。正規 MUA は一欄一 charset。
+- **修正**: `has_mixed_encoded_charset` — 論理行内の encoded-word charset を集め、2 種以上なら検出 → `Envelope.mixed_encoded_charset` → render_risks 警告。
+- **教訓**: 一枚の名札に二種類の文字体系が混ざる名は、翻訳係ごとに別の名前になる。
+
+### Security — D1369: 複数パートの Content-ID/Content-Location 重複が未検査
+
+- **問題**: multipart/related で同じ `cid:`/`Content-Location:` を名乗る二つのパートは、参照解決が「先に来る実装/後に来る実装」でずれる — HTML 本文が参照する画像を別内容に差し込める (cid 衝突)。
+- **修正**: `has_duplicate_content_id` — Content-ID/Content-Location の値を収集し重複を検出 → `Envelope.duplicate_content_id` → render_risks 警告。
+- **教訓**: 同じ札番号を名乗る二つの荷物 — 棚から取る係によって別物が届く。
+
+### Security — D1370: 差出人欄のドメインリテラルが未検査
+
+- **問題**: `From: admin@[192.168.0.1]`/`root@[IPv6:...]` はドメイン名を持たない自称 — ドメイン評判・SPF/DMARC の対象外で、内部宛・システム通知を装う手作り生成品の兆候。
+- **修正**: `has_literal_domain_sender` — From/Sender/Reply-To の `@` 後が `[` で始まる形を検出 → `Envelope.literal_domain_sender` → render_risks 警告。
+- **教訓**: 町名でなく座標で住処を名乗る差出人。
+
+### Fixed — Devin Review 指摘 (ラウンド55 追録)
+
+- **修正**: Devin Review の指摘8件を精査し実バグ5件を修正:
+  - `has_missing_part_content_type` — 本文中の `-- ` 署名区切りが宣言 boundary と見なされ偽パート run を開始していた問題を、宣言 boundary 一覧 (`declared_boundaries`) で厳密判定するよう修正 (BUG_0002)。
+  - `has_odd_mime_version` — `MIME-Version:` 値が FWS 折りたたみで次行に分かれると値比較が失敗していた問題を、論理行化してから比較するよう修正 (BUG_0003)。
+  - `has_empty_group_syntax` — `user@[IPv6:2001:db8::1]` のドメインリテラル内 `:` をグループ区切りと誤認していた問題を、`in_lit` フラグで `[...]` 区間を除外するよう修正 (BUG_0004)。
+  - `has_ansi_escape_body`/`has_bidi_override_body` — base64/QP 符号化パートの本文を復号せず生テキストで走査していたため、符号化で制御列を隠す回避が可能だった問題を、`decode_transfer_body`/`decode_qp_body` で復号後に検査するよう修正 (SEC_0002)。
+  - `has_undeclared_base64_block` — 単パートのみ走査で multipart 内の非宣言 b64 本文を見逃していた問題を、パート単位の CTE 状態機械に書き換え (SEC_0003)。
+- **回答のみ**: 残り指摘は (a) 全走査が線形・単一パスで指数爆発なし (リソース枯渇指摘は設計上成立せず)、(b) 生 UTF-8 ヘッダは RFC 6532 SMTPUTF8 で合法 (D1304 が別途非 UTF-8 を検出済み) — として PR 上で理由を記載。
+
 ### Security — D1367: 本文の ANSI/ターミナル制御列が未検査
 
 - **問題**: 本文の ESC `[`/`]`/`P`/`X`/`^`/`_` 制御列は、ターミナル系表示器やログビューアで開いた際に表示内容を改竄する (OSC 8 偽リンク・OSC 52 クリップボード書き換え・消去)。メール本文で正当な用途は無い。
