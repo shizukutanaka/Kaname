@@ -726,3 +726,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1310 | ~~**CT の name= ありで Content-Disposition 無しが未検査**~~ **(解消済み)** | P1 | CD のみ添付判定するスキャナが name= を素通り。修正: `has_ct_name_no_disposition` → render_risks | 判定に使う欄と効く欄の齟齬は差異の温床 |
 | D1311 | ~~**boundary= の空値が未検査**~~ **(解消済み)** | P1 | `boundary=""` で区切りが `--` に退化、構造解釈が完全にずれる。修正: `has_empty_boundary` → render_risks | 退化形は値域端で見落としやすい |
 | D1312 | ~~**MIME-Version の値が 1.0 以外が未検査**~~ **(解消済み)** | P2 | 欠落 (D1289) は検査済みだが `2.0` 等の異常値は未検査 — 厳格実装は MIME として扱わない。修正: `has_odd_mime_version` → render_risks | 有無だけでなく宣言値も見る |
+| D1313 | ~~**添付名のパストラバーサル成分が未検査**~~ **(解消済み)** | P1 | `filename="../../evil.exe"` 等で保存先をずらす書込み意図。修正: `has_traversal_filename` → render_risks | ファイル名検査は書込み先の指定も見る |
+| D1314 | ~~**998 バイト超のヘッダ行が未検査**~~ **(解消済み)** | P2 | RFC 5322 上限超過で切り詰める実装と全文読む実装がずれる。修正: `has_overlong_header` → render_risks | 規格の数値上限は差異の発生点 |

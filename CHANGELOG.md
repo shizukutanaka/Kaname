@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1313: 添付名のパストラバーサル成分が未検査
+
+- **問題**: `filename="../../evil.exe"`・`name="C:\x.exe"` 等のディレクトリ成分を含む添付名は、成分を除去するメーラーとそのまま保存するメーラーで保存先がずれる書込み意図の兆候。D1265 は CR/LF・末尾ドット・ホモグリフのみ対象。
+- **修正**: `has_traversal_filename` — CT の `name=` と CD の `filename=` 値に `..`・`/`・`\`・ドライブ文字があれば検出 → `Envelope.traversal_filename` → render_risks 警告。
+- **教訓**: ファイル名の検査は「表示の偽装」だけでなく「書込み先の指定」も見る — 保存動作は実装差が直接被害になる。
+
+### Security — D1314: 998 バイト超のヘッダ行が未検査
+
+- **問題**: RFC 5322 §2.1.1 の行長上限 (998 バイト) を超えるヘッダ行は、上限で切り詰める実装と全文を読む実装で値がずれる切断差異 (長い件名・宛先・DKIM-Signature に仕込む)。
+- **修正**: `has_overlong_header` — 外側ヘッダ部と各 MIME パートのヘッダ run で 998 バイト超の行を検出 (継続行は除外) → `Envelope.overlong_header` → render_risks 警告。
+- **教訓**: 規格の数値上限は必ず差異の発生点 — 上限超過の有無は見えているだけで検出の一線。
+
 ### Security — D1311: boundary= の空値が未検査
 
 - **問題**: `boundary=""` や `boundary=` 直後に区切りが来る形は区切り文字列が `--` だけに退化する。空境界を「boundary 無し」と扱う実装と「`--` 行すべてを区切りとする」実装でパート構造が完全にずれる (D1281/D1294/D1297 同族の極端形)。

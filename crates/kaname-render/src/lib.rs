@@ -200,6 +200,10 @@ pub struct Envelope {
     pub empty_boundary: bool,
     /// MIME-Version が 1.0 以外か (D1312 — 宣言値差異)。
     pub odd_mime_version: bool,
+    /// 添付名がパス成分 (`..`/`/`/`\`/ドライブ文字) を含むか (D1313)。
+    pub traversal_filename: bool,
+    /// 998 バイト超のヘッダ行があるか (D1314 — 切断差異)。
+    pub overlong_header: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2163,6 +2167,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1312: MIME-Version が 1.0 以外
     let odd_mime_version = has_odd_mime_version(bytes);
 
+    // D1313: 添付名のパストラバーサル成分
+    let traversal_filename = has_traversal_filename(bytes);
+
+    // D1314: 998 バイト超のヘッダ行
+    let overlong_header = has_overlong_header(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2235,6 +2245,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_name_no_disposition,
         empty_boundary,
         odd_mime_version,
+        traversal_filename,
+        overlong_header,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3790,6 +3802,90 @@ pub fn has_empty_boundary(raw: &[u8]) -> bool {
             }
         }
         rest = &rest[pos + 8..];
+    }
+    false
+}
+
+/// 添付名 (`filename=`/`name=`) がパス成分を含むか判定する (D1313)。
+///
+/// `filename="../../evil.exe"` や `filename="C:\\evil.exe"` のような
+/// ディレクトリ成分を含む添付名は、保存時に親ディレクトリや絶対
+/// パスへ書き込もうとする意図の兆候 — 成分を除去するメーラーと
+/// そのまま保存するメーラーで実際の保存先がずれる。
+#[must_use]
+pub fn has_traversal_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            if key != "filename" && key != "name" {
+                continue;
+            }
+            let mut v = seg[eq + 1..].trim();
+            if let Some(stripped) = v.strip_prefix('"') {
+                let end = stripped.find('"').unwrap_or(stripped.len());
+                v = &stripped[..end];
+            }
+            // `..` 要素・パス区切り・ドライブ文字のいずれかを含む
+            if v.contains("..") || v.contains('/') || v.contains('\\') {
+                return true;
+            }
+            let b = v.as_bytes();
+            if b.len() >= 2 && b[1] == b':' && b[0].is_ascii_alphabetic() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 998 バイトを超えるヘッダ行があるか判定する (D1314)。
+///
+/// RFC 5322 §2.1.1 の行長上限は 998 バイト (CRLF 含む)。超過行は
+/// 998 バイトで切り詰める実装と全文を読む実装で値がずれる
+/// (長い件名・To・DKIM-Signature 等に仕込む切断差異)。外側
+/// ヘッダ部と各 MIME パートのヘッダ run を走査する。
+#[must_use]
+pub fn has_overlong_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_header_run = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_header_run = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_header_run = true;
+            continue;
+        }
+        // 継続行はヘッダ値の一部 — 独立行としては扱わない
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if in_header_run && l.len() > 998 {
+            return true;
+        }
     }
     false
 }
@@ -17602,6 +17698,45 @@ mod tests {
         ));
         // ヘッダ自体が無い → D1289 の領分なので不発火
         assert!(!has_odd_mime_version(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn traversal_filename_はパス成分を検出する() {
+        assert!(has_traversal_filename(
+            b"Content-Disposition: attachment; filename=\"../../evil.exe\"\r\n\r\nb"
+        ));
+        assert!(has_traversal_filename(
+            b"Content-Type: application/octet-stream; name=\"C:\\temp\\x.exe\"\r\n\r\nb"
+        ));
+        assert!(has_traversal_filename(
+            b"Content-Disposition: attachment; filename=\"dir/evil.exe\"\r\n\r\nb"
+        ));
+        // 通常名は不発火
+        assert!(!has_traversal_filename(
+            b"Content-Disposition: attachment; filename=\"report.pdf\"\r\n\r\nb"
+        ));
+        // filename= でないパラメータは対象外
+        assert!(!has_traversal_filename(
+            b"Content-Type: multipart/mixed; boundary=\"a/b\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn overlong_header_は998超過行を検出する() {
+        let long = format!("Subject: {}\r\n\r\nb", "a".repeat(1000));
+        assert!(has_overlong_header(long.as_bytes()));
+        // パートヘッダの超過も検出
+        let inner = format!(
+            "Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nX-Long: {}\r\n\r\nx\r\n--b--",
+            "a".repeat(1000)
+        );
+        assert!(has_overlong_header(inner.as_bytes()));
+        // 丁度 998 は不発火 (>998 のみ)
+        let ok = format!("Subject: {}\r\n\r\nb", "a".repeat(989));
+        assert!(!has_overlong_header(ok.as_bytes()));
+        // 本文の長い行は対象外
+        let body = format!("Subject: x\r\n\r\n{}", "a".repeat(2000));
+        assert!(!has_overlong_header(body.as_bytes()));
     }
 
     #[test]

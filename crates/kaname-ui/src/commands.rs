@@ -2997,6 +2997,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1313: 添付名のパストラバーサル成分 — `../`・区切り・ドライブ文字
+    //    を含む添付名は、除去するメーラーとそのまま保存するメーラーで
+    //    実際の保存先がずれる意図の兆候。
+    if env.traversal_filename {
+        render_risks.push(
+            "添付ファイル名にパス成分 (../・区切り・ドライブ文字) が含まれています —\
+             保存先をずらそうとする意図の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1314: 998 バイト超のヘッダ行 — RFC 5322 §2.1.1 上限を超える行は
+    //    切り詰める実装と全文を読む実装で値がずれる。
+    if env.overlong_header {
+        render_risks.push(
+            "998 バイトを超えるヘッダ行があります — 行長上限で切り詰める実装と\
+             全文を読む実装で値がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
