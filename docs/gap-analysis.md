@@ -708,3 +708,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1292 | ~~**一意ヘッダ重複が未検査**~~ **(解消済み)** | P1 | Subject/From/Message-ID が複数 — 先頭/末尾採用が実装で分かれるパーサ差異。修正: `has_duplicate_identity_headers` → render_risks | 「最大1個」の制約も攻撃面 |
 | D1293 | ~~**multipart コンテナへの非 identity CTE が未検査**~~ **(解消済み)** | P1 | multipart/* + base64/QP は RFC 2045 §6.4 禁止 — decode 順序で構造がずれる。修正: `has_encoded_multipart_container` → render_risks | 禁止組合せは型との対で測る |
 | D1294 | ~~**boundary= 値の前後空白混入が未検査**~~ **(解消済み)** | P1 | `boundary="x "` — trim する/しないで別区切り (mail-parser trailing-ws)。修正: `has_whitespace_boundary` → render_risks | 値の体裁も攻撃面 |
+| D1295 | ~~**RFC 2231 添付名パラメータが未検査**~~ **(解消済み)** | P1 | `filename*=utf-8''x`/`filename*0=` — 再構成しないスキャナで拡張子検査を素通り。修正: `has_rfc2231_attachment_params` → render_risks | 別表記の存在自体が兆候 |
+| D1296 | ~~**boundary= のエスケープ/閉じないクオートが未検査**~~ **(解消済み)** | P1 | `boundary="a\"b"`/閉じない `"` — 展開方法で別区切り。修正: `has_escaped_boundary_quote` → render_risks | quoted-string の健全性まで測る |

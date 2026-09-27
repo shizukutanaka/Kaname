@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1295: RFC 2231 分割・符号化パラメータの添付名が未検査
+
+- **問題**: `filename*=utf-8''evil.exe` (文字コード符号化) と `filename*0=`/`filename*1=` (分割継続) の RFC 2231/5987 パラメータを再構成しないスキャナは添付名を `filename=` 不在として素通りし、危険拡張子検査が届かない。D1265 はデコード済み名のみ対象で、この経路は未カバーだった。
+- **修正**: `has_rfc2231_attachment_params` — content-type/content-disposition 行 (FWS 展開後) で `filename*`/`name*` 系パラメータを検出 → `Envelope.rfc2231_attachment_params` → render_risks 警告。
+- **教訓**: 「名前の書き方が複数ある」フィールドは全表記を同一経路に通すか、別表記の存在自体を兆候にする。
+
+### Security — D1296: boundary= のエスケープ/閉じないクオートが未検査
+
+- **問題**: `boundary="a\"b"` の quoted-pair や閉じない `"` は、エスケープ展開するパーサ・素直に閉じ `"` を探すパーサ・パース失敗で boundary 無し扱いのパーサで三者三様の区切りになる (D1281/D1294 と同族の boundary 差異)。
+- **修正**: `has_escaped_boundary_quote` — content-type の boundary= クオート値内の `\"`、または行末まで閉じないクオートを検出 → `Envelope.escaped_boundary_quote` → render_risks 警告。
+- **教訓**: quoted-string の中身は文字列として見るだけでなく、エスケープ構造の健全性まで測る。
+
 ### Security — D1293: multipart コンテナへの非 identity CTE が未検査
 
 - **問題**: `multipart/*` の Content-Transfer-Encoding は RFC 2045 §6.4 で 7bit/8bit/binary 以外が禁止 — `base64`/`quoted-printable` でコンテナ全体を符号化すると「先に decode して分割」する実装と「生のまま分割」する実装で構造が食い違い、内側パートを一方から隠せる。D1285 の重複/不正値検査は値の異常だけで、型との組合せ禁止は未検査だった。

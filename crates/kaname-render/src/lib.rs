@@ -168,6 +168,10 @@ pub struct Envelope {
     pub encoded_multipart_container: bool,
     /// boundary= 値に空白が混ざっているか (D1294 — trim 差異)。
     pub whitespace_boundary: bool,
+    /// filename*/name* の RFC 2231 パラメータがあるか (D1295)。
+    pub rfc2231_attachment_params: bool,
+    /// boundary= にエスケープ/閉じないクオートがあるか (D1296)。
+    pub escaped_boundary_quote: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2083,6 +2087,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1294: boundary= 値の空白混入 (trim 差異)
     let whitespace_boundary = has_whitespace_boundary(bytes);
 
+    // D1295: filename*/name* の RFC 2231 分割・符号化パラメータ
+    let rfc2231_attachment_params = has_rfc2231_attachment_params(bytes);
+
+    // D1296: boundary= のエスケープ/閉じないクオート
+    let escaped_boundary_quote = has_escaped_boundary_quote(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2139,6 +2149,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         duplicate_identity_headers,
         encoded_multipart_container,
         whitespace_boundary,
+        rfc2231_attachment_params,
+        escaped_boundary_quote,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3038,6 +3050,111 @@ pub fn has_whitespace_boundary(raw: &[u8]) -> bool {
         };
         // 前後の空白のみ違反 (内部の空白は bchars に含まれ RFC 上は合法)
         if v != v.trim() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `filename*`/`name*` の RFC 2231/5987 パラメータがあるか判定する
+/// (D1295)。
+///
+/// `filename*=utf-8''evil.exe` (文字コード符号化) と
+/// `filename*0="ev"; filename*1="il.exe"` (分割継続) は、これらを
+/// 再構成・デコードしないスキャナの添付名検査を素通りする — 表示側は
+/// デコードして危険拡張子を提示、検査側は `filename=` 不在として通す
+/// パーサ差異。
+///
+/// content-type/content-disposition 行のみ対象 (`name*` は CT の
+/// name*= 符号化を、 filename* は CD を拾う)。
+#[must_use]
+pub fn has_rfc2231_attachment_params(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-type:") || l.starts_with("content-disposition:")) {
+            continue;
+        }
+        // filename*= / filename*0= / filename*0*= (name* 同様)
+        for key in ["filename", "name"] {
+            let mut rest = l;
+            while let Some(p) = rest.find(key) {
+                let after = &rest[p + key.len()..];
+                // 直後が '*' → RFC 2231 系 (filename*= / filename*N= / filename*N*=)
+                if after.starts_with('*') {
+                    return true;
+                }
+                rest = &after[..];
+            }
+        }
+    }
+    false
+}
+
+/// `boundary=` 値にエスケープクオートまたは閉じないクオートがあるか
+/// 判定する (D1296)。
+///
+/// `boundary="a\"b"` (quoted-pair 含む) や `boundary="a` (閉じない) は、
+/// quoted-string のエスケープを展開するパーサと素直に閉じ `"` を探す
+/// パーサで別の境界文字列を採用する — boundary 系差異工作の一型
+/// (D1281/D1294 と同族)。
+#[must_use]
+pub fn has_escaped_boundary_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = l.find("boundary=") else { continue };
+        let rest = &l[pos + 9..];
+        let Some(q) = rest.strip_prefix('"') else { continue };
+        // 閉じクオートまでの間に `\"` (quoted-pair) がある、または閉じない
+        let mut i = 0usize;
+        let bytes = q.as_bytes();
+        let mut closed = false;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if i + 1 < bytes.len() => {
+                    // quoted-pair — エスケープ内に `"` があれば差異の種
+                    if bytes[i + 1] == b'"' {
+                        return true;
+                    }
+                    i += 2;
+                }
+                b'"' => {
+                    closed = true;
+                    break;
+                }
+                _ => i += 1,
+            }
+        }
+        if !closed {
+            // 閉じクオートがない — 行末までを値にする実装と、
+            // パース失敗で boundary 無し扱いの実装に分かれる
             return true;
         }
     }
@@ -16495,6 +16612,53 @@ mod tests {
         // boundary= のない content-type は対象外
         assert!(!has_whitespace_boundary(
             b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn rfc2231_attachment_params_は符号化添付名を検出する() {
+        // D1295 — filename*= / filename*0= / filename*0*= / name*=
+        assert!(has_rfc2231_attachment_params(
+            b"Content-Disposition: attachment; filename*=utf-8''evil.exe\r\n\r\nb"
+        ));
+        assert!(has_rfc2231_attachment_params(
+            b"Content-Disposition: attachment;\r\n filename*0=\"ev\";\r\n filename*1=\"il.exe\"\r\n\r\nb"
+        ));
+        assert!(has_rfc2231_attachment_params(
+            b"Content-Type: application/pdf; name*=utf-8''doc.pdf\r\n\r\nb"
+        ));
+        // 通常の filename=/name= は不発火
+        assert!(!has_rfc2231_attachment_params(
+            b"Content-Disposition: attachment; filename=\"evil.exe\"\r\n\r\nb"
+        ));
+        assert!(!has_rfc2231_attachment_params(
+            b"Content-Type: image/png; name=\"pic.png\"\r\n\r\nb"
+        ));
+        // 本文中の文字列は対象外 (CT/CD 行のみ)
+        assert!(!has_rfc2231_attachment_params(
+            b"Content-Type: text/plain\r\n\r\nfilename*=utf-8''x in body"
+        ));
+    }
+
+    #[test]
+    fn escaped_boundary_quote_はクオート異常を検出する() {
+        // D1296 — エスケープクオート / 閉じないクオート
+        assert!(has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=\"a\\\"b\"\r\n\r\nb"
+        ));
+        assert!(has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=\"unclosed\r\n\r\nb"
+        ));
+        // 正規クオート/クオート無しは不発火
+        assert!(!has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nb"
+        ));
+        assert!(!has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\nb"
+        ));
+        // boundary 以外のパラメータのクオート異常は対象外
+        assert!(!has_escaped_boundary_quote(
+            b"Content-Type: text/plain; name=\"a\\\"b\"\r\n\r\nb"
         ));
     }
 

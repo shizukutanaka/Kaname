@@ -2827,6 +2827,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1295: filename*/name* の RFC 2231 パラメータ — 分割継続・
+    //    文字コード符号化された添付名は、再構成しないスキャナの
+    //    拡張子検査を素通りする。
+    if env.rfc2231_attachment_params {
+        render_risks.push(
+            "添付名が RFC 2231 の分割・符号化パラメータ (filename*/name*) で\
+             書かれています — デコードしない検査経路では添付名が見えない\
+             パーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1296: boundary= のエスケープ/閉じないクオート — quoted-string
+    //    の展開仕方が実装で分かれ、別の区切り文字列を採用する。
+    if env.escaped_boundary_quote {
+        render_risks.push(
+            "boundary パラメータにエスケープされた引用符または閉じない引用符が\
+             あります — 実装ごとに異なる区切りを採用するパーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
