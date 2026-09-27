@@ -798,6 +798,17 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1267: 購読型 URI (webcal:/feed:) — メール検査の外から継続的に
+    //    コンテンツが届くチャンネルを確立させる誘導 (悪意あるカレンダー
+    //    購読はイベント通知として届き続ける)。
+    if has_subscription_uri(analysis_text) {
+        render_risks.push(
+            "本文に購読型 URI (webcal:/feed:) が含まれています — \
+             購読すると以後イベント・通知として外部からコンテンツが届き続けます"
+                .to_string(),
+        );
+    }
+
     // D1252: 電話番号のみのペイロード (TOAD / コールバックフィッシング)
     //    URL が一切無いメールはリンク解析を完全に素通りする — 番号への
     //    電話自体が唯一のペイロード。KnowBe4 観測で前年比 +449%。
@@ -3270,6 +3281,17 @@ fn has_external_protocol_uri(text: &str) -> bool {
     SCHEMES.iter().any(|s| lower.contains(s))
 }
 
+/// D1267: 購読型 URI スキーム — `webcal:`/`feed:`/`feeds:` は
+/// メールを開いた時点ではなく、購読先から継続的にコンテンツを受け取る
+/// チャンネルを確立する。悪意あるカレンダー購読 (calendar spam キャンペーン)
+/// は以後イベント・通知の形でメール検査の外から届き続ける。
+/// アプリ起動型 (D1262) とは性質が違うため別名で列挙する。
+fn has_subscription_uri(text: &str) -> bool {
+    const SCHEMES: &[&str] = &["webcal:", "feed:", "feeds:"];
+    let lower = text.to_lowercase();
+    SCHEMES.iter().any(|s| lower.contains(s))
+}
+
 /// 本文冒頭に LLM 生成物の前文が残っているか (D1259)。
 ///
 /// KnowBe4 (2026-06) の AI 生成フィッシング解析: モデルが出力冒頭に
@@ -4746,6 +4768,17 @@ mod tests {
         assert!(!has_external_protocol_uri("資料を添付しました"));
         // 大文字のスキームも検出
         assert!(has_external_protocol_uri("MS-MSDT:/id PCWDiagnostic"));
+    }
+
+    #[test]
+    fn has_subscription_uri_は購読スキームを検出する() {
+        // D1267 — webcal:/feed: 購読チャネル
+        assert!(has_subscription_uri("このカレンダーを購読: webcal://evil.example/spam.ics"));
+        assert!(has_subscription_uri("feed:https://evil.example/rss.xml"));
+        assert!(has_subscription_uri("FEEDs://evil.example/x"));
+        // 正規文では不発火
+        assert!(!has_subscription_uri("https://example.com/feed を開いてください"));
+        assert!(!has_subscription_uri("資料を添付しました"));
     }
 
     /// D1254: From == To の self-addressed メールは注意喚起が出る。

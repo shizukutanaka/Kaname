@@ -15848,6 +15848,34 @@ mod tests {
     }
 
     #[test]
+    fn scan_attachment_vcard_external_refs_flagged() {
+        // D1268 — PHOTO;VALUE=URI でリモート参照する vCard
+        let vcf = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John\r\nPHOTO;MEDIATYPE=image/jpeg;VALUE=URI:https://evil.example/track.jpg\r\nEND:VCARD\r\n";
+        let scan = scan_attachment_bytes("contact.vcf", "text/vcard", vcf);
+        assert!(
+            scan.risks.iter().any(|r| r.contains("vCard")),
+            "vCard の外部参照は警告されるべき: {:?}",
+            scan.risks
+        );
+        assert!(!scan.is_dangerous); // 注意喚起のみ
+
+        // URL プロパティの http 値も同様
+        let vcf2 = b"BEGIN:VCARD\nURL:http://evil.example/phish\nEND:VCARD\n";
+        let scan = scan_attachment_bytes("contact.vcf", "text/vcard", vcf2);
+        assert!(scan.risks.iter().any(|r| r.contains("URL")));
+
+        // inline データ (data: URI) と CID: 埋め込みは対象外
+        let vcf3 = b"BEGIN:VCARD\nPHOTO;VALUE=URI:data:image/jpeg;base64,/9j/4A\nSOURCE;VALUE=uri:CID:part1\r\nEND:VCARD\n";
+        let scan = scan_attachment_bytes("contact.vcf", "text/vcard", vcf3);
+        assert!(scan.risks.iter().all(|r| !r.contains("vCard")), "{:?}", scan.risks);
+
+        // URI 参照のない通常の vCard は不発火
+        let vcf4 = b"BEGIN:VCARD\nVERSION:4.0\nFN:John Doe\nTEL:+81-3-0000-0000\nEND:VCARD\n";
+        let scan = scan_attachment_bytes("contact.vcf", "text/vcard", vcf4);
+        assert!(scan.risks.iter().all(|r| !r.contains("vCard")));
+    }
+
+    #[test]
     fn scan_attachment_encrypted_zip_flagged() {
         // 暗号化フラグ付き ZIP — is_encrypted=true + 検査不能の通知 (D1251)
         let zip = make_zip_entry(b"evil.exe", 0x0001, b"\x01\x02\x03");
@@ -19953,6 +19981,45 @@ pub fn is_mls_message(raw: &[u8]) -> bool {
     })
 }
 
+/// vCard の外部参照プロパティを検査する (D1268)。
+///
+/// RFC 6350 の URI 値を取るプロパティ — `PHOTO`/`LOGO`/`SOUND`/`SOURCE`/
+/// `URL`/`GEO`/`IMPP`/`ORG-DIRECTORY` — はインポート・表示時にリモートから
+/// フェッチされ得る。値部が http(s)/ftp で始まる行を検出する
+/// (`data:` inline 埋め込みや `CID:` 参照は対象外)。
+fn detect_vcard_external_refs(text: &str) -> Vec<String> {
+    const URI_PROPS: &[&str] =
+        &["PHOTO", "LOGO", "SOUND", "SOURCE", "URL", "GEO", "IMPP", "ORG-DIRECTORY"];
+    let mut out = Vec::new();
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.starts_with([' ', '\t']) {
+            continue; // 継続行
+        }
+        let Some((head, value)) = line.split_once(':') else { continue };
+        let prop = head
+            .split(';')
+            .next()
+            .map(str::trim)
+            .unwrap_or("")
+            .to_ascii_uppercase();
+        // `ORG-DIRECTORY` 等のグループ接頭辞 (X.UID 等) は許容 — prop が
+        // ドット付きなら末尾の名前だけを見る。
+        let prop = prop.rsplit('.').next().unwrap_or(prop.as_str());
+        if !URI_PROPS.contains(&prop) {
+            continue;
+        }
+        let uri_val = value.trim();
+        let lower_val = uri_val.to_ascii_lowercase();
+        // 実際にリモートを参照するスキームのみ — `VALUE=URI` でも
+        // `data:` 埋め込み・`CID:` 参照は外部フェッチではない。
+        if lower_val.starts_with("http") || lower_val.starts_with("ftp:") {
+            out.push(format!("{prop} が外部 URI を参照: {uri_val}"));
+        }
+    }
+    out
+}
+
 /// 1 添付分のバイト列を各検出器にかける。
 ///
 /// `scan_attachments` (メール全体) と、JMAP でダウンロードした単一 blob の
@@ -20049,6 +20116,23 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
                 if matches!(scan.risk_level, calendar_guard::CalendarRiskLevel::Danger) {
                     is_dangerous = true;
                 }
+            }
+        }
+    }
+
+    // 5.6 vCard (.vcf) の外部参照 (D1268) — PHOTO/LOGO/SOUND/SOURCE/URL
+    //     等の http/ftp 値はインポート・表示時にリモートから
+    //     フェッチされる (ICS `ATTACH;VALUE=URI`、message/external-body と
+    //     同型の死角)。vCard には連絡先の体裁で任意 URL を載せられる。
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        let lower_name = filename.to_ascii_lowercase();
+        let is_vcf = lower_name.ends_with(".vcf")
+            || lower_name.ends_with(".vcard")
+            || declared_mime.to_ascii_lowercase().contains("vcard")
+            || text.contains("BEGIN:VCARD");
+        if is_vcf {
+            for r in detect_vcard_external_refs(text) {
+                risks.push(format!("vCard 添付のリスク: {r}"));
             }
         }
     }
