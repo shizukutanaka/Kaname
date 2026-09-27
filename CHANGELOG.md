@@ -8,6 +8,42 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1289: MIME-Version 欠落が未検査
+
+- **問題**: `MIME-Version: 1.0` は MIME の宣言 (RFC 2045 §4) — `Content-Type` パラメータや CTE を使いながらこれを欠くメッセージは、MIME として解釈する実装と RFC 5322 素テキストとして解釈する実装で構造が食い違う (D1278 欠落検査の姉妹)。
+- **修正**: `has_missing_mime_version` — トップヘッダに `mime-version:` が無く `content-type:` にパラメータ/multipart 指定または CTE/Disposition があると検出 → `Envelope.missing_mime_version` → render_risks 警告。
+- **教訓**: 構造を名乗るのに宣言を欠く — 欠落は意味だけでなく存在でも測る。
+
+### Security — D1290: 宣言 boundary の不使用・未終了 multipart が未検査
+
+- **問題**: `boundary=x` を宣言しながら `--x` が一度も現れない、または `--x--` で閉じない multipart は、残り本文の解釈がパーサごとに食い違う (mailsplit の未終了 multipart で外側 boundary が生きたまま残るバグと同型)。
+- **修正**: `has_unterminated_multipart` — トップレベル boundary 値を取り `--b`/`--b--` の存在を確認 → `Envelope.unterminated_multipart` → render_risks 警告。
+- **教訓**: 「宣言と実際の不一致」は双方の方向で測る — 宣言して使わないも使って閉じないも同じ兆候。
+
+### Security — D1287: 非 multipart Content-Type の bogus boundary= が未検査
+
+- **問題**: `Content-Type: text/plain; boundary=fake` — multipart 以外の型に boundary= があると、それを採用するパーサは本物の外側 boundary を無効化し、後続の実パートをスキャンから隠す (mailsplit AIKIDO-2026-785486 / zone-eu commit 028a6fc — 「boundary 所有権」の取り違え)。
+- **修正**: `has_bogus_boundary_param` — `boundary=` を含む `content-type:` 論理行で主型が `multipart/` でなければ検出 → `Envelope.bogus_boundary_param` → render_risks 警告。
+- **教訓**: パラメータの「存在」と「型との整合」は別の兆候 — 型に無関係な boundary は差異工作の種。
+
+### Security — D1288: プリアンブル/エピローグ内のパート構造が未検査
+
+- **問題**: 最初の `--boundary` より前、最後の `--boundary--` より後にパート様のヘッダ構造があると、プリアンブル/エピローグを無視するスキャナには見えず MUA は表示する (同じく mailsplit の boundary 所有権バグの系)。
+- **修正**: `has_orphaned_part_content` — トップレベル multipart の boundary 値からプリアンブル/エピローグを特定し、その中に `Content-Type:`/`Content-Disposition:`/`Content-Transfer-Encoding:` 行があれば検出 → `Envelope.orphaned_part_content` → render_risks 警告。説明テキストのみのプリアンブルは対象外。
+- **教訓**: boundary の外側も内容になりうる — 範囲外にあるヘッダ構造は「見る範囲が違う」差異の兆候。
+
+### Security — D1285: MIME 制御ヘッダの重複・不正 CTE が未検査
+
+- **問題**: 同一パートに `Content-Type:`/`Content-Transfer-Encoding:`/`Content-Disposition:` が複数あると、実装ごとに採用する方が食い違う — noxxi "Dubious MIME" (重複 CTE でスキャナとクライアントが別バイト列を復号) と IETF draft-chen-email-mime-ambiguity-defense-00 (2026-03) が扱う曖昧性工作。`x-uuencode` 等の非標準 CTE 値もフォールバックが実装間で分かれる。
+- **修正**: `has_conflicting_mime_headers` — ヘッダブロックごとに制御ヘッダの重複と CTE 値の網羅照合 → `Envelope.conflicting_mime_headers` → render_risks 警告。ブロック先頭から連続する `name:` 行のみ読むため本文誤認なし。
+- **教訓**: 曖昧性は値だけでなく「同じ名前の回数」でも測れる — 重複そのものが兆候。
+
+### Security — D1286: インライン uuencode ペイロードが未検査
+
+- **問題**: `begin 644 evil.exe` + `end` の uuencode ブロックは MIME 構造の外 — パート単位で走査する検査を完全に素通りし、自動展開するクライアントでは実行ファイルが現れる (非 MIME スマグリング)。
+- **修正**: `has_uuencode_payload` — `begin [0-7]{3} name` / `begin-base64 [0-7]{3} name` の行を先頭 1 MiB で検出 → `Envelope.uuencode_payload` → render_risks 警告。
+- **教訓**: MIME の外にもペイロードは置ける — 構造がないこと自体を構造の兆候として数えよ。
+
 ### Security — D1283: ヘッダの malformed encoded-word が未検査
 
 - **問題**: `=?UTF-8?B?...` (閉じ `?=` 無し) や `=?utf-8?X?` (不正 encoding) のような RFC 2047 形に合わない encoded-word 断片は、デコードする実装と素通しする実装で表示が食い違う — From/Subject の見た目を攻撃者が制御できるパーサ差異偽装 (CVE-2026-63435 系)。既存の件名/表示名検査はデコード後の文字列を見るため、そもそも形が壊れていることを捉えられなかった。

@@ -2721,6 +2721,68 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1285: MIME 制御ヘッダの重複・不正 CTE — 実装ごとに採用値が
+    //    食い違う曖昧性工作 (draft-chen MIME ambiguity / noxxi)。
+    if env.conflicting_mime_headers {
+        render_risks.push(
+            "MIME ヘッダ (Content-Type/Content-Transfer-Encoding/\
+             Content-Disposition) が重複または不正値です — \
+             検査側と表示側が別の解釈を採用する曖昧性工作の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1286: インライン uuencode/begin-base64 — MIME 構造の外の
+    //    非 MIME スマグリング。
+    if env.uuencode_payload {
+        render_risks.push(
+            "本文にインライン uuencode/begin-base64 ブロックがあります — \
+             MIME パート外にペイロードを置いて添付検査を素通りする\
+             手口の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1287: 非 multipart Content-Type の bogus boundary= —
+    //    mailsplit 系 boundary 所有権バグ (外側 boundary 無効化)。
+    if env.bogus_boundary_param {
+        render_risks.push(
+            "multipart でない Content-Type に boundary= パラメータがあります — \
+             偽の boundary が外側の区切りを無効化し後続パートを検査から\
+             隠す boundary 所有権工作の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1288: プリアンブル/エピローグ内のパート様構造。
+    if env.orphaned_part_content {
+        render_risks.push(
+            "boundary の範囲外 (プリアンブル/エピローグ) にパート構造があります — \
+             プリアンブル/エピローグを無視するスキャナに見えないパートの兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1289: MIME-Version 欠落 — MIME 構造を使うのに宣言がない
+    //    (パーサ差異の兆候)。
+    if env.missing_mime_version {
+        render_risks.push(
+            "MIME-Version ヘッダがありません — MIME 構造を使いながら\
+             宣言を欠くメッセージは、実装によって構造解釈が\
+             食い違う手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1290: 宣言 boundary が使われない/閉じない未終了 multipart。
+    if env.unterminated_multipart {
+        render_risks.push(
+            "宣言された boundary が使われていないか、終端がありません — \
+             パーサごとに残り本文の解釈が食い違う未終了 multipart の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -144,6 +144,22 @@ pub struct Envelope {
     /// `Content-Location:` が http(s)/ftp のリモート URL を指す
     /// パートがあるか (D1284 — MHTML smuggling)。
     pub remote_content_location: bool,
+    /// 同一パート内の MIME 制御ヘッダ重複・不正 CTE 値があるか
+    /// (D1285 — MIME 曖昧性パーサ差異)。
+    pub conflicting_mime_headers: bool,
+    /// 本文にインライン uuencode/begin-base64 ペイロードがあるか
+    /// (D1286 — 非 MIME スマグリング)。
+    pub uuencode_payload: bool,
+    /// 非 multipart の Content-Type に boundary= パラメータがあるか
+    /// (D1287 — boundary 所有権パーサ差異、mailsplit 系)。
+    pub bogus_boundary_param: bool,
+    /// 宣言 boundary のプリアンブル/エピローグにパート様構造があるか
+    /// (D1288 — 走査外パート)。
+    pub orphaned_part_content: bool,
+    /// MIME 構造を使うのに MIME-Version ヘッダがないか (D1289)。
+    pub missing_mime_version: bool,
+    /// 宣言 boundary が使われない/閉じないか (D1290 — 未終了 multipart)。
+    pub unterminated_multipart: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2053,6 +2069,24 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1284: Content-Location がリモート URL を指すパート (MHTML smuggling)
     let remote_content_location = has_remote_content_location(bytes);
 
+    // D1285: MIME 制御ヘッダの重複・不正 CTE (draft-chen MIME ambiguity)
+    let conflicting_mime_headers = has_conflicting_mime_headers(bytes);
+
+    // D1286: インライン uuencode/begin-base64 ペイロード (非 MIME スマグリング)
+    let uuencode_payload = has_uuencode_payload(bytes);
+
+    // D1287: 非 multipart Content-Type 上の bogus boundary= (mailsplit 系)
+    let bogus_boundary_param = has_bogus_boundary_param(bytes);
+
+    // D1288: boundary プリアンブル/エピローグ内のパート様構造
+    let orphaned_part_content = has_orphaned_part_content(bytes);
+
+    // D1289: MIME-Version 欠落 (MIME 構造を使うのに宣言無し)
+    let missing_mime_version = has_missing_mime_version(bytes);
+
+    // D1290: 宣言 boundary の不使用/未終了 multipart
+    let unterminated_multipart = has_unterminated_multipart(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2080,6 +2114,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ambiguous_boundary,
         malformed_encoded_word,
         remote_content_location,
+        conflicting_mime_headers,
+        uuencode_payload,
+        bogus_boundary_param,
+        orphaned_part_content,
+        missing_mime_version,
+        unterminated_multipart,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2558,6 +2598,283 @@ pub fn has_filename_name_mismatch(raw: &[u8]) -> bool {
     }
     false
 }
+
+/// D1285: ヘッダブロックごとに MIME 制御ヘッダの重複・競合を検出する。
+///
+/// 同一パートに `Content-Type:` / `Content-Transfer-Encoding:` /
+/// `Content-Disposition:` が複数あると、パーサごとに採用する方が
+/// 食い違う (draft-chen-email-mime-ambiguity-defense / noxxi Dubious
+/// MIME — 重複 CTE でスキャナとクライアントが別バイト列を復号する
+/// 古典的な差異)。また CTE 値が 7bit/8bit/binary/base64/
+/// quoted-printable 以外 (x-uuencode 等) の場合もフォールバック
+/// 動作が実装間で分かれるため兆候とする。
+#[must_use]
+pub fn has_conflicting_mime_headers(raw: &[u8]) -> bool {
+    const KNOWN_CTE: [&str; 5] = [
+        "7bit",
+        "8bit",
+        "binary",
+        "base64",
+        "quoted-printable",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.replace("\r\n", "\n").to_ascii_lowercase();
+    for block in lower.split("\n\n") {
+        if block.trim().is_empty() {
+            continue;
+        }
+        // `name: value` の形の行をヘッダとして連続する分だけ読む。
+        // パート境界 `--x` 行や本文行で区切られたヘッダ run ごとに
+        // カウントする (run 外の行はリセットされてもカウント対象には
+        // ならない — 非制御ヘッダの name は照合しないため)
+        let mut ct = 0u32;
+        let mut cte = 0u32;
+        let mut cd = 0u32;
+        for l in block.lines() {
+            if l.starts_with([' ', '\t']) {
+                continue; // FWS 継続
+            }
+            let name = l
+                .find(':')
+                .map(|c| l[..c].trim())
+                .unwrap_or("");
+            let is_header = !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+            if !is_header {
+                ct = 0;
+                cte = 0;
+                cd = 0;
+                continue;
+            }
+            match name {
+                "content-type" => ct += 1,
+                "content-transfer-encoding" => {
+                    cte += 1;
+                    let v = l[l.find(':').unwrap_or(0) + 1..]
+                        .trim()
+                        .split(';')
+                        .next()
+                        .unwrap_or("")
+                        .trim();
+                    if !KNOWN_CTE.contains(&v) {
+                        return true;
+                    }
+                }
+                "content-disposition" => cd += 1,
+                _ => {}
+            }
+            if ct > 1 || cte > 1 || cd > 1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// D1286: 本文中にインライン uuencode / begin-base64 ペイロードが
+///   あるか判定する。
+///
+/// `begin 644 file.exe` + `end` の uuencode ブロックは MIME 構造の
+/// 外にあるため、パート単位で走査するゲートウェイを完全に素通りする
+/// 一方、自動展開するクライアントでは実行ファイルが現れる
+/// (非 MIME スマグリング)。本体テキストのパート境界に関係なく
+/// `begin [0-7]{3} name` / `begin-base64 [0-7]{3} name` の行を探す。
+#[must_use]
+pub fn has_uuencode_payload(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    // 巨大メールでも先頭 1 MiB で十分 — 断片化は行単位なので境界跨ぎは許容
+    let scan = &text[..text.len().min(1024 * 1024)];
+    for l in scan.lines() {
+        let l = l.trim_end();
+        let Some(rest) = l
+            .strip_prefix("begin ")
+            .or_else(|| l.strip_prefix("begin-base64 "))
+        else {
+            continue;
+        };
+        // `644 filename` — 8進モード3桁 + 空白 + 非空ファイル名
+        let mut it = rest.splitn(2, [' ', '\t']);
+        let mode = it.next().unwrap_or("");
+        let name = it.next().map(str::trim).unwrap_or("");
+        if mode.len() == 3
+            && mode.chars().all(|c| ('0'..='7').contains(&c))
+            && !name.is_empty()
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// D1287: 非 multipart の `Content-Type:` に `boundary=` パラメータが
+///   あるか判定する。
+///
+/// multipart 以外で `boundary=` は本来意味を持たないが、一部パーサは
+/// これを採用して本物の外側 boundary を無効化し、後続の実パートを
+/// スキャンから隠す (mailsplit AIKIDO-2026-785486 — bogus boundary=
+/// でパース結果と MUA の表示がずれる)。`boundary=` を含む
+/// `content-type:` 論理行で型が `multipart/` でなければ兆候。
+#[must_use]
+pub fn has_bogus_boundary_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical: Vec<String> = Vec::new();
+    for l in text.split('\n') {
+        if l.starts_with([' ', '\t']) {
+            if let Some(last) = logical.last_mut() {
+                last.push_str(l.trim_start());
+            }
+        } else {
+            logical.push(l.to_string());
+        }
+    }
+    logical.iter().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        let Some(rest) = lower.strip_prefix("content-type:") else {
+            return false;
+        };
+        if !rest.contains("boundary=") {
+            return false;
+        }
+        let main_type = rest
+            .trim_start()
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim();
+        !main_type.starts_with("multipart/")
+    })
+}
+
+/// D1288: 宣言された boundary の外 (プリアンブル/エピローグ) に
+///   パート様のヘッダ構造があるか判定する。
+///
+/// 先頭 `--boundary` より前、または終端 `--boundary--` より後に
+/// `Content-Type:`/`Content-Disposition:` 等のヘッダ行があると、
+/// プリアンブル/エピローグを無視するスキャナには見えない実パートが
+/// 存在する (同じく mailsplit の boundary 所有権バグの系 — MUA は
+/// それをパートとして表示する)。トップレベルの multipart 宣言と
+/// boundary 値から判定。入れ子 multipart は外側だけ見る。
+#[must_use]
+pub fn has_orphaned_part_content(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(0);
+    // トップヘッダから boundary 値を拾う (引用符許容)
+    let lower_head = text[..header_end].to_ascii_lowercase();
+    let mut boundary: Option<String> = None;
+    for l in lower_head.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/") {
+            if let Some(pos) = l.find("boundary=") {
+                let v = l[pos + 9..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+                if !v.is_empty() {
+                    boundary = Some(v);
+                }
+            }
+        }
+    }
+    let Some(b) = boundary else { return false };
+    let lower = text.to_ascii_lowercase();
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    let first_open = lower.find(&open);
+    let last_close = lower.rfind(&close);
+    let is_part_struct = |region: &str| {
+        region.lines().any(|l| {
+            let lt = l.trim_start().to_ascii_lowercase();
+            lt.starts_with("content-type:")
+                || lt.starts_with("content-disposition:")
+                || lt.starts_with("content-transfer-encoding:")
+        })
+    };
+    // プリアンブル: ヘッダ終端〜最初の --boundary
+    if let Some(fp) = first_open {
+        if fp > header_end && is_part_struct(&text[header_end..fp]) {
+            return true;
+        }
+    }
+    // エピローグ: 最後の --boundary-- 以降
+    if let Some(lc) = last_close {
+        let after = &text[(lc + close.len()).min(text.len())..];
+        if is_part_struct(after) {
+            return true;
+        }
+    }
+    false
+}
+
+/// D1289: MIME 構造を使うのに `MIME-Version:` ヘッダがないか判定する。
+///
+/// `MIME-Version: 1.0` は MIME であることの宣言 (RFC 2045 §4) —
+/// `Content-Type:` パラメータや `Content-Transfer-Encoding:` を
+/// 使いながら `MIME-Version:` を欠くメッセージは、MIME として
+/// 解釈する実装と RFC 5322 素テキストとして解釈する実装で構造が
+/// 食い違う差異工作の兆候 (D1278 欠落検査の姉妹検査)。
+#[must_use]
+pub fn has_missing_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = text[..header_end.min(text.len())].replace("\r\n", "\n");
+    let lower = header.to_ascii_lowercase();
+    if lower.lines().any(|l| l.starts_with("mime-version:")) {
+        return false;
+    }
+    // MIME 構造を名乗るヘッダがあるのに MIME-Version がない
+    lower.lines().any(|l| {
+        l.starts_with("content-type:") && (l.contains(';') || l.contains("multipart/"))
+            || l.starts_with("content-transfer-encoding:")
+            || l.starts_with("content-disposition:")
+    })
+}
+
+/// D1290: 宣言された boundary が一度も使われない、または終端
+///   `--boundary--` がないか判定する。
+///
+/// multipart 宣言したのに `--b` が一度も現れない (実パートゼロ)
+/// か、開始しかなく `--b--` で閉じない — パーサごとに残り本文の
+/// 解釈が食い違う (mailsplit の未終了 multipart で外側 boundary が
+/// 生きたまま残るバグと同型)。トップレベル boundary だけ見る。
+#[must_use]
+pub fn has_unterminated_multipart(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(0);
+    let lower_head = text[..header_end].to_ascii_lowercase();
+    let mut boundary: Option<String> = None;
+    for l in lower_head.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/") {
+            if let Some(pos) = l.find("boundary=") {
+                let v = l[pos + 9..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+                if !v.is_empty() {
+                    boundary = Some(v);
+                }
+            }
+        }
+    }
+    let Some(b) = boundary else { return false };
+    let lower = text.to_ascii_lowercase();
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    // boundary が一度も使われない / 終端がない
+    !lower[header_end..].contains(&open) || !lower[header_end..].contains(&close)
+}
+
+/// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
@@ -15816,6 +16133,100 @@ mod tests {
         let cid = b"Content-Type: multipart/related; boundary=x\r\n\r\n--x\r\nContent-Location: cid:img1\r\n\r\n--x--";
         assert!(!has_remote_content_location(cid));
         assert!(!has_remote_content_location(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn conflicting_mime_headers_は重複と不正CTEを検出する() {
+        // D1285 — 重複 CTE (noxxi Dubious MIME)
+        let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
+        assert!(has_conflicting_mime_headers(dup_cte));
+        // 不正 CTE 値
+        let bad_cte = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_conflicting_mime_headers(bad_cte));
+        // 重複 Content-Type
+        let dup_ct = b"Content-Type: text/plain\r\nContent-Type: text/html\r\n\r\nx";
+        assert!(has_conflicting_mime_headers(dup_ct));
+        // 正規ヘッダは不発火 (本文中の 'token:' 行も誤認しない)
+        let ok = b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nbody\r\n--x--";
+        assert!(!has_conflicting_mime_headers(ok));
+        assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
+    }
+
+    #[test]
+    fn uuencode_payload_はインラインuuencodeを検出する() {
+        // D1286 — MIME 構造の外の uuencode ブロック
+        let uue = b"Content-Type: text/plain\r\n\r\nhello\nbegin 644 evil.exe\nM4$L#\n`\nend\n";
+        assert!(has_uuencode_payload(uue));
+        assert!(has_uuencode_payload(b"begin-base64 644 x.zip\nQUJD\n====\n"));
+        // 本文中の単なる 'begin' 単語・モード不備は不発火
+        assert!(!has_uuencode_payload(b"let's begin 644 things\r\n"));
+        assert!(!has_uuencode_payload(b"begin 644\r\nbegin abc x\r\n"));
+        assert!(!has_uuencode_payload(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn bogus_boundary_param_は非multipart境界を検出する() {
+        // D1287 — mailsplit 系: 非 multipart 型に boundary= があると
+        // 一部パーサが外側 boundary を無効化する
+        assert!(has_bogus_boundary_param(
+            b"Content-Type: multipart/mixed; boundary=real\r\n\r\n--real\r\nContent-Type: text/plain; boundary=fake\r\n\r\nx\r\n--real--"
+        ));
+        // FWS 継続で分かれた boundary
+        assert!(has_bogus_boundary_param(
+            b"Content-Type: text/html;\r\n\tboundary=evil\r\n\r\nx"
+        ));
+        // 正規 multipart は不発火
+        assert!(!has_bogus_boundary_param(
+            b"Content-Type: multipart/mixed; boundary=ok\r\n\r\n--ok\r\nContent-Type: text/plain\r\n\r\nb\r\n--ok--"
+        ));
+        assert!(!has_bogus_boundary_param(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn orphaned_part_content_はプリアンブルとエピローグのパートを検出する() {
+        // D1288 — boundary の外に実パート様構造
+        let pre = b"Content-Type: multipart/mixed; boundary=x\r\n\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: base64\r\n\r\njunk\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x--";
+        assert!(has_orphaned_part_content(pre));
+        let epi = b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x--\r\nContent-Type: text/html\r\n\r\nhidden";
+        assert!(has_orphaned_part_content(epi));
+        // 正規: プリアンブルに説明テキストのみ・エピローグ空は不発火
+        let ok = b"Content-Type: multipart/mixed; boundary=x\r\n\r\nThis is a multipart message.\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x--\r\n";
+        assert!(!has_orphaned_part_content(ok));
+        // multipart でない・boundary 無しは不発火
+        assert!(!has_orphaned_part_content(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn missing_mime_version_はMIME宣言なし構造を検出する() {
+        // D1289 — MIME 構造を使うのに MIME-Version ヘッダがない
+        assert!(has_missing_mime_version(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nb\r\n--x--"
+        ));
+        assert!(has_missing_mime_version(
+            b"Content-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        // 正規: MIME-Version ありは不発火
+        assert!(!has_missing_mime_version(
+            b"MIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\nx"
+        ));
+        // MIME 構造を名乗らない単純テキストは不発火
+        assert!(!has_missing_mime_version(b"Subject: a\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn unterminated_multipart_は未終了multipartを検出する() {
+        // D1290 — boundary 宣言のみで使用無し / 終端無し
+        assert!(has_unterminated_multipart(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\nno boundary used"
+        ));
+        assert!(has_unterminated_multipart(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nb"
+        ));
+        // 正規: 開始も終端もあるは不発火
+        assert!(!has_unterminated_multipart(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nb\r\n--x--"
+        ));
+        assert!(!has_unterminated_multipart(b"Content-Type: text/plain\r\n\r\nplain"));
     }
 
     #[test]
