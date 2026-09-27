@@ -3411,6 +3411,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.exotic_multipart_subtype {
+        render_risks.push(
+            "取扱いに差のある稀な multipart 型です (parallel・byteranges 等)\
+             —各パートの扱いが実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+    if env.malformed_media_type {
+        render_risks.push(
+            "Content-Type のメディア型の形が崩れています\
+             —型の解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+    if env.percent_encoded_filename {
+        render_risks.push(
+            "添付名に %XX エスケープが含まれています\
+             —表示されるファイル名が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

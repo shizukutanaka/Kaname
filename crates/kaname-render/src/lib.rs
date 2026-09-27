@@ -354,6 +354,19 @@ pub struct Envelope {
     /// route-addr の読み取りが実装間でずれ、表示される差出人が違う
     /// 形になる。
     pub unbalanced_route: bool,
+    /// D1355 — `multipart/` のサブタイプが既知の正規形
+    /// (mixed/alternative/related/signed/encrypted/digest/report/
+    /// form-data) でない。`parallel`/`byteranges`/`appledouble` 等は
+    /// メールでの正当な用途が無く、扱いが実装間でずれる。
+    pub exotic_multipart_subtype: bool,
+    /// D1356 — CT のメディア型トークンが `type/subtype` の形でない
+    /// (複数 `/`・空の側・空白混入)。型解釈が実装間でずれる
+    /// (subtype 欠落は D1320 — ここでは形の崩れを検査)。
+    pub malformed_media_type: bool,
+    /// D1357 — filename/name パラメータ値内の `%XX` エスケープ断片。
+    /// RFC 2231 の `filename*=` は符号化するが、素の `filename=` での
+    /// `%20` 等はパーセント復号する実装としない実装で添付名がずれる。
+    pub percent_encoded_filename: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2373,6 +2386,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let digest_container = has_digest_container(bytes);
     let malformed_addr_spec = has_malformed_addr_spec(bytes);
     let unbalanced_route = has_unbalanced_route(bytes);
+    let exotic_multipart_subtype = has_exotic_multipart_subtype(bytes);
+    let malformed_media_type = has_malformed_media_type(bytes);
+    let percent_encoded_filename = has_percent_encoded_filename(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2487,6 +2503,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         digest_container,
         malformed_addr_spec,
         unbalanced_route,
+        exotic_multipart_subtype,
+        malformed_media_type,
+        percent_encoded_filename,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6243,6 +6262,150 @@ pub fn has_unbalanced_route(raw: &[u8]) -> bool {
         }
         if open != close {
             return true;
+        }
+    }
+    false
+}
+
+/// `multipart/` のサブタイプが既知の正規形以外か判定する (D1355)。
+///
+/// `parallel`/`byteranges`/`appledouble`/`header-set` 等の稀な型は
+/// メールでの正当な用途が無く、パートの扱い (並列表示・範囲結合等)
+/// が実装間でずれる。`x-mixed-replace` は D1348 が専用の警告を出す。
+#[must_use]
+pub fn has_exotic_multipart_subtype(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &[
+        "mixed", "alternative", "related", "signed", "encrypted", "digest", "report", "form-data",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            let v = v.trim_start();
+            if let Some(sub) = v.strip_prefix("multipart/") {
+                let sub = sub
+                    .split(|c: char| c == ';' || c.is_whitespace())
+                    .next()
+                    .unwrap_or("");
+                if !sub.is_empty() && !KNOWN.contains(&sub) && sub != "x-mixed-replace" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// CT のメディア型トークンが `type/subtype` の形でないか判定する
+/// (D1356)。複数 `/`・`/片側空`・空白混入を検出 — 型解釈が実装間で
+/// ずれる (subtype 欠落は D1320 が担当)。
+#[must_use]
+pub fn has_malformed_media_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            let media = v
+                .trim_start()
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim_end();
+            if media.is_empty() {
+                return true;
+            }
+            let slashes = media.matches('/').count();
+            if slashes > 1 {
+                return true;
+            }
+            if slashes == 1 {
+                let Some((t, s)) = media.split_once('/') else {
+                    continue;
+                };
+                if t.trim().is_empty()
+                    || s.trim().is_empty()
+                    || t.contains(char::is_whitespace)
+                    || s.contains(char::is_whitespace)
+                {
+                    return true;
+                }
+            }
+            // slash 0 は D1320 が担当
+        }
+    }
+    false
+}
+
+/// filename/name パラメータ値に `%XX` エスケープ断片があるか判定する
+/// (D1357)。素の `filename=` での `%20` 等はパーセント復号する実装と
+/// しない実装で添付名がずれる (`filename*=` の RFC 2231 符号化は対象外)。
+#[must_use]
+pub fn has_percent_encoded_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        // `filename=`/`name=` (末尾 * を含まない正規キー) の値だけを評価
+        for m in l.match_indices('=').map(|(i, _)| i) {
+            let key_end = m;
+            let key_start = l[..key_end].rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .map(|p| p + 1)
+                .unwrap_or(0);
+            let key = l[key_start..key_end].trim();
+            if key.ends_with('*') || (key != "filename" && key != "name") {
+                continue;
+            }
+            let val = &l[m + 1..];
+            let val = val.split(';').next().unwrap_or("").trim_matches('"');
+            let vb = val.as_bytes();
+            let mut i = 0;
+            while i + 2 < vb.len() {
+                if vb[i] == b'%'
+                    && vb[i + 1].is_ascii_hexdigit()
+                    && vb[i + 2].is_ascii_hexdigit()
+                {
+                    return true;
+                }
+                i += 1;
+            }
         }
     }
     false
@@ -20829,6 +20992,62 @@ mod tests {
         // クオート内の < は対象外
         assert!(!has_unbalanced_route(b"From: \"<not-addr>\" <ceo@x.com>\r\n\r\nx"));
         assert!(!has_unbalanced_route(b"Subject: <x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn exotic_multipart_subtype_は稀なmultipart型を検出する() {
+        assert!(has_exotic_multipart_subtype(
+            b"Content-Type: multipart/parallel; boundary=b\r\n\r\nx"
+        ));
+        assert!(has_exotic_multipart_subtype(
+            b"Content-Type: multipart/byteranges; boundary=b\r\n\r\nx"
+        ));
+        // メンバー位置の稀な型も発火
+        assert!(has_exotic_multipart_subtype(
+            b"Content-Type: multipart/mixed; boundary=o\r\n\r\n--o\r\nContent-Type: multipart/parallel; boundary=i\r\n\r\n--i--\r\n--o--"
+        ));
+        assert!(!has_exotic_multipart_subtype(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\nx"
+        ));
+        // x-mixed-replace は D1348 の専用警告 — ここでは不発火
+        assert!(!has_exotic_multipart_subtype(
+            b"Content-Type: multipart/x-mixed-replace; boundary=b\r\n\r\nx"
+        ));
+        assert!(!has_exotic_multipart_subtype(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn malformed_media_type_は型トークンの崩れを検出する() {
+        assert!(has_malformed_media_type(b"Content-Type: text/a/b\r\n\r\nx"));
+        assert!(has_malformed_media_type(b"Content-Type: text/\r\n\r\nx"));
+        assert!(has_malformed_media_type(b"Content-Type: /plain\r\n\r\nx"));
+        assert!(has_malformed_media_type(b"Content-Type: text/pl ain\r\n\r\nx"));
+        assert!(has_malformed_media_type(b"Content-Type: \r\n\r\nx"));
+        // パート run の CT でも発火
+        assert!(has_malformed_media_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: app/l/x\r\n\r\nx\r\n--b--"
+        ));
+        assert!(!has_malformed_media_type(b"Content-Type: text/plain\r\n\r\nx"));
+        assert!(!has_malformed_media_type(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn percent_encoded_filename_は値内パーセントを検出する() {
+        assert!(has_percent_encoded_filename(
+            b"Content-Disposition: attachment; filename=\"inv%20oice.exe\"\r\n\r\nx"
+        ));
+        assert!(has_percent_encoded_filename(
+            b"Content-Type: application/pdf; name=rep%2epdf\r\n\r\nx"
+        ));
+        // filename*= (RFC 2231) は正規符号化 — 対象外
+        assert!(!has_percent_encoded_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''%e2%82%ac.pdf\r\n\r\nx"
+        ));
+        // 素の filename は不発火
+        assert!(!has_percent_encoded_filename(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nx"
+        ));
+        assert!(!has_percent_encoded_filename(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]

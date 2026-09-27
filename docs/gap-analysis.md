@@ -768,3 +768,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1352 | ~~**multipart/digest が未検査**~~ **(解消済み)** | P2 | メンバー既定 message/rfc822 を知らない検査は入れ子を見逃す。修正: `has_digest_container` → render_risks | 既定の中身は宣言されずに届く |
 | D1353 | ~~**アドレス dot-atom 違反が未検査**~~ **(解消済み)** | P2 | 厳格実装は拒否・寛容実装は正規化で照合がずれる。修正: `has_malformed_addr_spec` → render_risks | 形の崩れた宛名は読み手で受取人が変わる |
 | D1354 | ~~**アドレス欄の < > 不対応が未検査**~~ **(解消済み)** | P2 | route-addr の開閉ずれで抽出される差出人が分かれる。修正: `has_unbalanced_route` → render_risks | 括弧の対応は構造の約束 |
+| D1355 | ~~**稀な multipart サブタイプが未検査**~~ **(解消済み)** | P2 | parallel/byteranges 等はパート扱いが実装間でずれる。修正: `has_exotic_multipart_subtype` → render_risks | 珍しい器は開け方が係ごとに違う |
+| D1356 | ~~**メディア型トークンの形の崩れが未検査**~~ **(解消済み)** | P2 | text/a/b・text/・空白混入で型解釈がずれる。修正: `has_malformed_media_type` → render_risks | 型名の形が崩れれば読み手次第 |
+| D1357 | ~~**添付名の %XX 断片が未検査**~~ **(解消済み)** | P2 | filename= 値の %XX は復号有無で添付名がずれる。修正: `has_percent_encoded_filename` → render_risks | 復号する係としない係で別名になる |

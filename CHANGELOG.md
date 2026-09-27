@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1355: 稀な multipart サブタイプが未検査
+
+- **問題**: `multipart/parallel`/`byteranges`/`appledouble` 等はメールでの正当用途が無く、各パートの扱い (並列表示・範囲結合) が実装間でずれる死角。
+- **修正**: `has_exotic_multipart_subtype` — 既知正規形 (mixed/alternative/related/signed/encrypted/digest/report/form-data) 以外を検出 → `Envelope.exotic_multipart_subtype` → render_risks 警告。`x-mixed-replace` は D1348 の専用警告に委譲。
+- **教訓**: 珍しい器は「どう開けるか」が係ごとに違う。
+
+### Security — D1356: メディア型トークンの形の崩れが未検査
+
+- **問題**: `Content-Type: text/a/b`・`text/`・`/plain`・空白混入は型解釈が実装間でずれる (subtype 欠落は D1320)。
+- **修正**: `has_malformed_media_type` — CT 値のメディア型トークンを `type/subtype` の形で検査 → `Envelope.malformed_media_type` → render_risks 警告。
+- **教訓**: 型名の形が崩れれば「何と書かれたか」は読み手次第。
+
+### Security — D1357: 添付名の %XX エスケープ断片が未検査
+
+- **問題**: 素の `filename=`/`name=` 内の `%20` 等は、パーセント復号する実装としない実装で添付名がずれる (RFC 2231 `filename*=` は正規符号化で対象外)。
+- **修正**: `has_percent_encoded_filename` — CT/CD の正規キー値内の `%`+hex2桁を検出 → `Envelope.percent_encoded_filename` → render_risks 警告。
+- **教訓**: 同じ書類が「復号する係」と「しない係」で別名になる。
+
 ### Security — D1353: アドレスの dot-atom 違反が未検査
 
 - **問題**: `a..b@x`・`.a@x`・`user@internal` 等の addr-spec 違反は、厳格実装が拒否し寛容実装が受理・正規化する — 照合・表示が読み手でずれる。
