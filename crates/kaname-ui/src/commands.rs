@@ -868,6 +868,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1278: Date ヘッダの欠落/不正値 — RFC 5322 で必須の orig date が
+    //    ないか構文解析不能なメールは手作り生成品の兆候 (SANS ISC
+    //    2026-07-10 のコメントスタッフィング事例で Outlook が
+    //    "Date: None" を表示し目視で発覚した — 正規メールでは必ず存在)。
+    if env.date.is_none() {
+        render_risks.push(
+            "Date ヘッダがありません (または不正値) — \
+             RFC 5322 必須の送信日時が欠けており、手作り生成メールの兆候です"
+                .to_string(),
+        );
+    }
+
     // D1270: HTML 本文のリモートリソース参照 — 描画時には除去されるが、
     //    参照の存在自体が開封確認トラッキング (生存確認の偵察) の兆候。
     if html_extract

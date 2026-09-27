@@ -690,3 +690,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1274 | ~~**Google 翻訳リダイレクト (translate?u= / *.translate.goog) が未剥がし**~~ **(解消済み)** | P1 | 同上報告 — 翻訳 URL をリダイレクト元に、評判判定は Google を見て実宛先を見逃す。修正: `unwrap_protected_url` に translate?u= と <host>.translate.goog 復元を追加 | 中継者の評判は宛先の無罪を証明しない |
 | D1275 | ~~**表示名のホモグリフ/混在スクリプト解析が未配線 (dead code)**~~ **(解消済み)** | P1 | `idn_homograph::analyze_display_name` が呼出元ゼロ — 連絡先非一致名の混在スクリプトが素通り。修正: analyze で from.display_name へ適用 (全角ラテンのみは対象外) | 定義の存在は検出の存在を意味しない |
 | D1276 | ~~**件名の回避文字 (タグ文字・装飾英数字・ホモグリフ) が未検査**~~ **(解消済み)** | P1 | D1257/D1273 は本文のみ対象 — 件名は照合対象なのに検査の外。修正: `has_suspicious_subject_chars` → render_risks | フィルタ対象の全フィールドに同じ検査を |
+| D1277 | ~~**HTML 添付のコメントスタッフィング (走査回避の水増し) が未検査**~~ **(解消済み)** | P1 | SANS ISC 2026-07-10 — `<!-- -->` 水増しで走査入力上限を超える。修正: `SmugglingSignal::CommentPadding` (≥16KB かつコメント 50% 超) | 「読む部分」が少なすぎる添付は読ませないための形状 |
+| D1278 | ~~**Date ヘッダの欠落/不正値が未検査**~~ **(解消済み)** | P2 | RFC 5322 必須の orig date 欠落は手作り生成品の兆候 (同 SANS 事例 "Date: None")。修正: `env.date.is_none()` → render_risks | パーサが Option で返す未使用フィールドを点検せよ |
