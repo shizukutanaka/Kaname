@@ -357,6 +357,35 @@ impl QuishingDefense {
             return UrlReputation::Suspicious;
         }
 
+        // 0.7 URL 構造異常 (D1260 — SANS ISC 2026-09-24 "One URL, Three
+        //    Different Tricks" 観測)
+        //    (a) URL 中の `@` — authority の userinfo (`token@host`) は
+        //        ブラウザが黙って捨てつつブロックリストを個別化し、パスに
+        //        埋め込まれた被害者アドレス (`/@isc.sans.edu`) は「最後の
+        //        @ で分割する」不正パーサに受信者ドメインをホストと誤認
+        //        させる。正規のメール本文 URL に @ は要らない。
+        //    (b) `-` で始まる/終わるホストラベル — RFC 952/1123 上は不正だが
+        //        DNS は解決しブラウザは開く。厳密な URL 抽出器・リンクリライ
+        //        タが「不正」と判断してスキャン対象から落とす穴を突く。
+        if url.contains('@')
+            || domain
+                .split('.')
+                .any(|l| l.starts_with('-') || l.ends_with('-'))
+        {
+            return UrlReputation::Suspicious;
+        }
+
+        //    (c) `-`→`.` 折りたたみで信頼ドメイン構造が浮かぶホスト
+        //        (`koncar.hr` → `koncar-hr.com` の ccTLD ドットをハイフン化、
+        //        `paypal-com.evil.io` 型)。折りたたみ結果に対する判定のみで
+        //        元ドメインへの信頼付与はしない。
+        let folded = domain.replace('-', ".");
+        if folded != domain
+            && (self.is_trusted(&folded) || self.has_trusted_brand_as_subdomain(&folded))
+        {
+            return UrlReputation::Suspicious;
+        }
+
         // 1. 既知の悪意あるドメイン
         if self.known_malicious.contains(&domain) {
             return UrlReputation::Malicious;
@@ -675,6 +704,44 @@ fn unwrap_protected_url(url: &str) -> Option<String> {
             return Some(inner);
         }
         return None;
+    }
+
+    // --- 信頼ドメイン上のオープンリダイレクタ (D1261) ---
+    //    LinkedIn slink / YouTube redirect / Meta l.php — ブランドの評判を
+    //    借りて最終宛先を隠す形式。宛先はクエリパラメータに percent エンコード
+    //    されているため剥がせる。
+    if domain == "linkedin.com" || domain.ends_with(".linkedin.com") {
+        // linkedin.com/slink?code=…&url=<percent>
+        if !url.contains("/slink?") {
+            return None;
+        }
+        return query_param(url, "url")
+            .map(|v| html_unescape(&percent_decode(&v)))
+            .filter(|u| u.starts_with("http://") || u.starts_with("https://"));
+    }
+    if domain == "youtube.com" || domain.ends_with(".youtube.com") {
+        // youtube.com/redirect?q=<percent> (event=… を伴う)
+        if !url.contains("/redirect") {
+            return None;
+        }
+        for name in ["q", "url"] {
+            if let Some(v) = query_param(url, name) {
+                let inner = html_unescape(&percent_decode(&v));
+                if inner.starts_with("http://") || inner.starts_with("https://") {
+                    return Some(inner);
+                }
+            }
+        }
+        return None;
+    }
+    if domain == "l.facebook.com"
+        || domain == "lm.facebook.com"
+        || domain == "l.instagram.com"
+    {
+        // l.facebook.com/l.php?u=<percent>
+        return query_param(url, "u")
+            .map(|v| html_unescape(&percent_decode(&v)))
+            .filter(|u| u.starts_with("http://") || u.starts_with("https://"));
     }
 
     None
@@ -1538,6 +1605,96 @@ mod tests {
         let d = QuishingDefense::new();
         let wrapped = "https://slack-redir.net/link?url=https%3A%2F%2Fevil.tk%2F";
         assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    // ── D1260: URL 構造異常 (SANS ISC 2026-09-24) ────────────────────────────
+
+    #[test]
+    fn userinfo_at_sign_is_suspicious() {
+        let d = QuishingDefense::new();
+        // ランダム userinfo でブロックリスト個別化 + メールアドレスに見せかけ
+        assert_eq!(
+            d.evaluate_url("https://YKZjqa7A@evil.tk/login"),
+            UrlReputation::Suspicious
+        );
+    }
+
+    #[test]
+    fn victim_email_in_path_is_suspicious() {
+        let d = QuishingDefense::new();
+        // パスの @ — 最後の @ で分割する不正パーサには受信者ドメインが
+        // ホストに見える (実ホストは attacker.com)
+        assert_eq!(
+            d.evaluate_url("https://attacker.com/p/@victim.example.com"),
+            UrlReputation::Suspicious
+        );
+    }
+
+    #[test]
+    fn hyphen_at_label_edge_is_suspicious() {
+        let d = QuishingDefense::new();
+        // RFC 1123 違反だが DNS は解決する — 抽出器落とし狙い
+        for u in [
+            "https://gynd--.koncar-hr.example/path",
+            "https://-lead.example.com/",
+            "https://lead-.example.com/",
+        ] {
+            assert_eq!(
+                d.evaluate_url(u),
+                UrlReputation::Suspicious,
+                "未検出: {u}"
+            );
+        }
+    }
+
+    #[test]
+    fn hyphen_folded_trusted_brand_is_suspicious() {
+        let d = QuishingDefense::new();
+        // koncar.hr → koncar-hr.com 型: `microsoft-com.evil.example` は
+        // 折りたたみで `microsoft.com.evil.example` = 信頼ドメインの中間ラベル化
+        assert_eq!(
+            d.evaluate_url("https://microsoft-com.evil.example/login"),
+            UrlReputation::Suspicious
+        );
+        // 正規のハイフン入りドメイン (折りたたみてもブランド構造なし)
+        assert_ne!(
+            d.evaluate_url("https://my-real-shop.example/"),
+            UrlReputation::Suspicious
+        );
+    }
+
+    // ── D1261: 信頼ドメイン上のオープンリダイレクタ ──────────────────────────
+
+    #[test]
+    fn linkedin_slink_unwraps_url_param() {
+        let d = QuishingDefense::new();
+        let wrapped =
+            "https://www.linkedin.com/slink?code=abc&url=https%3A%2F%2Fevil.tk%2Flogin";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn youtube_redirect_unwraps_q_param() {
+        let d = QuishingDefense::new();
+        let wrapped = "https://www.youtube.com/redirect?event=x&q=https%3A%2F%2Fevil.tk%2F";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn facebook_lphp_unwraps_u_param() {
+        let d = QuishingDefense::new();
+        let wrapped = "https://l.facebook.com/l.php?u=https%3A%2F%2Fevil.tk%2F";
+        assert_eq!(d.evaluate_url(wrapped), UrlReputation::Suspicious);
+    }
+
+    #[test]
+    fn linkedin_profile_is_not_a_redirect() {
+        let d = QuishingDefense::new();
+        // プロフィール等の通常ページはリダイレクタでない — Suspicious にはしない
+        assert_ne!(
+            d.evaluate_url("https://www.linkedin.com/in/example"),
+            UrlReputation::Suspicious
+        );
     }
 
     #[test]

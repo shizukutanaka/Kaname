@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1260: URL の `@` 混乱・不正ハイフンラベル・ハイフン折りたたみブランドが未検査
+
+- **問題**: SANS ISC (2026-09-24) が観測した URL は 3 つの罠を重ねていた: (a) authority の `YKZjqa7A@` userinfo — ブラウザは黙って捨てるがブロックリストを URL ごとに個別化し、メールアドレスにも見せかける; (b) `gynd--.koncar-hr.com` 型の `-` で終わるラベル — RFC 952/1123 上は不正だが DNS は解決するため、厳密な URL 抽出器・リンクリライタが「不正」と判断してスキャン対象から落とす; (c) パスの `/@victim.example.com` — 最後の `@` で分割する不正パーサには受信者の自社ドメインがホストに見える。`extract_domain` は userinfo を正しく除去するが「含まれていたこと」は報告されず、ラベル形状の検査もなかった。
+- **修正**: `evaluate_url_inner` に構造異常チェックを追加 — URL 中の `@`、`-` で始まる/終わるホストラベル、および `-`→`.` 折りたたみで信頼ドメイン構造 (`microsoft-com.evil.example` → `microsoft.com.evil.example`) が浮かぶホストをすべて Suspicious。
+- **教訓**: 除去して終わりでは記録が残らない — userinfo は「存在したこと」自体が兆候。形式として「不正だが解決できる」構造はスキャナを黙らせる罠として検査せよ。
+
+### Security — D1261: LinkedIn/YouTube/Meta 上のオープンリダイレクタが unwrap 対象外
+
+- **問題**: `linkedin.com/slink?url=`・`youtube.com/redirect?q=`・`l.facebook.com/l.php?u=` はブランドドメインに寄生して最終宛先を隠すオープンリダイレクト — SafeLinks/URLDefense 等の unwrap (D1249) に収録されていなかった。
+- **修正**: `unwrap_protected_url` に 3 ホストのクエリパラメータ剥がしを追加し、内側の宛先を再評価。
+- **教訓**: リダイレクタはゲートウェイ製品だけでなく SNS の正当な機能にもある — 宛先がクエリにある限り同じ手続きで剥がせ。
+
+### Security — D1262: アプリ起動型 URI スキーム (ms-msdt:/search-ms:/ms-appinstaller:) が本文検査を素通り
+
+- **問題**: `extract_urls_from_text` は http(s) のみを拾うため、OS のプロトコルハンドラを起動する URI (`ms-msdt:` — Follina/CVE-2022-30190、`search-ms:`、`ms-appinstaller:` — 2023-24 サイドロード悪用、`itms-appss:`) がリンク評価の対象にすらならなかった。
+- **修正**: `has_external_protocol_uri` で本文中の悪用実績のあるアプリ起動スキームを検出し `render_risks` 警告。
+- **教訓**: 「URL でない URI」も誘導経路 — スキームを抽出条件にしている抽出器は、その外側の OS 起動経路をも列挙せよ。
+
 ### Security — D1248: HTML 添付が `HtmlSmugglingDetector` を通っていなかった + ClickFix/FileFix 型のシグナル欠落
 
 - **問題**: `HtmlSmugglingDetector` は `parse()` の **本文** HTML にしか適用されておらず、添付ファイルとして届く `.html`/`.htm` は一切検査されなかった。「添付の HTML をブラウザで開かせる」経路は ClickFix キャンペーン (Microsoft Threat Intelligence, 2025-08) の主要ベクタ — 偽 CAPTCHA 画面が `navigator.clipboard.writeText` でコマンドをクリップボードに書き込み、「Win+R → Ctrl+V → Enter」や「アドレスバーに貼り付け (FileFix, Check Point 2025-07)」と利用者自身に実行させる手口であり、本文をいくら検査しても添付は素通りだった。また検出器自体にも clipboard 書き込み・実行誘導のシグナルが無かった。
