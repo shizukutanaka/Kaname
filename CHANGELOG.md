@@ -8,7 +8,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
+### Security — D1265: 添付ファイル名の異常形状 (制御文字・末尾ドット・ホモグリフ) が未検査
+
+- **問題**: IRONSCALES (2026-04) が観測した nested RFC822 キャンペーンは、添付ファイル名に CR/LF 制御文字を注入し、ツールごとのファイル名終端解釈の差でスキャナと実際の保存名を食い違わせていた。加えて `evil.exe.` のように末尾ピリオド/空白を付けると `ends_with(".exe")` 系の拡張子検査を素通りしつつ Windows は除去して保存するため表示名と実体がずれ、キリル/ギリシャ文字混在のホモグリフ名 (`invoiсe.pdf` — キリル с) も検査されなかった。
+- **修正**: `magic_bytes::filename_anomalies` を追加し `scan_attachment_bytes` で検査 (制御文字 C0/C1/DEL、末尾 `.`/` `、ステム内キリル・ギリシャ×ラテン混在)。末尾除去後の名前でも危険拡張子を再評価し、`evil.exe.` は Danger 判定。
+- **教訓**: 名前は「表示されるもの」ではなく「保存されるもの」を検査せよ — ツール間の解釈差はそれ自体が攻撃面。
+
+### Security — D1266: 特殊 `message/*` サブタイプ (external-body / partial / delivery-status) が未検査
+
+- **問題**: `message/rfc822` 転送添付には注意喚起があるが (D1250)、同じ死角を作るサブタイプは素通りだった: `message/external-body` は中身を持たず URI で外部参照して表示時にフェッチ (ICS `ATTACH;VALUE=URI` と同型)、`message/partial` はペイロードを複数メッセージに断片化し各片の検査を素通り、`message/delivery-status`/`disposition-notification` は内容を返せないパートとして解析の死角になる (IRONSCALES 2026-04 で delivery-status が検査不能のまま届いた事例)。
+- **修正**: `magic_bytes::is_exotic_message_subtype` を追加し `scan_attachment_bytes` で注意喚起 (パラメータ付き宣言も判定)。Caution 級。
+- **教訓**: 「中身を持たない/持てない」サブタイプはスキャン不能を前提に兆候として数えよ。
+
+||||||| cd3333d### Security — D1263: 意図的に壊された ICS 構造 (malformed calendar invite) が未検査
 
 - **問題**: Mimecast (2026-06) が観測した 4 千件超の quishing キャンペーンは、.ics 招待を RFC 5545 に違反する形で意図的に壊し、QR 抽出ツールをパース段階で失敗させていた: (a) `BEGIN:VCALENDAR` の前に大量の X- ジャンク行、(b) `X-GENERATION; FUTURE:` 型 — `;` 後のパラメータが `name=value` 形を取らない — の無意味な X- プロパティ行。正当な ICS 生成器はどちらも出力しないが、kaname-render の CalendarGuard は構造異常を一切見ていなかった。
 - **修正**: `CalendarRisk::MalformedStructure { leading_lines, malformed_x_props }` を追加し `analyze` で検査 (継続行・正規 X- プロパティは対象外)。Caution 扱いで兆候として報告。

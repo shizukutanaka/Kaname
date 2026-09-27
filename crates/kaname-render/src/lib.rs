@@ -15798,6 +15798,56 @@ mod tests {
     }
 
     #[test]
+    fn scan_attachment_filename_anomalies_flagged() {
+        // D1265 — CR/LF 注入ファイル名 (IRONSCALES 2026-04 nested RFC822)
+        let scan = scan_attachment_bytes("evil\r\nfile.pdf", "application/pdf", b"%PDF-1.5\nx");
+        assert!(
+            scan.risks.iter().any(|r| r.contains("制御文字")),
+            "制御文字入りファイル名は警告されるべき: {:?}",
+            scan.risks
+        );
+        // キリル混在のホモグリフ名 (invoiсe.pdf — е は U+0435)
+        let scan = scan_attachment_bytes("invoi\u{0441}e.pdf", "application/pdf", b"%PDF-1.5\nx");
+        assert!(scan.risks.iter().any(|r| r.contains("キリル")));
+    }
+
+    #[test]
+    fn scan_attachment_trailing_dot_bypass_flagged() {
+        // D1265 — "evil.exe." は ends_with(".exe") を素通りするが、
+        // Windows の保存時除去で実体は evil.exe になる
+        let scan = scan_attachment_bytes("evil.exe.", "application/octet-stream", b"MZ");
+        assert!(scan.is_dangerous, "末尾ドット除去後の危険拡張子は Danger 扱い");
+        assert!(scan.risks.iter().any(|r| r.contains("evil.exe")));
+        // 空白末尾も同様
+        let scan = scan_attachment_bytes("evil.scr ", "application/octet-stream", b"MZ");
+        assert!(scan.is_dangerous);
+        // 正常名は不発火
+        let scan = scan_attachment_bytes("report.pdf", "application/pdf", b"%PDF-1.5\nx");
+        assert!(!scan.is_dangerous);
+        assert!(scan.risks.iter().all(|r| !r.contains("ピリオド")));
+    }
+
+    #[test]
+    fn scan_attachment_exotic_message_subtype_flagged() {
+        // D1266 — 外部参照型メッセージ (表示時フェッチ)
+        let scan = scan_attachment_bytes(
+            "note.eml",
+            "message/external-body; access-type=URL; URL=\"http://evil.example/x\"",
+            b"Content-Type: message/external-body\n\nx",
+        );
+        assert!(
+            scan.risks.iter().any(|r| r.contains("message/*")),
+            "external-body は注意喚起されるべき: {:?}",
+            scan.risks
+        );
+        // 断片分割メッセージ
+        let scan = scan_attachment_bytes("part1.eml", "message/partial", b"x");
+        assert!(scan.risks.iter().any(|r| r.contains("message/*")));
+        // いずれも注意喚起のみ
+        assert!(!scan.is_dangerous);
+    }
+
+    #[test]
     fn scan_attachment_encrypted_zip_flagged() {
         // 暗号化フラグ付き ZIP — is_encrypted=true + 検査不能の通知 (D1251)
         let zip = make_zip_entry(b"evil.exe", 0x0001, b"\x01\x02\x03");
@@ -19930,6 +19980,27 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         is_dangerous = true;
     }
 
+    // 1.5 ファイル名の異常形状 (D1265) — 制御文字注入 / 末尾 `.`/` ` /
+    //     キリル・ギリシャ文字のホモグリフ混在。末尾の `.`/` ` は
+    //     Windows が保存時に除去するため、除去後の名前でも危険拡張子を
+    //     再評価する (表示名と実ファイル名の食い違い)。
+    for anomaly in magic_bytes::filename_anomalies(filename) {
+        risks.push(
+            match anomaly {
+                "control_chars" => "ファイル名に制御文字 (CR/LF/TAB 等) が含まれています — ツールごとに名前の解釈がずれ、表示と実際の保存名が食い違う可能性があります".to_string(),
+                "trailing_dot_or_space" => "ファイル名がピリオドまたは空白で終わっています — Windows は保存時に末尾を除去するため、表示名と実ファイル名が一致しません".to_string(),
+                _ => "ファイル名にキリル文字/ギリシャ文字がラテン文字と混在しています — 見た目で実際のファイル名を偽装している可能性があります".to_string(),
+            },
+        );
+    }
+    let cleaned_name = filename.trim_end_matches(['.', ' ']);
+    if cleaned_name != filename && magic_bytes::is_dangerous_windows_attachment(cleaned_name) {
+        risks.push(format!(
+            "ファイル名末尾のピリオド/空白が除去されると {cleaned_name} になります — 危険な拡張子です"
+        ));
+        is_dangerous = true;
+    }
+
     // 2. 宣言 MIME と実体の不一致 (実行ファイルを画像等に偽装)
     if let Some(mismatch) = magic_bytes::check_mime_mismatch(declared_mime, bytes) {
         risks.push(format!(
@@ -20027,6 +20098,16 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
              開封後の内容が外側の文脈と一致するか確認してください"
                 .to_string(),
         );
+    }
+
+    // 5.8 特殊な message/* サブタイプ (D1266) — external-body は表示時に
+    //     リモートから中身をフェッチし、partial はペイロードを断片化して
+    //     各片の検査を素通りする。delivery-status/disposition-notification
+    //     は解析パイプラインの死角として観測されている。
+    if magic_bytes::is_exotic_message_subtype(declared_mime) {
+        risks.push(format!(
+            "特殊な message/* 添付です ({declared_mime}) — 外部参照や断片分割により内容がスキャンを素通りする可能性があります"
+        ));
     }
 
     // 6. メタデータ (作成者/GPS 等)。プライバシー通知であり実行リスクではない。

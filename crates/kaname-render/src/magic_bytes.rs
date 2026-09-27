@@ -404,6 +404,73 @@ pub fn has_bidi_override_filename(filename: &str) -> bool {
     })
 }
 
+/// 添付ファイル名の異常形状を検査し、該当した兆候ラベルを返す (D1265)。
+///
+/// 観測された回避工作:
+/// - **制御文字**: ファイル名への CR/LF 注入で、パーサごとにファイル名の
+///   終端解釈がずれ、スキャナと実際の保存名が食い違う
+///   (IRONSCALES 2026-04 — nested message/rfc822 に CR/LF 入りファイル名)。
+///   C0/C1 制御文字と DEL を対象とする。
+/// - **末尾の `.` / 空白**: Windows は保存時に末尾のピリオドと空白を除去する
+///   ため、`evil.exe.` は `ends_with(".exe")` 系の検査を素通りしつつ、
+///   実体は `evil.exe` として書き込まれる。
+/// - **キリル/ギリシャ文字とラテン文字の混在**: `pаypal.pdf` (キリル а) 型の
+///   ホモグリフで、表示上のファイル名を別物に見せかける。
+#[must_use]
+pub fn filename_anomalies(filename: &str) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if filename
+        .chars()
+        .any(|c| c.is_control() || ('\u{0080}'..='\u{009F}').contains(&c))
+    {
+        out.push("control_chars");
+    }
+    if filename.ends_with(['.', ' ']) {
+        out.push("trailing_dot_or_space");
+    }
+    let has_cyrillic_or_greek = filename.chars().any(|c| {
+        matches!(c,
+            '\u{0370}'..='\u{03FF}' // ギリシャ・コプト
+            | '\u{0400}'..='\u{04FF}' // キリル
+            | '\u{0500}'..='\u{052F}' // キリル補助
+            | '\u{1C80}'..='\u{1C8F}' // キリル拡張C
+        )
+    });
+    // 拡張子部のラテン文字は除外する — 全キリルのファイル名でも
+    // 「.pdf」のような拡張子は ASCII になり得るため。
+    let stem = match filename.rfind('.') {
+        Some(i) => &filename[..i],
+        None => filename,
+    };
+    if has_cyrillic_or_greek && stem.chars().any(|c| c.is_ascii_alphabetic()) {
+        out.push("cyrillic_greek_homoglyph");
+    }
+    out
+}
+
+/// 特殊な `message/*` MIME サブタイプか判定する (D1266)。
+///
+/// `message/rfc822` (転送添付) は `is_nested_email_attachment` が扱う。
+/// ここでは検査パイプラインの死角になることが観測されたものを対象とする:
+/// - `message/external-body` — 中身を持たず URI で外部参照し、
+///   表示時にリモートからフェッチする (ICS `ATTACH;VALUE=URI` と同型)。
+/// - `message/partial` — ペイロードを複数メッセージに断片化させ、
+///   各片は個別の検査を素通りした後で再構成される。
+/// - `message/delivery-status` / `message/disposition-notification` —
+///   中身を返せないパートとして解析パイプラインが内容を検査できない。
+#[must_use]
+pub fn is_exotic_message_subtype(declared_mime: &str) -> bool {
+    let lower = declared_mime.to_ascii_lowercase();
+    let base = lower.split(';').next().map(str::trim).unwrap_or("");
+    matches!(
+        base,
+        "message/external-body"
+            | "message/partial"
+            | "message/delivery-status"
+            | "message/disposition-notification"
+    )
+}
+
 /// Windows LNK (Shell Link) ファイルか magic bytes で判定する。
 ///
 /// LNK ファイルのヘッダー: `4C 00 00 00 01 14 02 00` (CLSID_ShellLink)
@@ -1012,5 +1079,56 @@ mod tests {
         let plain = b"%PDF-1.7\n1 0 obj << /Type /Page /MediaBox [0 0 612 792] >> endobj\n%%EOF";
         assert!(pdf_embedded_markers(plain).is_empty());
         assert!(pdf_active_markers(plain).is_empty());
+    }
+
+    #[test]
+    fn filename_anomalies_clean_names() {
+        assert!(filename_anomalies("report.pdf").is_empty());
+        assert!(filename_anomalies("invoice-2026-09.zip").is_empty());
+        // 日本語名はホモグリフ対象外
+        assert!(filename_anomalies("請求書.pdf").is_empty());
+    }
+
+    #[test]
+    fn filename_anomalies_control_chars() {
+        // CR/LF 注入 — パーサごとの解釈ずれ (IRONSCALES 2026-04)
+        let a = filename_anomalies("evil\r\nfile.eml");
+        assert!(a.contains(&"control_chars"));
+        let b = filename_anomalies("payload\0.scr");
+        assert!(b.contains(&"control_chars"));
+        // DEL と C1
+        assert!(filename_anomalies("x\u{007F}.exe").contains(&"control_chars"));
+        assert!(filename_anomalies("x\u{0085}.exe").contains(&"control_chars"));
+    }
+
+    #[test]
+    fn filename_anomalies_trailing_dot_space() {
+        assert!(filename_anomalies("evil.exe.").contains(&"trailing_dot_or_space"));
+        assert!(filename_anomalies("evil.exe ").contains(&"trailing_dot_or_space"));
+        // 内側のドットは対象外
+        assert!(!filename_anomalies("evil.scr.exe").contains(&"trailing_dot_or_space"));
+    }
+
+    #[test]
+    fn filename_anomalies_homoglyph() {
+        // キリル е (U+0435) を含む "invoiсe.pdf"
+        assert!(filename_anomalies("invoi\u{0441}e.pdf").contains(&"cyrillic_greek_homoglyph"));
+        // ギリシャ α を含む
+        assert!(filename_anomalies("p\u{03B1}yload.pdf").contains(&"cyrillic_greek_homoglyph"));
+        // キリルのみの名前 (ラテン文字なし) は対象外
+        assert!(!filename_anomalies("отчёт.pdf").contains(&"cyrillic_greek_homoglyph"));
+    }
+
+    #[test]
+    fn exotic_message_subtypes_flagged() {
+        assert!(is_exotic_message_subtype("message/external-body"));
+        assert!(is_exotic_message_subtype("message/external-body; access-type=URL; URL=\"http://e/x\""));
+        assert!(is_exotic_message_subtype("message/partial"));
+        assert!(is_exotic_message_subtype("message/delivery-status"));
+        assert!(is_exotic_message_subtype("Message/Disposition-Notification"));
+        // 転送添付と通常型は対象外
+        assert!(!is_exotic_message_subtype("message/rfc822"));
+        assert!(!is_exotic_message_subtype("application/pdf"));
+        assert!(!is_exotic_message_subtype("text/plain"));
     }
 }
