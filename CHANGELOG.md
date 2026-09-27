@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1329: charset 宣言と本文実バイトの矛盾が未検査
+
+- **問題**: `charset=us-ascii` を名乗る本文に高位バイト、`charset=utf-8` を名乗る本文に不正 UTF-8 列があると、置換文字にする実装と生バイトを保持する実装で本文がずれる — 表示側でのみ攻撃文字列になる差異。
+- **修正**: `has_charset_body_mismatch` — ヘッダ run ごとに charset/CTE/multipart を評価し、非符号化本文のバイト列を charset に照合 → `Envelope.charset_body_mismatch` → render_risks 警告。base64/QP は生行が判定材料でないため対象外。
+- **教訓**: 宣言は契約 — charset は「本文バイト列の読み方」の宣言であり、実バイトとの不一致は読み手ごとの解釈差分。
+
+### Security — D1330: `Name:` の形を持たないヘッダ行が未検査
+
+- **問題**: ヘッダ run 中にコロンを欠く行・空名・名前中に非許可文字を含む行があると、そこでヘッダ終端と見る実装・行を捨てる実装・結合する実装で以降の解釈がずれる (D1305 の空白前置名はこの一般形の一部)。
+- **修正**: `has_malformed_header_line` — ヘッダ run の非継続行が `表示可能 ASCII 名 + :` の形を持つか検査 → `Envelope.malformed_header_line` → render_risks 警告。
+- **教訓**: 欄の形そのものが崩れている行は、どこまでが欄かの読み手間差分。
+
 ### Security — D1327: ヘッダ内の非許可制御バイトが未検査
 
 - **問題**: ヘッダ値に許される制御文字は HTAB のみだが、FF/VT/DEL 等の混入は未検査だった — FF/VT は改頁・改行として描画される実装があり件名・差出人欄の見え方を偽装する。

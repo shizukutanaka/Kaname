@@ -247,6 +247,14 @@ pub struct Envelope {
     /// 本文に 0x80 以上のバイトが混入している。高位ビットを落とす
     /// 実装と保持する実装で本文の読みがずれる。
     pub eightbit_body_7bit: bool,
+    /// D1329 — `charset=us-ascii`/`utf-8` 宣言と本文の実バイトが
+    /// 矛盾する (us-ascii に高位バイト、utf-8 に不正列)。置換文字に
+    /// する実装と保持する実装で本文の読みがずれる。
+    pub charset_body_mismatch: bool,
+    /// D1330 — ヘッダ run 中に `Name:` の形を持たない行 (コロン
+    /// 無し・空名・名前中の非許可文字) がある。ヘッダ終端と見る
+    /// 実装と行を読み飛ばす実装で解釈がずれる。
+    pub malformed_header_line: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2240,6 +2248,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let executable_content_type = has_executable_content_type(bytes);
     let ctl_bytes_in_headers = has_ctl_bytes_in_headers(bytes);
     let eightbit_body_7bit = has_8bit_body_with_7bit_cte(bytes);
+    let charset_body_mismatch = has_charset_body_mismatch(bytes);
+    let malformed_header_line = has_malformed_header_line(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2328,6 +2338,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         executable_content_type,
         ctl_bytes_in_headers,
         eightbit_body_7bit,
+        charset_body_mismatch,
+        malformed_header_line,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4767,6 +4779,197 @@ pub fn has_8bit_body_with_7bit_cte(raw: &[u8]) -> bool {
         }
         if l.starts_with("--") {
             in_headers = true;
+        }
+    }
+    false
+}
+
+/// `charset=` 宣言と本文の実バイトが矛盾するパートがあるか判定
+/// する (D1329)。
+///
+/// `charset=us-ascii` と名乗る本文に 0x80 以上のバイト、または
+/// `charset=utf-8` と名乗る本文に UTF-8 として不正なバイト列が
+/// あると、置換文字 (U+FFFD) にする実装と生バイトを保持する実装で
+/// 本文がずれる (表示側でのみ攻撃文字列になる差異)。base64/QP の
+/// CTE は復号後が本来の本文であり生行は判定材料にできないため
+/// 対象外。multipart コンテナ自体も除外する。
+#[must_use]
+pub fn has_charset_body_mismatch(raw: &[u8]) -> bool {
+    // FWS 展開 (バイトレベル — 本文の高位バイトを保持するため
+    // from_utf8_lossy は使わない)
+    let mut logical: Vec<Vec<u8>> = Vec::new();
+    for line in raw.split(|&b| b == b'\n') {
+        let line = if line.last() == Some(&b'\r') {
+            &line[..line.len() - 1]
+        } else {
+            line
+        };
+        if (line.first() == Some(&b' ') || line.first() == Some(&b'\t'))
+            && !logical.is_empty()
+        {
+            if let Some(last) = logical.last_mut() {
+                last.push(b' ');
+                last.extend_from_slice(line);
+            }
+        } else {
+            logical.push(line.to_vec());
+        }
+    }
+    #[derive(PartialEq)]
+    enum Scan {
+        None,
+        Ascii,
+        Utf8,
+    }
+    let mut in_headers = true;
+    let mut run_ascii = false;
+    let mut run_utf8 = false;
+    let mut run_encoded = false;
+    let mut run_multipart = false;
+    let mut scan = Scan::None;
+    let mut utf8_buf: Vec<u8> = Vec::new();
+    for line in &logical {
+        match scan {
+            Scan::Ascii => {
+                if line.starts_with(b"--") {
+                    scan = Scan::None;
+                    in_headers = true;
+                    continue;
+                }
+                if line.iter().any(|&b| b >= 0x80) {
+                    return true;
+                }
+                continue;
+            }
+            Scan::Utf8 => {
+                if line.starts_with(b"--") {
+                    if std::str::from_utf8(&utf8_buf).is_err() {
+                        return true;
+                    }
+                    utf8_buf.clear();
+                    scan = Scan::None;
+                    in_headers = true;
+                    continue;
+                }
+                utf8_buf.extend_from_slice(line);
+                utf8_buf.push(b'\n');
+                continue;
+            }
+            Scan::None => {}
+        }
+        if in_headers {
+            if line.is_empty() {
+                in_headers = false;
+                if !run_multipart && !run_encoded {
+                    if run_ascii {
+                        scan = Scan::Ascii;
+                    } else if run_utf8 {
+                        utf8_buf.clear();
+                        scan = Scan::Utf8;
+                    }
+                }
+                run_ascii = false;
+                run_utf8 = false;
+                run_encoded = false;
+                run_multipart = false;
+                continue;
+            }
+            let low: Vec<u8> = line.iter().map(|b| b.to_ascii_lowercase()).collect();
+            if low.starts_with(b"content-type:") {
+                if let Some(p) = find_bytes(&low, b"charset=") {
+                    let rest = &line[p + 8..];
+                    let v: Vec<u8> = if rest.first() == Some(&b'"') {
+                        let inner = &rest[1..];
+                        let end = inner
+                            .iter()
+                            .position(|&b| b == b'"')
+                            .unwrap_or(inner.len());
+                        inner[..end].to_vec()
+                    } else {
+                        let end = rest
+                            .iter()
+                            .position(|&b| b == b';' || b == b' ' || b == b'\t')
+                            .unwrap_or(rest.len());
+                        rest[..end].to_vec()
+                    };
+                    let vlow: Vec<u8> = v.iter().map(|b| b.to_ascii_lowercase()).collect();
+                    if vlow == b"us-ascii" {
+                        run_ascii = true;
+                    } else if vlow == b"utf-8" || vlow == b"utf8" {
+                        run_utf8 = true;
+                    }
+                }
+                if let Some(p) = find_bytes(&low, b"multipart/") {
+                    if p == 0 || low[p - 1] == b':' || low[p - 1] == b' ' {
+                        run_multipart = true;
+                    }
+                }
+            }
+            if low.starts_with(b"content-transfer-encoding:") {
+                let v = &low[b"content-transfer-encoding:".len()..];
+                let v = trim_bytes(v);
+                run_encoded = v == b"base64" || v == b"quoted-printable";
+            }
+            continue;
+        }
+        if line.starts_with(b"--") {
+            in_headers = true;
+        }
+    }
+    if scan == Scan::Utf8 && std::str::from_utf8(&utf8_buf).is_err() {
+        return true;
+    }
+    false
+}
+
+fn find_bytes(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    hay.windows(needle.len()).position(|w| w == needle)
+}
+
+fn trim_bytes(b: &[u8]) -> &[u8] {
+    let mut s = 0;
+    let mut e = b.len();
+    while s < e && (b[s] == b' ' || b[s] == b'\t') {
+        s += 1;
+    }
+    while e > s && (b[e - 1] == b' ' || b[e - 1] == b'\t') {
+        e -= 1;
+    }
+    &b[s..e]
+}
+
+/// ヘッダ run 中に `Field-Name:` の形を持たない行があるか判定する
+/// (D1330)。
+///
+/// ヘッダ行は 1 文字以上のフィールド名 (表示可能 ASCII・コロン不可)
+/// + `:` で始まる。コロンを欠く行・名前が空の行・名前中に空白や
+/// 制御文字を含む行は、そこでヘッダ終端と見る実装・行を捨てる実装・
+/// 次行と結合する実装で以降全体の解釈がずれる。D1305 の空白前置名は
+/// この一般形の一部。
+#[must_use]
+pub fn has_malformed_header_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        match l.find(':') {
+            None | Some(0) => return true,
+            Some(n) => {
+                if l[..n].chars().any(|c| !(33..=126).contains(&(c as u32))) {
+                    return true;
+                }
+            }
         }
     }
     false
@@ -18894,6 +19097,56 @@ mod tests {
         // multipart コンテナ自身の 7bit は除外 (内側パートは別 run)
         assert!(!has_8bit_body_with_7bit_cte(
             "Content-Type: multipart/mixed; boundary=b\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: 8bit\r\n\r\nあ\r\n--b--".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn charset_body_mismatch_は宣言矛盾を検出する() {
+        assert!(has_charset_body_mismatch(
+            b"Content-Type: text/plain; charset=us-ascii\r\n\r\nabc\x80def\r\n"
+        ));
+        assert!(has_charset_body_mismatch(
+            b"Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nok \xff\xfe bad\r\n"
+        ));
+        // utf-8 + 正当 UTF-8 → 不発火
+        assert!(!has_charset_body_mismatch(
+            "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nこんにちは\r\n".as_bytes()
+        ));
+        assert!(!has_charset_body_mismatch(
+            b"Content-Type: text/plain; charset=us-ascii\r\n\r\nhello\r\n"
+        ));
+        // base64/QP は生行が判定材料でないため対象外
+        assert!(!has_charset_body_mismatch(
+            b"Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD\r\n"
+        ));
+        // charset 無し → 不発火
+        assert!(!has_charset_body_mismatch(
+            b"Content-Type: text/plain\r\n\r\nhi\x80\r\n"
+        ));
+        // 入れ子パート内も対象
+        assert!(has_charset_body_mismatch(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n\xffbad\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn malformed_header_line_は形のない行を検出する() {
+        assert!(has_malformed_header_line(
+            b"From a@x.example\r\nSubject: y\r\n\r\nx"
+        ));
+        assert!(has_malformed_header_line(b"Sub ject: x\r\n\r\nx"));
+        assert!(has_malformed_header_line(b":no name\r\n\r\nx"));
+        assert!(has_malformed_header_line("X日本語: x\r\n\r\nx".as_bytes()));
+        // 正規ヘッダは不発火
+        assert!(!has_malformed_header_line(
+            b"From: a@x.example\r\nSubject: =?UTF-8?B?aGk=?=\r\nX-Custom_1: v\r\n\r\nx"
+        ));
+        // 継続行・本文行は対象外
+        assert!(!has_malformed_header_line(
+            b"Subject: a\r\n folded text\r\n\r\nx"
+        ));
+        assert!(!has_malformed_header_line(
+            b"Subject: x\r\n\r\nno colon here"
         ));
     }
 

@@ -3149,6 +3149,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1329: charset 宣言と本文の実バイトの矛盾 — 置換文字にする
+    //    実装と生バイトを保持する実装で本文の読みがずれる。
+    if env.charset_body_mismatch {
+        render_risks.push(
+            "charset 宣言と本文の実バイトが矛盾するパートがあります —\
+             文字デコードの解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1330: `Name:` の形を持たないヘッダ行 — ヘッダ終端と見る
+    //    実装と読み飛ばす実装で以降の解釈がずれる。
+    if env.malformed_header_line {
+        render_risks.push(
+            "ヘッダ領域に `名前: 値` の形を持たない行があります —\
+             ヘッダの切れ目の解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
