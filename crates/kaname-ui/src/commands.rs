@@ -2903,6 +2903,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1303: 生メッセージ内の NUL バイト — C 文字列ベースの実装は
+    //    そこで切り詰めるため、以降の内容が一部の検査器から見えない。
+    if env.raw_nul_bytes {
+        render_risks.push(
+            "メッセージ中に NUL バイトが含まれています — \
+             C 文字列ベースの実装では以降の内容が切断されて見えなくなる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1304: ヘッダ部の非 UTF-8 バイト列 — lossy 置換する実装と
+    //    生バイトを保持する実装で文字列照合の結果がずれる。
+    if env.non_utf8_headers {
+        render_risks.push(
+            "ヘッダに UTF-8 として不正なバイト列が含まれています — \
+             encoded-word を通さない生の不正バイトで実装間の解釈がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

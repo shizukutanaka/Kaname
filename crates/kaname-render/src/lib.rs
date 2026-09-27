@@ -182,6 +182,10 @@ pub struct Envelope {
     pub address_comment: bool,
     /// MIME `charset=` に危険文字コード (utf-7/x-user-defined 等) があるか (D1301)。
     pub dangerous_charset: bool,
+    /// 生メッセージに NUL バイトがあるか (D1303 — 切断差異)。
+    pub raw_nul_bytes: bool,
+    /// ヘッダ部が UTF-8 として不正か (D1304 — デコード差異)。
+    pub non_utf8_headers: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2118,6 +2122,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1301: MIME charset= の危険文字コード
     let dangerous_charset = has_dangerous_charset(bytes);
 
+    // D1303: 生メッセージ内の NUL バイト
+    let raw_nul_bytes = has_raw_nul_bytes(bytes);
+
+    // D1304: ヘッダ部の非 UTF-8 バイト列
+    let non_utf8_headers = has_non_utf8_headers(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2181,6 +2191,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         fqdn_trailing_dot,
         address_comment,
         dangerous_charset,
+        raw_nul_bytes,
+        non_utf8_headers,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3432,6 +3444,35 @@ pub fn has_dangerous_charset(raw: &[u8]) -> bool {
         rest = &rest[pos + 7..];
     }
     false
+}
+
+/// 生メッセージに NUL バイト (0x00) が含まれるか判定する (D1303)。
+///
+/// RFC 5322/2045 のメッセージストリームは NUL を含まない (添付も
+/// base64/QP 等で符号化され届く)。生の NUL は C 文字列ベースの実装で
+/// そこで文字列を切り詰めるため、それ以降の内容が一部の検査器から
+/// 見えなくなる (切断差異)。存在自体が異常として検出する。
+#[must_use]
+pub fn has_raw_nul_bytes(raw: &[u8]) -> bool {
+    raw.contains(&0)
+}
+
+/// ヘッダ部に UTF-8 として不正なバイト列があるか判定する (D1304)。
+///
+/// 8bit/非 UTF-8 の生バイトがヘッダに混ざると、lossy 置換する実装と
+/// 生バイトを保持する実装で文字列照合の結果がずれる (例: ドメイン名や
+/// 件名の中間に不正バイト)。encoded-word を通さない生 8bit 自体が
+/// RFC 5322 違反であり、正規 MUA は出さない。ヘッダ終端は
+/// `\r\n\r\n` または `\n\n` の最初の出現位置。
+#[must_use]
+pub fn has_non_utf8_headers(raw: &[u8]) -> bool {
+    let mut end = raw.len();
+    if let Some(p) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+        end = p;
+    } else if let Some(p) = raw.windows(2).position(|w| w == b"\n\n") {
+        end = p;
+    }
+    std::str::from_utf8(&raw[..end]).is_err()
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -17051,6 +17092,38 @@ mod tests {
         assert!(has_dangerous_charset(
             b"Content-Type: text/plain;\r\n\tcharset=utf-7\r\n\r\nb"
         ));
+    }
+
+    #[test]
+    fn raw_nul_bytes_はnul混入を検出する() {
+        // D1303 — 生メッセージ内の NUL
+        assert!(has_raw_nul_bytes(b"From: a@b\r\nSubject: x\x00evil\r\n\r\nb"));
+        assert!(has_raw_nul_bytes(b"From: a@b\r\n\r\nbody\x00hidden"));
+        assert!(!has_raw_nul_bytes(b"From: a@b\r\nSubject: hi\r\n\r\nbody"));
+        // 空メッセージは不発火
+        assert!(!has_raw_nul_bytes(b""));
+    }
+
+    #[test]
+    fn non_utf8_headers_はヘッダの不正バイトを検出する() {
+        // D1304 — ヘッダ部の非 UTF-8
+        assert!(has_non_utf8_headers(
+            b"From: caf\xE9@x\r\nSubject: hi\r\n\r\nbody"
+        ));
+        assert!(has_non_utf8_headers(
+            b"Subject: \xFF\xFEbad\r\n\r\nbody"
+        ));
+        // 本文側の不正バイトは対象外
+        assert!(!has_non_utf8_headers(
+            b"From: a@b\r\n\r\nbody with \xFF\xFE bytes"
+        ));
+        // 正常 UTF-8 ヘッダは不発火
+        assert!(!has_non_utf8_headers(
+            "From: 山田 <y@x>\r\nSubject: 請求書\r\n\r\nb".as_bytes()
+        ));
+        // LF 終端のヘッダも判定
+        assert!(has_non_utf8_headers(b"From: caf\xE9@x\n\nbody"));
+        assert!(!has_non_utf8_headers(b"From: a@b\n\nbody"));
     }
 
     #[test]

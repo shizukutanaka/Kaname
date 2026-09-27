@@ -716,3 +716,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1300 | ~~**アドレスヘッダのコメント内アドレス/URL が未検査**~~ **(解消済み)** | P1 | `From: a@x (billing@y)` — コメント表示実装で見える差出人がずれる。修正: `has_address_comment` → render_risks | 稀な構文の中身まで読む |
 | D1301 | ~~**MIME charset= の危険文字コードが未検査**~~ **(解消済み)** | P1 | `charset=utf-7` 本文は ASCII のまま照合をすり抜ける (D978 は meta のみ)。修正: `has_dangerous_charset` → render_risks | 同じ穴は別の書ける場所に残る |
 | D1302 | ~~**件名の bidi override/isolate が未検査**~~ **(解消済み)** | P1 | 件名中の RLO/isolate で表示順反転 (trojan-source 系)。修正: has_suspicious_subject_chars に U+202A–202E・U+2066–2069 追加 | 「見え方をずらす」は不可視だけでなく順序改変も含む |
+| D1303 | ~~**生メッセージ内の NUL バイトが未検査**~~ **(解消済み)** | P1 | C 文字列実装で以降が切断され見えなくなる。修正: `has_raw_nul_bytes` → render_risks | 全域禁止バイトの存在自体が安い差異指標 |
+| D1304 | ~~**ヘッダ部の非 UTF-8 バイト列が未検査**~~ **(解消済み)** | P1 | lossy 置換 vs 生バイト保持で照合結果がずれる。修正: `has_non_utf8_headers` → render_risks | デコード可能性自体が異常信号 |

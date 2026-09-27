@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1303: 生メッセージ内の NUL バイトが未検査
+
+- **問題**: RFC 5322/2045 のメッセージストリームは NUL を含まない (添付も符号化され届く)。生の NUL は C 文字列ベースの実装でそこで文字列を切り詰め、以降の内容が一部の検査器から見えなくなる切断差異。
+- **修正**: `has_raw_nul_bytes` — 生メッセージに 0x00 があれば検出 → `Envelope.raw_nul_bytes` → render_risks 警告。
+- **教訓**: 「絶対に出てこないはずのバイト」の存在自体が最も安い差異指標 — 仕様の全域禁止をそのまま検査にする。
+
+### Security — D1304: ヘッダ部の非 UTF-8 バイト列が未検査
+
+- **問題**: encoded-word を通さない生の 8bit/不正バイトがヘッダに混ざると、lossy 置換する実装と生バイトを保持する実装で文字列照合の結果がずれる (ドメイン名・件名の中間に不正バイト)。正規 MUA は出さない。
+- **修正**: `has_non_utf8_headers` — ヘッダブロック (`\r\n\r\n`/`\n\n` まで) が UTF-8 として不正なら検出 → `Envelope.non_utf8_headers` → render_risks 警告。
+- **教訓**: デコード可能性自体が異常信号になる — 「読める」前提を崩す入力はまず兆候として数える。
+
 ### Security — D1301: MIME charset= の危険文字コードが未検査
 
 - **問題**: `Content-Type: ...; charset=utf-7` で書かれた本文は ASCII のまま (`+AGQ-` 等) キーワード照合をすり抜け、utf-7 を解釈する表示側でのみ攻撃文字列になる。D978 は `<meta charset>` のみ対象で MIME ヘッダ側は未検査だった。
