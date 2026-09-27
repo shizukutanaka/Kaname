@@ -3481,6 +3481,14 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.boundary_semicolon {
+        render_risks.push(
+            "boundary 値の途中にセミコロンが混入しています\
+             —ツールごとに区切り文字列の解釈がずれ、添付の境界が\
+             崩れる可能性があります"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

@@ -395,6 +395,10 @@ pub struct Envelope {
     /// Usenet 制御ヘッダがメールに混入。メールでは意味を持たず
     /// 存在自体が手作り生成・制度混在の兆候。
     pub usenet_control_header: bool,
+    /// D1366 — `boundary=` の非クオート値に `;` が混入
+    /// (`boundary=a;b`)。トークンで切る実装は `a` を、行末まで
+    /// 読む実装は `a;b` を区切りとし、パート構造がずれる。
+    pub boundary_semicolon: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2424,6 +2428,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let undeclared_base64_block = has_undeclared_base64_block(bytes);
     let empty_group_syntax = has_empty_group_syntax(bytes);
     let usenet_control_header = has_usenet_control_header(bytes);
+    let boundary_semicolon = has_boundary_semicolon(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2548,6 +2553,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         undeclared_base64_block,
         empty_group_syntax,
         usenet_control_header,
+        boundary_semicolon,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6855,6 +6861,56 @@ pub fn has_usenet_control_header(raw: &[u8]) -> bool {
                 || l.starts_with("cancel-key:")
                 || l.starts_with("approved:") && l[9..].contains('@'))
     })
+}
+
+/// `boundary=` の非クオート値に `;` が混入しているか判定する (D1366)。
+/// `boundary=a;b` はトークンで切る実装が `a`、行末まで読む実装が
+/// `a;b` を区切りとし、パート構造が完全にずれる (D1281/D1294/D1311
+/// boundary 系の姉妹検査)。クオート内の `;` は正規のため対象外。
+#[must_use]
+pub fn has_boundary_semicolon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(v) = l.strip_prefix("content-type:") else { continue };
+        for (i, _) in v.match_indices("boundary=") {
+            let after = &v[i + 9..];
+            // クオート値は `;` を含み得る正規形 — 非クオートのみ検査
+            if after.starts_with('"') {
+                continue;
+            }
+            let token_end = after
+                .find(|c: char| c == ';' || c.is_whitespace())
+                .unwrap_or(after.len());
+            if after[..token_end].is_empty() {
+                continue; // 空値は D1311 が担当
+            }
+            // `boundary=a;b` — `;` で値が切れた後、正規の `key=value`
+            // パラメータでない断片が続くなら、行末まで読む実装は
+            // `a;b` を boundary とする
+            if token_end < after.len()
+                && after.as_bytes()[token_end] == b';'
+            {
+                let rest = after[token_end + 1..].trim_start();
+                if !rest.is_empty() && !rest.contains('=') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -21644,6 +21700,28 @@ mod tests {
     }
 
     #[test]
+    fn boundary_semicolon_はセミコロン混入を検出する() {
+        assert!(has_boundary_semicolon(
+            b"Content-Type: multipart/mixed; boundary=a;b\r\n\r\nx"
+        ));
+        // 正規の後続パラメータは不発火
+        assert!(!has_boundary_semicolon(
+            b"Content-Type: multipart/mixed; boundary=a; charset=utf-8\r\n\r\nx"
+        ));
+        // クオート内 ; は正規
+        assert!(!has_boundary_semicolon(
+            b"Content-Type: multipart/mixed; boundary=\"a;b\"\r\n\r\nx"
+        ));
+        // 通常値・他ヘッダ・本文は不発火
+        assert!(!has_boundary_semicolon(
+            b"Content-Type: multipart/mixed; boundary=ab\r\n\r\nx"
+        ));
+        assert!(!has_boundary_semicolon(
+            b"Subject: boundary=a;b\r\n\r\nContent-Type: x; boundary=a;b"
+        ));
+    }
+
+    #[test]
     fn ct_name_no_disposition_は添付判定素通りを検出する() {
         // D1310 — name= あり・CD 無し
         assert!(has_ct_name_no_disposition(
@@ -22034,6 +22112,20 @@ mod tests {
         );
         assert!(scan.is_dangerous);
         assert!(scan.risks.iter().any(|r| r.contains("拡張子")));
+    }
+
+    #[test]
+    fn scan_attachment_ads_colon_filename_flags_risk() {
+        // D1365 — `名:型` は Windows ADS 書込み
+        let scan = scan_attachment_bytes(
+            "invoice.pdf:hidden.exe",
+            "application/pdf",
+            b"%PDF-1.5 data",
+        );
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| r.contains("コロン")));
     }
 
     #[test]
@@ -26405,6 +26497,7 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
             match anomaly {
                 "control_chars" => "ファイル名に制御文字 (CR/LF/TAB 等) が含まれています — ツールごとに名前の解釈がずれ、表示と実際の保存名が食い違う可能性があります".to_string(),
                 "trailing_dot_or_space" => "ファイル名がピリオドまたは空白で終わっています — Windows は保存時に末尾を除去するため、表示名と実ファイル名が一致しません".to_string(),
+                "ads_stream" => "ファイル名にコロンが含まれています — Windows の Alternate Data Stream として別名に書き込まれる格納先偽装の可能性があります".to_string(),
                 _ => "ファイル名にキリル文字/ギリシャ文字がラテン文字と混在しています — 見た目で実際のファイル名を偽装している可能性があります".to_string(),
             },
         );

@@ -778,3 +778,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1362 | ~~**非宣言 base64 本文ブロックが未検査**~~ **(解消済み)** | P2 | 宣言だけ復号する検査にペイロードが見えない。修正: `has_undeclared_base64_block` → render_risks | 「平文です」の箱に暗号の束 |
 | D1363 | ~~**空・未終端グループ構文が未検査**~~ **(解消済み)** | P2 | `To: label:;` は宛先を見せない一斉送信形 (D1339 回避)。修正: `has_empty_group_syntax` → render_risks | 宛先の名札が空なら誰にも読めない |
 | D1364 | ~~**Usenet 制御ヘッダ混入が未検査**~~ **(解消済み)** | P3 | Control:/Supersedes: 等はメールで意味を持たず制度混在の兆候。修正: `has_usenet_control_header` → render_risks | 別制度の消印が貼られた封筒 |
+| D1365 | ~~**添付名のコロン (Windows ADS) が未検査**~~ **(解消済み)** | P2 | `名:型` は ADS 書込みで格納先偽装。修正: `filename_anomalies` に ads_stream | 二つの名前を重ね書きした荷物 |
+| D1366 | ~~**非クオート boundary 値内の `;` 混入が未検査**~~ **(解消済み)** | P2 | `boundary=a;b` で区切り解釈がずれる。修正: `has_boundary_semicolon` → render_risks | 途中に切れ目のある区切り札 |

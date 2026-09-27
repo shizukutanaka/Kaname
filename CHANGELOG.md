@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1365: 添付名のコロン (Windows ADS) が未検査
+
+- **問題**: `filename="invoice.pdf:hidden.exe"` の `名:型` は Windows で Alternate Data Stream として別名に書き込まれる — 表示名と実際の格納先がずれ、拡張子検査を素通りする格納先偽装。
+- **修正**: `filename_anomalies` に `ads_stream` 兆候を追加 — `:` 含有名でリスク警告 (既存の添付走査経路に合流)。
+- **教訓**: 名札に二つの名前を重ね書きした荷物は、棚ごとに別の棚へ置かれる。
+
+### Security — D1366: 非クオート boundary 値内の `;` 混入が未検査
+
+- **問題**: `boundary=a;b` はトークンで切る実装が `a`、行末まで読む実装が `a;b` を区切りとし、パート構造が完全にずれる (D1281/D1294/D1311 boundary 系の姉妹)。
+- **修正**: `has_boundary_semicolon` — CT ヘッダの非クオート `boundary=` 値が `;` で切れた後に `key=value` でない断片が続く形を検出 → `Envelope.boundary_semicolon` → render_risks 警告。
+- **教訓**: 区切り札の途中に切れ目があると、荷物係ごとに違う札を見る。
+
 ### Security — D1363: 空・未終端グループ構文が未検査
 
 - **問題**: `To: undisclosed-recipients:;` は宛先欄を満たしながら宛先を一切見せない一斉送信の書式 — D1339 (宛先全欠落) の回避経路。`:` 後に `;` が無い未終端グループも実装間で解釈がずれる。
