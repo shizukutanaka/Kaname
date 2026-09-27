@@ -255,6 +255,14 @@ pub struct Envelope {
     /// 無し・空名・名前中の非許可文字) がある。ヘッダ終端と見る
     /// 実装と行を読み飛ばす実装で解釈がずれる。
     pub malformed_header_line: bool,
+    /// D1331 — 外側ヘッダに `Bcc:` が残っている。Bcc は配送時に
+    /// 除去されるのが一般で、受信メッセージの残存は手作り生成か
+    /// 経路異常の兆候。
+    pub bcc_header: bool,
+    /// D1332 — `Content-Base:` にリモート URL (http/https/ftp) が
+    /// ある。Content-Location と同じく相対参照の解決先を外部に向ける
+    /// MHTML 系ヘッダ (D1284 の姉妹)。
+    pub remote_content_base: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2250,6 +2258,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let eightbit_body_7bit = has_8bit_body_with_7bit_cte(bytes);
     let charset_body_mismatch = has_charset_body_mismatch(bytes);
     let malformed_header_line = has_malformed_header_line(bytes);
+    let bcc_header = has_bcc_header(bytes);
+    let remote_content_base = has_remote_content_base(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2340,6 +2350,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         eightbit_body_7bit,
         charset_body_mismatch,
         malformed_header_line,
+        bcc_header,
+        remote_content_base,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4973,6 +4985,74 @@ pub fn has_malformed_header_line(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// 外側ヘッダに `Bcc:` が残っているか判定する (D1331)。
+///
+/// Bcc は宛先に見せない欄であり、配送時に除去されるのが一般
+/// (RFC 5322 §3.6.3 は受取人向けの写しに残す運用も許すが、実装
+/// として受信メッセージに現れることは稀)。残存は手作り生成品や
+/// 経路異常の兆候、また Bcc 宛先が受信者に見えてしまう情報露出
+/// でもある。外側ヘッダのみを見る (入れ子 .eml の内部 Bcc は
+/// そのメッセージ自身の属性)。
+#[must_use]
+pub fn has_bcc_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break; // 外側ヘッダのみ
+        }
+        if l.to_ascii_lowercase().starts_with("bcc:") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Base:` にリモート URL があるか判定する (D1332)。
+///
+/// RFC 2557 (MHTML) の `Content-Base:` は相対参照の解決先を外部に
+/// 向けるヘッダで、D1284 が検査する `Content-Location:` と同じ
+/// リモートフェッチ経路になる — 本体は空・無害のまま表示時に
+/// 外部を引きにいく。`cid:`/ローカル参照は対象外。
+#[must_use]
+pub fn has_remote_content_base(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical: Vec<String> = Vec::new();
+    for l in text.split('\n') {
+        if l.starts_with([' ', '\t']) {
+            if let Some(last) = logical.last_mut() {
+                last.push_str(l.trim_start());
+            }
+        } else {
+            logical.push(l.to_string());
+        }
+    }
+    logical.iter().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        if !lower.starts_with("content-base:") {
+            return false;
+        }
+        let colon = lower.find(':').unwrap_or(0);
+        let v = lower[colon + 1..].trim();
+        v.starts_with("http://") || v.starts_with("https://") || v.starts_with("ftp://")
+    })
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -19147,6 +19227,38 @@ mod tests {
         ));
         assert!(!has_malformed_header_line(
             b"Subject: x\r\n\r\nno colon here"
+        ));
+    }
+
+    #[test]
+    fn bcc_header_は受信残存を検出する() {
+        assert!(has_bcc_header(b"From: a@x\r\nBcc: hidden@y\r\n\r\nx"));
+        assert!(has_bcc_header(b"BCC: h@y\r\n\r\nx"));
+        // 折り畳み跨ぎも捕捉 (論理行化後の行頭 bcc:)
+        assert!(!has_bcc_header(b"X-Note: a\r\n bcc: folded-value\r\n\r\nx"));
+        // 入れ子メール内の Bcc は外側判定に影響しない
+        assert!(!has_bcc_header(
+            b"Subject: x\r\n\r\n--b\r\nBcc: inner@y\r\n\r\nx"
+        ));
+        assert!(!has_bcc_header(b"From: a@x\r\nTo: b@y\r\n\r\nx"));
+    }
+
+    #[test]
+    fn remote_content_base_は外部参照を検出する() {
+        assert!(has_remote_content_base(
+            b"Content-Base: https://evil.example/base/\r\n\r\nx"
+        ));
+        assert!(has_remote_content_base(
+            b"--b\r\nContent-Base: http://t.evil/x\r\n\r\nx"
+        ));
+        // cid:/ローカル参照は不発火
+        assert!(!has_remote_content_base(
+            b"Content-Base: cid:part1@msg\r\n\r\nx"
+        ));
+        assert!(!has_remote_content_base(b"Subject: x\r\n\r\nx"));
+        // 折り畳み値も捕捉
+        assert!(has_remote_content_base(
+            b"Content-Base:\r\n\thttps://evil.example/\r\n\r\nx"
         ));
     }
 

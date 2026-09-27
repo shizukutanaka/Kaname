@@ -744,3 +744,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1328 | ~~**7bit 宣言と矛盾する高位バイト本文が未検査**~~ **(解消済み)** | P2 | 明示 7bit 宣言パートの ≥0x80 バイトで高位ビット処理が実装間ずれ。修正: `has_8bit_body_with_7bit_cte` → render_risks | 宣言値と実バイトの不一致は読み手ごとの解釈差分 |
 | D1329 | ~~**charset 宣言と本文実バイトの矛盾が未検査**~~ **(解消済み)** | P2 | us-ascii+高位バイト/utf-8+不正列で置換方針がずれる。修正: `has_charset_body_mismatch` → render_risks | charset は「本文の読み方」の宣言 — 実バイトとの不一致は解釈差分 |
 | D1330 | ~~**`Name:` 形を持たないヘッダ行が未検査**~~ **(解消済み)** | P2 | コロン無し・空名・名前中非許可文字でヘッダ終端の解釈がずれる。修正: `has_malformed_header_line` → render_risks | 欄の形の崩れは「どこまでが欄か」の読み手間差分 |
+| D1331 | ~~**受信メッセージの Bcc 残存が未検査**~~ **(解消済み)** | P2 | 配送時除去の欄が届く = 手作り生成/経路異常 + Bcc 露出。修正: `has_bcc_header` → render_risks | 「届くはずのない欄」が届いていること自体が兆候 |
+| D1332 | ~~**Content-Base のリモート URL が未検査**~~ **(解消済み)** | P2 | Content-Location と同型の MHTML リモートフェッチ経路。修正: `has_remote_content_base` → render_risks | 同型ヘッダは対で見る — 片方だけ塞ぐと経路が残る |

@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1331: 受信メッセージの Bcc 残存が未検査
+
+- **問題**: `Bcc:` は宛先に見せない欄で配送時に除去されるのが一般 — 受信メッセージへの残存は手作り生成か経路異常の兆候であり、Bcc 宛先が受信者に露出する情報流出でもある。
+- **修正**: `has_bcc_header` — FWS 展開後の外側ヘッダに `bcc:` があれば検出 → `Envelope.bcc_header` → render_risks 警告。入れ子 .eml 内部の Bcc はそのメッセージ自身の属性のため対象外。
+- **教訓**: 「届くはずのない欄」が届いていること自体が兆候。
+
+### Security — D1332: `Content-Base:` のリモート URL が未検査
+
+- **問題**: RFC 2557 (MHTML) の `Content-Base:` は相対参照の解決先を外部に向ける — 本体は空・無害のまま表示時リモートフェッチを成立させる。D1284 は `Content-Location:` のみ検査で姉妹ヘッダが残っていた。
+- **修正**: `has_remote_content_base` — `content-base:` 値が http/https/ftp なら検出 → `Envelope.remote_content_base` → render_risks 警告。cid: 等ローカル参照は対象外。
+- **教訓**: 同型ヘッダは対で見る — 片方だけ塞ぐと経路は残る。
+
 ### Security — D1329: charset 宣言と本文実バイトの矛盾が未検査
 
 - **問題**: `charset=us-ascii` を名乗る本文に高位バイト、`charset=utf-8` を名乗る本文に不正 UTF-8 列があると、置換文字にする実装と生バイトを保持する実装で本文がずれる — 表示側でのみ攻撃文字列になる差異。

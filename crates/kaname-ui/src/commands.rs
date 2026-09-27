@@ -3169,6 +3169,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1331: 受信メッセージに Bcc が残存 — 配送時除去が一般的で、
+    //    残存は手作り生成か経路異常の兆候 (Bcc 宛先露出でもある)。
+    if env.bcc_header {
+        render_risks.push(
+            "受信メッセージに Bcc ヘッダが残っています — 配送過程で除去される\
+             のが一般であり、残存は手作り生成か経路異常の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1332: Content-Base のリモート URL — Content-Location と同型の
+    //    リモートフェッチ経路 (D1284 の姉妹)。
+    if env.remote_content_base {
+        render_risks.push(
+            "Content-Base ヘッダが外部 URL を指しています — 表示時に外部\
+             リソースを読みにいく MHTML 系の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
