@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1265: 添付ファイル名の異常形状 (制御文字・末尾ドット・ホモグリフ) が未検査
+
+- **問題**: IRONSCALES (2026-04) が観測した nested RFC822 キャンペーンは、添付ファイル名に CR/LF 制御文字を注入し、ツールごとのファイル名終端解釈の差でスキャナと実際の保存名を食い違わせていた。加えて `evil.exe.` のように末尾ピリオド/空白を付けると `ends_with(".exe")` 系の拡張子検査を素通りしつつ Windows は除去して保存するため表示名と実体がずれ、キリル/ギリシャ文字混在のホモグリフ名 (`invoiсe.pdf` — キリル с) も検査されなかった。
+- **修正**: `magic_bytes::filename_anomalies` を追加し `scan_attachment_bytes` で検査 (制御文字 C0/C1/DEL、末尾 `.`/` `、ステム内キリル・ギリシャ×ラテン混在)。末尾除去後の名前でも危険拡張子を再評価し、`evil.exe.` は Danger 判定。
+- **教訓**: 名前は「表示されるもの」ではなく「保存されるもの」を検査せよ — ツール間の解釈差はそれ自体が攻撃面。
+
+### Security — D1266: 特殊 `message/*` サブタイプ (external-body / partial / delivery-status) が未検査
+
+- **問題**: `message/rfc822` 転送添付には注意喚起があるが (D1250)、同じ死角を作るサブタイプは素通りだった: `message/external-body` は中身を持たず URI で外部参照して表示時にフェッチ (ICS `ATTACH;VALUE=URI` と同型)、`message/partial` はペイロードを複数メッセージに断片化し各片の検査を素通り、`message/delivery-status`/`disposition-notification` は内容を返せないパートとして解析の死角になる (IRONSCALES 2026-04 で delivery-status が検査不能のまま届いた事例)。
+- **修正**: `magic_bytes::is_exotic_message_subtype` を追加し `scan_attachment_bytes` で注意喚起 (パラメータ付き宣言も判定)。Caution 級。
+- **教訓**: 「中身を持たない/持てない」サブタイプはスキャン不能を前提に兆候として数えよ。
+
 ### Security — D1260: URL の `@` 混乱・不正ハイフンラベル・ハイフン折りたたみブランドが未検査
 
 - **問題**: SANS ISC (2026-09-24) が観測した URL は 3 つの罠を重ねていた: (a) authority の `YKZjqa7A@` userinfo — ブラウザは黙って捨てるがブロックリストを URL ごとに個別化し、メールアドレスにも見せかける; (b) `gynd--.koncar-hr.com` 型の `-` で終わるラベル — RFC 952/1123 上は不正だが DNS は解決するため、厳密な URL 抽出器・リンクリライタが「不正」と判断してスキャン対象から落とす; (c) パスの `/@victim.example.com` — 最後の `@` で分割する不正パーサには受信者の自社ドメインがホストに見える。`extract_domain` は userinfo を正しく除去するが「含まれていたこと」は報告されず、ラベル形状の検査もなかった。
