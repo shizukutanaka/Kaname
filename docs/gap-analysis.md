@@ -771,3 +771,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1355 | ~~**稀な multipart サブタイプが未検査**~~ **(解消済み)** | P2 | parallel/byteranges 等はパート扱いが実装間でずれる。修正: `has_exotic_multipart_subtype` → render_risks | 珍しい器は開け方が係ごとに違う |
 | D1356 | ~~**メディア型トークンの形の崩れが未検査**~~ **(解消済み)** | P2 | text/a/b・text/・空白混入で型解釈がずれる。修正: `has_malformed_media_type` → render_risks | 型名の形が崩れれば読み手次第 |
 | D1357 | ~~**添付名の %XX 断片が未検査**~~ **(解消済み)** | P2 | filename= 値の %XX は復号有無で添付名がずれる。修正: `has_percent_encoded_filename` → render_risks | 復号する係としない係で別名になる |
+| D1358 | ~~**無名 attachment パートが未検査**~~ **(解消済み)** | P2 | 自動命名と空表示で添付名がずれる。修正: `has_unnamed_attachment` → render_risks | 名無しの荷物は係ごとに別の札が付く |
+| D1359 | ~~**アドレスドメインの非 ASCII が未検査**~~ **(解消済み)** | P2 | Unicode 表示と punycode/拒否で差出人が違う顔。修正: `has_non_ascii_addr_domain` → render_risks | 異字の町名は読み手で別の町に見える |
+| D1360 | ~~**filename / filename* 不一致が未検査**~~ **(解消済み)** | P2 | * 優先と無視で添付名がずれる。修正: `has_conflicting_filename` → render_risks | 二枚の名札は読む係で別名になる |

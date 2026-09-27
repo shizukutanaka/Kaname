@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1358: 無名 attachment パートが未検査
+
+- **問題**: `Content-Disposition: attachment` 宣言で filename/name が一切無いパートは、自動命名する実装 (attachment.bin・part2.exe) と空欄表示する実装で見える添付名がずれる。
+- **修正**: `has_unnamed_attachment` — パートのヘッダ run 単位で CD=attachment かつ filename/name 無しを検出 → `Envelope.unnamed_attachment` → render_risks 警告。
+- **教訓**: 名無しの荷物は開ける係ごとに別の札が付く。
+
+### Security — D1359: アドレスドメインの非 ASCII が未検査
+
+- **問題**: `u@例え.jp` のような Unicode ドメインは、そのまま表示する実装と punycode/拒否する実装で差出人ドメインが違う顔になる (IDN ホモグラフの宛名版)。
+- **修正**: `has_non_ascii_addr_domain` — アドレス欄のコメント・クオートを除いたトークンの `@` 以降に高位バイトを検出 → `Envelope.non_ascii_addr_domain` → render_risks 警告。
+- **教訓**: 異字の町名は読み手によって別の町に見える。
+
+### Security — D1360: filename / filename* の両記法不一致が未検査
+
+- **問題**: 同一パートの `filename=` と `filename*=` (RFC 2231) が別の値を名乗ると、`*` を優先する実装と無視する実装で添付名がずれる。
+- **修正**: `has_conflicting_filename` — 両キーの値を %復号して比較、不一致なら検出 → `Envelope.conflicting_filename` → render_risks 警告。一致する併記 (正規) は不発火。
+- **教訓**: 同じ荷物に二枚の名札 — 読む係で別の名になる。
+
 ### Security — D1355: 稀な multipart サブタイプが未検査
 
 - **問題**: `multipart/parallel`/`byteranges`/`appledouble` 等はメールでの正当用途が無く、各パートの扱い (並列表示・範囲結合) が実装間でずれる死角。

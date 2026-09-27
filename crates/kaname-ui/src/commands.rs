@@ -3432,6 +3432,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.unnamed_attachment {
+        render_risks.push(
+            "添付宣言がありながら名前の無いパートがあります\
+             —添付の見え方が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+    if env.non_ascii_addr_domain {
+        render_risks.push(
+            "宛先ドメインに Unicode 文字が含まれています\
+             —差出人ドメインの見え方が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+    if env.conflicting_filename {
+        render_risks.push(
+            "添付名の両記法 (filename / filename*) の値が一致しません\
+             —表示される添付名が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

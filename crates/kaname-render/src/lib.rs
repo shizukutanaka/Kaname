@@ -367,6 +367,18 @@ pub struct Envelope {
     /// RFC 2231 の `filename*=` は符号化するが、素の `filename=` での
     /// `%20` 等はパーセント復号する実装としない実装で添付名がずれる。
     pub percent_encoded_filename: bool,
+    /// D1358 — `Content-Disposition: attachment` 宣言でありながら
+    /// filename/name が一切無いパート。自動命名と空表示で
+    /// 見える添付名が実装間でずれる。
+    pub unnamed_attachment: bool,
+    /// D1359 — アドレス欄のドメイン部に非 ASCII バイト列。
+    /// Unicode 表示する実装と punycode/拒否する実装で差出人の
+    /// ドメインが違う顔になる (IDN ホモグラフの宛名版)。
+    pub non_ascii_addr_domain: bool,
+    /// D1360 — 同一パートで `filename=` と `filename*=` (RFC 2231)
+    /// が別の値を名乗る。`*` を優先する実装と無視する実装で
+    /// 添付名がずれる。
+    pub conflicting_filename: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2389,6 +2401,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let exotic_multipart_subtype = has_exotic_multipart_subtype(bytes);
     let malformed_media_type = has_malformed_media_type(bytes);
     let percent_encoded_filename = has_percent_encoded_filename(bytes);
+    let unnamed_attachment = has_unnamed_attachment(bytes);
+    let non_ascii_addr_domain = has_non_ascii_addr_domain(bytes);
+    let conflicting_filename = has_conflicting_filename(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2506,6 +2521,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         exotic_multipart_subtype,
         malformed_media_type,
         percent_encoded_filename,
+        unnamed_attachment,
+        non_ascii_addr_domain,
+        conflicting_filename,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6409,6 +6427,223 @@ pub fn has_percent_encoded_filename(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// `attachment` 宣言でありながら filename/name を一切持たないパートが
+/// あるか判定する (D1358)。自動命名する実装 (attachment.bin・part2.exe)
+/// と空欄表示する実装で見える添付名がずれる。
+#[must_use]
+pub fn has_unnamed_attachment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut saw_attachment = false;
+    let mut saw_name = false;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            if in_headers && saw_attachment && !saw_name {
+                return true;
+            }
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            if in_headers && saw_attachment && !saw_name {
+                return true;
+            }
+            // `--b--` の終端行は run を開始しない
+            in_headers = !(l.len() > 4 && l.ends_with("--"));
+            saw_attachment = false;
+            saw_name = false;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-disposition:") {
+            let first = v
+                .trim_start()
+                .split(|c: char| c == ';' || c.is_whitespace())
+                .next()
+                .unwrap_or("");
+            if first == "attachment" {
+                saw_attachment = true;
+            }
+        }
+        if l.starts_with("content-disposition:") || l.starts_with("content-type:") {
+            for (i, _) in l.match_indices('=') {
+                let ks = l[..i]
+                    .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                    .map(|p| p + 1)
+                    .unwrap_or(0);
+                let key = l[ks..i].trim().trim_end_matches('*').trim_end_matches(
+                    |c: char| c.is_ascii_digit() || c == '*',
+                );
+                if key == "filename" || key == "name" {
+                    saw_name = true;
+                }
+            }
+        }
+    }
+    in_headers && saw_attachment && !saw_name
+}
+
+/// アドレス欄のドメイン部に非 ASCII バイト列があるか判定する (D1359)。
+/// Unicode のまま表示する実装と punycode 化・拒否する実装で
+/// 差出人のドメインが違う顔になる (IDN ホモグラフの宛名版)。
+#[must_use]
+pub fn has_non_ascii_addr_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        // コメント・クオート内を除いた上で @ を含むトークンのドメイン部を検査
+        let val = &l[colon + 1..];
+        let mut cleaned = String::with_capacity(val.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = '\0';
+        for c in val.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if c == '"' && prev != '\\' {
+                in_q = !in_q;
+            } else if c == '(' && !in_q && prev != '\\' {
+                in_c = 1;
+            } else if !in_q {
+                cleaned.push(c);
+            }
+            prev = c;
+        }
+        for tok in cleaned.split(|c: char| c == ',' || c == ' ' || c == '\t' || c == '<' || c == '>') {
+            let Some(at) = tok.rfind('@') else { continue };
+            let domain = &tok[at + 1..];
+            if domain.bytes().any(|b| b >= 0x80) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 同一パートで `filename=` と `filename*=` (RFC 2231) が別の値を名乗るか
+/// 判定する (D1360)。`*` を優先する実装 (Thunderbird 系) と無視する実装
+/// (旧 Outlook 系) で添付名がずれる。値が一致する両記法併記は正規。
+#[must_use]
+pub fn has_conflicting_filename(raw: &[u8]) -> bool {
+    fn pct_decode(s: &str) -> Vec<u8> {
+        let b = s.as_bytes();
+        let mut out = Vec::with_capacity(b.len());
+        let mut i = 0;
+        while i < b.len() {
+            if b[i] == b'%'
+                && i + 2 < b.len()
+                && b[i + 1].is_ascii_hexdigit()
+                && b[i + 2].is_ascii_hexdigit()
+            {
+                let hi = (b[i + 1] as char).to_digit(16).unwrap_or(0) as u8;
+                let lo = (b[i + 2] as char).to_digit(16).unwrap_or(0) as u8;
+                out.push((hi << 4) | lo);
+                i += 3;
+            } else {
+                out.push(b[i]);
+                i += 1;
+            }
+        }
+        out
+    }
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut cur = String::new();
+    let check_line = |cur: &str| -> bool {
+        let lower = cur.to_ascii_lowercase();
+        if !lower.starts_with("content-disposition:") && !lower.starts_with("content-type:") {
+            return false;
+        }
+        let mut plain: Option<Vec<u8>> = None;
+        let mut star = Vec::new();
+        for (i, _) in lower.match_indices('=') {
+            let ks = lower[..i]
+                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .map(|p| p + 1)
+                .unwrap_or(0);
+            let key = lower[ks..i].trim();
+            let val = cur[i + 1..]
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches('"');
+            if key == "filename" || key == "name" {
+                plain = Some(val.as_bytes().to_vec());
+            } else if key.starts_with("filename*") || key.starts_with("name*") {
+                // `charset'lang'` 接頭辞を落として連結
+                let body = val.rsplit('\'').next().unwrap_or(val);
+                star.extend_from_slice(body.as_bytes());
+            }
+        }
+        match (plain, star.is_empty()) {
+            (Some(p), false) => pct_decode(&String::from_utf8_lossy(&p))
+                != pct_decode(&String::from_utf8_lossy(&star)),
+            _ => false,
+        }
+    };
+    for l in text.lines() {
+        if l.is_empty() {
+            if check_line(&cur) {
+                return true;
+            }
+            cur.clear();
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            if check_line(&cur) {
+                return true;
+            }
+            cur.clear();
+            in_headers = !(l.len() > 4 && l.ends_with("--"));
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            cur.push(' ');
+            cur.push_str(l.trim_start());
+        } else {
+            if check_line(&cur) {
+                return true;
+            }
+            cur.clear();
+            cur.push_str(l);
+        }
+    }
+    check_line(&cur)
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -21048,6 +21283,67 @@ mod tests {
             b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nx"
         ));
         assert!(!has_percent_encoded_filename(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unnamed_attachment_は無名添付を検出する() {
+        assert!(has_unnamed_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment\r\n\r\nPAY\r\n--b--"
+        ));
+        // filename / name があれば不発火
+        assert!(!has_unnamed_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment; filename=\"a.exe\"\r\n\r\nPAY\r\n--b--"
+        ));
+        assert!(!has_unnamed_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf; name=\"a.pdf\"\r\nContent-Disposition: attachment\r\n\r\nPAY\r\n--b--"
+        ));
+        // inline / CT無し / 本文のみは不発火
+        assert!(!has_unnamed_attachment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: inline\r\n\r\nPAY\r\n--b--"
+        ));
+        assert!(!has_unnamed_attachment(b"Subject: x\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn non_ascii_addr_domain_はUnicode宛先を検出する() {
+        assert!(has_non_ascii_addr_domain(
+            "From: u@例え.jp\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_non_ascii_addr_domain(
+            "To: Taro <t@日本.example>\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        // コメント内の Unicode は対象外 / ASCII 宛先は不発火
+        assert!(!has_non_ascii_addr_domain(
+            "From: u@x.com (例え.jp)\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_non_ascii_addr_domain(
+            "From: u@x.example\r\nSubject: x\r\n\r\nx".as_bytes()
+        ));
+        // 件名の Unicode は対象外
+        assert!(!has_non_ascii_addr_domain(
+            "From: u@x.com\r\nSubject: 例え\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn conflicting_filename_は両記法の不一致を検出する() {
+        // filename= と filename*= の値が違う
+        assert!(has_conflicting_filename(
+            b"Content-Disposition: attachment; filename=\"a.txt\"; filename*=utf-8''b.exe\r\n\r\nx"
+        ));
+        // 一致する両記法併記は正規 — 不発火
+        assert!(!has_conflicting_filename(
+            b"Content-Disposition: attachment; filename=\"a.txt\"; filename*=utf-8''a.txt\r\n\r\nx"
+        ));
+        // %XX 復号して一致 → 不発火
+        assert!(!has_conflicting_filename(
+            b"Content-Disposition: attachment; filename=\"a b.txt\"; filename*=utf-8''a%20b.txt\r\n\r\nx"
+        ));
+        // filename のみ / なしは不発火
+        assert!(!has_conflicting_filename(
+            b"Content-Disposition: attachment; filename=\"a.txt\"\r\n\r\nx"
+        ));
+        assert!(!has_conflicting_filename(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]
