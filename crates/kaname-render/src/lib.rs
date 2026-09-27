@@ -172,6 +172,10 @@ pub struct Envelope {
     pub rfc2231_attachment_params: bool,
     /// boundary= にエスケープ/閉じないクオートがあるか (D1296)。
     pub escaped_boundary_quote: bool,
+    /// 同一 boundary 値が複数 multipart で使い回されているか (D1297)。
+    pub reused_boundary: bool,
+    /// ヘッダ部に CRLF と裸 LF が混在するか (D1298 — 行分割差異)。
+    pub mixed_line_endings: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2093,6 +2097,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1296: boundary= のエスケープ/閉じないクオート
     let escaped_boundary_quote = has_escaped_boundary_quote(bytes);
 
+    // D1297: 同一 boundary 値の使い回し (入れ子衝突)
+    let reused_boundary = has_reused_boundary(bytes);
+
+    // D1298: ヘッダ部の CRLF/裸LF 混在
+    let mixed_line_endings = has_mixed_line_endings(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2151,6 +2161,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         whitespace_boundary,
         rfc2231_attachment_params,
         escaped_boundary_quote,
+        reused_boundary,
+        mixed_line_endings,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3156,6 +3168,99 @@ pub fn has_escaped_boundary_quote(raw: &[u8]) -> bool {
             // 閉じクオートがない — 行末までを値にする実装と、
             // パース失敗で boundary 無し扱いの実装に分かれる
             return true;
+        }
+    }
+    false
+}
+
+/// 同一の `boundary=` 値が複数の multipart 宣言で使い回されているか
+/// 判定する (D1297)。
+///
+/// 正規の MUA はパートごとにランダムな boundary を生成する。同じ値を
+/// 外側と入れ子で使うと、`--b--` がどちらのレベルを閉じるか実装ごとに
+/// 解釈が分かれ、内側のコンテンツを外側の一部/別パートとして読み替える
+/// 境界衝突工作になる (boundary collision)。クオート有無を正規化して
+/// 同一値の出現回数を数える。
+#[must_use]
+pub fn has_reused_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = l.find("boundary=") else { continue };
+        let rest = &l[pos + 9..];
+        let v = if let Some(q) = rest.strip_prefix('"') {
+            let end = q.find('"').unwrap_or(q.len());
+            q[..end].to_string()
+        } else {
+            rest.split(';').next().unwrap_or("").trim().to_string()
+        };
+        if v.is_empty() {
+            continue;
+        }
+        let n = seen.entry(v).or_insert(0);
+        *n += 1;
+        if *n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダ部の行終端に CRLF と裸 LF が混在するか判定する (D1298)。
+///
+/// RFC 5322 は CRLF を要求するが、受信経路では正規化が混じることがある。
+/// ヘッダブロック内に `\r\n` 終端と裸 `\n` 終端が混在すると、裸 `\n` を
+/// 行終端として認めないパーサは複数ヘッダを1行に結合し、認めるパーサは
+/// 別々に読む — ヘッダインジェクション系の差異工作 (mixed EOL)。
+/// ヘッダ部 = 最初の空行 (`\r\n\r\n` または `\n\n`) まで。
+#[must_use]
+pub fn has_mixed_line_endings(raw: &[u8]) -> bool {
+    // ヘッダ部の範囲: \r\n\r\n と \n\n のうち先に来る方
+    let mut header_end = raw.len();
+    for i in 0..raw.len().saturating_sub(1) {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+    }
+    let hdr = &raw[..header_end];
+    let mut saw_crlf = false;
+    let mut saw_bare_lf = false;
+    for (i, &b) in hdr.iter().enumerate() {
+        if b == b'\n' {
+            if i > 0 && hdr[i - 1] == b'\r' {
+                saw_crlf = true;
+            } else {
+                saw_bare_lf = true;
+            }
+            if saw_crlf && saw_bare_lf {
+                return true;
+            }
         }
     }
     false
@@ -16659,6 +16764,45 @@ mod tests {
         // boundary 以外のパラメータのクオート異常は対象外
         assert!(!has_escaped_boundary_quote(
             b"Content-Type: text/plain; name=\"a\\\"b\"\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn reused_boundary_はboundary衝突を検出する() {
+        // D1297 — 外側と入れ子で同じ boundary
+        assert!(has_reused_boundary(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: multipart/related; boundary=x\r\n\r\nb"
+        ));
+        // クオート有無の違いをまたいでも同一値で衝突
+        assert!(has_reused_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"x\"\r\n\r\n--x\r\nContent-Type: multipart/alternative; boundary=x\r\n\r\nb"
+        ));
+        // 異なる boundary は正規 → 不発火
+        assert!(!has_reused_boundary(
+            b"Content-Type: multipart/mixed; boundary=outer\r\n\r\n--outer\r\nContent-Type: multipart/alternative; boundary=inner\r\n\r\nb"
+        ));
+        // boundary 自体がない → 不発火
+        assert!(!has_reused_boundary(
+            b"Content-Type: text/plain\r\n\r\nplain"
+        ));
+    }
+
+    #[test]
+    fn mixed_line_endings_は改行混在を検出する() {
+        // D1298 — ヘッダ部の CRLF + 裸 LF
+        assert!(has_mixed_line_endings(
+            b"From: a@x\r\nSubject: hi\nTo: b@y\r\n\r\nbody"
+        ));
+        // 全 CRLF / 全 LF は不発火
+        assert!(!has_mixed_line_endings(
+            b"From: a@x\r\nSubject: hi\r\n\r\nbody"
+        ));
+        assert!(!has_mixed_line_endings(
+            b"From: a@x\nSubject: hi\n\nbody"
+        ));
+        // 本文中の混在は対象外 (ヘッダ部のみ)
+        assert!(!has_mixed_line_endings(
+            b"From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n"
         ));
     }
 

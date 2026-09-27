@@ -710,3 +710,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1294 | ~~**boundary= 値の前後空白混入が未検査**~~ **(解消済み)** | P1 | `boundary="x "` — trim する/しないで別区切り (mail-parser trailing-ws)。修正: `has_whitespace_boundary` → render_risks | 値の体裁も攻撃面 |
 | D1295 | ~~**RFC 2231 添付名パラメータが未検査**~~ **(解消済み)** | P1 | `filename*=utf-8''x`/`filename*0=` — 再構成しないスキャナで拡張子検査を素通り。修正: `has_rfc2231_attachment_params` → render_risks | 別表記の存在自体が兆候 |
 | D1296 | ~~**boundary= のエスケープ/閉じないクオートが未検査**~~ **(解消済み)** | P1 | `boundary="a\"b"`/閉じない `"` — 展開方法で別区切り。修正: `has_escaped_boundary_quote` → render_risks | quoted-string の健全性まで測る |
+| D1297 | ~~**boundary 値の使い回し (境界衝突) が未検査**~~ **(解消済み)** | P1 | 同一 boundary を外側/入れ子で再利用 — `--b--` の閉じるレベルが実装差。修正: `has_reused_boundary` → render_risks | 値の一意性も測る |
+| D1298 | ~~**ヘッダ部の CRLF/裸 LF 混在が未検査**~~ **(解消済み)** | P1 | 裸 LF を認めない実装はヘッダ行を結合 → ヘッダ差異工作。修正: `has_mixed_line_endings` → render_risks | 区切りの一貫性も攻撃面 |

@@ -2849,6 +2849,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1297: 同一 boundary 値の使い回し — `--b--` がどちらの
+    //    レベルを閉じるか実装で分かれる境界衝突工作。
+    if env.reused_boundary {
+        render_risks.push(
+            "複数の multipart で同じ boundary 値が使い回されています — \
+             終端の解釈が実装ごとに分かれる境界衝突の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1298: ヘッダ部の CRLF/裸LF 混在 — 裸 LF を認めないパーサは
+    //    複数行を1行に結合し、認めるパーサは別ヘッダとして読む。
+    if env.mixed_line_endings {
+        render_risks.push(
+            "ヘッダの改行に CRLF と LF が混在しています — \
+             行の区切り解釈が実装ごとに分かれるヘッダ差異の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

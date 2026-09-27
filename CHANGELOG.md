@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1297: 同一 boundary 値の使い回し (境界衝突) が未検査
+
+- **問題**: 外側と入れ子で同じ `boundary=` 値を使うと、`--b--` がどちらのレベルを閉じるか実装ごとに解釈が分かれ、内側コンテンツを外側の一部/別パートとして読み替える境界衝突工作になる。正規 MUA はパートごとにランダムな boundary を生成するため同一値の出現自体が異常。
+- **修正**: `has_reused_boundary` — 全 content-type 行の boundary= 値をクオート正規化して数え、同一値が2回以上なら検出 → `Envelope.reused_boundary` → render_risks 警告。
+- **教訓**: 識別子の一意性は使い回しでも破られる — 「値が正しい」だけでなく「一意か」も測る。
+
+### Security — D1298: ヘッダ部の CRLF/裸 LF 混在が未検査
+
+- **問題**: RFC 5322 は CRLF を要求するが、ヘッダブロック内に `\r\n` と裸 `\n` が混在すると、裸 `\n` を行終端として認めないパーサは複数ヘッダを1行に結合し、認めるパーサは別々に読む — ヘッダインジェクション系の差異工作 (mixed EOL)。
+- **修正**: `has_mixed_line_endings` — ヘッダ部 (最初の `\r\n\r\n`/`\n\n` まで) で CRLF 終端行と裸 LF 終端行の両方があれば検出 → `Envelope.mixed_line_endings` → render_risks 警告。全 CRLF/全 LF の一貫した入力は対象外。
+- **教訓**: 区切り文字列自体の一貫性も攻撃面 — 「混在」は仕様差を突く足場。
+
 ### Security — D1295: RFC 2231 分割・符号化パラメータの添付名が未検査
 
 - **問題**: `filename*=utf-8''evil.exe` (文字コード符号化) と `filename*0=`/`filename*1=` (分割継続) の RFC 2231/5987 パラメータを再構成しないスキャナは添付名を `filename=` 不在として素通りし、危険拡張子検査が届かない。D1265 はデコード済み名のみ対象で、この経路は未カバーだった。
