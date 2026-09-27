@@ -738,3 +738,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1322 | ~~**TNEF (winmail.dat) 添付の検査死角**~~ **(解消済み)** | P2 | 本体が独自バイナリ内にあり MIME 検査が届かない。修正: `has_tnef_attachment` → render_risks | 独自カプセル化は検査器に構造的盲点を作る |
 | D1323 | ~~**非正規形 IP リテラルホストが未検査**~~ **(解消済み)** | P2 | DWORD/hex/octal/短縮 IP はドメイン評判の対象外。修正: `is_numeric_ip_host` → Suspicious | ドメイン名の形をしていない宛先は評判照合が効かない |
 | D1324 | ~~**encoded-word 復号後の制御文字が未検査**~~ **(解消済み)** | P2 | 復号で CR/LF が出ると改行注入。修正: `has_control_encoded_word` → render_risks | 符号化欄は復号後の値まで検査する |
+| D1325 | ~~**From の複数アドレス/obs-route 形が未検査**~~ **(解消済み)** | P2 | 複数 mailbox・`<@r:u@h>` で採用アドレスがずれる。修正: `has_multi_addr_from` → render_risks | 一意であるべき欄が「並び」になること自体が兆候 |
+| D1326 | ~~**実行形式メディア型の添付宣言が未検査**~~ **(解消済み)** | P2 | x-msdownload/hta/jar 等の CT 値は拡張子検査を素通り。修正: `has_executable_content_type` → render_risks | 「何が入っているか」の宣言は拡張子と別経路 |

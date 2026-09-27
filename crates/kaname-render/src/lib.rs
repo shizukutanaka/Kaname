@@ -229,6 +229,15 @@ pub struct Envelope {
     /// が含まれる。デコード後にヘッダ行へ CR/LF が現れ、表示層や
     /// 解析層で改行注入・表示偽装の材料になる。
     pub control_encoded_word: bool,
+    /// D1325 — `From:` が複数アドレス (カンマ区切り) または
+    /// obs-route-addr (`<@a,@b:u@c>`) の形。単一アドレスと見る実装と
+    /// 先頭/末尾を採用する実装で「差出人」の見え方がずれる。
+    pub multi_addr_from: bool,
+    /// D1326 — `Content-Type` が実行形式メディア型を名乗るパート
+    /// (x-msdownload/dosexec/hta/java-archive 等)。拡張子ではなく
+    /// メディア型自体が「実行物」を宣言するため、拡張子を見るだけの
+    /// 検査を素通りする。
+    pub executable_content_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2218,6 +2227,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let typeless_content_type = has_typeless_content_type(bytes);
     let tnef_attachment = has_tnef_attachment(bytes);
     let control_encoded_word = has_control_encoded_word(bytes);
+    let multi_addr_from = has_multi_addr_from(bytes);
+    let executable_content_type = has_executable_content_type(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2302,6 +2313,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         typeless_content_type,
         tnef_attachment,
         control_encoded_word,
+        multi_addr_from,
+        executable_content_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4522,6 +4535,135 @@ fn decode_b64_simple(s: &str) -> Vec<u8> {
         }
     }
     out
+}
+
+/// `From:` が単一アドレスの形をしていないか判定する (D1325)。
+///
+/// `From: a@x, b@y` の複数 mailbox は RFC 5322 では Sender: を
+/// 必須とする特殊形だが、メーラーごとに「先頭を表示」「末尾を表示」
+/// 「両方表示」「全体を1名として表示」が分かれ、差出人欄の読み方が
+/// ずれる (複数 From パーサ差異は mutt/Thunderbird 系の CVE で実績)。
+/// また `<@relay1,@relay2:user@host>` の obs-route-addr も同様に
+/// 採用アドレスが実装でずれる旧来の経路指定形。`"…"` 引用と `(…)`
+/// コメント内のカンマは氏名として合法なため剥がしてから評価する。
+#[must_use]
+pub fn has_multi_addr_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break; // 外側ヘッダブロックのみ
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if !l[..colon].eq_ignore_ascii_case("from") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // 引用文字列とコメントを剥がす (`"Tanaka, Taro"` のカンマや
+        // `(a@x)` 内はカウントしない)
+        let b = v.as_bytes();
+        let mut stripped = String::with_capacity(v.len());
+        let mut i = 0;
+        let mut in_quote = false;
+        let mut in_comment = false;
+        while i < b.len() {
+            let c = b[i];
+            if c == b'\\' && i + 1 < b.len() {
+                i += 2;
+                continue;
+            }
+            if in_quote {
+                if c == b'"' {
+                    in_quote = false;
+                }
+                i += 1;
+                continue;
+            }
+            if in_comment {
+                if c == b')' {
+                    in_comment = false;
+                }
+                i += 1;
+                continue;
+            }
+            if c == b'"' {
+                in_quote = true;
+                i += 1;
+                continue;
+            }
+            if c == b'(' {
+                in_comment = true;
+                i += 1;
+                continue;
+            }
+            stripped.push(c as char);
+            i += 1;
+        }
+        return stripped.contains(',') || stripped.contains("<@");
+    }
+    false
+}
+
+/// `Content-Type` が実行形式メディア型を名乗るパートがあるか判定する
+/// (D1326)。
+///
+/// `application/x-msdownload`/`application/x-dosexec`/`application/hta`
+/// `application/java-archive` 等は、ファイル名の拡張子とは独立に
+/// 「これは実行物」と宣言する — 拡張子だけを見る検査 (`evil.scr`
+/// を `readme.dat` に偽装) を素通りする宣言値の側を見る。
+/// D1317/D1318 と同じく「宣言された型そのものが危険」の検査。
+#[must_use]
+pub fn has_executable_content_type(raw: &[u8]) -> bool {
+    const EXEC_TYPES: &[&str] = &[
+        "application/x-msdownload",
+        "application/x-dosexec",
+        "application/x-msdos-program",
+        "application/vnd.microsoft.portable-executable",
+        "application/x-ms-application",
+        "application/hta",
+        "application/java-archive",
+        "application/x-java-archive",
+        "application/x-java-jar",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-type:") {
+            let mt = v.split(';').next().unwrap_or(v).trim();
+            if EXEC_TYPES.contains(&mt) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -18555,6 +18697,45 @@ mod tests {
         assert!(!has_control_encoded_word(
             b"Subject: x\r\n\r\n=?UTF-8?B?DQo=?= in body"
         ));
+    }
+
+    #[test]
+    fn multi_addr_from_は複数差出人形を検出する() {
+        assert!(has_multi_addr_from(b"From: a@x.example, b@y.example\r\n\r\nx"));
+        // obs-route-addr `<@relay:user@host>`
+        assert!(has_multi_addr_from(
+            b"From: <@relay.example,@b.example:user@c.example>\r\n\r\nx"
+        ));
+        // 引用内カンマ (氏名) は不発火
+        assert!(!has_multi_addr_from(
+            b"From: \"Tanaka, Taro\" <t@x.example>\r\n\r\nx"
+        ));
+        // コメント内カンマは不発火
+        assert!(!has_multi_addr_from(
+            b"From: t@x.example (a, b)\r\n\r\nx"
+        ));
+        assert!(!has_multi_addr_from(b"From: Taro <t@x.example>\r\n\r\nx"));
+        // From 無しは不発火
+        assert!(!has_multi_addr_from(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn executable_content_type_は実行形式型を検出する() {
+        assert!(has_executable_content_type(
+            b"Content-Type: application/x-msdownload; name=\"readme.dat\"\r\n\r\nX"
+        ));
+        assert!(has_executable_content_type(
+            b"Content-Type: application/hta\r\n\r\nX"
+        ));
+        // パートヘッダ内も検出
+        assert!(has_executable_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/java-archive\r\n\r\nx\r\n--b--"
+        ));
+        // 通常型は不発火
+        assert!(!has_executable_content_type(
+            b"Content-Type: application/octet-stream; name=\"a.bin\"\r\n\r\nX"
+        ));
+        assert!(!has_executable_content_type(b"Content-Type: text/plain\r\n\r\nx"));
     }
 
     #[test]

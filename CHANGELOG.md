@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1325: From の複数アドレス/経路指定形が未検査
+
+- **問題**: `From: a@x, b@y` の複数 mailbox (RFC 5322 は Sender: を必須とする特殊形) や `<@relay:user@host>` の obs-route-addr は、単一差出人と見る実装と先頭/末尾を採用する実装で差出人欄がずれる (複数 From のパーサ差異は mutt/Thunderbird 系 CVE の実績形)。
+- **修正**: `has_multi_addr_from` — 引用・コメントを剥がした From 値に `,` または `<@` があれば検出 → `Envelope.multi_addr_from` → render_risks 警告。`"Tanaka, Taro"` の氏名カンマは不発火。
+- **教訓**: 一意であるべき欄が「並び」の形をとること自体が兆候 — 採用する1件が実装で分かれる。
+
+### Security — D1326: 実行形式メディア型の添付宣言が未検査
+
+- **問題**: `application/x-msdownload`/`x-dosexec`/`hta`/`java-archive` 等の CT 値は、ファイル名とは独立に「実行物」を宣言する — 拡張子を見る検査は `readme.dat` 偽装をすり抜けるが、宣言側を見る検査が無かった。
+- **修正**: `has_executable_content_type` — ヘッダ run の CT メディア型が実行形式型なら検出 → `Envelope.executable_content_type` → render_risks 警告。
+- **教訓**: 「何が入っているか」の宣言は拡張子と別の経路 — 型が名乗る危険度を直接見る。
+
 ### Security — D1323: 非正規形 IP リテラルホスト URL が未検査
 
 - **問題**: `http://2130706433/` (DWORD)・`http://0x7f000001/` (hex)・`http://0177.0.0.1/` (octal)・`http://127.1/` (短縮)・裸 IPv4 はブラウザ/inet_aton が IP に解釈するがドメイン評判リストの対象外 — 宛先が「ドメイン名の形」をしていないため評価系の盲点になる (SSRF 回避手法のメールリンク転用)。

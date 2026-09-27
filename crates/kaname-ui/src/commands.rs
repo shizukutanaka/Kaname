@@ -3109,6 +3109,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1325: From の複数アドレス/経路指定形 — 単一差出人として
+    //    読む実装と先頭/末尾を採用する実装で表示がずれる。
+    if env.multi_addr_from {
+        render_risks.push(
+            "From ヘッダが複数アドレス・経路指定の形です — 差出人として\
+             どのアドレスを表示するかが実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1326: Content-Type が実行形式メディア型を名乗る — 拡張子を
+    //    見るだけの検査を素通りする実行物宣言。
+    if env.executable_content_type {
+        render_risks.push(
+            "Content-Type が実行形式 (x-msdownload/hta/java-archive 等) を\
+             名乗るパートがあります — 拡張子とは独立に実行物と宣言されています"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
