@@ -834,6 +834,40 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1275: 表示名のホモグリフ/混在スクリプト — analyze_display_name
+    //    は存在するが配線されていなかった (連絡先照合 D-系とは別経路:
+    //    既知連絡先に一致しなくても混在スクリプトは兆候)。全角ラテン
+    //    だけの構成は日本語メールで正規使用のため対象外。
+    if let Some(name) = env.from.first().and_then(|a| a.display_name.as_deref()) {
+        let idn_risks = kaname_bec::idn_homograph::analyze_display_name(name);
+        let flagged = idn_risks.iter().any(|r| match r {
+            kaname_bec::idn_homograph::IdnRisk::HomoglyphCharacters { chars } => {
+                chars
+                    .iter()
+                    .any(|c| !('\u{FF01}'..='\u{FF5E}').contains(c))
+            }
+            _ => true,
+        });
+        if flagged {
+            render_risks.push(
+                "差出人の表示名にホモグリフ文字または混在スクリプトがあります — \
+                 見た目は通常名でも文字構成が異なる偽装の兆候です"
+                    .to_string(),
+            );
+        }
+    }
+
+    // D1276: 件名の回避文字 — 不可視タグ文字・装飾英数字・ゼロ幅・
+    //    ラテン混在キリル/ギリシャは件名でも照合回避に使われる
+    //    (D1257/D1273 は本文のみを対象としていた)。
+    if has_suspicious_subject_chars(&subject) {
+        render_risks.push(
+            "件名に不可視文字・装飾英数字・ホモグリフ文字が含まれています — \
+             件名フィルタを破る文字種変換の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1270: HTML 本文のリモートリソース参照 — 描画時には除去されるが、
     //    参照の存在自体が開封確認トラッキング (生存確認の偵察) の兆候。
     if html_extract
@@ -3392,6 +3426,23 @@ fn has_suspicious_local_part(addr: &str) -> bool {
     })
 }
 
+/// D1276: 件名の回避文字 — 本文用の文字種変換検査 (D1257/D1273) が
+/// 件名を対象にしていなかった穴を塞ぐ。不可視タグ文字・装飾英数字・
+/// ゼロ幅/書式制御・ラテン混在キリル/ギリシャを検出する。
+fn has_suspicious_subject_chars(subject: &str) -> bool {
+    let has_latin = subject.chars().any(|c| c.is_ascii_alphabetic());
+    subject.chars().any(|c| {
+        ('\u{E0000}'..='\u{E007F}').contains(&c) // Unicode タグ文字
+            || ('\u{1D400}'..='\u{1D7FF}').contains(&c) // 装飾英数字
+            || ('\u{24B6}'..='\u{24E9}').contains(&c) // 囲みラテン
+            || ('\u{1F130}'..='\u{1F189}').contains(&c) // 二乗/反転ラテン
+            || ('\u{200B}'..='\u{200F}').contains(&c) // ZWSP/ZWJ 等
+            || c == '\u{FEFF}'
+            || (has_latin
+                && matches!(c, '\u{0400}'..='\u{04FF}' | '\u{0370}'..='\u{03FF}'))
+    })
+}
+
 /// 本文冒頭に LLM 生成物の前文が残っているか (D1259)。
 ///
 /// KnowBe4 (2026-06) の AI 生成フィッシング解析: モデルが出力冒頭に
@@ -4896,6 +4947,20 @@ mod tests {
         // @ なし/空ローカル部は対象外
         assert!(!has_suspicious_local_part("no-at-sign"));
         assert!(!has_suspicious_local_part(""));
+    }
+
+    #[test]
+    fn has_suspicious_subject_chars_は件名の回避文字を検出する() {
+        // D1276 — 件名の文字種変換回避
+        assert!(has_suspicious_subject_chars("\u{1D400}mazon アカウント停止"));
+        assert!(has_suspicious_subject_chars("Re: inv\u{E0001}oice"));
+        assert!(has_suspicious_subject_chars("\u{24B6}mazon からのお知らせ"));
+        assert!(has_suspicious_subject_chars("inv\u{200D}oice")); // ZWJ
+        assert!(has_suspicious_subject_chars("inv\u{043E}ice")); // キリル о
+        // 正規件名・全角・日本語は不発火
+        assert!(!has_suspicious_subject_chars("【請求書】2026年9月分"));
+        assert!(!has_suspicious_subject_chars("Re: ＡＢＣプロジェクト"));
+        assert!(!has_suspicious_subject_chars("週次レポート"));
     }
 
     /// D1254: From == To の self-addressed メールは注意喚起が出る。
