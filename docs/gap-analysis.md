@@ -700,3 +700,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1284 | ~~**Content-Location のリモート参照が未検査**~~ **(解消済み)** | P1 | MHTML/related パートで `Content-Location: https://…` → 表示時リモートフェッチ (MHTML smuggling)。修正: `has_remote_content_location` → render_risks | 空パートは参照値を見よ |
 | D1285 | ~~**MIME 制御ヘッダの重複・不正 CTE が未検査**~~ **(解消済み)** | P1 | 重複 Content-Type/CTE/Disposition・非標準 CTE 値 — 実装間で採用値がずれる (draft-chen MIME ambiguity/noxxi)。修正: `has_conflicting_mime_headers` → render_risks | 同名ヘッダの回数自体が兆候 |
 | D1286 | ~~**インライン uuencode ペイロードが未検査**~~ **(解消済み)** | P2 | `begin 644 x` ブロックは MIME 構造の外 — パート走査を素通り。修正: `has_uuencode_payload` → render_risks | 構造がないこと自体が兆候 |
+| D1287 | ~~**非 multipart Content-Type の bogus boundary= が未検査**~~ **(解消済み)** | P1 | `text/plain; boundary=fake` で外側 boundary を無効化 (mailsplit AIKIDO-2026-785486)。修正: `has_bogus_boundary_param` → render_risks | 型に無関係なパラメータは差異の種 |
+| D1288 | ~~**プリアンブル/エピローグ内のパート構造が未検査**~~ **(解消済み)** | P1 | boundary の外のパート様ヘッダは無視系スキャナに不可視。修正: `has_orphaned_part_content` → render_risks | 範囲外のヘッダ構造も兆候 |

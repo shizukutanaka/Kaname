@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1287: 非 multipart Content-Type の bogus boundary= が未検査
+
+- **問題**: `Content-Type: text/plain; boundary=fake` — multipart 以外の型に boundary= があると、それを採用するパーサは本物の外側 boundary を無効化し、後続の実パートをスキャンから隠す (mailsplit AIKIDO-2026-785486 / zone-eu commit 028a6fc — 「boundary 所有権」の取り違え)。
+- **修正**: `has_bogus_boundary_param` — `boundary=` を含む `content-type:` 論理行で主型が `multipart/` でなければ検出 → `Envelope.bogus_boundary_param` → render_risks 警告。
+- **教訓**: パラメータの「存在」と「型との整合」は別の兆候 — 型に無関係な boundary は差異工作の種。
+
+### Security — D1288: プリアンブル/エピローグ内のパート構造が未検査
+
+- **問題**: 最初の `--boundary` より前、最後の `--boundary--` より後にパート様のヘッダ構造があると、プリアンブル/エピローグを無視するスキャナには見えず MUA は表示する (同じく mailsplit の boundary 所有権バグの系)。
+- **修正**: `has_orphaned_part_content` — トップレベル multipart の boundary 値からプリアンブル/エピローグを特定し、その中に `Content-Type:`/`Content-Disposition:`/`Content-Transfer-Encoding:` 行があれば検出 → `Envelope.orphaned_part_content` → render_risks 警告。説明テキストのみのプリアンブルは対象外。
+- **教訓**: boundary の外側も内容になりうる — 範囲外にあるヘッダ構造は「見る範囲が違う」差異の兆候。
+
 ### Security — D1285: MIME 制御ヘッダの重複・不正 CTE が未検査
 
 - **問題**: 同一パートに `Content-Type:`/`Content-Transfer-Encoding:`/`Content-Disposition:` が複数あると、実装ごとに採用する方が食い違う — noxxi "Dubious MIME" (重複 CTE でスキャナとクライアントが別バイト列を復号) と IETF draft-chen-email-mime-ambiguity-defense-00 (2026-03) が扱う曖昧性工作。`x-uuencode` 等の非標準 CTE 値もフォールバックが実装間で分かれる。
