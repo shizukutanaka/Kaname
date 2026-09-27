@@ -3189,6 +3189,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1333: 読了通知請求 — 開封を送信側に通知する仕掛け
+    //    (メールトラッカーと同型の生存確認・偵察経路)。
+    if env.receipt_request {
+        render_risks.push(
+            "読了通知の請求ヘッダがあります — 開封したことが送信側に\
+             通知される仕掛け (生存確認・追跡) の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1334: From が addr-spec を持たない — 表示名のみの差出人は
+    //    実装間で見え方がずれ、名前だけの偽装の材料になる。
+    if env.degenerate_from {
+        render_risks.push(
+            "From ヘッダに配送可能なアドレスがありません (表示名のみ・空値) —\
+             差出人欄の表示が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

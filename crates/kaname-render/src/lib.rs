@@ -263,6 +263,15 @@ pub struct Envelope {
     /// ある。Content-Location と同じく相対参照の解決先を外部に向ける
     /// MHTML 系ヘッダ (D1284 の姉妹)。
     pub remote_content_base: bool,
+    /// D1333 — 読了通知請求ヘッダ (`Disposition-Notification-To:`/
+    /// `Return-Receipt-To:`/`X-Confirm-Reading-To:`/
+    /// `Return-Receipt-Requested:`) がある — 開封を送信側に通知する
+    /// 仕掛けで、生存確認・追跡の偵察手段 (RFC 8098 MDN)。
+    pub receipt_request: bool,
+    /// D1334 — `From:` が addr-spec を持たない (`From: "CEO"` の
+    /// 表示名のみ・空値)。差出人として表示できるルーティング可能な
+    /// アドレスが無く、実装間で表示がずれる。
+    pub degenerate_from: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2260,6 +2269,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let malformed_header_line = has_malformed_header_line(bytes);
     let bcc_header = has_bcc_header(bytes);
     let remote_content_base = has_remote_content_base(bytes);
+    let receipt_request = has_receipt_request(bytes);
+    let degenerate_from = has_degenerate_from_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2352,6 +2363,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         malformed_header_line,
         bcc_header,
         remote_content_base,
+        receipt_request,
+        degenerate_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5053,6 +5066,106 @@ pub fn has_remote_content_base(raw: &[u8]) -> bool {
         let v = lower[colon + 1..].trim();
         v.starts_with("http://") || v.starts_with("https://") || v.starts_with("ftp://")
     })
+}
+
+/// 読了通知請求ヘッダがあるか判定する (D1333)。
+///
+/// `Disposition-Notification-To:` (RFC 8098 MDN)・
+/// `Return-Receipt-To:`・`X-Confirm-Reading-To:`・
+/// `Return-Receipt-Requested:` は、開封を送信側に通知する仕掛け。
+/// メールトラッカーのヘッダ形態であり、生存確認・開封時刻の偵察に
+/// 使われる — リモート画像と同じく「見たことを送信側が知る」
+/// 経路。外側ヘッダのみを見る。
+#[must_use]
+pub fn has_receipt_request(raw: &[u8]) -> bool {
+    const RCPT: &[&str] = &[
+        "disposition-notification-to:",
+        "return-receipt-to:",
+        "x-confirm-reading-to:",
+        "return-receipt-requested:",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.is_empty() {
+            break;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if RCPT.iter().any(|h| low.starts_with(h)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 外側 `From:` が addr-spec を持たないか判定する (D1334)。
+///
+/// `From: "CEO"` (表示名のみ) や `From:` (空値) は、ルーティング
+/// 可能な差出人アドレスが無い。名前だけを差出人として表示する
+/// 実装と「不明な差出人」を出す実装で見え方がずれ、表示名だけで
+/// 成り立つ偽装の材料になる。D1325 が「多すぎる From」を見るのに
+/// 対し、こちらは「アドレスを持たない From」を見る。
+#[must_use]
+pub fn has_degenerate_from_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if !l[..colon].eq_ignore_ascii_case("from") {
+            continue;
+        }
+        // 引用・コメントを剥がしてから addr-spec 有無を見る
+        let v = &l[colon + 1..];
+        let mut stripped = String::with_capacity(v.len());
+        let mut in_quote = false;
+        let mut in_comment = 0usize;
+        let mut esc = false;
+        for c in v.chars() {
+            if esc {
+                esc = false;
+                if !in_quote && in_comment == 0 {
+                    stripped.push(c);
+                }
+                continue;
+            }
+            match c {
+                '\\' => esc = true,
+                '"' if in_comment == 0 => in_quote = !in_quote,
+                '(' if !in_quote => in_comment += 1,
+                ')' if !in_quote && in_comment > 0 => in_comment -= 1,
+                _ => {
+                    if !in_quote && in_comment == 0 {
+                        stripped.push(c);
+                    }
+                }
+            }
+        }
+        let t = stripped.trim();
+        if t.is_empty() || !t.contains('@') {
+            return true;
+        }
+    }
+    false
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -19260,6 +19373,38 @@ mod tests {
         assert!(has_remote_content_base(
             b"Content-Base:\r\n\thttps://evil.example/\r\n\r\nx"
         ));
+    }
+
+    #[test]
+    fn receipt_request_は読了通知請求を検出する() {
+        assert!(has_receipt_request(
+            b"From: a@x\r\nDisposition-Notification-To: a@x\r\n\r\nx"
+        ));
+        assert!(has_receipt_request(b"Return-Receipt-To: r@x\r\n\r\nx"));
+        assert!(has_receipt_request(b"X-Confirm-Reading-To: r@x\r\n\r\nx"));
+        // 本文中の同文字列は対象外
+        assert!(!has_receipt_request(
+            b"Subject: x\r\n\r\nDisposition-Notification-To: a@x"
+        ));
+        assert!(!has_receipt_request(b"From: a@x\r\nTo: b@y\r\n\r\nx"));
+    }
+
+    #[test]
+    fn degenerate_from_はアドレス無し差出人を検出する() {
+        assert!(has_degenerate_from_addr(b"From: \"CEO\"\r\n\r\nx"));
+        assert!(has_degenerate_from_addr(b"From:\r\n\r\nx"));
+        assert!(has_degenerate_from_addr(b"From: 山田太郎\r\n\r\nx"));
+        // 引用内の @ はアドレスではない
+        assert!(has_degenerate_from_addr(b"From: \"a@b\"\r\n\r\nx"));
+        // 通常形は不発火
+        assert!(!has_degenerate_from_addr(b"From: ceo@x.example\r\n\r\nx"));
+        assert!(!has_degenerate_from_addr(
+            b"From: Taro <t@x.example>\r\n\r\nx"
+        ));
+        // コメント内 @ はアドレスではない → 名前のみ + コメントでも発火
+        assert!(has_degenerate_from_addr(b"From: Taro (t@x)\r\n\r\nx"));
+        // From 無しは不発火
+        assert!(!has_degenerate_from_addr(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]

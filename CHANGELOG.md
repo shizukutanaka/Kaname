@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1333: 読了通知請求ヘッダが未検査
+
+- **問題**: `Disposition-Notification-To:` (RFC 8098 MDN)・`Return-Receipt-To:`・`X-Confirm-Reading-To:`・`Return-Receipt-Requested:` は開封を送信側に通知する仕掛け — メールトラッカーと同型の生存確認・開封時刻偵察経路だが未検査だった。
+- **修正**: `has_receipt_request` — 外側ヘッダに該当ヘッダがあれば検出 → `Envelope.receipt_request` → render_risks 警告。
+- **教訓**: 「見たことを送信側が知る」経路はリモート画像と同型 — ヘッダ形態のものも兆候として扱う。
+
+### Security — D1334: addr-spec を持たない From が未検査
+
+- **問題**: `From: "CEO"` (表示名のみ) や `From:` (空値) にはルーティング可能な差出人アドレスが無い — 名前だけを表示する実装と「不明」を出す実装でずれ、表示名だけの偽装材料になる (D1325 は「多すぎる From」、こちらは「アドレスの無い From」)。
+- **修正**: `has_degenerate_from_addr` — 引用・コメントを剥がした From 値に `@` が無ければ検出 → `Envelope.degenerate_from` → render_risks 警告。引用・コメント内の `@` はアドレスと見なさない。
+- **教訓**: 一意欄の欠落形には「多い」だけでなく「無い」もある。
+
 ### Security — D1331: 受信メッセージの Bcc 残存が未検査
 
 - **問題**: `Bcc:` は宛先に見せない欄で配送時に除去されるのが一般 — 受信メッセージへの残存は手作り生成か経路異常の兆候であり、Bcc 宛先が受信者に露出する情報流出でもある。

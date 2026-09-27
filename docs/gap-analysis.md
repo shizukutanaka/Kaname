@@ -746,3 +746,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1330 | ~~**`Name:` 形を持たないヘッダ行が未検査**~~ **(解消済み)** | P2 | コロン無し・空名・名前中非許可文字でヘッダ終端の解釈がずれる。修正: `has_malformed_header_line` → render_risks | 欄の形の崩れは「どこまでが欄か」の読み手間差分 |
 | D1331 | ~~**受信メッセージの Bcc 残存が未検査**~~ **(解消済み)** | P2 | 配送時除去の欄が届く = 手作り生成/経路異常 + Bcc 露出。修正: `has_bcc_header` → render_risks | 「届くはずのない欄」が届いていること自体が兆候 |
 | D1332 | ~~**Content-Base のリモート URL が未検査**~~ **(解消済み)** | P2 | Content-Location と同型の MHTML リモートフェッチ経路。修正: `has_remote_content_base` → render_risks | 同型ヘッダは対で見る — 片方だけ塞ぐと経路が残る |
+| D1333 | ~~**読了通知請求ヘッダが未検査**~~ **(解消済み)** | P2 | MDN/Return-Receipt 系は開封通知の偵察経路 (トラッカーと同型)。修正: `has_receipt_request` → render_risks | 「見たことを送信側が知る」経路はヘッダ形態も兆候 |
+| D1334 | ~~**addr-spec を持たない From が未検査**~~ **(解消済み)** | P2 | 表示名のみ/空 From で差出人欄の表示がずれる。修正: `has_degenerate_from_addr` → render_risks | 一意欄の欠落形は「多い」だけでなく「無い」も |
