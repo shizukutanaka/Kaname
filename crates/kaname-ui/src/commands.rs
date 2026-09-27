@@ -2700,6 +2700,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1283: malformed encoded-word — デコード実装ごとに表示が
+    //    食い違うパーサ差異偽装 (CVE-2026-63435 系)。
+    if env.malformed_encoded_word {
+        render_risks.push(
+            "ヘッダに malformed encoded-word があります — \
+             デコードする実装と素通しする実装で表示が食い違い、\
+             送信者/件名の見た目を制御するパーサ差異偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1284: Content-Location がリモート URL — MHTML smuggling。
+    if env.remote_content_location {
+        render_risks.push(
+            "Content-Location がリモート URL を指しています — \
+             パート本体は無害なまま表示時にリモートからペイロードを\
+             読み込む MHTML スマグリングの兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

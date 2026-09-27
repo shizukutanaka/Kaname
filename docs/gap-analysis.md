@@ -696,3 +696,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1280 | ~~**空本文 + メール添付のみの相関が未検査**~~ **(解消済み)** | P2 | 「外側は無害・内側に集中」の形状。修正: 空本文 × 入れ子メール添付 → render_risks | 「何も書かない」も形状として数える |
 | D1281 | ~~**Content-Type の boundary= 重複 (MIME パーサ差異) が未検査**~~ **(解消済み)** | P1 | `boundary=safe; boundary=evil` — 先/後で読む実装で構造差異。修正: `has_ambiguous_boundary` (FWS 展開) → `ambiguous_boundary` → render_risks | パラメータ重複は parser differential の最も安い兆候 |
 | D1282 | ~~**件名の不可視文字検査に soft hyphen 系が抜けていた**~~ **(解消済み)** | P2 | SANS ISC 32428 — encoded-word 件名に U+00AD soft hyphen。修正: `has_suspicious_subject_chars` に SOFT HYPHEN/WORD JOINER/CGJ/ALM/Mongolian VS/Hangul filler 追加 | 不可視文字は網羅リストで維持せよ |
+| D1283 | ~~**ヘッダの malformed encoded-word が未検査**~~ **(解消済み)** | P2 | `=?UTF-8?B?...` (閉じ無し) 等はパーサ差異偽装の入口 (CVE-2026-63435 系)。修正: `has_malformed_encoded_word` (From/To/Cc/Reply-To/Subject) → `malformed_encoded_word` → render_risks | 形の破損自体が兆候 |
+| D1284 | ~~**Content-Location のリモート参照が未検査**~~ **(解消済み)** | P1 | MHTML/related パートで `Content-Location: https://…` → 表示時リモートフェッチ (MHTML smuggling)。修正: `has_remote_content_location` → render_risks | 空パートは参照値を見よ |

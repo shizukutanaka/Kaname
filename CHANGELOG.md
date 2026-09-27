@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1283: ヘッダの malformed encoded-word が未検査
+
+- **問題**: `=?UTF-8?B?...` (閉じ `?=` 無し) や `=?utf-8?X?` (不正 encoding) のような RFC 2047 形に合わない encoded-word 断片は、デコードする実装と素通しする実装で表示が食い違う — From/Subject の見た目を攻撃者が制御できるパーサ差異偽装 (CVE-2026-63435 系)。既存の件名/表示名検査はデコード後の文字列を見るため、そもそも形が壊れていることを捉えられなかった。
+- **修正**: `has_malformed_encoded_word` — From/To/Cc/Reply-To/Subject を FWS 展開して `=?charset?B|Q?text?=` の形に合わない断片を検出 → `Envelope.malformed_encoded_word` → render_risks 警告。
+- **教訓**: 「デコード結果が怪しい」だけでなく「形自体が壊れている」ことも兆候 — 壊れた形はパーサ差異の入口。
+
+### Security — D1284: Content-Location のリモート参照が未検査
+
+- **問題**: MHTML/関連パートで `Content-Location:` が `https://…` を指すと、パート本体は空・無害のまま表示時にリモートフェッチが発生し添付検査を素通りする (MHTML smuggling — Cofense/Trustwave の観測)。`.mht` 拡張子は D166 で既に危険扱いだが、メール本体内の related パートに同じ機構が残っていた。
+- **修正**: `has_remote_content_location` — 全文の論理行 (FWS 展開) で `content-location:` ヘッダを探し、値が http(s)/ftp 始まりなら検出 → `Envelope.remote_content_location` → render_risks 警告。`cid:` 等のローカル参照は対象外。
+- **教訓**: 「中身が無いパート」は本体ではなく参照を見よ — Content-Location/Content-ID の値そのものがペイロードの配送経路になる。
+
 ### Security — D1281: Content-Type の boundary= 重複 (MIME パーサ差異) が未検査
 
 - **問題**: `boundary=safe; boundary=evil` のように `Content-Type:` に複数の `boundary=` があると、先を読む実装と後を読む実装でパート構造が食い違う — ゲートウェイが検査した部分とクライアントが表示する部分が別物になる parser differential (Radboud 大学 MIME 差分ファジング論文 2025、Rack GHSA-vgpv-f759-9wx3 と同型)。既存の `missing_boundary_param` は「無い」場合のみで「重複」は未検査だった。

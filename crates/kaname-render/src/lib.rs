@@ -138,6 +138,12 @@ pub struct Envelope {
     /// 内容を見るパーサ差異 (MIME smuggling — Radboud 大学の
     /// differential fuzzing 論文 2025 / Rack GHSA-vgpv-f759-9wx3)。
     pub ambiguous_boundary: bool,
+    /// From/To/Cc/Reply-To/Subject の値に malformed encoded-word が
+    /// 含まれるか (D1283 — CVE-2026-63435 系のパーサ差異偽装)。
+    pub malformed_encoded_word: bool,
+    /// `Content-Location:` が http(s)/ftp のリモート URL を指す
+    /// パートがあるか (D1284 — MHTML smuggling)。
+    pub remote_content_location: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2041,6 +2047,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1281: Content-Type の boundary= 重複 (パーサ差異)
     let ambiguous_boundary = has_ambiguous_boundary(bytes);
 
+    // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
+    let malformed_encoded_word = has_malformed_encoded_word(bytes);
+
+    // D1284: Content-Location がリモート URL を指すパート (MHTML smuggling)
+    let remote_content_location = has_remote_content_location(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2066,6 +2078,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         empty_return_path,
         filename_name_mismatch,
         ambiguous_boundary,
+        malformed_encoded_word,
+        remote_content_location,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2396,6 +2410,113 @@ pub fn has_ambiguous_boundary(raw: &[u8]) -> bool {
     logical.iter().any(|l| {
         let l = l.to_ascii_lowercase();
         l.starts_with("content-type:") && l.matches("boundary=").count() > 1
+    })
+}
+
+/// D1283: ヘッダ値に malformed encoded-word が含まれるか判定する。
+///
+/// RFC 2047 の encoded-word は `=?charset?B|Q?text?=` の形で、
+/// charset は空白を含まない非空トークン、encoding は B/Q の 1 文字、
+/// text は空白・`?` を含まず `?=` で閉じる。`=?` で始まりこの形に
+/// ならない断片があると、デコードする実装と素通しする実装で
+/// 表示が食い違い、From の見た目を攻撃者側が制御できる
+/// (CVE-2026-63435 系の encoded-word パーサ差異偽装)。
+/// From:/To:/Cc:/Reply-To:/Subject: のみを対象にする。
+#[must_use]
+pub fn has_malformed_encoded_word(raw: &[u8]) -> bool {
+    fn word_malformed(value: &str) -> bool {
+        let mut i = 0;
+        while let Some(pos) = value[i..].find("=?") {
+            let rest = &value[i + pos + 2..];
+            // charset 終端: 次の '?' か空白まで
+            let e1 = rest.find(|c: char| c == '?' || c.is_whitespace());
+            let Some(e1) = e1 else { return true };
+            if rest.as_bytes().get(e1) != Some(&b'?') || rest[..e1].is_empty() {
+                return true;
+            }
+            let r2 = &rest[e1 + 1..];
+            if r2.len() < 2
+                || !matches!(r2.as_bytes()[0], b'b' | b'B' | b'q' | b'Q')
+                || r2.as_bytes()[1] != b'?'
+            {
+                return true;
+            }
+            let text = &r2[2..];
+            match text.find("?=") {
+                None => return true,
+                Some(e) => {
+                    let body = &text[..e];
+                    if body.is_empty() || body.contains(|c: char| c == '?' || c.is_whitespace()) {
+                        return true;
+                    }
+                    i += pos + 2 + e1 + 1 + 2 + e + 2;
+                }
+            }
+        }
+        false
+    }
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = text[..header_end.min(text.len())].replace("\r\n", "\n");
+    let mut logical: Vec<String> = Vec::new();
+    for l in header.split('\n') {
+        if l.starts_with([' ', '\t']) {
+            if let Some(last) = logical.last_mut() {
+                last.push_str(l.trim_start());
+            }
+        } else {
+            logical.push(l.to_string());
+        }
+    }
+    for l in &logical {
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("from:")
+            || lower.starts_with("to:")
+            || lower.starts_with("cc:")
+            || lower.starts_with("reply-to:")
+            || lower.starts_with("subject:")
+        {
+            let colon = l.find(':').unwrap_or(0);
+            if word_malformed(&l[colon + 1..]) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// D1284: いずれかのヘッダで `Content-Location:` が http(s)/ftp の
+///   リモート URL を指すか判定する。
+///
+/// MHTML/関連パートの Content-Location がリモートを指すと、パート本体は
+/// 空・無害のまま表示時にリモートフェッチが発生し、添付検査を素通りする
+/// (MHTML smuggling)。トップレベルに限らず入れ子パートのヘッダも対象に
+/// するため、行頭に `content-location:` が現れる論理行を全文で探す。
+#[must_use]
+pub fn has_remote_content_location(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical: Vec<String> = Vec::new();
+    for l in text.split('\n') {
+        if l.starts_with([' ', '\t']) {
+            if let Some(last) = logical.last_mut() {
+                last.push_str(l.trim_start());
+            }
+        } else {
+            logical.push(l.to_string());
+        }
+    }
+    logical.iter().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        if !lower.starts_with("content-location:") {
+            return false;
+        }
+        let colon = lower.find(':').unwrap_or(0);
+        let v = lower[colon + 1..].trim();
+        v.starts_with("http://") || v.starts_with("https://") || v.starts_with("ftp://")
     })
 }
 
@@ -15656,6 +15777,45 @@ mod tests {
         let ok = b"Content-Type: multipart/mixed; boundary=abc\r\nX-Note: boundary=x\r\n\r\nx";
         assert!(!has_ambiguous_boundary(ok));
         assert!(!has_ambiguous_boundary(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn malformed_encoded_word_は不正encoded_wordを検出する() {
+        // D1283 — =? で始まり ?= で閉じない / charset 空 / encoding 不正
+        assert!(has_malformed_encoded_word(
+            "Subject: =?UTF-8?B?aGVsbG8\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_malformed_encoded_word(
+            "From: =?utf-8?X?abc?= <a@b>\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_malformed_encoded_word(
+            "From: =??Q?abc?= <a@b>\r\n\r\nx".as_bytes()
+        ));
+        // 正規の encoded-word は不発火
+        assert!(!has_malformed_encoded_word(
+            "Subject: =?UTF-8?B?5Lul5YuV?=".as_bytes()
+        ));
+        assert!(!has_malformed_encoded_word(
+            "From: =?UTF-8?Q?Taro_Tanaka?= <t@x>\r\nSubject: hi\r\n\r\nx".as_bytes()
+        ));
+        // encoded-word を含まないヘッダ / ヘッダ外の '=?'
+        assert!(!has_malformed_encoded_word(
+            "Subject: plain\r\nX: a=?b\r\n\r\nbody =?broken".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn remote_content_location_はリモート参照を検出する() {
+        // D1284 — MHTML smuggling: パート本体は空、Content-Location がリモート
+        let remote = b"Content-Type: multipart/related; boundary=x\r\n\r\n--x\r\nContent-Type: text/html\r\nContent-Location: https://evil.example/pay.html\r\n\r\n<i>stub</i>\r\n--x--\r\n";
+        assert!(has_remote_content_location(remote));
+        // FWS 折り畳みの値
+        let folded = b"--x\r\nContent-Location:\r\n\thttp://evil.example/x\r\n\r\nbody\r\n--x--";
+        assert!(has_remote_content_location(folded));
+        // ローカル/cid 参照は不発火
+        let cid = b"Content-Type: multipart/related; boundary=x\r\n\r\n--x\r\nContent-Location: cid:img1\r\n\r\n--x--";
+        assert!(!has_remote_content_location(cid));
+        assert!(!has_remote_content_location(b"Content-Type: text/plain\r\n\r\nplain"));
     }
 
     #[test]
