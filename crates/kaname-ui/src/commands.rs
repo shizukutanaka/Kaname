@@ -3362,6 +3362,36 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1350: Content-Type 無宣言のパート — 既定値適用とスニッフィングで
+    //    読み手がずれる。
+    if env.missing_part_content_type {
+        render_risks.push(
+            "Content-Type を宣言しないパートがあります —\
+             型の解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1351: CT/CD パラメータ値内の encoded-word — RFC 2231 が正規の場に
+    //    RFC 2047 断片を混ぜ、復号する/しないで添付名がずれる。
+    if env.param_encoded_word {
+        render_risks.push(
+            "MIME パラメータ値に encoded-word が含まれます —\
+             添付名の読み取りが実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1352: multipart/digest — メンバー既定が message/rfc822 になり
+    //    既定値を知らない検査は入れ子メールを見逃す。
+    if env.digest_container {
+        render_risks.push(
+            "multipart/digest 型です — メンバー既定がメール全文になり、\
+             入れ子内容が走査を素通りする兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

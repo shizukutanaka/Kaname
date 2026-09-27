@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1350: Content-Type 無宣言パートが未検査
+
+- **問題**: boundary 行で始まるが `Content-Type:` を持たないパートは、RFC 2046 の既定 `text/plain` を適用する実装とスニッフィングに頼る実装で読み手がずれる。
+- **修正**: `has_missing_part_content_type` — `--` run が CT 無しで終われば検出 → `Envelope.missing_part_content_type` → render_risks 警告。
+- **教訓**: 「書かれていない型」は書かれた型より解釈が割れる。
+
+### Security — D1351: CT/CD パラメータ値内の encoded-word が未検査
+
+- **問題**: `filename="=?UTF-8?B?…?="` — RFC 2047 はパラメータ値内の encoded-word を認めない (RFC 2231 が正規) が、復号する表示側としない側で添付名がずれる。
+- **修正**: `has_param_encoded_word` — CT/CD 行の `;` 以降に `=?` があれば検出 → `Envelope.param_encoded_word` → render_risks 警告。
+- **教訓**: 正規の符号化方式が別にある場所に別方式を混ぜれば読み手が割れる。
+
+### Security — D1352: `multipart/digest` コンテナが未検査
+
+- **問題**: digest のメンバーは既定 `message/rfc822` (RFC 2046 §5.1.5)。既定値を知らない検査は宣言無しの入れ子メールを見逃す。
+- **修正**: `has_digest_container` — CT が `multipart/digest` なら検出 → `Envelope.digest_container` → render_risks 警告。
+- **教訓**: 既定値の中身は宣言されずに届く — 既定を知らない検査は見えない。
+
 ### Security — D1347: パート宣言の message/* サブタイプが未検査
 
 - **問題**: `message/delivery-status`・`message/partial`・`message/external-body` 等は添付側で D1266 が検査するが、パート宣言位置では未検査。「メッセージ型」を名乗るだけで内容走査を避ける死角。

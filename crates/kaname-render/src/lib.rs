@@ -334,6 +334,18 @@ pub struct Envelope {
     /// MESSAGE-----` 等の暗号化ブロック。内容が検査不能であることを
     /// 通知する (S/MIME・OpenPGP の正当利用でも発火する注意喚起)。
     pub opaque_encrypted: bool,
+    /// D1350 — boundary 行で始まるが `Content-Type:` を持たないパート。
+    /// RFC 2046 は既定 `text/plain` と定めるが、宣言の無い型は実装が
+    /// スニッフィングに頼るか既定値を使うかで読み手がずれる。
+    pub missing_part_content_type: bool,
+    /// D1351 — CT/CD パラメータ値内の encoded-word 断片 `=?…?…?…?=`。
+    /// RFC 2047 は値内の encoded-word を認めない (RFC 2231 が正規) —
+    /// 復号する表示側としない側で添付名がずれる。
+    pub param_encoded_word: bool,
+    /// D1352 — `Content-Type: multipart/digest`。メンバーの既定型が
+    /// `message/rfc822` になるコンテナ (RFC 2046 §5.1.5) — 既定値を
+    /// 知らない検査は入れ子メールを見逃す。
+    pub digest_container: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2348,6 +2360,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let message_subtype_part = has_message_subtype_part(bytes);
     let mixed_replace = has_mixed_replace(bytes);
     let opaque_encrypted = has_opaque_encrypted_content(bytes);
+    let missing_part_content_type = has_missing_part_content_type(bytes);
+    let param_encoded_word = has_param_encoded_word(bytes);
+    let digest_container = has_digest_container(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2457,6 +2472,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         message_subtype_part,
         mixed_replace,
         opaque_encrypted,
+        missing_part_content_type,
+        param_encoded_word,
+        digest_container,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5946,6 +5964,119 @@ pub fn has_opaque_encrypted_content(raw: &[u8]) -> bool {
                 {
                     return true;
                 }
+            }
+        }
+    }
+    false
+}
+
+/// boundary 行で始まるのに `Content-Type:` を持たないパートがあるか
+/// 判定する (D1350)。
+///
+/// RFC 2046 は既定 `text/plain` と定めるが、宣言の無い型は実装が
+/// 既定値を使うかスニッフィングに頼るかで読み手がずれる。
+#[must_use]
+pub fn has_missing_part_content_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_run = false;
+    let mut saw_ct = false;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            if in_run && !saw_ct {
+                return true;
+            }
+            // `--b--` の終端境界は新しい run を開始しない
+            if l.ends_with("--") && l.len() > 4 {
+                in_run = false;
+                saw_ct = false;
+                continue;
+            }
+            in_run = true;
+            saw_ct = false;
+            continue;
+        }
+        if !in_run {
+            continue;
+        }
+        if l.is_empty() {
+            // run の終わり (ヘッダ部が空だったパートも検出)
+            if !saw_ct {
+                return true;
+            }
+            in_run = false;
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("content-type:") {
+            saw_ct = true;
+        }
+    }
+    in_run && !saw_ct
+}
+
+/// CT/CD パラメータ値内に encoded-word 断片があるか判定する (D1351)。
+///
+/// `filename="=?UTF-8?B?…?="` — RFC 2047 はパラメータ値内の
+/// encoded-word を認めない (RFC 2231 が正規) が、復号する表示側と
+/// しない側で添付名がずれる。
+#[must_use]
+pub fn has_param_encoded_word(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        // `;` 以降のパラメータ部のみ評価 — メディア型自体に =? は来ない
+        let after_colon = l.find(':').map(|i| &l[i + 1..]).unwrap_or("");
+        if let Some(semi) = after_colon.find(';') {
+            if after_colon[semi + 1..].contains("=?") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type: multipart/digest` か判定する (D1352)。
+///
+/// digest のメンバーは既定で `message/rfc822` (RFC 2046 §5.1.5) —
+/// 既定値を知らない検査は入れ子メールを見逃す。
+#[must_use]
+pub fn has_digest_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            if v.trim_start().starts_with("multipart/digest") {
+                return true;
             }
         }
     }
@@ -20464,6 +20595,52 @@ mod tests {
         assert!(!has_opaque_encrypted_content(
             b"X-Note: -----BEGIN PGP-----\r\n\r\nx"
         ));
+    }
+
+    #[test]
+    fn missing_part_content_type_は無宣言パートを検出する() {
+        assert!(has_missing_part_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+        // CD のみ・CT 無しも発火
+        assert!(has_missing_part_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment\r\n\r\nx\r\n--b--"
+        ));
+        // 全パート CT 宣言ありは不発火
+        assert!(!has_missing_part_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        assert!(!has_missing_part_content_type(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn param_encoded_word_は値内encoded_wordを検出する() {
+        assert!(has_param_encoded_word(
+            b"Content-Disposition: attachment; filename=\"=?UTF-8?B?ZXZpbA==?=\"\r\n\r\nx"
+        ));
+        assert!(has_param_encoded_word(
+            b"Content-Type: text/plain; name==?UTF-8?Q?x?=\r\n\r\nx"
+        ));
+        // 通常パラメータ・メディア型は不発火
+        assert!(!has_param_encoded_word(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(!has_param_encoded_word(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn digest_container_はdigest型を検出する() {
+        assert!(has_digest_container(
+            b"Content-Type: multipart/digest; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+        // メンバー位置の digest も発火
+        assert!(has_digest_container(
+            b"Content-Type: multipart/mixed; boundary=o\r\n\r\n--o\r\nContent-Type: multipart/digest; boundary=i\r\n\r\n--i--\r\n--o--"
+        ));
+        assert!(!has_digest_container(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\nx"
+        ));
+        assert!(!has_digest_container(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]

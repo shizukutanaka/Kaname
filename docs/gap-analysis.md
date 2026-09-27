@@ -763,3 +763,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1347 | ~~**パート宣言の message/* サブタイプが未検査**~~ **(解消済み)** | P2 | 添付側 D1266 のみでパート宣言位置は死角。修正: `has_message_subtype_part` → render_risks | 同じ型でも通る場所が違う |
 | D1348 | ~~**multipart/x-mixed-replace が未検査**~~ **(解消済み)** | P2 | push 型で後続パートが表示を置き換える。修正: `has_mixed_replace` → render_risks | 時間と共に変わる文書は静止検査で見えない |
 | D1349 | ~~**暗号化内容の検査不能が未通知**~~ **(解消済み)** | P2 | multipart/encrypted・PGP ブロックは一切の走査を素通り。修正: `has_opaque_encrypted_content` → render_risks | 検査できない事実自体が検査結果 |
+| D1350 | ~~**Content-Type 無宣言パートが未検査**~~ **(解消済み)** | P2 | 既定値適用とスニッフィングで読み手がずれる。修正: `has_missing_part_content_type` → render_risks | 書かれていない型は解釈が割れる |
+| D1351 | ~~**パラメータ値内 encoded-word が未検査**~~ **(解消済み)** | P2 | RFC 2047 を値に混ぜると復号/非復号で添付名がずれる。修正: `has_param_encoded_word` → render_risks | 正規方式の別の場に別方式を混ぜる |
+| D1352 | ~~**multipart/digest が未検査**~~ **(解消済み)** | P2 | メンバー既定 message/rfc822 を知らない検査は入れ子を見逃す。修正: `has_digest_container` → render_risks | 既定の中身は宣言されずに届く |
