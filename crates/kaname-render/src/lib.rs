@@ -3827,7 +3827,28 @@ pub fn has_dangerous_charset(raw: &[u8]) -> bool {
             logical.push_str(l);
         }
     }
-    let mut rest = logical.as_str();
+    // charset は Content-Type パラメータ — ヘッダ run 内のみ走査する。
+    // 本文中の `charset=utf-7` を拾うと送信者が警告を偽造できる。
+    let mut scoped = String::with_capacity(logical.len());
+    let mut in_headers = true;
+    for (idx, l) in logical.lines().enumerate() {
+        if l.is_empty() {
+            // 論理行化の先頭改行由来の空行 (idx==0) は本文開始ではない
+            if idx != 0 {
+                in_headers = false;
+            }
+            continue;
+        }
+        if l.starts_with("--") && !(l.len() > 4 && l.ends_with("--")) {
+            in_headers = true;
+            continue;
+        }
+        if in_headers {
+            scoped.push_str(l);
+            scoped.push('\n');
+        }
+    }
+    let mut rest = scoped.as_str();
     while let Some(pos) = rest.find("charset") {
         let mut after = rest[pos + 7..].trim_start();
         if let Some(stripped) = after.strip_prefix('=') {
@@ -6232,6 +6253,9 @@ pub fn has_malformed_addr_spec(raw: &[u8]) -> bool {
                 }
             } else if c == '"' {
                 in_q = true;
+                // クオート済み局所部 (`"John Doe"@x`) は「内容あり」の
+                // 印として残す — 丸ごと落とすと空局所部に見えて誤爆する
+                scan.push('q');
             } else if c == '(' {
                 in_c = 1;
             } else {
@@ -6375,8 +6399,24 @@ pub fn has_exotic_multipart_subtype(raw: &[u8]) -> bool {
 pub fn has_malformed_media_type(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
+    // FWS 展開して論理行化 — `Content-Type:\n text/plain` の折りたたみを
+    // 値ありとして読む (折りたたみ前の行だけ見ると空値に誤判定する)
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
     let mut in_headers = true;
-    for l in text.to_ascii_lowercase().lines() {
+    for l in logical.to_ascii_lowercase().lines() {
         if l.is_empty() {
             in_headers = false;
             continue;
@@ -6627,7 +6667,9 @@ pub fn has_conflicting_filename(raw: &[u8]) -> bool {
             return false;
         }
         let mut plain: Option<Vec<u8>> = None;
-        let mut star = Vec::new();
+        // (連番, 断片) — 到着順ではなく `*0`/`*1` の番号順に連結する
+        // (name*1 が先に来る正規形を衝突と誤判定しないため)
+        let mut star_segs: Vec<(usize, Vec<u8>)> = Vec::new();
         for (i, _) in lower.match_indices('=') {
             let ks = lower[..i]
                 .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
@@ -6645,9 +6687,23 @@ pub fn has_conflicting_filename(raw: &[u8]) -> bool {
             } else if key.starts_with("filename*") || key.starts_with("name*") {
                 // `charset'lang'` 接頭辞を落として連結
                 let body = val.rsplit('\'').next().unwrap_or(val);
-                star.extend_from_slice(body.as_bytes());
+                // `filename*0*`/`filename*1` の連番を読む — 番号無しの
+                // `filename*` は 0 扱い (単一値と連番の混在自体が異形)
+                let idx = key
+                    .trim_end_matches('*')
+                    .rsplit('*')
+                    .next()
+                    .unwrap_or("")
+                    .parse::<usize>()
+                    .unwrap_or(0);
+                star_segs.push((idx, body.as_bytes().to_vec()));
             }
         }
+        star_segs.sort_by_key(|(i, _)| *i);
+        let star: Vec<u8> = star_segs
+            .into_iter()
+            .flat_map(|(_, b)| b)
+            .collect();
         match (plain, star.is_empty()) {
             (Some(p), false) => pct_decode(&String::from_utf8_lossy(&p))
                 != pct_decode(&String::from_utf8_lossy(&star)),
@@ -6688,10 +6744,11 @@ pub fn has_conflicting_filename(raw: &[u8]) -> bool {
     check_line(&cur)
 }
 
-/// 件名が返信・転送を名乗るのに In-Reply-To/References が無いか
+/// 件名が返信を名乗るのに In-Reply-To/References が無いか
 /// 判定する (D1361)。実 MUA の返信は必ず threading ヘッダを付ける —
-/// `Re:`/`Fwd:` だけある手作り品はスレッド偽装の兆候
-/// (BEC の「続きの体裁」工作)。
+/// `Re:` だけある手作り品はスレッド偽装の兆候
+/// (BEC の「続きの体裁」工作)。Fwd:/Fw: の転送は新規メッセージとして
+/// 参照を持たない正規形があるため対象外。
 #[must_use]
 pub fn has_fake_reply_claim(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
@@ -6720,7 +6777,9 @@ pub fn has_fake_reply_claim(raw: &[u8]) -> bool {
         }
         if let Some(v) = lower.strip_prefix("subject:") {
             let v = v.trim_start();
-            if v.starts_with("re:") || v.starts_with("fwd:") || v.starts_with("fw:") {
+            // Re: のみ対象 — Fwd:/Fw: の転送は正規の MUA でも
+            // threading ヘッダを付けない (新規メッセージ)
+            if v.starts_with("re:") {
                 reply_subject = true;
             }
         }
@@ -6925,6 +6984,34 @@ pub fn has_boundary_semicolon(raw: &[u8]) -> bool {
     false
 }
 
+/// 宣言された boundary 値を収集する (内部用 — D1367/D1368)。
+/// 列 0 の `content-type:` 行から `boundary=` 値を取る。クオート値は
+/// 内側を、非クオートは `;`/空白までを値とする。
+fn declared_boundaries(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for l in text.to_ascii_lowercase().lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(v) = l.strip_prefix("content-type:") else { continue };
+        for (i, _) in v.match_indices("boundary=") {
+            let after = &v[i + 9..];
+            let val = if let Some(q) = after.strip_prefix('"') {
+                q.split('"').next().unwrap_or("")
+            } else {
+                after
+                    .split(|c: char| c == ';' || c.is_whitespace())
+                    .next()
+                    .unwrap_or("")
+            };
+            if !val.is_empty() {
+                out.push(val.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// 本文に ANSI/ターミナル制御列があるか判定する (D1367)。
 ///
 /// ESC (0x1B) に続く `[` (CSI: カーソル・消去)・`]` (OSC: ウィンドウ
@@ -6939,6 +7026,7 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
     let text = text.replace("\r\n", "\n");
     let mut in_headers = true;
     let mut cte_encoded = false;
+    let declared = declared_boundaries(&text);
     for l in text.lines() {
         if in_headers {
             let low = l.to_ascii_lowercase();
@@ -6953,8 +7041,19 @@ pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
             continue;
         }
         if l.starts_with("--") {
+            // 宣言済み boundary の前方一致のみ区切りとする — 宣言の無い
+            // `--` 始まりの本文行で走査を止める抑止を防ぐ。
             // `--b--` 終端境界はヘッダ run を開始しない
-            if !(l.len() > 4 && l.ends_with("--")) {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim && !(l.len() > 4 && l.ends_with("--")) {
                 in_headers = true;
                 cte_encoded = false;
             }
@@ -6985,6 +7084,7 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
     let text = text.replace("\r\n", "\n");
     let mut in_headers = true;
     let mut cte_encoded = false;
+    let declared = declared_boundaries(&text);
     for l in text.lines() {
         if in_headers {
             let low = l.to_ascii_lowercase();
@@ -6999,7 +7099,16 @@ pub fn has_bidi_override_body(raw: &[u8]) -> bool {
             continue;
         }
         if l.starts_with("--") {
-            if !(l.len() > 4 && l.ends_with("--")) {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim && !(l.len() > 4 && l.ends_with("--")) {
                 in_headers = true;
                 cte_encoded = false;
             }
@@ -21725,7 +21834,8 @@ mod tests {
         assert!(has_fake_reply_claim(
             "From: a@x\r\nSubject: Re: 請求書について\r\n\r\nx".as_bytes()
         ));
-        assert!(has_fake_reply_claim(
+        // Fwd:/Fw: の転送は正規の MUA でも参照を持たない (新規メッセージ) — 不発火
+        assert!(!has_fake_reply_claim(
             "Subject: Fwd: 確認依頼\r\n\r\nx".as_bytes()
         ));
         // 返信 thread 参照がある正規の返信は不発火
@@ -21864,6 +21974,67 @@ mod tests {
         assert!(!has_bidi_override_body(b"Subject: x\r\n\r\nplain"));
         assert!(!has_bidi_override_body(
             "X-N: \u{202E}\r\nSubject: x\r\n\r\nplain".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn addr_spec_quoted_local_はクオート局所部を誤爆しない() {
+        // "John Doe"@x のクオート済み局所部は正規形
+        assert!(!has_malformed_addr_spec(
+            b"From: \"John Doe\"@example.com\r\n\r\nx"
+        ));
+        // 空局所部は依然発火
+        assert!(has_malformed_addr_spec(b"From: @example.com\r\n\r\nx"));
+    }
+
+    #[test]
+    fn malformed_media_type_は折りたたみCTを誤爆しない() {
+        // Content-Type: \n text/plain の FWS 折りたたみは正規
+        assert!(!has_malformed_media_type(
+            b"Content-Type:\n text/plain\r\n\r\nx"
+        ));
+        // 値が本当に無いものは依然発火
+        assert!(has_malformed_media_type(
+            b"Content-Type: \r\nSubject: x\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn conflicting_filename_は連番順不同を誤爆しない() {
+        // filename*1 が *0 より先に来る正規形は一致なら不発火
+        assert!(!has_conflicting_filename(
+            b"Content-Disposition: attachment; filename=\"report.pdf\"; filename*1=\".pdf\"; filename*0=\"report\"\r\n\r\nx"
+        ));
+        // 番号順連結と filename が違う場合は依然発火
+        assert!(has_conflicting_filename(
+            b"Content-Disposition: attachment; filename=\"evil.exe\"; filename*1=\".pdf\"; filename*0=\"report\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dangerous_charset_は本文のcharsetを拾わない() {
+        // 本文中の charset= は偽造できても宣言でない — 不発火
+        assert!(!has_dangerous_charset(
+            b"Content-Type: text/plain\r\n\r\ncharset=utf-7 body"
+        ));
+        // ヘッダ宣言は依然発火
+        assert!(has_dangerous_charset(
+            b"Content-Type: text/plain; charset=utf-7\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn ansi_escape_body_は宣言なし境界行を区切りにしない() {
+        // boundary 宣言の無い -- 行は本文のまま
+        assert!(has_ansi_escape_body(
+            b"Content-Type: text/plain\r\n\r\n--fake\r\n\x1b[31mred"
+        ));
+        // 宣言済み boundary の区切りは依然として次パートの本文を見る
+        assert!(!has_ansi_escape_body(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        assert!(has_ansi_escape_body(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\x1b[31mr\r\n--b--"
         ));
     }
 
