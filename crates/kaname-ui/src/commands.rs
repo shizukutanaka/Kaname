@@ -2975,6 +2975,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1311: boundary= の空値 — 区切りが `--` だけに退化し、
+    //    「boundary 無し」と扱う実装と `--` 行すべてを区切りとする
+    //    実装でパート構造が完全にずれる。
+    if env.empty_boundary {
+        render_risks.push(
+            "boundary= の値が空です — 区切り文字列が \"--\" だけに退化し、\
+             パート構造の解釈が実装間で完全にずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1312: MIME-Version が 1.0 以外 — 版番号を厳格に見る実装は
+    //    MIME として扱わず、構造解釈がずれる (D1289 の姉妹: 欠落でなく
+    //    異常値)。
+    if env.odd_mime_version {
+        render_risks.push(
+            "MIME-Version が 1.0 以外の値です — 版番号を厳格に見る実装では\
+             MIME 構造として扱われず解釈がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

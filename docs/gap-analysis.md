@@ -724,3 +724,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1308 | ~~**mbox 形式 `From ` 行の混入が未検査**~~ **(解消済み)** | P1 | 先頭 `From ` 行を区切り/無名ヘッダで解釈が分かれ以降全部ずれる。修正: `has_mbox_from_line` → render_risks | 格納形式と伝送形式の混在は全体を割る |
 | D1309 | ~~**CT/CD パラメータキー重複が未検査**~~ **(解消済み)** | P1 | `filename=a; filename=b` で採用値がずれる (D1281 一般化)。修正: `has_duplicate_mime_params` → render_risks | 特定キーの検査は全キーに一般化する |
 | D1310 | ~~**CT の name= ありで Content-Disposition 無しが未検査**~~ **(解消済み)** | P1 | CD のみ添付判定するスキャナが name= を素通り。修正: `has_ct_name_no_disposition` → render_risks | 判定に使う欄と効く欄の齟齬は差異の温床 |
+| D1311 | ~~**boundary= の空値が未検査**~~ **(解消済み)** | P1 | `boundary=""` で区切りが `--` に退化、構造解釈が完全にずれる。修正: `has_empty_boundary` → render_risks | 退化形は値域端で見落としやすい |
+| D1312 | ~~**MIME-Version の値が 1.0 以外が未検査**~~ **(解消済み)** | P2 | 欠落 (D1289) は検査済みだが `2.0` 等の異常値は未検査 — 厳格実装は MIME として扱わない。修正: `has_odd_mime_version` → render_risks | 有無だけでなく宣言値も見る |

@@ -196,6 +196,10 @@ pub struct Envelope {
     pub duplicate_mime_params: bool,
     /// CT の `name=` があるのに Content-Disposition が無いか (D1310 — 添付判定差異)。
     pub ct_name_no_disposition: bool,
+    /// boundary= の値が空か (D1311 — 区切り退化差異)。
+    pub empty_boundary: bool,
+    /// MIME-Version が 1.0 以外か (D1312 — 宣言値差異)。
+    pub odd_mime_version: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2153,6 +2157,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1310: name= ありで Content-Disposition 無し
     let ct_name_no_disposition = has_ct_name_no_disposition(bytes);
 
+    // D1311: boundary= の空値
+    let empty_boundary = has_empty_boundary(bytes);
+
+    // D1312: MIME-Version が 1.0 以外
+    let odd_mime_version = has_odd_mime_version(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2223,6 +2233,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mbox_from_line,
         duplicate_mime_params,
         ct_name_no_disposition,
+        empty_boundary,
+        odd_mime_version,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3727,6 +3739,82 @@ pub fn has_ct_name_no_disposition(raw: &[u8]) -> bool {
         }
     }
     ct_has_name && !saw_cd
+}
+
+/// `boundary=` の値が空か判定する (D1311)。
+///
+/// `boundary=""` や `boundary=` 直後に区切り/行末が来る形は、区切り文字列が
+/// `--` だけに退化する。空境界を「boundary 無し」と扱う実装と、「`--`
+/// の行すべてを区切りとする」実装でパート構造が完全にずれる (D1281/
+/// D1294/D1297 同族の極端なケース)。
+#[must_use]
+pub fn has_empty_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(pos) = rest.find("boundary") {
+        let mut after = rest[pos + 8..].trim_start();
+        if let Some(stripped) = after.strip_prefix('=') {
+            after = stripped;
+        } else {
+            rest = &rest[pos + 8..];
+            continue;
+        }
+        // `=` 直後の空白は SP/TAB のみ除く — `\n` (行末) は裸値の終端
+        let after = after.trim_start_matches([' ', '\t']);
+        if let Some(stripped) = after.strip_prefix('"') {
+            // クオート値 — 閉じ `"` までが値
+            let end = stripped.find('"').unwrap_or(stripped.len());
+            if stripped[..end].trim().is_empty() {
+                return true;
+            }
+        } else {
+            // 裸値 — `;` か行末まで
+            let end = after
+                .find(';')
+                .unwrap_or_else(|| after.find('\n').unwrap_or(after.len()));
+            if after[..end].trim().is_empty() {
+                return true;
+            }
+        }
+        rest = &rest[pos + 8..];
+    }
+    false
+}
+
+/// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
+///
+/// D1289 は MIME-Version 欠落を検査するが、値が `2.0` や空欄の場合は
+/// 未カバー。RFC 2045 では現在 `1.0` 以外の版は定義されておらず、
+/// 版番号を厳格に見る実装は MIME として扱わない — 「MIME 構造を使う
+/// のに宣言値が違う」形も同じ構造差異を生む。値の前後空白と末尾の
+/// CFWS コメント `(…)` を除いて比較する。
+#[must_use]
+pub fn has_odd_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if let Some(v) = l.strip_prefix("mime-version:") {
+            let v = v.trim();
+            // 末尾コメント (…) を除去
+            let v = v.split('(').next().unwrap_or(v).trim();
+            return v != "1.0";
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -17473,6 +17561,47 @@ mod tests {
         ));
         // パラメータ無しは不発火
         assert!(!has_duplicate_mime_params(b"Content-Type: text/plain\r\n\r\nb"));
+    }
+
+    #[test]
+    fn empty_boundary_は区切り退化を検出する() {
+        assert!(has_empty_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"\"\r\n\r\n--\r\nx"
+        ));
+        assert!(has_empty_boundary(
+            b"Content-Type: multipart/mixed; boundary=\r\n\r\nx"
+        ));
+        assert!(has_empty_boundary(
+            b"Content-Type: multipart/mixed; boundary= ; charset=utf-8\r\n\r\nx"
+        ));
+        // 通常の boundary → 不発火
+        assert!(!has_empty_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b--"
+        ));
+        // boundary= 無し → 不発火
+        assert!(!has_empty_boundary(b"Content-Type: text/plain\r\n\r\nx"));
+        // 値内部に空白を含む boundary は RFC 合法 → 不発火
+        assert!(!has_empty_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn odd_mime_version_は1以外の宣言値を検出する() {
+        assert!(has_odd_mime_version(
+            b"MIME-Version: 2.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\nx"
+        ));
+        assert!(has_odd_mime_version(b"MIME-Version:\r\n\r\nx"));
+        // 正常な 1.0 → 不発火
+        assert!(!has_odd_mime_version(
+            b"MIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+        // 末尾コメント付きの 1.0 → 不発火
+        assert!(!has_odd_mime_version(
+            b"MIME-Version: 1.0 (prologue)\r\n\r\nx"
+        ));
+        // ヘッダ自体が無い → D1289 の領分なので不発火
+        assert!(!has_odd_mime_version(b"Content-Type: text/plain\r\n\r\nx"));
     }
 
     #[test]

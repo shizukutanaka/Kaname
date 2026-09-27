@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1311: boundary= の空値が未検査
+
+- **問題**: `boundary=""` や `boundary=` 直後に区切りが来る形は区切り文字列が `--` だけに退化する。空境界を「boundary 無し」と扱う実装と「`--` 行すべてを区切りとする」実装でパート構造が完全にずれる (D1281/D1294/D1297 同族の極端形)。
+- **修正**: `has_empty_boundary` — Content-Type ヘッダの boundary= 値が (クオート内外問わず) 空なら検出 → `Envelope.empty_boundary` → render_risks 警告。値内部の空白は RFC 合法なので対象外。
+- **教訓**: 退化形 (空・極短・既定値) は正規の値域端で見落としやすい — 値の検査は「非空」を前提にしない。
+
+### Security — D1312: MIME-Version の値が 1.0 以外が未検査
+
+- **問題**: D1289 は MIME-Version 欠落のみ検査。値が `2.0` や空欄だと版番号を厳格に見る実装は MIME 構造として扱わず同じ構造差異を生む。
+- **修正**: `has_odd_mime_version` — MIME-Version 値が CFWS コメントを除いて `1.0` と一致しなければ検出 → `Envelope.odd_mime_version` → render_risks 警告。
+- **教訓**: 「必須フィールドの有無」だけでなく「宣言値が規定値と一致するか」まで見る — 値域のずれも解釈差異を生む。
+
 ### Security — D1309: CT/CD パラメータキー重複が未検査
 
 - **問題**: `filename="a.txt"; filename="b.exe"` や `charset=` 重複で先頭/末尾採用が実装間でずれる。D1281 は boundary= のみ対象で他のキーは未カバー。
