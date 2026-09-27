@@ -15532,7 +15532,7 @@ mod tests {
     }
 
     #[test]
-    fn filename_name_mismatch_は name_filename 不一致を検出する() {
+    fn filename_name_mismatch_は不一致を検出する() {
         // D1272 — パーサ差異
         let bad = b"Content-Type: application/octet-stream; name=\"safe.pdf\"\r\nContent-Disposition: attachment; filename=\"evil.exe\"\r\n\r\nx";
         assert!(has_filename_name_mismatch(bad));
