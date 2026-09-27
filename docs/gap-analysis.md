@@ -702,3 +702,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1286 | ~~**インライン uuencode ペイロードが未検査**~~ **(解消済み)** | P2 | `begin 644 x` ブロックは MIME 構造の外 — パート走査を素通り。修正: `has_uuencode_payload` → render_risks | 構造がないこと自体が兆候 |
 | D1287 | ~~**非 multipart Content-Type の bogus boundary= が未検査**~~ **(解消済み)** | P1 | `text/plain; boundary=fake` で外側 boundary を無効化 (mailsplit AIKIDO-2026-785486)。修正: `has_bogus_boundary_param` → render_risks | 型に無関係なパラメータは差異の種 |
 | D1288 | ~~**プリアンブル/エピローグ内のパート構造が未検査**~~ **(解消済み)** | P1 | boundary の外のパート様ヘッダは無視系スキャナに不可視。修正: `has_orphaned_part_content` → render_risks | 範囲外のヘッダ構造も兆候 |
+| D1289 | ~~**MIME-Version 欠落が未検査**~~ **(解消済み)** | P2 | MIME 構造を使うのに宣言無し — 解釈が実装間でずれる。修正: `has_missing_mime_version` → render_risks | 欠落は存在でも測る |
+| D1290 | ~~**宣言 boundary の不使用・未終了 multipart が未検査**~~ **(解消済み)** | P1 | `--b` 無使用/`--b--` 無し — 残り本文の解釈がずれる (mailsplit 未終了と同型)。修正: `has_unterminated_multipart` → render_risks | 宣言と実際の不一致は双方向に測る |

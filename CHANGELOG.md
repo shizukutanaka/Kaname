@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1289: MIME-Version 欠落が未検査
+
+- **問題**: `MIME-Version: 1.0` は MIME の宣言 (RFC 2045 §4) — `Content-Type` パラメータや CTE を使いながらこれを欠くメッセージは、MIME として解釈する実装と RFC 5322 素テキストとして解釈する実装で構造が食い違う (D1278 欠落検査の姉妹)。
+- **修正**: `has_missing_mime_version` — トップヘッダに `mime-version:` が無く `content-type:` にパラメータ/multipart 指定または CTE/Disposition があると検出 → `Envelope.missing_mime_version` → render_risks 警告。
+- **教訓**: 構造を名乗るのに宣言を欠く — 欠落は意味だけでなく存在でも測る。
+
+### Security — D1290: 宣言 boundary の不使用・未終了 multipart が未検査
+
+- **問題**: `boundary=x` を宣言しながら `--x` が一度も現れない、または `--x--` で閉じない multipart は、残り本文の解釈がパーサごとに食い違う (mailsplit の未終了 multipart で外側 boundary が生きたまま残るバグと同型)。
+- **修正**: `has_unterminated_multipart` — トップレベル boundary 値を取り `--b`/`--b--` の存在を確認 → `Envelope.unterminated_multipart` → render_risks 警告。
+- **教訓**: 「宣言と実際の不一致」は双方の方向で測る — 宣言して使わないも使って閉じないも同じ兆候。
+
 ### Security — D1287: 非 multipart Content-Type の bogus boundary= が未検査
 
 - **問題**: `Content-Type: text/plain; boundary=fake` — multipart 以外の型に boundary= があると、それを採用するパーサは本物の外側 boundary を無効化し、後続の実パートをスキャンから隠す (mailsplit AIKIDO-2026-785486 / zone-eu commit 028a6fc — 「boundary 所有権」の取り違え)。
