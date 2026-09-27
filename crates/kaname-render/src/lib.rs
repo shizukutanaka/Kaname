@@ -212,6 +212,10 @@ pub struct Envelope {
     pub invalid_boundary_chars: bool,
     /// 添付名が Windows 予約デバイス名か (D1318)。
     pub device_filename: bool,
+    /// 添付名が退化形 (空/空白のみ/ドットのみ) か (D1319)。
+    pub degenerate_filename: bool,
+    /// Content-Type 値に `/` が無いか (D1320 — 既定値差異)。
+    pub typeless_content_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2193,6 +2197,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1318: Windows 予約デバイス名の添付名
     let device_filename = has_device_filename(bytes);
 
+    // D1319: 退化添付名 (空/空白のみ/ドットのみ)
+    let degenerate_filename = has_degenerate_filename(bytes);
+
+    // D1320: Content-Type に subtype 無し
+    let typeless_content_type = has_typeless_content_type(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2271,6 +2281,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         invalid_base64_body,
         invalid_boundary_chars,
         device_filename,
+        degenerate_filename,
+        typeless_content_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4138,6 +4150,87 @@ pub fn has_device_filename(raw: &[u8]) -> bool {
                     && (stem.starts_with("com") || stem.starts_with("lpt"))
                     && stem.as_bytes()[3].is_ascii_digit());
             if hit {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 添付名 (`filename=`/`name=`) が退化形か判定する (D1319)。
+///
+/// `filename=""`・`filename="   "`・`filename=".."` 等の、実質的に
+/// 名前がない添付は、自動命名するメーラーと空欄のまま表示するメーラーで
+/// 見え方がずれる (D1311 空 boundary・D1313 パス成分と同族の退化形)。
+#[must_use]
+pub fn has_degenerate_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            if key != "filename" && key != "name" {
+                continue;
+            }
+            let mut v = seg[eq + 1..].trim();
+            if let Some(stripped) = v.strip_prefix('"') {
+                let end = stripped.find('"').unwrap_or(stripped.len());
+                v = &stripped[..end];
+            }
+            // 空・空白のみ・ドットのみは退化形
+            if v.is_empty() || v.chars().all(|c| c == '.' || c == ' ' || c == '\t') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` 値に `/` (サブタイプ) が無いか判定する (D1320)。
+///
+/// `Content-Type: text` 等の subtype 欠落は、`text/plain` を既定値と
+/// する実装と受理しない実装で解釈がずれる (D1312 宣言値差異と同型)。
+/// メディア型の主値だけがある形は RFC 2045 の grammar に合わない。
+#[must_use]
+pub fn has_typeless_content_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if let Some(v) = low.strip_prefix("content-type:") {
+            // メディア型本体 (パラメータ前) に `/` が無ければ違反
+            let mt = v.split(';').next().unwrap_or(v).trim();
+            if !mt.is_empty() && !mt.contains('/') {
                 return true;
             }
         }
@@ -18072,6 +18165,42 @@ mod tests {
         ));
         assert!(!has_device_filename(
             b"Content-Disposition: attachment; filename=\"my.nul.txt\"\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn degenerate_filename_は退化名を検出する() {
+        assert!(has_degenerate_filename(
+            b"Content-Disposition: attachment; filename=\"\"\r\n\r\nb"
+        ));
+        assert!(has_degenerate_filename(
+            b"Content-Disposition: attachment; filename=\"   \"\r\n\r\nb"
+        ));
+        assert!(has_degenerate_filename(
+            b"Content-Type: application/octet-stream; name=\"..\"\r\n\r\nb"
+        ));
+        // 通常名は不発火
+        assert!(!has_degenerate_filename(
+            b"Content-Disposition: attachment; filename=\"report.pdf\"\r\n\r\nb"
+        ));
+        // filename= が無い行は不発火
+        assert!(!has_degenerate_filename(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn typeless_content_type_はsubtype欠落を検出する() {
+        assert!(has_typeless_content_type(b"Content-Type: text\r\n\r\nx"));
+        assert!(has_typeless_content_type(
+            b"Content-Type: multipart\r\n\r\nx"
+        ));
+        // パートヘッダ内も検出
+        assert!(has_typeless_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application\r\n\r\nx\r\n--b--"
+        ));
+        // 正常型は不発火
+        assert!(!has_typeless_content_type(b"Content-Type: text/plain\r\n\r\nx"));
+        assert!(!has_typeless_content_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b--"
         ));
     }
 

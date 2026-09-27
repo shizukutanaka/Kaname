@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1319: 退化添付名が未検査
+
+- **問題**: `filename=""`・`filename="   "`・`filename=".."` 等の実質無名添付は、自動命名するメーラーと空欄のまま表示するメーラーで見え方がずれる (D1311 空 boundary・D1313 パス成分と同族の退化形)。
+- **修正**: `has_degenerate_filename` — `filename=`/`name=` 値が空または空白/ドットのみなら検出 → `Envelope.degenerate_filename` → render_risks 警告。
+- **教訓**: 名前欄の検査は「空・意味を成さない形」も含む — 実質無名は採番・表示・保存のどこでもずれを生む。
+
+### Security — D1320: Content-Type の subtype 欠落が未検査
+
+- **問題**: `Content-Type: text` 等の `/` を欠く値は、`text/plain` を既定値とする実装と受理しない実装で解釈がずれる (D1312 宣言値差異と同型)。メディア型の grammar 自体の違反。
+- **修正**: `has_typeless_content_type` — 外側 + パートヘッダ run で `content-type:` のメディア型本体に `/` が無ければ検出 → `Envelope.typeless_content_type` → render_risks 警告。
+- **教訓**: 「型/種別」の書式は両方の部分が必須 — 主値だけの欄は既定値の読み方が実装で分かれる。
+
 ### Security — D1317: boundary の bchars 外文字が未検査
 
 - **問題**: boundary の字句は bchars (`ALPHA`/`DIGIT`/`'()+_,-./:=?`/space) に限定される (RFC 2046 §5.1.1)。`<`・`"`・`#` 等を含む値は受理してそのまま区切りに使う実装と拒否/切り詰める実装でパート構造がずれる (D1281/D1294/D1311 の字句側)。

@@ -732,3 +732,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1316 | ~~**base64 本文のアルファベット外文字が未検査**~~ **(解消済み)** | P2 | 読み飛ばす/止めるデコーダで添付内容がずれる。修正: `has_invalid_base64_body` → render_risks | 符号化本文の検査は宣言 CTE に追随する |
 | D1317 | ~~**boundary の bchars 外文字が未検査**~~ **(解消済み)** | P2 | `boundary="a<b>"` 等で受理/拒否が分かれる字句差異。修正: `has_invalid_boundary_chars` → render_risks (`_` は実運用で広いため許容) | 規格と実態の差を両方知る |
 | D1318 | ~~**Windows 予約デバイス名の添付名が未検査**~~ **(解消済み)** | P2 | `NUL.exe` 等は Windows で保存不能 → 環境間で保存挙動がずれる。修正: `has_device_filename` → render_risks | 名が何を指すかは OS 依存 |
+| D1319 | ~~**退化添付名が未検査**~~ **(解消済み)** | P2 | `filename=""` 等で自動命名/空欄表示がずれる。修正: `has_degenerate_filename` → render_risks | 実質無名は採番・表示・保存でずれを生む |
+| D1320 | ~~**Content-Type の subtype 欠落が未検査**~~ **(解消済み)** | P2 | `Content-Type: text` で既定値適用/非受理が分かれる。修正: `has_typeless_content_type` → render_risks | 「型/種別」は両方必須 — 主値だけはずれる |

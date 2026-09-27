@@ -3059,6 +3059,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1319: 退化添付名 — 空・空白のみ・ドットのみの添付名は、
+    //    自動命名するメーラーと空欄のままのメーラーで見え方がずれる。
+    if env.degenerate_filename {
+        render_risks.push(
+            "添付ファイル名が空・空白・ドットのみです — 自動命名する実装と\
+             空欄のままの実装で見え方がずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1320: Content-Type に subtype 無し — `Content-Type: text` 等は
+    //    text/plain を既定とする実装と受理しない実装で解釈がずれる。
+    if env.typeless_content_type {
+        render_risks.push(
+            "Content-Type にサブタイプ (/) がありません — 既定値を適用する実装と\
+             受理しない実装で解釈がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
