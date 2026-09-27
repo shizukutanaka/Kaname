@@ -19393,7 +19393,7 @@ mod tests {
     fn degenerate_from_はアドレス無し差出人を検出する() {
         assert!(has_degenerate_from_addr(b"From: \"CEO\"\r\n\r\nx"));
         assert!(has_degenerate_from_addr(b"From:\r\n\r\nx"));
-        assert!(has_degenerate_from_addr(b"From: 山田太郎\r\n\r\nx"));
+        assert!(has_degenerate_from_addr("From: 山田太郎\r\n\r\nx".as_bytes()));
         // 引用内の @ はアドレスではない
         assert!(has_degenerate_from_addr(b"From: \"a@b\"\r\n\r\nx"));
         // 通常形は不発火
