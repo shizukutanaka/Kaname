@@ -774,3 +774,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1358 | ~~**無名 attachment パートが未検査**~~ **(解消済み)** | P2 | 自動命名と空表示で添付名がずれる。修正: `has_unnamed_attachment` → render_risks | 名無しの荷物は係ごとに別の札が付く |
 | D1359 | ~~**アドレスドメインの非 ASCII が未検査**~~ **(解消済み)** | P2 | Unicode 表示と punycode/拒否で差出人が違う顔。修正: `has_non_ascii_addr_domain` → render_risks | 異字の町名は読み手で別の町に見える |
 | D1360 | ~~**filename / filename* 不一致が未検査**~~ **(解消済み)** | P2 | * 優先と無視で添付名がずれる。修正: `has_conflicting_filename` → render_risks | 二枚の名札は読む係で別名になる |
+| D1361 | ~~**偽返信 (Re: だが threading 無し) が未検査**~~ **(解消済み)** | P2 | 続きの体裁を偽装する手作り品。修正: `has_fake_reply_claim` → render_risks | 綴じ紐の無い「続き」は別物 |
+| D1362 | ~~**非宣言 base64 本文ブロックが未検査**~~ **(解消済み)** | P2 | 宣言だけ復号する検査にペイロードが見えない。修正: `has_undeclared_base64_block` → render_risks | 「平文です」の箱に暗号の束 |

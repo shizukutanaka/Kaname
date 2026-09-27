@@ -3453,6 +3453,20 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.fake_reply_claim {
+        render_risks.push(
+            "件名が返信・転送を名乗りますがスレッド参照がありません\
+             —続きの体裁を偽装する兆候です"
+                .to_string(),
+        );
+    }
+    if env.undeclared_base64_block {
+        render_risks.push(
+            "宣言されていない base64 形の本文ブロックがあります\
+             —宣言だけを復号する検査をすり抜ける兆候です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

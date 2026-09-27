@@ -379,6 +379,14 @@ pub struct Envelope {
     /// が別の値を名乗る。`*` を優先する実装と無視する実装で
     /// 添付名がずれる。
     pub conflicting_filename: bool,
+    /// D1361 — 件名が `Re:`/`Fwd:`/`Fw:` を名乗るのに
+    /// In-Reply-To/References が無い。返信の体裁を偽造する
+    /// 手作り生成品の兆候。
+    pub fake_reply_claim: bool,
+    /// D1362 — 宣言されていない base64 様本文ブロック。
+    /// 単パートで CTE が base64 でないのに本文が base64 形の行で
+    /// 埋まると、宣言だけを復号する検査にペイロードが見えない。
+    pub undeclared_base64_block: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2404,6 +2412,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let unnamed_attachment = has_unnamed_attachment(bytes);
     let non_ascii_addr_domain = has_non_ascii_addr_domain(bytes);
     let conflicting_filename = has_conflicting_filename(bytes);
+    let fake_reply_claim = has_fake_reply_claim(bytes);
+    let undeclared_base64_block = has_undeclared_base64_block(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2524,6 +2534,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         unnamed_attachment,
         non_ascii_addr_domain,
         conflicting_filename,
+        fake_reply_claim,
+        undeclared_base64_block,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6644,6 +6656,102 @@ pub fn has_conflicting_filename(raw: &[u8]) -> bool {
         }
     }
     check_line(&cur)
+}
+
+/// 件名が返信・転送を名乗るのに In-Reply-To/References が無いか
+/// 判定する (D1361)。実 MUA の返信は必ず threading ヘッダを付ける —
+/// `Re:`/`Fwd:` だけある手作り品はスレッド偽装の兆候
+/// (BEC の「続きの体裁」工作)。
+#[must_use]
+pub fn has_fake_reply_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    let mut reply_subject = false;
+    let mut has_refs = false;
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("in-reply-to:") || lower.starts_with("references:") {
+            has_refs = true;
+        }
+        if let Some(v) = lower.strip_prefix("subject:") {
+            let v = v.trim_start();
+            if v.starts_with("re:") || v.starts_with("fwd:") || v.starts_with("fw:") {
+                reply_subject = true;
+            }
+        }
+    }
+    reply_subject && !has_refs
+}
+
+/// 宣言されていない base64 様本文ブロックがあるか判定する (D1362)。
+///
+/// 単パートで `Content-Transfer-Encoding` が base64 でないのに本文が
+/// base64 形の行 (アルファベット+`/`+`+` のみ・十分な長さ) で埋まると、
+/// 宣言だけを復号する検査系にペイロードが見えない (D1316 は宣言済み
+/// base64 の破損のみ対象)。multipart コンテナは各パートに委譲するため
+/// 対象外。
+#[must_use]
+pub fn has_undeclared_base64_block(raw: &[u8]) -> bool {
+    fn is_b64_line(l: &str) -> bool {
+        l.len() >= 20
+            && l.bytes().all(|b| {
+                b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'='
+            })
+            && l.bytes().any(|b| b.is_ascii_alphabetic())
+            && l.bytes().any(|b| b.is_ascii_digit() || b == b'+' || b == b'/')
+    }
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    // 論理行化した上で multipart / 宣言済み base64 は対象外
+    let lower_head = text[..header_end]
+        .to_ascii_lowercase()
+        .replace("\n ", " ")
+        .replace("\n\t", " ");
+    let mut declared_b64 = false;
+    let mut is_multipart = false;
+    for l in lower_head.lines().map(|l| l.trim_start()) {
+        if let Some(v) = l.strip_prefix("content-transfer-encoding:") {
+            if v.trim().split(';').next().unwrap_or("").trim() == "base64" {
+                declared_b64 = true;
+            }
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            if v.trim_start().starts_with("multipart/") {
+                is_multipart = true;
+            }
+        }
+    }
+    if is_multipart || declared_b64 {
+        return false;
+    }
+    let mut run = 0u32;
+    for l in text[header_end..].lines().map(|l| l.trim_end()) {
+        if is_b64_line(l) {
+            run += 1;
+            if run >= 2 || l.len() >= 48 {
+                return true;
+            }
+        } else if !l.is_empty() {
+            run = 0;
+        }
+    }
+    false
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -21344,6 +21452,54 @@ mod tests {
             b"Content-Disposition: attachment; filename=\"a.txt\"\r\n\r\nx"
         ));
         assert!(!has_conflicting_filename(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn fake_reply_claim_は偽返信を検出する() {
+        assert!(has_fake_reply_claim(
+            b"From: a@x\r\nSubject: Re: 請求書について\r\n\r\nx"
+        ));
+        assert!(has_fake_reply_claim(
+            b"Subject: Fwd: 確認依頼\r\n\r\nx"
+        ));
+        // 返信 thread 参照がある正規の返信は不発火
+        assert!(!has_fake_reply_claim(
+            b"Subject: Re: x\r\nIn-Reply-To: <a@b>\r\n\r\nx"
+        ));
+        assert!(!has_fake_reply_claim(
+            b"Subject: Re: x\r\nReferences: <a@b>\r\n\r\nx"
+        ));
+        // 新規件名・件名無しは不発火
+        assert!(!has_fake_reply_claim(b"Subject: hello\r\n\r\nx"));
+        assert!(!has_fake_reply_claim(b"From: a@x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn undeclared_base64_block_は非宣言ペイロードを検出する() {
+        // 単パート・CTE 無し・本文が b64 形連続
+        assert!(has_undeclared_base64_block(
+            b"Subject: x\r\n\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ="
+        ));
+        // 単発の長い b64 行も発火
+        assert!(has_undeclared_base64_block(
+            b"Subject: x\r\n\r\naGVsbG8gd29ybGRoZWxsb3dvcmxkYWhlbGxvIHdvcmxkYWhlbGxv"
+        ));
+        // 宣言済み base64 は D1316 管轄 — 不発火
+        assert!(!has_undeclared_base64_block(
+            b"Content-Transfer-Encoding: base64\r\n\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ="
+        ));
+        // multipart はパート単位で評価 — 不発火
+        assert!(!has_undeclared_base64_block(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\naGVsbG8gd29ybGQgaGVsbG8gd29ybGQ=\r\n--b--"
+        ));
+        // 通常の散文は不発火
+        assert!(!has_undeclared_base64_block(
+            b"Subject: x\r\n\r\nThis is a normal body line.\r\nAnother one here."
+        ));
+        // b64 形 1 行 (短い) は不発火
+        assert!(!has_undeclared_base64_block(
+            b"Subject: x\r\n\r\naGVsbG8gd29ybGQ="
+        ));
     }
 
     #[test]

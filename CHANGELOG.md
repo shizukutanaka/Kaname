@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1361: 偽返信 (Re:/Fwd: だが threading 参照無し) が未検査
+
+- **問題**: `Subject: Re: …` を名乗りながら `In-Reply-To:`/`References:` が無いメッセージは、実 MUA では作れない「続きの体裁」の偽装 (BEC の既存スレッド演出)。
+- **修正**: `has_fake_reply_claim` — 件名が `re:`/`fwd:`/`fw:` で始まり threading ヘッダが無いと検出 → `Envelope.fake_reply_claim` → render_risks 警告。
+- **教訓**: 「続き」と名乗る封筒に綴じ紐が無ければ別物。
+
+### Security — D1362: 宣言されていない base64 本文ブロックが未検査
+
+- **問題**: 単パートで `Content-Transfer-Encoding` が base64 でないのに本文が base64 形の行で埋まると、宣言だけを復号する検査にペイロードが見えない (D1316 は宣言済みの破損のみ)。
+- **修正**: `has_undeclared_base64_block` — 本文の b64 形連続行 (≥2 行または 48 字超の単行) を検出 → `Envelope.undeclared_base64_block` → render_risks 警告。multipart・宣言済み base64 は対象外。
+- **教訓**: 「平文です」と書かれた箱の中に暗号の束。
+
 ### Security — D1358: 無名 attachment パートが未検査
 
 - **問題**: `Content-Disposition: attachment` 宣言で filename/name が一切無いパートは、自動命名する実装 (attachment.bin・part2.exe) と空欄表示する実装で見える添付名がずれる。
