@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1307: ヘッダ部の裸 CR (\r 単独) が未検査
+
+- **問題**: D1298 は CRLF/裸LF の混在のみ検査し、Mac クラシック形式の `\r` 単独行終端は未カバー。`\r\n` と `\n` のみを区切りと見る実装はその行を次行と結合して読み、`\r` を区切る実装は分割する行分割差異。
+- **修正**: `has_bare_cr` — ヘッダ部 (`\r\n\r\n`/`\n\n` まで) に `\n` を伴わない `\r` があれば検出 → `Envelope.bare_cr` → render_risks 警告。
+- **教訓**: 改行の変種は3種ある (CRLF/LF/CR) — 2種の混在を見ても第3種単独は別検査が要る。
+
+### Security — D1308: mbox 形式 `From ` 行の混入が未検査
+
+- **問題**: メッセージが `From sender@host timestamp` で始まる場合、mbox の格納区切りとして剥がす実装と RFC 5322 の無名ヘッダ行として扱う実装で以降のヘッダ全体の解釈がずれる。
+- **修正**: `has_mbox_from_line` — 生メッセージ先頭が `From ` のとき検出 → `Envelope.mbox_from_line` → render_risks 警告 (本文中の `>From` エスケープは対象外)。
+- **教訓**: 格納形式と伝送形式の混在は、先頭1行をどう扱うかで全体の構造が割れる。
+
 ### Security — D1305: ヘッダ名とコロン間の空白混入が未検査
 
 - **問題**: RFC 5322 は `field-name ":"` の間の空白を許さない。`Subject : x` を「ヘッダ」と見る実装と「無名の行」と見る実装で検査対象ヘッダがずれるヘッダ境界差異。

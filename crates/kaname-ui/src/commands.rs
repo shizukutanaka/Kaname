@@ -2935,6 +2935,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1307: ヘッダ部の裸 CR — \r\n と \n しか区切りと見ない実装は
+    //    \r 単独を無視して次行と結合し、\r を区切る実装は分割する。
+    if env.bare_cr {
+        render_risks.push(
+            "ヘッダに改行を伴わない CR (\\r) が含まれています — \
+             行の区切り方が実装間でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1308: mbox 形式の From 行混入 — RFC 5322 として読む実装は
+    //    無名ヘッダ行として扱い、mbox として読む実装は剥がす。
+    if env.mbox_from_line {
+        render_risks.push(
+            "メッセージが mbox 形式の \"From \" 行で始まっています — \
+             格納形式の区切りとヘッダの解釈が実装間でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

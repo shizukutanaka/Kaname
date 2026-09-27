@@ -188,6 +188,10 @@ pub struct Envelope {
     pub non_utf8_headers: bool,
     /// ヘッダ名とコロンの間に空白があるか (D1305 — ヘッダ境界差異)。
     pub spaced_header_name: bool,
+    /// ヘッダ部に裸 CR (\r 単独) があるか (D1307 — 行分割差異)。
+    pub bare_cr: bool,
+    /// mbox 形式の `From ` 行で始まるか (D1308 — 形式混在差異)。
+    pub mbox_from_line: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2133,6 +2137,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1305: ヘッダ名とコロン間の空白混入
     let spaced_header_name = has_spaced_header_name(bytes);
 
+    // D1307: ヘッダ部の裸 CR (\r 単独)
+    let bare_cr = has_bare_cr(bytes);
+
+    // D1308: mbox 形式の From 行混入
+    let mbox_from_line = has_mbox_from_line(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2199,6 +2209,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         raw_nul_bytes,
         non_utf8_headers,
         spaced_header_name,
+        bare_cr,
+        mbox_from_line,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3557,6 +3569,53 @@ pub fn has_spaced_header_name(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// ヘッダ部に裸 CR (\n を伴わない \r) があるか判定する (D1307)。
+///
+/// D1298 の CRLF/裸LF 混在検査の姉妹 — Mac クラシック形式の \r 単独
+/// 行終端を挟むと、\r\n と \n のみを区切りと見る実装はその行を分割
+/// しないまま次行と結合して読み、\r を区切りとして扱う実装は別行に
+/// 分割する (行分割差異)。ヘッダ部のみを対象とする。
+#[must_use]
+pub fn has_bare_cr(raw: &[u8]) -> bool {
+    // ヘッダ部の範囲: \r\n\r\n と \n\n のうち先に来る方
+    let mut header_end = raw.len();
+    for i in 0..raw.len().saturating_sub(1) {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+    }
+    let hdr = &raw[..header_end];
+    for (i, &b) in hdr.iter().enumerate() {
+        if b == b'\r' && (i + 1 >= hdr.len() || hdr[i + 1] != b'\n') {
+            return true;
+        }
+    }
+    false
+}
+
+/// メッセージが mbox 形式の `From ` 行で始まるか判定する (D1308)。
+///
+/// mbox ファイルの先頭行 `From sender@host timestamp` はメール本文では
+/// なく格納形式の区切り。これを含むメッセージを RFC 5322 として読む
+/// 実装は 1 行目を無名ヘッダ行として扱い、mbox として読む実装は
+/// 区切りとして剥がす — 以降のヘッダ全体の解釈がずれる形式混在差異。
+/// メッセージ先頭の `From ` 行のみ対象 (本文中の `>From` エスケープ
+/// や引用内 `From ` は対象外)。
+#[must_use]
+pub fn has_mbox_from_line(raw: &[u8]) -> bool {
+    raw.starts_with(b"From ")
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -17252,6 +17311,35 @@ mod tests {
         // 継続行は対象外
         assert!(!has_spaced_header_name(
             b"Subject: long\r\n continuation : x\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn bare_cr_は改行を伴わないcrを検出する() {
+        // D1307 — ヘッダ部の \r 単独
+        assert!(has_bare_cr(b"From: a@b\rSubject: hi\r\n\r\nb"));
+        assert!(has_bare_cr(b"From: a@b\r\nX-A\rpart\r\n\r\nb"));
+        // 全 CRLF は不発火
+        assert!(!has_bare_cr(b"From: a@b\r\nSubject: hi\r\n\r\nb"));
+        // 本文中の裸 CR は対象外
+        assert!(!has_bare_cr(b"From: a@b\r\n\r\nline1\rline2"));
+        // LF-only ヘッダは不発火
+        assert!(!has_bare_cr(b"From: a@b\nSubject: hi\n\nb"));
+    }
+
+    #[test]
+    fn mbox_from_line_は先頭from行を検出する() {
+        // D1308 — 先頭 `From ` 行
+        assert!(has_mbox_from_line(
+            b"From sender@x Mon Sep 27 02:00:00 2026\r\nFrom: a@b\r\n\r\nb"
+        ));
+        // 先頭が From: ヘッダの通常メールは不発火
+        assert!(!has_mbox_from_line(
+            b"From: a@b\r\nSubject: hi\r\n\r\nb"
+        ));
+        // 本文中の From 行・>From エスケープは対象外
+        assert!(!has_mbox_from_line(
+            b"From: a@b\r\n\r\nFrom someone quoted\n>From escaped"
         ));
     }
 
