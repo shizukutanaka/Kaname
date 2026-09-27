@@ -21457,10 +21457,10 @@ mod tests {
     #[test]
     fn fake_reply_claim_は偽返信を検出する() {
         assert!(has_fake_reply_claim(
-            b"From: a@x\r\nSubject: Re: 請求書について\r\n\r\nx"
+            "From: a@x\r\nSubject: Re: 請求書について\r\n\r\nx".as_bytes()
         ));
         assert!(has_fake_reply_claim(
-            b"Subject: Fwd: 確認依頼\r\n\r\nx"
+            "Subject: Fwd: 確認依頼\r\n\r\nx".as_bytes()
         ));
         // 返信 thread 参照がある正規の返信は不発火
         assert!(!has_fake_reply_claim(
