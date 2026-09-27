@@ -160,6 +160,10 @@ pub struct Envelope {
     pub missing_mime_version: bool,
     /// 宣言 boundary が使われない/閉じないか (D1290 — 未終了 multipart)。
     pub unterminated_multipart: bool,
+    /// Date が未来日/遠すぎる過去か (D1291 — タイムスタンプ偽装)。
+    pub anomalous_date: bool,
+    /// Subject/From/Message-ID が重複しているか (D1292 — パーサ差異)。
+    pub duplicate_identity_headers: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2063,6 +2067,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1281: Content-Type の boundary= 重複 (パーサ差異)
     let ambiguous_boundary = has_ambiguous_boundary(bytes);
 
+    // D1291: Date の未来日/遠過去 (タイムスタンプ偽装)
+    let anomalous_date = date.map(|d| is_anomalous_date(d, unix_now())).unwrap_or(false);
+
+    // D1292: Subject/From/Message-ID の重複 (パーサ差異)
+    let duplicate_identity_headers = has_duplicate_identity_headers(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2115,6 +2125,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         malformed_encoded_word,
         remote_content_location,
         conflicting_mime_headers,
+        anomalous_date,
+        duplicate_identity_headers,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -2872,6 +2884,59 @@ pub fn has_unterminated_multipart(raw: &[u8]) -> bool {
     let close = format!("--{}--", b);
     // boundary が一度も使われない / 終端がない
     !lower[header_end..].contains(&open) || !lower[header_end..].contains(&close)
+}
+
+/// 現在時刻の UNIX 秒。
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Date タイムスタンプが異常か判定する (D1291)。
+///
+/// - 現在時刻より 48 時間以上未来 → 未来日メールはソート順の最上位に
+///   張り付く既知のスパム戦術であり、かつ「新しい受信」として見せる偽装
+/// - 1990-01-01 以前 → RFC 822 普及前のタイムスタンプは現実のメールでは
+///   ありえず、エポック/ゼロ埋め等の手作り生成品の兆候
+///
+/// 出典: タイムスタンプを未来日にして inbox 先頭に固定する手法は
+/// フィッシング対策協議会・SANS の観測で繰り返し報告される古典的戦術。
+#[must_use]
+pub fn is_anomalous_date(ts: i64, now_unix: i64) -> bool {
+    const FUTURE_SLACK: i64 = 48 * 3600;
+    const EPOCH_1990: i64 = 631_152_000; // 1990-01-01T00:00:00Z
+    ts > now_unix + FUTURE_SLACK || ts < EPOCH_1990
+}
+
+/// 一意ヘッダ (Subject/From/Message-ID) が複数あるか判定する (D1292)。
+///
+/// RFC 5322 §3.6 はこれらを「最大1個」と定める。複数あると実装ごとに
+/// 「先頭を採る/末尾を採る」が分かれ、表示側とフィルタ側で別の
+/// 件名・差出人を見せるパーサ差異工作になる (D1281/D1285 と同型)。
+/// 継続行 (行頭 WSP) は行頭がヘッダ名で始まらないため誤計数しない。
+#[must_use]
+pub fn has_duplicate_identity_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut subject = 0usize;
+    let mut from = 0usize;
+    let mut message_id = 0usize;
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with("subject:") {
+            subject += 1;
+        } else if l.starts_with("from:") {
+            from += 1;
+        } else if l.starts_with("message-id:") {
+            message_id += 1;
+        }
+        if subject > 1 || from > 1 || message_id > 1 {
+            return true;
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -16227,6 +16292,48 @@ mod tests {
             b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nb\r\n--x--"
         ));
         assert!(!has_unterminated_multipart(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn anomalous_date_は未来日と遠過去を検出する() {
+        // D1291 — now = 2026-09-27T00:00:00Z = 1790208000
+        let now = 1_790_208_000i64;
+        // 未来日 (>48h 先) → 発火
+        assert!(is_anomalous_date(now + 7 * 86400, now));
+        // 遠過去 (1990-01-01 前) → 発火
+        assert!(is_anomalous_date(0, now));            // エポック
+        assert!(is_anomalous_date(300_000_000, now));  // 1979 年
+        // 境界内は不発火
+        assert!(!is_anomalous_date(now, now));
+        assert!(!is_anomalous_date(now + 86400, now));        // +24h
+        assert!(!is_anomalous_date(631_152_000, now));        // 1990-01-01 丁度
+        assert!(!is_anomalous_date(now - 365 * 86400, now));  // 1 年前
+    }
+
+    #[test]
+    fn duplicate_identity_headers_は一意ヘッダ重複を検出する() {
+        // D1292 — Subject 二重 / From 二重 / Message-ID 二重
+        assert!(has_duplicate_identity_headers(
+            b"From: a@x\r\nSubject: hello\r\nSubject: goodbye\r\n\r\nb"
+        ));
+        assert!(has_duplicate_identity_headers(
+            b"From: a@x\r\nFrom: b@y\r\nSubject: s\r\n\r\nb"
+        ));
+        assert!(has_duplicate_identity_headers(
+            b"From: a@x\r\nMessage-ID: <1@x>\r\nMessage-ID: <2@x>\r\n\r\nb"
+        ));
+        // 継続行は別ヘッダとして数えない
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@x\r\nSubject: very long\r\n folded\r\n\r\nb"
+        ));
+        // X-From: 等の X- 系は from: にマッチしない
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@x\r\nX-From: b@y\r\nSubject: s\r\n\r\nb"
+        ));
+        // 正規メールは不発火
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@x\r\nTo: b@y\r\nSubject: s\r\nMessage-ID: <m@x>\r\n\r\nb"
+        ));
     }
 
     #[test]

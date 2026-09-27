@@ -704,3 +704,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1288 | ~~**プリアンブル/エピローグ内のパート構造が未検査**~~ **(解消済み)** | P1 | boundary の外のパート様ヘッダは無視系スキャナに不可視。修正: `has_orphaned_part_content` → render_risks | 範囲外のヘッダ構造も兆候 |
 | D1289 | ~~**MIME-Version 欠落が未検査**~~ **(解消済み)** | P2 | MIME 構造を使うのに宣言無し — 解釈が実装間でずれる。修正: `has_missing_mime_version` → render_risks | 欠落は存在でも測る |
 | D1290 | ~~**宣言 boundary の不使用・未終了 multipart が未検査**~~ **(解消済み)** | P1 | `--b` 無使用/`--b--` 無し — 残り本文の解釈がずれる (mailsplit 未終了と同型)。修正: `has_unterminated_multipart` → render_risks | 宣言と実際の不一致は双方向に測る |
+| D1291 | ~~**Date タイムスタンプ異常が未検査**~~ **(解消済み)** | P2 | 未来日はソート先頭に張り付く戦術、遠過去は手作り生成品の兆候。修正: `is_anomalous_date` → `anomalous_date` → render_risks | 存在の次は値域を測る |
+| D1292 | ~~**一意ヘッダ重複が未検査**~~ **(解消済み)** | P1 | Subject/From/Message-ID が複数 — 先頭/末尾採用が実装で分かれるパーサ差異。修正: `has_duplicate_identity_headers` → render_risks | 「最大1個」の制約も攻撃面 |

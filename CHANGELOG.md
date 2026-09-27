@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1291: Date タイムスタンプの異常が未検査
+
+- **問題**: `Date:` を 48 時間以上の未来日にしたメールは日時ソートで受信トレイ先頭に張り付き続ける既知の戦術で、エポック/1990 年以前の値は RFC 822 普及前の現実離れ値で手作り生成品の兆候 — D1278 の欠落検査は「無い/壊れている」だけで値の異常は未検査だった。
+- **修正**: `is_anomalous_date` — Date の UNIX 秒が `now+48h` 超または 1990-01-01 未満なら検出 → `Envelope.anomalous_date` → render_risks 警告。
+- **教訓**: 存在の検査の次は値域の検査 — 必須フィールドは「ある」だけでなく「ありえる値か」を測る。
+
+### Security — D1292: 一意ヘッダ (Subject/From/Message-ID) の重複が未検査
+
+- **問題**: RFC 5322 §3.6 で最大1個と定まる `Subject:`/`From:`/`Message-ID:` が複数あると、先頭を採る実装と末尾を採る実装で件名・差出人が別々になり、表示側とフィルタ側で違う値を見せるパーサ差異工作になる (D1281 boundary 重複・D1285 制御ヘッダ重複と同型だが対象フィールドが未カバーだった)。
+- **修正**: `has_duplicate_identity_headers` — トップヘッダブロックで `subject:`/`from:`/`message-id:` が2回以上現れると検出 (継続行は行頭名を持たないため誤計数なし、`X-From:` 等は対象外) → `Envelope.duplicate_identity_headers` → render_risks 警告。
+- **教訓**: 「最大1個」の制約も攻撃面 — 曖昧さは boundary だけでなく識別ヘッダにもある。
+
 ### Security — D1289: MIME-Version 欠落が未検査
 
 - **問題**: `MIME-Version: 1.0` は MIME の宣言 (RFC 2045 §4) — `Content-Type` パラメータや CTE を使いながらこれを欠くメッセージは、MIME として解釈する実装と RFC 5322 素テキストとして解釈する実装で構造が食い違う (D1278 欠落検査の姉妹)。

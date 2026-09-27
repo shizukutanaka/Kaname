@@ -2783,6 +2783,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1291: Date の未来日/遠過去 — 未来日で受信トレイ先頭に
+    //    張り付く・エポック値で経年を偽るタイムスタンプ偽装。
+    if env.anomalous_date {
+        render_risks.push(
+            "Date ヘッダの日時が異常です (大幅な未来日または1990年以前) — \
+             受信日時を偽って一覧の先頭に残る・経年を装う手口の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1292: Subject/From/Message-ID の重複 — 先頭/末尾どちらを
+    //    採用するかが実装で分かれ、表示側とフィルタ側で別の
+    //    件名・差出人を見せるパーサ差異工作。
+    if env.duplicate_identity_headers {
+        render_risks.push(
+            "Subject/From/Message-ID が複数回現れています — \
+             採用する値が実装ごとに分かれるパーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
