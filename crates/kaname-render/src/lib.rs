@@ -291,6 +291,15 @@ pub struct Envelope {
     /// 一切無い (または値が全て空)。宛先を見せない BCC 一斉送信の
     /// 配送形状 — 通常の手紙には宛先がある。
     pub no_recipient_headers: bool,
+    /// D1340 — 緊急性の自称ヘッダ (`X-Priority: 1-2`/`Importance: high`/
+    /// `Priority: urgent`/`X-MSMail-Priority: high`)。受取人に急かせの
+    /// 体裁を送信側が書き込む社会的圧力 — BEC の常套手段。
+    pub urgency_claim: bool,
+    /// D1341 — encoded-word の復号結果がヘッダ構文文字 (`<>"()\` や、
+    /// アドレス欄での `@`) を含む。復号後に再解釈する実装は表示名が
+    /// 構造を書き換えるため、転送形と復号形で差出人がずれる (D1324 の
+    /// 制御文字以外への拡張)。
+    pub structural_encoded_word: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2295,6 +2304,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let odd_disposition_type = has_odd_disposition_type(bytes);
     let malformed_thread_refs = has_malformed_thread_refs(bytes);
     let no_recipient_headers = has_no_recipient_headers(bytes);
+    let urgency_claim = has_urgency_claim(bytes);
+    let structural_encoded_word = has_structural_encoded_word(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2394,6 +2405,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         odd_disposition_type,
         malformed_thread_refs,
         no_recipient_headers,
+        urgency_claim,
+        structural_encoded_word,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5463,6 +5476,142 @@ pub fn has_no_recipient_headers(raw: &[u8]) -> bool {
         }
     }
     true
+}
+
+/// 緊急性を自称するヘッダがあるか判定する (D1340)。
+///
+/// `X-Priority: 1`/`2`・`Importance: high`/`urgent`・`Priority: urgent`・
+/// `X-MSMail-Priority: high` は送信側が書き込む「急げ」の体裁 — BEC で
+/// 判断を急かす圧力の定番。正規の至急連絡にも使われるため警告のみで、
+/// DMARC 認証済みなら自称フィルタで沈む自称系の兆候として扱う。
+#[must_use]
+pub fn has_urgency_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].to_ascii_lowercase();
+        let v = l[colon + 1..].trim().to_ascii_lowercase();
+        let hit = match name.as_str() {
+            // X-Priority: 1 (Highest) / 2 (High) のみ — 3 以上は通常
+            "x-priority" => v
+                .split(|c: char| c.is_whitespace() || c == ' ')
+                .next()
+                .map(|t| t == "1" || t == "2")
+                .unwrap_or(false),
+            "importance" | "x-msmail-priority" => v == "high" || v == "urgent",
+            "priority" => v == "urgent",
+            _ => false,
+        };
+        if hit {
+            return true;
+        }
+    }
+    false
+}
+
+/// encoded-word の復号結果にヘッダ構文文字が現れるか判定する (D1341)。
+///
+/// D1324 は復号後の制御文字 (改行注入) を見るが、構文文字も同型の脅威:
+/// `<`/`>`/`"`/`(`/`)`/`\\` を含む復号結果を持つ encoded-word は、復号後に
+/// ヘッダ値を再解釈する実装で引用・コメント・アドレス構造を書き換える。
+/// アドレス欄 (From/To/Cc/Reply-To/Sender/Resent-*) では復号結果の `@`
+/// も構造を変えるため検出対象 — 件名での `@` は普通の本文なので対象外。
+#[must_use]
+pub fn has_structural_encoded_word(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        // アドレス欄では復号結果の `@` がアドレス構造を変える
+        let is_addr_hdr = {
+            let Some(colon) = l.find(':') else { continue };
+            let name = l[..colon].to_ascii_lowercase();
+            matches!(
+                name.as_str(),
+                "from" | "to" | "cc" | "bcc" | "reply-to" | "sender"
+                    | "resent-from" | "resent-sender" | "resent-to" | "resent-cc"
+            )
+        };
+        let mut rest = l;
+        while let Some(start) = rest.find("=?") {
+            let after = &rest[start + 2..];
+            let Some(first_end) = after.find("?=") else { break };
+            let mut flagged = false;
+            let mut scan_end = 0;
+            while let Some(rel) = after[scan_end..].find("?=") {
+                let j = scan_end + rel;
+                scan_end = j + 2;
+                let tok = &after[..j];
+                let mut it = tok.splitn(3, '?');
+                let charset = it.next().unwrap_or("");
+                let enc = it.next().unwrap_or("");
+                let enc_text = it.next().unwrap_or("");
+                if charset.is_empty()
+                    || enc_text.is_empty()
+                    || !(enc.eq_ignore_ascii_case("q") || enc.eq_ignore_ascii_case("b"))
+                {
+                    continue;
+                }
+                let dec = decode_encoded_text(enc, enc_text);
+                let structural = dec.iter().any(|&c| {
+                    matches!(c, b'<' | b'>' | b'"' | b'(' | b')' | b'\\')
+                        || (is_addr_hdr && c == b'@')
+                });
+                if structural {
+                    flagged = true;
+                    break;
+                }
+            }
+            if flagged {
+                return true;
+            }
+            rest = &after[first_end + 2..];
+        }
+    }
+    false
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -19807,6 +19956,45 @@ mod tests {
         assert!(!has_no_recipient_headers(b"Resent-To: b@y\r\n\r\nx"));
         // 本文中の To: は対象外
         assert!(has_no_recipient_headers(b"From: a@x\r\n\r\nTo: b@y"));
+    }
+
+    #[test]
+    fn urgency_claim_は緊急自称ヘッダを検出する() {
+        assert!(has_urgency_claim(b"X-Priority: 1\r\n\r\nx"));
+        assert!(has_urgency_claim(b"X-Priority: 2 (High)\r\n\r\nx"));
+        assert!(has_urgency_claim(b"Importance: high\r\n\r\nx"));
+        assert!(has_urgency_claim(b"Priority: urgent\r\n\r\nx"));
+        assert!(has_urgency_claim(b"X-MSMail-Priority: High\r\n\r\nx"));
+        // 通常優先度・本文中・無関係は不発火
+        assert!(!has_urgency_claim(b"X-Priority: 3\r\n\r\nx"));
+        assert!(!has_urgency_claim(b"Importance: normal\r\n\r\nx"));
+        assert!(!has_urgency_claim(b"Subject: x\r\n\r\nImportance: high"));
+    }
+
+    #[test]
+    fn structural_encoded_word_は復号構文文字を検出する() {
+        // アドレス欄の復号結果に @ → 発火
+        assert!(has_structural_encoded_word(
+            b"From: =?UTF-8?Q?user=40x?= <a@b>\r\n\r\nx"
+        ));
+        // 件名でも <>() は構文文字 → 発火
+        assert!(has_structural_encoded_word(
+            b"Subject: =?UTF-8?Q?a=3Cb=3E?=\r\n\r\nx"
+        ));
+        // To で <…@…> を復号生成 → 発火
+        assert!(has_structural_encoded_word(
+            b"To: =?UTF-8?B?PGV2aWxAeD4=?= <a@b>\r\n\r\nx"
+        ));
+        // 件名での @ は普通の本文 → 不発火
+        assert!(!has_structural_encoded_word(
+            b"Subject: =?UTF-8?Q?a=40b?=\r\n\r\nx"
+        ));
+        // 日本語名の正常 encoded-word → 不発火
+        assert!(!has_structural_encoded_word(
+            "From: =?UTF-8?B?5bCx55Sw?= <t@x>\r\n\r\nx".as_bytes()
+        ));
+        // encoded-word 無し → 不発火
+        assert!(!has_structural_encoded_word(b"Subject: hi\r\n\r\nx"));
     }
 
     #[test]

@@ -3260,6 +3260,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1340: 緊急性の自称 (X-Priority: 1/2・Importance: high 等) —
+    //    「急げ」の体裁を送信側が書き込む圧力。DMARC 認証済みでは
+    //    自称フィルタ (SELF_CLAIM_SUFFIXES) が外すため、サフィックスを
+    //    「を送信側が書く兆候です」で揃える。
+    if env.urgency_claim {
+        render_risks.push(
+            "緊急・高優先度の表示 — 判断を急かす圧力として使われる体裁を\
+             送信側が書く兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1341: encoded-word 復号後に構文文字 (<>\"()\\ やアドレス欄の @)
+    //    — 復号結果を再解釈する実装でヘッダ構造がずれる。
+    if env.structural_encoded_word {
+        render_risks.push(
+            "エンコードされたヘッダ値の復号結果に構文上の記号 (<>\"> 等) が\
+             含まれます — 復号後の再解釈で欄の意味がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

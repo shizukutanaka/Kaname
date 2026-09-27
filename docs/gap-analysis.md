@@ -753,3 +753,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1337 | ~~**Content-Disposition の非標準型が未検査**~~ **(解消済み)** | P2 | inline/attachment 以外の型・空値は添付扱いが実装間でずれる。修正: `has_odd_disposition_type` → render_risks | 実装依存の解釈を生む標準外の値自体が兆候 |
 | D1338 | ~~**In-Reply-To/References の非 msgid 値が未検査**~~ **(解消済み)** | P2 | 参照できない識別子で「続きの体裁」を作る偽スレッド工作。修正: `has_malformed_thread_refs` → render_risks | 「続きの体裁」は件名の Re: だけでなく参照欄の値でも偽装される |
 | D1339 | ~~**宛先欄の全欠落が未検査**~~ **(解消済み)** | P2 | To/Cc 一切無しは宛先を見せない BCC 一斉送信の形。修正: `has_no_recipient_headers` → render_risks | 値の異常だけでなく欄の無い配送形状自体も兆候 |
+| D1340 | ~~**緊急性の自称ヘッダが未検査**~~ **(解消済み)** | P2 | X-Priority/Importance/MSMail-Priority の高優先度は「急げ」の自称 = BEC の圧力手段。修正: `has_urgency_claim` → render_risks (DMARC 時沈静) | 心理的圧力もヘッダで自称される |
+| D1341 | ~~**encoded-word 復号後の構文文字が未検査**~~ **(解消済み)** | P2 | `<>"()\`・アドレス欄の `@` を含む復号結果で欄構造がずれる。修正: `has_structural_encoded_word` → render_risks | 復号は防御の終点ではなく再解釈の起点 |

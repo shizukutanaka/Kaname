@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1340: 緊急性の自称ヘッダが未検査
+
+- **問題**: `X-Priority: 1`/`2`・`Importance: high`/`urgent`・`Priority: urgent`・`X-MSMail-Priority: high` は送信側が書き込む「急げ」の体裁 — BEC で判断を急かせる定番の社会的圧力だが未検査だった。
+- **修正**: `has_urgency_claim` — 外側ヘッダで当該値が高優先度なら検出 → `Envelope.urgency_claim` → render_risks 警告 (「を送信側が書く兆候です」サフィックスで DMARC pass 時に沈静化する自称系)。
+- **教訓**: 心理的圧力もヘッダで自称される — 体裁の自称は内容の異常と同じく兆候。
+
+### Security — D1341: encoded-word 復号後の構文文字が未検査
+
+- **問題**: D1324 は復号後の制御文字のみ見るが、`<`/`>`/`"`/`(`/`)`/`\` を含む復号結果を持つ encoded-word は、復号後にヘッダ値を再解釈する実装で引用・コメント・アドレス構造を書き換える — 転送形と復号形で差出人がずれる。アドレス欄では復号結果の `@` も構造を変える。
+- **修正**: `has_structural_encoded_word` — ヘッダ run 内の encoded-word を全 `?=` 終端候補で復号し、構文文字を検出。アドレス欄では `@` も対象 → `Envelope.structural_encoded_word` → render_risks 警告。
+- **教訓**: 復号は防御の終点ではなく再解釈の起点 — 構文を再び書き込める復号物は制御文字と同じ危険。
+
 ### Security — D1338: In-Reply-To/References の非 msgid 値が未検査
 
 - **問題**: `In-Reply-To:`/`References:` が `<id@…>` の形を持たない値 (空値・裸文字列・`@` 無しトークン・夾雑テキスト) は、参照できない偽のスレッド文脈 — 「既存スレッドの続き」の体裁を作る工作 (D1336 の姉妹)。
