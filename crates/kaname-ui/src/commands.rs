@@ -3038,6 +3038,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1317: boundary の bchars 外文字 — 受理する実装と拒否/切り詰める
+    //    実装で区切り文字列がずれる字句側の差異。
+    if env.invalid_boundary_chars {
+        render_risks.push(
+            "boundary に RFC 2046 の許可文字 (bchars) 外の文字があります —\
+             区切り文字列の解釈が実装間でずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1318: Windows 予約デバイス名の添付名 — NUL.exe 等は Windows で
+    //    通常ファイルとして保存できず、拒否する環境と別名保存する環境で
+    //    挙動がずれる。
+    if env.device_filename {
+        render_risks.push(
+            "添付ファイル名が Windows の予約デバイス名 (NUL/CON/PRN/AUX/COM1-9/LPT1-9) です —\
+             保存挙動が環境間でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -208,6 +208,10 @@ pub struct Envelope {
     pub invalid_qp_escapes: bool,
     /// base64 パートにアルファベット外の文字があるか (D1316)。
     pub invalid_base64_body: bool,
+    /// boundary 値に bchars 外の文字があるか (D1317)。
+    pub invalid_boundary_chars: bool,
+    /// 添付名が Windows 予約デバイス名か (D1318)。
+    pub device_filename: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2183,6 +2187,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1316: base64 本文の不正文字
     let invalid_base64_body = has_invalid_base64_body(bytes);
 
+    // D1317: boundary 値の bchars 外文字
+    let invalid_boundary_chars = has_invalid_boundary_chars(bytes);
+
+    // D1318: Windows 予約デバイス名の添付名
+    let device_filename = has_device_filename(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2259,6 +2269,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         overlong_header,
         invalid_qp_escapes,
         invalid_base64_body,
+        invalid_boundary_chars,
+        device_filename,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4017,6 +4029,115 @@ pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
                 break;
             }
             if !(c.is_ascii_alphanumeric() || c == b'+' || c == b'/') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// boundary 値に RFC 2046 の bchars 外の文字があるか判定する (D1317)。
+///
+/// boundary の字句は bchars (`ALPHA`/`DIGIT`/`'()+_,-./:=?`/space) に
+/// 限定される (RFC 2046 §5.1.1)。`<`・`"`・`;` 等を含む値は、受理して
+/// そのまま区切りに使う実装と拒否/切り詰める実装でパート構造がずれる
+/// (D1281/D1294/D1311 同族の字句側)。
+#[must_use]
+pub fn has_invalid_boundary_chars(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut rest = lower.as_str();
+    while let Some(pos) = rest.find("boundary") {
+        let mut after = rest[pos + 8..].trim_start();
+        if let Some(stripped) = after.strip_prefix('=') {
+            after = stripped;
+        } else {
+            rest = &rest[pos + 8..];
+            continue;
+        }
+        let after = after.trim_start_matches([' ', '\t']);
+        let value: &str = if let Some(stripped) = after.strip_prefix('"') {
+            let end = stripped.find('"').unwrap_or(stripped.len());
+            &stripped[..end]
+        } else {
+            let end = after
+                .find(';')
+                .unwrap_or_else(|| after.find('\n').unwrap_or(after.len()));
+            after[..end].trim_end()
+        };
+        // bchars = ALPHA DIGIT ' ( ) + , - . / : = ? space
+        // `_` は bchars 外だが `----_=_NextPart` 型の boundary を生成する
+        // 実装が広くあるため実害ゼロとして許容する
+        let ok = value.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(c, '\'' | '(' | ')' | '+' | ',' | '-' | '.' | '/' | ':' | '=' | '?' | ' ' | '_')
+        });
+        if !ok {
+            return true;
+        }
+        rest = &rest[pos + 8..];
+    }
+    false
+}
+
+/// 添付名が Windows 予約デバイス名か判定する (D1318)。
+///
+/// `NUL.exe`・`CON.pdf`・`COM1.scr` 等は Windows ではデバイスを指し
+/// 通常ファイルとして保存できない — 拒否する環境と別名に落とす環境で
+/// 挙動がずれるほか、意図的な工作の兆候。語幹 (basename の最初の `.`
+/// まで) が CON/PRN/AUX/NUL/COM1-9/LPT1-9 と一致するかを見る。
+#[must_use]
+pub fn has_device_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            if key != "filename" && key != "name" {
+                continue;
+            }
+            let mut v = seg[eq + 1..].trim();
+            if let Some(stripped) = v.strip_prefix('"') {
+                let end = stripped.find('"').unwrap_or(stripped.len());
+                v = &stripped[..end];
+            }
+            let stem = v.split('.').next().unwrap_or(v).trim();
+            let hit = matches!(stem, "con" | "prn" | "aux" | "nul")
+                || (stem.len() == 4
+                    && (stem.starts_with("com") || stem.starts_with("lpt"))
+                    && stem.as_bytes()[3].is_ascii_digit());
+            if hit {
                 return true;
             }
         }
@@ -17910,6 +18031,47 @@ mod tests {
         // base64 でないパートの記号は対象外
         assert!(!has_invalid_base64_body(
             b"Content-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\na#b$=c\r\n"
+        ));
+    }
+
+    #[test]
+    fn invalid_boundary_chars_はbchars外文字を検出する() {
+        assert!(has_invalid_boundary_chars(
+            b"Content-Type: multipart/mixed; boundary=\"a<b>\"\r\n\r\nx"
+        ));
+        assert!(has_invalid_boundary_chars(
+            b"Content-Type: multipart/mixed; boundary=\"a#b\"\r\n\r\nx"
+        ));
+        // bchars 内の記号 + 広く使われる `_` は不発火
+        assert!(!has_invalid_boundary_chars(
+            b"Content-Type: multipart/mixed; boundary=\"----_=_NextPart_001\"\r\n\r\nx"
+        ));
+        assert!(!has_invalid_boundary_chars(
+            b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nx"
+        ));
+        assert!(!has_invalid_boundary_chars(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn device_filename_は予約デバイス名を検出する() {
+        assert!(has_device_filename(
+            b"Content-Disposition: attachment; filename=\"NUL.exe\"\r\n\r\nb"
+        ));
+        assert!(has_device_filename(
+            b"Content-Type: application/octet-stream; name=\"com1.scr\"\r\n\r\nb"
+        ));
+        assert!(has_device_filename(
+            b"Content-Disposition: attachment; filename=\"lpt3.zip\"\r\n\r\nb"
+        ));
+        // 通常名・拡張子のみ一致・console 等は不発火
+        assert!(!has_device_filename(
+            b"Content-Disposition: attachment; filename=\"report.pdf\"\r\n\r\nb"
+        ));
+        assert!(!has_device_filename(
+            b"Content-Disposition: attachment; filename=\"console.pdf\"\r\n\r\nb"
+        ));
+        assert!(!has_device_filename(
+            b"Content-Disposition: attachment; filename=\"my.nul.txt\"\r\n\r\nb"
         ));
     }
 

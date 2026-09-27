@@ -730,3 +730,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1314 | ~~**998 バイト超のヘッダ行が未検査**~~ **(解消済み)** | P2 | RFC 5322 上限超過で切り詰める実装と全文読む実装がずれる。修正: `has_overlong_header` → render_risks | 規格の数値上限は差異の発生点 |
 | D1315 | ~~**QP 本文の不正エスケープが未検査**~~ **(解消済み)** | P2 | `=xy` 等を残す/捨てるデコーダで本文がずれる。修正: `has_invalid_qp_escapes` → render_risks | 符号字句違反は復号差異の直撃点 |
 | D1316 | ~~**base64 本文のアルファベット外文字が未検査**~~ **(解消済み)** | P2 | 読み飛ばす/止めるデコーダで添付内容がずれる。修正: `has_invalid_base64_body` → render_risks | 符号化本文の検査は宣言 CTE に追随する |
+| D1317 | ~~**boundary の bchars 外文字が未検査**~~ **(解消済み)** | P2 | `boundary="a<b>"` 等で受理/拒否が分かれる字句差異。修正: `has_invalid_boundary_chars` → render_risks (`_` は実運用で広いため許容) | 規格と実態の差を両方知る |
+| D1318 | ~~**Windows 予約デバイス名の添付名が未検査**~~ **(解消済み)** | P2 | `NUL.exe` 等は Windows で保存不能 → 環境間で保存挙動がずれる。修正: `has_device_filename` → render_risks | 名が何を指すかは OS 依存 |

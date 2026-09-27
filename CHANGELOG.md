@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1317: boundary の bchars 外文字が未検査
+
+- **問題**: boundary の字句は bchars (`ALPHA`/`DIGIT`/`'()+_,-./:=?`/space) に限定される (RFC 2046 §5.1.1)。`<`・`"`・`#` 等を含む値は受理してそのまま区切りに使う実装と拒否/切り詰める実装でパート構造がずれる (D1281/D1294/D1311 の字句側)。
+- **修正**: `has_invalid_boundary_chars` — boundary= 値に bchars 外の文字があれば検出 → `Envelope.invalid_boundary_chars` → render_risks 警告。`_` は `----_=_NextPart` 型を生成する実装が広くあるため許容。
+- **教訓**: 字句集合の検査も「実運用で一般的な逸脱」は許容する — 規格と実態の差を両方知る必要がある。
+
+### Security — D1318: Windows 予約デバイス名の添付名が未検査
+
+- **問題**: `NUL.exe`・`CON.pdf`・`COM1.scr` 等は Windows ではデバイスを指し通常ファイルとして保存できない — 拒否する環境と別名保存する環境で挙動がずれるほか意図的な工作の兆候。D1265/D1313 は形とパス成分のみ対象。
+- **修正**: `has_device_filename` — `filename=`/`name=` の語幹 (最初の `.` まで) が CON/PRN/AUX/NUL/COM1-9/LPT1-9 と一致すれば検出 → `Envelope.device_filename` → render_risks 警告。
+- **教訓**: 保存先 OS の予約語は跨環境の差異点 — 名が何を指すかは OS 依存。
+
 ### Security — D1315: QP 本文の不正エスケープが未検査
 
 - **問題**: quoted-printable 本文で `=` は行末ソフトブレークか `=XX` のみ合法 (RFC 2045 §6.7)。`=xy` 等の不正エスケープは「残す」デコーダと「除去する」デコーダで本文がずれ、検査器と表示側で別の内容になる。
