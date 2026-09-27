@@ -15873,6 +15873,11 @@ mod tests {
         let vcf4 = b"BEGIN:VCARD\nVERSION:4.0\nFN:John Doe\nTEL:+81-3-0000-0000\nEND:VCARD\n";
         let scan = scan_attachment_bytes("contact.vcf", "text/vcard", vcf4);
         assert!(scan.risks.iter().all(|r| !r.contains("vCard")));
+
+        // 継続行 (先頭空白) は独立プロパティとして検査しない
+        let vcf5 = b"BEGIN:VCARD\nNOTE: folded\n  URL:http://evil.example/cont\nEND:VCARD\n";
+        let scan = scan_attachment_bytes("contact.vcf", "text/vcard", vcf5);
+        assert!(scan.risks.iter().all(|r| !r.contains("vCard")), "{:?}", scan.risks);
     }
 
     #[test]
@@ -19992,10 +19997,10 @@ fn detect_vcard_external_refs(text: &str) -> Vec<String> {
         &["PHOTO", "LOGO", "SOUND", "SOURCE", "URL", "GEO", "IMPP", "ORG-DIRECTORY"];
     let mut out = Vec::new();
     for raw in text.lines() {
-        let line = raw.trim();
-        if line.starts_with([' ', '\t']) {
+        if raw.starts_with([' ', '\t']) {
             continue; // 継続行
         }
+        let line = raw.trim();
         let Some((head, value)) = line.split_once(':') else { continue };
         let prop = head
             .split(';')
