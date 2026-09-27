@@ -704,3 +704,13 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1288 | ~~**プリアンブル/エピローグ内のパート構造が未検査**~~ **(解消済み)** | P1 | boundary の外のパート様ヘッダは無視系スキャナに不可視。修正: `has_orphaned_part_content` → render_risks | 範囲外のヘッダ構造も兆候 |
 | D1289 | ~~**MIME-Version 欠落が未検査**~~ **(解消済み)** | P2 | MIME 構造を使うのに宣言無し — 解釈が実装間でずれる。修正: `has_missing_mime_version` → render_risks | 欠落は存在でも測る |
 | D1290 | ~~**宣言 boundary の不使用・未終了 multipart が未検査**~~ **(解消済み)** | P1 | `--b` 無使用/`--b--` 無し — 残り本文の解釈がずれる (mailsplit 未終了と同型)。修正: `has_unterminated_multipart` → render_risks | 宣言と実際の不一致は双方向に測る |
+| D1291 | ~~**Date タイムスタンプ異常が未検査**~~ **(解消済み)** | P2 | 未来日はソート先頭に張り付く戦術、遠過去は手作り生成品の兆候。修正: `is_anomalous_date` → `anomalous_date` → render_risks | 存在の次は値域を測る |
+| D1292 | ~~**一意ヘッダ重複が未検査**~~ **(解消済み)** | P1 | Subject/From/Message-ID が複数 — 先頭/末尾採用が実装で分かれるパーサ差異。修正: `has_duplicate_identity_headers` → render_risks | 「最大1個」の制約も攻撃面 |
+| D1293 | ~~**multipart コンテナへの非 identity CTE が未検査**~~ **(解消済み)** | P1 | multipart/* + base64/QP は RFC 2045 §6.4 禁止 — decode 順序で構造がずれる。修正: `has_encoded_multipart_container` → render_risks | 禁止組合せは型との対で測る |
+| D1294 | ~~**boundary= 値の前後空白混入が未検査**~~ **(解消済み)** | P1 | `boundary="x "` — trim する/しないで別区切り (mail-parser trailing-ws)。修正: `has_whitespace_boundary` → render_risks | 値の体裁も攻撃面 |
+| D1295 | ~~**RFC 2231 添付名パラメータが未検査**~~ **(解消済み)** | P1 | `filename*=utf-8''x`/`filename*0=` — 再構成しないスキャナで拡張子検査を素通り。修正: `has_rfc2231_attachment_params` → render_risks | 別表記の存在自体が兆候 |
+| D1296 | ~~**boundary= のエスケープ/閉じないクオートが未検査**~~ **(解消済み)** | P1 | `boundary="a\"b"`/閉じない `"` — 展開方法で別区切り。修正: `has_escaped_boundary_quote` → render_risks | quoted-string の健全性まで測る |
+| D1297 | ~~**boundary 値の使い回し (境界衝突) が未検査**~~ **(解消済み)** | P1 | 同一 boundary を外側/入れ子で再利用 — `--b--` の閉じるレベルが実装差。修正: `has_reused_boundary` → render_risks | 値の一意性も測る |
+| D1298 | ~~**ヘッダ部の CRLF/裸 LF 混在が未検査**~~ **(解消済み)** | P1 | 裸 LF を認めない実装はヘッダ行を結合 → ヘッダ差異工作。修正: `has_mixed_line_endings` → render_risks | 区切りの一貫性も攻撃面 |
+| D1299 | ~~**アドレスドメインの FQDN 末尾ドットが未検査**~~ **(解消済み)** | P1 | `user@example.com.` — DNS 的に同一ホストだが文字列照合は別ドメイン。修正: `has_fqdn_trailing_dot` → render_risks | 同一を指す別表記は照合をすり抜ける |
+| D1300 | ~~**アドレスヘッダのコメント内アドレス/URL が未検査**~~ **(解消済み)** | P1 | `From: a@x (billing@y)` — コメント表示実装で見える差出人がずれる。修正: `has_address_comment` → render_risks | 稀な構文の中身まで読む |

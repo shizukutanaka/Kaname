@@ -2783,6 +2783,115 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1291: Date の未来日/遠過去 — 未来日で受信トレイ先頭に
+    //    張り付く・エポック値で経年を偽るタイムスタンプ偽装。
+    if env.anomalous_date {
+        render_risks.push(
+            "Date ヘッダの日時が異常です (大幅な未来日または1990年以前) — \
+             受信日時を偽って一覧の先頭に残る・経年を装う手口の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1292: Subject/From/Message-ID の重複 — 先頭/末尾どちらを
+    //    採用するかが実装で分かれ、表示側とフィルタ側で別の
+    //    件名・差出人を見せるパーサ差異工作。
+    if env.duplicate_identity_headers {
+        render_risks.push(
+            "Subject/From/Message-ID が複数回現れています — \
+             採用する値が実装ごとに分かれるパーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1293: multipart/* に base64/QP の CTE — RFC 2045 §6.4 違反。
+    //    「先に decode して分割」する実装と「生のまま分割」する実装で
+    //    構造が食い違い、内側パートを一方から隠せる。
+    if env.encoded_multipart_container {
+        render_risks.push(
+            "multipart コンテナに base64/quoted-printable エンコードが\
+             指定されています — RFC 2045 で禁止された組合せで、\
+             パーサごとに構造解釈が食い違う兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1294: boundary= 値の空白混入 — trim する実装としない実装で
+    //    別の区切り文字列を採用する (mail-parser 系 trailing-ws 問題)。
+    if env.whitespace_boundary {
+        render_risks.push(
+            "boundary パラメータ値に空白が混ざっています — \
+             空白を除去する実装とそのまま使う実装で別の区切りになる\
+             パーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1295: filename*/name* の RFC 2231 パラメータ — 分割継続・
+    //    文字コード符号化された添付名は、再構成しないスキャナの
+    //    拡張子検査を素通りする。
+    if env.rfc2231_attachment_params {
+        render_risks.push(
+            "添付名が RFC 2231 の分割・符号化パラメータ (filename*/name*) で\
+             書かれています — デコードしない検査経路では添付名が見えない\
+             パーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1296: boundary= のエスケープ/閉じないクオート — quoted-string
+    //    の展開仕方が実装で分かれ、別の区切り文字列を採用する。
+    if env.escaped_boundary_quote {
+        render_risks.push(
+            "boundary パラメータにエスケープされた引用符または閉じない引用符が\
+             あります — 実装ごとに異なる区切りを採用するパーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1297: 同一 boundary 値の使い回し — `--b--` がどちらの
+    //    レベルを閉じるか実装で分かれる境界衝突工作。
+    if env.reused_boundary {
+        render_risks.push(
+            "複数の multipart で同じ boundary 値が使い回されています — \
+             終端の解釈が実装ごとに分かれる境界衝突の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1298: ヘッダ部の CRLF/裸LF 混在 — 裸 LF を認めないパーサは
+    //    複数行を1行に結合し、認めるパーサは別ヘッダとして読む。
+    if env.mixed_line_endings {
+        render_risks.push(
+            "ヘッダの改行に CRLF と LF が混在しています — \
+             行の区切り解釈が実装ごとに分かれるヘッダ差異の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1299: アドレスドメインの FQDN 末尾ドット — DNS 的には同じ
+    //    ホストだが文字列照合する実装は別ドメインとして見るため、
+    //    ドメイン一致フィルタをすり抜けながら配送は成立する。
+    if env.fqdn_trailing_dot {
+        render_risks.push(
+            "アドレスのドメインがピリオドで終わっています (FQDN 形式) — \
+             ドメイン文字列照合を行うフィルタとの解釈がずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1300: アドレスヘッダのコメント内アドレス/URL — コメントを
+    //    差出人として表示するクライアントと無視するクライアントで
+    //    見えるアイデンティティが分かれる。
+    if env.address_comment {
+        render_risks.push(
+            "アドレスヘッダの括弧コメント内に別のアドレスや URL があります — \
+             コメントを表示する実装と無視する実装で見える差出人が\
+             分かれる表示差異の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -8,6 +8,66 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1299: アドレスドメインの FQDN 末尾ドットが未検査
+
+- **問題**: `user@example.com.` の末尾ドットは DNS 的に `example.com` と同じホストを指すが、文字列比較でドメイン照合する実装は別ドメインと見る — 送信側が自社ドメイン許可リスト等をすり抜けつつ配送は成立する形。
+- **修正**: `has_fqdn_trailing_dot` — From/To/Cc/Reply-To/Return-Path の各 `@` 直後トークンが `.` で終わると検出 → `Envelope.fqdn_trailing_dot` → render_risks 警告。
+- **教訓**: 「同じホスト」を指す別表記は照合をすり抜ける — 名前の正規形まで揃えて比較するのが原則、揃えられないなら異形の存在を兆候にする。
+
+### Security — D1300: アドレスヘッダの CFWS コメント内アドレス/URL が未検査
+
+- **問題**: RFC 5322 の括弧コメント `From: ceo@corp.example (billing@victim.example)` に別アドレスや URL を置くと、コメントを差出人として表示するクライアントと無視するクライアントで見えるアイデンティティが分かれる。旧来の `(氏名)` 型は正規用法のため対象外。
+- **修正**: `has_address_comment` — 対象ヘッダの `(…)` 内に `@` または `http` を含むと検出 → `Envelope.address_comment` → render_risks 警告。
+- **教訓**: コメントのような「仕様上あるが滅多に使わない構文」の中に実体文字列を置くのは典型的な差異工作 — 中身まで読む。
+
+### Security — D1297: 同一 boundary 値の使い回し (境界衝突) が未検査
+
+- **問題**: 外側と入れ子で同じ `boundary=` 値を使うと、`--b--` がどちらのレベルを閉じるか実装ごとに解釈が分かれ、内側コンテンツを外側の一部/別パートとして読み替える境界衝突工作になる。正規 MUA はパートごとにランダムな boundary を生成するため同一値の出現自体が異常。
+- **修正**: `has_reused_boundary` — 全 content-type 行の boundary= 値をクオート正規化して数え、同一値が2回以上なら検出 → `Envelope.reused_boundary` → render_risks 警告。
+- **教訓**: 識別子の一意性は使い回しでも破られる — 「値が正しい」だけでなく「一意か」も測る。
+
+### Security — D1298: ヘッダ部の CRLF/裸 LF 混在が未検査
+
+- **問題**: RFC 5322 は CRLF を要求するが、ヘッダブロック内に `\r\n` と裸 `\n` が混在すると、裸 `\n` を行終端として認めないパーサは複数ヘッダを1行に結合し、認めるパーサは別々に読む — ヘッダインジェクション系の差異工作 (mixed EOL)。
+- **修正**: `has_mixed_line_endings` — ヘッダ部 (最初の `\r\n\r\n`/`\n\n` まで) で CRLF 終端行と裸 LF 終端行の両方があれば検出 → `Envelope.mixed_line_endings` → render_risks 警告。全 CRLF/全 LF の一貫した入力は対象外。
+- **教訓**: 区切り文字列自体の一貫性も攻撃面 — 「混在」は仕様差を突く足場。
+
+### Security — D1295: RFC 2231 分割・符号化パラメータの添付名が未検査
+
+- **問題**: `filename*=utf-8''evil.exe` (文字コード符号化) と `filename*0=`/`filename*1=` (分割継続) の RFC 2231/5987 パラメータを再構成しないスキャナは添付名を `filename=` 不在として素通りし、危険拡張子検査が届かない。D1265 はデコード済み名のみ対象で、この経路は未カバーだった。
+- **修正**: `has_rfc2231_attachment_params` — content-type/content-disposition 行 (FWS 展開後) で `filename*`/`name*` 系パラメータを検出 → `Envelope.rfc2231_attachment_params` → render_risks 警告。
+- **教訓**: 「名前の書き方が複数ある」フィールドは全表記を同一経路に通すか、別表記の存在自体を兆候にする。
+
+### Security — D1296: boundary= のエスケープ/閉じないクオートが未検査
+
+- **問題**: `boundary="a\"b"` の quoted-pair や閉じない `"` は、エスケープ展開するパーサ・素直に閉じ `"` を探すパーサ・パース失敗で boundary 無し扱いのパーサで三者三様の区切りになる (D1281/D1294 と同族の boundary 差異)。
+- **修正**: `has_escaped_boundary_quote` — content-type の boundary= クオート値内の `\"`、または行末まで閉じないクオートを検出 → `Envelope.escaped_boundary_quote` → render_risks 警告。
+- **教訓**: quoted-string の中身は文字列として見るだけでなく、エスケープ構造の健全性まで測る。
+
+### Security — D1293: multipart コンテナへの非 identity CTE が未検査
+
+- **問題**: `multipart/*` の Content-Transfer-Encoding は RFC 2045 §6.4 で 7bit/8bit/binary 以外が禁止 — `base64`/`quoted-printable` でコンテナ全体を符号化すると「先に decode して分割」する実装と「生のまま分割」する実装で構造が食い違い、内側パートを一方から隠せる。D1285 の重複/不正値検査は値の異常だけで、型との組合せ禁止は未検査だった。
+- **修正**: `has_encoded_multipart_container` — ヘッダ run 単位で multipart/* の CT と base64/QP の CTE の共存を検出 (入れ子パートの run も個別評価) → `Envelope.encoded_multipart_container` → render_risks 警告。
+- **教訓**: 禁止組合せは値単体ではなく型との対で測る — 正規値でも置く場所が違えば逸脱。
+
+### Security — D1294: boundary= 値の前後空白混入が未検査
+
+- **問題**: RFC 2046 §5.1.1 で boundary は空白で終わってはならない (bcharsnospace 終端)。`boundary="x "` のような前後空白を、trim するパーサとしないパーサで別の区切り文字列になり構造解釈がずれる (mail-parser 系 trailing-whitespace 問題)。
+- **修正**: `has_whitespace_boundary` — content-type の boundary= 値 (クオート有無両対応) が trim 前後で変わると検出。値内部の空白は bchars 上合法のため対象外 → `Envelope.whitespace_boundary` → render_risks 警告。
+- **教訓**: 「値の体裁」も攻撃面 — 仕様の端処理 (trim 可否) は実装差の温床。
+
+### Security — D1291: Date タイムスタンプの異常が未検査
+
+- **問題**: `Date:` を 48 時間以上の未来日にしたメールは日時ソートで受信トレイ先頭に張り付き続ける既知の戦術で、エポック/1990 年以前の値は RFC 822 普及前の現実離れ値で手作り生成品の兆候 — D1278 の欠落検査は「無い/壊れている」だけで値の異常は未検査だった。
+- **修正**: `is_anomalous_date` — Date の UNIX 秒が `now+48h` 超または 1990-01-01 未満なら検出 → `Envelope.anomalous_date` → render_risks 警告。
+- **教訓**: 存在の検査の次は値域の検査 — 必須フィールドは「ある」だけでなく「ありえる値か」を測る。
+
+### Security — D1292: 一意ヘッダ (Subject/From/Message-ID) の重複が未検査
+
+- **問題**: RFC 5322 §3.6 で最大1個と定まる `Subject:`/`From:`/`Message-ID:` が複数あると、先頭を採る実装と末尾を採る実装で件名・差出人が別々になり、表示側とフィルタ側で違う値を見せるパーサ差異工作になる (D1281 boundary 重複・D1285 制御ヘッダ重複と同型だが対象フィールドが未カバーだった)。
+- **修正**: `has_duplicate_identity_headers` — トップヘッダブロックで `subject:`/`from:`/`message-id:` が2回以上現れると検出 (継続行は行頭名を持たないため誤計数なし、`X-From:` 等は対象外) → `Envelope.duplicate_identity_headers` → render_risks 警告。
+- **教訓**: 「最大1個」の制約も攻撃面 — 曖昧さは boundary だけでなく識別ヘッダにもある。
+
 ### Security — D1289: MIME-Version 欠落が未検査
 
 - **問題**: `MIME-Version: 1.0` は MIME の宣言 (RFC 2045 §4) — `Content-Type` パラメータや CTE を使いながらこれを欠くメッセージは、MIME として解釈する実装と RFC 5322 素テキストとして解釈する実装で構造が食い違う (D1278 欠落検査の姉妹)。

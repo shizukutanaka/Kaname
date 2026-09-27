@@ -160,6 +160,26 @@ pub struct Envelope {
     pub missing_mime_version: bool,
     /// 宣言 boundary が使われない/閉じないか (D1290 — 未終了 multipart)。
     pub unterminated_multipart: bool,
+    /// Date が未来日/遠すぎる過去か (D1291 — タイムスタンプ偽装)。
+    pub anomalous_date: bool,
+    /// Subject/From/Message-ID が重複しているか (D1292 — パーサ差異)。
+    pub duplicate_identity_headers: bool,
+    /// multipart/* パートに base64/QP の CTE があるか (D1293)。
+    pub encoded_multipart_container: bool,
+    /// boundary= 値に空白が混ざっているか (D1294 — trim 差異)。
+    pub whitespace_boundary: bool,
+    /// filename*/name* の RFC 2231 パラメータがあるか (D1295)。
+    pub rfc2231_attachment_params: bool,
+    /// boundary= にエスケープ/閉じないクオートがあるか (D1296)。
+    pub escaped_boundary_quote: bool,
+    /// 同一 boundary 値が複数 multipart で使い回されているか (D1297)。
+    pub reused_boundary: bool,
+    /// ヘッダ部に CRLF と裸 LF が混在するか (D1298 — 行分割差異)。
+    pub mixed_line_endings: bool,
+    /// アドレスドメインに FQDN 末尾ドットがあるか (D1299)。
+    pub fqdn_trailing_dot: bool,
+    /// アドレスヘッダのコメント内にアドレス/URL があるか (D1300 — 表示差異)。
+    pub address_comment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2063,6 +2083,36 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1281: Content-Type の boundary= 重複 (パーサ差異)
     let ambiguous_boundary = has_ambiguous_boundary(bytes);
 
+    // D1291: Date の未来日/遠過去 (タイムスタンプ偽装)
+    let anomalous_date = date.map(|d| is_anomalous_date(d, unix_now())).unwrap_or(false);
+
+    // D1292: Subject/From/Message-ID の重複 (パーサ差異)
+    let duplicate_identity_headers = has_duplicate_identity_headers(bytes);
+
+    // D1293: multipart コンテナへの base64/QP CTE (RFC 2045 §6.4 違反)
+    let encoded_multipart_container = has_encoded_multipart_container(bytes);
+
+    // D1294: boundary= 値の空白混入 (trim 差異)
+    let whitespace_boundary = has_whitespace_boundary(bytes);
+
+    // D1295: filename*/name* の RFC 2231 分割・符号化パラメータ
+    let rfc2231_attachment_params = has_rfc2231_attachment_params(bytes);
+
+    // D1296: boundary= のエスケープ/閉じないクオート
+    let escaped_boundary_quote = has_escaped_boundary_quote(bytes);
+
+    // D1297: 同一 boundary 値の使い回し (入れ子衝突)
+    let reused_boundary = has_reused_boundary(bytes);
+
+    // D1298: ヘッダ部の CRLF/裸LF 混在
+    let mixed_line_endings = has_mixed_line_endings(bytes);
+
+    // D1299: アドレスドメインの FQDN 末尾ドット
+    let fqdn_trailing_dot = has_fqdn_trailing_dot(bytes);
+
+    // D1300: アドレスヘッダの CFWS コメント混入
+    let address_comment = has_address_comment(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2115,6 +2165,16 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         malformed_encoded_word,
         remote_content_location,
         conflicting_mime_headers,
+        anomalous_date,
+        duplicate_identity_headers,
+        encoded_multipart_container,
+        whitespace_boundary,
+        rfc2231_attachment_params,
+        escaped_boundary_quote,
+        reused_boundary,
+        mixed_line_endings,
+        fqdn_trailing_dot,
+        address_comment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -2872,6 +2932,444 @@ pub fn has_unterminated_multipart(raw: &[u8]) -> bool {
     let close = format!("--{}--", b);
     // boundary が一度も使われない / 終端がない
     !lower[header_end..].contains(&open) || !lower[header_end..].contains(&close)
+}
+
+/// 現在時刻の UNIX 秒。
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Date タイムスタンプが異常か判定する (D1291)。
+///
+/// - 現在時刻より 48 時間以上未来 → 未来日メールはソート順の最上位に
+///   張り付く既知のスパム戦術であり、かつ「新しい受信」として見せる偽装
+/// - 1990-01-01 以前 → RFC 822 普及前のタイムスタンプは現実のメールでは
+///   ありえず、エポック/ゼロ埋め等の手作り生成品の兆候
+///
+/// 出典: タイムスタンプを未来日にして inbox 先頭に固定する手法は
+/// フィッシング対策協議会・SANS の観測で繰り返し報告される古典的戦術。
+#[must_use]
+pub fn is_anomalous_date(ts: i64, now_unix: i64) -> bool {
+    const FUTURE_SLACK: i64 = 48 * 3600;
+    const EPOCH_1990: i64 = 631_152_000; // 1990-01-01T00:00:00Z
+    ts > now_unix + FUTURE_SLACK || ts < EPOCH_1990
+}
+
+/// 一意ヘッダ (Subject/From/Message-ID) が複数あるか判定する (D1292)。
+///
+/// RFC 5322 §3.6 はこれらを「最大1個」と定める。複数あると実装ごとに
+/// 「先頭を採る/末尾を採る」が分かれ、表示側とフィルタ側で別の
+/// 件名・差出人を見せるパーサ差異工作になる (D1281/D1285 と同型)。
+/// 継続行 (行頭 WSP) は行頭がヘッダ名で始まらないため誤計数しない。
+#[must_use]
+pub fn has_duplicate_identity_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut subject = 0usize;
+    let mut from = 0usize;
+    let mut message_id = 0usize;
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with("subject:") {
+            subject += 1;
+        } else if l.starts_with("from:") {
+            from += 1;
+        } else if l.starts_with("message-id:") {
+            message_id += 1;
+        }
+        if subject > 1 || from > 1 || message_id > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// multipart/* パートが base64/quoted-printable CTE を持つか判定する
+/// (D1293)。
+///
+/// RFC 2045 §6.4: `multipart/*` の Content-Transfer-Encoding は
+/// 7bit/8bit/binary 以外禁止。base64 でコンテナ全体を符号化すると、
+/// 「先に decode してから boundary 分割」する実装と「生のまま分割」する
+/// 実装で構造が食い違い、内側パートを一方から隠せる (境界ずらし系)。
+/// ヘッダ run 単位で判定 — `--b` 行は非ヘッダ行として run を切るので、
+/// 入れ子パートのヘッダ run も個別に評価される。
+#[must_use]
+pub fn has_encoded_multipart_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開: 継続行を論理行に結合
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let mut is_multipart_run = false;
+    let mut has_cte_in_run = false;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() || l.starts_with("--") {
+            // 非ヘッダ行・boundary 行で run を切る
+            if is_multipart_run && has_cte_in_run {
+                return true;
+            }
+            is_multipart_run = false;
+            has_cte_in_run = false;
+            continue;
+        }
+        if l.starts_with("content-type:") && l.contains("multipart/") {
+            is_multipart_run = true;
+        } else if l.starts_with("content-transfer-encoding:")
+            && (l.contains("base64") || l.contains("quoted-printable"))
+        {
+            has_cte_in_run = true;
+        }
+        if is_multipart_run && has_cte_in_run {
+            return true;
+        }
+    }
+    false
+}
+
+/// `boundary=` パラメータ値に空白が混ざっているか判定する (D1294)。
+///
+/// RFC 2046 §5.1.1: boundary は空白で終わってはならない (bcharsnospace
+/// で終端)。`boundary="x "` のような前後空白の混入は、trim するパーサと
+/// しないパーサで別の boundary 文字列を採用し、構造解釈が食い違う
+/// (mail-parser 系の trailing-whitespace boundary 問題)。値内部の
+/// 空白は bchars に含まれ RFC 上は合法のため対象外。
+#[must_use]
+pub fn has_whitespace_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = l.find("boundary=") else { continue };
+        let rest = &l[pos + 9..];
+        let v = if let Some(q) = rest.strip_prefix('"') {
+            let end = q.find('"').unwrap_or(q.len());
+            &q[..end]
+        } else {
+            rest.split(';').next().unwrap_or("")
+        };
+        // 前後の空白のみ違反 (内部の空白は bchars に含まれ RFC 上は合法)
+        if v != v.trim() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `filename*`/`name*` の RFC 2231/5987 パラメータがあるか判定する
+/// (D1295)。
+///
+/// `filename*=utf-8''evil.exe` (文字コード符号化) と
+/// `filename*0="ev"; filename*1="il.exe"` (分割継続) は、これらを
+/// 再構成・デコードしないスキャナの添付名検査を素通りする — 表示側は
+/// デコードして危険拡張子を提示、検査側は `filename=` 不在として通す
+/// パーサ差異。
+///
+/// content-type/content-disposition 行のみ対象 (`name*` は CT の
+/// name*= 符号化を、 filename* は CD を拾う)。
+#[must_use]
+pub fn has_rfc2231_attachment_params(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-type:") || l.starts_with("content-disposition:")) {
+            continue;
+        }
+        // filename*= / filename*0= / filename*0*= (name* 同様)
+        for key in ["filename", "name"] {
+            let mut rest = l;
+            while let Some(p) = rest.find(key) {
+                let after = &rest[p + key.len()..];
+                // 直後が '*' → RFC 2231 系 (filename*= / filename*N= / filename*N*=)
+                if after.starts_with('*') {
+                    return true;
+                }
+                rest = &after[..];
+            }
+        }
+    }
+    false
+}
+
+/// `boundary=` 値にエスケープクオートまたは閉じないクオートがあるか
+/// 判定する (D1296)。
+///
+/// `boundary="a\"b"` (quoted-pair 含む) や `boundary="a` (閉じない) は、
+/// quoted-string のエスケープを展開するパーサと素直に閉じ `"` を探す
+/// パーサで別の境界文字列を採用する — boundary 系差異工作の一型
+/// (D1281/D1294 と同族)。
+#[must_use]
+pub fn has_escaped_boundary_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = l.find("boundary=") else { continue };
+        let rest = &l[pos + 9..];
+        let Some(q) = rest.strip_prefix('"') else { continue };
+        // 閉じクオートまでの間に `\"` (quoted-pair) がある、または閉じない
+        let mut i = 0usize;
+        let bytes = q.as_bytes();
+        let mut closed = false;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if i + 1 < bytes.len() => {
+                    // quoted-pair — エスケープ内に `"` があれば差異の種
+                    if bytes[i + 1] == b'"' {
+                        return true;
+                    }
+                    i += 2;
+                }
+                b'"' => {
+                    closed = true;
+                    break;
+                }
+                _ => i += 1,
+            }
+        }
+        if !closed {
+            // 閉じクオートがない — 行末までを値にする実装と、
+            // パース失敗で boundary 無し扱いの実装に分かれる
+            return true;
+        }
+    }
+    false
+}
+
+/// 同一の `boundary=` 値が複数の multipart 宣言で使い回されているか
+/// 判定する (D1297)。
+///
+/// 正規の MUA はパートごとにランダムな boundary を生成する。同じ値を
+/// 外側と入れ子で使うと、`--b--` がどちらのレベルを閉じるか実装ごとに
+/// 解釈が分かれ、内側のコンテンツを外側の一部/別パートとして読み替える
+/// 境界衝突工作になる (boundary collision)。クオート有無を正規化して
+/// 同一値の出現回数を数える。
+#[must_use]
+pub fn has_reused_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = l.find("boundary=") else { continue };
+        let rest = &l[pos + 9..];
+        let v = if let Some(q) = rest.strip_prefix('"') {
+            let end = q.find('"').unwrap_or(q.len());
+            q[..end].to_string()
+        } else {
+            rest.split(';').next().unwrap_or("").trim().to_string()
+        };
+        if v.is_empty() {
+            continue;
+        }
+        let n = seen.entry(v).or_insert(0);
+        *n += 1;
+        if *n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダ部の行終端に CRLF と裸 LF が混在するか判定する (D1298)。
+///
+/// RFC 5322 は CRLF を要求するが、受信経路では正規化が混じることがある。
+/// ヘッダブロック内に `\r\n` 終端と裸 `\n` 終端が混在すると、裸 `\n` を
+/// 行終端として認めないパーサは複数ヘッダを1行に結合し、認めるパーサは
+/// 別々に読む — ヘッダインジェクション系の差異工作 (mixed EOL)。
+/// ヘッダ部 = 最初の空行 (`\r\n\r\n` または `\n\n`) まで。
+#[must_use]
+pub fn has_mixed_line_endings(raw: &[u8]) -> bool {
+    // ヘッダ部の範囲: \r\n\r\n と \n\n のうち先に来る方
+    let mut header_end = raw.len();
+    for i in 0..raw.len().saturating_sub(1) {
+        if raw[i] == b'\n' && raw[i + 1] == b'\n' {
+            header_end = i;
+            break;
+        }
+        if i + 3 < raw.len()
+            && raw[i] == b'\r'
+            && raw[i + 1] == b'\n'
+            && raw[i + 2] == b'\r'
+            && raw[i + 3] == b'\n'
+        {
+            header_end = i;
+            break;
+        }
+    }
+    let hdr = &raw[..header_end];
+    let mut saw_crlf = false;
+    let mut saw_bare_lf = false;
+    for (i, &b) in hdr.iter().enumerate() {
+        if b == b'\n' {
+            if i > 0 && hdr[i - 1] == b'\r' {
+                saw_crlf = true;
+            } else {
+                saw_bare_lf = true;
+            }
+            if saw_crlf && saw_bare_lf {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレスヘッダのドメインに FQDN 末尾ドットがあるか判定する (D1299)。
+///
+/// `user@example.com.` は DNS 的には `example.com` と同じホストを指すが、
+/// 文字列比較でドメイン照合する実装は別ドメインとして見る — 送信側が
+/// ドメイン一致フィルタ (自社ドメイン許可リスト等) をすり抜けつつ、
+/// 配送側は正しく届く形。From/To/Cc/Reply-To/Return-Path の各 `@` の
+/// 直後トークンを見る。
+#[must_use]
+pub fn has_fqdn_trailing_dot(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    for l in lower[..header_end].lines() {
+        let hit = l.starts_with("from:")
+            || l.starts_with("to:")
+            || l.starts_with("cc:")
+            || l.starts_with("reply-to:")
+            || l.starts_with("return-path:");
+        if !hit {
+            continue;
+        }
+        for (i, _) in l.match_indices('@') {
+            let rest = &l[i + 1..];
+            let end = rest
+                .find(|c: char| c == '>' || c == ',' || c == ';' || c.is_whitespace())
+                .unwrap_or(rest.len());
+            let domain = rest[..end].trim_start_matches('<');
+            if domain.ends_with('.') && domain.len() > 1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス系ヘッダの CFWS コメント `(…)` 内にメールアドレス/URL が
+/// 混ざっているか判定する (D1300)。
+///
+/// RFC 5322 は `From:` 等に括弧コメントを許す。`From: ceo@corp.example
+/// (billing@victim.example)` のようにコメント内に別アドレスを置くと、
+/// コメントを差出人として表示するクライアントと無視するクライアントで
+/// 見えるアイデンティティが分かれる (表示差異/アドレス注入)。
+/// 単なる `(氏名)` 型のコメントは旧来の正規用法のため対象外 —
+/// `@` または `http` を含むコメントのみ検出。
+#[must_use]
+pub fn has_address_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    for l in lower[..header_end].lines() {
+        let hit = l.starts_with("from:")
+            || l.starts_with("to:")
+            || l.starts_with("cc:")
+            || l.starts_with("reply-to:")
+            || l.starts_with("return-path:");
+        if !hit {
+            continue;
+        }
+        // コメント内に @ または http を含む (…)
+        if let Some(open) = l.find('(') {
+            if let Some(close) = l[open..].find(')') {
+                let inner = &l[open + 1..open + close];
+                if inner.contains('@') || inner.contains("http") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -16227,6 +16725,240 @@ mod tests {
             b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nb\r\n--x--"
         ));
         assert!(!has_unterminated_multipart(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn anomalous_date_は未来日と遠過去を検出する() {
+        // D1291 — now = 2026-09-27T00:00:00Z = 1790208000
+        let now = 1_790_208_000i64;
+        // 未来日 (>48h 先) → 発火
+        assert!(is_anomalous_date(now + 7 * 86400, now));
+        // 遠過去 (1990-01-01 前) → 発火
+        assert!(is_anomalous_date(0, now));            // エポック
+        assert!(is_anomalous_date(300_000_000, now));  // 1979 年
+        // 境界内は不発火
+        assert!(!is_anomalous_date(now, now));
+        assert!(!is_anomalous_date(now + 86400, now));        // +24h
+        assert!(!is_anomalous_date(631_152_000, now));        // 1990-01-01 丁度
+        assert!(!is_anomalous_date(now - 365 * 86400, now));  // 1 年前
+    }
+
+    #[test]
+    fn duplicate_identity_headers_は一意ヘッダ重複を検出する() {
+        // D1292 — Subject 二重 / From 二重 / Message-ID 二重
+        assert!(has_duplicate_identity_headers(
+            b"From: a@x\r\nSubject: hello\r\nSubject: goodbye\r\n\r\nb"
+        ));
+        assert!(has_duplicate_identity_headers(
+            b"From: a@x\r\nFrom: b@y\r\nSubject: s\r\n\r\nb"
+        ));
+        assert!(has_duplicate_identity_headers(
+            b"From: a@x\r\nMessage-ID: <1@x>\r\nMessage-ID: <2@x>\r\n\r\nb"
+        ));
+        // 継続行は別ヘッダとして数えない
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@x\r\nSubject: very long\r\n folded\r\n\r\nb"
+        ));
+        // X-From: 等の X- 系は from: にマッチしない
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@x\r\nX-From: b@y\r\nSubject: s\r\n\r\nb"
+        ));
+        // 正規メールは不発火
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@x\r\nTo: b@y\r\nSubject: s\r\nMessage-ID: <m@x>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn encoded_multipart_container_はmultipart上のCTEを検出する() {
+        // D1293 — multipart/* に base64/quoted-printable CTE
+        assert!(has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // CTE が CT より先の run でも発火
+        assert!(has_encoded_multipart_container(
+            b"Content-Transfer-Encoding: base64\r\nContent-Type: multipart/alternative; boundary=y\r\n\r\nb"
+        ));
+        // 入れ子パートのヘッダ run でも発火
+        assert!(has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=o\r\n\r\n--o\r\nContent-Type: multipart/related; boundary=i\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx"
+        ));
+        // multipart + 7bit/8bit/binary は正規 → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--x--"
+        ));
+        // 非 multipart への base64 は正規 → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\naGk="
+        ));
+        // multipart 宣言なし → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: text/html\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn whitespace_boundary_はboundary値の空白を検出する() {
+        // D1294 — クオート値内の空白 / クオート無し値の前後空白
+        assert!(has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"x \"\r\n\r\nb"
+        ));
+        assert!(has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\" x\"\r\n\r\nb"
+        ));
+        assert!(has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=x \r\n\r\nb"
+        ));
+        // 内部の空白は bchars に含まれ RFC 2046 上は合法 → 不発火
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nb"
+        ));
+        // 正規 boundary は不発火
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"abc-def\"\r\n\r\nb"
+        ));
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nb\r\n--x--"
+        ));
+        // boundary= のない content-type は対象外
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn rfc2231_attachment_params_は符号化添付名を検出する() {
+        // D1295 — filename*= / filename*0= / filename*0*= / name*=
+        assert!(has_rfc2231_attachment_params(
+            b"Content-Disposition: attachment; filename*=utf-8''evil.exe\r\n\r\nb"
+        ));
+        assert!(has_rfc2231_attachment_params(
+            b"Content-Disposition: attachment;\r\n filename*0=\"ev\";\r\n filename*1=\"il.exe\"\r\n\r\nb"
+        ));
+        assert!(has_rfc2231_attachment_params(
+            b"Content-Type: application/pdf; name*=utf-8''doc.pdf\r\n\r\nb"
+        ));
+        // 通常の filename=/name= は不発火
+        assert!(!has_rfc2231_attachment_params(
+            b"Content-Disposition: attachment; filename=\"evil.exe\"\r\n\r\nb"
+        ));
+        assert!(!has_rfc2231_attachment_params(
+            b"Content-Type: image/png; name=\"pic.png\"\r\n\r\nb"
+        ));
+        // 本文中の文字列は対象外 (CT/CD 行のみ)
+        assert!(!has_rfc2231_attachment_params(
+            b"Content-Type: text/plain\r\n\r\nfilename*=utf-8''x in body"
+        ));
+    }
+
+    #[test]
+    fn escaped_boundary_quote_はクオート異常を検出する() {
+        // D1296 — エスケープクオート / 閉じないクオート
+        assert!(has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=\"a\\\"b\"\r\n\r\nb"
+        ));
+        assert!(has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=\"unclosed\r\n\r\nb"
+        ));
+        // 正規クオート/クオート無しは不発火
+        assert!(!has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nb"
+        ));
+        assert!(!has_escaped_boundary_quote(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\nb"
+        ));
+        // boundary 以外のパラメータのクオート異常は対象外
+        assert!(!has_escaped_boundary_quote(
+            b"Content-Type: text/plain; name=\"a\\\"b\"\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn reused_boundary_はboundary衝突を検出する() {
+        // D1297 — 外側と入れ子で同じ boundary
+        assert!(has_reused_boundary(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: multipart/related; boundary=x\r\n\r\nb"
+        ));
+        // クオート有無の違いをまたいでも同一値で衝突
+        assert!(has_reused_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"x\"\r\n\r\n--x\r\nContent-Type: multipart/alternative; boundary=x\r\n\r\nb"
+        ));
+        // 異なる boundary は正規 → 不発火
+        assert!(!has_reused_boundary(
+            b"Content-Type: multipart/mixed; boundary=outer\r\n\r\n--outer\r\nContent-Type: multipart/alternative; boundary=inner\r\n\r\nb"
+        ));
+        // boundary 自体がない → 不発火
+        assert!(!has_reused_boundary(
+            b"Content-Type: text/plain\r\n\r\nplain"
+        ));
+    }
+
+    #[test]
+    fn mixed_line_endings_は改行混在を検出する() {
+        // D1298 — ヘッダ部の CRLF + 裸 LF
+        assert!(has_mixed_line_endings(
+            b"From: a@x\r\nSubject: hi\nTo: b@y\r\n\r\nbody"
+        ));
+        // 全 CRLF / 全 LF は不発火
+        assert!(!has_mixed_line_endings(
+            b"From: a@x\r\nSubject: hi\r\n\r\nbody"
+        ));
+        assert!(!has_mixed_line_endings(
+            b"From: a@x\nSubject: hi\n\nbody"
+        ));
+        // 本文中の混在は対象外 (ヘッダ部のみ)
+        assert!(!has_mixed_line_endings(
+            b"From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n"
+        ));
+    }
+
+    #[test]
+    fn fqdn_trailing_dot_はドメイン末尾ドットを検出する() {
+        // D1299 — From/Reply-To の FQDN 末尾ドット
+        assert!(has_fqdn_trailing_dot(
+            b"From: ceo@corp.example.\r\nTo: a@b\r\n\r\nb"
+        ));
+        assert!(has_fqdn_trailing_dot(
+            b"From: \"CEO\" <ceo@corp.example.>\r\n\r\nb"
+        ));
+        assert!(has_fqdn_trailing_dot(
+            b"Return-Path: <bounce@evil.example.>\r\n\r\nb"
+        ));
+        // 通常ドメインは不発火
+        assert!(!has_fqdn_trailing_dot(
+            b"From: ceo@corp.example\r\nTo: a@b\r\n\r\nb"
+        ));
+        // To の複数宛先の1つが末尾ドット
+        assert!(has_fqdn_trailing_dot(
+            b"From: a@b\r\nTo: x@y, z@w.example., v@u\r\n\r\nb"
+        ));
+        // 本文中のアドレスは対象外
+        assert!(!has_fqdn_trailing_dot(
+            b"From: a@b\r\n\r\nreply to ceo@corp.example. please"
+        ));
+    }
+
+    #[test]
+    fn address_comment_はコメント内アドレスを検出する() {
+        // D1300 — コメント内に別アドレス/URL
+        assert!(has_address_comment(
+            b"From: ceo@corp.example (billing@victim.example)\r\n\r\nb"
+        ));
+        assert!(has_address_comment(
+            b"Reply-To: x@y (see https://evil.example)\r\n\r\nb"
+        ));
+        // 旧来の (氏名) 型コメントは不発火
+        assert!(!has_address_comment(
+            b"From: john@corp.example (John Doe)\r\n\r\nb"
+        ));
+        // コメント無しは不発火
+        assert!(!has_address_comment(
+            b"From: \"John Doe\" <john@corp.example>\r\n\r\nb"
+        ));
+        // 本文中の括弧は対象外
+        assert!(!has_address_comment(
+            b"From: a@b\r\n\r\n(note with x@y inside)"
+        ));
     }
 
     #[test]
