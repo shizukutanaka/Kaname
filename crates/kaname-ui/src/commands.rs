@@ -2763,6 +2763,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1289: MIME-Version 欠落 — MIME 構造を使うのに宣言がない
+    //    (パーサ差異の兆候)。
+    if env.missing_mime_version {
+        render_risks.push(
+            "MIME-Version ヘッダがありません — MIME 構造を使いながら\
+             宣言を欠くメッセージは、実装によって構造解釈が\
+             食い違う手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1290: 宣言 boundary が使われない/閉じない未終了 multipart。
+    if env.unterminated_multipart {
+        render_risks.push(
+            "宣言された boundary が使われていないか、終端がありません — \
+             パーサごとに残り本文の解釈が食い違う未終了 multipart の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

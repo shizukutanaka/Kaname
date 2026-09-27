@@ -156,6 +156,10 @@ pub struct Envelope {
     /// 宣言 boundary のプリアンブル/エピローグにパート様構造があるか
     /// (D1288 — 走査外パート)。
     pub orphaned_part_content: bool,
+    /// MIME 構造を使うのに MIME-Version ヘッダがないか (D1289)。
+    pub missing_mime_version: bool,
+    /// 宣言 boundary が使われない/閉じないか (D1290 — 未終了 multipart)。
+    pub unterminated_multipart: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2077,6 +2081,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1288: boundary プリアンブル/エピローグ内のパート様構造
     let orphaned_part_content = has_orphaned_part_content(bytes);
 
+    // D1289: MIME-Version 欠落 (MIME 構造を使うのに宣言無し)
+    let missing_mime_version = has_missing_mime_version(bytes);
+
+    // D1290: 宣言 boundary の不使用/未終了 multipart
+    let unterminated_multipart = has_unterminated_multipart(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2108,6 +2118,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
+        missing_mime_version,
+        unterminated_multipart,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2796,6 +2808,73 @@ pub fn has_orphaned_part_content(raw: &[u8]) -> bool {
     }
     false
 }
+
+/// D1289: MIME 構造を使うのに `MIME-Version:` ヘッダがないか判定する。
+///
+/// `MIME-Version: 1.0` は MIME であることの宣言 (RFC 2045 §4) —
+/// `Content-Type:` パラメータや `Content-Transfer-Encoding:` を
+/// 使いながら `MIME-Version:` を欠くメッセージは、MIME として
+/// 解釈する実装と RFC 5322 素テキストとして解釈する実装で構造が
+/// 食い違う差異工作の兆候 (D1278 欠落検査の姉妹検査)。
+#[must_use]
+pub fn has_missing_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = text[..header_end.min(text.len())].replace("\r\n", "\n");
+    let lower = header.to_ascii_lowercase();
+    if lower.lines().any(|l| l.starts_with("mime-version:")) {
+        return false;
+    }
+    // MIME 構造を名乗るヘッダがあるのに MIME-Version がない
+    lower.lines().any(|l| {
+        l.starts_with("content-type:") && (l.contains(';') || l.contains("multipart/"))
+            || l.starts_with("content-transfer-encoding:")
+            || l.starts_with("content-disposition:")
+    })
+}
+
+/// D1290: 宣言された boundary が一度も使われない、または終端
+///   `--boundary--` がないか判定する。
+///
+/// multipart 宣言したのに `--b` が一度も現れない (実パートゼロ)
+/// か、開始しかなく `--b--` で閉じない — パーサごとに残り本文の
+/// 解釈が食い違う (mailsplit の未終了 multipart で外側 boundary が
+/// 生きたまま残るバグと同型)。トップレベル boundary だけ見る。
+#[must_use]
+pub fn has_unterminated_multipart(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(0);
+    let lower_head = text[..header_end].to_ascii_lowercase();
+    let mut boundary: Option<String> = None;
+    for l in lower_head.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/") {
+            if let Some(pos) = l.find("boundary=") {
+                let v = l[pos + 9..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+                if !v.is_empty() {
+                    boundary = Some(v);
+                }
+            }
+        }
+    }
+    let Some(b) = boundary else { return false };
+    let lower = text.to_ascii_lowercase();
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    // boundary が一度も使われない / 終端がない
+    !lower[header_end..].contains(&open) || !lower[header_end..].contains(&close)
+}
+
+/// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
@@ -16115,6 +16194,39 @@ mod tests {
         assert!(!has_orphaned_part_content(ok));
         // multipart でない・boundary 無しは不発火
         assert!(!has_orphaned_part_content(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn missing_mime_version_はMIME宣言なし構造を検出する() {
+        // D1289 — MIME 構造を使うのに MIME-Version ヘッダがない
+        assert!(has_missing_mime_version(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nb\r\n--x--"
+        ));
+        assert!(has_missing_mime_version(
+            b"Content-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        // 正規: MIME-Version ありは不発火
+        assert!(!has_missing_mime_version(
+            b"MIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\nx"
+        ));
+        // MIME 構造を名乗らない単純テキストは不発火
+        assert!(!has_missing_mime_version(b"Subject: a\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn unterminated_multipart_は未終了multipartを検出する() {
+        // D1290 — boundary 宣言のみで使用無し / 終端無し
+        assert!(has_unterminated_multipart(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\nno boundary used"
+        ));
+        assert!(has_unterminated_multipart(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nb"
+        ));
+        // 正規: 開始も終端もあるは不発火
+        assert!(!has_unterminated_multipart(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nb\r\n--x--"
+        ));
+        assert!(!has_unterminated_multipart(b"Content-Type: text/plain\r\n\r\nplain"));
     }
 
     #[test]
