@@ -751,3 +751,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1335 | ~~**表示名がメールアドレス形で実アドレスと不一致でも未検査**~~ **(解消済み)** | P2 | `"security@apple.com" <evil@x>` — 表示名のみ表示の実装で差出人誤認。修正: `has_address_display_name` → render_risks | 表示名/実値不一致は文字種だけでなく「表示名自体がアドレス形」でも |
 | D1336 | ~~**Message-ID 欠落・形の崩れが未検査**~~ **(解消済み)** | P2 | SHOULD 欄の欠落/不正形は手作り生成品の兆候。修正: `has_odd_message_id` → render_risks | 必須級だけでなく SHOULD 級の欠落も兆候 |
 | D1337 | ~~**Content-Disposition の非標準型が未検査**~~ **(解消済み)** | P2 | inline/attachment 以外の型・空値は添付扱いが実装間でずれる。修正: `has_odd_disposition_type` → render_risks | 実装依存の解釈を生む標準外の値自体が兆候 |
+| D1338 | ~~**In-Reply-To/References の非 msgid 値が未検査**~~ **(解消済み)** | P2 | 参照できない識別子で「続きの体裁」を作る偽スレッド工作。修正: `has_malformed_thread_refs` → render_risks | 「続きの体裁」は件名の Re: だけでなく参照欄の値でも偽装される |
+| D1339 | ~~**宛先欄の全欠落が未検査**~~ **(解消済み)** | P2 | To/Cc 一切無しは宛先を見せない BCC 一斉送信の形。修正: `has_no_recipient_headers` → render_risks | 値の異常だけでなく欄の無い配送形状自体も兆候 |

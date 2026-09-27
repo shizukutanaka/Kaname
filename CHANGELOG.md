@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1338: In-Reply-To/References の非 msgid 値が未検査
+
+- **問題**: `In-Reply-To:`/`References:` が `<id@…>` の形を持たない値 (空値・裸文字列・`@` 無しトークン・夾雑テキスト) は、参照できない偽のスレッド文脈 — 「既存スレッドの続き」の体裁を作る工作 (D1336 の姉妹)。
+- **修正**: `has_malformed_thread_refs` — 外側ヘッダで当該欄の値が空・`<…@…>` トークンを欠く・トークン外に非空白文字を持つ場合に検出 → `Envelope.malformed_thread_refs` → render_risks 警告。
+- **教訓**: 「続きの体裁」は Subject の Re: だけでなく参照欄の値でも偽装される。
+
+### Security — D1339: 宛先欄の全欠落が未検査
+
+- **問題**: 外側ヘッダに To/Cc/Resent-To/Resent-Cc が一切無い (または値が全て空) メッセージは、宛先を見せない BCC 一斉送信の配送形状 — 受取人を名指ししない大量送信の形。Bcc 欄は配送時除去されるため、届いた側で宛先が見えないこと自体が形の異常。
+- **修正**: `has_no_recipient_headers` — 宛先欄が無い・値が空なら検出 → `Envelope.no_recipient_headers` → render_risks 警告。
+- **教訓**: 「欄の値の異常」だけでなく「欄そのものが無い配送形状」も兆候として扱う。
+
 ### Security — D1335: 表示名がメールアドレス形で実アドレスと不一致でも未検査
 
 - **問題**: `From: "security@apple.com" <attacker@evil.example>` — 表示名だけを出す実装は表示名中のアドレスを差出人と誤認する。差出人欄偽装の定番形で未検査だった。

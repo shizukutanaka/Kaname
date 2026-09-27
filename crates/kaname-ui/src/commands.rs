@@ -3240,6 +3240,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1338: In-Reply-To/References の値が msgid 形を持たない — 参照
+    //    できない識別子を背負い「既存スレッドの続き」の体裁を作る工作。
+    if env.malformed_thread_refs {
+        render_risks.push(
+            "In-Reply-To/References の値がメッセージ識別子の形をしていません —\
+             存在しないスレッドの続きに見せかける工作の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1339: To/Cc の宛先欄が一切無い — 宛先を見せない BCC 一斉送信の
+    //    配送形状 (受取人を名指ししない大量送信)。
+    if env.no_recipient_headers {
+        render_risks.push(
+            "宛先ヘッダ (To/Cc) が一切ありません —\
+             宛先を見せない一斉送信の配送形状です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

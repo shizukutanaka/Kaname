@@ -283,6 +283,14 @@ pub struct Envelope {
     /// D1337 — `Content-Disposition:` の型が inline/attachment 以外。
     /// 拡張トークン・空値は「添付扱いする/しない」が実装間でずれる。
     pub odd_disposition_type: bool,
+    /// D1338 — `In-Reply-To:`/`References:` の値が msgid 形 (`<id@…>`) を
+    /// 持たない・空値・夾雑テキスト混在。参照できない偽のスレッド文脈を
+    /// 背負う「続きのように見せる」工作の兆候。
+    pub malformed_thread_refs: bool,
+    /// D1339 — 外側ヘッダに To/Cc/Resent-To/Resent-Cc の宛先欄が
+    /// 一切無い (または値が全て空)。宛先を見せない BCC 一斉送信の
+    /// 配送形状 — 通常の手紙には宛先がある。
+    pub no_recipient_headers: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2285,6 +2293,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let addr_in_display_name = has_address_display_name(bytes);
     let odd_message_id = has_odd_message_id(bytes);
     let odd_disposition_type = has_odd_disposition_type(bytes);
+    let malformed_thread_refs = has_malformed_thread_refs(bytes);
+    let no_recipient_headers = has_no_recipient_headers(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2382,6 +2392,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_in_display_name,
         odd_message_id,
         odd_disposition_type,
+        malformed_thread_refs,
+        no_recipient_headers,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5340,6 +5352,117 @@ pub fn has_odd_disposition_type(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// `In-Reply-To:`/`References:` の値が msgid の形を持たないか判定する
+/// (D1338)。
+///
+/// 参照できない識別子を背負うメッセージは「既存スレッドの続き」の体裁を
+/// 作る工作の兆候 — 値が空・`<…@…>` トークンを欠く・トークンの外に
+/// 夾雑テキストがある場合に検出する。正規の `<a@b> <c@d>` 列は不発火。
+#[must_use]
+pub fn has_malformed_thread_refs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].to_ascii_lowercase();
+        if name != "in-reply-to" && name != "references" {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.is_empty() {
+            return true;
+        }
+        // `<…@…>` トークンを順に取り除き、残りに非空白文字が残れば異常。
+        let mut rest = v;
+        let mut any_valid = false;
+        while let Some(lt) = rest.find('<') {
+            if rest[..lt].chars().any(|c| !c.is_whitespace()) {
+                // トークンの手前の夾雑テキスト
+                return true;
+            }
+            let Some(gt) = rest[lt + 1..].find('>') else {
+                // 開き < だけで閉じない → 後続は全て夾雑物
+                return true;
+            };
+            let inner = &rest[lt + 1..lt + 1 + gt];
+            if inner.contains('<') {
+                // 入れ子の < — `<a@b <c@d>` のような崩れた形
+                return true;
+            }
+            if inner.contains('@') {
+                any_valid = true;
+            } else {
+                // @ を欠く <…> トークンも異常形
+                return true;
+            }
+            rest = &rest[lt + 1 + gt + 1..];
+        }
+        if !any_valid || rest.chars().any(|c| !c.is_whitespace()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 外側ヘッダに宛先欄 (To/Cc/Resent-To/Resent-Cc) が一切無いか
+/// 判定する (D1339)。
+///
+/// 宛先を見せない配送形状は BCC 一斉送信・全員秘匿のスパム型。
+/// Bcc 欄は配送時に除去されるため届いた側で宛先が見えないのは、
+/// 受取人を名指ししない大量送信の形そのもの (D1331 の姉妹)。
+/// 欄はあるが値が空の場合も宛先は見えないため同様に検出する。
+#[must_use]
+pub fn has_no_recipient_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].to_ascii_lowercase();
+        if matches!(
+            name.as_str(),
+            "to" | "cc" | "resent-to" | "resent-cc"
+        ) && !l[colon + 1..].trim().is_empty()
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -19647,6 +19770,43 @@ mod tests {
         ));
         // CD ヘッダ自体が無い → 不発火
         assert!(!has_odd_disposition_type(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn malformed_thread_refs_は偽スレッド参照を検出する() {
+        assert!(has_malformed_thread_refs(b"In-Reply-To: garbage\r\n\r\nx"));
+        assert!(has_malformed_thread_refs(b"In-Reply-To: <notanid>\r\n\r\nx"));
+        assert!(has_malformed_thread_refs(b"References:\r\n\r\nx"));
+        assert!(has_malformed_thread_refs(
+            b"References: bogus <a@b>\r\n\r\nx"
+        ));
+        assert!(has_malformed_thread_refs(b"References: <a@b <c@d>\r\n\r\nx"));
+        // 正常形は不発火
+        assert!(!has_malformed_thread_refs(b"In-Reply-To: <a@b>\r\n\r\nx"));
+        assert!(!has_malformed_thread_refs(
+            b"References: <a@b> <c@d>\r\n\r\nx"
+        ));
+        // 欄が無い場合は対象外 (欠落ではなく形の異常の検査)
+        assert!(!has_malformed_thread_refs(b"Subject: x\r\n\r\nx"));
+        // 本文中の同文字列は対象外
+        assert!(!has_malformed_thread_refs(
+            b"Subject: x\r\n\r\nIn-Reply-To: garbage"
+        ));
+    }
+
+    #[test]
+    fn no_recipient_headers_は宛先欄の不在を検出する() {
+        assert!(has_no_recipient_headers(
+            b"From: a@x\r\nSubject: x\r\n\r\nx"
+        ));
+        // 欄はあるが値が空
+        assert!(has_no_recipient_headers(b"To:\r\nSubject: x\r\n\r\nx"));
+        // 通常形は不発火
+        assert!(!has_no_recipient_headers(b"To: b@y\r\n\r\nx"));
+        assert!(!has_no_recipient_headers(b"Cc: b@y\r\n\r\nx"));
+        assert!(!has_no_recipient_headers(b"Resent-To: b@y\r\n\r\nx"));
+        // 本文中の To: は対象外
+        assert!(has_no_recipient_headers(b"From: a@x\r\n\r\nTo: b@y"));
     }
 
     #[test]
