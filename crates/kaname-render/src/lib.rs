@@ -321,6 +321,19 @@ pub struct Envelope {
     /// コメントを剥がす実装と値の一部と見る実装で boundary/filename
     /// 等の値がずれる (D1281/D1296 同族の差異材料)。
     pub param_value_comment: bool,
+    /// D1347 — パート run の `Content-Type:` が `message/delivery-status`・
+    /// `message/partial`・`message/external-body` 等の message/* (rfc822
+    /// 以外)。添付側は D1266 が検査するが、添付でないパート位置での
+    /// 宣言は未検査だった死角。
+    pub message_subtype_part: bool,
+    /// D1348 — `Content-Type: multipart/x-mixed-replace`。後続パートが
+    /// 先の表示を置き換える push 型で、描画する実装では内容が動的に
+    /// すり替わる。メールで正当な用途は無い。
+    pub mixed_replace: bool,
+    /// D1349 — `multipart/encrypted` または本文の `-----BEGIN PGP
+    /// MESSAGE-----` 等の暗号化ブロック。内容が検査不能であることを
+    /// 通知する (S/MIME・OpenPGP の正当利用でも発火する注意喚起)。
+    pub opaque_encrypted: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2332,6 +2345,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let http_framing_headers = has_http_framing_headers(bytes);
     let rfc822_headers_part = has_rfc822_headers_part(bytes);
     let param_value_comment = has_param_value_comment(bytes);
+    let message_subtype_part = has_message_subtype_part(bytes);
+    let mixed_replace = has_mixed_replace(bytes);
+    let opaque_encrypted = has_opaque_encrypted_content(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2438,6 +2454,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         http_framing_headers,
         rfc822_headers_part,
         param_value_comment,
+        message_subtype_part,
+        mixed_replace,
+        opaque_encrypted,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5818,6 +5837,115 @@ pub fn has_param_value_comment(raw: &[u8]) -> bool {
                 '"' => in_quote = !in_quote,
                 '(' | ')' if !in_quote => return true,
                 _ => {}
+            }
+        }
+    }
+    false
+}
+
+/// パート run または外側の `Content-Type:` が `message/rfc822` 以外の
+/// `message/*` サブタイプか判定する (D1347)。
+///
+/// `message/delivery-status`・`message/disposition-notification`・
+/// `message/partial`・`message/external-body` 等は添付側では D1266
+/// (`is_exotic_message_subtype`) が検査するが、パート宣言位置では
+/// 未検査だった — 「メッセージ型」を名乗るだけで内容走査を避ける
+/// 死角を塞ぐ。
+#[must_use]
+pub fn has_message_subtype_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            let base = v.trim_start();
+            if base.starts_with("message/") && !base.starts_with("message/rfc822") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type: multipart/x-mixed-replace` か判定する (D1348)。
+///
+/// push 型 — 後続パートが先の内容を逐次置き換える。描画実装では
+/// 表示内容が受信後にも動的に入れ替わり、静止検査の見た目と実表示が
+/// ずれる。メールでの正当な用途は無い。
+#[must_use]
+pub fn has_mixed_replace(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            if v.trim_start().starts_with("multipart/x-mixed-replace") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `multipart/encrypted` または暗号化ブロック本文があるか判定する
+/// (D1349)。内容が検査不能であることを通知 — 正当な S/MIME・OpenPGP
+/// 利用でも発火する注意喚起。
+#[must_use]
+pub fn has_opaque_encrypted_content(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut past_headers = false;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            past_headers = true;
+            continue;
+        }
+        // `-----BEGIN …-----` 行は `--` 始まりだが boundary ではないため
+        // 境界判定より先に本文マーカーとして評価する
+        if past_headers
+            && !in_headers
+            && (l.starts_with("-----begin pgp")
+                || l.starts_with("-----begin pkcs7")
+                || l.starts_with("-----begin cms"))
+        {
+            return true;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if in_headers && !l.starts_with(' ') && !l.starts_with('\t') {
+            if let Some(v) = l.strip_prefix("content-type:") {
+                if v.trim_start().starts_with("multipart/encrypted")
+                    || v.trim_start().starts_with("application/pkcs7-mime")
+                    || v.trim_start().starts_with("application/x-pkcs7-mime")
+                {
+                    return true;
+                }
             }
         }
     }
@@ -20289,6 +20417,53 @@ mod tests {
             b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain(j); charset=x\r\n\r\nx\r\n--b--"
         ));
         assert!(!has_param_value_comment(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn message_subtype_part_はmessage系パートを検出する() {
+        assert!(has_message_subtype_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: message/delivery-status\r\n\r\nx\r\n--b--"
+        ));
+        assert!(has_message_subtype_part(
+            b"Content-Type: message/external-body; access-type=URL\r\n\r\nx"
+        ));
+        assert!(has_message_subtype_part(
+            b"Content-Type: message/partial; id=x\r\n\r\nx"
+        ));
+        // message/rfc822 は正当な転送 — 対象外
+        assert!(!has_message_subtype_part(
+            b"Content-Type: message/rfc822\r\n\r\nFrom: x@y\r\n\r\nz"
+        ));
+        assert!(!has_message_subtype_part(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn mixed_replace_は置換型multipartを検出する() {
+        assert!(has_mixed_replace(
+            b"Content-Type: multipart/x-mixed-replace; boundary=b\r\n\r\n--b\r\n\r\nx"
+        ));
+        assert!(!has_mixed_replace(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\nx"
+        ));
+        assert!(!has_mixed_replace(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn opaque_encrypted_は暗号化内容を検出する() {
+        assert!(has_opaque_encrypted_content(
+            b"Content-Type: multipart/encrypted; boundary=b\r\n\r\n--b--"
+        ));
+        assert!(has_opaque_encrypted_content(
+            b"Content-Type: application/pkcs7-mime\r\n\r\nx"
+        ));
+        assert!(has_opaque_encrypted_content(
+            b"Subject: x\r\n\r\n-----BEGIN PGP MESSAGE-----\r\nabc"
+        ));
+        assert!(!has_opaque_encrypted_content(b"Subject: x\r\n\r\nx"));
+        // ヘッダ内の文字列は本文ではないため対象外
+        assert!(!has_opaque_encrypted_content(
+            b"X-Note: -----BEGIN PGP-----\r\n\r\nx"
+        ));
     }
 
     #[test]

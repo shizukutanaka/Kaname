@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1347: パート宣言の message/* サブタイプが未検査
+
+- **問題**: `message/delivery-status`・`message/partial`・`message/external-body` 等は添付側で D1266 が検査するが、パート宣言位置では未検査。「メッセージ型」を名乗るだけで内容走査を避ける死角。
+- **修正**: `has_message_subtype_part` — 外側・パート run の CT が `message/rfc822` 以外の `message/*` なら検出 → `Envelope.message_subtype_part` → render_risks 警告。
+- **教訓**: 「添付」と「パート宣言」は別の入口 — 同じ型でも通る場所が違う。
+
+### Security — D1348: `multipart/x-mixed-replace` が未検査
+
+- **問題**: push 型 — 後続パートが先の内容を逐次置き換える。描画実装では表示内容が受信後に動的にすり替わり、静止検査と実表示がずれる。メールでの正当な用途は無い。
+- **修正**: `has_mixed_replace` — CT が `multipart/x-mixed-replace` なら検出 → `Envelope.mixed_replace` → render_risks 警告。
+- **教訓**: 「時間と共に変わる文書」は静止検査では見えない。
+
+### Security — D1349: 暗号化内容の検査不能が未通知
+
+- **問題**: `multipart/encrypted`・`application/pkcs7-mime`・本文の `-----BEGIN PGP MESSAGE-----` 等は内容が一切の走査を素通りする。正当利用でも「検査不能」は通知すべき情報。
+- **修正**: `has_opaque_encrypted_content` — CT が暗号化系または本文に BEGIN PGP/PKCS7/CMS ブロックがあれば検出 → `Envelope.opaque_encrypted` → render_risks 注意喚起。
+- **教訓**: 検査できないという事実自体が検査結果。
+
 ### Security — D1344: HTTP フレーミングヘッダが未検査
 
 - **問題**: `Content-Length:`/`Transfer-Encoding:`/`Host:`/`Connection:` は HTTP の転送制御ヘッダで RFC 5322 メールには意味を持たない。存在自体が手作り生成・プロキシ連結ミス・別プロトコルペイロード混入の兆候。

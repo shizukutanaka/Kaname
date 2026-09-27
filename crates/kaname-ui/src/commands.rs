@@ -3332,6 +3332,36 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1347: パート宣言の message/* サブタイプ (rfc822 以外) —
+    //    メッセージ型を名乗るだけで内容走査を避ける死角。
+    if env.message_subtype_part {
+        render_risks.push(
+            "message/* サブタイプ (delivery-status/partial/external-body 等) の\
+             パートがあります — 内容が走査を素通りする兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1348: multipart/x-mixed-replace — 後続パートが表示を逐次
+    //    置き換える push 型。メールに正当な用途は無い。
+    if env.mixed_replace {
+        render_risks.push(
+            "multipart/x-mixed-replace 型です —\
+             後続パートが内容を動的に置き換える兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1349: 暗号化内容 (multipart/encrypted・PGP ブロック等) —
+    //    内容が検査不能であることの注意喚起。
+    if env.opaque_encrypted {
+        render_risks.push(
+            "内容が暗号化されています — 本文を検査できません\
+             (正当な暗号化メールの場合もあります)"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

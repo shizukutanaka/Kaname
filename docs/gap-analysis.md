@@ -760,3 +760,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1344 | ~~**HTTP フレーミングヘッダが未検査**~~ **(解消済み)** | P2 | Content-Length/Transfer-Encoding/Host/Connection → 手作り生成・経路異常の兆候。修正: `has_http_framing_headers` → render_risks | プロトコル違いの欄は届け方が偽物の印 |
 | D1345 | ~~**text/rfc822-headers パートが未検査**~~ **(解消済み)** | P2 | ヘッダのみ内容型はヘッダ走査が届かない死角。修正: `has_rfc822_headers_part` → render_risks | 内容としてのヘッダと構造のヘッダは別物 |
 | D1346 | ~~**CT/CD パラメータ値内コメントが未検査**~~ **(解消済み)** | P2 | コメント剥がし/値として読むで boundary・filename がずれる。修正: `has_param_value_comment` → render_risks | 値中の注釈は解釈を割く |
+| D1347 | ~~**パート宣言の message/* サブタイプが未検査**~~ **(解消済み)** | P2 | 添付側 D1266 のみでパート宣言位置は死角。修正: `has_message_subtype_part` → render_risks | 同じ型でも通る場所が違う |
+| D1348 | ~~**multipart/x-mixed-replace が未検査**~~ **(解消済み)** | P2 | push 型で後続パートが表示を置き換える。修正: `has_mixed_replace` → render_risks | 時間と共に変わる文書は静止検査で見えない |
+| D1349 | ~~**暗号化内容の検査不能が未通知**~~ **(解消済み)** | P2 | multipart/encrypted・PGP ブロックは一切の走査を素通り。修正: `has_opaque_encrypted_content` → render_risks | 検査できない事実自体が検査結果 |
