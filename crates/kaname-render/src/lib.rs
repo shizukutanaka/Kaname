@@ -186,6 +186,8 @@ pub struct Envelope {
     pub raw_nul_bytes: bool,
     /// ヘッダ部が UTF-8 として不正か (D1304 — デコード差異)。
     pub non_utf8_headers: bool,
+    /// ヘッダ名とコロンの間に空白があるか (D1305 — ヘッダ境界差異)。
+    pub spaced_header_name: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2128,6 +2130,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1304: ヘッダ部の非 UTF-8 バイト列
     let non_utf8_headers = has_non_utf8_headers(bytes);
 
+    // D1305: ヘッダ名とコロン間の空白混入
+    let spaced_header_name = has_spaced_header_name(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2193,6 +2198,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dangerous_charset,
         raw_nul_bytes,
         non_utf8_headers,
+        spaced_header_name,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -2987,9 +2993,18 @@ pub fn has_duplicate_identity_headers(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
+    // RFC 5322 §3.6: subject/from/date/sender/reply-to/to/cc/bcc/
+    // message-id/in-reply-to/references は各最大1個 (D1306 で拡張 —
+    // 宛先系も「結合して読む/先頭だけ読む」で読み手が割れる)。
     let mut subject = 0usize;
     let mut from = 0usize;
     let mut message_id = 0usize;
+    let mut date = 0usize;
+    let mut to = 0usize;
+    let mut cc = 0usize;
+    let mut bcc = 0usize;
+    let mut sender = 0usize;
+    let mut reply_to = 0usize;
     for l in text[..header_end].to_ascii_lowercase().lines() {
         if l.starts_with("subject:") {
             subject += 1;
@@ -2997,8 +3012,29 @@ pub fn has_duplicate_identity_headers(raw: &[u8]) -> bool {
             from += 1;
         } else if l.starts_with("message-id:") {
             message_id += 1;
+        } else if l.starts_with("date:") {
+            date += 1;
+        } else if l.starts_with("to:") {
+            to += 1;
+        } else if l.starts_with("cc:") {
+            cc += 1;
+        } else if l.starts_with("bcc:") {
+            bcc += 1;
+        } else if l.starts_with("sender:") {
+            sender += 1;
+        } else if l.starts_with("reply-to:") {
+            reply_to += 1;
         }
-        if subject > 1 || from > 1 || message_id > 1 {
+        if subject > 1
+            || from > 1
+            || message_id > 1
+            || date > 1
+            || to > 1
+            || cc > 1
+            || bcc > 1
+            || sender > 1
+            || reply_to > 1
+        {
             return true;
         }
     }
@@ -3473,6 +3509,54 @@ pub fn has_non_utf8_headers(raw: &[u8]) -> bool {
         end = p;
     }
     std::str::from_utf8(&raw[..end]).is_err()
+}
+
+/// ヘッダ名とコロンの間に空白が挟まった行があるか判定する (D1305)。
+///
+/// RFC 5322 は `field-name ":"` の間に空白を許さない。`Subject : x`
+/// のような行を「Subject ヘッダ」と見る実装と「無名の行 (別ヘッダや
+/// 本文の一部)」と見る実装で、検査したヘッダと表示されるヘッダが
+/// ずれる (ヘッダ境界差異)。対象は外側ヘッダ部と各 MIME パートの
+/// ヘッダ run (`--boundary` 行の次の空行まで)。`name : value` の
+/// 形で、コロン前のトークンが field-name 文字 (ASCII 英字・数字・
+/// ハイフン) のみから成る行を検出する。
+#[must_use]
+pub fn has_spaced_header_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_header_run = true; // 先頭は外側ヘッダ run
+    for l in text.lines() {
+        if l.is_empty() {
+            in_header_run = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            // boundary 行の直後はパートのヘッダ run が始まる
+            in_header_run = true;
+            continue;
+        }
+        if !in_header_run {
+            continue;
+        }
+        // 継続行 (空白始まり) は対象外 — 名前の行のみ見る
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(colon) = l.find(':') {
+            let name = &l[..colon];
+            let trimmed = name.trim_end_matches([' ', '\t']);
+            // 名前が field-name 文字のみで、末尾に空白があった → 検出
+            if trimmed.len() >= 2
+                && trimmed.bytes().all(|b| {
+                    b.is_ascii_alphanumeric() || b == b'-'
+                })
+                && trimmed.len() != name.len()
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -17124,6 +17208,51 @@ mod tests {
         // LF 終端のヘッダも判定
         assert!(has_non_utf8_headers(b"From: caf\xE9@x\n\nbody"));
         assert!(!has_non_utf8_headers(b"From: a@b\n\nbody"));
+    }
+
+    #[test]
+    fn duplicate_identity_headers_は宛先系重複も検出する() {
+        // D1306 — Date/To/Cc/Sender/Reply-To の重複も一意違反
+        assert!(has_duplicate_identity_headers(
+            b"Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nDate: Tue, 2 Jan 2024 00:00:00 +0000\r\n\r\nb"
+        ));
+        assert!(has_duplicate_identity_headers(
+            b"From: a@b\r\nTo: x@y\r\nTo: z@w\r\n\r\nb"
+        ));
+        assert!(has_duplicate_identity_headers(
+            b"Sender: a@b\r\nSender: c@d\r\n\r\nb"
+        ));
+        // 単一宛先ヘッダは不発火
+        assert!(!has_duplicate_identity_headers(
+            b"From: a@b\r\nTo: x@y, z@w\r\nCc: c@d\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn spaced_header_name_はコロン前空白を検出する() {
+        // D1305 — `Name :` / `Name\t:` は RFC 5322 違反
+        assert!(has_spaced_header_name(
+            b"From: a@b\r\nSubject : hi\r\n\r\nb"
+        ));
+        assert!(has_spaced_header_name(
+            b"From: a@b\r\nX-Custom\t: v\r\n\r\nb"
+        ));
+        // 正常ヘッダは不発火
+        assert!(!has_spaced_header_name(
+            b"From: a@b\r\nSubject: hi\r\nX-Mailer: m\r\n\r\nb"
+        ));
+        // パート内ヘッダ run でも検出
+        assert!(has_spaced_header_name(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type : text/plain\r\n\r\nx\r\n--b--"
+        ));
+        // 本文中の `Word :` は対象外
+        assert!(!has_spaced_header_name(
+            b"From: a@b\r\n\r\nNote : hello\nResult : ok"
+        ));
+        // 継続行は対象外
+        assert!(!has_spaced_header_name(
+            b"Subject: long\r\n continuation : x\r\n\r\nb"
+        ));
     }
 
     #[test]

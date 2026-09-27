@@ -2923,6 +2923,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1305: ヘッダ名とコロン間の空白 — RFC 5322 は field-name と
+    //    ':' の間の空白を許さない。「ヘッダ」と見る実装と「無名の行」
+    //    と見る実装で検査対象のヘッダがずれる。
+    if env.spaced_header_name {
+        render_risks.push(
+            "ヘッダ名とコロンの間に空白がある行があります — \
+             ヘッダとして認める実装と無名の行として無視する実装で\
+             解釈がずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

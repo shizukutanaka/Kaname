@@ -718,3 +718,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1302 | ~~**件名の bidi override/isolate が未検査**~~ **(解消済み)** | P1 | 件名中の RLO/isolate で表示順反転 (trojan-source 系)。修正: has_suspicious_subject_chars に U+202A–202E・U+2066–2069 追加 | 「見え方をずらす」は不可視だけでなく順序改変も含む |
 | D1303 | ~~**生メッセージ内の NUL バイトが未検査**~~ **(解消済み)** | P1 | C 文字列実装で以降が切断され見えなくなる。修正: `has_raw_nul_bytes` → render_risks | 全域禁止バイトの存在自体が安い差異指標 |
 | D1304 | ~~**ヘッダ部の非 UTF-8 バイト列が未検査**~~ **(解消済み)** | P1 | lossy 置換 vs 生バイト保持で照合結果がずれる。修正: `has_non_utf8_headers` → render_risks | デコード可能性自体が異常信号 |
+| D1305 | ~~**ヘッダ名とコロン間の空白混入が未検査**~~ **(解消済み)** | P1 | `Subject : x` — ヘッダ/無名行の解釈分岐。修正: `has_spaced_header_name` → render_risks | 小さな構文違反が解釈分岐を生む |
+| D1306 | ~~**一意ヘッダ重複が宛先・日付系を未カバー**~~ **(解消済み)** | P1 | Date/To/Cc/Bcc/Sender/Reply-To 重複で採用値がずれる。修正: has_duplicate_identity_headers 対象拡張 | 同種違反は仕様表の全列をカバー |

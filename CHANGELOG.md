@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1305: ヘッダ名とコロン間の空白混入が未検査
+
+- **問題**: RFC 5322 は `field-name ":"` の間の空白を許さない。`Subject : x` を「ヘッダ」と見る実装と「無名の行」と見る実装で検査対象ヘッダがずれるヘッダ境界差異。
+- **修正**: `has_spaced_header_name` — 外側ヘッダ部と各 MIME パートのヘッダ run で、コロン前が field-name 文字のみかつ末尾空白の行を検出 → `Envelope.spaced_header_name` → render_risks 警告。
+- **教訓**: 構文違反の小さな差は「その行をヘッダとして数えるか」という根本的な解釈分岐を生む。
+
+### Security — D1306: 一意ヘッダ重複検査が宛先・日付系を未カバー
+
+- **問題**: D1292 は Subject/From/Message-ID のみ対象だったが、RFC 5322 §3.6 の一意フィールドは他にもある — Date/To/Cc/Bcc/Sender/Reply-To の重複でも先頭/末尾/結合採用が実装間でずれる (表示される送信日や宛先が読み手で違う)。
+- **修正**: `has_duplicate_identity_headers` の対象に Date/To/Cc/Bcc/Sender/Reply-To を追加。
+- **教訓**: 「同じ種類の違反」は仕様の表を引き当たって全列をカバーする — 部分カバーは残った列が抜け道になる。
+
 ### Security — D1303: 生メッセージ内の NUL バイトが未検査
 
 - **問題**: RFC 5322/2045 のメッセージストリームは NUL を含まない (添付も符号化され届く)。生の NUL は C 文字列ベースの実装でそこで文字列を切り詰め、以降の内容が一部の検査器から見えなくなる切断差異。
