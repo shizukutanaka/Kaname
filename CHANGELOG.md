@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1335: 表示名がメールアドレス形で実アドレスと不一致でも未検査
+
+- **問題**: `From: "security@apple.com" <attacker@evil.example>` — 表示名だけを出す実装は表示名中のアドレスを差出人と誤認する。差出人欄偽装の定番形で未検査だった。
+- **修正**: `has_address_display_name` — From の `<…>` ルートアドレスと、引用・コメントを剥がした表示名を比較。表示名が `@` を持ちルートアドレスと一致しなければ検出 → `Envelope.addr_in_display_name` → render_risks 警告。自己言及 (`"me@x" <me@x>`) は不発火。
+- **教訓**: 表示名と実値の不一致は文字種 (D1275) だけでなく「表示名自体がアドレスに見える」形でも起きる。
+
+### Security — D1336: Message-ID 欠落・形の崩れが未検査
+
+- **問題**: RFC 5322 は Message-ID を SHOULD とし通常の送信経路は必ず付与するが、欠落や `<id@domain>` の形を持たない値は手作り生成品の兆候で、スレッド参照検査の材料も失わせる (D1278 Date 欠落の姉妹)。
+- **修正**: `has_odd_message_id` — 外側ヘッダで `Message-ID:` が無い、または `<…@…>` の形にならない値を検出 → `Envelope.odd_message_id` → render_risks 警告。折り畳み継続行は FWS 展開後に評価。
+- **教訓**: 必須級欄の「無い」だけでなく SHOULD 級欄の欠落も兆候として扱う。
+
+### Security — D1337: Content-Disposition の非標準型が未検査
+
+- **問題**: `Content-Disposition:` の型は RFC 2183/6266 で inline|attachment のみ標準。`form-data` 等の拡張トークン・空値は「添付扱いする実装」と「ヘッダを無視する実装」で解釈がずれ、添付一覧に現れない死角になる。
+- **修正**: `has_odd_disposition_type` — 外側 + 各パートのヘッダ run を走査し、CD 値の第一トークンが inline/attachment 以外 (空値含む) なら検出 → `Envelope.odd_disposition_type` → render_risks 警告。
+- **教訓**: 「この値をどう解釈するかが実装依存」の指定は、標準外の値そのものが兆候。
+
 ### Security — D1333: 読了通知請求ヘッダが未検査
 
 - **問題**: `Disposition-Notification-To:` (RFC 8098 MDN)・`Return-Receipt-To:`・`X-Confirm-Reading-To:`・`Return-Receipt-Requested:` は開封を送信側に通知する仕掛け — メールトラッカーと同型の生存確認・開封時刻偵察経路だが未検査だった。

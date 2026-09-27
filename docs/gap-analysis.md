@@ -748,3 +748,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1332 | ~~**Content-Base のリモート URL が未検査**~~ **(解消済み)** | P2 | Content-Location と同型の MHTML リモートフェッチ経路。修正: `has_remote_content_base` → render_risks | 同型ヘッダは対で見る — 片方だけ塞ぐと経路が残る |
 | D1333 | ~~**読了通知請求ヘッダが未検査**~~ **(解消済み)** | P2 | MDN/Return-Receipt 系は開封通知の偵察経路 (トラッカーと同型)。修正: `has_receipt_request` → render_risks | 「見たことを送信側が知る」経路はヘッダ形態も兆候 |
 | D1334 | ~~**addr-spec を持たない From が未検査**~~ **(解消済み)** | P2 | 表示名のみ/空 From で差出人欄の表示がずれる。修正: `has_degenerate_from_addr` → render_risks | 一意欄の欠落形は「多い」だけでなく「無い」も |
+| D1335 | ~~**表示名がメールアドレス形で実アドレスと不一致でも未検査**~~ **(解消済み)** | P2 | `"security@apple.com" <evil@x>` — 表示名のみ表示の実装で差出人誤認。修正: `has_address_display_name` → render_risks | 表示名/実値不一致は文字種だけでなく「表示名自体がアドレス形」でも |
+| D1336 | ~~**Message-ID 欠落・形の崩れが未検査**~~ **(解消済み)** | P2 | SHOULD 欄の欠落/不正形は手作り生成品の兆候。修正: `has_odd_message_id` → render_risks | 必須級だけでなく SHOULD 級の欠落も兆候 |
+| D1337 | ~~**Content-Disposition の非標準型が未検査**~~ **(解消済み)** | P2 | inline/attachment 以外の型・空値は添付扱いが実装間でずれる。修正: `has_odd_disposition_type` → render_risks | 実装依存の解釈を生む標準外の値自体が兆候 |

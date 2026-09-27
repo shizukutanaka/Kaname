@@ -272,6 +272,17 @@ pub struct Envelope {
     /// 表示名のみ・空値)。差出人として表示できるルーティング可能な
     /// アドレスが無く、実装間で表示がずれる。
     pub degenerate_from: bool,
+    /// D1335 — From の表示名自身がメールアドレス形で、ルートアドレスと
+    /// 一致しない (`"security@apple.com" <evil@x>`)。表示名だけ出す実装は
+    /// 表示名中のアドレスを差出人と誤認する — 表示欄偽装の定番形。
+    pub addr_in_display_name: bool,
+    /// D1336 — `Message-ID:` が無い、または値が `<id@domain>` の形に
+    /// ならない。RFC 5322 で SHOULD のこの欄を欠く/形を崩すメッセージは
+    /// 手作り生成品の兆候 (D1278 Date 欠落の姉妹検査)。
+    pub odd_message_id: bool,
+    /// D1337 — `Content-Disposition:` の型が inline/attachment 以外。
+    /// 拡張トークン・空値は「添付扱いする/しない」が実装間でずれる。
+    pub odd_disposition_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2271,6 +2282,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let remote_content_base = has_remote_content_base(bytes);
     let receipt_request = has_receipt_request(bytes);
     let degenerate_from = has_degenerate_from_addr(bytes);
+    let addr_in_display_name = has_address_display_name(bytes);
+    let odd_message_id = has_odd_message_id(bytes);
+    let odd_disposition_type = has_odd_disposition_type(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2365,6 +2379,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         remote_content_base,
         receipt_request,
         degenerate_from,
+        addr_in_display_name,
+        odd_message_id,
+        odd_disposition_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5162,6 +5179,163 @@ pub fn has_degenerate_from_addr(raw: &[u8]) -> bool {
         }
         let t = stripped.trim();
         if t.is_empty() || !t.contains('@') {
+            return true;
+        }
+    }
+    false
+}
+
+/// From の表示名自身がメールアドレス形を持ち、ルートアドレスと
+/// 一致しないか判定する (D1335)。
+///
+/// `From: "security@apple.com" <attacker@evil.example>` — 表示名だけを
+/// 出す実装は表示名中のアドレスを差出人と誤認する。表示名・ルート
+/// アドレスが一致する場合 (自己言及) は正規形として対象外。
+/// 表示名に `@` が無い場合は D1334 (アドレス無し From) の領分。
+#[must_use]
+pub fn has_address_display_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        if l.is_empty() {
+            break;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if !l[..colon].eq_ignore_ascii_case("from") {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        // ルートアドレス <...> が無い裸アドレス形は対象外 (D1334 領分)。
+        let Some(lt) = v.find('<') else { continue };
+        let Some(gt) = v[lt + 1..].find('>') else { continue };
+        let route = v[lt + 1..lt + 1 + gt].trim();
+        // 表示名 = `<` の手前。引用・コメント・エスケープを剥がす。
+        let dn_raw = &v[..lt];
+        let mut dn = String::with_capacity(dn_raw.len());
+        let mut in_quote = false;
+        let mut in_comment = 0usize;
+        let mut esc = false;
+        for c in dn_raw.chars() {
+            if esc {
+                esc = false;
+                if in_comment == 0 {
+                    dn.push(c);
+                }
+                continue;
+            }
+            match c {
+                '\\' => esc = true,
+                '"' if in_comment == 0 => in_quote = !in_quote,
+                '(' if !in_quote => in_comment += 1,
+                ')' if !in_quote && in_comment > 0 => in_comment -= 1,
+                _ => {
+                    // 引用の内側こそ表示名の本文 — 記号だけ剥がして残す。
+                    // コメントの中身は表示名ではないので捨てる。
+                    if in_comment == 0 {
+                        dn.push(c);
+                    }
+                }
+            }
+        }
+        let dn = dn.trim();
+        if dn.contains('@') && !dn.eq_ignore_ascii_case(route) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID:` が欠落している、または値が `<id@domain>` の形に
+/// ならないか判定する (D1336)。
+///
+/// RFC 5322 は Message-ID を SHOULD とし、通常の MUA/MTA は必ず
+/// 付与する。欠落・形の崩れ (`<>` 無し・`@` 無し) は手作り生成品の
+/// 兆候で、参照チェーン検査の材料も失わせる (D1278 Date 欠落の姉妹)。
+#[must_use]
+pub fn has_odd_message_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut seen = false;
+    for l in logical.lines() {
+        if l.is_empty() {
+            break;
+        }
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("message-id:") else {
+            continue;
+        };
+        seen = true;
+        let v = l[l.len() - v.len()..].trim();
+        // <id@domain> の形でなければ異常値
+        let ok = v.starts_with('<')
+            && v.ends_with('>')
+            && v.len() > 2
+            && v[1..v.len() - 1].contains('@');
+        if !ok {
+            return true;
+        }
+    }
+    !seen
+}
+
+/// `Content-Disposition:` の型が inline/attachment 以外のパートが
+/// あるか判定する (D1337)。
+///
+/// RFC 2183/6266 は inline|attachment のみを標準とし、拡張トークンは
+/// 「添付扱いする実装」と「ヘッダを無視する実装」で解釈がずれる。
+/// 空値・未知の型 (`form-data` 等) を持つパートは検査系によって
+/// 添付一覧に現れない死角になる。
+#[must_use]
+pub fn has_odd_disposition_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-disposition:") else {
+            continue;
+        };
+        let ty = v.split(';').next().unwrap_or(v).trim();
+        if ty != "inline" && ty != "attachment" {
             return true;
         }
     }
@@ -19405,6 +19579,74 @@ mod tests {
         assert!(has_degenerate_from_addr(b"From: Taro (t@x)\r\n\r\nx"));
         // From 無しは不発火
         assert!(!has_degenerate_from_addr(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn address_display_name_は表示名アドレス偽装を検出する() {
+        // 表示名が別アドレス → 発火
+        assert!(has_address_display_name(
+            b"From: \"security@apple.com\" <attacker@evil.example>\r\n\r\nx"
+        ));
+        // 引用なしでも同様
+        assert!(has_address_display_name(
+            b"From: security@apple.com <attacker@evil.example>\r\n\r\nx"
+        ));
+        // 表示名とルートアドレスが一致 → 不発火 (自己言及は正規形)
+        assert!(!has_address_display_name(
+            b"From: \"me@x.example\" <me@x.example>\r\n\r\nx"
+        ));
+        // 表示名に @ が無い通常形 → 不発火
+        assert!(!has_address_display_name(
+            b"From: \"CEO\" <ceo@x.example>\r\n\r\nx"
+        ));
+        assert!(!has_address_display_name(b"From: t@x.example <t@x.example>\r\n\r\nx"));
+        // コメント内の @ は剥がされる → 表示名に @ が残らなければ不発火
+        assert!(!has_address_display_name(
+            b"From: Taro (t@x) <t@x.example>\r\n\r\nx"
+        ));
+        // 裸アドレス形 (<> 無し) は対象外
+        assert!(!has_address_display_name(b"From: ceo@x.example\r\n\r\nx"));
+        // From 無し → 不発火
+        assert!(!has_address_display_name(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn odd_message_id_は欠落と形の崩れを検出する() {
+        // 欠落
+        assert!(has_odd_message_id(b"From: a@x\r\nDate: Mon, 1 Jan 2024 00:00:00 +0000\r\n\r\nx"));
+        // <> 無し
+        assert!(has_odd_message_id(b"Message-ID: abc123\r\n\r\nx"));
+        // @ 無し
+        assert!(has_odd_message_id(b"Message-ID: <abc123>\r\n\r\nx"));
+        // 正常形は不発火
+        assert!(!has_odd_message_id(b"Message-ID: <abc@x.example>\r\n\r\nx"));
+        // 継続行折り畳みの正常形
+        assert!(!has_odd_message_id(
+            b"Message-ID:\r\n\t<abc@x.example>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn odd_disposition_type_は非標準型を検出する() {
+        // form-data 等の拡張型
+        assert!(has_odd_disposition_type(
+            b"Content-Disposition: form-data; name=\"f\"\r\n\r\nx"
+        ));
+        // 空値
+        assert!(has_odd_disposition_type(b"Content-Disposition:\r\n\r\nx"));
+        // パート内の非標準型
+        assert!(has_odd_disposition_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: x-custom\r\n\r\nx\r\n--b--"
+        ));
+        // inline/attachment は不発火
+        assert!(!has_odd_disposition_type(
+            b"Content-Disposition: inline\r\n\r\nx"
+        ));
+        assert!(!has_odd_disposition_type(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nx"
+        ));
+        // CD ヘッダ自体が無い → 不発火
+        assert!(!has_odd_disposition_type(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]

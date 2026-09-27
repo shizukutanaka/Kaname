@@ -3209,6 +3209,37 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1335: 表示名自体がメールアドレス形でルートアドレスと不一致 —
+    //    "security@apple.com" <evil@x> の形は表示名だけ出す実装で
+    //    差出人を誤認させる定番の偽装。
+    if env.addr_in_display_name {
+        render_risks.push(
+            "From の表示名がメールアドレス形で実アドレスと一致しません —\
+             差出人欄の表示を誤認させる偽装の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1336: Message-ID 欠落または値が <id@domain> の形にならない —
+    //    SHOULD の欄を欠く/崩すメッセージは手作り生成品の兆候。
+    if env.odd_message_id {
+        render_risks.push(
+            "Message-ID ヘッダが無い、または値の形が不正です —\
+             通常の送信経路が付ける識別子を欠く兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1337: Content-Disposition が inline/attachment 以外 — 拡張型や
+    //    空値は「添付扱いするか」が実装間でずれ、添付一覧に現れない死角になる。
+    if env.odd_disposition_type {
+        render_risks.push(
+            "Content-Disposition の型が標準外です (inline/attachment 以外) —\
+             添付かどうかの解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
