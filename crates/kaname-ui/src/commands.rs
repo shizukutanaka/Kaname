@@ -2721,6 +2721,28 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1285: MIME 制御ヘッダの重複・不正 CTE — 実装ごとに採用値が
+    //    食い違う曖昧性工作 (draft-chen MIME ambiguity / noxxi)。
+    if env.conflicting_mime_headers {
+        render_risks.push(
+            "MIME ヘッダ (Content-Type/Content-Transfer-Encoding/\
+             Content-Disposition) が重複または不正値です — \
+             検査側と表示側が別の解釈を採用する曖昧性工作の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1286: インライン uuencode/begin-base64 — MIME 構造の外の
+    //    非 MIME スマグリング。
+    if env.uuencode_payload {
+        render_risks.push(
+            "本文にインライン uuencode/begin-base64 ブロックがあります — \
+             MIME パート外にペイロードを置いて添付検査を素通りする\
+             手口の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

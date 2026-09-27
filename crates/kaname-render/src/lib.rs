@@ -144,6 +144,12 @@ pub struct Envelope {
     /// `Content-Location:` が http(s)/ftp のリモート URL を指す
     /// パートがあるか (D1284 — MHTML smuggling)。
     pub remote_content_location: bool,
+    /// 同一パート内の MIME 制御ヘッダ重複・不正 CTE 値があるか
+    /// (D1285 — MIME 曖昧性パーサ差異)。
+    pub conflicting_mime_headers: bool,
+    /// 本文にインライン uuencode/begin-base64 ペイロードがあるか
+    /// (D1286 — 非 MIME スマグリング)。
+    pub uuencode_payload: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2053,6 +2059,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1284: Content-Location がリモート URL を指すパート (MHTML smuggling)
     let remote_content_location = has_remote_content_location(bytes);
 
+    // D1285: MIME 制御ヘッダの重複・不正 CTE (draft-chen MIME ambiguity)
+    let conflicting_mime_headers = has_conflicting_mime_headers(bytes);
+
+    // D1286: インライン uuencode/begin-base64 ペイロード (非 MIME スマグリング)
+    let uuencode_payload = has_uuencode_payload(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2080,6 +2092,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ambiguous_boundary,
         malformed_encoded_word,
         remote_content_location,
+        conflicting_mime_headers,
+        uuencode_payload,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2554,6 +2568,113 @@ pub fn has_filename_name_mismatch(raw: &[u8]) -> bool {
             if n != f {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// D1285: ヘッダブロックごとに MIME 制御ヘッダの重複・競合を検出する。
+///
+/// 同一パートに `Content-Type:` / `Content-Transfer-Encoding:` /
+/// `Content-Disposition:` が複数あると、パーサごとに採用する方が
+/// 食い違う (draft-chen-email-mime-ambiguity-defense / noxxi Dubious
+/// MIME — 重複 CTE でスキャナとクライアントが別バイト列を復号する
+/// 古典的な差異)。また CTE 値が 7bit/8bit/binary/base64/
+/// quoted-printable 以外 (x-uuencode 等) の場合もフォールバック
+/// 動作が実装間で分かれるため兆候とする。
+#[must_use]
+pub fn has_conflicting_mime_headers(raw: &[u8]) -> bool {
+    const KNOWN_CTE: [&str; 5] = [
+        "7bit",
+        "8bit",
+        "binary",
+        "base64",
+        "quoted-printable",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.replace("\r\n", "\n").to_ascii_lowercase();
+    for block in lower.split("\n\n") {
+        if block.trim().is_empty() {
+            continue;
+        }
+        // `name: value` の形の行をヘッダとして連続する分だけ読む。
+        // パート境界 `--x` 行や本文行で区切られたヘッダ run ごとに
+        // カウントする (run 外の行はリセットされてもカウント対象には
+        // ならない — 非制御ヘッダの name は照合しないため)
+        let mut ct = 0u32;
+        let mut cte = 0u32;
+        let mut cd = 0u32;
+        for l in block.lines() {
+            if l.starts_with([' ', '\t']) {
+                continue; // FWS 継続
+            }
+            let name = l
+                .find(':')
+                .map(|c| l[..c].trim())
+                .unwrap_or("");
+            let is_header = !name.is_empty()
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+            if !is_header {
+                ct = 0;
+                cte = 0;
+                cd = 0;
+                continue;
+            }
+            match name {
+                "content-type" => ct += 1,
+                "content-transfer-encoding" => {
+                    cte += 1;
+                    let v = l[l.find(':').unwrap_or(0) + 1..]
+                        .trim()
+                        .split(';')
+                        .next()
+                        .unwrap_or("")
+                        .trim();
+                    if !KNOWN_CTE.contains(&v) {
+                        return true;
+                    }
+                }
+                "content-disposition" => cd += 1,
+                _ => {}
+            }
+            if ct > 1 || cte > 1 || cd > 1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// D1286: 本文中にインライン uuencode / begin-base64 ペイロードが
+///   あるか判定する。
+///
+/// `begin 644 file.exe` + `end` の uuencode ブロックは MIME 構造の
+/// 外にあるため、パート単位で走査するゲートウェイを完全に素通りする
+/// 一方、自動展開するクライアントでは実行ファイルが現れる
+/// (非 MIME スマグリング)。本体テキストのパート境界に関係なく
+/// `begin [0-7]{3} name` / `begin-base64 [0-7]{3} name` の行を探す。
+#[must_use]
+pub fn has_uuencode_payload(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    // 巨大メールでも先頭 1 MiB で十分 — 断片化は行単位なので境界跨ぎは許容
+    let scan = &text[..text.len().min(1024 * 1024)];
+    for l in scan.lines() {
+        let l = l.trim_end();
+        let Some(rest) = l
+            .strip_prefix("begin ")
+            .or_else(|| l.strip_prefix("begin-base64 "))
+        else {
+            continue;
+        };
+        // `644 filename` — 8進モード3桁 + 空白 + 非空ファイル名
+        let mut it = rest.splitn(2, [' ', '\t']);
+        let mode = it.next().unwrap_or("");
+        let name = it.next().map(str::trim).unwrap_or("");
+        if mode.len() == 3
+            && mode.chars().all(|c| ('0'..='7').contains(&c))
+            && !name.is_empty()
+        {
+            return true;
         }
     }
     false
@@ -15816,6 +15937,35 @@ mod tests {
         let cid = b"Content-Type: multipart/related; boundary=x\r\n\r\n--x\r\nContent-Location: cid:img1\r\n\r\n--x--";
         assert!(!has_remote_content_location(cid));
         assert!(!has_remote_content_location(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn conflicting_mime_headers_は重複と不正CTEを検出する() {
+        // D1285 — 重複 CTE (noxxi Dubious MIME)
+        let dup_cte = b"--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: 7bit\r\n\r\nbody\r\n--x--";
+        assert!(has_conflicting_mime_headers(dup_cte));
+        // 不正 CTE 値
+        let bad_cte = b"Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uuencode\r\n\r\nx";
+        assert!(has_conflicting_mime_headers(bad_cte));
+        // 重複 Content-Type
+        let dup_ct = b"Content-Type: text/plain\r\nContent-Type: text/html\r\n\r\nx";
+        assert!(has_conflicting_mime_headers(dup_ct));
+        // 正規ヘッダは不発火 (本文中の 'token:' 行も誤認しない)
+        let ok = b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--x\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nbody\r\n--x--";
+        assert!(!has_conflicting_mime_headers(ok));
+        assert!(!has_conflicting_mime_headers(b"Subject: a\r\n\r\nnot a header block\nno colon here"));
+    }
+
+    #[test]
+    fn uuencode_payload_はインラインuuencodeを検出する() {
+        // D1286 — MIME 構造の外の uuencode ブロック
+        let uue = b"Content-Type: text/plain\r\n\r\nhello\nbegin 644 evil.exe\nM4$L#\n`\nend\n";
+        assert!(has_uuencode_payload(uue));
+        assert!(has_uuencode_payload(b"begin-base64 644 x.zip\nQUJD\n====\n"));
+        // 本文中の単なる 'begin' 単語・モード不備は不発火
+        assert!(!has_uuencode_payload(b"let's begin 644 things\r\n"));
+        assert!(!has_uuencode_payload(b"begin 644\r\nbegin abc x\r\n"));
+        assert!(!has_uuencode_payload(b"Content-Type: text/plain\r\n\r\nplain"));
     }
 
     #[test]

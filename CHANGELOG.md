@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1285: MIME 制御ヘッダの重複・不正 CTE が未検査
+
+- **問題**: 同一パートに `Content-Type:`/`Content-Transfer-Encoding:`/`Content-Disposition:` が複数あると、実装ごとに採用する方が食い違う — noxxi "Dubious MIME" (重複 CTE でスキャナとクライアントが別バイト列を復号) と IETF draft-chen-email-mime-ambiguity-defense-00 (2026-03) が扱う曖昧性工作。`x-uuencode` 等の非標準 CTE 値もフォールバックが実装間で分かれる。
+- **修正**: `has_conflicting_mime_headers` — ヘッダブロックごとに制御ヘッダの重複と CTE 値の網羅照合 → `Envelope.conflicting_mime_headers` → render_risks 警告。ブロック先頭から連続する `name:` 行のみ読むため本文誤認なし。
+- **教訓**: 曖昧性は値だけでなく「同じ名前の回数」でも測れる — 重複そのものが兆候。
+
+### Security — D1286: インライン uuencode ペイロードが未検査
+
+- **問題**: `begin 644 evil.exe` + `end` の uuencode ブロックは MIME 構造の外 — パート単位で走査する検査を完全に素通りし、自動展開するクライアントでは実行ファイルが現れる (非 MIME スマグリング)。
+- **修正**: `has_uuencode_payload` — `begin [0-7]{3} name` / `begin-base64 [0-7]{3} name` の行を先頭 1 MiB で検出 → `Envelope.uuencode_payload` → render_risks 警告。
+- **教訓**: MIME の外にもペイロードは置ける — 構造がないこと自体を構造の兆候として数えよ。
+
 ### Security — D1283: ヘッダの malformed encoded-word が未検査
 
 - **問題**: `=?UTF-8?B?...` (閉じ `?=` 無し) や `=?utf-8?X?` (不正 encoding) のような RFC 2047 形に合わない encoded-word 断片は、デコードする実装と素通しする実装で表示が食い違う — From/Subject の見た目を攻撃者が制御できるパーサ差異偽装 (CVE-2026-63435 系)。既存の件名/表示名検査はデコード後の文字列を見るため、そもそも形が壊れていることを捉えられなかった。
