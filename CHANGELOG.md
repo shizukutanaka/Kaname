@@ -8,6 +8,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1344: HTTP フレーミングヘッダが未検査
+
+- **問題**: `Content-Length:`/`Transfer-Encoding:`/`Host:`/`Connection:` は HTTP の転送制御ヘッダで RFC 5322 メールには意味を持たない。存在自体が手作り生成・プロキシ連結ミス・別プロトコルペイロード混入の兆候。
+- **修正**: `has_http_framing_headers` — 外側ヘッダに該当欄があれば検出 → `Envelope.http_framing_headers` → render_risks 警告。`Content-Transfer-Encoding:` は別名で対象外。
+- **教訓**: プロトコル違いの欄は届け方そのものが偽物である印。
+
+### Security — D1345: `text/rfc822-headers` パートが未検査
+
+- **問題**: RFC 1892 のヘッダのみ内容型。中身は「ヘッダの形をした本文」でヘッダ走査が届かず、偽造 Received/From を潜ませる死角。
+- **修正**: `has_rfc822_headers_part` — 外側・パート run の CT が `text/rfc822-headers` なら検出 → `Envelope.rfc822_headers_part` → render_risks 警告。
+- **教訓**: 「ヘッダの形をした内容」は走査の抜け道 — 内容としてのヘッダと構造としてのヘッダは別物。
+
+### Security — D1346: CT/CD パラメータ値内のコメントが未検査
+
+- **問題**: `boundary=ab(junk)cd` のようなクオート外コメントは、剥がす実装と値の一部と見る実装で boundary/filename 等の値がずれる (D1281/D1296 同族)。
+- **修正**: `has_param_value_comment` — CT/CD 行でクオート外の `(`/`)` を検出 → `Envelope.param_value_comment` → render_risks 警告。クオート内の括弧は正規ファイル名として対象外。
+- **教訓**: 値の中の注釈は値の解釈を割く — コメントを認める実装差異は差異の材料。
+
 ### Security — D1342: メッセージ先頭の BOM が未検査
 
 - **問題**: RFC 5322 メッセージに BOM は存在しない。`EF BB BF` (UTF-8)・`FF FE`/`FE FF` (UTF-16) で始まるメッセージは、BOM を剥がす実装とそのまま第1ヘッダ行に載せる実装で以降の全ヘッダ解釈がずれる。UTF-16 のメッセージは ASCII 系パーサで全体が死角になる。

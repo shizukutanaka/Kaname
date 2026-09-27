@@ -757,3 +757,6 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1341 | ~~**encoded-word 復号後の構文文字が未検査**~~ **(解消済み)** | P2 | `<>"()\`・アドレス欄の `@` を含む復号結果で欄構造がずれる。修正: `has_structural_encoded_word` → render_risks | 復号は防御の終点ではなく再解釈の起点 |
 | D1342 | ~~**メッセージ先頭の BOM が未検査**~~ **(解消済み)** | P2 | BOM を剥がす実装と第1行に載せる実装で全ヘッダ解釈がずれる。修正: `has_leading_bom` → render_risks | 先頭1バイト目は全ヘッダの原点 |
 | D1343 | ~~**multipart/alternative 内の添付メンバーが未検査**~~ **(解消済み)** | P2 | 代替表現の場に attachment 形メンバー → メンバー扱いが実装間でずれる。修正: `has_alternative_attachment` → render_risks | 場違いのパートは構造の誤用 |
+| D1344 | ~~**HTTP フレーミングヘッダが未検査**~~ **(解消済み)** | P2 | Content-Length/Transfer-Encoding/Host/Connection → 手作り生成・経路異常の兆候。修正: `has_http_framing_headers` → render_risks | プロトコル違いの欄は届け方が偽物の印 |
+| D1345 | ~~**text/rfc822-headers パートが未検査**~~ **(解消済み)** | P2 | ヘッダのみ内容型はヘッダ走査が届かない死角。修正: `has_rfc822_headers_part` → render_risks | 内容としてのヘッダと構造のヘッダは別物 |
+| D1346 | ~~**CT/CD パラメータ値内コメントが未検査**~~ **(解消済み)** | P2 | コメント剥がし/値として読むで boundary・filename がずれる。修正: `has_param_value_comment` → render_risks | 値中の注釈は解釈を割く |

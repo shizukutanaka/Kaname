@@ -309,6 +309,18 @@ pub struct Envelope {
     /// あり、添付メンバーは「代替の一つとして隠す/無視する」実装差異の
     /// 材料になる。
     pub alternative_attachment: bool,
+    /// D1344 — `Content-Length:`/`Transfer-Encoding:`/`Host:`/`Connection:`
+    /// 等の HTTP フレーミングヘッダ。RFC 5322 メールには意味を持たず、
+    /// 存在自体が手作り生成・プロキシ連結ミス等の経路異常の兆候。
+    pub http_framing_headers: bool,
+    /// D1345 — `Content-Type: text/rfc822-headers` のパート。
+    /// ヘッダのみを内容とするパートは中身がヘッダとして走査されず、
+    /// 偽造 Received/From 等を潜ませる死角になる (RFC 1892)。
+    pub rfc822_headers_part: bool,
+    /// D1346 — CT/CD パラメータ値内のクオート外 `(...)` コメント。
+    /// コメントを剥がす実装と値の一部と見る実装で boundary/filename
+    /// 等の値がずれる (D1281/D1296 同族の差異材料)。
+    pub param_value_comment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2317,6 +2329,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let structural_encoded_word = has_structural_encoded_word(bytes);
     let leading_bom = has_leading_bom(bytes);
     let alternative_attachment = has_alternative_attachment(bytes);
+    let http_framing_headers = has_http_framing_headers(bytes);
+    let rfc822_headers_part = has_rfc822_headers_part(bytes);
+    let param_value_comment = has_param_value_comment(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2420,6 +2435,9 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         structural_encoded_word,
         leading_bom,
         alternative_attachment,
+        http_framing_headers,
+        rfc822_headers_part,
+        param_value_comment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -5702,6 +5720,105 @@ pub fn has_alternative_attachment(raw: &[u8]) -> bool {
             }
         } else if low.starts_with("content-type:") && low.contains("name=") {
             return true;
+        }
+    }
+    false
+}
+
+/// HTTP フレーミングヘッダがあるか判定する (D1344)。
+///
+/// `Content-Length:`/`Transfer-Encoding:`/`Host:`/`Connection:` は
+/// HTTP の転送制御ヘッダで RFC 5322 メールには意味を持たない。
+/// 存在自体が手作り生成品・プロキシ連結ミス・別プロトコル
+/// ペイロード混入の兆候。`Content-Transfer-Encoding:` は別名で
+/// 対象外。
+#[must_use]
+pub fn has_http_framing_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with("content-length:")
+            || l.starts_with("transfer-encoding:")
+            || l.starts_with("host:")
+            || l.starts_with("connection:")
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `text/rfc822-headers` のパートがあるか判定する (D1345)。
+///
+/// RFC 1892 のヘッダのみ内容型。中身は「ヘッダの形をした本文」で
+/// あり、ヘッダ走査が届かない — 偽造 Received/From 等を潜ませる
+/// 死角になる。`message/rfc822` (全体入れ子) は D1279/D1280 が担当。
+#[must_use]
+pub fn has_rfc822_headers_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true; // 外側ヘッダ run から開始
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            if v.trim_start().starts_with("text/rfc822-headers") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD パラメータ値にクオート外のコメント `(...)` があるか判定する
+/// (D1346)。
+///
+/// コメントを剥がす実装と値の一部と見る実装で boundary/filename 等の
+/// 値がずれる (D1281/D1296 同族)。クオート内の `(`/`)` はファイル名の
+/// 一文字として正規のため対象外。quoted-pair `\\x` は次字をスキップ。
+#[must_use]
+pub fn has_param_value_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        let mut in_quote = false;
+        let mut skip = false;
+        for c in l.chars() {
+            if skip {
+                skip = false;
+                continue;
+            }
+            match c {
+                '\\' if in_quote => skip = true,
+                '"' => in_quote = !in_quote,
+                '(' | ')' if !in_quote => return true,
+                _ => {}
+            }
         }
     }
     false
@@ -20120,6 +20237,58 @@ mod tests {
         ));
         // 非 multipart は不発火
         assert!(!has_alternative_attachment(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn http_framing_headers_はHTTP系ヘッダを検出する() {
+        assert!(has_http_framing_headers(b"Content-Length: 500\r\nSubject: x\r\n\r\nx"));
+        assert!(has_http_framing_headers(b"Transfer-Encoding: chunked\r\n\r\nx"));
+        assert!(has_http_framing_headers(b"Host: evil.example\r\n\r\nx"));
+        assert!(has_http_framing_headers(b"Connection: keep-alive\r\n\r\nx"));
+        // Content-Transfer-Encoding は別名 — 対象外
+        assert!(!has_http_framing_headers(
+            b"Content-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        // 本文中の Content-Length は対象外
+        assert!(!has_http_framing_headers(b"Subject: x\r\n\r\nContent-Length: 5"));
+        assert!(!has_http_framing_headers(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn rfc822_headers_part_はヘッダのみ内容型を検出する() {
+        assert!(has_rfc822_headers_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/rfc822-headers\r\n\r\nFrom: fake@x\r\n--b--"
+        ));
+        // 外側が text/rfc822-headers の場合も発火
+        assert!(has_rfc822_headers_part(
+            b"Content-Type: text/rfc822-headers\r\n\r\nFrom: fake@x"
+        ));
+        // message/rfc822 は別扱い (D1279/D1280) — 対象外
+        assert!(!has_rfc822_headers_part(
+            b"Content-Type: message/rfc822\r\n\r\nFrom: x@y\r\n\r\nz"
+        ));
+        assert!(!has_rfc822_headers_part(b"Subject: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn param_value_comment_はクオート外コメントを検出する() {
+        // boundary 値内のコメント
+        assert!(has_param_value_comment(
+            b"Content-Type: multipart/mixed; boundary=ab(junk)cd\r\n\r\nx"
+        ));
+        // CD の filename クオート外コメント
+        assert!(has_param_value_comment(
+            b"Content-Disposition: attachment; filename=x(note).pdf\r\n\r\nx"
+        ));
+        // クオート内の括弧は正規ファイル名 — 対象外
+        assert!(!has_param_value_comment(
+            b"Content-Disposition: attachment; filename=\"rep (1).pdf\"\r\n\r\nx"
+        ));
+        // パート run の CT でも発火
+        assert!(has_param_value_comment(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain(j); charset=x\r\n\r\nx\r\n--b--"
+        ));
+        assert!(!has_param_value_comment(b"Subject: x\r\n\r\nx"));
     }
 
     #[test]

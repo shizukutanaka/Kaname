@@ -3302,6 +3302,36 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1344: HTTP フレーミングヘッダ (Content-Length/Transfer-Encoding/
+    //    Host/Connection) — メールに意味を持たない別プロトコルの印。
+    if env.http_framing_headers {
+        render_risks.push(
+            "HTTP 由来のヘッダ (Content-Length 等) が含まれます —\
+             別プロトコル生成・経路異常の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1345: text/rfc822-headers パート — ヘッダのみを内容とし、
+    //    中身がヘッダ走査の対象外になる死角。
+    if env.rfc822_headers_part {
+        render_risks.push(
+            "ヘッダのみを内容とするパート (text/rfc822-headers) があります —\
+             偽造ヘッダを潜ませる死角の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1346: CT/CD パラメータ値内のクオート外コメント — コメントを
+    //    剥がす実装と値として読む実装で boundary/filename がずれる。
+    if env.param_value_comment {
+        render_risks.push(
+            "MIME パラメータ値にコメント (…) が含まれます —\
+             値の読み取りが実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
