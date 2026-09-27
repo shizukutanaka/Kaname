@@ -21853,7 +21853,7 @@ mod tests {
     }
 
     #[test]
-    fn bidi_override_body_は本文 bidi 上書きを検出する() {
+    fn bidi_override_body_は本文bidi上書きを検出する() {
         assert!(has_bidi_override_body(
             "Subject: x\r\n\r\n請求書 \u{202E}gnp.exe".as_bytes()
         ));
