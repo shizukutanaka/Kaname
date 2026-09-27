@@ -2869,6 +2869,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1299: アドレスドメインの FQDN 末尾ドット — DNS 的には同じ
+    //    ホストだが文字列照合する実装は別ドメインとして見るため、
+    //    ドメイン一致フィルタをすり抜けながら配送は成立する。
+    if env.fqdn_trailing_dot {
+        render_risks.push(
+            "アドレスのドメインがピリオドで終わっています (FQDN 形式) — \
+             ドメイン文字列照合を行うフィルタとの解釈がずれる兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1300: アドレスヘッダのコメント内アドレス/URL — コメントを
+    //    差出人として表示するクライアントと無視するクライアントで
+    //    見えるアイデンティティが分かれる。
+    if env.address_comment {
+        render_risks.push(
+            "アドレスヘッダの括弧コメント内に別のアドレスや URL があります — \
+             コメントを表示する実装と無視する実装で見える差出人が\
+             分かれる表示差異の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

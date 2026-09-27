@@ -176,6 +176,10 @@ pub struct Envelope {
     pub reused_boundary: bool,
     /// ヘッダ部に CRLF と裸 LF が混在するか (D1298 — 行分割差異)。
     pub mixed_line_endings: bool,
+    /// アドレスドメインに FQDN 末尾ドットがあるか (D1299)。
+    pub fqdn_trailing_dot: bool,
+    /// アドレスヘッダのコメント内にアドレス/URL があるか (D1300 — 表示差異)。
+    pub address_comment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2103,6 +2107,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1298: ヘッダ部の CRLF/裸LF 混在
     let mixed_line_endings = has_mixed_line_endings(bytes);
 
+    // D1299: アドレスドメインの FQDN 末尾ドット
+    let fqdn_trailing_dot = has_fqdn_trailing_dot(bytes);
+
+    // D1300: アドレスヘッダの CFWS コメント混入
+    let address_comment = has_address_comment(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2163,6 +2173,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         escaped_boundary_quote,
         reused_boundary,
         mixed_line_endings,
+        fqdn_trailing_dot,
+        address_comment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -3260,6 +3272,100 @@ pub fn has_mixed_line_endings(raw: &[u8]) -> bool {
             }
             if saw_crlf && saw_bare_lf {
                 return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレスヘッダのドメインに FQDN 末尾ドットがあるか判定する (D1299)。
+///
+/// `user@example.com.` は DNS 的には `example.com` と同じホストを指すが、
+/// 文字列比較でドメイン照合する実装は別ドメインとして見る — 送信側が
+/// ドメイン一致フィルタ (自社ドメイン許可リスト等) をすり抜けつつ、
+/// 配送側は正しく届く形。From/To/Cc/Reply-To/Return-Path の各 `@` の
+/// 直後トークンを見る。
+#[must_use]
+pub fn has_fqdn_trailing_dot(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    for l in lower[..header_end].lines() {
+        let hit = l.starts_with("from:")
+            || l.starts_with("to:")
+            || l.starts_with("cc:")
+            || l.starts_with("reply-to:")
+            || l.starts_with("return-path:");
+        if !hit {
+            continue;
+        }
+        for (i, _) in l.match_indices('@') {
+            let rest = &l[i + 1..];
+            let end = rest
+                .find(|c: char| c == '>' || c == ',' || c == ';' || c.is_whitespace())
+                .unwrap_or(rest.len());
+            let domain = rest[..end].trim_start_matches('<');
+            if domain.ends_with('.') && domain.len() > 1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス系ヘッダの CFWS コメント `(…)` 内にメールアドレス/URL が
+/// 混ざっているか判定する (D1300)。
+///
+/// RFC 5322 は `From:` 等に括弧コメントを許す。`From: ceo@corp.example
+/// (billing@victim.example)` のようにコメント内に別アドレスを置くと、
+/// コメントを差出人として表示するクライアントと無視するクライアントで
+/// 見えるアイデンティティが分かれる (表示差異/アドレス注入)。
+/// 単なる `(氏名)` 型のコメントは旧来の正規用法のため対象外 —
+/// `@` または `http` を含むコメントのみ検出。
+#[must_use]
+pub fn has_address_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    for l in lower[..header_end].lines() {
+        let hit = l.starts_with("from:")
+            || l.starts_with("to:")
+            || l.starts_with("cc:")
+            || l.starts_with("reply-to:")
+            || l.starts_with("return-path:");
+        if !hit {
+            continue;
+        }
+        // コメント内に @ または http を含む (…)
+        if let Some(open) = l.find('(') {
+            if let Some(close) = l[open..].find(')') {
+                let inner = &l[open + 1..open + close];
+                if inner.contains('@') || inner.contains("http") {
+                    return true;
+                }
             }
         }
     }
@@ -16803,6 +16909,55 @@ mod tests {
         // 本文中の混在は対象外 (ヘッダ部のみ)
         assert!(!has_mixed_line_endings(
             b"From: a@x\r\nSubject: hi\r\n\r\nline1\nline2\r\n"
+        ));
+    }
+
+    #[test]
+    fn fqdn_trailing_dot_はドメイン末尾ドットを検出する() {
+        // D1299 — From/Reply-To の FQDN 末尾ドット
+        assert!(has_fqdn_trailing_dot(
+            b"From: ceo@corp.example.\r\nTo: a@b\r\n\r\nb"
+        ));
+        assert!(has_fqdn_trailing_dot(
+            b"From: \"CEO\" <ceo@corp.example.>\r\n\r\nb"
+        ));
+        assert!(has_fqdn_trailing_dot(
+            b"Return-Path: <bounce@evil.example.>\r\n\r\nb"
+        ));
+        // 通常ドメインは不発火
+        assert!(!has_fqdn_trailing_dot(
+            b"From: ceo@corp.example\r\nTo: a@b\r\n\r\nb"
+        ));
+        // To の複数宛先の1つが末尾ドット
+        assert!(has_fqdn_trailing_dot(
+            b"From: a@b\r\nTo: x@y, z@w.example., v@u\r\n\r\nb"
+        ));
+        // 本文中のアドレスは対象外
+        assert!(!has_fqdn_trailing_dot(
+            b"From: a@b\r\n\r\nreply to ceo@corp.example. please"
+        ));
+    }
+
+    #[test]
+    fn address_comment_はコメント内アドレスを検出する() {
+        // D1300 — コメント内に別アドレス/URL
+        assert!(has_address_comment(
+            b"From: ceo@corp.example (billing@victim.example)\r\n\r\nb"
+        ));
+        assert!(has_address_comment(
+            b"Reply-To: x@y (see https://evil.example)\r\n\r\nb"
+        ));
+        // 旧来の (氏名) 型コメントは不発火
+        assert!(!has_address_comment(
+            b"From: john@corp.example (John Doe)\r\n\r\nb"
+        ));
+        // コメント無しは不発火
+        assert!(!has_address_comment(
+            b"From: \"John Doe\" <john@corp.example>\r\n\r\nb"
+        ));
+        // 本文中の括弧は対象外
+        assert!(!has_address_comment(
+            b"From: a@b\r\n\r\n(note with x@y inside)"
         ));
     }
 

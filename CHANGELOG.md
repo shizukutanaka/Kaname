@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1299: アドレスドメインの FQDN 末尾ドットが未検査
+
+- **問題**: `user@example.com.` の末尾ドットは DNS 的に `example.com` と同じホストを指すが、文字列比較でドメイン照合する実装は別ドメインと見る — 送信側が自社ドメイン許可リスト等をすり抜けつつ配送は成立する形。
+- **修正**: `has_fqdn_trailing_dot` — From/To/Cc/Reply-To/Return-Path の各 `@` 直後トークンが `.` で終わると検出 → `Envelope.fqdn_trailing_dot` → render_risks 警告。
+- **教訓**: 「同じホスト」を指す別表記は照合をすり抜ける — 名前の正規形まで揃えて比較するのが原則、揃えられないなら異形の存在を兆候にする。
+
+### Security — D1300: アドレスヘッダの CFWS コメント内アドレス/URL が未検査
+
+- **問題**: RFC 5322 の括弧コメント `From: ceo@corp.example (billing@victim.example)` に別アドレスや URL を置くと、コメントを差出人として表示するクライアントと無視するクライアントで見えるアイデンティティが分かれる。旧来の `(氏名)` 型は正規用法のため対象外。
+- **修正**: `has_address_comment` — 対象ヘッダの `(…)` 内に `@` または `http` を含むと検出 → `Envelope.address_comment` → render_risks 警告。
+- **教訓**: コメントのような「仕様上あるが滅多に使わない構文」の中に実体文字列を置くのは典型的な差異工作 — 中身まで読む。
+
 ### Security — D1297: 同一 boundary 値の使い回し (境界衝突) が未検査
 
 - **問題**: 外側と入れ子で同じ `boundary=` 値を使うと、`--b--` がどちらのレベルを閉じるか実装ごとに解釈が分かれ、内側コンテンツを外側の一部/別パートとして読み替える境界衝突工作になる。正規 MUA はパートごとにランダムな boundary を生成するため同一値の出現自体が異常。
