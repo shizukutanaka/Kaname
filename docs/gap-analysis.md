@@ -686,3 +686,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1270 | ~~**HTML 本文のリモートリソース参照 (トラッキングピクセル) が非報告**~~ **(解消済み)** | P2 | 描画層で除去されるリモート参照 (img/srcset/link/url()) は「存在したこと」が見えない — 開封確認による生存偵察の兆候。修正: `ExtractedBodyText.remote_resource` → render_risks 注意喚起 | 中和したものも「あったこと」は報告せよ |
 | D1271 | ~~**空 Return-Path エンベロープ (Direct Send バイパス) が未検査**~~ **(解消済み)** | P1 | ReliaQuest (2026-09) — 空 `Return-Path: <>` で RejectDirectSend を素通りし内部偽装。修正: `has_empty_return_path` + From が daemon 系でなければ render_risks 警告 | 認証系ヘッダは「値の不在」を疑え |
 | D1272 | ~~**Content-Type name= と filename= の不一致が未検査**~~ **(解消済み)** | P2 | パーサ差異 — 検査が name=・保存が filename= を見ると別名で通過。修正: `has_filename_name_mismatch` でパート単位比較 | 二度名付ける仕組みは不一致を疑え |
+| D1273 | ~~**装飾英数字 (囲み・太字斜体 Unicode) によるキーワード回避**~~ **(解消済み)** | P2 | フィッシング対策協議会 2026 — 𝐀𝐦𝐚𝐳𝐨𝐧 型の文字種変換で照合回避。修正: `ExtractedBodyText.styled_alphanum` (U+1D400–1D7FF/24B6–24E9/1F130–1F189) → render_risks | 装飾で書かれた字は別の字 |
+| D1274 | ~~**Google 翻訳リダイレクト (translate?u= / *.translate.goog) が未剥がし**~~ **(解消済み)** | P1 | 同上報告 — 翻訳 URL をリダイレクト元に、評判判定は Google を見て実宛先を見逃す。修正: `unwrap_protected_url` に translate?u= と <host>.translate.goog 復元を追加 | 中継者の評判は宛先の無罪を証明しない |

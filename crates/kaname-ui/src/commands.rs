@@ -759,6 +759,20 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1273: 装飾英数字 (太字/斜体/囲み/二乗ラテン) — 見た目は
+    //    「Amazon」等のブランド語だがキーワード照合が効かない文字種
+    //    変換回避 (フィッシング対策協議会 2026 報告)。
+    if html_extract
+        .as_ref()
+        .is_some_and(|e| e.styled_alphanum)
+    {
+        render_risks.push(
+            "本文に装飾英数字 (太字・斜体・囲み文字等) が含まれています — \
+             見た目は通常語でもキーワード照合を破る文字種変換の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1258: デバイスコード・フローへの誘導 (devicelogin / EvilTokens 型 AiTM)
     //    Microsoft (2026-09) の EvilTokens 解析 — PhaaS が配布する
     //    デバイスコード詐取フローでは、受信者を devicelogin ページへ
