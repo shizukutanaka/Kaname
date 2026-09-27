@@ -399,6 +399,14 @@ pub struct Envelope {
     /// (`boundary=a;b`)。トークンで切る実装は `a` を、行末まで
     /// 読む実装は `a;b` を区切りとし、パート構造がずれる。
     pub boundary_semicolon: bool,
+    /// D1367 — 本文に ANSI/ターミナル制御列 (ESC `[`/`]`/`P` 等) が
+    /// 混入。表示器・ログビューアで改行偽装・クリップボード書き換え
+    /// (OSC 52) 等に使われる。メール本文で正当な用途は無い。
+    pub ansi_escape_body: bool,
+    /// D1368 — 本文に bidi 上書き制御文字 (U+202A–U+202E) が混入。
+    /// 件名の D1302 と同型の表示反転偽装を本文側でも検出する。
+    /// (U+2066–U+2069 isolate は RTL 言語の正当利用があるため対象外)
+    pub bidi_override_body: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2429,6 +2437,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let empty_group_syntax = has_empty_group_syntax(bytes);
     let usenet_control_header = has_usenet_control_header(bytes);
     let boundary_semicolon = has_boundary_semicolon(bytes);
+    let ansi_escape_body = has_ansi_escape_body(bytes);
+    let bidi_override_body = has_bidi_override_body(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2554,6 +2564,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         empty_group_syntax,
         usenet_control_header,
         boundary_semicolon,
+        ansi_escape_body,
+        bidi_override_body,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -6908,6 +6920,101 @@ pub fn has_boundary_semicolon(raw: &[u8]) -> bool {
                     return true;
                 }
             }
+        }
+    }
+    false
+}
+
+/// 本文に ANSI/ターミナル制御列があるか判定する (D1367)。
+///
+/// ESC (0x1B) に続く `[` (CSI: カーソル・消去)・`]` (OSC: ウィンドウ
+/// タイトル・OSC 52 クリップボード書き換え)・`P` (DCS)・`X`/`^`/`_`
+/// (SOS/PM/APC) は、本文をターミナル系表示器・ログビューアで開いた
+/// 際に表示内容を改竄する。メール本文で正当な用途は無い。base64/QP
+/// 宣言パートの符号化行は内容の判定材料でないため対象外とし、
+/// 7bit/8bit/binary/無宣言パートの本文領域のみ走査する。
+#[must_use]
+pub fn has_ansi_escape_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut cte_encoded = false;
+    for l in text.lines() {
+        if in_headers {
+            let low = l.to_ascii_lowercase();
+            if let Some(tail) = low.strip_prefix("content-transfer-encoding:") {
+                let v = tail.trim().split(';').next().unwrap_or("").trim();
+                cte_encoded = matches!(v, "base64" | "quoted-printable");
+            }
+            if l.is_empty() {
+                in_headers = false;
+                continue;
+            }
+            continue;
+        }
+        if l.starts_with("--") {
+            // `--b--` 終端境界はヘッダ run を開始しない
+            if !(l.len() > 4 && l.ends_with("--")) {
+                in_headers = true;
+                cte_encoded = false;
+            }
+            continue;
+        }
+        if cte_encoded {
+            continue;
+        }
+        let b = l.as_bytes();
+        for (i, &c) in b.iter().enumerate() {
+            if c == 0x1B && matches!(b.get(i + 1), Some(b'[' | b']' | b'P' | b'X' | b'^' | b'_')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 本文に bidi 上書き制御文字 (U+202A–U+202E) があるか判定する (D1368)。
+///
+/// 件名の D1302 と同型の表示反転偽装を本文側でも検出する。override
+/// 系は現代の Unicode で正当な用途を持たず、本文中にあれば表示順を
+/// 書き換える偽装 (trojan-source 型)。isolate 系 (U+2066–U+2069) は
+/// RTL 言語の正当利用があるため対象外。符号化パートは対象外。
+#[must_use]
+pub fn has_bidi_override_body(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut cte_encoded = false;
+    for l in text.lines() {
+        if in_headers {
+            let low = l.to_ascii_lowercase();
+            if let Some(tail) = low.strip_prefix("content-transfer-encoding:") {
+                let v = tail.trim().split(';').next().unwrap_or("").trim();
+                cte_encoded = matches!(v, "base64" | "quoted-printable");
+            }
+            if l.is_empty() {
+                in_headers = false;
+                continue;
+            }
+            continue;
+        }
+        if l.starts_with("--") {
+            if !(l.len() > 4 && l.ends_with("--")) {
+                in_headers = true;
+                cte_encoded = false;
+            }
+            continue;
+        }
+        if cte_encoded {
+            continue;
+        }
+        if l.contains('\u{202A}')
+            || l.contains('\u{202B}')
+            || l.contains('\u{202C}')
+            || l.contains('\u{202D}')
+            || l.contains('\u{202E}')
+        {
+            return true;
         }
     }
     false
@@ -21718,6 +21825,45 @@ mod tests {
         ));
         assert!(!has_boundary_semicolon(
             b"Subject: boundary=a;b\r\n\r\nContent-Type: x; boundary=a;b"
+        ));
+    }
+
+    #[test]
+    fn ansi_escape_body_は端末制御列を検出する() {
+        // CSI/OSC/DCS/APC
+        assert!(has_ansi_escape_body(
+            b"Subject: x\r\n\r\nHello\x1b[2J cleared"
+        ));
+        assert!(has_ansi_escape_body(
+            b"Subject: x\r\n\r\n\x1b]8;;https://evil\x07click"
+        ));
+        // ヘッダ内・base64 パート内は対象外
+        assert!(!has_ansi_escape_body(
+            b"X-N: \x1b[2J\r\nSubject: x\r\n\r\nplain"
+        ));
+        assert!(!has_ansi_escape_body(
+            b"Content-Transfer-Encoding: base64\r\n\r\n\x1b[2JAAA="
+        ));
+        // 終端 boundary は run を開始しない・本文なしは不発火
+        assert!(!has_ansi_escape_body(b"Subject: x\r\n\r\nplain text"));
+        // パート本文内で検出
+        assert!(has_ansi_escape_body(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\x1b[31mred\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn bidi_override_body_は本文 bidi 上書きを検出する() {
+        assert!(has_bidi_override_body(
+            "Subject: x\r\n\r\n請求書 \u{202E}gnp.exe".as_bytes()
+        ));
+        // isolate 系は RTL 正当利用があるため対象外
+        assert!(!has_bidi_override_body(
+            "Subject: x\r\n\r\nname \u{2067}שלום\u{2069} end".as_bytes()
+        ));
+        assert!(!has_bidi_override_body(b"Subject: x\r\n\r\nplain"));
+        assert!(!has_bidi_override_body(
+            "X-N: \u{202E}\r\nSubject: x\r\n\r\nplain".as_bytes()
         ));
     }
 

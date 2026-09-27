@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1367: 本文の ANSI/ターミナル制御列が未検査
+
+- **問題**: 本文の ESC `[`/`]`/`P`/`X`/`^`/`_` 制御列は、ターミナル系表示器やログビューアで開いた際に表示内容を改竄する (OSC 8 偽リンク・OSC 52 クリップボード書き換え・消去)。メール本文で正当な用途は無い。
+- **修正**: `has_ansi_escape_body` — 非符号化パートの本文領域で ESC+制御列を検出 → `Envelope.ansi_escape_body` → render_risks 警告。
+- **教訓**: 見せられた文字が消える手紙は、書かれた内容を疑う。
+
+### Security — D1368: 本文の bidi 上書き制御文字が未検査
+
+- **問題**: 本文中の U+202A–U+202E (override) は表示順を反転させる trojan-source 型偽装 — 件名側は D1302 で済みだが本文側は未検査だった。
+- **修正**: `has_bidi_override_body` — 非符号化パートの本文領域で override 系を検出 → `Envelope.bidi_override_body` → render_risks 警告。isolate 系 (U+2066–9) は RTL 言語の正当利用があるため対象外。
+- **教訓**: 文字の順番を裏返す墨が混じった手紙。
+
 ### Security — D1365: 添付名のコロン (Windows ADS) が未検査
 
 - **問題**: `filename="invoice.pdf:hidden.exe"` の `名:型` は Windows で Alternate Data Stream として別名に書き込まれる — 表示名と実際の格納先がずれ、拡張子検査を素通りする格納先偽装。

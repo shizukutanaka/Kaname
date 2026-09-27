@@ -3489,6 +3489,21 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.ansi_escape_body {
+        render_risks.push(
+            "本文に端末制御シーケンス (ANSI/OSC) が混入しています\
+             —表示器で内容の改竄やクリップボード書き換えに使われる\
+             可能性があります"
+                .to_string(),
+        );
+    }
+    if env.bidi_override_body {
+        render_risks.push(
+            "本文に表示方向を上書きする制御文字 (bidi override) が\
+             混入しています —見た目の文字順が実際と異なる可能性があります"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

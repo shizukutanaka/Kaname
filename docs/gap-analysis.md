@@ -780,3 +780,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1364 | ~~**Usenet 制御ヘッダ混入が未検査**~~ **(解消済み)** | P3 | Control:/Supersedes: 等はメールで意味を持たず制度混在の兆候。修正: `has_usenet_control_header` → render_risks | 別制度の消印が貼られた封筒 |
 | D1365 | ~~**添付名のコロン (Windows ADS) が未検査**~~ **(解消済み)** | P2 | `名:型` は ADS 書込みで格納先偽装。修正: `filename_anomalies` に ads_stream | 二つの名前を重ね書きした荷物 |
 | D1366 | ~~**非クオート boundary 値内の `;` 混入が未検査**~~ **(解消済み)** | P2 | `boundary=a;b` で区切り解釈がずれる。修正: `has_boundary_semicolon` → render_risks | 途中に切れ目のある区切り札 |
+| D1367 | ~~**本文の ANSI/ターミナル制御列が未検査**~~ **(解消済み)** | P2 | ESC 制御列で表示器の内容改竄・OSC52 クリップボード。修正: `has_ansi_escape_body` → render_risks | 見せられた文字が消える手紙 |
+| D1368 | ~~**本文の bidi 上書き制御文字が未検査**~~ **(解消済み)** | P2 | 本文中 U+202A-E で表示順を反転 (件名 D1302 の本文版)。修正: `has_bidi_override_body` → render_risks | 文字順を裏返す墨 |
