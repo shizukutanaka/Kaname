@@ -706,3 +706,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1290 | ~~**宣言 boundary の不使用・未終了 multipart が未検査**~~ **(解消済み)** | P1 | `--b` 無使用/`--b--` 無し — 残り本文の解釈がずれる (mailsplit 未終了と同型)。修正: `has_unterminated_multipart` → render_risks | 宣言と実際の不一致は双方向に測る |
 | D1291 | ~~**Date タイムスタンプ異常が未検査**~~ **(解消済み)** | P2 | 未来日はソート先頭に張り付く戦術、遠過去は手作り生成品の兆候。修正: `is_anomalous_date` → `anomalous_date` → render_risks | 存在の次は値域を測る |
 | D1292 | ~~**一意ヘッダ重複が未検査**~~ **(解消済み)** | P1 | Subject/From/Message-ID が複数 — 先頭/末尾採用が実装で分かれるパーサ差異。修正: `has_duplicate_identity_headers` → render_risks | 「最大1個」の制約も攻撃面 |
+| D1293 | ~~**multipart コンテナへの非 identity CTE が未検査**~~ **(解消済み)** | P1 | multipart/* + base64/QP は RFC 2045 §6.4 禁止 — decode 順序で構造がずれる。修正: `has_encoded_multipart_container` → render_risks | 禁止組合せは型との対で測る |
+| D1294 | ~~**boundary= 値の前後空白混入が未検査**~~ **(解消済み)** | P1 | `boundary="x "` — trim する/しないで別区切り (mail-parser trailing-ws)。修正: `has_whitespace_boundary` → render_risks | 値の体裁も攻撃面 |

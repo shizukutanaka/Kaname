@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1293: multipart コンテナへの非 identity CTE が未検査
+
+- **問題**: `multipart/*` の Content-Transfer-Encoding は RFC 2045 §6.4 で 7bit/8bit/binary 以外が禁止 — `base64`/`quoted-printable` でコンテナ全体を符号化すると「先に decode して分割」する実装と「生のまま分割」する実装で構造が食い違い、内側パートを一方から隠せる。D1285 の重複/不正値検査は値の異常だけで、型との組合せ禁止は未検査だった。
+- **修正**: `has_encoded_multipart_container` — ヘッダ run 単位で multipart/* の CT と base64/QP の CTE の共存を検出 (入れ子パートの run も個別評価) → `Envelope.encoded_multipart_container` → render_risks 警告。
+- **教訓**: 禁止組合せは値単体ではなく型との対で測る — 正規値でも置く場所が違えば逸脱。
+
+### Security — D1294: boundary= 値の前後空白混入が未検査
+
+- **問題**: RFC 2046 §5.1.1 で boundary は空白で終わってはならない (bcharsnospace 終端)。`boundary="x "` のような前後空白を、trim するパーサとしないパーサで別の区切り文字列になり構造解釈がずれる (mail-parser 系 trailing-whitespace 問題)。
+- **修正**: `has_whitespace_boundary` — content-type の boundary= 値 (クオート有無両対応) が trim 前後で変わると検出。値内部の空白は bchars 上合法のため対象外 → `Envelope.whitespace_boundary` → render_risks 警告。
+- **教訓**: 「値の体裁」も攻撃面 — 仕様の端処理 (trim 可否) は実装差の温床。
+
 ### Security — D1291: Date タイムスタンプの異常が未検査
 
 - **問題**: `Date:` を 48 時間以上の未来日にしたメールは日時ソートで受信トレイ先頭に張り付き続ける既知の戦術で、エポック/1990 年以前の値は RFC 822 普及前の現実離れ値で手作り生成品の兆候 — D1278 の欠落検査は「無い/壊れている」だけで値の異常は未検査だった。

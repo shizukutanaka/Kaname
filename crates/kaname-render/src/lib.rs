@@ -164,6 +164,10 @@ pub struct Envelope {
     pub anomalous_date: bool,
     /// Subject/From/Message-ID が重複しているか (D1292 — パーサ差異)。
     pub duplicate_identity_headers: bool,
+    /// multipart/* パートに base64/QP の CTE があるか (D1293)。
+    pub encoded_multipart_container: bool,
+    /// boundary= 値に空白が混ざっているか (D1294 — trim 差異)。
+    pub whitespace_boundary: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2073,6 +2077,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1292: Subject/From/Message-ID の重複 (パーサ差異)
     let duplicate_identity_headers = has_duplicate_identity_headers(bytes);
 
+    // D1293: multipart コンテナへの base64/QP CTE (RFC 2045 §6.4 違反)
+    let encoded_multipart_container = has_encoded_multipart_container(bytes);
+
+    // D1294: boundary= 値の空白混入 (trim 差異)
+    let whitespace_boundary = has_whitespace_boundary(bytes);
+
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
 
@@ -2127,6 +2137,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         conflicting_mime_headers,
         anomalous_date,
         duplicate_identity_headers,
+        encoded_multipart_container,
+        whitespace_boundary,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -2933,6 +2945,99 @@ pub fn has_duplicate_identity_headers(raw: &[u8]) -> bool {
             message_id += 1;
         }
         if subject > 1 || from > 1 || message_id > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// multipart/* パートが base64/quoted-printable CTE を持つか判定する
+/// (D1293)。
+///
+/// RFC 2045 §6.4: `multipart/*` の Content-Transfer-Encoding は
+/// 7bit/8bit/binary 以外禁止。base64 でコンテナ全体を符号化すると、
+/// 「先に decode してから boundary 分割」する実装と「生のまま分割」する
+/// 実装で構造が食い違い、内側パートを一方から隠せる (境界ずらし系)。
+/// ヘッダ run 単位で判定 — `--b` 行は非ヘッダ行として run を切るので、
+/// 入れ子パートのヘッダ run も個別に評価される。
+#[must_use]
+pub fn has_encoded_multipart_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開: 継続行を論理行に結合
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let mut is_multipart_run = false;
+    let mut has_cte_in_run = false;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() || l.starts_with("--") {
+            // 非ヘッダ行・boundary 行で run を切る
+            if is_multipart_run && has_cte_in_run {
+                return true;
+            }
+            is_multipart_run = false;
+            has_cte_in_run = false;
+            continue;
+        }
+        if l.starts_with("content-type:") && l.contains("multipart/") {
+            is_multipart_run = true;
+        } else if l.starts_with("content-transfer-encoding:")
+            && (l.contains("base64") || l.contains("quoted-printable"))
+        {
+            has_cte_in_run = true;
+        }
+        if is_multipart_run && has_cte_in_run {
+            return true;
+        }
+    }
+    false
+}
+
+/// `boundary=` パラメータ値に空白が混ざっているか判定する (D1294)。
+///
+/// RFC 2046 §5.1.1: boundary は空白で終わってはならない (bcharsnospace
+/// で終端)。`boundary="x "` のような前後空白の混入は、trim するパーサと
+/// しないパーサで別の boundary 文字列を採用し、構造解釈が食い違う
+/// (mail-parser 系の trailing-whitespace boundary 問題)。値内部の
+/// 空白は bchars に含まれ RFC 上は合法のため対象外。
+#[must_use]
+pub fn has_whitespace_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = l.find("boundary=") else { continue };
+        let rest = &l[pos + 9..];
+        let v = if let Some(q) = rest.strip_prefix('"') {
+            let end = q.find('"').unwrap_or(q.len());
+            &q[..end]
+        } else {
+            rest.split(';').next().unwrap_or("")
+        };
+        // 前後の空白のみ違反 (内部の空白は bchars に含まれ RFC 上は合法)
+        if v != v.trim() {
             return true;
         }
     }
@@ -16333,6 +16438,63 @@ mod tests {
         // 正規メールは不発火
         assert!(!has_duplicate_identity_headers(
             b"From: a@x\r\nTo: b@y\r\nSubject: s\r\nMessage-ID: <m@x>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn encoded_multipart_container_はmultipart上のCTEを検出する() {
+        // D1293 — multipart/* に base64/quoted-printable CTE
+        assert!(has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // CTE が CT より先の run でも発火
+        assert!(has_encoded_multipart_container(
+            b"Content-Transfer-Encoding: base64\r\nContent-Type: multipart/alternative; boundary=y\r\n\r\nb"
+        ));
+        // 入れ子パートのヘッダ run でも発火
+        assert!(has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=o\r\n\r\n--o\r\nContent-Type: multipart/related; boundary=i\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx"
+        ));
+        // multipart + 7bit/8bit/binary は正規 → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: multipart/mixed; boundary=x\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--x--"
+        ));
+        // 非 multipart への base64 は正規 → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\naGk="
+        ));
+        // multipart 宣言なし → 不発火
+        assert!(!has_encoded_multipart_container(
+            b"Content-Type: text/html\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn whitespace_boundary_はboundary値の空白を検出する() {
+        // D1294 — クオート値内の空白 / クオート無し値の前後空白
+        assert!(has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"x \"\r\n\r\nb"
+        ));
+        assert!(has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\" x\"\r\n\r\nb"
+        ));
+        assert!(has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=x \r\n\r\nb"
+        ));
+        // 内部の空白は bchars に含まれ RFC 2046 上は合法 → 不発火
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nb"
+        ));
+        // 正規 boundary は不発火
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"abc-def\"\r\n\r\nb"
+        ));
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nb\r\n--x--"
+        ));
+        // boundary= のない content-type は対象外
+        assert!(!has_whitespace_boundary(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
         ));
     }
 

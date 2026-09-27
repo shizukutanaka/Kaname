@@ -2804,6 +2804,29 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1293: multipart/* に base64/QP の CTE — RFC 2045 §6.4 違反。
+    //    「先に decode して分割」する実装と「生のまま分割」する実装で
+    //    構造が食い違い、内側パートを一方から隠せる。
+    if env.encoded_multipart_container {
+        render_risks.push(
+            "multipart コンテナに base64/quoted-printable エンコードが\
+             指定されています — RFC 2045 で禁止された組合せで、\
+             パーサごとに構造解釈が食い違う兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1294: boundary= 値の空白混入 — trim する実装としない実装で
+    //    別の区切り文字列を採用する (mail-parser 系 trailing-ws 問題)。
+    if env.whitespace_boundary {
+        render_risks.push(
+            "boundary パラメータ値に空白が混ざっています — \
+             空白を除去する実装とそのまま使う実装で別の区切りになる\
+             パーサ差異の兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
