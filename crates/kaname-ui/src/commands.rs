@@ -2649,6 +2649,63 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1279: 入れ子メール添付の内側差出人が受信側ドメインを騙る型
+    //    (IRONSCALES 2026-01: 空本文 + .eml + 内側 From が自社の経理
+    //    部門アドレス)。外側の認証結果は内側に及ばないため、内側
+    //    From の自称は認証で裏付けられない。
+    {
+        let to_domains: Vec<String> = env
+            .to
+            .iter()
+            .filter_map(|a| {
+                a.addr
+                    .as_string()
+                    .rsplit('@')
+                    .next()
+                    .map(|d| d.to_lowercase())
+            })
+            .collect();
+        for scan in &attachment_scans {
+            let Some(inner) = &scan.inner_sender else {
+                continue;
+            };
+            let inner_domain = inner
+                .to_lowercase()
+                .rsplit('@')
+                .next()
+                .unwrap_or_default()
+                .to_string();
+            if inner_domain.is_empty() {
+                continue;
+            }
+            if (!our.is_empty() && inner_domain == our)
+                || to_domains.iter().any(|d| !d.is_empty() && *d == inner_domain)
+            {
+                render_risks.push(format!(
+                    "添付メール内側の差出人 ({inner}) が受信側ドメインを騙っています — \
+                     外側メールの認証は内側に及ばず、内部からの指示に見せかける偽装です"
+                ));
+            }
+        }
+    }
+
+    // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
+    //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
+    if analysis_text.trim().is_empty()
+        && attachment_scans.iter().any(|a| {
+            kaname_render::magic_bytes::is_nested_email_attachment(
+                &a.filename,
+                &a.declared_mime,
+            )
+        })
+    {
+        render_risks.push(
+            "本文が空でメール形式の添付のみがあります — \
+             外側を無害に保ち内側の .eml に偽装を集中させる手口の兆候です"
+                .to_string(),
+        );
+    }
+
     // D571: 「送信側が自称/自署/書く」系の警告は、ヘッダの存在だけで出る。
     // だが `X-Gm-*`/`X-Google-*` (Gmail)・`X-MS-Exchange-*`/`X-Microsoft-Antispam`
     // (Microsoft 365)・`X-GitHub-*`・`X-LinkedIn-*`・`X-MC-*` (Mailchimp)・

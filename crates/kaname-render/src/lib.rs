@@ -2325,6 +2325,36 @@ pub fn has_empty_return_path(raw: &[u8]) -> bool {
     })
 }
 
+/// 入れ子メール添付 (.eml/message/rfc822) の内側 `From:`/`Subject:` を抽出する (D1279)。
+///
+/// 外側メールの認証結果は内側に及ばないため、内側差出人の自称は無保証。
+/// 先頭 64KB のヘッダブロックから生の値を読む簡易抽出 (RFC 2047 の
+/// encoded-word デコードはしない — 表示用ヒントであり、判定は
+/// 呼び出し側でドメイン比較する)。継続行 (折り畳み) は 1 行目のみ使う。
+#[must_use]
+pub fn extract_nested_email_identity(full: &[u8]) -> (Option<String>, Option<String>) {
+    let text = String::from_utf8_lossy(&full[..full.len().min(64 * 1024)]);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = &text[..header_end];
+    let mut from = None;
+    let mut subject = None;
+    for line in header.lines() {
+        if line.starts_with([' ', '\t']) {
+            continue;
+        }
+        let lower = line.to_ascii_lowercase();
+        if lower.starts_with("from:") && from.is_none() {
+            from = Some(line[5..].trim().to_string());
+        } else if lower.starts_with("subject:") && subject.is_none() {
+            subject = Some(line[8..].trim().to_string());
+        }
+    }
+    (from, subject)
+}
+
 /// 同一 MIME パートで `Content-Type:` の `name=` と `Content-Disposition:` の
 /// `filename=` が食い違うか判定する (D1272)。
 ///
@@ -15571,6 +15601,37 @@ mod tests {
     }
 
     #[test]
+    fn extract_nested_email_identity_は内側ヘッダを読む() {
+        let inner = b"From: Accounting <accounting@corp.example>\r\nSubject: =?UTF-8?Q?contract?=\r\nTo: x@y\r\n\r\n<body>";
+        let (f, s) = extract_nested_email_identity(inner);
+        assert_eq!(f.as_deref(), Some("Accounting <accounting@corp.example>"));
+        assert_eq!(s.as_deref(), Some("=?UTF-8?Q?contract?="));
+        // LF のみ・ヘッダ無し・非メール入力
+        let (f2, _) = extract_nested_email_identity(b"From: a@b\n\nbody");
+        assert_eq!(f2.as_deref(), Some("a@b"));
+        let (f3, s3) = extract_nested_email_identity(b"not a mail at all");
+        assert!(f3.is_none() && s3.is_none());
+    }
+
+    #[test]
+    fn scan_attachment_は入れ子メールの内側差出人を提示する() {
+        // D1279 — 内側 From が受信側ドメインを騙る型の可視化
+        let inner = b"From: accounting@victim-corp.example\r\nSubject: contract\r\n\r\nscan this";
+        let scan = scan_attachment_bytes("forwarded.eml", "message/rfc822", inner);
+        assert_eq!(
+            scan.inner_sender.as_deref(),
+            Some("accounting@victim-corp.example")
+        );
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| r.contains("accounting@victim-corp.example")));
+        // 非メール添付では None
+        let scan = scan_attachment_bytes("doc.pdf", "application/pdf", b"%PDF-1.4");
+        assert!(scan.inner_sender.is_none());
+    }
+
+    #[test]
     fn html_to_text_flags_remote_resources() {
         // D1270 — リモート画像 (開封確認トラッキング)
         assert!(html_to_text(r#"<p>x</p><img src="https://tracker.evil.com/px.gif">"#).remote_resource);
@@ -20043,6 +20104,14 @@ pub struct AttachmentScan {
     /// 回避する定番の手口 (Sublime Security の検知ルールと同型)。
     /// 単体では警告どまりだが、本文側の文言との相関で警告を上げる。
     pub is_encrypted: bool,
+    /// 入れ子メール添付 (.eml/message/rfc822) の内側 `From:` の値 (D1279)。
+    ///
+    /// 外側メールの認証結果 (SPF/DKIM/DMARC) は内側に及ばない —
+    /// 内側差出人の自称は無保証であり、受信側ドメインを騙る
+    /// 内部偽装の代表的経路 (IRONSCALES 2026-01 観測)。
+    pub inner_sender: Option<String>,
+    /// 入れ子メール添付の内側 `Subject:` の値 (D1279)。
+    pub inner_subject: Option<String>,
 }
 
 /// メール全体から添付を取り出し、実装済みの各検出器にかける。
@@ -20243,6 +20312,8 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
 
     let mut risks = Vec::new();
     let mut is_dangerous = false;
+    let mut inner_sender: Option<String> = None;
+    let mut inner_subject: Option<String> = None;
 
     // 1. Windows で危険な拡張子 (.lnk / .docm / .scr / .exe 等) と
     //    双方向制御文字 (RTLO) を使った拡張子表示反転 (D166)
@@ -20393,6 +20464,20 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
              開封後の内容が外側の文脈と一致するか確認してください"
                 .to_string(),
         );
+        // D1279: 内側ヘッダをそのまま提示 — 差出人の自称が外側の
+        //   認証で裏付けられないことを可視化する (IRONSCALES 2026-01:
+        //   空本文 + .eml 添付 + 内側 From が受信者の経理部門を騙る)。
+        let (f, s) = extract_nested_email_identity(bytes);
+        if let Some(f) = &f {
+            risks.push(format!(
+                "内側メールの差出人: {f} — 外側メールの SPF/DKIM/DMARC 認証は内側に及びません"
+            ));
+        }
+        if let Some(s) = &s {
+            risks.push(format!("内側メールの件名: {s}"));
+        }
+        inner_sender = f;
+        inner_subject = s;
     }
 
     // 5.8 特殊な message/* サブタイプ (D1266) — external-body は表示時に
@@ -20467,6 +20552,8 @@ pub fn scan_attachment_bytes(filename: &str, declared_mime: &str, full: &[u8]) -
         risks,
         is_dangerous,
         is_encrypted,
+        inner_sender,
+        inner_subject,
     }
 }
 
