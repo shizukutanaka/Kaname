@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1327: ヘッダ内の非許可制御バイトが未検査
+
+- **問題**: ヘッダ値に許される制御文字は HTAB のみだが、FF/VT/DEL 等の混入は未検査だった — FF/VT は改頁・改行として描画される実装があり件名・差出人欄の見え方を偽装する。
+- **修正**: `has_ctl_bytes_in_headers` — 外側+パートヘッダ run の行を走査し `\t`/`\r`/NUL 以外の <0x20 と DEL を検出 → `Envelope.ctl_bytes_in_headers` → render_risks 警告 (NUL は D1303、裸 CR は D1307 が担当)。
+- **教訓**: 制御文字は「見えない改行」— 欄の表示形そのものを偽装する材料。
+
+### Security — D1328: 7bit 宣言と矛盾する高位バイト本文が未検査
+
+- **問題**: `Content-Transfer-Encoding: 7bit` を明示したパートの本文に 0x80 以上のバイトは、高位ビットを落とす実装と保持する実装で本文がずれる。既定 7bit (CTE 無し) の高位バイトは実害として広く見られるため対象外にし、明示宣言との矛盾のみを捉える。
+- **修正**: `has_8bit_body_with_7bit_cte` — ヘッダ run ごとに CTE==7bit かつ非 multipart を判定し、その本文に ≥0x80 バイトがあれば検出 → `Envelope.eightbit_body_7bit` → render_risks 警告。
+- **教訓**: 宣言は契約 — 宣言値と実バイトの不一致は読み手ごとの解釈差分。
+
 ### Security — D1325: From の複数アドレス/経路指定形が未検査
 
 - **問題**: `From: a@x, b@y` の複数 mailbox (RFC 5322 は Sender: を必須とする特殊形) や `<@relay:user@host>` の obs-route-addr は、単一差出人と見る実装と先頭/末尾を採用する実装で差出人欄がずれる (複数 From のパーサ差異は mutt/Thunderbird 系 CVE の実績形)。

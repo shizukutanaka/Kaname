@@ -740,3 +740,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1324 | ~~**encoded-word 復号後の制御文字が未検査**~~ **(解消済み)** | P2 | 復号で CR/LF が出ると改行注入。修正: `has_control_encoded_word` → render_risks | 符号化欄は復号後の値まで検査する |
 | D1325 | ~~**From の複数アドレス/obs-route 形が未検査**~~ **(解消済み)** | P2 | 複数 mailbox・`<@r:u@h>` で採用アドレスがずれる。修正: `has_multi_addr_from` → render_risks | 一意であるべき欄が「並び」になること自体が兆候 |
 | D1326 | ~~**実行形式メディア型の添付宣言が未検査**~~ **(解消済み)** | P2 | x-msdownload/hta/jar 等の CT 値は拡張子検査を素通り。修正: `has_executable_content_type` → render_risks | 「何が入っているか」の宣言は拡張子と別経路 |
+| D1327 | ~~**ヘッダ内の非許可制御バイトが未検査**~~ **(解消済み)** | P2 | FF/VT/DEL は表示側で改頁・改行・不可視化 → 件名/差出人欄偽装。修正: `has_ctl_bytes_in_headers` → render_risks | 制御文字は「見えない改行」— 欄の表示形そのものを偽装 |
+| D1328 | ~~**7bit 宣言と矛盾する高位バイト本文が未検査**~~ **(解消済み)** | P2 | 明示 7bit 宣言パートの ≥0x80 バイトで高位ビット処理が実装間ずれ。修正: `has_8bit_body_with_7bit_cte` → render_risks | 宣言値と実バイトの不一致は読み手ごとの解釈差分 |

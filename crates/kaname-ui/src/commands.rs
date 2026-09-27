@@ -3129,6 +3129,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1327: ヘッダ内の非許可制御バイト — FF/VT が改頁・改行として
+    //    描かれる実装で件名・差出人欄の見え方を偽装する。
+    if env.ctl_bytes_in_headers {
+        render_risks.push(
+            "ヘッダ内に許可されない制御バイト (FF/VT/DEL 等) が混入しています —\
+             表示側で改行・改頁として描かれ欄の見え方を偽装する兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1328: 7bit 宣言と矛盾する高位バイト本文 — 高位ビットを
+    //    落とす実装と保持する実装で本文がずれる。
+    if env.eightbit_body_7bit {
+        render_risks.push(
+            "7bit と宣言されたパートの本文に高位バイトが混入しています —\
+             宣言と矛盾するバイト列の解釈が実装でずれる兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

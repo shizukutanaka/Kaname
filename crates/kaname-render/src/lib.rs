@@ -238,6 +238,15 @@ pub struct Envelope {
     /// メディア型自体が「実行物」を宣言するため、拡張子を見るだけの
     /// 検査を素通りする。
     pub executable_content_type: bool,
+    /// D1327 — ヘッダ行中に HTAB/CR/LF 以外の制御バイト (0x00–0x1F
+    /// のうち\t\r\n以外と DEL) が混入している。FF/VT は表示側で
+    /// 改頁・改行として描かれる実装があり件名・差出人欄の見え方を
+    /// 偽装する材料になる。
+    pub ctl_bytes_in_headers: bool,
+    /// D1328 — `Content-Transfer-Encoding: 7bit` を明示したパートの
+    /// 本文に 0x80 以上のバイトが混入している。高位ビットを落とす
+    /// 実装と保持する実装で本文の読みがずれる。
+    pub eightbit_body_7bit: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2229,6 +2238,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let control_encoded_word = has_control_encoded_word(bytes);
     let multi_addr_from = has_multi_addr_from(bytes);
     let executable_content_type = has_executable_content_type(bytes);
+    let ctl_bytes_in_headers = has_ctl_bytes_in_headers(bytes);
+    let eightbit_body_7bit = has_8bit_body_with_7bit_cte(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2315,6 +2326,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         control_encoded_word,
         multi_addr_from,
         executable_content_type,
+        ctl_bytes_in_headers,
+        eightbit_body_7bit,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4661,6 +4674,99 @@ pub fn has_executable_content_type(raw: &[u8]) -> bool {
             if EXEC_TYPES.contains(&mt) {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// ヘッダ行中に RFC 5322 が許さない制御バイトが混入しているか
+/// 判定する (D1327)。
+///
+/// ヘッダ値に現れてよい制御文字は HTAB (FWS) のみ。FF (0x0C) や
+/// VT (0x0B) は改頁・改行として描画される実装があり、件名や差出人
+/// 欄の見え方を偽装する材料になる。DEL (0x7F) も不可視化に使える。
+/// NUL は D1303、裸 CR は D1307 が別途報告するためここでは除外する。
+#[must_use]
+pub fn has_ctl_bytes_in_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        for c in l.chars() {
+            let b = c as u32;
+            if (b < 0x20 && c != '\t' && c != '\r' && b != 0x00) || b == 0x7f {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding: 7bit` を明示したパートの本文に
+/// 0x80 以上のバイトが混入しているか判定する (D1328)。
+///
+/// 7bit 宣言は全バイトが 0x7F 以下であることを保証する — 宣言と
+/// 矛盾する高位バイトを含む本文は、高位ビットを落とす実装とその
+/// まま保持する実装で読みがずれる (日本語 UTF-8 本文も該当する
+/// ため「明示的に 7bit を名乗ったパート」だけを対象にする)。
+/// multipart コンテナの 7bit は正規なので除外する。
+#[must_use]
+pub fn has_8bit_body_with_7bit_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    let mut run_7bit = false;
+    let mut run_multipart = false;
+    let mut scan_body = false;
+    for l in text.lines() {
+        if scan_body {
+            if l.starts_with("--") {
+                scan_body = false;
+                in_headers = true;
+                continue;
+            }
+            if l.bytes().any(|b| b >= 0x80) {
+                return true;
+            }
+            continue;
+        }
+        if in_headers {
+            if l.is_empty() {
+                in_headers = false;
+                if run_7bit && !run_multipart {
+                    scan_body = true;
+                }
+                run_7bit = false;
+                run_multipart = false;
+                continue;
+            }
+            if l.starts_with(' ') || l.starts_with('\t') {
+                continue;
+            }
+            let low = l.to_ascii_lowercase();
+            if let Some(v) = low.strip_prefix("content-transfer-encoding:") {
+                run_7bit = v.trim() == "7bit";
+            }
+            if let Some(v) = low.strip_prefix("content-type:") {
+                if v.trim_start().starts_with("multipart/") {
+                    run_multipart = true;
+                }
+            }
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
         }
     }
     false
@@ -18736,6 +18842,59 @@ mod tests {
             b"Content-Type: application/octet-stream; name=\"a.bin\"\r\n\r\nX"
         ));
         assert!(!has_executable_content_type(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn ctl_bytes_in_headers_は非許可制御バイトを検出する() {
+        // Subject 値中の FF
+        assert!(has_ctl_bytes_in_headers(
+            b"Subject: invoice\x0cplease pay\r\n\r\nx"
+        ));
+        // From 値中の VT
+        assert!(has_ctl_bytes_in_headers(b"From: a\x0bb@x.example\r\n\r\nx"));
+        // DEL
+        assert!(has_ctl_bytes_in_headers(b"Subject: a\x7fb\r\n\r\nx"));
+        // パートヘッダ run も対象
+        assert!(has_ctl_bytes_in_headers(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nX-Note: \x01\r\n\r\nx\r\n--b--"
+        ));
+        // 本文中の制御バイトは対象外
+        assert!(!has_ctl_bytes_in_headers(
+            b"Subject: x\r\n\r\nbody \x0c here"
+        ));
+        // HTAB (FWS) は正規 → 不発火
+        assert!(!has_ctl_bytes_in_headers(
+            b"Subject: a\r\n\tfolded\r\n\r\nx"
+        ));
+        assert!(!has_ctl_bytes_in_headers(b"Subject: x\r\nFrom: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn eightbit_body_7bit_は宣言矛盾バイトを検出する() {
+        // 7bit 宣言 + UTF-8 日本語本文
+        assert!(has_8bit_body_with_7bit_cte(
+            "Content-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\nこんにちは\r\n".as_bytes()
+        ));
+        // 入れ子パート内も対象
+        assert!(has_8bit_body_with_7bit_cte(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\nあ\r\n--b--".as_bytes()
+        ));
+        // 7bit + ASCII 本文は不発火
+        assert!(!has_8bit_body_with_7bit_cte(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\nhello\r\n"
+        ));
+        // 8bit 宣言 + UTF-8 は正当 → 不発火
+        assert!(!has_8bit_body_with_7bit_cte(
+            "Content-Type: text/plain\r\nContent-Transfer-Encoding: 8bit\r\n\r\nこんにちは\r\n".as_bytes()
+        ));
+        // CTE 無し (既定 7bit) + 高位バイト — 明示宣言のみ対象のため不発火
+        assert!(!has_8bit_body_with_7bit_cte(
+            "Content-Type: text/plain\r\n\r\nこんにちは\r\n".as_bytes()
+        ));
+        // multipart コンテナ自身の 7bit は除外 (内側パートは別 run)
+        assert!(!has_8bit_body_with_7bit_cte(
+            "Content-Type: multipart/mixed; boundary=b\r\nContent-Transfer-Encoding: 7bit\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: 8bit\r\n\r\nあ\r\n--b--".as_bytes()
+        ));
     }
 
     #[test]
