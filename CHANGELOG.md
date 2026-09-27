@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1271: 空 Return-Path エンベロープ (Direct Send バイパス) が未検査
+
+- **問題**: ReliaQuest (2026-09) — 空の SMTP エンベロープ差出人 (`Return-Path: <>`) は Microsoft 365 の RejectDirectSend 制御を素通りし、内部ユーザー偽装に使われる。Kaname は不正形 (D281) は見ていたが「空 `<>` + 通常差出人」の組み合わせは未検査だった。
+- **修正**: `has_empty_return_path` で `Return-Path:` が `<>`/空白のケースを検出し、From が MAILER-DAEMON/postmaster 系でない場合に render_risks 警告 (正規バウンスは対象外)。
+- **教訓**: 認証系ヘッダは「形の正しさ」だけでなく「値の不在」を疑え — 空欄は制御の射程外。
+
+### Security — D1272: Content-Type name= と filename= の不一致が未検査
+
+- **問題**: 同一 MIME パートで `Content-Type: name=` と `Content-Disposition: filename=` が食い違うと、検査側と保存側で別名を使うパーサ差異工作になる (name=safe.pdf で検査通過・filename=evil.exe で保存、の型)。
+- **修正**: `has_filename_name_mismatch` でパートヘッダブロック単位に両パラメータを比較 → render_risks 注意喚起。片方のみの指定は対象外。
+- **教訓**: 同じ実体を二度名付ける仕組みは不一致を疑え — パーサ差異は常に相対比較で暴く。
+
 ### Security — D1269: 送信者ローカル部のゼロ幅/ホモグリフ混入が未検査
 
 - **問題**: IRONSCALES (2026-05) が観測した契約メール偽装は、From ローカル部にキリル文字と U+200D (ZWJ) を混ぜ「contracts」に見えるが文字列照合には一致しないアドレスを使い、SPF/DKIM/DMARC を通過した。Kaname は表示名・ドメインの偽装は見ていたが、ローカル部の文字構成は未検査だった。

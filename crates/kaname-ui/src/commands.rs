@@ -896,6 +896,38 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1271: 空 Return-Path + 通常差出人 — ReliaQuest (2026-09) の
+    //    Direct Send 認証回避 (エンベロープ差出人を空にして内部偽装)。
+    //    From が MAILER-DAEMON/postmaster 系の正規バウンスは対象外。
+    if env.empty_return_path {
+        let fp = from_addr_only
+            .split('@')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let is_daemon = matches!(
+            fp.as_str(),
+            "mailer-daemon" | "postmaster" | "nobody" | "daemon" | "noreply-daemon"
+        );
+        if !is_daemon {
+            render_risks.push(
+                "Return-Path: が空 (<>) ですが差出人は通常アドレスです — \
+                 エンベロープ差出人を空にする認証回避 (Direct Send バイパス) の兆候です"
+                    .to_string(),
+            );
+        }
+    }
+
+    // D1272: Content-Type name= と Content-Disposition filename= の
+    //    不一致 — 検査と保存で別パラメータを見るパーサ差異工作。
+    if env.filename_name_mismatch {
+        render_risks.push(
+            "添付の Content-Type name= と filename= が異なります — \
+             検査と保存で別名を使い分けるパーサ差異工作の兆候です"
+                .to_string(),
+        );
+    }
+
     // D327: abuse 報告先自称
     if env.abuse_headers {
         render_risks.push(

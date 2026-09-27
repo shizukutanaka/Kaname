@@ -119,6 +119,18 @@ pub struct Envelope {
     /// RFC 5321 は `<addr>` または空 `<>` の形 — 山括弧を欠く値は
     /// 手作り生成品の兆候。
     pub malformed_return_path: bool,
+    /// `Return-Path:` ヘッダが存在し値が空 (`<>` または空白のみ) (D1271)。
+    ///
+    /// 空の SMTP エンベロープ差出人 — バウンスメールでは正規だが、
+    /// 通常差出人のメールで現れると Direct Send 系の認証回避
+    /// (ReliaQuest 2026-09 観測) の兆候。
+    pub empty_return_path: bool,
+    /// 同一 MIME パートで `Content-Type:` の `name=` と
+    /// `Content-Disposition:` の `filename=` が食い違うか (D1272)。
+    ///
+    /// スキャナが片方、保存処理がもう片方を見る実装差を突く
+    /// パーサ差異工作。
+    pub filename_name_mismatch: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2013,6 +2025,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D281: Return-Path の不正値
     let malformed_return_path = has_malformed_return_path(bytes);
 
+    // D1271: Return-Path 空エンベロープ
+    let empty_return_path = has_empty_return_path(bytes);
+
+    // D1272: name= vs filename= 不一致
+    let filename_name_mismatch = has_filename_name_mismatch(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2035,6 +2053,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_boundary_param,
         missing_content_type,
         malformed_return_path,
+        empty_return_path,
+        filename_name_mismatch,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2280,6 +2300,68 @@ pub fn has_malformed_return_path(raw: &[u8]) -> bool {
     header
         .lines()
         .any(|l| l.starts_with("return-path:") && !l.contains('<'))
+}
+
+/// `Return-Path:` ヘッダが存在し値が空 (`<>` または空白のみ) か判定する (D1271)。
+///
+/// ReliaQuest (2026-09): 空の SMTP エンベロープ差出人は M365 の
+/// RejectDirectSend (Direct Send 制御) を素通りし、内部ユーザー
+/// 偽装に使われた。バウンス (From: MAILER-DAEMON 系) では正規のため、
+/// 呼び出し側で差出人と突き合わせて判定する。
+pub fn has_empty_return_path(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let header_end = text
+        .find("\r\n\r\n")
+        .or_else(|| text.find("\n\n"))
+        .unwrap_or(text.len());
+    let header = text[..header_end].to_ascii_lowercase();
+    header.lines().any(|l| {
+        if let Some(v) = l.strip_prefix("return-path:") {
+            let v = v.trim();
+            v.is_empty() || v == "<>"
+        } else {
+            false
+        }
+    })
+}
+
+/// 同一 MIME パートで `Content-Type:` の `name=` と `Content-Disposition:` の
+/// `filename=` が食い違うか判定する (D1272)。
+///
+/// パーサ差異: スキャナは `name=` を、保存処理は `filename=` を見る
+/// 実装があるため、両者をずらすと検査と実行で別ファイル名になる。
+/// ヘッダブロック (空行区切り) ごとに両方を抽出して比較する。
+pub fn has_filename_name_mismatch(raw: &[u8]) -> bool {
+    fn param_value<'a>(block: &'a str, key: &str) -> Option<&'a str> {
+        for l in block.lines() {
+            let ll = l.trim_start();
+            let val = ll.split(';').find_map(|p| {
+                let p = p.trim();
+                p.strip_prefix(key)
+                    .map(|v| v.trim().trim_matches('"'))
+            });
+            if let Some(v) = val.filter(|v| !v.is_empty()) {
+                return Some(v);
+            }
+        }
+        None
+    }
+    let text = String::from_utf8_lossy(raw);
+    // CRLF/LF 統一してからパートヘッダブロックを空行で区切る
+    let lower = text.replace("\r\n", "\n").to_ascii_lowercase();
+    for block in lower.split("\n\n") {
+        if !block.contains("content-type:") || !block.contains("content-disposition:") {
+            continue;
+        }
+        let name = param_value(block, "name=");
+        let filename = param_value(block, "filename=");
+        if let (Some(n), Some(f)) = (name, filename) {
+            if n != f {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -15437,6 +15519,32 @@ mod tests {
     }
 
     // ── D160: html_to_text (HTML のみメールの解析対象化 + hidden text salting) ──
+
+    #[test]
+    fn empty_return_path_は空エンベロープを検出する() {
+        // D1271 — ReliaQuest 2026-09 の Direct Send バイパス
+        assert!(has_empty_return_path(b"Return-Path: <>\r\nFrom: ceo@corp.jp\r\n\r\nx"));
+        assert!(has_empty_return_path(b"Return-Path: <>\nFrom: ceo@corp.jp\n\nx"));
+        assert!(has_empty_return_path(b"Return-Path:\r\nFrom: a@b\r\n\r\nx"));
+        // 正規アドレス/ヘッダ不在は不発火
+        assert!(!has_empty_return_path(b"Return-Path: <bounce@mx.com>\r\n\r\nx"));
+        assert!(!has_empty_return_path(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn filename_name_mismatch_は name_filename 不一致を検出する() {
+        // D1272 — パーサ差異
+        let bad = b"Content-Type: application/octet-stream; name=\"safe.pdf\"\r\nContent-Disposition: attachment; filename=\"evil.exe\"\r\n\r\nx";
+        assert!(has_filename_name_mismatch(bad));
+        // 一致は不発火
+        let ok = b"Content-Type: application/pdf; name=\"doc.pdf\"\r\nContent-Disposition: attachment; filename=\"doc.pdf\"\r\n\r\nx";
+        assert!(!has_filename_name_mismatch(ok));
+        // name= のみ / filename= のみは不発火
+        let only_name = b"Content-Type: application/pdf; name=\"doc.pdf\"\r\nContent-Disposition: attachment\r\n\r\nx";
+        assert!(!has_filename_name_mismatch(only_name));
+        // 添付セクション自体がない場合
+        assert!(!has_filename_name_mismatch(b"Content-Type: text/plain\r\n\r\nhello"));
+    }
 
     #[test]
     fn html_to_text_flags_remote_resources() {
