@@ -2743,6 +2743,26 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1287: 非 multipart Content-Type の bogus boundary= —
+    //    mailsplit 系 boundary 所有権バグ (外側 boundary 無効化)。
+    if env.bogus_boundary_param {
+        render_risks.push(
+            "multipart でない Content-Type に boundary= パラメータがあります — \
+             偽の boundary が外側の区切りを無効化し後続パートを検査から\
+             隠す boundary 所有権工作の兆候です"
+                .to_string(),
+        );
+    }
+
+    // D1288: プリアンブル/エピローグ内のパート様構造。
+    if env.orphaned_part_content {
+        render_risks.push(
+            "boundary の範囲外 (プリアンブル/エピローグ) にパート構造があります — \
+             プリアンブル/エピローグを無視するスキャナに見えないパートの兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -150,6 +150,12 @@ pub struct Envelope {
     /// 本文にインライン uuencode/begin-base64 ペイロードがあるか
     /// (D1286 — 非 MIME スマグリング)。
     pub uuencode_payload: bool,
+    /// 非 multipart の Content-Type に boundary= パラメータがあるか
+    /// (D1287 — boundary 所有権パーサ差異、mailsplit 系)。
+    pub bogus_boundary_param: bool,
+    /// 宣言 boundary のプリアンブル/エピローグにパート様構造があるか
+    /// (D1288 — 走査外パート)。
+    pub orphaned_part_content: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2065,6 +2071,12 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1286: インライン uuencode/begin-base64 ペイロード (非 MIME スマグリング)
     let uuencode_payload = has_uuencode_payload(bytes);
 
+    // D1287: 非 multipart Content-Type 上の bogus boundary= (mailsplit 系)
+    let bogus_boundary_param = has_bogus_boundary_param(bytes);
+
+    // D1288: boundary プリアンブル/エピローグ内のパート様構造
+    let orphaned_part_content = has_orphaned_part_content(bytes);
+
     Ok(Envelope {
         message_id,
         from,
@@ -2094,6 +2106,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         remote_content_location,
         conflicting_mime_headers,
         uuencode_payload,
+        bogus_boundary_param,
+        orphaned_part_content,
         abuse_headers: has_abuse_headers(hdr),
         has_attach_claim: has_attach_claim(hdr),
         feedback_id: has_feedback_id(hdr),
@@ -2674,6 +2688,109 @@ pub fn has_uuencode_payload(raw: &[u8]) -> bool {
             && mode.chars().all(|c| ('0'..='7').contains(&c))
             && !name.is_empty()
         {
+            return true;
+        }
+    }
+    false
+}
+
+/// D1287: 非 multipart の `Content-Type:` に `boundary=` パラメータが
+///   あるか判定する。
+///
+/// multipart 以外で `boundary=` は本来意味を持たないが、一部パーサは
+/// これを採用して本物の外側 boundary を無効化し、後続の実パートを
+/// スキャンから隠す (mailsplit AIKIDO-2026-785486 — bogus boundary=
+/// でパース結果と MUA の表示がずれる)。`boundary=` を含む
+/// `content-type:` 論理行で型が `multipart/` でなければ兆候。
+#[must_use]
+pub fn has_bogus_boundary_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical: Vec<String> = Vec::new();
+    for l in text.split('\n') {
+        if l.starts_with([' ', '\t']) {
+            if let Some(last) = logical.last_mut() {
+                last.push_str(l.trim_start());
+            }
+        } else {
+            logical.push(l.to_string());
+        }
+    }
+    logical.iter().any(|l| {
+        let lower = l.to_ascii_lowercase();
+        let Some(rest) = lower.strip_prefix("content-type:") else {
+            return false;
+        };
+        if !rest.contains("boundary=") {
+            return false;
+        }
+        let main_type = rest
+            .trim_start()
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim();
+        !main_type.starts_with("multipart/")
+    })
+}
+
+/// D1288: 宣言された boundary の外 (プリアンブル/エピローグ) に
+///   パート様のヘッダ構造があるか判定する。
+///
+/// 先頭 `--boundary` より前、または終端 `--boundary--` より後に
+/// `Content-Type:`/`Content-Disposition:` 等のヘッダ行があると、
+/// プリアンブル/エピローグを無視するスキャナには見えない実パートが
+/// 存在する (同じく mailsplit の boundary 所有権バグの系 — MUA は
+/// それをパートとして表示する)。トップレベルの multipart 宣言と
+/// boundary 値から判定。入れ子 multipart は外側だけ見る。
+#[must_use]
+pub fn has_orphaned_part_content(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(0);
+    // トップヘッダから boundary 値を拾う (引用符許容)
+    let lower_head = text[..header_end].to_ascii_lowercase();
+    let mut boundary: Option<String> = None;
+    for l in lower_head.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/") {
+            if let Some(pos) = l.find("boundary=") {
+                let v = l[pos + 9..]
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+                if !v.is_empty() {
+                    boundary = Some(v);
+                }
+            }
+        }
+    }
+    let Some(b) = boundary else { return false };
+    let lower = text.to_ascii_lowercase();
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    let first_open = lower.find(&open);
+    let last_close = lower.rfind(&close);
+    let is_part_struct = |region: &str| {
+        region.lines().any(|l| {
+            let lt = l.trim_start().to_ascii_lowercase();
+            lt.starts_with("content-type:")
+                || lt.starts_with("content-disposition:")
+                || lt.starts_with("content-transfer-encoding:")
+        })
+    };
+    // プリアンブル: ヘッダ終端〜最初の --boundary
+    if let Some(fp) = first_open {
+        if fp > header_end && is_part_struct(&text[header_end..fp]) {
+            return true;
+        }
+    }
+    // エピローグ: 最後の --boundary-- 以降
+    if let Some(lc) = last_close {
+        let after = &text[(lc + close.len()).min(text.len())..];
+        if is_part_struct(after) {
             return true;
         }
     }
@@ -15966,6 +16083,38 @@ mod tests {
         assert!(!has_uuencode_payload(b"let's begin 644 things\r\n"));
         assert!(!has_uuencode_payload(b"begin 644\r\nbegin abc x\r\n"));
         assert!(!has_uuencode_payload(b"Content-Type: text/plain\r\n\r\nplain"));
+    }
+
+    #[test]
+    fn bogus_boundary_param_は非multipart境界を検出する() {
+        // D1287 — mailsplit 系: 非 multipart 型に boundary= があると
+        // 一部パーサが外側 boundary を無効化する
+        assert!(has_bogus_boundary_param(
+            b"Content-Type: multipart/mixed; boundary=real\r\n\r\n--real\r\nContent-Type: text/plain; boundary=fake\r\n\r\nx\r\n--real--"
+        ));
+        // FWS 継続で分かれた boundary
+        assert!(has_bogus_boundary_param(
+            b"Content-Type: text/html;\r\n\tboundary=evil\r\n\r\nx"
+        ));
+        // 正規 multipart は不発火
+        assert!(!has_bogus_boundary_param(
+            b"Content-Type: multipart/mixed; boundary=ok\r\n\r\n--ok\r\nContent-Type: text/plain\r\n\r\nb\r\n--ok--"
+        ));
+        assert!(!has_bogus_boundary_param(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn orphaned_part_content_はプリアンブルとエピローグのパートを検出する() {
+        // D1288 — boundary の外に実パート様構造
+        let pre = b"Content-Type: multipart/mixed; boundary=x\r\n\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: base64\r\n\r\njunk\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x--";
+        assert!(has_orphaned_part_content(pre));
+        let epi = b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x--\r\nContent-Type: text/html\r\n\r\nhidden";
+        assert!(has_orphaned_part_content(epi));
+        // 正規: プリアンブルに説明テキストのみ・エピローグ空は不発火
+        let ok = b"Content-Type: multipart/mixed; boundary=x\r\n\r\nThis is a multipart message.\r\n--x\r\nContent-Type: text/plain\r\n\r\nbody\r\n--x--\r\n";
+        assert!(!has_orphaned_part_content(ok));
+        // multipart でない・boundary 無しは不発火
+        assert!(!has_orphaned_part_content(b"Content-Type: text/plain\r\n\r\nplain"));
     }
 
     #[test]
