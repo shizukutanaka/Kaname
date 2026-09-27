@@ -3099,6 +3099,16 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
 
+    // D1324: encoded-word のデコード結果に制御文字 — ヘッダ文字列へ
+    //    展開する実装で改行・終端が注入される (ヘッダ注入)。
+    if env.control_encoded_word {
+        render_risks.push(
+            "エンコードされたヘッダ (encoded-word) の復号結果に制御文字が\
+             含まれています — 復号時に改行や終端が注入される兆候です"
+                .to_string(),
+        );
+    }
+
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

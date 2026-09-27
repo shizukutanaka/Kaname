@@ -8,6 +8,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1323: 非正規形 IP リテラルホスト URL が未検査
+
+- **問題**: `http://2130706433/` (DWORD)・`http://0x7f000001/` (hex)・`http://0177.0.0.1/` (octal)・`http://127.1/` (短縮)・裸 IPv4 はブラウザ/inet_aton が IP に解釈するがドメイン評判リストの対象外 — 宛先が「ドメイン名の形」をしていないため評価系の盲点になる (SSRF 回避手法のメールリンク転用)。
+- **修正**: `is_numeric_ip_host` — 全ラベルが数字のみ/``0x``hex のホストを Suspicious として評価 (quishing::evaluate_url で QR・本文リンク両方に効く)。
+- **教訓**: 「ドメインかどうか」自体を疑う — 名の形をしていない宛先は評判照合が効かない。
+
+### Security — D1324: encoded-word 復号後の制御文字が未検査
+
+- **問題**: `=?UTF-8?B?DQo=?=` (CRLF) 等、encoded-word 自体は印字可能文字のみで合法だが、復号結果に制御文字が出るとヘッダ文字列への展開時に改行・終端が注入される (ヘッダ注入・表示偽装)。lenient 実装が text 内 `?` を許す形 (`=?x?Q?=09?=`) も復号器で読み方がずれる。
+- **修正**: `has_control_encoded_word` — ヘッダ run の `=?charset?{B,Q}?text?=` をすべての `?=` 終端候補で評価・復号し、制御文字 (0x20 未満/0x7F) を検出 → `Envelope.control_encoded_word` → render_risks 警告。
+- **教訓**: 符号化された欄は「復号した後の値」まで検査しないと、復号だけが見える文字が残る。
+
 ### Security — D1321: boundary 区切りの前方一致曖昧行が未検査
 
 - **問題**: `--b` の直後に空白でも `--`+空白でもない内容が続く行 (`--bJUNK`/`--b--x`) は、厳密一致の実装では区切りでないが prefix 一致で区切る実装ではそこで分割される — mailsplit 系のパーサ差異。入れ子 boundary が外側の延長文字列のとき自然に発生する形でもある。

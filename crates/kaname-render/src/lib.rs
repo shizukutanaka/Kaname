@@ -225,6 +225,10 @@ pub struct Envelope {
     /// 本体・添付が TNEF 独自バイナリの中に内包され、TNEF を展開しない
     /// MIME 検査には内容が一切見えない。
     pub tnef_attachment: bool,
+    /// D1324 — encoded-word のデコード結果に制御文字 (CR/LF/NUL 等)
+    /// が含まれる。デコード後にヘッダ行へ CR/LF が現れ、表示層や
+    /// 解析層で改行注入・表示偽装の材料になる。
+    pub control_encoded_word: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2213,6 +2217,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     // D1320: Content-Type に subtype 無し
     let typeless_content_type = has_typeless_content_type(bytes);
     let tnef_attachment = has_tnef_attachment(bytes);
+    let control_encoded_word = has_control_encoded_word(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2296,6 +2301,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ambiguous_boundary_line,
         typeless_content_type,
         tnef_attachment,
+        control_encoded_word,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -4374,6 +4380,148 @@ pub fn has_tnef_attachment(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// encoded-word のデコード結果に制御文字が含まれるか判定する (D1324)。
+///
+/// `=?UTF-8?B?DQo=?=` (CRLF) ・`=?x?Q?=00?=` (NUL) 等、encoded-word の
+/// 生表現は印字可能 ASCII のみで RFC 上も合法だが、**デコード結果に
+/// 制御文字が出る**と、それをヘッダ文字列へ展開する実装では改行・
+/// 終端が注入される (ヘッダ表示の改行偽装・下流パーサへの注入)。
+/// D1283 は encoded-word の構造不備を検査するが、構造が正しくても
+/// 中身が制御文字に化ける形は未カバーだった。ヘッダ run (外側 +
+/// パート) の `=?charset?{B,Q}?text?=` を実際にデコードして検査する。
+#[must_use]
+pub fn has_control_encoded_word(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開 — 折り畳まれた encoded-word を1行に戻す
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        // 行内の encoded-word を順に走査 — `?=` の終端は複数候補を
+        // 試す (厳密には text に `?` を含まないが、lenient な実装は
+        // `=?x?Q?=09?=` を `=09` 内包と読むため、すべての `?=` を終端
+        // 候補として評価する)
+        let mut rest = l;
+        while let Some(start) = rest.find("=?") {
+            let after = &rest[start + 2..];
+            let Some(first_end) = after.find("?=") else { break };
+            let mut flagged = false;
+            let mut scan_end = 0;
+            while let Some(rel) = after[scan_end..].find("?=") {
+                let j = scan_end + rel;
+                scan_end = j + 2;
+                let tok = &after[..j];
+                // `charset?enc?text` — enc は 1 文字の B/Q
+                let mut it = tok.splitn(3, '?');
+                let charset = it.next().unwrap_or("");
+                let enc = it.next().unwrap_or("");
+                let enc_text = it.next().unwrap_or("");
+                if charset.is_empty()
+                    || enc_text.is_empty()
+                    || !(enc.eq_ignore_ascii_case("q") || enc.eq_ignore_ascii_case("b"))
+                {
+                    continue;
+                }
+                if decode_encoded_text(enc, enc_text)
+                    .iter()
+                    .any(|&c| c < 0x20 || c == 0x7F)
+                {
+                    flagged = true;
+                    break;
+                }
+            }
+            if flagged {
+                return true;
+            }
+            rest = &after[first_end + 2..];
+        }
+    }
+    false
+}
+
+/// encoded-word の text 部を Q/B 符号化に従ってデコードする (D1324)。
+/// 判定目的のため不正シーケンスはリテラルとして残す簡易実装。
+fn decode_encoded_text(enc: &str, enc_text: &str) -> Vec<u8> {
+    if enc.eq_ignore_ascii_case("q") {
+        // Q-encoding: `=XX` hex、`_` は空白
+        let b = enc_text.as_bytes();
+        let mut out = Vec::with_capacity(b.len());
+        let mut i = 0;
+        while i < b.len() {
+            if b[i] == b'=' && i + 2 < b.len() {
+                let h = (b[i + 1] as char).to_digit(16);
+                let l2 = (b[i + 2] as char).to_digit(16);
+                if let (Some(h), Some(l2)) = (h, l2) {
+                    out.push((h * 16 + l2) as u8);
+                    i += 3;
+                    continue;
+                }
+            }
+            out.push(if b[i] == b'_' { b' ' } else { b[i] });
+            i += 1;
+        }
+        out
+    } else {
+        decode_b64_simple(enc_text)
+    }
+}
+
+/// encoded-word の B 部をデコードする最小 base64 (D1324)。
+/// 入力は印字可能テキストのみ — 不正文字は読み飛ばし、長さが
+/// 足りない末尾は打ち切る (判定目的に部分デコードで足りる)。
+fn decode_b64_simple(s: &str) -> Vec<u8> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut acc: u32 = 0;
+    let mut nbits = 0u32;
+    for &c in s.as_bytes() {
+        if c == b'=' {
+            break;
+        }
+        let Some(v) = val(c) else { continue };
+        acc = (acc << 6) | u32::from(v);
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            out.push((acc >> nbits) as u8);
+        }
+    }
+    out
 }
 
 /// `MIME-Version:` の値が `1.0` 以外か判定する (D1312)。
@@ -18380,6 +18528,33 @@ mod tests {
             b"Content-Type: application/octet-stream; name=\"a.bin\"\r\n\r\nX"
         ));
         assert!(!has_tnef_attachment(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn control_encoded_word_は復号後制御文字を検出する() {
+        // B 符号化の CRLF (DQo= = \r\n)
+        assert!(has_control_encoded_word(
+            b"Subject: =?UTF-8?B?DQo=?=\r\n\r\nx"
+        ));
+        // Q 符号化の NUL (=00)
+        assert!(has_control_encoded_word(
+            b"From: =?UTF-8?Q?a=00b?=\r\n\r\nx"
+        ));
+        // パートヘッダ内も検出
+        assert!(has_control_encoded_word(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nSubject: =?x?Q?=09?=\r\n\r\nx\r\n--b--"
+        ));
+        // 通常の encoded-word (UTF-8 日本語等) は不発火
+        assert!(!has_control_encoded_word(
+            b"Subject: =?UTF-8?B?44GT44KT44Gr44Gh44Gv?=\r\n\r\nx"
+        ));
+        assert!(!has_control_encoded_word(
+            b"Subject: =?UTF-8?Q?hello_world?=\r\n\r\nx"
+        ));
+        // 本文中の `=?` 形テキストはヘッダ外なので不発火
+        assert!(!has_control_encoded_word(
+            b"Subject: x\r\n\r\n=?UTF-8?B?DQo=?= in body"
+        ));
     }
 
     #[test]

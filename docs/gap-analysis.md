@@ -736,3 +736,5 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1320 | ~~**Content-Type の subtype 欠落が未検査**~~ **(解消済み)** | P2 | `Content-Type: text` で既定値適用/非受理が分かれる。修正: `has_typeless_content_type` → render_risks | 「型/種別」は両方必須 — 主値だけはずれる |
 | D1321 | ~~**boundary 区切りの前方一致曖昧行が未検査**~~ **(解消済み)** | P2 | `--b`+junk で厳密/prefix 一致がずれる。修正: `has_ambiguous_boundary_line` → render_risks | 区切り一致は行全体の契約 |
 | D1322 | ~~**TNEF (winmail.dat) 添付の検査死角**~~ **(解消済み)** | P2 | 本体が独自バイナリ内にあり MIME 検査が届かない。修正: `has_tnef_attachment` → render_risks | 独自カプセル化は検査器に構造的盲点を作る |
+| D1323 | ~~**非正規形 IP リテラルホストが未検査**~~ **(解消済み)** | P2 | DWORD/hex/octal/短縮 IP はドメイン評判の対象外。修正: `is_numeric_ip_host` → Suspicious | ドメイン名の形をしていない宛先は評判照合が効かない |
+| D1324 | ~~**encoded-word 復号後の制御文字が未検査**~~ **(解消済み)** | P2 | 復号で CR/LF が出ると改行注入。修正: `has_control_encoded_word` → render_risks | 符号化欄は復号後の値まで検査する |
