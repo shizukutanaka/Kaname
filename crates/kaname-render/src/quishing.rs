@@ -1634,9 +1634,10 @@ mod tests {
     fn bare_translate_goog_is_not_unwrapped() {
         let d = QuishingDefense::new();
         // 裸の translate.goog (翻訳トップ) は宛先埋込なし → 不発火
+        // (信頼リスト未登録のため評価は Neutral)
         assert_eq!(
             d.evaluate_url("https://translate.goog/"),
-            UrlReputation::Trusted
+            UrlReputation::Neutral
         );
     }
 
