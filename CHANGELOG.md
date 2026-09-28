@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1657: Date 欄の二時刻 (`12:00:00 14:30:00`) を検出 — `Envelope` に `date_two_times` を追加。
+
+### Security — D1658: クオート boundary 値の端空白 (`" x"`/`"x "`) を検出 — `Envelope` に `boundary_edge_ws` を追加 (中央空白は bchars 正規)。
+
+### Security — D1659: CT/CD 欄 param 裸値の `:` (`charset=x:y`) を検出 — `Envelope` に `colon_param_val` を追加。
+
+### Security — D1660: Date 欄の二曜日名 (`Mon, Tue, …`) を検出 — `Envelope` に `two_daynames` を追加 (曜日不一致は D1569)。
+
 ### Security — D1653: Date 欄の年欠落 (`25 Sep`) を検出 — `Envelope` に `date_no_year` を追加 (2桁年は D1535)。
 
 ### Security — D1654: Date 欄の `-` 区切り日付 (`25-Sep-2025`) を検出 — `Envelope` に `dash_date` を追加。

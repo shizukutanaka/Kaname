@@ -1024,6 +1024,14 @@ pub struct Envelope {
     pub cte_param: bool,
     /// param キーの非 token 文字 `;a b=x` (D1656 — param 読みずれ)。
     pub bad_param_key: bool,
+    /// Date 欄の二つの時刻 (D1657 — 日付解析ずれ)。
+    pub date_two_times: bool,
+    /// クオート boundary の端空白 (D1658 — 区切りずれ)。
+    pub boundary_edge_ws: bool,
+    /// param 裸値の `:` (D1659 — param 読みずれ)。
+    pub colon_param_val: bool,
+    /// Date 欄の二つの曜日名 (D1660 — 日付解析ずれ)。
+    pub two_daynames: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3491,6 +3499,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_param = has_cte_param(bytes);
     // D1656: param キーの非 token 文字
     let bad_param_key = has_bad_param_key(bytes);
+    // D1657: Date 欄の二時刻
+    let date_two_times = has_date_two_times(bytes);
+    // D1658: クオート boundary の端空白
+    let boundary_edge_ws = has_boundary_edge_ws(bytes);
+    // D1659: param 裸値の `:`
+    let colon_param_val = has_colon_param_val(bytes);
+    // D1660: Date 欄の二曜日名
+    let two_daynames = has_two_daynames(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3905,6 +3921,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dash_date,
         cte_param,
         bad_param_key,
+        date_two_times,
+        boundary_edge_ws,
+        colon_param_val,
+        two_daynames,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -22339,6 +22359,202 @@ pub fn has_bad_param_key(raw: &[u8]) -> bool {
             if !ok {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// Date 欄に時刻トークンが2つあるか判定する (D1657)。
+///
+/// `Date: 25 Sep 2025 12:00:00 14:30:00` — 先読み/後読みで日付が
+/// ずれる (時刻欠落は D1610、ゾーンなしは D1547)。
+#[must_use]
+pub fn has_date_two_times(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut n = 0u32;
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            // 時刻形: `数字:数字…`
+            let mut it = t.split(':');
+            let h = it.next().unwrap_or("");
+            if !h.is_empty()
+                && h.bytes().all(|b| b.is_ascii_digit())
+                && it.next().is_some_and(|m| !m.is_empty() && m.bytes().all(|b| b.is_ascii_digit()))
+            {
+                n += 1;
+            }
+        }
+        if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `boundary=` のクオート値の端に空白があるか判定する (D1658)。
+///
+/// `boundary=" x"`/`boundary="x "` — bchars は端の空白を許容せず、
+/// 保持する実装と trim する実装でパート区切りがずれる (中央空白は
+/// 正規)。
+#[must_use]
+pub fn has_boundary_edge_ws(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.to_ascii_lowercase().starts_with("content-type:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut rest = v;
+        while let Some(i) = rest.to_ascii_lowercase().find("boundary=") {
+            let after = &rest[i + 9..];
+            if after.starts_with('"') {
+                if let Some(e) = after[1..].find('"') {
+                    let inner = &after[1..1 + e];
+                    if !inner.is_empty()
+                        && (inner.starts_with(' ')
+                            || inner.starts_with('\t')
+                            || inner.ends_with(' ')
+                            || inner.ends_with('\t'))
+                    {
+                        return true;
+                    }
+                    rest = &after[1 + e + 1..];
+                    continue;
+                }
+            }
+            rest = &after[9.min(after.len())..];
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の param 裸値に `:` が含まれるか判定する (D1659)。
+///
+/// `charset=x:y`/`boundary=a:b` — `:` は token 外で、値を切る実装と
+/// 残す実装で param 値がずれる (クオート内は正規)。
+#[must_use]
+pub fn has_colon_param_val(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let val = seg[eq + 1..].trim();
+            if val.contains(':') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に曜日名が2つあるか判定する (D1660)。
+///
+/// `Date: Mon, Tue, 25 Sep 2025` — 先採用/後採用で曜日がずれ、曜日と
+/// 日付の整合検査も左右される (曜日不一致は D1569)。
+#[must_use]
+pub fn has_two_daynames(raw: &[u8]) -> bool {
+    const DAYS: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut n = 0u32;
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if DAYS.contains(&t.to_ascii_lowercase().as_str()) {
+                n += 1;
+            }
+        }
+        if n >= 2 {
+            return true;
         }
     }
     false
@@ -41525,6 +41741,51 @@ mod tests {
         assert!(!has_bad_param_key(b"Content-Disposition: attachment; filename*=utf-8''x\r\n\r\nx"));
         assert!(!has_bad_param_key(b"Content-Type: text/plain; x=\"a;b\"\r\n\r\nx"));
         assert!(!has_bad_param_key(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn date_two_times_二時刻を検出する() {
+        // D1657 — `12:00:00 14:30:00`
+        assert!(has_date_two_times(b"Date: 25 Sep 2025 12:00:00 14:30:00\r\n\r\nx"));
+        assert!(has_date_two_times(b"Date: Thu, 25 Sep 2025 12:00 13:00 +0900\r\n\r\nx"));
+        // 単一時刻・ゾーンのみ・他欄は不発火
+        assert!(!has_date_two_times(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_date_two_times(b"Date: 25 Sep 2025\r\n\r\nx"));
+        assert!(!has_date_two_times(b"Subject: 12:00:00 14:30:00\r\n\r\nx"));
+    }
+
+    #[test]
+    fn boundary_edge_ws_クオート境界端空白を検出する() {
+        // D1658 — `boundary=" x"`/`"x "`
+        assert!(has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=\" x\"\r\n\r\nx"));
+        assert!(has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=\"x \"\r\n\r\nx"));
+        // 通常クオート・裸値・中央空白・他欄は不発火
+        assert!(!has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nx"));
+        assert!(!has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=abc\r\n\r\nx"));
+        assert!(!has_boundary_edge_ws(b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nx"));
+        assert!(!has_boundary_edge_ws(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn colon_param_val_裸値コロンを検出する() {
+        // D1659 — `charset=x:y`/`boundary=a:b`
+        assert!(has_colon_param_val(b"Content-Type: text/plain; charset=x:y\r\n\r\nx"));
+        assert!(has_colon_param_val(b"Content-Type: multipart/mixed; boundary=a:b\r\n\r\nx"));
+        // 正常値・クオート内・他欄は不発火
+        assert!(!has_colon_param_val(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_colon_param_val(b"Content-Type: text/plain; x=\"a:b\"\r\n\r\nx"));
+        assert!(!has_colon_param_val(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn two_daynames_二曜日名を検出する() {
+        // D1660 — `Mon, Tue, 25 Sep`
+        assert!(has_two_daynames(b"Date: Mon, Tue, 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(has_two_daynames(b"Date: Sat Sun 25 Sep 2025\r\n\r\nx"));
+        // 単一曜日・曜日無し・他欄は不発火
+        assert!(!has_two_daynames(b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_two_daynames(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_two_daynames(b"Subject: Mon, Tue\r\n\r\nx"));
     }
 
     #[test]
