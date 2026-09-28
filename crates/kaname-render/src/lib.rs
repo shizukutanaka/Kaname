@@ -1040,6 +1040,14 @@ pub struct Envelope {
     pub quote_tail_param: bool,
     /// Date 欄の年先頭並び (D1664 — 日付解析ずれ)。
     pub year_first_date: bool,
+    /// Date 欄の `AM`/`PM` 記号 (D1665 — 日付解析ずれ)。
+    pub ampm_time: bool,
+    /// `Message-ID:` 欄の二識別子 (D1666 — 照合ずれ)。
+    pub two_msgids: bool,
+    /// アドレス欄の重複グループ名 (D1667 — 宛先ずれ)。
+    pub addr_group_dup: bool,
+    /// Date 欄の `/` 区切り日付 (D1668 — 日付解析ずれ)。
+    pub slash_date: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3523,6 +3531,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let quote_tail_param = has_quote_tail_param(bytes);
     // D1664: Date 欄の年先頭並び
     let year_first_date = has_year_first_date(bytes);
+    // D1665: Date 欄の AM/PM 記号
+    let ampm_time = has_ampm_time(bytes);
+    // D1666: Message-ID 欄の二識別子
+    let two_msgids = has_two_msgids(bytes);
+    // D1667: アドレス欄の重複グループ名
+    let addr_group_dup = has_addr_group_dup(bytes);
+    // D1668: Date 欄の / 区切り日付
+    let slash_date = has_slash_date(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3945,6 +3961,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         unsigned_zone,
         quote_tail_param,
         year_first_date,
+        ampm_time,
+        two_msgids,
+        addr_group_dup,
+        slash_date,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -22759,6 +22779,209 @@ pub fn has_year_first_date(raw: &[u8]) -> bool {
         }
         if toks.any(|t| t.len() >= 3 && t.bytes().all(|b| b.is_ascii_alphabetic())) {
             return true;
+        }
+    }
+    false
+}
+
+/// Date 欄の時刻の後に `AM`/`PM` の午前午後記号があるか判定する
+/// (D1665)。
+///
+/// `Date: 25 Sep 2025 12:00 PM` — obs-zone 外の語を捨てる実装と
+/// 12時間表記と読む実装で日付がずれる (未知ゾーン名は D1534)。
+#[must_use]
+pub fn has_ampm_time(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut seen_time = false;
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            let mut it = t.split(':');
+            let h = it.next().unwrap_or("");
+            if !h.is_empty()
+                && h.bytes().all(|b| b.is_ascii_digit())
+                && it.next().is_some_and(|m| !m.is_empty() && m.bytes().all(|b| b.is_ascii_digit()))
+            {
+                seen_time = true;
+                continue;
+            }
+            if seen_time && matches!(t.to_ascii_lowercase().as_str(), "am" | "pm" | "a.m." | "p.m.") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Message-ID:`/`Resent-Message-ID:` に識別子が2つあるか判定する
+/// (D1666)。
+///
+/// `Message-ID: <a@b> <c@d>` — 先採用と後採用でスレッド照合がずれる
+/// (References は複数識別子が正規なので対象外)。
+#[must_use]
+pub fn has_two_msgids(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let v = l
+            .strip_prefix("message-id:")
+            .or_else(|| l.strip_prefix("resent-message-id:"));
+        let Some(v) = v else { continue };
+        if v.matches('<').count() >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄に同名のグループが2回名乗るか判定する (D1667)。
+///
+/// `To: team: a@b; team: c@d;` — 結合する実装と後読みで上書きする
+/// 実装で宛先集合がずれる。
+#[must_use]
+pub fn has_addr_group_dup(raw: &[u8]) -> bool {
+    const ADDR: &[&str] = &["from", "to", "cc", "bcc", "reply-to", "sender"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        // クオートとコメントを除いてからグループ名を採取
+        let v = &l[colon + 1..];
+        let mut scrub = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = false;
+        let mut prev = b' ';
+        for b in v.bytes() {
+            if in_c {
+                if b == b')' && prev != b'\\' {
+                    in_c = false;
+                }
+            } else if in_q {
+                if b == b'"' && prev != b'\\' {
+                    in_q = false;
+                }
+            } else if b == b'(' {
+                in_c = true;
+            } else if b == b'"' {
+                in_q = true;
+            } else {
+                scrub.push(b as char);
+            }
+            prev = b;
+        }
+        let mut seen: Vec<String> = Vec::new();
+        for seg in scrub.split(';') {
+            let Some(c) = seg.find(':') else { continue };
+            let name = seg[..c].trim().to_ascii_lowercase();
+            if name.is_empty() || name.contains('@') {
+                continue;
+            }
+            if seen.iter().any(|n| n == &name) {
+                return true;
+            }
+            seen.push(name);
+        }
+    }
+    false
+}
+
+/// Date 欄に `/` 区切りの日付形があるか判定する (D1668)。
+///
+/// `Date: 25/09/2025` — 日/月の順が書式ごとに揺れ、読める実装と
+/// 読めない実装で日付がずれる (`-` 区切りは D1654)。
+#[must_use]
+pub fn has_slash_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            let parts: Vec<&str> = t.split('/').collect();
+            if parts.len() == 3
+                && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            {
+                return true;
+            }
         }
     }
     false
@@ -42034,6 +42257,50 @@ mod tests {
         assert!(!has_year_first_date(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
         assert!(!has_year_first_date(b"Date: Thu, 25 Sep 2025\r\n\r\nx"));
         assert!(!has_year_first_date(b"Subject: 2025 Sep 25\r\n\r\nx"));
+    }
+
+    #[test]
+    fn ampm_time_AMPM記号を検出する() {
+        // D1665 — `12:00 PM`
+        assert!(has_ampm_time(b"Date: 25 Sep 2025 12:00 PM\r\n\r\nx"));
+        assert!(has_ampm_time(b"Date: Thu, 25 Sep 2025 12:00:00 a.m. +0900\r\n\r\nx"));
+        // 24時間・ゾーン名・他欄は不発火
+        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_ampm_time(b"Date: 25 Sep 2025 12:00:00 GMT\r\n\r\nx"));
+        assert!(!has_ampm_time(b"Subject: 12:00 PM\r\n\r\nx"));
+    }
+
+    #[test]
+    fn two_msgids_二識別子を検出する() {
+        // D1666 — `<a@b> <c@d>`
+        assert!(has_two_msgids(b"Message-ID: <a@b> <c@d>\r\n\r\nx"));
+        assert!(has_two_msgids(b"Resent-Message-ID: <x> <y>\r\n\r\nx"));
+        // 単一・References の複数・他欄は不発火
+        assert!(!has_two_msgids(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_two_msgids(b"References: <a@b> <c@d>\r\n\r\nx"));
+        assert!(!has_two_msgids(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn addr_group_dup_重複グループ名を検出する() {
+        // D1667 — `team: a@b; team: c@d;`
+        assert!(has_addr_group_dup(b"To: team: a@b; team: c@d;\r\n\r\nx"));
+        assert!(has_addr_group_dup(b"Cc: ops: x@y; other: z@w; ops: q@r;\r\n\r\nx"));
+        // 単一グループ・別名複数・グループ無しは不発火
+        assert!(!has_addr_group_dup(b"To: team: a@b;\r\n\r\nx"));
+        assert!(!has_addr_group_dup(b"To: team: a@b; ops: c@d;\r\n\r\nx"));
+        assert!(!has_addr_group_dup(b"To: a@b, c@d\r\n\r\nx"));
+    }
+
+    #[test]
+    fn slash_date_スラッシュ区切り日付を検出する() {
+        // D1668 — `25/09/2025`
+        assert!(has_slash_date(b"Date: 25/09/2025\r\n\r\nx"));
+        assert!(has_slash_date(b"Date: Thu, 25/09/2025 12:00:00 +0900\r\n\r\nx"));
+        // 正規並び・パス形・他欄は不発火
+        assert!(!has_slash_date(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_slash_date(b"Date: 25 Sep 2025\r\n\r\nx"));
+        assert!(!has_slash_date(b"Subject: 25/09/2025\r\n\r\nx"));
     }
 
     #[test]

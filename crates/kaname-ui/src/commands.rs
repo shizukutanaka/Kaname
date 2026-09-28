@@ -5573,6 +5573,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.ampm_time {
+        render_risks.push(
+            "Date 欄に AM/PM の記号があります\
+             —捨てる実装と12時間表記と読む実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_msgids {
+        render_risks.push(
+            "Message-ID 欄に識別子が二つあります\
+             —先採用と後採用でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_group_dup {
+        render_risks.push(
+            "アドレス欄に同じ名前のグループが二度あります\
+             —結合する実装と上書きする実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.slash_date {
+        render_risks.push(
+            "Date 欄が「/」区切りで書かれています\
+             —読める実装と読めない実装で日付がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

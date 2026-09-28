@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1665: Date 欄の `AM`/`PM`/`a.m.`/`p.m.` 記号 (`12:00 PM`) を検出 — `Envelope` に `ampm_time` を追加。
+
+### Security — D1666: `Message-ID:`/`Resent-Message-ID:` の二識別子を検出 — `Envelope` に `two_msgids` を追加 (References は複数正規)。
+
+### Security — D1667: アドレス欄の重複グループ名 (`team: a@b; team: c@d;`) を検出 — `Envelope` に `addr_group_dup` を追加。
+
+### Security — D1668: Date 欄の `/` 区切り日付 (`25/09/2025`) を検出 — `Envelope` に `slash_date` を追加 (`-` 区切りは D1654)。
+
 ### Security — D1661: `Message-ID:`/`Resent-Message-ID:` の `<>` 欠落を検出 — `Envelope` に `unbracketed_msgid` を追加 (裸参照は `bare_msgid_ref` が In-Reply-To/References のみ担当)。
 
 ### Security — D1662: Date 欄の符号なし4桁ゾーン (`12:00 0900`) を検出 — `Envelope` に `unsigned_zone` を追加。
