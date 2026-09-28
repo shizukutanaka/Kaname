@@ -1048,6 +1048,14 @@ pub struct Envelope {
     pub addr_group_dup: bool,
     /// Date 欄の `/` 区切り日付 (D1668 — 日付解析ずれ)。
     pub slash_date: bool,
+    /// `boundary=` 値の 70 字超 (D1669 — 区切りずれ)。
+    pub boundary_too_long: bool,
+    /// Date 欄ゾーンの桁数異常 (D1670 — 日付解析ずれ)。
+    pub bad_zone_len: bool,
+    /// Date 欄の `.` 区切り日付 (D1671 — 日付解析ずれ)。
+    pub dot_date: bool,
+    /// Date 欄の二つの数値ゾーン (D1672 — 日付解析ずれ)。
+    pub two_num_zones: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3539,6 +3547,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let addr_group_dup = has_addr_group_dup(bytes);
     // D1668: Date 欄の / 区切り日付
     let slash_date = has_slash_date(bytes);
+    // D1669: boundary 値の 70 字超
+    let boundary_too_long = has_boundary_too_long(bytes);
+    // D1670: Date 欄ゾーンの桁数異常
+    let bad_zone_len = has_bad_zone_len(bytes);
+    // D1671: Date 欄の . 区切り日付
+    let dot_date = has_dot_date(bytes);
+    // D1672: Date 欄の二数値ゾーン
+    let two_num_zones = has_two_num_zones(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3965,6 +3981,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         two_msgids,
         addr_group_dup,
         slash_date,
+        boundary_too_long,
+        bad_zone_len,
+        dot_date,
+        two_num_zones,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -22982,6 +23002,196 @@ pub fn has_slash_date(raw: &[u8]) -> bool {
             {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// `boundary=` の値が 70 文字を超えるか判定する (D1669)。
+///
+/// RFC 2046 は boundary を 1–70 字に制限し、切り詰める実装と
+/// そのまま使う実装でパート区切りがずれる。
+#[must_use]
+pub fn has_boundary_too_long(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.to_ascii_lowercase().starts_with("content-type:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut rest = v;
+        while let Some(i) = rest.to_ascii_lowercase().find("boundary=") {
+            let after = &rest[i + 9..];
+            if after.starts_with('"') {
+                if let Some(e) = after[1..].find('"') {
+                    if after[1..1 + e].len() > 70 {
+                        return true;
+                    }
+                    rest = &after[1 + e + 1..];
+                    continue;
+                }
+                break;
+            }
+            let end = after
+                .find(|c: char| c == ';' || c.is_whitespace())
+                .unwrap_or(after.len());
+            if after[..end].len() > 70 {
+                return true;
+            }
+            rest = &after[end..];
+        }
+    }
+    false
+}
+
+/// Date 欄のゾーンが `+`/`-` + 4桁以外の桁数か判定する (D1670)。
+///
+/// `+090`/`+09000`/`+9` — RFC 5322 は `sign 4DIGIT` を要求し、桁数の
+/// ずれを丸める実装と捨てる実装で日付がずれる (範囲外は D1565)。
+#[must_use]
+pub fn has_bad_zone_len(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if !(t.starts_with('+') || t.starts_with('-')) {
+                continue;
+            }
+            let d = &t[1..];
+            if !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()) && d.len() != 4 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に `.` 区切りの日付形があるか判定する (D1671)。
+///
+/// `Date: 25.09.2025`/`25.Sep.2025` — ヨーロッパ式の並びを読める
+/// 実装と読めない実装で日付がずれる (`-` は D1654、`/` は D1668)。
+#[must_use]
+pub fn has_dot_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            let parts: Vec<&str> = t.split('.').collect();
+            if parts.len() == 3
+                && parts[0].bytes().all(|b| b.is_ascii_digit())
+                && !parts[0].is_empty()
+                && (parts[1].len() >= 3
+                    && parts[1].bytes().all(|b| b.is_ascii_alphabetic())
+                    || !parts[1].is_empty() && parts[1].bytes().all(|b| b.is_ascii_digit()))
+                && !parts[2].is_empty()
+                && parts[2].bytes().all(|b| b.is_ascii_digit())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に数値ゾーンが2つあるか判定する (D1672)。
+///
+/// `Date: … +0900 -0500` — 先採用と後採用で日付がずれる (片方が
+/// 名称ゾーンの場合は D1534、桁異常は D1670)。
+#[must_use]
+pub fn has_two_num_zones(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut n = 0u32;
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if t.len() == 5
+                && (t.starts_with('+') || t.starts_with('-'))
+                && t[1..].bytes().all(|b| b.is_ascii_digit())
+            {
+                n += 1;
+            }
+        }
+        if n >= 2 {
+            return true;
         }
     }
     false
@@ -42301,6 +42511,58 @@ mod tests {
         assert!(!has_slash_date(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
         assert!(!has_slash_date(b"Date: 25 Sep 2025\r\n\r\nx"));
         assert!(!has_slash_date(b"Subject: 25/09/2025\r\n\r\nx"));
+    }
+
+    #[test]
+    fn boundary_too_long_長すぎる境界を検出する() {
+        // D1669 — 71 字超の boundary
+        let long = "a".repeat(71);
+        assert!(has_boundary_too_long(
+            format!("Content-Type: multipart/mixed; boundary={}\r\n\r\nx", long).as_bytes()
+        ));
+        assert!(has_boundary_too_long(
+            format!("Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\nx", long).as_bytes()
+        ));
+        // 70 字以下・他欄は不発火
+        let ok = "a".repeat(70);
+        assert!(!has_boundary_too_long(
+            format!("Content-Type: multipart/mixed; boundary={}\r\n\r\nx", ok).as_bytes()
+        ));
+        assert!(!has_boundary_too_long(b"Content-Type: text/plain\r\n\r\nx"));
+        assert!(!has_boundary_too_long(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bad_zone_len_ゾーン桁異常を検出する() {
+        // D1670 — `+090`/`+9`
+        assert!(has_bad_zone_len(b"Date: 25 Sep 2025 12:00:00 +090\r\n\r\nx"));
+        assert!(has_bad_zone_len(b"Date: 25 Sep 2025 12:00:00 -5\r\n\r\nx"));
+        assert!(has_bad_zone_len(b"Date: 25 Sep 2025 12:00:00 +09000\r\n\r\nx"));
+        // 4桁・符号のみ・他欄は不発火
+        assert!(!has_bad_zone_len(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_bad_zone_len(b"Date: 25 Sep 2025 12:00:00 -0500\r\n\r\nx"));
+        assert!(!has_bad_zone_len(b"Subject: +090\r\n\r\nx"));
+    }
+
+    #[test]
+    fn dot_date_ドット区切り日付を検出する() {
+        // D1671 — `25.09.2025`/`25.Sep.2025`
+        assert!(has_dot_date(b"Date: 25.09.2025\r\n\r\nx"));
+        assert!(has_dot_date(b"Date: 25.Sep.2025 12:00:00 +0900\r\n\r\nx"));
+        // 正規並び・他欄は不発火
+        assert!(!has_dot_date(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_dot_date(b"Date: 25 Sep 2025\r\n\r\nx"));
+        assert!(!has_dot_date(b"Subject: 25.09.2025\r\n\r\nx"));
+    }
+
+    #[test]
+    fn two_num_zones_二数値ゾーンを検出する() {
+        // D1672 — `+0900 -0500`
+        assert!(has_two_num_zones(b"Date: 25 Sep 2025 12:00:00 +0900 -0500\r\n\r\nx"));
+        // 単一・名称併記・他欄は不発火
+        assert!(!has_two_num_zones(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_two_num_zones(b"Date: 25 Sep 2025 12:00:00 +0900 JST\r\n\r\nx"));
+        assert!(!has_two_num_zones(b"Subject: +0900 -0500\r\n\r\nx"));
     }
 
     #[test]

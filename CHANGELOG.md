@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1669: `boundary=` 値の 70 字超を検出 — `Envelope` に `boundary_too_long` を追加 (RFC 2046 上限)。
+
+### Security — D1670: Date 欄ゾーンの `sign + 非4桁` (`+090`/`+9`) を検出 — `Envelope` に `bad_zone_len` を追加 (範囲外は D1565)。
+
+### Security — D1671: Date 欄の `.` 区切り日付 (`25.09.2025`) を検出 — `Envelope` に `dot_date` を追加 (`-` は D1654、`/` は D1668)。
+
+### Security — D1672: Date 欄の二数値ゾーン (`+0900 -0500`) を検出 — `Envelope` に `two_num_zones` を追加。
+
 ### Security — D1665: Date 欄の `AM`/`PM`/`a.m.`/`p.m.` 記号 (`12:00 PM`) を検出 — `Envelope` に `ampm_time` を追加。
 
 ### Security — D1666: `Message-ID:`/`Resent-Message-ID:` の二識別子を検出 — `Envelope` に `two_msgids` を追加 (References は複数正規)。
