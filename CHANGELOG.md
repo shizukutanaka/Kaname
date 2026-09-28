@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1730: 宛名欄の `;` のみ値 `To: ;` を検出 — `Envelope` に `addr_semicolon_only` を追加 (空値は D1681)。
+### Security — D1729: `References:`/`In-Reply-To:` の識別子列の `,` `<a>,<b>` を検出 — `Envelope` に `msgid_ref_comma` を追加 (識別子内 `%`/`!` は D1626)。
+### Security — D1728: CT/CD param の `=` 無し裸名札 `;charset` を検出 — `Envelope` に `param_no_eq` を追加 (空 param 節は D1636、空値は D1696)。
+### Security — D1727: `Received:` の `via` 節空値 `via;` を検出 — `Envelope` に `received_via_empty` を追加 (空 for 節は D1726)。
 ### Security — D1726: `Received:` の `for` 節空値 `for;` を検出 — `Envelope` に `received_for_empty` を追加 (for 節重複は D1712、空 id 節は D1724)。(クオート符丁は既存 D1474 と重複判明のため差替)
 ### Security — D1725: 同一欄内の `boundary=` 重複 `boundary=a; boundary=b` を検出 — `Envelope` に `boundary_param_dup` を追加 (欄またぎの大小写衝突は D1701)。
 ### Security — D1724: `Received:` の `id` 節空値 `id;` を検出 — `Envelope` に `received_id_empty` を追加 (id 節重複は D1715、空 by 節は D1720)。

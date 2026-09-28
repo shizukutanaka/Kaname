@@ -1166,6 +1166,14 @@ pub struct Envelope {
     pub boundary_param_dup: bool,
     /// `Received:` の `for` 節空値 (D1726 — 経路解析ずれ)。
     pub received_for_empty: bool,
+    /// `Received:` の `via` 節空値 (D1727 — 経路解析ずれ)。
+    pub received_via_empty: bool,
+    /// param が `=` を持たない裸名札 (D1728 — param 解析ずれ)。
+    pub param_no_eq: bool,
+    /// `References:` 等の識別子列の `,` (D1729 — 識別子ずれ)。
+    pub msgid_ref_comma: bool,
+    /// 宛名欄が `;` のみ (D1730 — 宛先解析ずれ)。
+    pub addr_semicolon_only: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3773,6 +3781,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let boundary_param_dup = has_boundary_param_dup(bytes);
     // D1726: Received の for 節空値
     let received_for_empty = has_received_for_empty(bytes);
+    // D1727: Received の via 節空値
+    let received_via_empty = has_received_via_empty(bytes);
+    // D1728: param が = を持たない裸名札
+    let param_no_eq = has_param_no_eq(bytes);
+    // D1729: 識別子列の ,
+    let msgid_ref_comma = has_msgid_ref_comma(bytes);
+    // D1730: 宛名欄が ; のみ
+    let addr_semicolon_only = has_addr_semicolon_only(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4257,6 +4273,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_id_empty,
         boundary_param_dup,
         received_for_empty,
+        received_via_empty,
+        param_no_eq,
+        msgid_ref_comma,
+        addr_semicolon_only,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -25771,6 +25791,179 @@ pub fn has_received_for_empty(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `via` 節が空か判定する (D1727)。
+///
+/// `Received: … via; Thu` — `via` の直後に値が無い。
+/// 次の語を `via` の値と継ぐ実装と、空の節として残す実装で
+/// 配送媒体の経路解釈がずれる (via 節重複は D1719、空節族は
+/// D1703/D1720/D1723/D1724/D1726)。
+#[must_use]
+pub fn has_received_via_empty(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via")
+                && (i + 1 == toks.len()
+                    || CLAUSES.iter().any(|k| toks[i + 1].eq_ignore_ascii_case(k)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の param 節に `=` を持たない裸トークンがあるか判定する (D1728)。
+///
+/// `;charset` — 値の無い裸名札。空の param と読み飛ばす実装と、
+/// 欄ごと捨てる実装で param 解釈がずれる (空 param 節 `;;` は D1636、
+/// 空値 `;x=` は D1696、名なし `;=x` は has_empty_param_name)。
+#[must_use]
+pub fn has_param_no_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let p = part.trim();
+            if !p.is_empty() && !p.contains('=') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `References:`/`In-Reply-To:` の識別子列に `,` が含まれるか判定する (D1729)。
+///
+/// `References: <a@b>,<c@d>` — 識別子列の区切りは空白で、
+/// `,` は書けない。`,` で区切る実装と `,` を識別子の一部と読む実装で
+/// スレッド照合がずれる (識別子内 `%`/`!` は D1626、二識別子の空白区切りは
+/// D1666)。
+#[must_use]
+pub fn has_msgid_ref_comma(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        if l[colon + 1..].contains(',') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄の値が `;` のみか判定する (D1730)。
+///
+/// `To: ;` — 宛先もグループも無い裸の区切り。欄を破棄する実装と
+/// 空グループとして残す実装で宛先集合がずれる (空値は D1681、
+/// `,` だけの形とは別)。
+#[must_use]
+pub fn has_addr_semicolon_only(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if !v.is_empty() && v.bytes().all(|b| b == b';' || b == b' ' || b == b'\t') {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -45791,6 +45984,49 @@ mod tests {
             b"Received: from a by b for x@y; Thu\r\n\r\n"
         ));
         assert!(!has_received_for_empty(b""));
+    }
+
+    #[test]
+    fn received_via_empty_空のvia節を検出する() {
+        assert!(has_received_via_empty(b"Received: from a by b via; Thu\r\n\r\n"));
+        assert!(has_received_via_empty(
+            b"Received: from a by b via for x@y; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_via_empty(
+            b"Received: from a by b via c; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_via_empty(b""));
+    }
+
+    #[test]
+    fn param_no_eq_等号なき名札を検出する() {
+        assert!(has_param_no_eq(
+            b"Content-Type: text/plain; charset\r\n\r\n"
+        ));
+        assert!(!has_param_no_eq(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_param_no_eq(b"Content-Type: text/plain;\r\n\r\n"));
+        assert!(!has_param_no_eq(b""));
+    }
+
+    #[test]
+    fn msgid_ref_comma_識別子列のコンマを検出する() {
+        assert!(has_msgid_ref_comma(
+            b"References: <a@x>,<b@x>\r\n\r\n"
+        ));
+        assert!(!has_msgid_ref_comma(
+            b"References: <a@x> <b@x>\r\n\r\n"
+        ));
+        assert!(!has_msgid_ref_comma(b""));
+    }
+
+    #[test]
+    fn addr_semicolon_only_区切りだけの宛名を検出する() {
+        assert!(has_addr_semicolon_only(b"To: ;\r\n\r\n"));
+        assert!(has_addr_semicolon_only(b"Cc: ; ;\r\n\r\n"));
+        assert!(!has_addr_semicolon_only(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_semicolon_only(b""));
     }
 
     #[test]
