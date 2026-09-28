@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1625: `Message-ID: <>` の空額縁識別子を検出 — `Envelope` に `msgid_empty_angle` を追加。捨てる実装と匿名識別子として残す実装でスレッド照合がずれる (値自体の空は D1450)。
+
+### Security — D1626: 識別子欄の `<…>` 内 `%`/`!` 経路記号を検出 — `Envelope` に `msgid_routing_char` を追加。経路解釈する実装と生採用する実装で照合キーがずれる (アドレス欄側は D1436)。
+
+### Security — D1627: アドレス欄の額縁外に裸の `@word` 表示語がある形を検出 — `Envelope` に `bare_at_display` を追加。トークン採用と額縁採用で差出人表示がずれる (額縁前の裸アドレスは D1590)。
+
+### Security — D1628: 識別子欄の `<…>` 内側の `;` を検出 — `Envelope` に `semi_in_id` を追加。区切り優先の実装が識別子を途切れさせスレッド照合がずれる (コメント内側は D1603)。
+
 ### Security — D1621: `Content-Type: text/plain text/html` の空白区切り二重メディア型を検出 — `Envelope` に `two_media_types` を追加。先採用/後採用/全体エラーで部品の型解釈がずれる (型内空白は D1512)。
 
 ### Security — D1622: アドレス欄ドメイン部の DNS 外文字 (`a@b/c.com`) を検出 — `Envelope` に `bad_domain_char` を追加。ラベル構成字外の ASCII を含むドメインを厳格実装が拒否し宛名がずれる (`!`/`%` は D1436)。

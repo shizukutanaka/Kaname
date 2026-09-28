@@ -960,6 +960,14 @@ pub struct Envelope {
     pub msgid_fullwidth_angle: bool,
     /// CT/CD 非クオート param 値の `\` (D1624 — 名札ずれ)。
     pub param_backslash: bool,
+    /// 識別子欄の空額縁 `<>` (D1625 — 識別子読みずれ)。
+    pub msgid_empty_angle: bool,
+    /// 識別子欄の `<…>` 内 `%`/`!` 経路記号 (D1626 — 識別子読みずれ)。
+    pub msgid_routing_char: bool,
+    /// 額縁の外の裸 `@word` (D1627 — 差出人表示ずれ)。
+    pub bare_at_display: bool,
+    /// 識別子欄の `<…>` 内 `;` (D1628 — 識別子読みずれ)。
+    pub semi_in_id: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3363,6 +3371,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_fullwidth_angle = has_msgid_fullwidth_angle(bytes);
     // D1624: param 値の `\`
     let param_backslash = has_param_backslash(bytes);
+    // D1625: 空額縁の識別子
+    let msgid_empty_angle = has_msgid_empty_angle(bytes);
+    // D1626: 識別子内の経路記号
+    let msgid_routing_char = has_msgid_routing_char(bytes);
+    // D1627: 額縁の外の裸 @
+    let bare_at_display = has_bare_at_display(bytes);
+    // D1628: 識別子の `;`
+    let semi_in_id = has_semi_in_id(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3745,6 +3761,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bad_domain_char,
         msgid_fullwidth_angle,
         param_backslash,
+        msgid_empty_angle,
+        msgid_routing_char,
+        bare_at_display,
+        semi_in_id,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -20508,6 +20528,254 @@ pub fn has_param_backslash(raw: &[u8]) -> bool {
             if seg[eq + 1..].contains('\\') {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// 識別子欄の識別子が空の額縁 `<>` のみか判定する (D1625)。
+///
+/// `Message-ID: <>` — `local@domain` を欠く識別子は、厳格実装が
+/// 捨て、`<>` を残す/匿名識別子とする実装と照合がずれる
+/// (値自体の空は D1450、額縁無しは D1572、内側空白は D1596)。
+#[must_use]
+pub fn has_msgid_empty_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        // 値全体が `<>` のみ、または `<>` を要素として含む形
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].is_empty() {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内に `%`/`!` 経路記号があるか判定する (D1626)。
+///
+/// `Message-ID: <a%r1@h>`/`In-Reply-To: <a!h@x>` — 経路構文を識別子
+/// に混入させる形は、経路解釈する実装と生採用する実装で照合キーが
+/// ずれる (アドレス欄側は D1436、obs-route 額縁は D1499)。
+#[must_use]
+pub fn has_msgid_routing_char(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if inner.contains('%') || inner.contains('!') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄の表示側 (額縁の外・クオート/コメント外) に裸の
+/// `@word` トークンがあるか判定する (D1627)。
+///
+/// `From: John @doe <x@y>` — `@doe` はアドレスでなく表示語だが、
+/// トークンごと採る実装と額縁のみ採る実装で差出人表示がずれる
+/// (額縁前の裸アドレス `a@b` 形は D1590、クオート内 `@` は D1602、
+/// コメント内 `@` は D1617)。
+#[must_use]
+pub fn has_bare_at_display(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        for (i, &b) in v.as_bytes().iter().enumerate() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'<' {
+                in_a = true;
+            } else if b == b'>' {
+                in_a = false;
+            } else if b == b'@' && !in_a {
+                // `@` が空白等の後に裸で現れ、後続が `[A-Za-z0-9]` —
+                // アドレスではなく表示語 (`John @doe <x@y>`) の形。
+                // `a@b <c@d>` 形 (D1590) は `@` 直前が atom 字。
+                let prev_ok = matches!(
+                    i.checked_sub(1).map(|k| v.as_bytes()[k]),
+                    Some(b' ') | Some(b'\t') | Some(b',') | None
+                );
+                let next_ok = v
+                    .as_bytes()
+                    .get(i + 1)
+                    .map(|&c| c.is_ascii_alphanumeric())
+                    .unwrap_or(false);
+                if prev_ok && next_ok {
+                    return true;
+                }
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内側に `;` が含まれるか判定する (D1628)。
+///
+/// `Message-ID: <a;b@c>` — `;` は msg-id 非合法字で、区切りを優先
+/// する実装は識別子を途切れさせ、スレッド照合がずれる (コメント
+/// 内側は D1603、内側空白は D1596)。
+#[must_use]
+pub fn has_semi_in_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].contains(';') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
         }
     }
     false
@@ -39294,6 +39562,57 @@ mod tests {
         assert!(!has_param_backslash(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
         assert!(!has_param_backslash(b"From: a\\b <x@y>\r\n\r\nx"));
         assert!(!has_param_backslash(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_empty_angle_空額縁識別子を検出する() {
+        // D1625 — `<>` 空額縁
+        assert!(has_msgid_empty_angle(b"Message-ID: <>\r\n\r\nx"));
+        assert!(has_msgid_empty_angle(b"References: <a@b> <>\r\n\r\nx"));
+        // 通常形・額縁無し・空白内側・他欄は不発火
+        assert!(!has_msgid_empty_angle(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_msgid_empty_angle(b"List-Id: mylist\r\n\r\nx"));
+        assert!(!has_msgid_empty_angle(b"Message-ID: < a@b >\r\n\r\nx"));
+        assert!(!has_msgid_empty_angle(b"From: <>\r\n\r\nx"));
+        assert!(!has_msgid_empty_angle(b"Subject: <>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_routing_char_識別子内経路記号を検出する() {
+        // D1626 — <…> 内の %/!
+        assert!(has_msgid_routing_char(b"Message-ID: <a%r1@h.example>\r\n\r\nx"));
+        assert!(has_msgid_routing_char(b"In-Reply-To: <a!h@x>\r\n\r\nx"));
+        // 通常形・額縁外記号・他欄は不発火 (アドレス欄は D1436)
+        assert!(!has_msgid_routing_char(b"Message-ID: <a@h.example>\r\n\r\nx"));
+        assert!(!has_msgid_routing_char(b"From: a%r@b\r\n\r\nx"));
+        assert!(!has_msgid_routing_char(b"Subject: a%r@b\r\n\r\nx"));
+        assert!(!has_msgid_routing_char(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bare_at_display_裸アット表示語を検出する() {
+        // D1627 — 額縁の外の `@word` 表示語
+        assert!(has_bare_at_display(b"From: John @doe <x@y>\r\n\r\nx"));
+        assert!(has_bare_at_display(b"To: @team <x@y>\r\n\r\nx"));
+        // 額縁前の裸アドレス (D1590)・額縁内・クオート内・コメント内は不発火
+        assert!(!has_bare_at_display(b"From: a@b <c@d>\r\n\r\nx"));
+        assert!(!has_bare_at_display(b"From: <a@b>\r\n\r\nx"));
+        assert!(!has_bare_at_display(b"From: \"@doe\" <x@y>\r\n\r\nx"));
+        assert!(!has_bare_at_display(b"From: x@y (@tag)\r\n\r\nx"));
+        assert!(!has_bare_at_display(b"From: a@b\r\n\r\nx"));
+        assert!(!has_bare_at_display(b"Subject: @doe\r\n\r\nx"));
+    }
+
+    #[test]
+    fn semi_in_id_識別子内セミコロンを検出する() {
+        // D1628 — <…> 内 `;`
+        assert!(has_semi_in_id(b"Message-ID: <a;b@c>\r\n\r\nx"));
+        assert!(has_semi_in_id(b"List-Id: <my;list.x>\r\n\r\nx"));
+        // 通常形・額縁外 `;`・他欄は不発火
+        assert!(!has_semi_in_id(b"Message-ID: <a@c>\r\n\r\nx"));
+        assert!(!has_semi_in_id(b"From: a@b; c@d\r\n\r\nx"));
+        assert!(!has_semi_in_id(b"Subject: a;b\r\n\r\nx"));
+        assert!(!has_semi_in_id(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]
