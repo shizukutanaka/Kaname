@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1726: `Received:` の `for` 節空値 `for;` を検出 — `Envelope` に `received_for_empty` を追加 (for 節重複は D1712、空 id 節は D1724)。(クオート符丁は既存 D1474 と重複判明のため差替)
+### Security — D1725: 同一欄内の `boundary=` 重複 `boundary=a; boundary=b` を検出 — `Envelope` に `boundary_param_dup` を追加 (欄またぎの大小写衝突は D1701)。
+### Security — D1724: `Received:` の `id` 節空値 `id;` を検出 — `Envelope` に `received_id_empty` を追加 (id 節重複は D1715、空 by 節は D1720)。
+### Security — D1723: `Received:` の `with` 節空値 `with;` を検出 — `Envelope` に `received_with_empty` を追加 (空 by 節は D1720)。
 ### Security — D1722: 識別子 `<…>` 内の `@` 2つ `<a@b@c>` を検出 — `Envelope` に `msgid_two_at` を追加 (識別子内 `:`/`\\` は `has_msgid_bad_char`)。
 ### Security — D1721: `Content-Disposition:` の型トークン2つ `attachment inline` を検出 — `Envelope` に `cd_two_types` を追加 (型欠落は D1708、CT 二重型は D1621)。
 ### Security — D1720: `Received:` の `by` 節空値 `from a by;` を検出 — `Envelope` に `received_by_empty` を追加 (空 from 節は D1703)。

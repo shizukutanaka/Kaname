@@ -1158,6 +1158,14 @@ pub struct Envelope {
     pub cd_two_types: bool,
     /// 識別子 `<…>` 内の `@` が2つ (D1722 — 識別子解析ずれ)。
     pub msgid_two_at: bool,
+    /// `Received:` の `with` 節空値 (D1723 — 経路解析ずれ)。
+    pub received_with_empty: bool,
+    /// `Received:` の `id` 節空値 (D1724 — 経路解析ずれ)。
+    pub received_id_empty: bool,
+    /// 同一欄内の `boundary=` 重複 (D1725 — 区切り解析ずれ)。
+    pub boundary_param_dup: bool,
+    /// `Received:` の `for` 節空値 (D1726 — 経路解析ずれ)。
+    pub received_for_empty: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3757,6 +3765,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cd_two_types = has_cd_two_types(bytes);
     // D1722: 識別子内の @ 2つ
     let msgid_two_at = has_msgid_two_at(bytes);
+    // D1723: Received の with 節空値
+    let received_with_empty = has_received_with_empty(bytes);
+    // D1724: Received の id 節空値
+    let received_id_empty = has_received_id_empty(bytes);
+    // D1725: 同一欄内の boundary= 重複
+    let boundary_param_dup = has_boundary_param_dup(bytes);
+    // D1726: Received の for 節空値
+    let received_for_empty = has_received_for_empty(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4237,6 +4253,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_by_empty,
         cd_two_types,
         msgid_two_at,
+        received_with_empty,
+        received_id_empty,
+        boundary_param_dup,
+        received_for_empty,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -25586,6 +25606,171 @@ pub fn has_msgid_two_at(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `with` 節が空か判定する (D1723)。
+///
+/// `Received: … with; Thu` — `with` の直後に値が無い。
+/// 次の語を `with` の値と継ぐ実装と、空の節として残す実装で
+/// 転送プロトコルの経路解釈がずれる (空 by 節は D1720)。
+#[must_use]
+pub fn has_received_with_empty(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("with")
+                && (i + 1 == toks.len()
+                    || CLAUSES.iter().any(|k| toks[i + 1].eq_ignore_ascii_case(k)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `id` 節が空か判定する (D1724)。
+///
+/// `Received: … id; Thu` — `id` の直後に値が無い。
+/// 次の語を `id` の値と継ぐ実装と、空の節として残す実装で
+/// 識別子の経路解釈がずれる (id 節重複は D1715)。
+#[must_use]
+pub fn has_received_id_empty(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("id")
+                && (i + 1 == toks.len()
+                    || CLAUSES.iter().any(|k| toks[i + 1].eq_ignore_ascii_case(k)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 同一 `Content-Type:`/`Content-Disposition:` 欄内で `boundary=` が
+/// 2回以上出るか判定する (D1725)。
+///
+/// `Content-Type: multipart/mixed; boundary=a; boundary=b` —
+/// 最初を採る実装と最後を採る実装で区切りがずれる
+/// (大小写のみ異なる複数欄の boundary は D1701、欄そのものの重複は既存検出)。
+#[must_use]
+pub fn has_boundary_param_dup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        let mut n = 0usize;
+        let mut rest = &l[colon + 1..][..];
+        while let Some(p) = rest.to_ascii_lowercase().find("boundary=") {
+            n += 1;
+            rest = &rest[p + 9..];
+        }
+        if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節が空か判定する (D1726)。
+///
+/// `Received: … for; Thu` — `for` の直後に値が無い。
+/// 次の語を `for` の値と継ぐ実装と、空の節として残す実装で
+/// 配送先の経路解釈がずれる (for 節重複は D1712、空 id 節は D1724)。
+#[must_use]
+pub fn has_received_for_empty(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for")
+                && (i + 1 == toks.len()
+                    || CLAUSES.iter().any(|k| toks[i + 1].eq_ignore_ascii_case(k)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -45559,6 +45744,53 @@ mod tests {
         assert!(has_msgid_two_at(b"Message-ID: <a@b@c>\r\n\r\n"));
         assert!(!has_msgid_two_at(b"Message-ID: <a@b>\r\n\r\n"));
         assert!(!has_msgid_two_at(b""));
+    }
+
+    #[test]
+    fn received_with_empty_空のwith節を検出する() {
+        assert!(has_received_with_empty(b"Received: from a by b with; Thu\r\n\r\n"));
+        assert!(has_received_with_empty(
+            b"Received: from a by b with for x@y; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_with_empty(
+            b"Received: from a by b with ESMTP; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_with_empty(b""));
+    }
+
+    #[test]
+    fn received_id_empty_空のid節を検出する() {
+        assert!(has_received_id_empty(b"Received: from a by b id; Thu\r\n\r\n"));
+        assert!(has_received_id_empty(
+            b"Received: from a by b id for x@y; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_id_empty(
+            b"Received: from a by b id ABC; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_id_empty(b""));
+    }
+
+    #[test]
+    fn boundary_param_dup_欄内の重複境界を検出する() {
+        assert!(has_boundary_param_dup(
+            b"Content-Type: multipart/mixed; boundary=a; boundary=b\r\n\r\n"
+        ));
+        assert!(!has_boundary_param_dup(
+            b"Content-Type: multipart/mixed; boundary=a\r\n\r\n"
+        ));
+        assert!(!has_boundary_param_dup(b""));
+    }
+
+    #[test]
+    fn received_for_empty_空のfor節を検出する() {
+        assert!(has_received_for_empty(b"Received: from a by b for; Thu\r\n\r\n"));
+        assert!(has_received_for_empty(
+            b"Received: from a by b for with ESMTP; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_for_empty(
+            b"Received: from a by b for x@y; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_for_empty(b""));
     }
 
     #[test]
