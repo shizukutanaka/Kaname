@@ -3838,6 +3838,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.quoted_media_type {
+        render_risks.push(
+            "Content-Type のメディア型が引用符付きです\
+             —型解釈が読み手でずれる形です"
+                .to_string(),
+        );
+    }
+    if env.list_unsub_without_id {
+        render_risks.push(
+            "List-Unsubscribe 等の便益欄があるのに List-Id が無い形です\
+             —偽の退会誘導の兆候です"
+                .to_string(),
+        );
+    }
+    if env.long_filename {
+        render_risks.push(
+            "添付名が 255 バイトを超えています\
+             —保存名と表示名がずれる偽装材料です"
+                .to_string(),
+        );
+    }
+    if env.empty_param_name {
+        render_risks.push(
+            "Content-Type/Disposition に空名のパラメータがあります\
+             —後続パラメータの解釈が読み手でずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

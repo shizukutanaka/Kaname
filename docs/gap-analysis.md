@@ -830,3 +830,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1414 | Message-ID/Resent-Message-ID に <…> が複数 | 採用識別子が実装間でずれる | msgid 欄の < 個数を検査 | kaname-render |
 | D1415 | From/Sender/Return-Path が mailer-daemon 等の役割名 | 偽配送失敗通知の形 | 差出人欄 addr-spec ローカル部を検査 | kaname-render |
 | D1416 | Apparently-From/X-Apparently-Sender 等差出人側見せかけ欄 | 「見せかけ差出人」の体裁を自称 | 外側ヘッダの差出人側 Apparently-* を検出 | kaname-render |
+| D1417 | Content-Type メディア型がクオート | 引用符の剥がし/拒否で型解釈がずれる | CT 値先頭の引用符を検出 | kaname-render |
+| D1418 | List-* 便益欄があるのに List-Id 無し | 偽 unsubscribe 誘導の体裁 | List-* 欄と List-Id の有無を突き合わせ | kaname-render |
+| D1419 | 添付名が 255 バイト超 | 保存名と表示名がずれる | CT/CD 添付名値の長さを検査 | kaname-render |
+| D1420 | CT/CD に空名パラメータ (;= / ; =) | 以降パラメータ解釈がずれる | ; 直後の = を検出 | kaname-render |

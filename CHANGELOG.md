@@ -1,5 +1,48 @@
 ## [Unreleased]
 
+### Security — D1417:
+
+- **問題**: `Content-Type:` のメディア型がクオートされている
+  (`"text/plain"`) と、引用符を剥がす実装とそのまま拒否する
+  実装で型解釈がずれる — 規格上メディア型は token であり
+  quoted-string は許されない。
+- **修正**: `has_quoted_media_type` が外側ヘッダの CT 論理行で
+  値先頭の引用符を検出する (パラメータ値のクオートは対象外)。
+- **教訓**: トークンであるべき場所の引用符は、剥がす側と
+  拒否する側の読み分かれを生む。
+
+### Security — D1418:
+
+- **問題**: `List-Unsubscribe:`/`List-Post:`/`List-Subscribe:` 等の
+  便益欄があるのに `List-Id:` を欠く — 「配信リストからの退会」の
+  体裁だけを作る偽の unsubscribe 誘導 (識別子なき退会は名乗りも
+  無い罠)。
+- **修正**: `has_list_unsub_without_id` が外側ヘッダの List-* 系
+  便益欄と `List-Id:` の有無を突き合わせる。
+- **教訓**: 便益の体裁は識別子との対で成り立つ — 片方だけの
+  自称を突く。
+
+### Security — D1419:
+
+- **問題**: 添付名 (`filename=`/`name=`/`filename*=`/`name*=`) が
+  255 バイトを超える — 切り詰める実装と拒否する実装で保存名が
+  ずれ、末尾の拡張子が落ちて「見せた名前」と「保存される名」が
+  食い違う偽装材料になる。
+- **修正**: `has_long_filename` が CT/CD 行の添付名値の長さを
+  検査する (他欄の長い値は対象外)。
+- **教訓**: 名札の長さ上限超過は切り詰め側と拒否側で名がずれる
+  — 見えた名がそのまま保存されるとは限らない。
+
+### Security — D1420:
+
+- **問題**: `Content-Type:`/`Content-Disposition:` のパラメータ
+  区切りで名前が空 (`;=`/`; =`) の形 — 読み飛ばす実装とエラーに
+  する実装で以降の boundary/filename 解釈がずれる。
+- **修正**: `has_empty_param_name` が CT/CD 論理行の `;` 直後の
+  `=` を検出する。
+- **教訓**: 区切り記号の後の空白名は、パラメータ列の歩みを
+  実装間でずらせる。
+
 ### Security — D1413:
 
 - **問題**: `Sensitivity:` 欄 (company-confidential/personal/private)

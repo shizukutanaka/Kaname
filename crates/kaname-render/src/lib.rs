@@ -544,6 +544,14 @@ pub struct Envelope {
     /// D1416 — `Apparently-From:`/`X-Apparently-From:` 等の
     /// 差出人側「見せかけ」欄。
     pub apparently_from: bool,
+    /// D1417 — `Content-Type:` のメディア型がクオートされている (型解釈ずれ)。
+    pub quoted_media_type: bool,
+    /// D1418 — `List-*` 便益欄があるのに `List-Id:` が無い (偽 unsubscribe)。
+    pub list_unsub_without_id: bool,
+    /// D1419 — 添付名が 255 バイト超 (ファイルシステム上限超過で名がずれる)。
+    pub long_filename: bool,
+    /// D1420 — CT/CD パラメータ区切りに空名 (`;=`/`; =`) がある。
+    pub empty_param_name: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2623,6 +2631,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let double_msgid = has_double_msgid(bytes);
     let system_addr_from = has_system_addr_from(bytes);
     let apparently_from = has_apparently_from(bytes);
+    let quoted_media_type = has_quoted_media_type(bytes);
+    let list_unsub_without_id = has_list_unsub_without_id(bytes);
+    let long_filename = has_long_filename(bytes);
+    let empty_param_name = has_empty_param_name(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2797,6 +2809,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         double_msgid,
         system_addr_from,
         apparently_from,
+        quoted_media_type,
+        list_unsub_without_id,
+        long_filename,
+        empty_param_name,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -9623,6 +9639,156 @@ pub fn has_apparently_from(raw: &[u8]) -> bool {
             || l.starts_with("apparently-sender:")
             || l.starts_with("x-apparently-sender:")
     })
+}
+
+/// `Content-Type:` のメディア型がクオートされているか判定する (D1417)。
+///
+/// `Content-Type: "text/plain"` のように型名が引用符付きだと、
+/// 引用符を剥がす実装とそのまま拒否する実装で型解釈がずれる。
+/// 規格上メディア型は token であり quoted-string は許されない。
+#[must_use]
+pub fn has_quoted_media_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("content-type:") else {
+            continue;
+        };
+        if v.trim_start().starts_with('"') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `List-*` 系ヘッダがあるのに `List-Id:` が無いか判定する (D1418)。
+///
+/// `List-Unsubscribe:`/`List-Post:`/`List-Subscribe:`/`List-Help:`/
+/// `List-Archive:`/`List-Owner:` 等の購読便益欄だけがあり、肝心の
+/// リスト識別 `List-Id:` を欠く形は、「配信リストからの退会」の
+/// 体裁だけを作る偽の unsubscribe 誘導である。
+#[must_use]
+pub fn has_list_unsub_without_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let headers = text[..header_end].to_ascii_lowercase();
+    let mut saw_affordance = false;
+    let mut saw_id = false;
+    for l in headers.lines() {
+        if l.starts_with("list-id:") {
+            saw_id = true;
+        } else if l.starts_with("list-unsubscribe:")
+            || l.starts_with("list-post:")
+            || l.starts_with("list-subscribe:")
+            || l.starts_with("list-help:")
+            || l.starts_with("list-archive:")
+            || l.starts_with("list-owner:")
+        {
+            saw_affordance = true;
+        }
+    }
+    saw_affordance && !saw_id
+}
+
+/// 添付名 (`filename=`/`name=`/`filename*=`/`name*=`) が
+/// 255 バイトを超えるか判定する (D1419)。
+///
+/// ファイルシステムの名長上限を超える添付名は、切り詰める実装と
+/// 拒否する実装で保存名がずれる — 末尾の拡張子が落ちて
+/// 「見せた名前」と「保存される名」が食い違う偽装材料になる。
+#[must_use]
+pub fn has_long_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        for needle in ["filename*=", "filename=", "name*=", "name="] {
+            let mut pos = 0usize;
+            while let Some(rel) = l[pos..].find(needle) {
+                let s = pos + rel + needle.len();
+                let rest = &l[s..];
+                let val = if rest.starts_with('"') {
+                    match rest[1..].find('"') {
+                        Some(e) => &rest[1..1 + e],
+                        None => &rest[1..],
+                    }
+                } else {
+                    rest.split(';').next().unwrap_or("").trim()
+                };
+                if val.len() > 255 {
+                    return true;
+                }
+                pos = s;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` のパラメータ区切りで
+/// 名前が空 (`;=`/`; =`) のものがあるか判定する (D1420)。
+///
+/// `;` の直後に `=` が来る空名パラメータは、読み飛ばす実装と
+/// エラーにする実装で以降のパラメータ (boundary/filename) 解釈が
+/// ずれる。
+#[must_use]
+pub fn has_empty_param_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        // `;` 直後の空白を飛ばして `=` が来る形を検査する
+        let mut rest = v;
+        while let Some(sep) = rest.find(';') {
+            let after = rest[sep + 1..].trim_start();
+            if after.starts_with('=') {
+                return true;
+            }
+            rest = &rest[sep + 1..];
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -25368,6 +25534,75 @@ mod tests {
         ));
         assert!(!has_apparently_from(
             b"From: a@b\r\nApparently-To: user@x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn quoted_media_type_は引用型名を検出する() {
+        // D1417 — メディア型がクオートされている
+        assert!(has_quoted_media_type(
+            b"Content-Type: \"text/html\"\r\n\r\nbody"
+        ));
+        // 正規のトークン形は不発火
+        assert!(!has_quoted_media_type(
+            b"Content-Type: text/html\r\n\r\nbody"
+        ));
+        // パラメータ値のクオートは対象外 (型名のみ検査)
+        assert!(!has_quoted_media_type(
+            b"Content-Type: text/plain; charset=\"utf-8\"\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn list_unsub_without_id_は識別子無き退会欄を検出する() {
+        // D1418 — List-* 便益欄のみ・List-Id 無し
+        assert!(has_list_unsub_without_id(
+            b"From: a@b\r\nList-Unsubscribe: <https://evil.example/u>\r\n\r\nbody"
+        ));
+        // List-Id が揃っている正規リストは不発火
+        assert!(!has_list_unsub_without_id(
+            b"From: a@b\r\nList-Id: <list.example.com>\r\nList-Unsubscribe: <mailto:u@l>\r\n\r\nbody"
+        ));
+        // List-* 欄が一切無ければ不発火
+        assert!(!has_list_unsub_without_id(
+            b"From: a@b\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn long_filename_は上限超過の添付名を検出する() {
+        // D1419 — 255 バイト超の添付名
+        let long_name = "a".repeat(260);
+        let msg = format!(
+            "Content-Type: application/octet-stream; name=\"{}.exe\"\r\n\r\nAAAA",
+            long_name
+        );
+        assert!(has_long_filename(msg.as_bytes()));
+        // 通常長は不発火
+        assert!(!has_long_filename(
+            b"Content-Type: application/octet-stream; name=\"evil.exe\"\r\n\r\nAAAA"
+        ));
+        // 添付名欄以外の長い値は対象外
+        let long_subject = format!("Subject: {}\r\n\r\nbody", "x".repeat(300));
+        assert!(!has_long_filename(long_subject.as_bytes()));
+    }
+
+    #[test]
+    fn empty_param_name_は空名パラメータを検出する() {
+        // D1420 — `;=` の空名パラメータ
+        assert!(has_empty_param_name(
+            b"Content-Type: text/plain;=utf-8\r\n\r\nbody"
+        ));
+        assert!(has_empty_param_name(
+            b"Content-Disposition: attachment; =x; filename=\"a.exe\"\r\n\r\nAAAA"
+        ));
+        // 正規パラメータは不発火
+        assert!(!has_empty_param_name(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nbody"
+        ));
+        // `;` が無ければ不発火
+        assert!(!has_empty_param_name(
+            b"Content-Type: text/plain\r\n\r\nbody"
         ));
     }
 
