@@ -896,6 +896,14 @@ pub struct Envelope {
     pub nocomma_weekday: bool,
     /// 欄名に非 ftext 文字が混ざる形 (D1592 — 欄解析ずれ)。
     pub bad_ftext: bool,
+    /// CT/CD の型本体に `,` が混ざる形 (D1593 — 型解釈ずれ)。
+    pub comma_media_value: bool,
+    /// CT/CD 欄内の全角 `；`/`＝` (D1594 — param 分割ずれ)。
+    pub fullwidth_param_punct: bool,
+    /// 同一 Content-ID の複数パート (D1595 — cid 解決ずれ)。
+    pub dup_content_id: bool,
+    /// 識別子 `<…>` 内部の空白 (D1596 — 識別子照合ずれ)。
+    pub inner_space_id: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3235,6 +3243,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let nocomma_weekday = has_nocomma_weekday(bytes);
     // D1592: 欄名の非 ftext 文字
     let bad_ftext = has_bad_ftext(bytes);
+    // D1593: CT/CD 型本体の `,`
+    let comma_media_value = has_comma_media_value(bytes);
+    // D1594: CT/CD 欄の全角 `；`/`＝`
+    let fullwidth_param_punct = has_fullwidth_param_punct(bytes);
+    // D1595: Content-ID の重複
+    let dup_content_id = has_dup_content_id(bytes);
+    // D1596: 識別子 `<…>` 内部の空白
+    let inner_space_id = has_inner_space_id(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3585,6 +3601,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_before_angle,
         nocomma_weekday,
         bad_ftext,
+        comma_media_value,
+        fullwidth_param_punct,
+        dup_content_id,
+        inner_space_id,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -18731,6 +18751,219 @@ pub fn has_bad_ftext(raw: &[u8]) -> bool {
         }
         if name.bytes().any(|b| !(b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))) {
             return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` の型本体に `,` が混ざるか
+/// 判定する (D1593)。
+///
+/// `Content-Type: text/plain, text/html`/`Content-Disposition: attachment, inline`
+/// のカンマ入り型トークンは、先を採る実装と欄ごと捨てる実装で型の読みが
+/// ずれる (`;` 区切りの裸トークンは D1504、CTE の複数値は D1544)。
+#[must_use]
+pub fn has_comma_media_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let is_mime = l.starts_with("content-type:") || l.starts_with("content-disposition:");
+        if !is_mime {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let tok = v.split(';').next().unwrap_or(v);
+        // クオート区間を潰してから `,` を探す
+        let mut scrub = String::with_capacity(tok.len());
+        let mut rest = tok;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        if scrub.contains(',') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` 欄に全角の `；` (U+FF1B)
+/// または `＝` (U+FF1D) が混ざるか判定する (D1594)。
+///
+/// `boundary=x；charset=y`/`charset＝utf-8` のような全角句読点は、
+/// ASCII のみを区切りと見る実装では param が一つに潰れ、全角を正規化
+/// する実装では区切りとして読まれる — param の切り分けがずれる
+/// (全角コロンは D1581、全角空白は D1583)。
+#[must_use]
+pub fn has_fullwidth_param_punct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if (l.starts_with("content-type:") || l.starts_with("content-disposition:"))
+            && (l.contains('\u{ff1b}') || l.contains('\u{ff1d}'))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// 同一の `Content-ID` 値を持つパートが複数あるか判定する (D1595)。
+///
+/// RFC 2392 は Content-ID の一意性を要求する。`<a>` を二部品が名乗ると、
+/// `cid:a` を先読み実装と後読み実装で別の部品が差し込まれる —
+/// 埋め込みのすり替え (欠落参照は D1467、`@` 無し形は D1532)。
+#[must_use]
+pub fn has_dup_content_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    let mut seen = std::collections::HashSet::new();
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(v) = l.strip_prefix("content-id:") else { continue };
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if !seen.insert(rest[a + 1..a + z].trim().to_string()) {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内部に空白が含まれるか判定する (D1596)。
+///
+/// `Message-ID: <a b@c>`/`List-Id: <my list.x>` のような内側の空白は、
+/// 空白を含めて識別子と読む実装と切り詰める実装でスレッド照合・
+/// cid 解決がずれる。対象は message-id/in-reply-to/references/
+/// resent-message-id/list-id/content-id (msgid 系の端空白は D1516)。
+#[must_use]
+pub fn has_inner_space_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end();
+        let is_msgid = matches!(
+            name,
+            "message-id" | "in-reply-to" | "references" | "resent-message-id"
+        );
+        let is_other_id = matches!(name, "list-id" | "content-id");
+        if !is_msgid && !is_other_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            // msgid 系は内側空白のみ (端空白は D1516)、他は空白全般
+            let ws_hit = if is_msgid {
+                inner.trim().chars().any(|c| c.is_whitespace())
+            } else {
+                inner.chars().any(|c| c.is_whitespace())
+            };
+            if ws_hit {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
         }
     }
     false
@@ -37072,6 +37305,73 @@ mod tests {
         assert!(!has_bad_ftext(b"Content.Type: text/plain\r\nFrom: a@b\r\n\r\nbody"));
         assert!(!has_bad_ftext(b"Subject : x\r\nFrom: a@b\r\n\r\nbody"));
         assert!(!has_bad_ftext(b"Subject: x\r\nFrom: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn comma_media_value_型本体のカンマを検出する() {
+        // D1593 — CT/CD の型トークン内の `,`
+        assert!(has_comma_media_value(
+            b"Content-Type: text/plain, text/html\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(has_comma_media_value(
+            b"Content-Disposition: attachment, inline\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // パラメータ内・クオート内の `,` は対象外
+        assert!(!has_comma_media_value(
+            b"Content-Type: text/plain; name=\"a,b.txt\"\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_comma_media_value(
+            b"Content-Type: text/plain; charset=utf-8\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_comma_media_value(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn fullwidth_param_punct_全角句読点paramを検出する() {
+        // D1594 — CT/CD 欄の `；`/`＝`
+        assert!(has_fullwidth_param_punct(
+            "Content-Type: text/plain；charset=utf-8\r\nFrom: a@b\r\n\r\nbody".as_bytes()
+        ));
+        assert!(has_fullwidth_param_punct(
+            "Content-Disposition: attachment; filename＝x.txt\r\n\r\nbody".as_bytes()
+        ));
+        // ASCII 句読点・他欄の全角は不発火
+        assert!(!has_fullwidth_param_punct(
+            b"Content-Type: text/plain; charset=utf-8\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_fullwidth_param_punct(
+            "Subject: a；b\r\nFrom: a@b\r\n\r\nbody".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn dup_content_id_重複contentidを検出する() {
+        // D1595 — 同一 <…> が複数パートに
+        assert!(has_dup_content_id(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-ID: <x>\r\n\r\n1\r\n--b\r\nContent-ID: <x>\r\n\r\n2\r\n--b--"
+        ));
+        // 同一欄の連立も捕捉
+        assert!(has_dup_content_id(b"Content-ID: <a><a>\r\n\r\nx"));
+        // 異なる値・単一値は不発火
+        assert!(!has_dup_content_id(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-ID: <x>\r\n\r\n1\r\n--b\r\nContent-ID: <y>\r\n\r\n2\r\n--b--"
+        ));
+        assert!(!has_dup_content_id(b"Content-ID: <x>\r\n\r\nx"));
+        assert!(!has_dup_content_id(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn inner_space_id_識別子内空白を検出する() {
+        // D1596 — `<…>` 内部の空白
+        assert!(has_inner_space_id(b"Message-ID: <a b@c>\r\n\r\nx"));
+        assert!(has_inner_space_id(b"List-Id: <my list.example>\r\n\r\nx"));
+        assert!(has_inner_space_id(b"Content-ID: <a b>\r\n\r\nx"));
+        assert!(has_inner_space_id(b"References: <a@b>\r\n <c d@e>\r\n\r\nx"));
+        // 正常形・msgid の端空白のみ (D1516) は不発火
+        assert!(!has_inner_space_id(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_inner_space_id(b"Message-ID: < a@b >\r\n\r\nx"));
+        assert!(!has_inner_space_id(b"List-Id: <list.example>\r\n\r\nx"));
+        assert!(!has_inner_space_id(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

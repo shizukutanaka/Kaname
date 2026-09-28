@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1593: `Content-Type:`/`Content-Disposition:` の型本体に `,` が混ざる形 (`text/plain, text/html`) を検出 — `kaname-render` の `Envelope` に `comma_media_value` を追加。先の型を採る実装と欄ごと捨てる実装で型解釈がずれる (`;` 裸トークンは D1504、CTE 複数値は D1544)。
+
+### Security — D1594: CT/CD 欄の全角句読点 (`；` U+FF1B / `＝` U+FF1D) を検出 — `Envelope` に `fullwidth_param_punct` を追加。ASCII のみを区切りと見る実装では param が潰れ、正規化する実装では区切りとして読まれる (全角コロン D1581・全角空白 D1583)。
+
+### Security — D1595: 同一 `Content-ID` 値を持つ複数パートを検出 — `Envelope` に `dup_content_id` を追加。RFC 2392 は一意性を要求し、`cid:` 参照を先読み実装と後読み実装で別部品が差し込まれる (欠落参照は D1467)。
+
+### Security — D1596: 識別子欄 `<…>` 内部の空白 (`Message-ID: <a b@c>`/`List-Id: <my list.x>`) を検出 — `Envelope` に `inner_space_id` を追加。空白込みで読む実装と切り詰める実装でスレッド照合・cid 解決がずれる (msgid 端空白は D1516).
+
 ### Security — D1589: `From:`/`Date:`/`Subject:`/`Message-ID:` の複数回出現を検出 — `kaname-render` の `Envelope` に `dup_identity_headers` を追加。RFC 5322 では一意欄であり、先読み/後読みで差出人・件名・時刻がずれ、DKIM 署名対象欄としても片方だけが検証される (配送欄重複は D1376、MIME 欄は D1401)。
 
 ### Security — D1590: アドレス欄で `<…>` の前に裸アドレスがある形 (`From: a@b <c@d>`) を検出 — `Envelope` に `addr_before_angle` を追加。先の裸宛名を採る実装と額縁内を採る実装で表示される宛名がずれる (額縁後の書き足しは D1538、連続額縁は D1539)。
