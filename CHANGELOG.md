@@ -20,6 +20,14 @@
 **修正** `Envelope.dotdot_addr_local` — `@` 前トークンの `..` を検出。
 **教訓** 名の途中に抜けた文字がある表札は、名前を読める人と読めない人を分ける。
 
+### Security — D1565: `Date:`/`Resent-Date:`/`Expires:`/`Expiry-Date:` のタイムゾーンが範囲外 (`+2560`/`+2401` 等、時>14・分>59) の場合を検出 — `kaname-render` の `Envelope` に `bad_tz` を追加。丸める実装と構文エラーにする実装で日付がずれる (省略は D1547、略号は D1534)。
+
+### Security — D1566: 日付欄の月位置が数字 (`25 09 2025`) の場合を検出 — `Envelope` に `numeric_month` を追加。obs-date でしか許されない形を厳格実装は構文エラーとし寛容実装は拾う (未知月名 D1555、日範囲 D1561 の姉妹)。
+
+### Security — D1567: `Message-ID:`/`In-Reply-To:`/`References:` の `<…>` 内ローカル部に連続ドット (`<a..b@x>`) がある場合を検出 — `Envelope` に `msgid_dotdot_local` を追加。厳格実装が識別子を捨てスレッド照合がずれる (ドメイン側 D1551/D1563、宛名側 D1556)。
+
+### Security — D1568: アドレス欄に全角 `＠` (U+FF20/U+FE6B) がある場合を検出 — `Envelope` に `fullwidth_at_addr` を追加。ASCII 正規化する実装と生読みする実装で `@` の認識自体がずれ宛名抽出が壊れる (全角括弧 D1549・全角コンマ D1537 の姉妹)。
+
 ### Security — D1561: `Date:`/`Resent-Date:`/`Expires:`/`Expiry-Date:` の日が範囲外 (`32 Sep`/`00 Sep` 等) の場合を検出 — `kaname-render` の `Envelope` に `bad_day` を追加。丸める実装と構文エラーにする実装で日付がずれる (時刻は D1559、月名は D1555 と棲み分け)。
 
 ### Security — D1562: 宛名ドメインが `.` で始まる (`a@.b.c`) 場合を検出 — `Envelope` に `leading_dot_domain` を追加。先頭空ラベルは DNS 名として成立せず厳格実装は宛名を拒否する (連続 `..` は D1554)。

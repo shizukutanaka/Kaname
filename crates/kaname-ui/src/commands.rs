@@ -4873,6 +4873,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.bad_tz {
+        render_risks.push(
+            "日付欄のタイムゾーンが範囲外です (+2560・+2401 等)\
+             —丸める実装と構文エラーにする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.numeric_month {
+        render_risks.push(
+            "日付欄の月が数字で書かれています (25 09 2025 等)\
+             —旧式の読みしかできない実装と捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_dotdot_local {
+        render_risks.push(
+            "メッセージ識別子のローカル部に連続ドットがあります (<a..b@x> 等)\
+             —厳格実装は識別子を捨て、スレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.fullwidth_at_addr {
+        render_risks.push(
+            "宛名欄に全角＠があります (a＠b.x 等)\
+             —ASCII 正規化する実装と生読みする実装で宛名の切り分けがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

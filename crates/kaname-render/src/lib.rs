@@ -840,6 +840,14 @@ pub struct Envelope {
     pub msgid_leading_dot: bool,
     /// 宛名の範囲外 IP リテラル (D1564 — 宛名受理ずれ)。
     pub bad_ip_literal: bool,
+    /// Date 系の範囲外タイムゾーン (D1565 — 日付解釈ずれ)。
+    pub bad_tz: bool,
+    /// Date 系の数字月 (D1566 — 日付解釈ずれ)。
+    pub numeric_month: bool,
+    /// msgid ローカル部の連続ドット (D1567 — 照合ずれ)。
+    pub msgid_dotdot_local: bool,
+    /// 宛名欄の全角＠ (D1568 — 宛名抽出ずれ)。
+    pub fullwidth_at_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3123,6 +3131,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_leading_dot = has_msgid_leading_dot(bytes);
     // D1564: 範囲外 IP リテラル
     let bad_ip_literal = has_bad_ip_literal(bytes);
+    // D1565: 範囲外タイムゾーン
+    let bad_tz = has_bad_tz(bytes);
+    // D1566: 数字月
+    let numeric_month = has_numeric_month(bytes);
+    // D1567: msgid ローカル連続ドット
+    let msgid_dotdot_local = has_msgid_dotdot_local(bytes);
+    // D1568: 全角＠宛名
+    let fullwidth_at_addr = has_fullwidth_at_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3445,6 +3461,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         leading_dot_domain,
         msgid_leading_dot,
         bad_ip_literal,
+        bad_tz,
+        numeric_month,
+        msgid_dotdot_local,
+        fullwidth_at_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -17385,6 +17405,180 @@ pub fn has_bad_ip_literal(raw: &[u8]) -> bool {
                 return true;
             }
             rest = &after[rb + 1..];
+        }
+    }
+    false
+}
+
+
+/// Date 系欄のタイムゾーンオフセットが範囲外か判定する (D1565)。
+///
+/// `+2560`/`+1260`/`+2401` の時>14・分>59 は、丸める実装と構文
+/// エラーにする実装で日付がずれる (省略は D1547、略号は D1534)。
+#[must_use]
+pub fn has_bad_tz(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        for tok in v.split_whitespace() {
+            let t = tok.trim_matches(|c: char| c == ',' || c == ';');
+            let b = t.as_bytes();
+            if b.len() == 5
+                && (b[0] == b'+' || b[0] == b'-')
+                && b[1..].iter().all(|c| c.is_ascii_digit())
+            {
+                let hh: u32 = t[1..3].parse().unwrap_or(0);
+                let mm: u32 = t[3..5].parse().unwrap_or(0);
+                if hh > 14 || mm > 59 {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Date 系欄の月名位置が数字か判定する (D1566)。
+///
+/// `Date: 25 09 2025` の数字月は obs-date でしか許されず、厳格
+/// 実装は構文エラーとし寛容実装は拾う — 日付がずれる
+/// (未知月名は D1555、日の範囲は D1561)。
+#[must_use]
+pub fn has_numeric_month(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        // 日(数字)→月→年 の並びで、月の位置が数字なら異形
+        for w in toks.windows(3) {
+            let [d, m, y] = [w[0], w[1], w[2]];
+            if d.bytes().all(|b| b.is_ascii_digit())
+                && !d.is_empty()
+                && m.bytes().all(|b| b.is_ascii_digit())
+                && !m.is_empty()
+                && y.len() == 4
+                && y.bytes().all(|b| b.is_ascii_digit())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 系欄の `<…>` 内ローカル部に連続ドットがあるか判定する (D1567)。
+///
+/// `<a..b@x>` の空 atom ローカル部を厳格実装は識別子ごと捨て、
+/// スレッド照合がずれる (ドメイン側は D1551/D1563、宛名側は D1556)。
+#[must_use]
+pub fn has_msgid_dotdot_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_msgid = low.starts_with("message-id:")
+            || low.starts_with("in-reply-to:")
+            || low.starts_with("references:")
+            || low.starts_with("resent-message-id:");
+        if !is_msgid {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut rest = v;
+        while let Some(lt) = rest.find('<') {
+            let after = &rest[lt + 1..];
+            let Some(gt) = after.find('>') else { break };
+            let inner = &after[..gt];
+            if let Some(at) = inner.rfind('@') {
+                if inner[..at].contains("..") {
+                    return true;
+                }
+            }
+            rest = &after[gt + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄に全角 `＠` (U+FF20) があるか判定する (D1568)。
+///
+/// `a＠b.x` を ASCII 正規化する実装と生読みする実装で `@` の
+/// 認識自体がずれ、宛名の切り分けが壊れる (全角括弧は D1549、
+/// 全角コンマは D1537)。
+#[must_use]
+pub fn has_fullwidth_at_addr(raw: &[u8]) -> bool {
+    const FW: &[char] = &['\u{FF20}', '\u{FE6B}'];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        if l[colon + 1..].chars().any(|c| FW.contains(&c)) {
+            return true;
         }
     }
     false
@@ -35348,6 +35542,51 @@ mod tests {
         assert!(!has_bad_ip_literal(b"To: a@[192.168.0.1]\r\n\r\nb"));
         // 非数値リテラルは D1546 の領分
         assert!(!has_bad_ip_literal(b"To: a@[not-an-ip]\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bad_tz_は範囲外オフセットを検出する() {
+        // D1565 — +2560・+2401
+        assert!(has_bad_tz(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +2560\r\n\r\nb"
+        ));
+        assert!(has_bad_tz(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +2401\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_bad_tz(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +1400\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn numeric_month_は数字月を検出する() {
+        // D1566 — 25 09 2025
+        assert!(has_numeric_month(
+            b"Date: Thu, 25 09 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+        // 通常の月名は不発火
+        assert!(!has_numeric_month(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn msgid_dotdot_local_は連続ドットを検出する() {
+        // D1567 — <a..b@x>
+        assert!(has_msgid_dotdot_local(
+            b"Message-ID: <a..b@x>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_dotdot_local(
+            b"Message-ID: <a.b@x>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn fullwidth_at_addr_は全角アットを検出する() {
+        // D1568 — a＠b.x
+        assert!(has_fullwidth_at_addr("To: a＠b.x\r\n\r\nb".as_bytes()));
+        assert!(!has_fullwidth_at_addr(b"To: a@b.x\r\n\r\nb"));
     }
 
     #[test]
