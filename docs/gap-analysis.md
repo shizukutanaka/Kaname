@@ -882,3 +882,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1466 | 添付名の拡張子と宣言 CT の意味的矛盾 (exe+image 等) | 名札偽装で添付の顔がずれる | パート単位の CT/拡張子矛盾を検査 | kaname-render |
 | D1467 | 本文 cid: 参照に合う Content-ID 部品が無い | 埋め込み解決失敗で見え方ずれ | cid: 参照と宣言 ID の照合 | kaname-render |
 | D1468 | List-Id 無しの List-Post/Subscribe/Help/Archive/Owner | 名乗らぬ偽 ML 窓口 | List-Id 欠落下の ML 欄を検査 | kaname-render |
+| D1469 | 添付名が `-` で始まる (RFC2231 %2d 含む) | 保存後オプション誤読 | 先頭ハイフン検査 | kaname-render |
+| D1470 | 添付名に $()/${}/バッククォート等シェル式 | 保存名のシェル展開工作 | シェル式混入検査 | kaname-render |
+| D1471 | X-Face/Face/X-Image-URL 送信者指定顔写真 | 偽アバターで差出人信用偽装 | 顔写真欄の存在検査 | kaname-render |
+| D1472 | boundary 値に空白混入 | 区切り照合の実装間ずれ | 引用符内空白検査 | kaname-render |

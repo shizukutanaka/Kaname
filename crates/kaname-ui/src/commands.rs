@@ -4202,6 +4202,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.dash_filename {
+        render_risks.push(
+            "添付名が - で始まっています\
+             —保存後にコマンドのオプションとして誤読される危険があります"
+                .to_string(),
+        );
+    }
+    if env.shell_meta_filename {
+        render_risks.push(
+            "添付名にシェル式 ($() ・ ${} ・バッククォート) が含まれています\
+             —保存名をスクリプトに渡す運用で意図しない展開を招きます"
+                .to_string(),
+        );
+    }
+    if env.avatar_headers {
+        render_risks.push(
+            "X-Face/Face/X-Image-URL の送信者指定顔写真欄があります\
+             —偽の「本人らしい顔」が差出人表示に紛れる危険があります"
+                .to_string(),
+        );
+    }
+    if env.spaced_boundary {
+        render_risks.push(
+            "boundary 値に空白が含まれています\
+             —区切り行の生成と照合で実装間のずれが生じます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

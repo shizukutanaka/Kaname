@@ -648,6 +648,14 @@ pub struct Envelope {
     pub dangling_cid: bool,
     /// D1468 — List-Id 無しの List-Post/Subscribe/Help/Archive/Owner。
     pub orphan_list_headers: bool,
+    /// D1469 — 添付名が `-` で始まる (シェルのオプション誤認)。
+    pub dash_filename: bool,
+    /// D1470 — 添付名に `$(`/`${`/バッククォート (シェル式)。
+    pub shell_meta_filename: bool,
+    /// D1471 — X-Face/Face/X-Image-URL の送信者指定顔写真欄。
+    pub avatar_headers: bool,
+    /// D1472 — boundary 値に空白が含まれる。
+    pub spaced_boundary: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2779,6 +2787,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let mismatched_attachment_type = has_mismatched_attachment_type(bytes);
     let dangling_cid = has_dangling_cid(bytes);
     let orphan_list_headers = has_orphan_list_headers(bytes);
+    let dash_filename = has_dash_filename(bytes);
+    let shell_meta_filename = has_shell_meta_filename(bytes);
+    let avatar_headers = has_avatar_headers(bytes);
+    let spaced_boundary = has_spaced_boundary(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3005,6 +3017,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mismatched_attachment_type,
         dangling_cid,
         orphan_list_headers,
+        dash_filename,
+        shell_meta_filename,
+        avatar_headers,
+        spaced_boundary,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -8840,6 +8856,13 @@ pub fn has_rfc2231_gap(raw: &[u8]) -> bool {
                     }
                 }
             }
+            if idxs.is_empty() {
+                continue;
+            }
+            // *0 無しで *1 以降から始まる形も欠番 (始点の崩れ)
+            if *idxs.iter().min().unwrap_or(&0) != 0 && idxs.len() < 2 {
+                return true;
+            }
             if idxs.len() < 2 {
                 continue;
             }
@@ -12206,6 +12229,187 @@ pub fn has_orphan_list_headers(raw: &[u8]) -> bool {
             || l.starts_with("list-archive:")
             || l.starts_with("list-owner:")
     })
+}
+
+/// 添付名が `-` で始まるか判定する (D1469)。
+///
+/// `filename="-rf"`・`filename="-i.exe"` 等は、保存後に
+/// `mv`/`cp`/`rm` 等へ引数として渡したときオプションに読み替え
+/// られる — シェル利用の保存運用で意図しない動作を誘導する
+/// 名札偽装。先頭のドット・空白 (D1391) や語尾のドット・空白
+/// (D1444) とは別の、「先頭のハイフン」形。
+#[must_use]
+pub fn has_dash_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find('=') {
+            let ks = rest[..p]
+                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let key = rest[ks..p]
+                .trim()
+                .trim_end_matches(|c: char| c == '*' || c.is_ascii_digit());
+            if key == "filename" || key == "name" {
+                let after = rest[p + 1..].trim_start();
+                let v = if let Some(q) = after.strip_prefix('"') {
+                    q.split('"').next().unwrap_or("")
+                } else {
+                    after.split(';').next().unwrap_or("").trim()
+                };
+                // RFC 2231 形 `charset''…` は `''` の後の符号化部を見る
+                let body = v.find("''").map_or(v, |i| &v[i + 2..]);
+                if body.starts_with('-')
+                    || (body.len() >= 3 && body[..3].eq_ignore_ascii_case("%2d"))
+                {
+                    return true;
+                }
+            }
+            rest = &rest[p + 1..];
+        }
+    }
+    false
+}
+
+/// 添付名にシェル式 (`$(`・`${`・バッククォート) が含まれるか
+/// 判定する (D1470)。
+///
+/// `filename="$(id).txt"` は、保存名をそのままシェル文字列や
+/// スクリプトに埋め込んだ運用でコマンド置換として展開される —
+/// ダブルクリック保存後にターミナルで触れる運用への横打ち工作。
+#[must_use]
+pub fn has_shell_meta_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find('=') {
+            let ks = rest[..p]
+                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let key = rest[ks..p]
+                .trim()
+                .trim_end_matches(|c: char| c == '*' || c.is_ascii_digit());
+            if key == "filename" || key == "name" {
+                let after = rest[p + 1..].trim_start();
+                let v = if let Some(q) = after.strip_prefix('"') {
+                    q.split('"').next().unwrap_or("")
+                } else {
+                    after.split(';').next().unwrap_or("").trim()
+                };
+                // RFC 2231 形 `charset''…` は `''` の後の符号化部を見る
+                let body = v.find("''").map_or(v, |i| &v[i + 2..]);
+                if body.contains("$(")
+                    || body.contains("${")
+                    || body.contains('`')
+                    || body.contains("%24")
+                    || body.contains("%60")
+                {
+                    return true;
+                }
+            }
+            rest = &rest[p + 1..];
+        }
+    }
+    false
+}
+
+/// 送信者指定の顔写真・アバター欄 (`X-Face:`/`Face:`/
+/// `X-Image-URL:`) があるか判定する (D1471)。
+///
+/// `X-Face`/`Face` は送信側が自分のアイコン画像を同封する旧来欄 —
+/// 表示器がそれを顔写真として採用すると、偽の「この人らしい顔」が
+/// 差出人表示に紛れる (組織内印の自称 D1389 の視覚版)。
+#[must_use]
+pub fn has_avatar_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        l.starts_with("x-face:") || l.starts_with("face:") || l.starts_with("x-image-url:")
+    })
+}
+
+/// `boundary=` の値に空白が含まれるか判定する (D1472)。
+///
+/// `boundary="a b"` は RFC 2046 上 bchars として合法だが、
+/// デリミタ行 `--a b` を生成する実装と値の途中で切る実装で
+/// 構造解釈がずれる (語尾の `-`/`--` は D1457、長過ぎる boundary
+/// は D1402)。
+#[must_use]
+pub fn has_spaced_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find("boundary=") {
+            // 属性名の前がトークン境界か (`xboundary=` 除外)
+            if p > 0 {
+                let prev = rest[..p].chars().last().unwrap_or(' ');
+                if prev != ';' && prev != ':' && !prev.is_whitespace() {
+                    rest = &rest[p + 9..];
+                    continue;
+                }
+            }
+            let after = rest[p + 9..].trim_start();
+            if let Some(q) = after.strip_prefix('"') {
+                let inner = q.split('"').next().unwrap_or("");
+                if inner.contains(' ') || inner.contains('\t') {
+                    return true;
+                }
+            }
+            rest = &rest[p + 9..];
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -28816,6 +29020,71 @@ mod tests {
             b"List-Id: <ml.x>\r\nList-Post: <mailto:ml@x>\r\n\r\nx"
         ));
         assert!(!has_orphan_list_headers(b"Subject: hi\r\n\r\nx"));
+    }
+
+    #[test]
+    fn dash_filename_はハイフン始まりの添付名を検出する() {
+        // D1469 — `-rf` / `-i.exe` / RFC2231 %2d 始まり
+        assert!(has_dash_filename(
+            b"Content-Disposition: attachment; filename=\"-rf\""
+        ));
+        assert!(has_dash_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''%2d%69.exe"
+        ));
+        assert!(!has_dash_filename(
+            b"Content-Disposition: attachment; filename=\"invoice.pdf\""
+        ));
+        assert!(!has_dash_filename(
+            b"Content-Disposition: attachment; filename=\"a-b.pdf\""
+        ));
+    }
+
+    #[test]
+    fn shell_meta_filename_はシェル式混入の添付名を検出する() {
+        // D1470 — $( / ${ / バッククォート / %24 符号化
+        assert!(has_shell_meta_filename(
+            b"Content-Disposition: attachment; filename=\"$(id).txt\""
+        ));
+        assert!(has_shell_meta_filename(
+            b"Content-Disposition: attachment; filename=\"${IFS}x\""
+        ));
+        assert!(has_shell_meta_filename(
+            b"Content-Type: application/octet-stream; name=\"a`id`\""
+        ));
+        assert!(!has_shell_meta_filename(
+            b"Content-Disposition: attachment; filename=\"price$100.pdf\""
+        ));
+    }
+
+    #[test]
+    fn avatar_headers_は送信者指定の顔写真欄を検出する() {
+        // D1471 — X-Face/Face/X-Image-URL
+        assert!(has_avatar_headers(
+            b"X-Face: abcdef==\r\n\r\nbody"
+        ));
+        assert!(has_avatar_headers(
+            b"Face: Zm9v\r\n\r\nbody"
+        ));
+        assert!(has_avatar_headers(
+            b"X-Image-URL: https://x/a.png\r\n\r\nbody"
+        ));
+        // 通常メールでは不発火
+        assert!(!has_avatar_headers(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn spaced_boundary_は空白入り区切り値を検出する() {
+        // D1472 — 引用符内の空白入り boundary
+        assert!(has_spaced_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\nx"
+        ));
+        // 空白無し・非引用・xboundary は不発火
+        assert!(!has_spaced_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"ab\"\r\n\r\nx"
+        ));
+        assert!(!has_spaced_boundary(
+            b"Content-Type: multipart/mixed; boundary=ab\r\n\r\nx"
+        ));
     }
 
     #[test]
