@@ -560,6 +560,14 @@ pub struct Envelope {
     pub multi_reply_to: bool,
     /// D1424 — 外側ヘッダに `Content-Disposition:` (HTTP 由来欄の混入)。
     pub outer_content_disposition: bool,
+    /// D1425 — 外側ヘッダに `Received:` が無い (通過記録皆無 = 手作り生成)。
+    pub no_received: bool,
+    /// D1426 — `start=<cid>` が参照する Content-ID を持つパートが無い。
+    pub dangling_start: bool,
+    /// D1427 — `List-Id:` が `<label.host>` の形でない。
+    pub malformed_listid: bool,
+    /// D1428 — `Resent-Bcc:` 欄が残る (再送ブロックの隠し宛先露出)。
+    pub resent_bcc: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2647,6 +2655,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let midbody_mbox_from = has_midbody_mbox_from(bytes);
     let multi_reply_to = has_multi_reply_to(bytes);
     let outer_content_disposition = has_outer_content_disposition(bytes);
+    let no_received = has_no_received(bytes);
+    let dangling_start = has_dangling_start(bytes);
+    let malformed_listid = has_malformed_listid(bytes);
+    let resent_bcc = has_resent_bcc(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2829,6 +2841,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         midbody_mbox_from,
         multi_reply_to,
         outer_content_disposition,
+        no_received,
+        dangling_start,
+        malformed_listid,
+        resent_bcc,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -9911,6 +9927,140 @@ pub fn has_outer_content_disposition(raw: &[u8]) -> bool {
         .to_ascii_lowercase()
         .lines()
         .any(|l| l.starts_with("content-disposition:"))
+}
+
+/// 外側ヘッダに `Received:` が1行も無いか判定する (D1425)。
+///
+/// 配送経路の各 MTA が先頭に追記する通過記録 — 届いたメールに
+/// `Received:` が一切無い形は、配送を経ていない手作り生成品
+/// (ローカル注入・スプーフィング材料) の兆候。
+#[must_use]
+pub fn has_no_received(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(header_end) = text.find("\n\n") else {
+        return false;
+    };
+    !text[..header_end]
+        .to_ascii_lowercase()
+        .lines()
+        .any(|l| l.starts_with("received:"))
+}
+
+/// `start=<cid>` パラメータが参照する Content-ID を持つパートが
+/// 無いか判定する (D1426)。
+///
+/// `multipart/related` の `start=` はルート部品を選ぶ指し手 —
+/// 指す Content-ID が存在しないと、先頭パートを選ぶ実装と
+/// 表示不能に陥る実装で見え方がずれる。
+#[must_use]
+pub fn has_dangling_start(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text.to_ascii_lowercase();
+    let mut starts: Vec<String> = Vec::new();
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(rel) = rest.find("start=") {
+            // `xstart=` 等の内側一致を除く — 直前が `;`/空白のみ
+            if rel > 0
+                && !rest[..rel]
+                    .chars()
+                    .last()
+                    .is_some_and(|c| c == ';' || c.is_whitespace())
+            {
+                rest = &rest[rel + 6..];
+                continue;
+            }
+            let v = &rest[rel + 6..];
+            let v = v.trim_start_matches('"');
+            let end = v
+                .find(|c: char| c == ';' || c == '"' || c.is_whitespace())
+                .unwrap_or(v.len());
+            starts.push(v[..end].trim_matches(|c| c == '<' || c == '>').to_string());
+            rest = &v[end..];
+        }
+    }
+    if starts.is_empty() {
+        return false;
+    }
+    // 宣言された Content-ID を収集 (パートヘッダ・外側両方から)
+    let mut cids: Vec<String> = Vec::new();
+    for l in lower.lines() {
+        if let Some(v) = l.strip_prefix("content-id:") {
+            let v = v.trim().trim_matches(|c| c == '<' || c == '>');
+            cids.push(v.to_string());
+        }
+    }
+    starts.iter().any(|s| !s.is_empty() && !cids.contains(s))
+}
+
+/// `List-Id:` の値が `<…>` 形でないか判定する (D1427)。
+///
+/// RFC 2919 は `List-Id: phrase <label.host>` の形 — 山括弧も
+/// ドット区切りの識別子も欠く値は手作り生成品の兆候であり、
+/// 厳格実装では識別不能になる (D1418 の形状版)。
+#[must_use]
+pub fn has_malformed_listid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("list-id:") else {
+            continue;
+        };
+        let v = v.trim();
+        // `<label.host>` の形: `<` `>` と内部にドットがあること
+        let ok = v.find('<').is_some_and(|open| {
+            v.rfind('>').is_some_and(|close| {
+                close > open + 1 && v[open + 1..close].contains('.')
+            })
+        });
+        if !ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Resent-Bcc:` 欄があるか判定する (D1428)。
+///
+/// 再送ブロックの Bcc は配送時に除去されるべき受取人欄 —
+/// 届いたメールに残ること自体が経路異常であり、隠し宛先の
+/// 露出でもある (D1331 Bcc 残存の再送版)。
+#[must_use]
+pub fn has_resent_bcc(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end]
+        .to_ascii_lowercase()
+        .lines()
+        .any(|l| l.starts_with("resent-bcc:"))
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -25791,6 +25941,67 @@ mod tests {
         // CD が無ければ不発火
         assert!(!has_outer_content_disposition(
             b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn no_received_は通過記録皆無を検出する() {
+        // D1425 — Received が1行も無い
+        assert!(has_no_received(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
+        // Received があれば不発火
+        assert!(!has_no_received(
+            b"Received: from mta.example by mx.example\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // 本文中の "Received:" 文字列は対象外 (ヘッダ部のみ)
+        assert!(has_no_received(
+            b"From: a@b\r\n\r\nReceived: this is body text\r\n"
+        ));
+    }
+
+    #[test]
+    fn dangling_start_は指し先無きstartを検出する() {
+        // D1426 — start=<root> だが該当 Content-ID のパート無し
+        assert!(has_dangling_start(
+            b"Content-Type: multipart/related; start=\"<root@x>\"; boundary=b\r\n\r\n--b\r\nContent-ID: <other@x>\r\n\r\nP\r\n--b--\r\n"
+        ));
+        // 指し先が存在すれば不発火
+        assert!(!has_dangling_start(
+            b"Content-Type: multipart/related; start=\"<root@x>\"; boundary=b\r\n\r\n--b\r\nContent-ID: <root@x>\r\n\r\nP\r\n--b--\r\n"
+        ));
+        // start= が無ければ不発火
+        assert!(!has_dangling_start(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn malformed_listid_は形崩れのリスト識別子を検出する() {
+        // D1427 — <…> やドットを欠く List-Id
+        assert!(has_malformed_listid(
+            b"From: a@b\r\nList-Id: newsletter\r\n\r\nbody"
+        ));
+        assert!(has_malformed_listid(
+            b"From: a@b\r\nList-Id: <nodot>\r\n\r\nbody"
+        ));
+        // 正規形は不発火
+        assert!(!has_malformed_listid(
+            b"From: a@b\r\nList-Id: My List <list.example.com>\r\n\r\nbody"
+        ));
+        // List-Id が無ければ不発火
+        assert!(!has_malformed_listid(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn resent_bcc_は再送隠し宛先残りを検出する() {
+        // D1428 — Resent-Bcc の残存
+        assert!(has_resent_bcc(
+            b"From: a@b\r\nResent-Bcc: hidden@x\r\n\r\nbody"
+        ));
+        // Resent-Bcc が無ければ不発火
+        assert!(!has_resent_bcc(
+            b"From: a@b\r\nResent-To: user@x\r\n\r\nbody"
         ));
     }
 

@@ -3894,6 +3894,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.no_received {
+        render_risks.push(
+            "Received ヘッダが1行もありません\
+             —配送経路を通っていない手作り生成品の兆候です"
+                .to_string(),
+        );
+    }
+    if env.dangling_start {
+        render_risks.push(
+            "start= が参照する Content-ID のパートがありません\
+             —関連部品の根の選び方が読み手でずれます"
+                .to_string(),
+        );
+    }
+    if env.malformed_listid {
+        render_risks.push(
+            "List-Id の値が <識別子.ホスト> の形ではありません\
+             —厳格な実装ではリストを識別できません"
+                .to_string(),
+        );
+    }
+    if env.resent_bcc {
+        render_risks.push(
+            "Resent-Bcc 欄が残っています\
+             —再送ブロックの隠し宛先が露出しています"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

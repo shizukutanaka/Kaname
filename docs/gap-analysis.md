@@ -838,3 +838,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1422 | 本文中の mbox `From ` 区切り行 | mbox 格納で第2メッセージが潜む | `From `+`@`+4桁年の行を検出 | kaname-render |
 | D1423 | `Reply-To:` の複数アドレス | 返信の見えない分流 | 引用・コメント外の @ 個数とカンマを検査 | kaname-render |
 | D1424 | 外側ヘッダの `Content-Disposition:` | メール全体を添付扱いする実装とずれる | 外側ヘッダの CD 行を検出 | kaname-render |
+| D1425 | 外側ヘッダに Received: 皆無 | 配送を経ていない手作り生成品の兆候 | 外側ヘッダの received: 行の有無を検査 | kaname-render |
+| D1426 | start=<cid> が指す Content-ID 無し | ルート部品の選び方が実装間でずれる | start= 値と宣言 Content-ID を突き合わせ | kaname-render |
+| D1427 | List-Id: が <label.host> 形でない | 厳格実装でリスト識別不能・手作り品の兆候 | <…> と内部ドットを検査 | kaname-render |
+| D1428 | Resent-Bcc: 欄の残存 | 再送ブロックの隠し宛先露出 | 外側ヘッダの resent-bcc: を検出 | kaname-render |
