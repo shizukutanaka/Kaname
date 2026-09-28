@@ -3922,6 +3922,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.star_boundary {
+        render_risks.push(
+            "boundary に拡張記法 (boundary*=) が使われています\
+             —区切りを読める実装と見失う実装で構造がずれます"
+                .to_string(),
+        );
+    }
+    if env.url_filename {
+        render_risks.push(
+            "添付名が URL の形をしています\
+             —リンクとして描く実装と保存名として扱う実装で顔がずれます"
+                .to_string(),
+        );
+    }
+    if env.conflicting_priority {
+        render_risks.push(
+            "緊急度欄の値が矛盾しています\
+             —「急げ」と「不急」の併記で優先度表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.no_from {
+        render_risks.push(
+            "From 欄がありません\
+             —差出人をどう読むかが実装間でずれる形です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

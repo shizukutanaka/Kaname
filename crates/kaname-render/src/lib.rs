@@ -568,6 +568,14 @@ pub struct Envelope {
     pub malformed_listid: bool,
     /// D1428 — `Resent-Bcc:` 欄が残る (再送ブロックの隠し宛先露出)。
     pub resent_bcc: bool,
+    /// D1429 — `boundary*=`/`boundary*0=` 拡張記法の boundary。
+    pub star_boundary: bool,
+    /// D1430 — 添付名が URL 形 (`://` 含有)。
+    pub url_filename: bool,
+    /// D1431 — 緊急度欄の併記が矛盾 (high/urgent と low/non-urgent)。
+    pub conflicting_priority: bool,
+    /// D1432 — 外側ヘッダに `From:` (Resent-From 含む) が無い。
+    pub no_from: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2659,6 +2667,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dangling_start = has_dangling_start(bytes);
     let malformed_listid = has_malformed_listid(bytes);
     let resent_bcc = has_resent_bcc(bytes);
+    let star_boundary = has_star_boundary(bytes);
+    let url_filename = has_url_filename(bytes);
+    let conflicting_priority = has_conflicting_priority(bytes);
+    let no_from = has_no_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2845,6 +2857,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dangling_start,
         malformed_listid,
         resent_bcc,
+        star_boundary,
+        url_filename,
+        conflicting_priority,
+        no_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -10061,6 +10077,184 @@ pub fn has_resent_bcc(raw: &[u8]) -> bool {
         .to_ascii_lowercase()
         .lines()
         .any(|l| l.starts_with("resent-bcc:"))
+}
+
+/// `Content-Type:` の `boundary*=`/`boundary*0=` 形パラメータが
+/// あるか判定する (D1429)。
+///
+/// RFC 2231 の拡張属性記法 (`*=` や `*N=` 連番) を boundary に
+/// 適用すると、記法を解釈する実装は復号した区切りで分割し、
+/// 解釈しない実装は boundary 自体を見失う — 構造全体の解釈が
+/// ずれる (boundary 系差異の姉妹)。
+#[must_use]
+pub fn has_star_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        // `boundary*=` / `boundary*0=` / `boundary*0*=` 形
+        let mut rest = l;
+        while let Some(rel) = rest.find("boundary") {
+            let after = &rest[rel + 8..];
+            if rel > 0
+                && !rest[..rel]
+                    .chars()
+                    .last()
+                    .is_some_and(|c| c == ';' || c == ':' || c.is_whitespace())
+            {
+                rest = after;
+                continue;
+            }
+            if after.starts_with("*=")
+                || (after.starts_with('*')
+                    && after[1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_digit()))
+            {
+                return true;
+            }
+            rest = &after;
+        }
+    }
+    false
+}
+
+/// 添付名 (`filename=`/`name=`) の値が URL 形 (`://` 含有) か
+/// 判定する (D1430)。
+///
+/// `filename="https://evil.example/x.exe"` のように名札が URL の形を
+/// 持つと、リンクとして描く実装と保存名として扱う実装で
+/// 添付の顔がずれる — 誘導先の顔を添付名に潜ませる形。
+#[must_use]
+pub fn has_url_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        for needle in ["filename*=", "filename=", "name*=", "name="] {
+            let mut rest = l;
+            while let Some(rel) = rest.find(needle) {
+                let v = &rest[rel + needle.len()..];
+                let val = if let Some(stripped) = v.strip_prefix('"') {
+                    match stripped.find('"') {
+                        Some(e) => &stripped[..e],
+                        None => stripped,
+                    }
+                } else {
+                    v.split(';').next().unwrap_or("").trim()
+                };
+                if val.contains("://") {
+                    return true;
+                }
+                rest = &rest[rel + needle.len()..];
+            }
+        }
+    }
+    false
+}
+
+/// 緊急度欄が矛盾した値を併記しているか判定する (D1431)。
+///
+/// `X-Priority: 1` と `Importance: low` のように「急げ」と
+/// 「不急」を併記すると、優先度表示が実装間でずれる —
+/// 圧力欄の値の食い違い (D1340 の矛盾版)。
+#[must_use]
+pub fn has_conflicting_priority(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let mut high = false;
+    let mut low = false;
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some((name, v)) = l.split_once(':') else {
+            continue;
+        };
+        let v = v.trim();
+        match name.trim() {
+            "x-priority" | "x-msmail-priority" | "priority" => {
+                let f = v.chars().next().unwrap_or(' ');
+                if f == '1' || f == '2' || v.starts_with("urgent") || v.starts_with("high") {
+                    high = true;
+                } else if f == '4' || f == '5' || v.starts_with("non-urgent") || v.starts_with("low") {
+                    low = true;
+                }
+            }
+            "importance" => {
+                if v.starts_with("high") {
+                    high = true;
+                } else if v.starts_with("low") {
+                    low = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    high && low
+}
+
+/// 外側ヘッダに `From:` が1行も無いか判定する (D1432)。
+///
+/// RFC 5322 は `From:` を必須とする — 差出人欄を欠くメールは
+/// `Sender:` を差出人と見る実装と空欄を見せる実装で
+/// 差出人の読みがずれる (D1334 の欄欠落版)。
+#[must_use]
+pub fn has_no_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(header_end) = text.find("\n\n") else {
+        return false;
+    };
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    !logical
+        .to_ascii_lowercase()
+        .lines()
+        .any(|l| l.starts_with("from:") || l.starts_with("resent-from:"))
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -26002,6 +26196,68 @@ mod tests {
         // Resent-Bcc が無ければ不発火
         assert!(!has_resent_bcc(
             b"From: a@b\r\nResent-To: user@x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn star_boundary_は拡張記法の区切りを検出する() {
+        // D1429 — boundary*= / boundary*0= 形
+        assert!(has_star_boundary(
+            b"Content-Type: multipart/mixed; boundary*=utf-8''x\r\n\r\n--x\r\n\r\nP\r\n"
+        ));
+        assert!(has_star_boundary(
+            b"Content-Type: multipart/mixed; boundary*0=ab; boundary*1=cd\r\n\r\nP\r\n"
+        ));
+        // 正規 boundary= は不発火
+        assert!(!has_star_boundary(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n\r\nP\r\n"
+        ));
+    }
+
+    #[test]
+    fn url_filename_はurl形の添付名を検出する() {
+        // D1430 — filename が :// を含む
+        assert!(has_url_filename(
+            b"Content-Disposition: attachment; filename=\"https://evil.example/x.exe\"\r\n\r\nAAAA"
+        ));
+        // 通常の添付名は不発火
+        assert!(!has_url_filename(
+            b"Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\r\nAAAA"
+        ));
+        // 本文中の URL は対象外
+        assert!(!has_url_filename(
+            b"Content-Type: text/plain\r\n\r\nsee https://example.com\r\n"
+        ));
+    }
+
+    #[test]
+    fn conflicting_priority_は矛盾する緊急度を検出する() {
+        // D1431 — 急げと不急の併記
+        assert!(has_conflicting_priority(
+            b"From: a@b\r\nX-Priority: 1\r\nImportance: low\r\n\r\nbody"
+        ));
+        assert!(has_conflicting_priority(
+            b"From: a@b\r\nImportance: high\r\nPriority: non-urgent\r\n\r\nbody"
+        ));
+        // 一致した併記は不発火
+        assert!(!has_conflicting_priority(
+            b"From: a@b\r\nX-Priority: 1\r\nImportance: high\r\n\r\nbody"
+        ));
+        // 緊急度欄が無ければ不発火
+        assert!(!has_conflicting_priority(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn no_from_は差出人欄欠落を検出する() {
+        // D1432 — From 欄の欠落
+        assert!(has_no_from(
+            b"To: u@x\r\nSubject: a\r\n\r\nbody"
+        ));
+        // From があれば不発火
+        assert!(!has_no_from(b"From: a@b\r\n\r\nbody"));
+        // Resent-From は差出人欄と見なす
+        assert!(!has_no_from(
+            b"Resent-From: r@x\r\nTo: u@x\r\n\r\nbody"
         ));
     }
 

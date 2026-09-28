@@ -842,3 +842,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1426 | start=<cid> が指す Content-ID 無し | ルート部品の選び方が実装間でずれる | start= 値と宣言 Content-ID を突き合わせ | kaname-render |
 | D1427 | List-Id: が <label.host> 形でない | 厳格実装でリスト識別不能・手作り品の兆候 | <…> と内部ドットを検査 | kaname-render |
 | D1428 | Resent-Bcc: 欄の残存 | 再送ブロックの隠し宛先露出 | 外側ヘッダの resent-bcc: を検出 | kaname-render |
+| D1429 | boundary*= / boundary*0= 拡張記法 | 区切りを読める実装と見失う実装で構造ずれ | CT 行の boundary* 形を検出 | kaname-render |
+| D1430 | 添付名が URL 形 (:// 含有) | リンク表示と保存名で添付の顔がずれる | CT/CD 添付名値の :// を検査 | kaname-render |
+| D1431 | 緊急度欄の矛盾併記 (急げ+不急) | 優先度表示が実装間でずれる | X-Priority/Priority/Importance の高低両立を検査 | kaname-render |
+| D1432 | 外側ヘッダに From: 皆無 | 必須欄欠落で差出人の読みがずれる | from:/resent-from: 行の有無を検査 | kaname-render |
