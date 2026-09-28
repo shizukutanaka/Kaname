@@ -4901,6 +4901,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.weekday_mismatch {
+        render_risks.push(
+            "日付欄の曜日が実日付と一致しません (Mon, 25 Sep 2025 のようなずれ)\
+             —曜日を検証する実装と無視する実装で日付の信頼性評価がずれます"
+                .to_string(),
+        );
+    }
+    if env.non_digit_year {
+        render_risks.push(
+            "日付欄の年に数字以外の文字が混じっています (20x5・abcd 等)\
+             —構文エラーにする実装と拾う実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.junk_after_zone {
+        render_risks.push(
+            "日付欄のタイムゾーンの後に余分な語があります (+0000 EXTRA 等)\
+             —以降をエラーとする実装と無視する実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.bare_list_id {
+        render_risks.push(
+            "List-Id 欄に必須の括弧がありません (List-Id: abc 等)\
+             —欄ごと捨てる実装と拾う実装でメーリングリスト判定がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

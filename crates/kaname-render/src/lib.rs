@@ -848,6 +848,14 @@ pub struct Envelope {
     pub msgid_dotdot_local: bool,
     /// 宛名欄の全角＠ (D1568 — 宛名抽出ずれ)。
     pub fullwidth_at_addr: bool,
+    /// Date 欄の曜日と日付の不一致 (D1569 — 日付評価ずれ)。
+    pub weekday_mismatch: bool,
+    /// Date 系の非数字年 (D1570 — 日付解釈ずれ)。
+    pub non_digit_year: bool,
+    /// Date 系のゾーン後ゴミ (D1571 — 日付解釈ずれ)。
+    pub junk_after_zone: bool,
+    /// 裸 List-Id (D1572 — ML 判定ずれ)。
+    pub bare_list_id: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3139,6 +3147,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_dotdot_local = has_msgid_dotdot_local(bytes);
     // D1568: 全角＠宛名
     let fullwidth_at_addr = has_fullwidth_at_addr(bytes);
+    // D1569: 曜日と日付の不一致
+    let weekday_mismatch = has_weekday_mismatch(bytes);
+    // D1570: 非数字年
+    let non_digit_year = has_non_digit_year(bytes);
+    // D1571: ゾーン後ゴミ
+    let junk_after_zone = has_junk_after_zone(bytes);
+    // D1572: 裸 List-Id
+    let bare_list_id = has_bare_list_id(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3465,6 +3481,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         numeric_month,
         msgid_dotdot_local,
         fullwidth_at_addr,
+        weekday_mismatch,
+        non_digit_year,
+        junk_after_zone,
+        bare_list_id,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -17578,6 +17598,194 @@ pub fn has_fullwidth_at_addr(raw: &[u8]) -> bool {
             continue;
         }
         if l[colon + 1..].chars().any(|c| FW.contains(&c)) {
+            return true;
+        }
+    }
+    false
+}
+
+
+/// Date 欄の曜日名が実日付と一致しないか判定する (D1569)。
+///
+/// `Date: Mon, 25 Sep 2025` (実際は木曜) — 曜日を検証する実装と
+/// 無視する実装で日付の信頼性評価がずれる。
+#[must_use]
+pub fn has_weekday_mismatch(raw: &[u8]) -> bool {
+    const WD: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const MON: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("date:") {
+            continue;
+        }
+        let v = &low[low.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        // "曜, 日 月 年" の形のみ検査
+        if toks.len() < 4 || !WD.contains(&toks[0]) {
+            continue;
+        }
+        let (Some(d), Some(mi), Some(y)) = (
+            toks[1].parse::<u32>().ok().filter(|n| *n >= 1 && *n <= 31),
+            MON.iter().position(|m| *m == toks[2]),
+            toks[3].parse::<i64>().ok().filter(|n| *n >= 1900),
+        ) else {
+            continue;
+        };
+        // Zeller の合同式 (グレゴリオ暦) で実曜日を計算
+        let m = mi as i64 + 1;
+        let (yy, mm) = if m <= 2 { (y - 1, m + 12) } else { (y, m) };
+        let h = (d as i64 + (13 * (mm + 1)) / 5 + yy + yy / 4 - yy / 100 + yy / 400)
+            .rem_euclid(7);
+        // h: 0=Sat 1=Sun 2=Mon .. 6=Fri → toks[0] の index へ
+        let actual = (h + 5) % 7; // Sun=6→? 整理: h0=Sat→idx5, h1=Sun→idx6, h2=Mon→0..
+        let declared = WD.iter().position(|w| *w == toks[0]).unwrap_or(0) as i64;
+        if actual != declared {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 系欄の年が非数字か判定する (D1570)。
+///
+/// `25 Sep 20x5`/`25 Sep abcd` の英字混入年は、厳格実装が構文
+/// エラーとし寛容実装が拾う — 日付がずれる (2桁年は D1535)。
+#[must_use]
+pub fn has_non_digit_year(raw: &[u8]) -> bool {
+    const MON: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &low[l.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            // 月名の直後トークンを年として読む
+            if MON.contains(t) && i + 1 < toks.len() {
+                let y = toks[i + 1];
+                if y.len() >= 2 && y.len() <= 4 && !y.bytes().all(|b| b.is_ascii_digit()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Date 系欄のゾーンの後に余分なトークンがあるか判定する (D1571)。
+///
+/// `… +0000 EXTRA` — ゾーン以降をエラーとする実装と無視する実装で
+/// 日付欄の解釈がずれる (ゾーン省略は D1547、範囲外は D1565)。
+#[must_use]
+pub fn has_junk_after_zone(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            let b = t.as_bytes();
+            // ±HHMM 形をゾーンと見なす
+            if b.len() == 5
+                && (b[0] == b'+' || b[0] == b'-')
+                && b[1..].iter().all(|c| c.is_ascii_digit())
+            {
+                if toks[i + 1..].iter().any(|x| !x.is_empty()) {
+                    return true;
+                }
+                break;
+            }
+        }
+    }
+    false
+}
+
+/// `List-Id:` が `<…>` 括弧を欠くか判定する (D1572)。
+///
+/// `List-Id: abc` の裸形は RFC 2919 の必須括弧を欠き、厳格実装は
+/// 欄ごと捨て寛容実装は拾う — ML 判定がずれる (List-* 群は D1418/D1468)。
+#[must_use]
+pub fn has_bare_list_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("list-id:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let v = v.trim();
+        if !v.is_empty() && !(v.contains('<') && v.contains('>')) {
             return true;
         }
     }
@@ -35587,6 +35795,46 @@ mod tests {
         // D1568 — a＠b.x
         assert!(has_fullwidth_at_addr("To: a＠b.x\r\n\r\nb".as_bytes()));
         assert!(!has_fullwidth_at_addr(b"To: a@b.x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn weekday_mismatch_は曜日不一致を検出する() {
+        // D1569 — 2025-09-25 は木曜
+        assert!(has_weekday_mismatch(
+            b"Date: Mon, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+        assert!(!has_weekday_mismatch(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn non_digit_year_は非数字年を検出する() {
+        // D1570 — 20x5 / abcd
+        assert!(has_non_digit_year(
+            b"Date: Thu, 25 Sep 20x5 12:00:00 +0000\r\n\r\nb"
+        ));
+        assert!(!has_non_digit_year(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn junk_after_zone_はゾーン後ゴミを検出する() {
+        // D1571 — +0000 EXTRA
+        assert!(has_junk_after_zone(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000 EXTRA\r\n\r\nb"
+        ));
+        assert!(!has_junk_after_zone(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn bare_list_id_は括弧無しを検出する() {
+        // D1572 — List-Id: abc
+        assert!(has_bare_list_id(b"List-Id: mylist.example\r\n\r\nb"));
+        assert!(!has_bare_list_id(b"List-Id: <mylist.example>\r\n\r\nb"));
     }
 
     #[test]

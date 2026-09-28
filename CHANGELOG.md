@@ -20,6 +20,14 @@
 **修正** `Envelope.dotdot_addr_local` — `@` 前トークンの `..` を検出。
 **教訓** 名の途中に抜けた文字がある表札は、名前を読める人と読めない人を分ける。
 
+### Security — D1569: `Date:` 欄の曜日名が実日付と一致しない (`Mon, 25 Sep 2025` 等) 場合を検出 — `kaname-render` の `Envelope` に `weekday_mismatch` を追加。曜日を検証する実装と無視する実装で日付の信頼性評価がずれる。
+
+### Security — D1570: 日付欄の年に非数字が混じる (`20x5`/`abcd`) 場合を検出 — `Envelope` に `non_digit_year` を追加。厳格実装が構文エラーとし寛容実装が拾う (2桁年は D1535)。
+
+### Security — D1571: 日付欄のゾーン (`±HHMM`) の後に余分なトークンがある場合を検出 — `Envelope` に `junk_after_zone` を追加。ゾーン以降をエラーとする実装と無視する実装で日付がずれる (省略 D1547、範囲外 D1565)。
+
+### Security — D1572: `List-Id:` が `<…>` 括弧を欠く裸形の場合を検出 — `Envelope` に `bare_list_id` を追加。RFC 2919 の必須括弧を欠き厳格実装は欄ごと捨てる (List-* 群は D1418/D1468)。
+
 ### Security — D1565: `Date:`/`Resent-Date:`/`Expires:`/`Expiry-Date:` のタイムゾーンが範囲外 (`+2560`/`+2401` 等、時>14・分>59) の場合を検出 — `kaname-render` の `Envelope` に `bad_tz` を追加。丸める実装と構文エラーにする実装で日付がずれる (省略は D1547、略号は D1534)。
 
 ### Security — D1566: 日付欄の月位置が数字 (`25 09 2025`) の場合を検出 — `Envelope` に `numeric_month` を追加。obs-date でしか許されない形を厳格実装は構文エラーとし寛容実装は拾う (未知月名 D1555、日範囲 D1561 の姉妹)。
