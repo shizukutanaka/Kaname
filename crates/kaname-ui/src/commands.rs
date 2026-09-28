@@ -5601,10 +5601,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
-    if env.boundary_too_long {
+    if env.nested_boundary_reuse {
         render_risks.push(
-            "boundary が 70 字の上限を超えています\
-             —切り詰める実装とそのまま使う実装でパート区切りがずれます"
+            "親子の multipart が同じ boundary 値を名乗っています\
+             —区切り行の帰属が実装ごとに揺れてパート区切りがずれます"
                 .to_string(),
         );
     }
@@ -5625,6 +5625,27 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.two_num_zones {
         render_risks.push(
             "Date 欄に数値のタイムゾーンが二つあります\
+             —先採用と後採用で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.received_no_from {
+        render_risks.push(
+            "Received 欄に from 節がありません\
+             —欄ごと破棄する実装と残り節を読む実装で経路解析がずれます"
+                .to_string(),
+        );
+    }
+    if env.zone_colon {
+        render_risks.push(
+            "Date 欄のタイムゾーンにコロンがあります\
+             —除く実装と含める実装で時差がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_years {
+        render_risks.push(
+            "Date 欄に4桁の年が二つあります\
              —先採用と後採用で日付がずれます"
                 .to_string(),
         );

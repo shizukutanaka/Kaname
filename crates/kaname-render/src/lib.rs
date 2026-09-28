@@ -1048,14 +1048,20 @@ pub struct Envelope {
     pub addr_group_dup: bool,
     /// Date 欄の `/` 区切り日付 (D1668 — 日付解析ずれ)。
     pub slash_date: bool,
-    /// `boundary=` 値の 70 字超 (D1669 — 区切りずれ)。
-    pub boundary_too_long: bool,
+    /// 親子 multipart の boundary 値の再利用 (D1669 — 区切りずれ)。
+    pub nested_boundary_reuse: bool,
     /// Date 欄ゾーンの桁数異常 (D1670 — 日付解析ずれ)。
     pub bad_zone_len: bool,
     /// Date 欄の `.` 区切り日付 (D1671 — 日付解析ずれ)。
     pub dot_date: bool,
     /// Date 欄の二つの数値ゾーン (D1672 — 日付解析ずれ)。
     pub two_num_zones: bool,
+    /// `Received:` の `from` 節欠落 (D1673 — 経路解析ずれ)。
+    pub received_no_from: bool,
+    /// Date 欄ゾーンのコロン形 (D1674 — 日付解析ずれ)。
+    pub zone_colon: bool,
+    /// Date 欄の二つの4桁年 (D1675 — 日付解析ずれ)。
+    pub two_years: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3547,14 +3553,20 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let addr_group_dup = has_addr_group_dup(bytes);
     // D1668: Date 欄の / 区切り日付
     let slash_date = has_slash_date(bytes);
-    // D1669: boundary 値の 70 字超
-    let boundary_too_long = has_boundary_too_long(bytes);
+    // D1669: 親子 multipart の boundary 再利用
+    let nested_boundary_reuse = has_nested_boundary_reuse(bytes);
     // D1670: Date 欄ゾーンの桁数異常
     let bad_zone_len = has_bad_zone_len(bytes);
     // D1671: Date 欄の . 区切り日付
     let dot_date = has_dot_date(bytes);
     // D1672: Date 欄の二数値ゾーン
     let two_num_zones = has_two_num_zones(bytes);
+    // D1673: Received の from 節欠落
+    let received_no_from = has_received_no_from(bytes);
+    // D1674: Date 欄ゾーンのコロン形
+    let zone_colon = has_zone_colon(bytes);
+    // D1675: Date 欄の二4桁年
+    let two_years = has_two_years(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3981,10 +3993,13 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         two_msgids,
         addr_group_dup,
         slash_date,
-        boundary_too_long,
+        nested_boundary_reuse,
         bad_zone_len,
         dot_date,
         two_num_zones,
+        received_no_from,
+        zone_colon,
+        two_years,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -23007,14 +23022,20 @@ pub fn has_slash_date(raw: &[u8]) -> bool {
     false
 }
 
-/// `boundary=` の値が 70 文字を超えるか判定する (D1669)。
+/// 親子の multipart が同じ `boundary=` 値を名乗るか判定する
+/// (D1669)。
 ///
-/// RFC 2046 は boundary を 1–70 字に制限し、切り詰める実装と
-/// そのまま使う実装でパート区切りがずれる。
+/// `Content-Type: multipart/mixed; boundary=x` の内側にもう一つ
+/// `boundary=x` の multipart — 区切り行がどちらの層のものか実装
+/// ごとに解釈が揺れ、内側パートを外側の末尾と読み違えるずれが
+/// 起きる (長すぎる boundary は D1402)。
 #[must_use]
-pub fn has_boundary_too_long(raw: &[u8]) -> bool {
+pub fn has_nested_boundary_reuse(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
+    // 全 Content-Type 欄 (外側 + パート内) から boundary 値を採取し、
+    // 同一値が別の宣言で再使用されていれば再利用
+    let mut bounds: Vec<String> = Vec::new();
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -23025,34 +23046,37 @@ pub fn has_boundary_too_long(raw: &[u8]) -> bool {
             in_headers = true;
             continue;
         }
-        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !in_headers {
             continue;
         }
         if !l.to_ascii_lowercase().starts_with("content-type:") {
             continue;
         }
         let v = &l[l.find(':').unwrap_or(0) + 1..];
-        let mut rest = v;
-        while let Some(i) = rest.to_ascii_lowercase().find("boundary=") {
-            let after = &rest[i + 9..];
-            if after.starts_with('"') {
-                if let Some(e) = after[1..].find('"') {
-                    if after[1..1 + e].len() > 70 {
-                        return true;
-                    }
-                    rest = &after[1 + e + 1..];
-                    continue;
-                }
-                break;
-            }
-            let end = after
-                .find(|c: char| c == ';' || c.is_whitespace())
-                .unwrap_or(after.len());
-            if after[..end].len() > 70 {
-                return true;
-            }
-            rest = &after[end..];
+        let Some(i) = v.to_ascii_lowercase().find("boundary=") else {
+            continue;
+        };
+        let after = &v[i + 9..];
+        let val: String = if let Some(rest) = after.strip_prefix('"') {
+            rest.chars()
+                .take_while(|c| *c != '"')
+                .collect::<String>()
+        } else {
+            after
+                .chars()
+                .take_while(|c| !c.is_whitespace() && *c != ';')
+                .collect::<String>()
+        };
+        if val.is_empty() {
+            continue;
         }
+        if bounds.iter().any(|b| b == &val) {
+            return true;
+        }
+        bounds.push(val);
     }
     false
 }
@@ -23187,6 +23211,139 @@ pub fn has_two_num_zones(raw: &[u8]) -> bool {
                 && (t.starts_with('+') || t.starts_with('-'))
                 && t[1..].bytes().all(|b| b.is_ascii_digit())
             {
+                n += 1;
+            }
+        }
+        if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` に `from` 節が無いか判定する (D1673)。
+///
+/// `Received: by mx.x` — trace 欄は `from` 節を必須とし、欠いた欄を
+/// 破棄する実装と残り節だけ読む実装で経路解析がずれる (欄全体の
+/// 構造異常は `has_bad_received`、`;` 欠落は D1586)。
+#[must_use]
+pub fn has_received_no_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let v = l[colon + 1..].to_ascii_lowercase();
+        let has_from = v
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .any(|t| t == "from");
+        if !v.trim().is_empty() && !has_from {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 欄のゾーンが `+HH:MM` のコロン形か判定する (D1674)。
+///
+/// `+09:00` — RFC 5322 は `+HHMM` で、コロンを除く実装と含める
+/// 実装で時差がずれる (桁異常は D1670、分断は D1652)。
+#[must_use]
+pub fn has_zone_colon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if !(t.starts_with('+') || t.starts_with('-')) {
+                continue;
+            }
+            let d = &t[1..];
+            let parts: Vec<&str> = d.split(':').collect();
+            if parts.len() == 2
+                && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に4桁の年が2つあるか判定する (D1675)。
+///
+/// `Date: 25 Sep 2025 2026` — 先採用と後採用で日付がずれる
+/// (年欠落は D1653、年先頭は D1664)。
+#[must_use]
+pub fn has_two_years(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut n = 0u32;
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if t.len() == 4 && t.bytes().all(|b| b.is_ascii_digit()) {
                 n += 1;
             }
         }
@@ -42514,22 +42671,20 @@ mod tests {
     }
 
     #[test]
-    fn boundary_too_long_長すぎる境界を検出する() {
-        // D1669 — 71 字超の boundary
-        let long = "a".repeat(71);
-        assert!(has_boundary_too_long(
-            format!("Content-Type: multipart/mixed; boundary={}\r\n\r\nx", long).as_bytes()
+    fn nested_boundary_reuse_親子境界再利用を検出する() {
+        // D1669 — 外側と内側で同じ boundary 値
+        assert!(has_nested_boundary_reuse(
+            b"Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: multipart/related; boundary=x\r\n\r\n--x--"
         ));
-        assert!(has_boundary_too_long(
-            format!("Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\nx", long).as_bytes()
+        assert!(has_nested_boundary_reuse(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n--abc\r\nContent-Type: text/plain\r\n\r\nhi\r\n--abc\r\nContent-Type: multipart/related; boundary=abc\r\n\r\n--abc--\r\n--abc--"
         ));
-        // 70 字以下・他欄は不発火
-        let ok = "a".repeat(70);
-        assert!(!has_boundary_too_long(
-            format!("Content-Type: multipart/mixed; boundary={}\r\n\r\nx", ok).as_bytes()
+        // 別値・単一 multipart・他欄は不発火
+        assert!(!has_nested_boundary_reuse(
+            b"Content-Type: multipart/mixed; boundary=a\r\n\r\n--a\r\nContent-Type: multipart/related; boundary=b\r\n\r\n--b--\r\n--a--"
         ));
-        assert!(!has_boundary_too_long(b"Content-Type: text/plain\r\n\r\nx"));
-        assert!(!has_boundary_too_long(b"From: a@b\r\n\r\nx"));
+        assert!(!has_nested_boundary_reuse(b"Content-Type: multipart/mixed; boundary=x\r\n\r\nx"));
+        assert!(!has_nested_boundary_reuse(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]
@@ -42563,6 +42718,45 @@ mod tests {
         assert!(!has_two_num_zones(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
         assert!(!has_two_num_zones(b"Date: 25 Sep 2025 12:00:00 +0900 JST\r\n\r\nx"));
         assert!(!has_two_num_zones(b"Subject: +0900 -0500\r\n\r\nx"));
+    }
+
+    #[test]
+    fn received_no_from_from節欠落を検出する() {
+        // D1673 — `from` 節の無い Received
+        assert!(has_received_no_from(
+            b"Received: by mx.example.com with ESMTPS id 1\r\n\r\nx"
+        ));
+        // from 節あり・他欄は不発火
+        assert!(!has_received_no_from(
+            b"Received: from sender.x by mx.example.com\r\n\r\nx"
+        ));
+        assert!(!has_received_no_from(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn zone_colon_コロン付きゾーンを検出する() {
+        // D1674 — `+09:00`
+        assert!(has_zone_colon(
+            b"Date: 25 Sep 2025 12:00:00 +09:00\r\n\r\nx"
+        ));
+        // 通常形 `+0900`・他欄は不発火
+        assert!(!has_zone_colon(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_zone_colon(b"X-Z: +09:00\r\n\r\nx"));
+    }
+
+    #[test]
+    fn two_years_二つの4桁年を検出する() {
+        // D1675 — `2025 2026`
+        assert!(has_two_years(
+            b"Date: 25 Sep 2025 2026 12:00:00 +0900\r\n\r\nx"
+        ));
+        // 年ひとつ・他欄は不発火
+        assert!(!has_two_years(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_two_years(b"X-Z: 2025 2026\r\n\r\nx"));
     }
 
     #[test]

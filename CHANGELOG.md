@@ -1,6 +1,9 @@
 ## [Unreleased]
 
-### Security — D1669: `boundary=` 値の 70 字超を検出 — `Envelope` に `boundary_too_long` を追加 (RFC 2046 上限)。
+### Security — D1675: Date 欄の二つの4桁年を検出 — `Envelope` に `two_years` を追加 (年欠落は D1653、年先頭は D1664)。
+### Security — D1674: Date 欄ゾーンの `+HH:MM` コロン形を検出 — `Envelope` に `zone_colon` を追加 (桁異常は D1670)。
+### Security — D1673: `Received:` の `from` 節欠落を検出 — `Envelope` に `received_no_from` を追加 (欄異常は `has_bad_received`、`;` 欠落は D1586)。
+### Security — D1669: 親子 multipart の同一 `boundary=` 値再利用を検出 — `Envelope` に `nested_boundary_reuse` を追加 (長さ上限は D1402)。
 
 ### Security — D1670: Date 欄ゾーンの `sign + 非4桁` (`+090`/`+9`) を検出 — `Envelope` に `bad_zone_len` を追加 (範囲外は D1565)。
 
