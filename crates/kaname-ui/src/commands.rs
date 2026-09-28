@@ -4398,6 +4398,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.ext_and_plain_param {
+        render_risks.push(
+            "同じ名札が素の形と * 拡張形で併記されています (filename= + filename*=)\
+             —拡張優先の実装と素の形を採る実装で添付名がずれます"
+                .to_string(),
+        );
+    }
+    if env.broken_msgid_spec {
+        render_risks.push(
+            "Message-ID/参照欄の <> 内が local@domain の形を欠きます\
+             —厳格実装は識別子を捨てスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.route_addr {
+        render_risks.push(
+            "宛名に旧式の経路指定 <@経路:宛先> があります\
+             —経路を解釈する実装としない実装で差出人がずれます"
+                .to_string(),
+        );
+    }
+    if env.nested_angle_addr {
+        render_risks.push(
+            "宛名の <> が入れ子になっています (<<a@b>>)\
+             —括弧の剥がし方で宛名の読みがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

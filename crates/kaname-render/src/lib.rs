@@ -704,6 +704,14 @@ pub struct Envelope {
     pub mixed_case_param: bool,
     /// D1496 — multipart/alternative に text/* メンバー無し。
     pub alternative_no_text: bool,
+    /// D1497 — 同名パラメータの素の形と `*` 拡張形の併記。
+    pub ext_and_plain_param: bool,
+    /// D1498 — Message-ID 等の `<…>` 内が local@domain を欠く。
+    pub broken_msgid_spec: bool,
+    /// D1499 — アドレス欄に obs-route 経路指定 `<@r,@r:u@h>`。
+    pub route_addr: bool,
+    /// D1500 — アドレス欄の `<<…>>` 入れ子括弧。
+    pub nested_angle_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2863,6 +2871,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dup_alternative_part = has_dup_alternative_part(bytes);
     let mixed_case_param = has_mixed_case_param(bytes);
     let alternative_no_text = has_alternative_no_text(bytes);
+    let ext_and_plain_param = has_ext_and_plain_param(bytes);
+    let broken_msgid_spec = has_broken_msgid_spec(bytes);
+    let route_addr = has_route_addr(bytes);
+    let nested_angle_addr = has_nested_angle_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3117,6 +3129,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dup_alternative_part,
         mixed_case_param,
         alternative_no_text,
+        ext_and_plain_param,
+        broken_msgid_spec,
+        route_addr,
+        nested_angle_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -13789,6 +13805,252 @@ pub fn has_alternative_no_text(raw: &[u8]) -> bool {
         }
     }
     saw_part && !saw_text
+}
+
+/// 同一パラメータが素の形と RFC 2231 拡張形で併記されるか判定する (D1497)。
+///
+/// `filename="a"; filename*="utf-8''b"` — RFC 2231 は拡張形を優先と
+/// 規定するが、素の形を採る実装・後勝ちの実装では添付名がずれる。
+/// クオート区間内の文字は対象外 (値中の `;`/`=` で誤判定しない)。
+/// 拡張形だけ・素の形だけ・同名重複 (D1452) は対象外。
+#[must_use]
+pub fn has_ext_and_plain_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-type:") || l.starts_with("content-disposition:")) {
+            continue;
+        }
+        // クオート区間を潰す — 値中の `;`/`=` で誤判定しない
+        let mut scrub = String::with_capacity(l.len());
+        let mut rest = l;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        let mut plain: Vec<String> = Vec::new();
+        let mut ext: Vec<String> = Vec::new();
+        for seg in scrub.split(';').skip(1) {
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            if key.is_empty() {
+                continue;
+            }
+            // 名札の基底名 — 連番・星を末尾から剥がす
+            let mut base = key;
+            while let Some(c) = base.chars().last() {
+                if c == '*' || c.is_ascii_digit() {
+                    base = &base[..base.len() - 1];
+                } else {
+                    break;
+                }
+            }
+            if key.contains('*') {
+                ext.push(base.to_string());
+            } else {
+                plain.push(base.to_string());
+            }
+        }
+        if plain.iter().any(|p| ext.iter().any(|e| e == p)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Message-ID/参照欄の `<…>` 内の addr-spec が `@` を欠くか判定する (D1498)。
+///
+/// `Message-ID: <abc>` / `<a@>` / `<@h>` / `<>` — local@domain の
+/// 一方が欠ける識別子は厳格実装が捨て、寛容実装が拾う。入れ子括弧
+/// (D1480)・非 ASCII (D1492) とは別の構文欠落。
+#[must_use]
+pub fn has_broken_msgid_spec(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = rest[a + 1..a + z].trim();
+            let bad = inner.is_empty()
+                || !inner.contains('@')
+                || inner.starts_with('@')
+                || inner.ends_with('@');
+            if bad {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄に obs-route 経路指定 `<@r1,@r2:user@host>` があるか判定する (D1499)。
+///
+/// RFC 5322 obs-route — `@d1,@d2:` の経路指定を解釈する実装は宛先を
+/// 末端だけに見、解釈しない実装は全体を一つの名前として見る。
+/// 経路書き換えによる差出人偽装の古い型 (%/! は D1436)。
+/// クオート・コメント内は対象外。
+#[must_use]
+pub fn has_route_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        // `<` と `>` の間で、`:` の前が `@` 始まりなら経路指定
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        let mut angle: Option<usize> = None;
+        for (i, &b) in v.as_bytes().iter().enumerate() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if !in_q && b == b'(' {
+                in_c = 1;
+            } else if !in_q {
+                if b == b'<' {
+                    angle = Some(i);
+                } else if b == b'>' {
+                    if let Some(s) = angle {
+                        let inner = &v[s + 1..i];
+                        if let Some(c) = inner.find(':') {
+                            let route = inner[..c].trim_start();
+                            if route.starts_with('@') {
+                                return true;
+                            }
+                        }
+                    }
+                    angle = None;
+                }
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` が入れ子になるか判定する (D1500)。
+///
+/// `From: <<a@b>>` — 括弧を1層剥がす実装と全部剥がす実装で
+/// 宛名がずれる。Message-ID の入れ子 (D1480) のアドレス版。
+/// クオート・コメント内は対象外。
+#[must_use]
+pub fn has_nested_angle_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        // クオート・コメントを潰してから `<<`/`>>` を探す
+        let v = &l[colon + 1..];
+        let mut scrub = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                    scrub.push('(');
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if !in_q && b == b'(' {
+                in_c = 1;
+            } else if !in_q {
+                scrub.push(b as char);
+            }
+            prev = b;
+        }
+        if scrub.contains("<<") || scrub.contains(">>") {
+            return true;
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -30820,6 +31082,69 @@ mod tests {
         ));
         assert!(!has_alternative_no_text(
             b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\n\r\nplain default\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn ext_and_plain_param_は素と拡張の併記を検出する() {
+        // D1497 — filename= と filename*= が同じ行に
+        assert!(has_ext_and_plain_param(
+            b"Content-Disposition: attachment; filename=\"a.txt\"; filename*=utf-8''b.txt\r\n\r\nx"
+        ));
+        // name= + name*0= 連番でも発火
+        assert!(has_ext_and_plain_param(
+            b"Content-Type: application/octet-stream; name=\"a\"; name*0*=utf-8''b\r\n\r\nx"
+        ));
+        // 拡張形のみ・素の形のみ・クオート内は不発火
+        assert!(!has_ext_and_plain_param(
+            b"Content-Type: text/plain; name*=utf-8''a.txt\r\n\r\nx"
+        ));
+        assert!(!has_ext_and_plain_param(
+            b"Content-Type: text/plain; name=\"a;b=c\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn broken_msgid_spec_は住所欠けの識別子を検出する() {
+        // D1498 — <abc> / <a@> / <@h> / <> の欠落形
+        assert!(has_broken_msgid_spec(b"Message-ID: <abc>\r\n\r\nx"));
+        assert!(has_broken_msgid_spec(b"In-Reply-To: <a@>\r\n\r\nx"));
+        assert!(has_broken_msgid_spec(b"References: <@host>\r\n\r\nx"));
+        // 正常形・<> 無し欄 (bare は別検査) は不発火
+        assert!(!has_broken_msgid_spec(
+            b"Message-ID: <a@b>\r\nIn-Reply-To: <c@d>\r\n\r\nx"
+        ));
+        assert!(!has_broken_msgid_spec(b"Subject: hi\r\n\r\nx"));
+    }
+
+    #[test]
+    fn route_addr_は経路指定を検出する() {
+        // D1499 — <@r1,@r2:user@host> ソースルート
+        assert!(has_route_addr(
+            b"From: \"x\" <@r1,@r2:user@host>\r\n\r\nx"
+        ));
+        assert!(has_route_addr(
+            b"Reply-To: <@relay:attacker@evil.example>\r\n\r\nx"
+        ));
+        // 通常宛名・クオート内・他欄は不発火
+        assert!(!has_route_addr(b"From: user@host\r\n\r\nx"));
+        assert!(!has_route_addr(
+            b"X-Note: <@a,@b:c@d>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn nested_angle_addr_は入れ子括弧を検出する() {
+        // D1500 — From: <<a@b>>
+        assert!(has_nested_angle_addr(b"From: <<a@b>>\r\n\r\nx"));
+        assert!(has_nested_angle_addr(b"Reply-To: <<x@y>>\r\n\r\nx"));
+        // 通常形・コメント内・Message-ID (別検査 D1480) は不発火
+        assert!(!has_nested_angle_addr(b"From: a@b (x)\r\n\r\nx"));
+        assert!(!has_nested_angle_addr(
+            b"From: \"a\" <x@y>\r\n\r\nx"
+        ));
+        assert!(!has_nested_angle_addr(
+            b"Message-ID: <<a@b>>\r\n\r\nx"
         ));
     }
 
