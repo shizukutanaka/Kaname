@@ -4370,6 +4370,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.spaced_param_name {
+        render_risks.push(
+            "パラメータ名と = の間に空白があります (name =値)\
+             —trim する実装と未知キーとして捨てる実装で解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.dup_alternative_part {
+        render_risks.push(
+            "multipart/alternative に同じ型の部品が二度あります\
+             —最初を採る実装と最後を採る実装で本文がずれます"
+                .to_string(),
+        );
+    }
+    if env.mixed_case_param {
+        render_risks.push(
+            "パラメータ名が大文字混じりです (FILENAME= 等)\
+             —大小写を畳まない実装は添付名を見逃します"
+                .to_string(),
+        );
+    }
+    if env.alternative_no_text {
+        render_risks.push(
+            "multipart/alternative に text/* の部品がありません\
+             —読める表現の無い容器で見え方がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

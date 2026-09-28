@@ -696,6 +696,14 @@ pub struct Envelope {
     pub double_closer: bool,
     /// D1492 — Message-ID 等の `<…>` 内に非 ASCII。
     pub nonascii_msgid: bool,
+    /// D1493 — パラメータ名と `=` の間に空白 (`name =v`)。
+    pub spaced_param_name: bool,
+    /// D1494 — multipart/alternative の同型メンバー重複。
+    pub dup_alternative_part: bool,
+    /// D1495 — 大文字混じりのパラメータ名 (`FILENAME=`)。
+    pub mixed_case_param: bool,
+    /// D1496 — multipart/alternative に text/* メンバー無し。
+    pub alternative_no_text: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2851,6 +2859,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bad_star_param = has_bad_star_param(bytes);
     let double_closer = has_double_closer(bytes);
     let nonascii_msgid = has_nonascii_msgid(bytes);
+    let spaced_param_name = has_spaced_param_name(bytes);
+    let dup_alternative_part = has_dup_alternative_part(bytes);
+    let mixed_case_param = has_mixed_case_param(bytes);
+    let alternative_no_text = has_alternative_no_text(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3101,6 +3113,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bad_star_param,
         double_closer,
         nonascii_msgid,
+        spaced_param_name,
+        dup_alternative_part,
+        mixed_case_param,
+        alternative_no_text,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -13479,6 +13495,300 @@ pub fn has_nonascii_msgid(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// CT/CD パラメータ名の直後に空白が挟まって `=` が来る形か判定する
+/// (D1493)。
+///
+/// `boundary = "x"` — キーの末尾空白を trim する実装は `boundary`
+/// を拾い、厳格実装は `boundary ` という未知キーと見て捨てる
+/// (構造情報の喪失)。`= の直後の空白` は D1487 が担当。
+#[must_use]
+pub fn has_spaced_param_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        // クオート区間を潰す — "a = b" 内の ` =` は値の一部
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        // `=` 直前が空白の形を検出 (`>=` 等の算用記号はここでは現れない)
+        let b = scrub.as_bytes();
+        for i in 1..b.len() {
+            if b[i] == b'=' && (b[i - 1] == b' ' || b[i - 1] == b'\t') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `multipart/alternative` に同じ基底型のメンバーが 2 つ以上あるか
+/// 判定する (D1494)。
+///
+/// alternative は「同じ内容の別表現」の束 — 同じ型が二度現れると
+/// 「最初を採用」と「最後を採用」で見せる本文がずれる
+/// (順序の型差異は D1454)。
+#[must_use]
+pub fn has_dup_alternative_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    // alternative の boundary を特定
+    let mut alt_bound: Option<String> = None;
+    for l in lower.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/alternative") {
+            if let Some(bp) = l.find("boundary=") {
+                let brest = &l[bp + 9..];
+                let b = if let Some(q) = brest.strip_prefix('"') {
+                    q.split('"').next().unwrap_or("")
+                } else {
+                    brest.split(';').next().unwrap_or("").trim()
+                };
+                if !b.is_empty() {
+                    alt_bound = Some(format!("--{}", b));
+                }
+            }
+            break;
+        }
+    }
+    let Some(bound) = alt_bound else { return false };
+    // メンバーの基底型を列挙して重複を検出 — CT 無しの部品は
+    // 既定 text/plain (RFC 2046 §5.1) として run 終了時に計上
+    let mut seen: Vec<String> = Vec::new();
+    let mut in_run = false;
+    let mut run_ct: Option<String> = None;
+    for l in lower.lines() {
+        if l.starts_with(&bound) {
+            let is_closer = l[bound.len()..].trim_start().starts_with("--");
+            if in_run {
+                let v = run_ct.take().unwrap_or_else(|| "text/plain".to_string());
+                if seen.iter().any(|s| *s == v) {
+                    return true;
+                }
+                seen.push(v);
+            }
+            in_run = !is_closer;
+            continue;
+        }
+        if in_run && run_ct.is_none() && l.starts_with("content-type:") {
+            let v = l[13..]
+                .trim_start()
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !v.is_empty() {
+                run_ct = Some(v);
+            }
+        }
+    }
+    if in_run {
+        let v = run_ct.unwrap_or_else(|| "text/plain".to_string());
+        if seen.iter().any(|s| *s == v) {
+            return true;
+        }
+    }
+    false
+}
+
+/// CT/CD のパラメータ名が大文字混じりか判定する (D1495)。
+///
+/// パラメータ名は case-insensitive — `FILENAME=`・`Name=` の形は
+/// 大小写を畳む実装では拾われるが、畳まない実装は添付名を見逃す
+/// (添付の所在自体がずれる)。
+#[must_use]
+pub fn has_mixed_case_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        // クオート区間を潰す
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';') {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim().trim_end_matches(|c: char| {
+                c == '*' || c.is_ascii_digit()
+            });
+            if key.is_empty() {
+                continue;
+            }
+            // 全小文字でない param 名 = 大文字混じり
+            if key.chars().any(|c| c.is_ascii_uppercase()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `multipart/alternative` のメンバーに text/* が一つも無い形か
+/// 判定する (D1496)。
+///
+/// alternative は「読める別表現」の束 — text メンバーが無いと
+/// 「最初の部品を描く」実装と「添付一覧に落とす」実装で見え方が
+/// ずれる (順序差異は D1454、添付混入は D1343)。
+#[must_use]
+pub fn has_alternative_no_text(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut alt_bound: Option<String> = None;
+    for l in lower.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/alternative") {
+            if let Some(bp) = l.find("boundary=") {
+                let brest = &l[bp + 9..];
+                let b = if let Some(q) = brest.strip_prefix('"') {
+                    q.split('"').next().unwrap_or("")
+                } else {
+                    brest.split(';').next().unwrap_or("").trim()
+                };
+                if !b.is_empty() {
+                    alt_bound = Some(format!("--{}", b));
+                }
+            }
+            break;
+        }
+    }
+    let Some(bound) = alt_bound else { return false };
+    // CT 無しの部品は既定 text/plain — run 終了時に計上
+    let mut in_run = false;
+    let mut run_ct: Option<String> = None;
+    let mut saw_part = false;
+    let mut saw_text = false;
+    for l in lower.lines() {
+        if l.starts_with(&bound) {
+            let is_closer = l[bound.len()..].trim_start().starts_with("--");
+            if in_run {
+                saw_part = true;
+                let v = run_ct.take().unwrap_or_else(|| "text/plain".to_string());
+                if v.starts_with("text/") {
+                    saw_text = true;
+                }
+            }
+            in_run = !is_closer;
+            continue;
+        }
+        if in_run && run_ct.is_none() && l.starts_with("content-type:") {
+            let v = l[13..]
+                .trim_start()
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !v.is_empty() {
+                run_ct = Some(v);
+            }
+        }
+    }
+    if in_run {
+        saw_part = true;
+        let v = run_ct.unwrap_or_else(|| "text/plain".to_string());
+        if v.starts_with("text/") {
+            saw_text = true;
+        }
+    }
+    saw_part && !saw_text
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -30447,6 +30757,69 @@ mod tests {
         // 非対象欄の非ASCIIは不発火 (D1304 の担域)
         assert!(!has_nonascii_msgid(
             "Subject: café\r\n\r\nx".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn spaced_param_name_は名札側の空白を検出する() {
+        // D1493 — `name =` の形
+        assert!(has_spaced_param_name(
+            b"Content-Type: multipart/mixed; boundary =\"b\"\r\n\r\nx"
+        ));
+        assert!(has_spaced_param_name(
+            b"Content-Disposition: attachment; filename =\"a.exe\"\r\n\r\nx"
+        ));
+        // クオート内 ` =`・正常は不発火
+        assert!(!has_spaced_param_name(
+            b"Content-Type: text/plain; name=\"a =b\"\r\n\r\nx"
+        ));
+        assert!(!has_spaced_param_name(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dup_alternative_part_は同型代替を検出する() {
+        // D1494 — alternative に text/plain が二度
+        assert!(has_dup_alternative_part(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/plain\r\n\r\ny\r\n--b--"
+        ));
+        // plain+html は不発火 (順序差異は D1454)
+        assert!(!has_dup_alternative_part(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn mixed_case_param_は大文字名札を検出する() {
+        // D1495 — FILENAME=/Name= の大文字混じり
+        assert!(has_mixed_case_param(
+            b"Content-Disposition: attachment; FILENAME=\"a.exe\"\r\n\r\nx"
+        ));
+        assert!(has_mixed_case_param(
+            b"Content-Type: text/plain; Name=\"a\"\r\n\r\nx"
+        ));
+        // 全小文字・クオート内は不発火
+        assert!(!has_mixed_case_param(
+            b"Content-Type: text/plain; name=\"File.EXE\"\r\n\r\nx"
+        ));
+        assert!(!has_mixed_case_param(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn alternative_no_text_は読める代替無しを検出する() {
+        // D1496 — alternative の全メンバーが非 text
+        assert!(has_alternative_no_text(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: application/pdf\r\n\r\nx\r\n--b\r\nContent-Type: image/png\r\n\r\ny\r\n--b--"
+        ));
+        // text メンバーあり・CT無し部品 (既定 text/plain) は不発火
+        assert!(!has_alternative_no_text(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--b--"
+        ));
+        assert!(!has_alternative_no_text(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\n\r\nplain default\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--b--"
         ));
     }
 

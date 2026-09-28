@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security — D1493: 名札側空白のパラメータ検出
+**問題** `boundary = "x"` — param 名末尾の空白を trim する実装は拾い、厳格実装は未知キーとして捨てる (構造情報の喪失)。`= の直後の空白` は D1487。
+**修正** `Envelope.spaced_param_name` — クオート区間を潰して `=` 直前の空白を検出。
+**教訓** キーと `=` の間の空白も構文違反 — trim の有無で param の存否が変わる。
+
+### Security — D1494: 同型代替メンバーの重複検出
+**問題** `multipart/alternative` に同じ基底型のメンバーが二度現れると、「最初を採用」と「最後を採用」で見せる本文がずれる (順序差異は D1454)。
+**修正** `Envelope.dup_alternative_part` — alternative のメンバー基底型を列挙し重複を検出 (CT 無し部品は既定 text/plain)。
+**教訓** 「別表現」の約束は型の一意性を含む — 同型の二度目はどちらが本物か実装に委ねられる。
+
+### Security — D1495: 大文字混じりのパラメータ名検出
+**問題** パラメータ名は case-insensitive — `FILENAME=`・`Name=` を畳まない実装は添付名を見逃す。
+**修正** `Envelope.mixed_case_param` — CT/CD の param キー (連番タグ除く) の大文字を検出。
+**教訓** 大小写の正規化は暗黙の前提 — 畳まない実装では名札が読めない。
+
+### Security — D1496: text を欠く alternative 検出
+**問題** `multipart/alternative` のメンバーに text/* が一つも無いと、「最初の部品を描く」実装と「添付一覧に落とす」実装で見え方がずれる。
+**修正** `Envelope.alternative_no_text` — メンバー基底型を列挙 (CT 無しは既定 text/plain) し text の有無を検査。
+**教訓** 「読める代替」がひとつも無い束は構造の誤用 — 添付混入 (D1343) とは別の死角。
+
 ### Security — D1489: パート本文先頭の BOM 検出
 **問題** パート本文が BOM (`EF BB BF`/`FF FE`/`FE FF`) で始まると、BOM を優先する実装と charset 宣言を優先する実装で文字コード解釈がずれる (UTF-16 BOM なら内容ごと見えなくなる)。メッセージ先頭は D1342。
 **修正** `Envelope.part_bom` — ヘッダ区切り (`\n\n`/`\r\n\r\n`) 直後のバイト列を検査。
