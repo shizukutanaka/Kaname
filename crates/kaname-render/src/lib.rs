@@ -936,6 +936,14 @@ pub struct Envelope {
     pub nested_comment: bool,
     /// encoded-word の連接 (`=?…?= =?…?=`) (D1612 — 表示文字列ずれ)。
     pub adjacent_encoded_words: bool,
+    /// CT のメディア型トークンに大文字 (D1613 — 型解釈ずれ)。
+    pub uppercase_media: bool,
+    /// `name*=` 値に `'` が無い RFC 2231 破損 (D1614 — 拡張名札ずれ)。
+    pub star_param_no_apostrophe: bool,
+    /// 識別子欄 `<…>` 内の非 IP ドメインリテラル (D1615 — 照合ずれ)。
+    pub msgid_bad_literal: bool,
+    /// アドレス欄の空クオート表示名 `""` (D1616 — 表示名ずれ)。
+    pub empty_quoted_string: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3315,6 +3323,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let nested_comment = has_nested_comment(bytes);
     // D1612: encoded-word 連接
     let adjacent_encoded_words = has_adjacent_encoded_words(bytes);
+    // D1613: 大文字混じりのメディア型
+    let uppercase_media = has_uppercase_media(bytes);
+    // D1614: `*=` 値の `'` 欠落
+    let star_param_no_apostrophe = has_star_param_no_apostrophe(bytes);
+    // D1615: 識別子内の非 IP リテラル
+    let msgid_bad_literal = has_msgid_bad_literal(bytes);
+    // D1616: 空クオート表示名
+    let empty_quoted_string = has_empty_quoted_string(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3685,6 +3701,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         timeless_date,
         nested_comment,
         adjacent_encoded_words,
+        uppercase_media,
+        star_param_no_apostrophe,
+        msgid_bad_literal,
+        empty_quoted_string,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -19778,6 +19798,228 @@ pub fn has_adjacent_encoded_words(raw: &[u8]) -> bool {
                 }
             }
             i += 1;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` のメディア型トークン (主型/サブ型) に ASCII 大文字が
+/// 混ざるか判定する (D1613)。
+///
+/// `TEXT/PLAIN`/`Text/HTML` — メディア型は大小写不変と規定されるが、
+/// 厳密比較する実装は小文字形しか拾えず、正規化実装と部品の型解釈が
+/// ずれる (CTE の大文字は D1513、CD 値は D1519、param 名は D1495)。
+/// クオート括りの型値は D1417 の領分。
+#[must_use]
+pub fn has_uppercase_media(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mt = v.split(';').next().unwrap_or("").trim();
+        if !mt.contains('/') || mt.starts_with('"') {
+            continue;
+        }
+        if mt.bytes().any(|b| b.is_ascii_uppercase()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `name*=`/`filename*=` 等の単一 `*=` param 値に `'` が無いか判定する
+/// (D1614)。
+///
+/// RFC 2231 の `param*=` は `charset'lang'value` 形を要求する — `'` を
+/// 欠く値は厳格実装が捨て、素通しする実装だけが採用する (`*` 連番の
+/// 混在は D1530、非数値タグは D1490、危険 charset は D1524)。
+#[must_use]
+pub fn has_star_param_no_apostrophe(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_ct = l.starts_with("content-type:") || l.starts_with("content-disposition:");
+        if !is_ct {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        // クオート区間を潰してから `;` 分割
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';') {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim();
+            let val = seg[eq + 1..].trim();
+            // `name*=` (単一符号化形) のみ対象 — `name*N=`/`name*N*=` の
+            // 連番形は値に `'` を要求しない (D1530 系の領分)
+            if key.is_empty() || !key.ends_with('*') || val.is_empty() {
+                continue;
+            }
+            let base = &key[..key.len() - 1];
+            if base.is_empty()
+                || base.bytes().last().is_some_and(|b| b.is_ascii_digit())
+            {
+                continue;
+            }
+            if !val.contains('\'') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内に非 IP ドメインリテラル `[@…]` があるか判定する
+/// (D1615)。
+///
+/// `Message-ID: <a@[not-an-ip]>` — `[` `]` 括りは IP リテラル専用で、
+/// 中身が IP 形でなければ厳格実装は識別子を捨てる (宛名欄側は D1546、
+/// 範囲外 octet は D1564)。
+#[must_use]
+pub fn has_msgid_bad_literal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end();
+        let is_id = matches!(
+            name,
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let bytes = v.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i] == b'[' {
+                let mut j = i + 1;
+                while j < bytes.len() && bytes[j] != b']' {
+                    j += 1;
+                }
+                let inner = &v[i + 1..j.min(v.len())];
+                let inner_clean = inner.strip_prefix("ipv6:").unwrap_or(inner);
+                let is_ip = !inner_clean.is_empty()
+                    && inner_clean
+                        .bytes()
+                        .all(|b| b.is_ascii_digit() || b == b'.' || b == b':' || (b'a'..=b'f').contains(&b));
+                if !is_ip {
+                    return true;
+                }
+                i = j;
+            }
+            i += 1;
+        }
+    }
+    false
+}
+
+/// アドレス欄の表示名が空のクオート `""` か判定する (D1616)。
+///
+/// `From: "" <a@b>` — 空の表示名は、捨てる実装と空文字として採用する
+/// 実装で差出人の見え方がずれる (表示名自体がアドレス形は D1335、
+/// 語句のみは D1604、クオートのみ宛名は D1542)。
+#[must_use]
+pub fn has_empty_quoted_string(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if v.contains("\"\"") {
+            return true;
         }
     }
     false
@@ -38396,6 +38638,68 @@ mod tests {
             b"Subject: =?utf-8?b?QQ==?==?utf-8?b?Qg==?=\r\n\r\nx"
         ));
         assert!(!has_adjacent_encoded_words(b"Subject: hello world\r\n\r\nx"));
+    }
+
+    #[test]
+    fn uppercase_media_大文字メディア型を検出する() {
+        // D1613 — 型トークンの大文字
+        assert!(has_uppercase_media(b"Content-Type: TEXT/PLAIN\r\n\r\nx"));
+        assert!(has_uppercase_media(b"Content-Type: Text/Html; charset=utf-8\r\n\r\nx"));
+        assert!(has_uppercase_media(
+            b"Content-Type: multipart/mixed\r\n\r\n--b\r\nContent-Type: IMAGE/PNG\r\n\r\nx\r\n--b--\r\n"
+        ));
+        // 小文字形・クオート型 (D1417)・param 名の大文字 (D1495)・他欄は不発火
+        assert!(!has_uppercase_media(b"Content-Type: text/plain; FILENAME=x\r\n\r\nx"));
+        assert!(!has_uppercase_media(b"Content-Type: \"TEXT/PLAIN\"\r\n\r\nx"));
+        assert!(!has_uppercase_media(b"Content-Disposition: ATTACHMENT\r\n\r\nx"));
+        assert!(!has_uppercase_media(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn star_param_no_apostrophe_拡張paramの引用符欠落を検出する() {
+        // D1614 — `*=` 値の `'` 欠落
+        assert!(has_star_param_no_apostrophe(
+            b"Content-Disposition: attachment; filename*=utf8x\r\n\r\nx"
+        ));
+        assert!(has_star_param_no_apostrophe(
+            b"Content-Type: text/plain; name*=utf-8file\r\n\r\nx"
+        ));
+        // 正規形・連番形 `*N=`/`*N*=`・他欄は不発火
+        assert!(!has_star_param_no_apostrophe(
+            b"Content-Disposition: attachment; filename*=utf-8''a.txt\r\n\r\nx"
+        ));
+        assert!(!has_star_param_no_apostrophe(
+            b"Content-Disposition: attachment; filename*0*=a; filename*1*=b\r\n\r\nx"
+        ));
+        assert!(!has_star_param_no_apostrophe(
+            b"Content-Disposition: attachment; filename*0=a; filename*1=b\r\n\r\nx"
+        ));
+        assert!(!has_star_param_no_apostrophe(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_bad_literal_識別子内非ipリテラルを検出する() {
+        // D1615 — `<a@[not-ip]>`
+        assert!(has_msgid_bad_literal(b"Message-ID: <a@[not-an-ip]>\r\n\r\nx"));
+        assert!(has_msgid_bad_literal(b"References: <a@[blah]>\r\n\r\nx"));
+        assert!(has_msgid_bad_literal(b"Content-ID: <x@[no_ip]>\r\n\r\nx"));
+        // IP 形・IPv6 形・リテラル無し・他欄は不発火
+        assert!(!has_msgid_bad_literal(b"Message-ID: <a@[192.0.2.1]>\r\n\r\nx"));
+        assert!(!has_msgid_bad_literal(b"Message-ID: <a@[IPv6:::1]>\r\n\r\nx"));
+        assert!(!has_msgid_bad_literal(b"Message-ID: <a@b.example>\r\n\r\nx"));
+        assert!(!has_msgid_bad_literal(b"From: a@[not-ip]\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_quoted_string_空クオート表示名を検出する() {
+        // D1616 — `""` 表示名
+        assert!(has_empty_quoted_string(b"From: \"\" <a@b>\r\n\r\nx"));
+        assert!(has_empty_quoted_string(b"To: \"\" <a@b>, c@d\r\n\r\nx"));
+        // 中身あり・クオート無し・他欄は不発火
+        assert!(!has_empty_quoted_string(b"From: \"John\" <a@b>\r\n\r\nx"));
+        assert!(!has_empty_quoted_string(b"From: John <a@b>\r\n\r\nx"));
+        assert!(!has_empty_quoted_string(b"Subject: \"\"\r\n\r\nx"));
+        assert!(!has_empty_quoted_string(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

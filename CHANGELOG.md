@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1613: `Content-Type:` のメディア型トークンに ASCII 大文字 (`TEXT/PLAIN`/`Text/Html`) を検出 — `kaname-render` の `Envelope` に `uppercase_media` を追加。厳密比較実装は小文字形しか拾えず部品の型解釈がずれる (CTE は D1513、param 名は D1495)。
+
+### Security — D1614: `name*=`/`filename*=` の単一 `*=` param 値に `'` が無い形 (`filename*=utf8x`) を検出 — `Envelope` に `star_param_no_apostrophe` を追加。RFC 2231 は `charset'lang'value` を要求し厳格実装が値を捨てる (連番混在は D1530、非数値タグは D1490)。
+
+### Security — D1615: 識別子欄 `<…>` 内の非 IP ドメインリテラル (`Message-ID: <a@[not-an-ip]>`) を検出 — `Envelope` に `msgid_bad_literal` を追加。厳格実装が識別子を捨てスレッド照合がずれる (宛名欄側は D1546)。
+
+### Security — D1616: アドレス欄の表示名が空クオート `""` の形 (`From: "" <a@b>`) を検出 — `Envelope` に `empty_quoted_string` を追加。捨てる実装と空文字採用で差出人の見え方がずれる (語句のみは D1604)。
+
 ### Security — D1609: `Content-Type:`/`Content-Disposition:` のクオート値内 `;` (`boundary="a;b"`) を検出 — `kaname-render` の `Envelope` に `quoted_semicolon` を追加。クオートを読まず `;` で割る素朴な実装は値を途中で切る (裸 `;` 異常は D1486)。
 
 ### Security — D1610: 日付欄に時刻トークン (`:`) が無い形 (`Date: 25 Sep 2025`) を検出 — `Envelope` に `timeless_date` を追加。深夜扱いする実装と構文エラーとする実装でずれる (ゾーン欠落は D1547)。
