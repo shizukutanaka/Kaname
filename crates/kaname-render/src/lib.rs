@@ -1008,6 +1008,14 @@ pub struct Envelope {
     pub param_eq_bare: bool,
     /// Date の 4 字以上の月名 `September` (D1648 — 日付解析ずれ)。
     pub long_month: bool,
+    /// `Content-Type:` の型トークン欠落 (D1649 — 既定値ずれ)。
+    pub missing_media_type: bool,
+    /// 宛名ドメイン部の空白 (D1650 — 宛名分割ずれ)。
+    pub ws_domain: bool,
+    /// param 値の直後空白 `charset= x` (D1651 — param 読みずれ)。
+    pub param_leading_ws: bool,
+    /// Date 欄の空白分断ゾーン `+09 00` (D1652 — 日付解析ずれ)。
+    pub split_zone: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3459,6 +3467,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let param_eq_bare = has_param_eq_bare(bytes);
     // D1648: 長い月名
     let long_month = has_long_month(bytes);
+    // D1649: CT 型トークン欠落
+    let missing_media_type = has_missing_media_type(bytes);
+    // D1650: ドメイン部の空白
+    let ws_domain = has_ws_domain(bytes);
+    // D1651: param 値直後の空白
+    let param_leading_ws = has_param_leading_ws(bytes);
+    // D1652: 空白分断ゾーン
+    let split_zone = has_split_zone(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3865,6 +3881,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         quoted_domain,
         param_eq_bare,
         long_month,
+        missing_media_type,
+        ws_domain,
+        param_leading_ws,
+        split_zone,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -21887,6 +21907,216 @@ pub fn has_long_month(raw: &[u8]) -> bool {
                     .all(|b| b.is_ascii_alphabetic())
                 && MONTHS3.contains(&t[..3].to_ascii_lowercase().as_str())
                 && t[3..].bytes().all(|b| b.is_ascii_alphabetic())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` 欄の `;` の前に型トークンが無いか判定する (D1649)。
+///
+/// `Content-Type: ; charset=x` / `Content-Type: charset=x` — 型本体が
+/// 無い欄は「text/plain 既定値」と読む実装と「欄ごと捨てる実装」で
+/// 本文の扱いがずれる (欄自体の欠落は `missing_content_type`、空値は
+/// D1645)。
+#[must_use]
+pub fn has_missing_media_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.to_ascii_lowercase().starts_with("content-type:") {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim_start();
+        // `;` か `=` より前に `/` を含むトークンがあるか
+        let head = v.split(';').next().unwrap_or("");
+        let head = head.split_whitespace().next().unwrap_or("");
+        if head.is_empty() || !head.contains('/') || head.starts_with('=') {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄ドメイン部の途中に空白があるか判定する (D1650)。
+///
+/// `a@b .c`/`a@ b.c` — `@` の後の空白をドメイン内部の折り返しと読む
+/// 実装と、宛名終端と読む実装で宛名がずれる (表示名空白は合法)。
+#[must_use]
+pub fn has_ws_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        let mut after_at = false;
+        let mut domain_started = false;
+        let mut ws_gap = false;
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b')' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && !in_a {
+                in_q = !in_q;
+            } else if in_q {
+                // クオート区間内は対象外
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'<' {
+                in_a = true;
+                after_at = false;
+                domain_started = false;
+                ws_gap = false;
+            } else if b == b'>' {
+                in_a = false;
+                after_at = false;
+                domain_started = false;
+                ws_gap = false;
+            } else if b == b'@' {
+                after_at = true;
+            } else if after_at && (b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'[' || b == b']') {
+                if ws_gap {
+                    // `a@b .c` / `a@ b.c` — 空白を挟んだドメイン継続
+                    return true;
+                }
+                domain_started = true;
+            } else if b == b' ' || b == b'\t' {
+                if after_at {
+                    ws_gap = true;
+                }
+            } else if b == b',' || b == b';' {
+                after_at = false;
+                domain_started = false;
+                ws_gap = false;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の param 値が `=` 直後に空白を挟むか判定する (D1651)。
+///
+/// `charset= utf-8` — `=` 後の空白を含める実装と除く実装で param 値が
+/// ずれる (param 先頭空白は token として不正)。
+#[must_use]
+pub fn has_param_leading_ws(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        for seg in v.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let val = &seg[eq + 1..];
+            if (val.starts_with(' ') || val.starts_with('\t'))
+                && !val.trim_start().is_empty()
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄のタイムゾーンが空白で分断されているか判定する (D1652)。
+///
+/// `Date: … +09 00` / `+0900 30` — ゾーン値の途中空白を「ゾーン終了」と
+/// 読む実装と「継続」と読む実装で日付がずれる。
+#[must_use]
+pub fn has_split_zone(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let toks: Vec<&str> = l[colon + 1..].split_whitespace().collect();
+        for (i, t) in toks.iter().enumerate() {
+            // `+09` / `-09` / `+090` のように 2–3 桁で終わるゾーン断片の
+            // 直後に数字トークンがある形
+            if (t.starts_with('+') || t.starts_with('-'))
+                && t.len() >= 3
+                && t.len() < 5
+                && t[1..].bytes().all(|b| b.is_ascii_digit())
+                && toks.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit()))
             {
                 return true;
             }
@@ -40983,6 +41213,53 @@ mod tests {
         assert!(!has_long_month(b"Date: Thursday, 25 Sep 2025 12:00:00 +0000\r\n\r\nx"));
         assert!(!has_long_month(b"Subject: September report\r\n\r\nx"));
         assert!(!has_long_month(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn missing_media_type_型トークン欠落を検出する() {
+        // D1649 — `Content-Type: ; charset=x` / `Content-Type: charset=x`
+        assert!(has_missing_media_type(b"Content-Type: ; charset=utf-8\r\n\r\nx"));
+        assert!(has_missing_media_type(b"Content-Type: charset=utf-8\r\n\r\nx"));
+        assert!(has_missing_media_type(b"Content-Type:\r\n  ; charset=x\r\n\r\nx"));
+        // 正常型・他欄は不発火
+        assert!(!has_missing_media_type(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_missing_media_type(b"Content-Type: */*\r\n\r\nx"));
+        assert!(!has_missing_media_type(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn ws_domain_ドメイン部空白を検出する() {
+        // D1650 — `a@b .c`/`a@ b.c` の空白継続
+        assert!(has_ws_domain(b"To: <a@b .c>\r\n\r\nx"));
+        assert!(has_ws_domain(b"To: <a@ b.c>\r\n\r\nx"));
+        assert!(has_ws_domain(b"From: a@b .c\r\n\r\nx"));
+        // 正常・クオート内・表示名空白は不発火
+        assert!(!has_ws_domain(b"From: John <a@b.c>\r\n\r\nx"));
+        assert!(!has_ws_domain(b"From: \"a@b .c\" <x@y>\r\n\r\nx"));
+        assert!(!has_ws_domain(b"To: a@b.c, c@d.e\r\n\r\nx"));
+        assert!(!has_ws_domain(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn param_leading_ws_param直後空白を検出する() {
+        // D1651 — `charset= utf-8`
+        assert!(has_param_leading_ws(b"Content-Type: text/plain; charset= utf-8\r\n\r\nx"));
+        assert!(has_param_leading_ws(b"Content-Type: multipart/mixed; boundary=\tX\r\n\r\nx"));
+        // 直結値・クオート・他欄は不発火
+        assert!(!has_param_leading_ws(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_param_leading_ws(b"Content-Type: text/plain; charset=\"utf-8\"\r\n\r\nx"));
+        assert!(!has_param_leading_ws(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn split_zone_空白分断ゾーンを検出する() {
+        // D1652 — `+09 00`
+        assert!(has_split_zone(b"Date: Thu, 25 Sep 2025 12:00:00 +09 00\r\n\r\nx"));
+        assert!(has_split_zone(b"Date: 25 Sep 2025 12:00:00 +090 0\r\n\r\nx"));
+        // 正常ゾーン・文字ゾーン・他欄は不発火
+        assert!(!has_split_zone(b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_split_zone(b"Date: Thu, 25 Sep 2025 12:00:00 JST\r\n\r\nx"));
+        assert!(!has_split_zone(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

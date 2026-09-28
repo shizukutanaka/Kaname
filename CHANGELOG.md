@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1649: `Content-Type:` の型トークン欠落 (`; charset=x` のみ) を検出 — `Envelope` に `missing_media_type` を追加 (欄欠落は `missing_content_type`、空値は D1645)。
+
+### Security — D1650: 宛名ドメイン部の空白継続 (`a@b .c`/`a@ b.c`) を検出 — `Envelope` に `ws_domain` を追加。
+
+### Security — D1651: param 値の `=` 直後空白 (`charset= utf-8`) を検出 — `Envelope` に `param_leading_ws` を追加。
+
+### Security — D1652: Date 欄タイムゾーンの空白分断 (`+09 00`) を検出 — `Envelope` に `split_zone` を追加。
+
 ### Security — D1645: `Content-Type:`/`Content-Disposition:`/`Content-Transfer-Encoding:` の空値を検出 — `Envelope` に `empty_mime_field` を追加。既定値丸め/欄破棄で読みがずれる (from/date 等の空値は D1435)。
 
 ### Security — D1646: 宛名ドメイン部のクオート区間 `a@"b.c"` を検出 — `Envelope` に `quoted_domain` を追加。ドメインは dot-atom/リテラルが正で、受理/構文エラーで宛名がずれる。
