@@ -130,6 +130,21 @@ pub enum CalendarRisk {
         /// 参照先 URI
         uri: String,
     },
+    /// 非招待系 METHOD (CANCEL/REPLY/DECLINE 等) の検出 (D1375)。
+    ///
+    /// `METHOD:REQUEST`/`PUBLISH` は新規招待の正規形だが、
+    /// `CANCEL` は **UID が一致する既存イベントをカレンダーから消す**
+    /// 指示、REPLY/DECLINE/COUNTER/DECLINECOUNTER は出席応答の記録、
+    /// REFRESH/ADD は既存イベントの照会・更新指示 — いずれも送信側の
+    /// 自称だけで状態を書き換える形のため、第三者が偽造すると実在の
+    /// 会議が消えたり応答が捏造される。正当な取り消し通知も同じ形を
+    /// 取るため Caution 級の兆候として報告する (Danger にはしない)。
+    MethodSpoof {
+        /// 検出された METHOD 値 (大文字)
+        method: String,
+        /// その METHOD が持つ動作の説明
+        action: String,
+    },
 }
 
 /// カレンダー招待スキャン結果。
@@ -287,6 +302,10 @@ impl CalendarGuard {
         //     `ATTACH;VALUE=URI:` は招待の表示時にリモートから内容を
         //     フェッチさせる — QR 画像・次段ペイロードの配送経路。
         risks.extend(detect_external_attach_uri(ics_content));
+
+        // 12. 非招待系 METHOD (CANCEL/REPLY/DECLINE 等) — 既存イベントへ
+        //     の削除・応答記録を送信者の自称だけで起こす指示 (D1375)。
+        risks.extend(detect_method_spoof(ics_content));
 
         let risk_level = Self::calculate_level(&risks);
         CalendarScan { risks, risk_level }
@@ -751,6 +770,33 @@ fn detect_external_attach_uri(content: &str) -> Vec<CalendarRisk> {
     risks
 }
 
+/// 非招待系 `METHOD:` (CANCEL/REPLY/DECLINE/COUNTER/DECLINECOUNTER/
+/// REFRESH/ADD) を検出する (D1375)。
+///
+/// 招待 (REQUEST/PUBLISH) 以外の METHOD は「既存イベントへの操作」を
+/// 意味する: CANCEL は UID 一致で実在イベントを削除し、REPLY/DECLINE
+/// 系は出席応答を記録し、REFRESH/ADD は照会・追記を求める。受信側が
+/// 送信者認証を伴わずこれらを適用する実装では、会議の消去・応答捏造
+/// という状態改竄になる (calendar spoofing の別形)。
+fn detect_method_spoof(content: &str) -> Vec<CalendarRisk> {
+    let Some(method) = extract_field(content, "METHOD") else {
+        return Vec::new();
+    };
+    let method = method.to_uppercase();
+    let action = match method.as_str() {
+        "CANCEL" => "UID 一致の既存イベントを削除するキャンセル指示",
+        "REPLY" | "DECLINE" | "COUNTER" | "DECLINECOUNTER" => {
+            "出席応答・反対提案を記録する応答指示"
+        }
+        "REFRESH" | "ADD" => "既存イベントの照会・追記指示",
+        _ => return Vec::new(),
+    };
+    vec![CalendarRisk::MethodSpoof {
+        method,
+        action: action.to_string(),
+    }]
+}
+
 fn extract_ics_urls(content: &str) -> Vec<String> {
     let mut urls = Vec::new();
     for line in content.lines() {
@@ -870,6 +916,29 @@ END:VCALENDAR"#;
         let scan = g.analyze(PHISHING_ICS);
         assert_eq!(scan.risk_level, CalendarRiskLevel::Danger);
         assert!(!scan.risks.is_empty());
+    }
+
+    #[test]
+    fn method_cancel_は非招待系指示を検出する() {
+        // D1375 — METHOD:CANCEL は既存イベントの削除指示
+        let g = guard();
+        let ics = "BEGIN:VCALENDAR\nMETHOD:CANCEL\nBEGIN:VEVENT\nUID:real-meeting@x\nSUMMARY:定例\nEND:VEVENT\nEND:VCALENDAR";
+        let scan = g.analyze(ics);
+        assert!(scan
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::MethodSpoof { .. })));
+        // METHOD:REQUEST (正当な招待) は不発火
+        let ok = "BEGIN:VCALENDAR\nMETHOD:REQUEST\nBEGIN:VEVENT\nUID:m@x\nSUMMARY:定例\nEND:VEVENT\nEND:VCALENDAR";
+        assert!(!g.analyze(ok)
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::MethodSpoof { .. })));
+        // METHOD 無しも不発火
+        assert!(!g.analyze(NORMAL_ICS)
+            .risks
+            .iter()
+            .any(|r| matches!(r, CalendarRisk::MethodSpoof { .. })));
     }
 
     #[test]
