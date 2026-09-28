@@ -4649,6 +4649,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.double_colon_header {
+        render_risks.push(
+            "欄名が二重コロンで終わる行があります (From:: 等)\
+             —許す実装と捨てる実装で以降の全欄の解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.named_zone {
+        render_risks.push(
+            "日付欄の末尾が非標準の名前付きタイムゾーンです (JST 等)\
+             —既知名だけ解釈する実装と捨てる実装で時刻がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_digit_year {
+        render_risks.push(
+            "日付欄の年が2桁です (obs-year)\
+             —世紀のピボット規則を知る実装とそのまま読む実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.comment_only_addr {
+        render_risks.push(
+            "宛名欄が注釈のみで宛名がありません (From: (notes) 等)\
+             —注釈を差出人表示に使う実装と宛名なしとする実装でずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

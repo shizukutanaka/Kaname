@@ -776,6 +776,14 @@ pub struct Envelope {
     pub spaced_bare_addrs: bool,
     /// `Content-ID:` の `@` 無し識別子 (D1532 — cid 解決差異)。
     pub atless_content_id: bool,
+    /// `:` 終わりの欄名 (D1533 — 構文ずれ)。
+    pub double_colon_header: bool,
+    /// Date 系の名前付きゾーン (D1534 — 時刻解釈ずれ)。
+    pub named_zone: bool,
+    /// Date 系の2桁年 (D1535 — 世紀ピボットずれ)。
+    pub two_digit_year: bool,
+    /// コメントのみの宛名欄 (D1536 — 差出人表示ずれ)。
+    pub comment_only_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2995,6 +3003,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let spaced_bare_addrs = has_spaced_bare_addrs(bytes);
     // D1532: @ 無し Content-ID
     let atless_content_id = has_atless_content_id(bytes);
+    // D1533: `:` 終わり欄名
+    let double_colon_header = has_double_colon_header(bytes);
+    // D1534: 名前付きタイムゾーン
+    let named_zone = has_named_zone(bytes);
+    // D1535: 2桁年
+    let two_digit_year = has_two_digit_year(bytes);
+    // D1536: コメントのみ宛名
+    let comment_only_addr = has_comment_only_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3285,6 +3301,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mixed_2231_cont,
         spaced_bare_addrs,
         atless_content_id,
+        double_colon_header,
+        named_zone,
+        two_digit_year,
+        comment_only_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -15804,6 +15824,187 @@ pub fn has_atless_content_id(raw: &[u8]) -> bool {
                     return true;
                 }
             }
+        }
+    }
+    false
+}
+
+
+/// ヘッダ名が `:` で終わる二重コロン行があるか判定する (D1533)。
+///
+/// `From:: a@b`/`X-Foo: bar` は最初の `:` で切る実装では名が `:` を
+/// 含み構文エラー、末尾 `:` を許す実装では正当欄として読まれる —
+/// 以降の全欄の解釈がずれる。
+#[must_use]
+pub fn has_double_colon_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') || l.is_empty() {
+            continue;
+        }
+        let Some(c) = l.find(':') else { continue };
+        let name = &l[..c];
+        // 名の末尾が ':' — `From::`/`X-Foo::` 形
+        if name.ends_with(':') || (c + 1 < l.len() && l.as_bytes()[c + 1] == b':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 系欄が obs-zone の名前付きタイムゾーンで終わるか判定する (D1534)。
+///
+/// `Date: Thu, 25 Sep 2025 12:00:00 JST` のような名前ゾーンは
+/// RFC 5322 obs-zone (UT/GMT/EST/…) のみ許容で、任意の略名は
+/// 解釈不能 — 既知名だけ解釈する実装と捨てる実装で時刻がずれる。
+#[must_use]
+pub fn has_named_zone(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &[
+        "ut", "gmt", "est", "edt", "cst", "cdt", "mst", "mdt", "pst", "pdt", "z",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim();
+        // 末尾トークンが A-Z 名 (+/-数字 は正常)
+        let Some(last) = v.split_whitespace().last() else { continue };
+        if last.is_empty()
+            || !last.bytes().all(|b| b.is_ascii_alphabetic())
+            || last.starts_with('+')
+            || last.starts_with('-')
+        {
+            continue;
+        }
+        let ll = last.to_ascii_lowercase();
+        if !KNOWN.contains(&ll.as_str()) && ll != "z" {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 系欄の年が2桁か判定する (D1535)。
+///
+/// `Date: Thu, 25 Sep 25 12:00` の2桁年は obs-year で、
+/// 00–49→2000年代・50–99→1900年代のピボット規則を知る実装と
+/// そのまま読む実装で日付がずれる。
+#[must_use]
+pub fn has_two_digit_year(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        // " 25 " / " 25," の孤立2桁 — 時刻 12:34 の後半に当たらぬよう
+        // 数字4桁以上のトークンは除外し、丁度2桁の年トークンを探す
+        for (i, tok) in v.split_whitespace().enumerate() {
+            let t = tok.trim_matches(|c: char| c == ',' || c == ';' || c == '(' || c == ')');
+            if t.len() == 2
+                && t.bytes().all(|b| b.is_ascii_digit())
+                && i >= 2
+                && !v.contains(':')
+            {
+                return true;
+            }
+            // 時刻 (12:34) より前の dd-mm-yy / dd mm yy 形でも拾う
+        }
+        // `25 Sep 25` 形: 月名の直後の2桁
+        let months = [
+            "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+        ];
+        let lv = v.to_ascii_lowercase();
+        for m in months {
+            if let Some(p) = lv.find(m) {
+                let after = lv[p + 3..].trim_start();
+                let year: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+                if year.len() == 2 {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄がコメントのみを含むか判定する (D1536)。
+///
+/// `From: (notes)` のように宛名を欠き注釈だけ書いた欄は、
+/// 宛名抽出が空になる実装と注釈を差出人表示に使う実装で
+/// 差出人の読みがずれる (空値は D1450、欄欠落は D1432)。
+#[must_use]
+pub fn has_comment_only_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        // 値が `(…)` のみ: コメントを剥がすと何も残らない
+        let mut rest = v;
+        let mut stripped = String::new();
+        while let Some(o) = rest.find('(') {
+            stripped.push_str(&rest[..o]);
+            match rest[o..].find(')') {
+                Some(z) => rest = &rest[o + z + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        stripped.push_str(rest);
+        if stripped.trim().is_empty() && v.contains('(') {
+            return true;
         }
     }
     false
@@ -33378,6 +33579,57 @@ mod tests {
         assert!(!has_atless_content_id(b"Content-ID: <a@b>\r\n\r\nb"));
         // 括弧なしは D1395 の領分
         assert!(!has_atless_content_id(b"Content-ID: abc\r\n\r\nb"));
+    }
+
+    #[test]
+    fn double_colon_header_は二重コロンを検出する() {
+        // D1533 — From:: / X-Foo::
+        assert!(has_double_colon_header(b"From:: a@b\r\n\r\nb"));
+        assert!(has_double_colon_header(b"X-Flag:: yes\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_double_colon_header(b"From: a@b\r\n\r\nb"));
+        // 値中の :: は対象外
+        assert!(!has_double_colon_header(b"Subject: a::b\r\n\r\nb"));
+    }
+
+    #[test]
+    fn named_zone_は名前付きゾーンを検出する() {
+        // D1534 — JST/KST 等
+        assert!(has_named_zone(
+            b"Date: Thu, 25 Sep 2025 12:00:00 JST\r\n\r\nb"
+        ));
+        // obs-zone の GMT/UT は正当形
+        assert!(!has_named_zone(
+            b"Date: Thu, 25 Sep 2025 12:00:00 GMT\r\n\r\nb"
+        ));
+        // 数値ゾーンは正常
+        assert!(!has_named_zone(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn two_digit_year_は二桁年を検出する() {
+        // D1535 — 25 Sep 25
+        assert!(has_two_digit_year(
+            b"Date: Thu, 25 Sep 25 12:00:00 +0000\r\n\r\nb"
+        ));
+        // 4桁年は正常
+        assert!(!has_two_digit_year(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn comment_only_addr_は注釈のみを検出する() {
+        // D1536 — From: (notes)
+        assert!(has_comment_only_addr(b"From: (delivery notes)\r\n\r\nb"));
+        // 宛名+コメントは正常
+        assert!(!has_comment_only_addr(b"From: a@b (notes)\r\n\r\nb"));
+        // 表示名+括弧は正常
+        assert!(!has_comment_only_addr(
+            b"From: John <a@b>\r\n\r\nb"
+        ));
     }
 
     #[test]
