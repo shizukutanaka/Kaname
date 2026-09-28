@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1377: message/* パートの base64/QP CTE が未検査
+
+- **問題**: RFC 2046 §5.2.1 は `message/*` の CTE を 7bit/8bit/binary に限定 — base64 で .eml を包むと「パートをそのまま走査する」検査系は内側メッセージのヘッダを一切読めない。D1293 は `multipart/*` のみ対象だった。
+- **修正**: `has_encoded_message_part` — `Content-Type: message/*` と base64/QP CTE が同一ヘッダ run に同居する形を検出 → `Envelope.encoded_message_part` → render_risks 警告。
+- **教訓**: 書類束をさらに封筒に入れて密封する梱包は、中の宛名を書記に読ませない。
+
+### Security — D1378: multipart/signed の署名パート欠落が未検査
+
+- **問題**: `multipart/signed` は「本体 + 署名」の2パート構造 — 署名型パート (`application/pgp-signature`/`pkcs7-signature` 等) が無いまま signed を名乗ると「検証不能な署名付き体裁」になる。`protocol=` の言及だけでは署名は存在しない。
+- **修正**: `has_unsigned_signed_container` — 外側が multipart/signed で、いずれかのパートの `Content-Type` が署名型でない構造を検出 → `Envelope.unsigned_signed_container` → render_risks 警告。
+- **教訓**: 「封印済み」と書かれた箱に封印そのものが入っていない荷物。
+
+### Security — D1379: In-Reply-To/References の自己参照が未検査
+
+- **問題**: 返信系ヘッダが自分の `Message-ID` を参照するメッセージは「実在スレッドへの続き」を装う偽造形 — スレッドインデックスで自己ループや親子誤判定を誘発する。
+- **修正**: `has_self_reply_ref` — Message-ID の `<…>` を抽出し、In-Reply-To/References の各 `<…>` と照合 → `Envelope.self_reply_ref` → render_risks 警告。
+- **教訓**: 「この手紙はこの手紙への返信です」と名乗る葉書は、紐付け係を迷わせる。
+
+### Security — D1380: 期限自称ヘッダ (Expires/Reply-By 等) が未検査
+
+- **問題**: `Expires:`/`Reply-By:`/`Expiry-Date:` は送信側が「期限」を記す欄 — 日付で急かせる圧力表示 (D1340 `X-Priority` の期限版)。正規 MUA はほぼ生成しない。
+- **修正**: `has_deadline_claim` — ヘッダ部でこれらの欄を検出 → `Envelope.deadline_claim` → render_risks 警告。
+- **教訓**: 「今日中に返せ」と差出人が印字する葉書 — 催促の口上を封筒に書く手口。
+
 ### Security — D1375: カレンダー招待の非招待系 METHOD (CANCEL 等) が未検査
 
 - **問題**: `METHOD:CANCEL` は UID 一致の既存イベントをカレンダーから**消す**指示、`REPLY`/`DECLINE`/`COUNTER` 系は出席応答の記録、`REFRESH`/`ADD` は照会・追記 — 送信側の自称だけで状態を書き換える。第三者が UID を盗んで偽 CANCEL を送れば実在の会議が消える (calendar spoofing)。`detect_auto_registration_abuse` は REQUEST/PUBLISH のみ対象だった。

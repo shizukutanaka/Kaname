@@ -790,3 +790,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1374 | ~~**パートヘッダ内の MIME-Version が未検査**~~ **(解消済み)** | P2 | 外側専用の欄の混入で MIME 判定がずれる。修正: `has_part_mime_version` → render_risks | 荷物の札に便の規格番号 |
 | D1375 | ~~**カレンダー非招待系 METHOD (CANCEL 等) が未検査**~~ **(解消済み)** | P2 | 偽 CANCEL で実在会議を削除、偽 REPLY で応答捏造。修正: `detect_method_spoof` → CalendarRisk::MethodSpoof | 「無かったことにせよ」の口上 |
 | D1376 | ~~**text/enriched/richtext が未検査**~~ **(解消済み)** | P3 | 廃止済み簡易マークアップで表示器間の見え方がずれる。修正: `has_enriched_text_type` → render_risks | 誰も使わない書式の書類 |
+| D1377 | ~~**message/* の base64/QP CTE が未検査**~~ **(解消済み)** | P2 | RFC 2046 §5.2.1 違反 — 符号化 .eml はスキャナに内側が見えない。修正: `has_encoded_message_part` → render_risks | 密封した封筒に入った書類束 |
+| D1378 | ~~**multipart/signed の署名パート欠落が未検査**~~ **(解消済み)** | P2 | signed を名乗るのに署名パートが無い検証不能構造。修正: `has_unsigned_signed_container` → render_risks | 「封印済み」だが封印が無い箱 |
+| D1379 | ~~**In-Reply-To/References の自己参照が未検査**~~ **(解消済み)** | P2 | 自分の Message-ID を参照する偽造スレッド。修正: `has_self_reply_ref` → render_risks | 自分への返信を名乗る葉書 |
+| D1380 | ~~**期限自称ヘッダ (Expires/Reply-By 等) が未検査**~~ **(解消済み)** | P3 | 日付で急かせる圧力表示 (X-Priority の期限版)。修正: `has_deadline_claim` → render_risks | 催促を印字した封筒 |

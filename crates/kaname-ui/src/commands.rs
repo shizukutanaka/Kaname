@@ -3556,6 +3556,35 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.encoded_message_part {
+        render_risks.push(
+            "メール形式パート (message/*) が base64/quoted-printable で\
+             符号化されています —規格違反で、内側メッセージのヘッダが\
+             検査から隠されます"
+                .to_string(),
+        );
+    }
+    if env.unsigned_signed_container {
+        render_risks.push(
+            "「署名付き」構造 (multipart/signed) を名乗っていますが署名\
+             パートが存在しません —検証不能な体裁のみの偽装です"
+                .to_string(),
+        );
+    }
+    if env.self_reply_ref {
+        render_risks.push(
+            "返信系ヘッダ (In-Reply-To/References) が自分の Message-ID を\
+             参照しています —実在スレッドの体裁を偽造した可能性があります"
+                .to_string(),
+        );
+    }
+    if env.deadline_claim {
+        render_risks.push(
+            "送信側が期限ヘッダ (Expires/Reply-By/Expiry-Date) を\
+             書き込んでいます —日付で急かせる圧力表示の兆候です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

@@ -428,6 +428,18 @@ pub struct Envelope {
     /// D1376 — `text/enriched`/`text/richtext` の廃止済み簡易マーク
     /// アップ形式宣言 (表示側と平文側で本文の見え方がずれる)。
     pub enriched_text_type: bool,
+    /// D1377 — `message/*` パートに base64/QP の CTE (RFC 2046
+    /// §5.2.1 禁止 — 符号化 .eml の内側ヘッダが走査に見えない)。
+    pub encoded_message_part: bool,
+    /// D1378 — `multipart/signed` なのに署名パートが無い
+    /// (「署名付き」の体裁だけで検証不能)。
+    pub unsigned_signed_container: bool,
+    /// D1379 — In-Reply-To/References が自分の Message-ID を参照
+    /// (自己参照スレッド — 実在スレッドの体裁を偽造)。
+    pub self_reply_ref: bool,
+    /// D1380 — `Expires:`/`Reply-By:`/`Expiry-Date:` 等の期限自称
+    /// ヘッダ (「急げ」の日付版 — 正規 MUA はほぼ生成しない)。
+    pub deadline_claim: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2467,6 +2479,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let deep_multipart_nesting = has_deep_multipart_nesting(bytes);
     let part_mime_version = has_part_mime_version(bytes);
     let enriched_text_type = has_enriched_text_type(bytes);
+    let encoded_message_part = has_encoded_message_part(bytes);
+    let unsigned_signed_container = has_unsigned_signed_container(bytes);
+    let self_reply_ref = has_self_reply_ref(bytes);
+    let deadline_claim = has_deadline_claim(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2601,6 +2617,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         deep_multipart_nesting,
         part_mime_version,
         enriched_text_type,
+        encoded_message_part,
+        unsigned_signed_container,
+        self_reply_ref,
+        deadline_claim,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -7729,6 +7749,184 @@ pub fn has_enriched_text_type(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// `message/*` パートに base64/quoted-printable CTE があるか判定する
+/// (D1377)。
+///
+/// RFC 2046 §5.2.1: `message/*` は 7bit/8bit/binary のみ許可
+/// (`Content-Transfer-Encoding` を使ってはならない)。base64 で
+/// .eml を包むと、CTE を見ずにパートをそのまま走査する検査系は
+/// 内側メッセージのヘッダを一切読めない — D1293
+/// (`multipart/*` への符号化) の姉妹形。
+#[must_use]
+pub fn has_encoded_message_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開: 継続行を論理行に結合
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let mut is_message_run = false;
+    let mut has_cte_in_run = false;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() || l.starts_with("--") {
+            if is_message_run && has_cte_in_run {
+                return true;
+            }
+            is_message_run = false;
+            has_cte_in_run = false;
+            continue;
+        }
+        if l.starts_with("content-type:") && l.contains("message/") {
+            is_message_run = true;
+        } else if l.starts_with("content-transfer-encoding:")
+            && (l.contains("base64") || l.contains("quoted-printable"))
+        {
+            has_cte_in_run = true;
+        }
+        if is_message_run && has_cte_in_run {
+            return true;
+        }
+    }
+    false
+}
+
+/// `multipart/signed` なのに署名パートが無いか判定する (D1378)。
+///
+/// `multipart/signed` は「本体 + 署名」の2パート構造 —
+/// `application/pgp-signature`/`x-pkcs7-signature` 等の署名型
+/// パートが無いと検証不能の「署名付き体裁」のみ残る。
+/// `protocol=` パラメータがあっても署名パート自体が無ければ
+/// 何も検証できない。
+#[must_use]
+pub fn has_unsigned_signed_container(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // FWS 展開: 継続行を論理行に結合
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    if !lower.contains("multipart/signed") {
+        return false;
+    }
+    // 署名パートは「そのパートの Content-Type が署名型」であることで
+    // 判定する — 外側行の `protocol="application/pgp-signature"` の
+    // 言及だけでは署名パートの存在にならないため、CT 値そのものを照合。
+    let has_sig_part = lower.lines().any(|l| {
+        l.strip_prefix("content-type:").is_some_and(|v| {
+            let v = v.trim_start();
+            v.starts_with("application/pgp-signature")
+                || v.starts_with("application/pkcs7-signature")
+                || v.starts_with("application/x-pkcs7-signature")
+                || v.starts_with("application/pkcs7-mime")
+        })
+    });
+    !has_sig_part
+}
+
+/// `In-Reply-To:`/`References:` が自分の `Message-ID:` を参照するか
+/// 判定する (D1379)。
+///
+/// スレッド系ヘッダが自メッセージの ID を指す「自己参照返信」は
+/// 実在スレッドへの参加を装う偽造形 — スレッドインデックスで
+/// ループや親子判定の誤りを誘発する。
+#[must_use]
+pub fn has_self_reply_ref(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    // Message-ID の値を抽出 (最初の <...> )
+    let mut own_id: Option<String> = None;
+    let mut reply_refs: Vec<String> = Vec::new();
+    for l in lower.lines() {
+        if let Some(v) = l.strip_prefix("message-id:") {
+            let v = v.trim();
+            if let (Some(a), Some(b)) = (v.find('<'), v.rfind('>')) {
+                if a < b {
+                    own_id = Some(v[a + 1..b].to_string());
+                }
+            }
+        } else if let Some(v) = l
+            .strip_prefix("in-reply-to:")
+            .or_else(|| l.strip_prefix("references:"))
+        {
+            reply_refs.push(v.to_string());
+        }
+    }
+    let Some(own) = own_id else { return false };
+    reply_refs.iter().any(|r| {
+        // 参照列の各 <...> と自分の ID を照合
+        let mut rest = r.as_str();
+        loop {
+            match rest.find('<') {
+                None => return false,
+                Some(a) => {
+                    let after = &rest[a + 1..];
+                    match after.find('>') {
+                        None => return false,
+                        Some(b) => {
+                            if after[..b].trim() == own {
+                                return true;
+                            }
+                            rest = &after[b + 1..];
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// `Expires:`/`Reply-By:`/`Expiry-Date:` 等の期限自称ヘッダがあるか
+/// 判定する (D1380)。
+///
+/// 「有効期限」「返信期限」を送信側が記す欄 — 緊急性を日付で
+/// 提示する圧力表示 (D1340 `X-Priority` 自称の期限版)。
+/// 正規 MUA はほぼ生成しない。
+#[must_use]
+pub fn has_deadline_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let header = &lower[..header_end];
+    header.lines().any(|l| {
+        l.starts_with("expires:")
+            || l.starts_with("reply-by:")
+            || l.starts_with("expiry-date:")
+            || l.starts_with("x-expires:")
+    })
 }
 
 
@@ -22813,6 +23011,85 @@ mod tests {
         assert!(!has_undeclared_base64_block(
             b"Content-Type: text/plain\r\n\r\nHello, world. This is a normal message body.\r\n"
         ));
+    }
+
+    #[test]
+    fn encoded_message_part_は符号化emlを検出する() {
+        // D1377 — message/rfc822 + base64 CTE
+        assert!(has_encoded_message_part(
+            b"Content-Type: message/rfc822\r\nContent-Transfer-Encoding: base64\r\n\r\nRnJvbTogYUBi"
+        ));
+        // パート内でも検出
+        assert!(has_encoded_message_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: message/rfc822\r\nContent-Transfer-Encoding: base64\r\n\r\nRnJvbTogYUBi\r\n--b--"
+        ));
+        // 7bit/8bit は不発火 (規格適合)
+        assert!(!has_encoded_message_part(
+            b"Content-Type: message/rfc822\r\nContent-Transfer-Encoding: 8bit\r\n\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // CTE 無しは不発火
+        assert!(!has_encoded_message_part(
+            b"Content-Type: message/rfc822\r\n\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // text/plain + base64 は別件 (D1315/D1316) — ここでは不発火
+        assert!(!has_encoded_message_part(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nQUJD"
+        ));
+    }
+
+    #[test]
+    fn unsigned_signed_は署名パート欠落を検出する() {
+        // D1378 — multipart/signed だが署名型パート無し
+        assert!(has_unsigned_signed_container(
+            b"Content-Type: multipart/signed; boundary=b; protocol=\"application/pgp-signature\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\n<i>x</i>\r\n--b--"
+        ));
+        // 署名パートがある正当形は不発火
+        assert!(!has_unsigned_signed_container(
+            b"Content-Type: multipart/signed; boundary=b; protocol=\"application/pgp-signature\"\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: application/pgp-signature\r\n\r\n--b--"
+        ));
+        // pkcs7 も同様
+        assert!(!has_unsigned_signed_container(
+            b"Content-Type: multipart/signed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: application/x-pkcs7-signature\r\n\r\n--b--"
+        ));
+        // multipart/signed 以外は不発火
+        assert!(!has_unsigned_signed_container(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn self_reply_ref_は自己参照を検出する() {
+        // D1379 — In-Reply-To が自分の Message-ID
+        assert!(has_self_reply_ref(
+            b"Message-ID: <abc@x>\r\nIn-Reply-To: <abc@x>\r\n\r\nx"
+        ));
+        // References でも同様
+        assert!(has_self_reply_ref(
+            b"Message-ID: <abc@x>\r\nReferences: <other@y> <abc@x>\r\n\r\nx"
+        ));
+        // 他者への参照は不発火
+        assert!(!has_self_reply_ref(
+            b"Message-ID: <abc@x>\r\nIn-Reply-To: <other@y>\r\n\r\nx"
+        ));
+        // Message-ID 無しは不発火
+        assert!(!has_self_reply_ref(b"In-Reply-To: <abc@x>\r\n\r\nx"));
+        // 参照ヘッダ無しは不発火
+        assert!(!has_self_reply_ref(b"Message-ID: <abc@x>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn deadline_claim_は期限自称を検出する() {
+        // D1380 — Expires/Reply-By/Expiry-Date
+        assert!(has_deadline_claim(
+            b"From: a@b\r\nExpires: Thu, 01 Jan 1970 00:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(has_deadline_claim(b"From: a@b\r\nReply-By: tomorrow\r\n\r\nx"));
+        assert!(has_deadline_claim(
+            b"From: a@b\r\nExpiry-Date: 1970-01-01\r\n\r\nx"
+        ));
+        assert!(has_deadline_claim(b"From: a@b\r\nX-Expires: 1\r\n\r\nx"));
+        // 通常ヘッダは不発火
+        assert!(!has_deadline_claim(b"From: a@b\r\nSubject: hi\r\n\r\nx"));
     }
 
     #[test]
