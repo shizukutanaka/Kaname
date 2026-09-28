@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security — D1485: 大小写違いの区切り行検出
+**問題** boundary は case-sensitive — `boundary=b` と宣言されながら本文に `--B` が現れると、厳密比較する実装は部品を見ず、正規化する実装は切り出す。
+**修正** `Envelope.case_variant_boundary` — 宣言値の完全一致を除き、大小写を畳んだ時だけ一致する区切り行を検出。
+**教訓** 「ほぼ同じ区切り」はパーサ実装の分岐点 — case-fold する実装が存在する限りずれは残る。
+
+### Security — D1486: ぶら下がりパラメータ区切り検出
+**問題** `Content-Type: text/plain;` — 区切り `;` の後に何も無い (または `;;` 連続) と、「パラメータを期待してエラー」と「読み飛ばす」で型解釈がずれる。
+**修正** `Envelope.dangling_param_semi` — クオート区間を潰して `;` 末尾・`;;` 連続を検出 (`;=` 空名は D1420)。
+**教訓** 区切り記号の終端も構文の一部 — 残りを期待する実装と寛容な実装でずれる。
+
+### Security — D1487: 空白を挟んだパラメータ値検出
+**問題** `filename= "a.exe"` — `=` の直後の空白を値の一部と読む実装と、飛ばして値を読む実装で添付名がずれる。
+**修正** `Envelope.spaced_param_value` — クオート区間を除いた `= ` / `=	` を検出。
+**教訓** 構文の空白許容は規格ごとに狭い — つい読み飛ばす実装の方が多いためずれが出る。
+
+### Security — D1488: 本体なき List-Unsubscribe-Post 検出
+**問題** RFC 8058 の `List-Unsubscribe-Post:` は `List-Unsubscribe:` 機構への振る舞い指定 — 本体無しでは「ワンクリック」の体裁だけ残る (Gmail 等はボタン表示の根拠に使う)。
+**修正** `Envelope.orphan_unsubscribe_post` — Post 欄あり・Unsubscribe 欄無しを検出 (孤児 List-* は D1468)。
+**教訓** 修飾欄は本体があって初めて意味を持つ — 単独で現れる修飾は偽装の形跡。
+
 ### Security — D1481: 平文部品の HTML 混入検出
 **問題** `Content-Type: text/plain` の本文に `<html>`/`<a href=`/`<form>` 等が含まれると、型を厳守する実装は文字列を表示し「親切」に HTML と推測する実装は対話可能なフォームとして描画する — 安全と名乗る型の下に活動性コンテンツが潜む。
 **修正** `Envelope.html_in_plain_part` — パート run ごとに CT 基底型と本文を対応づけ、text/plain 本文のマークアップを検出。

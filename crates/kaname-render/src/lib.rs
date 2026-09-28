@@ -680,6 +680,14 @@ pub struct Envelope {
     pub closer_only_multipart: bool,
     /// D1484 — ヘッダ値に encoded-word 外の `=XX` 混入。
     pub stray_qp_header: bool,
+    /// D1485 — 本文区切り行が宣言 boundary と大小写のみ違う。
+    pub case_variant_boundary: bool,
+    /// D1486 — CT/CD パラメータ区切り `;` が行末裸・連続。
+    pub dangling_param_semi: bool,
+    /// D1487 — `= ` のように空白を挟んだパラメータ値。
+    pub spaced_param_value: bool,
+    /// D1488 — List-Unsubscribe 無しの List-Unsubscribe-Post。
+    pub orphan_unsubscribe_post: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2827,6 +2835,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let misplaced_attachment_param = has_misplaced_attachment_param(bytes);
     let closer_only_multipart = has_closer_only_multipart(bytes);
     let stray_qp_header = has_stray_qp_header(bytes);
+    let case_variant_boundary = has_case_variant_boundary(bytes);
+    let dangling_param_semi = has_dangling_param_semi(bytes);
+    let spaced_param_value = has_spaced_param_value(bytes);
+    let orphan_unsubscribe_post = has_orphan_unsubscribe_post(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3069,6 +3081,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         misplaced_attachment_param,
         closer_only_multipart,
         stray_qp_header,
+        case_variant_boundary,
+        dangling_param_semi,
+        spaced_param_value,
+        orphan_unsubscribe_post,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -13016,6 +13032,223 @@ pub fn has_stray_qp_header(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// 本文中に宣言 boundary とは大小写の違う区切り行があるか判定する
+/// (D1485)。
+///
+/// boundary は case-sensitive — `boundary=b` と宣言されながら本文に
+/// `--B` が現れると、厳密比較する実装は部品を見ないが、小文字に
+/// 正規化する実装は部品として切り出す (構造解釈がずれる)。
+#[must_use]
+pub fn has_case_variant_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // boundary= 値を原文で収集 (case-sensitive)
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut bounds: Vec<String> = Vec::new();
+    for (orig, low) in logical.lines().zip(lower.lines()) {
+        if !low.starts_with("content-type:") {
+            continue;
+        }
+        let Some(pos) = low.find("boundary=") else { continue };
+        let rest = &orig[pos + 9..];
+        let v = if let Some(q) = rest.strip_prefix('"') {
+            let end = q.find('"').unwrap_or(q.len());
+            &q[..end]
+        } else {
+            rest.split(';').next().unwrap_or("").trim()
+        };
+        if !v.is_empty() {
+            bounds.push(v.to_string());
+        }
+    }
+    if bounds.is_empty() {
+        return false;
+    }
+    for l in text.lines() {
+        if !l.starts_with("--") {
+            continue;
+        }
+        // 宣言 boundary のいずれかに完全一致 → 通常の区切り
+        if bounds.iter().any(|b| l.starts_with(&format!("--{b}"))) {
+            continue;
+        }
+        // 大小写を畳んだ時だけ一致 → case-variant
+        let ll = l.to_ascii_lowercase();
+        if bounds.iter().any(|b| {
+            ll.starts_with(&format!("--{}", b.to_ascii_lowercase()))
+        }) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Content-Type/Content-Disposition 行のパラメータ区切り `;` が
+/// 行末に裸で終わる (または `;;` が続く) 形か判定する (D1486)。
+///
+/// `text/plain;` — 「パラメータを期待してエラー」と「読み飛ばす」
+/// で型解釈がずれる。`;=` (空名) は D1420 が担当。
+#[must_use]
+pub fn has_dangling_param_semi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        // クオート内の ; は区切りでない — "..." 区間を潰してから走査
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        let mut rest = scrub.as_str();
+        while let Some(sep) = rest.find(';') {
+            let after = &rest[sep + 1..];
+            // `;` のあとに空白のみ (=行末) か `;` が続く → ぶら下がり区切り
+            if after.trim().is_empty() || after.trim_start().starts_with(';') {
+                return true;
+            }
+            rest = &rest[sep + 1..];
+        }
+    }
+    false
+}
+
+/// `name=`・`filename=` 等のパラメータで `=` の直後に空白が挟まる
+/// 形か判定する (D1487)。
+///
+/// `filename= "a.exe"` — `=` 後の空白を値の一部と読む実装と、
+/// 空白を飛ばして値を読む実装で添付名がずれる (空値は D1420)。
+#[must_use]
+pub fn has_spaced_param_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_ct = low.starts_with("content-type:");
+        let is_cd = low.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        // クオート内の `= ` は値の一部 — "..." 区間を潰してから走査
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        // `= ` または `=\t` (空白を挟んだ値) を検出 — `==` 継続は除外
+        let b = scrub.as_bytes();
+        for i in 1..b.len().saturating_sub(1) {
+            if b[i] == b'='
+                && b[i - 1] != b'='
+                && (b[i + 1] == b' ' || b[i + 1] == b'\t')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `List-Unsubscribe-Post:` (RFC 8058 ワンクリック) が
+/// `List-Unsubscribe:` 無しで存在するか判定する (D1488)。
+///
+/// Post 欄は Unsubscribe 機構への POST 振る舞い指定 — 本体が無い
+/// 「ワンクリック」の体裁だけの宣言は、機構を表示する実装と
+/// 組にして初めて意味を持つ仕様で解釈がずれる (孤児 List-* は
+/// D1468)。
+#[must_use]
+pub fn has_orphan_unsubscribe_post(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw).to_lowercase();
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let header = &text[..header_end];
+    let mut has_post = false;
+    let mut has_unsub = false;
+    for l in header.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("list-unsubscribe-post:") {
+            has_post = true;
+        } else if l.starts_with("list-unsubscribe:") {
+            has_unsub = true;
+        }
+    }
+    has_post && !has_unsub
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -29859,6 +30092,71 @@ mod tests {
             b"DKIM-Signature: v=1; b=dGVzdA==\r\n\r\nx"
         ));
         assert!(!has_stray_qp_header(b"Subject: plan a=b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn case_variant_boundary_は大小写違いの区切りを検出する() {
+        // D1485 — 宣言 b だが本文に --B
+        assert!(has_case_variant_boundary(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--B\r\nx\r\n--B--"
+        ));
+        // 完全一致は不発火
+        assert!(!has_case_variant_boundary(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nx\r\n--b--"
+        ));
+        // boundary 宣言無しは不発火
+        assert!(!has_case_variant_boundary(
+            b"Content-Type: text/plain\r\n\r\n--x"
+        ));
+    }
+
+    #[test]
+    fn dangling_param_semi_はぶら下がり区切りを検出する() {
+        // D1486 — 行末 `;` / `;;`
+        assert!(has_dangling_param_semi(b"Content-Type: text/plain;\r\n\r\nx"));
+        assert!(has_dangling_param_semi(
+            b"Content-Type: text/plain;; charset=utf-8\r\n\r\nx"
+        ));
+        // 正常 param・クオート内 `;` は不発火
+        assert!(!has_dangling_param_semi(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(!has_dangling_param_semi(
+            b"Content-Type: text/plain; name=\"a;;b\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn spaced_param_value_は空白挟みの値を検出する() {
+        // D1487 — `= value`
+        assert!(has_spaced_param_value(
+            b"Content-Disposition: attachment; filename= \"a.exe\"\r\n\r\nx"
+        ));
+        assert!(has_spaced_param_value(
+            b"Content-Type: text/plain; charset= utf-8\r\n\r\nx"
+        ));
+        // クオート内の `= `・正常値は不発火
+        assert!(!has_spaced_param_value(
+            b"Content-Type: text/plain; name=\"a= b\"\r\n\r\nx"
+        ));
+        assert!(!has_spaced_param_value(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn orphan_unsubscribe_post_は本体なき一斉送信機構を検出する() {
+        // D1488 — Post 欄のみ
+        assert!(has_orphan_unsubscribe_post(
+            b"List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\r\nx"
+        ));
+        // 組が揃えば不発火
+        assert!(!has_orphan_unsubscribe_post(
+            b"List-Unsubscribe: <mailto:u@x>\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n\r\nx"
+        ));
+        assert!(!has_orphan_unsubscribe_post(
+            b"List-Unsubscribe: <mailto:u@x>\r\n\r\nx"
+        ));
     }
 
     #[test]
