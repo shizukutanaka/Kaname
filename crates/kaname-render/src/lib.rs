@@ -672,6 +672,14 @@ pub struct Envelope {
     pub archive_claim: bool,
     /// D1480 — Message-ID/参照欄の入れ子 `<<…>>`。
     pub nested_msgid: bool,
+    /// D1481 — text/plain パート本文の HTML マークアップ混入。
+    pub html_in_plain_part: bool,
+    /// D1482 — filename= が CT 行 / name= が CD 行にある。
+    pub misplaced_attachment_param: bool,
+    /// D1483 — boundary が閉じ区切りとしてのみ使われる (部品ゼロ)。
+    pub closer_only_multipart: bool,
+    /// D1484 — ヘッダ値に encoded-word 外の `=XX` 混入。
+    pub stray_qp_header: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2815,6 +2823,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let obsolete_signature_headers = has_obsolete_signature_headers(bytes);
     let archive_claim = has_archive_claim(bytes);
     let nested_msgid = has_nested_msgid(bytes);
+    let html_in_plain_part = has_html_in_plain_part(bytes);
+    let misplaced_attachment_param = has_misplaced_attachment_param(bytes);
+    let closer_only_multipart = has_closer_only_multipart(bytes);
+    let stray_qp_header = has_stray_qp_header(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3053,6 +3065,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         obsolete_signature_headers,
         archive_claim,
         nested_msgid,
+        html_in_plain_part,
+        misplaced_attachment_param,
+        closer_only_multipart,
+        stray_qp_header,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -12736,6 +12752,270 @@ pub fn has_nested_msgid(raw: &[u8]) -> bool {
             let v = &l[l.find(':').map(|i| i + 1).unwrap_or(0)..];
             v.contains("<<") || v.contains(">>")
         })
+}
+
+/// `text/plain` パートの本文に HTML マークアップがあるか判定する
+/// (D1481)。
+///
+/// `Content-Type: text/plain` と名乗る本文が `<html>`・`<a href=`・
+/// `<form`・`<script` を含むと、型を厳守する実装は文字列を表示し、
+/// 「親切」に HTML と推測する実装は対話可能なフォームとして描画
+/// する — 安全と名乗る型の下に活動性コンテンツが潜む。
+#[must_use]
+pub fn has_html_in_plain_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    // run ごとに CT 基底型と直後の本文を対応づける
+    let mut run_plain = false;
+    let mut in_run = true; // 外側ヘッダ run から
+    let mut body_seen = false;
+    for l in lower.lines() {
+        if l.starts_with("--") {
+            in_run = true;
+            run_plain = false;
+            continue;
+        }
+        if in_run {
+            if l.is_empty() {
+                in_run = false;
+                body_seen = true;
+                continue;
+            }
+            if let Some(v) = l.strip_prefix("content-type:") {
+                run_plain = v
+                    .trim_start()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    == "text/plain";
+            }
+            continue;
+        }
+        if !run_plain || !body_seen {
+            continue;
+        }
+        if l.contains("<html")
+            || l.contains("<a href")
+            || l.contains("<a  href")
+            || l.contains("<form")
+            || l.contains("<script")
+            || l.contains("<img")
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `filename=` が Content-Type 行に、`name=` が
+/// Content-Disposition 行にある形か判定する (D1482)。
+///
+/// `filename=` は CD の、`name=` は CT のパラメータ — 逆の欄に
+/// 置かれると、欄の正しいパラメータだけを読む実装と横断して拾う
+/// 実装で添付名がずれる。
+#[must_use]
+pub fn has_misplaced_attachment_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        // パラメータキーを走査 — filename が CT に / name が CD にあれば異常
+        let mut rest = l;
+        while let Some(p) = rest.find('=') {
+            let ks = rest[..p]
+                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let key = rest[ks..p]
+                .trim()
+                .trim_end_matches(|c: char| c == '*' || c.is_ascii_digit());
+            if (is_ct && key == "filename") || (is_cd && key == "name") {
+                return true;
+            }
+            rest = &rest[p + 1..];
+        }
+    }
+    false
+}
+
+/// 宣言 boundary が開き区切りとして一度も使われず、閉じ区切り
+/// (`--b--`) のみ現れる形か判定する (D1483)。
+///
+/// `--b--` のみ → 部品ゼロの空容器 — 閉じ区切りだけで multipart
+/// と判断する実装と部品を探し続ける実装で構造がずれる
+/// (boundary 完全不使用は D1460)。
+#[must_use]
+pub fn has_closer_only_multipart(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let Some(ct) = lower.lines().find(|l| l.starts_with("content-type:")) else {
+        return false;
+    };
+    if !ct.contains("multipart/") {
+        return false;
+    }
+    let Some(bp) = ct.find("boundary=") else { return false };
+    let brest = &ct[bp + 9..];
+    let b = if let Some(q) = brest.strip_prefix('"') {
+        q.split('"').next().unwrap_or("")
+    } else {
+        brest.split(';').next().unwrap_or("").trim()
+    };
+    if b.is_empty() {
+        return false;
+    }
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    let mut opens = 0usize;
+    let mut closes = 0usize;
+    let header_end = lower.find("\n\n").unwrap_or(0);
+    for l in lower[header_end..].lines() {
+        if l.starts_with(&close) {
+            closes += 1;
+        } else if l.starts_with(&open) {
+            opens += 1;
+        }
+    }
+    opens == 0 && closes > 0
+}
+
+/// ヘッダ値に encoded-word 外の `=XX` 形 (素の QP エスケープ) が
+/// あるか判定する (D1484)。
+///
+/// `Subject: half=20baked` — 欄値の QP 復号を行う実装と行わない
+/// 実装で表示がずれる (encoded-word 内部の制御は D1324、本文 QP
+/// の破損は D1315 が担当)。
+#[must_use]
+pub fn has_stray_qp_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].to_ascii_lowercase();
+        // 表示対象となる欄に限定 (DKIM/認証結果等の =hex 値を含む欄は除外)
+        let display = matches!(
+            name.as_str(),
+            "subject"
+                | "from"
+                | "to"
+                | "cc"
+                | "bcc"
+                | "reply-to"
+                | "comments"
+                | "keywords"
+                | "sender"
+                | "organization"
+                | "x-face"
+                | "content-description"
+                | "summary"
+                | "list-id"
+        );
+        if !display {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // encoded-word 内部を除くため `=?…?=` 区画を潰してから走査
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(s) = rest.find("=?") {
+            scrub.push_str(&rest[..s]);
+            match rest[s + 2..].find("?=") {
+                Some(e) => rest = &rest[s + 2 + e + 2..],
+                None => {
+                    scrub.push_str(&rest[s..]);
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        // `=` に続く2文字が hex の形を検出
+        let b = scrub.as_bytes();
+        let mut i = 0;
+        while i + 2 < b.len() {
+            if b[i] == b'='
+                && b[i + 1].is_ascii_hexdigit()
+                && b[i + 2].is_ascii_hexdigit()
+            {
+                return true;
+            }
+            i += 1;
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -29515,6 +29795,70 @@ mod tests {
         // 通常形・連立 (D1414 の担当) は不発火
         assert!(!has_nested_msgid(b"Message-ID: <a@b>\r\n\r\nx"));
         assert!(!has_nested_msgid(b"Message-ID: <a@b><c@d>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn html_in_plain_part_は平文部品のhtml混入を検出する() {
+        // D1481 — text/plain 本文の <a href>/<form> 等
+        assert!(has_html_in_plain_part(
+            b"Content-Type: text/plain\r\n\r\nClick <a href=\"https://x\">here</a>"
+        ));
+        assert!(has_html_in_plain_part(
+            b"Content-Type: text/plain\r\n\r\n<html><body>hi</body></html>"
+        ));
+        // text/html 本文・マークアップ無しは不発火
+        assert!(!has_html_in_plain_part(
+            b"Content-Type: text/html\r\n\r\n<a href=\"https://x\">l</a>"
+        ));
+        assert!(!has_html_in_plain_part(
+            b"Content-Type: text/plain\r\n\r\nsee the notes"
+        ));
+    }
+
+    #[test]
+    fn misplaced_attachment_param_は欄違いの名札を検出する() {
+        // D1482 — filename= が CT 行 / name= が CD 行
+        assert!(has_misplaced_attachment_param(
+            b"Content-Type: text/plain; filename=\"evil.exe\"\r\n\r\nx"
+        ));
+        assert!(has_misplaced_attachment_param(
+            b"Content-Disposition: attachment; name=\"evil.exe\"\r\n\r\nx"
+        ));
+        // 正規の配置 (name= が CT、filename= が CD) は不発火
+        assert!(!has_misplaced_attachment_param(
+            b"Content-Type: application/octet-stream; name=\"a\"\r\nContent-Disposition: attachment; filename=\"a\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn closer_only_multipart_は開きなき容器を検出する() {
+        // D1483 — 閉じ区切りのみ・開き無し
+        assert!(has_closer_only_multipart(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b--\r\n"
+        ));
+        // 開きがあれば不発火
+        assert!(!has_closer_only_multipart(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nx\r\n--b--"
+        ));
+        // multipart 以外・boundary 不使用は不発火 (D1460 の担当)
+        assert!(!has_closer_only_multipart(
+            b"Content-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn stray_qp_header_は欄値の素qp断片を検出する() {
+        // D1484 — encoded-word 外の =XX
+        assert!(has_stray_qp_header(b"Subject: half=20baked\r\n\r\nx"));
+        assert!(has_stray_qp_header(b"From: a=20b@x\r\n\r\nx"));
+        // encoded-word 内・非対象欄・正常値は不発火
+        assert!(!has_stray_qp_header(
+            b"Subject: =?utf-8?q?a=20b?=\r\n\r\nx"
+        ));
+        assert!(!has_stray_qp_header(
+            b"DKIM-Signature: v=1; b=dGVzdA==\r\n\r\nx"
+        ));
+        assert!(!has_stray_qp_header(b"Subject: plan a=b\r\n\r\nx"));
     }
 
     #[test]

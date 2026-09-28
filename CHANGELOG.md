@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security — D1481: 平文部品の HTML 混入検出
+**問題** `Content-Type: text/plain` の本文に `<html>`/`<a href=`/`<form>` 等が含まれると、型を厳守する実装は文字列を表示し「親切」に HTML と推測する実装は対話可能なフォームとして描画する — 安全と名乗る型の下に活動性コンテンツが潜む。
+**修正** `Envelope.html_in_plain_part` — パート run ごとに CT 基底型と本文を対応づけ、text/plain 本文のマークアップを検出。
+**教訓** 「text/plain は安全」は実装依存 — 推測描画する実装が存在する限り型宣言は安全保証でない。
+
+### Security — D1482: 欄違いの名札パラメータ検出
+**問題** `filename=` が Content-Type 行に、`name=` が Content-Disposition 行に置かれると、欄の正規パラメータだけを読む実装と横断して拾う実装で添付名がずれる。
+**修正** `Envelope.misplaced_attachment_param` — CT/CD 行のパラメータキーを走査し逆配置を検出。
+**教訓** 「どの欄にどのパラメータ」も実装差異の源 — 寛容実装は RFC を越えて拾う。
+
+### Security — D1483: 閉じ区切りのみの multipart 検出
+**問題** 宣言 boundary が `--b--` (閉じ) のみで `--b` (開き) が一度も現れない → 部品ゼロの空容器。閉じ区切りだけで multipart と判断する実装と部品を探し続ける実装で構造がずれる (D1460 は boundary 完全不使用)。
+**修正** `Envelope.closer_only_multipart` — 開き/閉じ区切りを別々に数え、開き0・閉じ1以上を検出。
+**教訓** 「区切りが使われている」だけでは不十分 — 開きと閉じのペアで意味が決まる。
+
+### Security — D1484: ヘッダ値の素 QP 断片検出
+**問題** `Subject: half=20baked` のように encoded-word 外の `=XX` がヘッダ値に現れると、QP 復号を適用する実装としない実装で表示がずれる (encoded-word 内部の制御は D1324)。
+**修正** `Envelope.stray_qp_header` — 表示欄 (Subject/From/To 等) の値から `=?…?=` を除き `=hexhex` を検出。
+**教訓** 欄値の「たまたま QP らしい形」も復号差異の種 — 対象欄の限定で誤爆を避ける。
+
 ### Security — D1477:
 
 - **問題**: `X-Original-Message-ID:`/`X-Original-From:`/

@@ -894,3 +894,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1478 | DomainKey-Signature/X-DKIM 系の廃止・模倣署名欄 | 検証不能な封印体裁 | 旧式署名欄検査 | kaname-render |
 | D1479 | Archived-At/X-Archived-At 等の原本参照 URL | 原本体裁の誘導リンク | アーカイブ欄検査 | kaname-render |
 | D1480 | Message-ID/参照欄の <<…>> 入れ子括弧 | 括弧層差で照合ずれ | 入れ子括弧検査 | kaname-render |
+| D1481 | text/plain 本文の HTML マークアップ混入 | 推測描画 vs 厳守表示のずれ |
+| D1482 | filename= が CT / name= が CD の逆配置 | 欄正規 param 読み vs 横断読みのずれ |
+| D1483 | boundary が閉じ区切りのみ (部品ゼロ) | 開き無し容器の構造解釈ずれ |
+| D1484 | ヘッダ値の encoded-word 外 =XX | QP 復号の有無で表示ずれ |
