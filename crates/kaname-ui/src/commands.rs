@@ -4426,6 +4426,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.space_separated_param {
+        render_risks.push(
+            "型指定の継ぎ目に ; が無く空白区切りです (text/plain charset=…)\
+             —; で区切る実装はパラメータを見失います"
+                .to_string(),
+        );
+    }
+    if env.unknown_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding の値が規定外です (uuencode/binhex 等)\
+             —素通し実装と既定扱い実装で本文の見え方がずれます"
+                .to_string(),
+        );
+    }
+    if env.nested_alternative {
+        render_risks.push(
+            "multipart/alternative の中に alternative 部品があります\
+             —内側に降りる実装と部品として扱う実装で本文がずれます"
+                .to_string(),
+        );
+    }
+    if env.bare_param {
+        render_risks.push(
+            "型指定の ; 区切りに = の無い裸トークンがあります\
+             —値なしパラメータと読む実装と捨てる実装で解釈がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

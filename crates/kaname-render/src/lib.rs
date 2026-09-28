@@ -712,6 +712,14 @@ pub struct Envelope {
     pub route_addr: bool,
     /// D1500 — アドレス欄の `<<…>>` 入れ子括弧。
     pub nested_angle_addr: bool,
+    /// D1501 — CT/CD の型トークンの後に空白区切りの param 継ぎ。
+    pub space_separated_param: bool,
+    /// D1502 — CTE 値が既知集合外の単一トークン。
+    pub unknown_cte: bool,
+    /// D1503 — alternative の中に alternative メンバー。
+    pub nested_alternative: bool,
+    /// D1504 — CT/CD の `;` 区切りに `=` 無しの裸トークン。
+    pub bare_param: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2875,6 +2883,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let broken_msgid_spec = has_broken_msgid_spec(bytes);
     let route_addr = has_route_addr(bytes);
     let nested_angle_addr = has_nested_angle_addr(bytes);
+    let space_separated_param = has_space_separated_param(bytes);
+    let unknown_cte = has_unknown_cte(bytes);
+    let nested_alternative = has_nested_alternative(bytes);
+    let bare_param = has_bare_param(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3133,6 +3145,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         broken_msgid_spec,
         route_addr,
         nested_angle_addr,
+        space_separated_param,
+        unknown_cte,
+        nested_alternative,
+        bare_param,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -11775,7 +11791,7 @@ pub fn has_dash_boundary(raw: &[u8]) -> bool {
             } else {
                 after.split(';').next().unwrap_or("").trim()
             };
-            if v.ends_with('-') || v.contains("--") {
+            if v.starts_with('-') || v.ends_with('-') || v.contains("--") {
                 return true;
             }
             rest = &rest[p + 9..];
@@ -14048,6 +14064,215 @@ pub fn has_nested_angle_addr(raw: &[u8]) -> bool {
         }
         if scrub.contains("<<") || scrub.contains(">>") {
             return true;
+        }
+    }
+    false
+}
+
+/// CT/CD の最初のパラメータが `;` でなく空白区切りか判定する (D1501)。
+///
+/// `Content-Type: text/plain charset=utf-8` — `;` を欠いて空白で
+/// 継ぐ形は、`;` で区切る実装には「パラメータ無し」に見え、
+/// 空白で区切る実装には charset 有りに見える。読み手によって
+/// 型情報の有無が変わる区切り忘れ。
+#[must_use]
+pub fn has_space_separated_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        // 最初の `;` の手前 (= 型トークン区間) に空白+`=` があるか
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let head = v.split(';').next().unwrap_or("");
+        // クオート区間を潰してから検査
+        let mut scrub = String::with_capacity(head.len());
+        let mut rest = head;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        let scrub = scrub.trim();
+        if let Some(sp) = scrub.find(|c: char| c == ' ' || c == '\t') {
+            if scrub[sp..].contains('=') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値が既知集合外の単一トークンか判定する (D1502)。
+///
+/// `uuencode`/`binhex`/`yenc` 等の規定外符号化名 — 未知値を素通しに
+/// する実装と既定 7bit 扱いする実装で本文の見え方がずれる。
+/// `x-*` 拡張トークンは規格上正当なため対象外。複合・ゴミ付きの
+/// 値 (D1405)・欠落 (D1451) とは別の「未知の名札」。
+#[must_use]
+pub fn has_unknown_cte(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &["7bit", "8bit", "binary", "base64", "quoted-printable"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        let v = v.trim();
+        // 単一トークンのみ判定 — ゴミ付き値は D1405、空値は D1451
+        let clean = !v.is_empty()
+            && !v.contains(';')
+            && !v.contains(',')
+            && v.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if clean && !KNOWN.contains(&v) && !v.starts_with("x-") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `multipart/alternative` のメンバーに `multipart/alternative` が
+/// 混在するか判定する (D1503)。
+///
+/// 「別表現の束」の中に別表現の束が入る形 — 降りて内側を読む実装と
+/// 部品として扱う実装で本文がずれる。related/mixed メンバーは
+/// 正当なので alternative のみを対象とする。
+#[must_use]
+pub fn has_nested_alternative(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let mut alt_bound: Option<String> = None;
+    for l in lower.lines() {
+        if l.starts_with("content-type:") && l.contains("multipart/alternative") {
+            if let Some(bp) = l.find("boundary=") {
+                let brest = &l[bp + 9..];
+                let b = if let Some(q) = brest.strip_prefix('"') {
+                    q.split('"').next().unwrap_or("")
+                } else {
+                    brest.split(';').next().unwrap_or("").trim()
+                };
+                if !b.is_empty() {
+                    alt_bound = Some(format!("--{}", b));
+                }
+            }
+            break;
+        }
+    }
+    let Some(bound) = alt_bound else { return false };
+    let mut in_run = false;
+    for l in lower.lines() {
+        if l.starts_with(&bound) {
+            in_run = !l[bound.len()..].trim_start().starts_with("--");
+            continue;
+        }
+        if in_run
+            && l.starts_with("content-type:")
+            && l.contains("multipart/alternative")
+        {
+            return true;
+        }
+        // 部品ヘッダは空行で終わる — 本文中の本文行は見ない
+        if in_run && l.is_empty() {
+            in_run = false;
+        }
+    }
+    false
+}
+
+/// CT/CD の `;` 区切りに `=` を持たない裸トークンがあるか判定する (D1504)。
+///
+/// `Content-Disposition: attachment; inline` — `=` の無い裸の
+/// トークンは「値なしパラメータ」と読む実装と「ゴミとして捨てる」
+/// 実装で解釈がずれる (空名 `;=` は D1420、行末/連続 `;` は D1486)。
+/// クオート区間内は対象外。
+#[must_use]
+pub fn has_bare_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        // クオート区間を潰す — 値中の `;` で誤判定しない
+        let mut scrub = String::with_capacity(l.len());
+        let mut rest = l;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';').skip(1) {
+            let t = seg.trim();
+            if !t.is_empty() && !t.contains('=') {
+                return true;
+            }
         }
     }
     false
@@ -31145,6 +31370,78 @@ mod tests {
         ));
         assert!(!has_nested_angle_addr(
             b"Message-ID: <<a@b>>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn space_separated_param_は区切り忘れを検出する() {
+        // D1501 — `;` 無しで空白継ぎの param
+        assert!(has_space_separated_param(
+            b"Content-Type: text/plain charset=utf-8\r\n\r\nx"
+        ));
+        assert!(has_space_separated_param(
+            b"Content-Disposition: attachment filename=a.exe\r\n\r\nx"
+        ));
+        // 正規の `;` 区切り・param 無しは不発火
+        assert!(!has_space_separated_param(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(!has_space_separated_param(
+            b"Content-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn unknown_cte_は規定外符号化名を検出する() {
+        // D1502 — uuencode/binhex/yenc 等
+        assert!(has_unknown_cte(
+            b"Content-Transfer-Encoding: uuencode\r\n\r\nx"
+        ));
+        assert!(has_unknown_cte(
+            b"Content-Transfer-Encoding: binhex40\r\n\r\nx"
+        ));
+        // 既知値・x- 拡張・ゴミ付き (D1405) は不発火
+        assert!(!has_unknown_cte(
+            b"Content-Transfer-Encoding: base64\r\n\r\nx"
+        ));
+        assert!(!has_unknown_cte(
+            b"Content-Transfer-Encoding: x-uuencode\r\n\r\nx"
+        ));
+        assert!(!has_unknown_cte(
+            b"Content-Transfer-Encoding: base64; junk\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn nested_alternative_は容器の中の容器を検出する() {
+        // D1503 — alternative の部品が alternative
+        assert!(has_nested_alternative(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: multipart/alternative; boundary=c\r\n\r\n--c\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--c--\r\n--b--"
+        ));
+        // plain+html・related メンバーは不発火
+        assert!(!has_nested_alternative(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--b--"
+        ));
+        assert!(!has_nested_alternative(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: multipart/related; boundary=c\r\n\r\n--c\r\nContent-Type: text/html\r\n\r\n<b>y</b>\r\n--c--\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn bare_param_は裸トークンを検出する() {
+        // D1504 — `;inline`/`;junk` の = 無し区切り
+        assert!(has_bare_param(
+            b"Content-Disposition: attachment; inline; filename=\"a\"\r\n\r\nx"
+        ));
+        assert!(has_bare_param(
+            b"Content-Type: text/plain; charset=utf-8; junk\r\n\r\nx"
+        ));
+        // 通常形・クオート内は不発火
+        assert!(!has_bare_param(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(!has_bare_param(
+            b"Content-Type: text/plain; name=\"a;b\"\r\n\r\nx"
         ));
     }
 

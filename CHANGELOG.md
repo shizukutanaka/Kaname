@@ -1,5 +1,27 @@
 ## [Unreleased]
 
+### Security — D1501: 空白区切りのパラメータ継ぎ検出
+**問題** `Content-Type: text/plain charset=utf-8` — `;` を欠いて空白で継ぐ形は、`;` で区切る実装に「param 無し」と見え、空白で区切る実装に charset 有りと見える。
+**修正** `Envelope.space_separated_param` — CT/CD の型トークン区間 (最初の `;` 手前) の空白後 `=` を検出 (クオート内除外)。
+**教訓** 区切り記号を忘れた継ぎは、読み方によって param の存否が変わる。
+
+### Security — D1502: 規定外符号化名の検出
+**問題** `Content-Transfer-Encoding: uuencode`/`binhex`/`yenc` — 未知値を素通しにする実装と既定 7bit 扱いの実装で本文の見え方がずれる。
+**修正** `Envelope.unknown_cte` — 既知集合外かつ `x-` 非接頭の単一トークン値を検出 (ゴミ付きは D1405、空値は D1451)。
+**教訓** 辞書に無い符号化名は、引き受けるか落とすかが実装差 — `x-` 拡張だけが規定の抜け道。
+
+### Security — D1503: 容器の中の容器検出
+**問題** `multipart/alternative` のメンバーに `multipart/alternative` — 内側に降りる実装と部品として扱う実装で本文がずれる。
+**修正** `Envelope.nested_alternative` — alternative のメンバー部品の CT が alternative なら検出 (related/mixed は正当)。
+**教訓** 「読み比べる束」の中に「読み比べる束」は再帰の誤用 — 部品化と降下で見えるものが違う。
+
+### Security — D1504: 裸トークンのパラメータ検出
+**問題** `Content-Disposition: attachment; inline` — `=` を持たない裸トークンは値なし param かゴミかで実装が分かれる (空名 `;=` は D1420、行末/連続 `;` は D1486)。
+**修正** `Envelope.bare_param` — クオート区間を潰した上で `;` 区切り片の `=` 無し非空を検出。
+**教訓** `=` を欠く継ぎ目のトークンは param か誤植か曖昧 — 曖昧さは実装差の温床。
+
+あわせて `has_dash_boundary` を拡張 — `-x` のように `-` で始まる boundary 値 (区切り行 `---x`) も捕捉。
+
 ### Security — D1497: 素と拡張の名札併記検出
 **問題** `filename="a"; filename*="b"` — RFC 2231 は拡張形優先と規定するが、素の形を採る実装・後勝ちの実装では添付名がずれる。
 **修正** `Envelope.ext_and_plain_param` — クオート区間を潰した上で同名基底の素/拡張併記を検出。
