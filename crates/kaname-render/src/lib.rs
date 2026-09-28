@@ -816,6 +816,14 @@ pub struct Envelope {
     pub dotdot_msgid_domain: bool,
     /// MIME 欄値中の encoded-word (D1552 — 復号有無ずれ)。
     pub ew_in_mime_headers: bool,
+    /// ローカル部の端ドット (D1553 — 宛名受理ずれ)。
+    pub edge_dot_local: bool,
+    /// 宛名ドメインの連続ドット (D1554 — 宛名ずれ)。
+    pub dotdot_addr_domain: bool,
+    /// Date 系の未知月名 (D1555 — 日付解析ずれ)。
+    pub bad_month_name: bool,
+    /// ローカル部の連続ドット (D1556 — 宛名ずれ)。
+    pub dotdot_addr_local: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3075,6 +3083,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dotdot_msgid_domain = has_dotdot_msgid_domain(bytes);
     // D1552: MIME 欄値中の encoded-word
     let ew_in_mime_headers = has_ew_in_mime_headers(bytes);
+    // D1553: ローカル端ドット
+    let edge_dot_local = has_edge_dot_local(bytes);
+    // D1554: 宛名ドメイン連続ドット
+    let dotdot_addr_domain = has_dotdot_addr_domain(bytes);
+    // D1555: 未知月名
+    let bad_month_name = has_bad_month_name(bytes);
+    // D1556: ローカル連続ドット
+    let dotdot_addr_local = has_dotdot_addr_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3385,6 +3401,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_at_addr,
         dotdot_msgid_domain,
         ew_in_mime_headers,
+        edge_dot_local,
+        dotdot_addr_domain,
+        bad_month_name,
+        dotdot_addr_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -16738,6 +16758,207 @@ pub fn has_ew_in_mime_headers(raw: &[u8]) -> bool {
             || low.starts_with("content-transfer-encoding:");
         if is_mime && l.contains("=?") {
             return true;
+        }
+    }
+    false
+}
+
+
+/// アドレス欄のローカル部が `.` で始まる/終わるか判定する (D1553)。
+///
+/// `From: .a@x`/`a.@x` の端のドットは空 atom で、厳格実装は
+/// 宛名を拒否し、寛容実装はそのまま受理する — 宛名がずれる。
+#[must_use]
+pub fn has_edge_dot_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // @ の直前/直後のトークン端に `.` があるか (クオート/コメント除外は簡易)
+        for (i, &b) in v.as_bytes().iter().enumerate() {
+            if b != b'@' {
+                continue;
+            }
+            // ローカル側の末尾文字 = @ の前の非空白
+            if i > 0 {
+                let prev = v.as_bytes()[..i]
+                    .iter()
+                    .rev()
+                    .find(|c| !c.is_ascii_whitespace());
+                if let Some(&p) = prev {
+                    if p == b'.' {
+                        return true;
+                    }
+                }
+            }
+            // ローカル先頭 = 直前の区切りの次文字 — `@x` 手前を遡る
+        }
+        // 値の先頭または , 直後が `.xxx@` 形
+        for seg in v.split(',') {
+            let t = seg.trim_start();
+            if t.starts_with('.') && t.contains('@') {
+                return true;
+            }
+            // `x .a@b` — トークン先頭が '.' で '@' を含む
+            for tok in seg.split_whitespace() {
+                if tok.starts_with('.') && tok.contains('@') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメインに連続 `..` があるか判定する (D1554)。
+///
+/// `a@b..c` の空ラベルは受理する実装と拒否する実装で宛名が
+/// ずれる (msgid 欄版は D1551、`.` 単独行は D1421)。
+#[must_use]
+pub fn has_dotdot_addr_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // @ 以降のトークンに `..`
+        for seg in v.split(',') {
+            if let Some(at) = seg.rfind('@') {
+                let dom = seg[at + 1..].trim_end_matches(|c: char| {
+                    c == '>' || c == ')' || c == ';' || c.is_whitespace()
+                });
+                if dom.contains("..") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Date 系欄の月名が12か月の名に無いか判定する (D1555)。
+///
+/// `Date: Thu, 25 Foo 2025 12:00:00 +0000` の未知月名は、
+/// 解析を捨てる実装と月を飛ばす実装で日付がずれる。
+#[must_use]
+pub fn has_bad_month_name(raw: &[u8]) -> bool {
+    const MONTHS: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].to_ascii_lowercase();
+        // `日 月 年` の3文字英字トークンを月名リストと照合
+        let toks: Vec<&str> = v.split_whitespace().collect();
+        for (i, t) in toks.iter().enumerate() {
+            let tt = t.trim_matches(|c: char| c == ',' || c == ';');
+            if tt.len() >= 3
+                && tt[..3].bytes().all(|b| b.is_ascii_alphabetic())
+                && i > 0
+                && toks[..i].iter().any(|p| {
+                    p.trim_matches(|c: char| c == ',' || c == ';')
+                        .bytes()
+                        .all(|b| b.is_ascii_digit())
+                        && !p.trim_matches(|c: char| c == ',' || c == ';').is_empty()
+                })
+            {
+                // 日数字の直後の英字語 = 月名候補
+                let m3 = &tt[..3];
+                if MONTHS.contains(&m3) {
+                    break; // 正当月が見つかった
+                }
+                if !MONTHS.contains(&m3) && tt.bytes().all(|b| b.is_ascii_alphabetic()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のローカル部に連続 `..` があるか判定する (D1556)。
+///
+/// `a..b@x` の空 atom は厳格実装が宛名を捨て、寛容実装は受理
+/// する — 宛名の読みがずれる (ドメイン側は D1554、msgid は D1551)。
+#[must_use]
+pub fn has_dotdot_addr_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            // セグメント内の各 @ の直前ローカル部に `..`
+            for tok in seg.split_whitespace() {
+                let tok = tok.trim_matches(|c: char| c == '<' || c == '>' || c == '"');
+                if let Some(at) = tok.find('@') {
+                    if tok[..at].contains("..") {
+                        return true;
+                    }
+                }
+            }
         }
     }
     false
@@ -34573,6 +34794,45 @@ mod tests {
         ));
         // Subject の EW は対象外
         assert!(!has_ew_in_mime_headers(b"Subject: =?utf-8?Q?x?=\r\n\r\nb"));
+    }
+
+    #[test]
+    fn edge_dot_local_は端ドットを検出する() {
+        // D1553 — .a@x / a.@x
+        assert!(has_edge_dot_local(b"From: .a@x\r\n\r\nb"));
+        assert!(has_edge_dot_local(b"To: a.@x\r\n\r\nb"));
+        // 中のドットは正常
+        assert!(!has_edge_dot_local(b"From: a.b@x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn dotdot_addr_domain_は連続ドットを検出する() {
+        // D1554 — a@b..c
+        assert!(has_dotdot_addr_domain(b"From: a@b..c\r\n\r\nb"));
+        assert!(has_dotdot_addr_domain(b"To: <a@b..c>\r\n\r\nb"));
+        // 正常ドメインは不発火
+        assert!(!has_dotdot_addr_domain(b"From: a@b.c\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bad_month_name_は未知月名を検出する() {
+        // D1555 — 25 Foo 2025
+        assert!(has_bad_month_name(
+            b"Date: Thu, 25 Foo 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+        // 正常月は不発火
+        assert!(!has_bad_month_name(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn dotdot_addr_local_は連続ドットを検出する() {
+        // D1556 — a..b@x
+        assert!(has_dotdot_addr_local(b"From: a..b@x\r\n\r\nb"));
+        assert!(has_dotdot_addr_local(b"To: <a..b@x>\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_dotdot_addr_local(b"From: a.b@x\r\n\r\nb"));
     }
 
     #[test]
