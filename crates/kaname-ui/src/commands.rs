@@ -4565,6 +4565,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.unclosed_addr_comment {
+        render_risks.push(
+            "宛名欄に閉じないコメント ( があります\
+             —行末まで注釈と読む実装と捨てる実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.unclosed_msgid {
+        render_risks.push(
+            "識別子の < が閉じていません (<a@b 等)\
+             —行末まで読む実装と捨てる実装で識別子がずれます"
+                .to_string(),
+        );
+    }
+    if env.semicolon_addr {
+        render_risks.push(
+            "宛名欄にグループ外の ; があります (a@b; c@d 等)\
+             —区切りと読む実装と構文エラーとする実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_2231_charset {
+        render_risks.push(
+            "添付名の *= パラメータに危険な charset があります (utf-16/utf-7 等)\
+             —復号器によって名札の綴りがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

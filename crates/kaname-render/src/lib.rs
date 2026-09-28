@@ -752,6 +752,14 @@ pub struct Envelope {
     pub mixed_case_disposition: bool,
     /// `CTE:` 値内の空白 (D1520 — 復号有無の差異)。
     pub spaced_cte: bool,
+    /// アドレス欄の未終端コメント `(` (D1521 — 行末読み/破棄差異)。
+    pub unclosed_addr_comment: bool,
+    /// msgid 欄の未終端 `<` (D1522 — 識別子解釈差異)。
+    pub unclosed_msgid: bool,
+    /// アドレス欄のグループ外 `;` (D1523 — 分割/エラー差異)。
+    pub semicolon_addr: bool,
+    /// `*=` パラメータの危険 charset (D1524 — 復号差異)。
+    pub bad_2231_charset: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2947,6 +2955,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let mixed_case_disposition = has_mixed_case_disposition(bytes);
     // D1520: CTE 値内の空白
     let spaced_cte = has_spaced_cte(bytes);
+    // D1521: アドレス欄の未終端コメント
+    let unclosed_addr_comment = has_unclosed_addr_comment(bytes);
+    // D1522: msgid の未終端 <
+    let unclosed_msgid = has_unclosed_msgid(bytes);
+    // D1523: グループ外 ;
+    let semicolon_addr = has_semicolon_addr(bytes);
+    // D1524: *= の危険 charset
+    let bad_2231_charset = has_bad_2231_charset(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3225,6 +3241,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dot_stuffed_line,
         mixed_case_disposition,
         spaced_cte,
+        unclosed_addr_comment,
+        unclosed_msgid,
+        semicolon_addr,
+        bad_2231_charset,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -15092,6 +15112,218 @@ pub fn has_spaced_cte(raw: &[u8]) -> bool {
         let v = v.trim();
         if v.contains(' ') || v.contains('\t') {
             return true;
+        }
+    }
+    false
+}
+
+
+/// アドレス欄に閉じないコメント `(` があるか判定する (D1521)。
+///
+/// `From: a@b (notes` の未終端コメントは、行末までコメントと読む
+/// 実装とエラーで捨てる実装で宛名解釈がずれる。コメント内の別
+/// アドレス (D1300) や `;` 経路とは別の、括弧自体の閉塞欠落。
+#[must_use]
+pub fn has_unclosed_addr_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート内の ( は除外しつつ ( の対を数える
+        let mut in_q = false;
+        let mut depth = 0i32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if b == b'"' {
+                in_q = !in_q;
+            } else if !in_q {
+                if b == b'(' {
+                    depth += 1;
+                } else if b == b')' {
+                    depth -= 1;
+                }
+            }
+            prev = b;
+        }
+        if depth > 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 欄に閉じない `<` があるか判定する (D1522)。
+///
+/// `Message-ID: <a@b` の未終端括弧は、行末まで識別子と読む実装と
+/// 欄ごと捨てる実装で識別子がずれる (形の崩れ自体は D1498 が担う
+/// が、閉じ括弧の欠落はそこで打ち切られて検査されない)。
+#[must_use]
+pub fn has_unclosed_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            match rest[a..].find('>') {
+                Some(z) => rest = &rest[a + z + 1..],
+                None => return true,
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄にグループ外の `;` があるか判定する (D1523)。
+///
+/// `From: a@b; c@d` の裸 `;` はグループ終端のはずの記号で、
+/// `,` と同格に分割する実装と構文エラーとする実装で宛名がずれる
+/// (グループ構文自体は D1363/D1446 が担う)。
+#[must_use]
+pub fn has_semicolon_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート・コメント・<…> 内の ; は正当なので外だけ見る
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if in_a {
+                if b == b'>' {
+                    in_a = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'<' {
+                in_a = true;
+            } else if b == b';' {
+                return true;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// RFC 2231 `*=` パラメータの charset が危険系か判定する (D1524)。
+///
+/// `filename*=utf-16''x`/`utf-7''`/`x-user-defined''` は復号器の
+/// charset 解釈で名札の綴りが変わる — ヘッダ charset の危険値
+/// (D1301) と同じ顔を `*=` の位置で見る。
+#[must_use]
+pub fn has_bad_2231_charset(raw: &[u8]) -> bool {
+    const BAD: &[&str] = &[
+        "utf-7", "utf7", "unicode-1-1-utf-7", "utf-16", "utf-16le", "utf-16be",
+        "utf-32", "utf-32le", "utf-32be", "x-user-defined", "x-mac-ce",
+        "iso-2022-cn", "iso-2022-jp", "iso-2022-kr", "csunicode11utf7",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !(low.starts_with("content-type:") || low.starts_with("content-disposition:")) {
+            continue;
+        }
+        for part in low.split(';').skip(1) {
+            let Some(eq) = part.find('=') else { continue };
+            let key = part[..eq].trim();
+            if !key.ends_with('*') {
+                continue;
+            }
+            let v = part[eq + 1..].trim().trim_matches('"');
+            // charset'lang'value の charset 部
+            let Some(q) = v.find('\'') else { continue };
+            let cs = v[..q].trim();
+            if BAD.contains(&cs) {
+                return true;
+            }
         }
     }
     false
@@ -32500,6 +32732,64 @@ mod tests {
         // 正常形は不発火
         assert!(!has_spaced_cte(b"Content-Transfer-Encoding: base64\r\n\r\nb"));
         assert!(!has_spaced_cte(b"Content-Transfer-Encoding:  base64\r\n\r\nb"));
+    }
+
+    #[test]
+    fn unclosed_addr_comment_は閉じない括弧を検出する() {
+        // D1521 — From: a@b (notes
+        assert!(has_unclosed_addr_comment(b"From: a@b (notes\r\n\r\nb"));
+        // 閉じたコメントは不発火
+        assert!(!has_unclosed_addr_comment(b"From: a@b (John)\r\n\r\nb"));
+        // クオート内の ( は対象外
+        assert!(!has_unclosed_addr_comment(
+            b"From: \"a(b\" <x@y>\r\n\r\nb"
+        ));
+        // アドレス欄以外は対象外
+        assert!(!has_unclosed_addr_comment(b"Subject: hi (x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn unclosed_msgid_は閉じない括弧を検出する() {
+        // D1522 — <a@b 未終端
+        assert!(has_unclosed_msgid(b"Message-ID: <a@b\r\n\r\nb"));
+        assert!(has_unclosed_msgid(b"References: <a@b> <c@d\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_unclosed_msgid(b"Message-ID: <a@b>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn semicolon_addr_はグループ外の区切りを検出する() {
+        // D1523 — From: a@b; c@d
+        assert!(has_semicolon_addr(b"From: a@b; c@d\r\n\r\nb"));
+        // グループ構文 label:...; の ; も外として検出 (D1363 と併記)
+        assert!(has_semicolon_addr(b"To: g: a@b;\r\n\r\nb"));
+        // クオート/コメント/括弧内の ; は対象外
+        assert!(!has_semicolon_addr(b"From: \"a;b\" <x@y>\r\n\r\nb"));
+        assert!(!has_semicolon_addr(b"From: x@y (a;b)\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_semicolon_addr(b"To: a@b, c@d\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bad_2231_charset_は危険符号化を検出する() {
+        // D1524 — filename*=utf-16''x 等
+        assert!(has_bad_2231_charset(
+            b"Content-Disposition: attachment; filename*=utf-16''a.pdf\r\n\r\nb"
+        ));
+        assert!(has_bad_2231_charset(
+            b"Content-Type: text/plain; name*=utf-7''x\r\n\r\nb"
+        ));
+        // utf-8/iso-8859-1 は正当
+        assert!(!has_bad_2231_charset(
+            b"Content-Disposition: attachment; filename*=utf-8''a.pdf\r\n\r\nb"
+        ));
+        assert!(!has_bad_2231_charset(
+            b"Content-Disposition: attachment; filename*=iso-8859-1''a.pdf\r\n\r\nb"
+        ));
+        // 素の filename= は対象外
+        assert!(!has_bad_2231_charset(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nb"
+        ));
     }
 
     #[test]
