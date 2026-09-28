@@ -5433,6 +5433,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.empty_mime_field {
+        render_risks.push(
+            "MIME 欄の値が空です\
+             —既定値に丸める実装と欄ごと捨てる実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_domain {
+        render_risks.push(
+            "宛名のドメイン部が引用符で括られています\
+             —受理する実装と構文エラーとする実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.param_eq_bare {
+        render_risks.push(
+            "名札以外の param 値に裸の「=」が含まれています\
+             —値として残す実装と捨てる実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.long_month {
+        render_risks.push(
+            "Date 欄に 4 字以上の月名があります\
+             —先頭3字で読む実装と全体一致を要求する実装で日付がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

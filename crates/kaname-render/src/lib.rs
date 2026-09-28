@@ -1000,6 +1000,14 @@ pub struct Envelope {
     pub local_backslash: bool,
     /// name/filename 以外の param の生非 ASCII (D1644 — param 読みずれ)。
     pub raw_param_nonascii: bool,
+    /// `Content-Type:`/`CD:`/`CTE:` の空値 (D1645 — 既定値ずれ)。
+    pub empty_mime_field: bool,
+    /// 宛名のクオート付きドメイン `a@"b.c"` (D1646 — 宛名受理ずれ)。
+    pub quoted_domain: bool,
+    /// 名札以外 param の裸の第二 `=` (D1647 — param 読みずれ)。
+    pub param_eq_bare: bool,
+    /// Date の 4 字以上の月名 `September` (D1648 — 日付解析ずれ)。
+    pub long_month: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3443,6 +3451,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let local_backslash = has_local_backslash(bytes);
     // D1644: param 値の生非 ASCII
     let raw_param_nonascii = has_raw_param_nonascii(bytes);
+    // D1645: MIME 欄の空値
+    let empty_mime_field = has_empty_mime_field(bytes);
+    // D1646: クオート付きドメイン
+    let quoted_domain = has_quoted_domain(bytes);
+    // D1647: param 値の裸の第二 `=`
+    let param_eq_bare = has_param_eq_bare(bytes);
+    // D1648: 長い月名
+    let long_month = has_long_month(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3845,6 +3861,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mimever_in_part,
         local_backslash,
         raw_param_nonascii,
+        empty_mime_field,
+        quoted_domain,
+        param_eq_bare,
+        long_month,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -20434,7 +20454,7 @@ pub fn has_two_media_types(raw: &[u8]) -> bool {
 /// リテラル `[…]` は D1546)。
 #[must_use]
 pub fn has_bad_domain_char(raw: &[u8]) -> bool {
-    const BAD: &[u8] = b"/=?&#'$^|{}~\"<>;`";
+    const BAD: &[u8] = b"/=?&#'$^|{}~\"<>;`\\";
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -21647,6 +21667,227 @@ pub fn has_raw_param_nonascii(raw: &[u8]) -> bool {
                 continue; // name/filename は D1510、* 形は D1524
             }
             if seg[eq + 1..].chars().any(|c| !c.is_ascii()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:`/`Content-Transfer-Encoding:`
+/// の値が空か判定する (D1645)。
+///
+/// MIME 制御欄の空値は「既定値 (text/plain・inline・7bit) に丸める
+/// 実装」と「欄ごと捨てる実装」で読みがずれる (From/Date 等の空値は
+/// D1435 `has_empty_identity_value`)。
+#[must_use]
+pub fn has_empty_mime_field(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if matches!(
+            name.as_str(),
+            "content-type" | "content-disposition" | "content-transfer-encoding"
+        ) && l[colon + 1..].trim().is_empty()
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメイン部がクオート区間 (`a@"b.c"`) か判定する (D1646)。
+///
+/// ドメインは dot-atom/リテラルが正で、クオート化は受理する実装と
+/// 構文エラーとする実装で宛名がずれる (クオート表示名は D1602 と別)。
+#[must_use]
+pub fn has_quoted_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        let mut after_at = false;
+        let mut domainish = false;
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b')' {
+                    in_c -= 1;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'@' && !in_q {
+                after_at = true;
+                domainish = true;
+            } else if b == b'"' {
+                if in_q {
+                    in_q = false;
+                } else if after_at && domainish {
+                    // `a@"b.c"` — ドメイン字に直結した `"` だけを拾う
+                    // (`a@b "c"` のような後続クオート句は宛名ずれの対象外)
+                    return true;
+                } else {
+                    in_q = true;
+                }
+            } else if b == b',' || b == b';' || b == b'>' || b == b' ' || b == b'\t' {
+                domainish = false;
+                if b != b' ' && b != b'\t' {
+                    after_at = false;
+                }
+            } else if after_at && (b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'[' || b == b']') {
+                domainish = true;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の name/filename 以外の param 値に裸の第二 `=` があるか
+/// 判定する (D1647)。
+///
+/// `charset=a=b`/`boundary=a=b` — 最初の `=` で切る実装は値 `a=b` を
+/// 残し、値に `=` を赦さない実装は捨てる。名札側 (filename=a=b) は
+/// D1515。
+#[must_use]
+pub fn has_param_eq_bare(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim().to_ascii_lowercase();
+            if key == "name" || key == "filename" || key.ends_with('*') {
+                continue;
+            }
+            if seg[eq + 1..].trim().contains('=') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に 4 字以上の月名 (`September` 等) があるか判定する (D1648)。
+///
+/// RFC 5322 の月名は 3 字固定で、先頭3字で受理する実装と全体一致を
+/// 要求する実装で日付がずれる (未知3字名は D1555 `has_bad_month_name`)。
+#[must_use]
+pub fn has_long_month(raw: &[u8]) -> bool {
+    const MONTHS3: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for tok in l[colon + 1..].split_whitespace() {
+            let t = tok.trim_matches(|c: char| c == ',' || c == ';');
+            if t.len() > 3
+                && t[..3].to_ascii_lowercase().as_str() // 先頭3字が月名
+                    .as_bytes()
+                    .iter()
+                    .all(|b| b.is_ascii_alphabetic())
+                && MONTHS3.contains(&t[..3].to_ascii_lowercase().as_str())
+                && t[3..].bytes().all(|b| b.is_ascii_alphabetic())
+            {
                 return true;
             }
         }
@@ -40693,6 +40934,55 @@ mod tests {
         ));
         assert!(!has_raw_param_nonascii(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
         assert!(!has_raw_param_nonascii(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_mime_field_MIME欄空値を検出する() {
+        // D1645 — CT/CD/CTE の空値
+        assert!(has_empty_mime_field(b"Content-Type:\r\n\r\nx"));
+        assert!(has_empty_mime_field(b"Content-Disposition: \r\n\r\nx"));
+        assert!(has_empty_mime_field(b"Content-Transfer-Encoding:\t\r\n\r\nx"));
+        assert!(has_empty_mime_field(b"Content-Type:\r\n  \r\n\r\nx"));
+        // 値あり・他欄空値は不発火
+        assert!(!has_empty_mime_field(b"Content-Type: text/plain\r\n\r\nx"));
+        assert!(!has_empty_mime_field(b"Subject:\r\n\r\nx"));
+        assert!(!has_empty_mime_field(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn quoted_domain_クオートドメインを検出する() {
+        // D1646 — `a@"b.c"`
+        assert!(has_quoted_domain(b"From: a@\"b.c\"\r\n\r\nx"));
+        assert!(has_quoted_domain(b"To: <a@\"b.c\">\r\n\r\nx"));
+        // クオート表示名・空白後のクオート・コメント内は不発火
+        assert!(!has_quoted_domain(b"From: \"a@b\" <x@y>\r\n\r\nx"));
+        assert!(!has_quoted_domain(b"From: a@b \"note\"\r\n\r\nx"));
+        assert!(!has_quoted_domain(b"From: a@b (\"c\")\r\n\r\nx"));
+        assert!(!has_quoted_domain(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn param_eq_bare_裸の第二等号を検出する() {
+        // D1647 — 名札以外 param の値内 `=`
+        assert!(has_param_eq_bare(b"Content-Type: text/plain; charset=a=b\r\n\r\nx"));
+        assert!(has_param_eq_bare(b"Content-Type: multipart/mixed; boundary=a=b\r\n\r\nx"));
+        // filename (D1515)・クオート内・通常値は不発火
+        assert!(!has_param_eq_bare(b"Content-Disposition: attachment; filename=a=b.txt\r\n\r\nx"));
+        assert!(!has_param_eq_bare(b"Content-Type: text/plain; charset=\"a=b\"\r\n\r\nx"));
+        assert!(!has_param_eq_bare(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_param_eq_bare(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn long_month_長い月名を検出する() {
+        // D1648 — 4字以上の月名
+        assert!(has_long_month(b"Date: Thu, 25 September 2025 12:00:00 +0000\r\n\r\nx"));
+        assert!(has_long_month(b"Date: 25 Sept 2025 12:00:00 +0000\r\n\r\nx"));
+        // 3字月名・非月名の長い語・他欄は不発火
+        assert!(!has_long_month(b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nx"));
+        assert!(!has_long_month(b"Date: Thursday, 25 Sep 2025 12:00:00 +0000\r\n\r\nx"));
+        assert!(!has_long_month(b"Subject: September report\r\n\r\nx"));
+        assert!(!has_long_month(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

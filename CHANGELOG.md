@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1645: `Content-Type:`/`Content-Disposition:`/`Content-Transfer-Encoding:` の空値を検出 — `Envelope` に `empty_mime_field` を追加。既定値丸め/欄破棄で読みがずれる (from/date 等の空値は D1435)。
+
+### Security — D1646: 宛名ドメイン部のクオート区間 `a@"b.c"` を検出 — `Envelope` に `quoted_domain` を追加。ドメインは dot-atom/リテラルが正で、受理/構文エラーで宛名がずれる。
+
+### Security — D1647: name/filename 以外の param 値の裸の第二 `=` (`charset=a=b`) を検出 — `Envelope` に `param_eq_bare` を追加 (名札側は D1515)。
+
+### Security — D1648: Date 欄の 4 字以上の月名 (`September`) を検出 — `Envelope` に `long_month` を追加 (未知3字名は D1555)。あわせて D1622 の BAD 集合に `\` を追加し `a@b\c` を捕捉。
+
 ### Security — D1641: `Sender:` ありで `From:` 無しの形を検出 — `Envelope` に `sender_no_from` を追加。RFC 5322 は Sender に From を要求し、Sender 採用/欄破棄で差出人表示がずれる。
 
 ### Security — D1642: パート側ヘッダの `MIME-Version:` を検出 — `Envelope` に `mimever_in_part` を追加。版欄は最外専用で、パートを拾う/外側のみで MIME 対応判定がずれる (外側欠落は D1289)。
