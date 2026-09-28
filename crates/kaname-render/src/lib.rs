@@ -720,6 +720,14 @@ pub struct Envelope {
     pub nested_alternative: bool,
     /// D1504 — CT/CD の `;` 区切りに `=` 無しの裸トークン。
     pub bare_param: bool,
+    /// D1505 — text/plain+base64 部品の復号結果が HTML。
+    pub b64_html_part: bool,
+    /// D1506 — 添付名に生の制御文字。
+    pub ctl_filename: bool,
+    /// D1507 — 差出人欄のドット無しドメイン (a@localhost 等)。
+    pub dotless_sender_domain: bool,
+    /// D1508 — アドレス欄の空 `<>`。
+    pub empty_angle_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2887,6 +2895,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let unknown_cte = has_unknown_cte(bytes);
     let nested_alternative = has_nested_alternative(bytes);
     let bare_param = has_bare_param(bytes);
+    let b64_html_part = has_b64_html_part(bytes);
+    let ctl_filename = has_ctl_filename(bytes);
+    let dotless_sender_domain = has_dotless_sender_domain(bytes);
+    let empty_angle_addr = has_empty_angle_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3149,6 +3161,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         unknown_cte,
         nested_alternative,
         bare_param,
+        b64_html_part,
+        ctl_filename,
+        dotless_sender_domain,
+        empty_angle_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -14273,6 +14289,242 @@ pub fn has_bare_param(raw: &[u8]) -> bool {
             if !t.is_empty() && !t.contains('=') {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// `text/plain` + `base64` の部品が、復号すると HTML を含むか判定する (D1505)。
+///
+/// 「安全な平文」の名札の下に符号化された活動コンテンツ —
+/// 復号して文字列表示する実装は安全に見えるが、描画側が推測して
+/// HTML として解釈すると対話フォームが動く (D1481 の符号化版)。
+/// 部品単位だけでなく単一部品のメール本文にも対応。
+#[must_use]
+pub fn has_b64_html_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // 部品のヘッダ/本文を走る — 空行が部品ヘッダの終わり
+    let mut in_hdr = true;
+    let mut ct = String::new();
+    let mut cte = String::new();
+    let mut collect = false;
+    let mut buf = String::new();
+    let mut found = false;
+    for l in text.lines() {
+        if l.starts_with("--") {
+            if collect {
+                let dec = decode_b64_simple(&buf);
+                let dl = String::from_utf8_lossy(&dec).to_ascii_lowercase();
+                if dl.contains("<html")
+                    || dl.contains("<a href")
+                    || dl.contains("<script")
+                    || dl.contains("<form")
+                    || dl.contains("<img")
+                {
+                    found = true;
+                    break;
+                }
+            }
+            collect = false;
+            in_hdr = true;
+            ct.clear();
+            cte.clear();
+            continue;
+        }
+        if in_hdr {
+            if l.is_empty() {
+                in_hdr = false;
+                collect = ct == "text/plain" && cte == "base64";
+                buf.clear();
+                continue;
+            }
+            let ll = l.to_ascii_lowercase();
+            if let Some(v) = ll.strip_prefix("content-type:") {
+                ct = v.trim_start()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+            } else if let Some(v) = ll.strip_prefix("content-transfer-encoding:") {
+                cte = v.trim().to_string();
+            }
+            continue;
+        }
+        if collect {
+            if buf.len() < 8192 {
+                buf.push_str(l.trim());
+            }
+        }
+    }
+    if !found && collect && !buf.is_empty() {
+        let dec = decode_b64_simple(&buf);
+        let dl = String::from_utf8_lossy(&dec).to_ascii_lowercase();
+        if dl.contains("<html")
+            || dl.contains("<a href")
+            || dl.contains("<script")
+            || dl.contains("<form")
+            || dl.contains("<img")
+        {
+            found = true;
+        }
+    }
+    found
+}
+
+/// 添付名 (filename/name) の値に生の制御文字が混ざるか判定する (D1506)。
+///
+/// `filename="a\x01b.exe"` のような非印刷バイト — 保存時に除去する
+/// 実装とそのまま残す実装で名札の読みがずれる (改行の混入は
+/// D1396 が符号化形を担当 — こちらは素の `filename=`/`name=` の
+/// 生バイト)。
+#[must_use]
+pub fn has_ctl_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let lower = text.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            // 素の filename=/name= のみ (`*=` 符号化形は D1396)
+            if key != "filename" && key != "name" {
+                continue;
+            }
+            let v = seg[eq + 1..].trim();
+            let inner = if let Some(q) = v.strip_prefix('"') {
+                q.split('"').next().unwrap_or(q)
+            } else {
+                v
+            };
+            // HT は quoted-string 内で規格上許容 — 他の制御文字を見る
+            if inner.bytes().any(|b| (b < 0x20 && b != b'\t') || b == 0x7f) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 差出人欄のドメインがドットを欠くか判定する (D1507)。
+///
+/// `From: a@mail`/`a@localhost` のようなドット無しドメイン —
+/// 拒否する実装・そのまま表示する実装・組織内ドメインと
+/// 推測する実装で差出人の読みがずれる (IP リテラルは D1370、
+/// `_` は D1404、末尾ドットは has_fqdn_trailing_dot)。
+#[must_use]
+pub fn has_dotless_sender_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_sender = l.starts_with("from:")
+            || l.starts_with("sender:")
+            || l.starts_with("resent-from:")
+            || l.starts_with("resent-sender:");
+        if !is_sender {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        // `<…>` の中身があればそれを、無ければ末尾トークンを採る
+        let cand = if let (Some(a), Some(z)) = (v.find('<'), v.rfind('>')) {
+            &v[a + 1..z.max(a + 1)]
+        } else {
+            v.trim()
+        };
+        let Some(at) = cand.rfind('@') else {
+            continue;
+        };
+        let dom = cand[at + 1..]
+            .trim_end_matches(|c: char| c == '>' || c == ',' || c == ';' || c.is_whitespace())
+            .trim();
+        if !dom.is_empty()
+            && !dom.contains('.')
+            && !dom.starts_with('[')
+            && dom.bytes().all(|b| b.is_ascii())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄に空の `<>` があるか判定する (D1508)。
+///
+/// `From: "x" <>` — 括弧だけで中身の無い宛名は、括弧内を採る実装で
+/// 宛先が消え、全体を読む実装で残骸が残る (片側欠落の `a@`/`@b` は
+/// D1408、識別子欄の `<>` は D1498)。Return-Path の `<>` は
+/// バウンスの正規形なので対象外 (アドレス欄のみ走査)。
+#[must_use]
+pub fn has_empty_angle_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for (i, &b) in v.as_bytes().iter().enumerate() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if !in_q && b == b'(' {
+                in_c = 1;
+            } else if !in_q && b == b'<' {
+                if v.as_bytes().get(i + 1) == Some(&b'>') {
+                    return true;
+                }
+            }
+            prev = b;
         }
     }
     false
@@ -31442,6 +31694,70 @@ mod tests {
         ));
         assert!(!has_bare_param(
             b"Content-Type: text/plain; name=\"a;b\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn b64_html_part_は平文の顔のhtmlを検出する() {
+        // D1505 — text/plain + base64 が <html> を内包
+        // "<html><a href='x'>" の base64: PGh0bWw+PGEgaHJlZj0neCc+
+        assert!(has_b64_html_part(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nPGh0bWw+PGEgaHJlZj0neCc+\r\n"
+        ));
+        // multipart 部品でも
+        assert!(has_b64_html_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nPGh0bWw+PGEgaHJlZj0neCc+\r\n--b--"
+        ));
+        // 実際の平文・text/html+base64 は不発火
+        assert!(!has_b64_html_part(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\naGVsbG8gd29ybGQ=\r\n"
+        ));
+        assert!(!has_b64_html_part(
+            b"Content-Type: text/html\r\nContent-Transfer-Encoding: base64\r\n\r\nPGh0bWw+PC9odG1sPg==\r\n"
+        ));
+    }
+
+    #[test]
+    fn ctl_filename_は生の制御文字を検出する() {
+        // D1506 — filename="a\x01b.exe"
+        assert!(has_ctl_filename(
+            b"Content-Disposition: attachment; filename=\"a\x01b.exe\"\r\n\r\nx"
+        ));
+        assert!(has_ctl_filename(
+            b"Content-Type: application/octet-stream; name=\"a\x7fb\"\r\n\r\nx"
+        ));
+        // 通常名・符号化形 (D1396) は不発火
+        assert!(!has_ctl_filename(
+            b"Content-Disposition: attachment; filename=\"a.exe\"\r\n\r\nx"
+        ));
+        assert!(!has_ctl_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''a%01b.exe\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dotless_sender_domain_は点無し宛名を検出する() {
+        // D1507 — From: a@localhost / a@mail
+        assert!(has_dotless_sender_domain(b"From: a@localhost\r\n\r\nx"));
+        assert!(has_dotless_sender_domain(b"Sender: sys@mailserver\r\n\r\nx"));
+        // ドットあり・IP リテラル (D1370)・@ 無し (D1456) は不発火
+        assert!(!has_dotless_sender_domain(b"From: a@example.com\r\n\r\nx"));
+        assert!(!has_dotless_sender_domain(
+            b"From: a@[127.0.0.1]\r\n\r\nx"
+        ));
+        assert!(!has_dotless_sender_domain(b"From: John Doe\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_angle_addr_は空の括弧を検出する() {
+        // D1508 — From: "x" <>
+        assert!(has_empty_angle_addr(b"From: \"x\" <>\r\n\r\nx"));
+        assert!(has_empty_angle_addr(b"Reply-To: a@b, <>\r\n\r\nx"));
+        // 通常形・Return-Path (対象外)・括弧無しは不発火
+        assert!(!has_empty_angle_addr(b"From: a@b\r\n\r\nx"));
+        assert!(!has_empty_angle_addr(b"Return-Path: <>\r\n\r\nx"));
+        assert!(!has_empty_angle_addr(
+            b"From: \"<>\" <a@b>\r\n\r\nx"
         ));
     }
 

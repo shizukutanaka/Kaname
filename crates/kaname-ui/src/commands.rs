@@ -4454,6 +4454,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.b64_html_part {
+        render_risks.push(
+            "text/plain を名乗る base64 部品が、復号すると HTML です\
+             —平文表示の実装と推測描画する実装で見え方がずれます"
+                .to_string(),
+        );
+    }
+    if env.ctl_filename {
+        render_risks.push(
+            "添付名に生の制御文字が混ざっています\
+             —保存時に除去する実装と残す実装で名札がずれます"
+                .to_string(),
+        );
+    }
+    if env.dotless_sender_domain {
+        render_risks.push(
+            "差出人欄のドメインにドットがありません (a@localhost 等)\
+             —拒否・表示・組織内推測で差出人の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_angle_addr {
+        render_risks.push(
+            "宛名に空の <> があります\
+             —括弧内を採る実装で宛先が消えます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
