@@ -992,6 +992,14 @@ pub struct Envelope {
     pub four_part_time: bool,
     /// 宛名欄の `<…>` 内途中位置の `"` (D1640 — 宛名読みずれ)。
     pub mid_angle_quote: bool,
+    /// `Sender:` ありで `From:` 無し (D1641 — 一意欄ずれ)。
+    pub sender_no_from: bool,
+    /// パート側 `MIME-Version:` (D1642 — 版表示ずれ)。
+    pub mimever_in_part: bool,
+    /// 宛名ローカル部の裸 `\` (D1643 — 宛名読みずれ)。
+    pub local_backslash: bool,
+    /// name/filename 以外の param の生非 ASCII (D1644 — param 読みずれ)。
+    pub raw_param_nonascii: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3427,6 +3435,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let four_part_time = has_four_part_time(bytes);
     // D1640: 額縁内途中の `"`
     let mid_angle_quote = has_mid_angle_quote(bytes);
+    // D1641: Sender ありで From 無し
+    let sender_no_from = has_sender_no_from(bytes);
+    // D1642: パート内 MIME-Version
+    let mimever_in_part = has_mimever_in_part(bytes);
+    // D1643: ローカル部の裸 `\`
+    let local_backslash = has_local_backslash(bytes);
+    // D1644: param 値の生非 ASCII
+    let raw_param_nonascii = has_raw_param_nonascii(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3825,6 +3841,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_angle_semi,
         four_part_time,
         mid_angle_quote,
+        sender_no_from,
+        mimever_in_part,
+        local_backslash,
+        raw_param_nonascii,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -21457,6 +21477,178 @@ pub fn has_mid_angle_quote(raw: &[u8]) -> bool {
                 }
             }
             rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Sender:` 欄がありながら `From:` 欄が無いか判定する (D1641)。
+///
+/// Sender は From を代行する欄で、From 無しの Sender は「実際の
+/// 差出人不在のまま Sender だけ採用する実装」と「欄ごと捨てる
+/// 実装」で差出人表示がずれる。
+#[must_use]
+pub fn has_sender_no_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut from = false;
+    let mut sender = false;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if low.starts_with("from:") {
+            from = true;
+        } else if low.starts_with("sender:") {
+            sender = true;
+        }
+    }
+    sender && !from
+}
+
+/// `MIME-Version:` 欄がパート側ヘッダに現れるか判定する (D1642)。
+///
+/// MIME-Version は最外ヘッダ専用 — パート側に置かれると「パート
+/// の版を拾う実装」と「外側だけ見る実装」で MIME 対応判定がずれる
+/// (外側欠落は D1289、外側重複は D1352)。
+#[must_use]
+pub fn has_mimever_in_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut seen_boundary = false;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            seen_boundary = true;
+            continue;
+        }
+        if seen_boundary && !l.starts_with(' ') && !l.starts_with('\t') && l.starts_with("mime-version:") {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄の裸ローカル部に `\` が含まれるか判定する (D1643)。
+///
+/// `From: a\b@c` — `\` は atext 外で、エスケープ処理する実装は
+/// 次字と合わせて読み、生採用する実装は字として残し宛名がずれる
+/// (param 値の `\` は D1624)。
+#[must_use]
+pub fn has_local_backslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        let mut after_at = false;
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'@' {
+                after_at = true;
+            } else if b == b',' || b == b';' || b == b' ' || b == b'\t' || b == b'>' {
+                after_at = false;
+            } else if b == b'\\' && !after_at {
+                // `@` より前の裸 `\` — ローカル部
+                return true;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の name/filename 以外の param 値に生の非 ASCII があるか
+/// 判定する (D1644)。
+///
+/// `charset=日本語`/`title*=…` 以外の `boundary=日本` 等 — param 値
+/// の非 ASCII は RFC 2231/5987 の符号化を要し、生のまま読む実装と
+/// 捨てる実装で読みがずれる (name/filename は D1510)。
+#[must_use]
+pub fn has_raw_param_nonascii(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        // クオート区間を潰して param 節を走査
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim().to_ascii_lowercase();
+            if key == "name" || key == "filename" || key.ends_with("*") {
+                continue; // name/filename は D1510、* 形は D1524
+            }
+            if seg[eq + 1..].chars().any(|c| !c.is_ascii()) {
+                return true;
+            }
         }
     }
     false
@@ -40446,6 +40638,61 @@ mod tests {
         assert!(!has_mid_angle_quote(b"From: \"a b\" <x@y>\r\n\r\nx"));
         assert!(!has_mid_angle_quote(b"Subject: <a\"b>\r\n\r\nx"));
         assert!(!has_mid_angle_quote(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn sender_no_from_差出人不在のsenderを検出する() {
+        // D1641 — Sender ありで From 無し
+        assert!(has_sender_no_from(b"Sender: s@x\r\n\r\nx"));
+        assert!(has_sender_no_from(b"Sender: s@x\r\nTo: t@y\r\n\r\nx"));
+        // From 併記・Sender 無し・他欄は不発火
+        assert!(!has_sender_no_from(b"From: a@b\r\nSender: s@x\r\n\r\nx"));
+        assert!(!has_sender_no_from(b"From: a@b\r\n\r\nx"));
+        assert!(!has_sender_no_from(b"Subject: Sender\r\n\r\nx"));
+    }
+
+    #[test]
+    fn mimever_in_part_パート内版欄を検出する() {
+        // D1642 — パートヘッダの MIME-Version
+        assert!(has_mimever_in_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nMIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--\r\n"
+        ));
+        // 外側のみ・パート内無し・無しは不発火
+        assert!(!has_mimever_in_part(b"MIME-Version: 1.0\r\n\r\nx"));
+        assert!(!has_mimever_in_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--\r\n"
+        ));
+        assert!(!has_mimever_in_part(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn local_backslash_ローカル部逆斜線を検出する() {
+        // D1643 — `a\b@c`
+        assert!(has_local_backslash(b"From: a\\b@c\r\n\r\nx"));
+        assert!(has_local_backslash(b"To: <x\\y@z>\r\n\r\nx"));
+        // クオート内・コメント内・ドメイン側・他欄は不発火
+        assert!(!has_local_backslash(b"From: \"a\\b\" <x@y>\r\n\r\nx"));
+        assert!(!has_local_backslash(b"From: x@y (a\\b)\r\n\r\nx"));
+        assert!(!has_local_backslash(b"From: x@y\\z\r\n\r\nx"));
+        assert!(!has_local_backslash(b"Subject: a\\b\r\n\r\nx"));
+        assert!(!has_local_backslash(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn raw_param_nonascii_裸param非asciiを検出する() {
+        // D1644 — name/filename 以外の param の生非 ASCII
+        assert!(has_raw_param_nonascii(
+            "Content-Type: text/plain; charset=日本語\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_raw_param_nonascii(
+            "Content-Type: multipart/mixed; boundary=日本\r\n\r\nx".as_bytes()
+        ));
+        // name/filename (D1510)・`*` 形・ASCII のみ・他欄は不発火
+        assert!(!has_raw_param_nonascii(
+            "Content-Disposition: attachment; filename=日本.txt\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_raw_param_nonascii(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_raw_param_nonascii(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

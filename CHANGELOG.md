@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1641: `Sender:` ありで `From:` 無しの形を検出 — `Envelope` に `sender_no_from` を追加。RFC 5322 は Sender に From を要求し、Sender 採用/欄破棄で差出人表示がずれる。
+
+### Security — D1642: パート側ヘッダの `MIME-Version:` を検出 — `Envelope` に `mimever_in_part` を追加。版欄は最外専用で、パートを拾う/外側のみで MIME 対応判定がずれる (外側欠落は D1289)。
+
+### Security — D1643: アドレス欄ローカル部の裸 `\` (`a\b@c`) を検出 — `Envelope` に `local_backslash` を追加。atext 外の `\` をエスケープ処理/字として読むで宛名がずれる (param 値側は D1624)。
+
+### Security — D1644: CT/CD 欄の name/filename 以外の param 値の生非 ASCII を検出 — `Envelope` に `raw_param_nonascii` を追加。RFC 2231/5987 符号化を要する値を生読み/破棄でずれる (filename は D1510)。
+
 ### Security — D1637: 識別子欄 `<…>` 内の残存非合法字 (`|`/`=`/`/`/`,` 等) を検出 — `Envelope` に `msgid_bad_char` を追加。msg-id 字句外の記号を厳格実装が識別子ごと捨て照合ずれ。
 
 ### Security — D1638: アドレス欄 `<…>` 内側の `;` (`<a;b@c>`) を検出 — `Envelope` に `addr_angle_semi` を追加。グループ区切りと読む実装と壊れた宛名と読む実装で宛先がずれる (内側 `,` は D1633)。
