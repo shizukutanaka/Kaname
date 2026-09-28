@@ -792,6 +792,14 @@ pub struct Envelope {
     pub two_angles_no_comma: bool,
     /// `Content-Type` の `*/*` ワイルドカード (D1540 — 型解釈差異)。
     pub wildcard_ct: bool,
+    /// `List-*:` の危険スキーム (D1541 — 解除リンクの実行)。
+    pub dangerous_list_scheme: bool,
+    /// クオートのみの宛名欄 (D1542 — 宛名抽出差異)。
+    pub quoted_only_addr: bool,
+    /// `;` 無しのグループ構文 (D1543 — 宛名読みずれ)。
+    pub unclosed_addr_group: bool,
+    /// `,` 継ぎ複数 CTE 値 (D1544 — 復号有無ずれ)。
+    pub multi_value_cte: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3027,6 +3035,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let two_angles_no_comma = has_two_angles_no_comma(bytes);
     // D1540: ワイルドカード CT
     let wildcard_ct = has_wildcard_ct(bytes);
+    // D1541: List-* の危険スキーム
+    let dangerous_list_scheme = has_dangerous_list_scheme(bytes);
+    // D1542: クオートのみ宛名
+    let quoted_only_addr = has_quoted_only_addr(bytes);
+    // D1543: `;` 無しグループ
+    let unclosed_addr_group = has_unclosed_addr_group(bytes);
+    // D1544: 複数値 CTE
+    let multi_value_cte = has_multi_value_cte(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3325,6 +3341,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_junk_after_angle,
         two_angles_no_comma,
         wildcard_ct,
+        dangerous_list_scheme,
+        quoted_only_addr,
+        unclosed_addr_group,
+        multi_value_cte,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -16169,6 +16189,179 @@ pub fn has_wildcard_ct(raw: &[u8]) -> bool {
         let v = l[l.find(':').unwrap_or(0) + 1..].trim();
         let mt = v.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
         if mt == "*/*" || mt.ends_with("/*") || mt.starts_with("*") {
+            return true;
+        }
+    }
+    false
+}
+
+
+/// `List-Unsubscribe:`/`List-*:` に危険スキームがあるか判定する (D1541)。
+///
+/// `List-Unsubscribe: <javascript:alert(1)>` のような mailto:/http
+/// 以外のスキームはワンクリック解除ボタンを実装したクライアントで
+/// 任意スキームが開かれる — 規格は mailto:/https? のみ想定。
+#[must_use]
+pub fn has_dangerous_list_scheme(raw: &[u8]) -> bool {
+    const BAD: &[&str] = &[
+        "javascript:", "data:", "file:", "vbscript:", "ftp:", "about:", "blob:",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !low[..colon].trim_end().starts_with("list-") {
+            continue;
+        }
+        let v = low[colon + 1..].trim();
+        if BAD.iter().any(|b| v.contains(b)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄がクオート文字列のみを含むか判定する (D1542)。
+///
+/// `From: "a@b"` は括弧も裸宛名も無く、クオート内を宛名と読む
+/// 実装と宛名抽出が空になる実装で差出人がずれる
+/// (注釈のみは D1536、クオート未終端は D1525)。
+#[must_use]
+pub fn has_quoted_only_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        // 値が全体で `"…"` のみ (前後空白のみ許容)
+        if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄のグループ構文が `;` で閉じていないか判定する (D1543)。
+///
+/// `To: team: a@b` はグループの開き `:` のまま行が終わり、
+/// `;` を要求する実装は構文エラー、行末で自動閉じる実装は
+/// メンバ宛名として読む — 宛先の読みがずれる
+/// (`;` の混入自体は D1523、空グループは D1334)。
+#[must_use]
+pub fn has_unclosed_addr_group(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート/コメント/括弧を除いた領域に `:` が残り、`;` が無い
+        let mut scrub = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if in_a {
+                if b == b'>' {
+                    in_a = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'<' {
+                in_a = true;
+            } else {
+                scrub.push(b as char);
+            }
+            prev = b;
+        }
+        if scrub.contains(':') && !scrub.contains(';') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値が `,` 継ぎの複数値か判定する (D1544)。
+///
+/// `CTE: base64, quoted-printable` の二値は先頭採用・末尾採用・
+/// 欄ごと破棄で復号の有無がずれる (欄の重複は D1288 の系、
+/// `;` 継ぎゴミは D1405)。
+#[must_use]
+pub fn has_multi_value_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-transfer-encoding:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        if v.split(',').filter(|t| !t.trim().is_empty()).count() >= 2 {
             return true;
         }
     }
@@ -33845,6 +34038,65 @@ mod tests {
         assert!(has_wildcard_ct(b"Content-Type: text/*\r\n\r\nb"));
         // 正常型は不発火
         assert!(!has_wildcard_ct(b"Content-Type: text/plain\r\n\r\nb"));
+    }
+
+    #[test]
+    fn dangerous_list_scheme_は危険スキームを検出する() {
+        // D1541 — List-Unsubscribe: <javascript:…>
+        assert!(has_dangerous_list_scheme(
+            b"List-Unsubscribe: <javascript:alert(1)>\r\n\r\nb"
+        ));
+        assert!(has_dangerous_list_scheme(
+            b"List-Unsubscribe: <data:text/html,x>\r\n\r\nb"
+        ));
+        // mailto/https は正常
+        assert!(!has_dangerous_list_scheme(
+            b"List-Unsubscribe: <mailto:x@y>, <https://z>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn quoted_only_addr_はクオートのみ宛名を検出する() {
+        // D1542 — From: "a@b"
+        assert!(has_quoted_only_addr(
+            b"From: \"a@b\"\r\n\r\nb"
+        ));
+        // クオート+括弧は正常
+        assert!(!has_quoted_only_addr(
+            b"From: \"John\" <a@b>\r\n\r\nb"
+        ));
+        // 裸宛名は正常
+        assert!(!has_quoted_only_addr(b"From: a@b\r\n\r\nb"));
+    }
+
+    #[test]
+    fn unclosed_addr_group_は閉じないグループを検出する() {
+        // D1543 — To: team: a@b (; 無し)
+        assert!(has_unclosed_addr_group(b"To: team: a@b\r\n\r\nb"));
+        // 正常グループは ; あり
+        assert!(!has_unclosed_addr_group(b"To: team: a@b;\r\n\r\nb"));
+        // コロン無しは正常
+        assert!(!has_unclosed_addr_group(b"To: a@b\r\n\r\nb"));
+        // クオート内の : は対象外
+        assert!(!has_unclosed_addr_group(
+            b"To: \"a:b\" <c@d>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn multi_value_cte_は複数値を検出する() {
+        // D1544 — CTE: base64, quoted-printable
+        assert!(has_multi_value_cte(
+            b"Content-Transfer-Encoding: base64, quoted-printable\r\n\r\nb"
+        ));
+        // 単一値は正常
+        assert!(!has_multi_value_cte(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // 末尾カンマだけは実質単一値
+        assert!(!has_multi_value_cte(
+            b"Content-Transfer-Encoding: base64,\r\n\r\nb"
+        ));
     }
 
     #[test]

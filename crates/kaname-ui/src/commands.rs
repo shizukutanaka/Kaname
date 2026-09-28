@@ -4705,6 +4705,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.dangerous_list_scheme {
+        render_risks.push(
+            "List-* 欄に危険なスキームがあります (javascript: 等)\
+             —解除ボタンを実装するクライアントで任意スキームが開かれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_only_addr {
+        render_risks.push(
+            "宛名欄がクオート文字列のみです (From: a@b のクオート形)\
+             —クオート内を宛名と読む実装と宛名なしとする実装でずれます"
+                .to_string(),
+        );
+    }
+    if env.unclosed_addr_group {
+        render_risks.push(
+            "宛名欄のグループ構文が ; で閉じていません (team: a@b 等)\
+             —構文エラーとする実装と行末で閉じる実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.multi_value_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding がコンマ継ぎの複数値です\
+             —先頭採用・末尾採用・破棄で復号の有無がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
