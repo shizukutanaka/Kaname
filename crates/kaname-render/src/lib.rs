@@ -744,6 +744,14 @@ pub struct Envelope {
     pub extra_eq_param: bool,
     /// msgid `<…>` 内に空白があるか (D1516 — スレッド照合差異)。
     pub spaced_msgid: bool,
+    /// アドレス欄ローカル部の非 ASCII (D1517 — SMTPUTF8 解釈差異)。
+    pub nonascii_addr_local: bool,
+    /// 本文の `..` 始まり行 (D1518 — dot-stuffing 復元差異)。
+    pub dot_stuffed_line: bool,
+    /// `Content-Disposition:` の大文字形 (D1519 — 厳密比較差異)。
+    pub mixed_case_disposition: bool,
+    /// `CTE:` 値内の空白 (D1520 — 復号有無の差異)。
+    pub spaced_cte: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2931,6 +2939,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let extra_eq_param = has_extra_eq_param(bytes);
     // D1516: msgid 内の空白
     let spaced_msgid = has_spaced_msgid(bytes);
+    // D1517: ローカル部の非 ASCII
+    let nonascii_addr_local = has_nonascii_addr_local(bytes);
+    // D1518: dot-stuffing 残渣
+    let dot_stuffed_line = has_dot_stuffed_line(bytes);
+    // D1519: 大文字形 Content-Disposition
+    let mixed_case_disposition = has_mixed_case_disposition(bytes);
+    // D1520: CTE 値内の空白
+    let spaced_cte = has_spaced_cte(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3205,6 +3221,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_at_msgid,
         extra_eq_param,
         spaced_msgid,
+        nonascii_addr_local,
+        dot_stuffed_line,
+        mixed_case_disposition,
+        spaced_cte,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -14927,6 +14947,151 @@ pub fn has_spaced_msgid(raw: &[u8]) -> bool {
                 return true;
             }
             rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+
+/// アドレス欄のローカル部に非 ASCII が含まれるか判定する (D1517)。
+///
+/// `café@x.example` の非 ASCII ローカル部は、SMTPUTF8 を解釈する
+/// 実装では有効な宛名だが ASCII のみを認める実装では宛名ごと捨て
+/// られる。ドメイン側の非 ASCII は D1359 が担う — こちらは `@` の
+/// 手前側を見る。
+#[must_use]
+pub fn has_nonascii_addr_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // @ の直前に続く非区切り文字列をローカル部として見る
+        let vb = v.as_bytes();
+        for (i, b) in vb.iter().enumerate() {
+            if *b != b'@' {
+                continue;
+            }
+            let mut start = i;
+            while start > 0 {
+                let c = vb[start - 1];
+                if c == b' ' || c == b'\t' || c == b'<' || c == b'(' || c == b'"'
+                    || c == b',' || c == b';' || c == b':'
+                {
+                    break;
+                }
+                start -= 1;
+            }
+            if start < i && !v[start..i].is_ascii() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 本文に `..` 始まりの行があるか判定する (D1518 — dot-stuffing 残渣)。
+///
+/// SMTP は `.` 始まりの本文行を `..` に重ねて送る (RFC 5321 §4.5.2)。
+/// 重ねを戻す実装とそのまま見せる実装で行頭がずれ、単独 `.` を
+/// 含む復元では以降の本文が消えることがある (D1421 の姉妹)。
+/// ありふれた `...` のみの行は対象外とする。
+#[must_use]
+pub fn has_dot_stuffed_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(body_start) = text.find("\n\n") else {
+        return false;
+    };
+    for l in text[body_start + 2..].lines() {
+        if !l.starts_with("..") {
+            continue;
+        }
+        // `...` 以上のみドットの行は曖昧なので対象外
+        if l.len() > 2 && l.chars().all(|c| c == '.') {
+            continue;
+        }
+        return true;
+    }
+    false
+}
+
+/// `Content-Disposition:` の型が大文字形か判定する (D1519)。
+///
+/// `Attachment`/`INLINE` は規格上大小写不問だが、小文字比較の実装は
+/// 型として認識せず添付判定がずれる。非標準の型自体は D1337 が担う。
+#[must_use]
+pub fn has_mixed_case_disposition(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if low.strip_prefix("content-disposition:").is_none() {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let ty = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        let tl = ty.to_ascii_lowercase();
+        if (tl == "inline" || tl == "attachment") && tl != ty {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値内に空白があるか判定する (D1520)。
+///
+/// `base 64` のような空白入り符号化名は、空白を除去して読む実装と
+/// 未知値として捨てる実装で復号の有無がずれる。大文字形は D1513、
+/// 未知トークンは D1502、ゴミ付きは D1405 の領分。
+#[must_use]
+pub fn has_spaced_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        let v = v.trim();
+        if v.contains(' ') || v.contains('\t') {
+            return true;
         }
     }
     false
@@ -32281,6 +32446,60 @@ mod tests {
         assert!(has_spaced_msgid(b"References: <a b@c>\r\n\r\nb"));
         // 正常は不発火
         assert!(!has_spaced_msgid(b"Message-ID: <a@b>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn nonascii_addr_local_は高位バイト宛名を検出する() {
+        // D1517 — café@x のローカル部
+        assert!(has_nonascii_addr_local(
+            "From: caf\u{e9}@x.example\r\n\r\nb".as_bytes()
+        ));
+        assert!(has_nonascii_addr_local(
+            "To: \"x\" <\u{846c}@y.example>\r\n\r\nb".as_bytes()
+        ));
+        // ASCII 宛名は不発火
+        assert!(!has_nonascii_addr_local(b"From: a@x.example\r\n\r\nb"));
+        // ドメイン側の非 ASCII は D1359 の領分
+        assert!(!has_nonascii_addr_local(
+            "From: a@\u{4f8b}.example\r\n\r\nb".as_bytes()
+        ));
+    }
+
+    #[test]
+    fn dot_stuffed_line_は重ねドットを検出する() {
+        // D1518 — 本文の .. 始まり行
+        assert!(has_dot_stuffed_line(b"Subject: x\r\n\r\n..abc\r\nb\r\n"));
+        assert!(has_dot_stuffed_line(b"Subject: x\r\n\r\n..\r\nb\r\n"));
+        // 単独 . (D1421) と ... のみ行は対象外
+        assert!(!has_dot_stuffed_line(b"Subject: x\r\n\r\n.\r\n"));
+        assert!(!has_dot_stuffed_line(b"Subject: x\r\n\r\n...\r\n"));
+        // 平文のみは不発火
+        assert!(!has_dot_stuffed_line(b"Subject: x\r\n\r\nabc\r\n"));
+    }
+
+    #[test]
+    fn mixed_case_disposition_は大文字形を検出する() {
+        // D1519 — Attachment/INLINE
+        assert!(has_mixed_case_disposition(
+            b"Content-Disposition: Attachment; filename=\"a\"\r\n\r\nb"
+        ));
+        assert!(has_mixed_case_disposition(b"Content-Disposition: INLINE\r\n\r\nb"));
+        // 小文字形は正常
+        assert!(!has_mixed_case_disposition(
+            b"Content-Disposition: attachment\r\n\r\nb"
+        ));
+        // 未知値は D1337 の領分
+        assert!(!has_mixed_case_disposition(b"Content-Disposition: banana\r\n\r\nb"));
+    }
+
+    #[test]
+    fn spaced_cte_は値内空白を検出する() {
+        // D1520 — base 64 の空白継ぎ
+        assert!(has_spaced_cte(b"Content-Transfer-Encoding: base 64\r\n\r\nb"));
+        assert!(has_spaced_cte(b"Content-Transfer-Encoding: 7 bit\r\n\r\nb"));
+        // 正常形は不発火
+        assert!(!has_spaced_cte(b"Content-Transfer-Encoding: base64\r\n\r\nb"));
+        assert!(!has_spaced_cte(b"Content-Transfer-Encoding:  base64\r\n\r\nb"));
     }
 
     #[test]

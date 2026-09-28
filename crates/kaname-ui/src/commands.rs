@@ -4538,6 +4538,33 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.nonascii_addr_local {
+        render_risks.push(
+            "宛名の @ の手前側に非 ASCII 文字があります (café@x 等)\
+             —SMTPUTF8 を読む実装と捨てる実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.dot_stuffed_line {
+        render_risks.push(
+            "本文に .. 始まりの行があります—配送時の重ねドットを戻す実装とそのまま見せる実装で行頭がずれます"
+                .to_string(),
+        );
+    }
+    if env.mixed_case_disposition {
+        render_risks.push(
+            "Content-Disposition が大文字形です (Attachment/INLINE 等)\
+             —厳密比較する実装は添付判定を見落とします"
+                .to_string(),
+        );
+    }
+    if env.spaced_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding の値の中に空白があります (base 64 等)\
+             —除去して読む実装と捨てる実装で復号の有無がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
