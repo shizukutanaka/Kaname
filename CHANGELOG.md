@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1385: ヘッダ run 先頭の孤児継続行 (WSP 始まり) が未検査
+
+- **問題**: 外側ヘッダ・パートヘッダ run の**先頭行**が空白/タブ始まりだと、親を持たない孤児折りたたみになる — 先頭行を捨てる実装とヘッダ名として読む実装で最初の欄の解釈がずれる。
+- **修正**: `has_leading_continuation` — 宣言 boundary 追跡で各 run の先頭行を検査 → `Envelope.leading_continuation` → render_risks 警告。
+- **教訓**: 上の行を持たない続き行 — 行頭が下がっただけの書類。
+
+### Security — D1386: 本文冒頭のヘッダ形連続行が未検査
+
+- **問題**: 外側ヘッダ終端の空行直後に `Name:` 形の行が連続すると、「本文文字列」と読む実装と「後続ヘッダブロック」と読む実装 (formail 系・.eml 再取り込み・mbox 格納) で欄解釈がずれる。
+- **修正**: `has_body_header_block` — 本文冒頭の `Name:` 形連続 (2行以上) を検出 → `Envelope.body_header_block` → render_risks 警告。
+- **教訓**: 本文の顔をした第二の表紙 — 格納差異で隠れ欄が復活する。
+
+### Security — D1387: RFC 1421 PEM ヘッダ (Proc-Type 等) が未検査
+
+- **問題**: `Proc-Type:`/`DEK-Info:`/`Content-Domain:`/`MIC-Info:`/`Key-Info:`/`Originator-ID-*`/`Recipient-ID-*`/`Issuer-Certificate:`/`Issuer:` は廃止済み Privacy Enhanced Mail の印 — この形式で保護された内容は現行スキャナが「暗号化メール」として扱わず (D1349 は PGP/S-MIME のみ対象)、走査が素通りする死角。
+- **修正**: `has_pem_markers` — ヘッダ部で PEM 系欄を検出 → `Envelope.pem_markers` → render_risks 警告。
+- **教訓**: 誰も読めなくなった旧規格の封印 — 検査不能を通知する。
+
+### Security — D1388: 下書き・エクスポート残渣ヘッダ (X-Unsent 等) が未検査
+
+- **問題**: `X-Unsent: 1` (Outlook/PST の未送信下書き印)/`X-Original-ArrivalTime:`/`Apparently-To:`/`X-Apparently-To:` は届いたメールに存在しないはずの残渣 — エクスポート品・手作り生成の兆候で、Apparently-To は Bcc 宛先の露出にもなる。
+- **修正**: `has_draft_residue` — ヘッダ部で残渣欄を検出 → `Envelope.draft_residue` → render_risks 警告。
+- **教訓**: 差出人の机の中にしまってあったはずの控えが届いた葉書。
+
 ### Security — D1381: SpamAssassin 判定欄 (X-Spam-Status 等) の自称が未検査
 
 - **問題**: `X-Spam-Status:`/`X-Spam-Flag:`/`X-Spam-Level:`/`X-Spam-Bar:`/`X-Spam-Checker-Version:` 等の**判定結果**欄 — 「無害と判定済み」の体裁を送信側が書き込める。D363 は内訳欄のみ対象で判定欄そのものは未検査だった。

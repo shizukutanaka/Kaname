@@ -3613,6 +3613,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.leading_continuation {
+        render_risks.push(
+            "ヘッダの先頭が折りたたみ継続行になっています\
+             —欄の解釈が実装間でずれる異常形状です"
+                .to_string(),
+        );
+    }
+    if env.body_header_block {
+        render_risks.push(
+            "本文の冒頭にヘッダ形の行が連続しています\
+             —再取り込み時に「隠れ欄」として復活する形状です"
+                .to_string(),
+        );
+    }
+    if env.pem_markers {
+        render_risks.push(
+            "廃止済み暗号形式 (RFC 1421 PEM) のヘッダがあります\
+             —現行スキャナが暗号化と認識しない検査の死角です"
+                .to_string(),
+        );
+    }
+    if env.draft_residue {
+        render_risks.push(
+            "下書き・エクスポート残渣の欄 (X-Unsent 等) があります\
+             —エクスポート品や手作り生成の兆候です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

@@ -452,6 +452,18 @@ pub struct Envelope {
     /// D1384 — アドレス欄の addr-spec 位置に encoded-word が混入
     /// (復号してから読む実装とそのまま読む実装でアドレスがずれる)。
     pub encoded_word_addr_spec: bool,
+    /// D1385 — ヘッダ run 先頭が継続行 (WSP 始まり) の孤児折りたたみ
+    /// (先頭行を捨てる実装とそのまま読む実装で欄がずれる)。
+    pub leading_continuation: bool,
+    /// D1386 — 本文冒頭に `Name:` 形の行が連続する (格納・再取り込みで
+    /// 後続ヘッダブロックとして復活する欄解釈の差異)。
+    pub body_header_block: bool,
+    /// D1387 — `Proc-Type:`/`DEK-Info:`/`MIC-Info:` 等の RFC 1421 PEM
+    /// 廃止暗号ヘッダ (現行スキャナが暗号化と認識しない死角)。
+    pub pem_markers: bool,
+    /// D1388 — `X-Unsent:`/`Apparently-To:` 等の下書き・エクスポート
+    /// 残渣ヘッダ (エクスポート品・手作り生成の兆候)。
+    pub draft_residue: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2499,6 +2511,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let integrity_claim = has_integrity_claim(bytes);
     let suppression_claim = has_suppression_claim(bytes);
     let encoded_word_addr_spec = has_encoded_word_addr_spec(bytes);
+    let leading_continuation = has_leading_continuation(bytes);
+    let body_header_block = has_body_header_block(bytes);
+    let pem_markers = has_pem_markers(bytes);
+    let draft_residue = has_draft_residue(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2641,6 +2657,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         integrity_claim,
         suppression_claim,
         encoded_word_addr_spec,
+        leading_continuation,
+        body_header_block,
+        pem_markers,
+        draft_residue,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -8091,6 +8111,129 @@ pub fn has_encoded_word_addr_spec(raw: &[u8]) -> bool {
     false
 }
 
+/// ヘッダ run の先頭行が継続行 (空白・タブ始まり) であるか判定する
+/// (D1385)。
+///
+/// 折りたたみ (FWS) は「前行の続き」の印 — 先頭が継続行だと
+/// 親を持たない孤児継続になる。先頭行を捨てて読む実装と
+/// そのままヘッダ名を読もうとする実装で最初の欄の解釈がずれる。
+/// 外側ヘッダと各 MIME パートのヘッダ run を走査する。
+#[must_use]
+pub fn has_leading_continuation(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let declared = declared_boundaries(&text);
+    if text.starts_with(' ') || text.starts_with('\t') {
+        return true;
+    }
+    let mut expect_run_start = false;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                expect_run_start = !(l.ends_with("--") && l.len() > 4);
+            }
+            continue;
+        }
+        if expect_run_start {
+            expect_run_start = false;
+            // 区切り直後の先頭行が WSP 始まり → 孤児継続
+            if l.starts_with(' ') || l.starts_with('\t') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 本文冒頭が `Name:` 形の行の連続であるか判定する (D1386)。
+///
+/// 外側ヘッダ終端の空行直後にヘッダ形の行が連続すると、
+/// 「本文の文字列」と読む実装と「後続ヘッダブロック」と
+/// 読む実装 (formail 系・.eml 再取り込み・mbox 格納) で
+/// 欄解釈がずれる — 格納差異で隠れ欄が復活する形。
+fn is_header_shape_line(l: &str) -> bool {
+    let Some(p) = l.find(':') else { return false };
+    p > 0 && l[..p].bytes().all(|b| (b'!'..=b'~').contains(&b) && b != b':')
+}
+
+#[must_use]
+pub fn has_body_header_block(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(body_start) = text.find("\n\n") else {
+        return false;
+    };
+    let mut count = 0u32;
+    for l in text[body_start + 2..].lines() {
+        if !is_header_shape_line(l) {
+            break;
+        }
+        count += 1;
+        if count >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// RFC 1421 PEM 系ヘッダがあるか判定する (D1387)。
+///
+/// `Proc-Type:`/`DEK-Info:`/`Content-Domain:`/`MIC-Info:`/
+/// `Key-Info:`/`Originator-ID-*`/`Recipient-ID-*`/
+/// `Issuer-Certificate:`/`Issuer:` は廃止済み Privacy Enhanced
+/// Mail の印 — この形式で保護された内容は現行スキャナが
+/// 「暗号化メール」として扱わず (D1349 は PGP/S-MIME のみ)、
+/// 走査が素通りする死角。届くこと自体が手作りの異形である。
+#[must_use]
+pub fn has_pem_markers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    lower[..header_end].lines().any(|l| {
+        l.starts_with("proc-type:")
+            || l.starts_with("dek-info:")
+            || l.starts_with("content-domain:")
+            || l.starts_with("mic-info:")
+            || l.starts_with("key-info:")
+            || l.starts_with("originator-id-")
+            || l.starts_with("recipient-id-")
+            || l.starts_with("issuer-certificate:")
+            || l.starts_with("issuer:")
+    })
+}
+
+/// `X-Unsent:`/`X-Original-ArrivalTime:`/`Apparently-To:`/
+/// `X-Apparently-To:` 等の下書き・エクスポート残渣ヘッダがあるか
+/// 判定する (D1388)。
+/// (`X-Message-Flag:` は D380 notice_marks 側で検出済みのため除く)
+///
+/// `X-Unsent: 1` は Outlook/PST の「未送信下書き」印 —
+/// 届いたメールにあればエクスポート品・手作り生成の兆候。
+/// `Apparently-To:` は sendmail が宛先欄無しの配送で付ける
+/// 旧式残渣で Bcc 宛先の露出にもなる。
+#[must_use]
+pub fn has_draft_residue(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    lower[..header_end].lines().any(|l| {
+        l.starts_with("x-unsent:")
+            || l.starts_with("x-original-arrivaltime:")
+            || l.starts_with("apparently-to:")
+            || l.starts_with("x-apparently-to:")
+    })
+}
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 
@@ -23325,6 +23468,73 @@ mod tests {
         ));
         // 普通のアドレスは不発火
         assert!(!has_encoded_word_addr_spec(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn leading_continuation_は孤児継続行を検出する() {
+        // D1385 — 外側ヘッダの先頭行が継続行
+        assert!(has_leading_continuation(
+            b" X-Bogus: v\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // パートヘッダ run の先頭行が継続行
+        assert!(has_leading_continuation(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n X-Bogus: v\r\n\r\nx\r\n--b--"
+        ));
+        // 通常の継続行 (途中の折りたたみ) は不発火
+        assert!(!has_leading_continuation(
+            b"From: a@b\r\nSubject: l\r\n ong\r\n\r\nbody"
+        ));
+        assert!(!has_leading_continuation(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n X-C: d\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn body_header_block_は本文冒頭の欄形を検出する() {
+        // D1386 — 本文冒頭に Name: 形の行が連続
+        assert!(has_body_header_block(
+            b"Subject: x\r\n\r\nX-Fake: 1\r\nX-Fake2: 2\r\n\r\nbody"
+        ));
+        // 1行だけなら不発火 (本文にコロンを含む行はあり得る)
+        assert!(!has_body_header_block(
+            b"Subject: x\r\n\r\nNote: single line\r\nrest"
+        ));
+        // ヘッダ形でない本文は不発火
+        assert!(!has_body_header_block(
+            b"Subject: x\r\n\r\nhello world"
+        ));
+        assert!(!has_body_header_block(b"Subject: x\r\n\r\n"));
+    }
+
+    #[test]
+    fn pem_markers_は廃止暗号欄を検出する() {
+        // D1387 — Proc-Type/DEK-Info/MIC-Info
+        assert!(has_pem_markers(
+            b"From: a@b\r\nProc-Type: 4,ENCRYPTED\r\nDEK-Info: DES-CBC,0123\r\n\r\nbody"
+        ));
+        assert!(has_pem_markers(
+            b"From: a@b\r\nMIC-Info: RSA-MD5,RSA,xyz\r\n\r\nbody"
+        ));
+        // 本文中の言及は不発火
+        assert!(!has_pem_markers(
+            b"From: a@b\r\n\r\nProc-Type: 4,ENCRYPTED\r\n"
+        ));
+        assert!(!has_pem_markers(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn draft_residue_は下書き残渣欄を検出する() {
+        // D1388 — X-Unsent/X-Original-ArrivalTime 等
+        assert!(has_draft_residue(
+            b"From: a@b\r\nX-Unsent: 1\r\nSubject: x\r\n\r\nbody"
+        ));
+        assert!(has_draft_residue(
+            b"From: a@b\r\nX-Original-ArrivalTime: 25 Sep 2026\r\n\r\nbody"
+        ));
+        assert!(has_draft_residue(
+            b"From: a@b\r\nApparently-To: b@x\r\n\r\nbody"
+        ));
+        assert!(!has_draft_residue(b"From: a@b\r\nSubject: x\r\n\r\nbody"));
     }
 
     #[test]

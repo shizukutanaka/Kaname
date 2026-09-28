@@ -798,3 +798,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1382 | ~~**廃止整合性欄 (Content-MD5 等) の自称が未検査**~~ **(解消済み)** | P3 | 「照合済み」の体裁を内容側が書き込む。修正: `has_integrity_claim` → render_risks | 検査済み印を出品側が捺す箱 |
 | D1383 | ~~**記録抑制要求ヘッダ (X-No-Archive 等) が未検査**~~ **(解消済み)** | P2 | 「痕跡を残すな」の要求 — 証拠隠滅の兆候。修正: `has_suppression_claim` → render_risks | 読んだら捨てろの葉書 |
 | D1384 | ~~**addr-spec 位置の encoded-word が未検査**~~ **(解消済み)** | P2 | アドレス内 `=?…?=` で抽出がずれる。修正: `has_encoded_word_addr_spec` → render_risks | 住所の途中に暗号の宛名 |
+| D1385 | ~~**ヘッダ先頭の孤児継続行 (WSP 始まり) が未検査**~~ **(解消済み)** | P2 | 親を持たない折りたたみで欄解釈がずれる。修正: `has_leading_continuation` → render_risks | 上の行を持たない続き行の書類 |
+| D1386 | ~~**本文冒頭のヘッダ形連続行が未検査**~~ **(解消済み)** | P2 | 再取り込みで後続ヘッダとして復活する格納差異。修正: `has_body_header_block` → render_risks | 本文の顔をした第二の表紙 |
+| D1387 | ~~**RFC 1421 PEM ヘッダ (Proc-Type 等) が未検査**~~ **(解消済み)** | P2 | 現行スキャナが暗号化と認識しない死角。修正: `has_pem_markers` → render_risks | 誰も読めなくなった旧規格の封印 |
+| D1388 | ~~**下書き残渣ヘッダ (X-Unsent 等) が未検査**~~ **(解消済み)** | P3 | エクスポート品・手作り生成の兆候 (Bcc 露出も)。修正: `has_draft_residue` → render_risks | 机の中の控えが届いた葉書 |
