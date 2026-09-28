@@ -1118,6 +1118,14 @@ pub struct Envelope {
     pub boundary_case_collide: bool,
     /// `List-Id:` の二識別子 (D1702 — ML 判定ずれ)。
     pub two_list_ids: bool,
+    /// `Received:` の `from` 節が空 (D1703 — 経路解析ずれ)。
+    pub received_from_empty: bool,
+    /// param 裸値の `/` (D1704 — param 値ずれ)。
+    pub slash_param_value: bool,
+    /// `Content-Type:` のサブ型欠落 (D1705 — 型解釈ずれ)。
+    pub ct_no_subtype: bool,
+    /// 識別子のドット無しドメイン (D1706 — 識別子ずれ)。
+    pub msgid_dotless_domain: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3677,6 +3685,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let boundary_case_collide = has_boundary_case_collide(bytes);
     // D1702: List-Id の二識別子
     let two_list_ids = has_two_list_ids(bytes);
+    // D1703: Received の from 節が空
+    let received_from_empty = has_received_from_empty(bytes);
+    // D1704: param 裸値の /
+    let slash_param_value = has_slash_param_value(bytes);
+    // D1705: Content-Type のサブ型欠落
+    let ct_no_subtype = has_ct_no_subtype(bytes);
+    // D1706: 識別子のドット無しドメイン
+    let msgid_dotless_domain = has_msgid_dotless_domain(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4137,6 +4153,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         param_quoted_eq,
         boundary_case_collide,
         two_list_ids,
+        received_from_empty,
+        slash_param_value,
+        ct_no_subtype,
+        msgid_dotless_domain,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -24687,6 +24707,175 @@ pub fn has_two_list_ids(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `from` 節に値が無いか判定する (D1703)。
+///
+/// `Received: from by mx…` — `from` の直後に節キーワードが続く形。
+/// 次の語をホスト名と読む実装と、空節として読む実装で経路の
+/// 出所がずれる (`from` 節欠落は D1673、`by` 節欠落は D1691)。
+#[must_use]
+pub fn has_received_from_empty(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        // `;` より前が節部 — `from` が末尾なら値無し、次が節語なら値無し
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_ascii_lowercase())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t != "from" {
+                continue;
+            }
+            match toks.get(i + 1) {
+                None => return true,
+                Some(next) if CLAUSES.contains(&next.as_str()) => return true,
+                _ => {}
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD param の裸値に `/` が含まれるか判定する (D1704)。
+///
+/// `;charset=utf/8` — `/` は tspecial で裸値には書けない。
+/// 値ごと採る実装と param を捨てる実装で読みがずれる
+/// (値内の `:` は D1659、第二 `=` は D1647)。
+#[must_use]
+pub fn has_slash_param_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let Some(eq) = part.find('=') else { continue };
+            let v = part[eq + 1..].trim();
+            // クオート値は合法 — 裸値のみ対象
+            if !v.starts_with('"') && v.contains('/') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の値に `/` (サブ型) が無いか判定する (D1705)。
+///
+/// `Content-Type: text` — 既定 `text/plain` に丸める実装と
+/// 欄ごと捨てる実装で本文の型解釈がずれる (型本体の欠落は
+/// D1649、空値は D1645、二重 `/` は D1356)。
+#[must_use]
+pub fn has_ct_no_subtype(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let body = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        // 値が空でなく、かつ `/` を含まない → サブ型欠落
+        if !body.is_empty() && !body.contains('/') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID:`/`Resent-Message-ID:`/`In-Reply-To:`/`References:` の
+/// `<…>` ドメイン部にドットが無いか判定する (D1706)。
+///
+/// `<a@localhost>` — FQDN を要求する実装は識別子を棄て、
+/// 受理する実装は照合キーに使う — スレッド照合がずれる
+/// (宛名欄側は D1697)。
+#[must_use]
+pub fn has_msgid_dotless_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !matches!(
+            name.as_str(),
+            "message-id" | "resent-message-id" | "in-reply-to" | "references" | "content-id"
+        ) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(o) = rest.find('<') {
+            let Some(c) = rest[o..].find('>') else { break };
+            let inner = &rest[o + 1..o + c];
+            if let Some(at) = inner.rfind('@') {
+                let domain = inner[at + 1..].trim_matches(|ch| ch == '[' || ch == ']');
+                if !domain.is_empty() && !domain.contains('.') && !domain.contains(':') {
+                    return true;
+                }
+            }
+            rest = &rest[o + c + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -44431,6 +44620,54 @@ mod tests {
         assert!(has_two_list_ids(b"List-Id: <a.x> <b.y>\r\n\r\n"));
         assert!(!has_two_list_ids(b"List-Id: <a.x>\r\n\r\n"));
         assert!(!has_two_list_ids(b""));
+    }
+
+    #[test]
+    fn received_from_empty_空のfrom節を検出する() {
+        assert!(has_received_from_empty(
+            b"Received: from by mx.example.com; Thu, 25 Sep 2025\r\n\r\n"
+        ));
+        assert!(has_received_from_empty(b"Received: from; Thu\r\n\r\n"));
+        assert!(!has_received_from_empty(
+            b"Received: from mail.example.com by mx.example.com\r\n\r\n"
+        ));
+        assert!(!has_received_from_empty(b""));
+    }
+
+    #[test]
+    fn slash_param_value_裸値の斜線を検出する() {
+        assert!(has_slash_param_value(
+            b"Content-Type: text/plain; charset=utf/8\r\n\r\n"
+        ));
+        assert!(!has_slash_param_value(
+            b"Content-Type: text/plain; charset=\"a/b\"\r\n\r\n"
+        ));
+        assert!(!has_slash_param_value(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_slash_param_value(b""));
+    }
+
+    #[test]
+    fn ct_no_subtype_サブ型欠落を検出する() {
+        assert!(has_ct_no_subtype(b"Content-Type: text\r\n\r\n"));
+        assert!(has_ct_no_subtype(b"Content-Type: text; charset=utf-8\r\n\r\n"));
+        assert!(!has_ct_no_subtype(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_no_subtype(b"Content-Type: \r\n\r\n"));
+        assert!(!has_ct_no_subtype(b""));
+    }
+
+    #[test]
+    fn msgid_dotless_domain_単ラベル識別子を検出する() {
+        assert!(has_msgid_dotless_domain(b"Message-ID: <a@localhost>\r\n\r\n"));
+        assert!(has_msgid_dotless_domain(
+            b"References: <x@y.com> <b@intranet>\r\n\r\n"
+        ));
+        assert!(!has_msgid_dotless_domain(b"Message-ID: <a@x.com>\r\n\r\n"));
+        assert!(!has_msgid_dotless_domain(
+            b"Message-ID: <a@[192.168.0.1]>\r\n\r\n"
+        ));
+        assert!(!has_msgid_dotless_domain(b""));
     }
 
     #[test]

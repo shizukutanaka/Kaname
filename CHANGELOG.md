@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1706: 識別子 `<a@localhost>` のドット無しドメインを検出 — `Envelope` に `msgid_dotless_domain` を追加 (宛名欄側は D1697)。
+### Security — D1705: `Content-Type: text` のサブ型欠落を検出 — `Envelope` に `ct_no_subtype` を追加 (型本体の欠落は D1649、空値は D1645、二重 `/` は D1356)。
+### Security — D1704: param 裸値の `/` `;charset=utf/8` を検出 — `Envelope` に `slash_param_value` を追加 (値内 `:` は D1659、第二 `=` は D1647)。
+### Security — D1703: `Received:` の空 `from` 節を検出 — `Envelope` に `received_from_empty` を追加 (`from` 節欠落は D1673、`by` 節欠落は D1691)。
 ### Security — D1702: `List-Id:` の二識別子 `<a> <b>` を検出 — `Envelope` に `two_list_ids` を追加 (Message-ID 側は D1666)。
 ### Security — D1701: 大小写のみ異なる複数 `boundary=` 値を検出 — `Envelope` に `boundary_case_collide` を追加 (同一値再利用は D1669)。
 ### Security — D1700: param 引用値内の `=` `;charset="a=b"` を検出 — `Envelope` に `param_quoted_eq` を追加 (クオート内 `;` は D1609)。
