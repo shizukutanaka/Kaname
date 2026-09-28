@@ -4621,6 +4621,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.msgid_encoded_word {
+        render_risks.push(
+            "識別子欄の中に encoded-word があります\
+             —復号して照合する実装と生のまま採る実装でスレッドがずれます"
+                .to_string(),
+        );
+    }
+    if env.mixed_2231_cont {
+        render_risks.push(
+            "添付名の連番パラメータが素の形と * 付き形で混在しています\
+             —*= のみ読む実装と全連結する実装で名札がずれます"
+                .to_string(),
+        );
+    }
+    if env.spaced_bare_addrs {
+        render_risks.push(
+            "宛名欄に空白だけで継がれた複数宛名があります (a@b c@d 等)\
+             —空白でも切る実装と切らない実装で宛先数がずれます"
+                .to_string(),
+        );
+    }
+    if env.atless_content_id {
+        render_risks.push(
+            "Content-ID の括弧内に @ がありません (<abc> 等)\
+             —厳密照合する実装と素通しする実装で埋め込み解決がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

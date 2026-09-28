@@ -768,6 +768,14 @@ pub struct Envelope {
     pub bad_ew_charset: bool,
     /// アドレス欄の `@` 無し `<…>` (D1528 — 宛名解釈差異)。
     pub atless_angle_addr: bool,
+    /// msgid 欄内の encoded-word (D1529 — 復号照合差異)。
+    pub msgid_encoded_word: bool,
+    /// RFC 2231 連番の `*N=`/`*N*=` 混在 (D1530 — 連結差異)。
+    pub mixed_2231_cont: bool,
+    /// アドレス欄の空白継ぎ裸アドレス (D1531 — 分割差異)。
+    pub spaced_bare_addrs: bool,
+    /// `Content-ID:` の `@` 無し識別子 (D1532 — cid 解決差異)。
+    pub atless_content_id: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2979,6 +2987,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bad_ew_charset = has_bad_ew_charset(bytes);
     // D1528: @ 無し括弧宛名
     let atless_angle_addr = has_atless_angle_addr(bytes);
+    // D1529: msgid 欄内の encoded-word
+    let msgid_encoded_word = has_msgid_encoded_word(bytes);
+    // D1530: 2231 連番の素/*混在
+    let mixed_2231_cont = has_mixed_2231_cont(bytes);
+    // D1531: 空白継ぎの裸アドレス
+    let spaced_bare_addrs = has_spaced_bare_addrs(bytes);
+    // D1532: @ 無し Content-ID
+    let atless_content_id = has_atless_content_id(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3265,6 +3281,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         unclosed_angle_addr,
         bad_ew_charset,
         atless_angle_addr,
+        msgid_encoded_word,
+        mixed_2231_cont,
+        spaced_bare_addrs,
+        atless_content_id,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -15577,6 +15597,213 @@ pub fn has_atless_angle_addr(raw: &[u8]) -> bool {
             }
             prev = b;
             i += 1;
+        }
+    }
+    false
+}
+
+
+/// msgid 欄の `<…>` 内に encoded-word があるか判定する (D1529)。
+///
+/// `Message-ID: <=?utf-8?B?eA==?=@h>` のように識別子の中に
+/// encoded-word が現れると、復号してから照合する実装と生のまま
+/// 採る実装で識別子がずれ、スレッドの綴じが壊れる。
+#[must_use]
+pub fn has_msgid_encoded_word(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        if l.contains("=?") {
+            return true;
+        }
+    }
+    false
+}
+
+/// RFC 2231 連番で `*N=` と `*N*=` が混在するか判定する (D1530)。
+///
+/// `filename*0=a; filename*1*=b` のように符号化セグメントと素の
+/// セグメントが混ざると、`*=` のみ解釈する実装と全連結する実装で
+/// 添付名がずれる (欠番は D1394、非数値は D1490)。
+#[must_use]
+pub fn has_mixed_2231_cont(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !(low.starts_with("content-type:") || low.starts_with("content-disposition:")) {
+            continue;
+        }
+        // 基底名ごとに「素の連番」と「*付き連番」の有無を数える
+        let mut plain: Vec<String> = Vec::new();
+        let mut star: Vec<String> = Vec::new();
+        for part in low.split(';').skip(1) {
+            let Some(eq) = part.find('=') else { continue };
+            let key = part[..eq].trim();
+            // key = base*N または base*N*
+            let Some(st) = key.find('*') else { continue };
+            let base = &key[..st];
+            let tail = &key[st + 1..];
+            let starred = tail.ends_with('*');
+            let num = if starred { &tail[..tail.len() - 1] } else { tail };
+            if num.is_empty() || !num.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            if starred {
+                star.push(base.to_string());
+            } else {
+                plain.push(base.to_string());
+            }
+        }
+        if plain.iter().any(|b| star.contains(b)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄に空白区切りの裸アドレスが連なるか判定する (D1531)。
+///
+/// `To: a@b c@d` の空白継ぎは、`,` だけを区切る実装では一つの
+/// 壊れた宛名、空白でも切る実装では2つの宛名になる (`,` 無しの
+/// 複数アドレスは厳密には `,` が必要)。
+#[must_use]
+pub fn has_spaced_bare_addrs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // <…>/クオート/コメントを外し、残りの裸トークンで @ を2回見る
+        let mut scrub = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if in_a {
+                if b == b'>' {
+                    in_a = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'<' {
+                in_a = true;
+            } else {
+                scrub.push(b as char);
+            }
+            prev = b;
+        }
+        // , 区切りの各欄で、空白のみで継がれた「トークン@トークン」を探す
+        for seg in scrub.split(',') {
+            let toks: Vec<&str> = seg.split_whitespace().collect();
+            if toks.len() >= 2
+                && toks[0].contains('@')
+                && toks[1].contains('@')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-ID:` の `<…>` 内に `@` が無いか判定する (D1532)。
+///
+/// `Content-ID: <abc>` の `@` 無し識別子は msgid 形ではなく、
+/// `cid:` 参照を厳密照合する実装と素通しする実装で埋め込み解決が
+/// ずれる (括弧欠落は D1395、msgid 欄の `@` 無しは D1498)。
+#[must_use]
+pub fn has_atless_content_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-id:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        if let Some(a) = v.find('<') {
+            if let Some(z) = v[a..].find('>') {
+                let inner = &v[a + 1..a + z];
+                if !inner.is_empty() && !inner.contains('@') {
+                    return true;
+                }
+            }
         }
     }
     false
@@ -33090,6 +33317,67 @@ mod tests {
         assert!(!has_atless_angle_addr(b"From: x <>\r\n\r\nb"));
         // クオート/コメント内は対象外
         assert!(!has_atless_angle_addr(b"From: \"<noat>\" <x@y>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn msgid_encoded_word_は識別子内の符号化を検出する() {
+        // D1529 — <=?…?=@h>
+        assert!(has_msgid_encoded_word(
+            b"Message-ID: <=?utf-8?B?eA==?=@h>\r\n\r\nb"
+        ));
+        assert!(has_msgid_encoded_word(
+            b"References: <a@b> <=?utf-8?Q?c?=@d>\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_msgid_encoded_word(b"Message-ID: <a@b>\r\n\r\nb"));
+        // Subject の encoded-word は対象外
+        assert!(!has_msgid_encoded_word(
+            b"Subject: =?utf-8?Q?x?=\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn mixed_2231_cont_は素と星の混在を検出する() {
+        // D1530 — *0= + *1*=
+        assert!(has_mixed_2231_cont(
+            b"Content-Disposition: attachment; filename*0=a; filename*1*=b\r\n\r\nb"
+        ));
+        // 全部 * 付きは正当形
+        assert!(!has_mixed_2231_cont(
+            b"Content-Disposition: attachment; filename*0*=a; filename*1*=b\r\n\r\nb"
+        ));
+        // 全部素は正当形
+        assert!(!has_mixed_2231_cont(
+            b"Content-Disposition: attachment; filename*0=a; filename*1=b\r\n\r\nb"
+        ));
+        // 連番でない *= は対象外
+        assert!(!has_mixed_2231_cont(
+            b"Content-Disposition: attachment; filename*=utf-8''a\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn spaced_bare_addrs_は空白継ぎを検出する() {
+        // D1531 — To: a@b c@d
+        assert!(has_spaced_bare_addrs(b"To: a@b c@d\r\n\r\nb"));
+        // , 区切りは正常
+        assert!(!has_spaced_bare_addrs(b"To: a@b, c@d\r\n\r\nb"));
+        // 表示名+括弧は正常
+        assert!(!has_spaced_bare_addrs(
+            b"From: John Doe <a@b>\r\n\r\nb"
+        ));
+        // 単一宛名は不発火
+        assert!(!has_spaced_bare_addrs(b"To: a@b\r\n\r\nb"));
+    }
+
+    #[test]
+    fn atless_content_id_はアット無し識別子を検出する() {
+        // D1532 — Content-ID: <abc>
+        assert!(has_atless_content_id(b"Content-ID: <abc>\r\n\r\nb"));
+        // 正常 msgid 形は不発火
+        assert!(!has_atless_content_id(b"Content-ID: <a@b>\r\n\r\nb"));
+        // 括弧なしは D1395 の領分
+        assert!(!has_atless_content_id(b"Content-ID: abc\r\n\r\nb"));
     }
 
     #[test]
