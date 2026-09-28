@@ -858,3 +858,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1442 | multipart/related に type= 無し | ルート部品の型が特定不能 (RFC 2387) | CT 行の type= 有無を検査 | kaname-render |
 | D1443 | In-Reply-To に複数 msgid 併記 | 単一返信先欄の統合体裁偽造 | 値内の msgid 数を検査 | kaname-render |
 | D1444 | 添付名の末尾 . / 空白 | Windows が保存時に剥がし宣言名とずれる | CT/CD 添付名値の末尾を検査 | kaname-render |
+| D1445 | 緊急度欄 (X-Priority/Priority/Importance/X-MSMail-Priority) の規格外値 | 手書き生成の形跡・読み手で強弱ずれ | 値を既定集合と照合 | kaname-render |
+| D1446 | From/Sender 等 mailbox 欄のグループ構文 | 先頭メンバを差出人に読む/欄捨てるでずれ | クオート・コメント除去後 `:`…`;` を検査 | kaname-render |
+| D1447 | ヘッダ run に `:` を欠く壊れ行混入 | 打ち切り/読み飛ばし/継続で以降全行ずれ | 外側ヘッダ物理行の `:` 有無を検査 | kaname-render |
+| D1448 | ヘッダ名に非印刷文字・空白・非ASCII | 厳格実装は欄ごと拒否で読みずれ | 名前部バイト種 (33–126) を検査 | kaname-render |

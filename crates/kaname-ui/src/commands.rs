@@ -4034,6 +4034,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.bad_priority_value {
+        render_risks.push(
+            "緊急度欄の値が規定集合を外れています\
+             —規格に依らない手書き生成の形跡です"
+                .to_string(),
+        );
+    }
+    if env.mailbox_group {
+        render_risks.push(
+            "差出人欄にグループ構文 (label: members;) が混在しています\
+             —mailbox 欄に許されない構文で差出人の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.headerless_line {
+        render_risks.push(
+            "ヘッダ部に「名前:値」の形でない壊れ行が混在しています\
+             —以降の欄の読みが実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_header_name {
+        render_risks.push(
+            "ヘッダ名に使えない文字 (制御・空白・非ASCII) が混在しています\
+             —厳格な実装は欄ごと捨てるため読みがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

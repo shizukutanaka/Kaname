@@ -600,6 +600,14 @@ pub struct Envelope {
     pub multi_inreply: bool,
     /// D1444 — 添付名が `.` または空白で終わる (Windows 保存名ずれ)。
     pub filename_trailing: bool,
+    /// D1445 — 緊急度欄の値が既定集合を外れる (手書き生成の形跡)。
+    pub bad_priority_value: bool,
+    /// D1446 — From/Sender 等の mailbox 欄にグループ構文が混入。
+    pub mailbox_group: bool,
+    /// D1447 — ヘッダ run に `:` を持たない壊れ行が混入。
+    pub headerless_line: bool,
+    /// D1448 — ヘッダ名にフィールド名でない文字 (制御/空白/非ASCII) が混入。
+    pub bad_header_name: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2707,6 +2715,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let related_no_type = has_related_no_type(bytes);
     let multi_inreply = has_multi_inreply(bytes);
     let filename_trailing = has_filename_trailing(bytes);
+    let bad_priority_value = has_bad_priority_value(bytes);
+    let mailbox_group = has_mailbox_group(bytes);
+    let headerless_line = has_headerless_line(bytes);
+    let bad_header_name = has_bad_header_name(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2909,6 +2921,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         related_no_type,
         multi_inreply,
         filename_trailing,
+        bad_priority_value,
+        mailbox_group,
+        headerless_line,
+        bad_header_name,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -10886,6 +10902,188 @@ pub fn has_filename_trailing(raw: &[u8]) -> bool {
                 }
                 rest = next;
             }
+        }
+    }
+    false
+}
+
+/// 緊急度欄 (`X-Priority:`/`Priority:`/`Importance:`/
+/// `X-MSMail-Priority:`) の値が既定集合を外れるか判定する
+/// (D1445)。
+///
+/// `X-Priority:` は 1–5 の数値 (任意で説明語を伴う)、
+/// `Priority:` は urgent|normal|non-urgent、`Importance:` と
+/// `X-MSMail-Priority:` は high|normal|low が正当な値 —
+/// 集合外の値 (`9`・`banana`・空) は規定に依らない
+/// 手書き生成の形跡で、強弱を読む実装と捨てる実装で
+/// 急かせ具合がずれる (D1340/D1431 の値異常版)。
+#[must_use]
+pub fn has_bad_priority_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some((name, v)) = l.split_once(':') else {
+            continue;
+        };
+        let v = v.trim();
+        match name.trim() {
+            "x-priority" => {
+                // 先頭が 1-5 の数字でなければ規格外
+                if !matches!(v.chars().next(), Some('1'..='5')) {
+                    return true;
+                }
+            }
+            "priority" => {
+                if !matches!(v, "urgent" | "normal" | "non-urgent") {
+                    return true;
+                }
+            }
+            "importance" | "x-msmail-priority" => {
+                if !matches!(v, "high" | "normal" | "low") {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// `From:`/`Sender:`/`Resent-From:`/`Resent-Sender:`/`Return-Path:` の
+/// 値にグループ構文 (`label: members;`) が現れるか判定する (D1446)。
+///
+/// これらは RFC 5322 上 mailbox 欄 — グループは address 構文で
+/// あって mailbox ではなく、許容する実装は先頭メンバを差出人に、
+/// 厳格な実装は欄ごと捨てるため読み手がずれる
+/// (D1363 の空グループ検査は宛先欄向けで、こちらは差出人欄の
+/// 非空グループ)。
+#[must_use]
+pub fn has_mailbox_group(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !matches!(
+            lower[..colon].trim(),
+            "from" | "sender" | "resent-from" | "resent-sender" | "return-path"
+        ) {
+            continue;
+        }
+        // クオート・コメント・ドメインリテラルを除いた残りで
+        // `label:` … `;` の並びを探す
+        let val = &l[colon + 1..];
+        let mut cleaned = String::with_capacity(val.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut in_lit = false;
+        let mut prev = '\0';
+        for c in val.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if c == '"' && prev != '\\' {
+                in_q = !in_q;
+            } else if c == '(' && !in_q && prev != '\\' {
+                in_c = 1;
+            } else if !in_q && c == '[' {
+                in_lit = true;
+            } else if in_lit && c == ']' {
+                in_lit = false;
+            } else if !in_lit {
+                cleaned.push(c);
+            }
+            prev = c;
+        }
+        // 先に `:`、後に `;` がある形がグループ
+        if let Some(p) = cleaned.find(':') {
+            if cleaned[p + 1..].contains(';') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 外側ヘッダ run に `:` を持たない非空の物理行があるか判定する
+/// (D1447)。
+///
+/// `Name: value` の形でも行頭空白の継続行でもない行は、
+/// ヘッダの打ち切り・読み飛ばし・継続扱いのどれになるかが
+/// 実装間でずれる壊れ行 — 以降のヘッダの読みが全部ずれる。
+/// 行頭 `From ` の mbox 区切りは別検出なので対象外。
+#[must_use]
+pub fn has_headerless_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for (i, l) in text[..header_end].lines().enumerate() {
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if i == 0 && l.starts_with("From ") {
+            continue;
+        }
+        if !l.contains(':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダ名 (`:` の前) にフィールド名でない文字 (制御文字・
+/// 空白・非 ASCII) が混じるか判定する (D1448)。
+///
+/// field-name は印刷可能 ASCII のうち `:` を除く文字のみ —
+/// `X Foo:` (内部空白) や `X-R\x82` のような名前を、厳格実装は
+/// 拒否し寛容実装は読み込むため欄の有無がずれる
+/// (D 系の名前末尾空白検査とは別: こちらは名前本体の文字種)。
+/// 継続行・`: ` を欠く壊れ行は対象外。
+#[must_use]
+pub fn has_bad_header_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.is_empty() || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else {
+            continue;
+        };
+        let name = &l[..colon];
+        if name.is_empty() {
+            continue;
+        }
+        if name
+            .bytes()
+            .any(|b| !(33..=126).contains(&b))
+        {
+            return true;
         }
     }
     false
@@ -27096,6 +27294,74 @@ mod tests {
         // 通常の添付名は不発火
         assert!(!has_filename_trailing(
             b"Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\r\nAAAA"
+        ));
+    }
+
+    #[test]
+    fn bad_priority_value_は緊急度の規格外値を検出する() {
+        // D1445 — 集合外の値
+        assert!(has_bad_priority_value(
+            b"From: a@b\r\nX-Priority: 9\r\n\r\nx"
+        ));
+        assert!(has_bad_priority_value(
+            b"From: a@b\r\nImportance: critical-now\r\n\r\nx"
+        ));
+        // 規定内の値は不発火
+        assert!(!has_bad_priority_value(
+            b"From: a@b\r\nX-Priority: 1 (Highest)\r\n\r\nx"
+        ));
+        assert!(!has_bad_priority_value(
+            b"From: a@b\r\nImportance: low\r\nPriority: normal\r\n\r\nx"
+        ));
+        // 欄が無ければ不発火
+        assert!(!has_bad_priority_value(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn mailbox_group_は差出人欄のグループ構文を検出する() {
+        // D1446 — mailbox 欄のグループ構文
+        assert!(has_mailbox_group(
+            b"From: Friends: a@b, c@d;\r\n\r\nx"
+        ));
+        // 宛先欄のグループは正規 (To/Cc は address 欄)
+        assert!(!has_mailbox_group(
+            b"To: Friends: a@b, c@d;\r\nFrom: x@y\r\n\r\nx"
+        ));
+        // 単一 mailbox は不発火
+        assert!(!has_mailbox_group(
+            b"From: \"a:b\" <x@y>\r\n\r\nx"
+        ));
+        assert!(!has_mailbox_group(b"From: x@y\r\n\r\nx"));
+    }
+
+    #[test]
+    fn headerless_line_は壊れ行混入を検出する() {
+        // D1447 — `:` を欠く非空行
+        assert!(has_headerless_line(
+            b"From: a@b\r\nJUNKLINE\r\nSubject: x\r\n\r\ny"
+        ));
+        // 正常ヘッダのみなら不発火
+        assert!(!has_headerless_line(
+            b"From: a@b\r\nSubject: x\r\n folded\r\n\r\ny"
+        ));
+        // 本文側の自由行は対象外
+        assert!(!has_headerless_line(
+            b"From: a@b\r\n\r\nJUNKLINE in body\r\nno colon here"
+        ));
+    }
+
+    #[test]
+    fn bad_header_name_は名前の文字種逸脱を検出する() {
+        // D1448 — 名前に空白・制御文字・非ASCII
+        assert!(has_bad_header_name(
+            b"X Foo: v\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_bad_header_name(
+            "X-Fröm: v\r\nFrom: a@b\r\n\r\nx".as_bytes()
+        ));
+        // 通常名は不発火 (末尾空白の `X-Foo :` は spaced_header_name 側)
+        assert!(!has_bad_header_name(
+            b"X-Custom-1: v\r\nFrom: a@b\r\n\r\nx"
         ));
     }
 
