@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1581: 欄名の区切りが全角コロン `：` (U+FF1A) の形を検出 — `kaname-render` の `Envelope` に `fullwidth_colon_header` を追加。`From：a@b`/`Subject：hi` は ASCII `:` だけを区切りと見る実装では欄として認識されず、全角を正規化する実装では通常の欄として読まれる (ハイフン欠落は D1473、ドット混入は D1548)。
+
+### Security — D1582: `Date:` の曜日名が正規の3文字形でない形 (`Monday,`/`mo,`) を検出 — `Envelope` に `bad_weekday` を追加。厳格実装が構文エラーとし寛容実装が曜日を飛ばして日付だけ拾う (曜日と日付の不一致は D1569)。
+
+### Security — D1583: 宛名欄・識別欄に全角スペース U+3000 が混ざる形 (`To: a@b　c@d`) を検出 — `Envelope` に `fullwidth_space_addr` を追加。ASCII 空白以外を語の切れ目と見ない実装と全角空白でも区切る実装で宛先の分割がずれる (全角コンマ D1537・全角＠ D1568)。
+
+### Security — D1584: アドレス欄の宛名リストに空要素が混ざる形 (`a@b,,c@d`/`,a@b`/`a@b,`) を検出 — `Envelope` に `empty_addr_segment` を追加。空要素を無視する実装と不正 mailbox として欄ごと捨てる実装で宛先の集合がずれる (コンマ無し連立は D1539)。
+
 ### Security — D1553: ローカル部端ドット検出
 **問題** `From: .a@x`/`a.@x` — 端のドットは空 atom で、厳格実装は宛名を拒否・寛容実装は受理してずれる。
 **修正** `Envelope.edge_dot_local` — `@` 直前の `.` と先頭 `.` 宛名を検出。

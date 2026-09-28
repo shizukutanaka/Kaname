@@ -872,6 +872,14 @@ pub struct Envelope {
     pub long_local: bool,
     /// 宛名ドメインラベル 63 超 (D1580 — 宛名受理ずれ)。
     pub long_domain_label: bool,
+    /// 欄名の区切りが全角コロン U+FF1A (D1581 — 欄解釈ずれ)。
+    pub fullwidth_colon_header: bool,
+    /// Date: の曜日名が非3文字形 (D1582 — 日付解釈ずれ)。
+    pub bad_weekday: bool,
+    /// 宛名・識別欄内の全角スペース U+3000 (D1583 — 宛名分割ずれ)。
+    pub fullwidth_space_addr: bool,
+    /// 宛名リストの空要素 (D1584 — 宛先集合ずれ)。
+    pub empty_addr_segment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3187,6 +3195,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let long_local = has_long_local(bytes);
     // D1580: 長いドメインラベル
     let long_domain_label = has_long_domain_label(bytes);
+    // D1581: 全角コロンの欄名区切り
+    let fullwidth_colon_header = has_fullwidth_colon_header(bytes);
+    // D1582: 非3文字曜日名
+    let bad_weekday = has_bad_weekday(bytes);
+    // D1583: 宛名欄の全角スペース
+    let fullwidth_space_addr = has_fullwidth_space_addr(bytes);
+    // D1584: 宛名リストの空要素
+    let empty_addr_segment = has_empty_addr_segment(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3525,6 +3541,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         quoted_msgid,
         long_local,
         long_domain_label,
+        fullwidth_colon_header,
+        bad_weekday,
+        fullwidth_space_addr,
+        empty_addr_segment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -18156,6 +18176,190 @@ pub fn has_long_domain_label(raw: &[u8]) -> bool {
             if dom.split('.').any(|lbl| lbl.len() > 63) {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// ヘッダ行の区切りが全角コロン `：` (U+FF1A) か判定する (D1581)。
+///
+/// `From：a@b`/`Subject：hi` のように欄名の直後に全角コロンを置く形は、
+/// ASCII `:` だけを区切りと見る実装では欄として認識されず、全角を正規化
+/// する実装では通常の欄として読まれる — 欄の有無がずれる (欄名のハイフン
+/// 欠落は D1473、ドット混入は D1548)。
+#[must_use]
+pub fn has_fullwidth_colon_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.is_empty() {
+            break; // ヘッダブロック終端
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue; // 折り返し行 — 継続値の中身は対象外
+        }
+        let Some(fpos) = l.find('\u{ff1a}') else { continue };
+        if let Some(c) = l.find(':') {
+            if c <= fpos {
+                continue; // 正常な `:` が先行 — `：` は値の中身
+            }
+        }
+        let name = &l[..fpos];
+        if name.len() <= 64
+            && name.bytes().next().is_some_and(|b| b.is_ascii_alphabetic())
+            && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Date:` の曜日名が正規の3文字形でないか判定する (D1582)。
+///
+/// `Date: Monday, 25 Sep 2025`/`Date: mo, 25 Sep 2025` のように3文字
+/// 略号以外の英字語を曜日位置に置く形は、厳格実装が構文エラーとし
+/// 寛容実装が曜日を飛ばして日付だけ拾う — 日付がずれる (曜日と日付の
+/// 不一致は D1569)。
+#[must_use]
+pub fn has_bad_weekday(raw: &[u8]) -> bool {
+    const WD: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    const MON: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("date:") {
+            continue;
+        }
+        let v = &low[low.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        if toks.len() < 3 {
+            continue;
+        }
+        if !toks[0].is_empty()
+            && toks[0].bytes().all(|b| b.is_ascii_alphabetic())
+            && !WD.contains(&toks[0])
+            && toks[1].parse::<u32>().ok().filter(|n| *n >= 1 && *n <= 31).is_some()
+            && MON.contains(&toks[2])
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄・識別欄に全角スペース U+3000 が混ざるか判定する (D1583)。
+///
+/// `To: a@b　c@d` のように ASCII 空白以外を語の切れ目と見ない実装は
+/// 1宛名として読み、全角空白でも区切る実装は2宛名として読む — 宛先の
+/// 分割がずれる (全角コンマは D1537、全角＠は D1568)。
+#[must_use]
+pub fn has_fullwidth_space_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        let name = low[..colon].trim_end();
+        let is_target = is_addr_header_name(name)
+            || matches!(
+                name,
+                "message-id" | "in-reply-to" | "references" | "resent-message-id"
+            );
+        if !is_target {
+            continue;
+        }
+        if l[colon + 1..].contains('\u{3000}') {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄の宛名リストに空要素が混ざるか判定する (D1584)。
+///
+/// `To: a@b,,c@d`/`To: ,a@b`/`To: a@b,` の空要素は、「空白のみの要素は
+/// 無視」と読む実装と「不正 mailbox として欄ごと捨てる」実装で宛先の
+/// 集合がずれる (コンマ無し連立は D1539)。
+#[must_use]
+pub fn has_empty_addr_segment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if !v.contains(',') {
+            continue;
+        }
+        let (mut in_q, mut in_c, mut in_a) = (false, 0i32, 0i32);
+        let mut seg_empty = true;
+        let mut prev = 0u8;
+        for &b in v.as_bytes() {
+            if b == b',' && !in_q && in_c == 0 && in_a == 0 {
+                if seg_empty {
+                    return true;
+                }
+                seg_empty = true;
+                prev = b;
+                continue;
+            }
+            match b {
+                b'"' if in_c == 0 && prev != b'\\' => in_q = !in_q,
+                b'(' if !in_q => in_c += 1,
+                b')' if !in_q && in_c > 0 => in_c -= 1,
+                b'<' if !in_q && in_c == 0 => in_a += 1,
+                b'>' if !in_q && in_c == 0 && in_a > 0 => in_a -= 1,
+                _ => {}
+            }
+            if b != b' ' && b != b'\t' {
+                seg_empty = false;
+            } else if in_q || in_c > 0 || in_a > 0 {
+                seg_empty = false; // クオート/注釈/括弧の中の空白も中身
+            }
+            prev = b;
+        }
+        if seg_empty {
+            return true;
         }
     }
     false
@@ -36288,6 +36492,72 @@ mod tests {
         // 63 字以内は不発火
         let ok = format!("To: a@{}.x\r\n\r\nb", "b".repeat(63));
         assert!(!has_long_domain_label(ok.as_bytes()));
+    }
+
+    #[test]
+    fn fullwidth_colon_header_は全角コロン欄名を検出する() {
+        // D1581 — `From：a@b`/`Subject：x` の全角コロン区切り
+        assert!(has_fullwidth_colon_header(
+            "From：a@b\r\nTo: c@d\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_fullwidth_colon_header(
+            "To: a@b\r\nX-Note：hi\r\n\r\nx".as_bytes()
+        ));
+        // 正常な `:` 先行行・値内の全角コロン・本文側は不発火
+        assert!(!has_fullwidth_colon_header(
+            "From: a：b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_fullwidth_colon_header(
+            "From: a@b\r\n\r\nNote：x".as_bytes()
+        ));
+        assert!(!has_fullwidth_colon_header(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bad_weekday_は非3文字曜日を検出する() {
+        // D1582 — `Monday,`/`mo,` の非正規曜日名
+        assert!(has_bad_weekday(
+            b"Date: Monday, 25 Sep 2025 12:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(has_bad_weekday(
+            b"Date: mo, 25 Sep 2025 12:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_bad_weekday(
+            b"Date: Mon, 22 Sep 2025 12:00:00 +0000\r\n\r\nx"
+        ));
+        assert!(!has_bad_weekday(
+            b"Date: 25 Sep 2025 12:00:00 +0000\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn fullwidth_space_addr_は全角空白を検出する() {
+        // D1583 — 宛名・識別欄内の U+3000
+        assert!(has_fullwidth_space_addr(
+            "To: a@b\u{3000}c@d\r\n\r\nx".as_bytes()
+        ));
+        assert!(has_fullwidth_space_addr(
+            "Message-ID: <a\u{3000}@b>\r\n\r\nx".as_bytes()
+        ));
+        // 対象外欄の全角空白・通常の ASCII 空白区切りは不発火
+        assert!(!has_fullwidth_space_addr(
+            "Subject: a\u{3000}b\r\nTo: a@b\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_fullwidth_space_addr(b"To: a@b c@d\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_addr_segment_は空要素を検出する() {
+        // D1584 — `,,`・先頭/末尾コンマの空要素
+        assert!(has_empty_addr_segment(b"To: a@b,,c@d\r\n\r\nx"));
+        assert!(has_empty_addr_segment(b"To: ,a@b\r\n\r\nx"));
+        assert!(has_empty_addr_segment(b"To: a@b,\r\n\r\nx"));
+        // 正常リスト・クオート内コンマ・obs-route は不発火
+        assert!(!has_empty_addr_segment(b"To: a@b, c@d\r\n\r\nx"));
+        assert!(!has_empty_addr_segment(
+            b"To: \"x,y\" <a@b>\r\n\r\nx"
+        ));
+        assert!(!has_empty_addr_segment(b"To: a@b\r\n\r\nx"));
     }
 
     #[test]

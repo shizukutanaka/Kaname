@@ -4985,6 +4985,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.fullwidth_colon_header {
+        render_risks.push(
+            "欄名の区切りに全角コロン「：」が使われています\
+             —ASCII のみを区切りと見る実装では欄が消え、正規化する実装では読めます"
+                .to_string(),
+        );
+    }
+    if env.bad_weekday {
+        render_risks.push(
+            "Date: の曜日名が正規の3文字形ではありません\
+             —構文エラーとする実装と曜日を読み飛ばす実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.fullwidth_space_addr {
+        render_risks.push(
+            "宛名・識別欄に全角スペースが混ざっています\
+             —区切りと見る実装と見ない実装で宛先の切り分けがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_addr_segment {
+        render_risks.push(
+            "宛名リストに空の要素 (連続コンマ・先頭/末尾コンマ) があります\
+             —要素を無視する実装と欄ごと捨てる実装で宛先がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
