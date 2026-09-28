@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1722: 識別子 `<…>` 内の `@` 2つ `<a@b@c>` を検出 — `Envelope` に `msgid_two_at` を追加 (識別子内 `:`/`\\` は `has_msgid_bad_char`)。
+### Security — D1721: `Content-Disposition:` の型トークン2つ `attachment inline` を検出 — `Envelope` に `cd_two_types` を追加 (型欠落は D1708、CT 二重型は D1621)。
+### Security — D1720: `Received:` の `by` 節空値 `from a by;` を検出 — `Envelope` に `received_by_empty` を追加 (空 from 節は D1703)。
+### Security — D1719: `Received:` の `via` 節重複を検出 — `Envelope` に `received_multi_via` を追加 (id 節は D1715)。
 ### Security — D1718: 英数字を含まない `boundary=` 値を検出 — `Envelope` に `alnumless_boundary` を追加 (bchars 外は D1317、`-` 始まりは `has_dash_boundary`)。
 ### Security — D1717: `Content-Transfer-Encoding:` の値トークン2つを検出 — `Envelope` に `two_cte_values` を追加 (余分な空白は D1714、`;` 混入は D1655)。
 ### Security — D1716: param 名の `/` `;file/name=x` を検出 — `Envelope` に `slash_param_name` を追加 (名の `@` は D1713、値の `/` は D1704)。

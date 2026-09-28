@@ -1150,6 +1150,14 @@ pub struct Envelope {
     pub two_cte_values: bool,
     /// boundary に英数字が無い (D1718 — 区切り行ずれ)。
     pub alnumless_boundary: bool,
+    /// `Received:` の `via` 節重複 (D1719 — 経路解析ずれ)。
+    pub received_multi_via: bool,
+    /// `Received:` の `by` 節空値 (D1720 — 経路解析ずれ)。
+    pub received_by_empty: bool,
+    /// `Content-Disposition:` 型トークンが2つ (D1721 — 添付判定ずれ)。
+    pub cd_two_types: bool,
+    /// 識別子 `<…>` 内の `@` が2つ (D1722 — 識別子解析ずれ)。
+    pub msgid_two_at: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3741,6 +3749,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let two_cte_values = has_two_cte_values(bytes);
     // D1718: boundary に英数字が無い
     let alnumless_boundary = has_alnumless_boundary(bytes);
+    // D1719: Received の via 節重複
+    let received_multi_via = has_received_multi_via(bytes);
+    // D1720: Received の by 節空値
+    let received_by_empty = has_received_by_empty(bytes);
+    // D1721: Content-Disposition 型トークン2つ
+    let cd_two_types = has_cd_two_types(bytes);
+    // D1722: 識別子内の @ 2つ
+    let msgid_two_at = has_msgid_two_at(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4217,6 +4233,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         slash_param_name,
         two_cte_values,
         alnumless_boundary,
+        received_multi_via,
+        received_by_empty,
+        cd_two_types,
+        msgid_two_at,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -25398,6 +25418,174 @@ pub fn has_alnumless_boundary(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `via` 節が2つあるか判定する (D1719)。
+///
+/// `Received: … via a via b` — 最初の `via` を採る実装と
+/// 最後を採る実装で配送媒体の経路解析がずれる
+/// (id 節重複は D1715、with/for 節重複は D1711/D1712)。
+#[must_use]
+pub fn has_received_multi_via(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let vias = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .filter(|t| t.eq_ignore_ascii_case("via"))
+            .count();
+        if vias >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `by` 節が空か判定する (D1720)。
+///
+/// `Received: from a by; Thu` — `by` の直後に値が無い。
+/// 次の語を `by` の値と継ぐ実装と、空の節として残す実装で
+/// 経路の受け取り側解釈がずれる (空 from 節は D1703)。
+#[must_use]
+pub fn has_received_by_empty(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("by")
+                && (i + 1 == toks.len()
+                    || CLAUSES.iter().any(|k| toks[i + 1].eq_ignore_ascii_case(k)))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型トークンが2つあるか判定する (D1721)。
+///
+/// `Content-Disposition: attachment inline` — 最初の語を型と採る
+/// 実装と欄ごと捨てる実装で添付判定がずれる
+/// (型欠落は D1708、CT 二重型は D1621)。
+#[must_use]
+pub fn has_cd_two_types(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("");
+        let n = before_semi
+            .split(|c: char| c.is_whitespace())
+            .filter(|t| !t.is_empty())
+            .count();
+        if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// 識別子 `<…>` 内の `@` が2つ以上あるか判定する (D1722)。
+///
+/// `Message-ID: <a@b@c>` — id-left は `@` を書けない。
+/// 先の `@` で分ける実装と後の `@` で分ける実装と
+/// 識別子ごと捨てる実装でスレッド照合がずれる
+/// (識別子内の `:`/`\` は has_msgid_bad_char、`/` は D1691 系の棲み分け)。
+#[must_use]
+pub fn has_msgid_two_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    const ID_HEADERS: &[&str] = &[
+        "message-id",
+        "in-reply-to",
+        "references",
+        "list-id",
+        "resent-message-id",
+    ];
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ID_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let mut rest = &l[colon + 1..][..];
+        while let Some(o) = rest.find('<') {
+            let after = &rest[o + 1..];
+            let Some(c) = after.find('>') else { break };
+            let inner = &after[..c];
+            if inner.bytes().filter(|b| *b == b'@').count() >= 2 {
+                return true;
+            }
+            rest = &after[c + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -45330,6 +45518,47 @@ mod tests {
             b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n"
         ));
         assert!(!has_alnumless_boundary(b""));
+    }
+
+    #[test]
+    fn received_multi_via_二つのvia節を検出する() {
+        assert!(has_received_multi_via(
+            b"Received: from a by b via a via b; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_via(
+            b"Received: from a by b via a; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_via(b""));
+    }
+
+    #[test]
+    fn received_by_empty_空のby節を検出する() {
+        assert!(has_received_by_empty(b"Received: from a by; Thu\r\n\r\n"));
+        assert!(has_received_by_empty(
+            b"Received: from a by with ESMTP; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_by_empty(
+            b"Received: from a by mx.example; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_by_empty(b""));
+    }
+
+    #[test]
+    fn cd_two_types_二つの型を検出する() {
+        assert!(has_cd_two_types(
+            b"Content-Disposition: attachment inline; filename=a\r\n\r\n"
+        ));
+        assert!(!has_cd_two_types(
+            b"Content-Disposition: attachment; filename=a\r\n\r\n"
+        ));
+        assert!(!has_cd_two_types(b""));
+    }
+
+    #[test]
+    fn msgid_two_at_二つのアットを検出する() {
+        assert!(has_msgid_two_at(b"Message-ID: <a@b@c>\r\n\r\n"));
+        assert!(!has_msgid_two_at(b"Message-ID: <a@b>\r\n\r\n"));
+        assert!(!has_msgid_two_at(b""));
     }
 
     #[test]
