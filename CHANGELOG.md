@@ -1,5 +1,29 @@
 ## [Unreleased]
 
+### Security — D1401: 外側 Content-Type/Content-Disposition/CTE の重複が未検査
+
+- **問題**: D1306 は subject/from/date 等の一意欄を対象だが、外側の MIME 構造欄 (CT/CD/CTE) の重複は未対象 — 先頭/末尾採用でメディア型・添付判定・符号化が実装間でずれる。
+- **修正**: `has_dup_mime_headers` — 外側ヘッダで3欄の出現回数を検査 → `Envelope.dup_mime_headers` → render_risks 警告。
+- **教訓**: 小包の「種類」欄に二度記入された伝票 — どちらが本物かは係員次第。
+
+### Security — D1402: boundary パラメータの 70 文字超過が未検査
+
+- **問題**: RFC 2046 の boundary 上限は 70 文字 — 超過値は先頭70文字に切り詰める実装と全文を読む実装で区切り解釈がずれ、前半だけが実区切りとして機能する偽装構造になり得る。
+- **修正**: `has_long_boundary` — boundary= 値の長さを検査 (クオート有無両対応) → `Envelope.long_boundary` → render_risks 警告。
+- **教訓**: 規格の票がはみ出す見出し線 — 読めるのは枠に収まる部分だけ。
+
+### Security — D1403: 表示名中の URL 文字列が未検査
+
+- **問題**: `From: "http://click.evil" <a@b>` の表示名中の URL は、表示名をリンク化する実装でクリック可能な誘導経路になる (D1335 はアドレス形の表示名のみ対象)。
+- **修正**: `has_url_display_name` — クオート内表示名に `http://`/`https://`/`hxxp`/`www.` かつ後続 `<addr>` を検出 → `Envelope.url_display_name` → render_risks 警告。
+- **教訓**: 名札の面に URL を刷った名刺 — 名前をタップすると別の場所に連れて行かれる。
+
+### Security — D1404: アドレスドメインのアンダースコア混入が未検査
+
+- **問題**: `user@my_host.example` の `_` はメールアドレスのドメインとして非合法 — 拒否する実装と受理する実装で名指し照合・評価がずれる (dot-atom 違反は D1353、非 ASCII は D1359 が担当)。
+- **修正**: `has_underscore_domain` — コメント・クオートを除いたアドレスのドメイン部に `_` を検出 → `Envelope.underscore_domain` → render_risks 警告。
+- **教訓**: 住所に載らない区画記号で書かれた宛名 — 地図によって行き先が変わる。
+
 ### Security — D1397: 配送失敗通知先 (Errors-To/Return-Error-To) の送信側指定が未検査
 
 - **問題**: `Errors-To:`/`Return-Error-To:`/`Deliver-Errors-To:` は不達通知の転送先を送信側が書く旧来の欄 — 届いたメールに付いていると「失敗する宛先を試す偵察」の応答経路を内蔵させる。`X-Errors-To` 系は既存のバウンス印群が担当するが裸欄は未対象だった。

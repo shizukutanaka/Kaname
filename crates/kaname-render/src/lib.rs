@@ -498,6 +498,18 @@ pub struct Envelope {
     pub missing_charset_hibit: bool,
     /// D1400 — 旧式 `Encrypted:`/`Decryptable:` 欄の自称。
     pub legacy_encrypted_header: bool,
+    /// D1401 — 外側の Content-Type/Content-Disposition/CTE 重複
+    /// (メディア型採用の実装差異)。
+    pub dup_mime_headers: bool,
+    /// D1402 — boundary パラメータ値が 70 文字超
+    /// (切り詰め実装との区切り解釈差異)。
+    pub long_boundary: bool,
+    /// D1403 — アドレス欄のクオート表示名が URL を含む
+    /// (表示名リンク化の誘導経路)。
+    pub url_display_name: bool,
+    /// D1404 — アドレスのドメイン部に `_` を含む
+    /// (非合法ラベル文字の名指し差異)。
+    pub underscore_domain: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2561,6 +2573,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let part_header_dup = has_part_header_dup(bytes);
     let missing_charset_hibit = has_missing_charset_hibit(bytes);
     let legacy_encrypted_header = has_legacy_encrypted_header(bytes);
+    let dup_mime_headers = has_dup_mime_headers(bytes);
+    let long_boundary = has_long_boundary(bytes);
+    let url_display_name = has_url_display_name(bytes);
+    let underscore_domain = has_underscore_domain(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2719,6 +2735,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         part_header_dup,
         missing_charset_hibit,
         legacy_encrypted_header,
+        dup_mime_headers,
+        long_boundary,
+        url_display_name,
+        underscore_domain,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -8881,6 +8901,227 @@ pub fn has_legacy_encrypted_header(raw: &[u8]) -> bool {
     text[..header_end].to_ascii_lowercase().lines().any(|l| {
         l.starts_with("encrypted:") || l.starts_with("decryptable:")
     })
+}
+
+/// 外側ヘッダで `Content-Type:`/`Content-Disposition:`/
+/// `Content-Transfer-Encoding:` が二度現れるか判定する (D1401)。
+///
+/// 一意であるべき MIME 構造欄 (D1306 の対象外だった残り) — 先頭/
+/// 末尾採用でメディア型・添付判定・符号化が実装間でずれる。
+/// パート内の重複は D1398 が担当するためここでは外側のみ。
+#[must_use]
+pub fn has_dup_mime_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut ct = 0usize;
+    let mut cd = 0usize;
+    let mut cte = 0usize;
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("content-type:") {
+            ct += 1;
+        } else if l.starts_with("content-disposition:") {
+            cd += 1;
+        } else if l.starts_with("content-transfer-encoding:") {
+            cte += 1;
+        }
+        if ct > 1 || cd > 1 || cte > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `boundary=` パラメータ値が RFC 2046 の上限 70 文字を超えるか
+/// 判定する (D1402)。
+///
+/// 上限超過の boundary は、先頭70文字に切り詰める実装と全文を
+/// 読む実装で区切り解釈がずれる (長すぎる boundary で前半部分だけが
+/// 実パートとして機能する偽装構造になり得る)。値はクオート有無の
+/// 双方で取り出す。
+#[must_use]
+pub fn has_long_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            if seg[..eq].trim() != "boundary" {
+                continue;
+            }
+            let mut v = seg[eq + 1..].trim();
+            if let Some(stripped) = v.strip_prefix('"') {
+                let end = stripped.find('"').unwrap_or(stripped.len());
+                v = &stripped[..end];
+            }
+            // 非クオートは行末/空白まで — 空白以降は次トークン
+            let token_end = v
+                .find(|c: char| c.is_whitespace() || c == ';')
+                .unwrap_or(v.len());
+            if v[..token_end].len() > 70 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄の引用つき表示名 (display-name) が URL 文字列を含むか
+/// 判定する (D1403)。
+///
+/// `From: "http://click.evil" <a@b>` の表示名中の URL は、表示名を
+/// リンク化する実装ではクリック可能な誘導経路になる (D1335 は
+/// アドレス形の表示名を対象 — URL 形は未対象)。クオート内のみを
+/// 対象としコメント内は除く (コメント内は address_comment が担当)。
+#[must_use]
+pub fn has_url_display_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        let val = &lower[colon + 1..];
+        // クオート内文字列を取り出して URL 形を検査
+        let b = val.as_bytes();
+        let mut i = 0;
+        while i < b.len() {
+            if b[i] == b'"' {
+                let start = i + 1;
+                let mut j = start;
+                while j < b.len() && b[j] != b'"' {
+                    if b[j] == b'\\' && j + 1 < b.len() {
+                        j += 1;
+                    }
+                    j += 1;
+                }
+                let name = &val[start..j.min(val.len())];
+                // 引用局所部 `"user@www.x"` (括弧なしアドレス) は表示名
+                // ではないため、後続に <addr> がある場合のみ評価
+                let has_addr_spec = val[j.min(val.len())..].contains('<');
+                if has_addr_spec
+                    && (name.contains("http://")
+                        || name.contains("https://")
+                        || name.contains("hxxp")
+                        || name.contains("www."))
+                {
+                    return true;
+                }
+                i = j + 1;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のアドレスのドメイン部に `_` (アンダースコア) が
+/// 含まれるか判定する (D1404)。
+///
+/// `user@my_host.example` — DNS ラベルの許容文字を外れたドメインは
+/// 拒否する実装と受理する実装で名指し照合・評価結果がずれる。
+/// SRV 用に `_` は DNS で合法だがメールアドレスのドメインとしては
+/// 正当ではない (dot-atom 違反は D1353 が担当、非 ASCII は D1359)。
+#[must_use]
+pub fn has_underscore_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        let val = &lower[colon + 1..];
+        // クオート/コメントを除いたクリーン列でトークン評価
+        let mut cleaned = String::with_capacity(val.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = '\0';
+        for c in val.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if c == '"' && prev != '\\' {
+                in_q = !in_q;
+            } else if c == '(' && !in_q && prev != '\\' {
+                in_c = 1;
+            } else if !in_q {
+                cleaned.push(c);
+            }
+            prev = c;
+        }
+        for tok in cleaned.split(|c: char| c == ',' || c == ' ' || c == '\t' || c == '<' || c == '>') {
+            let Some(at) = tok.rfind('@') else {
+                continue;
+            };
+            let domain = &tok[at + 1..];
+            if domain.contains('_') {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -24378,6 +24619,68 @@ mod tests {
         assert!(!has_legacy_encrypted_header(
             b"From: a@b\r\nSubject: x\r\n\r\nbody"
         ));
+    }
+
+    #[test]
+    fn dup_mime_headers_は外側MIME欄重複を検出する() {
+        // D1401 — 外側の CT/CD/CTE 二重
+        assert!(has_dup_mime_headers(
+            b"Content-Type: text/plain\r\nContent-Type: text/html\r\nSubject: x\r\n\r\nbody"
+        ));
+        assert!(has_dup_mime_headers(
+            b"Content-Transfer-Encoding: 7bit\r\nContent-Transfer-Encoding: base64\r\n\r\nbody"
+        ));
+        assert!(!has_dup_mime_headers(
+            b"Content-Type: text/plain\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn long_boundary_は長すぎるboundaryを検出する() {
+        // D1402 — boundary > 70 chars
+        let long_b = format!(
+            "Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\nx",
+            "b".repeat(71)
+        );
+        assert!(has_long_boundary(long_b.as_bytes()));
+        let ok_b = format!(
+            "Content-Type: multipart/mixed; boundary=\"{}\"\r\n\r\nx",
+            "b".repeat(70)
+        );
+        assert!(!has_long_boundary(ok_b.as_bytes()));
+        assert!(!has_long_boundary(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn url_display_name_はURL名を検出する() {
+        // D1403 — 表示名中の URL
+        assert!(has_url_display_name(
+            b"From: \"http://click.evil\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(has_url_display_name(
+            b"From: \"visit www.evil.com\" <a@b>\r\n\r\nbody"
+        ));
+        // 普通の表示名は不発火
+        assert!(!has_url_display_name(
+            b"From: \"Taro Tanaka\" <a@b>\r\n\r\nbody"
+        ));
+        assert!(!has_url_display_name(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn underscore_domain_は非合法ラベル文字を検出する() {
+        // D1404 — ドメインの `_`
+        assert!(has_underscore_domain(
+            b"From: user@my_host.example\r\n\r\nbody"
+        ));
+        assert!(has_underscore_domain(
+            b"To: \"X\" <a@b_c.d>\r\n\r\nbody"
+        ));
+        // ローカル部の `_` は対象外 (ドメインのみ)
+        assert!(!has_underscore_domain(
+            b"From: my_user@host.example\r\n\r\nbody"
+        ));
+        assert!(!has_underscore_domain(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]

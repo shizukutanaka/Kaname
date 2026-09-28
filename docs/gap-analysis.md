@@ -814,3 +814,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1398 | ~~**同一パート run 内の CT/CD/CTE/Content-ID 重複が未検査**~~ **(解消済み)** | P2 | 採用値が実装間でずれる。修正: `has_part_header_dup` → render_risks | 箱に二枚のラベル |
 | D1399 | ~~**charset 無し text/* + 高位バイト本文が未検査**~~ **(解消済み)** | P2 | 文字コード推測が実装間でずれる。修正: `has_missing_charset_hibit` → render_risks | 言語不明記の手紙 |
 | D1400 | ~~**旧式 Encrypted:/Decryptable: 欄の自称が未検査**~~ **(解消済み)** | P3 | 意味を持たない暗号化自称。修正: `has_legacy_encrypted_header` → render_risks | 「封印済」と書かれた透ける封筒 |
+| D1401 | ~~**外側 Content-Type/CD/CTE の重複が未検査**~~ **(解消済み)** | P2 | メディア型採用が実装間でずれる。修正: `has_dup_mime_headers` → render_risks | 二度記入の種類欄 |
+| D1402 | ~~**boundary パラメータの 70 文字超過が未検査**~~ **(解消済み)** | P2 | 切り詰め実装と区切り解釈がずれる。修正: `has_long_boundary` → render_risks | 枠からはみ出す見出し線 |
+| D1403 | ~~**表示名中の URL 文字列が未検査**~~ **(解消済み)** | P2 | 表示名リンク化で誘導経路に。修正: `has_url_display_name` → render_risks | URL を刷った名刺 |
+| D1404 | ~~**アドレスドメインのアンダースコア混入が未検査**~~ **(解消済み)** | P3 | 非合法ラベル文字で名指しがずれる。修正: `has_underscore_domain` → render_risks | 区画外記号の宛名 |
