@@ -736,6 +736,14 @@ pub struct Envelope {
     pub edge_slash_ct: bool,
     /// `Content-Type:` の型トークン内に空白があるか (D1512 — 型解釈差異)。
     pub spaced_media_type: bool,
+    /// `CTE:` の値が既知符号化の大文字形か (D1513 — 厳密比較差異)。
+    pub mixed_case_cte: bool,
+    /// msgid `<…>` 内の `@` が 2 個以上か (D1514 — 識別子解釈差異)。
+    pub multi_at_msgid: bool,
+    /// CT/CD パラメータ値に裸の `=` が続くか (D1515 — 名値切り分け差異)。
+    pub extra_eq_param: bool,
+    /// msgid `<…>` 内に空白があるか (D1516 — スレッド照合差異)。
+    pub spaced_msgid: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2915,6 +2923,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let edge_slash_ct = has_edge_slash_ct(bytes);
     // D1512: 型トークン内空白
     let spaced_media_type = has_spaced_media_type(bytes);
+    // D1513: 大文字形 CTE
+    let mixed_case_cte = has_mixed_case_cte(bytes);
+    // D1514: msgid 内の複数 @
+    let multi_at_msgid = has_multi_at_msgid(bytes);
+    // D1515: パラメータ値内の裸 =
+    let extra_eq_param = has_extra_eq_param(bytes);
+    // D1516: msgid 内の空白
+    let spaced_msgid = has_spaced_msgid(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3185,6 +3201,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         raw_nonascii_filename,
         edge_slash_ct,
         spaced_media_type,
+        mixed_case_cte,
+        multi_at_msgid,
+        extra_eq_param,
+        spaced_msgid,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -14719,6 +14739,194 @@ pub fn has_spaced_media_type(raw: &[u8]) -> bool {
         let mt = v.split(';').next().unwrap_or("").trim();
         if mt.contains(' ') || mt.contains('\t') {
             return true;
+        }
+    }
+    false
+}
+
+
+/// `Content-Transfer-Encoding:` の値が既知符号化の大文字形か判定する
+/// (D1513 — 大小写厳密比較の復号差異)。
+///
+/// `BASE64`/`Quoted-Printable` は規格上は大小写不問だが、値を
+/// 厳密に小文字比較する実装は「未知の符号化」として復号しない。
+/// 復号する側としない側で本文の見え方が根本的にずれる。
+#[must_use]
+pub fn has_mixed_case_cte(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &["7bit", "8bit", "binary", "base64", "quoted-printable"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(v0) = low.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        // 大小写を保つため low ではなく l から値を採る
+        let v = l[l.len() - v0.len()..].trim();
+        if v.is_empty() || v.contains(';') || v.contains(',') {
+            continue;
+        }
+        let vl = v.to_ascii_lowercase();
+        if KNOWN.contains(&vl.as_str()) && vl != v {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid の `<…>` 内に `@` が 2 個以上あるか判定する (D1514)。
+///
+/// `<a@b@c>` の複数 `@` は、最初/最後の `@` で切る実装と全体を
+/// 採る実装で識別子がずれる。`@` 皆無・空・端 `@` は D1498 の領分。
+#[must_use]
+pub fn has_multi_at_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = rest[a + 1..a + z].trim();
+            if inner.matches('@').count() > 1 {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// CT/CD パラメータの値に裸の `=` が続くか判定する (D1515)。
+///
+/// `filename=a=b` のように `=` を含む非クオート値は、最初の `=` のみ
+/// で切る実装と全 `=` で切る実装で名・値がずれる。クオート内の
+/// `=` は正当なので scrub してから見る。
+#[must_use]
+pub fn has_extra_eq_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !(low.starts_with("content-type:") || low.starts_with("content-disposition:")) {
+            continue;
+        }
+        // クオート内を除去してから `=` を数える
+        let mut scrub = String::with_capacity(l.len());
+        let mut rest = l;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for part in scrub.split(';').skip(1) {
+            let Some(eq) = part.find('=') else {
+                continue;
+            };
+            if part[..eq].trim().is_empty() {
+                continue;
+            }
+            if part[eq + 1..].contains('=') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid の `<…>` 内に空白があるか判定する (D1516)。
+///
+/// `< a@b >`・`<a b@c>` の空白入り識別子は、trim する実装と空白を
+/// 含めて採る実装・捨てる実装で識別子がずれ、スレッド照合が壊れる。
+/// `@` 皆無・空・端 `@` は D1498、複数 `@` は D1514 の領分。
+#[must_use]
+pub fn has_spaced_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if inner.contains(' ') || inner.contains('\t') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
         }
     }
     false
@@ -32017,6 +32225,62 @@ mod tests {
             b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
         ));
         assert!(!has_spaced_media_type(b"Content-Type:   text/plain\r\n\r\nb"));
+    }
+
+    #[test]
+    fn mixed_case_cte_は大文字符号化名を検出する() {
+        // D1513 — BASE64/Base64 の大文字形
+        assert!(has_mixed_case_cte(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: BASE64\r\n\r\naGk=\r\n"
+        ));
+        assert!(has_mixed_case_cte(
+            b"Content-Transfer-Encoding: Quoted-Printable\r\n\r\nb\r\n"
+        ));
+        // 小文字形は正常
+        assert!(!has_mixed_case_cte(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb\r\n"
+        ));
+        // 未知値は D1502 の領分
+        assert!(!has_mixed_case_cte(
+            b"Content-Transfer-Encoding: yEnc\r\n\r\nb\r\n"
+        ));
+    }
+
+    #[test]
+    fn multi_at_msgid_は二重アットを検出する() {
+        // D1514 — <a@b@c>
+        assert!(has_multi_at_msgid(b"Message-ID: <a@b@c>\r\n\r\nb"));
+        // References 内でも
+        assert!(has_multi_at_msgid(
+            b"References: <a@b> <c@d@e>\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_multi_at_msgid(b"Message-ID: <a@b>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn extra_eq_param_は値内の等号を検出する() {
+        // D1515 — filename=a=b
+        assert!(has_extra_eq_param(
+            b"Content-Disposition: attachment; filename=a=b.txt\r\n\r\nb"
+        ));
+        // クオート内の = は正当
+        assert!(!has_extra_eq_param(
+            b"Content-Disposition: attachment; filename=\"a=b.txt\"\r\n\r\nb"
+        ));
+        // 正常形は不発火
+        assert!(!has_extra_eq_param(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn spaced_msgid_は括弧内空白を検出する() {
+        // D1516 — < a@b > / <a b@c>
+        assert!(has_spaced_msgid(b"Message-ID: < a@b >\r\n\r\nb"));
+        assert!(has_spaced_msgid(b"References: <a b@c>\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_spaced_msgid(b"Message-ID: <a@b>\r\n\r\nb"));
     }
 
     #[test]
