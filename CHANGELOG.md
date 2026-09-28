@@ -20,6 +20,14 @@
 **修正** `Envelope.dotdot_addr_local` — `@` 前トークンの `..` を検出。
 **教訓** 名の途中に抜けた文字がある表札は、名前を読める人と読めない人を分ける。
 
+### Security — D1561: `Date:`/`Resent-Date:`/`Expires:`/`Expiry-Date:` の日が範囲外 (`32 Sep`/`00 Sep` 等) の場合を検出 — `kaname-render` の `Envelope` に `bad_day` を追加。丸める実装と構文エラーにする実装で日付がずれる (時刻は D1559、月名は D1555 と棲み分け)。
+
+### Security — D1562: 宛名ドメインが `.` で始まる (`a@.b.c`) 場合を検出 — `Envelope` に `leading_dot_domain` を追加。先頭空ラベルは DNS 名として成立せず厳格実装は宛名を拒否する (連続 `..` は D1554)。
+
+### Security — D1563: `Message-ID:`/`In-Reply-To:`/`References:` の `<…>` 内ドメインが `.` で始まる (`<a@.b>`) 場合を検出 — `Envelope` に `msgid_leading_dot` を追加。厳格実装が識別子を捨てスレッド照合がずれる (アドレス欄側は D1562)。
+
+### Security — D1564: 宛名のドット区切り数値リテラルが範囲外 (`a@[999.1.1.1]` の octet>255) の場合を検出 — `Envelope` に `bad_ip_literal` を追加。IPv4 として成立しない値を厳格実装は拒否する (非 IP 形は D1546)。
+
 ### Security — D1557: アドレス欄の裸ローカル部に atext 外の特殊文字 (`a/b@x`/`a=b@x`/`a?b@x` の `/` `=` `?` 等) がある場合を検出 — `kaname-render` の `Envelope` に `special_local_char` を追加。厳格実装は宛名を拒否し寛容実装は受理するため、宛名抽出がずれる (連続 `..` は D1556、非 ASCII は D1517 と棲み分け)。
 
 ### Security — D1558: 宛名ドメインの最終ラベルが全数字 (`a@b.123`) の場合を検出 — `Envelope` に `digit_tld_addr` を追加。数値 TLD は DNS 名として成立せずフィルタする実装と受理する実装で宛名がずれる (ドット無し数値ドメインは D1507)。

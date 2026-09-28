@@ -832,6 +832,14 @@ pub struct Envelope {
     pub bad_clock: bool,
     /// 宛名ドメインの端ハイフン (D1560 — 宛名受理ずれ)。
     pub edge_hyphen_domain: bool,
+    /// Date 系の範囲外の日 (D1561 — 日付解釈ずれ)。
+    pub bad_day: bool,
+    /// 宛名ドメインの先頭ドット (D1562 — 宛名受理ずれ)。
+    pub leading_dot_domain: bool,
+    /// msgid ドメインの先頭ドット (D1563 — 照合ずれ)。
+    pub msgid_leading_dot: bool,
+    /// 宛名の範囲外 IP リテラル (D1564 — 宛名受理ずれ)。
+    pub bad_ip_literal: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3107,6 +3115,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bad_clock = has_bad_clock(bytes);
     // D1560: 端ハイフンドメイン
     let edge_hyphen_domain = has_edge_hyphen_domain(bytes);
+    // D1561: 範囲外の日
+    let bad_day = has_bad_day(bytes);
+    // D1562: 先頭ドットドメイン
+    let leading_dot_domain = has_leading_dot_domain(bytes);
+    // D1563: msgid 先頭ドットドメイン
+    let msgid_leading_dot = has_msgid_leading_dot(bytes);
+    // D1564: 範囲外 IP リテラル
+    let bad_ip_literal = has_bad_ip_literal(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3425,6 +3441,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         digit_tld_addr,
         bad_clock,
         edge_hyphen_domain,
+        bad_day,
+        leading_dot_domain,
+        msgid_leading_dot,
+        bad_ip_literal,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -17184,6 +17204,187 @@ pub fn has_edge_hyphen_domain(raw: &[u8]) -> bool {
                     return true;
                 }
             }
+        }
+    }
+    false
+}
+
+
+/// Date 系欄の日が範囲外か判定する (D1561)。
+///
+/// `Date: 32 Jan`/`00 Jan` の日>31/0 は、丸める実装と構文エラーに
+/// する実装で日付がずれる (時刻は D1559、月名は D1555、2桁年は D1535)。
+#[must_use]
+pub fn has_bad_day(raw: &[u8]) -> bool {
+    const MONTHS: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &low[l.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        // 月名の直前トークンを日として読む
+        for (i, t) in toks.iter().enumerate() {
+            if MONTHS.contains(t) && i > 0 {
+                let d = toks[i - 1];
+                if !d.is_empty() && d.bytes().all(|b| b.is_ascii_digit()) {
+                    if let Ok(n) = d.parse::<u32>() {
+                        if n == 0 || n > 31 {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメインが `.` で始まるか判定する (D1562)。
+///
+/// `a@.b.c` の先頭空ラベルは DNS 名として成立せず、厳格実装は宛名を
+/// 拒否し寛容実装は受理する (連続 `..` は D1554、数値 TLD は D1558)。
+#[must_use]
+pub fn has_leading_dot_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            let seg = seg.trim();
+            let Some(at) = seg.rfind('@') else { continue };
+            if seg[at + 1..].starts_with('.') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 系欄の `<…>` 内ドメインが `.` で始まるか判定する (D1563)。
+///
+/// `<a@.b>` の先頭空ラベルを厳格実装は識別子ごと捨て、スレッド
+/// 照合がずれる (連続 `..` は D1551、アドレス欄側は D1562)。
+#[must_use]
+pub fn has_msgid_leading_dot(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_msgid = low.starts_with("message-id:")
+            || low.starts_with("in-reply-to:")
+            || low.starts_with("references:")
+            || low.starts_with("resent-message-id:");
+        if !is_msgid {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut rest = v;
+        while let Some(lt) = rest.find('<') {
+            let after = &rest[lt + 1..];
+            let Some(gt) = after.find('>') else { break };
+            let inner = &after[..gt];
+            if let Some(at) = inner.rfind('@') {
+                if inner[at + 1..].starts_with('.') {
+                    return true;
+                }
+            }
+            rest = &after[gt + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄のドット区切り数値リテラルが範囲外か判定する (D1564)。
+///
+/// `a@[999.1.1.1]` の octet>255 は IPv4 として成立せず、厳格実装は
+/// 宛名を拒否し寛容実装は受理する (非 IP 形は D1546、正常 IP は対象外)。
+#[must_use]
+pub fn has_bad_ip_literal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(lb) = rest.find('[') {
+            let after = &rest[lb + 1..];
+            let Some(rb) = after.find(']') else { break };
+            let inner = after[..rb].trim();
+            // IPv6: 形は別系統 — ここでは n.n.n.n だけを見る
+            let parts: Vec<&str> = inner.split('.').collect();
+            if parts.len() == 4
+                && parts
+                    .iter()
+                    .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+                && parts
+                    .iter()
+                    .any(|p| p.parse::<u32>().unwrap_or(0) > 255 || p.len() > 3)
+            {
+                return true;
+            }
+            rest = &after[rb + 1..];
         }
     }
     false
@@ -35102,6 +35303,51 @@ mod tests {
         assert!(has_edge_hyphen_domain(b"To: a@b-.x\r\n\r\nb"));
         // 中のハイフンは正常
         assert!(!has_edge_hyphen_domain(b"To: a@my-host.x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bad_day_は範囲外の日を検出する() {
+        // D1561 — 32 日・0 日
+        assert!(has_bad_day(
+            b"Date: Thu, 32 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+        assert!(has_bad_day(
+            b"Date: Thu, 00 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_bad_day(
+            b"Date: Thu, 31 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn leading_dot_domain_は先頭ドットを検出する() {
+        // D1562 — a@.b.c
+        assert!(has_leading_dot_domain(b"To: a@.b.c\r\n\r\nb"));
+        assert!(has_leading_dot_domain(b"To: <a@.b.c>\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_leading_dot_domain(b"To: a@b.c\r\n\r\nb"));
+    }
+
+    #[test]
+    fn msgid_leading_dot_は先頭ドットを検出する() {
+        // D1563 — <a@.b>
+        assert!(has_msgid_leading_dot(
+            b"Message-ID: <a@.b>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_leading_dot(
+            b"Message-ID: <a@b.c>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn bad_ip_literal_は範囲外オクテットを検出する() {
+        // D1564 — a@[999.1.1.1]
+        assert!(has_bad_ip_literal(b"To: a@[999.1.1.1]\r\n\r\nb"));
+        // 正常 IP は不発火
+        assert!(!has_bad_ip_literal(b"To: a@[192.168.0.1]\r\n\r\nb"));
+        // 非数値リテラルは D1546 の領分
+        assert!(!has_bad_ip_literal(b"To: a@[not-an-ip]\r\n\r\nb"));
     }
 
     #[test]
