@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1629: アドレス欄の宛名区切りの全角 `；` (U+FF1B) を検出 — `Envelope` に `addr_fullwidth_semi` を追加。ASCII `;`/`,` のみで分割する実装は宛名を一つと読む (全角コンマは D1537、全角空白は D1583)。
+
+### Security — D1630: 識別子欄 `<…>` 内の生非 ASCII 文字を検出 — `Envelope` に `msgid_nonascii` を追加。msg-id は ASCII 構成のため正規化/拒否でスレッド照合がずれる (encoded-word 形は D1529)。
+
+### Security — D1631: 識別子欄 `<…>` 内のクオート区間 (`<"a b"@x>`) を検出 — `Envelope` に `msgid_quoted_local` を追加。quoted-string は msg-id の字句に無く、剥がす/生採用でずれる。
+
+### Security — D1632: `Date:` の1桁時刻 (`1:2:3`/`1:00`/`12:5`) を検出 — `Envelope` に `date_short_time` を追加。`time-of-day` は 2DIGIT 桁を要求し、丸める/構文エラーで日付がずれる。
+
 ### Security — D1625: `Message-ID: <>` の空額縁識別子を検出 — `Envelope` に `msgid_empty_angle` を追加。捨てる実装と匿名識別子として残す実装でスレッド照合がずれる (値自体の空は D1450)。
 
 ### Security — D1626: 識別子欄の `<…>` 内 `%`/`!` 経路記号を検出 — `Envelope` に `msgid_routing_char` を追加。経路解釈する実装と生採用する実装で照合キーがずれる (アドレス欄側は D1436)。

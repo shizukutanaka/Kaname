@@ -968,6 +968,14 @@ pub struct Envelope {
     pub bare_at_display: bool,
     /// 識別子欄の `<…>` 内 `;` (D1628 — 識別子読みずれ)。
     pub semi_in_id: bool,
+    /// 宛名欄の全角セミコロン `；` (D1629 — 宛名分割ずれ)。
+    pub addr_fullwidth_semi: bool,
+    /// 識別子欄の `<…>` 内の生非 ASCII (D1630 — 識別子読みずれ)。
+    pub msgid_nonascii: bool,
+    /// 識別子欄の `<…>` 内クオートローカル (D1631 — 識別子読みずれ)。
+    pub msgid_quoted_local: bool,
+    /// Date 欄の1桁時刻 `1:2:3` (D1632 — 日付解析ずれ)。
+    pub date_short_time: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3379,6 +3387,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bare_at_display = has_bare_at_display(bytes);
     // D1628: 識別子の `;`
     let semi_in_id = has_semi_in_id(bytes);
+    // D1629: 宛名の全角 `；`
+    let addr_fullwidth_semi = has_addr_fullwidth_semi(bytes);
+    // D1630: 識別子内の生非 ASCII
+    let msgid_nonascii = has_msgid_nonascii(bytes);
+    // D1631: 識別子のクオートローカル
+    let msgid_quoted_local = has_msgid_quoted_local(bytes);
+    // D1632: 1桁時刻
+    let date_short_time = has_date_short_time(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3765,6 +3781,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_routing_char,
         bare_at_display,
         semi_in_id,
+        addr_fullwidth_semi,
+        msgid_nonascii,
+        msgid_quoted_local,
+        date_short_time,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -20776,6 +20796,203 @@ pub fn has_semi_in_id(raw: &[u8]) -> bool {
                 return true;
             }
             rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄の宛名区切りに全角セミコロン `；` (U+FF1B) が使われて
+/// いるか判定する (D1629)。
+///
+/// `To: a@b；c@d` — ASCII `;`/`,` のみで分割する実装は一つの宛名
+/// と読み、全角を正規化する実装は二つと読む (全角コンマは D1537、
+/// 全角スペースは D1583)。
+#[must_use]
+pub fn has_addr_fullwidth_semi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        if l[colon + 1..].contains('\u{ff1b}') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内に生の非 ASCII 文字が含まれるか判定する
+/// (D1630)。
+///
+/// `Message-ID: <café@x.example>` — msg-id の構成字は ASCII のみ。
+/// UTF-8 直打ちの識別子は正規化する実装と拒否する実装でスレッド
+/// 照合がずれる (encoded-word 形は D1529)。
+#[must_use]
+pub fn has_msgid_nonascii(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].chars().any(|c| !c.is_ascii()) {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内側にクオート区間 (`"…"`) があるか判定する
+/// (D1631)。
+///
+/// `Message-ID: <"a b"@x>` — msg-id の字句に quoted-string は
+/// 含まれないため、クオートを剥がす実装と生採用する実装で識別子
+/// がずれる (額縁内空白は D1596、内側コメントは D1603)。
+#[must_use]
+pub fn has_msgid_quoted_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].contains('"') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Date:` の時刻部が1桁の時・分で記されているか判定する (D1632)。
+///
+/// `Date: 25 Sep 2025 1:2:30`/`Date: … 1:00` — `time-of-day` は
+/// `2DIGIT ":" 2DIGIT` を要求する。1桁の時/分は丸める実装と
+/// 構文エラーとする実装で日付評価がずれる (ゾーン欠落は D1547、
+/// 範囲外は D1559/D1565)。
+#[must_use]
+pub fn has_date_short_time(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // `H:MM`/`H:MM:SS` — 時が1桁なのは「空白の直後に digit `:`」
+        let b = v.as_bytes();
+        let mut i = 0;
+        while i + 1 < b.len() {
+            if b[i].is_ascii_digit() && b[i + 1] == b':' {
+                let prev_ok = i == 0 || matches!(b[i - 1], b' ' | b'\t');
+                let next_d = b.get(i + 2).map(|c| c.is_ascii_digit()).unwrap_or(false);
+                let prev2_d = i >= 1 && b[i - 1].is_ascii_digit();
+                if prev_ok && next_d && !prev2_d {
+                    return true;
+                }
+            }
+            i += 1;
+        }
+        // `HH:M`/`HH:M:S` — 分が1桁
+        let mut i = 0;
+        while i + 1 < b.len() {
+            if b[i] == b':' && b.get(i + 1).map(|c| c.is_ascii_digit()).unwrap_or(false)
+                && !b.get(i + 2).map(|c| c.is_ascii_digit()).unwrap_or(false)
+            {
+                return true;
+            }
+            i += 1;
         }
     }
     false
@@ -39613,6 +39830,54 @@ mod tests {
         assert!(!has_semi_in_id(b"From: a@b; c@d\r\n\r\nx"));
         assert!(!has_semi_in_id(b"Subject: a;b\r\n\r\nx"));
         assert!(!has_semi_in_id(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn addr_fullwidth_semi_全角セミコロン区切りを検出する() {
+        // D1629 — 宛名の `；` 区切り
+        assert!(has_addr_fullwidth_semi("To: a@b\u{ff1b}c@d\r\n\r\nx".as_bytes()));
+        assert!(has_addr_fullwidth_semi("Cc: x@y\u{ff1b}\r\n\r\nx".as_bytes()));
+        // ASCII `;`・全角なし・他欄は不発火
+        assert!(!has_addr_fullwidth_semi(b"To: a@b; c@d\r\n\r\nx"));
+        assert!(!has_addr_fullwidth_semi("Subject: a\u{ff1b}b\r\n\r\nx".as_bytes()));
+        assert!(!has_addr_fullwidth_semi(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_nonascii_識別子内非asciiを検出する() {
+        // D1630 — `<…>` 内の生非 ASCII
+        assert!(has_msgid_nonascii("Message-ID: <café@x.example>\r\n\r\nx".as_bytes()));
+        assert!(has_msgid_nonascii("In-Reply-To: <中@x>\r\n\r\nx".as_bytes()));
+        // ASCII のみ・額縁外・他欄は不発火
+        assert!(!has_msgid_nonascii(b"Message-ID: <a@x>\r\n\r\nx"));
+        assert!(!has_msgid_nonascii("Message-ID: café@x\r\n\r\nx".as_bytes()));
+        assert!(!has_msgid_nonascii("From: café@x\r\n\r\nx".as_bytes()));
+        assert!(!has_msgid_nonascii(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_quoted_local_識別子内クオートを検出する() {
+        // D1631 — `<…>` 内の `"…"`
+        assert!(has_msgid_quoted_local(b"Message-ID: <\"a b\"@x>\r\n\r\nx"));
+        assert!(has_msgid_quoted_local(b"References: <\"a\"@x>\r\n\r\nx"));
+        // 通常形・額縁外クオート・他欄は不発火
+        assert!(!has_msgid_quoted_local(b"Message-ID: <a@x>\r\n\r\nx"));
+        assert!(!has_msgid_quoted_local(b"Message-ID: \"x\" <a@b>\r\n\r\nx"));
+        assert!(!has_msgid_quoted_local(b"From: \"a b\" <x@y>\r\n\r\nx"));
+        assert!(!has_msgid_quoted_local(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn date_short_time_1桁時刻を検出する() {
+        // D1632 — `1:2:3` / `1:00` / `12:5`
+        assert!(has_date_short_time(b"Date: 25 Sep 2025 1:02:03 +0900\r\n\r\nx"));
+        assert!(has_date_short_time(b"Date: 25 Sep 2025 1:00\r\n\r\nx"));
+        assert!(has_date_short_time(b"Date: 25 Sep 2025 12:5\r\n\r\nx"));
+        // 正規2桁・時刻無し・他欄は不発火
+        assert!(!has_date_short_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_date_short_time(b"Date: 25 Sep 2025\r\n\r\nx"));
+        assert!(!has_date_short_time(b"Subject: 1:2:3\r\n\r\nx"));
+        assert!(!has_date_short_time(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]
