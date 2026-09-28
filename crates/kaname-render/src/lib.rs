@@ -1102,6 +1102,14 @@ pub struct Envelope {
     pub trailing_semi_param: bool,
     /// `Received:` の `;` 複数 (D1694 — 経路解析ずれ)。
     pub multi_semi_received: bool,
+    /// Date 欄の数字曜日 (D1695 — 日付解析ずれ)。
+    pub numeric_dow: bool,
+    /// CT/CD param の空値 (D1696 — param 解析ずれ)。
+    pub param_empty_value: bool,
+    /// 宛名の単ラベルドメイン (D1697 — 宛先ずれ)。
+    pub single_label_domain: bool,
+    /// param `=` 直前の空白 (D1698 — param 解析ずれ)。
+    pub pre_eq_space: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3645,6 +3653,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let trailing_semi_param = has_trailing_semi_param(bytes);
     // D1694: Received の ; 複数
     let multi_semi_received = has_multi_semi_received(bytes);
+    // D1695: Date 欄の数字曜日
+    let numeric_dow = has_numeric_dow(bytes);
+    // D1696: CT/CD param の空値
+    let param_empty_value = has_param_empty_value(bytes);
+    // D1697: 宛名の単ラベルドメイン
+    let single_label_domain = has_single_label_domain(bytes);
+    // D1698: param = 直前の空白
+    let pre_eq_space = has_pre_eq_space(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4097,6 +4113,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         date_two_months,
         trailing_semi_param,
         multi_semi_received,
+        numeric_dow,
+        param_empty_value,
+        single_label_domain,
+        pre_eq_space,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -24291,6 +24311,192 @@ pub fn has_multi_semi_received(raw: &[u8]) -> bool {
     false
 }
 
+/// Date 欄の曜日位置に数字があるか判定する (D1695)。
+///
+/// `Date: 4, 25 Sep 2025` — 曜日名のみを読み飛ばす実装は
+/// `4` を日番号と誤認し、数字曜日を読む実装は曜日として
+/// 捨てる — 日付解釈がずれる (綴り違い曜日は D1582)。
+#[must_use]
+pub fn has_numeric_dow(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // 「数字,」の形 (曜日位置) — 先頭トークンが数字+`,`
+        let first_tok = v.trim_start().split_whitespace().next().unwrap_or("");
+        let t = first_tok.trim_end_matches(',');
+        if first_tok.ends_with(',')
+            && !t.is_empty()
+            && t.bytes().all(|b| b.is_ascii_digit())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` の param に `名=` のみの
+/// 空値があるか判定する (D1696)。
+///
+/// `;charset=` — 空値を空文字として採用する実装と param ごと
+/// 破棄する実装で読みがずれる (名なし `=v` は
+/// `has_empty_param_name`、空節 `;;` は D1636)。
+#[must_use]
+pub fn has_param_empty_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let part = part.trim();
+            if part.ends_with('=') && part.len() > 1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 宛名欄の `<…>` または裸宛名のドメインがドットを含まない
+/// 単ラベルか判定する (D1697)。
+///
+/// `To: a@localhost` — FQDN を要求する実装は宛名を拒否し、
+/// ローカル配送名として受理する実装は残す (ドメイン欠落は
+/// D1679、空側は `has_empty_addr_side`)。
+#[must_use]
+pub fn has_single_label_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = l[colon + 1..].to_ascii_lowercase();
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut tok = String::new();
+        let mut found = false;
+        let mut check = |t: &str| {
+            let t = t.trim_matches(|c: char| c == '<' || c == '>' || c == ';');
+            if let Some(at) = t.rfind('@') {
+                let d = t[at + 1..].trim_start_matches('[').trim_end_matches(']');
+                if !d.is_empty() && !d.contains('.') && !d.contains(':') {
+                    found = true;
+                }
+            }
+        };
+        for &b in v.as_bytes() {
+            match b {
+                b'"' if in_c == 0 => in_q = !in_q,
+                b'(' if !in_q => in_c += 1,
+                b')' if !in_q && in_c > 0 => in_c -= 1,
+                b',' | b' ' | b'\t' if !in_q && in_c == 0 => {
+                    check(&tok);
+                    tok.clear();
+                }
+                _ if in_c == 0 => tok.push(b as char),
+                _ => {}
+            }
+        }
+        check(&tok);
+        if found {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` の param の `=` 直前に
+/// 空白があるか判定する (D1698)。
+///
+/// `;charset =utf-8` — 空白を含めてキーと読む実装と trim して
+/// 正しく読む実装で値の採用がずれる (`=` 直後の空白は D1651)。
+#[must_use]
+pub fn has_pre_eq_space(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // 区切り単位で `;key =value` の形を探す
+        for part in v.split(';').skip(1) {
+            if let Some(eq) = part.find('=') {
+                if part[..eq].ends_with(' ') || part[..eq].ends_with('\t') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -43947,6 +44153,52 @@ mod tests {
         assert!(!has_multi_semi_received(b""));
     }
 
+
+    #[test]
+    fn numeric_dow_数字曜日を検出する() {
+        assert!(has_numeric_dow(b"Date: 4, 25 Sep 2025 12:00:00 +0900\r\n\r\n"));
+        assert!(!has_numeric_dow(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_numeric_dow(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_numeric_dow(b""));
+    }
+
+    #[test]
+    fn param_empty_value_空の名札値を検出する() {
+        assert!(has_param_empty_value(
+            b"Content-Type: text/plain; charset=\r\n\r\n"
+        ));
+        assert!(has_param_empty_value(
+            b"Content-Disposition: attachment; filename= \r\n\r\n"
+        ));
+        assert!(!has_param_empty_value(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_param_empty_value(b""));
+    }
+
+    #[test]
+    fn single_label_domain_単ラベルドメインを検出する() {
+        assert!(has_single_label_domain(b"To: a@localhost\r\n\r\n"));
+        assert!(has_single_label_domain(b"To: <a@node>\r\n\r\n"));
+        assert!(!has_single_label_domain(b"To: a@b.example.com\r\n\r\n"));
+        assert!(!has_single_label_domain(b"To: a@[192.0.2.1]\r\n\r\n"));
+        assert!(!has_single_label_domain(b""));
+    }
+
+    #[test]
+    fn pre_eq_space_等号前の空白を検出する() {
+        assert!(has_pre_eq_space(
+            b"Content-Type: text/plain; charset =utf-8\r\n\r\n"
+        ));
+        assert!(!has_pre_eq_space(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_pre_eq_space(b""));
+    }
 
     #[test]
     fn ct_name_no_disposition_は添付判定素通りを検出する() {

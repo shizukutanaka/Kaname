@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1698: param の `=` 直前空白 `;key =v` を検出 — `Envelope` に `pre_eq_space` を追加 (`=` 直後の空白は D1651)。
+### Security — D1697: 宛名のドット無し単ラベルドメイン `a@localhost` を検出 — `Envelope` に `single_label_domain` を追加 (ドメイン欠落は D1679)。
+### Security — D1696: CT/CD param の空値 `;charset=` を検出 — `Envelope` に `param_empty_value` を追加 (名なしは `has_empty_param_name`、空節は D1636)。
+### Security — D1695: Date 欄の数字曜日 `4,` を検出 — `Envelope` に `numeric_dow` を追加 (綴り違い曜日は D1582)。
 ### Security — D1694: `Received:` の `;` 複数を検出 — `Envelope` に `multi_semi_received` を追加 (`;` のみ値は D1690、`;` 欠落は D1586)。
 ### Security — D1693: CT/CD 欄の末尾 `;` を検出 — `Envelope` に `trailing_semi_param` を追加 (連続 `;;` は D1636)。
 ### Security — D1692: Date 欄の二つの月名を検出 — `Envelope` に `date_two_months` を追加 (二年は D1675、二つの日は D1689)。

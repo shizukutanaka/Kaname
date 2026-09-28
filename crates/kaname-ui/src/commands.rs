@@ -5756,6 +5756,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.multi_semi_received {
         render_risks.push("Received 欄に「;」が二つ以上あります—最初と最後で切る実装で日時印がずれます".to_string());
     }
+    if env.numeric_dow {
+        render_risks.push("Date 欄の曜日が数字です—曜日として捨てる実装と日番号と読む実装で日付がずれます".to_string());
+    }
+    if env.param_empty_value {
+        render_risks.push("パラメータに値がない名札があります—空文字として採る実装と破棄する実装で読みがずれます".to_string());
+    }
+    if env.single_label_domain {
+        render_risks.push("宛名のドメインにドットがありません—FQDNを要求する実装と受理する実装で宛先がずれます".to_string());
+    }
+    if env.pre_eq_space {
+        render_risks.push("パラメータの「=」の前に空白があります—キーに含める実装と除く実装で読みがずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
