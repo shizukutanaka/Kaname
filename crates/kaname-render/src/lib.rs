@@ -984,6 +984,14 @@ pub struct Envelope {
     pub msgid_gt_only: bool,
     /// CT/CD 欄の `;;` 空 param 節 (D1636 — param 読みずれ)。
     pub empty_param_segment: bool,
+    /// 識別子欄の `<…>` 内の残存非合法字 (D1637 — 識別子読みずれ)。
+    pub msgid_bad_char: bool,
+    /// 宛名欄の `<…>` 内 `;` (D1638 — 宛名分割ずれ)。
+    pub addr_angle_semi: bool,
+    /// Date 欄の4節時刻 `1:2:3:4` (D1639 — 日付解析ずれ)。
+    pub four_part_time: bool,
+    /// 宛名欄の `<…>` 内途中位置の `"` (D1640 — 宛名読みずれ)。
+    pub mid_angle_quote: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3411,6 +3419,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_gt_only = has_msgid_gt_only(bytes);
     // D1636: `;;` 空 param 節
     let empty_param_segment = has_empty_param_segment(bytes);
+    // D1637: 識別子内の残存非合法字
+    let msgid_bad_char = has_msgid_bad_char(bytes);
+    // D1638: 額縁内の `;`
+    let addr_angle_semi = has_addr_angle_semi(bytes);
+    // D1639: 4節時刻
+    let four_part_time = has_four_part_time(bytes);
+    // D1640: 額縁内途中の `"`
+    let mid_angle_quote = has_mid_angle_quote(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3805,6 +3821,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mid_token_quote,
         msgid_gt_only,
         empty_param_segment,
+        msgid_bad_char,
+        addr_angle_semi,
+        four_part_time,
+        mid_angle_quote,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -21245,6 +21265,198 @@ pub fn has_empty_param_segment(raw: &[u8]) -> bool {
             if s.trim().is_empty() && segs.peek().is_some() {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内に msg-id 非合法の記号があるか判定する
+/// (D1637)。
+///
+/// `<a|b@c>`/`<a=b@c>` — `|` `\` `?` `&` `'` `=` `:` `/` `,` は
+/// msg-id の字句に含まれない。厳格実装が識別子を捨て、生採用する
+/// 実装と照合がずれる (`(`/`)`/`;`/`"`/`%`/`!` は D1603/D1628/
+/// D1631/D1626 が個別に担う形の残り分)。
+#[must_use]
+pub fn has_msgid_bad_char(raw: &[u8]) -> bool {
+    const BAD: &[u8] = b"|\\?&'=:/,";
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].bytes().any(|b| BAD.contains(&b)) {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` 内側に `;` が含まれるか判定する (D1638)。
+///
+/// `To: <a;b@c>` — angle-addr の内側は単一宛名の約束のため、
+/// `;` をグループ区切りと読む実装と壊れた宛名と読む実装で宛先
+/// がずれる (内側 `,` は D1633、欄レベルの `;` は D1523)。
+#[must_use]
+pub fn has_addr_angle_semi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].contains(';') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Date:` の時刻部が `H:M:S:S` の4節以上あるか判定する (D1639)。
+///
+/// `Date: 25 Sep 2025 12:00:00:30` — `time-of-day` は `H:M[:S]` の
+/// 3節まで。4節目を捨てる実装と構文エラーとする実装で日付がずれる
+/// (範囲外の時刻は D1559、1桁形は D1632)。
+#[must_use]
+pub fn has_four_part_time(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if !l[..colon].trim_end().eq_ignore_ascii_case("date") {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // 空白区切り語の中に `D+:D+:D+:D+` 形を探す
+        for tok in v.split_whitespace() {
+            let parts: Vec<&str> = tok.split(':').collect();
+            if parts.len() >= 4 && parts.iter().all(|p| p.chars().all(|c| c.is_ascii_digit()) && !p.is_empty()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` 内側で、ローカル開始位置以外に `"` があるか
+/// 判定する (D1640)。
+///
+/// `To: <a "b" @x>` — クオートローカル `<"a b"@x>` は合法だが、
+/// 内側の途中から始まる `"` は字句として非合法。開始クオートと
+/// 読む実装と字と読む実装で宛名がずれる (トークン途中 `"` の
+/// 額縁外版は D1634)。
+#[must_use]
+pub fn has_mid_angle_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if let Some(q0) = inner.find('"') {
+                if q0 == 0 {
+                    // `"…"@d` のクオートローカル形は合法 — 閉じ `"` の後の
+                    // 残りを検査し、`@domain` でない形や更なる `"` を非合法とみなす
+                    match inner[1..].find('"') {
+                        None => return true, // 閉じないクオート
+                        Some(q1) => {
+                            let after = inner[q1 + 2..].trim_start();
+                            if !after.starts_with('@') || after.contains('"') {
+                                return true;
+                            }
+                        }
+                    }
+                } else {
+                    return true; // 途中位置の `"`
+                }
+            }
+            rest = &rest[a + z + 1..];
         }
     }
     false
@@ -40184,6 +40396,56 @@ mod tests {
             b"Content-Disposition: attachment; filename=\"a;;b\"\r\n\r\nx"
         ));
         assert!(!has_empty_param_segment(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_bad_char_識別子内非合法記号を検出する() {
+        // D1637 — `<a|b@c>` 等の残存非合法字
+        assert!(has_msgid_bad_char(b"Message-ID: <a|b@c>\r\n\r\nx"));
+        assert!(has_msgid_bad_char(b"In-Reply-To: <a=b@c>\r\n\r\nx"));
+        assert!(has_msgid_bad_char(b"Message-ID: <a,b@c>\r\n\r\nx"));
+        // 通常形・額縁外・他欄・姉妹担当字 (%/! D1626, ; D1628, " D1631) は不発火
+        assert!(!has_msgid_bad_char(b"Message-ID: <a@c>\r\n\r\nx"));
+        assert!(!has_msgid_bad_char(b"Message-ID: <a%r@c>\r\n\r\nx"));
+        assert!(!has_msgid_bad_char(b"Subject: a|b\r\n\r\nx"));
+        assert!(!has_msgid_bad_char(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn addr_angle_semi_額縁内セミコロンを検出する() {
+        // D1638 — `<a;b@c>`
+        assert!(has_addr_angle_semi(b"To: <a;b@c>\r\n\r\nx"));
+        assert!(has_addr_angle_semi(b"Cc: <x@y;>\r\n\r\nx"));
+        // 額縁外 `;`・通常形・他欄は不発火
+        assert!(!has_addr_angle_semi(b"To: a@b; c@d\r\n\r\nx"));
+        assert!(!has_addr_angle_semi(b"To: <a@b>; <c@d>\r\n\r\nx"));
+        assert!(!has_addr_angle_semi(b"Subject: <a;b>\r\n\r\nx"));
+        assert!(!has_addr_angle_semi(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn four_part_time_4節時刻を検出する() {
+        // D1639 — `H:M:S:S`
+        assert!(has_four_part_time(b"Date: 25 Sep 2025 12:00:00:30 +0900\r\n\r\nx"));
+        assert!(has_four_part_time(b"Date: 25 Sep 2025 1:2:3:4\r\n\r\nx"));
+        // 3節・2節・時刻無し・他欄は不発火
+        assert!(!has_four_part_time(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_four_part_time(b"Date: 25 Sep 2025 12:00\r\n\r\nx"));
+        assert!(!has_four_part_time(b"Subject: 1:2:3:4\r\n\r\nx"));
+        assert!(!has_four_part_time(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn mid_angle_quote_額縁内途中クオートを検出する() {
+        // D1640 — `<a "b" @x>` / `<a"b@x>` / 閉じない `"`
+        assert!(has_mid_angle_quote(b"To: <a \"b\" @x>\r\n\r\nx"));
+        assert!(has_mid_angle_quote(b"From: <a\"b@x>\r\n\r\nx"));
+        assert!(has_mid_angle_quote(b"To: <\"a b@x>\r\n\r\nx"));
+        // クオートローカル合法形・額縁外・他欄は不発火
+        assert!(!has_mid_angle_quote(b"To: <\"a b\"@x>\r\n\r\nx"));
+        assert!(!has_mid_angle_quote(b"From: \"a b\" <x@y>\r\n\r\nx"));
+        assert!(!has_mid_angle_quote(b"Subject: <a\"b>\r\n\r\nx"));
+        assert!(!has_mid_angle_quote(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

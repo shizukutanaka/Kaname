@@ -5377,6 +5377,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.msgid_bad_char {
+        render_risks.push(
+            "識別子の「<…>」内に非合法の記号があります\
+             —厳格実装が識別子を捨て、生採用する実装と照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_angle_semi {
+        render_risks.push(
+            "宛名の「<…>」の内側に「;」があります\
+             —区切りと読む実装と壊れた宛名と読む実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.four_part_time {
+        render_risks.push(
+            "Date の時刻が4節以上あります (「12:00:00:30」等)\
+             —切り捨てる実装と構文エラーとする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.mid_angle_quote {
+        render_risks.push(
+            "宛名の「<…>」の途中位置に引用符があります\
+             —クオート開始と読む実装と字として読む実装で宛名がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
