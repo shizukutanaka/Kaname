@@ -5237,6 +5237,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.comment_has_addr {
+        render_risks.push(
+            "宛名欄の注釈 (…) の中に @ を含む住所構造があります\
+             —注釈ごと走査する実装は別の住所を拾い、差出人表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_semicolon_display {
+        render_risks.push(
+            "表示名のクオート内に「;」があります\
+             —クオートを読まずに分割する実装は宛名の切れ目をずらします"
+                .to_string(),
+        );
+    }
+    if env.comment_in_angle {
+        render_risks.push(
+            "宛名欄の「<…>」の内側に注釈 (…) があります\
+             —剥がす実装と保持する実装で宛名の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_domain_literal {
+        render_risks.push(
+            "宛名のドメインに空の […] リテラルがあります\
+             —受理する実装と構文エラーとする実装で宛名がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

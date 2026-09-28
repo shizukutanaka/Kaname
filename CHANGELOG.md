@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1617: アドレス欄のコメント `(…)` 内に `@` を含む構造 (`From: ops (ceo@real.com) <x@y>`) を検出 — `Envelope` に `comment_has_addr` を追加。コメントごと走査する実装が別アドレスを拾い差出人表示がずれる (クオート内 `@` は D1602)。
+
+### Security — D1618: アドレス欄のクオート表示名内の `;` (`"Doe; John"`) を検出 — `Envelope` に `quoted_semicolon_display` を追加。クオートを読まずに `;` で切る実装で宛名の切れ目がずれる (CT/CD 版は D1609)。
+
+### Security — D1619: アドレス欄の `<…>` 内側にコメント `(…)` (`From: John <a(note)@b>`) を検出 — `Envelope` に `comment_in_angle` を追加。addr-spec は括弧内 CFWS を許さず剥がす/保持で宛名がずれる (識別子側は D1603)。
+
+### Security — D1620: アドレス欄の空ドメインリテラル `a@[]` を検出 — `Envelope` に `empty_domain_literal` を追加。受理 vs 構文エラーで宛名がずれる (非 IP 中身は D1546)。
+
 ### Security — D1613: `Content-Type:` のメディア型トークンに ASCII 大文字 (`TEXT/PLAIN`/`Text/Html`) を検出 — `kaname-render` の `Envelope` に `uppercase_media` を追加。厳密比較実装は小文字形しか拾えず部品の型解釈がずれる (CTE は D1513、param 名は D1495)。
 
 ### Security — D1614: `name*=`/`filename*=` の単一 `*=` param 値に `'` が無い形 (`filename*=utf8x`) を検出 — `Envelope` に `star_param_no_apostrophe` を追加。RFC 2231 は `charset'lang'value` を要求し厳格実装が値を捨てる (連番混在は D1530、非数値タグは D1490)。

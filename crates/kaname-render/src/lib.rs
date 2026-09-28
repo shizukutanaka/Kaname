@@ -944,6 +944,14 @@ pub struct Envelope {
     pub msgid_bad_literal: bool,
     /// アドレス欄の空クオート表示名 `""` (D1616 — 表示名ずれ)。
     pub empty_quoted_string: bool,
+    /// アドレス欄のコメント内に `@` 構造 (D1617 — 宛名抽出ずれ)。
+    pub comment_has_addr: bool,
+    /// アドレス欄のクオート内に `;` (D1618 — 宛名分割ずれ)。
+    pub quoted_semicolon_display: bool,
+    /// アドレス欄の `<…>` 内側にコメント `(…)` (D1619 — 宛名抽出ずれ)。
+    pub comment_in_angle: bool,
+    /// 空のドメインリテラル `a@[]` (D1620 — 宛名妥当性ずれ)。
+    pub empty_domain_literal: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3331,6 +3339,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_bad_literal = has_msgid_bad_literal(bytes);
     // D1616: 空クオート表示名
     let empty_quoted_string = has_empty_quoted_string(bytes);
+    // D1617: コメント内のアドレス構造
+    let comment_has_addr = has_comment_has_addr(bytes);
+    // D1618: クオート内の `;`
+    let quoted_semicolon_display = has_quoted_semicolon_display(bytes);
+    // D1619: 額縁内のコメント
+    let comment_in_angle = has_comment_in_angle(bytes);
+    // D1620: 空ドメインリテラル
+    let empty_domain_literal = has_empty_domain_literal(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3705,6 +3721,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         star_param_no_apostrophe,
         msgid_bad_literal,
         empty_quoted_string,
+        comment_has_addr,
+        quoted_semicolon_display,
+        comment_in_angle,
+        empty_domain_literal,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -20020,6 +20040,209 @@ pub fn has_empty_quoted_string(raw: &[u8]) -> bool {
         let v = &l[colon + 1..];
         if v.contains("\"\"") {
             return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄のコメント `(…)` の内側に `@` を含むアドレス構造が
+/// あるか判定する (D1617)。
+///
+/// `From: ops (ceo@real.com) <attacker@evil>` — コメントを除く実装は
+/// `attacker@evil`、コメントごと走査する素朴な抽出器は `ceo@real.com`
+/// を拾い、差出人の表示・判定がずれる (クオート内 `@` は D1602)。
+#[must_use]
+pub fn has_comment_has_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut depth = 0u32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if b == b'\\' && prev != b'\\' {
+                prev = b;
+                continue;
+            }
+            if depth > 0 {
+                if b == b'(' && prev != b'\\' {
+                    depth += 1;
+                } else if b == b')' && prev != b'\\' {
+                    depth -= 1;
+                } else if b == b'@' {
+                    return true;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q {
+                depth = 1;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// アドレス欄のクオート表示名の内側に `;` があるか判定する (D1618)。
+///
+/// `From: "Doe; John" <a@b>` — クオートを読まずに `;` で切る実装は
+/// `John` を別要素と読み、宛名集合がずれる (CT/CD 欄のクオート内
+/// `;` は D1609、コメント内 `@` は D1617)。
+#[must_use]
+pub fn has_quoted_semicolon_display(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q && prev != b'\\' {
+                in_c = 1;
+            } else if b == b';' && in_q {
+                return true;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` の内側にコメント `(…)` があるか判定する (D1619)。
+///
+/// `From: John <a(note)@b>` — addr-spec は括弧内に CFWS を許さず、
+/// 剥がす実装と保持する実装で宛名がずれる (識別子欄側は D1603、
+/// コメント内 `@` は D1617)。
+#[must_use]
+pub fn has_comment_in_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if b == b'"' && prev != b'\\' && !in_a {
+                in_q = !in_q;
+            } else if b == b'<' && !in_q && prev != b'\\' {
+                in_a = true;
+            } else if b == b'>' && in_a {
+                in_a = false;
+            } else if (b == b'(' || b == b')') && in_a && !in_q {
+                return true;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// アドレス欄に空のドメインリテラル `a@[]` があるか判定する (D1620)。
+///
+/// `[` `]` 括りは IP リテラル専用 — 中身が空なら受理側は空リテラル、
+/// 厳格側は構文エラーで宛名がずれる (非 IP 中身は D1546、識別子側は
+/// D1615)。
+#[must_use]
+pub fn has_empty_domain_literal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let bytes = v.as_bytes();
+        for i in 1..bytes.len().saturating_sub(1) {
+            if bytes[i] == b'[' && bytes[i + 1] == b']' && bytes[i - 1] == b'@' {
+                return true;
+            }
         }
     }
     false
@@ -38700,6 +38923,54 @@ mod tests {
         assert!(!has_empty_quoted_string(b"From: John <a@b>\r\n\r\nx"));
         assert!(!has_empty_quoted_string(b"Subject: \"\"\r\n\r\nx"));
         assert!(!has_empty_quoted_string(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn comment_has_addr_コメント内アドレス構造を検出する() {
+        // D1617 — コメント内の @
+        assert!(has_comment_has_addr(b"From: ops (ceo@real.com) <attacker@evil>\r\n\r\nx"));
+        assert!(has_comment_has_addr(b"To: team (ml@x.y) <a@b>\r\n\r\nx"));
+        // クオート内・コメント無し・コメント内 @ 無し・他欄は不発火
+        assert!(!has_comment_has_addr(b"From: \"ceo@real.com\" <a@b>\r\n\r\nx"));
+        assert!(!has_comment_has_addr(b"From: ops (plain note) <a@b>\r\n\r\nx"));
+        assert!(!has_comment_has_addr(b"Subject: (a@b)\r\n\r\nx"));
+        assert!(!has_comment_has_addr(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn quoted_semicolon_display_クオート内区切りを検出する() {
+        // D1618 — 表示名クオート内の `;`
+        assert!(has_quoted_semicolon_display(b"From: \"Doe; John\" <a@b>\r\n\r\nx"));
+        assert!(has_quoted_semicolon_display(b"To: \"a;b\" <x@y>\r\n\r\nx"));
+        // クオート外・クオート無し・他欄は不発火
+        assert!(!has_quoted_semicolon_display(b"From: \"Doe\" <a@b>\r\n\r\nx"));
+        assert!(!has_quoted_semicolon_display(b"From: Doe; John <a@b>\r\n\r\nx"));
+        assert!(!has_quoted_semicolon_display(b"Subject: \"a;b\"\r\n\r\nx"));
+        assert!(!has_quoted_semicolon_display(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn comment_in_angle_額縁内コメントを検出する() {
+        // D1619 — アドレス欄の `<…>` 内コメント
+        assert!(has_comment_in_angle(b"From: John <a(note)@b>\r\n\r\nx"));
+        assert!(has_comment_in_angle(b"To: <a@b(comment)>\r\n\r\nx"));
+        // 額縁外のコメント・コメント無し・他欄は不発火
+        assert!(!has_comment_in_angle(b"From: John (note) <a@b>\r\n\r\nx"));
+        assert!(!has_comment_in_angle(b"From: John <a@b>\r\n\r\nx"));
+        assert!(!has_comment_in_angle(b"Subject: <a(b)\r\n\r\nx"));
+        assert!(!has_comment_in_angle(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_domain_literal_空ドメインリテラルを検出する() {
+        // D1620 — `a@[]`
+        assert!(has_empty_domain_literal(b"From: a@[]\r\n\r\nx"));
+        assert!(has_empty_domain_literal(b"To: <a@[]>\r\n\r\nx"));
+        // IP 形・非 IP 中身・リテラル無し・他欄は不発火
+        assert!(!has_empty_domain_literal(b"From: a@[192.0.2.1]\r\n\r\nx"));
+        assert!(!has_empty_domain_literal(b"From: a@[nope]\r\n\r\nx"));
+        assert!(!has_empty_domain_literal(b"From: a@b\r\n\r\nx"));
+        assert!(!has_empty_domain_literal(b"Subject: a@[]\r\n\r\nx"));
     }
 
     #[test]
