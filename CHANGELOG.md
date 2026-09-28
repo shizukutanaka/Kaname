@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1601: `List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/`List-Help:`/`List-Owner:`/`List-Archive:` の値が `<…>` 括弧を欠く裸形 (`List-Unsubscribe: mailto:x`) を検出 — `kaname-render` の `Envelope` に `bare_list_url` を追加。RFC 2369 は `<url>` 形を要求し、厳格実装が操作欄を捨てる (List-Id 裸形は D1572、危険スキームは D1541)。
+
+### Security — D1602: アドレス欄の表示名 (quoted-string) が `@` を含む形 (`From: "ceo@example.com" <attacker@evil>`) を検出 — `Envelope` に `quoted_at_display` を追加。引用部を宛名と誤読する実装で差出人がすり替わる (クオートのみ宛名は D1542、コメント内別アドレスは D1300)。
+
+### Security — D1603: 識別子欄 `<…>` 内の `(` コメント (`Message-ID: <a(x)@b>`) を検出 — `Envelope` に `comment_inside_id` を追加。CFWS は額縁の外のみ合法で、剥がす実装と保持する実装で照合がずれる (端空白 D1516・内側空白 D1596)。
+
+### Security — D1604: アドレス欄が `@` も `<` も持たない語句のみの形 (`From: John Doe`) を検出 — `Envelope` に `display_only_addr` を追加。欄を拒否する実装と語句を名前と推測する実装で差出人がずれる (コメントのみは D1536、グループ構文は対象外)。
+
 ### Security — D1597: ヘッダ改行が全て裸 LF (CRLF 皆無) の形を検出 — `kaname-render` の `Envelope` に `lf_only_headers` を追加。CRLF 必須の実装はヘッダ全体を1行と読み、LF 許容実装と欄構成がずれる (行端混在は D1290 系)。
 
 ### Security — D1598: `To:`/`Cc:`/`Bcc:`/`Reply-To:` の複数回出現を検出 — `Envelope` に `dup_addr_headers` を追加。結合する実装と先頭/末尾採用で宛先集合がずれる (From/Date 等は D1589、配送欄は D1390)。

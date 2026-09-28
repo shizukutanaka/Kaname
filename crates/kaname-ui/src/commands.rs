@@ -5125,6 +5125,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.bare_list_url {
+        render_risks.push(
+            "List-Post/Unsubscribe 等の欄値に「<…>」がありません\
+             —括弧を必須とする実装が操作欄を捨て、寛容な実装だけが読みます"
+                .to_string(),
+        );
+    }
+    if env.quoted_at_display {
+        render_risks.push(
+            "表示名のクオート内に「@」を含む別アドレスがあります\
+             —引用部を宛名と誤読する実装は差出人を別人として表示します"
+                .to_string(),
+        );
+    }
+    if env.comment_inside_id {
+        render_risks.push(
+            "識別子「<…>」の内側にコメント「(…)」があります\
+             —剥がす実装と識別子の一部と読む実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.display_only_addr {
+        render_risks.push(
+            "宛名欄にアドレス (@/<>) が無く表示名の語句だけです\
+             —欄を拒否する実装と語句を名前と推測する実装で表示がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

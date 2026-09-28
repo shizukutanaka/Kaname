@@ -912,6 +912,14 @@ pub struct Envelope {
     pub blank_ws_line: bool,
     /// CT/CD param 値の未終端クオート (D1600 — param 読みずれ)。
     pub unterm_param_quote: bool,
+    /// `List-*` 欄の値に `<…>` 括弧が無い形 (D1601 — 解除欄解釈ずれ)。
+    pub bare_list_url: bool,
+    /// アドレス欄の表示名が `@` を含むクオート形 (D1602 — 差出人表示偽装)。
+    pub quoted_at_display: bool,
+    /// 識別子 `<…>` 内の `(` コメント (D1603 — 識別子照合ずれ)。
+    pub comment_inside_id: bool,
+    /// アドレス欄に `@` も `<` も無い表示名のみ形 (D1604 — 宛名解釈ずれ)。
+    pub display_only_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3267,6 +3275,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let blank_ws_line = has_blank_ws_line(bytes);
     // D1600: CT/CD param の未終端クオート
     let unterm_param_quote = has_unterm_param_quote(bytes);
+    // D1601: List-* 欄の裸 URL
+    let bare_list_url = has_bare_list_url(bytes);
+    // D1602: 表示名クオート内の `@`
+    let quoted_at_display = has_quoted_at_display(bytes);
+    // D1603: 識別子 `<…>` 内の `(`
+    let comment_inside_id = has_comment_inside_id(bytes);
+    // D1604: 表示名のみの宛名欄
+    let display_only_addr = has_display_only_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3625,6 +3641,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dup_addr_headers,
         blank_ws_line,
         unterm_param_quote,
+        bare_list_url,
+        quoted_at_display,
+        comment_inside_id,
+        display_only_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -19108,6 +19128,230 @@ pub fn has_unterm_param_quote(raw: &[u8]) -> bool {
             prev = b;
         }
         if quotes % 2 == 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/`List-Help:`/
+/// `List-Owner:`/`List-Archive:` の値が `<…>` 括弧を欠くか判定する
+/// (D1601)。
+///
+/// RFC 2369 はリスト操作欄に `<url>` 形を要求する — `mailto:` の裸値は
+/// 括弧を要求する実装が解除ボタンを出さず、寛容な実装だけが出す
+/// (List-Id の裸形は D1572、危険スキームは D1541)。
+#[must_use]
+pub fn has_bare_list_url(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_list = l.starts_with("list-post:")
+            || l.starts_with("list-subscribe:")
+            || l.starts_with("list-unsubscribe:")
+            || l.starts_with("list-help:")
+            || l.starts_with("list-owner:")
+            || l.starts_with("list-archive:");
+        if !is_list {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("").trim();
+        if v.is_empty() {
+            continue;
+        }
+        if !v.contains('<') {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄の表示名 (quoted-string) が `@` を含むか判定する (D1602)。
+///
+/// `From: "ceo@example.com" <attacker@evil>` — 引用内の `@` までを
+/// アドレスと誤読する表示実装は差出人を引用部の値で示す。クオート
+/// だけの宛名 (額無し) は D1542、コメント内の別アドレスは D1300。
+#[must_use]
+pub fn has_quoted_at_display(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // `<` が無ければクオートのみ宛名 (D1542) の領分
+        if !v.contains('<') {
+            continue;
+        }
+        let bytes = v.as_bytes();
+        let mut in_q = false;
+        let mut q_has_at = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for &b in bytes {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q && prev != b'\\' {
+                in_c = 1;
+            } else if in_q && b == b'@' {
+                q_has_at = true;
+            }
+            prev = b;
+        }
+        if q_has_at {
+            return true;
+        }
+    }
+    false
+}
+
+/// 識別子欄の `<…>` 内に `(` (コメント) があるか判定する (D1603)。
+///
+/// `Message-ID: <a(note)@b>` — msg-id の CFWS は括弧の外側のみ
+/// 合法で、内側の `(` は剥がす実装と識別子の一部と読む実装で
+/// 照合がずれる (端空白は D1516、内側空白は D1596)。
+#[must_use]
+pub fn has_comment_inside_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end();
+        let is_id = matches!(
+            name,
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if inner.contains('(') || inner.contains(')') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄に `@` も `<` も無く表示名語句のみの形か判定する (D1604)。
+///
+/// `From: John Doe` — アドレスを欠く値は、欄を拒否する実装と語句を
+/// 名前として推測する実装で差出人表示がずれる (コメントのみは D1536、
+/// `@` 無し額縁は D1528、空値は D1340 系)。グループ構文
+/// (`label:;`) は対象外。
+#[must_use]
+pub fn has_display_only_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if v.trim().is_empty() || v.contains('@') || v.contains('<') {
+            continue;
+        }
+        // コメントを剥がした残りに `@`/`<`/`:`/`;` が無ければ語句のみ
+        let mut plain = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q && prev != b'\\' {
+                in_c = 1;
+            } else if !in_q {
+                plain.push(b as char);
+            }
+            prev = b;
+        }
+        let p = plain.trim();
+        if p.is_empty() || p.contains(':') || p.contains(';') {
+            continue;
+        }
+        if p.chars().any(|c| !c.is_whitespace()) {
             return true;
         }
     }
@@ -37564,6 +37808,58 @@ mod tests {
         ));
         assert!(!has_unterm_param_quote(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
         assert!(!has_unterm_param_quote(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bare_list_url_裸のlist欄を検出する() {
+        // D1601 — List-* 欄の `<…>` 欠落
+        assert!(has_bare_list_url(b"List-Unsubscribe: mailto:x@y\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_bare_list_url(b"List-Post: mailto:l@x\r\nList-Id: <l.x>\r\n\r\nx"));
+        // `<…>` 形・他欄・空値は不発火
+        assert!(!has_bare_list_url(
+            b"List-Unsubscribe: <mailto:x@y>, <https://x/u>\r\nList-Id: <l.x>\r\n\r\nx"
+        ));
+        assert!(!has_bare_list_url(b"List-Id: <list.example>\r\n\r\nx"));
+        assert!(!has_bare_list_url(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn quoted_at_display_クオート内アドレスを検出する() {
+        // D1602 — 表示名 `"a@b"` + 別の額縁宛名
+        assert!(has_quoted_at_display(
+            b"From: \"ceo@example.com\" <attacker@evil>\r\n\r\nx"
+        ));
+        assert!(has_quoted_at_display(
+            b"To: \"help@bank\" <real@x>\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // `@` の無い表示名・クオートのみ宛名 (D1542)・通常形は不発火
+        assert!(!has_quoted_at_display(b"From: \"John Doe\" <a@b>\r\n\r\nx"));
+        assert!(!has_quoted_at_display(b"From: \"a@b\"\r\n\r\nx"));
+        assert!(!has_quoted_at_display(b"From: John <a@b> (x@y)\r\n\r\nx"));
+        assert!(!has_quoted_at_display(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn comment_inside_id_識別子内コメントを検出する() {
+        // D1603 — `<…>` 内の `(`
+        assert!(has_comment_inside_id(b"Message-ID: <a(note)@b>\r\n\r\nx"));
+        assert!(has_comment_inside_id(b"References: <a@b> <c(x)@d>\r\n\r\nx"));
+        assert!(has_comment_inside_id(b"Content-ID: <x(y)>\r\n\r\nx"));
+        // 括弧外のコメント・通常形は不発火
+        assert!(!has_comment_inside_id(b"Message-ID: (note) <a@b>\r\n\r\nx"));
+        assert!(!has_comment_inside_id(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_comment_inside_id(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn display_only_addr_宛名無し表示名を検出する() {
+        // D1604 — `@` も `<` も無い語句のみ
+        assert!(has_display_only_addr(b"From: John Doe\r\nTo: a@b\r\n\r\nx"));
+        assert!(has_display_only_addr(b"To: Sales Team\r\nFrom: a@b\r\n\r\nx"));
+        // グループ構文・コメントのみ・正常形は不発火
+        assert!(!has_display_only_addr(b"To: undisclosed-recipients:;\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_display_only_addr(b"From: (notes)\r\nTo: a@b\r\n\r\nx"));
+        assert!(!has_display_only_addr(b"From: a@b\r\nTo: c@d\r\n\r\nx"));
     }
 
     #[test]
