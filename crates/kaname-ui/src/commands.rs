@@ -3698,6 +3698,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.bounce_directive {
+        render_risks.push(
+            "配送失敗時の通知先を送信側が指定しています (Errors-To 等)\
+             —不達通知を盗み見る旧来の欄です"
+                .to_string(),
+        );
+    }
+    if env.part_header_dup {
+        render_risks.push(
+            "同じパートのヘッダに Content-Type/Disposition/CTE/ID が\
+             二度現れています —どちらを採用するか実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.missing_charset_hibit {
+        render_risks.push(
+            "charset 宣言のないテキストパートに非 ASCII バイトが\
+             あります —文字コードの推測結果が実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.legacy_encrypted_header {
+        render_risks.push(
+            "旧式の暗号化欄 (Encrypted:/Decryptable:) が宣言されています\
+             —現行では意味を持たない自称です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

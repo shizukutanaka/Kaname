@@ -1,5 +1,29 @@
 ## [Unreleased]
 
+### Security — D1397: 配送失敗通知先 (Errors-To/Return-Error-To) の送信側指定が未検査
+
+- **問題**: `Errors-To:`/`Return-Error-To:`/`Deliver-Errors-To:` は不達通知の転送先を送信側が書く旧来の欄 — 届いたメールに付いていると「失敗する宛先を試す偵察」の応答経路を内蔵させる。`X-Errors-To` 系は既存のバウンス印群が担当するが裸欄は未対象だった。
+- **修正**: `has_bounce_directive` — 外側ヘッダで3欄を検出 → `Envelope.bounce_directive` → render_risks 警告。
+- **教訓**: 差出人が勝手に書き込んだ「届かなければこちらへ転送」の案内。
+
+### Security — D1398: 同一パート run 内の CT/CD/CTE/Content-ID 重複が未検査
+
+- **問題**: 外側の一意欄重複 (D1306) と同じく、同一パートのヘッダ run で同名欄が二度現れると先頭/末尾採用で型・添付判定・符号化が実装間でずれる。
+- **修正**: `has_part_header_dup` — 宣言 boundary でパート run を追跡し run ごとに集合をリセットして重複を検出 → `Envelope.part_header_dup` → render_risks 警告。
+- **教訓**: 一つの箱に二枚貼られた内容物ラベル — どちらを信じるかは受取人次第。
+
+### Security — D1399: charset 宣言のない text/* + 高位バイト本文が未検査
+
+- **問題**: charset 無しの既定は us-ascii — 高位バイトがあると「UTF-8 と推す」「windows-1252 と推す」「拒否」で本文の見え方がずれる。宣言ありの不一致は D1329 が担当するが、宣言自体の欠落は対象外だった。
+- **修正**: `has_missing_charset_hibit` — text/* で charset= 欠落かつ本文に高位バイトを検出 (外側 + パート両走査) → `Envelope.missing_charset_hibit` → render_risks 警告。
+- **教訓**: 言語を明記せずに書かれた手紙 — 読み手が勝手に言語を選ぶ。
+
+### Security — D1400: 旧式 `Encrypted:`/`Decryptable:` 欄の自称が未検査
+
+- **問題**: RFC 822 時代の `Encrypted:` 欄は現行では意味を持たない — 存在は「暗号化済み」の体裁を値だけで語る自称 (PEM 構造は D1387、PGP/S-MIME 内包は D1349 が担当)。
+- **修正**: `has_legacy_encrypted_header` — 外側ヘッダで2欄を検出 → `Envelope.legacy_encrypted_header` → render_risks 警告。
+- **教訓**: 「暗号で封印済」とだけ書かれた封筒 — 中は透けて見える。
+
 ### Security — D1393: 添付名の Windows 非合法文字 (* ? | < >) が未検査
 
 - **問題**: `filename="a?b.exe"` のような Windows 保存不能文字を含む添付名は、拒否する実装と別名保存する実装で宣言名と保存名がずれる — 名指し検査をサニタイズ差異が素通りする。

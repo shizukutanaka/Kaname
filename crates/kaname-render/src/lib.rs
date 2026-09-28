@@ -487,6 +487,17 @@ pub struct Envelope {
     /// D1396 — `filename*=`/`name*=` の値に制御文字の
     /// パーセント符号化 (復号後の改行・不可視化)。
     pub encoded_control_filename: bool,
+    /// D1397 — `Errors-To:`/`Return-Error-To:`/`Deliver-Errors-To:`
+    /// バウンス転送指示 (不達通知の盗み見経路)。
+    pub bounce_directive: bool,
+    /// D1398 — 同一パート run 内の CT/CD/CTE/Content-ID 重複
+    /// (採用値の実装差異)。
+    pub part_header_dup: bool,
+    /// D1399 — charset 宣言のない text/* + 高位バイト本文
+    /// (文字コード推測の実装差異)。
+    pub missing_charset_hibit: bool,
+    /// D1400 — 旧式 `Encrypted:`/`Decryptable:` 欄の自称。
+    pub legacy_encrypted_header: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2546,6 +2557,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let rfc2231_gap = has_rfc2231_gap(bytes);
     let unbracketed_content_id = has_unbracketed_content_id(bytes);
     let encoded_control_filename = has_encoded_control_filename(bytes);
+    let bounce_directive = has_bounce_directive(bytes);
+    let part_header_dup = has_part_header_dup(bytes);
+    let missing_charset_hibit = has_missing_charset_hibit(bytes);
+    let legacy_encrypted_header = has_legacy_encrypted_header(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2700,6 +2715,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         rfc2231_gap,
         unbracketed_content_id,
         encoded_control_filename,
+        bounce_directive,
+        part_header_dup,
+        missing_charset_hibit,
+        legacy_encrypted_header,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -8673,7 +8692,196 @@ pub fn has_encoded_control_filename(raw: &[u8]) -> bool {
     false
 }
 
-/// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
+/// `Errors-To:`/`Return-Error-To:`/`Deliver-Errors-To:` ヘッダが
+/// あるか判定する (D1397)。
+///
+/// 配送失敗時の通知先を送信側が指定する旧来の欄 — 届いたメールに
+/// 付いていると「不達を盗み見る経路」の材料になる (配送に失敗する
+/// 宛先を試す偵察への応答先を内蔵させる)。`X-Errors-To:` 系は既存の
+/// バウンス印群が担当するため、ここでは RFC 822 系の裸欄のみ対象。
+#[must_use]
+pub fn has_bounce_directive(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        l.starts_with("errors-to:")
+            || l.starts_with("return-error-to:")
+            || l.starts_with("deliver-errors-to:")
+    })
+}
+
+/// 同一パートのヘッダ run 内で `Content-Type:`/`Content-Disposition:`/
+/// `Content-Transfer-Encoding:`/`Content-ID:` が二度現れるか判定する
+/// (D1398)。
+///
+/// 外側の一意ヘッダ重複 (D1306) と同じく、先頭/末尾/結合どれを採るかで
+/// パートの型・添付判定・符号化が実装間でずれる。パート run 内に限定
+/// するため正当な multipart で誤爆しない (run ごとに集合をリセット)。
+#[must_use]
+pub fn has_part_header_dup(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let declared = declared_boundaries(&text);
+    let mut in_part_headers = false;
+    let mut seen: Vec<&str> = Vec::new();
+    for l in text[header_end..].to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                in_part_headers = !(l.ends_with("--") && l.len() > 4);
+                seen.clear();
+            }
+            continue;
+        }
+        if !in_part_headers {
+            continue;
+        }
+        if l.is_empty() {
+            in_part_headers = false;
+            seen.clear();
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let name = if l.starts_with("content-type:") {
+            Some("content-type")
+        } else if l.starts_with("content-disposition:") {
+            Some("content-disposition")
+        } else if l.starts_with("content-transfer-encoding:") {
+            Some("cte")
+        } else if l.starts_with("content-id:") {
+            Some("content-id")
+        } else {
+            None
+        };
+        if let Some(n) = name {
+            if seen.contains(&n) {
+                return true;
+            }
+            seen.push(n);
+        }
+    }
+    false
+}
+
+/// `text/*` パート (または外側メッセージ) が charset 宣言を欠いたまま
+/// 高位バイトの本文を持つか判定する (D1399)。
+///
+/// charset 無しの既定は us-ascii — 高位バイトがあると「UTF-8 と
+/// 推す表示」「windows-1252 と推す表示」「拒否」で本文の見え方が
+/// ずれる。宣言ありの不一致は D1329 が担当 — こちらは宣言自体の
+/// 欠落 + 高位バイトの組み合わせのみ。
+#[must_use]
+pub fn has_missing_charset_hibit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let declared = declared_boundaries(&text);
+    // 論理行化して各 run の content-type を評価 (to_ascii_lowercase は
+    // 非 ASCII バイトをそのまま通すため高位バイト検査にも使える)
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    // 外側 CT が charset 無し text/* で、本体に高位バイト
+    let outer_ct = lower[..header_end]
+        .lines()
+        .find(|l| l.starts_with("content-type:"))
+        .and_then(|l| l.strip_prefix("content-type:"))
+        .map(str::trim)
+        .unwrap_or("");
+    let outer_is_text = outer_ct.starts_with("text/");
+    let outer_has_charset = outer_ct.contains("charset=");
+    let outer_multipart = outer_ct.starts_with("multipart/");
+    if outer_is_text && !outer_has_charset {
+        if lower[header_end..].bytes().any(|b| b >= 0x80) {
+            return true;
+        }
+    }
+    if !outer_multipart {
+        return false;
+    }
+    // パート: text/* で charset 無し → そのパート本文の高位バイトを監視
+    let mut in_part_headers = false;
+    let mut watch_body = false;
+    let mut pending_hibit = false;
+    let body_text = &lower[header_end..];
+    for l in body_text.lines() {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                in_part_headers = !(l.ends_with("--") && l.len() > 4);
+                watch_body = false;
+                pending_hibit = false;
+            }
+            continue;
+        }
+        if in_part_headers {
+            if l.is_empty() {
+                in_part_headers = false;
+                // CT が charset 無し text/* なら本文監視
+                watch_body = pending_hibit;
+                continue;
+            }
+            if l.starts_with(' ') || l.starts_with('\t') {
+                continue;
+            }
+            if let Some(rest) = l.strip_prefix("content-type:") {
+                let v = rest.trim();
+                pending_hibit = v.starts_with("text/") && !v.contains("charset=");
+            }
+            continue;
+        }
+        if watch_body {
+            if l.bytes().any(|b| b >= 0x80) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 旧式 `Encrypted:`/`Decryptable:` ヘッダがあるか判定する (D1400)。
+///
+/// RFC 822 時代の `Encrypted:` 欄 — 現行では意味を持たず、存在は
+/// 手作り生成または「暗号化済み」の体裁を値だけで語る自称。
+/// PEM 構造 (Proc-Type/DEK-Info) は D1387、PGP/S-MIME の内包は
+/// D1349 が担当 — こちらは欄名だけの自称。
+#[must_use]
+pub fn has_legacy_encrypted_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        l.starts_with("encrypted:") || l.starts_with("decryptable:")
+    })
+}
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
@@ -24111,6 +24319,65 @@ mod tests {
             b"Content-Disposition: attachment; filename=\"a%0ab.exe\"\r\n\r\nx"
         ));
         assert!(!has_encoded_control_filename(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bounce_directive_は不達通知指定を検出する() {
+        // D1397 — Errors-To/Return-Error-To
+        assert!(has_bounce_directive(
+            b"From: a@b\r\nErrors-To: watcher@evil\r\n\r\nbody"
+        ));
+        assert!(has_bounce_directive(
+            b"From: a@b\r\nReturn-Error-To: w@evil\r\n\r\nbody"
+        ));
+        assert!(!has_bounce_directive(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn part_header_dup_はパート内欄重複を検出する() {
+        // D1398 — 同一パート run 内の CT/CTE 二重
+        assert!(has_part_header_dup(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Type: text/html\r\n\r\nx\r\n--b--"
+        ));
+        assert!(has_part_header_dup(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Transfer-Encoding: 7bit\r\nContent-Transfer-Encoding: base64\r\n\r\nx\r\n--b--"
+        ));
+        // 別パートに同名欄があるのは正当 (run ごとにリセット)
+        assert!(!has_part_header_dup(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\ny\r\n--b--"
+        ));
+        assert!(!has_part_header_dup(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn missing_charset_hibit_は文字コード推測差異を検出する() {
+        // D1399 — charset 無し text/* + 高位バイト
+        assert!(has_missing_charset_hibit(
+            "Content-Type: text/plain\r\n\r\ncafé".as_bytes()
+        ));
+        // multipart 内パートも対象
+        assert!(has_missing_charset_hibit(
+            "Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\ncafé\r\n--b--".as_bytes()
+        ));
+        // charset ありは不発火
+        assert!(!has_missing_charset_hibit(
+            "Content-Type: text/plain; charset=utf-8\r\n\r\ncafé".as_bytes()
+        ));
+        // 高位バイト無しは不発火
+        assert!(!has_missing_charset_hibit(b"Content-Type: text/plain\r\n\r\nhello"));
+    }
+
+    #[test]
+    fn legacy_encrypted_header_は旧式暗号欄を検出する() {
+        // D1400 — Encrypted:/Decryptable:
+        assert!(has_legacy_encrypted_header(
+            b"From: a@b\r\nEncrypted: 40-bit\r\n\r\nbody"
+        ));
+        assert!(!has_legacy_encrypted_header(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
     }
 
     #[test]

@@ -810,3 +810,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1394 | ~~**RFC 2231 連番パラメータの欠番が未検査**~~ **(解消済み)** | P2 | *0/*2 で *1 欠番 — 連結実装差で添付名ずれ。修正: `has_rfc2231_gap` → render_risks | 欠巻の分冊百科 |
 | D1395 | ~~**パート Content-ID の角括弧欠落が未検査**~~ **(解消済み)** | P2 | cid: 参照解決が実装間でずれる。修正: `has_unbracketed_content_id` → render_risks | 額縁に入らない図版番号 |
 | D1396 | ~~**符号化添付名の制御文字パーセント符号化が未検査**~~ **(解消済み)** | P2 | `filename*=…%0a` で復号後改行を含む名。修正: `has_encoded_control_filename` → render_risks | 名札の裏の第二の名前 |
+| D1397 | ~~**Errors-To/Return-Error-To バウンス転送指示が未検査**~~ **(解消済み)** | P3 | 不達通知を盗み見る旧来欄。修正: `has_bounce_directive` → render_risks | 転送先自書の案内 |
+| D1398 | ~~**同一パート run 内の CT/CD/CTE/Content-ID 重複が未検査**~~ **(解消済み)** | P2 | 採用値が実装間でずれる。修正: `has_part_header_dup` → render_risks | 箱に二枚のラベル |
+| D1399 | ~~**charset 無し text/* + 高位バイト本文が未検査**~~ **(解消済み)** | P2 | 文字コード推測が実装間でずれる。修正: `has_missing_charset_hibit` → render_risks | 言語不明記の手紙 |
+| D1400 | ~~**旧式 Encrypted:/Decryptable: 欄の自称が未検査**~~ **(解消済み)** | P3 | 意味を持たない暗号化自称。修正: `has_legacy_encrypted_header` → render_risks | 「封印済」と書かれた透ける封筒 |
