@@ -1,5 +1,219 @@
 ## [Unreleased]
 
+### Security — D1702: `List-Id:` の二識別子 `<a> <b>` を検出 — `Envelope` に `two_list_ids` を追加 (Message-ID 側は D1666)。
+### Security — D1701: 大小写のみ異なる複数 `boundary=` 値を検出 — `Envelope` に `boundary_case_collide` を追加 (同一値再利用は D1669)。
+### Security — D1700: param 引用値内の `=` `;charset="a=b"` を検出 — `Envelope` に `param_quoted_eq` を追加 (クオート内 `;` は D1609)。
+### Security — D1699: Date 欄の5桁以上の年を検出 — `Envelope` に `year_5digit` を追加 (2桁年は D1535、二年は D1675)。
+### Security — D1698: param の `=` 直前空白 `;key =v` を検出 — `Envelope` に `pre_eq_space` を追加 (`=` 直後の空白は D1651)。
+### Security — D1697: 宛名のドット無し単ラベルドメイン `a@localhost` を検出 — `Envelope` に `single_label_domain` を追加 (ドメイン欠落は D1679)。
+### Security — D1696: CT/CD param の空値 `;charset=` を検出 — `Envelope` に `param_empty_value` を追加 (名なしは `has_empty_param_name`、空節は D1636)。
+### Security — D1695: Date 欄の数字曜日 `4,` を検出 — `Envelope` に `numeric_dow` を追加 (綴り違い曜日は D1582)。
+### Security — D1694: `Received:` の `;` 複数を検出 — `Envelope` に `multi_semi_received` を追加 (`;` のみ値は D1690、`;` 欠落は D1586)。
+### Security — D1693: CT/CD 欄の末尾 `;` を検出 — `Envelope` に `trailing_semi_param` を追加 (連続 `;;` は D1636)。
+### Security — D1692: Date 欄の二つの月名を検出 — `Envelope` に `date_two_months` を追加 (二年は D1675、二つの日は D1689)。
+### Security — D1691: `Received:` の `by` 節欠落を検出 — `Envelope` に `received_no_by` を追加 (from 欠落は D1673)。
+### Security — D1690: `Received:` の `;` のみ値を検出 — `Envelope` に `received_semi_only` を追加 (空値は D1687、`;` 欠落は D1586)。
+### Security — D1689: Date 欄の二つの日を検出 — `Envelope` に `date_two_days` を追加 (二年は D1675、二曜日は D1660、二時刻は D1657)。
+### Security — D1688: `Received:` の `from` 節重複を検出 — `Envelope` に `received_multi_from` を追加 (from 欠落は D1673)。
+### Security — D1687: `Received:` の空値を検出 — `Envelope` に `empty_received` を追加 (from 節欠落は D1673)。
+### Security — D1686: Date 欄の数字+英字融合語 `25Sep2025` を検出 — `Envelope` に `fused_date` を追加。
+### Security — D1685: 宛名欄の `<` 無し `>` を検出 — `Envelope` に `addr_gt_only` を追加 (message-id 側は D1635)。
+### Security — D1684: Date 欄ゾーンの符号のみ `+`/`-` を検出 — `Envelope` に `zone_sign_only` を追加 (桁異常は D1670)。
+### Security — D1683: Date 欄ゾーンの `+ABCD` 符号+英字形を検出 — `Envelope` に `zone_alpha` を追加 (裸英字は obs-zone 合法)。
+### Security — D1682: 宣言なき `--boundary` 様の本文区切り行を検出 — `Envelope` に `orphan_boundary` を追加 (宣言済み孤児パートは `has_orphaned_part_content`)。
+### Security — D1681: 宛名欄の空値を検出 — `Envelope` に `empty_addr_header` を追加 (空要素は D1584)。
+### Security — D1680: `boundary=` の空白のみ値を検出 — `Envelope` に `ws_boundary` を追加 (空値は `has_empty_boundary`)。
+### Security — D1679: 宛名欄の `@` 終端 (ドメイン欠落) を検出 — `Envelope` に `addr_at_end` を追加。
+### Security — D1678: Date 欄の時刻のみ値を検出 — `Envelope` に `date_time_only` を追加 (時刻無しは D1610)。
+### Security — D1677: Date 欄ゾーンの二重符号 `+-0900` を検出 — `Envelope` に `zone_two_signs` を追加。
+### Security — D1676: `Resent-*` 欄の同名重複を検出 — `Envelope` に `dup_resent_headers` を追加 (通常欄重複は D1589/D1598)。
+### Security — D1675: Date 欄の二つの4桁年を検出 — `Envelope` に `two_years` を追加 (年欠落は D1653、年先頭は D1664)。
+### Security — D1674: Date 欄ゾーンの `+HH:MM` コロン形を検出 — `Envelope` に `zone_colon` を追加 (桁異常は D1670)。
+### Security — D1673: `Received:` の `from` 節欠落を検出 — `Envelope` に `received_no_from` を追加 (欄異常は `has_bad_received`、`;` 欠落は D1586)。
+### Security — D1669: 親子 multipart の同一 `boundary=` 値再利用を検出 — `Envelope` に `nested_boundary_reuse` を追加 (長さ上限は D1402)。
+
+### Security — D1670: Date 欄ゾーンの `sign + 非4桁` (`+090`/`+9`) を検出 — `Envelope` に `bad_zone_len` を追加 (範囲外は D1565)。
+
+### Security — D1671: Date 欄の `.` 区切り日付 (`25.09.2025`) を検出 — `Envelope` に `dot_date` を追加 (`-` は D1654、`/` は D1668)。
+
+### Security — D1672: Date 欄の二数値ゾーン (`+0900 -0500`) を検出 — `Envelope` に `two_num_zones` を追加。
+
+### Security — D1665: Date 欄の `AM`/`PM`/`a.m.`/`p.m.` 記号 (`12:00 PM`) を検出 — `Envelope` に `ampm_time` を追加。
+
+### Security — D1666: `Message-ID:`/`Resent-Message-ID:` の二識別子を検出 — `Envelope` に `two_msgids` を追加 (References は複数正規)。
+
+### Security — D1667: アドレス欄の重複グループ名 (`team: a@b; team: c@d;`) を検出 — `Envelope` に `addr_group_dup` を追加。
+
+### Security — D1668: Date 欄の `/` 区切り日付 (`25/09/2025`) を検出 — `Envelope` に `slash_date` を追加 (`-` 区切りは D1654)。
+
+### Security — D1661: `Message-ID:`/`Resent-Message-ID:` の `<>` 欠落を検出 — `Envelope` に `unbracketed_msgid` を追加 (裸参照は `bare_msgid_ref` が In-Reply-To/References のみ担当)。
+
+### Security — D1662: Date 欄の符号なし4桁ゾーン (`12:00 0900`) を検出 — `Envelope` に `unsigned_zone` を追加。
+
+### Security — D1663: param 値の閉じクオート後の続き文字 (`;x="a"b`) を検出 — `Envelope` に `quote_tail_param` を追加 (未終端クオートは D1600)。
+
+### Security — D1664: Date 欄の年先頭並び (`2025 Sep 25`) を検出 — `Envelope` に `year_first_date` を追加 (月先頭は D1577)。
+
+### Security — D1657: Date 欄の二時刻 (`12:00:00 14:30:00`) を検出 — `Envelope` に `date_two_times` を追加。
+
+### Security — D1658: クオート boundary 値の端空白 (`" x"`/`"x "`) を検出 — `Envelope` に `boundary_edge_ws` を追加 (中央空白は bchars 正規)。
+
+### Security — D1659: CT/CD 欄 param 裸値の `:` (`charset=x:y`) を検出 — `Envelope` に `colon_param_val` を追加。
+
+### Security — D1660: Date 欄の二曜日名 (`Mon, Tue, …`) を検出 — `Envelope` に `two_daynames` を追加 (曜日不一致は D1569)。
+
+### Security — D1653: Date 欄の年欠落 (`25 Sep`) を検出 — `Envelope` に `date_no_year` を追加 (2桁年は D1535)。
+
+### Security — D1654: Date 欄の `-` 区切り日付 (`25-Sep-2025`) を検出 — `Envelope` に `dash_date` を追加。
+
+### Security — D1655: `Content-Transfer-Encoding:` 値の `;` param を検出 — `Envelope` に `cte_param` を追加 (CTE は param を取らない)。
+
+### Security — D1656: CT/CD 欄の param キーの非 token 文字 (`;a b=x`) を検出 — `Envelope` に `bad_param_key` を追加 (値側は D1647/D1515)。D1642 の doc に D1374 との併記関係を注記。
+
+### Security — D1649: `Content-Type:` の型トークン欠落 (`; charset=x` のみ) を検出 — `Envelope` に `missing_media_type` を追加 (欄欠落は `missing_content_type`、空値は D1645)。
+
+### Security — D1650: 宛名ドメイン部の空白継続 (`a@b .c`/`a@ b.c`) を検出 — `Envelope` に `ws_domain` を追加。
+
+### Security — D1651: param 値の `=` 直後空白 (`charset= utf-8`) を検出 — `Envelope` に `param_leading_ws` を追加。
+
+### Security — D1652: Date 欄タイムゾーンの空白分断 (`+09 00`) を検出 — `Envelope` に `split_zone` を追加。
+
+### Security — D1645: `Content-Type:`/`Content-Disposition:`/`Content-Transfer-Encoding:` の空値を検出 — `Envelope` に `empty_mime_field` を追加。既定値丸め/欄破棄で読みがずれる (from/date 等の空値は D1435)。
+
+### Security — D1646: 宛名ドメイン部のクオート区間 `a@"b.c"` を検出 — `Envelope` に `quoted_domain` を追加。ドメインは dot-atom/リテラルが正で、受理/構文エラーで宛名がずれる。
+
+### Security — D1647: name/filename 以外の param 値の裸の第二 `=` (`charset=a=b`) を検出 — `Envelope` に `param_eq_bare` を追加 (名札側は D1515)。
+
+### Security — D1648: Date 欄の 4 字以上の月名 (`September`) を検出 — `Envelope` に `long_month` を追加 (未知3字名は D1555)。あわせて D1622 の BAD 集合に `\` を追加し `a@b\c` を捕捉。
+
+### Security — D1641: `Sender:` ありで `From:` 無しの形を検出 — `Envelope` に `sender_no_from` を追加。RFC 5322 は Sender に From を要求し、Sender 採用/欄破棄で差出人表示がずれる。
+
+### Security — D1642: パート側ヘッダの `MIME-Version:` を検出 — `Envelope` に `mimever_in_part` を追加。版欄は最外専用で、パートを拾う/外側のみで MIME 対応判定がずれる (外側欠落は D1289)。
+
+### Security — D1643: アドレス欄ローカル部の裸 `\` (`a\b@c`) を検出 — `Envelope` に `local_backslash` を追加。atext 外の `\` をエスケープ処理/字として読むで宛名がずれる (param 値側は D1624)。
+
+### Security — D1644: CT/CD 欄の name/filename 以外の param 値の生非 ASCII を検出 — `Envelope` に `raw_param_nonascii` を追加。RFC 2231/5987 符号化を要する値を生読み/破棄でずれる (filename は D1510)。
+
+### Security — D1637: 識別子欄 `<…>` 内の残存非合法字 (`|`/`=`/`/`/`,` 等) を検出 — `Envelope` に `msgid_bad_char` を追加。msg-id 字句外の記号を厳格実装が識別子ごと捨て照合ずれ。
+
+### Security — D1638: アドレス欄 `<…>` 内側の `;` (`<a;b@c>`) を検出 — `Envelope` に `addr_angle_semi` を追加。グループ区切りと読む実装と壊れた宛名と読む実装で宛先がずれる (内側 `,` は D1633)。
+
+### Security — D1639: `Date:` の4節時刻 (`12:00:00:30`) を検出 — `Envelope` に `four_part_time` を追加。`time-of-day` は3節までで、切捨て/構文エラーで日付がずれる。
+
+### Security — D1640: アドレス欄 `<…>` 内の途中位置 `"` (`<a "b" @x>`) を検出 — `Envelope` に `mid_angle_quote` を追加。クオートローカル `<"a b"@x>` は合法だが途中位置は非合法 — 開始クオート読み/字読みでずれる。
+
+### Security — D1633: アドレス欄 `<…>` 内側の `,` (`<a@b, c@d>`) を検出 — `Envelope` に `addr_angle_comma` を追加。内側を区切る実装と壊れた単一宛名と読む実装で宛先集合がずれる。
+
+### Security — D1634: アドレス欄の裸トークン途中の `"` (`a"b"@x`) を検出 — `Envelope` に `mid_token_quote` を追加。クオート開始と読む実装と字として読む実装で宛名がずれる。
+
+### Security — D1635: 識別子欄の `<` を伴わない `>` (`a@b>`) を検出 — `Envelope` に `msgid_gt_only` を追加。字として残す実装と捨てる実装で識別子がずれる (開き側のみは D1522)。
+
+### Security — D1636: CT/CD 欄の `;;` 空 param 節を検出 — `Envelope` に `empty_param_segment` を追加。空節を無視する実装と欄ごと捨てる実装で型・名札の読みがずれる。
+
+### Security — D1629: アドレス欄の宛名区切りの全角 `；` (U+FF1B) を検出 — `Envelope` に `addr_fullwidth_semi` を追加。ASCII `;`/`,` のみで分割する実装は宛名を一つと読む (全角コンマは D1537、全角空白は D1583)。
+
+### Security — D1630: 識別子欄 `<…>` 内の生非 ASCII 文字を検出 — `Envelope` に `msgid_nonascii` を追加。msg-id は ASCII 構成のため正規化/拒否でスレッド照合がずれる (encoded-word 形は D1529)。
+
+### Security — D1631: 識別子欄 `<…>` 内のクオート区間 (`<"a b"@x>`) を検出 — `Envelope` に `msgid_quoted_local` を追加。quoted-string は msg-id の字句に無く、剥がす/生採用でずれる。
+
+### Security — D1632: `Date:` の1桁時刻 (`1:2:3`/`1:00`/`12:5`) を検出 — `Envelope` に `date_short_time` を追加。`time-of-day` は 2DIGIT 桁を要求し、丸める/構文エラーで日付がずれる。
+
+### Security — D1625: `Message-ID: <>` の空額縁識別子を検出 — `Envelope` に `msgid_empty_angle` を追加。捨てる実装と匿名識別子として残す実装でスレッド照合がずれる (値自体の空は D1450)。
+
+### Security — D1626: 識別子欄の `<…>` 内 `%`/`!` 経路記号を検出 — `Envelope` に `msgid_routing_char` を追加。経路解釈する実装と生採用する実装で照合キーがずれる (アドレス欄側は D1436)。
+
+### Security — D1627: アドレス欄の額縁外に裸の `@word` 表示語がある形を検出 — `Envelope` に `bare_at_display` を追加。トークン採用と額縁採用で差出人表示がずれる (額縁前の裸アドレスは D1590)。
+
+### Security — D1628: 識別子欄の `<…>` 内側の `;` を検出 — `Envelope` に `semi_in_id` を追加。区切り優先の実装が識別子を途切れさせスレッド照合がずれる (コメント内側は D1603)。
+
+### Security — D1621: `Content-Type: text/plain text/html` の空白区切り二重メディア型を検出 — `Envelope` に `two_media_types` を追加。先採用/後採用/全体エラーで部品の型解釈がずれる (型内空白は D1512)。
+
+### Security — D1622: アドレス欄ドメイン部の DNS 外文字 (`a@b/c.com`) を検出 — `Envelope` に `bad_domain_char` を追加。ラベル構成字外の ASCII を含むドメインを厳格実装が拒否し宛名がずれる (`!`/`%` は D1436)。
+
+### Security — D1623: 識別子欄の全角額縁 `〈a@b〉`/`＜a@b＞`/`【x】` を検出 — `Envelope` に `msgid_fullwidth_angle` を追加。ASCII `<>` のみ拾う実装は識別子を見失う (アドレス欄側は D1549)。
+
+### Security — D1624: CT/CD 欄の非クオート param 値内の `\` (`filename=a\b.txt`) を検出 — `Envelope` に `param_backslash` を追加。エスケープ処理する実装と生採用で添付名がずれる。
+
+### Security — D1617: アドレス欄のコメント `(…)` 内に `@` を含む構造 (`From: ops (ceo@real.com) <x@y>`) を検出 — `Envelope` に `comment_has_addr` を追加。コメントごと走査する実装が別アドレスを拾い差出人表示がずれる (クオート内 `@` は D1602)。
+
+### Security — D1618: アドレス欄のクオート表示名内の `;` (`"Doe; John"`) を検出 — `Envelope` に `quoted_semicolon_display` を追加。クオートを読まずに `;` で切る実装で宛名の切れ目がずれる (CT/CD 版は D1609)。
+
+### Security — D1619: アドレス欄の `<…>` 内側にコメント `(…)` (`From: John <a(note)@b>`) を検出 — `Envelope` に `comment_in_angle` を追加。addr-spec は括弧内 CFWS を許さず剥がす/保持で宛名がずれる (識別子側は D1603)。
+
+### Security — D1620: アドレス欄の空ドメインリテラル `a@[]` を検出 — `Envelope` に `empty_domain_literal` を追加。受理 vs 構文エラーで宛名がずれる (非 IP 中身は D1546)。
+
+### Security — D1613: `Content-Type:` のメディア型トークンに ASCII 大文字 (`TEXT/PLAIN`/`Text/Html`) を検出 — `kaname-render` の `Envelope` に `uppercase_media` を追加。厳密比較実装は小文字形しか拾えず部品の型解釈がずれる (CTE は D1513、param 名は D1495)。
+
+### Security — D1614: `name*=`/`filename*=` の単一 `*=` param 値に `'` が無い形 (`filename*=utf8x`) を検出 — `Envelope` に `star_param_no_apostrophe` を追加。RFC 2231 は `charset'lang'value` を要求し厳格実装が値を捨てる (連番混在は D1530、非数値タグは D1490)。
+
+### Security — D1615: 識別子欄 `<…>` 内の非 IP ドメインリテラル (`Message-ID: <a@[not-an-ip]>`) を検出 — `Envelope` に `msgid_bad_literal` を追加。厳格実装が識別子を捨てスレッド照合がずれる (宛名欄側は D1546)。
+
+### Security — D1616: アドレス欄の表示名が空クオート `""` の形 (`From: "" <a@b>`) を検出 — `Envelope` に `empty_quoted_string` を追加。捨てる実装と空文字採用で差出人の見え方がずれる (語句のみは D1604)。
+
+### Security — D1609: `Content-Type:`/`Content-Disposition:` のクオート値内 `;` (`boundary="a;b"`) を検出 — `kaname-render` の `Envelope` に `quoted_semicolon` を追加。クオートを読まず `;` で割る素朴な実装は値を途中で切る (裸 `;` 異常は D1486)。
+
+### Security — D1610: 日付欄に時刻トークン (`:`) が無い形 (`Date: 25 Sep 2025`) を検出 — `Envelope` に `timeless_date` を追加。深夜扱いする実装と構文エラーとする実装でずれる (ゾーン欠落は D1547)。
+
+### Security — D1611: アドレス欄のコメント入れ子 `((…))` (`From: John ((boss) ceo) <a@b>`) を検出 — `Envelope` に `nested_comment` を追加。浅い除去器は内側を残し表示名の正規化がずれる (未終端は D1521、識別子内は D1603)。
+
+### Security — D1612: encoded-word の連接 (`=?…?=` + 空白 + `=?…?`) を検出 — `Envelope` に `adjacent_encoded_words` を追加。RFC 2047 は間の空白を落とす規定で、厳密処理実装と生表示実装で件名・表示名がずれる。
+
+### Security — D1605: ヘッダブロック先頭が空白/タブ始まりの継続行のみ形を検出 — `kaname-render` の `Envelope` に `orphan_continuation` を追加。folding の元を持たない先頭行で、捨てる実装と本文扱いする実装で欄構成がずれる (空白のみ行は D1599)。
+
+### Security — D1606: アドレス欄の非クオート表示名内 `,` (`From: Doe, John <a@b>`) を検出 — `Envelope` に `unquoted_comma_display` を追加。宛名区切りと読む実装と表示名の一部と読む実装で宛先集合がずれる (連続/端コンマは D1584、語句のみ欄は D1604)。
+
+### Security — D1607: `List-Id:`/`List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/`List-Help:`/`List-Owner:`/`List-Archive:` の複数回出現を検出 — `Envelope` に `dup_list_headers` を追加。一意前提の欄で先読み/後読みがずれる (宛先欄重複は D1598、一意欄は D1589)。
+
+### Security — D1608: `List-*` 欄の `<`/`>` 数不一致 (`List-Id: <mylist`) を検出 — `Envelope` に `unclosed_list_angle` を追加。行末まで読む実装と欄ごと捨てる実装で解除欄・ML 判定がずれる (裸形は D1601、識別子未終端は D1522)。
+
+### Security — D1601: `List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/`List-Help:`/`List-Owner:`/`List-Archive:` の値が `<…>` 括弧を欠く裸形 (`List-Unsubscribe: mailto:x`) を検出 — `kaname-render` の `Envelope` に `bare_list_url` を追加。RFC 2369 は `<url>` 形を要求し、厳格実装が操作欄を捨てる (List-Id 裸形は D1572、危険スキームは D1541)。
+
+### Security — D1602: アドレス欄の表示名 (quoted-string) が `@` を含む形 (`From: "ceo@example.com" <attacker@evil>`) を検出 — `Envelope` に `quoted_at_display` を追加。引用部を宛名と誤読する実装で差出人がすり替わる (クオートのみ宛名は D1542、コメント内別アドレスは D1300)。
+
+### Security — D1603: 識別子欄 `<…>` 内の `(` コメント (`Message-ID: <a(x)@b>`) を検出 — `Envelope` に `comment_inside_id` を追加。CFWS は額縁の外のみ合法で、剥がす実装と保持する実装で照合がずれる (端空白 D1516・内側空白 D1596)。
+
+### Security — D1604: アドレス欄が `@` も `<` も持たない語句のみの形 (`From: John Doe`) を検出 — `Envelope` に `display_only_addr` を追加。欄を拒否する実装と語句を名前と推測する実装で差出人がずれる (コメントのみは D1536、グループ構文は対象外)。
+
+### Security — D1597: ヘッダ改行が全て裸 LF (CRLF 皆無) の形を検出 — `kaname-render` の `Envelope` に `lf_only_headers` を追加。CRLF 必須の実装はヘッダ全体を1行と読み、LF 許容実装と欄構成がずれる (行端混在は D1290 系)。
+
+### Security — D1598: `To:`/`Cc:`/`Bcc:`/`Reply-To:` の複数回出現を検出 — `Envelope` に `dup_addr_headers` を追加。結合する実装と先頭/末尾採用で宛先集合がずれる (From/Date 等は D1589、配送欄は D1390)。
+
+### Security — D1599: ヘッダブロック内の空白文字のみ行を検出 — `Envelope` に `blank_ws_line` を追加。継続行と読む実装とヘッダ終端と読む実装で以降の欄が本文落ちするかずれる (コロン無し行は D1585)。
+
+### Security — D1600: CT/CD param 値の未終端 `"` (`boundary="abc`/`charset="x`) を検出 — `Envelope` に `unterm_param_quote` を追加。行末まで読む実装と欄ごと破棄する実装で境界・文字コードの読みがずれる (アドレス欄は D1525)。
+
+### Security — D1593: `Content-Type:`/`Content-Disposition:` の型本体に `,` が混ざる形 (`text/plain, text/html`) を検出 — `kaname-render` の `Envelope` に `comma_media_value` を追加。先の型を採る実装と欄ごと捨てる実装で型解釈がずれる (`;` 裸トークンは D1504、CTE 複数値は D1544)。
+
+### Security — D1594: CT/CD 欄の全角句読点 (`；` U+FF1B / `＝` U+FF1D) を検出 — `Envelope` に `fullwidth_param_punct` を追加。ASCII のみを区切りと見る実装では param が潰れ、正規化する実装では区切りとして読まれる (全角コロン D1581・全角空白 D1583)。
+
+### Security — D1595: 同一 `Content-ID` 値を持つ複数パートを検出 — `Envelope` に `dup_content_id` を追加。RFC 2392 は一意性を要求し、`cid:` 参照を先読み実装と後読み実装で別部品が差し込まれる (欠落参照は D1467)。
+
+### Security — D1596: 識別子欄 `<…>` 内部の空白 (`Message-ID: <a b@c>`/`List-Id: <my list.x>`) を検出 — `Envelope` に `inner_space_id` を追加。空白込みで読む実装と切り詰める実装でスレッド照合・cid 解決がずれる (msgid 端空白は D1516).
+
+### Security — D1589: `From:`/`Date:`/`Subject:`/`Message-ID:` の複数回出現を検出 — `kaname-render` の `Envelope` に `dup_identity_headers` を追加。RFC 5322 では一意欄であり、先読み/後読みで差出人・件名・時刻がずれ、DKIM 署名対象欄としても片方だけが検証される (配送欄重複は D1376、MIME 欄は D1401)。
+
+### Security — D1590: アドレス欄で `<…>` の前に裸アドレスがある形 (`From: a@b <c@d>`) を検出 — `Envelope` に `addr_before_angle` を追加。先の裸宛名を採る実装と額縁内を採る実装で表示される宛名がずれる (額縁後の書き足しは D1538、連続額縁は D1539)。
+
+### Security — D1591: `Date:` の曜日名が `,` 無しの裸形 (`Date: Thu 25 Sep 2025`) を検出 — `Envelope` に `nocomma_weekday` を追加。コンマ必須の実装は曜日を読めず構文エラー、寛容実装は飛ばして日付を拾う (曜日名の綴り違いは D1582、曜日不一致は D1569)。
+
+### Security — D1592: 欄名に ftext 外文字が含まれる形 (`Sub ject:`/`X(1):`/`フロム:`) を検出 — `Envelope` に `bad_ftext` を追加。厳密検査実装が欄ごと捨て、寛容実装が読む (`_` は D1587、`.` は D1548、名と `:` の間の空白は D1305)。
+
+### Security — D1585: ヘッダブロックに `:` を含まない行が混ざる形を検出 — `kaname-render` の `Envelope` に `colonless_header_line` を追加。`X-Junk garbage` のようなコロン無し欄行は、そこでヘッダ解析を打ち切る実装と行を読み飛ばす実装で以降の欄構成がずれる (空白行前コロンは D1305)。
+
+### Security — D1586: `Received:` に必須の `;` 付き日時印が無い形を検出 — `Envelope` に `received_no_semi` を追加。節 (`from/by/with/id/for`) があるのに `;` が無い `Received: from a by b 25 Sep 2025` は、日時印を必須とする実装が欄を捨て寛容実装が拾う (節皆無の手書き形は D1458)。
+
+### Security — D1587: 標準ヘッダ名が `-` でなく `_` で書かれた形 (`Message_ID:`/`Content_Type:`) を検出 — `Envelope` に `underscore_header_name` を追加。欄名を文字通り見る実装では別物の任意欄、`_`→`-` を正規化する実装では標準欄として読まれる (ハイフン欠落は D1473)。
+
+### Security — D1588: `Content-Type:` のメイン型が未登録値の形 (`Content-Type: wednesday/midnight`) を検出 — `Envelope` に `unknown_maintype` を追加。RFC 2045 上 `application/octet-stream` として扱う実装と欄ごと拒否する実装で中身の扱いがずれる (形の崩れは D1356、ワイルドカードは D1540)。
+
+### Security — D1581: 欄名の区切りが全角コロン `：` (U+FF1A) の形を検出 — `kaname-render` の `Envelope` に `fullwidth_colon_header` を追加。`From：a@b`/`Subject：hi` は ASCII `:` だけを区切りと見る実装では欄として認識されず、全角を正規化する実装では通常の欄として読まれる (ハイフン欠落は D1473、ドット混入は D1548)。
+
+### Security — D1582: `Date:` の曜日名が正規の3文字形でない形 (`Monday,`/`mo,`) を検出 — `Envelope` に `bad_weekday` を追加。厳格実装が構文エラーとし寛容実装が曜日を飛ばして日付だけ拾う (曜日と日付の不一致は D1569)。
+
+### Security — D1583: 宛名欄・識別欄に全角スペース U+3000 が混ざる形 (`To: a@b　c@d`) を検出 — `Envelope` に `fullwidth_space_addr` を追加。ASCII 空白以外を語の切れ目と見ない実装と全角空白でも区切る実装で宛先の分割がずれる (全角コンマ D1537・全角＠ D1568)。
+
+### Security — D1584: アドレス欄の宛名リストに空要素が混ざる形 (`a@b,,c@d`/`,a@b`/`a@b,`) を検出 — `Envelope` に `empty_addr_segment` を追加。空要素を無視する実装と不正 mailbox として欄ごと捨てる実装で宛先の集合がずれる (コンマ無し連立は D1539)。
+
 ### Security — D1553: ローカル部端ドット検出
 **問題** `From: .a@x`/`a.@x` — 端のドットは空 atom で、厳格実装は宛名を拒否・寛容実装は受理してずれる。
 **修正** `Envelope.edge_dot_local` — `@` 直前の `.` と先頭 `.` 宛名を検出。

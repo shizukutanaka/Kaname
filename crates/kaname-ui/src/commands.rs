@@ -4985,7 +4985,801 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.fullwidth_colon_header {
+        render_risks.push(
+            "欄名の区切りに全角コロン「：」が使われています\
+             —ASCII のみを区切りと見る実装では欄が消え、正規化する実装では読めます"
+                .to_string(),
+        );
+    }
+    if env.bad_weekday {
+        render_risks.push(
+            "Date: の曜日名が正規の3文字形ではありません\
+             —構文エラーとする実装と曜日を読み飛ばす実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.fullwidth_space_addr {
+        render_risks.push(
+            "宛名・識別欄に全角スペースが混ざっています\
+             —区切りと見る実装と見ない実装で宛先の切り分けがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_addr_segment {
+        render_risks.push(
+            "宛名リストに空の要素 (連続コンマ・先頭/末尾コンマ) があります\
+             —要素を無視する実装と欄ごと捨てる実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.colonless_header_line {
+        render_risks.push(
+            "ヘッダ部に「:」を含まない行があります\
+             —そこで解析を打ち切る実装と読み飛ばす実装で欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.received_no_semi {
+        render_risks.push(
+            "Received: に必須の「;」と日時印がありません\
+             —日時印を必須とする実装と寛容に拾う実装で経過記録がずれます"
+                .to_string(),
+        );
+    }
+    if env.underscore_header_name {
+        render_risks.push(
+            "標準ヘッダ名が「-」でなく「_」で書かれています\
+             —文字通り読む実装と正規化する実装で欄の種類がずれます"
+                .to_string(),
+        );
+    }
+    if env.unknown_maintype {
+        render_risks.push(
+            "Content-Type のメイン型が未登録の値です\
+             —application/octet-stream として扱う実装と欄ごと拒否する実装で中身の扱いがずれます"
+                .to_string(),
+        );
+    }
+    if env.dup_identity_headers {
+        render_risks.push(
+            "From/Date/Subject/Message-ID が複数回出ています\
+             —先に読む実装と後に読む実装で差出人・件名・時刻の同一性がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_before_angle {
+        render_risks.push(
+            "アドレス欄で「<…>」の前に裸のアドレスがあります\
+             —先を採る実装と額縁を採る実装で表示される宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.nocomma_weekday {
+        render_risks.push(
+            "Date: の曜日名に「,」がありません\
+             —コンマを必須とする実装は曜日を読めず、飛ばす実装だけが日付を拾います"
+                .to_string(),
+        );
+    }
+    if env.bad_ftext {
+        render_risks.push(
+            "欄名に使えない文字を含むヘッダ行があります\
+             —厳密に検査する実装が欄ごと捨て、寛容な実装だけが読みます"
+                .to_string(),
+        );
+    }
+    if env.comma_media_value {
+        render_risks.push(
+            "Content-Type/Content-Disposition の型本体に「,」があります\
+             —先を採る実装と欄ごと捨てる実装で型の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.fullwidth_param_punct {
+        render_risks.push(
+            "Content-Type/Content-Disposition に全角の「；」「＝」があります\
+             —ASCII のみを区切る実装で param が潰れ、正規化する実装で読めます"
+                .to_string(),
+        );
+    }
+    if env.dup_content_id {
+        render_risks.push(
+            "同じ Content-ID を持つ部品が複数あります\
+             —「cid:」参照を先読み実装と後読み実装で別の部品が差し込まれます"
+                .to_string(),
+        );
+    }
+    if env.inner_space_id {
+        render_risks.push(
+            "識別子「<…>」の内側に空白があります\
+             —空白込みで読む実装と切り詰める実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.lf_only_headers {
+        render_risks.push(
+            "ヘッダの改行が全て LF だけです (CRLF 無し)\
+             —CRLF を必須とする実装がヘッダ全体を1行と読み、欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.dup_addr_headers {
+        render_risks.push(
+            "To/Cc/Bcc/Reply-To が複数回現れます\
+             —結合する実装と先頭/末尾のみ採る実装で宛先集合がずれます"
+                .to_string(),
+        );
+    }
+    if env.blank_ws_line {
+        render_risks.push(
+            "ヘッダの途中に空白だけの行があります\
+             —継続行と読む実装とヘッダ終端と読む実装で欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.unterm_param_quote {
+        render_risks.push(
+            "Content-Type/Content-Disposition の param 値に閉じない引用符があります\
+             —行末まで読む実装と欄ごと破棄する実装で境界・文字コードがずれます"
+                .to_string(),
+        );
+    }
+    if env.bare_list_url {
+        render_risks.push(
+            "List-Post/Unsubscribe 等の欄値に「<…>」がありません\
+             —括弧を必須とする実装が操作欄を捨て、寛容な実装だけが読みます"
+                .to_string(),
+        );
+    }
+    if env.quoted_at_display {
+        render_risks.push(
+            "表示名のクオート内に「@」を含む別アドレスがあります\
+             —引用部を宛名と誤読する実装は差出人を別人として表示します"
+                .to_string(),
+        );
+    }
+    if env.comment_inside_id {
+        render_risks.push(
+            "識別子「<…>」の内側にコメント「(…)」があります\
+             —剥がす実装と識別子の一部と読む実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.display_only_addr {
+        render_risks.push(
+            "宛名欄にアドレス (@/<>) が無く表示名の語句だけです\
+             —欄を拒否する実装と語句を名前と推測する実装で表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.orphan_continuation {
+        render_risks.push(
+            "ヘッダの先頭行が空白始まりです (継続行だけの形)\
+             —先頭行を捨てる実装とヘッダ全体を本文扱いする実装で欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.unquoted_comma_display {
+        render_risks.push(
+            "表示名の中に引用符なしの「,」があります\
+             —宛名の区切りと読む実装と表示名の一部と読む実装で宛先集合がずれます"
+                .to_string(),
+        );
+    }
+    if env.dup_list_headers {
+        render_risks.push(
+            "List-Id/Unsubscribe 等の欄が複数回現れます\
+             —先読み/後読みで ML の同一性と解除 URL がずれます"
+                .to_string(),
+        );
+    }
+    if env.unclosed_list_angle {
+        render_risks.push(
+            "List-* 欄の「<」「>」の数が合っていません\
+             —行末まで読む実装と欄ごと捨てる実装で解除欄・ML 判定がずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_semicolon {
+        render_risks.push(
+            "Content-Type/Disposition の引用値の中に「;」があります\
+             —引用符を読まずに分割する実装は値を途中で切り、境界・添付名がずれます"
+                .to_string(),
+        );
+    }
+    if env.timeless_date {
+        render_risks.push(
+            "日付欄に時刻がありません\
+             —深夜として読む実装と構文エラーとする実装で並び順・表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.nested_comment {
+        render_risks.push(
+            "宛名欄の注釈が入れ子になっています\
+             —外側だけ剥がす実装は注釈を残し、表示名の正規化がずれます"
+                .to_string(),
+        );
+    }
+    if env.adjacent_encoded_words {
+        render_risks.push(
+            "encoded-word が空白を挟んで連続しています\
+             —間の空白を落とす実装と残す実装で件名・表示名の見え方がずれます"
+                .to_string(),
+        );
+    }
+    if env.uppercase_media {
+        render_risks.push(
+            "Content-Type のメディア型に大文字が混ざっています\
+             —厳密比較する実装は小文字形しか拾えず、部品の型解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.star_param_no_apostrophe {
+        render_risks.push(
+            "拡張 param (filename*= 等) の値に「'」がありません\
+             —厳格実装が捨て、素通しする実装だけが添付名として採用します"
+                .to_string(),
+        );
+    }
+    if env.msgid_bad_literal {
+        render_risks.push(
+            "識別子の中に IP でない […] ドメインリテラルがあります\
+             —厳格実装は識別子を捨て、スレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_quoted_string {
+        render_risks.push(
+            "宛名欄の表示名が空の引用符だけです\
+             —捨てる実装と空文字として採用する実装で差出人の見え方がずれます"
+                .to_string(),
+        );
+    }
+    if env.comment_has_addr {
+        render_risks.push(
+            "宛名欄の注釈 (…) の中に @ を含む住所構造があります\
+             —注釈ごと走査する実装は別の住所を拾い、差出人表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_semicolon_display {
+        render_risks.push(
+            "表示名のクオート内に「;」があります\
+             —クオートを読まずに分割する実装は宛名の切れ目をずらします"
+                .to_string(),
+        );
+    }
+    if env.comment_in_angle {
+        render_risks.push(
+            "宛名欄の「<…>」の内側に注釈 (…) があります\
+             —剥がす実装と保持する実装で宛名の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_domain_literal {
+        render_risks.push(
+            "宛名のドメインに空の […] リテラルがあります\
+             —受理する実装と構文エラーとする実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_media_types {
+        render_risks.push(
+            "Content-Type の型の部分に空白区切りの型が2つ並んでいます\
+             —先採用と後採用で部品の型解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_domain_char {
+        render_risks.push(
+            "宛名のドメインに DNS 名でない文字があります\
+             —厳格実装は拒否し、受理する実装と宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_fullwidth_angle {
+        render_risks.push(
+            "識別子が全角の額縁 (〈〉/＜＞) で括られています\
+             —ASCII の「<>」しか拾わない実装は識別子を見失います"
+                .to_string(),
+        );
+    }
+    if env.param_backslash {
+        render_risks.push(
+            "添付名札の引用符なし値に「\\」があります\
+             —エスケープ処理する実装と生採用する実装で添付名がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_empty_angle {
+        render_risks.push(
+            "識別子が中身の無い「<>」です\
+             —捨てる実装と残す実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_routing_char {
+        render_risks.push(
+            "識別子の「<…>」内に経路記号 (%/!) があります\
+             —経路解釈する実装と生採用する実装で照合キーがずれます"
+                .to_string(),
+        );
+    }
+    if env.bare_at_display {
+        render_risks.push(
+            "宛名の額縁の外に裸の「@word」語があります\
+             —トークン採用と額縁採用で差出人表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.semi_in_id {
+        render_risks.push(
+            "識別子の「<…>」内に「;」があります\
+             —区切り優先の実装が識別子を途切れさせ照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_fullwidth_semi {
+        render_risks.push(
+            "宛名の区切りに全角の「；」が使われています\
+             —ASCII の「;」のみで切る実装は宛名を一つと読みます"
+                .to_string(),
+        );
+    }
+    if env.msgid_nonascii {
+        render_risks.push(
+            "識別子の「<…>」内に生の非 ASCII 文字があります\
+             —正規化する実装と拒否する実装で照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_quoted_local {
+        render_risks.push(
+            "識別子の「<…>」内に引用符区間があります\
+             —クオートを剥がす実装と生採用する実装で識別子がずれます"
+                .to_string(),
+        );
+    }
+    if env.date_short_time {
+        render_risks.push(
+            "Date の時刻が1桁で書かれています (「1:2:3」等)\
+             —丸める実装と構文エラーとする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_angle_comma {
+        render_risks.push(
+            "宛名の「<…>」の内側に「,」があります\
+             —内側を区切る実装と壊れた単一宛名と読む実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.mid_token_quote {
+        render_risks.push(
+            "宛名の途中に引用符が埋まっています\
+             —クオート開始と読む実装と字として読む実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_gt_only {
+        render_risks.push(
+            "識別子に「<」を伴わない「>」があります\
+             —字として残す実装と捨てる実装で識別子がずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_param_segment {
+        render_risks.push(
+            "種類札に中身の無い「;;」の節があります\
+             —空節を無視する実装と欄ごと捨てる実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_bad_char {
+        render_risks.push(
+            "識別子の「<…>」内に非合法の記号があります\
+             —厳格実装が識別子を捨て、生採用する実装と照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_angle_semi {
+        render_risks.push(
+            "宛名の「<…>」の内側に「;」があります\
+             —区切りと読む実装と壊れた宛名と読む実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.four_part_time {
+        render_risks.push(
+            "Date の時刻が4節以上あります (「12:00:00:30」等)\
+             —切り捨てる実装と構文エラーとする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.mid_angle_quote {
+        render_risks.push(
+            "宛名の「<…>」の途中位置に引用符があります\
+             —クオート開始と読む実装と字として読む実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.sender_no_from {
+        render_risks.push(
+            "Sender 欄があるのに From 欄がありません\
+             —Sender を差出人にする実装と欄ごと捨てる実装で表示がずれます"
+                .to_string(),
+        );
+    }
+    if env.mimever_in_part {
+        render_risks.push(
+            "パート側に MIME-Version 欄があります\
+             —パートの版を拾う実装と外側のみ読む実装で判定がずれます"
+                .to_string(),
+        );
+    }
+    if env.local_backslash {
+        render_risks.push(
+            "宛名のローカル部に逆斜線があります\
+             —エスケープ処理する実装と字として読む実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.raw_param_nonascii {
+        render_risks.push(
+            "名札以外の param 値に生の非 ASCII 文字があります\
+             —そのまま読む実装と捨てる実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_mime_field {
+        render_risks.push(
+            "MIME 欄の値が空です\
+             —既定値に丸める実装と欄ごと捨てる実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_domain {
+        render_risks.push(
+            "宛名のドメイン部が引用符で括られています\
+             —受理する実装と構文エラーとする実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.param_eq_bare {
+        render_risks.push(
+            "名札以外の param 値に裸の「=」が含まれています\
+             —値として残す実装と捨てる実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.long_month {
+        render_risks.push(
+            "Date 欄に 4 字以上の月名があります\
+             —先頭3字で読む実装と全体一致を要求する実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.missing_media_type {
+        render_risks.push(
+            "Content-Type 欄に型トークンがありません\
+             —既定値に丸める実装と欄ごと捨てる実装で本文の扱いがずれます"
+                .to_string(),
+        );
+    }
+    if env.ws_domain {
+        render_risks.push(
+            "宛名のドメイン部に空白が挟まれています\
+             —ドメインの継続と読む実装と宛名の終端と読む実装でずれます"
+                .to_string(),
+        );
+    }
+    if env.param_leading_ws {
+        render_risks.push(
+            "param の値が「=」直後に空白を挟んでいます\
+             —空白を含める実装と除く実装で値がずれます"
+                .to_string(),
+        );
+    }
+    if env.split_zone {
+        render_risks.push(
+            "Date 欄のタイムゾーンが空白で分断されています\
+             —ゾーン終了と読む実装と継続と読む実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.date_no_year {
+        render_risks.push(
+            "Date 欄に年がありません\
+             —当年とみなす実装と構文エラーとする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.dash_date {
+        render_risks.push(
+            "Date 欄が「-」区切りで書かれています\
+             —分割する実装とトークンごと捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.cte_param {
+        render_risks.push(
+            "Content-Transfer-Encoding の値に「;」の param が付いています\
+             —値の一部と読む実装と「;」で切る実装で符号化判定がずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_param_key {
+        render_risks.push(
+            "param のキーに token として非合法な文字があります\
+             —欄を捨てる実装とそのまま読む実装で値がずれます"
+                .to_string(),
+        );
+    }
+    if env.date_two_times {
+        render_risks.push(
+            "Date 欄に時刻が二つあります\
+             —先読みと後読みで日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.boundary_edge_ws {
+        render_risks.push(
+            "boundary のクオート値の端に空白があります\
+             —保持する実装と切り詰める実装でパート区切りがずれます"
+                .to_string(),
+        );
+    }
+    if env.colon_param_val {
+        render_risks.push(
+            "param の値に token 外の「:」が含まれています\
+             —値を切る実装と残す実装でパラメータがずれます"
+                .to_string(),
+        );
+    }
+    if env.two_daynames {
+        render_risks.push(
+            "Date 欄に曜日名が二つあります\
+             —先採用と後採用で曜日・日付整合の評価がずれます"
+                .to_string(),
+        );
+    }
+    if env.unbracketed_msgid {
+        render_risks.push(
+            "Message-ID 欄の値に「<>」がありません\
+             —括弧を省略する実装と欄ごと捨てる実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.unsigned_zone {
+        render_risks.push(
+            "Date 欄のタイムゾーンに符号がありません\
+             —ゾーンと読む実装と余分な語と読む実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.quote_tail_param {
+        render_risks.push(
+            "param のクオートの閉じた後に文字が続いています\
+             —読み切る実装と残す実装で値がずれます"
+                .to_string(),
+        );
+    }
+    if env.year_first_date {
+        render_risks.push(
+            "Date 欄が年先頭の並びです\
+             —読める実装と読めない実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.ampm_time {
+        render_risks.push(
+            "Date 欄に AM/PM の記号があります\
+             —捨てる実装と12時間表記と読む実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_msgids {
+        render_risks.push(
+            "Message-ID 欄に識別子が二つあります\
+             —先採用と後採用でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_group_dup {
+        render_risks.push(
+            "アドレス欄に同じ名前のグループが二度あります\
+             —結合する実装と上書きする実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.slash_date {
+        render_risks.push(
+            "Date 欄が「/」区切りで書かれています\
+             —読める実装と読めない実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.nested_boundary_reuse {
+        render_risks.push(
+            "親子の multipart が同じ boundary 値を名乗っています\
+             —区切り行の帰属が実装ごとに揺れてパート区切りがずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_zone_len {
+        render_risks.push(
+            "Date 欄のタイムゾーンの桁数が異常です\
+             —丸める実装と捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.dot_date {
+        render_risks.push(
+            "Date 欄が「.」区切りで書かれています\
+             —読める実装と読めない実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_num_zones {
+        render_risks.push(
+            "Date 欄に数値のタイムゾーンが二つあります\
+             —先採用と後採用で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.received_no_from {
+        render_risks.push(
+            "Received 欄に from 節がありません\
+             —欄ごと破棄する実装と残り節を読む実装で経路解析がずれます"
+                .to_string(),
+        );
+    }
+    if env.zone_colon {
+        render_risks.push(
+            "Date 欄のタイムゾーンにコロンがあります\
+             —除く実装と含める実装で時差がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_years {
+        render_risks.push(
+            "Date 欄に4桁の年が二つあります\
+             —先採用と後採用で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.dup_resent_headers {
+        render_risks.push(
+            "Resent-* 欄が同じ名前で二度記されています\
+             —先読みと後読みで再送経路がずれます"
+                .to_string(),
+        );
+    }
+    if env.zone_two_signs {
+        render_risks.push(
+            "Date 欄のタイムゾーンに符号が二つあります\
+             —1個だけ読む実装と欄ごと捨てる実装で時差がずれます"
+                .to_string(),
+        );
+    }
+    if env.date_time_only {
+        render_risks.push(
+            "Date 欄に時刻しかありません\
+             —日付の一部と読む実装と欄ごと捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_at_end {
+        render_risks.push(
+            "宛名が「@」で終わりドメインがありません\
+             —拒否する実装と名前として残す実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.ws_boundary {
+        render_risks.push(
+            "boundary の値が空白しかありません\
+             —trim して空値と読む実装とそのまま使う実装で区切りがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_addr_header {
+        render_risks.push(
+            "宛名欄に値がありません\
+             —宛先なしと読む実装と欄ごと無視する実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.orphan_boundary {
+        render_risks.push(
+            "宣言されていない --boundary 様の区切り行があります\
+             —区切りと読む実装と本文文字列と読む実装で構造がずれます"
+                .to_string(),
+        );
+    }
+    if env.zone_alpha {
+        render_risks.push(
+            "Date 欄のタイムゾーンが符号+英字です\
+             —英字ゾーンと読む実装と欄ごと捨てる実装で時差がずれます"
+                .to_string(),
+        );
+    }
+    if env.zone_sign_only {
+        render_risks.push(
+            "Date 欄のタイムゾーンが符号しかありません\
+             —壊れたゾーンと読む実装と無視する実装で時差がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_gt_only {
+        render_risks.push(
+            "宛名に「>」だけが残っています\
+             —残す実装と語を破棄する実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.fused_date {
+        render_risks.push(
+            "Date 欄に数字と英字の融合した語があります\
+             —分解して読む実装と欄ごと捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_received {
+        render_risks.push(
+            "Received 欄に値がありません\
+             —破棄する実装とホップとして数える実装で経路がずれます"
+                .to_string(),
+        );
+    }
 
+    if env.received_multi_from {
+        render_risks.push("Received 欄に from 節が二度あります—最初と最後の採用で経路解析がずれます".to_string());
+    }
+    if env.date_two_days {
+        render_risks.push("Date 欄に日が二つあります—先採用と後採用で日付がずれます".to_string());
+    }
+    if env.received_semi_only {
+        render_risks.push("Received 欄が「;」しかありません—空欄として破棄する実装と節として読む実装で経路がずれます".to_string());
+    }
+    if env.received_no_by {
+        render_risks.push("Received 欄に by 節がありません—必須と読む実装と任意と読む実装で経路解析がずれます".to_string());
+    }
+    if env.date_two_months {
+        render_risks.push("Date 欄に月名が二つあります—先採用と後採用で日付がずれます".to_string());
+    }
+    if env.trailing_semi_param {
+        render_risks.push("欄の末尾に空のパラメータがあります—無視する実装と構文エラーとする実装で読みがずれます".to_string());
+    }
+    if env.multi_semi_received {
+        render_risks.push("Received 欄に「;」が二つ以上あります—最初と最後で切る実装で日時印がずれます".to_string());
+    }
+    if env.numeric_dow {
+        render_risks.push("Date 欄の曜日が数字です—曜日として捨てる実装と日番号と読む実装で日付がずれます".to_string());
+    }
+    if env.param_empty_value {
+        render_risks.push("パラメータに値がない名札があります—空文字として採る実装と破棄する実装で読みがずれます".to_string());
+    }
+    if env.single_label_domain {
+        render_risks.push("宛名のドメインにドットがありません—FQDNを要求する実装と受理する実装で宛先がずれます".to_string());
+    }
+    if env.pre_eq_space {
+        render_risks.push("パラメータの「=」の前に空白があります—キーに含める実装と除く実装で読みがずれます".to_string());
+    }
+    if env.year_5digit {
+        render_risks.push("Date 欄に5桁以上の年があります—4桁まで読む実装とそのまま拾う実装で日付がずれます".to_string());
+    }
+    if env.param_quoted_eq {
+        render_risks.push("パラメータの引用値に「=」が含まれています—最初の=で切る実装と引用読みの実装で値がずれます".to_string());
+    }
+    if env.boundary_case_collide {
+        render_risks.push("boundary が大小写だけ違う値で二度名乗られています—区別する実装と同一視する実装で区切りがずれます".to_string());
+    }
+    if env.two_list_ids {
+        render_risks.push("List-Id 欄に識別子が二つあります—先採用と後採用でML判定がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
