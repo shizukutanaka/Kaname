@@ -1,5 +1,48 @@
 ## [Unreleased]
 
+### Security — D1433:
+
+- **問題**: `Authentication-Results:`/`Received-SPF:` 欄が
+  `dkim=pass` を記すのに `DKIM-Signature:` 欄が無い — 検証を
+  経ずに「検証済み」の体裁だけ書き込んだ自称印で、認証結果を
+  表示に採用する実装では差出人検証の偽装になる。
+- **修正**: `has_inconsistent_auth_results` が署名欄不在と
+  `dkim=pass`/`domainkeys=pass` 判定の矛盾を検査する。
+- **教訓**: 「検証済み」の印は検証対象が在って初めて意味を
+  持つ — 対象の不在と結果の両方を見る。
+
+### Security — D1434:
+
+- **問題**: `multipart/signed`/`multipart/encrypted` に
+  `protocol=` 指定が無い — RFC 3156/1847 の必須欄を欠くと
+  署名・暗号化の方式が特定できない器になる (D1378 は署名
+  パート欠落側を担当)。
+- **修正**: `has_missing_crypto_protocol` が両型の CT 行の
+  `protocol=` 有無を全パートのヘッダ run で検査する。
+- **教訓**: 封印の器は「何式の封印か」まで書かれて初めて
+  検証に載る — 方式不明記の器は体裁だけの器。
+
+### Security — D1435:
+
+- **問題**: `Thread-Index:`/`Thread-Topic:`/`X-Thread-*` が
+  `In-Reply-To:`/`References:` 無しで存在する — Outlook 系の
+  スレッド管理欄だけで「既存スレッドの続き」の体裁を作る
+  偽スレッド工作 (D1361 `Re:` の Outlook 形対応物)。
+- **修正**: `has_orphan_thread` が thread 印の有無と参照欄の
+  有無の不一致を検査する。
+- **教訓**: 「続き」を名乗る札は参照できる親を指さないと
+  体裁の貼り紙にすぎない。
+
+### Security — D1436:
+
+- **問題**: アドレス欄の addr-spec に `%` (sendmail %-hack) や
+  `!` (UUCP bang path) の経路指定構文 — 解釈する実装は中継先を
+  書き換え、しない実装は文字通りに読み、宛名がずれる。
+- **修正**: `has_routing_addr` がアドレス欄のクオート・
+  コメント外の @ トークン内 %/! を検査する。
+- **教訓**: 宛名の中の経路構文は「誰」を「どこ経由で」に
+  読み替える — 制度が変わると読みも変わる。
+
 ### Security — D1429:
 
 - **問題**: `Content-Type:` の `boundary*=`/`boundary*0=` (RFC 2231

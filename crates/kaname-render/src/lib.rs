@@ -576,6 +576,14 @@ pub struct Envelope {
     pub conflicting_priority: bool,
     /// D1432 — 外側ヘッダに `From:` (Resent-From 含む) が無い。
     pub no_from: bool,
+    /// D1433 — 認証結果欄が dkim=pass を名乗るが DKIM-Signature 欄が無い。
+    pub inconsistent_auth_results: bool,
+    /// D1434 — multipart/signed|encrypted に `protocol=` 指定が無い。
+    pub missing_crypto_protocol: bool,
+    /// D1435 — Thread-Index/Thread-Topic が参照欄無しで存在する。
+    pub orphan_thread: bool,
+    /// D1436 — アドレス欄に %-hack/UUCP ! の経路構文がある。
+    pub routing_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2671,6 +2679,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let url_filename = has_url_filename(bytes);
     let conflicting_priority = has_conflicting_priority(bytes);
     let no_from = has_no_from(bytes);
+    let inconsistent_auth_results = has_inconsistent_auth_results(bytes);
+    let missing_crypto_protocol = has_missing_crypto_protocol(bytes);
+    let orphan_thread = has_orphan_thread(bytes);
+    let routing_addr = has_routing_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2861,6 +2873,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         url_filename,
         conflicting_priority,
         no_from,
+        inconsistent_auth_results,
+        missing_crypto_protocol,
+        orphan_thread,
+        routing_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -10255,6 +10271,192 @@ pub fn has_no_from(raw: &[u8]) -> bool {
         .to_ascii_lowercase()
         .lines()
         .any(|l| l.starts_with("from:") || l.starts_with("resent-from:"))
+}
+
+/// `Authentication-Results:` 系欄が `dkim=pass` 判定を名乗るのに
+/// `DKIM-Signature:`/`DomainKey-Signature:` 欄が無いか判定する
+/// (D1433)。
+///
+/// dkim 判定は `DKIM-Signature:` 欄への検証結果 — 署名欄自体が
+/// 無いメッセージに `dkim=pass`/`domainkeys=pass` を記す認証結果欄は
+/// 検証を経ずに「検証済み」の体裁だけ書き込んだ自称印になる。
+/// 認証結果を表示に採用する実装では差出人検証の偽装になる。
+#[must_use]
+pub fn has_inconsistent_auth_results(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    if lower
+        .lines()
+        .any(|l| l.starts_with("dkim-signature:") || l.starts_with("domainkey-signature:"))
+    {
+        return false;
+    }
+    lower.lines().any(|l| {
+        (l.starts_with("authentication-results:")
+            || l.starts_with("x-authentication-results:")
+            || l.starts_with("received-spf:")
+            || l.starts_with("x-received-spf:"))
+            && (l.contains("dkim=pass")
+                || l.contains("dkim= pass")
+                || l.contains("domainkeys=pass")
+                || l.contains("domainkey=pass"))
+    })
+}
+
+/// `multipart/signed`/`multipart/encrypted` なのに `protocol=` 指定が
+/// 無いか判定する (D1434)。
+///
+/// RFC 3156 / RFC 1847 はこれらの型に `protocol=` を必須とする —
+/// 無いと「署名・暗号化の方式が不明」な器になり、type だけを見て
+/// 検証を試みる実装と検査不能で素通りする実装で解釈がずれる
+/// (D1378 は署名パート欠落側を担当)。
+#[must_use]
+pub fn has_missing_crypto_protocol(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        let Some(v) = l.strip_prefix("content-type:") else {
+            continue;
+        };
+        let v = v.trim_start();
+        if (v.starts_with("multipart/signed") || v.starts_with("multipart/encrypted"))
+            && !l.contains("protocol=")
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Thread-Index:`/`Thread-Topic:` が `In-Reply-To:`/`References:`
+/// 無しで存在するか判定する (D1435)。
+///
+/// Outlook 系のスレッド管理欄は「既存スレッドの続き」の体裁を作る
+/// — 参照権威 (msgid 参照) を持たない thread 印は手作りの偽スレッド
+/// 工作 (D1361 `Re:` の Outlook 形対応物)。
+#[must_use]
+pub fn has_orphan_thread(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let has_thread = lower.lines().any(|l| {
+        l.starts_with("thread-index:") || l.starts_with("thread-topic:") || l.starts_with("x-thread-")
+    });
+    if !has_thread {
+        return false;
+    }
+    !lower
+        .lines()
+        .any(|l| l.starts_with("in-reply-to:") || l.starts_with("references:"))
+}
+
+/// アドレス欄の addr-spec に `%` (sendmail %-hack) や `!`
+/// (UUCP bang path) の経路指定構文があるか判定する (D1436)。
+///
+/// `u%internal@relay` は旧来の経路指定で、解釈する実装は中継先を
+/// 書き換え、解釈しない実装は文字通りのアドレスとして見る —
+/// クライアント間で差出人の読みがずれる経路構文の残存。
+/// クオート局所部・コメント内の %/! は対象外。
+#[must_use]
+pub fn has_routing_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        // クオート・コメントの外で @ を含むトークンに %/! が混ざるか
+        let bytes = lower[colon + 1..].as_bytes();
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        let mut tok_at = false;
+        let mut tok_route = false;
+        for &b in bytes {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q && prev != b'\\' {
+                in_c = 1;
+            } else if !in_q {
+                match b {
+                    b'@' => tok_at = true,
+                    b'%' | b'!' => tok_route = true,
+                    b',' | b' ' | b'\t' | b'<' | b'>' | b';' => {
+                        if tok_at && tok_route {
+                            return true;
+                        }
+                        tok_at = false;
+                        tok_route = false;
+                    }
+                    _ => {}
+                }
+            }
+            prev = b;
+        }
+        if tok_at && tok_route {
+            return true;
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -26259,6 +26461,74 @@ mod tests {
         assert!(!has_no_from(
             b"Resent-From: r@x\r\nTo: u@x\r\n\r\nbody"
         ));
+    }
+
+    #[test]
+    fn inconsistent_auth_results_は署名なき合格判定を検出する() {
+        // D1433 — dkim=pass を名乗るが DKIM-Signature が無い
+        assert!(has_inconsistent_auth_results(
+            b"Authentication-Results: mx.example; dkim=pass spf=pass\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_inconsistent_auth_results(
+            b"Received-SPF: pass dkim=pass\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // 署名欄があれば不発火
+        assert!(!has_inconsistent_auth_results(
+            b"DKIM-Signature: v=1; d=x; s=s; b=zz\r\nAuthentication-Results: mx.example; dkim=pass\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // 判定を名乗らなければ不発火
+        assert!(!has_inconsistent_auth_results(
+            b"Authentication-Results: mx.example; dkim=fail\r\nFrom: a@b\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn missing_crypto_protocol_は方式不明の器を検出する() {
+        // D1434 — multipart/signed|encrypted に protocol= 無し
+        assert!(has_missing_crypto_protocol(
+            b"Content-Type: multipart/signed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        assert!(has_missing_crypto_protocol(
+            b"Content-Type: multipart/encrypted; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        // protocol= 指定があれば不発火
+        assert!(!has_missing_crypto_protocol(
+            b"Content-Type: multipart/signed; protocol=\"application/pgp-signature\"; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        // 通常の multipart は対象外
+        assert!(!has_missing_crypto_protocol(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+    }
+
+    #[test]
+    fn orphan_thread_は参照なきスレッド印を検出する() {
+        // D1435 — Thread-Index/Thread-Topic 単独
+        assert!(has_orphan_thread(
+            b"From: a@b\r\nThread-Index: AQHBz2V4YTh6\r\n\r\nx"
+        ));
+        assert!(has_orphan_thread(
+            "From: a@b\r\nThread-Topic: 支払いの件\r\n\r\nx".as_bytes()
+        ));
+        // 参照欄があれば不発火
+        assert!(!has_orphan_thread(
+            b"From: a@b\r\nThread-Index: AQH\r\nIn-Reply-To: <x@y>\r\n\r\nx"
+        ));
+        // thread 印も参照も無ければ不発火
+        assert!(!has_orphan_thread(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn routing_addr_は経路構文アドレスを検出する() {
+        // D1436 — %-hack / UUCP ! 構文
+        assert!(has_routing_addr(b"From: u%internal@relay.example\r\n\r\nx"));
+        assert!(has_routing_addr(b"To: host!user@x.example\r\n\r\nx"));
+        // クオート局所部の % は対象外
+        assert!(!has_routing_addr(
+            b"From: \"a%b\"@x.example\r\n\r\nx"
+        ));
+        // 通常アドレスは不発火
+        assert!(!has_routing_addr(b"From: a@example.com\r\n\r\nx"));
     }
 
     #[test]

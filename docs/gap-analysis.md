@@ -846,3 +846,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1430 | 添付名が URL 形 (:// 含有) | リンク表示と保存名で添付の顔がずれる | CT/CD 添付名値の :// を検査 | kaname-render |
 | D1431 | 緊急度欄の矛盾併記 (急げ+不急) | 優先度表示が実装間でずれる | X-Priority/Priority/Importance の高低両立を検査 | kaname-render |
 | D1432 | 外側ヘッダに From: 皆無 | 必須欄欠落で差出人の読みがずれる | from:/resent-from: 行の有無を検査 | kaname-render |
+| D1433 | dkim=pass を名乗るのに DKIM-Signature 欄が無い | 検証済み体裁の自称印 | 署名欄不在と dkim=pass 判定の矛盾を検査 | kaname-render |
+| D1434 | multipart/signed|encrypted に protocol= 無し | 署名・暗号方式が特定不能 | 両型 CT 行の protocol= 有無を検査 | kaname-render |
+| D1435 | Thread-Index/Topic が参照欄無しで存在 | 参照できない「続きの体裁」(偽スレッド) | thread 印と参照欄の不一致を検査 | kaname-render |
+| D1436 | addr-spec の %-hack/UUCP ! 経路構文 | 経路解釈する実装としない実装で宛名ずれ | アドレス欄 @ トークン内 %/! を検査 | kaname-render |

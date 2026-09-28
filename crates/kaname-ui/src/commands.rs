@@ -3950,6 +3950,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.inconsistent_auth_results {
+        render_risks.push(
+            "認証結果欄が署名の無い合格を名乗っています\
+             —dkim=pass と記すのに DKIM-Signature 欄が無い自称印です"
+                .to_string(),
+        );
+    }
+    if env.missing_crypto_protocol {
+        render_risks.push(
+            "multipart/signed|encrypted に protocol 指定がありません\
+             —署名・暗号化の方式が特定できない器です"
+                .to_string(),
+        );
+    }
+    if env.orphan_thread {
+        render_risks.push(
+            "スレッド印 (Thread-Index/Topic) のみで参照欄がありません\
+             —参照できない「続きの体裁」の形です"
+                .to_string(),
+        );
+    }
+    if env.routing_addr {
+        render_risks.push(
+            "アドレスに旧来の経路指定構文 (%・!) があります\
+             —経路を解釈する実装としない実装で宛名がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
