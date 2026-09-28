@@ -1016,6 +1016,14 @@ pub struct Envelope {
     pub param_leading_ws: bool,
     /// Date 欄の空白分断ゾーン `+09 00` (D1652 — 日付解析ずれ)。
     pub split_zone: bool,
+    /// Date 欄の年欠落 `25 Sep` (D1653 — 日付解析ずれ)。
+    pub date_no_year: bool,
+    /// Date 欄の `-` 区切り `25-Sep-2025` (D1654 — 日付解析ずれ)。
+    pub dash_date: bool,
+    /// `CTE:` 値の `;` param (D1655 — エンコーディング解釈ずれ)。
+    pub cte_param: bool,
+    /// param キーの非 token 文字 `;a b=x` (D1656 — param 読みずれ)。
+    pub bad_param_key: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3475,6 +3483,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let param_leading_ws = has_param_leading_ws(bytes);
     // D1652: 空白分断ゾーン
     let split_zone = has_split_zone(bytes);
+    // D1653: Date 欄の年欠落
+    let date_no_year = has_date_no_year(bytes);
+    // D1654: `-` 区切り日付
+    let dash_date = has_dash_date(bytes);
+    // D1655: CTE 値の param
+    let cte_param = has_cte_param(bytes);
+    // D1656: param キーの非 token 文字
+    let bad_param_key = has_bad_param_key(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3885,6 +3901,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ws_domain,
         param_leading_ws,
         split_zone,
+        date_no_year,
+        dash_date,
+        cte_param,
+        bad_param_key,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -21552,7 +21572,9 @@ pub fn has_sender_no_from(raw: &[u8]) -> bool {
 ///
 /// MIME-Version は最外ヘッダ専用 — パート側に置かれると「パート
 /// の版を拾う実装」と「外側だけ見る実装」で MIME 対応判定がずれる
-/// (外側欠落は D1289、外側重複は D1352)。
+/// (外側欠落は D1289、外側重複は D1352)。D1374 `has_part_mime_version`
+/// が宣言済み boundary のパート部を厳密に走査し、当検出は境界行の
+/// 有無を問わない緩い形として併記する。
 #[must_use]
 pub fn has_mimever_in_part(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
@@ -22118,6 +22140,203 @@ pub fn has_split_zone(raw: &[u8]) -> bool {
                 && t[1..].bytes().all(|b| b.is_ascii_digit())
                 && toks.get(i + 1).is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit()))
             {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に年が無いか判定する (D1653)。
+///
+/// `Date: 25 Sep`/`25 Sep 12:00` — 年欠落を「当年」とみなす実装と
+/// 構文エラーとする実装で日付がずれる (2桁年は D1535)。
+#[must_use]
+pub fn has_date_no_year(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // 4桁年 (`(19|20)\d\d` 相当) が無く、月名がある形
+        let has_year = v
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|t| t.len() == 4 && t.bytes().all(|b| b.is_ascii_digit()));
+        let has_month = v
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|t| t.len() >= 3 && t.bytes().all(|b| b.is_ascii_alphabetic()));
+        if !has_year && has_month {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 欄の日付部分が `-` 区切り (`25-Sep-2025`) か判定する (D1654)。
+///
+/// RFC 5322 は空白区切りのみ許容 — `-` で綴る形は分割する実装と
+/// トークンごと捨てる実装で日付がずれる。
+#[must_use]
+pub fn has_dash_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            // `25-Sep-2025` 型: 数字-英字3月-数字4桁
+            let parts: Vec<&str> = t.split('-').collect();
+            if parts.len() == 3
+                && !parts[0].is_empty()
+                && parts[0].bytes().all(|b| b.is_ascii_digit())
+                && parts[1].len() >= 3
+                && parts[1].bytes().all(|b| b.is_ascii_alphabetic())
+                && parts[2].bytes().all(|b| b.is_ascii_digit())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` 値に `;` param が付くか判定する
+/// (D1655)。
+///
+/// CTE は param を取らない — `base64; x` を「値の一部」と読む実装と
+/// 「`;` で切る」実装で符号化判定がずれる (CTE の空白は D1455)。
+#[must_use]
+pub fn has_cte_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("content-transfer-encoding:")
+            && l.contains(';')
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の param キーに非 token 文字 (空白/`@`/`(` 等) があるか
+/// 判定する (D1656)。
+///
+/// `;a b=x`/`;@@=x` — キーを token として検査する実装は欄を捨て、
+/// そのまま読む実装は値を拾う。param 値側の異常は D1647/D1515。
+#[must_use]
+pub fn has_bad_param_key(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim();
+            // token 許容: a-z A-Z 0-9 ! # $ % & ' * + - . ^ _ ` | ~
+            let ok = !key.is_empty()
+                && key.bytes().all(|b| {
+                    b.is_ascii_alphanumeric()
+                        || matches!(
+                            b,
+                            b'!' | b'#'
+                                | b'$'
+                                | b'%'
+                                | b'&'
+                                | b'\''
+                                | b'*'
+                                | b'+'
+                                | b'-'
+                                | b'.'
+                                | b'^'
+                                | b'_'
+                                | b'`'
+                                | b'|'
+                                | b'~'
+                        )
+                });
+            if !ok {
                 return true;
             }
         }
@@ -41260,6 +41479,52 @@ mod tests {
         assert!(!has_split_zone(b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
         assert!(!has_split_zone(b"Date: Thu, 25 Sep 2025 12:00:00 JST\r\n\r\nx"));
         assert!(!has_split_zone(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn date_no_year_年欠落を検出する() {
+        // D1653 — `25 Sep`/`25 Sep 12:00`
+        assert!(has_date_no_year(b"Date: 25 Sep\r\n\r\nx"));
+        assert!(has_date_no_year(b"Date: 25 Sep 12:00:00\r\n\r\nx"));
+        // 年あり・月無し・他欄は不発火
+        assert!(!has_date_no_year(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_date_no_year(b"Date: 12345\r\n\r\nx"));
+        assert!(!has_date_no_year(b"Subject: 25 Sep\r\n\r\nx"));
+    }
+
+    #[test]
+    fn dash_date_ダッシュ区切り日付を検出する() {
+        // D1654 — `25-Sep-2025`
+        assert!(has_dash_date(b"Date: 25-Sep-2025\r\n\r\nx"));
+        assert!(has_dash_date(b"Date: Thu, 25-Sep-2025 12:00:00 +0900\r\n\r\nx"));
+        // 通常空白区切り・ゾーンの `-`・他欄は不発火
+        assert!(!has_dash_date(b"Date: 25 Sep 2025 12:00:00 -0900\r\n\r\nx"));
+        assert!(!has_dash_date(b"Date: 25 Sep 2025\r\n\r\nx"));
+        assert!(!has_dash_date(b"Subject: 25-Sep-2025\r\n\r\nx"));
+    }
+
+    #[test]
+    fn cte_param_CTE値paramを検出する() {
+        // D1655 — `base64; x`
+        assert!(has_cte_param(b"Content-Transfer-Encoding: base64; x=y\r\n\r\nx"));
+        assert!(has_cte_param(b"Content-Transfer-Encoding: base64;foo\r\n\r\nx"));
+        // 通常値・CT 欄の param・他欄は不発火
+        assert!(!has_cte_param(b"Content-Transfer-Encoding: base64\r\n\r\nx"));
+        assert!(!has_cte_param(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_cte_param(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bad_param_key_非tokenのparamキーを検出する() {
+        // D1656 — `;a b=x`/`;@@=x`
+        assert!(has_bad_param_key(b"Content-Type: text/plain; a b=x\r\n\r\nx"));
+        assert!(has_bad_param_key(b"Content-Type: text/plain; @@=x\r\n\r\nx"));
+        assert!(has_bad_param_key(b"Content-Type: text/plain; (x)=y\r\n\r\nx"));
+        // 正常キー・`*` 形・クオート内・他欄は不発火
+        assert!(!has_bad_param_key(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_bad_param_key(b"Content-Disposition: attachment; filename*=utf-8''x\r\n\r\nx"));
+        assert!(!has_bad_param_key(b"Content-Type: text/plain; x=\"a;b\"\r\n\r\nx"));
+        assert!(!has_bad_param_key(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

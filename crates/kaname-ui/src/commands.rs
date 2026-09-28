@@ -5489,6 +5489,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.date_no_year {
+        render_risks.push(
+            "Date 欄に年がありません\
+             —当年とみなす実装と構文エラーとする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.dash_date {
+        render_risks.push(
+            "Date 欄が「-」区切りで書かれています\
+             —分割する実装とトークンごと捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.cte_param {
+        render_risks.push(
+            "Content-Transfer-Encoding の値に「;」の param が付いています\
+             —値の一部と読む実装と「;」で切る実装で符号化判定がずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_param_key {
+        render_risks.push(
+            "param のキーに token として非合法な文字があります\
+             —欄を捨てる実装とそのまま読む実装で値がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

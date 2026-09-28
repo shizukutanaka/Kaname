@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1653: Date 欄の年欠落 (`25 Sep`) を検出 — `Envelope` に `date_no_year` を追加 (2桁年は D1535)。
+
+### Security — D1654: Date 欄の `-` 区切り日付 (`25-Sep-2025`) を検出 — `Envelope` に `dash_date` を追加。
+
+### Security — D1655: `Content-Transfer-Encoding:` 値の `;` param を検出 — `Envelope` に `cte_param` を追加 (CTE は param を取らない)。
+
+### Security — D1656: CT/CD 欄の param キーの非 token 文字 (`;a b=x`) を検出 — `Envelope` に `bad_param_key` を追加 (値側は D1647/D1515)。D1642 の doc に D1374 との併記関係を注記。
+
 ### Security — D1649: `Content-Type:` の型トークン欠落 (`; charset=x` のみ) を検出 — `Envelope` に `missing_media_type` を追加 (欄欠落は `missing_content_type`、空値は D1645)。
 
 ### Security — D1650: 宛名ドメイン部の空白継続 (`a@b .c`/`a@ b.c`) を検出 — `Envelope` に `ws_domain` を追加。
