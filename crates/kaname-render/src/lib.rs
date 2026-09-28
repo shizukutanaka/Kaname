@@ -624,6 +624,14 @@ pub struct Envelope {
     pub cd_boundary: bool,
     /// D1456 — From/Sender 等の値に @ を含むアドレスが無い。
     pub addrless_from: bool,
+    /// D1457 — boundary 値が - で終わる/内部に -- を含む。
+    pub dash_boundary: bool,
+    /// D1458 — Received の値が節・コメント・日付のいずれも欠く。
+    pub bad_received: bool,
+    /// D1459 — 外側ヘッダに MIME-Version が2行以上。
+    pub dup_mime_version: bool,
+    /// D1460 — 宣言 boundary が本文で一度も使われない。
+    pub unused_boundary: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2743,6 +2751,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let alt_wrong_order = has_alt_wrong_order(bytes);
     let cd_boundary = has_cd_boundary(bytes);
     let addrless_from = has_addrless_from(bytes);
+    let dash_boundary = has_dash_boundary(bytes);
+    let bad_received = has_bad_received(bytes);
+    let dup_mime_version = has_dup_mime_version(bytes);
+    let unused_boundary = has_unused_boundary(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2957,6 +2969,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         alt_wrong_order,
         cd_boundary,
         addrless_from,
+        dash_boundary,
+        bad_received,
+        dup_mime_version,
+        unused_boundary,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -11543,6 +11559,160 @@ pub fn has_addrless_from(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// `boundary=` の値が `-` で終わる、または内部に `--` を含むか
+/// 判定する (D1457)。
+///
+/// bchars 上は合法だが `boundary=x--` なら開き区切り行が
+/// `--x--` — boundary `x` の閉じ区切りと同一形になり、先頭一致で
+/// 区切る実装は最初の部品開始を「閉じ」と誤認して全パートを捨てる。
+/// 内部に `--` を含む境界 (`a--b`) も同族の誤区切りを誘発する。
+#[must_use]
+pub fn has_dash_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find("boundary=") {
+            if p > 0 {
+                let prev = rest[..p].chars().last().unwrap_or(' ');
+                if prev != ';' && prev != ':' && !prev.is_whitespace() {
+                    rest = &rest[p + 9..];
+                    continue;
+                }
+            }
+            let after = &rest[p + 9..];
+            let v = if let Some(q) = after.strip_prefix('"') {
+                q.split('"').next().unwrap_or("")
+            } else {
+                after.split(';').next().unwrap_or("").trim()
+            };
+            if v.ends_with('-') || v.contains("--") {
+                return true;
+            }
+            rest = &rest[p + 9..];
+        }
+    }
+    false
+}
+
+/// `Received:` の値が節 (`from`/`by`/`with`/`id`/`for`)・
+/// コメント・`;` 日付のいずれも欠く形か判定する (D1458)。
+///
+/// 実際に配送経路を通った痕跡の Received は必ず節か日付を持つ —
+/// それらを一切欠く値は手書きの偽装消印 (配送記録の体裁だけの
+/// 捏造)。Received の有無そのものは D1425 が担当。
+#[must_use]
+pub fn has_bad_received(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    // Received 値は折りたたまれることが多いので論理行で見る
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("received:") else {
+            continue;
+        };
+        let v = v.trim();
+        let has_clause = v.split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .any(|t| matches!(t, "from" | "by" | "with" | "id" | "for"));
+        if !v.is_empty() && !has_clause && !v.contains('(') && !v.contains(';') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 外側ヘッダに `MIME-Version:` が2行以上あるか判定する (D1459)。
+///
+/// 一意であるべき宣言欄の重複 — 先頭を採る実装と末尾を採る実装で
+/// バージョン解釈がずれる (D1306 系の一意欄重複 — 値の異常は
+/// odd_mime_version、パート混入は D1374)。
+#[must_use]
+pub fn has_dup_mime_version(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower
+        .lines()
+        .filter(|l| l.starts_with("mime-version:"))
+        .nth(1)
+        .is_some()
+}
+
+/// 外側が `multipart/*` で `boundary=b` を宣言しているのに、本文に
+/// `--b` の区切り行が一行も現れないか判定する (D1460)。
+///
+/// 宣言された区切りが一度も使われない = 部品ゼロの空容器。
+/// 全本文を preamble (表示されない領域) とみなす実装と、構造を
+/// 諦めて生本文を見せる実装で見え方がまったくずれる。
+/// 区切り自体の異常は D1287/D1366/D1457 が担当。
+#[must_use]
+pub fn has_unused_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower_head = text[..header_end].to_ascii_lowercase();
+    // 外側の multipart/* boundary を取得 (引用符許容・FWS 連結)
+    let mut joined = String::with_capacity(lower_head.len());
+    for l in lower_head.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            joined.push(' ');
+            joined.push_str(l.trim_start());
+        } else {
+            joined.push('\n');
+            joined.push_str(l);
+        }
+    }
+    let Some(ct) = joined.lines().find(|l| l.starts_with("content-type:")) else {
+        return false;
+    };
+    if !ct.contains("multipart/") {
+        return false;
+    }
+    let Some(pos) = ct.find("boundary=") else { return false };
+    let rest = &ct[pos + 9..];
+    let boundary = if let Some(q) = rest.strip_prefix('"') {
+        q.split('"').next().unwrap_or("")
+    } else {
+        rest.split(';').next().unwrap_or("").trim()
+    };
+    if boundary.is_empty() {
+        return false;
+    }
+    let delim = format!("--{boundary}");
+    !text[header_end..]
+        .lines()
+        .any(|l| l.to_ascii_lowercase().starts_with(&delim))
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -27953,6 +28123,73 @@ mod tests {
         // クオート/コメント内の @ だけの形も検出 (宛名でない @ を数えない)
         assert!(has_addrless_from(
             b"From: \"a@b\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dash_boundary_は危険な区切り値を検出する() {
+        // D1457 — - 終わり / 内部に --
+        assert!(has_dash_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"x--\"\r\n\r\n--x--\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+        assert!(has_dash_boundary(
+            b"Content-Type: multipart/mixed; boundary=a--b\r\n\r\n--a--b\r\n\r\nx"
+        ));
+        // 通常の boundary は不発火
+        assert!(!has_dash_boundary(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n--abc\r\n\r\nx\r\n--abc--"
+        ));
+        // 非 multipart の boundary= は対象外ではない — CT 行であれば見る
+        // (leaf の boundary= も構造を誤読するので発火)
+        assert!(has_dash_boundary(
+            b"Content-Type: text/plain; boundary=x-\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn bad_received_は節なき配送記録を検出する() {
+        // D1458 — from/by/with/id/for・コメント・; 日付を欠く値
+        assert!(has_bad_received(
+            b"Received: junk\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // 正規形は不発火
+        assert!(!has_bad_received(
+            b"Received: from mx.a by mx.b; Mon, 1 Jan 2024\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // qmail 系のコメント形も不発火
+        assert!(!has_bad_received(
+            b"Received: (qmail 123 invoked from network); Mon\r\nFrom: a@b\r\n\r\nx"
+        ));
+        // 折りたたまれた節も拾う (論理行)
+        assert!(!has_bad_received(
+            b"Received:\r\n from mx.a by mx.b\r\nFrom: a@b\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dup_mime_version_は重複した版宣言を検出する() {
+        // D1459 — MIME-Version ×2
+        assert!(has_dup_mime_version(
+            b"MIME-Version: 1.0\r\nMIME-Version: 2.0\r\n\r\nx"
+        ));
+        assert!(!has_dup_mime_version(
+            b"MIME-Version: 1.0\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn unused_boundary_は宣言のみの区切りを検出する() {
+        // D1460 — boundary 宣言済みだが本文に区切り行ゼロ
+        assert!(has_unused_boundary(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\nplain text only"
+        ));
+        // 区切りが使われていれば不発火
+        assert!(!has_unused_boundary(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+        // 非 multipart は対象外
+        assert!(!has_unused_boundary(
+            b"Content-Type: text/plain\r\n\r\nx"
         ));
     }
 

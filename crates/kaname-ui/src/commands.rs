@@ -4118,6 +4118,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.dash_boundary {
+        render_risks.push(
+            "boundary 値が - または -- を含みます\
+             —開き区切りと閉じ区切りが紛らわしく部品が誤読されます"
+                .to_string(),
+        );
+    }
+    if env.bad_received {
+        render_risks.push(
+            "Received の値に配送節 (from/by 等) も日付もありません\
+             —手書きの偽装消印の形跡です"
+                .to_string(),
+        );
+    }
+    if env.dup_mime_version {
+        render_risks.push(
+            "MIME-Version が複数行あります\
+             —先頭/末尾のどちらを採るかで解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.unused_boundary {
+        render_risks.push(
+            "宣言された boundary が本文で一度も使われていません\
+             —部品ゼロの空容器で本文の扱いがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

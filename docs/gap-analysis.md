@@ -870,3 +870,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1454 | multipart/alternative の忠実度逆順 (plain が html より後) | 先頭/末尾採用で表示・検査対象がずれる | メンバー CT 並びを検査 | kaname-render |
 | D1455 | Content-Disposition 行の boundary= 混入 | boundary を拾う実装が構造を誤読 | CD 行の boundary= を検査 | kaname-render |
 | D1456 | From/Sender 値に @ を含む宛名が無い | 名のみ読む/欄捨てるで差出人がずれる | クオート・コメント除去後の @ 有無を検査 | kaname-render |
+| D1457 | boundary 値が - 終わり/内部に -- を含む | 開き区切りが閉じ形と紛らわしく構造誤読 | boundary 値の末尾 -/内部 -- を検査 | kaname-render |
+| D1458 | Received に節・コメント・日付のいずれも無い | 手書き偽装消印 | Received 値の節/コメント/日付有無を検査 | kaname-render |
+| D1459 | 外側 MIME-Version の重複 | 一意欄重複で版解釈がずれる | 外側 MIME-Version 行数を検査 | kaname-render |
+| D1460 | 宣言 boundary が本文で不使用 (部品ゼロ multipart) | 全本文が preamble 扱いになるずれ | 宣言 boundary の本文使用を検査 | kaname-render |
