@@ -808,6 +808,14 @@ pub struct Envelope {
     pub zoneless_date: bool,
     /// `.` を含む欄名 (D1548 — 欄読みずれ)。
     pub dotted_header_name: bool,
+    /// 宛名欄の全角括弧 (D1549 — 正規化差異)。
+    pub fullwidth_angle_addr: bool,
+    /// 宛名の二重 @ (D1550 — 切断位置ずれ)。
+    pub multi_at_addr: bool,
+    /// msgid ドメインの連続ドット (D1551 — 識別子受理ずれ)。
+    pub dotdot_msgid_domain: bool,
+    /// MIME 欄値中の encoded-word (D1552 — 復号有無ずれ)。
+    pub ew_in_mime_headers: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3059,6 +3067,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let zoneless_date = has_zoneless_date(bytes);
     // D1548: `.` を含む欄名
     let dotted_header_name = has_dotted_header_name(bytes);
+    // D1549: 全角括弧宛名
+    let fullwidth_angle_addr = has_fullwidth_angle_addr(bytes);
+    // D1550: 二重 @ 宛名
+    let multi_at_addr = has_multi_at_addr(bytes);
+    // D1551: msgid ドメインの連続ドット
+    let dotdot_msgid_domain = has_dotdot_msgid_domain(bytes);
+    // D1552: MIME 欄値中の encoded-word
+    let ew_in_mime_headers = has_ew_in_mime_headers(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3365,6 +3381,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         nonip_domain_literal,
         zoneless_date,
         dotted_header_name,
+        fullwidth_angle_addr,
+        multi_at_addr,
+        dotdot_msgid_domain,
+        ew_in_mime_headers,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -16540,6 +16560,183 @@ pub fn has_dotted_header_name(raw: &[u8]) -> bool {
         let Some(c) = l.find(':') else { continue };
         let name = &l[..c];
         if name.contains('.') && !name.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+
+/// アドレス欄に全角括弧 `〈〉`/`＜＞`/`［］` があるか判定する (D1549)。
+///
+/// `To: 〈a@b〉` の全角括弧は、ASCII `<>` に正規化する実装と
+/// そのまま読む実装で宛名の抽出がずれる。
+#[must_use]
+pub fn has_fullwidth_angle_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        if l[colon + 1..].contains(['〈', '〉', '＜', '＞']) {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄に `@` を2個含むアドレスがあるか判定する (D1550)。
+///
+/// `a@b@c`/`<a@b@c>` の二重 @ は、最初の @ で切る実装・最後で
+/// 切る実装・構文エラーとする実装で宛名がずれる (`a@@b` の
+/// 連続形は D1408、msgid 欄は D1514)。
+#[must_use]
+pub fn has_multi_at_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // `,` 単位で @ を数える — 正当の多宛名 `a@b, c@d` は誤爆しない
+        for seg in v.split(',') {
+            let mut iq = false;
+            let mut ic = 0i32;
+            let mut cnt = 0usize;
+            let mut pv = b'\0';
+            for &b in seg.as_bytes() {
+                if pv == b'\\' {
+                    pv = b;
+                    continue;
+                }
+                if ic > 0 {
+                    if b == b'(' {
+                        ic += 1;
+                    } else if b == b')' {
+                        ic -= 1;
+                    }
+                } else if iq {
+                    if b == b'"' {
+                        iq = false;
+                    }
+                } else if b == b'(' {
+                    ic = 1;
+                } else if b == b'"' {
+                    iq = true;
+                } else if b == b'@' {
+                    cnt += 1;
+                }
+                pv = b;
+            }
+            if cnt >= 2 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 欄のドメインに連続 `..` があるか判定する (D1551)。
+///
+/// `Message-ID: <a@b..c>` の空ラベルは、受理する実装と
+/// 識別子を捨てる実装でスレッド照合がずれる。
+#[must_use]
+pub fn has_dotdot_msgid_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if let Some(at) = inner.rfind('@') {
+                if inner[at..].contains("..") {
+                    return true;
+                }
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` の値中に encoded-word が
+/// あるか判定する (D1552)。
+///
+/// `Content-Type: =?utf-8?Q?x?=`/`filename="=?utf-8?B?…?="` の
+/// encoded-word は param 値を復号する実装と生採用する実装で
+/// 型・名札の読みがずれる (欄値の EW は malformed 系と別 —
+/// こちらは形の正しい EW が値位置にあること自体が逸脱)。
+#[must_use]
+pub fn has_ew_in_mime_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_mime = low.starts_with("content-type:")
+            || low.starts_with("content-disposition:")
+            || low.starts_with("content-transfer-encoding:");
+        if is_mime && l.contains("=?") {
             return true;
         }
     }
@@ -34325,6 +34522,57 @@ mod tests {
         assert!(!has_dotted_header_name(b"X-Original-From: a@b\r\n\r\nb"));
         // 値中のドットは対象外
         assert!(!has_dotted_header_name(b"Subject: v1.2\r\n\r\nb"));
+    }
+
+    #[test]
+    fn fullwidth_angle_addr_は全角括弧を検出する() {
+        // D1549 — 〈a@b〉・＜a@b＞
+        assert!(has_fullwidth_angle_addr(
+            "To: 〈a@b〉\r\n\r\nb".as_bytes()
+        ));
+        assert!(has_fullwidth_angle_addr(
+            "To: ＜a@b＞\r\n\r\nb".as_bytes()
+        ));
+        // ASCII 括弧は正常
+        assert!(!has_fullwidth_angle_addr(b"To: <a@b>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn multi_at_addr_は二重アットを検出する() {
+        // D1550 — a@b@c / <a@b@c>
+        assert!(has_multi_at_addr(b"To: a@b@c\r\n\r\nb"));
+        assert!(has_multi_at_addr(b"From: <a@b@c>\r\n\r\nb"));
+        // 2宛名は正常
+        assert!(!has_multi_at_addr(b"To: a@b, c@d\r\n\r\nb"));
+        // 単一宛名は不発火
+        assert!(!has_multi_at_addr(b"To: a@b\r\n\r\nb"));
+    }
+
+    #[test]
+    fn dotdot_msgid_domain_は連続ドットを検出する() {
+        // D1551 — <a@b..c>
+        assert!(has_dotdot_msgid_domain(b"Message-ID: <a@b..c>\r\n\r\nb"));
+        // 正常ドメインは不発火
+        assert!(!has_dotdot_msgid_domain(b"Message-ID: <a@b.c>\r\n\r\nb"));
+        // local 側の .. は対象外 (ドメインのみ)
+        assert!(!has_dotdot_msgid_domain(b"Message-ID: <a..b@c>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn ew_in_mime_headers_は値内encoded_wordを検出する() {
+        // D1552 — CT/CD 値中の =?…?=
+        assert!(has_ew_in_mime_headers(
+            b"Content-Type: =?utf-8?Q?x?=\r\n\r\nb"
+        ));
+        assert!(has_ew_in_mime_headers(
+            b"Content-Disposition: attachment; filename=\"=?utf-8?B?eA==?=\"\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_ew_in_mime_headers(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+        // Subject の EW は対象外
+        assert!(!has_ew_in_mime_headers(b"Subject: =?utf-8?Q?x?=\r\n\r\nb"));
     }
 
     #[test]
