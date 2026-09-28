@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1714: `Content-Transfer-Encoding:` 値の余分な空白を検出 — `Envelope` に `padded_cte` を追加 (欄の `;` 混入は D1655)。
+### Security — D1713: param 名の `@` `;file@name=x` を検出 — `Envelope` に `at_param_name` を追加 (名の空白は D1656、名なしは `has_empty_param_name`)。
+### Security — D1712: `Received:` の `for` 節重複を検出 — `Envelope` に `received_multi_for` を追加。
+### Security — D1711: `Received:` の `with` 節重複を検出 — `Envelope` に `received_multi_with` を追加 (`from` 節重複は D1688、`by` 節重複は D1707)。
 ### Security — D1710: `Received:` の `from` 節の裸 `@` `from user@host` を検出 — `Envelope` に `received_from_at` を追加 (from 節欠落は D1673、空 from 節は D1703)。
 ### Security — D1709: `Received:` の `from` 節クオート名 `from "mx"` を検出 — `Envelope` に `received_from_quoted` を追加。
 ### Security — D1708: `Content-Disposition: ; x=y` の型欠落を検出 — `Envelope` に `cd_empty_type` を追加 (型本体の空値は D1645、CT 型欠落は D1649)。

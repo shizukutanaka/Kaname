@@ -1134,6 +1134,14 @@ pub struct Envelope {
     pub received_from_quoted: bool,
     /// `Received:` の `from` 節の裸 `@` (D1710 — 経路解析ずれ)。
     pub received_from_at: bool,
+    /// `Received:` の `with` 節重複 (D1711 — 経路解析ずれ)。
+    pub received_multi_with: bool,
+    /// `Received:` の `for` 節重複 (D1712 — 経路解析ずれ)。
+    pub received_multi_for: bool,
+    /// param 名の `@` (D1713 — param 解析ずれ)。
+    pub at_param_name: bool,
+    /// `Content-Transfer-Encoding:` の値の余分な空白 (D1714 — 符号化判定ずれ)。
+    pub padded_cte: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3709,6 +3717,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_from_quoted = has_received_from_quoted(bytes);
     // D1710: Received の from 節の裸 @
     let received_from_at = has_received_from_at(bytes);
+    // D1711: Received の with 節重複
+    let received_multi_with = has_received_multi_with(bytes);
+    // D1712: Received の for 節重複
+    let received_multi_for = has_received_multi_for(bytes);
+    // D1713: param 名の @
+    let at_param_name = has_at_param_name(bytes);
+    // D1714: CTE 値の余分な空白
+    let padded_cte = has_padded_cte(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4177,6 +4193,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cd_empty_type,
         received_from_quoted,
         received_from_at,
+        received_multi_with,
+        received_multi_for,
+        at_param_name,
+        padded_cte,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -25053,6 +25073,155 @@ pub fn has_received_from_at(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `with` 節が2つあるか判定する (D1711)。
+///
+/// `Received: … with ESMTP with HTTP` — 最初の `with` を採る実装と
+/// 最後を採る実装で配送プロトコルの経路解析がずれる
+/// (`from` 節重複は D1688、`by` 節重複は D1707)。
+#[must_use]
+pub fn has_received_multi_with(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let withs = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .filter(|t| t.eq_ignore_ascii_case("with"))
+            .count();
+        if withs >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節が2つあるか判定する (D1712)。
+///
+/// `Received: … for a@x for b@y` — 最初の `for` を採る実装と
+/// 最後を採る実装で配送先の解釈がずれる。
+#[must_use]
+pub fn has_received_multi_for(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let fors = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .filter(|t| t.eq_ignore_ascii_case("for"))
+            .count();
+        if fors >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// CT/CD param の名に `@` が含まれるか判定する (D1713)。
+///
+/// `;file@name=x` — `@` は tspecial で param 名には書けない。
+/// 名を区切りまで読む実装と欄ごと捨てる実装で param がずれる
+/// (名の空白は D1656、名なしは has_empty_param_name)。
+#[must_use]
+pub fn has_at_param_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let key = part.split('=').next().unwrap_or("");
+            if key.trim().contains('@') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に余分な空白があるか判定する (D1714)。
+///
+/// `CTE:  base64` (値の前の二重空白) や `CTE: base64 ` (末尾空白) —
+/// trim する実装は正規に読み、生の値と比較する実装は
+/// 不明符号化として棄てる — 本文のデコードがずれる
+/// (欄の `;` 混入は D1655)。
+#[must_use]
+pub fn has_padded_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+            continue;
+        }
+        // コロン直後の標準的な SP 一つを除いた残りが trim と一致しない = 余分な空白
+        let v = l[colon + 1..].strip_prefix(' ').unwrap_or(&l[colon + 1..]);
+        if !v.trim().is_empty() && v != v.trim() {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -44890,6 +45059,54 @@ mod tests {
             b"Received: from host.com by mx.b; Thu\r\n\r\n"
         ));
         assert!(!has_received_from_at(b""));
+    }
+
+    #[test]
+    fn received_multi_with_二つのwith節を検出する() {
+        assert!(has_received_multi_with(
+            b"Received: from a by b with ESMTP with HTTP; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_with(
+            b"Received: from a by b with ESMTP; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_with(b""));
+    }
+
+    #[test]
+    fn received_multi_for_二つのfor節を検出する() {
+        assert!(has_received_multi_for(
+            b"Received: from a by b for a@x for b@y; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_for(
+            b"Received: from a by b for a@x; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_for(b""));
+    }
+
+    #[test]
+    fn at_param_name_アットの名札を検出する() {
+        assert!(has_at_param_name(
+            b"Content-Type: text/plain; file@name=x\r\n\r\n"
+        ));
+        assert!(!has_at_param_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\n"
+        ));
+        assert!(!has_at_param_name(b""));
+    }
+
+    #[test]
+    fn padded_cte_余分な空白を検出する() {
+        assert!(has_padded_cte(
+            b"Content-Transfer-Encoding:  base64\r\n\r\n"
+        ));
+        assert!(has_padded_cte(
+            b"Content-Transfer-Encoding: base64 \r\n\r\n"
+        ));
+        assert!(!has_padded_cte(
+            b"Content-Transfer-Encoding: base64\r\n\r\n"
+        ));
+        assert!(!has_padded_cte(b"Content-Transfer-Encoding:\r\n\r\n"));
+        assert!(!has_padded_cte(b""));
     }
 
     #[test]

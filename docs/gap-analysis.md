@@ -1124,3 +1124,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1708 | `Content-Disposition:` の型欠落 | attachment 既定 vs 欄破棄で添付判定ずれ |
 | D1709 | `from` 節のクオート名 | 剥がす vs 生読みで経路ずれ |
 | D1710 | `from` 節の裸 `@` | ホスト名 vs 宛名読みで経路ずれ |
+| D1711 | `Received:` の `with` 節重複 | 先採用 vs 後採用で経路ずれ |
+| D1712 | `Received:` の `for` 節重複 | 先採用 vs 後採用で配送先ずれ |
+| D1713 | param 名の `@` | 名継続 vs 欄破棄で param ずれ |
+| D1714 | `CTE:` 値の余分な空白 | trim vs 生比較でデコードずれ |

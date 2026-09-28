@@ -5804,6 +5804,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.received_from_at {
         render_risks.push("Received 欄の from 節にアドレス形があります—ホスト名と採る実装とローカル部を捨てる実装で経路がずれます".to_string());
     }
+    if env.received_multi_with {
+        render_risks.push("Received 欄に with 節が二つあります—先採用と後採用で経路がずれます".to_string());
+    }
+    if env.received_multi_for {
+        render_risks.push("Received 欄に for 節が二つあります—先採用と後採用で配送先がずれます".to_string());
+    }
+    if env.at_param_name {
+        render_risks.push("パラメータの名に「@」があります—名を区切りまで読む実装と欄を捨てる実装で読みがずれます".to_string());
+    }
+    if env.padded_cte {
+        render_risks.push("符号化の値に余分な空白があります—空白を除く実装とそのまま比較する実装でデコードがずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
