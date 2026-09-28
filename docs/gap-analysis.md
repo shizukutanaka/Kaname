@@ -826,3 +826,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1410 | multipart の epilogue に非空内容 | 閉じ boundary の向こうへの潜伏 | 外側閉じ boundary 以降の非空行を検出 | kaname-render |
 | D1411 | 非 text/* 型への charset= パラメータ | 無視と適用で解釈がずれる | CT 主型が text/message 以外で charset= を検出 | kaname-render |
 | D1412 | Newsgroups/Path/Xref/NNTP-* 経路欄 | メールに無い制度の欄の混入 | 外側ヘッダの NNTP 経路欄を検出 | kaname-render |
+| D1413 | Sensitivity: 自称機密度欄 | 「機密案件」の体裁を送信側が自称 | 外側ヘッダの sensitivity 系欄を検出 | kaname-render |
+| D1414 | Message-ID/Resent-Message-ID に <…> が複数 | 採用識別子が実装間でずれる | msgid 欄の < 個数を検査 | kaname-render |
+| D1415 | From/Sender/Return-Path が mailer-daemon 等の役割名 | 偽配送失敗通知の形 | 差出人欄 addr-spec ローカル部を検査 | kaname-render |
+| D1416 | Apparently-From/X-Apparently-Sender 等差出人側見せかけ欄 | 「見せかけ差出人」の体裁を自称 | 外側ヘッダの差出人側 Apparently-* を検出 | kaname-render |

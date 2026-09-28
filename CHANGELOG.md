@@ -1,5 +1,46 @@
 ## [Unreleased]
 
+### Security — D1413:
+
+- **問題**: `Sensitivity:` 欄 (company-confidential/personal/private)
+  は送信側が内容に貼る機密度の名札 — 表示する実装では「機密案件」
+  の体裁を作る圧力欄 (BEC の「内密の件」演出と同型)。
+- **修正**: `has_sensitivity_claim` が外側ヘッダの `sensitivity:`/
+  `x-sensitivity:`/`sensitivity-level:` を検出する。
+- **教訓**: 圧力の体裁は緊急度 (X-Priority, D1340) だけでなく
+  機密度の名札でも作られる。
+
+### Security — D1414:
+
+- **問題**: `Message-ID:`/`Resent-Message-ID:` に `<…>` が2個以上
+  あると、先頭/末尾採用で識別子がずれる (スレッド偽装の素地)。
+- **修正**: `has_double_msgid` が msgid 欄の値中の `<` の個数を
+  検査する (In-Reply-To/References の複数 msgid は正当なので
+  対象外)。
+- **教訓**: 一意欄は値の中でも一意であるべき — 欄の個数だけで
+  なく値内部の構造も重複の形になる。
+
+### Security — D1415:
+
+- **問題**: `From:`/`Sender:`/`Return-Path:` のローカル部が
+  `mailer-daemon`/`postmaster`/`hostmaster` — 配送器の役割名を
+  名乗るメールは偽の配送失敗通知の形 (「戻ってきた添付を開かせる」
+  malspam の定番)。
+- **修正**: `has_system_addr_from` が差出人系欄の addr-spec トークンの
+  ローカル部を検査する (完全一致で誤爆しない)。
+- **教訓**: 役割名の名乘りは配送失敗の体裁を作る素地 —
+  人間が差出人に使わない名を切り分ける。
+
+### Security — D1416:
+
+- **問題**: `Apparently-From:`/`X-Apparently-From:`/
+  `Apparently-Sender:` 等の差出人側「見せかけ」欄 — 宛先側の
+  `X-Apparently-To:` は既存印群が担当するが差出人側は未対象。
+- **修正**: `has_apparently_from` が外側ヘッダの差出人側
+  Apparently-* 欄を検出する。
+- **教訓**: 「見せかけ」の欄は宛先側だけでなく差出人側にもある
+  — 対になる欄は対に塞ぐ。
+
 ### Security — D1409:
 
 - **問題**: multipart メールの preamble (最初の boundary 行より前)

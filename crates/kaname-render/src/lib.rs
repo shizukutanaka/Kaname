@@ -533,6 +533,17 @@ pub struct Envelope {
     /// D1412 — Newsgroups:/Followup-To:/Path:/Xref:/NNTP-Posting-*
     /// 等の Usenet 経路・分類欄 (メールに無い制度の欄)。
     pub nntp_routing: bool,
+    /// D1413 — `Sensitivity:` 自称機密度欄 (内密演出の圧力名札)。
+    pub sensitivity_claim: bool,
+    /// D1414 — Message-ID/Resent-Message-ID に `<` が2個以上
+    /// (識別子が複数 — 採用実装差でスレッドがずれる)。
+    pub double_msgid: bool,
+    /// D1415 — From/Sender/Return-Path のローカル部が
+    /// mailer-daemon/postmaster/hostmaster (配送器役割名の名乗り)。
+    pub system_addr_from: bool,
+    /// D1416 — `Apparently-From:`/`X-Apparently-From:` 等の
+    /// 差出人側「見せかけ」欄。
+    pub apparently_from: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2608,6 +2619,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let epilogue_content = has_epilogue_content(bytes);
     let nontext_charset = has_nontext_charset(bytes);
     let nntp_routing = has_nntp_routing(bytes);
+    let sensitivity_claim = has_sensitivity_claim(bytes);
+    let double_msgid = has_double_msgid(bytes);
+    let system_addr_from = has_system_addr_from(bytes);
+    let apparently_from = has_apparently_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2778,6 +2793,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         epilogue_content,
         nontext_charset,
         nntp_routing,
+        sensitivity_claim,
+        double_msgid,
+        system_addr_from,
+        apparently_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -9483,6 +9502,126 @@ pub fn has_nntp_routing(raw: &[u8]) -> bool {
             || l.starts_with("xref:")
             || l.starts_with("nntp-posting-host:")
             || l.starts_with("nntp-posting-date:")
+    })
+}
+
+/// `Sensitivity:` 欄 (自称機密度) があるか判定する (D1413)。
+///
+/// `Sensitivity: company-confidential`/`personal`/`private` は送信側が
+/// 内容に貼る機密度の名札 — 表示する実装では「機密案件」の体裁を
+/// 作る圧力欄 (BEC の「内密の件」演出と同型)。X-Priority (D1340)
+/// の機密度版。
+#[must_use]
+pub fn has_sensitivity_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        l.starts_with("sensitivity:")
+            || l.starts_with("x-sensitivity:")
+            || l.starts_with("sensitivity-level:")
+    })
+}
+
+/// `Message-ID:`/`Resent-Message-ID:` の値に `<` が2個以上あるか
+/// 判定する (D1414)。
+///
+/// msgid は1欄につき `<id@domain>` が1個 — `<a@x><b@y>` のように
+/// 複数あると先頭/末尾採用で識別子がずれる (スレッド偽装の素地)。
+/// In-Reply-To/References の複数 msgid は正当なので対象外
+/// (そちらは D1338 が非 msgid 値を担当)。
+#[must_use]
+pub fn has_double_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let v = l
+            .strip_prefix("message-id:")
+            .or_else(|| l.strip_prefix("resent-message-id:"));
+        let Some(v) = v else { continue };
+        if v.matches('<').count() > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// From/Sender の addr-spec のローカル部がシステム・役割名か
+/// 判定する (D1415)。
+///
+/// `mailer-daemon@`/`postmaster@`/`hostmaster@` は配送器の役割
+/// アドレス — From にこれを名乗るメールは偽の配送失敗通知
+/// (「戻ってきた添付を開かせる」malspam の定番形)。人間の正当送信者が
+/// この名を差出人に使うことはない。
+#[must_use]
+pub fn has_system_addr_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let v = l
+            .strip_prefix("from:")
+            .or_else(|| l.strip_prefix("sender:"))
+            .or_else(|| l.strip_prefix("return-path:"));
+        let Some(v) = v else { continue };
+        for tok in v.split(|c: char| c == ',' || c == ' ' || c == '\t' || c == '<' || c == '>' || c == '"') {
+            let Some(at) = tok.find('@') else {
+                continue;
+            };
+            let local = &tok[..at];
+            if matches!(local, "mailer-daemon" | "postmaster" | "hostmaster") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Apparently-From:`/`X-Apparently-From:`/`Apparently-Sender:` 等の
+/// 差出人側の「見せかけ」欄があるか判定する (D1416)。
+///
+/// `X-Apparently-To:` (宛先側) は既存印群が担当するが、差出人側の
+/// Apparently-* は未対象だった — 「配送上の見せかけ差出人」の体裁を
+/// 送信側が書き込む欄。
+#[must_use]
+pub fn has_apparently_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        l.starts_with("apparently-from:")
+            || l.starts_with("x-apparently-from:")
+            || l.starts_with("apparently-sender:")
+            || l.starts_with("x-apparently-sender:")
     })
 }
 
@@ -25170,6 +25309,65 @@ mod tests {
         ));
         assert!(!has_nntp_routing(
             b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn sensitivity_claim_は機密度名札を検出する() {
+        // D1413 — Sensitivity: 欄
+        assert!(has_sensitivity_claim(
+            b"From: a@b\r\nSensitivity: company-confidential\r\n\r\nbody"
+        ));
+        assert!(has_sensitivity_claim(
+            b"From: a@b\r\nSensitivity: personal\r\n\r\nbody"
+        ));
+        assert!(!has_sensitivity_claim(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn double_msgid_は複数識別子を検出する() {
+        // D1414 — Message-ID に < が2個
+        assert!(has_double_msgid(
+            b"Message-ID: <a@x><b@y>\r\n\r\nbody"
+        ));
+        // 通常の msgid / References 複数は不発火
+        assert!(!has_double_msgid(
+            b"Message-ID: <a@x>\r\n\r\nbody"
+        ));
+        assert!(!has_double_msgid(
+            b"References: <a@x> <b@y>\r\nMessage-ID: <c@z>\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn system_addr_from_は役割差出人を検出する() {
+        // D1415 — mailer-daemon/postmaster/hostmaster
+        assert!(has_system_addr_from(
+            b"From: mailer-daemon@host.example\r\n\r\nbody"
+        ));
+        assert!(has_system_addr_from(
+            b"From: \"Mail Delivery\" <postmaster@x>\r\n\r\nbody"
+        ));
+        // 一般人は不発火
+        assert!(!has_system_addr_from(
+            b"From: daemon-user@x\r\n\r\nbody"
+        ));
+        assert!(!has_system_addr_from(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn apparently_from_は見せかけ差出人欄を検出する() {
+        // D1416 — Apparently-From/X-Apparently-From
+        assert!(has_apparently_from(
+            b"From: a@b\r\nApparently-From: boss@company\r\n\r\nbody"
+        ));
+        assert!(has_apparently_from(
+            b"From: a@b\r\nX-Apparently-Sender: boss@company\r\n\r\nbody"
+        ));
+        assert!(!has_apparently_from(
+            b"From: a@b\r\nApparently-To: user@x\r\n\r\nbody"
         ));
     }
 

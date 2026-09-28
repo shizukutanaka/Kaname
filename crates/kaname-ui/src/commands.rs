@@ -3810,6 +3810,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.sensitivity_claim {
+        render_risks.push(
+            "Sensitivity (機密度) 欄を送信側が書き込んでいます\
+             —「機密案件」の体裁を自称する圧力欄です"
+                .to_string(),
+        );
+    }
+    if env.double_msgid {
+        render_risks.push(
+            "Message-ID に <…> が複数含まれています\
+             —採用する識別子が実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.system_addr_from {
+        render_risks.push(
+            "差出人が mailer-daemon/postmaster/hostmaster を名乗っています\
+             —偽の配送失敗通知の形です"
+                .to_string(),
+        );
+    }
+    if env.apparently_from {
+        render_risks.push(
+            "Apparently-From 等の「見せかけ差出人」欄を送信側が書き込んでいます\
+             —配送上の自称欄です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
