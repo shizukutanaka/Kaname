@@ -880,6 +880,14 @@ pub struct Envelope {
     pub fullwidth_space_addr: bool,
     /// 宛名リストの空要素 (D1584 — 宛先集合ずれ)。
     pub empty_addr_segment: bool,
+    /// ヘッダブロックに `:` を欠く行 (D1585 — 欄解析ずれ)。
+    pub colonless_header_line: bool,
+    /// Received: に `;` 付き日時印が無い (D1586 — 経過記録ずれ)。
+    pub received_no_semi: bool,
+    /// 標準欄名を `_` で書いた形 (D1587 — 欄名解釈ずれ)。
+    pub underscore_header_name: bool,
+    /// Content-Type の未知メイン型 (D1588 — 既定型ずれ)。
+    pub unknown_maintype: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3203,6 +3211,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let fullwidth_space_addr = has_fullwidth_space_addr(bytes);
     // D1584: 宛名リストの空要素
     let empty_addr_segment = has_empty_addr_segment(bytes);
+    // D1585: コロンを欠くヘッダ行
+    let colonless_header_line = has_colonless_header_line(bytes);
+    // D1586: Received の `;` 日時印欠落
+    let received_no_semi = has_received_no_semi(bytes);
+    // D1587: `_` 綴りの標準欄名
+    let underscore_header_name = has_underscore_header_name(bytes);
+    // D1588: 未知メディア主型
+    let unknown_maintype = has_unknown_maintype(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3545,6 +3561,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bad_weekday,
         fullwidth_space_addr,
         empty_addr_segment,
+        colonless_header_line,
+        received_no_semi,
+        underscore_header_name,
+        unknown_maintype,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -18360,6 +18380,167 @@ pub fn has_empty_addr_segment(raw: &[u8]) -> bool {
         }
         if seg_empty {
             return true;
+        }
+    }
+    false
+}
+
+/// ヘッダブロックに `:` を一切含まない行があるか判定する (D1585)。
+///
+/// `X-Junk garbage`/`From sender …` (mbox 形) のようなコロン無し行は、
+/// そこでヘッダ解析を打ち切る実装と行を読み飛ばす実装で以降の欄構成が
+/// ずれる (空白行前コロンは D1305、全角コロンは D1581)。
+#[must_use]
+pub fn has_colonless_header_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.is_empty() {
+            break; // ヘッダブロック終端
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue; // 折り返し行
+        }
+        if !l.contains(':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の値に `;` 付きの日時印があるか判定する (D1586)。
+///
+/// RFC 5321 は Received 追跡欄に `from/by/with/id/for` 節の後 `;`
+/// で区切られた日時印を必須とする。節があるのに `;` が無い形
+/// (`from a by b 25 Sep 2025`) は、日時印を必須とする実装が欄を捨て
+/// 寛容実装が拾う — 経過記録の読みがずれる (節皆無の手書き形は D1458)。
+#[must_use]
+pub fn has_received_no_semi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("received:") else { continue };
+        let has_clause = v
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .any(|t| matches!(t, "from" | "by" | "with" | "id" | "for"));
+        if has_clause && !v.contains(';') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 標準ヘッダ名が `-` でなく `_` で書かれているか判定する (D1587)。
+///
+/// `Message_ID:`/`Content_Type:`/`Reply_To:`/`MIME_Version:` 等は、欄名を
+/// 文字通り見る実装では別物の任意欄となり、`_`→`-` を正規化する実装では
+/// 標準欄として読まれる — 欄の種類がずれる (ハイフン欠落は D1473、
+/// ドット混入は D1548)。
+#[must_use]
+pub fn has_underscore_header_name(raw: &[u8]) -> bool {
+    const KNOWN: &[&str] = &[
+        "message-id", "in-reply-to", "resent-message-id", "resent-from", "resent-to",
+        "resent-cc", "resent-bcc", "resent-sender", "resent-date", "resent-reply-to",
+        "reply-to", "return-path", "content-type", "content-transfer-encoding",
+        "content-disposition", "content-id", "content-description", "content-language",
+        "content-location", "content-md5", "content-length", "content-base",
+        "mime-version", "list-id", "list-post", "list-help", "list-archive",
+        "list-owner", "list-subscribe", "list-unsubscribe", "list-unsubscribe-post",
+        "dkim-signature", "domainkey-signature", "received-spf", "authentication-results",
+        "disposition-notification-to", "original-recipient", "final-recipient",
+        "delivered-to", "return-receipt-to", "auto-submitted", "expiry-date",
+        "reply-by", "followup-to", "complaints-to", "archived-at", "user-agent",
+        "x-mailer",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.is_empty() {
+            break;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name.contains('_') && KNOWN.contains(&name.replace('_', "-").as_str()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` のメイン型が登録済み集合の外にあるか判定する (D1588)。
+///
+/// `Content-Type: wednesday/midnight` のような未知メイン型は、RFC 2045 上
+/// `application/octet-stream` として扱う実装と欄ごと拒否する実装で中身の
+/// 扱いがずれる (形の崩れは D1356、ワイルドカードは D1540、クオートは
+/// D1417)。登録主型は application/audio/example/font/haptics/image/
+/// message/model/multipart/text/video と `x-` 始まりの拡張のみ。
+#[must_use]
+pub fn has_unknown_maintype(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            let mt = v.trim_start().split(';').next().unwrap_or("").trim_end();
+            if !mt.contains('/') {
+                continue; // `/` 無しは D1320 の領分
+            }
+            let main = mt.split('/').next().unwrap_or("").trim();
+            if main.is_empty() || main == "*" || main.starts_with('"') {
+                continue; // 空側は D1511、ワイルドカードは D1540、クオートは D1417
+            }
+            if !matches!(
+                main,
+                "application" | "audio" | "example" | "font" | "haptics" | "image"
+                    | "message" | "model" | "multipart" | "text" | "video"
+            ) && !main.starts_with("x-")
+            {
+                return true;
+            }
         }
     }
     false
@@ -36558,6 +36739,83 @@ mod tests {
             b"To: \"x,y\" <a@b>\r\n\r\nx"
         ));
         assert!(!has_empty_addr_segment(b"To: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn colonless_header_line_コロンなし欄行を検出する() {
+        // D1585 — ヘッダブロック内に `:` を欠く行
+        assert!(has_colonless_header_line(
+            b"From: a@b\r\nSubject: x\r\nX-Junk garbage here\r\n\r\nbody"
+        ));
+        assert!(has_colonless_header_line(b"garbage first line\r\nFrom: a@b\r\n\r\nbody"));
+        // 本文側のコロン無し行は対象外
+        assert!(!has_colonless_header_line(
+            b"From: a@b\r\nSubject: x\r\n\r\nno colon here\nstill none"
+        ));
+        // 折り返し行は欄行ではない
+        assert!(!has_colonless_header_line(
+            b"From: a@b\r\nSubject: long\r\n folded text no colon\r\n\r\nbody"
+        ));
+        assert!(!has_colonless_header_line(b"From: a@b\r\nSubject: x\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn received_no_semi_semicolonなきreceivedを検出する() {
+        // D1586 — 節があるのに `;` + 日時印が無い
+        assert!(has_received_no_semi(
+            b"Received: from mail.example by mx.dest 25 Sep 2025\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(has_received_no_semi(
+            b"Received: from a by b\r\n with esmtp id xyz\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // 正常形は不発火
+        assert!(!has_received_no_semi(
+            b"Received: from a by b; Mon, 25 Sep 2025 12:00:00 +0000\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_received_no_semi(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn underscore_header_name_アンダースコア欄名を検出する() {
+        // D1587 — 標準欄名の `_` 綴り
+        assert!(has_underscore_header_name(b"Message_ID: <a@b>\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(has_underscore_header_name(
+            b"From: a@b\r\nContent_Type: text/plain\r\n\r\nbody"
+        ));
+        assert!(has_underscore_header_name(b"In_Reply_To: <a@b>\r\nFrom: a@b\r\n\r\nbody"));
+        // 未知欄名の `_` は対象外、正規綴りは不発火
+        assert!(!has_underscore_header_name(b"X_Custom_Header: v\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(!has_underscore_header_name(
+            b"Message-ID: <a@b>\r\nContent-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn unknown_maintype_未知メイン型を検出する() {
+        // D1588 — 登録済み主型以外の `foo/bar`
+        assert!(has_unknown_maintype(
+            b"Content-Type: wednesday/midnight\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(has_unknown_maintype(
+            b"Content-Type: Xyz/abc; charset=utf-8\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // パート欄でも捕捉
+        assert!(has_unknown_maintype(
+            b"Content-Type: multipart/mixed; boundary=b\r\nFrom: a@b\r\n\r\n--b\r\nContent-Type: foo/bar\r\n\r\nx\r\n--b--"
+        ));
+        // 登録主型・x-拡張・ワイルドカード・クオート・欠けた形は不発火
+        assert!(!has_unknown_maintype(
+            b"Content-Type: text/plain; charset=utf-8\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_unknown_maintype(
+            b"Content-Type: x-foo/bar\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_unknown_maintype(b"Content-Type: */*\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(!has_unknown_maintype(
+            b"Content-Type: \"text/plain\"\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_unknown_maintype(b"Content-Type: foo\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(!has_unknown_maintype(b"From: a@b\r\n\r\nbody"));
     }
 
     #[test]

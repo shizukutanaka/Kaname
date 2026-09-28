@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1585: ヘッダブロックに `:` を含まない行が混ざる形を検出 — `kaname-render` の `Envelope` に `colonless_header_line` を追加。`X-Junk garbage` のようなコロン無し欄行は、そこでヘッダ解析を打ち切る実装と行を読み飛ばす実装で以降の欄構成がずれる (空白行前コロンは D1305)。
+
+### Security — D1586: `Received:` に必須の `;` 付き日時印が無い形を検出 — `Envelope` に `received_no_semi` を追加。節 (`from/by/with/id/for`) があるのに `;` が無い `Received: from a by b 25 Sep 2025` は、日時印を必須とする実装が欄を捨て寛容実装が拾う (節皆無の手書き形は D1458)。
+
+### Security — D1587: 標準ヘッダ名が `-` でなく `_` で書かれた形 (`Message_ID:`/`Content_Type:`) を検出 — `Envelope` に `underscore_header_name` を追加。欄名を文字通り見る実装では別物の任意欄、`_`→`-` を正規化する実装では標準欄として読まれる (ハイフン欠落は D1473)。
+
+### Security — D1588: `Content-Type:` のメイン型が未登録値の形 (`Content-Type: wednesday/midnight`) を検出 — `Envelope` に `unknown_maintype` を追加。RFC 2045 上 `application/octet-stream` として扱う実装と欄ごと拒否する実装で中身の扱いがずれる (形の崩れは D1356、ワイルドカードは D1540)。
+
 ### Security — D1581: 欄名の区切りが全角コロン `：` (U+FF1A) の形を検出 — `kaname-render` の `Envelope` に `fullwidth_colon_header` を追加。`From：a@b`/`Subject：hi` は ASCII `:` だけを区切りと見る実装では欄として認識されず、全角を正規化する実装では通常の欄として読まれる (ハイフン欠落は D1473、ドット混入は D1548)。
 
 ### Security — D1582: `Date:` の曜日名が正規の3文字形でない形 (`Monday,`/`mo,`) を検出 — `Envelope` に `bad_weekday` を追加。厳格実装が構文エラーとし寛容実装が曜日を飛ばして日付だけ拾う (曜日と日付の不一致は D1569)。

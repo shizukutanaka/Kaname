@@ -5013,6 +5013,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.colonless_header_line {
+        render_risks.push(
+            "ヘッダ部に「:」を含まない行があります\
+             —そこで解析を打ち切る実装と読み飛ばす実装で欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.received_no_semi {
+        render_risks.push(
+            "Received: に必須の「;」と日時印がありません\
+             —日時印を必須とする実装と寛容に拾う実装で経過記録がずれます"
+                .to_string(),
+        );
+    }
+    if env.underscore_header_name {
+        render_risks.push(
+            "標準ヘッダ名が「-」でなく「_」で書かれています\
+             —文字通り読む実装と正規化する実装で欄の種類がずれます"
+                .to_string(),
+        );
+    }
+    if env.unknown_maintype {
+        render_risks.push(
+            "Content-Type のメイン型が未登録の値です\
+             —application/octet-stream として扱う実装と欄ごと拒否する実装で中身の扱いがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
