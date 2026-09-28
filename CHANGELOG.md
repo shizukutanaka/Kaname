@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1687: `Received:` の空値を検出 — `Envelope` に `empty_received` を追加 (from 節欠落は D1673)。
+### Security — D1686: Date 欄の数字+英字融合語 `25Sep2025` を検出 — `Envelope` に `fused_date` を追加。
+### Security — D1685: 宛名欄の `<` 無し `>` を検出 — `Envelope` に `addr_gt_only` を追加 (message-id 側は D1635)。
+### Security — D1684: Date 欄ゾーンの符号のみ `+`/`-` を検出 — `Envelope` に `zone_sign_only` を追加 (桁異常は D1670)。
 ### Security — D1683: Date 欄ゾーンの `+ABCD` 符号+英字形を検出 — `Envelope` に `zone_alpha` を追加 (裸英字は obs-zone 合法)。
 ### Security — D1682: 宣言なき `--boundary` 様の本文区切り行を検出 — `Envelope` に `orphan_boundary` を追加 (宣言済み孤児パートは `has_orphaned_part_content`)。
 ### Security — D1681: 宛名欄の空値を検出 — `Envelope` に `empty_addr_header` を追加 (空要素は D1584)。

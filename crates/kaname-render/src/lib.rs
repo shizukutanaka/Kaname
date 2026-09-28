@@ -1079,6 +1079,14 @@ pub struct Envelope {
     pub orphan_boundary: bool,
     /// Date 欄ゾーンが符号+英字 (D1683 — 日付解析ずれ)。
     pub zone_alpha: bool,
+    /// Date 欄ゾーンが符号のみ (D1684 — 日付解析ずれ)。
+    pub zone_sign_only: bool,
+    /// 宛名欄の `<` 無し `>` (D1685 — 宛先ずれ)。
+    pub addr_gt_only: bool,
+    /// Date 欄の数字+英字融合語 (D1686 — 日付解析ずれ)。
+    pub fused_date: bool,
+    /// `Received:` の空値 (D1687 — 経路解析ずれ)。
+    pub empty_received: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3600,6 +3608,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let orphan_boundary = has_orphan_boundary(bytes);
     // D1683: Date 欄ゾーンが符号+英字
     let zone_alpha = has_zone_alpha(bytes);
+    // D1684: Date 欄ゾーンが符号のみ
+    let zone_sign_only = has_zone_sign_only(bytes);
+    // D1685: 宛名欄の < 無し >
+    let addr_gt_only = has_addr_gt_only(bytes);
+    // D1686: Date 欄の数字+英字融合語
+    let fused_date = has_fused_date(bytes);
+    // D1687: Received の空値
+    let empty_received = has_empty_received(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4041,6 +4057,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         empty_addr_header,
         orphan_boundary,
         zone_alpha,
+        zone_sign_only,
+        addr_gt_only,
+        fused_date,
+        empty_received,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -23751,6 +23771,185 @@ pub fn has_zone_alpha(raw: &[u8]) -> bool {
     false
 }
 
+/// Date 欄のゾーンが `+`/`-` 単独か判定する (D1684)。
+///
+/// `Date: … 12:00:00 +` — 符号のみの語をゾーンの壊れと読む実装
+/// と余分な語として無視する実装で時差がずれる (符号+数字は
+/// D1670、符号+英字は D1683、二重符号は D1677)。
+#[must_use]
+pub fn has_zone_sign_only(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if t == "+" || t == "-" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 宛名欄に `<` の無い `>` が裸であるか判定する (D1685)。
+///
+/// `To: a@b>` — 額縁の閉じだけが残った宛名を、残す実装と語を
+/// 破棄する実装で宛先がずれる (message-id 側は D1635)。
+/// クオート・コメント内は対象外。
+#[must_use]
+pub fn has_addr_gt_only(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut depth = 0u32;
+        let mut depth_angle = 0u32;
+        for c in v.chars() {
+            if depth > 0 {
+                if c == '(' {
+                    depth += 1;
+                } else if c == ')' {
+                    depth -= 1;
+                }
+            } else if in_q {
+                if c == '"' {
+                    in_q = false;
+                }
+            } else if c == '"' {
+                in_q = true;
+            } else if c == '(' {
+                depth = 1;
+            } else if c == '<' {
+                depth_angle += 1;
+            } else if c == '>' {
+                if depth_angle == 0 {
+                    return true;
+                }
+                depth_angle -= 1;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄に `25Sep2025` のような数字+英字の融合語があるか
+/// 判定する (D1686)。
+///
+/// 空白で区切られない日付語 — 融合語を分解して読む実装と欄
+/// ごと捨てる実装で日付がずれる。
+#[must_use]
+pub fn has_fused_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if t.len() < 2 {
+                continue;
+            }
+            // 数字と英字が両方混在する語 (例 `25Sep2025`/`Sep25`)
+            let has_d = t.bytes().any(|b| b.is_ascii_digit());
+            let has_a = t.bytes().any(|b| b.is_ascii_alphabetic());
+            if has_d && has_a
+                && t.bytes().all(|b| b.is_ascii_alphanumeric())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の値が空か判定する (D1687)。
+///
+/// `Received:` (値なし) — trace 欄を空欄として破棄する実装と
+/// ホップを1つとして数える実装で経路数がずれる (from 節欠落は
+/// D1673、欄異常は `has_bad_received`)。
+#[must_use]
+pub fn has_empty_received(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        if l[colon + 1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -43267,6 +43466,53 @@ mod tests {
             b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
         ));
         assert!(!has_zone_alpha(b"X-Z: +UT\r\n\r\nx"));
+    }
+
+    #[test]
+    fn zone_sign_only_符号のみゾーンを検出する() {
+        // D1684 — `+` 単独
+        assert!(has_zone_sign_only(
+            b"Date: 25 Sep 2025 12:00:00 +\r\n\r\nx"
+        ));
+        // 数値ゾーン・他欄は不発火
+        assert!(!has_zone_sign_only(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_zone_sign_only(b"X-Z: +\r\n\r\nx"));
+    }
+
+    #[test]
+    fn addr_gt_only_閉じ額のみを検出する() {
+        // D1685 — `a@b>`
+        assert!(has_addr_gt_only(b"To: a@b>\r\n\r\nx"));
+        // 正常額縁・他欄は不発火
+        assert!(!has_addr_gt_only(b"To: <a@b>\r\n\r\nx"));
+        assert!(!has_addr_gt_only(b"To: a@b\r\n\r\nx"));
+        assert!(!has_addr_gt_only(b"X-Z: a@b>\r\n\r\nx"));
+    }
+
+    #[test]
+    fn fused_date_融合日付語を検出する() {
+        // D1686 — `25Sep2025`
+        assert!(has_fused_date(b"Date: 25Sep2025 12:00:00\r\n\r\nx"));
+        assert!(has_fused_date(b"Date: Thu, 25Sep2025\r\n\r\nx"));
+        // 分離形・他欄は不発火
+        assert!(!has_fused_date(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_fused_date(b"X-Z: 25Sep2025\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_received_空の経過印を検出する() {
+        // D1687 — `Received:` 空値
+        assert!(has_empty_received(b"Received:\r\n\r\nx"));
+        assert!(has_empty_received(b"Received: \r\n\r\nx"));
+        // 値あり・他欄は不発火
+        assert!(!has_empty_received(
+            b"Received: from a by b\r\n\r\nx"
+        ));
+        assert!(!has_empty_received(b"To: a@b\r\n\r\nx"));
     }
 
     #[test]
