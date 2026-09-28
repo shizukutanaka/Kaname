@@ -824,6 +824,14 @@ pub struct Envelope {
     pub bad_month_name: bool,
     /// ローカル部の連続ドット (D1556 — 宛名ずれ)。
     pub dotdot_addr_local: bool,
+    /// 裸ローカル部の atext 外文字 (D1557 — 宛名受理ずれ)。
+    pub special_local_char: bool,
+    /// 宛名ドメインの数値 TLD (D1558 — 宛名ずれ)。
+    pub digit_tld_addr: bool,
+    /// Date 系の範囲外時刻 (D1559 — 日付解釈ずれ)。
+    pub bad_clock: bool,
+    /// 宛名ドメインの端ハイフン (D1560 — 宛名受理ずれ)。
+    pub edge_hyphen_domain: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3091,6 +3099,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bad_month_name = has_bad_month_name(bytes);
     // D1556: ローカル連続ドット
     let dotdot_addr_local = has_dotdot_addr_local(bytes);
+    // D1557: 裸ローカル部の特殊文字
+    let special_local_char = has_special_local_char(bytes);
+    // D1558: 数値 TLD
+    let digit_tld_addr = has_digit_tld_addr(bytes);
+    // D1559: 範囲外時刻
+    let bad_clock = has_bad_clock(bytes);
+    // D1560: 端ハイフンドメイン
+    let edge_hyphen_domain = has_edge_hyphen_domain(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3405,6 +3421,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dotdot_addr_domain,
         bad_month_name,
         dotdot_addr_local,
+        special_local_char,
+        digit_tld_addr,
+        bad_clock,
+        edge_hyphen_domain,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -16957,6 +16977,211 @@ pub fn has_dotdot_addr_local(raw: &[u8]) -> bool {
                     if tok[..at].contains("..") {
                         return true;
                     }
+                }
+            }
+        }
+    }
+    false
+}
+
+
+/// アドレス欄の裸ローカル部に atext 外の特殊文字があるか判定する (D1557)。
+///
+/// `a/b@x`/`a=b@x`/`a?b@x` の `/` `=` `?` 等は dot-atom の字では
+/// なく、厳格実装は宛名を拒否し寛容実装は受理する — 宛名がずれる
+/// (連続 `..` は D1556、非 ASCII は D1517)。
+#[must_use]
+pub fn has_special_local_char(raw: &[u8]) -> bool {
+    const BAD: &[u8] = b"/=?[]():;";
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート・コメントを除き、括弧内は宛名本体なので残す
+        let mut seg = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else {
+                seg.push(b as char);
+            }
+            prev = b;
+        }
+        for part in seg.split(|c: char| c == ',' || c == '<' || c == '>') {
+            for tok in part.split_whitespace() {
+                let Some(at) = tok.find('@') else { continue };
+                let local = &tok[..at];
+                if local.bytes().any(|b| BAD.contains(&b)) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメイン最終ラベルが全数字か判定する (D1558)。
+///
+/// `a@b.123` の数値 TLD は DNS 名として成立せず、フィルタする
+/// 実装と受理する実装で宛名がずれる。
+#[must_use]
+pub fn has_digit_tld_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            let seg = seg.trim_end_matches(|c: char| c == '>' || c == ')' || c == ';');
+            let Some(at) = seg.rfind('@') else { continue };
+            let dom = seg[at + 1..]
+                .trim_end_matches(|c: char| c.is_whitespace() || c == '>' || c == ')');
+            // ドット無し数値ドメインは D1507 の領分
+            if dom.contains('.') {
+                if let Some(tld) = dom.rsplit('.').next() {
+                    if !tld.is_empty() && tld.bytes().all(|b| b.is_ascii_digit()) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Date 系欄の時刻が範囲外か判定する (D1559)。
+///
+/// `Date: … 25:00:00`/`12:60` の時>23・分>59 は、丸める実装と
+/// 構文エラーにする実装で日付がずれる (月名は D1555、2桁年は D1535)。
+#[must_use]
+pub fn has_bad_clock(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        for tok in v.split_whitespace() {
+            let t = tok.trim_matches(|c: char| c == ',' || c == ';');
+            let digs: Vec<&str> = t.split(':').collect();
+            if digs.len() >= 2
+                && digs[0].len() == 2
+                && digs[0].bytes().all(|b| b.is_ascii_digit())
+                && digs[1].len() == 2
+                && digs[1].bytes().all(|b| b.is_ascii_digit())
+            {
+                let h: u32 = digs[0].parse().unwrap_or(0);
+                let m: u32 = digs[1].parse().unwrap_or(0);
+                let s_ok = digs.len() < 3
+                    || (digs[2].len() >= 2
+                        && digs[2][..2].bytes().all(|b| b.is_ascii_digit())
+                        && digs[2][..2].parse::<u32>().unwrap_or(0) <= 60);
+                if h > 23 || m > 59 || !s_ok {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメインラベルが `-` で始まる/終わるか判定する (D1560)。
+///
+/// `a@-b.x`/`a@b-.x` の端ハイフンは DNS ラベルとして非合法で、
+/// 厳格実装は宛名を拒否し寛容実装は受理する (`_` は D1404)。
+#[must_use]
+pub fn has_edge_hyphen_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            let seg = seg.trim();
+            let Some(at) = seg.rfind('@') else { continue };
+            let dom = seg[at + 1..]
+                .trim_end_matches(|c: char| c == '>' || c == ')' || c == ';' || c.is_whitespace());
+            for label in dom.split('.') {
+                if !label.is_empty() && (label.starts_with('-') || label.ends_with('-')) {
+                    return true;
                 }
             }
         }
@@ -34833,6 +35058,50 @@ mod tests {
         assert!(has_dotdot_addr_local(b"To: <a..b@x>\r\n\r\nb"));
         // 正常は不発火
         assert!(!has_dotdot_addr_local(b"From: a.b@x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn special_local_char_は特殊文字を検出する() {
+        // D1557 — a/b@x・a=b@x・a?b@x
+        assert!(has_special_local_char(b"To: a/b@x\r\n\r\nb"));
+        assert!(has_special_local_char(b"To: <a=b@x>\r\n\r\nb"));
+        // 正常宛名は不発火
+        assert!(!has_special_local_char(b"To: a.b@x\r\n\r\nb"));
+        assert!(!has_special_local_char(b"To: a+b@x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn digit_tld_addr_は数値tldを検出する() {
+        // D1558 — a@b.123
+        assert!(has_digit_tld_addr(b"To: a@b.123\r\n\r\nb"));
+        // 普通の TLD は不発火
+        assert!(!has_digit_tld_addr(b"To: a@b.example\r\n\r\nb"));
+        // ドット無しは対象外 (D1507)
+        assert!(!has_digit_tld_addr(b"From: a@123\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bad_clock_は範囲外時刻を検出する() {
+        // D1559 — 25:00・12:60
+        assert!(has_bad_clock(
+            b"Date: Thu, 25 Sep 2025 25:00:00 +0000\r\n\r\nb"
+        ));
+        assert!(has_bad_clock(
+            b"Date: Thu, 25 Sep 2025 12:60:00 +0000\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_bad_clock(
+            b"Date: Thu, 25 Sep 2025 23:59:59 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn edge_hyphen_domain_は端ハイフンを検出する() {
+        // D1560 — a@-b.x / a@b-.x
+        assert!(has_edge_hyphen_domain(b"To: a@-b.x\r\n\r\nb"));
+        assert!(has_edge_hyphen_domain(b"To: a@b-.x\r\n\r\nb"));
+        // 中のハイフンは正常
+        assert!(!has_edge_hyphen_domain(b"To: a@my-host.x\r\n\r\nb"));
     }
 
     #[test]
