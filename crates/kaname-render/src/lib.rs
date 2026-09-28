@@ -1032,6 +1032,14 @@ pub struct Envelope {
     pub colon_param_val: bool,
     /// Date 欄の二つの曜日名 (D1660 — 日付解析ずれ)。
     pub two_daynames: bool,
+    /// `Message-ID:` の `<>` 欠落 (D1661 — 識別子照合ずれ)。
+    pub unbracketed_msgid: bool,
+    /// Date 欄の符号なしゾーン (D1662 — 日付解析ずれ)。
+    pub unsigned_zone: bool,
+    /// param クオート閉じ後の続き文字 (D1663 — param 読みずれ)。
+    pub quote_tail_param: bool,
+    /// Date 欄の年先頭並び (D1664 — 日付解析ずれ)。
+    pub year_first_date: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3507,6 +3515,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let colon_param_val = has_colon_param_val(bytes);
     // D1660: Date 欄の二曜日名
     let two_daynames = has_two_daynames(bytes);
+    // D1661: Message-ID の <> 欠落
+    let unbracketed_msgid = has_unbracketed_msgid(bytes);
+    // D1662: Date 欄の符号なしゾーン
+    let unsigned_zone = has_unsigned_zone(bytes);
+    // D1663: param クオート閉じ後の続き文字
+    let quote_tail_param = has_quote_tail_param(bytes);
+    // D1664: Date 欄の年先頭並び
+    let year_first_date = has_year_first_date(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3925,6 +3941,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         boundary_edge_ws,
         colon_param_val,
         two_daynames,
+        unbracketed_msgid,
+        unsigned_zone,
+        quote_tail_param,
+        year_first_date,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -22554,6 +22574,190 @@ pub fn has_two_daynames(raw: &[u8]) -> bool {
             }
         }
         if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID:`/`Resent-Message-ID:` の値に `<` が無いか判定する
+/// (D1661)。
+///
+/// `Message-ID: a@b` — msg-id は `<id-left@id-right>` を要求し、
+/// 括弧を省略する実装と欄ごと捨てる実装でスレッド照合がずれる
+/// (In-Reply-To/References の裸参照は `has_bare_msgid_ref`)。
+#[must_use]
+pub fn has_unbracketed_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let v = l
+            .strip_prefix("message-id:")
+            .or_else(|| l.strip_prefix("resent-message-id:"));
+        let Some(v) = v else { continue };
+        let v = v.trim();
+        if !v.is_empty() && !v.contains('<') && !v.contains('>') {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 欄の時刻の後に符号なし4桁ゾーンがあるか判定する (D1662)。
+///
+/// `Date: 25 Sep 2025 12:00 0900` — `0900` をゾーンと読む実装と
+/// 余分な語と読む実装で日付がずれる (ゾーン欠落は D1547、
+/// 分断は D1652、範囲外は D1565)。
+#[must_use]
+pub fn has_unsigned_zone(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut seen_time = false;
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            let mut it = t.split(':');
+            let h = it.next().unwrap_or("");
+            let is_time = !h.is_empty()
+                && h.bytes().all(|b| b.is_ascii_digit())
+                && it.next().is_some_and(|m| !m.is_empty() && m.bytes().all(|b| b.is_ascii_digit()));
+            if is_time {
+                seen_time = true;
+                continue;
+            }
+            if seen_time
+                && t.len() == 4
+                && t.bytes().all(|b| b.is_ascii_digit())
+                && !t.starts_with('+')
+                && !t.starts_with('-')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の param で閉じクオートの直後に文字が続くか判定する
+/// (D1663)。
+///
+/// `;x="a"b` — クオート終端で読み切る実装と残す実装で param 値が
+/// ずれる (未終端クオートは D1600)。
+#[must_use]
+pub fn has_quote_tail_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        for seg in v.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let val = seg[eq + 1..].trim();
+            let Some(stripped) = val.strip_prefix('"') else { continue };
+            let Some(end) = stripped.find('"') else { continue };
+            let tail = &stripped[end + 1..];
+            if !tail.trim().is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄が年先頭の並びか判定する (D1664)。
+///
+/// `Date: 2025 Sep 25` — RFC 5322 の並びは `日 月 年`、年先頭を
+/// 読める実装と読めない実装で日付がずれる (月先頭は D1577)。
+#[must_use]
+pub fn has_year_first_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let mut toks = l[colon + 1..].split_whitespace().peekable();
+        // 先頭の曜日名 `Thu,` を落とす
+        if toks.peek().is_some_and(|t| t.ends_with(',')) {
+            toks.next();
+        }
+        let Some(first_tok) = toks.next() else { continue };
+        if !(first_tok.len() == 4 && first_tok.bytes().all(|b| b.is_ascii_digit())) {
+            continue;
+        }
+        if toks.any(|t| t.len() >= 3 && t.bytes().all(|b| b.is_ascii_alphabetic())) {
             return true;
         }
     }
@@ -41786,6 +41990,50 @@ mod tests {
         assert!(!has_two_daynames(b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
         assert!(!has_two_daynames(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
         assert!(!has_two_daynames(b"Subject: Mon, Tue\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unbracketed_msgid_括弧なき識別子を検出する() {
+        // D1661 — `Message-ID: a@b` 裸形
+        assert!(has_unbracketed_msgid(b"Message-ID: a@b\r\n\r\nx"));
+        assert!(has_unbracketed_msgid(b"Resent-Message-ID: xyz\r\n\r\nx"));
+        // 括弧あり・空値・他欄は不発火
+        assert!(!has_unbracketed_msgid(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_unbracketed_msgid(b"Message-ID:\r\n\r\nx"));
+        assert!(!has_unbracketed_msgid(b"In-Reply-To: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unsigned_zone_符号なしゾーンを検出する() {
+        // D1662 — `12:00 0900`
+        assert!(has_unsigned_zone(b"Date: 25 Sep 2025 12:00 0900\r\n\r\nx"));
+        assert!(has_unsigned_zone(b"Date: Thu, 25 Sep 2025 12:00:00 0530\r\n\r\nx"));
+        // 符号付き・ゾーン無し・他欄は不発火
+        assert!(!has_unsigned_zone(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_unsigned_zone(b"Date: 25 Sep 2025 12:00:00\r\n\r\nx"));
+        assert!(!has_unsigned_zone(b"Subject: 12:00 0900\r\n\r\nx"));
+    }
+
+    #[test]
+    fn quote_tail_param_閉じクオート後の続き文字を検出する() {
+        // D1663 — `;x="a"b`
+        assert!(has_quote_tail_param(b"Content-Type: text/plain; charset=\"utf-8\"x\r\n\r\nx"));
+        assert!(has_quote_tail_param(b"Content-Disposition: attachment; filename=\"a.txt\".exe\r\n\r\nx"));
+        // 正常クオート・末尾空白のみ・他欄は不発火
+        assert!(!has_quote_tail_param(b"Content-Type: text/plain; charset=\"utf-8\"\r\n\r\nx"));
+        assert!(!has_quote_tail_param(b"Content-Type: text/plain; x=\"a\" \r\n\r\nx"));
+        assert!(!has_quote_tail_param(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn year_first_date_年先頭日付を検出する() {
+        // D1664 — `2025 Sep 25`
+        assert!(has_year_first_date(b"Date: 2025 Sep 25 12:00:00 +0900\r\n\r\nx"));
+        assert!(has_year_first_date(b"Date: Thu, 2025 Sep 25\r\n\r\nx"));
+        // 正規並び・他欄は不発火
+        assert!(!has_year_first_date(b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_year_first_date(b"Date: Thu, 25 Sep 2025\r\n\r\nx"));
+        assert!(!has_year_first_date(b"Subject: 2025 Sep 25\r\n\r\nx"));
     }
 
     #[test]

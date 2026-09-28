@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1661: `Message-ID:`/`Resent-Message-ID:` の `<>` 欠落を検出 — `Envelope` に `unbracketed_msgid` を追加 (裸参照は `bare_msgid_ref` が In-Reply-To/References のみ担当)。
+
+### Security — D1662: Date 欄の符号なし4桁ゾーン (`12:00 0900`) を検出 — `Envelope` に `unsigned_zone` を追加。
+
+### Security — D1663: param 値の閉じクオート後の続き文字 (`;x="a"b`) を検出 — `Envelope` に `quote_tail_param` を追加 (未終端クオートは D1600)。
+
+### Security — D1664: Date 欄の年先頭並び (`2025 Sep 25`) を検出 — `Envelope` に `year_first_date` を追加 (月先頭は D1577)。
+
 ### Security — D1657: Date 欄の二時刻 (`12:00:00 14:30:00`) を検出 — `Envelope` に `date_two_times` を追加。
 
 ### Security — D1658: クオート boundary 値の端空白 (`" x"`/`"x "`) を検出 — `Envelope` に `boundary_edge_ws` を追加 (中央空白は bchars 正規)。

@@ -5545,6 +5545,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.unbracketed_msgid {
+        render_risks.push(
+            "Message-ID 欄の値に「<>」がありません\
+             —括弧を省略する実装と欄ごと捨てる実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.unsigned_zone {
+        render_risks.push(
+            "Date 欄のタイムゾーンに符号がありません\
+             —ゾーンと読む実装と余分な語と読む実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.quote_tail_param {
+        render_risks.push(
+            "param のクオートの閉じた後に文字が続いています\
+             —読み切る実装と残す実装で値がずれます"
+                .to_string(),
+        );
+    }
+    if env.year_first_date {
+        render_risks.push(
+            "Date 欄が年先頭の並びです\
+             —読める実装と読めない実装で日付がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
