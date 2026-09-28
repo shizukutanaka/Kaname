@@ -854,3 +854,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1438 | multipart/report に report-type= 無し | 報告種別が特定不能 | CT 行の report-type= 有無を検査 | kaname-render |
 | D1439 | 裸の Charset:/Encoding: 宣言欄 (RFC 2978/1154 廃止) | 尊重/無視で本文の読みがずれる | 外側ヘッダの charset:/encoding: 行を検査 | kaname-render |
 | D1440 | 非 message/* パートヘッダに From/Subject 等のメッセージ級欄 | パート属性と読む実装と飾り扱いでずれ | パートヘッダ run 内のメッセージ級欄を検査 | kaname-render |
+| D1441 | HTTP 応答欄 (Set-Cookie/Location/Refresh/ETag/CSP 等) の混入 | 別制度の記録=連結ミスor誘導の兆候 | 外側ヘッダの HTTP 応答欄を検査 | kaname-render |
+| D1442 | multipart/related に type= 無し | ルート部品の型が特定不能 (RFC 2387) | CT 行の type= 有無を検査 | kaname-render |
+| D1443 | In-Reply-To に複数 msgid 併記 | 単一返信先欄の統合体裁偽造 | 値内の msgid 数を検査 | kaname-render |
+| D1444 | 添付名の末尾 . / 空白 | Windows が保存時に剥がし宣言名とずれる | CT/CD 添付名値の末尾を検査 | kaname-render |

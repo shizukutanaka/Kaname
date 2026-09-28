@@ -592,6 +592,14 @@ pub struct Envelope {
     pub obsolete_decl_headers: bool,
     /// D1440 — 非 message/* パートヘッダにメッセージ級欄が混在する。
     pub part_field_headers: bool,
+    /// D1441 — HTTP 応答欄 (Set-Cookie/Location/Refresh 等) が混在する。
+    pub http_response_headers: bool,
+    /// D1442 — multipart/related に `type=` 指定が無い。
+    pub related_no_type: bool,
+    /// D1443 — In-Reply-To が複数 msgid を併記する。
+    pub multi_inreply: bool,
+    /// D1444 — 添付名が `.` または空白で終わる (Windows 保存名ずれ)。
+    pub filename_trailing: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2695,6 +2703,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let missing_report_type = has_missing_report_type(bytes);
     let obsolete_decl_headers = has_obsolete_decl_headers(bytes);
     let part_field_headers = has_part_field_headers(bytes);
+    let http_response_headers = has_http_response_headers(bytes);
+    let related_no_type = has_related_no_type(bytes);
+    let multi_inreply = has_multi_inreply(bytes);
+    let filename_trailing = has_filename_trailing(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2893,6 +2905,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_report_type,
         obsolete_decl_headers,
         part_field_headers,
+        http_response_headers,
+        related_no_type,
+        multi_inreply,
+        filename_trailing,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -10710,6 +10726,166 @@ pub fn has_part_field_headers(raw: &[u8]) -> bool {
                 | "sender"
         ) {
             return true;
+        }
+    }
+    false
+}
+
+/// `Set-Cookie:`/`Location:`/`Refresh:`/`WWW-Authenticate:`/`ETag:`/
+/// `P3P:`/`X-Frame-Options:`/`X-Content-Type-Options:`/
+/// `Content-Security-Policy:`/`Strict-Transport-Security:`/
+/// `Accept-Ranges:`/`Allow:`/`Last-Modified:` 等の HTTP 応答欄が
+/// あるか判定する (D1441)。
+///
+/// HTTP 応答の制度欄 (D1344 が扱った Content-Length 等の
+/// フレーミング欄とは別群) — メールに現れるのはプロキシ連結・
+/// ページ保存残渣・または内容側の誘導 (Location/Refresh は
+/// リダイレクト命令) の兆候。受信機の検査記録でない HTTP 欄は
+/// 送信側が書き込んだ自称・漏洩の形。
+#[must_use]
+pub fn has_http_response_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        l.starts_with("set-cookie:")
+            || l.starts_with("set-cookie2:")
+            || l.starts_with("location:")
+            || l.starts_with("refresh:")
+            || l.starts_with("www-authenticate:")
+            || l.starts_with("proxy-authenticate:")
+            || l.starts_with("etag:")
+            || l.starts_with("p3p:")
+            || l.starts_with("x-frame-options:")
+            || l.starts_with("x-content-type-options:")
+            || l.starts_with("content-security-policy:")
+            || l.starts_with("strict-transport-security:")
+            || l.starts_with("accept-ranges:")
+            || l.starts_with("allow:")
+            || l.starts_with("last-modified:")
+    })
+}
+
+/// `multipart/related` に `type=` 指定が無いか判定する (D1442)。
+///
+/// RFC 2387 は `multipart/related` に `type=` (ルート部品の型) を
+/// 必須とする — 無いと関連リソースの親が特定できず、ルートを
+/// start= で探す実装・先頭パートを使う実装で表示がずれる
+/// (D1426 の指し手欠落とは別: こちらは型の欠落)。
+#[must_use]
+pub fn has_related_no_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        l.strip_prefix("content-type:").is_some_and(|v| {
+            v.trim_start().starts_with("multipart/related")
+                && !l.contains("type=")
+        })
+    })
+}
+
+/// `In-Reply-To:` が複数の msgid (`<a@b><c@d>`) を並べるか
+/// 判定する (D1443)。
+///
+/// In-Reply-To は単一の返信先を指す欄 — 複数 msgid の併記は
+/// 複数スレッドを束ねる「統合の体裁」を作る偽造形で、先頭を読む
+/// 実装と末尾を読む実装でスレッド帰属がずれる。
+#[must_use]
+pub fn has_multi_inreply(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("in-reply-to:") else {
+            continue;
+        };
+        if v.matches('<').count() >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// 添付名 (`filename=`/`name=`) が `.` または空白で終わるか
+/// 判定する (D1444)。
+///
+/// Windows は名末の `.` と空白を保存時に剥がす — `evil.exe.`
+/// は `evil.exe` として落ち、宣言名と保存名がずれる
+/// (拡張子の見え方を変える名末工作)。
+#[must_use]
+pub fn has_filename_trailing(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        for needle in ["filename=", "name=", "filename*=", "name*="] {
+            let mut rest = l;
+            while let Some(rel) = rest.find(needle) {
+                // 属性名の前がトークン境界か確認 (xfilename= 等を除外)
+                if rel > 0 {
+                    let prev = rest[..rel].chars().last().unwrap_or(' ');
+                    if prev != ';' && prev != ':' && !prev.is_whitespace() {
+                        rest = &rest[rel + needle.len()..];
+                        continue;
+                    }
+                }
+                let after = &rest[rel + needle.len()..];
+                let (val, next) = if let Some(q) = after.strip_prefix('"') {
+                    match q.find('"') {
+                        Some(b) => (&q[..b], &q[b..]),
+                        None => (q, &q[q.len()..]),
+                    }
+                } else {
+                    let end = after
+                        .find(';')
+                        .or_else(|| after.find(char::is_whitespace))
+                        .unwrap_or(after.len());
+                    (&after[..end], &after[end..])
+                };
+                if val.ends_with('.') || val.ends_with(' ') {
+                    return true;
+                }
+                rest = next;
+            }
         }
     }
     false
@@ -26858,6 +27034,68 @@ mod tests {
         // パート欄が Content-* のみなら不発火
         assert!(!has_part_field_headers(
             b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn http_response_headers_はhttp応答欄を検出する() {
+        // D1441 — Set-Cookie/Location/Refresh 等
+        assert!(has_http_response_headers(
+            b"From: a@b\r\nSet-Cookie: sid=1; HttpOnly\r\n\r\nx"
+        ));
+        assert!(has_http_response_headers(
+            b"From: a@b\r\nLocation: https://evil.example\r\n\r\nx"
+        ));
+        // 通常ヘッダは不発火
+        assert!(!has_http_response_headers(
+            b"From: a@b\r\nSubject: hi\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn related_no_type_は型不明の関連器を検出する() {
+        // D1442 — multipart/related に type= 無し
+        assert!(has_related_no_type(
+            b"Content-Type: multipart/related; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        // type= 指定があれば不発火
+        assert!(!has_related_no_type(
+            b"Content-Type: multipart/related; type=\"text/html\"; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        // 通常の multipart は対象外
+        assert!(!has_related_no_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+    }
+
+    #[test]
+    fn multi_inreply_は複数返信先併記を検出する() {
+        // D1443 — In-Reply-To に msgid が2つ以上
+        assert!(has_multi_inreply(
+            b"From: a@b\r\nIn-Reply-To: <x@y> <z@w>\r\n\r\nx"
+        ));
+        // 単一 msgid は不発火
+        assert!(!has_multi_inreply(
+            b"From: a@b\r\nIn-Reply-To: <x@y>\r\n\r\nx"
+        ));
+        // References の複数併記は正規 — 対象外
+        assert!(!has_multi_inreply(
+            b"From: a@b\r\nReferences: <x@y> <z@w>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn filename_trailing_は名末工作を検出する() {
+        // D1444 — 名末の . や空白
+        assert!(has_filename_trailing(
+            b"Content-Disposition: attachment; filename=\"evil.exe.\"\r\n\r\nAAAA"
+        ));
+        assert!(has_filename_trailing(
+            b"Content-Disposition: attachment; filename=\"evil.exe \"\r\n\r\nAAAA"
+        ));
+        // 通常の添付名は不発火
+        assert!(!has_filename_trailing(
+            b"Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\r\nAAAA"
         ));
     }
 

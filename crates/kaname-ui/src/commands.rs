@@ -4006,6 +4006,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.http_response_headers {
+        render_risks.push(
+            "HTTP 応答の欄 (Set-Cookie/Location/Refresh 等) が混在しています\
+             —メールに現れるべきでない別制度の記録です"
+                .to_string(),
+        );
+    }
+    if env.related_no_type {
+        render_risks.push(
+            "multipart/related に type 指定がありません\
+             —関連リソースの親が特定できない器です"
+                .to_string(),
+        );
+    }
+    if env.multi_inreply {
+        render_risks.push(
+            "In-Reply-To が複数の返信先を併記しています\
+             —複数スレッドを束ねる「統合の体裁」の形です"
+                .to_string(),
+        );
+    }
+    if env.filename_trailing {
+        render_risks.push(
+            "添付名が . または空白で終わっています\
+             —保存時に名が削られ宣言名と保存名がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

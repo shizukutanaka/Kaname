@@ -1,5 +1,50 @@
 ## [Unreleased]
 
+### Security — D1441:
+
+- **問題**: `Set-Cookie:`/`Location:`/`Refresh:`/`ETag:`/
+  `X-Frame-Options:`/`Content-Security-Policy:` 等の HTTP 応答
+  制度欄 — メールに現れるのはプロキシ連結・ページ保存残渣・
+  内容側の誘導 (Location/Refresh はリダイレクト命令) の兆候
+  (D1344 のフレーミング欄とは別群)。
+- **修正**: `has_http_response_marks` が外側ヘッダの HTTP
+  応答欄を検査する。
+- **教訓**: 別の制度の記録が届くとき、経路の連結ミスか
+  内容側がその制度を演じているかのどちらかである。
+
+### Security — D1442:
+
+- **問題**: `multipart/related` に `type=` 指定が無い — RFC 2387
+  の必須欄を欠くと関連リソースの親 (ルート部品) の型が特定
+  できず、start= で探す実装と先頭パートを使う実装で表示が
+  ずれる (D1426 の指し手欠落と別の型欠落)。
+- **修正**: `has_related_no_type` が `multipart/related` の
+  CT 行の `type=` 有無を全パートで検査する。
+- **教訓**: 関連の器は「どの型の部品が親か」の明記がないと
+  各読み手が勝手に親を選ぶ。
+
+### Security — D1443:
+
+- **問題**: `In-Reply-To:` が複数の msgid (`<a@b> <c@d>`) を
+  併記 — 単一返信先の欄に複数を並べる形は複数スレッドを
+  束ねる「統合の体裁」の偽造で、先頭を読む実装と末尾を読む
+  実装でスレッド帰属がずれる。
+- **修正**: `has_multi_inreply` が In-Reply-To 値内の
+  msgid `<…>` の数を検査する (References の複数併記は正規)。
+- **教訓**: 「一つだけ指す欄」に二つ指させる併記は、
+  読み手に帰属の選ばせ合いをさせる工作である。
+
+### Security — D1444:
+
+- **問題**: 添付名 (`filename=`/`name=`) が `.` または空白で
+  終わる — Windows は名末の `.`・空白を保存時に剥がすため
+  `evil.exe.` が `evil.exe` として落ち、宣言名と保存名がずれる。
+- **修正**: `has_filename_trailing` が CT/CD 行の添付名値の
+  末尾 `.`/空白を検査する (トークン境界外の `xfilename=` は
+  対象外)。
+- **教訓**: 名札の名と保存される名がずれると、見せた種類と
+  実際に落ちた種類が違うものになる。
+
 ### Security — D1437:
 
 - **問題**: `Subject:` が encoded-word (`=?utf-8?B?UmU6?=` 等) で
