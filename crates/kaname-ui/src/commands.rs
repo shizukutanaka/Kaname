@@ -3754,6 +3754,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.junk_cte_value {
+        render_risks.push(
+            "Content-Transfer-Encoding の値が単一トークンではありません\
+             —先頭だけ読む実装と全体を未知値とする実装で復号がずれます"
+                .to_string(),
+        );
+    }
+    if env.deliver_to_mark {
+        render_risks.push(
+            "配送到着の記録欄 (Deliver-To 等) を送信側が書き込んでいます\
+             —「配送済み」の体裁を自称する旧来欄です"
+                .to_string(),
+        );
+    }
+    if env.literal_msgid_domain {
+        render_risks.push(
+            "Message-ID/References の識別子のドメインが [IP] リテラルです\
+             —通常の MUA が生成しない手作り識別子です"
+                .to_string(),
+        );
+    }
+    if env.empty_addr_side {
+        render_risks.push(
+            "アドレスのローカル部またはドメイン部が空です (a@/@b 等)\
+             —抽出と拒否で宛名の表示がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

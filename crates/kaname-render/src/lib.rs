@@ -510,6 +510,17 @@ pub struct Envelope {
     /// D1404 — アドレスのドメイン部に `_` を含む
     /// (非合法ラベル文字の名指し差異)。
     pub underscore_domain: bool,
+    /// D1405 — CTE 値が単一トークンでない (デコード採用の実装差異)。
+    pub junk_cte_value: bool,
+    /// D1406 — `Deliver-To:`/`Deliver-Date:`/`X-Deliver-To:` 等の
+    /// 裸の配送到着記録欄 (「配送済み」の自称)。
+    pub deliver_to_mark: bool,
+    /// D1407 — Message-ID/In-Reply-To/References の msgid の
+    /// ドメイン部が `[…]` リテラル (手作り識別子)。
+    pub literal_msgid_domain: bool,
+    /// D1408 — アドレスのローカル部/ドメイン部が空 (a@/@b/a@@b)
+    /// — 抽出実装と拒否実装で宛名がずれる。
+    pub empty_addr_side: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2577,6 +2588,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let long_boundary = has_long_boundary(bytes);
     let url_display_name = has_url_display_name(bytes);
     let underscore_domain = has_underscore_domain(bytes);
+    let junk_cte_value = has_junk_cte_value(bytes);
+    let deliver_to_mark = has_deliver_to_mark(bytes);
+    let literal_msgid_domain = has_literal_msgid_domain(bytes);
+    let empty_addr_side = has_empty_addr_side(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2739,6 +2754,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         long_boundary,
         url_display_name,
         underscore_domain,
+        junk_cte_value,
+        deliver_to_mark,
+        literal_msgid_domain,
+        empty_addr_side,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -9119,6 +9138,191 @@ pub fn has_underscore_domain(raw: &[u8]) -> bool {
             if domain.contains('_') {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値が単一トークンでないか判定する
+/// (D1405)。
+///
+/// `base64; x`/`base64, junk`/`base64 extra` のようなゴミ付き値は、
+/// 先頭トークンだけ読む実装と全体を未知値として扱う実装で符号化
+/// 解釈がずれる (前者は base64 を復号、後者は素通し → ペイロードの
+/// 見え方が割れる)。正当な値は `7bit|8bit|binary|quoted-printable|
+/// base64|x-*` の単一トークンのみ。
+#[must_use]
+pub fn has_junk_cte_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        let v = v.trim();
+        // 単一トークン = 空白を含まない・`;`/`,` を含まない
+        let clean = !v.is_empty()
+            && !v.contains(';')
+            && !v.contains(',')
+            && v.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !clean {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Deliver-To:`/`Deliver-Date:`/`X-Deliver-To:`/`X-Delivery:` 等の
+/// 配送到着記録欄があるか判定する (D1406)。
+///
+/// `Deliver-To:`/`Deliver-Date:` は配送器が到着時に付ける記録 —
+/// 送信側が書き込むと「配送済み」の体裁を自称する (`Delivered-To`/
+/// `X-Envelope-To` 等の系統は既存印群が担当)。裸欄のみ対象。
+#[must_use]
+pub fn has_deliver_to_mark(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        l.starts_with("deliver-to:")
+            || l.starts_with("deliver-date:")
+            || l.starts_with("x-deliver-to:")
+            || l.starts_with("x-delivery:")
+    })
+}
+
+/// `Message-ID:`/`In-Reply-To:`/`References:` の msgid のドメイン部が
+/// ドメインリテラル `[…]` か判定する (D1407)。
+///
+/// `<id@[127.0.0.1]>` のようなリテラルドメインの識別子は、通常の
+/// MUA が生成する識別子には見られない形 — 手作り生成品の兆候
+/// (D1370 の差出人欄版の姉妹)。D1338 は非 msgid 値を担当。
+#[must_use]
+pub fn has_literal_msgid_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let v = l
+            .strip_prefix("message-id:")
+            .or_else(|| l.strip_prefix("in-reply-to:"))
+            .or_else(|| l.strip_prefix("references:"));
+        let Some(v) = v else { continue };
+        // `<…@…>` の @ 以降が `[` で始まるか
+        for (at_idx, _) in v.match_indices('@') {
+            let after = &v[at_idx + 1..];
+            if after.trim_start().starts_with('[') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のアドレスのローカル部またはドメイン部が空か判定する
+/// (D1408)。
+///
+/// `a@`・`@b`・`a@@b` のような片側が空のアドレスは、抽出する実装と
+/// 拒否する実装で表示される差出人・宛先がずれる (dot-atom 違反
+/// D1353 の残る形 — 空側はそもそも atom が無い)。
+#[must_use]
+pub fn has_empty_addr_side(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !is_addr_header_name(lower[..colon].trim_end()) {
+            continue;
+        }
+        let val = &lower[colon + 1..];
+        // クオート/コメント外の `@` を走査し、両側の atom が空か
+        // 判定する。`"a@b"@x` (クオート局所部の正当形) は `@` の直前が
+        // 閉じクオートなので対象外 (D1353 で残した実装誤爆の回避)。
+        let bytes = val.as_bytes();
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for (i, &b) in bytes.iter().enumerate() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q && prev != b'\\' {
+                in_c = 1;
+            } else if !in_q && b == b'@' {
+                let after_quote = i > 0 && bytes[i - 1] == b'"';
+                if after_quote {
+                    prev = b;
+                    continue;
+                }
+                let mut ls = i;
+                while ls > 0 {
+                    let p = bytes[ls - 1];
+                    if matches!(p, b',' | b' ' | b'\t' | b'<' | b'>' | b';' | b'(') {
+                        break;
+                    }
+                    ls -= 1;
+                }
+                let mut de = i + 1;
+                while de < bytes.len() {
+                    let n = bytes[de];
+                    if matches!(n, b',' | b' ' | b'\t' | b'<' | b'>' | b';' | b'(') {
+                        break;
+                    }
+                    de += 1;
+                }
+                if ls == i || de == i + 1 || bytes[i + 1..de].contains(&b'@') {
+                    return true;
+                }
+            }
+            prev = b;
         }
     }
     false
@@ -24681,6 +24885,71 @@ mod tests {
             b"From: my_user@host.example\r\n\r\nbody"
         ));
         assert!(!has_underscore_domain(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn junk_cte_value_は値のゴミを検出する() {
+        // D1405 — CTE 値が単一トークンでない
+        assert!(has_junk_cte_value(
+            b"Content-Transfer-Encoding: base64; x\r\n\r\nbody"
+        ));
+        assert!(has_junk_cte_value(
+            b"Content-Transfer-Encoding: base64 extra\r\n\r\nbody"
+        ));
+        assert!(has_junk_cte_value(
+            b"Content-Transfer-Encoding: \r\n\r\nbody"
+        ));
+        // 通常値は不発火
+        assert!(!has_junk_cte_value(
+            b"Content-Transfer-Encoding: base64\r\n\r\nbody"
+        ));
+        assert!(!has_junk_cte_value(b"Content-Type: text/plain\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn deliver_to_mark_は到着記録欄を検出する() {
+        // D1406 — Deliver-To/Deliver-Date/X-Deliver-To
+        assert!(has_deliver_to_mark(
+            b"From: a@b\r\nDeliver-To: user@x\r\n\r\nbody"
+        ));
+        assert!(has_deliver_to_mark(
+            b"From: a@b\r\nX-Deliver-To: user@x\r\n\r\nbody"
+        ));
+        assert!(!has_deliver_to_mark(
+            b"From: a@b\r\nDelivered-To: user@x\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn literal_msgid_domain_はリテラル識別子を検出する() {
+        // D1407 — msgid のドメインが […]
+        assert!(has_literal_msgid_domain(
+            b"Message-ID: <abc@[127.0.0.1]>\r\n\r\nbody"
+        ));
+        assert!(has_literal_msgid_domain(
+            b"In-Reply-To: <x@[IPv6:::1]>\r\n\r\nbody"
+        ));
+        // 通常の msgid は不発火
+        assert!(!has_literal_msgid_domain(
+            b"Message-ID: <abc@host.example>\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn empty_addr_side_は片側空アドレスを検出する() {
+        // D1408 — a@ / @b / a@@b
+        assert!(has_empty_addr_side(b"From: a@\r\n\r\nbody"));
+        assert!(has_empty_addr_side(b"From: @b\r\n\r\nbody"));
+        assert!(has_empty_addr_side(b"To: a@@b\r\n\r\nbody"));
+        // 通常アドレスは不発火
+        assert!(!has_empty_addr_side(b"From: a@b\r\n\r\nbody"));
+        assert!(!has_empty_addr_side(
+            b"To: \"X\" <a@b>, c@d\r\n\r\nbody"
+        ));
+        // クオート局所部 `"a@b"@x` は正当形なので不発火
+        assert!(!has_empty_addr_side(
+            b"From: \"a@b\"@x\r\n\r\nbody"
+        ));
     }
 
     #[test]

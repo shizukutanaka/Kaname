@@ -818,3 +818,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1402 | ~~**boundary パラメータの 70 文字超過が未検査**~~ **(解消済み)** | P2 | 切り詰め実装と区切り解釈がずれる。修正: `has_long_boundary` → render_risks | 枠からはみ出す見出し線 |
 | D1403 | ~~**表示名中の URL 文字列が未検査**~~ **(解消済み)** | P2 | 表示名リンク化で誘導経路に。修正: `has_url_display_name` → render_risks | URL を刷った名刺 |
 | D1404 | ~~**アドレスドメインのアンダースコア混入が未検査**~~ **(解消済み)** | P3 | 非合法ラベル文字で名指しがずれる。修正: `has_underscore_domain` → render_risks | 区画外記号の宛名 |
+| D1405 | Content-Transfer-Encoding の値が単一トークンでない | base64; x 等は先頭読みと未知値扱いで復号がずれる | 値が単一クリーントークンでない CTE を検出 | kaname-render |
+| D1406 | Deliver-To/Deliver-Date/X-Deliver-To 等の裸到着記録欄 | 送信側が「配送済み」の体裁を自称 | 外側ヘッダの裸到着記録欄を検出 | kaname-render |
+| D1407 | msgid のドメイン部が […] リテラル | 手作り生成品の兆候 (MUA は生成しない) | msgid 欄の @ 直後が [ で始まる形を検出 | kaname-render |
+| D1408 | アドレスのローカル/ドメイン部が空 (a@/@b/a@@b) | 抽出と拒否で宛名がずれる | クオート/コメント外 @ の両側 atom 空を検出 | kaname-render |
