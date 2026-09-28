@@ -26,7 +26,7 @@
 
 ### Security — D1575: アドレス欄に全角ピリオド (U+3002 `。`/U+FF0E `．`/U+FF61 `｡`) がある場合を検出 — `Envelope` に `fullwidth_dot_addr` を追加。ASCII 正規化と生読みでドット解釈がずれる (全角＠ D1568・全角括弧 D1549 の姉妹)。
 
-### Security — D1576: `Message-ID:`/`In-Reply-To:`/`References:` の `<…>` 内に空白 (`<a b@x>`) がある場合を検出 — `Envelope` に `spaced_msgid` を追加。空白除去照合 vs 識別子破棄でスレッド照合がずれる (端の空白は D1516)。
+### Security — D1576: `Message-ID:`/`In-Reply-To:`/`References:` の `<…>` 内ローカル部がドットで始まる/終わる (`<.a@x>`/`<a.@x>`) 場合を検出 — `Envelope` に `msgid_edge_dot_local` を追加。空 atom のローカル部を厳格実装は識別子ごと捨てる (連続 `..` は D1567、宛名側は D1553)。
 
 ### Security — D1569: `Date:` 欄の曜日名が実日付と一致しない (`Mon, 25 Sep 2025` 等) 場合を検出 — `kaname-render` の `Envelope` に `weekday_mismatch` を追加。曜日を検証する実装と無視する実装で日付の信頼性評価がずれる。
 

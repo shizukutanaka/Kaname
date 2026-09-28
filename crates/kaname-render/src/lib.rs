@@ -862,8 +862,8 @@ pub struct Envelope {
     pub bare_ipv4_domain: bool,
     /// 宛名欄の全角ピリオド (D1575 — 宛名抽出ずれ)。
     pub fullwidth_dot_addr: bool,
-    /// msgid 内部空白 (D1576 — 照合ずれ)。
-    pub spaced_msgid: bool,
+    /// msgid ローカル部の端ドット (D1576 — 照合ずれ)。
+    pub msgid_edge_dot_local: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3169,8 +3169,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bare_ipv4_domain = has_bare_ipv4_domain(bytes);
     // D1575: 全角ピリオド宛名
     let fullwidth_dot_addr = has_fullwidth_dot_addr(bytes);
-    // D1576: msgid 内部空白
-    let spaced_msgid = has_spaced_msgid(bytes);
+    // D1576: msgid ローカル端ドット
+    let msgid_edge_dot_local = has_msgid_edge_dot_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3504,7 +3504,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         multi_slash_ct,
         bare_ipv4_domain,
         fullwidth_dot_addr,
-        spaced_msgid,
+        msgid_edge_dot_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -17916,12 +17916,13 @@ pub fn has_fullwidth_dot_addr(raw: &[u8]) -> bool {
     false
 }
 
-/// msgid 系欄の `<…>` 内に空白があるか判定する (D1576)。
+/// msgid 系欄の `<…>` 内ローカル部がドットで始まる/終わるか判定する (D1576)。
 ///
-/// `<a b@x>` の内部空白は、除去して照合する実装と識別子ごと
-/// 捨てる実装でスレッド照合がずれる (括弧内空白 D1516 は端のみ)。
+/// `<.a@x>`/`<a.@x>` の端ドットは空 atom を含み、厳格実装は
+/// 識別子を捨てスレッド照合がずれる (連続 `..` は D1567、
+/// 宛名側は D1553)。
 #[must_use]
-pub fn has_spaced_msgid(raw: &[u8]) -> bool {
+pub fn has_msgid_edge_dot_local(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let mut logical = String::with_capacity(text.len());
@@ -17949,8 +17950,11 @@ pub fn has_spaced_msgid(raw: &[u8]) -> bool {
             let after = &rest[lt + 1..];
             let Some(gt) = after.find('>') else { break };
             let inner = &after[..gt];
-            if inner.trim().chars().any(|c| c.is_whitespace()) {
-                return true;
+            if let Some(at) = inner.find('@') {
+                let local = &inner[..at];
+                if local.starts_with('.') || local.ends_with('.') {
+                    return true;
+                }
             }
             rest = &after[gt + 1..];
         }
@@ -36032,10 +36036,18 @@ mod tests {
     }
 
     #[test]
-    fn spaced_msgid_は内部空白を検出する() {
-        // D1576 — <a b@x>
-        assert!(has_spaced_msgid(b"Message-ID: <a b@x>\r\n\r\nb"));
-        assert!(!has_spaced_msgid(b"Message-ID: <a.b@x>\r\n\r\nb"));
+    fn msgid_edge_dot_local_は端ドットを検出する() {
+        // D1576 — <.a@x> / <a.@x>
+        assert!(has_msgid_edge_dot_local(
+            b"Message-ID: <.a@x>\r\n\r\nb"
+        ));
+        assert!(has_msgid_edge_dot_local(
+            b"Message-ID: <a.@x>\r\n\r\nb"
+        ));
+        // 通常形は不発火
+        assert!(!has_msgid_edge_dot_local(
+            b"Message-ID: <a.b@x>\r\n\r\nb"
+        ));
     }
 
     #[test]

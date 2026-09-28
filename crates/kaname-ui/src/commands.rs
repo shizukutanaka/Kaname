@@ -4950,10 +4950,10 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
-    if env.spaced_msgid {
+    if env.msgid_edge_dot_local {
         render_risks.push(
-            "メッセージ識別子の括弧内に空白があります (<a b@x> 等)\
-             —空白を除いて照合する実装と識別子を捨てる実装でスレッドがずれます"
+            "メッセージ識別子のローカル部がドットで始まるか終わっています (<.a@x>・<a.@x> 等)\
+             —厳格実装は識別子を捨て、スレッド照合がずれます"
                 .to_string(),
         );
     }
