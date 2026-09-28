@@ -862,3 +862,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1446 | From/Sender 等 mailbox 欄のグループ構文 | 先頭メンバを差出人に読む/欄捨てるでずれ | クオート・コメント除去後 `:`…`;` を検査 | kaname-render |
 | D1447 | ヘッダ run に `:` を欠く壊れ行混入 | 打ち切り/読み飛ばし/継続で以降全行ずれ | 外側ヘッダ物理行の `:` 有無を検査 | kaname-render |
 | D1448 | ヘッダ名に非印刷文字・空白・非ASCII | 厳格実装は欄ごと拒否で読みずれ | 名前部バイト種 (33–126) を検査 | kaname-render |
+| D1449 | In-Reply-To/References の重複 | 一意欄の重複で先頭/末尾読みがずれる (D1306 は参照欄対象外) | 外側ヘッダの参照欄行数を検査 | kaname-render |
+| D1450 | 識別欄 (From/To/Subject/Message-ID 等) の空値 | 空値と欠落で読みがずれる | 外側ヘッダの識別欄空値を検査 | kaname-render |
+| D1451 | MIME 欄 (Content-Type/Disposition/CTE 等) の空値 | 既定値適用 vs 欄捨てで型・添付判定がずれる | 外側+パート全 run の空値を検査 | kaname-render |
+| D1452 | charset= 空値 | 既定 charset vs 空文字名で文字解釈がずれる | CT 行の charset パラメータ空値を検査 | kaname-render |

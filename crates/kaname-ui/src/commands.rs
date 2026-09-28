@@ -4062,6 +4062,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.dup_thread_headers {
+        render_risks.push(
+            "参照欄 (In-Reply-To/References) が重複しています\
+             —先頭/末尾のどちらを読むかでスレッド帰属がずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_identity_value {
+        render_risks.push(
+            "From/To/Subject 等の識別欄が「欄だけで値無し」の形です\
+             —空値と欠落を読み分ける実装で読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_mime_value {
+        render_risks.push(
+            "Content-Type 等の MIME 欄が「欄だけで値無し」の形です\
+             —既定値を当てる実装と捨てる実装で型の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_charset {
+        render_risks.push(
+            "charset 指定が空値です\
+             —既定文字コードと空文字名のどちらで読むかがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

@@ -608,6 +608,14 @@ pub struct Envelope {
     pub headerless_line: bool,
     /// D1448 — ヘッダ名にフィールド名でない文字 (制御/空白/非ASCII) が混入。
     pub bad_header_name: bool,
+    /// D1449 — In-Reply-To/References が2行以上 (参照欄の重複)。
+    pub dup_thread_headers: bool,
+    /// D1450 — From/To/Subject 等の識別欄が「欄あり値なし」。
+    pub empty_identity_value: bool,
+    /// D1451 — Content-* 系欄が「欄あり値なし」(外側+パート)。
+    pub empty_mime_value: bool,
+    /// D1452 — `charset=` が空値。
+    pub empty_charset: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2719,6 +2727,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let mailbox_group = has_mailbox_group(bytes);
     let headerless_line = has_headerless_line(bytes);
     let bad_header_name = has_bad_header_name(bytes);
+    let dup_thread_headers = has_dup_thread_headers(bytes);
+    let empty_identity_value = has_empty_identity_value(bytes);
+    let empty_mime_value = has_empty_mime_value(bytes);
+    let empty_charset = has_empty_charset(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2925,6 +2937,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         mailbox_group,
         headerless_line,
         bad_header_name,
+        dup_thread_headers,
+        empty_identity_value,
+        empty_mime_value,
+        empty_charset,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -11084,6 +11100,187 @@ pub fn has_bad_header_name(raw: &[u8]) -> bool {
             .any(|b| !(33..=126).contains(&b))
         {
             return true;
+        }
+    }
+    false
+}
+
+/// `In-Reply-To:`/`References:` が外側ヘッダに2行以上あるか判定する
+/// (D1449)。
+///
+/// RFC 5322 §3.6 はこれらも最大1個 — 重複する参照欄は先頭を読む
+/// 実装と末尾を読む実装でスレッド帰属がずれる (D1306 の一意欄
+/// 検査は subject/from/message-id/date/to/cc/bcc/sender/reply-to
+/// までで、参照欄は対象外だった)。
+#[must_use]
+pub fn has_dup_thread_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut in_reply_to = 0usize;
+    let mut references = 0usize;
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("in-reply-to:") {
+            in_reply_to += 1;
+        } else if l.starts_with("references:") {
+            references += 1;
+        }
+        if in_reply_to > 1 || references > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// 識別系欄 (`From:`/`Sender:`/`To:`/`Cc:`/`Subject:`/`Date:`/
+/// `Message-ID:`/`Reply-To:`/`In-Reply-To:`/`References:`/
+/// `Resent-*:`/`Return-Path:`) が「欄はあるが値が空」の形か
+/// 判定する (D1450)。
+///
+/// 欄の欠落 (D1432 等) とは別: 空値は「空文字列の値」と読む
+/// 実装と「欄ごと無い」と読む実装で、差出人・件名・参照の
+/// 読みがずれる。
+#[must_use]
+pub fn has_empty_identity_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some((name, v)) = l.split_once(':') else {
+            continue;
+        };
+        if matches!(
+            name.trim(),
+            "from" | "sender" | "to" | "cc" | "bcc" | "subject" | "date"
+                | "message-id" | "reply-to" | "in-reply-to" | "references"
+                | "resent-from" | "resent-sender" | "resent-to" | "resent-cc"
+                | "resent-bcc" | "resent-date" | "resent-message-id"
+                | "return-path" | "delivered-to" | "errors-to"
+        ) && v.trim().is_empty()
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// MIME 系欄 (`Content-Type:`/`Content-Disposition:`/
+/// `Content-Transfer-Encoding:`/`Content-ID:`/`Content-Location:`/
+/// `Content-Description:`/`MIME-Version:`) が「欄はあるが値が空」
+/// の形か判定する (D1451)。外側とパートの全ヘッダ run を見る。
+///
+/// `Content-Type:` の空値は「既定値 text/plain」を当てる実装と
+/// 壊れたヘッダとして捨てる実装で型の読みがずれ、パート側では
+/// 添付判定そのものがずれる (欠落は missing_content_type が担当)。
+#[must_use]
+pub fn has_empty_mime_value(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lines: Vec<&str> = text.lines().collect();
+    let mut in_header_run = true; // 先頭は外側ヘッダ run
+    for (i, l) in lines.iter().enumerate() {
+        if l.is_empty() {
+            in_header_run = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            // boundary 行の直後はパートのヘッダ run が始まる
+            in_header_run = true;
+            continue;
+        }
+        if !in_header_run || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some((name, v)) = l.split_once(':') else {
+            continue;
+        };
+        if !v.trim().is_empty() {
+            continue;
+        }
+        // 次行が継続行なら折りたたみで値が続く正規形 — 対象外
+        if lines
+            .get(i + 1)
+            .is_some_and(|n| n.starts_with(' ') || n.starts_with('\t'))
+        {
+            continue;
+        }
+        if matches!(
+            name.trim().to_ascii_lowercase().as_str(),
+            "content-type" | "content-disposition" | "content-transfer-encoding"
+                | "content-id" | "content-location" | "content-description"
+                | "mime-version"
+        ) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type` の `charset=` パラメータが空値か判定する
+/// (D1452)。
+///
+/// `charset=`/`charset=""` は「既定 charset」を適用する実装と
+/// 空文字を符号化名として扱う実装で本文の文字解釈がずれる
+/// (危険 charset 値は D1301、宣言と本文の不一致は D1329)。
+#[must_use]
+pub fn has_empty_charset(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find("charset=") {
+            // 属性名の前がトークン境界か確認 (xcharset= 等を除外)
+            if p > 0 {
+                let prev = rest[..p].chars().last().unwrap_or(' ');
+                if prev != ';' && prev != ':' && !prev.is_whitespace() {
+                    rest = &rest[p + 8..];
+                    continue;
+                }
+            }
+            let after = &rest[p + 8..];
+            let empty = if let Some(q) = after.strip_prefix('"') {
+                q.starts_with('"')
+            } else {
+                let end = after
+                    .find(';')
+                    .or_else(|| after.find(char::is_whitespace))
+                    .unwrap_or(after.len());
+                after[..end].trim().is_empty()
+            };
+            if empty {
+                return true;
+            }
+            rest = &rest[p + 8..];
         }
     }
     false
@@ -27362,6 +27559,79 @@ mod tests {
         // 通常名は不発火 (末尾空白の `X-Foo :` は spaced_header_name 側)
         assert!(!has_bad_header_name(
             b"X-Custom-1: v\r\nFrom: a@b\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dup_thread_headers_は参照欄の重複を検出する() {
+        // D1449 — In-Reply-To/References の2行以上
+        assert!(has_dup_thread_headers(
+            b"From: a@b\r\nIn-Reply-To: <x@y>\r\nIn-Reply-To: <z@w>\r\n\r\nx"
+        ));
+        assert!(has_dup_thread_headers(
+            b"From: a@b\r\nReferences: <x@y>\r\nReferences: <z@w>\r\n\r\nx"
+        ));
+        // 各1行なら不発火
+        assert!(!has_dup_thread_headers(
+            b"From: a@b\r\nIn-Reply-To: <x@y>\r\nReferences: <x@y>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn empty_identity_value_は空値の識別欄を検出する() {
+        // D1450 — 欄はあるが値が空
+        assert!(has_empty_identity_value(
+            b"From: a@b\r\nSubject:\r\n\r\nx"
+        ));
+        assert!(has_empty_identity_value(
+            b"From: a@b\r\nTo:   \r\n\r\nx"
+        ));
+        // 折りたたみで値が続く形は空でない
+        assert!(!has_empty_identity_value(
+            b"From: a@b\r\nSubject:\r\n real value\r\n\r\nx"
+        ));
+        // 値のある正常形は不発火
+        assert!(!has_empty_identity_value(
+            b"From: a@b\r\nSubject: hi\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn empty_mime_value_は空値のmime欄を検出する() {
+        // D1451 — 欄はあるが値が空 (外側)
+        assert!(has_empty_mime_value(
+            b"From: a@b\r\nContent-Type:\r\n\r\nx"
+        ));
+        // パート側でも検出
+        assert!(has_empty_mime_value(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Transfer-Encoding:\r\n\r\nx\r\n--b--"
+        ));
+        // 折りたたみで値が続く形は空でない
+        assert!(!has_empty_mime_value(
+            b"From: a@b\r\nContent-Type:\r\n text/plain\r\n\r\nx"
+        ));
+        // 正常値は不発火
+        assert!(!has_empty_mime_value(
+            b"From: a@b\r\nContent-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn empty_charset_は空の文字コード指定を検出する() {
+        // D1452 — charset= の空値
+        assert!(has_empty_charset(
+            b"Content-Type: text/plain; charset=\r\n\r\nx"
+        ));
+        assert!(has_empty_charset(
+            b"Content-Type: text/plain; charset=\"\"\r\n\r\nx"
+        ));
+        // 値のある charset は不発火
+        assert!(!has_empty_charset(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+        // charset 無しは対象外
+        assert!(!has_empty_charset(
+            b"Content-Type: text/plain\r\n\r\nx"
         ));
     }
 
