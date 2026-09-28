@@ -784,6 +784,14 @@ pub struct Envelope {
     pub two_digit_year: bool,
     /// コメントのみの宛名欄 (D1536 — 差出人表示ずれ)。
     pub comment_only_addr: bool,
+    /// 宛名欄の全角コンマ区切り (D1537 — 分割差異)。
+    pub fullwidth_comma_addr: bool,
+    /// 宛名欄 `>` 後のゴミ (D1538 — 宛名終端差異)。
+    pub addr_junk_after_angle: bool,
+    /// `,` 無しの連続括弧宛名 (D1539 — 宛名数差異)。
+    pub two_angles_no_comma: bool,
+    /// `Content-Type` の `*/*` ワイルドカード (D1540 — 型解釈差異)。
+    pub wildcard_ct: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3011,6 +3019,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let two_digit_year = has_two_digit_year(bytes);
     // D1536: コメントのみ宛名
     let comment_only_addr = has_comment_only_addr(bytes);
+    // D1537: 全角コンマ区切り
+    let fullwidth_comma_addr = has_fullwidth_comma_addr(bytes);
+    // D1538: `>` 後のゴミ
+    let addr_junk_after_angle = has_addr_junk_after_angle(bytes);
+    // D1539: `,` 無し連続括弧宛名
+    let two_angles_no_comma = has_two_angles_no_comma(bytes);
+    // D1540: ワイルドカード CT
+    let wildcard_ct = has_wildcard_ct(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3305,6 +3321,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         named_zone,
         two_digit_year,
         comment_only_addr,
+        fullwidth_comma_addr,
+        addr_junk_after_angle,
+        two_angles_no_comma,
+        wildcard_ct,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -16004,6 +16024,151 @@ pub fn has_comment_only_addr(raw: &[u8]) -> bool {
         }
         stripped.push_str(rest);
         if stripped.trim().is_empty() && v.contains('(') {
+            return true;
+        }
+    }
+    false
+}
+
+
+/// アドレス欄に全角コンマ `，`/読点 `、` 区切りがあるか判定する (D1537)。
+///
+/// `To: a@b，c@d` の全角区切りは、`,` だけを切る実装では一つの
+/// 壊れた宛名、全角も区切る実装では二宛名になる — 宛先数がずれる。
+#[must_use]
+pub fn has_fullwidth_comma_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        if l[colon + 1..].contains(['，', '、']) {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄の `>` の後に非空白ゴミが続くか判定する (D1538)。
+///
+/// `From: <a@b> junk` は括弧内を採って残りを捨てる実装と、
+/// 残りも宛名の一部と読む実装で差出人がずれる (`>` 欠落は
+/// D1526、空括弧は D1508)。
+#[must_use]
+pub fn has_addr_junk_after_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim_end();
+        // 最後の '>' より後に非空白・非コメントがあるか
+        let Some(gt) = v.rfind('>') else { continue };
+        // '<' が無い行の stray '>' は D1526
+        if !v.contains('<') {
+            continue;
+        }
+        let after = v[gt + 1..].trim();
+        if after.is_empty() || after.starts_with('(') {
+            continue;
+        }
+        // `>` 後に `,` 以外が続く = ゴミ (`,` 後は次の宛名で正常)
+        if !after.starts_with(',') {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄に `,` 無しで括弧宛名が連なるか判定する (D1539)。
+///
+/// `To: <a@b> <c@d>` は括弧ごと採る実装では宛名2件、
+/// `,` のみ区切る実装では壊れた一宛名になる — 宛先がずれる
+/// (空白継ぎの裸宛名は D1531)。
+#[must_use]
+pub fn has_two_angles_no_comma(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            // 1セグメント内に `<…> <…>` が2組
+            if seg.matches('<').count() >= 2 && seg.matches('>').count() >= 2 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型がワイルドカードか判定する (D1540)。
+///
+/// `Content-Type: */*`/`text/*` はメッセージでは非合法で、
+/// 既定型を当てる実装と欄ごと捨てる実装で本文の扱いがずれる
+/// (空の型側は D1511)。
+#[must_use]
+pub fn has_wildcard_ct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim();
+        let mt = v.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        if mt == "*/*" || mt.ends_with("/*") || mt.starts_with("*") {
             return true;
         }
     }
@@ -33630,6 +33795,56 @@ mod tests {
         assert!(!has_comment_only_addr(
             b"From: John <a@b>\r\n\r\nb"
         ));
+    }
+
+    #[test]
+    fn fullwidth_comma_addr_は全角区切りを検出する() {
+        // D1537 — To: a@b，c@d
+        assert!(has_fullwidth_comma_addr(
+            "To: a@b，c@d\r\n\r\nb".as_bytes()
+        ));
+        assert!(has_fullwidth_comma_addr(
+            "To: a@b、c@d\r\n\r\nb".as_bytes()
+        ));
+        // ASCII コンマは正常
+        assert!(!has_fullwidth_comma_addr(b"To: a@b, c@d\r\n\r\nb"));
+    }
+
+    #[test]
+    fn addr_junk_after_angle_は括弧後のゴミを検出する() {
+        // D1538 — <a@b> junk
+        assert!(has_addr_junk_after_angle(b"From: <a@b> junk\r\n\r\nb"));
+        // `,` 継ぎは正常
+        assert!(!has_addr_junk_after_angle(
+            b"From: <a@b>, <c@d>\r\n\r\nb"
+        ));
+        // 末尾括弧のみは正常
+        assert!(!has_addr_junk_after_angle(b"From: x <a@b>\r\n\r\nb"));
+        // 後のコメントは正常形
+        assert!(!has_addr_junk_after_angle(b"From: <a@b> (n)\r\n\r\nb"));
+    }
+
+    #[test]
+    fn two_angles_no_comma_は連続括弧を検出する() {
+        // D1539 — To: <a@b> <c@d>
+        assert!(has_two_angles_no_comma(b"To: <a@b> <c@d>\r\n\r\nb"));
+        // , 区切りは正常
+        assert!(!has_two_angles_no_comma(b"To: <a@b>, <c@d>\r\n\r\nb"));
+        // 単一括弧は正常
+        assert!(!has_two_angles_no_comma(b"To: <a@b>\r\n\r\nb"));
+        // 表示名+括弧は正常
+        assert!(!has_two_angles_no_comma(
+            b"To: John <a@b>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn wildcard_ct_はワイルドカード型を検出する() {
+        // D1540 — Content-Type: */* / text/*
+        assert!(has_wildcard_ct(b"Content-Type: */*\r\n\r\nb"));
+        assert!(has_wildcard_ct(b"Content-Type: text/*\r\n\r\nb"));
+        // 正常型は不発火
+        assert!(!has_wildcard_ct(b"Content-Type: text/plain\r\n\r\nb"));
     }
 
     #[test]

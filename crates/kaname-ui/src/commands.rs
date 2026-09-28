@@ -4677,6 +4677,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.fullwidth_comma_addr {
+        render_risks.push(
+            "宛名欄が全角コンマ・読点で区切られています (，・、)\
+             —全角も切る実装と切らない実装で宛先数がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_junk_after_angle {
+        render_risks.push(
+            "宛名の括弧の後にゴミが続いています (<a@b> junk 等)\
+             —括弧内だけ採る実装と残りも読む実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.two_angles_no_comma {
+        render_risks.push(
+            "宛名欄にコンマ無しで括弧宛名が連なっています (<a@b> <c@d> 等)\
+             —括弧ごと採る実装と壊れた一宛名とする実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.wildcard_ct {
+        render_risks.push(
+            "Content-Type がワイルドカード型です (*/*・text/* 等)\
+             —既定型を当てる実装と欄ごと捨てる実装で本文の扱いがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
