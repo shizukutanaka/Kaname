@@ -1062,6 +1062,14 @@ pub struct Envelope {
     pub zone_colon: bool,
     /// Date 欄の二つの4桁年 (D1675 — 日付解析ずれ)。
     pub two_years: bool,
+    /// `Resent-*` 欄の重複 (D1676 — 再送経路ずれ)。
+    pub dup_resent_headers: bool,
+    /// Date 欄ゾーンの二重符号 (D1677 — 日付解析ずれ)。
+    pub zone_two_signs: bool,
+    /// Date 欄が時刻のみ (D1678 — 日付解析ずれ)。
+    pub date_time_only: bool,
+    /// 宛名が `@` で終わりドメイン欠落 (D1679 — 宛先ずれ)。
+    pub addr_at_end: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3567,6 +3575,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let zone_colon = has_zone_colon(bytes);
     // D1675: Date 欄の二4桁年
     let two_years = has_two_years(bytes);
+    // D1676: Resent-* 欄の重複
+    let dup_resent_headers = has_dup_resent_headers(bytes);
+    // D1677: Date 欄ゾーンの二重符号
+    let zone_two_signs = has_zone_two_signs(bytes);
+    // D1678: Date 欄が時刻のみ
+    let date_time_only = has_date_time_only(bytes);
+    // D1679: 宛名が @ で終わりドメイン欠落
+    let addr_at_end = has_addr_at_end(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4000,6 +4016,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_no_from,
         zone_colon,
         two_years,
+        dup_resent_headers,
+        zone_two_signs,
+        date_time_only,
+        addr_at_end,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -23349,6 +23369,217 @@ pub fn has_two_years(raw: &[u8]) -> bool {
         }
         if n >= 2 {
             return true;
+        }
+    }
+    false
+}
+
+/// `Resent-*` 欄が同名で2行以上あるか判定する (D1676)。
+///
+/// `Resent-From:`/`Resent-To:` 等の再送欄は一意が前提 — 重複を
+/// 先読みと後読みで再送経路がずれる (通常欄の重複は D1589/D1598、
+/// 欄異常は D1673)。
+#[must_use]
+pub fn has_dup_resent_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut counts = [0usize; 7];
+    for l in text[..header_end].to_ascii_lowercase().lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let idx = if l.starts_with("resent-from:") {
+            0
+        } else if l.starts_with("resent-sender:") {
+            1
+        } else if l.starts_with("resent-to:") {
+            2
+        } else if l.starts_with("resent-cc:") {
+            3
+        } else if l.starts_with("resent-bcc:") {
+            4
+        } else if l.starts_with("resent-date:") {
+            5
+        } else if l.starts_with("resent-message-id:") {
+            6
+        } else {
+            continue;
+        };
+        counts[idx] += 1;
+        if counts[idx] > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 欄のゾーンが `+-0900`/`++0900` のように二重符号か判定する
+/// (D1677)。
+///
+/// 符号を1個だけ読む実装と語全体を破棄する実装で時差がずれる
+/// (桁異常は D1670、コロン形は D1674)。
+#[must_use]
+pub fn has_zone_two_signs(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            let b = t.as_bytes();
+            if b.len() >= 2
+                && matches!(b[0], b'+' | b'-')
+                && matches!(b[1], b'+' | b'-')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Date 欄の値が時刻のみ (日・月・年が無い) か判定する (D1678)。
+///
+/// `Date: 12:00:00` — 時刻を日付の一部と読む実装と欄ごと捨てる
+/// 実装で日付がずれる (日のみは D1653、時刻無しは D1610)。
+#[must_use]
+pub fn has_date_time_only(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.is_empty() {
+            continue;
+        }
+        let mut has_time = false;
+        let mut has_datepart = false;
+        for t in v.split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if t.is_empty() {
+                continue;
+            }
+            // 時刻形: 数字+「:」+数字
+            if t.bytes().any(|b| b == b':')
+                && t.split(':').all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            {
+                has_time = true;
+            } else if t.bytes().any(|b| b.is_ascii_alphabetic())
+                || t.bytes().all(|b| b.is_ascii_digit())
+            {
+                // 曜日名・月名・数値 — 日付部品
+                has_datepart = true;
+            }
+        }
+        if has_time && !has_datepart {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄に `@` で終わる (ドメインが空の) 語があるか判定する
+/// (D1679)。
+///
+/// `To: a@` — ドメイン欠落を拒否する実装と `a@` を名前として
+/// 残す実装で宛先集合がずれる (ドメイン先頭ドットは D1562)。
+#[must_use]
+pub fn has_addr_at_end(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            continue;
+        }
+        // クオートとコメントを潰す
+        let v = &l[colon + 1..];
+        let mut scrub = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut depth = 0u32;
+        for c in v.chars() {
+            if depth > 0 {
+                if c == '(' {
+                    depth += 1;
+                } else if c == ')' {
+                    depth -= 1;
+                }
+            } else if in_q {
+                if c == '"' {
+                    in_q = false;
+                }
+            } else if c == '"' {
+                in_q = true;
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        for t in scrub.split(|c: char| c.is_whitespace() || c == ',') {
+            let t = t.trim_matches(|c: char| c == '<' || c == '>' || c == ';');
+            if t.ends_with('@') && t.len() > 1 {
+                return true;
+            }
         }
     }
     false
@@ -42757,6 +42988,60 @@ mod tests {
             b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
         ));
         assert!(!has_two_years(b"X-Z: 2025 2026\r\n\r\nx"));
+    }
+
+    #[test]
+    fn dup_resent_headers_再送欄の重複を検出する() {
+        // D1676 — 同名 Resent-* の重複
+        assert!(has_dup_resent_headers(
+            b"Resent-From: a@b\r\nResent-From: c@d\r\n\r\nx"
+        ));
+        assert!(has_dup_resent_headers(
+            b"Resent-To: a@b\r\nResent-To: c@d\r\n\r\nx"
+        ));
+        // 異種再送欄・通常欄は不発火
+        assert!(!has_dup_resent_headers(
+            b"Resent-From: a@b\r\nResent-To: c@d\r\n\r\nx"
+        ));
+        assert!(!has_dup_resent_headers(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn zone_two_signs_二重符号ゾーンを検出する() {
+        // D1677 — `+-0900`/`++0900`
+        assert!(has_zone_two_signs(
+            b"Date: 25 Sep 2025 12:00:00 +-0900\r\n\r\nx"
+        ));
+        assert!(has_zone_two_signs(
+            b"Date: 25 Sep 2025 12:00:00 ++0900\r\n\r\nx"
+        ));
+        // 通常形・他欄は不発火
+        assert!(!has_zone_two_signs(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_zone_two_signs(b"X-Z: +-0900\r\n\r\nx"));
+    }
+
+    #[test]
+    fn date_time_only_時刻のみの日付欄を検出する() {
+        // D1678 — 時刻のみ
+        assert!(has_date_time_only(b"Date: 12:00:00\r\n\r\nx"));
+        assert!(has_date_time_only(b"Date: 12:00\r\n\r\nx"));
+        // 完全形・他欄は不発火
+        assert!(!has_date_time_only(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_date_time_only(b"X-Z: 12:00:00\r\n\r\nx"));
+    }
+
+    #[test]
+    fn addr_at_end_アット終端宛名を検出する() {
+        // D1679 — `a@` で終わる宛名
+        assert!(has_addr_at_end(b"To: a@\r\n\r\nx"));
+        assert!(has_addr_at_end(b"From: John <a@>\r\n\r\nx"));
+        // 正常宛名・他欄は不発火
+        assert!(!has_addr_at_end(b"To: a@b\r\n\r\nx"));
+        assert!(!has_addr_at_end(b"X-Z: a@\r\n\r\nx"));
     }
 
     #[test]

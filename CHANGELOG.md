@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1679: 宛名欄の `@` 終端 (ドメイン欠落) を検出 — `Envelope` に `addr_at_end` を追加。
+### Security — D1678: Date 欄の時刻のみ値を検出 — `Envelope` に `date_time_only` を追加 (時刻無しは D1610)。
+### Security — D1677: Date 欄ゾーンの二重符号 `+-0900` を検出 — `Envelope` に `zone_two_signs` を追加。
+### Security — D1676: `Resent-*` 欄の同名重複を検出 — `Envelope` に `dup_resent_headers` を追加 (通常欄重複は D1589/D1598)。
 ### Security — D1675: Date 欄の二つの4桁年を検出 — `Envelope` に `two_years` を追加 (年欠落は D1653、年先頭は D1664)。
 ### Security — D1674: Date 欄ゾーンの `+HH:MM` コロン形を検出 — `Envelope` に `zone_colon` を追加 (桁異常は D1670)。
 ### Security — D1673: `Received:` の `from` 節欠落を検出 — `Envelope` に `received_no_from` を追加 (欄異常は `has_bad_received`、`;` 欠落は D1586)。
