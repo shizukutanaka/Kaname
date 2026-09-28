@@ -5678,6 +5678,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.ws_boundary {
+        render_risks.push(
+            "boundary の値が空白しかありません\
+             —trim して空値と読む実装とそのまま使う実装で区切りがずれます"
+                .to_string(),
+        );
+    }
+    if env.empty_addr_header {
+        render_risks.push(
+            "宛名欄に値がありません\
+             —宛先なしと読む実装と欄ごと無視する実装で宛先がずれます"
+                .to_string(),
+        );
+    }
+    if env.orphan_boundary {
+        render_risks.push(
+            "宣言されていない --boundary 様の区切り行があります\
+             —区切りと読む実装と本文文字列と読む実装で構造がずれます"
+                .to_string(),
+        );
+    }
+    if env.zone_alpha {
+        render_risks.push(
+            "Date 欄のタイムゾーンが符号+英字です\
+             —英字ゾーンと読む実装と欄ごと捨てる実装で時差がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

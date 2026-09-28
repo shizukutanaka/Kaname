@@ -1068,8 +1068,17 @@ pub struct Envelope {
     pub zone_two_signs: bool,
     /// Date 欄が時刻のみ (D1678 — 日付解析ずれ)。
     pub date_time_only: bool,
-    /// 宛名が `@` で終わりドメイン欠落 (D1679 — 宛先ずれ)。
+    /// 宛名が `@` で終わりドメイン欠落 (D1679 — 宛先ずれ;
+    /// `@` の空側全般は `has_empty_addr_side` と併記)。
     pub addr_at_end: bool,
+    /// `boundary=` 値が空白のみ (D1680 — 区切りずれ)。
+    pub ws_boundary: bool,
+    /// 宛名欄の値が空 (D1681 — 宛先ずれ)。
+    pub empty_addr_header: bool,
+    /// 宣言なき `--boundary` 区切り行 (D1682 — 区切りずれ)。
+    pub orphan_boundary: bool,
+    /// Date 欄ゾーンが符号+英字 (D1683 — 日付解析ずれ)。
+    pub zone_alpha: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3583,6 +3592,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let date_time_only = has_date_time_only(bytes);
     // D1679: 宛名が @ で終わりドメイン欠落
     let addr_at_end = has_addr_at_end(bytes);
+    // D1680: boundary 値が空白のみ
+    let ws_boundary = has_ws_boundary(bytes);
+    // D1681: 宛名欄の値が空
+    let empty_addr_header = has_empty_addr_header(bytes);
+    // D1682: 宣言なき区切り行
+    let orphan_boundary = has_orphan_boundary(bytes);
+    // D1683: Date 欄ゾーンが符号+英字
+    let zone_alpha = has_zone_alpha(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4020,6 +4037,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         zone_two_signs,
         date_time_only,
         addr_at_end,
+        ws_boundary,
+        empty_addr_header,
+        orphan_boundary,
+        zone_alpha,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -23585,6 +23606,151 @@ pub fn has_addr_at_end(raw: &[u8]) -> bool {
     false
 }
 
+/// `boundary=` の値が空白文字のみか判定する (D1680)。
+///
+/// `boundary="   "` — 空白だけの区切り値を trim して空値と読む
+/// 実装と、そのまま区切りに使う実装でパート区切りがずれる
+/// (空の boundary は `has_empty_boundary`)。
+#[must_use]
+pub fn has_ws_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find("boundary=") {
+            let after = &rest[p + 9..];
+            if let Some(q) = after.strip_prefix('"') {
+                let end = q.find('"').unwrap_or(q.len());
+                let v = &q[..end];
+                if !v.is_empty() && v.bytes().all(|b| b == b' ' || b == b'\t') {
+                    return true;
+                }
+                break;
+            }
+            rest = &rest[p + 9..];
+        }
+    }
+    false
+}
+
+/// 宛名欄 (`To:`/`From:`/`Cc:` 等) の値が空か判定する (D1681)。
+///
+/// `To:` (値なし) — 宛先なしとして破棄する実装と欄ごと無視する
+/// 実装で宛先集合がずれる (欄欠落は別検出群、空要素は D1584)。
+#[must_use]
+pub fn has_empty_addr_header(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !is_addr_header_name(&name) {
+            continue;
+        }
+        if l[colon + 1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宣言されていない `--boundary` 様の区切り行が本文中にあるか
+/// 判定する (D1682)。
+///
+/// `--abc`/`--abc--` の行が現れるのに multipart 宣言も boundary
+/// 宣言も無い — 区切りとして解釈する実装と本文文字列と読む実装
+/// で構造がずれる (宣言済み boundary の孤児パートは
+/// `has_orphaned_part_content`)。
+#[must_use]
+pub fn has_orphan_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower_head = text[..header_end].to_ascii_lowercase();
+    // multipart 宣言も boundary= も無ければ、本文の -- 行は孤児
+    if lower_head.contains("multipart/") || lower_head.contains("boundary=") {
+        return false;
+    }
+    for l in text[header_end..].lines() {
+        let t = l.trim_end();
+        // `--token`/`--token--` 形で、全ダッシュの罫線 (`----`) や
+        // 署名区切り (`-- `) は対象外
+        if !t.starts_with("--") || t.len() <= 2 {
+            continue;
+        }
+        let inner = t[2..].trim_end_matches('-');
+        if inner.is_empty() || inner.bytes().all(|b| b == b'-') {
+            continue;
+        }
+        if inner.bytes().all(|b| b.is_ascii() && b != b' ' && b != b'\t') {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 欄のゾーンが `+ABCD` のように符号+英字か判定する
+/// (D1683)。
+///
+/// 符号を剥がして obs-zone の英字として読む実装と、符号も値の
+/// 一部として破棄する実装で時差がずれる (裸の英字ゾーン自体は
+/// obs-zone として合法 — 符号+英字のみが異常)。
+#[must_use]
+pub fn has_zone_alpha(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if (t.starts_with('+') || t.starts_with('-'))
+                && t.len() > 1
+                && t[1..].bytes().all(|b| b.is_ascii_alphabetic())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -43042,6 +43208,65 @@ mod tests {
         // 正常宛名・他欄は不発火
         assert!(!has_addr_at_end(b"To: a@b\r\n\r\nx"));
         assert!(!has_addr_at_end(b"X-Z: a@\r\n\r\nx"));
+    }
+
+    #[test]
+    fn ws_boundary_空白のみ境界を検出する() {
+        // D1680 — `boundary="   "`
+        assert!(has_ws_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"   \"\r\n\r\nx"
+        ));
+        // 空クオート (has_empty_boundary)・実値・他欄は不発火
+        assert!(!has_ws_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"\"\r\n\r\nx"
+        ));
+        assert!(!has_ws_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nx"
+        ));
+        assert!(!has_ws_boundary(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_addr_header_空の宛名欄を検出する() {
+        // D1681 — `To:` 空値
+        assert!(has_empty_addr_header(b"To:\r\n\r\nx"));
+        assert!(has_empty_addr_header(b"From: \r\n\r\nx"));
+        // 値あり・他欄空値は不発火
+        assert!(!has_empty_addr_header(b"To: a@b\r\n\r\nx"));
+        assert!(!has_empty_addr_header(b"Subject:\r\n\r\nx"));
+    }
+
+    #[test]
+    fn orphan_boundary_宣言なき区切り行を検出する() {
+        // D1682 — 本文の `--abc` 行・multipart 宣言無し
+        assert!(has_orphan_boundary(
+            b"To: a@b\r\n\r\nhello\r\n--abc\r\nmore\r\n--abc--\r\n"
+        ));
+        // multipart 宣言あり・`----` 罫線・`-- ` 署名区切りは不発火
+        assert!(!has_orphan_boundary(
+            b"To: a@b\r\nContent-Type: multipart/mixed; boundary=abc\r\n\r\n--abc\r\n\r\nx"
+        ));
+        assert!(!has_orphan_boundary(b"To: a@b\r\n\r\nfoo\r\n----\r\nbar\r\n"));
+        assert!(!has_orphan_boundary(b"To: a@b\r\n\r\nfoo\r\n-- \r\nsig\r\n"));
+    }
+
+    #[test]
+    fn zone_alpha_符号英字ゾーンを検出する() {
+        // D1683 — `+UT`/`+EST`
+        assert!(has_zone_alpha(
+            b"Date: 25 Sep 2025 12:00:00 +UT\r\n\r\nx"
+        ));
+        assert!(has_zone_alpha(
+            b"Date: 25 Sep 2025 12:00:00 -EST\r\n\r\nx"
+        ));
+        // 裸英字 obs-zone・数値ゾーン・他欄は不発火
+        assert!(!has_zone_alpha(
+            b"Date: 25 Sep 2025 12:00:00 UT\r\n\r\nx"
+        ));
+        assert!(!has_zone_alpha(
+            b"Date: 25 Sep 2025 12:00:00 +0900\r\n\r\nx"
+        ));
+        assert!(!has_zone_alpha(b"X-Z: +UT\r\n\r\nx"));
     }
 
     #[test]

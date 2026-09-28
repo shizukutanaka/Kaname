@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1683: Date 欄ゾーンの `+ABCD` 符号+英字形を検出 — `Envelope` に `zone_alpha` を追加 (裸英字は obs-zone 合法)。
+### Security — D1682: 宣言なき `--boundary` 様の本文区切り行を検出 — `Envelope` に `orphan_boundary` を追加 (宣言済み孤児パートは `has_orphaned_part_content`)。
+### Security — D1681: 宛名欄の空値を検出 — `Envelope` に `empty_addr_header` を追加 (空要素は D1584)。
+### Security — D1680: `boundary=` の空白のみ値を検出 — `Envelope` に `ws_boundary` を追加 (空値は `has_empty_boundary`)。
 ### Security — D1679: 宛名欄の `@` 終端 (ドメイン欠落) を検出 — `Envelope` に `addr_at_end` を追加。
 ### Security — D1678: Date 欄の時刻のみ値を検出 — `Envelope` に `date_time_only` を追加 (時刻無しは D1610)。
 ### Security — D1677: Date 欄ゾーンの二重符号 `+-0900` を検出 — `Envelope` に `zone_two_signs` を追加。
