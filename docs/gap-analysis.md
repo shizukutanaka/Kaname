@@ -794,3 +794,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1378 | ~~**multipart/signed の署名パート欠落が未検査**~~ **(解消済み)** | P2 | signed を名乗るのに署名パートが無い検証不能構造。修正: `has_unsigned_signed_container` → render_risks | 「封印済み」だが封印が無い箱 |
 | D1379 | ~~**In-Reply-To/References の自己参照が未検査**~~ **(解消済み)** | P2 | 自分の Message-ID を参照する偽造スレッド。修正: `has_self_reply_ref` → render_risks | 自分への返信を名乗る葉書 |
 | D1380 | ~~**期限自称ヘッダ (Expires/Reply-By 等) が未検査**~~ **(解消済み)** | P3 | 日付で急かせる圧力表示 (X-Priority の期限版)。修正: `has_deadline_claim` → render_risks | 催促を印字した封筒 |
+| D1381 | ~~**SA 判定欄 (X-Spam-Status 等) の自称が未検査**~~ **(解消済み)** | P2 | 「無害と判定済み」を送信側が書き込む。修正: `has_spam_verdict_claim` → render_risks | 無害印を自分で捺す書類 |
+| D1382 | ~~**廃止整合性欄 (Content-MD5 等) の自称が未検査**~~ **(解消済み)** | P3 | 「照合済み」の体裁を内容側が書き込む。修正: `has_integrity_claim` → render_risks | 検査済み印を出品側が捺す箱 |
+| D1383 | ~~**記録抑制要求ヘッダ (X-No-Archive 等) が未検査**~~ **(解消済み)** | P2 | 「痕跡を残すな」の要求 — 証拠隠滅の兆候。修正: `has_suppression_claim` → render_risks | 読んだら捨てろの葉書 |
+| D1384 | ~~**addr-spec 位置の encoded-word が未検査**~~ **(解消済み)** | P2 | アドレス内 `=?…?=` で抽出がずれる。修正: `has_encoded_word_addr_spec` → render_risks | 住所の途中に暗号の宛名 |

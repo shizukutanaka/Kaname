@@ -3585,6 +3585,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.spam_verdict_claim {
+        render_risks.push(
+            "スパム判定結果の欄 (X-Spam-Status/Flag/Level 等) を送信側が\
+             書き込んでいます —「判定済み・無害」の体裁を自称する兆候です"
+                .to_string(),
+        );
+    }
+    if env.integrity_claim {
+        render_risks.push(
+            "廃止済みの整合性ヘッダ (Content-MD5 等) を送信側が\
+             書き込んでいます —「内容は照合済み」の体裁を自称する兆候です"
+                .to_string(),
+        );
+    }
+    if env.suppression_claim {
+        render_risks.push(
+            "記録抑制の欄 (X-No-Archive/Restrict 等) を送信側が\
+             書き込んでいます —保存や記録を避けようとする要求です"
+                .to_string(),
+        );
+    }
+    if env.encoded_word_addr_spec {
+        render_risks.push(
+            "アドレス欄の住所部分に encoded-word が混入しています\
+             —復号する実装としない実装で差出人がずれる可能性があります"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

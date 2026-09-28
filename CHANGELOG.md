@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1381: SpamAssassin 判定欄 (X-Spam-Status 等) の自称が未検査
+
+- **問題**: `X-Spam-Status:`/`X-Spam-Flag:`/`X-Spam-Level:`/`X-Spam-Bar:`/`X-Spam-Checker-Version:` 等の**判定結果**欄 — 「無害と判定済み」の体裁を送信側が書き込める。D363 は内訳欄のみ対象で判定欄そのものは未検査だった。
+- **修正**: `has_spam_verdict_claim` — ヘッダ部で判定欄を検出 → `Envelope.spam_verdict_claim` → render_risks 警告。
+- **教訓**: 「この書類は無害と判定済み」と内容側が印字する申請書。
+
+### Security — D1382: 廃止済み整合性欄 (Content-MD5 等) の自称が未検査
+
+- **問題**: `Content-MD5:` (RFC 1864・廃止)/`Content-Features:`/`Content-Alternative:`/`Content-Digest:` は「内容は照合済み・規格どおり」の体裁を送信側が書き込む欄 — 実際の検証なしに出せる自称印。
+- **修正**: `has_integrity_claim` — ヘッダ部で該当欄を検出 → `Envelope.integrity_claim` → render_risks 警告。
+- **教訓**: 検査済みの印を検査官ではなく出品側が捺す箱。
+
+### Security — D1383: 記録抑制要求ヘッダ (X-No-Archive 等) が未検査
+
+- **問題**: `X-No-Archive:`/`Restrict:`/`X-Ack:` 等は保存・記録を抑制する要求欄 — 「痕跡を残すな」の要求は証拠隠滅を図る送信側の兆候。
+- **修正**: `has_suppression_claim` — ヘッダ部で該当欄を検出 → `Envelope.suppression_claim` → render_risks 警告。
+- **教訓**: 「この手紙は読んだら捨てろ」と消印欄に書く葉書。
+
+### Security — D1384: アドレス欄 addr-spec 位置の encoded-word が未検査
+
+- **問題**: `From: =?utf-8?q?x?=@evil.example` や `From: <a=?utf-8?b?Yg==?=c@x>` — encoded-word がアドレス部分に混入すると、「復号してから addr-spec を読む実装」と「そのまま読む実装」で抽出アドレスがずれる (D1335 の構文版)。
+- **修正**: `has_encoded_word_addr_spec` — From/Sender/Reply-To/To/Cc/Bcc/Resent-From の `<…>` 内部と `@` 直前に `=?…?=` を検出 → `Envelope.encoded_word_addr_spec` → render_risks 警告。
+- **教訓**: 住所の途中に暗号が挟まれた宛名は、翻訳係ごとに別の家へ届ける。
+
 ### Security — D1377: message/* パートの base64/QP CTE が未検査
 
 - **問題**: RFC 2046 §5.2.1 は `message/*` の CTE を 7bit/8bit/binary に限定 — base64 で .eml を包むと「パートをそのまま走査する」検査系は内側メッセージのヘッダを一切読めない。D1293 は `multipart/*` のみ対象だった。
