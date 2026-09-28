@@ -4174,6 +4174,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.related_bad_type {
+        render_risks.push(
+            "multipart/related の type= が実在する部品の型を指していません\
+             —ルート部品の読みが実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.mismatched_attachment_type {
+        render_risks.push(
+            "添付名の拡張子と宣言 Content-Type が矛盾しています\
+             —実行形式を文書に見せる名札偽装の形跡です"
+                .to_string(),
+        );
+    }
+    if env.dangling_cid {
+        render_risks.push(
+            "本文中の cid: 参照に合う Content-ID の部品がありません\
+             —埋め込み解決が失敗し見え方がずれます"
+                .to_string(),
+        );
+    }
+    if env.orphan_list_headers {
+        render_risks.push(
+            "List-Id の無い List-Post/Subscribe 等の欄があります\
+             —名乗らない偽 ML 窓口の形跡です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

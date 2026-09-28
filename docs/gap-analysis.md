@@ -878,3 +878,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1462 | multipart/signed で protocol あり・micalg 無し | ハッシュ方式不明で検証不能の署名体裁 | signed 器の micalg= 欠落を検査 | kaname-render |
 | D1463 | 本文 text/* 部品が CD: attachment | 本文が添付として隠れる | text/* 部品の attachment 宣言を検査 | kaname-render |
 | D1464 | ヘッダ/本文の区切り空行が無い | 全文がヘッダ/本文のみかで構造がずれる | ヘッダ形行+空行欠落の併存を検査 | kaname-render |
+| D1465 | multipart/related の type= が実在メンバー型を指さない | ルート部品解決が実装間でずれる | type= とメンバー CT の一致を検査 | kaname-render |
+| D1466 | 添付名の拡張子と宣言 CT の意味的矛盾 (exe+image 等) | 名札偽装で添付の顔がずれる | パート単位の CT/拡張子矛盾を検査 | kaname-render |
+| D1467 | 本文 cid: 参照に合う Content-ID 部品が無い | 埋め込み解決失敗で見え方ずれ | cid: 参照と宣言 ID の照合 | kaname-render |
+| D1468 | List-Id 無しの List-Post/Subscribe/Help/Archive/Owner | 名乗らぬ偽 ML 窓口 | List-Id 欠落下の ML 欄を検査 | kaname-render |

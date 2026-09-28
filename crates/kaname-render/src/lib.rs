@@ -640,6 +640,14 @@ pub struct Envelope {
     pub attachment_body_part: bool,
     /// D1464 — ヘッダ/本文の区切り空行が無い。
     pub no_body_separator: bool,
+    /// D1465 — multipart/related の type= が実在メンバー型を指さない。
+    pub related_bad_type: bool,
+    /// D1466 — 添付名の拡張子と宣言 CT が意味的に矛盾。
+    pub mismatched_attachment_type: bool,
+    /// D1467 — 本文の cid: 参照が宣言 Content-ID に無い。
+    pub dangling_cid: bool,
+    /// D1468 — List-Id 無しの List-Post/Subscribe/Help/Archive/Owner。
+    pub orphan_list_headers: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2767,6 +2775,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let signed_no_micalg = has_signed_no_micalg(bytes);
     let attachment_body_part = has_attachment_body_part(bytes);
     let no_body_separator = has_no_body_separator(bytes);
+    let related_bad_type = has_related_bad_type(bytes);
+    let mismatched_attachment_type = has_mismatched_attachment_type(bytes);
+    let dangling_cid = has_dangling_cid(bytes);
+    let orphan_list_headers = has_orphan_list_headers(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2989,6 +3001,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         signed_no_micalg,
         attachment_body_part,
         no_body_separator,
+        related_bad_type,
+        mismatched_attachment_type,
+        dangling_cid,
+        orphan_list_headers,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -11911,6 +11927,285 @@ pub fn has_no_body_separator(raw: &[u8]) -> bool {
                 .bytes()
                 .all(|b| (33..=126).contains(&b))
     }) && !text.contains("\n\n")
+}
+
+/// `multipart/related` の `type=` が実在するメンバ部品の
+/// Content-Type を指していないか判定する (D1465)。
+///
+/// RFC 2387 の type= はルート部品の型を宣言する — 宣言型に合う
+/// メンバーが無いと、最初の部品をルートにする実装と失敗する実装で
+/// 埋め込みリソースの解決がずれる (start= の指し先欠落は D1426、
+/// type= 欠落は D1442)。
+#[must_use]
+pub fn has_related_bad_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let Some(ct) = lower.lines().find(|l| l.starts_with("content-type:")) else {
+        return false;
+    };
+    if !ct.contains("multipart/related") {
+        return false;
+    }
+    // type= の値 (引用符許容)
+    let Some(tp) = ct.find("type=") else { return false };
+    let trest = &ct[tp + 5..];
+    let want = if let Some(q) = trest.strip_prefix('"') {
+        q.split('"').next().unwrap_or("")
+    } else {
+        trest.split(';').next().unwrap_or("").trim()
+    };
+    if want.is_empty() {
+        return false;
+    }
+    // メンバー部品の CT 基底型を集める
+    let mut members: Vec<String> = Vec::new();
+    let mut in_run = false;
+    for l in lower.lines() {
+        if l.starts_with("--") {
+            in_run = true;
+            continue;
+        }
+        if l.is_empty() {
+            in_run = false;
+            continue;
+        }
+        if in_run {
+            if let Some(v) = l.strip_prefix("content-type:") {
+                members.push(
+                    v.trim_start()
+                        .split(';')
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .to_string(),
+                );
+            }
+        }
+    }
+    !members.is_empty() && !members.iter().any(|m| m == want)
+}
+
+/// 添付名の拡張子と宣言 Content-Type が意味的に矛盾するか判定する
+/// (D1466)。
+///
+/// `invoice.pdf` が `application/x-msdownload` だったり
+/// `photo.jpg` が `text/plain` だったりすると、宣言型でプレビュー
+/// する実装と拡張子で保存先を決める実装で添付の「顔」がずれる —
+/// 実行形式を文書に見せる (またはその逆) 名札偽装。パート単位で
+/// CT 基底型と name=/filename= の拡張子を対応づける。
+#[must_use]
+pub fn has_mismatched_attachment_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let exec_ext = [
+        "exe", "scr", "bat", "cmd", "com", "pif", "js", "vbs", "vbe",
+        "ps1", "msi", "dll", "lnk", "hta", "jar", "wsf",
+    ];
+    let doc_ext = [
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt",
+        "jpg", "jpeg", "png", "gif", "bmp", "svg", "zip", "csv", "rtf",
+    ];
+    let exec_ct = |t: &str| {
+        t.contains("msdownload")
+            || t.contains("x-dosexec")
+            || t.contains("x-executable")
+            || t.contains("x-msdos-program")
+            || t.contains("javascript")
+            || t.contains("x-sh")
+            || t.contains("x-bat")
+    };
+    let docish_ct = |t: &str| {
+        t.starts_with("image/")
+            || t.starts_with("audio/")
+            || t.starts_with("video/")
+            || t == "application/pdf"
+            || t.starts_with("text/")
+    };
+    let param_ext = |l: &str| -> Option<String> {
+        let mut rest = l;
+        while let Some(p) = rest.find('=') {
+            let ks = rest[..p]
+                .rfind(|c: char| c == ';' || c == ' ' || c == '\t')
+                .map(|i| i + 1)
+                .unwrap_or(0);
+            let key = rest[ks..p].trim().trim_end_matches(|c: char| {
+                c == '*' || c.is_ascii_digit()
+            });
+            if key == "name" || key == "filename" {
+                let after = &rest[p + 1..];
+                let v = if let Some(q) = after.strip_prefix('"') {
+                    q.split('"').next().unwrap_or("")
+                } else {
+                    after.split(';').next().unwrap_or("").trim()
+                };
+                if v.contains('.') {
+                    let ext = v.rsplit('.').next().unwrap_or("").trim();
+                    if !ext.is_empty() {
+                        return Some(ext.to_string());
+                    }
+                }
+            }
+            rest = &rest[p + 1..];
+        }
+        None
+    };
+    // 外側 run も含め、run ごとに CT と拡張子を対応づける
+    let mut run_ct: Option<String> = None;
+    let mut run_ext: Option<String> = None;
+    let mut in_run = true; // 外側ヘッダ run から開始
+    let check = |ct: &Option<String>, ext: &Option<String>| -> bool {
+        if let (Some(ct), Some(ext)) = (ct, ext) {
+            let is_exec = exec_ext.contains(&ext.as_str());
+            let is_doc = doc_ext.contains(&ext.as_str());
+            return (is_exec && docish_ct(ct)) || (is_doc && exec_ct(ct));
+        }
+        false
+    };
+    for l in lower.lines() {
+        if l.starts_with("--") {
+            if in_run && check(&run_ct, &run_ext) {
+                return true;
+            }
+            in_run = true;
+            run_ct = None;
+            run_ext = None;
+            continue;
+        }
+        if l.is_empty() {
+            if in_run && check(&run_ct, &run_ext) {
+                return true;
+            }
+            in_run = false;
+            continue;
+        }
+        if !in_run {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            run_ct = Some(
+                v.trim_start()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string(),
+            );
+        }
+        if (l.starts_with("content-type:") || l.starts_with("content-disposition:"))
+            && run_ext.is_none()
+        {
+            run_ext = param_ext(l);
+        }
+    }
+    in_run && check(&run_ct, &run_ext)
+}
+
+/// 本文中の `cid:` URL 参照が、どのパートの `Content-ID:` にも
+/// 一致しないか判定する (D1467)。
+///
+/// `cid:` は「この識別子を持つ部品を埋め込め」の指し手 —
+/// 指し先の部品が無いと埋め込み解決が失敗し、画像を落とす実装と
+/// 壊れプレースホルダを出す実装で見え方がずれる (start= の
+/// 指し先欠落は D1426、Content-ID 重複は D1369)。
+#[must_use]
+pub fn has_dangling_cid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    // 宣言された Content-ID 値を集める (<…>・裸形の両方)
+    let mut ids: Vec<String> = Vec::new();
+    for l in lower.lines() {
+        if let Some(v) = l.strip_prefix("content-id:") {
+            let v = v.trim().trim_matches(|c| c == '<' || c == '>');
+            if !v.is_empty() {
+                ids.push(v.to_string());
+            }
+        }
+    }
+    // 本文・全体から cid: 参照を拾う (宣言 Content-ID がゼロなら
+    // すべての cid: 参照が宙吊り)
+    
+    let mut rest = lower.as_str();
+    while let Some(p) = rest.find("cid:") {
+        // トークン境界 — `acid:` 等の語尾で誤爆しない
+        if p > 0 && rest[..p]
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            rest = &rest[p + 4..];
+            continue;
+        }
+        let after = &rest[p + 4..];
+        let end = after
+            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '>' || c == ')')
+            .unwrap_or(after.len());
+        let target = &after[..end];
+        if !target.is_empty() && !ids.iter().any(|i| i == target) {
+            return true;
+        }
+        rest = &rest[p + 4..];
+    }
+    false
+}
+
+/// `List-Post:`/`List-Subscribe:`/`List-Help:`/`List-Archive:`/
+/// `List-Owner:` が `List-Id:` 無しで存在するか判定する (D1468)。
+///
+/// 名乗らない ML 窓口 — 正規 ML は必ず List-Id を持つため、
+/// 窓口欄だけのメールは偽 ML 体裁 (List-Unsubscribe の無 List-Id
+/// は D1418)。
+#[must_use]
+pub fn has_orphan_list_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let has_list_id = lower.lines().any(|l| l.starts_with("list-id:"));
+    if has_list_id {
+        return false;
+    }
+    lower.lines().any(|l| {
+        l.starts_with("list-post:")
+            || l.starts_with("list-subscribe:")
+            || l.starts_with("list-help:")
+            || l.starts_with("list-archive:")
+            || l.starts_with("list-owner:")
+    })
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -28455,6 +28750,72 @@ mod tests {
         assert!(!has_no_body_separator(b"From: a@b\r\n\r\nbody"));
         // ヘッダ形の行がなければ対象外 (ヘッダ無し文書)
         assert!(!has_no_body_separator(b"just text\r\nno headers"));
+    }
+
+    #[test]
+    fn related_bad_type_は不在部品への型指定を検出する() {
+        // D1465 — type= がどのメンバー CT にも一致しない
+        assert!(has_related_bad_type(
+            b"Content-Type: multipart/related; type=\"text/html\"; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        // 一致していれば不発火
+        assert!(!has_related_bad_type(
+            b"Content-Type: multipart/related; type=\"text/html\"; boundary=b\r\n\r\n--b\r\nContent-Type: text/html\r\n\r\nx\r\n--b--"
+        ));
+        // type= 無しは D1442、related 以外は対象外
+        assert!(!has_related_bad_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn mismatched_attachment_type_は型と拡張子の矛盾を検出する() {
+        // D1466 — exe 名に画像 CT / 画像名に実行 CT
+        assert!(has_mismatched_attachment_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: image/png; name=\"evil.exe\"\r\nContent-Disposition: attachment\r\n\r\nAAAA\r\n--b--"
+        ));
+        assert!(has_mismatched_attachment_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/x-msdownload\r\nContent-Disposition: attachment; filename=\"invoice.pdf\"\r\n\r\nAAAA\r\n--b--"
+        ));
+        // 一致組は不発火
+        assert!(!has_mismatched_attachment_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: image/png; name=\"photo.png\"\r\n\r\nAAAA\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn dangling_cid_は行き先なき埋め込み参照を検出する() {
+        // D1467 — cid: 参照に合う Content-ID 部品が無い
+        assert!(has_dangling_cid(
+            b"Content-Type: text/html\r\n\r\n<img src=\"cid:logo@x\">"
+        ));
+        assert!(has_dangling_cid(
+            b"Content-Type: text/html\r\nContent-ID: <a@x>\r\n\r\n<img src=\"cid:other@x\">"
+        ));
+        // 一致していれば不発火
+        assert!(!has_dangling_cid(
+            b"Content-Type: text/html\r\nContent-ID: <logo@x>\r\n\r\n<img src=\"cid:logo@x\">"
+        ));
+        // acid: の語尾で誤爆しない
+        assert!(!has_dangling_cid(
+            b"Content-Type: text/plain\r\n\r\nsee acid: notes"
+        ));
+    }
+
+    #[test]
+    fn orphan_list_headers_は名無しml窓口を検出する() {
+        // D1468 — List-Id 無しの List-Post/Subscribe/Help/Archive/Owner
+        assert!(has_orphan_list_headers(
+            b"List-Post: <mailto:ml@x>\r\n\r\nx"
+        ));
+        assert!(has_orphan_list_headers(
+            b"List-Archive: <https://x/arc>\r\n\r\nx"
+        ));
+        // List-Id があれば正規 ML — 不発火
+        assert!(!has_orphan_list_headers(
+            b"List-Id: <ml.x>\r\nList-Post: <mailto:ml@x>\r\n\r\nx"
+        ));
+        assert!(!has_orphan_list_headers(b"Subject: hi\r\n\r\nx"));
     }
 
     #[test]

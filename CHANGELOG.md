@@ -1,5 +1,50 @@
 ## [Unreleased]
 
+### Security — D1465:
+
+- **問題**: `multipart/related` の `type=` が実在するメンバ部品の
+  Content-Type を指していない — RFC 2387 のルート部品宣言と
+  実体がずれ、最初の部品を採る実装と解決に失敗する実装で
+  埋め込みリソースの参照がずれる (start= 欠落は D1426、
+  type= 欠落は D1442)。
+- **修正**: `has_related_bad_type` が related 器の type= と
+  メンバー CT の一致を検査する。
+- **教訓**: 「表紙は A 型」と書かれた箱に A 型の部品が無い —
+  先頭を表紙と見做す係員と読み直す係員で内容がずれる。
+
+### Security — D1466:
+
+- **問題**: 添付名の拡張子と宣言 Content-Type が意味的に矛盾
+  (`invoice.pdf` + `application/x-msdownload`、`evil.exe` +
+  `image/png`) — 宣言型でプレビューする実装と拡張子で保存先を
+  決める実装で添付の「顔」がずれる名札偽装。
+- **修正**: `has_mismatched_attachment_type` がパート単位で
+  CT 基底型と name=/filename= 拡張子の矛盾を検査する。
+- **教訓**: 「絵です」と名乗る箱に「実行です」と書かれた品が
+  入っている — 札と中身の宣言が矛盾する箱は開け方で顔が変わる。
+
+### Security — D1467:
+
+- **問題**: 本文中の `cid:` URL 参照がどのパートの
+  `Content-ID:` にも一致しない — 埋め込み解決が失敗し、
+  画像を落とす実装と壊れプレースホルダを出す実装で見え方が
+  ずれる (Content-ID 重複は D1369、start= 欠落は D1426)。
+- **修正**: `has_dangling_cid` が cid: 参照と宣言 Content-ID の
+  照合を検査する (`acid:` 等の語尾誤爆を避ける境界検査付き)。
+- **教訓**: 「部品番号 X を埋め込め」と書かれても X の部品が
+  無ければ、黙って抜く係員と空枠を残す係員に分かれる。
+
+### Security — D1468:
+
+- **問題**: `List-Post:`/`List-Subscribe:`/`List-Help:`/
+  `List-Archive:`/`List-Owner:` が `List-Id:` 無しで存在 —
+  正規 ML は必ず名札 (List-Id) を持つため、窓口欄だけのメールは
+  偽 ML 体裁 (List-Unsubscribe の無 List-Id は D1418)。
+- **修正**: `has_orphan_list_headers` が List-Id 欠落下の
+  ML 窓口欄を検査する。
+- **教訓**: 名札を持たない会が窓口だけ開く — 退会窓口だけでなく
+  投稿・購読の窓口も名札が要る。
+
 ### Security — D1461:
 
 - **問題**: `In-Reply-To:`/`References:` の値に `<…>` 形の msgid が
