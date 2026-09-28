@@ -864,6 +864,14 @@ pub struct Envelope {
     pub fullwidth_dot_addr: bool,
     /// msgid ローカル部の端ドット (D1576 — 照合ずれ)。
     pub msgid_edge_dot_local: bool,
+    /// Date 系の月先頭並び (D1577 — 日付解釈ずれ)。
+    pub month_first_date: bool,
+    /// msgid のクオート括り (D1578 — 照合ずれ)。
+    pub quoted_msgid: bool,
+    /// 宛名ローカル部 64 超 (D1579 — 宛名受理ずれ)。
+    pub long_local: bool,
+    /// 宛名ドメインラベル 63 超 (D1580 — 宛名受理ずれ)。
+    pub long_domain_label: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3171,6 +3179,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let fullwidth_dot_addr = has_fullwidth_dot_addr(bytes);
     // D1576: msgid ローカル端ドット
     let msgid_edge_dot_local = has_msgid_edge_dot_local(bytes);
+    // D1577: 月先頭日付
+    let month_first_date = has_month_first_date(bytes);
+    // D1578: クオート msgid
+    let quoted_msgid = has_quoted_msgid(bytes);
+    // D1579: 長いローカル部
+    let long_local = has_long_local(bytes);
+    // D1580: 長いドメインラベル
+    let long_domain_label = has_long_domain_label(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3505,6 +3521,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bare_ipv4_domain,
         fullwidth_dot_addr,
         msgid_edge_dot_local,
+        month_first_date,
+        quoted_msgid,
+        long_local,
+        long_domain_label,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -17957,6 +17977,185 @@ pub fn has_msgid_edge_dot_local(raw: &[u8]) -> bool {
                 }
             }
             rest = &after[gt + 1..];
+        }
+    }
+    false
+}
+
+
+/// Date 系欄が「月→日」の並びか判定する (D1577)。
+///
+/// `Date: Sep 25 2025` の月先頭は RFC 5322 の並び (日→月→年) と
+/// 逆で、慣習形に倒す実装と構文エラーにする実装で日付がずれる
+/// (数字月 D1566・未知月名 D1555・曜日不一致 D1569 の姉妹)。
+#[must_use]
+pub fn has_month_first_date(raw: &[u8]) -> bool {
+    const MON: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = &low[l.find(':').unwrap_or(0) + 1..];
+        let toks: Vec<&str> = v
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .collect();
+        for w in toks.windows(3) {
+            // 月 日(数字) 年(数字4桁) の慣習並び
+            if MON.contains(&w[0])
+                && w[1].bytes().all(|b| b.is_ascii_digit())
+                && !w[1].is_empty()
+                && w[2].len() == 4
+                && w[2].bytes().all(|b| b.is_ascii_digit())
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 系欄の識別子がクオートで括られているか判定する (D1578)。
+///
+/// `Message-ID: "<a@b>"` — 引用符を剥がして照合する実装と
+/// 引用込みで採る/捨てる実装でスレッド照合がずれる
+/// (括弧内空白は D1516)。
+#[must_use]
+pub fn has_quoted_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_msgid = low.starts_with("message-id:")
+            || low.starts_with("in-reply-to:")
+            || low.starts_with("references:")
+            || low.starts_with("resent-message-id:");
+        if !is_msgid {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim();
+        // "<…>" — 先頭 `"` で囲まれた識別子
+        if v.starts_with('"')
+            && v.len() >= 2
+            && v[1..].contains('<')
+            && v[1..].contains('>')
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄の裸ローカル部が 64 文字を超えるか判定する (D1579)。
+///
+/// RFC 5321 §4.5.3.1.1 の local-part 上限 64 を超える宛名は、
+/// 厳格実装が拒否し寛容実装が受理する — 宛名がずれる。
+#[must_use]
+pub fn has_long_local(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            // <…> 内か裸の addr-spec を取り出す
+            let seg = seg.trim();
+            let inner = if let (Some(lt), Some(gt)) = (seg.find('<'), seg.rfind('>')) {
+                if gt > lt {
+                    &seg[lt + 1..gt]
+                } else {
+                    seg
+                }
+            } else {
+                seg
+            };
+            if let Some(at) = inner.rfind('@') {
+                let local = inner[..at].trim_matches('"');
+                if local.len() > 64 {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメインラベルが 63 文字を超えるか判定する (D1580)。
+///
+/// DNS ラベル上限 63 を超えるドメインは厳格実装が宛名を拒否し
+/// 寛容実装が受理する — 宛名がずれる (ラベル端の記号は D1560)。
+#[must_use]
+pub fn has_long_domain_label(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            let seg = seg.trim();
+            let Some(at) = seg.rfind('@') else { continue };
+            let dom = seg[at + 1..]
+                .trim_end_matches(|c: char| c == '>' || c == ')' || c == ';' || c.is_whitespace());
+            if dom.split('.').any(|lbl| lbl.len() > 63) {
+                return true;
+            }
         }
     }
     false
@@ -36048,6 +36247,47 @@ mod tests {
         assert!(!has_msgid_edge_dot_local(
             b"Message-ID: <a.b@x>\r\n\r\nb"
         ));
+    }
+
+    #[test]
+    fn month_first_date_は月先頭を検出する() {
+        // D1577 — Sep 25 2025
+        assert!(has_month_first_date(
+            b"Date: Sep 25 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+        // 正規の並びは不発火
+        assert!(!has_month_first_date(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn quoted_msgid_はクオート括りを検出する() {
+        // D1578 — "<a@b>"
+        assert!(has_quoted_msgid(
+            b"Message-ID: \"<a@b>\"\r\n\r\nb"
+        ));
+        assert!(!has_quoted_msgid(b"Message-ID: <a@b>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn long_local_は長いローカル部を検出する() {
+        // D1579 — 65 字のローカル部
+        let l = format!("To: {}@x\r\n\r\nb", "a".repeat(65));
+        assert!(has_long_local(l.as_bytes()));
+        // 64 字以内は不発火
+        let ok = format!("To: {}@x\r\n\r\nb", "a".repeat(64));
+        assert!(!has_long_local(ok.as_bytes()));
+    }
+
+    #[test]
+    fn long_domain_label_は長いラベルを検出する() {
+        // D1580 — 64 字ラベル
+        let l = format!("To: a@{}.x\r\n\r\nb", "b".repeat(64));
+        assert!(has_long_domain_label(l.as_bytes()));
+        // 63 字以内は不発火
+        let ok = format!("To: a@{}.x\r\n\r\nb", "b".repeat(63));
+        assert!(!has_long_domain_label(ok.as_bytes()));
     }
 
     #[test]

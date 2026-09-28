@@ -20,6 +20,14 @@
 **修正** `Envelope.dotdot_addr_local` — `@` 前トークンの `..` を検出。
 **教訓** 名の途中に抜けた文字がある表札は、名前を読める人と読めない人を分ける。
 
+### Security — D1577: `Date:`/`Resent-Date:`/`Expires:`/`Expiry-Date:` が月先頭の慣習並び (`Sep 25 2025`) の場合を検出 — `kaname-render` の `Envelope` に `month_first_date` を追加。日→月→年の並びしか読めない実装と捨てる実装で日付がずれる (数字月 D1566・曜日不一致 D1569 の姉妹)。
+
+### Security — D1578: `Message-ID:`/`In-Reply-To:`/`References:` の識別子がクオートで括られた形 (`"<a@b>"`) の場合を検出 — `Envelope` に `quoted_msgid` を追加。引用符を剥がして照合する実装と含めて採る実装でスレッド照合がずれる (括弧内空白は D1516)。
+
+### Security — D1579: 宛名ローカル部が RFC 5321 の上限 64 字を超える場合を検出 — `Envelope` に `long_local` を追加。長さを検査する実装と受理する実装で宛名がずれる。
+
+### Security — D1580: 宛名ドメインのラベルが DNS 上限 63 字を超える場合を検出 — `Envelope` に `long_domain_label` を追加。厳格実装が宛名を拒否し寛容実装が受理する (ラベル端の記号は D1560)。
+
 ### Security — D1573: `Content-Type:` のメディア型に `/` が2つ以上 (`text/plain/extra`) ある場合を検出 — `kaname-render` の `Envelope` に `multi_slash_ct` を追加。最初の `/` で切る実装と欄ごと捨てる実装で型解釈がずれる (`text//plain` D1511・空白継ぎ D1512・ワイルドカード D1540 と棲み分け)。
 
 ### Security — D1574: 宛名ドメインが裸の IPv4 形 (`a@1.2.3.4`) の場合を検出 — `Envelope` に `bare_ipv4_domain` を追加。ドメイン名と読む実装と IP リテラルと見なす実装で宛名がずれる (範囲外は D1564、数値 TLD は D1558)。

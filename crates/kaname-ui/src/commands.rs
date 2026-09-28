@@ -4957,6 +4957,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.month_first_date {
+        render_risks.push(
+            "日付欄が月・日・年の慣習並びです (Sep 25 2025 等)\
+             —日・月・年の並びしか読めない実装と捨てる実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_msgid {
+        render_risks.push(
+            "メッセージ識別子が引用符で括られています (\"<a@b>\" 等)\
+             —引用符を剥がして照合する実装と含めて採る実装でスレッドがずれます"
+                .to_string(),
+        );
+    }
+    if env.long_local {
+        render_risks.push(
+            "宛名のローカル部が 64 字を超えています\
+             —長さを検査する実装と受理する実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.long_domain_label {
+        render_risks.push(
+            "宛名ドメインのラベルが 63 字を超えています\
+             —DNS 上限を検査する実装と受理する実装で宛名がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
