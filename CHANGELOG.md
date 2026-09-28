@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1621: `Content-Type: text/plain text/html` の空白区切り二重メディア型を検出 — `Envelope` に `two_media_types` を追加。先採用/後採用/全体エラーで部品の型解釈がずれる (型内空白は D1512)。
+
+### Security — D1622: アドレス欄ドメイン部の DNS 外文字 (`a@b/c.com`) を検出 — `Envelope` に `bad_domain_char` を追加。ラベル構成字外の ASCII を含むドメインを厳格実装が拒否し宛名がずれる (`!`/`%` は D1436)。
+
+### Security — D1623: 識別子欄の全角額縁 `〈a@b〉`/`＜a@b＞`/`【x】` を検出 — `Envelope` に `msgid_fullwidth_angle` を追加。ASCII `<>` のみ拾う実装は識別子を見失う (アドレス欄側は D1549)。
+
+### Security — D1624: CT/CD 欄の非クオート param 値内の `\` (`filename=a\b.txt`) を検出 — `Envelope` に `param_backslash` を追加。エスケープ処理する実装と生採用で添付名がずれる。
+
 ### Security — D1617: アドレス欄のコメント `(…)` 内に `@` を含む構造 (`From: ops (ceo@real.com) <x@y>`) を検出 — `Envelope` に `comment_has_addr` を追加。コメントごと走査する実装が別アドレスを拾い差出人表示がずれる (クオート内 `@` は D1602)。
 
 ### Security — D1618: アドレス欄のクオート表示名内の `;` (`"Doe; John"`) を検出 — `Envelope` に `quoted_semicolon_display` を追加。クオートを読まずに `;` で切る実装で宛名の切れ目がずれる (CT/CD 版は D1609)。

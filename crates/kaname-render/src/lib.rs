@@ -952,6 +952,14 @@ pub struct Envelope {
     pub comment_in_angle: bool,
     /// 空のドメインリテラル `a@[]` (D1620 — 宛名妥当性ずれ)。
     pub empty_domain_literal: bool,
+    /// CT 型本体に空白区切りの二重メディア型 (D1621 — 型解釈ずれ)。
+    pub two_media_types: bool,
+    /// ドメイン部の DNS 外文字 (D1622 — 宛名妥当性ずれ)。
+    pub bad_domain_char: bool,
+    /// 識別子欄の全角額縁 `〈〉`/`＜＞` (D1623 — 識別子読みずれ)。
+    pub msgid_fullwidth_angle: bool,
+    /// CT/CD 非クオート param 値の `\` (D1624 — 名札ずれ)。
+    pub param_backslash: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3347,6 +3355,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let comment_in_angle = has_comment_in_angle(bytes);
     // D1620: 空ドメインリテラル
     let empty_domain_literal = has_empty_domain_literal(bytes);
+    // D1621: 二重メディア型
+    let two_media_types = has_two_media_types(bytes);
+    // D1622: ドメインの DNS 外文字
+    let bad_domain_char = has_bad_domain_char(bytes);
+    // D1623: 識別子の全角額縁
+    let msgid_fullwidth_angle = has_msgid_fullwidth_angle(bytes);
+    // D1624: param 値の `\`
+    let param_backslash = has_param_backslash(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3725,6 +3741,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         quoted_semicolon_display,
         comment_in_angle,
         empty_domain_literal,
+        two_media_types,
+        bad_domain_char,
+        msgid_fullwidth_angle,
+        param_backslash,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -20241,6 +20261,251 @@ pub fn has_empty_domain_literal(raw: &[u8]) -> bool {
         let bytes = v.as_bytes();
         for i in 1..bytes.len().saturating_sub(1) {
             if bytes[i] == b'[' && bytes[i + 1] == b']' && bytes[i - 1] == b'@' {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体が空白区切りで2つ並ぶ形
+/// (`text/plain text/html`) があるか判定する (D1621)。
+///
+/// `;` 無しの空白継ぎで完結したメディア型が2つ並ぶと、先採用/
+/// 後採用/全体エラーで部品の型解釈がずれる (param の空白継ぎは
+/// D1501、型内空白は D1512)。
+#[must_use]
+pub fn has_two_media_types(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim();
+        // `;` 前の型本体を空白で分割 — 2つとも `x/y` 形なら二重型
+        let media = v.split(';').next().unwrap_or("");
+        let mut count = 0u32;
+        for tok in media.split_whitespace() {
+            if tok.contains('/') && !tok.starts_with('"') {
+                count += 1;
+            }
+        }
+        if count >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメイン部に DNS 名として非合法な文字があるか判定する
+/// (D1622)。
+///
+/// `a@b/c.com`/`a@b=c.com` — ラベル構成字 (`[A-Za-z0-9-]` + `.`) 外の
+/// ASCII を含むドメインは厳格実装が拒否し宛名がずれる (`!`/`%` の
+/// 経路構文は D1436、`_` は D1338、全角・非 ASCII は D1537/D1359、
+/// リテラル `[…]` は D1546)。
+#[must_use]
+pub fn has_bad_domain_char(raw: &[u8]) -> bool {
+    const BAD: &[u8] = b"/=?&#'$^|{}~\"<>;`";
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート/コメントを飛ばしつつ `@` 後のドメイン区間を走査
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut in_a = false;
+        let mut in_lit = false;
+        let mut prev = b'\0';
+        let mut after_at = false;
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && !in_a {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q {
+                in_c = 1;
+            } else if b == b'<' && !in_q {
+                in_a = true;
+            } else if b == b'>' && in_a {
+                in_a = false;
+            } else if b == b'[' && !in_q {
+                in_lit = true;
+            } else if b == b']' {
+                in_lit = false;
+            } else if b == b'@' && !in_q {
+                after_at = true;
+            } else if b == b',' || b == b';' || b == b' ' || b == b'\t' {
+                if !in_q && !in_a {
+                    after_at = false;
+                }
+            } else if after_at && !in_q && !in_lit {
+                if BAD.contains(&b) {
+                    return true;
+                }
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// 識別子欄の識別子が全角額縁 `〈〉`/`＜＞`/`【】` で括られているか
+/// 判定する (D1623)。
+///
+/// `Message-ID: 〈a@b〉` — ASCII `<>` のみ拾う実装は識別子を見失い、
+/// 全角を正規化する実装とずれる (アドレス欄側は D1549)。
+#[must_use]
+pub fn has_msgid_fullwidth_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if v.contains('〈') || v.contains('＜') || v.contains('【') {
+            return true;
+        }
+    }
+    false
+}
+
+/// CT/CD 欄の非クオート param 値に `\` が含まれるか判定する (D1624)。
+///
+/// `filename=a\b.txt` — `\` は attr-char 外のためクオート必須。
+/// エスケープ処理する実装は `\b` を別文字と読み、生採用する実装と
+/// 添付名がずれる (クオート内 `\` は quoted-pair として正規)。
+#[must_use]
+pub fn has_param_backslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        // クオート区間を潰す
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        for seg in scrub.split(';') {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            if seg[eq + 1..].contains('\\') {
                 return true;
             }
         }
@@ -38971,6 +39236,64 @@ mod tests {
         assert!(!has_empty_domain_literal(b"From: a@[nope]\r\n\r\nx"));
         assert!(!has_empty_domain_literal(b"From: a@b\r\n\r\nx"));
         assert!(!has_empty_domain_literal(b"Subject: a@[]\r\n\r\nx"));
+    }
+
+    #[test]
+    fn two_media_types_二重メディア型を検出する() {
+        // D1621 — 空白継ぎの二つの型
+        assert!(has_two_media_types(b"Content-Type: text/plain text/html\r\n\r\nx"));
+        assert!(has_two_media_types(
+            b"Content-Type: multipart/mixed\r\n\r\n--b\r\nContent-Type: text/plain text/html\r\n\r\nx\r\n--b--\r\n"
+        ));
+        // 単一型・param 付き・他欄は不発火
+        assert!(!has_two_media_types(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_two_media_types(b"Content-Type: text/plain\r\n\r\nx"));
+        assert!(!has_two_media_types(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn bad_domain_char_ドメイン不正文字を検出する() {
+        // D1622 — ドメイン部の DNS 外文字
+        assert!(has_bad_domain_char(b"From: a@b/c.com\r\n\r\nx"));
+        assert!(has_bad_domain_char(b"To: <a@b=c.com>\r\n\r\nx"));
+        assert!(has_bad_domain_char(b"Reply-To: a@b#c.com\r\n\r\nx"));
+        // 正規ドメイン・リテラル・クオート内・経路記号 (!/% は D1436)・他欄は不発火
+        assert!(!has_bad_domain_char(b"From: a@b-c.example.com\r\n\r\nx"));
+        assert!(!has_bad_domain_char(b"From: a@[192.0.2.1]\r\n\r\nx"));
+        assert!(!has_bad_domain_char(b"From: \"a/b\" <x@y>\r\n\r\nx"));
+        assert!(!has_bad_domain_char(b"From: a@b%c\r\n\r\nx"));
+        assert!(!has_bad_domain_char(b"Subject: a@b/c\r\n\r\nx"));
+        assert!(!has_bad_domain_char(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_fullwidth_angle_識別子の全角額縁を検出する() {
+        // D1623 — 〈〉/＜＞/【】 括り
+        assert!(has_msgid_fullwidth_angle("Message-ID: \u{ff1c}a@b\u{ff1e}\r\n\r\nx".as_bytes()));
+        assert!(has_msgid_fullwidth_angle("References: 〈a@b〉\r\n\r\nx".as_bytes()));
+        assert!(has_msgid_fullwidth_angle("List-Id: 【mylist】\r\n\r\nx".as_bytes()));
+        // ASCII 額縁・全角なし・他欄は不発火
+        assert!(!has_msgid_fullwidth_angle(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_msgid_fullwidth_angle("Subject: 〈hi〉\r\n\r\nx".as_bytes()));
+        assert!(!has_msgid_fullwidth_angle(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn param_backslash_裸paramのバックスラッシュを検出する() {
+        // D1624 — 非クオート値内の `\`
+        assert!(has_param_backslash(
+            b"Content-Disposition: attachment; filename=a\\b.txt\r\n\r\nx"
+        ));
+        assert!(has_param_backslash(
+            b"Content-Type: text/plain; name=x\\y\r\n\r\nx"
+        ));
+        // クオート内・非 param・他欄は不発火
+        assert!(!has_param_backslash(
+            b"Content-Disposition: attachment; filename=\"a\\b.txt\"\r\n\r\nx"
+        ));
+        assert!(!has_param_backslash(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_param_backslash(b"From: a\\b <x@y>\r\n\r\nx"));
+        assert!(!has_param_backslash(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]

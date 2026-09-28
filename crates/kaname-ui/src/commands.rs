@@ -5265,6 +5265,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.two_media_types {
+        render_risks.push(
+            "Content-Type の型の部分に空白区切りの型が2つ並んでいます\
+             —先採用と後採用で部品の型解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_domain_char {
+        render_risks.push(
+            "宛名のドメインに DNS 名でない文字があります\
+             —厳格実装は拒否し、受理する実装と宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.msgid_fullwidth_angle {
+        render_risks.push(
+            "識別子が全角の額縁 (〈〉/＜＞) で括られています\
+             —ASCII の「<>」しか拾わない実装は識別子を見失います"
+                .to_string(),
+        );
+    }
+    if env.param_backslash {
+        render_risks.push(
+            "添付名札の引用符なし値に「\\」があります\
+             —エスケープ処理する実装と生採用する実装で添付名がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
