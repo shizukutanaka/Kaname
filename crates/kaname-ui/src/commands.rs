@@ -3866,6 +3866,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.smtp_dot_line {
+        render_risks.push(
+            "本文中に単独のドット行があります\
+             —SMTP 終端として切り捨てる実装では以降が見えません"
+                .to_string(),
+        );
+    }
+    if env.midbody_mbox_from {
+        render_risks.push(
+            "本文中に mbox 区切り形の From 行があります\
+             —格納形式で以降が別メッセージとして隠れます"
+                .to_string(),
+        );
+    }
+    if env.multi_reply_to {
+        render_risks.push(
+            "Reply-To に複数の返信先が並んでいます\
+             —返信が見えない宛先へ分流される形です"
+                .to_string(),
+        );
+    }
+    if env.outer_content_disposition {
+        render_risks.push(
+            "外側ヘッダに Content-Disposition があります\
+             —メッセージ全体を添付として扱う実装とずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

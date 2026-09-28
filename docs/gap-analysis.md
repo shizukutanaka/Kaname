@@ -834,3 +834,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1418 | List-* 便益欄があるのに List-Id 無し | 偽 unsubscribe 誘導の体裁 | List-* 欄と List-Id の有無を突き合わせ | kaname-render |
 | D1419 | 添付名が 255 バイト超 | 保存名と表示名がずれる | CT/CD 添付名値の長さを検査 | kaname-render |
 | D1420 | CT/CD に空名パラメータ (;= / ; =) | 以降パラメータ解釈がずれる | ; 直後の = を検出 | kaname-render |
+| D1421 | 本文に単独 `.` 行 (SMTP DATA 終端形) | 切り捨て/表示で以降の見え方がずれる | 本文の孤立ドット行を検出 | kaname-render |
+| D1422 | 本文中の mbox `From ` 区切り行 | mbox 格納で第2メッセージが潜む | `From `+`@`+4桁年の行を検出 | kaname-render |
+| D1423 | `Reply-To:` の複数アドレス | 返信の見えない分流 | 引用・コメント外の @ 個数とカンマを検査 | kaname-render |
+| D1424 | 外側ヘッダの `Content-Disposition:` | メール全体を添付扱いする実装とずれる | 外側ヘッダの CD 行を検出 | kaname-render |

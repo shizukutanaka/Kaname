@@ -552,6 +552,14 @@ pub struct Envelope {
     pub long_filename: bool,
     /// D1420 — CT/CD パラメータ区切りに空名 (`;=`/`; =`) がある。
     pub empty_param_name: bool,
+    /// D1421 — 本文に単独の `.` 行 (SMTP DATA 終端形 — 切り捨てずれ)。
+    pub smtp_dot_line: bool,
+    /// D1422 — 本文中の mbox `From ` 行 (格納形式の区切り混入)。
+    pub midbody_mbox_from: bool,
+    /// D1423 — `Reply-To:` に複数アドレス (返信の見えない分流)。
+    pub multi_reply_to: bool,
+    /// D1424 — 外側ヘッダに `Content-Disposition:` (HTTP 由来欄の混入)。
+    pub outer_content_disposition: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2635,6 +2643,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let list_unsub_without_id = has_list_unsub_without_id(bytes);
     let long_filename = has_long_filename(bytes);
     let empty_param_name = has_empty_param_name(bytes);
+    let smtp_dot_line = has_smtp_dot_line(bytes);
+    let midbody_mbox_from = has_midbody_mbox_from(bytes);
+    let multi_reply_to = has_multi_reply_to(bytes);
+    let outer_content_disposition = has_outer_content_disposition(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2813,6 +2825,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         list_unsub_without_id,
         long_filename,
         empty_param_name,
+        smtp_dot_line,
+        midbody_mbox_from,
+        multi_reply_to,
+        outer_content_disposition,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -9789,6 +9805,112 @@ pub fn has_empty_param_name(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// 本文中に単独の `.` 行があるか判定する (D1421)。
+///
+/// SMTP の DATA 終端は行頭の単一ドット — 本文中の孤立 `.` 行を
+/// 終端として切り捨てるパーサと、本文として表示する実装で
+/// その後の内容の見え方がずれる (終端以降の潜伏)。
+#[must_use]
+pub fn has_smtp_dot_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(header_end) = text.find("\n\n") else {
+        return false;
+    };
+    text[header_end + 2..]
+        .lines()
+        .any(|l| l.trim_end() == ".")
+}
+
+/// 本文中に mbox 形式の `From ` 行があるか判定する (D1422)。
+///
+/// D1308 はメッセージ先頭の `From ` のみ — 本文途中の
+/// `From user@host ...` (mbox 区切り形) は、mbox として格納する
+/// 実装では新メッセージの区切りになり、以降が別メールとして
+/// 隠れる格納差異。`@` と4桁年を含む形のみ対象 (本文の
+/// 「From here」等の通常文は対象外)。
+#[must_use]
+pub fn has_midbody_mbox_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(header_end) = text.find("\n\n") else {
+        return false;
+    };
+    text[header_end + 2..].lines().any(|l| {
+        let l = l.trim_end();
+        l.starts_with("From ")
+            && l.contains('@')
+            && l[l.len().saturating_sub(5)..]
+                .chars()
+                .filter(|c| c.is_ascii_digit())
+                .count()
+                >= 4
+    })
+}
+
+/// `Reply-To:` に複数アドレスがあるか判定する (D1423)。
+///
+/// 返信先を複数並べると返信が見えない宛先へ分流される —
+/// 単一の返信先を想定する実装と全宛先へ送る実装で届き方が
+/// ずれる (BEC の返信横取りの素地)。
+#[must_use]
+pub fn has_multi_reply_to(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("reply-to:") else {
+            continue;
+        };
+        // コメント (…) と引用 "…" を落としてから @ を数える
+        let mut cleaned = String::with_capacity(v.len());
+        let mut in_quote = false;
+        let mut in_comment = false;
+        for c in v.chars() {
+            match c {
+                '"' if !in_comment => in_quote = !in_quote,
+                '(' if !in_quote => in_comment = true,
+                ')' if in_comment => in_comment = false,
+                _ if !in_quote && !in_comment => cleaned.push(c),
+                _ => {}
+            }
+        }
+        if cleaned.matches('@').count() >= 2 && cleaned.contains(',') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 外側ヘッダに `Content-Disposition:` があるか判定する (D1424)。
+///
+/// CD はパート (添付) の扱いを指定する欄で、メッセージ全体の
+/// 外側ヘッダには意味を持たない。置かれていると、メール全体を
+/// 添付として扱う実装と欄を無視する実装で扱いがずれる —
+/// HTTP 由来の欄がメール表紙に混ざった形。
+#[must_use]
+pub fn has_outer_content_disposition(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let Some(header_end) = text.find("\n\n") else {
+        return false;
+    };
+    text[..header_end]
+        .to_ascii_lowercase()
+        .lines()
+        .any(|l| l.starts_with("content-disposition:"))
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -25602,6 +25724,72 @@ mod tests {
         ));
         // `;` が無ければ不発火
         assert!(!has_empty_param_name(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn smtp_dot_line_は本文の孤立ドットを検出する() {
+        // D1421 — 本文中の単独 `.` 行
+        assert!(has_smtp_dot_line(
+            b"Subject: a\r\n\r\nfirst part\r\n.\r\nhidden body\r\n"
+        ));
+        // 単独行でないドット (文末のピリオド) は不発火
+        assert!(!has_smtp_dot_line(
+            b"Subject: a\r\n\r\nend of sentence.\r\nmore\r\n"
+        ));
+        // ドット行が無ければ不発火
+        assert!(!has_smtp_dot_line(
+            b"Subject: a\r\n\r\nplain body\r\n"
+        ));
+    }
+
+    #[test]
+    fn midbody_mbox_from_は本文のmbox区切りを検出する() {
+        // D1422 — 本文途中の `From user@host ... 2025` 形
+        assert!(has_midbody_mbox_from(
+            b"Subject: a\r\n\r\nhello\r\nFrom mallory@evil.example Mon Sep 22 2025\r\nSubject: smuggled\r\n\r\npayload"
+        ));
+        // @ や年を含まない通常の From 文は不発火
+        assert!(!has_midbody_mbox_from(
+            b"Subject: a\r\n\r\nFrom here onward we proceed.\r\n"
+        ));
+        // メッセージ先頭の From 行は D1308 の領分 — 本文側は不発火
+        assert!(!has_midbody_mbox_from(
+            b"Subject: a\r\n\r\nplain body\r\n"
+        ));
+    }
+
+    #[test]
+    fn multi_reply_to_は複数返信先を検出する() {
+        // D1423 — Reply-To に 2 アドレス
+        assert!(has_multi_reply_to(
+            b"From: a@b\r\nReply-To: victim@x, attacker@evil\r\n\r\nbody"
+        ));
+        // 単一宛先は不発火
+        assert!(!has_multi_reply_to(
+            b"From: a@b\r\nReply-To: support@company\r\n\r\nbody"
+        ));
+        // コメント中の @ は数えない
+        assert!(!has_multi_reply_to(
+            b"From: a@b\r\nReply-To: admin@x (note: admin@y)\r\n\r\nbody"
+        ));
+        // Reply-To が無ければ不発火
+        assert!(!has_multi_reply_to(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn outer_content_disposition_は外側添付扱い欄を検出する() {
+        // D1424 — 外側ヘッダの Content-Disposition
+        assert!(has_outer_content_disposition(
+            b"Content-Type: text/plain\r\nContent-Disposition: attachment\r\n\r\nbody"
+        ));
+        // パート側の CD は対象外 (外側ヘッダのみ検査)
+        assert!(!has_outer_content_disposition(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment; filename=\"a.exe\"\r\n\r\nAAAA\r\n--b--\r\n"
+        ));
+        // CD が無ければ不発火
+        assert!(!has_outer_content_disposition(
             b"Content-Type: text/plain\r\n\r\nbody"
         ));
     }
