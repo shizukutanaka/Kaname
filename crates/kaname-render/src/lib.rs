@@ -928,6 +928,14 @@ pub struct Envelope {
     pub dup_list_headers: bool,
     /// `List-*` 欄の `<`/`>` 数不一致 (D1608 — 解除欄読みずれ)。
     pub unclosed_list_angle: bool,
+    /// CT/CD のクオート値内 `;` (D1609 — param 分割ずれ)。
+    pub quoted_semicolon: bool,
+    /// 日付欄に時刻 (`:`) が無い形 (D1610 — 日付解釈ずれ)。
+    pub timeless_date: bool,
+    /// アドレス欄のコメント入れ子 `( (…) )` (D1611 — コメント除去ずれ)。
+    pub nested_comment: bool,
+    /// encoded-word の連接 (`=?…?= =?…?=`) (D1612 — 表示文字列ずれ)。
+    pub adjacent_encoded_words: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3299,6 +3307,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dup_list_headers = has_dup_list_headers(bytes);
     // D1608: List-* 欄の `<`/`>` 不一致
     let unclosed_list_angle = has_unclosed_list_angle(bytes);
+    // D1609: CT/CD クオート値内の `;`
+    let quoted_semicolon = has_quoted_semicolon(bytes);
+    // D1610: 時刻を欠く日付欄
+    let timeless_date = has_timeless_date(bytes);
+    // D1611: アドレス欄のコメント入れ子
+    let nested_comment = has_nested_comment(bytes);
+    // D1612: encoded-word 連接
+    let adjacent_encoded_words = has_adjacent_encoded_words(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3665,6 +3681,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         unquoted_comma_display,
         dup_list_headers,
         unclosed_list_angle,
+        quoted_semicolon,
+        timeless_date,
+        nested_comment,
+        adjacent_encoded_words,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -19553,6 +19573,211 @@ pub fn has_unclosed_list_angle(raw: &[u8]) -> bool {
         let gt = v.bytes().filter(|&b| b == b'>').count();
         if lt != gt {
             return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` のクオート値内に `;` が
+/// あるか判定する (D1609)。
+///
+/// `boundary="a;b"`/`filename="a;b"` — `;` はクオートの中では値の一部
+/// だが、クオートを読まずに `;` で割る素朴な実装は値を途中で切り、
+/// 境界・添付名がずれる (エスケープ `\"` は考慮、param 内 `;` の
+/// 裸形は D1486)。
+#[must_use]
+pub fn has_quoted_semicolon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers {
+            continue;
+        }
+        let is_ct = l.starts_with("content-type:") || l.starts_with("content-disposition:");
+        if !is_ct {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let bytes = v.as_bytes();
+        let mut in_q = false;
+        let mut prev = b'\0';
+        for &b in bytes {
+            if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if in_q && b == b';' {
+                return true;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// 日付欄の値に時刻 (`:` を含む時刻トークン) が無いか判定する (D1610)。
+///
+/// `Date: 25 Sep 2025` — RFC 5322 の date-time は `HH:MM` を必須とする。
+/// 時刻無しを深夜扱いする実装と構文エラーとする実装で並び順・表示が
+/// ずれる (ゾーン欠落は D1547、範囲外は D1559/D1561)。
+#[must_use]
+pub fn has_timeless_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim();
+        if v.is_empty() {
+            continue;
+        }
+        // コメントを剥がして判定
+        let mut plain = String::with_capacity(v.len());
+        let mut in_c = 0u32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'(' && prev != b'\\' {
+                in_c = 1;
+            } else {
+                plain.push(b as char);
+            }
+            prev = b;
+        }
+        if !plain.contains(':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄のコメントが入れ子 `((…))` か判定する (D1611)。
+///
+/// `From: John ((boss) ceo) <a@b>` — RFC 5322 のコメントは入れ子可能
+/// だが、浅い除去器は外側だけを剥がし `(ceo)` を残す — 表示名の
+/// 正規化結果がずれる (未終端は D1521、識別子内は D1603)。
+#[must_use]
+pub fn has_nested_comment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut depth = 0u32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if b == b'"' && prev != b'\\' && depth == 0 {
+                in_q = !in_q;
+            } else if !in_q && b == b'(' && prev != b'\\' {
+                depth += 1;
+                if depth >= 2 {
+                    return true;
+                }
+            } else if !in_q && b == b')' && prev != b'\\' && depth > 0 {
+                depth -= 1;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// ヘッダ欄に encoded-word の連接 (`=?…?=` + 空白 + `=?…?`) があるか
+/// 判定する (D1612)。
+///
+/// RFC 2047 は連接する encoded-word の間の空白を「復号後に落とす」と
+/// 定める — 厳密に処理する実装は `AB` と継げ、生で出す実装は
+/// `=…?= =?…=` のまま見せ、半端に処理する実装は `A B` と空白を残す —
+/// 件名・表示名の見え方がずれる。
+#[must_use]
+pub fn has_adjacent_encoded_words(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let bytes = l.as_bytes();
+        let mut i = 0usize;
+        while i + 1 < bytes.len() {
+            if bytes[i] == b'?' && bytes[i + 1] == b'=' {
+                let mut j = i + 2;
+                let mut ws = 0usize;
+                while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                    j += 1;
+                    ws += 1;
+                }
+                if ws > 0 && j + 1 < bytes.len() && bytes[j] == b'=' && bytes[j + 1] == b'?' {
+                    return true;
+                }
+            }
+            i += 1;
         }
     }
     false
@@ -38114,6 +38339,63 @@ mod tests {
         assert!(!has_unclosed_list_angle(b"List-Id: <mylist.x>\r\n\r\nx"));
         assert!(!has_unclosed_list_angle(b"List-Unsubscribe: mailto:a@x\r\n\r\nx"));
         assert!(!has_unclosed_list_angle(b"Message-ID: <a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn quoted_semicolon_クオート内セミコロンを検出する() {
+        // D1609 — クオート値内の `;`
+        assert!(has_quoted_semicolon(
+            b"Content-Type: multipart/mixed; boundary=\"a;b\"\r\n\r\nx"
+        ));
+        assert!(has_quoted_semicolon(
+            b"Content-Disposition: attachment; filename=\"a;b.txt\"\r\n\r\nx"
+        ));
+        // 裸のセミコロン・クオート無し・他欄は不発火
+        assert!(!has_quoted_semicolon(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_quoted_semicolon(b"From: \"a;b\" <x@y>\r\n\r\nx"));
+        assert!(!has_quoted_semicolon(b"Subject: a;b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn timeless_date_時刻なし日付を検出する() {
+        // D1610 — 時刻トークン欠落
+        assert!(has_timeless_date(b"Date: 25 Sep 2025\r\n\r\nx"));
+        assert!(has_timeless_date(b"Date: Thu, 25 Sep 2025\r\n\r\nx"));
+        assert!(has_timeless_date(b"Resent-Date: 25 Sep 2025\r\n\r\nx"));
+        // 時刻あり・他欄・空値は不発火
+        assert!(!has_timeless_date(b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nx"));
+        assert!(!has_timeless_date(b"Date: 25 Sep 2025 (note) 12:00:00\r\n\r\nx"));
+        assert!(!has_timeless_date(b"From: a@b\r\n\r\nx"));
+        assert!(!has_timeless_date(b"Date:\r\n\r\nx"));
+    }
+
+    #[test]
+    fn nested_comment_入れ子コメントを検出する() {
+        // D1611 — `( (…) )`
+        assert!(has_nested_comment(b"From: John ((boss) ceo) <a@b>\r\n\r\nx"));
+        assert!(has_nested_comment(b"To: a@b ((x)y)\r\n\r\nx"));
+        // 浅いコメント・クオート内 `(`・他欄は不発火
+        assert!(!has_nested_comment(b"From: John (ceo) <a@b>\r\n\r\nx"));
+        assert!(!has_nested_comment(b"From: \"a((b\" <x@y>\r\n\r\nx"));
+        assert!(!has_nested_comment(b"Subject: ((x))\r\n\r\nx"));
+        assert!(!has_nested_comment(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn adjacent_encoded_words_連接エンコードワードを検出する() {
+        // D1612 — `?= =?` の連接
+        assert!(has_adjacent_encoded_words(
+            b"Subject: =?utf-8?b?QQ==?= =?utf-8?b?Qg==?=\r\n\r\nx"
+        ));
+        assert!(has_adjacent_encoded_words(
+            b"From: =?utf-8?q?A?=  =?utf-8?q?B?= <a@b>\r\n\r\nx"
+        ));
+        // 単一 encoded-word・空白無し・通常件名は不発火
+        assert!(!has_adjacent_encoded_words(b"Subject: =?utf-8?b?QQ==?=\r\n\r\nx"));
+        assert!(!has_adjacent_encoded_words(
+            b"Subject: =?utf-8?b?QQ==?==?utf-8?b?Qg==?=\r\n\r\nx"
+        ));
+        assert!(!has_adjacent_encoded_words(b"Subject: hello world\r\n\r\nx"));
     }
 
     #[test]

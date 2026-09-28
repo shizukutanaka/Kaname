@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1609: `Content-Type:`/`Content-Disposition:` のクオート値内 `;` (`boundary="a;b"`) を検出 — `kaname-render` の `Envelope` に `quoted_semicolon` を追加。クオートを読まず `;` で割る素朴な実装は値を途中で切る (裸 `;` 異常は D1486)。
+
+### Security — D1610: 日付欄に時刻トークン (`:`) が無い形 (`Date: 25 Sep 2025`) を検出 — `Envelope` に `timeless_date` を追加。深夜扱いする実装と構文エラーとする実装でずれる (ゾーン欠落は D1547)。
+
+### Security — D1611: アドレス欄のコメント入れ子 `((…))` (`From: John ((boss) ceo) <a@b>`) を検出 — `Envelope` に `nested_comment` を追加。浅い除去器は内側を残し表示名の正規化がずれる (未終端は D1521、識別子内は D1603)。
+
+### Security — D1612: encoded-word の連接 (`=?…?=` + 空白 + `=?…?`) を検出 — `Envelope` に `adjacent_encoded_words` を追加。RFC 2047 は間の空白を落とす規定で、厳密処理実装と生表示実装で件名・表示名がずれる。
+
 ### Security — D1605: ヘッダブロック先頭が空白/タブ始まりの継続行のみ形を検出 — `kaname-render` の `Envelope` に `orphan_continuation` を追加。folding の元を持たない先頭行で、捨てる実装と本文扱いする実装で欄構成がずれる (空白のみ行は D1599)。
 
 ### Security — D1606: アドレス欄の非クオート表示名内 `,` (`From: Doe, John <a@b>`) を検出 — `Envelope` に `unquoted_comma_display` を追加。宛名区切りと読む実装と表示名の一部と読む実装で宛先集合がずれる (連続/端コンマは D1584、語句のみ欄は D1604)。
