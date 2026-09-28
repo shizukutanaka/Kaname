@@ -20,6 +20,14 @@
 **修正** `Envelope.dotdot_addr_local` — `@` 前トークンの `..` を検出。
 **教訓** 名の途中に抜けた文字がある表札は、名前を読める人と読めない人を分ける。
 
+### Security — D1573: `Content-Type:` のメディア型に `/` が2つ以上 (`text/plain/extra`) ある場合を検出 — `kaname-render` の `Envelope` に `multi_slash_ct` を追加。最初の `/` で切る実装と欄ごと捨てる実装で型解釈がずれる (`text//plain` D1511・空白継ぎ D1512・ワイルドカード D1540 と棲み分け)。
+
+### Security — D1574: 宛名ドメインが裸の IPv4 形 (`a@1.2.3.4`) の場合を検出 — `Envelope` に `bare_ipv4_domain` を追加。ドメイン名と読む実装と IP リテラルと見なす実装で宛名がずれる (範囲外は D1564、数値 TLD は D1558)。
+
+### Security — D1575: アドレス欄に全角ピリオド (U+3002 `。`/U+FF0E `．`/U+FF61 `｡`) がある場合を検出 — `Envelope` に `fullwidth_dot_addr` を追加。ASCII 正規化と生読みでドット解釈がずれる (全角＠ D1568・全角括弧 D1549 の姉妹)。
+
+### Security — D1576: `Message-ID:`/`In-Reply-To:`/`References:` の `<…>` 内に空白 (`<a b@x>`) がある場合を検出 — `Envelope` に `spaced_msgid` を追加。空白除去照合 vs 識別子破棄でスレッド照合がずれる (端の空白は D1516)。
+
 ### Security — D1569: `Date:` 欄の曜日名が実日付と一致しない (`Mon, 25 Sep 2025` 等) 場合を検出 — `kaname-render` の `Envelope` に `weekday_mismatch` を追加。曜日を検証する実装と無視する実装で日付の信頼性評価がずれる。
 
 ### Security — D1570: 日付欄の年に非数字が混じる (`20x5`/`abcd`) 場合を検出 — `Envelope` に `non_digit_year` を追加。厳格実装が構文エラーとし寛容実装が拾う (2桁年は D1535)。

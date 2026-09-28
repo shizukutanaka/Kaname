@@ -4929,6 +4929,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.multi_slash_ct {
+        render_risks.push(
+            "Content-Type の型に区切りが二つ以上あります (text/plain/extra 等)\
+             —最初で切る実装と欄ごと捨てる実装で型解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.bare_ipv4_domain {
+        render_risks.push(
+            "宛名のドメインが裸の IPv4 形です (a@1.2.3.4 等)\
+             —ドメイン名と読む実装と IP リテラルと見なす実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.fullwidth_dot_addr {
+        render_risks.push(
+            "宛名欄に全角ピリオドがあります (a。b@x・a．b@x 等)\
+             —ASCII 正規化する実装と生読みする実装で宛名の切り分けがずれます"
+                .to_string(),
+        );
+    }
+    if env.spaced_msgid {
+        render_risks.push(
+            "メッセージ識別子の括弧内に空白があります (<a b@x> 等)\
+             —空白を除いて照合する実装と識別子を捨てる実装でスレッドがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

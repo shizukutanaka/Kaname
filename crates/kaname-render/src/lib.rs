@@ -856,6 +856,14 @@ pub struct Envelope {
     pub junk_after_zone: bool,
     /// 裸 List-Id (D1572 — ML 判定ずれ)。
     pub bare_list_id: bool,
+    /// CT 型の複数スラッシュ (D1573 — 型解釈ずれ)。
+    pub multi_slash_ct: bool,
+    /// 宛名の裸 IPv4 ドメイン (D1574 — 宛名ずれ)。
+    pub bare_ipv4_domain: bool,
+    /// 宛名欄の全角ピリオド (D1575 — 宛名抽出ずれ)。
+    pub fullwidth_dot_addr: bool,
+    /// msgid 内部空白 (D1576 — 照合ずれ)。
+    pub spaced_msgid: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3155,6 +3163,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let junk_after_zone = has_junk_after_zone(bytes);
     // D1572: 裸 List-Id
     let bare_list_id = has_bare_list_id(bytes);
+    // D1573: 複数スラッシュ CT
+    let multi_slash_ct = has_multi_slash_ct(bytes);
+    // D1574: 裸 IPv4 ドメイン
+    let bare_ipv4_domain = has_bare_ipv4_domain(bytes);
+    // D1575: 全角ピリオド宛名
+    let fullwidth_dot_addr = has_fullwidth_dot_addr(bytes);
+    // D1576: msgid 内部空白
+    let spaced_msgid = has_spaced_msgid(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3485,6 +3501,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         non_digit_year,
         junk_after_zone,
         bare_list_id,
+        multi_slash_ct,
+        bare_ipv4_domain,
+        fullwidth_dot_addr,
+        spaced_msgid,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -17787,6 +17807,152 @@ pub fn has_bare_list_id(raw: &[u8]) -> bool {
         let v = v.trim();
         if !v.is_empty() && !(v.contains('<') && v.contains('>')) {
             return true;
+        }
+    }
+    false
+}
+
+
+/// `Content-Type:` のメディア型に `/` が2つ以上あるか判定する (D1573)。
+///
+/// `text/plain/extra` の二重区切りは、最初の `/` で切る実装と
+/// 欄ごと捨てる実装で型解釈がずれる (`text//plain` は D1511、
+/// `text /plain` は D1512、ワイルドカードは D1540)。
+#[must_use]
+pub fn has_multi_slash_ct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-type:") else {
+            continue;
+        };
+        let mt = v.split(';').next().unwrap_or("").trim();
+        if mt.bytes().filter(|b| *b == b'/').count() >= 2
+            && mt.split('/').all(|p| !p.is_empty())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄のドメインが裸の IPv4 形か判定する (D1574)。
+///
+/// `a@1.2.3.4` — ドメイン名として読む実装と IP リテラルと見なす
+/// 実装で宛名がずれる (括弧付きは正規形、範囲外は D1564)。
+#[must_use]
+pub fn has_bare_ipv4_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        for seg in v.split(',') {
+            let seg = seg.trim();
+            let Some(at) = seg.rfind('@') else { continue };
+            let dom = seg[at + 1..]
+                .trim_end_matches(|c: char| c == '>' || c == ')' || c == ';' || c.is_whitespace());
+            let parts: Vec<&str> = dom.split('.').collect();
+            if parts.len() == 4
+                && parts.iter().all(|p| {
+                    !p.is_empty() && p.len() <= 3 && p.bytes().all(|b| b.is_ascii_digit())
+                })
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// アドレス欄に全角ピリオドがあるか判定する (D1575)。
+///
+/// `a。b@x`/`a．b@x`/`a｡b@x` の U+3002/U+FF0E/U+FF61 を ASCII に
+/// 正規化する実装と生読みする実装でドットの解釈がずれる
+/// (全角＠は D1568、全角括弧は D1549)。
+#[must_use]
+pub fn has_fullwidth_dot_addr(raw: &[u8]) -> bool {
+    const FW: &[char] = &['\u{3002}', '\u{FF0E}', '\u{FF61}'];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        if l[colon + 1..].chars().any(|c| FW.contains(&c)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 系欄の `<…>` 内に空白があるか判定する (D1576)。
+///
+/// `<a b@x>` の内部空白は、除去して照合する実装と識別子ごと
+/// 捨てる実装でスレッド照合がずれる (括弧内空白 D1516 は端のみ)。
+#[must_use]
+pub fn has_spaced_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_msgid = low.starts_with("message-id:")
+            || low.starts_with("in-reply-to:")
+            || low.starts_with("references:")
+            || low.starts_with("resent-message-id:");
+        if !is_msgid {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        let mut rest = v;
+        while let Some(lt) = rest.find('<') {
+            let after = &rest[lt + 1..];
+            let Some(gt) = after.find('>') else { break };
+            let inner = &after[..gt];
+            if inner.trim().chars().any(|c| c.is_whitespace()) {
+                return true;
+            }
+            rest = &after[gt + 1..];
         }
     }
     false
@@ -35835,6 +36001,41 @@ mod tests {
         // D1572 — List-Id: abc
         assert!(has_bare_list_id(b"List-Id: mylist.example\r\n\r\nb"));
         assert!(!has_bare_list_id(b"List-Id: <mylist.example>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn multi_slash_ct_は二重区切りを検出する() {
+        // D1573 — text/plain/extra
+        assert!(has_multi_slash_ct(
+            b"Content-Type: text/plain/extra\r\n\r\nb"
+        ));
+        // 通常形は不発火
+        assert!(!has_multi_slash_ct(b"Content-Type: text/plain\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bare_ipv4_domain_は裸ipv4を検出する() {
+        // D1574 — a@1.2.3.4
+        assert!(has_bare_ipv4_domain(b"To: a@1.2.3.4\r\n\r\nb"));
+        // ドメイン名は不発火
+        assert!(!has_bare_ipv4_domain(b"To: a@b.example\r\n\r\nb"));
+        // 数値 TLD は D1558、範囲外は D1564
+        assert!(!has_bare_ipv4_domain(b"To: a@b.1234\r\n\r\nb"));
+    }
+
+    #[test]
+    fn fullwidth_dot_addr_は全角ピリオドを検出する() {
+        // D1575 — a。b@x / a．b@x
+        assert!(has_fullwidth_dot_addr("To: a。b@x\r\n\r\nb".as_bytes()));
+        assert!(has_fullwidth_dot_addr("To: a．b@x\r\n\r\nb".as_bytes()));
+        assert!(!has_fullwidth_dot_addr(b"To: a.b@x\r\n\r\nb"));
+    }
+
+    #[test]
+    fn spaced_msgid_は内部空白を検出する() {
+        // D1576 — <a b@x>
+        assert!(has_spaced_msgid(b"Message-ID: <a b@x>\r\n\r\nb"));
+        assert!(!has_spaced_msgid(b"Message-ID: <a.b@x>\r\n\r\nb"));
     }
 
     #[test]
