@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1633: アドレス欄 `<…>` 内側の `,` (`<a@b, c@d>`) を検出 — `Envelope` に `addr_angle_comma` を追加。内側を区切る実装と壊れた単一宛名と読む実装で宛先集合がずれる。
+
+### Security — D1634: アドレス欄の裸トークン途中の `"` (`a"b"@x`) を検出 — `Envelope` に `mid_token_quote` を追加。クオート開始と読む実装と字として読む実装で宛名がずれる。
+
+### Security — D1635: 識別子欄の `<` を伴わない `>` (`a@b>`) を検出 — `Envelope` に `msgid_gt_only` を追加。字として残す実装と捨てる実装で識別子がずれる (開き側のみは D1522)。
+
+### Security — D1636: CT/CD 欄の `;;` 空 param 節を検出 — `Envelope` に `empty_param_segment` を追加。空節を無視する実装と欄ごと捨てる実装で型・名札の読みがずれる。
+
 ### Security — D1629: アドレス欄の宛名区切りの全角 `；` (U+FF1B) を検出 — `Envelope` に `addr_fullwidth_semi` を追加。ASCII `;`/`,` のみで分割する実装は宛名を一つと読む (全角コンマは D1537、全角空白は D1583)。
 
 ### Security — D1630: 識別子欄 `<…>` 内の生非 ASCII 文字を検出 — `Envelope` に `msgid_nonascii` を追加。msg-id は ASCII 構成のため正規化/拒否でスレッド照合がずれる (encoded-word 形は D1529)。

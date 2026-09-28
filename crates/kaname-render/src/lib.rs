@@ -976,6 +976,14 @@ pub struct Envelope {
     pub msgid_quoted_local: bool,
     /// Date 欄の1桁時刻 `1:2:3` (D1632 — 日付解析ずれ)。
     pub date_short_time: bool,
+    /// 宛名欄の `<…>` 内 `,` (D1633 — 宛名分割ずれ)。
+    pub addr_angle_comma: bool,
+    /// 宛名欄の裸トークン途中の `"` (D1634 — 宛名読みずれ)。
+    pub mid_token_quote: bool,
+    /// 識別子欄の `>` 先出 `<` 無し (D1635 — 識別子読みずれ)。
+    pub msgid_gt_only: bool,
+    /// CT/CD 欄の `;;` 空 param 節 (D1636 — param 読みずれ)。
+    pub empty_param_segment: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3395,6 +3403,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_quoted_local = has_msgid_quoted_local(bytes);
     // D1632: 1桁時刻
     let date_short_time = has_date_short_time(bytes);
+    // D1633: 額縁内の `,`
+    let addr_angle_comma = has_addr_angle_comma(bytes);
+    // D1634: 裸トークン途中の `"`
+    let mid_token_quote = has_mid_token_quote(bytes);
+    // D1635: `<` 無しの `>`
+    let msgid_gt_only = has_msgid_gt_only(bytes);
+    // D1636: `;;` 空 param 節
+    let empty_param_segment = has_empty_param_segment(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3785,6 +3801,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_nonascii,
         msgid_quoted_local,
         date_short_time,
+        addr_angle_comma,
+        mid_token_quote,
+        msgid_gt_only,
+        empty_param_segment,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -20557,7 +20577,9 @@ pub fn has_param_backslash(raw: &[u8]) -> bool {
 ///
 /// `Message-ID: <>` — `local@domain` を欠く識別子は、厳格実装が
 /// 捨て、`<>` を残す/匿名識別子とする実装と照合がずれる
-/// (値自体の空は D1450、額縁無しは D1572、内側空白は D1596)。
+/// (D1498 が広く `@` 欠落形を拾うが、当検出は `<>` 空額縁の
+/// 明示形として併記する。値自体の空は D1450、額縁無しは D1572、
+/// 内側空白は D1596)。
 #[must_use]
 pub fn has_msgid_empty_angle(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
@@ -20993,6 +21015,236 @@ pub fn has_date_short_time(raw: &[u8]) -> bool {
                 return true;
             }
             i += 1;
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` 内側に `,` が含まれるか判定する (D1633)。
+///
+/// `To: <a@b, c@d>` — angle-addr は1つの宛名を括る約束のため、
+/// 内側の `,` を宛名区切りと読む実装と壊れた単一宛名と読む実装で
+/// 宛先集合がずれる (連続額縁は D1539、欄レベルの空要素は D1584)。
+#[must_use]
+pub fn has_addr_angle_comma(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            if rest[a + 1..a + z].contains(',') {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// アドレス欄の裸トークン途中に `"` が埋まる形があるか判定する
+/// (D1634)。
+///
+/// `From: a"b"@x` — `"` は quoted-string の区切りであり、atom の
+/// 途中に置く形は「クオート開始」と読む実装と「字」と読む実装で
+/// 宛名がずれる (正規の `"…" <a>` 形は `"` の前が空白/欄頭)。
+#[must_use]
+pub fn has_mid_token_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        let b = v.as_bytes();
+        let mut in_c = 0u32;
+        let mut in_q = false;
+        let mut prev_esc = false;
+        for (i, &ch) in b.iter().enumerate() {
+            if prev_esc {
+                prev_esc = false;
+                continue;
+            }
+            if in_c > 0 {
+                if ch == b')' {
+                    in_c -= 1;
+                }
+                continue;
+            }
+            if ch == b'(' {
+                in_c = 1;
+                continue;
+            }
+            if ch == b'\\' {
+                prev_esc = true;
+                continue;
+            }
+            if in_q {
+                if ch == b'"' {
+                    in_q = false;
+                }
+                continue;
+            }
+            if ch == b'"' && i > 0 {
+                // `"` の直前が atom 字 (空白/`<`/`,`/欄頭でない) —
+                // 表示名の開始クオートではなくトークン途中の `"`
+                let prev = b[i - 1];
+                if !matches!(prev, b' ' | b'\t' | b'<' | b',' | b'(') {
+                    return true;
+                }
+            }
+            if ch == b'"' {
+                in_q = true;
+            }
+        }
+    }
+    false
+}
+
+/// 識別子欄に `<` を伴わない `>` があるか判定する (D1635)。
+///
+/// `Message-ID: a@b>` — 額縁の閉じ側だけの形は `>` を字として残す
+/// 実装と捨てる実装で識別子がずれる (`<a@b` 開き側だけは D1522)。
+#[must_use]
+pub fn has_msgid_gt_only(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut depth = false;
+        for ch in v.chars() {
+            if ch == '<' {
+                depth = true;
+            } else if ch == '>' {
+                if depth {
+                    depth = false;
+                } else {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD 欄に `;;` の空 param 節があるか判定する (D1636)。
+///
+/// `Content-Type: text/plain;; charset=utf-8` — `;` と `;` の間に
+/// param 無し。空節を無視する実装と欄ごと捨てる実装で型・名札の
+/// 読みがずれる (キー無し `=x` は D1399、`;x` 裸トークンは D1504)。
+#[must_use]
+pub fn has_empty_param_segment(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_headers = true;
+    for l in text.lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("content-type:") && !low.starts_with("content-disposition:") {
+            continue;
+        }
+        let v = &l[l.find(':').unwrap_or(0) + 1..];
+        // クオート区間を潰してから `;` 分割
+        let mut scrub = String::with_capacity(v.len());
+        let mut rest = v;
+        while let Some(q) = rest.find('"') {
+            scrub.push_str(&rest[..q]);
+            match rest[q + 1..].find('"') {
+                Some(e) => rest = &rest[q + 1 + e + 1..],
+                None => {
+                    rest = "";
+                    break;
+                }
+            }
+        }
+        scrub.push_str(rest);
+        let mut segs = scrub.split(';').skip(1).peekable();
+        while let Some(s) = segs.next() {
+            if s.trim().is_empty() && segs.peek().is_some() {
+                return true;
+            }
         }
     }
     false
@@ -39878,6 +40130,60 @@ mod tests {
         assert!(!has_date_short_time(b"Date: 25 Sep 2025\r\n\r\nx"));
         assert!(!has_date_short_time(b"Subject: 1:2:3\r\n\r\nx"));
         assert!(!has_date_short_time(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn addr_angle_comma_額縁内コンマを検出する() {
+        // D1633 — `<a@b, c@d>`
+        assert!(has_addr_angle_comma(b"To: <a@b, c@d>\r\n\r\nx"));
+        assert!(has_addr_angle_comma(b"Cc: <a@b,c@d>\r\n\r\nx"));
+        // 額縁外コンマ・通常形・他欄は不発火
+        assert!(!has_addr_angle_comma(b"To: a@b, c@d\r\n\r\nx"));
+        assert!(!has_addr_angle_comma(b"To: <a@b>, <c@d>\r\n\r\nx"));
+        assert!(!has_addr_angle_comma(b"Subject: <a,b>\r\n\r\nx"));
+        assert!(!has_addr_angle_comma(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn mid_token_quote_トークン途中の引用符を検出する() {
+        // D1634 — `a"b"@x`
+        assert!(has_mid_token_quote(b"From: a\"b\"@x\r\n\r\nx"));
+        assert!(has_mid_token_quote(b"To: x@y a\"b\r\n\r\nx"));
+        // 正規表示名・欄頭クオート・コメント内は不発火
+        assert!(!has_mid_token_quote(b"From: \"a b\" <x@y>\r\n\r\nx"));
+        assert!(!has_mid_token_quote(b"From: x@y (a\"b)\r\n\r\nx"));
+        assert!(!has_mid_token_quote(b"Subject: a\"b\r\n\r\nx"));
+        assert!(!has_mid_token_quote(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn msgid_gt_only_閉じ額のみを検出する() {
+        // D1635 — `a@b>` の `<` 無し `>`
+        assert!(has_msgid_gt_only(b"Message-ID: a@b>\r\n\r\nx"));
+        assert!(has_msgid_gt_only(b"References: <a@b> c@d>\r\n\r\nx"));
+        // 対揃い・開きのみ・他欄は不発火
+        assert!(!has_msgid_gt_only(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_msgid_gt_only(b"Message-ID: <a@b\r\n\r\nx"));
+        assert!(!has_msgid_gt_only(b"From: a@b>\r\n\r\nx"));
+        assert!(!has_msgid_gt_only(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn empty_param_segment_空param節を検出する() {
+        // D1636 — `;;`
+        assert!(has_empty_param_segment(
+            b"Content-Type: text/plain;; charset=utf-8\r\n\r\nx"
+        ));
+        assert!(has_empty_param_segment(
+            b"Content-Disposition: attachment;; filename=a\r\n\r\nx"
+        ));
+        // 通常形・末尾 `;` のみ・クオート内・他欄は不発火
+        assert!(!has_empty_param_segment(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_empty_param_segment(b"Content-Type: text/plain;\r\n\r\nx"));
+        assert!(!has_empty_param_segment(
+            b"Content-Disposition: attachment; filename=\"a;;b\"\r\n\r\nx"
+        ));
+        assert!(!has_empty_param_segment(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]
