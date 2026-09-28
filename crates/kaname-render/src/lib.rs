@@ -1126,6 +1126,14 @@ pub struct Envelope {
     pub ct_no_subtype: bool,
     /// 識別子のドット無しドメイン (D1706 — 識別子ずれ)。
     pub msgid_dotless_domain: bool,
+    /// `Received:` の `by` 節重複 (D1707 — 経路解析ずれ)。
+    pub received_multi_by: bool,
+    /// `Content-Disposition:` の型欠落 (D1708 — 添付判定ずれ)。
+    pub cd_empty_type: bool,
+    /// `Received:` の `from` 節クオート名 (D1709 — 経路解析ずれ)。
+    pub received_from_quoted: bool,
+    /// `Received:` の `from` 節の裸 `@` (D1710 — 経路解析ずれ)。
+    pub received_from_at: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3693,6 +3701,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_no_subtype = has_ct_no_subtype(bytes);
     // D1706: 識別子のドット無しドメイン
     let msgid_dotless_domain = has_msgid_dotless_domain(bytes);
+    // D1707: Received の by 節重複
+    let received_multi_by = has_received_multi_by(bytes);
+    // D1708: Content-Disposition の型欠落
+    let cd_empty_type = has_cd_empty_type(bytes);
+    // D1709: Received の from 節クオート名
+    let received_from_quoted = has_received_from_quoted(bytes);
+    // D1710: Received の from 節の裸 @
+    let received_from_at = has_received_from_at(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4157,6 +4173,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         slash_param_value,
         ct_no_subtype,
         msgid_dotless_domain,
+        received_multi_by,
+        cd_empty_type,
+        received_from_quoted,
+        received_from_at,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -24876,6 +24896,163 @@ pub fn has_msgid_dotless_domain(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `by` 節が2つあるか判定する (D1707)。
+///
+/// `Received: from a by x by y` — 最初の `by` を採る実装と
+/// 最後を採る実装で受け渡し先の経路がずれる
+/// (`from` 節重複は D1688)。
+#[must_use]
+pub fn has_received_multi_by(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let bys = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .filter(|t| t.eq_ignore_ascii_case("by"))
+            .count();
+        if bys >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型トークンが空か判定する (D1708)。
+///
+/// `Content-Disposition: ; filename=x` — `attachment` 既定で
+/// 処理する実装と欄ごと捨てる実装で添付判定がずれる
+/// (型本体の空値は D1645、型トークン欠落は D1649 — こちらは CD 側)。
+#[must_use]
+pub fn has_cd_empty_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let body = v.split(';').next().unwrap_or("").trim();
+        // `; xxx` で始まる = 型トークンが空 (欄全体の空値は対象外)
+        if body.is_empty() && v.trim_start().starts_with(';') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `from` 節値がクオートされているか判定する (D1709)。
+///
+/// `Received: from "mx.example.com"` — クオートを剥がす実装と
+/// そのままホスト名として捨てる実装で経路の出所がずれる。
+#[must_use]
+pub fn has_received_from_quoted(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if !t.eq_ignore_ascii_case("from") {
+                continue;
+            }
+            if let Some(next) = toks.get(i + 1) {
+                if next.starts_with('"') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `from` 節値に裸 `@` が含まれるか判定する (D1710)。
+///
+/// `Received: from user@host.com` — `from` 節はドメイン名を
+/// 取る筈で、メールアドレス形を書くと、全体をホスト名と採る実装と
+/// ローカル部を捨てる実装で経路の出所がずれる
+/// (from 節欠落は D1673、空 from 節は D1703)。
+#[must_use]
+pub fn has_received_from_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if !t.eq_ignore_ascii_case("from") {
+                continue;
+            }
+            if let Some(next) = toks.get(i + 1) {
+                if next.contains('@') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -44668,6 +44845,51 @@ mod tests {
             b"Message-ID: <a@[192.168.0.1]>\r\n\r\n"
         ));
         assert!(!has_msgid_dotless_domain(b""));
+    }
+
+    #[test]
+    fn received_multi_by_二つのby節を検出する() {
+        assert!(has_received_multi_by(
+            b"Received: from mail.a by mx.b by relay.c; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_by(
+            b"Received: from mail.a by mx.b; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_by(b""));
+    }
+
+    #[test]
+    fn cd_empty_type_空の型を検出する() {
+        assert!(has_cd_empty_type(
+            b"Content-Disposition: ; filename=\"a.txt\"\r\n\r\n"
+        ));
+        assert!(!has_cd_empty_type(
+            b"Content-Disposition: attachment; filename=\"a.txt\"\r\n\r\n"
+        ));
+        assert!(!has_cd_empty_type(b"Content-Disposition:\r\n\r\n"));
+        assert!(!has_cd_empty_type(b""));
+    }
+
+    #[test]
+    fn received_from_quoted_クオート名のfrom節を検出する() {
+        assert!(has_received_from_quoted(
+            b"Received: from \"mx.example.com\" by mx.b; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_from_quoted(
+            b"Received: from mx.example.com by mx.b; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_from_quoted(b""));
+    }
+
+    #[test]
+    fn received_from_at_裸アットのfrom節を検出する() {
+        assert!(has_received_from_at(
+            b"Received: from user@host.com by mx.b; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_from_at(
+            b"Received: from host.com by mx.b; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_from_at(b""));
     }
 
     #[test]

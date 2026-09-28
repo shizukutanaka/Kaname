@@ -5792,6 +5792,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.msgid_dotless_domain {
         render_risks.push("識別子のドメインにドットがありません—FQDNを要求する実装と受理する実装で照合がずれます".to_string());
     }
+    if env.received_multi_by {
+        render_risks.push("Received 欄に by 節が二つあります—先採用と後採用で経路がずれます".to_string());
+    }
+    if env.cd_empty_type {
+        render_risks.push("Content-Disposition に型がありません—attachment扱いする実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.received_from_quoted {
+        render_risks.push("Received 欄の from 節がクオートされています—剥がす実装とそのまま読む実装で経路がずれます".to_string());
+    }
+    if env.received_from_at {
+        render_risks.push("Received 欄の from 節にアドレス形があります—ホスト名と採る実装とローカル部を捨てる実装で経路がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

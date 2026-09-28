@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1710: `Received:` の `from` 節の裸 `@` `from user@host` を検出 — `Envelope` に `received_from_at` を追加 (from 節欠落は D1673、空 from 節は D1703)。
+### Security — D1709: `Received:` の `from` 節クオート名 `from "mx"` を検出 — `Envelope` に `received_from_quoted` を追加。
+### Security — D1708: `Content-Disposition: ; x=y` の型欠落を検出 — `Envelope` に `cd_empty_type` を追加 (型本体の空値は D1645、CT 型欠落は D1649)。
+### Security — D1707: `Received:` の `by` 節重複を検出 — `Envelope` に `received_multi_by` を追加 (`from` 節重複は D1688)。
 ### Security — D1706: 識別子 `<a@localhost>` のドット無しドメインを検出 — `Envelope` に `msgid_dotless_domain` を追加 (宛名欄側は D1697)。
 ### Security — D1705: `Content-Type: text` のサブ型欠落を検出 — `Envelope` に `ct_no_subtype` を追加 (型本体の欠落は D1649、空値は D1645、二重 `/` は D1356)。
 ### Security — D1704: param 裸値の `/` `;charset=utf/8` を検出 — `Envelope` に `slash_param_value` を追加 (値内 `:` は D1659、第二 `=` は D1647)。
