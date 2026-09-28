@@ -4342,6 +4342,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.part_bom {
+        render_risks.push(
+            "パート本文の先頭に BOM があります\
+             —BOM 優先と charset 優先で文字コード解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.bad_star_param {
+        render_risks.push(
+            "filename*/name* の連番札に数字以外のタグがあります\
+             —厳格実装は捨て、寛容実装は拾います"
+                .to_string(),
+        );
+    }
+    if env.double_closer {
+        render_risks.push(
+            "同じ boundary の閉じ区切りが重複・逆順で現れます\
+             —最初の閉じで止める実装と拾い続ける実装で構造がずれます"
+                .to_string(),
+        );
+    }
+    if env.nonascii_msgid {
+        render_risks.push(
+            "Message-ID/参照欄の <> 内に非 ASCII 文字があります\
+             —厳格実装は識別子を捨てスレッド照合がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

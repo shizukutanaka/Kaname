@@ -688,6 +688,14 @@ pub struct Envelope {
     pub spaced_param_value: bool,
     /// D1488 — List-Unsubscribe 無しの List-Unsubscribe-Post。
     pub orphan_unsubscribe_post: bool,
+    /// D1489 — パート本文先頭の BOM (UTF-8/UTF-16)。
+    pub part_bom: bool,
+    /// D1490 — `*=` 裸星・`*foo=` 非数値タグの異常連番 param。
+    pub bad_star_param: bool,
+    /// D1491 — 同一 boundary の閉じ区切りの重複・逆順。
+    pub double_closer: bool,
+    /// D1492 — Message-ID 等の `<…>` 内に非 ASCII。
+    pub nonascii_msgid: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2839,6 +2847,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dangling_param_semi = has_dangling_param_semi(bytes);
     let spaced_param_value = has_spaced_param_value(bytes);
     let orphan_unsubscribe_post = has_orphan_unsubscribe_post(bytes);
+    let part_bom = has_part_bom(bytes);
+    let bad_star_param = has_bad_star_param(bytes);
+    let double_closer = has_double_closer(bytes);
+    let nonascii_msgid = has_nonascii_msgid(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3085,6 +3097,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dangling_param_semi,
         spaced_param_value,
         orphan_unsubscribe_post,
+        part_bom,
+        bad_star_param,
+        double_closer,
+        nonascii_msgid,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -13249,6 +13265,220 @@ pub fn has_orphan_unsubscribe_post(raw: &[u8]) -> bool {
         }
     }
     has_post && !has_unsub
+}
+
+/// パート境界 (ヘッダ区切りの空行) の直後が BOM で始まる形か
+/// 判定する (D1489)。
+///
+/// メッセージ先頭の BOM は D1342。パート本文先頭に BOM があると、
+/// BOM を優先する実装と charset 宣言を優先する実装で文字コード
+/// 解釈がずれる (UTF-16 BOM なら内容ごと見えなくなる)。
+#[must_use]
+pub fn has_part_bom(raw: &[u8]) -> bool {
+    const BOM: [[u8; 3]; 1] = [[0xEF, 0xBB, 0xBF]];
+    const BOM2: [[u8; 2]; 2] = [[0xFF, 0xFE], [0xFE, 0xFF]];
+    // \n\n または \r\n\r\n の直後のバイト列を検査
+    let mut i = 0;
+    while i + 4 <= raw.len() {
+        let is_sep = (raw[i] == b'\n' && raw[i + 1] == b'\n')
+            || (raw[i] == b'\r'
+                && raw[i + 1] == b'\n'
+                && raw[i + 2] == b'\r'
+                && raw[i + 3] == b'\n');
+        if !is_sep {
+            i += 1;
+            continue;
+        }
+        let off = i + if raw[i] == b'\n' { 2 } else { 4 };
+        if off >= raw.len() {
+            break;
+        }
+        for b in BOM {
+            if raw[off..].starts_with(&b) {
+                return true;
+            }
+        }
+        for b in BOM2 {
+            if raw[off..].starts_with(&b) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// `filename*x=` のような非数値タグ・`*=` 裸キーのパラメータが
+/// あるか判定する (D1490)。
+///
+/// RFC 2231 の連番タグは `*数字` — `name*foo=` や `*=` は厳格実装で
+/// 捨てられ、寛容実装は拾う。`filename*=`/`name*1=` 等の正規形は
+/// 対象外 (欠番は D1394)。
+#[must_use]
+pub fn has_bad_star_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_ct = l.starts_with("content-type:");
+        let is_cd = l.starts_with("content-disposition:");
+        if !is_ct && !is_cd {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        for seg in v.split(';') {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim();
+            if key.is_empty() {
+                continue;
+            }
+            if let Some(star) = key.find('*') {
+                let tag = &key[star + 1..];
+                // `name*` (単一符号化) または `name*<digits>`/`name*<digits>*` が正規
+                // — `*=` の裸星・`*foo=` の非数値タグ・`**=` の空名は異常
+                let ok = star > 0
+                    && (tag.is_empty()
+                        || (!tag.trim_end_matches('*').is_empty()
+                            && tag
+                                .trim_end_matches('*')
+                                .chars()
+                                .all(|c| c.is_ascii_digit())));
+                if !ok {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// 同一 boundary の閉じ区切り `--b--` が 2 回以上、または最初の
+/// 開き `--b` より前に現れる形か判定する (D1491)。
+///
+/// 閉じ区切りの再出現は「最初の閉じで全て終了」と読む実装と、
+/// エピローグ後も区切りを拾い続ける実装で構造がずれる。
+#[must_use]
+pub fn has_double_closer(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let Some(ct) = lower.lines().find(|l| l.starts_with("content-type:")) else {
+        return false;
+    };
+    if !ct.contains("multipart/") {
+        return false;
+    }
+    let Some(bp) = ct.find("boundary=") else { return false };
+    let brest = &ct[bp + 9..];
+    let b = if let Some(q) = brest.strip_prefix('"') {
+        q.split('"').next().unwrap_or("")
+    } else {
+        brest.split(';').next().unwrap_or("").trim()
+    };
+    if b.is_empty() {
+        return false;
+    }
+    let open = format!("--{}", b);
+    let close = format!("--{}--", b);
+    let header_end = lower.find("\n\n").unwrap_or(0);
+    let mut opens = 0usize;
+    let mut closes = 0usize;
+    let mut closer_before_opener = false;
+    for l in lower[header_end..].lines() {
+        if l.starts_with(&close) {
+            if opens == 0 {
+                closer_before_opener = true;
+            }
+            closes += 1;
+        } else if l.starts_with(&open) {
+            opens += 1;
+        }
+    }
+    // opens==0 のまま閉じのみなら D1483 (closer_only) の担域 — ここでは
+    // 「開きがあってもなお」閉じが先/二重の形だけを摘出する
+    opens > 0 && (closes >= 2 || closer_before_opener)
+}
+
+/// Message-ID/In-Reply-To/References の `<…>` 内に非 ASCII バイト
+/// があるか判定する (D1492)。
+///
+/// msgid は `<dot-atom@dot-atom>` の ASCII 構文 — `café@x` のような
+/// 非 ASCII を含む識別子は厳格実装で捨てられ、寛容実装は採用する
+/// (スレッド照合のずれ)。生 UTF-8 ヘッダ全般は D1304 が別途担当。
+#[must_use]
+pub fn has_nonascii_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if !inner.is_ascii() {
+                return true;
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -30156,6 +30386,67 @@ mod tests {
         ));
         assert!(!has_orphan_unsubscribe_post(
             b"List-Unsubscribe: <mailto:u@x>\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn part_bom_は部品先頭のbomを検出する() {
+        // D1489 — パート本文先頭の BOM (メッセージ先頭は D1342)
+        assert!(has_part_bom(b"Content-Type: text/plain\r\n\r\n\xef\xbb\xbfhello"));
+        assert!(has_part_bom(b"A: 1\r\n\r\n\xff\xfex"));
+        // BOM 無し・BOM が行の途中は不発火
+        assert!(!has_part_bom(b"Content-Type: text/plain\r\n\r\nhello"));
+        assert!(!has_part_bom(b"A: 1\r\n\r\nx\xef\xbb\xbfy"));
+    }
+
+    #[test]
+    fn bad_star_param_は異常連番札を検出する() {
+        // D1490 — `*=` 裸星・`name*foo=` 非数値
+        assert!(has_bad_star_param(
+            b"Content-Disposition: attachment; *=utf-8''a\r\n\r\nx"
+        ));
+        assert!(has_bad_star_param(
+            b"Content-Disposition: attachment; filename*foo=a\r\n\r\nx"
+        ));
+        // 正規連番・単一符号化は不発火
+        assert!(!has_bad_star_param(
+            b"Content-Disposition: attachment; filename*0=a; filename*1=b\r\n\r\nx"
+        ));
+        assert!(!has_bad_star_param(
+            b"Content-Disposition: attachment; filename*=utf-8''a\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn double_closer_は二重閉じを検出する() {
+        // D1491 — 開きの後に閉じが二度/先
+        assert!(has_double_closer(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nx\r\n--b--\r\n--b--"
+        ));
+        assert!(has_double_closer(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b--\r\n--b\r\nx"
+        ));
+        // 正常形・閉じのみ (D1483) は不発火
+        assert!(!has_double_closer(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nx\r\n--b--"
+        ));
+        assert!(!has_double_closer(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn nonascii_msgid_は識別子の非asciiを検出する() {
+        // D1492 — <café@x>
+        assert!(has_nonascii_msgid(
+            "Message-ID: <café@x>\r\n\r\nx".as_bytes()
+        ));
+        assert!(!has_nonascii_msgid(
+            b"Message-ID: <a@b>\r\n\r\nx"
+        ));
+        // 非対象欄の非ASCIIは不発火 (D1304 の担域)
+        assert!(!has_nonascii_msgid(
+            "Subject: café\r\n\r\nx".as_bytes()
         ));
     }
 
