@@ -5041,6 +5041,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.dup_identity_headers {
+        render_risks.push(
+            "From/Date/Subject/Message-ID が複数回出ています\
+             —先に読む実装と後に読む実装で差出人・件名・時刻の同一性がずれます"
+                .to_string(),
+        );
+    }
+    if env.addr_before_angle {
+        render_risks.push(
+            "アドレス欄で「<…>」の前に裸のアドレスがあります\
+             —先を採る実装と額縁を採る実装で表示される宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.nocomma_weekday {
+        render_risks.push(
+            "Date: の曜日名に「,」がありません\
+             —コンマを必須とする実装は曜日を読めず、飛ばす実装だけが日付を拾います"
+                .to_string(),
+        );
+    }
+    if env.bad_ftext {
+        render_risks.push(
+            "欄名に使えない文字を含むヘッダ行があります\
+             —厳密に検査する実装が欄ごと捨て、寛容な実装だけが読みます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

@@ -1002,3 +1002,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1586 | Received `;` 日時印無し | 欄破棄 vs 拾いで経過記録ずれ |
 | D1587 | `Message_ID:` `_` 綴り欄名 | 文字通り vs 正規化で欄種別ずれ |
 | D1588 | `wednesday/midnight` 未知主型 | octet-stream 既定 vs 拒否でずれ |
+| D1589 | `From:`/`Date:`/`Subject:` 重複欄 | 先読み vs 後読みで同一性ずれ |
+| D1590 | `a@b <c@d>` 額縁前の裸宛名 | 先採用 vs 額縁採用で宛名ずれ |
+| D1591 | `Thu 25 Sep` コンマ無し曜日 | エラー vs 読み飛ばしで日付ずれ |
+| D1592 | `Sub ject:` 非 ftext 欄名 | 欄破棄 vs 読みで欄構成ずれ |

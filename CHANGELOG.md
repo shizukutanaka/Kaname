@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1589: `From:`/`Date:`/`Subject:`/`Message-ID:` の複数回出現を検出 — `kaname-render` の `Envelope` に `dup_identity_headers` を追加。RFC 5322 では一意欄であり、先読み/後読みで差出人・件名・時刻がずれ、DKIM 署名対象欄としても片方だけが検証される (配送欄重複は D1376、MIME 欄は D1401)。
+
+### Security — D1590: アドレス欄で `<…>` の前に裸アドレスがある形 (`From: a@b <c@d>`) を検出 — `Envelope` に `addr_before_angle` を追加。先の裸宛名を採る実装と額縁内を採る実装で表示される宛名がずれる (額縁後の書き足しは D1538、連続額縁は D1539)。
+
+### Security — D1591: `Date:` の曜日名が `,` 無しの裸形 (`Date: Thu 25 Sep 2025`) を検出 — `Envelope` に `nocomma_weekday` を追加。コンマ必須の実装は曜日を読めず構文エラー、寛容実装は飛ばして日付を拾う (曜日名の綴り違いは D1582、曜日不一致は D1569)。
+
+### Security — D1592: 欄名に ftext 外文字が含まれる形 (`Sub ject:`/`X(1):`/`フロム:`) を検出 — `Envelope` に `bad_ftext` を追加。厳密検査実装が欄ごと捨て、寛容実装が読む (`_` は D1587、`.` は D1548、名と `:` の間の空白は D1305)。
+
 ### Security — D1585: ヘッダブロックに `:` を含まない行が混ざる形を検出 — `kaname-render` の `Envelope` に `colonless_header_line` を追加。`X-Junk garbage` のようなコロン無し欄行は、そこでヘッダ解析を打ち切る実装と行を読み飛ばす実装で以降の欄構成がずれる (空白行前コロンは D1305)。
 
 ### Security — D1586: `Received:` に必須の `;` 付き日時印が無い形を検出 — `Envelope` に `received_no_semi` を追加。節 (`from/by/with/id/for`) があるのに `;` が無い `Received: from a by b 25 Sep 2025` は、日時印を必須とする実装が欄を捨て寛容実装が拾う (節皆無の手書き形は D1458)。

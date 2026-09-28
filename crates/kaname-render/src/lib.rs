@@ -888,6 +888,14 @@ pub struct Envelope {
     pub underscore_header_name: bool,
     /// Content-Type の未知メイン型 (D1588 — 既定型ずれ)。
     pub unknown_maintype: bool,
+    /// From/Date/Subject/Message-ID の重複欄 (D1589 — 同一性ずれ)。
+    pub dup_identity_headers: bool,
+    /// 角括弧宛名の前に裸アドレス (D1590 — 採用位置ずれ)。
+    pub addr_before_angle: bool,
+    /// Date: の曜日名に `,` が無い形 (D1591 — 日付解釈ずれ)。
+    pub nocomma_weekday: bool,
+    /// 欄名に非 ftext 文字が混ざる形 (D1592 — 欄解析ずれ)。
+    pub bad_ftext: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3219,6 +3227,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let underscore_header_name = has_underscore_header_name(bytes);
     // D1588: 未知メディア主型
     let unknown_maintype = has_unknown_maintype(bytes);
+    // D1589: 同一性欄の重複
+    let dup_identity_headers = has_dup_identity_headers(bytes);
+    // D1590: 角括弧宛名の前の裸アドレス
+    let addr_before_angle = has_addr_before_angle(bytes);
+    // D1591: コンマ無し曜日名
+    let nocomma_weekday = has_nocomma_weekday(bytes);
+    // D1592: 欄名の非 ftext 文字
+    let bad_ftext = has_bad_ftext(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3565,6 +3581,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_no_semi,
         underscore_header_name,
         unknown_maintype,
+        dup_identity_headers,
+        addr_before_angle,
+        nocomma_weekday,
+        bad_ftext,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -18541,6 +18561,176 @@ pub fn has_unknown_maintype(raw: &[u8]) -> bool {
             {
                 return true;
             }
+        }
+    }
+    false
+}
+
+/// `From:`/`Date:`/`Subject:`/`Message-ID:` が複数回出るか判定する
+/// (D1589)。
+///
+/// RFC 5322 はこれらを一意欄 (max 1) と定める。二枚ある場合、先読み実装
+/// と後読み実装で差出人・日付・件名・スレッド識別がずれ、署名欄として
+/// 採用する DKIM 実装では片方だけが署名対象になる — 同一性の偽装。
+/// (配送欄は D1376、スレッド参照欄は D1404、MIME 欄は D1401)。
+#[must_use]
+pub fn has_dup_identity_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let (mut from, mut date, mut subject, mut msgid) = (0usize, 0usize, 0usize, 0usize);
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("from:") {
+            from += 1;
+        } else if l.starts_with("date:") {
+            date += 1;
+        } else if l.starts_with("subject:") {
+            subject += 1;
+        } else if l.starts_with("message-id:") {
+            msgid += 1;
+        }
+        if from > 1 || date > 1 || subject > 1 || msgid > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄で角括弧宛名 `<…>` の前に裸の `@` トークンが置かれた形か
+/// 判定する (D1590)。
+///
+/// `From: a@b <c@d>` は表示名部分にアドレス風トークンが来た形 — 先の
+/// 裸アドレスを採る実装と額縁内を採る実装で差出人がずれる (額縁後の
+/// 書き足しは D1538、連続額縁は D1539)。クオート・コメント内の `@`
+/// は対象外。
+#[must_use]
+pub fn has_addr_before_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = l[colon + 1..].as_bytes();
+        // 各トップレベル区切り `,` ごとに: `<` が出る前に裸 `@` があるか
+        let (mut in_q, mut in_c, mut in_a, mut bare_at, mut prev) =
+            (false, 0i32, false, false, b'\0');
+        for &b in v.iter().chain(std::iter::once(&b',')) {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if in_a {
+                if b == b'>' {
+                    in_a = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'<' {
+                if bare_at {
+                    return true;
+                }
+                in_a = true;
+            } else if b == b'@' {
+                bare_at = true;
+            } else if b == b',' {
+                bare_at = false;
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// `Date:` の曜日名が `,` 無しの裸形か判定する (D1591)。
+///
+/// `Date: Thu 25 Sep 2025` — RFC 5322 の day-of-week は `曜,` の形を
+/// 必須とする。コンマを必須とする実装は曜日を読めず構文エラー、寛容
+/// 実装は曜日を飛ばして日付を拾う — 日付の解釈がずれる (曜日名の
+/// 綴り違いは D1582、曜日と日付の不一致は D1569)。
+#[must_use]
+pub fn has_nocomma_weekday(raw: &[u8]) -> bool {
+    const WD: &[&str] = &["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !low.starts_with("date:") {
+            continue;
+        }
+        let v = &low[low.find(':').unwrap_or(0) + 1..];
+        let Some(first) = v.split_whitespace().next() else { continue };
+        // 正規形は `Mon,` — 生トークンが末尾 `,` を欠き曜日名なら検出
+        if !first.ends_with(',') && WD.contains(&first.trim_matches(|c: char| c == ';' || c == ',')) {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダ名に field-name 文字 (ASCII 英字・数字・ハイフン) 以外が
+/// 含まれる形か判定する (D1592)。
+///
+/// `Sub ject:`/`X(1):`/`フロム:` のような非 ftext 文字を含む欄名は、
+/// 名前を厳密に検査する実装が欄ごと捨て、寛容実装がそのまま読む —
+/// 欄の有無がずれる。`_` 綴りは D1587、`.` 混入は D1548、名前と
+/// `:` の間の空白は D1305 の領分 (それらはここでは対象外)。
+#[must_use]
+pub fn has_bad_ftext(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.is_empty() {
+            break; // ヘッダブロック終端
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end_matches([' ', '\t']);
+        if name.is_empty() {
+            return true; // `: value` — 名の無い欄
+        }
+        if name.bytes().any(|b| !(b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))) {
+            return true;
         }
     }
     false
@@ -36816,6 +37006,72 @@ mod tests {
         ));
         assert!(!has_unknown_maintype(b"Content-Type: foo\r\nFrom: a@b\r\n\r\nbody"));
         assert!(!has_unknown_maintype(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn dup_identity_headers_同一性欄重複を検出する() {
+        // D1589 — From/Date/Subject/Message-ID が2回以上
+        assert!(has_dup_identity_headers(
+            b"From: a@b\r\nFrom: c@d\r\nSubject: x\r\n\r\nbody"
+        ));
+        assert!(has_dup_identity_headers(
+            b"From: a@b\r\nSubject: x\r\nSubject: y\r\n\r\nbody"
+        ));
+        assert!(has_dup_identity_headers(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\nDate: Thu, 25 Sep 2025 12:00:00 +0000\r\n\r\nbody"
+        ));
+        assert!(has_dup_identity_headers(
+            b"Message-ID: <a@b>\r\nMessage-ID: <c@d>\r\n\r\nbody"
+        ));
+        // 通常形・折り返し内の from: 文字列は不発火
+        assert!(!has_dup_identity_headers(b"From: a@b\r\nSubject: x\r\n\r\nbody"));
+        assert!(!has_dup_identity_headers(
+            b"From: a@b\r\nSubject: x\r\n and from: words\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn addr_before_angle_額縁前の裸アドレスを検出する() {
+        // D1590 — `<…>` の前に裸の @ トークン
+        assert!(has_addr_before_angle(b"From: a@b <c@d>\r\n\r\nbody"));
+        assert!(has_addr_before_angle(b"To: junk@x.y, real@x.y <v@z>\r\n\r\nbody"));
+        // 通常の表示名・額縁のみ・クオート内 @ は不発火
+        assert!(!has_addr_before_angle(b"From: John <a@b>\r\n\r\nbody"));
+        assert!(!has_addr_before_angle(b"From: \"a@b\" <c@d>\r\n\r\nbody"));
+        assert!(!has_addr_before_angle(b"From: <a@b> <c@d>\r\n\r\nbody")); // D1539 領分
+        assert!(!has_addr_before_angle(b"From: a@b, c@d\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn nocomma_weekday_コンマなし曜日を検出する() {
+        // D1591 — `Date: Thu 25 Sep 2025`
+        assert!(has_nocomma_weekday(
+            b"Date: Thu 25 Sep 2025 12:00:00 +0000\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        // 正規形 `Thu,`・曜日無し・非3文字名 (D1582) は不発火
+        assert!(!has_nocomma_weekday(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0000\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_nocomma_weekday(
+            b"Date: 25 Sep 2025 12:00:00 +0000\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_nocomma_weekday(
+            b"Date: Monday, 25 Sep 2025 12:00:00 +0000\r\nFrom: a@b\r\n\r\nbody"
+        ));
+        assert!(!has_nocomma_weekday(b"From: a@b\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn bad_ftext_非ftext欄名を検出する() {
+        // D1592 — 欄名に ftext 外文字
+        assert!(has_bad_ftext(b"Sub ject: x\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(has_bad_ftext(b"X(1): x\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(has_bad_ftext("フロム: a@b\r\nFrom: a@b\r\n\r\nbody".as_bytes()));
+        // `_` (D1587)・`.` (D1548)・末尾空白 (D1305)・正規形は不発火
+        assert!(!has_bad_ftext(b"X_Custom_Header: v\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(!has_bad_ftext(b"Content.Type: text/plain\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(!has_bad_ftext(b"Subject : x\r\nFrom: a@b\r\n\r\nbody"));
+        assert!(!has_bad_ftext(b"Subject: x\r\nFrom: a@b\r\n\r\nbody"));
     }
 
     #[test]
