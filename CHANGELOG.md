@@ -8,6 +8,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — D1389: Exchange 組織内記録ヘッダの自称が未検査
+
+- **問題**: `X-MS-Exchange-Organization-AuthAs: Internal`/`-MessageDirectionality:`/`X-MS-Exchange-CrossTenant-*`/`SafeLinks-*`/`X-MS-PublicTrafficType:` は受信側で付与される組織内輸送記録 — 送信側が書き込むと「社内からの発信」の体裁が偽造できる (AuthAs: Internal は BEC の定番)。
+- **修正**: `has_exchange_org_claim` — ms_eop_marks の補集合 (organization-/crosstenant/atpmessageproperties/safelinks/skg-/office365-filtering/publictraffictype/traffictypediagnostic/oob-tlc) を検出 → `Envelope.exchange_org_claim` → render_risks 警告。
+- **教訓**: 受付で捺されるはずの構内通行印を来客が自署した通行証。
+
+### Security — D1390: 配送記録ヘッダ (Return-Path/Delivered-To) の重複が未検査
+
+- **問題**: Return-Path は最終配送 MTA が1度だけ付け、Delivered-To も配送ごとに1行 — 2回現れるのは再注入ループや配送系統重複の残渣で単発メールにはあり得ない形 (D1271 は空欄側のみ対象)。
+- **修正**: `has_dup_delivery_headers` — 外側ヘッダで2欄の出現回数を数える → `Envelope.dup_delivery_headers` → render_risks 警告。
+- **教訓**: 二度捺された配達証印 — 通ったはずのない二つの窓口の記録。
+
+### Security — D1391: 添付名のドット・空白始まり (隠れ名) が未検査
+
+- **問題**: `filename=".evil.exe"` は Finder/Unix 一覧で不可視の dotfile、`filename=" report.pdf"` は先頭空白で見え方がずれる — 保存されるが一覧に現れない添付。`filename*=` の `%2e` 先頭も同型。
+- **修正**: `has_hidden_filename` — filename/name パラメータ値の先頭文字を検査 → `Envelope.hidden_filename` → render_risks 警告。
+- **教訓**: 名札が透明インクで書かれた添付 — 棚に載るが目録に出ない。
+
+### Security — D1392: CT/CD パラメータのクオート不対応が未検査
+
+- **問題**: `filename="a` のような未終端クオートは、行末まで値として読む実装と `;` で切る実装で添付名がずれる — パラメータ境界の解釈差異。
+- **修正**: `has_unbalanced_param_quote` — CT/CD 論理行をスキャン、コメント内 `"` と `\"` を除いて不対応を検出 → `Envelope.unbalanced_param_quote` → render_risks 警告。
+- **教訓**: 閉じられない引用符 — 「ここまでが名前だ」の線が引けない書類。
+
 ### Security — D1385: ヘッダ run 先頭の孤児継続行 (WSP 始まり) が未検査
 
 - **問題**: 外側ヘッダ・パートヘッダ run の**先頭行**が空白/タブ始まりだと、親を持たない孤児折りたたみになる — 先頭行を捨てる実装とヘッダ名として読む実装で最初の欄の解釈がずれる。

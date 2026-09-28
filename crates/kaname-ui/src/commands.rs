@@ -3641,6 +3641,35 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.exchange_org_claim {
+        render_risks.push(
+            "組織内処理の記録欄 (X-MS-Exchange-Organization-* 等) を\
+             送信側が書き込んでいます —「社内からの発信」の体裁を\
+             自称する兆候です"
+                .to_string(),
+        );
+    }
+    if env.dup_delivery_headers {
+        render_risks.push(
+            "配送記録欄 (Return-Path/Delivered-To) が重複しています\
+             —配送系統の重複や再注入の残渣です"
+                .to_string(),
+        );
+    }
+    if env.hidden_filename {
+        render_risks.push(
+            "添付名がドット・空白で始まっています\
+             —一覧に現れない隠れ名の形状です"
+                .to_string(),
+        );
+    }
+    if env.unbalanced_param_quote {
+        render_risks.push(
+            "Content-Type/Disposition のパラメータでクオートが\
+             閉じられていません —添付名の解釈が実装間でずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

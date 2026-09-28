@@ -464,6 +464,17 @@ pub struct Envelope {
     /// D1388 — `X-Unsent:`/`Apparently-To:` 等の下書き・エクスポート
     /// 残渣ヘッダ (エクスポート品・手作り生成の兆候)。
     pub draft_residue: bool,
+    /// D1389 — `X-MS-Exchange-Organization-*`/CrossTenant/SafeLinks 等
+    /// の組織内処理記録の自称 (「社内発信」の体裁を外部が書き込む)。
+    pub exchange_org_claim: bool,
+    /// D1390 — `Return-Path:`/`Delivered-To:` の重複 (配送系統の
+    /// 重複・再注入ループ残渣)。
+    pub dup_delivery_headers: bool,
+    /// D1391 — 添付名がドット・空白始まり (dotfile/不可視名)。
+    pub hidden_filename: bool,
+    /// D1392 — CT/CD パラメータ領域のダブルクオート不対応
+    /// (パラメータ境界の解釈差異)。
+    pub unbalanced_param_quote: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2515,6 +2526,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let body_header_block = has_body_header_block(bytes);
     let pem_markers = has_pem_markers(bytes);
     let draft_residue = has_draft_residue(bytes);
+    let exchange_org_claim = has_exchange_org_claim(bytes);
+    let dup_delivery_headers = has_dup_delivery_headers(bytes);
+    let hidden_filename = has_hidden_filename(bytes);
+    let unbalanced_param_quote = has_unbalanced_param_quote(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2661,6 +2676,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         body_header_block,
         pem_markers,
         draft_residue,
+        exchange_org_claim,
+        dup_delivery_headers,
+        hidden_filename,
+        unbalanced_param_quote,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -8233,6 +8252,162 @@ pub fn has_draft_residue(raw: &[u8]) -> bool {
             || l.starts_with("apparently-to:")
             || l.starts_with("x-apparently-to:")
     })
+}
+
+/// `X-MS-Exchange-Organization-*`/`X-MS-Exchange-CrossTenant-*`/
+/// `X-MS-Exchange-ATPMessageProperties:`/`X-MS-Exchange-SafeLinks-*`/
+/// `X-MS-PublicTrafficType:` 等の組織内処理記録があるか判定する
+/// (D1389)。
+///
+/// `X-MS-Exchange-Organization-AuthAs: Internal` や
+/// `-MessageDirectionality: Originating` は「社内からの発信」の
+/// 体裁を作る Exchange 輸送記録 — 受信側で付与されるはずの欄を
+/// 送信側が書き込む自称 (AuthAs: Internal は BEC の定番工作)。
+/// 既存 ms_eop_marks (inbox-/transport-/moderation-/gcc- 等) の
+/// 補集合を対象とする。
+#[must_use]
+pub fn has_exchange_org_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    lower[..header_end].lines().any(|l| {
+        l.starts_with("x-ms-exchange-organization-")
+            || l.starts_with("x-ms-exchange-crosstenant")
+            || l.starts_with("x-ms-exchange-atpmessageproperties")
+            || l.starts_with("x-ms-exchange-safelinks")
+            || l.starts_with("x-ms-exchange-skg-")
+            || l.starts_with("x-ms-office365-filtering-")
+            || l.starts_with("x-ms-publictraffictype:")
+            || l.starts_with("x-ms-traffictypediagnostic:")
+            || l.starts_with("x-ms-oob-tlc-oofclassifiers:")
+    })
+}
+
+/// `Return-Path:`/`Delivered-To:` が2回以上現れるか判定する
+/// (D1390)。
+///
+/// Return-Path は最終配送 MTA が1度だけ付け、Delivered-To も
+/// 配送ごとに1行 — 2回現れるのは配送系統の重複・再注入ループの
+/// 残渣で、単発メールではあり得ない形 (D1271 は空 Return-Path、
+/// こちらは重複側)。
+#[must_use]
+pub fn has_dup_delivery_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let lower = text.to_ascii_lowercase();
+    let header_end = lower.find("\n\n").unwrap_or(lower.len());
+    let mut return_path = 0u32;
+    let mut delivered_to = 0u32;
+    for l in lower[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("return-path:") {
+            return_path += 1;
+        } else if l.starts_with("delivered-to:") {
+            delivered_to += 1;
+        }
+    }
+    return_path > 1 || delivered_to > 1
+}
+
+/// 添付名 (`filename=`/`name=`) がドット・空白始まりか判定する
+/// (D1391)。
+///
+/// `filename=".evil.exe"` は macOS/Linux の標準一覧で不可視の
+/// dotfile、`filename=" report.pdf"` は先頭空白で見え方がずれる
+/// 隠れ名。`filename*=` の符号化値先頭が `%2e` (.) の形も拾う。
+#[must_use]
+pub fn has_hidden_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else { continue };
+            let key = seg[..eq].trim();
+            let v = &seg[eq + 1..];
+            if key == "filename" || key == "name" {
+                // クオート値の中身の先頭文字を見る
+                let inner = v.strip_prefix('"').map(|s| {
+                    &s[..s.find('"').unwrap_or(s.len())]
+                });
+                let val = inner.unwrap_or(v.trim());
+                if val.starts_with('.') || val.starts_with(' ') || val.starts_with('\t') {
+                    return true;
+                }
+            } else if key.starts_with("filename*") || key.starts_with("name*") {
+                // RFC 2231: `charset'lang'value` — 先頭が %2e = ドット
+                let after = v.split("''").last().unwrap_or(v);
+                if after.starts_with("%2e") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD 行のパラメータ領域でダブルクオートが不対応か判定する
+/// (D1392)。
+///
+/// `filename="a` のような未終端クオートは、行末まで値として
+/// 読む実装と `;` で切る実装で添付名がずれる — パラメータ境界の
+/// 解釈差異。コメント `(...)` 内の `"` と quoted-pair `\"` は
+/// 数えない (コメント内の孤立クオートは誤爆を避けるため)。
+#[must_use]
+pub fn has_unbalanced_param_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-type:") || l.starts_with("content-disposition:")) {
+            continue;
+        }
+        let mut in_quote = false;
+        let mut comment_depth = 0u32;
+        let bytes = l.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if in_quote => i += 1, // quoted-pair を読み飛ばす
+                b'(' if !in_quote => comment_depth += 1,
+                b')' if !in_quote => comment_depth = comment_depth.saturating_sub(1),
+                b'"' if comment_depth == 0 => in_quote = !in_quote,
+                _ => {}
+            }
+            i += 1;
+        }
+        if in_quote {
+            return true;
+        }
+    }
+    false
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -23535,6 +23710,75 @@ mod tests {
             b"From: a@b\r\nApparently-To: b@x\r\n\r\nbody"
         ));
         assert!(!has_draft_residue(b"From: a@b\r\nSubject: x\r\n\r\nbody"));
+    }
+
+    #[test]
+    fn exchange_org_claim_は社内記録欄を検出する() {
+        // D1389 — Exchange 組織内記録の自称
+        assert!(has_exchange_org_claim(
+            b"From: a@b\r\nX-MS-Exchange-Organization-AuthAs: Internal\r\n\r\nbody"
+        ));
+        assert!(has_exchange_org_claim(
+            b"From: a@b\r\nX-MS-Exchange-CrossTenant-OriginalArrivalTime: x\r\n\r\nbody"
+        ));
+        assert!(has_exchange_org_claim(
+            b"From: a@b\r\nX-MS-PublicTrafficType: Email\r\n\r\nbody"
+        ));
+        assert!(!has_exchange_org_claim(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn dup_delivery_headers_は配送欄重複を検出する() {
+        // D1390 — Return-Path/Delivered-To 重複
+        assert!(has_dup_delivery_headers(
+            b"Return-Path: <a@x>\r\nReturn-Path: <b@y>\r\nSubject: x\r\n\r\nbody"
+        ));
+        assert!(has_dup_delivery_headers(
+            b"Delivered-To: a@x\r\nDelivered-To: a@x\r\nSubject: x\r\n\r\nbody"
+        ));
+        // 単発は不発火
+        assert!(!has_dup_delivery_headers(
+            b"Return-Path: <a@x>\r\nDelivered-To: a@x\r\nSubject: x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn hidden_filename_は隠れ添付名を検出する() {
+        // D1391 — dotfile / 先頭空白
+        assert!(has_hidden_filename(
+            b"Content-Type: text/plain\r\nContent-Disposition: attachment; filename=\".evil.exe\"\r\n\r\nx"
+        ));
+        assert!(has_hidden_filename(
+            b"Content-Disposition: attachment; filename=\" report.pdf\"\r\n\r\nx"
+        ));
+        // filename*= の %2e 先頭
+        assert!(has_hidden_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''%2eevil.exe\r\n\r\nx"
+        ));
+        // 通常名は不発火
+        assert!(!has_hidden_filename(
+            b"Content-Disposition: attachment; filename=\"report.pdf\"\r\n\r\nx"
+        ));
+        assert!(!has_hidden_filename(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unbalanced_param_quote_はクオート不対応を検出する() {
+        // D1392 — 未終端クオート
+        assert!(has_unbalanced_param_quote(
+            b"Content-Disposition: attachment; filename=\"a.exe\r\n\r\nx"
+        ));
+        // 対応したクオートは不発火
+        assert!(!has_unbalanced_param_quote(
+            b"Content-Disposition: attachment; filename=\"a.exe\"\r\n\r\nx"
+        ));
+        // コメント内のクオートは数えない
+        assert!(!has_unbalanced_param_quote(
+            b"Content-Type: text/plain (note \"stray\")\r\n\r\nx"
+        ));
+        assert!(!has_unbalanced_param_quote(b"Content-Type: text/plain\r\n\r\nx"));
     }
 
     #[test]

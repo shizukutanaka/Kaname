@@ -802,3 +802,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1386 | ~~**本文冒頭のヘッダ形連続行が未検査**~~ **(解消済み)** | P2 | 再取り込みで後続ヘッダとして復活する格納差異。修正: `has_body_header_block` → render_risks | 本文の顔をした第二の表紙 |
 | D1387 | ~~**RFC 1421 PEM ヘッダ (Proc-Type 等) が未検査**~~ **(解消済み)** | P2 | 現行スキャナが暗号化と認識しない死角。修正: `has_pem_markers` → render_risks | 誰も読めなくなった旧規格の封印 |
 | D1388 | ~~**下書き残渣ヘッダ (X-Unsent 等) が未検査**~~ **(解消済み)** | P3 | エクスポート品・手作り生成の兆候 (Bcc 露出も)。修正: `has_draft_residue` → render_risks | 机の中の控えが届いた葉書 |
+| D1389 | ~~**Exchange 組織内記録欄 (Organization-* 等) の自称が未検査**~~ **(解消済み)** | P2 | AuthAs: Internal で社内発信の体裁を偽造。修正: `has_exchange_org_claim` → render_risks | 来客が自署する構内通行証 |
+| D1390 | ~~**配送記録欄 (Return-Path/Delivered-To) の重複が未検査**~~ **(解消済み)** | P3 | 再注入ループ・系統重複の残渣。修正: `has_dup_delivery_headers` → render_risks | 二度捺された配達証印 |
+| D1391 | ~~**添付名のドット・空白始まり (隠れ名) が未検査**~~ **(解消済み)** | P2 | dotfile は一覧に現れない添付。修正: `has_hidden_filename` → render_risks | 透明インクの名札の添付 |
+| D1392 | ~~**CT/CD パラメータのクオート不対応が未検査**~~ **(解消済み)** | P2 | 未終端クオートで添付名境界がずれる。修正: `has_unbalanced_param_quote` → render_risks | 閉じられない引用符の書類 |
