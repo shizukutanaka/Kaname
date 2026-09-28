@@ -632,6 +632,14 @@ pub struct Envelope {
     pub dup_mime_version: bool,
     /// D1460 — 宣言 boundary が本文で一度も使われない。
     pub unused_boundary: bool,
+    /// D1461 — In-Reply-To/References に <…> 形の msgid が無い。
+    pub bare_msgid_ref: bool,
+    /// D1462 — multipart/signed で protocol あり・micalg 無し。
+    pub signed_no_micalg: bool,
+    /// D1463 — 本文 text/* 部品が attachment と名乗る。
+    pub attachment_body_part: bool,
+    /// D1464 — ヘッダ/本文の区切り空行が無い。
+    pub no_body_separator: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2755,6 +2763,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let bad_received = has_bad_received(bytes);
     let dup_mime_version = has_dup_mime_version(bytes);
     let unused_boundary = has_unused_boundary(bytes);
+    let bare_msgid_ref = has_bare_msgid_ref(bytes);
+    let signed_no_micalg = has_signed_no_micalg(bytes);
+    let attachment_body_part = has_attachment_body_part(bytes);
+    let no_body_separator = has_no_body_separator(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2973,6 +2985,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         bad_received,
         dup_mime_version,
         unused_boundary,
+        bare_msgid_ref,
+        signed_no_micalg,
+        attachment_body_part,
+        no_body_separator,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -11713,6 +11729,188 @@ pub fn has_unused_boundary(raw: &[u8]) -> bool {
     !text[header_end..]
         .lines()
         .any(|l| l.to_ascii_lowercase().starts_with(&delim))
+}
+
+/// `In-Reply-To:`/`References:` の値に `<…>` 形の msgid が
+/// 一つも無いか判定する (D1461)。
+///
+/// 参照欄の msgid は `<id@dom>` の括弧形 — 括弧を欠く裸トークンは
+/// 厳格実装で参照欄ごと捨てられ、寛容実装では文字列が残る。
+/// 複数 msgid 併記は D1443、重複行は D1449、自己参照は D1379。
+#[must_use]
+pub fn has_bare_msgid_ref(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let v = low
+            .strip_prefix("in-reply-to:")
+            .or_else(|| low.strip_prefix("references:"));
+        if let Some(v) = v {
+            let v = v.trim();
+            // 空値は D1450、括弧があれば形の検査は別検出が担当
+            if !v.is_empty() && !v.contains('<') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `multipart/signed` で `protocol=` はあるのに `micalg=` が無いか
+/// 判定する (D1462)。
+///
+/// micalg は署名のハッシュ方式宣言 — protocol を名乗るのに方式を
+/// 欠くと検証者がハッシュを特定できず「検証不能な署名付き体裁」が
+/// 残る (protocol 欠落は D1434、署名パート欠落は D1378)。
+#[must_use]
+pub fn has_signed_no_micalg(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-type:") {
+            continue;
+        }
+        if l.contains("multipart/signed")
+            && l.contains("protocol=")
+            && !l.contains("micalg=")
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `text/plain`/`text/html` の本文部品が `Content-Disposition:
+/// attachment` と名乗るか判定する (D1463)。
+///
+/// 本文パートを添付扱いすると、CD を尊重する表示器では本文が
+/// 見えなくなり添付としてのみ現れる — 「表示される本文を持たない」
+/// メールになり、添付として開くまで内容が検査に出ない隠蔽形。
+/// 外側の CD は D1424、名前無き attachment は D1358。
+#[must_use]
+pub fn has_attachment_body_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    // パートヘッダ run を追跡し、text/* かつ CD: attachment を検出
+    let mut in_run = false;
+    let mut part_text = false;
+    let mut part_attach = false;
+    let mut outer_done = false;
+    let mut outer_multipart = false;
+    for l in lower.lines() {
+        if l.is_empty() {
+            if in_run && part_text && part_attach {
+                return true;
+            }
+            if !outer_done {
+                outer_done = true;
+            } else {
+                in_run = false;
+            }
+            part_text = false;
+            part_attach = false;
+            continue;
+        }
+        if !outer_done {
+            if let Some(v) = l.strip_prefix("content-type:") {
+                outer_multipart = v.trim_start().starts_with("multipart/");
+            }
+            continue;
+        }
+        if !outer_multipart {
+            break; // 単パートは本文=全体で D1424 の領分
+        }
+        if l.starts_with("--") {
+            if in_run && part_text && part_attach {
+                return true;
+            }
+            in_run = true;
+            part_text = false;
+            part_attach = false;
+            continue;
+        }
+        if !in_run {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-type:") {
+            let base = v.trim_start().split(';').next().unwrap_or("").trim();
+            part_text = base == "text/plain" || base == "text/html";
+        }
+        if let Some(v) = l.strip_prefix("content-disposition:") {
+            let first = v
+                .trim_start()
+                .split(|c: char| c == ';' || c.is_whitespace())
+                .next()
+                .unwrap_or("");
+            part_attach = first == "attachment";
+        }
+    }
+    in_run && part_text && part_attach
+}
+
+/// ヘッダ部と本文を分ける空行 (`\n\n`) が文書全体に無いか
+/// 判定する (D1464)。
+///
+/// 区切り空行の無いメールは全体がヘッダ — 全文をヘッダとして
+/// 読む実装と、ヘッダ欠落の本文のみと読む実装で構造がまったく
+/// ずれる (本文冒頭の欄風行は D1386)。
+#[must_use]
+pub fn has_no_body_separator(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    // ヘッダ形の行が1行以上あり、区切り空行が無い
+    text.lines().any(|l| {
+        let mut it = l.splitn(2, ':');
+        let name = it.next().unwrap_or("");
+        it.next().is_some()
+            && !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| (33..=126).contains(&b))
+    }) && !text.contains("\n\n")
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -28191,6 +28389,72 @@ mod tests {
         assert!(!has_unused_boundary(
             b"Content-Type: text/plain\r\n\r\nx"
         ));
+    }
+
+    #[test]
+    fn bare_msgid_ref_は括弧なき参照を検出する() {
+        // D1461 — In-Reply-To/References の値に <…> が無い
+        assert!(has_bare_msgid_ref(
+            b"In-Reply-To: abc123@x\r\n\r\nx"
+        ));
+        assert!(has_bare_msgid_ref(
+            b"References: abc123@x def456@y\r\n\r\nx"
+        ));
+        // 括弧形は不発火
+        assert!(!has_bare_msgid_ref(
+            b"In-Reply-To: <abc@x>\r\n\r\nx"
+        ));
+        // 空値は D1450 の領分
+        assert!(!has_bare_msgid_ref(b"In-Reply-To:\r\n\r\nx"));
+        assert!(!has_bare_msgid_ref(b"Subject: hi\r\n\r\nx"));
+    }
+
+    #[test]
+    fn signed_no_micalg_は方式なき署名器を検出する() {
+        // D1462 — protocol あり・micalg 無し
+        assert!(has_signed_no_micalg(
+            b"Content-Type: multipart/signed; protocol=\"application/pgp-signature\"; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+        // micalg 宣言があれば不発火
+        assert!(!has_signed_no_micalg(
+            b"Content-Type: multipart/signed; protocol=\"application/pgp-signature\"; micalg=pgp-sha256; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+        // protocol も無いのは D1434 の領分 — ここでは不発火
+        assert!(!has_signed_no_micalg(
+            b"Content-Type: multipart/signed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn attachment_body_part_は添付扱いの本文を検出する() {
+        // D1463 — text/* 部品に CD: attachment
+        assert!(has_attachment_body_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"note.txt\"\r\n\r\nbody\r\n--b--"
+        ));
+        // CD なしの text 部品は不発火
+        assert!(!has_attachment_body_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nbody\r\n--b--"
+        ));
+        // attachment でも text/* でなければ対象外 (通常添付)
+        assert!(!has_attachment_body_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=\"a.exe\"\r\n\r\nAAAA\r\n--b--"
+        ));
+        // 単パートの外側 CD は D1424 の領分
+        assert!(!has_attachment_body_part(
+            b"Content-Type: text/plain\r\nContent-Disposition: attachment\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn no_body_separator_は区切り欠落を検出する() {
+        // D1464 — ヘッダ形の行はあるが空行が無い
+        assert!(has_no_body_separator(
+            b"From: a@b\r\nSubject: hi\r\n"
+        ));
+        // 区切りがあれば不発火
+        assert!(!has_no_body_separator(b"From: a@b\r\n\r\nbody"));
+        // ヘッダ形の行がなければ対象外 (ヘッダ無し文書)
+        assert!(!has_no_body_separator(b"just text\r\nno headers"));
     }
 
     #[test]

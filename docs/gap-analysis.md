@@ -874,3 +874,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1458 | Received に節・コメント・日付のいずれも無い | 手書き偽装消印 | Received 値の節/コメント/日付有無を検査 | kaname-render |
 | D1459 | 外側 MIME-Version の重複 | 一意欄重複で版解釈がずれる | 外側 MIME-Version 行数を検査 | kaname-render |
 | D1460 | 宣言 boundary が本文で不使用 (部品ゼロ multipart) | 全本文が preamble 扱いになるずれ | 宣言 boundary の本文使用を検査 | kaname-render |
+| D1461 | In-Reply-To/References に <…> 形 msgid が無い | 厳格実装で参照欄ごと捨てられる | 参照欄値の < 欠落を検査 | kaname-render |
+| D1462 | multipart/signed で protocol あり・micalg 無し | ハッシュ方式不明で検証不能の署名体裁 | signed 器の micalg= 欠落を検査 | kaname-render |
+| D1463 | 本文 text/* 部品が CD: attachment | 本文が添付として隠れる | text/* 部品の attachment 宣言を検査 | kaname-render |
+| D1464 | ヘッダ/本文の区切り空行が無い | 全文がヘッダ/本文のみかで構造がずれる | ヘッダ形行+空行欠落の併存を検査 | kaname-render |

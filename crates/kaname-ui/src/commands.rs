@@ -4146,6 +4146,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.bare_msgid_ref {
+        render_risks.push(
+            "参照欄に <…> 形の参照 ID がありません\
+             —厳格な実装では参照欄ごと捨てられます"
+                .to_string(),
+        );
+    }
+    if env.signed_no_micalg {
+        render_risks.push(
+            "multipart/signed に micalg 指定がありません\
+             —署名のハッシュ方式を特定できず検証不能です"
+                .to_string(),
+        );
+    }
+    if env.attachment_body_part {
+        render_risks.push(
+            "本文の text 部品が attachment と名乗っています\
+             —本文が添付として隠れて表示されないメールです"
+                .to_string(),
+        );
+    }
+    if env.no_body_separator {
+        render_risks.push(
+            "ヘッダと本文を分ける空行がありません\
+             —全体がヘッダか本文のみかで読みがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
