@@ -1,5 +1,52 @@
 ## [Unreleased]
 
+### Security — D1453:
+
+- **問題**: `Cookie:`/`Authorization:`/`Proxy-Authorization:`/
+  `Origin:`/`Referer:`/`Accept-*:` 等の HTTP **要求**欄 —
+  メールに現れるのはプロキシ連結・保存残渣の兆候で、
+  Cookie/Authorization の混入は資格情報の漏洩ベクトル
+  (D1441 は応答側の制度欄)。`User-Agent:` は正規 MUA の
+  欄なので対象外。
+- **修正**: `has_http_request_headers` が外側ヘッダの HTTP
+  要求欄を検査する。
+- **教訓**: 手紙に web の注文票が混ざるとき、最も危ないのは
+  資格情報の欄 — 届いた時点で漏れている。
+
+### Security — D1454:
+
+- **問題**: `multipart/alternative` で `text/plain` が
+  `text/html` より後に置かれる — RFC 2046 は忠実度の低い順を
+  要求するが、逆順の束は「最初の読めるものを採る」実装と
+  「最後の読めるものを採る」実装で表示がずれる。
+- **修正**: `has_alt_wrong_order` が alternative 器の
+  メンバー CT 並びを検査する。
+- **教訓**: 同じ内容の束でも並びが逆なら、先頭採用の係員には
+  簡易版だけが見えて濃い版が検査を外れる。
+
+### Security — D1455:
+
+- **問題**: `Content-Disposition:` 行に `boundary=` パラメータ —
+  boundary は Content-Type の指定で、CD に書くと行頭を見ずに
+  `boundary=` を拾う実装が誤って区切りに使い、パート構造を
+  書き換える差異工作になる。
+- **修正**: `has_cd_boundary` が CD 行の boundary パラメータを
+  検査する (CT 行の boundary は正規)。
+- **教訓**: 区切りの指定は仕切り板の名札に書くもの —
+  処置札に書くと区切りを探す係員が別の場所で裂く。
+
+### Security — D1456:
+
+- **問題**: `From:`/`Sender:`/`Resent-*` の値に `@` を含む
+  宛名が一切無い (`From: John Doe` やクオート表示名のみ) —
+  名を差出人と読む実装と欄を捨てる実装で読みがずれる
+  (片側が空の `a@`/`@b` は D1408、欄欠落は D1432、
+  値の空は D1450)。
+- **修正**: `has_addrless_from` が差出人欄の値を
+  クオート・コメント除去の上で `@` の有無を検査する。
+- **教訓**: 名札だけ立って宛名が無い差出人は、読む係員に
+  よって「この人」にも「誰でもない」にもなる。
+
 ### Security — D1449:
 
 - **問題**: `In-Reply-To:`/`References:` が外側ヘッダに2行以上 —

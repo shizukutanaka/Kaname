@@ -616,6 +616,14 @@ pub struct Envelope {
     pub empty_mime_value: bool,
     /// D1452 — `charset=` が空値。
     pub empty_charset: bool,
+    /// D1453 — HTTP 要求欄 (Cookie/Authorization/Referer 等) の混入。
+    pub http_request_headers: bool,
+    /// D1454 — multipart/alternative で text/plain が text/html より後。
+    pub alt_wrong_order: bool,
+    /// D1455 — Content-Disposition に boundary= が混入。
+    pub cd_boundary: bool,
+    /// D1456 — From/Sender 等の値に @ を含むアドレスが無い。
+    pub addrless_from: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2731,6 +2739,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let empty_identity_value = has_empty_identity_value(bytes);
     let empty_mime_value = has_empty_mime_value(bytes);
     let empty_charset = has_empty_charset(bytes);
+    let http_request_headers = has_http_request_headers(bytes);
+    let alt_wrong_order = has_alt_wrong_order(bytes);
+    let cd_boundary = has_cd_boundary(bytes);
+    let addrless_from = has_addrless_from(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2941,6 +2953,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         empty_identity_value,
         empty_mime_value,
         empty_charset,
+        http_request_headers,
+        alt_wrong_order,
+        cd_boundary,
+        addrless_from,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -11281,6 +11297,249 @@ pub fn has_empty_charset(raw: &[u8]) -> bool {
                 return true;
             }
             rest = &rest[p + 8..];
+        }
+    }
+    false
+}
+
+/// HTTP の**要求**欄 (`Cookie:`/`Authorization:`/`Origin:`/
+/// `Referer:`/`Accept:`/`Accept-Encoding:`/`Accept-Language:` 等) が
+/// あるか判定する (D1453)。
+///
+/// D1441 が応答側の制度欄を見るのに対し、こちらは要求側 —
+/// `Cookie:`/`Authorization:`/`Proxy-Authorization:` は資格情報を
+/// 内容側に混入する漏洩ベクトルで、`Origin:`/`Referer:` は
+/// 遷移元の主張。メールに現れるのはプロキシ連結・認証情報の
+/// 混入ミスの兆候。`User-Agent:` は正規 MUA も書くため対象外。
+#[must_use]
+pub fn has_http_request_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        l.starts_with("cookie:")
+            || l.starts_with("cookie2:")
+            || l.starts_with("authorization:")
+            || l.starts_with("proxy-authorization:")
+            || l.starts_with("origin:")
+            || l.starts_with("referer:")
+            || l.starts_with("accept:")
+            || l.starts_with("accept-charset:")
+            || l.starts_with("accept-encoding:")
+            || l.starts_with("accept-language:")
+            || l.starts_with("accept-datetime:")
+            || l.starts_with("if-match:")
+            || l.starts_with("if-modified-since:")
+            || l.starts_with("if-none-match:")
+            || l.starts_with("if-range:")
+            || l.starts_with("if-unmodified-since:")
+            || l.starts_with("range:")
+            || l.starts_with("te:")
+            || l.starts_with("upgrade:")
+            || l.starts_with("upgrade-insecure-requests:")
+            || l.starts_with("dnt:")
+            || l.starts_with("expect:")
+            || l.starts_with("sec-fetch-")
+            || l.starts_with("x-requested-with:")
+    })
+}
+
+/// `multipart/alternative` 内で text/plain 等の簡易パートが
+/// text/html より**後**に置かれるか判定する (D1454)。
+///
+/// RFC 2046 は alternative のメンバを忠実度の低い順に並べることを
+/// 要求する — 逆順は実装が「最初の読めるものを選ぶ」か
+/// 「最後の読めるものを選ぶ」かで表示がずれる (先頭採用で
+/// 簡易版だけが見え、ペイロード側が検査を外れる)。
+#[must_use]
+pub fn has_alt_wrong_order(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    // 外側 (最初の Content-Type) が multipart/alternative か
+    let Some(ct) = lower.lines().find(|l| l.starts_with("content-type:")) else {
+        return false;
+    };
+    if !ct.contains("multipart/alternative") {
+        return false;
+    }
+    let Some(pos) = ct.find("boundary=") else { return false };
+    let rest = &ct[pos + 9..];
+    let boundary = if let Some(q) = rest.strip_prefix('"') {
+        q.split('"').next().unwrap_or("").to_string()
+    } else {
+        rest.split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    };
+    if boundary.is_empty() {
+        return false;
+    }
+    let delim = format!("--{boundary}");
+    // メンバーパートのヘッダ run から CT を順に集める
+    let mut member_types: Vec<String> = Vec::new();
+    let mut in_part = false;
+    let mut got_body = false;
+    for l in text.lines() {
+        let low = l.to_ascii_lowercase();
+        if low.starts_with(&delim) {
+            let rest = low[delim.len()..].trim_start();
+            // 終端区切り `--b--` でメンバー走査を終える。
+            // `--b-junk` (別 boundary 行) は区切りでないので無視。
+            if rest.starts_with("--") {
+                break;
+            }
+            if !rest.is_empty() {
+                continue;
+            }
+            in_part = true;
+            got_body = false;
+            continue;
+        }
+        if !in_part {
+            continue;
+        }
+        if l.is_empty() {
+            got_body = true;
+            in_part = false;
+            continue;
+        }
+        if !got_body && low.starts_with("content-type:") {
+            let v = low["content-type:".len()..]
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            member_types.push(v);
+        }
+    }
+    // text/plain が text/html より後にあれば逆順
+    let html_pos = member_types.iter().position(|t| t == "text/html");
+    if let Some(h) = html_pos {
+        if member_types.iter().skip(h + 1).any(|t| t == "text/plain") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` 行に `boundary=` パラメータがあるか
+/// 判定する (D1455)。
+///
+/// boundary は Content-Type のパラメータ — CD に書くと、行頭を
+/// 見ずに `boundary=` を拾う実装が誤って区切りに使い、
+/// パート構造を書き換える差異工作になる。
+#[must_use]
+pub fn has_cd_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        if !l.starts_with("content-disposition:") {
+            continue;
+        }
+        let mut rest = l;
+        while let Some(p) = rest.find("boundary=") {
+            // 属性名の前がトークン境界か確認 (xboundary= 等を除外)
+            if p > 0 {
+                let prev = rest[..p].chars().last().unwrap_or(' ');
+                if prev != ';' && prev != ':' && !prev.is_whitespace() {
+                    rest = &rest[p + 9..];
+                    continue;
+                }
+            }
+            return true;
+        }
+    }
+    false
+}
+
+/// `From:`/`Sender:`/`Resent-From:`/`Resent-Sender:` の値に
+/// `@` を含むアドレスが一切無いか判定する (D1456)。
+///
+/// `From: John Doe` のようなアドレスを欠く差出人欄は、
+/// 名を差出人と読む実装と欄を捨てる実装で読みがずれる
+/// (片側が空の `a@`/`@b` は D1408、欄欠落は D1432)。
+#[must_use]
+pub fn has_addrless_from(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else {
+            continue;
+        };
+        if !matches!(
+            lower[..colon].trim(),
+            "from" | "sender" | "resent-from" | "resent-sender"
+        ) {
+            continue;
+        }
+        // クオート・コメント・ドメインリテラル以外の残りで @ を探す
+        let val = &l[colon + 1..];
+        let mut cleaned = String::with_capacity(val.len());
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut prev = '\0';
+        for c in val.chars() {
+            if in_c > 0 {
+                if c == '(' && prev != '\\' {
+                    in_c += 1;
+                } else if c == ')' && prev != '\\' {
+                    in_c -= 1;
+                }
+            } else if c == '"' && prev != '\\' {
+                in_q = !in_q;
+            } else if c == '(' && !in_q && prev != '\\' {
+                in_c = 1;
+            } else if !in_q {
+                cleaned.push(c);
+            }
+            prev = c;
+        }
+        // 値そのものが空なら空値の検出 (D1450) 側の領分 —
+        // ここでは「値はあるが宛名が無い」形だけを見る。
+        // クオート表示名のみ (`"a@b"`) も宛名を含まないため発火。
+        if !val.trim().is_empty() && !cleaned.contains('@') {
+            return true;
         }
     }
     false
@@ -27632,6 +27891,68 @@ mod tests {
         // charset 無しは対象外
         assert!(!has_empty_charset(
             b"Content-Type: text/plain\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn http_request_headers_はhttp要求欄を検出する() {
+        // D1453 — Cookie/Authorization/Referer 等
+        assert!(has_http_request_headers(
+            b"From: a@b\r\nCookie: session=abc\r\n\r\nx"
+        ));
+        assert!(has_http_request_headers(
+            b"From: a@b\r\nAuthorization: Bearer xyz\r\n\r\nx"
+        ));
+        // User-Agent は正規 MUA も書くため対象外
+        assert!(!has_http_request_headers(
+            b"From: a@b\r\nUser-Agent: MUA/1.0\r\n\r\nx"
+        ));
+        assert!(!has_http_request_headers(
+            b"From: a@b\r\nSubject: hi\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn alt_wrong_order_は順序違反の代替束を検出する() {
+        // D1454 — text/plain が text/html より後 (忠実度の逆順)
+        assert!(has_alt_wrong_order(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        // 正規順 (plain → html) は不発火
+        assert!(!has_alt_wrong_order(
+            b"Content-Type: multipart/alternative; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--b--"
+        ));
+        // alternative 以外は対象外
+        assert!(!has_alt_wrong_order(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/html\r\n\r\n<b>x</b>\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn cd_boundary_は処置欄の区切り混入を検出する() {
+        // D1455 — CD 行に boundary=
+        assert!(has_cd_boundary(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment; boundary=fake; filename=\"x\"\r\n\r\nx\r\n--b--"
+        ));
+        // CT 行の boundary は正規 — CD のみ見る
+        assert!(!has_cd_boundary(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Disposition: attachment; filename=\"x\"\r\n\r\nx\r\n--b--"
+        ));
+    }
+
+    #[test]
+    fn addrless_from_はアドレス無し差出人を検出する() {
+        // D1456 — From/Sender の値に @ を含む宛名が無い
+        assert!(has_addrless_from(
+            b"From: John Doe\r\n\r\nx"
+        ));
+        // 空値は empty_identity_value 側 — ここでは対象外
+        assert!(!has_addrless_from(b"From:\r\n\r\nx"));
+        // アドレスありは不発火
+        assert!(!has_addrless_from(b"From: \"J\" <a@b>\r\n\r\nx"));
+        // クオート/コメント内の @ だけの形も検出 (宛名でない @ を数えない)
+        assert!(has_addrless_from(
+            b"From: \"a@b\"\r\n\r\nx"
         ));
     }
 

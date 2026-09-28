@@ -866,3 +866,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1450 | 識別欄 (From/To/Subject/Message-ID 等) の空値 | 空値と欠落で読みがずれる | 外側ヘッダの識別欄空値を検査 | kaname-render |
 | D1451 | MIME 欄 (Content-Type/Disposition/CTE 等) の空値 | 既定値適用 vs 欄捨てで型・添付判定がずれる | 外側+パート全 run の空値を検査 | kaname-render |
 | D1452 | charset= 空値 | 既定 charset vs 空文字名で文字解釈がずれる | CT 行の charset パラメータ空値を検査 | kaname-render |
+| D1453 | HTTP 要求欄 (Cookie/Authorization/Referer/Accept-* 等) の混入 | 資格情報漏洩・別制度記録の混入 | 外側ヘッダの HTTP 要求欄を検査 | kaname-render |
+| D1454 | multipart/alternative の忠実度逆順 (plain が html より後) | 先頭/末尾採用で表示・検査対象がずれる | メンバー CT 並びを検査 | kaname-render |
+| D1455 | Content-Disposition 行の boundary= 混入 | boundary を拾う実装が構造を誤読 | CD 行の boundary= を検査 | kaname-render |
+| D1456 | From/Sender 値に @ を含む宛名が無い | 名のみ読む/欄捨てるで差出人がずれる | クオート・コメント除去後の @ 有無を検査 | kaname-render |
