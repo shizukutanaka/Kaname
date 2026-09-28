@@ -3670,6 +3670,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.invalid_filename_chars {
+        render_risks.push(
+            "添付名に Windows で保存不能な文字 (* ? | < >) が含まれています\
+             —表示名と保存される名がずれます"
+                .to_string(),
+        );
+    }
+    if env.rfc2231_gap {
+        render_risks.push(
+            "連番パラメータ (filename*0 等) の番号に欠番があります\
+             —添付名の連結結果が実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.unbracketed_content_id {
+        render_risks.push(
+            "パートの Content-ID が <…> の形をしていません\
+             —cid: 参照の解決が実装間でずれます"
+                .to_string(),
+        );
+    }
+    if env.encoded_control_filename {
+        render_risks.push(
+            "符号化添付名 (filename*=) に制御文字の符号化が含まれています\
+             —復号後の名前が改行・不可視化されます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

@@ -475,6 +475,18 @@ pub struct Envelope {
     /// D1392 — CT/CD パラメータ領域のダブルクオート不対応
     /// (パラメータ境界の解釈差異)。
     pub unbalanced_param_quote: bool,
+    /// D1393 — filename/name 値の Windows 非合法文字
+    /// (`*` `?` `|` `<` `>`) (保存名のサニタイズ差異)。
+    pub invalid_filename_chars: bool,
+    /// D1394 — RFC 2231 連番パラメータ (`filename*N`/`name*N`)
+    /// の欠番 (連結解釈の実装差異)。
+    pub rfc2231_gap: bool,
+    /// D1395 — パートの Content-ID が `<…>` 形でない
+    /// (cid: 参照解決の実装差異)。
+    pub unbracketed_content_id: bool,
+    /// D1396 — `filename*=`/`name*=` の値に制御文字の
+    /// パーセント符号化 (復号後の改行・不可視化)。
+    pub encoded_control_filename: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2530,6 +2542,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dup_delivery_headers = has_dup_delivery_headers(bytes);
     let hidden_filename = has_hidden_filename(bytes);
     let unbalanced_param_quote = has_unbalanced_param_quote(bytes);
+    let invalid_filename_chars = has_invalid_filename_chars(bytes);
+    let rfc2231_gap = has_rfc2231_gap(bytes);
+    let unbracketed_content_id = has_unbracketed_content_id(bytes);
+    let encoded_control_filename = has_encoded_control_filename(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2680,6 +2696,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         dup_delivery_headers,
         hidden_filename,
         unbalanced_param_quote,
+        invalid_filename_chars,
+        rfc2231_gap,
+        unbracketed_content_id,
+        encoded_control_filename,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -8405,6 +8425,249 @@ pub fn has_unbalanced_param_quote(raw: &[u8]) -> bool {
         }
         if in_quote {
             return true;
+        }
+    }
+    false
+}
+
+/// Content-Disposition/Content-Type の `filename`/`name` パラメータ値に
+/// Windows 上で保存不能な文字 (`*` `?` `|` `<` `>`) が含まれるか判定する
+/// (D1393)。
+///
+/// これらの文字を含む添付名は Windows で保存時に拒否されるか別名に
+/// 置換されるため、宣言した添付名と実際に保存される名がずれる。
+/// つまり `evil?.exe` は表示されたままには保存されない — 保存側の
+/// サニタイズ差異は検査側の名指しを素通りする。`"` はクオート値の
+/// 内部に来られないため対象外。制御文字・末尾ドット/空白・ホモグリフ・
+/// ADS (`:`)・パス成分は D1265/D1313/D1365 が既に担当するため対象外。
+#[must_use]
+pub fn has_invalid_filename_chars(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            if key != "filename" && key != "name" {
+                continue;
+            }
+            let mut v = seg[eq + 1..].trim();
+            if let Some(stripped) = v.strip_prefix('"') {
+                let end = stripped.find('"').unwrap_or(stripped.len());
+                v = &stripped[..end];
+            }
+            if v.contains('*')
+                || v.contains('?')
+                || v.contains('|')
+                || v.contains('<')
+                || v.contains('>')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// RFC 2231 連番パラメータ (`filename*0`/`filename*1`/…) の番号に
+/// 欠番があるか判定する (D1394)。
+///
+/// `filename*0=` と `filename*2=` があって `*1` が無いような欠番は、
+/// 欠番以降を連結しない実装と番号順を無視して全連結する実装で
+/// 添付名がずれる。連番は 0 始まり連続であることが前提のため、
+/// 欠番は形の崩れとして兆候。filename/name を別系統として評価。
+#[must_use]
+pub fn has_rfc2231_gap(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        // filename / name の各系統で連番番号を集める
+        for base in ["filename*", "name*"] {
+            let mut idxs: Vec<usize> = Vec::new();
+            for seg in l.split(';').skip(1) {
+                let seg = seg.trim();
+                let Some(eq) = seg.find('=') else {
+                    continue;
+                };
+                let key = seg[..eq].trim();
+                let Some(rest) = key.strip_prefix(base) else {
+                    continue;
+                };
+                // `*0` / `*0*` — 末尾の `*` (符号化印) を除いた数字
+                let num = rest.trim_end_matches('*');
+                if num.is_empty() {
+                    continue;
+                }
+                if let Ok(n) = num.parse::<usize>() {
+                    if !idxs.contains(&n) {
+                        idxs.push(n);
+                    }
+                }
+            }
+            if idxs.len() < 2 {
+                continue;
+            }
+            idxs.sort_unstable();
+            // 0..=max が連続していなければ欠番
+            let max = *idxs.last().unwrap_or(&0);
+            if idxs.len() != max + 1 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// パートヘッダの `Content-ID:` 値が `<addr-spec>` の形を持たないか
+/// 判定する (D1395)。
+///
+/// `Content-ID: abc123` のような角括弧なしの値は、厳格実装では
+/// `cid:` URL の照合が解決できず埋め込み画像が表示されない一方、
+/// 寛容実装では裸の値として照合されて表示される — 添付の
+/// 参照可能性が実装間でずれる形の崩れ。Content-Location は URI で
+/// 角括弧を持たないのが正規のため対象外 (重複は D1369 が担当)。
+#[must_use]
+pub fn has_unbracketed_content_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let declared = declared_boundaries(&text);
+    let mut in_part_headers = false;
+    for l in text[header_end..].to_ascii_lowercase().lines() {
+        if l.starts_with("--") {
+            let is_delim = l[2..]
+                .split(|c: char| c.is_whitespace())
+                .next()
+                .is_some_and(|b| {
+                    !b.is_empty()
+                        && declared
+                            .iter()
+                            .any(|d| b.starts_with(d.as_str()) || d.starts_with(b))
+                });
+            if is_delim {
+                in_part_headers = !(l.ends_with("--") && l.len() > 4);
+            }
+            continue;
+        }
+        if !in_part_headers {
+            continue;
+        }
+        if l.is_empty() {
+            in_part_headers = false;
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if let Some(v) = l.strip_prefix("content-id:") {
+            let v = v.trim();
+            if !v.is_empty() && !v.starts_with('<') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// RFC 2231 符号化パラメータ (`filename*=`/`name*=`) の値が
+/// 制御文字のパーセント符号化 (`%0a`/`%0d`/`%09` 等) を含むか判定する
+/// (D1396)。
+///
+/// `filename*=utf-8''a%0ab.exe` は復号すると改行を含む添付名になり、
+/// 表示を2行に割る実装としない実装で添付名の見え方がずれる —
+/// 偽拡張子を改行の向こうに隠す工作の材料。素の `filename=` の
+/// `%XX` は D1357 (復号実装差異) が担当 — こちらは RFC 2231 の正規の
+/// 場で復号した結果が制御文字になる値のみ。`%00`–`%1f` と `%7f`。
+#[must_use]
+pub fn has_encoded_control_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    let hexval = |c: u8| -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            _ => None,
+        }
+    };
+    for l in lower.lines() {
+        if !(l.starts_with("content-disposition:") || l.starts_with("content-type:")) {
+            continue;
+        }
+        for seg in l.split(';').skip(1) {
+            let seg = seg.trim();
+            let Some(eq) = seg.find('=') else {
+                continue;
+            };
+            let key = seg[..eq].trim();
+            // `filename*=`/`filename*0*=`/`name*=` 等の符号化形のみ対象
+            // (`*` で終わるキー = 値がパーセント符号化される形)
+            let starred = key
+                .strip_prefix("filename")
+                .or_else(|| key.strip_prefix("name"))
+                .is_some_and(|rest| rest.ends_with('*'));
+            if !starred {
+                continue;
+            }
+            let v = seg[eq + 1..].trim().trim_matches('"');
+            // `charset'lang'value` の値部 (無ければ全体)
+            let val = v.split("''").last().unwrap_or(v);
+            let b = val.as_bytes();
+            let mut i = 0;
+            while i + 2 < b.len() {
+                if b[i] == b'%' {
+                    if let (Some(h), Some(l2)) = (hexval(b[i + 1]), hexval(b[i + 2])) {
+                        let byte = h * 16 + l2;
+                        if byte < 0x20 || byte == 0x7f {
+                            return true;
+                        }
+                    }
+                    i += 3;
+                } else {
+                    i += 1;
+                }
+            }
         }
     }
     false
@@ -23779,6 +24042,75 @@ mod tests {
             b"Content-Type: text/plain (note \"stray\")\r\n\r\nx"
         ));
         assert!(!has_unbalanced_param_quote(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn invalid_filename_chars_は保存不能文字を検出する() {
+        // D1393 — Windows 非合法文字
+        assert!(has_invalid_filename_chars(
+            b"Content-Disposition: attachment; filename=\"a?b.exe\"\r\n\r\nx"
+        ));
+        assert!(has_invalid_filename_chars(
+            b"Content-Disposition: attachment; filename=\"a<b.exe\"\r\n\r\nx"
+        ));
+        assert!(has_invalid_filename_chars(
+            b"Content-Type: application/octet-stream; name=\"a|b.bin\"\r\n\r\nx"
+        ));
+        // 通常名は不発火
+        assert!(!has_invalid_filename_chars(
+            b"Content-Disposition: attachment; filename=\"report.pdf\"\r\n\r\nx"
+        ));
+        assert!(!has_invalid_filename_chars(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn rfc2231_gap_は連番欠番を検出する() {
+        // D1394 — *0 と *2 で *1 欠番
+        assert!(has_rfc2231_gap(
+            b"Content-Disposition: attachment; filename*0=a; filename*2=c\r\n\r\nx"
+        ));
+        // 連続連番は不発火
+        assert!(!has_rfc2231_gap(
+            b"Content-Disposition: attachment; filename*0=a; filename*1=b\r\n\r\nx"
+        ));
+        // 単独パラメータも不発火
+        assert!(!has_rfc2231_gap(
+            b"Content-Disposition: attachment; filename*=utf-8''x\r\n\r\nx"
+        ));
+        assert!(!has_rfc2231_gap(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unbracketed_content_id_は角括弧欠落を検出する() {
+        // D1395 — パートの Content-ID に <> が無い
+        assert!(has_unbracketed_content_id(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-ID: abc123\r\n\r\nx\r\n--b--"
+        ));
+        // <…> 形は不発火
+        assert!(!has_unbracketed_content_id(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-ID: <abc123@x>\r\n\r\nx\r\n--b--"
+        ));
+        assert!(!has_unbracketed_content_id(b"Content-Type: text/plain\r\n\r\nx"));
+    }
+
+    #[test]
+    fn encoded_control_filename_は符号化制御文字を検出する() {
+        // D1396 — filename*= の %0a 等
+        assert!(has_encoded_control_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''a%0ab.exe\r\n\r\nx"
+        ));
+        assert!(has_encoded_control_filename(
+            b"Content-Type: application/octet-stream; name*0*=utf-8''a%09b.exe\r\n\r\nx"
+        ));
+        // %20 (空白) 等は不発火
+        assert!(!has_encoded_control_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''a%20b.exe\r\n\r\nx"
+        ));
+        // 素の filename の %XX は D1357 の領分 — ここでは不発火
+        assert!(!has_encoded_control_filename(
+            b"Content-Disposition: attachment; filename=\"a%0ab.exe\"\r\n\r\nx"
+        ));
+        assert!(!has_encoded_control_filename(b"Content-Type: text/plain\r\n\r\nx"));
     }
 
     #[test]

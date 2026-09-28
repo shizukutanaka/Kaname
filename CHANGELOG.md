@@ -1,6 +1,29 @@
-# CHANGELOG
+## [Unreleased]
 
-All notable changes to Kaname are documented here.
+### Security — D1393: 添付名の Windows 非合法文字 (* ? | < >) が未検査
+
+- **問題**: `filename="a?b.exe"` のような Windows 保存不能文字を含む添付名は、拒否する実装と別名保存する実装で宣言名と保存名がずれる — 名指し検査をサニタイズ差異が素通りする。
+- **修正**: `has_invalid_filename_chars` — filename/name 値の `*?|<>` を検出 → `Envelope.invalid_filename_chars` → render_risks 警告。
+- **教訓**: 届け先の町で使えない文字で書かれた宛名 — 配達先で書き換えられる名前。
+
+### Security — D1394: RFC 2231 連番パラメータの欠番が未検査
+
+- **問題**: `filename*0=a; filename*2=c` (*1 欠番) は、欠番以降を連結しない実装と番号順に全連結する実装で添付名がずれる — 0 始まり連続が前提の連番の形の崩れ。
+- **修正**: `has_rfc2231_gap` — filename/name 系統ごとに連番番号を集め、0..=max の連続性を検査 → `Envelope.rfc2231_gap` → render_risks 警告。
+- **教訓**: 綴じ番号が抜けた分冊百科 — 欠けた巻をどう数えるかは読み手次第。
+
+### Security — D1395: パート Content-ID の角括弧欠落が未検査
+
+- **問題**: `Content-ID: abc123` (<> 無し) は厳格実装で cid: 参照が解決できず画像が表示されない一方、寛容実装は裸の値で照合し表示する — 参照可能性が実装間でずれる。
+- **修正**: `has_unbracketed_content_id` — パートヘッダの `content-id:` 値が `<` で始まらないか検査 → `Envelope.unbracketed_content_id` → render_risks 警告。
+- **教訓**: 額縁に入っていない図版番号 — 本文中の「図1を見よ」が指し先を失う。
+
+### Security — D1396: 符号化添付名の制御文字パーセント符号化が未検査
+
+- **問題**: `filename*=utf-8''a%0ab.exe` は復号で改行を含む名になり、表示を2行に割る実装としない実装で添付名の見え方がずれる — 偽拡張子を改行の向こうに隠す材料。
+- **修正**: `has_encoded_control_filename` — `filename*`/`name*` 値の `%00`–`%1f`/`%7f` を検出 → `Envelope.encoded_control_filename` → render_risks 警告。
+- **教訓**: 名札の裏に折り込まれた第二の名前 — 開いたときだけ現れる。
+l notable changes to Kaname are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 

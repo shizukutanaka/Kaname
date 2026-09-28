@@ -806,3 +806,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1390 | ~~**配送記録欄 (Return-Path/Delivered-To) の重複が未検査**~~ **(解消済み)** | P3 | 再注入ループ・系統重複の残渣。修正: `has_dup_delivery_headers` → render_risks | 二度捺された配達証印 |
 | D1391 | ~~**添付名のドット・空白始まり (隠れ名) が未検査**~~ **(解消済み)** | P2 | dotfile は一覧に現れない添付。修正: `has_hidden_filename` → render_risks | 透明インクの名札の添付 |
 | D1392 | ~~**CT/CD パラメータのクオート不対応が未検査**~~ **(解消済み)** | P2 | 未終端クオートで添付名境界がずれる。修正: `has_unbalanced_param_quote` → render_risks | 閉じられない引用符の書類 |
+| D1393 | ~~**添付名の Windows 非合法文字 (* ? \| < >) が未検査**~~ **(解消済み)** | P2 | 保存不能文字で宣言名と保存名がずれる。修正: `has_invalid_filename_chars` → render_risks | 使えない文字の宛名 |
+| D1394 | ~~**RFC 2231 連番パラメータの欠番が未検査**~~ **(解消済み)** | P2 | *0/*2 で *1 欠番 — 連結実装差で添付名ずれ。修正: `has_rfc2231_gap` → render_risks | 欠巻の分冊百科 |
+| D1395 | ~~**パート Content-ID の角括弧欠落が未検査**~~ **(解消済み)** | P2 | cid: 参照解決が実装間でずれる。修正: `has_unbracketed_content_id` → render_risks | 額縁に入らない図版番号 |
+| D1396 | ~~**符号化添付名の制御文字パーセント符号化が未検査**~~ **(解消済み)** | P2 | `filename*=…%0a` で復号後改行を含む名。修正: `has_encoded_control_filename` → render_risks | 名札の裏の第二の名前 |
