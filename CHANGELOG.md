@@ -1,5 +1,46 @@
 ## [Unreleased]
 
+### Security — D1477:
+
+- **問題**: `X-Original-Message-ID:`/`X-Original-From:`/
+  `X-Original-Subject:`/`X-Original-Date:` 等の「元の値」欄 —
+  書き換え前の真の値の露出と、存在しない「元の体裁」の捏造の
+  両方に使われる (X-Original-To/-Sender/-ArrivalTime は MTA
+  記録印の群で検出済み)。
+- **修正**: `has_original_headers` が元の値を名乗る欄を検査する。
+- **教訓**: 「元はこうでした」の添え書き — 書き換え前の真実を
+  明かすものと、無かった過去を作るものとがある。
+
+### Security — D1478:
+
+- **問題**: `DomainKey-Signature:`/`DomainKey-Status:`/`X-DKIM:`/
+  `X-DKIM-Signature:`/`X-DomainKey*:` — DomainKeys は RFC 4870 で
+  DKIM に置き換えられた旧制度で現行では検証不能、「封印済み」の
+  体裁だけ残る (dkim=pass の対象欠落は D1433)。
+- **修正**: `has_obsolete_signature_headers` が廃止・模倣の署名欄
+  を検査する。
+- **教訓**: 昔の制度の朱肉 — 現行の鑑定では読めない「捺印済み」の
+  体裁は誰でも作れる。
+
+### Security — D1479:
+
+- **問題**: `Archived-At:`/`X-Archived-At:`/`X-Mail-Archive-*` —
+  RFC 5064 の「原本の保存場所」URL 欄。本文 URL 集めに含めない
+  スキャナの隙間を通る誘導リンクで、「原本」の体裁が別メッセージ
+  への差し替えを可能にする (Content-Description 内 URL は D1475)。
+- **修正**: `has_archive_claim` が原本参照欄を検査する。
+- **教訓**: 「原本はあちらに」という指示札 — 示された先が本物の
+  原本かは誰も確かめない。
+
+### Security — D1480:
+
+- **問題**: `Message-ID: <<a@b>>`/`References: <<c@d>>` — 識別子の
+  入れ子括弧。括弧を1層剥がす実装と全部剥がす実装で識別子がずれ、
+  スレッド照合が壊れる (`<a><b>` 連立は D1414、`<` 無しは D1461)。
+- **修正**: `has_nested_msgid` が識別子値の `<<`/`>>` を検査する。
+- **教訓**: 二重の額縁 — 一層剥がす係員と全部剥がす係員で
+  中の絵が違う。
+
 ### Security — D1473:
 
 - **問題**: `MessageID:`/`InReplyTo:`/`MIMEVersion:`/

@@ -4258,6 +4258,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.original_headers {
+        render_risks.push(
+            "X-Original-Message-ID/From/Subject 等の「元の値」欄があります\
+             —書き換え前の値の露出または捏造です"
+                .to_string(),
+        );
+    }
+    if env.obsolete_signature_headers {
+        render_risks.push(
+            "DomainKey-Signature 等の廃止・模倣の署名欄があります\
+             —検証不能な「封印済み」の体裁です"
+                .to_string(),
+        );
+    }
+    if env.archive_claim {
+        render_risks.push(
+            "Archived-At 等のアーカイブ参照欄があります\
+             —「原本」の体裁を介した別メッセージへの誘導に使われます"
+                .to_string(),
+        );
+    }
+    if env.nested_msgid {
+        render_risks.push(
+            "Message-ID/参照欄に <<…>> の入れ子括弧があります\
+             —括弧を剥がす層の違いでスレッド照合がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

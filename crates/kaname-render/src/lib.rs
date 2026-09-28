@@ -664,6 +664,14 @@ pub struct Envelope {
     pub url_in_content_description: bool,
     /// D1476 — Resent-* 欄があるのに Resent-From/Resent-Date が無い。
     pub incomplete_resent: bool,
+    /// D1477 — X-Original-* の「元の値」欄。
+    pub original_headers: bool,
+    /// D1478 — DomainKey-Signature 等の廃止・模倣署名欄。
+    pub obsolete_signature_headers: bool,
+    /// D1479 — Archived-At 等のアーカイブ参照欄。
+    pub archive_claim: bool,
+    /// D1480 — Message-ID/参照欄の入れ子 `<<…>>`。
+    pub nested_msgid: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2803,6 +2811,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let quoted_cte = has_quoted_cte(bytes);
     let url_in_content_description = has_url_in_content_description(bytes);
     let incomplete_resent = has_incomplete_resent(bytes);
+    let original_headers = has_original_headers(bytes);
+    let obsolete_signature_headers = has_obsolete_signature_headers(bytes);
+    let archive_claim = has_archive_claim(bytes);
+    let nested_msgid = has_nested_msgid(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3037,6 +3049,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         quoted_cte,
         url_in_content_description,
         incomplete_resent,
+        original_headers,
+        obsolete_signature_headers,
+        archive_claim,
+        nested_msgid,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -7265,9 +7281,16 @@ pub fn has_fake_reply_claim(raw: &[u8]) -> bool {
         }
         if let Some(v) = lower.strip_prefix("subject:") {
             let v = v.trim_start();
-            // Re: のみ対象 — Fwd:/Fw: の転送は正規の MUA でも
-            // threading ヘッダを付けない (新規メッセージ)
-            if v.starts_with("re:") {
+            // Re: 系のみ対象 — Fwd:/Fw: の転送は正規の MUA でも
+            // threading ヘッダを付けない (新規メッセージ)。
+            // AW:/Sv:/Vs:/Odp:/Antw:/Atb:/Re[n]: のローカライズ返信
+            // 接頭辞は各言語圏 MUA の正規形だが、スレッド参照欄が無い
+            // 手作りの「続きの体裁」を同じ規則で捕らえる。
+            if ["re:", "aw:", "sv:", "vs:", "odp:", "antw:", "atb:", "blz:"]
+                .iter()
+                .any(|p| v.starts_with(p))
+                || (v.starts_with("re[") && v.contains("]:"))
+            {
                 reply_subject = true;
             }
         }
@@ -12586,6 +12609,133 @@ pub fn has_incomplete_resent(raw: &[u8]) -> bool {
         }
     }
     any && !(from && date)
+}
+
+/// `X-Original-Message-ID:`/`X-Original-From:`/`X-Original-Subject:`/
+/// `X-Original-Date:`/`X-Original-References:` 等の「元の値」欄が
+/// あるか判定する (D1477)。
+///
+/// 転送・リスト改変前の値を記録する欄 — 書き換え前の真の値の露出
+/// (情報流出) と、存在しない「元の体裁」の捏造の両方に使われる
+/// (X-Original-To/-Sender/-ArrivalTime は MTA 記録印の群で検出済み)。
+#[must_use]
+pub fn has_original_headers(raw: &[u8]) -> bool {
+    const ORIG: &[&str] = &[
+        "x-original-message-id",
+        "x-original-messageid",
+        "x-original-from",
+        "x-original-subject",
+        "x-original-date",
+        "x-original-references",
+        "x-original-to-headers",
+        "x-original-rcpt-to",
+        "x-originalauthentication-results",
+        "x-original-authentication-results",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.find(':')
+            .map(|c| ORIG.contains(&l[..c].trim()))
+            .unwrap_or(false)
+    })
+}
+
+/// 廃止済み・模倣の署名欄 (`DomainKey-Signature:`/`DomainKey-Status:`/
+/// `X-DKIM:`/`X-DKIM-Signature:`/`X-DomainKey*:`) があるか判定する
+/// (D1478)。
+///
+/// DomainKeys は RFC 4870 で DKIM に置き換えられた旧制度 —
+/// 現行では検証できない「封印済み」の体裁だけが残る。`X-` 付きの
+/// DKIM 形も検証経路を通らない模倣印 (dkim=pass の対象欠落は
+/// D1433、署名本体欠落は D1378)。
+#[must_use]
+pub fn has_obsolete_signature_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.starts_with("domainkey-signature:")
+            || l.starts_with("domainkey-status:")
+            || l.starts_with("domainkey-signature-public-key:")
+            || l.starts_with("x-dkim:")
+            || l.starts_with("x-dkim-signature:")
+            || l.starts_with("x-domainkey")
+            || l.starts_with("x-domainkeys:")
+    })
+}
+
+/// アーカイブ参照欄 (`Archived-At:`/`X-Archived-At:`/
+/// `X-Mail-Archive-*`) があるか判定する (D1479)。
+///
+/// RFC 5064 の `Archived-At:` は「原本の保存場所」を指す URL 欄 —
+/// 本文 URL 集めに含めないスキャナの隙間を通る誘導リンクで、
+/// 「原本」の体裁が別メッセージへの差し替えを可能にする
+/// (Content-Description 内 URL は D1475)。
+#[must_use]
+pub fn has_archive_claim(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower.lines().any(|l| {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            return false;
+        }
+        l.starts_with("archived-at:")
+            || l.starts_with("x-archived-at:")
+            || l.starts_with("x-mail-archive-")
+            || l.starts_with("x-archive-")
+    })
+}
+
+/// Message-ID/参照欄の値に入れ子の `<<…>>` があるか判定する (D1480)。
+///
+/// `Message-ID: <<a@b>>` — 括弧を1層剥がす実装と全部剥がす実装で
+/// 識別子がずれ、スレッド照合が壊れる (`<a><b>` 連立は D1414、
+/// `<` 無しは D1461)。
+#[must_use]
+pub fn has_nested_msgid(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+        .to_ascii_lowercase()
+        .lines()
+        .filter(|l| {
+            l.starts_with("message-id:")
+                || l.starts_with("in-reply-to:")
+                || l.starts_with("references:")
+                || l.starts_with("resent-message-id:")
+        })
+        .any(|l| {
+            let v = &l[l.find(':').map(|i| i + 1).unwrap_or(0)..];
+            v.contains("<<") || v.contains(">>")
+        })
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -29315,6 +29465,56 @@ mod tests {
             b"Resent-From: a@b\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-To: c@d\r\n\r\nx"
         ));
         assert!(!has_incomplete_resent(b"To: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn original_headers_は元の値欄を検出する() {
+        // D1477 — X-Original-Message-ID/From/Subject/Date 等
+        assert!(has_original_headers(b"X-Original-From: a@b\r\n\r\nx"));
+        assert!(has_original_headers(
+            b"X-Original-Message-ID: <a@b>\r\n\r\nx"
+        ));
+        assert!(!has_original_headers(b"X-Original-Other: y\r\n\r\nx"));
+        assert!(!has_original_headers(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn obsolete_signature_headers_は旧式署名欄を検出する() {
+        // D1478 — DomainKey/X-DKIM 系
+        assert!(has_obsolete_signature_headers(
+            b"DomainKey-Signature: a=rsa; b=xx\r\n\r\nx"
+        ));
+        assert!(has_obsolete_signature_headers(
+            b"X-DKIM-Signature: v=1\r\n\r\nx"
+        ));
+        // 現行 DKIM-Signature は不発火
+        assert!(!has_obsolete_signature_headers(
+            b"DKIM-Signature: v=1; d=x\r\n\r\nx"
+        ));
+        assert!(!has_obsolete_signature_headers(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn archive_claim_は原本参照欄を検出する() {
+        // D1479 — Archived-At / X-Archived-At / X-Mail-Archive-*
+        assert!(has_archive_claim(
+            b"Archived-At: <https://x/arc/1>\r\n\r\nx"
+        ));
+        assert!(has_archive_claim(b"X-Archived-At: https://x\r\n\r\nx"));
+        assert!(!has_archive_claim(b"List-Archive: <https://x>\r\n\r\nx"));
+        assert!(!has_archive_claim(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn nested_msgid_は入れ子括弧の識別子を検出する() {
+        // D1480 — <<a@b>> の二重括弧
+        assert!(has_nested_msgid(b"Message-ID: <<a@b>>\r\n\r\nx"));
+        assert!(has_nested_msgid(
+            b"References: <a@b> <<c@d>>\r\n\r\nx"
+        ));
+        // 通常形・連立 (D1414 の担当) は不発火
+        assert!(!has_nested_msgid(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_nested_msgid(b"Message-ID: <a@b><c@d>\r\n\r\nx"));
     }
 
     #[test]

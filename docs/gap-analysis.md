@@ -890,3 +890,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1474 | CTE 値が引用符付き ("base64") | 剥がす実装と拒否で復号ずれ | 引用符始まり検査 | kaname-render |
 | D1475 | Content-Description 値に URL 混入 | 説明欄経由の誘導リンク | URL 存在検査 | kaname-render |
 | D1476 | Resent-* 欄が Resent-From/Date を欠く | 体裁だけの転送履歴 | 必須ペア欠落検査 | kaname-render |
+| D1477 | X-Original-Message-ID/From/Subject/Date 等の元の値欄 | 真の値露出・元体裁捏造 | X-Original-* 欄検査 | kaname-render |
+| D1478 | DomainKey-Signature/X-DKIM 系の廃止・模倣署名欄 | 検証不能な封印体裁 | 旧式署名欄検査 | kaname-render |
+| D1479 | Archived-At/X-Archived-At 等の原本参照 URL | 原本体裁の誘導リンク | アーカイブ欄検査 | kaname-render |
+| D1480 | Message-ID/参照欄の <<…>> 入れ子括弧 | 括弧層差で照合ずれ | 入れ子括弧検査 | kaname-render |
