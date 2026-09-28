@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1597: ヘッダ改行が全て裸 LF (CRLF 皆無) の形を検出 — `kaname-render` の `Envelope` に `lf_only_headers` を追加。CRLF 必須の実装はヘッダ全体を1行と読み、LF 許容実装と欄構成がずれる (行端混在は D1290 系)。
+
+### Security — D1598: `To:`/`Cc:`/`Bcc:`/`Reply-To:` の複数回出現を検出 — `Envelope` に `dup_addr_headers` を追加。結合する実装と先頭/末尾採用で宛先集合がずれる (From/Date 等は D1589、配送欄は D1390)。
+
+### Security — D1599: ヘッダブロック内の空白文字のみ行を検出 — `Envelope` に `blank_ws_line` を追加。継続行と読む実装とヘッダ終端と読む実装で以降の欄が本文落ちするかずれる (コロン無し行は D1585)。
+
+### Security — D1600: CT/CD param 値の未終端 `"` (`boundary="abc`/`charset="x`) を検出 — `Envelope` に `unterm_param_quote` を追加。行末まで読む実装と欄ごと破棄する実装で境界・文字コードの読みがずれる (アドレス欄は D1525)。
+
 ### Security — D1593: `Content-Type:`/`Content-Disposition:` の型本体に `,` が混ざる形 (`text/plain, text/html`) を検出 — `kaname-render` の `Envelope` に `comma_media_value` を追加。先の型を採る実装と欄ごと捨てる実装で型解釈がずれる (`;` 裸トークンは D1504、CTE 複数値は D1544)。
 
 ### Security — D1594: CT/CD 欄の全角句読点 (`；` U+FF1B / `＝` U+FF1D) を検出 — `Envelope` に `fullwidth_param_punct` を追加。ASCII のみを区切りと見る実装では param が潰れ、正規化する実装では区切りとして読まれる (全角コロン D1581・全角空白 D1583)。

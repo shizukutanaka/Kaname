@@ -5097,6 +5097,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.lf_only_headers {
+        render_risks.push(
+            "ヘッダの改行が全て LF だけです (CRLF 無し)\
+             —CRLF を必須とする実装がヘッダ全体を1行と読み、欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.dup_addr_headers {
+        render_risks.push(
+            "To/Cc/Bcc/Reply-To が複数回現れます\
+             —結合する実装と先頭/末尾のみ採る実装で宛先集合がずれます"
+                .to_string(),
+        );
+    }
+    if env.blank_ws_line {
+        render_risks.push(
+            "ヘッダの途中に空白だけの行があります\
+             —継続行と読む実装とヘッダ終端と読む実装で欄構成がずれます"
+                .to_string(),
+        );
+    }
+    if env.unterm_param_quote {
+        render_risks.push(
+            "Content-Type/Content-Disposition の param 値に閉じない引用符があります\
+             —行末まで読む実装と欄ごと破棄する実装で境界・文字コードがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

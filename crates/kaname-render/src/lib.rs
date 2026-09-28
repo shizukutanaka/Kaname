@@ -904,6 +904,14 @@ pub struct Envelope {
     pub dup_content_id: bool,
     /// 識別子 `<…>` 内部の空白 (D1596 — 識別子照合ずれ)。
     pub inner_space_id: bool,
+    /// ヘッダ全域が LF のみ改行 (D1597 — 行端解釈ずれ)。
+    pub lf_only_headers: bool,
+    /// `To:`/`Cc:`/`Bcc:`/`Reply-To:` の複数回出現 (D1598 — 宛先集合ずれ)。
+    pub dup_addr_headers: bool,
+    /// ヘッダブロック内の空白のみ行 (D1599 — ヘッダ終端ずれ)。
+    pub blank_ws_line: bool,
+    /// CT/CD param 値の未終端クオート (D1600 — param 読みずれ)。
+    pub unterm_param_quote: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3251,6 +3259,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let dup_content_id = has_dup_content_id(bytes);
     // D1596: 識別子 `<…>` 内部の空白
     let inner_space_id = has_inner_space_id(bytes);
+    // D1597: ヘッダが LF のみ改行
+    let lf_only_headers = has_lf_only_headers(bytes);
+    // D1598: To/Cc/Bcc/Reply-To の重複
+    let dup_addr_headers = has_dup_addr_headers(bytes);
+    // D1599: ヘッダ内の空白のみ行
+    let blank_ws_line = has_blank_ws_line(bytes);
+    // D1600: CT/CD param の未終端クオート
+    let unterm_param_quote = has_unterm_param_quote(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3605,6 +3621,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         fullwidth_param_punct,
         dup_content_id,
         inner_space_id,
+        lf_only_headers,
+        dup_addr_headers,
+        blank_ws_line,
+        unterm_param_quote,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -18964,6 +18984,131 @@ pub fn has_inner_space_id(raw: &[u8]) -> bool {
                 return true;
             }
             rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
+/// ヘッダ部の改行が全て裸 LF (`\n`) で CRLF が一度も無いか判定する
+/// (D1597)。
+///
+/// RFC 5322/SMTP の行端は CRLF — 全編 LF のみのメッセージは非準拠経路
+/// (queue ファイルや POSIX ツール経由) の産物で、CRLF を必須とする
+/// 実装がヘッダ全体を1行と読み、LF を赦す実装と欄構成がずれる
+/// (CRLF/LF 混在は D1290 系の行端混在検査、裸 CR は D1297)。
+#[must_use]
+pub fn has_lf_only_headers(raw: &[u8]) -> bool {
+    let has_lf = raw.iter().any(|&b| b == b'\n');
+    if !has_lf {
+        return false;
+    }
+    !raw.windows(2).any(|w| w == [b'\r', b'\n'])
+}
+
+/// `To:`/`Cc:`/`Bcc:`/`Reply-To:` が2回以上現れるか判定する (D1598)。
+///
+/// RFC 5322 は宛先欄を各1回までと定める — 重複時に結合する実装と
+/// 先頭/末尾のみ採る実装で宛先集合がずれる (From/Date/Subject/
+/// Message-ID の重複は D1589、配送欄は D1390)。
+#[must_use]
+pub fn has_dup_addr_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let (mut to, mut cc, mut bcc, mut rt) = (0usize, 0usize, 0usize, 0usize);
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("to:") {
+            to += 1;
+        } else if l.starts_with("cc:") {
+            cc += 1;
+        } else if l.starts_with("bcc:") {
+            bcc += 1;
+        } else if l.starts_with("reply-to:") {
+            rt += 1;
+        }
+        if to > 1 || cc > 1 || bcc > 1 || rt > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダブロック内に空白文字のみの行が混ざるか判定する (D1599)。
+///
+/// 「空白だけの行」を継続行と読む実装と、ヘッダ区切り (空行) と読む
+/// 実装で、それ以降の欄が全部本文に落ちるか欄として残るかがずれる
+/// (コロン無し行は D1585、行端混在は D1290 系)。
+#[must_use]
+pub fn has_blank_ws_line(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.is_empty() {
+            break; // 空行 = ヘッダ終端
+        }
+        if l.bytes().all(|b| b == b' ' || b == b'\t') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` 欄の param 値に未終端の
+/// `"` があるか判定する (D1600)。
+///
+/// `boundary="abc`/`charset="utf-8` の閉じ `"` 欠落は、行末まで読む
+/// 実装と欄ごと破棄する実装で境界・文字コードの読みがずれる
+/// (アドレス欄の未終端クオートは D1525)。
+#[must_use]
+pub fn has_unterm_param_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut in_headers = true;
+    for l in logical.to_ascii_lowercase().lines() {
+        if l.is_empty() {
+            in_headers = false;
+            continue;
+        }
+        if l.starts_with("--") {
+            in_headers = true;
+            continue;
+        }
+        if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if !l.starts_with("content-type:") && !l.starts_with("content-disposition:") {
+            continue;
+        }
+        // 値部の `"` を数える — `\\"` のエスケープは数えない
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let mut quotes = 0usize;
+        let mut prev = b' ';
+        for &b in v.as_bytes() {
+            if b == b'"' && prev != b'\\' {
+                quotes += 1;
+            }
+            prev = b;
+        }
+        if quotes % 2 == 1 {
+            return true;
         }
     }
     false
@@ -37372,6 +37517,53 @@ mod tests {
         assert!(!has_inner_space_id(b"Message-ID: < a@b >\r\n\r\nx"));
         assert!(!has_inner_space_id(b"List-Id: <list.example>\r\n\r\nx"));
         assert!(!has_inner_space_id(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn lf_only_headers_lfのみ改行を検出する() {
+        // D1597 — ヘッダ全域が LF のみ
+        assert!(has_lf_only_headers(b"From: a@b\nSubject: x\n\nbody\n"));
+        // 混在形は D1290 系の領分、純 CRLF は不発火
+        assert!(!has_lf_only_headers(b"From: a@b\r\nSubject: x\r\n\r\nbody"));
+        assert!(!has_lf_only_headers(b"From: a@b\r\nSubject: x\n\nbody"));
+        assert!(!has_lf_only_headers(b"From: a@b"));
+    }
+
+    #[test]
+    fn dup_addr_headers_宛先欄重複を検出する() {
+        // D1598 — To/Cc/Bcc/Reply-To の複数回出現
+        assert!(has_dup_addr_headers(b"To: a@b\r\nTo: c@d\r\n\r\nx"));
+        assert!(has_dup_addr_headers(b"To: a@b\r\nCc: x\r\nCc: y\r\n\r\nx"));
+        assert!(has_dup_addr_headers(b"Bcc: x\r\nBcc: y\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_dup_addr_headers(b"Reply-To: x\r\nReply-To: y\r\n\r\nx"));
+        // 継続行・異名欄は不発火
+        assert!(!has_dup_addr_headers(b"To: a@b,\r\n c@d\r\nCc: x\r\n\r\nx"));
+        assert!(!has_dup_addr_headers(b"To: a@b\r\nFrom: c@d\r\n\r\nx"));
+        assert!(!has_dup_addr_headers(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn blank_ws_line_空白のみ行を検出する() {
+        // D1599 — ヘッダブロック内の空白のみ行
+        assert!(has_blank_ws_line(b"From: a@b\r\n   \r\nSubject: x\r\n\r\nbody"));
+        assert!(has_blank_ws_line(b"From: a@b\r\n\t\r\nSubject: x\r\n\r\nbody"));
+        // 真の空行は終端、本文中の空白行・継続行は不発火
+        assert!(!has_blank_ws_line(b"From: a@b\r\nSubject: x\r\n\r\nbody"));
+        assert!(!has_blank_ws_line(b"From: a@b\r\n\tcontinued\r\n\r\nbody"));
+        assert!(!has_blank_ws_line(b"From: a@b\r\n\r\n   \r\nbody"));
+    }
+
+    #[test]
+    fn unterm_param_quote_未終端クオートを検出する() {
+        // D1600 — CT/CD param の閉じ `"` 欠落
+        assert!(has_unterm_param_quote(b"Content-Type: multipart/mixed; boundary=\"abc\r\n\r\nx"));
+        assert!(has_unterm_param_quote(b"Content-Disposition: attachment; filename=\"a\r\n\r\nx"));
+        // 偶数クオート・エスケープ対は不発火
+        assert!(!has_unterm_param_quote(
+            b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nx"
+        ));
+        assert!(!has_unterm_param_quote(b"Content-Type: text/plain; charset=utf-8\r\n\r\nx"));
+        assert!(!has_unterm_param_quote(b"From: a@b\r\n\r\nx"));
     }
 
     #[test]
