@@ -822,3 +822,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1406 | Deliver-To/Deliver-Date/X-Deliver-To 等の裸到着記録欄 | 送信側が「配送済み」の体裁を自称 | 外側ヘッダの裸到着記録欄を検出 | kaname-render |
 | D1407 | msgid のドメイン部が […] リテラル | 手作り生成品の兆候 (MUA は生成しない) | msgid 欄の @ 直後が [ で始まる形を検出 | kaname-render |
 | D1408 | アドレスのローカル/ドメイン部が空 (a@/@b/a@@b) | 抽出と拒否で宛名がずれる | クオート/コメント外 @ の両側 atom 空を検出 | kaname-render |
+| D1409 | multipart の preamble に非空内容 | 規格上表示されない領域に注記/ペイロード潜伏 | 宣言 boundary より前の非空行を検出 | kaname-render |
+| D1410 | multipart の epilogue に非空内容 | 閉じ boundary の向こうへの潜伏 | 外側閉じ boundary 以降の非空行を検出 | kaname-render |
+| D1411 | 非 text/* 型への charset= パラメータ | 無視と適用で解釈がずれる | CT 主型が text/message 以外で charset= を検出 | kaname-render |
+| D1412 | Newsgroups/Path/Xref/NNTP-* 経路欄 | メールに無い制度の欄の混入 | 外側ヘッダの NNTP 経路欄を検出 | kaname-render |

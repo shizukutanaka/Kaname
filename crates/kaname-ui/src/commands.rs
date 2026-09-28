@@ -3782,6 +3782,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.preamble_content {
+        render_risks.push(
+            "multipart の preamble (最初の boundary より前) に内容があります\
+             —規格上表示されない領域への潜伏の兆候です"
+                .to_string(),
+        );
+    }
+    if env.epilogue_content {
+        render_risks.push(
+            "multipart の epilogue (閉じ boundary 以降) に内容があります\
+             —規格上切り捨てられる領域への潜伏の兆候です"
+                .to_string(),
+        );
+    }
+    if env.nontext_charset {
+        render_risks.push(
+            "text ではない Content-Type に charset= が付いています\
+             —型と引数の組み合わせが規格外です"
+                .to_string(),
+        );
+    }
+    if env.nntp_routing {
+        render_risks.push(
+            "Usenet の経路欄 (Newsgroups/Path/Xref 等) が含まれています\
+             —メールに存在しない制度の欄です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

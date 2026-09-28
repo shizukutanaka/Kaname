@@ -521,6 +521,18 @@ pub struct Envelope {
     /// D1408 — アドレスのローカル部/ドメイン部が空 (a@/@b/a@@b)
     /// — 抽出実装と拒否実装で宛名がずれる。
     pub empty_addr_side: bool,
+    /// D1409 — multipart の preamble (最初の boundary より前) に
+    /// 空行以外の内容 (規格上表示されない潜伏領域)。
+    pub preamble_content: bool,
+    /// D1410 — multipart の epilogue (閉じ boundary 以降) に
+    /// 空行以外の内容 (規格上切り捨てられる潜伏領域)。
+    pub epilogue_content: bool,
+    /// D1411 — 非 text/*/message/* の Content-Type に charset=
+    /// パラメータ (型と引数の組み合わせ異常)。
+    pub nontext_charset: bool,
+    /// D1412 — Newsgroups:/Followup-To:/Path:/Xref:/NNTP-Posting-*
+    /// 等の Usenet 経路・分類欄 (メールに無い制度の欄)。
+    pub nntp_routing: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2592,6 +2604,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let deliver_to_mark = has_deliver_to_mark(bytes);
     let literal_msgid_domain = has_literal_msgid_domain(bytes);
     let empty_addr_side = has_empty_addr_side(bytes);
+    let preamble_content = has_preamble_content(bytes);
+    let epilogue_content = has_epilogue_content(bytes);
+    let nontext_charset = has_nontext_charset(bytes);
+    let nntp_routing = has_nntp_routing(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2758,6 +2774,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         deliver_to_mark,
         literal_msgid_domain,
         empty_addr_side,
+        preamble_content,
+        epilogue_content,
+        nontext_charset,
+        nntp_routing,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -9326,6 +9346,144 @@ pub fn has_empty_addr_side(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// multipart メールの preamble (最初の boundary 行より前) に
+/// 空行以外の内容があるか判定する (D1409)。
+///
+/// preamble は MIME 規格上「表示されない」領域 — 準拠 MUA は
+/// 読み飛ばすが生テキストを走査する検査は読むため、規格上見えない
+/// 場所に注記・ペイロードを潜ませる潜伏経路になる (epilogue と対)。
+#[must_use]
+pub fn has_preamble_content(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    if !lower.contains("multipart/") {
+        return false;
+    }
+    let bounds = declared_boundaries(&text[..header_end]);
+    if bounds.is_empty() {
+        return false;
+    }
+    let body = &text[header_end + 2..];
+    for l in body.lines() {
+        let t = l.trim();
+        if t.is_empty() {
+            continue;
+        }
+        // 宣言 boundary で始まる行に到達すれば preamble はここまで
+        // (declared_boundaries は小写化済みのため行側も小写で比較)
+        let tl = t.to_ascii_lowercase();
+        if tl.starts_with("--") && bounds.iter().any(|b| tl[2..].starts_with(b.as_str())) {
+            return false;
+        }
+        return true; // boundary より前の非空行 = preamble 内容
+    }
+    false
+}
+
+/// multipart メールの epilogue (閉じ boundary `--b--` 以降) に
+/// 空行以外の内容があるか判定する (D1410)。
+///
+/// epilogue も規格上「表示されない」領域 — 規格を守る MUA は
+/// 切り捨てるが、末尾まで走査する検査は読むため閉じ boundary の
+/// 向こうに内容を隠せる (Outlook 系で実績のある evasion)。
+#[must_use]
+pub fn has_epilogue_content(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    if !lower.contains("multipart/") {
+        return false;
+    }
+    let bounds = declared_boundaries(&text[..header_end]);
+    if bounds.is_empty() {
+        return false;
+    }
+    let body = &text[header_end + 2..];
+    let mut seen_close = false;
+    for l in body.lines() {
+        let t = l.trim_end();
+        if !seen_close {
+            // 外側の閉じ boundary `--b--` を厳密一致で探す
+            // (bounds は外側ヘッダに宣言された値のみ — 内側パートの
+            // 境界はここに入らないので入れ子で誤判定しない)
+            if t.starts_with("--") && t.ends_with("--") {
+                let name = t[2..t.len() - 2].trim_end().to_ascii_lowercase();
+                if bounds.iter().any(|b| *b == name) {
+                    seen_close = true;
+                }
+            }
+            continue;
+        }
+        if !t.trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `charset=` パラメータが非 `text/*`/`message/*` の Content-Type に
+/// 付いているか判定する (D1411)。
+///
+/// charset はテキスト型にのみ意味を持つ — `application/pdf;
+/// charset=utf-8` のような宣言は無視する実装と適用を試みる実装で
+/// 解釈がずれる (型と引数の組み合わせ異常)。
+#[must_use]
+pub fn has_nontext_charset(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("content-type:") else {
+            continue;
+        };
+        let v = v.trim();
+        let ty = v.split(';').next().unwrap_or("").trim();
+        if !v.contains("charset=") {
+            continue;
+        }
+        if ty.starts_with("text/") || ty.starts_with("message/") {
+            continue;
+        }
+        return true;
+    }
+    false
+}
+
+/// `Newsgroups:`/`Followup-To:`/`Path:`/`Xref:`/`NNTP-Posting-Host:`/
+/// `NNTP-Posting-Date:` 等の Usenet 経路・分類欄があるか判定する (D1412)。
+/// (`Organization:`/`Distribution:` は RFC 2076 でメールにも認められ
+/// ているため対象外)
+///
+/// メールに現れるべきでない NNTP 制度の欄 — `Control:`/`Supersedes:`/
+/// `Approved:` 等の制御欄 (D1364) と対になる、記事配送・分類の残り欄。
+/// メールとニュースの連結ゲートウェイ経由・フォージの兆候。
+#[must_use]
+pub fn has_nntp_routing(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    text[..header_end].to_ascii_lowercase().lines().any(|l| {
+        l.starts_with("newsgroups:")
+            || l.starts_with("followup-to:")
+            || l.starts_with("path:")
+            || l.starts_with("xref:")
+            || l.starts_with("nntp-posting-host:")
+            || l.starts_with("nntp-posting-date:")
+    })
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -24949,6 +25107,69 @@ mod tests {
         // クオート局所部 `"a@b"@x` は正当形なので不発火
         assert!(!has_empty_addr_side(
             b"From: \"a@b\"@x\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn preamble_content_は境界前の内容を検出する() {
+        // D1409 — 最初の boundary より前の非空行
+        assert!(has_preamble_content(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\nThis is hidden text\n--b\n\nx\n--b--"
+        ));
+        // 即 boundary で始まる multipart は不発火
+        assert!(!has_preamble_content(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\n\nx\n--b--"
+        ));
+        // 単一パートは不発火
+        assert!(!has_preamble_content(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn epilogue_content_は閉じ境界後の内容を検出する() {
+        // D1410 — `--b--` 以降の非空行
+        assert!(has_epilogue_content(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\n\nx\n--b--\nhidden payload\n"
+        ));
+        // 閉じ boundary で終わるものは不発火
+        assert!(!has_epilogue_content(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\n\nx\n--b--\n"
+        ));
+        assert!(!has_epilogue_content(
+            b"Content-Type: text/plain\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn nontext_charset_は非text型のcharsetを検出する() {
+        // D1411 — application/* 等への charset=
+        assert!(has_nontext_charset(
+            b"Content-Type: application/pdf; charset=utf-8\r\n\r\nbody"
+        ));
+        assert!(has_nontext_charset(
+            b"Content-Type: image/png; charset=binary\r\n\r\nbody"
+        ));
+        // text/* と message/* は不発火
+        assert!(!has_nontext_charset(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nbody"
+        ));
+        assert!(!has_nontext_charset(
+            b"Content-Type: application/pdf\r\n\r\nbody"
+        ));
+    }
+
+    #[test]
+    fn nntp_routing_はUsenet欄を検出する() {
+        // D1412 — Newsgroups/Path/Xref/NNTP-* 等
+        assert!(has_nntp_routing(
+            b"From: a@b\r\nNewsgroups: misc.test\r\n\r\nbody"
+        ));
+        assert!(has_nntp_routing(
+            b"From: a@b\r\nPath: news.example!a\r\n\r\nbody"
+        ));
+        assert!(!has_nntp_routing(
+            b"From: a@b\r\nSubject: x\r\n\r\nbody"
         ));
     }
 

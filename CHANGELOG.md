@@ -1,5 +1,49 @@
 ## [Unreleased]
 
+### Security — D1409:
+
+- **問題**: multipart メールの preamble (最初の boundary 行より前)
+  に空行以外の内容があると、規格上は表示されない領域だが生
+  テキストを走査する検査には読まれる — 規格上見えない場所への
+  注記・ペイロード潜伏経路。
+- **修正**: `has_preamble_content` が外側 multipart 宣言のある
+  メールで、宣言 boundary で始まる行より前の非空行を検出する。
+- **教訓**: 構造の前後 (preamble/epilogue) は「規格が読まない
+  領域」— 規格順守の表示器と生テキスト検査で可視性が割れる。
+
+### Security — D1410:
+
+- **問題**: 閉じ boundary `--b--` 以降の epilogue も規格上は
+  切り捨てられる領域 — 末尾まで走査する検査には内容が見える
+  ため閉じ境界の向こうにペイロードを隠せる (Outlook 系で実績)。
+- **修正**: `has_epilogue_content` が外側ヘッダ宣言の boundary の
+  閉じ行を厳密一致で見つけ、以降の非空行を検出する (入れ子の
+  内側境界は外側宣言に無いため誤判定しない)。
+- **教訓**: 「終わった構造の後」は表示器が読まない死角 —
+  検査器がそこを読むなら潜伏場所になる。
+
+### Security — D1411:
+
+- **問題**: `application/pdf; charset=utf-8` 等、非 `text/*`/
+  `message/*` 型への `charset=` パラメータは無視する実装と適用
+  を試みる実装で解釈がずれる型と引数の組み合わせ異常。
+- **修正**: `has_nontext_charset` が論理行化した CT 欄で主型が
+  text/message 以外なのに charset= を持つ形を検出する。
+- **教訓**: 引数の妥当性は型ごとに決まる — 組み合わせの異常も
+  独立した検査面になる。
+
+### Security — D1412:
+
+- **問題**: `Newsgroups:`/`Followup-To:`/`Path:`/`Xref:`/
+  `NNTP-Posting-Host:`/`NNTP-Posting-Date:` 等の Usenet 経路欄は
+  メールに存在しない制度の欄 — 連結ゲートウェイ経由・フォージの
+  兆候 ( `Control:`/`Supersedes:`/`Approved:` は D1364 が担当)。
+- **修正**: `has_nntp_routing` が外側ヘッダの NNTP 経路欄を
+  検出する (`Organization:`/`Distribution:` は RFC 2076 でメールに
+  も認められるため対象外)。
+- **教訓**: 制度の混在は欄ごとに検査が必要 — 制御欄だけでは
+  なく配送・分類欄も別制度の痕跡。
+
 ### Security — D1405:
 
 - **問題**: `Content-Transfer-Encoding:` の値が単一トークンでない
