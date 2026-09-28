@@ -850,3 +850,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1434 | multipart/signed|encrypted に protocol= 無し | 署名・暗号方式が特定不能 | 両型 CT 行の protocol= 有無を検査 | kaname-render |
 | D1435 | Thread-Index/Topic が参照欄無しで存在 | 参照できない「続きの体裁」(偽スレッド) | thread 印と参照欄の不一致を検査 | kaname-render |
 | D1436 | addr-spec の %-hack/UUCP ! 経路構文 | 経路解釈する実装としない実装で宛名ずれ | アドレス欄 @ トークン内 %/! を検査 | kaname-render |
+| D1437 | Subject が encoded-word 復号で re: 始まり・参照欄無し | 生読み偽返信検査 (D1361) の符号化回避 | 先頭 encoded-word を Q/B 復号し re: 始まり+参照欠落を検査 | kaname-render |
+| D1438 | multipart/report に report-type= 無し | 報告種別が特定不能 | CT 行の report-type= 有無を検査 | kaname-render |
+| D1439 | 裸の Charset:/Encoding: 宣言欄 (RFC 2978/1154 廃止) | 尊重/無視で本文の読みがずれる | 外側ヘッダの charset:/encoding: 行を検査 | kaname-render |
+| D1440 | 非 message/* パートヘッダに From/Subject 等のメッセージ級欄 | パート属性と読む実装と飾り扱いでずれ | パートヘッダ run 内のメッセージ級欄を検査 | kaname-render |

@@ -3978,6 +3978,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.encoded_re_subject {
+        render_risks.push(
+            "件名が符号化された「返信の体裁」です\
+             —復号すると Re: になるのに参照欄が無い偽返信です"
+                .to_string(),
+        );
+    }
+    if env.missing_report_type {
+        render_risks.push(
+            "multipart/report に report-type 指定がありません\
+             —何の報告か特定できない配送報告の器です"
+                .to_string(),
+        );
+    }
+    if env.obsolete_decl_headers {
+        render_risks.push(
+            "廃止済みの Charset:/Encoding: 宣言欄があります\
+             —宣言に従う実装と無視する実装で本文の読みがずれます"
+                .to_string(),
+        );
+    }
+    if env.part_field_headers {
+        render_risks.push(
+            "パートのヘッダにメッセージ級欄 (From/Subject 等) があります\
+             —パート属性と読む実装と無視する実装で解釈がずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

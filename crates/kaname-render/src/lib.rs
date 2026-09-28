@@ -584,6 +584,14 @@ pub struct Envelope {
     pub orphan_thread: bool,
     /// D1436 — アドレス欄に %-hack/UUCP ! の経路構文がある。
     pub routing_addr: bool,
+    /// D1437 — Subject が encoded-word で `re:` に復号されるが参照欄無し。
+    pub encoded_re_subject: bool,
+    /// D1438 — multipart/report に `report-type=` 指定が無い。
+    pub missing_report_type: bool,
+    /// D1439 — 裸の `Charset:`/`Encoding:` 宣言欄がある。
+    pub obsolete_decl_headers: bool,
+    /// D1440 — 非 message/* パートヘッダにメッセージ級欄が混在する。
+    pub part_field_headers: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2683,6 +2691,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let missing_crypto_protocol = has_missing_crypto_protocol(bytes);
     let orphan_thread = has_orphan_thread(bytes);
     let routing_addr = has_routing_addr(bytes);
+    let encoded_re_subject = has_encoded_re_subject(bytes);
+    let missing_report_type = has_missing_report_type(bytes);
+    let obsolete_decl_headers = has_obsolete_decl_headers(bytes);
+    let part_field_headers = has_part_field_headers(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -2877,6 +2889,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         missing_crypto_protocol,
         orphan_thread,
         routing_addr,
+        encoded_re_subject,
+        missing_report_type,
+        obsolete_decl_headers,
+        part_field_headers,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -10453,6 +10469,246 @@ pub fn has_routing_addr(raw: &[u8]) -> bool {
             prev = b;
         }
         if tok_at && tok_route {
+            return true;
+        }
+    }
+    false
+}
+
+fn decode_ew_payload(enc: &str, payload: &str) -> Option<Vec<u8>> {
+    if enc.eq_ignore_ascii_case("q") {
+        let pb = payload.as_bytes();
+        let mut out = Vec::with_capacity(pb.len());
+        let mut i = 0;
+        while i < pb.len() {
+            match pb[i] {
+                b'_' => {
+                    out.push(b' ');
+                    i += 1;
+                }
+                b'=' if i + 2 < pb.len() => {
+                    let h = u8::from_str_radix(&payload[i + 1..i + 3], 16).unwrap_or(b'?');
+                    out.push(h);
+                    i += 3;
+                }
+                c => {
+                    out.push(c);
+                    i += 1;
+                }
+            }
+        }
+        Some(out)
+    } else if enc.eq_ignore_ascii_case("b") {
+        let mut out = Vec::with_capacity(payload.len() * 3 / 4);
+        let mut acc = 0u32;
+        let mut n = 0u32;
+        for &c in payload.as_bytes() {
+            if c == b'=' {
+                break;
+            }
+            let v = match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => continue,
+            };
+            acc = (acc << 6) | v as u32;
+            n += 1;
+            if n == 4 {
+                out.push((acc >> 16) as u8);
+                out.push((acc >> 8) as u8);
+                out.push(acc as u8);
+                acc = 0;
+                n = 0;
+            }
+        }
+        if n == 3 {
+            out.push((acc >> 10) as u8);
+            out.push((acc >> 2) as u8);
+        } else if n == 2 {
+            out.push((acc >> 4) as u8);
+        }
+        Some(out)
+    } else {
+        None
+    }
+}
+
+/// `Subject:` が encoded-word で `re:` に復号されるのに
+/// `In-Reply-To:`/`References:` が無いか判定する (D1437)。
+///
+/// 生の `Re:` を検査する D1361 は `=?utf-8?B?UmU6?=` のような
+/// encoded-word 先頭を素通りする — 復号して初めて「返信の体裁」
+/// になる件名は、生読みで偽返信を検査する実装を回避する。
+#[must_use]
+pub fn has_encoded_re_subject(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    let mut decoded_prefix = String::new();
+    let mut has_refs = false;
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("in-reply-to:") || lower.starts_with("references:") {
+            has_refs = true;
+        }
+        if !lower.starts_with("subject:") {
+            continue;
+        }
+        // 先頭から連続する encoded-word を順に復号して連結する
+        // (B エンコードのペイロードは大文字小文字を含むため
+        //  元行から値を取る)
+        let mut rest = l["subject:".len()..].trim_start();
+        while let Some(tail) = rest.strip_prefix("=?") {
+            let Some(end) = tail.find("?=") else {
+                break;
+            };
+            let inner = &tail[..end];
+            let mut it = inner.splitn(2, '?');
+            let _charset = it.next();
+            let Some(enc_payload) = it.next() else { break };
+            let Some(pq) = enc_payload.find('?') else {
+                break;
+            };
+            let enc = &enc_payload[..pq];
+            let payload = &enc_payload[pq + 1..];
+            let Some(bytes) = decode_ew_payload(enc, payload) else {
+                break;
+            };
+            decoded_prefix.push_str(&String::from_utf8_lossy(&bytes));
+            rest = tail[end + 2..].trim_start();
+            if !rest.starts_with("=?") {
+                break;
+            }
+        }
+    }
+    !decoded_prefix.is_empty()
+        && decoded_prefix
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("re:")
+        && !has_refs
+}
+
+/// `multipart/report` に `report-type=` 指定が無いか判定する
+/// (D1438)。
+///
+/// RFC 6522 は `multipart/report` に `report-type=`
+/// (delivery-status/disposition-notification 等) を必須とする —
+/// 無いと「何の報告か」が特定できず、DSN/MDN として処理する実装と
+/// 通常 multipart として処理する実装で解釈がずれる。
+#[must_use]
+pub fn has_missing_report_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    let lower = logical.to_ascii_lowercase();
+    lower.lines().any(|l| {
+        l.strip_prefix("content-type:").is_some_and(|v| {
+            v.trim_start().starts_with("multipart/report") && !l.contains("report-type=")
+        })
+    })
+}
+
+/// 裸の `Charset:`/`Encoding:` 宣言欄があるか判定する (D1439)。
+///
+/// `Charset:` (RFC 2978 で廃止) と `Encoding:` (RFC 1154 で廃止) は
+/// メッセージ全体に charset/符号化を宣言する旧式欄 — 尊重する実装は
+/// 宣言に従って復号し、無視する実装は本文を生読みするため内容の
+/// 読みがずれる (現行の宣言経路は Content-Type/CTE のみ)。
+#[must_use]
+pub fn has_obsolete_decl_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    lower
+        .lines()
+        .any(|l| l.starts_with("charset:") || l.starts_with("encoding:"))
+}
+
+/// MIME パートのヘッダ run に `From:`/`To:`/`Subject:`/`Date:`/
+/// `Message-ID:` 等のメッセージ級欄があるか判定する (D1440)。
+///
+/// パートヘッダは Content-* 系のみが正規 — 非 message/* パートの
+/// ヘッダにメッセージ級欄が現れると、それをパートの属性として
+/// 採用する実装と単なる飾りとして無視する実装で読みがずれる
+/// (中に仕込んだ「第2の表紙」の変種 — D1386 のパート版)。
+#[must_use]
+pub fn has_part_field_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let declared = declared_boundaries(&text);
+    if declared.is_empty() {
+        return false;
+    }
+    let lower = text.to_ascii_lowercase();
+    let mut in_part_hdr = false;
+    for l in lower.lines() {
+        if l.starts_with("--") {
+            let tok = l[2..]
+                .split(|c: char| c.is_whitespace() || c == ';')
+                .next()
+                .unwrap_or("");
+            let stripped = tok.strip_suffix("--").unwrap_or(tok);
+            let is_b = !stripped.is_empty()
+                && declared
+                    .iter()
+                    .any(|d| stripped == *d || stripped.starts_with(d.as_str()) || d.starts_with(stripped));
+            if is_b {
+                in_part_hdr = true;
+            }
+            continue;
+        }
+        if !in_part_hdr {
+            continue;
+        }
+        if l.is_empty() {
+            in_part_hdr = false;
+            continue;
+        }
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue; // FWS 継続
+        }
+        let Some(colon) = l.find(':') else {
+            in_part_hdr = false;
+            continue;
+        };
+        let name = l[..colon].trim();
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            in_part_hdr = false;
+            continue;
+        }
+        if matches!(
+            name,
+            "from" | "to" | "cc" | "bcc" | "subject" | "date" | "message-id" | "reply-to"
+                | "sender"
+        ) {
             return true;
         }
     }
@@ -26529,6 +26785,80 @@ mod tests {
         ));
         // 通常アドレスは不発火
         assert!(!has_routing_addr(b"From: a@example.com\r\n\r\nx"));
+    }
+
+    #[test]
+    fn encoded_re_subject_は符号化偽返信を検出する() {
+        // D1437 — =?..?B?UmU6?= で始まる件名 (= "Re:")
+        assert!(has_encoded_re_subject(
+            b"From: a@b\r\nSubject: =?utf-8?B?UmU6?= payment\r\n\r\nx"
+        ));
+        // Q エンコード形 =?utf-8?Q?Re=3A_?=
+        assert!(has_encoded_re_subject(
+            b"From: a@b\r\nSubject: =?utf-8?Q?re=3A?= payment\r\n\r\nx"
+        ));
+        // 参照欄があれば不発火
+        assert!(!has_encoded_re_subject(
+            b"From: a@b\r\nSubject: =?utf-8?B?UmU6?= payment\r\nIn-Reply-To: <x@y>\r\n\r\nx"
+        ));
+        // 復号が re: でなければ不発火
+        assert!(!has_encoded_re_subject(
+            b"From: a@b\r\nSubject: =?utf-8?B?SGVsbG8=?= there\r\n\r\nx"
+        ));
+        // 生の Re: は D1361 側の仕事 (ここでは encoded-word 限定)
+        assert!(!has_encoded_re_subject(
+            b"From: a@b\r\nSubject: Re: payment\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn missing_report_type_は種別不明の報告器を検出する() {
+        // D1438 — multipart/report に report-type= 無し
+        assert!(has_missing_report_type(
+            b"Content-Type: multipart/report; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        // report-type= 指定があれば不発火
+        assert!(!has_missing_report_type(
+            b"Content-Type: multipart/report; report-type=delivery-status; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+        // 通常の multipart は対象外
+        assert!(!has_missing_report_type(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\n\r\nx\r\n"
+        ));
+    }
+
+    #[test]
+    fn obsolete_decl_headers_は旧式宣言欄を検出する() {
+        // D1439 — 裸の Charset:/Encoding: 欄
+        assert!(has_obsolete_decl_headers(
+            b"From: a@b\r\nCharset: ascii\r\n\r\nx"
+        ));
+        assert!(has_obsolete_decl_headers(
+            b"From: a@b\r\nEncoding: 85 HEX\r\n\r\nx"
+        ));
+        // Content-Type 内の charset= パラメータは対象外
+        assert!(!has_obsolete_decl_headers(
+            b"From: a@b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn part_field_headers_はパート内メッセージ欄を検出する() {
+        // D1440 — 非 message/* パートのヘッダに Subject:/From:
+        assert!(has_part_field_headers(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nSubject: hidden\r\n\r\nx\r\n--b--"
+        ));
+        assert!(has_part_field_headers(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nFrom: inner@evil\r\n\r\nx\r\n--b--"
+        ));
+        // 外側ヘッダの Subject は対象外
+        assert!(!has_part_field_headers(
+            b"Content-Type: multipart/mixed; boundary=b\r\nSubject: outer\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nx\r\n--b--"
+        ));
+        // パート欄が Content-* のみなら不発火
+        assert!(!has_part_field_headers(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: 7bit\r\n\r\nx\r\n--b--"
+        ));
     }
 
     #[test]

@@ -1,5 +1,51 @@
 ## [Unreleased]
 
+### Security — D1437:
+
+- **問題**: `Subject:` が encoded-word (`=?utf-8?B?UmU6?=` 等) で
+  先頭から `re:` に復号されるのに `In-Reply-To:`/`References:` が
+  無い — 生読みで `re:` を検査する偽返信検出 (D1361) を、
+  復号して初めて返信の体裁になる符号化で回避する形。
+- **修正**: `has_encoded_re_subject` が Subject 先頭の連続
+  encoded-word を Q/B 復号し、復号形が `re:` で始まるのに
+  参照欄を欠く形を検査する (Fwd/Fw 系は転送のため対象外)。
+- **教訓**: 体裁の検査は生の字句と復号後の両方で行う —
+  復号して初めて現れる体裁は生読みの檻を素通りする。
+
+### Security — D1438:
+
+- **問題**: `multipart/report` に `report-type=` 指定が無い —
+  RFC 6522 の必須欄を欠くと「何の報告か」(delivery-status/
+  disposition-notification 等) が特定できず、DSN/MDN として
+  処理する実装と通常 multipart でずれる (D1434 の報告器版)。
+- **修正**: `has_missing_report_type` が `multipart/report` の
+  CT 行の `report-type=` 有無を検査する。
+- **教訓**: 報告の器は「何の報告か」の明記が検査の前提 —
+  種別不明記の器は機械仕分けの網をすり抜ける。
+
+### Security — D1439:
+
+- **問題**: 裸の `Charset:`/`Encoding:` 欄 — RFC 2978/1154 で
+  廃止済みのメッセージ全体宣言。尊重する実装は宣言に従って
+  復号し、無視する実装は本文を生読みするため読みがずれる。
+- **修正**: `has_obsolete_decl_headers` が外側ヘッダの
+  `charset:`/`encoding:` 行を検査する (CT パラメータの
+  `charset=` は対象外)。
+- **教訓**: 廃止された宣言経路は「正」の経路と読みを争わせる
+  — 欄として独立した旧式宣言は残存そのものがずれの種。
+
+### Security — D1440:
+
+- **問題**: 非 message/* MIME パートのヘッダ run に `From:`/
+  `Subject:`/`Date:` 等のメッセージ級欄が混在する — パート
+  属性として採用する実装と飾りとして無視する実装で読みが
+  ずれる (D1386 本文第2表紙のパート版)。
+- **修正**: `has_part_field_headers` が宣言 boundary に沿って
+  パートヘッダ run を追跡し、run 内のメッセージ級欄を検査する。
+- **教訓**: 部品の札は部品のことだけ書くべき — 手紙の表紙が
+  部品の中に紛れ込むと、読み手によって「内側の別の手紙」に
+  見える。
+
 ### Security — D1433:
 
 - **問題**: `Authentication-Results:`/`Received-SPF:` 欄が
