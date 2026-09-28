@@ -1094,8 +1094,14 @@ pub struct Envelope {
     pub date_two_days: bool,
     /// `Received:` が `;` のみ (D1690 — 経路解析ずれ)。
     pub received_semi_only: bool,
-    /// `boundary=` 値に `/` (D1691 — 区切りずれ)。
-    pub slash_boundary: bool,
+    /// `Received:` の `by` 節欠落 (D1691 — 経路解析ずれ)。
+    pub received_no_by: bool,
+    /// Date 欄の二つの月名 (D1692 — 日付解析ずれ)。
+    pub date_two_months: bool,
+    /// CT/CD 欄の末尾 `;` (D1693 — param 解析ずれ)。
+    pub trailing_semi_param: bool,
+    /// `Received:` の `;` 複数 (D1694 — 経路解析ずれ)。
+    pub multi_semi_received: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3631,8 +3637,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let date_two_days = has_date_two_days(bytes);
     // D1690: Received が ; のみ
     let received_semi_only = has_received_semi_only(bytes);
-    // D1691: boundary 値の /
-    let slash_boundary = has_slash_boundary(bytes);
+    // D1691: Received の by 節欠落
+    let received_no_by = has_received_no_by(bytes);
+    // D1692: Date 欄の二つの月名
+    let date_two_months = has_date_two_months(bytes);
+    // D1693: CT/CD 欄の末尾 ;
+    let trailing_semi_param = has_trailing_semi_param(bytes);
+    // D1694: Received の ; 複数
+    let multi_semi_received = has_multi_semi_received(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4081,7 +4093,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_multi_from,
         date_two_days,
         received_semi_only,
-        slash_boundary,
+        received_no_by,
+        date_two_months,
+        trailing_semi_param,
+        multi_semi_received,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -24105,46 +24120,172 @@ pub fn has_received_semi_only(raw: &[u8]) -> bool {
     false
 }
 
-/// `boundary=` の値に `/` が含まれるか判定する (D1691)。
+/// `Received:` の値に `from`/`with`/`id` 等の節があるのに
+/// `by` 節が無いか判定する (D1691)。
 ///
-/// `boundary=a/b` — `/` は bchars に含まれないため、厳格実装は
-/// 区切り値を拒否し寛容実装は採用する (区切りの `;` は
-/// `has_boundary_semicolon`)。
+/// `Received: from a; date` — `by` 節を必須とみなす実装と
+/// 任意とみなす実装で経路解析がずれる (from 欠落は D1673、
+/// 節皆無は `has_bad_received`、空値は D1687、`;` のみは D1690)。
 #[must_use]
-pub fn has_slash_boundary(raw: &[u8]) -> bool {
+pub fn has_received_no_by(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
-    let mut logical = String::with_capacity(text.len());
-    for l in text.lines() {
-        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
-            logical.push(' ');
-            logical.push_str(l.trim_start());
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
         } else {
-            logical.push('\n');
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
             logical.push_str(l);
         }
     }
-    for l in logical.to_ascii_lowercase().lines() {
-        if !l.starts_with("content-type:") {
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
             continue;
         }
-        let mut rest = l;
-        while let Some(p) = rest.find("boundary=") {
-            let after = &rest[p + 9..];
-            if let Some(q) = after.strip_prefix('"') {
-                let end = q.find('"').unwrap_or(q.len());
-                if q[..end].contains('/') {
-                    return true;
-                }
-                break;
+        let v = l[colon + 1..].to_ascii_lowercase();
+        let toks: Vec<&str> = v
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .collect();
+        let has_clause = toks
+            .iter()
+            .any(|t| matches!(*t, "from" | "with" | "id" | "for" | "via"));
+        if has_clause && !toks.iter().any(|t| *t == "by") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Date 欄に月名が2つあるか判定する (D1692)。
+///
+/// `Date: 25 Sep Oct 2025` — 先採用と後採用で日付がずれる
+/// (二年は D1675、二つの日は D1689、二曜日は D1660)。
+#[must_use]
+pub fn has_date_two_months(raw: &[u8]) -> bool {
+    const MONTHS: [&str; 12] = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+        "nov", "dec",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
             }
-            let end = after
-                .find(|c: char| c == ';' || c.is_whitespace())
-                .unwrap_or(after.len());
-            if after[..end].contains('/') {
-                return true;
+        } else {
+            if !first {
+                logical.push('\n');
             }
-            rest = &rest[p + 9..];
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        let n = l[colon + 1..]
+            .to_ascii_lowercase()
+            .split_whitespace()
+            .map(|t| t.trim_matches(|c: char| c == ',' || c == ';'))
+            .filter(|t| MONTHS.contains(t))
+            .count();
+        if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:`/`Content-Disposition:` の値が `;` で終わるか判定する (D1693)。
+///
+/// `Content-Type: text/plain;` — 末尾の空 param を無視する実装と
+/// 構文エラーとする実装で読みがずれる (連続 `;;` は D1636)。
+#[must_use]
+pub fn has_trailing_semi_param(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        if l[colon + 1..].trim_end().ends_with(';') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の値に `;` が2つ以上あるか判定する (D1694)。
+///
+/// `Received: from a by b; 25 Sep 2025; extra` — 最初の `;` で
+/// 切る実装は正しい日時を得るが、最後の `;` で切る実装は
+/// `extra` を日時として読み、経路解析がずれる (`;` のみ値は
+/// D1690、`;` 欠落は D1586)。
+#[must_use]
+pub fn has_multi_semi_received(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if v.matches(';').count() >= 2 {
+            return true;
         }
     }
     false
@@ -43756,21 +43897,56 @@ mod tests {
     }
 
     #[test]
-    fn slash_boundary_スラッシュ区切り値を検出する() {
-        assert!(has_slash_boundary(
-            b"Content-Type: multipart/mixed; boundary=a/b\r\n\r\n"
+    fn received_no_by_by節欠落を検出する() {
+        assert!(has_received_no_by(
+            b"Received: from a.example with ESMTPS id x; Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
         ));
-        assert!(has_slash_boundary(
-            b"Content-Type: multipart/mixed; boundary=\"a/b\"\r\n\r\n"
+        assert!(!has_received_no_by(
+            b"Received: from a.example by b.example; Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
         ));
-        assert!(!has_slash_boundary(
-            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n"
-        ));
-        assert!(!has_slash_boundary(
-            b"Content-Type: text/plain\r\n\r\n"
-        ));
-        assert!(!has_slash_boundary(b""));
+        assert!(!has_received_no_by(b"Received: ;\r\n\r\n"));
+        assert!(!has_received_no_by(b""));
     }
+
+
+    #[test]
+    fn date_two_months_二つの月名を検出する() {
+        assert!(has_date_two_months(
+            b"Date: 25 Sep Oct 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_date_two_months(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_date_two_months(b"Date: Sep 2025\r\n\r\n"));
+        assert!(!has_date_two_months(b""));
+    }
+
+    #[test]
+    fn trailing_semi_param_末尾区切りを検出する() {
+        assert!(has_trailing_semi_param(
+            b"Content-Type: text/plain;\r\n\r\n"
+        ));
+        assert!(has_trailing_semi_param(
+            b"Content-Disposition: attachment; \r\n\r\n"
+        ));
+        assert!(!has_trailing_semi_param(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_trailing_semi_param(b""));
+    }
+
+    #[test]
+    fn multi_semi_received_二つ以上の区切り印を検出する() {
+        assert!(has_multi_semi_received(
+            b"Received: from a by b; 25 Sep 2025 12:00:00 +0900; extra\r\n\r\n"
+        ));
+        assert!(!has_multi_semi_received(
+            b"Received: from a by b; 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_multi_semi_received(b"Received: ;\r\n\r\n"));
+        assert!(!has_multi_semi_received(b""));
+    }
+
 
     #[test]
     fn ct_name_no_disposition_は添付判定素通りを検出する() {

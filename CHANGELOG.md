@@ -1,6 +1,9 @@
 ## [Unreleased]
 
-### Security — D1691: `boundary=` 値の `/` 混入を検出 — `Envelope` に `slash_boundary` を追加 (区切りの `;` は `has_boundary_semicolon`)。
+### Security — D1694: `Received:` の `;` 複数を検出 — `Envelope` に `multi_semi_received` を追加 (`;` のみ値は D1690、`;` 欠落は D1586)。
+### Security — D1693: CT/CD 欄の末尾 `;` を検出 — `Envelope` に `trailing_semi_param` を追加 (連続 `;;` は D1636)。
+### Security — D1692: Date 欄の二つの月名を検出 — `Envelope` に `date_two_months` を追加 (二年は D1675、二つの日は D1689)。
+### Security — D1691: `Received:` の `by` 節欠落を検出 — `Envelope` に `received_no_by` を追加 (from 欠落は D1673)。
 ### Security — D1690: `Received:` の `;` のみ値を検出 — `Envelope` に `received_semi_only` を追加 (空値は D1687、`;` 欠落は D1586)。
 ### Security — D1689: Date 欄の二つの日を検出 — `Envelope` に `date_two_days` を追加 (二年は D1675、二曜日は D1660、二時刻は D1657)。
 ### Security — D1688: `Received:` の `from` 節重複を検出 — `Envelope` に `received_multi_from` を追加 (from 欠落は D1673)。
