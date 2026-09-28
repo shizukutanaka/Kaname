@@ -760,6 +760,14 @@ pub struct Envelope {
     pub semicolon_addr: bool,
     /// `*=` パラメータの危険 charset (D1524 — 復号差異)。
     pub bad_2231_charset: bool,
+    /// アドレス欄の未終端クオート (D1525 — quoted-string 差異)。
+    pub unclosed_addr_quote: bool,
+    /// アドレス欄の未終端/裸 `>` 括弧 (D1526 — 構文差異)。
+    pub unclosed_angle_addr: bool,
+    /// encoded-word の危険 charset (D1527 — 復号差異)。
+    pub bad_ew_charset: bool,
+    /// アドレス欄の `@` 無し `<…>` (D1528 — 宛名解釈差異)。
+    pub atless_angle_addr: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2963,6 +2971,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let semicolon_addr = has_semicolon_addr(bytes);
     // D1524: *= の危険 charset
     let bad_2231_charset = has_bad_2231_charset(bytes);
+    // D1525: 未終端クオート
+    let unclosed_addr_quote = has_unclosed_addr_quote(bytes);
+    // D1526: 未終端/裸の括弧
+    let unclosed_angle_addr = has_unclosed_angle_addr(bytes);
+    // D1527: encoded-word の危険 charset
+    let bad_ew_charset = has_bad_ew_charset(bytes);
+    // D1528: @ 無し括弧宛名
+    let atless_angle_addr = has_atless_angle_addr(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3245,6 +3261,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         unclosed_msgid,
         semicolon_addr,
         bad_2231_charset,
+        unclosed_addr_quote,
+        unclosed_angle_addr,
+        bad_ew_charset,
+        atless_angle_addr,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -15324,6 +15344,239 @@ pub fn has_bad_2231_charset(raw: &[u8]) -> bool {
             if BAD.contains(&cs) {
                 return true;
             }
+        }
+    }
+    false
+}
+
+
+/// アドレス欄に閉じないクオートがあるか判定する (D1525)。
+///
+/// `From: "John <a@b>` の未終端クオートは、行末までを quoted-string
+/// と読む実装と欄ごと捨てる実装で宛名がずれる (コメントの未終端は
+/// D1521、括弧の未終端は D1526)。
+#[must_use]
+pub fn has_unclosed_addr_quote(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // コメント内の " は除外しつつ対を数える
+        let mut in_c = 0i32;
+        let mut quotes = 0usize;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                quotes += 1;
+            }
+            prev = b;
+        }
+        if quotes % 2 == 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` が閉じない、または `>` が裸で現れるか判定する
+/// (D1526)。
+///
+/// `From: <a@b`・`To: a@b>` は括弧の対応が崩れた形で、行末まで
+/// 読む実装と構文エラーとする実装で宛名がずれる (空括弧は D1508、
+/// 入れ子は D1500、識別子欄の未終端は D1522)。
+#[must_use]
+pub fn has_unclosed_angle_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut depth = 0i32;
+        let mut stray_close = false;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'<' {
+                depth += 1;
+            } else if b == b'>' {
+                if depth == 0 {
+                    stray_close = true;
+                } else {
+                    depth -= 1;
+                }
+            }
+            prev = b;
+        }
+        if depth > 0 || stray_close {
+            return true;
+        }
+    }
+    false
+}
+
+/// encoded-word の charset が危険系か判定する (D1527)。
+///
+/// `=?utf-7?Q?…?=`/`=?utf-16?B?…?=`/`=?x-user-defined?…` は復号器の
+/// charset 解釈で Subject/差出人表示が変わる — ヘッダ charset
+/// (D1301)・`*=` charset (D1524) と同じ顔を encoded-word の位置で
+/// 見る (異 charset 混在は D1372 が担う)。
+#[must_use]
+pub fn has_bad_ew_charset(raw: &[u8]) -> bool {
+    const BAD: &[&str] = &[
+        "utf-7", "utf7", "unicode-1-1-utf-7", "csunicode11utf7",
+        "utf-16", "utf-16le", "utf-16be", "utf-32", "utf-32le", "utf-32be",
+        "x-user-defined", "x-mac-ce", "iso-2022-cn", "iso-2022-jp", "iso-2022-kr",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let mut rest = l;
+        while let Some(a) = rest.find("=?") {
+            let Some(e) = rest[a + 2..].find('?') else { break };
+            let cs = rest[a + 2..a + 2 + e].trim();
+            if BAD.contains(&cs) {
+                return true;
+            }
+            rest = &rest[a + 2 + e..];
+        }
+    }
+    false
+}
+
+/// アドレス欄の `<…>` 内に `@` が無いか判定する (D1528)。
+///
+/// `From: John <backup>` の `@` 無し括弧宛名は、括弧内を宛名と採る
+/// 実装と全体を読む実装で宛名がずれる (空括弧は D1508、形崩れの
+/// msgid 側は D1498)。
+#[must_use]
+pub fn has_atless_angle_addr(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        let mut i = 0usize;
+        let vb = v.as_bytes();
+        while i < vb.len() {
+            let b = vb[i];
+            if prev == b'\\' {
+                prev = b;
+                i += 1;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'<' {
+                if let Some(z) = v[i..].find('>') {
+                    let inner = &v[i + 1..i + z];
+                    // 空括弧は D1508、obs-route (@ で始まる) は D1499
+                    if !inner.is_empty() && !inner.contains('@') {
+                        return true;
+                    }
+                    i += z;
+                }
+            }
+            prev = b;
+            i += 1;
         }
     }
     false
@@ -32790,6 +33043,53 @@ mod tests {
         assert!(!has_bad_2231_charset(
             b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nb"
         ));
+    }
+
+    #[test]
+    fn unclosed_addr_quote_は閉じない引用符を検出する() {
+        // D1525 — From: "John <a@b>
+        assert!(has_unclosed_addr_quote(b"From: \"John <a@b>\r\n\r\nb"));
+        // 閉じたクオートは不発火
+        assert!(!has_unclosed_addr_quote(
+            b"From: \"John\" <a@b>\r\n\r\nb"
+        ));
+        // コメント内の " は対象外
+        assert!(!has_unclosed_addr_quote(b"From: a@b (see \"x)\r\n\r\nb"));
+        // アドレス欄以外は対象外
+        assert!(!has_unclosed_addr_quote(b"Subject: \"hi\r\n\r\nb"));
+    }
+
+    #[test]
+    fn unclosed_angle_addr_は括弧の崩れを検出する() {
+        // D1526 — 未終端 < と裸 >
+        assert!(has_unclosed_angle_addr(b"From: <a@b\r\n\r\nb"));
+        assert!(has_unclosed_angle_addr(b"To: a@b>\r\n\r\nb"));
+        // 正常形は不発火
+        assert!(!has_unclosed_angle_addr(b"From: \"x\" <a@b>\r\n\r\nb"));
+        // クオート/コメント内の括弧は対象外
+        assert!(!has_unclosed_angle_addr(b"From: \"a<b\" <x@y>\r\n\r\nb"));
+    }
+
+    #[test]
+    fn bad_ew_charset_は危険charsetを検出する() {
+        // D1527 — =?utf-7? / =?utf-16? / =?x-user-defined?
+        assert!(has_bad_ew_charset(b"Subject: =?utf-7?Q?x?=\r\n\r\nb"));
+        assert!(has_bad_ew_charset(b"From: =?utf-16?B?AA==?= <a@b>\r\n\r\nb"));
+        // 正常 charset は不発火
+        assert!(!has_bad_ew_charset(b"Subject: =?utf-8?Q?caf=C3=A9?=\r\n\r\nb"));
+        assert!(!has_bad_ew_charset(b"Subject: =?iso-8859-1?Q?x?=\r\n\r\nb"));
+    }
+
+    #[test]
+    fn atless_angle_addr_はアット無し括弧を検出する() {
+        // D1528 — From: John <backup>
+        assert!(has_atless_angle_addr(b"From: John <backup>\r\n\r\nb"));
+        // 正常は不発火
+        assert!(!has_atless_angle_addr(b"From: John <a@b>\r\n\r\nb"));
+        // 空括弧は D1508 の領分
+        assert!(!has_atless_angle_addr(b"From: x <>\r\n\r\nb"));
+        // クオート/コメント内は対象外
+        assert!(!has_atless_angle_addr(b"From: \"<noat>\" <x@y>\r\n\r\nb"));
     }
 
     #[test]
