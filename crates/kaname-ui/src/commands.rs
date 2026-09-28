@@ -4818,16 +4818,32 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
         );
     }
     if env.special_local_char {
-        risks.push(format!("宛名のローカル部に引き綴り不能な特殊文字があります (a/b@x 等)                            —厳格実装は宛名を拒否し、寛容実装は受理してずれます"));
+        render_risks.push(
+            "宛名のローカル部に引き綴り不能な特殊文字があります (a/b@x 等)\
+             —厳格実装は宛名を拒否し、寛容実装は受理してずれます"
+                .to_string(),
+        );
     }
     if env.digit_tld_addr {
-        risks.push(format!("宛名のドメイン最終ラベルが全数字です (a@b.123 等)                            —フィルタする実装と受理する実装で宛名がずれます"));
+        render_risks.push(
+            "宛名のドメイン最終ラベルが全数字です (a@b.123 等)\
+             —フィルタする実装と受理する実装で宛名がずれます"
+                .to_string(),
+        );
     }
     if env.bad_clock {
-        risks.push(format!("日付欄の時刻が範囲外です (25:00・12:60 等)                            —丸める実装と構文エラーにする実装で日付がずれます"));
+        render_risks.push(
+            "日付欄の時刻が範囲外です (25:00・12:60 等)\
+             —丸める実装と構文エラーにする実装で日付がずれます"
+                .to_string(),
+        );
     }
     if env.edge_hyphen_domain {
-        risks.push(format!("宛名ドメインのラベルがハイフンで始まるか終わっています (a@-b.x・a@b-.x 等)                            —厳格実装は宛名を拒否し、寛容実装は受理してずれます"));
+        render_risks.push(
+            "宛名ドメインのラベルがハイフンで始まるか終わっています (a@-b.x・a@b-.x 等)\
+             —厳格実装は宛名を拒否し、寛容実装は受理してずれます"
+                .to_string(),
+        );
     }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
