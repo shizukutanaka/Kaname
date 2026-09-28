@@ -920,6 +920,14 @@ pub struct Envelope {
     pub comment_inside_id: bool,
     /// アドレス欄に `@` も `<` も無い表示名のみ形 (D1604 — 宛名解釈ずれ)。
     pub display_only_addr: bool,
+    /// ヘッダブロックの先頭行が空白始まり (継続行のみ) の形 (D1605 — ヘッダ起点ずれ)。
+    pub orphan_continuation: bool,
+    /// アドレス欄の非クオート表示名に `,` を含む形 (D1606 — 宛名分割ずれ)。
+    pub unquoted_comma_display: bool,
+    /// `List-Id:`/`List-Unsubscribe:` 等の複数回出現 (D1607 — ML 欄解釈ずれ)。
+    pub dup_list_headers: bool,
+    /// `List-*` 欄の `<`/`>` 数不一致 (D1608 — 解除欄読みずれ)。
+    pub unclosed_list_angle: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3283,6 +3291,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let comment_inside_id = has_comment_inside_id(bytes);
     // D1604: 表示名のみの宛名欄
     let display_only_addr = has_display_only_addr(bytes);
+    // D1605: 継続行のみで始まるヘッダブロック
+    let orphan_continuation = has_orphan_continuation(bytes);
+    // D1606: 非クオート表示名内の `,`
+    let unquoted_comma_display = has_unquoted_comma_display(bytes);
+    // D1607: List-* 欄の重複
+    let dup_list_headers = has_dup_list_headers(bytes);
+    // D1608: List-* 欄の `<`/`>` 不一致
+    let unclosed_list_angle = has_unclosed_list_angle(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3645,6 +3661,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         quoted_at_display,
         comment_inside_id,
         display_only_addr,
+        orphan_continuation,
+        unquoted_comma_display,
+        dup_list_headers,
+        unclosed_list_angle,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -19352,6 +19372,186 @@ pub fn has_display_only_addr(raw: &[u8]) -> bool {
             continue;
         }
         if p.chars().any(|c| !c.is_whitespace()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダブロックの先頭行が空白/タブ始まり (継続行のみ) か判定する
+/// (D1605)。
+///
+/// RFC 5322 の folding は「先行するヘッダ行への継続」を意味するが、
+/// 先頭が継続行のメッセージでは起点が無い — 先頭行を捨てる実装と
+/// ヘッダ全体を本文扱いする実装で欄構成がずれる (空白のみの行は
+/// D1599、コロン無し行は D1585)。
+#[must_use]
+pub fn has_orphan_continuation(raw: &[u8]) -> bool {
+    matches!(raw.first(), Some(b' ') | Some(b'\t'))
+}
+
+/// アドレス欄の値をトップレベルの `,` で割ったとき、空でない要素に
+/// `@` も `:`/`;`/`<` も含まない表示名語句だけの要素が混ざるか判定する
+/// (D1606)。
+///
+/// `From: Doe, John <a@b>` — 非クオートの `,` は本来 mailbox の区切りで、
+/// 「Doe」を空の宛名要素とする実装と表示名の一部と読む実装で宛先集合が
+/// ずれる (連続/端コンマは D1584、全角コンマは D1537、欄が語句のみは
+/// D1604)。クオート・コメント・額縁の内側の `,` は対象外。
+#[must_use]
+pub fn has_unquoted_comma_display(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !is_addr_header_name(l[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let bytes = v.as_bytes();
+        let mut in_q = false;
+        let mut in_c = 0u32;
+        let mut in_a = false;
+        let mut prev = b'\0';
+        let mut seg_start = 0usize;
+        let mut found = false;
+        let mut saw_comma = false;
+        let iter = bytes.iter().chain(std::iter::once(&b','));
+        for (i, &b) in iter.enumerate() {
+            if in_c > 0 {
+                if b == b'(' && prev != b'\\' {
+                    in_c += 1;
+                } else if b == b')' && prev != b'\\' {
+                    in_c -= 1;
+                }
+            } else if b == b'"' && prev != b'\\' {
+                in_q = !in_q;
+            } else if b == b'(' && !in_q && prev != b'\\' {
+                in_c = 1;
+            } else if !in_q && b == b'<' && prev != b'\\' {
+                in_a = true;
+            } else if !in_q && b == b'>' && in_a {
+                in_a = false;
+            } else if !in_q && !in_a && in_c == 0 && b == b',' {
+                let seg = v[seg_start..i].trim();
+                seg_start = i + 1;
+                if i < bytes.len() {
+                    saw_comma = true;
+                }
+                if !seg.is_empty()
+                    && !seg.contains('@')
+                    && !seg.contains(':')
+                    && !seg.contains(';')
+                {
+                    found = true;
+                }
+            }
+            prev = b;
+        }
+        if found && saw_comma {
+            return true;
+        }
+    }
+    false
+}
+
+/// `List-Id:`/`List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/
+/// `List-Help:`/`List-Owner:`/`List-Archive:` が複数回出現するか判定する
+/// (D1607)。
+///
+/// RFC 2369/2919 の欄は一意が前提 — 同名欄が二度あると先読み/後読みで
+/// ML の同一性・解除 URL がずれる (From/Date 等は D1589、宛先欄は
+/// D1598、識別子欄は D1595 の領分)。
+#[must_use]
+pub fn has_dup_list_headers(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut counts = [0u32; 7];
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        let idx = if low.starts_with("list-id:") {
+            0
+        } else if low.starts_with("list-post:") {
+            1
+        } else if low.starts_with("list-subscribe:") {
+            2
+        } else if low.starts_with("list-unsubscribe:") {
+            3
+        } else if low.starts_with("list-help:") {
+            4
+        } else if low.starts_with("list-owner:") {
+            5
+        } else if low.starts_with("list-archive:") {
+            6
+        } else {
+            continue;
+        };
+        counts[idx] += 1;
+        if counts[idx] > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `List-*` 欄の値で `<` と `>` の数が一致しないか判定する (D1608)。
+///
+/// `List-Id: <mylist`/`List-Unsubscribe: <mailto:a` — 閉じない括弧は
+/// 行末まで読む実装と欄ごと捨てる実装で解除欄・ML 判定がずれる
+/// (裸形は D1601、識別子欄の未終端は D1522)。
+#[must_use]
+pub fn has_unclosed_list_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+            first = false;
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_list = l.starts_with("list-id:")
+            || l.starts_with("list-post:")
+            || l.starts_with("list-subscribe:")
+            || l.starts_with("list-unsubscribe:")
+            || l.starts_with("list-help:")
+            || l.starts_with("list-owner:")
+            || l.starts_with("list-archive:");
+        if !is_list {
+            continue;
+        }
+        let v = l.splitn(2, ':').nth(1).unwrap_or("");
+        let lt = v.bytes().filter(|&b| b == b'<').count();
+        let gt = v.bytes().filter(|&b| b == b'>').count();
+        if lt != gt {
             return true;
         }
     }
@@ -37860,6 +38060,60 @@ mod tests {
         assert!(!has_display_only_addr(b"To: undisclosed-recipients:;\r\nFrom: a@b\r\n\r\nx"));
         assert!(!has_display_only_addr(b"From: (notes)\r\nTo: a@b\r\n\r\nx"));
         assert!(!has_display_only_addr(b"From: a@b\r\nTo: c@d\r\n\r\nx"));
+    }
+
+    #[test]
+    fn orphan_continuation_継続行のみの先頭を検出する() {
+        // D1605 — ヘッダブロックの先頭が SP/TAB
+        assert!(has_orphan_continuation(b" X-Junk: y\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_orphan_continuation(b"\tcontinued\r\nFrom: a@b\r\n\r\nx"));
+        // 通常の先頭・空・本文側の継続行は不発火
+        assert!(!has_orphan_continuation(b"From: a@b\r\n X: y\r\n\r\nx"));
+        assert!(!has_orphan_continuation(b"\r\nFrom: a@b\r\n\r\nx"));
+        assert!(!has_orphan_continuation(b""));
+    }
+
+    #[test]
+    fn unquoted_comma_display_表示名内コンマを検出する() {
+        // D1606 — 非クオート `,` で区切られる語句要素
+        assert!(has_unquoted_comma_display(b"From: Doe, John <a@b>\r\n\r\nx"));
+        assert!(has_unquoted_comma_display(b"To: Team Alpha, a@b\r\n\r\nx"));
+        // クオート内・コメント内のコンマ、通常の複数宛名、語句のみ欄 (D1604) は不発火
+        assert!(!has_unquoted_comma_display(b"From: \"Doe, John\" <a@b>\r\n\r\nx"));
+        assert!(!has_unquoted_comma_display(b"From: John (x, y) <a@b>\r\n\r\nx"));
+        assert!(!has_unquoted_comma_display(b"To: a@b, c@d\r\n\r\nx"));
+        assert!(!has_unquoted_comma_display(b"From: John Doe\r\n\r\nx"));
+        assert!(!has_unquoted_comma_display(
+            b"To: undisclosed-recipients:;, a@b\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn dup_list_headers_list欄重複を検出する() {
+        // D1607 — List-* の複数回出現
+        assert!(has_dup_list_headers(
+            b"List-Id: <a.x>\r\nList-Id: <b.x>\r\nFrom: a@b\r\n\r\nx"
+        ));
+        assert!(has_dup_list_headers(
+            b"List-Unsubscribe: <mailto:a@x>\r\nList-Unsubscribe: <https://x/u>\r\n\r\nx"
+        ));
+        // 異なる種類・単一出現は不発火
+        assert!(!has_dup_list_headers(
+            b"List-Id: <a.x>\r\nList-Post: <mailto:a@x>\r\nList-Unsubscribe: <mailto:u@x>\r\n\r\nx"
+        ));
+        assert!(!has_dup_list_headers(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn unclosed_list_angle_list欄の未終端括弧を検出する() {
+        // D1608 — `<`/`>` 数不一致
+        assert!(has_unclosed_list_angle(b"List-Id: <mylist\r\nFrom: a@b\r\n\r\nx"));
+        assert!(has_unclosed_list_angle(b"List-Unsubscribe: <mailto:a@x\r\n\r\nx"));
+        assert!(has_unclosed_list_angle(b"List-Id: mylist>\r\n\r\nx"));
+        // 釣り合い・裸形 (D1601)・他欄は不発火
+        assert!(!has_unclosed_list_angle(b"List-Id: <mylist.x>\r\n\r\nx"));
+        assert!(!has_unclosed_list_angle(b"List-Unsubscribe: mailto:a@x\r\n\r\nx"));
+        assert!(!has_unclosed_list_angle(b"Message-ID: <a@b\r\n\r\nx"));
     }
 
     #[test]

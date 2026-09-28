@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Security — D1605: ヘッダブロック先頭が空白/タブ始まりの継続行のみ形を検出 — `kaname-render` の `Envelope` に `orphan_continuation` を追加。folding の元を持たない先頭行で、捨てる実装と本文扱いする実装で欄構成がずれる (空白のみ行は D1599)。
+
+### Security — D1606: アドレス欄の非クオート表示名内 `,` (`From: Doe, John <a@b>`) を検出 — `Envelope` に `unquoted_comma_display` を追加。宛名区切りと読む実装と表示名の一部と読む実装で宛先集合がずれる (連続/端コンマは D1584、語句のみ欄は D1604)。
+
+### Security — D1607: `List-Id:`/`List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/`List-Help:`/`List-Owner:`/`List-Archive:` の複数回出現を検出 — `Envelope` に `dup_list_headers` を追加。一意前提の欄で先読み/後読みがずれる (宛先欄重複は D1598、一意欄は D1589)。
+
+### Security — D1608: `List-*` 欄の `<`/`>` 数不一致 (`List-Id: <mylist`) を検出 — `Envelope` に `unclosed_list_angle` を追加。行末まで読む実装と欄ごと捨てる実装で解除欄・ML 判定がずれる (裸形は D1601、識別子未終端は D1522)。
+
 ### Security — D1601: `List-Post:`/`List-Subscribe:`/`List-Unsubscribe:`/`List-Help:`/`List-Owner:`/`List-Archive:` の値が `<…>` 括弧を欠く裸形 (`List-Unsubscribe: mailto:x`) を検出 — `kaname-render` の `Envelope` に `bare_list_url` を追加。RFC 2369 は `<url>` 形を要求し、厳格実装が操作欄を捨てる (List-Id 裸形は D1572、危険スキームは D1541)。
 
 ### Security — D1602: アドレス欄の表示名 (quoted-string) が `@` を含む形 (`From: "ceo@example.com" <attacker@evil>`) を検出 — `Envelope` に `quoted_at_display` を追加。引用部を宛名と誤読する実装で差出人がすり替わる (クオートのみ宛名は D1542、コメント内別アドレスは D1300)。
