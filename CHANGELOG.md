@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security — D1545: msgid 欄の括弧後ゴミ検出
+**問題** `Message-ID: <a@b> junk` — 括弧内だけ採る実装と残りを識別子に連ねる実装でスレッド照合がずれる (宛名欄版は D1538)。
+**修正** `Envelope.msgid_junk_after_angle` — 最終 `>` 以降の残存を検出。
+**教訓** 整理番号の額縁の外に書き足された文字は、番号の一部と読む棚と読まない棚でずれる。
+
+### Security — D1546: 非 IP ドメインリテラル検出
+**問題** `From: a@[not-an-ip]` — `[…]` が IP を含まず、リテラル受理と拒否で宛名がずれる (IP 形は D1407)。
+**修正** `Envelope.nonip_domain_literal` — `[…]` 内が数値/IPv6 形でない宛名を検出。
+**教訓** 地図の緯度経度欄に名前を書くと、座標として読む配達人と捨てる配達人がいる。
+
+### Security — D1547: ゾーン無し Date 検出
+**問題** `Date: Thu, 25 Sep 2025 12:00:00` ゾーン欠落 — ローカル時刻扱いと構文エラーで日付がずれる (名前ゾーンは D1534)。
+**修正** `Envelope.zoneless_date` — Date 系欄末尾のゾーン欠落を検出。
+**教訓** 時刻帯の書かれていない消印は、読む場所で「今日」の境界がずれる。
+
+### Security — D1548: ドット欄名検出
+**問題** `Content.Type:`/`X.Original-From:` — ハイフンの代わりのドットは欄名文字として拒否する実装と許す実装で欄がずれる (ハイフン欠落は D1473)。
+**修正** `Envelope.dotted_header_name` — `:` 前の欄名中 `.` を検出。
+**教訓** 欄名の綴りに点を打つ癖は、それを綴りと認める係と欄ごと捨てる係を分ける。
+
 ### Security — D1541: `List-*` 危険スキーム検出
 **問題** `List-Unsubscribe: <javascript:alert(1)>` — 規格は mailto/https のみ想定だが、ワンクリック解除を実装したクライアントは任意スキームを開き得る。
 **修正** `Envelope.dangerous_list_scheme` — `List-*` 欄の `javascript:`/`data:`/`file:`/`vbscript:` 等を検出。

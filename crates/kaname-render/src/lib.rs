@@ -800,6 +800,14 @@ pub struct Envelope {
     pub unclosed_addr_group: bool,
     /// `,` 継ぎ複数 CTE 値 (D1544 — 復号有無ずれ)。
     pub multi_value_cte: bool,
+    /// msgid 欄の `>` 後ゴミ (D1545 — 識別子終端ずれ)。
+    pub msgid_junk_after_angle: bool,
+    /// 非 IP ドメインリテラル (D1546 — 宛名受理ずれ)。
+    pub nonip_domain_literal: bool,
+    /// ゾーン無し Date (D1547 — 時刻解釈ずれ)。
+    pub zoneless_date: bool,
+    /// `.` を含む欄名 (D1548 — 欄読みずれ)。
+    pub dotted_header_name: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3043,6 +3051,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let unclosed_addr_group = has_unclosed_addr_group(bytes);
     // D1544: 複数値 CTE
     let multi_value_cte = has_multi_value_cte(bytes);
+    // D1545: msgid 欄の `>` 後ゴミ
+    let msgid_junk_after_angle = has_msgid_junk_after_angle(bytes);
+    // D1546: 非 IP ドメインリテラル
+    let nonip_domain_literal = has_nonip_domain_literal(bytes);
+    // D1547: ゾーン無し Date
+    let zoneless_date = has_zoneless_date(bytes);
+    // D1548: `.` を含む欄名
+    let dotted_header_name = has_dotted_header_name(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3345,6 +3361,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         quoted_only_addr,
         unclosed_addr_group,
         multi_value_cte,
+        msgid_junk_after_angle,
+        nonip_domain_literal,
+        zoneless_date,
+        dotted_header_name,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -16362,6 +16382,164 @@ pub fn has_multi_value_cte(raw: &[u8]) -> bool {
         }
         let v = &l[l.find(':').unwrap_or(0) + 1..];
         if v.split(',').filter(|t| !t.trim().is_empty()).count() >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+
+/// msgid 欄の `>` の後に非空白ゴミが続くか判定する (D1545)。
+///
+/// `Message-ID: <a@b> junk` は括弧内だけ採る実装と残りも識別子に
+/// 連ねる実装でスレッド照合がずれる (宛名欄版は D1538)。
+#[must_use]
+pub fn has_msgid_junk_after_angle(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let is_id = l.starts_with("message-id:")
+            || l.starts_with("in-reply-to:")
+            || l.starts_with("references:")
+            || l.starts_with("resent-message-id:");
+        if !is_id {
+            continue;
+        }
+        let v = l.trim();
+        let Some(gt) = v.rfind('>') else { continue };
+        if !v.contains('<') {
+            continue;
+        }
+        let after = v[gt + 1..].trim();
+        if !after.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名のドメインリテラルが非 IP 文字列か判定する (D1546)。
+///
+/// `From: a@[not-an-ip]` は `[…]` が IP を含まず、リテラルを
+/// 受理する実装と拒否する実装で宛名がずれる (IP 形は D1407、
+/// `_` ドメインは D1404)。
+#[must_use]
+pub fn has_nonip_domain_literal(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let Some(colon) = low.find(':') else { continue };
+        if !is_addr_header_name(low[..colon].trim_end()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(o) = rest.find('[') {
+            match rest[o..].find(']') {
+                Some(z) => {
+                    let inner = &rest[o + 1..o + z];
+                    let ok = inner.to_ascii_lowercase().starts_with("ipv6:")
+                        || inner.bytes().all(|b| b.is_ascii_digit() || b == b'.');
+                    if !ok && !inner.is_empty() {
+                        return true;
+                    }
+                    rest = &rest[o + z + 1..];
+                }
+                None => break,
+            }
+        }
+    }
+    false
+}
+
+/// Date 系欄にタイムゾーンが無いか判定する (D1547)。
+///
+/// `Date: Thu, 25 Sep 2025 12:00:00` のゾーン欠落は、ローカル
+/// 時刻とみなす実装と構文エラーにする実装で日付がずれる
+/// (名前ゾーンは D1534、2桁年は D1535)。
+#[must_use]
+pub fn has_zoneless_date(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        let is_date = low.starts_with("date:")
+            || low.starts_with("resent-date:")
+            || low.starts_with("expires:")
+            || low.starts_with("expiry-date:");
+        if !is_date {
+            continue;
+        }
+        let v = l[l.find(':').unwrap_or(0) + 1..].trim();
+        let Some(last) = v.split_whitespace().last() else { continue };
+        // 末尾が ±HHMM または英字ゾーンならゾーンあり
+        let is_num_zone = last.len() == 5
+            && (last.starts_with('+') || last.starts_with('-'))
+            && last[1..].bytes().all(|b| b.is_ascii_digit());
+        let is_name_zone = last.bytes().all(|b| b.is_ascii_alphabetic());
+        // `12:00:00` で終わる = ゾーン無し
+        if !is_num_zone && !is_name_zone && v.contains(':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// ヘッダ名に `.` を含む行があるか判定する (D1548)。
+///
+/// `Content.Type: text/plain`/`X.Original-From:` はハイフンの代わりの
+/// ドットで、`.` を許す実装と欄名文字として拒否する実装で欄の
+/// 読みがずれる (ハイフン欠落は D1473)。
+#[must_use]
+pub fn has_dotted_header_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') || l.is_empty() {
+            continue;
+        }
+        let Some(c) = l.find(':') else { continue };
+        let name = &l[..c];
+        if name.contains('.') && !name.is_empty() {
             return true;
         }
     }
@@ -34097,6 +34275,56 @@ mod tests {
         assert!(!has_multi_value_cte(
             b"Content-Transfer-Encoding: base64,\r\n\r\nb"
         ));
+    }
+
+    #[test]
+    fn msgid_junk_after_angle_は括弧後ゴミを検出する() {
+        // D1545 — Message-ID: <a@b> junk
+        assert!(has_msgid_junk_after_angle(
+            b"Message-ID: <a@b> junk\r\n\r\nb"
+        ));
+        // 正常は不発火
+        assert!(!has_msgid_junk_after_angle(b"Message-ID: <a@b>\r\n\r\nb"));
+        assert!(!has_msgid_junk_after_angle(
+            b"References: <a@b> <c@d>\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn nonip_domain_literal_は非ipリテラルを検出する() {
+        // D1546 — a@[not-an-ip]
+        assert!(has_nonip_domain_literal(b"From: a@[not-an-ip]\r\n\r\nb"));
+        // 数値リテラルは受理側の範囲
+        assert!(!has_nonip_domain_literal(b"From: a@[127.0.0.1]\r\n\r\nb"));
+        assert!(!has_nonip_domain_literal(b"From: a@[IPv6:::1]\r\n\r\nb"));
+        // 普通のドメインは不発火
+        assert!(!has_nonip_domain_literal(b"From: a@b.example\r\n\r\nb"));
+    }
+
+    #[test]
+    fn zoneless_date_はゾーン欠落を検出する() {
+        // D1547 — ゾーン無し Date
+        assert!(has_zoneless_date(
+            b"Date: Thu, 25 Sep 2025 12:00:00\r\n\r\nb"
+        ));
+        // +0900 / GMT は正常
+        assert!(!has_zoneless_date(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\nb"
+        ));
+        assert!(!has_zoneless_date(
+            b"Date: Thu, 25 Sep 2025 12:00:00 GMT\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn dotted_header_name_はドット欄名を検出する() {
+        // D1548 — Content.Type: / X.Original-From:
+        assert!(has_dotted_header_name(b"Content.Type: text/plain\r\n\r\nb"));
+        assert!(has_dotted_header_name(b"X.Original-From: a@b\r\n\r\nb"));
+        // 正常欄名は不発火
+        assert!(!has_dotted_header_name(b"X-Original-From: a@b\r\n\r\nb"));
+        // 値中のドットは対象外
+        assert!(!has_dotted_header_name(b"Subject: v1.2\r\n\r\nb"));
     }
 
     #[test]

@@ -4733,6 +4733,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.msgid_junk_after_angle {
+        render_risks.push(
+            "識別子欄の括弧の後にゴミが続いています (<a@b> junk 等)\
+             —括弧内だけ採る実装と残りも読む実装でスレッド照合がずれます"
+                .to_string(),
+        );
+    }
+    if env.nonip_domain_literal {
+        render_risks.push(
+            "宛名のドメインリテラルが IP ではありません (a@[name] 等)\
+             —リテラルを受理する実装と拒否する実装で宛名がずれます"
+                .to_string(),
+        );
+    }
+    if env.zoneless_date {
+        render_risks.push(
+            "日付欄にタイムゾーンがありません\
+             —ローカル時刻とみなす実装と構文エラーにする実装で日付がずれます"
+                .to_string(),
+        );
+    }
+    if env.dotted_header_name {
+        render_risks.push(
+            "欄名にドットを含む行があります (Content.Type: 等)\
+             —ドットを許す実装と欄ごと拒否する実装で欄の読みがずれます"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
