@@ -4230,6 +4230,34 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
                 .to_string(),
         );
     }
+    if env.unhyphenated_header {
+        render_risks.push(
+            "ハイフンの無い欄名 (MessageID 等) があります\
+             —欄名を正規化する実装と捨てる実装で解釈がずれます"
+                .to_string(),
+        );
+    }
+    if env.quoted_cte {
+        render_risks.push(
+            "Content-Transfer-Encoding が引用符付きの値です\
+             —引用符を剥がす実装と拒否する実装で復号がずれます"
+                .to_string(),
+        );
+    }
+    if env.url_in_content_description {
+        render_risks.push(
+            "Content-Description に URL が含まれています\
+             —説明欄を通る誘導リンクの形跡です"
+                .to_string(),
+        );
+    }
+    if env.incomplete_resent {
+        render_risks.push(
+            "Resent-* 欄が Resent-From/Resent-Date を欠いています\
+             —体裁だけの転送履歴の形跡です"
+                .to_string(),
+        );
+    }
 
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

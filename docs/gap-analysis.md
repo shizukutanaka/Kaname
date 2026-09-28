@@ -886,3 +886,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1470 | 添付名に $()/${}/バッククォート等シェル式 | 保存名のシェル展開工作 | シェル式混入検査 | kaname-render |
 | D1471 | X-Face/Face/X-Image-URL 送信者指定顔写真 | 偽アバターで差出人信用偽装 | 顔写真欄の存在検査 | kaname-render |
 | D1472 | boundary 値に空白混入 | 区切り照合の実装間ずれ | 引用符内空白検査 | kaname-render |
+| D1473 | ハイフン欠落した標準欄名の綴り違い (MessageID 等) | 欄名正規化で解釈ずれ | 綴り違い欄名の検査 | kaname-render |
+| D1474 | CTE 値が引用符付き ("base64") | 剥がす実装と拒否で復号ずれ | 引用符始まり検査 | kaname-render |
+| D1475 | Content-Description 値に URL 混入 | 説明欄経由の誘導リンク | URL 存在検査 | kaname-render |
+| D1476 | Resent-* 欄が Resent-From/Date を欠く | 体裁だけの転送履歴 | 必須ペア欠落検査 | kaname-render |

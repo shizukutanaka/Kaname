@@ -656,6 +656,14 @@ pub struct Envelope {
     pub avatar_headers: bool,
     /// D1472 — boundary 値に空白が含まれる。
     pub spaced_boundary: bool,
+    /// D1473 — ハイフンを欠いた標準欄名の綴り違い (MessageID 等)。
+    pub unhyphenated_header: bool,
+    /// D1474 — CTE の値が引用符付き文字列。
+    pub quoted_cte: bool,
+    /// D1475 — Content-Description の値に URL 混入。
+    pub url_in_content_description: bool,
+    /// D1476 — Resent-* 欄があるのに Resent-From/Resent-Date が無い。
+    pub incomplete_resent: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2791,6 +2799,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let shell_meta_filename = has_shell_meta_filename(bytes);
     let avatar_headers = has_avatar_headers(bytes);
     let spaced_boundary = has_spaced_boundary(bytes);
+    let unhyphenated_header = has_unhyphenated_header(bytes);
+    let quoted_cte = has_quoted_cte(bytes);
+    let url_in_content_description = has_url_in_content_description(bytes);
+    let incomplete_resent = has_incomplete_resent(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3021,6 +3033,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         shell_meta_filename,
         avatar_headers,
         spaced_boundary,
+        unhyphenated_header,
+        quoted_cte,
+        url_in_content_description,
+        incomplete_resent,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -12410,6 +12426,166 @@ pub fn has_spaced_boundary(raw: &[u8]) -> bool {
         }
     }
     false
+}
+
+/// ハイフンを欠いた標準欄名の綴り違い (`MessageID:`/`InReplyTo:`/
+/// `MIMEVersion:`/`ContentType:`/`ListID:` 等) があるか判定する
+/// (D1473)。
+///
+/// `Message-ID` を `MessageID` と書くような綴り違い欄は、厳格な
+/// 欄名一致の実装では認識されず、正規化して拾う実装では機能する
+/// — スレッド判定・構造判定・一意欄判定が実装間でずれる。
+/// (名前中の空白・非 ASCII は D1448、語尾の空白は spaced_header
+/// 系が担当)
+#[must_use]
+pub fn has_unhyphenated_header(raw: &[u8]) -> bool {
+    const VARIANTS: &[&str] = &[
+        "messageid",
+        "inreplyto",
+        "mimeversion",
+        "contenttype",
+        "contenttransferencoding",
+        "contentdisposition",
+        "contentid",
+        "contentlocation",
+        "contentdescription",
+        "returnpath",
+        "deliveredto",
+        "listid",
+        "listpost",
+        "listsubscribe",
+        "listunsubscribe",
+        "listarchive",
+        "listhelp",
+        "listowner",
+        "replyto",
+        "dkimsignature",
+        "authenticationresults",
+        "receivedspf",
+        "arcseal",
+        "arcmessagesignature",
+        "arcauthenticationresults",
+        "autosubmitted",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue; // 継続行
+        }
+        let Some(colon) = l.find(':') else {
+            continue;
+        };
+        let name = l[..colon].trim().to_ascii_lowercase();
+        if VARIANTS.contains(&name.as_str()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値が引用符付き文字列か判定する
+/// (D1474)。
+///
+/// `CTE: "base64"` — mechanism はトークン型が規格で、引用符を
+/// 剥がす実装と欄ごと拒否する実装で復号の有無がずれる (メディア
+/// 型の引用符は D1417 が担当)。
+#[must_use]
+pub fn has_quoted_cte(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+        .to_ascii_lowercase()
+        .lines()
+        .filter(|l| l.starts_with("content-transfer-encoding:"))
+        .any(|l| {
+            let v = l["content-transfer-encoding:".len()..].trim();
+            v.starts_with('"') || v.starts_with('\'')
+        })
+}
+
+/// `Content-Description:` の値に URL が含まれるか判定する (D1475)。
+///
+/// 添付説明欄に `http://…` — 添付一覧・詳細に表示される欄で、
+/// スキャナが本文 URL 集めに含めない隙間への誘導リンク配置。
+#[must_use]
+pub fn has_url_in_content_description(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    logical
+        .to_ascii_lowercase()
+        .lines()
+        .filter(|l| l.starts_with("content-description:"))
+        .any(|l| {
+            let v = &l["content-description:".len()..];
+            v.contains("http://") || v.contains("https://") || v.contains("www.")
+        })
+}
+
+/// `Resent-*` ブロックが必須欄 (`Resent-From:`/`Resent-Date:`) を
+/// 欠く形か判定する (D1476)。
+///
+/// RFC 5322 §3.6.6 — Resent 欄が一つでもあるブロックは
+/// Resent-From+Resent-Date (または Resent-Sender+Resent-Date) を
+/// 伴うことが前提。転送履歴の体裁だけ作り、正当転送と手作りが
+/// 実装間でずれる (Resent-Bcc 残存は D1428 が担当)。
+#[must_use]
+pub fn has_incomplete_resent(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let lower = text[..header_end].to_ascii_lowercase();
+    let mut any = false;
+    let mut from = false;
+    let mut date = false;
+    for l in lower.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        if l.starts_with("resent-") {
+            any = true;
+            if l.starts_with("resent-from:") || l.starts_with("resent-sender:") {
+                from = true;
+            }
+            if l.starts_with("resent-date:") {
+                date = true;
+            }
+        }
+    }
+    any && !(from && date)
 }
 
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
@@ -29085,6 +29261,60 @@ mod tests {
         assert!(!has_spaced_boundary(
             b"Content-Type: multipart/mixed; boundary=ab\r\n\r\nx"
         ));
+    }
+
+    #[test]
+    fn unhyphenated_header_は綴り違い欄名を検出する() {
+        // D1473 — MessageID/InReplyTo/MIMEVersion/ContentType 等
+        assert!(has_unhyphenated_header(b"MessageID: <a@b>\r\n\r\nx"));
+        assert!(has_unhyphenated_header(b"ContentType: text/plain\r\n\r\nx"));
+        assert!(has_unhyphenated_header(b"MIMEVersion: 1.0\r\n\r\nx"));
+        // 正規綴り・無関係欄は不発火
+        assert!(!has_unhyphenated_header(b"Message-ID: <a@b>\r\n\r\nx"));
+        assert!(!has_unhyphenated_header(b"X-Custom: y\r\n\r\nx"));
+        // 継続行の先頭は欄名ではない
+        assert!(!has_unhyphenated_header(b"Subject: a\r\n contenttype: x\r\n\r\nx"));
+    }
+
+    #[test]
+    fn quoted_cte_は引用符付き転送符号化を検出する() {
+        // D1474 — 引用符付き CTE 値
+        assert!(has_quoted_cte(
+            b"Content-Transfer-Encoding: \"base64\"\r\n\r\nAAAA"
+        ));
+        assert!(!has_quoted_cte(
+            b"Content-Transfer-Encoding: base64\r\n\r\nAAAA"
+        ));
+        // 折りたたみ継続でも捕捉
+        assert!(has_quoted_cte(
+            b"Content-Transfer-Encoding:\r\n \"quoted-printable\"\r\n\r\nx"
+        ));
+    }
+
+    #[test]
+    fn url_in_content_description_は説明欄のurlを検出する() {
+        // D1475 — Content-Description 値中の URL
+        assert!(has_url_in_content_description(
+            b"Content-Type: image/png\r\nContent-Description: see https://evil.example/x\r\n\r\nx"
+        ));
+        assert!(!has_url_in_content_description(
+            b"Content-Description: company logo\r\n\r\nx"
+        ));
+        assert!(!has_url_in_content_description(b"From: a@b\r\n\r\nx"));
+    }
+
+    #[test]
+    fn incomplete_resent_は必須欄欠落の再送塊を検出する() {
+        // D1476 — Resent-* があるのに From/Date ペア欠落
+        assert!(has_incomplete_resent(b"Resent-To: a@b\r\n\r\nx"));
+        assert!(has_incomplete_resent(
+            b"Resent-From: a@b\r\nResent-To: c@d\r\n\r\nx"
+        ));
+        // From+Date が揃えば正規再送 — 不発火
+        assert!(!has_incomplete_resent(
+            b"Resent-From: a@b\r\nResent-Date: Mon, 1 Jan 2024 00:00:00 +0000\r\nResent-To: c@d\r\n\r\nx"
+        ));
+        assert!(!has_incomplete_resent(b"To: a@b\r\n\r\nx"));
     }
 
     #[test]
