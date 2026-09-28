@@ -1,5 +1,25 @@
 ## [Unreleased]
 
+### Security — D1509: QP 符号化平文部品の HTML 検出
+**問題** `text/plain` + `quoted-printable` 部品の復号結果が `<html>`/`<a href>` — 復号表示 vs 推測描画でずれる (D1505 の QP 版)。
+**修正** `Envelope.qp_html_part` — QP ソフト改行を畳んで復号し HTML マーカを検査 (部品・単一部品本文両対応)。
+**教訓** 符号化方式が違っても狙いは同じ — 名札の型と復号後の実体を両方見る。
+
+### Security — D1510: 添付名の生非 ASCII 検出
+**問題** `filename="café.pdf"` の生高位バイト — Latin-1 読み・UTF-8 読み・拒否で名札がずれる (`*=` 符号化形は D1396、制御バイトは D1506)。
+**修正** `Envelope.raw_nonascii_filename` — 素の `filename=`/`name=` 値の非 ASCII を検出。
+**教訓** 符号化宣言の無い文字は読み手の推測次第 — 同じ名札が実装ごとに別の綴りになる。
+
+### Security — D1511: 空の型・サブタイプ検出
+**問題** `text/`/`/plain`/`text//plain` — `/` があるが片側が空。既定値を当てる実装と欄ごと捨てる実装で型がずれる (`/` 皆無は D1320)。
+**修正** `Envelope.edge_slash_ct` — メディア型トークンの空側・二重スラッシュを検出。
+**教訓** 区切りだけあって名が無い — 形を借りた空白は読み分けを生む。
+
+### Security — D1512: 型トークン内空白検出
+**問題** `text /plain`/`multipart/ mixed` の型内部空白 — 空白除去 vs 捨てる実装で型解釈がずれる (param 領域の空白継ぎは D1501)。
+**修正** `Envelope.spaced_media_type` — メディア型トークン内部の WSP を検出。
+**教訓** 名札の真ん中の隙間は結合か切断かで読みが分かれる。
+
 ### Security — D1505: 平文名札の符号化 HTML 検出
 **問題** `text/plain` + `base64` 部品の復号結果が `<html>`/`<a href>` — 復号して文字列表示する実装は安全に見えるが、推測描画する実装では対話フォームが動く (D1481 の符号化版)。
 **修正** `Envelope.b64_html_part` — 部品単位・単一部品本文の両方で b64 復号し HTML マーカを検査。

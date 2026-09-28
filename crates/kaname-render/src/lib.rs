@@ -728,6 +728,14 @@ pub struct Envelope {
     pub dotless_sender_domain: bool,
     /// D1508 — アドレス欄の空 `<>`。
     pub empty_angle_addr: bool,
+    /// `text/plain`+`quoted-printable` 部品の復号結果が HTML か (D1509 — 推測描画差異)。
+    pub qp_html_part: bool,
+    /// `filename=`/`name=` の値に生の非 ASCII バイトがあるか (D1510 — charset 解釈差異)。
+    pub raw_nonascii_filename: bool,
+    /// `Content-Type:` の型/サブタイプが空 (`text/`/`/plain`) か (D1511 — 既定値差異)。
+    pub edge_slash_ct: bool,
+    /// `Content-Type:` の型トークン内に空白があるか (D1512 — 型解釈差異)。
+    pub spaced_media_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -2899,6 +2907,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ctl_filename = has_ctl_filename(bytes);
     let dotless_sender_domain = has_dotless_sender_domain(bytes);
     let empty_angle_addr = has_empty_angle_addr(bytes);
+    // D1509: text/plain+QP 部品の復号 HTML
+    let qp_html_part = has_qp_html_part(bytes);
+    // D1510: filename/name の生非 ASCII
+    let raw_nonascii_filename = has_raw_nonascii_filename(bytes);
+    // D1511: 空の型/サブタイプ
+    let edge_slash_ct = has_edge_slash_ct(bytes);
+    // D1512: 型トークン内空白
+    let spaced_media_type = has_spaced_media_type(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -3165,6 +3181,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ctl_filename,
         dotless_sender_domain,
         empty_angle_addr,
+        qp_html_part,
+        raw_nonascii_filename,
+        edge_slash_ct,
+        spaced_media_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -14525,6 +14545,180 @@ pub fn has_empty_angle_addr(raw: &[u8]) -> bool {
                 }
             }
             prev = b;
+        }
+    }
+    false
+}
+
+
+/// `text/plain` + `quoted-printable` 部品の復号結果が HTML か判定する
+/// (D1509 — `has_b64_html_part` の QP 版)。
+///
+/// 「平文」と名乗る部品の QP 復号結果に `<html`/`<a href`/`<script`
+/// 等が含まれるとき、復号して文字列表示する実装は安全に見えるが、
+/// 内容を推測して描画する実装では対話フォームや画像が動作する。
+/// QP のソフト改行 (`=`+EOL) はデコーダが畳んでから検査する。
+#[must_use]
+pub fn has_qp_html_part(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut in_hdr = true;
+    let mut ct = String::new();
+    let mut cte = String::new();
+    let mut collect = false;
+    let mut buf = String::new();
+    let mut found = false;
+    for l in text.lines() {
+        if l.starts_with("--") {
+            if collect {
+                let dec = decode_qp_body(&buf);
+                let dl = String::from_utf8_lossy(&dec).to_ascii_lowercase();
+                if dl.contains("<html")
+                    || dl.contains("<a href")
+                    || dl.contains("<script")
+                    || dl.contains("<form")
+                    || dl.contains("<img")
+                {
+                    found = true;
+                    break;
+                }
+            }
+            collect = false;
+            in_hdr = true;
+            ct.clear();
+            cte.clear();
+            continue;
+        }
+        if in_hdr {
+            if l.is_empty() {
+                in_hdr = false;
+                collect = ct == "text/plain" && cte == "quoted-printable";
+                buf.clear();
+                continue;
+            }
+            let ll = l.to_ascii_lowercase();
+            if let Some(v) = ll.strip_prefix("content-type:") {
+                ct = v.trim_start()
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+            } else if let Some(v) = ll.strip_prefix("content-transfer-encoding:") {
+                cte = v.trim().to_string();
+            }
+            continue;
+        }
+        if collect && buf.len() < 8192 {
+            buf.push_str(l);
+            buf.push('\n');
+        }
+    }
+    if !found && collect && !buf.is_empty() {
+        let dec = decode_qp_body(&buf);
+        let dl = String::from_utf8_lossy(&dec).to_ascii_lowercase();
+        if dl.contains("<html")
+            || dl.contains("<a href")
+            || dl.contains("<script")
+            || dl.contains("<form")
+            || dl.contains("<img")
+        {
+            found = true;
+        }
+    }
+    found
+}
+
+/// `filename=`/`name=` の値に生の非 ASCII バイトがあるか判定する (D1510)。
+///
+/// RFC 2231 の `*=` 符号化ではなく生の UTF-8/Latin-1 バイトが値に
+/// 混ざると、Latin-1 として読む実装と UTF-8 として読む実装で添付名が
+/// ずれる (そもそも捨てる実装もある)。エンコード済み形 (D1396) と
+/// 制御バイト (D1506) とは別の、符号化宣言の無い高位バイトを見る。
+#[must_use]
+pub fn has_raw_nonascii_filename(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let low = l.to_ascii_lowercase();
+        if !(low.starts_with("content-type:") || low.starts_with("content-disposition:")) {
+            continue;
+        }
+        for part in l.split(';').skip(1) {
+            let Some(eq) = part.find('=') else {
+                continue;
+            };
+            let key = part[..eq].trim().to_ascii_lowercase();
+            if key != "filename" && key != "name" {
+                continue;
+            }
+            let v = part[eq + 1..].trim().trim_matches('"');
+            if v.chars().any(|c| !c.is_ascii()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` のメディア型が空の側を持つか判定する (D1511)。
+///
+/// `text/`/`/plain`/`text//plain` は型側かサブタイプ側が空で、
+/// 規定値に倒す実装・欄ごと捨てる実装・部分だけ読む実装で解釈が
+/// ずれる。`/` 皆無 (typeless — D1320) とは別の、区切りだけある形。
+#[must_use]
+pub fn has_edge_slash_ct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-type:") else {
+            continue;
+        };
+        let mt = v.split(';').next().unwrap_or("").trim();
+        if !mt.is_empty()
+            && (mt.starts_with('/') || mt.ends_with('/') || mt.contains("//"))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` のメディア型トークン内に空白があるか判定する (D1512)。
+///
+/// `text /plain`・`multipart/ mixed` のように型トークン中に WSP が
+/// 混ざると、空白を除去して読む実装とトークンを切り捨てる実装で
+/// 型解釈がずれる。パラメータ領域の空白継ぎ (D1501) とは別の、
+/// 型本体の内部空白を見る。
+#[must_use]
+pub fn has_spaced_media_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    for l in text.lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            continue;
+        }
+        let low = l.to_ascii_lowercase();
+        let Some(v) = low.strip_prefix("content-type:") else {
+            continue;
+        };
+        let mt = v.split(';').next().unwrap_or("").trim();
+        if mt.contains(' ') || mt.contains('\t') {
+            return true;
         }
     }
     false
@@ -31759,6 +31953,70 @@ mod tests {
         assert!(!has_empty_angle_addr(
             b"From: \"<>\" <a@b>\r\n\r\nx"
         ));
+    }
+
+    #[test]
+    fn qp_html_part_は平文の顔のhtmlを検出する() {
+        // D1509 — QP 復号で HTML が現れる
+        assert!(has_qp_html_part(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n=3Chtml=3E=3Ca href=3D'x'=3E\r\n"
+        ));
+        // multipart 部品内でも
+        assert!(has_qp_html_part(
+            b"Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n=3Cscript=3E\r\n--b--\r\n"
+        ));
+        // 平文 QP は不発火
+        assert!(!has_qp_html_part(
+            b"Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nhello=20world\r\n"
+        ));
+        // text/html+QP は正当なので不発火
+        assert!(!has_qp_html_part(
+            b"Content-Type: text/html\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n=3Chtml=3E\r\n"
+        ));
+    }
+
+    #[test]
+    fn raw_nonascii_filename_は生の高位バイトを検出する() {
+        // D1510 — 符号化でない非 ASCII 添付名
+        assert!(has_raw_nonascii_filename(
+            "Content-Disposition: attachment; filename=\"報告.pdf\"\r\n\r\nb".as_bytes()
+        ));
+        // name= も対象
+        assert!(has_raw_nonascii_filename(
+            "Content-Type: image/png; name=\"café.png\"\r\n\r\nb".as_bytes()
+        ));
+        // ASCII のみは不発火
+        assert!(!has_raw_nonascii_filename(
+            b"Content-Disposition: attachment; filename=\"a.pdf\"\r\n\r\nb"
+        ));
+        // *= 符号化形は対象外 (別検出)
+        assert!(!has_raw_nonascii_filename(
+            b"Content-Disposition: attachment; filename*=utf-8''a.pdf\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn edge_slash_ct_は空の型側を検出する() {
+        // D1511 — 型 or サブタイプが空
+        assert!(has_edge_slash_ct(b"Content-Type: text/\r\n\r\nb"));
+        assert!(has_edge_slash_ct(b"Content-Type: /plain\r\n\r\nb"));
+        assert!(has_edge_slash_ct(b"Content-Type: text//plain\r\n\r\nb"));
+        // 正常形は不発火
+        assert!(!has_edge_slash_ct(b"Content-Type: text/plain\r\n\r\nb"));
+        // slash 皆無は D1320 の領分でここでは対象外
+        assert!(!has_edge_slash_ct(b"Content-Type: textplain\r\n\r\nb"));
+    }
+
+    #[test]
+    fn spaced_media_type_は型内空白を検出する() {
+        // D1512 — 型トークン内の WSP
+        assert!(has_spaced_media_type(b"Content-Type: text /plain\r\n\r\nb"));
+        assert!(has_spaced_media_type(b"Content-Type: multipart/ mixed\r\n\r\nb"));
+        // 正常形は不発火 (パラメータ前の空白は trim 済み)
+        assert!(!has_spaced_media_type(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+        assert!(!has_spaced_media_type(b"Content-Type:   text/plain\r\n\r\nb"));
     }
 
     #[test]
