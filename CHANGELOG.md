@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1702: `List-Id:` の二識別子 `<a> <b>` を検出 — `Envelope` に `two_list_ids` を追加 (Message-ID 側は D1666)。
+### Security — D1701: 大小写のみ異なる複数 `boundary=` 値を検出 — `Envelope` に `boundary_case_collide` を追加 (同一値再利用は D1669)。
+### Security — D1700: param 引用値内の `=` `;charset="a=b"` を検出 — `Envelope` に `param_quoted_eq` を追加 (クオート内 `;` は D1609)。
+### Security — D1699: Date 欄の5桁以上の年を検出 — `Envelope` に `year_5digit` を追加 (2桁年は D1535、二年は D1675)。
 ### Security — D1698: param の `=` 直前空白 `;key =v` を検出 — `Envelope` に `pre_eq_space` を追加 (`=` 直後の空白は D1651)。
 ### Security — D1697: 宛名のドット無し単ラベルドメイン `a@localhost` を検出 — `Envelope` に `single_label_domain` を追加 (ドメイン欠落は D1679)。
 ### Security — D1696: CT/CD param の空値 `;charset=` を検出 — `Envelope` に `param_empty_value` を追加 (名なしは `has_empty_param_name`、空節は D1636)。

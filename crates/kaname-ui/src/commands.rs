@@ -5768,6 +5768,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.pre_eq_space {
         render_risks.push("パラメータの「=」の前に空白があります—キーに含める実装と除く実装で読みがずれます".to_string());
     }
+    if env.year_5digit {
+        render_risks.push("Date 欄に5桁以上の年があります—4桁まで読む実装とそのまま拾う実装で日付がずれます".to_string());
+    }
+    if env.param_quoted_eq {
+        render_risks.push("パラメータの引用値に「=」が含まれています—最初の=で切る実装と引用読みの実装で値がずれます".to_string());
+    }
+    if env.boundary_case_collide {
+        render_risks.push("boundary が大小写だけ違う値で二度名乗られています—区別する実装と同一視する実装で区切りがずれます".to_string());
+    }
+    if env.two_list_ids {
+        render_risks.push("List-Id 欄に識別子が二つあります—先採用と後採用でML判定がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

@@ -1110,6 +1110,14 @@ pub struct Envelope {
     pub single_label_domain: bool,
     /// param `=` 直前の空白 (D1698 — param 解析ずれ)。
     pub pre_eq_space: bool,
+    /// Date 欄の5桁以上の年 (D1699 — 日付解析ずれ)。
+    pub year_5digit: bool,
+    /// param 引用値内の `=` (D1700 — param 解析ずれ)。
+    pub param_quoted_eq: bool,
+    /// 大小写のみ異なる boundary 値 (D1701 — 区切りずれ)。
+    pub boundary_case_collide: bool,
+    /// `List-Id:` の二識別子 (D1702 — ML 判定ずれ)。
+    pub two_list_ids: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3661,6 +3669,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let single_label_domain = has_single_label_domain(bytes);
     // D1698: param = 直前の空白
     let pre_eq_space = has_pre_eq_space(bytes);
+    // D1699: Date 欄の5桁以上の年
+    let year_5digit = has_year_5digit(bytes);
+    // D1700: param 引用値内の =
+    let param_quoted_eq = has_param_quoted_eq(bytes);
+    // D1701: 大小写のみ異なる boundary
+    let boundary_case_collide = has_boundary_case_collide(bytes);
+    // D1702: List-Id の二識別子
+    let two_list_ids = has_two_list_ids(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4117,6 +4133,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         param_empty_value,
         single_label_domain,
         pre_eq_space,
+        year_5digit,
+        param_quoted_eq,
+        boundary_case_collide,
+        two_list_ids,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -24497,6 +24517,176 @@ pub fn has_pre_eq_space(raw: &[u8]) -> bool {
     false
 }
 
+/// Date 欄に5桁以上の年があれば真 (D1699)。
+///
+/// `Date: 25 Sep 20255` — 4桁までを年と読む実装と長い数値を
+/// 年として拾う実装で日付がずれる (2桁年は D1535、二年は D1675)。
+#[must_use]
+pub fn has_year_5digit(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "date" {
+            continue;
+        }
+        for t in l[colon + 1..].split_whitespace() {
+            let t = t.trim_matches(|c: char| c == ',' || c == ';');
+            if t.len() >= 5 && t.bytes().all(|b| b.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// CT/CD param の引用値内に `=` があるか判定する (D1700)。
+///
+/// `;charset="a=b"` — 値の最初の `=` で切る単純実装は
+/// `\"a` を値として拾い、クオート読みの実装は `a=b` を得る —
+/// param 値がずれる (クオート内 `;` は D1609)。
+#[must_use]
+pub fn has_param_quoted_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let Some(eq) = part.find('=') else { continue };
+            let v = part[eq + 1..].trim();
+            if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
+                if v[1..v.len() - 1].contains('=') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// 2つの `boundary=` 値が大小写のみ異なる場合に真 (D1701)。
+///
+/// `boundary=AbC` と `boundary=abc` — 仕様上は区別されるが
+/// 大小写を潰して比較する実装は両者を同じ区切りとみなし
+/// パート区切りがずれる。
+#[must_use]
+pub fn has_boundary_case_collide(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    // 大小写を保持したまま boundary 値を全て集める
+    let mut vals: Vec<String> = Vec::new();
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let mut rest = &l[colon + 1..];
+        while let Some(p) = rest.to_ascii_lowercase().find("boundary=") {
+            let after = &rest[p + 9..];
+            let val: String = if let Some(q) = after.strip_prefix('"') {
+                let end = q.find('"').unwrap_or(q.len());
+                q[..end].to_string()
+            } else {
+                let end = after
+                    .find(|c: char| c == ';' || c.is_whitespace())
+                    .unwrap_or(after.len());
+                after[..end].to_string()
+            };
+            vals.push(val);
+            rest = &rest[p + 9..];
+        }
+    }
+    for i in 0..vals.len() {
+        for j in i + 1..vals.len() {
+            if vals[i] != vals[j] && vals[i].eq_ignore_ascii_case(&vals[j]) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `List-Id:` に `<…>` 識別子が2つあるか判定する (D1702)。
+///
+/// `List-Id: <a> <b>` — 先採用と後採用で ML 識別がずれる
+/// (Message-ID 側は D1666、括弧欠落は D1572)。
+#[must_use]
+pub fn has_two_list_ids(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "list-id" {
+            continue;
+        }
+        if l[colon + 1..].matches('<').count() >= 2
+            && l[colon + 1..].matches('>').count() >= 2
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -44198,6 +44388,49 @@ mod tests {
             b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
         ));
         assert!(!has_pre_eq_space(b""));
+    }
+
+    #[test]
+    fn year_5digit_五桁の年を検出する() {
+        assert!(has_year_5digit(
+            b"Date: 25 Sep 20255 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_year_5digit(
+            b"Date: Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_year_5digit(b""));
+    }
+
+    #[test]
+    fn param_quoted_eq_引用値内の等号を検出する() {
+        assert!(has_param_quoted_eq(
+            b"Content-Type: text/plain; charset=\"a=b\"\r\n\r\n"
+        ));
+        assert!(!has_param_quoted_eq(
+            b"Content-Type: text/plain; charset=\"utf-8\"\r\n\r\n"
+        ));
+        assert!(!has_param_quoted_eq(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_param_quoted_eq(b""));
+    }
+
+    #[test]
+    fn boundary_case_collide_大小写衝突を検出する() {
+        assert!(has_boundary_case_collide(
+            b"Content-Type: multipart/mixed; boundary=AbC\r\n\r\n--AbC\r\nContent-Type: text/plain; boundary=abc\r\n\r\n--abc--\r\n"
+        ));
+        assert!(!has_boundary_case_collide(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n"
+        ));
+        assert!(!has_boundary_case_collide(b""));
+    }
+
+    #[test]
+    fn two_list_ids_二つの識別子を検出する() {
+        assert!(has_two_list_ids(b"List-Id: <a.x> <b.y>\r\n\r\n"));
+        assert!(!has_two_list_ids(b"List-Id: <a.x>\r\n\r\n"));
+        assert!(!has_two_list_ids(b""));
     }
 
     #[test]
