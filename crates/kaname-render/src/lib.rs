@@ -1142,6 +1142,14 @@ pub struct Envelope {
     pub at_param_name: bool,
     /// `Content-Transfer-Encoding:` の値の余分な空白 (D1714 — 符号化判定ずれ)。
     pub padded_cte: bool,
+    /// `Received:` の `id` 節重複 (D1715 — 経路解析ずれ)。
+    pub received_multi_id: bool,
+    /// param 名の `/` (D1716 — param 解析ずれ)。
+    pub slash_param_name: bool,
+    /// `CTE:` 値の二トークン (D1717 — 符号化判定ずれ)。
+    pub two_cte_values: bool,
+    /// boundary に英数字が無い (D1718 — 区切り行ずれ)。
+    pub alnumless_boundary: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3725,6 +3733,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let at_param_name = has_at_param_name(bytes);
     // D1714: CTE 値の余分な空白
     let padded_cte = has_padded_cte(bytes);
+    // D1715: Received の id 節重複
+    let received_multi_id = has_received_multi_id(bytes);
+    // D1716: param 名の /
+    let slash_param_name = has_slash_param_name(bytes);
+    // D1717: CTE 値の二トークン
+    let two_cte_values = has_two_cte_values(bytes);
+    // D1718: boundary に英数字が無い
+    let alnumless_boundary = has_alnumless_boundary(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4197,6 +4213,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_multi_for,
         at_param_name,
         padded_cte,
+        received_multi_id,
+        slash_param_name,
+        two_cte_values,
+        alnumless_boundary,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -25222,6 +25242,162 @@ pub fn has_padded_cte(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の `id` 節が2つあるか判定する (D1715)。
+///
+/// `Received: … id ABC id DEF` — 最初の `id` を採る実装と
+/// 最後を採る実装で受信識別子の経路解析がずれる
+/// (with 節重複は D1711、for 節重複は D1712)。
+#[must_use]
+pub fn has_received_multi_id(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let ids = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .filter(|t| t.eq_ignore_ascii_case("id"))
+            .count();
+        if ids >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// CT/CD param の名に `/` が含まれるか判定する (D1716)。
+///
+/// `;file/name=x` — `/` は tspecial で param 名には書けない。
+/// 名を区切りまで読む実装と欄ごと捨てる実装で param がずれる
+/// (名の `@` は D1713、名の空白は D1656、値の `/` は D1704)。
+#[must_use]
+pub fn has_slash_param_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let key = part.split('=').next().unwrap_or("");
+            if key.trim().contains('/') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` に値トークンが2つあるか判定する (D1717)。
+///
+/// `CTE: base64 7bit` — 最初の語を符号化と採る実装と
+/// 欄ごと捨てる実装で本文のデコードがずれる
+/// (値の余分な空白は D1714、`;` 混入は D1655)。
+#[must_use]
+pub fn has_two_cte_values(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+            continue;
+        }
+        let n = l[colon + 1..]
+            .split(|c: char| c.is_whitespace() || c == ';')
+            .filter(|t| !t.is_empty())
+            .count();
+        if n >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `boundary=` 値に英数字が1文字も無いか判定する (D1718)。
+///
+/// `boundary=---`/`boundary=...` — bchars 上は書けるが、
+/// 区切り行が `-----` のように区切り接頭と同化する。
+/// 接頭一致だけで区切る実装は構造を読み違える
+/// (bchars 外の文字は D1317、`-` 始まりは has_dash_boundary)。
+#[must_use]
+pub fn has_alnumless_boundary(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            logical.push('\n');
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let mut rest = &l[..];
+        while let Some(p) = rest.to_ascii_lowercase().find("boundary=") {
+            let after = &rest[p + 9..];
+            let val: &str = if let Some(q) = after.strip_prefix('"') {
+                let end = q.find('"').unwrap_or(q.len());
+                &q[..end]
+            } else {
+                let end = after
+                    .find(|c: char| c == ';' || c.is_whitespace())
+                    .unwrap_or(after.len());
+                &after[..end]
+            };
+            if !val.is_empty() && !val.bytes().any(|b| b.is_ascii_alphanumeric()) {
+                return true;
+            }
+            rest = &rest[p + 9..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -45107,6 +45283,53 @@ mod tests {
         ));
         assert!(!has_padded_cte(b"Content-Transfer-Encoding:\r\n\r\n"));
         assert!(!has_padded_cte(b""));
+    }
+
+    #[test]
+    fn received_multi_id_二つのid節を検出する() {
+        assert!(has_received_multi_id(
+            b"Received: from a by b id ABC id DEF; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_id(
+            b"Received: from a by b id ABC; Thu\r\n\r\n"
+        ));
+        assert!(!has_received_multi_id(b""));
+    }
+
+    #[test]
+    fn slash_param_name_斜線の名札を検出する() {
+        assert!(has_slash_param_name(
+            b"Content-Type: text/plain; file/name=x\r\n\r\n"
+        ));
+        assert!(!has_slash_param_name(
+            b"Content-Type: text/plain; filename=x\r\n\r\n"
+        ));
+        assert!(!has_slash_param_name(b""));
+    }
+
+    #[test]
+    fn two_cte_values_二つの値を検出する() {
+        assert!(has_two_cte_values(
+            b"Content-Transfer-Encoding: base64 7bit\r\n\r\n"
+        ));
+        assert!(!has_two_cte_values(
+            b"Content-Transfer-Encoding: base64\r\n\r\n"
+        ));
+        assert!(!has_two_cte_values(b""));
+    }
+
+    #[test]
+    fn alnumless_boundary_英数字なし境界を検出する() {
+        assert!(has_alnumless_boundary(
+            b"Content-Type: multipart/mixed; boundary=---\r\n\r\n"
+        ));
+        assert!(has_alnumless_boundary(
+            b"Content-Type: multipart/mixed; boundary=\"...\"\r\n\r\n"
+        ));
+        assert!(!has_alnumless_boundary(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n"
+        ));
+        assert!(!has_alnumless_boundary(b""));
     }
 
     #[test]

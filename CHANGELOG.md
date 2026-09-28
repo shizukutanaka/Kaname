@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1718: 英数字を含まない `boundary=` 値を検出 — `Envelope` に `alnumless_boundary` を追加 (bchars 外は D1317、`-` 始まりは `has_dash_boundary`)。
+### Security — D1717: `Content-Transfer-Encoding:` の値トークン2つを検出 — `Envelope` に `two_cte_values` を追加 (余分な空白は D1714、`;` 混入は D1655)。
+### Security — D1716: param 名の `/` `;file/name=x` を検出 — `Envelope` に `slash_param_name` を追加 (名の `@` は D1713、値の `/` は D1704)。
+### Security — D1715: `Received:` の `id` 節重複を検出 — `Envelope` に `received_multi_id` を追加 (with 節は D1711、for 節は D1712)。
 ### Security — D1714: `Content-Transfer-Encoding:` 値の余分な空白を検出 — `Envelope` に `padded_cte` を追加 (欄の `;` 混入は D1655)。
 ### Security — D1713: param 名の `@` `;file@name=x` を検出 — `Envelope` に `at_param_name` を追加 (名の空白は D1656、名なしは `has_empty_param_name`)。
 ### Security — D1712: `Received:` の `for` 節重複を検出 — `Envelope` に `received_multi_for` を追加。
