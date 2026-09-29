@@ -26795,7 +26795,7 @@ pub fn has_msgid_no_at(raw: &[u8]) -> bool {
 /// `From: a@b@c` / `To: a@b@c` — 宛名に `@` は一つ。
 /// 先の `@` で割る実装と後の `@` で割る実装と構文エラーにする実装で
 /// 宛先がずれる (msgid 系の `@` 二つは D1722)。
-/// `multi_at_addr` (D1631 系) の上位互換 — Return-Path/Delivered-To/
+/// `multi_at_addr` (D1550) の上位互換 — Return-Path/Delivered-To/
 /// コメント位置の `@` 二つも拾う。
 #[must_use]
 pub fn has_two_at_addr(raw: &[u8]) -> bool {
