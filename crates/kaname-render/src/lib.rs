@@ -1246,6 +1246,14 @@ pub struct Envelope {
     pub cd_colon_type: bool,
     /// `Content-Disposition:` の型本体内孤立括弧 (D1766 — 添付判定ずれ)。
     pub cd_paren: bool,
+    /// 宛名ローカル部の `{}` (D1767 — 宛先解析ずれ)。
+    pub addr_brace_local: bool,
+    /// `CTE:` の値本体内孤立括弧 (D1768 — 符号化判定ずれ)。
+    pub cte_paren: bool,
+    /// msgid 系の `,` 先立ち (D1769 — 識別子照合ずれ)。
+    pub msgid_comma_lead: bool,
+    /// 宛名ローカル部の `^` (D1770 — 宛先解析ずれ)。
+    pub addr_caret_local: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3933,6 +3941,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cd_colon_type = has_cd_colon_type(bytes);
     // D1766: CD 型本体内の孤立括弧
     let cd_paren = has_cd_paren(bytes);
+    // D1767: 宛名ローカル部の {}
+    let addr_brace_local = has_addr_brace_local(bytes);
+    // D1768: CTE 値本体内の孤立括弧
+    let cte_paren = has_cte_paren(bytes);
+    // D1769: msgid 系の , 先立ち
+    let msgid_comma_lead = has_msgid_comma_lead(bytes);
+    // D1770: 宛名ローカル部の ^
+    let addr_caret_local = has_addr_caret_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4457,6 +4473,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_paren,
         cd_colon_type,
         cd_paren,
+        addr_brace_local,
+        cte_paren,
+        msgid_comma_lead,
+        addr_caret_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -27965,6 +27985,281 @@ pub fn has_cd_paren(raw: &[u8]) -> bool {
     false
 }
 
+/// 宛名欄のローカル部に `{`/`}` があるか判定する (D1767)。
+///
+/// `To: a{b@c`/`a}b@c` — `{}` は atext 外字なのでローカル部に書けない。
+/// 厳格に拒否する実装とそのまま採用する実装で宛先がずれる
+/// (D1557/D1760/D1763 の兄弟 — 表示名とクオート内は拾わない)。
+#[must_use]
+pub fn has_addr_brace_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        let mut seg = String::new();
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'@' {
+                let local = seg
+                    .trim_end()
+                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .next()
+                    .unwrap_or("");
+                if local.contains('{') || local.contains('}') {
+                    return true;
+                }
+            } else {
+                seg.push(b as char);
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値本体に孤立括弧があるか判定する (D1768)。
+///
+/// `CTE: base64(x`/`7bit)` — `(`/`)` は token 外字 (コメントは値を
+/// 括る形でのみ合法)。値として読む実装と欄ごと捨てる実装で復号がずれる
+/// (CT 側は D1764、CD 側は D1766)。
+#[must_use]
+pub fn has_cte_paren(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        // 合法コメント `(…)` を除去した残りに孤立括弧があれば発火
+        let mut scrub = String::with_capacity(v.len());
+        let mut depth = 0i32;
+        for c in v.chars() {
+            if depth > 0 {
+                if c == '(' {
+                    depth += 1;
+                } else if c == ')' {
+                    depth -= 1;
+                }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('(') || scrub.contains(')') || depth > 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 系欄の値が `,` 先立ちか判定する (D1769)。
+///
+/// `Message-ID: ,<a@b>` — `,` 先立ちを読み飛ばす実装と欄ごと捨てる
+/// 実装で識別子照合がずれる (`;` 先立ちは D1755、References 系は D1751)。
+#[must_use]
+pub fn has_msgid_comma_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !matches!(
+            name.as_str(),
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with(',') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄のローカル部に `^` があるか判定する (D1770)。
+///
+/// `To: a^b@c` — `^` は atext 外字なのでローカル部に書けない。
+/// 厳格に拒否する実装とそのまま採用する実装で宛先がずれる
+/// (`{`/`}` は D1767、`&` は D1760、`~` は D1763)。
+#[must_use]
+pub fn has_addr_caret_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        let mut seg = String::new();
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'@' {
+                let local = seg
+                    .trim_end()
+                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .next()
+                    .unwrap_or("");
+                if local.contains('^') {
+                    return true;
+                }
+            } else {
+                seg.push(b as char);
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -48400,6 +48695,49 @@ mod tests {
             b"Content-Disposition: attachment (ok)\r\n\r\n"
         ));
         assert!(!has_cd_paren(b""));
+    }
+
+    #[test]
+    fn addr_brace_local_ローカル部の波括弧を検出する() {
+        assert!(has_addr_brace_local(b"To: a{b@c\r\n\r\n"));
+        assert!(has_addr_brace_local(b"To: a}b@c\r\n\r\n"));
+        assert!(!has_addr_brace_local(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_brace_local(b"To: a@b{c\r\n\r\n"));
+        assert!(!has_addr_brace_local(b""));
+    }
+
+    #[test]
+    fn cte_paren_値本体の孤立括弧を検出する() {
+        assert!(has_cte_paren(
+            b"Content-Transfer-Encoding: base64(x\r\n\r\n"
+        ));
+        assert!(has_cte_paren(
+            b"Content-Transfer-Encoding: 7bit)\r\n\r\n"
+        ));
+        assert!(!has_cte_paren(
+            b"Content-Transfer-Encoding: base64\r\n\r\n"
+        ));
+        assert!(!has_cte_paren(
+            b"Content-Transfer-Encoding: base64 (ok)\r\n\r\n"
+        ));
+        assert!(!has_cte_paren(b""));
+    }
+
+    #[test]
+    fn msgid_comma_lead_先立つ連結を検出する() {
+        assert!(has_msgid_comma_lead(b"Message-ID: ,<a@b>\r\n\r\n"));
+        assert!(has_msgid_comma_lead(b"List-Id: ,<l>\r\n\r\n"));
+        assert!(!has_msgid_comma_lead(b"Message-ID: <a@b>\r\n\r\n"));
+        assert!(!has_msgid_comma_lead(b"Message-ID: ,\r\n\r\n"));
+        assert!(!has_msgid_comma_lead(b""));
+    }
+
+    #[test]
+    fn addr_caret_local_ローカル部の山形を検出する() {
+        assert!(has_addr_caret_local(b"To: a^b@c\r\n\r\n"));
+        assert!(has_addr_caret_local(b"From: <x^y@z>\r\n\r\n"));
+        assert!(!has_addr_caret_local(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_caret_local(b""));
     }
 
     #[test]

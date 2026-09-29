@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1770: 宛名ローカル部の `^` `a^b@c` を検出 — `Envelope` に `addr_caret_local` を追加 (`{}` は D1767、`&`/`~` は D1760/D1763)。
+### Security — D1769: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `,` 先立ちを検出 — `Envelope` に `msgid_comma_lead` を追加 (`;` 先立ちは D1755、References 系は D1751)。
+### Security — D1768: `Content-Transfer-Encoding:` 値本体内の孤立括弧 `base64(x`/`7bit)` を検出 — `Envelope` に `cte_paren` を追加 (CT 側は D1764、CD 側は D1766)。
+### Security — D1767: 宛名ローカル部の `{`/`}` `a{b@c`/`a}b@c` を検出 — `Envelope` に `addr_brace_local` を追加 (表示名とクオート内は除外)。
 ### Security — D1766: `Content-Disposition:` 型本体内の孤立括弧 `attachment(x`/`attachment)` を検出 — `Envelope` に `cd_paren` を追加 (型二語案は既存 `spaced_media_type` D1512 と重複判明のため差替、CT 側は D1764)。あわせて `spaced_media_type` が合法コメント `text/plain (note)` で誤発火する件を修正。
 ### Security — D1765: `Content-Disposition:` 型本体内の `:` `attachment:x` を検出 — `Envelope` に `cd_colon_type` を追加 (CT 側は D1761、`=` は D1759)。
 ### Security — D1764: `Content-Type:` 型本体内の孤立括弧 `text(plain` を検出 — `Envelope` に `ct_paren` を追加 (合法コメント `(…)` は除外)。
