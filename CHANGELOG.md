@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1742: `References:`/`In-Reply-To:` の同一識別子重複 `<a@x> <a@x>` を検出 — `Envelope` に `msgid_ref_dup` を追加 (異名二識別子は D1666)。
+### Security — D1741: `Received:` 節値の `:` `from mx:25` を検出 — `Envelope` に `received_port` を追加 (節の空値・重複・欠落は D1691/D1707/D1720 系)。
+### Security — D1740: `boundary=` 値の端点ドット `boundary=.abc`/`boundary=abc.` を検出 — `Envelope` に `boundary_dot_edge` を追加 (空白端点は D1658、英数字なしは D1718)。
+### Security — D1739: `Message-ID:` 系のドメイン端点ドット `<a@.b>`/`<a@b.>` を検出 — `Envelope` に `msgid_edge_dot_domain` を追加 (宛名欄の先頭ドットは D1603 系)。
 ### Security — D1738: 宛名欄の二つの異名グループ `To: a: x@h; b: y@h;` を検出 — `Envelope` に `addr_two_groups` を追加 (同名グループ重複は D1667)。
 ### Security — D1737: `Received:` の `;` 後日付節欠落 `from a by b;` を検出 — `Envelope` に `received_date_empty` を追加 (`;` 自体の欠落は D1586、欄全体の空値は D1687)。
 ### Security — D1736: `Resent-*` 欄の規格外順序 (`Resent-To:` が `Resent-From:` より先) を検出 — `Envelope` に `resent_out_of_order` を追加 (同名重複は D1676)。(同名重複は既存 D1676 `dup_resent_headers` と重複判明のため差替)

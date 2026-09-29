@@ -5888,6 +5888,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.addr_two_groups {
         render_risks.push("宛名欄に二つのグループがあります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
     }
+    if env.msgid_edge_dot_domain {
+        render_risks.push("識別子のドメインがドットで始まるか終わります—剥く実装と捨てる実装で照合がずれます".to_string());
+    }
+    if env.boundary_dot_edge {
+        render_risks.push("区切りの値がドットで始まるか終わります—削る実装と生採用の実装でパート区切りがずれます".to_string());
+    }
+    if env.received_port {
+        render_risks.push("経過印の節の値にコロンがあります—切る実装と生採用の実装で経路解析がずれます".to_string());
+    }
+    if env.msgid_ref_dup {
+        render_risks.push("同じ識別子が二度あります—捨てる実装と連結する実装で照合がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

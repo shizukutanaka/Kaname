@@ -1190,6 +1190,14 @@ pub struct Envelope {
     pub received_date_empty: bool,
     /// 宛名欄に二つの異名グループ (D1738 — 宛先解析ずれ)。
     pub addr_two_groups: bool,
+    /// `Message-ID:` 系のドメイン端点ドット (D1739 — 識別子ずれ)。
+    pub msgid_edge_dot_domain: bool,
+    /// `boundary=` 値の端点ドット (D1740 — 境界ずれ)。
+    pub boundary_dot_edge: bool,
+    /// `Received:` 節の `:` 付き値 (D1741 — 経路解析ずれ)。
+    pub received_port: bool,
+    /// `References:` 等の同一識別子重複 (D1742 — 識別子ずれ)。
+    pub msgid_ref_dup: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3821,6 +3829,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_date_empty = has_received_date_empty(bytes);
     // D1738: 宛名欄の二つの異名グループ
     let addr_two_groups = has_addr_two_groups(bytes);
+    // D1739: msgid 系のドメイン端点ドット
+    let msgid_edge_dot_domain = has_msgid_edge_dot_domain(bytes);
+    // D1740: boundary 値の端点ドット
+    let boundary_dot_edge = has_boundary_dot_edge(bytes);
+    // D1741: Received 節の : 付き値
+    let received_port = has_received_port(bytes);
+    // D1742: References 等の同一識別子重複
+    let msgid_ref_dup = has_msgid_ref_dup(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4317,6 +4333,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         resent_out_of_order,
         received_date_empty,
         addr_two_groups,
+        msgid_edge_dot_domain,
+        boundary_dot_edge,
+        received_port,
+        msgid_ref_dup,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -26361,6 +26381,209 @@ pub fn has_addr_two_groups(raw: &[u8]) -> bool {
     false
 }
 
+/// `Message-ID:`/`References:`/`In-Reply-To:` の `<…>` 内で
+/// `@` 後のドメインがドットで始まる/終わるか判定する (D1739)。
+///
+/// `<a@.example.com>` `<a@example.com.>` — ラベル端点のドットは DNS 名として
+/// 非合法。端点ドットを剥く実装と識別子ごと捨てる実装で照合がずれる
+/// (宛名欄の先頭ドットは D1603 系、内部 `..` は D1612 系、ローカル部端点は D1637 系)。
+#[must_use]
+pub fn has_msgid_edge_dot_domain(raw: &[u8]) -> bool {
+    const MSGID_HEADERS: &[&str] = &["message-id", "in-reply-to", "references", "resent-message-id"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !MSGID_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let mut rest = &l[colon + 1..];
+        while let Some(lt) = rest.find('<') {
+            let after = &rest[lt + 1..];
+            let Some(gt) = after.find('>') else { break };
+            let inner = after[..gt].trim();
+            if let Some(at) = inner.rfind('@') {
+                let domain = &inner[at + 1..];
+                if domain.starts_with('.') || domain.ends_with('.') {
+                    return true;
+                }
+            }
+            rest = &after[gt + 1..];
+        }
+    }
+    false
+}
+
+/// `boundary=` 値がドットで始まる/終わるか判定する (D1740)。
+///
+/// `boundary=.abc` `boundary=abc.` — 端点のドットは区切り行
+/// `--.abc`/`--abc.` にそのまま出る。trim する実装と生採用の実装で
+/// パート区切りがずれる (空白端点は D1658、英数字なしは D1718)。
+#[must_use]
+pub fn has_boundary_dot_edge(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let p = part.trim();
+            let Some(eq) = p.find('=') else { continue };
+            if !p[..eq].trim().eq_ignore_ascii_case("boundary") {
+                continue;
+            }
+            let mut v = p[eq + 1..].trim();
+            if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
+                v = &v[1..v.len() - 1];
+            }
+            if v.len() >= 2 && (v.starts_with('.') || v.ends_with('.')) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Received:` の `;` 前の節部分に `:` を含む値があるか判定する (D1741)。
+///
+/// `Received: from mx:25 by hub` — 節の値に `:` (ポート風) は書けない。
+/// `:` で切る実装と生採用の実装で経路解析がずれる
+/// (節の欠落・重複・空値は D1691/D1707/D1720 系)。
+#[must_use]
+pub fn has_received_port(raw: &[u8]) -> bool {
+    const CLAUSES: &[&str] = &["from", "by", "with", "id", "for", "via"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let clause_part = &l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<&str> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .collect();
+        // 節キーワード直後の値が `:` を含むか
+        for (i, t) in toks.iter().enumerate() {
+            if CLAUSES.contains(&t.to_ascii_lowercase().as_str()) {
+                if let Some(next) = toks.get(i + 1) {
+                    // IPv6 リテラル `[v6…]` は合法なので除外
+                    if !next.starts_with('[')
+                        && next.contains(':')
+                        && !CLAUSES.contains(&next.to_ascii_lowercase().as_str())
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `References:`/`In-Reply-To:` に同一の識別子が二度出るか判定する (D1742)。
+///
+/// `References: <a@x> <a@x>` — 重複識別子。
+/// 重複を捨てる実装とそのまま連結する実装でスレッド照合がずれる
+/// (異名二識別子は D1666)。
+#[must_use]
+pub fn has_msgid_ref_dup(raw: &[u8]) -> bool {
+    const REF_HEADERS: &[&str] = &["references", "in-reply-to"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !REF_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let mut seen: Vec<String> = Vec::new();
+        let mut rest = &l[colon + 1..];
+        while let Some(lt) = rest.find('<') {
+            let after = &rest[lt + 1..];
+            let Some(gt) = after.find('>') else { break };
+            let id = after[..gt].trim().to_string();
+            if !id.is_empty() && seen.iter().any(|s| s == &id) {
+                return true;
+            }
+            seen.push(id);
+            rest = &after[gt + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -46516,6 +46739,56 @@ mod tests {
         ));
         assert!(!has_addr_two_groups(b"To: a@h.example\r\n\r\n"));
         assert!(!has_addr_two_groups(b""));
+    }
+
+    #[test]
+    fn msgid_edge_dot_domain_端点ドットの識別子を検出する() {
+        assert!(has_msgid_edge_dot_domain(
+            b"Message-ID: <a@.example.com>\r\n\r\n"
+        ));
+        assert!(has_msgid_edge_dot_domain(
+            b"Message-ID: <a@example.com.>\r\n\r\n"
+        ));
+        assert!(!has_msgid_edge_dot_domain(
+            b"Message-ID: <a@example.com>\r\n\r\n"
+        ));
+        assert!(!has_msgid_edge_dot_domain(b""));
+    }
+
+    #[test]
+    fn boundary_dot_edge_端点ドットの境界を検出する() {
+        assert!(has_boundary_dot_edge(
+            b"Content-Type: multipart/mixed; boundary=.abc\r\n\r\n"
+        ));
+        assert!(has_boundary_dot_edge(
+            b"Content-Type: multipart/mixed; boundary=\"abc.\"\r\n\r\n"
+        ));
+        assert!(!has_boundary_dot_edge(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n"
+        ));
+        assert!(!has_boundary_dot_edge(b""));
+    }
+
+    #[test]
+    fn received_port_節値のコロンを検出する() {
+        assert!(has_received_port(
+            b"Received: from mx.example:25 by hub.example; Thu, 25 Sep 2025\r\n\r\n"
+        ));
+        assert!(!has_received_port(
+            b"Received: from mx.example by hub.example; Thu, 25 Sep 2025\r\n\r\n"
+        ));
+        assert!(!has_received_port(b""));
+    }
+
+    #[test]
+    fn msgid_ref_dup_同じ識別子の二度を検出する() {
+        assert!(has_msgid_ref_dup(
+            b"References: <a@x.example> <a@x.example>\r\n\r\n"
+        ));
+        assert!(!has_msgid_ref_dup(
+            b"References: <a@x.example> <b@x.example>\r\n\r\n"
+        ));
+        assert!(!has_msgid_ref_dup(b""));
     }
 
     #[test]
