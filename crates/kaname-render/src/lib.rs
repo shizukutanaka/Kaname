@@ -1222,6 +1222,14 @@ pub struct Envelope {
     pub addr_gt_lead: bool,
     /// msgid 系のローカル部/ドメイン部欠落 (D1754 — 識別子照合ずれ)。
     pub msgid_empty_side: bool,
+    /// `Message-ID:`/`List-Id:` 系の `;` 先立ち (D1755 — 識別子照合ずれ)。
+    pub msgid_semi_lead: bool,
+    /// `CTE:` の `;` 先立ち (D1756 — 符号化判定ずれ)。
+    pub cte_semi_lead: bool,
+    /// `References:`/`In-Reply-To:` の `>` 先立ち (D1757 — 識別子照合ずれ)。
+    pub ref_gt_lead: bool,
+    /// msgid 系のクオートドメイン (D1758 — 識別子照合ずれ)。
+    pub msgid_quoted_domain: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3885,6 +3893,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let addr_gt_lead = has_addr_gt_lead(bytes);
     // D1754: msgid 系の側欠落
     let msgid_empty_side = has_msgid_empty_side(bytes);
+    // D1755: msgid 系の ; 先立ち
+    let msgid_semi_lead = has_msgid_semi_lead(bytes);
+    // D1756: CTE の ; 先立ち
+    let cte_semi_lead = has_cte_semi_lead(bytes);
+    // D1757: References 系の > 先立ち
+    let ref_gt_lead = has_ref_gt_lead(bytes);
+    // D1758: msgid 系のクオートドメイン
+    let msgid_quoted_domain = has_msgid_quoted_domain(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4397,6 +4413,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_paren,
         addr_gt_lead,
         msgid_empty_side,
+        msgid_semi_lead,
+        cte_semi_lead,
+        ref_gt_lead,
+        msgid_quoted_domain,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -27231,6 +27251,185 @@ pub fn has_msgid_empty_side(raw: &[u8]) -> bool {
     false
 }
 
+/// `Message-ID:`/`List-Id:`/`Content-ID:` 系の値が `;` 先立ちか判定する
+/// (D1755)。
+///
+/// `Message-ID: ;<a@x>` — 先頭区切りを読み飛ばす実装と欄ごと捨てる実装で
+/// 識別子照合がずれる (References/In-Reply-To は D1751)。
+#[must_use]
+pub fn has_msgid_semi_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !matches!(
+            name.as_str(),
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with(';') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値が `;` 先立ちか判定する (D1756)。
+///
+/// `CTE: ;base64` — param を取らない欄の先頭 `;` を読み飛ばす実装と
+/// 欄ごと捨てる実装で符号化判定がずれる (Received の `;` 先立ちは D1743、
+/// `;` 継ぎの param 形は D1655)。
+#[must_use]
+pub fn has_cte_semi_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with(';') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `References:`/`In-Reply-To:` の値が `>` 先立ちか判定する (D1757)。
+///
+/// `References: ><a@x>` — 迷子の閉じ額を捨てる実装と識別子の一部と
+/// 読む実装で照合がずれる (宛名側の `>` 先立ちは D1753、
+/// `<` 無し `>` は D1635)。
+#[must_use]
+pub fn has_ref_gt_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('>') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 系欄の `<…>` でドメインがクオートか判定する (D1758)。
+///
+/// `Message-ID: <a@"b">` — ドメイン部の quoted-string は addr-spec で
+/// 非合法 (宛名欄のクオートドメインは D1646)。クオートを剥がす実装と
+/// 欄ごと捨てる実装で識別子照合がずれる。
+#[must_use]
+pub fn has_msgid_quoted_domain(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if let Some(at) = inner.rfind('@') {
+                if inner[at + 1..].trim_start().starts_with('"') {
+                    return true;
+                }
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -47543,6 +47742,42 @@ mod tests {
         assert!(!has_msgid_empty_side(b"Message-ID: <a@b>\r\n\r\n"));
         assert!(!has_msgid_empty_side(b"Message-ID: <>\r\n\r\n"));
         assert!(!has_msgid_empty_side(b""));
+    }
+
+    #[test]
+    fn msgid_semi_lead_先立つ区切りを検出する() {
+        assert!(has_msgid_semi_lead(b"Message-ID: ;<a@x>\r\n\r\n"));
+        assert!(has_msgid_semi_lead(b"List-Id: ;<l@x>\r\n\r\n"));
+        assert!(!has_msgid_semi_lead(b"Message-ID: <a@x>\r\n\r\n"));
+        assert!(!has_msgid_semi_lead(b"Message-ID: ;\r\n\r\n"));
+        assert!(!has_msgid_semi_lead(b""));
+    }
+
+    #[test]
+    fn cte_semi_lead_先立つ区切りを検出する() {
+        assert!(has_cte_semi_lead(
+            b"Content-Transfer-Encoding: ;base64\r\n\r\n"
+        ));
+        assert!(!has_cte_semi_lead(b"Content-Transfer-Encoding: base64\r\n\r\n"));
+        assert!(!has_cte_semi_lead(b"Content-Transfer-Encoding: ;\r\n\r\n"));
+        assert!(!has_cte_semi_lead(b""));
+    }
+
+    #[test]
+    fn ref_gt_lead_先立つ閉じ額を検出する() {
+        assert!(has_ref_gt_lead(b"References: ><a@x>\r\n\r\n"));
+        assert!(has_ref_gt_lead(b"In-Reply-To: ><a@x>\r\n\r\n"));
+        assert!(!has_ref_gt_lead(b"References: <a@x>\r\n\r\n"));
+        assert!(!has_ref_gt_lead(b"References: >\r\n\r\n"));
+        assert!(!has_ref_gt_lead(b""));
+    }
+
+    #[test]
+    fn msgid_quoted_domain_クオートドメインを検出する() {
+        assert!(has_msgid_quoted_domain(b"Message-ID: <a@\"b\">\r\n\r\n"));
+        assert!(!has_msgid_quoted_domain(b"Message-ID: <a@b>\r\n\r\n"));
+        assert!(!has_msgid_quoted_domain(b"Message-ID: <\"a\"@b>\r\n\r\n"));
+        assert!(!has_msgid_quoted_domain(b""));
     }
 
     #[test]
