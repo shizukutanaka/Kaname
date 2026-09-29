@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1774: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `=` 先立ちを検出 — `Envelope` に `msgid_eq_lead` を追加 (`;` は D1755、`,` は D1769)。
+### Security — D1773: `Received:` の `by` 節の `@` `by user@host` を検出 — `Envelope` に `received_by_at` を追加 (`from` 節の `@` は D1710)。
+### Security — D1772: `List-Id:`/`Content-ID:` を含む msgid 系の額縁内空白 `<a b@l>` を検出 — `Envelope` に `msgid_ws_inner` を追加 (`spaced_msgid` D1516 の上位互換 — 4欄→6欄)。
+### Security — D1771: 宛名ローカル部の `` ` `` ``a`b@c`` を検出 — `Envelope` に `addr_backtick_local` を追加 (`^`/`{}`/`&`/`~` は D1770/D1767/D1760/D1763)。
 ### Security — D1770: 宛名ローカル部の `^` `a^b@c` を検出 — `Envelope` に `addr_caret_local` を追加 (`{}` は D1767、`&`/`~` は D1760/D1763)。
 ### Security — D1769: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `,` 先立ちを検出 — `Envelope` に `msgid_comma_lead` を追加 (`;` 先立ちは D1755、References 系は D1751)。
 ### Security — D1768: `Content-Transfer-Encoding:` 値本体内の孤立括弧 `base64(x`/`7bit)` を検出 — `Envelope` に `cte_paren` を追加 (CT 側は D1764、CD 側は D1766)。
