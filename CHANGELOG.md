@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1782: `;file`name=x` の param 名の反転符を検出 — `Envelope` に `param_backtick_name` を追加 (`@` は D1713、`/` は D1716、`*` 先頭は D1735)。
+### Security — D1781: `Received:` の `from` 節の `!` を検出 — `Envelope` に `received_from_bang` を追加 (from 節の `@` は D1710、for 節の `@` 二つは D1777)。
+### Security — D1780: `Content-Transfer-Encoding: base=64` の値内 `=` を検出 — `Envelope` に `cte_eq` を追加 (`;` 先立ちは D1756、`,` は D1734、孤立括弧は D1768)。
+### Security — D1779: `Message-ID: %<a>` 等の `%` 先立ちを検出 — `Envelope` に `msgid_pct_lead` を追加 (`;` は D1755、`,` は D1769、`=` は D1774)。
 ### Security — D1778: `To: : a@b;` の無名グループを検出 — `Envelope` に `addr_noname_group` を追加 (`:` だけは D1750、`label:;` 空要素は empty_group_syntax)。
 ### Security — D1777: `Received:` の `for` 節の `@` 二つを検出 — `Envelope` に `received_for_two_at` を追加 (`by` 節の `@` は D1773)。
 ### Security — D1776: `Content-Disposition: *` のワイルドカード型を検出 — `Envelope` に `cd_star_type` を追加。

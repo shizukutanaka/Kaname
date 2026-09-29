@@ -1270,6 +1270,14 @@ pub struct Envelope {
     pub received_for_two_at: bool,
     /// 宛名欄の無名グループ (D1778 — 宛先ずれ)。
     pub addr_noname_group: bool,
+    /// msgid 系の `%` 先立ち (D1779 — 識別子照合ずれ)。
+    pub msgid_pct_lead: bool,
+    /// `Content-Transfer-Encoding:` 値の `=` (D1780 — 復号ずれ)。
+    pub cte_eq: bool,
+    /// `Received:` の `from` 節の `!` (D1781 — 経路解析ずれ)。
+    pub received_from_bang: bool,
+    /// param 名の反転符 (D1782 — param ずれ)。
+    pub param_backtick_name: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3977,6 +3985,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cd_star_type = has_cd_star_type(bytes);
     let received_for_two_at = has_received_for_two_at(bytes);
     let addr_noname_group = has_addr_noname_group(bytes);
+    let msgid_pct_lead = has_msgid_pct_lead(bytes);
+    let cte_eq = has_cte_eq(bytes);
+    let received_from_bang = has_received_from_bang(bytes);
+    let param_backtick_name = has_param_backtick_name(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4513,6 +4525,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cd_star_type,
         received_for_two_at,
         addr_noname_group,
+        msgid_pct_lead,
+        cte_eq,
+        received_from_bang,
+        param_backtick_name,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -28701,6 +28717,181 @@ pub fn has_addr_noname_group(raw: &[u8]) -> bool {
     false
 }
 
+/// msgid 系欄の値が `%` 先立ちか判定する (D1779)。
+///
+/// `Message-ID: %<a@b>` — `%` 先立ちを読み飛ばす実装と欄ごと捨てる
+/// 実装で識別子照合がずれる (`;` は D1755、`,` は D1769、`=` は D1774)。
+#[must_use]
+pub fn has_msgid_pct_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        // 裸の `%` だけは pct-only 節 — `%` 後に中身があるか
+        if v.starts_with('%') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `=` があるか判定する (D1780)。
+///
+/// `CTE: base=64` — `=` は token 文字でないため値を先割れで読む
+/// 実装と欄を捨てる実装で復号がずれる (`;` 先立ちは D1756、
+/// `,` 区切りは D1734、孤立括弧は D1768)。
+#[must_use]
+pub fn has_cte_eq(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        // 値の先頭 token 内の `=` — 以降の `;` param 部は対象外
+        let tok = v.trim().split(|c: char| c.is_whitespace() || c == ';')
+            .next().unwrap_or("");
+        if tok.contains('=') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `from` 節の値に `!` があるか判定する (D1781)。
+///
+/// `from a!b` — `!` はホスト名に非合法。bang 経路 (UUCP 旧式)
+/// と読む実装と欄を捨てる実装で経路がずれる (`from` の `@` は
+/// D1710、`for` の `@` 二つは D1777)。
+#[must_use]
+pub fn has_received_from_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("from") && i + 1 < toks.len()
+                && toks[i + 1].contains('!')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// パラメータ名に反転符があるか判定する (D1782)。
+///
+/// `;file`name=x` — 名前を反転符込みで読む実装と param を捨てる
+/// 実装で値がずれる (`@` は D1713、`/` は D1716、`*` 先頭は D1735)。
+#[must_use]
+pub fn has_param_backtick_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let is_param_hdr = lower.starts_with("content-type:")
+            || lower.starts_with("content-disposition:")
+            || lower.starts_with("content-transfer-encoding:");
+        if !is_param_hdr {
+            continue;
+        }
+        // `;` 区切りの param 節を走査 — 名前側 (=` の前) に反転符
+        for seg in l.split(';').skip(1) {
+            let name = seg.split('=').next().unwrap_or("").trim();
+            if !name.is_empty() && name.contains('`') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -49300,6 +49491,85 @@ mod tests {
             b"To: a@b.example\r\n\r\nb"
         ));
         assert!(!has_addr_noname_group(b""));
+    }
+
+    #[test]
+    #[test]
+    fn msgid_pct_lead_先立つパーセントを検出する() {
+        // D1779 — `%` 先立ち
+        assert!(has_msgid_pct_lead(
+            b"Message-ID: %<a@b.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_pct_lead(
+            b"List-Id: %<l.example>\r\n\r\nb"
+        ));
+        // 裸 `%` だけは不発火 (空尾)
+        assert!(!has_msgid_pct_lead(
+            b"Message-ID: %\r\n\r\nb"
+        ));
+        // 正規識別子は不発火
+        assert!(!has_msgid_pct_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // References 等は4名サブセット対象外 — `%` 先立ちでも不発火
+        assert!(!has_msgid_pct_lead(
+            b"References: %<a@b.example>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_pct_lead(b""));
+    }
+
+    #[test]
+    fn cte_eq_値の等号を検出する() {
+        // D1780 — `base=64`
+        assert!(has_cte_eq(
+            b"Content-Transfer-Encoding: base=64\r\n\r\nb"
+        ));
+        // 正当値は不発火
+        assert!(!has_cte_eq(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // `;` 後の param 側 `=` は対象外 — 不発火
+        assert!(!has_cte_eq(
+            b"Content-Transfer-Encoding: base64; x=y\r\n\r\nb"
+        ));
+        assert!(!has_cte_eq(b""));
+    }
+
+    #[test]
+    fn received_from_bang_差出節のビックリを検出する() {
+        // D1781 — from 節値の `!`
+        assert!(has_received_from_bang(
+            b"Received: from a!b.example.com by mx.example.com; x\r\n\r\nb"
+        ));
+        // 通常ホスト名は不発火
+        assert!(!has_received_from_bang(
+            b"Received: from mx.example.com by mx2.example.com; x\r\n\r\nb"
+        ));
+        // `!` が by 節側なら対象外 — 不発火
+        assert!(!has_received_from_bang(
+            b"Received: from mx.example.com by a!b; x\r\n\r\nb"
+        ));
+        assert!(!has_received_from_bang(b""));
+    }
+
+    #[test]
+    fn param_backtick_name_名札の反転符を検出する() {
+        // D1782 — param 名の `` ` ``
+        assert!(has_param_backtick_name(
+            b"Content-Type: text/plain; file`name=x\r\n\r\nb"
+        ));
+        assert!(has_param_backtick_name(
+            b"Content-Disposition: attachment; x`y=z\r\n\r\nb"
+        ));
+        // 正当 param 名は不発火
+        assert!(!has_param_backtick_name(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\nb"
+        ));
+        // 値側の反転符は対象外 — 不発火
+        assert!(!has_param_backtick_name(
+            b"Content-Type: text/plain; name=a`b\r\n\r\nb"
+        ));
+        assert!(!has_param_backtick_name(b""));
     }
 
     #[test]
