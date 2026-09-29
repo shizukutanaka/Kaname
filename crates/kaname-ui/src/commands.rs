@@ -5876,6 +5876,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.cte_comma {
         render_risks.push("符号化の値にコンマがあります—区切って先を採る実装と欄を捨てる実装でデコードがずれます".to_string());
     }
+    if env.param_star_name {
+        render_risks.push("パラメータ名が星で始まります—名に含める実装と欄を捨てる実装で値がずれます".to_string());
+    }
+    if env.dup_resent {
+        render_risks.push("同じ再送欄が二度あります—先読みと後読みで再送経路がずれます".to_string());
+    }
+    if env.received_date_empty {
+        render_risks.push("経過印の日付節が空です—無視する実装と欄を捨てる実装で日時記録がずれます".to_string());
+    }
+    if env.addr_two_groups {
+        render_risks.push("宛名欄に二つのグループがあります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

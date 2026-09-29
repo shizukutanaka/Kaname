@@ -1182,6 +1182,14 @@ pub struct Envelope {
     pub ct_empty_subtype: bool,
     /// `CTE:` 値の `,` 区切り二値 (D1734 — 符号化判定ずれ)。
     pub cte_comma: bool,
+    /// param 名が `*` で始まる (D1735 — param 解析ずれ)。
+    pub param_star_name: bool,
+    /// 同名 `Resent-*` 欄の重複 (D1736 — 再送経路ずれ)。
+    pub dup_resent: bool,
+    /// `Received:` の `;` 後日付節が空 (D1737 — 経路日時ずれ)。
+    pub received_date_empty: bool,
+    /// 宛名欄に二つの異名グループ (D1738 — 宛先解析ずれ)。
+    pub addr_two_groups: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3805,6 +3813,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_empty_subtype = has_ct_empty_subtype(bytes);
     // D1734: CTE 値の , 区切り二値
     let cte_comma = has_cte_comma(bytes);
+    // D1735: param 名が * 始まり
+    let param_star_name = has_param_star_name(bytes);
+    // D1736: 同名 Resent-* 欄重複
+    let dup_resent = has_dup_resent(bytes);
+    // D1737: Received の ; 後日付節が空
+    let received_date_empty = has_received_date_empty(bytes);
+    // D1738: 宛名欄の二つの異名グループ
+    let addr_two_groups = has_addr_two_groups(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4297,6 +4313,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_comma_only,
         ct_empty_subtype,
         cte_comma,
+        param_star_name,
+        dup_resent,
+        received_date_empty,
+        addr_two_groups,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -26163,6 +26183,195 @@ pub fn has_cte_comma(raw: &[u8]) -> bool {
     false
 }
 
+/// `Content-Type:`/`Content-Disposition:` の param 名が `*` で始まるか判定する (D1735)。
+///
+/// `;*file=x` — attribute の先頭 `*` は連番・拡張形 (name*0*=/name*=) の
+/// 終端記号としてのみ合法で、名の先頭には書けない。
+/// `*` を名に含めて採用する実装と欄ごと捨てる実装で param 値がずれる
+/// (name*= の形崩れは D1614)。
+#[must_use]
+pub fn has_param_star_name(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let key = part.split('=').next().unwrap_or("").trim();
+            if key.starts_with('*') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 同名の `Resent-*` 欄が重複するか判定する (D1736)。
+///
+/// `Resent-From:`/`Resent-To:`/`Resent-Date:`/`Resent-Message-ID:` 等が
+/// 同名で二度出る — 再送欄は原則一組。先読み/後読みで再送経路がずれる
+/// (Resent-* の部分的欠落は D1380 系、宛名欄一般の重複は D1598)。
+#[must_use]
+pub fn has_dup_resent(raw: &[u8]) -> bool {
+    const RESENT: &[&str] = &[
+        "resent-from",
+        "resent-sender",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-date",
+        "resent-message-id",
+        "resent-reply-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    let mut seen: Vec<String> = Vec::new();
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if !RESENT.contains(&name.as_str()) {
+            continue;
+        }
+        if seen.iter().any(|s| s == &name) {
+            return true;
+        }
+        seen.push(name);
+    }
+    false
+}
+
+/// `Received:` の `;` 後の日付節が空か判定する (D1737)。
+///
+/// `Received: from a by b;` — `;` の後に日付が続くのが規格。
+/// `;` で終わる経過印は、空節を無視する実装と欄ごと捨てる実装で
+/// 日時記録がずれる (`;` 自体の欠落は D1586、欄値全体の空は D1687)。
+#[must_use]
+pub fn has_received_date_empty(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        if let Some(semi) = v.rfind(';') {
+            if v[semi + 1..].trim().is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 宛名欄に二つの異名グループ構文があるか判定する (D1738)。
+///
+/// `To: a: x@h; b: y@h;` — 一つの欄に名前の異なる group が二つ。
+/// 結合する実装と先のグループだけ採る実装で宛先集合がずれる
+/// (同名グループの重複は D1667、空グループは D1500 系)。
+#[must_use]
+pub fn has_addr_two_groups(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &["to", "cc", "bcc", "reply-to", "resent-to", "resent-cc", "resent-bcc"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut groups = 0usize;
+        let mut rest = v;
+        while let Some(cpos) = rest.find(':') {
+            let name_part = rest[..cpos].rsplit(';').next().unwrap_or("").trim();
+            // グループ名は `:` 直前の語句 — 非空かつ `@` `<` を含まない
+            if !name_part.is_empty()
+                && !name_part.contains('@')
+                && !name_part.contains('<')
+                && rest[cpos + 1..].contains(';')
+            {
+                groups += 1;
+            }
+            rest = &rest[cpos + 1..];
+        }
+        if groups >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -46267,6 +46476,54 @@ mod tests {
         ));
         assert!(!has_cte_comma(b"Content-Transfer-Encoding: base64\r\n\r\n"));
         assert!(!has_cte_comma(b""));
+    }
+
+    #[test]
+    fn param_star_name_星始まりの名札を検出する() {
+        assert!(has_param_star_name(
+            b"Content-Type: text/plain; *file=x\r\n\r\n"
+        ));
+        assert!(!has_param_star_name(
+            b"Content-Type: text/plain; charset=x\r\n\r\n"
+        ));
+        assert!(!has_param_star_name(b""));
+    }
+
+    #[test]
+    fn dup_resent_二度の再送欄を検出する() {
+        assert!(has_dup_resent(
+            b"Resent-From: a@x\r\nResent-From: b@x\r\n\r\n"
+        ));
+        assert!(has_dup_resent(
+            b"Resent-Date: d\r\nResent-From: a@x\r\nResent-Date: e\r\n\r\n"
+        ));
+        assert!(!has_dup_resent(
+            b"Resent-From: a@x\r\nResent-To: b@x\r\n\r\n"
+        ));
+        assert!(!has_dup_resent(b""));
+    }
+
+    #[test]
+    fn received_date_empty_空の日付節を検出する() {
+        assert!(has_received_date_empty(
+            b"Received: from a.example by b.example;\r\n\r\n"
+        ));
+        assert!(!has_received_date_empty(
+            b"Received: from a.example by b.example; Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_received_date_empty(b""));
+    }
+
+    #[test]
+    fn addr_two_groups_二つのグループを検出する() {
+        assert!(has_addr_two_groups(
+            b"To: a: x@h.example; b: y@h.example;\r\n\r\n"
+        ));
+        assert!(!has_addr_two_groups(
+            b"To: team: a@h.example, b@h.example;\r\n\r\n"
+        ));
+        assert!(!has_addr_two_groups(b"To: a@h.example\r\n\r\n"));
+        assert!(!has_addr_two_groups(b""));
     }
 
     #[test]
