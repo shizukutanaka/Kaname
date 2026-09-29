@@ -3,7 +3,7 @@
 ### Security — D1750: 宛名欄の `:` のみ値 `To: :` を検出 — `Envelope` に `addr_colon_only` を追加 (`;` のみは D1730、`,` のみは D1732)。
 ### Security — D1749: `boundary=` 裸値の内部空白 `boundary=a b` を検出 — `Envelope` に `boundary_inner_ws` を追加 (端点空白は D1658、端点ドットは D1740)。
 ### Security — D1748: `Content-Type:` の `//` 空セグメント `text//plain` を検出 — `Envelope` に `ct_double_slash` を追加 (`/` 無しは D1705、サブ型欠落は D1733)。
-### Security — D1747: 宛名欄の `@` 二つ `a@b@c` を検出 — `Envelope` に `two_at_addr` を追加 (msgid 系の `@` 二つは D1722、クオート内の `@` は除外)。
+### Security — D1747: 宛名欄の `@` 二つ `a@b@c` を検出 — `Envelope` に `two_at_addr` を追加 (msgid 系の `@` 二つは D1722、クオート内の `@` は除外; `multi_at_addr` の上位互換で Return-Path/コメント位置も拾う)。
 ### Security — D1746: `Message-ID:` 系の `@` 無し識別子 `<abc>` を検出 — `Envelope` に `msgid_no_at` を追加 (`<>` 空は D1625)。
 ### Security — D1745: 宛名欄の `<…>` 二組 `From: <a> <b>`/`, ` 無し `To: <a> <b>` を検出 — `Envelope` に `addr_two_angle` を追加 (異名グループは D1738)。
 ### Security — D1744: `CTE:` 値の大文字 `BASE64` を検出 — `Envelope` に `cte_upper` を追加 (CT 型の大文字は D1613)。
