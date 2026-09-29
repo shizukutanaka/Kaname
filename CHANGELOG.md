@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1762: 宛名欄の同一アドレス重複 `To: a@b, a@b` を検出 — `Envelope` に `same_addr_dup` を追加 (同名欄の重複は D1605 系、識別子重複は D1742)。
+### Security — D1761: `Content-Type:` 型本体内の `:` `text:plain` を検出 — `Envelope` に `ct_colon_type` を追加 (`=` は D1758)。
+### Security — D1760: 宛名ローカル部の `&` `a&b@c` を検出 — `Envelope` に `addr_amp_local` を追加 (表示名の `&` とクオート内は除外)。
+### Security — D1759: `Content-Disposition:` 型本体内の `=` `attachment=x` を検出 — `Envelope` に `cd_eq_type` を追加 (CT 側は D1758)。
 ### Security — D1758: `Content-Type:` 型本体内の `=` `text=plain` を検出 — `Envelope` に `ct_eq_type` を追加 (クオートドメイン案は既存 `msgid_quoted_local` と重複判明のため差替)。
 ### Security — D1757: `References:`/`In-Reply-To:` の `>` 先立ち `><a>` を検出 — `Envelope` に `ref_gt_lead` を追加 (宛名側は D1753、`<` 無し `>` は D1635)。
 ### Security — D1756: `CTE:` の `;` 先立ち `;base64` を検出 — `Envelope` に `cte_semi_lead` を追加 (Received の `;` 先立ちは D1743)。

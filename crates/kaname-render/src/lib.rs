@@ -1230,6 +1230,14 @@ pub struct Envelope {
     pub ref_gt_lead: bool,
     /// `Content-Type:` の型本体内 `=` (D1758 — 型解釈ずれ)。
     pub ct_eq_type: bool,
+    /// `Content-Disposition:` の型本体内 `=` (D1759 — 添付判定ずれ)。
+    pub cd_eq_type: bool,
+    /// 宛名ローカル部の `&` (D1760 — 宛先解析ずれ)。
+    pub addr_amp_local: bool,
+    /// `Content-Type:` の型本体内 `:` (D1761 — 型解釈ずれ)。
+    pub ct_colon_type: bool,
+    /// 宛名欄の同一アドレス重複 (D1762 — 宛先解析ずれ)。
+    pub same_addr_dup: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3901,6 +3909,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ref_gt_lead = has_ref_gt_lead(bytes);
     // D1758: CT 型本体内の =
     let ct_eq_type = has_ct_eq_type(bytes);
+    // D1759: CD 型本体内の =
+    let cd_eq_type = has_cd_eq_type(bytes);
+    // D1760: 宛名ローカル部の &
+    let addr_amp_local = has_addr_amp_local(bytes);
+    // D1761: CT 型本体内の :
+    let ct_colon_type = has_ct_colon_type(bytes);
+    // D1762: 宛名欄の同一アドレス重複
+    let same_addr_dup = has_same_addr_dup(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4417,6 +4433,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cte_semi_lead,
         ref_gt_lead,
         ct_eq_type,
+        cd_eq_type,
+        addr_amp_local,
+        ct_colon_type,
+        same_addr_dup,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -27412,6 +27432,261 @@ pub fn has_ct_eq_type(raw: &[u8]) -> bool {
     false
 }
 
+/// `Content-Disposition:` の型本体に `=` があるか判定する (D1759)。
+///
+/// `Content-Disposition: attachment=x` — `=` は token 外字。
+/// 型として読む実装と param として読む実装と欄ごと捨てる実装で
+/// 添付判定がずれる (CT 側は D1758)。
+#[must_use]
+pub fn has_cd_eq_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if before_semi.contains('=') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄のローカル部に `&` があるか判定する (D1760)。
+///
+/// `To: a&b@c` — `&` は atext 外字なのでローカル部に書けない。
+/// 厳格に拒否する実装とそのまま採用する実装で宛先がずれる
+/// (ローカル部の異常は edge_dot/dotdot/quoted/nonascii/long が担当済み)。
+#[must_use]
+pub fn has_addr_amp_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート/コメント外の `@` の直前に `&` があるか
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        let mut seg = String::new();
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'@' {
+                // ローカル部 = @ 直前の非空白ラン
+                let local = seg.trim_end();
+                let local = local.rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':').next().unwrap_or("");
+                if local.contains('&') {
+                    return true;
+                }
+            } else {
+                seg.push(b as char);
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体に `:` があるか判定する (D1761)。
+///
+/// `Content-Type: text:plain` — `:` は token 外字。
+/// 型として読む実装と欄ごと捨てる実装で型解釈がずれる
+/// (`=` は D1758、`/` 欠落は D1705)。
+#[must_use]
+pub fn has_ct_colon_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if before_semi.contains(':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄で同一ア��レスが二度書かれるか判定する (D1762)。
+///
+/// `To: a@b, a@b` — 重複を除く実装とそのまま採用する実装で宛先集合がずれる
+/// (同名欄の重複は D1605 系、識別子の重複は D1742)。
+#[must_use]
+pub fn has_same_addr_dup(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // クオート区間を潰して `,`/`;` で分割し、@ を含む語を収集
+        let mut scrub = String::with_capacity(v.len());
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else {
+                scrub.push(b as char);
+            }
+            prev = b;
+        }
+        let mut seen = std::collections::HashSet::new();
+        for tok in scrub.split(|c: char| c == ',' || c == ';') {
+            for w in tok.split_whitespace() {
+                let w = w.trim_matches(|c: char| c == '<' || c == '>' || c == '(' || c == ')');
+                if w.contains('@') && !seen.insert(w.to_ascii_lowercase()) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -47762,6 +48037,41 @@ mod tests {
             b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
         ));
         assert!(!has_ct_eq_type(b""));
+    }
+
+    #[test]
+    fn cd_eq_type_型本体の等号を検出する() {
+        assert!(has_cd_eq_type(b"Content-Disposition: attachment=x\r\n\r\n"));
+        assert!(!has_cd_eq_type(b"Content-Disposition: attachment\r\n\r\n"));
+        assert!(!has_cd_eq_type(
+            b"Content-Disposition: attachment; filename=x\r\n\r\n"
+        ));
+        assert!(!has_cd_eq_type(b""));
+    }
+
+    #[test]
+    fn addr_amp_local_ローカル部の連結号を検出する() {
+        assert!(has_addr_amp_local(b"To: a&b@c\r\n\r\n"));
+        assert!(has_addr_amp_local(b"From: <x&y@z>\r\n\r\n"));
+        assert!(!has_addr_amp_local(b"To: Jane & Co <j@x>\r\n\r\n"));
+        assert!(!has_addr_amp_local(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_amp_local(b""));
+    }
+
+    #[test]
+    fn ct_colon_type_型本体の二重連を検出する() {
+        assert!(has_ct_colon_type(b"Content-Type: text:plain\r\n\r\n"));
+        assert!(!has_ct_colon_type(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_colon_type(b""));
+    }
+
+    #[test]
+    fn same_addr_dup_同一アドレスの重複を検出する() {
+        assert!(has_same_addr_dup(b"To: a@b, a@b\r\n\r\n"));
+        assert!(has_same_addr_dup(b"To: <a@b>, a@b\r\n\r\n"));
+        assert!(!has_same_addr_dup(b"To: a@b, c@d\r\n\r\n"));
+        assert!(!has_same_addr_dup(b"To: a@b\r\n\r\n"));
+        assert!(!has_same_addr_dup(b""));
     }
 
     #[test]

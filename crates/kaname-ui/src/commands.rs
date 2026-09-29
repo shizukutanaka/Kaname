@@ -5948,6 +5948,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.ct_eq_type {
         render_risks.push("Content-Type の型に等号があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
     }
+    if env.cd_eq_type {
+        render_risks.push("Content-Disposition の型に等号があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
+    }
+    if env.addr_amp_local {
+        render_risks.push("宛名のローカル部に連結号があります—拒否する実装と採用する実装で宛先がずれます".to_string());
+    }
+    if env.ct_colon_type {
+        render_risks.push("Content-Type の型に二重連があります—型として読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.same_addr_dup {
+        render_risks.push("宛名欄に同じアドレスが二度書かれています—重複を除く実装と採用する実装で宛先がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
