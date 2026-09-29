@@ -28374,7 +28374,8 @@ pub fn has_addr_backtick_local(raw: &[u8]) -> bool {
 /// `List-Id: <a b@l>`/`Content-ID: <c d@e>` — `spaced_msgid`
 /// (D1516) は message-id/in-reply-to/references/resent-message-id の
 /// 4欄だけを見るため、List-Id/Content-ID の額縁内空白は抜ける。
-/// 本検出器はその上位互換で6欄全部を見る (doc 併記)。
+/// また `inner_space_id` は6欄を見るが先端空白 `< a@c>` を逃す。
+/// 本検出器は両者の上位互換として6欄全部+先端空白を見る (doc 併記)。
 #[must_use]
 pub fn has_msgid_ws_inner(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
