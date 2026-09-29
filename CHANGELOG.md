@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1798: `Content-Transfer-Encoding: base>64` の値内 `>` を検出 — `Envelope` に `cte_gt` を追加 (`=` は D1780、`\` は D1788、`,` は D1734)。
+### Security — D1797: `Received:` の `from` 節の `%` を検出 — `Envelope` に `received_from_pct` を追加 (`by` の `%` は D1793、`from` の `!` は D1781、`@` は D1710)。
+### Security — D1796: `Content-Type: text<plain` の型本体内 `<` を検出 — `Envelope` に `ct_lt_type` を追加 (`>` は D1792、`:` は D1761、`\` は D1784)。
+### Security — D1795: `Message-ID: ?<a>` 等の `?` 先立ちを検出 — `Envelope` に `msgid_qmark_lead` を追加 (lead-sep 系は D1755–D1791)。
 ### Security — D1794: `Content-Disposition: attach>ment` の型本体内 `>` を検出 — `Envelope` に `cd_gt_type` を追加 (`:` は D1765、`=` は D1759、`\` は D1786)。
 ### Security — D1793: `Received:` の `by` 節の `%` を検出 — `Envelope` に `received_by_pct` を追加 (`by` の `@` は D1773、`from` の `!` は D1781)。
 ### Security — D1792: `Content-Type: text>plain` の型本体内 `>` を検出 — `Envelope` に `ct_gt_type` を追加 (`:` は D1761、`=` は D1758、`\` は D1784)。

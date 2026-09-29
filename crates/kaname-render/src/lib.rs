@@ -1302,6 +1302,14 @@ pub struct Envelope {
     pub received_by_pct: bool,
     /// `Content-Disposition:` 型本体内の `>` (D1794 — 添付判定ずれ)。
     pub cd_gt_type: bool,
+    /// msgid 系の `?` 先立ち (D1795 — 識別子照合ずれ)。
+    pub msgid_qmark_lead: bool,
+    /// `Content-Type:` 型本体内の `<` (D1796 — 型ずれ)。
+    pub ct_lt_type: bool,
+    /// `Received:` の `from` 節の `%` (D1797 — 経路解析ずれ)。
+    pub received_from_pct: bool,
+    /// `Content-Transfer-Encoding:` 値内の `>` (D1798 — 復号ずれ)。
+    pub cte_gt: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -4025,6 +4033,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_gt_type = has_ct_gt_type(bytes);
     let received_by_pct = has_received_by_pct(bytes);
     let cd_gt_type = has_cd_gt_type(bytes);
+    let msgid_qmark_lead = has_msgid_qmark_lead(bytes);
+    let ct_lt_type = has_ct_lt_type(bytes);
+    let received_from_pct = has_received_from_pct(bytes);
+    let cte_gt = has_cte_gt(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4577,6 +4589,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_gt_type,
         received_by_pct,
         cd_gt_type,
+        msgid_qmark_lead,
+        ct_lt_type,
+        received_from_pct,
+        cte_gt,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -29503,6 +29519,186 @@ pub fn has_cd_gt_type(raw: &[u8]) -> bool {
     false
 }
 
+/// msgid 系欄の値が `?` 先立ちか判定する (D1795)。
+///
+/// `Message-ID: ?<a@b>` — 先頭の `?` を読み飛ばす実装と欄を
+/// 捨てる実装で照合がずれる (`;`/`,`/`=`/`%`/`:`/`>`/`<<` は
+/// D1755–D1791、字内は bare_param 系とは別領域)。
+#[must_use]
+pub fn has_msgid_qmark_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('?') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体内に `<` があるか判定する (D1796)。
+///
+/// `text<plain` — `<` は tchar でないため型を継続して読む実装と
+/// 欄を捨てる実装で型がずれる (`>` は D1792、`:` は D1761、
+/// `=` は D1758、`\` は D1784)。
+#[must_use]
+pub fn has_ct_lt_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-type:") else { continue };
+        let ty = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(ty.len());
+        let mut depth = 0i32;
+        for c in ty.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('<') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `from` 節の値に `%` があるか判定する (D1797)。
+///
+/// `from a%b` — UUCP 旧式 `%` 経路の名残をホスト名に継続して
+/// 読む実装と欄を捨てる実装で経路がずれる (`by` の `%` は D1793、
+/// `from` の `!` は D1781、`from` の `@` は D1710)。
+#[must_use]
+pub fn has_received_from_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("from") && i + 1 < toks.len()
+                && toks[i + 1].contains('%')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `>` があるか判定する
+/// (D1798)。
+///
+/// `base>64` — `>` は tchar でないため先頭トークンに `>` を
+/// 含む値を継続して読む実装と欄を捨てる実装で復号がずれる
+/// (`=` は D1780、`\` は D1788、`,` は D1734)。
+#[must_use]
+pub fn has_cte_gt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        let tok = v.trim().split(|c: char| c.is_whitespace() || c == ';')
+            .next()
+            .unwrap_or("");
+        if tok.contains('>') {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -50416,6 +50612,86 @@ mod tests {
             b"Content-Disposition: attachment; filename=\"a>b.txt\"\r\n\r\nb"
         ));
         assert!(!has_cd_gt_type(b""));
+    }
+
+    #[test]
+    #[test]
+    fn msgid_qmark_lead_先立つ疑問符を検出する() {
+        // D1795 — `?` 先立ち
+        assert!(has_msgid_qmark_lead(
+            b"Message-ID: ?<a@b.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_qmark_lead(
+            b"Content-ID: ?<c@d.example>\r\n\r\nb"
+        ));
+        // 裸 `?` は不発火 (空尾)
+        assert!(!has_msgid_qmark_lead(
+            b"Message-ID: ?\r\n\r\nb"
+        ));
+        // 正規識別子は不発火
+        assert!(!has_msgid_qmark_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // References は4名サブセット対象外
+        assert!(!has_msgid_qmark_lead(
+            b"References: ?<a@b.example>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_qmark_lead(b""));
+    }
+
+    #[test]
+    fn ct_lt_type_型の開き額を検出する() {
+        // D1796 — `text<plain`
+        assert!(has_ct_lt_type(
+            b"Content-Type: text<plain\r\n\r\nb"
+        ));
+        // 正当型は不発火
+        assert!(!has_ct_lt_type(
+            b"Content-Type: text/plain\r\n\r\nb"
+        ));
+        // コメント内 `<` は除去され不発火
+        assert!(!has_ct_lt_type(
+            b"Content-Type: text/plain (a<b)\r\n\r\nb"
+        ));
+        // param 側の `<` は対象外 — 不発火
+        assert!(!has_ct_lt_type(
+            b"Content-Type: text/plain; name=a<b\r\n\r\nb"
+        ));
+        assert!(!has_ct_lt_type(b""));
+    }
+
+    #[test]
+    fn received_from_pct_差出節のパーセントを検出する() {
+        // D1797 — from 節値の `%`
+        assert!(has_received_from_pct(
+            b"Received: from a%b.example.com by mx.example.com; x\r\n\r\nb"
+        ));
+        // 通常ホスト名は不発火
+        assert!(!has_received_from_pct(
+            b"Received: from mx.example.com by mx2.example.com; x\r\n\r\nb"
+        ));
+        // `%` が by 節側なら対象外 — 不発火
+        assert!(!has_received_from_pct(
+            b"Received: from mx.example.com by a%b.example.com; x\r\n\r\nb"
+        ));
+        assert!(!has_received_from_pct(b""));
+    }
+
+    #[test]
+    fn cte_gt_値の閉じ額を検出する() {
+        // D1798 — `base>64`
+        assert!(has_cte_gt(
+            b"Content-Transfer-Encoding: base>64\r\n\r\nb"
+        ));
+        // 正当値は不発火
+        assert!(!has_cte_gt(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // 二トークン目の `>` は対象外 — 不発火
+        assert!(!has_cte_gt(
+            b"Content-Transfer-Encoding: base64 >\r\n\r\nb"
+        ));
+        assert!(!has_cte_gt(b""));
     }
 
     #[test]
