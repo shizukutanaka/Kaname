@@ -5930,8 +5930,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.msgid_paren {
         render_risks.push("識別子の額縁にコメントが隣接しています—剥がす実装と結合する実装で照合がずれます".to_string());
     }
-    if env.ct_lead_slash {
-        render_risks.push("Content-Type の型が斜線で始まっています—既定値に丸める実装と欄を捨てる実装で型がずれます".to_string());
+    if env.addr_gt_lead {
+        render_risks.push("宛名欄が閉じ額で始まっています—先頭語を捨てる実装と住所の一部と読む実装で宛先がずれます".to_string());
     }
     if env.msgid_empty_side {
         render_risks.push("識別子のアットマークの片側が空です—受理する実装と捨てる実装で照合がずれます".to_string());

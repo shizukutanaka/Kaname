@@ -1218,8 +1218,8 @@ pub struct Envelope {
     pub ref_lead_sep: bool,
     /// msgid 系の `<…>` に隣接するコメント (D1752 — 識別子照合ずれ)。
     pub msgid_paren: bool,
-    /// `Content-Type:` の `/` 先立ち (D1753 — 型解釈ずれ)。
-    pub ct_lead_slash: bool,
+    /// 宛名欄の先頭 `>` (D1753 — 宛先解析ずれ)。
+    pub addr_gt_lead: bool,
     /// msgid 系のローカル部/ドメイン部欠落 (D1754 — 識別子照合ずれ)。
     pub msgid_empty_side: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
@@ -3881,8 +3881,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ref_lead_sep = has_ref_lead_sep(bytes);
     // D1752: msgid 系の <> 隣接コメント
     let msgid_paren = has_msgid_paren(bytes);
-    // D1753: CT の / 先立ち
-    let ct_lead_slash = has_ct_lead_slash(bytes);
+    // D1753: 宛名欄の先頭 >
+    let addr_gt_lead = has_addr_gt_lead(bytes);
     // D1754: msgid 系の側欠落
     let msgid_empty_side = has_msgid_empty_side(bytes);
 
@@ -4395,7 +4395,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_colon_only,
         ref_lead_sep,
         msgid_paren,
-        ct_lead_slash,
+        addr_gt_lead,
         msgid_empty_side,
         uuencode_payload,
         bogus_boundary_param,
@@ -27119,13 +27119,29 @@ pub fn has_msgid_paren(raw: &[u8]) -> bool {
     false
 }
 
-/// `Content-Type:` の型本体が `/` 先立ちか判定する (D1753)。
+/// 宛名欄の値が `>` 先立ちか判定する (D1753)。
 ///
-/// `Content-Type: /plain` — 型名欠落でサブ型だけ。
-/// 既定値に丸める実装と欄ごと捨てる実装で型解釈がずれる
-/// (`/` 無しは D1705、`//` は D1748、`x/` は D1733、型欠落は D1649)。
+/// `To: >a@b` — 対になる `<` の無い先頭閉じ額。
+/// 先頭語を捨てる実装と `>` を住所の一部と読む実装で宛先がずれる
+/// (末尾の孤立 `>` は D1685、msgid の `>` のみは D1514 系)。
 #[must_use]
-pub fn has_ct_lead_slash(raw: &[u8]) -> bool {
+pub fn has_addr_gt_lead(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -27147,11 +27163,11 @@ pub fn has_ct_lead_slash(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
             continue;
         }
-        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
-        if before_semi.starts_with('/') && before_semi.len() > 1 {
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with('>') && !v[1..].trim().is_empty() {
             return true;
         }
     }
@@ -47512,11 +47528,12 @@ mod tests {
     }
 
     #[test]
-    fn ct_lead_slash_先立つ斜線を検出する() {
-        assert!(has_ct_lead_slash(b"Content-Type: /plain\r\n\r\n"));
-        assert!(!has_ct_lead_slash(b"Content-Type: /\r\n\r\n"));
-        assert!(!has_ct_lead_slash(b"Content-Type: text/plain\r\n\r\n"));
-        assert!(!has_ct_lead_slash(b""));
+    fn addr_gt_lead_先立つ閉じ額を検出する() {
+        assert!(has_addr_gt_lead(b"To: >a@b\r\n\r\n"));
+        assert!(!has_addr_gt_lead(b"To: >\r\n\r\n"));
+        assert!(!has_addr_gt_lead(b"To: <a@b>\r\n\r\n"));
+        assert!(!has_addr_gt_lead(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_gt_lead(b""));
     }
 
     #[test]

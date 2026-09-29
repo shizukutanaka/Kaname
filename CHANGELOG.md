@@ -1,7 +1,7 @@
 ## [Unreleased]
 
 ### Security — D1754: msgid 系の `<@b>`/`<a@>` 側欠落を検出 — `Envelope` に `msgid_empty_side` を追加 (宛名側は D1560 系、`@` 無しは D1746)。
-### Security — D1753: `Content-Type:` の `/` 先立ち `/plain` を検出 — `Envelope` に `ct_lead_slash` を追加 (`/` 無しは D1705、`//` は D1748、サブ型欠落は D1733)。
+### Security — D1753: 宛名欄の `>` 先立ち `To: >a@b` を検出 — `Envelope` に `addr_gt_lead` を追加 (末尾孤立 `>` は D1685; `/plain` 案は既存 `edge_slash_ct` と重複判明のため差替)。
 ### Security — D1752: msgid 系の `<…>` 隣接コメント `(x)<a>`/`<a>(x)` を検出 — `Envelope` に `msgid_paren` を追加 (額の中のコメントは D1619、空白隔ては正規形で不発火)。
 ### Security — D1751: `References:`/`In-Reply-To:` の先頭 `;`/`,` を検出 — `Envelope` に `ref_lead_sep` を追加 (宛名の `;` のみは D1730)。
 ### Security — D1750: 宛名欄の `:` のみ値 `To: :` を検出 — `Envelope` に `addr_colon_only` を追加 (`;` のみは D1730、`,` のみは D1732)。
