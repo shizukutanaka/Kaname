@@ -5879,8 +5879,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.param_star_name {
         render_risks.push("パラメータ名が星で始まります—名に含める実装と欄を捨てる実装で値がずれます".to_string());
     }
-    if env.dup_resent {
-        render_risks.push("同じ再送欄が二度あります—先読みと後読みで再送経路がずれます".to_string());
+    if env.resent_out_of_order {
+        render_risks.push("再送欄の並びが規格と逆です—順序を見ない実装と欄順から転送を推す実装で経路がずれます".to_string());
     }
     if env.received_date_empty {
         render_risks.push("経過印の日付節が空です—無視する実装と欄を捨てる実装で日時記録がずれます".to_string());

@@ -2,7 +2,7 @@
 
 ### Security — D1738: 宛名欄の二つの異名グループ `To: a: x@h; b: y@h;` を検出 — `Envelope` に `addr_two_groups` を追加 (同名グループ重複は D1667)。
 ### Security — D1737: `Received:` の `;` 後日付節欠落 `from a by b;` を検出 — `Envelope` に `received_date_empty` を追加 (`;` 自体の欠落は D1586、欄全体の空値は D1687)。
-### Security — D1736: 同名 `Resent-*` 欄の重複を検出 — `Envelope` に `dup_resent` を追加 (宛名欄一般の重複は D1598)。
+### Security — D1736: `Resent-*` 欄の規格外順序 (`Resent-To:` が `Resent-From:` より先) を検出 — `Envelope` に `resent_out_of_order` を追加 (同名重複は D1676)。(同名重複は既存 D1676 `dup_resent_headers` と重複判明のため差替)
 ### Security — D1735: param 名の `*` 先頭 `;*file=x` を検出 — `Envelope` に `param_star_name` を追加 (name*= の形崩れは D1614)。
 ### Security — D1734: `Content-Transfer-Encoding:` の `,` 区切り `base64,7bit` を検出 — `Envelope` に `cte_comma` を追加 (空白区切り二値は D1717)。
 ### Security — D1733: `Content-Type:` のサブ型欠落 `text/` を検出 — `Envelope` に `ct_empty_subtype` を追加 (`/` 無しは D1705、型本体欠落は D1649)。

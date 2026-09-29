@@ -1184,8 +1184,8 @@ pub struct Envelope {
     pub cte_comma: bool,
     /// param 名が `*` で始まる (D1735 — param 解析ずれ)。
     pub param_star_name: bool,
-    /// 同名 `Resent-*` 欄の重複 (D1736 — 再送経路ずれ)。
-    pub dup_resent: bool,
+    /// `Resent-*` 欄の順序が規格と逆 (D1736 — 再送経路ずれ)。
+    pub resent_out_of_order: bool,
     /// `Received:` の `;` 後日付節が空 (D1737 — 経路日時ずれ)。
     pub received_date_empty: bool,
     /// 宛名欄に二つの異名グループ (D1738 — 宛先解析ずれ)。
@@ -3815,8 +3815,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_comma = has_cte_comma(bytes);
     // D1735: param 名が * 始まり
     let param_star_name = has_param_star_name(bytes);
-    // D1736: 同名 Resent-* 欄重複
-    let dup_resent = has_dup_resent(bytes);
+    // D1736: Resent-* 欄の順序が規格と逆
+    let resent_out_of_order = has_resent_out_of_order(bytes);
     // D1737: Received の ; 後日付節が空
     let received_date_empty = has_received_date_empty(bytes);
     // D1738: 宛名欄の二つの異名グループ
@@ -4314,7 +4314,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_empty_subtype,
         cte_comma,
         param_star_name,
-        dup_resent,
+        resent_out_of_order,
         received_date_empty,
         addr_two_groups,
         uuencode_payload,
@@ -26226,53 +26226,42 @@ pub fn has_param_star_name(raw: &[u8]) -> bool {
     false
 }
 
-/// 同名の `Resent-*` 欄が重複するか判定する (D1736)。
+/// `Resent-*` 欄が規格順と逆の並びで出るか判定する (D1736)。
 ///
-/// `Resent-From:`/`Resent-To:`/`Resent-Date:`/`Resent-Message-ID:` 等が
-/// 同名で二度出る — 再送欄は原則一組。先読み/後読みで再送経路がずれる
-/// (Resent-* の部分的欠落は D1380 系、宛名欄一般の重複は D1598)。
+/// 再送欄は転送機が先頭に逐次 prepend するのが規格 — `Resent-Date:`
+/// `Resent-From:`/`Resent-Sender:` の後に `Resent-To:` 系が続く並びが正常。
+/// `Resent-To:` が `Resent-From:` より前に出る逆順は、順序を見ない実装と
+/// 転送回数を欄順から推す実装で再送経路の読みがずれる
+/// (同名重複は D1676、部分的欠落は D1380 系)。
 #[must_use]
-pub fn has_dup_resent(raw: &[u8]) -> bool {
-    const RESENT: &[&str] = &[
-        "resent-from",
-        "resent-sender",
-        "resent-to",
-        "resent-cc",
-        "resent-bcc",
-        "resent-date",
-        "resent-message-id",
-        "resent-reply-to",
+pub fn has_resent_out_of_order(raw: &[u8]) -> bool {
+    // 規格順のランク: date < from/sender < to/cc/bcc (message-id は不定位置)
+    const RESENT_RANKS: &[(&str, u8)] = &[
+        ("resent-date", 0),
+        ("resent-from", 1),
+        ("resent-sender", 1),
+        ("resent-to", 2),
+        ("resent-cc", 2),
+        ("resent-bcc", 2),
+        ("resent-reply-to", 2),
     ];
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
-    let mut logical = String::with_capacity(header_end + 1);
-    let mut first = true;
+    let mut max_rank: i32 = -1;
     for l in text[..header_end].lines() {
         if l.starts_with(' ') || l.starts_with('\t') {
-            if !first {
-                logical.push(' ');
-                logical.push_str(l.trim_start());
-            }
-        } else {
-            if !first {
-                logical.push('\n');
-            }
-            first = false;
-            logical.push_str(l);
-        }
-    }
-    let mut seen: Vec<String> = Vec::new();
-    for l in logical.lines() {
-        let Some(colon) = l.find(':') else { continue };
-        let name = l[..colon].trim_end().to_ascii_lowercase();
-        if !RESENT.contains(&name.as_str()) {
             continue;
         }
-        if seen.iter().any(|s| s == &name) {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let Some(&(_, rank)) = RESENT_RANKS
+            .iter()
+            .find(|&&(n, _)| name == n) else { continue };
+        if (rank as i32) < max_rank {
             return true;
         }
-        seen.push(name);
+        max_rank = max_rank.max(rank as i32);
     }
     false
 }
@@ -46490,17 +46479,20 @@ mod tests {
     }
 
     #[test]
-    fn dup_resent_二度の再送欄を検出する() {
-        assert!(has_dup_resent(
-            b"Resent-From: a@x\r\nResent-From: b@x\r\n\r\n"
+    fn resent_out_of_order_逆順の再送欄を検出する() {
+        assert!(has_resent_out_of_order(
+            b"Resent-To: b@x\r\nResent-From: a@x\r\n\r\n"
         ));
-        assert!(has_dup_resent(
-            b"Resent-Date: d\r\nResent-From: a@x\r\nResent-Date: e\r\n\r\n"
+        assert!(has_resent_out_of_order(
+            b"Resent-To: b@x\r\nResent-Date: d\r\n\r\n"
         ));
-        assert!(!has_dup_resent(
+        assert!(!has_resent_out_of_order(
+            b"Resent-Date: d\r\nResent-From: a@x\r\nResent-To: b@x\r\n\r\n"
+        ));
+        assert!(!has_resent_out_of_order(
             b"Resent-From: a@x\r\nResent-To: b@x\r\n\r\n"
         ));
-        assert!(!has_dup_resent(b""));
+        assert!(!has_resent_out_of_order(b""));
     }
 
     #[test]
