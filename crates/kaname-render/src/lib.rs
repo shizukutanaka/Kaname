@@ -1262,6 +1262,14 @@ pub struct Envelope {
     pub received_by_at: bool,
     /// msgid 系の `=` 先立ち (D1774 — 識別子照合ずれ)。
     pub msgid_eq_lead: bool,
+    /// クオート境界値内の `;` (D1775 — パート区切りずれ)。
+    pub boundary_quoted_semi: bool,
+    /// `Content-Disposition:` の `*` 型 (D1776 — 添付判定ずれ)。
+    pub cd_star_type: bool,
+    /// `Received:` の `for` 節の `@` 二つ (D1777 — 配送先ずれ)。
+    pub received_for_two_at: bool,
+    /// 宛名欄の無名グループ (D1778 — 宛先ずれ)。
+    pub addr_noname_group: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3965,6 +3973,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_by_at = has_received_by_at(bytes);
     // D1774: msgid 系の = 先立ち
     let msgid_eq_lead = has_msgid_eq_lead(bytes);
+    let boundary_quoted_semi = has_boundary_quoted_semi(bytes);
+    let cd_star_type = has_cd_star_type(bytes);
+    let received_for_two_at = has_received_for_two_at(bytes);
+    let addr_noname_group = has_addr_noname_group(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4497,6 +4509,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_ws_inner,
         received_by_at,
         msgid_eq_lead,
+        boundary_quoted_semi,
+        cd_star_type,
+        received_for_two_at,
+        addr_noname_group,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -28510,6 +28526,181 @@ pub fn has_msgid_eq_lead(raw: &[u8]) -> bool {
     false
 }
 
+/// `boundary=` のクオート値内に `;` があるか判定する (D1775)。
+///
+/// `boundary="a;b"` — bchars はクオート有無に関わらず `;` を
+/// 含まないため仕様上不正だが、boundary_semicolon はクオート値を
+/// 正規形として明示的に外すため漏れる。引用内なら何でも通す実装と
+/// bchars を検査する実装でパート区切りがずれる。
+#[must_use]
+pub fn has_boundary_quoted_semi(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.to_ascii_lowercase().lines() {
+        let Some(v) = l.strip_prefix("content-type:") else { continue };
+        for (i, _) in v.match_indices("boundary=") {
+            let after = &v[i + 9..];
+            let Some(inner) = after
+                .strip_prefix('"')
+                .and_then(|r| r.find('"').map(|e| &r[..e]))
+            else { continue };
+            if inner.contains(';') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型トークンが `*` か判定する (D1776)。
+///
+/// `*` は token 文字だが disposition 名として意味を持たない。
+/// ワイルドカードを受理する実装と欄を捨てる実装で添付判定がずれる
+/// (型欠落は D1708、型二語は D1721)。
+#[must_use]
+pub fn has_cd_star_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-disposition:") else { continue };
+        let ty = v.split(';').next().unwrap_or("").trim();
+        if ty == "*" {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節に `@` が二つあるか判定する (D1777)。
+///
+/// `for a@b@c` — for 節は配送先の宛名だが `@` が二つあると
+/// 先で割る実装・後で割る実装・節を捨てる実装で配送先がずれる
+/// (単一 `@` は正常形、`by` 節の `@` は D1773)。
+#[must_use]
+pub fn has_received_for_two_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].matches('@').count() >= 2
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 宛名欄に無名グループがあるか判定する (D1778)。
+///
+/// `To: : a@b;` — グループ構文 `name: members;` の名前が空。
+/// 名なしを受理する実装と要素を捨てる実装で宛先がずれる
+/// (名前のみ `:` は D1750、要素空の `label:;` は empty_group_syntax)。
+#[must_use]
+pub fn has_addr_noname_group(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "from", "sender", "to", "cc", "bcc", "reply-to",
+        "resent-from", "resent-sender", "resent-to", "resent-cc",
+        "resent-bcc", "resent-reply-to", "return-path", "disposition-notification-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&lower[..colon].trim_end()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        // `:` 始まりで `;` までに要素がある — 無名グループ
+        if v.starts_with(':') {
+            let members = v[1..].split(';').next().unwrap_or("");
+            if !members.trim().is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -49028,6 +49219,87 @@ mod tests {
         assert!(!has_msgid_eq_lead(b"Message-ID: <a@b>\r\n\r\n"));
         assert!(!has_msgid_eq_lead(b"Message-ID: =\r\n\r\n"));
         assert!(!has_msgid_eq_lead(b""));
+    }
+
+    #[test]
+    #[test]
+    fn boundary_quoted_semi_クオート内の仕切りを検出する() {
+        // D1775 — クオート値内 `;`
+        assert!(has_boundary_quoted_semi(
+            b"Content-Type: multipart/mixed; boundary=\"a;b\"\r\n\r\nb"
+        ));
+        // クオート値に `;` なしは不発火
+        assert!(!has_boundary_quoted_semi(
+            b"Content-Type: multipart/mixed; boundary=\"abc\"\r\n\r\nb"
+        ));
+        // 非クオート `;` は boundary_semicolon の領域 — ここは不発火
+        assert!(!has_boundary_quoted_semi(
+            b"Content-Type: multipart/mixed; boundary=a;b\r\n\r\nb"
+        ));
+        // クオートを閉じない — 内側と見なせず不発火
+        assert!(!has_boundary_quoted_semi(
+            b"Content-Type: multipart/mixed; boundary=\"a;b\r\n\r\nb"
+        ));
+        assert!(!has_boundary_quoted_semi(b""));
+    }
+
+    #[test]
+    fn cd_star_type_ワイルドカード型を検出する() {
+        // D1776 — `*` 型
+        assert!(has_cd_star_type(
+            b"Content-Disposition: *; filename=\"a.txt\"\r\n\r\nb"
+        ));
+        // 正当型は不発火
+        assert!(!has_cd_star_type(
+            b"Content-Disposition: attachment; filename=\"a.txt\"\r\n\r\nb"
+        ));
+        // `*` を含む長い名は不発火 (完全一致のみ)
+        assert!(!has_cd_star_type(
+            b"Content-Disposition: att*ach\r\n\r\nb"
+        ));
+        // param 側の `*` (filename*= は RFC 5987) は不発火
+        assert!(!has_cd_star_type(
+            b"Content-Disposition: attachment; filename*=utf-8''a.txt\r\n\r\nb"
+        ));
+        assert!(!has_cd_star_type(b""));
+    }
+
+    #[test]
+    fn received_for_two_at_届け先節の二アットを検出する() {
+        // D1777 — for 節の `@` 二つ
+        assert!(has_received_for_two_at(
+            b"Received: from mx.example.com by mx2.example.com for a@b@c; x\r\n\r\nb"
+        ));
+        // 単一 `@` の for 節は正常形 — 不発火
+        assert!(!has_received_for_two_at(
+            b"Received: from mx.example.com by mx2.example.com for user@example.com; x\r\n\r\nb"
+        ));
+        // from 節の `@` 二つは対象外 — 不発火
+        assert!(!has_received_for_two_at(
+            b"Received: from a@b@c by mx.example.com; x\r\n\r\nb"
+        ));
+        assert!(!has_received_for_two_at(b""));
+    }
+
+    #[test]
+    fn addr_noname_group_無名グループを検出する() {
+        // D1778 — `: a@b;`
+        assert!(has_addr_noname_group(
+            b"To: : a@b.example;\r\n\r\nb"
+        ));
+        // 名ありグループは不発火
+        assert!(!has_addr_noname_group(
+            b"To: team: a@b.example;\r\n\r\nb"
+        ));
+        // `:` だけ (要素なし) は colon_only_addr の領域 — 不発火
+        assert!(!has_addr_noname_group(
+            b"To: :\r\n\r\nb"
+        ));
+        // 素アドレスは不発火
+        assert!(!has_addr_noname_group(
+            b"To: a@b.example\r\n\r\nb"
+        ));
+        assert!(!has_addr_noname_group(b""));
     }
 
     #[test]

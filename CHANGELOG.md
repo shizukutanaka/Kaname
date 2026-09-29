@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1778: `To: : a@b;` の無名グループを検出 — `Envelope` に `addr_noname_group` を追加 (`:` だけは D1750、`label:;` 空要素は empty_group_syntax)。
+### Security — D1777: `Received:` の `for` 節の `@` 二つを検出 — `Envelope` に `received_for_two_at` を追加 (`by` 節の `@` は D1773)。
+### Security — D1776: `Content-Disposition: *` のワイルドカード型を検出 — `Envelope` に `cd_star_type` を追加。
+### Security — D1775: `boundary="a;b"` クオート境界値内の `;` を検出 — `Envelope` に `boundary_quoted_semi` を追加 (非クオートは boundary_semicolon)。
 ### Security — D1774: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `=` 先立ちを検出 — `Envelope` に `msgid_eq_lead` を追加 (`;` は D1755、`,` は D1769)。
 ### Security — D1773: `Received:` の `by` 節の `@` `by user@host` を検出 — `Envelope` に `received_by_at` を追加 (`from` 節の `@` は D1710)。
 ### Security — D1772: `List-Id:`/`Content-ID:` を含む msgid 系の額縁内空白 `<a b@l>` を検出 — `Envelope` に `msgid_ws_inner` を追加 (`spaced_msgid` D1516 の上位互換 — 4欄→6欄)。
