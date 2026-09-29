@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1794: `Content-Disposition: attach>ment` の型本体内 `>` を検出 — `Envelope` に `cd_gt_type` を追加 (`:` は D1765、`=` は D1759、`\` は D1786)。
+### Security — D1793: `Received:` の `by` 節の `%` を検出 — `Envelope` に `received_by_pct` を追加 (`by` の `@` は D1773、`from` の `!` は D1781)。
+### Security — D1792: `Content-Type: text>plain` の型本体内 `>` を検出 — `Envelope` に `ct_gt_type` を追加 (`:` は D1761、`=` は D1758、`\` は D1784)。
+### Security — D1791: `Message-ID: ><a>` 等の `>` 先立ちを検出 — `Envelope` に `msgid_gt_lead` を追加 (References 側は D1757、`<<` は D1787)。
 ### Security — D1790: `<a\b@c>` 等、msgid 系額縁内の逆斜線を検出 — `Envelope` に `msgid_inner_bslash` を追加 (額縁内空白は D1772、宛名の `\` は local_backslash)。
 ### Security — D1789: `Received:` の `via` 節の `@` を検出 — `Envelope` に `received_via_at` を追加 (`by` 節の `@` は D1773、`for` 節の `@` 二つは D1777)。
 ### Security — D1788: `Content-Transfer-Encoding: base\64` の値内逆斜線を検出 — `Envelope` に `cte_bslash` を追加 (`=` は D1780、`;` 先立ちは D1756、`,` は D1734)。
