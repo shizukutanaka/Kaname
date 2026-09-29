@@ -1206,6 +1206,14 @@ pub struct Envelope {
     pub addr_two_angle: bool,
     /// `Message-ID:` 系の `@` 無し識別子 (D1746 — 識別子ずれ)。
     pub msgid_no_at: bool,
+    /// 宛名欄の `@` が二つ (D1747 — 宛先解析ずれ)。
+    pub two_at_addr: bool,
+    /// `Content-Type:` の `//` 空セグメント (D1748 — 型解釈ずれ)。
+    pub ct_double_slash: bool,
+    /// `boundary=` 裸値の内部空白 (D1749 — 境界ずれ)。
+    pub boundary_inner_ws: bool,
+    /// 宛名欄が `:` のみ (D1750 — 宛先解析ずれ)。
+    pub addr_colon_only: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3853,6 +3861,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let addr_two_angle = has_addr_two_angle(bytes);
     // D1746: msgid 系の @ 無し識別子
     let msgid_no_at = has_msgid_no_at(bytes);
+    // D1747: 宛名欄の @ が二つ
+    let two_at_addr = has_two_at_addr(bytes);
+    // D1748: CT の // 空セグメント
+    let ct_double_slash = has_ct_double_slash(bytes);
+    // D1749: boundary 裸値の内部空白
+    let boundary_inner_ws = has_boundary_inner_ws(bytes);
+    // D1750: 宛名欄が : のみ
+    let addr_colon_only = has_addr_colon_only(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4357,6 +4373,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cte_upper,
         addr_two_angle,
         msgid_no_at,
+        two_at_addr,
+        ct_double_slash,
+        boundary_inner_ws,
+        addr_colon_only,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -26770,6 +26790,216 @@ pub fn has_msgid_no_at(raw: &[u8]) -> bool {
     false
 }
 
+/// 宛名欄の値に `@` が二つあるか判定する (D1747)。
+///
+/// `From: a@b@c` / `To: a@b@c` — 宛名に `@` は一つ。
+/// 先の `@` で割る実装と後の `@` で割る実装と構文エラーにする実装で
+/// 宛先がずれる (msgid 系の `@` 二つは D1722)。
+#[must_use]
+pub fn has_two_at_addr(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // `,` 区切りは別の宛名 — 各宛名内で `@` が二つか判定
+        for seg in v.split(',') {
+            // クオート区間の `@` は表示名の文字なので除外
+            let mut in_q = false;
+            let mut ats = 0usize;
+            for b in seg.bytes() {
+                if b == b'"' {
+                    in_q = !in_q;
+                } else if b == b'@' && !in_q {
+                    ats += 1;
+                }
+            }
+            if ats >= 2 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体に `//` (空セグメント) があるか判定する (D1748)。
+///
+/// `Content-Type: text//plain` — `type/subtype` は `/` 一つ。
+/// 空セグメントを読み飛ばす実装と欄ごと捨てる実装で型解釈がずれる
+/// (`/` 無しは D1705、型本体欠落は D1649、サブ型欠落は D1733)。
+#[must_use]
+pub fn has_ct_double_slash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if before_semi.contains("//") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `boundary=` の裸値に内部の空白があるか判定する (D1749)。
+///
+/// `boundary=a b` — bchars に空白は書けない。
+/// 空白で値を切る実装と生採用の実装でパート区切りがずれる
+/// (端点の空白は D1658、端点のドットは D1740、英数字なしは D1718)。
+#[must_use]
+pub fn has_boundary_inner_ws(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "content-type" && name != "content-disposition" {
+            continue;
+        }
+        for part in l[colon + 1..].split(';').skip(1) {
+            let p = part.trim();
+            let Some(eq) = p.find('=') else { continue };
+            if !p[..eq].trim().eq_ignore_ascii_case("boundary") {
+                continue;
+            }
+            let v = p[eq + 1..].trim();
+            // 裸値 (クオートなし) で内部空白
+            if !v.starts_with('"') && v.contains(|c: char| c == ' ' || c == '\t') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 宛名欄の値が `:` のみか判定する (D1750)。
+///
+/// `To: :` — 宛先もグループも無い裸のコロン。
+/// 欄を破棄する実装と空のグループ開始と読む実装で宛先がずれる
+/// (`;` のみは D1730、`,` のみは D1732、空値は D1681)。
+#[must_use]
+pub fn has_addr_colon_only(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if !v.is_empty() && v.bytes().all(|b| b == b':' || b == b' ' || b == b'\t') {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -47008,6 +47238,44 @@ mod tests {
         assert!(has_msgid_no_at(b"Message-ID: <abc>\r\n\r\n"));
         assert!(!has_msgid_no_at(b"Message-ID: <a@x>\r\n\r\n"));
         assert!(!has_msgid_no_at(b""));
+    }
+
+    #[test]
+    fn two_at_addr_二つのアットを検出する() {
+        assert!(has_two_at_addr(b"From: a@b@c\r\n\r\n"));
+        assert!(has_two_at_addr(b"To: a@b@c, d@e\r\n\r\n"));
+        assert!(!has_two_at_addr(b"To: a@b, c@d\r\n\r\n"));
+        assert!(!has_two_at_addr(b"From: \"x@y\" <a@b>\r\n\r\n"));
+        assert!(!has_two_at_addr(b""));
+    }
+
+    #[test]
+    fn ct_double_slash_二重の斜線を検出する() {
+        assert!(has_ct_double_slash(b"Content-Type: text//plain\r\n\r\n"));
+        assert!(!has_ct_double_slash(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_double_slash(b""));
+    }
+
+    #[test]
+    fn boundary_inner_ws_内側の空白を検出する() {
+        assert!(has_boundary_inner_ws(
+            b"Content-Type: multipart/mixed; boundary=a b\r\n\r\n"
+        ));
+        assert!(!has_boundary_inner_ws(
+            b"Content-Type: multipart/mixed; boundary=\"a b\"\r\n\r\n"
+        ));
+        assert!(!has_boundary_inner_ws(
+            b"Content-Type: multipart/mixed; boundary=ab\r\n\r\n"
+        ));
+        assert!(!has_boundary_inner_ws(b""));
+    }
+
+    #[test]
+    fn addr_colon_only_コロンだけの宛名を検出する() {
+        assert!(has_addr_colon_only(b"To: :\r\n\r\n"));
+        assert!(has_addr_colon_only(b"Cc: : :\r\n\r\n"));
+        assert!(!has_addr_colon_only(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_colon_only(b""));
     }
 
     #[test]
