@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-### Security — D1766: `Content-Type:` の型トークン二つ `text/plain text/html` を検出 — `Envelope` に `ct_two_types` を追加 (合法コメントは除外、CD 側は D1721)。
+### Security — D1766: `Content-Disposition:` 型本体内の孤立括弧 `attachment(x`/`attachment)` を検出 — `Envelope` に `cd_paren` を追加 (型二語案は既存 `spaced_media_type` D1512 と重複判明のため差替、CT 側は D1764)。あわせて `spaced_media_type` が合法コメント `text/plain (note)` で誤発火する件を修正。
 ### Security — D1765: `Content-Disposition:` 型本体内の `:` `attachment:x` を検出 — `Envelope` に `cd_colon_type` を追加 (CT 側は D1761、`=` は D1759)。
 ### Security — D1764: `Content-Type:` 型本体内の孤立括弧 `text(plain` を検出 — `Envelope` に `ct_paren` を追加 (合法コメント `(…)` は除外)。
 ### Security — D1763: 宛名ローカル部の `~` `a~b@c` を検出 — `Envelope` に `addr_tilde_local` を追加 (`&` は D1760、その他特殊字は D1557)。

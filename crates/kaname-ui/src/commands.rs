@@ -5969,8 +5969,8 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.cd_colon_type {
         render_risks.push("Content-Disposition の型に二重連があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
     }
-    if env.ct_two_types {
-        render_risks.push("Content-Type の型が二語書かれています—先に読む実装と後に読む実装で型がずれます".to_string());
+    if env.cd_paren {
+        render_risks.push("Content-Disposition の型に括弧があります—型として読む実装と欄を捨てる実装で添付判定がずれます".to_string());
     }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。

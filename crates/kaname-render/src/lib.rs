@@ -1244,8 +1244,8 @@ pub struct Envelope {
     pub ct_paren: bool,
     /// `Content-Disposition:` の型本体内 `:` (D1765 — 添付判定ずれ)。
     pub cd_colon_type: bool,
-    /// `Content-Type:` の型トークン二つ (D1766 — 型解釈ずれ)。
-    pub ct_two_types: bool,
+    /// `Content-Disposition:` の型本体内孤立括弧 (D1766 — 添付判定ずれ)。
+    pub cd_paren: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3931,8 +3931,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_paren = has_ct_paren(bytes);
     // D1765: CD 型本体内の :
     let cd_colon_type = has_cd_colon_type(bytes);
-    // D1766: CT 型トークン二つ
-    let ct_two_types = has_ct_two_types(bytes);
+    // D1766: CD 型本体内の孤立括弧
+    let cd_paren = has_cd_paren(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4456,7 +4456,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_tilde_local,
         ct_paren,
         cd_colon_type,
-        ct_two_types,
+        cd_paren,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -15989,7 +15989,24 @@ pub fn has_spaced_media_type(raw: &[u8]) -> bool {
             continue;
         };
         let mt = v.split(';').next().unwrap_or("").trim();
-        if mt.contains(' ') || mt.contains('\t') {
+        // 型トークンに続く合法コメント `(…)` は CFWS で許容されるため除去
+        let mut scrub = String::with_capacity(mt.len());
+        let mut depth = 0i32;
+        for c in mt.chars() {
+            if depth > 0 {
+                if c == '(' {
+                    depth += 1;
+                } else if c == ')' {
+                    depth -= 1;
+                }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        let scrub = scrub.trim();
+        if scrub.contains(' ') || scrub.contains('\t') {
             return true;
         }
     }
@@ -27890,13 +27907,16 @@ pub fn has_cd_colon_type(raw: &[u8]) -> bool {
     false
 }
 
-/// `Content-Type:` の型トークンが二つあるか判定する (D1766)。
+/// `Content-Disposition:` の型本体に孤立括弧があるか判定する (D1766)。
 ///
-/// `Content-Type: text/plain text/html` — 型は一語のはず。
-/// 先採用/後採用/欄破棄で型解釈がずれる (CD 側は D1721、`/` 異常は
-/// D1705/D1733/D1748)。
+/// `Content-Disposition: attachment(x` — `(`/`)` は token 外字
+/// (コメントは値を括る形でのみ合法)。型として読む実装と欄ごと捨てる
+/// 実装で添付判定がずれる (CT 側は D1764、型二語は D1721)。
+///
+/// ※初案の `ct_two_types` は既存 `spaced_media_type` (D1512) の
+/// 完全部分集合と判明したためこの検出器に差替。
 #[must_use]
-pub fn has_ct_two_types(raw: &[u8]) -> bool {
+pub fn has_cd_paren(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -27918,11 +27938,11 @@ pub fn has_ct_two_types(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
             continue;
         }
         let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
-        // 合法コメント `(…)` を除去してから語数を数える
+        // 合法コメント `(…)` を除去した残りに孤立括弧があれば発火
         let mut scrub = String::with_capacity(before_semi.len());
         let mut depth = 0i32;
         for c in before_semi.chars() {
@@ -27938,7 +27958,7 @@ pub fn has_ct_two_types(raw: &[u8]) -> bool {
                 scrub.push(c);
             }
         }
-        if scrub.split_whitespace().count() > 1 {
+        if scrub.contains('(') || scrub.contains(')') || depth > 0 {
             return true;
         }
     }
@@ -48366,18 +48386,20 @@ mod tests {
     }
 
     #[test]
-    fn ct_two_types_二つの型語を検出する() {
-        assert!(has_ct_two_types(
-            b"Content-Type: text/plain text/html\r\n\r\n"
+    fn cd_paren_型本体の孤立括弧を検出する() {
+        assert!(has_cd_paren(
+            b"Content-Disposition: attachment(x\r\n\r\n"
         ));
-        assert!(!has_ct_two_types(b"Content-Type: text/plain\r\n\r\n"));
-        assert!(!has_ct_two_types(
-            b"Content-Type: text/plain; charset=x\r\n\r\n"
+        assert!(has_cd_paren(
+            b"Content-Disposition: attachment)\r\n\r\n"
         ));
-        assert!(!has_ct_two_types(
-            b"Content-Type: text/plain (ok)\r\n\r\n"
+        assert!(!has_cd_paren(
+            b"Content-Disposition: attachment\r\n\r\n"
         ));
-        assert!(!has_ct_two_types(b""));
+        assert!(!has_cd_paren(
+            b"Content-Disposition: attachment (ok)\r\n\r\n"
+        ));
+        assert!(!has_cd_paren(b""));
     }
 
     #[test]
