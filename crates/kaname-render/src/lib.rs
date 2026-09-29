@@ -5852,6 +5852,60 @@ pub fn has_address_comment(raw: &[u8]) -> bool {
     false
 }
 
+/// メッセージの宣言 `boundary=` 値を外側 `Content-Type:` から抽出する。
+///
+/// ヘッダ run 走査で `--` 行が「宣言された区切り」の時だけ後続を
+/// パートヘッダとみなすための補助 — 本文中の `--` で始まる行を
+/// 区切りと誤認させないため (Devin Review #676-3)。
+fn declared_boundary(text: &str) -> Option<String> {
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        if !lower.starts_with("content-type:") {
+            continue;
+        }
+        let v = &l["content-type:".len()..];
+        // ascii lowercase はバイト位置を保持するので lv のオフセットが v に使える
+        let lv = &lower["content-type:".len()..];
+        let mut off = lv.split(';').next().map_or(0, |s| s.len() + 1);
+        for part in lv.split(';').skip(1) {
+            if let Some(eq) = part.find('=') {
+                if part[..eq].trim() == "boundary" {
+                    let bv = v.get(off + eq + 1..).unwrap_or("").trim();
+                    let bv = bv.trim_matches('"');
+                    if !bv.is_empty() {
+                        return Some(bv.to_string());
+                    }
+                }
+            }
+            off += part.len() + 1;
+        }
+    }
+    None
+}
+
+/// 行が宣言 boundary の開始区切り (`--`+boundary+末尾空白のみ) か判定する。
+///
+/// 閉じ区切り `--bnd--` は新パート開始ではないため含めない。
+fn is_boundary_open(l: &str, boundary: &str) -> bool {
+    l.strip_prefix("--")
+        .is_some_and(|r| r.trim_end() == boundary)
+}
+
 /// Content-Type の `charset=` に危険な文字コードが指定されているか判定する
 /// (D1301)。
 ///
@@ -5888,6 +5942,7 @@ pub fn has_dangerous_charset(raw: &[u8]) -> bool {
     }
     // charset は Content-Type パラメータ — ヘッダ run 内のみ走査する。
     // 本文中の `charset=utf-7` を拾うと送信者が警告を偽造できる。
+    let bnd = declared_boundary(&text);
     let mut scoped = String::with_capacity(logical.len());
     let mut in_headers = true;
     for (idx, l) in logical.lines().enumerate() {
@@ -5898,8 +5953,12 @@ pub fn has_dangerous_charset(raw: &[u8]) -> bool {
             }
             continue;
         }
-        if l.starts_with("--") && !(l.len() > 4 && l.ends_with("--")) {
-            in_headers = true;
+        if l.starts_with("--") {
+            if let Some(b) = bnd.as_deref() {
+                if is_boundary_open(l, b) {
+                    in_headers = true;
+                }
+            }
             continue;
         }
         if in_headers {
@@ -6299,6 +6358,7 @@ pub fn has_overlong_header(raw: &[u8]) -> bool {
 pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
+    let bnd = declared_boundary(&text);
     let mut in_headers = true;
     let mut qp = false;
     for l in text.lines() {
@@ -6309,8 +6369,12 @@ pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
             continue;
         }
         if l.starts_with("--") {
-            in_headers = true;
-            qp = false;
+            if let Some(b) = bnd.as_deref() {
+                if is_boundary_open(l, b) {
+                    in_headers = true;
+                    qp = false;
+                }
+            }
             continue;
         }
         if in_headers {
@@ -6359,6 +6423,7 @@ pub fn has_invalid_qp_escapes(raw: &[u8]) -> bool {
 pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
+    let bnd = declared_boundary(&text);
     let mut in_headers = true;
     let mut b64 = false;
     for l in text.lines() {
@@ -6369,8 +6434,12 @@ pub fn has_invalid_base64_body(raw: &[u8]) -> bool {
             continue;
         }
         if l.starts_with("--") {
-            in_headers = true;
-            b64 = false;
+            if let Some(b) = bnd.as_deref() {
+                if is_boundary_open(l, b) {
+                    in_headers = true;
+                    b64 = false;
+                }
+            }
             continue;
         }
         if in_headers {
@@ -6576,6 +6645,7 @@ pub fn has_degenerate_filename(raw: &[u8]) -> bool {
 pub fn has_typeless_content_type(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
+    let bnd = declared_boundary(&text);
     let mut in_headers = true;
     for l in text.lines() {
         if l.is_empty() {
@@ -6583,7 +6653,11 @@ pub fn has_typeless_content_type(raw: &[u8]) -> bool {
             continue;
         }
         if l.starts_with("--") {
-            in_headers = true;
+            if let Some(b) = bnd.as_deref() {
+                if is_boundary_open(l, b) {
+                    in_headers = true;
+                }
+            }
             continue;
         }
         if !in_headers || l.starts_with(' ') || l.starts_with('\t') {
@@ -20015,11 +20089,26 @@ pub fn has_inner_space_id(raw: &[u8]) -> bool {
 /// (CRLF/LF 混在は D1290 系の行端混在検査、裸 CR は D1297)。
 #[must_use]
 pub fn has_lf_only_headers(raw: &[u8]) -> bool {
-    let has_lf = raw.iter().any(|&b| b == b'\n');
-    if !has_lf {
-        return false;
+    // 判定範囲は最初の空行まで — 本文中の CRLF に引きずられて
+    // LF のみのヘッダを見落とさない (Devin Review #676-2)。
+    let mut header_end = raw.len();
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == b'\n' {
+            if i + 1 < raw.len() && raw[i + 1] == b'\n' {
+                header_end = i + 1;
+                break;
+            }
+            if i + 2 < raw.len() && raw[i + 1] == b'\r' && raw[i + 2] == b'\n' {
+                header_end = i + 1;
+                break;
+            }
+        }
+        i += 1;
     }
-    !raw.windows(2).any(|w| w == [b'\r', b'\n'])
+    let headers = &raw[..header_end];
+    headers.iter().any(|&b| b == b'\n')
+        && !headers.windows(2).any(|w| w == [b'\r', b'\n'])
 }
 
 /// `To:`/`Cc:`/`Bcc:`/`Reply-To:` が2回以上現れるか判定する (D1598)。
@@ -22659,13 +22748,13 @@ pub fn has_long_month(raw: &[u8]) -> bool {
         }
         for tok in l[colon + 1..].split_whitespace() {
             let t = tok.trim_matches(|c: char| c == ',' || c == ';');
+            let (Some(p3), Some(rest3)) = (t.get(..3), t.get(3..)) else {
+                continue;
+            };
             if t.len() > 3
-                && t[..3].to_ascii_lowercase().as_str() // 先頭3字が月名
-                    .as_bytes()
-                    .iter()
-                    .all(|b| b.is_ascii_alphabetic())
-                && MONTHS3.contains(&t[..3].to_ascii_lowercase().as_str())
-                && t[3..].bytes().all(|b| b.is_ascii_alphabetic())
+                && p3.bytes().all(|b| b.is_ascii_alphabetic())
+                && MONTHS3.contains(&p3.to_ascii_lowercase().as_str())
+                && rest3.bytes().all(|b| b.is_ascii_alphabetic())
             {
                 return true;
             }
@@ -24972,7 +25061,8 @@ pub fn has_single_label_domain(raw: &[u8]) -> bool {
                     check(&tok);
                     tok.clear();
                 }
-                _ if in_c == 0 => tok.push(b as char),
+                // 引用表示名 `"user@localhost"` の中身は宛名ではない
+                _ if in_c == 0 && !in_q => tok.push(b as char),
                 _ => {}
             }
         }
@@ -25087,14 +25177,45 @@ pub fn has_param_quoted_eq(raw: &[u8]) -> bool {
         if name != "content-type" && name != "content-disposition" {
             continue;
         }
-        for part in l[colon + 1..].split(';').skip(1) {
-            let Some(eq) = part.find('=') else { continue };
-            let v = part[eq + 1..].trim();
-            if v.starts_with('"') && v.ends_with('"') && v.len() >= 2 {
-                if v[1..v.len() - 1].contains('=') {
+        // `;` 分割はクオート外のみ — `filename="a;b=c"` の
+        // 引用内 `;` で値を切ると引用内 `=` を見落とす (D1700)。
+        let seg = &l[colon + 1..];
+        let mut part = String::new();
+        let mut in_q = false;
+        let mut esc = false;
+        let check = |p: &str| {
+            let Some(eq) = p.find('=') else { return false };
+            let v = p[eq + 1..].trim();
+            v.starts_with('"') && v.ends_with('"') && v.len() >= 2
+                && v[1..v.len() - 1].contains('=')
+        };
+        for c in seg.chars() {
+            if esc {
+                esc = false;
+                part.push(c);
+                continue;
+            }
+            if c == '\\' && in_q {
+                esc = true;
+                part.push(c);
+                continue;
+            }
+            if c == '"' {
+                in_q = !in_q;
+                part.push(c);
+                continue;
+            }
+            if c == ';' && !in_q {
+                if check(&part) {
                     return true;
                 }
+                part.clear();
+                continue;
             }
+            part.push(c);
+        }
+        if check(&part) {
+            return true;
         }
     }
     false
@@ -51332,6 +51453,77 @@ mod tests {
             b"To: a@x.example\r\n\r\nb"
         ));
         assert!(!has_addr_dollar_local(b""));
+    }
+
+    #[test]
+    fn long_month_非ascii語でも落ちない() {
+        // 修正: `t[..3]` が UTF-8 境界を割って panic していた
+        assert!(!has_long_month(
+            "Date: 25 ééa 2025 12:00 +0000\r\n\r\nb".as_bytes()
+        ));
+        // 通常の長月名は発火
+        assert!(has_long_month(
+            b"Date: 25 September 2025 12:00 +0000\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn lf_only_headers_本文crlfに引きずられない() {
+        // 修正: 本文 CRLF があると LF のみヘッダを見落としていた
+        assert!(has_lf_only_headers(
+            b"Subject: x\nFrom: a@b.example\n\nbody line\r\nmore"
+        ));
+        // 全行 LF のみも発火
+        assert!(has_lf_only_headers(b"Subject: x\n\nbody"));
+        // ヘッダに CRLF 混在なら不発火
+        assert!(!has_lf_only_headers(
+            b"Subject: x\r\nFrom: a@b.example\n\nbody"
+        ));
+    }
+
+    #[test]
+    fn boundary_run_本文ダッシュ行を区切りと誤認しない() {
+        // 修正: 宣言外の `--` 行で in_headers が戻り本文を走査していた
+        // 宣言 boundary の無い本文 `--x` + charset は発火しない
+        assert!(!has_dangerous_charset(
+            b"Content-Type: text/plain\r\n\r\n--x\r\ncharset=utf-7\r\n"
+        ));
+        // 宣言 boundary がある本文中の別 `--zzz` 行も発火しない
+        assert!(!has_dangerous_charset(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n--zzz\r\ncharset=utf-7\r\n"
+        ));
+        // 宣言 boundary のパートヘッダ内 charset は発火
+        assert!(has_dangerous_charset(
+            b"Content-Type: multipart/mixed; boundary=abc\r\n\r\n--abc\r\nContent-Type: text/plain; charset=utf-7\r\n\r\nx\r\n"
+        ));
+    }
+
+    #[test]
+    fn param_quoted_eq_引用内区切りで値を切らない() {
+        // 修正: `filename="a;b=c"` を `;` で切り引用内 `=` を見落としていた
+        assert!(has_param_quoted_eq(
+            b"Content-Disposition: attachment; filename=\"a;b=c\"\r\n\r\nb"
+        ));
+        // 従来形も発火
+        assert!(has_param_quoted_eq(
+            b"Content-Type: text/plain; charset=\"a=b\"\r\n\r\nb"
+        ));
+        // 引用内 `=` 無しは不発火
+        assert!(!has_param_quoted_eq(
+            b"Content-Type: text/plain; charset=\"utf-8\"\r\n\r\nb"
+        ));
+    }
+
+    #[test]
+    fn single_label_domain_引用表示名を宛名と誤認しない() {
+        // 修正: `"user@localhost"` の引用内 `@` がドメイン判定に漏れていた
+        assert!(!has_single_label_domain(
+            b"From: \"user@localhost\" <real@example.com>\r\n\r\nb"
+        ));
+        // 単ラベルドメインは発火
+        assert!(has_single_label_domain(
+            b"From: a@localhost\r\n\r\nb"
+        ));
     }
 
     #[test]
