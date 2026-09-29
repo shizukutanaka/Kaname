@@ -1238,6 +1238,14 @@ pub struct Envelope {
     pub ct_colon_type: bool,
     /// 宛名欄の同一アドレス重複 (D1762 — 宛先解析ずれ)。
     pub same_addr_dup: bool,
+    /// 宛名ローカル部の `~` (D1763 — 宛先解析ずれ)。
+    pub addr_tilde_local: bool,
+    /// `Content-Type:` の型本体内 `(` (D1764 — 型解釈ずれ)。
+    pub ct_paren: bool,
+    /// `Content-Disposition:` の型本体内 `:` (D1765 — 添付判定ずれ)。
+    pub cd_colon_type: bool,
+    /// `Content-Type:` の型トークン二つ (D1766 — 型解釈ずれ)。
+    pub ct_two_types: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3917,6 +3925,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_colon_type = has_ct_colon_type(bytes);
     // D1762: 宛名欄の同一アドレス重複
     let same_addr_dup = has_same_addr_dup(bytes);
+    // D1763: 宛名ローカル部の ~
+    let addr_tilde_local = has_addr_tilde_local(bytes);
+    // D1764: CT 型本体内の (
+    let ct_paren = has_ct_paren(bytes);
+    // D1765: CD 型本体内の :
+    let cd_colon_type = has_cd_colon_type(bytes);
+    // D1766: CT 型トークン二つ
+    let ct_two_types = has_ct_two_types(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4437,6 +4453,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         addr_amp_local,
         ct_colon_type,
         same_addr_dup,
+        addr_tilde_local,
+        ct_paren,
+        cd_colon_type,
+        ct_two_types,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -27687,6 +27707,244 @@ pub fn has_same_addr_dup(raw: &[u8]) -> bool {
     false
 }
 
+/// 宛名欄のローカル部に `~` があるか判定する (D1763)。
+///
+/// `To: a~b@c` — `~` は atext 外字なのでローカル部に書けない。
+/// 厳格に拒否する実装とそのまま採用する実装で宛先がずれる
+/// (D1557/D1760 の兄弟 — 表示名の `~` とクオート内は拾わない)。
+#[must_use]
+pub fn has_addr_tilde_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut in_q = false;
+        let mut in_c = 0i32;
+        let mut prev = b'\0';
+        let mut seg = String::new();
+        for &b in v.as_bytes() {
+            if prev == b'\\' {
+                prev = b;
+                continue;
+            }
+            if in_c > 0 {
+                if b == b'(' {
+                    in_c += 1;
+                } else if b == b')' {
+                    in_c -= 1;
+                }
+            } else if in_q {
+                if b == b'"' {
+                    in_q = false;
+                }
+            } else if b == b'"' {
+                in_q = true;
+            } else if b == b'(' {
+                in_c = 1;
+            } else if b == b'@' {
+                let local = seg
+                    .trim_end()
+                    .rsplit(|c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':')
+                    .next()
+                    .unwrap_or("");
+                if local.contains('~') {
+                    return true;
+                }
+            } else {
+                seg.push(b as char);
+            }
+            prev = b;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体に `(` があるか判定する (D1764)。
+///
+/// `Content-Type: text(plain` — `(` は token 外字 (コメントは値を
+/// 括る形でのみ合法)。型として読む実装と欄ごと捨てる実装で型がずれる
+/// (`=` は D1758、`:` は D1761)。
+#[must_use]
+pub fn has_ct_paren(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        // 合法コメント `(…)` を除去した残りに孤立括弧があれば発火
+        let mut scrub = String::with_capacity(before_semi.len());
+        let mut depth = 0i32;
+        for c in before_semi.chars() {
+            if depth > 0 {
+                if c == '(' {
+                    depth += 1;
+                } else if c == ')' {
+                    depth -= 1;
+                }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('(') || scrub.contains(')') || depth > 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型本体に `:` があるか判定する (D1765)。
+///
+/// `Content-Disposition: attachment:x` — `:` は token 外字。
+/// 型として読む実装と欄ごと捨てる実装で添付判定がずれる
+/// (`=` は D1759、CT 側の `:` は D1761)。
+#[must_use]
+pub fn has_cd_colon_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-disposition" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if before_semi.contains(':') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型トークンが二つあるか判定する (D1766)。
+///
+/// `Content-Type: text/plain text/html` — 型は一語のはず。
+/// 先採用/後採用/欄破棄で型解釈がずれる (CD 側は D1721、`/` 異常は
+/// D1705/D1733/D1748)。
+#[must_use]
+pub fn has_ct_two_types(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        // 合法コメント `(…)` を除去してから語数を数える
+        let mut scrub = String::with_capacity(before_semi.len());
+        let mut depth = 0i32;
+        for c in before_semi.chars() {
+            if depth > 0 {
+                if c == '(' {
+                    depth += 1;
+                } else if c == ')' {
+                    depth -= 1;
+                }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.split_whitespace().count() > 1 {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -48072,6 +48330,54 @@ mod tests {
         assert!(!has_same_addr_dup(b"To: a@b, c@d\r\n\r\n"));
         assert!(!has_same_addr_dup(b"To: a@b\r\n\r\n"));
         assert!(!has_same_addr_dup(b""));
+    }
+
+    #[test]
+    fn addr_tilde_local_ローカル部の波線を検出する() {
+        assert!(has_addr_tilde_local(b"To: a~b@c\r\n\r\n"));
+        assert!(has_addr_tilde_local(b"From: <x~y@z>\r\n\r\n"));
+        assert!(!has_addr_tilde_local(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_tilde_local(b""));
+    }
+
+    #[test]
+    fn ct_paren_型本体の括弧を検出する() {
+        assert!(has_ct_paren(b"Content-Type: text(plain\r\n\r\n"));
+        assert!(has_ct_paren(b"Content-Type: text/plain)\r\n\r\n"));
+        assert!(!has_ct_paren(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_paren(
+            b"Content-Type: text/plain (ok)\r\n\r\n"
+        ));
+        assert!(!has_ct_paren(b""));
+    }
+
+    #[test]
+    fn cd_colon_type_型本体の二重連を検出する() {
+        assert!(has_cd_colon_type(
+            b"Content-Disposition: attachment:x\r\n\r\n"
+        ));
+        assert!(!has_cd_colon_type(
+            b"Content-Disposition: attachment\r\n\r\n"
+        ));
+        assert!(!has_cd_colon_type(
+            b"Content-Disposition: attachment; filename=x:y\r\n\r\n"
+        ));
+        assert!(!has_cd_colon_type(b""));
+    }
+
+    #[test]
+    fn ct_two_types_二つの型語を検出する() {
+        assert!(has_ct_two_types(
+            b"Content-Type: text/plain text/html\r\n\r\n"
+        ));
+        assert!(!has_ct_two_types(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_two_types(
+            b"Content-Type: text/plain; charset=x\r\n\r\n"
+        ));
+        assert!(!has_ct_two_types(
+            b"Content-Type: text/plain (ok)\r\n\r\n"
+        ));
+        assert!(!has_ct_two_types(b""));
     }
 
     #[test]

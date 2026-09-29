@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1766: `Content-Type:` の型トークン二つ `text/plain text/html` を検出 — `Envelope` に `ct_two_types` を追加 (合法コメントは除外、CD 側は D1721)。
+### Security — D1765: `Content-Disposition:` 型本体内の `:` `attachment:x` を検出 — `Envelope` に `cd_colon_type` を追加 (CT 側は D1761、`=` は D1759)。
+### Security — D1764: `Content-Type:` 型本体内の孤立括弧 `text(plain` を検出 — `Envelope` に `ct_paren` を追加 (合法コメント `(…)` は除外)。
+### Security — D1763: 宛名ローカル部の `~` `a~b@c` を検出 — `Envelope` に `addr_tilde_local` を追加 (`&` は D1760、その他特殊字は D1557)。
 ### Security — D1762: 宛名欄の同一アドレス重複 `To: a@b, a@b` を検出 — `Envelope` に `same_addr_dup` を追加 (同名欄の重複は D1605 系、識別子重複は D1742)。
 ### Security — D1761: `Content-Type:` 型本体内の `:` `text:plain` を検出 — `Envelope` に `ct_colon_type` を追加 (`=` は D1758)。
 ### Security — D1760: 宛名ローカル部の `&` `a&b@c` を検出 — `Envelope` に `addr_amp_local` を追加 (表示名の `&` とクオート内は除外)。
