@@ -1228,8 +1228,8 @@ pub struct Envelope {
     pub cte_semi_lead: bool,
     /// `References:`/`In-Reply-To:` の `>` 先立ち (D1757 — 識別子照合ずれ)。
     pub ref_gt_lead: bool,
-    /// msgid 系のクオートドメイン (D1758 — 識別子照合ずれ)。
-    pub msgid_quoted_domain: bool,
+    /// `Content-Type:` の型本体内 `=` (D1758 — 型解釈ずれ)。
+    pub ct_eq_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3899,8 +3899,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_semi_lead = has_cte_semi_lead(bytes);
     // D1757: References 系の > 先立ち
     let ref_gt_lead = has_ref_gt_lead(bytes);
-    // D1758: msgid 系のクオートドメイン
-    let msgid_quoted_domain = has_msgid_quoted_domain(bytes);
+    // D1758: CT 型本体内の =
+    let ct_eq_type = has_ct_eq_type(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4416,7 +4416,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         msgid_semi_lead,
         cte_semi_lead,
         ref_gt_lead,
-        msgid_quoted_domain,
+        ct_eq_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -27373,13 +27373,13 @@ pub fn has_ref_gt_lead(raw: &[u8]) -> bool {
     false
 }
 
-/// msgid 系欄の `<…>` でドメインがクオートか判定する (D1758)。
+/// `Content-Type:` の型本体に `=` があるか判定する (D1758)。
 ///
-/// `Message-ID: <a@"b">` — ドメイン部の quoted-string は addr-spec で
-/// 非合法 (宛名欄のクオートドメインは D1646)。クオートを剥がす実装と
-/// 欄ごと捨てる実装で識別子照合がずれる。
+/// `Content-Type: text=plain` — `=` は token 外字なので、
+/// 型として読む実装と param として読む実装と欄ごと捨てる実装で
+/// 型解釈がずれる (param 側の `=` は正規形)。
 #[must_use]
-pub fn has_msgid_quoted_domain(raw: &[u8]) -> bool {
+pub fn has_ct_eq_type(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let header_end = text.find("\n\n").unwrap_or(text.len());
@@ -27401,30 +27401,12 @@ pub fn has_msgid_quoted_domain(raw: &[u8]) -> bool {
     }
     for l in logical.lines() {
         let Some(colon) = l.find(':') else { continue };
-        let name = l[..colon].trim_end().to_ascii_lowercase();
-        let is_id = matches!(
-            name.as_str(),
-            "message-id"
-                | "in-reply-to"
-                | "references"
-                | "resent-message-id"
-                | "list-id"
-                | "content-id"
-        );
-        if !is_id {
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
             continue;
         }
-        let v = &l[colon + 1..];
-        let mut rest = v;
-        while let Some(a) = rest.find('<') {
-            let Some(z) = rest[a..].find('>') else { break };
-            let inner = &rest[a + 1..a + z];
-            if let Some(at) = inner.rfind('@') {
-                if inner[at + 1..].trim_start().starts_with('"') {
-                    return true;
-                }
-            }
-            rest = &rest[a + z + 1..];
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if before_semi.contains('=') {
+            return true;
         }
     }
     false
@@ -47773,11 +47755,13 @@ mod tests {
     }
 
     #[test]
-    fn msgid_quoted_domain_クオートドメインを検出する() {
-        assert!(has_msgid_quoted_domain(b"Message-ID: <a@\"b\">\r\n\r\n"));
-        assert!(!has_msgid_quoted_domain(b"Message-ID: <a@b>\r\n\r\n"));
-        assert!(!has_msgid_quoted_domain(b"Message-ID: <\"a\"@b>\r\n\r\n"));
-        assert!(!has_msgid_quoted_domain(b""));
+    fn ct_eq_type_型本体の等号を検出する() {
+        assert!(has_ct_eq_type(b"Content-Type: text=plain\r\n\r\n"));
+        assert!(!has_ct_eq_type(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_eq_type(
+            b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+        ));
+        assert!(!has_ct_eq_type(b""));
     }
 
     #[test]

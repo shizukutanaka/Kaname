@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-### Security — D1758: msgid 系のクオートドメイン `<a@"b">` を検出 — `Envelope` に `msgid_quoted_domain` を追加 (宛名側は D1646、クオートローカルは D1631)。
+### Security — D1758: `Content-Type:` 型本体内の `=` `text=plain` を検出 — `Envelope` に `ct_eq_type` を追加 (クオートドメイン案は既存 `msgid_quoted_local` と重複判明のため差替)。
 ### Security — D1757: `References:`/`In-Reply-To:` の `>` 先立ち `><a>` を検出 — `Envelope` に `ref_gt_lead` を追加 (宛名側は D1753、`<` 無し `>` は D1635)。
 ### Security — D1756: `CTE:` の `;` 先立ち `;base64` を検出 — `Envelope` に `cte_semi_lead` を追加 (Received の `;` 先立ちは D1743)。
 ### Security — D1755: `Message-ID:`/`List-Id:`/`Content-ID:` 系の `;` 先立ちを検出 — `Envelope` に `msgid_semi_lead` を追加 (References/In-Reply-To は D1751)。
