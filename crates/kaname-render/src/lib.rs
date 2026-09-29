@@ -1310,6 +1310,14 @@ pub struct Envelope {
     pub received_from_pct: bool,
     /// `Content-Transfer-Encoding:` 値内の `>` (D1798 — 復号ずれ)。
     pub cte_gt: bool,
+    /// msgid 系の `@` 先立ち (D1799 — 識別子照合ずれ)。
+    pub msgid_at_lead: bool,
+    /// `Received:` の `id` 節の `%` (D1800 — 経路解析ずれ)。
+    pub received_id_pct: bool,
+    /// `Content-Disposition:` 型本体内の `<` (D1801 — 添付判定ずれ)。
+    pub cd_lt_type: bool,
+    /// 宛名ローカル部の `|` (D1802 — 宛名ずれ)。
+    pub addr_pipe_local: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -4037,6 +4045,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_lt_type = has_ct_lt_type(bytes);
     let received_from_pct = has_received_from_pct(bytes);
     let cte_gt = has_cte_gt(bytes);
+    let msgid_at_lead = has_msgid_at_lead(bytes);
+    let received_id_pct = has_received_id_pct(bytes);
+    let cd_lt_type = has_cd_lt_type(bytes);
+    let addr_pipe_local = has_addr_pipe_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4593,6 +4605,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_lt_type,
         received_from_pct,
         cte_gt,
+        msgid_at_lead,
+        received_id_pct,
+        cd_lt_type,
+        addr_pipe_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -29699,6 +29715,232 @@ pub fn has_cte_gt(raw: &[u8]) -> bool {
     false
 }
 
+/// msgid 系欄の値が `@` 先立ちか判定する (D1799)。
+///
+/// `Message-ID: @<a@b>` — 先頭の `@` を読み飛ばす実装と欄を
+/// 捨てる実装で照合がずれる (`;`/`,`/`=`/`%`/`:`/`>`/`?`/`<<` は
+/// D1755–D1795)。
+#[must_use]
+pub fn has_msgid_at_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('@') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `id` 節の値に `%` があるか判定する (D1800)。
+///
+/// `id a%b` — 旧式 `%` 経路の名残を識別子に継続して読む実装と
+/// 欄を捨てる実装で経路がずれる (`id` の `!` は D1785、`by` の
+/// `%` は D1793、`from` の `%` は D1797)。
+#[must_use]
+pub fn has_received_id_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("id") && i + 1 < toks.len()
+                && toks[i + 1].contains('%')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型本体内に `<` があるか判定する
+/// (D1801)。
+///
+/// `attach<ment` — `<` は tchar でないため型を継続して読む実装と
+/// 欄を捨てる実装で添付判定がずれる (`>` は D1794、`:` は D1765、
+/// `\` は D1786)。
+#[must_use]
+pub fn has_cd_lt_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-disposition:") else {
+            continue;
+        };
+        let ty = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(ty.len());
+        let mut depth = 0i32;
+        for c in ty.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('<') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄のローカル部に `|` があるか判定する (D1802)。
+///
+/// `a|b@c` — `|` は atext 上は合法だが実際の MTA/MUA では稀で、
+/// 拒否する実装と採用する実装で宛名がずれる (`&` D1760、`~` D1763、
+/// `{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+#[must_use]
+pub fn has_addr_pipe_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: [&str; 14] = [
+        "from", "to", "cc", "bcc", "reply-to", "sender", "resent-from",
+        "resent-to", "resent-cc", "resent-bcc", "resent-sender",
+        "return-path", "delivered-to", "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !ADDR_HEADERS.contains(&name) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let bs = v.as_bytes();
+        let mut in_q = false;
+        let mut in_c = false;
+        let mut esc = false;
+        for (i, &b) in bs.iter().enumerate() {
+            if esc {
+                esc = false;
+                continue;
+            }
+            if b == b'\\' {
+                esc = true;
+                continue;
+            }
+            if in_c {
+                if b == b')' {
+                    in_c = false;
+                }
+                continue;
+            }
+            if b == b'(' && !in_q {
+                in_c = true;
+                continue;
+            }
+            if b == b'"' {
+                in_q = !in_q;
+                continue;
+            }
+            if b == b'@' && !in_q {
+                // 表示名内の `@` を除くため `<` がある場合は `<` の後から
+                let seg = if let Some(lt) = v[..i].rfind('<') {
+                    &v[lt + 1..i]
+                } else {
+                    &v[..i]
+                };
+                let local = seg.trim_end().rsplit(
+                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                ).next().unwrap_or("");
+                if local.contains('|') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -50692,6 +50934,89 @@ mod tests {
             b"Content-Transfer-Encoding: base64 >\r\n\r\nb"
         ));
         assert!(!has_cte_gt(b""));
+    }
+
+    #[test]
+    #[test]
+    fn msgid_at_lead_先立つアットを検出する() {
+        // D1799 — `@` 先立ち
+        assert!(has_msgid_at_lead(
+            b"Message-ID: @<a@b.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_at_lead(
+            b"Resent-Message-ID: @<r@h.example>\r\n\r\nb"
+        ));
+        // 裸 `@` は不発火 (空尾)
+        assert!(!has_msgid_at_lead(
+            b"Message-ID: @\r\n\r\nb"
+        ));
+        // 正規識別子は不発火
+        assert!(!has_msgid_at_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // References は4名サブセット対象外
+        assert!(!has_msgid_at_lead(
+            b"References: @<a@b.example>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_at_lead(b""));
+    }
+
+    #[test]
+    fn received_id_pct_荷印節のパーセントを検出する() {
+        // D1800 — id 節値の `%`
+        assert!(has_received_id_pct(
+            b"Received: from mx.example.com by mx2.example.com with ESMTP id a%b; x\r\n\r\nb"
+        ));
+        // 通常 id 値は不発火
+        assert!(!has_received_id_pct(
+            b"Received: from mx.example.com by mx2.example.com with ESMTP id ABC123; x\r\n\r\nb"
+        ));
+        // `%` が by 節側なら対象外 — 不発火
+        assert!(!has_received_id_pct(
+            b"Received: from mx.example.com by a%b.example.com with ESMTP id ABC; x\r\n\r\nb"
+        ));
+        assert!(!has_received_id_pct(b""));
+    }
+
+    #[test]
+    fn cd_lt_type_荷印型の開き額を検出する() {
+        // D1801 — `attach<ment`
+        assert!(has_cd_lt_type(
+            b"Content-Disposition: attach<ment; filename=\"a.txt\"\r\n\r\nb"
+        ));
+        // 正当型は不発火
+        assert!(!has_cd_lt_type(
+            b"Content-Disposition: attachment; filename=\"a.txt\"\r\n\r\nb"
+        ));
+        // param 値側の `<` は対象外 — 不発火
+        assert!(!has_cd_lt_type(
+            b"Content-Disposition: attachment; filename=\"a<b.txt\"\r\n\r\nb"
+        ));
+        assert!(!has_cd_lt_type(b""));
+    }
+
+    #[test]
+    fn addr_pipe_local_ローカル部の縦線を検出する() {
+        // D1802 — `a|b@c`
+        assert!(has_addr_pipe_local(
+            b"To: a|b@x.example\r\n\r\nb"
+        ));
+        assert!(has_addr_pipe_local(
+            b"From: \"n\" <a|b@x.example>\r\n\r\nb"
+        ));
+        // 表示名の `|` は対象外 — 不発火
+        assert!(!has_addr_pipe_local(
+            b"From: \"a|b\" <n@x.example>\r\n\r\nb"
+        ));
+        // ドメイン側 `|` は対象外 — 不発火
+        assert!(!has_addr_pipe_local(
+            b"To: a@b|c.example\r\n\r\nb"
+        ));
+        // 通常宛名は不発火
+        assert!(!has_addr_pipe_local(
+            b"To: a@x.example\r\n\r\nb"
+        ));
+        assert!(!has_addr_pipe_local(b""));
     }
 
     #[test]
