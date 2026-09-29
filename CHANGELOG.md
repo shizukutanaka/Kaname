@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1746: `Message-ID:` 系の `@` 無し識別子 `<abc>` を検出 — `Envelope` に `msgid_no_at` を追加 (`<>` 空は D1625)。
+### Security — D1745: 宛名欄の `<…>` 二組 `From: <a> <b>`/`, ` 無し `To: <a> <b>` を検出 — `Envelope` に `addr_two_angle` を追加 (異名グループは D1738)。
+### Security — D1744: `CTE:` 値の大文字 `BASE64` を検出 — `Envelope` に `cte_upper` を追加 (CT 型の大文字は D1613)。
+### Security — D1743: `Received:` の `;` 先立ち `; date` を検出 — `Envelope` に `received_semi_lead` を追加 (`;` のみ値は D1690、日付節の空は D1737)。
 ### Security — D1742: `References:`/`In-Reply-To:` の同一識別子重複 `<a@x> <a@x>` を検出 — `Envelope` に `msgid_ref_dup` を追加 (異名二識別子は D1666)。
 ### Security — D1741: `Received:` 節値の `:` `from mx:25` を検出 — `Envelope` に `received_port` を追加 (節の空値・重複・欠落は D1691/D1707/D1720 系)。
 ### Security — D1740: `boundary=` 値の端点ドット `boundary=.abc`/`boundary=abc.` を検出 — `Envelope` に `boundary_dot_edge` を追加 (空白端点は D1658、英数字なしは D1718)。

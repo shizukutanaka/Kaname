@@ -5900,6 +5900,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.msgid_ref_dup {
         render_risks.push("同じ識別子が二度あります—捨てる実装と連結する実装で照合がずれます".to_string());
     }
+    if env.received_semi_lead {
+        render_risks.push("経過印が区切りで始まります—空の節を無視する実装と欄を捨てる実装で経路がずれます".to_string());
+    }
+    if env.cte_upper {
+        render_risks.push("符号化の値が大文字です—厳密比較の実装は拾えずデコード経路がずれます".to_string());
+    }
+    if env.addr_two_angle {
+        render_risks.push("宛名欄に額縁が二組あります—結合する実装と先だけ採る実装で宛先がずれます".to_string());
+    }
+    if env.msgid_no_at {
+        render_risks.push("識別子にアットマークがありません—受理する実装と捨てる実装で照合がずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()

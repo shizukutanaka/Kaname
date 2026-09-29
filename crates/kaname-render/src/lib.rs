@@ -1198,6 +1198,14 @@ pub struct Envelope {
     pub received_port: bool,
     /// `References:` 等の同一識別子重複 (D1742 — 識別子ずれ)。
     pub msgid_ref_dup: bool,
+    /// `Received:` が `;` で始まる (D1743 — 経路解析ずれ)。
+    pub received_semi_lead: bool,
+    /// `CTE:` 値の大文字 (D1744 — 符号化判定ずれ)。
+    pub cte_upper: bool,
+    /// 宛名欄の `<…>` が二組 (D1745 — 宛先解析ずれ)。
+    pub addr_two_angle: bool,
+    /// `Message-ID:` 系の `@` 無し識別子 (D1746 — 識別子ずれ)。
+    pub msgid_no_at: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3837,6 +3845,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_port = has_received_port(bytes);
     // D1742: References 等の同一識別子重複
     let msgid_ref_dup = has_msgid_ref_dup(bytes);
+    // D1743: Received が ; で始まる
+    let received_semi_lead = has_received_semi_lead(bytes);
+    // D1744: CTE 値の大文字
+    let cte_upper = has_cte_upper(bytes);
+    // D1745: 宛名欄の <…> が二組
+    let addr_two_angle = has_addr_two_angle(bytes);
+    // D1746: msgid 系の @ 無し識別子
+    let msgid_no_at = has_msgid_no_at(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4337,6 +4353,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         boundary_dot_edge,
         received_port,
         msgid_ref_dup,
+        received_semi_lead,
+        cte_upper,
+        addr_two_angle,
+        msgid_no_at,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -26584,6 +26604,172 @@ pub fn has_msgid_ref_dup(raw: &[u8]) -> bool {
     false
 }
 
+/// `Received:` の値が `;` で始まるか判定する (D1743)。
+///
+/// `Received: ; Thu, 25 Sep…` — 節部分が空で日付だけ。
+/// 空節を無視して日付を読む実装と欄ごと捨てる実装で経路がずれる
+/// (`;` 自体の欠落は D1586、`;` のみ値は D1690、日付節の空は D1737)。
+#[must_use]
+pub fn has_received_semi_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "received" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if v.starts_with(';') && v.len() > 1 && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に大文字があるか判定する (D1744)。
+///
+/// `CTE: BASE64` — mechanism は大小写を区別しないが、厳密に小文字比較する
+/// 実装は `base64` 形しか拾えず、デコード経路がずれる
+/// (CT 型トークンの大文字は D1613、未知値は D1360 系)。
+#[must_use]
+pub fn has_cte_upper(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+            continue;
+        }
+        if l[colon + 1..].bytes().any(|b| b.is_ascii_uppercase()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄に `<…>` の組が二組以上あるか判定する (D1745)。
+///
+/// `From: <a@x> <b@y>` (単一宛名欄は二組で必ず非合法) /
+/// `To: <a@x> <b@y>` (複数宛名欄でも `,` 無し連結は非合法) —
+/// 結合する実装と先の額縁だけ採る実装で宛先集合がずれる
+/// (異名グループ二つは D1738、二つの bare 宛名は D1627 系)。
+#[must_use]
+pub fn has_addr_two_angle(raw: &[u8]) -> bool {
+    const SINGLE_ADDR: &[&str] = &["from", "sender", "return-path", "resent-from", "resent-sender"];
+    const LIST_ADDR: &[&str] = &["to", "cc", "bcc", "reply-to", "resent-to", "resent-cc", "resent-bcc"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let v = &l[colon + 1..];
+        if SINGLE_ADDR.contains(&name.as_str()) && v.matches('<').count() >= 2 {
+            return true;
+        }
+        if LIST_ADDR.contains(&name.as_str()) && v.matches('<').count() >= 2 && !v.contains(',') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Message-ID:` 系の `<…>` 内に `@` が無いか判定する (D1746)。
+///
+/// `<abc>` — `@` 無しの裸語句識別子。単一トークンとして受理する実装と
+/// 構文エラーとして捨てる実装でスレッド照合がずれる
+/// (`<>` 空は D1625、`@` 二つは D1722)。
+#[must_use]
+pub fn has_msgid_no_at(raw: &[u8]) -> bool {
+    const MSGID_HEADERS: &[&str] = &["message-id", "in-reply-to", "references", "resent-message-id"];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !MSGID_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let mut rest = &l[colon + 1..];
+        while let Some(lt) = rest.find('<') {
+            let after = &rest[lt + 1..];
+            let Some(gt) = after.find('>') else { break };
+            let inner = after[..gt].trim();
+            if !inner.is_empty() && !inner.contains('@') {
+                return true;
+            }
+            rest = &after[gt + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -46789,6 +46975,39 @@ mod tests {
             b"References: <a@x.example> <b@x.example>\r\n\r\n"
         ));
         assert!(!has_msgid_ref_dup(b""));
+    }
+
+    #[test]
+    fn received_semi_lead_先立つ仕切りを検出する() {
+        assert!(has_received_semi_lead(
+            b"Received: ; Thu, 25 Sep 2025 12:00:00 +0900\r\n\r\n"
+        ));
+        assert!(!has_received_semi_lead(
+            b"Received: from a.example by b.example; Thu, 25 Sep 2025\r\n\r\n"
+        ));
+        assert!(!has_received_semi_lead(b""));
+    }
+
+    #[test]
+    fn cte_upper_大文字の符丁を検出する() {
+        assert!(has_cte_upper(b"Content-Transfer-Encoding: BASE64\r\n\r\n"));
+        assert!(!has_cte_upper(b"Content-Transfer-Encoding: base64\r\n\r\n"));
+        assert!(!has_cte_upper(b""));
+    }
+
+    #[test]
+    fn addr_two_angle_二つの額縁を検出する() {
+        assert!(has_addr_two_angle(b"From: <a@x> <b@y>\r\n\r\n"));
+        assert!(has_addr_two_angle(b"To: <a@x> <b@y>\r\n\r\n"));
+        assert!(!has_addr_two_angle(b"To: <a@x>, <b@y>\r\n\r\n"));
+        assert!(!has_addr_two_angle(b""));
+    }
+
+    #[test]
+    fn msgid_no_at_アットなし識別子を検出する() {
+        assert!(has_msgid_no_at(b"Message-ID: <abc>\r\n\r\n"));
+        assert!(!has_msgid_no_at(b"Message-ID: <a@x>\r\n\r\n"));
+        assert!(!has_msgid_no_at(b""));
     }
 
     #[test]
