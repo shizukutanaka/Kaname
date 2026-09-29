@@ -1214,6 +1214,14 @@ pub struct Envelope {
     pub boundary_inner_ws: bool,
     /// 宛名欄が `:` のみ (D1750 — 宛先解析ずれ)。
     pub addr_colon_only: bool,
+    /// `References:`/`In-Reply-To:` の先頭区切り (D1751 — 識別子照合ずれ)。
+    pub ref_lead_sep: bool,
+    /// msgid 系の `<…>` に隣接するコメント (D1752 — 識別子照合ずれ)。
+    pub msgid_paren: bool,
+    /// `Content-Type:` の `/` 先立ち (D1753 — 型解釈ずれ)。
+    pub ct_lead_slash: bool,
+    /// msgid 系のローカル部/ドメイン部欠落 (D1754 — 識別子照合ずれ)。
+    pub msgid_empty_side: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3869,6 +3877,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let boundary_inner_ws = has_boundary_inner_ws(bytes);
     // D1750: 宛名欄が : のみ
     let addr_colon_only = has_addr_colon_only(bytes);
+    // D1751: References 系の先頭区切り
+    let ref_lead_sep = has_ref_lead_sep(bytes);
+    // D1752: msgid 系の <> 隣接コメント
+    let msgid_paren = has_msgid_paren(bytes);
+    // D1753: CT の / 先立ち
+    let ct_lead_slash = has_ct_lead_slash(bytes);
+    // D1754: msgid 系の側欠落
+    let msgid_empty_side = has_msgid_empty_side(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4377,6 +4393,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_double_slash,
         boundary_inner_ws,
         addr_colon_only,
+        ref_lead_sep,
+        msgid_paren,
+        ct_lead_slash,
+        msgid_empty_side,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -27002,6 +27022,199 @@ pub fn has_addr_colon_only(raw: &[u8]) -> bool {
     false
 }
 
+/// `References:`/`In-Reply-To:` の値が `;` または `,` 先立ちか判定する
+/// (D1751)。
+///
+/// `References: ;<a@x>` — 先頭区切りを読み飛ばす実装と欄ごと捨てる実装で
+/// スレッド照合がずれる (`;` のみの宛名は D1730、列中の `;`/`,` は
+/// D1731/D1729)。
+#[must_use]
+pub fn has_ref_lead_sep(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        let v = l[colon + 1..].trim_start();
+        if (v.starts_with(';') || v.starts_with(',')) && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 系欄で `<…>` の直前/直後にコメント `(…)` があるか判定する (D1752)。
+///
+/// `Message-ID: (note)<a@x>` / `<a@x>(note)` — コメントを剥がす実装は
+/// `<a@x>` を得るが、結合する実装は識別子を汚染して照合がずれる
+/// (額の中のコメントは D1619、コメント内の @ は D1617)。
+#[must_use]
+pub fn has_msgid_paren(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        // `<` の直前が `)`、または `>` の直後が `(` で隣接コメント
+        let bytes = v.as_bytes();
+        for (i, &b) in bytes.iter().enumerate() {
+            if b == b'<' && i > 0 && bytes[i - 1] == b')' {
+                return true;
+            }
+            if b == b'>' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体が `/` 先立ちか判定する (D1753)。
+///
+/// `Content-Type: /plain` — 型名欠落でサブ型だけ。
+/// 既定値に丸める実装と欄ごと捨てる実装で型解釈がずれる
+/// (`/` 無しは D1705、`//` は D1748、`x/` は D1733、型欠落は D1649)。
+#[must_use]
+pub fn has_ct_lead_slash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if before_semi.starts_with('/') && before_semi.len() > 1 {
+            return true;
+        }
+    }
+    false
+}
+
+/// msgid 系欄の `<…>` で `@` の片側が空か判定する (D1754)。
+///
+/// `Message-ID: <@b>` / `<a@>` — ローカル部またはドメイン部の欠落。
+/// 受理する実装と捨てる実装で識別子照合がずれる
+/// (宛名側の側欠落は D1560 系、`@` 無しは D1746、`<>` 空は D1625)。
+#[must_use]
+pub fn has_msgid_empty_side(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        let is_id = matches!(
+            name.as_str(),
+            "message-id"
+                | "in-reply-to"
+                | "references"
+                | "resent-message-id"
+                | "list-id"
+                | "content-id"
+        );
+        if !is_id {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let mut rest = v;
+        while let Some(a) = rest.find('<') {
+            let Some(z) = rest[a..].find('>') else { break };
+            let inner = &rest[a + 1..a + z];
+            if let Some(at) = inner.rfind('@') {
+                if inner[..at].is_empty() || inner[at + 1..].is_empty() {
+                    return true;
+                }
+            }
+            rest = &rest[a + z + 1..];
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -47278,6 +47491,41 @@ mod tests {
         assert!(has_addr_colon_only(b"Cc: : :\r\n\r\n"));
         assert!(!has_addr_colon_only(b"To: a@b\r\n\r\n"));
         assert!(!has_addr_colon_only(b""));
+    }
+
+    #[test]
+    fn ref_lead_sep_先立つ区切りを検出する() {
+        assert!(has_ref_lead_sep(b"References: ;<a@x>\r\n\r\n"));
+        assert!(has_ref_lead_sep(b"In-Reply-To: ,<a@x>\r\n\r\n"));
+        assert!(!has_ref_lead_sep(b"References: <a@x>\r\n\r\n"));
+        assert!(!has_ref_lead_sep(b"References: ;\r\n\r\n"));
+        assert!(!has_ref_lead_sep(b""));
+    }
+
+    #[test]
+    fn msgid_paren_隣接コメントを検出する() {
+        assert!(has_msgid_paren(b"Message-ID: (note)<a@x>\r\n\r\n"));
+        assert!(has_msgid_paren(b"Message-ID: <a@x>(note)\r\n\r\n"));
+        assert!(!has_msgid_paren(b"Message-ID: (note) <a@x>\r\n\r\n"));
+        assert!(!has_msgid_paren(b"Message-ID: <a@x>\r\n\r\n"));
+        assert!(!has_msgid_paren(b""));
+    }
+
+    #[test]
+    fn ct_lead_slash_先立つ斜線を検出する() {
+        assert!(has_ct_lead_slash(b"Content-Type: /plain\r\n\r\n"));
+        assert!(!has_ct_lead_slash(b"Content-Type: /\r\n\r\n"));
+        assert!(!has_ct_lead_slash(b"Content-Type: text/plain\r\n\r\n"));
+        assert!(!has_ct_lead_slash(b""));
+    }
+
+    #[test]
+    fn msgid_empty_side_側欠落を検出する() {
+        assert!(has_msgid_empty_side(b"Message-ID: <@b>\r\n\r\n"));
+        assert!(has_msgid_empty_side(b"Message-ID: <a@>\r\n\r\n"));
+        assert!(!has_msgid_empty_side(b"Message-ID: <a@b>\r\n\r\n"));
+        assert!(!has_msgid_empty_side(b"Message-ID: <>\r\n\r\n"));
+        assert!(!has_msgid_empty_side(b""));
     }
 
     #[test]
