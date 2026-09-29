@@ -1174,6 +1174,14 @@ pub struct Envelope {
     pub msgid_ref_comma: bool,
     /// 宛名欄が `;` のみ (D1730 — 宛先解析ずれ)。
     pub addr_semicolon_only: bool,
+    /// `References:` 等の識別子列の `;` (D1731 — 識別子ずれ)。
+    pub msgid_ref_semicolon: bool,
+    /// 宛名欄が `,` のみ (D1732 — 宛先解析ずれ)。
+    pub addr_comma_only: bool,
+    /// `Content-Type:` の型のみで `/` 後が空 (D1733 — 型解釈ずれ)。
+    pub ct_empty_subtype: bool,
+    /// `CTE:` 値の `,` 区切り二値 (D1734 — 符号化判定ずれ)。
+    pub cte_comma: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3789,6 +3797,14 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let msgid_ref_comma = has_msgid_ref_comma(bytes);
     // D1730: 宛名欄が ; のみ
     let addr_semicolon_only = has_addr_semicolon_only(bytes);
+    // D1731: 識別子列の ;
+    let msgid_ref_semicolon = has_msgid_ref_semicolon(bytes);
+    // D1732: 宛名欄が , のみ
+    let addr_comma_only = has_addr_comma_only(bytes);
+    // D1733: CT の型のみで / 後が空
+    let ct_empty_subtype = has_ct_empty_subtype(bytes);
+    // D1734: CTE 値の , 区切り二値
+    let cte_comma = has_cte_comma(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4277,6 +4293,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         param_name_dup,
         msgid_ref_comma,
         addr_semicolon_only,
+        msgid_ref_semicolon,
+        addr_comma_only,
+        ct_empty_subtype,
+        cte_comma,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -25970,6 +25990,179 @@ pub fn has_addr_semicolon_only(raw: &[u8]) -> bool {
     false
 }
 
+/// `References:`/`In-Reply-To:` の識別子列に `;` が含まれるか判定する (D1731)。
+///
+/// `References: <a@b>;<c@d>` — 識別子列の区切りは空白で、
+/// `;` は書けない。`;` で区切る実装と `;` を識別子の一部と読む実装で
+/// スレッド照合がずれる (列の `,` は D1729)。
+#[must_use]
+pub fn has_msgid_ref_semicolon(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        let name = l[..colon].trim_end().to_ascii_lowercase();
+        if name != "references" && name != "in-reply-to" {
+            continue;
+        }
+        if l[colon + 1..].contains(';') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄の値が `,` のみか判定する (D1732)。
+///
+/// `To: ,` — 宛先もグループも無い裸の区切り。欄を破棄する実装と
+/// 空要素として残す実装で宛先集合がずれる (`;` のみは D1730、空値は D1681)。
+#[must_use]
+pub fn has_addr_comma_only(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: &[&str] = &[
+        "to",
+        "cc",
+        "bcc",
+        "from",
+        "sender",
+        "reply-to",
+        "resent-to",
+        "resent-cc",
+        "resent-bcc",
+        "resent-from",
+        "resent-sender",
+        "return-path",
+        "delivered-to",
+        "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if !ADDR_HEADERS.contains(&l[..colon].trim_end().to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if !v.is_empty() && v.bytes().all(|b| b == b',' || b == b' ' || b == b'\t') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体が `/` で終わるか判定する (D1733)。
+///
+/// `Content-Type: text/` — `/` だけ残った主型。
+/// サブ型を既定値とみなす実装と欄ごと捨てる実装で型解釈がずれる
+/// (`/` 無しは D1705、型本体欠落 `;` 先立ちは D1649)。
+#[must_use]
+pub fn has_ct_empty_subtype(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-type" {
+            continue;
+        }
+        let before_semi = l[colon + 1..].split(';').next().unwrap_or("").trim();
+        if let Some(slash) = before_semi.find('/') {
+            let sub = before_semi[slash + 1..].trim();
+            if sub.is_empty() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `,` 区切りが含まれるか判定する (D1734)。
+///
+/// `CTE: base64,7bit` — mechanism は単一トークンが規格。
+/// `,` で区切って先を採る実装と、欄ごと捨てる実装で
+/// 本文のデコードがずれる (二トークン空白区切りは D1717)。
+#[must_use]
+pub fn has_cte_comma(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let Some(colon) = l.find(':') else { continue };
+        if l[..colon].trim_end().to_ascii_lowercase() != "content-transfer-encoding" {
+            continue;
+        }
+        if l[colon + 1..].contains(',') {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -46032,6 +46225,48 @@ mod tests {
         assert!(has_addr_semicolon_only(b"Cc: ; ;\r\n\r\n"));
         assert!(!has_addr_semicolon_only(b"To: a@b\r\n\r\n"));
         assert!(!has_addr_semicolon_only(b""));
+    }
+
+    #[test]
+    fn msgid_ref_semicolon_識別子列のセミコロンを検出する() {
+        assert!(has_msgid_ref_semicolon(
+            b"References: <a@x>;<b@x>\r\n\r\n"
+        ));
+        assert!(!has_msgid_ref_semicolon(
+            b"References: <a@x> <b@x>\r\n\r\n"
+        ));
+        assert!(!has_msgid_ref_semicolon(b""));
+    }
+
+    #[test]
+    fn addr_comma_only_コンマだけの宛名を検出する() {
+        assert!(has_addr_comma_only(b"To: ,\r\n\r\n"));
+        assert!(has_addr_comma_only(b"Cc: , ,\r\n\r\n"));
+        assert!(!has_addr_comma_only(b"To: a@b\r\n\r\n"));
+        assert!(!has_addr_comma_only(b""));
+    }
+
+    #[test]
+    fn ct_empty_subtype_半型の型札を検出する() {
+        assert!(has_ct_empty_subtype(
+            b"Content-Type: text/\r\n\r\n"
+        ));
+        assert!(has_ct_empty_subtype(
+            b"Content-Type: multipart/mixed; boundary=/\r\nContent-Type: text/ ;\r\n\r\n"
+        ));
+        assert!(!has_ct_empty_subtype(
+            b"Content-Type: text/plain\r\n\r\n"
+        ));
+        assert!(!has_ct_empty_subtype(b""));
+    }
+
+    #[test]
+    fn cte_comma_コンマ区切り符丁を検出する() {
+        assert!(has_cte_comma(
+            b"Content-Transfer-Encoding: base64,7bit\r\n\r\n"
+        ));
+        assert!(!has_cte_comma(b"Content-Transfer-Encoding: base64\r\n\r\n"));
+        assert!(!has_cte_comma(b""));
     }
 
     #[test]

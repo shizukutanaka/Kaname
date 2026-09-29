@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1734: `Content-Transfer-Encoding:` の `,` 区切り `base64,7bit` を検出 — `Envelope` に `cte_comma` を追加 (空白区切り二値は D1717)。
+### Security — D1733: `Content-Type:` のサブ型欠落 `text/` を検出 — `Envelope` に `ct_empty_subtype` を追加 (`/` 無しは D1705、型本体欠落は D1649)。
+### Security — D1732: 宛名欄の `,` のみ値 `To: ,` を検出 — `Envelope` に `addr_comma_only` を追加 (`;` のみは D1730、空値は D1681)。
+### Security — D1731: `References:`/`In-Reply-To:` の識別子列の `;` `<a>;<b>` を検出 — `Envelope` に `msgid_ref_semicolon` を追加 (列の `,` は D1729)。
 ### Security — D1730: 宛名欄の `;` のみ値 `To: ;` を検出 — `Envelope` に `addr_semicolon_only` を追加 (空値は D1681)。
 ### Security — D1729: `References:`/`In-Reply-To:` の識別子列の `,` `<a>,<b>` を検出 — `Envelope` に `msgid_ref_comma` を追加 (識別子内 `%`/`!` は D1626)。
 ### Security — D1728: 同一欄内の同名 param 重複 `;charset=a; charset=b` を検出 — `Envelope` に `param_name_dup` を追加 (boundary 限定の重複は D1725)。(裸名札は既存 D1504 `has_bare_param` と重複判明のため差替)

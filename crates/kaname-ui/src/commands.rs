@@ -5864,6 +5864,18 @@ pub async fn analyze_raw_email(bytes: &[u8]) -> Result<ImportedEmail, String> {
     if env.addr_semicolon_only {
         render_risks.push("宛名欄が区切りだけです—欄を破棄する実装と空集合とする実装で宛先がずれます".to_string());
     }
+    if env.msgid_ref_semicolon {
+        render_risks.push("識別子の列にセミコロンがあります—区切る実装と識別子の一部と読む実装で照合がずれます".to_string());
+    }
+    if env.addr_comma_only {
+        render_risks.push("宛名欄がコンマだけです—欄を破棄する実装と空要素とする実装で宛先がずれます".to_string());
+    }
+    if env.ct_empty_subtype {
+        render_risks.push("Content-Type の型が斜線だけです—既定値と読む実装と欄を捨てる実装で型がずれます".to_string());
+    }
+    if env.cte_comma {
+        render_risks.push("符号化の値にコンマがあります—区切って先を採る実装と欄を捨てる実装でデコードがずれます".to_string());
+    }
     // D1280: 本文が空 + メール添付のみ — IRONSCALES 2026-01 の形:
     //    外側は認証を通るが中身ゼロ、ペイロードは全て .eml の内側。
     if analysis_text.trim().is_empty()
