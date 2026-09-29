@@ -1286,6 +1286,14 @@ pub struct Envelope {
     pub received_id_bang: bool,
     /// `Content-Disposition:` 型本体内の逆斜線 (D1786 — 添付判定ずれ)。
     pub cd_bslash_type: bool,
+    /// msgid 系の二重 `<` 先立ち (D1787 — 識別子照合ずれ)。
+    pub msgid_lt_lead: bool,
+    /// `Content-Transfer-Encoding:` 値の逆斜線 (D1788 — 復号ずれ)。
+    pub cte_bslash: bool,
+    /// `Received:` の `via` 節の `@` (D1789 — 経路解析ずれ)。
+    pub received_via_at: bool,
+    /// msgid 系の額縁内逆斜線 (D1790 — 識別子照合ずれ)。
+    pub msgid_inner_bslash: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -4001,6 +4009,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let ct_bslash_type = has_ct_bslash_type(bytes);
     let received_id_bang = has_received_id_bang(bytes);
     let cd_bslash_type = has_cd_bslash_type(bytes);
+    let msgid_lt_lead = has_msgid_lt_lead(bytes);
+    let cte_bslash = has_cte_bslash(bytes);
+    let received_via_at = has_received_via_at(bytes);
+    let msgid_inner_bslash = has_msgid_inner_bslash(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4545,6 +4557,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         ct_bslash_type,
         received_id_bang,
         cd_bslash_type,
+        msgid_lt_lead,
+        cte_bslash,
+        received_via_at,
+        msgid_inner_bslash,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -29097,6 +29113,191 @@ pub fn has_cd_bslash_type(raw: &[u8]) -> bool {
     false
 }
 
+/// msgid 系欄の値が `<<` 二重先立ちか判定する (D1787)。
+///
+/// `Message-ID: <<a@b>` — 二重の開き括弧を剥がす実装と欄ごと
+/// 捨てる実装で識別子照合がずれる (`;`/`,`/`=`/`%`/`:` 先立ちは
+/// D1755/D1769/D1774/D1779/D1783)。
+#[must_use]
+pub fn has_msgid_lt_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with("<<") {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に逆斜線があるか判定する
+/// (D1788)。
+///
+/// `CTE: base\64` — `\` は token 文字でないため値を継続して読む
+/// 実装と欄を捨てる実装で復号がずれる (`=` は D1780、`;` 先立ちは
+/// D1756、`,` は D1734、孤立括弧は D1768)。
+#[must_use]
+pub fn has_cte_bslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        let tok = v.trim().split(|c: char| c.is_whitespace() || c == ';')
+            .next().unwrap_or("");
+        if tok.contains('\\') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `via` 節の値に `@` があるか判定する (D1789)。
+///
+/// `via a@b` — via 節は経路手段を名乗る場所で `@` は非合法。
+/// 宛名と読む実装とホスト名と読む実装で経路がずれる (`by` 節の
+/// `@` は D1773、`for` 節の `@` 二つは D1777)。
+#[must_use]
+pub fn has_received_via_at(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("via") && i + 1 < toks.len()
+                && toks[i + 1].contains('@')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// msgid 系欄の `<…>` 内に逆斜線があるか判定する (D1790)。
+///
+/// `<a\b@c>` — 額縁内の `\` をエスケープと読む実装と字とする
+/// 実装で識別子照合がずれる (額縁内空白は D1772、宛名
+/// ローカル部の `\` は local_backslash)。
+#[must_use]
+pub fn has_msgid_inner_bslash(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "in-reply-to" | "references"
+                | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let rest = &l[colon + 1..];
+        let mut scan = rest;
+        while let Some(a) = scan.find('<') {
+            match scan[a..].find('>') {
+                Some(b) => {
+                    if scan[a + 1..a + b].contains('\\') {
+                        return true;
+                    }
+                    scan = &scan[a + b + 1..];
+                }
+                None => break,
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -49855,6 +50056,81 @@ mod tests {
             b"Content-Disposition: attachment; filename=\"a\\b.txt\"\r\n\r\nb"
         ));
         assert!(!has_cd_bslash_type(b""));
+    }
+
+    #[test]
+    #[test]
+    fn msgid_lt_lead_二重開き額を検出する() {
+        // D1787 — `<<`
+        assert!(has_msgid_lt_lead(
+            b"Message-ID: <<a@b.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_lt_lead(
+            b"List-Id: <<l.example>\r\n\r\nb"
+        ));
+        // 通常識別子は不発火
+        assert!(!has_msgid_lt_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // References は4名サブセット対象外
+        assert!(!has_msgid_lt_lead(
+            b"References: <<a@b.example>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_lt_lead(b""));
+    }
+
+    #[test]
+    fn cte_bslash_値の逆斜線を検出する() {
+        // D1788 — `base\64`
+        assert!(has_cte_bslash(
+            b"Content-Transfer-Encoding: base\\64\r\n\r\nb"
+        ));
+        // 正当値は不発火
+        assert!(!has_cte_bslash(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // `;` 後の param 側は対象外 — 不発火
+        assert!(!has_cte_bslash(
+            b"Content-Transfer-Encoding: base64; x=a\\b\r\n\r\nb"
+        ));
+        assert!(!has_cte_bslash(b""));
+    }
+
+    #[test]
+    fn received_via_at_便り節のアットを検出する() {
+        // D1789 — via 節値の `@`
+        assert!(has_received_via_at(
+            b"Received: from mx.example.com by mx2.example.com via a@b; x\r\n\r\nb"
+        ));
+        // 通常 via は不発火
+        assert!(!has_received_via_at(
+            b"Received: from mx.example.com by mx2.example.com via TCP; x\r\n\r\nb"
+        ));
+        // `@` が by 節側なら対象外 — 不発火 (by は D1773)
+        assert!(!has_received_via_at(
+            b"Received: from mx.example.com by user@host; x\r\n\r\nb"
+        ));
+        assert!(!has_received_via_at(b""));
+    }
+
+    #[test]
+    fn msgid_inner_bslash_額縁内の逆斜線を検出する() {
+        // D1790 — `<a\b@c>`
+        assert!(has_msgid_inner_bslash(
+            b"Message-ID: <a\\b@c.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_inner_bslash(
+            b"List-Id: <x\\y@l.example>\r\n\r\nb"
+        ));
+        // 額縁内に `\` がなければ不発火
+        assert!(!has_msgid_inner_bslash(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // 額縁の外側の `\` は対象外 — 不発火
+        assert!(!has_msgid_inner_bslash(
+            b"Message-ID: <a@b.example> \\junk\r\n\r\nb"
+        ));
+        assert!(!has_msgid_inner_bslash(b""));
     }
 
     #[test]

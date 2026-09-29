@@ -1200,3 +1200,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1784 | `Content-Type:` 型本体内の `\` | 型継続 vs 欄破棄で型ずれ |
 | D1785 | `Received:` の `id` 節の `!` | bang 読み vs 欄破棄で識別子ずれ |
 | D1786 | `Content-Disposition:` 型本体内の `\` | 型継続 vs 欄破棄で添付判定ずれ |
+| D1787 | msgid 系の二重 `<` 先立ち | 剥がし vs 欄破棄で照合ずれ |
+| D1788 | `Content-Transfer-Encoding:` 値の `\` | 値継続 vs 欄破棄で復号ずれ |
+| D1789 | `Received:` の `via` 節の `@` | 宛名読み vs ホスト読みで経路ずれ |
+| D1790 | msgid 系額縁内の `\` | 外す vs 字とするで照合ずれ |
