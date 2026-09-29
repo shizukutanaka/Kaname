@@ -1318,6 +1318,14 @@ pub struct Envelope {
     pub cd_lt_type: bool,
     /// 宛名ローカル部の `|` (D1802 — 宛名ずれ)。
     pub addr_pipe_local: bool,
+    /// msgid 系の `!` 先立ち (D1803 — 識別子照合ずれ)。
+    pub msgid_bang_lead: bool,
+    /// `Received:` の `for` 節の `%` (D1804 — 配送先ずれ)。
+    pub received_for_pct: bool,
+    /// `Content-Transfer-Encoding:` 値内の `<` (D1805 — 復号ずれ)。
+    pub cte_lt: bool,
+    /// 宛名ローカル部の `$` (D1806 — 宛名ずれ)。
+    pub addr_dollar_local: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -4049,6 +4057,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_id_pct = has_received_id_pct(bytes);
     let cd_lt_type = has_cd_lt_type(bytes);
     let addr_pipe_local = has_addr_pipe_local(bytes);
+    let msgid_bang_lead = has_msgid_bang_lead(bytes);
+    let received_for_pct = has_received_for_pct(bytes);
+    let cte_lt = has_cte_lt(bytes);
+    let addr_dollar_local = has_addr_dollar_local(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4609,6 +4621,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         received_id_pct,
         cd_lt_type,
         addr_pipe_local,
+        msgid_bang_lead,
+        received_for_pct,
+        cte_lt,
+        addr_dollar_local,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -29941,6 +29957,222 @@ pub fn has_addr_pipe_local(raw: &[u8]) -> bool {
     false
 }
 
+/// msgid 系欄の値が `!` 先立ちか判定する (D1803)。
+///
+/// `Message-ID: !<a@b>` — 先頭の `!` を bang 経路と読む実装・
+/// 読み飛ばす実装・欄を捨てる実装で照合がずれる
+/// (`;`/`,`/`=`/`%`/`:`/`>`/`?`/`@`/`<<` は D1755–D1799)。
+#[must_use]
+pub fn has_msgid_bang_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with('!') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `for` 節の値に `%` があるか判定する (D1804)。
+///
+/// `for a%b` — UUCP 旧式 `%` 経路の名残を宛名に継続して読む
+/// 実装と欄を捨てる実装で配送先がずれる (`for` の `@` 二つは
+/// D1777、`id`/`by`/`from` の `%` は D1800/D1793/D1797)。
+#[must_use]
+pub fn has_received_for_pct(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("for") && i + 1 < toks.len()
+                && toks[i + 1].contains('%')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Transfer-Encoding:` の値に `<` があるか判定する
+/// (D1805)。
+///
+/// `base<64` — `<` は tchar でないため先頭トークンに `<` を
+/// 含む値を継続して読む実装と欄を捨てる実装で復号がずれる
+/// (`>` は D1798、`=` は D1780、`\` は D1788)。
+#[must_use]
+pub fn has_cte_lt(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-transfer-encoding:") else {
+            continue;
+        };
+        let tok = v.trim().split(|c: char| c.is_whitespace() || c == ';')
+            .next()
+            .unwrap_or("");
+        if tok.contains('<') {
+            return true;
+        }
+    }
+    false
+}
+
+/// 宛名欄のローカル部に `$` があるか判定する (D1806)。
+///
+/// `a$b@c` — `$` は atext 上は合法だが実際の MTA/MUA では稀で、
+/// 拒否する実装と採用する実装で宛名がずれる (`|` D1802、
+/// `&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+#[must_use]
+pub fn has_addr_dollar_local(raw: &[u8]) -> bool {
+    const ADDR_HEADERS: [&str; 14] = [
+        "from", "to", "cc", "bcc", "reply-to", "sender", "resent-from",
+        "resent-to", "resent-cc", "resent-bcc", "resent-sender",
+        "return-path", "delivered-to", "envelope-to",
+    ];
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !ADDR_HEADERS.contains(&name) {
+            continue;
+        }
+        let v = &l[colon + 1..];
+        let bs = v.as_bytes();
+        let mut in_q = false;
+        let mut in_c = false;
+        let mut esc = false;
+        for (i, &b) in bs.iter().enumerate() {
+            if esc {
+                esc = false;
+                continue;
+            }
+            if b == b'\\' {
+                esc = true;
+                continue;
+            }
+            if in_c {
+                if b == b')' {
+                    in_c = false;
+                }
+                continue;
+            }
+            if b == b'(' && !in_q {
+                in_c = true;
+                continue;
+            }
+            if b == b'"' {
+                in_q = !in_q;
+                continue;
+            }
+            if b == b'@' && !in_q {
+                let seg = if let Some(lt) = v[..i].rfind('<') {
+                    &v[lt + 1..i]
+                } else {
+                    &v[..i]
+                };
+                let local = seg.trim_end().rsplit(
+                    |c: char| c == ' ' || c == '\t' || c == ',' || c == ';' || c == '<' || c == ':',
+                ).next().unwrap_or("");
+                if local.contains('$') {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -51017,6 +51249,89 @@ mod tests {
             b"To: a@x.example\r\n\r\nb"
         ));
         assert!(!has_addr_pipe_local(b""));
+    }
+
+    #[test]
+    #[test]
+    fn msgid_bang_lead_先立つ感嘆符を検出する() {
+        // D1803 — `!` 先立ち
+        assert!(has_msgid_bang_lead(
+            b"Message-ID: !<a@b.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_bang_lead(
+            b"List-Id: !<l.example>\r\n\r\nb"
+        ));
+        // 裸 `!` は不発火 (空尾)
+        assert!(!has_msgid_bang_lead(
+            b"Message-ID: !\r\n\r\nb"
+        ));
+        // 正規識別子は不発火
+        assert!(!has_msgid_bang_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // References は4名サブセット対象外
+        assert!(!has_msgid_bang_lead(
+            b"References: !<a@b.example>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_bang_lead(b""));
+    }
+
+    #[test]
+    fn received_for_pct_届け節のパーセントを検出する() {
+        // D1804 — for 節値の `%`
+        assert!(has_received_for_pct(
+            b"Received: from mx.example.com by mx2.example.com for a%b@x.example; x\r\n\r\nb"
+        ));
+        // 通常宛名は不発火
+        assert!(!has_received_for_pct(
+            b"Received: from mx.example.com by mx2.example.com for u@x.example; x\r\n\r\nb"
+        ));
+        // `%` が by 節側なら対象外 — 不発火
+        assert!(!has_received_for_pct(
+            b"Received: from mx.example.com by a%b.example.com for u@x.example; x\r\n\r\nb"
+        ));
+        assert!(!has_received_for_pct(b""));
+    }
+
+    #[test]
+    fn cte_lt_値の開き額を検出する() {
+        // D1805 — `base<64`
+        assert!(has_cte_lt(
+            b"Content-Transfer-Encoding: base<64\r\n\r\nb"
+        ));
+        // 正当値は不発火
+        assert!(!has_cte_lt(
+            b"Content-Transfer-Encoding: base64\r\n\r\nb"
+        ));
+        // 二トークン目の `<` は対象外 — 不発火
+        assert!(!has_cte_lt(
+            b"Content-Transfer-Encoding: base64 <\r\n\r\nb"
+        ));
+        assert!(!has_cte_lt(b""));
+    }
+
+    #[test]
+    fn addr_dollar_local_ローカル部のドル符を検出する() {
+        // D1806 — `a$b@c`
+        assert!(has_addr_dollar_local(
+            b"To: a$b@x.example\r\n\r\nb"
+        ));
+        assert!(has_addr_dollar_local(
+            b"From: \"n\" <a$b@x.example>\r\n\r\nb"
+        ));
+        // 表示名の `$` は対象外 — 不発火
+        assert!(!has_addr_dollar_local(
+            b"From: \"a$b\" <n@x.example>\r\n\r\nb"
+        ));
+        // ドメイン側 `$` は対象外 — 不発火
+        assert!(!has_addr_dollar_local(
+            b"To: a@b$c.example\r\n\r\nb"
+        ));
+        // 通常宛名は不発火
+        assert!(!has_addr_dollar_local(
+            b"To: a@x.example\r\n\r\nb"
+        ));
+        assert!(!has_addr_dollar_local(b""));
     }
 
     #[test]

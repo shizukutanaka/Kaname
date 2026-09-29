@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security — D1806: `To: a$b@c` のローカル部 `$` を検出 — `Envelope` に `addr_dollar_local` を追加 (`|` D1802、`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
+### Security — D1805: `Content-Transfer-Encoding: base<64` の値内 `<` を検出 — `Envelope` に `cte_lt` を追加 (`>` は D1798、`=` は D1780、`\` は D1788)。
+### Security — D1804: `Received:` の `for` 節の `%` を検出 — `Envelope` に `received_for_pct` を追加 (`for` の `@` 二つは D1777、`id`/`by`/`from` の `%` は D1800/D1793/D1797)。
+### Security — D1803: `Message-ID: !<a>` 等の `!` 先立ちを検出 — `Envelope` に `msgid_bang_lead` を追加 (lead-sep 系は D1755–D1799)。
 ### Security — D1802: `To: a|b@c` のローカル部 `|` を検出 — `Envelope` に `addr_pipe_local` を追加 (`&` D1760、`~` D1763、`{}` D1767、`^` D1770、`` ` `` D1771 と同族)。
 ### Security — D1801: `Content-Disposition: attach<ment` の型本体内 `<` を検出 — `Envelope` に `cd_lt_type` を追加 (`>` は D1794、`:` は D1765、`\` は D1786)。
 ### Security — D1800: `Received:` の `id` 節の `%` を検出 — `Envelope` に `received_id_pct` を追加 (`id` の `!` は D1785、`by`/`from` の `%` は D1793/D1797)。
