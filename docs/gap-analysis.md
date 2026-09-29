@@ -1196,3 +1196,7 @@ main の履歴再構築と PR のマージ期限切れにより、監査済み�
 | D1780 | `Content-Transfer-Encoding:` 値の `=` | 先割れ vs 欄破棄で復号ずれ |
 | D1781 | `Received:` の `from` 節の `!` | bang 経路読み vs 欄破棄で経路ずれ |
 | D1782 | param 名の `` ` `` | 名継続 vs 欄破棄で値ずれ |
+| D1783 | msgid 系の `:` 先立ち | 読み飛ばし vs 欄破棄で照合ずれ |
+| D1784 | `Content-Type:` 型本体内の `\` | 型継続 vs 欄破棄で型ずれ |
+| D1785 | `Received:` の `id` 節の `!` | bang 読み vs 欄破棄で識別子ずれ |
+| D1786 | `Content-Disposition:` 型本体内の `\` | 型継続 vs 欄破棄で添付判定ずれ |

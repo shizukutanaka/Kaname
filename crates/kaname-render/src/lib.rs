@@ -1278,6 +1278,14 @@ pub struct Envelope {
     pub received_from_bang: bool,
     /// param 名の反転符 (D1782 — param ずれ)。
     pub param_backtick_name: bool,
+    /// msgid 系の `:` 先立ち (D1783 — 識別子照合ずれ)。
+    pub msgid_colon_lead: bool,
+    /// `Content-Type:` 型本体内の逆斜線 (D1784 — 型ずれ)。
+    pub ct_bslash_type: bool,
+    /// `Received:` の `id` 節の `!` (D1785 — 経路解析ずれ)。
+    pub received_id_bang: bool,
+    /// `Content-Disposition:` 型本体内の逆斜線 (D1786 — 添付判定ずれ)。
+    pub cd_bslash_type: bool,
     /// `Complaints-To:`/`X-Complaints-To:`/`X-Report-Abuse:`/`X-Abuse-Reports-To:`
     /// 等の abuse 報告先ヘッダがあるか — 「運用監視あり」の体裁を自署する兆候
     /// (D327)。
@@ -3989,6 +3997,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let cte_eq = has_cte_eq(bytes);
     let received_from_bang = has_received_from_bang(bytes);
     let param_backtick_name = has_param_backtick_name(bytes);
+    let msgid_colon_lead = has_msgid_colon_lead(bytes);
+    let ct_bslash_type = has_ct_bslash_type(bytes);
+    let received_id_bang = has_received_id_bang(bytes);
+    let cd_bslash_type = has_cd_bslash_type(bytes);
 
     // D1283: malformed encoded-word (CVE-2026-63435 系パーサ差異偽装)
     let malformed_encoded_word = has_malformed_encoded_word(bytes);
@@ -4529,6 +4541,10 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         cte_eq,
         received_from_bang,
         param_backtick_name,
+        msgid_colon_lead,
+        ct_bslash_type,
+        received_id_bang,
+        cd_bslash_type,
         uuencode_payload,
         bogus_boundary_param,
         orphaned_part_content,
@@ -28892,6 +28908,195 @@ pub fn has_param_backtick_name(raw: &[u8]) -> bool {
     false
 }
 
+/// msgid 系欄の値が `:` 先立ちか判定する (D1783)。
+///
+/// `Message-ID: :<a@b>` — `:` 先立ちを読み飛ばす実装と欄ごと捨てる
+/// 実装で識別子照合がずれる (`;` は D1755、`,` は D1769、`=` は
+/// D1774、`%` は D1779)。
+#[must_use]
+pub fn has_msgid_colon_lead(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        let name = lower[..colon].trim_end();
+        if !matches!(
+            name,
+            "message-id" | "resent-message-id" | "list-id" | "content-id"
+        ) {
+            continue;
+        }
+        let v = l[colon + 1..].trim();
+        if v.starts_with(':') && !v[1..].trim().is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Content-Type:` の型本体内に逆斜線があるか判定する (D1784)。
+///
+/// `text\plain` — `\` は tchar でないため型を継続して読む実装と
+/// 欄を捨てる実装で型がずれる (`:` は D1761、`=` は D1758、
+/// 孤立括弧は D1764、param 値の `\` は別系列)。
+#[must_use]
+pub fn has_ct_bslash_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-type:") else { continue };
+        // 型本体 = 値の先頭から `;` まで — `(…)` コメントは除去
+        let ty = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(ty.len());
+        let mut depth = 0i32;
+        for c in ty.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('\\') {
+            return true;
+        }
+    }
+    false
+}
+
+/// `Received:` の `id` 節の値に `!` があるか判定する (D1785)。
+///
+/// `id a!b` — 識別子値に非合法文字 `!` を含む。bang 読みと欄破棄
+/// で識別子ずれ (`from` の `!` は D1781、`id` 節重複は D1715)。
+#[must_use]
+pub fn has_received_id_bang(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let mut logical = String::with_capacity(text.len());
+    let mut first = true;
+    for l in text.lines() {
+        if (l.starts_with(' ') || l.starts_with('\t')) && !logical.is_empty() {
+            logical.push(' ');
+            logical.push_str(l.trim_start());
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(colon) = lower.find(':') else { continue };
+        if lower[..colon].trim_end() != "received" {
+            continue;
+        }
+        let clause_part = l[colon + 1..].split(';').next().unwrap_or("");
+        let toks: Vec<String> = clause_part
+            .split(|c: char| c.is_whitespace() || c == '(' || c == ')')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect();
+        for (i, t) in toks.iter().enumerate() {
+            if t.eq_ignore_ascii_case("id") && i + 1 < toks.len()
+                && toks[i + 1].contains('!')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Content-Disposition:` の型本体内に逆斜線があるか判定する
+/// (D1786)。
+///
+/// `attach\ment` — `\` は tchar でないため型を継続して読む実装と
+/// 欄を捨てる実装で添付判定がずれる (`:` は D1765、`=` は D1759、
+/// 孤立括弧は D1766)。
+#[must_use]
+pub fn has_cd_bslash_type(raw: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(raw);
+    let text = text.replace("\r\n", "\n");
+    let header_end = text.find("\n\n").unwrap_or(text.len());
+    let mut logical = String::with_capacity(header_end + 1);
+    let mut first = true;
+    for l in text[..header_end].lines() {
+        if l.starts_with(' ') || l.starts_with('\t') {
+            if !first {
+                logical.push(' ');
+                logical.push_str(l.trim_start());
+            }
+        } else {
+            if !first {
+                logical.push('\n');
+            }
+            first = false;
+            logical.push_str(l);
+        }
+    }
+    for l in logical.lines() {
+        let lower = l.to_ascii_lowercase();
+        let Some(v) = lower.strip_prefix("content-disposition:") else {
+            continue;
+        };
+        let ty = v.split(';').next().unwrap_or("");
+        let mut scrub = String::with_capacity(ty.len());
+        let mut depth = 0i32;
+        for c in ty.chars() {
+            if depth > 0 {
+                if c == '(' { depth += 1 } else if c == ')' { depth -= 1 }
+            } else if c == '(' {
+                depth = 1;
+            } else {
+                scrub.push(c);
+            }
+        }
+        if scrub.contains('\\') {
+            return true;
+        }
+    }
+    false
+}
+
 /// 疑似署名添付 (signature.asc/smime.p7s 等) か判定する (D239)。
 ///
 /// `signature.asc`/`signature.p7s`/`smime.p7s` 等は「署名済み」の
@@ -49570,6 +49775,86 @@ mod tests {
             b"Content-Type: text/plain; name=a`b\r\n\r\nb"
         ));
         assert!(!has_param_backtick_name(b""));
+    }
+
+    #[test]
+    #[test]
+    fn msgid_colon_lead_先立つコロンを検出する() {
+        // D1783 — `:` 先立ち
+        assert!(has_msgid_colon_lead(
+            b"Message-ID: :<a@b.example>\r\n\r\nb"
+        ));
+        assert!(has_msgid_colon_lead(
+            b"List-Id: :<l.example>\r\n\r\nb"
+        ));
+        // 裸 `:` は不発火 (空尾)
+        assert!(!has_msgid_colon_lead(
+            b"Message-ID: :\r\n\r\nb"
+        ));
+        // 正規識別子は不発火
+        assert!(!has_msgid_colon_lead(
+            b"Message-ID: <a@b.example>\r\n\r\nb"
+        ));
+        // References は4名サブセット対象外
+        assert!(!has_msgid_colon_lead(
+            b"References: :<a@b.example>\r\n\r\nb"
+        ));
+        assert!(!has_msgid_colon_lead(b""));
+    }
+
+    #[test]
+    fn ct_bslash_type_型の逆斜線を検出する() {
+        // D1784 — `text\plain`
+        assert!(has_ct_bslash_type(
+            b"Content-Type: text\\plain\r\n\r\nb"
+        ));
+        // 正当型は不発火
+        assert!(!has_ct_bslash_type(
+            b"Content-Type: text/plain\r\n\r\nb"
+        ));
+        // コメント内の `\` は除去され不発火
+        assert!(!has_ct_bslash_type(
+            b"Content-Type: text/plain (a\\b)\r\n\r\nb"
+        ));
+        // param 側の `\` は対象外 — 不発火
+        assert!(!has_ct_bslash_type(
+            b"Content-Type: text/plain; name=a\\b\r\n\r\nb"
+        ));
+        assert!(!has_ct_bslash_type(b""));
+    }
+
+    #[test]
+    fn received_id_bang_荷印節のビックリを検出する() {
+        // D1785 — id 節値の `!`
+        assert!(has_received_id_bang(
+            b"Received: from mx.example.com by mx2.example.com id a!b; x\r\n\r\nb"
+        ));
+        // 通常識別子は不発火
+        assert!(!has_received_id_bang(
+            b"Received: from mx.example.com by mx2.example.com id ABC123; x\r\n\r\nb"
+        ));
+        // `!` が from 節側なら対象外 — 不発火 (from は D1781)
+        assert!(!has_received_id_bang(
+            b"Received: from a!b by mx.example.com id ABC; x\r\n\r\nb"
+        ));
+        assert!(!has_received_id_bang(b""));
+    }
+
+    #[test]
+    fn cd_bslash_type_荷印型の逆斜線を検出する() {
+        // D1786 — `attach\ment`
+        assert!(has_cd_bslash_type(
+            b"Content-Disposition: attach\\ment; filename=\"a.txt\"\r\n\r\nb"
+        ));
+        // 正当型は不発火
+        assert!(!has_cd_bslash_type(
+            b"Content-Disposition: attachment; filename=\"a.txt\"\r\n\r\nb"
+        ));
+        // param 値側の `\` は対象外 — 不発火
+        assert!(!has_cd_bslash_type(
+            b"Content-Disposition: attachment; filename=\"a\\b.txt\"\r\n\r\nb"
+        ));
+        assert!(!has_cd_bslash_type(b""));
     }
 
     #[test]
