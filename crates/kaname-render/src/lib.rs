@@ -1168,8 +1168,8 @@ pub struct Envelope {
     pub received_for_empty: bool,
     /// `Received:` の `via` 節空値 (D1727 — 経路解析ずれ)。
     pub received_via_empty: bool,
-    /// param が `=` を持たない裸名札 (D1728 — param 解析ずれ)。
-    pub param_no_eq: bool,
+    /// 同一欄内の同名 param 重複 (D1728 — param 解析ずれ)。
+    pub param_name_dup: bool,
     /// `References:` 等の識別子列の `,` (D1729 — 識別子ずれ)。
     pub msgid_ref_comma: bool,
     /// 宛名欄が `;` のみ (D1730 — 宛先解析ずれ)。
@@ -3783,8 +3783,8 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
     let received_for_empty = has_received_for_empty(bytes);
     // D1727: Received の via 節空値
     let received_via_empty = has_received_via_empty(bytes);
-    // D1728: param が = を持たない裸名札
-    let param_no_eq = has_param_no_eq(bytes);
+    // D1728: 同一欄内の同名 param 重複
+    let param_name_dup = has_param_name_dup(bytes);
     // D1729: 識別子列の ,
     let msgid_ref_comma = has_msgid_ref_comma(bytes);
     // D1730: 宛名欄が ; のみ
@@ -4274,7 +4274,7 @@ pub fn parse(raw: &[u8]) -> Result<Envelope, RenderError> {
         boundary_param_dup,
         received_for_empty,
         received_via_empty,
-        param_no_eq,
+        param_name_dup,
         msgid_ref_comma,
         addr_semicolon_only,
         uuencode_payload,
@@ -25834,13 +25834,14 @@ pub fn has_received_via_empty(raw: &[u8]) -> bool {
     false
 }
 
-/// CT/CD 欄の param 節に `=` を持たない裸トークンがあるか判定する (D1728)。
+/// 同一 `Content-Type:`/`Content-Disposition:` 欄内で同名の param が
+/// 2回以上出るか判定する (D1728)。
 ///
-/// `;charset` — 値の無い裸名札。空の param と読み飛ばす実装と、
-/// 欄ごと捨てる実装で param 解釈がずれる (空 param 節 `;;` は D1636、
-/// 空値 `;x=` は D1696、名なし `;=x` は has_empty_param_name)。
+/// `;charset=a; charset=b` — 同名 param の最初を採る実装と
+/// 最後を採る実装で値がずれる (boundary 限定の重複は D1725、
+/// 欄ごとの重複は既存検出)。
 #[must_use]
-pub fn has_param_no_eq(raw: &[u8]) -> bool {
+pub fn has_param_name_dup(raw: &[u8]) -> bool {
     let text = String::from_utf8_lossy(raw);
     let text = text.replace("\r\n", "\n");
     let mut logical = String::with_capacity(text.len());
@@ -25859,11 +25860,16 @@ pub fn has_param_no_eq(raw: &[u8]) -> bool {
         if name != "content-type" && name != "content-disposition" {
             continue;
         }
+        let mut keys: Vec<String> = Vec::new();
         for part in l[colon + 1..].split(';').skip(1) {
-            let p = part.trim();
-            if !p.is_empty() && !p.contains('=') {
+            let key = part.split('=').next().unwrap_or("").trim().to_ascii_lowercase();
+            if key.is_empty() {
+                continue;
+            }
+            if keys.iter().any(|k| k == &key) {
                 return true;
             }
+            keys.push(key);
         }
     }
     false
@@ -45999,15 +46005,14 @@ mod tests {
     }
 
     #[test]
-    fn param_no_eq_等号なき名札を検出する() {
-        assert!(has_param_no_eq(
-            b"Content-Type: text/plain; charset\r\n\r\n"
+    fn param_name_dup_同名の名札を検出する() {
+        assert!(has_param_name_dup(
+            b"Content-Type: text/plain; charset=a; charset=b\r\n\r\n"
         ));
-        assert!(!has_param_no_eq(
+        assert!(!has_param_name_dup(
             b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
         ));
-        assert!(!has_param_no_eq(b"Content-Type: text/plain;\r\n\r\n"));
-        assert!(!has_param_no_eq(b""));
+        assert!(!has_param_name_dup(b""));
     }
 
     #[test]
